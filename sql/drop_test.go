@@ -19,6 +19,7 @@ package sql_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
@@ -154,7 +155,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 }
 
-func TestDropIndex(t *testing.T) {
+func TestinDropIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, sqlDB, kvDB := setup(t)
 	defer cleanup(s, sqlDB)
@@ -167,6 +168,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 `); err != nil {
 		t.Fatal(err)
 	}
+	time.Sleep(1 * time.Second)
 
 	nameKey := sql.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
 	gr, err := kvDB.Get(nameKey)
@@ -179,6 +181,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	descKey := sql.MakeDescMetadataKey(sql.ID(gr.ValueInt()))
+
 	desc := sql.TableDescriptor{}
 	if err := kvDB.GetProto(descKey, &desc); err != nil {
 		t.Fatal(err)
@@ -202,6 +205,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if _, err := sqlDB.Exec(`DROP INDEX t.kv@foo`); err != nil {
 		t.Fatal(err)
 	}
+	time.Sleep(1 * time.Second)
 
 	if kvs, err := kvDB.Scan(indexStartKey, indexEndKey, 0); err != nil {
 		t.Fatal(err)

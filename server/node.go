@@ -19,8 +19,10 @@ package server
 
 import (
 	"container/list"
+	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -49,7 +51,8 @@ const (
 	gossipInterval = 1 * time.Minute
 	// publishStatusInterval is the interval for publishing periodic statistics
 	// from stores to the internal event feed.
-	publishStatusInterval = 10 * time.Second
+	publishStatusInterval    = 10 * time.Second
+	keyLeaderElectionInteval = 50 * time.Millisecond
 )
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -69,6 +72,9 @@ type Node struct {
 	feed       status.NodeEventFeed   // Feed publisher for local events
 	status     *status.NodeStatusMonitor
 	startedAt  int64
+	// Protects notifyKeys.
+	mu         sync.Mutex
+	notifyKeys map[string]keyState
 }
 
 // allocateNodeID increments the node id generator key to allocate
@@ -162,9 +168,10 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 // NewNode returns a new instance of Node.
 func NewNode(ctx storage.StoreContext) *Node {
 	return &Node{
-		ctx:     ctx,
-		status:  status.NewNodeStatusMonitor(),
-		lSender: kv.NewLocalSender(),
+		ctx:        ctx,
+		status:     status.NewNodeStatusMonitor(),
+		lSender:    kv.NewLocalSender(),
+		notifyKeys: make(map[string]keyState),
 	}
 }
 
@@ -404,6 +411,7 @@ func (n *Node) startGossip(stopper *stop.Stopper) {
 			select {
 			case <-ticker.C:
 				n.gossipStores()
+
 			case <-stopper.ShouldStop():
 				return
 			}
@@ -419,6 +427,69 @@ func (n *Node) gossipStores() {
 	}); err != nil {
 		panic(err)
 	}
+}
+
+// startKeyLeaderElections loops on a periodic ticker to attempt to
+// elect the local node as a key's leader. It exits as soon as there
+// are no more registered keys. It's safe for more than
+// one of these routines to be run concurrently.
+func (n *Node) startKeyLeaderElections(stopper *stop.Stopper) {
+	stopper.RunWorker(func() {
+		ticker := time.NewTicker(keyLeaderElectionInteval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if n.keyLeaderElections() {
+					// No more registered keys.
+					return
+				}
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
+}
+
+func (n *Node) keyLeaderElections() bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	for i, ks := range n.notifyKeys {
+		val := n.keyLeaderElection(ks)
+		if val.isLeader != ks.isLeader {
+			n.notifyKeys[i] = val
+		}
+	}
+	return len(n.notifyKeys) == 0
+}
+
+var errFound = errors.New("this is not an error")
+
+func (n *Node) keyLeaderElection(ks keyState) keyState {
+	var isLeader bool
+	if err := n.lSender.VisitStores(func(s *storage.Store) error {
+		if rng := s.LookupReplica(keys.Addr(ks.key), nil); rng != nil {
+			if rng.IsLeader() {
+				isLeader = true
+			}
+			return errFound
+		}
+		return nil
+	}); err != nil && err != errFound {
+		panic(err)
+	}
+	if ks.isLeader != isLeader {
+		ks.isLeader = isLeader
+		go notifyKeyleader(ks)
+	}
+	return ks
+}
+
+func notifyKeyleader(ks keyState) {
+	if log.V(2) {
+		log.Infof("notified node of leader(%v) for key: %v", ks.isLeader, ks.key)
+	}
+	ks.report <- sql.KeyLeaderNotification{Key: ks.key, IsLeader: ks.isLeader}
 }
 
 // startPublishStatuses starts a loop which periodically instructs each store to
@@ -472,4 +543,35 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 	n.feed.CallComplete(*ba, pErr)
 	br.Error = pErr
 	return br, nil
+}
+
+type keyState struct {
+	key      roachpb.Key
+	isLeader bool
+	report   chan<- sql.KeyLeaderNotification
+}
+
+// RegisterNotifyKeyLeader reports whether the node is a leader for the range containing the key.
+// It also reports a leadership change.
+func (n *Node) RegisterNotifyKeyLeader(key roachpb.Key, s *stop.Stopper, report chan<- sql.KeyLeaderNotification) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	ks := keyState{key: key, isLeader: false, report: report}
+	ks = n.keyLeaderElection(ks)
+	n.notifyKeys[string(key)] = ks
+	// Start periodic key leader elections for all registered keys.
+	if len(n.notifyKeys) == 1 {
+		go n.startKeyLeaderElections(s)
+	}
+}
+
+// UnregisterNotifyKeyLeader drops a prior registration.
+func (n *Node) UnregisterNotifyKeyLeader(key roachpb.Key) {
+	keyString := string(key)
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if _, ok := n.notifyKeys[keyString]; !ok {
+		panic("trying to unregister a key that is not being followed")
+	}
+	delete(n.notifyKeys, string(key))
 }
