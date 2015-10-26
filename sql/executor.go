@@ -41,8 +41,9 @@ var errTransactionInProgress = errors.New("there is already a transaction in pro
 
 // An Executor executes SQL statements.
 type Executor struct {
-	db     client.DB
-	nodeID uint32
+	db      client.DB
+	nodeID  uint32
+	reCache *parser.RegexpCache
 
 	// System Config and mutex.
 	systemConfig   *config.SystemConfig
@@ -52,7 +53,10 @@ type Executor struct {
 // newExecutor creates an Executor and registers a callback on the
 // system config.
 func newExecutor(db client.DB, gossip *gossip.Gossip, clock *hlc.Clock) *Executor {
-	exec := &Executor{db: db}
+	exec := &Executor{
+		db:      db,
+		reCache: parser.NewRegexpCache(512),
+	}
 	gossip.RegisterSystemConfigCallback(exec.updateSystemConfig)
 	return exec
 }
@@ -83,7 +87,8 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 	planMaker := planner{
 		user: args.GetUser(),
 		evalCtx: parser.EvalContext{
-			NodeID: e.nodeID,
+			NodeID:  e.nodeID,
+			ReCache: e.reCache,
 		},
 		systemConfig: e.getSystemConfig(),
 	}
@@ -130,7 +135,7 @@ func (e *Executor) execStmts(sql string, params parameters, planMaker *planner) 
 	var resp driver.Response
 	stmts, err := parser.Parse(sql, parser.Syntax(planMaker.session.Syntax))
 	if err != nil {
-		// A parse error occured: we can't determine if there were multiple
+		// A parse error occurred: we can't determine if there were multiple
 		// statements or only one, so just pretend there was one.
 		resp.Results = append(resp.Results, makeResultFromError(planMaker, err))
 		return resp

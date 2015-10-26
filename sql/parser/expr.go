@@ -144,7 +144,6 @@ type ComparisonExpr struct {
 	Operator    ComparisonOp
 	Left, Right Expr
 	fn          cmpOp
-	cache       interface{}
 }
 
 func (node *ComparisonExpr) String() string {

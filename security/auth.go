@@ -34,7 +34,7 @@ const (
 )
 
 // LogTLSState logs information about TLS state in the form:
-// "<method>: perr certs: [<Subject.CommonName>...], chain: [[<CommonName>...][..]]"
+// "<method>: peer certs: [<Subject.CommonName>...], chain: [[<CommonName>...][..]]"
 func LogTLSState(method string, tlsState *tls.ConnectionState) {
 	if tlsState == nil {
 		log.Printf("%s: no TLS\n", method)

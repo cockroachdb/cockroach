@@ -292,10 +292,27 @@ var builtins = map[string][]builtin{
 	}, DummyString)},
 
 	"regexp_replace": {
-		stringBuiltin3(func(s, pattern, to string) (Datum, error) {
-			return regexpReplace(s, pattern, to, "")
-		}, DummyString),
-		stringBuiltin4(regexpReplace, DummyString),
+		builtin{
+			types:      typeList{stringType, stringType, stringType},
+			returnType: DummyString,
+			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+				s := string(args[0].(DString))
+				pattern := string(args[1].(DString))
+				to := string(args[2].(DString))
+				return regexpReplace(ctx, s, pattern, to, "")
+			},
+		},
+		builtin{
+			types:      typeList{stringType, stringType, stringType, stringType},
+			returnType: DummyString,
+			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+				s := string(args[0].(DString))
+				pattern := string(args[1].(DString))
+				to := string(args[2].(DString))
+				sqlFlags := string(args[3].(DString))
+				return regexpReplace(ctx, s, pattern, to, sqlFlags)
+			},
+		},
 	},
 
 	"initcap": {stringBuiltin1(func(s string) (Datum, error) {
@@ -414,7 +431,7 @@ var builtins = map[string][]builtin{
 			types:      typeList{},
 			returnType: DummyBytes,
 			impure:     true,
-			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				return DBytes(uuid.NewUUID4()), nil
 			},
 		},
@@ -423,8 +440,8 @@ var builtins = map[string][]builtin{
 	"greatest": {
 		builtin{
 			types: nil,
-			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return pickFromTuple(true /* greatest */, args)
+			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+				return pickFromTuple(ctx, true /* greatest */, args)
 			},
 		},
 	},
@@ -432,8 +449,8 @@ var builtins = map[string][]builtin{
 	"least": {
 		builtin{
 			types: nil,
-			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return pickFromTuple(false /* !greatest */, args)
+			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+				return pickFromTuple(ctx, false /* !greatest */, args)
 			},
 		},
 	},
@@ -961,21 +978,25 @@ func datumToString(datum Datum) (string, error) {
 	return "", fmt.Errorf("argument type unsupported: %s", datum.Type())
 }
 
+type regexpKey struct {
+	sqlPattern string
+	sqlFlags   string
+}
+
+func (k regexpKey) pattern() (string, error) {
+	return regexpEvalFlags(k.sqlPattern, k.sqlFlags)
+}
+
 var replaceSubRe = regexp.MustCompile(`\\[&1-9]`)
 
-func regexpReplace(s, pattern, to, sqlFlags string) (Datum, error) {
-	pattern, global, err := regexpEvalFlags(pattern, sqlFlags)
-	if err != nil {
-		return nil, err
-	}
-
-	patternRe, err := regexp.Compile(pattern)
+func regexpReplace(ctx EvalContext, s, pattern, to, sqlFlags string) (Datum, error) {
+	patternRe, err := ctx.ReCache.GetRegexp(regexpKey{pattern, sqlFlags})
 	if err != nil {
 		return nil, err
 	}
 
 	matchCount := 1
-	if global {
+	if strings.ContainsRune(sqlFlags, 'g') {
 		matchCount = -1
 	}
 
@@ -1039,16 +1060,14 @@ func regexpReplace(s, pattern, to, sqlFlags string) (Datum, error) {
 // regexpEvalFlags evaluates the provided Postgres regexp flags in
 // accordance with their definitions provided at
 // http://www.postgresql.org/docs/9.0/static/functions-matching.html#POSIX-EMBEDDED-OPTIONS-TABLE.
-// It then returns an adjusted regexp pattern, and a flag specifying if more
-// than one match should be found or not.
-func regexpEvalFlags(pattern, sqlFlags string) (string, bool, error) {
-	global := false
+// It then returns an adjusted regexp pattern.
+func regexpEvalFlags(pattern, sqlFlags string) (string, error) {
 	goReFlags := map[rune]struct{}{'s': {}, 'm': {}}
 
 	for _, flag := range sqlFlags {
 		switch flag {
 		case 'g':
-			global = true
+			// Ignore for now, valid flag that should be handled elsewhere.
 		case 'i':
 			goReFlags['i'] = struct{}{}
 		case 'c':
@@ -1065,19 +1084,19 @@ func regexpEvalFlags(pattern, sqlFlags string) (string, bool, error) {
 			delete(goReFlags, 's')
 			goReFlags['m'] = struct{}{}
 		default:
-			return "", false, fmt.Errorf("invalid regexp flag: %q", flag)
+			return "", fmt.Errorf("invalid regexp flag: %q", flag)
 		}
 	}
 
 	if len(goReFlags) == 0 {
-		return pattern, global, nil
+		return pattern, nil
 	}
 
 	var flagString bytes.Buffer
 	for flag := range goReFlags {
 		flagString.WriteRune(flag)
 	}
-	return fmt.Sprintf("(?%s:%s)", flagString.String(), pattern), global, nil
+	return fmt.Sprintf("(?%s:%s)", flagString.String(), pattern), nil
 }
 
 func round(x float64, n int64) (Datum, error) {
@@ -1107,16 +1126,16 @@ func round(x float64, n int64) (Datum, error) {
 }
 
 // Pick the greatest (or least value) from a tuple.
-func pickFromTuple(greatest bool, args DTuple) (Datum, error) {
+func pickFromTuple(ctx EvalContext, greatest bool, args DTuple) (Datum, error) {
 	g := args[0]
 	// Pick a greater (or smaller) value.
 	for _, d := range args[1:] {
 		var eval Datum
 		var err error
 		if greatest {
-			eval, err = evalComparison(LT, g, d)
+			eval, err = evalComparison(ctx, LT, g, d)
 		} else {
-			eval, err = evalComparison(LT, d, g)
+			eval, err = evalComparison(ctx, LT, d, g)
 		}
 		if err != nil {
 			return DNull, err
