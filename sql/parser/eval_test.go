@@ -18,7 +18,6 @@
 package parser
 
 import (
-	"reflect"
 	"regexp"
 	"testing"
 
@@ -357,21 +356,20 @@ func TestEvalError(t *testing.T) {
 }
 
 func TestEvalComparisonExprCaching(t *testing.T) {
-	regexpType := reflect.TypeOf(&regexp.Regexp{})
 	testExprs := []struct {
 		op          ComparisonOp
 		left, right string
-		cacheType   reflect.Type
+		cacheCount  int
 	}{
 		// Comparisons.
-		{EQ, `0`, `1`, nil},
-		{LT, `0`, `1`, nil},
+		{EQ, `0`, `1`, 0},
+		{LT, `0`, `1`, 0},
 		// LIKE and NOT LIKE
-		{Like, `TEST`, `T%T`, regexpType},
-		{NotLike, `TEST`, `%E%`, regexpType},
+		{Like, `TEST`, `T%T`, 1},
+		{NotLike, `TEST`, `%E%`, 1},
 		// SIMILAR TO and NOT SIMILAR TO
-		{SimilarTo, `abc`, `(b|c)%`, regexpType},
-		{NotSimilarTo, `abc`, `%(b|d)%`, regexpType},
+		{SimilarTo, `abc`, `(b|c)%`, 1},
+		{NotSimilarTo, `abc`, `%(b|d)%`, 1},
 	}
 	for _, d := range testExprs {
 		expr := &ComparisonExpr{
@@ -379,22 +377,16 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 			Left:     DString(d.left),
 			Right:    DString(d.right),
 		}
-		if _, err := expr.Eval(defaultContext); err != nil {
-			t.Fatalf("%s: %v", d, err)
+		ctx := defaultContext
+		ctx.ReCache = NewRegexpCache(8)
+		if _, err := expr.Eval(ctx); err != nil {
+			t.Fatalf("%v: %v", d, err)
 		}
 		if expr.fn.fn == nil {
 			t.Errorf("%s: expected the comparison function to be looked up and memoized, but it wasn't", expr)
 		}
-		if d.cacheType != nil {
-			if expr.cache == nil {
-				t.Errorf("%s: expected expression cache population, but found an empty cache", expr)
-			} else if ty := reflect.TypeOf(expr.cache); ty != d.cacheType {
-				t.Errorf("%s: expected expression cache to have type %v, but found %v", expr, d.cacheType, ty)
-			}
-		} else {
-			if expr.cache != nil {
-				t.Errorf("%s: expected no expression cache population, but found %v", expr, expr.cache)
-			}
+		if count := ctx.ReCache.Len(); count != d.cacheCount {
+			t.Errorf("%s: expected regular expression cache to contain %d compiled patterns, but found %d", expr, d.cacheCount, count)
 		}
 	}
 }

@@ -292,10 +292,27 @@ var builtins = map[string][]builtin{
 	}, DummyString)},
 
 	"regexp_replace": {
-		stringBuiltin3(func(s, pattern, to string) (Datum, error) {
-			return regexpReplace(s, pattern, to, "")
-		}, DummyString),
-		stringBuiltin4(regexpReplace, DummyString),
+		builtin{
+			types:      typeList{stringType, stringType, stringType},
+			returnType: DummyString,
+			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+				s := string(args[0].(DString))
+				pattern := string(args[1].(DString))
+				to := string(args[2].(DString))
+				return regexpReplace(ctx, s, pattern, to, "")
+			},
+		},
+		builtin{
+			types:      typeList{stringType, stringType, stringType, stringType},
+			returnType: DummyString,
+			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+				s := string(args[0].(DString))
+				pattern := string(args[1].(DString))
+				to := string(args[2].(DString))
+				sqlFlags := string(args[3].(DString))
+				return regexpReplace(ctx, s, pattern, to, sqlFlags)
+			},
+		},
 	},
 
 	"initcap": {stringBuiltin1(func(s string) (Datum, error) {
@@ -414,7 +431,7 @@ var builtins = map[string][]builtin{
 			types:      typeList{},
 			returnType: DummyBytes,
 			impure:     true,
-			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				return DBytes(uuid.NewUUID4()), nil
 			},
 		},
@@ -423,8 +440,8 @@ var builtins = map[string][]builtin{
 	"greatest": {
 		builtin{
 			types: nil,
-			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return pickFromTuple(true /* greatest */, args)
+			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+				return pickFromTuple(ctx, true /* greatest */, args)
 			},
 		},
 	},
@@ -432,8 +449,8 @@ var builtins = map[string][]builtin{
 	"least": {
 		builtin{
 			types: nil,
-			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return pickFromTuple(false /* !greatest */, args)
+			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+				return pickFromTuple(ctx, false /* !greatest */, args)
 			},
 		},
 	},
@@ -963,13 +980,13 @@ func datumToString(datum Datum) (string, error) {
 
 var replaceSubRe = regexp.MustCompile(`\\[&1-9]`)
 
-func regexpReplace(s, pattern, to, sqlFlags string) (Datum, error) {
+func regexpReplace(ctx EvalContext, s, pattern, to, sqlFlags string) (Datum, error) {
 	pattern, global, err := regexpEvalFlags(pattern, sqlFlags)
 	if err != nil {
 		return nil, err
 	}
 
-	patternRe, err := regexp.Compile(pattern)
+	patternRe, err := ctx.ReCache.GetRegexp(pattern)
 	if err != nil {
 		return nil, err
 	}
@@ -1107,16 +1124,16 @@ func round(x float64, n int64) (Datum, error) {
 }
 
 // Pick the greatest (or least value) from a tuple.
-func pickFromTuple(greatest bool, args DTuple) (Datum, error) {
+func pickFromTuple(ctx EvalContext, greatest bool, args DTuple) (Datum, error) {
 	g := args[0]
 	// Pick a greater (or smaller) value.
 	for _, d := range args[1:] {
 		var eval Datum
 		var err error
 		if greatest {
-			eval, err = evalComparison(LT, g, d)
+			eval, err = evalComparison(ctx, LT, g, d)
 		} else {
-			eval, err = evalComparison(LT, d, g)
+			eval, err = evalComparison(ctx, LT, d, g)
 		}
 		if err != nil {
 			return DNull, err
