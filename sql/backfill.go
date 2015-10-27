@@ -23,13 +23,46 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName, tableDesc *TableDescriptor, indexDescs ...IndexDescriptor) error {
+func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName, oldTableDesc, newTableDesc *TableDescriptor) error {
+	table := &parser.AliasedTableExpr{Expr: tableName}
+
+	// Determine the columns being dropped, if any. This assumes that
+	// neither oldTableDesc.Columns nor newTableDesc.Columns are ever
+	// reordered.
+	var droppedColumnDescs []ColumnDescriptor
+	for i, j := 0, 0; i < len(oldTableDesc.Columns); i++ {
+		if j == len(newTableDesc.Columns) || oldTableDesc.Columns[i] != newTableDesc.Columns[j] {
+			droppedColumnDescs = append(droppedColumnDescs, oldTableDesc.Columns[i])
+		} else {
+			j++
+		}
+	}
+
+	if len(droppedColumnDescs) > 0 {
+		var updateExprs parser.UpdateExprs
+		for _, droppedColumnDesc := range droppedColumnDescs {
+			updateExprs = append(updateExprs, &parser.UpdateExpr{
+				Names: parser.QualifiedNames{&parser.QualifiedName{Base: parser.Name(droppedColumnDesc.Name)}},
+				Expr:  parser.DNull,
+			})
+		}
+
+		// Run `UPDATE <table> SET col1 = NULL, col2 = NULL, ...` to clear
+		// the data stored in the columns being dropped.
+		if _, err := p.Update(&parser.Update{
+			Table: table,
+			Exprs: updateExprs,
+		}); err != nil {
+			return err
+		}
+	}
+
 	// Get all the rows affected.
 	// TODO(vivek): Avoid going through Select.
 	// TODO(tamird): Support partial indexes?
 	row, err := p.Select(&parser.Select{
 		Exprs: parser.SelectExprs{parser.StarSelectExpr()},
-		From:  parser.TableExprs{&parser.AliasedTableExpr{Expr: tableName}},
+		From:  parser.TableExprs{table},
 	})
 	if err != nil {
 		return err
@@ -39,11 +72,18 @@ func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName
 	// row.
 	colIDtoRowIndex := map[ColumnID]int{}
 	for i, name := range row.Columns() {
-		c, err := tableDesc.FindColumnByName(name)
+		c, err := oldTableDesc.FindColumnByName(name)
 		if err != nil {
 			return err
 		}
 		colIDtoRowIndex[c.ID] = i
+	}
+
+	var newIndexDescs []IndexDescriptor
+	for _, index := range append(newTableDesc.Indexes, newTableDesc.PrimaryIndex) {
+		if index.ID >= oldTableDesc.NextIndexID {
+			newIndexDescs = append(newIndexDescs, index)
+		}
 	}
 
 	// TODO(tamird): This will fall down in production use. We need to do
@@ -60,9 +100,9 @@ func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName
 	for row.Next() {
 		rowVals := row.Values()
 
-		for _, indexDesc := range indexDescs {
+		for _, newIndexDesc := range newIndexDescs {
 			secondaryIndexEntries, err := encodeSecondaryIndexes(
-				tableDesc.ID, []IndexDescriptor{indexDesc}, colIDtoRowIndex, rowVals)
+				oldTableDesc.ID, []IndexDescriptor{newIndexDesc}, colIDtoRowIndex, rowVals)
 			if err != nil {
 				return err
 			}
