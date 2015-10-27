@@ -184,12 +184,11 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	idx, err := desc.FindIndexByName("foo")
+	i, err := desc.FindIndexByName("foo")
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	indexPrefix := sql.MakeIndexKeyPrefix(desc.ID, idx.ID)
+	indexPrefix := sql.MakeIndexKeyPrefix(desc.ID, desc.Indexes[i].ID)
 
 	indexStartKey := roachpb.Key(indexPrefix)
 	indexEndKey := indexStartKey.PrefixEnd()
