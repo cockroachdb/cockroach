@@ -40,9 +40,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 	}
 
 	// TODO(tamird,pmattis): avoid going through Select to avoid encoding
-	// and decoding keys. Also, avoiding Select may provide more
-	// convenient access to index keys which we are not currently
-	// deleting.
+	// and decoding keys.
 	rows, err := p.Select(&parser.Select{
 		Exprs: parser.SelectExprs{parser.StarSelectExpr()},
 		From:  parser.TableExprs{n.Table},
