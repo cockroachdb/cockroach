@@ -187,7 +187,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 	}
 
 	idxName := n.Name.Index()
-	idx, err := tableDesc.FindIndexByName(idxName)
+	i, err := tableDesc.FindIndexByName(idxName)
 	if err != nil {
 		if n.IfExists {
 			// Noop.
@@ -210,7 +210,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, fmt.Errorf("index name %q already exists", n.NewName)
 	}
 
-	idx.Name = newIdxName
+	tableDesc.Indexes[i].Name = newIdxName
 	descKey := MakeDescMetadataKey(tableDesc.GetID())
 	if err := tableDesc.Validate(); err != nil {
 		return nil, err

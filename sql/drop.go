@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -106,7 +105,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 		}
 
 		idxName := indexQualifiedName.Index()
-		idx, err := tableDesc.FindIndexByName(idxName)
+		i, err := tableDesc.FindIndexByName(idxName)
 		if err != nil {
 			if n.IfExists {
 				// Noop.
@@ -120,7 +119,9 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 			return nil, err
 		}
 
-		indexPrefix := MakeIndexKeyPrefix(tableDesc.ID, idx.ID)
+		indexID := tableDesc.Indexes[i].ID
+		tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
+		indexPrefix := MakeIndexKeyPrefix(tableDesc.ID, indexID)
 
 		// Delete the index.
 		indexStartKey := roachpb.Key(indexPrefix)
@@ -129,18 +130,6 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 			log.Infof("DelRange %s - %s", prettyKey(indexStartKey, 0), prettyKey(indexEndKey, 0))
 		}
 		b.DelRange(indexStartKey, indexEndKey)
-
-		found := false
-		for i := range tableDesc.Indexes {
-			if &tableDesc.Indexes[i] == idx {
-				tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, util.Errorf("index %s not found in %s", idx, tableDesc)
-		}
 
 		descKey := MakeDescMetadataKey(tableDesc.GetID())
 		if err := tableDesc.Validate(); err != nil {
