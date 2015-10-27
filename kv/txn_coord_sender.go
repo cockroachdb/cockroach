@@ -381,9 +381,10 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 				// the client.
 				return nil, roachpb.NewError(util.Errorf("cannot commit a read-only transaction"))
 			}
-			// TODO(tschottdorf): V(1)
-			for _, intent := range et.Intents {
-				trace.Event(fmt.Sprintf("intent: [%s,%s)", intent.Key, intent.EndKey))
+			if log.V(1) {
+				for _, intent := range et.Intents {
+					trace.Event(fmt.Sprintf("intent: [%s,%s)", intent.Key, intent.EndKey))
+				}
 			}
 		}
 	}
