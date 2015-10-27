@@ -89,7 +89,7 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) erro
 				result.Err = pErr.GoError()
 				if result.Err == nil {
 					if offset+k < len(br.Responses) {
-						reply = br.Responses[offset+k].GetValue().(roachpb.Response)
+						reply = br.Responses[offset+k].GetInner()
 					} else if args.Method() != roachpb.EndTransaction {
 						// TODO(tschottdorf): EndTransaction is excepted here
 						// because it may be elided (r/o txns). Might prefer to
