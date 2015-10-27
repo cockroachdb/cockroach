@@ -891,8 +891,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 		// The transaction doesn't exist yet on disk; we're allowed to abort it.
 		reply.PusheeTxn = args.PusheeTxn.Clone()
 		reply.PusheeTxn.Status = roachpb.ABORTED
-		err = engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, reply.PusheeTxn)
-		return reply, err
+		return reply, engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, reply.PusheeTxn)
 	}
 
 	// If already committed or aborted, return success.
