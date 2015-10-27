@@ -363,7 +363,7 @@ func (desc *TableDescriptor) FindColumnByName(name string) (*ColumnDescriptor, e
 			return &desc.Columns[i], nil
 		}
 	}
-	return nil, util.Errorf("column %q does not exist", name)
+	return nil, fmt.Errorf("column %q does not exist", name)
 }
 
 // FindColumnByID finds the column with specified ID.
@@ -383,7 +383,7 @@ func (desc *TableDescriptor) FindIndexByName(name string) (*IndexDescriptor, err
 			return &desc.Indexes[i], nil
 		}
 	}
-	return nil, util.Errorf("index %q does not exist", name)
+	return nil, fmt.Errorf("index %q does not exist", name)
 }
 
 // FindIndexByID finds the index with specified ID.
