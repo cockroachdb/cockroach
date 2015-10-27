@@ -237,7 +237,21 @@ func (d DFloat) IsMin() bool {
 }
 
 func (d DFloat) String() string {
-	return strconv.FormatFloat(float64(d), 'g', -1, 64)
+	fmt := byte('g')
+	prec := -1
+	if _, frac := math.Modf(float64(d)); frac == 0 {
+		// d is a whole number.
+		if -1000000 < d && d < 1000000 {
+			// Small whole numbers are printed without exponents, and with one
+			// digit of decimal precision to ensure they will parse as floats.
+			fmt = 'f'
+			prec = 1
+		} else {
+			// Large whole numbers are printed with exponents.
+			fmt = 'e'
+		}
+	}
+	return strconv.FormatFloat(float64(d), fmt, prec, 64)
 }
 
 // DString is the string Datum.
