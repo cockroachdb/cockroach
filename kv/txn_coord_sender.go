@@ -303,7 +303,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 
 	// This is the earliest point at which the request has a ClientCmdID and/or
 	// TxnID (if applicable). Begin a Trace which follows this request.
-	trace := tc.tracer.NewTrace(&ba)
+	trace := tc.tracer.NewTrace(tracer.Coord, &ba)
 	defer trace.Finalize()
 	defer trace.Epoch("sending batch")()
 	ctx = tracer.ToCtx(ctx, trace)
@@ -553,7 +553,7 @@ func (tc *TxnCoordSender) heartbeatLoop(id string) {
 		tc.Lock()
 		txnMeta := tc.txns[id] // do not leak to outer scope
 		closer = txnMeta.txnEnd
-		trace = tc.tracer.NewTrace(&txnMeta.txn)
+		trace = tc.tracer.NewTrace(tracer.Coord, &txnMeta.txn)
 		tc.Unlock()
 	}
 	if closer == nil {

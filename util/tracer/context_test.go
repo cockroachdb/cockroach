@@ -24,7 +24,7 @@ import (
 )
 
 func TestContext(t *testing.T) {
-	ctx := ToCtx(context.Background(), NewTracer(nil, "").NewTrace(traceID(5)))
+	ctx := ToCtx(context.Background(), NewTracer(nil, "").NewTrace("fml", traceID(5)))
 	if tr := FromCtx(ctx); tr == nil || tr.ID != "5" {
 		t.Fatalf("trace got lost: %+v", tr)
 	}
