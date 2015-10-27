@@ -501,3 +501,37 @@ func TestRSpanContains(t *testing.T) {
 		}
 	}
 }
+
+// TestRSpanIntersect verifies Intersect
+func TestRSpanIntersect(t *testing.T) {
+	rs := RSpan{Key: RKey("b"), EndKey: RKey("e")}
+
+	testData := []struct {
+		startKey, endKey RKey
+		expected         RSpan
+	}{
+		// Partially overlapping.
+		{RKey("a"), RKey("c"), RSpan{Key: RKey("b"), EndKey: RKey("c")}},
+		{RKey("d"), RKey("f"), RSpan{Key: RKey("d"), EndKey: RKey("e")}},
+		// No overlap.
+		{RKey("a"), RKey("b"), RSpan{Key: RKey("a"), EndKey: RKey("b")}},
+		// Descriptor surrounds the span.
+		{RKey("a"), RKey("f"), RSpan{Key: RKey("b"), EndKey: RKey("e")}},
+		// Descriptor has the same range as the span.
+		{RKey("b"), RKey("e"), RSpan{Key: RKey("b"), EndKey: RKey("e")}},
+	}
+
+	for i, test := range testData {
+		desc := RangeDescriptor{}
+		desc.StartKey = test.startKey
+		desc.EndKey = test.endKey
+
+		actual := rs.Intersect(&desc)
+		if bytes.Compare(actual.Key, test.expected.Key) != 0 ||
+			bytes.Compare(actual.EndKey, test.expected.EndKey) != 0 {
+			t.Errorf("%d: expected RSpan [%q,%q) but got [%q,%q)",
+				i, test.expected.Key, test.expected.EndKey,
+				actual.Key, actual.EndKey)
+		}
+	}
+}
