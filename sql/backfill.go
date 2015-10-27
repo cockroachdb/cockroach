@@ -23,8 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func (p *planner) makeBackfillBatch(tableName *parser.QualifiedName, tableDesc *TableDescriptor, indexDescs ...IndexDescriptor) (client.Batch, error) {
-	b := client.Batch{}
+func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName, tableDesc *TableDescriptor, indexDescs ...IndexDescriptor) error {
 	// Get all the rows affected.
 	// TODO(vivek): Avoid going through Select.
 	// TODO(tamird): Support partial indexes?
@@ -33,7 +32,7 @@ func (p *planner) makeBackfillBatch(tableName *parser.QualifiedName, tableDesc *
 		From:  parser.TableExprs{&parser.AliasedTableExpr{Expr: tableName}},
 	})
 	if err != nil {
-		return b, err
+		return err
 	}
 
 	// Construct a map from column ID to the index the value appears at within a
@@ -42,7 +41,7 @@ func (p *planner) makeBackfillBatch(tableName *parser.QualifiedName, tableDesc *
 	for i, name := range row.Columns() {
 		c, err := tableDesc.FindColumnByName(name)
 		if err != nil {
-			return b, err
+			return err
 		}
 		colIDtoRowIndex[c.ID] = i
 	}
@@ -65,7 +64,7 @@ func (p *planner) makeBackfillBatch(tableName *parser.QualifiedName, tableDesc *
 			secondaryIndexEntries, err := encodeSecondaryIndexes(
 				tableDesc.ID, []IndexDescriptor{indexDesc}, colIDtoRowIndex, rowVals)
 			if err != nil {
-				return b, err
+				return err
 			}
 
 			for _, secondaryIndexEntry := range secondaryIndexEntries {
@@ -78,5 +77,5 @@ func (p *planner) makeBackfillBatch(tableName *parser.QualifiedName, tableDesc *
 		}
 	}
 
-	return b, row.Err()
+	return row.Err()
 }

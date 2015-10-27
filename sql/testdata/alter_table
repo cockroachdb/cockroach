@@ -68,3 +68,18 @@ SELECT * FROM t
 1 NULL NULL
 2 1    1
 3 2    1
+
+statement error index "bar" does not exist
+ALTER TABLE t DROP CONSTRAINT bar
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT IF EXISTS bar
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT foo
+
+query TTTTT colnames
+SHOW INDEX FROM t
+----
+Table  Name     Unique  Seq  Column  Storing
+t      primary  true    1    a       false
