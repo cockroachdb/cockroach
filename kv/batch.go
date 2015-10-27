@@ -228,7 +228,7 @@ func (cs *chunkingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 // prev gives the right boundary of the union of all requests which don't
 // affect keys larger than the given key.
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
-// 'keys' into 'proto'.
+// 'keys' into 'roachpb'.
 func prev(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
 	candidate := roachpb.RKeyMin
 	for _, union := range ba.Requests {
