@@ -226,10 +226,12 @@ func (t *Tracer) NewTrace(tracee Traceable) *Trace {
 }
 
 func (t *Tracer) newTrace(id, name string) *Trace {
+	nt := ntrace.New("req", name)
+	nt.SetMaxEvents(100)
 	return &Trace{
 		ID:     id,
 		Name:   name,
 		tracer: t,
-		nTrace: ntrace.New("req", name),
+		nTrace: nt,
 	}
 }
