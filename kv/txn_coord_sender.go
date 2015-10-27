@@ -607,7 +607,7 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.clock.Now()
 	ba.CmdID = ba.GetOrCreateCmdID(ba.Timestamp.WallTime)
-	ba.Txn = &txn
+	ba.Txn = txn.Clone()
 	ba.Add(hb)
 
 	epochEnds := trace.Epoch("heartbeat")
@@ -663,6 +663,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		if t.NodeID == 0 {
 			panic("no replica set in header on uncertainty restart")
 		}
+		newTxn.Update(&t.Txn)
 		newTxn.CertainNodes.Add(t.NodeID)
 		// If the reader encountered a newer write within the uncertainty
 		// interval, move the timestamp forward, just past that write or
@@ -673,6 +674,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		newTxn.Restart(ba.GetUserPriority(), newTxn.Priority, newTxn.Timestamp)
 		t.Txn = *newTxn
 	case *roachpb.TransactionAbortedError:
+		newTxn.Update(&t.Txn)
 		// Increase timestamp if applicable.
 		newTxn.Timestamp.Forward(t.Txn.Timestamp)
 		newTxn.Priority = t.Txn.Priority
@@ -681,14 +683,14 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		// race with the state update below.
 		defer tc.cleanupTxn(trace, t.Txn)
 	case *roachpb.TransactionPushError:
+		newTxn.Update(t.Txn)
 		// Increase timestamp if applicable, ensuring that we're
 		// just ahead of the pushee.
 		newTxn.Timestamp.Forward(t.PusheeTxn.Timestamp.Add(0, 1))
 		newTxn.Restart(ba.GetUserPriority(), t.PusheeTxn.Priority-1, newTxn.Timestamp)
 		t.Txn = newTxn
 	case *roachpb.TransactionRetryError:
-		// Increase timestamp if applicable.
-		newTxn.Timestamp.Forward(t.Txn.Timestamp)
+		newTxn.Update(&t.Txn)
 		newTxn.Restart(ba.GetUserPriority(), t.Txn.Priority, newTxn.Timestamp)
 		t.Txn = *newTxn
 	case roachpb.TransactionRestartError:

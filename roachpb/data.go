@@ -639,17 +639,16 @@ func (t *Transaction) Update(o *Transaction) {
 	if t.Epoch < o.Epoch {
 		t.Epoch = o.Epoch
 	}
-	if t.Timestamp.Less(o.Timestamp) {
-		t.Timestamp = o.Timestamp
+	t.Timestamp.Forward(o.Timestamp)
+	t.OrigTimestamp.Forward(o.OrigTimestamp)
+	t.MaxTimestamp.Forward(o.MaxTimestamp)
+	if o.LastHeartbeat != nil {
+		if t.LastHeartbeat == nil {
+			t.LastHeartbeat = &Timestamp{}
+		}
+		t.LastHeartbeat.Forward(*o.LastHeartbeat)
 	}
-	if t.OrigTimestamp.Less(o.OrigTimestamp) {
-		t.OrigTimestamp = o.OrigTimestamp
-	}
-	if t.LastHeartbeat == nil || (o.LastHeartbeat == nil || t.LastHeartbeat.Less(*o.LastHeartbeat)) {
-		t.LastHeartbeat = o.LastHeartbeat
-	}
-	// Should not actually change at the time of writing.
-	t.MaxTimestamp = o.MaxTimestamp
+
 	// Copy the list of nodes without time uncertainty.
 	t.CertainNodes = NodeList{Nodes: append(Int32Slice(nil),
 		o.CertainNodes.Nodes...)}

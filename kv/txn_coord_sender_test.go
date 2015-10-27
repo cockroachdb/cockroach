@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -597,5 +598,40 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 	_, pErr := ts.Send(context.Background(), ba)
 	if pErr != nil {
 		t.Fatal(pErr)
+	}
+}
+
+// TestTxnCoordSenderErrorWithIntent validates that if a transactional request
+// returns an error but also indicates a Writing transaction, the coordinator
+// tracks it just like a successful request.
+func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	clock.SetMaxOffset(20)
+
+	ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		txn := ba.Txn.Clone()
+		txn.Writing = true
+		return nil, roachpb.NewError(roachpb.NewTransactionRetryError(txn))
+	}), clock, false, nil, stopper)
+	defer stopper.Stop()
+
+	var ba roachpb.BatchRequest
+	key := roachpb.Key("test")
+	ba.Add(&roachpb.BeginTransactionRequest{Span: roachpb.Span{Key: key}})
+	ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: key}})
+	ba.Add(&roachpb.EndTransactionRequest{})
+	ba.Txn = &roachpb.Transaction{Name: "test"}
+	if _, pErr := ts.Send(context.Background(), ba); !testutils.IsError(pErr.GoError(), "retry txn") {
+		t.Fatalf("unexpected error: %v", pErr)
+	}
+
+	defer teardownHeartbeats(ts)
+	ts.Lock()
+	defer ts.Unlock()
+	if len(ts.txns) != 1 {
+		t.Fatalf("expected transaction to be tracked")
 	}
 }
