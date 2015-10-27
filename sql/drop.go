@@ -113,7 +113,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 				return &valuesNode{}, nil
 			}
 			// Index does not exist, but we want it to: error out.
-			return nil, fmt.Errorf("index %q does not exist", idxName)
+			return nil, err
 		}
 
 		if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
