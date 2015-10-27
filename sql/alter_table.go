@@ -133,7 +133,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 			}
 
 		case *parser.AlterTableDropConstraint:
-			idx, err := newTableDesc.FindIndexByName(t.Constraint)
+			i, err := newTableDesc.FindIndexByName(t.Constraint)
 			if err != nil {
 				if t.IfExists {
 					// Noop.
@@ -141,20 +141,10 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 				}
 				return nil, err
 			}
+			indexID := newTableDesc.Indexes[i].ID
+			newTableDesc.Indexes = append(newTableDesc.Indexes[:i], newTableDesc.Indexes[i+1:]...)
 
-			found := false
-			for i := range newTableDesc.Indexes {
-				if &newTableDesc.Indexes[i] == idx {
-					newTableDesc.Indexes = append(newTableDesc.Indexes[:i], newTableDesc.Indexes[i+1:]...)
-					found = true
-					break
-				}
-			}
-			if !found {
-				return nil, util.Errorf("index %s not found in %s", idx, newTableDesc)
-			}
-
-			indexPrefix := MakeIndexKeyPrefix(newTableDesc.ID, idx.ID)
+			indexPrefix := MakeIndexKeyPrefix(newTableDesc.ID, indexID)
 
 			// Delete the index.
 			indexStartKey := roachpb.Key(indexPrefix)
