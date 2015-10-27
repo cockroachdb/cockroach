@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/gogo/protobuf/proto"
 )
 
 // CreateDatabase creates a database.
@@ -75,25 +76,26 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 		ColumnNames:      n.Columns,
 		StoreColumnNames: n.Storing,
 	}
-	if err := tableDesc.AddIndex(indexDesc, false); err != nil {
+
+	newTableDesc := proto.Clone(tableDesc).(*TableDescriptor)
+
+	if err := newTableDesc.AddIndex(indexDesc, false); err != nil {
 		return nil, err
 	}
 
-	if err := tableDesc.AllocateIDs(); err != nil {
+	if err := newTableDesc.AllocateIDs(); err != nil {
 		return nil, err
 	}
 
-	// `indexDesc` changed on us when we called `tableDesc.AllocateIDs()`.
-	indexDesc = tableDesc.Indexes[len(tableDesc.Indexes)-1]
 	b := client.Batch{}
-	if err := p.backfillBatch(&b, n.Table, tableDesc, indexDesc); err != nil {
+	if err := p.backfillBatch(&b, n.Table, tableDesc, newTableDesc); err != nil {
 		return nil, err
 	}
 
-	b.Put(MakeDescMetadataKey(tableDesc.GetID()), tableDesc)
+	b.Put(MakeDescMetadataKey(newTableDesc.GetID()), newTableDesc)
 
 	if err := p.txn.Run(&b); err != nil {
-		return nil, convertBatchError(tableDesc, b, err)
+		return nil, convertBatchError(newTableDesc, b, err)
 	}
 
 	return &valuesNode{}, nil

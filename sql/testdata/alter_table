@@ -62,12 +62,25 @@ INSERT INTO t VALUES (2, 1, 1), (3, 2, 1)
 statement error duplicate key value \(c\)=\(1\) violates unique constraint "bar"
 ALTER TABLE t ADD CONSTRAINT bar UNIQUE (c)
 
-query II
+query II colnames
 SELECT * FROM t
 ----
+a b    c
 1 NULL NULL
 2 1    1
 3 2    1
+
+statement error column "d" does not exist
+ALTER TABLE t DROP d
+
+statement ok
+ALTER TABLE t DROP IF EXISTS d
+
+statement error column "a" is referenced by the primary key
+ALTER TABLE t DROP a
+
+statement error column "b" is referenced by existing index "foo"
+ALTER TABLE t DROP b
 
 statement error index "bar" does not exist
 ALTER TABLE t DROP CONSTRAINT bar
@@ -83,3 +96,28 @@ SHOW INDEX FROM t
 ----
 Table  Name     Unique  Seq  Column  Storing
 t      primary  true    1    a       false
+
+query ITTB colnames
+EXPLAIN (DEBUG) SELECT * FROM t
+----
+RowIdx  Key             Value  Output
+0       /t/primary/1    NULL   true
+1       /t/primary/2    NULL   NULL
+1       /t/primary/2/b  1      NULL
+1       /t/primary/2/c  1      true
+2       /t/primary/3    NULL   NULL
+2       /t/primary/3/b  2      NULL
+2       /t/primary/3/c  1      true
+
+statement ok
+ALTER TABLE t DROP b
+
+query ITTB colnames
+EXPLAIN (DEBUG) SELECT * FROM t
+----
+RowIdx  Key             Value  Output
+0       /t/primary/1    NULL   true
+1       /t/primary/2    NULL   NULL
+1       /t/primary/2/c  1      true
+2       /t/primary/3    NULL   NULL
+2       /t/primary/3/c  1      true
