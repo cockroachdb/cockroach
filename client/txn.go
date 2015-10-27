@@ -444,7 +444,7 @@ func (txn *Txn) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.
 				Key: firstWriteKey,
 			},
 		}
-		reqs = append(append(append([]roachpb.Request(nil), reqs[:firstWriteIndex]...), []roachpb.Request{bt}...), reqs[firstWriteIndex:]...)
+		reqs = append(append(append([]roachpb.Request(nil), reqs[:firstWriteIndex]...), bt), reqs[firstWriteIndex:]...)
 	}
 
 	if elideEndTxn {
