@@ -87,9 +87,6 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 		return nil, err
 	}
 	p.txn.SetSystemDBTrigger()
-	if err := p.txn.Commit(); err != nil {
-		return nil, err
-	}
 	return &valuesNode{}, nil
 }
 
