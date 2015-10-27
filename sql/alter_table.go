@@ -20,9 +20,12 @@ package sql
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // AlterTable creates a table.
@@ -65,6 +68,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 
 	nextIndexID := tableDesc.NextIndexID
 
+	b := client.Batch{}
 	for _, cmd := range n.Cmds {
 		switch t := cmd.(type) {
 		case *parser.AlterTableAddColumn:
@@ -96,6 +100,38 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 				return nil, util.Errorf("unsupported constraint: %T", t.ConstraintDef)
 			}
 
+		case *parser.AlterTableDropConstraint:
+			idx, err := tableDesc.FindIndexByName(t.Constraint)
+			if err != nil {
+				if t.IfExists {
+					// Noop.
+					continue
+				}
+				return nil, err
+			}
+
+			found := false
+			for i := range tableDesc.Indexes {
+				if &tableDesc.Indexes[i] == idx {
+					tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
+					found = true
+					break
+				}
+			}
+			if !found {
+				return nil, util.Errorf("index %s not found in %s", idx, tableDesc)
+			}
+
+			indexPrefix := MakeIndexKeyPrefix(tableDesc.ID, idx.ID)
+
+			// Delete the index.
+			indexStartKey := roachpb.Key(indexPrefix)
+			indexEndKey := indexStartKey.PrefixEnd()
+			if log.V(2) {
+				log.Infof("DelRange %s - %s", prettyKey(indexStartKey, 0), prettyKey(indexEndKey, 0))
+			}
+			b.DelRange(indexStartKey, indexEndKey)
+
 		default:
 			return nil, util.Errorf("unsupported alter cmd: %T", cmd)
 		}
@@ -113,8 +149,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		}
 	}
 
-	b, err := p.makeBackfillBatch(n.Table, tableDesc, newIndexes...)
-	if err != nil {
+	if err := p.backfillBatch(&b, n.Table, tableDesc, newIndexes...); err != nil {
 		return nil, err
 	}
 
