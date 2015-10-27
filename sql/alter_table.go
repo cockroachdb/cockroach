@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/gogo/protobuf/proto"
 )
 
 // AlterTable creates a table.
@@ -66,7 +67,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		return nil, err
 	}
 
-	nextIndexID := tableDesc.NextIndexID
+	newTableDesc := proto.Clone(tableDesc).(*TableDescriptor)
 
 	b := client.Batch{}
 	for _, cmd := range n.Cmds {
@@ -77,9 +78,9 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 			if err != nil {
 				return nil, err
 			}
-			tableDesc.AddColumn(*col)
+			newTableDesc.AddColumn(*col)
 			if idx != nil {
-				if err := tableDesc.AddIndex(*idx, d.PrimaryKey); err != nil {
+				if err := newTableDesc.AddIndex(*idx, d.PrimaryKey); err != nil {
 					return nil, err
 				}
 			}
@@ -93,15 +94,45 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 					ColumnNames:      d.Columns,
 					StoreColumnNames: d.Storing,
 				}
-				if err := tableDesc.AddIndex(idx, d.PrimaryKey); err != nil {
+				if err := newTableDesc.AddIndex(idx, d.PrimaryKey); err != nil {
 					return nil, err
 				}
 			default:
 				return nil, util.Errorf("unsupported constraint: %T", t.ConstraintDef)
 			}
+		case *parser.AlterTableDropColumn:
+			col, err := newTableDesc.FindColumnByName(t.Column)
+			if err != nil {
+				if t.IfExists {
+					// Noop.
+					continue
+				}
+				return nil, err
+			}
+
+			if newTableDesc.PrimaryIndex.containsColumnID(col.ID) {
+				return nil, fmt.Errorf("column %q is contained in the primary key", col.Name)
+			}
+			for _, idx := range newTableDesc.Indexes {
+				if idx.containsColumnID(col.ID) {
+					return nil, fmt.Errorf("column %q is contained in existing index %q", col.Name, idx.Name)
+				}
+			}
+
+			found := false
+			for i := range newTableDesc.Columns {
+				if &newTableDesc.Columns[i] == col {
+					newTableDesc.Columns = append(newTableDesc.Columns[:i], newTableDesc.Columns[i+1:]...)
+					found = true
+					break
+				}
+			}
+			if !found {
+				return nil, util.Errorf("column %s not found in %s", col, newTableDesc)
+			}
 
 		case *parser.AlterTableDropConstraint:
-			idx, err := tableDesc.FindIndexByName(t.Constraint)
+			idx, err := newTableDesc.FindIndexByName(t.Constraint)
 			if err != nil {
 				if t.IfExists {
 					// Noop.
@@ -111,18 +142,18 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 			}
 
 			found := false
-			for i := range tableDesc.Indexes {
-				if &tableDesc.Indexes[i] == idx {
-					tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
+			for i := range newTableDesc.Indexes {
+				if &newTableDesc.Indexes[i] == idx {
+					newTableDesc.Indexes = append(newTableDesc.Indexes[:i], newTableDesc.Indexes[i+1:]...)
 					found = true
 					break
 				}
 			}
 			if !found {
-				return nil, util.Errorf("index %s not found in %s", idx, tableDesc)
+				return nil, util.Errorf("index %s not found in %s", idx, newTableDesc)
 			}
 
-			indexPrefix := MakeIndexKeyPrefix(tableDesc.ID, idx.ID)
+			indexPrefix := MakeIndexKeyPrefix(newTableDesc.ID, idx.ID)
 
 			// Delete the index.
 			indexStartKey := roachpb.Key(indexPrefix)
@@ -137,26 +168,18 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		}
 	}
 
-	if err := tableDesc.AllocateIDs(); err != nil {
+	if err := newTableDesc.AllocateIDs(); err != nil {
 		return nil, err
 	}
 
-	// These changed on us when we called `tableDesc.AllocateIDs()`.
-	var newIndexes []IndexDescriptor
-	for _, index := range append(tableDesc.Indexes, tableDesc.PrimaryIndex) {
-		if index.ID >= nextIndexID {
-			newIndexes = append(newIndexes, index)
-		}
-	}
-
-	if err := p.backfillBatch(&b, n.Table, tableDesc, newIndexes...); err != nil {
+	if err := p.backfillBatch(&b, n.Table, tableDesc, newTableDesc); err != nil {
 		return nil, err
 	}
 
-	b.Put(MakeDescMetadataKey(tableDesc.GetID()), tableDesc)
+	b.Put(MakeDescMetadataKey(newTableDesc.GetID()), newTableDesc)
 
 	if err := p.txn.Run(&b); err != nil {
-		return nil, convertBatchError(tableDesc, b, err)
+		return nil, convertBatchError(newTableDesc, b, err)
 	}
 
 	return &valuesNode{}, nil
