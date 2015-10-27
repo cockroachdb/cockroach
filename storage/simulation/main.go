@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -36,8 +37,10 @@ var scriptInputFile = flag.String("script", "default.script", "Input script file
 func main() {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-
 	flag.Parse()
+
+	rand, _ := randutil.NewPseudoRand()
+
 	// Give the flags some boundaries.
 	if *startingNodes < 0 {
 		*startingNodes = 0
@@ -103,14 +106,14 @@ func main() {
 	}
 
 	fmt.Printf("\nParsing Script:\n")
-	s, err := createScript(*maxEpoch, *scriptInputFile)
+	s, err := createScript(*maxEpoch, *scriptInputFile, rand)
 	if err != nil {
 		fmt.Printf("Could not correctly parse script file:%s - %s", *scriptInputFile, err)
 		os.Exit(1)
 	}
 
 	fmt.Printf("\nPreparing Cluster:\n")
-	c := createCluster(stopper, *startingNodes, epochWriter, actionWriter, s)
+	c := createCluster(stopper, *startingNodes, epochWriter, actionWriter, s, rand)
 
 	// Run until stable or at the 100th epoch.
 	fmt.Printf("\nRunning Simulation:\n")

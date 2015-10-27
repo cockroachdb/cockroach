@@ -21,6 +21,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"math/rand"
 	"os"
 	"strconv"
 	"strings"
@@ -100,13 +101,17 @@ type Action struct {
 // First is the first epoch in which the action occurs.
 // Every is the interval for how often the action re-occurs.
 // Last is the final epoch in which the action can occur.
-// Repeat is how many times an action occurs at each epoch in which it fires.
+// Repeat is how many times an action occurs at each epoch in which it
+// fires.
+// Percent is the percentage chance that the action will occur at every epoch
+// at which it could occur, a value form 0 to 100.
 type ActionDetails struct {
 	Action
-	first  int
-	every  int
-	last   int
-	repeat int
+	first   int
+	every   int
+	last    int
+	repeat  int
+	percent int
 }
 
 func (ad ActionDetails) String() string {
@@ -137,6 +142,9 @@ func (ad ActionDetails) String() string {
 	if ad.repeat > 1 {
 		fmt.Fprintf(&buf, "\tRepeat:%d", ad.repeat)
 	}
+	if ad.percent < 100 {
+		fmt.Fprintf(&buf, "\tPercent:%d%%", ad.percent)
+	}
 	return buf.String()
 }
 
@@ -144,22 +152,26 @@ func (ad ActionDetails) String() string {
 type Script struct {
 	maxEpoch int
 	actions  map[int][]Action
+	rand     *rand.Rand
 }
 
 // createScript creates a new Script.
-func createScript(maxEpoch int, scriptFile string) (Script, error) {
+func createScript(maxEpoch int, scriptFile string, rand *rand.Rand) (Script, error) {
 	s := Script{
 		maxEpoch: maxEpoch,
 		actions:  make(map[int][]Action),
+		rand:     rand,
 	}
 
 	return s, s.parse(scriptFile)
 }
 
 // addActionAtEpoch adds an action at a specific epoch to the s.actions map.
-func (s *Script) addActionAtEpoch(action Action, repeat, epoch int) {
+func (s *Script) addActionAtEpoch(action Action, repeat, epoch, percent int) {
 	for i := 0; i < repeat; i++ {
-		s.actions[epoch] = append(s.actions[epoch], action)
+		if s.rand.Intn(100) < percent {
+			s.actions[epoch] = append(s.actions[epoch], action)
+		}
 	}
 }
 
@@ -187,7 +199,7 @@ func (s *Script) addAction(details ActionDetails) {
 
 	// Save all the times this action should occur in s.actions.
 	for currentEpoch := details.first; currentEpoch <= last && currentEpoch <= s.maxEpoch; currentEpoch += every {
-		s.addActionAtEpoch(details.Action, repeat, currentEpoch)
+		s.addActionAtEpoch(details.Action, repeat, currentEpoch, details.percent)
 	}
 }
 
@@ -228,7 +240,7 @@ func (s *Script) parse(scriptFile string) error {
 		if len(elements) < 2 {
 			return util.Errorf("line %d has too few elements: %s", lineNumber, line)
 		}
-		if len(elements) > 5 {
+		if len(elements) > 6 {
 			return util.Errorf("line %d has too many elements: %s", lineNumber, line)
 		}
 
@@ -280,6 +292,20 @@ func (s *Script) parse(scriptFile string) error {
 			if details.repeat, err = strconv.Atoi(elements[4]); err != nil {
 				return util.Errorf("line %d REPEAT could not be parsed: %s", lineNumber, elements[4])
 			}
+		}
+
+		// Get the percentage value.
+		if len(elements) > 5 {
+			if details.percent, err = strconv.Atoi(elements[5]); err != nil {
+				return util.Errorf("line %d PERCENT could not be parsed: %s", lineNumber, elements[5])
+			}
+			if details.percent < 1 {
+				return util.Errorf("line %d PERCENT is less than 1: %s", lineNumber, elements[5])
+			} else if details.percent > 100 {
+				return util.Errorf("line %d PERCENT is greater than 100: %s", lineNumber, elements[5])
+			}
+		} else {
+			details.percent = 100
 		}
 
 		s.addAction(details)
