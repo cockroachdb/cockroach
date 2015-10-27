@@ -20,6 +20,7 @@ package sql
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -84,9 +85,8 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 
 	// `indexDesc` changed on us when we called `tableDesc.AllocateIDs()`.
 	indexDesc = tableDesc.Indexes[len(tableDesc.Indexes)-1]
-
-	b, err := p.makeBackfillBatch(n.Table, tableDesc, indexDesc)
-	if err != nil {
+	b := client.Batch{}
+	if err := p.backfillBatch(&b, n.Table, tableDesc, indexDesc); err != nil {
 		return nil, err
 	}
 
