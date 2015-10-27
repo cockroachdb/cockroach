@@ -349,25 +349,27 @@ func (l *Cluster) startNode(i int) *Container {
 		"--gossip=" + strings.Join(gossipNodes, ","),
 		"--scan-max-idle-time=200ms", // set low to speed up tests
 	}
+	var localLogDir string
 	if len(l.LogDir) > 0 {
-		dockerDir := "/logs/" + node(i)
-		localDir := l.LogDir + "/" + node(i)
-		if !exists(localDir) {
-			if err := os.Mkdir(localDir, 0777); err != nil {
+		dockerLogDir := "/logs/" + node(i)
+		localLogDir = l.LogDir + "/" + node(i)
+		if !exists(localLogDir) {
+			if err := os.Mkdir(localLogDir, 0777); err != nil {
 				log.Fatal(err)
 			}
 		}
-		log.Infof("Logs for node %s are located at %s.", node(i), localDir)
 		cmd = append(
 			cmd,
-			"--log-dir="+dockerDir,
+			"--log-dir="+dockerLogDir,
 			"--logtostderr=false",
 			"--alsologtostderr=true")
 	}
 	c := l.createRoach(i, cmd...)
 	maybePanic(c.Start(nil, l.dns, l.vols))
 	c.Name = node(i)
-	log.Infof("started %s: https://%s", c.Name, c.Addr(""))
+	uri := fmt.Sprintf("https://%s", c.Addr(""))
+	// Infof doesn't take positional parameters, hence the Sprintf.
+	log.Infof(fmt.Sprintf("started node:\n\tname:  %s\n\tui:    %[2]s\n\ttrace: %[2]s/debug/requests\n\tpprof: %[2]s/debug/pprof/profile\n\tlogs:  %s\n\tcerts:  %s", c.Name, uri, localLogDir, l.CertsDir))
 	return c
 }
 
