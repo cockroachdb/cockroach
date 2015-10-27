@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -53,7 +52,6 @@ type Cluster struct {
 	rangeIDs        roachpb.RangeIDSlice // sorted
 	rangeIDsByStore map[roachpb.StoreID]roachpb.RangeIDSlice
 	rand            *rand.Rand
-	seed            int64
 	epoch           int
 	epochWriter     *tabwriter.Writer
 	actionWriter    *tabwriter.Writer
@@ -62,8 +60,7 @@ type Cluster struct {
 
 // createCluster generates a new cluster using the provided stopper and the
 // number of nodes supplied. Each node will have one store to start.
-func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWriter io.Writer, script Script) *Cluster {
-	rand, seed := randutil.NewPseudoRand()
+func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWriter io.Writer, script Script, rand *rand.Rand) *Cluster {
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
 	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
@@ -84,7 +81,6 @@ func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWrit
 		ranges:          make(map[roachpb.RangeID]*Range),
 		rangeIDsByStore: make(map[roachpb.StoreID]roachpb.RangeIDSlice),
 		rand:            rand,
-		seed:            seed,
 		epochWriter:     tabwriter.NewWriter(epochWriter, 8, 1, 2, ' ', 0),
 		actionWriter:    tabwriter.NewWriter(actionWriter, 8, 1, 2, ' ', 0),
 		script:          script,
@@ -392,7 +388,7 @@ func (c *Cluster) calculateRangeIDsByStore() {
 // String prints out the current status of the cluster.
 func (c *Cluster) String() string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Cluster Info:\nSeed - %d\tEpoch - %d\n", c.seed, c.epoch)
+	fmt.Fprintf(&buf, "Cluster Info:\tEpoch - %d\n", c.epoch)
 
 	var nodeIDs roachpb.NodeIDSlice
 	for nodeID := range c.nodes {
