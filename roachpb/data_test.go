@@ -461,3 +461,77 @@ func TestIsPrev(t *testing.T) {
 		}
 	}
 }
+
+// TestRSpanContains verifies methods to check whether a key
+// or key range is contained within the span.
+func TestRSpanContains(t *testing.T) {
+	rs := RSpan{Key: []byte("a"), EndKey: []byte("b")}
+
+	testData := []struct {
+		start, end []byte
+		contains   bool
+	}{
+		// Single keys.
+		{[]byte("a"), []byte("a"), true},
+		{[]byte("a"), nil, true},
+		{[]byte("aa"), []byte("aa"), true},
+		{[]byte("`"), []byte("`"), false},
+		{[]byte("b"), []byte("b"), false},
+		{[]byte("b"), nil, false},
+		{[]byte("c"), []byte("c"), false},
+		// Key ranges.
+		{[]byte("a"), []byte("b"), true},
+		{[]byte("a"), []byte("aa"), true},
+		{[]byte("aa"), []byte("b"), true},
+		{[]byte("0"), []byte("9"), false},
+		{[]byte("`"), []byte("a"), false},
+		{[]byte("b"), []byte("bb"), false},
+		{[]byte("0"), []byte("bb"), false},
+		{[]byte("aa"), []byte("bb"), false},
+		{[]byte("b"), []byte("a"), false},
+	}
+	for i, test := range testData {
+		if bytes.Compare(test.start, test.end) == 0 {
+			if rs.ContainsKey(test.start) != test.contains {
+				t.Errorf("%d: expected key %q within range", i, test.start)
+			}
+		}
+		if rs.ContainsKeyRange(test.start, test.end) != test.contains {
+			t.Errorf("%d: expected key %q within range", i, test.start)
+		}
+	}
+}
+
+// TestRSpanIntersect verifies Intersect
+func TestRSpanIntersect(t *testing.T) {
+	rs := RSpan{Key: RKey("b"), EndKey: RKey("e")}
+
+	testData := []struct {
+		startKey, endKey RKey
+		expected         RSpan
+	}{
+		// Partially overlapping.
+		{RKey("a"), RKey("c"), RSpan{Key: RKey("b"), EndKey: RKey("c")}},
+		{RKey("d"), RKey("f"), RSpan{Key: RKey("d"), EndKey: RKey("e")}},
+		// No overlap.
+		{RKey("a"), RKey("b"), RSpan{Key: RKey("a"), EndKey: RKey("b")}},
+		// Descriptor surrounds the span.
+		{RKey("a"), RKey("f"), RSpan{Key: RKey("b"), EndKey: RKey("e")}},
+		// Descriptor has the same range as the span.
+		{RKey("b"), RKey("e"), RSpan{Key: RKey("b"), EndKey: RKey("e")}},
+	}
+
+	for i, test := range testData {
+		desc := RangeDescriptor{}
+		desc.StartKey = test.startKey
+		desc.EndKey = test.endKey
+
+		actual := rs.Intersect(&desc)
+		if bytes.Compare(actual.Key, test.expected.Key) != 0 ||
+			bytes.Compare(actual.EndKey, test.expected.EndKey) != 0 {
+			t.Errorf("%d: expected RSpan [%q,%q) but got [%q,%q)",
+				i, test.expected.Key, test.expected.EndKey,
+				actual.Key, actual.EndKey)
+		}
+	}
+}
