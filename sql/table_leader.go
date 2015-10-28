@@ -18,8 +18,6 @@
 package sql
 
 import (
-	"time"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -89,8 +87,6 @@ func (t TableLeaderCreator) Start(s *stop.Stopper, gossip *gossip.Gossip, node K
 		// the sql operations used in running the mutations need fully table
 		// parser.QualifiedName.
 		databases := make(map[ID]string)
-		// Wake up every once in a while to run outstanding table mutations.
-		ticker := time.NewTicker(50 * time.Millisecond)
 
 		for {
 			select {
@@ -123,13 +119,27 @@ func (t TableLeaderCreator) Start(s *stop.Stopper, gossip *gossip.Gossip, node K
 					if len(descriptor.Mutations) > 0 {
 						key := MakeIndexKeyPrefix(descriptor.ID, descriptor.PrimaryIndex.ID)
 						keyString := string(key)
-						if _, ok := tables[keyString]; !ok {
-							tables[keyString] = descriptorState{descriptor: descriptor}
+						d, ok := tables[keyString]
+						if !ok {
+							d = descriptorState{descriptor: descriptor}
+							tables[keyString] = d
 							// Register a key for the first range of the table data for notifications.
 							node.RegisterNotifyKeyLeader(key, s, ch)
 						}
 						// Keep the key in tables. Remove it from delTables
 						delete(delTables, keyString)
+						// Possibly apply mutation.
+						if d.isLeader && !d.isWorking {
+							d.isWorking = true
+							tables[keyString] = d
+							go func() {
+								err := applyOneMutation(db, d.descriptor, databases[d.descriptor.ParentID])
+								if err != nil {
+									log.Info(err)
+								}
+								done <- mutationDone{key: roachpb.Key(key)}
+							}()
+						}
 					}
 				}
 				// Unregister all the tables in delTables.
@@ -172,24 +182,6 @@ func (t TableLeaderCreator) Start(s *stop.Stopper, gossip *gossip.Gossip, node K
 					log.Info("received leader notification for table not followed")
 				}
 
-			case <-ticker.C:
-				for k, v := range tables {
-					if v.isLeader && !v.isWorking {
-						keyString := string(k)
-						if !v.isWorking {
-							v.isWorking = true
-							tables[keyString] = v
-							go func() {
-								err := applyOneMutation(db, v.descriptor, databases[v.descriptor.ParentID])
-								if err != nil {
-									log.Info(err)
-								}
-								done <- mutationDone{key: roachpb.Key(k)}
-							}()
-						}
-					}
-				}
-
 			case d := <-done:
 				keyString := string(d.key)
 				if v, ok := tables[keyString]; ok {
@@ -197,7 +189,8 @@ func (t TableLeaderCreator) Start(s *stop.Stopper, gossip *gossip.Gossip, node K
 						panic("received work completion notification with no pending work")
 					}
 					v.isWorking = false
-					// continue to work when the clock ticks next.
+					// Continue to work on the next mutation if present when a new system
+					// config is read.
 					tables[keyString] = v
 					if v.isDeleted {
 						node.UnregisterNotifyKeyLeader(roachpb.Key(keyString))
