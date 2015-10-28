@@ -23,22 +23,34 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 )
 
+type nodeIDSet map[roachpb.NodeID]struct{}
+
+func makeNodeIDSet(nodeIDs ...roachpb.NodeID) nodeIDSet {
+	nodeSet := make(nodeIDSet)
+	for _, id := range nodeIDs {
+		nodeSet[id] = struct{}{}
+	}
+	return nodeSet
+}
+
 // A Balancer is an object that makes decisions on how to move ranges between
 // nodes on the cluster, based on collected statistics, in order to optimally
 // balance the workload across the cluster.
 type balancer interface {
 	// selectGood attempts to select a store from the supplied store list that
-	// it considers to be 'Good' relative to the other stores in the list.
+	// it considers to be 'Good' relative to the other stores in the list. Any
+	// nodes in the supplied 'exclude' list will be disqualified from selection.
 	// Returns the selected store or nil if no such store can be found.
-	selectGood(sl StoreList) *roachpb.StoreDescriptor
+	selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor
 	// selectBad attempts to select a store from the supplied store list that it
 	// considers to be 'Bad' relative to the other stores in the list. Returns
 	// the selected store or nil if no such store can be found.
 	selectBad(sl StoreList) *roachpb.StoreDescriptor
 	// improve attempts to select an improvement over the given store from the
-	// stores in the given store list. Returns the selected store nil if no such
-	// store can be found.
-	improve(store *roachpb.StoreDescriptor, sl StoreList) *roachpb.StoreDescriptor
+	// stores in the given store list. Any nodes in the supplied 'xclude' list
+	// will be disqualified from selection. Returns the selected store, or nil if no
+	// such store can be found.
+	improve(store *roachpb.StoreDescriptor, sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor
 }
 
 // rangeCountBalancer attempts to balance ranges across the cluster while
@@ -47,9 +59,9 @@ type rangeCountBalancer struct {
 	rand *rand.Rand
 }
 
-func (rcb rangeCountBalancer) selectGood(sl StoreList) *roachpb.StoreDescriptor {
+func (rcb rangeCountBalancer) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
 	// Consider a random sample of stores from the store list.
-	candidates := selectRandom(rcb.rand, 3, sl)
+	candidates := selectRandom(rcb.rand, 3, sl, excluded)
 	var best *roachpb.StoreDescriptor
 	for _, candidate := range candidates {
 		if best == nil {
@@ -78,7 +90,8 @@ func (rcb rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 	return worst
 }
 
-func (rcb rangeCountBalancer) improve(store *roachpb.StoreDescriptor, sl StoreList) *roachpb.StoreDescriptor {
+func (rcb rangeCountBalancer) improve(store *roachpb.StoreDescriptor, sl StoreList,
+	excluded nodeIDSet) *roachpb.StoreDescriptor {
 	// If existing replica has a stable range count, return false immediately.
 	if float64(store.Capacity.RangeCount) < sl.count.mean*(1+rebalanceFromMean) {
 		return nil
@@ -87,7 +100,7 @@ func (rcb rangeCountBalancer) improve(store *roachpb.StoreDescriptor, sl StoreLi
 	// Attempt to select a better candidate from the supplied list.
 	// Only approve the candidate if its range count is sufficiently below the
 	// cluster mean.
-	candidate := rcb.selectGood(sl)
+	candidate := rcb.selectGood(sl, excluded)
 	if candidate == nil {
 		return nil
 	}
@@ -103,9 +116,9 @@ type usedCapacityBalancer struct {
 	rand *rand.Rand
 }
 
-func (ucb usedCapacityBalancer) selectGood(sl StoreList) *roachpb.StoreDescriptor {
+func (ucb usedCapacityBalancer) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
 	// Consider a random sample of stores from the store list.
-	candidates := selectRandom(ucb.rand, 3, sl)
+	candidates := selectRandom(ucb.rand, 3, sl, excluded)
 	var best *roachpb.StoreDescriptor
 	for _, candidate := range candidates {
 		if best == nil {
@@ -133,7 +146,8 @@ func (ucb usedCapacityBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor
 	return worst
 }
 
-func (ucb usedCapacityBalancer) improve(store *roachpb.StoreDescriptor, sl StoreList) *roachpb.StoreDescriptor {
+func (ucb usedCapacityBalancer) improve(store *roachpb.StoreDescriptor, sl StoreList,
+	excluded nodeIDSet) *roachpb.StoreDescriptor {
 	storeFraction := store.Capacity.FractionUsed()
 
 	// If existing replica has stable capacity usage,, return false immediately.
@@ -144,7 +158,7 @@ func (ucb usedCapacityBalancer) improve(store *roachpb.StoreDescriptor, sl Store
 	// Attempt to select a better candidate from the supplied list.  Only
 	// approve the candidate if its disk usage is sufficiently below the cluster
 	// mean.
-	candidate := ucb.selectGood(sl)
+	candidate := ucb.selectGood(sl, excluded)
 	if candidate == nil {
 		return nil
 	}
@@ -162,13 +176,13 @@ type defaultBalancer struct {
 	rand *rand.Rand
 }
 
-func (db defaultBalancer) selectGood(sl StoreList) *roachpb.StoreDescriptor {
+func (db defaultBalancer) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
 	if sl.used.mean < minFractionUsedThreshold {
 		rcb := rangeCountBalancer{db.rand}
-		return rcb.selectGood(sl)
+		return rcb.selectGood(sl, excluded)
 	}
 	ucb := usedCapacityBalancer{db.rand}
-	return ucb.selectGood(sl)
+	return ucb.selectGood(sl, excluded)
 }
 
 func (db defaultBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
@@ -180,21 +194,27 @@ func (db defaultBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 	return ucb.selectBad(sl)
 }
 
-func (db defaultBalancer) improve(store *roachpb.StoreDescriptor, sl StoreList) *roachpb.StoreDescriptor {
+func (db defaultBalancer) improve(store *roachpb.StoreDescriptor, sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
 	if sl.used.mean < minFractionUsedThreshold {
 		rcb := rangeCountBalancer{db.rand}
-		return rcb.improve(store, sl)
+		return rcb.improve(store, sl, excluded)
 	}
 	ucb := usedCapacityBalancer{db.rand}
-	return ucb.improve(store, sl)
+	return ucb.improve(store, sl, excluded)
 }
 
 // selectRandom chooses up to count random store descriptors from the given
 // store list.
-func selectRandom(randGen *rand.Rand, count int, sl StoreList) []*roachpb.StoreDescriptor {
+func selectRandom(randGen *rand.Rand, count int, sl StoreList,
+	excluded nodeIDSet) []*roachpb.StoreDescriptor {
 	var descs []*roachpb.StoreDescriptor
 	// Randomly permute available stores matching the required attributes.
 	for _, idx := range randGen.Perm(len(sl.stores)) {
+		desc := sl.stores[idx]
+		// Skip if store is in excluded set.
+		if _, ok := excluded[desc.Node.NodeID]; ok {
+			continue
+		}
 		// Add this store; exit loop if we've satisfied count.
 		descs = append(descs, sl.stores[idx])
 		if len(descs) >= count {
