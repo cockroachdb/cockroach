@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/gogo/protobuf/proto"
@@ -450,6 +451,14 @@ func (desc *TableDescriptor) appendMutation(mutation TableDescriptor_Mutation) e
 		return err
 	}
 	desc.Mutations = append(desc.Mutations, &mutation)
+	return nil
+}
+
+func (desc *TableDescriptor) putInDB(txn *client.Txn) error {
+	if err := txn.Put(MakeDescMetadataKey(desc.GetID()), desc); err != nil {
+		return err
+	}
+	txn.SetSystemDBTrigger()
 	return nil
 }
 

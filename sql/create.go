@@ -82,11 +82,9 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 	if err := tableDesc.appendMutation(mutation); err != nil {
 		return nil, err
 	}
-
-	if err := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), tableDesc); err != nil {
+	if err := tableDesc.putInDB(p.txn); err != nil {
 		return nil, err
 	}
-	p.txn.SetSystemDBTrigger()
 	return &valuesNode{}, nil
 }
 

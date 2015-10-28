@@ -85,16 +85,16 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		case *parser.AlterTableAddConstraint:
 			switch d := t.ConstraintDef.(type) {
 			case *parser.UniqueConstraintTableDef:
-				idx := &IndexDescriptor{
+				if d.PrimaryKey {
+					return nil, fmt.Errorf("multiple primary keys for table %q are not allowed", tableDesc.Name)
+				}
+				idx := IndexDescriptor{
 					Name:             string(d.Name),
 					Unique:           true,
 					ColumnNames:      d.Columns,
 					StoreColumnNames: d.Storing,
 				}
-				if d.PrimaryKey {
-					return nil, fmt.Errorf("multiple primary keys for table %q are not allowed", tableDesc.Name)
-				}
-				mutation := TableDescriptor_Mutation{Descriptor_: &TableDescriptor_Mutation_AddIndex{AddIndex: idx}}
+				mutation := TableDescriptor_Mutation{Descriptor_: &TableDescriptor_Mutation_AddIndex{AddIndex: &idx}}
 				if err := tableDesc.appendMutation(mutation); err != nil {
 					return nil, err
 				}
@@ -106,10 +106,9 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 			return nil, util.Errorf("unsupported alter cmd: %T", cmd)
 		}
 	}
-	if err := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), tableDesc); err != nil {
+	if err := tableDesc.putInDB(p.txn); err != nil {
 		return nil, err
 	}
-	p.txn.SetSystemDBTrigger()
 
 	return &valuesNode{}, nil
 }

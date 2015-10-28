@@ -124,8 +124,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 		if err := tableDesc.appendMutation(mutation); err != nil {
 			return nil, err
 		}
-		descKey := MakeDescMetadataKey(tableDesc.GetID())
-		if err := p.txn.Put(descKey, tableDesc); err != nil {
+		if err := tableDesc.putInDB(p.txn); err != nil {
 			return nil, err
 		}
 	}
