@@ -39,17 +39,22 @@ func newRSpan(ba roachpb.BatchRequest) rSpan {
 }
 
 // intersect returns the intersection of the current span and the
-// descriptor's range.
-func (rs rSpan) intersect(desc *roachpb.RangeDescriptor) rSpan {
+// descriptor's range. Returns an error if the span and the
+// descriptor's range do not overlap.
+func (rs rSpan) intersect(desc *roachpb.RangeDescriptor) (rSpan, error) {
+	if !rs.key.Less(desc.EndKey) || !desc.StartKey.Less(rs.endKey) {
+		return rs, util.Errorf("span and desciprot's range do not overlap")
+	}
+
 	key := rs.key
 	if !desc.ContainsKey(key) {
 		key = desc.StartKey
 	}
 	endKey := rs.endKey
-	if !desc.ContainsKeyRange(desc.StartKey, endKey) || endKey == nil {
+	if !desc.ContainsKeyRange(desc.StartKey, endKey) {
 		endKey = desc.EndKey
 	}
-	return rSpan{key, endKey}
+	return rSpan{key, endKey}, nil
 }
 
 // truncate restricts all contained requests to the given key range.
@@ -67,7 +72,10 @@ func (rs rSpan) intersect(desc *roachpb.RangeDescriptor) rSpan {
 // overhead in the common case of a batch which never needs truncation but is
 // less magical.
 func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, rs rSpan) (func(), int, error) {
-	rs = rs.intersect(desc)
+	rs, err := rs.intersect(desc)
+	if err != nil {
+		return func() {}, 0, err
+	}
 
 	truncateOne := func(args roachpb.Request) (bool, []func(), error) {
 		if _, ok := args.(*roachpb.NoopRequest); ok {

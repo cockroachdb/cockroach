@@ -70,3 +70,60 @@ func TestBatchPrevNext(t *testing.T) {
 		}
 	}
 }
+
+// TestRSpanIntersect verifies rSpan.intersect.
+func TestRSpanIntersect(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	rs := rSpan{key: roachpb.RKey("b"), endKey: roachpb.RKey("e")}
+
+	testData := []struct {
+		startKey, endKey roachpb.RKey
+		expected         rSpan
+	}{
+		// Partially overlapping.
+		{roachpb.RKey("a"), roachpb.RKey("c"), rSpan{key: roachpb.RKey("b"), endKey: roachpb.RKey("c")}},
+		{roachpb.RKey("d"), roachpb.RKey("f"), rSpan{key: roachpb.RKey("d"), endKey: roachpb.RKey("e")}},
+		// Descriptor surrounds the span.
+		{roachpb.RKey("a"), roachpb.RKey("f"), rSpan{key: roachpb.RKey("b"), endKey: roachpb.RKey("e")}},
+		// Span surrounds the descriptor.
+		{roachpb.RKey("c"), roachpb.RKey("d"), rSpan{key: roachpb.RKey("c"), endKey: roachpb.RKey("d")}},
+		// Descriptor has the same range as the span.
+		{roachpb.RKey("b"), roachpb.RKey("e"), rSpan{key: roachpb.RKey("b"), endKey: roachpb.RKey("e")}},
+	}
+
+	for i, test := range testData {
+		desc := roachpb.RangeDescriptor{}
+		desc.StartKey = test.startKey
+		desc.EndKey = test.endKey
+
+		actual, err := rs.intersect(&desc)
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+		if bytes.Compare(actual.key, test.expected.key) != 0 ||
+			bytes.Compare(actual.endKey, test.expected.endKey) != 0 {
+			t.Errorf("%d: expected RSpan [%q,%q) but got [%q,%q)",
+				i, test.expected.key, test.expected.endKey,
+				actual.key, actual.endKey)
+		}
+	}
+
+	// Error scenarios
+	errorTestData := []struct {
+		startKey, endKey roachpb.RKey
+	}{
+		{roachpb.RKey("a"), roachpb.RKey("b")},
+		{roachpb.RKey("e"), roachpb.RKey("f")},
+		{roachpb.RKey("f"), roachpb.RKey("g")},
+	}
+	for i, test := range errorTestData {
+		desc := roachpb.RangeDescriptor{}
+		desc.StartKey = test.startKey
+		desc.EndKey = test.endKey
+		if _, err := rs.intersect(&desc); err == nil {
+			t.Errorf("%d: unexpected sucess", i)
+		}
+	}
+
+}
