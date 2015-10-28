@@ -2060,7 +2060,8 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 		pushee := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 		pushee.Priority = 1
-		pusher.Priority = 2 // Pusher will win.
+		pusher.Priority = 2   // Pusher will win
+		pusher.Writing = true // expected when a txn is heartbeat
 
 		// First, establish "start" of existing pushee's txn via BeginTransaction.
 		pushee.Epoch = test.startEpoch
@@ -2086,7 +2087,6 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		expTxn.Timestamp = test.expTS
 		expTxn.Status = roachpb.ABORTED
 		expTxn.LastHeartbeat = &test.startTS
-		expTxn.Writing = true // always set for physical txn table entries
 
 		if !reflect.DeepEqual(expTxn, reply.PusheeTxn) {
 			t.Errorf("unexpected push txn in trial %d; expected %+v, got %+v", i, expTxn, reply.PusheeTxn)

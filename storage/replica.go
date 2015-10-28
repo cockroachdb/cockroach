@@ -1210,6 +1210,13 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 	// If transactional, send out the final transaction entry with the reply.
 	if isTxn {
 		br.Txn = ba.Txn
+		// If this is the beginning of the write portion of a transaction,
+		// mark the returned transaction as Writing. It's important that
+		// we do this only at the end, since updating at the first write
+		// could "poison" the transaction on restartable errors, see #2920.
+		if _, ok := ba.GetArg(roachpb.BeginTransaction); ok {
+			br.Txn.Writing = true
+		}
 	}
 	return br, intents, nil
 }
