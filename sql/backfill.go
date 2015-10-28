@@ -85,24 +85,6 @@ func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName
 		}
 	}
 
-	// Get all the rows affected.
-	// TODO(vivek): Avoid going through Select.
-	// TODO(tamird): Support partial indexes?
-	rows, err := p.Select(&parser.Select{
-		Exprs: parser.SelectExprs{parser.StarSelectExpr()},
-		From:  parser.TableExprs{table},
-	})
-	if err != nil {
-		return err
-	}
-
-	// Construct a map from column ID to the index the value appears at within a
-	// row.
-	colIDtoRowIndex, err := makeColIDtoRowIndex(rows, oldTableDesc)
-	if err != nil {
-		return err
-	}
-
 	var newIndexDescs []IndexDescriptor
 	for _, index := range append(newTableDesc.Indexes, newTableDesc.PrimaryIndex) {
 		if index.ID >= oldTableDesc.NextIndexID {
@@ -110,36 +92,58 @@ func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName
 		}
 	}
 
-	// TODO(tamird): This will fall down in production use. We need to do
-	// something better (see #2036). In particular, this implementation
-	// has the following problems:
-	// - Very large tables will generate an enormous batch here. This
-	// isn't really a problem in itself except that it will exacerbate
-	// the other issue:
-	// - Any non-quiescent table that this runs against will end up with
-	// an inconsistent index. This is because as inserts/updates continue
-	// to roll in behind this operation's read front, the written index
-	// will become incomplete/stale before it's written.
+	if len(newIndexDescs) > 0 {
+		// Get all the rows affected.
+		// TODO(vivek): Avoid going through Select.
+		// TODO(tamird): Support partial indexes?
+		rows, err := p.Select(&parser.Select{
+			Exprs: parser.SelectExprs{parser.StarSelectExpr()},
+			From:  parser.TableExprs{table},
+		})
+		if err != nil {
+			return err
+		}
 
-	for rows.Next() {
-		rowVals := rows.Values()
+		// Construct a map from column ID to the index the value appears at within a
+		// row.
+		colIDtoRowIndex, err := makeColIDtoRowIndex(rows, oldTableDesc)
+		if err != nil {
+			return err
+		}
 
-		for _, newIndexDesc := range newIndexDescs {
-			secondaryIndexEntries, err := encodeSecondaryIndexes(
-				oldTableDesc.ID, []IndexDescriptor{newIndexDesc}, colIDtoRowIndex, rowVals)
-			if err != nil {
-				return err
-			}
+		// TODO(tamird): This will fall down in production use. We need to do
+		// something better (see #2036). In particular, this implementation
+		// has the following problems:
+		// - Very large tables will generate an enormous batch here. This
+		// isn't really a problem in itself except that it will exacerbate
+		// the other issue:
+		// - Any non-quiescent table that this runs against will end up with
+		// an inconsistent index. This is because as inserts/updates continue
+		// to roll in behind this operation's read front, the written index
+		// will become incomplete/stale before it's written.
 
-			for _, secondaryIndexEntry := range secondaryIndexEntries {
-				if log.V(2) {
-					log.Infof("CPut %s -> %v", prettyKey(secondaryIndexEntry.key, 0),
-						secondaryIndexEntry.value)
+		for rows.Next() {
+			rowVals := rows.Values()
+
+			for _, newIndexDesc := range newIndexDescs {
+				secondaryIndexEntries, err := encodeSecondaryIndexes(
+					oldTableDesc.ID, []IndexDescriptor{newIndexDesc}, colIDtoRowIndex, rowVals)
+				if err != nil {
+					return err
 				}
-				b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
+
+				for _, secondaryIndexEntry := range secondaryIndexEntries {
+					if log.V(2) {
+						log.Infof("CPut %s -> %v", prettyKey(secondaryIndexEntry.key, 0),
+							secondaryIndexEntry.value)
+					}
+					b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
+				}
 			}
 		}
+
+		return rows.Err()
 	}
 
-	return rows.Err()
+	return nil
 }
