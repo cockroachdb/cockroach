@@ -115,7 +115,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		if _, err := increment(rangeID, key2, 5); err != nil {
 			t.Fatal(err)
 		}
-		splitArgs := adminSplitArgs(roachpb.RKeyMin, splitKey)
+		splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
 		if _, err := client.SendWrapped(rg1(store), nil, &splitArgs); err != nil {
 			t.Fatal(err)
 		}
@@ -607,8 +607,8 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	// Split off a range from the initial range for testing; there are
 	// complications if the metadata ranges are removed from store 1, this
 	// simplifies the test.
-	splitKey := roachpb.RKey("m")
-	rightKey := roachpb.RKey("z")
+	splitKey := roachpb.Key("m")
+	rightKey := roachpb.Key("z")
 	{
 		replica := store0.LookupReplica(roachpb.RKeyMin, nil)
 		mtc.replicateRange(replica.Desc().RangeID, 0, 1, 2)
@@ -619,7 +619,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 		}
 	}
 	// Replicate the new range to all five stores.
-	replica := store0.LookupReplica(rightKey, nil)
+	replica := store0.LookupReplica(keys.Addr(rightKey), nil)
 	desc := replica.Desc()
 	mtc.replicateRange(desc.RangeID, 0, 3, 4)
 
@@ -653,7 +653,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 		foundIDset := make(storeIDset)
 		foundLocalRangeDescs := make([]*roachpb.RangeDescriptor, 0, len(mtc.stores))
 		for _, s := range mtc.stores {
-			r := s.LookupReplica(splitKey, nil)
+			r := s.LookupReplica(keys.Addr(splitKey), nil)
 			if r != nil {
 				foundLocalRangeDescs = append(foundLocalRangeDescs, r.Desc())
 				foundIDset[s.StoreID()] = struct{}{}
@@ -668,7 +668,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 
 		// Look up the official range descriptor, make sure it agrees with the
 		// found replicas.
-		realRangeDesc := getRangeMetadata(rightKey, mtc, t)
+		realRangeDesc := getRangeMetadata(keys.Addr(rightKey), mtc, t)
 		realIDset := makeStoreIDset(realRangeDesc.Replicas)
 		if !reflect.DeepEqual(realIDset, foundIDset) {
 			return false, realIDset
@@ -958,7 +958,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 
 	store0 := mtc.stores[0]
 	// Make the split
-	splitArgs := adminSplitArgs(roachpb.RKeyMin, splitKey)
+	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
 	if _, err := client.SendWrapped(rg1(store0), nil, &splitArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -1048,7 +1048,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 			t.Fatal("failed to look up min range")
 		}
 		desc := rng.Desc()
-		args := adminSplitArgs(roachpb.RKeyMin, []byte(fmt.Sprintf("A%03d", i)))
+		args := adminSplitArgs(roachpb.KeyMin, []byte(fmt.Sprintf("A%03d", i)))
 		if _, err := rng.AdminSplit(args, desc); err != nil {
 			t.Fatal(err)
 		}
@@ -1061,7 +1061,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 			t.Fatal("failed to look up max range")
 		}
 		desc := rng.Desc()
-		args := adminSplitArgs(roachpb.RKeyMin, []byte(fmt.Sprintf("B%03d", i)))
+		args := adminSplitArgs(roachpb.KeyMin, []byte(fmt.Sprintf("B%03d", i)))
 		if _, err := rng.AdminSplit(args, desc); err != nil {
 			t.Fatal(err)
 		}
@@ -1076,7 +1076,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	defer mtc.Stop()
 
 	// Make the split.
-	splitArgs := adminSplitArgs(roachpb.RKeyMin, []byte("b"))
+	splitArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"))
 	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &splitArgs); err != nil {
 		t.Fatal(err)
 	}

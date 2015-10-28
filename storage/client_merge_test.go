@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func adminMergeArgs(key []byte) roachpb.AdminMergeRequest {
+func adminMergeArgs(key roachpb.Key) roachpb.AdminMergeRequest {
 	return roachpb.AdminMergeRequest{
 		Span: roachpb.Span{
 			Key: key,
@@ -43,7 +43,7 @@ func adminMergeArgs(key []byte) roachpb.AdminMergeRequest {
 }
 
 func createSplitRanges(store *storage.Store) (*roachpb.RangeDescriptor, *roachpb.RangeDescriptor, error) {
-	args := adminSplitArgs(roachpb.RKeyMin, []byte("b"))
+	args := adminSplitArgs(roachpb.KeyMin, []byte("b"))
 	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
 		return nil, nil, err
 	}
@@ -70,7 +70,7 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	}
 
 	// Merge the b range back into the a range.
-	args := adminMergeArgs(roachpb.RKeyMin)
+	args := adminMergeArgs(roachpb.KeyMin)
 	_, err := client.SendWrapped(rg1(store), nil, &args)
 	if err != nil {
 		t.Fatal(err)
@@ -127,7 +127,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	}
 
 	// Merge the b range back into the a range.
-	args := adminMergeArgs(roachpb.RKeyMin)
+	args := adminMergeArgs(roachpb.KeyMin)
 	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	}
 
 	// Merge the b range back into the a range.
-	args := adminMergeArgs(roachpb.RKeyMin)
+	args := adminMergeArgs(roachpb.KeyMin)
 	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +294,7 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer stopper.Stop()
 
 	// Merge last range.
-	args := adminMergeArgs(roachpb.RKeyMin)
+	args := adminMergeArgs(roachpb.KeyMin)
 	if _, err := client.SendWrapped(rg1(store), nil, &args); !testutils.IsError(err, "cannot merge final range") {
 		t.Fatalf("expected 'cannot merge final range' error; got %s", err)
 	}
@@ -310,11 +310,11 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 	store := mtc.stores[0]
 
 	// Split into 3 ranges
-	argsSplit := adminSplitArgs(roachpb.RKeyMin, []byte("d"))
+	argsSplit := adminSplitArgs(roachpb.KeyMin, []byte("d"))
 	if _, err := client.SendWrapped(rg1(store), nil, &argsSplit); err != nil {
 		t.Fatalf("Can't split range %s", err)
 	}
-	argsSplit = adminSplitArgs(roachpb.RKeyMin, []byte("b"))
+	argsSplit = adminSplitArgs(roachpb.KeyMin, []byte("b"))
 	if _, err := client.SendWrapped(rg1(store), nil, &argsSplit); err != nil {
 		t.Fatalf("Can't split range %s", err)
 	}
@@ -341,7 +341,7 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 
 	// Attempt to merge.
 	desc := rangeA.Desc()
-	argsMerge := adminMergeArgs(desc.StartKey)
+	argsMerge := adminMergeArgs(roachpb.Key(desc.StartKey))
 	if _, err := rangeA.AdminMerge(argsMerge, desc); !testutils.IsError(err, "ranges not collocated") {
 		t.Fatalf("did not got expected error; got %s", err)
 	}

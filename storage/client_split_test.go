@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
-func adminSplitArgs(key, splitKey []byte) roachpb.AdminSplitRequest {
+func adminSplitArgs(key, splitKey roachpb.Key) roachpb.AdminSplitRequest {
 	return roachpb.AdminSplitRequest{
 		Span: roachpb.Span{
 			Key: key,
@@ -75,7 +75,7 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 		keys.Meta2KeyMax,
 		keys.MakeTablePrefix(10 /* system descriptor ID */),
 	} {
-		args := adminSplitArgs(roachpb.RKeyMin, key)
+		args := adminSplitArgs(roachpb.KeyMin, key)
 		_, err := client.SendWrapped(rg1(store), nil, &args)
 		if err == nil {
 			t.Fatalf("%q: split succeeded unexpectedly", key)
@@ -117,7 +117,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	args := adminSplitArgs(roachpb.RKeyMin, []byte("a"))
+	args := adminSplitArgs(roachpb.KeyMin, []byte("a"))
 	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 		t.Fatalf("split succeeded unexpectedly")
 	}
 	// Now try to split at start of new range.
-	args = adminSplitArgs(roachpb.RKeyMin, []byte("a"))
+	args = adminSplitArgs(roachpb.KeyMin, []byte("a"))
 	if _, err := client.SendWrapped(rg1(store), nil, &args); err == nil {
 		t.Fatalf("split succeeded unexpectedly")
 	}
@@ -147,7 +147,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	failureCount := int32(0)
 	for i := int32(0); i < concurrentCount; i++ {
 		go func() {
-			args := adminSplitArgs(roachpb.RKeyMin, splitKey)
+			args := adminSplitArgs(roachpb.KeyMin, splitKey)
 			_, err := client.SendWrapped(rg1(store), nil, &args)
 			if err != nil {
 				atomic.AddInt32(&failureCount, 1)
@@ -182,7 +182,7 @@ func TestStoreRangeSplit(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 	rangeID := roachpb.RangeID(1)
-	splitKey := roachpb.RKey("m")
+	splitKey := roachpb.Key("m")
 	content := roachpb.Key("asdvb")
 
 	// First, write some values left and right of the proposed split key.
@@ -221,13 +221,13 @@ func TestStoreRangeSplit(t *testing.T) {
 	keyBytes, valBytes := ms.KeyBytes, ms.ValBytes
 
 	// Split the range.
-	args := adminSplitArgs(roachpb.RKeyMin, splitKey)
+	args := adminSplitArgs(roachpb.KeyMin, splitKey)
 	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify no intents remains on range descriptor keys.
-	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(roachpb.RKeyMin), keys.RangeDescriptorKey(splitKey)} {
+	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(roachpb.RKeyMin), keys.RangeDescriptorKey(keys.Addr(splitKey))} {
 		if _, _, err := engine.MVCCGet(store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
 			t.Fatal(err)
 		}

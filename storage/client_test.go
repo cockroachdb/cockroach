@@ -526,7 +526,7 @@ func (m *multiTestContext) expireLeaderLeases() {
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
-func getArgs(key []byte) roachpb.GetRequest {
+func getArgs(key roachpb.Key) roachpb.GetRequest {
 	return roachpb.GetRequest{
 		Span: roachpb.Span{
 			Key: key,
@@ -536,7 +536,7 @@ func getArgs(key []byte) roachpb.GetRequest {
 
 // putArgs returns a PutRequest and PutResponse pair addressed to
 // the default replica for the specified key / value.
-func putArgs(key, value []byte) roachpb.PutRequest {
+func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
 	return roachpb.PutRequest{
 		Span: roachpb.Span{
 			Key: key,
@@ -547,7 +547,7 @@ func putArgs(key, value []byte) roachpb.PutRequest {
 
 // incrementArgs returns an IncrementRequest and IncrementResponse pair
 // addressed to the default replica for the specified key / value.
-func incrementArgs(key []byte, inc int64) roachpb.IncrementRequest {
+func incrementArgs(key roachpb.Key, inc int64) roachpb.IncrementRequest {
 	return roachpb.IncrementRequest{
 		Span: roachpb.Span{
 			Key: key,
