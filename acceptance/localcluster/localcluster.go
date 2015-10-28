@@ -369,7 +369,13 @@ func (l *Cluster) startNode(i int) *Container {
 	c.Name = node(i)
 	uri := fmt.Sprintf("https://%s", c.Addr(""))
 	// Infof doesn't take positional parameters, hence the Sprintf.
-	log.Infof(fmt.Sprintf("started node:\n\tname:  %s\n\tui:    %[2]s\n\ttrace: %[2]s/debug/requests\n\tpprof: %[2]s/debug/pprof/profile\n\tlogs:  %s\n\tcerts:  %s", c.Name, uri, localLogDir, l.CertsDir))
+	log.Infof(fmt.Sprintf(`*** started %[1]s ***
+  ui:    %[2]s
+  trace: %[2]s/debug/requests
+  logs:  %[3]s/cockroach.INFO
+  certs: %[4]s
+  pprof: docker exec -it %[5]s /bin/bash -c 'go tool pprof /cockroach <(wget --no-check-certificate -qO- https://$(hostname):26257/debug/pprof/heap)'`,
+		c.Name, uri, localLogDir, l.CertsDir, c.ID[:5]))
 	return c
 }
 
@@ -461,6 +467,7 @@ func (l *Cluster) Start() {
 // Currently, the only events generated (and asserted against) are "die" and
 // "restart", to maximize compatibility across different versions of Docker.
 func (l *Cluster) Assert(t util.Tester) {
+	const almostZero = 50 * time.Millisecond
 	filter := func(ch chan Event, wait time.Duration) *Event {
 		for {
 			select {
@@ -478,7 +485,7 @@ func (l *Cluster) Assert(t util.Tester) {
 
 	var events []Event
 	for {
-		exp := filter(l.expectedEvents, time.Duration(0))
+		exp := filter(l.expectedEvents, almostZero)
 		if exp == nil {
 			break
 		}
@@ -488,7 +495,7 @@ func (l *Cluster) Assert(t util.Tester) {
 		}
 		events = append(events, *exp)
 	}
-	if cur := filter(l.events, time.Duration(0)); cur != nil {
+	if cur := filter(l.events, almostZero); cur != nil {
 		t.Fatalf("unexpected extra event %v (after %v)", cur, events)
 	}
 	if log.V(2) {
