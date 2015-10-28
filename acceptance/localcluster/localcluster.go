@@ -192,7 +192,7 @@ func (l *Cluster) runDockerSpy() {
 		})
 	}
 	c, err := create()
-	if err == dockerclient.ErrNotFound {
+	if err == dockerclient.ErrImageNotFound {
 		log.Infof("pulling %s", dockerspyImage)
 		err = l.client.PullImage(dockerspyImage, nil)
 		if err == nil {
@@ -237,7 +237,7 @@ func (l *Cluster) initCluster() {
 		})
 	}
 	c, err := create()
-	if err == dockerclient.ErrNotFound && *cockroachImage == builderImage {
+	if err == dockerclient.ErrImageNotFound && *cockroachImage == builderImage {
 		log.Infof("pulling %s", *cockroachImage)
 		err = l.client.PullImage(*cockroachImage, nil)
 		if err == nil {
