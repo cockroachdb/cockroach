@@ -259,7 +259,10 @@ func (l *Cluster) initCluster() {
 		panic(err)
 	}
 
-	binds := []string{l.CertsDir + ":/certs"}
+	binds := []string{
+		l.CertsDir + ":/certs",
+		filepath.Join(pwd, "..") + ":/go/src/github.com/cockroachdb/cockroach",
+	}
 
 	if logDirectory != nil && len(*logDirectory) > 0 {
 		if filepath.IsAbs(*logDirectory) {
