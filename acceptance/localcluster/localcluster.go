@@ -467,6 +467,7 @@ func (l *Cluster) Start() {
 // Currently, the only events generated (and asserted against) are "die" and
 // "restart", to maximize compatibility across different versions of Docker.
 func (l *Cluster) Assert(t util.Tester) {
+	const almostZero = 50 * time.Millisecond
 	filter := func(ch chan Event, wait time.Duration) *Event {
 		for {
 			select {
@@ -484,7 +485,7 @@ func (l *Cluster) Assert(t util.Tester) {
 
 	var events []Event
 	for {
-		exp := filter(l.expectedEvents, time.Duration(0))
+		exp := filter(l.expectedEvents, almostZero)
 		if exp == nil {
 			break
 		}
@@ -494,7 +495,7 @@ func (l *Cluster) Assert(t util.Tester) {
 		}
 		events = append(events, *exp)
 	}
-	if cur := filter(l.events, time.Duration(0)); cur != nil {
+	if cur := filter(l.events, almostZero); cur != nil {
 		t.Fatalf("unexpected extra event %v (after %v)", cur, events)
 	}
 	if log.V(2) {
