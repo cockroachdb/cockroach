@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/biogo/store/interval"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
@@ -762,8 +763,13 @@ func (rs RSpan) ContainsKeyRange(start, end RKey) bool {
 }
 
 // Intersect returns the intersection of the current span and the
-// descriptor's range.
-func (rs RSpan) Intersect(desc *RangeDescriptor) RSpan {
+// descriptor's range. Returns an error if the span and the
+// descriptor's range do not overlap.
+func (rs RSpan) Intersect(desc *RangeDescriptor) (RSpan, error) {
+	if !rs.Key.Less(desc.EndKey) || !desc.StartKey.Less(rs.EndKey) {
+		return rs, util.Errorf("span and descriptor's range do not overlap")
+	}
+
 	key := rs.Key
 	if !desc.ContainsKey(key) {
 		key = desc.StartKey
@@ -772,5 +778,5 @@ func (rs RSpan) Intersect(desc *RangeDescriptor) RSpan {
 	if !desc.ContainsKeyRange(desc.StartKey, endKey) || endKey == nil {
 		endKey = desc.EndKey
 	}
-	return RSpan{key, endKey}
+	return RSpan{key, endKey}, nil
 }
