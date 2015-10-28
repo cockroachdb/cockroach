@@ -23,6 +23,18 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+func makecolIDtoRowIndex(row planNode, desc *TableDescriptor) (map[ColumnID]int, error) {
+	colIDtoRowIndex := make(map[ColumnID]int)
+	for i, name := range row.Columns() {
+		j, err := desc.FindColumnByName(name)
+		if err != nil {
+			return nil, err
+		}
+		colIDtoRowIndex[desc.Columns[j].ID] = i
+	}
+	return colIDtoRowIndex, nil
+}
+
 func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName, oldTableDesc, newTableDesc *TableDescriptor) error {
 	table := &parser.AliasedTableExpr{Expr: tableName}
 
@@ -57,7 +69,7 @@ func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName
 	// Get all the rows affected.
 	// TODO(vivek): Avoid going through Select.
 	// TODO(tamird): Support partial indexes?
-	row, err := p.Select(&parser.Select{
+	rows, err := p.Select(&parser.Select{
 		Exprs: parser.SelectExprs{parser.StarSelectExpr()},
 		From:  parser.TableExprs{table},
 	})
@@ -67,13 +79,9 @@ func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName
 
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
-	colIDtoRowIndex := map[ColumnID]int{}
-	for i, name := range row.Columns() {
-		c, err := oldTableDesc.FindColumnByName(name)
-		if err != nil {
-			return err
-		}
-		colIDtoRowIndex[c.ID] = i
+	colIDtoRowIndex, err := makecolIDtoRowIndex(rows, oldTableDesc)
+	if err != nil {
+		return err
 	}
 
 	var newIndexDescs []IndexDescriptor
@@ -94,8 +102,8 @@ func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName
 	// to roll in behind this operation's read front, the written index
 	// will become incomplete/stale before it's written.
 
-	for row.Next() {
-		rowVals := row.Values()
+	for rows.Next() {
+		rowVals := rows.Values()
 
 		for _, newIndexDesc := range newIndexDescs {
 			secondaryIndexEntries, err := encodeSecondaryIndexes(
@@ -114,5 +122,5 @@ func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName
 		}
 	}
 
-	return row.Err()
+	return rows.Err()
 }

@@ -224,15 +224,16 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 		if err := n.NormalizeColumnName(); err != nil {
 			return nil, err
 		}
-		col, err := tableDesc.FindColumnByName(n.Column())
+		j, err := tableDesc.FindColumnByName(n.Column())
 		if err != nil {
 			return nil, err
 		}
+		col := tableDesc.Columns[j]
 		if _, ok := colIDSet[col.ID]; ok {
 			return nil, fmt.Errorf("multiple assignments to same column \"%s\"", n.Column())
 		}
 		colIDSet[col.ID] = struct{}{}
-		cols[i] = *col
+		cols[i] = col
 	}
 
 	return cols, nil
