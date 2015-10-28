@@ -113,7 +113,7 @@ func TestTracer(t *testing.T) {
 
 	// TODO(tschottdorf): Test some more.
 	req1 := traceID(10)
-	t1 := tracer.NewTrace(req1)
+	t1 := tracer.NewTrace("foo", req1)
 
 	e1a := t1.Epoch("A1")
 	add(10 * time.Millisecond)
@@ -140,7 +140,7 @@ func TestTracer(t *testing.T) {
 }
 
 func TestNilTracer(t *testing.T) {
-	trace := (*Tracer)(nil).NewTrace(traceID(9))
+	trace := (*Tracer)(nil).NewTrace("foo", traceID(9))
 	defer trace.Epoch("A")()
 	trace.Event("B")
 	trace.Event("C")
@@ -149,7 +149,7 @@ func TestNilTracer(t *testing.T) {
 }
 
 func TestEpochBalance(t *testing.T) {
-	trace := (*Tracer)(nil).NewTrace(traceID(9))
+	trace := (*Tracer)(nil).NewTrace("foo", traceID(9))
 	trace.Epoch("never finalized")
 	if !util.Panics(func() { trace.Finalize() }) {
 		t.Fatalf("should panic when Finalize is called too early")

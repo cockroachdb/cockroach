@@ -33,6 +33,12 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+// Node is the family used for the node.
+const Node = "node"
+
+// Coord is the family used for the coordinator/gateway.
+const Coord = "coord"
+
 // A Traceable object has a Trace identifier attached to it.
 type Traceable interface {
 	// TraceID is the unique ID for the tracee.
@@ -80,6 +86,7 @@ type Trace struct {
 	Content []TraceItem
 	tracer  *Tracer // origin tracer for clock, publishing...
 	depth   int32
+	family  string
 	nTrace  ntrace.Trace
 }
 
@@ -167,7 +174,7 @@ func (t *Trace) Fork() *Trace {
 	if t == nil {
 		return nil
 	}
-	return t.tracer.newTrace(t.ID, t.Name)
+	return t.tracer.newTrace(t.family, t.ID, t.Name)
 }
 
 // String implements fmt.Stringer. It prints a human-readable breakdown of the
@@ -218,19 +225,20 @@ var dummyTracer = &Tracer{
 }
 
 // NewTrace creates a Trace for the given Traceable.
-func (t *Tracer) NewTrace(tracee Traceable) *Trace {
+func (t *Tracer) NewTrace(family string, tracee Traceable) *Trace {
 	if t == nil {
 		t = dummyTracer
 	}
-	return t.newTrace(tracee.TraceID(), tracee.TraceName())
+	return t.newTrace(family, tracee.TraceID(), tracee.TraceName())
 }
 
-func (t *Tracer) newTrace(id, name string) *Trace {
-	nt := ntrace.New("req", name)
+func (t *Tracer) newTrace(family string, id, name string) *Trace {
+	nt := ntrace.New(family, name)
 	nt.SetMaxEvents(100)
 	return &Trace{
 		ID:     id,
 		Name:   name,
+		family: family,
 		tracer: t,
 		nTrace: nt,
 	}

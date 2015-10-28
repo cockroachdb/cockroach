@@ -116,14 +116,12 @@ func (rsr *RuntimeStatRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
 	rsr.lastPauseTime = ms.PauseTotalNs
 
 	// Log summary of statistics to console, if requested.
-	if log.V(1) {
-		activeMiB := float64(ms.Alloc) / (1 << 20)
-		cgoRate := float64((numCgoCall-rsr.lastCgoCall)*int64(time.Second)) / dur
-		log.Infof("runtime stats: %d goroutines, %.2fMiB active, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
-			numGoroutine, activeMiB, cgoRate, uPerc, sPerc, pausePerc, ms.NumGC-rsr.lastNumGC)
-		rsr.lastCgoCall = numCgoCall
-		rsr.lastNumGC = ms.NumGC
-	}
+	activeMiB := float64(ms.Alloc) / (1 << 20)
+	cgoRate := float64((numCgoCall-rsr.lastCgoCall)*int64(time.Second)) / dur
+	log.Infof("runtime stats: %d goroutines, %.2fMiB active, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
+		numGoroutine, activeMiB, cgoRate, uPerc, sPerc, pausePerc, ms.NumGC-rsr.lastNumGC)
+	rsr.lastCgoCall = numCgoCall
+	rsr.lastNumGC = ms.NumGC
 
 	data = append(data, rsr.record(now, "cgocalls", float64(numCgoCall)))
 	data = append(data, rsr.record(now, "goroutines", float64(numGoroutine)))
