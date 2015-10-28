@@ -40,9 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
 	"github.com/gogo/protobuf/proto"
 )
@@ -140,39 +138,6 @@ type pendingCmd struct {
 	done chan roachpb.ResponseWithError // Used to signal waiting RPC handler
 }
 
-// A RangeManager is an interface satisfied by Store through which ranges
-// contained in the store can access the methods required for splitting.
-// TODO(tschottdorf): consider moving LocalSender to storage, in which
-// case this can be unexported.
-type RangeManager interface {
-	// Accessors for shared state.
-	ClusterID() string
-	StoreID() roachpb.StoreID
-	Clock() *hlc.Clock
-	Engine() engine.Engine
-	DB() *client.DB
-	allocator() Allocator
-	Gossip() *gossip.Gossip
-	splitQueue() *splitQueue
-	replicaGCQueue() *replicaGCQueue
-	Stopper() *stop.Stopper
-	EventFeed() StoreEventFeed
-	Context(context.Context) context.Context
-	resolveWriteIntentError(context.Context, *roachpb.WriteIntentError, *Replica, roachpb.Request, roachpb.Header, roachpb.PushTxnType) error
-
-	// Range and replica manipulation methods.
-	LookupReplica(start, end roachpb.RKey) *Replica
-	GetReplica(rangeID roachpb.RangeID) (*Replica, error)
-	MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, subsumedRangeID roachpb.RangeID) error
-	NewRangeDescriptor(start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor) (*roachpb.RangeDescriptor, error)
-	NewSnapshot() engine.Engine
-	ProposeRaftCommand(cmdIDKey, roachpb.RaftCommand) <-chan error
-	RemoveReplica(rng *Replica) error
-	Tracer() *tracer.Tracer
-	SplitRange(origRng, newRng *Replica) error
-	processRangeDescriptorUpdate(rng *Replica) error
-}
-
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -181,9 +146,9 @@ type RangeManager interface {
 // as appropriate.
 type Replica struct {
 	desc     unsafe.Pointer // Atomic pointer for *roachpb.RangeDescriptor
-	rm       RangeManager   // Makes some store methods available
-	stats    *rangeStats    // Range statistics
-	maxBytes int64          // Max bytes before split.
+	store    *Store
+	stats    *rangeStats // Range statistics
+	maxBytes int64       // Max bytes before split.
 	// Last index persisted to the raft log (not necessarily committed).
 	// Updated atomically.
 	lastIndex uint64
@@ -193,6 +158,9 @@ type Replica struct {
 	lease        unsafe.Pointer // Information for leader lease, updated atomically
 	llMu         sync.Mutex     // Synchronizes readers' requests for leader lease
 	respCache    *ResponseCache // Provides idempotence for retries
+
+	// proposeRaftCommandFn can be set to mock out the propose operation.
+	proposeRaftCommandFn func(cmdIDKey, roachpb.RaftCommand) <-chan error
 
 	sync.RWMutex                 // Protects the following fields:
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
@@ -216,9 +184,9 @@ type Replica struct {
 var _ client.Sender = &Replica{}
 
 // NewReplica initializes the replica using the given metadata.
-func NewReplica(desc *roachpb.RangeDescriptor, rm RangeManager) (*Replica, error) {
+func NewReplica(desc *roachpb.RangeDescriptor, rm *Store) (*Replica, error) {
 	r := &Replica{
-		rm:          rm,
+		store:       rm,
 		cmdQ:        NewCommandQueue(),
 		tsCache:     NewTimestampCache(rm.Clock()),
 		respCache:   NewResponseCache(desc.RangeID),
@@ -233,13 +201,13 @@ func NewReplica(desc *roachpb.RangeDescriptor, rm RangeManager) (*Replica, error
 	}
 	atomic.StoreUint64(&r.lastIndex, lastIndex)
 
-	appliedIndex, err := r.loadAppliedIndex(r.rm.Engine())
+	appliedIndex, err := r.loadAppliedIndex(r.store.Engine())
 	if err != nil {
 		return nil, err
 	}
 	atomic.StoreUint64(&r.appliedIndex, appliedIndex)
 
-	lease, err := loadLeaderLease(r.rm.Engine(), desc.RangeID)
+	lease, err := loadLeaderLease(r.store.Engine(), desc.RangeID)
 	if err != nil {
 		return nil, err
 	}
@@ -265,9 +233,9 @@ func (r *Replica) String() string {
 // Destroy cleans up all data associated with this range, leaving a tombstone.
 func (r *Replica) Destroy() error {
 	desc := r.Desc()
-	iter := newReplicaDataIterator(desc, r.rm.Engine())
+	iter := newReplicaDataIterator(desc, r.store.Engine())
 	defer iter.Close()
-	batch := r.rm.Engine().NewBatch()
+	batch := r.store.Engine().NewBatch()
 	defer batch.Close()
 	for ; iter.Valid(); iter.Next() {
 		_ = batch.Clear(iter.Key())
@@ -291,7 +259,7 @@ func (r *Replica) Destroy() error {
 // on this range in the absence of a pre-existing context, such as
 // during range scanner operations.
 func (r *Replica) context() context.Context {
-	return context.WithValue(r.rm.Context(nil), log.RangeID, r.Desc().RangeID)
+	return context.WithValue(r.store.Context(nil), log.RangeID, r.Desc().RangeID)
 }
 
 // GetMaxBytes atomically gets the range maximum byte limit.
@@ -347,7 +315,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	// Prepare a Raft command to get a leader lease for this replica.
 	expiration := timestamp.Add(duration, 0)
 	desc := r.Desc()
-	_, replica := desc.FindReplica(r.rm.StoreID())
+	_, replica := desc.FindReplica(r.store.StoreID())
 	if replica == nil {
 		return roachpb.NewRangeNotFoundError(desc.RangeID)
 	}
@@ -364,7 +332,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	ba := roachpb.BatchRequest{}
 	ba.RangeID = desc.RangeID
 	ba.CmdID = roachpb.ClientCmdID{
-		WallTime: r.rm.Clock().Now().WallTime,
+		WallTime: r.store.Clock().Now().WallTime,
 		Random:   rand.Int63(),
 	}
 	ba.Add(args)
@@ -401,12 +369,12 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp 
 	defer r.llMu.Unlock()
 
 	if lease := r.getLease(); lease.Covers(timestamp) {
-		if lease.OwnedBy(r.rm.StoreID()) {
+		if lease.OwnedBy(r.store.StoreID()) {
 			// Happy path: We have an active lease, nothing to do.
 			return nil
 		}
 		// If lease is currently held by another, redirect to holder.
-		return r.newNotLeaderError(lease, r.rm.StoreID())
+		return r.newNotLeaderError(lease, r.store.StoreID())
 	}
 	defer trace.Epoch("request leader lease")()
 	// Otherwise, no active lease: Request renewal.
@@ -418,7 +386,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp 
 	// extra round-trip.
 	if _, ok := err.(*roachpb.LeaseRejectedError); ok {
 		if lease := r.getLease(); lease.Covers(timestamp) {
-			return r.newNotLeaderError(lease, r.rm.StoreID())
+			return r.newNotLeaderError(lease, r.store.StoreID())
 		}
 	}
 	return err
@@ -442,11 +410,11 @@ func (r *Replica) Desc() *roachpb.RangeDescriptor {
 // descriptor update.
 func (r *Replica) setDesc(desc *roachpb.RangeDescriptor) error {
 	r.setDescWithoutProcessUpdate(desc)
-	if r.rm == nil {
+	if r.store == nil {
 		// r.rm is null in some tests.
 		return nil
 	}
-	return r.rm.processRangeDescriptorUpdate(r)
+	return r.store.processRangeDescriptorUpdate(r)
 }
 
 // setDescWithoutProcessUpdate updates the range descriptor without calling
@@ -469,7 +437,7 @@ func (r *Replica) setCachedTruncatedState(state *roachpb.RaftTruncatedState) {
 // GetReplica returns the replica for this range from the range descriptor.
 // Returns nil if the replica is not found.
 func (r *Replica) GetReplica() *roachpb.ReplicaDescriptor {
-	_, replica := r.Desc().FindReplica(r.rm.StoreID())
+	_, replica := r.Desc().FindReplica(r.store.StoreID())
 	return replica
 }
 
@@ -519,7 +487,7 @@ func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool
 func (r *Replica) GetGCMetadata() (*roachpb.GCMetadata, error) {
 	key := keys.RangeGCMetadataKey(r.Desc().RangeID)
 	gcMeta := &roachpb.GCMetadata{}
-	_, err := engine.MVCCGetProto(r.rm.Engine(), key, roachpb.ZeroTimestamp, true, nil, gcMeta)
+	_, err := engine.MVCCGetProto(r.store.Engine(), key, roachpb.ZeroTimestamp, true, nil, gcMeta)
 	if err != nil {
 		return nil, err
 	}
@@ -531,7 +499,7 @@ func (r *Replica) GetGCMetadata() (*roachpb.GCMetadata, error) {
 func (r *Replica) GetLastVerificationTimestamp() (roachpb.Timestamp, error) {
 	key := keys.RangeLastVerificationTimestampKey(r.Desc().RangeID)
 	timestamp := roachpb.Timestamp{}
-	_, err := engine.MVCCGetProto(r.rm.Engine(), key, roachpb.ZeroTimestamp, true, nil, &timestamp)
+	_, err := engine.MVCCGetProto(r.store.Engine(), key, roachpb.ZeroTimestamp, true, nil, &timestamp)
 	if err != nil {
 		return roachpb.ZeroTimestamp, err
 	}
@@ -542,7 +510,7 @@ func (r *Replica) GetLastVerificationTimestamp() (roachpb.Timestamp, error) {
 // data was last verified.
 func (r *Replica) SetLastVerificationTimestamp(timestamp roachpb.Timestamp) error {
 	key := keys.RangeLastVerificationTimestampKey(r.Desc().RangeID)
-	return engine.MVCCPutProto(r.rm.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
+	return engine.MVCCPutProto(r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
 }
 
 // Send adds a command for execution on this range. The command's
@@ -656,7 +624,7 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) ([]interface{}, error) {
 			// TODO(tschottdorf): see if this is already done somewhere else.
 			ba.Timestamp = ba.Txn.Timestamp
 		} else {
-			ba.Timestamp = r.rm.Clock().Now()
+			ba.Timestamp = r.store.Clock().Now()
 		}
 	}
 
@@ -757,7 +725,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 	}
 
 	// Execute read-only batch command.
-	br, intents, err := r.executeBatch(r.rm.Engine(), nil, ba)
+	br, intents, err := r.executeBatch(r.store.Engine(), nil, ba)
 
 	r.handleSkippedIntents(intents)
 
@@ -881,7 +849,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 		done: make(chan roachpb.ResponseWithError, 1),
 	}
 	desc := r.Desc()
-	_, replica := desc.FindReplica(r.rm.StoreID())
+	_, replica := desc.FindReplica(r.store.StoreID())
 	if replica == nil {
 		errChan := make(chan error, 1)
 		errChan <- roachpb.NewRangeNotFoundError(desc.RangeID)
@@ -892,12 +860,17 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 		OriginReplica: *replica,
 		Cmd:           ba,
 	}
-	cmdID := ba.GetOrCreateCmdID(r.rm.Clock().PhysicalNow())
+	cmdID := ba.GetOrCreateCmdID(r.store.Clock().PhysicalNow())
 	idKey := makeCmdIDKey(cmdID)
 	r.Lock()
 	r.pendingCmds[idKey] = pendingCmd
 	r.Unlock()
-	errChan := r.rm.ProposeRaftCommand(idKey, raftCmd)
+	var errChan <-chan error
+	if r.proposeRaftCommandFn != nil {
+		errChan = r.proposeRaftCommandFn(idKey, raftCmd)
+	} else {
+		errChan = r.store.ProposeRaftCommand(idKey, raftCmd)
+	}
 
 	return errChan, pendingCmd
 }
@@ -990,14 +963,14 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 		// Publish update to event feed.
 		// TODO(spencer): we should be sending feed updates for each part
 		// of the batch. In particular, stats should be reported per-command.
-		r.rm.EventFeed().updateRange(r, roachpb.Batch, &ms)
+		r.store.EventFeed().updateRange(r, roachpb.Batch, &ms)
 		// If the commit succeeded, potentially add range to split queue.
 		r.maybeAddToSplitQueue()
 	}
 
 	// On the replica on which this command originated, resolve skipped intents
 	// asynchronously - even on failure.
-	if originReplica.StoreID == r.rm.StoreID() {
+	if originReplica.StoreID == r.store.StoreID() {
 		r.handleSkippedIntents(intents)
 	}
 
@@ -1010,7 +983,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, originReplica roachpb.ReplicaDescriptor,
 	ba roachpb.BatchRequest, ms *engine.MVCCStats) (engine.Engine, *roachpb.BatchResponse, []intentsWithArg, error) {
 	// Create a new batch for the command to ensure all or nothing semantics.
-	btch := r.rm.Engine().NewBatch()
+	btch := r.store.Engine().NewBatch()
 
 	// Check the response cache for this batch to ensure idempotency.
 	if ba.IsWrite() {
@@ -1103,7 +1076,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			// Otherwise, reset the batch to clear out partial execution and
 			// prepare for the failed response cache entry.
 			btch.Close()
-			btch = r.rm.Engine().NewBatch()
+			btch = r.store.Engine().NewBatch()
 		}
 		if err := r.respCache.PutResponse(btch, ba.CmdID,
 			roachpb.ResponseWithError{Reply: br, Err: err}); err != nil {
@@ -1225,13 +1198,13 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 // should gossip; the bool returned indicates whether it's us.
 func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, error) {
 	// If no Gossip available (some tests) or range too fresh, noop.
-	if r.rm.Gossip() == nil || !r.isInitialized() {
+	if r.store.Gossip() == nil || !r.isInitialized() {
 		return false, util.Errorf("no gossip or range not initialized")
 	}
 	var hasLease bool
 	var err error
-	if !r.rm.Stopper().RunTask(func() {
-		timestamp := r.rm.Clock().Now()
+	if !r.store.Stopper().RunTask(func() {
+		timestamp := r.store.Clock().Now()
 		// Check for or obtain the lease, if none active.
 		err = r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), timestamp)
 		hasLease = err == nil
@@ -1266,10 +1239,10 @@ func (r *Replica) maybeGossipFirstRange() error {
 
 	// Gossip the cluster ID from all replicas of the first range.
 	if log.V(1) {
-		log.Infoc(ctx, "gossiping cluster id %s from store %d, range %d", r.rm.ClusterID(),
-			r.rm.StoreID(), r.Desc().RangeID)
+		log.Infoc(ctx, "gossiping cluster id %s from store %d, range %d", r.store.ClusterID(),
+			r.store.StoreID(), r.Desc().RangeID)
 	}
-	if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, []byte(r.rm.ClusterID()), clusterIDGossipTTL); err != nil {
+	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, []byte(r.store.ClusterID()), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
 
@@ -1277,15 +1250,15 @@ func (r *Replica) maybeGossipFirstRange() error {
 		return err
 	}
 	if log.V(1) {
-		log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.rm.StoreID(), desc.RangeID)
+		log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.store.StoreID(), desc.RangeID)
 	}
-	if err := r.rm.Gossip().AddInfo(gossip.KeySentinel, []byte(r.rm.ClusterID()), clusterIDGossipTTL); err != nil {
+	if err := r.store.Gossip().AddInfo(gossip.KeySentinel, []byte(r.store.ClusterID()), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip sentinel: %s", err)
 	}
 	if log.V(1) {
-		log.Infoc(ctx, "gossiping first range from store %d, range %d", r.rm.StoreID(), desc.RangeID)
+		log.Infoc(ctx, "gossiping first range from store %d, range %d", r.store.StoreID(), desc.RangeID)
 	}
-	if err := r.rm.Gossip().AddInfoProto(gossip.KeyFirstRangeDescriptor, desc, configGossipTTL); err != nil {
+	if err := r.store.Gossip().AddInfoProto(gossip.KeyFirstRangeDescriptor, desc, configGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip first range metadata: %s", err)
 	}
 	return nil
@@ -1307,18 +1280,18 @@ func (r *Replica) maybeGossipSystemConfig() {
 }
 
 func (r *Replica) maybeGossipSystemConfigLocked() {
-	if r.rm.Gossip() == nil || !r.isInitialized() {
+	if r.store.Gossip() == nil || !r.isInitialized() {
 		return
 	}
 
-	if lease := r.getLease(); !lease.OwnedBy(r.rm.StoreID()) || !lease.Covers(r.rm.Clock().Now()) {
+	if lease := r.getLease(); !lease.OwnedBy(r.store.StoreID()) || !lease.Covers(r.store.Clock().Now()) {
 		// Do not gossip when a leader lease is not held.
 		return
 	}
 
 	ctx := r.context()
 	// TODO(marc): check for bad split in the middle of the SystemDB span.
-	kvs, hash, err := loadSystemDBSpan(r.rm.Engine())
+	kvs, hash, err := loadSystemDBSpan(r.store.Engine())
 	if err != nil {
 		log.Errorc(ctx, "could not load SystemDB span: %s", err)
 		return
@@ -1328,11 +1301,11 @@ func (r *Replica) maybeGossipSystemConfigLocked() {
 	}
 
 	if log.V(1) {
-		log.Infoc(ctx, "gossiping system config from store %d, range %d", r.rm.StoreID(), r.Desc().RangeID)
+		log.Infoc(ctx, "gossiping system config from store %d, range %d", r.store.StoreID(), r.Desc().RangeID)
 	}
 
 	cfg := &config.SystemConfig{Values: kvs}
-	if err := r.rm.Gossip().AddInfoProto(gossip.KeySystemConfig, cfg, 0); err != nil {
+	if err := r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, cfg, 0); err != nil {
 		log.Errorc(ctx, "failed to gossip system config: %s", err)
 		return
 	}
@@ -1345,18 +1318,18 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 	if len(intents) == 0 {
 		return
 	}
-	now := r.rm.Clock().Now()
+	now := r.store.Clock().Now()
 
 	for _, item := range intents {
 		ctx := r.context()
-		stopper := r.rm.Stopper()
+		stopper := r.store.Stopper()
 		// TODO(tschottdorf): avoid data race related to batch unrolling in ExecuteCmd;
 		// can probably go again when that provisional code there is gone. Should
 		// still be careful though, a retry could happen and race with args.
 		args := proto.Clone(item.args).(roachpb.Request)
 		stopper.RunAsyncTask(func() {
 			h := roachpb.Header{Timestamp: now}
-			err := r.rm.resolveWriteIntentError(ctx, &roachpb.WriteIntentError{
+			err := r.store.resolveWriteIntentError(ctx, &roachpb.WriteIntentError{
 				Intents: item.intents,
 			}, r, args, h, roachpb.CLEANUP_TXN)
 			if wiErr, ok := err.(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
@@ -1455,7 +1428,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 
 	var reqsRemote []roachpb.Request
 	baLocal := roachpb.BatchRequest{}
-	baLocal.CmdID = baLocal.GetOrCreateCmdID(r.rm.Clock().PhysicalNow())
+	baLocal.CmdID = baLocal.GetOrCreateCmdID(r.store.Clock().PhysicalNow())
 	for i := range intents {
 		intent := intents[i] // avoids a race in `i, intent := range ...`
 		var resolveArgs roachpb.Request
@@ -1495,7 +1468,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 	if len(baLocal.Requests) > 0 {
 		action := func() {
 			// Trace this under the ID of the intent owner.
-			ctx := tracer.ToCtx(ctx, r.rm.Tracer().NewTrace(tracer.Node, baLocal))
+			ctx := tracer.ToCtx(ctx, r.store.Tracer().NewTrace(tracer.Node, baLocal))
 			if _, err := r.addWriteCmd(ctx, baLocal, &wg); err != nil {
 				if log.V(1) {
 					log.Warningc(ctx, "batch resolve failed: %s", err)
@@ -1520,7 +1493,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 			}
 		}
 		wg.Add(1)
-		if !r.rm.Stopper().RunAsyncTask(action) {
+		if !r.store.Stopper().RunAsyncTask(action) {
 			// Still run the task when draining. Our caller already has a task and
 			// going async here again is merely for performance, but some intents
 			// need to be resolved because they might block other tasks. See #1684.
@@ -1535,11 +1508,11 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 		b.InternalAddRequest(reqsRemote...)
 		action := func() {
 			// TODO(tschottdorf): no tracing here yet.
-			if err := r.rm.DB().Run(b); err != nil {
+			if err := r.store.DB().Run(b); err != nil {
 				log.Warningf("unable to resolve intent: %s", err)
 			}
 		}
-		if !r.rm.Stopper().RunAsyncTask(action) {
+		if !r.store.Stopper().RunAsyncTask(action) {
 			// As with local intents, try async to not keep the caller waiting, but
 			// when draining just go ahead and do it synchronously. See #1684.
 			action()
@@ -1580,6 +1553,6 @@ func loadSystemDBSpan(eng engine.Engine) ([]roachpb.KeyValue, []byte, error) {
 func (r *Replica) maybeAddToSplitQueue() {
 	maxBytes := r.GetMaxBytes()
 	if maxBytes > 0 && r.stats.KeyBytes+r.stats.ValBytes > maxBytes {
-		r.rm.splitQueue().MaybeAdd(r, r.rm.Clock().Now())
+		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 }

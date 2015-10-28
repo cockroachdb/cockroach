@@ -124,7 +124,7 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 		if log.V(1) {
 			log.Infof("destroying local data from range %d", desc.RangeID)
 		}
-		if err := rng.rm.RemoveReplica(rng); err != nil {
+		if err := rng.store.RemoveReplica(rng); err != nil {
 			return err
 		}
 
@@ -137,7 +137,7 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 		q.locker.Lock()
 		defer q.locker.Unlock()
 
-		if _, err := rng.rm.GetReplica(desc.RangeID); err == nil {
+		if _, err := rng.store.GetReplica(desc.RangeID); err == nil {
 			log.Infof("replica recreated during deletion; aborting deletion")
 			return nil
 		}
@@ -153,7 +153,7 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 		if log.V(1) {
 			log.Infof("removing merged range %d", desc.RangeID)
 		}
-		if err := rng.rm.RemoveReplica(rng); err != nil {
+		if err := rng.store.RemoveReplica(rng); err != nil {
 			return err
 		}
 

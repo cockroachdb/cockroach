@@ -87,7 +87,7 @@ func (rq *replicateQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 		return true, priority
 	}
 	// See if there is a rebalancing opportunity present.
-	shouldRebalance := rq.allocator.ShouldRebalance(repl.rm.StoreID())
+	shouldRebalance := rq.allocator.ShouldRebalance(repl.store.StoreID())
 	return shouldRebalance, 0
 }
 
@@ -131,7 +131,7 @@ func (rq *replicateQueue) process(now roachpb.Timestamp, repl *Replica, sysCfg *
 			return err
 		}
 		// Do not requeue if we removed ourselves.
-		if removeReplica.StoreID == repl.rm.StoreID() {
+		if removeReplica.StoreID == repl.store.StoreID() {
 			return nil
 		}
 	case AllocatorRemoveDead:
@@ -147,7 +147,7 @@ func (rq *replicateQueue) process(now roachpb.Timestamp, repl *Replica, sysCfg *
 	case AllocatorNoop:
 		// The Noop case will result if this replica was queued in order to
 		// rebalance. Attempt to find a rebalancing target.
-		rebalanceStore := rq.allocator.RebalanceTarget(repl.rm.StoreID(), zone.ReplicaAttrs[0], desc.Replicas)
+		rebalanceStore := rq.allocator.RebalanceTarget(repl.store.StoreID(), zone.ReplicaAttrs[0], desc.Replicas)
 		if rebalanceStore == nil {
 			// No action was necessary and no rebalance target was found. Return
 			// without re-queueing this replica.
