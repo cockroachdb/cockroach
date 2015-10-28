@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/gogo/protobuf/proto"
 )
 
 // tableKey implements descriptorKey.
@@ -187,7 +188,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*TableDescriptor, 
 		// system.lease table, in particular, is problematic because it is used for
 		// acquiring leases itself, creating a chicken&egg problem.
 		if tableDesc, ok := systemTables[qname.Table()]; ok {
-			return tableDesc, nil
+			return proto.Clone(tableDesc).(*TableDescriptor), nil
 		}
 	}
 
@@ -199,16 +200,18 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*TableDescriptor, 
 	if p.leases == nil {
 		p.leases = make(map[ID]*LeaseState)
 	}
-	if lease, ok := p.leases[tableID]; ok {
-		return &lease.TableDescriptor, nil
+
+	lease, ok := p.leases[tableID]
+	if !ok {
+		var err error
+		lease, err = p.leaseMgr.Acquire(p.txn, tableID, 0)
+		if err != nil {
+			return nil, err
+		}
+		p.leases[tableID] = lease
 	}
 
-	lease, err := p.leaseMgr.Acquire(p.txn, tableID, 0)
-	if err != nil {
-		return nil, err
-	}
-	p.leases[tableID] = lease
-	return &lease.TableDescriptor, nil
+	return proto.Clone(&lease.TableDescriptor).(*TableDescriptor), nil
 }
 
 // getTableID retrieves the table ID for the specified table. It uses the
@@ -219,6 +222,9 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, error) {
 		return 0, err
 	}
 
+	// Lookup the database in the cache first, falling back to the KV store if it
+	// isn't present. The cache might cause the usage of a recently renamed
+	// database, but that's a race that could occur anyways.
 	dbDesc, err := p.getCachedDatabaseDesc(qname.Database())
 	if err != nil {
 		dbDesc, err = p.getDatabaseDesc(qname.Database())
@@ -227,12 +233,13 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, error) {
 		}
 	}
 
+	// Lookup the ID of the table in the cache. The use of the cache might cause
+	// the usage of a recently renamed table, but that's a race that could occur
+	// anyways.
 	nameKey := tableKey{dbDesc.ID, qname.Table()}
-	if p.systemConfig != nil {
-		if nameVal := p.systemConfig.GetValue(nameKey.Key()); nameVal != nil {
-			id, err := nameVal.GetInt()
-			return ID(id), err
-		}
+	if nameVal := p.systemConfig.GetValue(nameKey.Key()); nameVal != nil {
+		id, err := nameVal.GetInt()
+		return ID(id), err
 	}
 
 	gr, err := p.txn.Get(nameKey.Key())

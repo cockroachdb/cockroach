@@ -197,13 +197,10 @@ func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, er
 	if !ok {
 		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
-	leaseDesc, err := p.getTableLease(table)
+	desc, err := p.getTableLease(table)
 	if err != nil {
 		return nil, err
 	}
-	// Make a copy of the leased descriptor so that the caller can mutate it.
-	desc := &TableDescriptor{}
-	*desc = *leaseDesc
 	if ate.As != "" {
 		desc.Alias = string(ate.As)
 	} else {

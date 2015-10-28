@@ -62,12 +62,9 @@ func (p *planner) getCachedDatabaseDesc(name string) (*DatabaseDescriptor, error
 	}
 
 	nameKey := databaseKey{name}
-	var nameVal *roachpb.Value
-	if p.systemConfig != nil {
-		nameVal = p.systemConfig.GetValue(nameKey.Key())
-	}
+	nameVal := p.systemConfig.GetValue(nameKey.Key())
 	if nameVal == nil {
-		return nil, fmt.Errorf("database %q does not exist in system cache", nameKey.Name())
+		return nil, fmt.Errorf("database %q does not exist in system cache", name)
 	}
 
 	id, err := nameVal.GetInt()
@@ -78,8 +75,7 @@ func (p *planner) getCachedDatabaseDesc(name string) (*DatabaseDescriptor, error
 	descKey := MakeDescMetadataKey(ID(id))
 	descVal := p.systemConfig.GetValue(descKey)
 	if descVal == nil {
-		return nil, fmt.Errorf("database %q has name entry, but no descriptor in system cache",
-			nameKey.Name())
+		return nil, fmt.Errorf("database %q has name entry, but no descriptor in system cache", name)
 	}
 
 	desc := &DatabaseDescriptor{}

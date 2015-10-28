@@ -63,10 +63,9 @@ func newExecutor(db client.DB, gossip *gossip.Gossip, clock *hlc.Clock) *Executo
 	return exec
 }
 
-// SetNodeID sets the node ID for the SQL server.
+// SetNodeID sets the node ID for the SQL server. This method must be called
+// before actually using the Executor.
 func (e *Executor) SetNodeID(nodeID roachpb.NodeID) {
-	// This method is called during node setup before any requests are received
-	// making it safe to perform without locking.
 	e.nodeID = uint32(nodeID)
 	e.leaseMgr.nodeID = e.nodeID
 }
