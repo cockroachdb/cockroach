@@ -369,7 +369,13 @@ func (l *Cluster) startNode(i int) *Container {
 	c.Name = node(i)
 	uri := fmt.Sprintf("https://%s", c.Addr(""))
 	// Infof doesn't take positional parameters, hence the Sprintf.
-	log.Infof(fmt.Sprintf("started node:\n\tname:  %s\n\tui:    %[2]s\n\ttrace: %[2]s/debug/requests\n\tpprof: %[2]s/debug/pprof/profile\n\tlogs:  %s\n\tcerts:  %s", c.Name, uri, localLogDir, l.CertsDir))
+	log.Infof(fmt.Sprintf(`*** started %s ***
+  ui:    %[2]s
+  trace: %[2]s/debug/requests
+  logs:  %[3]s/cockroach.INFO
+  certs: %[4]s
+  pprof: docker exec -it %[5]s /bin/bash -c 'go tool pprof /cockroach <(wget --no-check-certificate -qO- https://$(hostname):26257/debug/pprof/heap)'`,
+		c.Name, uri, localLogDir, l.CertsDir, c.ID[:5]))
 	return c
 }
 

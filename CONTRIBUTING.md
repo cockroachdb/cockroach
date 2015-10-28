@@ -86,3 +86,25 @@ We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wi
 
 + Address feedback in new commits. Wait (or ask) for new feedback on those commits if they are not straightforward. An `LGTM` ("looks good to me") by someone qualified is usually posted when you're free to go ahead and merge. Most new contributors aren't allowed to merge themselves; in that case, we'll do it for you. You may also be asked to re-groom your commits.
 
+
+### Debugging
+
+Peeking into a running cluster can be done in several ways:
+
+* the [net/trace](https://godoc.org/golang.org/x/net/trace) endpoint at `/debug/requests`.
+  It has a breakdown of the recent traced requests, in particularly slow ones. Two families are traced: `node` and `coord`, the former (and likely more interesting one) containing what happens inside of `Node`/`Store`/`Replica` and the other inside of the coordinator (`TxnCoordSender`).
+* [pprof](https://golang.org/pkg/net/http/pprof/) gives us (among other things) heap and cpu profiles; [this golang blog post](http://blog.golang.org/profiling-go-programs) explains it extremely well and [this one by Dmitry Vuykov](https://software.intel.com/en-us/blogs/2014/05/10/debugging-performance-issues-in-go-programs) goes into even more detail. Two caveats: the `cockroach` binary passed to `pprof` must be the same as the one creating the profile (not true on OSX in acceptance tests!), and the HTTP client used by `pprof` doesn't simply swallow self-signed certs (relevant when using SSL). For the latter, a workaround of the form
+
+  ```
+  go tool pprof cockroach <(curl -k https://$(hostname):26257/debug/pprof/profile)
+  ```
+  will do the trick.
+
+An easy way to locally run a workload against a cluster are the acceptance tests.
+For example,
+
+```bash
+make acceptance TESTS='TestPut$$' TESTFLAGS='-v -d 1200s -l .' TESTTIMEOUT=1210s
+```
+
+runs the `Put` acceptance test for 20 minutes with logging (useful to look at the stacktrace in case of a node dying). When it starts, all the relevant commands for `pprof`, `trace` and logs are logged to allow for convenient inspection of the cluster.
