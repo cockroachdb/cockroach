@@ -40,6 +40,8 @@ func newRSpan(ba roachpb.BatchRequest) rSpan {
 
 // intersect returns the intersection of the current span and the
 // descriptor's range.
+// TODO(kkaneda): Currently the method returns desc when desc and the span
+// do not overlap. Fix if this is not the expected behavior here.
 func (rs rSpan) intersect(desc *roachpb.RangeDescriptor) rSpan {
 	key := rs.key
 	if !desc.ContainsKey(key) {
