@@ -200,10 +200,11 @@ func (desc *TableDescriptor) AllocateIDs() error {
 			index.ImplicitColumnIDs = implicitColumnIDs
 
 			for _, colName := range index.StoreColumnNames {
-				col, err := desc.FindColumnByName(colName)
+				i, err := desc.FindColumnByName(colName)
 				if err != nil {
 					return err
 				}
+				col := desc.Columns[i]
 				if desc.PrimaryIndex.containsColumnID(col.ID) {
 					continue
 				}
@@ -357,13 +358,13 @@ func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
 }
 
 // FindColumnByName finds the column with specified name.
-func (desc *TableDescriptor) FindColumnByName(name string) (*ColumnDescriptor, error) {
+func (desc *TableDescriptor) FindColumnByName(name string) (int, error) {
 	for i, c := range desc.Columns {
 		if equalName(c.Name, name) {
-			return &desc.Columns[i], nil
+			return i, nil
 		}
 	}
-	return nil, fmt.Errorf("column %q does not exist", name)
+	return -1, fmt.Errorf("column %q does not exist", name)
 }
 
 // FindColumnByID finds the column with specified ID.

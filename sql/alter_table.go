@@ -102,7 +102,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 			}
 
 		case *parser.AlterTableDropColumn:
-			col, err := newTableDesc.FindColumnByName(t.Column)
+			i, err := newTableDesc.FindColumnByName(t.Column)
 			if err != nil {
 				if t.IfExists {
 					// Noop.
@@ -111,6 +111,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 				return nil, err
 			}
 
+			col := newTableDesc.Columns[i]
 			if newTableDesc.PrimaryIndex.containsColumnID(col.ID) {
 				return nil, fmt.Errorf("column %q is referenced by the primary key", col.Name)
 			}
@@ -120,17 +121,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 				}
 			}
 
-			found := false
-			for i := range newTableDesc.Columns {
-				if &newTableDesc.Columns[i] == col {
-					newTableDesc.Columns = append(newTableDesc.Columns[:i], newTableDesc.Columns[i+1:]...)
-					found = true
-					break
-				}
-			}
-			if !found {
-				return nil, util.Errorf("column %s not found in %s", col, newTableDesc)
-			}
+			newTableDesc.Columns = append(newTableDesc.Columns[:i], newTableDesc.Columns[i+1:]...)
 
 		case *parser.AlterTableDropConstraint:
 			i, err := newTableDesc.FindIndexByName(t.Constraint)

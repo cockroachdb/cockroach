@@ -262,11 +262,12 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 	}
 
 	colName := string(n.Name)
-	column, err := tableDesc.FindColumnByName(colName)
+	i, err := tableDesc.FindColumnByName(colName)
 	// n.IfExists only applies to table, no need to check here.
 	if err != nil {
 		return nil, err
 	}
+	column := &tableDesc.Columns[i]
 
 	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
 		return nil, err
