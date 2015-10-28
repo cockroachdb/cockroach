@@ -536,7 +536,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 
 			curReply, pErr = func() (*roachpb.BatchResponse, *roachpb.Error) {
 				// Truncate the request to our current key range.
-				untruncate, numActive, trErr := truncate(&ba, rs, desc)
+				untruncate, numActive, trErr := truncate(&ba, rs.Intersect(desc))
 				if numActive == 0 && trErr == nil {
 					untruncate()
 					// This shouldn't happen in the wild, but some tests
