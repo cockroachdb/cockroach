@@ -217,7 +217,7 @@ func TestV(t *testing.T) {
 	_ = logging.verbosity.Set("2")
 	defer func() { _ = logging.verbosity.Set("0") }()
 	if v(2) {
-		logging.print(InfoLog, "test")
+		AddStructured(nil, InfoLog, 1, "", []interface{}{"test"})
 	}
 	if !contains(InfoLog, "I", t) {
 		t.Errorf("Info has wrong character: %q", contents(InfoLog))
@@ -243,7 +243,7 @@ func TestVmoduleOn(t *testing.T) {
 		t.Error("V enabled for 3")
 	}
 	if v(2) {
-		logging.print(InfoLog, "test")
+		AddStructured(nil, InfoLog, 1, "", []interface{}{"test"})
 	}
 	if !contains(InfoLog, "I", t) {
 		t.Errorf("Info has wrong character: %q", contents(InfoLog))
@@ -265,7 +265,7 @@ func TestVmoduleOff(t *testing.T) {
 		}
 	}
 	if v(2) {
-		logging.print(InfoLog, "test")
+		AddStructured(nil, InfoLog, 1, "", []interface{}{"test"})
 	}
 	if contents(InfoLog) != "" {
 		t.Error("V logged incorrectly")

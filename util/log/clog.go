@@ -716,13 +716,6 @@ func (l *loggingT) putBuffer(b *buffer) {
 	l.freeListMu.Unlock()
 }
 
-func (l *loggingT) print(s Severity, args ...interface{}) {
-	file, line, _ := caller.Lookup(1)
-	entry := LogEntry{}
-	setLogEntry(nil, "", args, &entry)
-	l.outputLogEntry(s, file, line, false, &entry)
-}
-
 // outputLogEntry marshals a log entry proto into bytes, and writes
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.

@@ -113,9 +113,9 @@ func TestSetLogEntry(t *testing.T) {
 			test.expEntry.Args[i].Type = fmt.Sprintf("%T", arg)
 		}
 
-		entry := &LogEntry{}
-		setLogEntry(test.ctx, test.format, test.args, entry)
-		if !reflect.DeepEqual(entry, &test.expEntry) {
+		entry := LogEntry{}
+		entry.set(test.ctx, test.format, test.args)
+		if !reflect.DeepEqual(&entry, &test.expEntry) {
 			t.Errorf("%d: expected:\n%+v\ngot:\n%+v", i, &test.expEntry, entry)
 		}
 	}
