@@ -21,6 +21,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -39,6 +40,7 @@ func makeColIDtoRowIndex(row planNode, desc *TableDescriptor) (map[ColumnID]int,
 }
 
 var _ sort.Interface = columnsByID{}
+var _ sort.Interface = indexesByID{}
 
 type columnsByID []ColumnDescriptor
 
@@ -50,6 +52,18 @@ func (cds columnsByID) Less(i, j int) bool {
 }
 func (cds columnsByID) Swap(i, j int) {
 	cds[i], cds[j] = cds[j], cds[i]
+}
+
+type indexesByID []IndexDescriptor
+
+func (ids indexesByID) Len() int {
+	return len(ids)
+}
+func (ids indexesByID) Less(i, j int) bool {
+	return ids[i].ID < ids[j].ID
+}
+func (ids indexesByID) Swap(i, j int) {
+	ids[i], ids[j] = ids[j], ids[i]
 }
 
 func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName, oldTableDesc, newTableDesc *TableDescriptor) error {
@@ -83,6 +97,29 @@ func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName
 		}); err != nil {
 			return err
 		}
+	}
+
+	var droppedIndexDescs []IndexDescriptor
+	sort.Sort(indexesByID(oldTableDesc.Indexes))
+	sort.Sort(indexesByID(newTableDesc.Indexes))
+	for i, j := 0, 0; i < len(oldTableDesc.Indexes); i++ {
+		if j == len(newTableDesc.Indexes) || oldTableDesc.Indexes[i].ID != newTableDesc.Indexes[j].ID {
+			droppedIndexDescs = append(droppedIndexDescs, oldTableDesc.Indexes[i])
+		} else {
+			j++
+		}
+	}
+
+	for _, indexDescriptor := range droppedIndexDescs {
+		indexPrefix := MakeIndexKeyPrefix(newTableDesc.ID, indexDescriptor.ID)
+
+		// Delete the index.
+		indexStartKey := roachpb.Key(indexPrefix)
+		indexEndKey := indexStartKey.PrefixEnd()
+		if log.V(2) {
+			log.Infof("DelRange %s - %s", prettyKey(indexStartKey, 0), prettyKey(indexEndKey, 0))
+		}
+		b.DelRange(indexStartKey, indexEndKey)
 	}
 
 	var newIndexDescs []IndexDescriptor

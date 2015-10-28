@@ -21,11 +21,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -132,17 +130,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 				}
 				return nil, err
 			}
-			indexID := newTableDesc.Indexes[i].ID
 			newTableDesc.Indexes = append(newTableDesc.Indexes[:i], newTableDesc.Indexes[i+1:]...)
-			indexPrefix := MakeIndexKeyPrefix(newTableDesc.ID, indexID)
-
-			// Delete the index.
-			indexStartKey := roachpb.Key(indexPrefix)
-			indexEndKey := indexStartKey.PrefixEnd()
-			if log.V(2) {
-				log.Infof("DelRange %s - %s", prettyKey(indexStartKey, 0), prettyKey(indexEndKey, 0))
-			}
-			b.DelRange(indexStartKey, indexEndKey)
 
 		default:
 			return nil, util.Errorf("unsupported alter cmd: %T", cmd)
