@@ -444,7 +444,7 @@ func (txn *Txn) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.
 				Key: firstWriteKey,
 			},
 		}
-		reqs = append(append(append([]roachpb.Request(nil), reqs[:firstWriteIndex]...), []roachpb.Request{bt}...), reqs[firstWriteIndex:]...)
+		reqs = append(append(append([]roachpb.Request(nil), reqs[:firstWriteIndex]...), bt), reqs[firstWriteIndex:]...)
 	}
 
 	if elideEndTxn {
@@ -470,16 +470,14 @@ func (txn *Txn) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.
 			br.Responses = append(br.Responses[:firstWriteIndex], br.Responses[firstWriteIndex+1:]...)
 		}
 		// Handle case where inserted begin txn confused an indexed error.
-		if pErr != nil && pErr.Detail != nil {
-			if iErr, ok := pErr.Detail.GetValue().(roachpb.IndexedError); ok {
-				if idx, ok := iErr.ErrorIndex(); ok {
-					if idx == int32(firstWriteIndex) {
-						// An error was encountered on begin txn; disallow the indexing.
-						pErr = roachpb.NewError(util.Errorf("error on begin transaction: %s", pErr.Detail.GetValue().(error)))
-					} else if idx > int32(firstWriteIndex) {
-						// An error was encountered after begin txn; decrement index.
-						iErr.SetErrorIndex(idx - 1)
-					}
+		if iErr, ok := pErr.GoError().(roachpb.IndexedError); ok {
+			if idx, ok := iErr.ErrorIndex(); ok {
+				if idx == int32(firstWriteIndex) {
+					// An error was encountered on begin txn; disallow the indexing.
+					pErr = roachpb.NewError(util.Errorf("error on begin transaction: %s", pErr))
+				} else if idx > int32(firstWriteIndex) {
+					// An error was encountered after begin txn; decrement index.
+					iErr.SetErrorIndex(idx - 1)
 				}
 			}
 		}

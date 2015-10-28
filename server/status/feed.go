@@ -90,11 +90,9 @@ func (nef NodeEventFeed) StartNode(desc roachpb.NodeDescriptor, startedAt int64)
 func (nef NodeEventFeed) CallComplete(ba roachpb.BatchRequest, pErr *roachpb.Error) {
 	if pErr != nil && pErr.TransactionRestart == roachpb.TransactionRestart_ABORT {
 		method := roachpb.Batch
-		if pErr.Detail != nil {
-			if iErr, ok := pErr.Detail.GetValue().(roachpb.IndexedError); ok {
-				if index, ok := iErr.ErrorIndex(); ok {
-					method = ba.Requests[index].GetInner().Method()
-				}
+		if iErr, ok := pErr.GoError().(roachpb.IndexedError); ok {
+			if index, ok := iErr.ErrorIndex(); ok {
+				method = ba.Requests[index].GetInner().Method()
 			}
 		}
 		nef.f.Publish(&CallErrorEvent{
