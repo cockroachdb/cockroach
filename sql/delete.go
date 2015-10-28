@@ -40,9 +40,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 	}
 
 	// TODO(tamird,pmattis): avoid going through Select to avoid encoding
-	// and decoding keys. Also, avoiding Select may provide more
-	// convenient access to index keys which we are not currently
-	// deleting.
+	// and decoding keys.
 	rows, err := p.Select(&parser.Select{
 		Exprs: parser.SelectExprs{parser.StarSelectExpr()},
 		From:  parser.TableExprs{n.Table},
@@ -54,13 +52,9 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
-	colIDtoRowIndex := map[ColumnID]int{}
-	for i, name := range rows.Columns() {
-		c, err := tableDesc.FindColumnByName(name)
-		if err != nil {
-			return nil, err
-		}
-		colIDtoRowIndex[c.ID] = i
+	colIDtoRowIndex, err := makeColIDtoRowIndex(rows, tableDesc)
+	if err != nil {
+		return nil, err
 	}
 
 	primaryIndex := tableDesc.PrimaryIndex

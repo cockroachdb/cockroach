@@ -18,65 +18,169 @@
 package sql
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func (p *planner) makeBackfillBatch(tableName *parser.QualifiedName, tableDesc *TableDescriptor, indexDescs ...IndexDescriptor) (client.Batch, error) {
-	b := client.Batch{}
-	// Get all the rows affected.
-	// TODO(vivek): Avoid going through Select.
-	// TODO(tamird): Support partial indexes?
-	row, err := p.Select(&parser.Select{
-		Exprs: parser.SelectExprs{parser.StarSelectExpr()},
-		From:  parser.TableExprs{&parser.AliasedTableExpr{Expr: tableName}},
-	})
-	if err != nil {
-		return b, err
-	}
-
-	// Construct a map from column ID to the index the value appears at within a
-	// row.
-	colIDtoRowIndex := map[ColumnID]int{}
-	for i, name := range row.Columns() {
-		c, err := tableDesc.FindColumnByName(name)
+func makeColIDtoRowIndex(row planNode, desc *TableDescriptor) (map[ColumnID]int, error) {
+	columns := row.Columns()
+	colIDtoRowIndex := make(map[ColumnID]int, len(columns))
+	for i, name := range columns {
+		j, err := desc.FindColumnByName(name)
 		if err != nil {
-			return b, err
+			return nil, err
 		}
-		colIDtoRowIndex[c.ID] = i
+		colIDtoRowIndex[desc.Columns[j].ID] = i
+	}
+	return colIDtoRowIndex, nil
+}
+
+var _ sort.Interface = columnsByID{}
+var _ sort.Interface = indexesByID{}
+
+type columnsByID []ColumnDescriptor
+
+func (cds columnsByID) Len() int {
+	return len(cds)
+}
+func (cds columnsByID) Less(i, j int) bool {
+	return cds[i].ID < cds[j].ID
+}
+func (cds columnsByID) Swap(i, j int) {
+	cds[i], cds[j] = cds[j], cds[i]
+}
+
+type indexesByID []IndexDescriptor
+
+func (ids indexesByID) Len() int {
+	return len(ids)
+}
+func (ids indexesByID) Less(i, j int) bool {
+	return ids[i].ID < ids[j].ID
+}
+func (ids indexesByID) Swap(i, j int) {
+	ids[i], ids[j] = ids[j], ids[i]
+}
+
+func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName, oldTableDesc, newTableDesc *TableDescriptor) error {
+	table := &parser.AliasedTableExpr{Expr: tableName}
+
+	var droppedColumnDescs []ColumnDescriptor
+	sort.Sort(columnsByID(oldTableDesc.Columns))
+	sort.Sort(columnsByID(newTableDesc.Columns))
+	for i, j := 0, 0; i < len(oldTableDesc.Columns); i++ {
+		if j == len(newTableDesc.Columns) || oldTableDesc.Columns[i].ID != newTableDesc.Columns[j].ID {
+			droppedColumnDescs = append(droppedColumnDescs, oldTableDesc.Columns[i])
+		} else {
+			j++
+		}
 	}
 
-	// TODO(tamird): This will fall down in production use. We need to do
-	// something better (see #2036). In particular, this implementation
-	// has the following problems:
-	// - Very large tables will generate an enormous batch here. This
-	// isn't really a problem in itself except that it will exacerbate
-	// the other issue:
-	// - Any non-quiescent table that this runs against will end up with
-	// an inconsistent index. This is because as inserts/updates continue
-	// to roll in behind this operation's read front, the written index
-	// will become incomplete/stale before it's written.
+	if len(droppedColumnDescs) > 0 {
+		var updateExprs parser.UpdateExprs
+		for _, droppedColumnDesc := range droppedColumnDescs {
+			updateExprs = append(updateExprs, &parser.UpdateExpr{
+				Names: parser.QualifiedNames{&parser.QualifiedName{Base: parser.Name(droppedColumnDesc.Name)}},
+				Expr:  parser.DNull,
+			})
+		}
 
-	for row.Next() {
-		rowVals := row.Values()
+		// Run `UPDATE <table> SET col1 = NULL, col2 = NULL, ...` to clear
+		// the data stored in the columns being dropped.
+		if _, err := p.Update(&parser.Update{
+			Table: table,
+			Exprs: updateExprs,
+		}); err != nil {
+			return err
+		}
+	}
 
-		for _, indexDesc := range indexDescs {
-			secondaryIndexEntries, err := encodeSecondaryIndexes(
-				tableDesc.ID, []IndexDescriptor{indexDesc}, colIDtoRowIndex, rowVals)
-			if err != nil {
-				return b, err
-			}
+	var droppedIndexDescs []IndexDescriptor
+	sort.Sort(indexesByID(oldTableDesc.Indexes))
+	sort.Sort(indexesByID(newTableDesc.Indexes))
+	for i, j := 0, 0; i < len(oldTableDesc.Indexes); i++ {
+		if j == len(newTableDesc.Indexes) || oldTableDesc.Indexes[i].ID != newTableDesc.Indexes[j].ID {
+			droppedIndexDescs = append(droppedIndexDescs, oldTableDesc.Indexes[i])
+		} else {
+			j++
+		}
+	}
 
-			for _, secondaryIndexEntry := range secondaryIndexEntries {
-				if log.V(2) {
-					log.Infof("CPut %s -> %v", prettyKey(secondaryIndexEntry.key, 0),
-						secondaryIndexEntry.value)
+	for _, indexDescriptor := range droppedIndexDescs {
+		indexPrefix := MakeIndexKeyPrefix(newTableDesc.ID, indexDescriptor.ID)
+
+		// Delete the index.
+		indexStartKey := roachpb.Key(indexPrefix)
+		indexEndKey := indexStartKey.PrefixEnd()
+		if log.V(2) {
+			log.Infof("DelRange %s - %s", prettyKey(indexStartKey, 0), prettyKey(indexEndKey, 0))
+		}
+		b.DelRange(indexStartKey, indexEndKey)
+	}
+
+	var newIndexDescs []IndexDescriptor
+	for _, index := range append(newTableDesc.Indexes, newTableDesc.PrimaryIndex) {
+		if index.ID >= oldTableDesc.NextIndexID {
+			newIndexDescs = append(newIndexDescs, index)
+		}
+	}
+
+	if len(newIndexDescs) > 0 {
+		// Get all the rows affected.
+		// TODO(vivek): Avoid going through Select.
+		// TODO(tamird): Support partial indexes?
+		rows, err := p.Select(&parser.Select{
+			Exprs: parser.SelectExprs{parser.StarSelectExpr()},
+			From:  parser.TableExprs{table},
+		})
+		if err != nil {
+			return err
+		}
+
+		// Construct a map from column ID to the index the value appears at within a
+		// row.
+		colIDtoRowIndex, err := makeColIDtoRowIndex(rows, oldTableDesc)
+		if err != nil {
+			return err
+		}
+
+		// TODO(tamird): This will fall down in production use. We need to do
+		// something better (see #2036). In particular, this implementation
+		// has the following problems:
+		// - Very large tables will generate an enormous batch here. This
+		// isn't really a problem in itself except that it will exacerbate
+		// the other issue:
+		// - Any non-quiescent table that this runs against will end up with
+		// an inconsistent index. This is because as inserts/updates continue
+		// to roll in behind this operation's read front, the written index
+		// will become incomplete/stale before it's written.
+
+		for rows.Next() {
+			rowVals := rows.Values()
+
+			for _, newIndexDesc := range newIndexDescs {
+				secondaryIndexEntries, err := encodeSecondaryIndexes(
+					oldTableDesc.ID, []IndexDescriptor{newIndexDesc}, colIDtoRowIndex, rowVals)
+				if err != nil {
+					return err
 				}
-				b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
+
+				for _, secondaryIndexEntry := range secondaryIndexEntries {
+					if log.V(2) {
+						log.Infof("CPut %s -> %v", prettyKey(secondaryIndexEntry.key, 0),
+							secondaryIndexEntry.value)
+					}
+					b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
+				}
 			}
 		}
+
+		return rows.Err()
 	}
 
-	return b, row.Err()
+	return nil
 }

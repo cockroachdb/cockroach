@@ -187,14 +187,14 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 	}
 
 	idxName := n.Name.Index()
-	idx, err := tableDesc.FindIndexByName(idxName)
+	i, err := tableDesc.FindIndexByName(idxName)
 	if err != nil {
 		if n.IfExists {
 			// Noop.
 			return &valuesNode{}, nil
 		}
 		// Index does not exist, but we want it to: error out.
-		return nil, fmt.Errorf("index %q does not exist", idxName)
+		return nil, err
 	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
@@ -210,7 +210,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, fmt.Errorf("index name %q already exists", n.NewName)
 	}
 
-	idx.Name = newIdxName
+	tableDesc.Indexes[i].Name = newIdxName
 	descKey := MakeDescMetadataKey(tableDesc.GetID())
 	if err := tableDesc.Validate(); err != nil {
 		return nil, err
@@ -262,11 +262,12 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 	}
 
 	colName := string(n.Name)
-	column, err := tableDesc.FindColumnByName(colName)
+	i, err := tableDesc.FindColumnByName(colName)
 	// n.IfExists only applies to table, no need to check here.
 	if err != nil {
 		return nil, err
 	}
+	column := &tableDesc.Columns[i]
 
 	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
 		return nil, err

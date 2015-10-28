@@ -22,11 +22,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/gogo/protobuf/proto"
 )
 
 // DropDatabase drops a database.
@@ -105,50 +103,34 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 			return nil, err
 		}
 
+		if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+			return nil, err
+		}
+
+		newTableDesc := proto.Clone(tableDesc).(*TableDescriptor)
+
 		idxName := indexQualifiedName.Index()
-		idx, err := tableDesc.FindIndexByName(idxName)
+		i, err := newTableDesc.FindIndexByName(idxName)
 		if err != nil {
 			if n.IfExists {
 				// Noop.
 				return &valuesNode{}, nil
 			}
 			// Index does not exist, but we want it to: error out.
-			return nil, fmt.Errorf("index %q does not exist", idxName)
+			return nil, err
 		}
+		newTableDesc.Indexes = append(newTableDesc.Indexes[:i], newTableDesc.Indexes[i+1:]...)
 
-		if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+		if err := p.backfillBatch(&b, indexQualifiedName, tableDesc, newTableDesc); err != nil {
 			return nil, err
 		}
 
-		indexPrefix := MakeIndexKeyPrefix(tableDesc.ID, idx.ID)
-
-		// Delete the index.
-		indexStartKey := roachpb.Key(indexPrefix)
-		indexEndKey := indexStartKey.PrefixEnd()
-		if log.V(2) {
-			log.Infof("DelRange %s - %s", prettyKey(indexStartKey, 0), prettyKey(indexEndKey, 0))
-		}
-		b.DelRange(indexStartKey, indexEndKey)
-
-		found := false
-		for i := range tableDesc.Indexes {
-			if &tableDesc.Indexes[i] == idx {
-				tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, util.Errorf("index %s not found in %s", idx, tableDesc)
-		}
-
-		descKey := MakeDescMetadataKey(tableDesc.GetID())
-		if err := tableDesc.Validate(); err != nil {
+		descKey := MakeDescMetadataKey(newTableDesc.GetID())
+		if err := newTableDesc.Validate(); err != nil {
 			return nil, err
 		}
-		if err := p.txn.Put(descKey, tableDesc); err != nil {
-			return nil, err
-		}
+
+		b.Put(descKey, newTableDesc)
 	}
 
 	if err := p.txn.Run(&b); err != nil {

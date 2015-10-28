@@ -20,9 +20,11 @@ package sql
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/gogo/protobuf/proto"
 )
 
 // AlterTable creates a table.
@@ -63,8 +65,9 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		return nil, err
 	}
 
-	nextIndexID := tableDesc.NextIndexID
+	newTableDesc := proto.Clone(tableDesc).(*TableDescriptor)
 
+	b := client.Batch{}
 	for _, cmd := range n.Cmds {
 		switch t := cmd.(type) {
 		case *parser.AlterTableAddColumn:
@@ -73,9 +76,9 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 			if err != nil {
 				return nil, err
 			}
-			tableDesc.AddColumn(*col)
+			newTableDesc.AddColumn(*col)
 			if idx != nil {
-				if err := tableDesc.AddIndex(*idx, d.PrimaryKey); err != nil {
+				if err := newTableDesc.AddIndex(*idx, d.PrimaryKey); err != nil {
 					return nil, err
 				}
 			}
@@ -89,39 +92,63 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 					ColumnNames:      d.Columns,
 					StoreColumnNames: d.Storing,
 				}
-				if err := tableDesc.AddIndex(idx, d.PrimaryKey); err != nil {
+				if err := newTableDesc.AddIndex(idx, d.PrimaryKey); err != nil {
 					return nil, err
 				}
 			default:
 				return nil, util.Errorf("unsupported constraint: %T", t.ConstraintDef)
 			}
 
+		case *parser.AlterTableDropColumn:
+			i, err := newTableDesc.FindColumnByName(t.Column)
+			if err != nil {
+				if t.IfExists {
+					// Noop.
+					continue
+				}
+				return nil, err
+			}
+
+			col := newTableDesc.Columns[i]
+			if newTableDesc.PrimaryIndex.containsColumnID(col.ID) {
+				return nil, fmt.Errorf("column %q is referenced by the primary key", col.Name)
+			}
+			for _, idx := range newTableDesc.Indexes {
+				if idx.containsColumnID(col.ID) {
+					return nil, fmt.Errorf("column %q is referenced by existing index %q", col.Name, idx.Name)
+				}
+			}
+
+			newTableDesc.Columns = append(newTableDesc.Columns[:i], newTableDesc.Columns[i+1:]...)
+
+		case *parser.AlterTableDropConstraint:
+			i, err := newTableDesc.FindIndexByName(t.Constraint)
+			if err != nil {
+				if t.IfExists {
+					// Noop.
+					continue
+				}
+				return nil, err
+			}
+			newTableDesc.Indexes = append(newTableDesc.Indexes[:i], newTableDesc.Indexes[i+1:]...)
+
 		default:
 			return nil, util.Errorf("unsupported alter cmd: %T", cmd)
 		}
 	}
 
-	if err := tableDesc.AllocateIDs(); err != nil {
+	if err := newTableDesc.AllocateIDs(); err != nil {
 		return nil, err
 	}
 
-	// These changed on us when we called `tableDesc.AllocateIDs()`.
-	var newIndexes []IndexDescriptor
-	for _, index := range append(tableDesc.Indexes, tableDesc.PrimaryIndex) {
-		if index.ID >= nextIndexID {
-			newIndexes = append(newIndexes, index)
-		}
-	}
-
-	b, err := p.makeBackfillBatch(n.Table, tableDesc, newIndexes...)
-	if err != nil {
+	if err := p.backfillBatch(&b, n.Table, tableDesc, newTableDesc); err != nil {
 		return nil, err
 	}
 
-	b.Put(MakeDescMetadataKey(tableDesc.GetID()), tableDesc)
+	b.Put(MakeDescMetadataKey(newTableDesc.GetID()), newTableDesc)
 
 	if err := p.txn.Run(&b); err != nil {
-		return nil, convertBatchError(tableDesc, b, err)
+		return nil, convertBatchError(newTableDesc, b, err)
 	}
 
 	return &valuesNode{}, nil
