@@ -554,6 +554,7 @@ func (tc *TxnCoordSender) heartbeatLoop(id string) {
 		txnMeta := tc.txns[id] // do not leak to outer scope
 		closer = txnMeta.txnEnd
 		trace = tc.tracer.NewTrace(tracer.Coord, &txnMeta.txn)
+		defer trace.Finalize()
 		tc.Unlock()
 	}
 	if closer == nil {
@@ -562,7 +563,6 @@ func (tc *TxnCoordSender) heartbeatLoop(id string) {
 		return
 	}
 	ctx := tracer.ToCtx(context.Background(), trace)
-	defer trace.Finalize()
 	// Loop with ticker for periodic heartbeats.
 	for {
 		select {

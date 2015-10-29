@@ -133,6 +133,7 @@ func (t *Trace) epoch(name string) func() {
 // Finalize submits the Trace to the underlying feed. If there is an open
 // Epoch, a panic occurs.
 func (t *Trace) Finalize() {
+	defer t.nTrace.Finish()
 	if t == nil || len(t.Content) == 0 {
 		return
 	}
@@ -149,7 +150,6 @@ func (t *Trace) Finalize() {
 	} else if log.V(2) {
 		log.Info(t)
 	}
-	t.nTrace.Finish()
 }
 
 func (t *Trace) add(name string) int {
