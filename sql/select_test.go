@@ -295,6 +295,10 @@ func TestApplyConstraints(t *testing.T) {
 		{`a != 1`, []string{"a"}, `a != 1`},
 		{`a IS NOT NULL`, []string{"a"}, `<nil>`},
 		{`a = 1 AND b IS NOT NULL`, []string{"a", "b"}, `<nil>`},
+		{`a >= 1 AND b = 2`, []string{"a", "b"}, `a >= 1 AND b = 2`},
+		{`a >= 1 AND a <= 3 AND b = 2`, []string{"a", "b"}, `a >= 1 AND a <= 3 AND b = 2`},
+		{`(a, b) = (1, 2) AND c IS NOT NULL`, []string{"a", "b", "c"}, `<nil>`},
+		{`a IN (1, 2) AND b = 3`, []string{"a", "b"}, `b = 3`},
 	}
 	for _, d := range testData {
 		desc, index := makeTestIndex(t, d.columns)

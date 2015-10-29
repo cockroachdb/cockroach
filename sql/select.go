@@ -782,6 +782,21 @@ func applyConstraints(expr parser.Expr, constraints indexConstraints) parser.Exp
 	for _, c := range constraints {
 		v.constraint = c
 		expr = parser.WalkExpr(v, expr)
+		// We can only continue to apply the constraints if the constraints we have
+		// applied so far are equality constraints. There are two cases to
+		// consider: the first is that both the start and end constraints are
+		// equality.
+		if c.start == c.end {
+			if c.start.Operator == parser.EQ {
+				continue
+			}
+			// The second case is that both the start and end constraint are an IN
+			// operator with only a single value.
+			if c.start.Operator == parser.In && len(c.start.Right.(parser.DTuple)) == 1 {
+				continue
+			}
+		}
+		break
 	}
 	if expr == parser.DBool(true) {
 		return nil
