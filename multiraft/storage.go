@@ -53,6 +53,12 @@ type Storage interface {
 	ReplicaIDForStore(groupID roachpb.RangeID, storeID roachpb.StoreID) (roachpb.ReplicaID, error)
 	ReplicasFromSnapshot(snap raftpb.Snapshot) ([]roachpb.ReplicaDescriptor, error)
 
+	// CanApplySnapshot should return false if attempting to apply the
+	// given snapshot would result in an error. This allows snapshots to
+	// be dropped cleanly since errors deep inside raft often result in
+	// panics.
+	CanApplySnapshot(groupID roachpb.RangeID, snap raftpb.Snapshot) bool
+
 	// GroupLocker returns a lock which (if non-nil) will be acquired
 	// when a group is being created (which entails multiple calls to
 	// Storage and StateMachine methods and may race with the removal of
@@ -116,6 +122,11 @@ func (m *MemoryStorage) ReplicaIDForStore(groupID roachpb.RangeID, storeID roach
 // ReplicasFromSnapshot implements the Storage interface.
 func (m *MemoryStorage) ReplicasFromSnapshot(_ raftpb.Snapshot) ([]roachpb.ReplicaDescriptor, error) {
 	return nil, nil
+}
+
+// CanApplySnapshot implements the Storage interface.
+func (m *MemoryStorage) CanApplySnapshot(_ roachpb.RangeID, _ raftpb.Snapshot) bool {
+	return true
 }
 
 // GroupLocker implements the Storage interface by returning nil.
