@@ -134,3 +134,11 @@ message DatabaseDescriptor {
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
   optional PrivilegeDescriptor privileges = 3;
 }
+
+// Descriptor is a union type holding either a table or database descriptor.
+message Descriptor {
+  oneof union {
+    TableDescriptor table = 1;
+    DatabaseDescriptor database = 2;
+  }
+}

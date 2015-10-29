@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -54,19 +55,23 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 	}
 
 	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
-	desc := DatabaseDescriptor{}
-	if err := p.txn.GetProto(descKey, &desc); err != nil {
+	desc := &Descriptor{}
+	if err := p.txn.GetProto(descKey, desc); err != nil {
 		return nil, err
 	}
-	if err := desc.Validate(); err != nil {
+	dbDesc := desc.GetDatabase()
+	if dbDesc == nil {
+		return nil, util.Errorf("%q is not a database", n.Name)
+	}
+	if err := dbDesc.Validate(); err != nil {
 		return nil, err
 	}
 
-	if err := p.checkPrivilege(&desc, privilege.DROP); err != nil {
+	if err := p.checkPrivilege(dbDesc, privilege.DROP); err != nil {
 		return nil, err
 	}
 
-	tbNames, err := p.getTableNames(&desc)
+	tbNames, err := p.getTableNames(dbDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +84,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 	b.Del(descKey)
 	b.Del(nameKey)
 	// Delete the zone config entry for this database.
-	b.Del(MakeZoneKey(desc.ID))
+	b.Del(MakeZoneKey(dbDesc.ID))
 
 	if err := p.txn.Run(b); err != nil {
 		return nil, err
@@ -125,12 +130,12 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 			return nil, err
 		}
 
-		descKey := MakeDescMetadataKey(newTableDesc.GetID())
 		if err := newTableDesc.Validate(); err != nil {
 			return nil, err
 		}
 
-		b.Put(descKey, newTableDesc)
+		descKey := MakeDescMetadataKey(newTableDesc.GetID())
+		b.Put(descKey, wrapDescriptor(newTableDesc))
 	}
 
 	if err := p.txn.Run(&b); err != nil {
@@ -173,16 +178,20 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 			return nil, fmt.Errorf("table %q does not exist", tbKey.Name())
 		}
 
-		tableDesc := TableDescriptor{}
+		desc := &Descriptor{}
 		descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
-		if err := p.txn.GetProto(descKey, &tableDesc); err != nil {
+		if err := p.txn.GetProto(descKey, desc); err != nil {
 			return nil, err
+		}
+		tableDesc := desc.GetTable()
+		if tableDesc == nil {
+			return nil, util.Errorf("%q is not a table", tbKey.Name())
 		}
 		if err := tableDesc.Validate(); err != nil {
 			return nil, err
 		}
 
-		if err := p.checkPrivilege(&tableDesc, privilege.DROP); err != nil {
+		if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
 			return nil, err
 		}
 

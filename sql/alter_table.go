@@ -149,7 +149,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 	// properly.
 	p.hackNoteSchemaChange(newTableDesc)
 
-	b.Put(MakeDescMetadataKey(newTableDesc.GetID()), newTableDesc)
+	b.Put(MakeDescMetadataKey(newTableDesc.GetID()), wrapDescriptor(newTableDesc))
 
 	if err := p.txn.Run(&b); err != nil {
 		return nil, convertBatchError(newTableDesc, b, err)

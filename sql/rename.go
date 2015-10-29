@@ -67,7 +67,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 
 	b := client.Batch{}
 	b.CPut(databaseKey{string(n.NewName)}.Key(), dbDesc.GetID(), nil)
-	b.Put(descKey, dbDesc)
+	b.Put(descKey, wrapDescriptor(dbDesc))
 	b.Del(databaseKey{string(n.Name)}.Key())
 
 	if err := p.txn.Run(&b); err != nil {
@@ -145,15 +145,15 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	tableDesc.SetName(n.NewName.Table())
 	tableDesc.ParentID = targetDbDesc.ID
 
-	newTbKey := tableKey{targetDbDesc.ID, n.NewName.Table()}.Key()
 	descKey := MakeDescMetadataKey(tableDesc.GetID())
+	newTbKey := tableKey{targetDbDesc.ID, n.NewName.Table()}.Key()
 
 	if err := tableDesc.Validate(); err != nil {
 		return nil, err
 	}
 
 	b := client.Batch{}
-	b.Put(descKey, tableDesc)
+	b.Put(descKey, wrapDescriptor(tableDesc))
 	b.CPut(newTbKey, tableDesc.GetID(), nil)
 	b.Del(tbKey)
 
@@ -220,7 +220,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 	if err := tableDesc.Validate(); err != nil {
 		return nil, err
 	}
-	if err := p.txn.Put(descKey, tableDesc); err != nil {
+	if err := p.txn.Put(descKey, wrapDescriptor(tableDesc)); err != nil {
 		return nil, err
 	}
 
@@ -304,7 +304,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 	if err := tableDesc.Validate(); err != nil {
 		return nil, err
 	}
-	if err := p.txn.Put(descKey, tableDesc); err != nil {
+	if err := p.txn.Put(descKey, wrapDescriptor(tableDesc)); err != nil {
 		return nil, err
 	}
 

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // databaseKey implements descriptorKey.
@@ -47,11 +48,11 @@ func makeDatabaseDesc(p *parser.CreateDatabase) DatabaseDescriptor {
 
 // getDatabaseDesc looks up the database descriptor given its name.
 func (p *planner) getDatabaseDesc(name string) (*DatabaseDescriptor, error) {
-	desc := DatabaseDescriptor{}
-	if err := p.getDescriptor(databaseKey{name}, &desc); err != nil {
+	desc := &DatabaseDescriptor{}
+	if err := p.getDescriptor(databaseKey{name}, desc); err != nil {
 		return nil, err
 	}
-	return &desc, nil
+	return desc, nil
 }
 
 // getCachedDatabaseDesc looks up the database descriptor given its name in the
@@ -78,10 +79,14 @@ func (p *planner) getCachedDatabaseDesc(name string) (*DatabaseDescriptor, error
 		return nil, fmt.Errorf("database %q has name entry, but no descriptor in system cache", name)
 	}
 
-	desc := &DatabaseDescriptor{}
+	desc := &Descriptor{}
 	if err := descVal.GetProto(desc); err != nil {
 		return nil, err
 	}
 
-	return desc, desc.Validate()
+	database := desc.GetDatabase()
+	if database == nil {
+		return nil, util.Errorf("%q is not a database", name)
+	}
+	return database, database.Validate()
 }

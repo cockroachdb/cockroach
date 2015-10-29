@@ -19,6 +19,7 @@
 		IndexDescriptor
 		TableDescriptor
 		DatabaseDescriptor
+		Descriptor
 */
 package sql
 

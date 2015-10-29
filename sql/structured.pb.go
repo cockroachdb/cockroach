@@ -276,6 +276,108 @@ func (m *DatabaseDescriptor) GetPrivileges() *PrivilegeDescriptor {
 	return nil
 }
 
+// Descriptor is a union type holding either a table or database descriptor.
+type Descriptor struct {
+	// Types that are valid to be assigned to Union:
+	//	*Descriptor_Table
+	//	*Descriptor_Database
+	Union isDescriptor_Union `protobuf_oneof:"union"`
+}
+
+func (m *Descriptor) Reset()         { *m = Descriptor{} }
+func (m *Descriptor) String() string { return proto.CompactTextString(m) }
+func (*Descriptor) ProtoMessage()    {}
+
+type isDescriptor_Union interface {
+	isDescriptor_Union()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type Descriptor_Table struct {
+	Table *TableDescriptor `protobuf:"bytes,1,opt,name=table,oneof"`
+}
+type Descriptor_Database struct {
+	Database *DatabaseDescriptor `protobuf:"bytes,2,opt,name=database,oneof"`
+}
+
+func (*Descriptor_Table) isDescriptor_Union()    {}
+func (*Descriptor_Database) isDescriptor_Union() {}
+
+func (m *Descriptor) GetUnion() isDescriptor_Union {
+	if m != nil {
+		return m.Union
+	}
+	return nil
+}
+
+func (m *Descriptor) GetTable() *TableDescriptor {
+	if x, ok := m.GetUnion().(*Descriptor_Table); ok {
+		return x.Table
+	}
+	return nil
+}
+
+func (m *Descriptor) GetDatabase() *DatabaseDescriptor {
+	if x, ok := m.GetUnion().(*Descriptor_Database); ok {
+		return x.Database
+	}
+	return nil
+}
+
+// XXX_OneofFuncs is for the internal use of the proto package.
+func (*Descriptor) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), []interface{}) {
+	return _Descriptor_OneofMarshaler, _Descriptor_OneofUnmarshaler, []interface{}{
+		(*Descriptor_Table)(nil),
+		(*Descriptor_Database)(nil),
+	}
+}
+
+func _Descriptor_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
+	m := msg.(*Descriptor)
+	// union
+	switch x := m.Union.(type) {
+	case *Descriptor_Table:
+		_ = b.EncodeVarint(1<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Table); err != nil {
+			return err
+		}
+	case *Descriptor_Database:
+		_ = b.EncodeVarint(2<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Database); err != nil {
+			return err
+		}
+	case nil:
+	default:
+		return fmt.Errorf("Descriptor.Union has unexpected type %T", x)
+	}
+	return nil
+}
+
+func _Descriptor_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+	m := msg.(*Descriptor)
+	switch tag {
+	case 1: // union.table
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(TableDescriptor)
+		err := b.DecodeMessage(msg)
+		m.Union = &Descriptor_Table{msg}
+		return true, err
+	case 2: // union.database
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(DatabaseDescriptor)
+		err := b.DecodeMessage(msg)
+		m.Union = &Descriptor_Database{msg}
+		return true, err
+	default:
+		return false, nil
+	}
+}
+
 func init() {
 	proto.RegisterEnum("cockroach.sql.ColumnType_Kind", ColumnType_Kind_name, ColumnType_Kind_value)
 }
@@ -556,6 +658,59 @@ func (m *DatabaseDescriptor) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *Descriptor) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Descriptor) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Union != nil {
+		nn6, err := m.Union.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += nn6
+	}
+	return i, nil
+}
+
+func (m *Descriptor_Table) MarshalTo(data []byte) (int, error) {
+	i := 0
+	if m.Table != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Table.Size()))
+		n7, err := m.Table.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n7
+	}
+	return i, nil
+}
+func (m *Descriptor_Database) MarshalTo(data []byte) (int, error) {
+	i := 0
+	if m.Database != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Database.Size()))
+		n8, err := m.Database.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n8
+	}
+	return i, nil
+}
 func encodeFixed64Structured(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	data[offset+1] = uint8(v >> 8)
@@ -683,6 +838,34 @@ func (m *DatabaseDescriptor) Size() (n int) {
 	n += 1 + sovStructured(uint64(m.ID))
 	if m.Privileges != nil {
 		l = m.Privileges.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	return n
+}
+
+func (m *Descriptor) Size() (n int) {
+	var l int
+	_ = l
+	if m.Union != nil {
+		n += m.Union.Size()
+	}
+	return n
+}
+
+func (m *Descriptor_Table) Size() (n int) {
+	var l int
+	_ = l
+	if m.Table != nil {
+		l = m.Table.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	return n
+}
+func (m *Descriptor_Database) Size() (n int) {
+	var l int
+	_ = l
+	if m.Database != nil {
+		l = m.Database.Size()
 		n += 1 + l + sovStructured(uint64(l))
 	}
 	return n
@@ -1669,6 +1852,120 @@ func (m *DatabaseDescriptor) Unmarshal(data []byte) error {
 			if err := m.Privileges.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipStructured(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthStructured
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Descriptor) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowStructured
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Descriptor: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Descriptor: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Table", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &TableDescriptor{}
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Union = &Descriptor_Table{v}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Database", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &DatabaseDescriptor{}
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Union = &Descriptor_Database{v}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

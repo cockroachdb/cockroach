@@ -53,16 +53,17 @@ func TestRenameTable(t *testing.T) {
 	counter++
 
 	// Check the table descriptor.
-	var descriptor sql.TableDescriptor
+	desc := &sql.Descriptor{}
 	tableDescKey := sql.MakeDescMetadataKey(sql.ID(tableCounter))
-	if err := kvDB.GetProto(tableDescKey, &descriptor); err != nil {
+	if err := kvDB.GetProto(tableDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
-	if descriptor.Name != oldName {
-		t.Fatalf("Wrong table name, expected %s, got: %+v", oldName, descriptor)
+	tableDesc := desc.GetTable()
+	if tableDesc.Name != oldName {
+		t.Fatalf("Wrong table name, expected %s, got: %+v", oldName, tableDesc)
 	}
-	if descriptor.ParentID != oldDBID {
-		t.Fatalf("Wrong parent ID on table, expected %d, got: %+v", oldDBID, descriptor)
+	if tableDesc.ParentID != oldDBID {
+		t.Fatalf("Wrong parent ID on table, expected %d, got: %+v", oldDBID, tableDesc)
 	}
 
 	// Create database test2.
@@ -79,14 +80,14 @@ func TestRenameTable(t *testing.T) {
 	}
 
 	// Check the table descriptor again.
-	if err := kvDB.GetProto(tableDescKey, &descriptor); err != nil {
+	if err := kvDB.GetProto(tableDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
-	if descriptor.Name != newName {
-		t.Fatalf("Wrong table name, expected %s, got: %+v", newName, descriptor)
+	tableDesc = desc.GetTable()
+	if tableDesc.Name != newName {
+		t.Fatalf("Wrong table name, expected %s, got: %+v", newName, tableDesc)
 	}
-	if descriptor.ParentID != newDBID {
-		t.Fatalf("Wrong parent ID on table, expected %d, got: %+v", newDBID, descriptor)
+	if tableDesc.ParentID != newDBID {
+		t.Fatalf("Wrong parent ID on table, expected %d, got: %+v", newDBID, tableDesc)
 	}
-
 }
