@@ -20,6 +20,7 @@ package server
 
 import (
 	"compress/gzip"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -253,7 +254,11 @@ func (s *Server) writeSummaries() error {
 			return err
 		}
 		if log.V(1) {
-			log.Infof("recorded status for node %d", nodeStatus.Desc.NodeID)
+			statusJSON, err := json.Marshal(nodeStatus)
+			if err != nil {
+				log.Errorf("error marshaling nodeStatus to json: %s", err)
+			}
+			log.Infof("node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
 		}
 	}
 
@@ -262,9 +267,13 @@ func (s *Server) writeSummaries() error {
 		if err := s.db.Put(key, &ss); err != nil {
 			return err
 		}
-	}
-	if log.V(1) {
-		log.Infof("recorded status for %d stores", len(storeStatuses))
+		if log.V(1) {
+			statusJSON, err := json.Marshal(&ss)
+			if err != nil {
+				log.Errorf("error marshaling storeStatus to json: %s", err)
+			}
+			log.Infof("store %d status: %s", ss.Desc.StoreID, statusJSON)
+		}
 	}
 	return nil
 }
