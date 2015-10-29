@@ -48,7 +48,7 @@ const (
 	// replica should attempt to rebalance. This helps introduce some
 	// probabilistic "jitter" to shouldRebalance() function: the store will not
 	// take every rebalancing opportunity available.
-	rebalanceShouldRebalanceChance = 0.05
+	rebalanceShouldRebalanceChance = 0.2
 
 	// priorities for various repair operations.
 	removeDeadReplicaPriority  float64 = 10000
@@ -169,17 +169,17 @@ func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *roachpb.RangeDes
 // set of stores being considered.
 func (a *Allocator) AllocateTarget(required roachpb.Attributes, existing []roachpb.ReplicaDescriptor, relaxConstraints bool,
 	filter func(storeDesc *roachpb.StoreDescriptor, count, used *stat) bool) (*roachpb.StoreDescriptor, error) {
-	existingNodes := make([]roachpb.NodeID, 0, len(existing))
+	existingNodes := make(nodeIDSet, len(existing))
 	for _, repl := range existing {
-		existingNodes = append(existingNodes, repl.NodeID)
+		existingNodes[repl.NodeID] = struct{}{}
 	}
 
 	// Because more redundancy is better than less, if relaxConstraints, the
 	// matching here is lenient, and tries to find a target by relaxing an
 	// attribute constraint, from last attribute to first.
 	for attrs := append([]string(nil), required.Attrs...); ; attrs = attrs[:len(attrs)-1] {
-		sl := a.storePool.getStoreList(roachpb.Attributes{Attrs: attrs}, existingNodes, a.options.Deterministic)
-		if target := a.balancer.selectGood(sl); target != nil {
+		sl := a.storePool.getStoreList(roachpb.Attributes{Attrs: attrs}, a.options.Deterministic)
+		if target := a.balancer.selectGood(sl, existingNodes); target != nil {
 			return target, nil
 		}
 		if len(attrs) == 0 {
@@ -243,13 +243,13 @@ func (a Allocator) RebalanceTarget(storeID roachpb.StoreID, required roachpb.Att
 	if !a.options.AllowRebalance {
 		return nil
 	}
-	existingNodes := make([]roachpb.NodeID, 0, len(existing))
+	existingNodes := make(nodeIDSet, len(existing))
 	for _, repl := range existing {
-		existingNodes = append(existingNodes, repl.NodeID)
+		existingNodes[repl.NodeID] = struct{}{}
 	}
 	storeDesc := a.storePool.getStoreDescriptor(storeID)
-	sl := a.storePool.getStoreList(required, existingNodes, a.options.Deterministic)
-	if replacement := a.balancer.improve(storeDesc, sl); replacement != nil {
+	sl := a.storePool.getStoreList(required, a.options.Deterministic)
+	if replacement := a.balancer.improve(storeDesc, sl, existingNodes); replacement != nil {
 		return replacement
 	}
 	return nil
@@ -278,10 +278,10 @@ func (a Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 		return false
 	}
 
-	sl := a.storePool.getStoreList(*storeDesc.CombinedAttrs(), []roachpb.NodeID{storeDesc.Node.NodeID}, a.options.Deterministic)
+	sl := a.storePool.getStoreList(*storeDesc.CombinedAttrs(), a.options.Deterministic)
 
 	// ShouldRebalance is true if a suitable replacement can be found.
-	return a.balancer.improve(storeDesc, sl) != nil
+	return a.balancer.improve(storeDesc, sl, makeNodeIDSet(storeDesc.Node.NodeID)) != nil
 }
 
 // computeQuorum computes the quorum value for the given number of nodes.
