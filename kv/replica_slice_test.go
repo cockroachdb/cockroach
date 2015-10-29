@@ -76,7 +76,8 @@ func TestReplicaSetSortByCommonAttributePrefix(t *testing.T) {
 		}
 		prefixLen := rs.SortByCommonAttributePrefix(attr)
 		if !verifyOrdering(attr, rs, prefixLen) {
-			t.Errorf("%d: attributes not ordered by %s or prefix length %d incorrect:\n%v", i, attr, prefixLen, rs)
+			t.Errorf("%d: attributes not ordered by %s or prefix length %d incorrect:\n%v",
+				i, attr, prefixLen, rs)
 		}
 	}
 }
@@ -108,5 +109,29 @@ func TestReplicaSetMoveToFront(t *testing.T) {
 	exp = []roachpb.StoreID{5, 3, 1, 2, 4}
 	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
 		t.Errorf("expected order %s, got %s", exp, stores)
+	}
+}
+
+func TestReplicaSetRandomOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	rs := replicaSlice(nil)
+	for i := 0; i < 10; i++ {
+		rs = append(rs, replicaInfo{ReplicaDescriptor: roachpb.ReplicaDescriptor{StoreID: roachpb.StoreID(i + 1)}})
+	}
+
+	rs.SortRandomOrder(2, 10)
+	expNot := []roachpb.StoreID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	if stores := getStores(rs); reflect.DeepEqual(stores, expNot) {
+		t.Errorf("expected order %s, got %s", expNot, stores)
+	}
+	rs.SortRandomOrder(1, 10)
+	expNot = []roachpb.StoreID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	if stores := getStores(rs); reflect.DeepEqual(stores, expNot) {
+		t.Errorf("expected order %s, got %s", expNot, stores)
+	}
+	rs.SortRandomOrder(3, 10)
+	expNot = []roachpb.StoreID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	if stores := getStores(rs); reflect.DeepEqual(stores, expNot) {
+		t.Errorf("expected order %s, got %s", expNot, stores)
 	}
 }
