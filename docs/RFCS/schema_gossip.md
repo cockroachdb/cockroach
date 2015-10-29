@@ -29,7 +29,7 @@ This is slightly more complicated than the current implementation. Because the s
 We could augment the current implementation with some of:
 - inconsistent reads
 - time-bounded local caching
-This will be strictly less performant than the gossip approach but will be more optimal in memeory as nodes will only cache schema information that they themselves need. Note that at the time of this writing every node will likely need all schema information due to the current uniform distribution of ranges to nodes.
+This will be strictly less performant than the gossip approach but will be more optimal in memory as nodes will only cache schema information that they themselves need. Note that at the time of this writing every node will likely need all schema information due to the current uniform distribution of ranges to nodes.
 
 We could have a special metadata range which all nodes have a replica of. This would probably result in unacceptable read and write times and induce lots of network traffic.
 

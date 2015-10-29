@@ -95,7 +95,7 @@ same store, or a raft leader sends a snapshot to a store that should
 have a replica of the same range but doesn't.
 
 Each replica-creation path will need to consider whether the replica
-has already been created via the other path (comparaing replica IDs,
+has already been created via the other path (comparing replica IDs,
 not just range IDs). In `splitTrigger`, if the replica already exists
 under a different segment, then a snapshot occurred before the split.
 The left-hand range should delete all data that are outside the bounds
