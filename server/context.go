@@ -45,6 +45,7 @@ const (
 	defaultMetricsFrequency   = 10 * time.Second
 	defaultTimeUntilStoreDead = 5 * time.Minute
 	defaultAllowRebalancing   = false
+	defaultLogStatus          = false
 )
 
 // Context holds parameters needed to setup a server.
@@ -126,6 +127,10 @@ type Context struct {
 	// record internal metrics.
 	MetricsFrequency time.Duration
 
+	// LogStatus enables both nodes and stores to also log their statuses when
+	// they're published.
+	LogStatus bool
+
 	// TimeUntilStoreDead is the time after which if there is no new gossiped
 	// information about a store, it is considered dead.
 	TimeUntilStoreDead time.Duration
@@ -143,6 +148,7 @@ func NewContext() *Context {
 		MetricsFrequency:   defaultMetricsFrequency,
 		TimeUntilStoreDead: defaultTimeUntilStoreDead,
 		AllowRebalancing:   defaultAllowRebalancing,
+		LogStatus:          defaultLogStatus,
 	}
 	// Initializes base context defaults.
 	ctx.InitDefaults()
