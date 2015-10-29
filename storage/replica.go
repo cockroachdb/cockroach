@@ -1468,7 +1468,9 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 	if len(baLocal.Requests) > 0 {
 		action := func() {
 			// Trace this under the ID of the intent owner.
-			ctx := tracer.ToCtx(ctx, r.store.Tracer().NewTrace(tracer.Node, baLocal))
+			trace := r.store.Tracer().NewTrace(tracer.Node, baLocal)
+			defer trace.Finalize()
+			ctx := tracer.ToCtx(ctx, trace)
 			if _, err := r.addWriteCmd(ctx, baLocal, &wg); err != nil {
 				if log.V(1) {
 					log.Warningc(ctx, "batch resolve failed: %s", err)
