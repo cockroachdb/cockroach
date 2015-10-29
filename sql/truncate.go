@@ -33,7 +33,7 @@ import (
 func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 	b := client.Batch{}
 	for _, tableQualifiedName := range n.Tables {
-		tableDesc, err := p.getTableDesc(tableQualifiedName)
+		tableDesc, err := p.getTableLease(tableQualifiedName)
 		if err != nil {
 			return nil, err
 		}

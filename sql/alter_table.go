@@ -145,6 +145,10 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		return nil, err
 	}
 
+	// TODO(pmattis): This is a hack. Remove when schema change operations work
+	// properly.
+	p.hackNoteSchemaChange(newTableDesc)
+
 	b.Put(MakeDescMetadataKey(newTableDesc.GetID()), newTableDesc)
 
 	if err := p.txn.Run(&b); err != nil {

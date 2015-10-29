@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/gogo/protobuf/proto"
 )
 
 // tableKey implements descriptorKey.
@@ -173,6 +174,81 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, e
 		return nil, err
 	}
 	return &desc, nil
+}
+
+// getTableLease acquires a lease for the specified table. The lease will be
+// released when the planner closes.
+func (p *planner) getTableLease(qname *parser.QualifiedName) (*TableDescriptor, error) {
+	if err := qname.NormalizeTableName(p.session.Database); err != nil {
+		return nil, err
+	}
+
+	if qname.Database() == SystemDB.Name {
+		// We don't go through the normal lease mechanism for system tables. The
+		// system.lease and system.descriptor table, in particular, are problematic
+		// because they are used for acquiring leases itself, creating a
+		// chicken&egg problem.
+		return p.getTableDesc(qname)
+	}
+
+	tableID, err := p.getTableID(qname)
+	if err != nil {
+		return nil, err
+	}
+
+	if p.leases == nil {
+		p.leases = make(map[ID]*LeaseState)
+	}
+
+	lease, ok := p.leases[tableID]
+	if !ok {
+		var err error
+		lease, err = p.leaseMgr.Acquire(p.txn, tableID, 0)
+		if err != nil {
+			return nil, err
+		}
+		p.leases[tableID] = lease
+	}
+
+	return proto.Clone(&lease.TableDescriptor).(*TableDescriptor), nil
+}
+
+// getTableID retrieves the table ID for the specified table. It uses the
+// descriptor cache to perform lookups, falling back to the KV store when
+// necessary.
+func (p *planner) getTableID(qname *parser.QualifiedName) (ID, error) {
+	if err := qname.NormalizeTableName(p.session.Database); err != nil {
+		return 0, err
+	}
+
+	// Lookup the database in the cache first, falling back to the KV store if it
+	// isn't present. The cache might cause the usage of a recently renamed
+	// database, but that's a race that could occur anyways.
+	dbDesc, err := p.getCachedDatabaseDesc(qname.Database())
+	if err != nil {
+		dbDesc, err = p.getDatabaseDesc(qname.Database())
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	// Lookup the ID of the table in the cache. The use of the cache might cause
+	// the usage of a recently renamed table, but that's a race that could occur
+	// anyways.
+	nameKey := tableKey{dbDesc.ID, qname.Table()}
+	if nameVal := p.systemConfig.GetValue(nameKey.Key()); nameVal != nil {
+		id, err := nameVal.GetInt()
+		return ID(id), err
+	}
+
+	gr, err := p.txn.Get(nameKey.Key())
+	if err != nil {
+		return 0, err
+	}
+	if !gr.Exists() {
+		return 0, fmt.Errorf("table %q does not exist", nameKey.Name())
+	}
+	return ID(gr.ValueInt()), nil
 }
 
 func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNames, error) {

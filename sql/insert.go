@@ -37,7 +37,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	// reflected in the cached version (yet). Perhaps schema modification
 	// routines such as CREATE INDEX should not return until the schema change
 	// has been pushed everywhere.
-	tableDesc, err := p.getTableDesc(n.Table)
+	tableDesc, err := p.getTableLease(n.Table)
 	if err != nil {
 		return nil, err
 	}
