@@ -171,7 +171,7 @@ transactionally:
 * `UPDATE system.descriptor WHERE id = <descID> SET descriptor = <desc>`
 
 The table descriptor `ModificationTime` would be fed to the
-`hlc.Clock.Update` whenver a lease is acquired to ensure that the node
+`hlc.Clock.Update` whenever a lease is acquired to ensure that the node
 is not allowed to use a descriptor "from the future".
 
 Note that the updating of the table descriptor will cause the table
