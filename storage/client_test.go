@@ -142,6 +142,7 @@ type multiTestContext struct {
 	gossip       *gossip.Gossip
 	storePool    *storage.StorePool
 	transport    multiraft.Transport
+	distSender   *kv.DistSender
 	db           *client.DB
 	feed         *util.Feed
 
@@ -214,12 +215,12 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	m.senders = append(m.senders, kv.NewLocalSender())
 
 	if m.db == nil {
-		distSender := kv.NewDistSender(&kv.DistSenderContext{
+		m.distSender = kv.NewDistSender(&kv.DistSenderContext{
 			Clock:             m.clock,
 			RangeDescriptorDB: m.senders[0],
 			RPCSend:           m.rpcSend,
 		}, m.gossip)
-		sender := kv.NewTxnCoordSender(distSender, m.clock, false, nil, m.clientStopper)
+		sender := kv.NewTxnCoordSender(m.distSender, m.clock, false, nil, m.clientStopper)
 		m.db = client.NewDB(sender)
 	}
 
@@ -296,7 +297,19 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 		if stErr != nil {
 			m.t.Fatal(stErr)
 		}
-		br, pErr = m.senders[nodeID-1].Send(context.Background(), ba)
+		nodeIndex := nodeID - 1
+		// The rpcSend method crosses store boundaries: it is possible that the
+		// destination store is stopped while the source is still running.
+		// Run the send in a Task on the destination store to simulate what
+		// would happen with real RPCs.
+		if s := m.stoppers[nodeIndex]; s == nil || !s.RunTask(func() {
+			br, pErr = m.senders[nodeIndex].Send(context.Background(), ba)
+		}) {
+			pErr = &roachpb.Error{}
+			pErr.SetGoError(rpc.NewSendError("store is stopped", false))
+			m.expireLeaderLeases()
+			continue
+		}
 		if pErr == nil {
 			return []proto.Message{br}, nil
 		}
@@ -308,6 +321,9 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 				// Leader is not known; this can happen if the leader is removed
 				// from the group. Move the manual clock forward in an attempt to
 				// expire the lease.
+				m.expireLeaderLeases()
+			} else if m.stores[tErr.Leader.NodeID-1] == nil {
+				// The leader is known but down, so expire its lease.
 				m.expireLeaderLeases()
 			}
 		default:
