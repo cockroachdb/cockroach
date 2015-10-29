@@ -53,6 +53,10 @@ func (b *BlockableStorage) ReplicasFromSnapshot(snap raftpb.Snapshot) ([]roachpb
 	return b.storage.ReplicasFromSnapshot(snap)
 }
 
+func (b *BlockableStorage) CanApplySnapshot(groupID roachpb.RangeID, snap raftpb.Snapshot) bool {
+	return b.storage.CanApplySnapshot(groupID, snap)
+}
+
 func (b *BlockableStorage) GroupLocker() sync.Locker {
 	return b.storage.GroupLocker()
 }

@@ -600,3 +600,170 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		t.Errorf("expected splits not found: %s", err)
 	}
 }
+
+// setupSplitSnapshotRace engineers a situation in which a range has
+// been split but node 3 hasn't processed it yet. There is a race
+// depending on whether node 3 learns of the split from its left or
+// right side. When this function returns most of the nodes will be
+// stopped, and depending on the order in which they are restarted, we
+// can arrange for both possible outcomes of the race.
+//
+// Range 1 is the system keyspace, located on node 0.
+// The range containing "a" is the left side of the split, located on nodes 1, 2, and 3.
+// The range containing "z" is the right side of the split, located on nodes 3, 4, and 5.
+// Nodes 1-5 are stopped; only node 0 is running.
+//
+// See https://github.com/cockroachdb/cockroach/issues/1644.
+func setupSplitSnapshotRace(t *testing.T) *multiTestContext {
+	mtc := startMultiTestContext(t, 6)
+
+	leftKey := roachpb.Key("a")
+	rightKey := roachpb.Key("z")
+
+	// First, do a couple of writes; we'll use these to determine when
+	// the dust has settled.
+	incArgs := incrementArgs(leftKey, 1)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	incArgs = incrementArgs(rightKey, 2)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Split the system range from the rest of the keyspace.
+	splitArgs := adminSplitArgs(roachpb.KeyMin, keys.SystemMax)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &splitArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Get the left range's ID. This is currently 2, but using
+	// LookupReplica is more future-proof (and see below for
+	// rightRangeID).
+	leftRangeID := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil).Desc().RangeID
+
+	// Replicate the left range onto nodes 1-3 and remove it from node 0.
+	mtc.replicateRange(leftRangeID, 0, 1, 2, 3)
+	mtc.unreplicateRange(leftRangeID, 0, 0)
+	mtc.expireLeaderLeases()
+
+	mtc.waitForValues(leftKey, 3*time.Second, []int64{0, 1, 1, 1, 0, 0})
+	mtc.waitForValues(rightKey, 3*time.Second, []int64{0, 2, 2, 2, 0, 0})
+
+	// Stop node 3 so it doesn't hear about the split.
+	mtc.stopStore(3)
+	mtc.expireLeaderLeases()
+
+	// Split the data range.
+	splitArgs = adminSplitArgs(keys.SystemMax, roachpb.Key("m"))
+	if _, err := client.SendWrapped(mtc.distSender, nil, &splitArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Get the right range's ID. Since the split was performed on node
+	// 1, it is currently 11 and not 3 as might be expected.
+	rightRangeID := mtc.stores[1].LookupReplica(roachpb.RKey("z"), nil).Desc().RangeID
+
+	// Relocate the right range onto nodes 3-5.
+	mtc.replicateRange(rightRangeID, 1, 4, 5)
+	mtc.unreplicateRange(rightRangeID, 1, 2)
+	mtc.unreplicateRange(rightRangeID, 1, 1)
+
+	mtc.waitForValues(rightKey, 3*time.Second, []int64{0, 0, 0, 2, 2, 2})
+
+	// Stop the remaining data stores.
+	mtc.stopStore(1)
+	mtc.stopStore(2)
+	// 3 is already stopped.
+	mtc.stopStore(4)
+	mtc.stopStore(5)
+	mtc.expireLeaderLeases()
+
+	return mtc
+}
+
+// TestSplitSnapshotRace_SplitWins exercises one outcome of the
+// split/snapshot race: The left side of the split propagates first,
+// so the split completes before it sees a competing snapshot. This is
+// the more common outcome in practice.
+func TestSplitSnapshotRace_SplitWins(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	mtc := setupSplitSnapshotRace(t)
+	defer mtc.Stop()
+
+	// Bring the left range up first so that the split happens before it sees a snapshot.
+	for i := 1; i <= 3; i++ {
+		mtc.restartStore(i)
+	}
+
+	leftKey := roachpb.Key("a")
+	rightKey := roachpb.Key("z")
+
+	// Perform a write on the left range and wait for it to propagate.
+	incArgs := incrementArgs(leftKey, 10)
+	if _, err := client.SendWrapped(mtc.distSender, nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	mtc.waitForValues(leftKey, 3*time.Second, []int64{0, 11, 11, 11, 0, 0})
+
+	// Now wake the other stores up.
+	mtc.restartStore(4)
+	mtc.restartStore(5)
+
+	// Write to the right range.
+	incArgs = incrementArgs(rightKey, 20)
+	if _, err := client.SendWrapped(mtc.distSender, nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	mtc.waitForValues(rightKey, 3*time.Second, []int64{0, 0, 0, 22, 22, 22})
+}
+
+// TestSplitSnapshotRace_SplitWins exercises one outcome of the
+// split/snapshot race: The right side of the split replicates first,
+// so target node sees a raft snapshot before it has processed the split,
+// so it still has a conflicting range.
+func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	mtc := setupSplitSnapshotRace(t)
+	defer mtc.Stop()
+
+	// Bring the right range up first.
+	for i := 3; i <= 5; i++ {
+		mtc.restartStore(i)
+	}
+
+	leftKey := roachpb.Key("a")
+	rightKey := roachpb.Key("z")
+
+	// Perform a write on the right range.
+	incArgs := incrementArgs(rightKey, 20)
+	if _, err := client.SendWrapped(mtc.distSender, nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// It immediately propagates between nodes 4 and 5, but node 3 remains
+	// at its old value.  It can't accept the right-hand range because
+	// it conflicts with its not-yet-split copy of the left-hand range.
+	mtc.waitForValues(rightKey, 3*time.Second, []int64{0, 0, 0, 2, 22, 22})
+
+	// Wake up the left-hand range. This will allow the left-hand
+	// range's split to complete and unblock the right-hand range.
+	mtc.restartStore(1)
+	mtc.restartStore(2)
+
+	// Perform writes on both sides. This is not strictly necessary but
+	// it helps wake up dormant ranges that would otherwise have to wait
+	// for retry timeouts.
+	incArgs = incrementArgs(leftKey, 10)
+	if _, err := client.SendWrapped(mtc.distSender, nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	mtc.waitForValues(leftKey, 3*time.Second, []int64{0, 11, 11, 11, 0, 0})
+
+	incArgs = incrementArgs(rightKey, 200)
+	if _, err := client.SendWrapped(mtc.distSender, nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	mtc.waitForValues(rightKey, 3*time.Second, []int64{0, 0, 0, 222, 222, 222})
+
+}
