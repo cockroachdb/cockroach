@@ -22,7 +22,6 @@ import (
 	// explicit because these Go libraries do not export any Go symbols.
 	_ "github.com/cockroachdb/c-protobuf"
 	_ "github.com/cockroachdb/c-rocksdb"
-	_ "github.com/cockroachdb/c-snappy"
 )
 
 // #cgo CPPFLAGS: -I ../../../../c-protobuf/internal/src -I ../../../../c-rocksdb/internal/include
