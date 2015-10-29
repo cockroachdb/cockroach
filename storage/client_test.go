@@ -141,6 +141,7 @@ type multiTestContext struct {
 	gossip       *gossip.Gossip
 	storePool    *storage.StorePool
 	transport    multiraft.Transport
+	distSender   *kv.DistSender
 	db           *client.DB
 	feed         *util.Feed
 	// The per-store clocks slice normally contains aliases of
@@ -199,12 +200,12 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	m.senders = append(m.senders, kv.NewLocalSender())
 
 	if m.db == nil {
-		distSender := kv.NewDistSender(&kv.DistSenderContext{
+		m.distSender = kv.NewDistSender(&kv.DistSenderContext{
 			Clock:             m.clock,
 			RangeDescriptorDB: m.senders[0],
 			RPCSend:           m.rpcSend,
 		}, m.gossip)
-		sender := kv.NewTxnCoordSender(distSender, m.clock, false, nil, m.clientStopper)
+		sender := kv.NewTxnCoordSender(m.distSender, m.clock, false, nil, m.clientStopper)
 		m.db = client.NewDB(sender)
 	}
 
@@ -276,7 +277,13 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 		if stErr != nil {
 			m.t.Fatal(stErr)
 		}
-		br, pErr = m.senders[nodeID-1].Send(context.Background(), ba)
+		nodeIndex := nodeID - 1
+		if m.stores[nodeIndex] == nil {
+			pErr = &roachpb.Error{}
+			pErr.SetGoError(rpc.NewSendError("store is stopped", true))
+			continue
+		}
+		br, pErr = m.senders[nodeIndex].Send(context.Background(), ba)
 		if pErr == nil {
 			return []proto.Message{br}, nil
 		}
@@ -288,6 +295,9 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 				// Leader is not known; this can happen if the leader is removed
 				// from the group. Move the manual clock forward in an attempt to
 				// expire the lease.
+				m.expireLeaderLeases()
+			} else if m.stores[tErr.Leader.NodeID-1] == nil {
+				// The leader is known but down, so expire its lease.
 				m.expireLeaderLeases()
 			}
 		default:

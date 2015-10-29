@@ -910,6 +910,13 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 	if s.replicasByKey.ReplaceOrInsert(origRng) != nil {
 		return util.Errorf("couldn't insert range %v in rangesByKey btree", origRng)
 	}
+
+	// If we have an uninitialized replica of the new range, delete it to make
+	// way for the complete one created by the split.
+	if _, ok := s.uninitReplicas[newDesc.RangeID]; ok {
+		delete(s.uninitReplicas, newDesc.RangeID)
+		delete(s.replicas, newDesc.RangeID)
+	}
 	if err := s.addReplicaInternal(newRng); err != nil {
 		return util.Errorf("couldn't insert range %v in rangesByKey btree: %s", newRng, err)
 	}
@@ -1582,6 +1589,34 @@ func (s *Store) ReplicasFromSnapshot(snap raftpb.Snapshot) ([]roachpb.ReplicaDes
 // GroupLocker implements the multiraft.Storage interface.
 func (s *Store) GroupLocker() sync.Locker {
 	return &s.raftGroupLocker
+}
+
+// CanApplySnapshot implements the multiraft.Storage interface.
+func (s *Store) CanApplySnapshot(rangeID roachpb.RangeID, snap raftpb.Snapshot) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if r, ok := s.replicas[rangeID]; ok && r.isInitialized() {
+		// We have the range and it's initialized, so let the snapshot
+		// through.
+		return true
+	}
+
+	// We don't have the range (or we have an uninitialized
+	// placeholder). Will we be able to create/initialize it?
+	// TODO(bdarnell): can we avoid parsing this twice?
+	var parsedSnap roachpb.RaftSnapshotData
+	if err := parsedSnap.Unmarshal(snap.Data); err != nil {
+		return false
+	}
+
+	if s.replicasByKey.Has(rangeBTreeKey(parsedSnap.RangeDescriptor.EndKey)) {
+		// We have a conflicting range, so we must block the snapshot.
+		// When such a conflict exists, it will be resolved by one range
+		// either being split or garbage collected.
+		return false
+	}
+
+	return true
 }
 
 // AppliedIndex implements the multiraft.StateMachine interface.
