@@ -26,7 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	stdLog "log"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1065,8 +1065,8 @@ func CopyStandardLogTo(name string) {
 	}
 	// Set a log format that captures the user's file and line:
 	//   d.go:23: message
-	stdLog.SetFlags(stdLog.Lshortfile)
-	stdLog.SetOutput(logBridge(sev))
+	log.SetFlags(log.Lshortfile)
+	log.SetOutput(logBridge(sev))
 }
 
 // logBridge provides the Write method that enables CopyStandardLogTo to connect
