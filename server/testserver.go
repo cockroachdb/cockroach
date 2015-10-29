@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
@@ -138,6 +139,11 @@ func (ts *TestServer) EventFeed() *util.Feed {
 		return ts.node.ctx.EventFeed
 	}
 	return nil
+}
+
+// SQLExecutor returns the sql.Executor used by the TestServer.
+func (ts *TestServer) SQLExecutor() sql.Executor {
+	return ts.Server.sqlServer.Executor
 }
 
 // Start starts the TestServer by bootstrapping an in-memory store

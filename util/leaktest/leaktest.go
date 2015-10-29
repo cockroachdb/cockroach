@@ -101,6 +101,10 @@ func goroutineLeaked() bool {
 // on a blacklist to terminate and provides more precise error reporting
 // than TestMainWithLeakCheck alone.
 func AfterTest(t testing.TB) {
+	if r := recover(); r != nil {
+		// Don't bother with leaktest if we're recovering from a panic.
+		return
+	}
 	http.DefaultTransport.(*http.Transport).CloseIdleConnections()
 	if testing.Short() || t.Failed() {
 		return
