@@ -176,8 +176,9 @@ func GetInitialSystemValues() []roachpb.KeyValue {
 		i++
 
 		value = roachpb.Value{}
-		if err := value.SetProto(d.desc); err != nil {
-			log.Fatalf("could not marshal %v", d.desc)
+		desc := wrapDescriptor(d.desc)
+		if err := value.SetProto(desc); err != nil {
+			log.Fatalf("could not marshal %v", desc)
 		}
 		ret[i] = roachpb.KeyValue{
 			Key:   MakeDescMetadataKey(d.desc.GetID()),

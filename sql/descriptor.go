@@ -106,9 +106,10 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 	// mimicry. In particular, we're only writing a single key per table, while
 	// perfect mimicry would involve writing a sentinel key for each row as well.
 	descKey := MakeDescMetadataKey(descriptor.GetID())
+
 	b := client.Batch{}
 	b.CPut(key, descriptor.GetID(), nil)
-	b.CPut(descKey, descriptor, nil)
+	b.CPut(descKey, wrapDescriptor(descriptor), nil)
 
 	return p.txn.Run(&b)
 }
@@ -125,8 +126,24 @@ func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorPro
 	}
 
 	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
-	if err := p.txn.GetProto(descKey, descriptor); err != nil {
+	desc := &Descriptor{}
+	if err := p.txn.GetProto(descKey, desc); err != nil {
 		return err
+	}
+
+	switch t := descriptor.(type) {
+	case *TableDescriptor:
+		table := desc.GetTable()
+		if table == nil {
+			return util.Errorf("%q is not a table", plainKey.Name())
+		}
+		*t = *table
+	case *DatabaseDescriptor:
+		database := desc.GetDatabase()
+		if database == nil {
+			return util.Errorf("%q is not a database", plainKey.Name())
+		}
+		*t = *database
 	}
 
 	return descriptor.Validate()
@@ -159,4 +176,17 @@ func (p *planner) getDescriptorFromTargetList(targets parser.TargetList) (descri
 		return nil, err
 	}
 	return descriptor, nil
+}
+
+func wrapDescriptor(descriptor descriptorProto) *Descriptor {
+	desc := &Descriptor{}
+	switch t := descriptor.(type) {
+	case *TableDescriptor:
+		desc.Union = &Descriptor_Table{Table: t}
+	case *DatabaseDescriptor:
+		desc.Union = &Descriptor_Database{Database: t}
+	default:
+		panic(fmt.Sprintf("unknown descriptor type: %s", descriptor.TypeName()))
+	}
+	return desc
 }

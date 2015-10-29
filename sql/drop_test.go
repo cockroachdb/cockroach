@@ -51,10 +51,11 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf(`database "t" does not exist`)
 	}
 	dbDescKey := sql.MakeDescMetadataKey(sql.ID(r.ValueInt()))
-	dbDesc := sql.DatabaseDescriptor{}
-	if err := kvDB.GetProto(dbDescKey, &dbDesc); err != nil {
+	desc := &sql.Descriptor{}
+	if err := kvDB.GetProto(dbDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
+	dbDesc := desc.GetDatabase()
 
 	tbNameKey := sql.MakeNameMetadataKey(dbDesc.ID, "kv")
 	gr, err := kvDB.Get(tbNameKey)
@@ -65,10 +66,10 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf(`table "kv" does not exist`)
 	}
 	tbDescKey := sql.MakeDescMetadataKey(sql.ID(gr.ValueInt()))
-	tbDesc := sql.TableDescriptor{}
-	if err := kvDB.GetProto(tbDescKey, &tbDesc); err != nil {
+	if err := kvDB.GetProto(tbDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
+	tbDesc := desc.GetTable()
 
 	// Add a zone config for both the table and database.
 	buf, err := proto.Marshal(config.DefaultZoneConfig)
@@ -179,16 +180,17 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	descKey := sql.MakeDescMetadataKey(sql.ID(gr.ValueInt()))
-	desc := sql.TableDescriptor{}
-	if err := kvDB.GetProto(descKey, &desc); err != nil {
+	desc := &sql.Descriptor{}
+	if err := kvDB.GetProto(descKey, desc); err != nil {
 		t.Fatal(err)
 	}
+	tableDesc := desc.GetTable()
 
-	i, err := desc.FindIndexByName("foo")
+	i, err := tableDesc.FindIndexByName("foo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	indexPrefix := sql.MakeIndexKeyPrefix(desc.ID, desc.Indexes[i].ID)
+	indexPrefix := sql.MakeIndexKeyPrefix(tableDesc.ID, tableDesc.Indexes[i].ID)
 
 	indexStartKey := roachpb.Key(indexPrefix)
 	indexEndKey := indexStartKey.PrefixEnd()
@@ -208,15 +210,15 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 
-	if err := kvDB.GetProto(descKey, &desc); err != nil {
+	if err := kvDB.GetProto(descKey, desc); err != nil {
 		t.Fatal(err)
-	} else {
-		if _, err := desc.FindIndexByName("foo"); err == nil {
-			t.Fatalf("table descriptor still contains index after index is dropped")
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
+	}
+	tableDesc = desc.GetTable()
+	if _, err := tableDesc.FindIndexByName("foo"); err == nil {
+		t.Fatalf("table descriptor still contains index after index is dropped")
+	}
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -244,21 +246,22 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	descKey := sql.MakeDescMetadataKey(sql.ID(gr.ValueInt()))
-	desc := sql.TableDescriptor{}
-	if err := kvDB.GetProto(descKey, &desc); err != nil {
+	desc := &sql.Descriptor{}
+	if err := kvDB.GetProto(descKey, desc); err != nil {
 		t.Fatal(err)
 	}
+	tableDesc := desc.GetTable()
 
 	// Add a zone config for the table.
 	buf, err := proto.Marshal(config.DefaultZoneConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, desc.ID, buf); err != nil {
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
 
-	zoneKey := sql.MakeZoneKey(desc.ID)
+	zoneKey := sql.MakeZoneKey(tableDesc.ID)
 	if gr, err := kvDB.Get(zoneKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
@@ -267,7 +270,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	var tablePrefix []byte
 	tablePrefix = append(tablePrefix, keys.TableDataPrefix...)
-	tablePrefix = encoding.EncodeUvarint(tablePrefix, uint64(desc.ID))
+	tablePrefix = encoding.EncodeUvarint(tablePrefix, uint64(tableDesc.ID))
 
 	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()

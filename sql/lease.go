@@ -101,9 +101,16 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion uint32) (*Le
 	if values == nil {
 		return nil, util.Errorf("table ID %d not found", tableID)
 	}
-	if err := proto.Unmarshal([]byte(values[0].(parser.DBytes)), &lease.TableDescriptor); err != nil {
+	desc := &Descriptor{}
+	if err := proto.Unmarshal([]byte(values[0].(parser.DBytes)), desc); err != nil {
 		return nil, err
 	}
+
+	tableDesc := desc.GetTable()
+	if tableDesc == nil {
+		return nil, util.Errorf("ID %d is not a table", tableID)
+	}
+	lease.TableDescriptor = *tableDesc
 
 	if err := lease.Validate(); err != nil {
 		return nil, err
@@ -148,7 +155,7 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 // called multiple times if retries occur: make sure it does not have side
 // effects.
 func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) error {
-	desc := &TableDescriptor{}
+	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(tableID)
 
 	retryOpts := retry.Options{
@@ -164,15 +171,20 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) err
 		if err := s.db.GetProto(descKey, desc); err != nil {
 			return err
 		}
+		tableDesc := desc.GetTable()
+		if tableDesc == nil {
+			return util.Errorf("ID %d is not a table", tableID)
+		}
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
 		now := s.clock.Now()
-		count, err := s.countLeases(desc.ID, desc.Version-1, now.GoTime())
+		count, err := s.countLeases(tableDesc.ID, tableDesc.Version-1, now.GoTime())
 		if err != nil {
 			return err
 		}
 		if count != 0 {
-			log.Infof("publish (count leases): descID=%d version=%d count=%d", desc.ID, desc.Version-1, count)
+			log.Infof("publish (count leases): descID=%d version=%d count=%d",
+				tableDesc.ID, tableDesc.Version-1, count)
 			continue
 		}
 
@@ -180,33 +192,38 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) err
 		// has leases outstanding. Lease acquisition (see acquire()) maintains the
 		// invariant that no new leases for desc.Version-1 will be granted once
 		// desc.Version exists.
-		expectedVersion := desc.Version
+		expectedVersion := tableDesc.Version
 		err = s.db.Txn(func(txn *client.Txn) error {
 			// Re-read the current version of the table descriptor, this time
 			// transactionally.
 			if err := txn.GetProto(descKey, desc); err != nil {
 				return err
 			}
-			if expectedVersion != desc.Version {
+			tableDesc := desc.GetTable()
+			if tableDesc == nil {
+				return util.Errorf("ID %d is not a table", tableID)
+			}
+			if expectedVersion != tableDesc.Version {
 				// The version changed out from under us. Someone else must be
 				// performing a schema change operation.
 				if log.V(3) {
-					log.Infof("publish (version changed): %d != %d", expectedVersion, desc.Version)
+					log.Infof("publish (version changed): %d != %d", expectedVersion, tableDesc.Version)
 				}
 				return errLeaseVersionChanged
 			}
 
 			// Run the update closure which is intended to perform a single step in a
 			// multi-step schema change operation.
-			if err := update(desc); err != nil {
+			if err := update(tableDesc); err != nil {
 				return err
 			}
 
 			// Bump the version and modification time.
-			desc.Version = desc.Version + 1
-			desc.ModificationTime = now
+			tableDesc.Version = tableDesc.Version + 1
+			tableDesc.ModificationTime = now
 			if log.V(3) {
-				log.Infof("publish: descID=%d version=%d mtime=%s", desc.ID, desc.Version, now.GoTime())
+				log.Infof("publish: descID=%d version=%d mtime=%s",
+					tableDesc.ID, tableDesc.Version, now.GoTime())
 			}
 
 			// Write the updated descriptor.

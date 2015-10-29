@@ -17,14 +17,11 @@
 
 package sql
 
-import (
-	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/util"
-)
+import "github.com/cockroachdb/cockroach/config"
 
 func init() {
-	// TODO(marc): we use a hook to avoid a depency on the sql package.
-	// We should probably move keys/protos elsewhere.
+	// TODO(marc): we use a hook to avoid a dependency on the sql package. We
+	// should probably move keys/protos elsewhere.
 	config.ZoneConfigHook = GetZoneConfig
 }
 
@@ -44,28 +41,17 @@ func GetZoneConfig(cfg config.SystemConfig, id uint32) (*config.ZoneConfig, erro
 	// or table. Lookup its descriptor.
 	if descVal := cfg.GetValue(MakeDescMetadataKey(ID(id))); descVal != nil {
 		// Determine whether this is a database or table.
-		// TODO(marc): we need a better way of doing this. Options include:
-		// - add a type field on the descriptor table
-		// - separate descriptor tables for databases and tables
-		// - prebuild list of databases and tables in the system config
-		var dbDesc DatabaseDescriptor
-		if err := descVal.GetProto(&dbDesc); err == nil {
-			// parses as a database: return default config.
-			return config.DefaultZoneConfig, nil
+		desc := &Descriptor{}
+		if err := descVal.GetProto(desc); err != nil {
+			return nil, err
 		}
-
-		var tableDesc TableDescriptor
-		if err := descVal.GetProto(&tableDesc); err != nil {
-			// does not parse as a table either: this means an entry in the
-			// descriptor table we're not familiar with.
-			return nil, util.Errorf("descriptor for object ID %d is not a table or database", id)
+		if tableDesc := desc.GetTable(); tableDesc != nil {
+			// This is a table descriptor. Lookup its parent database zone config.
+			return GetZoneConfig(cfg, uint32(tableDesc.ParentID))
 		}
-
-		// This is a table descriptor. Lookup its parent database zone config.
-		return GetZoneConfig(cfg, uint32(tableDesc.ParentID))
 	}
 
-	// No descriptor. This table/db could have been deleted,
-	// just return the default config.
+	// No descriptor or not a table. This table/db could have been deleted, just
+	// return the default config.
 	return config.DefaultZoneConfig, nil
 }
