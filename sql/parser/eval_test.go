@@ -312,6 +312,21 @@ func TestEval(t *testing.T) {
 		{`COALESCE(NULL, 2, 3, 4/0)`, `2`},
 		{`COALESCE(NULL, NULL, NULL, 4)`, `4`},
 		{`COALESCE(NULL, NULL, NULL, NULL)`, `NULL`},
+		// Infinities
+		{`'Infinity'::float`, `+Inf`},
+		{`'+Infinity'::float`, `+Inf`},
+		{`'-Infinity'::float`, `-Inf`},
+		{`'Inf'::float`, `+Inf`},
+		{`'+Inf'::float`, `+Inf`},
+		{`'-Inf'::float`, `-Inf`},
+		{`'Inf'::float(4)`, `+Inf`},
+		{`'-Inf'::real`, `-Inf`},
+		{`'+Infinity'::double precision`, `+Inf`},
+		// NaN
+		{`'NaN'::float`, `NaN`},
+		{`'NaN'::float(4)`, `NaN`},
+		{`'NaN'::real`, `NaN`},
+		{`'NaN'::double precision`, `NaN`},
 	}
 	for _, d := range testData {
 		q, err := ParseTraditional("SELECT " + d.expr)
