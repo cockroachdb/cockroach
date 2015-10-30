@@ -2,7 +2,7 @@ FROM golang:1.5.1
 
 MAINTAINER Peter Mattis <peter@cockroachlabs.com>
 
-RUN curl --silent --location https://deb.nodesource.com/setup_4.x | bash - && \
+RUN curl --silent --location https://deb.nodesource.com/setup_5.x | bash - && \
  apt-get dist-upgrade -y && \
  apt-get install --no-install-recommends --auto-remove -y git build-essential file nodejs && \
  apt-get clean autoclean && \

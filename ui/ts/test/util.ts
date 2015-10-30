@@ -104,7 +104,7 @@ suite("Properties", () => {
           Utils.Prop("Leonardo"),
           Utils.Prop("Donatello"),
           Utils.Prop("Raphael"),
-          Utils.Prop("Michaelangelo")
+          Utils.Prop("Michaelangelo"),
         ];
         recomputeCount = 0;
         computed = Utils.Computed(parents[0], parents[1], parents[2], parents[3],

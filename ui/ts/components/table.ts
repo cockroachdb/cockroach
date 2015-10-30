@@ -133,7 +133,7 @@ module Components {
           m("th",
             {
               onclick: (e: any): void => this.SetSortColumn(col),
-              className: this.IsSortColumn(col) ? sortClass : ""
+              className: this.IsSortColumn(col) ? sortClass : "",
             },
             col.title));
         return m("tr", renderedCols);

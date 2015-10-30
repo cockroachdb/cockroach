@@ -35,50 +35,50 @@ module AdminViews {
               let date = new Date(Utils.Convert.NanoToMilli(entry.time));
               return Utils.Format.Date(date);
             },
-            sortable: true
+            sortable: true,
           },
           {
             title: "Severity",
-            view: (entry: LogEntry): string => Utils.Format.Severity(entry.severity)
+            view: (entry: LogEntry): string => Utils.Format.Severity(entry.severity),
           },
           {
             title: "Message",
-            view: (entry: LogEntry): string => Utils.Format.LogEntryMessage(entry)
+            view: (entry: LogEntry): string => Utils.Format.LogEntryMessage(entry),
           },
           {
             title: "Node",
             view: (entry: LogEntry): string => entry.node_id ? entry.node_id.toString() : "",
             sortable: true,
-            sortValue: (entry: LogEntry): number => entry.node_id
+            sortValue: (entry: LogEntry): number => entry.node_id,
           },
           {
             title: "Store",
             view: (entry: LogEntry): string => entry.store_id ? entry.store_id.toString() : "",
             sortable: true,
-            sortValue: (entry: LogEntry): number => entry.store_id
+            sortValue: (entry: LogEntry): number => entry.store_id,
           },
           {
             title: "Range",
             view: (entry: LogEntry): string => entry.range_id ? entry.range_id.toString() : "",
             sortable: true,
-            sortValue: (entry: LogEntry): number => entry.range_id
+            sortValue: (entry: LogEntry): number => entry.range_id,
           },
           {
             title: "Key",
             view: (entry: LogEntry): string => entry.key,
-            sortable: true
+            sortable: true,
           },
           {
             title: "File:Line",
             view: (entry: LogEntry): string => entry.file + ":" + entry.line,
-            sortable: true
+            sortable: true,
           },
           {
             title: "Method",
             view: (entry: LogEntry): string => entry.method ? entry.method.toString() : "",
             sortable: true,
-            sortValue: (entry: LogEntry): number => entry.method
-          }
+            sortValue: (entry: LogEntry): number => entry.method,
+          },
         ];
 
         private static _queryEveryMS: number = 10000;
@@ -141,7 +141,7 @@ module AdminViews {
       export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
         let comparisonData: Table.TableData<LogEntry> = {
           columns: ctrl.columns,
-          rows: entries.allEntries
+          rows: entries.allEntries,
         };
         let count: number;
         if (entries.allEntries()) {
@@ -157,15 +157,15 @@ module AdminViews {
             m.component(Components.Select, {
               items: _severitySelectOptions,
               value: entries.level,
-              onChange: onChangeSeverity
+              onChange: onChangeSeverity,
             }),
             m.trust("&nbsp;&nbsp;Max Results: "),
             m("input", { onchange: m.withAttr("value", onChangeMax), value: entries.max() }),
             m.trust("&nbsp;&nbsp;Regex Filter: "),
-            m("input", { onchange: m.withAttr("value", onChangePattern), value: entries.pattern() })
+            m("input", { onchange: m.withAttr("value", onChangePattern), value: entries.pattern() }),
           ]),
           m("p", count + " log entries retrieved"),
-          m(".stats-table", Components.Table.create(comparisonData))
+          m(".stats-table", Components.Table.create(comparisonData)),
         ]);
       };
     }

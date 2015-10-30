@@ -57,7 +57,7 @@ module Models {
         gc_bytes_age: 0,
         sys_bytes: 0,
         sys_count: 0,
-        last_update_nanos: 0
+        last_update_nanos: 0,
       };
     }
 

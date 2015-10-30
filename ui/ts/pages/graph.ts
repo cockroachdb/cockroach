@@ -93,7 +93,7 @@ module AdminViews {
           m("",
             m("input[type=button]", {
               value: buttonText,
-              onclick: ctrl.toggleGraph
+              onclick: ctrl.toggleGraph,
             })),
         ]);
       }

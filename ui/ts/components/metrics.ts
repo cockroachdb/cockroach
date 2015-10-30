@@ -106,7 +106,7 @@ module Components {
                     key: s.title(),
                     color: Controller.colors(s.series()),
                     area: true,
-                    fillOpacity: .1
+                    fillOpacity: .1,
                   });
                 }
               });

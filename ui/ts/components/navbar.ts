@@ -43,7 +43,7 @@ module Components {
             m("a",
               {
                 config: m.route,
-                href: args.ts.baseRoute + t.route
+                href: args.ts.baseRoute + t.route,
               },
               t.view
               )

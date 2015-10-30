@@ -44,12 +44,12 @@ module AdminViews {
             view: (status: NodeStatus): MithrilElement =>
               m("a", {href: "/nodes/" + status.desc.node_id, config: m.route}, status.desc.node_id.toString()),
             sortable: true,
-            sortValue: (status: NodeStatus): number => status.desc.node_id
+            sortValue: (status: NodeStatus): number => status.desc.node_id,
           },
           {
             title: "Address",
             view: (status: NodeStatus): string => status.desc.address.address,
-            sortable: true
+            sortable: true,
           },
           {
             title: "Started At",
@@ -57,19 +57,19 @@ module AdminViews {
               let date = new Date(Utils.Convert.NanoToMilli(status.started_at));
               return Utils.Format.Date(date);
             },
-            sortable: true
+            sortable: true,
           },
           {
             title: "Live Bytes",
             view: (status: NodeStatus): string => Utils.Format.Bytes(status.stats.live_bytes),
             sortable: true,
-            sortValue: (status: NodeStatus): number => status.stats.live_bytes
+            sortValue: (status: NodeStatus): number => status.stats.live_bytes,
           },
           {
             title: "Logs",
             view: (status: NodeStatus): MithrilElement =>
-              m("a", { href: "/logs/" + status.desc.node_id, config: m.route }, "Log")
-          }
+              m("a", { href: "/logs/" + status.desc.node_id, config: m.route }, "Log"),
+          },
         ];
 
         private static _queryEveryMS: number = 10000;
@@ -92,24 +92,24 @@ module AdminViews {
             return m(".primary-stats", [
               m(".stat", [
                 m("span.title", "Total Ranges"),
-                m("span.value", allStats.range_count)
+                m("span.value", allStats.range_count),
               ]),
               m(".stat", [
                 m("span.title", "Total Live Bytes"),
-                m("span.value", Utils.Format.Bytes(allStats.stats.live_bytes))
+                m("span.value", Utils.Format.Bytes(allStats.stats.live_bytes)),
               ]),
               m(".stat", [
                 m("span.title", "Leader Ranges"),
-                m("span.value", allStats.leader_range_count)
+                m("span.value", allStats.leader_range_count),
               ]),
               m(".stat", [
                 m("span.title", "Available"),
-                m("span.value", Utils.Format.Percentage(allStats.available_range_count, allStats.leader_range_count))
+                m("span.value", Utils.Format.Percentage(allStats.available_range_count, allStats.leader_range_count)),
               ]),
               m(".stat", [
                 m("span.title", "Fully Replicated"),
-                m("span.value", Utils.Format.Percentage(allStats.replicated_range_count, allStats.leader_range_count))
-              ])
+                m("span.value", Utils.Format.Percentage(allStats.replicated_range_count, allStats.leader_range_count)),
+              ]),
             ]);
           }
           return m(".primary-stats");
@@ -127,12 +127,12 @@ module AdminViews {
       export function view(ctrl: Controller): MithrilElement {
         let comparisonData: Table.TableData<NodeStatus> = {
           columns: ctrl.columns,
-          rows: nodeStatuses.allStatuses
+          rows: nodeStatuses.allStatuses,
         };
         return m(".page", [
           m.component(Components.Topbar, {title: "Nodes"}),
           m(".section", ctrl.RenderPrimaryStats()),
-          m(".section", m(".stats-table", Components.Table.create(comparisonData)))
+          m(".section", m(".stats-table", Components.Table.create(comparisonData))),
         ]);
       }
     }
@@ -147,12 +147,12 @@ module AdminViews {
         private static defaultTargets: NavigationBar.Target[] = [
           {
             view: "Overview",
-            route: ""
+            route: "",
           },
           {
             view: "Graphs",
-            route: "graph"
-          }
+            route: "graph",
+          },
         ];
 
         private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
@@ -199,32 +199,32 @@ module AdminViews {
             return m(".primary-stats", [
               m(".stat", [
                 m("span.title", "Started At"),
-                m("span.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(nodeStats.started_at))))
+                m("span.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(nodeStats.started_at)))),
               ]),
               m(".stat", [
                 m("span.title", "Last Updated At"),
-                m("span.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(nodeStats.updated_at))))
+                m("span.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(nodeStats.updated_at)))),
               ]),
               m(".stat", [
                 m("span.title", "Total Ranges"),
-                m("span.value", nodeStats.range_count)
+                m("span.value", nodeStats.range_count),
               ]),
               m(".stat", [
                 m("span.title", "Total Live Bytes"),
-                m("span.value", Utils.Format.Bytes(nodeStats.stats.live_bytes))
+                m("span.value", Utils.Format.Bytes(nodeStats.stats.live_bytes)),
               ]),
               m(".stat", [
                 m("span.title", "Leader Ranges"),
-                m("span.value", nodeStats.leader_range_count)
+                m("span.value", nodeStats.leader_range_count),
               ]),
               m(".stat", [
                 m("span.title", "Available"),
-                m("span.value", Utils.Format.Percentage(nodeStats.available_range_count, nodeStats.leader_range_count))
+                m("span.value", Utils.Format.Percentage(nodeStats.available_range_count, nodeStats.leader_range_count)),
               ]),
               m(".stat", [
                 m("span.title", "Fully Replicated"),
-                m("span.value", Utils.Format.Percentage(nodeStats.replicated_range_count, nodeStats.leader_range_count))
-              ])
+                m("span.value", Utils.Format.Percentage(nodeStats.replicated_range_count, nodeStats.leader_range_count)),
+              ]),
             ]);
           }
           return m(".primary-stats");
@@ -234,7 +234,7 @@ module AdminViews {
           return m(".charts", this.axes.map((axis: Metrics.Axis) => {
             return m("", { style: "float:left" }, [
               m("h4", axis.title()),
-              Components.Metrics.LineGraph.create(this.exec, axis)
+              Components.Metrics.LineGraph.create(this.exec, axis),
             ]);
           }));
         }
@@ -243,7 +243,7 @@ module AdminViews {
           return {
             baseRoute: "/nodes/" + this._nodeId + "/",
             targets: Utils.Prop(Controller.defaultTargets),
-            isActive: Controller.isActive
+            isActive: Controller.isActive,
           };
         }
 
@@ -270,7 +270,7 @@ module AdminViews {
       export function view(ctrl: Controller): MithrilElement {
         let detail: string = m.route.param("detail");
 
-        // Page title. 
+        // Page title.
         let title: string = "Nodes: Node " + ctrl.GetNodeId();
         if (detail === "graph") {
           title += ": Graphs";
@@ -287,7 +287,7 @@ module AdminViews {
         return m(".page", [
           m.component(Components.Topbar, {title: title}),
           m.component(NavigationBar, {ts: ctrl.TargetSet()}),
-          m(".section", primaryContent)
+          m(".section", primaryContent),
         ]);
       }
     }

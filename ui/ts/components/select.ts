@@ -47,7 +47,7 @@ module Components {
 			return m("select", { onchange: m.withAttr("value", ctrl.onChange) }, [
 				ctrl.items.map(function(item: Item): _mithril.MithrilVirtualElement {
 					return m("option", { value: item.value, selected: (item.value === ctrl.value()) }, item.text);
-				})
+				}),
 			]);
 		}
 	}
