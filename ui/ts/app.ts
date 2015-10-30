@@ -1,10 +1,9 @@
 // source: app.ts
-/// <reference path="external/mithril/mithril.d.ts" />
+/// <reference path="../bower_components/mithriljs/mithril.d.ts" />
 
 /// <reference path="pages/navigation.ts" />
 /// <reference path="pages/graph.ts" />
 /// <reference path="pages/log.ts" />
-/// <reference path="pages/monitor.ts" />
 /// <reference path="pages/nodes.ts" />
 /// <reference path="pages/stores.ts" />
 
@@ -17,7 +16,6 @@ m.route(document.getElementById("root"), "/nodes", {
   "/graph": AdminViews.Graph.Page,
   "/logs": AdminViews.Log.Page,
   "/logs/:node_id": AdminViews.Log.Page,
-  "/monitor": AdminViews.Monitor.Page,
   "/node": AdminViews.Nodes.NodesPage,
   "/nodes": AdminViews.Nodes.NodesPage,
   "/node/:node_id": AdminViews.Nodes.NodePage,

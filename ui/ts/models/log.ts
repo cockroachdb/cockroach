@@ -1,7 +1,7 @@
 // source: models/log.ts
 /// <reference path="../models/proto.ts" />
 /// <reference path="../../typings/d3/d3.d.ts" />
-/// <reference path="../external/mithril/mithril.d.ts" />
+/// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../util/chainprop.ts" />
 /// <reference path="../util/format.ts" />
 /// <reference path="../util/querycache.ts" />
@@ -113,7 +113,7 @@ module Models {
      * nonJsonErrors ensures that error messages returned from the server
      * are parseable as JSON strings.
      */
-    function nonJsonErrors(xhr: XMLHttpRequest, opts: _mithril.MithrilXHROptions): string {
+    function nonJsonErrors(xhr: XMLHttpRequest, opts: _mithril.MithrilXHROptions<{}>): string {
       return xhr.status > 200 ? JSON.stringify(xhr.responseText) : xhr.responseText;
     }
   }

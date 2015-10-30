@@ -1,5 +1,3 @@
-/// <reference path="../external/mithril/mithril.d.ts" />
-
 // Author: Max Lang (max@cockroachlabs.com)
 
 module Components {
