@@ -564,9 +564,11 @@ func (l *Cluster) stop() {
 				log.Infof("node %d: stderr at %s", i, file)
 			}
 		} else if crashed {
+			// Don't remove crashed containers - could be useful for post-mortem.
 			log.Warningf("node %d died: %s", i, ci.State)
+		} else {
+			maybePanic(n.Remove())
 		}
-		maybePanic(n.Remove())
 	}
 	l.Nodes = nil
 	// Only delete the logging directory if ForceLogging was set and there was
