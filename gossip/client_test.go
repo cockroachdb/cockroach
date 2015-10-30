@@ -30,12 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-const (
-	// With the default gossip interval, some tests
-	// may take longer than they need.
-	gossipInterval = 20 * time.Millisecond
-)
-
 // startGossip creates local and remote gossip instances.
 // The remote gossip instance launches its gossip service.
 func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
@@ -48,7 +42,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 	if err := lserver.Start(); err != nil {
 		t.Fatal(err)
 	}
-	local = New(lRPCContext, gossipInterval, TestBootstrap)
+	local = New(lRPCContext, TestBootstrap)
 	if err := local.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  1,
 		Address: util.MakeUnresolvedAddr(laddr.Network(), laddr.String()),
@@ -62,7 +56,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 	if err := rserver.Start(); err != nil {
 		t.Fatal(err)
 	}
-	remote = New(rRPCContext, gossipInterval, TestBootstrap)
+	remote = New(rRPCContext, TestBootstrap)
 	if err := local.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  2,
 		Address: util.MakeUnresolvedAddr(raddr.Network(), raddr.String()),
@@ -110,50 +104,4 @@ func TestClientGossip(t *testing.T) {
 		}
 		return nil
 	})
-}
-
-// TestClientDisconnectRedundant verifies that the gossip server
-// will drop an outgoing client connection that is already an
-// inbound client connection of another node.
-func TestClientDisconnectRedundant(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	local, remote, stopper := startGossip(t)
-	defer stopper.Stop()
-	// startClient doesn't lock the underlying gossip
-	// object, so we acquire those locks here.
-	local.mu.Lock()
-	remote.mu.Lock()
-	rAddr := remote.is.NodeAddr
-	lAddr := local.is.NodeAddr
-	lclock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
-	local.startClient(rAddr, rpcContext, stopper)
-	remote.startClient(lAddr, rpcContext, stopper)
-	local.mu.Unlock()
-	remote.mu.Unlock()
-	local.manage(stopper)
-	remote.manage(stopper)
-	wasConnected1, wasConnected2 := false, false
-	if err := util.IsTrueWithin(func() bool {
-		// Check which of the clients is connected to the other.
-		ok1 := local.findClient(func(c *client) bool { return c.addr.String() == rAddr.String() }) != nil
-		ok2 := remote.findClient(func(c *client) bool { return c.addr.String() == lAddr.String() }) != nil
-		if ok1 {
-			wasConnected1 = true
-		}
-		if ok2 {
-			wasConnected2 = true
-		}
-		// Check if at some point both nodes were connected to
-		// each other, but now aren't any more.
-		// Unfortunately it's difficult to get a more direct
-		// read on what's happening without really messing with
-		// the internals.
-		if wasConnected1 && wasConnected2 && (!ok1 || !ok2) {
-			return true
-		}
-		return false
-	}, 10*time.Second); err != nil {
-		t.Fatal(err)
-	}
 }

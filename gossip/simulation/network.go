@@ -55,8 +55,7 @@ type Network struct {
 // in order to yield accurate estimates of how old data actually ends
 // up being at the various nodes (e.g. DefaultTestGossipInterval).
 // TODO: This method should take `stopper` as an argument.
-func NewNetwork(nodeCount int, networkType string,
-	gossipInterval time.Duration) *Network {
+func NewNetwork(nodeCount int, networkType string, gossipInterval time.Duration) *Network {
 	clock := hlc.NewClock(hlc.UnixNano)
 
 	log.Infof("simulating gossip network with %d nodes", nodeCount)
@@ -88,7 +87,7 @@ func NewNetwork(nodeCount int, networkType string,
 			resolvers = append(resolvers, resolver.NewResolverFromAddress(rightNode.Server.Addr()))
 		}
 
-		gossipNode := gossip.New(rpcContext, gossipInterval, resolvers)
+		gossipNode := gossip.New(rpcContext, resolvers)
 		addr := leftNode.Server.Addr()
 		if err := gossipNode.SetNodeDescriptor(&roachpb.NodeDescriptor{
 			NodeID:  roachpb.NodeID(i + 1),
