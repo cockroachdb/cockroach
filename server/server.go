@@ -27,7 +27,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/c-snappy"
+	snappy "github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -115,7 +115,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.rpc = rpc.NewServer(util.MakeUnresolvedAddr("tcp", addr), rpcContext)
 	s.stopper.AddCloser(s.rpc)
-	s.gossip = gossip.New(rpcContext, s.ctx.GossipInterval, s.ctx.GossipBootstrapResolvers)
+	s.gossip = gossip.New(rpcContext, s.ctx.GossipBootstrapResolvers)
 	s.storePool = storage.NewStorePool(s.gossip, ctx.TimeUntilStoreDead, stopper)
 
 	feed := util.NewFeed(stopper)
