@@ -675,6 +675,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		newTxn.Restart(ba.GetUserPriority(), newTxn.Priority, newTxn.Timestamp)
 		t.Txn = *newTxn
 	case *roachpb.TransactionAbortedError:
+		trace.SetError()
 		newTxn.Update(&t.Txn)
 		// Increase timestamp if applicable.
 		newTxn.Timestamp.Forward(t.Txn.Timestamp)
@@ -700,6 +701,8 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		if pErr.Detail != nil {
 			panic(fmt.Sprintf("unhandled TransactionRestartError %T", err))
 		}
+	default:
+		trace.SetError()
 	}
 
 	return func() *roachpb.Error {

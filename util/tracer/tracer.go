@@ -99,6 +99,13 @@ func (t *Trace) Event(name string) {
 	t.Content[len(t.Content)-1].Duration = 0
 }
 
+// SetError marks the request associated to the Trace as failed.
+func (t *Trace) SetError() {
+	if t != nil {
+		t.nTrace.SetError()
+	}
+}
+
 // Epoch begins a phase in the life of the Trace, starting the measurement of
 // its duration. The returned function needs to be called when the measurement
 // is complete; failure to do so results in a panic() when Finalize() is

@@ -555,6 +555,8 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	}
 	// TODO(tschottdorf): assert nil reply on error.
 	if err != nil {
+		trace.SetError()
+		trace.Event(fmt.Sprintf("error: %s", err))
 		return nil, roachpb.NewError(err)
 	}
 	return br, nil
@@ -906,9 +908,6 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd roach
 	br, err := r.applyRaftCommand(ctx, index, raftCmd.OriginReplica, raftCmd.Cmd)
 	err = r.maybeSetCorrupt(err)
 	execDone()
-	if err != nil {
-		trace.Event(fmt.Sprintf("error: %T", err))
-	}
 
 	if cmd != nil {
 		cmd.done <- roachpb.ResponseWithError{Reply: br, Err: err}
