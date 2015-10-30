@@ -51,7 +51,7 @@ module Models {
           leader_range_count: 0,
           replicated_range_count: 0,
           available_range_count: 0,
-          stats: Proto.NewMVCCStats()
+          stats: Proto.NewMVCCStats(),
         };
         list.forEach((storeStatus: Proto.StoreStatus) => {
           Proto.AccumulateStatus(status, storeStatus);
@@ -96,7 +96,7 @@ module Models {
           leader_range_count: 0,
           replicated_range_count: 0,
           available_range_count: 0,
-          stats: Proto.NewMVCCStats()
+          stats: Proto.NewMVCCStats(),
         };
         list.forEach((nodeStatus: Proto.NodeStatus) => {
           Proto.AccumulateStatus(status, nodeStatus);

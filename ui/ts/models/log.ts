@@ -83,7 +83,7 @@ module Models {
           startTime: this.startTime(),
           endTime: this.endTime(),
           max: this.max(),
-          pattern: this.pattern()
+          pattern: this.pattern(),
         };
         // buildQueryString includes empty query strings when they have a null
         // value and we need to remove them.

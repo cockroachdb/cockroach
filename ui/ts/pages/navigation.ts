@@ -31,26 +31,26 @@ module AdminViews {
             title: "",
             route: "/",
             icon: SvgIcons.cockroachIcon,
-            liClass: "cockroach"
+            liClass: "cockroach",
           },
           {
             title: "Nodes",
             route: "/nodes",
-            icon: SvgIcons.nodesIcon
+            icon: SvgIcons.nodesIcon,
           },
           {
             title: "Stores",
             route: "/stores",
-            icon: SvgIcons.storesIcon
-          }
+            icon: SvgIcons.storesIcon,
+          },
         ].map(function(v: {title: string; route: string; icon: string; liClass?: string; }): NavigationBar.Target {
           return {
             view: [
               m(".image-container", m.trust(v.icon)),
-              m("div", v.title)
+              m("div", v.title),
             ],
             route: v.route,
-            liClass: v.liClass
+            liClass: v.liClass,
           };
         });
 
@@ -63,7 +63,7 @@ module AdminViews {
           return {
             baseRoute: "",
             targets: Utils.Prop(Controller.defaultTargets),
-            isActive: Controller.isActive
+            isActive: Controller.isActive,
           };
         };
       }

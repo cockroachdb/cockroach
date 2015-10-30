@@ -26,19 +26,19 @@ module TestTable {
         title: "ID Column",
         view: (r: TestTableRow): MithrilElement => m("span.id", r.id),
         sortable: true,
-        sortValue: (r: TestTableRow): number => r.id
+        sortValue: (r: TestTableRow): number => r.id,
       },
       {
         title: "Title",
         view: (r: TestTableRow): string => r.title,
-        sortable: false
+        sortable: false,
       },
       {
         title: "Value",
         view: (r: TestTableRow): MithrilElement => m("span.value", r.value),
         sortable: true,
-        sortValue: (r: TestTableRow): number => r.value
-      }
+        sortValue: (r: TestTableRow): number => r.value,
+      },
     ];
     let data: Table.TableData<TestTableRow> = {
       columns: Utils.Prop(columns),
@@ -46,19 +46,19 @@ module TestTable {
         {
           id: 2,
           title: "CCC",
-          value: 60
+          value: 60,
         },
         {
           id: 1,
           title: "AAA",
-          value: 40
+          value: 40,
         },
         {
           id: 3,
           title: "BBB",
-          value: 10
+          value: 10,
         },
-      ])
+      ]),
     };
 
     test("Sorts data correctly", () => {

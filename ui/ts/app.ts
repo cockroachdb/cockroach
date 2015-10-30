@@ -29,5 +29,5 @@ m.route(document.getElementById("root"), "/nodes", {
   "/store/:store_id": AdminViews.Stores.StorePage,
   "/stores/:store_id": AdminViews.Stores.StorePage,
   "/store/:store_id/:detail": AdminViews.Stores.StorePage,
-  "/stores/:store_id/:detail": AdminViews.Stores.StorePage
+  "/stores/:store_id/:detail": AdminViews.Stores.StorePage,
 });

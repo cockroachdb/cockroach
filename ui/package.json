@@ -4,18 +4,18 @@
   "private": true,
   "dependencies": {
     "bower": ">=1.5.3",
-    "del": "^2.0.2",
-    "gulp": "^3.9.0",
-    "gulp-livereload": "^3.8.0",
-    "gulp-rename": "^1.2.2",
-    "gulp-stylus": "^2.0.7",
-    "gulp-typescript": "^2.9.0",
-    "npm": "^3.3.4",
-    "shonkwrap": "^1.1.2",
-    "stylint": "^1.2.3",
+    "del": ">=2.0.2",
+    "gulp": ">=3.9.0",
+    "gulp-livereload": ">=3.8.0",
+    "gulp-rename": ">=1.2.2",
+    "gulp-stylus": ">=2.0.7",
+    "gulp-typescript": ">=2.9.0",
+    "npm": ">=3.3.4",
+    "shonkwrap": ">=1.1.2",
+    "stylint": ">=1.2.3",
     "stylus": ">=0.51.1",
-    "tsd": "^0.6.4",
-    "tslint": ">=2.3.1-beta",
-    "typescript": ">=1.5.0-beta"
+    "tsd": ">=0.6.4",
+    "tslint": ">=3.0.0-dev.1",
+    "typescript": ">=1.6.2"
   }
 }

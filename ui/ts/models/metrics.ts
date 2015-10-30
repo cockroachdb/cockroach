@@ -133,7 +133,7 @@ module Models {
           return {
             name: this.seriesName,
             sources: this.sources(),
-            aggregator: Proto.QueryAggregator.AVG
+            aggregator: Proto.QueryAggregator.AVG,
           };
         };
       }
@@ -151,7 +151,7 @@ module Models {
           return {
             name: this.seriesName,
             sources: this.sources(),
-            aggregator: Proto.QueryAggregator.AVG_RATE
+            aggregator: Proto.QueryAggregator.AVG_RATE,
           };
         };
       }
@@ -200,7 +200,7 @@ module Models {
             let endTime: Date = new Date();
             let startTime: Date = new Date(endTime.getTime() - duration);
             return [startTime.getTime(), endTime.getTime()];
-          }
+          },
         };
       }
     }
@@ -286,7 +286,7 @@ module Models {
         let req: Proto.QueryRequestSet = {
           start_nanos: Utils.Convert.MilliToNano(ts[0]),
           end_nanos: Utils.Convert.MilliToNano(ts[1]),
-          queries: []
+          queries: [],
         };
 
         // Build a set of requests by looping over selectors. The set of
