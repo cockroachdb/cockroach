@@ -19,7 +19,7 @@ package gossip
 
 import (
 	"net"
-	"time"
+	netrpc "net/rpc"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -28,27 +28,22 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-const (
-	// maxWaitForNewGossip is maximum wait for new gossip before a
-	// peer is considered a poor source of good gossip and is GC'd.
-	maxWaitForNewGossip = 1 * time.Minute
-)
-
 // client is a client-side RPC connection to a gossip peer node.
 type client struct {
-	peerID      roachpb.NodeID // Peer node ID; 0 until first gossip response
-	addr        net.Addr       // Peer node network address
-	rpcClient   *rpc.Client    // RPC client
-	forwardAddr net.Addr       // Set if disconnected with an alternate addr
-	lastFresh   int64          // Last wall time client received fresh info
-	closer      chan struct{}  // Client shutdown channel
+	peerID                roachpb.NodeID  // Peer node ID; 0 until first gossip response
+	addr                  net.Addr        // Peer node network address
+	rpcClient             *rpc.Client     // RPC client
+	forwardAddr           net.Addr        // Set if disconnected with an alternate addr
+	remoteHighWaterStamps map[int32]int64 // High water timestamps for remote server; matches rpc Request/Response
+	closer                chan struct{}   // Client shutdown channel
 }
 
 // newClient creates and returns a client struct.
 func newClient(addr net.Addr) *client {
 	return &client{
-		addr:   addr,
-		closer: make(chan struct{}),
+		addr: addr,
+		remoteHighWaterStamps: map[int32]int64{},
+		closer:                make(chan struct{}),
 	}
 }
 
@@ -65,7 +60,6 @@ func (c *client) start(g *Gossip, done chan *client, context *rpc.Context, stopp
 		select {
 		case <-c.rpcClient.Healthy():
 			// Start gossiping and wait for disconnect or error.
-			c.lastFresh = time.Now().UnixNano()
 			err = c.gossip(g, stopper)
 			if context.DisableCache {
 				c.rpcClient.Close()
@@ -87,59 +81,66 @@ func (c *client) close() {
 	close(c.closer)
 }
 
-// gossip loops, sending deltas of the infostore and receiving deltas
-// in turn. If an alternate is proposed on response, the client addr
-// is modified and method returns for forwarding by caller.
-func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
-	localMaxSeq := int64(0)
-	remoteMaxSeq := int64(-1)
-	for {
-		// Compute the delta of local node's infostore to send with request.
-		g.mu.Lock()
-		delta := g.is.delta(c.peerID, localMaxSeq)
-		nodeID := g.is.NodeID
-		localMaxSeq = g.is.MaxSeq
-		g.mu.Unlock()
+// getGossip requests the latest gossip from the remote server by
+// supplying a map of this node's knowledge of other nodes' high water
+// timestamps.
+func (c *client) getGossip(g *Gossip, nodeID roachpb.NodeID, addr, lAddr util.UnresolvedAddr, done chan *netrpc.Call) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 
-		addr := g.is.NodeAddr
-		lAddr := c.rpcClient.LocalAddr()
+	args := Request{
+		NodeID:          nodeID,
+		Addr:            addr,
+		LAddr:           lAddr,
+		HighWaterStamps: g.is.getHighWaterStamps(),
+	}
+	reply := Response{}
+	c.rpcClient.Go("Gossip.Gossip", &args, &reply, done)
+}
 
-		// Send gossip with timeout.
-		args := Request{
-			NodeID: nodeID,
-			Addr:   util.MakeUnresolvedAddr(addr.Network(), addr.String()),
-			LAddr:  util.MakeUnresolvedAddr(lAddr.Network(), lAddr.String()),
-			MaxSeq: remoteMaxSeq,
-			Delta:  delta,
+// sendGossip sends the latest gossip to the remote server, based on
+// the remote server's high water timestamps map.
+func (c *client) sendGossip(g *Gossip, nodeID roachpb.NodeID, addr, lAddr util.UnresolvedAddr, done chan *netrpc.Call) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	delta := g.is.delta(c.peerID, c.remoteHighWaterStamps)
+	if len(delta) == 0 {
+		return
+	}
+
+	args := Request{
+		NodeID: nodeID,
+		Addr:   addr,
+		LAddr:  lAddr,
+		Delta:  delta,
+	}
+	reply := Response{}
+	c.rpcClient.Go("Gossip.Gossip", &args, &reply, done)
+}
+
+// handleGossip handles errors, remote forwarding, and combines delta
+// gossip infos from the remote server with this node's infostore.
+func (c *client) handleGossip(g *Gossip, nodeID roachpb.NodeID, call *netrpc.Call) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if call.Error != nil {
+		return call.Error
+	}
+	reply := call.Reply.(*Response)
+
+	// Handle remote forwarding.
+	if reply.Alternate != nil {
+		var err error
+		if c.forwardAddr, err = reply.Alternate.Resolve(); err != nil {
+			return util.Errorf("unable to resolve alternate address: %s: %s", reply.Alternate, err)
 		}
-		reply := Response{}
-		gossipCall := c.rpcClient.Go("Gossip.Gossip", &args, &reply, nil)
-		select {
-		case <-gossipCall.Done:
-			if gossipCall.Error != nil {
-				return gossipCall.Error
-			}
-		case <-c.rpcClient.Closed:
-			return util.Errorf("client closed")
-		case <-c.closer:
-			return nil
-		case <-stopper.ShouldStop():
-			return nil
-		case <-time.After(g.interval * 10):
-			return util.Errorf("timeout after: %s", g.interval*10)
-		}
+		return util.Errorf("received forward from %s to %s", c.addr, reply.Alternate)
+	}
 
-		// Handle remote forwarding.
-		if reply.Alternate != nil {
-			var err error
-			if c.forwardAddr, err = reply.Alternate.Resolve(); err != nil {
-				return util.Errorf("unable to resolve alternate address: %s: %s", reply.Alternate, err)
-			}
-			return util.Errorf("received forward from %s to %s", c.addr, reply.Alternate)
-		}
-
-		now := time.Now().UnixNano()
-		// Combine remote node's infostore delta with ours.
+	// Combine remote node's infostore delta with ours.
+	if reply.Delta != nil {
 		if infoCount := len(reply.Delta); infoCount > 0 {
 			if log.V(2) {
 				log.Infof("gossip: received %s from %s", reply.Delta, c.addr)
@@ -147,28 +148,76 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 				log.Infof("gossip: received %d info(s) from %s", infoCount, c.addr)
 			}
 		}
-		g.mu.Lock()
-		c.peerID = reply.NodeID
-		g.outgoing.addNode(c.peerID)
 		freshCount := g.is.combine(reply.Delta, reply.NodeID)
 		if freshCount > 0 {
-			c.lastFresh = now
+			log.Infof("gossip: %d info(s) were fresh from %s", freshCount, c.addr)
 		}
-		remoteMaxSeq = reply.MaxSeq
+	}
+	c.peerID = reply.NodeID
+	g.outgoing.addNode(c.peerID)
+	c.remoteHighWaterStamps = reply.HighWaterStamps
 
-		// If we have the sentinel gossip, we're considered connected.
-		g.checkHasConnected()
-		g.mu.Unlock()
+	// If we have the sentinel gossip, we're considered connected.
+	g.checkHasConnected()
 
-		// Check whether this outgoing client is duplicating work already
-		// being done by an incoming client. To avoid mutual shutdown, we
-		// only shutdown our client if our node ID is less than the peer's.
-		if g.hasIncoming(c.peerID) && nodeID < c.peerID {
-			return util.Errorf("stopping outgoing client %d @ %s; already have incoming", c.peerID, c.addr)
-		}
-		// Check whether peer node is too boring--disconnect if yes.
-		if nodeID != c.peerID && (now-c.lastFresh) > int64(maxWaitForNewGossip) {
-			return util.Errorf("peer is too boring")
+	// Check whether this outgoing client is duplicating work already
+	// being done by an incoming client. To avoid mutual shutdown, we
+	// only shutdown our client if our node ID is less than the peer's.
+	if g.hasIncoming(c.peerID) && nodeID < c.peerID {
+		return util.Errorf("stopping outgoing client %d @ %s; already have incoming", c.peerID, c.addr)
+	}
+
+	return nil
+}
+
+// gossip loops, sending deltas of the infostore and receiving deltas
+// in turn. If an alternate is proposed on response, the client addr
+// is modified and method returns for forwarding by caller.
+func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
+	g.mu.Lock()
+	nodeID := g.is.NodeID
+	addr := util.MakeUnresolvedAddr(g.is.NodeAddr.Network(), g.is.NodeAddr.String())
+	g.mu.Unlock()
+
+	lAddr := util.MakeUnresolvedAddr(c.rpcClient.LocalAddr().Network(), c.rpcClient.LocalAddr().String())
+	done := make(chan *netrpc.Call, 10)
+	c.getGossip(g, nodeID, addr, lAddr, done)
+
+	// Register a callback for gossip updates.
+	updateCallback := func(key string, content []byte) {
+		c.sendGossip(g, nodeID, addr, lAddr, done)
+	}
+	// Defer calling "undoer" calblack returned from registration.
+	defer g.RegisterCallback(".*", updateCallback)()
+
+	// Loop until stopper is signalled, or until either the gossip or
+	// RPC clients are closed. getGossip is a hanging get, returning
+	// results only when the remote server has new gossip information to
+	// share. sendGossip is sent to the remote server when this node has
+	// new gossip information to share with the server.
+	//
+	// Nodes "pull" gossip in order to guarantee that they're connected
+	// to the sentinel and not too distant from other nodes in the
+	// network. The also "push" their own gossip which guarantees that
+	// the sentinel node will contain their info, and therefore every
+	// node connected to the sentinel. Just pushing or just pulling
+	// wouldn't guarantee a fully connected network.
+	for {
+		select {
+		case call := <-done:
+			if err := c.handleGossip(g, nodeID, call); err != nil {
+				return err
+			}
+			// If this was from a gossip pull request, fetch again.
+			if req, ok := call.Args.(*Request); ok && req.Delta == nil {
+				c.getGossip(g, nodeID, addr, lAddr, done)
+			}
+		case <-c.rpcClient.Closed:
+			return util.Errorf("client closed")
+		case <-c.closer:
+			return nil
+		case <-stopper.ShouldStop():
+			return nil
 		}
 	}
 }

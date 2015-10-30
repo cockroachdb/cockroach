@@ -21,32 +21,22 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 )
 
-type info struct {
-	Info
-	peerID roachpb.NodeID
-	seq    int64
-}
-
 // expired returns true if the node's time to live (TTL) has expired.
-func (i *info) expired(now int64) bool {
+func (i *Info) expired(now int64) bool {
 	return i.TTLStamp <= now
 }
 
-// isFresh returns true if the info has a sequence number newer
-// than seq and wasn't either passed directly or originated from
-// the same node.
-func (i *info) isFresh(nodeID roachpb.NodeID, seq int64) bool {
-	if i.seq <= seq {
+// isFresh returns true if the info has an originating timestamp newer
+// than timestamp and didn't originate from the same node.
+func (i *Info) isFresh(nodeID roachpb.NodeID, timestamp int64) bool {
+	if i.OrigStamp <= timestamp {
 		return false
 	}
 	if nodeID != 0 && i.NodeID == nodeID {
-		return false
-	}
-	if nodeID != 0 && i.peerID == nodeID {
 		return false
 	}
 	return true
 }
 
 // infoMap is a map of keys to info object pointers.
-type infoMap map[string]*info
+type infoMap map[string]*Info
