@@ -42,7 +42,7 @@ func gossipForTest(t *testing.T) (*gossip.Gossip, *stop.Stopper) {
 	config.TestingSetupZoneConfigHook(stopper)
 
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
-	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
+	g := gossip.New(rpcContext, gossip.TestBootstrap)
 
 	// Put an empty system config into gossip.
 	if err := g.AddInfoProto(gossip.KeySystemConfig,

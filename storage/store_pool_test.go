@@ -56,7 +56,7 @@ var uniqueStore = []*roachpb.StoreDescriptor{
 func createTestStorePool(timeUntilStoreDead time.Duration) (*stop.Stopper, *gossip.Gossip, *StorePool) {
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
-	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
+	g := gossip.New(rpcContext, gossip.TestBootstrap)
 	storePool := NewStorePool(g, timeUntilStoreDead, stopper)
 	return stopper, g, storePool
 }

@@ -62,7 +62,7 @@ func TestSendAndReceive(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
-	g := gossip.New(nodeRPCContext, gossip.TestInterval, gossip.TestBootstrap)
+	g := gossip.New(nodeRPCContext, gossip.TestBootstrap)
 
 	// Create several servers, each of which has two stores (A multiraft
 	// node ID addresses a store). Node 1 has stores 1 and 2, node 2 has
@@ -230,7 +230,7 @@ func TestInOrderDelivery(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
-	g := gossip.New(nodeRPCContext, gossip.TestInterval, gossip.TestBootstrap)
+	g := gossip.New(nodeRPCContext, gossip.TestBootstrap)
 
 	server := rpc.NewServer(util.CreateTestAddr("tcp"), nodeRPCContext)
 	if err := server.Start(); err != nil {

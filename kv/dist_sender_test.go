@@ -55,8 +55,10 @@ var testRangeDescriptor = roachpb.RangeDescriptor{
 
 var testAddress = util.MakeUnresolvedAddr("tcp", "node1:26257")
 
+const testInterval = 10 * time.Millisecond
+
 func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
-	n := simulation.NewNetwork(1, "tcp", gossip.TestInterval)
+	n := simulation.NewNetwork(1, "tcp", testInterval)
 	g := n.Nodes[0].Gossip
 
 	if err := g.AddInfo(gossip.KeySentinel, nil, time.Hour); err != nil {
@@ -576,7 +578,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 
 func TestGetFirstRangeDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	n := simulation.NewNetwork(3, "tcp", gossip.TestInterval)
+	n := simulation.NewNetwork(3, "tcp", testInterval)
 	ds := NewDistSender(nil, n.Nodes[0].Gossip)
 	if _, err := ds.firstRange(); err == nil {
 		t.Errorf("expected not to find first range descriptor")

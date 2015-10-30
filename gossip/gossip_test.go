@@ -33,7 +33,7 @@ import (
 func TestGossipInfoStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), nil)
-	g := New(rpcContext, TestInterval, TestBootstrap)
+	g := New(rpcContext, TestBootstrap)
 	slice := []byte("b")
 	if err := g.AddInfo("s", slice, time.Hour); err != nil {
 		t.Fatal(err)
@@ -69,7 +69,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	if len(resolvers) != 6 {
 		t.Errorf("expected 6 resolvers; got %d", len(resolvers))
 	}
-	g := New(nil, TestInterval, resolvers)
+	g := New(nil, resolvers)
 
 	// Using specified resolvers, fetch bootstrap addresses 10 times
 	// and verify the results match expected addresses.
