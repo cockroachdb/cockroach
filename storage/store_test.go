@@ -101,10 +101,10 @@ func (db *testSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		return nil, roachpb.NewError(util.Errorf("%s method not supported", et.Method()))
 	}
 	// Lookup range and direct request.
-	key, endKey := keys.Range(ba)
-	rng := db.store.LookupReplica(key, endKey)
+	rs := keys.Range(ba)
+	rng := db.store.LookupReplica(rs.Key, rs.EndKey)
 	if rng == nil {
-		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(key.AsRawKey(), endKey.AsRawKey(), nil))
+		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), nil))
 	}
 	ba.RangeID = rng.Desc().RangeID
 	replica := rng.GetReplica()
