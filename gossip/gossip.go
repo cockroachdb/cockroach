@@ -16,7 +16,7 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 /*
-Each node attempts to contact peer nodes to gather all infos in
+Each node attempts to contact peer nodes to gather all Infos in
 the system with minimal total hops. The algorithm is as follows:
 
  0 Node starts up gossip server to accept incoming gossip requests.
@@ -26,31 +26,26 @@ the system with minimal total hops. The algorithm is as follows:
    address for its first outgoing connection. Node starts client and
    continues to step #2.
 
- 2 Node requests gossip from peer. If this is first request, MaxSeq
-   will be 0. Otherwise, will be value of MaxSeq from last response to
-   gossip request. Requesting node times out at gossipInterval*2. On
-   timeout, client is closed and GC'd. If node has no outgoing
-   connections, goto #1.
+ 2 Node requests gossip from peer. Gossip requests contain
+   HighWaterStamps, a map from node ID to most recent timestamp of any
+   Info originating at that node. Requesting node times out at
+   checkInterval. On timeout, client is closed and GC'd. If node
+   has no outgoing connections, goto #1.
 
-   a. When gossip is received, infostore is augmented. If new info was
-      received, the client in question is credited. If nothing new was
-      received in maxWaitForNewGossip, client is closed. If node has no
+   a. When gossip is received, infostore is augmented. If new Info was
+      received, the client in question is credited. If node has no
       outgoing connections, goto #1.
 
    b. If any gossip was received at > maxToleratedHops and num
       connected peers < maxPeers, choose random peer from those
-      originating info > maxToleratedHops, start it, and goto #2.
+      originating Info > maxToleratedHops, start it, and goto #2.
 
    c. If sentinel gossip keyed by KeySentinel is missing or expired,
       node is considered partitioned; goto #1.
 
  3 On connect, if node has too many connected clients, gossip requests
    are returned immediately with an alternate address set to a random
-   selection from amongst already-connected clients. If MaxSeq is -1
-   (initial connection), returns gossip immediately. Otherwise,
-   request waits for a randomly jittered interval ~= gossipInterval.
-   Node periodically returns empty gossip responses to prevent client
-   timeouts. Node receives delta from gossiping client in turn.
+   selection from amongst already-connected clients.
 */
 
 package gossip
@@ -58,6 +53,7 @@ package gossip
 import (
 	"encoding/json"
 	"math"
+	"math/rand"
 	"net"
 	"strings"
 	"sync"
@@ -94,8 +90,10 @@ const (
 	// ttlNodeIDGossip is time-to-live for node ID -> address.
 	ttlNodeIDGossip time.Duration = 0
 
-	// TestInterval is the default gossip interval used for running tests.
-	TestInterval = 10 * time.Millisecond
+	// defaultCheckInterval is the default interval for checking for
+	// bad gossip states, including a badly connected network and
+	// the least useful clients.
+	defaultCheckInterval time.Duration = 60 * time.Second
 )
 
 var (
@@ -112,6 +110,7 @@ type Gossip struct {
 	RPCContext    *rpc.Context        // The context required for RPC
 	bsRPCContext  *rpc.Context        // Context for bootstrap RPCs
 	*server                           // Embedded gossip RPC server
+	checkInterval time.Duration       // Interval between checks on gossip network state
 	outgoing      nodeSet             // Set of outgoing client node IDs
 	bootstrapping map[string]struct{} // Set of active bootstrap clients
 	clientsMu     sync.Mutex          // Mutex protects the clients slice
@@ -136,11 +135,12 @@ type Gossip struct {
 }
 
 // New creates an instance of a gossip node.
-func New(rpcContext *rpc.Context, gossipInterval time.Duration, resolvers []resolver.Resolver) *Gossip {
+func New(rpcContext *rpc.Context, resolvers []resolver.Resolver) *Gossip {
 	g := &Gossip{
 		Connected:     make(chan struct{}),
 		RPCContext:    rpcContext,
-		server:        newServer(gossipInterval),
+		server:        newServer(),
+		checkInterval: defaultCheckInterval,
 		outgoing:      makeNodeSet(MaxPeers),
 		bootstrapping: map[string]struct{}{},
 		clients:       []*client{},
@@ -298,6 +298,27 @@ func (g *Gossip) GetInfosAsJSON() ([]byte, error) {
 	return json.MarshalIndent(g.is, "", "  ")
 }
 
+// Update contains the key and content for a gossip Info.
+type Update struct {
+	Key     string
+	Content []byte
+}
+
+// RegisterUpdateChannel registers an update channel for a key pattern.
+// Any gossip updates matching the pattern are sent on the channel.
+func (g *Gossip) RegisterUpdateChannel(pattern string, updateChan chan Update) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.is.registerUpdateChannel(pattern, updateChan)
+}
+
+// UnregisterUpdateChannel unregisters an update channel.
+func (g *Gossip) UnregisterUpdateChannel(updateChan chan Update) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.is.unregisterUpdateChannel(updateChan)
+}
+
 // Callback is a callback method to be invoked on gossip update
 // of info denoted by key.
 type Callback func(key string, content []byte)
@@ -412,7 +433,7 @@ func (g *Gossip) Start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 func (g *Gossip) maxToleratedHops() uint32 {
 	var nodeCount int64
 
-	if err := g.is.visitInfos(func(key string, i *info) error {
+	if err := g.is.visitInfos(func(key string, i *Info) error {
 		if strings.HasPrefix(key, KeyNodeIDPrefix) {
 			nodeCount++
 		}
@@ -431,8 +452,6 @@ func (g *Gossip) maxToleratedHops() uint32 {
 // hasIncoming returns whether the server has an incoming gossip
 // client matching the provided node ID.
 func (g *Gossip) hasIncoming(nodeID roachpb.NodeID) bool {
-	g.mu.Lock()
-	defer g.mu.Unlock()
 	return g.incoming.hasNode(nodeID)
 }
 
@@ -536,14 +555,20 @@ func (g *Gossip) manage(stopper *stop.Stopper) {
 				return
 			case c := <-g.disconnected:
 				g.doDisconnected(stopper, c)
-			case <-time.After(g.jitteredGossipInterval()):
-				g.doCheckTimeout(stopper)
+			case <-time.After(g.jitteredCheckInterval()):
+				g.doCheckNetwork(stopper)
 			}
 		}
 	})
 }
 
-func (g *Gossip) doCheckTimeout(stopper *stop.Stopper) {
+// jitteredCheckInterval returns a randomly jittered (+/-25%) duration
+// from checkInterval.
+func (g *Gossip) jitteredCheckInterval() time.Duration {
+	return time.Duration(float64(g.checkInterval) * (0.75 + 0.5*rand.Float64()))
+}
+
+func (g *Gossip) doCheckNetwork(stopper *stop.Stopper) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	// Check whether the graph needs to be tightened to

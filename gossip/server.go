@@ -18,10 +18,8 @@
 package gossip
 
 import (
-	"math/rand"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -39,25 +37,28 @@ type clientInfo struct {
 // server maintains an array of connected peers to which it gossips
 // newly arrived information on a periodic basis.
 type server struct {
-	interval time.Duration // Interval at which to gossip fresh info
-	ready    *sync.Cond    // Broadcasts wakeup to waiting gossip requests
+	ready *sync.Cond // Broadcasts wakeup to waiting gossip requests
 
-	mu       sync.Mutex            // Protects the fields below
-	is       infoStore             // The backing infostore
-	closed   bool                  // True if server was closed
-	incoming nodeSet               // Incoming client node IDs
-	lAddrMap map[string]clientInfo // Incoming client's local address -> client's node info
+	mu         sync.Mutex            // Protects the fields below
+	is         infoStore             // The backing infostore
+	closed     bool                  // True if server was closed
+	incoming   nodeSet               // Incoming client node IDs
+	lAddrMap   map[string]clientInfo // Incoming client's local address -> client's node info
+	updateChan chan Update           // Gossip updates channel
 }
 
 // newServer creates and returns a server struct.
-func newServer(interval time.Duration) *server {
+func newServer() *server {
 	s := &server{
-		is:       newInfoStore(0, util.UnresolvedAddr{}),
-		interval: interval,
-		incoming: makeNodeSet(MaxPeers),
-		lAddrMap: map[string]clientInfo{},
+		is:         newInfoStore(0, util.UnresolvedAddr{}),
+		incoming:   makeNodeSet(MaxPeers),
+		lAddrMap:   map[string]clientInfo{},
+		updateChan: make(chan Update, 10000),
 	}
 	s.ready = sync.NewCond(&s.mu)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.is.registerUpdateChannel(".*", s.updateChan)
 	return s
 }
 
@@ -106,25 +107,31 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 			log.Infof("gossip: received %d info(s) from %s", infoCount, addr)
 		}
 	}
-	s.is.combine(args.Delta, args.NodeID)
 
-	// The exit condition for waiting clients.
-	if s.closed {
-		return nil, util.Errorf("gossip server shutdown")
+	// Combine incoming infos if specified and exit.
+	if args.Delta != nil {
+		s.is.combine(args.Delta, args.NodeID)
+		if s.closed {
+			return nil, util.Errorf("gossip server shutdown")
+		}
+		reply.HighWaterStamps = s.is.getHighWaterStamps()
+		return reply, nil
 	}
-	// If requested max sequence is not -1, wait for gossip interval to expire.
-	if args.MaxSeq != -1 {
+
+	// Otherwise, loop until the server has deltas for the client.
+	for {
+		// The exit condition for waiting clients.
+		if s.closed {
+			return nil, util.Errorf("gossip server shutdown")
+		}
+		reply.Delta = s.is.delta(args.NodeID, args.HighWaterStamps)
+		if len(reply.Delta) > 0 {
+			reply.HighWaterStamps = s.is.getHighWaterStamps()
+			return reply, nil
+		}
+		// Wait for server to get new gossip set before computing delta.
 		s.ready.Wait()
 	}
-	// Return reciprocal delta.
-	reply.Delta = s.is.delta(args.NodeID, args.MaxSeq)
-	return reply, nil
-}
-
-// jitteredGossipInterval returns a randomly jittered duration from
-// interval [0.75 * gossipInterval, 1.25 * gossipInterval).
-func (s *server) jitteredGossipInterval() time.Duration {
-	return time.Duration(float64(s.interval) * (0.75 + 0.5*rand.Float64()))
 }
 
 // start initializes the infostore with the rpc server address and
@@ -143,8 +150,8 @@ func (s *server) start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 		// Periodically wakeup blocked client gossip requests.
 		for {
 			select {
-			case <-time.After(s.jitteredGossipInterval()):
-				// Wakeup all blocked gossip requests.
+			case <-s.updateChan:
+				// Wakeup all pending clients.
 				s.ready.Broadcast()
 			case <-stopper.ShouldStop():
 				s.stop()

@@ -51,8 +51,8 @@ func TestNewInfo(t *testing.T) {
 	is := newInfoStore(1, emptyAddr)
 	info1 := is.newInfo(nil, time.Second)
 	info2 := is.newInfo(nil, time.Second)
-	if info1.seq != info2.seq-1 {
-		t.Errorf("sequence numbers should increment %d, %d", info1.seq, info2.seq)
+	if info1.OrigStamp >= info2.OrigStamp {
+		t.Errorf("timestamps should increment %d, %d", info1.OrigStamp, info2.OrigStamp)
 	}
 }
 
@@ -62,14 +62,15 @@ func TestInfoStoreGetInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
 	i := is.newInfo(nil, time.Second)
+	i.NodeID = 1
 	if err := is.addInfo("a", i); err != nil {
 		t.Error(err)
 	}
 	if infoCount := len(is.Infos); infoCount != 1 {
 		t.Errorf("infostore count incorrect %d != 1", infoCount)
 	}
-	if is.MaxSeq != i.seq {
-		t.Error("max seq value wasn't updated")
+	if is.highWaterStamps[1] != i.OrigStamp {
+		t.Error("high water timestamps map wasn't updated")
 	}
 	if is.getInfo("a") != i {
 		t.Error("unable to get info")
@@ -167,16 +168,19 @@ func createTestInfoStore(t *testing.T) infoStore {
 
 	for i := 0; i < 10; i++ {
 		infoA := is.newInfo(nil, time.Second)
+		infoA.NodeID = 1
 		if err := is.addInfo(fmt.Sprintf("a.%d", i), infoA); err != nil {
 			t.Fatal(err)
 		}
 
 		infoB := is.newInfo(nil, time.Second)
+		infoB.NodeID = 2
 		if err := is.addInfo(fmt.Sprintf("b.%d", i), infoB); err != nil {
 			t.Fatal(err)
 		}
 
 		infoC := is.newInfo(nil, time.Second)
+		infoC.NodeID = 3
 		if err := is.addInfo(fmt.Sprintf("c.%d", i), infoC); err != nil {
 			t.Fatal(err)
 		}
@@ -185,29 +189,41 @@ func createTestInfoStore(t *testing.T) infoStore {
 	return is
 }
 
-// Check infostore delta based on info sequence numbers.
+// Check infostore delta based on info high water timestamps.
 func TestInfoStoreDelta(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	is := createTestInfoStore(t)
 
-	// Verify deltas with successive sequence numbers.
+	// Verify deltas with successive timestamps.
+	infos := is.delta(4, map[int32]int64{})
 	for i := 0; i < 10; i++ {
-		infos := is.delta(2, int64(i*3))
+		if i > 0 {
+			infoA := is.getInfo(fmt.Sprintf("a.%d", i-1))
+			infoB := is.getInfo(fmt.Sprintf("b.%d", i-1))
+			infoC := is.getInfo(fmt.Sprintf("c.%d", i-1))
+			infos = is.delta(4, map[int32]int64{
+				1: infoA.OrigStamp,
+				2: infoB.OrigStamp,
+				3: infoC.OrigStamp,
+			})
+		}
 
-		for j := 0; j < 10-i; j++ {
-			if _, ok := infos[fmt.Sprintf("c.%d", j+i)]; !ok {
-				t.Errorf("unable to fetch info %d", j+i)
-			}
-			if i > 0 {
-				if _, ok := infos[fmt.Sprintf("c.%d", 0)]; ok {
-					t.Errorf("erroneously fetched info %d", j+i+1)
+		for _, node := range []string{"a", "b", "c"} {
+			for j := 0; j < 10; j++ {
+				expected := i <= j
+				if _, ok := infos[fmt.Sprintf("%s.%d", node, j)]; ok != expected {
+					t.Errorf("i,j=%d,%d: expected to fetch info %s.%d? %t; got %t", i, j, node, j, expected, ok)
 				}
 			}
 		}
 	}
 
-	if infos := is.delta(2, int64(30)); len(infos) != 0 {
-		t.Error("fetching delta of infostore at maximum sequence number should return nil")
+	if infos := is.delta(4, map[int32]int64{
+		1: math.MaxInt64,
+		2: math.MaxInt64,
+		3: math.MaxInt64,
+	}); len(infos) != 0 {
+		t.Errorf("fetching delta of infostore at maximum timestamp should return empty, got %d", len(infos))
 	}
 }
 
@@ -255,7 +271,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf1 := is.newInfo(nil, time.Second)
-	inf1.peerID = 1
+	inf1.PeerID = 1
 	if err := is.addInfo("a1", inf1); err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +285,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf2 := is.newInfo(nil, time.Second)
-	inf2.peerID = 1
+	inf2.PeerID = 1
 	if err := is.addInfo("a2", inf2); err != nil {
 		t.Fatal(err)
 	}
@@ -283,12 +299,135 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf3 := is.newInfo(nil, time.Second)
-	inf3.peerID = 2
+	inf3.PeerID = 2
 	if err := is.addInfo("a3", inf3); err != nil {
 		t.Fatal(err)
 	}
 	if is.leastUseful(set) != nodes[1] {
 		t.Error("expecting nodes[1] as least useful")
+	}
+}
+
+func drainChannel(updateChan <-chan Update) []string {
+	keys := []string{}
+	for {
+		select {
+		case update := <-updateChan:
+			keys = append(keys, update.Key)
+		default:
+			return keys
+		}
+	}
+}
+
+func TestUpdateChannels(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	is := newInfoStore(1, emptyAddr)
+	uc1 := make(chan Update, 10)
+	uc2 := make(chan Update, 10)
+	ucAll := make(chan Update, 10)
+
+	is.registerUpdateChannel("key1", uc1)
+	is.registerUpdateChannel("key2", uc2)
+	is.registerUpdateChannel("key.*", ucAll)
+
+	i1 := is.newInfo(nil, time.Second)
+	i2 := is.newInfo(nil, time.Second)
+	i3 := is.newInfo(nil, time.Second)
+
+	// Add infos twice and verify updates aren't sent for same timestamps.
+	for i := 0; i < 2; i++ {
+		if err := is.addInfo("key1", i1); err != nil {
+			if i == 0 {
+				t.Error(err)
+			}
+		} else {
+			if i != 0 {
+				t.Errorf("expected error on run #%d, but didn't get one", i)
+			}
+		}
+		if err := is.addInfo("key2", i2); err != nil {
+			if i == 0 {
+				t.Error(err)
+			}
+		} else {
+			if i != 0 {
+				t.Errorf("expected error on run #%d, but didn't get one", i)
+			}
+		}
+		if err := is.addInfo("key3", i3); err != nil {
+			if i == 0 {
+				t.Error(err)
+			}
+		} else {
+			if i != 0 {
+				t.Errorf("expected error on run #%d, but didn't get one", i)
+			}
+		}
+		uc1Keys := drainChannel(uc1)
+		uc2Keys := drainChannel(uc2)
+
+		exp1Keys := []string{}
+		exp2Keys := []string{}
+		expAllKeys := []string{}
+		if i == 0 {
+			exp1Keys = []string{"key1"}
+			exp2Keys = []string{"key2"}
+			expAllKeys = []string{"key1", "key2", "key3"}
+		}
+		if !reflect.DeepEqual(uc1Keys, exp1Keys) {
+			t.Errorf("expected %v, got %v", exp1Keys, uc1Keys)
+		}
+		if !reflect.DeepEqual(uc2Keys, exp2Keys) {
+			t.Errorf("expected %v, got %v", exp2Keys, uc2Keys)
+		}
+		ucAllKeys := drainChannel(ucAll)
+		if !reflect.DeepEqual(ucAllKeys, expAllKeys) {
+			t.Errorf("expected %v, got %v", expAllKeys, ucAllKeys)
+		}
+	}
+
+	// Update an info.
+	{
+		i1 := is.newInfo([]byte("a"), time.Second)
+		if err := is.addInfo("key1", i1); err != nil {
+			t.Error(err)
+		}
+
+		uc1Keys := drainChannel(uc1)
+		uc2Keys := drainChannel(uc2)
+
+		if expKeys := []string{"key1"}; !reflect.DeepEqual(uc1Keys, expKeys) {
+			t.Errorf("expected %v, got %v", expKeys, uc1Keys)
+		}
+		if expKeys := []string{}; !reflect.DeepEqual(uc2Keys, expKeys) {
+			t.Errorf("expected %v, got %v", expKeys, uc2Keys)
+		}
+		ucAllKeys := drainChannel(ucAll)
+		if expKeys := []string{"key1"}; !reflect.DeepEqual(ucAllKeys, expKeys) {
+			t.Errorf("expected %v, got %v", expKeys, ucAllKeys)
+		}
+	}
+
+	// Register another update channel with same pattern and verify it is
+	// invoked for all three keys.
+	is.registerUpdateChannel("key.*", ucAll)
+	expKeys := []string{"key1", "key2", "key3"}
+	ucAllKeys := drainChannel(ucAll)
+	sort.Strings(ucAllKeys)
+	if !reflect.DeepEqual(ucAllKeys, expKeys) {
+		t.Errorf("expected %v, got %v", expKeys, ucAllKeys)
+	}
+
+	// Unregister a channel and verify nothing is invoked on it.
+	is.unregisterUpdateChannel(uc1)
+	iNew := is.newInfo([]byte("a"), time.Second)
+	if err := is.addInfo("key1", iNew); err != nil {
+		t.Error(err)
+	}
+	uc1Keys := drainChannel(uc1)
+	if len(uc1Keys) != 0 {
+		t.Errorf("expected empty uc1 keys, got %v", uc1Keys)
 	}
 }
 

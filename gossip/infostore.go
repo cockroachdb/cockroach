@@ -30,6 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+// updateChannel holds regexp pattern match and update channel.
+type updateChannel struct {
+	pattern    *regexp.Regexp
+	updateChan chan Update
+}
+
 // callback holds regexp pattern match and GossipCallback method.
 type callback struct {
 	pattern *regexp.Regexp
@@ -41,18 +47,18 @@ type callback struct {
 // objects.
 //
 // infoStores can be queried for incremental updates occurring since a
-// specified sequence number.
+// specified map of peer node high water timestamps.
 //
 // infoStores can be combined using deltas from peer nodes.
 //
 // infoStores are not thread safe.
 type infoStore struct {
-	Infos     infoMap             `json:"infos,omitempty"` // Map from key to info
-	NodeID    roachpb.NodeID      `json:"-"`               // Owning node's ID
-	NodeAddr  util.UnresolvedAddr `json:"-"`               // Address of node owning this info store: "host:port"
-	MaxSeq    int64               `json:"-"`               // Maximum sequence number inserted
-	seqGen    int64               // Sequence generator incremented each time info is added
-	callbacks []callback
+	Infos           infoMap             `json:"infos,omitempty"` // Map from key to info
+	NodeID          roachpb.NodeID      `json:"-"`               // Owning node's ID
+	NodeAddr        util.UnresolvedAddr `json:"-"`               // Address of node owning this info store: "host:port"
+	highWaterStamps map[int32]int64     // High water timestamps for known gossip peers
+	updateChannels  []updateChannel
+	callbacks       []callback
 }
 
 // monotonicUnixNano returns a monotonically increasing value for
@@ -84,7 +90,7 @@ func (is *infoStore) String() string {
 
 	prepend := ""
 
-	if err := is.visitInfos(func(key string, i *info) error {
+	if err := is.visitInfos(func(key string, i *Info) error {
 		fmt.Fprintf(&buf, "%sinfo %q: %+v", prepend, key, i.Value)
 		prepend = ", "
 		return nil
@@ -102,36 +108,33 @@ var (
 // newInfoStore allocates and returns a new infoStore.
 func newInfoStore(nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr) infoStore {
 	return infoStore{
-		Infos:    make(infoMap),
-		NodeID:   nodeID,
-		NodeAddr: nodeAddr,
+		Infos:           make(infoMap),
+		NodeID:          nodeID,
+		NodeAddr:        nodeAddr,
+		highWaterStamps: map[int32]int64{},
 	}
 }
 
 // newInfo allocates and returns a new info object using specified key,
 // value, and time-to-live.
-func (is *infoStore) newInfo(val []byte, ttl time.Duration) *info {
-	is.seqGen++
+func (is *infoStore) newInfo(val []byte, ttl time.Duration) *Info {
 	now := monotonicUnixNano()
 	ttlStamp := now + int64(ttl)
 	if ttl == 0 {
 		ttlStamp = math.MaxInt64
 	}
 	v := roachpb.MakeValueFromBytesAndTimestamp(val, roachpb.Timestamp{WallTime: now})
-	return &info{
-		Info: Info{
-			Value:    v,
-			TTLStamp: ttlStamp,
-			NodeID:   is.NodeID,
-		},
-		peerID: is.NodeID,
-		seq:    is.seqGen,
+	return &Info{
+		Value:     v,
+		OrigStamp: now,
+		TTLStamp:  ttlStamp,
+		NodeID:    is.NodeID,
 	}
 }
 
 // getInfo returns the Info at key. Returns nil when key is not present
 // in the infoStore.
-func (is *infoStore) getInfo(key string) *info {
+func (is *infoStore) getInfo(key string) *Info {
 	if info, ok := is.Infos[key]; ok {
 		// Check TTL and discard if too old.
 		if info.expired(time.Now().UnixNano()) {
@@ -146,7 +149,7 @@ func (is *infoStore) getInfo(key string) *info {
 // addInfo adds or updates an info in the infos map.
 //
 // Returns nil if info was added; error otherwise.
-func (is *infoStore) addInfo(key string, i *info) error {
+func (is *infoStore) addInfo(key string, i *Info) error {
 	// Only replace an existing info if new timestamp is greater, or if
 	// timestamps are equal, but new hops is smaller.
 	if existingInfo, ok := is.Infos[key]; ok {
@@ -161,13 +164,15 @@ func (is *infoStore) addInfo(key string, i *info) error {
 
 	// Update info map.
 	is.Infos[key] = i
-	if i.seq > is.MaxSeq {
-		is.MaxSeq = i.seq
-	}
 	bytes, err := i.Value.GetBytes()
 	if err != nil {
 		return err
 	}
+	// Update the high water timestamps.
+	if is.highWaterStamps[int32(i.NodeID)] < i.OrigStamp {
+		is.highWaterStamps[int32(i.NodeID)] = i.OrigStamp
+	}
+	is.processUpdateChannels(key, bytes)
 	is.processCallbacks(key, bytes)
 	return nil
 }
@@ -177,7 +182,7 @@ func (is *infoStore) addInfo(key string, i *info) error {
 // originator and this node.
 func (is *infoStore) maxHops() uint32 {
 	var maxHops uint32
-	if err := is.visitInfos(func(key string, i *info) error {
+	if err := is.visitInfos(func(key string, i *Info) error {
 		if i.Hops > maxHops {
 			maxHops = i.Hops
 		}
@@ -188,13 +193,62 @@ func (is *infoStore) maxHops() uint32 {
 	return maxHops
 }
 
+// getHighWaterStamps returns a copy of the high water timestamps map
+// maintained by this infostore.
+func (is *infoStore) getHighWaterStamps() map[int32]int64 {
+	copy := map[int32]int64{}
+	for k, v := range is.highWaterStamps {
+		copy[k] = v
+	}
+	return copy
+}
+
+// registerUpdateChannel compiles a regexp for pattern and adds it to
+// the update slice.
+func (is *infoStore) registerUpdateChannel(pattern string, updateChan chan Update) {
+	re := regexp.MustCompile(pattern)
+	is.updateChannels = append(is.updateChannels, updateChannel{pattern: re, updateChan: updateChan})
+	if err := is.visitInfos(func(key string, i *Info) error {
+		if re.MatchString(key) {
+			bytes, err := i.Value.GetBytes()
+			if err != nil {
+				return err
+			}
+			updateChan <- Update{Key: key, Content: bytes}
+		}
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+}
+
+func (is *infoStore) unregisterUpdateChannel(updateChan chan Update) {
+	for i := range is.updateChannels {
+		if is.updateChannels[i].updateChan == updateChan {
+			is.updateChannels = append(is.updateChannels[:i], is.updateChannels[i+1:]...)
+			return
+		}
+	}
+}
+
+// processUpdateChannels processes update channels for the specified
+// key by matching regular expression against the key and sending
+// an update on the corresponding update channel on a match.
+func (is *infoStore) processUpdateChannels(key string, content []byte) {
+	for _, uc := range is.updateChannels {
+		if uc.pattern.MatchString(key) {
+			uc.updateChan <- Update{Key: key, Content: content}
+		}
+	}
+}
+
 // registerCallback compiles a regexp for pattern and adds it to
 // the callbacks slice.
 func (is *infoStore) registerCallback(pattern string, method Callback) {
 	re := regexp.MustCompile(pattern)
 	is.callbacks = append(is.callbacks, callback{pattern: re, method: method})
 	infosBytes := make(map[string][]byte)
-	if err := is.visitInfos(func(key string, i *info) error {
+	if err := is.visitInfos(func(key string, i *Info) error {
 		if re.MatchString(key) {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
@@ -235,7 +289,7 @@ func (is *infoStore) processCallbacks(key string, content []byte) {
 // visitInfos implements a visitor pattern to run the visitInfo
 // function against each info in turn. Be sure to skip over any expired
 // infos.
-func (is *infoStore) visitInfos(visitInfo func(string, *info) error) error {
+func (is *infoStore) visitInfos(visitInfo func(string, *Info) error) error {
 	now := time.Now().UnixNano()
 
 	if visitInfo != nil {
@@ -254,23 +308,18 @@ func (is *infoStore) visitInfos(visitInfo func(string, *info) error) error {
 }
 
 // combine combines an incremental delta with the current infoStore.
-// The sequence numbers on all info objects are reset using the info
-// store's sequence generator. All hop distances on infos are
-// incremented to indicate they've arrived from an external source.
-// Returns the count of "fresh" infos in the provided delta.
+// All hop distances on infos are incremented to indicate they've
+// arrived from an external source.  Returns the count of "fresh"
+// infos in the provided delta.
 func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) int {
 	var freshCount int
-	for key, infoProto := range infos {
-		i := &info{
-			Info: *infoProto,
-		}
-		is.seqGen++
-		i.seq = is.seqGen
-		i.Hops++
-		i.peerID = nodeID
+	for key, i := range infos {
+		copy := *i
+		copy.Hops++
+		copy.PeerID = nodeID
 		// Errors from addInfo here are not a problem; they simply
 		// indicate that the data in *is is newer than in *delta.
-		if err := is.addInfo(key, i); err == nil {
+		if err := is.addInfo(key, &copy); err == nil {
 			freshCount++
 		}
 	}
@@ -278,34 +327,32 @@ func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) int 
 }
 
 // delta returns an incremental delta of infos added to the info store
-// since (not including) the specified sequence number. These deltas
-// are intended for efficiently updating peer nodes. Any infos passed
-// from node requesting delta are ignored.
+// since (not including) the high water timestamps specified. These
+// deltas are intended for efficiently updating peer nodes. Any infos
+// passed from node requesting delta are ignored.
 //
 // Returns nil if there are no deltas.
-func (is *infoStore) delta(nodeID roachpb.NodeID, seq int64) map[string]*Info {
+func (is *infoStore) delta(nodeID roachpb.NodeID, highWaterStamps map[int32]int64) map[string]*Info {
 	infos := make(map[string]*Info)
 
-	if seq < is.MaxSeq {
-		// Compute delta of infos.
-		if err := is.visitInfos(func(key string, i *info) error {
-			if i.isFresh(nodeID, seq) {
-				infos[key] = &i.Info
-			}
-			return nil
-		}); err != nil {
-			panic(err)
+	// Compute delta of infos.
+	if err := is.visitInfos(func(key string, i *Info) error {
+		if i.isFresh(nodeID, highWaterStamps[int32(i.NodeID)]) {
+			infos[key] = i
 		}
+		return nil
+	}); err != nil {
+		panic(err)
 	}
 
 	return infos
 }
 
-// distant returns a nodeSet for gossip peers which originated infos
+// distant returns a nodeSet for gossip peers which originated Infos
 // with info.Hops > maxHops.
 func (is *infoStore) distant(maxHops uint32) nodeSet {
 	ns := makeNodeSet(0)
-	if err := is.visitInfos(func(key string, i *info) error {
+	if err := is.visitInfos(func(key string, i *Info) error {
 		if i.Hops > maxHops {
 			ns.addNode(i.NodeID)
 		}
@@ -323,8 +370,8 @@ func (is *infoStore) leastUseful(nodes nodeSet) roachpb.NodeID {
 	for node := range nodes.nodes {
 		contrib[node] = 0
 	}
-	if err := is.visitInfos(func(key string, i *info) error {
-		contrib[i.peerID]++
+	if err := is.visitInfos(func(key string, i *Info) error {
+		contrib[i.PeerID]++
 		return nil
 	}); err != nil {
 		panic(err)

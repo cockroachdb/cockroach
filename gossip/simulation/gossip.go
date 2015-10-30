@@ -79,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -198,24 +199,32 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 		node := simNode.Gossip
 		var incomplete int
 		var totalAge int64
-		for _, addr := range network.Addrs {
-			infoKey := addr.String()
-			if infoKey == simNode.Addr.String() {
+		for _, otherNode := range network.Nodes {
+			if otherNode == simNode {
 				continue // skip the node's own info
 			}
-			if val, err := node.GetInfo(infoKey); err != nil {
+			infoKey := otherNode.Server.Addr().String()
+			if info, err := node.GetInfo(infoKey); err != nil {
 				log.Infof("error getting info for key %q: %s", infoKey, err)
 				incomplete++
 			} else {
-				totalAge += int64(cycle) - val.(int64)
+				_, val, err := encoding.DecodeUint64(info)
+				if err != nil {
+					log.Fatalf("bad decode of node info cycle: %s", err)
+				}
+				totalAge += int64(cycle) - int64(val)
 			}
 		}
 
 		var sentinelAge int64
-		if val, err := node.GetInfo(gossip.KeySentinel); err != nil {
+		if info, err := node.GetInfo(gossip.KeySentinel); err != nil {
 			log.Infof("error getting info for sentinel gossip key %q: %s", gossip.KeySentinel, err)
 		} else {
-			sentinelAge = int64(cycle) - val.(int64)
+			_, val, err := encoding.DecodeUint64(info)
+			if err != nil {
+				log.Fatalf("bad decode of sentinel cycle: %s", err)
+			}
+			sentinelAge = int64(cycle) - int64(val)
 		}
 
 		var age, nodeColor string
@@ -313,9 +322,9 @@ func main() {
 			nodes := network.Nodes
 			for i := 0; i < len(nodes); i++ {
 				node := nodes[i].Gossip
-				if err := node.AddInfo(nodes[i].Addr.String(), int64(cycle), time.Hour); err != nil {
+				if err := node.AddInfo(nodes[i].Server.Addr().String(), encoding.EncodeUint64(nil, uint64(cycle)), time.Hour); err != nil {
 					log.Infof("error updating infos addr: %s cycle: %v: %s",
-						nodes[i].Addr.String(), cycle, err)
+						nodes[i].Server.Addr().String(), cycle, err)
 				}
 			}
 			// Output dot graph periodically.
