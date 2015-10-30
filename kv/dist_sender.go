@@ -40,7 +40,7 @@ import (
 
 // Default constants for timeouts.
 const (
-	defaultSendNextTimeout = 500 * time.Millisecond
+	defaultSendNextTimeout = 10 * time.Second // for now; see #2500
 	defaultRPCTimeout      = 5 * time.Second
 	defaultClientTimeout   = 10 * time.Second
 	retryBackoff           = 250 * time.Millisecond
