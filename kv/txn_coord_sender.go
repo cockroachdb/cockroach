@@ -656,8 +656,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		// timestamp regressions; consider txn dead.
 		defer tc.cleanupTxn(trace, t.Txn)
 	case *roachpb.OpRequiresTxnError:
-		// TODO(tschottdorf): range-spanning autowrap currently broken.
-		panic("TODO(tschottdorf): disabled")
+		panic("OpRequiresTxnError must not happen at this level")
 	case *roachpb.ReadWithinUncertaintyIntervalError:
 		// Mark the host as certain. See the protobuf comment for
 		// Transaction.CertainNodes for details.
