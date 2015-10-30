@@ -38,7 +38,6 @@ import (
 const (
 	defaultAddr               = ":26257"
 	defaultMaxOffset          = 250 * time.Millisecond
-	defaultGossipInterval     = 2 * time.Second
 	defaultCacheSize          = 1 << 30 // GB
 	defaultScanInterval       = 10 * time.Minute
 	defaultScanMaxIdleTime    = 5 * time.Second
@@ -81,10 +80,6 @@ type Context struct {
 	// GossipBootstrap is a comma-separated list of node addresses that
 	// act as bootstrap hosts for connecting to the gossip network.
 	GossipBootstrap string
-
-	// GossipInterval is a time interval specifying how often gossip is
-	// communicated between hosts on the gossip network.
-	GossipInterval time.Duration
 
 	// Enables running the node as a single-node in-memory cluster.
 	EphemeralSingleNode bool
@@ -136,7 +131,6 @@ func NewContext() *Context {
 	ctx := &Context{
 		Addr:               defaultAddr,
 		MaxOffset:          defaultMaxOffset,
-		GossipInterval:     defaultGossipInterval,
 		CacheSize:          defaultCacheSize,
 		ScanInterval:       defaultScanInterval,
 		ScanMaxIdleTime:    defaultScanMaxIdleTime,

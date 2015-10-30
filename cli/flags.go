@@ -83,9 +83,6 @@ var flagUsage = map[string]string{
         - http-lb: HTTP load balancer: we query
           http(s)://<address>/_status/details/local
 `,
-	"gossip-interval": `
-        Approximate interval (time.Duration) for gossiping new information to peers.
-`,
 	"key-size": `
         Key size in bits for CA/Node/Client certificates.
 `,
@@ -189,7 +186,6 @@ func initFlags(ctx *server.Context) {
 
 		// Gossip flags.
 		f.StringVar(&ctx.GossipBootstrap, "gossip", ctx.GossipBootstrap, flagUsage["gossip"])
-		f.DurationVar(&ctx.GossipInterval, "gossip-interval", ctx.GossipInterval, flagUsage["gossip-interval"])
 
 		// KV flags.
 		f.BoolVar(&ctx.Linearizable, "linearizable", ctx.Linearizable, flagUsage["linearizable"])
