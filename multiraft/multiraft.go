@@ -975,7 +975,7 @@ func (s *state) propose(p *proposal) {
 		s.removePending(nil, p, ErrGroupDeleted)
 		return
 	}
-	// If configration change callback is pending, wait for it.
+	// If configuration change callback is pending, wait for it.
 	if g.waitForCallback > 0 {
 		g.pending[p.commandID] = p
 		return
