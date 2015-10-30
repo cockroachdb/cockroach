@@ -1557,3 +1557,23 @@ func (r *Replica) maybeAddToSplitQueue() {
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 }
+
+// Quiesce drains the replica and prepares it for removal. First, proposal
+// of new commands is disabled. Secondly, all pending commands are aborted.
+// In both cases, a RangeNotFoundError results.
+func (r *Replica) Quiesce() {
+	r.Lock()
+	r.proposeRaftCommandFn = func(_ cmdIDKey, _ roachpb.RaftCommand) <-chan error {
+		ch := make(chan error, 1)
+		ch <- multiraft.ErrGroupDeleted
+		return ch
+	}
+	for id, cmd := range r.pendingCmds {
+		cmd.done <- roachpb.ResponseWithError{Err: multiraft.ErrGroupDeleted}
+		// Deleting while iterating is ok in Go. We don't just want to `nil`
+		// this since there could be commands being queued up for execution on
+		// the replica.
+		delete(r.pendingCmds, id)
+	}
+	r.Unlock()
+}
