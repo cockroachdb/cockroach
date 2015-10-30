@@ -650,7 +650,7 @@ we store all the top-level metadata in a single range (the first range). These
 top-level metadata keys are known as *meta1* keys, and are prefixed such that
 they sort to the beginning of the key space. Given the metadata size of 256
 bytes given above, a single 64M range would support 64M/256B = 2\^18 ranges,
-which gives a total storage of 64M \* 2\^18 = 16.7T. To support the 1P quoted
+which gives a total storage of 64M \* 2\^18 = 16T. To support the 1P quoted
 above, we need two levels of indirection, where the first level addresses the
 second, and the second addresses user data. With two levels of indirection, we
 can address 2\^(18 + 18) = 2\^36 ranges; each range addresses 2\^26 B, and
