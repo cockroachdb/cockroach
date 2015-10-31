@@ -312,9 +312,10 @@ func (r *Replica) newNotLeaderError(l *roachpb.Lease, originStoreID roachpb.Stor
 func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	// TODO(Tobias): get duration from configuration, either as a config flag
 	// or, later, dynamically adjusted.
-	duration := int64(DefaultLeaderLeaseDuration)
+	duration := DefaultLeaderLeaseDuration
+
 	// Prepare a Raft command to get a leader lease for this replica.
-	expiration := timestamp.Add(duration, 0)
+	expiration := timestamp.Add(int64(duration), 0)
 	desc := r.Desc()
 	_, replica := desc.FindReplica(r.store.StoreID())
 	if replica == nil {
@@ -337,16 +338,38 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 		Random:   rand.Int63(),
 	}
 	ba.Add(args)
+
+	// The raft command becomes moot after its expiration, so give it a
+	// context with a deadline.
+	// We compute a new deadline here using time.Now() instead of using
+	// expiration.GoTime() because in many tests database time uses
+	// a fake clock.
+	ctx, cancel := context.WithDeadline(r.context(), time.Now().Add(duration))
+	defer cancel()
+
 	// Send lease request directly to raft in order to skip unnecessary
 	// checks from normal request machinery, (e.g. the command queue).
 	// Note that the command itself isn't traced, but usually the caller
 	// waiting for the result has an active Trace.
-	errChan, pendingCmd := r.proposeRaftCommand(r.context(), ba)
-	if err := <-errChan; err != nil {
-		return err
+	errChan, pendingCmd := r.proposeRaftCommand(ctx, ba)
+
+	select {
+	case err := <-errChan:
+		if err != nil {
+			return err
+		}
+	case <-ctx.Done():
+		// If the context expired we don't know who got the lease but we
+		// know we didn't.
+		return r.newNotLeaderError(nil, r.store.StoreID())
 	}
 	// Next if the command was committed, wait for the range to apply it.
-	return (<-pendingCmd.done).Err
+	select {
+	case c := <-pendingCmd.done:
+		return c.Err
+	case <-ctx.Done():
+		return r.newNotLeaderError(nil, r.store.StoreID())
+	}
 }
 
 // redirectOnOrAcquireLeaderLease checks whether this replica has the
