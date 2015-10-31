@@ -311,9 +311,9 @@ func (r *Replica) newNotLeaderError(l *roachpb.Lease, originStoreID roachpb.Stor
 func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	// TODO(Tobias): get duration from configuration, either as a config flag
 	// or, later, dynamically adjusted.
-	duration := int64(DefaultLeaderLeaseDuration)
+	duration := DefaultLeaderLeaseDuration
 	// Prepare a Raft command to get a leader lease for this replica.
-	expiration := timestamp.Add(duration, 0)
+	expiration := timestamp.Add(int64(duration), 0)
 	desc := r.Desc()
 	_, replica := desc.FindReplica(r.store.StoreID())
 	if replica == nil {
@@ -341,11 +341,27 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	// Note that the command itself isn't traced, but usually the caller
 	// waiting for the result has an active Trace.
 	errChan, pendingCmd := r.proposeRaftCommand(r.context(), ba)
-	if err := <-errChan; err != nil {
-		return err
+
+	// It does no good to block here for longer than the proposed lease's
+	// lifetime. If the command takes that long to commit we are probably
+	// partitioned away and we can conclude that another node has taken
+	// the lease.
+	deadline := time.After(duration)
+	select {
+	case err := <-errChan:
+		if err != nil {
+			return err
+		}
+	case <-deadline:
+		return r.newNotLeaderError(nil, r.store.StoreID())
 	}
 	// Next if the command was committed, wait for the range to apply it.
-	return (<-pendingCmd.done).Err
+	select {
+	case c := <-pendingCmd.done:
+		return c.Err
+	case <-deadline:
+		return r.newNotLeaderError(nil, r.store.StoreID())
+	}
 }
 
 // redirectOnOrAcquireLeaderLease checks whether this replica has the
