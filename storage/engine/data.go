@@ -49,4 +49,3 @@ func (k EncodedKey) Equal(l EncodedKey) bool {
 func (k EncodedKey) String() string {
 	return fmt.Sprintf("%q", []byte(k))
 }
-

@@ -15,7 +15,7 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package keys 
+package keys
 
 // BytesNext returns the next possible byte by appending an \x00.
 func BytesNext(b []byte) []byte {
