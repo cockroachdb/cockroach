@@ -17,7 +17,7 @@
 
 package keys 
 
-// Returns the next possible byte by appending an \x00.
+// BytesNext returns the next possible byte by appending an \x00.
 func BytesNext(b []byte) []byte {
 	// TODO(spencer): Do we need to enforce KeyMaxLength here?
 	return append(append([]byte(nil), b...), 0)
