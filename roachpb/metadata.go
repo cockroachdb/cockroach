@@ -114,6 +114,7 @@ func (r *RangeDescriptor) ContainsKey(key []byte) bool {
 // ContainsKeyRange returns whether this RangeDescriptor contains the specified
 // key range from start (inclusive) to end (exclusive).
 // If end is empty, returns ContainsKey(start).
+// TODO(tschottdorf): RKey.
 func (r *RangeDescriptor) ContainsKeyRange(start, end []byte) bool {
 	rs := RSpan{Key: r.StartKey, EndKey: r.EndKey}
 	return rs.ContainsKeyRange(start, end)
