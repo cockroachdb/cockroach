@@ -915,7 +915,7 @@ Ranges maintain the same accounting statistics as accounting key
 prefixes. These boil down to a time series of data points with minute
 granularity. Everything from number of bytes to read/write queue sizes.
 Arbitrary distillations of the accounting stats can be determined as the
-basis for splitting / merging. Two sensical metrics for use with
+basis for splitting / merging. Two sensible metrics for use with
 split/merge are range size in bytes and IOps. A good metric for
 rebalancing a replica from one node to another would be total read/write
 queue wait times. These metrics are gossipped, with each range / node
