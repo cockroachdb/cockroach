@@ -703,7 +703,7 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		return err
 	}
 	s.Ident = ident
-	kvs, err := engine.Scan(s.engine, roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 1)
+	kvs, err := engine.Scan(s.engine, engine.EncodedKey(roachpb.RKeyMin), engine.EncodedKey(roachpb.RKeyMax), 1)
 	if err != nil {
 		return util.Errorf("store %s: unable to access: %s", s.engine, err)
 	} else if len(kvs) > 0 {

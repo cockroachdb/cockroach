@@ -156,7 +156,7 @@ func emptyKeyError() error {
 //
 // The key and value byte slices may be reused safely. put takes a copy of
 // them before returning.
-func (r *RocksDB) Put(key roachpb.EncodedKey, value []byte) error {
+func (r *RocksDB) Put(key EncodedKey, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -175,7 +175,7 @@ func (r *RocksDB) Put(key roachpb.EncodedKey, value []byte) error {
 //
 // The key and value byte slices may be reused safely. merge takes a copy
 // of them before returning.
-func (r *RocksDB) Merge(key roachpb.EncodedKey, value []byte) error {
+func (r *RocksDB) Merge(key EncodedKey, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -187,12 +187,12 @@ func (r *RocksDB) Merge(key roachpb.EncodedKey, value []byte) error {
 }
 
 // Get returns the value for the given key.
-func (r *RocksDB) Get(key roachpb.EncodedKey) ([]byte, error) {
+func (r *RocksDB) Get(key EncodedKey) ([]byte, error) {
 	return r.getInternal(key, nil)
 }
 
 // getInternal returns the value for the given key.
-func (r *RocksDB) getInternal(key roachpb.EncodedKey, snapshotHandle *C.DBSnapshot) ([]byte, error) {
+func (r *RocksDB) getInternal(key EncodedKey, snapshotHandle *C.DBSnapshot) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -205,12 +205,12 @@ func (r *RocksDB) getInternal(key roachpb.EncodedKey, snapshotHandle *C.DBSnapsh
 }
 
 // GetProto fetches the value at the specified key and unmarshals it.
-func (r *RocksDB) GetProto(key roachpb.EncodedKey, msg proto.Message) (
+func (r *RocksDB) GetProto(key EncodedKey, msg proto.Message) (
 	ok bool, keyBytes, valBytes int64, err error) {
 	return r.getProtoInternal(key, msg, nil)
 }
 
-func (r *RocksDB) getProtoInternal(key roachpb.EncodedKey, msg proto.Message,
+func (r *RocksDB) getProtoInternal(key EncodedKey, msg proto.Message,
 	snapshotHandle *C.DBSnapshot) (ok bool, keyBytes, valBytes int64, err error) {
 	if len(key) == 0 {
 		err = emptyKeyError()
@@ -239,7 +239,7 @@ func (r *RocksDB) getProtoInternal(key roachpb.EncodedKey, msg proto.Message,
 }
 
 // Clear removes the item from the db with the given key.
-func (r *RocksDB) Clear(key roachpb.EncodedKey) error {
+func (r *RocksDB) Clear(key EncodedKey) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -248,11 +248,11 @@ func (r *RocksDB) Clear(key roachpb.EncodedKey) error {
 
 // Iterate iterates from start to end keys, invoking f on each
 // key/value pair. See engine.Iterate for details.
-func (r *RocksDB) Iterate(start, end roachpb.EncodedKey, f func(roachpb.RawKeyValue) (bool, error)) error {
+func (r *RocksDB) Iterate(start, end EncodedKey, f func(RawKeyValue) (bool, error)) error {
 	return r.iterateInternal(start, end, f, nil)
 }
 
-func (r *RocksDB) iterateInternal(start, end roachpb.EncodedKey, f func(roachpb.RawKeyValue) (bool, error),
+func (r *RocksDB) iterateInternal(start, end EncodedKey, f func(RawKeyValue) (bool, error),
 	snapshotHandle *C.DBSnapshot) error {
 	if bytes.Compare(start, end) >= 0 {
 		return nil
@@ -266,7 +266,7 @@ func (r *RocksDB) iterateInternal(start, end roachpb.EncodedKey, f func(roachpb.
 		if !it.Key().Less(end) {
 			break
 		}
-		if done, err := f(roachpb.RawKeyValue{Key: k, Value: it.Value()}); done || err != nil {
+		if done, err := f(RawKeyValue{Key: k, Value: it.Value()}); done || err != nil {
 			return err
 		}
 	}
@@ -300,7 +300,7 @@ func (r *RocksDB) SetGCTimeouts(minTxnTS, minRCacheTS int64) {
 // Similarly, specifying nil for the end key will compact through the
 // last key. Note that the use of the word "Range" here does not refer
 // to Cockroach ranges, just to a generalized key range.
-func (r *RocksDB) CompactRange(start, end roachpb.EncodedKey) {
+func (r *RocksDB) CompactRange(start, end EncodedKey) {
 	var (
 		s, e       C.DBSlice
 		sPtr, ePtr *C.DBSlice
@@ -326,7 +326,7 @@ func (r *RocksDB) Destroy() error {
 
 // ApproximateSize returns the approximate number of bytes on disk that RocksDB
 // is using to store data for the given range of keys.
-func (r *RocksDB) ApproximateSize(start, end roachpb.EncodedKey) (uint64, error) {
+func (r *RocksDB) ApproximateSize(start, end EncodedKey) (uint64, error) {
 	return uint64(C.DBApproximateSize(r.rdb, goToCSlice(start), goToCSlice(end))), nil
 }
 
@@ -463,17 +463,17 @@ func (r *rocksDBSnapshot) Attrs() roachpb.Attributes {
 }
 
 // Put is illegal for snapshot and returns an error.
-func (r *rocksDBSnapshot) Put(key roachpb.EncodedKey, value []byte) error {
+func (r *rocksDBSnapshot) Put(key EncodedKey, value []byte) error {
 	return util.Errorf("cannot Put to a snapshot")
 }
 
 // Get returns the value for the given key, nil otherwise using
 // the snapshot handle.
-func (r *rocksDBSnapshot) Get(key roachpb.EncodedKey) ([]byte, error) {
+func (r *rocksDBSnapshot) Get(key EncodedKey) ([]byte, error) {
 	return r.parent.getInternal(key, r.handle)
 }
 
-func (r *rocksDBSnapshot) GetProto(key roachpb.EncodedKey, msg proto.Message) (
+func (r *rocksDBSnapshot) GetProto(key EncodedKey, msg proto.Message) (
 	ok bool, keyBytes, valBytes int64, err error) {
 	return r.parent.getProtoInternal(key, msg, r.handle)
 }
@@ -481,17 +481,17 @@ func (r *rocksDBSnapshot) GetProto(key roachpb.EncodedKey, msg proto.Message) (
 // Iterate iterates over the keys between start inclusive and end
 // exclusive, invoking f() on each key/value pair using the snapshot
 // handle.
-func (r *rocksDBSnapshot) Iterate(start, end roachpb.EncodedKey, f func(roachpb.RawKeyValue) (bool, error)) error {
+func (r *rocksDBSnapshot) Iterate(start, end EncodedKey, f func(RawKeyValue) (bool, error)) error {
 	return r.parent.iterateInternal(start, end, f, r.handle)
 }
 
 // Clear is illegal for snapshot and returns an error.
-func (r *rocksDBSnapshot) Clear(key roachpb.EncodedKey) error {
+func (r *rocksDBSnapshot) Clear(key EncodedKey) error {
 	return util.Errorf("cannot Clear from a snapshot")
 }
 
 // Merge is illegal for snapshot and returns an error.
-func (r *rocksDBSnapshot) Merge(key roachpb.EncodedKey, value []byte) error {
+func (r *rocksDBSnapshot) Merge(key EncodedKey, value []byte) error {
 	return util.Errorf("cannot Merge to a snapshot")
 }
 
@@ -506,7 +506,7 @@ func (r *rocksDBSnapshot) SetGCTimeouts(minTxnTS, minRCacheTS int64) {
 
 // ApproximateSize returns the approximate number of bytes the engine is
 // using to store data for the given range of keys.
-func (r *rocksDBSnapshot) ApproximateSize(start, end roachpb.EncodedKey) (uint64, error) {
+func (r *rocksDBSnapshot) ApproximateSize(start, end EncodedKey) (uint64, error) {
 	return r.parent.ApproximateSize(start, end)
 }
 
@@ -569,7 +569,7 @@ func (r *rocksDBBatch) Attrs() roachpb.Attributes {
 	return r.parent.Attrs()
 }
 
-func (r *rocksDBBatch) Put(key roachpb.EncodedKey, value []byte) error {
+func (r *rocksDBBatch) Put(key EncodedKey, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -577,7 +577,7 @@ func (r *rocksDBBatch) Put(key roachpb.EncodedKey, value []byte) error {
 	return nil
 }
 
-func (r *rocksDBBatch) Merge(key roachpb.EncodedKey, value []byte) error {
+func (r *rocksDBBatch) Merge(key EncodedKey, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -585,7 +585,7 @@ func (r *rocksDBBatch) Merge(key roachpb.EncodedKey, value []byte) error {
 	return nil
 }
 
-func (r *rocksDBBatch) Get(key roachpb.EncodedKey) ([]byte, error) {
+func (r *rocksDBBatch) Get(key EncodedKey) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -597,7 +597,7 @@ func (r *rocksDBBatch) Get(key roachpb.EncodedKey) ([]byte, error) {
 	return cStringToGoBytes(result), nil
 }
 
-func (r *rocksDBBatch) GetProto(key roachpb.EncodedKey, msg proto.Message) (
+func (r *rocksDBBatch) GetProto(key EncodedKey, msg proto.Message) (
 	ok bool, keyBytes, valBytes int64, err error) {
 	if len(key) == 0 {
 		err = emptyKeyError()
@@ -624,7 +624,7 @@ func (r *rocksDBBatch) GetProto(key roachpb.EncodedKey, msg proto.Message) (
 	return
 }
 
-func (r *rocksDBBatch) Iterate(start, end roachpb.EncodedKey, f func(roachpb.RawKeyValue) (bool, error)) error {
+func (r *rocksDBBatch) Iterate(start, end EncodedKey, f func(RawKeyValue) (bool, error)) error {
 	if bytes.Compare(start, end) >= 0 {
 		return nil
 	}
@@ -639,7 +639,7 @@ func (r *rocksDBBatch) Iterate(start, end roachpb.EncodedKey, f func(roachpb.Raw
 		if !it.Key().Less(end) {
 			break
 		}
-		if done, err := f(roachpb.RawKeyValue{Key: k, Value: it.Value()}); done || err != nil {
+		if done, err := f(RawKeyValue{Key: k, Value: it.Value()}); done || err != nil {
 			return err
 		}
 	}
@@ -647,7 +647,7 @@ func (r *rocksDBBatch) Iterate(start, end roachpb.EncodedKey, f func(roachpb.Raw
 	return it.Error()
 }
 
-func (r *rocksDBBatch) Clear(key roachpb.EncodedKey) error {
+func (r *rocksDBBatch) Clear(key EncodedKey) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -663,7 +663,7 @@ func (r *rocksDBBatch) SetGCTimeouts(minTxnTS, minRCacheTS int64) {
 	// no-op
 }
 
-func (r *rocksDBBatch) ApproximateSize(start, end roachpb.EncodedKey) (uint64, error) {
+func (r *rocksDBBatch) ApproximateSize(start, end EncodedKey) (uint64, error) {
 	return r.parent.ApproximateSize(start, end)
 }
 
@@ -763,7 +763,7 @@ func (r *rocksDBIterator) SeekReverse(key []byte) {
 		}
 		// Make sure the current key is <= the provided key.
 		curKey := r.Key()
-		if roachpb.EncodedKey(key).Less(curKey) {
+		if EncodedKey(key).Less(curKey) {
 			r.Prev()
 		}
 	}
@@ -773,7 +773,7 @@ func (r *rocksDBIterator) Prev() {
 	C.DBIterPrev(r.iter)
 }
 
-func (r *rocksDBIterator) Key() roachpb.EncodedKey {
+func (r *rocksDBIterator) Key() EncodedKey {
 	// The data returned by rocksdb_iter_{key,value} is not meant to be
 	// freed by the client. It is a direct reference to the data managed
 	// by the iterator, so it is copied instead of freed.
