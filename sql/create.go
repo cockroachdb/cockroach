@@ -20,11 +20,9 @@ package sql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/gogo/protobuf/proto"
 )
 
 // CreateDatabase creates a database.
@@ -70,36 +68,23 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 		return nil, err
 	}
 
-	indexDesc := IndexDescriptor{
-		Name:             string(n.Name),
-		Unique:           n.Unique,
-		ColumnNames:      n.Columns,
-		StoreColumnNames: n.Storing,
+	mutation := TableDescriptor_Mutation{
+		Descriptor_: &TableDescriptor_Mutation_AddIndex{
+			AddIndex: &IndexDescriptor{
+				Name:             string(n.Name),
+				Unique:           n.Unique,
+				ColumnNames:      n.Columns,
+				StoreColumnNames: n.Storing,
+			},
+		},
 	}
 
-	newTableDesc := proto.Clone(tableDesc).(*TableDescriptor)
-
-	if err := newTableDesc.AddIndex(indexDesc, false); err != nil {
+	if err := tableDesc.appendMutation(mutation, &p.session); err != nil {
 		return nil, err
 	}
 
-	if err := newTableDesc.AllocateIDs(); err != nil {
+	if err := tableDesc.put(p); err != nil {
 		return nil, err
-	}
-
-	b := client.Batch{}
-	if err := p.backfillBatch(&b, n.Table, tableDesc, newTableDesc); err != nil {
-		return nil, err
-	}
-
-	// TODO(pmattis): This is a hack. Remove when schema change operations work
-	// properly.
-	p.hackNoteSchemaChange(newTableDesc)
-
-	b.Put(MakeDescMetadataKey(newTableDesc.GetID()), wrapDescriptor(newTableDesc))
-
-	if err := p.txn.Run(&b); err != nil {
-		return nil, convertBatchError(newTableDesc, b, err)
 	}
 
 	return &valuesNode{}, nil

@@ -19,8 +19,10 @@ package server
 
 import (
 	"container/list"
+	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -49,7 +51,8 @@ const (
 	gossipInterval = 1 * time.Minute
 	// publishStatusInterval is the interval for publishing periodic statistics
 	// from stores to the internal event feed.
-	publishStatusInterval = 10 * time.Second
+	publishStatusInterval     = 10 * time.Second
+	checkTableLeadersInterval = 50 * time.Millisecond
 )
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -69,6 +72,9 @@ type Node struct {
 	feed       status.NodeEventFeed   // Feed publisher for local events
 	status     *status.NodeStatusMonitor
 	startedAt  int64
+	mu         sync.Mutex
+	// mu protects tableLeaders
+	tableLeaders map[string]tableLeader
 }
 
 // allocateNodeID increments the node id generator key to allocate
@@ -162,9 +168,10 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 // NewNode returns a new instance of Node.
 func NewNode(ctx storage.StoreContext) *Node {
 	return &Node{
-		ctx:     ctx,
-		status:  status.NewNodeStatusMonitor(),
-		lSender: kv.NewLocalSender(),
+		ctx:          ctx,
+		status:       status.NewNodeStatusMonitor(),
+		lSender:      kv.NewLocalSender(),
+		tableLeaders: make(map[string]tableLeader),
 	}
 }
 
@@ -404,6 +411,7 @@ func (n *Node) startGossip(stopper *stop.Stopper) {
 			select {
 			case <-ticker.C:
 				n.gossipStores()
+
 			case <-stopper.ShouldStop():
 				return
 			}
@@ -419,6 +427,73 @@ func (n *Node) gossipStores() {
 	}); err != nil {
 		panic(err)
 	}
+}
+
+// periodicallyCheckTableLeaders loops on a periodic ticker to attempt to
+// elect the local node as a table leader. It exits as soon as there
+// are no more registered keys. It's safe for more than
+// one of these routines to run concurrently.
+func (n *Node) periodicallyCheckTableLeaders(stopper *stop.Stopper) {
+	stopper.RunWorker(func() {
+		ticker := time.NewTicker(checkTableLeadersInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if n.checkTableLeaders(stopper) {
+					// No more registered keys.
+					return
+				}
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
+}
+
+// checkTableLeaders checks to see if any of the tables have
+// changed node leadership, and sends notifications for all leader
+// changes. It returns true when there are no registered table leaders.
+func (n *Node) checkTableLeaders(stopper *stop.Stopper) bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	for i, tl := range n.tableLeaders {
+		if ok := n.hasTableLeaderChanged(tl); ok {
+			tl.isLeader = !tl.isLeader
+			n.tableLeaders[i] = tl
+			notifyTableLeader(stopper, tl)
+		}
+	}
+	return len(n.tableLeaders) == 0
+}
+
+var errFound = errors.New("found replica")
+
+// hasTableLeaderChanged checks to see if the leader state
+// for the key has changed.
+func (n *Node) hasTableLeaderChanged(tl tableLeader) bool {
+	var isLeader bool
+	if err := n.lSender.VisitStores(func(s *storage.Store) error {
+		if rng := s.LookupReplica(keys.Addr(tl.key), nil); rng != nil {
+			if rng.IsLeader() {
+				isLeader = true
+			}
+			return errFound
+		}
+		return nil
+	}); err != nil && err != errFound {
+		panic(err)
+	}
+	return tl.isLeader != isLeader
+}
+
+func notifyTableLeader(s *stop.Stopper, tl tableLeader) {
+	s.RunAsyncTask(func() {
+		if log.V(2) {
+			log.Infof("about to notify node of leader(%v) for key: %v", tl.isLeader, tl.key)
+		}
+		tl.report <- sql.TableLeaderNotification{Key: tl.key, IsLeader: tl.isLeader}
+	})
 }
 
 // startPublishStatuses starts a loop which periodically instructs each store to
@@ -472,4 +547,42 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 	n.feed.CallComplete(*ba, pErr)
 	br.Error = pErr
 	return br, nil
+}
+
+type tableLeader struct {
+	// The table's primary key prefix.
+	key      roachpb.Key
+	isLeader bool
+	report   chan<- sql.TableLeaderNotification
+}
+
+// RegisterNotifyTableLeader registers a key for table leader
+// notifications. A node is a table leader if the node is a replica
+// leader for the range containing the prefix key for the table.
+func (n *Node) RegisterNotifyTableLeader(key roachpb.Key, s *stop.Stopper, report chan<- sql.TableLeaderNotification) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	tl := tableLeader{key: key, isLeader: false, report: report}
+	keyString := string(key)
+	n.tableLeaders[keyString] = tl
+	if ok := n.hasTableLeaderChanged(tl); ok {
+		tl.isLeader = true
+		n.tableLeaders[keyString] = tl
+		notifyTableLeader(s, tl)
+	}
+	// Start periodic table leader checks for all registered keys.
+	if len(n.tableLeaders) == 1 {
+		n.periodicallyCheckTableLeaders(s)
+	}
+}
+
+// UnregisterNotifyTableLeader drops a prior registration.
+func (n *Node) UnregisterNotifyTableLeader(key roachpb.Key) {
+	keyString := string(key)
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if _, ok := n.tableLeaders[keyString]; !ok {
+		panic(fmt.Sprintf("trying to unregister a key that is not being followed: %s", keyString))
+	}
+	delete(n.tableLeaders, keyString)
 }
