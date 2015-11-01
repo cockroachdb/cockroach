@@ -67,8 +67,8 @@ func createRangeData(r *Replica, t *testing.T) []roachpb.EncodedKey {
 		{keys.ResponseCacheKey(r.Desc().RangeID, &roachpb.ClientCmdID{WallTime: 1, Random: 1}), ts0},
 		{keys.ResponseCacheKey(r.Desc().RangeID, &roachpb.ClientCmdID{WallTime: 2, Random: 2}), ts0},
 		{keys.RaftHardStateKey(r.Desc().RangeID), ts0},
-		{keys.RaftLogKey(r.Desc().RangeID, 2), ts0},
 		{keys.RaftLogKey(r.Desc().RangeID, 1), ts0},
+		{keys.RaftLogKey(r.Desc().RangeID, 2), ts0},
 		{keys.RangeGCMetadataKey(r.Desc().RangeID), ts0},
 		{keys.RangeLastVerificationTimestampKey(r.Desc().RangeID), ts0},
 		{keys.RangeStatsKey(r.Desc().RangeID), ts0},
@@ -132,7 +132,6 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 // ranges still contain the expected data.
 func TestReplicaDataIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(tschottdorf): long broken; relies on Range not writing on creation, but Raft elections write state")
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
 	}
@@ -146,7 +145,6 @@ func TestReplicaDataIterator(t *testing.T) {
 	if err := tc.rng.setDesc(&newDesc); err != nil {
 		t.Fatal(err)
 	}
-
 	// Create two more ranges, one before the test range and one after.
 	preRng := createRange(tc.store, 2, roachpb.RKeyMin, roachpb.RKey("b"))
 	if err := tc.store.AddReplicaTest(preRng); err != nil {
@@ -196,7 +194,18 @@ func TestReplicaDataIterator(t *testing.T) {
 	iter = newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine())
 	defer iter.Close()
 	if iter.Valid() {
-		t.Errorf("expected empty iteration; got first key %q", iter.Key())
+		// If the range is destroyed, only a tombstone key will be there.
+		k1, _, _, err := engine.MVCCDecodeKey(iter.Key())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		iter.Next()
+		if bytes.Compare(k1, keys.RaftTombstoneKey(tc.rng.Desc().RangeID)) != 0 || iter.Valid() {
+			t.Errorf("expected only a tombstone key")
+		}
+	} else {
+		t.Errorf("expected a tombstone key, but got an empty iteration")
 	}
 
 	// Verify the keys in pre & post ranges.
