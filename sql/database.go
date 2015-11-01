@@ -62,6 +62,10 @@ func (p *planner) getCachedDatabaseDesc(name string) (*DatabaseDescriptor, error
 		return &SystemDB, nil
 	}
 
+	if p.systemConfig == nil {
+		return nil, fmt.Errorf("database %q does not exist in system cache", name)
+	}
+
 	nameKey := databaseKey{name}
 	nameVal := p.systemConfig.GetValue(nameKey.Key())
 	if nameVal == nil {

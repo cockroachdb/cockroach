@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/gogo/protobuf/proto"
 )
 
 // ID, ColumnID, and IndexID are all uint32, but are each given a
@@ -397,6 +398,92 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 		}
 	}
 	return nil, util.Errorf("index-id \"%d\" does not exist", id)
+}
+
+func (desc *TableDescriptor) applyMutation(mutation TableDescriptor_Mutation) error {
+	switch m := mutation.Descriptor_.(type) {
+	case *TableDescriptor_Mutation_AddIndex:
+		if err := desc.AddIndex(*m.AddIndex, false); err != nil {
+			return err
+		}
+		if err := desc.AllocateIDs(); err != nil {
+			return err
+		}
+
+	case *TableDescriptor_Mutation_AddColumn:
+		desc.AddColumn(*m.AddColumn)
+		if err := desc.AllocateIDs(); err != nil {
+			return err
+		}
+
+	case *TableDescriptor_Mutation_DropIndex:
+		for i := range desc.Indexes {
+			if desc.Indexes[i].ID == m.DropIndex.ID {
+				desc.Indexes = append(desc.Indexes[:i], desc.Indexes[i+1:]...)
+				return nil
+			}
+		}
+		return util.Errorf("index %s not found in %s", m.DropIndex, desc)
+
+	case *TableDescriptor_Mutation_DropColumn:
+		for i := range desc.Columns {
+			if desc.Columns[i].ID == m.DropColumn.ID {
+				desc.Columns = append(desc.Columns[:i], desc.Columns[i+1:]...)
+				return nil
+			}
+		}
+		return util.Errorf("column %s not found in %s", m.DropColumn, desc)
+
+	default:
+		return util.Errorf("unknown mutation type: %v", m)
+	}
+	return nil
+}
+
+// Checks to see if this is a valid mutation.
+func (desc *TableDescriptor) validMutation(mutation TableDescriptor_Mutation) error {
+	tableDesc := proto.Clone(desc).(*TableDescriptor)
+	for _, m := range desc.Mutations {
+		if err := tableDesc.applyMutation(*m); err != nil {
+			return err
+		}
+	}
+	if err := tableDesc.applyMutation(mutation); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Append the mutation to the table descriptor. Check that the application of the
+// mutation will not lead to some obvious errors. Note that a mutation can be in
+// conflict with the table data, and that can only be rejected when applying the
+// mutation; e.g. adding a unique constraint on a table column that is not unique.
+func (desc *TableDescriptor) appendMutation(mutation TableDescriptor_Mutation, session *Session) error {
+	if err := desc.validMutation(mutation); err != nil {
+		return err
+	}
+	// Fill in the mutation ID
+	m := session.Txn.Mutation
+	if m.isSet() {
+		if m.Name == desc.Name && m.ParentID == desc.ParentID {
+			mutation.ID = m.ID
+		} else {
+			return fmt.Errorf("schema changes on more than one table in the same transaction is disallowed")
+		}
+	} else {
+		mutation.ID = desc.NextMutationID
+		desc.NextMutationID++
+		session.Txn.Mutation = Session_Transaction_TableMutation{Name: desc.Name, ParentID: desc.ParentID, ID: mutation.ID}
+	}
+	desc.Mutations = append(desc.Mutations, &mutation)
+	return nil
+}
+
+func (desc *TableDescriptor) put(p *planner) error {
+	if err := p.txn.Put(MakeDescMetadataKey(desc.ID), wrapDescriptor(desc)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // SQLString returns the SQL string corresponding to the type.

@@ -1279,12 +1279,20 @@ func (r *Replica) maybeGossipSystemConfig() {
 	r.maybeGossipSystemConfigLocked()
 }
 
+// IsLeader returns true if the node has a leader lease on the replica.
+func (r *Replica) IsLeader() bool {
+	if lease := r.getLease(); lease.OwnedBy(r.store.StoreID()) && lease.Covers(r.store.Clock().Now()) {
+		return true
+	}
+	return false
+}
+
 func (r *Replica) maybeGossipSystemConfigLocked() {
 	if r.store.Gossip() == nil || !r.isInitialized() {
 		return
 	}
 
-	if lease := r.getLease(); !lease.OwnedBy(r.store.StoreID()) || !lease.Covers(r.store.Clock().Now()) {
+	if !r.IsLeader() {
 		// Do not gossip when a leader lease is not held.
 		return
 	}

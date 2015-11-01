@@ -36,3 +36,7 @@ func (s Session) getLocation() (*time.Location, error) {
 		return nil, util.Errorf("unhandled timezone variant type %T", t)
 	}
 }
+
+func (m Session_Transaction_TableMutation) isSet() bool {
+	return m.Name != ""
+}
