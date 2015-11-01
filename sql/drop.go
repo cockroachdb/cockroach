@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/gogo/protobuf/proto"
 )
 
 // DropDatabase drops a database.
@@ -97,7 +96,6 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 //   Notes: postgres allows only the index owner to DROP an index.
 //          mysql requires the INDEX privilege on the table.
 func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
-	b := client.Batch{}
 	for _, indexQualifiedName := range n.Names {
 		if err := indexQualifiedName.NormalizeTableName(p.session.Database); err != nil {
 			return nil, err
@@ -112,10 +110,8 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 			return nil, err
 		}
 
-		newTableDesc := proto.Clone(tableDesc).(*TableDescriptor)
-
 		idxName := indexQualifiedName.Index()
-		i, err := newTableDesc.FindIndexByName(idxName)
+		i, err := tableDesc.FindIndexByName(idxName)
 		if err != nil {
 			if n.IfExists {
 				// Noop.
@@ -124,27 +120,30 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 			// Index does not exist, but we want it to: error out.
 			return nil, err
 		}
-		newTableDesc.Indexes = append(newTableDesc.Indexes[:i], newTableDesc.Indexes[i+1:]...)
-
-		if err := p.backfillBatch(&b, indexQualifiedName, tableDesc, newTableDesc); err != nil {
+		idx := tableDesc.Indexes[i]
+		mutation := TableDescriptor_Mutation{
+			Descriptor_: &TableDescriptor_Mutation_DropIndex{
+				DropIndex: &idx,
+			},
+		}
+		if err := tableDesc.appendMutation(mutation, &p.session); err != nil {
 			return nil, err
 		}
 
-		if err := newTableDesc.Validate(); err != nil {
+		if err := tableDesc.put(p); err != nil {
 			return nil, err
 		}
-
-		descKey := MakeDescMetadataKey(newTableDesc.GetID())
-		b.Put(descKey, wrapDescriptor(newTableDesc))
-	}
-
-	if err := p.txn.Run(&b); err != nil {
-		return nil, err
 	}
 
 	return &valuesNode{}, nil
 }
 
+// TODO(vivek): Drop a table in a staged manner to allow safe leases
+// on the table. This will involve marking the table as deleted,
+// converting all operations to not run on deleted tables, and then
+// GC-ing the table once all leases have expired. The same should be
+// done for dropping a database.
+//
 // DropTable drops a table.
 // Privileges: DROP on table.
 //   Notes: postgres allows only the table owner to DROP a table.

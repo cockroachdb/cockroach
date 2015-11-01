@@ -151,6 +151,10 @@ type TableDescriptor struct {
 	// next_index_id is used to ensure that deleted index ids are not reused.
 	NextIndexID IndexID              `protobuf:"varint,11,opt,name=next_index_id,casttype=IndexID" json:"next_index_id"`
 	Privileges  *PrivilegeDescriptor `protobuf:"bytes,12,opt,name=privileges" json:"privileges,omitempty"`
+	// A queue of mutations to be processed in FIFO order.
+	Mutations []*TableDescriptor_Mutation `protobuf:"bytes,13,rep,name=mutations" json:"mutations,omitempty"`
+	// id for the next group of mutations created in the same transaction.
+	NextMutationID uint32 `protobuf:"varint,14,opt,name=next_mutation_id" json:"next_mutation_id"`
 }
 
 func (m *TableDescriptor) Reset()         { *m = TableDescriptor{} }
@@ -239,6 +243,174 @@ func (m *TableDescriptor) GetPrivileges() *PrivilegeDescriptor {
 		return m.Privileges
 	}
 	return nil
+}
+
+func (m *TableDescriptor) GetMutations() []*TableDescriptor_Mutation {
+	if m != nil {
+		return m.Mutations
+	}
+	return nil
+}
+
+func (m *TableDescriptor) GetNextMutationID() uint32 {
+	if m != nil {
+		return m.NextMutationID
+	}
+	return 0
+}
+
+type TableDescriptor_Mutation struct {
+	// Types that are valid to be assigned to Descriptor_:
+	//	*TableDescriptor_Mutation_AddIndex
+	//	*TableDescriptor_Mutation_DropIndex
+	//	*TableDescriptor_Mutation_AddColumn
+	//	*TableDescriptor_Mutation_DropColumn
+	Descriptor_ isTableDescriptor_Mutation_Descriptor_ `protobuf_oneof:"descriptor"`
+	ID          uint32                                 `protobuf:"varint,5,opt,name=id" json:"id"`
+}
+
+func (m *TableDescriptor_Mutation) Reset()         { *m = TableDescriptor_Mutation{} }
+func (m *TableDescriptor_Mutation) String() string { return proto.CompactTextString(m) }
+func (*TableDescriptor_Mutation) ProtoMessage()    {}
+
+type isTableDescriptor_Mutation_Descriptor_ interface {
+	isTableDescriptor_Mutation_Descriptor_()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type TableDescriptor_Mutation_AddIndex struct {
+	AddIndex *IndexDescriptor `protobuf:"bytes,1,opt,name=add_index,oneof"`
+}
+type TableDescriptor_Mutation_DropIndex struct {
+	DropIndex *IndexDescriptor `protobuf:"bytes,2,opt,name=drop_index,oneof"`
+}
+type TableDescriptor_Mutation_AddColumn struct {
+	AddColumn *ColumnDescriptor `protobuf:"bytes,3,opt,name=add_column,oneof"`
+}
+type TableDescriptor_Mutation_DropColumn struct {
+	DropColumn *ColumnDescriptor `protobuf:"bytes,4,opt,name=drop_column,oneof"`
+}
+
+func (*TableDescriptor_Mutation_AddIndex) isTableDescriptor_Mutation_Descriptor_()   {}
+func (*TableDescriptor_Mutation_DropIndex) isTableDescriptor_Mutation_Descriptor_()  {}
+func (*TableDescriptor_Mutation_AddColumn) isTableDescriptor_Mutation_Descriptor_()  {}
+func (*TableDescriptor_Mutation_DropColumn) isTableDescriptor_Mutation_Descriptor_() {}
+
+func (m *TableDescriptor_Mutation) GetDescriptor_() isTableDescriptor_Mutation_Descriptor_ {
+	if m != nil {
+		return m.Descriptor_
+	}
+	return nil
+}
+
+func (m *TableDescriptor_Mutation) GetAddIndex() *IndexDescriptor {
+	if x, ok := m.GetDescriptor_().(*TableDescriptor_Mutation_AddIndex); ok {
+		return x.AddIndex
+	}
+	return nil
+}
+
+func (m *TableDescriptor_Mutation) GetDropIndex() *IndexDescriptor {
+	if x, ok := m.GetDescriptor_().(*TableDescriptor_Mutation_DropIndex); ok {
+		return x.DropIndex
+	}
+	return nil
+}
+
+func (m *TableDescriptor_Mutation) GetAddColumn() *ColumnDescriptor {
+	if x, ok := m.GetDescriptor_().(*TableDescriptor_Mutation_AddColumn); ok {
+		return x.AddColumn
+	}
+	return nil
+}
+
+func (m *TableDescriptor_Mutation) GetDropColumn() *ColumnDescriptor {
+	if x, ok := m.GetDescriptor_().(*TableDescriptor_Mutation_DropColumn); ok {
+		return x.DropColumn
+	}
+	return nil
+}
+
+// XXX_OneofFuncs is for the internal use of the proto package.
+func (*TableDescriptor_Mutation) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), []interface{}) {
+	return _TableDescriptor_Mutation_OneofMarshaler, _TableDescriptor_Mutation_OneofUnmarshaler, []interface{}{
+		(*TableDescriptor_Mutation_AddIndex)(nil),
+		(*TableDescriptor_Mutation_DropIndex)(nil),
+		(*TableDescriptor_Mutation_AddColumn)(nil),
+		(*TableDescriptor_Mutation_DropColumn)(nil),
+	}
+}
+
+func _TableDescriptor_Mutation_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
+	m := msg.(*TableDescriptor_Mutation)
+	// descriptor
+	switch x := m.Descriptor_.(type) {
+	case *TableDescriptor_Mutation_AddIndex:
+		_ = b.EncodeVarint(1<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.AddIndex); err != nil {
+			return err
+		}
+	case *TableDescriptor_Mutation_DropIndex:
+		_ = b.EncodeVarint(2<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.DropIndex); err != nil {
+			return err
+		}
+	case *TableDescriptor_Mutation_AddColumn:
+		_ = b.EncodeVarint(3<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.AddColumn); err != nil {
+			return err
+		}
+	case *TableDescriptor_Mutation_DropColumn:
+		_ = b.EncodeVarint(4<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.DropColumn); err != nil {
+			return err
+		}
+	case nil:
+	default:
+		return fmt.Errorf("TableDescriptor_Mutation.Descriptor_ has unexpected type %T", x)
+	}
+	return nil
+}
+
+func _TableDescriptor_Mutation_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+	m := msg.(*TableDescriptor_Mutation)
+	switch tag {
+	case 1: // descriptor.add_index
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(IndexDescriptor)
+		err := b.DecodeMessage(msg)
+		m.Descriptor_ = &TableDescriptor_Mutation_AddIndex{msg}
+		return true, err
+	case 2: // descriptor.drop_index
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(IndexDescriptor)
+		err := b.DecodeMessage(msg)
+		m.Descriptor_ = &TableDescriptor_Mutation_DropIndex{msg}
+		return true, err
+	case 3: // descriptor.add_column
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(ColumnDescriptor)
+		err := b.DecodeMessage(msg)
+		m.Descriptor_ = &TableDescriptor_Mutation_AddColumn{msg}
+		return true, err
+	case 4: // descriptor.drop_column
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(ColumnDescriptor)
+		err := b.DecodeMessage(msg)
+		m.Descriptor_ = &TableDescriptor_Mutation_DropColumn{msg}
+		return true, err
+	default:
+		return false, nil
+	}
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
@@ -620,9 +792,108 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 		}
 		i += n4
 	}
+	if len(m.Mutations) > 0 {
+		for _, msg := range m.Mutations {
+			data[i] = 0x6a
+			i++
+			i = encodeVarintStructured(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	data[i] = 0x70
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.NextMutationID))
 	return i, nil
 }
 
+func (m *TableDescriptor_Mutation) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TableDescriptor_Mutation) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Descriptor_ != nil {
+		nn5, err := m.Descriptor_.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += nn5
+	}
+	data[i] = 0x28
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.ID))
+	return i, nil
+}
+
+func (m *TableDescriptor_Mutation_AddIndex) MarshalTo(data []byte) (int, error) {
+	i := 0
+	if m.AddIndex != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.AddIndex.Size()))
+		n6, err := m.AddIndex.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n6
+	}
+	return i, nil
+}
+func (m *TableDescriptor_Mutation_DropIndex) MarshalTo(data []byte) (int, error) {
+	i := 0
+	if m.DropIndex != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.DropIndex.Size()))
+		n7, err := m.DropIndex.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n7
+	}
+	return i, nil
+}
+func (m *TableDescriptor_Mutation_AddColumn) MarshalTo(data []byte) (int, error) {
+	i := 0
+	if m.AddColumn != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.AddColumn.Size()))
+		n8, err := m.AddColumn.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n8
+	}
+	return i, nil
+}
+func (m *TableDescriptor_Mutation_DropColumn) MarshalTo(data []byte) (int, error) {
+	i := 0
+	if m.DropColumn != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.DropColumn.Size()))
+		n9, err := m.DropColumn.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n9
+	}
+	return i, nil
+}
 func (m *DatabaseDescriptor) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -649,11 +920,11 @@ func (m *DatabaseDescriptor) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintStructured(data, i, uint64(m.Privileges.Size()))
-		n5, err := m.Privileges.MarshalTo(data[i:])
+		n10, err := m.Privileges.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n5
+		i += n10
 	}
 	return i, nil
 }
@@ -674,11 +945,11 @@ func (m *Descriptor) MarshalTo(data []byte) (int, error) {
 	var l int
 	_ = l
 	if m.Union != nil {
-		nn6, err := m.Union.MarshalTo(data[i:])
+		nn11, err := m.Union.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += nn6
+		i += nn11
 	}
 	return i, nil
 }
@@ -689,11 +960,11 @@ func (m *Descriptor_Table) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintStructured(data, i, uint64(m.Table.Size()))
-		n7, err := m.Table.MarshalTo(data[i:])
+		n12, err := m.Table.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n7
+		i += n12
 	}
 	return i, nil
 }
@@ -703,11 +974,11 @@ func (m *Descriptor_Database) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x12
 		i++
 		i = encodeVarintStructured(data, i, uint64(m.Database.Size()))
-		n8, err := m.Database.MarshalTo(data[i:])
+		n13, err := m.Database.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n8
+		i += n13
 	}
 	return i, nil
 }
@@ -827,9 +1098,62 @@ func (m *TableDescriptor) Size() (n int) {
 		l = m.Privileges.Size()
 		n += 1 + l + sovStructured(uint64(l))
 	}
+	if len(m.Mutations) > 0 {
+		for _, e := range m.Mutations {
+			l = e.Size()
+			n += 1 + l + sovStructured(uint64(l))
+		}
+	}
+	n += 1 + sovStructured(uint64(m.NextMutationID))
 	return n
 }
 
+func (m *TableDescriptor_Mutation) Size() (n int) {
+	var l int
+	_ = l
+	if m.Descriptor_ != nil {
+		n += m.Descriptor_.Size()
+	}
+	n += 1 + sovStructured(uint64(m.ID))
+	return n
+}
+
+func (m *TableDescriptor_Mutation_AddIndex) Size() (n int) {
+	var l int
+	_ = l
+	if m.AddIndex != nil {
+		l = m.AddIndex.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	return n
+}
+func (m *TableDescriptor_Mutation_DropIndex) Size() (n int) {
+	var l int
+	_ = l
+	if m.DropIndex != nil {
+		l = m.DropIndex.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	return n
+}
+func (m *TableDescriptor_Mutation_AddColumn) Size() (n int) {
+	var l int
+	_ = l
+	if m.AddColumn != nil {
+		l = m.AddColumn.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	return n
+}
+func (m *TableDescriptor_Mutation_DropColumn) Size() (n int) {
+	var l int
+	_ = l
+	if m.DropColumn != nil {
+		l = m.DropColumn.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	return n
+}
 func (m *DatabaseDescriptor) Size() (n int) {
 	var l int
 	_ = l
@@ -1722,6 +2046,253 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 13:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Mutations", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Mutations = append(m.Mutations, &TableDescriptor_Mutation{})
+			if err := m.Mutations[len(m.Mutations)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 14:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NextMutationID", wireType)
+			}
+			m.NextMutationID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.NextMutationID |= (uint32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipStructured(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthStructured
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TableDescriptor_Mutation) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowStructured
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Mutation: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Mutation: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AddIndex", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &IndexDescriptor{}
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Descriptor_ = &TableDescriptor_Mutation_AddIndex{v}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DropIndex", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &IndexDescriptor{}
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Descriptor_ = &TableDescriptor_Mutation_DropIndex{v}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AddColumn", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &ColumnDescriptor{}
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Descriptor_ = &TableDescriptor_Mutation_AddColumn{v}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DropColumn", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &ColumnDescriptor{}
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Descriptor_ = &TableDescriptor_Mutation_DropColumn{v}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+			}
+			m.ID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.ID |= (uint32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipStructured(data[iNdEx:])

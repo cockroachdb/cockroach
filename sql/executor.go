@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -53,11 +52,11 @@ type Executor struct {
 
 // newExecutor creates an Executor and registers a callback on the
 // system config.
-func newExecutor(db client.DB, gossip *gossip.Gossip, clock *hlc.Clock) *Executor {
+func newExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager) *Executor {
 	exec := &Executor{
 		db:       db,
 		reCache:  parser.NewRegexpCache(512),
-		leaseMgr: NewLeaseManager(0, db, clock),
+		leaseMgr: leaseMgr,
 	}
 	gossip.RegisterSystemConfigCallback(exec.updateSystemConfig)
 	return exec
@@ -103,7 +102,7 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 		return args.CreateReply(), http.StatusBadRequest, err
 	}
 	// Resume a pending transaction if present.
-	if planMaker.session.Txn != nil {
+	if planMaker.session.Txn.Timestamp.Sec != 0 {
 		txn := client.NewTxn(e.db)
 		txn.Proto = planMaker.session.Txn.Txn
 		if planMaker.session.MutatesSystemDB {
@@ -120,10 +119,11 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 	// Send back the session state even if there were application-level errors.
 	// Add transaction to session state.
 	if planMaker.txn != nil {
-		planMaker.session.Txn = &Session_Transaction{Txn: planMaker.txn.Proto, Timestamp: driver.Timestamp(planMaker.evalCtx.TxnTimestamp.Time)}
+		planMaker.session.Txn.Txn = planMaker.txn.Proto
+		planMaker.session.Txn.Timestamp = driver.Timestamp(planMaker.evalCtx.TxnTimestamp.Time)
 		planMaker.session.MutatesSystemDB = planMaker.txn.SystemDBTrigger()
 	} else {
-		planMaker.session.Txn = nil
+		planMaker.session.Txn = Session_Transaction{}
 		planMaker.session.MutatesSystemDB = false
 	}
 	bytes, err := proto.Marshal(&planMaker.session)
@@ -152,13 +152,14 @@ func (e *Executor) execStmts(sql string, params parameters, planMaker *planner) 
 			result = makeResultFromError(planMaker, err)
 		}
 		resp.Results = append(resp.Results, result)
-		// TODO(pmattis): Is this the correct time to be releasing leases acquired
-		// during execution of the statement?
-		//
-		// TODO(pmattis): Need to record the leases used by a transaction within
-		// the transaction state and restore it when the transaction is restored.
-		planMaker.releaseLeases(e.db)
 	}
+	// TODO(pmattis): Is this the correct time to be releasing leases acquired
+	// during execution of the statement?
+	//
+	// TODO(pmattis): Need to record the leases used by a transaction within
+	// the transaction state and restore it when the transaction is restored.
+	planMaker.releaseLeases(e.db)
+
 	return resp
 }
 
@@ -286,6 +287,9 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 	// If there is a pending transaction.
 	if planMaker.txn != nil {
 		err := f(time.Now())
+		if _, ok := stmt.(*parser.CommitTransaction); ok && err == nil {
+			e.maybeWaitOnTableMutation(planMaker)
+		}
 		return result, err
 	}
 
@@ -298,7 +302,41 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 		planMaker.resetTxn()
 		return err
 	})
+	if err == nil {
+		e.maybeWaitOnTableMutation(planMaker)
+	}
 	return result, err
+}
+
+func (e *Executor) maybeWaitOnTableMutation(planMaker *planner) {
+	// Check if the session transaction has a table schema mutation scheduled.
+	m := planMaker.session.Txn.Mutation
+	if m.Name != "" {
+		for {
+			// Wait
+			time.Sleep(100 * time.Millisecond)
+			tableDesc := &TableDescriptor{}
+			if err := e.db.Txn(func(txn *client.Txn) error {
+				timestamp := time.Now()
+				planMaker.setTxn(txn, timestamp)
+				// Read the table descriptor from the database
+				err := planMaker.getDescriptor(tableKey{m.ParentID, m.Name}, tableDesc)
+				planMaker.resetTxn()
+				return err
+			}); err != nil {
+				return
+			}
+			done := true
+			for _, mutation := range tableDesc.Mutations {
+				if m.ID == mutation.ID {
+					done = false
+				}
+			}
+			if done {
+				break
+			}
+		}
+	}
 }
 
 // If we hit an error and there is a pending transaction, rollback
