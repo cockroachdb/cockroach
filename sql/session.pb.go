@@ -23,7 +23,7 @@ type Session struct {
 	Database string `protobuf:"bytes,1,opt,name=database" json:"database"`
 	Syntax   int32  `protobuf:"varint,2,opt,name=syntax" json:"syntax"`
 	// Open transaction.
-	Txn *Session_Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
+	Txn Session_Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn"`
 	// Indicates that the above transaction is mutating keys in the
 	// SystemDB span.
 	MutatesSystemDB bool `protobuf:"varint,4,opt,name=mutates_system_db" json:"mutates_system_db"`
@@ -126,11 +126,24 @@ type Session_Transaction struct {
 	// Timestamp to be used by SQL in the above transaction. Note: this is not the
 	// transaction timestamp in roachpb.Transaction above.
 	Timestamp cockroach_sql_driver.Datum_Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	Mutation  Session_Transaction_TableMutation    `protobuf:"bytes,3,opt,name=mutation" json:"mutation"`
 }
 
 func (m *Session_Transaction) Reset()         { *m = Session_Transaction{} }
 func (m *Session_Transaction) String() string { return proto.CompactTextString(m) }
 func (*Session_Transaction) ProtoMessage()    {}
+
+type Session_Transaction_TableMutation struct {
+	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
+	// ID of the parent database.
+	ParentID ID `protobuf:"varint,2,opt,name=parent_id,casttype=ID" json:"parent_id"`
+	// Mutation id.
+	ID uint32 `protobuf:"varint,3,opt,name=id" json:"id"`
+}
+
+func (m *Session_Transaction_TableMutation) Reset()         { *m = Session_Transaction_TableMutation{} }
+func (m *Session_Transaction_TableMutation) String() string { return proto.CompactTextString(m) }
+func (*Session_Transaction_TableMutation) ProtoMessage()    {}
 
 func (m *Session) Marshal() (data []byte, err error) {
 	size := m.Size()
@@ -154,16 +167,14 @@ func (m *Session) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintSession(data, i, uint64(m.Syntax))
-	if m.Txn != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintSession(data, i, uint64(m.Txn.Size()))
-		n1, err := m.Txn.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n1
+	data[i] = 0x1a
+	i++
+	i = encodeVarintSession(data, i, uint64(m.Txn.Size()))
+	n1, err := m.Txn.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
 	}
+	i += n1
 	data[i] = 0x20
 	i++
 	if m.MutatesSystemDB {
@@ -228,6 +239,42 @@ func (m *Session_Transaction) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n4
+	data[i] = 0x1a
+	i++
+	i = encodeVarintSession(data, i, uint64(m.Mutation.Size()))
+	n5, err := m.Mutation.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n5
+	return i, nil
+}
+
+func (m *Session_Transaction_TableMutation) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Session_Transaction_TableMutation) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintSession(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	data[i] = 0x10
+	i++
+	i = encodeVarintSession(data, i, uint64(m.ParentID))
+	data[i] = 0x18
+	i++
+	i = encodeVarintSession(data, i, uint64(m.ID))
 	return i, nil
 }
 
@@ -264,10 +311,8 @@ func (m *Session) Size() (n int) {
 	l = len(m.Database)
 	n += 1 + l + sovSession(uint64(l))
 	n += 1 + sovSession(uint64(m.Syntax))
-	if m.Txn != nil {
-		l = m.Txn.Size()
-		n += 1 + l + sovSession(uint64(l))
-	}
+	l = m.Txn.Size()
+	n += 1 + l + sovSession(uint64(l))
 	n += 2
 	if m.Timezone != nil {
 		n += m.Timezone.Size()
@@ -295,6 +340,18 @@ func (m *Session_Transaction) Size() (n int) {
 	n += 1 + l + sovSession(uint64(l))
 	l = m.Timestamp.Size()
 	n += 1 + l + sovSession(uint64(l))
+	l = m.Mutation.Size()
+	n += 1 + l + sovSession(uint64(l))
+	return n
+}
+
+func (m *Session_Transaction_TableMutation) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovSession(uint64(l))
+	n += 1 + sovSession(uint64(m.ParentID))
+	n += 1 + sovSession(uint64(m.ID))
 	return n
 }
 
@@ -413,9 +470,6 @@ func (m *Session) Unmarshal(data []byte) error {
 			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
-			}
-			if m.Txn == nil {
-				m.Txn = &Session_Transaction{}
 			}
 			if err := m.Txn.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
@@ -600,6 +654,153 @@ func (m *Session_Transaction) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Mutation", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSession
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSession
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Mutation.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipSession(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthSession
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Session_Transaction_TableMutation) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowSession
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TableMutation: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TableMutation: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSession
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthSession
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ParentID", wireType)
+			}
+			m.ParentID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSession
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.ParentID |= (ID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+			}
+			m.ID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSession
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.ID |= (uint32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipSession(data[iNdEx:])
