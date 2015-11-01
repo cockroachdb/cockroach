@@ -119,6 +119,26 @@ message TableDescriptor {
   optional uint32 next_index_id = 11 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextIndexID", (gogoproto.casttype) = "IndexID"];
   optional PrivilegeDescriptor privileges = 12;
+
+  message Mutation {
+    oneof descriptor {
+      IndexDescriptor add_index = 1;
+      IndexDescriptor drop_index = 2;
+      ColumnDescriptor add_column = 3;
+      ColumnDescriptor drop_column = 4;
+    }
+    // An id used to tag mutations that belong to the same transaction.
+    // Used for cases like creating a unique column, which involve
+    // adding two mutations: one for the column and another for the
+    // constraint index.
+    optional uint32 id = 5 [(gogoproto.nullable) = false,
+        (gogoproto.customname) = "ID", (gogoproto.casttype) = "MutationID"];
+  }
+  // A queue of mutations to be processed in FIFO order.
+  repeated Mutation mutations = 13;
+  // ID for the next group of mutations created in the same transaction.
+  optional uint32 next_mutation_id = 14 [(gogoproto.nullable) = false,
+       (gogoproto.customname) = "NextMutationID", (gogoproto.casttype) = "MutationID"]; 
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
