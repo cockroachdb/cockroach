@@ -107,7 +107,7 @@ testrace:
 .PHONY: bench
 bench:
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) -cpu $(CPUS) -bench $(TESTS) $(PKG) -timeout $(BENCHTIMEOUT) $(TESTFLAGS)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run NONE -cpu $(CPUS) -bench $(TESTS) $(PKG) -timeout $(BENCHTIMEOUT) $(TESTFLAGS)
 
 .PHONY: coverage
 coverage:
