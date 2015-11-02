@@ -31,7 +31,7 @@ func TestNoLinkForbidden(t *testing.T) {
 		t.Skip("GOPATH isn't set")
 	}
 
-	imports, err := testutils.TransitiveImports("github.com/cockroachdb/cockroach/sql/driver", false)
+	imports, err := testutils.TransitiveImports("github.com/cockroachdb/cockroach/sql/driver", true)
 	if err != nil {
 		t.Fatal(err)
 	}

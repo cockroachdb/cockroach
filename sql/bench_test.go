@@ -24,15 +24,21 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 )
 
-// BenchmarkSelect1 is a benchmark of the simplest SQL query: SELECT 1. This
+// benchmarkSelect1 is a benchmark of the simplest SQL query: SELECT 1. This
 // query requires no tables, expression analysis, etc. As such, it is measuring
 // the overhead of parsing and other non-table processing (e.g. reading
 // requests, writing responses).
-func BenchmarkSelect1(b *testing.B) {
-	s := server.StartTestServer(b)
+func benchmarkSelect1(b *testing.B, scheme string) {
+	s := &server.TestServer{}
+	s.Ctx = server.NewTestContext()
+	s.Ctx.Insecure = (scheme == "http" || scheme == "rpc")
+	if err := s.Start(); err != nil {
+		b.Fatal(err)
+	}
 	defer s.Stop()
 
-	db, err := sql.Open("cockroach", "https://root@"+s.ServingAddr()+"?certs=test_certs")
+	db, err := sql.Open("cockroach",
+		scheme+"://node@"+s.ServingAddr()+"?certs="+s.Ctx.Certs)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -46,4 +52,21 @@ func BenchmarkSelect1(b *testing.B) {
 		}
 		rows.Close()
 	}
+	b.StopTimer()
+}
+
+func BenchmarkSelect1_HTTP(b *testing.B) {
+	benchmarkSelect1(b, "http")
+}
+
+func BenchmarkSelect1_HTTPS(b *testing.B) {
+	benchmarkSelect1(b, "https")
+}
+
+func BenchmarkSelect1_RPC(b *testing.B) {
+	benchmarkSelect1(b, "rpc")
+}
+
+func BenchmarkSelect1_RPCS(b *testing.B) {
+	benchmarkSelect1(b, "rpcs")
 }
