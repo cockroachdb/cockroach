@@ -150,9 +150,6 @@ func (s *Server) AddCloseCallback(cb func(conn net.Conn)) {
 	s.closeCallbacks = append(s.closeCallbacks, cb)
 }
 
-// Can connect to RPC service using HTTP CONNECT to rpcPath.
-var connected = "200 Connected to Go RPC"
-
 // ServeHTTP implements an http.Handler that answers RPC requests.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != rpc.DefaultRPCPath {
@@ -185,7 +182,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if log.V(3) {
 		security.LogTLSState("RPC", r.TLS)
 	}
-	if _, err := io.WriteString(conn, "HTTP/1.0 "+connected+"\n\n"); err != nil {
+	if _, err := io.WriteString(conn, "HTTP/1.0 "+codec.Connected+"\n\n"); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
