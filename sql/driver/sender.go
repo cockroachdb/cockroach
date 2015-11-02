@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // defaultRetryOptions sets the retry options for handling retryable errors and
@@ -45,7 +46,7 @@ type Sender interface {
 }
 
 // NewSenderFunc creates a new sender for the registered scheme.
-type NewSenderFunc func(u *url.URL, ctx *base.Context, retryOpts retry.Options) (Sender, error)
+type NewSenderFunc func(u *url.URL, ctx *base.Context, retryOpts retry.Options, stopper *stop.Stopper) (Sender, error)
 
 var sendersMu sync.Mutex
 var senders = map[string]NewSenderFunc{}
@@ -64,12 +65,12 @@ func RegisterSender(scheme string, f NewSenderFunc) {
 	senders[scheme] = f
 }
 
-func newSender(u *url.URL, ctx *base.Context) (Sender, error) {
+func newSender(u *url.URL, ctx *base.Context, stopper *stop.Stopper) (Sender, error) {
 	sendersMu.Lock()
 	defer sendersMu.Unlock()
 	f := senders[u.Scheme]
 	if f == nil {
 		return nil, fmt.Errorf("no sender registered for \"%s\"", u.Scheme)
 	}
-	return f(u, ctx, defaultRetryOptions)
+	return f(u, ctx, defaultRetryOptions, stopper)
 }

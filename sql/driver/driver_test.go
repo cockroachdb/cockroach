@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 func setup(t *testing.T, loc *time.Location) (*server.TestServer, *sql.DB) {
@@ -385,28 +386,38 @@ func TestConnectionSettings(t *testing.T) {
 	}
 }
 
-func TestInsecure(t *testing.T) {
+func TestProtocols(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	// Start test server in insecure mode.
-	s := &server.TestServer{}
-	s.Ctx = server.NewTestContext()
-	s.Ctx.Insecure = true
-	if err := s.Start(); err != nil {
-		t.Fatalf("Could not start server: %v", err)
-	}
-	defer s.Stop()
 
-	// We can't attempt a connection through HTTPS since the client just retries forever.
-	// DB connection using plain HTTP.
-	db, err := sql.Open("cockroach", "http://root@"+s.ServingAddr())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		_ = db.Close()
-	}()
-	if _, err := db.Exec(`SELECT 1`); err != nil {
-		t.Fatal(err)
+	// Test that all of the network protocols work.
+	for _, scheme := range []string{"http", "https", "rpc", "rpcs"} {
+		func() {
+			// Start test server in insecure mode.
+			s := &server.TestServer{}
+			s.Ctx = server.NewTestContext()
+			s.Ctx.Insecure = (scheme == "http" || scheme == "rpc")
+			if err := s.Start(); err != nil {
+				t.Fatalf("Could not start server: %v", err)
+			}
+			defer s.Stop()
+
+			driver.Stopper = stop.NewStopper()
+			defer func() {
+				driver.Stopper.Stop()
+				driver.Stopper = nil
+			}()
+
+			db, err := sql.Open("cockroach",
+				scheme+"://node@"+s.ServingAddr()+"?certs="+s.Ctx.Certs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+
+			if _, err := db.Exec(`SELECT 1`); err != nil {
+				t.Fatal(err)
+			}
+		}()
 	}
 }
 

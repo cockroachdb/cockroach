@@ -68,7 +68,7 @@ type Server struct {
 	storePool     *storage.StorePool
 	db            *client.DB
 	kvDB          *kv.DBServer
-	sqlServer     sql.HTTPServer
+	sqlServer     sql.Server
 	node          *Node
 	recorder      *status.NodeStatusRecorder
 	admin         *adminServer
@@ -138,7 +138,10 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		return nil, err
 	}
 
-	s.sqlServer = sql.MakeHTTPServer(&s.ctx.Context, *s.db, s.gossip, s.clock)
+	s.sqlServer = sql.MakeServer(&s.ctx.Context, *s.db, s.gossip, s.clock)
+	if err := s.sqlServer.RegisterRPC(s.rpc); err != nil {
+		return nil, err
+	}
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{

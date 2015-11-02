@@ -31,6 +31,9 @@ func TransitiveImports(importpath string, cgo bool) (map[string]struct{}, error)
 	addImports = func(root string) error {
 		pkg, err := buildContext.Import(root, buildContext.GOPATH, 0)
 		if err != nil {
+			if _, ok := err.(*build.NoGoError); ok {
+				return nil
+			}
 			return err
 		}
 

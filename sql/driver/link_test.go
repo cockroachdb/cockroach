@@ -39,7 +39,7 @@ func TestNoLinkForbidden(t *testing.T) {
 	for _, forbidden := range []string{
 		"C",       // cross compilation
 		"testing", // defines flags
-		"github.com/cockroachdb/cockroach/util/log", // defines flags
+		"github.com/cockroachdb/cockroach/keys",
 	} {
 		if _, ok := imports[forbidden]; ok {
 			t.Errorf("sql/driver includes %s, which is forbidden", forbidden)
