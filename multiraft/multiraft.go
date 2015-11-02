@@ -688,6 +688,13 @@ func (s *state) stop() {
 	}
 	s.MultiRaft.multiNode.Stop()
 	s.MultiRaft.Transport.Stop(s.storeID)
+
+	// Ensure that any remaining commands are not left hanging.
+	for _, g := range s.groups {
+		for _, p := range g.pending {
+			p.ch <- util.Errorf("shutting down")
+		}
+	}
 }
 
 // addNode creates a node and registers the given group (if not nil)
