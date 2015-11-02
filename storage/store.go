@@ -242,6 +242,7 @@ type Store struct {
 	verifyQueue       *verifyQueue    // Checksum verification queue
 	replicateQueue    *replicateQueue // Replication queue
 	replicaGCQueue    *replicaGCQueue // Replica GC queue
+	raftLogQueue      *raftLogQueue   // Raft Log Truncation queue
 	scanner           *replicaScanner // Replica scanner
 	feed              StoreEventFeed  // Event Feed
 	removeReplicaChan chan removeReplicaOp
@@ -375,7 +376,8 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	s.verifyQueue = newVerifyQueue(s.ctx.Gossip, s.ReplicaCount)
 	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.RebalancingOptions)
 	s.replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip, s.GroupLocker())
-	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.replicaGCQueue)
+	s.raftLogQueue = newRaftLogQueue(s.db, s.ctx.Gossip)
+	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
 
 	return s
 }
@@ -722,6 +724,17 @@ func (s *Store) ForceReplicaGCScan(t util.Tester) {
 
 	for _, r := range s.replicas {
 		s.replicaGCQueue.MaybeAdd(r, s.ctx.Clock.Now())
+	}
+}
+
+// ForceRaftLogScan iterates over all ranges and enqueues any that need their
+// raft logs truncated. Exposed only for testing.
+func (s *Store) ForceRaftLogScan(t util.Tester) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, r := range s.replicas {
+		s.raftLogQueue.MaybeAdd(r, s.ctx.Clock.Now())
 	}
 }
 
