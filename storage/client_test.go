@@ -30,6 +30,7 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -143,23 +144,28 @@ type multiTestContext struct {
 	transport    multiraft.Transport
 	db           *client.DB
 	feed         *util.Feed
+
 	// The per-store clocks slice normally contains aliases of
 	// multiTestContext.clock, but it may be populated before Start() to
 	// use distinct clocks per store.
 	clocks  []*hlc.Clock
 	engines []engine.Engine
 	senders []*kv.LocalSender
-	stores  []*storage.Store
 	idents  []roachpb.StoreIdent
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. clientStopper is for 'db', transportStopper is
 	// for 'transport', and the 'stoppers' slice corresponds to the
 	// 'stores'.
 	clientStopper      *stop.Stopper
-	stoppers           []*stop.Stopper
 	transportStopper   *stop.Stopper
 	engineStoppers     []*stop.Stopper
 	timeUntilStoreDead time.Duration
+
+	// 'stores' and 'stoppers' may change at runtime so the pointers
+	// they contain are protected by 'mu'.
+	mu       sync.RWMutex
+	stores   []*storage.Store
+	stoppers []*stop.Stopper
 }
 
 // startMultiTestContext is a convenience function to create, start, and return
@@ -220,6 +226,8 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 func (m *multiTestContext) Stop() {
 	done := make(chan struct{})
 	go func() {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
 		stoppers := append([]*stop.Stopper{m.clientStopper, m.transportStopper}, m.stoppers...)
 		// Quiesce all the stoppers so that we can stop all stoppers in unison.
 		for _, s := range stoppers {
@@ -262,6 +270,8 @@ func (m *multiTestContext) Stop() {
 func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 	getArgs func(addr net.Addr) proto.Message,
 	getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	fail := func(pErr *roachpb.Error) ([]proto.Message, error) {
 		br := &roachpb.BatchResponse{}
 		br.Error = pErr
@@ -400,6 +410,8 @@ func gossipNodeDesc(g *gossip.Gossip, nodeID roachpb.NodeID) error {
 // StopStore stops a store but leaves the engine intact.
 // All stopped stores must be restarted before multiTestContext.Stop is called.
 func (m *multiTestContext) stopStore(i int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.senders[i].RemoveStore(m.stores[i])
 	m.stoppers[i].Stop()
 	m.stoppers[i] = nil
@@ -408,6 +420,8 @@ func (m *multiTestContext) stopStore(i int) {
 
 // restartStore restarts a store previously stopped with StopStore.
 func (m *multiTestContext) restartStore(i int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.stoppers[i] = stop.NewStopper()
 
 	ctx := m.makeContext(i)
@@ -432,6 +446,8 @@ func (m *multiTestContext) restart() {
 
 // replicateRange replicates the given range onto the given stores.
 func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, sourceStoreIndex int, dests ...int) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	rng, err := m.stores[sourceStoreIndex].GetReplica(rangeID)
 	if err != nil {
 		m.t.Fatal(err)
@@ -464,6 +480,8 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, sourceStoreIn
 // unreplicateRange removes a replica of the range in the source store
 // from the dest store.
 func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, source, dest int) {
+	m.mu.RLock()
+	m.mu.RUnlock()
 	rng, err := m.stores[source].GetReplica(rangeID)
 	if err != nil {
 		m.t.Fatal(err)
