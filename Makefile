@@ -34,7 +34,7 @@ RUN := run
 #   make test PKG=./storage TESTFLAGS=--vmodule=multiraft=1
 PKG          := ./...
 TAGS         :=
-TESTS        := ".*"
+TESTS        := .
 TESTTIMEOUT  := 1m10s
 CPUS         := 1
 RACETIMEOUT  := 5m
@@ -107,7 +107,7 @@ testrace:
 .PHONY: bench
 bench:
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) -cpu $(CPUS) -bench $(TESTS) $(PKG) -timeout $(BENCHTIMEOUT) $(TESTFLAGS)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run - -cpu $(CPUS) -bench $(TESTS) $(PKG) -timeout $(BENCHTIMEOUT) $(TESTFLAGS)
 
 .PHONY: coverage
 coverage:

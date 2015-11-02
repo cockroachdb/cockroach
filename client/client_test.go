@@ -688,13 +688,14 @@ func setupClientBenchData(useSSL bool, numVersions, numKeys int, b *testing.B) (
 	if !useSSL {
 		s.Ctx.Insecure = true
 	}
-	s.Ctx.Engines = []engine.Engine{engine.NewRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize, s.Stopper())}
-	if err := s.Start(); err != nil {
+	stopper := stop.NewStopper()
+	s.Ctx.Engines = []engine.Engine{engine.NewRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize, stopper)}
+	if err := s.StartWithStopper(stopper); err != nil {
 		b.Fatal(err)
 	}
 
-	db, err := client.Open(s.Stopper(), fmt.Sprintf("rpcs://%s@%s?certs=%s",
-		security.NodeUser, s.ServingAddr(), s.Ctx.Certs))
+	db, err := client.Open(s.Stopper(), fmt.Sprintf("%s://%s@%s?certs=%s",
+		s.Ctx.RPCRequestScheme(), security.NodeUser, s.ServingAddr(), s.Ctx.Certs))
 	if err != nil {
 		b.Fatal(err)
 	}
