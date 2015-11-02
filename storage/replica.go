@@ -165,6 +165,7 @@ type Replica struct {
 	sync.RWMutex                 // Protects the following fields:
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
 	tsCache      *TimestampCache // Most recent timestamps for keys / key ranges
+	quiesced     bool            // If true, removal pending and pendingCmds is nil
 	pendingCmds  map[cmdIDKey]*pendingCmd
 
 	// pendingReplica houses a replica that is not yet in the range
@@ -178,7 +179,7 @@ type Replica struct {
 		*sync.Cond
 		value roachpb.ReplicaDescriptor
 	}
-	truncatedState unsafe.Pointer // *roachpb.RaftTruancatedState
+	truncatedState unsafe.Pointer // *roachpb.RaftTruncatedState
 }
 
 var _ client.Sender = &Replica{}
@@ -555,6 +556,8 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	}
 	// TODO(tschottdorf): assert nil reply on error.
 	if err != nil {
+		trace.SetError()
+		trace.Event(fmt.Sprintf("error: %s", err))
 		return nil, roachpb.NewError(err)
 	}
 	return br, nil
@@ -862,11 +865,22 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 	}
 	cmdID := ba.GetOrCreateCmdID(r.store.Clock().PhysicalNow())
 	idKey := makeCmdIDKey(cmdID)
-	r.Lock()
-	r.pendingCmds[idKey] = pendingCmd
-	r.Unlock()
+
 	var errChan <-chan error
-	if r.proposeRaftCommandFn != nil {
+	r.Lock()
+	if r.quiesced {
+		// Replica is about to be removed.
+		ch := make(chan error, 1)
+		ch <- multiraft.ErrGroupDeleted
+		errChan = ch
+	} else {
+		r.pendingCmds[idKey] = pendingCmd
+	}
+	r.Unlock()
+
+	if errChan != nil {
+		// already errored out; do nothing
+	} else if r.proposeRaftCommandFn != nil {
 		errChan = r.proposeRaftCommandFn(idKey, raftCmd)
 	} else {
 		errChan = r.store.ProposeRaftCommand(idKey, raftCmd)
@@ -906,9 +920,6 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd roach
 	br, err := r.applyRaftCommand(ctx, index, raftCmd.OriginReplica, raftCmd.Cmd)
 	err = r.maybeSetCorrupt(err)
 	execDone()
-	if err != nil {
-		trace.Event(fmt.Sprintf("error: %T", err))
-	}
 
 	if cmd != nil {
 		cmd.done <- roachpb.ResponseWithError{Reply: br, Err: err}
@@ -1557,4 +1568,16 @@ func (r *Replica) maybeAddToSplitQueue() {
 	if maxBytes > 0 && r.stats.KeyBytes+r.stats.ValBytes > maxBytes {
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
+}
+
+// Quiesce drains the replica and prepares it for removal. All pending and future commands are aborted with a RangeNotFoundError.
+func (r *Replica) Quiesce() {
+	r.Lock()
+	defer r.Unlock()
+	for _, cmd := range r.pendingCmds {
+		// ErrGroupDeleted is transformed into RangeNotFound in (*Replica).Send().
+		cmd.done <- roachpb.ResponseWithError{Err: multiraft.ErrGroupDeleted}
+	}
+	r.pendingCmds = nil
+	r.quiesced = true
 }
