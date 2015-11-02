@@ -278,12 +278,18 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 			m.t.Fatal(stErr)
 		}
 		nodeIndex := nodeID - 1
-		if m.stores[nodeIndex] == nil {
+		// The rpcSend method crosses store boundaries: it is possible that the
+		// destination store is stopped while the source is still running.
+		// Run the send in a Task on the destination store to simulate what
+		// would happen with real RPCs.
+		if s := m.stoppers[nodeIndex]; s == nil || !s.RunTask(func() {
+			br, pErr = m.senders[nodeIndex].Send(context.Background(), ba)
+		}) {
 			pErr = &roachpb.Error{}
 			pErr.SetGoError(rpc.NewSendError("store is stopped", true))
+			m.expireLeaderLeases()
 			continue
 		}
-		br, pErr = m.senders[nodeIndex].Send(context.Background(), ba)
 		if pErr == nil {
 			return []proto.Message{br}, nil
 		}
