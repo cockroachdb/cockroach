@@ -146,6 +146,12 @@ func (ts *TestServer) EventFeed() *util.Feed {
 // TestServer.ServingAddr() after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
 func (ts *TestServer) Start() error {
+	return ts.StartWithStopper(nil)
+}
+
+// StartWithStopper is the same as Start, but allows passing a stopper
+// explicitly.
+func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 	if ts.Ctx == nil {
 		ts.Ctx = NewTestContext()
 	}
@@ -154,8 +160,12 @@ func (ts *TestServer) Start() error {
 	// for the default cluster-wide zone config.
 	config.DefaultZoneConfig.ReplicaAttrs = []roachpb.Attributes{{}}
 
+	if stopper == nil {
+		stopper = stop.NewStopper()
+	}
+
 	var err error
-	ts.Server, err = NewServer(ts.Ctx, stop.NewStopper())
+	ts.Server, err = NewServer(ts.Ctx, stopper)
 	if err != nil {
 		return err
 	}
