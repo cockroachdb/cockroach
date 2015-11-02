@@ -34,7 +34,7 @@ RUN := run
 #   make test PKG=./storage TESTFLAGS=--vmodule=multiraft=1
 PKG          := ./...
 TAGS         :=
-TESTS        := ".*"
+TESTS        := .
 TESTTIMEOUT  := 1m10s
 CPUS         := 1
 RACETIMEOUT  := 5m
