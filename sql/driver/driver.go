@@ -24,7 +24,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
+
+// Stopper exposed to allow tests to properly drain client connections.
+//
+// TODO(pmattis): Is there a better way to expose this?
+var Stopper *stop.Stopper
 
 var _ driver.Driver = roachDriver{}
 
@@ -58,7 +64,7 @@ func (roachDriver) Open(dsn string) (driver.Conn, error) {
 		ctx.Certs = dir
 	}
 
-	sender, err := newSender(u, ctx)
+	sender, err := newSender(u, ctx, Stopper)
 	if err != nil {
 		return nil, err
 	}

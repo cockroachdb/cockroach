@@ -23,10 +23,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 func init() {
-	f := func(u *url.URL, ctx *base.Context, retryOpts retry.Options) (Sender, error) {
+	f := func(u *url.URL, ctx *base.Context, retryOpts retry.Options, _ *stop.Stopper) (Sender, error) {
 		ctx.Insecure = (u.Scheme != "https")
 		return newHTTPSender(u.Host, ctx, retryOpts)
 	}

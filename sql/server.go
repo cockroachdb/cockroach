@@ -26,24 +26,26 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/gogo/protobuf/proto"
 )
 
 var allowedEncodings = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
 
-// An HTTPServer provides an HTTP server endpoint serving the SQL API.
-// It accepts either JSON or serialized protobuf content types.
-type HTTPServer struct {
+// An Server provides both an HTTP and RPC server endpoint serving the SQL API.
+// The HTTP endpoint accepts either JSON or serialized protobuf content types.
+type Server struct {
 	context *base.Context
 	*Executor
 }
 
-// MakeHTTPServer creates an HTTPServer.
-func MakeHTTPServer(ctx *base.Context, db client.DB, gossip *gossip.Gossip, clock *hlc.Clock) HTTPServer {
-	return HTTPServer{context: ctx, Executor: newExecutor(db, gossip, clock)}
+// MakeServer creates a Server.
+func MakeServer(ctx *base.Context, db client.DB, gossip *gossip.Gossip, clock *hlc.Clock) Server {
+	return Server{context: ctx, Executor: newExecutor(db, gossip, clock)}
 }
 
 // ServeHTTP serves the SQL API by treating the request URL path
@@ -54,7 +56,7 @@ func MakeHTTPServer(ctx *base.Context, db client.DB, gossip *gossip.Gossip, cloc
 // encoded according to the request's Accept header, or if not
 // present, in the same format as the request's incoming Content-Type
 // header.
-func (s HTTPServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	method := r.URL.Path
 	if !strings.HasPrefix(method, driver.Endpoint) {
@@ -109,4 +111,15 @@ func (s HTTPServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if _, err := w.Write(body); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+// RegisterRPC ...
+func (s Server) RegisterRPC(rpcServer *rpc.Server) error {
+	return rpcServer.RegisterPublic(driver.RPCMethod, s.executeCmd, &driver.Request{})
+}
+
+func (s Server) executeCmd(argsI proto.Message) (proto.Message, error) {
+	args := argsI.(*driver.Request)
+	reply, _, err := s.Execute(*args)
+	return &reply, err
 }
