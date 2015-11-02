@@ -28,13 +28,16 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+// updateChannelSize sets the size of buffered channel used to receive
+// gossip info updates.
+const updateChannelSize = 10000
+
 // client is a client-side RPC connection to a gossip peer node.
 type client struct {
 	peerID                roachpb.NodeID  // Peer node ID; 0 until first gossip response
 	addr                  net.Addr        // Peer node network address
 	rpcClient             *rpc.Client     // RPC client
 	forwardAddr           net.Addr        // Set if disconnected with an alternate addr
-	updateChan            chan Update     // Gossip updates channel
 	remoteHighWaterStamps map[int32]int64 // High water timestamps for remote server; matches rpc Request/Response
 	closer                chan struct{}   // Client shutdown channel
 }
@@ -42,8 +45,7 @@ type client struct {
 // newClient creates and returns a client struct.
 func newClient(addr net.Addr) *client {
 	return &client{
-		addr:                  addr,
-		updateChan:            make(chan Update, 10000),
+		addr: addr,
 		remoteHighWaterStamps: map[int32]int64{},
 		closer:                make(chan struct{}),
 	}
@@ -55,10 +57,6 @@ func newClient(addr net.Addr) *client {
 // be set. This method starts client processing in a goroutine and
 // returns immediately.
 func (c *client) start(g *Gossip, done chan *client, context *rpc.Context, stopper *stop.Stopper) {
-	// Register a channel for gossip updates; caller already holds mutex
-	// so use infostore method directly.
-	g.is.registerUpdateChannel(".*", c.updateChan)
-
 	stopper.RunWorker(func() {
 		var err error
 
@@ -73,10 +71,6 @@ func (c *client) start(g *Gossip, done chan *client, context *rpc.Context, stopp
 		case <-c.rpcClient.Closed:
 			err = util.Errorf("client closed")
 		}
-
-		g.mu.Lock()
-		g.is.unregisterUpdateChannel(c.updateChan)
-		g.mu.Unlock()
 
 		done <- c
 
@@ -190,14 +184,26 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 	g.mu.Unlock()
 
 	lAddr := util.MakeUnresolvedAddr(c.rpcClient.LocalAddr().Network(), c.rpcClient.LocalAddr().String())
-	done := make(chan *netrpc.Call, 10000)
+	done := make(chan *netrpc.Call, updateChannelSize)
 	c.getGossip(g, nodeID, addr, lAddr, done)
+
+	// Register a channel for gossip updates.
+	updateChan := make(chan Update, updateChannelSize)
+	g.RegisterUpdateChannel(".*", updateChan)
+	defer g.UnregisterUpdateChannel(updateChan)
 
 	// Loop until stopper is signalled, or until either the gossip or
 	// RPC clients are closed. getGossip is a hanging get, returning
 	// results only when the remote server has new gossip information to
 	// share. sendGossip is sent to the remote server when this node has
 	// new gossip information to share with the server.
+	//
+	// Nodes "pull" gossip in order to guarantee that they're connected
+	// to the sentinel and not too distant from other nodes in the
+	// network. The also "push" their own gossip which guarantees that
+	// the sentinel node will contain their info, and therefore every
+	// node connected to the sentinel. Just pushing or just pulling
+	// wouldn't guarantee a fully connected network.
 	for {
 		select {
 		case call := <-done:
@@ -208,7 +214,7 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 			if req, ok := call.Args.(*Request); ok && req.Delta == nil {
 				c.getGossip(g, nodeID, addr, lAddr, done)
 			}
-		case <-c.updateChan:
+		case <-updateChan:
 			c.sendGossip(g, nodeID, addr, lAddr, done)
 		case <-c.rpcClient.Closed:
 			return util.Errorf("client closed")

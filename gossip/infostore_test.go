@@ -223,7 +223,7 @@ func TestInfoStoreDelta(t *testing.T) {
 		2: math.MaxInt64,
 		3: math.MaxInt64,
 	}); len(infos) != 0 {
-		t.Errorf("fetching delta of infostore at maximum timestamp should return empty, got %d", len(infos))
+		t.Errorf("fetching delta of infostore at maximum timestamp should return empty, got %v", infos)
 	}
 }
 

@@ -450,7 +450,8 @@ func (g *Gossip) maxToleratedHops() uint32 {
 }
 
 // hasIncoming returns whether the server has an incoming gossip
-// client matching the provided node ID.
+// client matching the provided node ID. Mutex should be held by
+// caller.
 func (g *Gossip) hasIncoming(nodeID roachpb.NodeID) bool {
 	return g.incoming.hasNode(nodeID)
 }

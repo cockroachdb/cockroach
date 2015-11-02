@@ -53,7 +53,7 @@ func newServer() *server {
 		is:         newInfoStore(0, util.UnresolvedAddr{}),
 		incoming:   makeNodeSet(MaxPeers),
 		lAddrMap:   map[string]clientInfo{},
-		updateChan: make(chan Update, 10000),
+		updateChan: make(chan Update, updateChannelSize),
 	}
 	s.ready = sync.NewCond(&s.mu)
 	s.mu.Lock()
