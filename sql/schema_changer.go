@@ -54,6 +54,12 @@ type SchemaChanger struct {
 	systemConfig   config.SystemConfig
 	systemConfigMu sync.RWMutex
 	newConfig      chan struct{}
+	// All the table descriptors with outstanding mutations.
+	tables map[string]descriptorState
+	// The names of all the databases. We have to recreate this because some of
+	// the sql operations used in running the mutations need full table names:
+	// parser.QualifiedName.
+	databases map[ID]string
 }
 
 // updateSystemConfig is called whenever the system config gossip entry is updated.
@@ -109,12 +115,8 @@ func (t *SchemaChanger) Start(s *stop.Stopper, gossip *gossip.Gossip, node Table
 		ch := make(chan TableLeaderNotification)
 		// Create channel that receives table mutation completion notifications.
 		done := make(chan mutationDone)
-		// All the table descriptors with outstanding mutations.
-		tables := make(map[string]descriptorState)
-		// The names of all the databases. We have to recreate this because some of
-		// the sql operations used in running the mutations need full table names:
-		// parser.QualifiedName.
-		databases := make(map[ID]string)
+		t.tables = make(map[string]descriptorState)
+		t.databases = make(map[ID]string)
 
 		for {
 			select {
@@ -124,8 +126,8 @@ func (t *SchemaChanger) Start(s *stop.Stopper, gossip *gossip.Gossip, node Table
 				// outstanding mutations.
 
 				// Existing tables being followed.
-				delTables := make(map[string]struct{})
-				for k := range tables {
+				delTables := make(map[string]struct{}, len(t.tables))
+				for k := range t.tables {
 					delTables[k] = struct{}{}
 				}
 
@@ -144,7 +146,7 @@ func (t *SchemaChanger) Start(s *stop.Stopper, gossip *gossip.Gossip, node Table
 					case *Descriptor_Database:
 						// Attempt to unmarshal config into a database descriptor.
 						database := union.Database
-						databases[database.ID] = database.Name
+						t.databases[database.ID] = database.Name
 
 					case *Descriptor_Table:
 						table := union.Table
@@ -156,7 +158,7 @@ func (t *SchemaChanger) Start(s *stop.Stopper, gossip *gossip.Gossip, node Table
 							lastMutationID := table.Mutations[len(table.Mutations)-1].ID
 							key := MakeIndexKeyPrefix(table.ID, table.PrimaryIndex.ID)
 							keyString := string(key)
-							d, ok := tables[keyString]
+							d, ok := t.tables[keyString]
 							if ok {
 								d.mutationID = lastMutationID
 							} else {
@@ -164,7 +166,7 @@ func (t *SchemaChanger) Start(s *stop.Stopper, gossip *gossip.Gossip, node Table
 								// Register a key for the first range of the table data for notifications.
 								node.RegisterNotifyTableLeader(key, s, ch)
 							}
-							tables[keyString] = d
+							t.tables[keyString] = d
 
 							// Keep the key in tables. Remove it from delTables
 							delete(delTables, keyString)
@@ -176,40 +178,30 @@ func (t *SchemaChanger) Start(s *stop.Stopper, gossip *gossip.Gossip, node Table
 				}
 				// Unregister all the tables in delTables.
 				for key := range delTables {
-					if _, ok := tables[key]; ok {
-						if !tables[key].isWorking {
+					if _, ok := t.tables[key]; ok {
+						if !t.tables[key].isWorking {
 							node.UnregisterNotifyTableLeader(roachpb.Key(key))
-							delete(tables, key)
+							delete(t.tables, key)
 						} else {
-							d := tables[key]
+							d := t.tables[key]
 							d.isDeleted = true
-							tables[key] = d
+							t.tables[key] = d
 						}
 					}
 				}
-				for k, v := range tables {
+				for _, v := range t.tables {
 					// Possibly apply mutation.
-					if v.isLeader && !v.isWorking {
-						v.isWorking = true
-						tables[string(k)] = v
-						runApplyMutation(s, v, db, databases[v.descriptor.ParentID], done, leaseMgr)
-					}
+					t.tryApplyMutation(s, v, db, done, leaseMgr)
 				}
 
 			case n := <-ch:
 				key := string(n.Key)
 				log.Info("received a leader notification for %v", key)
-				if d, ok := tables[key]; ok {
-					if n.IsLeader && !d.isLeader {
-						d.isLeader = true
-						d.isWorking = true
-						tables[key] = d
-						// start schema change  goroutine.
-						runApplyMutation(s, d, db, databases[d.descriptor.ParentID], done, leaseMgr)
-					} else if !n.IsLeader && d.isLeader {
-						// Notify table leader to stop.
-						d.isLeader = false
-						tables[key] = d
+				if d, ok := t.tables[key]; ok {
+					if n.IsLeader != d.isLeader {
+						d.isLeader = n.IsLeader
+						t.tables[key] = d
+						t.tryApplyMutation(s, d, db, done, leaseMgr)
 					}
 				} else {
 					log.Warningf("received leader notification for table not followed: %s", key)
@@ -217,21 +209,19 @@ func (t *SchemaChanger) Start(s *stop.Stopper, gossip *gossip.Gossip, node Table
 
 			case d := <-done:
 				log.Infof("received work completion notification for: %s", d.key)
-				if v, ok := tables[d.key]; ok {
+				if v, ok := t.tables[d.key]; ok {
 					if !v.isWorking {
 						panic("received work completion notification with no pending work")
 					}
-					v.isWorking = false
-					tables[d.key] = v
 					if v.isDeleted {
 						node.UnregisterNotifyTableLeader(roachpb.Key(d.key))
-						delete(tables, d.key)
+						delete(t.tables, d.key)
 					} else {
+						v.isWorking = false
+						t.tables[d.key] = v
 						// still more work to be done.
-						if v.isLeader && v.mutationID > d.mutationID {
-							v.isWorking = true
-							tables[d.key] = v
-							runApplyMutation(s, v, db, databases[v.descriptor.ParentID], done, leaseMgr)
+						if v.mutationID > d.mutationID {
+							t.tryApplyMutation(s, v, db, done, leaseMgr)
 						}
 					}
 				} else {
@@ -245,9 +235,19 @@ func (t *SchemaChanger) Start(s *stop.Stopper, gossip *gossip.Gossip, node Table
 	})
 }
 
-func runApplyMutation(s *stop.Stopper, table descriptorState, db *client.DB, dbName string, done chan<- mutationDone, leaseMgr *LeaseManager) {
+func (t *SchemaChanger) tryApplyMutation(s *stop.Stopper, table descriptorState, db *client.DB, done chan<- mutationDone, leaseMgr *LeaseManager) {
+	if !table.isLeader || table.isWorking {
+		return
+	}
+	if _, ok := t.databases[table.descriptor.ParentID]; !ok {
+		log.Warningf("No database entry for table %s", table.descriptor.Name)
+		return
+	}
+
+	table.isWorking = true
+	t.tables[table.key] = table
 	s.RunAsyncTask(func() {
-		id, err := applyMutations(db, table.descriptor, dbName, leaseMgr)
+		id, err := applyMutations(db, table.descriptor, t.databases[table.descriptor.ParentID], leaseMgr)
 		if err != nil {
 			log.Info(err)
 		}
