@@ -21,16 +21,10 @@ package rpc
 // properties haven't been analyzed or audited.
 
 import (
-	"bufio"
 	"crypto/tls"
-	"io"
 	"net"
-	"net/http"
-	"net/rpc"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -47,41 +41,4 @@ func tlsListen(network, address string, config *tls.Config) (net.Listener, error
 		return net.Listen(network, address)
 	}
 	return tls.Listen(network, address, config)
-}
-
-var defaultDialer = net.Dialer{
-	Timeout: base.NetworkTimeout,
-}
-
-// tlsDial wraps either net.Dial or crypto/tls.Dial, depending on the contents of
-// the passed TLS Config.
-func tlsDial(network, address string, config *tls.Config) (net.Conn, error) {
-	if config == nil {
-		return defaultDialer.Dial(network, address)
-	}
-	return tls.DialWithDialer(&defaultDialer, network, address, config)
-}
-
-// TLSDialHTTP connects to an HTTP RPC server at the specified address.
-func TLSDialHTTP(network, address string, config *tls.Config) (net.Conn, error) {
-	conn, err := tlsDial(network, address, config)
-	if err != nil {
-		return conn, err
-	}
-
-	// Note: this code was adapted from net/rpc.DialHTTPPath.
-	if _, err := io.WriteString(conn, "CONNECT "+rpc.DefaultRPCPath+" HTTP/1.0\n\n"); err != nil {
-		return conn, err
-	}
-
-	// Require successful HTTP response before switching to RPC protocol.
-	resp, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: "CONNECT"})
-	if err == nil {
-		if resp.Status == connected {
-			return conn, nil
-		}
-		err = util.Errorf("unexpected HTTP response: %s", resp.Status)
-	}
-	conn.Close()
-	return nil, err
 }
