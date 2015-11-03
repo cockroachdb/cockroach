@@ -45,6 +45,12 @@ func (ba *BatchRequest) IsReverse() bool {
 	return (ba.flags() & isReverse) != 0
 }
 
+// IsPossibleTransaction returns true iff the BatchRequest contains
+// requests that can be part of a transaction.
+func (ba *BatchRequest) IsPossibleTransaction() bool {
+	return (ba.flags() & isTxn) != 0
+}
+
 // IsTransactionWrite returns true iff the BatchRequest contains a txn write.
 func (ba *BatchRequest) IsTransactionWrite() bool {
 	return (ba.flags() & isTxnWrite) != 0
