@@ -328,36 +328,28 @@ func TestCallbacks(t *testing.T) {
 	i3 := is.newInfo(nil, time.Second)
 
 	// Add infos twice and verify callbacks aren't called for same timestamps.
-	wg.Add(5)
 	for i := 0; i < 2; i++ {
-		if err := is.addInfo("key1", i1); err != nil {
+		for _, test := range []struct {
+			key   string
+			info  *info
+			count int
+		}{
+			{"key1", i1, 2},
+			{"key2", i2, 2},
+			{"key3", i3, 1},
+		} {
 			if i == 0 {
-				t.Error(err)
+				wg.Add(test.count)
 			}
-		} else {
-			if i != 0 {
+			if err := is.addInfo(test.key, test.info); err != nil {
+				if i == 0 {
+					t.Error(err)
+				}
+			} else if i != 0 {
 				t.Errorf("expected error on run #%d, but didn't get one", i)
 			}
+			wg.Wait()
 		}
-		if err := is.addInfo("key2", i2); err != nil {
-			if i == 0 {
-				t.Error(err)
-			}
-		} else {
-			if i != 0 {
-				t.Errorf("expected error on run #%d, but didn't get one", i)
-			}
-		}
-		if err := is.addInfo("key3", i3); err != nil {
-			if i == 0 {
-				t.Error(err)
-			}
-		} else {
-			if i != 0 {
-				t.Errorf("expected error on run #%d, but didn't get one", i)
-			}
-		}
-		wg.Wait()
 
 		if expKeys := []string{"key1"}; !reflect.DeepEqual(cb1.Keys(), expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, cb1.Keys())
@@ -366,7 +358,6 @@ func TestCallbacks(t *testing.T) {
 			t.Errorf("expected %v, got %v", expKeys, cb2.Keys())
 		}
 		keys := cbAll.Keys()
-		sort.Strings(keys)
 		if expKeys := []string{"key1", "key2", "key3"}; !reflect.DeepEqual(keys, expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, keys)
 		}
@@ -388,21 +379,22 @@ func TestCallbacks(t *testing.T) {
 			t.Errorf("expected %v, got %v", expKeys, cb2.Keys())
 		}
 		keys := cbAll.Keys()
-		sort.Strings(keys)
-		if expKeys := []string{"key1", "key1", "key2", "key3"}; !reflect.DeepEqual(keys, expKeys) {
+		if expKeys := []string{"key1", "key2", "key3", "key1"}; !reflect.DeepEqual(keys, expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, keys)
 		}
 	}
 
+	const numInfos = 3
+
 	// Register another callback with same pattern and verify it is
 	// invoked for all three keys.
-	wg.Add(3)
+	wg.Add(numInfos)
 	is.registerCallback("key.*", cbAll.Add)
 	wg.Wait()
 
-	expKeys := []string{"key1", "key2", "key3", "key1", "key1", "key2", "key3"}
-	sort.Strings(expKeys)
+	expKeys := []string{"key1", "key2", "key3"}
 	keys := cbAll.Keys()
+	keys = keys[len(keys)-numInfos:]
 	sort.Strings(keys)
 	if !reflect.DeepEqual(keys, expKeys) {
 		t.Errorf("expected %v, got %v", expKeys, keys)
