@@ -63,6 +63,7 @@ const (
 	isAdmin    = 1 << iota // admin cmds don't go through raft, but run on leader
 	isRead                 // read-only cmds don't go through raft, but may run on leader
 	isWrite                // write cmds go through raft and must be proposed on leader
+	isTxn                  // txn commands may be part of a transaction
 	isTxnWrite             // txn write cmds start heartbeat and are marked for intent resolution
 	isRange                // range commands may span multiple keys
 	isReverse              // reverse commands traverse ranges in descending direction
@@ -506,22 +507,22 @@ func NewReverseScan(key, endKey Key, maxResults int64) Request {
 	}
 }
 
-func (*GetRequest) flags() int                { return isRead }
-func (*PutRequest) flags() int                { return isWrite | isTxnWrite }
-func (*ConditionalPutRequest) flags() int     { return isRead | isWrite | isTxnWrite }
-func (*IncrementRequest) flags() int          { return isRead | isWrite | isTxnWrite }
-func (*DeleteRequest) flags() int             { return isWrite | isTxnWrite }
-func (*DeleteRangeRequest) flags() int        { return isWrite | isTxnWrite | isRange }
-func (*ScanRequest) flags() int               { return isRead | isRange }
-func (*ReverseScanRequest) flags() int        { return isRead | isRange | isReverse }
-func (*BeginTransactionRequest) flags() int   { return isWrite }
-func (*EndTransactionRequest) flags() int     { return isWrite | isAlone }
+func (*GetRequest) flags() int                { return isRead | isTxn }
+func (*PutRequest) flags() int                { return isWrite | isTxn | isTxnWrite }
+func (*ConditionalPutRequest) flags() int     { return isRead | isWrite | isTxn | isTxnWrite }
+func (*IncrementRequest) flags() int          { return isRead | isWrite | isTxn | isTxnWrite }
+func (*DeleteRequest) flags() int             { return isWrite | isTxn | isTxnWrite }
+func (*DeleteRangeRequest) flags() int        { return isWrite | isTxn | isTxnWrite | isRange }
+func (*ScanRequest) flags() int               { return isRead | isRange | isTxn }
+func (*ReverseScanRequest) flags() int        { return isRead | isRange | isReverse | isTxn }
+func (*BeginTransactionRequest) flags() int   { return isWrite | isTxn }
+func (*EndTransactionRequest) flags() int     { return isWrite | isTxn | isAlone }
 func (*AdminSplitRequest) flags() int         { return isAdmin | isAlone }
 func (*AdminMergeRequest) flags() int         { return isAdmin | isAlone }
-func (*HeartbeatTxnRequest) flags() int       { return isWrite }
+func (*HeartbeatTxnRequest) flags() int       { return isWrite | isTxn }
 func (*GCRequest) flags() int                 { return isWrite | isRange }
 func (*PushTxnRequest) flags() int            { return isWrite }
-func (*RangeLookupRequest) flags() int        { return isRead }
+func (*RangeLookupRequest) flags() int        { return isRead | isTxn }
 func (*ResolveIntentRequest) flags() int      { return isWrite }
 func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
 func (*NoopRequest) flags() int               { return isRead } // slightly special
