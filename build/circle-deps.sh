@@ -11,17 +11,15 @@ set -eux
 if [ "${1-}" = "docker" ]; then
   cmds=$(grep '^cmd' GLOCKFILE | grep -v glock | awk '{print $2}')
 
-  # `/uicache` is `~/uicache` on the host computer, which is cached by
-  # circle-ci.
-
-  # Create the cache directories to avoid errors on `ln` below.
-  mkdir -p /uicache/{bower_components,node_modules,typings}
-
   # Symlink the cache into the source tree if they don't exist.
   # In circleci they never do, but this script can also be run
   # locally where they might.
   for i in bower_components node_modules typings; do
     if ! [ -e ui/$i ]; then
+      # Create the cache directory to avoid errors on `ln` below.
+      # `/uicache` is `~/uicache` on the host computer, which is cached
+      # by circle-ci.
+      mkdir -p /uicache/$i
       ln -s /uicache/$i ui/$i
     fi
   done
