@@ -298,27 +298,6 @@ func (g *Gossip) GetInfosAsJSON() ([]byte, error) {
 	return json.MarshalIndent(g.is, "", "  ")
 }
 
-// Update contains the key and content for a gossip Info.
-type Update struct {
-	Key     string
-	Content []byte
-}
-
-// RegisterUpdateChannel registers an update channel for a key pattern.
-// Any gossip updates matching the pattern are sent on the channel.
-func (g *Gossip) RegisterUpdateChannel(pattern string, updateChan chan Update) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.is.registerUpdateChannel(pattern, updateChan)
-}
-
-// UnregisterUpdateChannel unregisters an update channel.
-func (g *Gossip) UnregisterUpdateChannel(updateChan chan Update) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.is.unregisterUpdateChannel(updateChan)
-}
-
 // Callback is a callback method to be invoked on gossip update
 // of info denoted by key.
 type Callback func(key string, content []byte)
@@ -326,8 +305,8 @@ type Callback func(key string, content []byte)
 // RegisterCallback registers a callback for a key pattern to be
 // invoked whenever new info for a gossip key matching pattern is
 // received. The callback method is invoked with the info key which
-// matched pattern.
-func (g *Gossip) RegisterCallback(pattern string, method Callback) {
+// matched pattern. Returns a value to use with UnregisterCallback().
+func (g *Gossip) RegisterCallback(pattern string, method Callback) interface{} {
 	if pattern == KeySystemConfig {
 		log.Warning("raw gossip callback registered on %s, consider using RegisterSystemConfigCallback",
 			KeySystemConfig)
@@ -335,7 +314,15 @@ func (g *Gossip) RegisterCallback(pattern string, method Callback) {
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.is.registerCallback(pattern, method)
+	return g.is.registerCallback(pattern, method)
+}
+
+// UnregisterCallback unregisters an update callback. Use the value
+// returned by the call to RegisterCallback to unregister.
+func (g *Gossip) UnregisterCallback(unregister interface{}) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.is.unregisterCallback(unregister)
 }
 
 // GetSystemConfig returns the local unmarshalled version of the

@@ -28,10 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-// updateChannelSize sets the size of buffered channel used to receive
-// gossip info updates.
-const updateChannelSize = 10000
-
 // client is a client-side RPC connection to a gossip peer node.
 type client struct {
 	peerID                roachpb.NodeID  // Peer node ID; 0 until first gossip response
@@ -184,13 +180,15 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 	g.mu.Unlock()
 
 	lAddr := util.MakeUnresolvedAddr(c.rpcClient.LocalAddr().Network(), c.rpcClient.LocalAddr().String())
-	done := make(chan *netrpc.Call, updateChannelSize)
+	done := make(chan *netrpc.Call, 10)
 	c.getGossip(g, nodeID, addr, lAddr, done)
 
-	// Register a channel for gossip updates.
-	updateChan := make(chan Update, updateChannelSize)
-	g.RegisterUpdateChannel(".*", updateChan)
-	defer g.UnregisterUpdateChannel(updateChan)
+	// Register a callback for gossip updates.
+	updateCallback := func(key string, content []byte) {
+		c.sendGossip(g, nodeID, addr, lAddr, done)
+	}
+	unregisterCB := g.RegisterCallback(".*", updateCallback)
+	defer g.UnregisterCallback(unregisterCB)
 
 	// Loop until stopper is signalled, or until either the gossip or
 	// RPC clients are closed. getGossip is a hanging get, returning
@@ -214,8 +212,6 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 			if req, ok := call.Args.(*Request); ok && req.Delta == nil {
 				c.getGossip(g, nodeID, addr, lAddr, done)
 			}
-		case <-updateChan:
-			c.sendGossip(g, nodeID, addr, lAddr, done)
 		case <-c.rpcClient.Closed:
 			return util.Errorf("client closed")
 		case <-c.closer:

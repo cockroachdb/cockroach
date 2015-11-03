@@ -30,12 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// updateChannel holds regexp pattern match and update channel.
-type updateChannel struct {
-	pattern    *regexp.Regexp
-	updateChan chan Update
-}
-
 // callback holds regexp pattern match and GossipCallback method.
 type callback struct {
 	pattern *regexp.Regexp
@@ -57,8 +51,7 @@ type infoStore struct {
 	NodeID          roachpb.NodeID      `json:"-"`               // Owning node's ID
 	NodeAddr        util.UnresolvedAddr `json:"-"`               // Address of node owning this info store: "host:port"
 	highWaterStamps map[int32]int64     // High water timestamps for known gossip peers
-	updateChannels  []updateChannel
-	callbacks       []callback
+	callbacks       []*callback
 }
 
 // monotonicUnixNano returns a monotonically increasing value for
@@ -172,7 +165,6 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 	if is.highWaterStamps[int32(i.NodeID)] < i.OrigStamp {
 		is.highWaterStamps[int32(i.NodeID)] = i.OrigStamp
 	}
-	is.processUpdateChannels(key, bytes)
 	is.processCallbacks(key, bytes)
 	return nil
 }
@@ -203,50 +195,12 @@ func (is *infoStore) getHighWaterStamps() map[int32]int64 {
 	return copy
 }
 
-// registerUpdateChannel compiles a regexp for pattern and adds it to
-// the update slice.
-func (is *infoStore) registerUpdateChannel(pattern string, updateChan chan Update) {
-	re := regexp.MustCompile(pattern)
-	is.updateChannels = append(is.updateChannels, updateChannel{pattern: re, updateChan: updateChan})
-	if err := is.visitInfos(func(key string, i *Info) error {
-		if re.MatchString(key) {
-			bytes, err := i.Value.GetBytes()
-			if err != nil {
-				return err
-			}
-			updateChan <- Update{Key: key, Content: bytes}
-		}
-		return nil
-	}); err != nil {
-		panic(err)
-	}
-}
-
-func (is *infoStore) unregisterUpdateChannel(updateChan chan Update) {
-	for i := range is.updateChannels {
-		if is.updateChannels[i].updateChan == updateChan {
-			is.updateChannels = append(is.updateChannels[:i], is.updateChannels[i+1:]...)
-			return
-		}
-	}
-}
-
-// processUpdateChannels processes update channels for the specified
-// key by matching regular expression against the key and sending
-// an update on the corresponding update channel on a match.
-func (is *infoStore) processUpdateChannels(key string, content []byte) {
-	for _, uc := range is.updateChannels {
-		if uc.pattern.MatchString(key) {
-			uc.updateChan <- Update{Key: key, Content: content}
-		}
-	}
-}
-
 // registerCallback compiles a regexp for pattern and adds it to
 // the callbacks slice.
-func (is *infoStore) registerCallback(pattern string, method Callback) {
+func (is *infoStore) registerCallback(pattern string, method Callback) interface{} {
 	re := regexp.MustCompile(pattern)
-	is.callbacks = append(is.callbacks, callback{pattern: re, method: method})
+	cb := &callback{pattern: re, method: method}
+	is.callbacks = append(is.callbacks, cb)
 	infosBytes := make(map[string][]byte)
 	if err := is.visitInfos(func(key string, i *Info) error {
 		if re.MatchString(key) {
@@ -266,13 +220,23 @@ func (is *infoStore) registerCallback(pattern string, method Callback) {
 			method(key, bytes)
 		}
 	}()
+	return cb
+}
+
+func (is *infoStore) unregisterCallback(cb interface{}) {
+	for i := range is.callbacks {
+		if is.callbacks[i] == cb {
+			is.callbacks = append(is.callbacks[:i], is.callbacks[i+1:]...)
+			return
+		}
+	}
 }
 
 // processCallbacks processes callbacks for the specified key by
 // matching callback regular expression against the key and invoking
 // the corresponding callback method on a match.
 func (is *infoStore) processCallbacks(key string, content []byte) {
-	var matches []callback
+	var matches []*callback
 	for _, cb := range is.callbacks {
 		if cb.pattern.MatchString(key) {
 			matches = append(matches, cb)

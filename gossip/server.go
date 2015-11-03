@@ -39,26 +39,21 @@ type clientInfo struct {
 type server struct {
 	ready *sync.Cond // Broadcasts wakeup to waiting gossip requests
 
-	mu         sync.Mutex            // Protects the fields below
-	is         infoStore             // The backing infostore
-	closed     bool                  // True if server was closed
-	incoming   nodeSet               // Incoming client node IDs
-	lAddrMap   map[string]clientInfo // Incoming client's local address -> client's node info
-	updateChan chan Update           // Gossip updates channel
+	mu       sync.Mutex            // Protects the fields below
+	is       infoStore             // The backing infostore
+	closed   bool                  // True if server was closed
+	incoming nodeSet               // Incoming client node IDs
+	lAddrMap map[string]clientInfo // Incoming client's local address -> client's node info
 }
 
 // newServer creates and returns a server struct.
 func newServer() *server {
 	s := &server{
-		is:         newInfoStore(0, util.UnresolvedAddr{}),
-		incoming:   makeNodeSet(MaxPeers),
-		lAddrMap:   map[string]clientInfo{},
-		updateChan: make(chan Update, updateChannelSize),
+		is:       newInfoStore(0, util.UnresolvedAddr{}),
+		incoming: makeNodeSet(MaxPeers),
+		lAddrMap: map[string]clientInfo{},
 	}
 	s.ready = sync.NewCond(&s.mu)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.is.registerUpdateChannel(".*", s.updateChan)
 	return s
 }
 
@@ -146,15 +141,18 @@ func (s *server) start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 	}
 	rpcServer.AddCloseCallback(s.onClose)
 
+	updateCallback := func(key string, content []byte) {
+		// Wakeup all pending clients.
+		s.ready.Broadcast()
+	}
+	unregisterCB := s.is.registerCallback(".*", updateCallback)
+
 	stopper.RunWorker(func() {
 		// Periodically wakeup blocked client gossip requests.
 		for {
 			select {
-			case <-s.updateChan:
-				// Wakeup all pending clients.
-				s.ready.Broadcast()
 			case <-stopper.ShouldStop():
-				s.stop()
+				s.stop(unregisterCB)
 				return
 			}
 		}
@@ -163,11 +161,12 @@ func (s *server) start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 
 // stop sets the server's closed bool to true and broadcasts to
 // waiting gossip clients to wakeup and finish.
-func (s *server) stop() {
+func (s *server) stop(unregisterCB interface{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.closed = true
 	s.ready.Broadcast() // wake up clients
+	s.is.unregisterCallback(unregisterCB)
 }
 
 // onClose is invoked by the rpcServer each time a connected client

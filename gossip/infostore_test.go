@@ -308,129 +308,6 @@ func TestLeastUseful(t *testing.T) {
 	}
 }
 
-func drainChannel(updateChan <-chan Update) []string {
-	keys := []string{}
-	for {
-		select {
-		case update := <-updateChan:
-			keys = append(keys, update.Key)
-		default:
-			return keys
-		}
-	}
-}
-
-func TestUpdateChannels(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	is := newInfoStore(1, emptyAddr)
-	uc1 := make(chan Update, 10)
-	uc2 := make(chan Update, 10)
-	ucAll := make(chan Update, 10)
-
-	is.registerUpdateChannel("key1", uc1)
-	is.registerUpdateChannel("key2", uc2)
-	is.registerUpdateChannel("key.*", ucAll)
-
-	i1 := is.newInfo(nil, time.Second)
-	i2 := is.newInfo(nil, time.Second)
-	i3 := is.newInfo(nil, time.Second)
-
-	// Add infos twice and verify updates aren't sent for same timestamps.
-	for i := 0; i < 2; i++ {
-		if err := is.addInfo("key1", i1); err != nil {
-			if i == 0 {
-				t.Error(err)
-			}
-		} else {
-			if i != 0 {
-				t.Errorf("expected error on run #%d, but didn't get one", i)
-			}
-		}
-		if err := is.addInfo("key2", i2); err != nil {
-			if i == 0 {
-				t.Error(err)
-			}
-		} else {
-			if i != 0 {
-				t.Errorf("expected error on run #%d, but didn't get one", i)
-			}
-		}
-		if err := is.addInfo("key3", i3); err != nil {
-			if i == 0 {
-				t.Error(err)
-			}
-		} else {
-			if i != 0 {
-				t.Errorf("expected error on run #%d, but didn't get one", i)
-			}
-		}
-		uc1Keys := drainChannel(uc1)
-		uc2Keys := drainChannel(uc2)
-
-		exp1Keys := []string{}
-		exp2Keys := []string{}
-		expAllKeys := []string{}
-		if i == 0 {
-			exp1Keys = []string{"key1"}
-			exp2Keys = []string{"key2"}
-			expAllKeys = []string{"key1", "key2", "key3"}
-		}
-		if !reflect.DeepEqual(uc1Keys, exp1Keys) {
-			t.Errorf("expected %v, got %v", exp1Keys, uc1Keys)
-		}
-		if !reflect.DeepEqual(uc2Keys, exp2Keys) {
-			t.Errorf("expected %v, got %v", exp2Keys, uc2Keys)
-		}
-		ucAllKeys := drainChannel(ucAll)
-		if !reflect.DeepEqual(ucAllKeys, expAllKeys) {
-			t.Errorf("expected %v, got %v", expAllKeys, ucAllKeys)
-		}
-	}
-
-	// Update an info.
-	{
-		i1 := is.newInfo([]byte("a"), time.Second)
-		if err := is.addInfo("key1", i1); err != nil {
-			t.Error(err)
-		}
-
-		uc1Keys := drainChannel(uc1)
-		uc2Keys := drainChannel(uc2)
-
-		if expKeys := []string{"key1"}; !reflect.DeepEqual(uc1Keys, expKeys) {
-			t.Errorf("expected %v, got %v", expKeys, uc1Keys)
-		}
-		if expKeys := []string{}; !reflect.DeepEqual(uc2Keys, expKeys) {
-			t.Errorf("expected %v, got %v", expKeys, uc2Keys)
-		}
-		ucAllKeys := drainChannel(ucAll)
-		if expKeys := []string{"key1"}; !reflect.DeepEqual(ucAllKeys, expKeys) {
-			t.Errorf("expected %v, got %v", expKeys, ucAllKeys)
-		}
-	}
-
-	// Register another update channel with same pattern and verify it is
-	// invoked for all three keys.
-	is.registerUpdateChannel("key.*", ucAll)
-	expKeys := []string{"key1", "key2", "key3"}
-	ucAllKeys := drainChannel(ucAll)
-	sort.Strings(ucAllKeys)
-	if !reflect.DeepEqual(ucAllKeys, expKeys) {
-		t.Errorf("expected %v, got %v", expKeys, ucAllKeys)
-	}
-
-	// Unregister a channel and verify nothing is invoked on it.
-	is.unregisterUpdateChannel(uc1)
-	iNew := is.newInfo([]byte("a"), time.Second)
-	if err := is.addInfo("key1", iNew); err != nil {
-		t.Error(err)
-	}
-	uc1Keys := drainChannel(uc1)
-	if len(uc1Keys) != 0 {
-		t.Errorf("expected empty uc1 keys, got %v", uc1Keys)
-	}
-}
-
 type callbackRecord struct {
 	keys []string
 	wg   *sync.WaitGroup
@@ -458,7 +335,7 @@ func TestCallbacks(t *testing.T) {
 	cb2 := callbackRecord{wg: wg}
 	cbAll := callbackRecord{wg: wg}
 
-	is.registerCallback("key1", cb1.Add)
+	cb1CB := is.registerCallback("key1", cb1.Add)
 	is.registerCallback("key2", cb2.Add)
 	is.registerCallback("key.*", cbAll.Add)
 
@@ -545,6 +422,18 @@ func TestCallbacks(t *testing.T) {
 	sort.Strings(keys)
 	if !reflect.DeepEqual(keys, expKeys) {
 		t.Errorf("expected %v, got %v", expKeys, keys)
+	}
+
+	// Unregister a callback and verify nothing is invoked on it.
+	is.unregisterCallback(cb1CB)
+	iNew := is.newInfo([]byte("a"), time.Second)
+	wg.Add(2) // for the two cbAll callbacks
+	if err := is.addInfo("key1", iNew); err != nil {
+		t.Error(err)
+	}
+	wg.Wait()
+	if len(cb1.Keys()) != 2 {
+		t.Errorf("expected no new cb1 keys, got %v", cb1.Keys())
 	}
 }
 
