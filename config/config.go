@@ -56,9 +56,9 @@ var (
 	// This is also used by testing to simplify fake configs.
 	ZoneConfigHook func(SystemConfig, uint32) (*ZoneConfig, error)
 
-	// TestingLargestIDHook is a function used to bypass GetLargestObjectID
+	// testingLargestIDHook is a function used to bypass GetLargestObjectID
 	// in tests.
-	TestingLargestIDHook func() uint32
+	testingLargestIDHook func() uint32
 
 	// TestingDisableTableSplits is a testing-only variable that disables
 	// splits of tables into separate ranges.
@@ -138,7 +138,7 @@ func (s SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
 // This could be either a table or a database.
 func (s SystemConfig) GetLargestObjectID() (uint32, error) {
 	testingLock.Lock()
-	hook := TestingLargestIDHook
+	hook := testingLargestIDHook
 	testingLock.Unlock()
 	if hook != nil {
 		return hook(), nil

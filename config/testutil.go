@@ -43,7 +43,7 @@ func TestingSetupZoneConfigHook(stopper *stop.Stopper) {
 	testingZoneConfig = map[uint32]*ZoneConfig{}
 	testingPreviousHook = ZoneConfigHook
 	ZoneConfigHook = testingZoneConfigHook
-	TestingLargestIDHook = func() (max uint32) {
+	testingLargestIDHook = func() (max uint32) {
 		testingLock.Lock()
 		defer testingLock.Unlock()
 		for id := range testingZoneConfig {
@@ -67,7 +67,7 @@ func testingResetZoneConfigHook() {
 	}
 	testingHasHook = false
 	ZoneConfigHook = testingPreviousHook
-	TestingLargestIDHook = nil
+	testingLargestIDHook = nil
 }
 
 // TestingSetZoneConfig sets the zone config entry for object 'id'
