@@ -47,10 +47,6 @@ func TestReplicaGCQueueDropReplica(t *testing.T) {
 		}
 		return nil
 	})
-
-	// Restart the store to tear down the test cleanly.
-	mtc.stopStore(1)
-	mtc.restartStore(1)
 }
 
 // TestReplicaGCQueueDropReplicaOnScan verifies that the range GC queue
@@ -90,8 +86,4 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 		}
 		return nil
 	})
-
-	// Restart the store to tear down the test cleanly.
-	mtc.stopStore(1)
-	mtc.restartStore(1)
 }

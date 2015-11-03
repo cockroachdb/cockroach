@@ -1476,7 +1476,9 @@ func (s *Store) processRaft() {
 						if err != nil {
 							log.Fatal(err)
 						}
-						log.Infof("got an event membership change committed event: %s", cmd.Cmd)
+						if log.V(6) {
+							log.Infof("store %s: new committed membership change at inded %d", s, e.Index)
+						}
 
 					default:
 						continue
