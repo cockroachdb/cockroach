@@ -156,6 +156,12 @@ type multiTestContext struct {
 	// test individually. clientStopper is for 'db', transportStopper is
 	// for 'transport', and the 'stoppers' slice corresponds to the
 	// 'stores'.
+	// TODO(bdarnell): scannerStopper is a hack. The scanner is the one
+	// source of asynchronous operations that the test has no direct
+	// control over, and it is prone to an infinite retry loop during
+	// shutdown. When we have fixed our retry configurations (#2500),
+	// we should be able to remove scannerStopper.
+	scannerStopper     *stop.Stopper
 	clientStopper      *stop.Stopper
 	transportStopper   *stop.Stopper
 	engineStoppers     []*stop.Stopper
@@ -187,6 +193,9 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.gossip == nil {
 		rpcContext := rpc.NewContext(&base.Context{}, m.clock, nil)
 		m.gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
+	}
+	if m.scannerStopper == nil {
+		m.scannerStopper = stop.NewStopper()
 	}
 	if m.clientStopper == nil {
 		m.clientStopper = stop.NewStopper()
@@ -228,7 +237,8 @@ func (m *multiTestContext) Stop() {
 	go func() {
 		m.mu.RLock()
 		defer m.mu.RUnlock()
-		stoppers := append([]*stop.Stopper{m.clientStopper, m.transportStopper}, m.stoppers...)
+		stoppers := append([]*stop.Stopper{m.scannerStopper, m.clientStopper, m.transportStopper},
+			m.stoppers...)
 		// Quiesce all the stoppers so that we can stop all stoppers in unison.
 		for _, s := range stoppers {
 			// Stoppers may be nil if stopStore has been called without restartStore.
@@ -329,6 +339,7 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 	ctx.StorePool = m.storePool
 	ctx.Transport = m.transport
 	ctx.EventFeed = m.feed
+	ctx.ScannerStopper = m.scannerStopper
 	return ctx
 }
 
