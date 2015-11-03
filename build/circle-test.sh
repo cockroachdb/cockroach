@@ -7,7 +7,7 @@ if [ -n "${CIRCLE_ARTIFACTS-}" ]; then
 elif [ -n "${TMPDIR-}" ]; then
   outdir="${TMPDIR}"
 else
-  outdir=""
+  outdir="/tmp"
 fi
 
 builder=$(dirname $0)/builder.sh
