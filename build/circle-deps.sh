@@ -23,7 +23,10 @@ if [ "${1-}" = "docker" ]; then
       ln -s /uicache/$i ui/$i
     fi
   done
-  time make -C ui {bower,npm,tsd}.installed
+
+  time make -C ui npm.installed   || rm -rf node_modules/*     && make -C ui npm.installed
+  time make -C ui bower.installed || rm -rf bower_components/* && make -C ui bower.installed
+  time make -C ui tsd.installed   || rm -rf typings/*          && make -C ui tsd.installed
 
   # Restore previously cached build artifacts.
   time go install github.com/cockroachdb/build-cache
