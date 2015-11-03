@@ -60,10 +60,24 @@ var (
 	// in tests.
 	testingLargestIDHook func() uint32
 
-	// TestingDisableTableSplits is a testing-only variable that disables
+	// testingDisableTableSplits is a testing-only variable that disables
 	// splits of tables into separate ranges.
-	TestingDisableTableSplits bool
+	testingDisableTableSplits bool
 )
+
+// TestingDisableTableSplits is a testing-only function that disables
+// splits of tables into separate ranges. It returns a function
+// that re-enables this splitting.
+func TestingDisableTableSplits() func() {
+	testingLock.Lock()
+	testingDisableTableSplits = true
+	testingLock.Unlock()
+	return func() {
+		testingLock.Lock()
+		testingDisableTableSplits = false
+		testingLock.Unlock()
+	}
+}
 
 // Validate verifies some ZoneConfig fields.
 // This should be used to validate user input when setting a new zone config.
@@ -215,7 +229,10 @@ func (s SystemConfig) getZoneConfigForID(id uint32) (*ZoneConfig, error) {
 // at which to split the span [start, end).
 // The only required splits are at each user table prefix.
 func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.RKey {
-	if TestingDisableTableSplits {
+	testingLock.Lock()
+	tableSplitsDisabled := testingDisableTableSplits
+	testingLock.Unlock()
+	if tableSplitsDisabled {
 		return nil
 	}
 

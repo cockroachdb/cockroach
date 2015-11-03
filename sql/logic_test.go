@@ -510,8 +510,7 @@ func TestLogic(t *testing.T) {
 
 	// TODO(marc): splitting ranges at table boundaries causes
 	// a blocked task and won't drain. Investigate and fix.
-	config.TestingDisableTableSplits = true
-	defer func() { config.TestingDisableTableSplits = false }()
+	defer config.TestingDisableTableSplits()()
 
 	var globs []string
 	if *bigtest {

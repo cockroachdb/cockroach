@@ -30,8 +30,7 @@ import (
 // a rename operation.
 func TestRenameTable(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	config.TestingDisableTableSplits = true
-	defer func() { config.TestingDisableTableSplits = false }()
+	defer config.TestingDisableTableSplits()()
 	s, sqlDB, kvDB := setup(t)
 	defer cleanup(s, sqlDB)
 
