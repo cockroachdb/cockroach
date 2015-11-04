@@ -100,8 +100,13 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	// Update SystemConfig to trigger gossip.
 	if err := store.DB().Txn(func(txn *client.Txn) error {
 		txn.SetSystemDBTrigger()
+		// We don't care about the values, just the keys.
 		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + 1))
-		return txn.Put(k, 10)
+		v, err := txn.Get(k)
+		if err != nil {
+			return err
+		}
+		return txn.Put(k, v.ValueBytes())
 	}); err != nil {
 		t.Fatal(err)
 	}
