@@ -381,14 +381,23 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp 
 	// Otherwise, no active lease: Request renewal.
 	err := r.requestLeaderLease(timestamp)
 
-	// Getting a LeaseRejectedError back means someone else got there first;
-	// we can redirect if they cover our timestamp. Note that it can't be us,
-	// since we're holding a lock here, and even if it were it would be a rare
-	// extra round-trip.
+	// Getting a LeaseRejectedError back means someone else got there first, or
+	// the lease request was somehow invalid due to a concurrent change.
+	//
+	// In the case where another machine obtained the lease, we are certain that
+	// it can't be this replica because we're holding a lock.
+	//
+	// In all cases, the error is converted to a NotLeaderError.
 	if _, ok := err.(*roachpb.LeaseRejectedError); ok {
-		if lease := r.getLease(); lease.Covers(timestamp) {
-			return r.newNotLeaderError(lease, r.store.StoreID())
+		if log.V(1) {
+			log.Warningf("Lease for range %s rejected at timestamp %v: %s", r, timestamp,
+				err)
 		}
+		lease := r.getLease()
+		if !lease.Covers(timestamp) {
+			lease = nil
+		}
+		return r.newNotLeaderError(lease, r.store.StoreID())
 	}
 	return err
 }
