@@ -327,7 +327,7 @@ func (txn *Txn) CommitInBatch(b *Batch) error {
 // CommitInBatchWithResponse is a version of CommitInBatch that returns the
 // BatchResponse.
 func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, error) {
-	b.reqs = append(b.reqs, endTxnReq(true /* commit */, txn.systemDBTrigger))
+	b.reqs = append(b.reqs, endTxnReq(true /* commit */, txn.SystemDBTrigger()))
 	b.initResult(1, 0, nil)
 	return txn.RunWithResponse(b)
 }
@@ -345,7 +345,7 @@ func (txn *Txn) Rollback() error {
 }
 
 func (txn *Txn) sendEndTxnReq(commit bool) error {
-	_, pErr := txn.send(endTxnReq(commit, txn.systemDBTrigger))
+	_, pErr := txn.send(endTxnReq(commit, txn.SystemDBTrigger()))
 	return pErr.GoError()
 }
 
