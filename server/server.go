@@ -69,6 +69,7 @@ type Server struct {
 	db            *client.DB
 	kvDB          *kv.DBServer
 	sqlServer     sql.HTTPServer
+	schemaChanger sql.SchemaChanger
 	node          *Node
 	recorder      *status.NodeStatusRecorder
 	admin         *adminServer
@@ -137,8 +138,8 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	if err := s.kvDB.RegisterRPC(s.rpc); err != nil {
 		return nil, err
 	}
-
-	s.sqlServer = sql.MakeHTTPServer(&s.ctx.Context, *s.db, s.gossip, s.clock)
+	leaseMgr := sql.NewLeaseManager(0, *s.db, s.clock)
+	s.sqlServer = sql.MakeHTTPServer(&s.ctx.Context, *s.db, s.gossip, leaseMgr)
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
@@ -156,6 +157,8 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		},
 	}
 	s.node = NewNode(nCtx)
+	s.schemaChanger.Start(s.stopper, s.gossip, s.node, s.db, leaseMgr)
+
 	s.admin = newAdminServer(s.db, s.stopper)
 	s.status = newStatusServer(s.db, s.gossip, ctx)
 	s.tsDB = ts.NewDB(s.db)
