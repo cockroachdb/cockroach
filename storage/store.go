@@ -447,12 +447,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	s.feed = NewStoreEventFeed(s.Ident.StoreID, s.ctx.EventFeed)
 	s.feed.startStore(s.startedAt)
 
-	// GCTimeouts method is called each time an engine compaction is
-	// underway. It sets minimum timeouts for transaction records and
-	// response cache entries.
-	minTxnTS := int64(0) // disable GC of transactions until we know minimum write intent age
-	minRCacheTS := now.WallTime - GCResponseCacheExpiration.Nanoseconds()
-	s.engine.SetGCTimeouts(minTxnTS, minRCacheTS)
+	s.startUpdateGC()
 
 	// Iterator over all range-local key-based data.
 	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
@@ -562,6 +557,33 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 // has completed its scan. Only for testing.
 func (s *Store) WaitForInit() {
 	s.initComplete.Wait()
+}
+
+func (s *Store) startUpdateGC() {
+	updateGC := func() {
+		minRCacheTS := s.ctx.Clock.Now().WallTime - GCResponseCacheExpiration.Nanoseconds()
+		// We don't actually GC Txn entries just yet. See #2062.
+		const minTxnTS = int64(0)
+		// These timeouts are used each time an engine compaction is
+		// underway. Transaction records and response cache entries
+		// older than the respective timestamp are gc'ed.
+		s.engine.SetGCTimeouts(minTxnTS, minRCacheTS)
+	}
+
+	updateGC()
+	s.stopper.RunWorker(func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				updateGC()
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+
+	})
 }
 
 // startGossip runs an infinite loop in a goroutine which regularly checks
