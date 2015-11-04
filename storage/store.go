@@ -128,7 +128,7 @@ type rangeAlreadyExists struct {
 }
 
 // Error implements the error interface.
-func (e *rangeAlreadyExists) Error() string {
+func (e rangeAlreadyExists) Error() string {
 	return fmt.Sprintf("range for Range ID %d already exists on store", e.rng.Desc().RangeID)
 }
 
@@ -1007,7 +1007,7 @@ func (s *Store) addReplicaInternal(rng *Replica) error {
 	}
 
 	if s.replicasByKey.Has(rng) {
-		return &rangeAlreadyExists{rng}
+		return rangeAlreadyExists{rng}
 	}
 	if exRngItem := s.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
 		return util.Errorf("range for key %v already exists in rangesByKey btree",
@@ -1021,7 +1021,7 @@ func (s *Store) addReplicaToRangeMap(rng *Replica) error {
 	rangeID := rng.Desc().RangeID
 
 	if exRng, ok := s.replicas[rangeID]; ok {
-		return &rangeAlreadyExists{exRng}
+		return rangeAlreadyExists{exRng}
 	}
 	s.replicas[rangeID] = rng
 	return nil
@@ -1094,7 +1094,7 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 	s.feed.registerRange(rng, false /* scan */)
 
 	if s.replicasByKey.Has(rng) {
-		return &rangeAlreadyExists{rng}
+		return rangeAlreadyExists{rng}
 	}
 	if exRngItem := s.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
 		return util.Errorf("range for key %v already exists in rangesByKey btree",
