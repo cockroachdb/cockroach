@@ -30,6 +30,7 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -141,25 +142,37 @@ type multiTestContext struct {
 	gossip       *gossip.Gossip
 	storePool    *storage.StorePool
 	transport    multiraft.Transport
+	distSender   *kv.DistSender
 	db           *client.DB
 	feed         *util.Feed
+
 	// The per-store clocks slice normally contains aliases of
 	// multiTestContext.clock, but it may be populated before Start() to
 	// use distinct clocks per store.
 	clocks  []*hlc.Clock
 	engines []engine.Engine
 	senders []*kv.LocalSender
-	stores  []*storage.Store
 	idents  []roachpb.StoreIdent
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. clientStopper is for 'db', transportStopper is
 	// for 'transport', and the 'stoppers' slice corresponds to the
 	// 'stores'.
+	// TODO(bdarnell): scannerStopper is a hack. The scanner is the one
+	// source of asynchronous operations that the test has no direct
+	// control over, and it is prone to an infinite retry loop during
+	// shutdown. When we have fixed our retry configurations (#2500),
+	// we should be able to remove scannerStopper.
+	scannerStopper     *stop.Stopper
 	clientStopper      *stop.Stopper
-	stoppers           []*stop.Stopper
 	transportStopper   *stop.Stopper
 	engineStoppers     []*stop.Stopper
 	timeUntilStoreDead time.Duration
+
+	// 'stores' and 'stoppers' may change at runtime so the pointers
+	// they contain are protected by 'mu'.
+	mu       sync.RWMutex
+	stores   []*storage.Store
+	stoppers []*stop.Stopper
 }
 
 // startMultiTestContext is a convenience function to create, start, and return
@@ -182,6 +195,9 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		rpcContext := rpc.NewContext(&base.Context{}, m.clock, nil)
 		m.gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	}
+	if m.scannerStopper == nil {
+		m.scannerStopper = stop.NewStopper()
+	}
 	if m.clientStopper == nil {
 		m.clientStopper = stop.NewStopper()
 	}
@@ -199,12 +215,12 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	m.senders = append(m.senders, kv.NewLocalSender())
 
 	if m.db == nil {
-		distSender := kv.NewDistSender(&kv.DistSenderContext{
+		m.distSender = kv.NewDistSender(&kv.DistSenderContext{
 			Clock:             m.clock,
 			RangeDescriptorDB: m.senders[0],
 			RPCSend:           m.rpcSend,
 		}, m.gossip)
-		sender := kv.NewTxnCoordSender(distSender, m.clock, false, nil, m.clientStopper)
+		sender := kv.NewTxnCoordSender(m.distSender, m.clock, false, nil, m.clientStopper)
 		m.db = client.NewDB(sender)
 	}
 
@@ -220,7 +236,10 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 func (m *multiTestContext) Stop() {
 	done := make(chan struct{})
 	go func() {
-		stoppers := append([]*stop.Stopper{m.clientStopper, m.transportStopper}, m.stoppers...)
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+		stoppers := append([]*stop.Stopper{m.scannerStopper, m.clientStopper, m.transportStopper},
+			m.stoppers...)
 		// Quiesce all the stoppers so that we can stop all stoppers in unison.
 		for _, s := range stoppers {
 			// Stoppers may be nil if stopStore has been called without restartStore.
@@ -262,6 +281,8 @@ func (m *multiTestContext) Stop() {
 func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 	getArgs func(addr net.Addr) proto.Message,
 	getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	fail := func(pErr *roachpb.Error) ([]proto.Message, error) {
 		br := &roachpb.BatchResponse{}
 		br.Error = pErr
@@ -276,7 +297,19 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 		if stErr != nil {
 			m.t.Fatal(stErr)
 		}
-		br, pErr = m.senders[nodeID-1].Send(context.Background(), ba)
+		nodeIndex := nodeID - 1
+		// The rpcSend method crosses store boundaries: it is possible that the
+		// destination store is stopped while the source is still running.
+		// Run the send in a Task on the destination store to simulate what
+		// would happen with real RPCs.
+		if s := m.stoppers[nodeIndex]; s == nil || !s.RunTask(func() {
+			br, pErr = m.senders[nodeIndex].Send(context.Background(), ba)
+		}) {
+			pErr = &roachpb.Error{}
+			pErr.SetGoError(rpc.NewSendError("store is stopped", false))
+			m.expireLeaderLeases()
+			continue
+		}
 		if pErr == nil {
 			return []proto.Message{br}, nil
 		}
@@ -288,6 +321,9 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 				// Leader is not known; this can happen if the leader is removed
 				// from the group. Move the manual clock forward in an attempt to
 				// expire the lease.
+				m.expireLeaderLeases()
+			} else if m.stores[tErr.Leader.NodeID-1] == nil {
+				// The leader is known but down, so expire its lease.
 				m.expireLeaderLeases()
 			}
 		default:
@@ -319,6 +355,7 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 	ctx.StorePool = m.storePool
 	ctx.Transport = m.transport
 	ctx.EventFeed = m.feed
+	ctx.ScannerStopper = m.scannerStopper
 	return ctx
 }
 
@@ -400,6 +437,8 @@ func gossipNodeDesc(g *gossip.Gossip, nodeID roachpb.NodeID) error {
 // StopStore stops a store but leaves the engine intact.
 // All stopped stores must be restarted before multiTestContext.Stop is called.
 func (m *multiTestContext) stopStore(i int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.senders[i].RemoveStore(m.stores[i])
 	m.stoppers[i].Stop()
 	m.stoppers[i] = nil
@@ -408,6 +447,8 @@ func (m *multiTestContext) stopStore(i int) {
 
 // restartStore restarts a store previously stopped with StopStore.
 func (m *multiTestContext) restartStore(i int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.stoppers[i] = stop.NewStopper()
 
 	ctx := m.makeContext(i)
@@ -432,6 +473,8 @@ func (m *multiTestContext) restart() {
 
 // replicateRange replicates the given range onto the given stores.
 func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, sourceStoreIndex int, dests ...int) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	rng, err := m.stores[sourceStoreIndex].GetReplica(rangeID)
 	if err != nil {
 		m.t.Fatal(err)
@@ -464,6 +507,8 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, sourceStoreIn
 // unreplicateRange removes a replica of the range in the source store
 // from the dest store.
 func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, source, dest int) {
+	m.mu.RLock()
+	m.mu.RUnlock()
 	rng, err := m.stores[source].GetReplica(rangeID)
 	if err != nil {
 		m.t.Fatal(err)

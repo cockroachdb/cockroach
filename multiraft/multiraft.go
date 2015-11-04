@@ -688,6 +688,15 @@ func (s *state) stop() {
 	}
 	s.MultiRaft.multiNode.Stop()
 	s.MultiRaft.Transport.Stop(s.storeID)
+
+	// Ensure that any remaining commands are not left hanging.
+	for _, g := range s.groups {
+		for _, p := range g.pending {
+			if p.ch != nil {
+				p.ch <- util.Errorf("shutting down")
+			}
+		}
+	}
 }
 
 // addNode creates a node and registers the given group (if not nil)
@@ -743,9 +752,18 @@ func (s *state) handleMessage(req *RaftMessageRequest) {
 	case raftpb.MsgHeartbeat:
 		s.fanoutHeartbeat(req)
 		return
+
 	case raftpb.MsgHeartbeatResp:
 		s.fanoutHeartbeatResponse(req)
 		return
+
+	case raftpb.MsgSnap:
+		if !s.Storage.CanApplySnapshot(req.GroupID, req.Message.Snapshot) {
+			// If the storage cannot accept the snapshot, drop it before
+			// passing it to multiNode.Step, since our error handling
+			// options past that point are limited.
+			return
+		}
 	}
 
 	s.CacheReplicaDescriptor(req.GroupID, req.FromReplica)

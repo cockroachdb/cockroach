@@ -518,7 +518,8 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// re-run as part of a transaction for consistency. The
 			// case where we don't need to re-run is if the read
 			// consistency is not required.
-			if needAnother && ba.Txn == nil && ba.ReadConsistency != roachpb.INCONSISTENT {
+			if needAnother && ba.Txn == nil && ba.IsPossibleTransaction() &&
+				ba.ReadConsistency != roachpb.INCONSISTENT {
 				return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{})
 			}
 
