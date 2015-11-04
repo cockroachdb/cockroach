@@ -22,18 +22,33 @@ import (
 	"os"
 )
 
-// EnsureHost takes a host:port pair, where the host portion is optional.
-// If a host is present, the output is equal to the input. Otherwise,
-// the output will contain a host portion equal to the hostname (or
-// "127.0.0.1" as a fallback).
-func EnsureHost(addr string) string {
+const (
+	defaultPort = "26257"
+)
+
+// EnsureHostPort takes a host:port pair, where the host and port are optional.
+// If host and port are present, the output is equal to the input. If port is
+// not present, use default port 26257. If host is not present, host will be
+// equal to the hostname (or "127.0.0.1" as a fallback).
+func EnsureHostPort(addr string) string {
 	host, port, err := net.SplitHostPort(addr)
 	if host != "" || err != nil {
+		if port == "" {
+			port = defaultPort
+			return net.JoinHostPort(addr, port)
+		}
+
 		return addr
 	}
+
 	host, err = os.Hostname()
 	if err != nil {
 		host = "127.0.0.1"
 	}
+
+	if port == "" {
+		port = defaultPort
+	}
+
 	return net.JoinHostPort(host, port)
 }
