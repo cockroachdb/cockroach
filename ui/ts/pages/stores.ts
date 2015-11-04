@@ -5,6 +5,7 @@
 /// <reference path="../components/table.ts" />
 /// <reference path="../components/navbar.ts" />
 /// <reference path="../components/topbar.ts" />
+/// <reference path="../components/visualizations/visualizations.ts" />
 /// <reference path="../util/format.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
@@ -36,6 +37,7 @@ module AdminViews {
      */
     export module StoresPage {
       import Topbar = Components.Topbar;
+      import MithrilComponent = _mithril.MithrilComponent;
       class Controller {
         private static comparisonColumns: Table.TableColumn<StoreStatus>[] = [
           {
@@ -92,27 +94,50 @@ module AdminViews {
           let allStats: Models.Proto.Status = storeStatuses.totalStatus();
           if (allStats) {
             return m(".primary-stats", [
-              m(".stat", [
-                m("span.title", "Total Ranges"),
-                m("span.value", allStats.range_count),
-              ]),
-              m(".stat", [
-                m("span.title", "Total Live Bytes"),
-                m("span.value", Utils.Format.Bytes(allStats.stats.live_bytes)),
-              ]),
-              m(".stat", [
-                m("span.title", "Leader Ranges"),
-                m("span.value", allStats.leader_range_count),
-              ]),
-              m(".stat", [
-                m("span.title", "Available"),
-                m("span.value", Utils.Format.Percentage(allStats.available_range_count, allStats.leader_range_count)),
-              ]),
-              m(".stat", [
-                m("span.title", "Fully Replicated"),
-                m("span.value", Utils.Format.Percentage(allStats.replicated_range_count, allStats.leader_range_count)),
-              ]),
-            ]);
+                {
+                  title: "Total Ranges",
+                  visualizationArguments: {
+                    format: ".0s",
+                    data: {value: allStats.range_count},
+                  },
+                },
+                {
+                  title: "Total Live Bytes",
+                  visualizationArguments: {
+                    formatFn: function (v: number): string {
+                      return Utils.Format.Bytes(v);
+                    },
+                    zoom: "50%",
+                    data: {value: allStats.stats.live_bytes},
+                  },
+                },
+                {
+                  title: "Leader Ranges",
+                  visualizationArguments: {
+                    format: ".0s",
+                    data: {value: allStats.leader_range_count},
+                  },
+                },
+                {
+                  title: "Available",
+                  visualizationArguments: {
+                    format: "3%",
+                    data: {value: allStats.available_range_count / allStats.leader_range_count},
+                  },
+                },
+                {
+                  title: "Fully Replicated",
+                  visualizationArguments: {
+                    format: "3%",
+                    data: {value: allStats.replicated_range_count / allStats.leader_range_count},
+                  },
+                },
+              ].map(function (v: any): MithrilComponent<any> {
+                v.virtualVisualizationElement =
+                  m.component(Visualizations.NumberVisualization, v.visualizationArguments);
+                return m.component(Visualizations.VisualizationWrapper, v);
+              })
+            );
           }
           return m(".primary-stats");
         }
