@@ -569,7 +569,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		// This time, only write the last table descriptor. Splits
 		// still occur for every ID.
 		// We don't care about the values, just the keys.
-		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + 10))
+		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + 1))
 		v, err := txn.Get(k)
 		if err != nil {
 			return err

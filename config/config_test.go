@@ -44,8 +44,8 @@ func sqlKV(tableID uint32, indexID, descriptorID uint64) roachpb.KeyValue {
 	return kv(k, nil)
 }
 
-func descriptor(descriptorID uint32) roachpb.KeyValue {
-	return sqlKV(uint32(keys.DescriptorTableID), 1, uint64(descriptorID))
+func descriptor(descriptorID uint64) roachpb.KeyValue {
+	return sqlKV(uint32(keys.DescriptorTableID), 1, descriptorID)
 }
 
 func kv(k, v []byte) roachpb.KeyValue {
@@ -201,7 +201,7 @@ func TestGetLargestID(t *testing.T) {
 func TestComputeSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	start := uint32(keys.MaxReservedDescID + 1)
+	const start = keys.MaxReservedDescID + 1
 
 	// Real SQL system tables only.
 	baseSql := sql.GetInitialSystemValues()
@@ -257,10 +257,8 @@ func TestComputeSplits(t *testing.T) {
 
 		// Convert ints to actual keys.
 		expected := []roachpb.RKey{}
-		if tc.splits != nil {
-			for _, s := range tc.splits {
-				expected = append(expected, keys.MakeTablePrefix(s))
-			}
+		for _, s := range tc.splits {
+			expected = append(expected, keys.MakeTablePrefix(s))
 		}
 		if !reflect.DeepEqual(splits, expected) {
 			t.Errorf("#%d: bad splits:\ngot: %v\nexpected: %v", tcNum, splits, expected)
