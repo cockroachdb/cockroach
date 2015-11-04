@@ -145,7 +145,7 @@ func (lt *localRPCTransport) getClient(id roachpb.StoreID) (*netrpc.Client, erro
 	address := server.Addr().String()
 
 	// If this wasn't test code we wouldn't want to call Dial while holding the lock.
-	conn, err := crpc.TLSDialHTTP("tcp", address, nil)
+	conn, err := codec.TLSDialHTTP("tcp", address, base.NetworkTimeout, nil)
 	if err != nil {
 		return nil, err
 	}

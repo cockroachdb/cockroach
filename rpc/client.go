@@ -28,6 +28,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/rpc/codec"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -161,7 +162,8 @@ func (c *Client) internalConn() *internalConn {
 
 // connect attempts a single connection attempt. On success, updates `c.conn`.
 func (c *Client) connect() error {
-	conn, err := TLSDialHTTP(c.addr.NetworkField, c.addr.AddressField, c.tlsConfig)
+	conn, err := codec.TLSDialHTTP(
+		c.addr.NetworkField, c.addr.AddressField, base.NetworkTimeout, c.tlsConfig)
 	if err != nil {
 		return err
 	}

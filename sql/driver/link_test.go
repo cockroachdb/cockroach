@@ -31,7 +31,9 @@ func TestNoLinkForbidden(t *testing.T) {
 		t.Skip("GOPATH isn't set")
 	}
 
-	imports, err := testutils.TransitiveImports("github.com/cockroachdb/cockroach/sql/driver", false)
+	// TODO(pmattis): Pass false instead of true for the cgo parameter once
+	// rpc/codec can be compiled without the c-lz4 and c-snappy dependencies.
+	imports, err := testutils.TransitiveImports("github.com/cockroachdb/cockroach/sql/driver", true)
 	if err != nil {
 		t.Fatal(err)
 	}
