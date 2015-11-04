@@ -1413,7 +1413,10 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd roachpb.RaftCommand) <-ch
 // proposeRaftCommandImpl runs on the processRaft goroutine.
 func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd roachpb.RaftCommand) <-chan error {
 	// If the range has been removed since the proposal started, drop it now.
-	if _, ok := s.replicas[cmd.RangeID]; !ok {
+	s.mu.RLock()
+	_, ok := s.replicas[cmd.RangeID]
+	s.mu.RUnlock()
+	if !ok {
 		ch := make(chan error, 1)
 		ch <- roachpb.NewRangeNotFoundError(cmd.RangeID)
 		return ch
@@ -1610,8 +1613,8 @@ func (s *Store) GroupLocker() sync.Locker {
 
 // CanApplySnapshot implements the multiraft.Storage interface.
 func (s *Store) CanApplySnapshot(rangeID roachpb.RangeID, snap raftpb.Snapshot) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if r, ok := s.replicas[rangeID]; ok && r.isInitialized() {
 		// We have the range and it's initialized, so let the snapshot
 		// through.
