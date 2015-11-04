@@ -283,7 +283,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error re-adding same range")
 	}
-	if _, ok := err.(*rangeAlreadyExists); !ok {
+	if _, ok := err.(rangeAlreadyExists); !ok {
 		t.Fatalf("expected rangeAlreadyExists error; got %s", err)
 	}
 	// Try to remove range 1 again.

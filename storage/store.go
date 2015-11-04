@@ -128,7 +128,7 @@ type rangeAlreadyExists struct {
 }
 
 // Error implements the error interface.
-func (e *rangeAlreadyExists) Error() string {
+func (e rangeAlreadyExists) Error() string {
 	return fmt.Sprintf("range for Range ID %d already exists on store", e.rng.Desc().RangeID)
 }
 
@@ -1007,7 +1007,7 @@ func (s *Store) addReplicaInternal(rng *Replica) error {
 	}
 
 	if s.replicasByKey.Has(rng) {
-		return &rangeAlreadyExists{rng}
+		return rangeAlreadyExists{rng}
 	}
 	if exRngItem := s.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
 		return util.Errorf("range for key %v already exists in rangesByKey btree",
@@ -1021,7 +1021,7 @@ func (s *Store) addReplicaToRangeMap(rng *Replica) error {
 	rangeID := rng.Desc().RangeID
 
 	if exRng, ok := s.replicas[rangeID]; ok {
-		return &rangeAlreadyExists{exRng}
+		return rangeAlreadyExists{exRng}
 	}
 	s.replicas[rangeID] = rng
 	return nil
@@ -1094,7 +1094,7 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 	s.feed.registerRange(rng, false /* scan */)
 
 	if s.replicasByKey.Has(rng) {
-		return &rangeAlreadyExists{rng}
+		return rangeAlreadyExists{rng}
 	}
 	if exRngItem := s.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
 		return util.Errorf("range for key %v already exists in rangesByKey btree",
@@ -1413,7 +1413,10 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd roachpb.RaftCommand) <-ch
 // proposeRaftCommandImpl runs on the processRaft goroutine.
 func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd roachpb.RaftCommand) <-chan error {
 	// If the range has been removed since the proposal started, drop it now.
-	if _, ok := s.replicas[cmd.RangeID]; !ok {
+	s.mu.RLock()
+	_, ok := s.replicas[cmd.RangeID]
+	s.mu.RUnlock()
+	if !ok {
 		ch := make(chan error, 1)
 		ch <- roachpb.NewRangeNotFoundError(cmd.RangeID)
 		return ch
@@ -1610,8 +1613,8 @@ func (s *Store) GroupLocker() sync.Locker {
 
 // CanApplySnapshot implements the multiraft.Storage interface.
 func (s *Store) CanApplySnapshot(rangeID roachpb.RangeID, snap raftpb.Snapshot) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if r, ok := s.replicas[rangeID]; ok && r.isInitialized() {
 		// We have the range and it's initialized, so let the snapshot
 		// through.
