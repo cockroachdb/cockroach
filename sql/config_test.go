@@ -79,8 +79,7 @@ func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// Disable splitting. We're using bad attributes in zone configs
 	// to be able to match.
-	config.TestingDisableTableSplits = true
-	defer func() { config.TestingDisableTableSplits = false }()
+	defer config.TestingDisableTableSplits()()
 	s, sqlDB, _ := setup(t)
 	defer cleanup(s, sqlDB)
 

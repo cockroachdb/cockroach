@@ -3,11 +3,11 @@
   "dependencies": {
     "d3": "~3.5.6",
     "lodash": "~3.10.1",
-    "mithriljs": "next",
+    "mithriljs": "df114a4ee27ed64d3602741dc461d052fbc9c284",
     "nvd3": "~1.8.1"
   },
   "devDependencies": {
-    "chai": "~3.3.0",
+    "chai": "~3.4.0",
     "mocha": "~2.3.3"
   }
 }

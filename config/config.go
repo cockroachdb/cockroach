@@ -56,14 +56,28 @@ var (
 	// This is also used by testing to simplify fake configs.
 	ZoneConfigHook func(SystemConfig, uint32) (*ZoneConfig, error)
 
-	// TestingLargestIDHook is a function used to bypass GetLargestObjectID
+	// testingLargestIDHook is a function used to bypass GetLargestObjectID
 	// in tests.
-	TestingLargestIDHook func() uint32
+	testingLargestIDHook func() uint32
 
-	// TestingDisableTableSplits is a testing-only variable that disables
+	// testingDisableTableSplits is a testing-only variable that disables
 	// splits of tables into separate ranges.
-	TestingDisableTableSplits bool
+	testingDisableTableSplits bool
 )
+
+// TestingDisableTableSplits is a testing-only function that disables
+// splits of tables into separate ranges. It returns a function
+// that re-enables this splitting.
+func TestingDisableTableSplits() func() {
+	testingLock.Lock()
+	testingDisableTableSplits = true
+	testingLock.Unlock()
+	return func() {
+		testingLock.Lock()
+		testingDisableTableSplits = false
+		testingLock.Unlock()
+	}
+}
 
 // Validate verifies some ZoneConfig fields.
 // This should be used to validate user input when setting a new zone config.
@@ -138,7 +152,7 @@ func (s SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
 // This could be either a table or a database.
 func (s SystemConfig) GetLargestObjectID() (uint32, error) {
 	testingLock.Lock()
-	hook := TestingLargestIDHook
+	hook := testingLargestIDHook
 	testingLock.Unlock()
 	if hook != nil {
 		return hook(), nil
@@ -215,7 +229,10 @@ func (s SystemConfig) getZoneConfigForID(id uint32) (*ZoneConfig, error) {
 // at which to split the span [start, end).
 // The only required splits are at each user table prefix.
 func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.RKey {
-	if TestingDisableTableSplits {
+	testingLock.Lock()
+	tableSplitsDisabled := testingDisableTableSplits
+	testingLock.Unlock()
+	if tableSplitsDisabled {
 		return nil
 	}
 
