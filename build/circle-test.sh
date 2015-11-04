@@ -11,7 +11,7 @@ else
 fi
 
 builder=$(dirname $0)/builder.sh
-match='^panic|^[Gg]oroutine \d+|(read|write) by.*goroutine|DATA RACE'
+match='^F\d+|^panic|^[Gg]oroutine \d+|(read|write) by.*goroutine|DATA RACE'
 
 prepare_artifacts() {
   ret=$?
