@@ -487,6 +487,21 @@ func TestRangeLeaderLease(t *testing.T) {
 	if held, expired := hasLease(tc.rng, tc.clock.Now()); held || !expired {
 		t.Errorf("expected another replica to have expired lease")
 	}
+
+	// Verify that command returns NotLeaderError when lease is rejected.
+	rng, err := NewReplica(testRangeDescriptor(), tc.store)
+	rng.proposeRaftCommandFn = func(id cmdIDKey, cmd roachpb.RaftCommand) <-chan error {
+		errChan := make(chan error, 1)
+		errChan <- &roachpb.LeaseRejectedError{
+			Message: "replica not found",
+		}
+		return errChan
+	}
+
+	err = rng.redirectOnOrAcquireLeaderLease(nil, tc.clock.Now())
+	if lErr, ok := err.(*roachpb.NotLeaderError); !ok || lErr == nil {
+		t.Fatalf("wanted NotLeaderError, got %s", err)
+	}
 }
 
 func TestRangeNotLeaderError(t *testing.T) {
