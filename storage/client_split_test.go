@@ -98,13 +98,36 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 		t.Fatalf("%q: split unexpected error: %s", key, err)
 	}
 
+	desc := &sql.TableDescriptor{}
+	descBytes, err := desc.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Update SystemConfig to trigger gossip.
 	if err := store.DB().Txn(func(txn *client.Txn) error {
 		txn.SetSystemDBTrigger()
+		// We don't care about the values, just the keys.
 		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + 1))
-		return txn.Put(k, 10)
+		return txn.Put(k, desc)
 	}); err != nil {
 		t.Fatal(err)
+	}
+
+	successChan := make(chan struct{}, 1)
+	store.Gossip().RegisterCallback(gossip.KeySystemConfig, func(_ string, content []byte) {
+		if bytes.Contains(content, descBytes) {
+			select {
+			case successChan <- struct{}{}:
+			default:
+			}
+		}
+	})
+
+	select {
+	case <-time.After(time.Second):
+		t.Errorf("expected a schema gossip containing %q, but did not see one", descBytes)
+	case <-successChan:
 	}
 }
 
