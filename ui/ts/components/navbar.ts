@@ -30,7 +30,7 @@ module Components {
       isActive: (t: Target) => boolean;
     }
 
-    export function controller(): any {}
+    export function controller(): void {}
 
     export function view(ctrl: any, args: {ts: TargetSet; }): _mithril.MithrilVirtualElement {
       return m(

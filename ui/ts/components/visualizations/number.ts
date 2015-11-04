@@ -8,8 +8,6 @@ module Visualizations {
 
   import MithrilVirtualElement = _mithril.MithrilVirtualElement;
 
-  let formatFn: (n: number) => string;
-
   interface NumberVisualizationData {
     value: number;
   }
@@ -22,18 +20,14 @@ module Visualizations {
   }
 
   export module NumberVisualization {
-    export function controller(): any {
-    }
+    export function controller(): void {}
 
     export function view(ctrl: any, info: NumberVisualizationConfig): MithrilVirtualElement {
-
-      formatFn = info.formatFn || d3.format(info.format || ".3s");
-
-      let data: VisualizationData = _.isArray(info.data) ? info.data[0] : info.data;
+      let formatFn: (n: number) => string = info.formatFn || d3.format(info.format || ".3s");
 
       return m(
         ".visualization",
-        m(".number", {style: "zoom:" + (info.zoom || "100%") + ";"}, formatFn(data.value))
+        m(".number", {style: "zoom:" + (info.zoom || "100%") + ";"}, formatFn(info.data.value))
       );
     }
   }

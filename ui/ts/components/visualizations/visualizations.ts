@@ -11,20 +11,18 @@ module Visualizations {
   import MithrilVirtualElement = _mithril.MithrilVirtualElement;
 
   export interface VisualizationData {
-    key?: string;
     value: number;
   }
 
   export interface VisualizationWrapperInfo {
-    title?: string;
+    title: string;
     virtualVisualizationElement: MithrilVirtualElement;
   }
 
   export module VisualizationWrapper {
     import MithrilVirtualElement = _mithril.MithrilVirtualElement;
 
-    export function controller(): void {
-    }
+    export function controller(): void {}
 
     export function view(ctrl: any, info: VisualizationWrapperInfo): MithrilVirtualElement {
 
