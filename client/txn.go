@@ -19,6 +19,7 @@ package client
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"golang.org/x/net/context"
@@ -109,7 +110,7 @@ func (txn *Txn) SetDebugName(name string, depth int) {
 	if name == "" {
 		name = fun
 	}
-	txn.Proto.Name = fmt.Sprintf("%s:%d %s", file, line, name)
+	txn.Proto.Name = file + ":" + strconv.Itoa(line) + " " + name
 }
 
 // DebugName returns the debug name associated with the transaction.
