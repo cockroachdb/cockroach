@@ -1406,5 +1406,5 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 	mtc.replicateRange(raftID, 0, 2)
 
 	// The range should be synced back up.
-	mtc.waitForValues(roachpb.Key("a"), 3*time.Second, []int64{16, 16, 16})
+	mtc.waitForValues(roachpb.Key("a"), 2*time.Minute, []int64{16, 16, 16})
 }
