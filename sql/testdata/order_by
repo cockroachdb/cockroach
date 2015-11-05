@@ -244,3 +244,15 @@ query I
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
 0 revscan abc@bc /2-/3
+
+statement ok
+CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz));
+
+statement ok
+INSERT INTO bar VALUES (0, NULL), (1, NULL);
+
+query IT
+SELECT * FROM bar ORDER BY baz, id;
+----
+0 NULL
+1 NULL
