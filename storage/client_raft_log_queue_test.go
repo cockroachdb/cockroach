@@ -45,13 +45,13 @@ func TestRaftLogQueue(t *testing.T) {
 	}
 
 	rep := mtc.stores[0].LookupReplica([]byte("a"), nil)
-	firstIndex, err := rep.FirstIndex()
+	originalIndex, err := rep.FirstIndex()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Write a collection of values to increase the raft log.
-	for i := 0; i < storage.RaftLogQueueLogThreshold+1; i++ {
+	for i := 0; i < storage.RaftLogQueueStaleThreshold+1; i++ {
 		pArgs = putArgs([]byte(fmt.Sprintf("key-%d", i)), []byte("value"))
 		if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &pArgs); err != nil {
 			t.Fatal(err)
@@ -62,12 +62,12 @@ func TestRaftLogQueue(t *testing.T) {
 	desc := rep.Desc()
 	raftStatus := mtc.stores[0].RaftStatus(desc.RangeID)
 	if raftStatus == nil {
-		t.Fatalf("raft status does not exist for range %s", desc)
+		t.Fatalf("the raft group doesn't exist for range %d", desc.RangeID)
 	}
 
 	for _, progress := range raftStatus.Progress {
-		if progress.Match <= firstIndex {
-			t.Fatalf("raft log has not advanced, match:%d firstIndex:%d", progress.Match, firstIndex)
+		if progress.Match <= originalIndex {
+			t.Fatalf("raft log has not advanced, match:%d originalIndex:%d", progress.Match, originalIndex)
 		}
 	}
 
@@ -85,9 +85,9 @@ func TestRaftLogQueue(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if currentIndex <= firstIndex {
+		if currentIndex <= originalIndex {
 			return util.Errorf("raft log has not been truncated yet, currentIndex:%d originalIndex:%d",
-				currentIndex, firstIndex)
+				currentIndex, originalIndex)
 		}
 		return nil
 	})
@@ -103,7 +103,7 @@ func TestRaftLogQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 	if currentIndex != finalIndex {
-		t.Errorf("raft log was truncated again and it shouldn't have been, index after truncation:%d actual index:%d",
+		t.Errorf("raft log was truncated again and it shouldn't have been, post 1st truncation index:%d post 2nd truncation index:%d",
 			currentIndex, finalIndex)
 	}
 }
