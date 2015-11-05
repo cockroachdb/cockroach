@@ -288,14 +288,12 @@ func (m *MergeTrigger) String() string { return proto.CompactTextString(m) }
 func (*MergeTrigger) ProtoMessage()    {}
 
 type ChangeReplicasTrigger struct {
-	NodeID     NodeID            `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
-	StoreID    StoreID           `protobuf:"varint,2,opt,name=store_id,casttype=StoreID" json:"store_id"`
-	ChangeType ReplicaChangeType `protobuf:"varint,3,opt,name=change_type,enum=cockroach.roachpb.ReplicaChangeType" json:"change_type"`
+	ChangeType ReplicaChangeType `protobuf:"varint,1,opt,name=change_type,enum=cockroach.roachpb.ReplicaChangeType" json:"change_type"`
 	// The replica being modified.
-	Replica ReplicaDescriptor `protobuf:"bytes,4,opt,name=replica" json:"replica"`
+	Replica ReplicaDescriptor `protobuf:"bytes,2,opt,name=replica" json:"replica"`
 	// The new replica list with this change applied.
-	UpdatedReplicas []ReplicaDescriptor `protobuf:"bytes,5,rep,name=updated_replicas" json:"updated_replicas"`
-	NextReplicaID   ReplicaID           `protobuf:"varint,6,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
+	UpdatedReplicas []ReplicaDescriptor `protobuf:"bytes,3,rep,name=updated_replicas" json:"updated_replicas"`
+	NextReplicaID   ReplicaID           `protobuf:"varint,4,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
 }
 
 func (m *ChangeReplicasTrigger) Reset()         { *m = ChangeReplicasTrigger{} }
@@ -711,14 +709,8 @@ func (m *ChangeReplicasTrigger) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0x8
 	i++
-	i = encodeVarintData(data, i, uint64(m.NodeID))
-	data[i] = 0x10
-	i++
-	i = encodeVarintData(data, i, uint64(m.StoreID))
-	data[i] = 0x18
-	i++
 	i = encodeVarintData(data, i, uint64(m.ChangeType))
-	data[i] = 0x22
+	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(m.Replica.Size()))
 	n6, err := m.Replica.MarshalTo(data[i:])
@@ -728,7 +720,7 @@ func (m *ChangeReplicasTrigger) MarshalTo(data []byte) (int, error) {
 	i += n6
 	if len(m.UpdatedReplicas) > 0 {
 		for _, msg := range m.UpdatedReplicas {
-			data[i] = 0x2a
+			data[i] = 0x1a
 			i++
 			i = encodeVarintData(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -738,7 +730,7 @@ func (m *ChangeReplicasTrigger) MarshalTo(data []byte) (int, error) {
 			i += n
 		}
 	}
-	data[i] = 0x30
+	data[i] = 0x20
 	i++
 	i = encodeVarintData(data, i, uint64(m.NextReplicaID))
 	return i, nil
@@ -1177,8 +1169,6 @@ func (m *MergeTrigger) Size() (n int) {
 func (m *ChangeReplicasTrigger) Size() (n int) {
 	var l int
 	_ = l
-	n += 1 + sovData(uint64(m.NodeID))
-	n += 1 + sovData(uint64(m.StoreID))
 	n += 1 + sovData(uint64(m.ChangeType))
 	l = m.Replica.Size()
 	n += 1 + l + sovData(uint64(l))
@@ -2121,44 +2111,6 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NodeID", wireType)
-			}
-			m.NodeID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowData
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.NodeID |= (NodeID(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StoreID", wireType)
-			}
-			m.StoreID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowData
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.StoreID |= (StoreID(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 3:
-			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ChangeType", wireType)
 			}
 			m.ChangeType = 0
@@ -2176,7 +2128,7 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 4:
+		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Replica", wireType)
 			}
@@ -2206,7 +2158,7 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 5:
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field UpdatedReplicas", wireType)
 			}
@@ -2237,7 +2189,7 @@ func (m *ChangeReplicasTrigger) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 6:
+		case 4:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field NextReplicaID", wireType)
 			}

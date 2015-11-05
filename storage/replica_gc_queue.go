@@ -76,10 +76,9 @@ func (*replicaGCQueue) acceptsUnsplitRanges() bool {
 func (*replicaGCQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 	_ *config.SystemConfig) (bool, float64) {
 
-	if l := rng.getLease(); l.Expiration.Add(ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0).Less(now) {
-		return true, 0
-	}
-	return false, 0
+	return rng.getLease().Expiration.Add(
+		ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0,
+	).Less(now), 0
 }
 
 // process performs a consistent lookup on the range descriptor to see if we are
