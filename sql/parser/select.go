@@ -50,16 +50,17 @@ func (node *ParenSelect) String() string {
 
 // Select represents a SELECT statement.
 type Select struct {
-	Distinct    bool
-	Exprs       SelectExprs
-	From        TableExprs
-	Where       *Where
-	GroupBy     GroupBy
-	Having      *Where
-	OrderBy     OrderBy
-	Limit       *Limit
-	Lock        string
-	tableSelect bool
+	Distinct                bool
+	Exprs                   SelectExprs
+	From                    TableExprs
+	Where                   *Where
+	GroupBy                 GroupBy
+	Having                  *Where
+	OrderBy                 OrderBy
+	Limit                   *Limit
+	Lock                    string
+	tableSelect             bool
+	MutationColumnsReadable bool
 }
 
 func (node *Select) String() string {

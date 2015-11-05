@@ -137,6 +137,10 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		// happen before index encoding because certain datum types (i.e. tuple)
 		// cannot be used as index values.
 		for i, val := range rowVals {
+			// Don't marshal if the column is not writable.
+			if !cols[i].isWritable() {
+				continue
+			}
 			// Make sure the value can be written to the column before proceeding.
 			var err error
 			if marshalled[i], err = marshalColumnValue(cols[i], val); err != nil {

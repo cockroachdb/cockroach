@@ -295,7 +295,13 @@ func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
 			n.isSecondaryIndex = true
 		} else {
 			n.index = &n.desc.PrimaryIndex
-			n.visibleCols = n.desc.Columns
+			for _, col := range n.desc.Columns {
+				// Skip columns in transition.
+				if !col.isReadable() {
+					continue
+				}
+				n.visibleCols = append(n.visibleCols, col)
+			}
 		}
 
 		return nil
@@ -404,12 +410,12 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 	return n.err
 }
 
-func (n *scanNode) initTargets(targets parser.SelectExprs) error {
+func (n *scanNode) initTargets(targets parser.SelectExprs, mutationColumnsReadable bool) error {
 	// Loop over the select expressions and expand them into the expressions
 	// we're going to use to generate the returned column set and the names for
 	// those columns.
 	for _, target := range targets {
-		if n.err = n.addRender(target); n.err != nil {
+		if n.err = n.addRender(target, mutationColumnsReadable); n.err != nil {
 			return n.err
 		}
 	}
@@ -457,7 +463,7 @@ func (n *scanNode) computeOrdering(columnIDs []ColumnID) []int {
 	return ordering
 }
 
-func (n *scanNode) addRender(target parser.SelectExpr) error {
+func (n *scanNode) addRender(target parser.SelectExpr, mutationColumnsReadable bool) error {
 	// When generating an output column name it should exactly match the original
 	// expression, so determine the output column name before we perform any
 	// manipulations to the expression (such as star expansion).
@@ -498,6 +504,10 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 				}
 			} else {
 				for _, col := range n.desc.Columns {
+					// Skip columns in transition.
+					if !col.isReadable() && !mutationColumnsReadable {
+						continue
+					}
 					n.columns = append(n.columns, col.Name)
 					n.render = append(n.render, n.getQVal(col))
 				}

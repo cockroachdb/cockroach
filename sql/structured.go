@@ -55,6 +55,19 @@ func validateName(name, typ string) error {
 	return nil
 }
 
+func (desc *ColumnDescriptor) isWritable() bool {
+	if desc.Mutation != nil {
+		return desc.Mutation.State == DescriptorMutation_WRITE_ONLY
+	}
+	// A column without a mutation is a writable column.
+	return true
+}
+
+func (desc *ColumnDescriptor) isReadable() bool {
+	// A column without a mutation is a readable column.
+	return desc.Mutation == nil
+}
+
 // allocateName sets desc.Name to a value that is not equalName to any
 // of tableDesc's indexes. allocateName roughly follows PostgreSQL's
 // convention for automatically-named indexes.
@@ -274,6 +287,9 @@ func (desc *TableDescriptor) Validate() error {
 		if column.ID >= desc.NextColumnID {
 			return fmt.Errorf("column \"%s\" invalid ID (%d) > next column ID (%d)",
 				column.Name, column.ID, desc.NextColumnID)
+		}
+		if column.Mutation != nil && column.Mutation.State == DescriptorMutation_INVALID {
+			return util.Errorf("mutation in invalid state: col %s, col-id %d", column.Name, column.ID)
 		}
 	}
 

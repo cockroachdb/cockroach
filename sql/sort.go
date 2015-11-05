@@ -109,7 +109,7 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, error) {
 				//
 				//   SELECT a FROM t ORDER by b
 				//   SELECT a, b FROM t ORDER by a+b
-				if err := s.addRender(parser.SelectExpr{Expr: expr}); err != nil {
+				if err := s.addRender(parser.SelectExpr{Expr: expr}, false /* mutationColumnsReadable */); err != nil {
 					return nil, err
 				}
 				index = len(s.columns)

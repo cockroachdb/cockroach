@@ -47,7 +47,7 @@ func (p *planner) Select(n *parser.Select) (planNode, error) {
 	if err := scan.initWhere(n.Where); err != nil {
 		return nil, err
 	}
-	if err := scan.initTargets(n.Exprs); err != nil {
+	if err := scan.initTargets(n.Exprs, n.MutationColumnsReadable); err != nil {
 		return nil, err
 	}
 	group, err := p.groupBy(n, scan)

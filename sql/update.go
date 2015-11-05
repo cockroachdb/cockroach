@@ -131,6 +131,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		Exprs: targets,
 		From:  parser.TableExprs{n.Table},
 		Where: n.Where,
+		MutationColumnsReadable: true,
 	})
 	if err != nil {
 		return nil, err
@@ -193,6 +194,10 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		// happen before index encoding because certain datum types (i.e. tuple)
 		// cannot be used as index values.
 		for i, val := range newVals {
+			// Only marshal writable columns.
+			if !cols[i].isWritable() {
+				continue
+			}
 			var err error
 			if marshalled[i], err = marshalColumnValue(cols[i], val); err != nil {
 				return nil, err
