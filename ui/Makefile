@@ -85,8 +85,8 @@ tsd.installed: tsd.json npm.installed
 	touch $@
 
 $(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
+	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts')
 	tsc -p $(TS_ROOT)
-	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts' -not -path '*external*')
 
 $(TEST_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
 	tsc -p $(TEST_ROOT)
