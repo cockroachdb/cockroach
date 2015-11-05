@@ -630,8 +630,23 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 // it does it outputs the last row. The return value indicates whether a row
 // was output or an error occurred. In either case, iteration should terminate.
 func (n *scanNode) maybeOutputRow() bool {
+	// For unique secondary indexes, the index-key does not distinguish one row
+	// from the next if both rows contain identical values along with a
+	// NULL. Consider the keys:
+	//
+	//   /test/unique_idx/NULL/0
+	//   /test/unique_idx/NULL/1
+	//
+	// The index-key extracted from the above keys is /test/unique_idx/NULL. The
+	// trailing /0 and /1 are the primary key used to unique-ify the keys when a
+	// NULL is present. Currently we don't detect NULLs on decoding. If we did we
+	// could detect this case and enlarge the index-key. A simpler fix for this
+	// problem is to simply always output a row for each key scanned from a
+	// secondary index as secondary indexes have only one key per row.
+
 	if n.indexKey != nil &&
-		(n.kvIndex == len(n.kvs) || !bytes.HasPrefix(n.kvs[n.kvIndex].Key, n.indexKey)) {
+		(n.isSecondaryIndex || n.kvIndex == len(n.kvs) ||
+			!bytes.HasPrefix(n.kvs[n.kvIndex].Key, n.indexKey)) {
 		// The current key belongs to a new row. Output the current row.
 		n.indexKey = nil
 		output := n.filterRow()
