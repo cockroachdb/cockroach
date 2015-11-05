@@ -157,7 +157,7 @@ module AdminViews {
         return m(".page", [
           m.component(Components.Topbar, {title: "Nodes"}),
           m(".section", ctrl.RenderPrimaryStats()),
-          m(".section", m(".stats-table", Components.Table.create(comparisonData))),
+          m(".section.table", m(".stats-table", Components.Table.create(comparisonData))),
         ]);
       }
     }

@@ -19,49 +19,63 @@ Author: Matt Tracy (matt@cockroachlabs.com)
 
 @require '../modules/*'
 
-$stats-table--border-top  = 1px solid -color('neutral', 'x-dark')
-$stats-table-tr--border   = 1px solid -color('neutral', 'x-light')
+$stats-table-cell--border = 1px solid $secondary-gray-8
 
-$stats-table-th--fg  = -color('light', 'light')
+$stats-table-th--fg = $secondary-gray-6
+$stats-table-td--fg = $main-navy
 
-$stats-table-th--bg          = -color('neutral', 'light')
-$stats-table-th--bg-alt      = -color('neutral')
-$stats-table-th--bg-sorted   = -color('neutral', 'x-light')
-$stats-table-td--bg          = -color('light', 'light')
-$stats-table-td--bg-alt      = -color('light')
-$stats-table-td--bg-sorted   = -color('light', 'x-light')
+$stats-table-th--bg     = white
+$stats-table-tr--bg     = white
+$stats-table-tr--bg-alt = $secondary-gray-7
 
 // ---- Data table ---- 
 .stats-table
   color -color('dark')
   table
     border-collapse collapse
-    border-top $stats-table--border-top
     margin-bottom 2rem
-  tr
-    height 4rem
-    border-bottom $stats-table-tr--border
+
+  thead
+    border $stats-table-cell--border
+    border-left none
+
+    tr
+      height 71px
+      vertical-align top
+
+  tbody tr
+      height 45px
+      background-color $stats-table-tr--bg
+      &:nth-child(odd)
+        background-color $stats-table-tr--bg-alt
+      &:last-child
+        border-bottom $stats-table-cell--border
+
   th
     color $stats-table-th--fg
+    font-family Lato-Bold
+    font-size 13px
+    letter-spacing .27px
     font-weight normal
-    alternating-background $stats-table-th--bg $stats-table-th--bg-alt
+    text-align left
+    background-color $stats-table-th--bg
     &.sorted
-      background-color $stats-table-th--bg-sorted
       &:after
         content "▼"
       &.ascending
         &:after
           content "▲"
-          
+
   td
-    alternating-background $stats-table-td--bg $stats-table-td--bg-alt
-    &.sorted
-      background-color $stats-table-td--bg-sorted
+    color $stats-table-td--fg
+    font-family Lato-Medium
+    font-size 16px
+    letter-spacing .33px
 
   td
   th
-    padding-left 1rem
-    padding-right 1rem
+    padding 15px 20px
+    border-right $stats-table-cell--border
 
 .stat
   .title

@@ -165,8 +165,8 @@ module Components {
 
     export function view<T>(ctrl: Controller<T>): MithrilElement {
       return m("table", [
-        ctrl.RenderHeaders(),
-        ctrl.RenderRows(),
+        m("thead", ctrl.RenderHeaders()),
+        m("tbody", ctrl.RenderRows()),
       ]);
     }
 
