@@ -884,32 +884,7 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp
 		return err
 	}
 
-	hackBecauseStoreNotAtomic := func() bool {
-		if txn == nil {
-			return false
-		}
-		_, _, err := MVCCGet(engine, key, timestamp, true /* consistent */, nil)
-		if _, ok := err.(*roachpb.WriteIntentError); !ok {
-			// Doesn't have an intent on top? Don't hack.
-			return false
-		}
-		// Now we're sure the top value is **our** intent.
-		// If what's there is what we intent to write, it's probably a
-		// retry on top of a half-executed batch.
-		if existVal != nil && bytes.Equal(value.RawBytes, existVal.RawBytes) {
-			return true
-		}
-		return false
-	}
-
-	if hackBecauseStoreNotAtomic() {
-		// TODO(tschottdorf): There's a chance that we've executed this
-		// ConditionalPut before but the Batch containing this request
-		// had to be retried. This is temporary logic until we execute
-		// Batches atomically: If this is written by our transaction,
-		// and it matches what we wanted to write: fine, let's go ahead.
-		// Provisional code; removed when batches are atomic on the Store.
-	} else if expValue == nil && existVal != nil {
+	if expValue == nil && existVal != nil {
 		return &roachpb.ConditionFailedError{
 			ActualValue: existVal,
 		}
