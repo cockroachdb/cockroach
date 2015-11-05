@@ -1574,8 +1574,6 @@ func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica r
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
-					NodeID:          replica.NodeID,
-					StoreID:         replica.StoreID,
 					ChangeType:      changeType,
 					Replica:         replica,
 					UpdatedReplicas: updatedDesc.Replicas,
