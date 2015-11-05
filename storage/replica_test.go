@@ -2817,9 +2817,8 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	}
 	// After changing back to inconsistent lookups, should be good to go.
 	var origSeen, newSeen bool
-	const count = 100
 
-	for i := 0; i < count && !(origSeen && newSeen); i++ {
+	for !(origSeen && newSeen) {
 		clonedRLArgs := proto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
 
 		reply, err = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
@@ -2837,9 +2836,6 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 		} else {
 			t.Errorf("expected orig/new descriptor %s/%s; got %s", &origDesc, &newDesc, &seen)
 		}
-	}
-	if !(origSeen && newSeen) {
-		t.Errorf("didn't see both descriptors after %d attempts", count)
 	}
 }
 
