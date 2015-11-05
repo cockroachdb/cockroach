@@ -1514,7 +1514,7 @@ func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica r
 
 	// Validate the request and prepare the new descriptor.
 	updatedDesc := *desc
-	updatedDesc.Replicas = append([]roachpb.ReplicaDescriptor{}, desc.Replicas...)
+	updatedDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
 	found := -1       // tracks NodeID && StoreID
 	nodeUsed := false // tracks NodeID only
 	for i, existingRep := range desc.Replicas {
