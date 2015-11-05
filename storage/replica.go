@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracer"
-	"github.com/coreos/etcd/raft"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -1615,11 +1614,4 @@ func (r *Replica) Quiesce() {
 	}
 	r.pendingCmds = nil
 	r.quiesced = true
-}
-
-// getRaftStatus returns the current raft status for the replica. Note that a
-// number of the value are not useful unless the replica is the raft leader
-// which is when raftStatus.RaftState == raft.StateLeader.
-func (r *Replica) getRaftStatus() *raft.Status {
-	return r.store.RaftStatus(r.Desc().RangeID)
 }
