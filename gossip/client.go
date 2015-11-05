@@ -34,6 +34,7 @@ type client struct {
 	addr                  net.Addr        // Peer node network address
 	rpcClient             *rpc.Client     // RPC client
 	forwardAddr           net.Addr        // Set if disconnected with an alternate addr
+	sendingGossip         bool            // True if there's an outstanding RPC to send gossip
 	remoteHighWaterStamps map[int32]int64 // High water timestamps for remote server; matches rpc Request/Response
 	closer                chan struct{}   // Client shutdown channel
 }
@@ -104,6 +105,9 @@ func (c *client) sendGossip(g *Gossip, nodeID roachpb.NodeID, addr, lAddr util.U
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
+	if c.sendingGossip {
+		return
+	}
 	delta := g.is.delta(c.peerID, c.remoteHighWaterStamps)
 	if len(delta) == 0 {
 		return
@@ -117,6 +121,7 @@ func (c *client) sendGossip(g *Gossip, nodeID roachpb.NodeID, addr, lAddr util.U
 	}
 	reply := Response{}
 	c.rpcClient.Go("Gossip.Gossip", &args, &reply, done)
+	c.sendingGossip = true
 }
 
 // handleGossip handles errors, remote forwarding, and combines delta
@@ -129,15 +134,6 @@ func (c *client) handleGossip(g *Gossip, nodeID roachpb.NodeID, call *netrpc.Cal
 		return call.Error
 	}
 	reply := call.Reply.(*Response)
-
-	// Handle remote forwarding.
-	if reply.Alternate != nil {
-		var err error
-		if c.forwardAddr, err = reply.Alternate.Resolve(); err != nil {
-			return util.Errorf("unable to resolve alternate address: %s: %s", reply.Alternate, err)
-		}
-		return util.Errorf("received forward from %s to %s", c.addr, reply.Alternate)
-	}
 
 	// Combine remote node's infostore delta with ours.
 	if reply.Delta != nil {
@@ -156,6 +152,15 @@ func (c *client) handleGossip(g *Gossip, nodeID roachpb.NodeID, call *netrpc.Cal
 	c.peerID = reply.NodeID
 	g.outgoing.addNode(c.peerID)
 	c.remoteHighWaterStamps = reply.HighWaterStamps
+
+	// Handle remote forwarding.
+	if reply.Alternate != nil {
+		var err error
+		if c.forwardAddr, err = reply.Alternate.Resolve(); err != nil {
+			return util.Errorf("unable to resolve alternate address: %s: %s", reply.Alternate, err)
+		}
+		return util.Errorf("received forward from %s to %s", c.addr, reply.Alternate)
+	}
 
 	// If we have the sentinel gossip, we're considered connected.
 	g.checkHasConnected()
@@ -187,7 +192,7 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 	updateCallback := func(key string, content []byte) {
 		c.sendGossip(g, nodeID, addr, lAddr, done)
 	}
-	// Defer calling "undoer" calblack returned from registration.
+	// Defer calling "undoer" callback returned from registration.
 	defer g.RegisterCallback(".*", updateCallback)()
 
 	// Loop until stopper is signalled, or until either the gossip or
@@ -209,8 +214,15 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 				return err
 			}
 			// If this was from a gossip pull request, fetch again.
-			if req, ok := call.Args.(*Request); ok && req.Delta == nil {
-				c.getGossip(g, nodeID, addr, lAddr, done)
+			if req, ok := call.Args.(*Request); ok {
+				if req.Delta == nil {
+					c.getGossip(g, nodeID, addr, lAddr, done)
+				} else {
+					g.mu.Lock()
+					c.sendingGossip = false
+					g.mu.Unlock()
+					c.sendGossip(g, nodeID, addr, lAddr, done)
+				}
 			}
 		case <-c.rpcClient.Closed:
 			return util.Errorf("client closed")

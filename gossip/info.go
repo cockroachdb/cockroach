@@ -29,10 +29,7 @@ func (i *Info) expired(now int64) bool {
 // isFresh returns true if the info has an originating timestamp newer
 // than timestamp and didn't originate from the same node.
 func (i *Info) isFresh(nodeID roachpb.NodeID, timestamp int64) bool {
-	if i.OrigStamp <= timestamp {
-		return false
-	}
-	if nodeID != 0 && i.NodeID == nodeID {
+	if (nodeID != 0 && nodeID == i.NodeID) || i.OrigStamp <= timestamp {
 		return false
 	}
 	return true

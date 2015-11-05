@@ -19,7 +19,6 @@ package gossip_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -27,15 +26,8 @@ import (
 
 // verifyConvergence verifies that info from each node is visible from
 // every node in the network within numCycles cycles of the gossip protocol.
-// NOTE: This test is non-deterministic because it involves multiple goroutines
-// that may not all be able to keep up if the given interval is too small.
-// As a rule of thumb, increase the interval until the same number of cycles are used
-// for both race and non-race tests; this indicates that no goroutines are being
-// left behind by CPU limits.
-// TODO(spencer): figure out a more deterministic setup, advancing the clock
-// manually and counting cycles accurately instead of relying on real-time sleeps.
-func verifyConvergence(numNodes, maxCycles int, interval time.Duration, t *testing.T) {
-	network := simulation.NewNetwork(numNodes, "tcp", interval)
+func verifyConvergence(numNodes, maxCycles int, t *testing.T) {
+	network := simulation.NewNetwork(numNodes, "tcp")
 
 	if connectedCycle := network.RunUntilFullyConnected(); connectedCycle > maxCycles {
 		t.Errorf("expected a fully-connected network within %d cycles; took %d",
@@ -45,9 +37,14 @@ func verifyConvergence(numNodes, maxCycles int, interval time.Duration, t *testi
 }
 
 // TestConvergence verifies a 10 node gossip network converges within
-// 8 cycles.
+// a fixed number of simulation cycles. It's really difficult to
+// determine the right number for cycles because different things can
+// happen during a single cycle, depending on how much CPU time is
+// available. Eliminating this variability by getting more
+// synchronization primitives in place for the simulation is possible,
+// though two attempts so far have introduced more complexity into the
+// actual production gossip code than seems worthwhile for a unittest.
 func TestConvergence(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	// 100 milliseconds to accommodate race tests on slower hardware.
-	verifyConvergence(10, 8, 100*time.Millisecond, t)
+	verifyConvergence(10, 15, t)
 }

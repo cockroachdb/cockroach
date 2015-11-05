@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
@@ -74,20 +75,23 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	// Using specified resolvers, fetch bootstrap addresses 10 times
 	// and verify the results match expected addresses.
 	expAddresses := []string{
+		"127.0.0.1:9000",
 		"127.0.0.1:9001",
 		"/tmp/unix-socket12345",
 		"127.0.0.1:9002",
 		"localhost:9004",
 		"127.0.0.1:9005",
-		"127.0.0.1:9000",
 		"127.0.0.1:9002",
 		"127.0.0.1:9005",
 		"127.0.0.1:9002",
 		"127.0.0.1:9005",
 	}
-	for i := 0; i < 10; i++ {
+	for i := 0; i < len(expAddresses); i++ {
+		log.Infof("getting next address")
 		addr := g.getNextBootstrapAddress()
-		if addr.String() != expAddresses[i] {
+		if addr == nil {
+			t.Errorf("%d: unexpected nil addr when expecting %s", i, expAddresses[i])
+		} else if addr.String() != expAddresses[i] {
 			t.Errorf("%d: expected addr %s; got %s", i, expAddresses[i], addr.String())
 		}
 	}

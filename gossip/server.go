@@ -18,7 +18,10 @@
 package gossip
 
 import (
+	"math"
+	"math/rand"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -37,20 +40,21 @@ type clientInfo struct {
 // server maintains an array of connected peers to which it gossips
 // newly arrived information on a periodic basis.
 type server struct {
-	ready *sync.Cond // Broadcasts wakeup to waiting gossip requests
-
 	mu       sync.Mutex            // Protects the fields below
 	is       infoStore             // The backing infostore
 	closed   bool                  // True if server was closed
 	incoming nodeSet               // Incoming client node IDs
 	lAddrMap map[string]clientInfo // Incoming client's local address -> client's node info
+	ready    *sync.Cond            // Broadcasts wakeup to waiting gossip requests
+
+	simulationCycler *sync.Cond // Used when simulating the network to signal next cycle
 }
 
 // newServer creates and returns a server struct.
 func newServer() *server {
 	s := &server{
 		is:       newInfoStore(0, util.UnresolvedAddr{}),
-		incoming: makeNodeSet(MaxPeers),
+		incoming: makeNodeSet(1),
 		lAddrMap: map[string]clientInfo{},
 	}
 	s.ready = sync.NewCond(&s.mu)
@@ -64,7 +68,12 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 	args := argsI.(*Request)
 	reply := &Response{}
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer func() {
+		if s.simulationCycler != nil {
+			s.simulationCycler.Wait()
+		}
+		s.mu.Unlock()
+	}()
 
 	addr, err := args.Addr.Resolve()
 	if err != nil {
@@ -77,21 +86,21 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 
 	reply.NodeID = s.is.NodeID
 
-	// If there is no more capacity to accept incoming clients, return
-	// a random already-being-serviced incoming client as an alternate.
+	// Decide whether or not we can accept the incoming connection
+	// as a permanent peer. We always accept its input and return
+	// our delta.
+	canAccept := true
+	s.incoming.setMaxSize(s.maxPeers())
 	if !s.incoming.hasNode(args.NodeID) {
 		if !s.incoming.hasSpace() {
-			// Map iteration order is random.
-			for _, cInfo := range s.lAddrMap {
-				reply.Alternate = cInfo.addr
-				return reply, nil
-			}
+			canAccept = false
+		} else {
+			s.incoming.addNode(args.NodeID)
+			// This lookup map allows the incoming client to be removed from
+			// the incoming addr set when its connection is closed. See
+			// server.serveConn() below.
+			s.lAddrMap[lAddr.String()] = clientInfo{args.NodeID, &args.Addr}
 		}
-		s.incoming.addNode(args.NodeID)
-		// This lookup map allows the incoming client to be removed from
-		// the incoming addr set when its connection is closed. See
-		// server.serveConn() below.
-		s.lAddrMap[lAddr.String()] = clientInfo{args.NodeID, &args.Addr}
 	}
 
 	// Update infostore with gossiped infos.
@@ -120,13 +129,50 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 			return nil, util.Errorf("gossip server shutdown")
 		}
 		reply.Delta = s.is.delta(args.NodeID, args.HighWaterStamps)
-		if len(reply.Delta) > 0 {
+		if len(reply.Delta) > 0 || !canAccept {
+			// If there is no more capacity to accept incoming clients, return
+			// a random already-being-serviced incoming client as an alternate.
+			if !canAccept {
+				// Map iteration order is random.
+				randIdx := rand.Int31n(int32(len(s.lAddrMap)))
+				for _, cInfo := range s.lAddrMap {
+					if randIdx == 0 {
+						reply.Alternate = cInfo.addr
+						break
+					}
+					randIdx--
+				}
+			}
 			reply.HighWaterStamps = s.is.getHighWaterStamps()
 			return reply, nil
 		}
 		// Wait for server to get new gossip set before computing delta.
 		s.ready.Wait()
 	}
+}
+
+// maxPeers returns the maximum number of peers each gossip node
+// may connect to. This is based on maxHops, which is a preset
+// maximum for number of hops allowed before the gossip network
+// will seek to "tighten" by creating new connections to distant
+// nodes.
+func (s *server) maxPeers() int {
+	var nodeCount int
+
+	if err := s.is.visitInfos(func(key string, i *Info) error {
+		if strings.HasPrefix(key, KeyNodeIDPrefix) {
+			nodeCount++
+		}
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+
+	peers := int(math.Ceil(math.Exp(2 * math.Log(float64(nodeCount)) / float64(MaxHops-1))))
+	if peers < minPeers {
+		return minPeers
+	}
+	return peers
 }
 
 // start initializes the infostore with the rpc server address and
@@ -164,9 +210,9 @@ func (s *server) start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 func (s *server) stop(unregister func()) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	unregister()
 	s.closed = true
 	s.ready.Broadcast() // wake up clients
-	unregister()
 }
 
 // onClose is invoked by the rpcServer each time a connected client

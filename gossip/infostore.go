@@ -119,10 +119,9 @@ func (is *infoStore) newInfo(val []byte, ttl time.Duration) *Info {
 	}
 	v := roachpb.MakeValueFromBytesAndTimestamp(val, roachpb.Timestamp{WallTime: now})
 	return &Info{
-		Value:     v,
-		OrigStamp: now,
-		TTLStamp:  ttlStamp,
-		NodeID:    is.NodeID,
+		Value:    v,
+		TTLStamp: ttlStamp,
+		NodeID:   is.NodeID,
 	}
 }
 
@@ -153,18 +152,25 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 			return util.Errorf("info %+v older than current info %+v", i, existingInfo)
 		}
 	}
-
-	i.Value.InitChecksum([]byte(key))
-
-	// Update info map.
-	is.Infos[key] = i
+	if i.OrigStamp == 0 {
+		i.Value.InitChecksum([]byte(key))
+		i.OrigStamp = monotonicUnixNano()
+		if hws := is.highWaterStamps[int32(i.NodeID)]; hws >= i.OrigStamp {
+			panic(util.Errorf("high water stamp %d >= %d", hws, i.OrigStamp))
+		}
+	}
+	// Verify bytes.
 	bytes, err := i.Value.GetBytes()
 	if err != nil {
 		return err
 	}
+	// Update info map.
+	is.Infos[key] = i
 	// Update the high water timestamps.
-	if is.highWaterStamps[int32(i.NodeID)] < i.OrigStamp {
-		is.highWaterStamps[int32(i.NodeID)] = i.OrigStamp
+	if i.NodeID != 0 {
+		if is.highWaterStamps[int32(i.NodeID)] < i.OrigStamp {
+			is.highWaterStamps[int32(i.NodeID)] = i.OrigStamp
+		}
 	}
 	is.processCallbacks(key, bytes)
 	return nil
@@ -277,6 +283,9 @@ func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) int 
 		copy.PeerID = nodeID
 		// Errors from addInfo here are not a problem; they simply
 		// indicate that the data in *is is newer than in *delta.
+		if copy.OrigStamp == 0 {
+			panic(util.Errorf("combining info from node %d with 0 original timestamp", nodeID))
+		}
 		if err := is.addInfo(key, &copy); err == nil {
 			freshCount++
 		}
@@ -292,7 +301,6 @@ func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) int 
 // Returns nil if there are no deltas.
 func (is *infoStore) delta(nodeID roachpb.NodeID, highWaterStamps map[int32]int64) map[string]*Info {
 	infos := make(map[string]*Info)
-
 	// Compute delta of infos.
 	if err := is.visitInfos(func(key string, i *Info) error {
 		if i.isFresh(nodeID, highWaterStamps[int32(i.NodeID)]) {
