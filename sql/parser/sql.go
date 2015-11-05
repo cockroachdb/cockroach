@@ -576,7 +576,7 @@ var sqlStatenames = [...]string{}
 
 const sqlEofCode = 1
 const sqlErrCode = 2
-const sqlMaxDepth = 200
+const sqlInitialStackSize = 200
 
 //line sql.y:3701
 
@@ -3504,18 +3504,17 @@ type sqlParser interface {
 }
 
 type sqlParserImpl struct {
-	lookahead func() int
+	lval  sqlSymType
+	stack [sqlInitialStackSize]sqlSymType
+	char  int
 }
 
 func (p *sqlParserImpl) Lookahead() int {
-	return p.lookahead()
+	return p.char
 }
 
 func sqlNewParser() sqlParser {
-	p := &sqlParserImpl{
-		lookahead: func() int { return -1 },
-	}
-	return p
+	return &sqlParserImpl{}
 }
 
 const sqlFlag = -1000
@@ -3643,22 +3642,20 @@ func sqlParse(sqllex sqlLexer) int {
 
 func (sqlrcvr *sqlParserImpl) Parse(sqllex sqlLexer) int {
 	var sqln int
-	var sqllval sqlSymType
 	var sqlVAL sqlSymType
 	var sqlDollar []sqlSymType
 	_ = sqlDollar // silence set and not used
-	sqlS := make([]sqlSymType, sqlMaxDepth)
+	sqlS := sqlrcvr.stack[:]
 
 	Nerrs := 0   /* number of errors */
 	Errflag := 0 /* error recovery flag */
 	sqlstate := 0
-	sqlchar := -1
-	sqltoken := -1 // sqlchar translated into internal numbering
-	sqlrcvr.lookahead = func() int { return sqlchar }
+	sqlrcvr.char = -1
+	sqltoken := -1 // sqlrcvr.char translated into internal numbering
 	defer func() {
 		// Make sure we report no lookahead when not parsing.
 		sqlstate = -1
-		sqlchar = -1
+		sqlrcvr.char = -1
 		sqltoken = -1
 	}()
 	sqlp := -1
@@ -3690,8 +3687,8 @@ sqlnewstate:
 	if sqln <= sqlFlag {
 		goto sqldefault /* simple state */
 	}
-	if sqlchar < 0 {
-		sqlchar, sqltoken = sqllex1(sqllex, &sqllval)
+	if sqlrcvr.char < 0 {
+		sqlrcvr.char, sqltoken = sqllex1(sqllex, &sqlrcvr.lval)
 	}
 	sqln += sqltoken
 	if sqln < 0 || sqln >= sqlLast {
@@ -3699,9 +3696,9 @@ sqlnewstate:
 	}
 	sqln = sqlAct[sqln]
 	if sqlChk[sqln] == sqltoken { /* valid shift */
-		sqlchar = -1
+		sqlrcvr.char = -1
 		sqltoken = -1
-		sqlVAL = sqllval
+		sqlVAL = sqlrcvr.lval
 		sqlstate = sqln
 		if Errflag > 0 {
 			Errflag--
@@ -3713,8 +3710,8 @@ sqldefault:
 	/* default state action */
 	sqln = sqlDef[sqlstate]
 	if sqln == -2 {
-		if sqlchar < 0 {
-			sqlchar, sqltoken = sqllex1(sqllex, &sqllval)
+		if sqlrcvr.char < 0 {
+			sqlrcvr.char, sqltoken = sqllex1(sqllex, &sqlrcvr.lval)
 		}
 
 		/* look through exception table */
@@ -3777,7 +3774,7 @@ sqldefault:
 			if sqltoken == sqlEofCode {
 				goto ret1
 			}
-			sqlchar = -1
+			sqlrcvr.char = -1
 			sqltoken = -1
 			goto sqlnewstate /* try again in the same state */
 		}
