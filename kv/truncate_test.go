@@ -113,7 +113,11 @@ func TestTruncate(t *testing.T) {
 			desc.EndKey = roachpb.RKey(test.to)
 		}
 		rs := roachpb.RSpan{Key: roachpb.RKey(test.from), EndKey: roachpb.RKey(test.to)}
-		rs = rs.Intersect(desc)
+		rs, err := rs.Intersect(desc)
+		if err != nil {
+			t.Errorf("%d: intersection failure: %v", i, err)
+			continue
+		}
 		undo, num, err := truncate(ba, rs)
 		if err != nil || test.err != "" {
 			if test.err == "" || !testutils.IsError(err, test.err) {
