@@ -28,15 +28,17 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-// TestReplicaGCQueueDropReplicaOnScan verifies that the range GC queue
-// removes a range from a store that no longer should have a replica.
+// TestRaftLogQueue verifies that the raft log queue correctly truncates the
+// raft log.
+// TODO(bram): Add a new test case in which the raft leader differs from the
+// lease holder.
 func TestRaftLogQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
-	// Write a single values to ensure we have a leader.
+	// Write a single value to ensure we have a leader.
 	pArgs := putArgs([]byte("key"), []byte("value"))
 	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &pArgs); err != nil {
 		t.Fatal(err)
@@ -60,7 +62,7 @@ func TestRaftLogQueue(t *testing.T) {
 	desc := rep.Desc()
 	raftStatus := mtc.stores[0].RaftStatus(desc.RangeID)
 	if raftStatus == nil {
-		t.Fatalf("can't get raft status for range %s", desc)
+		t.Fatalf("raft status not available for range %s", desc)
 	}
 
 	for _, progress := range raftStatus.Progress {
@@ -84,7 +86,8 @@ func TestRaftLogQueue(t *testing.T) {
 			return err
 		}
 		if currentIndex <= firstIndex {
-			return util.Errorf("raft log not truncated yet")
+			return util.Errorf("raft log not been truncated yet, currentIndex:%d originalIndex:%d",
+				currentIndex, firstIndex)
 		}
 		return nil
 	})
@@ -100,6 +103,7 @@ func TestRaftLogQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 	if currentIndex != finalIndex {
-		t.Errorf("raft log was truncated again and it shouldn't have been")
+		t.Errorf("raft log was truncated again and it shouldn't have been, currentIndex:%d originalIndex:%d",
+			currentIndex, firstIndex)
 	}
 }

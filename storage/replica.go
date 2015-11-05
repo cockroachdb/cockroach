@@ -1617,13 +1617,9 @@ func (r *Replica) Quiesce() {
 	r.quiesced = true
 }
 
-// isRaftLeader returns true if the replica is the current raft leader and also
-// returns the raft status.
-func (r *Replica) isRaftLeader() (bool, raft.Status, error) {
-	desc := r.Desc()
-	raftStatus := r.store.RaftStatus(desc.RangeID)
-	if raftStatus == nil {
-		return false, raft.Status{}, util.Errorf("could not get raft status for %s", desc)
-	}
-	return raftStatus.RaftState == raft.StateLeader, *raftStatus, nil
+// getRaftStatus returns the current raft status for the replica. Note that a
+// number of the value are not useful unless the replica is the raft leader
+// which is when raftStatus.RaftState == raft.StateLeader.
+func (r *Replica) getRaftStatus() *raft.Status {
+	return r.store.RaftStatus(r.Desc().RangeID)
 }

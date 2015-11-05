@@ -83,11 +83,14 @@ func getOldestIndex(raftStatus raft.Status) uint64 {
 // old entries exceeds the size threshold.
 func (*raftLogQueue) shouldQueue(now roachpb.Timestamp, r *Replica, _ *config.SystemConfig) (shouldQ bool,
 	priority float64) {
-	raftLeader, raftStatus, err := r.isRaftLeader()
-	if !raftLeader {
-		if err != nil {
-			log.Warning(err)
-		}
+	raftStatus := r.getRaftStatus()
+	if raftStatus == nil {
+		log.Warningf("raft status not available for range %s", r.Desc())
+		return false, 0
+	}
+
+	// Is this the raft leader?
+	if raftStatus.RaftState != raft.StateLeader {
 		return false, 0
 	}
 
@@ -97,21 +100,26 @@ func (*raftLogQueue) shouldQueue(now roachpb.Timestamp, r *Replica, _ *config.Sy
 		return false, 0
 	}
 
-	oldestIndex := getOldestIndex(raftStatus)
+	oldestIndex := getOldestIndex(*raftStatus)
+	if oldestIndex < firstIndex {
+		log.Warningf("raft log's oldest index is less than the first index for range %s", r.Desc())
+	}
 
 	// Can and should the raft logs be truncated?
 	truncatableIndexes := oldestIndex - firstIndex
 	return truncatableIndexes > RaftLogQueueLogSizeThreshold, float64(truncatableIndexes)
 }
 
-// process synchronously invokes for each replica that requires a raft log
-// truncation.
+// process truncates the raft log of the range if the replica is the raft
+// leader and if the range's raft log's old entries exceeds the size threshold.
 func (rlq *raftLogQueue) process(now roachpb.Timestamp, r *Replica, _ *config.SystemConfig) error {
-	raftLeader, raftStatus, err := r.isRaftLeader()
-	if !raftLeader {
-		if err != nil {
-			return err
-		}
+	raftStatus := r.getRaftStatus()
+	if raftStatus == nil {
+		return util.Errorf("raft status not available for range %s", r.Desc())
+	}
+
+	// Is this the raft leader?
+	if raftStatus.RaftState != raft.StateLeader {
 		return nil
 	}
 
@@ -120,7 +128,10 @@ func (rlq *raftLogQueue) process(now roachpb.Timestamp, r *Replica, _ *config.Sy
 		return util.Errorf("error retrieving first index for range %s: %s", r.Desc(), err)
 	}
 
-	oldestIndex := getOldestIndex(raftStatus)
+	oldestIndex := getOldestIndex(*raftStatus)
+	if oldestIndex < firstIndex {
+		return util.Errorf("raft log's oldest index is less than the first index for range %s", r.Desc())
+	}
 
 	// Can and should the raft logs be truncated?
 	truncatableIndexes := oldestIndex - firstIndex
