@@ -1472,7 +1472,7 @@ func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd roachpb.RaftCommand) 
 				}
 				// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
 				// needs to understand it; it cannot simply be an opaque command.
-				log.Infof("changing raft replica %d for range %d", crt.Replica, cmd.RangeID)
+				log.Infof("raft: %s %v for range %d", crt.ChangeType, crt.Replica, cmd.RangeID)
 				return s.multiraft.ChangeGroupMembership(cmd.RangeID, string(idKey),
 					changeTypeInternalToRaft[crt.ChangeType],
 					crt.Replica,
