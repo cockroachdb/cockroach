@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
@@ -97,13 +98,36 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 		t.Fatalf("%q: split unexpected error: %s", key, err)
 	}
 
+	desc := &sql.TableDescriptor{}
+	descBytes, err := desc.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Update SystemConfig to trigger gossip.
 	if err := store.DB().Txn(func(txn *client.Txn) error {
 		txn.SetSystemDBTrigger()
+		// We don't care about the values, just the keys.
 		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + 1))
-		return txn.Put(k, 10)
+		return txn.Put(k, desc)
 	}); err != nil {
 		t.Fatal(err)
+	}
+
+	successChan := make(chan struct{}, 1)
+	store.Gossip().RegisterCallback(gossip.KeySystemConfig, func(_ string, content []byte) {
+		if bytes.Contains(content, descBytes) {
+			select {
+			case successChan <- struct{}{}:
+			default:
+			}
+		}
+	})
+
+	select {
+	case <-time.After(time.Second):
+		t.Errorf("expected a schema gossip containing %q, but did not see one", descBytes)
+	case <-successChan:
 	}
 }
 
@@ -511,6 +535,8 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
+	initialSystemValues := sql.GetInitialSystemValues()
+	numInitialValues := len(initialSystemValues)
 	// Write the initial sql values to the system DB as well
 	// as the equivalent of table descriptors for X user tables.
 	// This does two things:
@@ -519,21 +545,21 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	// We should end up with splits at each user table prefix.
 	if err := store.DB().Txn(func(txn *client.Txn) error {
 		txn.SetSystemDBTrigger()
-		for _, kv := range sql.GetInitialSystemValues() {
-			// There are all kinds of different types here, so we can't use the
-			// typed getters.
-			if err := txn.Put(kv.Key, kv.Value.RawBytes); err != nil {
-				return err
-			}
-		}
-		for i := 1; i <= 5; i++ {
-			// We don't care about the values, just the keys.
-			k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + i))
-			v, err := txn.Get(k)
+		for i, kv := range initialSystemValues {
+			bytes, err := kv.Value.GetBytes()
 			if err != nil {
+				log.Info(err)
+				continue
+			}
+			if err := txn.Put(kv.Key, bytes); err != nil {
 				return err
 			}
-			if err := txn.Put(k, v.ValueBytes()); err != nil {
+
+			descID := keys.MaxReservedDescID + i + 1
+
+			// We don't care about the values, just the keys.
+			k := sql.MakeDescMetadataKey(sql.ID(descID))
+			if err := txn.Put(k, kv.Value.RawBytes); err != nil {
 				return err
 			}
 		}
@@ -542,63 +568,50 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expKeys := []roachpb.Key{}
-	for i := 1; i <= 5; i++ {
-		expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix,
-			keys.MakeTablePrefix(uint32(keys.MaxReservedDescID+i))))
-	}
-	expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax))
-
-	if err := util.IsTrueWithin(func() bool {
-		rows, err := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
-		if err != nil {
-			t.Fatalf("failed to scan meta2 keys: %s", err)
+	verifySplitsAtTablePrefixes := func(maxTableID int) {
+		// We expect splits at each of the user tables, but not at the system
+		// tables boundaries.
+		expKeys := make([]roachpb.Key, 0, maxTableID+1)
+		for i := 1; i <= maxTableID; i++ {
+			expKeys = append(expKeys,
+				keys.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(keys.MaxReservedDescID+uint32(i))),
+			)
 		}
-		var keys []roachpb.Key
-		for _, r := range rows {
-			keys = append(keys, r.Key)
-		}
-		return reflect.DeepEqual(keys, expKeys)
-	}, 5*time.Second); err != nil {
-		t.Errorf("expected splits not found: %s", err)
+		expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax))
+
+		util.SucceedsWithinDepth(1, t, 5*time.Second, func() error {
+			rows, err := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+			if err != nil {
+				return err
+			}
+			keys := make([]roachpb.Key, 0, len(expKeys))
+			for _, r := range rows {
+				keys = append(keys, r.Key)
+			}
+			if !reflect.DeepEqual(keys, expKeys) {
+				return util.Errorf("expected split keys:\n%v\nbut found:\n%v", expKeys, keys)
+			}
+			return nil
+		})
 	}
 
-	// Write more descriptors for user tables.
+	verifySplitsAtTablePrefixes(len(initialSystemValues))
+
+	numTotalValues := numInitialValues + 5
+
+	// Write another, disjoint descriptor for a user table.
 	if err := store.DB().Txn(func(txn *client.Txn) error {
 		txn.SetSystemDBTrigger()
 		// This time, only write the last table descriptor. Splits
-		// still occur for every ID.
+		// still occur for every intervening ID.
 		// We don't care about the values, just the keys.
-		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + 10))
-		v, err := txn.Get(k)
-		if err != nil {
-			return err
-		}
-		return txn.Put(k, v.ValueBytes())
+		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + numTotalValues))
+		return txn.Put(k, &sql.TableDescriptor{})
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	expKeys = []roachpb.Key{}
-	for i := 1; i <= 10; i++ {
-		expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix,
-			keys.MakeTablePrefix(uint32(keys.MaxReservedDescID+i))))
-	}
-	expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax))
-
-	if err := util.IsTrueWithin(func() bool {
-		rows, err := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
-		if err != nil {
-			t.Fatalf("failed to scan meta2 keys: %s", err)
-		}
-		var keys []roachpb.Key
-		for _, r := range rows {
-			keys = append(keys, r.Key)
-		}
-		return reflect.DeepEqual(keys, expKeys)
-	}, 5*time.Second); err != nil {
-		t.Errorf("expected splits not found: %s", err)
-	}
+	verifySplitsAtTablePrefixes(numTotalValues)
 }
 
 // setupSplitSnapshotRace engineers a situation in which a range has
