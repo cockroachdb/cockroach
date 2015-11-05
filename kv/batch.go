@@ -27,48 +27,18 @@ import (
 	"golang.org/x/net/context"
 )
 
-// rSpan is a key range passed to the truncate function.
-type rSpan struct {
-	key, endKey roachpb.RKey
-}
-
-// newRSpan returns an rSpan encompassing all the keys in the batch request.
-func newRSpan(ba roachpb.BatchRequest) rSpan {
-	key, endKey := keys.Range(ba)
-	return rSpan{key: key, endKey: endKey}
-}
-
-// intersect returns the intersection of the current span and the
-// descriptor's range.
-func (rs rSpan) intersect(desc *roachpb.RangeDescriptor) rSpan {
-	key := rs.key
-	if !desc.ContainsKey(key) {
-		key = desc.StartKey
-	}
-	endKey := rs.endKey
-	if !desc.ContainsKeyRange(desc.StartKey, endKey) || endKey == nil {
-		endKey = desc.EndKey
-	}
-	return rSpan{key, endKey}
-}
-
 // truncate restricts all contained requests to the given key range.
 // Even on error, the returned closure must be executed; it undoes any
 // truncations performed.
-// First, the boundaries of the truncation are obtained: This is the
-// intersection between the given span and the descriptor's range.
-// Secondly, all requests contained in the batch are "truncated" to
-// the resulting range, inserting NoopRequest appropriately to
-// replace requests which are left without a key range to operate on.
-// The number of non-noop requests after truncation is returned along
-// with a closure which must be executed to undo the truncation, even
-// in case of an error.
+// All requests contained in the batch are "truncated" to the given
+// span, inserting NoopRequest appropriately to replace requests which
+// are left without a key range to operate on. The number of non-noop
+// requests after truncation is returned along with a closure which
+// must be executed to undo the truncation, even in case of an error.
 // TODO(tschottdorf): Consider returning a new BatchRequest, which has more
 // overhead in the common case of a batch which never needs truncation but is
 // less magical.
-func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, rs rSpan) (func(), int, error) {
-	rs = rs.intersect(desc)
-
+func truncate(br *roachpb.BatchRequest, rs roachpb.RSpan) (func(), int, error) {
 	truncateOne := func(args roachpb.Request) (bool, []func(), error) {
 		if _, ok := args.(*roachpb.NoopRequest); ok {
 			return true, nil, nil
@@ -79,7 +49,7 @@ func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, rs rSpan)
 			if len(header.EndKey) > 0 {
 				return false, nil, util.Errorf("%T is not a range command, but EndKey is set", args)
 			}
-			if !desc.ContainsKey(keys.Addr(header.Key)) {
+			if !rs.ContainsKey(keys.Addr(header.Key)) {
 				return true, nil, nil
 			}
 			return false, nil, nil
@@ -88,29 +58,30 @@ func truncate(br *roachpb.BatchRequest, desc *roachpb.RangeDescriptor, rs rSpan)
 		var undo []func()
 		keyAddr, endKeyAddr := keys.Addr(header.Key), keys.Addr(header.EndKey)
 		if l, r := !keyAddr.Equal(header.Key), !endKeyAddr.Equal(header.EndKey); l || r {
-			if !desc.ContainsKeyRange(keyAddr, endKeyAddr) {
+			if !rs.ContainsKeyRange(keyAddr, endKeyAddr) {
 				return false, nil, util.Errorf("local key range must not span ranges")
 			}
 			if !l || !r {
 				return false, nil, util.Errorf("local key mixed with global key in range")
 			}
+			return false, nil, nil
 		}
 		// Below, {end,}keyAddr equals header.{End,}Key, so nothing is local.
-		if keyAddr.Less(rs.key) {
+		if keyAddr.Less(rs.Key) {
 			{
 				origKey := header.Key
 				undo = append(undo, func() { header.Key = origKey })
 			}
-			header.Key = rs.key.AsRawKey() // "key" can't be local
-			keyAddr = rs.key
+			header.Key = rs.Key.AsRawKey() // "key" can't be local
+			keyAddr = rs.Key
 		}
-		if !endKeyAddr.Less(rs.endKey) {
+		if !endKeyAddr.Less(rs.EndKey) {
 			{
 				origEndKey := header.EndKey
 				undo = append(undo, func() { header.EndKey = origEndKey })
 			}
-			header.EndKey = rs.endKey.AsRawKey() // "endKey" can't be local
-			endKeyAddr = rs.endKey
+			header.EndKey = rs.EndKey.AsRawKey() // "endKey" can't be local
+			endKeyAddr = rs.EndKey
 		}
 		// Check whether the truncation has left any keys in the range. If not,
 		// we need to cut it out of the request.

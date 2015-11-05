@@ -735,3 +735,42 @@ func (l Lease) Covers(timestamp Timestamp) bool {
 func (l Lease) OwnedBy(storeID StoreID) bool {
 	return l.Replica.StoreID == storeID
 }
+
+// RSpan is a key range with an inclusive start RKey and an exclusive end RKey.
+type RSpan struct {
+	Key, EndKey RKey
+}
+
+// ContainsKey returns whether this span contains the specified key.
+func (rs RSpan) ContainsKey(key RKey) bool {
+	return bytes.Compare(key, rs.Key) >= 0 && bytes.Compare(key, rs.EndKey) < 0
+}
+
+// ContainsKeyRange returns whether this span contains the specified
+// key range from start (inclusive) to end (exclusive).
+// If end is empty, returns ContainsKey(start).
+func (rs RSpan) ContainsKeyRange(start, end RKey) bool {
+	if len(end) == 0 {
+		return rs.ContainsKey(start)
+	}
+	if comp := bytes.Compare(end, start); comp < 0 {
+		return false
+	} else if comp == 0 {
+		return rs.ContainsKey(start)
+	}
+	return bytes.Compare(start, rs.Key) >= 0 && bytes.Compare(rs.EndKey, end) >= 0
+}
+
+// Intersect returns the intersection of the current span and the
+// descriptor's range.
+func (rs RSpan) Intersect(desc *RangeDescriptor) RSpan {
+	key := rs.Key
+	if !desc.ContainsKey(key) {
+		key = desc.StartKey
+	}
+	endKey := rs.EndKey
+	if !desc.ContainsKeyRange(desc.StartKey, endKey) || endKey == nil {
+		endKey = desc.EndKey
+	}
+	return RSpan{key, endKey}
+}

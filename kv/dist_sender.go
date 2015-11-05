@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
@@ -385,14 +386,14 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 // Note that `from` and `to` are not necessarily Key and EndKey from a
 // RequestHeader; it's assumed that they've been translated to key addresses
 // already (via KeyAddress).
-func (ds *DistSender) getDescriptors(rs rSpan, options lookupOptions) (*roachpb.RangeDescriptor, bool, func(), *roachpb.Error) {
+func (ds *DistSender) getDescriptors(rs roachpb.RSpan, options lookupOptions) (*roachpb.RangeDescriptor, bool, func(), *roachpb.Error) {
 	var desc *roachpb.RangeDescriptor
 	var err error
 	var descKey roachpb.RKey
 	if !options.useReverseScan {
-		descKey = rs.key
+		descKey = rs.Key
 	} else {
-		descKey = rs.endKey
+		descKey = rs.EndKey
 	}
 	desc, err = ds.rangeCache.LookupRangeDescriptor(descKey, options)
 
@@ -403,9 +404,9 @@ func (ds *DistSender) getDescriptors(rs rSpan, options lookupOptions) (*roachpb.
 	// Checks whether need to get next range descriptor. If so, returns true.
 	needAnother := func(desc *roachpb.RangeDescriptor, isReverse bool) bool {
 		if isReverse {
-			return rs.key.Less(desc.StartKey)
+			return rs.Key.Less(desc.StartKey)
 		}
-		return desc.EndKey.Less(rs.endKey)
+		return desc.EndKey.Less(rs.EndKey)
 	}
 
 	evict := func() {
@@ -481,7 +482,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 	// Local addressing has already been resolved.
 	// TODO(tschottdorf): consider rudimentary validation of the batch here
 	// (for example, non-range requests with EndKey, or empty key ranges).
-	rs := newRSpan(ba)
+	rs := keys.Range(ba)
 	var br *roachpb.BatchResponse
 	// Send the request to one range per iteration.
 	for {
@@ -528,20 +529,20 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// descriptor. Example revscan [a,g), first desc lookup for "g"
 			// returns descriptor [c,d) -> [d,g) is never scanned.
 			// We evict and retry in such a case.
-			if (isReverse && !desc.ContainsKeyRange(desc.StartKey, rs.endKey)) || (!isReverse && !desc.ContainsKeyRange(rs.key, desc.EndKey)) {
+			if (isReverse && !desc.ContainsKeyRange(desc.StartKey, rs.EndKey)) || (!isReverse && !desc.ContainsKeyRange(rs.Key, desc.EndKey)) {
 				evictDesc()
 				continue
 			}
 
 			curReply, pErr = func() (*roachpb.BatchResponse, *roachpb.Error) {
 				// Truncate the request to our current key range.
-				untruncate, numActive, trErr := truncate(&ba, desc, rs)
+				untruncate, numActive, trErr := truncate(&ba, rs.Intersect(desc))
 				if numActive == 0 && trErr == nil {
 					untruncate()
 					// This shouldn't happen in the wild, but some tests
 					// exercise it.
 					return nil, roachpb.NewError(util.Errorf("truncation resulted in empty batch on [%s,%s): %s",
-						rs.key, rs.endKey, ba))
+						rs.Key, rs.EndKey, ba))
 				}
 				defer untruncate()
 				if trErr != nil {
@@ -721,7 +722,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// We use the StartKey of the current descriptor as opposed to the
 			// EndKey of the previous one since that doesn't have bugs when
 			// stale descriptors come into play.
-			rs.endKey = prev(ba, desc.StartKey)
+			rs.EndKey = prev(ba, desc.StartKey)
 		} else {
 			// In next iteration, query next range.
 			// It's important that we use the EndKey of the current descriptor
@@ -730,7 +731,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// one, and unless both descriptors are stale, the next descriptor's
 			// StartKey would move us to the beginning of the current range,
 			// resulting in a duplicate scan.
-			rs.key = next(ba, desc.EndKey)
+			rs.Key = next(ba, desc.EndKey)
 		}
 		trace.Event("querying next range")
 	}

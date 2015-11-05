@@ -349,8 +349,8 @@ func TestBatchRange(t *testing.T) {
 		for _, pair := range c.req {
 			ba.Add(&roachpb.ScanRequest{Span: roachpb.Span{Key: roachpb.Key(pair[0]), EndKey: roachpb.Key(pair[1])}})
 		}
-		from, to := Range(ba)
-		if actPair := [2]string{string(from), string(to)}; !reflect.DeepEqual(actPair, c.exp) {
+		rs := Range(ba)
+		if actPair := [2]string{string(rs.Key), string(rs.EndKey)}; !reflect.DeepEqual(actPair, c.exp) {
 			t.Fatalf("%d: expected [%q,%q), got [%q,%q)", i, c.exp[0], c.exp[1], actPair[0], actPair[1])
 		}
 	}

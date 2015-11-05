@@ -18,7 +18,6 @@
 package roachpb
 
 import (
-	"bytes"
 	"testing"
 )
 
@@ -82,47 +81,5 @@ func TestRangeDescriptorMissingReplica(t *testing.T) {
 	i, r := desc.FindReplica(0)
 	if i >= 0 || r != nil {
 		t.Fatalf("unexpected return (%d, %s) on missing replica", i, r)
-	}
-}
-
-// TestRangeDescriptorContains verifies methods to check whether a key
-// or key range is contained within the range.
-func TestRangeDescriptorContains(t *testing.T) {
-	desc := RangeDescriptor{}
-	desc.StartKey = []byte("a")
-	desc.EndKey = []byte("b")
-
-	testData := []struct {
-		start, end []byte
-		contains   bool
-	}{
-		// Single keys.
-		{[]byte("a"), []byte("a"), true},
-		{[]byte("a"), nil, true},
-		{[]byte("aa"), []byte("aa"), true},
-		{[]byte("`"), []byte("`"), false},
-		{[]byte("b"), []byte("b"), false},
-		{[]byte("b"), nil, false},
-		{[]byte("c"), []byte("c"), false},
-		// Key ranges.
-		{[]byte("a"), []byte("b"), true},
-		{[]byte("a"), []byte("aa"), true},
-		{[]byte("aa"), []byte("b"), true},
-		{[]byte("0"), []byte("9"), false},
-		{[]byte("`"), []byte("a"), false},
-		{[]byte("b"), []byte("bb"), false},
-		{[]byte("0"), []byte("bb"), false},
-		{[]byte("aa"), []byte("bb"), false},
-		{[]byte("b"), []byte("a"), false},
-	}
-	for i, test := range testData {
-		if bytes.Compare(test.start, test.end) == 0 {
-			if desc.ContainsKey(test.start) != test.contains {
-				t.Errorf("%d: expected key %q within range", i, test.start)
-			}
-		}
-		if desc.ContainsKeyRange(test.start, test.end) != test.contains {
-			t.Errorf("%d: expected key %q within range", i, test.start)
-		}
 	}
 }

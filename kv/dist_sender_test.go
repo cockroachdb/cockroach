@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
@@ -346,8 +348,11 @@ func TestSendRPCOrder(t *testing.T) {
 type mockRangeDescriptorDB func(roachpb.RKey, lookupOptions) ([]roachpb.RangeDescriptor, error)
 
 func (mdb mockRangeDescriptorDB) rangeLookup(key roachpb.RKey, options lookupOptions, _ *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
-	if bytes.HasPrefix(key, keys.Meta1Prefix) {
+	if bytes.HasPrefix(key, keys.Meta2Prefix) {
 		return mdb(key[len(keys.Meta1Prefix):], options)
+	}
+	if bytes.HasPrefix(key, keys.Meta1Prefix) {
+		return mdb(keys.MakeKey(keys.Meta2Prefix, key[len(keys.Meta1Prefix):]), options)
 	}
 	// First range.
 	return mdb(nil, options)
@@ -418,6 +423,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	errors := []error{
 		errors.New("fatal boom"),
 		&roachpb.RangeKeyMismatchError{}, // retryable
+		nil,
 		nil,
 	}
 
@@ -527,11 +533,11 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
 		ba := getArgs(testAddress).(*roachpb.BatchRequest)
-		key, endKey := keys.Range(*ba)
+		rs := keys.Range(*ba)
 		if _, ok := ba.GetArg(roachpb.RangeLookup); ok {
-			if !descStale && bytes.HasPrefix(key, keys.Meta2Prefix) {
+			if !descStale && bytes.HasPrefix(rs.Key, keys.Meta2Prefix) {
 				t.Errorf("unexpected extra lookup for non-stale replica descriptor at %s",
-					key)
+					rs.Key)
 			}
 
 			br := getReply().(*roachpb.BatchResponse)
@@ -540,7 +546,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 			br.Add(r)
 			// If we just returned the stale descriptor, set up returning the
 			// good one next time.
-			if bytes.HasPrefix(key, keys.Meta2Prefix) {
+			if bytes.HasPrefix(rs.Key, keys.Meta2Prefix) {
 				if newRangeDescriptor.StartKey.Equal(badStartKey) {
 					newRangeDescriptor.StartKey = goodStartKey
 				} else {
@@ -552,8 +558,8 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		// When the Scan first turns up, update the descriptor for future
 		// range descriptor lookups.
 		if !newRangeDescriptor.StartKey.Equal(goodStartKey) {
-			return nil, &roachpb.RangeKeyMismatchError{RequestStartKey: key.AsRawKey(),
-				RequestEndKey: endKey.AsRawKey()}
+			return nil, &roachpb.RangeKeyMismatchError{RequestStartKey: rs.Key.AsRawKey(),
+				RequestEndKey: rs.EndKey.AsRawKey()}
 		}
 		return []proto.Message{ba.CreateReply()}, nil
 	}
@@ -731,13 +737,13 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 			t.Fatalf("unexpected method:%s", method)
 		}
 		ba := getArgs(testAddress).(*roachpb.BatchRequest)
-		key, endKey := keys.Range(*ba)
+		rs := keys.Range(*ba)
 		batchReply := getReply().(*roachpb.BatchResponse)
 		reply := &roachpb.ScanResponse{}
 		batchReply.Add(reply)
 		results := []roachpb.KeyValue{}
 		for _, curKV := range existingKVs {
-			if key.Less(keys.Addr(curKV.Key).Next()) && keys.Addr(curKV.Key).Less(endKey) {
+			if rs.Key.Less(keys.Addr(curKV.Key).Next()) && keys.Addr(curKV.Key).Less(rs.EndKey) {
 				results = append(results, curKV)
 			}
 		}
@@ -795,6 +801,113 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 		Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 	}
 	if _, err := client.SendWrapped(ds, nil, rScan); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestTruncateWithSpanAndDescriptor verifies that a batch request is truncated with a
+// range span and the range of a descriptor found in cache.
+func TestTruncateWithSpanAndDescriptor(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	g, s := makeTestGossip(t)
+	defer s()
+
+	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	nd := &roachpb.NodeDescriptor{
+		NodeID:  roachpb.NodeID(1),
+		Address: util.MakeUnresolvedAddr(testAddress.Network(), testAddress.String()),
+	}
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(1)), nd, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	// Fill mockRangeDescriptorDB with two descriptors. When a
+	// range descriptor is looked up by key "b", return the second
+	// descriptor whose range is ["a", "c") and partially overlaps
+	// with the first descriptor's range.
+	var descriptor1 = roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKey("b"),
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	var descriptor2 = roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("c"),
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	descDB := mockRangeDescriptorDB(func(key roachpb.RKey, _ lookupOptions) ([]roachpb.RangeDescriptor, error) {
+		desc := descriptor1
+		if key.Equal(roachpb.RKey("b")) {
+			desc = descriptor2
+		}
+		return []roachpb.RangeDescriptor{desc}, nil
+	})
+
+	// Define our rpcSend stub which checks the span of the batch
+	// requests. The first request should be the point request on
+	// "a". The second request should be on "b".
+	first := true
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
+		if method != "Node.Batch" {
+			return nil, util.Errorf("unexpected method %v", method)
+		}
+
+		ba := getArgs(testAddress).(*roachpb.BatchRequest)
+		rs := keys.Range(*ba)
+		if first {
+			if !(rs.Key.Equal(roachpb.RKey("a")) && rs.EndKey.Equal(roachpb.RKey("a").Next())) {
+				t.Errorf("Unexpected span [%s,%s)", rs.Key, rs.EndKey)
+			}
+			first = false
+		} else {
+			if !(rs.Key.Equal(roachpb.RKey("b")) && rs.EndKey.Equal(roachpb.RKey("b").Next())) {
+				t.Errorf("Unexpected span [%s,%s)", rs.Key, rs.EndKey)
+			}
+		}
+
+		batchReply := getReply().(*roachpb.BatchResponse)
+		reply := &roachpb.PutResponse{}
+		batchReply.Add(reply)
+		return []proto.Message{batchReply}, nil
+	}
+
+	ctx := &DistSenderContext{
+		RPCSend:           testFn,
+		RangeDescriptorDB: descDB,
+	}
+	ds := NewDistSender(ctx, g)
+
+	// Send a batch request contains two puts. In the first
+	// attempt, the range of the descriptor found in the cache is
+	// ["a", "b"). The request is truncated to contain only the put
+	// on "a".
+	//
+	// In the second attempt, The range of the descriptor found in
+	// the cache is ["a", c"), but the put on "a" will not be
+	// resent. The request is truncated to contain only the put on "b".
+	ba := roachpb.BatchRequest{}
+	ba.CmdID = ba.GetOrCreateCmdID(0)
+	ba.Txn = &roachpb.Transaction{Name: "test"}
+	val := roachpb.MakeValueFromString("val")
+	ba.Add(roachpb.NewPut(keys.RangeTreeNodeKey(roachpb.RKey("a")), val).(*roachpb.PutRequest))
+	ba.Add(roachpb.NewPut(keys.RangeTreeNodeKey(roachpb.RKey("b")), val).(*roachpb.PutRequest))
+
+	_, pErr := ds.Send(context.Background(), ba)
+	if err := pErr.GoError(); err != nil {
 		t.Fatal(err)
 	}
 }
