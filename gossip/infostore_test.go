@@ -51,6 +51,12 @@ func TestNewInfo(t *testing.T) {
 	is := newInfoStore(1, emptyAddr)
 	info1 := is.newInfo(nil, time.Second)
 	info2 := is.newInfo(nil, time.Second)
+	if err := is.addInfo("a", info1); err != nil {
+		t.Error(err)
+	}
+	if err := is.addInfo("b", info2); err != nil {
+		t.Error(err)
+	}
 	if info1.OrigStamp >= info2.OrigStamp {
 		t.Errorf("timestamps should increment %d, %d", info1.OrigStamp, info2.OrigStamp)
 	}
@@ -347,7 +353,7 @@ func TestCallbacks(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		for _, test := range []struct {
 			key   string
-			info  *info
+			info  *Info
 			count int
 		}{
 			{"key1", i1, 2},

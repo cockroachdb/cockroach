@@ -36,9 +36,9 @@ the system with minimal total hops. The algorithm is as follows:
       received, the client in question is credited. If node has no
       outgoing connections, goto #1.
 
-   b. If any gossip was received at > maxToleratedHops and num
-      connected peers < maxPeers, choose random peer from those
-      originating Info > maxToleratedHops, start it, and goto #2.
+   b. If any gossip was received at > MaxHops and num connected peers
+      < maxPeers(), choose random peer from those originating Info >
+      MaxHops, start it, and goto #2.
 
    c. If sentinel gossip keyed by KeySentinel is missing or expired,
       node is considered partitioned; goto #1.
@@ -52,10 +52,8 @@ package gossip
 
 import (
 	"encoding/json"
-	"math"
 	"math/rand"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
@@ -72,28 +70,28 @@ import (
 )
 
 const (
-	// MaxPeers is the maximum number of connected gossip peers.
-	MaxPeers = 10
-	// minNodeCount is the minimum number of nodes in the gossip network
-	// for the purpose of computing the maximum hops allowed for info
-	// transimission. The actual count of nodes in the cluster is
-	// computed by counting the number of node IDs in the infoStore.
-	//
-	// The count of nodes is used to compute the maximum hops allowed
-	// for info transmission given the maxPeers parameter by the
-	// formula: maxHops = ceil(log(numNodes) / log(maxPeers)) + 1.
-	//
-	// This minimum value helps when establishing the gossip network,
-	// and is set purposefully high to avoid premature tightening.
-	minNodeCount int64 = 1000
+	// MaxHops is the maximum number of hops which any gossip info
+	// should require to transit between any two nodes in a gossip
+	// network.
+	MaxHops uint32 = 5
+
+	// minPeers is the minimum number of peers which the maxPeers()
+	// function will return. This is set higher than one to prevent
+	// excessive tightening of the network.
+	minPeers int = 3
 
 	// ttlNodeIDGossip is time-to-live for node ID -> address.
 	ttlNodeIDGossip time.Duration = 0
 
-	// defaultCheckInterval is the default interval for checking for
-	// bad gossip states, including a badly connected network and
-	// the least useful clients.
-	defaultCheckInterval time.Duration = 60 * time.Second
+	// checkInterval is the default interval for checking for bad gossip
+	// states, including a badly connected network and the least useful
+	// clients.
+	checkInterval time.Duration = 60 * time.Second
+
+	// stallInterval is the default interval for checking whether the
+	// incoming and outgoing connections to the gossip network are
+	// insufficient to keep the network connected.
+	stallInterval time.Duration = 1 * time.Second
 )
 
 var (
@@ -110,7 +108,6 @@ type Gossip struct {
 	RPCContext    *rpc.Context        // The context required for RPC
 	bsRPCContext  *rpc.Context        // Context for bootstrap RPCs
 	*server                           // Embedded gossip RPC server
-	checkInterval time.Duration       // Interval between checks on gossip network state
 	outgoing      nodeSet             // Set of outgoing client node IDs
 	bootstrapping map[string]struct{} // Set of active bootstrap clients
 	clientsMu     sync.Mutex          // Mutex protects the clients slice
@@ -140,11 +137,10 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver) *Gossip {
 		Connected:     make(chan struct{}),
 		RPCContext:    rpcContext,
 		server:        newServer(),
-		checkInterval: defaultCheckInterval,
-		outgoing:      makeNodeSet(MaxPeers),
+		outgoing:      makeNodeSet(1),
 		bootstrapping: map[string]struct{}{},
 		clients:       []*client{},
-		disconnected:  make(chan *client, MaxPeers),
+		disconnected:  make(chan *client, 10),
 		stalled:       make(chan struct{}, 1),
 		resolvers:     resolvers,
 	}
@@ -173,12 +169,12 @@ func (g *Gossip) GetNodeID() roachpb.NodeID {
 // and sets the infostore's node ID.
 func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	log.Infof("gossiping node descriptor %+v", desc)
+	g.mu.Lock()
+	g.is.NodeID = desc.NodeID
+	g.mu.Unlock()
 	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, ttlNodeIDGossip); err != nil {
 		return util.Errorf("couldn't gossip descriptor for node %d: %v", desc.NodeID, err)
 	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.is.NodeID = desc.NodeID
 	return nil
 }
 
@@ -207,6 +203,29 @@ func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescript
 	}
 
 	return nodeDescriptor, nil
+}
+
+// EnableSimulationCycler is for TESTING PURPOSES ONLY. It sets a
+// condition variable which is signaled at each cycle of the
+// simulation via SimulationCycle(). The gossip server makes each
+// connecting client wait for the cycler to signal before responding.
+func (g *Gossip) EnableSimulationCycler(enable bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if enable {
+		g.simulationCycler = sync.NewCond(&g.mu)
+	} else {
+		g.simulationCycler.Broadcast()
+		g.simulationCycler = nil
+	}
+}
+
+// SimulationCycle cycles this gossip node's server by allowing all
+// connected clients to proceed one step.
+func (g *Gossip) SimulationCycle() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.simulationCycler.Broadcast()
 }
 
 // getNodeDescriptorLocked looks up the descriptor of the node by ID. The mutex
@@ -370,14 +389,6 @@ func (g *Gossip) updateSystemConfig(key string, content []byte) {
 	}
 }
 
-// MaxHops returns the maximum number of hops to reach the furthest
-// gossiped information currently in the network.
-func (g *Gossip) MaxHops() uint32 {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return g.is.maxHops()
-}
-
 // Incoming returns a slice of incoming gossip client connection
 // node IDs.
 func (g *Gossip) Incoming() []roachpb.NodeID {
@@ -410,29 +421,6 @@ func (g *Gossip) Start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 	g.maybeWarnAboutInit(stopper)
 }
 
-// maxToleratedHops computes the maximum number of hops which the
-// gossip network should allow when optimally configured. It's based
-// on the level of fanout (MaxPeers) and the count of nodes in the
-// cluster.
-func (g *Gossip) maxToleratedHops() uint32 {
-	var nodeCount int64
-
-	if err := g.is.visitInfos(func(key string, i *Info) error {
-		if strings.HasPrefix(key, KeyNodeIDPrefix) {
-			nodeCount++
-		}
-		return nil
-	}); err != nil {
-		panic(err)
-	}
-
-	if nodeCount < minNodeCount {
-		nodeCount = minNodeCount
-	}
-
-	return uint32(math.Ceil(math.Log(float64(nodeCount))/math.Log(float64(MaxPeers))))*2 + 1
-}
-
 // hasIncoming returns whether the server has an incoming gossip
 // client matching the provided node ID. Mutex should be held by
 // caller.
@@ -462,7 +450,7 @@ func (g *Gossip) getNextBootstrapAddress() net.Addr {
 
 	// Run through resolvers round robin starting at last resolved index.
 	for i := 0; i < len(g.resolvers); i++ {
-		g.resolverIdx = (g.resolverIdx + 1) % len(g.resolvers)
+		g.resolverIdx = g.resolverIdx % len(g.resolvers)
 		if g.resolverIdx == len(g.resolvers)-1 {
 			g.triedAll = true
 		}
@@ -522,11 +510,11 @@ func (g *Gossip) bootstrap(stopper *stop.Stopper) {
 }
 
 // manage manages outgoing clients. Periodically, the infostore is
-// scanned for infos with hop count exceeding maxToleratedHops()
+// scanned for infos with hop count exceeding the MaxHops
 // threshold. If the number of outgoing clients doesn't exceed
-// MaxPeers, a new gossip client is connected to a randomly selected
-// peer beyond maxToleratedHops threshold. Otherwise, the least useful
-// peer node is cut off to make room for a replacement. Disconnected
+// maxPeers(), a new gossip client is connected to a randomly selected
+// peer beyond MaxHops threshold. Otherwise, the least useful peer
+// node is cut off to make room for a replacement. Disconnected
 // clients are processed via the disconnected channel and taken out of
 // the outgoing address set. If there are no longer any outgoing
 // connections or the sentinel gossip is unavailable, the bootstrapper
@@ -540,17 +528,19 @@ func (g *Gossip) manage(stopper *stop.Stopper) {
 				return
 			case c := <-g.disconnected:
 				g.doDisconnected(stopper, c)
-			case <-time.After(g.jitteredCheckInterval()):
+			case <-time.After(g.jitteredInterval(checkInterval)):
 				g.doCheckNetwork(stopper)
+			case <-time.After(g.jitteredInterval(stallInterval)):
+				g.maybeSignalStalledLocked()
 			}
 		}
 	})
 }
 
-// jitteredCheckInterval returns a randomly jittered (+/-25%) duration
+// jitteredInterval returns a randomly jittered (+/-25%) duration
 // from checkInterval.
-func (g *Gossip) jitteredCheckInterval() time.Duration {
-	return time.Duration(float64(g.checkInterval) * (0.75 + 0.5*rand.Float64()))
+func (g *Gossip) jitteredInterval(interval time.Duration) time.Duration {
+	return time.Duration(float64(interval) * (0.75 + 0.5*rand.Float64()))
 }
 
 func (g *Gossip) doCheckNetwork(stopper *stop.Stopper) {
@@ -558,28 +548,26 @@ func (g *Gossip) doCheckNetwork(stopper *stop.Stopper) {
 	defer g.mu.Unlock()
 	// Check whether the graph needs to be tightened to
 	// accommodate distant infos.
-	distant := g.filterExtant(g.is.distant(g.maxToleratedHops()))
-	if distant.len() > 0 {
-		// If we have space, start a client immediately.
-		if g.outgoing.hasSpace() {
-			nodeID := distant.selectRandom()
-			if nodeAddr, err := g.getNodeIDAddressLocked(nodeID); err != nil {
-				log.Errorf("node %d: %s", nodeID, err)
-			} else {
-				g.startClient(nodeAddr, g.RPCContext, stopper)
-			}
+	distant := g.filterExtant(g.is.distant(MaxHops))
+	g.outgoing.setMaxSize(g.maxPeers())
+	// If there are distant nodes, start a client if we have space.
+	if g.outgoing.hasSpace() && distant.len() > 0 {
+		nodeID := distant.selectRandom()
+		if nodeAddr, err := g.getNodeIDAddressLocked(nodeID); err != nil {
+			log.Errorf("node %d: %s", nodeID, err)
 		} else {
-			// Otherwise, find least useful peer and close it. Make sure
-			// here that we only consider outgoing clients which are
-			// connected.
-			nodeID := g.is.leastUseful(g.outgoing)
-			if nodeID != 0 {
-				log.Infof("closing least useful client %d to tighten network graph", nodeID)
-				g.closeClient(nodeID)
-			}
+			g.startClient(nodeAddr, g.RPCContext, stopper)
+		}
+	} else if !g.outgoing.hasSpace() {
+		// Otherwise, find least useful peer and close it. Make sure
+		// here that we only consider outgoing clients which are
+		// connected.
+		nodeID := g.is.leastUseful(g.outgoing)
+		if nodeID != 0 {
+			log.Infof("closing least useful client %d to tighten network graph", nodeID)
+			g.closeClient(nodeID)
 		}
 	}
-	g.maybeSignalStalledLocked()
 }
 
 func (g *Gossip) doDisconnected(stopper *stop.Stopper, c *client) {
