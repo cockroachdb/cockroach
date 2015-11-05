@@ -283,7 +283,9 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 
 	// Iterate over all the data in the range, including local-only data like
 	// the response cache.
-	for iter := newReplicaDataIterator(&desc, snap); iter.Valid(); iter.Next() {
+	iter := newReplicaDataIterator(&desc, snap)
+	defer iter.Close()
+	for ; iter.Valid(); iter.Next() {
 		snapData.KV = append(snapData.KV,
 			&roachpb.RaftSnapshotData_KeyValue{Key: iter.Key(), Value: iter.Value()})
 	}
@@ -410,7 +412,9 @@ func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 	defer batch.Close()
 
 	// Delete everything in the range and recreate it from the snapshot.
-	for iter := newReplicaDataIterator(&desc, r.store.Engine()); iter.Valid(); iter.Next() {
+	iter := newReplicaDataIterator(&desc, r.store.Engine())
+	defer iter.Close()
+	for ; iter.Valid(); iter.Next() {
 		if err := batch.Clear(iter.Key()); err != nil {
 			return err
 		}
