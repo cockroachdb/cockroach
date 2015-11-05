@@ -501,9 +501,8 @@ func TestRangeLeaderLease(t *testing.T) {
 		return errChan
 	}
 
-	err = rng.redirectOnOrAcquireLeaderLease(nil, tc.clock.Now())
-	if lErr, ok := err.(*roachpb.NotLeaderError); !ok || lErr == nil {
-		t.Fatalf("wanted NotLeaderError, got %s", err)
+	if _, ok := rng.redirectOnOrAcquireLeaderLease(nil, tc.clock.Now()).(*roachpb.NotLeaderError); !ok {
+		t.Fatalf("expected %T, got %s", &roachpb.NotLeaderError{}, err)
 	}
 }
 
