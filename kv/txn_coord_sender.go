@@ -24,6 +24,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/montanaflynn/stats"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -35,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
-	"github.com/montanaflynn/stats"
 )
 
 const statusLogInterval = 5 * time.Second
@@ -640,6 +641,8 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	trace := tracer.FromCtx(ctx)
 	newTxn := &roachpb.Transaction{}
 	newTxn.Update(ba.GetTxn())
+	// TODO(tamird): remove this clone. It's currently needed to avoid race conditions.
+	pErr = proto.Clone(pErr).(*roachpb.Error)
 	err := pErr.GoError()
 	// TODO(bdarnell): We're writing to errors here (and where using ErrorWithIndex);
 	// since there's no concept of ownership copy-on-write is always preferable.
