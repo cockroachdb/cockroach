@@ -576,7 +576,7 @@ var sqlStatenames = [...]string{}
 
 const sqlEofCode = 1
 const sqlErrCode = 2
-const sqlInitialStackSize = 200
+const sqlInitialStackSize = 16
 
 //line sql.y:3701
 

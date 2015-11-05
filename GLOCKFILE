@@ -16,7 +16,7 @@ github.com/cockroachdb/c-lz4 c40aaae2fc50293eb8750b34632bc3efe813e23f
 github.com/cockroachdb/c-protobuf 6a18bfcdd5169966cd1235edb71d749c950216e8
 github.com/cockroachdb/c-rocksdb bf15ead80bdc205a19b3d33415b23c156a3cf371
 github.com/cockroachdb/c-snappy 5c6d0932e0adaffce4bfca7bdf2ac37f79952ccf
-github.com/cockroachdb/yacc f26089c6a2b83ae2b04a600d63eed2b8a9813ac6
+github.com/cockroachdb/yacc 443154b1852a8702b07d675da6cd97cd9177a316
 github.com/coreos/etcd 2fe6893d5d71e2d91df27f72814aeccc747f4f64
 github.com/cpuguy83/go-md2man 71acacd42f85e5e82f70a55327789582a5200a90
 github.com/docker/docker 8d62f243c725c6eba43ca59ef17407e43004a238
