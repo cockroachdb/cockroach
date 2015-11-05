@@ -631,7 +631,8 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 // was output or an error occurred. In either case, iteration should terminate.
 func (n *scanNode) maybeOutputRow() bool {
 	if n.indexKey != nil &&
-		(n.kvIndex == len(n.kvs) || !bytes.HasPrefix(n.kvs[n.kvIndex].Key, n.indexKey)) {
+		(n.isSecondaryIndex || n.kvIndex == len(n.kvs) ||
+			!bytes.HasPrefix(n.kvs[n.kvIndex].Key, n.indexKey)) {
 		// The current key belongs to a new row. Output the current row.
 		n.indexKey = nil
 		output := n.filterRow()

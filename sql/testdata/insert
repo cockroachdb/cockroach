@@ -56,15 +56,15 @@ EXPLAIN (DEBUG) SELECT * FROM kv
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM kv@a
 ----
-0  /kv/a/NULL /'A'     NULL
-0  /kv/a/NULL /'nil1'  NULL
-0  /kv/a/NULL /'nil2'  NULL
-0  /kv/a/NULL /'nil3'  NULL
-0  /kv/a/NULL /'nil4'  true
-1  /kv/a/''   /'g'     true
-2  /kv/a/'b'  /'a'     true
-3  /kv/a/'d'  /'c'     true
-4  /kv/a/'f'  /'e'     true
+0  /kv/a/NULL /'A'     true
+1  /kv/a/NULL /'nil1'  true
+2  /kv/a/NULL /'nil2'  true
+3  /kv/a/NULL /'nil3'  true
+4  /kv/a/NULL /'nil4'  true
+5  /kv/a/''   /'g'     true
+6  /kv/a/'b'  /'a'     true
+7  /kv/a/'d'  /'c'     true
+8  /kv/a/'f'  /'e'     true
 
 statement error duplicate key value \(v\)=\('f'\) violates unique constraint "a"
 INSERT INTO kv VALUES ('e', 'f')
@@ -89,15 +89,15 @@ EXPLAIN (DEBUG) SELECT * FROM kv
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM kv@a
 ----
-0  /kv/a/NULL /'A'     NULL
-0  /kv/a/NULL /'nil1'  NULL
-0  /kv/a/NULL /'nil2'  NULL
-0  /kv/a/NULL /'nil3'  NULL
-0  /kv/a/NULL /'nil4'  true
-1  /kv/a/''   /'g'     true
-2  /kv/a/'b'  /'a'     true
-3  /kv/a/'d'  /'c'     true
-4  /kv/a/'f'  /'e'     true
+0  /kv/a/NULL /'A'     true
+1  /kv/a/NULL /'nil1'  true
+2  /kv/a/NULL /'nil2'  true
+3  /kv/a/NULL /'nil3'  true
+4  /kv/a/NULL /'nil4'  true
+5  /kv/a/''   /'g'     true
+6  /kv/a/'b'  /'a'     true
+7  /kv/a/'d'  /'c'     true
+8  /kv/a/'f'  /'e'     true
 
 statement ok
 INSERT INTO kv VALUES ('f', 'g')
@@ -124,17 +124,16 @@ EXPLAIN (DEBUG) SELECT * FROM kv
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM kv@a
 ----
-0  /kv/a/NULL /'A'     NULL
-0  /kv/a/NULL /'nil1'  NULL
-0  /kv/a/NULL /'nil2'  NULL
-0  /kv/a/NULL /'nil3'  NULL
-0  /kv/a/NULL /'nil4'  true
-1  /kv/a/''   /'g'     true
-2  /kv/a/'b'  /'a'     true
-3  /kv/a/'d'  /'c'     true
-4  /kv/a/'f'  /'e'     true
-5  /kv/a/'g'  /'f'     true
-
+0  /kv/a/NULL /'A'     true
+1  /kv/a/NULL /'nil1'  true
+2  /kv/a/NULL /'nil2'  true
+3  /kv/a/NULL /'nil3'  true
+4  /kv/a/NULL /'nil4'  true
+5  /kv/a/''   /'g'     true
+6  /kv/a/'b'  /'a'     true
+7  /kv/a/'d'  /'c'     true
+8  /kv/a/'f'  /'e'     true
+9  /kv/a/'g'  /'f'     true
 
 statement error duplicate key value \(v\)=\('g'\) violates unique constraint "a"
 INSERT INTO kv VALUES ('h', 'g')
@@ -161,16 +160,16 @@ EXPLAIN (DEBUG) SELECT * FROM kv
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM kv@a
 ----
-0  /kv/a/NULL /'A'     NULL
-0  /kv/a/NULL /'nil1'  NULL
-0  /kv/a/NULL /'nil2'  NULL
-0  /kv/a/NULL /'nil3'  NULL
-0  /kv/a/NULL /'nil4'  true
-1  /kv/a/''   /'g'     true
-2  /kv/a/'b'  /'a'     true
-3  /kv/a/'d'  /'c'     true
-4  /kv/a/'f'  /'e'     true
-5  /kv/a/'g'  /'f'     true
+0  /kv/a/NULL /'A'     true
+1  /kv/a/NULL /'nil1'  true
+2  /kv/a/NULL /'nil2'  true
+3  /kv/a/NULL /'nil3'  true
+4  /kv/a/NULL /'nil4'  true
+5  /kv/a/''   /'g'     true
+6  /kv/a/'b'  /'a'     true
+7  /kv/a/'d'  /'c'     true
+8  /kv/a/'f'  /'e'     true
+9  /kv/a/'g'  /'f'     true
 
 query TT
 SELECT * FROM kv
