@@ -69,15 +69,17 @@ func TestRaftLogQueue(t *testing.T) {
 		}
 	}
 
-	// Turn the raft log queue back on.
+	// Force a truncation check.
 	for _, store := range mtc.stores {
 		store.ForceRaftLogScan(t)
 	}
 
 	// Wait until the firstIndex has increased indicating that the log
 	// truncation has occurred.
+	var currentIndex uint64
 	util.SucceedsWithin(t, time.Second, func() error {
-		currentIndex, err := rep.FirstIndex()
+		var err error
+		currentIndex, err = rep.FirstIndex()
 		if err != nil {
 			return err
 		}
@@ -87,7 +89,17 @@ func TestRaftLogQueue(t *testing.T) {
 		return nil
 	})
 
-	// Restart the store to tear down the test cleanly.
-	mtc.stopStore(1)
-	mtc.restartStore(1)
+	// Force a truncation check again to ensure that attempting to truncate an
+	// already truncated log has no effect.
+	for _, store := range mtc.stores {
+		store.ForceRaftLogScan(t)
+	}
+
+	finalIndex, err := rep.FirstIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if currentIndex != finalIndex {
+		t.Errorf("raft log was truncated again and it shouldn't have been")
+	}
 }

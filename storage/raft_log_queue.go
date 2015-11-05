@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/coreos/etcd/raft"
 )
 
 const (
@@ -56,26 +57,16 @@ func newRaftLogQueue(db *client.DB, gossip *gossip.Gossip) *raftLogQueue {
 }
 
 func (*raftLogQueue) needsLeaderLease() bool {
-	return true
+	return false
 }
 
 func (*raftLogQueue) acceptsUnsplitRanges() bool {
 	return true
 }
 
-// getTruncatableIndexes looks up the replica's raft status and returns the
-// current first index for the replica and the oldest still in use index.
-func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
-	desc := r.Desc()
-	raftStatus := r.store.RaftStatus(desc.RangeID)
-	if raftStatus == nil {
-		return 0, 0, util.Errorf("could not get raft status for %s", desc)
-	}
-	firstIndex, err := r.FirstIndex()
-	if err != nil {
-		return 0, 0, util.Errorf("error retrieving first index for range %s: %s", desc, err)
-	}
-
+// getOldestIndex returns the the oldest index still in use for the passed in
+// raft status.
+func getOldestIndex(raftStatus raft.Status) uint64 {
 	// Find the oldest index still in use by the range.
 	oldestIndex := raftStatus.Applied
 	for _, progress := range raftStatus.Progress {
@@ -84,18 +75,30 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 		}
 	}
 
-	return firstIndex, oldestIndex, nil
+	return oldestIndex
 }
 
 // shouldQueue determines whether a range should be queued for truncating. This
-// is true if the range's raft log's old entries exceeds the size threshold.
+// is true only if the replica is the raft leader and if the range's raft log's
+// old entries exceeds the size threshold.
 func (*raftLogQueue) shouldQueue(now roachpb.Timestamp, r *Replica, _ *config.SystemConfig) (shouldQ bool,
 	priority float64) {
-	firstIndex, oldestIndex, err := getTruncatableIndexes(r)
-	if err != nil {
-		log.Warning(err)
+	raftLeader, raftStatus, err := r.isRaftLeader()
+	if !raftLeader {
+		if err != nil {
+			log.Warning(err)
+		}
 		return false, 0
 	}
+
+	firstIndex, err := r.FirstIndex()
+	if err != nil {
+		log.Warningf("error retrieving first index for range %s: %s", r.Desc(), err)
+		return false, 0
+	}
+
+	oldestIndex := getOldestIndex(raftStatus)
+
 	// Can and should the raft logs be truncated?
 	truncatableIndexes := oldestIndex - firstIndex
 	return truncatableIndexes > RaftLogQueueLogSizeThreshold, float64(truncatableIndexes)
@@ -103,11 +106,21 @@ func (*raftLogQueue) shouldQueue(now roachpb.Timestamp, r *Replica, _ *config.Sy
 
 // process synchronously invokes for each replica that requires a raft log
 // truncation.
-func (*raftLogQueue) process(now roachpb.Timestamp, r *Replica, _ *config.SystemConfig) error {
-	firstIndex, oldestIndex, err := getTruncatableIndexes(r)
-	if err != nil {
-		return err
+func (rlq *raftLogQueue) process(now roachpb.Timestamp, r *Replica, _ *config.SystemConfig) error {
+	raftLeader, raftStatus, err := r.isRaftLeader()
+	if !raftLeader {
+		if err != nil {
+			return err
+		}
+		return nil
 	}
+
+	firstIndex, err := r.FirstIndex()
+	if err != nil {
+		return util.Errorf("error retrieving first index for range %s: %s", r.Desc(), err)
+	}
+
+	oldestIndex := getOldestIndex(raftStatus)
 
 	// Can and should the raft logs be truncated?
 	truncatableIndexes := oldestIndex - firstIndex
@@ -115,8 +128,9 @@ func (*raftLogQueue) process(now roachpb.Timestamp, r *Replica, _ *config.System
 		if log.V(1) {
 			log.Infof("truncating the raft log of range %d from %d to %d", r.Desc().RangeID, firstIndex, oldestIndex)
 		}
-		_, err := client.SendWrapped(r, r.context(), &roachpb.TruncateLogRequest{Index: oldestIndex})
-		return err
+		b := &client.Batch{}
+		b.InternalAddRequest(&roachpb.TruncateLogRequest{Index: oldestIndex})
+		return rlq.db.Run(b)
 	}
 	return nil
 }

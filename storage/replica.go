@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/coreos/etcd/raft"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -1614,4 +1615,15 @@ func (r *Replica) Quiesce() {
 	}
 	r.pendingCmds = nil
 	r.quiesced = true
+}
+
+// isRaftLeader returns true if the replica is the current raft leader and also
+// returns the raft status.
+func (r *Replica) isRaftLeader() (bool, raft.Status, error) {
+	desc := r.Desc()
+	raftStatus := r.store.RaftStatus(desc.RangeID)
+	if raftStatus == nil {
+		return false, raft.Status{}, util.Errorf("could not get raft status for %s", desc)
+	}
+	return raftStatus.RaftState == raft.StateLeader, *raftStatus, nil
 }
