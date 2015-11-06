@@ -2171,15 +2171,18 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		args := pushTxnArgs(pusher, pushee, test.pushType)
 		args.Now = roachpb.Timestamp{WallTime: test.currentTime}
 
-		_, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &args)
+		reply, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &args)
 
 		if test.expSuccess != (err == nil) {
-			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
+			t.Errorf("%d: expected_success=%t; got err %s", i, test.expSuccess, err)
+			continue
 		}
 		if err != nil {
 			if _, ok := err.(*roachpb.TransactionPushError); !ok {
-				t.Errorf("expected txn push error: %s", err)
+				t.Errorf("%d: expected txn push error: %s", i, err)
 			}
+		} else if txn := reply.(*roachpb.PushTxnResponse).PusheeTxn; txn == nil || txn.Status != roachpb.ABORTED {
+			t.Errorf("%d: expected aborted transaction, got %s", i, txn)
 		}
 	}
 }
