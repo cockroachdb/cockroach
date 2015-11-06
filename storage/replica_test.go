@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1585,6 +1586,69 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 		t.Fatal("expected to see cached error but got nil")
 	} else if !testutils.IsError(err, pastError.Error()) {
 		t.Fatalf("expected '%s', but got %s", pastError, err)
+	}
+}
+
+// TestEndTransactionDeadline verifies that EndTransaction respects the
+// transaction deadline.
+func TestEndTransactionDeadline(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	// 4 cases: no deadline, past deadline, equal deadline, future deadline.
+	for i := 0; i < 4; i++ {
+		key := roachpb.Key("key: " + strconv.Itoa(i))
+		txn := newTransaction("txn: "+strconv.Itoa(i), key, 1, roachpb.SERIALIZABLE, tc.clock)
+
+		btArgs, btHeader := beginTxnArgs(key, txn)
+		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), btHeader, &btArgs); err != nil {
+			t.Fatal(err)
+		}
+
+		etArgs, etHeader := endTxnArgs(txn, true /* commit */)
+		switch i {
+		case 0:
+			// No deadline.
+		case 1:
+			// Past deadline.
+			ts := txn.Timestamp.Prev()
+			etArgs.Deadline = &ts
+		case 2:
+			// Equal deadline.
+			etArgs.Deadline = &txn.Timestamp
+		case 3:
+			// Future deadline.
+			ts := txn.Timestamp.Next()
+			etArgs.Deadline = &ts
+		}
+
+		{
+			_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), etHeader, &etArgs)
+			switch i {
+			case 0:
+				// No deadline.
+				if err != nil {
+					t.Error(err)
+				}
+			case 1:
+				// Past deadline.
+				if err != nil {
+					t.Error(err)
+				}
+			case 2:
+				// Equal deadline.
+				if err != nil {
+					t.Error(err)
+				}
+			case 3:
+				// Future deadline.
+				if _, ok := err.(*roachpb.TransactionAbortedError); !ok {
+					t.Errorf("expected TransactionAbortedError but got %T: %s", err, err)
+				}
+			}
+		}
 	}
 }
 
