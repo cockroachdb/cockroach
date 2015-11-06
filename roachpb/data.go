@@ -527,9 +527,6 @@ func NewTransaction(name string, baseKey Key, userPriority int32,
 
 // Clone creates a deep copy of the given transaction.
 func (t *Transaction) Clone() *Transaction {
-	if t == nil {
-		return nil
-	}
 	return proto.Clone(t).(*Transaction)
 }
 
