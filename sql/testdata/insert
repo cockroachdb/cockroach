@@ -290,3 +290,9 @@ query ITTB
 SELECT * FROM kv5@a
 ----
 NULL a
+
+statement ok
+CREATE TABLE test.boom (id INT PRIMARY KEY)
+
+statement error something
+INSERT INTO test.boom VALUES(1,2)
