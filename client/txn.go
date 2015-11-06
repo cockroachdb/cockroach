@@ -296,8 +296,8 @@ func (txn *Txn) RunWithResponse(b *Batch) (*roachpb.BatchResponse, error) {
 	return sendAndFill(txn.send, b)
 }
 
-func (txn *Txn) commit() error {
-	return txn.sendEndTxnReq(true /* commit */)
+func (txn *Txn) commit(deadline *roachpb.Timestamp) error {
+	return txn.sendEndTxnReq(true /* commit */, deadline)
 }
 
 // Cleanup cleans up the transaction as appropriate based on err.
@@ -313,7 +313,7 @@ func (txn *Txn) Cleanup(err error) {
 // up on failure. It is exposed only for use in txn_correctness_test.go
 // because those tests manipulate transaction state at a low level.
 func (txn *Txn) CommitNoCleanup() error {
-	return txn.commit()
+	return txn.commit(nil)
 }
 
 // CommitInBatch executes the operations queued up within a batch and
@@ -328,41 +328,49 @@ func (txn *Txn) CommitInBatch(b *Batch) error {
 // CommitInBatchWithResponse is a version of CommitInBatch that returns the
 // BatchResponse.
 func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, error) {
-	b.reqs = append(b.reqs, endTxnReq(true /* commit */, txn.SystemDBTrigger()))
+	b.reqs = append(b.reqs, endTxnReq(true /* commit */, nil, txn.SystemDBTrigger()))
 	b.initResult(1, 0, nil)
 	return txn.RunWithResponse(b)
 }
 
 // Commit sends an EndTransactionRequest with Commit=true.
 func (txn *Txn) Commit() error {
-	err := txn.commit()
+	err := txn.commit(nil)
+	txn.Cleanup(err)
+	return err
+}
+
+// CommitBy sends an EndTransactionRequest with Commit=true and
+// Deadline=deadline.
+func (txn *Txn) CommitBy(deadline *roachpb.Timestamp) error {
+	err := txn.commit(deadline)
 	txn.Cleanup(err)
 	return err
 }
 
 // Rollback sends an EndTransactionRequest with Commit=false.
 func (txn *Txn) Rollback() error {
-	return txn.sendEndTxnReq(false /* commit */)
+	return txn.sendEndTxnReq(false /* commit */, nil)
 }
 
-func (txn *Txn) sendEndTxnReq(commit bool) error {
-	_, pErr := txn.send(endTxnReq(commit, txn.SystemDBTrigger()))
+func (txn *Txn) sendEndTxnReq(commit bool, deadline *roachpb.Timestamp) error {
+	_, pErr := txn.send(endTxnReq(commit, deadline, txn.SystemDBTrigger()))
 	return pErr.GoError()
 }
 
-func endTxnReq(commit bool, hasTrigger bool) roachpb.Request {
-	var trigger *roachpb.InternalCommitTrigger
+func endTxnReq(commit bool, deadline *roachpb.Timestamp, hasTrigger bool) roachpb.Request {
+	req := &roachpb.EndTransactionRequest{
+		Commit:   commit,
+		Deadline: deadline,
+	}
 	if hasTrigger {
-		trigger = &roachpb.InternalCommitTrigger{
+		req.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
 			ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{
 				SystemDBSpan: true,
 			},
 		}
 	}
-	return &roachpb.EndTransactionRequest{
-		Commit:                commit,
-		InternalCommitTrigger: trigger,
-	}
+	return req
 }
 
 func (txn *Txn) exec(retryable func(txn *Txn) error) error {
@@ -373,7 +381,7 @@ func (txn *Txn) exec(retryable func(txn *Txn) error) error {
 		err = retryable(txn)
 		if err == nil && txn.Proto.Status == roachpb.PENDING {
 			// retryable succeeded, but didn't commit.
-			err = txn.commit()
+			err = txn.commit(nil)
 		}
 		if restartErr, ok := err.(roachpb.TransactionRestartError); ok {
 			if log.V(2) {

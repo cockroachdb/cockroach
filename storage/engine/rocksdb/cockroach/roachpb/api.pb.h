@@ -2302,19 +2302,28 @@ class EndTransactionRequest : public ::google::protobuf::Message {
   bool commit() const;
   void set_commit(bool value);
 
-  // optional .cockroach.roachpb.InternalCommitTrigger internal_commit_trigger = 3;
+  // optional .cockroach.roachpb.Timestamp deadline = 3;
+  bool has_deadline() const;
+  void clear_deadline();
+  static const int kDeadlineFieldNumber = 3;
+  const ::cockroach::roachpb::Timestamp& deadline() const;
+  ::cockroach::roachpb::Timestamp* mutable_deadline();
+  ::cockroach::roachpb::Timestamp* release_deadline();
+  void set_allocated_deadline(::cockroach::roachpb::Timestamp* deadline);
+
+  // optional .cockroach.roachpb.InternalCommitTrigger internal_commit_trigger = 4;
   bool has_internal_commit_trigger() const;
   void clear_internal_commit_trigger();
-  static const int kInternalCommitTriggerFieldNumber = 3;
+  static const int kInternalCommitTriggerFieldNumber = 4;
   const ::cockroach::roachpb::InternalCommitTrigger& internal_commit_trigger() const;
   ::cockroach::roachpb::InternalCommitTrigger* mutable_internal_commit_trigger();
   ::cockroach::roachpb::InternalCommitTrigger* release_internal_commit_trigger();
   void set_allocated_internal_commit_trigger(::cockroach::roachpb::InternalCommitTrigger* internal_commit_trigger);
 
-  // repeated .cockroach.roachpb.Intent intents = 4;
+  // repeated .cockroach.roachpb.Intent intents = 5;
   int intents_size() const;
   void clear_intents();
-  static const int kIntentsFieldNumber = 4;
+  static const int kIntentsFieldNumber = 5;
   const ::cockroach::roachpb::Intent& intents(int index) const;
   ::cockroach::roachpb::Intent* mutable_intents(int index);
   ::cockroach::roachpb::Intent* add_intents();
@@ -2329,6 +2338,8 @@ class EndTransactionRequest : public ::google::protobuf::Message {
   inline void clear_has_header();
   inline void set_has_commit();
   inline void clear_has_commit();
+  inline void set_has_deadline();
+  inline void clear_has_deadline();
   inline void set_has_internal_commit_trigger();
   inline void clear_has_internal_commit_trigger();
 
@@ -2336,6 +2347,7 @@ class EndTransactionRequest : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::Span* header_;
+  ::cockroach::roachpb::Timestamp* deadline_;
   ::cockroach::roachpb::InternalCommitTrigger* internal_commit_trigger_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent > intents_;
   bool commit_;
@@ -7684,15 +7696,58 @@ inline void EndTransactionRequest::set_commit(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.EndTransactionRequest.commit)
 }
 
-// optional .cockroach.roachpb.InternalCommitTrigger internal_commit_trigger = 3;
-inline bool EndTransactionRequest::has_internal_commit_trigger() const {
+// optional .cockroach.roachpb.Timestamp deadline = 3;
+inline bool EndTransactionRequest::has_deadline() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void EndTransactionRequest::set_has_internal_commit_trigger() {
+inline void EndTransactionRequest::set_has_deadline() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void EndTransactionRequest::clear_has_internal_commit_trigger() {
+inline void EndTransactionRequest::clear_has_deadline() {
   _has_bits_[0] &= ~0x00000004u;
+}
+inline void EndTransactionRequest::clear_deadline() {
+  if (deadline_ != NULL) deadline_->::cockroach::roachpb::Timestamp::Clear();
+  clear_has_deadline();
+}
+inline const ::cockroach::roachpb::Timestamp& EndTransactionRequest::deadline() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.EndTransactionRequest.deadline)
+  return deadline_ != NULL ? *deadline_ : *default_instance_->deadline_;
+}
+inline ::cockroach::roachpb::Timestamp* EndTransactionRequest::mutable_deadline() {
+  set_has_deadline();
+  if (deadline_ == NULL) {
+    deadline_ = new ::cockroach::roachpb::Timestamp;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.EndTransactionRequest.deadline)
+  return deadline_;
+}
+inline ::cockroach::roachpb::Timestamp* EndTransactionRequest::release_deadline() {
+  clear_has_deadline();
+  ::cockroach::roachpb::Timestamp* temp = deadline_;
+  deadline_ = NULL;
+  return temp;
+}
+inline void EndTransactionRequest::set_allocated_deadline(::cockroach::roachpb::Timestamp* deadline) {
+  delete deadline_;
+  deadline_ = deadline;
+  if (deadline) {
+    set_has_deadline();
+  } else {
+    clear_has_deadline();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.EndTransactionRequest.deadline)
+}
+
+// optional .cockroach.roachpb.InternalCommitTrigger internal_commit_trigger = 4;
+inline bool EndTransactionRequest::has_internal_commit_trigger() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void EndTransactionRequest::set_has_internal_commit_trigger() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void EndTransactionRequest::clear_has_internal_commit_trigger() {
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void EndTransactionRequest::clear_internal_commit_trigger() {
   if (internal_commit_trigger_ != NULL) internal_commit_trigger_->::cockroach::roachpb::InternalCommitTrigger::Clear();
@@ -7727,7 +7782,7 @@ inline void EndTransactionRequest::set_allocated_internal_commit_trigger(::cockr
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.EndTransactionRequest.internal_commit_trigger)
 }
 
-// repeated .cockroach.roachpb.Intent intents = 4;
+// repeated .cockroach.roachpb.Intent intents = 5;
 inline int EndTransactionRequest::intents_size() const {
   return intents_.size();
 }

@@ -374,9 +374,13 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	// TODO(tschottdorf): shouldn't have to be done here.
 	reply.Txn.Timestamp.Forward(ts)
 
+	deadline := args.Deadline
+	deadlineLapsed := deadline != nil && ts.Less(*deadline)
+
 	// Set transaction status to COMMITTED or ABORTED as per the
-	// args.Commit parameter.
-	if args.Commit {
+	// args.Commit parameter. If the transaction deadline is set and has
+	// elapsed, abort.
+	if args.Commit && !deadlineLapsed {
 		// If the isolation level is SERIALIZABLE, return a transaction
 		// retry error if the commit timestamp isn't equal to the txn
 		// timestamp.
@@ -451,6 +455,10 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		if err != nil {
 			return reply, nil, err
 		}
+	}
+
+	if deadlineLapsed {
+		return reply, externalIntents, roachpb.NewTransactionAbortedError(reply.Txn)
 	}
 
 	// Run triggers if successfully committed.
