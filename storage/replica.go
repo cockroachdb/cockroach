@@ -1336,7 +1336,7 @@ func (r *Replica) maybeGossipSystemConfigLocked() {
 
 	ctx := r.context()
 	// TODO(marc): check for bad split in the middle of the SystemDB span.
-	kvs, hash, err := loadSystemDBSpan(r.store.Engine())
+	kvs, hash, err := loadSystemDBSpan(r)
 	if err != nil {
 		log.Errorc(ctx, "could not load SystemDB span: %s", err)
 		return
@@ -1573,14 +1573,24 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 
 // loadSystemDBSpan scans the entire SystemDB span and returns the full list of
 // key/value pairs along with the sha1 checksum of the contents (key and value).
-func loadSystemDBSpan(eng engine.Engine) ([]roachpb.KeyValue, []byte, error) {
-	// TODO(tschottdorf): Currently this does not handle intents well.
-	kvs, _, err := engine.MVCCScan(eng, keys.SystemDBSpan.Key, keys.SystemDBSpan.EndKey,
-		0, roachpb.MaxTimestamp, true /* consistent */, nil)
+func loadSystemDBSpan(r *Replica) ([]roachpb.KeyValue, []byte, error) {
+	ba := roachpb.BatchRequest{}
+	ba.ReadConsistency = roachpb.INCONSISTENT
+	ba.Timestamp = r.store.Clock().Now()
+	ba.Add(&roachpb.ScanRequest{Span: keys.SystemDBSpan})
+	br, intents, err := r.executeBatch(r.store.Engine(), nil, ba)
 	if err != nil {
 		return nil, nil, err
 	}
+	if len(intents) > 0 {
+		// There were intents, so what we read may not be consistent. Attempt
+		// to nudge the intents in case they're expired; next time around we'll
+		// hopefully have more luck.
+		r.handleSkippedIntents(intents)
+		return nil, nil, util.Errorf("must retry later due to intent on SystemDB")
+	}
 	sha := sha1.New()
+	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
 	for _, kv := range kvs {
 		if _, err := sha.Write(kv.Key); err != nil {
 			return nil, nil, err

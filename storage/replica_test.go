@@ -3302,3 +3302,48 @@ func TestReplicaQuiesce(t *testing.T) {
 		}
 	}
 }
+
+// TestReplicaLoadSystemDBSpanIntent verifies that intents on the SystemDBSpan
+// cause an error, but trigger asynchronous cleanup.
+func TestReplicaLoadSystemDBSpanIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	rng := tc.store.LookupReplica(keys.Addr(keys.SystemDBSpan.Key), nil)
+	if rng == nil {
+		t.Fatalf("no replica contains the SystemDB span")
+	}
+	v := roachpb.Value{}
+	v.SetBytes([]byte("foo"))
+	// Create a transaction. We don't write a txn record, so pushing this will
+	// succeed and abort the intent we write here.
+	txn := newTransaction("test", []byte("a"), 1, roachpb.SNAPSHOT, rng.store.Clock())
+	if err := engine.MVCCPut(rng.store.Engine(), &engine.MVCCStats{},
+		keys.SystemDBSpan.Key, rng.store.Clock().Now(), v, txn); err != nil {
+		t.Fatal(err)
+	}
+	// Verify that this trips up loading the SystemDB data.
+	if _, _, err := loadSystemDBSpan(rng); !testutils.IsError(err, "must retry later due to intent") {
+		t.Fatal(err)
+	}
+
+	// In the loop, wait until the intent is aborted. Then write a "real" value
+	// there and verify that we can now load the data as expected.
+	util.SucceedsWithin(t, time.Second, func() error {
+		kvs, _, err := loadSystemDBSpan(rng)
+		if err != nil {
+			return err
+		}
+
+		if err := engine.MVCCPut(rng.store.Engine(), &engine.MVCCStats{},
+			keys.SystemDBSpan.Key, rng.store.Clock().Now(), v, nil); err != nil {
+			return err
+		}
+
+		if len(kvs) != 1 || !bytes.Equal(kvs[0].Key, keys.SystemDBSpan.Key) {
+			return util.Errorf("expected only %s entry in SystemDB: %+v", keys.SystemDBSpan.Key, kvs)
+		}
+		return nil
+	})
+}
