@@ -19,6 +19,8 @@
 package kv
 
 import (
+	"math/rand"
+
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -102,8 +104,10 @@ func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 	if len(rs) < 2 {
 		return 0
 	}
-	topIndex := len(rs) - 1
-	for bucket := 0; bucket < len(attrs); bucket++ {
+	maxIndex := len(rs) - 1
+	topIndex := maxIndex
+	bucket := 0
+	for ; bucket < len(attrs); bucket++ {
 		firstNotOrdered := 0
 		for i := 0; i <= topIndex; i++ {
 			if bucket < len(rs[i].attrs()) && rs[i].attrs()[bucket] == attrs[bucket] {
@@ -115,11 +119,13 @@ func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 			}
 		}
 		if firstNotOrdered == 0 {
-			return bucket
+			break
 		}
+		rs.randPerm(firstNotOrdered, topIndex, maxIndex)
 		topIndex = firstNotOrdered - 1
 	}
-	return len(attrs)
+	rs.randPerm(0, topIndex, maxIndex)
+	return bucket
 }
 
 // MoveToFront moves the replica at the given index to the front
@@ -134,4 +140,18 @@ func (rs replicaSlice) MoveToFront(i int) {
 	// Move the first i elements to the right
 	copy(rs[1:i+1], rs[0:i])
 	rs[0] = front
+}
+
+func (rs replicaSlice) randPerm(startIndex int, topIndex int, maxIndex int) {
+	if topIndex >= maxIndex {
+		return
+	}
+	length := topIndex - startIndex + 1
+	if length < 2 {
+		return
+	}
+	randIndices := rand.Perm(length)
+	for i := 0; i < length; i++ {
+		rs.Swap(startIndex+i, startIndex+randIndices[i])
+	}
 }
