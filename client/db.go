@@ -465,11 +465,11 @@ func (db *DB) Txn(retryable func(txn *Txn) error) error {
 	return txn.exec(retryable)
 }
 
-// send runs the specified calls synchronously in a single batch and
-// returns any errors.
+// send runs the specified calls synchronously in a single batch and returns
+// any errors. Returns a nil response for empty input (no requests).
 func (db *DB) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(reqs) == 0 {
-		return &roachpb.BatchResponse{}, nil
+		return nil, nil
 	}
 
 	ba := roachpb.BatchRequest{}
