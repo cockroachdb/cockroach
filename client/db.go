@@ -469,7 +469,7 @@ func (db *DB) Txn(retryable func(txn *Txn) error) error {
 // returns any errors.
 func (db *DB) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(reqs) == 0 {
-		return &roachpb.BatchResponse{}, nil
+		return nil, nil
 	}
 
 	ba := roachpb.BatchRequest{}
