@@ -765,7 +765,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		}
 		// Update our record of this transaction, even on error.
 		if txnMeta != nil {
-			txnMeta.txn.Update(newTxn) // better to replace after #2300
+			txnMeta.txn = *newTxn
 			if !txnMeta.txn.Writing {
 				panic("tracking a non-writing txn")
 			}
@@ -774,10 +774,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		if err == nil {
 			// For successful transactional requests, always send the updated txn
 			// record back.
-			if br.Txn == nil {
-				br.Txn = &roachpb.Transaction{}
-			}
-			*br.Txn = *newTxn
+			br.Txn = newTxn
 		}
 		return pErr
 	}()
