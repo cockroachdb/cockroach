@@ -748,9 +748,10 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 
 	// Perform a write on the right range.
 	incArgs := incrementArgs(rightKey, 20)
-	if _, err := client.SendWrapped(mtc.distSender, nil, &incArgs); err != nil {
-		t.Fatal(err)
-	}
+	util.SucceedsWithin(t, 5*time.Second, func() error {
+		_, err := client.SendWrapped(mtc.distSender, nil, &incArgs)
+		return err
+	})
 
 	// It immediately propagates between nodes 4 and 5, but node 3
 	// remains at its old value. It can't accept the right-hand range
