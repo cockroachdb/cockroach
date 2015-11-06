@@ -98,6 +98,10 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		return nil, err
 	}
 
+	if expressions, columns := len(rows.Columns()), len(cols); expressions > columns {
+		return nil, fmt.Errorf("INSERT has more expressions than target columns: %d/%d", expressions, columns)
+	}
+
 	primaryIndex := tableDesc.PrimaryIndex
 	primaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
