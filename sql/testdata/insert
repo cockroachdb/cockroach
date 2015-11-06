@@ -290,3 +290,9 @@ query ITTB
 SELECT * FROM kv5@a
 ----
 NULL a
+
+statement ok
+CREATE TABLE boom (id INT PRIMARY KEY)
+
+statement error INSERT has more expressions than target columns: \d+/\d+
+INSERT INTO boom VALUES(1,2)
