@@ -43,9 +43,10 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	if err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
+	initialized := r.isInitialized()
 	if !found {
 		// We don't have a saved HardState, so set up the defaults.
-		if r.isInitialized() {
+		if initialized {
 			// Set the initial log term.
 			hs.Term = raftInitialLogTerm
 			hs.Commit = raftInitialLogIndex
@@ -56,11 +57,18 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 			// from zero so we will receive a snapshot.
 			atomic.StoreUint64(&r.lastIndex, 0)
 		}
+	} else if initialized && hs.Commit == 0 {
+		// Normally, when the commit index changes, raft gives us a new
+		// commit index to persist, however, during initialization, which
+		// occurs entirely in cockroach, raft has no knowledge of this.
+		// By setting this to the initial log index, we avoid a panic in
+		// raft caused by this inconsistency.
+		hs.Commit = raftInitialLogIndex
 	}
 
 	var cs raftpb.ConfState
 	// For uninitalized ranges, membership is unknown at this point.
-	if found || r.isInitialized() {
+	if found || initialized {
 		for _, rep := range desc.Replicas {
 			cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 		}
