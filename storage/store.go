@@ -943,8 +943,11 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		return util.Errorf("orig range is not splittable by new range: %+v, %+v", origDesc, newDesc)
 	}
 
+	s.raftGroupLocker.Lock()
 	s.mu.Lock()
+	defer s.raftGroupLocker.Unlock()
 	defer s.mu.Unlock()
+
 	// Replace the end key of the original range with the start key of
 	// the new range. Reinsert the range since the btree is keyed by range end keys.
 	if s.replicasByKey.Delete(origRng) == nil {
@@ -960,10 +963,15 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 	}
 
 	// If we have an uninitialized replica of the new range, delete it to make
-	// way for the complete one created by the split.
+	// way for the complete one created by the split. We also need to prevent an
+	// uninitialized group from updating its raft state, so we remove it as well
+	// which requires the raftGroupLocker.
 	if _, ok := s.uninitReplicas[newDesc.RangeID]; ok {
 		delete(s.uninitReplicas, newDesc.RangeID)
 		delete(s.replicas, newDesc.RangeID)
+		if err := s.multiraft.RemoveGroup(newDesc.RangeID); err != nil {
+			return util.Errorf("couldn't remove uninitialized range's group %d: %s", newDesc.RangeID, err)
+		}
 	}
 	if err := s.addReplicaInternal(newRng); err != nil {
 		return util.Errorf("couldn't insert range %v in rangesByKey btree: %s", newRng, err)
