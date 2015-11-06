@@ -453,30 +453,31 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		}
 	}
 
-	// Run triggers if successfully committed. Any failures running
-	// triggers will set an error and prevent the batch from committing.
-	if ct := args.InternalCommitTrigger; ct != nil {
-		// Run appropriate trigger.
-		if reply.Txn.Status == roachpb.COMMITTED {
-			if ct.SplitTrigger != nil {
-				*ms = engine.MVCCStats{} // clear stats, as split will recompute from scratch.
-				if err := r.splitTrigger(batch, ct.SplitTrigger); err != nil {
-					return reply, nil, err
-				}
-			} else if ct.MergeTrigger != nil {
-				*ms = engine.MVCCStats{} // clear stats, as merge will recompute from scratch.
-				if err := r.mergeTrigger(batch, ct.MergeTrigger); err != nil {
-					return reply, nil, err
-				}
-			} else if ct.ChangeReplicasTrigger != nil {
-				if err := r.changeReplicasTrigger(ct.ChangeReplicasTrigger); err != nil {
-					return reply, nil, err
-				}
-			} else if ct.ModifiedSpanTrigger != nil {
-				if ct.ModifiedSpanTrigger.SystemDBSpan {
-					// Check if we need to gossip the system config.
-					batch.Defer(r.maybeGossipSystemConfig)
-				}
+	// Run triggers if successfully committed.
+	if reply.Txn.Status == roachpb.COMMITTED {
+		ct := args.InternalCommitTrigger
+
+		if ct.GetSplitTrigger() != nil {
+			*ms = engine.MVCCStats{} // clear stats, as split will recompute from scratch.
+			if err := r.splitTrigger(batch, ct.SplitTrigger); err != nil {
+				return reply, nil, err
+			}
+		}
+		if ct.GetMergeTrigger() != nil {
+			*ms = engine.MVCCStats{} // clear stats, as merge will recompute from scratch.
+			if err := r.mergeTrigger(batch, ct.MergeTrigger); err != nil {
+				return reply, nil, err
+			}
+		}
+		if ct.GetChangeReplicasTrigger() != nil {
+			if err := r.changeReplicasTrigger(ct.ChangeReplicasTrigger); err != nil {
+				return reply, nil, err
+			}
+		}
+		if ct.GetModifiedSpanTrigger() != nil {
+			if ct.ModifiedSpanTrigger.SystemDBSpan {
+				// Check if we need to gossip the system config.
+				batch.Defer(r.maybeGossipSystemConfig)
 			}
 		}
 	}
