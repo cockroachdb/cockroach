@@ -221,13 +221,6 @@ func (w *writeTask) start(stopper *stop.Stopper) {
 				}
 				groupResp := &groupWriteResponse{raftpb.HardState{}, -1, -1, groupReq.entries}
 				response.groups[groupID] = groupResp
-				if !raft.IsEmptyHardState(groupReq.state) {
-					err := group.SetHardState(groupReq.state)
-					if err != nil {
-						panic(err) // TODO(bdarnell): mark this node dead on storage errors
-					}
-					groupResp.state = groupReq.state
-				}
 				if !raft.IsEmptySnap(groupReq.snapshot) {
 					err := group.ApplySnapshot(groupReq.snapshot)
 					if err != nil {
@@ -239,6 +232,13 @@ func (w *writeTask) start(stopper *stop.Stopper) {
 					if err != nil {
 						panic(err) // TODO(bdarnell)
 					}
+				}
+				if !raft.IsEmptyHardState(groupReq.state) {
+					err := group.SetHardState(groupReq.state)
+					if err != nil {
+						panic(err) // TODO(bdarnell): mark this node dead on storage errors
+					}
+					groupResp.state = groupReq.state
 				}
 			}
 			w.out <- response
