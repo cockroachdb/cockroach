@@ -928,6 +928,9 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 			log.Infof("pushing expired txn %s", reply.PusheeTxn)
 		}
 		pusherWins = true
+		// When cleaning up, actually clean up (as opposed to simply pushing
+		// the garbage in the path of future writers).
+		args.PushType = roachpb.ABORT_TXN
 	} else if reply.PusheeTxn.Isolation == roachpb.SNAPSHOT && args.PushType == roachpb.PUSH_TIMESTAMP {
 		if log.V(1) {
 			log.Infof("pushing timestamp for snapshot isolation txn")
