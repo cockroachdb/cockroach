@@ -148,7 +148,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	var mu sync.Mutex
 	var oldestIntentNanos int64 = math.MaxInt64
 	var expBaseKey roachpb.Key
-	var keys []roachpb.EncodedKey
+	var keys []engine.MVCCKey
 	var vals [][]byte
 
 	// Maps from txn ID to txn and intent key slice.
@@ -213,7 +213,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 			// Moving to the next key (& values).
 			processKeysAndValues()
 			expBaseKey = baseKey
-			keys = []roachpb.EncodedKey{iter.Key()}
+			keys = []engine.MVCCKey{iter.Key()}
 			vals = [][]byte{iter.Value()}
 		} else {
 			if !baseKey.Equal(expBaseKey) {

@@ -82,3 +82,9 @@ message MVCCStats {
   optional int64 sys_count = 13 [(gogoproto.nullable) = false];
   optional int64 last_update_nanos = 30 [(gogoproto.nullable) = false];
 }
+
+// MVCCKeyValue contains the raw bytes of the value for a key.
+message MVCCKeyValue {
+  optional bytes key = 1 [(gogoproto.casttype) = "MVCCKey"];
+  optional bytes value = 2;
+}

@@ -29,12 +29,12 @@ import (
 var (
 	aKey  = roachpb.Key("a")
 	bKey  = roachpb.Key("b")
-	aKeys = []roachpb.EncodedKey{
+	aKeys = []MVCCKey{
 		MVCCEncodeVersionKey(aKey, makeTS(2E9, 0)),
 		MVCCEncodeVersionKey(aKey, makeTS(1E9, 1)),
 		MVCCEncodeVersionKey(aKey, makeTS(1E9, 0)),
 	}
-	bKeys = []roachpb.EncodedKey{
+	bKeys = []MVCCKey{
 		MVCCEncodeVersionKey(bKey, makeTS(2E9, 0)),
 		MVCCEncodeVersionKey(bKey, makeTS(1E9, 0)),
 	}
@@ -59,7 +59,7 @@ func TestGarbageCollectorFilter(t *testing.T) {
 	testData := []struct {
 		gc       *GarbageCollector
 		time     roachpb.Timestamp
-		keys     []roachpb.EncodedKey
+		keys     []MVCCKey
 		values   [][]byte
 		expDelTS roachpb.Timestamp
 	}{

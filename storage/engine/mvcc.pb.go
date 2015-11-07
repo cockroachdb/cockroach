@@ -12,6 +12,7 @@
 		MVCCValue
 		MVCCMetadata
 		MVCCStats
+		MVCCKeyValue
 */
 package engine
 
@@ -95,6 +96,16 @@ type MVCCStats struct {
 func (m *MVCCStats) Reset()         { *m = MVCCStats{} }
 func (m *MVCCStats) String() string { return proto.CompactTextString(m) }
 func (*MVCCStats) ProtoMessage()    {}
+
+// MVCCKeyValue contains the raw bytes of the value for a key.
+type MVCCKeyValue struct {
+	Key   MVCCKey `protobuf:"bytes,1,opt,name=key,casttype=MVCCKey" json:"key,omitempty"`
+	Value []byte  `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
+}
+
+func (m *MVCCKeyValue) Reset()         { *m = MVCCKeyValue{} }
+func (m *MVCCKeyValue) String() string { return proto.CompactTextString(m) }
+func (*MVCCKeyValue) ProtoMessage()    {}
 
 func (m *MVCCValue) Marshal() (data []byte, err error) {
 	size := m.Size()
@@ -251,6 +262,36 @@ func (m *MVCCStats) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *MVCCKeyValue) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *MVCCKeyValue) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Key != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintMvcc(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
+	}
+	if m.Value != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintMvcc(data, i, uint64(len(m.Value)))
+		i += copy(data[i:], m.Value)
+	}
+	return i, nil
+}
+
 func encodeFixed64Mvcc(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	data[offset+1] = uint8(v >> 8)
@@ -324,6 +365,20 @@ func (m *MVCCStats) Size() (n int) {
 	n += 1 + sovMvcc(uint64(m.SysBytes))
 	n += 1 + sovMvcc(uint64(m.SysCount))
 	n += 2 + sovMvcc(uint64(m.LastUpdateNanos))
+	return n
+}
+
+func (m *MVCCKeyValue) Size() (n int) {
+	var l int
+	_ = l
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovMvcc(uint64(l))
+	}
+	if m.Value != nil {
+		l = len(m.Value)
+		n += 1 + l + sovMvcc(uint64(l))
+	}
 	return n
 }
 
@@ -923,6 +978,112 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 					break
 				}
 			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMvcc(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMvcc
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MVCCKeyValue) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMvcc
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MVCCKeyValue: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MVCCKeyValue: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMvcc
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Key = append([]byte{}, data[iNdEx:postIndex]...)
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMvcc
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Value = append([]byte{}, data[iNdEx:postIndex]...)
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMvcc(data[iNdEx:])

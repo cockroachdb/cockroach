@@ -1052,7 +1052,7 @@ func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roach
 	rangeID := r.Desc().RangeID
 	start := keys.RaftLogKey(rangeID, 0)
 	end := keys.RaftLogKey(rangeID, args.Index)
-	if err = batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end), func(kv roachpb.RawKeyValue) (bool, error) {
+	if err = batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end), func(kv engine.MVCCKeyValue) (bool, error) {
 		return false, batch.Clear(kv.Key)
 	}); err != nil {
 		return reply, err

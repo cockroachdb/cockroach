@@ -105,7 +105,7 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRangeID roachpb.RangeID) 
 	start := engine.MVCCEncodeKey(prefix)
 	end := engine.MVCCEncodeKey(prefix.PrefixEnd())
 
-	return e.Iterate(start, end, func(kv roachpb.RawKeyValue) (bool, error) {
+	return e.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
 		// Decode the key into a cmd, skipping on error. Otherwise,
 		// write it to the corresponding key in the new cache.
 		cmdID, err := rc.decodeResponseCacheKey(kv.Key)
@@ -138,7 +138,7 @@ func (rc *ResponseCache) CopyFrom(e engine.Engine, originRangeID roachpb.RangeID
 	start := engine.MVCCEncodeKey(prefix)
 	end := engine.MVCCEncodeKey(prefix.PrefixEnd())
 
-	return e.Iterate(start, end, func(kv roachpb.RawKeyValue) (bool, error) {
+	return e.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
 		// Decode the key into a cmd, skipping on error. Otherwise,
 		// write it to the corresponding key in the new cache.
 		cmdID, err := rc.decodeResponseCacheKey(kv.Key)
@@ -199,7 +199,7 @@ func (rc *ResponseCache) shouldCacheResponse(replyWithErr roachpb.ResponseWithEr
 	return true
 }
 
-func (rc *ResponseCache) decodeResponseCacheKey(encKey roachpb.EncodedKey) (roachpb.ClientCmdID, error) {
+func (rc *ResponseCache) decodeResponseCacheKey(encKey engine.MVCCKey) (roachpb.ClientCmdID, error) {
 	ret := roachpb.ClientCmdID{}
 	key, _, isValue, err := engine.MVCCDecodeKey(encKey)
 	if err != nil {

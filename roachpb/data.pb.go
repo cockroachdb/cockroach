@@ -237,16 +237,6 @@ func (m *KeyValue) Reset()         { *m = KeyValue{} }
 func (m *KeyValue) String() string { return proto.CompactTextString(m) }
 func (*KeyValue) ProtoMessage()    {}
 
-// RawKeyValue contains the raw bytes of the value for a key.
-type RawKeyValue struct {
-	Key   EncodedKey `protobuf:"bytes,1,opt,name=key,casttype=EncodedKey" json:"key,omitempty"`
-	Value []byte     `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
-}
-
-func (m *RawKeyValue) Reset()         { *m = RawKeyValue{} }
-func (m *RawKeyValue) String() string { return proto.CompactTextString(m) }
-func (*RawKeyValue) ProtoMessage()    {}
-
 // A StoreIdent uniquely identifies a store in the cluster. The
 // StoreIdent is written to the underlying storage engine at a
 // store-reserved system key (KeyLocalIdent).
@@ -568,36 +558,6 @@ func (m *KeyValue) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n2
-	return i, nil
-}
-
-func (m *RawKeyValue) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *RawKeyValue) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Key != nil {
-		data[i] = 0xa
-		i++
-		i = encodeVarintData(data, i, uint64(len(m.Key)))
-		i += copy(data[i:], m.Key)
-	}
-	if m.Value != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintData(data, i, uint64(len(m.Value)))
-		i += copy(data[i:], m.Value)
-	}
 	return i, nil
 }
 
@@ -1123,20 +1083,6 @@ func (m *KeyValue) Size() (n int) {
 	return n
 }
 
-func (m *RawKeyValue) Size() (n int) {
-	var l int
-	_ = l
-	if m.Key != nil {
-		l = len(m.Key)
-		n += 1 + l + sovData(uint64(l))
-	}
-	if m.Value != nil {
-		l = len(m.Value)
-		n += 1 + l + sovData(uint64(l))
-	}
-	return n
-}
-
 func (m *StoreIdent) Size() (n int) {
 	var l int
 	_ = l
@@ -1626,112 +1572,6 @@ func (m *KeyValue) Unmarshal(data []byte) error {
 			if err := m.Value.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipData(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthData
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *RawKeyValue) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowData
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: RawKeyValue: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: RawKeyValue: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowData
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthData
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Key = append([]byte{}, data[iNdEx:postIndex]...)
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowData
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthData
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Value = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

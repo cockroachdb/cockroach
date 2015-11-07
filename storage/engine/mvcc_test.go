@@ -799,11 +799,11 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	value1, err := proto.Marshal(&roachpb.RawKeyValue{Value: []byte("value1")})
+	value1, err := proto.Marshal(&MVCCKeyValue{Value: []byte("value1")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	value2, err := proto.Marshal(&roachpb.RawKeyValue{Value: []byte("value2")})
+	value2, err := proto.Marshal(&MVCCKeyValue{Value: []byte("value2")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -820,7 +820,7 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	}
 
 	// A get with consistent=false should fail in a txn.
-	val := &roachpb.RawKeyValue{}
+	val := &MVCCKeyValue{}
 	_, err = MVCCGetProto(engine, testKey1, makeTS(1, 0), false, txn1, val)
 	if err == nil {
 		t.Error("expected an error getting with consistent=false in txn")
@@ -859,7 +859,7 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 		t.Errorf("expected no result; got %+v", val)
 	}
 
-	// Write a malformed value (not an encoded roachpb.RawKeyValue) and a
+	// Write a malformed value (not an encoded MVCCKeyValue) and a
 	// write intent to key 3; the parse error is returned instead of the
 	// write intent.
 	if err := MVCCPut(engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {
@@ -2493,7 +2493,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expEncKeys := []roachpb.EncodedKey{
+	expEncKeys := []MVCCKey{
 		MVCCEncodeKey(roachpb.Key("a")),
 		MVCCEncodeVersionKey(roachpb.Key("a"), ts2),
 		MVCCEncodeKey(roachpb.Key("b")),

@@ -57,7 +57,7 @@ func fakePrevKey(k []byte) roachpb.Key {
 // createRangeData creates sample range data in all possible areas of
 // the key space. Returns a slice of the encoded keys of all created
 // data.
-func createRangeData(r *Replica, t *testing.T) []roachpb.EncodedKey {
+func createRangeData(r *Replica, t *testing.T) []engine.MVCCKey {
 	ts0 := roachpb.ZeroTimestamp
 	ts := roachpb.Timestamp{WallTime: 1}
 	keyTSs := []struct {
@@ -86,7 +86,7 @@ func createRangeData(r *Replica, t *testing.T) []roachpb.EncodedKey {
 		{fakePrevKey(r.Desc().EndKey), ts},
 	}
 
-	keys := []roachpb.EncodedKey{}
+	keys := []engine.MVCCKey{}
 	for _, keyTS := range keyTSs {
 		if err := engine.MVCCPut(r.store.Engine(), nil, keyTS.key, keyTS.ts, roachpb.MakeValueFromString("value"), nil); err != nil {
 			t.Fatal(err)
@@ -213,7 +213,7 @@ func TestReplicaDataIterator(t *testing.T) {
 	// Verify the keys in pre & post ranges.
 	for _, test := range []struct {
 		r    *Replica
-		keys []roachpb.EncodedKey
+		keys []engine.MVCCKey
 	}{
 		{preRng, preKeys},
 		{postRng, postKeys},
