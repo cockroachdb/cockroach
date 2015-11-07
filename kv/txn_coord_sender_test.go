@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -302,10 +303,10 @@ func verifyCleanup(key roachpb.Key, coord *TxnCoordSender, eng engine.Engine, t 
 		if err != nil {
 			return fmt.Errorf("error getting MVCC metadata: %s", err)
 		}
-		if !ok || meta.Txn == nil {
-			return nil
+		if ok && meta.Txn != nil {
+			return fmt.Errorf("found unexpected write intent: %s", meta)
 		}
-		return errors.New("intents not cleaned up")
+		return nil
 	})
 }
 
@@ -317,15 +318,59 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 
-	key := roachpb.Key("a")
-	txn := client.NewTxn(*s.DB)
-	if err := txn.Put(key, []byte("value")); err != nil {
-		t.Fatal(err)
+	// 4 cases: no deadline, past deadline, equal deadline, future deadline.
+	for i := 0; i < 4; i++ {
+		key := roachpb.Key("key: " + strconv.Itoa(i))
+		txn := client.NewTxn(*s.DB)
+		// Initialize the transaction
+		if err := txn.Put(key, []byte("value")); err != nil {
+			t.Fatal(err)
+		}
+
+		var deadline *roachpb.Timestamp
+		switch i {
+		case 0:
+			// No deadline.
+		case 1:
+			// Past deadline.
+			ts := txn.Proto.Timestamp.Prev()
+			deadline = &ts
+		case 2:
+			// Equal deadline.
+			deadline = &txn.Proto.Timestamp
+		case 3:
+			// Future deadline.
+			ts := txn.Proto.Timestamp.Next()
+			deadline = &ts
+		}
+
+		{
+			err := txn.CommitBy(deadline)
+			switch i {
+			case 0:
+				// No deadline.
+				if err != nil {
+					t.Error(err)
+				}
+			case 1:
+				// Past deadline.
+				if err != nil {
+					t.Error(err)
+				}
+			case 2:
+				// Equal deadline.
+				if err != nil {
+					t.Error(err)
+				}
+			case 3:
+				// Future deadline.
+				if _, ok := err.(*roachpb.TransactionAbortedError); !ok {
+					t.Errorf("expected TransactionAbortedError but got %T: %s", err, err)
+				}
+			}
+		}
+		verifyCleanup(key, s.Sender, s.Eng, t)
 	}
-	if err := txn.Commit(); err != nil {
-		t.Fatal(err)
-	}
-	verifyCleanup(key, s.Sender, s.Eng, t)
 }
 
 // TestTxnCoordSenderCleanupOnAborted verifies that if a txn receives a

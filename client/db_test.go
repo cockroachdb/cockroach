@@ -361,6 +361,7 @@ func TestCommonMethods(t *testing.T) {
 		key{dbType, "Txn"}:                        {},
 		key{dbType, "GetSender"}:                  {},
 		key{txnType, "Commit"}:                    {},
+		key{txnType, "CommitBy"}:                  {},
 		key{txnType, "CommitInBatch"}:             {},
 		key{txnType, "CommitInBatchWithResponse"}: {},
 		key{txnType, "CommitNoCleanup"}:           {},

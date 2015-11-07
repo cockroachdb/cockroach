@@ -321,12 +321,29 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		return reply, nil, util.Errorf("transaction does not exist: %s on store %d", h.Txn, r.store.StoreID())
 	}
 
+	deadline := args.Deadline
+	deadlineLapsed := deadline != nil && ts.Less(*deadline)
+
+	if deadlineLapsed {
+		reply.Txn.Status = roachpb.ABORTED
+	}
+
 	for i := range args.Intents {
 		// Set the transaction into the intents (TxnCoordSender avoids sending
 		// all of that redundant info over the wire).
 		// This needs to be done before the commit status check because
 		// the TransactionAbortedError branch below returns these intents.
 		args.Intents[i].Txn = *(reply.Txn)
+	}
+
+	if deadlineLapsed {
+		// FIXME(#3037):
+		// If the deadline has lapsed, return all the intents for
+		// resolution. Unfortunately, since we're (a) returning an error,
+		// and (b) not able to write on error (see #1989), we can't write
+		// ABORTED into the master transaction record, which remains
+		// PENDING, and that's pretty bad.
+		return reply, args.Intents, roachpb.NewTransactionAbortedError(reply.Txn)
 	}
 
 	// If the transaction record already exists, verify that we can either
@@ -375,7 +392,8 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	reply.Txn.Timestamp.Forward(ts)
 
 	// Set transaction status to COMMITTED or ABORTED as per the
-	// args.Commit parameter.
+	// args.Commit parameter. If the transaction deadline is set and has
+	// elapsed, abort.
 	if args.Commit {
 		// If the isolation level is SERIALIZABLE, return a transaction
 		// retry error if the commit timestamp isn't equal to the txn
@@ -453,30 +471,31 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		}
 	}
 
-	// Run triggers if successfully committed. Any failures running
-	// triggers will set an error and prevent the batch from committing.
-	if ct := args.InternalCommitTrigger; ct != nil {
-		// Run appropriate trigger.
-		if reply.Txn.Status == roachpb.COMMITTED {
-			if ct.SplitTrigger != nil {
-				*ms = engine.MVCCStats{} // clear stats, as split will recompute from scratch.
-				if err := r.splitTrigger(batch, ct.SplitTrigger); err != nil {
-					return reply, nil, err
-				}
-			} else if ct.MergeTrigger != nil {
-				*ms = engine.MVCCStats{} // clear stats, as merge will recompute from scratch.
-				if err := r.mergeTrigger(batch, ct.MergeTrigger); err != nil {
-					return reply, nil, err
-				}
-			} else if ct.ChangeReplicasTrigger != nil {
-				if err := r.changeReplicasTrigger(ct.ChangeReplicasTrigger); err != nil {
-					return reply, nil, err
-				}
-			} else if ct.ModifiedSpanTrigger != nil {
-				if ct.ModifiedSpanTrigger.SystemDBSpan {
-					// Check if we need to gossip the system config.
-					batch.Defer(r.maybeGossipSystemConfig)
-				}
+	// Run triggers if successfully committed.
+	if reply.Txn.Status == roachpb.COMMITTED {
+		ct := args.InternalCommitTrigger
+
+		if ct.GetSplitTrigger() != nil {
+			*ms = engine.MVCCStats{} // clear stats, as split will recompute from scratch.
+			if err := r.splitTrigger(batch, ct.SplitTrigger); err != nil {
+				return reply, nil, err
+			}
+		}
+		if ct.GetMergeTrigger() != nil {
+			*ms = engine.MVCCStats{} // clear stats, as merge will recompute from scratch.
+			if err := r.mergeTrigger(batch, ct.MergeTrigger); err != nil {
+				return reply, nil, err
+			}
+		}
+		if ct.GetChangeReplicasTrigger() != nil {
+			if err := r.changeReplicasTrigger(ct.ChangeReplicasTrigger); err != nil {
+				return reply, nil, err
+			}
+		}
+		if ct.GetModifiedSpanTrigger() != nil {
+			if ct.ModifiedSpanTrigger.SystemDBSpan {
+				// Check if we need to gossip the system config.
+				batch.Defer(r.maybeGossipSystemConfig)
 			}
 		}
 	}
