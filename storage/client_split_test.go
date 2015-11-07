@@ -563,7 +563,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 			// We don't care about the values, just the keys.
 			k := sql.MakeDescMetadataKey(sql.ID(descID))
-			if err := txn.Put(k, kv.Value.RawBytes); err != nil {
+			if err := txn.Put(k, bytes); err != nil {
 				return err
 			}
 		}

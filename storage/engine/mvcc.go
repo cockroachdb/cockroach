@@ -884,15 +884,13 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp
 		return err
 	}
 
-	if expValue == nil && existVal != nil {
+	if (expValue == nil) != (existVal == nil) {
 		return &roachpb.ConditionFailedError{
 			ActualValue: existVal,
 		}
-	} else if expValue != nil {
-		// Handle check for existence when there is no key.
-		if existVal == nil {
-			return &roachpb.ConditionFailedError{}
-		} else if expValue.RawBytes != nil && !bytes.Equal(expValue.RawBytes, existVal.RawBytes) {
+	} else if expValue != nil && existVal != nil {
+		// Every type flows through here, so we can't use the typed getters.
+		if !(expValue.Tag == existVal.Tag && bytes.Equal(expValue.RawBytes, existVal.RawBytes)) {
 			return &roachpb.ConditionFailedError{
 				ActualValue: existVal,
 			}
