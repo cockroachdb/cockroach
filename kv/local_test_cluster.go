@@ -75,7 +75,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
 	ltc.Stopper = stop.NewStopper()
 	rpcContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), ltc.Clock, ltc.Stopper)
-	ltc.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
+	ltc.Gossip = gossip.New(rpcContext, gossip.TestBootstrap)
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20, ltc.Stopper)
 
 	ltc.localSender = NewLocalSender()

@@ -18,10 +18,11 @@
 package gossip
 
 import (
+	"math"
 	"math/rand"
 	"net"
+	"strings"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -39,22 +40,21 @@ type clientInfo struct {
 // server maintains an array of connected peers to which it gossips
 // newly arrived information on a periodic basis.
 type server struct {
-	interval time.Duration // Interval at which to gossip fresh info
-	ready    *sync.Cond    // Broadcasts wakeup to waiting gossip requests
-
 	mu       sync.Mutex            // Protects the fields below
 	is       infoStore             // The backing infostore
 	closed   bool                  // True if server was closed
 	incoming nodeSet               // Incoming client node IDs
 	lAddrMap map[string]clientInfo // Incoming client's local address -> client's node info
+	ready    *sync.Cond            // Broadcasts wakeup to waiting gossip requests
+
+	simulationCycler *sync.Cond // Used when simulating the network to signal next cycle
 }
 
 // newServer creates and returns a server struct.
-func newServer(interval time.Duration) *server {
+func newServer() *server {
 	s := &server{
 		is:       newInfoStore(0, util.UnresolvedAddr{}),
-		interval: interval,
-		incoming: makeNodeSet(MaxPeers),
+		incoming: makeNodeSet(1),
 		lAddrMap: map[string]clientInfo{},
 	}
 	s.ready = sync.NewCond(&s.mu)
@@ -68,7 +68,12 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 	args := argsI.(*Request)
 	reply := &Response{}
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer func() {
+		if s.simulationCycler != nil {
+			s.simulationCycler.Wait()
+		}
+		s.mu.Unlock()
+	}()
 
 	addr, err := args.Addr.Resolve()
 	if err != nil {
@@ -81,21 +86,21 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 
 	reply.NodeID = s.is.NodeID
 
-	// If there is no more capacity to accept incoming clients, return
-	// a random already-being-serviced incoming client as an alternate.
+	// Decide whether or not we can accept the incoming connection
+	// as a permanent peer. We always accept its input and return
+	// our delta.
+	canAccept := true
+	s.incoming.setMaxSize(s.maxPeers())
 	if !s.incoming.hasNode(args.NodeID) {
 		if !s.incoming.hasSpace() {
-			// Map iteration order is random.
-			for _, cInfo := range s.lAddrMap {
-				reply.Alternate = cInfo.addr
-				return reply, nil
-			}
+			canAccept = false
+		} else {
+			s.incoming.addNode(args.NodeID)
+			// This lookup map allows the incoming client to be removed from
+			// the incoming addr set when its connection is closed. See
+			// server.serveConn() below.
+			s.lAddrMap[lAddr.String()] = clientInfo{args.NodeID, &args.Addr}
 		}
-		s.incoming.addNode(args.NodeID)
-		// This lookup map allows the incoming client to be removed from
-		// the incoming addr set when its connection is closed. See
-		// server.serveConn() below.
-		s.lAddrMap[lAddr.String()] = clientInfo{args.NodeID, &args.Addr}
 	}
 
 	// Update infostore with gossiped infos.
@@ -106,25 +111,68 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 			log.Infof("gossip: received %d info(s) from %s", infoCount, addr)
 		}
 	}
-	s.is.combine(args.Delta, args.NodeID)
 
-	// The exit condition for waiting clients.
-	if s.closed {
-		return nil, util.Errorf("gossip server shutdown")
+	// Combine incoming infos if specified and exit.
+	if args.Delta != nil {
+		s.is.combine(args.Delta, args.NodeID)
+		if s.closed {
+			return nil, util.Errorf("gossip server shutdown")
+		}
+		reply.HighWaterStamps = s.is.getHighWaterStamps()
+		return reply, nil
 	}
-	// If requested max sequence is not -1, wait for gossip interval to expire.
-	if args.MaxSeq != -1 {
+
+	// Otherwise, loop until the server has deltas for the client.
+	for {
+		// The exit condition for waiting clients.
+		if s.closed {
+			return nil, util.Errorf("gossip server shutdown")
+		}
+		reply.Delta = s.is.delta(args.NodeID, args.HighWaterStamps)
+		if len(reply.Delta) > 0 || !canAccept {
+			// If there is no more capacity to accept incoming clients, return
+			// a random already-being-serviced incoming client as an alternate.
+			if !canAccept {
+				// Map iteration order is random.
+				randIdx := rand.Int31n(int32(len(s.lAddrMap)))
+				for _, cInfo := range s.lAddrMap {
+					if randIdx == 0 {
+						reply.Alternate = cInfo.addr
+						break
+					}
+					randIdx--
+				}
+			}
+			reply.HighWaterStamps = s.is.getHighWaterStamps()
+			return reply, nil
+		}
+		// Wait for server to get new gossip set before computing delta.
 		s.ready.Wait()
 	}
-	// Return reciprocal delta.
-	reply.Delta = s.is.delta(args.NodeID, args.MaxSeq)
-	return reply, nil
 }
 
-// jitteredGossipInterval returns a randomly jittered duration from
-// interval [0.75 * gossipInterval, 1.25 * gossipInterval).
-func (s *server) jitteredGossipInterval() time.Duration {
-	return time.Duration(float64(s.interval) * (0.75 + 0.5*rand.Float64()))
+// maxPeers returns the maximum number of peers each gossip node
+// may connect to. This is based on maxHops, which is a preset
+// maximum for number of hops allowed before the gossip network
+// will seek to "tighten" by creating new connections to distant
+// nodes.
+func (s *server) maxPeers() int {
+	var nodeCount int
+
+	if err := s.is.visitInfos(func(key string, i *Info) error {
+		if strings.HasPrefix(key, KeyNodeIDPrefix) {
+			nodeCount++
+		}
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+
+	peers := int(math.Ceil(math.Exp(2 * math.Log(float64(nodeCount)) / float64(MaxHops-1))))
+	if peers < minPeers {
+		return minPeers
+	}
+	return peers
 }
 
 // start initializes the infostore with the rpc server address and
@@ -139,15 +187,18 @@ func (s *server) start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 	}
 	rpcServer.AddCloseCallback(s.onClose)
 
+	updateCallback := func(key string, content []byte) {
+		// Wakeup all pending clients.
+		s.ready.Broadcast()
+	}
+	unregister := s.is.registerCallback(".*", updateCallback)
+
 	stopper.RunWorker(func() {
 		// Periodically wakeup blocked client gossip requests.
 		for {
 			select {
-			case <-time.After(s.jitteredGossipInterval()):
-				// Wakeup all blocked gossip requests.
-				s.ready.Broadcast()
 			case <-stopper.ShouldStop():
-				s.stop()
+				s.stop(unregister)
 				return
 			}
 		}
@@ -156,9 +207,10 @@ func (s *server) start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 
 // stop sets the server's closed bool to true and broadcasts to
 // waiting gossip clients to wakeup and finish.
-func (s *server) stop() {
+func (s *server) stop(unregister func()) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	unregister()
 	s.closed = true
 	s.ready.Broadcast() // wake up clients
 }

@@ -51,8 +51,14 @@ func TestNewInfo(t *testing.T) {
 	is := newInfoStore(1, emptyAddr)
 	info1 := is.newInfo(nil, time.Second)
 	info2 := is.newInfo(nil, time.Second)
-	if info1.seq != info2.seq-1 {
-		t.Errorf("sequence numbers should increment %d, %d", info1.seq, info2.seq)
+	if err := is.addInfo("a", info1); err != nil {
+		t.Error(err)
+	}
+	if err := is.addInfo("b", info2); err != nil {
+		t.Error(err)
+	}
+	if info1.OrigStamp >= info2.OrigStamp {
+		t.Errorf("timestamps should increment %d, %d", info1.OrigStamp, info2.OrigStamp)
 	}
 }
 
@@ -62,14 +68,15 @@ func TestInfoStoreGetInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	is := newInfoStore(1, emptyAddr)
 	i := is.newInfo(nil, time.Second)
+	i.NodeID = 1
 	if err := is.addInfo("a", i); err != nil {
 		t.Error(err)
 	}
 	if infoCount := len(is.Infos); infoCount != 1 {
 		t.Errorf("infostore count incorrect %d != 1", infoCount)
 	}
-	if is.MaxSeq != i.seq {
-		t.Error("max seq value wasn't updated")
+	if is.highWaterStamps[1] != i.OrigStamp {
+		t.Error("high water timestamps map wasn't updated")
 	}
 	if is.getInfo("a") != i {
 		t.Error("unable to get info")
@@ -167,16 +174,19 @@ func createTestInfoStore(t *testing.T) infoStore {
 
 	for i := 0; i < 10; i++ {
 		infoA := is.newInfo(nil, time.Second)
+		infoA.NodeID = 1
 		if err := is.addInfo(fmt.Sprintf("a.%d", i), infoA); err != nil {
 			t.Fatal(err)
 		}
 
 		infoB := is.newInfo(nil, time.Second)
+		infoB.NodeID = 2
 		if err := is.addInfo(fmt.Sprintf("b.%d", i), infoB); err != nil {
 			t.Fatal(err)
 		}
 
 		infoC := is.newInfo(nil, time.Second)
+		infoC.NodeID = 3
 		if err := is.addInfo(fmt.Sprintf("c.%d", i), infoC); err != nil {
 			t.Fatal(err)
 		}
@@ -185,29 +195,41 @@ func createTestInfoStore(t *testing.T) infoStore {
 	return is
 }
 
-// Check infostore delta based on info sequence numbers.
+// Check infostore delta based on info high water timestamps.
 func TestInfoStoreDelta(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	is := createTestInfoStore(t)
 
-	// Verify deltas with successive sequence numbers.
+	// Verify deltas with successive timestamps.
+	infos := is.delta(4, map[int32]int64{})
 	for i := 0; i < 10; i++ {
-		infos := is.delta(2, int64(i*3))
+		if i > 0 {
+			infoA := is.getInfo(fmt.Sprintf("a.%d", i-1))
+			infoB := is.getInfo(fmt.Sprintf("b.%d", i-1))
+			infoC := is.getInfo(fmt.Sprintf("c.%d", i-1))
+			infos = is.delta(4, map[int32]int64{
+				1: infoA.OrigStamp,
+				2: infoB.OrigStamp,
+				3: infoC.OrigStamp,
+			})
+		}
 
-		for j := 0; j < 10-i; j++ {
-			if _, ok := infos[fmt.Sprintf("c.%d", j+i)]; !ok {
-				t.Errorf("unable to fetch info %d", j+i)
-			}
-			if i > 0 {
-				if _, ok := infos[fmt.Sprintf("c.%d", 0)]; ok {
-					t.Errorf("erroneously fetched info %d", j+i+1)
+		for _, node := range []string{"a", "b", "c"} {
+			for j := 0; j < 10; j++ {
+				expected := i <= j
+				if _, ok := infos[fmt.Sprintf("%s.%d", node, j)]; ok != expected {
+					t.Errorf("i,j=%d,%d: expected to fetch info %s.%d? %t; got %t", i, j, node, j, expected, ok)
 				}
 			}
 		}
 	}
 
-	if infos := is.delta(2, int64(30)); len(infos) != 0 {
-		t.Error("fetching delta of infostore at maximum sequence number should return nil")
+	if infos := is.delta(4, map[int32]int64{
+		1: math.MaxInt64,
+		2: math.MaxInt64,
+		3: math.MaxInt64,
+	}); len(infos) != 0 {
+		t.Errorf("fetching delta of infostore at maximum timestamp should return empty, got %v", infos)
 	}
 }
 
@@ -255,7 +277,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf1 := is.newInfo(nil, time.Second)
-	inf1.peerID = 1
+	inf1.PeerID = 1
 	if err := is.addInfo("a1", inf1); err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +291,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf2 := is.newInfo(nil, time.Second)
-	inf2.peerID = 1
+	inf2.PeerID = 1
 	if err := is.addInfo("a2", inf2); err != nil {
 		t.Fatal(err)
 	}
@@ -283,7 +305,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf3 := is.newInfo(nil, time.Second)
-	inf3.peerID = 2
+	inf3.PeerID = 2
 	if err := is.addInfo("a3", inf3); err != nil {
 		t.Fatal(err)
 	}
@@ -319,7 +341,7 @@ func TestCallbacks(t *testing.T) {
 	cb2 := callbackRecord{wg: wg}
 	cbAll := callbackRecord{wg: wg}
 
-	is.registerCallback("key1", cb1.Add)
+	unregisterCB1 := is.registerCallback("key1", cb1.Add)
 	is.registerCallback("key2", cb2.Add)
 	is.registerCallback("key.*", cbAll.Add)
 
@@ -331,7 +353,7 @@ func TestCallbacks(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		for _, test := range []struct {
 			key   string
-			info  *info
+			info  *Info
 			count int
 		}{
 			{"key1", i1, 2},
@@ -398,6 +420,18 @@ func TestCallbacks(t *testing.T) {
 	sort.Strings(keys)
 	if !reflect.DeepEqual(keys, expKeys) {
 		t.Errorf("expected %v, got %v", expKeys, keys)
+	}
+
+	// Unregister a callback and verify nothing is invoked on it.
+	unregisterCB1()
+	iNew := is.newInfo([]byte("a"), time.Second)
+	wg.Add(2) // for the two cbAll callbacks
+	if err := is.addInfo("key1", iNew); err != nil {
+		t.Error(err)
+	}
+	wg.Wait()
+	if len(cb1.Keys()) != 2 {
+		t.Errorf("expected no new cb1 keys, got %v", cb1.Keys())
 	}
 }
 

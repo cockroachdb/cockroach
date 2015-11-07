@@ -63,7 +63,7 @@ type Cluster struct {
 func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWriter io.Writer, script Script, rand *rand.Rand) *Cluster {
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
-	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
+	g := gossip.New(rpcContext, gossip.TestBootstrap)
 	storePool := storage.NewStorePool(g, storage.TestTimeUntilStoreDeadOff, stopper)
 	c := &Cluster{
 		stopper:   stopper,

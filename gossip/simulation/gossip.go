@@ -79,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -93,9 +94,6 @@ const (
 var (
 	size        = flag.String("size", "medium", "size of network (tiny|small|medium|large|huge|ginormous)")
 	networkType = flag.String("network", "unix", "test with network type (unix|tcp)")
-	// simGossipInterval is the compressed timescale upon which
-	// simulations run.
-	simGossipInterval = time.Millisecond * 150
 )
 
 // edge is a helper struct which describes an edge in the dot output graph.
@@ -148,7 +146,11 @@ func (em edgeMap) addEdge(nodeID roachpb.NodeID, e edge) {
 //        node5 -> node2
 //        node5 -> node3
 //   }
-func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet map[string]edge) string {
+//
+// Returns the name of the output file and a boolean for whether or not
+// the network has quiesced (that is, no new edges, and all nodes are
+// connected).
+func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet map[string]edge) (string, bool) {
 	f, err := os.Create(dotFN)
 	if err != nil {
 		log.Fatalf("unable to create temp file: %s", err)
@@ -159,6 +161,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 	// edges, keeping track of which are new since last time (added=true).
 	outgoingMap := make(edgeMap)
 	var maxIncoming int
+	quiescent := true
 	// The order the graph file is written influences the arrangement
 	// of nodes in the output image, so it makes sense to eliminate
 	// randomness here. Unfortunately with graphviz it's fairly hard
@@ -171,6 +174,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 			key := fmt.Sprintf("%d:%d", iNode, node.GetNodeID())
 			if _, ok := edgeSet[key]; !ok {
 				e.added = true
+				quiescent = false
 			}
 			delete(edgeSet, key)
 			outgoingMap.addEdge(iNode, e)
@@ -184,6 +188,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 	for key, e := range edgeSet {
 		e.added = false
 		e.deleted = true
+		quiescent = false
 		nodeID, err := strconv.Atoi(strings.Split(key, ":")[0])
 		if err != nil {
 			log.Fatal(err)
@@ -198,24 +203,33 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 		node := simNode.Gossip
 		var incomplete int
 		var totalAge int64
-		for _, addr := range network.Addrs {
-			infoKey := addr.String()
-			if infoKey == simNode.Addr.String() {
+		for _, otherNode := range network.Nodes {
+			if otherNode == simNode {
 				continue // skip the node's own info
 			}
-			if val, err := node.GetInfo(infoKey); err != nil {
+			infoKey := otherNode.Server.Addr().String()
+			if info, err := node.GetInfo(infoKey); err != nil {
 				log.Infof("error getting info for key %q: %s", infoKey, err)
 				incomplete++
+				quiescent = false
 			} else {
-				totalAge += int64(cycle) - val.(int64)
+				_, val, err := encoding.DecodeUint64(info)
+				if err != nil {
+					log.Fatalf("bad decode of node info cycle: %s", err)
+				}
+				totalAge += int64(cycle) - int64(val)
 			}
 		}
 
 		var sentinelAge int64
-		if val, err := node.GetInfo(gossip.KeySentinel); err != nil {
+		if info, err := node.GetInfo(gossip.KeySentinel); err != nil {
 			log.Infof("error getting info for sentinel gossip key %q: %s", gossip.KeySentinel, err)
 		} else {
-			sentinelAge = int64(cycle) - val.(int64)
+			_, val, err := encoding.DecodeUint64(info)
+			if err != nil {
+				log.Fatalf("bad decode of sentinel cycle: %s", err)
+			}
+			sentinelAge = int64(cycle) - int64(val)
 		}
 
 		var age, nodeColor string
@@ -223,15 +237,15 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 			nodeColor = "color=red,"
 			age = fmt.Sprintf("missing %d", incomplete)
 		} else {
-			age = strconv.FormatFloat(float64(totalAge)/float64(len(network.Nodes)-1), 'f', 2, 64)
+			age = strconv.FormatFloat(float64(totalAge)/float64(len(network.Nodes)-1), 'f', 4, 64)
 		}
 		fontSize := minDotFontSize
 		if maxIncoming > 0 {
 			fontSize = minDotFontSize + int(math.Floor(float64(len(node.Incoming())*
 				(maxDotFontSize-minDotFontSize))/float64(maxIncoming)))
 		}
-		f.WriteString(fmt.Sprintf("\t%s [%sfontsize=%d,label=\"{%s|MH=%d, AA=%s, SA=%d}\"]\n",
-			node.GetNodeID(), nodeColor, fontSize, node.GetNodeID(), node.MaxHops(), age, sentinelAge))
+		f.WriteString(fmt.Sprintf("\t%s [%sfontsize=%d,label=\"{%s|AA=%s, SA=%d}\"]\n",
+			node.GetNodeID(), nodeColor, fontSize, node.GetNodeID(), age, sentinelAge))
 		outgoing := outgoingMap[node.GetNodeID()]
 		for _, e := range outgoing {
 			destSimNode, ok := network.GetNodeFromID(e.dest)
@@ -252,7 +266,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 		}
 	}
 	f.WriteString("}\n")
-	return f.Name()
+	return f.Name(), quiescent
 }
 
 func main() {
@@ -274,9 +288,6 @@ func main() {
 	// cycles. At each cycle % outputEvery, a dot file showing the
 	// state of the network graph is output.
 	nodeCount := 3
-	gossipInterval := simGossipInterval
-	numCycles := 10
-	outputEvery := 1
 	switch *size {
 	case "tiny":
 		// Use default parameters.
@@ -286,45 +297,24 @@ func main() {
 		nodeCount = 25
 	case "large":
 		nodeCount = 50
-		gossipInterval = time.Millisecond * 250
 	case "huge":
 		nodeCount = 100
-		gossipInterval = time.Second
-		numCycles = 20
-		outputEvery = 2
 	case "ginormous":
 		nodeCount = 250
-		gossipInterval = time.Second * 3
-		numCycles = 20
-		outputEvery = 2
 	default:
 		log.Fatalf("unknown simulation size: %s", *size)
 	}
 
 	edgeSet := make(map[string]edge)
 
-	n := simulation.NewNetwork(nodeCount, *networkType, gossipInterval)
+	n := simulation.NewNetwork(nodeCount, *networkType)
 	n.SimulateNetwork(
 		func(cycle int, network *simulation.Network) bool {
-			if cycle == numCycles {
-				return false
-			}
-			// Update infos.
-			nodes := network.Nodes
-			for i := 0; i < len(nodes); i++ {
-				node := nodes[i].Gossip
-				if err := node.AddInfo(nodes[i].Addr.String(), int64(cycle), time.Hour); err != nil {
-					log.Infof("error updating infos addr: %s cycle: %v: %s",
-						nodes[i].Addr.String(), cycle, err)
-				}
-			}
-			// Output dot graph periodically.
-			if (cycle+1)%outputEvery == 0 {
-				dotFN := fmt.Sprintf("%s/sim-cycle-%d.dot", dirName, cycle)
-				outputDotFile(dotFN, cycle, network, edgeSet)
-			}
-
-			return true
+			// Output dot graph.
+			dotFN := fmt.Sprintf("%s/sim-cycle-%03d.dot", dirName, cycle)
+			_, quiescent := outputDotFile(dotFN, cycle, network, edgeSet)
+			// Run until network has quiesced.
+			return !quiescent
 		})
 	n.Stop()
 
