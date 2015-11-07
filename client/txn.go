@@ -342,8 +342,8 @@ func (txn *Txn) Commit() error {
 
 // CommitBy sends an EndTransactionRequest with Commit=true and
 // Deadline=deadline.
-func (txn *Txn) CommitBy(deadline *roachpb.Timestamp) error {
-	err := txn.commit(deadline)
+func (txn *Txn) CommitBy(deadline roachpb.Timestamp) error {
+	err := txn.commit(&deadline)
 	txn.Cleanup(err)
 	return err
 }

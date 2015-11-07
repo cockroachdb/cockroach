@@ -327,25 +327,23 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		var deadline *roachpb.Timestamp
-		switch i {
-		case 0:
-			// No deadline.
-		case 1:
-			// Past deadline.
-			ts := txn.Proto.Timestamp.Prev()
-			deadline = &ts
-		case 2:
-			// Equal deadline.
-			deadline = &txn.Proto.Timestamp
-		case 3:
-			// Future deadline.
-			ts := txn.Proto.Timestamp.Next()
-			deadline = &ts
-		}
-
 		{
-			err := txn.CommitBy(deadline)
+			var err error
+			switch i {
+			case 0:
+				// No deadline.
+				err = txn.Commit()
+			case 1:
+				// Past deadline.
+				err = txn.CommitBy(txn.Proto.Timestamp.Prev())
+			case 2:
+				// Equal deadline.
+				err = txn.CommitBy(txn.Proto.Timestamp)
+			case 3:
+				// Future deadline.
+				err = txn.CommitBy(txn.Proto.Timestamp.Next())
+			}
+
 			switch i {
 			case 0:
 				// No deadline.
