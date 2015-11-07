@@ -493,3 +493,84 @@ func BenchmarkMVCCMergeTimeSeries(b *testing.B) {
 	}
 	runMVCCMerge(&value, 1024, b)
 }
+
+// runMVCCComputeStats merges value into numKeys separate keys.
+func runMVCCComputeStats(numRows, numVersions int, b *testing.B) {
+	// Use the same number of keys for all of the mvcc scan
+	// benchmarks. Using a different number of keys per test gives
+	// preferential treatment to tests with fewer keys. Note that the
+	// datasets all fit in cache and the cache is pre-warmed.
+	const numKeys = 100000
+
+	rocksdb, stopper := setupMVCCScanData(numVersions, numKeys, b)
+	defer stopper.Stop()
+
+	prewarmCache(rocksdb)
+
+	b.SetBytes(int64(numRows * 1024))
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			iter := rocksdb.NewIterator()
+			_, err := MVCCComputeStats(iter, 0)
+			iter.Close()
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.StopTimer()
+}
+
+// The 1 version tests generate a rocksdb database that is 105M.
+func BenchmarkMVCCComputeStats1Version1Row(b *testing.B) {
+	runMVCCComputeStats(1, 1, b)
+}
+
+func BenchmarkMVCCComputeStats1Version10Rows(b *testing.B) {
+	runMVCCComputeStats(10, 1, b)
+}
+
+func BenchmarkMVCCComputeStats1Version100Rows(b *testing.B) {
+	runMVCCComputeStats(100, 1, b)
+}
+
+func BenchmarkMVCCComputeStats1Version1000Rows(b *testing.B) {
+	runMVCCComputeStats(1000, 1, b)
+}
+
+// The 10 version tests generate a rocksdb database that is 564M.
+func BenchmarkMVCCComputeStats10Versions1Row(b *testing.B) {
+	runMVCCComputeStats(1, 10, b)
+}
+
+func BenchmarkMVCCComputeStats10Versions10Rows(b *testing.B) {
+	runMVCCComputeStats(10, 10, b)
+}
+
+func BenchmarkMVCCComputeStats10Versions100Rows(b *testing.B) {
+	runMVCCComputeStats(100, 10, b)
+}
+
+func BenchmarkMVCCComputeStats10Versions1000Rows(b *testing.B) {
+	runMVCCComputeStats(1000, 10, b)
+}
+
+// The 100 version tests generate a rocksdb database that is ~5G.
+func BenchmarkMVCCComputeStats100Versions1Row(b *testing.B) {
+	runMVCCComputeStats(1, 100, b)
+}
+
+func BenchmarkMVCCComputeStats100Versions10Rows(b *testing.B) {
+	runMVCCComputeStats(10, 100, b)
+}
+
+func BenchmarkMVCCComputeStats100Versions100Rows(b *testing.B) {
+	runMVCCComputeStats(100, 100, b)
+}
+
+func BenchmarkMVCCComputeStats100Versions1000Rows(b *testing.B) {
+	runMVCCComputeStats(1000, 100, b)
+}
