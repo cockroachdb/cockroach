@@ -201,7 +201,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
 	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
 	if err != nil {
-		t.Errorf("Unable to perform allocation: %v", err)
+		t.Fatalf("Unable to perform allocation: %v", err)
 	}
 	if result.Node.NodeID != 1 || result.StoreID != 1 {
 		t.Errorf("expected NodeID 1 and StoreID 1: %+v", result)
@@ -1085,7 +1085,7 @@ func Example_rebalancing() {
 	alloc.randGen = rand.New(rand.NewSource(0))
 
 	var wg sync.WaitGroup
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ []byte) { wg.Done() })
+	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ roachpb.Value) { wg.Done() })
 
 	const generations = 100
 	const nodes = 20

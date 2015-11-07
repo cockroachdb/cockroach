@@ -547,7 +547,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(len(mtc.stores))
 	key := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
-	mtc.stores[0].Gossip().RegisterCallback(key, func(_ string, _ []byte) { wg.Done() })
+	mtc.stores[0].Gossip().RegisterCallback(key, func(_ string, _ roachpb.Value) { wg.Done() })
 	for _, s := range mtc.stores {
 		s.GossipStore()
 	}
@@ -627,7 +627,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(len(mtc.stores))
 	key := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
-	mtc.stores[0].Gossip().RegisterCallback(key, func(_ string, _ []byte) { wg.Done() })
+	mtc.stores[0].Gossip().RegisterCallback(key, func(_ string, _ roachpb.Value) { wg.Done() })
 	for _, s := range mtc.stores {
 		s.GossipStore()
 	}

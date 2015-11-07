@@ -187,7 +187,7 @@ func (s *server) start(rpcServer *rpc.Server, stopper *stop.Stopper) {
 	}
 	rpcServer.AddCloseCallback(s.onClose)
 
-	updateCallback := func(key string, content []byte) {
+	updateCallback := func(_ string, _ roachpb.Value) {
 		// Wakeup all pending clients.
 		s.ready.Broadcast()
 	}

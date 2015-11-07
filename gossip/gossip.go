@@ -321,7 +321,7 @@ func (g *Gossip) GetInfosAsJSON() ([]byte, error) {
 
 // Callback is a callback method to be invoked on gossip update
 // of info denoted by key.
-type Callback func(key string, content []byte)
+type Callback func(string, roachpb.Value)
 
 // RegisterCallback registers a callback for a key pattern to be
 // invoked whenever new info for a gossip key matching pattern is
@@ -372,13 +372,13 @@ func (g *Gossip) RegisterSystemConfigCallback(method systemConfigCallback) {
 // updateSystemConfig is the raw gossip info callback.
 // Unmarshal the system config, and if successfuly, update out
 // copy and run the callbacks.
-func (g *Gossip) updateSystemConfig(key string, content []byte) {
+func (g *Gossip) updateSystemConfig(key string, content roachpb.Value) {
 	if key != KeySystemConfig {
 		log.Fatalf("wrong key received on SystemConfig callback: %s", key)
 		return
 	}
 	cfg := &config.SystemConfig{}
-	if err := proto.Unmarshal(content, cfg); err != nil {
+	if err := content.GetProto(cfg); err != nil {
 		log.Errorf("could not unmarshal system config on callback: %s", err)
 		return
 	}

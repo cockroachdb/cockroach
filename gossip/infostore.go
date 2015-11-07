@@ -159,11 +159,6 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 			panic(util.Errorf("high water stamp %d >= %d", hws, i.OrigStamp))
 		}
 	}
-	// Verify bytes.
-	bytes, err := i.Value.GetBytes()
-	if err != nil {
-		return err
-	}
 	// Update info map.
 	is.Infos[key] = i
 	// Update the high water timestamps.
@@ -172,7 +167,7 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 			is.highWaterStamps[int32(i.NodeID)] = i.OrigStamp
 		}
 	}
-	is.processCallbacks(key, bytes)
+	is.processCallbacks(key, i.Value)
 	return nil
 }
 
@@ -208,25 +203,15 @@ func (is *infoStore) registerCallback(pattern string, method Callback) func() {
 	re := regexp.MustCompile(pattern)
 	cb := &callback{pattern: re, method: method}
 	is.callbacks[cb] = struct{}{}
-	infosBytes := make(map[string][]byte)
 	if err := is.visitInfos(func(key string, i *Info) error {
 		if re.MatchString(key) {
-			bytes, err := i.Value.GetBytes()
-			if err != nil {
-				return err
-			}
-			infosBytes[key] = bytes
+			// Run callbacks in a goroutine to avoid mutex reentry.
+			go method(key, i.Value)
 		}
 		return nil
 	}); err != nil {
 		panic(err)
 	}
-	// Run callbacks in a goroutine to avoid mutex reentry.
-	go func() {
-		for key, bytes := range infosBytes {
-			method(key, bytes)
-		}
-	}()
 	return func() {
 		delete(is.callbacks, cb)
 	}
@@ -235,17 +220,18 @@ func (is *infoStore) registerCallback(pattern string, method Callback) func() {
 // processCallbacks processes callbacks for the specified key by
 // matching callback regular expression against the key and invoking
 // the corresponding callback method on a match.
-func (is *infoStore) processCallbacks(key string, content []byte) {
-	var matches []*callback
+func (is *infoStore) processCallbacks(key string, content roachpb.Value) {
+	var matches []Callback
 	for cb := range is.callbacks {
 		if cb.pattern.MatchString(key) {
-			matches = append(matches, cb)
+			matches = append(matches, cb.method)
 		}
 	}
+
 	// Run callbacks in a goroutine to avoid mutex reentry.
 	go func() {
-		for _, cb := range matches {
-			cb.method(key, content)
+		for _, method := range matches {
+			method(key, content)
 		}
 	}()
 }
