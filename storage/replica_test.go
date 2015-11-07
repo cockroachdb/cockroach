@@ -1597,7 +1597,7 @@ func TestEndTransactionDeadline(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	// 4 cases: no deadline, past deadline, equal deadline, future deadline
+	// 4 cases: no deadline, past deadline, equal deadline, future deadline.
 	for i := 0; i < 4; i++ {
 		key := roachpb.Key("key: " + strconv.Itoa(i))
 		txn := newTransaction("txn: "+strconv.Itoa(i), key, 1, roachpb.SERIALIZABLE, tc.clock)
@@ -1610,16 +1610,16 @@ func TestEndTransactionDeadline(t *testing.T) {
 		etArgs, etHeader := endTxnArgs(txn, true /* commit */)
 		switch i {
 		case 0:
-			// no deadline
+			// No deadline.
 		case 1:
-			// past deadline
+			// Past deadline.
 			ts := txn.Timestamp.Prev()
 			etArgs.Deadline = &ts
 		case 2:
-			// equal deadline
+			// Equal deadline.
 			etArgs.Deadline = &txn.Timestamp
 		case 3:
-			// future deadline
+			// Future deadline.
 			ts := txn.Timestamp.Next()
 			etArgs.Deadline = &ts
 		}
@@ -1628,22 +1628,22 @@ func TestEndTransactionDeadline(t *testing.T) {
 			_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), etHeader, &etArgs)
 			switch i {
 			case 0:
-				// no deadline
+				// No deadline.
 				if err != nil {
 					t.Error(err)
 				}
 			case 1:
-				// past deadline
+				// Past deadline.
 				if err != nil {
 					t.Error(err)
 				}
 			case 2:
-				// equal deadline
+				// Equal deadline.
 				if err != nil {
 					t.Error(err)
 				}
 			case 3:
-				// future deadline
+				// Future deadline.
 				if _, ok := err.(*roachpb.TransactionAbortedError); !ok {
 					t.Errorf("expected TransactionAbortedError but got %T: %s", err, err)
 				}

@@ -318,7 +318,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 
-	// 4 cases: no deadline, past deadline, equal deadline, future deadline
+	// 4 cases: no deadline, past deadline, equal deadline, future deadline.
 	for i := 0; i < 4; i++ {
 		key := roachpb.Key("key: " + strconv.Itoa(i))
 		txn := client.NewTxn(*s.DB)
@@ -330,16 +330,16 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		var deadline *roachpb.Timestamp
 		switch i {
 		case 0:
-			// no deadline
+			// No deadline.
 		case 1:
-			// past deadline
+			// Past deadline.
 			ts := txn.Proto.Timestamp.Prev()
 			deadline = &ts
 		case 2:
-			// equal deadline
+			// Equal deadline.
 			deadline = &txn.Proto.Timestamp
 		case 3:
-			// future deadline
+			// Future deadline.
 			ts := txn.Proto.Timestamp.Next()
 			deadline = &ts
 		}
@@ -348,22 +348,22 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 			err := txn.CommitBy(deadline)
 			switch i {
 			case 0:
-				// no deadline
+				// No deadline.
 				if err != nil {
 					t.Error(err)
 				}
 			case 1:
-				// past deadline
+				// Past deadline.
 				if err != nil {
 					t.Error(err)
 				}
 			case 2:
-				// equal deadline
+				// Equal deadline.
 				if err != nil {
 					t.Error(err)
 				}
 			case 3:
-				// future deadline
+				// Future deadline.
 				if _, ok := err.(*roachpb.TransactionAbortedError); !ok {
 					t.Errorf("expected TransactionAbortedError but got %T: %s", err, err)
 				}
