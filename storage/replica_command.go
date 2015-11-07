@@ -337,6 +337,12 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	}
 
 	if deadlineLapsed {
+		// FIXME(#3037):
+		// If the deadline has lapsed, return all the intents for
+		// resolution. Unfortunately, since we're (a) returning an error,
+		// and (b) not able to write on error (see #1989), we can't write
+		// ABORTED into the master transaction record, which remains
+		// PENDING, and that's pretty bad.
 		return reply, args.Intents, roachpb.NewTransactionAbortedError(reply.Txn)
 	}
 
