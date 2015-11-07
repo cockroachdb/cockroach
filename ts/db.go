@@ -124,25 +124,15 @@ func (db *DB) StoreData(r Resolution, data []TimeSeriesData) error {
 	}
 
 	// Send the individual internal merge requests.
-	// TODO(mrtracy): In the likely event that there are multiple values to
-	// merge, they should be batched together instead of being called
-	// individually. However, BatchRequest currently does not support
-	// MergeRequest, probably because it cannot be part of a
-	// transaction. Look into batching this.
+	b := client.Batch{}
 	for _, kv := range kvs {
-		// Note, this looks like a batch, but isn't a batch because we only add a
-		// single request to it.
-		b := &client.Batch{}
 		b.InternalAddRequest(&roachpb.MergeRequest{
 			Span: roachpb.Span{
 				Key: kv.Key,
 			},
 			Value: kv.Value,
 		})
-		if err := db.db.Run(b); err != nil {
-			return err
-		}
 	}
 
-	return nil
+	return db.db.Run(&b)
 }
