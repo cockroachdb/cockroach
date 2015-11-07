@@ -872,7 +872,7 @@ func MVCCIncrement(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roac
 // The condition check reads a value from the key using the same operational
 // timestamp as we use to write a value.
 func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp, value roachpb.Value,
-	expValue *roachpb.Value, txn *roachpb.Transaction) error {
+	expVal *roachpb.Value, txn *roachpb.Transaction) error {
 	// Use the specified timestamp to read the value. When a write
 	// with newer timestamp exists, either of the following will
 	// happen:
@@ -884,18 +884,16 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp
 		return err
 	}
 
-	if expValue == nil && existVal != nil {
-		return &roachpb.ConditionFailedError{
-			ActualValue: existVal,
-		}
-	} else if expValue != nil {
-		// Handle check for existence when there is no key.
-		if existVal == nil {
-			return &roachpb.ConditionFailedError{}
-		} else if expValue.RawBytes != nil && !bytes.Equal(expValue.RawBytes, existVal.RawBytes) {
+	if expValPresent, existValPresent := expVal != nil, existVal != nil; expValPresent && existValPresent {
+		// Every type flows through here, so we can't use the typed getters.
+		if !(expVal.Tag == existVal.Tag && bytes.Equal(expVal.RawBytes, existVal.RawBytes)) {
 			return &roachpb.ConditionFailedError{
 				ActualValue: existVal,
 			}
+		}
+	} else if expValPresent != existValPresent {
+		return &roachpb.ConditionFailedError{
+			ActualValue: existVal,
 		}
 	}
 
