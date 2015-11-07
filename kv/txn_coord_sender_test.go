@@ -304,7 +304,7 @@ func verifyCleanup(key roachpb.Key, coord *TxnCoordSender, eng engine.Engine, t 
 			return fmt.Errorf("error getting MVCC metadata: %s", err)
 		}
 		if ok && meta.Txn != nil {
-			return fmt.Errorf("expected empty metadata, got: %s", meta)
+			return fmt.Errorf("found unexpected write intent: %s", meta)
 		}
 		return nil
 	})
