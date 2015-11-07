@@ -321,12 +321,23 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		return reply, nil, util.Errorf("transaction does not exist: %s on store %d", h.Txn, r.store.StoreID())
 	}
 
+	deadline := args.Deadline
+	deadlineLapsed := deadline != nil && ts.Less(*deadline)
+
+	if deadlineLapsed {
+		reply.Txn.Status = roachpb.ABORTED
+	}
+
 	for i := range args.Intents {
 		// Set the transaction into the intents (TxnCoordSender avoids sending
 		// all of that redundant info over the wire).
 		// This needs to be done before the commit status check because
 		// the TransactionAbortedError branch below returns these intents.
 		args.Intents[i].Txn = *(reply.Txn)
+	}
+
+	if deadlineLapsed {
+		return reply, args.Intents, roachpb.NewTransactionAbortedError(reply.Txn)
 	}
 
 	// If the transaction record already exists, verify that we can either
@@ -374,13 +385,10 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	// TODO(tschottdorf): shouldn't have to be done here.
 	reply.Txn.Timestamp.Forward(ts)
 
-	deadline := args.Deadline
-	deadlineLapsed := deadline != nil && ts.Less(*deadline)
-
 	// Set transaction status to COMMITTED or ABORTED as per the
 	// args.Commit parameter. If the transaction deadline is set and has
 	// elapsed, abort.
-	if args.Commit && !deadlineLapsed {
+	if args.Commit {
 		// If the isolation level is SERIALIZABLE, return a transaction
 		// retry error if the commit timestamp isn't equal to the txn
 		// timestamp.
@@ -455,10 +463,6 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		if err != nil {
 			return reply, nil, err
 		}
-	}
-
-	if deadlineLapsed {
-		return reply, externalIntents, roachpb.NewTransactionAbortedError(reply.Txn)
 	}
 
 	// Run triggers if successfully committed.
