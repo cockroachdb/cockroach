@@ -143,9 +143,9 @@ func TestRocksDBCompaction(t *testing.T) {
 // The creation of the rocksdb database is time consuming, especially
 // for larger numbers of versions. The database is persisted between
 // runs and stored in the current directory as
-// "mvcc_scan_<versions>_<keys>".
-func setupMVCCScanData(numVersions, numKeys int, b *testing.B) (*RocksDB, *stop.Stopper) {
-	loc := fmt.Sprintf("mvcc_scan_%d_%d", numVersions, numKeys)
+// "mvcc_scan_<versions>_<keys>_<valueBytes>".
+func setupMVCCScanData(numVersions, numKeys, valueBytes int, b *testing.B) (*RocksDB, *stop.Stopper) {
+	loc := fmt.Sprintf("mvcc_scan_%d_%d_%d", numVersions, numKeys, valueBytes)
 
 	exists := true
 	if _, err := os.Stat(loc); os.IsNotExist(err) {
@@ -179,7 +179,7 @@ func setupMVCCScanData(numVersions, numKeys int, b *testing.B) (*RocksDB, *stop.
 			// Only write values if this iteration is less than the random
 			// number of versions chosen for this key.
 			if t <= nvs[i] {
-				value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, 1024))
+				value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
 				value.InitChecksum(keys[i])
 				if err := MVCCPut(batch, nil, keys[i], ts, value, nil); err != nil {
 					b.Fatal(err)
@@ -218,7 +218,7 @@ func runMVCCScan(numRows, numVersions int, b *testing.B) {
 	// datasets all fit in cache and the cache is pre-warmed.
 	const numKeys = 100000
 
-	rocksdb, stopper := setupMVCCScanData(numVersions, numKeys, b)
+	rocksdb, stopper := setupMVCCScanData(numVersions, numKeys, 1024, b)
 	defer stopper.Stop()
 
 	prewarmCache(rocksdb)
@@ -307,7 +307,7 @@ func runMVCCGet(numVersions int, b *testing.B) {
 	// datasets all fit in cache and the cache is pre-warmed.
 	const numKeys = 100000
 
-	rocksdb, stopper := setupMVCCScanData(numVersions, numKeys, b)
+	rocksdb, stopper := setupMVCCScanData(numVersions, numKeys, 1024, b)
 	defer stopper.Stop()
 
 	prewarmCache(rocksdb)
@@ -492,4 +492,78 @@ func BenchmarkMVCCMergeTimeSeries(b *testing.B) {
 		b.Fatal(err)
 	}
 	runMVCCMerge(&value, 1024, b)
+}
+
+// runMVCCComputeStats merges value into numKeys separate keys.
+func runMVCCComputeStats(numVersions, valueBytes int, b *testing.B) {
+	const rangeBytes = 64 * 1024 * 1024
+	numKeys := rangeBytes / (valueBytes * ((numVersions / 2) + 1))
+	rocksdb, stopper := setupMVCCScanData(numVersions, numKeys, valueBytes, b)
+	defer stopper.Stop()
+
+	prewarmCache(rocksdb)
+
+	b.SetBytes(rangeBytes)
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			iter := rocksdb.NewIterator()
+			_, err := MVCCComputeStats(iter, 0)
+			iter.Close()
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.StopTimer()
+}
+
+func BenchmarkMVCCComputeStats1Version256Bytes(b *testing.B) {
+	runMVCCComputeStats(1, 256, b)
+}
+
+func BenchmarkMVCCComputeStats10Versions256Bytes(b *testing.B) {
+	runMVCCComputeStats(10, 256, b)
+}
+
+func BenchmarkMVCCComputeStats100Versions256Bytes(b *testing.B) {
+	runMVCCComputeStats(100, 256, b)
+}
+
+func BenchmarkMVCCComputeStats1000Versions256Bytes(b *testing.B) {
+	runMVCCComputeStats(1000, 256, b)
+}
+
+func BenchmarkMVCCComputeStats1Version1024Bytes(b *testing.B) {
+	runMVCCComputeStats(1, 1024, b)
+}
+
+func BenchmarkMVCCComputeStats10Versions1024Bytes(b *testing.B) {
+	runMVCCComputeStats(10, 1024, b)
+}
+
+func BenchmarkMVCCComputeStats100Versions1024Bytes(b *testing.B) {
+	runMVCCComputeStats(100, 1024, b)
+}
+
+func BenchmarkMVCCComputeStats1000Versions1024Bytes(b *testing.B) {
+	runMVCCComputeStats(1000, 1024, b)
+}
+
+func BenchmarkMVCCComputeStats1Version2048Bytes(b *testing.B) {
+	runMVCCComputeStats(1, 2048, b)
+}
+
+func BenchmarkMVCCComputeStats10Versions2048Bytes(b *testing.B) {
+	runMVCCComputeStats(10, 2048, b)
+}
+
+func BenchmarkMVCCComputeStats100Versions2048Bytes(b *testing.B) {
+	runMVCCComputeStats(100, 2048, b)
+}
+
+func BenchmarkMVCCComputeStats1000Versions2048Bytes(b *testing.B) {
+	runMVCCComputeStats(1000, 2048, b)
 }
