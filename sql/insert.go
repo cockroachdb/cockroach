@@ -51,6 +51,9 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Number of columns expecting an input. This doesn't include the
+	// columns receiving a default value.
+	numInputColumns := len(cols)
 
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
@@ -59,15 +62,27 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		colIDtoRowIndex[c.ID] = i
 	}
 
-	// Add any column not already present that has a DEFAULT expression.
+	// Add the column if it has a DEFAULT expression.
+	addIfDefault := func(col ColumnDescriptor) {
+		if col.DefaultExpr != nil {
+			if _, ok := colIDtoRowIndex[col.ID]; !ok {
+				colIDtoRowIndex[col.ID] = len(cols)
+				cols = append(cols, col)
+			}
+		}
+	}
+
+	// Add any column that has a DEFAULT expression.
 	for _, col := range tableDesc.Columns {
-		if _, ok := colIDtoRowIndex[col.ID]; ok {
+		addIfDefault(col)
+	}
+	// Also add any column in a mutation that is WRITE_ONLY and has
+	// a DEFAULT expression.
+	for _, m := range tableDesc.ColumnMutations {
+		if m.Mutation.State != DescriptorMutation_WRITE_ONLY {
 			continue
 		}
-		if col.DefaultExpr != nil {
-			colIDtoRowIndex[col.ID] = len(cols)
-			cols = append(cols, col)
-		}
+		addIfDefault(m.Column)
 	}
 
 	// Verify we have at least the columns that are part of the primary key.
@@ -98,8 +113,8 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		return nil, err
 	}
 
-	if expressions, columns := len(rows.Columns()), len(cols); expressions > columns {
-		return nil, fmt.Errorf("INSERT has more expressions than target columns: %d/%d", expressions, columns)
+	if expressions := len(rows.Columns()); expressions > numInputColumns {
+		return nil, fmt.Errorf("INSERT has more expressions than target columns: %d/%d", expressions, numInputColumns)
 	}
 
 	primaryIndex := tableDesc.PrimaryIndex
