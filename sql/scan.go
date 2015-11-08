@@ -295,7 +295,13 @@ func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
 			n.isSecondaryIndex = true
 		} else {
 			n.index = &n.desc.PrimaryIndex
-			n.visibleCols = n.desc.Columns
+			for _, col := range n.desc.Columns {
+				// Skip columns in transition.
+				if !col.isReadable() {
+					continue
+				}
+				n.visibleCols = append(n.visibleCols, col)
+			}
 		}
 
 		return nil
@@ -498,6 +504,10 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 				}
 			} else {
 				for _, col := range n.desc.Columns {
+					// Skip columns in transition.
+					if !col.isReadable() {
+						continue
+					}
 					n.columns = append(n.columns, col.Name)
 					n.render = append(n.render, n.getQVal(col))
 				}

@@ -51,6 +51,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
+	numInputColumns := len(cols)
 
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
@@ -64,7 +65,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		if _, ok := colIDtoRowIndex[col.ID]; ok {
 			continue
 		}
-		if col.DefaultExpr != nil {
+		if col.DefaultExpr != nil && col.isDefaultWritable() {
 			colIDtoRowIndex[col.ID] = len(cols)
 			cols = append(cols, col)
 		}
@@ -98,8 +99,8 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		return nil, err
 	}
 
-	if expressions, columns := len(rows.Columns()), len(cols); expressions > columns {
-		return nil, fmt.Errorf("INSERT has more expressions than target columns: %d/%d", expressions, columns)
+	if expressions := len(rows.Columns()); expressions > numInputColumns {
+		return nil, fmt.Errorf("INSERT has more expressions than target columns: %d/%d", expressions, numInputColumns)
 	}
 
 	primaryIndex := tableDesc.PrimaryIndex
@@ -217,7 +218,14 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 func (p *planner) processColumns(tableDesc *TableDescriptor,
 	node parser.QualifiedNames) ([]ColumnDescriptor, error) {
 	if node == nil {
-		return tableDesc.Columns, nil
+		cols := make([]ColumnDescriptor, 0, len(tableDesc.Columns))
+		for _, c := range tableDesc.Columns {
+			if !c.isWritable() {
+				continue
+			}
+			cols = append(cols, c)
+		}
+		return cols, nil
 	}
 
 	cols := make([]ColumnDescriptor, len(node))
@@ -233,6 +241,10 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 			return nil, err
 		}
 		col := tableDesc.Columns[j]
+		if !col.isWritable() {
+			// A non writable column is like a column that doesn't exist.
+			return nil, fmt.Errorf("column %q does not exist", n.Column())
+		}
 		if _, ok := colIDSet[col.ID]; ok {
 			return nil, fmt.Errorf("multiple assignments to same column \"%s\"", n.Column())
 		}

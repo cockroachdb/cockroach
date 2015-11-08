@@ -139,7 +139,12 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
 	colIDtoRowIndex := map[ColumnID]int{}
+	numReadableColumns := 0
 	for i, col := range tableDesc.Columns {
+		// Also separately, keep track of the number of readable columns.
+		if col.isReadable() {
+			numReadableColumns++
+		}
 		colIDtoRowIndex[col.ID] = i
 	}
 
@@ -179,7 +184,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 
 		// Our updated value expressions occur immediately after the plain
 		// columns in the output.
-		newVals := rowVals[len(tableDesc.Columns):]
+		newVals := rowVals[numReadableColumns:]
 		// Update the row values.
 		for i, col := range cols {
 			val := newVals[i]

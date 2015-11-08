@@ -29,6 +29,36 @@ option (gogoproto.marshaler_all) = true;
 option (gogoproto.sizer_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
+// A table descriptor in the middle of a schema change will
+// have a DescriptorMutation attached to each column/index
+// descriptor being added or deleted.
+message DescriptorMutation {
+  // These states are used to restrict the scope of
+  // DB write operations. The presence of a DescriptorMutation
+  // prevents read operations.
+  enum State {
+    // Not used.
+    UNKNOWN = 0;
+    // Operations can use this descriptor to delete entries.
+    // When deleting a descriptor, all descriptor related data
+    // (column or index data) can only be deleted once all the
+    // nodes have transitioned to the DELETE_ONLY state.
+    DELETE_ONLY = 1;
+    // Operations can use this descriptor to write/delete entries.
+    // When adding a descriptor, all descriptor related data
+    // (column default or index data) can only be backfilled once
+    // all nodes have transitioned into the WRITE_ONLY state.
+    WRITE_ONLY = 2;
+  }
+  optional State state = 1 [(gogoproto.nullable) = false];
+  // A few fields for a future PR placed here to motivate the need
+  // for the DescriptorMutation message.
+  // Is this descriptor being added or deleted?
+  // optional bool delete = 2 [(gogoproto.nullable) = false];
+  // MutationID id 3;
+  // Keys used to checkpoint the state of the mutation transition.
+}
+
 message ColumnType {
   // These mirror the types supported by the sql/parser. See
   // sql/parser/types.go.
@@ -60,6 +90,10 @@ message ColumnDescriptor {
   // Default expression to use to populate the column on insert if no
   // value is provided.
   optional string default_expr = 5;
+  // The mutation state for this descriptor. A null value implies no
+  // outstanding mutation; the presence of a mutation disables column
+  // reads.
+  optional DescriptorMutation mutation = 6;
 }
 
 message IndexDescriptor {

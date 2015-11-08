@@ -55,6 +55,31 @@ func validateName(name, typ string) error {
 	return nil
 }
 
+func (desc *ColumnDescriptor) isReadable() bool {
+	// A column without a mutation is a readable column.
+	return desc.Mutation == nil
+}
+
+func (desc *ColumnDescriptor) isWritable() bool {
+	// A column without a mutation is a writable column.
+	// A column with a mutation in the WRITE_ONLY state is
+	// technically writable, but an update on that column
+	// requires a read of that column which is disallowed.
+	// We therefore only allow writes with user supplied values
+	// when the column has no outstanding mutation.
+	return desc.Mutation == nil
+}
+
+// Can the database write a default value to this column when
+// it is not supplied by the user.
+func (desc *ColumnDescriptor) isDefaultWritable() bool {
+	if desc.Mutation != nil {
+		return desc.Mutation.State == DescriptorMutation_WRITE_ONLY
+	}
+	// A column without a mutation is a writable column.
+	return true
+}
+
 // allocateName sets desc.Name to a value that is not equalName to any
 // of tableDesc's indexes. allocateName roughly follows PostgreSQL's
 // convention for automatically-named indexes.
@@ -274,6 +299,9 @@ func (desc *TableDescriptor) Validate() error {
 		if column.ID >= desc.NextColumnID {
 			return fmt.Errorf("column \"%s\" invalid ID (%d) > next column ID (%d)",
 				column.Name, column.ID, desc.NextColumnID)
+		}
+		if column.Mutation != nil && column.Mutation.State == DescriptorMutation_UNKNOWN {
+			return util.Errorf("mutation in %s state: col %s, col-id %d", column.Mutation.State, column.Name, column.ID)
 		}
 	}
 
