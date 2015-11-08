@@ -74,6 +74,68 @@ func (x *ColumnType_Kind) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// A descriptor within a mutation is unavailable for reads, writes
+// and deletes. It is only available for implicit (internal to
+// the database) writes and deletes depending on the state of the mutation.
+type DescriptorMutation_State int32
+
+const (
+	// Not used.
+	DescriptorMutation_UNKNOWN DescriptorMutation_State = 0
+	// Operations can use this invisible descriptor to implicitly
+	// delete entries.
+	// Column: A descriptor in this state is invisible to
+	// INSERT and UPDATE. DELETE must delete a column in this state.
+	// Index: A descriptor in this state is invisible to an INSERT.
+	// UPDATE must delete the old value of the index but doesn't write
+	// the new value. DELETE must delete the index.
+	//
+	// When deleting a descriptor, all descriptor related data
+	// (column or index data) can only be mass deleted once
+	// all the nodes have transitioned to the DELETE_ONLY state.
+	DescriptorMutation_DELETE_ONLY DescriptorMutation_State = 1
+	// Operations can use this invisible descriptor to implicitly
+	// write and delete entries.
+	// Column: INSERT will populate this column with the default
+	// value. UPDATE ignores this descriptor. DELETE must delete
+	// the column.
+	// Index: INSERT, UPDATE and DELETE treat this index like any
+	// other index.
+	//
+	// When adding a descriptor, all descriptor related data
+	// (column default or index data) can only be backfilled once
+	// all nodes have transitioned into the WRITE_ONLY state.
+	DescriptorMutation_WRITE_ONLY DescriptorMutation_State = 2
+)
+
+var DescriptorMutation_State_name = map[int32]string{
+	0: "UNKNOWN",
+	1: "DELETE_ONLY",
+	2: "WRITE_ONLY",
+}
+var DescriptorMutation_State_value = map[string]int32{
+	"UNKNOWN":     0,
+	"DELETE_ONLY": 1,
+	"WRITE_ONLY":  2,
+}
+
+func (x DescriptorMutation_State) Enum() *DescriptorMutation_State {
+	p := new(DescriptorMutation_State)
+	*p = x
+	return p
+}
+func (x DescriptorMutation_State) String() string {
+	return proto.EnumName(DescriptorMutation_State_name, int32(x))
+}
+func (x *DescriptorMutation_State) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(DescriptorMutation_State_value, data, "DescriptorMutation_State")
+	if err != nil {
+		return err
+	}
+	*x = DescriptorMutation_State(value)
+	return nil
+}
+
 type ColumnType struct {
 	Kind ColumnType_Kind `protobuf:"varint,1,opt,name=kind,enum=cockroach.sql.ColumnType_Kind" json:"kind"`
 	// BIT, INT, FLOAT, DECIMAL, CHAR and BINARY
@@ -127,6 +189,166 @@ func (m *IndexDescriptor) Reset()         { *m = IndexDescriptor{} }
 func (m *IndexDescriptor) String() string { return proto.CompactTextString(m) }
 func (*IndexDescriptor) ProtoMessage()    {}
 
+// A DescriptorMutation represents a column or an index that
+// has either been added or dropped and hasn't yet transitioned
+// into a stable state: completely backfilled and visible, or
+// completely deleted. A table descriptor in the middle of a
+// schema change will have a FIFO queue of DescriptorMutation
+// containing each column/index descriptor being added or dropped.
+type DescriptorMutation struct {
+	// Types that are valid to be assigned to Descriptor_:
+	//	*DescriptorMutation_AddColumn
+	//	*DescriptorMutation_DropColumn
+	//	*DescriptorMutation_AddIndex
+	//	*DescriptorMutation_DropIndex
+	Descriptor_ isDescriptorMutation_Descriptor_ `protobuf_oneof:"descriptor"`
+	State       DescriptorMutation_State         `protobuf:"varint,5,opt,name=state,enum=cockroach.sql.DescriptorMutation_State" json:"state"`
+}
+
+func (m *DescriptorMutation) Reset()         { *m = DescriptorMutation{} }
+func (m *DescriptorMutation) String() string { return proto.CompactTextString(m) }
+func (*DescriptorMutation) ProtoMessage()    {}
+
+type isDescriptorMutation_Descriptor_ interface {
+	isDescriptorMutation_Descriptor_()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type DescriptorMutation_AddColumn struct {
+	AddColumn *ColumnDescriptor `protobuf:"bytes,1,opt,name=add_column,oneof"`
+}
+type DescriptorMutation_DropColumn struct {
+	DropColumn *ColumnDescriptor `protobuf:"bytes,2,opt,name=drop_column,oneof"`
+}
+type DescriptorMutation_AddIndex struct {
+	AddIndex *IndexDescriptor `protobuf:"bytes,3,opt,name=add_index,oneof"`
+}
+type DescriptorMutation_DropIndex struct {
+	DropIndex *IndexDescriptor `protobuf:"bytes,4,opt,name=drop_index,oneof"`
+}
+
+func (*DescriptorMutation_AddColumn) isDescriptorMutation_Descriptor_()  {}
+func (*DescriptorMutation_DropColumn) isDescriptorMutation_Descriptor_() {}
+func (*DescriptorMutation_AddIndex) isDescriptorMutation_Descriptor_()   {}
+func (*DescriptorMutation_DropIndex) isDescriptorMutation_Descriptor_()  {}
+
+func (m *DescriptorMutation) GetDescriptor_() isDescriptorMutation_Descriptor_ {
+	if m != nil {
+		return m.Descriptor_
+	}
+	return nil
+}
+
+func (m *DescriptorMutation) GetAddColumn() *ColumnDescriptor {
+	if x, ok := m.GetDescriptor_().(*DescriptorMutation_AddColumn); ok {
+		return x.AddColumn
+	}
+	return nil
+}
+
+func (m *DescriptorMutation) GetDropColumn() *ColumnDescriptor {
+	if x, ok := m.GetDescriptor_().(*DescriptorMutation_DropColumn); ok {
+		return x.DropColumn
+	}
+	return nil
+}
+
+func (m *DescriptorMutation) GetAddIndex() *IndexDescriptor {
+	if x, ok := m.GetDescriptor_().(*DescriptorMutation_AddIndex); ok {
+		return x.AddIndex
+	}
+	return nil
+}
+
+func (m *DescriptorMutation) GetDropIndex() *IndexDescriptor {
+	if x, ok := m.GetDescriptor_().(*DescriptorMutation_DropIndex); ok {
+		return x.DropIndex
+	}
+	return nil
+}
+
+// XXX_OneofFuncs is for the internal use of the proto package.
+func (*DescriptorMutation) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), []interface{}) {
+	return _DescriptorMutation_OneofMarshaler, _DescriptorMutation_OneofUnmarshaler, []interface{}{
+		(*DescriptorMutation_AddColumn)(nil),
+		(*DescriptorMutation_DropColumn)(nil),
+		(*DescriptorMutation_AddIndex)(nil),
+		(*DescriptorMutation_DropIndex)(nil),
+	}
+}
+
+func _DescriptorMutation_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
+	m := msg.(*DescriptorMutation)
+	// descriptor
+	switch x := m.Descriptor_.(type) {
+	case *DescriptorMutation_AddColumn:
+		_ = b.EncodeVarint(1<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.AddColumn); err != nil {
+			return err
+		}
+	case *DescriptorMutation_DropColumn:
+		_ = b.EncodeVarint(2<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.DropColumn); err != nil {
+			return err
+		}
+	case *DescriptorMutation_AddIndex:
+		_ = b.EncodeVarint(3<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.AddIndex); err != nil {
+			return err
+		}
+	case *DescriptorMutation_DropIndex:
+		_ = b.EncodeVarint(4<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.DropIndex); err != nil {
+			return err
+		}
+	case nil:
+	default:
+		return fmt.Errorf("DescriptorMutation.Descriptor_ has unexpected type %T", x)
+	}
+	return nil
+}
+
+func _DescriptorMutation_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+	m := msg.(*DescriptorMutation)
+	switch tag {
+	case 1: // descriptor.add_column
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(ColumnDescriptor)
+		err := b.DecodeMessage(msg)
+		m.Descriptor_ = &DescriptorMutation_AddColumn{msg}
+		return true, err
+	case 2: // descriptor.drop_column
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(ColumnDescriptor)
+		err := b.DecodeMessage(msg)
+		m.Descriptor_ = &DescriptorMutation_DropColumn{msg}
+		return true, err
+	case 3: // descriptor.add_index
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(IndexDescriptor)
+		err := b.DecodeMessage(msg)
+		m.Descriptor_ = &DescriptorMutation_AddIndex{msg}
+		return true, err
+	case 4: // descriptor.drop_index
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(IndexDescriptor)
+		err := b.DecodeMessage(msg)
+		m.Descriptor_ = &DescriptorMutation_DropIndex{msg}
+		return true, err
+	default:
+		return false, nil
+	}
+}
+
 // A TableDescriptor represents a table and is stored in a structured metadata
 // key. The TableDescriptor has a globally-unique ID, while its member
 // {Column,Index}Descriptors have locally-unique IDs.
@@ -151,6 +373,8 @@ type TableDescriptor struct {
 	// next_index_id is used to ensure that deleted index ids are not reused.
 	NextIndexID IndexID              `protobuf:"varint,11,opt,name=next_index_id,casttype=IndexID" json:"next_index_id"`
 	Privileges  *PrivilegeDescriptor `protobuf:"bytes,12,opt,name=privileges" json:"privileges,omitempty"`
+	// Columns or indexes being added or deleted in a FIFO order.
+	Mutations []DescriptorMutation `protobuf:"bytes,13,rep,name=mutations" json:"mutations"`
 }
 
 func (m *TableDescriptor) Reset()         { *m = TableDescriptor{} }
@@ -237,6 +461,13 @@ func (m *TableDescriptor) GetNextIndexID() IndexID {
 func (m *TableDescriptor) GetPrivileges() *PrivilegeDescriptor {
 	if m != nil {
 		return m.Privileges
+	}
+	return nil
+}
+
+func (m *TableDescriptor) GetMutations() []DescriptorMutation {
+	if m != nil {
+		return m.Mutations
 	}
 	return nil
 }
@@ -380,6 +611,7 @@ func _Descriptor_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buf
 
 func init() {
 	proto.RegisterEnum("cockroach.sql.ColumnType_Kind", ColumnType_Kind_name, ColumnType_Kind_value)
+	proto.RegisterEnum("cockroach.sql.DescriptorMutation_State", DescriptorMutation_State_name, DescriptorMutation_State_value)
 }
 func (m *ColumnType) Marshal() (data []byte, err error) {
 	size := m.Size()
@@ -532,6 +764,90 @@ func (m *IndexDescriptor) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *DescriptorMutation) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *DescriptorMutation) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Descriptor_ != nil {
+		nn2, err := m.Descriptor_.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += nn2
+	}
+	data[i] = 0x28
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.State))
+	return i, nil
+}
+
+func (m *DescriptorMutation_AddColumn) MarshalTo(data []byte) (int, error) {
+	i := 0
+	if m.AddColumn != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.AddColumn.Size()))
+		n3, err := m.AddColumn.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
+	}
+	return i, nil
+}
+func (m *DescriptorMutation_DropColumn) MarshalTo(data []byte) (int, error) {
+	i := 0
+	if m.DropColumn != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.DropColumn.Size()))
+		n4, err := m.DropColumn.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n4
+	}
+	return i, nil
+}
+func (m *DescriptorMutation_AddIndex) MarshalTo(data []byte) (int, error) {
+	i := 0
+	if m.AddIndex != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.AddIndex.Size()))
+		n5, err := m.AddIndex.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n5
+	}
+	return i, nil
+}
+func (m *DescriptorMutation_DropIndex) MarshalTo(data []byte) (int, error) {
+	i := 0
+	if m.DropIndex != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.DropIndex.Size()))
+		n6, err := m.DropIndex.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n6
+	}
+	return i, nil
+}
 func (m *TableDescriptor) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -567,11 +883,11 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x32
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.ModificationTime.Size()))
-	n2, err := m.ModificationTime.MarshalTo(data[i:])
+	n7, err := m.ModificationTime.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n2
+	i += n7
 	if len(m.Columns) > 0 {
 		for _, msg := range m.Columns {
 			data[i] = 0x3a
@@ -590,11 +906,11 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x4a
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.PrimaryIndex.Size()))
-	n3, err := m.PrimaryIndex.MarshalTo(data[i:])
+	n8, err := m.PrimaryIndex.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n3
+	i += n8
 	if len(m.Indexes) > 0 {
 		for _, msg := range m.Indexes {
 			data[i] = 0x52
@@ -614,11 +930,23 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x62
 		i++
 		i = encodeVarintStructured(data, i, uint64(m.Privileges.Size()))
-		n4, err := m.Privileges.MarshalTo(data[i:])
+		n9, err := m.Privileges.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n4
+		i += n9
+	}
+	if len(m.Mutations) > 0 {
+		for _, msg := range m.Mutations {
+			data[i] = 0x6a
+			i++
+			i = encodeVarintStructured(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
 	}
 	return i, nil
 }
@@ -649,11 +977,11 @@ func (m *DatabaseDescriptor) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintStructured(data, i, uint64(m.Privileges.Size()))
-		n5, err := m.Privileges.MarshalTo(data[i:])
+		n10, err := m.Privileges.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n5
+		i += n10
 	}
 	return i, nil
 }
@@ -674,11 +1002,11 @@ func (m *Descriptor) MarshalTo(data []byte) (int, error) {
 	var l int
 	_ = l
 	if m.Union != nil {
-		nn6, err := m.Union.MarshalTo(data[i:])
+		nn11, err := m.Union.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += nn6
+		i += nn11
 	}
 	return i, nil
 }
@@ -689,11 +1017,11 @@ func (m *Descriptor_Table) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintStructured(data, i, uint64(m.Table.Size()))
-		n7, err := m.Table.MarshalTo(data[i:])
+		n12, err := m.Table.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n7
+		i += n12
 	}
 	return i, nil
 }
@@ -703,11 +1031,11 @@ func (m *Descriptor_Database) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x12
 		i++
 		i = encodeVarintStructured(data, i, uint64(m.Database.Size()))
-		n8, err := m.Database.MarshalTo(data[i:])
+		n13, err := m.Database.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n8
+		i += n13
 	}
 	return i, nil
 }
@@ -795,6 +1123,52 @@ func (m *IndexDescriptor) Size() (n int) {
 	return n
 }
 
+func (m *DescriptorMutation) Size() (n int) {
+	var l int
+	_ = l
+	if m.Descriptor_ != nil {
+		n += m.Descriptor_.Size()
+	}
+	n += 1 + sovStructured(uint64(m.State))
+	return n
+}
+
+func (m *DescriptorMutation_AddColumn) Size() (n int) {
+	var l int
+	_ = l
+	if m.AddColumn != nil {
+		l = m.AddColumn.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	return n
+}
+func (m *DescriptorMutation_DropColumn) Size() (n int) {
+	var l int
+	_ = l
+	if m.DropColumn != nil {
+		l = m.DropColumn.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	return n
+}
+func (m *DescriptorMutation_AddIndex) Size() (n int) {
+	var l int
+	_ = l
+	if m.AddIndex != nil {
+		l = m.AddIndex.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	return n
+}
+func (m *DescriptorMutation_DropIndex) Size() (n int) {
+	var l int
+	_ = l
+	if m.DropIndex != nil {
+		l = m.DropIndex.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	return n
+}
 func (m *TableDescriptor) Size() (n int) {
 	var l int
 	_ = l
@@ -826,6 +1200,12 @@ func (m *TableDescriptor) Size() (n int) {
 	if m.Privileges != nil {
 		l = m.Privileges.Size()
 		n += 1 + l + sovStructured(uint64(l))
+	}
+	if len(m.Mutations) > 0 {
+		for _, e := range m.Mutations {
+			l = e.Size()
+			n += 1 + l + sovStructured(uint64(l))
+		}
 	}
 	return n
 }
@@ -1385,6 +1765,203 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 	}
 	return nil
 }
+func (m *DescriptorMutation) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowStructured
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: DescriptorMutation: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: DescriptorMutation: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AddColumn", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &ColumnDescriptor{}
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Descriptor_ = &DescriptorMutation_AddColumn{v}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DropColumn", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &ColumnDescriptor{}
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Descriptor_ = &DescriptorMutation_DropColumn{v}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AddIndex", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &IndexDescriptor{}
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Descriptor_ = &DescriptorMutation_AddIndex{v}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DropIndex", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &IndexDescriptor{}
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Descriptor_ = &DescriptorMutation_DropIndex{v}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field State", wireType)
+			}
+			m.State = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.State |= (DescriptorMutation_State(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipStructured(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthStructured
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *TableDescriptor) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -1719,6 +2296,37 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				m.Privileges = &PrivilegeDescriptor{}
 			}
 			if err := m.Privileges.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 13:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Mutations", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Mutations = append(m.Mutations, DescriptorMutation{})
+			if err := m.Mutations[len(m.Mutations)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

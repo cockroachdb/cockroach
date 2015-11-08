@@ -88,6 +88,54 @@ message IndexDescriptor {
       (gogoproto.casttype) = "ColumnID"];
 }
 
+// A DescriptorMutation represents a column or an index that
+// has either been added or dropped and hasn't yet transitioned
+// into a stable state: completely backfilled and visible, or
+// completely deleted. A table descriptor in the middle of a
+// schema change will have a FIFO queue of DescriptorMutation
+// containing each column/index descriptor being added or dropped.
+message DescriptorMutation {
+  oneof descriptor {
+    ColumnDescriptor add_column = 1;
+    ColumnDescriptor drop_column = 2;
+    IndexDescriptor add_index = 3;
+    IndexDescriptor drop_index = 4;
+  }
+  // A descriptor within a mutation is unavailable for reads, writes
+  // and deletes. It is only available for implicit (internal to
+  // the database) writes and deletes depending on the state of the mutation.
+  enum State {
+    // Not used.
+    UNKNOWN = 0;
+    // Operations can use this invisible descriptor to implicitly
+    // delete entries.
+    // Column: A descriptor in this state is invisible to
+    // INSERT and UPDATE. DELETE must delete a column in this state.
+    // Index: A descriptor in this state is invisible to an INSERT.
+    // UPDATE must delete the old value of the index but doesn't write
+    // the new value. DELETE must delete the index. 
+    //
+    // When deleting a descriptor, all descriptor related data
+    // (column or index data) can only be mass deleted once
+    // all the nodes have transitioned to the DELETE_ONLY state.
+    DELETE_ONLY = 1;
+    // Operations can use this invisible descriptor to implicitly
+    // write and delete entries.
+    // Column: INSERT will populate this column with the default
+    // value. UPDATE ignores this descriptor. DELETE must delete
+    // the column. 
+    // Index: INSERT, UPDATE and DELETE treat this index like any
+    // other index.
+    //
+    // When adding a descriptor, all descriptor related data
+    // (column default or index data) can only be backfilled once
+    // all nodes have transitioned into the WRITE_ONLY state.
+    WRITE_ONLY = 2;
+  }
+  optional State state = 5 [(gogoproto.nullable) = false];
+}
+
+
 // A TableDescriptor represents a table and is stored in a structured metadata
 // key. The TableDescriptor has a globally-unique ID, while its member
 // {Column,Index}Descriptors have locally-unique IDs.
@@ -119,6 +167,9 @@ message TableDescriptor {
   optional uint32 next_index_id = 11 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextIndexID", (gogoproto.casttype) = "IndexID"];
   optional PrivilegeDescriptor privileges = 12;
+  // Columns or indexes being added or deleted in a FIFO order.
+  repeated DescriptorMutation mutations = 13 [(gogoproto.nullable) = false];
+; 
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
