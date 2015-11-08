@@ -17,6 +17,7 @@
 		ColumnType
 		ColumnDescriptor
 		IndexDescriptor
+		DescriptorMutation
 		TableDescriptor
 		DatabaseDescriptor
 		Descriptor
