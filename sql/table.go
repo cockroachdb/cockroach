@@ -30,6 +30,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+// TestDisableTableLeases set to true to disable table leases in tests.
+var TestDisableTableLeases bool
+
 // tableKey implements descriptorKey.
 type tableKey struct {
 	parentID ID
@@ -183,7 +186,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*TableDescriptor, 
 		return nil, err
 	}
 
-	if qname.Database() == SystemDB.Name {
+	if qname.Database() == SystemDB.Name || TestDisableTableLeases {
 		// We don't go through the normal lease mechanism for system tables. The
 		// system.lease and system.descriptor table, in particular, are problematic
 		// because they are used for acquiring leases itself, creating a

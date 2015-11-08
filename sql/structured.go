@@ -129,6 +129,34 @@ func (desc *TableDescriptor) SetName(name string) {
 	desc.Name = name
 }
 
+// GetColumn returns the column descriptor if present.
+func (m DescriptorMutation) GetColumn() *ColumnDescriptor {
+	if col := m.GetAddColumn(); col != nil {
+		return col
+	}
+	return m.GetDropColumn()
+}
+
+// GetIndex returns the index descriptor if present.
+func (m DescriptorMutation) GetIndex() *IndexDescriptor {
+	if idx := m.GetAddIndex(); idx != nil {
+		return idx
+	}
+	return m.GetDropIndex()
+}
+
+// allColumns includes the columns present in mutations.
+func (desc *TableDescriptor) allColumns() []ColumnDescriptor {
+	cols := make([]ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
+	cols = append(cols, desc.Columns...)
+	for _, m := range desc.Mutations {
+		if col := m.GetColumn(); col != nil {
+			cols = append(cols, *col)
+		}
+	}
+	return cols
+}
+
 // AllocateIDs allocates column and index ids for any column or index which has
 // an ID of 0.
 func (desc *TableDescriptor) AllocateIDs() error {
@@ -252,7 +280,7 @@ func (desc *TableDescriptor) Validate() error {
 
 	columnNames := map[string]ColumnID{}
 	columnIDs := map[ColumnID]string{}
-	for _, column := range desc.Columns {
+	for _, column := range desc.allColumns() {
 		if err := validateName(column.Name, "column"); err != nil {
 			return err
 		}
@@ -274,6 +302,18 @@ func (desc *TableDescriptor) Validate() error {
 		if column.ID >= desc.NextColumnID {
 			return fmt.Errorf("column \"%s\" invalid ID (%d) > next column ID (%d)",
 				column.Name, column.ID, desc.NextColumnID)
+		}
+	}
+
+	for _, m := range desc.Mutations {
+		if m.State == DescriptorMutation_UNKNOWN {
+			if col := m.GetColumn(); col != nil {
+				return util.Errorf("mutation in %s state: col %s, id %v", m.State, col.Name, col.ID)
+			} else if idx := m.GetIndex(); idx != nil {
+				return util.Errorf("mutation in %s state: index %s, id %v", m.State, idx.Name, idx.ID)
+			} else {
+				return util.Errorf("mutation in %s state: no column/index descriptor", m.State)
+			}
 		}
 	}
 
