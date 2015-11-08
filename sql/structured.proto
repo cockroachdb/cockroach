@@ -29,6 +29,43 @@ option (gogoproto.marshaler_all) = true;
 option (gogoproto.sizer_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
+// A table descriptor in the middle of a schema change will
+// have a DescriptorMutation attached for each column/index
+// descriptor being added or deleted. A descriptor within a
+// mutation is unavailable for reads, writes and deletes. It
+// is only available for implicit (internal to the database)
+// writes and deletes depending on the state of the mutation.
+message DescriptorMutation {
+  // These states are used to change the scope of
+  // DB write/delete operations. The descriptor is invisible
+  // for reads.
+  enum State {
+    // Not used.
+    UNKNOWN = 0;
+    // Operations can use this invisible descriptor to implicitly
+    // delete entries.
+    //
+    // When deleting a descriptor, all descriptor related data
+    // (column or index data) can only be mass deleted  once
+    // all the nodes have transitioned to the DELETE_ONLY state.
+    DELETE_ONLY = 1;
+    // Operations can use this invisible descriptor to implicitly
+    // write and delete entries.
+    //
+    // When adding a descriptor, all descriptor related data
+    // (column default or index data) can only be backfilled once
+    // all nodes have transitioned into the WRITE_ONLY state.
+    WRITE_ONLY = 2;
+  }
+  optional State state = 1 [(gogoproto.nullable) = false];
+  // A few fields for a future PR placed here to motivate the need
+  // for the DescriptorMutation message.
+  // Is this descriptor being added or deleted?
+  // optional bool delete = 2 [(gogoproto.nullable) = false];
+  // MutationID id 3;
+  // Keys used to checkpoint the state of the mutation transition.
+}
+
 message ColumnType {
   // These mirror the types supported by the sql/parser. See
   // sql/parser/types.go.
@@ -49,6 +86,14 @@ message ColumnType {
   optional int32 width = 2 [(gogoproto.nullable) = false];
   // FLOAT and DECIMAL.
   optional int32 precision = 3 [(gogoproto.nullable) = false];
+}
+
+// ColumnMutation represents a column that has either been added
+// or deleted and hasn't yet transitioned into a stable state:
+// completely backfilled and visible, or completely deleted.
+message ColumnMutation {
+  optional ColumnDescriptor column = 1 [(gogoproto.nullable) = false];
+  optional DescriptorMutation mutation = 2 [(gogoproto.nullable) = false];
 }
 
 message ColumnDescriptor {
@@ -109,16 +154,18 @@ message TableDescriptor {
   // Last modification time of the table descriptor.
   optional roachpb.Timestamp modification_time = 6 [(gogoproto.nullable) = false];
   repeated ColumnDescriptor columns = 7 [(gogoproto.nullable) = false];
+  // Columns currently being added or deleted.
+  repeated ColumnMutation column_mutations = 8 [(gogoproto.nullable) = false];
   // next_column_id is used to ensure that deleted column ids are not reused.
-  optional uint32 next_column_id = 8 [(gogoproto.nullable) = false,
+  optional uint32 next_column_id = 9 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextColumnID", (gogoproto.casttype) = "ColumnID"];
-  optional IndexDescriptor primary_index = 9 [(gogoproto.nullable) = false];
+  optional IndexDescriptor primary_index = 10 [(gogoproto.nullable) = false];
   // indexes are all the secondary indexes.
-  repeated IndexDescriptor indexes = 10 [(gogoproto.nullable) = false];
+  repeated IndexDescriptor indexes = 11 [(gogoproto.nullable) = false];
   // next_index_id is used to ensure that deleted index ids are not reused.
-  optional uint32 next_index_id = 11 [(gogoproto.nullable) = false,
+  optional uint32 next_index_id = 12 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextIndexID", (gogoproto.casttype) = "IndexID"];
-  optional PrivilegeDescriptor privileges = 12;
+  optional PrivilegeDescriptor privileges = 13;
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
