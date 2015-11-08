@@ -14,7 +14,9 @@
 		UserPrivileges
 		PrivilegeDescriptor
 		Session
+		DescriptorMutation
 		ColumnType
+		ColumnMutation
 		ColumnDescriptor
 		IndexDescriptor
 		TableDescriptor
