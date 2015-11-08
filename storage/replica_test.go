@@ -1634,8 +1634,8 @@ func TestEndTransactionDeadline(t *testing.T) {
 				}
 			case 1:
 				// Past deadline.
-				if err != nil {
-					t.Error(err)
+				if _, ok := err.(*roachpb.TransactionAbortedError); !ok {
+					t.Errorf("expected TransactionAbortedError but got %T: %s", err, err)
 				}
 			case 2:
 				// Equal deadline.
@@ -1644,8 +1644,8 @@ func TestEndTransactionDeadline(t *testing.T) {
 				}
 			case 3:
 				// Future deadline.
-				if _, ok := err.(*roachpb.TransactionAbortedError); !ok {
-					t.Errorf("expected TransactionAbortedError but got %T: %s", err, err)
+				if err != nil {
+					t.Error(err)
 				}
 			}
 		}

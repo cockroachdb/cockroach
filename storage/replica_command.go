@@ -322,7 +322,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	}
 
 	deadline := args.Deadline
-	deadlineLapsed := deadline != nil && ts.Less(*deadline)
+	deadlineLapsed := deadline != nil && deadline.Less(ts)
 
 	if deadlineLapsed {
 		reply.Txn.Status = roachpb.ABORTED
