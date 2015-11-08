@@ -129,6 +129,15 @@ func (desc *TableDescriptor) SetName(name string) {
 	desc.Name = name
 }
 
+func (desc *TableDescriptor) allColumns() []ColumnDescriptor {
+	cols := make([]ColumnDescriptor, 0, len(desc.Columns)+len(desc.ColumnMutations))
+	cols = append(cols, desc.Columns...)
+	for _, m := range desc.ColumnMutations {
+		cols = append(cols, m.Column)
+	}
+	return cols
+}
+
 // AllocateIDs allocates column and index ids for any column or index which has
 // an ID of 0.
 func (desc *TableDescriptor) AllocateIDs() error {
@@ -252,7 +261,7 @@ func (desc *TableDescriptor) Validate() error {
 
 	columnNames := map[string]ColumnID{}
 	columnIDs := map[ColumnID]string{}
-	for _, column := range desc.Columns {
+	for _, column := range desc.allColumns() {
 		if err := validateName(column.Name, "column"); err != nil {
 			return err
 		}
@@ -274,6 +283,12 @@ func (desc *TableDescriptor) Validate() error {
 		if column.ID >= desc.NextColumnID {
 			return fmt.Errorf("column \"%s\" invalid ID (%d) > next column ID (%d)",
 				column.Name, column.ID, desc.NextColumnID)
+		}
+	}
+
+	for _, m := range desc.ColumnMutations {
+		if m.Mutation.State == DescriptorMutation_UNKNOWN {
+			return util.Errorf("mutation in %s state: col %s, col-id %d", m.Mutation.State, m.Column.Name, m.Column.ID)
 		}
 	}
 
