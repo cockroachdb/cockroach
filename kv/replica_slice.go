@@ -104,8 +104,7 @@ func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 	if len(rs) < 2 {
 		return 0
 	}
-	maxIndex := len(rs) - 1
-	topIndex := maxIndex
+	topIndex := len(rs) - 1
 	bucket := 0
 	for ; bucket < len(attrs); bucket++ {
 		firstNotOrdered := 0
@@ -118,7 +117,7 @@ func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 				firstNotOrdered++
 			}
 		}
-		rs.randPerm(firstNotOrdered, topIndex, maxIndex)
+		rs.randPerm(firstNotOrdered, topIndex)
 		if firstNotOrdered == 0 {
 			break
 		}
@@ -141,8 +140,8 @@ func (rs replicaSlice) MoveToFront(i int) {
 	rs[0] = front
 }
 
-func (rs replicaSlice) randPerm(startIndex int, topIndex int, maxIndex int) {
-	if topIndex >= maxIndex {
+func (rs replicaSlice) randPerm(startIndex int, topIndex int) {
+	if topIndex >= len(rs)-1 {
 		return
 	}
 	length := topIndex - startIndex + 1
