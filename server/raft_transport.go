@@ -133,6 +133,7 @@ func (t *rpcTransport) processQueue(nodeID roachpb.NodeID, storeID roachpb.Store
 	defer func() {
 		t.mu.Lock()
 		delete(t.queues, storeID)
+		close(ch)
 		t.mu.Unlock()
 	}()
 
