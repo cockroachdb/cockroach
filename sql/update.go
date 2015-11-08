@@ -147,18 +147,37 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	primaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
 	// Secondary indexes needing updating.
-	var indexes []IndexDescriptor
-	for _, index := range tableDesc.Indexes {
+	colInIndex := func(index IndexDescriptor) bool {
 		for _, id := range index.ColumnIDs {
 			if _, ok := colIDSet[id]; ok {
-				indexes = append(indexes, index)
-				break
+				return true
+			}
+		}
+		return false
+	}
+	indexes := make([]IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.Mutations))
+	for _, index := range tableDesc.Indexes {
+		if colInIndex(index) {
+			indexes = append(indexes, index)
+		}
+	}
+	var deleteIndexes []IndexDescriptor
+	for _, m := range tableDesc.Mutations {
+		if index := m.GetIndex(); index != nil {
+			switch m.State {
+			case DescriptorMutation_DELETE_ONLY:
+				// Delete index independent of whether colInIndex.
+				deleteIndexes = append(deleteIndexes, *index)
+
+			case DescriptorMutation_WRITE_ONLY:
+				if colInIndex(*index) {
+					// Add index in the WRITE_ONLY state.
+					indexes = append(indexes, *index)
+				}
 			}
 		}
 	}
-
 	marshalled := make([]interface{}, len(cols))
-
 	b := client.Batch{}
 	result := &valuesNode{}
 	for rows.Next() {
@@ -175,6 +194,26 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
 		if err != nil {
 			return nil, err
+		}
+
+		// We delete the current secondary index entry for deleted indexes,
+		// to eliminate invalid entries in the index. Note, it is safe to
+		// delete a key that hasn't changed, because a missing index
+		// entry will be backfilled in the WRITE_ONLY state, and backfill
+		// only starts once all nodes can see the index in the WRITE_ONLY
+		// state.
+		//
+		// Compute the secondary index key:value pairs.
+		deleteIndexEntries, err := encodeSecondaryIndexes(
+			tableDesc.ID, deleteIndexes, colIDtoRowIndex, rowVals)
+		if err != nil {
+			return nil, err
+		}
+		for _, d := range deleteIndexEntries {
+			if log.V(2) {
+				log.Infof("Del %s", prettyKey(d.key, 0))
+			}
+			b.Del(d.key)
 		}
 
 		// Our updated value expressions occur immediately after the plain

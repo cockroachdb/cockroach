@@ -172,12 +172,20 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		}
 
 		// Write the secondary indexes.
+		indexes := tableDesc.Indexes
+		// Also include the secondary indexes in mutation state WRITE_ONLY.
+		for _, m := range tableDesc.Mutations {
+			if m.State == DescriptorMutation_WRITE_ONLY {
+				if index := m.GetIndex(); index != nil {
+					indexes = append(indexes, *index)
+				}
+			}
+		}
 		secondaryIndexEntries, err := encodeSecondaryIndexes(
-			tableDesc.ID, tableDesc.Indexes, colIDtoRowIndex, rowVals)
+			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
 		if err != nil {
 			return nil, err
 		}
-
 		for _, secondaryIndexEntry := range secondaryIndexEntries {
 			if log.V(2) {
 				log.Infof("CPut %s -> %v", prettyKey(secondaryIndexEntry.key, 0),

@@ -73,12 +73,20 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 		}
 
 		// Delete the secondary indexes.
+		indexes := tableDesc.Indexes
+		// Also include indexes under mutation.
+		if tableDesc.Mutations != nil {
+			for _, m := range tableDesc.Mutations {
+				if index := m.GetIndex(); index != nil {
+					indexes = append(indexes, *index)
+				}
+			}
+		}
 		secondaryIndexEntries, err := encodeSecondaryIndexes(
-			tableDesc.ID, tableDesc.Indexes, colIDtoRowIndex, rowVals)
+			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
 		if err != nil {
 			return nil, err
 		}
-
 		for _, secondaryIndexEntry := range secondaryIndexEntries {
 			if log.V(2) {
 				log.Infof("Del %s", prettyKey(secondaryIndexEntry.key, 0))
