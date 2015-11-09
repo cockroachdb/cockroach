@@ -108,14 +108,14 @@ func TestIntentResolution(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			b := &client.Batch{}
-			for _, key := range tc.keys {
-				b.Put(key, "test")
-			}
-			for _, kr := range tc.ranges {
-				b.DelRange(kr[0], kr[1])
-			}
 			if err := s.db.Txn(func(txn *client.Txn) error {
+				b := &client.Batch{}
+				for _, key := range tc.keys {
+					b.Put(key, "test")
+				}
+				for _, kr := range tc.ranges {
+					b.DelRange(kr[0], kr[1])
+				}
 				return txn.CommitInBatch(b)
 			}); err != nil {
 				t.Fatalf("%d: %s", i, err)
