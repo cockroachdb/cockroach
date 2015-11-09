@@ -69,8 +69,8 @@ func encodeTransaction(timestamp roachpb.Timestamp, t *testing.T) []byte {
 }
 
 // TestRocksDBCompaction verifies that a garbage collector can be
-// installed on a RocksDB engine and will properly compact response
-// cache and transaction entries.
+// installed on a RocksDB engine and will properly compact transaction
+// entries.
 func TestRocksDBCompaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
@@ -80,21 +80,11 @@ func TestRocksDBCompaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not create new in-memory rocksdb db instance: %v", err)
 	}
-	rocksdb.SetGCTimeouts(1, 2)
+	rocksdb.SetGCTimeouts(1)
 
-	cmdID := &roachpb.ClientCmdID{WallTime: 1, Random: 1}
-
-	// Write two transaction values and two response cache values such
-	// that exactly one of each should be GC'd based on our GC timeouts.
+	// Write two transaction values such that exactly one should be GC'd based
+	// on our GC timeouts.
 	kvs := []roachpb.KeyValue{
-		{
-			Key:   keys.ResponseCacheKey(1, cmdID),
-			Value: roachpb.MakeValueFromBytes(encodePutResponse(makeTS(2, 0), t)),
-		},
-		{
-			Key:   keys.ResponseCacheKey(2, cmdID),
-			Value: roachpb.MakeValueFromBytes(encodePutResponse(makeTS(3, 0), t)),
-		},
 		{
 			Key:   keys.TransactionKey(roachpb.Key("a"), roachpb.Key(uuid.NewUUID4())),
 			Value: roachpb.MakeValueFromBytes(encodeTransaction(makeTS(1, 0), t)),
@@ -122,7 +112,6 @@ func TestRocksDBCompaction(t *testing.T) {
 	}
 	expKeys := []roachpb.Key{
 		kvs[1].Key,
-		kvs[3].Key,
 	}
 	if !reflect.DeepEqual(expKeys, keys) {
 		t.Errorf("expected keys %+v, got keys %+v", expKeys, keys)

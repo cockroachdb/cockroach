@@ -128,10 +128,6 @@ rocksdb::ReadOptions MakeReadOptions(DBSnapshot* snap) {
 // key/value pairs which can be considered in isolation. This
 // includes:
 //
-// - Response cache: response cache entries are garbage collected
-//   based on their age vs. the current wall time. They're kept for a
-//   configurable window.
-//
 // - Transactions: transaction table entries are garbage collected
 //   according to the commit time of the transaction vs. the oldest
 //   remaining write intent across the entire system. The oldest write
@@ -139,10 +135,8 @@ rocksdb::ReadOptions MakeReadOptions(DBSnapshot* snap) {
 //   all ranges in the map.
 class DBCompactionFilter : public rocksdb::CompactionFilter {
  public:
-  DBCompactionFilter(int64_t min_txn_ts,
-                     int64_t min_rcache_ts)
-      : min_txn_ts_(min_txn_ts),
-        min_rcache_ts_(min_rcache_ts) {
+  DBCompactionFilter(int64_t min_txn_ts)
+      : min_txn_ts_(min_txn_ts) {
   }
 
   // For debugging:
@@ -157,28 +151,6 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
   //   }
   //   return h;
   // }
-
-  bool IsResponseCacheEntry(rocksdb::Slice key) const {
-    // The response cache key format is:
-    //   <prefix><varint64-range-id><suffix>[remainder].
-    if (!key.starts_with(kKeyLocalRangeIDPrefix)) {
-      return false;
-    }
-
-    std::string decStr;
-    if (!DecodeBytes(&key, &decStr)) {
-      return false;
-    }
-    rocksdb::Slice decKey(decStr);
-    decKey.remove_prefix(kKeyLocalRangePrefixSize);
-
-    uint64_t dummy;
-    if (!DecodeUvarint64(&decKey, &dummy)) {
-      return false;
-    }
-
-    return decKey.starts_with(kKeyLocalResponseCacheSuffix);
-  }
 
   bool IsTransactionRecord(rocksdb::Slice key) const {
     // The transaction key format is:
@@ -210,10 +182,9 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
                       bool* value_changed) const {
     *value_changed = false;
 
-    // Only filter response cache entries and transaction rows.
-    bool is_rcache = IsResponseCacheEntry(key);
-    bool is_txn = !is_rcache && IsTransactionRecord(key);
-    if (!is_rcache && !is_txn) {
+    // Only filter transaction rows.
+    bool is_txn = IsTransactionRecord(key);
+    if (!is_txn) {
       return false;
     }
     // Parse MVCC metadata for inlined value.
@@ -226,30 +197,17 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
       // *error_msg = (char*)"not an inlined mvcc value";
       return false;
     }
-    // Response cache rows are GC'd if their timestamp is older than the
-    // response cache GC timeout.
-    if (is_rcache) {
-      cockroach::roachpb::BatchResponse b_reply;
-      if (!b_reply.ParseFromArray(meta.value().raw_bytes().data(), meta.value().raw_bytes().size())) {
-        // *error_msg = (char*)"failed to parse response cache entry";
-        return false;
-      }
-      if (b_reply.header().timestamp().wall_time() <= min_rcache_ts_) {
-        return true;
-      }
-    } else if (is_txn) {
-      // Transaction rows are GC'd if their timestamp is older than
-      // the system-wide minimum write intent timestamp. This
-      // system-wide minimum write intent is periodically computed via
-      // map-reduce over all ranges and gossiped.
-      cockroach::roachpb::Transaction txn;
-      if (!txn.ParseFromArray(meta.value().raw_bytes().data(), meta.value().raw_bytes().size())) {
-        // *error_msg = (char*)"failed to parse transaction entry";
-        return false;
-      }
-      if (txn.timestamp().wall_time() <= min_txn_ts_) {
-        return true;
-      }
+    // Transaction rows are GC'd if their timestamp is older than
+    // the system-wide minimum write intent timestamp. This
+    // system-wide minimum write intent is periodically computed via
+    // map-reduce over all ranges and gossiped.
+    cockroach::roachpb::Transaction txn;
+    if (!txn.ParseFromArray(meta.value().raw_bytes().data(), meta.value().raw_bytes().size())) {
+      // *error_msg = (char*)"failed to parse transaction entry";
+      return false;
+    }
+    if (txn.timestamp().wall_time() <= min_txn_ts_) {
+      return true;
     }
     return false;
   }
@@ -260,7 +218,6 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
 
  private:
   const int64_t min_txn_ts_;
-  const int64_t min_rcache_ts_;
 };
 
 class DBCompactionFilterFactory : public rocksdb::CompactionFilterFactory {
@@ -271,23 +228,21 @@ class DBCompactionFilterFactory : public rocksdb::CompactionFilterFactory {
       const rocksdb::CompactionFilter::Context& context) override {
     google::protobuf::MutexLock l(&mu_); // Protect access to gc timeouts.
     return std::unique_ptr<rocksdb::CompactionFilter>(
-        new DBCompactionFilter(min_txn_ts_, min_rcache_ts_));
+        new DBCompactionFilter(min_txn_ts_));
   }
 
   virtual const char* Name() const override {
     return "cockroach_compaction_filter_factory";
   }
 
-  void SetGCTimeouts(int64_t min_txn_ts, int64_t min_rcache_ts) {
+  void SetGCTimeouts(int64_t min_txn_ts) {
     google::protobuf::MutexLock l(&mu_);
     min_txn_ts_ = min_txn_ts;
-    min_rcache_ts_ = min_rcache_ts;
   }
 
  private:
   google::protobuf::Mutex mu_; // Protects values below.
   int64_t min_txn_ts_;
-  int64_t min_rcache_ts_;
 };
 
 bool WillOverflow(int64_t a, int64_t b) {
@@ -1078,10 +1033,10 @@ DBStatus DBFlush(DBEngine* db) {
   return ToDBStatus(db->rep->Flush(options));
 }
 
-void DBSetGCTimeouts(DBEngine * db, int64_t min_txn_ts, int64_t min_rcache_ts) {
+void DBSetGCTimeouts(DBEngine * db, int64_t min_txn_ts) {
   DBCompactionFilterFactory *db_cff =
       (DBCompactionFilterFactory*)db->rep->GetOptions().compaction_filter_factory.get();
-  db_cff->SetGCTimeouts(min_txn_ts, min_rcache_ts);
+  db_cff->SetGCTimeouts(min_txn_ts);
 }
 
 DBStatus DBCompactRange(DBEngine* db, DBSlice* start, DBSlice* end) {
