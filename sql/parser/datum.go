@@ -31,37 +31,25 @@ import (
 
 var (
 	// DummyBool is a placeholder DBool value.
-	DummyBool = DBool(false)
+	DummyBool Datum = DBool(false)
 	// DummyInt is a placeholder DInt value.
-	DummyInt = DInt(0)
+	DummyInt Datum = DInt(0)
 	// DummyFloat is a placeholder DFloat value.
-	DummyFloat = DFloat(0)
+	DummyFloat Datum = DFloat(0)
 	// DummyString is a placeholder DString value.
-	DummyString = DString("")
+	DummyString Datum = DString("")
 	// DummyBytes is a placeholder DBytes value.
-	DummyBytes = DBytes("")
+	DummyBytes Datum = DBytes("")
 	// DummyDate is a placeholder DDate value.
-	DummyDate = DDate(0)
+	DummyDate Datum = DDate(0)
 	// DummyTimestamp is a placeholder DTimestamp value.
-	DummyTimestamp = DTimestamp{}
+	DummyTimestamp Datum = DTimestamp{}
 	// DummyInterval is a placeholder DInterval value.
-	DummyInterval = DInterval{}
+	DummyInterval Datum = DInterval{}
 	// dummyTuple is a placeholder DTuple value.
-	dummyTuple = DTuple{}
-
+	dummyTuple Datum = DTuple{}
 	// DNull is the NULL Datum.
-	DNull = dNull{}
-
-	_ Datum = DummyBool
-	_ Datum = DummyInt
-	_ Datum = DummyFloat
-	_ Datum = DummyString
-	_ Datum = DummyBytes
-	_ Datum = DummyDate
-	_ Datum = DummyTimestamp
-	_ Datum = DummyInterval
-	_ Datum = dummyTuple
-	_ Datum = DNull
+	DNull Datum = dNull{}
 
 	boolType      = reflect.TypeOf(DummyBool)
 	intType       = reflect.TypeOf(DummyInt)
