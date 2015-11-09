@@ -1103,13 +1103,6 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 			rep, rd.ReplicaID, origDesc.NextReplicaID)
 	}
 
-	// Silence the Replica. This clears all outstanding commands and makes
-	// sure that whatever else slips in winds up with a RangeNotFoundError.
-	// Before this change, clients would be signaled that their command had
-	// been aborted when in fact it could commit just after that, which led
-	// to #2593.
-	rep.Quiesce()
-
 	// RemoveGroup needs to access the storage, which in turn needs the
 	// lock. Some care is needed to avoid deadlocks. We remove the group
 	// from multiraft outside the scope of s.mu; this is effectively
