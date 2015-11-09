@@ -14,4 +14,4 @@ BINARY_NAME="cockroach.$(date +"%Y%m%d-%H:%M:%S").${CIRCLE_SHA1}"
 
 cd $(dirname $0)/..
 strip -S cockroach
-time aws cp cockroach s3://${BUCKET_PATH}/${BINARY_NAME}
+time aws s3 cp cockroach s3://${BUCKET_PATH}/${BINARY_NAME}
