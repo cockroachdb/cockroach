@@ -133,9 +133,6 @@ check:
 	@echo "vet"
 	@! go tool vet . 2>&1 | \
 	  grep -vE '^vet: cannot process directory .git'
-	@echo "vet --shadow"
-	@! go tool vet --shadow . 2>&1 | \
-	  grep -vE '(declaration of err shadows|^vet: cannot process directory \.git)'
 	@echo "golint"
 	@! golint $(PKG) | \
 	  grep -vE '(\.pb\.go|embedded\.go|_string\.go|LastInsertId|sql/parser/(yaccpar|sql\.y):)' \
@@ -147,6 +144,9 @@ check:
 	@! gofmt -s -d -l . 2>&1 | grep -vE '^\.git/'
 	@echo "goimports"
 	@! goimports -l . | grep -vF 'No Exceptions'
+	@echo "vet --shadow"
+	@! go tool vet --shadow . 2>&1 | \
+	  grep -vE '(declaration of err shadows|^vet: cannot process directory \.git)'
 
 .PHONY: clean
 clean:
