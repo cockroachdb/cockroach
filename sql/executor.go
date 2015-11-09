@@ -384,11 +384,12 @@ func makeResultFromError(planMaker *planner, err error) driver.Response_Result {
 	return driver.Response_Result{Error: &errString}
 }
 
-// parameters implements the parser.Args interface.
+var _ parser.Args = parameters{}
+
 type parameters []driver.Datum
 
 // Arg implements the parser.Args interface.
-func (p *parameters) Arg(name string) (parser.Datum, bool) {
+func (p parameters) Arg(name string) (parser.Datum, bool) {
 	if len(name) == 0 {
 		// This shouldn't happen unless the parser let through an invalid parameter
 		// specification.
@@ -403,10 +404,10 @@ func (p *parameters) Arg(name string) (parser.Datum, bool) {
 	if err != nil {
 		return nil, false
 	}
-	if i < 1 || int(i) > len(*p) {
+	if i < 1 || int(i) > len(p) {
 		return nil, false
 	}
-	arg := (*p)[i-1].Payload
+	arg := p[i-1].Payload
 	if arg == nil {
 		return parser.DNull, true
 	}
