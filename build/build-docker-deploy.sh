@@ -18,7 +18,7 @@ if [ "${1-}" = "docker" ]; then
     # awkward to do this programmatically, but this should work.
     file cockroach | grep -F 'statically linked' > /dev/null
 
-    mv cockroach build/deploy/cockroach
+    cp cockroach build/deploy/cockroach
 
     exit 0
 fi
