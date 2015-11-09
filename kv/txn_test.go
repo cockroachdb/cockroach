@@ -121,12 +121,27 @@ func BenchmarkTxnWrites(b *testing.B) {
 	}
 }
 
+// disableOwnNodeCertain is used in tests which want to verify uncertainty
+// related logic on single-node installations. In regular operation, trans-
+// actional requests automatically have the "own" NodeID marked as free from
+// uncertainty, which interferes with the tests. The feature is disabled simply
+// by poisoning the gossip NodeID; this may break other functionality which
+// is usually not relevant in uncertainty tests.
+func disableOwnNodeCertain(tc *LocalTestCluster) {
+	desc := tc.distSender.getNodeDescriptor()
+	desc.NodeID = 999
+	if err := tc.distSender.gossip.SetNodeDescriptor(desc); err != nil {
+		panic(err)
+	}
+}
+
 // verifyUncertainty writes values to a key in 5ns intervals and then launches
 // a transaction at each value's timestamp reading that value with
 // the maximumOffset given, verifying in the process that the correct values
 // are read (usually after one transaction restart).
 func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 	s := createTestDB(t)
+	disableOwnNodeCertain(s)
 	defer s.Stop()
 
 	key := []byte("key-test")
@@ -253,6 +268,7 @@ func TestTxnDBUncertainty(t *testing.T) {
 func TestUncertaintyRestarts(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
+	disableOwnNodeCertain(s)
 	defer s.Stop()
 	// Set a large offset so that a busy restart-loop
 	// really shows. Also makes sure that the values
@@ -306,6 +322,7 @@ func TestUncertaintyRestarts(t *testing.T) {
 func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
+	disableOwnNodeCertain(s)
 	defer s.Stop()
 	// Large offset so that any value in the future is an uncertain read.
 	// Also makes sure that the values we write in the future below don't

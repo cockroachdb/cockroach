@@ -365,6 +365,51 @@ func (mdb mockRangeDescriptorDB) firstRange() (*roachpb.RangeDescriptor, error) 
 	return &rs[0], nil
 }
 
+func TestOwnNodeCertain(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	g, s := makeTestGossip(t)
+	defer s()
+	const expNodeID = 42
+	nd := &roachpb.NodeDescriptor{
+		NodeID:  expNodeID,
+		Address: util.MakeUnresolvedAddr("tcp", "foobar:1234"),
+	}
+	if err := g.SetNodeDescriptor(nd); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(expNodeID), nd, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	var act roachpb.NodeList
+	var testFn rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr, getArgs func(addr net.Addr) proto.Message, _ func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
+		ba := getArgs(nil).(*roachpb.BatchRequest)
+		for _, nodeID := range ba.Txn.CertainNodes.Nodes {
+			act.Add(roachpb.NodeID(nodeID))
+		}
+		return []proto.Message{ba.CreateReply()}, nil
+	}
+
+	ctx := &DistSenderContext{
+		RPCSend: testFn,
+		RangeDescriptorDB: mockRangeDescriptorDB(func(_ roachpb.RKey, _ lookupOptions) ([]roachpb.RangeDescriptor, error) {
+			return []roachpb.RangeDescriptor{testRangeDescriptor}, nil
+		}),
+	}
+	ds := NewDistSender(ctx, g)
+	v := roachpb.MakeValueFromString("value")
+	put := roachpb.NewPut(roachpb.Key("a"), v)
+	if _, err := client.SendWrappedWith(ds, nil, roachpb.Header{
+		Txn: &roachpb.Transaction{},
+	}, put); err != nil {
+		t.Fatalf("put encountered error: %s", err)
+	}
+	if expNodes := []int32{expNodeID}; !reflect.DeepEqual(act.Nodes, expNodes) {
+		t.Fatalf("got %v, expected %v", act.Nodes, expNodes)
+	}
+
+}
+
 // TestRetryOnNotLeaderError verifies that the DistSender correctly updates the
 // leader cache and retries when receiving a NotLeaderError.
 func TestRetryOnNotLeaderError(t *testing.T) {
