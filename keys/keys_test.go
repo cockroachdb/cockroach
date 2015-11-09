@@ -19,8 +19,8 @@ package keys
 
 import (
 	"bytes"
-	"strings"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -360,8 +360,8 @@ func TestBatchRange(t *testing.T) {
 func TestPrettyPrint(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	testCases := []struct {
-		key    roachpb.Key
-		exp 	string
+		key roachpb.Key
+		exp string
 	}{
 		// local
 		{StoreIdentKey(), "/Local/Store/storeIdent"},
@@ -376,23 +376,23 @@ func TestPrettyPrint(t *testing.T) {
 		{RangeGCMetadataKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeGCMetadata"},
 		{RangeLastVerificationTimestampKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeLastVerificationTimestamp"},
 		{RangeStatsKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeStats"},
-		
+
 		{MakeRangeKeyPrefix(roachpb.RKey("ok")), "/Local/Range/'ok'"},
 		{RangeDescriptorKey(roachpb.RKey("111")), "/Local/Range/RangeDescriptor/'111'"},
 		{RangeTreeNodeKey(roachpb.RKey("111")), "/Local/Range/RangeTreeNode/'111'"},
 		{TransactionKey(roachpb.Key("111"), []byte("22222")), "/Local/Range/Transaction/addrKey:/'111'/id:\"22222\""},
 
 		{LocalMax, "/Local/Max"},
-		
+
 		// system
 		{roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo")), "/System/Meta2/\"foo\""},
 		{roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo")), "/System/Meta1/\"foo\""},
-		
+
 		{StoreStatusKey(2222), "/System/StatusStore/2222"},
 		{NodeStatusKey(1111), "/System/StatusNode/1111"},
-		
+
 		{SystemMax, "/System/Max"},
-		
+
 		// tabledata
 		{MakeTablePrefix(111), "/User/TableData/111"},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey("foo")), "/User/TableData/42/\"foo\""},
