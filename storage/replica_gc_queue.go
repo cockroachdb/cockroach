@@ -140,7 +140,7 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 			return nil
 		}
 
-		if err := rng.Destroy(); err != nil {
+		if err := rng.Destroy(replyDesc); err != nil {
 			return err
 		}
 	} else if desc.RangeID != replyDesc.RangeID {
