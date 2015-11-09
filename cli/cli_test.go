@@ -40,7 +40,7 @@ func newCLITest() cliTest {
 	// Reset the client context for each test. We don't reset the
 	// pointer (because they are tied into the flags), but instead
 	// overwrite the existing struct's values.
-	*context = *server.NewContext()
+	context.InitDefaults()
 
 	osExit = func(int) {}
 	osStderr = os.Stdout
