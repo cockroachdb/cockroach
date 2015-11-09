@@ -266,7 +266,7 @@ func ExampleTxn_Commit() {
 	// 1/0: ab=2
 }
 
-func ExampleDB_second() {
+func ExampleDB_insecure() {
 	s := &server.TestServer{}
 	s.Ctx = server.NewTestContext()
 	s.Ctx.Insecure = true
