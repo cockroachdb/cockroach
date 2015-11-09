@@ -84,6 +84,9 @@ func (*replicaGCQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
 func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.SystemConfig) error {
+	// Note that the Replicas field of desc is probably out of date, so
+	// we should only use `desc` for its static fields like RangeID and
+	// StartKey (and avoid rng.GetReplica() for the same reason).
 	desc := rng.Desc()
 
 	// Calls to RangeLookup typically use inconsistent reads, but we
