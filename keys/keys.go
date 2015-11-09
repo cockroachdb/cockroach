@@ -24,8 +24,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -373,18 +373,17 @@ func Range(ba roachpb.BatchRequest) roachpb.RSpan {
 }
 
 type dictEntry struct {
-	name string
-	prefix roachpb.Key	
+	name   string
+	prefix roachpb.Key
 	// print the key's pretty value, key has been removed prefix data
 	ppFunc func(key roachpb.Key) string
 }
-
 
 func localStoreKeyPrint(key roachpb.Key) string {
 	if bytes.HasPrefix(key, localStoreIdentSuffix) {
 		return "/storeIdent"
 	}
-	
+
 	return key.String()
 }
 
@@ -397,7 +396,7 @@ func responseCacheKeyPrint(key roachpb.Key) string {
 		fmt.Fprintf(&buf, "/err<%v:%s>", err, key.String())
 		return buf.String()
 	}
-	
+
 	key, rand, err = encoding.DecodeUint64(key)
 	if err != nil {
 		fmt.Fprintf(&buf, "/err<%v:%s>", err, key.String())
@@ -428,7 +427,7 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 		fmt.Fprintf(&buf, "/err<%s>", key.String())
 		return buf.String()
 	}
-	
+
 	// get range id
 	var i int64
 	var err error
@@ -438,11 +437,11 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 		return buf.String()
 	}
 
-	fmt.Fprintf(&buf, "/%s",  parser.DInt(i))
-	
+	fmt.Fprintf(&buf, "/%s", parser.DInt(i))
+
 	// get suffix
 	suffixDict := []struct {
-		name string
+		name   string
 		suffix []byte
 		ppFunc func(key roachpb.Key) string
 	}{
@@ -457,44 +456,44 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 		{name: "RangeGCMetadata", suffix: localRangeGCMetadataSuffix},
 		{name: "RangeLastVerificationTimestamp", suffix: localRangeLastVerificationTimestampSuffix},
 		{name: "RangeStats", suffix: localRangeStatsSuffix},
-	}	
+	}
 	hasSuffix := false
 	for _, s := range suffixDict {
 		if bytes.HasPrefix(key, s.suffix) {
-			fmt.Fprintf(&buf, "/%s",  s.name)
+			fmt.Fprintf(&buf, "/%s", s.name)
 			key = key[len(s.suffix):]
 			if s.ppFunc != nil && len(key) != 0 {
-				fmt.Fprintf(&buf, "%s",  s.ppFunc(key))
+				fmt.Fprintf(&buf, "%s", s.ppFunc(key))
 				return buf.String()
 			}
 			hasSuffix = true
 			break
 		}
 	}
-	
+
 	// get encode values
 	if hasSuffix {
-		fmt.Fprintf(&buf, "%s",  decodeKeyPrint(key))
+		fmt.Fprintf(&buf, "%s", decodeKeyPrint(key))
 	} else {
-		fmt.Fprintf(&buf, "%s",  key.String())
+		fmt.Fprintf(&buf, "%s", key.String())
 	}
-	
+
 	return buf.String()
 }
 
 func localRangeKeyPrint(key roachpb.Key) string {
 	var buf bytes.Buffer
-	
+
 	suffixDict := []struct {
-		name string
+		name   string
 		suffix []byte
-		atEnd bool
+		atEnd  bool
 	}{
 		{name: "RangeDescriptor", suffix: LocalRangeDescriptorSuffix, atEnd: true},
 		{name: "RangeTreeNode", suffix: localRangeTreeNodeSuffix, atEnd: true},
 		{name: "Transaction", suffix: localTransactionSuffix, atEnd: false},
 	}
-	
+
 	for _, s := range suffixDict {
 		if s.atEnd {
 			if bytes.HasSuffix(key, s.suffix) {
@@ -506,7 +505,7 @@ func localRangeKeyPrint(key roachpb.Key) string {
 			begin := bytes.Index(key, s.suffix)
 			if begin > 0 {
 				addrKey := key[:begin]
-				id := key[(begin+len(s.suffix)):]
+				id := key[(begin + len(s.suffix)):]
 				fmt.Fprintf(&buf, "/%s/addrKey:%s/id:%s", s.name, decodeKeyPrint(addrKey), id.String())
 				return buf.String()
 			}
@@ -515,7 +514,6 @@ func localRangeKeyPrint(key roachpb.Key) string {
 	fmt.Fprintf(&buf, "%s", decodeKeyPrint(key))
 	return buf.String()
 }
-
 
 func hexPrint(key roachpb.Key) string {
 	return fmt.Sprintf("/%s", key.String())
@@ -555,7 +553,7 @@ func decodeKeyPrint(key roachpb.Key) string {
 			d = key.String()
 			key = nil
 		}
-		
+
 		if err != nil {
 			fmt.Fprintf(&buf, "/<%v>", err)
 			continue
@@ -565,12 +563,12 @@ func decodeKeyPrint(key roachpb.Key) string {
 	return buf.String()
 }
 
-// Print the key with more human readable 
+// PrettyPrint print the key with more human readable, which organized as follow
 func PrettyPrint(key roachpb.Key) string {
 	keyDict := []struct {
-		name  string
-		start roachpb.Key
-		end	roachpb.Key
+		name    string
+		start   roachpb.Key
+		end     roachpb.Key
 		entries []dictEntry
 	}{
 		{name: "Local", start: localPrefix, end: LocalMax, entries: []dictEntry{
@@ -593,18 +591,16 @@ func PrettyPrint(key roachpb.Key) string {
 
 	var buf bytes.Buffer
 	for _, k := range keyDict {
-		if k.end != nil && (key.Compare(k.start) < 0 || key.Compare(k.end) >0) {
+		if k.end != nil && (key.Compare(k.start) < 0 || key.Compare(k.end) > 0) {
 			continue
-		} 
-		
+		}
+
 		fmt.Fprintf(&buf, "/%s", k.name)
 		if k.end != nil && k.end.Compare(key) == 0 {
 			fmt.Fprintf(&buf, "/Max")
 			return buf.String()
 		}
-		
-		
-		
+
 		hasPrefix := false
 		for _, e := range k.entries {
 			if bytes.HasPrefix(key, e.prefix) {
@@ -617,7 +613,7 @@ func PrettyPrint(key roachpb.Key) string {
 		if !hasPrefix {
 			fmt.Fprintf(&buf, "/%s", key.String())
 		}
-		
+
 		return buf.String()
 	}
 
