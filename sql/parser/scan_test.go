@@ -269,8 +269,8 @@ func TestScanParam(t *testing.T) {
 		if id != PARAM {
 			t.Errorf("%s: expected %d, but found %d", d.sql, PARAM, id)
 		}
-		if d.expected != lval.ival {
-			t.Errorf("%s: expected %d, but found %d", d.sql, d.expected, lval.ival)
+		if d.expected != lval.ival.Val {
+			t.Errorf("%s: expected %d, but found %d", d.sql, d.expected, lval.ival.Val)
 		}
 	}
 }

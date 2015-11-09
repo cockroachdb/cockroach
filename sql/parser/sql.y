@@ -31,7 +31,7 @@ func unimplemented() {
   id             int
   pos            int
   empty          struct{}
-  ival           int64
+  ival           IntVal
   boolVal        bool
   str            string
   strs           []string
@@ -1256,7 +1256,7 @@ numeric_only:
   }
 | signed_iconst
   {
-    $$ = DInt($1)
+    $$ = DInt($1.Val)
   }
 
 // TRUNCATE table relname1, relname2, ...
@@ -2177,11 +2177,11 @@ const_typename:
 opt_numeric_modifiers:
   '(' ICONST ')'
   {
-    $$ = &DecimalType{Prec: int($2)}
+    $$ = &DecimalType{Prec: int($2.Val)}
   }
 | '(' ICONST ',' ICONST ')'
   {
-    $$ = &DecimalType{Prec: int($2), Scale: int($4)}
+    $$ = &DecimalType{Prec: int($2.Val), Scale: int($4.Val)}
   }
 | /* EMPTY */
   {
@@ -2216,7 +2216,7 @@ numeric:
   }
 | FLOAT opt_float
   {
-    $$ = &FloatType{Name: "FLOAT", Prec: int($2)}
+    $$ = &FloatType{Name: "FLOAT", Prec: int($2.Val)}
   }
 | DOUBLE PRECISION
   {
@@ -2253,7 +2253,7 @@ opt_float:
   }
 | /* EMPTY */
   {
-    $$ = 0
+    $$ = IntVal{}
   }
 
 // SQL bit-field data types
@@ -2271,7 +2271,7 @@ const_bit:
 bit_with_length:
   BIT opt_varying '(' ICONST ')'
   {
-    $$ = &IntType{Name: "BIT", N: int($4)}
+    $$ = &IntType{Name: "BIT", N: int($4.Val)}
   }
 
 bit_without_length:
@@ -2294,7 +2294,7 @@ character_with_length:
   character_base '(' ICONST ')'
   {
     $$ = $1
-    $$.(*StringType).N = int($3)
+    $$.(*StringType).N = int($3.Val)
   }
 
 character_without_length:
@@ -3366,7 +3366,7 @@ func_name:
 a_expr_const:
   ICONST
   {
-    $$ = IntVal($1)
+    $$ = &IntVal{Val: $1.Val, Str: $1.Str}
   }
 | FCONST
   {
@@ -3412,11 +3412,11 @@ signed_iconst:
   ICONST
 | '+' ICONST
   {
-    $$ = +$2
+    $$ = $2
   }
 | '-' ICONST
   {
-    $$ = -$2
+    $$ = IntVal{Val: -$2.Val, Str: "-" + $2.Str}
   }
 
 // Name classification hierarchy.

@@ -17,7 +17,7 @@ type sqlSymType struct {
 	id             int
 	pos            int
 	empty          struct{}
-	ival           int64
+	ival           IntVal
 	boolVal        bool
 	str            string
 	strs           []string
@@ -4861,7 +4861,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1258
 		{
-			sqlVAL.expr = DInt(sqlDollar[1].ival)
+			sqlVAL.expr = DInt(sqlDollar[1].ival.Val)
 		}
 	case 201:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
@@ -5832,13 +5832,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:2179
 		{
-			sqlVAL.colType = &DecimalType{Prec: int(sqlDollar[2].ival)}
+			sqlVAL.colType = &DecimalType{Prec: int(sqlDollar[2].ival.Val)}
 		}
 	case 381:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
 		//line sql.y:2183
 		{
-			sqlVAL.colType = &DecimalType{Prec: int(sqlDollar[2].ival), Scale: int(sqlDollar[4].ival)}
+			sqlVAL.colType = &DecimalType{Prec: int(sqlDollar[2].ival.Val), Scale: int(sqlDollar[4].ival.Val)}
 		}
 	case 382:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
@@ -5886,7 +5886,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:2218
 		{
-			sqlVAL.colType = &FloatType{Name: "FLOAT", Prec: int(sqlDollar[2].ival)}
+			sqlVAL.colType = &FloatType{Name: "FLOAT", Prec: int(sqlDollar[2].ival.Val)}
 		}
 	case 390:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -5937,13 +5937,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
 		//line sql.y:2255
 		{
-			sqlVAL.ival = 0
+			sqlVAL.ival = IntVal{}
 		}
 	case 402:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
 		//line sql.y:2273
 		{
-			sqlVAL.colType = &IntType{Name: "BIT", N: int(sqlDollar[4].ival)}
+			sqlVAL.colType = &IntType{Name: "BIT", N: int(sqlDollar[4].ival.Val)}
 		}
 	case 403:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -5956,7 +5956,7 @@ sqldefault:
 		//line sql.y:2295
 		{
 			sqlVAL.colType = sqlDollar[1].colType
-			sqlVAL.colType.(*StringType).N = int(sqlDollar[3].ival)
+			sqlVAL.colType.(*StringType).N = int(sqlDollar[3].ival.Val)
 		}
 	case 409:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
@@ -7422,7 +7422,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3368
 		{
-			sqlVAL.expr = IntVal(sqlDollar[1].ival)
+			sqlVAL.expr = &IntVal{Val: sqlDollar[1].ival.Val, Str: sqlDollar[1].ival.Str}
 		}
 	case 670:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
@@ -7490,13 +7490,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3414
 		{
-			sqlVAL.ival = +sqlDollar[2].ival
+			sqlVAL.ival = sqlDollar[2].ival
 		}
 	case 682:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3418
 		{
-			sqlVAL.ival = -sqlDollar[2].ival
+			sqlVAL.ival = IntVal{Val: -sqlDollar[2].ival.Val, Str: "-" + sqlDollar[2].ival.Str}
 		}
 	case 687:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]

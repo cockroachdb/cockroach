@@ -37,6 +37,9 @@ func TestValues(t *testing.T) {
 
 	unsupp := &parser.RangeCond{}
 
+	intVal := func(v int64) *parser.IntVal {
+		return &parser.IntVal{Val: v}
+	}
 	asRow := func(datums ...parser.Datum) []parser.DTuple {
 		return []parser.DTuple{datums}
 	}
@@ -47,12 +50,12 @@ func TestValues(t *testing.T) {
 		ok   bool
 	}{
 		{
-			parser.Values{{parser.IntVal(vInt)}},
+			parser.Values{{intVal(vInt)}},
 			asRow(parser.DInt(vInt)),
 			true,
 		},
 		{
-			parser.Values{{parser.IntVal(vInt), parser.IntVal(vInt)}},
+			parser.Values{{intVal(vInt), intVal(vInt)}},
 			asRow(parser.DInt(vInt), parser.DInt(vInt)),
 			true,
 		},
