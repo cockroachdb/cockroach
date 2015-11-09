@@ -64,8 +64,8 @@ func createRangeData(r *Replica, t *testing.T) []roachpb.EncodedKey {
 		key roachpb.Key
 		ts  roachpb.Timestamp
 	}{
-		{keys.ResponseCacheKey(r.Desc().RangeID, &roachpb.ClientCmdID{WallTime: 1, Random: 1}), ts0},
-		{keys.ResponseCacheKey(r.Desc().RangeID, &roachpb.ClientCmdID{WallTime: 2, Random: 2}), ts0},
+		{keys.ResponseCacheKey(r.Desc().RangeID, []byte("test"), &roachpb.ClientCmdID{WallTime: 1, Random: 1}), ts0},
+		{keys.ResponseCacheKey(r.Desc().RangeID, []byte("test"), &roachpb.ClientCmdID{WallTime: 2, Random: 2}), ts0},
 		{keys.RaftHardStateKey(r.Desc().RangeID), ts0},
 		{keys.RaftLogKey(r.Desc().RangeID, 1), ts0},
 		{keys.RaftLogKey(r.Desc().RangeID, 2), ts0},
