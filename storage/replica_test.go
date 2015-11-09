@@ -1516,9 +1516,8 @@ func TestRangeResponseCacheStoredTxnRetryError(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
+	key := []byte("a")
 	for i, pastError := range []error{errors.New("boom"), nil} {
-
-		key := []byte("a")
 		txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
 		cmdID := roachpb.ClientCmdID{WallTime: 1, Random: int64(1 + i)}
 		_ = tc.rng.respCache.PutResponse(tc.engine, txn.ID, cmdID, pastError)
@@ -1531,6 +1530,28 @@ func TestRangeResponseCacheStoredTxnRetryError(t *testing.T) {
 		if _, ok := err.(*roachpb.TransactionRetryError); !ok {
 			t.Fatalf("%d: unexpected error %v", i, err)
 		}
+	}
+
+	// Try the same again, this time verifying that the Put will actually
+	// populate the cache appropriately.
+	txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
+	cmdID := roachpb.ClientCmdID{WallTime: 12345, Random: 6789}
+	args := incrementArgs(key, 1)
+	try := func() error {
+		_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
+			CmdID: cmdID,
+			Txn:   txn,
+		}, &args)
+		return err
+	}
+
+	if firstErr := try(); firstErr != nil {
+		t.Fatal(firstErr)
+	}
+	txn.Timestamp.Forward(txn.Timestamp.Add(10, 10)) // can't hurt
+	secondErr := try()
+	if _, ok := secondErr.(*roachpb.TransactionRetryError); !ok {
+		t.Fatal(secondErr)
 	}
 }
 
