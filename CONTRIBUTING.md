@@ -3,9 +3,9 @@
 ### Getting and building
 
 1.  Install the following prerequisites, as necessary:
-    - A C++ compiler that supports C++11 (GCC 4.9+ and clang 3.6+ are known to work). On Mac OS X, Xcode should suffice. 
-    - A [Go environment](http://golang.org/doc/code.html) with a 64-bit version of Go 1.5. You can download the [Go binary](https://golang.org/dl/) directly from the official site. On OS X, you can also use [homebrew](http://brew.sh): `brew install go`. 
-    - Git 1.8+ 
+    - A C++ compiler that supports C++11 (GCC 4.9+ and clang 3.6+ are known to work). On Mac OS X, Xcode should suffice.
+    - A [Go environment](http://golang.org/doc/code.html) with a 64-bit version of Go 1.6. You can download the [Go binary](https://golang.org/dl/) directly from the official site. On OS X, you can also use [homebrew](http://brew.sh): `brew install go`.
+    - Git 1.8+
 
 2.  Get the CockroachDB code:
 
@@ -14,7 +14,7 @@
     cd $GOPATH/src/github.com/cockroachdb/cockroach
     ```
 
-3.  Run `make build`, `make test`, or anything else our Makefile offers. Note that the first time you run `make`, it can take some time to download and install various dependencies. 
+3.  Run `make build`, `make test`, or anything else our Makefile offers. Note that the first time you run `make`, it can take some time to download and install various dependencies.
 
 Note that if you edit a `.proto` or `.ts` file, you will need to manually regenerate the associated `.pb.{go,cc,h}` or `.js` files using `go generate ./...`.
 `go generate` requires a collection of node modules which are installed via npm. If you don't have npm, it typically comes with node. To get it via homebrew:

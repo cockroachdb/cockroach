@@ -596,14 +596,14 @@ func runMVCCDeleteRange(valueBytes int, b *testing.B) {
 			b.Fatal(err)
 		}
 		stopper := stop.NewStopper()
-		rocksdb := NewRocksDB(roachpb.Attributes{}, locDirty, rocksdb.cacheSize,
+		dupRocksdb := NewRocksDB(roachpb.Attributes{}, locDirty, rocksdb.cacheSize,
 			rocksdb.memtableBudget, stopper)
-		if err := rocksdb.Open(); err != nil {
+		if err := dupRocksdb.Open(); err != nil {
 			b.Fatal(err)
 		}
 
 		b.StartTimer()
-		_, err := MVCCDeleteRange(rocksdb, &MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, roachpb.MaxTimestamp, nil)
+		_, err := MVCCDeleteRange(dupRocksdb, &MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, roachpb.MaxTimestamp, nil)
 		if err != nil {
 			b.Fatal(err)
 		}

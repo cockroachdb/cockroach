@@ -48,7 +48,7 @@ buildcache_dir=~/buildcache
 # The tag for the cockroachdb/builder image. If the image is changed
 # (for example, adding "npm"), a new image should be pushed using
 # "build/builder.sh push" and the new tag value placed here.
-tag="20151210-134003"
+tag="20151230-145725"
 
 mkdir -p "${buildcache_dir}"
 du -sh "${buildcache_dir}"

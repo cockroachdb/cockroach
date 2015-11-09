@@ -262,17 +262,17 @@ func (c *Cluster) gossipStores() {
 // required using the allocator.
 func (c *Cluster) prepareActions() {
 	for _, r := range c.ranges {
-		for storeID, replica := range r.replicas {
-			replica.action, replica.priority = r.allocator.ComputeAction(r.zone, &r.desc)
-			if replica.action == storage.AllocatorNoop {
-				replica.rebalance = r.allocator.ShouldRebalance(storeID)
+		for storeID, rep := range r.replicas {
+			rep.action, rep.priority = r.allocator.ComputeAction(r.zone, &r.desc)
+			if rep.action == storage.AllocatorNoop {
+				rep.rebalance = r.allocator.ShouldRebalance(storeID)
 				// Set the priority to 1 so that rebalances will occur in
 				// performActions.
-				replica.priority = 1
+				rep.priority = 1
 			} else {
-				replica.rebalance = false
+				rep.rebalance = false
 			}
-			r.replicas[storeID] = replica
+			r.replicas[storeID] = rep
 		}
 	}
 }
@@ -297,10 +297,10 @@ func (c *Cluster) performActions() bool {
 		var topRangeID roachpb.RangeID
 		var topReplica replica
 		for _, rangeID := range c.rangeIDsByStore[storeID] {
-			replica := c.ranges[rangeID].replicas[storeID]
-			if replica.priority > topReplica.priority {
+			rep := c.ranges[rangeID].replicas[storeID]
+			if rep.priority > topReplica.priority {
 				topRangeID = rangeID
-				topReplica = replica
+				topReplica = rep
 			}
 		}
 
