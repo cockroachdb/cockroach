@@ -21,11 +21,17 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestDesiredAggregateOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)
+
+	extractAggregateFuncs := func(expr parser.Expr) (parser.Expr, []*aggregateFunc, error) {
+		var v extractAggregatesVisitor
+		return v.run(expr)
+	}
 
 	testData := []struct {
 		expr     string

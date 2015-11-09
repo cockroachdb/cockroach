@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-func (s Session) getLocation() (*time.Location, error) {
+func (s *Session) getLocation() (*time.Location, error) {
 	switch t := s.Timezone.(type) {
 	case nil:
 		return time.UTC, nil

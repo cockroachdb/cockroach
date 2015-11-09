@@ -25,23 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// TypeCheckAndNormalizeExpr is a combination of TypeCheck() and
-// ctx.NormalizeExpr(). It returns an error if either of TypeCheck() or
-// ctx.NormalizeExpr() return one, and otherwise returns the Expr
-// returned by ctx.NormalizeExpr().
-func (ctx EvalContext) TypeCheckAndNormalizeExpr(expr Expr) (Expr, error) {
-	if _, err := expr.TypeCheck(); err != nil {
-		return nil, err
-	}
-
-	var err error
-	expr, err = ctx.NormalizeExpr(expr)
-	if err != nil {
-		return nil, err
-	}
-	return expr, nil
-}
-
 // TypeCheck implements the Expr interface.
 func (expr *AndExpr) TypeCheck() (Datum, error) {
 	return typeCheckBooleanExprs(expr.Left, expr.Right)

@@ -24,9 +24,9 @@ import (
 )
 
 func (p *planner) expandSubqueries(expr parser.Expr, columns int) (parser.Expr, error) {
-	v := subqueryVisitor{planner: p, columns: columns}
-	expr = parser.WalkExpr(&v, expr)
-	return expr, v.err
+	p.subqueryVisitor = subqueryVisitor{planner: p, columns: columns}
+	expr = parser.WalkExpr(&p.subqueryVisitor, expr)
+	return expr, p.subqueryVisitor.err
 }
 
 type subqueryVisitor struct {
@@ -53,8 +53,11 @@ func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, par
 		return v, expr
 	}
 
+	// Calling makePlan() might recursively invoke expandSubqueries, so we need a
+	// copy of the planner in order for there to have a separate subqueryVisitor.
+	planMaker := *v.planner
 	var plan planNode
-	if plan, v.err = v.makePlan(subquery.Select); v.err != nil {
+	if plan, v.err = planMaker.makePlan(subquery.Select); v.err != nil {
 		return nil, expr
 	}
 
