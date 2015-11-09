@@ -25,7 +25,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1472,63 +1471,6 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	}
 }
 
-// TestRangeIdempotence verifies that a retry increment with
-// same client command ID receives same reply.
-func TestRangeIdempotence(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-
-	key := []byte("a")
-	txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
-
-	// Run the same increment 100 times, 50 with identical command IDs,
-	// interleaved with 50 using a sequence of different command IDs.
-	const numIncs = 100
-	var wg sync.WaitGroup
-	var count int64
-	incFunc := func(idx int) {
-		defer wg.Done()
-		args := incrementArgs(key, 1)
-		cmdID := roachpb.ClientCmdID{WallTime: 1, Random: int64((idx % 2) * (idx + 100))}
-		resp, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
-			Txn:   txn,
-			CmdID: cmdID,
-		}, &args)
-		reply := resp.(*roachpb.IncrementResponse)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if idx%2 == 0 && reply.NewValue != 1 {
-			t.Errorf("expected all incremented values to be 1; got %d", reply.NewValue)
-		} else if idx%2 == 1 {
-			atomic.AddInt64(&count, reply.NewValue)
-		}
-	}
-
-	wg.Add(numIncs)
-	// The assertions for the even-numbered half of this test look for a
-	// hardcoded value of 1, so we have to make sure the first iteration
-	// that actually runs is even-numbered so that the cached response
-	// for that command ID has a value of 1. Otherwise, N odd-numbered
-	// operations may get scheduled first, run with a different command
-	// ID, and cause even-numbered operations to report something other
-	// than 1, depending on the value of N.
-	incFunc(0)
-	for i := 1; i < numIncs; i++ {
-		go incFunc(i)
-	}
-	// Wait for all to complete.
-	wg.Wait()
-
-	// Verify that all non-repeated client commands incremented the
-	// counter starting at 2 all the way to 51 (sum of sequence = 1325).
-	if count != 1325 {
-		t.Errorf("expected sum of all increments to be 1325; got %d", count)
-	}
-}
-
 // TestRangeResponseCacheReadError verifies that an error is returned to the
 // client in the event that a response cache entry is found but is not
 // decodable.
@@ -1565,34 +1507,29 @@ func TestRangeResponseCacheReadError(t *testing.T) {
 	}
 }
 
-// TestRangeResponseCacheStoredError verifies that if a cached entry contains
-// an error, that error is returned.
-func TestRangeResponseCacheStoredError(t *testing.T) {
+// TestRangeResponseCacheStoredError verifies that if a cached entry is present,
+// a transaction restart error is returned.
+func TestRangeResponseCacheStoredTxnRetryError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
 
-	cmdID := roachpb.ClientCmdID{WallTime: 1, Random: 1}
-	// Write an error into the response cache.
-	incReply := roachpb.IncrementResponse{}
-	br := roachpb.BatchResponse{}
-	br.Add(&incReply)
-	pastError := errors.New("boom")
-	_ = tc.rng.respCache.PutResponse(tc.engine, cmdID,
-		roachpb.ResponseWithError{Reply: &br, Err: pastError})
+	for i, pastError := range []error{errors.New("boom"), nil} {
 
-	key := []byte("a")
-	txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
-	args := incrementArgs(key, 1)
-	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
-		CmdID: cmdID,
-		Txn:   txn,
-	}, &args)
-	if err == nil {
-		t.Fatal("expected to see cached error but got nil")
-	} else if !testutils.IsError(err, pastError.Error()) {
-		t.Fatalf("expected '%s', but got %s", pastError, err)
+		cmdID := roachpb.ClientCmdID{WallTime: 1, Random: int64(1 + i)}
+		_ = tc.rng.respCache.PutResponse(tc.engine, cmdID, pastError)
+
+		key := []byte("a")
+		txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
+		args := incrementArgs(key, 1)
+		_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
+			CmdID: cmdID,
+			Txn:   txn,
+		}, &args)
+		if _, ok := err.(*roachpb.TransactionRetryError); !ok {
+			t.Fatalf("%d: unexpected error %v", i, err)
+		}
 	}
 }
 
