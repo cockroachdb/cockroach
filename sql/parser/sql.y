@@ -3102,12 +3102,18 @@ substr_list:
   { 
     $$ = Exprs{$1, $2, $3}
   }
-| a_expr substr_for substr_from { unimplemented() }
+| a_expr substr_for substr_from
+  { 
+    $$ = Exprs{$1, $3, $2}
+  }
 | a_expr substr_from
   { 
     $$ = Exprs{$1, $2}
   }
-| a_expr substr_for { unimplemented() }
+| a_expr substr_for
+  { 
+    $$ = Exprs{$1, DInt(0), $2}
+  }
 | expr_list 
   { 
     $$ = $1

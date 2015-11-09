@@ -475,8 +475,12 @@ func TestParse2(t *testing.T) {
 		// Special substring syntax
 		{`SELECT SUBSTRING('RoacH' from 2 for 3)`,
 			`SELECT SUBSTRING('RoacH', 2, 3)`},
+		{`SELECT SUBSTRING('RoacH' for 2 from 3)`,
+			`SELECT SUBSTRING('RoacH', 3, 2)`},
 		{`SELECT SUBSTRING('RoacH' from 2)`,
 			`SELECT SUBSTRING('RoacH', 2)`},
+		{`SELECT SUBSTRING('RoacH' for 3)`,
+			`SELECT SUBSTRING('RoacH', 0, 3)`},
 		{`SELECT SUBSTRING('f(oabaroob' from '\(o(.)b')`,
 			`SELECT SUBSTRING('f(oabaroob', e'\\(o(.)b')`},
 		{`SELECT SUBSTRING('f(oabaroob' from '+(o(.)b' for '+')`,
