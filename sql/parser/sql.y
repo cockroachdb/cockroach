@@ -143,7 +143,7 @@ func unimplemented() {
 %type <qnames> qualified_name_list
 %type <qname> any_name
 %type <qnames> any_name_list
-%type <exprs> expr_list extract_list
+%type <exprs> expr_list extract_list substr_list
 %type <indirect> attrs
 %type <selExprs> target_list opt_target_list
 %type <updateExprs> set_clause_list
@@ -160,9 +160,9 @@ func unimplemented() {
 %type <str> join_type
 
 %type <empty> overlay_list position_list
-%type <empty> substr_list trim_list
+%type <empty> trim_list
 %type <empty> opt_interval interval_second
-%type <empty> overlay_placing substr_from substr_for
+%type <empty> overlay_placing
 
 %type <boolVal> opt_unique opt_column
 
@@ -186,6 +186,7 @@ func unimplemented() {
 %type <expr>  where_clause
 %type <indirectElem> indirection_elem
 %type <expr>  a_expr b_expr c_expr a_expr_const
+%type <expr>  substr_from substr_for
 %type <expr>  in_expr
 %type <expr>  having_clause
 %type <expr>  array_expr
@@ -2831,7 +2832,10 @@ func_expr_common_subexpr:
   }
 | OVERLAY '(' overlay_list ')' { unimplemented() }
 | POSITION '(' position_list ')' { unimplemented() }
-| SUBSTRING '(' substr_list ')' { unimplemented() }
+| SUBSTRING '(' substr_list ')' 
+  { 
+    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3} 
+  }
 | TREAT '(' a_expr AS typename ')' { unimplemented() }
 | TRIM '(' BOTH trim_list ')' { unimplemented() }
 | TRIM '(' LEADING trim_list ')' { unimplemented() }
@@ -3094,18 +3098,42 @@ position_list:
 // here, and convert the SQL9x style to the generic list for further
 // processing. - thomas 2000-11-28
 substr_list:
-  a_expr substr_from substr_for { unimplemented() }
-| a_expr substr_for substr_from { unimplemented() }
-| a_expr substr_from { unimplemented() }
-| a_expr substr_for { unimplemented() }
-| expr_list { unimplemented() }
-| /* EMPTY */ {}
+  a_expr substr_from substr_for 
+  { 
+    $$ = Exprs{$1, $2, $3}
+  }
+| a_expr substr_for substr_from
+  { 
+    $$ = Exprs{$1, $3, $2}
+  }
+| a_expr substr_from
+  { 
+    $$ = Exprs{$1, $2}
+  }
+| a_expr substr_for
+  { 
+    $$ = Exprs{$1, DInt(1), $2}
+  }
+| expr_list 
+  { 
+    $$ = $1
+  }
+| /* EMPTY */ 
+  {
+    $$ = nil
+  }
 
 substr_from:
-  FROM a_expr { unimplemented() }
+  FROM a_expr 
+  {
+    $$ = $2
+  }
 
 substr_for:
-  FOR a_expr { unimplemented() }
+  FOR a_expr
+  {
+    $$ = $2
+  }
 
 trim_list:
   a_expr FROM expr_list { unimplemented() }

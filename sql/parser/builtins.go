@@ -298,7 +298,7 @@ var builtins = map[string][]builtin{
 			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
 				s := string(args[0].(DString))
 				pattern := string(args[1].(DString))
-				return regexpExtract(ctx, s, pattern)
+				return regexpExtract(ctx, s, pattern, `\`)
 			},
 		},
 	},
@@ -893,6 +893,25 @@ var substringImpls = []builtin{
 			return str[start:end], nil
 		},
 	},
+	{
+		types:      typeList{stringType, stringType},
+		returnType: DummyString,
+		fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+			s := string(args[0].(DString))
+			pattern := string(args[1].(DString))
+			return regexpExtract(ctx, s, pattern, `\`)
+		},
+	},
+	{
+		types:      typeList{stringType, stringType, stringType},
+		returnType: DummyString,
+		fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+			s := string(args[0].(DString))
+			pattern := string(args[1].(DString))
+			escape := string(args[2].(DString))
+			return regexpExtract(ctx, s, pattern, escape)
+		},
+	},
 }
 
 var ceilImpl = floatBuiltin1(func(x float64) (Datum, error) {
@@ -990,17 +1009,22 @@ func datumToString(datum Datum) (string, error) {
 	return "", fmt.Errorf("argument type unsupported: %s", datum.Type())
 }
 
-type regexpKey struct {
+type regexpEscapeKey struct {
 	sqlPattern string
-	sqlFlags   string
+	sqlEscape  string
 }
 
-func (k regexpKey) pattern() (string, error) {
-	return regexpEvalFlags(k.sqlPattern, k.sqlFlags)
+func (k regexpEscapeKey) pattern() (string, error) {
+	pattern := k.sqlPattern
+	if k.sqlEscape != `\` {
+		pattern = strings.Replace(pattern, `\`, `\\`, -1)
+		pattern = strings.Replace(pattern, k.sqlEscape, `\`, -1)
+	}
+	return pattern, nil
 }
 
-func regexpExtract(ctx EvalContext, s, pattern string) (Datum, error) {
-	patternRe, err := ctx.ReCache.GetRegexp(regexpKey{pattern, ""})
+func regexpExtract(ctx EvalContext, s, pattern, escape string) (Datum, error) {
+	patternRe, err := ctx.ReCache.GetRegexp(regexpEscapeKey{pattern, escape})
 	if err != nil {
 		return nil, err
 	}
@@ -1016,10 +1040,19 @@ func regexpExtract(ctx EvalContext, s, pattern string) (Datum, error) {
 	return DString(match[0]), nil
 }
 
+type regexpFlagKey struct {
+	sqlPattern string
+	sqlFlags   string
+}
+
+func (k regexpFlagKey) pattern() (string, error) {
+	return regexpEvalFlags(k.sqlPattern, k.sqlFlags)
+}
+
 var replaceSubRe = regexp.MustCompile(`\\[&1-9]`)
 
 func regexpReplace(ctx EvalContext, s, pattern, to, sqlFlags string) (Datum, error) {
-	patternRe, err := ctx.ReCache.GetRegexp(regexpKey{pattern, sqlFlags})
+	patternRe, err := ctx.ReCache.GetRegexp(regexpFlagKey{pattern, sqlFlags})
 	if err != nil {
 		return nil, err
 	}
