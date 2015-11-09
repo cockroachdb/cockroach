@@ -1025,8 +1025,9 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// Create a new batch for the command to ensure all or nothing semantics.
 	btch := r.store.Engine().NewBatch()
 
-	// Check the response cache for this batch to ensure idempotency.
-	if ba.IsWrite() {
+	// Check the response cache for this batch to ensure idempotency. Only applies
+	// to transactional requests.
+	if ba.IsWrite() && ba.Txn != nil {
 		if ba.CmdID == roachpb.ZeroCmdID {
 			return btch, nil, nil, util.Errorf("write request without CmdID: %s", ba)
 		}
@@ -1118,10 +1119,13 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			btch.Close()
 			btch = r.store.Engine().NewBatch()
 		}
-		if err := r.respCache.PutResponse(btch, ba.CmdID,
-			roachpb.ResponseWithError{Reply: br, Err: err}); err != nil {
-			// TODO(tschottdorf): ReplicaCorruptionError.
-			log.Fatalc(ctx, "putting a response cache entry in a batch should never fail: %s", err)
+		// Only transactional requests have replay protection.
+		if ba.Txn != nil {
+			if err := r.respCache.PutResponse(btch, ba.CmdID,
+				roachpb.ResponseWithError{Reply: br, Err: err}); err != nil {
+				// TODO(tschottdorf): ReplicaCorruptionError.
+				log.Fatalc(ctx, "putting a response cache entry in a batch should never fail: %s", err)
+			}
 		}
 	}
 

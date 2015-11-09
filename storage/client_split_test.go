@@ -205,7 +205,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 // TestStoreRangeSplit executes a split of a range and verifies that the
 // resulting ranges respond to the right key ranges and that their stats
 // and response caches have been properly accounted for.
-func TestStoreRangeSplit(t *testing.T) {
+func TestStoreRangeSplitIdempotency(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
@@ -226,9 +226,12 @@ func TestStoreRangeSplit(t *testing.T) {
 	// Increments are a good way of testing the response cache. Up here, we
 	// address them to the original range, then later to the one that contains
 	// the key.
+	txn := roachpb.NewTransaction("test", []byte("c"), 10, roachpb.SERIALIZABLE,
+		store.Clock().Now(), 0)
 	lCmdID := roachpb.ClientCmdID{WallTime: 123, Random: 423}
 	lIncArgs := incrementArgs([]byte("apoptosis"), 100)
 	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+		Txn:   txn,
 		CmdID: lCmdID,
 	}, &lIncArgs); err != nil {
 		t.Fatal(err)
@@ -236,6 +239,7 @@ func TestStoreRangeSplit(t *testing.T) {
 	rIncArgs := incrementArgs([]byte("wobble"), 10)
 	rCmdID := roachpb.ClientCmdID{WallTime: 12, Random: 42}
 	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+		Txn:   txn,
 		CmdID: rCmdID,
 	}, &rIncArgs); err != nil {
 		t.Fatal(err)
@@ -293,6 +297,7 @@ func TestStoreRangeSplit(t *testing.T) {
 	// Send out an increment request copied from above (same ClientCmdID) which
 	// remains in the old range.
 	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+		Txn:   txn,
 		CmdID: lCmdID,
 	}, &lIncArgs); err != nil {
 		t.Fatal(err)
@@ -304,6 +309,7 @@ func TestStoreRangeSplit(t *testing.T) {
 	// now to the newly created range (which should hold that key).
 	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: newRng.Desc().RangeID,
+		Txn:     txn,
 		CmdID:   rCmdID,
 	}, &rIncArgs); err != nil {
 		t.Fatal(err)
