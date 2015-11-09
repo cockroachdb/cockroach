@@ -21,9 +21,11 @@ package keys
 import (
 	"bytes"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -369,4 +371,256 @@ func Range(ba roachpb.BatchRequest) roachpb.RSpan {
 		}
 	}
 	return roachpb.RSpan{Key: from, EndKey: to}
+}
+
+type dictEntry struct {
+	name string
+	prefix roachpb.Key	
+	// print the key's pretty value, key has been removed prefix data
+	ppFunc func(key roachpb.Key) string
+}
+
+
+func localStoreKeyPrint(key roachpb.Key) string {
+	if bytes.HasPrefix(key, localStoreIdentSuffix) {
+		return "/storeIdent"
+	}
+	
+	return key.String()
+}
+
+func responseCacheKeyPrint(key roachpb.Key) string {
+	var buf bytes.Buffer
+	var wallTime, rand uint64
+	var err error
+	key, wallTime, err = encoding.DecodeUvarint(key)
+	if err != nil {
+		fmt.Fprintf(&buf, "/err<%v:%s>", err, key.String())
+		return buf.String()
+	}
+	
+	key, rand, err = encoding.DecodeUint64(key)
+	if err != nil {
+		fmt.Fprintf(&buf, "/err<%v:%s>", err, key.String())
+		return buf.String()
+	}
+
+	fmt.Fprintf(&buf, "/WallTime:%d/Random:%d", wallTime, rand)
+	return buf.String()
+}
+
+func raftLogKeyPrint(key roachpb.Key) string {
+	var buf bytes.Buffer
+	var logIndex uint64
+	var err error
+	key, logIndex, err = encoding.DecodeUint64(key)
+	if err != nil {
+		fmt.Fprintf(&buf, "/err<%v:%s>", err, key.String())
+		return buf.String()
+	}
+
+	fmt.Fprintf(&buf, "/logIndex:%d", logIndex)
+	return buf.String()
+}
+
+func localRangeIDKeyPrint(key roachpb.Key) string {
+	var buf bytes.Buffer
+	if encoding.PeekType(key) != encoding.Int {
+		fmt.Fprintf(&buf, "/err<%s>", key.String())
+		return buf.String()
+	}
+	
+	// get range id
+	var i int64
+	var err error
+	key, i, err = encoding.DecodeVarint(key)
+	if err != nil {
+		fmt.Fprintf(&buf, "/err<%v:%s>", err, key.String())
+		return buf.String()
+	}
+
+	fmt.Fprintf(&buf, "/%s",  parser.DInt(i))
+	
+	// get suffix
+	suffixDict := []struct {
+		name string
+		suffix []byte
+		ppFunc func(key roachpb.Key) string
+	}{
+		{name: "ResponseCache", suffix: LocalResponseCacheSuffix, ppFunc: responseCacheKeyPrint},
+		{name: "RaftLeaderLease", suffix: localRaftLeaderLeaseSuffix},
+		{name: "RaftTombstone", suffix: localRaftTombstoneSuffix},
+		{name: "RaftHardState", suffix: localRaftHardStateSuffix},
+		{name: "RaftAppliedIndex", suffix: localRaftAppliedIndexSuffix},
+		{name: "RaftLog", suffix: localRaftLogSuffix, ppFunc: raftLogKeyPrint},
+		{name: "RaftTruncatedState", suffix: localRaftTruncatedStateSuffix},
+		{name: "RaftLastIndex", suffix: localRaftLastIndexSuffix},
+		{name: "RangeGCMetadata", suffix: localRangeGCMetadataSuffix},
+		{name: "RangeLastVerificationTimestamp", suffix: localRangeLastVerificationTimestampSuffix},
+		{name: "RangeStats", suffix: localRangeStatsSuffix},
+	}	
+	hasSuffix := false
+	for _, s := range suffixDict {
+		if bytes.HasPrefix(key, s.suffix) {
+			fmt.Fprintf(&buf, "/%s",  s.name)
+			key = key[len(s.suffix):]
+			if s.ppFunc != nil && len(key) != 0 {
+				fmt.Fprintf(&buf, "%s",  s.ppFunc(key))
+				return buf.String()
+			}
+			hasSuffix = true
+			break
+		}
+	}
+	
+	// get encode values
+	if hasSuffix {
+		fmt.Fprintf(&buf, "%s",  decodeKeyPrint(key))
+	} else {
+		fmt.Fprintf(&buf, "%s",  key.String())
+	}
+	
+	return buf.String()
+}
+
+func localRangeKeyPrint(key roachpb.Key) string {
+	var buf bytes.Buffer
+	
+	suffixDict := []struct {
+		name string
+		suffix []byte
+		atEnd bool
+	}{
+		{name: "RangeDescriptor", suffix: LocalRangeDescriptorSuffix, atEnd: true},
+		{name: "RangeTreeNode", suffix: localRangeTreeNodeSuffix, atEnd: true},
+		{name: "Transaction", suffix: localTransactionSuffix, atEnd: false},
+	}
+	
+	for _, s := range suffixDict {
+		if s.atEnd {
+			if bytes.HasSuffix(key, s.suffix) {
+				key = key[:len(key)-len(s.suffix)]
+				fmt.Fprintf(&buf, "/%s%s", s.name, decodeKeyPrint(key))
+				return buf.String()
+			}
+		} else {
+			begin := bytes.Index(key, s.suffix)
+			if begin > 0 {
+				addrKey := key[:begin]
+				id := key[(begin+len(s.suffix)):]
+				fmt.Fprintf(&buf, "/%s/addrKey:%s/id:%s", s.name, decodeKeyPrint(addrKey), id.String())
+				return buf.String()
+			}
+		}
+	}
+	fmt.Fprintf(&buf, "%s", decodeKeyPrint(key))
+	return buf.String()
+}
+
+
+func hexPrint(key roachpb.Key) string {
+	return fmt.Sprintf("/%s", key.String())
+}
+
+// TableDataPrefix
+func decodeKeyPrint(key roachpb.Key) string {
+	var buf bytes.Buffer
+	for k := 0; len(key) > 0; k++ {
+		var d interface{}
+		var err error
+		switch encoding.PeekType(key) {
+		case encoding.Null:
+			key, _ = encoding.DecodeIfNull(key)
+			d = parser.DNull
+		case encoding.NotNull:
+			key, _ = encoding.DecodeIfNotNull(key)
+			d = "#"
+		case encoding.Int:
+			var i int64
+			key, i, err = encoding.DecodeVarint(key)
+			d = parser.DInt(i)
+		case encoding.Float:
+			var f float64
+			key, f, err = encoding.DecodeFloat(key, nil)
+			d = parser.DFloat(f)
+		case encoding.Bytes:
+			var s string
+			key, s, err = encoding.DecodeString(key, nil)
+			d = parser.DString(s)
+		case encoding.Time:
+			var t time.Time
+			key, t, err = encoding.DecodeTime(key)
+			d = parser.DTimestamp{Time: t}
+		default:
+			// This shouldn't ever happen, but if it does let the loop exit.
+			d = key.String()
+			key = nil
+		}
+		
+		if err != nil {
+			fmt.Fprintf(&buf, "/<%v>", err)
+			continue
+		}
+		fmt.Fprintf(&buf, "/%s", d)
+	}
+	return buf.String()
+}
+
+// Print the key with more human readable 
+func PrettyPrint(key roachpb.Key) string {
+	keyDict := []struct {
+		name  string
+		start roachpb.Key
+		end	roachpb.Key
+		entries []dictEntry
+	}{
+		{name: "Local", start: localPrefix, end: LocalMax, entries: []dictEntry{
+			{name: "Store", prefix: roachpb.Key(localStorePrefix), ppFunc: localStoreKeyPrint},
+			{name: "RangeID", prefix: roachpb.Key(LocalRangeIDPrefix), ppFunc: localRangeIDKeyPrint},
+			{name: "Range", prefix: LocalRangePrefix, ppFunc: localRangeKeyPrint},
+		}},
+		{name: "System", start: SystemPrefix, end: SystemMax, entries: []dictEntry{
+			{name: "Meta2", prefix: Meta2Prefix, ppFunc: hexPrint},
+			{name: "Meta1", prefix: Meta1Prefix, ppFunc: hexPrint},
+			//{name: "Meta", prefix: MetaPrefix},
+			{name: "StatusStore", prefix: StatusStorePrefix, ppFunc: decodeKeyPrint},
+			{name: "StatusNode", prefix: StatusNodePrefix, ppFunc: decodeKeyPrint},
+			//{name: "Status", prefix: StatusPrefix},
+		}},
+		{name: "User", start: TableDataPrefix, end: nil, entries: []dictEntry{
+			{name: "TableData", prefix: TableDataPrefix, ppFunc: decodeKeyPrint},
+		}},
+	}
+
+	var buf bytes.Buffer
+	for _, k := range keyDict {
+		if k.end != nil && (key.Compare(k.start) < 0 || key.Compare(k.end) >0) {
+			continue
+		} 
+		
+		fmt.Fprintf(&buf, "/%s", k.name)
+		if k.end != nil && k.end.Compare(key) == 0 {
+			fmt.Fprintf(&buf, "/Max")
+			return buf.String()
+		}
+		
+		
+		
+		hasPrefix := false
+		for _, e := range k.entries {
+			if bytes.HasPrefix(key, e.prefix) {
+				hasPrefix = true
+				key = key[len(e.prefix):]
+				fmt.Fprintf(&buf, "/%s%s", e.name, e.ppFunc(key))
+				break
+			}
+		}
+		if !hasPrefix {
+			fmt.Fprintf(&buf, "/%s", key.String())
+		}
+		
+		return buf.String()
+	}
+
+	return key.String()
 }
