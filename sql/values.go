@@ -34,7 +34,7 @@ func (p *planner) Values(n parser.Values) (planNode, error) {
 	for _, tuple := range n {
 		for i := range tuple {
 			var err error
-			tuple[i], err = p.evalCtx.TypeCheckAndNormalizeExpr(tuple[i])
+			tuple[i], err = p.parser.TypeCheckAndNormalizeExpr(p.evalCtx, tuple[i])
 			if err != nil {
 				return nil, err
 			}

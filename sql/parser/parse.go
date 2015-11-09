@@ -55,13 +55,55 @@ const (
 	Modern
 )
 
+// Parser wraps a scanner, parser and other utilities present in the parser
+// package.
+type Parser struct {
+	scanner          scanner
+	parserImpl       sqlParserImpl
+	argVisitor       argVisitor
+	normalizeVisitor normalizeVisitor
+}
+
+// Parse parses the sql and returns a list of statements.
+func (p *Parser) Parse(sql string, syntax Syntax) (StatementList, error) {
+	p.scanner.init(sql, syntax)
+	if p.parserImpl.Parse(&p.scanner) != 0 {
+		return nil, errors.New(p.scanner.lastError)
+	}
+	return p.scanner.stmts, nil
+}
+
+// FillArgs replaces any placeholder nodes in the expression with arguments
+// supplied with the query.
+func (p *Parser) FillArgs(stmt Statement, args Args) error {
+	p.argVisitor = argVisitor{args: args}
+	WalkStmt(&p.argVisitor, stmt)
+	return p.argVisitor.err
+}
+
+// NormalizeExpr is wrapper around ctx.NormalizeExpr which avoids allocation of
+// a normalizeVisitor.
+func (p *Parser) NormalizeExpr(ctx EvalContext, expr Expr) (Expr, error) {
+	p.normalizeVisitor = normalizeVisitor{ctx: ctx}
+	expr = WalkExpr(&p.normalizeVisitor, expr)
+	return expr, p.normalizeVisitor.err
+}
+
+// TypeCheckAndNormalizeExpr is a combination of TypeCheck() and
+// ctx.NormalizeExpr(). It returns an error if either of TypeCheck() or
+// ctx.NormalizeExpr() return one, and otherwise returns the Expr returned by
+// ctx.NormalizeExpr().
+func (p *Parser) TypeCheckAndNormalizeExpr(ctx EvalContext, expr Expr) (Expr, error) {
+	if _, err := expr.TypeCheck(); err != nil {
+		return nil, err
+	}
+	return p.NormalizeExpr(ctx, expr)
+}
+
 // Parse parses the sql and returns a list of statements.
 func Parse(sql string, syntax Syntax) (StatementList, error) {
-	s := newScanner(sql, syntax)
-	if sqlParse(s) != 0 {
-		return nil, errors.New(s.lastError)
-	}
-	return s.stmts, nil
+	var p Parser
+	return p.Parse(sql, syntax)
 }
 
 // ParseTraditional is short-hand for Parse(sql, Traditional)
