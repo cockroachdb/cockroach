@@ -1028,41 +1028,15 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 		if ba.CmdID == roachpb.ZeroCmdID {
 			return btch, nil, nil, util.Errorf("write request without CmdID: %s", ba)
 		}
-		if replyWithErr, readErr := r.respCache.GetResponse(btch, ba.CmdID); readErr != nil {
+		if isCached, readErr := r.respCache.GetResponse(btch, ba.CmdID); readErr != nil {
 			return btch, nil, nil, newReplicaCorruptionError(util.Errorf("could not read from response cache"), readErr)
-		} else if replyWithErr.Reply != nil {
-			// TODO(tschottdorf): this is a hack to avoid wrong replies served
-			// back. See #2297. Not 100% correct, only correct enough to get
-			// tests passing (multi-range requests going wrong).
-			// Treat RangeKeyMismatchError specially. We don't want the correct
-			// range to pretend it's mismatching. All other errors have no
-			// sanity check as to whether they actually belong to the request,
-			// there's no information to deduce that from.
-			ok := true
-			if _, isMismatch := replyWithErr.Err.(*roachpb.RangeKeyMismatchError); isMismatch {
-				ok = false
+		} else if isCached {
+			if log.V(1) {
+				log.Infoc(ctx, "found response cache entry for %+v", ba.CmdID)
 			}
-			if ok && replyWithErr.Err == nil {
-				ok = len(replyWithErr.Reply.Responses) == len(ba.Requests)
-				for i, union := range replyWithErr.Reply.Responses {
-					if !ok {
-						break
-					}
-					args := ba.Requests[i].GetInner()
-					reply := union.GetInner()
-					ok = fmt.Sprintf("%T", args.CreateReply()) == fmt.Sprintf("%T", reply)
-				}
-			}
-			if ok {
-				if log.V(1) {
-					log.Infoc(ctx, "found response cache entry for %+v", ba.CmdID)
-				}
-				// We successfully read from the response cache, so return whatever error
-				// was present in the cached entry (if any).
-				return btch, replyWithErr.Reply, nil, replyWithErr.Err
-			} else if replyWithErr.Err == nil {
-				log.Warningf("TODO(tschottdorf): #2297: %s hit cache for: <%s,%T>", ba, replyWithErr.Reply, replyWithErr.Err)
-			}
+			// We successfully read from the response cache, so let the
+			// transaction restart.
+			return btch, nil, nil, roachpb.NewTransactionRetryError(ba.Txn)
 		}
 	}
 
@@ -1118,10 +1092,9 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 		}
 		// Only transactional requests have replay protection.
 		if ba.Txn != nil {
-			if err := r.respCache.PutResponse(btch, ba.CmdID,
-				roachpb.ResponseWithError{Reply: br, Err: err}); err != nil {
+			if putErr := r.respCache.PutResponse(btch, ba.CmdID, err); putErr != nil {
 				// TODO(tschottdorf): ReplicaCorruptionError.
-				log.Fatalc(ctx, "putting a response cache entry in a batch should never fail: %s", err)
+				log.Fatalc(ctx, "putting a response cache entry in a batch should never fail: %s", putErr)
 			}
 		}
 	}
