@@ -477,10 +477,10 @@ var evalTupleEQ = cmpOp{
 		for i := range left {
 			d, err := evalComparison(ctx, EQ, left[i], right[i])
 			if err != nil {
-				return DummyBool, err
+				return DBool(false), err
 			}
 			if v, err := getBool(d); err != nil {
-				return DummyBool, err
+				return DBool(false), err
 			} else if !v {
 				return v, nil
 			}
@@ -539,7 +539,7 @@ var defaultContext = EvalContext{
 func (ctx EvalContext) makeDDate(t time.Time) (DDate, error) {
 	loc, err := ctx.GetLocation()
 	if err != nil {
-		return DummyDate, err
+		return DDate(0), err
 	}
 	year, month, day := t.In(loc).Date()
 	secs := time.Date(year, month, day, 0, 0, 0, 0, time.UTC).Unix()
@@ -1247,7 +1247,7 @@ func ParseDate(s DString) (DDate, error) {
 	// No need to ParseInLocation here because we're only parsing dates.
 	t, err := time.Parse(dateFormat, string(s))
 	if err != nil {
-		return DummyDate, err
+		return DDate(0), err
 	}
 	return defaultContext.makeDDate(t)
 }
@@ -1258,7 +1258,7 @@ func (ctx EvalContext) ParseTimestamp(s DString) (DTimestamp, error) {
 	if ctx.GetLocation != nil {
 		var err error
 		if loc, err = ctx.GetLocation(); err != nil {
-			return DummyTimestamp, err
+			return DTimestamp{}, err
 		}
 	}
 
@@ -1277,7 +1277,7 @@ func (ctx EvalContext) ParseTimestamp(s DString) (DTimestamp, error) {
 		}
 	}
 
-	return DummyTimestamp, err
+	return DTimestamp{}, err
 }
 
 type likeKey string
