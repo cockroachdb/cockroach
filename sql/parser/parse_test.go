@@ -480,7 +480,7 @@ func TestParse2(t *testing.T) {
 		{`SELECT SUBSTRING('RoacH' from 2)`,
 			`SELECT SUBSTRING('RoacH', 2)`},
 		{`SELECT SUBSTRING('RoacH' for 3)`,
-			`SELECT SUBSTRING('RoacH', 0, 3)`},
+			`SELECT SUBSTRING('RoacH', 1, 3)`},
 		{`SELECT SUBSTRING('f(oabaroob' from '\(o(.)b')`,
 			`SELECT SUBSTRING('f(oabaroob', e'\\(o(.)b')`},
 		{`SELECT SUBSTRING('f(oabaroob' from '+(o(.)b' for '+')`,

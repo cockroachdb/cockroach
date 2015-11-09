@@ -3112,7 +3112,7 @@ substr_list:
   }
 | a_expr substr_for
   { 
-    $$ = Exprs{$1, DInt(0), $2}
+    $$ = Exprs{$1, DInt(1), $2}
   }
 | expr_list 
   { 

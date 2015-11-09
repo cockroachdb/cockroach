@@ -7143,7 +7143,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3114
 		{
-			sqlVAL.exprs = Exprs{sqlDollar[1].expr, DInt(0), sqlDollar[2].expr}
+			sqlVAL.exprs = Exprs{sqlDollar[1].expr, DInt(1), sqlDollar[2].expr}
 		}
 	case 620:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
