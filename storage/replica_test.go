@@ -1493,8 +1493,8 @@ func TestRangeResponseCacheReadError(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Overwrite repsonse cache entry with garbage for the last op.
-	key := keys.ResponseCacheKey(tc.rng.Desc().RangeID, &cmdID)
+	// Overwrite response cache entry with garbage for the last op.
+	key := keys.ResponseCacheKey(tc.rng.Desc().RangeID, txn.ID, &cmdID)
 	err := engine.MVCCPut(tc.engine, nil, key, roachpb.ZeroTimestamp, roachpb.MakeValueFromString("\xff"), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1518,11 +1518,11 @@ func TestRangeResponseCacheStoredTxnRetryError(t *testing.T) {
 
 	for i, pastError := range []error{errors.New("boom"), nil} {
 
-		cmdID := roachpb.ClientCmdID{WallTime: 1, Random: int64(1 + i)}
-		_ = tc.rng.respCache.PutResponse(tc.engine, cmdID, pastError)
-
 		key := []byte("a")
 		txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
+		cmdID := roachpb.ClientCmdID{WallTime: 1, Random: int64(1 + i)}
+		_ = tc.rng.respCache.PutResponse(tc.engine, txn.ID, cmdID, pastError)
+
 		args := incrementArgs(key, 1)
 		_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			CmdID: cmdID,
