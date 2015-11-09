@@ -296,25 +296,23 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 
 	// Send out an increment request copied from above (same ClientCmdID) which
 	// remains in the old range.
-	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+	_, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		Txn:   txn,
 		CmdID: lCmdID,
-	}, &lIncArgs); err != nil {
-		t.Fatal(err)
-	} else if lIncReply := reply.(*roachpb.IncrementResponse); lIncReply.NewValue != 100 {
-		t.Errorf("response cache broken in old range, expected %d but got %d", lIncArgs.Increment, lIncReply.NewValue)
+	}, &lIncArgs)
+	if _, ok := err.(*roachpb.TransactionRetryError); !ok {
+		t.Fatal("unexpected response cache miss")
 	}
 
 	// Send out the same increment copied from above (same ClientCmdID), but
 	// now to the newly created range (which should hold that key).
-	if reply, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+	_, err = client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: newRng.Desc().RangeID,
 		Txn:     txn,
 		CmdID:   rCmdID,
-	}, &rIncArgs); err != nil {
-		t.Fatal(err)
-	} else if rIncReply := reply.(*roachpb.IncrementResponse); rIncReply.NewValue != 10 {
-		t.Errorf("response cache not copied correctly to new range, expected %d but got %d", rIncArgs.Increment, rIncReply.NewValue)
+	}, &rIncArgs)
+	if _, ok := err.(*roachpb.TransactionRetryError); !ok {
+		t.Fatal("unexpected response cache miss")
 	}
 
 	// Compare stats of split ranges to ensure they are non zero and

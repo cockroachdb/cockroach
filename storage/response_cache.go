@@ -19,6 +19,7 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -29,6 +30,8 @@ import (
 )
 
 type cmdIDKey string
+
+var errEmptyCmdID = errors.New("empty CommandID used in response cache")
 
 func makeCmdIDKey(cmdID roachpb.ClientCmdID) cmdIDKey {
 	buf := make([]byte, 0, 16)
@@ -76,25 +79,19 @@ func (rc *ResponseCache) ClearData(e engine.Engine) error {
 // If the response is not found, nil is returned for both the response
 // and its error. In all cases, the third return value is the error
 // returned from the engine when reading the on-disk cache.
-func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID roachpb.ClientCmdID) (roachpb.ResponseWithError, error) {
+func (rc *ResponseCache) GetResponse(e engine.Engine, cmdID roachpb.ClientCmdID) (bool, error) {
 	// Do nothing if command ID is empty.
 	if cmdID.IsEmpty() {
-		return roachpb.ResponseWithError{}, nil
+		return false, errEmptyCmdID
 	}
 
 	// Pull response from the cache and read into reply if available.
-	br := &roachpb.BatchResponse{}
 	key := keys.ResponseCacheKey(rc.rangeID, &cmdID)
-	ok, err := engine.MVCCGetProto(e, key, roachpb.ZeroTimestamp, true, nil, br)
+	v, _, err := engine.MVCCGet(e, key, roachpb.ZeroTimestamp, true, nil)
 	if err != nil {
-		return roachpb.ResponseWithError{}, err
+		return false, err
 	}
-	if ok {
-		header := br.Header()
-		defer func() { header.Error = nil }()
-		return roachpb.ResponseWithError{Reply: br, Err: header.Error.GoError()}, nil
-	}
-	return roachpb.ResponseWithError{}, nil
+	return v != nil, err
 }
 
 // CopyInto copies all the cached results from this response cache
@@ -161,38 +158,27 @@ func (rc *ResponseCache) CopyFrom(e engine.Engine, originRangeID roachpb.RangeID
 	})
 }
 
-// PutResponse writes a response and an error associated with it to the
+// PutResponse writes a response or a error associated with it to the
 // cache for the specified cmdID.
-func (rc *ResponseCache) PutResponse(e engine.Engine, cmdID roachpb.ClientCmdID, replyWithErr roachpb.ResponseWithError) error {
+func (rc *ResponseCache) PutResponse(e engine.Engine, cmdID roachpb.ClientCmdID, err error) error {
 	// Do nothing if command ID is empty.
 	if cmdID.IsEmpty() {
+		return errEmptyCmdID
+	}
+	if !rc.shouldCacheError(err) {
 		return nil
 	}
 
 	// Write the response value to the engine.
-	if rc.shouldCacheResponse(replyWithErr) {
-		// Write the error into the reply before caching.
-		replyWithErr.Reply.SetGoError(replyWithErr.Err)
-		// Be sure to clear it when you're done!
-		defer func() { replyWithErr.Reply.BatchResponse_Header.Error = nil }()
-
-		key := keys.ResponseCacheKey(rc.rangeID, &cmdID)
-		return engine.MVCCPutProto(e, nil, key, roachpb.ZeroTimestamp, nil, replyWithErr.Reply)
-	}
-
-	return nil
+	key := keys.ResponseCacheKey(rc.rangeID, &cmdID)
+	return engine.MVCCPut(e, nil /* ms */, key, roachpb.ZeroTimestamp, roachpb.Value{Timestamp: &roachpb.ZeroTimestamp}, nil /* txn */)
 }
 
-// shouldCacheResponse returns whether the response should be cached.
 // Responses with write-too-old, write-intent and not leader errors
 // are retried on the server, and so are not recorded in the response
 // cache in the hopes of retrying to a successful outcome.
-func (rc *ResponseCache) shouldCacheResponse(replyWithErr roachpb.ResponseWithError) bool {
-	if err := replyWithErr.Reply.Header().Error; err != nil {
-		panic(roachpb.ErrorUnexpectedlySet(rc, replyWithErr.Reply))
-	}
-
-	switch replyWithErr.Err.(type) {
+func (rc *ResponseCache) shouldCacheError(err error) bool {
+	switch err.(type) {
 	case *roachpb.WriteTooOldError, *roachpb.WriteIntentError, *roachpb.NotLeaderError:
 		return false
 	}
