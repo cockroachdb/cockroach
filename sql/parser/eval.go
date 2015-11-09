@@ -1081,11 +1081,11 @@ func (t DefaultVal) Eval(_ EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (t IntVal) Eval(_ EvalContext) (Datum, error) {
-	if t < 0 {
+func (t *IntVal) Eval(_ EvalContext) (Datum, error) {
+	if t.Val < 0 {
 		return nil, fmt.Errorf("integer value out of range: %s", t)
 	}
-	return DInt(t), nil
+	return DInt(t.Val), nil
 }
 
 // Eval implements the Expr interface.

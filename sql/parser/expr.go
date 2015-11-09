@@ -20,9 +20,7 @@ package parser
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"reflect"
-	"strconv"
 )
 
 // Expr represents an expression.
@@ -233,17 +231,13 @@ func (node *CoalesceExpr) String() string {
 }
 
 // IntVal represents an integer.
-type IntVal int64
+type IntVal struct {
+	Val int64
+	Str string
+}
 
-func (node IntVal) String() string {
-	// Note that IntVal uses math.MinInt64 to represent uint64(1 << 63). This
-	// implies that IntVal cannot represent math.MinInt64, but that is ok because
-	// it is only used to store signed integers in grammar rules which do not
-	// require that range.
-	if node == math.MinInt64 {
-		return strconv.FormatUint(uint64(node), 10)
-	}
-	return strconv.FormatInt(int64(node), 10)
+func (node *IntVal) String() string {
+	return node.Str
 }
 
 // NumVal represents a number.

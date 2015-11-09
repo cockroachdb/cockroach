@@ -546,7 +546,8 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 	}
 	// uval is now in the range [0, 1<<63]. Casting to an int64 leaves the range
 	// [0, 1<<63 - 1] intact and moves 1<<63 to -1<<63 (a.k.a. math.MinInt64).
-	lval.ival = int64(uval)
+	lval.ival.Val = int64(uval)
+	lval.ival.Str = lval.str
 	if err != nil {
 		lval.id = ERROR
 		lval.str = err.Error()
@@ -569,7 +570,8 @@ func (s *scanner) scanParam(lval *sqlSymType) {
 	}
 	// uval is now in the range [0, 1<<63]. Casting to an int64 leaves the range
 	// [0, 1<<63 - 1] intact and moves 1<<63 to -1<<63 (a.k.a. math.MinInt64).
-	lval.ival = int64(uval)
+	lval.ival.Val = int64(uval)
+	lval.ival.Str = lval.str
 	if err != nil {
 		lval.id = ERROR
 		lval.str = err.Error()

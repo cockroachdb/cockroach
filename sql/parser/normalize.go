@@ -279,7 +279,7 @@ func (expr *UnaryExpr) normalize(v *normalizeVisitor) Expr {
 	// traversal. Or do it during the downward traversal for const
 	// UnaryExprs.
 	if expr.Operator == UnaryMinus {
-		if d, ok := expr.Expr.(IntVal); ok && d == math.MinInt64 {
+		if d, ok := expr.Expr.(*IntVal); ok && d.Val == math.MinInt64 {
 			return DInt(math.MinInt64)
 		}
 	}
