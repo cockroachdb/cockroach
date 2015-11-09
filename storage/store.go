@@ -532,15 +532,15 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		// Start the scanner. The construction here makes sure that the scanner
 		// only starts after Gossip has connected, and that it does not block Start
 		// from returning (as doing so might prevent Gossip from ever connecting).
-		s.stopper.RunWorker(func() {
+		scannerStopper := s.ctx.ScannerStopper
+		if scannerStopper == nil {
+			scannerStopper = s.stopper
+		}
+		scannerStopper.RunWorker(func() {
 			select {
 			case <-s.ctx.Gossip.Connected:
-				scannerStopper := s.ctx.ScannerStopper
-				if scannerStopper == nil {
-					scannerStopper = s.stopper
-				}
 				s.scanner.Start(s.ctx.Clock, scannerStopper)
-			case <-s.stopper.ShouldStop():
+			case <-scannerStopper.ShouldStop():
 				return
 			}
 		})
