@@ -591,7 +591,7 @@ func (s *state) start() {
 				op.ch <- s.removeGroup(op.groupID)
 
 			case prop := <-s.proposalChan:
-				s.propose(prop)
+				s.propose(prop, true)
 
 			case s.readyGroups = <-raftReady:
 				// readyGroups are saved in a local variable until they can be sent to
@@ -734,13 +734,6 @@ func (s *state) removeNode(nodeID roachpb.NodeID, g *group) error {
 	}
 	// TODO(bdarnell): when a node has no more groups, remove it.
 	node.unregisterGroup(g.groupID)
-
-	// Cancel any outstanding proposals.
-	if nodeID == s.nodeID {
-		for _, prop := range g.pending {
-			s.removePending(g, prop, ErrGroupDeleted)
-		}
-	}
 
 	return nil
 }
@@ -974,7 +967,7 @@ func (s *state) removeGroup(groupID roachpb.RangeID) error {
 	return nil
 }
 
-func (s *state) propose(p *proposal) {
+func (s *state) propose(p *proposal, initialProposal bool) {
 	g, ok := s.groups[p.groupID]
 	if !ok {
 		s.removePending(nil /* group */, p, ErrGroupDeleted)
@@ -989,8 +982,21 @@ func (s *state) propose(p *proposal) {
 		}
 	}
 	if !found {
-		// If we are not a member of the group, don't allow any proposals.
-		s.removePending(nil, p, ErrGroupDeleted)
+		// If we are no longer a member of the group, don't allow any additional
+		// proposals.
+		//
+		// If this is an initial proposal, go ahead and remove the command. If
+		// this is a re-proposal, there is a good chance that the original
+		// proposal will still commit even though the node has been removed from
+		// the group.
+		//
+		// Therefore, we will not remove the pending command until the group
+		// itself is removed, the node is re-added to the group
+		// (which will trigger another re-proposal that will succeed), or the
+		// proposal is committed.
+		if initialProposal {
+			s.removePending(nil, p, ErrGroupDeleted)
+		}
 		return
 	}
 	// If configuration change callback is pending, wait for it.
@@ -1158,7 +1164,7 @@ func (s *state) processCommittedEntry(groupID roachpb.RangeID, g *group, entry r
 					g.waitForCallback--
 					if g.waitForCallback <= 0 {
 						for _, prop := range g.pending {
-							s.propose(prop)
+							s.propose(prop, false)
 						}
 					}
 				}:
@@ -1274,7 +1280,7 @@ func (s *state) maybeSendLeaderEvent(groupID roachpb.RangeID, g *group, ready *r
 
 		// Re-submit all pending proposals
 		for _, prop := range g.pending {
-			s.propose(prop)
+			s.propose(prop, false)
 		}
 	}
 }
