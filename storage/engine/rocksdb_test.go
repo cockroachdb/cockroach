@@ -224,7 +224,7 @@ func runMVCCScan(numRows, numVersions int, b *testing.B) {
 		for pb.Next() {
 			// Choose a random key to start scan.
 			keyIdx := rand.Int31n(int32(numKeys - numRows))
-			startKey := roachpb.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(keyIdx)))
+			startKey := roachpb.Key(encoding.EncodeUvarint(keyBuf[:4], uint64(keyIdx)))
 			walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 			ts := makeTS(walltime, 0)
 			kvs, _, err := MVCCScan(rocksdb, startKey, keyMax, int64(numRows), ts, true, nil)
@@ -313,7 +313,7 @@ func runMVCCGet(numVersions int, b *testing.B) {
 		for pb.Next() {
 			// Choose a random key to retrieve.
 			keyIdx := rand.Int31n(int32(numKeys))
-			key := roachpb.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(keyIdx)))
+			key := roachpb.Key(encoding.EncodeUvarint(keyBuf[:4], uint64(keyIdx)))
 			walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 			ts := makeTS(walltime, 0)
 			if v, _, err := MVCCGet(rocksdb, key, ts, true, nil); err != nil {
@@ -354,7 +354,7 @@ func runMVCCPut(valueSize int, b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		key := roachpb.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(i)))
+		key := roachpb.Key(encoding.EncodeUvarint(keyBuf[:4], uint64(i)))
 		ts := makeTS(time.Now().UnixNano(), 0)
 		if err := MVCCPut(rocksdb, nil, key, ts, value, nil); err != nil {
 			b.Fatalf("failed put: %s", err)
@@ -401,7 +401,7 @@ func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
 		batch := rocksdb.NewBatch()
 
 		for j := i; j < end; j++ {
-			key := roachpb.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(j)))
+			key := roachpb.Key(encoding.EncodeUvarint(keyBuf[:4], uint64(j)))
 			ts := makeTS(time.Now().UnixNano(), 0)
 			if err := MVCCPut(batch, nil, key, ts, value, nil); err != nil {
 				b.Fatalf("failed put: %s", err)

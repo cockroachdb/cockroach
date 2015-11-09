@@ -478,19 +478,19 @@ func TestEngineScan2(t *testing.T) {
 		insertKeys(keys, engine, t)
 
 		// Scan all keys (non-inclusive of final key).
-		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 10, keys[0:5], engine, t)
-		verifyScan(MVCCKey("a"), MVCCKey(roachpb.RKeyMax), 10, keys[0:5], engine, t)
+		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 10, keys[:5], engine, t)
+		verifyScan(MVCCKey("a"), MVCCKey(roachpb.RKeyMax), 10, keys[:5], engine, t)
 
 		// Scan sub range.
 		verifyScan(MVCCKey("aab"), MVCCKey("abcc"), 10, keys[3:5], engine, t)
 		verifyScan(MVCCKey("aa0"), MVCCKey("abcc"), 10, keys[2:5], engine, t)
 
 		// Scan with max values.
-		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 3, keys[0:3], engine, t)
+		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 3, keys[:3], engine, t)
 		verifyScan(MVCCKey("a0"), MVCCKey(roachpb.RKeyMax), 3, keys[1:4], engine, t)
 
 		// Scan with max value 0 gets all values.
-		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 0, keys[0:5], engine, t)
+		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 0, keys[:5], engine, t)
 	}, t)
 }
 
@@ -509,7 +509,7 @@ func TestEngineDeleteRange(t *testing.T) {
 		insertKeys(keys, engine, t)
 
 		// Scan all keys (non-inclusive of final key).
-		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 10, keys[0:5], engine, t)
+		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 10, keys[:5], engine, t)
 
 		// Delete a range of keys
 		numDeleted, err := ClearRange(engine, MVCCKey("aa"), MVCCKey("abc"))

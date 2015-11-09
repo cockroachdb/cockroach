@@ -126,12 +126,11 @@ func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 // of the slice, keeping the order of the remaining elements stable.
 // The function will panic when invoked with an invalid index.
 func (rs replicaSlice) MoveToFront(i int) {
-	l := len(rs) - 1
-	if i > l {
+	if i >= len(rs) {
 		panic("out of bound index")
 	}
 	front := rs[i]
-	// Move the first i elements to the right
-	copy(rs[1:i+1], rs[0:i])
+	// Move the first i elements one index to the right
+	copy(rs[1:], rs[:i])
 	rs[0] = front
 }
