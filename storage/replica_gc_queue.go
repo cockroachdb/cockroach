@@ -84,6 +84,9 @@ func (*replicaGCQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
 func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.SystemConfig) error {
+	// Note that the Replicas field of desc is probably out of date, so
+	// we should only use `desc` for its static fields like RangeID and
+	// StartKey (and avoid rng.GetReplica() for the same reason).
 	desc := rng.Desc()
 
 	// Calls to RangeLookup typically use inconsistent reads, but we
@@ -109,12 +112,11 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 
 	replyDesc := reply.Ranges[0]
 	currentMember := false
-	if me := rng.GetReplica(); me != nil {
-		for _, rep := range replyDesc.Replicas {
-			if rep.StoreID == me.StoreID {
-				currentMember = true
-				break
-			}
+	storeID := rng.store.StoreID()
+	for _, rep := range replyDesc.Replicas {
+		if rep.StoreID == storeID {
+			currentMember = true
+			break
 		}
 	}
 
@@ -123,7 +125,7 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 		if log.V(1) {
 			log.Infof("destroying local data from range %d", desc.RangeID)
 		}
-		if err := rng.store.RemoveReplica(rng); err != nil {
+		if err := rng.store.RemoveReplica(rng, replyDesc); err != nil {
 			return err
 		}
 
@@ -141,10 +143,10 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 			return nil
 		}
 
-		if err := rng.Destroy(); err != nil {
+		if err := rng.Destroy(replyDesc); err != nil {
 			return err
 		}
-	} else if desc.RangeID != desc.RangeID {
+	} else if desc.RangeID != replyDesc.RangeID {
 		// If we get a different  range ID back, then the range has been merged
 		// away. But currentMember is true, so we are still a member of the
 		// subsuming range. Shut down raft processing for the former range
@@ -152,7 +154,7 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 		if log.V(1) {
 			log.Infof("removing merged range %d", desc.RangeID)
 		}
-		if err := rng.store.RemoveReplica(rng); err != nil {
+		if err := rng.store.RemoveReplica(rng, replyDesc); err != nil {
 			return err
 		}
 

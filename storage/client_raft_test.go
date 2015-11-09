@@ -1395,8 +1395,13 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 	}
 	mtc.waitForValues(roachpb.Key("a"), 3*time.Second, []int64{16, 16, 5})
 
-	// Bring it back up and re-add the range.
-	// This re-uses the existing replica but changes its replica ID.
+	// Bring it back up and re-add the range. There is a race when the
+	// store applies its removal and re-addition back to back: the
+	// replica may or may not have (asynchronously) garbage collected
+	// its data in between. Whether the existing data is reused or the
+	// replica gets recreated, the replica ID is changed by this
+	// process. An ill-timed GC has been known to cause bugs including
+	// https://github.com/cockroachdb/cockroach/issues/2873.
 	mtc.restartStore(2)
 	mtc.replicateRange(raftID, 0, 2)
 

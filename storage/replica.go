@@ -233,8 +233,12 @@ func (r *Replica) String() string {
 }
 
 // Destroy cleans up all data associated with this range, leaving a tombstone.
-func (r *Replica) Destroy() error {
+func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor) error {
 	desc := r.Desc()
+	if _, rd := desc.FindReplica(r.store.StoreID()); rd != nil && rd.ReplicaID >= origDesc.NextReplicaID {
+		return util.Errorf("cannot destroy replica %s; replica ID has changed (%s >= %s)",
+			r, rd.ReplicaID, origDesc.NextReplicaID)
+	}
 	iter := newReplicaDataIterator(desc, r.store.Engine())
 	defer iter.Close()
 	batch := r.store.Engine().NewBatch()

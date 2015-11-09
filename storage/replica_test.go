@@ -64,6 +64,7 @@ func testRangeDescriptor() *roachpb.RangeDescriptor {
 				StoreID:   1,
 			},
 		},
+		NextReplicaID: 2,
 	}
 }
 
@@ -3412,4 +3413,34 @@ func TestReplicaLoadSystemDBSpanIntent(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestReplicaDestroy(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	rep, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// First try and fail with an outdated descriptor.
+	origDesc := rep.Desc()
+	newDesc := proto.Clone(origDesc).(*roachpb.RangeDescriptor)
+	_, newRep := newDesc.FindReplica(tc.store.StoreID())
+	newRep.ReplicaID++
+	newDesc.NextReplicaID++
+	if err := rep.setDesc(newDesc); err != nil {
+		t.Fatal(err)
+	}
+	if err := rep.Destroy(*origDesc); !testutils.IsError(err, "replica ID has changed") {
+		t.Fatalf("expected error 'replica ID has changed' but got %s", err)
+	}
+
+	// Now try a fresh descriptor and succeed.
+	if err := rep.Destroy(*rep.Desc()); err != nil {
+		t.Fatal(err)
+	}
 }
