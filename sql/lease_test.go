@@ -141,6 +141,7 @@ func (t *leaseTest) node(nodeID uint32) *csql.LeaseManager {
 
 func TestLeaseManager(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)
+	testingT.Skip("#3050")
 	t := newLeaseTest(testingT)
 	defer t.cleanup()
 
@@ -234,6 +235,7 @@ func TestLeaseManager(testingT *testing.T) {
 
 func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)
+	testingT.Skip("#3050")
 	t := newLeaseTest(testingT)
 	defer t.cleanup()
 
