@@ -2,8 +2,6 @@
 
 set -eu
 
-YACC="../../../../../../bin/yacc"
-
 # This step runs sql.y through the YACC compiler directly without
 # performing any type/token declaration modifications, throwing out
 # the result on a successful compilation. This allows the YACC compiler
@@ -12,11 +10,11 @@ YACC="../../../../../../bin/yacc"
 # to union type accessors in the Go code within rules, as the YACC
 # compiler does not type check Go code.
 function type_check() {
-    $YACC -o /dev/null -p sql sql.y
+    go tool yacc -o /dev/null -p sql sql.y
 }
 
 # This step performs the actual compilation from the sql.y syntax to
-# the sql.go parser implementation. It first translates the syntax 
+# the sql.go parser implementation. It first translates the syntax
 # file to use the union type for any type declaration whose type was
 # given a union accessor on sqlSymUnion. Next, it performs the YACC
 # compilation.
@@ -44,7 +42,7 @@ function compile() {
 
     # Compile this new "unionized" syntax file through YACC, this time writing
     # the output to sql.go.
-    $YACC -o sql.go -p sql sql.y
+    go tool yacc -o sql.go -p sql sql.y
 
     # Overwrite the migrated syntax file with the original syntax file.
     mv sql.y.tmp sql.y
