@@ -128,19 +128,22 @@ type Context struct {
 
 // NewContext returns a Context with default values.
 func NewContext() *Context {
-	ctx := &Context{
-		Addr:               defaultAddr,
-		MaxOffset:          defaultMaxOffset,
-		CacheSize:          defaultCacheSize,
-		ScanInterval:       defaultScanInterval,
-		ScanMaxIdleTime:    defaultScanMaxIdleTime,
-		MetricsFrequency:   defaultMetricsFrequency,
-		TimeUntilStoreDead: defaultTimeUntilStoreDead,
-		AllowRebalancing:   defaultAllowRebalancing,
-	}
-	// Initializes base context defaults.
+	ctx := &Context{}
 	ctx.InitDefaults()
 	return ctx
+}
+
+// InitDefaults sets up the default values for a context.
+func (ctx *Context) InitDefaults() {
+	ctx.Context.InitDefaults()
+	ctx.Addr = defaultAddr
+	ctx.MaxOffset = defaultMaxOffset
+	ctx.CacheSize = defaultCacheSize
+	ctx.ScanInterval = defaultScanInterval
+	ctx.ScanMaxIdleTime = defaultScanMaxIdleTime
+	ctx.MetricsFrequency = defaultMetricsFrequency
+	ctx.TimeUntilStoreDead = defaultTimeUntilStoreDead
+	ctx.AllowRebalancing = defaultAllowRebalancing
 }
 
 // Get the stores on both start and init.
