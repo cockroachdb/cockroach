@@ -1005,7 +1005,7 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, su
 
 	// Remove and destroy the subsumed range. Note that we are on the
 	// processRaft goroutine so we can call removeReplicaImpl directly.
-	if err := s.removeReplicaImpl(subsumedRng); err != nil {
+	if err := s.removeReplicaImpl(subsumedRng, *subsumedDesc); err != nil {
 		return util.Errorf("cannot remove range %s", err)
 	}
 
@@ -1068,22 +1068,30 @@ func (s *Store) addReplicaToRangeMap(rng *Replica) error {
 }
 
 type removeReplicaOp struct {
-	rep *Replica
-	ch  chan<- error
+	rep      *Replica
+	origDesc roachpb.RangeDescriptor
+	ch       chan<- error
 }
 
 // RemoveReplica removes the replica from the store's replica map and from
-// the sorted replicasByKey btree.
-func (s *Store) RemoveReplica(rep *Replica) error {
+// the sorted replicasByKey btree. The version of the replica descriptor that
+// was used to make the removal decision is passed in, and the removal is
+// aborted if the replica ID has changed since then.
+func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor) error {
 
 	ch := make(chan error)
-	s.removeReplicaChan <- removeReplicaOp{rep, ch}
+	s.removeReplicaChan <- removeReplicaOp{rep, origDesc, ch}
 	return <-ch
 }
 
 // removeReplicaImpl runs on the processRaft goroutine.
-func (s *Store) removeReplicaImpl(rep *Replica) error {
-	rangeID := rep.Desc().RangeID
+func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor) error {
+	desc := rep.Desc()
+	rangeID := desc.RangeID
+	if _, rd := desc.FindReplica(s.StoreID()); rd != nil && rd.ReplicaID >= origDesc.NextReplicaID {
+		return util.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
+			rep, rd.ReplicaID, origDesc.NextReplicaID)
+	}
 
 	// Silence the Replica. This clears all outstanding commands and makes
 	// sure that whatever else slips in winds up with a RangeNotFoundError.
@@ -1563,7 +1571,7 @@ func (s *Store) processRaft() {
 				}
 
 			case op := <-s.removeReplicaChan:
-				op.ch <- s.removeReplicaImpl(op.rep)
+				op.ch <- s.removeReplicaImpl(op.rep, op.origDesc)
 
 			case op := <-s.proposeChan:
 				op.ch <- s.proposeRaftCommandImpl(op.idKey, op.cmd)

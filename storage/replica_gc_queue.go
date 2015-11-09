@@ -122,7 +122,7 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 		if log.V(1) {
 			log.Infof("destroying local data from range %d", desc.RangeID)
 		}
-		if err := rng.store.RemoveReplica(rng); err != nil {
+		if err := rng.store.RemoveReplica(rng, replyDesc); err != nil {
 			return err
 		}
 
@@ -143,7 +143,7 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 		if err := rng.Destroy(); err != nil {
 			return err
 		}
-	} else if desc.RangeID != desc.RangeID {
+	} else if desc.RangeID != replyDesc.RangeID {
 		// If we get a different  range ID back, then the range has been merged
 		// away. But currentMember is true, so we are still a member of the
 		// subsuming range. Shut down raft processing for the former range
@@ -151,7 +151,7 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 		if log.V(1) {
 			log.Infof("removing merged range %d", desc.RangeID)
 		}
-		if err := rng.store.RemoveReplica(rng); err != nil {
+		if err := rng.store.RemoveReplica(rng, replyDesc); err != nil {
 			return err
 		}
 

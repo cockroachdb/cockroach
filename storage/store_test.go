@@ -270,7 +270,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Error(err)
 	}
 	// Remove range 1.
-	if err := store.RemoveReplica(rng1); err != nil {
+	if err := store.RemoveReplica(rng1, *rng1.Desc()); err != nil {
 		t.Error(err)
 	}
 	// Create a new range (id=2).
@@ -287,7 +287,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Fatalf("expected rangeAlreadyExists error; got %s", err)
 	}
 	// Try to remove range 1 again.
-	if err := store.RemoveReplica(rng1); err == nil {
+	if err := store.RemoveReplica(rng1, *rng1.Desc()); err == nil {
 		t.Fatal("expected error re-removing same range")
 	}
 	// Try to add a range with previously-used (but now removed) ID.
@@ -326,6 +326,33 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 }
 
+func TestStoreRemoveReplicaOldDescriptor(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	rng1, err := store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	origDesc := rng1.Desc()
+	newDesc := proto.Clone(origDesc).(*roachpb.RangeDescriptor)
+	_, newRep := newDesc.FindReplica(store.StoreID())
+	newRep.ReplicaID++
+	newDesc.NextReplicaID++
+	if err := rng1.setDesc(newDesc); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RemoveReplica(rng1, *origDesc); !testutils.IsError(err, "replica ID has changed") {
+		t.Fatalf("expected error 'replica ID has changed' but got %s", err)
+	}
+
+	// Now try the latest descriptor and succeed.
+	if err := store.RemoveReplica(rng1, *rng1.Desc()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestStoreRangeSet(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
@@ -336,7 +363,7 @@ func TestStoreRangeSet(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := store.RemoveReplica(rng1); err != nil {
+	if err := store.RemoveReplica(rng1, *rng1.Desc()); err != nil {
 		t.Error(err)
 	}
 	// Add 10 new ranges.
@@ -419,7 +446,7 @@ func TestStoreRangeSet(t *testing.T) {
 	if rng.Desc().RangeID != 2 {
 		t.Errorf("expected fetch of rangeID=2; got %d", rng.Desc().RangeID)
 	}
-	if err := store.RemoveReplica(rng); err != nil {
+	if err := store.RemoveReplica(rng, *rng.Desc()); err != nil {
 		t.Error(err)
 	}
 	if ec := ranges.EstimatedCount(); ec != 9 {
@@ -1528,7 +1555,7 @@ func TestMaybeRemove(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := store.RemoveReplica(rng); err != nil {
+	if err := store.RemoveReplica(rng, *rng.Desc()); err != nil {
 		t.Error(err)
 	}
 	// MaybeRemove is called.
