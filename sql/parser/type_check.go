@@ -242,7 +242,7 @@ func (expr *FuncExpr) TypeCheck() (Datum, error) {
 	// Cache is cold, do the lookup.
 	if expr.fn.fn == nil {
 		if len(expr.Name.Indirect) > 0 {
-			// We don'expr support qualified function names (yet).
+			// We don't support qualified function names (yet).
 			return nil, fmt.Errorf("unknown function: %s", expr.Name)
 		}
 
@@ -275,7 +275,7 @@ func (expr *FuncExpr) TypeCheck() (Datum, error) {
 		return expr.fn.returnType, nil
 	}
 
-	// Function lookup succeeded but `fn` doesn'expr encode its return type.
+	// Function lookup succeeded but `fn` doesn't encode its return type.
 	// We need to call the function with dummy arguments.
 	res, err := expr.fn.fn(defaultContext, dummyArgs)
 	if err != nil {

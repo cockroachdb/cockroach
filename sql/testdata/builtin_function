@@ -62,13 +62,28 @@ SELECT SUBSTR('RoacH', 2, 3)
 ----
 oac
 
-#query T
-#SELECT SUBSTRING('RoacH', 2, 3)
-#----
-#oac
+query T
+SELECT SUBSTRING('RoacH', 2, 3)
+----
+oac
+
+query T
+SELECT SUBSTRING('RoacH' from 2 for 3)
+----
+oac
+
+query T
+SELECT SUBSTRING('RoacH' for 3 from 2)
+----
+oac
 
 query T
 SELECT SUBSTR('RoacH', 2)
+----
+oacH
+
+query T
+SELECT SUBSTRING('RoacH' from 2)
 ----
 oacH
 
@@ -94,6 +109,32 @@ SELECT SUBSTR('12345', -2, 77)
 
 statement error SUBSTR: negative substring length -1 not allowed
 SELECT SUBSTR('12345', 2, -1)
+
+query T
+SELECT SUBSTRING('12345' for 3)
+----
+123
+
+query T
+SELECT SUBSTRING('foobar' from 'o.b')
+----
+oob
+
+query T
+SELECT SUBSTRING('f(oabaroob' from '\(o(.)b')
+----
+a
+
+query T
+SELECT SUBSTRING('f(oabaroob' from '+(o(.)b' for '+')
+----
+a
+
+query error SUBSTRING: error parsing regexp: missing closing \): `\\\\\(o\(.\)b`
+SELECT SUBSTRING('f(oabaroob' from '\(o(.)b' for '+')
+
+query error unknown signature for SUBSTRING: SUBSTRING()
+SELECT SUBSTRING()
 
 query T
 SELECT CONCAT_WS(',', 'abcde', NULL)
@@ -480,6 +521,31 @@ query T
 SELECT translate('a‰ÒÁ', 'aÒ', '∏p')
 ----
 ∏‰pÁ
+
+query T
+SELECT regexp_extract('foobar', 'o.b')
+----
+oob
+
+query T
+SELECT regexp_extract('foobar', 'o(.)b')
+----
+o
+
+query T
+SELECT regexp_extract('foobar', '(o(.)b)')
+----
+oob
+
+query T
+SELECT regexp_extract('foabaroob', 'o(.)b')
+----
+a
+
+query T
+SELECT regexp_extract('foobar', 'o.x')
+----
+NULL
 
 query T
 SELECT regexp_replace('foobarbaz', 'b..', 'X')
