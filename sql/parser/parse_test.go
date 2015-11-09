@@ -614,6 +614,13 @@ CREATE TABLE a (b INT DEFAULT (SELECT 1))
                                         ^
 `,
 		},
+		{
+			`SELECT POSITION('high', 'a')`,
+			`syntax error at or near ","
+SELECT POSITION('high', 'a')
+                      ^
+`,
+		},
 	}
 	for _, d := range testData {
 		_, err := ParseTraditional(d.sql)
