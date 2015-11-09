@@ -50,6 +50,8 @@ func makeCmdID(wallTime, random int64) roachpb.ClientCmdID {
 	}
 }
 
+var family = []byte("testfamily")
+
 // TestResponseCachePutGetClearData tests basic get & put functionality as well as
 // clearing the cache.
 func TestResponseCachePutGetClearData(t *testing.T) {
@@ -59,18 +61,18 @@ func TestResponseCachePutGetClearData(t *testing.T) {
 	rc, e := createTestResponseCache(t, 1, stopper)
 	cmdID := makeCmdID(1, 1)
 	// Start with a get for an unseen cmdID.
-	if isHit, readErr := rc.GetResponse(e, cmdID); isHit {
+	if isHit, readErr := rc.GetResponse(e, family, cmdID); isHit {
 		t.Errorf("expected no response for id %+v", cmdID)
 	} else if readErr != nil {
 		t.Fatalf("unxpected read error :%s", readErr)
 	}
 	// Cache the test response.
-	if err := rc.PutResponse(e, cmdID, nil); err != nil {
+	if err := rc.PutResponse(e, family, cmdID, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
 	tryHit := func(shouldHit bool) {
-		if isHit, readErr := rc.GetResponse(e, cmdID); readErr != nil {
+		if isHit, readErr := rc.GetResponse(e, family, cmdID); readErr != nil {
 			t.Errorf("unexpected failure getting response: %s", readErr)
 		} else if isHit != shouldHit {
 			t.Errorf("wanted hit: %t, got hit: %t", shouldHit, isHit)
@@ -93,10 +95,10 @@ func TestResponseCacheEmptyCmdID(t *testing.T) {
 	rc, e := createTestResponseCache(t, 1, stopper)
 	cmdID := roachpb.ClientCmdID{}
 	// Put value of 1 for test response.
-	if err := rc.PutResponse(e, cmdID, nil); err != errEmptyCmdID {
+	if err := rc.PutResponse(e, family, cmdID, nil); err != errEmptyCmdID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if _, readErr := rc.GetResponse(e, cmdID); readErr != errEmptyCmdID {
+	if _, readErr := rc.GetResponse(e, family, cmdID); readErr != errEmptyCmdID {
 		t.Fatalf("unxpected read error: %v", readErr)
 	}
 }
@@ -111,7 +113,7 @@ func TestResponseCacheCopyInto(t *testing.T) {
 	rc2, _ := createTestResponseCache(t, 2, stopper)
 	cmdID := makeCmdID(1, 1)
 	// Store an increment with new value one in the first cache.
-	if err := rc1.PutResponse(e, cmdID, nil); err != nil {
+	if err := rc1.PutResponse(e, family, cmdID, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	// Copy the first cache into the second.
@@ -120,7 +122,7 @@ func TestResponseCacheCopyInto(t *testing.T) {
 	}
 	for _, cache := range []*ResponseCache{rc1, rc2} {
 		// Get should return 1 for both caches.
-		if isHit, readErr := cache.GetResponse(e, cmdID); readErr != nil {
+		if isHit, readErr := cache.GetResponse(e, family, cmdID); readErr != nil {
 			t.Errorf("unexpected failure getting response from source: %s", readErr)
 		} else if !isHit {
 			t.Fatalf("unxpected cache miss")
@@ -138,7 +140,7 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 	rc2, _ := createTestResponseCache(t, 2, stopper)
 	cmdID := makeCmdID(1, 1)
 	// Store an increment with new value one in the first cache.
-	if err := rc1.PutResponse(e, cmdID, nil); err != nil {
+	if err := rc1.PutResponse(e, family, cmdID, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
@@ -149,7 +151,7 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 
 	// Get should hit both caches.
 	for _, cache := range []*ResponseCache{rc1, rc2} {
-		if isHit, readErr := cache.GetResponse(e, cmdID); readErr != nil {
+		if isHit, readErr := cache.GetResponse(e, family, cmdID); readErr != nil {
 			t.Fatalf("unxpected read error :%s", readErr)
 		} else if !isHit {
 			t.Errorf("unexpected cache miss")
