@@ -2574,7 +2574,6 @@ func TestTruncateLog(t *testing.T) {
 
 	// Discard the first half of the log
 	truncateArgs := truncateLogArgs(indexes[5])
-
 	if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &truncateArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -2616,6 +2615,13 @@ func TestTruncateLog(t *testing.T) {
 	_, err = tc.rng.Term(indexes[3])
 	if err != raft.ErrUnavailable {
 		t.Errorf("expected ErrUnavailable, got %s", err)
+	}
+
+	// Truncating logs that have already been truncated should not return an
+	// error.
+	truncateArgs = truncateLogArgs(indexes[3])
+	if _, err = client.SendWrapped(tc.Sender(), tc.rng.context(), &truncateArgs); err != nil {
+		t.Fatal(err)
 	}
 }
 

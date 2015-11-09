@@ -1026,9 +1026,23 @@ func (r *Replica) Merge(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Hea
 	return reply, engine.MVCCMerge(batch, ms, args.Key, args.Value)
 }
 
-// TruncateLog discards a prefix of the raft log.
+// TruncateLog discards a prefix of the raft log. Truncating part of a log that
+// has already been truncated has no effect.
 func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.TruncateLogRequest) (roachpb.TruncateLogResponse, error) {
 	var reply roachpb.TruncateLogResponse
+
+	// Have we already truncated this log? If so, just return without an error.
+	firstIndex, err := r.FirstIndex()
+	if err != nil {
+		return reply, err
+	}
+	if firstIndex >= args.Index {
+		if log.V(3) {
+			log.Infof("range %d: attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
+				r.Desc().RangeID, firstIndex, args.Index)
+		}
+		return reply, nil
+	}
 
 	// args.Index is the first index to keep.
 	term, err := r.Term(args.Index - 1)
