@@ -123,6 +123,9 @@ a
 query error SUBSTRING: error parsing regexp: missing closing \): `\\\\\(o\(.\)b`
 SELECT SUBSTRING('f(oabaroob' from '\(o(.)b' for '+')
 
+query error unknown signature for SUBSTRING: SUBSTRING()
+SELECT SUBSTRING()
+
 query T
 SELECT CONCAT_WS(',', 'abcde', NULL)
 ----
