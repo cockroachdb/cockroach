@@ -482,6 +482,31 @@ SELECT translate('a‰ÒÁ', 'aÒ', '∏p')
 ∏‰pÁ
 
 query T
+SELECT regexp_extract('foobar', 'o.b')
+----
+oob
+
+query T
+SELECT regexp_extract('foobar', 'o(.)b')
+----
+o
+
+query T
+SELECT regexp_extract('foobar', '(o(.)b)')
+----
+oob
+
+query T
+SELECT regexp_extract('foabaroob', 'o(.)b')
+----
+a
+
+query T
+SELECT regexp_extract('foobar', 'o.x')
+----
+NULL
+
+query T
 SELECT regexp_replace('foobarbaz', 'b..', 'X')
 ----
 fooXbaz

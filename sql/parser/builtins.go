@@ -291,6 +291,18 @@ var builtins = map[string][]builtin{
 		return DString(string(runes)), nil
 	}, DummyString)},
 
+	"regexp_extract": {
+		builtin{
+			types:      typeList{stringType, stringType},
+			returnType: DummyString,
+			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+				s := string(args[0].(DString))
+				pattern := string(args[1].(DString))
+				return regexpExtract(ctx, s, pattern)
+			},
+		},
+	},
+
 	"regexp_replace": {
 		builtin{
 			types:      typeList{stringType, stringType, stringType},
@@ -985,6 +997,23 @@ type regexpKey struct {
 
 func (k regexpKey) pattern() (string, error) {
 	return regexpEvalFlags(k.sqlPattern, k.sqlFlags)
+}
+
+func regexpExtract(ctx EvalContext, s, pattern string) (Datum, error) {
+	patternRe, err := ctx.ReCache.GetRegexp(regexpKey{pattern, ""})
+	if err != nil {
+		return nil, err
+	}
+
+	match := patternRe.FindStringSubmatch(s)
+	if match == nil {
+		return DNull, nil
+	}
+
+	if len(match) > 1 {
+		return DString(match[1]), nil
+	}
+	return DString(match[0]), nil
 }
 
 var replaceSubRe = regexp.MustCompile(`\\[&1-9]`)
