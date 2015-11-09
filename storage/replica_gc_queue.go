@@ -109,12 +109,11 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 
 	replyDesc := reply.Ranges[0]
 	currentMember := false
-	if me := rng.GetReplica(); me != nil {
-		for _, rep := range replyDesc.Replicas {
-			if rep.StoreID == me.StoreID {
-				currentMember = true
-				break
-			}
+	storeID := rng.store.StoreID()
+	for _, rep := range replyDesc.Replicas {
+		if rep.StoreID == storeID {
+			currentMember = true
+			break
 		}
 	}
 
