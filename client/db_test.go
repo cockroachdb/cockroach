@@ -235,7 +235,7 @@ func ExampleDB_Del() {
 	// 1: ac=3
 }
 
-func ExampleTx_Commit() {
+func ExampleTxn_Commit() {
 	s, db := setup()
 	defer s.Stop()
 
@@ -266,7 +266,7 @@ func ExampleTx_Commit() {
 	// 1/0: ab=2
 }
 
-func ExampleDB_Insecure() {
+func ExampleDB_insecure() {
 	s := &server.TestServer{}
 	s.Ctx = server.NewTestContext()
 	s.Ctx.Insecure = true
