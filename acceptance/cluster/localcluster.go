@@ -337,8 +337,8 @@ func (l *LocalCluster) createNodeCerts() {
 
 func (l *LocalCluster) startNode(i int) *Container {
 	gossipNodes := []string{}
-	for i := 0; i < l.numLocal; i++ {
-		gossipNodes = append(gossipNodes, fmt.Sprintf("%s:%d", nodeStr(i), cockroachPort))
+	for j := 0; j < l.numLocal; j++ {
+		gossipNodes = append(gossipNodes, fmt.Sprintf("%s:%d", nodeStr(j), cockroachPort))
 	}
 
 	cmd := []string{

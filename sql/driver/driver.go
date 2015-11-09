@@ -61,9 +61,9 @@ func (roachDriver) Open(dsn string) (driver.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	conn := conn{sender: sender}
-	if err := conn.applySettings(params); err != nil {
+	c := &conn{sender: sender}
+	if err := c.applySettings(params); err != nil {
 		return nil, err
 	}
-	return &conn, nil
+	return c, nil
 }

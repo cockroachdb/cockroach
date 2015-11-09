@@ -107,19 +107,19 @@ endif
 .PHONY: test
 test:
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) $(PKG) -timeout $(TESTTIMEOUT) $(TESTFLAGS)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: testslow
 testslow: TESTFLAGS += -v
 testslow:
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) $(PKG) -timeout $(TESTTIMEOUT) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 .PHONY: testraceslow
 testraceslow: TESTFLAGS += -v
 testraceslow:
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -run $(TESTS) $(PKG) -timeout $(RACETIMEOUT) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -run $(TESTS) -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 # "go test -i" builds dependencies and installs them into GOPATH/pkg, but does not run the
 # tests. Run it as a part of "testrace" since race-enabled builds are not covered by
@@ -128,12 +128,12 @@ testraceslow:
 .PHONY: testrace
 testrace:
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -run $(TESTS) $(PKG) -timeout $(RACETIMEOUT) $(TESTFLAGS)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -run $(TESTS) -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: bench
 bench:
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run - -bench $(TESTS) $(PKG) -timeout $(BENCHTIMEOUT) $(TESTFLAGS)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run - -bench $(TESTS) -timeout $(BENCHTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: coverage
 coverage:
