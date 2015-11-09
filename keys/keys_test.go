@@ -19,6 +19,7 @@ package keys
 
 import (
 	"bytes"
+	"strings"
 	"reflect"
 	"testing"
 
@@ -352,6 +353,55 @@ func TestBatchRange(t *testing.T) {
 		rs := Range(ba)
 		if actPair := [2]string{string(rs.Key), string(rs.EndKey)}; !reflect.DeepEqual(actPair, c.exp) {
 			t.Fatalf("%d: expected [%q,%q), got [%q,%q)", i, c.exp[0], c.exp[1], actPair[0], actPair[1])
+		}
+	}
+}
+
+func TestPrettyPrint(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	testCases := []struct {
+		key    roachpb.Key
+		exp 	string
+	}{
+		// local
+		{StoreIdentKey(), "/Local/Store/storeIdent"},
+		{ResponseCacheKey(roachpb.RangeID(1000001), &roachpb.ClientCmdID{WallTime: 9999, Random: 111}), "/Local/RangeID/1000001/ResponseCache/WallTime:9999/Random:111"},
+		{RaftLeaderLeaseKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftLeaderLease"},
+		{RaftTombstoneKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftTombstone"},
+		{RaftHardStateKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftHardState"},
+		{RaftAppliedIndexKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftAppliedIndex"},
+		{RaftLogKey(roachpb.RangeID(1000001), uint64(200001)), "/Local/RangeID/1000001/RaftLog/logIndex:200001"},
+		{RaftTruncatedStateKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftTruncatedState"},
+		{RaftLastIndexKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftLastIndex"},
+		{RangeGCMetadataKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeGCMetadata"},
+		{RangeLastVerificationTimestampKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeLastVerificationTimestamp"},
+		{RangeStatsKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeStats"},
+		
+		{MakeRangeKeyPrefix(roachpb.RKey("ok")), "/Local/Range/'ok'"},
+		{RangeDescriptorKey(roachpb.RKey("111")), "/Local/Range/RangeDescriptor/'111'"},
+		{RangeTreeNodeKey(roachpb.RKey("111")), "/Local/Range/RangeTreeNode/'111'"},
+		{TransactionKey(roachpb.Key("111"), []byte("22222")), "/Local/Range/Transaction/addrKey:/'111'/id:\"22222\""},
+
+		{LocalMax, "/Local/Max"},
+		
+		// system
+		{roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo")), "/System/Meta2/\"foo\""},
+		{roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo")), "/System/Meta1/\"foo\""},
+		
+		{StoreStatusKey(2222), "/System/StatusStore/2222"},
+		{NodeStatusKey(1111), "/System/StatusNode/1111"},
+		
+		{SystemMax, "/System/Max"},
+		
+		// tabledata
+		{MakeTablePrefix(111), "/User/TableData/111"},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey("foo")), "/User/TableData/42/\"foo\""},
+		// others
+	}
+	for i, test := range testCases {
+		keyInfo := PrettyPrint(test.key)
+		if strings.Compare(test.exp, keyInfo) != 0 {
+			t.Fatalf("%d: expected %s, got %s", i, test.exp, keyInfo)
 		}
 	}
 }
