@@ -472,6 +472,15 @@ func TestParse2(t *testing.T) {
 			`SET TIME ZONE 'Europe/Rome'`},
 		{`SET TIME ZONE INTERVAL '-7h'`,
 			`SET TIME ZONE INTERVAL '-7h0m0s'`},
+		// Special substring syntax
+		{`SELECT SUBSTRING('RoacH' from 2 for 3)`,
+			`SELECT SUBSTRING('RoacH', 2, 3)`},
+		{`SELECT SUBSTRING('RoacH' from 2)`,
+			`SELECT SUBSTRING('RoacH', 2)`},
+		{`SELECT SUBSTRING('f(oabaroob' from '\(o(.)b')`,
+			`SELECT SUBSTRING('f(oabaroob', e'\\(o(.)b')`},
+		{`SELECT SUBSTRING('f(oabaroob' from '+(o(.)b' for '+')`,
+			`SELECT SUBSTRING('f(oabaroob', '+(o(.)b', '+')`},
 	}
 	for _, d := range testData {
 		stmts, err := ParseTraditional(d.sql)
@@ -488,7 +497,7 @@ func TestParse2(t *testing.T) {
 	}
 }
 
-// TestParseSyntax verifieds that parsing succeeds, though the syntax tree
+// TestParseSyntax verifies that parsing succeeds, though the syntax tree
 // likely differs. All of the test cases here should eventually be moved
 // elsewhere.
 func TestParseSyntax(t *testing.T) {
