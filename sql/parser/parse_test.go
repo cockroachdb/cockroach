@@ -486,6 +486,9 @@ func TestParse2(t *testing.T) {
 			`SELECT SUBSTRING('f(oabaroob', e'\\(o(.)b')`},
 		{`SELECT SUBSTRING('f(oabaroob' from '+(o(.)b' for '+')`,
 			`SELECT SUBSTRING('f(oabaroob', '+(o(.)b', '+')`},
+		// Special position syntax
+		{`SELECT POSITION('ig' in 'high')`,
+			`SELECT STRPOS('high', 'ig')`},
 	}
 	for _, d := range testData {
 		stmts, err := ParseTraditional(d.sql)
@@ -613,6 +616,13 @@ CREATE TABLE a (b INT DEFAULT c)
 			`default expression contains a subquery at or near ")"
 CREATE TABLE a (b INT DEFAULT (SELECT 1))
                                         ^
+`,
+		},
+		{
+			`SELECT POSITION('high', 'a')`,
+			`syntax error at or near ","
+SELECT POSITION('high', 'a')
+                      ^
 `,
 		},
 	}
