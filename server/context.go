@@ -133,7 +133,7 @@ func NewContext() *Context {
 	return ctx
 }
 
-// InitDefaults sets up the default values for a context.
+// InitDefaults sets up the default values for a Context.
 func (ctx *Context) InitDefaults() {
 	ctx.Context.InitDefaults()
 	ctx.Addr = defaultAddr
