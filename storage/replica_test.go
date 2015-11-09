@@ -30,8 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
@@ -3312,62 +3310,6 @@ func TestWriteWithoutCmdID(t *testing.T) {
 
 	if _, pErr := tc.rng.Send(tc.rng.context(), ba); pErr != nil {
 		t.Fatal(pErr)
-	}
-}
-
-func TestReplicaQuiesce(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	tc := testContext{
-		rng: &Replica{},
-	}
-	tc.Start(t)
-	defer tc.Stop()
-
-	// Mock proposeRaftCommand to do nothing to get a pending command.
-	proposeRaftCommandFn := func(cmdIDKey, roachpb.RaftCommand) <-chan error {
-		ch := make(chan error, 1)
-		ch <- nil
-		return ch
-	}
-	rng, err := NewReplica(testRangeDescriptor(), tc.store)
-	rng.proposeRaftCommandFn = proposeRaftCommandFn
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := tc.store.AddReplicaTest(rng); err != nil {
-		t.Fatal(err)
-	}
-
-	args := putArgs(roachpb.Key("a"), nil)
-	var ba roachpb.BatchRequest
-	ba.Add(&args)
-
-	_, cmd := rng.proposeRaftCommand(context.Background(), ba)
-	rng.Quiesce()
-
-	select {
-	default:
-		t.Fatal("command was not canceled on Quiesce")
-	case rwe := <-cmd.done:
-		if rwe.Err != multiraft.ErrGroupDeleted {
-			t.Fatal(err)
-		}
-	}
-
-	rng.Lock()
-	if rng.pendingCmds != nil {
-		t.Error("expected rng.pendingCmds to be nil")
-	}
-	rng.Unlock()
-
-	errChan, _ := rng.proposeRaftCommand(context.Background(), ba)
-	select {
-	default:
-		t.Fatal("accepted new command after Quiesce")
-	case err := <-errChan:
-		if err != multiraft.ErrGroupDeleted {
-			t.Fatal(err)
-		}
 	}
 }
 
