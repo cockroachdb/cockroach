@@ -213,6 +213,19 @@ SELECT strpos('💩high', 'ig')
 ----
 3
 
+query I
+SELECT position('ig' in 'high')
+----
+2
+
+query I
+SELECT position('a' in 'high')
+----
+0
+
+query error syntax error at or near ","
+SELECT position('high', 'a')
+
 query T
 SELECT btrim('xyxtrimyyx', 'xy')
 ----

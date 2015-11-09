@@ -143,7 +143,7 @@ func unimplemented() {
 %type <qnames> qualified_name_list
 %type <qname> any_name
 %type <qnames> any_name_list
-%type <exprs> expr_list extract_list substr_list
+%type <exprs> expr_list extract_list position_list substr_list
 %type <indirect> attrs
 %type <selExprs> target_list opt_target_list
 %type <updateExprs> set_clause_list
@@ -159,7 +159,7 @@ func unimplemented() {
 %type <joinCond> join_qual
 %type <str> join_type
 
-%type <empty> overlay_list position_list
+%type <empty> overlay_list
 %type <empty> trim_list
 %type <empty> opt_interval interval_second
 %type <empty> overlay_placing
@@ -2831,7 +2831,10 @@ func_expr_common_subexpr:
     $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
   }
 | OVERLAY '(' overlay_list ')' { unimplemented() }
-| POSITION '(' position_list ')' { unimplemented() }
+| POSITION '(' position_list ')'
+  {
+    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
+  }
 | SUBSTRING '(' substr_list ')' 
   { 
     $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3} 
@@ -3083,8 +3086,14 @@ overlay_placing:
 
 // position_list uses b_expr not a_expr to avoid conflict with general IN
 position_list:
-  b_expr IN b_expr { unimplemented() }
-| /* EMPTY */ {}
+  b_expr IN b_expr
+  {
+    $$ = Exprs{$3, $1}
+  }
+| /* EMPTY */ 
+  {
+    $$ = nil
+  }
 
 // SUBSTRING() arguments
 // SQL9x defines a specific syntax for arguments to SUBSTRING():

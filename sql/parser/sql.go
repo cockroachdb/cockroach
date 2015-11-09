@@ -578,7 +578,7 @@ const sqlEofCode = 1
 const sqlErrCode = 2
 const sqlInitialStackSize = 16
 
-//line sql.y:3729
+//line sql.y:3738
 
 //line yacctab:1
 var sqlExca = [...]int{
@@ -1031,9 +1031,9 @@ var sqlAct = [...]int{
 	1234, 1235, 380, 379, 87, 87, 837, 1355, 913, 371,
 	87, 1412, 87, 837, 87, 87, 87, 87, 1407, 79,
 	80, 1015, 1350, 1370, 764, 813, 87, 1379, 87, 1371,
-	1372, 628, 1190, 1377, 231, 1123, 87, 87, 955, 953,
-	87, 332, 459, 772, 837, 1141, 87, 87, 1427, 358,
-	320, 963, 1436, 1278, 1279, 1280, 1281, 1282, 1283, 1284,
+	1372, 628, 1190, 1377, 231, 1123, 87, 87, 953, 332,
+	87, 459, 772, 358, 837, 1141, 87, 87, 1427, 320,
+	963, 955, 1436, 1278, 1279, 1280, 1281, 1282, 1283, 1284,
 	1285, 1286, 1287, 1288, 1289, 1290, 1291, 1292, 1293, 1294,
 	1295, 858, 1299, 1457, 857, 1419, 1443, 944, 1364, 1422,
 	1363, 1459, 1365, 824, 1445, 1420, 1465, 1456, 87, 1067,
@@ -2895,9 +2895,9 @@ var sqlPgo = [...]int{
 	1412, 10, 76, 72, 1409, 37, 1408, 542, 1163, 49,
 	20, 15, 4, 1407, 1397, 1393, 29, 1391, 1390, 1389,
 	11, 40, 25, 1388, 14, 89, 1384, 1379, 74, 1373,
-	127, 42, 96, 97, 1367, 1341, 1340, 484, 1339, 12,
-	46, 1333, 24, 1332, 19, 51, 103, 1331, 499, 38,
-	22, 36, 1329, 1328, 61, 70, 43, 1325, 1324, 45,
+	127, 42, 96, 97, 1367, 1341, 1340, 1339, 484, 1333,
+	12, 46, 1332, 24, 1331, 19, 51, 103, 1329, 499,
+	38, 22, 36, 1328, 61, 70, 43, 1325, 1324, 45,
 	1322, 95, 98, 1321, 1315, 1314, 1312, 1311, 1310, 1094,
 	1309, 7, 52, 41, 28, 39, 0, 215, 551, 1299,
 	30, 32, 56, 27, 35, 31, 1298, 77, 1293, 1292,
@@ -2920,7 +2920,7 @@ var sqlR1 = [...]int{
 	32, 32, 32, 32, 32, 32, 32, 32, 32, 29,
 	29, 35, 35, 35, 34, 34, 30, 30, 5, 5,
 	5, 9, 10, 10, 10, 10, 10, 10, 62, 62,
-	61, 61, 66, 66, 11, 11, 12, 12, 12, 12,
+	61, 61, 67, 67, 11, 11, 12, 12, 12, 12,
 	138, 138, 137, 13, 17, 204, 204, 204, 208, 208,
 	209, 209, 210, 210, 210, 210, 210, 210, 210, 206,
 	206, 19, 19, 19, 99, 99, 98, 98, 98, 98,
@@ -2939,17 +2939,17 @@ var sqlR1 = [...]int{
 	16, 16, 16, 16, 16, 89, 89, 90, 90, 21,
 	21, 21, 213, 213, 36, 36, 37, 6, 6, 14,
 	43, 43, 95, 95, 95, 97, 97, 97, 96, 96,
-	96, 23, 69, 69, 70, 70, 136, 71, 71, 18,
+	96, 23, 70, 70, 71, 71, 136, 72, 72, 18,
 	18, 25, 25, 24, 24, 24, 24, 24, 24, 26,
 	26, 27, 27, 27, 27, 27, 27, 27, 189, 189,
 	189, 191, 191, 188, 15, 15, 15, 15, 190, 190,
-	212, 212, 78, 78, 78, 49, 48, 48, 52, 52,
-	51, 53, 53, 129, 76, 76, 76, 76, 91, 92,
-	92, 93, 93, 94, 94, 75, 75, 113, 113, 28,
+	212, 212, 79, 79, 79, 49, 48, 48, 52, 52,
+	51, 53, 53, 129, 77, 77, 77, 77, 91, 92,
+	92, 93, 93, 94, 94, 76, 76, 113, 113, 28,
 	28, 58, 58, 59, 59, 131, 131, 131, 131, 132,
 	132, 132, 132, 132, 132, 127, 127, 127, 127, 128,
-	128, 81, 81, 81, 81, 79, 79, 80, 80, 133,
-	133, 133, 133, 77, 77, 134, 134, 134, 104, 104,
+	128, 82, 82, 82, 82, 80, 80, 81, 81, 133,
+	133, 133, 133, 78, 78, 134, 134, 134, 104, 104,
 	139, 139, 139, 57, 57, 57, 140, 140, 140, 140,
 	140, 140, 140, 140, 140, 140, 141, 141, 141, 141,
 	143, 143, 143, 142, 142, 142, 142, 142, 142, 142,
@@ -2975,11 +2975,11 @@ var sqlR1 = [...]int{
 	200, 201, 201, 202, 202, 202, 202, 202, 117, 117,
 	117, 118, 118, 119, 63, 63, 115, 115, 114, 114,
 	114, 116, 116, 64, 156, 156, 156, 156, 156, 156,
-	156, 82, 82, 87, 83, 83, 65, 65, 65, 65,
-	65, 65, 110, 111, 84, 84, 84, 112, 112, 120,
+	156, 83, 83, 87, 65, 65, 66, 66, 66, 66,
+	66, 66, 110, 111, 84, 84, 84, 112, 112, 120,
 	124, 124, 123, 122, 122, 121, 121, 105, 105, 105,
-	105, 105, 72, 72, 214, 214, 125, 125, 73, 73,
-	74, 68, 68, 67, 67, 135, 135, 135, 135, 60,
+	105, 105, 73, 73, 214, 214, 125, 125, 74, 74,
+	75, 69, 69, 68, 68, 135, 135, 135, 135, 60,
 	60, 42, 42, 55, 55, 56, 56, 40, 40, 109,
 	109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
 	158, 158, 158, 38, 38, 38, 39, 39, 164, 164,
@@ -3132,16 +3132,16 @@ var sqlChk = [...]int{
 	204, -88, 68, 221, -26, -27, -25, -51, -52, 220,
 	116, 85, 154, -24, -25, -189, -191, 171, -188, -38,
 	130, 138, 189, 212, 208, -191, -48, -49, 18, 78,
-	264, -133, -42, 152, -38, -74, 260, -3, -133, 106,
+	264, -133, -42, 152, -38, -75, 260, -3, -133, 106,
 	-38, -42, 106, 97, 118, -134, -133, -38, 106, -60,
 	106, -42, -62, 106, -61, -138, -137, -165, 4, -169,
 	-171, -170, 229, 47, 57, 98, 111, 119, 121, 126,
 	128, 139, 157, 159, 179, 193, 151, 264, 151, -99,
 	-99, -37, 120, 210, 245, 97, 240, -45, 6, 74,
-	-66, 262, 97, -205, 151, 97, -161, 97, 240, 120,
-	-36, -37, -77, -133, -61, 106, 109, -38, 106, -51,
-	-52, -76, -91, -92, 129, 150, -78, 18, 78, -78,
-	-78, 37, 261, 261, 264, -191, -56, 260, -68, -67,
+	-67, 262, 97, -205, 151, 97, -161, 97, 240, 120,
+	-36, -37, -78, -133, -61, 106, 109, -38, 106, -51,
+	-52, -77, -91, -92, 129, 150, -79, 18, 78, -79,
+	-79, 37, 261, 261, 264, -191, -56, 260, -69, -68,
 	-135, -106, 253, -108, 251, 252, 257, 142, 241, -117,
 	-42, -109, 9, 260, -120, -186, -25, 86, 24, -118,
 	-119, 182, -38, 8, 5, 6, 7, -40, -141, -150,
@@ -3150,8 +3150,8 @@ var sqlChk = [...]int{
 	224, 41, 88, 160, 164, 202, 213, 214, 106, 145,
 	107, 45, 101, 125, 80, 31, 32, 34, 35, 42,
 	43, 70, 72, 73, 93, 113, 114, 115, 147, 170,
-	195, 209, 230, -170, -153, -154, -147, -148, -155, -67,
-	-74, 253, -42, 260, -72, -105, 262, 265, 258, -73,
+	195, 209, 230, -170, -153, -154, -147, -148, -155, -68,
+	-75, 253, -42, 260, -73, -105, 262, 265, 258, -74,
 	-125, -106, 74, -33, 174, -32, 17, 19, 81, 227,
 	86, 174, 174, 86, -134, -43, -42, 191, -38, 25,
 	86, -35, 264, 39, 176, 86, 264, 86, 261, 264,
@@ -3168,22 +3168,22 @@ var sqlChk = [...]int{
 	173, 177, 187, 190, 197, 203, 204, 207, 210, 211,
 	215, 220, 221, 224, 225, 231, 233, 234, 235, 236,
 	-162, -207, 95, -204, -162, -162, 127, -35, 264, 260,
-	142, -39, 106, -38, 142, -76, -92, -91, -93, -106,
+	142, -39, 106, -38, 142, -77, -92, -91, -93, -106,
 	18, -106, -108, -26, -26, -26, -53, -129, -106, -188,
 	25, -55, -38, -58, 97, 264, 10, 46, 28, 251,
 	252, 253, 254, 255, 248, 249, 250, 247, 243, 244,
 	245, 52, 133, 184, 12, 13, 14, 22, 153, 128,
 	241, 193, 119, 30, 108, 25, 4, -106, -106, -106,
-	-106, -106, 159, -25, -106, -63, -72, -25, -114, 258,
-	260, -72, 260, 6, 6, 260, -121, -106, -192, 237,
+	-106, -106, 159, -25, -106, -63, -73, -25, -114, 258,
+	260, -73, 260, 6, 6, 260, -121, -106, -192, 237,
 	95, 260, 260, 260, 260, 260, 260, 260, 260, 260,
 	260, 260, 260, 260, 260, 260, 166, -157, 232, -157,
 	-157, -143, 260, -143, -144, 260, -143, 260, -58, -42,
 	-105, -163, 253, -163, -106, 264, 261, 264, 210, -89,
 	54, 48, -102, 106, 48, -173, -38, 54, -174, 44,
 	221, 167, 96, -89, 54, -89, 54, 54, -133, 210,
-	210, -42, -104, 234, -95, -18, 260, 74, 25, -69,
-	-70, -136, -71, -42, 260, -38, -38, -42, -60, -61,
+	210, -42, -104, 234, -95, -18, 260, 74, 25, -70,
+	-71, -136, -72, -42, 260, -38, -38, -42, -60, -61,
 	-62, -12, -137, 210, -60, -55, 97, -44, 169, 175,
 	196, 188, 264, 5, 8, 8, 6, -163, -206, -38,
 	-133, -46, -47, -103, -102, -175, -173, 109, 221, 86,
@@ -3201,8 +3201,8 @@ var sqlChk = [...]int{
 	-63, 231, 18, 78, 253, -85, 239, 136, 71, 105,
 	135, -86, 186, 8, -124, -123, 233, -193, 91, 102,
 	260, 261, 261, -106, -64, -156, 4, 239, 136, 71,
-	105, 135, 186, -82, -106, -83, -107, -108, 251, 252,
-	257, 260, 182, -65, -106, -63, -106, 36, 124, 211,
+	105, 135, 186, -83, -106, -65, -107, -108, 251, 252,
+	257, 260, 182, -66, -106, -63, -106, 36, 124, 211,
 	-84, -106, 97, -63, -106, -106, -106, -63, -63, -63,
 	260, 8, 8, 8, -104, 261, 259, 266, -125, -32,
 	-42, -38, -38, 142, -102, 106, -139, -38, 260, 260,
@@ -3210,8 +3210,8 @@ var sqlChk = [...]int{
 	174, -38, -38, 174, -106, -97, 151, -60, 229, -38,
 	-58, 264, 245, -60, -35, -206, -206, 219, 51, 169,
 	-167, -85, 264, 261, 264, -39, 109, -61, -42, 86,
-	-38, -129, -15, -18, -14, -23, -9, -38, -75, 102,
-	264, 57, -81, 121, 139, 98, 126, 179, 111, -128,
+	-38, -129, -15, -18, -14, -23, -9, -38, -76, 102,
+	264, 57, -82, 121, 139, 98, 126, 179, 111, -128,
 	-127, 25, -38, -128, -25, -132, -131, -57, 24, -85,
 	260, 240, -106, 210, -214, 203, -112, -106, 144, 215,
 	89, 222, 78, 148, 97, 260, -107, -107, -63, 260,
@@ -3223,12 +3223,12 @@ var sqlChk = [...]int{
 	133, 184, 12, 13, 14, 119, 108, -107, -107, -107,
 	-63, 260, 261, -110, -111, 97, 95, 25, -84, -84,
 	-84, 261, 97, -63, 264, 264, 264, 261, 261, 261,
-	8, 261, 264, 261, 261, -75, -106, 210, 210, 86,
+	8, 261, 264, 261, 261, -76, -106, 210, 210, 86,
 	142, -176, -174, -106, -55, 260, 260, -29, 81, 191,
 	-90, 86, -35, 86, -35, 210, -89, 54, 210, 53,
-	261, -104, -70, -125, 261, -38, -103, 260, -39, 260,
+	261, -104, -71, -125, 261, -38, -103, 260, -39, 260,
 	260, -38, 261, -113, 104, 37, -131, 121, 121, -131,
-	-81, 121, -79, 157, -79, -79, -38, 260, 261, 258,
+	-82, 121, -80, 157, -80, -80, -38, 260, 261, 258,
 	258, 8, -106, -106, -107, -107, 97, 260, -106, -115,
 	-139, 22, 22, 261, -63, 261, 264, 261, -106, -114,
 	261, 231, -52, -52, -52, 136, 105, 135, -86, 135,
@@ -3243,16 +3243,16 @@ var sqlChk = [...]int{
 	142, 74, 67, 217, -38, -38, -42, -38, -38, -38,
 	-96, 260, 151, -18, 245, -55, 260, -46, -54, -130,
 	-38, -187, 260, -184, -185, -40, 151, -194, 235, -106,
-	-63, -131, -131, -80, 225, 151, 121, -131, 260, -55,
+	-63, -131, -131, -81, 225, 151, 121, -131, 260, -55,
 	-127, 259, 8, 8, 261, 22, 22, -106, -115, 261,
 	264, -106, -106, 261, -106, 6, -106, 261, 261, 261,
 	261, -106, -203, -38, -106, 261, 261, -111, 97, 78,
 	148, 260, -106, 261, 261, 264, 261, 261, 261, -194,
 	-102, -38, -61, 144, 122, 260, -107, -42, -101, -211,
 	55, 201, 261, 261, 144, 144, -106, -139, -35, -35,
-	210, 210, 79, -54, 54, -74, -25, 260, 261, -55,
-	261, 261, 264, -41, -72, 46, -41, -106, 260, -42,
-	-195, -197, -38, -80, 260, -106, -131, -55, 261, 259,
+	210, 210, 79, -54, 54, -75, -25, 260, 261, -55,
+	261, 261, 264, -41, -73, 46, -41, -106, 260, -42,
+	-195, -197, -38, -81, 260, -106, -131, -55, 261, 259,
 	259, -106, -106, 261, -139, 261, -52, -196, 162, 261,
 	-107, 97, 260, -115, 261, -106, -178, -106, -50, 260,
 	260, 173, -34, 46, -38, -38, 223, 143, 261, -38,
@@ -3261,7 +3261,7 @@ var sqlChk = [...]int{
 	261, 261, -181, 134, -55, -55, -42, -30, 225, -61,
 	191, -104, -101, -41, -52, -54, -197, -199, 261, -200,
 	168, 183, -63, 261, -179, -182, -180, 151, 98, 161,
-	194, 261, 261, -50, -106, -69, -31, 261, 261, 261,
+	194, 261, 261, -50, -106, -70, -31, 261, 261, 261,
 	-201, -202, 30, 218, 59, -106, -201, -180, 151, -182,
 	151, 223, 76, -181, -104, -101, -202, 165, 94, 182,
 	165, 94, -183, 141, 176, 39, 191, -183, -179, 22,
@@ -6765,742 +6765,743 @@ sqldefault:
 		}
 	case 548:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:2834
+		//line sql.y:2835
 		{
-			unimplemented()
+			sqlVAL.expr = &FuncExpr{Name: &QualifiedName{Base: Name(sqlDollar[1].str)}, Exprs: sqlDollar[3].exprs}
 		}
 	case 549:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:2836
+		//line sql.y:2839
 		{
 			sqlVAL.expr = &FuncExpr{Name: &QualifiedName{Base: Name(sqlDollar[1].str)}, Exprs: sqlDollar[3].exprs}
 		}
 	case 550:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:2839
+		//line sql.y:2842
 		{
 			unimplemented()
 		}
 	case 551:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:2840
+		//line sql.y:2843
 		{
 			unimplemented()
 		}
 	case 552:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:2841
+		//line sql.y:2844
 		{
 			unimplemented()
 		}
 	case 553:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:2842
+		//line sql.y:2845
 		{
 			unimplemented()
 		}
 	case 554:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:2843
+		//line sql.y:2846
 		{
 			unimplemented()
 		}
 	case 555:
 		sqlDollar = sqlS[sqlpt-8 : sqlpt+1]
-		//line sql.y:2845
+		//line sql.y:2848
 		{
 			sqlVAL.expr = &IfExpr{Cond: sqlDollar[3].expr, True: sqlDollar[5].expr, Else: sqlDollar[7].expr}
 		}
 	case 556:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:2849
+		//line sql.y:2852
 		{
 			sqlVAL.expr = &NullIfExpr{Expr1: sqlDollar[3].expr, Expr2: sqlDollar[5].expr}
 		}
 	case 557:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:2853
+		//line sql.y:2856
 		{
 			sqlVAL.expr = &CoalesceExpr{Name: "IFNULL", Exprs: Exprs{sqlDollar[3].expr, sqlDollar[5].expr}}
 		}
 	case 558:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:2857
+		//line sql.y:2860
 		{
 			sqlVAL.expr = &CoalesceExpr{Name: "COALESCE", Exprs: sqlDollar[3].exprs}
 		}
 	case 559:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:2861
+		//line sql.y:2864
 		{
 			sqlVAL.expr = &FuncExpr{Name: &QualifiedName{Base: Name(sqlDollar[1].str)}, Exprs: sqlDollar[3].exprs}
 		}
 	case 560:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:2865
+		//line sql.y:2868
 		{
 			sqlVAL.expr = &FuncExpr{Name: &QualifiedName{Base: Name(sqlDollar[1].str)}, Exprs: sqlDollar[3].exprs}
 		}
 	case 561:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:2871
+		//line sql.y:2874
 		{
 			unimplemented()
 		}
 	case 562:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:2872
+		//line sql.y:2875
 		{
 		}
 	case 563:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:2875
+		//line sql.y:2878
 		{
 			unimplemented()
 		}
 	case 564:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:2876
+		//line sql.y:2879
 		{
 		}
 	case 565:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:2880
+		//line sql.y:2883
 		{
 			unimplemented()
 		}
 	case 566:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:2881
+		//line sql.y:2884
 		{
 		}
 	case 567:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:2884
+		//line sql.y:2887
 		{
 			unimplemented()
 		}
 	case 568:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:2885
+		//line sql.y:2888
 		{
 			unimplemented()
 		}
 	case 569:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:2888
+		//line sql.y:2891
 		{
 			unimplemented()
 		}
 	case 570:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:2891
+		//line sql.y:2894
 		{
 			unimplemented()
 		}
 	case 571:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:2892
+		//line sql.y:2895
 		{
 			unimplemented()
 		}
 	case 572:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:2893
+		//line sql.y:2896
 		{
 		}
 	case 573:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:2897
+		//line sql.y:2900
 		{
 			unimplemented()
 		}
 	case 574:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:2908
+		//line sql.y:2911
 		{
 			unimplemented()
 		}
 	case 575:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:2909
+		//line sql.y:2912
 		{
 		}
 	case 576:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:2912
+		//line sql.y:2915
 		{
 			unimplemented()
 		}
 	case 577:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:2913
+		//line sql.y:2916
 		{
 		}
 	case 578:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:2921
+		//line sql.y:2924
 		{
 			unimplemented()
 		}
 	case 579:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:2922
+		//line sql.y:2925
 		{
 			unimplemented()
 		}
 	case 580:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:2923
+		//line sql.y:2926
 		{
 		}
 	case 581:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:2926
+		//line sql.y:2929
 		{
 			unimplemented()
 		}
 	case 582:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:2927
+		//line sql.y:2930
 		{
 			unimplemented()
 		}
 	case 583:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:2933
+		//line sql.y:2936
 		{
 			unimplemented()
 		}
 	case 584:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:2934
+		//line sql.y:2937
 		{
 			unimplemented()
 		}
 	case 585:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:2935
+		//line sql.y:2938
 		{
 			unimplemented()
 		}
 	case 586:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:2936
+		//line sql.y:2939
 		{
 			unimplemented()
 		}
 	case 587:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:2937
+		//line sql.y:2940
 		{
 			unimplemented()
 		}
 	case 588:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:2948
+		//line sql.y:2951
 		{
 			sqlVAL.expr = Row(sqlDollar[3].exprs)
 		}
 	case 589:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:2952
+		//line sql.y:2955
 		{
 			sqlVAL.expr = Row(nil)
 		}
 	case 590:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:2956
+		//line sql.y:2959
 		{
 			sqlVAL.expr = Tuple(append(sqlDollar[2].exprs, sqlDollar[4].expr))
 		}
 	case 591:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:2962
+		//line sql.y:2965
 		{
 			sqlVAL.expr = Row(sqlDollar[3].exprs)
 		}
 	case 592:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:2966
+		//line sql.y:2969
 		{
 			sqlVAL.expr = Row(nil)
 		}
 	case 593:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:2972
+		//line sql.y:2975
 		{
 			sqlVAL.expr = Tuple(append(sqlDollar[2].exprs, sqlDollar[4].expr))
 		}
 	case 594:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3013
+		//line sql.y:3016
 		{
 			sqlVAL.exprs = Exprs{sqlDollar[1].expr}
 		}
 	case 595:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3017
+		//line sql.y:3020
 		{
 			sqlVAL.exprs = append(sqlDollar[1].exprs, sqlDollar[3].expr)
 		}
 	case 596:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3023
+		//line sql.y:3026
 		{
 			sqlVAL.colTypes = []ColumnType{sqlDollar[1].colType}
 		}
 	case 597:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3027
+		//line sql.y:3030
 		{
 			sqlVAL.colTypes = append(sqlDollar[1].colTypes, sqlDollar[3].colType)
 		}
 	case 598:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3033
+		//line sql.y:3036
 		{
 			sqlVAL.expr = Array(sqlDollar[2].exprs)
 		}
 	case 599:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3037
+		//line sql.y:3040
 		{
 			sqlVAL.expr = Array(sqlDollar[2].exprs)
 		}
 	case 600:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3041
+		//line sql.y:3044
 		{
 			sqlVAL.expr = Array(nil)
 		}
 	case 601:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3047
+		//line sql.y:3050
 		{
 			sqlVAL.exprs = Exprs{sqlDollar[1].expr}
 		}
 	case 602:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3051
+		//line sql.y:3054
 		{
 			sqlVAL.exprs = append(sqlDollar[1].exprs, sqlDollar[3].expr)
 		}
 	case 603:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3057
+		//line sql.y:3060
 		{
 			sqlVAL.exprs = Exprs{DString(sqlDollar[1].str), sqlDollar[3].expr}
 		}
 	case 611:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3078
+		//line sql.y:3081
 		{
 			unimplemented()
 		}
 	case 612:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3079
+		//line sql.y:3082
 		{
 			unimplemented()
 		}
 	case 613:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3082
+		//line sql.y:3085
 		{
 			unimplemented()
 		}
 	case 614:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3086
+		//line sql.y:3090
 		{
-			unimplemented()
+			sqlVAL.exprs = Exprs{sqlDollar[3].expr, sqlDollar[1].expr}
 		}
 	case 615:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3087
+		//line sql.y:3094
 		{
+			sqlVAL.exprs = nil
 		}
 	case 616:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3102
+		//line sql.y:3111
 		{
 			sqlVAL.exprs = Exprs{sqlDollar[1].expr, sqlDollar[2].expr, sqlDollar[3].expr}
 		}
 	case 617:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3106
+		//line sql.y:3115
 		{
 			sqlVAL.exprs = Exprs{sqlDollar[1].expr, sqlDollar[3].expr, sqlDollar[2].expr}
 		}
 	case 618:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3110
+		//line sql.y:3119
 		{
 			sqlVAL.exprs = Exprs{sqlDollar[1].expr, sqlDollar[2].expr}
 		}
 	case 619:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3114
+		//line sql.y:3123
 		{
 			sqlVAL.exprs = Exprs{sqlDollar[1].expr, DInt(1), sqlDollar[2].expr}
 		}
 	case 620:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3118
+		//line sql.y:3127
 		{
 			sqlVAL.exprs = sqlDollar[1].exprs
 		}
 	case 621:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3122
+		//line sql.y:3131
 		{
 			sqlVAL.exprs = nil
 		}
 	case 622:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3128
+		//line sql.y:3137
 		{
 			sqlVAL.expr = sqlDollar[2].expr
 		}
 	case 623:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3134
+		//line sql.y:3143
 		{
 			sqlVAL.expr = sqlDollar[2].expr
 		}
 	case 624:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3139
+		//line sql.y:3148
 		{
 			unimplemented()
 		}
 	case 625:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3140
+		//line sql.y:3149
 		{
 			unimplemented()
 		}
 	case 626:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3141
+		//line sql.y:3150
 		{
 			unimplemented()
 		}
 	case 627:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3145
+		//line sql.y:3154
 		{
 			sqlVAL.expr = &Subquery{Select: sqlDollar[1].selectStmt}
 		}
 	case 628:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3149
+		//line sql.y:3158
 		{
 			sqlVAL.expr = Tuple(sqlDollar[2].exprs)
 		}
 	case 629:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3160
+		//line sql.y:3169
 		{
 			sqlVAL.expr = &CaseExpr{Expr: sqlDollar[2].expr, Whens: sqlDollar[3].whens, Else: sqlDollar[4].expr}
 		}
 	case 630:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3167
+		//line sql.y:3176
 		{
 			sqlVAL.whens = []*When{sqlDollar[1].when}
 		}
 	case 631:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3171
+		//line sql.y:3180
 		{
 			sqlVAL.whens = append(sqlDollar[1].whens, sqlDollar[2].when)
 		}
 	case 632:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
-		//line sql.y:3177
+		//line sql.y:3186
 		{
 			sqlVAL.when = &When{Cond: sqlDollar[2].expr, Val: sqlDollar[4].expr}
 		}
 	case 633:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3183
+		//line sql.y:3192
 		{
 			sqlVAL.expr = sqlDollar[2].expr
 		}
 	case 634:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3187
+		//line sql.y:3196
 		{
 			sqlVAL.expr = nil
 		}
 	case 636:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3194
+		//line sql.y:3203
 		{
 			sqlVAL.expr = nil
 		}
 	case 637:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3200
+		//line sql.y:3209
 		{
 			sqlVAL.indirectElem = NameIndirection(sqlDollar[2].str)
 		}
 	case 638:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3204
+		//line sql.y:3213
 		{
 			sqlVAL.indirectElem = qualifiedStar
 		}
 	case 639:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3208
+		//line sql.y:3217
 		{
 			sqlVAL.indirectElem = IndexIndirection(sqlDollar[2].str)
 		}
 	case 640:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3212
+		//line sql.y:3221
 		{
 			sqlVAL.indirectElem = &ArrayIndirection{Begin: sqlDollar[2].expr}
 		}
 	case 641:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3216
+		//line sql.y:3225
 		{
 			sqlVAL.indirectElem = &ArrayIndirection{Begin: sqlDollar[2].expr, End: sqlDollar[4].expr}
 		}
 	case 642:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3222
+		//line sql.y:3231
 		{
 			sqlVAL.indirect = Indirection{sqlDollar[1].indirectElem}
 		}
 	case 643:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3226
+		//line sql.y:3235
 		{
 			sqlVAL.indirect = append(sqlDollar[1].indirect, sqlDollar[2].indirectElem)
 		}
 	case 644:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3231
+		//line sql.y:3240
 		{
 		}
 	case 645:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3232
+		//line sql.y:3241
 		{
 		}
 	case 647:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3241
+		//line sql.y:3250
 		{
 			sqlVAL.expr = DefaultVal{}
 		}
 	case 648:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3247
+		//line sql.y:3256
 		{
 			sqlVAL.exprs = []Expr{sqlDollar[1].expr}
 		}
 	case 649:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3251
+		//line sql.y:3260
 		{
 			sqlVAL.exprs = append(sqlDollar[1].exprs, sqlDollar[3].expr)
 		}
 	case 650:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3260
+		//line sql.y:3269
 		{
 			sqlVAL.exprs = sqlDollar[2].exprs
 		}
 	case 652:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3268
+		//line sql.y:3277
 		{
 			sqlVAL.selExprs = nil
 		}
 	case 653:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3274
+		//line sql.y:3283
 		{
 			sqlVAL.selExprs = SelectExprs{sqlDollar[1].selExpr}
 		}
 	case 654:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3278
+		//line sql.y:3287
 		{
 			sqlVAL.selExprs = append(sqlDollar[1].selExprs, sqlDollar[3].selExpr)
 		}
 	case 655:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3284
+		//line sql.y:3293
 		{
 			sqlVAL.selExpr = SelectExpr{Expr: sqlDollar[1].expr, As: Name(sqlDollar[3].str)}
 		}
 	case 656:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3293
+		//line sql.y:3302
 		{
 			sqlVAL.selExpr = SelectExpr{Expr: sqlDollar[1].expr, As: Name(sqlDollar[2].str)}
 		}
 	case 657:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3297
+		//line sql.y:3306
 		{
 			sqlVAL.selExpr = SelectExpr{Expr: sqlDollar[1].expr}
 		}
 	case 658:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3301
+		//line sql.y:3310
 		{
 			sqlVAL.selExpr = StarSelectExpr()
 		}
 	case 659:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3309
+		//line sql.y:3318
 		{
 			sqlVAL.qnames = QualifiedNames{sqlDollar[1].qname}
 		}
 	case 660:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3313
+		//line sql.y:3322
 		{
 			sqlVAL.qnames = append(sqlDollar[1].qnames, sqlDollar[3].qname)
 		}
 	case 661:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3324
+		//line sql.y:3333
 		{
 			sqlVAL.qname = &QualifiedName{Base: Name(sqlDollar[1].str)}
 		}
 	case 662:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3328
+		//line sql.y:3337
 		{
 			sqlVAL.qname = &QualifiedName{Base: Name(sqlDollar[1].str), Indirect: sqlDollar[2].indirect}
 		}
 	case 663:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3334
+		//line sql.y:3343
 		{
 			sqlVAL.strs = []string{sqlDollar[1].str}
 		}
 	case 664:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3338
+		//line sql.y:3347
 		{
 			sqlVAL.strs = append(sqlDollar[1].strs, sqlDollar[3].str)
 		}
 	case 665:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3344
+		//line sql.y:3353
 		{
 			sqlVAL.strs = sqlDollar[2].strs
 		}
 	case 666:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3347
+		//line sql.y:3356
 		{
 		}
 	case 667:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3357
+		//line sql.y:3366
 		{
 			sqlVAL.qname = &QualifiedName{Base: Name(sqlDollar[1].str)}
 		}
 	case 668:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3361
+		//line sql.y:3370
 		{
 			sqlVAL.qname = &QualifiedName{Base: Name(sqlDollar[1].str), Indirect: sqlDollar[2].indirect}
 		}
 	case 669:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3368
+		//line sql.y:3377
 		{
 			sqlVAL.expr = IntVal(sqlDollar[1].ival)
 		}
 	case 670:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3372
+		//line sql.y:3381
 		{
 			sqlVAL.expr = NumVal(sqlDollar[1].str)
 		}
 	case 671:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3376
+		//line sql.y:3385
 		{
 			sqlVAL.expr = DString(sqlDollar[1].str)
 		}
 	case 672:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3380
+		//line sql.y:3389
 		{
 			sqlVAL.expr = DBytes(sqlDollar[1].str)
 		}
 	case 673:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
-		//line sql.y:3383
+		//line sql.y:3392
 		{
 			unimplemented()
 		}
 	case 674:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3385
+		//line sql.y:3394
 		{
 			sqlVAL.expr = &CastExpr{Expr: DString(sqlDollar[2].str), Type: sqlDollar[1].colType}
 		}
 	case 675:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
-		//line sql.y:3389
+		//line sql.y:3398
 		{
 			// TODO(pmattis): support opt_interval?
 			sqlVAL.expr = &CastExpr{Expr: DString(sqlDollar[2].str), Type: sqlDollar[1].colType}
 		}
 	case 676:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
-		//line sql.y:3394
+		//line sql.y:3403
 		{
 			// TODO(pmattis): Support the precision specification?
 			sqlVAL.expr = &CastExpr{Expr: DString(sqlDollar[5].str), Type: sqlDollar[1].colType}
 		}
 	case 677:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3399
+		//line sql.y:3408
 		{
 			sqlVAL.expr = DBool(true)
 		}
 	case 678:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3403
+		//line sql.y:3412
 		{
 			sqlVAL.expr = DBool(false)
 		}
 	case 679:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
-		//line sql.y:3407
+		//line sql.y:3416
 		{
 			sqlVAL.expr = DNull
 		}
 	case 681:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3414
+		//line sql.y:3423
 		{
 			sqlVAL.ival = +sqlDollar[2].ival
 		}
 	case 682:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
-		//line sql.y:3418
+		//line sql.y:3427
 		{
 			sqlVAL.ival = -sqlDollar[2].ival
 		}
 	case 687:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
-		//line sql.y:3440
+		//line sql.y:3449
 		{
 			sqlVAL.str = ""
 		}

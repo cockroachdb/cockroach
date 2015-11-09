@@ -214,15 +214,8 @@ var builtins = map[string][]builtin{
 		},
 	},
 
-	// TODO(XisiHuang): support the position(substring in string) syntax.
-	"strpos": {stringBuiltin2(func(s, substring string) (Datum, error) {
-		index := strings.Index(s, substring)
-		if index < 0 {
-			return DInt(0), nil
-		}
-
-		return DInt(utf8.RuneCountInString(s[:index]) + 1), nil
-	}, DummyInt)},
+	"position": {positionImpl},
+	"strpos":   {positionImpl},
 
 	// TODO(XisiHuang): support the trim([leading|trailing|both] [characters]
 	// from string) syntax.
@@ -913,6 +906,15 @@ var substringImpls = []builtin{
 		},
 	},
 }
+
+var positionImpl = stringBuiltin2(func(s, substring string) (Datum, error) {
+	index := strings.Index(s, substring)
+	if index < 0 {
+		return DInt(0), nil
+	}
+
+	return DInt(utf8.RuneCountInString(s[:index]) + 1), nil
+}, DummyInt)
 
 var ceilImpl = floatBuiltin1(func(x float64) (Datum, error) {
 	return DFloat(math.Ceil(x)), nil
