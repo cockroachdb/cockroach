@@ -42,8 +42,15 @@ type scanner struct {
 	syntax      Syntax
 }
 
-func newScanner(str string, syntax Syntax) *scanner {
-	s := &scanner{in: str, syntax: syntax}
+func makeScanner(str string, syntax Syntax) scanner {
+	var s scanner
+	s.init(str, syntax)
+	return s
+}
+
+func (s *scanner) init(str string, syntax Syntax) {
+	s.in = str
+	s.syntax = syntax
 	switch syntax {
 	case Traditional:
 		s.identQuote = '"'
@@ -51,7 +58,6 @@ func newScanner(str string, syntax Syntax) *scanner {
 		s.identQuote = '`'
 		s.stringQuote = '"'
 	}
-	return s
 }
 
 func (s *scanner) Lex(lval *sqlSymType) int {

@@ -301,7 +301,7 @@ func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, erro
 		if err != nil {
 			return nil, err
 		}
-		expr, err = p.evalCtx.NormalizeExpr(expr)
+		expr, err = p.parser.NormalizeExpr(p.evalCtx, expr)
 		if err != nil {
 			return nil, err
 		}

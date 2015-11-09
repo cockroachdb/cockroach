@@ -396,7 +396,7 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 	if n.err == nil {
 		// Normalize the expression (this will also evaluate any branches that are
 		// constant).
-		n.filter, n.err = n.planner.evalCtx.NormalizeExpr(n.filter)
+		n.filter, n.err = n.planner.parser.NormalizeExpr(n.planner.evalCtx, n.filter)
 	}
 	if n.err == nil {
 		n.filter, n.err = n.planner.expandSubqueries(n.filter, 1)
@@ -514,7 +514,8 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 	}
 	// Type check the expression to memoize operators and functions.
 	var normalized parser.Expr
-	if normalized, n.err = n.planner.evalCtx.TypeCheckAndNormalizeExpr(resolved); n.err != nil {
+	normalized, n.err = n.planner.parser.TypeCheckAndNormalizeExpr(n.planner.evalCtx, resolved)
+	if n.err != nil {
 		return n.err
 	}
 	if normalized, n.err = n.planner.expandSubqueries(normalized, 1); n.err != nil {
