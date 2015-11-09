@@ -466,6 +466,20 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		ba.Timestamp = ds.clock.Now()
 	}
 
+	if ba.Txn != nil && len(ba.Txn.CertainNodes.Nodes) == 0 {
+		// Ensure the local NodeID is marked as free from clock offset;
+		// the transaction's timestamp was taken off the local clock.
+		if nDesc := ds.getNodeDescriptor(); nDesc != nil {
+			// TODO(tschottdorf): bad style to assume that ba.Txn is ours.
+			// No race here, but should have a better way of doing this.
+			// TODO(tschottdorf): future refactoring should move this to txn
+			// creation in TxnCoordSender, which is currently unaware of the
+			// NodeID (and wraps *DistSender through client.Sender since it
+			// also needs test compatibility with *LocalSender).
+			ba.Txn.CertainNodes.Add(nDesc.NodeID)
+		}
+	}
+
 	// TODO(tschottdorf): provisional instantiation.
 	return newChunkingSender(ds.sendChunk).Send(ctx, ba)
 }
