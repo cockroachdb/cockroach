@@ -1482,6 +1482,9 @@ func TestRangeIdempotence(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
+	key := []byte("a")
+	txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
+
 	// Run the same increment 100 times, 50 with identical command IDs,
 	// interleaved with 50 using a sequence of different command IDs.
 	const numIncs = 100
@@ -1489,12 +1492,11 @@ func TestRangeIdempotence(t *testing.T) {
 	var count int64
 	incFunc := func(idx int) {
 		defer wg.Done()
-		args := incrementArgs([]byte("a"), 1)
-		ts := tc.clock.Now()
+		args := incrementArgs(key, 1)
 		cmdID := roachpb.ClientCmdID{WallTime: 1, Random: int64((idx % 2) * (idx + 100))}
 		resp, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
-			Timestamp: ts, // remove
-			CmdID:     cmdID,
+			Txn:   txn,
+			CmdID: cmdID,
 		}, &args)
 		reply := resp.(*roachpb.IncrementResponse)
 		if err != nil {
@@ -1538,10 +1540,13 @@ func TestRangeResponseCacheReadError(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	args := incrementArgs([]byte("a"), 1)
+	k := []byte("a")
+	txn := newTransaction("test", k, 10, roachpb.SERIALIZABLE, tc.clock)
+	args := incrementArgs(k, 1)
 	cmdID := roachpb.ClientCmdID{WallTime: 1, Random: 1}
 
 	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
+		Txn:   txn,
 		CmdID: cmdID,
 	}, &args); pErr != nil {
 		t.Fatal(pErr)
@@ -1579,9 +1584,12 @@ func TestRangeResponseCacheStoredError(t *testing.T) {
 	_ = tc.rng.respCache.PutResponse(tc.engine, cmdID,
 		roachpb.ResponseWithError{Reply: &br, Err: pastError})
 
-	args := incrementArgs([]byte("a"), 1)
+	key := []byte("a")
+	txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
+	args := incrementArgs(key, 1)
 	_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		CmdID: cmdID,
+		Txn:   txn,
 	}, &args)
 	if err == nil {
 		t.Fatal("expected to see cached error but got nil")
@@ -3292,17 +3300,21 @@ func TestBatchErrorWithIndex(t *testing.T) {
 
 }
 
-// TestWriteWithoutCmdID verifies that a write is required to have a CmdID set.
+// TestWriteWithoutCmdID verifies that a txn write is required to have a CmdID set.
 func TestWriteWithoutCmdID(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
 
+	key := []byte("k")
+	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+
 	// A write needs a CmdID or it will error out.
 	ba := roachpb.BatchRequest{}
+	ba.Txn = txn
 	ba.Add(&roachpb.PutRequest{
-		Span:  roachpb.Span{Key: roachpb.Key("k")},
+		Span:  roachpb.Span{Key: key},
 		Value: roachpb.MakeValueFromString("not nil"),
 	})
 
@@ -3312,6 +3324,7 @@ func TestWriteWithoutCmdID(t *testing.T) {
 
 	// A read should be fine without.
 	ba = roachpb.BatchRequest{}
+	ba.Txn = txn
 	ba.Add(&roachpb.GetRequest{
 		Span: roachpb.Span{Key: roachpb.Key("k")},
 	})
