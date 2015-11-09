@@ -214,7 +214,7 @@ var builtins = map[string][]builtin{
 		},
 	},
 
-	// TODO(XisiHuang): support the position(substring in string) syntax.
+	// The SQL parser coerces POSITION to STRPOS.
 	"strpos": {stringBuiltin2(func(s, substring string) (Datum, error) {
 		index := strings.Index(s, substring)
 		if index < 0 {
