@@ -18,6 +18,8 @@
 package server
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -62,7 +64,7 @@ func NewTestContext() *Context {
 	// MaxOffset is the maximum offset for clocks in the cluster.
 	// This is mostly irrelevant except when testing reads within
 	// uncertainty intervals.
-	ctx.MaxOffset = 0
+	ctx.MaxOffset = 50 * time.Millisecond
 
 	// Load test certs. In addition, the tests requiring certs
 	// need to call security.SetReadFileFn(securitytest.Asset)
