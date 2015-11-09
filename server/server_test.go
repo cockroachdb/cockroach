@@ -491,7 +491,7 @@ func TestSystemDBGossip(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 
-	resultChan := make(chan ([]byte))
+	resultChan := make(chan roachpb.Value)
 	var count int32
 	db := s.db
 	key := sql.MakeDescMetadataKey(keys.MaxReservedDescID)
@@ -500,7 +500,7 @@ func TestSystemDBGossip(t *testing.T) {
 	}
 
 	// Register a callback for gossip updates.
-	s.Gossip().RegisterCallback(gossip.KeySystemConfig, func(_ string, content []byte) {
+	s.Gossip().RegisterCallback(gossip.KeySystemConfig, func(_ string, content roachpb.Value) {
 		newCount := atomic.AddInt32(&count, 1)
 		if newCount != 2 {
 			// RegisterCallback calls us right away with the contents,
@@ -535,24 +535,22 @@ func TestSystemDBGossip(t *testing.T) {
 	}
 
 	// Wait for the callback.
-	var b []byte
+	var systemConfig config.SystemConfig
 	select {
-	case b = <-resultChan:
-		break
+	case content := <-resultChan:
+		if err := content.GetProto(&systemConfig); err != nil {
+			t.Fatal(err)
+		}
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("did not receive gossip callback")
 	}
 
 	// Now check the gossip callback.
 	var val *roachpb.Value
-	systemConfig := &config.SystemConfig{}
-	if err := proto.Unmarshal(b, systemConfig); err != nil {
-		t.Fatal(err)
-	}
-
 	for _, kv := range systemConfig.Values {
 		if bytes.Equal(key, kv.Key) {
 			val = &kv.Value
+			break
 		}
 	}
 	if val == nil {

@@ -591,7 +591,7 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 		readKey := []byte(fmt.Sprintf(testUser+"/value-%d", i))
 		gr, err := db.Get(readKey)
 		if err != nil {
-			log.Fatal(err)
+			t.Fatal(err)
 		}
 		if gr.Value == nil {
 			t.Fatalf("unexpected empty key: %s=%v", readKey, gr.Value)

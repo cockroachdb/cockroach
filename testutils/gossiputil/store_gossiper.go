@@ -43,7 +43,7 @@ func NewStoreGossiper(g *gossip.Gossip) *StoreGossiper {
 		g:           g,
 		storeKeyMap: make(map[string]struct{}),
 	}
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(key string, _ []byte) {
+	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(key string, _ roachpb.Value) {
 		sg.mu.Lock()
 		defer sg.mu.Unlock()
 		if _, ok := sg.storeKeyMap[key]; ok {

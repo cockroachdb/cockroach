@@ -189,7 +189,7 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 	c.getGossip(g, nodeID, addr, lAddr, done)
 
 	// Register a callback for gossip updates.
-	updateCallback := func(key string, content []byte) {
+	updateCallback := func(_ string, _ roachpb.Value) {
 		c.sendGossip(g, nodeID, addr, lAddr, done)
 	}
 	// Defer calling "undoer" callback returned from registration.

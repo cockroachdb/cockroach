@@ -115,8 +115,12 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	}
 
 	successChan := make(chan struct{}, 1)
-	store.Gossip().RegisterCallback(gossip.KeySystemConfig, func(_ string, content []byte) {
-		if bytes.Contains(content, descBytes) {
+	store.Gossip().RegisterCallback(gossip.KeySystemConfig, func(_ string, content roachpb.Value) {
+		contentBytes, err := content.GetBytes()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(contentBytes, descBytes) {
 			select {
 			case successChan <- struct{}{}:
 			default:
@@ -559,7 +563,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 			// We don't care about the values, just the keys.
 			k := sql.MakeDescMetadataKey(sql.ID(descID))
-			if err := txn.Put(k, kv.Value.RawBytes); err != nil {
+			if err := txn.Put(k, bytes); err != nil {
 				return err
 			}
 		}

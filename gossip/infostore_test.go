@@ -320,7 +320,7 @@ type callbackRecord struct {
 	sync.Mutex
 }
 
-func (cr *callbackRecord) Add(key string, _ []byte) {
+func (cr *callbackRecord) Add(key string, _ roachpb.Value) {
 	cr.Lock()
 	defer cr.Unlock()
 	cr.keys = append(cr.keys, key)
