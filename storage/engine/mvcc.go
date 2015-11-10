@@ -72,6 +72,12 @@ type encodedSpan struct {
 	start, end MVCCKey
 }
 
+// MVCCKeyValue contains the raw bytes of the value for a key.
+type MVCCKeyValue struct {
+	Key   MVCCKey
+	Value []byte
+}
+
 // illegalSplitKeySpans lists spans of keys that should not be split.
 var illegalSplitKeySpans []encodedSpan
 

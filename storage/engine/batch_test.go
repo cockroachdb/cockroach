@@ -218,41 +218,41 @@ func TestBatchProto(t *testing.T) {
 	b := e.NewBatch()
 	defer b.Close()
 
-	kv := &MVCCKeyValue{Key: MVCCKey("a"), Value: []byte("value")}
-	if _, _, err := PutProto(b, MVCCKey("proto"), kv); err != nil {
+	val := roachpb.MakeValueFromString("value")
+	if _, _, err := PutProto(b, MVCCKey("proto"), &val); err != nil {
 		t.Fatal(err)
 	}
-	getKV := &MVCCKeyValue{}
-	ok, keySize, valSize, err := b.GetProto(MVCCKey("proto"), getKV)
+	getVal := &roachpb.Value{}
+	ok, keySize, valSize, err := b.GetProto(MVCCKey("proto"), getVal)
 	if !ok || err != nil {
 		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
 	}
 	if keySize != 5 {
 		t.Errorf("expected key size 5; got %d", keySize)
 	}
-	var data []byte
-	if data, err = proto.Marshal(kv); err != nil {
+	data, err := val.Marshal()
+	if err != nil {
 		t.Fatal(err)
 	}
 	if valSize != int64(len(data)) {
 		t.Errorf("expected value size %d; got %d", len(data), valSize)
 	}
-	if !reflect.DeepEqual(getKV, kv) {
-		t.Errorf("expected %v; got %v", kv, getKV)
+	if !proto.Equal(getVal, &val) {
+		t.Errorf("expected %v; got %v", &val, getVal)
 	}
 	// Before commit, proto will not be available via engine.
-	if ok, _, _, err = e.GetProto(MVCCKey("proto"), getKV); ok || err != nil {
+	if ok, _, _, err := e.GetProto(MVCCKey("proto"), getVal); ok || err != nil {
 		t.Fatalf("expected GetProto to fail ok=%t: %s", ok, err)
 	}
 	// Commit and verify the proto can be read directly from the engine.
 	if err := b.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	if ok, _, _, err = e.GetProto(MVCCKey("proto"), getKV); !ok || err != nil {
+	if ok, _, _, err := e.GetProto(MVCCKey("proto"), getVal); !ok || err != nil {
 		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
 	}
-	if !reflect.DeepEqual(getKV, kv) {
-		t.Errorf("expected %v; got %v", kv, getKV)
+	if !proto.Equal(getVal, &val) {
+		t.Errorf("expected %v; got %v", &val, getVal)
 	}
 }
 
