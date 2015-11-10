@@ -39,6 +39,14 @@ var errNoTransactionInProgress = errors.New("there is no transaction in progress
 var errTransactionAborted = errors.New("current transaction is aborted, commands ignored until end of transaction block")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
+var plannerPool = sync.Pool{
+	New: func() interface{} {
+		p := &planner{}
+		p.evalCtx.GetLocation = p.session.getLocation
+		return p
+	},
+}
+
 // An Executor executes SQL statements.
 type Executor struct {
 	db       client.DB
@@ -88,11 +96,17 @@ func (e *Executor) getSystemConfig() *config.SystemConfig {
 // Execute the statement(s) in the given request and return a response.
 // On error, the returned integer is an HTTP error code.
 func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
-	planMaker := &planner{
+	planMaker := plannerPool.Get().(*planner)
+	defer plannerPool.Put(planMaker)
+
+	*planMaker = planner{
 		user: args.GetUser(),
 		evalCtx: parser.EvalContext{
 			NodeID:  e.nodeID,
 			ReCache: e.reCache,
+			// Copy existing GetLocation closure. See plannerPool.New() for the
+			// initial setting.
+			GetLocation: planMaker.evalCtx.GetLocation,
 		},
 		leaseMgr:     e.leaseMgr,
 		systemConfig: e.getSystemConfig(),
@@ -111,11 +125,11 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 		}
 		planMaker.setTxn(txn, planMaker.session.Txn.Timestamp.GoTime())
 	}
-	planMaker.evalCtx.GetLocation = planMaker.session.getLocation
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	reply := e.execStmts(args.Sql, parameters(args.Params), planMaker)
+	planMaker.params = parameters(args.Params)
+	reply := e.execStmts(args.Sql, planMaker)
 
 	// Send back the session state even if there were application-level errors.
 	// Add transaction to session state.
@@ -137,9 +151,9 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 
 // exec executes the request. Any error encountered is returned; it is
 // the caller's responsibility to update the response.
-func (e *Executor) execStmts(sql string, params parameters, planMaker *planner) driver.Response {
+func (e *Executor) execStmts(sql string, planMaker *planner) driver.Response {
 	var resp driver.Response
-	stmts, err := parser.Parse(sql, parser.Syntax(planMaker.session.Syntax))
+	stmts, err := planMaker.parser.Parse(sql, parser.Syntax(planMaker.session.Syntax))
 	if err != nil {
 		// A parse error occurred: we can't determine if there were multiple
 		// statements or only one, so just pretend there was one.
@@ -147,7 +161,7 @@ func (e *Executor) execStmts(sql string, params parameters, planMaker *planner) 
 		return resp
 	}
 	for _, stmt := range stmts {
-		result, err := e.execStmt(stmt, params, planMaker)
+		result, err := e.execStmt(stmt, planMaker)
 		if err != nil {
 			result = makeResultFromError(planMaker, err)
 		}
@@ -162,7 +176,7 @@ func (e *Executor) execStmts(sql string, params parameters, planMaker *planner) 
 	return resp
 }
 
-func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker *planner) (driver.Response_Result, error) {
+func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.Response_Result, error) {
 	var result driver.Response_Result
 	switch stmt.(type) {
 	case *parser.BeginTransaction:
@@ -192,7 +206,7 @@ func (e *Executor) execStmt(stmt parser.Statement, params parameters, planMaker 
 	}
 
 	// Bind all the placeholder variables in the stmt to actual values.
-	if err := parser.FillArgs(stmt, params); err != nil {
+	if err := parser.FillArgs(stmt, &planMaker.params); err != nil {
 		return result, err
 	}
 
@@ -318,7 +332,7 @@ func makeResultFromError(planMaker *planner, err error) driver.Response_Result {
 type parameters []driver.Datum
 
 // Arg implements the parser.Args interface.
-func (p parameters) Arg(name string) (parser.Datum, bool) {
+func (p *parameters) Arg(name string) (parser.Datum, bool) {
 	if len(name) == 0 {
 		// This shouldn't happen unless the parser let through an invalid parameter
 		// specification.
@@ -333,10 +347,10 @@ func (p parameters) Arg(name string) (parser.Datum, bool) {
 	if err != nil {
 		return nil, false
 	}
-	if i < 1 || int(i) > len(p) {
+	if i < 1 || int(i) > len(*p) {
 		return nil, false
 	}
-	arg := p[i-1].Payload
+	arg := (*p)[i-1].Payload
 	if arg == nil {
 		return parser.DNull, true
 	}

@@ -46,6 +46,11 @@ type planner struct {
 	// TODO(pmattis): This is a hack to force updating to the latest version of a
 	// lease after a schema change operation such as CREATE INDEX.
 	modifiedSchemas []schemaInfo
+
+	parser                   parser.Parser
+	extractAggregatesVisitor extractAggregatesVisitor
+	params                   parameters
+	subqueryVisitor          subqueryVisitor
 }
 
 func (p *planner) setTxn(txn *client.Txn, timestamp time.Time) {

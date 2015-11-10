@@ -51,7 +51,7 @@ func (p *planner) limit(n *parser.Select, plan planNode) (planNode, error) {
 				return nil, fmt.Errorf("argument of %s must not contain variables", datum.name)
 			}
 
-			normalized, err := p.evalCtx.NormalizeExpr(datum.src)
+			normalized, err := p.parser.NormalizeExpr(p.evalCtx, datum.src)
 			if err != nil {
 				return nil, err
 			}
