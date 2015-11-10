@@ -798,6 +798,16 @@ func (r *rocksDBIterator) ValueProto(msg proto.Message) error {
 	return proto.Unmarshal(data, msg)
 }
 
+func (r *rocksDBIterator) unsafeKey() MVCCKey {
+	data := C.DBIterKey(r.iter)
+	return cSliceToUnsafeGoBytes(data)
+}
+
+func (r *rocksDBIterator) unsafeValue() []byte {
+	data := C.DBIterValue(r.iter)
+	return cSliceToUnsafeGoBytes(data)
+}
+
 func (r *rocksDBIterator) Error() error {
 	return statusToError(C.DBIterError(r.iter))
 }

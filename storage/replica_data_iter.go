@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/gogo/protobuf/proto"
 )
 
 // keyRange is a helper struct for the rangeDataIterator.
@@ -39,7 +38,7 @@ type keyRange struct {
 type replicaDataIterator struct {
 	curIndex int
 	ranges   []keyRange
-	iter     engine.Iterator
+	engine.Iterator
 }
 
 func newReplicaDataIterator(d *roachpb.RangeDescriptor, e engine.Engine) *replicaDataIterator {
@@ -65,9 +64,9 @@ func newReplicaDataIterator(d *roachpb.RangeDescriptor, e engine.Engine) *replic
 				end:   engine.MVCCEncodeKey(d.EndKey.AsRawKey()),
 			},
 		},
-		iter: e.NewIterator(),
+		Iterator: e.NewIterator(),
 	}
-	ri.iter.Seek(ri.ranges[ri.curIndex].start)
+	ri.Seek(ri.ranges[ri.curIndex].start)
 	ri.advance()
 	return ri
 }
@@ -75,46 +74,20 @@ func newReplicaDataIterator(d *roachpb.RangeDescriptor, e engine.Engine) *replic
 // Close closes the underlying iterator.
 func (ri *replicaDataIterator) Close() {
 	ri.curIndex = len(ri.ranges)
-	ri.iter.Close()
+	ri.Iterator.Close()
 }
 
 // Seek seeks to the specified key.
 func (ri *replicaDataIterator) Seek(key []byte) {
-	ri.iter.Seek(key)
+	ri.Iterator.Seek(key)
 	ri.advance()
-}
-
-// Valid returns whether the underlying iterator is valid.
-func (ri *replicaDataIterator) Valid() bool {
-	return ri.iter.Valid()
 }
 
 // Next returns the next raw key value in the iteration, or nil if
 // iteration is done.
 func (ri *replicaDataIterator) Next() {
-	ri.iter.Next()
+	ri.Iterator.Next()
 	ri.advance()
-}
-
-// Key returns the current Key for the iteration if valid.
-func (ri *replicaDataIterator) Key() engine.MVCCKey {
-	return ri.iter.Key()
-}
-
-// Value returns the current Value for the iteration if valid.
-func (ri *replicaDataIterator) Value() []byte {
-	return ri.iter.Value()
-}
-
-// ValueProto unmarshals the current value into the provided message
-// if valid.
-func (ri *replicaDataIterator) ValueProto(msg proto.Message) error {
-	return proto.Unmarshal(ri.iter.Value(), msg)
-}
-
-// Error returns the Error for the iteration if applicable.
-func (ri *replicaDataIterator) Error() error {
-	return ri.iter.Error()
 }
 
 // advance moves the iterator forward through the ranges until a valid
@@ -122,15 +95,15 @@ func (ri *replicaDataIterator) Error() error {
 // invalid.
 func (ri *replicaDataIterator) advance() {
 	for {
-		if !ri.iter.Valid() || ri.iter.Key().Less(ri.ranges[ri.curIndex].end) {
+		if !ri.Valid() || ri.Key().Less(ri.ranges[ri.curIndex].end) {
 			return
 		}
 		ri.curIndex++
 		if ri.curIndex < len(ri.ranges) {
-			ri.iter.Seek(ri.ranges[ri.curIndex].start)
+			ri.Iterator.Seek(ri.ranges[ri.curIndex].start)
 		} else {
 			// Otherwise, seek to end to make iterator invalid.
-			ri.iter.Seek(engine.MVCCKeyMax)
+			ri.Iterator.Seek(engine.MVCCKeyMax)
 			return
 		}
 	}
