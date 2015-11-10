@@ -27,7 +27,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -141,7 +140,6 @@ func (t *leaseTest) node(nodeID uint32) *csql.LeaseManager {
 
 func TestLeaseManager(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)
-	testingT.Skip("#3050")
 	t := newLeaseTest(testingT)
 	defer t.cleanup()
 
@@ -235,7 +233,6 @@ func TestLeaseManager(testingT *testing.T) {
 
 func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)
-	testingT.Skip("#3050")
 	t := newLeaseTest(testingT)
 	defer t.cleanup()
 
@@ -253,11 +250,14 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	}
 	t.expectLeases(descID, "/1/1")
 
-	// Push the clock up near the lease expiration. The 20s is less than
-	// minLeaseDuration.
-	t.server.Clock().Update(roachpb.Timestamp{
-		WallTime: l1.Expiration().Add(-20 * time.Second).UnixNano(),
-	})
+	// Set the minimum lease duration such that the next lease acquisition will
+	// require the lease to be reacquired.
+	savedLeaseDuration, savedMinLeaseDuration := csql.LeaseDuration, csql.MinLeaseDuration
+	defer func() {
+		csql.LeaseDuration, csql.MinLeaseDuration = savedLeaseDuration, savedMinLeaseDuration
+	}()
+	csql.MinLeaseDuration = l1.Expiration().Sub(time.Now())
+	csql.LeaseDuration = 2 * csql.MinLeaseDuration
 
 	// Another lease acquisition from the same node will result in a new lease.
 	l3 := t.mustAcquire(1, descID, 0)
