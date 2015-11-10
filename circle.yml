@@ -31,4 +31,4 @@ deployment:
           if [ -n "$DOCKER_EMAIL" ]; then
             build/push-docker-deploy.sh
           fi
-      - build/push_aws.sh
+      - build/push-aws.sh
