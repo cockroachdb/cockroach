@@ -47,6 +47,8 @@ type planner struct {
 	// lease after a schema change operation such as CREATE INDEX.
 	modifiedSchemas []schemaInfo
 
+	verifyMetadata func(*config.SystemConfig) error
+
 	parser                   parser.Parser
 	extractAggregatesVisitor extractAggregatesVisitor
 	params                   parameters

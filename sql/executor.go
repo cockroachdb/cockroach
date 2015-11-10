@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -32,12 +34,24 @@ import (
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/util/retry"
 )
+
+var testingWaitForMetadata bool
+
+// TestingWaitForMetadata causes metadata-mutating operations to wait
+// for the new metadata to back-propagate through gossip.
+func TestingWaitForMetadata() func() {
+	testingWaitForMetadata = true
+	return func() {
+		testingWaitForMetadata = false
+	}
+}
 
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionAborted = errors.New("current transaction is aborted, commands ignored until end of transaction block")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
+var errStaleMetadata = errors.New("metadata is still stale")
 
 var plannerPool = sync.Pool{
 	New: func() interface{} {
@@ -312,6 +326,17 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 		planMaker.resetTxn()
 		return err
 	})
+
+	if testingWaitForMetadata {
+		if verify := planMaker.verifyMetadata; verify != nil {
+			for r := retry.Start(retry.Options{MaxBackoff: 500 * time.Millisecond}); r.Next(); {
+				if err := verify(e.getSystemConfig()); err == nil {
+					break
+				}
+			}
+		}
+	}
+
 	return result, err
 }
 
