@@ -294,7 +294,7 @@ var builtins = map[string][]builtin{
 
 	"translate": {stringBuiltin3(func(s, from, to string) (Datum, error) {
 		const deletionRune = utf8.MaxRune + 1
-		translation := make(map[rune]rune, len(from))
+		translation := make(map[rune]rune, utf8.RuneCountInString(from))
 		for _, fromRune := range from {
 			toRune, size := utf8.DecodeRuneInString(to)
 			if toRune == utf8.RuneError {
@@ -305,7 +305,7 @@ var builtins = map[string][]builtin{
 			translation[fromRune] = toRune
 		}
 
-		runes := make([]rune, 0, len(s))
+		runes := make([]rune, 0, utf8.RuneCountInString(s))
 		for _, c := range s {
 			if t, ok := translation[c]; ok {
 				if t != deletionRune {
