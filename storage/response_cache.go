@@ -47,17 +47,14 @@ type ResponseCache struct {
 }
 
 // NewResponseCache returns a new response cache. Every range replica
-// maintains a response cache, not just the leader. However, when a
-// replica loses or gains leadership of the Raft consensus group, the
-// inflight map should be cleared.
+// maintains a response cache, not just the leader.
 func NewResponseCache(rangeID roachpb.RangeID) *ResponseCache {
 	return &ResponseCache{
 		rangeID: rangeID,
 	}
 }
 
-// ClearData removes all items stored in the persistent cache. It does not alter
-// the inflight map.
+// ClearData removes all items stored in the persistent cache.
 func (rc *ResponseCache) ClearData(e engine.Engine) error {
 	from := keys.ResponseCacheKey(rc.rangeID, roachpb.KeyMin)
 	to := keys.ResponseCacheKey(rc.rangeID, roachpb.KeyMax)
@@ -65,12 +62,9 @@ func (rc *ResponseCache) ClearData(e engine.Engine) error {
 	return err
 }
 
-// GetResponse looks up a response matching the specified family. If the
-// response is found, it is returned along with its associated error.
-// If the response is not found, nil is returned for both the response
-// and its error. In all cases, the third return value is the error
-// returned from the engine when reading the on-disk cache.
-func (rc *ResponseCache) GetResponse(e engine.Engine, family []byte) (int64, error) {
+// GetSequence looks up the latest sequence number recorded for this family. On a
+// cache miss, zero is returned.
+func (rc *ResponseCache) GetSequence(e engine.Engine, family []byte) (int64, error) {
 	if len(family) == 0 {
 		return 0, errEmptyID
 	}
@@ -153,8 +147,8 @@ func (rc *ResponseCache) CopyFrom(e engine.Engine, originRangeID roachpb.RangeID
 	})
 }
 
-// PutResponse writes a sequence number for the specified family.
-func (rc *ResponseCache) PutResponse(e engine.Engine, family []byte, sequence int64, err error) error {
+// PutSequence writes a sequence number for the specified family.
+func (rc *ResponseCache) PutSequence(e engine.Engine, family []byte, sequence int64, err error) error {
 	if sequence <= 0 || len(family) == 0 {
 		return errEmptyID
 	}

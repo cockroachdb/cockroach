@@ -183,8 +183,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
     *value_changed = false;
 
     // Only filter transaction rows.
-    bool is_txn = IsTransactionRecord(key);
-    if (!is_txn) {
+    if (!IsTransactionRecord(key)) {
       return false;
     }
     // Parse MVCC metadata for inlined value.

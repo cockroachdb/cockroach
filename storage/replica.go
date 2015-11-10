@@ -1031,7 +1031,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// Check the response cache for this batch to ensure idempotency. Only applies
 	// to transactional requests.
 	if ba.IsWrite() && ba.Txn != nil {
-		if sequence, readErr := r.respCache.GetResponse(btch, ba.Txn.ID); readErr != nil {
+		if sequence, readErr := r.respCache.GetSequence(btch, ba.Txn.ID); readErr != nil {
 			return btch, nil, nil, newReplicaCorruptionError(util.Errorf("could not read from response cache"), readErr)
 		} else if sequence >= int64(ba.Txn.Sequence) {
 			if log.V(1) {
@@ -1096,7 +1096,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 		}
 		// Only transactional requests have replay protection.
 		if ba.Txn != nil {
-			if putErr := r.respCache.PutResponse(btch, ba.Txn.ID, int64(ba.Txn.Sequence), err); putErr != nil {
+			if putErr := r.respCache.PutSequence(btch, ba.Txn.ID, int64(ba.Txn.Sequence), err); putErr != nil {
 				// TODO(tschottdorf): ReplicaCorruptionError.
 				log.Fatalc(ctx, "putting a response cache entry in a batch should never fail: %s", putErr)
 			}
