@@ -945,7 +945,6 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	// the cache is ["a", c"), but the put on "a" will not be
 	// resent. The request is truncated to contain only the put on "b".
 	ba := roachpb.BatchRequest{}
-	ba.CmdID = ba.GetOrCreateCmdID(0)
 	ba.Txn = &roachpb.Transaction{Name: "test"}
 	val := roachpb.MakeValueFromString("val")
 	ba.Add(roachpb.NewPut(keys.RangeTreeNodeKey(roachpb.RKey("a")), val).(*roachpb.PutRequest))

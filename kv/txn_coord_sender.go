@@ -299,12 +299,11 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 	if err := tc.maybeBeginTxn(&ba); err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	ba.CmdID = ba.GetOrCreateCmdID(tc.clock.PhysicalNow())
 	var startNS int64
 	ba.SetNewRequest()
 
-	// This is the earliest point at which the request has a ClientCmdID and/or
-	// TxnID (if applicable). Begin a Trace which follows this request.
+	// This is the earliest point at which the request has an ID (if
+	// applicable). Begin a Trace which follows this request.
 	trace := tc.tracer.NewTrace(tracer.Coord, &ba)
 	defer trace.Finalize()
 	defer trace.Epoch("sending batch")()
@@ -609,7 +608,6 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 	hb.Key = txn.Key
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.clock.Now()
-	ba.CmdID = ba.GetOrCreateCmdID(ba.Timestamp.WallTime)
 	ba.Txn = txn.Clone()
 	ba.Add(hb)
 

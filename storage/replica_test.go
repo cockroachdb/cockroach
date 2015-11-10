@@ -189,7 +189,6 @@ func (tc *testContext) Sender() client.Sender {
 		if ba.RangeID != 0 {
 			ba.RangeID = 1
 		}
-		ba.CmdID = ba.GetOrCreateCmdID(0)
 		return ba
 	})
 }
@@ -282,7 +281,6 @@ func TestRangeContains(t *testing.T) {
 
 func setLeaderLease(t *testing.T, r *Replica, l *roachpb.Lease) {
 	ba := roachpb.BatchRequest{}
-	ba.CmdID = ba.GetOrCreateCmdID(0)
 	ba.Add(&roachpb.LeaderLeaseRequest{Lease: *l})
 	errChan, pendingCmd := r.proposeRaftCommand(r.context(), ba)
 	var err error
@@ -731,7 +729,6 @@ func TestRangeLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 		},
 	}
 	ba := roachpb.BatchRequest{}
-	ba.CmdID = ba.GetOrCreateCmdID(0)
 	ba.Add(&roachpb.LeaderLeaseRequest{Lease: *lease})
 	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), ba)
 	var err error
@@ -3293,40 +3290,6 @@ func TestBatchErrorWithIndex(t *testing.T) {
 		t.Fatalf("invalid index or error type: %s", iErr)
 	}
 
-}
-
-// TestWriteWithoutCmdID verifies that a txn write is required to have a CmdID set.
-func TestWriteWithoutCmdID(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-
-	key := []byte("k")
-	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
-
-	// A write needs a CmdID or it will error out.
-	ba := roachpb.BatchRequest{}
-	ba.Txn = txn
-	ba.Add(&roachpb.PutRequest{
-		Span:  roachpb.Span{Key: key},
-		Value: roachpb.MakeValueFromString("not nil"),
-	})
-
-	if _, pErr := tc.rng.Send(tc.rng.context(), ba); !testutils.IsError(pErr.GoError(), "write request without CmdID") {
-		t.Fatalf("expected an error, but not this one: %v", pErr.GoError())
-	}
-
-	// A read should be fine without.
-	ba = roachpb.BatchRequest{}
-	ba.Txn = txn
-	ba.Add(&roachpb.GetRequest{
-		Span: roachpb.Span{Key: roachpb.Key("k")},
-	})
-
-	if _, pErr := tc.rng.Send(tc.rng.context(), ba); pErr != nil {
-		t.Fatal(pErr)
-	}
 }
 
 // TestReplicaLoadSystemDBSpanIntent verifies that intents on the SystemDBSpan

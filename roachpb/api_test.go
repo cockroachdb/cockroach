@@ -25,18 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
-func TestClientCmdIDIsEmpty(t *testing.T) {
-	if !(ClientCmdID{}).IsEmpty() {
-		t.Error("expected cmd to be empty")
-	}
-	if (ClientCmdID{WallTime: 1}).IsEmpty() {
-		t.Error("expected cmd to not be empty")
-	}
-	if (ClientCmdID{Random: 1}).IsEmpty() {
-		t.Error("expected cmd to not be empty")
-	}
-}
-
 type testError struct{}
 
 func (t *testError) Error() string             { return "test" }
