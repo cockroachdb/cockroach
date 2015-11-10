@@ -851,24 +851,24 @@ var substringImpls = []builtin{
 		types:      typeList{stringType, intType},
 		returnType: DummyString,
 		fn: func(_ EvalContext, args DTuple) (Datum, error) {
-			str := args[0].(DString)
+			runes := []rune(string(args[0].(DString)))
 			// SQL strings are 1-indexed.
 			start := int(args[1].(DInt)) - 1
 
 			if start < 0 {
 				start = 0
-			} else if start > len(str) {
-				start = len(str)
+			} else if start > len(runes) {
+				start = len(runes)
 			}
 
-			return str[start:], nil
+			return DString(runes[start:]), nil
 		},
 	},
 	{
 		types:      typeList{stringType, intType, intType},
 		returnType: DummyString,
 		fn: func(_ EvalContext, args DTuple) (Datum, error) {
-			str := args[0].(DString)
+			runes := []rune(string(args[0].(DString)))
 			// SQL strings are 1-indexed.
 			start := int(args[1].(DInt)) - 1
 			length := int(args[2].(DInt))
@@ -880,17 +880,17 @@ var substringImpls = []builtin{
 			end := start + length
 			if end < 0 {
 				end = 0
-			} else if end > len(str) {
-				end = len(str)
+			} else if end > len(runes) {
+				end = len(runes)
 			}
 
 			if start < 0 {
 				start = 0
-			} else if start > len(str) {
-				start = len(str)
+			} else if start > len(runes) {
+				start = len(runes)
 			}
 
-			return str[start:end], nil
+			return DString(runes[start:end]), nil
 		},
 	},
 	{
