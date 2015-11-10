@@ -44,7 +44,6 @@ const (
 	defaultScanMaxIdleTime    = 5 * time.Second
 	defaultMetricsFrequency   = 10 * time.Second
 	defaultTimeUntilStoreDead = 5 * time.Minute
-	defaultAllowRebalancing   = true
 	defaultBalanceMode        = storage.BalanceModeUsage
 )
 
@@ -94,9 +93,6 @@ type Context struct {
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.
 	CacheSize int64
-
-	// Enables this server to rebalance replicas to other servers.
-	AllowRebalancing bool
 
 	// BalanceMode determines how this node makes balancing decisions.
 	BalanceMode storage.BalanceMode
@@ -148,7 +144,6 @@ func (ctx *Context) InitDefaults() {
 	ctx.ScanMaxIdleTime = defaultScanMaxIdleTime
 	ctx.MetricsFrequency = defaultMetricsFrequency
 	ctx.TimeUntilStoreDead = defaultTimeUntilStoreDead
-	ctx.AllowRebalancing = defaultAllowRebalancing
 	ctx.BalanceMode = defaultBalanceMode
 }
 

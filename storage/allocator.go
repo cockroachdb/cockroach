@@ -186,7 +186,7 @@ func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 	case BalanceModeRangeCount:
 		a.balancer = rangeCountBalancer{randGen}
 	default:
-		panic(fmt.Sprintf("AllocatorOptions specified invalid BalanceMode %s", options.Mode))
+		panic(fmt.Sprintf("AllocatorOptions specified invalid BalanceMode %s", options.Mode.String()))
 	}
 
 	return a
