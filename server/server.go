@@ -156,6 +156,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		StorePool:       s.storePool,
 		RebalancingOptions: storage.RebalancingOptions{
 			AllowRebalance: s.ctx.AllowRebalancing,
+			Mode:           s.ctx.RebalanceMode,
 		},
 	}
 	s.node = NewNode(nCtx)

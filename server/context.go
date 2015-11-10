@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -44,6 +45,7 @@ const (
 	defaultMetricsFrequency   = 10 * time.Second
 	defaultTimeUntilStoreDead = 5 * time.Minute
 	defaultAllowRebalancing   = false
+	defaultRebalanceMode      = storage.RebalanceModeUsage
 )
 
 // Context holds parameters needed to setup a server.
@@ -96,6 +98,9 @@ type Context struct {
 	// Enables this server to rebalance replicas to other servers.
 	AllowRebalancing bool
 
+	// RebalanceMode determines how this node makes rebalancing decisions.
+	RebalanceMode storage.RebalanceMode
+
 	// Parsed values.
 
 	// Engines is the storage instances specified by Stores.
@@ -144,6 +149,7 @@ func (ctx *Context) InitDefaults() {
 	ctx.MetricsFrequency = defaultMetricsFrequency
 	ctx.TimeUntilStoreDead = defaultTimeUntilStoreDead
 	ctx.AllowRebalancing = defaultAllowRebalancing
+	ctx.RebalanceMode = defaultRebalanceMode
 }
 
 // Get the stores on both start and init.
