@@ -38,7 +38,7 @@ import (
 const (
 	defaultAddr               = ":26257"
 	defaultMaxOffset          = 250 * time.Millisecond
-	defaultCacheSize          = 1 << 30 // GB
+	defaultCacheSize          = 1 << 29 // 512MB
 	defaultScanInterval       = 10 * time.Minute
 	defaultScanMaxIdleTime    = 5 * time.Second
 	defaultMetricsFrequency   = 10 * time.Second
