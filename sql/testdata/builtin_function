@@ -237,6 +237,49 @@ query error unknown signature for STRPOS: STRPOS()
 SELECT position()
 
 query T
+SELECT overlay('123456789' placing 'xxxx' from 3);
+----
+12xxxx789
+
+query T
+SELECT overlay('123456789' placing 'xxxx' from 3 for 2); 
+----
+12xxxx56789
+
+query T
+SELECT overlay('123456789' placing 'xxxx' from 3 for 6);
+----
+12xxxx9
+
+query T
+SELECT overlay('123456789' placing 'xxxx' from 15 for 6);
+----
+123456789xxxx
+
+query T
+SELECT overlay('123456789' placing 'xxxx' from 3 for 10);
+----
+12xxxx
+
+query T
+SELECT overlay('123456789' placing 'xxxx' from 3 for -1);
+----
+12xxxx23456789
+
+query T
+SELECT overlay('123456789' placing 'xxxx' from 3 for -8);
+----
+12xxxx123456789
+
+query T
+SELECT overlay('💩123456789' placing 'xxxxÂ' from 3 for 3);
+----
+💩1xxxxÂ56789
+
+query error non-positive substring length not allowed: -1
+SELECT overlay('123456789' placing 'xxxx' from -1 for 6);
+
+query T
 SELECT btrim('xyxtrimyyx', 'xy')
 ----
 trim

@@ -224,6 +224,31 @@ var builtins = map[string][]builtin{
 		return DInt(utf8.RuneCountInString(s[:index]) + 1), nil
 	}, DummyInt)},
 
+	"overlay": {
+		builtin{
+			types:      typeList{stringType, stringType, intType},
+			returnType: DummyString,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				s := string(args[0].(DString))
+				to := string(args[1].(DString))
+				pos := int(args[2].(DInt))
+				size := utf8.RuneCountInString(to)
+				return overlay(s, to, pos, size)
+			},
+		},
+		builtin{
+			types:      typeList{stringType, stringType, intType, intType},
+			returnType: DummyString,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				s := string(args[0].(DString))
+				to := string(args[1].(DString))
+				pos := int(args[2].(DInt))
+				size := int(args[3].(DInt))
+				return overlay(s, to, pos, size)
+			},
+		},
+	},
+
 	// TODO(XisiHuang): support the trim([leading|trailing|both] [characters]
 	// from string) syntax.
 	"btrim": {
@@ -1159,6 +1184,25 @@ func regexpEvalFlags(pattern, sqlFlags string) (string, error) {
 		flagString.WriteRune(flag)
 	}
 	return fmt.Sprintf("(?%s:%s)", flagString.String(), pattern), nil
+}
+
+func overlay(s, to string, pos, size int) (Datum, error) {
+	if pos < 1 {
+		return nil, fmt.Errorf("non-positive substring length not allowed: %d", pos)
+	}
+	pos--
+
+	runes := []rune(s)
+	if pos > len(runes) {
+		pos = len(runes)
+	}
+	after := pos + size
+	if after < 0 {
+		after = 0
+	} else if after > len(runes) {
+		after = len(runes)
+	}
+	return DString(string(runes[:pos]) + to + string(runes[after:])), nil
 }
 
 func round(x float64, n int64) (Datum, error) {
