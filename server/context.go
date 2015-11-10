@@ -45,7 +45,7 @@ const (
 	defaultMetricsFrequency   = 10 * time.Second
 	defaultTimeUntilStoreDead = 5 * time.Minute
 	defaultAllowRebalancing   = false
-	defaultRebalanceMode      = storage.RebalanceModeUsage
+	defaultBalanceMode        = storage.BalanceModeUsage
 )
 
 // Context holds parameters needed to setup a server.
@@ -98,8 +98,8 @@ type Context struct {
 	// Enables this server to rebalance replicas to other servers.
 	AllowRebalancing bool
 
-	// RebalanceMode determines how this node makes rebalancing decisions.
-	RebalanceMode storage.RebalanceMode
+	// BalanceMode determines how this node makes balancing decisions.
+	BalanceMode storage.BalanceMode
 
 	// Parsed values.
 
@@ -149,7 +149,7 @@ func (ctx *Context) InitDefaults() {
 	ctx.MetricsFrequency = defaultMetricsFrequency
 	ctx.TimeUntilStoreDead = defaultTimeUntilStoreDead
 	ctx.AllowRebalancing = defaultAllowRebalancing
-	ctx.RebalanceMode = defaultRebalanceMode
+	ctx.BalanceMode = defaultBalanceMode
 }
 
 // Get the stores on both start and init.

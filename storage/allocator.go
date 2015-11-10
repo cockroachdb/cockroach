@@ -71,69 +71,69 @@ const (
 	AllocatorRemoveDead
 )
 
-// A RebalanceMode is a configurable mode which effects how the allocator makes
+// A BalanceMode is a configurable mode which effects how the allocator makes
 // rebalancing decisions.
-type RebalanceMode int
+type BalanceMode int
 
 const (
-	// RebalanceModeUsage balances ranges between stores by primarily
+	// BalanceModeUsage balances ranges between stores by primarily
 	// considering disk space usage, but also considers range counts in nascent
 	// clusters.
-	RebalanceModeUsage RebalanceMode = iota
-	// RebalanceModeRangeCount balances ranges by considering the total range
+	BalanceModeUsage BalanceMode = iota
+	// BalanceModeRangeCount balances ranges by considering the total range
 	// count of each node.
-	RebalanceModeRangeCount
+	BalanceModeRangeCount
 )
 
-// rebalanceModeMap is used to map RebalanceMode values to strings, used for
+// balanceModeMap is used to map BalanceMode values to strings, used for
 // accepting command line options.
-var rebalanceModeMap = map[string]RebalanceMode{
-	"usage":      RebalanceModeUsage,
-	"rangecount": RebalanceModeRangeCount,
+var balanceModeMap = map[string]BalanceMode{
+	"usage":      BalanceModeUsage,
+	"rangecount": BalanceModeRangeCount,
 }
 
 // String is needed to implement the pflag.Value interface, allowing this to be
 // set from the command line.
-func (r *RebalanceMode) String() string {
-	for k, v := range rebalanceModeMap {
+func (r *BalanceMode) String() string {
+	for k, v := range balanceModeMap {
 		if *r == v {
 			return k
 		}
 	}
-	panic(fmt.Sprintf("invalid value %d of RebalanceMode variable", int(*r)))
+	panic(fmt.Sprintf("invalid value %d of BalanceMode variable", int(*r)))
 }
 
-// Set configures the given RebalanceMode from a string provided from the
+// Set configures the given BalanceMode from a string provided from the
 // command line. It returns an error if the provided string value is not
 // recognized. Needed to implement pflag.Value.
-func (r *RebalanceMode) Set(value string) error {
-	if v, ok := rebalanceModeMap[value]; ok {
+func (r *BalanceMode) Set(value string) error {
+	if v, ok := balanceModeMap[value]; ok {
 		*r = v
 		return nil
 	}
-	return fmt.Errorf("%s is not a valid rebalancing mode", value)
+	return fmt.Errorf("%s is not a valid balance mode", value)
 }
 
 // Type is needed by the pflag.Value interface.
-func (r *RebalanceMode) Type() string {
+func (r *BalanceMode) Type() string {
 	return "string"
 }
 
-var _ pflag.Value = new(RebalanceMode)
+var _ pflag.Value = new(BalanceMode)
 
-// RebalancingOptions are configurable options which effect the way that the
+// AllocatorOptions are configurable options which effect the way that the
 // replicate queue will handle rebalancing opportunities.
-type RebalancingOptions struct {
+type AllocatorOptions struct {
 	// AllowRebalance allows this store to attempt to rebalance its own
 	// replicas to other stores.
 	AllowRebalance bool
 
 	// Mode determines the strategy that will be used to locate stores for
-	// allocation decisions.
-	Mode RebalanceMode
+	// allocation decisions in a way that balances load across the cluster.
+	Mode BalanceMode
 
-	// Deterministic makes rebalance decisions deterministic, based on
-	// current cluster statistics. If this flag is not set, rebalance operations
+	// Deterministic makes allocation decisions deterministic, based on
+	// current cluster statistics. If this flag is not set, allocation operations
 	// will have random behavior. This flag is intended to be set for testing
 	// purposes only.
 	Deterministic bool
@@ -158,12 +158,12 @@ type RebalancingOptions struct {
 type Allocator struct {
 	storePool *StorePool
 	randGen   *rand.Rand
-	options   RebalancingOptions
+	options   AllocatorOptions
 	balancer  balancer
 }
 
 // MakeAllocator creates a new allocator using the specified StorePool.
-func MakeAllocator(storePool *StorePool, options RebalancingOptions) Allocator {
+func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 	var randSource rand.Source
 	if options.Deterministic {
 		randSource = rand.NewSource(777)
@@ -179,9 +179,9 @@ func MakeAllocator(storePool *StorePool, options RebalancingOptions) Allocator {
 
 	// Instantiate balancer based on provided options.
 	switch options.Mode {
-	case RebalanceModeUsage:
-		a.balancer = defaultBalancer{randGen}
-	case RebalanceModeRangeCount:
+	case BalanceModeUsage:
+		a.balancer = usageBalancer{randGen}
+	case BalanceModeRangeCount:
 		a.balancer = rangeCountBalancer{randGen}
 	}
 

@@ -308,9 +308,9 @@ type StoreContext struct {
 	// information about a store, it can be considered dead.
 	TimeUntilStoreDead time.Duration
 
-	// RebalancingOptions configures how the store will attempt to rebalance its
+	// AllocatorOptions configures how the store will attempt to rebalance its
 	// replicas to other stores.
-	RebalancingOptions RebalancingOptions
+	AllocatorOptions AllocatorOptions
 
 	// EventFeed is a feed to which this store will publish events.
 	EventFeed *util.Feed
@@ -362,7 +362,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 		ctx:               ctx,
 		db:                ctx.DB, // TODO(tschottdorf) remove redundancy.
 		engine:            eng,
-		allocator:         MakeAllocator(ctx.StorePool, ctx.RebalancingOptions),
+		allocator:         MakeAllocator(ctx.StorePool, ctx.AllocatorOptions),
 		replicas:          map[roachpb.RangeID]*Replica{},
 		replicasByKey:     btree.New(64 /* degree */),
 		uninitReplicas:    map[roachpb.RangeID]*Replica{},
@@ -376,7 +376,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	s.gcQueue = newGCQueue(s.ctx.Gossip)
 	s.splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.ctx.Gossip, s.ReplicaCount)
-	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.RebalancingOptions)
+	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions)
 	s.replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip, s.GroupLocker())
 	s.raftLogQueue = newRaftLogQueue(s.db, s.ctx.Gossip)
 	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)

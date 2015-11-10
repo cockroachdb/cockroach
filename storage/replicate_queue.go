@@ -47,7 +47,7 @@ type replicateQueue struct {
 
 // newReplicateQueue returns a new instance of replicateQueue.
 func newReplicateQueue(gossip *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
-	options RebalancingOptions) *replicateQueue {
+	options AllocatorOptions) *replicateQueue {
 	rq := &replicateQueue{
 		allocator: allocator,
 		clock:     clock,
