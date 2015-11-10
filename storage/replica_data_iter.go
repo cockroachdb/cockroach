@@ -26,7 +26,7 @@ import (
 
 // keyRange is a helper struct for the rangeDataIterator.
 type keyRange struct {
-	start, end roachpb.EncodedKey
+	start, end engine.MVCCKey
 }
 
 // replicaDataIterator provides a complete iteration over all key / value
@@ -97,7 +97,7 @@ func (ri *replicaDataIterator) Next() {
 }
 
 // Key returns the current Key for the iteration if valid.
-func (ri *replicaDataIterator) Key() roachpb.EncodedKey {
+func (ri *replicaDataIterator) Key() engine.MVCCKey {
 	return ri.iter.Key()
 }
 

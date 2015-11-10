@@ -43,10 +43,10 @@ func AddStructured(ctx context.Context, s Severity, depth int, format string, ar
 // Returns nil if the type is simple and does not require a separate
 // JSON representation.
 func getJSON(arg interface{}) []byte {
-	// Not much point in storying strings and byte slices twice, as
+	// Not much point in storing strings and byte slices twice, as
 	// they're nearly always exactly specified in the format string.
 	switch arg.(type) {
-	case string, []byte, roachpb.Key, roachpb.EncodedKey:
+	case string, []byte, roachpb.Key:
 		return nil
 	}
 

@@ -51,7 +51,7 @@ type Iterator interface {
 	// iterator was not positioned at the first key.
 	Prev()
 	// Key returns the current key as a byte slice.
-	Key() roachpb.EncodedKey
+	Key() MVCCKey
 	// Value returns the current value as a byte slice.
 	Value() []byte
 	// ValueProto unmarshals the value the iterator is currently
@@ -71,24 +71,24 @@ type Engine interface {
 	// Attrs returns the engine/store attributes.
 	Attrs() roachpb.Attributes
 	// Put sets the given key to the value provided.
-	Put(key roachpb.EncodedKey, value []byte) error
+	Put(key MVCCKey, value []byte) error
 	// Get returns the value for the given key, nil otherwise.
-	Get(key roachpb.EncodedKey) ([]byte, error)
+	Get(key MVCCKey) ([]byte, error)
 	// GetProto fetches the value at the specified key and unmarshals it
 	// using a protobuf decoder. Returns true on success or false if the
 	// key was not found. On success, returns the length in bytes of the
 	// key and the value.
-	GetProto(key roachpb.EncodedKey, msg proto.Message) (ok bool, keyBytes, valBytes int64, err error)
+	GetProto(key MVCCKey, msg proto.Message) (ok bool, keyBytes, valBytes int64, err error)
 	// Iterate scans from start to end keys, visiting at most max
 	// key/value pairs. On each key value pair, the function f is
 	// invoked. If f returns an error or if the scan itself encounters
 	// an error, the iteration will stop and return the error.
 	// If the first result of f is true, the iteration stops.
-	Iterate(start, end roachpb.EncodedKey, f func(roachpb.RawKeyValue) (bool, error)) error
+	Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error
 	// Clear removes the item from the db with the given key.
 	// Note that clear actually removes entries from the storage
 	// engine, rather than inserting tombstones.
-	Clear(key roachpb.EncodedKey) error
+	Clear(key MVCCKey) error
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
 	// sequentially into a single key; a subsequent read will return a "merged"
@@ -102,7 +102,7 @@ type Engine interface {
 	// combined with specialized logic beyond that of simple byte slices.
 	//
 	// The logic for merges is written in db.cc in order to be compatible with RocksDB.
-	Merge(key roachpb.EncodedKey, value []byte) error
+	Merge(key MVCCKey, value []byte) error
 	// Capacity returns capacity details for the engine's available storage.
 	Capacity() (roachpb.StoreCapacity, error)
 	// SetGCTimeouts sets timeout values for GC of transaction and
@@ -114,7 +114,7 @@ type Engine interface {
 	SetGCTimeouts(minTxnTS, minRCacheTS int64)
 	// ApproximateSize returns the approximate number of bytes the engine is
 	// using to store data for the given range of keys.
-	ApproximateSize(start, end roachpb.EncodedKey) (uint64, error)
+	ApproximateSize(start, end MVCCKey) (uint64, error)
 	// Flush causes the engine to write all in-memory data to disk
 	// immediately.
 	Flush() error
@@ -152,7 +152,7 @@ var bufferPool = sync.Pool{
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg and the provided timestamp. Returns the length in bytes of
 // key and the value.
-func PutProto(engine Engine, key roachpb.EncodedKey, msg proto.Message) (keyBytes, valBytes int64, err error) {
+func PutProto(engine Engine, key MVCCKey, msg proto.Message) (keyBytes, valBytes int64, err error) {
 	buf := bufferPool.Get().(*proto.Buffer)
 	buf.Reset()
 
@@ -175,9 +175,9 @@ func PutProto(engine Engine, key roachpb.EncodedKey, msg proto.Message) (keyByte
 // Scan returns up to max key/value objects starting from
 // start (inclusive) and ending at end (non-inclusive).
 // Specify max=0 for unbounded scans.
-func Scan(engine Engine, start, end roachpb.EncodedKey, max int64) ([]roachpb.RawKeyValue, error) {
-	var kvs []roachpb.RawKeyValue
-	err := engine.Iterate(start, end, func(kv roachpb.RawKeyValue) (bool, error) {
+func Scan(engine Engine, start, end MVCCKey, max int64) ([]MVCCKeyValue, error) {
+	var kvs []MVCCKeyValue
+	err := engine.Iterate(start, end, func(kv MVCCKeyValue) (bool, error) {
 		if max != 0 && int64(len(kvs)) >= max {
 			return true, nil
 		}
@@ -193,11 +193,11 @@ func Scan(engine Engine, start, end roachpb.EncodedKey, max int64) ([]roachpb.Ra
 // none, and an error will be returned. Note that this function
 // actually removes entries from the storage engine, rather than
 // inserting tombstones, as with deletion through the MVCC.
-func ClearRange(engine Engine, start, end roachpb.EncodedKey) (int, error) {
+func ClearRange(engine Engine, start, end MVCCKey) (int, error) {
 	b := engine.NewBatch()
 	defer b.Close()
 	count := 0
-	if err := engine.Iterate(start, end, func(kv roachpb.RawKeyValue) (bool, error) {
+	if err := engine.Iterate(start, end, func(kv MVCCKeyValue) (bool, error) {
 		if err := b.Clear(kv.Key); err != nil {
 			return false, err
 		}

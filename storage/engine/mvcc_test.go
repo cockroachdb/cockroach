@@ -799,17 +799,19 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	value1, err := proto.Marshal(&roachpb.RawKeyValue{Value: []byte("value1")})
+	value1 := roachpb.MakeValueFromString("value1")
+	bytes1, err := value1.Marshal()
 	if err != nil {
 		t.Fatal(err)
 	}
-	value2, err := proto.Marshal(&roachpb.RawKeyValue{Value: []byte("value2")})
+	value2 := roachpb.MakeValueFromString("value2")
+	bytes2, err := value2.Marshal()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	v1 := roachpb.MakeValueFromBytes(value1)
-	v2 := roachpb.MakeValueFromBytes(value2)
+	v1 := roachpb.MakeValueFromBytes(bytes1)
+	v2 := roachpb.MakeValueFromBytes(bytes2)
 
 	// Put two values to key 1, the latest with a txn.
 	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), v1, nil); err != nil {
@@ -820,18 +822,17 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	}
 
 	// A get with consistent=false should fail in a txn.
-	val := &roachpb.RawKeyValue{}
-	_, err = MVCCGetProto(engine, testKey1, makeTS(1, 0), false, txn1, val)
-	if err == nil {
+	if _, err := MVCCGetProto(engine, testKey1, makeTS(1, 0), false, txn1, nil); err == nil {
 		t.Error("expected an error getting with consistent=false in txn")
 	} else if _, ok := err.(*roachpb.WriteIntentError); ok {
 		t.Error("expected non-WriteIntentError with inconsistent read in txn")
 	}
 
 	// Inconsistent get will fetch value1 for any timestamp.
+
 	for _, ts := range []roachpb.Timestamp{makeTS(1, 0), makeTS(2, 0)} {
-		val.Reset()
-		found, err := MVCCGetProto(engine, testKey1, ts, false, nil, val)
+		val := roachpb.Value{}
+		found, err := MVCCGetProto(engine, testKey1, ts, false, nil, &val)
 		if ts.Less(makeTS(2, 0)) {
 			if err != nil {
 				t.Fatal(err)
@@ -842,41 +843,50 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 		if !found {
 			t.Errorf("expected to find result with inconsistent read")
 		}
-		if !bytes.Equal(val.Value, []byte("value1")) {
-			t.Errorf("@%s expected %q; got %q", ts, []byte("value1"), val.Value)
+		valBytes, err := val.GetBytes()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(valBytes, []byte("value1")) {
+			t.Errorf("@%s expected %q; got %q", ts, []byte("value1"), valBytes)
 		}
 	}
 
-	// Write a single intent for key 2 and verify get returns empty.
-	if err := MVCCPut(engine, nil, testKey2, makeTS(2, 0), v1, txn2); err != nil {
-		t.Fatal(err)
-	}
-	found, err := MVCCGetProto(engine, testKey2, makeTS(2, 0), false, nil, val)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if found {
-		t.Errorf("expected no result; got %+v", val)
+	{
+		// Write a single intent for key 2 and verify get returns empty.
+		if err := MVCCPut(engine, nil, testKey2, makeTS(2, 0), v1, txn2); err != nil {
+			t.Fatal(err)
+		}
+		val := roachpb.Value{}
+		found, err := MVCCGetProto(engine, testKey2, makeTS(2, 0), false, nil, &val)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if found {
+			t.Errorf("expected no result; got %+v", val)
+		}
 	}
 
-	// Write a malformed value (not an encoded roachpb.RawKeyValue) and a
-	// write intent to key 3; the parse error is returned instead of the
-	// write intent.
-	if err := MVCCPut(engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {
-		t.Fatal(err)
-	}
-	if err := MVCCPut(engine, nil, testKey3, makeTS(2, 0), v2, txn1); err != nil {
-		t.Fatal(err)
-	}
-	val.Reset()
-	found, err = MVCCGetProto(engine, testKey3, makeTS(1, 0), false, nil, val)
-	if err == nil {
-		t.Errorf("expected error reading malformed data")
-	} else if !strings.HasPrefix(err.Error(), "proto: ") {
-		t.Errorf("expected proto error, got %s", err)
-	}
-	if !found {
-		t.Errorf("expected to find result with malformed data")
+	{
+		// Write a malformed value (not an encoded MVCCKeyValue) and a
+		// write intent to key 3; the parse error is returned instead of the
+		// write intent.
+		if err := MVCCPut(engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {
+			t.Fatal(err)
+		}
+		if err := MVCCPut(engine, nil, testKey3, makeTS(2, 0), v2, txn1); err != nil {
+			t.Fatal(err)
+		}
+		val := roachpb.Value{}
+		found, err := MVCCGetProto(engine, testKey3, makeTS(1, 0), false, nil, &val)
+		if err == nil {
+			t.Errorf("expected error reading malformed data")
+		} else if !strings.HasPrefix(err.Error(), "proto: ") {
+			t.Errorf("expected proto error, got %s", err)
+		}
+		if !found {
+			t.Errorf("expected to find result with malformed data")
+		}
 	}
 }
 
@@ -2493,7 +2503,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expEncKeys := []roachpb.EncodedKey{
+	expEncKeys := []MVCCKey{
 		MVCCEncodeKey(roachpb.Key("a")),
 		MVCCEncodeVersionKey(roachpb.Key("a"), ts2),
 		MVCCEncodeKey(roachpb.Key("b")),

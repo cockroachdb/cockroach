@@ -68,7 +68,6 @@
 		Timestamp
 		Value
 		KeyValue
-		RawKeyValue
 		StoreIdent
 		SplitTrigger
 		MergeTrigger

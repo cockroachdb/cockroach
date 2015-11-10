@@ -75,7 +75,7 @@ func (rk RKey) Equal(other []byte) bool {
 
 // Next returns the RKey that sorts immediately after the given one.
 func (rk RKey) Next() RKey {
-	return RKey(bytesNext(rk))
+	return RKey(BytesNext(rk))
 }
 
 // PrefixEnd determines the end key given key as a prefix, that is the
@@ -97,10 +97,6 @@ func (rk RKey) String() string {
 // messages which refer to Cockroach keys.
 type Key []byte
 
-// EncodedKey is an encoded key, distinguished from Key in that it is
-// an encoded version.
-type EncodedKey []byte
-
 // MakeKey makes a new key which is the concatenation of the
 // given inputs, in order.
 func MakeKey(keys ...[]byte) []byte {
@@ -111,8 +107,8 @@ func MakeKey(keys ...[]byte) []byte {
 	return bytes.Join(byteSlices, nil)
 }
 
-// Returns the next possible byte by appending an \x00.
-func bytesNext(b []byte) []byte {
+// BytesNext returns the next possible byte by appending an \x00.
+func BytesNext(b []byte) []byte {
 	// TODO(spencer): Do we need to enforce KeyMaxLength here?
 	return append(append([]byte(nil), b...), 0)
 }
@@ -132,18 +128,13 @@ func bytesPrefixEnd(b []byte) []byte {
 
 // Next returns the next key in lexicographic sort order.
 func (k Key) Next() Key {
-	return Key(bytesNext(k))
+	return Key(BytesNext(k))
 }
 
 // IsPrev is a more efficient version of k.Next().Equal(m).
 func (k Key) IsPrev(m Key) bool {
 	l := len(m) - 1
 	return l == len(k) && m[l] == 0 && k.Equal(m[:l])
-}
-
-// Next returns the next key in lexicographic sort order.
-func (k EncodedKey) Next() EncodedKey {
-	return EncodedKey(bytesNext(k))
 }
 
 // PrefixEnd determines the end key given key as a prefix, that is the
@@ -157,27 +148,8 @@ func (k Key) PrefixEnd() Key {
 	return Key(bytesPrefixEnd(k))
 }
 
-// PrefixEnd determines the key directly after the last key which has
-// this key as a prefix. See comments for Key.
-func (k EncodedKey) PrefixEnd() EncodedKey {
-	if len(k) == 0 {
-		return EncodedKey(RKeyMax)
-	}
-	return EncodedKey(bytesPrefixEnd(k))
-}
-
-// Less compares two keys.
-func (k EncodedKey) Less(l EncodedKey) bool {
-	return bytes.Compare(k, l) < 0
-}
-
 // Equal returns whether two keys are identical.
 func (k Key) Equal(l Key) bool {
-	return bytes.Equal(k, l)
-}
-
-// Equal returns whether two keys are identical.
-func (k EncodedKey) Equal(l EncodedKey) bool {
 	return bytes.Equal(k, l)
 }
 
@@ -191,20 +163,8 @@ func (k Key) String() string {
 	return fmt.Sprintf("%q", []byte(k))
 }
 
-// String returns a string-formatted version of the key.
-func (k EncodedKey) String() string {
-	return fmt.Sprintf("%q", []byte(k))
-}
-
 // Format implements the fmt.Formatter interface.
 func (k Key) Format(f fmt.State, verb rune) {
-	// Note: this implementation doesn't handle the width and precision
-	// specifiers such as "%20.10s".
-	fmt.Fprint(f, strconv.Quote(string(k)))
-}
-
-// Format implements the fmt.Formatter interface.
-func (k EncodedKey) Format(f fmt.State, verb rune) {
 	// Note: this implementation doesn't handle the width and precision
 	// specifiers such as "%20.10s".
 	fmt.Fprint(f, strconv.Quote(string(k)))

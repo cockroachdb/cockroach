@@ -34,7 +34,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []roachpb.RawKeyValue) {
+func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []MVCCKeyValue) {
 	if len(keyvals) != len(sortedKeys) {
 		t.Errorf("length mismatch. expected %s, got %s", sortedKeys, keyvals)
 	}
@@ -68,7 +68,7 @@ func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 func TestEngineBatchCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	numWrites := 10000
-	key := roachpb.EncodedKey("a")
+	key := MVCCKey("a")
 	finalVal := []byte(strconv.Itoa(numWrites - 1))
 
 	runWithAllEngines(func(e Engine, t *testing.T) {
@@ -120,10 +120,10 @@ func TestEngineBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		numShuffles := 100
-		key := roachpb.EncodedKey("a")
+		key := MVCCKey("a")
 		// Those are randomized below.
 		type data struct {
-			key   roachpb.EncodedKey
+			key   MVCCKey
 			value []byte
 			merge bool
 		}
@@ -162,7 +162,7 @@ func TestEngineBatch(t *testing.T) {
 			return eng.Put(d.key, d.value)
 		}
 
-		get := func(eng Engine, key roachpb.EncodedKey) []byte {
+		get := func(eng Engine, key MVCCKey) []byte {
 			b, err := eng.Get(key)
 			if err != nil {
 				t.Fatal(err)
@@ -324,12 +324,12 @@ func TestEngineMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		testcases := []struct {
-			testKey  roachpb.EncodedKey
+			testKey  MVCCKey
 			merges   [][]byte
 			expected []byte
 		}{
 			{
-				roachpb.EncodedKey("haste not in life"),
+				MVCCKey("haste not in life"),
 				[][]byte{
 					appender("x"),
 					appender("y"),
@@ -338,7 +338,7 @@ func TestEngineMerge(t *testing.T) {
 				appender("xyz"),
 			},
 			{
-				roachpb.EncodedKey("timeseriesmerged"),
+				MVCCKey("timeseriesmerged"),
 				[][]byte{
 					timeSeries(testtime, 1000, []tsSample{
 						{1, 1, 5, 5, 5},
@@ -433,9 +433,9 @@ func TestEngineScan1(t *testing.T) {
 		// Should return all key/value pairs in lexicographic order.
 		// Note that []byte("") is the lowest key possible and is
 		// a special case in engine.scan, that's why we test it here.
-		startKeys := []roachpb.EncodedKey{roachpb.EncodedKey("cat"), roachpb.EncodedKey("")}
+		startKeys := []MVCCKey{MVCCKey("cat"), MVCCKey("")}
 		for _, startKey := range startKeys {
-			keyvals, err = Scan(engine, startKey, roachpb.EncodedKey(roachpb.RKeyMax), 0)
+			keyvals, err = Scan(engine, startKey, MVCCKey(roachpb.RKeyMax), 0)
 			if err != nil {
 				t.Fatalf("could not run scan: %v", err)
 			}
@@ -444,7 +444,7 @@ func TestEngineScan1(t *testing.T) {
 	}, t)
 }
 
-func verifyScan(start, end roachpb.EncodedKey, max int64, expKeys []roachpb.EncodedKey, engine Engine, t *testing.T) {
+func verifyScan(start, end MVCCKey, max int64, expKeys []MVCCKey, engine Engine, t *testing.T) {
 	kvs, err := Scan(engine, start, end, max)
 	if err != nil {
 		t.Errorf("scan %q-%q: expected no error, but got %s", string(start), string(end), err)
@@ -466,53 +466,53 @@ func TestEngineScan2(t *testing.T) {
 	// TODO(Tobias): Merge this with TestEngineScan1 and remove
 	// either verifyScan or the other helper function.
 	runWithAllEngines(func(engine Engine, t *testing.T) {
-		keys := []roachpb.EncodedKey{
-			roachpb.EncodedKey("a"),
-			roachpb.EncodedKey("aa"),
-			roachpb.EncodedKey("aaa"),
-			roachpb.EncodedKey("ab"),
-			roachpb.EncodedKey("abc"),
-			roachpb.EncodedKey(roachpb.RKeyMax),
+		keys := []MVCCKey{
+			MVCCKey("a"),
+			MVCCKey("aa"),
+			MVCCKey("aaa"),
+			MVCCKey("ab"),
+			MVCCKey("abc"),
+			MVCCKey(roachpb.RKeyMax),
 		}
 
 		insertKeys(keys, engine, t)
 
 		// Scan all keys (non-inclusive of final key).
-		verifyScan(roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 10, keys[0:5], engine, t)
-		verifyScan(roachpb.EncodedKey("a"), roachpb.EncodedKey(roachpb.RKeyMax), 10, keys[0:5], engine, t)
+		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 10, keys[0:5], engine, t)
+		verifyScan(MVCCKey("a"), MVCCKey(roachpb.RKeyMax), 10, keys[0:5], engine, t)
 
 		// Scan sub range.
-		verifyScan(roachpb.EncodedKey("aab"), roachpb.EncodedKey("abcc"), 10, keys[3:5], engine, t)
-		verifyScan(roachpb.EncodedKey("aa0"), roachpb.EncodedKey("abcc"), 10, keys[2:5], engine, t)
+		verifyScan(MVCCKey("aab"), MVCCKey("abcc"), 10, keys[3:5], engine, t)
+		verifyScan(MVCCKey("aa0"), MVCCKey("abcc"), 10, keys[2:5], engine, t)
 
 		// Scan with max values.
-		verifyScan(roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 3, keys[0:3], engine, t)
-		verifyScan(roachpb.EncodedKey("a0"), roachpb.EncodedKey(roachpb.RKeyMax), 3, keys[1:4], engine, t)
+		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 3, keys[0:3], engine, t)
+		verifyScan(MVCCKey("a0"), MVCCKey(roachpb.RKeyMax), 3, keys[1:4], engine, t)
 
 		// Scan with max value 0 gets all values.
-		verifyScan(roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 0, keys[0:5], engine, t)
+		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 0, keys[0:5], engine, t)
 	}, t)
 }
 
 func TestEngineDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
-		keys := []roachpb.EncodedKey{
-			roachpb.EncodedKey("a"),
-			roachpb.EncodedKey("aa"),
-			roachpb.EncodedKey("aaa"),
-			roachpb.EncodedKey("ab"),
-			roachpb.EncodedKey("abc"),
-			roachpb.EncodedKey(roachpb.RKeyMax),
+		keys := []MVCCKey{
+			MVCCKey("a"),
+			MVCCKey("aa"),
+			MVCCKey("aaa"),
+			MVCCKey("ab"),
+			MVCCKey("abc"),
+			MVCCKey(roachpb.RKeyMax),
 		}
 
 		insertKeys(keys, engine, t)
 
 		// Scan all keys (non-inclusive of final key).
-		verifyScan(roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 10, keys[0:5], engine, t)
+		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 10, keys[0:5], engine, t)
 
 		// Delete a range of keys
-		numDeleted, err := ClearRange(engine, roachpb.EncodedKey("aa"), roachpb.EncodedKey("abc"))
+		numDeleted, err := ClearRange(engine, MVCCKey("aa"), MVCCKey("abc"))
 		// Verify what was deleted
 		if err != nil {
 			t.Error("Not expecting an error")
@@ -521,8 +521,8 @@ func TestEngineDeleteRange(t *testing.T) {
 			t.Errorf("Expected to delete 3 entries; was %v", numDeleted)
 		}
 		// Verify what's left
-		verifyScan(roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 10,
-			[]roachpb.EncodedKey{roachpb.EncodedKey("a"), roachpb.EncodedKey("abc")}, engine, t)
+		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 10,
+			[]MVCCKey{MVCCKey("a"), MVCCKey("abc")}, engine, t)
 	}, t)
 }
 
@@ -561,8 +561,8 @@ func TestSnapshot(t *testing.T) {
 				valSnapshot, val1)
 		}
 
-		keyvals, _ := Scan(engine, key, roachpb.EncodedKey(roachpb.RKeyMax), 0)
-		keyvalsSnapshot, error := Scan(snap, key, roachpb.EncodedKey(roachpb.RKeyMax), 0)
+		keyvals, _ := Scan(engine, key, MVCCKey(roachpb.RKeyMax), 0)
+		keyvalsSnapshot, error := Scan(snap, key, MVCCKey(roachpb.RKeyMax), 0)
 		if error != nil {
 			t.Fatalf("error : %s", error)
 		}
@@ -618,8 +618,8 @@ func TestSnapshotMethods(t *testing.T) {
 		}
 
 		// Verify Scan.
-		keyvals, _ := Scan(engine, roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 0)
-		keyvalsSnapshot, err := Scan(snap, roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), 0)
+		keyvals, _ := Scan(engine, MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 0)
+		keyvalsSnapshot, err := Scan(snap, MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -630,7 +630,7 @@ func TestSnapshotMethods(t *testing.T) {
 
 		// Verify Iterate.
 		index := 0
-		if err := snap.Iterate(roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax), func(kv roachpb.RawKeyValue) (bool, error) {
+		if err := snap.Iterate(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), func(kv MVCCKeyValue) (bool, error) {
 			if !bytes.Equal(kv.Key, keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
 				t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
 					index, keys[index], vals[index], kv.Key, kv.Value)
@@ -667,11 +667,11 @@ func TestSnapshotMethods(t *testing.T) {
 		}
 
 		// Verify ApproximateSize.
-		approx, err := engine.ApproximateSize(roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax))
+		approx, err := engine.ApproximateSize(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax))
 		if err != nil {
 			t.Fatal(err)
 		}
-		approxSnapshot, err := snap.ApproximateSize(roachpb.EncodedKey(roachpb.RKeyMin), roachpb.EncodedKey(roachpb.RKeyMax))
+		approxSnapshot, err := snap.ApproximateSize(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -736,7 +736,7 @@ func TestApproximateSize(t *testing.T) {
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		var (
 			count    = 10000
-			keys     = make([]roachpb.EncodedKey, count)
+			keys     = make([]MVCCKey, count)
 			values   = make([][]byte, count) // Random values to prevent compression
 			rand, _  = randutil.NewPseudoRand()
 			valueLen = 10
@@ -759,11 +759,11 @@ func TestApproximateSize(t *testing.T) {
 	}, t)
 }
 
-func insertKeys(keys []roachpb.EncodedKey, engine Engine, t *testing.T) {
+func insertKeys(keys []MVCCKey, engine Engine, t *testing.T) {
 	insertKeysAndValues(keys, nil, engine, t)
 }
 
-func insertKeysAndValues(keys []roachpb.EncodedKey, values [][]byte, engine Engine, t *testing.T) {
+func insertKeysAndValues(keys []MVCCKey, values [][]byte, engine Engine, t *testing.T) {
 	// Add keys to store in random order (make sure they sort!).
 	order := rand.Perm(len(keys))
 	for _, idx := range order {
@@ -779,7 +779,7 @@ func insertKeysAndValues(keys []roachpb.EncodedKey, values [][]byte, engine Engi
 	}
 }
 
-func verifyApproximateSize(keys []roachpb.EncodedKey, engine Engine, sizePerRecord int, ratio float64, t *testing.T) {
+func verifyApproximateSize(keys []MVCCKey, engine Engine, sizePerRecord int, ratio float64, t *testing.T) {
 	sz, err := engine.ApproximateSize(keys[0], keys[len(keys)-1])
 	if err != nil {
 		t.Errorf("Error from ApproximateSize(): %s", err)

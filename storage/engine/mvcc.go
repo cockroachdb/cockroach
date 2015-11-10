@@ -24,12 +24,13 @@ import (
 	"math"
 	"sync"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -43,8 +44,38 @@ var (
 	MVCCKeyMax = MVCCEncodeKey(roachpb.KeyMax)
 )
 
+// MVCCKey is an encoded key, distinguished from roachpb.Key in that it
+// is an encoded version.
+type MVCCKey []byte
+
+// Next returns the next key in lexicographic sort order.
+func (k MVCCKey) Next() MVCCKey {
+	return MVCCKey(roachpb.BytesNext(k))
+}
+
+// Less compares two keys.
+func (k MVCCKey) Less(l MVCCKey) bool {
+	return bytes.Compare(k, l) < 0
+}
+
+// Equal returns whether two keys are identical.
+func (k MVCCKey) Equal(l MVCCKey) bool {
+	return bytes.Equal(k, l)
+}
+
+// String returns a string-formatted version of the key.
+func (k MVCCKey) String() string {
+	return fmt.Sprintf("%q", []byte(k))
+}
+
 type encodedSpan struct {
-	start, end roachpb.EncodedKey
+	start, end MVCCKey
+}
+
+// MVCCKeyValue contains the raw bytes of the value for a key.
+type MVCCKeyValue struct {
+	Key   MVCCKey
+	Value []byte
 }
 
 // illegalSplitKeySpans lists spans of keys that should not be split.
@@ -458,8 +489,8 @@ func MVCCGet(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consis
 	}
 
 	// Create a function which scans for the first key between start and end keys.
-	getValue := func(engine Engine, start, end roachpb.EncodedKey,
-		msg proto.Message) (roachpb.EncodedKey, error) {
+	getValue := func(engine Engine, start, end MVCCKey,
+		msg proto.Message) (MVCCKey, error) {
 		iter := engine.NewIterator()
 		defer iter.Close()
 		iter.Seek(start)
@@ -487,8 +518,8 @@ func MVCCGet(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consis
 
 // getValueFunc fetches a version of a key between start and end.
 // Returns the key as an encoded byte slice, and error, if applicable.
-type getValueFunc func(engine Engine, start, end roachpb.EncodedKey,
-	msg proto.Message) (roachpb.EncodedKey, error)
+type getValueFunc func(engine Engine, start, end MVCCKey,
+	msg proto.Message) (MVCCKey, error)
 
 // mvccGetInternal parses the MVCCMetadata from the specified raw key
 // value, and reads the versioned value indicated by timestamp, taking
@@ -500,7 +531,7 @@ type getValueFunc func(engine Engine, start, end roachpb.EncodedKey,
 // most recent non-intent value instead. In the event that an inconsistent read
 // does encounter an intent (currently there can only be one), it is returned
 // via the roachpb.Intent slice, in addition to the result.
-func mvccGetInternal(engine Engine, key roachpb.Key, metaKey roachpb.EncodedKey,
+func mvccGetInternal(engine Engine, key roachpb.Key, metaKey MVCCKey,
 	timestamp roachpb.Timestamp, consistent bool, txn *roachpb.Transaction,
 	getValue getValueFunc, buf *getBuffer) (*roachpb.Value, []roachpb.Intent, error) {
 	if !consistent && txn != nil {
@@ -526,7 +557,7 @@ func mvccGetInternal(engine Engine, key roachpb.Key, metaKey roachpb.EncodedKey,
 		timestamp = meta.Timestamp.Prev()
 	}
 
-	var valueKey roachpb.EncodedKey
+	var valueKey MVCCKey
 	value := &buf.value
 
 	if !timestamp.Less(meta.Timestamp) && meta.HasWriteIntentError(txn) {
@@ -945,7 +976,7 @@ func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey roachpb.Key, max 
 	return num, nil
 }
 
-func getScanMetaKey(iter Iterator, encEndKey roachpb.EncodedKey) (roachpb.Key, roachpb.EncodedKey, error) {
+func getScanMetaKey(iter Iterator, encEndKey MVCCKey) (roachpb.Key, MVCCKey, error) {
 	metaKey := iter.Key()
 	if bytes.Compare(metaKey, encEndKey) >= 0 {
 		return nil, nil, iter.Error()
@@ -960,7 +991,7 @@ func getScanMetaKey(iter Iterator, encEndKey roachpb.EncodedKey) (roachpb.Key, r
 	return key, metaKey, nil
 }
 
-func getReverseScanMetaKey(iter Iterator, encEndKey roachpb.EncodedKey) (roachpb.Key, roachpb.EncodedKey, error) {
+func getReverseScanMetaKey(iter Iterator, encEndKey MVCCKey) (roachpb.Key, MVCCKey, error) {
 	metaKey := iter.Key()
 	// The metaKey < encEndKey is exceeding the boundary.
 	if bytes.Compare(metaKey, encEndKey) < 0 {
@@ -1049,13 +1080,13 @@ func MVCCIterate(engine Engine, startKey, endKey roachpb.Key, timestamp roachpb.
 
 	// getMetaKeyFunc is used to get the key and the meta key of the logic row.
 	// encEndKey is used to judge whether iterator exceeds the boundary or not.
-	type getMetaKeyFunc func(iter Iterator, encEndKey roachpb.EncodedKey) (roachpb.Key,
-		roachpb.EncodedKey, error)
+	type getMetaKeyFunc func(iter Iterator, encEndKey MVCCKey) (roachpb.Key,
+		MVCCKey, error)
 	var getMetaKey getMetaKeyFunc
 
 	// We store encEndKey and encKey in the same buffer to avoid memory
 	// allocations.
-	var encKey, encEndKey roachpb.EncodedKey
+	var encKey, encEndKey MVCCKey
 	var keyBuf []byte
 	if reverse {
 		encEndKey = mvccEncodeKey(buf.key[0:0], startKey)
@@ -1072,8 +1103,8 @@ func MVCCIterate(engine Engine, startKey, endKey roachpb.Key, timestamp roachpb.
 	// Get a new iterator and define our getter using iter.Seek.
 	iter := engine.NewIterator()
 	defer iter.Close()
-	getValue := func(engine Engine, start, end roachpb.EncodedKey,
-		msg proto.Message) (roachpb.EncodedKey, error) {
+	getValue := func(engine Engine, start, end MVCCKey,
+		msg proto.Message) (MVCCKey, error) {
 		iter.Seek(start)
 		if !iter.Valid() {
 			return nil, iter.Error()
@@ -1468,7 +1499,7 @@ func IsValidSplitKey(key roachpb.Key) bool {
 
 // isValidEncodedSplitKey iterates through the illegal ranges and
 // returns true if the specified key falls within any; false otherwise.
-func isValidEncodedSplitKey(key roachpb.EncodedKey) bool {
+func isValidEncodedSplitKey(key MVCCKey) bool {
 	for _, rng := range illegalSplitKeySpans {
 		if rng.start.Less(key) && key.Less(rng.end) {
 			return false
@@ -1503,7 +1534,7 @@ func MVCCFindSplitKey(engine Engine, rangeID roachpb.RangeID, key, endKey roachp
 	bestSplitKey := encStartKey
 	bestSplitDiff := int64(math.MaxInt64)
 
-	if err := engine.Iterate(encStartKey, encEndKey, func(kv roachpb.RawKeyValue) (bool, error) {
+	if err := engine.Iterate(encStartKey, encEndKey, func(kv MVCCKeyValue) (bool, error) {
 		// Is key within a legal key range?
 		valid := isValidEncodedSplitKey(kv.Key)
 
@@ -1632,27 +1663,27 @@ func MVCCComputeStats(iter Iterator, nowNanos int64) (MVCCStats, error) {
 // MVCCEncodeKey makes an MVCC key for storing MVCC metadata or
 // for storing raw values directly. Use MVCCEncodeVersionValue for
 // storing timestamped version values.
-func MVCCEncodeKey(key roachpb.Key) roachpb.EncodedKey {
+func MVCCEncodeKey(key roachpb.Key) MVCCKey {
 	return mvccEncodeKey(nil, key)
 }
 
 // mvccEncodeKey is the internal version of MVCCEncodeKey and takes a
 // buffer to append the encoded key to.
-func mvccEncodeKey(buf []byte, key roachpb.Key) roachpb.EncodedKey {
+func mvccEncodeKey(buf []byte, key roachpb.Key) MVCCKey {
 	return encoding.EncodeBytes(buf, key)
 }
 
 // MVCCEncodeVersionKey makes an MVCC version key, which consists
 // of a binary-encoding of key, followed by a decreasing encoding
 // of the timestamp, so that more recent versions sort first.
-func MVCCEncodeVersionKey(key roachpb.Key, timestamp roachpb.Timestamp) roachpb.EncodedKey {
+func MVCCEncodeVersionKey(key roachpb.Key, timestamp roachpb.Timestamp) MVCCKey {
 	k := encoding.EncodeBytes(nil, key)
 	return mvccEncodeTimestamp(k, timestamp)
 }
 
 // mvccEncodeTimestamp encodes the MVCC version info onto an existing
 // MVCC key (created using MVCCEncodeKey).
-func mvccEncodeTimestamp(key roachpb.EncodedKey, timestamp roachpb.Timestamp) roachpb.EncodedKey {
+func mvccEncodeTimestamp(key MVCCKey, timestamp roachpb.Timestamp) MVCCKey {
 	if timestamp.WallTime < 0 || timestamp.Logical < 0 {
 		panic(fmt.Sprintf("negative values disallowed in timestamps: %+v", timestamp))
 	}
@@ -1668,7 +1699,7 @@ func mvccEncodeTimestamp(key roachpb.EncodedKey, timestamp roachpb.Timestamp) ro
 // exactly 12 trailing bytes and they're decoded into a timestamp.
 // The decoded key, timestamp and true are returned to indicate the
 // key is for an MVCC versioned value.
-func MVCCDecodeKey(encodedKey roachpb.EncodedKey) (roachpb.Key, roachpb.Timestamp, bool, error) {
+func MVCCDecodeKey(encodedKey MVCCKey) (roachpb.Key, roachpb.Timestamp, bool, error) {
 	tsBytes, key, err := encoding.DecodeBytes(encodedKey, nil)
 	if err != nil {
 		return nil, roachpb.Timestamp{}, false, err
