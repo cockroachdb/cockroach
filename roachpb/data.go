@@ -522,6 +522,7 @@ func NewTransaction(name string, baseKey Key, userPriority int32,
 		Timestamp:     now,
 		OrigTimestamp: now,
 		MaxTimestamp:  max,
+		Sequence:      1,
 	}
 }
 
@@ -657,6 +658,9 @@ func (t *Transaction) Update(o *Transaction) {
 	// We can't assert against regression here since it can actually happen
 	// that we update from a transaction which isn't Writing.
 	t.Writing = t.Writing || o.Writing
+	if t.Sequence < o.Sequence {
+		t.Sequence = o.Sequence
+	}
 }
 
 // UpgradePriority sets transaction priority to the maximum of current
