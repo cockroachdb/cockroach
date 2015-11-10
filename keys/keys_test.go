@@ -361,6 +361,9 @@ func TestBatchRange(t *testing.T) {
 
 func TestPrettyPrint(t *testing.T) {
 	defer leaktest.AfterTest(t)
+
+	tm, _ := time.Parse(time.UnixDate, "Sat Mar  7 11:06:39 UTC 2015")
+
 	testCases := []struct {
 		key roachpb.Key
 		exp string
@@ -400,12 +403,12 @@ func TestPrettyPrint(t *testing.T) {
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey("foo")), "/Table/42/\"foo\""},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeFloat(nil, float64(233.221112)))), "/Table/42/233.221112"},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeVarint(nil, 1222)), roachpb.RKey(encoding.EncodeString(nil, "handsome man"))), "/Table/42/1222/\"handsome man\""},
-		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeTime(nil, time.Time{}))), "/Table/42/0001-01-01 08:00:00 +0800 CST"},
-		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeTime(nil, time.Time{}.Add(10*time.Hour)))), "/Table/42/0001-01-01 18:00:00 +0800 CST"},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeBytes(nil, []byte{1, 2, 8, 255}))), "/Table/42/\"\\x01\\x02\\b\\xff\""},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeBytes(nil, []byte{1, 2, 8, 255})), roachpb.RKey("foo")), "/Table/42/\"\\x01\\x02\\b\\xff\"/\"foo\""},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeNull(nil))), "/Table/42/NULL"},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeNotNull(nil))), "/Table/42/#"},
+
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeTime(nil, tm))), "/Table/42/Sat Mar  7 11:06:39 UTC 2015"},
 
 		// others
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x31, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:382: unknown escape>"},
