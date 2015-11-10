@@ -236,12 +236,13 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, error) {
 	// the usage of a recently renamed table, but that's a race that could occur
 	// anyways.
 	nameKey := tableKey{dbDesc.ID, qname.Table()}
-	if nameVal := p.systemConfig.GetValue(nameKey.Key()); nameVal != nil {
+	key := nameKey.Key()
+	if nameVal := p.systemConfig.GetValue(key); nameVal != nil {
 		id, err := nameVal.GetInt()
 		return ID(id), err
 	}
 
-	gr, err := p.txn.Get(nameKey.Key())
+	gr, err := p.txn.Get(key)
 	if err != nil {
 		return 0, err
 	}
