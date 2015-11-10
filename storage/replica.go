@@ -166,6 +166,7 @@ type Replica struct {
 	sync.RWMutex                 // Protects the following fields:
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
 	tsCache      *TimestampCache // Most recent timestamps for keys / key ranges
+	pendingSeq   uint64          // atomic sequence counter for cmdIDKey generation
 	pendingCmds  map[cmdIDKey]*pendingCmd
 
 	// pendingReplica houses a replica that is not yet in the range
@@ -898,14 +899,11 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 		Cmd:           ba,
 	}
 
-	makeCmdIDKey := func() cmdIDKey {
-		buf := make([]byte, 0, 16)
-		buf = encoding.EncodeUint64(buf, uint64(r.store.Clock().PhysicalNow()))
-		buf = encoding.EncodeUint64(buf, uint64(rand.Int63()))
-		return cmdIDKey(string(buf))
+	buf := make([]byte, 0, multiraft.CommandIDLen)
+	{
+		buf = encoding.EncodeUint64(buf, uint64(rand.Int63()))[:multiraft.CommandIDLen]
 	}
-
-	idKey := makeCmdIDKey()
+	idKey := cmdIDKey(buf)
 
 	r.Lock()
 	r.pendingCmds[idKey] = pendingCmd
