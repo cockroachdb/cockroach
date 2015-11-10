@@ -44,7 +44,7 @@ const (
 	defaultScanMaxIdleTime    = 5 * time.Second
 	defaultMetricsFrequency   = 10 * time.Second
 	defaultTimeUntilStoreDead = 5 * time.Minute
-	defaultAllowRebalancing   = false
+	defaultAllowRebalancing   = true
 	defaultBalanceMode        = storage.BalanceModeUsage
 )
 
