@@ -154,9 +154,9 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		EventFeed:       feed,
 		Tracer:          tracer,
 		StorePool:       s.storePool,
-		RebalancingOptions: storage.RebalancingOptions{
+		AllocatorOptions: storage.AllocatorOptions{
 			AllowRebalance: s.ctx.AllowRebalancing,
-			Mode:           s.ctx.RebalanceMode,
+			Mode:           s.ctx.BalanceMode,
 		},
 	}
 	s.node = NewNode(nCtx)

@@ -71,7 +71,7 @@ func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWrit
 		rpc:       rpcContext,
 		gossip:    g,
 		storePool: storePool,
-		allocator: storage.MakeAllocator(storePool, storage.RebalancingOptions{
+		allocator: storage.MakeAllocator(storePool, storage.AllocatorOptions{
 			AllowRebalance: true,
 			Deterministic:  true,
 		}),
