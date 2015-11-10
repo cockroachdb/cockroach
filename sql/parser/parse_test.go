@@ -492,6 +492,29 @@ func TestParse2(t *testing.T) {
 		// Special position syntax
 		{`SELECT POSITION('ig' in 'high')`,
 			`SELECT STRPOS('high', 'ig')`},
+		// Special trim syntax
+		{`SELECT TRIM('xy' from 'xyxtrimyyx')`,
+			`SELECT BTRIM('xyxtrimyyx', 'xy')`},
+		{`SELECT TRIM(both 'xy' from 'xyxtrimyyx')`,
+			`SELECT BTRIM('xyxtrimyyx', 'xy')`},
+		{`SELECT TRIM(from 'xyxtrimyyx')`,
+			`SELECT BTRIM('xyxtrimyyx')`},
+		{`SELECT TRIM(both 'xyxtrimyyx')`,
+			`SELECT BTRIM('xyxtrimyyx')`},
+		{`SELECT TRIM(both from 'xyxtrimyyx')`,
+			`SELECT BTRIM('xyxtrimyyx')`},
+		{`SELECT TRIM(leading 'xy' from 'xyxtrimyyx')`,
+			`SELECT LTRIM('xyxtrimyyx', 'xy')`},
+		{`SELECT TRIM(leading from 'xyxtrimyyx')`,
+			`SELECT LTRIM('xyxtrimyyx')`},
+		{`SELECT TRIM(leading 'xyxtrimyyx')`,
+			`SELECT LTRIM('xyxtrimyyx')`},
+		{`SELECT TRIM(trailing 'xy' from 'xyxtrimyyx')`,
+			`SELECT RTRIM('xyxtrimyyx', 'xy')`},
+		{`SELECT TRIM(trailing from 'xyxtrimyyx')`,
+			`SELECT RTRIM('xyxtrimyyx')`},
+		{`SELECT TRIM(trailing 'xyxtrimyyx')`,
+			`SELECT RTRIM('xyxtrimyyx')`},
 	}
 	for _, d := range testData {
 		stmts, err := ParseTraditional(d.sql)

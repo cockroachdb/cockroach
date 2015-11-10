@@ -285,6 +285,16 @@ SELECT btrim('xyxtrimyyx', 'xy')
 trim
 
 query T
+SELECT trim('xy' from 'xyxtrimyyx')
+----
+trim
+
+query T
+SELECT trim(both 'xy' from 'xyxtrimyyx')
+----
+trim
+
+query T
 SELECT 'a' || btrim('    postgres    ') || 'b'
 ----
 apostgresb
@@ -295,12 +305,33 @@ SELECT ltrim('zzzytrimxyz', 'xyz')
 trimxyz
 
 query T
+SELECT trim(leading 'xyz' from 'zzzytrimxyz')
+----
+trimxyz
+
+query T
 SELECT ltrim('   trimxyz')
 ----
 trimxyz
 
 query T
+SELECT trim(leading '   trimxyz')
+----
+trimxyz
+
+query T
+SELECT trim(leading from '   trimxyz')
+----
+trimxyz
+
+
+query T
 SELECT rtrim('xyzzzzytrimxyz', 'xyz')
+----
+xyzzzzytrim
+
+query T
+SELECT trim(trailing 'xyz' from 'xyzzzzytrimxyz')
 ----
 xyzzzzytrim
 
