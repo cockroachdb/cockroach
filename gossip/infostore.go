@@ -196,8 +196,10 @@ func (is *infoStore) getHighWaterStamps() map[int32]int64 {
 	return copy
 }
 
-// registerCallback compiles a regexp for pattern and adds it to
-// the callbacks slice.
+// registerCallback registers a callback for a key pattern to be
+// invoked whenever new info for a gossip key matching pattern is
+// received. The callback method is invoked with the info key which
+// matched pattern. Returns a function to unregister the callback.
 func (is *infoStore) registerCallback(pattern string, method Callback) func() {
 	re := regexp.MustCompile(pattern)
 	cb := &callback{pattern: re, method: method}
