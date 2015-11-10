@@ -155,7 +155,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		Tracer:          tracer,
 		StorePool:       s.storePool,
 		AllocatorOptions: storage.AllocatorOptions{
-			AllowRebalance: s.ctx.AllowRebalancing,
+			AllowRebalance: true,
 			Mode:           s.ctx.BalanceMode,
 		},
 	}

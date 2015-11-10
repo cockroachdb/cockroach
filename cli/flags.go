@@ -136,13 +136,9 @@ var flagUsage = map[string]string{
 	"max-results": `
         Define the maximum number of results that will be retrieved.
 `,
-	"allow-rebalancing": `
-        Enables this server to rebalance replicas to other stores on the cluster.
-`,
 	"balance-mode": `
 		Determines the criteria used by nodes to make balanced allocation
-		decisions.  Valid options are "usage" (default), "rangecount", or
-		"none".
+		decisions.  Valid options are "usage" (default) or "rangecount".
 `,
 }
 
@@ -179,7 +175,6 @@ func initFlags(ctx *server.Context) {
 		f.StringVar(&ctx.Stores, "stores", ctx.Stores, flagUsage["stores"])
 		f.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, flagUsage["max-offset"])
 		f.DurationVar(&ctx.MetricsFrequency, "metrics-frequency", ctx.MetricsFrequency, flagUsage["metrics-frequency"])
-		f.BoolVar(&ctx.AllowRebalancing, "allow-rebalancing", ctx.AllowRebalancing, flagUsage["allow-rebalancing"])
 		f.Var(&ctx.BalanceMode, "balance-mode", flagUsage["balance-mode"])
 
 		// Security flags.
