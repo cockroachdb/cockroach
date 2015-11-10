@@ -41,11 +41,13 @@ type planner struct {
 	evalCtx      parser.EvalContext
 	leases       map[ID]*LeaseState
 	leaseMgr     *LeaseManager
-	systemConfig *config.SystemConfig
+	systemConfig config.SystemConfig
 
 	// TODO(pmattis): This is a hack to force updating to the latest version of a
 	// lease after a schema change operation such as CREATE INDEX.
 	modifiedSchemas []schemaInfo
+
+	testingVerifyMetadata func(config.SystemConfig) error
 
 	parser                   parser.Parser
 	extractAggregatesVisitor extractAggregatesVisitor
