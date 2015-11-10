@@ -1914,7 +1914,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		txn.Sequence++
 
 		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args); !testutils.IsError(err, test.expErrRegexp) {
-			t.Errorf("expected %s to match %s", err, test.expErrRegexp)
+			t.Errorf("expected error:\n%s\nto match:\n%s", err, test.expErrRegexp)
 		}
 	}
 }
