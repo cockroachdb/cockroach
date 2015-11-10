@@ -143,7 +143,11 @@ func unimplemented() {
 %type <qnames> qualified_name_list
 %type <qname> any_name
 %type <qnames> any_name_list
-%type <exprs> expr_list extract_list position_list substr_list
+%type <exprs> expr_list
+%type <exprs> extract_list
+%type <exprs> overlay_list
+%type <exprs> position_list
+%type <exprs> substr_list
 %type <indirect> attrs
 %type <selExprs> target_list opt_target_list
 %type <updateExprs> set_clause_list
@@ -159,10 +163,9 @@ func unimplemented() {
 %type <joinCond> join_qual
 %type <str> join_type
 
-%type <empty> overlay_list
 %type <empty> trim_list
 %type <empty> opt_interval interval_second
-%type <empty> overlay_placing
+%type <expr> overlay_placing
 
 %type <boolVal> opt_unique opt_column
 
@@ -2830,7 +2833,10 @@ func_expr_common_subexpr:
   {
     $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
   }
-| OVERLAY '(' overlay_list ')' { unimplemented() }
+| OVERLAY '(' overlay_list ')'
+  { 
+    $$ = &OverlayExpr{FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}} 
+  }
 | POSITION '(' position_list ')'
   {
     $$ = &FuncExpr{Name: &QualifiedName{Base: "STRPOS"}, Exprs: $3}
@@ -3078,11 +3084,20 @@ extract_arg:
 //   - overlay(text placing text from int)
 // and similarly for binary strings
 overlay_list:
-  a_expr overlay_placing substr_from substr_for { unimplemented() }
-| a_expr overlay_placing substr_from { unimplemented() }
+  a_expr overlay_placing substr_from substr_for
+  {
+    $$ = Exprs{$1, $2, $3, $4}
+  }
+| a_expr overlay_placing substr_from
+  {
+    $$ = Exprs{$1, $2, $3}
+  }
 
 overlay_placing:
-  PLACING a_expr { unimplemented() }
+  PLACING a_expr
+  {
+    $$ = $2
+  }
 
 // position_list uses b_expr not a_expr to avoid conflict with general IN
 position_list:
