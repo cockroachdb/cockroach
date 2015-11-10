@@ -168,15 +168,15 @@ func (ucb usedCapacityBalancer) improve(store *roachpb.StoreDescriptor, sl Store
 	return nil
 }
 
-// defaultBalancer is the default rebalancer currently used by Cockroach. It
-// multiplexes RangeCountBalancer and UsedCapacityBalancer, preferring the
-// latter but using RangeCountBalancer on clusters with very low average disk
+// usageBalancer is the default rebalancer currently used by Cockroach. It
+// multiplexes rangeCountBalancer and usedCapacityBalancer, preferring the
+// latter but using rangeCountBalancer on clusters with very low average disk
 // usage.
-type defaultBalancer struct {
+type usageBalancer struct {
 	rand *rand.Rand
 }
 
-func (db defaultBalancer) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
+func (db usageBalancer) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
 	if sl.used.mean < minFractionUsedThreshold {
 		rcb := rangeCountBalancer{db.rand}
 		return rcb.selectGood(sl, excluded)
@@ -185,7 +185,7 @@ func (db defaultBalancer) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.
 	return ucb.selectGood(sl, excluded)
 }
 
-func (db defaultBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
+func (db usageBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 	if sl.used.mean < minFractionUsedThreshold {
 		rcb := rangeCountBalancer{db.rand}
 		return rcb.selectBad(sl)
@@ -194,7 +194,7 @@ func (db defaultBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 	return ucb.selectBad(sl)
 }
 
-func (db defaultBalancer) improve(store *roachpb.StoreDescriptor, sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
+func (db usageBalancer) improve(store *roachpb.StoreDescriptor, sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
 	if sl.used.mean < minFractionUsedThreshold {
 		rcb := rangeCountBalancer{db.rand}
 		return rcb.improve(store, sl, excluded)
