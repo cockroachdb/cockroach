@@ -291,8 +291,8 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
 	}
 
-	// Send out an increment request copied from above (same ClientCmdID) which
-	// remains in the old range.
+	// Send out an increment request copied from above (same txn/sequence)
+	// which remains in the old range.
 	_, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		Txn: txn,
 	}, &lIncArgs)
@@ -300,7 +300,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		t.Fatal("unexpected response cache miss")
 	}
 
-	// Send out the same increment copied from above (same ClientCmdID), but
+	// Send out the same increment copied from above (same txn/sequence), but
 	// now to the newly created range (which should hold that key).
 	_, err = client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: newRng.Desc().RangeID,

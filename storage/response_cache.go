@@ -29,25 +29,16 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-type cmdIDKey string
-
-var errEmptyCmdID = errors.New("empty CommandID used in response cache")
-
-func makeCmdIDKey(cmdID roachpb.ClientCmdID) cmdIDKey {
-	buf := make([]byte, 0, 16)
-	buf = encoding.EncodeUint64(buf, uint64(cmdID.WallTime))
-	buf = encoding.EncodeUint64(buf, uint64(cmdID.Random))
-	return cmdIDKey(string(buf))
-}
+var errEmptyID = errors.New("empty CommandID used in response cache")
 
 // A ResponseCache provides idempotence for request retries. Each
-// request to a range specifies a ClientCmdID in the request header
+// transactional request to a range specifies an ID and sequence number
 // which uniquely identifies a client command. After commands have
 // been replicated via Raft, they are executed against the state
 // machine and the results are stored in the ResponseCache.
 //
 // The ResponseCache stores responses in the underlying engine, using
-// keys derived from the Range ID and the ClientCmdID.
+// keys derived from Range ID, txn ID and sequence number.
 //
 // A ResponseCache is not thread safe. Access to it is serialized
 // through Raft.
@@ -74,14 +65,14 @@ func (rc *ResponseCache) ClearData(e engine.Engine) error {
 	return err
 }
 
-// GetResponse looks up a response matching the specified cmdID. If the
+// GetResponse looks up a response matching the specified family. If the
 // response is found, it is returned along with its associated error.
 // If the response is not found, nil is returned for both the response
 // and its error. In all cases, the third return value is the error
 // returned from the engine when reading the on-disk cache.
 func (rc *ResponseCache) GetResponse(e engine.Engine, family []byte) (int64, error) {
 	if len(family) == 0 {
-		return 0, errEmptyCmdID
+		return 0, errEmptyID
 	}
 
 	// Pull response from the cache and read into reply if available.
@@ -162,11 +153,10 @@ func (rc *ResponseCache) CopyFrom(e engine.Engine, originRangeID roachpb.RangeID
 	})
 }
 
-// PutResponse writes a response or a error associated with it to the
-// cache for the specified cmdID.
+// PutResponse writes a sequence number for the specified family.
 func (rc *ResponseCache) PutResponse(e engine.Engine, family []byte, sequence int64, err error) error {
 	if sequence <= 0 || len(family) == 0 {
-		return errEmptyCmdID
+		return errEmptyID
 	}
 	if !rc.shouldCacheError(err) {
 		return nil

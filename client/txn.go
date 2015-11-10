@@ -48,6 +48,7 @@ type txnSender Txn
 func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Send call through wrapped sender.
 	ba.Txn = &ts.Proto
+	ba.SetNewRequest()
 	br, pErr := ts.wrapped.Send(ctx, ba)
 	if br != nil && br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(ts.wrapped, br))

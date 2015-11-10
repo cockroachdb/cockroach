@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracer"
 	"github.com/gogo/protobuf/proto"
@@ -138,6 +139,8 @@ type pendingCmd struct {
 	ctx  context.Context
 	done chan roachpb.ResponseWithError // Used to signal waiting RPC handler
 }
+
+type cmdIDKey string
 
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
@@ -338,10 +341,6 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	}
 	ba := roachpb.BatchRequest{}
 	ba.RangeID = desc.RangeID
-	ba.CmdID = roachpb.ClientCmdID{
-		WallTime: r.store.Clock().Now().WallTime,
-		Random:   rand.Int63(),
-	}
 	ba.Add(args)
 
 	// The raft command becomes moot after its expiration, so give it a
@@ -902,8 +901,15 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 		OriginReplica: *replica,
 		Cmd:           ba,
 	}
-	cmdID := ba.GetOrCreateCmdID(r.store.Clock().PhysicalNow())
-	idKey := makeCmdIDKey(cmdID)
+
+	makeCmdIDKey := func() cmdIDKey {
+		buf := make([]byte, 0, 16)
+		buf = encoding.EncodeUint64(buf, uint64(r.store.Clock().PhysicalNow()))
+		buf = encoding.EncodeUint64(buf, uint64(rand.Int63()))
+		return cmdIDKey(string(buf))
+	}
+
+	idKey := makeCmdIDKey()
 
 	var errChan <-chan error
 	r.Lock()
@@ -1038,14 +1044,11 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// Check the response cache for this batch to ensure idempotency. Only applies
 	// to transactional requests.
 	if ba.IsWrite() && ba.Txn != nil {
-		if ba.CmdID == roachpb.ZeroCmdID {
-			return btch, nil, nil, util.Errorf("write request without CmdID: %s", ba)
-		}
 		if sequence, readErr := r.respCache.GetResponse(btch, ba.Txn.ID); readErr != nil {
 			return btch, nil, nil, newReplicaCorruptionError(util.Errorf("could not read from response cache"), readErr)
 		} else if sequence >= int64(ba.Txn.Sequence) {
 			if log.V(1) {
-				log.Infoc(ctx, "found response cache entry for %+v", ba.CmdID)
+				log.Infoc(ctx, "found response cache entry for %s@%d", ba.Txn.Short(), ba.Txn.Sequence)
 			}
 			// We successfully read from the response cache, so let the
 			// transaction restart.
@@ -1071,11 +1074,12 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			// through Raft, a read which was not taken into account may have been
 			// served. Hence, we must retry at the current leader.
 			//
-			// It's crucial that we don't update the response cache for the error
-			// returned below since the request is going to be retried with the
-			// same ClientCmdID and would get the distributed sender stuck in an
-			// infinite loop, retrieving a stale NotLeaderError over and over
-			// again, even when proposing at the correct replica.
+			// It's crucial that we don't update the response cache for the
+			// error returned below since the request is going to be retried
+			// with the same sequence number and would get the distributed
+			// sender stuck in an infinite loop, retrieving a stale
+			// NotLeaderError over and over again, even when proposing at the
+			// correct replica.
 			return btch, nil, nil, r.newNotLeaderError(lease, originReplica.StoreID)
 		}
 	}
@@ -1455,7 +1459,6 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 
 	var reqsRemote []roachpb.Request
 	baLocal := roachpb.BatchRequest{}
-	baLocal.CmdID = baLocal.GetOrCreateCmdID(r.store.Clock().PhysicalNow())
 	for i := range intents {
 		intent := intents[i] // avoids a race in `i, intent := range ...`
 		var resolveArgs roachpb.Request
