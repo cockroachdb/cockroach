@@ -129,22 +129,6 @@ func (desc *TableDescriptor) SetName(name string) {
 	desc.Name = name
 }
 
-// GetColumn returns the column descriptor if present.
-func (m DescriptorMutation) GetColumn() *ColumnDescriptor {
-	if col := m.GetAddColumn(); col != nil {
-		return col
-	}
-	return m.GetDropColumn()
-}
-
-// GetIndex returns the index descriptor if present.
-func (m DescriptorMutation) GetIndex() *IndexDescriptor {
-	if idx := m.GetAddIndex(); idx != nil {
-		return idx
-	}
-	return m.GetDropIndex()
-}
-
 // allColumns includes the columns present in mutations.
 func (desc *TableDescriptor) allColumns() []ColumnDescriptor {
 	cols := make([]ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
@@ -306,15 +290,18 @@ func (desc *TableDescriptor) Validate() error {
 	}
 
 	for _, m := range desc.Mutations {
-		if m.State == DescriptorMutation_UNKNOWN {
-			if col := m.GetColumn(); col != nil {
-				return util.Errorf("mutation in %s state: col %s, id %v", m.State, col.Name, col.ID)
-			} else if idx := m.GetIndex(); idx != nil {
-				return util.Errorf("mutation in %s state: index %s, id %v", m.State, idx.Name, idx.ID)
-			} else {
-				return util.Errorf("mutation in %s state: no column/index descriptor", m.State)
-			}
+		col := m.GetColumn()
+		index := m.GetIndex()
+		if col == nil && index == nil {
+			return util.Errorf("mutation in state %s, direction %s, and no column/index descriptor", m.State, m.Direction)
 		}
+		if m.State == DescriptorMutation_UNKNOWN || m.Direction == DescriptorMutation_NONE {
+			if col != nil {
+				return util.Errorf("mutation in state %s, direction %s, col %s, id %v", m.State, m.Direction, col.Name, col.ID)
+			}
+			return util.Errorf("mutation in state %s, direction %s, index %s, id %v", m.State, m.Direction, index.Name, index.ID)
+		}
+
 	}
 
 	// TODO(pmattis): Check that the indexes are unique. That is, no 2 indexes

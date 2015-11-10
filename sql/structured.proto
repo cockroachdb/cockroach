@@ -96,10 +96,8 @@ message IndexDescriptor {
 // containing each column/index descriptor being added or dropped.
 message DescriptorMutation {
   oneof descriptor {
-    ColumnDescriptor add_column = 1;
-    ColumnDescriptor drop_column = 2;
-    IndexDescriptor add_index = 3;
-    IndexDescriptor drop_index = 4;
+    ColumnDescriptor column = 1;
+    IndexDescriptor index = 2;
   }
   // A descriptor within a mutation is unavailable for reads, writes
   // and deletes. It is only available for implicit (internal to
@@ -132,7 +130,18 @@ message DescriptorMutation {
     // all nodes have transitioned into the WRITE_ONLY state.
     WRITE_ONLY = 2;
   }
-  optional State state = 5 [(gogoproto.nullable) = false];
+  optional State state = 3 [(gogoproto.nullable) = false];
+
+  // Direction of mutation.
+  enum Direction {
+    // Not used.
+    NONE = 0;
+    // Descriptor is being added.
+    ADD = 1;
+    // Descriptor is being dropped.
+    DROP = 2;
+  }
+  optional Direction direction = 4 [(gogoproto.nullable) = false];
 }
 
 
