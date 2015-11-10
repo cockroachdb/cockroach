@@ -628,6 +628,12 @@ func TestMVCCGetWriteIntentError(t *testing.T) {
 	}
 }
 
+func mkVal(s string, ts roachpb.Timestamp) roachpb.Value {
+	v := roachpb.MakeValueFromString(s)
+	v.Timestamp = &ts
+	return v
+}
+
 func TestMVCCScanWriteIntentError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
@@ -637,12 +643,12 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 	ts := []roachpb.Timestamp{makeTS(0, 1), makeTS(0, 2), makeTS(0, 3), makeTS(0, 4), makeTS(0, 5), makeTS(0, 6)}
 
 	fixtureKVs := []roachpb.KeyValue{
-		{Key: testKey1, Value: roachpb.MakeValueFromStringAndTimestamp("testValue1 pre", ts[0])},
-		{Key: testKey4, Value: roachpb.MakeValueFromStringAndTimestamp("testValue4 pre", ts[1])},
-		{Key: testKey1, Value: roachpb.MakeValueFromStringAndTimestamp("testValue1", ts[2])},
-		{Key: testKey2, Value: roachpb.MakeValueFromStringAndTimestamp("testValue2", ts[3])},
-		{Key: testKey3, Value: roachpb.MakeValueFromStringAndTimestamp("testValue3", ts[4])},
-		{Key: testKey4, Value: roachpb.MakeValueFromStringAndTimestamp("testValue4", ts[5])},
+		{Key: testKey1, Value: mkVal("testValue1 pre", ts[0])},
+		{Key: testKey4, Value: mkVal("testValue4 pre", ts[1])},
+		{Key: testKey1, Value: mkVal("testValue1", ts[2])},
+		{Key: testKey2, Value: mkVal("testValue2", ts[3])},
+		{Key: testKey3, Value: mkVal("testValue3", ts[4])},
+		{Key: testKey4, Value: mkVal("testValue4", ts[5])},
 	}
 	for i, kv := range fixtureKVs {
 		var txn *roachpb.Transaction
@@ -651,7 +657,9 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 		} else if i == 5 {
 			txn = txn2
 		}
-		err := MVCCPut(engine, nil, kv.Key, *kv.Value.Timestamp, kv.Value, txn)
+		v := *proto.Clone(&kv.Value).(*roachpb.Value)
+		v.Timestamp = nil
+		err := MVCCPut(engine, nil, kv.Key, *kv.Value.Timestamp, v, txn)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2473,7 +2481,9 @@ func TestMVCCGarbageCollect(t *testing.T) {
 					}
 					continue
 				}
-				if err := MVCCPut(engine, ms, test.key, *val.Timestamp, val, nil); err != nil {
+				valCpy := *proto.Clone(&val).(*roachpb.Value)
+				valCpy.Timestamp = nil
+				if err := MVCCPut(engine, ms, test.key, *val.Timestamp, valCpy, nil); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -2549,15 +2559,17 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	bytes := []byte("value")
+	s := "string"
 	ts1 := makeTS(1E9, 0)
 	ts2 := makeTS(2E9, 0)
-	val1 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts1)
-	val2 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts2)
+	val1 := mkVal(s, ts1)
+	val2 := mkVal(s, ts2)
 	key := roachpb.Key("a")
 	vals := []roachpb.Value{val1, val2}
 	for _, val := range vals {
-		if err := MVCCPut(engine, nil, key, *val.Timestamp, val, nil); err != nil {
+		valCpy := *proto.Clone(&val).(*roachpb.Value)
+		valCpy.Timestamp = nil
+		if err := MVCCPut(engine, nil, key, *val.Timestamp, valCpy, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -2579,10 +2591,12 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 	bytes := []byte("value")
 	ts1 := makeTS(1E9, 0)
 	ts2 := makeTS(2E9, 0)
-	val1 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts1)
 	key := roachpb.Key("a")
-	if err := MVCCPut(engine, nil, key, ts1, val1, nil); err != nil {
-		t.Fatal(err)
+	{
+		val1 := roachpb.MakeValueFromBytes(bytes)
+		if err := MVCCPut(engine, nil, key, ts1, val1, nil); err != nil {
+			t.Fatal(err)
+		}
 	}
 	txn := &roachpb.Transaction{ID: []byte("txn"), Timestamp: ts2}
 	if err := MVCCDelete(engine, nil, key, ts2, txn); err != nil {

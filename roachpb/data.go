@@ -299,14 +299,6 @@ func MakeValueFromBytesAndTimestamp(bs []byte, t Timestamp) Value {
 	return v
 }
 
-// MakeValueFromStringAndTimestamp returns a value with bytes, timestamp and
-// tag set.
-func MakeValueFromStringAndTimestamp(s string, t Timestamp) Value {
-	v := Value{Timestamp: &t}
-	v.SetBytes([]byte(s))
-	return v
-}
-
 // SetBytes sets the bytes and tag field of the receiver.
 func (v *Value) SetBytes(b []byte) {
 	v.RawBytes = b
