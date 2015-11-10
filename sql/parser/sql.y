@@ -144,10 +144,6 @@ func unimplemented() {
 %type <qname> any_name
 %type <qnames> any_name_list
 %type <exprs> expr_list
-%type <exprs> extract_list
-%type <exprs> overlay_list
-%type <exprs> position_list
-%type <exprs> substr_list
 %type <indirect> attrs
 %type <selExprs> target_list opt_target_list
 %type <updateExprs> set_clause_list
@@ -163,7 +159,11 @@ func unimplemented() {
 %type <joinCond> join_qual
 %type <str> join_type
 
-%type <empty> trim_list
+%type <exprs> extract_list
+%type <exprs> overlay_list
+%type <exprs> position_list
+%type <exprs> substr_list
+%type <exprs> trim_list
 %type <empty> opt_interval interval_second
 %type <expr> overlay_placing
 
@@ -2846,10 +2846,22 @@ func_expr_common_subexpr:
     $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3} 
   }
 | TREAT '(' a_expr AS typename ')' { unimplemented() }
-| TRIM '(' BOTH trim_list ')' { unimplemented() }
-| TRIM '(' LEADING trim_list ')' { unimplemented() }
-| TRIM '(' TRAILING trim_list ')' { unimplemented() }
-| TRIM '(' trim_list ')' { unimplemented() }
+| TRIM '(' BOTH trim_list ')'
+  {
+     $$ = &FuncExpr{Name: &QualifiedName{Base: "BTRIM"}, Exprs: $4}
+  }
+| TRIM '(' LEADING trim_list ')'
+  {
+     $$ = &FuncExpr{Name: &QualifiedName{Base: "LTRIM"}, Exprs: $4}
+  }
+| TRIM '(' TRAILING trim_list ')' 
+  {
+     $$ = &FuncExpr{Name: &QualifiedName{Base: "RTRIM"}, Exprs: $4}
+  }
+| TRIM '(' trim_list ')'
+  {
+    $$ = &FuncExpr{Name: &QualifiedName{Base: "BTRIM"}, Exprs: $3}
+  }
 | IF '(' a_expr ',' a_expr ',' a_expr ')'
   {
     $$ = &IfExpr{Cond: $3, True: $5, Else: $7}
@@ -3160,9 +3172,18 @@ substr_for:
   }
 
 trim_list:
-  a_expr FROM expr_list { unimplemented() }
-| FROM expr_list { unimplemented() }
-| expr_list { unimplemented() }
+  a_expr FROM expr_list
+  {
+    $$ = append($3, $1)
+  }
+| FROM expr_list
+  {
+    $$ = $2
+  }
+| expr_list
+  {
+    $$ = $1
+  }
 
 in_expr:
   select_with_parens
