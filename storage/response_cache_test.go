@@ -53,19 +53,19 @@ func TestResponseCachePutGetClearData(t *testing.T) {
 	defer stopper.Stop()
 	rc, e := createTestResponseCache(t, 1, stopper)
 	// Start with a get for an unseen id/sequence combo.
-	if seq, readErr := rc.GetResponse(e, family); seq > 0 {
+	if seq, readErr := rc.GetSequence(e, family); seq > 0 {
 		t.Errorf("expected no response for family %s", family)
 	} else if readErr != nil {
 		t.Fatalf("unxpected read error: %s", readErr)
 	}
 	// Cache the test response.
 	const seq = 123
-	if err := rc.PutResponse(e, family, seq, nil); err != nil {
+	if err := rc.PutSequence(e, family, seq, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
 	tryHit := func(shouldHit bool) {
-		if actSeq, readErr := rc.GetResponse(e, family); readErr != nil {
+		if actSeq, readErr := rc.GetSequence(e, family); readErr != nil {
 			t.Errorf("unexpected failure getting response: %s", readErr)
 		} else if shouldHit != (actSeq == seq) {
 			t.Errorf("wanted hit: %t, got actual %d vs expected %d", shouldHit, actSeq, seq)
@@ -86,13 +86,13 @@ func TestResponseCacheEmptyParams(t *testing.T) {
 	defer stopper.Stop()
 	rc, e := createTestResponseCache(t, 1, stopper)
 	// Put value for test response.
-	if err := rc.PutResponse(e, family, 0, nil); err != errEmptyID {
+	if err := rc.PutSequence(e, family, 0, nil); err != errEmptyID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if err := rc.PutResponse(e, nil, 10, nil); err != errEmptyID {
+	if err := rc.PutSequence(e, nil, 10, nil); err != errEmptyID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if _, readErr := rc.GetResponse(e, nil); readErr != errEmptyID {
+	if _, readErr := rc.GetSequence(e, nil); readErr != errEmptyID {
 		t.Fatalf("unxpected read error: %v", readErr)
 	}
 }
@@ -107,7 +107,7 @@ func TestResponseCacheCopyInto(t *testing.T) {
 	rc2, _ := createTestResponseCache(t, 2, stopper)
 	const seq = 123
 	// Store an increment with new value one in the first cache.
-	if err := rc1.PutResponse(e, family, seq, nil); err != nil {
+	if err := rc1.PutSequence(e, family, seq, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	// Copy the first cache into the second.
@@ -116,7 +116,7 @@ func TestResponseCacheCopyInto(t *testing.T) {
 	}
 	for _, cache := range []*ResponseCache{rc1, rc2} {
 		// Get should return 1 for both caches.
-		if actSeq, readErr := cache.GetResponse(e, family); readErr != nil {
+		if actSeq, readErr := cache.GetSequence(e, family); readErr != nil {
 			t.Errorf("unexpected failure getting response from source: %s", readErr)
 		} else if actSeq != seq {
 			t.Fatalf("unxpected cache miss")
@@ -134,7 +134,7 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 	rc2, _ := createTestResponseCache(t, 2, stopper)
 	const seq = 321
 	// Store an increment with new value one in the first cache.
-	if err := rc1.PutResponse(e, family, seq, nil); err != nil {
+	if err := rc1.PutSequence(e, family, seq, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
@@ -145,7 +145,7 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 
 	// Get should hit both caches.
 	for _, cache := range []*ResponseCache{rc1, rc2} {
-		if actSeq, readErr := cache.GetResponse(e, family); readErr != nil {
+		if actSeq, readErr := cache.GetSequence(e, family); readErr != nil {
 			t.Fatalf("unxpected read error: %s", readErr)
 		} else if actSeq != seq {
 			t.Errorf("unexpected cache miss")

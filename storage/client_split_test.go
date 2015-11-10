@@ -297,7 +297,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		Txn: txn,
 	}, &lIncArgs)
 	if _, ok := err.(*roachpb.TransactionRetryError); !ok {
-		t.Fatal("unexpected response cache miss")
+		t.Fatalf("unexpected response cache miss: %v", err)
 	}
 
 	// Send out the same increment copied from above (same txn/sequence), but
@@ -307,7 +307,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		Txn:     txn,
 	}, &rIncArgs)
 	if _, ok := err.(*roachpb.TransactionRetryError); !ok {
-		t.Fatal("unexpected response cache miss")
+		t.Fatalf("unexpected response cache miss: %v", err)
 	}
 
 	// Compare stats of split ranges to ensure they are non zero and

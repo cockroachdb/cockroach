@@ -34,7 +34,7 @@ func TestClientTxnSequenceNumber(t *testing.T) {
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		count++
 		if ba.Txn.Sequence <= curSeq {
-			return nil, roachpb.NewError(util.Errorf("sequence number did not increase"))
+			return nil, roachpb.NewError(util.Errorf("sequence number %d did not increase", curSeq))
 		}
 		curSeq = ba.Txn.Sequence
 		return ba.CreateReply(), nil

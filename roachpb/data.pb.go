@@ -421,9 +421,9 @@ type Transaction struct {
 	// Writing is true if the transaction has previously executed a successful
 	// write request, i.e. a request that may have left intents (across retries).
 	Writing bool `protobuf:"varint,13,opt,name=Writing" json:"Writing"`
-	// A sequence number which is increased on each batch sent as part
-	// of the transaction. Used to prevent replay and out-of-order application
-	// protection (by means of a transaction retry).
+	// A one-indexed sequence number which is increased on each batch sent as
+	// part of the transaction. Used to prevent replay and out-of-order
+	// application protection (by means of a transaction retry).
 	Sequence int32 `protobuf:"varint,14,opt,name=Sequence" json:"Sequence"`
 }
 
