@@ -209,7 +209,8 @@ func verifyStoreList(sp *StorePool, requiredAttrs []string, expected []int) erro
 // that are alive and match the attribute criteria.
 func TestStorePoolGetStoreList(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper, g, sp := createTestStorePool(TestTimeUntilStoreDead)
+	// We're going to manually mark stores dead in this test.
+	stopper, g, sp := createTestStorePool(TestTimeUntilStoreDeadOff)
 	defer stopper.Stop()
 	sg := gossiputil.NewStoreGossiper(g)
 	required := []string{"ssd", "dc"}
@@ -244,6 +245,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		Attrs:   roachpb.Attributes{Attrs: required},
 	}
 
+	// Mark all alive initially.
 	sg.GossipStores([]*roachpb.StoreDescriptor{
 		&matchingStore,
 		&supersetStore,
@@ -260,16 +262,10 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		t.Error(err)
 	}
 
-	// Timeout all stores, but specifically store 5.
-	waitUntilDead(t, sp, 5)
-
-	// Resurrect all stores except for 5.
-	sg.GossipStores([]*roachpb.StoreDescriptor{
-		&matchingStore,
-		&supersetStore,
-		&unmatchingStore,
-		&emptyStore,
-	}, t)
+	// Mark one store dead.
+	sp.mu.Lock()
+	sp.stores[deadStore.StoreID].markDead(time.Now())
+	sp.mu.Unlock()
 
 	if err := verifyStoreList(sp, required, []int{
 		int(matchingStore.StoreID),
