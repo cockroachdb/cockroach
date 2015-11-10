@@ -51,7 +51,7 @@ type infoStore struct {
 	NodeID          roachpb.NodeID      `json:"-"`               // Owning node's ID
 	NodeAddr        util.UnresolvedAddr `json:"-"`               // Address of node owning this info store: "host:port"
 	highWaterStamps map[int32]int64     // High water timestamps for known gossip peers
-	callbacks       map[*callback]struct{}
+	callbacks       []*callback
 }
 
 // monotonicUnixNano returns a monotonically increasing value for
@@ -105,7 +105,6 @@ func newInfoStore(nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr) infoStore
 		NodeID:          nodeID,
 		NodeAddr:        nodeAddr,
 		highWaterStamps: map[int32]int64{},
-		callbacks:       map[*callback]struct{}{},
 	}
 }
 
@@ -197,12 +196,14 @@ func (is *infoStore) getHighWaterStamps() map[int32]int64 {
 	return copy
 }
 
-// registerCallback compiles a regexp for pattern and adds it to
-// the callbacks slice.
+// registerCallback registers a callback for a key pattern to be
+// invoked whenever new info for a gossip key matching pattern is
+// received. The callback method is invoked with the info key which
+// matched pattern. Returns a function to unregister the callback.
 func (is *infoStore) registerCallback(pattern string, method Callback) func() {
 	re := regexp.MustCompile(pattern)
 	cb := &callback{pattern: re, method: method}
-	is.callbacks[cb] = struct{}{}
+	is.callbacks = append(is.callbacks, cb)
 	if err := is.visitInfos(func(key string, i *Info) error {
 		if re.MatchString(key) {
 			// Run callbacks in a goroutine to avoid mutex reentry.
@@ -213,7 +214,14 @@ func (is *infoStore) registerCallback(pattern string, method Callback) func() {
 		panic(err)
 	}
 	return func() {
-		delete(is.callbacks, cb)
+		for i, targetCB := range is.callbacks {
+			if targetCB == cb {
+				numCBs := len(is.callbacks)
+				is.callbacks[i] = is.callbacks[numCBs-1]
+				is.callbacks = is.callbacks[:numCBs-1]
+				break
+			}
+		}
 	}
 }
 
@@ -222,7 +230,7 @@ func (is *infoStore) registerCallback(pattern string, method Callback) func() {
 // the corresponding callback method on a match.
 func (is *infoStore) processCallbacks(key string, content roachpb.Value) {
 	var matches []Callback
-	for cb := range is.callbacks {
+	for _, cb := range is.callbacks {
 		if cb.pattern.MatchString(key) {
 			matches = append(matches, cb.method)
 		}
