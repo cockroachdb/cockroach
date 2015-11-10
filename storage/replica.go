@@ -1031,9 +1031,9 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 		if ba.CmdID == roachpb.ZeroCmdID {
 			return btch, nil, nil, util.Errorf("write request without CmdID: %s", ba)
 		}
-		if isCached, readErr := r.respCache.GetResponse(btch, ba.Txn.ID, ba.CmdID); readErr != nil {
+		if sequence, readErr := r.respCache.GetResponse(btch, ba.Txn.ID); readErr != nil {
 			return btch, nil, nil, newReplicaCorruptionError(util.Errorf("could not read from response cache"), readErr)
-		} else if isCached {
+		} else if sequence >= int64(ba.Txn.Sequence) {
 			if log.V(1) {
 				log.Infoc(ctx, "found response cache entry for %+v", ba.CmdID)
 			}
@@ -1095,7 +1095,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 		}
 		// Only transactional requests have replay protection.
 		if ba.Txn != nil {
-			if putErr := r.respCache.PutResponse(btch, ba.Txn.ID, ba.CmdID, err); putErr != nil {
+			if putErr := r.respCache.PutResponse(btch, ba.Txn.ID, int64(ba.Txn.Sequence), err); putErr != nil {
 				// TODO(tschottdorf): ReplicaCorruptionError.
 				log.Fatalc(ctx, "putting a response cache entry in a batch should never fail: %s", putErr)
 			}

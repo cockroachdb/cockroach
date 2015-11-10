@@ -228,19 +228,16 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	// the key.
 	txn := roachpb.NewTransaction("test", []byte("c"), 10, roachpb.SERIALIZABLE,
 		store.Clock().Now(), 0)
-	lCmdID := roachpb.ClientCmdID{WallTime: 123, Random: 423}
 	lIncArgs := incrementArgs([]byte("apoptosis"), 100)
 	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
-		Txn:   txn,
-		CmdID: lCmdID,
+		Txn: txn,
 	}, &lIncArgs); err != nil {
 		t.Fatal(err)
 	}
 	rIncArgs := incrementArgs([]byte("wobble"), 10)
-	rCmdID := roachpb.ClientCmdID{WallTime: 12, Random: 42}
+	txn.Sequence++
 	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
-		Txn:   txn,
-		CmdID: rCmdID,
+		Txn: txn,
 	}, &rIncArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -297,8 +294,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	// Send out an increment request copied from above (same ClientCmdID) which
 	// remains in the old range.
 	_, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
-		Txn:   txn,
-		CmdID: lCmdID,
+		Txn: txn,
 	}, &lIncArgs)
 	if _, ok := err.(*roachpb.TransactionRetryError); !ok {
 		t.Fatal("unexpected response cache miss")
@@ -309,7 +305,6 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	_, err = client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: newRng.Desc().RangeID,
 		Txn:     txn,
-		CmdID:   rCmdID,
 	}, &rIncArgs)
 	if _, ok := err.(*roachpb.TransactionRetryError); !ok {
 		t.Fatal("unexpected response cache miss")

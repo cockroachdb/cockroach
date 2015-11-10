@@ -813,6 +813,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 		// First lay down intent using the pushee's txn.
 		pArgs := putArgs(key, []byte("value"))
 		h := roachpb.Header{Txn: pushee}
+		pushee.Sequence++
 		if _, err := client.SendWrappedWith(store.testSender(), nil, h, &pArgs); err != nil {
 			t.Fatal(err)
 		}
@@ -840,6 +841,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 				t.Errorf("expected txn to match pushee %q; got %s", pushee.ID, rErr)
 			}
 			// Trying again should fail again.
+			h.Txn.Sequence++
 			if _, err := client.SendWrappedWith(store.testSender(), nil, h, &pArgs); err == nil {
 				t.Errorf("expected another error on latent write intent but succeeded")
 			}
@@ -869,6 +871,7 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 	// First lay down intent using the pushee's txn.
 	args := incrementArgs(key, 1)
 	h := roachpb.Header{Txn: pushee}
+	pushee.Sequence++
 	if _, err := client.SendWrappedWith(store.testSender(), nil, h, &args); err != nil {
 		t.Fatal(err)
 	}
@@ -931,6 +934,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 
 		// Second, lay down intent using the pushee's txn.
 		h := roachpb.Header{Txn: pushee}
+		pushee.Sequence++
 		args.Value.SetBytes([]byte("value2"))
 		if _, err := client.SendWrappedWith(store.testSender(), nil, h, &args); err != nil {
 			t.Fatal(err)
@@ -956,6 +960,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			// commit timestamp is equal to pusher's Timestamp + 1. Otherwise,
 			// verify commit fails with TransactionRetryError.
 			etArgs, h := endTxnArgs(pushee, true)
+			pushee.Sequence++
 			reply, cErr := client.SendWrappedWith(store.testSender(), nil, h, &etArgs)
 
 			expTimestamp := pusher.Timestamp
@@ -1026,6 +1031,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 
 	// Lay down intent using the pushee's txn.
 	h := roachpb.Header{Txn: pushee}
+	h.Txn.Sequence++
 	h.Timestamp = store.ctx.Clock.Now()
 	args.Value.SetBytes([]byte("value2"))
 	if _, err := client.SendWrappedWith(store.testSender(), nil, h, &args); err != nil {
@@ -1050,6 +1056,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	// commit timestamp is equal to gArgs.Timestamp + 1.
 	etArgs, h := endTxnArgs(pushee, true)
 	h.Timestamp = pushee.Timestamp
+	h.Txn.Sequence++
 	reply, err := client.SendWrappedWith(store.testSender(), nil, h, &etArgs)
 	if err != nil {
 		t.Fatal(err)
@@ -1081,6 +1088,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 
 	// First, lay down intent from pushee.
+	pushee.Sequence++
 	args := putArgs(key, []byte("value1"))
 	if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Txn: pushee}, &args); err != nil {
 		t.Fatal(err)
@@ -1138,6 +1146,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	// Finally, try to end the pushee's transaction; it should have
 	// been aborted.
 	etArgs, h := endTxnArgs(pushee, true)
+	pushee.Sequence++
 	_, err := client.SendWrappedWith(store.testSender(), nil, h, &etArgs)
 	if err == nil {
 		t.Errorf("unexpected success committing transaction")
@@ -1194,12 +1203,14 @@ func TestStoreReadInconsistent(t *testing.T) {
 				t.Fatal(err)
 			}
 			args.Key = txn.Key
+			txn.Sequence++
 			if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Txn: txn}, &args); err != nil {
 				t.Fatal(err)
 			}
 		}
 		// End txn B, but without resolving the intent.
 		etArgs, h := endTxnArgs(txnB, true)
+		txnB.Sequence++
 		if _, err := client.SendWrappedWith(store.testSender(), nil, h, &etArgs); err != nil {
 			t.Fatal(err)
 		}
@@ -1328,6 +1339,7 @@ func TestStoreScanIntents(t *testing.T) {
 				}
 			}
 			args := putArgs(key, []byte(fmt.Sprintf("value%02d", j)))
+			txn.Sequence++
 			if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Txn: txn}, &args); err != nil {
 				t.Fatal(err)
 			}
@@ -1373,6 +1385,7 @@ func TestStoreScanIntents(t *testing.T) {
 			} else {
 				// Commit the unpushable txn so the read can finish.
 				etArgs, h := endTxnArgs(txn, true)
+				txn.Sequence++
 				for _, key := range keys {
 					etArgs.Intents = append(etArgs.Intents, roachpb.Intent{Key: key})
 				}
@@ -1419,6 +1432,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 		key := roachpb.Key(fmt.Sprintf("key%02d", j))
 		keys = append(keys, key)
 		args := putArgs(key, []byte(fmt.Sprintf("value%02d", j)))
+		txn.Sequence++
 		if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Txn: txn}, &args); err != nil {
 			t.Fatal(err)
 		}
@@ -1428,6 +1442,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	// of Txn entries in this test, the Txn entry would be removed and later
 	// attempts to resolve the intents would fail.
 	etArgs, h := endTxnArgs(txn, true)
+	txn.Sequence++
 	if _, err := client.SendWrappedWith(store.testSender(), nil, h, &etArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -1508,6 +1523,9 @@ func TestStoreBadRequests(t *testing.T) {
 	for i, test := range testCases {
 		if test.header == nil {
 			test.header = &roachpb.Header{}
+		}
+		if test.header.Txn != nil {
+			test.header.Txn.Sequence++
 		}
 		if _, err := client.SendWrappedWith(store.testSender(), nil, *test.header, test.args); err == nil || test.err == "" || !testutils.IsError(err, test.err) {
 			t.Errorf("%d unexpected result: %s", i, err)
