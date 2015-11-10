@@ -300,6 +300,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 	}
 	ba.CmdID = ba.GetOrCreateCmdID(tc.clock.PhysicalNow())
 	var startNS int64
+	ba.SetNewRequest()
 
 	// This is the earliest point at which the request has a ClientCmdID and/or
 	// TxnID (if applicable). Begin a Trace which follows this request.
