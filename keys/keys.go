@@ -553,7 +553,7 @@ func decodeKeyPrint(key roachpb.Key) string {
 			var t time.Time
 			key, t, err = encoding.DecodeTime(key)
 			if err == nil {
-				fmt.Fprintf(&buf, "/%s", t)
+				fmt.Fprintf(&buf, "/%s", t.UTC().Format(time.UnixDate))
 			}
 		default:
 			// This shouldn't ever happen, but if it does let the loop exit.
