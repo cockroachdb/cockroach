@@ -59,23 +59,23 @@ func TestResponseCachePutGetClearData(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	rc, e := createTestResponseCache(t, 1, stopper)
-	cmdID := makeCmdID(1, 1)
 	// Start with a get for an unseen cmdID.
-	if isHit, readErr := rc.GetResponse(e, family, cmdID); isHit {
-		t.Errorf("expected no response for id %+v", cmdID)
+	if seq, readErr := rc.GetResponse(e, family); seq > 0 {
+		t.Errorf("expected no response for family %s", family)
 	} else if readErr != nil {
-		t.Fatalf("unxpected read error :%s", readErr)
+		t.Fatalf("unxpected read error: %s", readErr)
 	}
 	// Cache the test response.
-	if err := rc.PutResponse(e, family, cmdID, nil); err != nil {
+	const seq = 123
+	if err := rc.PutResponse(e, family, seq, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
 	tryHit := func(shouldHit bool) {
-		if isHit, readErr := rc.GetResponse(e, family, cmdID); readErr != nil {
+		if actSeq, readErr := rc.GetResponse(e, family); readErr != nil {
 			t.Errorf("unexpected failure getting response: %s", readErr)
-		} else if isHit != shouldHit {
-			t.Errorf("wanted hit: %t, got hit: %t", shouldHit, isHit)
+		} else if shouldHit != (actSeq == seq) {
+			t.Errorf("wanted hit: %t, got actual %d vs expected %d", shouldHit, actSeq, seq)
 		}
 	}
 
@@ -86,19 +86,20 @@ func TestResponseCachePutGetClearData(t *testing.T) {
 	tryHit(false)
 }
 
-// TestResponseCacheEmptyCmdID tests operation with empty client
-// command id.
+// TestResponseCacheEmptyCmdID tests operation with empty parameters.
 func TestResponseCacheEmptyCmdID(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	rc, e := createTestResponseCache(t, 1, stopper)
-	cmdID := roachpb.ClientCmdID{}
-	// Put value of 1 for test response.
-	if err := rc.PutResponse(e, family, cmdID, nil); err != errEmptyCmdID {
+	// Put value for test response.
+	if err := rc.PutResponse(e, family, 0, nil); err != errEmptyCmdID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if _, readErr := rc.GetResponse(e, family, cmdID); readErr != errEmptyCmdID {
+	if err := rc.PutResponse(e, nil, 10, nil); err != errEmptyCmdID {
+		t.Errorf("unexpected error putting response: %v", err)
+	}
+	if _, readErr := rc.GetResponse(e, nil); readErr != errEmptyCmdID {
 		t.Fatalf("unxpected read error: %v", readErr)
 	}
 }
@@ -111,9 +112,9 @@ func TestResponseCacheCopyInto(t *testing.T) {
 	defer stopper.Stop()
 	rc1, e := createTestResponseCache(t, 1, stopper)
 	rc2, _ := createTestResponseCache(t, 2, stopper)
-	cmdID := makeCmdID(1, 1)
+	const seq = 123
 	// Store an increment with new value one in the first cache.
-	if err := rc1.PutResponse(e, family, cmdID, nil); err != nil {
+	if err := rc1.PutResponse(e, family, seq, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	// Copy the first cache into the second.
@@ -122,9 +123,9 @@ func TestResponseCacheCopyInto(t *testing.T) {
 	}
 	for _, cache := range []*ResponseCache{rc1, rc2} {
 		// Get should return 1 for both caches.
-		if isHit, readErr := cache.GetResponse(e, family, cmdID); readErr != nil {
+		if actSeq, readErr := cache.GetResponse(e, family); readErr != nil {
 			t.Errorf("unexpected failure getting response from source: %s", readErr)
-		} else if !isHit {
+		} else if actSeq != seq {
 			t.Fatalf("unxpected cache miss")
 		}
 	}
@@ -138,9 +139,9 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 	defer stopper.Stop()
 	rc1, e := createTestResponseCache(t, 1, stopper)
 	rc2, _ := createTestResponseCache(t, 2, stopper)
-	cmdID := makeCmdID(1, 1)
+	const seq = 321
 	// Store an increment with new value one in the first cache.
-	if err := rc1.PutResponse(e, family, cmdID, nil); err != nil {
+	if err := rc1.PutResponse(e, family, seq, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
@@ -151,9 +152,9 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 
 	// Get should hit both caches.
 	for _, cache := range []*ResponseCache{rc1, rc2} {
-		if isHit, readErr := cache.GetResponse(e, family, cmdID); readErr != nil {
-			t.Fatalf("unxpected read error :%s", readErr)
-		} else if !isHit {
+		if actSeq, readErr := cache.GetResponse(e, family); readErr != nil {
+			t.Fatalf("unxpected read error: %s", readErr)
+		} else if actSeq != seq {
 			t.Errorf("unexpected cache miss")
 		}
 	}

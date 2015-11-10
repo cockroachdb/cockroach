@@ -346,6 +346,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 			}, &pArgs); err != nil {
 				t.Fatalf("%d: could not put data: %s", i, err)
 			}
+			txns[i].Sequence++
 		}
 	}
 
