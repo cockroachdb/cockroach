@@ -4675,18 +4675,28 @@ class TruncateLogRequest : public ::google::protobuf::Message {
   ::google::protobuf::uint64 index() const;
   void set_index(::google::protobuf::uint64 value);
 
+  // optional int64 range_id = 6;
+  bool has_range_id() const;
+  void clear_range_id();
+  static const int kRangeIdFieldNumber = 6;
+  ::google::protobuf::int64 range_id() const;
+  void set_range_id(::google::protobuf::int64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.TruncateLogRequest)
  private:
   inline void set_has_header();
   inline void clear_has_header();
   inline void set_has_index();
   inline void clear_has_index();
+  inline void set_has_range_id();
+  inline void clear_has_range_id();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::Span* header_;
   ::google::protobuf::uint64 index_;
+  ::google::protobuf::int64 range_id_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -9643,6 +9653,30 @@ inline void TruncateLogRequest::set_index(::google::protobuf::uint64 value) {
   set_has_index();
   index_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.TruncateLogRequest.index)
+}
+
+// optional int64 range_id = 6;
+inline bool TruncateLogRequest::has_range_id() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void TruncateLogRequest::set_has_range_id() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void TruncateLogRequest::clear_has_range_id() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void TruncateLogRequest::clear_range_id() {
+  range_id_ = GOOGLE_LONGLONG(0);
+  clear_has_range_id();
+}
+inline ::google::protobuf::int64 TruncateLogRequest::range_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TruncateLogRequest.range_id)
+  return range_id_;
+}
+inline void TruncateLogRequest::set_range_id(::google::protobuf::int64 value) {
+  set_has_range_id();
+  range_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.TruncateLogRequest.range_id)
 }
 
 // -------------------------------------------------------------------

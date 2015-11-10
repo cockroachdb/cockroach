@@ -845,6 +845,10 @@ type TruncateLogRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// Log entries < this index are to be discarded.
 	Index uint64 `protobuf:"varint,2,opt,name=index" json:"index"`
+	// Range ID to double check that the correct range is being truncated. The
+	// range may have changed form the one specified in the span in the case of
+	// a merge.
+	RangeID RangeID `protobuf:"varint,6,opt,name=range_id,casttype=RangeID" json:"range_id"`
 }
 
 func (m *TruncateLogRequest) Reset()         { *m = TruncateLogRequest{} }
@@ -2532,6 +2536,9 @@ func (m *TruncateLogRequest) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Index))
+	data[i] = 0x30
+	i++
+	i = encodeVarintApi(data, i, uint64(m.RangeID))
 	return i, nil
 }
 
@@ -3801,6 +3808,7 @@ func (m *TruncateLogRequest) Size() (n int) {
 	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.Index))
+	n += 1 + sovApi(uint64(m.RangeID))
 	return n
 }
 
@@ -8935,6 +8943,25 @@ func (m *TruncateLogRequest) Unmarshal(data []byte) error {
 				b := data[iNdEx]
 				iNdEx++
 				m.Index |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
+			}
+			m.RangeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.RangeID |= (RangeID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
