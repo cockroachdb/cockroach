@@ -21,13 +21,15 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/gogo/protobuf/proto"
 )
 
 var (
@@ -108,8 +110,39 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 	descKey := MakeDescMetadataKey(descriptor.GetID())
 
 	b := client.Batch{}
-	b.CPut(key, descriptor.GetID(), nil)
-	b.CPut(descKey, wrapDescriptor(descriptor), nil)
+	descID := descriptor.GetID()
+	descDesc := wrapDescriptor(descriptor)
+	b.CPut(key, descID, nil)
+	b.CPut(descKey, descDesc, nil)
+
+	p.testingVerifyMetadata = func(systemConfig *config.SystemConfig) error {
+		if systemConfig == nil {
+			return errSystemCacheUnpopulated
+		}
+		if v := systemConfig.GetValue(key); v != nil {
+			id, err := v.GetInt()
+			if err != nil {
+				return err
+			}
+			if ID(id) != descID {
+				return errStaleMetadata
+			}
+		} else {
+			return errStaleMetadata
+		}
+		if v := systemConfig.GetValue(descKey); v != nil {
+			var desc Descriptor
+			if err := v.GetProto(&desc); err != nil {
+				return err
+			}
+			if !proto.Equal(&desc, descDesc) {
+				return errStaleMetadata
+			}
+		} else {
+			return errStaleMetadata
+		}
+		return nil
+	}
 
 	return p.txn.Run(&b)
 }

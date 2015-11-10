@@ -25,17 +25,32 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/gogo/protobuf/proto"
 )
 
+var testingWaitForMetadata bool
+
+// TestingWaitForMetadata causes metadata-mutating operations to wait
+// for the new metadata to back-propagate through gossip.
+func TestingWaitForMetadata() func() {
+	testingWaitForMetadata = true
+	return func() {
+		testingWaitForMetadata = false
+	}
+}
+
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
+var errStaleMetadata = errors.New("metadata is still stale")
+var errSystemCacheUnpopulated = errors.New("system cache has not been received from gossip")
 var errTransactionAborted = errors.New("current transaction is aborted, commands ignored until end of transaction block")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
@@ -55,8 +70,9 @@ type Executor struct {
 	leaseMgr *LeaseManager
 
 	// System Config and mutex.
-	systemConfig   *config.SystemConfig
-	systemConfigMu sync.RWMutex
+	systemConfig     *config.SystemConfig
+	systemConfigMu   sync.RWMutex
+	systemConfigCond *sync.Cond
 }
 
 // newExecutor creates an Executor and registers a callback on the
@@ -67,6 +83,7 @@ func newExecutor(db client.DB, gossip *gossip.Gossip, clock *hlc.Clock) *Executo
 		reCache:  parser.NewRegexpCache(512),
 		leaseMgr: NewLeaseManager(0, db, clock),
 	}
+	exec.systemConfigCond = sync.NewCond(&exec.systemConfigMu)
 	gossip.RegisterSystemConfigCallback(exec.updateSystemConfig)
 	return exec
 }
@@ -81,16 +98,18 @@ func (e *Executor) SetNodeID(nodeID roachpb.NodeID) {
 // updateSystemConfig is called whenever the system config gossip entry is updated.
 func (e *Executor) updateSystemConfig(cfg *config.SystemConfig) {
 	e.systemConfigMu.Lock()
-	defer e.systemConfigMu.Unlock()
 	e.systemConfig = cfg
+	e.systemConfigCond.Broadcast()
+	e.systemConfigMu.Unlock()
 }
 
 // getSystemConfig returns a pointer to the latest system config. May be nil,
 // if the gossip callback has not run.
 func (e *Executor) getSystemConfig() *config.SystemConfig {
 	e.systemConfigMu.RLock()
-	defer e.systemConfigMu.RUnlock()
-	return e.systemConfig
+	cfg := e.systemConfig
+	e.systemConfigMu.RUnlock()
+	return cfg
 }
 
 // Execute the statement(s) in the given request and return a response.
@@ -303,6 +322,17 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 		return result, err
 	}
 
+	// we might need to verify metadata. Lock the system config so that
+	// no gossip updates sneak in under us.
+	// The case of a multi-request transaction is not handled here,
+	// because the transaction outlives the verification callback. This
+	// can be addressed when we move to a connection-oriented protocol
+	// and server-side transactions.
+	if testingWaitForMetadata {
+		e.systemConfigCond.L.Lock()
+		defer e.systemConfigCond.L.Unlock()
+	}
+
 	// No transaction. Run the command as a retryable block in an
 	// auto-transaction.
 	err := e.db.Txn(func(txn *client.Txn) error {
@@ -312,6 +342,25 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 		planMaker.resetTxn()
 		return err
 	})
+
+	if testingWaitForMetadata && err == nil {
+		if verify := planMaker.testingVerifyMetadata; verify != nil {
+			// In the case of a multi-statement request, avoid reusing this
+			// callback.
+			planMaker.testingVerifyMetadata = nil
+			for i := 0; ; i++ {
+				if verify(e.systemConfig) != nil {
+					e.systemConfigCond.Wait()
+				} else {
+					if i != 1 {
+						err = util.Errorf("expected %s to require one gossip update, but it required %d", stmt, i)
+					}
+					break
+				}
+			}
+		}
+	}
+
 	return result, err
 }
 

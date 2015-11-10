@@ -21,7 +21,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -65,16 +68,50 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 		return nil, err
 	}
 
+	newKey := databaseKey{string(n.NewName)}.Key()
+	oldKey := databaseKey{string(n.Name)}.Key()
+	descID := dbDesc.GetID()
+	descDesc := wrapDescriptor(dbDesc)
+
 	b := client.Batch{}
-	b.CPut(databaseKey{string(n.NewName)}.Key(), dbDesc.GetID(), nil)
-	b.Put(descKey, wrapDescriptor(dbDesc))
-	b.Del(databaseKey{string(n.Name)}.Key())
+	b.CPut(newKey, descID, nil)
+	b.Put(descKey, descDesc)
+	b.Del(oldKey)
 
 	if err := p.txn.Run(&b); err != nil {
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
 			return nil, fmt.Errorf("the new database name %q already exists", string(n.NewName))
 		}
 		return nil, err
+	}
+
+	p.testingVerifyMetadata = func(systemConfig *config.SystemConfig) error {
+		if v := systemConfig.GetValue(newKey); v != nil {
+			id, err := v.GetInt()
+			if err != nil {
+				return err
+			}
+			if ID(id) != descID {
+				return errStaleMetadata
+			}
+		} else {
+			return errStaleMetadata
+		}
+		if v := systemConfig.GetValue(descKey); v != nil {
+			var desc Descriptor
+			if err := v.GetProto(&desc); err != nil {
+				return err
+			}
+			if !proto.Equal(&desc, descDesc) {
+				return errStaleMetadata
+			}
+		} else {
+			return errStaleMetadata
+		}
+		if systemConfig.GetValue(oldKey) != nil {
+			return errStaleMetadata
+		}
+		return nil
 	}
 
 	return &valuesNode{}, nil
@@ -152,9 +189,12 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, err
 	}
 
+	descID := tableDesc.GetID()
+	descDesc := wrapDescriptor(tableDesc)
+
 	b := client.Batch{}
-	b.Put(descKey, wrapDescriptor(tableDesc))
-	b.CPut(newTbKey, tableDesc.GetID(), nil)
+	b.Put(descKey, descDesc)
+	b.CPut(newTbKey, descID, nil)
 	b.Del(tbKey)
 
 	if err := p.txn.Run(&b); err != nil {
@@ -162,6 +202,35 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 			return nil, fmt.Errorf("table name %q already exists", n.NewName.Table())
 		}
 		return nil, err
+	}
+
+	p.testingVerifyMetadata = func(systemConfig *config.SystemConfig) error {
+		if v := systemConfig.GetValue(newTbKey); v != nil {
+			id, err := v.GetInt()
+			if err != nil {
+				return err
+			}
+			if ID(id) != descID {
+				return errStaleMetadata
+			}
+		} else {
+			return errStaleMetadata
+		}
+		if v := systemConfig.GetValue(descKey); v != nil {
+			var desc Descriptor
+			if err := v.GetProto(&desc); err != nil {
+				return err
+			}
+			if !proto.Equal(&desc, descDesc) {
+				return errStaleMetadata
+			}
+		} else {
+			return errStaleMetadata
+		}
+		if systemConfig.GetValue(tbKey) != nil {
+			return errStaleMetadata
+		}
+		return nil
 	}
 
 	return &valuesNode{}, nil
