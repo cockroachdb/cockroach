@@ -1027,19 +1027,32 @@ func (r *Replica) Merge(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Hea
 }
 
 // TruncateLog discards a prefix of the raft log. Truncating part of a log that
-// has already been truncated has no effect.
+// has already been truncated has no effect. If this range is not the one
+// specified within the request body, the request will also be ignored.
 func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.TruncateLogRequest) (roachpb.TruncateLogResponse, error) {
 	var reply roachpb.TruncateLogResponse
+
+	rangeID := r.Desc().RangeID
+
+	// After a merge, it's possible that this request was sent to the wrong
+	// range based on the start key. This will cancel the request if this is not
+	// the range specified in the request body.
+	if rangeID != args.RangeID {
+		log.Infof("range %d: attempting to truncate raft logs for another range %d. Normally this is due to a merge and can be ignored.",
+			rangeID, args.RangeID)
+		return reply, nil
+	}
 
 	// Have we already truncated this log? If so, just return without an error.
 	firstIndex, err := r.FirstIndex()
 	if err != nil {
 		return reply, err
 	}
+
 	if firstIndex >= args.Index {
 		if log.V(3) {
 			log.Infof("range %d: attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
-				r.Desc().RangeID, firstIndex, args.Index)
+				rangeID, firstIndex, args.Index)
 		}
 		return reply, nil
 	}
@@ -1049,7 +1062,6 @@ func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roach
 	if err != nil {
 		return reply, err
 	}
-	rangeID := r.Desc().RangeID
 	start := keys.RaftLogKey(rangeID, 0)
 	end := keys.RaftLogKey(rangeID, args.Index)
 	if err = batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end), func(kv engine.MVCCKeyValue) (bool, error) {

@@ -131,7 +131,11 @@ func (rlq *raftLogQueue) process(now roachpb.Timestamp, r *Replica, _ *config.Sy
 			log.Infof("truncating the raft log of range %d to %d", r.Desc().RangeID, oldestIndex)
 		}
 		b := &client.Batch{}
-		b.InternalAddRequest(&roachpb.TruncateLogRequest{Index: oldestIndex})
+		b.InternalAddRequest(&roachpb.TruncateLogRequest{
+			Span:    roachpb.Span{Key: r.Desc().StartKey.AsRawKey()},
+			Index:   oldestIndex,
+			RangeID: r.Desc().RangeID,
+		})
 		return rlq.db.Run(b)
 	}
 	return nil
