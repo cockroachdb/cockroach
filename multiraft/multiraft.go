@@ -735,13 +735,6 @@ func (s *state) removeNode(nodeID roachpb.NodeID, g *group) error {
 	// TODO(bdarnell): when a node has no more groups, remove it.
 	node.unregisterGroup(g.groupID)
 
-	// Cancel any outstanding proposals.
-	if nodeID == s.nodeID {
-		for _, prop := range g.pending {
-			s.removePending(g, prop, ErrGroupDeleted)
-		}
-	}
-
 	return nil
 }
 
@@ -989,8 +982,21 @@ func (s *state) propose(p *proposal) {
 		}
 	}
 	if !found {
-		// If we are not a member of the group, don't allow any proposals.
-		s.removePending(nil, p, ErrGroupDeleted)
+		// If we are no longer a member of the group, don't allow any additional
+		// proposals.
+		//
+		// If this is an initial proposal, go ahead and remove the command. If
+		// this is a re-proposal, there is a good chance that the original
+		// proposal will still commit even though the node has been removed from
+		// the group.
+		//
+		// Therefore, we will not remove the pending command until the group
+		// itself is removed, the node is re-added to the group
+		// (which will trigger another re-proposal that will succeed), or the
+		// proposal is committed.
+		if _, ok := g.pending[p.commandID]; !ok {
+			s.removePending(nil, p, ErrGroupDeleted)
+		}
 		return
 	}
 	// If configuration change callback is pending, wait for it.
