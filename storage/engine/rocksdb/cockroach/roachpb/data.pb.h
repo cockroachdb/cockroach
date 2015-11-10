@@ -1400,6 +1400,13 @@ class Transaction : public ::google::protobuf::Message {
   bool writing() const;
   void set_writing(bool value);
 
+  // optional int32 Sequence = 14;
+  bool has_sequence() const;
+  void clear_sequence();
+  static const int kSequenceFieldNumber = 14;
+  ::google::protobuf::int32 sequence() const;
+  void set_sequence(::google::protobuf::int32 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Transaction)
  private:
   inline void set_has_name();
@@ -1428,6 +1435,8 @@ class Transaction : public ::google::protobuf::Message {
   inline void clear_has_certain_nodes();
   inline void set_has_writing();
   inline void clear_has_writing();
+  inline void set_has_sequence();
+  inline void clear_has_sequence();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -1445,6 +1454,7 @@ class Transaction : public ::google::protobuf::Message {
   ::cockroach::roachpb::Timestamp* max_timestamp_;
   ::cockroach::roachpb::NodeList* certain_nodes_;
   bool writing_;
+  ::google::protobuf::int32 sequence_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fdata_2eproto();
@@ -3220,6 +3230,30 @@ inline void Transaction::set_writing(bool value) {
   set_has_writing();
   writing_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.Writing)
+}
+
+// optional int32 Sequence = 14;
+inline bool Transaction::has_sequence() const {
+  return (_has_bits_[0] & 0x00002000u) != 0;
+}
+inline void Transaction::set_has_sequence() {
+  _has_bits_[0] |= 0x00002000u;
+}
+inline void Transaction::clear_has_sequence() {
+  _has_bits_[0] &= ~0x00002000u;
+}
+inline void Transaction::clear_sequence() {
+  sequence_ = 0;
+  clear_has_sequence();
+}
+inline ::google::protobuf::int32 Transaction::sequence() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.Sequence)
+  return sequence_;
+}
+inline void Transaction::set_sequence(::google::protobuf::int32 value) {
+  set_has_sequence();
+  sequence_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.Sequence)
 }
 
 // -------------------------------------------------------------------

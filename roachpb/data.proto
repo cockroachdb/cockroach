@@ -253,6 +253,10 @@ message Transaction {
   // Writing is true if the transaction has previously executed a successful
   // write request, i.e. a request that may have left intents (across retries).
   optional bool Writing = 13 [(gogoproto.nullable) = false];
+  // A sequence number which is increased on each batch sent as part
+  // of the transaction. Used to prevent replay and out-of-order application
+  // protection (by means of a transaction retry).
+  optional int32 Sequence = 14 [(gogoproto.nullable) = false];
 }
 
 // Lease contains information about leader leases including the

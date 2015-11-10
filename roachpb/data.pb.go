@@ -411,6 +411,10 @@ type Transaction struct {
 	// Writing is true if the transaction has previously executed a successful
 	// write request, i.e. a request that may have left intents (across retries).
 	Writing bool `protobuf:"varint,13,opt,name=Writing" json:"Writing"`
+	// A sequence number which is increased on each batch sent as part
+	// of the transaction. Used to prevent replay and out-of-order application
+	// protection (by means of a transaction retry).
+	Sequence int32 `protobuf:"varint,14,opt,name=Sequence" json:"Sequence"`
 }
 
 func (m *Transaction) Reset()      { *m = Transaction{} }
@@ -909,6 +913,9 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 		data[i] = 0
 	}
 	i++
+	data[i] = 0x70
+	i++
+	i = encodeVarintData(data, i, uint64(m.Sequence))
 	return i, nil
 }
 
@@ -1200,6 +1207,7 @@ func (m *Transaction) Size() (n int) {
 	l = m.CertainNodes.Size()
 	n += 1 + l + sovData(uint64(l))
 	n += 2
+	n += 1 + sovData(uint64(m.Sequence))
 	return n
 }
 
@@ -2796,6 +2804,25 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				}
 			}
 			m.Writing = bool(v != 0)
+		case 14:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Sequence", wireType)
+			}
+			m.Sequence = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Sequence |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
