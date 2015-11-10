@@ -93,6 +93,9 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 		if len(end) != 0 {
 			return util.Errorf("end key %q should not be specified for this operation", end)
 		}
+		if bytes.Equal(start, roachpb.KeyMin) {
+			return util.Errorf("point requests to KeyMin are not allowed")
+		}
 		return nil
 	}
 	if end == nil {
