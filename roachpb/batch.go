@@ -20,7 +20,6 @@ package roachpb
 import (
 	"errors"
 	"fmt"
-	"math/rand"
 	"strings"
 )
 
@@ -259,28 +258,13 @@ func (ba BatchRequest) String() string {
 	return strings.Join(str, ", ")
 }
 
-// GetOrCreateCmdID returns the request header's command ID if available.
-// Otherwise, creates a new ClientCmdID, initialized with current time
-// and random salt.
-func (ba BatchRequest) GetOrCreateCmdID(walltime int64) (cmdID ClientCmdID) {
-	if !ba.CmdID.IsEmpty() {
-		cmdID = ba.CmdID
-	} else {
-		cmdID = ClientCmdID{
-			WallTime: walltime,
-			Random:   rand.Int63(),
-		}
-	}
-	return
-}
-
-// TraceID implements tracer.Traceable by returning the first nontrivial
-// TraceID of the Transaction and CmdID.
+// TraceID implements tracer.Traceable by returning the TraceID of the Transaction or,
+// if not transactional, TODO(tschottdorf).
 func (ba BatchRequest) TraceID() string {
 	if r := ba.Txn.TraceID(); r != "" {
 		return r
 	}
-	return ba.CmdID.TraceID()
+	return "TODO(tschottdorf)"
 }
 
 // TraceName implements tracer.Traceable and behaves like TraceID, but using
@@ -289,7 +273,7 @@ func (ba BatchRequest) TraceName() string {
 	if r := ba.Txn.TraceID(); r != "" {
 		return ba.Txn.TraceName()
 	}
-	return ba.CmdID.TraceName()
+	return "TODO(tschottdorf)"
 }
 
 // TODO(marc): we should assert

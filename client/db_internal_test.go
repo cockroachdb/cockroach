@@ -25,22 +25,31 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-// TestClientCommandID verifies that client command ID is set
-// on call.
-func TestClientCommandID(t *testing.T) {
+// TestClientTxnSequenceNumber verifies that the sequence number is increased
+// between calls.
+func TestClientTxnSequenceNumber(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	count := 0
+	var curSeq int32
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		count++
-		if ba.CmdID.WallTime == 0 {
-			return nil, roachpb.NewError(util.Errorf("expected client command ID to be initialized"))
+		if ba.Txn.Sequence <= curSeq {
+			return nil, roachpb.NewError(util.Errorf("sequence number did not increase"))
 		}
+		curSeq = ba.Txn.Sequence
 		return ba.CreateReply(), nil
 	}, nil))
-	if err := db.Put("a", "b"); err != nil {
-		t.Error(err)
+	if err := db.Txn(func(txn *Txn) error {
+		for range []int{1, 2, 3} {
+			if err := txn.Put("a", "b"); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
-	if count != 1 {
-		t.Errorf("expected test sender to be invoked once; got %d", count)
+	if count != 4 {
+		t.Errorf("expected test sender to be invoked four times; got %d", count)
 	}
 }

@@ -43,13 +43,6 @@ func createTestResponseCache(t *testing.T, rangeID roachpb.RangeID, stopper *sto
 	return NewResponseCache(rangeID), engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 }
 
-func makeCmdID(wallTime, random int64) roachpb.ClientCmdID {
-	return roachpb.ClientCmdID{
-		WallTime: wallTime,
-		Random:   random,
-	}
-}
-
 var family = []byte("testfamily")
 
 // TestResponseCachePutGetClearData tests basic get & put functionality as well as
@@ -59,7 +52,7 @@ func TestResponseCachePutGetClearData(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	rc, e := createTestResponseCache(t, 1, stopper)
-	// Start with a get for an unseen cmdID.
+	// Start with a get for an unseen id/sequence combo.
 	if seq, readErr := rc.GetResponse(e, family); seq > 0 {
 		t.Errorf("expected no response for family %s", family)
 	} else if readErr != nil {
@@ -86,20 +79,20 @@ func TestResponseCachePutGetClearData(t *testing.T) {
 	tryHit(false)
 }
 
-// TestResponseCacheEmptyCmdID tests operation with empty parameters.
-func TestResponseCacheEmptyCmdID(t *testing.T) {
+// TestResponseCacheEmptyParams tests operation with empty parameters.
+func TestResponseCacheEmptyParams(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	rc, e := createTestResponseCache(t, 1, stopper)
 	// Put value for test response.
-	if err := rc.PutResponse(e, family, 0, nil); err != errEmptyCmdID {
+	if err := rc.PutResponse(e, family, 0, nil); err != errEmptyID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if err := rc.PutResponse(e, nil, 10, nil); err != errEmptyCmdID {
+	if err := rc.PutResponse(e, nil, 10, nil); err != errEmptyID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if _, readErr := rc.GetResponse(e, nil); readErr != errEmptyCmdID {
+	if _, readErr := rc.GetResponse(e, nil); readErr != errEmptyID {
 		t.Fatalf("unxpected read error: %v", readErr)
 	}
 }

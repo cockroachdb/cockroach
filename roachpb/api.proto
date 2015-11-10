@@ -30,27 +30,6 @@ option (gogoproto.marshaler_all) = true;
 option (gogoproto.sizer_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
-// ClientCmdID provides a unique ID for client commands. Clients which
-// provide ClientCmdID gain operation idempotence. In other words,
-// clients can submit the same command multiple times and always
-// receive the same response. This is common on retries over flaky
-// networks. However, the system imposes a limit on how long
-// idempotence is provided. Retries over an hour old are not
-// guaranteed idempotence and may be executed more than once with
-// potentially different results.
-//
-// ClientCmdID contains the client's timestamp and a client-generated
-// random number. The client Timestamp is specified in unix
-// nanoseconds and is used for some uniqueness but also to provide a
-// rough ordering of requests, useful for data locality on the
-// server. The Random is specified for additional uniqueness.
-// NOTE: An accurate time signal IS NOT required for correctness.
-message ClientCmdID {
-  // Nanoseconds since Unix epoch.
-  optional int64 wall_time = 1 [(gogoproto.nullable) = false];
-  optional int64 random = 2 [(gogoproto.nullable) = false];
-}
-
 // ReadConsistencyType specifies what type of consistency is observed
 // during read operations.
 enum ReadConsistencyType {
@@ -606,12 +585,11 @@ message Header {
   optional Timestamp timestamp = 1 [(gogoproto.nullable) = false];
   // cmd_id is optionally specified for request idempotence
   // (i.e. replay protection).
-  optional ClientCmdID cmd_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];
-  optional ReplicaDescriptor replica = 5 [(gogoproto.nullable) = false];
+  optional ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
   // range_id specifies the ID of the Raft consensus group which the key
   // range belongs to. This is used by the receiving node to route the
   // request to the correct range.
-  optional int64 range_id = 6 [(gogoproto.nullable) = false,
+  optional int64 range_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
   // user_priority specifies priority multiple for non-transactional
   // commands. This value should be a positive integer [1, 2^31-1).
@@ -622,17 +600,17 @@ message Header {
   // with user_priority=1. This value is ignored if Txn is
   // specified. If neither this value nor txn is specified, the value
   // defaults to 1.
-  optional int32 user_priority = 7 [default = 1];
+  optional int32 user_priority = 4 [default = 1];
   // txn is set non-nil if a transaction is underway. To start a txn,
   // the first request should set this field to non-nil with name and
   // isolation level set as desired. The response will contain the
   // fully-initialized transaction with txn ID, priority, initial
   // timestamp, and maximum timestamp.
-  optional Transaction txn = 8;
+  optional Transaction txn = 5;
   // read_consistency specifies the consistency for read
   // operations. The default is CONSISTENT. This value is ignored for
   // write operations.
-  optional ReadConsistencyType read_consistency = 9 [(gogoproto.nullable) = false];
+  optional ReadConsistencyType read_consistency = 6 [(gogoproto.nullable) = false];
 }
 
 
