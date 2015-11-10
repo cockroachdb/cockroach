@@ -326,6 +326,9 @@ func TestParse(t *testing.T) {
 		{`SET TIME ZONE DEFAULT`},
 		{`SET TIME ZONE LOCAL`},
 
+		{`SELECT OVERLAY('w333333rce' PLACING 'resou' FROM 3)`},
+		{`SELECT OVERLAY('w333333rce' PLACING 'resou' FROM 3 FOR 5)`},
+
 		// TODO(pmattis): Is this a postgres extension?
 		{`TABLE a`}, // Shorthand for: SELECT * FROM a
 

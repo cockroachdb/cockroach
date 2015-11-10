@@ -644,6 +644,19 @@ func (node *FuncExpr) String() string {
 	return fmt.Sprintf("%s(%s%s)", node.Name, distinct, node.Exprs)
 }
 
+// OverlayExpr represents an overlay function call.
+type OverlayExpr struct {
+	FuncExpr
+}
+
+func (node *OverlayExpr) String() string {
+	f := ""
+	if len(node.Exprs) == 4 {
+		f = fmt.Sprintf(" FOR %s", node.Exprs[3])
+	}
+	return fmt.Sprintf("%s(%s PLACING %s FROM %s%s)", node.Name, node.Exprs[0], node.Exprs[1], node.Exprs[2], f)
+}
+
 // CaseExpr represents a CASE expression.
 type CaseExpr struct {
 	Expr  Expr
