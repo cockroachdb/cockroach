@@ -650,7 +650,7 @@ type OverlayExpr struct {
 }
 
 func (node *OverlayExpr) String() string {
-	f := ""
+	var f string
 	if len(node.Exprs) == 4 {
 		f = fmt.Sprintf(" FOR %s", node.Exprs[3])
 	}

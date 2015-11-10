@@ -266,7 +266,7 @@ SELECT overlay('💩123456789' placing 'xxxxÂ' from 3 for 3);
 ----
 💩1xxxxÂ56789
 
-query error negative substring length not allowed
+query error non-positive substring length not allowed: -1
 SELECT overlay('123456789' placing 'xxxx' from -1 for 6);
 
 query T

@@ -1188,27 +1188,22 @@ func regexpEvalFlags(pattern, sqlFlags string) (string, error) {
 
 func overlay(s, to string, pos, size int) (Datum, error) {
 	if pos < 1 {
-		return nil, errors.New("negative substring length not allowed")
+		return nil, fmt.Errorf("non-positive substring length not allowed: %d", pos)
 	}
+	pos--
 
-	var out bytes.Buffer
-	i := 0
-	for _, c := range s {
-		if i >= pos-1 {
-			break
-		}
-		out.WriteRune(c)
-		i++
+	runes := []rune(s)
+	if pos > len(runes) {
+		pos = len(runes)
 	}
-	out.WriteString(to)
-	i = 0
-	for _, c := range s {
-		if i >= pos-1+size {
-			out.WriteRune(c)
-		}
-		i++
+	after := pos + size
+	if after < 0 {
+		after = 0
 	}
-	return DString(out.String()), nil
+	if after > len(runes) {
+		after = len(runes)
+	}
+	return DString(string(runes[:pos]) + to + string(runes[after:])), nil
 }
 
 func round(x float64, n int64) (Datum, error) {
