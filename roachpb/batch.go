@@ -303,6 +303,17 @@ func (*BatchRequest) GetUser() string {
 	return "node"
 }
 
+// SetNewRequest increases the internal sequence counter of this batch request.
+// The sequence counter is used for replay and reordering protection. At the
+// Store, a sequence counter less than or equal to the last observed one incurs
+// a transaction restart (if the request is transactional).
+func (ba *BatchRequest) SetNewRequest() {
+	if ba.Txn == nil {
+		return
+	}
+	ba.Txn.Sequence++
+}
+
 // GoError returns the non-nil error from the proto.Error union.
 func (br *BatchResponse) GoError() error {
 	return br.Error.GoError()
