@@ -57,6 +57,8 @@ type Iterator interface {
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
 	ValueProto(msg proto.Message) error
+	unsafeKey() MVCCKey
+	unsafeValue() []byte
 	// Error returns the error, if any, which the iterator encountered.
 	Error() error
 }

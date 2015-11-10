@@ -141,7 +141,6 @@ func setupMVCCScanData(numVersions, numKeys, valueBytes int, b *testing.B) (*Roc
 		exists = false
 	}
 
-	log.Infof("creating mvcc data: %s", loc)
 	const cacheSize = 8 << 30 // 8 GB
 	stopper := stop.NewStopper()
 	rocksdb := NewRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize, stopper)
@@ -152,6 +151,8 @@ func setupMVCCScanData(numVersions, numKeys, valueBytes int, b *testing.B) (*Roc
 	if exists {
 		return rocksdb, stopper
 	}
+
+	log.Infof("creating mvcc data: %s", loc)
 
 	rng, _ := randutil.NewPseudoRand()
 	keys := make([]roachpb.Key, numKeys)
@@ -485,10 +486,11 @@ func BenchmarkMVCCMergeTimeSeries(b *testing.B) {
 }
 
 // runMVCCComputeStats merges value into numKeys separate keys.
-func runMVCCComputeStats(numVersions, valueBytes int, b *testing.B) {
+func runMVCCComputeStats(valueBytes int, b *testing.B) {
 	const rangeBytes = 64 * 1024 * 1024
-	numKeys := rangeBytes / (valueBytes * ((numVersions / 2) + 1))
-	rocksdb, stopper := setupMVCCScanData(numVersions, numKeys, valueBytes, b)
+	const overhead = 48 // Per key/value overhead (empirically determined)
+	numKeys := rangeBytes / (overhead + valueBytes)
+	rocksdb, stopper := setupMVCCScanData(1, numKeys, valueBytes, b)
 	defer stopper.Stop()
 
 	prewarmCache(rocksdb)
@@ -496,65 +498,30 @@ func runMVCCComputeStats(numVersions, valueBytes int, b *testing.B) {
 	b.SetBytes(rangeBytes)
 	b.ResetTimer()
 
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			iter := rocksdb.NewIterator()
-			iter.Seek(keyMin)
-			_, err := MVCCComputeStats(iter, 0)
-			iter.Close()
-			if err != nil {
-				b.Fatal(err)
-			}
+	var stats MVCCStats
+	for i := 0; i < b.N; i++ {
+		iter := rocksdb.NewIterator()
+		iter.Seek(keyMin)
+		var err error
+		stats, err = MVCCComputeStats(iter, 0)
+		iter.Close()
+		if err != nil {
+			b.Fatal(err)
 		}
-	})
+	}
 
 	b.StopTimer()
+	log.Infof("live_bytes: %d", stats.LiveBytes)
 }
 
 func BenchmarkMVCCComputeStats1Version8Bytes(b *testing.B) {
-	runMVCCComputeStats(1, 8, b)
-}
-
-func BenchmarkMVCCComputeStats10Versions8Bytes(b *testing.B) {
-	runMVCCComputeStats(10, 8, b)
-}
-
-func BenchmarkMVCCComputeStats100Versions8Bytes(b *testing.B) {
-	runMVCCComputeStats(100, 8, b)
-}
-
-func BenchmarkMVCCComputeStats1000Versions8Bytes(b *testing.B) {
-	runMVCCComputeStats(1000, 8, b)
+	runMVCCComputeStats(8, b)
 }
 
 func BenchmarkMVCCComputeStats1Version32Bytes(b *testing.B) {
-	runMVCCComputeStats(1, 32, b)
-}
-
-func BenchmarkMVCCComputeStats10Versions32Bytes(b *testing.B) {
-	runMVCCComputeStats(10, 32, b)
-}
-
-func BenchmarkMVCCComputeStats100Versions32Bytes(b *testing.B) {
-	runMVCCComputeStats(100, 32, b)
-}
-
-func BenchmarkMVCCComputeStats1000Versions32Bytes(b *testing.B) {
-	runMVCCComputeStats(1000, 32, b)
+	runMVCCComputeStats(32, b)
 }
 
 func BenchmarkMVCCComputeStats1Version256Bytes(b *testing.B) {
-	runMVCCComputeStats(1, 256, b)
-}
-
-func BenchmarkMVCCComputeStats10Versions256Bytes(b *testing.B) {
-	runMVCCComputeStats(10, 256, b)
-}
-
-func BenchmarkMVCCComputeStats100Versions256Bytes(b *testing.B) {
-	runMVCCComputeStats(100, 256, b)
-}
-
-func BenchmarkMVCCComputeStats1000Versions256Bytes(b *testing.B) {
-	runMVCCComputeStats(1000, 256, b)
+	runMVCCComputeStats(256, b)
 }
