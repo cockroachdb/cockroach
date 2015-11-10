@@ -76,6 +76,22 @@ install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildDeps=$(shell 
 install:
 	$(GO) install -tags '$(TAGS)' $(GOFLAGS) -ldflags '$(LDFLAGS)' -v
 
+# Build, but do not run the tests.
+# PKG is expanded and all packages are built and moved to their directory.
+# If STATIC=1, tests are statically linked.
+# eg: to statically build the sql tests, run:
+#   make testbuild PKG=./sql STATIC=1
+.PHONY: testbuild
+testbuild: TESTS := $(shell $(GO) list $(PKG))
+testbuild: GOFLAGS += -c
+testbuild:
+	for p in $(TESTS); do \
+	  NAME=$$(basename "$$p"); \
+	  OUT="$$NAME.test"; \
+	  DIR=$$($(GO) list -f {{.Dir}} $$p); \
+	  $(GO) test $(GOFLAGS) -tags '$(TAGS)' -o "$$DIR"/"$$OUT" -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
+	done
+
 # Similar to "testrace", we want to cache the build before running the
 # tests.
 .PHONY: test
