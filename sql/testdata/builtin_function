@@ -68,6 +68,11 @@ SELECT SUBSTRING('RoacH', 2, 3)
 oac
 
 query T
+SELECT SUBSTRING('💩oacH', 2, 3)
+----
+oac
+
+query T
 SELECT SUBSTRING('RoacH' from 2 for 3)
 ----
 oac
@@ -79,6 +84,11 @@ oac
 
 query T
 SELECT SUBSTR('RoacH', 2)
+----
+oacH
+
+query T
+SELECT SUBSTR('💩oacH', 2)
 ----
 oacH
 
