@@ -21,13 +21,15 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/gogo/protobuf/proto"
 )
 
 var (
@@ -73,9 +75,9 @@ func (p *planner) checkPrivilege(descriptor descriptorProto, privilege privilege
 // createDescriptor takes a Table or Database descriptor and creates it
 // if needed, incrementing the descriptor counter.
 func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptorProto, ifNotExists bool) error {
-	key := plainKey.Key()
-	// Check whether key exists.
-	gr, err := p.txn.Get(key)
+	idKey := plainKey.Key()
+	// Check whether idKey exists.
+	gr, err := p.txn.Get(idKey)
 	if err != nil {
 		return err
 	}
@@ -108,13 +110,22 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 	descKey := MakeDescMetadataKey(descriptor.GetID())
 
 	b := client.Batch{}
-	b.CPut(key, descriptor.GetID(), nil)
-	b.CPut(descKey, wrapDescriptor(descriptor), nil)
+	descID := descriptor.GetID()
+	descDesc := wrapDescriptor(descriptor)
+	b.CPut(idKey, descID, nil)
+	b.CPut(descKey, descDesc, nil)
+
+	p.testingVerifyMetadata = func(systemConfig config.SystemConfig) error {
+		if err := expectDescriptorID(systemConfig, idKey, descID); err != nil {
+			return err
+		}
+		return expectDescriptor(systemConfig, descKey, descDesc)
+	}
 
 	return p.txn.Run(&b)
 }
 
-// getDescriptor looks up the descriptor for `key`, validates it,
+// getDescriptor looks up the descriptor for `plainKey`, validates it,
 // and unmarshals it into `descriptor`.
 func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorProto) error {
 	gr, err := p.txn.Get(plainKey.Key())
