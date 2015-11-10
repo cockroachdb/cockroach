@@ -65,15 +65,16 @@ type EventMembershipChangeCommitted struct {
 // followed by the payload. This inflexible encoding is used so we can efficiently
 // parse the command id while processing the logs.
 const (
-	commandIDLen                = 16
+	// The prescribed length for each command ID.
+	CommandIDLen                = 8
 	commandEncodingVersion byte = 0
 )
 
 func encodeCommand(commandID string, command []byte) []byte {
-	if len(commandID) != commandIDLen {
-		log.Fatalf("invalid command ID length; %d != %d", len(commandID), commandIDLen)
+	if len(commandID) != CommandIDLen {
+		log.Fatalf("invalid command ID length; %d != %d", len(commandID), CommandIDLen)
 	}
-	x := make([]byte, 1, 1+commandIDLen+len(command))
+	x := make([]byte, 1, 1+CommandIDLen+len(command))
 	x[0] = commandEncodingVersion
 	x = append(x, []byte(commandID)...)
 	x = append(x, command...)
@@ -84,5 +85,5 @@ func decodeCommand(data []byte) (commandID string, command []byte) {
 	if data[0] != commandEncodingVersion {
 		log.Fatalf("unknown command encoding version %v", data[0])
 	}
-	return string(data[1 : 1+commandIDLen]), data[1+commandIDLen:]
+	return string(data[1 : 1+CommandIDLen]), data[1+CommandIDLen:]
 }
