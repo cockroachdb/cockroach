@@ -39,12 +39,14 @@ import (
 // TODO(pmattis): Periodically renew leases for tables that were used recently and
 // for which the lease will expire soon.
 
-const (
-	leaseDuration    = 5 * time.Minute
-	minLeaseDuration = time.Minute
-)
-
 var (
+	// LeaseDuration is the mean duration a lease will be acquired for. The
+	// actual duration is jittered in the range
+	// [0.75,1.25]*LeaseDuration. Exported for testing purposes only.
+	LeaseDuration = 5 * time.Minute
+	// MinLeaseDuration is the minimum duration a lease will have remaining upon
+	// acquisition. Exported for testing purposes only.
+	MinLeaseDuration       = time.Minute
 	errLeaseVersionChanged = errors.New("lease version changed")
 )
 
@@ -80,7 +82,7 @@ type LeaseStore struct {
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
 // [0.75 * leaseDuration, 1.25 * leaseDuration].
 func (s LeaseStore) jitteredLeaseDuration() time.Duration {
-	return time.Duration(float64(leaseDuration) * (0.75 + 0.5*rand.Float64()))
+	return time.Duration(float64(LeaseDuration) * (0.75 + 0.5*rand.Float64()))
 }
 
 // Acquire a lease on the most recent version of a table descriptor.
@@ -90,6 +92,8 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion uint32) (*Le
 		Time: time.Unix(0, s.clock.Now().WallTime).Add(s.jitteredLeaseDuration()),
 	}
 
+	// Use the supplied (user) transaction to look up the descriptor because the
+	// descriptor might have been created within the transaction.
 	p := planner{txn: txn, user: security.RootUser}
 
 	const getDescriptor = `SELECT descriptor FROM system.descriptor WHERE id = %d`
@@ -119,17 +123,33 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion uint32) (*Le
 		return nil, util.Errorf("version %d of table %d does not exist yet", minVersion, tableID)
 	}
 
-	const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
-		`VALUES (%d, %d, %d, '%s'::timestamp)`
-	sql = fmt.Sprintf(insertLease, lease.ID, lease.Version, s.nodeID, lease.expiration)
-	count, err := p.exec(sql)
-	if err != nil {
-		return nil, err
-	}
-	if count != 1 {
-		return nil, util.Errorf("%s: expected 1 result, found %d", sql, count)
-	}
-	return lease, nil
+	// Insert the entry in the lease table in a separate transaction. This is
+	// necessary because we want to ensure that the lease entry is added and the
+	// transaction passed to Acquire() might be aborted. The lease entry needs to
+	// be added because we store the returned LeaseState in local in-memory maps
+	// and cannot handle the entry being reverted. This is safe because either
+	// the descriptor we're acquiring the lease on existed prior to the acquire
+	// transaction in which case acquiring the lease is kosher, or the descriptor
+	// was created within the acquire transaction. The second case is more
+	// subtle. We might create a lease entry for a table that doesn't exist, but
+	// there is no harm in that as no other transaction will be attempting to
+	// modify the descriptor and even if the descriptor is never created we'll
+	// just have a dangling lease entry which will eventually get GC'd.
+	err = s.db.Txn(func(txn *client.Txn) error {
+		p := planner{txn: txn, user: security.RootUser}
+		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
+			`VALUES (%d, %d, %d, '%s'::timestamp)`
+		sql = fmt.Sprintf(insertLease, lease.ID, lease.Version, s.nodeID, lease.expiration)
+		count, err := p.exec(sql)
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return util.Errorf("%s: expected 1 result, found %d", sql, count)
+		}
+		return nil
+	})
+	return lease, err
 }
 
 // Release a previously acquired table descriptor lease.
@@ -389,7 +409,7 @@ func (t *tableState) acquire(txn *client.Txn, version uint32, store LeaseStore) 
 				}
 				return s, nil
 			}
-			minDesiredExpiration := store.clock.Now().GoTime().Add(minLeaseDuration)
+			minDesiredExpiration := store.clock.Now().GoTime().Add(MinLeaseDuration)
 			if s.expiration.After(minDesiredExpiration) {
 				s.refcount++
 				if log.V(3) {
