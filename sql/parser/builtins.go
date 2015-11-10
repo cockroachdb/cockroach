@@ -249,7 +249,7 @@ var builtins = map[string][]builtin{
 		},
 	},
 
-	// The SQL parser coerces TRIM(...) and TRIM(BOTH ...) to BTRIM.
+	// The SQL parser coerces TRIM(...) and TRIM(BOTH ...) to BTRIM(...).
 	"btrim": {
 		stringBuiltin2(func(s, chars string) (Datum, error) {
 			return DString(strings.Trim(s, chars)), nil
@@ -259,7 +259,7 @@ var builtins = map[string][]builtin{
 		}, DummyString),
 	},
 
-	// The SQL parser coerces TRIM(LEADING ...) to LTRIM.
+	// The SQL parser coerces TRIM(LEADING ...) to LTRIM(...).
 	"ltrim": {
 		stringBuiltin2(func(s, chars string) (Datum, error) {
 			return DString(strings.TrimLeft(s, chars)), nil
@@ -269,7 +269,7 @@ var builtins = map[string][]builtin{
 		}, DummyString),
 	},
 
-	// The SQL parser coerces TRIM(TRAILING ...) to RTRIM.
+	// The SQL parser coerces TRIM(TRAILING ...) to RTRIM(...).
 	"rtrim": {
 		stringBuiltin2(func(s, chars string) (Datum, error) {
 			return DString(strings.TrimRight(s, chars)), nil
