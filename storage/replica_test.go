@@ -1003,9 +1003,10 @@ func internalMergeArgs(key []byte, value roachpb.Value) roachpb.MergeRequest {
 	}
 }
 
-func truncateLogArgs(index uint64) roachpb.TruncateLogRequest {
+func truncateLogArgs(index uint64, rangeID roachpb.RangeID) roachpb.TruncateLogRequest {
 	return roachpb.TruncateLogRequest{
-		Index: index,
+		Index:   index,
+		RangeID: rangeID,
 	}
 }
 
@@ -2570,8 +2571,10 @@ func TestTruncateLog(t *testing.T) {
 		indexes = append(indexes, idx)
 	}
 
-	// Discard the first half of the log
-	truncateArgs := truncateLogArgs(indexes[5])
+	rangeID := tc.rng.Desc().RangeID
+
+	// Discard the first half of the log.
+	truncateArgs := truncateLogArgs(indexes[5], rangeID)
 	if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &truncateArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -2617,9 +2620,25 @@ func TestTruncateLog(t *testing.T) {
 
 	// Truncating logs that have already been truncated should not return an
 	// error.
-	truncateArgs = truncateLogArgs(indexes[3])
+	truncateArgs = truncateLogArgs(indexes[3], rangeID)
 	if _, err = client.SendWrapped(tc.Sender(), tc.rng.context(), &truncateArgs); err != nil {
 		t.Fatal(err)
+	}
+
+	// Truncating logs that have the wrong rangeID included should not return
+	// an error but should not truncate any logs.
+	truncateArgs = truncateLogArgs(indexes[9], rangeID+1)
+	if _, err = client.SendWrapped(tc.Sender(), tc.rng.context(), &truncateArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// The term of the last truncated entry is still available.
+	term, err = tc.rng.Term(indexes[4])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if term == 0 {
+		t.Errorf("invalid term 0 for truncated entry")
 	}
 }
 

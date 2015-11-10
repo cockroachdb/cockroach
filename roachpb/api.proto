@@ -515,6 +515,13 @@ message TruncateLogRequest {
 
   // Log entries < this index are to be discarded.
   optional uint64 index = 2 [(gogoproto.nullable) = false];
+
+  // RangeID is used to double check that the correct range is being truncated.
+  // The header specifies a span, start and end keys, but not the range id
+  // itself. The range may have changed from the one specified in the header
+  // in the case of a merge.
+  optional int64 range_id = 3 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
 }
 
 // TruncateLogResponse is the response to a TruncateLog() operation.
