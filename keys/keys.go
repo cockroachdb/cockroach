@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -438,7 +437,7 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 		return buf.String()
 	}
 
-	fmt.Fprintf(&buf, "/%s", parser.DInt(i))
+	fmt.Fprintf(&buf, "/%d", i)
 
 	// get suffix
 	suffixDict := []struct {
@@ -524,34 +523,41 @@ func hexPrint(key roachpb.Key) string {
 func decodeKeyPrint(key roachpb.Key) string {
 	var buf bytes.Buffer
 	for k := 0; len(key) > 0; k++ {
-		var d interface{}
 		var err error
 		switch encoding.PeekType(key) {
 		case encoding.Null:
 			key, _ = encoding.DecodeIfNull(key)
-			d = parser.DNull
+			fmt.Fprintf(&buf, "/NULL")
 		case encoding.NotNull:
 			key, _ = encoding.DecodeIfNotNull(key)
-			d = "#"
+			fmt.Fprintf(&buf, "/#")
 		case encoding.Int:
 			var i int64
 			key, i, err = encoding.DecodeVarint(key)
-			d = parser.DInt(i)
+			if err == nil {
+				fmt.Fprintf(&buf, "/%d", i)
+			}
 		case encoding.Float:
 			var f float64
 			key, f, err = encoding.DecodeFloat(key, nil)
-			d = parser.DFloat(f)
+			if err == nil {
+				fmt.Fprintf(&buf, "/%f", f)
+			}
 		case encoding.Bytes:
 			var s string
 			key, s, err = encoding.DecodeString(key, nil)
-			d = parser.DString(s)
+			if err == nil {
+				fmt.Fprintf(&buf, "/%q", s)
+			}
 		case encoding.Time:
 			var t time.Time
 			key, t, err = encoding.DecodeTime(key)
-			d = parser.DTimestamp{Time: t}
+			if err == nil {
+				fmt.Fprintf(&buf, "/%s", t)
+			}
 		default:
 			// This shouldn't ever happen, but if it does let the loop exit.
-			d = key.String()
+			fmt.Fprintf(&buf, "/%q", key)
 			key = nil
 		}
 
@@ -559,7 +565,6 @@ func decodeKeyPrint(key roachpb.Key) string {
 			fmt.Fprintf(&buf, "/<%v>", err)
 			continue
 		}
-		fmt.Fprintf(&buf, "/%s", d)
 	}
 	return buf.String()
 }
@@ -572,21 +577,21 @@ func PrettyPrint(key roachpb.Key) string {
 		end     roachpb.Key
 		entries []dictEntry
 	}{
-		{name: "Local", start: localPrefix, end: LocalMax, entries: []dictEntry{
-			{name: "Store", prefix: roachpb.Key(localStorePrefix), ppFunc: localStoreKeyPrint},
-			{name: "RangeID", prefix: roachpb.Key(LocalRangeIDPrefix), ppFunc: localRangeIDKeyPrint},
-			{name: "Range", prefix: LocalRangePrefix, ppFunc: localRangeKeyPrint},
+		{name: "/Local", start: localPrefix, end: LocalMax, entries: []dictEntry{
+			{name: "/Store", prefix: roachpb.Key(localStorePrefix), ppFunc: localStoreKeyPrint},
+			{name: "/RangeID", prefix: roachpb.Key(LocalRangeIDPrefix), ppFunc: localRangeIDKeyPrint},
+			{name: "/Range", prefix: LocalRangePrefix, ppFunc: localRangeKeyPrint},
 		}},
-		{name: "System", start: SystemPrefix, end: SystemMax, entries: []dictEntry{
-			{name: "Meta2", prefix: Meta2Prefix, ppFunc: hexPrint},
-			{name: "Meta1", prefix: Meta1Prefix, ppFunc: hexPrint},
+		{name: "/System", start: SystemPrefix, end: SystemMax, entries: []dictEntry{
+			{name: "/Meta2", prefix: Meta2Prefix, ppFunc: hexPrint},
+			{name: "/Meta1", prefix: Meta1Prefix, ppFunc: hexPrint},
 			//{name: "Meta", prefix: MetaPrefix},
-			{name: "StatusStore", prefix: StatusStorePrefix, ppFunc: decodeKeyPrint},
-			{name: "StatusNode", prefix: StatusNodePrefix, ppFunc: decodeKeyPrint},
+			{name: "/StatusStore", prefix: StatusStorePrefix, ppFunc: decodeKeyPrint},
+			{name: "/StatusNode", prefix: StatusNodePrefix, ppFunc: decodeKeyPrint},
 			//{name: "Status", prefix: StatusPrefix},
 		}},
-		{name: "User", start: TableDataPrefix, end: nil, entries: []dictEntry{
-			{name: "TableData", prefix: TableDataPrefix, ppFunc: decodeKeyPrint},
+		{name: "/Table", start: TableDataPrefix, end: nil, entries: []dictEntry{
+			{name: "", prefix: TableDataPrefix, ppFunc: decodeKeyPrint},
 		}},
 	}
 
@@ -596,7 +601,7 @@ func PrettyPrint(key roachpb.Key) string {
 			continue
 		}
 
-		fmt.Fprintf(&buf, "/%s", k.name)
+		fmt.Fprintf(&buf, "%s", k.name)
 		if k.end != nil && k.end.Compare(key) == 0 {
 			fmt.Fprintf(&buf, "/Max")
 			return buf.String()
@@ -607,7 +612,7 @@ func PrettyPrint(key roachpb.Key) string {
 			if bytes.HasPrefix(key, e.prefix) {
 				hasPrefix = true
 				key = key[len(e.prefix):]
-				fmt.Fprintf(&buf, "/%s%s", e.name, e.ppFunc(key))
+				fmt.Fprintf(&buf, "%s%s", e.name, e.ppFunc(key))
 				break
 			}
 		}

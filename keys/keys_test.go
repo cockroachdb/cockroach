@@ -22,9 +22,11 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -377,10 +379,10 @@ func TestPrettyPrint(t *testing.T) {
 		{RangeLastVerificationTimestampKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeLastVerificationTimestamp"},
 		{RangeStatsKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeStats"},
 
-		{MakeRangeKeyPrefix(roachpb.RKey("ok")), "/Local/Range/'ok'"},
-		{RangeDescriptorKey(roachpb.RKey("111")), "/Local/Range/RangeDescriptor/'111'"},
-		{RangeTreeNodeKey(roachpb.RKey("111")), "/Local/Range/RangeTreeNode/'111'"},
-		{TransactionKey(roachpb.Key("111"), []byte("22222")), "/Local/Range/Transaction/addrKey:/'111'/id:\"22222\""},
+		{MakeRangeKeyPrefix(roachpb.RKey("ok")), "/Local/Range/\"ok\""},
+		{RangeDescriptorKey(roachpb.RKey("111")), "/Local/Range/RangeDescriptor/\"111\""},
+		{RangeTreeNodeKey(roachpb.RKey("111")), "/Local/Range/RangeTreeNode/\"111\""},
+		{TransactionKey(roachpb.Key("111"), []byte("22222")), "/Local/Range/Transaction/addrKey:/\"111\"/id:\"22222\""},
 
 		{LocalMax, "/Local/Max"},
 
@@ -393,10 +395,20 @@ func TestPrettyPrint(t *testing.T) {
 
 		{SystemMax, "/System/Max"},
 
-		// tabledata
-		{MakeTablePrefix(111), "/User/TableData/111"},
-		{MakeKey(MakeTablePrefix(42), roachpb.RKey("foo")), "/User/TableData/42/\"foo\""},
+		// table
+		{MakeTablePrefix(111), "/Table/111"},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey("foo")), "/Table/42/\"foo\""},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeFloat(nil, float64(233.221112)))), "/Table/42/233.221112"},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeVarint(nil, 1222)), roachpb.RKey(encoding.EncodeString(nil, "handsome man"))), "/Table/42/1222/\"handsome man\""},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeTime(nil, time.Time{}))), "/Table/42/0001-01-01 08:00:00 +0800 CST"},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeTime(nil, time.Time{}.Add(10*time.Hour)))), "/Table/42/0001-01-01 18:00:00 +0800 CST"},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeBytes(nil, []byte{1, 2, 8, 255}))), "/Table/42/\"\\x01\\x02\\b\\xff\""},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeBytes(nil, []byte{1, 2, 8, 255})), roachpb.RKey("foo")), "/Table/42/\"\\x01\\x02\\b\\xff\"/\"foo\""},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeNull(nil))), "/Table/42/NULL"},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeNotNull(nil))), "/Table/42/#"},
+
 		// others
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x31, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:382: unknown escape>"},
 	}
 	for i, test := range testCases {
 		keyInfo := PrettyPrint(test.key)
