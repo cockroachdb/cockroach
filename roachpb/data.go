@@ -32,6 +32,7 @@ import (
 	"github.com/biogo/store/interval"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/keys"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
 )
@@ -75,7 +76,7 @@ func (rk RKey) Equal(other []byte) bool {
 
 // Next returns the RKey that sorts immediately after the given one.
 func (rk RKey) Next() RKey {
-	return RKey(bytesNext(rk))
+	return RKey(keys.BytesNext(rk))
 }
 
 // PrefixEnd determines the end key given key as a prefix, that is the
@@ -111,12 +112,6 @@ func MakeKey(keys ...[]byte) []byte {
 	return bytes.Join(byteSlices, nil)
 }
 
-// Returns the next possible byte by appending an \x00.
-func bytesNext(b []byte) []byte {
-	// TODO(spencer): Do we need to enforce KeyMaxLength here?
-	return append(append([]byte(nil), b...), 0)
-}
-
 func bytesPrefixEnd(b []byte) []byte {
 	end := append([]byte(nil), b...)
 	for i := len(end) - 1; i >= 0; i-- {
@@ -132,7 +127,7 @@ func bytesPrefixEnd(b []byte) []byte {
 
 // Next returns the next key in lexicographic sort order.
 func (k Key) Next() Key {
-	return Key(bytesNext(k))
+	return Key(keys.BytesNext(k))
 }
 
 // IsPrev is a more efficient version of k.Next().Equal(m).
@@ -143,7 +138,7 @@ func (k Key) IsPrev(m Key) bool {
 
 // Next returns the next key in lexicographic sort order.
 func (k EncodedKey) Next() EncodedKey {
-	return EncodedKey(bytesNext(k))
+	return EncodedKey(keys.BytesNext(k))
 }
 
 // PrefixEnd determines the end key given key as a prefix, that is the
