@@ -87,29 +87,26 @@ const (
 
 // balanceModeMap is used to map BalanceMode values to strings, used for
 // accepting command line options.
-var balanceModeMap = map[string]BalanceMode{
-	"usage":      BalanceModeUsage,
-	"rangecount": BalanceModeRangeCount,
+var balanceModeMap = [...]string{
+	BalanceModeUsage:      "usage",
+	BalanceModeRangeCount: "rangecount",
 }
 
 // String is needed to implement the pflag.Value interface, allowing this to be
 // set from the command line.
 func (r *BalanceMode) String() string {
-	for k, v := range balanceModeMap {
-		if *r == v {
-			return k
-		}
-	}
-	panic(fmt.Sprintf("invalid value %d of BalanceMode variable", int(*r)))
+	return balanceModeMap[*r]
 }
 
 // Set configures the given BalanceMode from a string provided from the
 // command line. It returns an error if the provided string value is not
 // recognized. Needed to implement pflag.Value.
 func (r *BalanceMode) Set(value string) error {
-	if v, ok := balanceModeMap[value]; ok {
-		*r = v
-		return nil
+	for i, s := range balanceModeMap {
+		if value == s {
+			*r = BalanceMode(i)
+			return nil
+		}
 	}
 	return fmt.Errorf("%s is not a valid balance mode", value)
 }
@@ -183,6 +180,8 @@ func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 		a.balancer = usageBalancer{randGen}
 	case BalanceModeRangeCount:
 		a.balancer = rangeCountBalancer{randGen}
+	default:
+		panic(fmt.Sprintf("AllocatorOptions specified invalid BalanceMode %d", int(options.Mode)))
 	}
 
 	return a
