@@ -139,6 +139,10 @@ var flagUsage = map[string]string{
 	"allow-rebalancing": `
         Enables this server to rebalance replicas to other stores on the cluster.
 `,
+	"rebalance-mode": `
+		Determines the criteria used by nodes to make rebalancing decisions.
+		Valid options are "usage" (default), "rangecount", or "none".
+`,
 }
 
 func normalizeStdFlagName(s string) string {
@@ -175,6 +179,7 @@ func initFlags(ctx *server.Context) {
 		f.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, flagUsage["max-offset"])
 		f.DurationVar(&ctx.MetricsFrequency, "metrics-frequency", ctx.MetricsFrequency, flagUsage["metrics-frequency"])
 		f.BoolVar(&ctx.AllowRebalancing, "allow-rebalancing", ctx.AllowRebalancing, flagUsage["allow-rebalancing"])
+		f.Var(&ctx.RebalanceMode, "rebalance-mode", flagUsage["rebalance-mode"])
 
 		// Security flags.
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])

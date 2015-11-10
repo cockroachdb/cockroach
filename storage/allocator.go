@@ -20,12 +20,14 @@
 package storage
 
 import (
+	"fmt"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/spf13/pflag"
 )
 
 const (
@@ -69,12 +71,66 @@ const (
 	AllocatorRemoveDead
 )
 
+// A RebalanceMode is a configurable mode which effects how the allocator makes
+// rebalancing decisions.
+type RebalanceMode int
+
+const (
+	// RebalanceModeUsage balances ranges between stores by primarily
+	// considering disk space usage, but also considers range counts in nascent
+	// clusters.
+	RebalanceModeUsage RebalanceMode = iota
+	// RebalanceModeRangeCount balances ranges by considering the total range
+	// count of each node.
+	RebalanceModeRangeCount
+)
+
+// rebalanceModeMap is used to map RebalanceMode values to strings, used for
+// accepting command line options.
+var rebalanceModeMap = map[string]RebalanceMode{
+	"usage":      RebalanceModeUsage,
+	"rangecount": RebalanceModeRangeCount,
+}
+
+// String is needed to implement the pflag.Value interface, allowing this to be
+// set from the command line.
+func (r *RebalanceMode) String() string {
+	for k, v := range rebalanceModeMap {
+		if *r == v {
+			return k
+		}
+	}
+	panic(fmt.Sprintf("invalid value %d of RebalanceMode variable", int(*r)))
+}
+
+// Set configures the given RebalanceMode from a string provided from the
+// command line. It returns an error if the provided string value is not
+// recognized. Needed to implement pflag.Value.
+func (r *RebalanceMode) Set(value string) error {
+	if v, ok := rebalanceModeMap[value]; ok {
+		*r = v
+		return nil
+	}
+	return fmt.Errorf("%s is not a valid rebalancing mode", value)
+}
+
+// Type is needed by the pflag.Value interface.
+func (r *RebalanceMode) Type() string {
+	return "string"
+}
+
+var _ pflag.Value = new(RebalanceMode)
+
 // RebalancingOptions are configurable options which effect the way that the
 // replicate queue will handle rebalancing opportunities.
 type RebalancingOptions struct {
 	// AllowRebalance allows this store to attempt to rebalance its own
 	// replicas to other stores.
 	AllowRebalance bool
+
+	// Mode determines the strategy that will be used to locate stores for
+	// allocation decisions.
+	Mode RebalanceMode
 
 	// Deterministic makes rebalance decisions deterministic, based on
 	// current cluster statistics. If this flag is not set, rebalance operations
@@ -115,12 +171,21 @@ func MakeAllocator(storePool *StorePool, options RebalancingOptions) Allocator {
 		randSource = rand.NewSource(rand.Int63())
 	}
 	randGen := rand.New(randSource)
-	return Allocator{
+	a := Allocator{
 		storePool: storePool,
 		randGen:   randGen,
 		options:   options,
-		balancer:  defaultBalancer{randGen},
 	}
+
+	// Instantiate balancer based on provided options.
+	switch options.Mode {
+	case RebalanceModeUsage:
+		a.balancer = defaultBalancer{randGen}
+	case RebalanceModeRangeCount:
+		a.balancer = rangeCountBalancer{randGen}
+	}
+
+	return a
 }
 
 // ComputeAction determines the exact operation needed to repair the supplied
