@@ -35,7 +35,7 @@ function push_one_binary {
   time aws s3 cp s3://${BUCKET_PATH}/${binary_name}${LATEST_SUFFIX} ${tmpfile} || true
   contents=$(cat ${tmpfile})
   rm -f ${tmpfile}
-  latest_date=$(echo ${contents} | sed 's/cockroach.\([0-9]\+\)-.*/\1/')
+  latest_date=$(echo ${contents} | sed "s/${binary_name}.\([0-9]\+\)-.*/\1/")
 
   if [ "${latest_date}" == "${today}" ]; then
     echo "Latest binary is from today, skipping: ${contents}"
