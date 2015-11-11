@@ -6,7 +6,7 @@
 
 # Summary
 
-* rename `{Response->Sequence}Cache`.
+* rename `{Response->Sequence}{Cache->Span}`, `Transaction{Table->Span}`.
 * store client's intents in `Txn` record on (successful) `EndTransaction`.
 * GC transaction records asynchronously following the client's `EndTransaction` call after successful resolution of (possibly) outstanding intents.
 * GC sequence cache entries with `ResolveIntent{,Range}` which are carried out as a consequence of client's `EndTransaction` (successful or not).
@@ -48,6 +48,24 @@ on `ResolveIntent` triggered through an aborting `Push`, we can actually deal wi
 * `(epoch, seq) < (epoch', seq') iff epoch < epoch' || (epoch == epoch' && seq < seq')`.
 * upon aborting an intent after a `Push`, we simply poison the sequence cache on that range (setting `sequence=math.MaxInt64`). Assuming that we check the sequence cache on **every** batch (not only for writes), we trigger a transaction restart should the transaction come back to the `Range`. If checking the sequence cache on reads shows up in performance considerations, there are going to be ways to avoid disk I/O in most cases.
 The retry increases the epoch, so when the txn comes back, it will be able to perform normally.
+
+## Interaction with Splits and Merges
+
+On both Split and Merge we'll copy the entry (keeping the larger one on collision).
+
+## "Slow" GC Path
+
+The slow path to sequence span GC takes place in the following situations:
+
+* a transaction is abandoned (so a list of intents is never sent by the client)
+* a sequence span entry is duplicated during `Split` to a `Range` not touched by `ResolveIntent{,Range}` for its transaction.
+
+In the same queue which grooms the transaction span, we'll also groom the local sequence span with the goal of finding "inactive" entries, pinging their transaction and removing according to the outcome. To be able to do that, we need to persist more information into the response cache key:
+
+* Txn.Key (to get the range which holds the transaction entry, but we only have Txn.ID from the sequence span entry), and
+* Txn.Timestamp (to figure out whether this is "probably" an inactive transaction)
+
+Some of the additional overhead could be avoided if transaction IDs encoded some of that information. For example, instead of UUID4 transaction IDs we could adopt the scheme `<hlc_wall=64bit,hlc_logical=32bit><random=32bit>`, but the entropy is considerably lower. This is out of scope for this RFC.
 
 # Drawbacks
 
