@@ -485,7 +485,7 @@ func BenchmarkMVCCMergeTimeSeries(b *testing.B) {
 	runMVCCMerge(&value, 1024, b)
 }
 
-// runMVCCComputeStats merges value into numKeys separate keys.
+// runMVCCComputeStats benchmarks computing MVCC stats on a 64MB range of data.
 func runMVCCComputeStats(valueBytes int, b *testing.B) {
 	const rangeBytes = 64 * 1024 * 1024
 	const overhead = 48 // Per key/value overhead (empirically determined)

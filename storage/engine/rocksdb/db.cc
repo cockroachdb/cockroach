@@ -124,6 +124,21 @@ rocksdb::ReadOptions MakeReadOptions(DBSnapshot* snap) {
   return options;
 }
 
+DBIterState DBIterGetState(DBIterator* iter) {
+  DBIterState state;
+  state.valid = iter->rep->Valid();
+  if (state.valid) {
+    state.key = ToDBSlice(iter->rep->key());
+    state.value = ToDBSlice(iter->rep->value());
+  } else {
+    state.key.data = NULL;
+    state.key.len = 0;
+    state.value.data = NULL;
+    state.value.len = 0;
+  }
+  return state;
+}
+
 // DBCompactionFilter implements our garbage collection policy for
 // key/value pairs which can be considered in isolation. This
 // includes:
@@ -1124,36 +1139,29 @@ void DBIterDestroy(DBIterator* iter) {
   delete iter;
 }
 
-void DBIterSeek(DBIterator* iter, DBSlice key) {
+DBIterState DBIterSeek(DBIterator* iter, DBSlice key) {
   iter->rep->Seek(ToSlice(key));
+  return DBIterGetState(iter);
 }
 
-void DBIterSeekToFirst(DBIterator* iter) {
+DBIterState DBIterSeekToFirst(DBIterator* iter) {
   iter->rep->SeekToFirst();
+  return DBIterGetState(iter);
 }
 
-void DBIterSeekToLast(DBIterator* iter) {
+DBIterState DBIterSeekToLast(DBIterator* iter) {
   iter->rep->SeekToLast();
+  return DBIterGetState(iter);
 }
 
-int DBIterValid(DBIterator* iter) {
-  return iter->rep->Valid();
-}
-
-void DBIterNext(DBIterator* iter) {
+DBIterState DBIterNext(DBIterator* iter) {
   iter->rep->Next();
+  return DBIterGetState(iter);
 }
 
-void DBIterPrev(DBIterator* iter){
-	iter->rep->Prev();
-}
-
-DBSlice DBIterKey(DBIterator* iter) {
-  return ToDBSlice(iter->rep->key());
-}
-
-DBSlice DBIterValue(DBIterator* iter) {
-  return ToDBSlice(iter->rep->value());
+DBIterState DBIterPrev(DBIterator* iter){
+  iter->rep->Prev();
+  return DBIterGetState(iter);
 }
 
 DBStatus DBIterError(DBIterator* iter) {
