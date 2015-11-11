@@ -20,7 +20,6 @@ package keys
 import (
 	"bytes"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -382,16 +381,16 @@ func TestPrettyPrint(t *testing.T) {
 		{RangeLastVerificationTimestampKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeLastVerificationTimestamp"},
 		{RangeStatsKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeStats"},
 
-		{MakeRangeKeyPrefix(roachpb.RKey("ok")), "/Local/Range/\"ok\""},
-		{RangeDescriptorKey(roachpb.RKey("111")), "/Local/Range/RangeDescriptor/\"111\""},
-		{RangeTreeNodeKey(roachpb.RKey("111")), "/Local/Range/RangeTreeNode/\"111\""},
-		{TransactionKey(roachpb.Key("111"), []byte("22222")), "/Local/Range/Transaction/addrKey:/\"111\"/id:\"22222\""},
+		{MakeRangeKeyPrefix(roachpb.RKey("ok")), `/Local/Range/"ok"`},
+		{RangeDescriptorKey(roachpb.RKey("111")), `/Local/Range/RangeDescriptor/"111"`},
+		{RangeTreeNodeKey(roachpb.RKey("111")), `/Local/Range/RangeTreeNode/"111"`},
+		{TransactionKey(roachpb.Key("111"), []byte("22222")), `/Local/Range/Transaction/addrKey:/"111"/id:"22222"`},
 
 		{LocalMax, "/Local/Max"},
 
 		// system
-		{roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo")), "/System/Meta2/\"foo\""},
-		{roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo")), "/System/Meta1/\"foo\""},
+		{roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo")), `/System/Meta2/"foo"`},
+		{roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo")), `/System/Meta1/"foo"`},
 
 		{StoreStatusKey(2222), "/System/StatusStore/2222"},
 		{NodeStatusKey(1111), "/System/StatusNode/1111"},
@@ -400,11 +399,11 @@ func TestPrettyPrint(t *testing.T) {
 
 		// table
 		{MakeTablePrefix(111), "/Table/111"},
-		{MakeKey(MakeTablePrefix(42), roachpb.RKey("foo")), "/Table/42/\"foo\""},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey("foo")), `/Table/42/"foo"`},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeFloat(nil, float64(233.221112)))), "/Table/42/233.221112"},
-		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeVarint(nil, 1222)), roachpb.RKey(encoding.EncodeString(nil, "handsome man"))), "/Table/42/1222/\"handsome man\""},
-		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeBytes(nil, []byte{1, 2, 8, 255}))), "/Table/42/\"\\x01\\x02\\b\\xff\""},
-		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeBytes(nil, []byte{1, 2, 8, 255})), roachpb.RKey("foo")), "/Table/42/\"\\x01\\x02\\b\\xff\"/\"foo\""},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeVarint(nil, 1222)), roachpb.RKey(encoding.EncodeString(nil, "handsome man"))), `/Table/42/1222/"handsome man"`},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeBytes(nil, []byte{1, 2, 8, 255}))), `/Table/42/"\x01\x02\b\xff"`},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeBytes(nil, []byte{1, 2, 8, 255})), roachpb.RKey("foo")), `/Table/42/"\x01\x02\b\xff"/"foo"`},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeNull(nil))), "/Table/42/NULL"},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeNotNull(nil))), "/Table/42/#"},
 
@@ -415,7 +414,11 @@ func TestPrettyPrint(t *testing.T) {
 	}
 	for i, test := range testCases {
 		keyInfo := PrettyPrint(test.key)
-		if strings.Compare(test.exp, keyInfo) != 0 {
+		if test.exp != keyInfo {
+			t.Fatalf("%d: expected %s, got %s", i, test.exp, keyInfo)
+		}
+
+		if test.exp != test.key.String() {
 			t.Fatalf("%d: expected %s, got %s", i, test.exp, keyInfo)
 		}
 	}
