@@ -64,10 +64,11 @@ type Storage interface {
 	AppliedIndex(groupID roachpb.RangeID) (uint64, error)
 
 	// RaftLocker returns a lock which (if non-nil) will be acquired
-	// when a group is being created (which entails multiple calls to
-	// Storage methods and may race with the removal of a previous
-	// incarnation of a group). If it returns a non-nil value it must
+	// before calling any other Storage method. Multiple calls may be
+	// made under a single lock. If it returns a non-nil value it must
 	// return the same value on every call.
+	// This lock *may or may not* be held when calling methods of
+	// WriteableGroupStorage.
 	RaftLocker() sync.Locker
 }
 
@@ -210,7 +211,14 @@ func (w *writeTask) start(stopper *stop.Stopper) {
 			response := &writeResponse{make(map[roachpb.RangeID]*groupWriteResponse)}
 
 			for groupID, groupReq := range request.groups {
+				locker := w.storage.RaftLocker()
+				if locker != nil {
+					locker.Lock()
+				}
 				group, err := w.storage.GroupStorage(groupID, groupReq.replicaID)
+				if locker != nil {
+					locker.Unlock()
+				}
 				if err == ErrGroupDeleted {
 					if log.V(4) {
 						log.Infof("dropping write to deleted group %v", groupID)

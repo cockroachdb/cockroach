@@ -194,6 +194,8 @@ func (s *state) sendEvent(event interface{}) {
 // fanoutHeartbeat sends the given heartbeat to all groups which believe that
 // their leader resides on the sending node.
 func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
+	s.lockStorage()
+	defer s.unlockStorage()
 	// A heartbeat message is expanded into a heartbeat for each group
 	// that the remote node is a part of.
 	fromID := roachpb.NodeID(req.Message.From)
@@ -212,7 +214,7 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 				continue
 			}
 
-			fromRepID, err := s.Storage.ReplicaIDForStore(groupID, req.FromReplica.StoreID)
+			fromRepID, err := s.Storage().ReplicaIDForStore(groupID, req.FromReplica.StoreID)
 			if err != nil {
 				if log.V(3) {
 					log.Infof("node %s: not fanning out heartbeat to %s, could not find replica id for sending store %s",
@@ -221,7 +223,7 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 				continue
 			}
 
-			toRepID, err := s.Storage.ReplicaIDForStore(groupID, req.ToReplica.StoreID)
+			toRepID, err := s.Storage().ReplicaIDForStore(groupID, req.ToReplica.StoreID)
 			if err != nil {
 				if log.V(3) {
 					log.Infof("node %s: not fanning out heartbeat to %s, could not find replica id for receiving store %s",
@@ -267,6 +269,8 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 // fanoutHeartbeatResponse sends the given heartbeat response to all groups
 // which overlap with the sender's groups and consider themselves leader.
 func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
+	s.lockStorage()
+	defer s.unlockStorage()
 	fromID := roachpb.NodeID(req.Message.From)
 	originNode, ok := s.nodes[fromID]
 	if !ok {
@@ -286,7 +290,7 @@ func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
 			continue
 		}
 
-		fromRepID, err := s.Storage.ReplicaIDForStore(groupID, req.FromReplica.StoreID)
+		fromRepID, err := s.Storage().ReplicaIDForStore(groupID, req.FromReplica.StoreID)
 		if err != nil {
 			if log.V(3) {
 				log.Infof("node %s: not fanning out heartbeat to %s, could not find replica id for sending store %s",
@@ -295,7 +299,7 @@ func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
 			continue
 		}
 
-		toRepID, err := s.Storage.ReplicaIDForStore(groupID, req.ToReplica.StoreID)
+		toRepID, err := s.Storage().ReplicaIDForStore(groupID, req.ToReplica.StoreID)
 		if err != nil {
 			if log.V(3) {
 				log.Infof("node %s: not fanning out heartbeat to %s, could not find replica id for receiving store %s",
@@ -492,6 +496,7 @@ type state struct {
 	nodes            map[roachpb.NodeID]*node
 	writeTask        *writeTask
 	replicaDescCache *cache.UnorderedCache
+	storageLocked    bool
 	// Buffer the events and send them in batch to avoid the deadlock
 	// between s.Events channel and callbackChan.
 	pendingEvents []interface{}
@@ -512,6 +517,38 @@ func newState(m *MultiRaft) *state {
 			},
 		}),
 	}
+}
+
+func (s *state) lockStorage() {
+	if s.storageLocked {
+		panic("storage already locked")
+	}
+	s.storageLocked = true
+	locker := s.Storage().RaftLocker()
+	if locker != nil {
+		locker.Lock()
+	}
+}
+
+func (s *state) unlockStorage() {
+	locker := s.Storage().RaftLocker()
+	if locker != nil {
+		locker.Unlock()
+	}
+	s.storageLocked = false
+}
+
+func (s *state) assertStorageLocked() {
+	if !s.storageLocked {
+		panic("storage lock must be held")
+	}
+}
+
+// Storage returns the configured Storage object. It masks direct
+// access to the embedded field so we can enforce correct locking.
+func (s *state) Storage() Storage {
+	s.assertStorageLocked()
+	return s.MultiRaft.Storage
 }
 
 func (s *state) start() {
@@ -748,7 +785,10 @@ func (s *state) handleMessage(req *RaftMessageRequest) {
 		return
 
 	case raftpb.MsgSnap:
-		if !s.Storage.CanApplySnapshot(req.GroupID, req.Message.Snapshot) {
+		s.lockStorage()
+		canApply := s.Storage().CanApplySnapshot(req.GroupID, req.Message.Snapshot)
+		s.unlockStorage()
+		if !canApply {
 			// If the storage cannot accept the snapshot, drop it before
 			// passing it to multiNode.Step, since our error handling
 			// options past that point are limited.
@@ -806,11 +846,8 @@ func (s *state) handleMessage(req *RaftMessageRequest) {
 // messages (in which case the replicaID comes from the incoming
 // message, since nothing is on disk yet).
 func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) error {
-	locker := s.Storage.RaftLocker()
-	if locker != nil {
-		locker.Lock()
-		defer locker.Unlock()
-	}
+	s.lockStorage()
+	defer s.unlockStorage()
 	if g, ok := s.groups[groupID]; ok {
 		if replicaID != 0 && g.replicaID != replicaID {
 			return util.Errorf("cannot create group %s with replica ID %s; already exists with replica ID %s",
@@ -822,7 +859,7 @@ func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID
 		log.Infof("node %v creating group %v", s.nodeID, groupID)
 	}
 
-	gs, err := s.Storage.GroupStorage(groupID, replicaID)
+	gs, err := s.Storage().GroupStorage(groupID, replicaID)
 	if err != nil {
 		return err
 	}
@@ -860,7 +897,7 @@ func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID
 		StoreID:   s.storeID,
 	})
 
-	appliedIndex, err := s.Storage.AppliedIndex(groupID)
+	appliedIndex, err := s.Storage().AppliedIndex(groupID)
 	if err != nil {
 		return err
 	}
@@ -1038,6 +1075,8 @@ func (s *state) handleWriteReady() {
 	if log.V(6) {
 		log.Infof("node %v write ready, preparing request", s.nodeID)
 	}
+	s.lockStorage()
+	defer s.unlockStorage()
 	writeRequest := newWriteRequest()
 	for groupID, ready := range s.readyGroups {
 		raftGroupID := roachpb.RangeID(groupID)
@@ -1052,7 +1091,7 @@ func (s *state) handleWriteReady() {
 
 		gwr := &groupWriteRequest{}
 		var err error
-		gwr.replicaID, err = s.Storage.ReplicaIDForStore(roachpb.RangeID(groupID), s.storeID)
+		gwr.replicaID, err = s.Storage().ReplicaIDForStore(roachpb.RangeID(groupID), s.storeID)
 		if err != nil {
 			if log.V(1) {
 				log.Warningf("failed to look up replica ID for range %v (disabling replica ID check): %s",
@@ -1236,6 +1275,7 @@ func (s *state) sendMessage(g *group, msg raftpb.Message) {
 // maybeSendLeaderEvent processes a raft.Ready to send events in response to leadership
 // changes (this includes both sending an event to the app and retrying any pending
 // proposals).
+// It may call into Storage so it must be called with the storage lock held.
 func (s *state) maybeSendLeaderEvent(groupID roachpb.RangeID, g *group, ready *raft.Ready) {
 	term := g.committedTerm
 	if ready.SoftState != nil {
@@ -1279,6 +1319,8 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 	if log.V(6) {
 		log.Infof("node %v got write response: %#v", s.nodeID, *response)
 	}
+	s.lockStorage()
+	defer s.unlockStorage()
 	// Everything has been written to disk; now we can apply updates to the state machine
 	// and send outgoing messages.
 	for groupID, ready := range readyGroups {
@@ -1312,7 +1354,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 
 		if !raft.IsEmptySnap(ready.Snapshot) {
 			// Sync the group/node mapping with the information contained in the snapshot.
-			replicas, err := s.Storage.ReplicasFromSnapshot(ready.Snapshot)
+			replicas, err := s.Storage().ReplicasFromSnapshot(ready.Snapshot)
 			if err != nil {
 				log.Fatalf("failed to parse snapshot: %s", err)
 			}
@@ -1353,11 +1395,16 @@ type replicaDescCacheKey struct {
 	replicaID roachpb.ReplicaID
 }
 
+// ReplicaDescriptor returns a (possibly cached) ReplicaDescriptor.
+// It may call into Storage so it must be called with the storage lock held.
 func (s *state) ReplicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
+	// Manually assert the lock instead of relying on the check in Storage()
+	// so we don't have locking issues masked by cache hits.
+	s.assertStorageLocked()
 	if rep, ok := s.replicaDescCache.Get(replicaDescCacheKey{groupID, replicaID}); ok {
 		return rep.(roachpb.ReplicaDescriptor), nil
 	}
-	rep, err := s.Storage.ReplicaDescriptor(groupID, replicaID)
+	rep, err := s.Storage().ReplicaDescriptor(groupID, replicaID)
 	if err == nil {
 		err = rep.Validate()
 	}
