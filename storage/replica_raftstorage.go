@@ -83,6 +83,9 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // TODO(bdarnell): consider caching for recent entries, if rocksdb's builtin caching
 // is insufficient.
 func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
+	if lo > hi {
+		return nil, util.Errorf("lo:%d is greater than hi:%d", lo, hi)
+	}
 	// Scan over the log to find the requested entries in the range [lo, hi),
 	// stopping once we have enough.
 	var ents []raftpb.Entry
@@ -98,7 +101,6 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	}
 
 	rangeID := r.Desc().RangeID
-
 	_, err := engine.MVCCIterate(r.store.Engine(),
 		keys.RaftLogKey(rangeID, lo),
 		keys.RaftLogKey(rangeID, hi),
@@ -112,16 +114,32 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	// If neither the number of entries nor the size limitations had an
 	// effect, we weren't able to supply everything the client wanted.
 	if len(ents) != int(hi-lo) && (maxBytes == 0 || size < maxBytes) {
+		if len(ents) > 0 {
+			if ents[0].Index > lo {
+				// The requested lo index has already been truncated.
+				return nil, raft.ErrCompacted
+			}
+			// The requested hi index does not yet exist.
+			return nil, raft.ErrUnavailable
+		}
+		ts, err := r.raftTruncatedState()
+		if err != nil {
+			return nil, err
+		}
+		if ts.Index >= lo {
+			// The requested lo index has already been truncated.
+			return nil, raft.ErrCompacted
+		}
+		// The requested lo index does not yet exist.
 		return nil, raft.ErrUnavailable
 	}
-
 	return ents, nil
 }
 
 // Term implements the raft.Storage interface.
 func (r *Replica) Term(i uint64) (uint64, error) {
 	ents, err := r.Entries(i, i+1, 0)
-	if err == raft.ErrUnavailable {
+	if err == raft.ErrCompacted {
 		ts, err := r.raftTruncatedState()
 		if err != nil {
 			return 0, err
@@ -129,7 +147,7 @@ func (r *Replica) Term(i uint64) (uint64, error) {
 		if i == ts.Index {
 			return ts.Term, nil
 		}
-		return 0, raft.ErrUnavailable
+		return 0, raft.ErrCompacted
 	} else if err != nil {
 		return 0, err
 	}
