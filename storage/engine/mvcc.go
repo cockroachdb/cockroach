@@ -701,7 +701,8 @@ var putBufferPool = sync.Pool{
 
 // MVCCPut sets the value for a specified key. It will save the value
 // with different versions according to its timestamp and update the
-// key metadata.
+// key metadata. The timestamp must be passed as a parameter; using
+// the Timestamp field on the value results in an error.
 //
 // If the timestamp is specifed as roachpb.ZeroTimestamp, the value is
 // inlined instead of being written as a timestamp-versioned value. A
@@ -712,10 +713,8 @@ var putBufferPool = sync.Pool{
 // the value. In addition, zero timestamp values may be merged.
 func MVCCPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
 	value roachpb.Value, txn *roachpb.Transaction) error {
-	if value.Timestamp != nil && !value.Timestamp.Equal(timestamp) {
-		return util.Errorf(
-			"the timestamp %+v provided in value does not match the timestamp %+v in request",
-			value.Timestamp, timestamp)
+	if value.Timestamp != nil {
+		return util.Errorf("cannot have timestamp set in value on Put")
 	}
 
 	buf := putBufferPool.Get().(*putBuffer)

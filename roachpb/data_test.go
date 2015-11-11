@@ -417,6 +417,7 @@ func TestTransactionUpdate(t *testing.T) {
 		MaxTimestamp:  makeTS(40, 41),
 		CertainNodes:  nodes,
 		Writing:       true,
+		Sequence:      123,
 	}
 
 	noZeroField := func(txn Transaction) error {

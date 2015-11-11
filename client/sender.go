@@ -96,7 +96,6 @@ func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.Header, args 
 	}
 	ba := roachpb.BatchRequest{}
 	ba.Header = h
-	ba.CmdID = ba.GetOrCreateCmdID(0)
 	ba.Add(args)
 
 	br, pErr := sender.Send(ctx, ba)

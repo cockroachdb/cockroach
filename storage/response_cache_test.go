@@ -19,7 +19,6 @@ package storage
 
 import (
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -44,12 +43,7 @@ func createTestResponseCache(t *testing.T, rangeID roachpb.RangeID, stopper *sto
 	return NewResponseCache(rangeID), engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 }
 
-func makeCmdID(wallTime, random int64) roachpb.ClientCmdID {
-	return roachpb.ClientCmdID{
-		WallTime: wallTime,
-		Random:   random,
-	}
-}
+var family = []byte("testfamily")
 
 // TestResponseCachePutGetClearData tests basic get & put functionality as well as
 // clearing the cache.
@@ -58,53 +52,48 @@ func TestResponseCachePutGetClearData(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	rc, e := createTestResponseCache(t, 1, stopper)
-	cmdID := makeCmdID(1, 1)
-	// Start with a get for an unseen cmdID.
-	if replyWithErr, readErr := rc.GetResponse(e, cmdID); replyWithErr.Reply != nil || replyWithErr.Err != nil {
-		t.Errorf("expected no response for id %+v; got %+v, %s", cmdID, replyWithErr.Reply, replyWithErr.Err)
+	// Start with a get for an unseen id/sequence combo.
+	if seq, readErr := rc.GetSequence(e, family); seq > 0 {
+		t.Errorf("expected no response for family %s", family)
 	} else if readErr != nil {
-		t.Fatalf("unxpected read error :%s", readErr)
+		t.Fatalf("unxpected read error: %s", readErr)
 	}
-	// Put value of 1 for test response.
-	if err := rc.PutResponse(e, cmdID, roachpb.ResponseWithError{Reply: &batchR, Err: nil}); err != nil {
+	// Cache the test response.
+	const seq = 123
+	if err := rc.PutSequence(e, family, seq, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
-	// Get should now return 1.
-	replyWithErr, readErr := rc.GetResponse(e, cmdID)
-	incReply := replyWithErr.Reply.Responses[0].GetInner().(*roachpb.IncrementResponse)
-	if readErr != nil || replyWithErr.Reply == nil {
-		t.Errorf("unexpected failure getting response: %s", readErr)
-	} else if incReply.NewValue != 1 || replyWithErr.Err != nil {
-		t.Errorf("unexpected response: %s, %s", incReply, replyWithErr.Err)
+
+	tryHit := func(shouldHit bool) {
+		if actSeq, readErr := rc.GetSequence(e, family); readErr != nil {
+			t.Errorf("unexpected failure getting response: %s", readErr)
+		} else if shouldHit != (actSeq == seq) {
+			t.Errorf("wanted hit: %t, got actual %d vs expected %d", shouldHit, actSeq, seq)
+		}
 	}
+
+	tryHit(true)
 	if err := rc.ClearData(e); err != nil {
 		t.Error(err)
 	}
-	// The previously present response should be gone.
-	if replyWithErr, readErr := rc.GetResponse(e, cmdID); replyWithErr.Reply != nil || replyWithErr.Err != nil {
-		t.Errorf("unexpected success getting response: %s, %+v", replyWithErr.Err, replyWithErr.Reply)
-	} else if readErr != nil {
-		t.Fatalf("unxpected read error :%s", readErr)
-	}
+	tryHit(false)
 }
 
-// TestResponseCacheEmptyCmdID tests operation with empty client
-// command id. All calls should be noops.
-func TestResponseCacheEmptyCmdID(t *testing.T) {
+// TestResponseCacheEmptyParams tests operation with empty parameters.
+func TestResponseCacheEmptyParams(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	rc, e := createTestResponseCache(t, 1, stopper)
-	cmdID := roachpb.ClientCmdID{}
-	// Put value of 1 for test response.
-	if err := rc.PutResponse(e, cmdID, roachpb.ResponseWithError{Reply: &batchR, Err: nil}); err != nil {
-		t.Errorf("unexpected error putting response: %s", err)
+	// Put value for test response.
+	if err := rc.PutSequence(e, family, 0, nil); err != errEmptyID {
+		t.Errorf("unexpected error putting response: %v", err)
 	}
-	// Get should return !ok.
-	if replyWithErr, readErr := rc.GetResponse(e, cmdID); replyWithErr.Reply != nil || replyWithErr.Err != nil {
-		t.Errorf("unexpected success getting response: %s, %+v", replyWithErr.Err, replyWithErr.Reply)
-	} else if readErr != nil {
-		t.Fatalf("unxpected read error :%s", readErr)
+	if err := rc.PutSequence(e, nil, 10, nil); err != errEmptyID {
+		t.Errorf("unexpected error putting response: %v", err)
+	}
+	if _, readErr := rc.GetSequence(e, nil); readErr != errEmptyID {
+		t.Fatalf("unxpected read error: %v", readErr)
 	}
 }
 
@@ -116,29 +105,22 @@ func TestResponseCacheCopyInto(t *testing.T) {
 	defer stopper.Stop()
 	rc1, e := createTestResponseCache(t, 1, stopper)
 	rc2, _ := createTestResponseCache(t, 2, stopper)
-	cmdID := makeCmdID(1, 1)
+	const seq = 123
 	// Store an increment with new value one in the first cache.
-	if err := rc1.PutResponse(e, cmdID, roachpb.ResponseWithError{Reply: &batchR, Err: nil}); err != nil {
+	if err := rc1.PutSequence(e, family, seq, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	// Copy the first cache into the second.
 	if err := rc1.CopyInto(e, rc2.rangeID); err != nil {
 		t.Errorf("unexpected error while copying response cache: %s", err)
 	}
-	// Get should return 1 for both caches.
-	replyWithErr, readErr := rc1.GetResponse(e, cmdID)
-	incReply := replyWithErr.Reply.Responses[0].GetInner().(*roachpb.IncrementResponse)
-	if replyWithErr.Reply == nil && replyWithErr.Err == nil || incReply.NewValue != 1 {
-		t.Errorf("unexpected failure getting response from source: %s, %+v", replyWithErr.Err, incReply)
-	} else if readErr != nil {
-		t.Fatalf("unxpected read error :%s", readErr)
-	}
-	replyWithErr, readErr = rc2.GetResponse(e, cmdID)
-	incReply = replyWithErr.Reply.Responses[0].GetInner().(*roachpb.IncrementResponse)
-	if replyWithErr.Reply == nil && replyWithErr.Err == nil || incReply.NewValue != 1 {
-		t.Errorf("unexpected failure getting response from destination: %s, %+v", replyWithErr.Err, incReply)
-	} else if readErr != nil {
-		t.Fatalf("unxpected read error :%s", readErr)
+	for _, cache := range []*ResponseCache{rc1, rc2} {
+		// Get should return 1 for both caches.
+		if actSeq, readErr := cache.GetSequence(e, family); readErr != nil {
+			t.Errorf("unexpected failure getting response from source: %s", readErr)
+		} else if actSeq != seq {
+			t.Fatalf("unxpected cache miss")
+		}
 	}
 }
 
@@ -150,9 +132,9 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 	defer stopper.Stop()
 	rc1, e := createTestResponseCache(t, 1, stopper)
 	rc2, _ := createTestResponseCache(t, 2, stopper)
-	cmdID := makeCmdID(1, 1)
+	const seq = 321
 	// Store an increment with new value one in the first cache.
-	if err := rc1.PutResponse(e, cmdID, roachpb.ResponseWithError{Reply: &batchR, Err: nil}); err != nil {
+	if err := rc1.PutSequence(e, family, seq, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
@@ -161,56 +143,12 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 		t.Errorf("unexpected error while copying response cache: %s", err)
 	}
 
-	// Get should return 1 for both caches.
-	replyWithErr, readErr := rc1.GetResponse(e, cmdID)
-	incReply := replyWithErr.Reply.Responses[0].GetInner().(*roachpb.IncrementResponse)
-	if replyWithErr.Reply == nil && replyWithErr.Err == nil || incReply.NewValue != 1 {
-		t.Errorf("unexpected failure getting response from source: %s, %+v", replyWithErr.Err, incReply)
-	} else if readErr != nil {
-		t.Fatalf("unxpected read error :%s", readErr)
-	}
-	replyWithErr, readErr = rc2.GetResponse(e, cmdID)
-	incReply = replyWithErr.Reply.Responses[0].GetInner().(*roachpb.IncrementResponse)
-	if replyWithErr.Reply == nil && replyWithErr.Err == nil || incReply.NewValue != 1 {
-		t.Errorf("unexpected failure getting response from source: %s, %+v", replyWithErr.Err, incReply)
-	} else if readErr != nil {
-		t.Fatalf("unxpected read error :%s", readErr)
-	}
-}
-
-// TestResponseCacheInflight verifies concurrent GetResponse
-// invocations do not block on same keys.
-func TestResponseCacheInflight(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	rc, e := createTestResponseCache(t, 1, stopper)
-	cmdID := makeCmdID(1, 1)
-	// Add inflight for cmdID.
-	if replyWithErr, readErr := rc.GetResponse(e, cmdID); replyWithErr.Reply != nil || replyWithErr.Err != nil {
-		t.Errorf("unexpected response or error: %s", replyWithErr.Err)
-	} else if readErr != nil {
-		t.Fatalf("unxpected read error :%s", readErr)
-	}
-	// Make two requests for response from cmdID, which is inflight.
-	doneChans := []chan struct{}{make(chan struct{}), make(chan struct{})}
-	for _, done := range doneChans {
-		doneChan := done
-		go func() {
-			if replyWithErr, readErr := rc.GetResponse(e, cmdID); replyWithErr.Reply != nil || replyWithErr.Err != nil {
-				t.Errorf("unexpectedly found value for response cache entry %+v: %s", cmdID, replyWithErr.Err)
-			} else if readErr != nil {
-				t.Fatalf("unxpected read error :%s", readErr)
-			}
-			close(doneChan)
-		}()
-	}
-	for _, doneChan := range doneChans {
-		select {
-		case <-doneChan:
-			break
-		case <-time.After(100 * time.Millisecond):
-			t.Fatalf("concurrent gets to cache did not complete")
+	// Get should hit both caches.
+	for _, cache := range []*ResponseCache{rc1, rc2} {
+		if actSeq, readErr := cache.GetSequence(e, family); readErr != nil {
+			t.Fatalf("unxpected read error: %s", readErr)
+		} else if actSeq != seq {
+			t.Errorf("unexpected cache miss")
 		}
 	}
 }
@@ -245,46 +183,8 @@ func TestResponseCacheShouldCache(t *testing.T) {
 	for i, test := range testCases {
 		br := &roachpb.BatchResponse{}
 		br.Add(&reply)
-		if shouldCache := rc.shouldCacheResponse(roachpb.ResponseWithError{Reply: br, Err: test.err}); shouldCache != test.shouldCache {
+		if shouldCache := rc.shouldCacheError(test.err); shouldCache != test.shouldCache {
 			t.Errorf("%d: expected cache? %t; got %t", i, test.shouldCache, shouldCache)
 		}
-	}
-}
-
-// TestResponseCacheGC verifies that response cache entries are
-// garbage collected periodically.
-func TestResponseCacheGC(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	eng := engine.NewInMem(roachpb.Attributes{Attrs: []string{"ssd"}}, 1<<30, stopper)
-
-	rc := NewResponseCache(1)
-	cmdID := makeCmdID(1, 1)
-
-	// Add response for cmdID with timestamp at time=1ns.
-	copyR := batchR
-	copyR.Timestamp.WallTime = 1
-	if err := rc.PutResponse(eng, cmdID, roachpb.ResponseWithError{Reply: &copyR, Err: nil}); err != nil {
-		t.Fatalf("unexpected error putting responpse: %s", err)
-	}
-	eng.SetGCTimeouts(0, 0) // avoids GC
-	eng.CompactRange(nil, nil)
-	replyWithErr, readErr := rc.GetResponse(eng, cmdID)
-	if readErr != nil {
-		t.Fatalf("unxpected read error :%s", readErr)
-	} else if replyWithErr.Reply == nil || replyWithErr.Err != nil {
-		t.Fatalf("unexpected empty response or error: %s, %+v", replyWithErr.Err, replyWithErr.Reply)
-	} else if inc := copyR.Responses[0].GetInner().(*roachpb.IncrementResponse); inc.NewValue != 1 {
-		t.Fatalf("unexpected value for increment: %+v", inc)
-	}
-
-	// Now set minRCacheTS to 1, which will GC.
-	eng.SetGCTimeouts(0, 1)
-	eng.CompactRange(nil, nil)
-	if replyWithErr, readErr := rc.GetResponse(eng, cmdID); replyWithErr.Reply != nil && replyWithErr.Err != nil {
-		t.Fatalf("unexpected response or error: %s, %+v", replyWithErr.Err, replyWithErr.Reply)
-	} else if readErr != nil {
-		t.Fatalf("unxpected read error :%s", readErr)
 	}
 }

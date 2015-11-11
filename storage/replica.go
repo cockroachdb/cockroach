@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracer"
 	"github.com/gogo/protobuf/proto"
@@ -136,6 +137,8 @@ type pendingCmd struct {
 	done chan roachpb.ResponseWithError // Used to signal waiting RPC handler
 }
 
+type cmdIDKey string
+
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -163,6 +166,7 @@ type Replica struct {
 	sync.RWMutex                 // Protects the following fields:
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
 	tsCache      *TimestampCache // Most recent timestamps for keys / key ranges
+	pendingSeq   uint64          // atomic sequence counter for cmdIDKey generation
 	pendingCmds  map[cmdIDKey]*pendingCmd
 
 	// pendingReplica houses a replica that is not yet in the range
@@ -334,10 +338,6 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	}
 	ba := roachpb.BatchRequest{}
 	ba.RangeID = desc.RangeID
-	ba.CmdID = roachpb.ClientCmdID{
-		WallTime: r.store.Clock().Now().WallTime,
-		Random:   rand.Int63(),
-	}
 	ba.Add(args)
 
 	// The raft command becomes moot after its expiration, so give it a
@@ -898,8 +898,12 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 		OriginReplica: *replica,
 		Cmd:           ba,
 	}
-	cmdID := ba.GetOrCreateCmdID(r.store.Clock().PhysicalNow())
-	idKey := makeCmdIDKey(cmdID)
+
+	buf := make([]byte, 0, multiraft.CommandIDLen)
+	{
+		buf = encoding.EncodeUint64(buf, uint64(rand.Int63()))[:multiraft.CommandIDLen]
+	}
+	idKey := cmdIDKey(buf)
 
 	r.Lock()
 	r.pendingCmds[idKey] = pendingCmd
@@ -1022,46 +1026,18 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// Create a new batch for the command to ensure all or nothing semantics.
 	btch := r.store.Engine().NewBatch()
 
-	// Check the response cache for this batch to ensure idempotency.
-	if ba.IsWrite() {
-		if ba.CmdID == roachpb.ZeroCmdID {
-			return btch, nil, nil, util.Errorf("write request without CmdID: %s", ba)
-		}
-		if replyWithErr, readErr := r.respCache.GetResponse(btch, ba.CmdID); readErr != nil {
+	// Check the response cache for this batch to ensure idempotency. Only applies
+	// to transactional requests.
+	if ba.IsWrite() && ba.Txn != nil {
+		if sequence, readErr := r.respCache.GetSequence(btch, ba.Txn.ID); readErr != nil {
 			return btch, nil, nil, newReplicaCorruptionError(util.Errorf("could not read from response cache"), readErr)
-		} else if replyWithErr.Reply != nil {
-			// TODO(tschottdorf): this is a hack to avoid wrong replies served
-			// back. See #2297. Not 100% correct, only correct enough to get
-			// tests passing (multi-range requests going wrong).
-			// Treat RangeKeyMismatchError specially. We don't want the correct
-			// range to pretend it's mismatching. All other errors have no
-			// sanity check as to whether they actually belong to the request,
-			// there's no information to deduce that from.
-			ok := true
-			if _, isMismatch := replyWithErr.Err.(*roachpb.RangeKeyMismatchError); isMismatch {
-				ok = false
+		} else if sequence >= int64(ba.Txn.Sequence) {
+			if log.V(1) {
+				log.Infoc(ctx, "found response cache entry for %s@%d", ba.Txn.Short(), ba.Txn.Sequence)
 			}
-			if ok && replyWithErr.Err == nil {
-				ok = len(replyWithErr.Reply.Responses) == len(ba.Requests)
-				for i, union := range replyWithErr.Reply.Responses {
-					if !ok {
-						break
-					}
-					args := ba.Requests[i].GetInner()
-					reply := union.GetInner()
-					ok = fmt.Sprintf("%T", args.CreateReply()) == fmt.Sprintf("%T", reply)
-				}
-			}
-			if ok {
-				if log.V(1) {
-					log.Infoc(ctx, "found response cache entry for %+v", ba.CmdID)
-				}
-				// We successfully read from the response cache, so return whatever error
-				// was present in the cached entry (if any).
-				return btch, replyWithErr.Reply, nil, replyWithErr.Err
-			} else if replyWithErr.Err == nil {
-				log.Warningf("TODO(tschottdorf): #2297: %s hit cache for: <%s,%T>", ba, replyWithErr.Reply, replyWithErr.Err)
-			}
+			// We successfully read from the response cache, so let the
+			// transaction restart.
+			return btch, nil, nil, roachpb.NewTransactionRetryError(ba.Txn)
 		}
 	}
 
@@ -1083,11 +1059,12 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			// through Raft, a read which was not taken into account may have been
 			// served. Hence, we must retry at the current leader.
 			//
-			// It's crucial that we don't update the response cache for the error
-			// returned below since the request is going to be retried with the
-			// same ClientCmdID and would get the distributed sender stuck in an
-			// infinite loop, retrieving a stale NotLeaderError over and over
-			// again, even when proposing at the correct replica.
+			// It's crucial that we don't update the response cache for the
+			// error returned below since the request is going to be retried
+			// with the same sequence number and would get the distributed
+			// sender stuck in an infinite loop, retrieving a stale
+			// NotLeaderError over and over again, even when proposing at the
+			// correct replica.
 			return btch, nil, nil, r.newNotLeaderError(lease, originReplica.StoreID)
 		}
 	}
@@ -1115,10 +1092,12 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			btch.Close()
 			btch = r.store.Engine().NewBatch()
 		}
-		if err := r.respCache.PutResponse(btch, ba.CmdID,
-			roachpb.ResponseWithError{Reply: br, Err: err}); err != nil {
-			// TODO(tschottdorf): ReplicaCorruptionError.
-			log.Fatalc(ctx, "putting a response cache entry in a batch should never fail: %s", err)
+		// Only transactional requests have replay protection.
+		if ba.Txn != nil {
+			if putErr := r.respCache.PutSequence(btch, ba.Txn.ID, int64(ba.Txn.Sequence), err); putErr != nil {
+				// TODO(tschottdorf): ReplicaCorruptionError.
+				log.Fatalc(ctx, "putting a response cache entry in a batch should never fail: %s", putErr)
+			}
 		}
 	}
 
@@ -1465,7 +1444,6 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 
 	var reqsRemote []roachpb.Request
 	baLocal := roachpb.BatchRequest{}
-	baLocal.CmdID = baLocal.GetOrCreateCmdID(r.store.Clock().PhysicalNow())
 	for i := range intents {
 		intent := intents[i] // avoids a race in `i, intent := range ...`
 		var resolveArgs roachpb.Request

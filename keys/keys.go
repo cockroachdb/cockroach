@@ -123,14 +123,8 @@ func RangeStatsKey(rangeID roachpb.RangeID) roachpb.Key {
 // ResponseCacheKey returns a range-local key by Range ID for a
 // response cache entry, with detail specified by encoding the
 // supplied client command ID.
-func ResponseCacheKey(rangeID roachpb.RangeID, cmdID *roachpb.ClientCmdID) roachpb.Key {
-	detail := roachpb.RKey{}
-	if cmdID != nil {
-		// Wall time helps sort for locality.
-		detail = encoding.EncodeUvarint(nil, uint64(cmdID.WallTime))
-		detail = encoding.EncodeUint64(detail, uint64(cmdID.Random))
-	}
-	return MakeRangeIDKey(rangeID, LocalResponseCacheSuffix, detail)
+func ResponseCacheKey(rangeID roachpb.RangeID, family []byte) roachpb.Key {
+	return MakeRangeIDKey(rangeID, LocalResponseCacheSuffix, encoding.EncodeBytes(nil, family))
 }
 
 // MakeRangeKey creates a range-local key based on the range

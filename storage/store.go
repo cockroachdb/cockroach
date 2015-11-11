@@ -46,9 +46,6 @@ import (
 )
 
 const (
-	// GCResponseCacheExpiration is the expiration duration for response
-	// cache entries.
-	GCResponseCacheExpiration = 1 * time.Hour
 	// rangeIDAllocCount is the number of Range IDs to allocate per allocation.
 	rangeIDAllocCount               = 10
 	defaultRaftTickInterval         = 100 * time.Millisecond
@@ -451,8 +448,6 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	s.feed = NewStoreEventFeed(s.Ident.StoreID, s.ctx.EventFeed)
 	s.feed.startStore(s.startedAt)
 
-	s.startUpdateGC()
-
 	// Iterator over all range-local key-based data.
 	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
 	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
@@ -549,6 +544,10 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 
 	}
 
+	// Initialize txn entry GC - for now, it's pretty much disabled. See
+	// #2062, #3005.
+	s.engine.SetGCTimeouts(0)
+
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)
 
@@ -561,38 +560,6 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 // has completed its scan. Only for testing.
 func (s *Store) WaitForInit() {
 	s.initComplete.Wait()
-}
-
-func (s *Store) startUpdateGC() {
-
-	// How often we update. Since there's no Txn GC yet, just do it
-	// proportionally to the response cache timeout.
-	const freq = GCResponseCacheExpiration / 10
-
-	updateGC := func() {
-		minRCacheTS := s.ctx.Clock.Now().WallTime - GCResponseCacheExpiration.Nanoseconds()
-		// We don't actually GC Txn entries just yet. See #2062.
-		const minTxnTS = 0
-		// These timeouts are used each time an engine compaction is
-		// underway. Transaction records and response cache entries
-		// older than the respective timestamp are gc'ed.
-		s.engine.SetGCTimeouts(minTxnTS, minRCacheTS)
-	}
-
-	updateGC()
-	s.stopper.RunWorker(func() {
-		ticker := time.NewTicker(freq)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				updateGC()
-			case <-s.stopper.ShouldStop():
-				return
-			}
-		}
-
-	})
 }
 
 // startGossip runs an infinite loop in a goroutine which regularly checks
@@ -1237,8 +1204,11 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 	defer trace.Epoch(fmt.Sprintf("executing %d requests", len(ba.Requests)))()
 	// Backoff and retry loop for handling errors. Backoff times are measured
 	// in the Trace.
+	// Increase the sequence counter to avoid getting caught in replay
+	// protection on retry.
 	next := func(r *retry.Retry) bool {
 		if r.CurrentAttempt() > 0 {
+			ba.SetNewRequest()
 			defer trace.Epoch("backoff")()
 		}
 		return r.Next()

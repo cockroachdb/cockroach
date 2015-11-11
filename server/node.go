@@ -455,7 +455,6 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 	ba := argsI.(*roachpb.BatchRequest)
 	// TODO(tschottdorf) get a hold of the client's ID, add it to the
 	// context before dispatching, and create an ID for tracing the request.
-	ba.CmdID = ba.GetOrCreateCmdID(n.ctx.Clock.PhysicalNow())
 	trace := n.ctx.Tracer.NewTrace(tracer.Node, ba)
 	defer trace.Finalize()
 	defer trace.Epoch("node")()

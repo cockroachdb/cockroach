@@ -20,7 +20,6 @@ package client
 import (
 	"bytes"
 	"fmt"
-	"math/rand"
 	"net/url"
 	"strconv"
 	"time"
@@ -478,7 +477,6 @@ func (db *DB) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Er
 	if ba.UserPriority == nil && db.userPriority != 0 {
 		ba.UserPriority = proto.Int32(db.userPriority)
 	}
-	resetClientCmdID(&ba)
 	br, pErr := db.sender.Send(context.TODO(), ba)
 	if pErr != nil {
 		if log.V(1) {
@@ -508,14 +506,4 @@ func runOneRow(r Runner, b *Batch) (KeyValue, error) {
 	}
 	res := b.Results[0]
 	return res.Rows[0], res.Err
-}
-
-// resetClientCmdID sets the client command ID if the call is for a
-// read-write method. The client command ID provides idempotency
-// protection in conjunction with the server.
-func resetClientCmdID(ba *roachpb.BatchRequest) {
-	ba.CmdID = roachpb.ClientCmdID{
-		WallTime: time.Now().UnixNano(),
-		Random:   rand.Int63(),
-	}
 }

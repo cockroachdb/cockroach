@@ -271,7 +271,6 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	gcArgs.GCMeta = *gcMeta
 
 	var ba roachpb.BatchRequest
-	ba.CmdID = ba.GetOrCreateCmdID(now.WallTime)
 	// Technically not needed since we're talking directly to the Range.
 	ba.RangeID = desc.RangeID
 	ba.Add(gcArgs)

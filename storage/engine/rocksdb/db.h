@@ -71,7 +71,7 @@ void DBClose(DBEngine* db);
 DBStatus DBFlush(DBEngine* db);
 
 // Sets GC timeouts.
-void DBSetGCTimeouts(DBEngine * db, int64_t min_txn_ts, int64_t min_rcache_ts);
+void DBSetGCTimeouts(DBEngine * db, int64_t min_txn_ts);
 
 // Compacts the underlying storage for the key range
 // [start,end]. start==NULL is treated as a key before all keys in the

@@ -39,7 +39,7 @@ import (
 var testRand, _ = randutil.NewPseudoRand()
 
 func makeCommandID() string {
-	return string(randutil.RandBytes(testRand, commandIDLen))
+	return string(randutil.RandBytes(testRand, CommandIDLen))
 }
 
 type testCluster struct {
@@ -504,7 +504,7 @@ func TestRapidMembershipChange(t *testing.T) {
 	cluster.createGroup(groupID, 0, 1 /* replicas */)
 	startSeq := int32(0) // updated atomically from now on
 
-	cmdIDFormat := "%0" + fmt.Sprintf("%d", commandIDLen) + "d"
+	cmdIDFormat := "%0" + fmt.Sprintf("%d", CommandIDLen) + "d"
 	teardown := make(chan struct{})
 
 	proposerFn := func(i int) {

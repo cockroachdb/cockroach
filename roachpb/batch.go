@@ -20,7 +20,6 @@ package roachpb
 import (
 	"errors"
 	"fmt"
-	"math/rand"
 	"strings"
 )
 
@@ -259,28 +258,19 @@ func (ba BatchRequest) String() string {
 	return strings.Join(str, ", ")
 }
 
-// GetOrCreateCmdID returns the request header's command ID if available.
-// Otherwise, creates a new ClientCmdID, initialized with current time
-// and random salt.
-func (ba BatchRequest) GetOrCreateCmdID(walltime int64) (cmdID ClientCmdID) {
-	if !ba.CmdID.IsEmpty() {
-		cmdID = ba.CmdID
-	} else {
-		cmdID = ClientCmdID{
-			WallTime: walltime,
-			Random:   rand.Int63(),
-		}
-	}
-	return
+// Short gives gives a short version of the batch, printing the flags and
+// timestamp only.
+func (ba BatchRequest) Short() string {
+	return flagsToStr(ba.flags()) + "@" + ba.Timestamp.String()
 }
 
-// TraceID implements tracer.Traceable by returning the first nontrivial
-// TraceID of the Transaction and CmdID.
+// TraceID implements tracer.Traceable by returning the TraceID of the Transaction or,
+// if not transactional, a digest of the batch.
 func (ba BatchRequest) TraceID() string {
 	if r := ba.Txn.TraceID(); r != "" {
 		return r
 	}
-	return ba.CmdID.TraceID()
+	return "c" + ba.Short()
 }
 
 // TraceName implements tracer.Traceable and behaves like TraceID, but using
@@ -289,7 +279,7 @@ func (ba BatchRequest) TraceName() string {
 	if r := ba.Txn.TraceID(); r != "" {
 		return ba.Txn.TraceName()
 	}
-	return ba.CmdID.TraceName()
+	return ba.Short()
 }
 
 // TODO(marc): we should assert
@@ -301,6 +291,17 @@ func (ba BatchRequest) TraceName() string {
 func (*BatchRequest) GetUser() string {
 	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
 	return "node"
+}
+
+// SetNewRequest increases the internal sequence counter of this batch request.
+// The sequence counter is used for replay and reordering protection. At the
+// Store, a sequence counter less than or equal to the last observed one incurs
+// a transaction restart (if the request is transactional).
+func (ba *BatchRequest) SetNewRequest() {
+	if ba.Txn == nil {
+		return
+	}
+	ba.Txn.Sequence++
 }
 
 // GoError returns the non-nil error from the proto.Error union.

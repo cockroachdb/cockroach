@@ -13,7 +13,6 @@
 		cockroach/roachpb/metadata.proto
 
 	It has these top-level messages:
-		ClientCmdID
 		Span
 		ResponseHeader
 		GetRequest
@@ -213,31 +212,6 @@ func (x *PushTxnType) UnmarshalJSON(data []byte) error {
 	*x = PushTxnType(value)
 	return nil
 }
-
-// ClientCmdID provides a unique ID for client commands. Clients which
-// provide ClientCmdID gain operation idempotence. In other words,
-// clients can submit the same command multiple times and always
-// receive the same response. This is common on retries over flaky
-// networks. However, the system imposes a limit on how long
-// idempotence is provided. Retries over an hour old are not
-// guaranteed idempotence and may be executed more than once with
-// potentially different results.
-//
-// ClientCmdID contains the client's timestamp and a client-generated
-// random number. The client Timestamp is specified in unix
-// nanoseconds and is used for some uniqueness but also to provide a
-// rough ordering of requests, useful for data locality on the
-// server. The Random is specified for additional uniqueness.
-// NOTE: An accurate time signal IS NOT required for correctness.
-type ClientCmdID struct {
-	// Nanoseconds since Unix epoch.
-	WallTime int64 `protobuf:"varint,1,opt,name=wall_time" json:"wall_time"`
-	Random   int64 `protobuf:"varint,2,opt,name=random" json:"random"`
-}
-
-func (m *ClientCmdID) Reset()         { *m = ClientCmdID{} }
-func (m *ClientCmdID) String() string { return proto.CompactTextString(m) }
-func (*ClientCmdID) ProtoMessage()    {}
 
 // Span is supplied with every storage node request.
 type Span struct {
@@ -957,12 +931,11 @@ type Header struct {
 	Timestamp Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
 	// cmd_id is optionally specified for request idempotence
 	// (i.e. replay protection).
-	CmdID   ClientCmdID       `protobuf:"bytes,2,opt,name=cmd_id" json:"cmd_id"`
-	Replica ReplicaDescriptor `protobuf:"bytes,5,opt,name=replica" json:"replica"`
+	Replica ReplicaDescriptor `protobuf:"bytes,2,opt,name=replica" json:"replica"`
 	// range_id specifies the ID of the Raft consensus group which the key
 	// range belongs to. This is used by the receiving node to route the
 	// request to the correct range.
-	RangeID RangeID `protobuf:"varint,6,opt,name=range_id,casttype=RangeID" json:"range_id"`
+	RangeID RangeID `protobuf:"varint,3,opt,name=range_id,casttype=RangeID" json:"range_id"`
 	// user_priority specifies priority multiple for non-transactional
 	// commands. This value should be a positive integer [1, 2^31-1).
 	// It's properly viewed as a multiple for how likely this
@@ -972,17 +945,17 @@ type Header struct {
 	// with user_priority=1. This value is ignored if Txn is
 	// specified. If neither this value nor txn is specified, the value
 	// defaults to 1.
-	UserPriority *int32 `protobuf:"varint,7,opt,name=user_priority,def=1" json:"user_priority,omitempty"`
+	UserPriority *int32 `protobuf:"varint,4,opt,name=user_priority,def=1" json:"user_priority,omitempty"`
 	// txn is set non-nil if a transaction is underway. To start a txn,
 	// the first request should set this field to non-nil with name and
 	// isolation level set as desired. The response will contain the
 	// fully-initialized transaction with txn ID, priority, initial
 	// timestamp, and maximum timestamp.
-	Txn *Transaction `protobuf:"bytes,8,opt,name=txn" json:"txn,omitempty"`
+	Txn *Transaction `protobuf:"bytes,5,opt,name=txn" json:"txn,omitempty"`
 	// read_consistency specifies the consistency for read
 	// operations. The default is CONSISTENT. This value is ignored for
 	// write operations.
-	ReadConsistency ReadConsistencyType `protobuf:"varint,9,opt,name=read_consistency,enum=cockroach.roachpb.ReadConsistencyType" json:"read_consistency"`
+	ReadConsistency ReadConsistencyType `protobuf:"varint,6,opt,name=read_consistency,enum=cockroach.roachpb.ReadConsistencyType" json:"read_consistency"`
 }
 
 func (m *Header) Reset()         { *m = Header{} }
@@ -996,13 +969,6 @@ func (m *Header) GetTimestamp() Timestamp {
 		return m.Timestamp
 	}
 	return Timestamp{}
-}
-
-func (m *Header) GetCmdID() ClientCmdID {
-	if m != nil {
-		return m.CmdID
-	}
-	return ClientCmdID{}
 }
 
 func (m *Header) GetReplica() ReplicaDescriptor {
@@ -1093,30 +1059,6 @@ func init() {
 	proto.RegisterEnum("cockroach.roachpb.ReadConsistencyType", ReadConsistencyType_name, ReadConsistencyType_value)
 	proto.RegisterEnum("cockroach.roachpb.PushTxnType", PushTxnType_name, PushTxnType_value)
 }
-func (m *ClientCmdID) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *ClientCmdID) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintApi(data, i, uint64(m.WallTime))
-	data[i] = 0x10
-	i++
-	i = encodeVarintApi(data, i, uint64(m.Random))
-	return i, nil
-}
-
 func (m *Span) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -3157,39 +3099,31 @@ func (m *Header) MarshalTo(data []byte) (int, error) {
 	i += n108
 	data[i] = 0x12
 	i++
-	i = encodeVarintApi(data, i, uint64(m.CmdID.Size()))
-	n109, err := m.CmdID.MarshalTo(data[i:])
+	i = encodeVarintApi(data, i, uint64(m.Replica.Size()))
+	n109, err := m.Replica.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n109
-	data[i] = 0x2a
-	i++
-	i = encodeVarintApi(data, i, uint64(m.Replica.Size()))
-	n110, err := m.Replica.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n110
-	data[i] = 0x30
+	data[i] = 0x18
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RangeID))
 	if m.UserPriority != nil {
-		data[i] = 0x38
+		data[i] = 0x20
 		i++
 		i = encodeVarintApi(data, i, uint64(*m.UserPriority))
 	}
 	if m.Txn != nil {
-		data[i] = 0x42
+		data[i] = 0x2a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Txn.Size()))
-		n111, err := m.Txn.MarshalTo(data[i:])
+		n110, err := m.Txn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n111
+		i += n110
 	}
-	data[i] = 0x48
+	data[i] = 0x30
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ReadConsistency))
 	return i, nil
@@ -3213,11 +3147,11 @@ func (m *BatchRequest) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Header.Size()))
-	n112, err := m.Header.MarshalTo(data[i:])
+	n111, err := m.Header.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n112
+	i += n111
 	if len(m.Requests) > 0 {
 		for _, msg := range m.Requests {
 			data[i] = 0x12
@@ -3251,11 +3185,11 @@ func (m *BatchResponse) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.BatchResponse_Header.Size()))
-	n113, err := m.BatchResponse_Header.MarshalTo(data[i:])
+	n112, err := m.BatchResponse_Header.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n113
+	i += n112
 	if len(m.Responses) > 0 {
 		for _, msg := range m.Responses {
 			data[i] = 0x12
@@ -3290,29 +3224,29 @@ func (m *BatchResponse_Header) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Error.Size()))
-		n114, err := m.Error.MarshalTo(data[i:])
+		n113, err := m.Error.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n114
+		i += n113
 	}
 	data[i] = 0x12
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Timestamp.Size()))
-	n115, err := m.Timestamp.MarshalTo(data[i:])
+	n114, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n115
+	i += n114
 	if m.Txn != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Txn.Size()))
-		n116, err := m.Txn.MarshalTo(data[i:])
+		n115, err := m.Txn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n116
+		i += n115
 	}
 	return i, nil
 }
@@ -3344,14 +3278,6 @@ func encodeVarintApi(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	return offset + 1
 }
-func (m *ClientCmdID) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovApi(uint64(m.WallTime))
-	n += 1 + sovApi(uint64(m.Random))
-	return n
-}
-
 func (m *Span) Size() (n int) {
 	var l int
 	_ = l
@@ -4031,8 +3957,6 @@ func (m *Header) Size() (n int) {
 	_ = l
 	l = m.Timestamp.Size()
 	n += 1 + l + sovApi(uint64(l))
-	l = m.CmdID.Size()
-	n += 1 + l + sovApi(uint64(l))
 	l = m.Replica.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.RangeID))
@@ -4345,94 +4269,6 @@ func (this *ResponseUnion) SetValue(value interface{}) bool {
 		return false
 	}
 	return true
-}
-func (m *ClientCmdID) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowApi
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: ClientCmdID: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ClientCmdID: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field WallTime", wireType)
-			}
-			m.WallTime = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowApi
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.WallTime |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Random", wireType)
-			}
-			m.Random = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowApi
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.Random |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipApi(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthApi
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
 }
 func (m *Span) Unmarshal(data []byte) error {
 	l := len(data)
@@ -10870,36 +10706,6 @@ func (m *Header) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field CmdID", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowApi
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthApi
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.CmdID.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 5:
-			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Replica", wireType)
 			}
 			var msglen int
@@ -10928,7 +10734,7 @@ func (m *Header) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 6:
+		case 3:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
 			}
@@ -10947,7 +10753,7 @@ func (m *Header) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 7:
+		case 4:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field UserPriority", wireType)
 			}
@@ -10967,7 +10773,7 @@ func (m *Header) Unmarshal(data []byte) error {
 				}
 			}
 			m.UserPriority = &v
-		case 8:
+		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)
 			}
@@ -11000,7 +10806,7 @@ func (m *Header) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 9:
+		case 6:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ReadConsistency", wireType)
 			}

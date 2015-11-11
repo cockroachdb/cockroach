@@ -18,8 +18,6 @@
 package kv
 
 import (
-	"math/rand"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -151,29 +149,13 @@ func (cs *chunkingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		panic("empty batch")
 	}
 
-	// Deterministically create ClientCmdIDs for all parts of the batch if
-	// a CmdID is already set (otherwise, leave them empty).
-	var nextID func() roachpb.ClientCmdID
-	empty := roachpb.ClientCmdID{}
-	if empty == ba.CmdID {
-		nextID = func() roachpb.ClientCmdID {
-			return empty
-		}
-	} else {
-		rng := rand.New(rand.NewSource(ba.CmdID.Random))
-		id := ba.CmdID
-		nextID = func() roachpb.ClientCmdID {
-			curID := id             // copy
-			id.Random = rng.Int63() // adjust for next call
-			return curID
-		}
-	}
-
 	parts := ba.Split()
 	var rplChunks []*roachpb.BatchResponse
 	for _, part := range parts {
 		ba.Requests = part
-		ba.CmdID = nextID()
+		// Increase the sequence counter to account for the fact that while
+		// chunking, we're likely sending multiple requests to the same Replica.
+		ba.SetNewRequest()
 		rpl, err := cs.f(ctx, ba)
 		if err != nil {
 			return nil, err

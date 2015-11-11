@@ -18,6 +18,7 @@
 package roachpb
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 
@@ -39,26 +40,6 @@ func (r RangeIDSlice) Len() int           { return len(r) }
 func (r RangeIDSlice) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
 func (r RangeIDSlice) Less(i, j int) bool { return r[i] < r[j] }
 
-// ZeroCmdID is a trivial ClientCmdID.
-var ZeroCmdID = ClientCmdID{}
-
-// IsEmpty returns true if the client command ID has zero values.
-func (ccid ClientCmdID) IsEmpty() bool {
-	return ccid.WallTime == 0 && ccid.Random == 0
-}
-
-// TraceID implements tracer.Traceable and returns the ClientCmdID in the
-// format "c<WallTime>.<Random>".
-func (ccid ClientCmdID) TraceID() string {
-	return fmt.Sprint("c", ccid.WallTime, ".", ccid.Random)
-}
-
-// TraceName implements tracer.Traceable.
-func (ccid ClientCmdID) TraceName() string {
-	// 1 day = 8.64*10E13ns
-	return fmt.Sprint("c", ccid.WallTime%10E14, ".", ccid.Random%100)
-}
-
 const (
 	isAdmin    = 1 << iota // admin cmds don't go through raft, but run on leader
 	isRead                 // read-only cmds don't go through raft, but may run on leader
@@ -68,7 +49,19 @@ const (
 	isRange                // range commands may span multiple keys
 	isReverse              // reverse commands traverse ranges in descending direction
 	isAlone                // requests which must be alone in a batch
+	flagMax                // sentinel
 )
+
+var flagMap = map[int]string{
+	isAdmin:    "Ad",
+	isRead:     "Rd",
+	isWrite:    "Wr",
+	isTxn:      "", // not useful to print this
+	isTxnWrite: "", // not useful to print this
+	isRange:    "Rg",
+	isReverse:  "Rv",
+	isAlone:    "Al",
+}
 
 // IsReadOnly returns true iff the request is read-only.
 func IsReadOnly(args Request) bool {
@@ -505,6 +498,16 @@ func NewReverseScan(key, endKey Key, maxResults int64) Request {
 		},
 		MaxResults: maxResults,
 	}
+}
+
+func flagsToStr(flags int) string {
+	var buf bytes.Buffer
+	for flag := 1; flag < flagMax; flag = flag << 1 {
+		if (flags & flag) != 0 {
+			buf.WriteString(flagMap[flag])
+		}
+	}
+	return buf.String()
 }
 
 func (*GetRequest) flags() int                { return isRead | isTxn }
