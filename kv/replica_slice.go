@@ -98,15 +98,12 @@ func (rs replicaSlice) FindReplicaByNodeID(nodeID roachpb.NodeID) int {
 // number of attributes successfully matched to at least one replica is
 // returned (hence, if the return value equals the length of the replicaSlice,
 // at least one replica matched all attributes).
-//
-// TODO(peter): need to randomize the replica order within each bucket.
 func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 	if len(rs) < 2 {
 		return 0
 	}
 	topIndex := len(rs) - 1
-	bucket := 0
-	for ; bucket < len(attrs); bucket++ {
+	for bucket := 0; bucket < len(attrs); bucket++ {
 		firstNotOrdered := 0
 		for i := 0; i <= topIndex; i++ {
 			if bucket < len(rs[i].attrs()) && rs[i].attrs()[bucket] == attrs[bucket] {
@@ -117,13 +114,13 @@ func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 				firstNotOrdered++
 			}
 		}
-		rs.randPerm(firstNotOrdered, topIndex)
+		rs.randPerm(firstNotOrdered, topIndex, rand.Perm)
 		if firstNotOrdered == 0 {
-			break
+			return bucket
 		}
 		topIndex = firstNotOrdered - 1
 	}
-	return bucket
+	return len(attrs)
 }
 
 // MoveToFront moves the replica at the given index to the front
@@ -140,7 +137,7 @@ func (rs replicaSlice) MoveToFront(i int) {
 	rs[0] = front
 }
 
-func (rs replicaSlice) randPerm(startIndex int, topIndex int) {
+func (rs replicaSlice) randPerm(startIndex int, topIndex int, permFn func(int) []int) {
 	if topIndex >= len(rs)-1 {
 		return
 	}
@@ -148,7 +145,7 @@ func (rs replicaSlice) randPerm(startIndex int, topIndex int) {
 	if length < 2 {
 		return
 	}
-	randIndices := rand.Perm(length)
+	randIndices := permFn(length)
 	for i := 0; i < length; i++ {
 		rs.Swap(startIndex+i, startIndex+randIndices[i])
 	}
