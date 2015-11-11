@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -43,7 +44,7 @@ const (
 	defaultScanMaxIdleTime    = 5 * time.Second
 	defaultMetricsFrequency   = 10 * time.Second
 	defaultTimeUntilStoreDead = 5 * time.Minute
-	defaultAllowRebalancing   = false
+	defaultBalanceMode        = storage.BalanceModeUsage
 )
 
 // Context holds parameters needed to setup a server.
@@ -93,8 +94,8 @@ type Context struct {
 	// The value is split evenly between the stores if there are more than one.
 	CacheSize int64
 
-	// Enables this server to rebalance replicas to other servers.
-	AllowRebalancing bool
+	// BalanceMode determines how this node makes balancing decisions.
+	BalanceMode storage.BalanceMode
 
 	// Parsed values.
 
@@ -143,7 +144,7 @@ func (ctx *Context) InitDefaults() {
 	ctx.ScanMaxIdleTime = defaultScanMaxIdleTime
 	ctx.MetricsFrequency = defaultMetricsFrequency
 	ctx.TimeUntilStoreDead = defaultTimeUntilStoreDead
-	ctx.AllowRebalancing = defaultAllowRebalancing
+	ctx.BalanceMode = defaultBalanceMode
 }
 
 // Get the stores on both start and init.

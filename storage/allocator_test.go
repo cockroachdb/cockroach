@@ -168,7 +168,7 @@ func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
 	g := gossip.New(rpcContext, gossip.TestBootstrap)
 	storePool := NewStorePool(g, TestTimeUntilStoreDeadOff, stopper)
-	a := MakeAllocator(storePool, RebalancingOptions{AllowRebalance: true})
+	a := MakeAllocator(storePool, AllocatorOptions{AllowRebalance: true})
 	return stopper, g, storePool, a
 }
 
@@ -1080,7 +1080,7 @@ func Example_rebalancing() {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	sp := NewStorePool(g, TestTimeUntilStoreDeadOff, stopper)
-	alloc := MakeAllocator(sp, RebalancingOptions{AllowRebalance: true, Deterministic: true})
+	alloc := MakeAllocator(sp, AllocatorOptions{AllowRebalance: true, Deterministic: true})
 
 	var wg sync.WaitGroup
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ roachpb.Value) { wg.Done() })
