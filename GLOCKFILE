@@ -41,6 +41,7 @@ github.com/shurcooL/sanitized_anchor_name 10ef21a441db47d8b13ebcc5fd2310f636973c
 github.com/spf13/cobra 2ab15e2b40dbbe9e48d556cb90fb95b8f1f3f105
 github.com/spf13/pflag 08b1a584251b5b62f458943640fc8ebd4d50aaa5
 github.com/tebeka/go2xunit d45000af2242dd0e7b8c7b07d82a1068adc5fd40
+github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 golang.org/x/crypto c8b9e6388ef638d5a8a9d865c634befdc46a6784
 golang.org/x/net 2fd7f1556cc0a4aa45f8aee9626ce303433f31eb
 golang.org/x/text 0fe7e6856182a6ebfcf1e6a7aa90bead9a8e1bc0

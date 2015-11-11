@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/termie/go-shutil"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -483,6 +485,55 @@ func BenchmarkMVCCMergeTimeSeries(b *testing.B) {
 		b.Fatal(err)
 	}
 	runMVCCMerge(&value, 1024, b)
+}
+
+func runMVCCDeleteRange(valueBytes int, b *testing.B) {
+	// 512 KB ranges so the benchmark doesn't take forever
+	const rangeBytes = 512 * 1024
+	const overhead = 48 // Per key/value overhead (empirically determined)
+	numKeys := rangeBytes / (overhead + valueBytes)
+	rocksdb, stopper := setupMVCCScanData(1, numKeys, valueBytes, b)
+	stopper.Stop()
+
+	b.SetBytes(rangeBytes)
+	b.StopTimer()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		locDirty := rocksdb.dir + "_dirty"
+		if err := os.RemoveAll(locDirty); err != nil {
+			b.Fatal(err)
+		}
+		if err := shutil.CopyTree(rocksdb.dir, locDirty, nil); err != nil {
+			b.Fatal(err)
+		}
+		stopper := stop.NewStopper()
+		rocksdb := NewRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, locDirty, rocksdb.cacheSize, stopper)
+		if err := rocksdb.Open(); err != nil {
+			b.Fatal(err)
+		}
+
+		b.StartTimer()
+		_, err := MVCCDeleteRange(rocksdb, &MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, roachpb.MaxTimestamp, nil)
+		if err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+
+		stopper.Stop()
+	}
+}
+
+func BenchmarkMVCCDeleteRange1Version8Bytes(b *testing.B) {
+	runMVCCDeleteRange(8, b)
+}
+
+func BenchmarkMVCCDeleteRange1Version32Bytes(b *testing.B) {
+	runMVCCDeleteRange(32, b)
+}
+
+func BenchmarkMVCCDeleteRange1Version256Bytes(b *testing.B) {
+	runMVCCDeleteRange(256, b)
 }
 
 // runMVCCComputeStats benchmarks computing MVCC stats on a 64MB range of data.
