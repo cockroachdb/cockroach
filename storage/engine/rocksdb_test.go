@@ -134,17 +134,25 @@ func TestRocksDBCompaction(t *testing.T) {
 // runs and stored in the current directory as
 // "mvcc_scan_<versions>_<keys>_<valueBytes>".
 func setupMVCCScanData(numVersions, numKeys, valueBytes int, b *testing.B) (*RocksDB, *stop.Stopper) {
+	return setupMVCCData(numVersions, numKeys, valueBytes, true, b)
+}
+
+func setupMVCCData(numVersions, numKeys, valueBytes int, reuse bool, b *testing.B) (*RocksDB, *stop.Stopper) {
 	loc := fmt.Sprintf("mvcc_scan_%d_%d_%d", numVersions, numKeys, valueBytes)
 
-	exists := true
-	if _, err := os.Stat(loc); os.IsNotExist(err) {
-		exists = false
+	if !reuse {
+		if err := os.RemoveAll(loc); err != nil {
+			b.Fatal(err)
+		}
 	}
 
-	log.Infof("creating mvcc data: %s", loc)
+	_, err := os.Stat(loc)
+	exists := !os.IsNotExist(err)
+
 	const cacheSize = 8 << 30 // 8 GB
 	stopper := stop.NewStopper()
 	rocksdb := NewRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize, stopper)
+
 	if err := rocksdb.Open(); err != nil {
 		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}
@@ -152,6 +160,8 @@ func setupMVCCScanData(numVersions, numKeys, valueBytes int, b *testing.B) (*Roc
 	if exists {
 		return rocksdb, stopper
 	}
+
+	log.Infof("creating mvcc data: %s", loc)
 
 	rng, _ := randutil.NewPseudoRand()
 	keys := make([]roachpb.Key, numKeys)
@@ -482,6 +492,40 @@ func BenchmarkMVCCMergeTimeSeries(b *testing.B) {
 		b.Fatal(err)
 	}
 	runMVCCMerge(&value, 1024, b)
+}
+
+func runMVCCDeleteRange(valueBytes int, b *testing.B) {
+	// 512 KB ranges so the benchmark doesn't take forever
+	const rangeBytes = 512 * 1024
+	const overhead = 48 // Per key/value overhead (empirically determined)
+	numKeys := rangeBytes / (overhead + valueBytes)
+
+	b.SetBytes(rangeBytes)
+	b.ResetTimer()
+	b.StopTimer()
+
+	for i := 0; i < b.N; i++ {
+		rocksdb, stopper := setupMVCCData(1, numKeys, valueBytes, false, b)
+		b.StartTimer()
+		_, err := MVCCDeleteRange(rocksdb, &MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, roachpb.MaxTimestamp, nil)
+		if err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+		stopper.Stop()
+	}
+}
+
+func BenchmarkMVCCDeleteRange1Version8Bytes(b *testing.B) {
+	runMVCCDeleteRange(8, b)
+}
+
+func BenchmarkMVCCDeleteRange1Version32Bytes(b *testing.B) {
+	runMVCCDeleteRange(32, b)
+}
+
+func BenchmarkMVCCDeleteRange1Version256Bytes(b *testing.B) {
+	runMVCCDeleteRange(256, b)
 }
 
 // runMVCCComputeStats merges value into numKeys separate keys.
