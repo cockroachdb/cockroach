@@ -603,19 +603,18 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.clock.Now()
-	ba.CmdID = ba.GetOrCreateCmdID(ba.Timestamp.WallTime)
 	ba.Txn = txn.Clone()
 
 	if !proceed {
 		// Actively abort the transaction and its intents since we assume it's abandoned
-		ab := &roachpb.EndTransactionRequest{
+		et := &roachpb.EndTransactionRequest{
 			Commit:  false,
 			Intents: txnMeta.intents(),
 		}
-		ba.Add(ab)
+		ba.Add(et)
 		if _, err := tc.wrapped.Send(ctx, ba); err != nil {
 			if log.V(1) {
-				log.Warningf("heartbeat abort to %s failed: %s ", txn, err)
+				log.Warningf("abort due to inactivty for %s failed: %s ", txn, err)
 			}
 
 		}
@@ -624,9 +623,6 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 
 	hb := &roachpb.HeartbeatTxnRequest{}
 	hb.Key = txn.Key
-	ba := roachpb.BatchRequest{}
-	ba.Timestamp = tc.clock.Now()
-	ba.Txn = txn.Clone()
 	ba.Add(hb)
 
 	epochEnds := trace.Epoch("heartbeat")
