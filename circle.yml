@@ -13,8 +13,6 @@ dependencies:
   cache_directories:
     - ~/buildcache
     - ~/uicache
-  post:
-    - aws configure set region us-east-1
 
 test:
   override:
@@ -31,4 +29,6 @@ deployment:
           if [ -n "$DOCKER_EMAIL" ]; then
             build/push-docker-deploy.sh
           fi
+      - aws configure set region us-east-1
+      - build/build-static-binaries.sh
       - build/push-aws.sh

@@ -1,7 +1,5 @@
 #!/bin/bash
-# Build a statically linked Cockroach binary
-#
-# Author: Peter Mattis (peter@cockroachlabs.com)
+# Build various statically linked binaries.
 
 set -euo pipefail
 
@@ -12,19 +10,18 @@ set -euo pipefail
 # commands in the if-branch to be executed within the docker
 # container.
 if [ "${1-}" = "docker" ]; then
-    time make STATIC=1 release
+    time make STATIC=1 build
+    time make STATIC=1 testbuild PKG=./sql
 
     # Make sure the created binary is statically linked.  Seems
     # awkward to do this programmatically, but this should work.
     file cockroach | grep -F 'statically linked' > /dev/null
+    file sql/sql.test | grep -F 'statically linked' > /dev/null
 
-    mv cockroach build/deploy/cockroach
-
+    strip -S cockroach
+    strip -S sql/sql.test
     exit 0
 fi
 
 # Build the cockroach and test binaries.
 $(dirname $0)/builder.sh $0 docker
-
-# Build the image.
-docker build --tag=cockroachdb/cockroach "$(dirname $0)/deploy"
