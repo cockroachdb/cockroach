@@ -1173,7 +1173,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
 		header := arg.Header()
-		if err := verifyKeys(header.Key, header.EndKey, roachpb.IsRange(arg)); err != nil {
+		if err := verifyKeys(header.Key, header.EndKey, roachpb.IsRange(arg)); err != nil && arg.Method() != roachpb.Noop {
 			return nil, roachpb.NewError(err)
 		}
 	}
