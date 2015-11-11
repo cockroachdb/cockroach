@@ -398,6 +398,7 @@ func TestPrettyPrint(t *testing.T) {
 		{SystemMax, "/System/Max"},
 
 		// table
+		{UserTableDataMin, "/Table/1000"},
 		{MakeTablePrefix(111), "/Table/111"},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey("foo")), `/Table/42/"foo"`},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeFloat(nil, float64(233.221112)))), "/Table/42/233.221112"},

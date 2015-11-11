@@ -223,9 +223,9 @@ func Example_ranges() {
 	// 4 result(s)
 	// range split c
 	// range ls
-	// ""-"c" [1]
+	// /Table/""-/Table/"c" [1]
 	// 	0: node-id=1 store-id=1
-	// "c"-"\xff\xff" [2]
+	// /Table/"c"-/Table/"\xff" [2]
 	// 	0: node-id=1 store-id=1
 	// 2 result(s)
 	// kv scan
@@ -242,7 +242,7 @@ func Example_ranges() {
 	// 4 result(s)
 	// range merge b
 	// range ls
-	// ""-"\xff\xff" [1]
+	// /Table/""-/Table/"\xff" [1]
 	// 	0: node-id=1 store-id=1
 	// 1 result(s)
 	// kv scan
@@ -350,9 +350,9 @@ func Example_max_results() {
 	// range split c
 	// range split d
 	// range ls --max-results=2
-	// ""-"c" [1]
+	// /Table/""-/Table/"c" [1]
 	// 	0: node-id=1 store-id=1
-	// "c"-"d" [2]
+	// /Table/"c"-/Table/"d" [2]
 	// 	0: node-id=1 store-id=1
 	// 2 result(s)
 	// quit
