@@ -63,12 +63,12 @@ type Storage interface {
 	// state machine.
 	AppliedIndex(groupID roachpb.RangeID) (uint64, error)
 
-	// GroupLocker returns a lock which (if non-nil) will be acquired
+	// RaftLocker returns a lock which (if non-nil) will be acquired
 	// when a group is being created (which entails multiple calls to
 	// Storage methods and may race with the removal of a previous
 	// incarnation of a group). If it returns a non-nil value it must
 	// return the same value on every call.
-	GroupLocker() sync.Locker
+	RaftLocker() sync.Locker
 }
 
 // MemoryStorage is an in-memory implementation of Storage for testing.
@@ -130,8 +130,8 @@ func (m *MemoryStorage) AppliedIndex(groupID roachpb.RangeID) (uint64, error) {
 	return 0, nil
 }
 
-// GroupLocker implements the Storage interface by returning nil.
-func (m *MemoryStorage) GroupLocker() sync.Locker {
+// RaftLocker implements the Storage interface by returning nil.
+func (m *MemoryStorage) RaftLocker() sync.Locker {
 	return nil
 }
 

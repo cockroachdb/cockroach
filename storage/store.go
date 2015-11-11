@@ -374,7 +374,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	s.splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.ctx.Gossip, s.ReplicaCount)
 	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions)
-	s.replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip, s.GroupLocker())
+	s.replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip, s.RaftLocker())
 	s.raftLogQueue = newRaftLogQueue(s.db, s.ctx.Gossip)
 	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
 
@@ -1626,8 +1626,8 @@ func (s *Store) ReplicasFromSnapshot(snap raftpb.Snapshot) ([]roachpb.ReplicaDes
 	return parsedSnap.RangeDescriptor.Replicas, nil
 }
 
-// GroupLocker implements the multiraft.Storage interface.
-func (s *Store) GroupLocker() sync.Locker {
+// RaftLocker implements the multiraft.Storage interface.
+func (s *Store) RaftLocker() sync.Locker {
 	return &s.raftGroupLocker
 }
 

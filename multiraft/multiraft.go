@@ -806,7 +806,7 @@ func (s *state) handleMessage(req *RaftMessageRequest) {
 // messages (in which case the replicaID comes from the incoming
 // message, since nothing is on disk yet).
 func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) error {
-	locker := s.Storage.GroupLocker()
+	locker := s.Storage.RaftLocker()
 	if locker != nil {
 		locker.Lock()
 		defer locker.Unlock()
