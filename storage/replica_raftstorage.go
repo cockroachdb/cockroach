@@ -83,22 +83,32 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // TODO(bdarnell): consider caching for recent entries, if rocksdb's builtin caching
 // is insufficient.
 func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
+	if lo > hi {
+		return nil, util.Errorf("lo:%d is greater than hi:%d", lo, hi)
+	}
 	// Scan over the log to find the requested entries in the range [lo, hi),
 	// stopping once we have enough.
 	var ents []raftpb.Entry
 	size := uint64(0)
 	var ent raftpb.Entry
+	expectedIndex := lo
+	exceededMaxBytes := false
 	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
 		if err := kv.Value.GetProto(&ent); err != nil {
 			return false, err
 		}
+		// Exit early if we have any gaps or it has been compacted.
+		if ent.Index != expectedIndex {
+			return true, nil
+		}
+		expectedIndex++
 		size += uint64(ent.Size())
 		ents = append(ents, ent)
-		return maxBytes > 0 && size > maxBytes, nil
+		exceededMaxBytes = maxBytes > 0 && size > maxBytes
+		return exceededMaxBytes, nil
 	}
 
 	rangeID := r.Desc().RangeID
-
 	_, err := engine.MVCCIterate(r.store.Engine(),
 		keys.RaftLogKey(rangeID, lo),
 		keys.RaftLogKey(rangeID, hi),
@@ -109,19 +119,53 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 		return nil, err
 	}
 
-	// If neither the number of entries nor the size limitations had an
-	// effect, we weren't able to supply everything the client wanted.
-	if len(ents) != int(hi-lo) && (maxBytes == 0 || size < maxBytes) {
-		return nil, raft.ErrUnavailable
+	// Did the correct number of results come back? If so, we're all good.
+	if len(ents) == int(hi)-int(lo) {
+		return ents, nil
 	}
 
-	return ents, nil
+	// Did we hit the size limit? If so, return what we have.
+	if exceededMaxBytes {
+		return ents, nil
+	}
+
+	// Did we get any results at all? Because something went wrong.
+	if len(ents) > 0 {
+		// Was the lo already truncated?
+		if ents[0].Index > lo {
+			return nil, raft.ErrCompacted
+		}
+
+		// Was the missing index after the last index?
+		lastIndex, err := r.LastIndex()
+		if err != nil {
+			return nil, err
+		}
+		if lastIndex <= expectedIndex {
+			return nil, raft.ErrUnavailable
+		}
+
+		// We have a gap in the record, if so, return a nasty error.
+		return nil, util.Errorf("there is a gap in the index record between lo:%d and hi:%d at index:%d", lo, hi, expectedIndex)
+	}
+
+	// No results, was it due to unavailability or truncation?
+	ts, err := r.raftTruncatedState()
+	if err != nil {
+		return nil, err
+	}
+	if ts.Index >= lo {
+		// The requested lo index has already been truncated.
+		return nil, raft.ErrCompacted
+	}
+	// The requested lo index does not yet exist.
+	return nil, raft.ErrUnavailable
 }
 
 // Term implements the raft.Storage interface.
 func (r *Replica) Term(i uint64) (uint64, error) {
 	ents, err := r.Entries(i, i+1, 0)
-	if err == raft.ErrUnavailable {
+	if err == raft.ErrCompacted {
 		ts, err := r.raftTruncatedState()
 		if err != nil {
 			return 0, err
@@ -129,7 +173,7 @@ func (r *Replica) Term(i uint64) (uint64, error) {
 		if i == ts.Index {
 			return ts.Term, nil
 		}
-		return 0, raft.ErrUnavailable
+		return 0, raft.ErrCompacted
 	} else if err != nil {
 		return 0, err
 	}
