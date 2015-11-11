@@ -60,9 +60,6 @@ type Config struct {
 	Transport Transport
 	// Ticker may be nil to use real time and TickInterval.
 	Ticker Ticker
-	// StateMachine may be nil if the state machine is transient and always starts from
-	// a blank slate.
-	StateMachine StateMachine
 
 	// A new election is called if the election timeout elapses with no
 	// contact from the leader.  The actual timeout is chosen randomly
@@ -863,12 +860,9 @@ func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID
 		StoreID:   s.storeID,
 	})
 
-	var appliedIndex uint64
-	if s.StateMachine != nil {
-		appliedIndex, err = s.StateMachine.AppliedIndex(groupID)
-		if err != nil {
-			return err
-		}
+	appliedIndex, err := s.Storage.AppliedIndex(groupID)
+	if err != nil {
+		return err
 	}
 
 	raftCfg := &raft.Config{

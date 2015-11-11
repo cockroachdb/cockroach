@@ -59,21 +59,16 @@ type Storage interface {
 	// panics.
 	CanApplySnapshot(groupID roachpb.RangeID, snap raftpb.Snapshot) bool
 
-	// GroupLocker returns a lock which (if non-nil) will be acquired
-	// when a group is being created (which entails multiple calls to
-	// Storage and StateMachine methods and may race with the removal of
-	// a previous incarnation of a group). If it returns a non-nil value
-	// it must return the same value on every call.
-	GroupLocker() sync.Locker
-}
-
-// The StateMachine interface is supplied by the application to manage a persistent
-// state machine (in Cockroach the StateMachine and the Storage are the same thing
-// but they are logically distinct and systems like etcd keep them separate).
-type StateMachine interface {
 	// AppliedIndex returns the last index which has been applied to the given group's
 	// state machine.
 	AppliedIndex(groupID roachpb.RangeID) (uint64, error)
+
+	// GroupLocker returns a lock which (if non-nil) will be acquired
+	// when a group is being created (which entails multiple calls to
+	// Storage methods and may race with the removal of a previous
+	// incarnation of a group). If it returns a non-nil value it must
+	// return the same value on every call.
+	GroupLocker() sync.Locker
 }
 
 // MemoryStorage is an in-memory implementation of Storage for testing.
@@ -127,6 +122,12 @@ func (m *MemoryStorage) ReplicasFromSnapshot(_ raftpb.Snapshot) ([]roachpb.Repli
 // CanApplySnapshot implements the Storage interface.
 func (m *MemoryStorage) CanApplySnapshot(_ roachpb.RangeID, _ raftpb.Snapshot) bool {
 	return true
+}
+
+// AppliedIndex returns the last index which has been applied to the given group's
+// state machine.
+func (m *MemoryStorage) AppliedIndex(groupID roachpb.RangeID) (uint64, error) {
+	return 0, nil
 }
 
 // GroupLocker implements the Storage interface by returning nil.

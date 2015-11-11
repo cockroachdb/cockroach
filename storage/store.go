@@ -455,7 +455,6 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	if s.multiraft, err = multiraft.NewMultiRaft(s.Ident.NodeID, s.Ident.StoreID, &multiraft.Config{
 		Transport:              s.ctx.Transport,
 		Storage:                s,
-		StateMachine:           s,
 		TickInterval:           s.ctx.RaftTickInterval,
 		ElectionTimeoutTicks:   s.ctx.RaftElectionTimeoutTicks,
 		HeartbeatIntervalTicks: s.ctx.RaftHeartbeatIntervalTicks,
@@ -1660,7 +1659,7 @@ func (s *Store) CanApplySnapshot(rangeID roachpb.RangeID, snap raftpb.Snapshot) 
 	return true
 }
 
-// AppliedIndex implements the multiraft.StateMachine interface.
+// AppliedIndex implements the multiraft.Storage interface.
 func (s *Store) AppliedIndex(groupID roachpb.RangeID) (uint64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
