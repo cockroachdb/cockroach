@@ -38,6 +38,12 @@ typedef struct {
   int len;
 } DBString;
 
+typedef struct {
+  int valid;
+  DBSlice key;
+  DBSlice value;
+} DBIterState;
+
 // A DBStatus is an alias for DBString and is used to indicate that
 // the return value indicates the success or failure of an
 // operation. If DBStatus.data == NULL the operation succeeded.
@@ -120,35 +126,23 @@ DBIterator* DBNewIter(DBEngine* db, DBSnapshot* snapshot);
 void DBIterDestroy(DBIterator* iter);
 
 // Positions the iterator at the first key that is >= "key".
-void DBIterSeek(DBIterator* iter, DBSlice key);
+DBIterState DBIterSeek(DBIterator* iter, DBSlice key);
 
 // Positions the iterator at the first key in the database.
-void DBIterSeekToFirst(DBIterator* iter);
+DBIterState DBIterSeekToFirst(DBIterator* iter);
 
 // Positions the iterator at the last key in the database.
-void DBIterSeekToLast(DBIterator* iter);
-
-// Returns 1 if the iterator is positioned at a valid key/value pair
-// and 0 otherwise.
-int  DBIterValid(DBIterator* iter);
+DBIterState DBIterSeekToLast(DBIterator* iter);
 
 // Advances the iterator to the next key. After this call,
 // DBIterValid() returns 1 iff the iterator was not positioned at the
 // last key.
-void DBIterNext(DBIterator* iter);
+DBIterState DBIterNext(DBIterator* iter);
 
 // Moves the iterator back to the previous key. After this call,
 // DBIterValid() returns 1 iff the iterator was not positioned at the
 // first key.
-void DBIterPrev(DBIterator* iter);
-
-// Returns the key at the current iterator position. Note that a slice
-// is returned and the memory does not have to be freed.
-DBSlice DBIterKey(DBIterator* iter);
-
-// Returns the value at the current iterator position. Note that a
-// slice is returned and the memory does not have to be freed.
-DBSlice DBIterValue(DBIterator* iter);
+DBIterState DBIterPrev(DBIterator* iter);
 
 // Returns any error associated with the iterator.
 DBStatus DBIterError(DBIterator* iter);

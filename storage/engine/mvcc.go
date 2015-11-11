@@ -1591,21 +1591,25 @@ func MVCCComputeStats(iter Iterator, nowNanos int64) (MVCCStats, error) {
 	ms := MVCCStats{LastUpdateNanos: nowNanos}
 	first := false
 	meta := &MVCCMetadata{}
+	scratch := make([]byte, 0, 128)
 
 	for ; iter.Valid(); iter.Next() {
-		key, ts, isValue, err := MVCCDecodeKey(iter.Key())
+		iterKey := iter.unsafeKey()
+		iterValue := iter.unsafeValue()
+
+		key, ts, isValue, err := mvccDecodeKey(iterKey, scratch)
 		if err != nil {
 			return ms, err
 		}
 		_, sys := updateStatsForKey(&ms, key)
 		if !isValue {
-			totalBytes := int64(len(iter.Value())) + int64(len(iter.Key()))
+			totalBytes := int64(len(iterValue)) + int64(len(iterKey))
 			first = true
-			if err := proto.Unmarshal(iter.Value(), meta); err != nil {
-				return ms, util.Errorf("unable to unmarshal MVCC metadata %b: %s", iter.Value(), err)
+			if err := proto.Unmarshal(iterValue, meta); err != nil {
+				return ms, err
 			}
 			if sys {
-				ms.SysBytes += int64(len(iter.Key())) + int64(len(iter.Value()))
+				ms.SysBytes += int64(len(iterKey)) + int64(len(iterValue))
 				ms.SysCount++
 			} else {
 				if !meta.Deleted {
@@ -1615,15 +1619,15 @@ func MVCCComputeStats(iter Iterator, nowNanos int64) (MVCCStats, error) {
 					// First value is deleted, so it's GC'able; add meta key & value bytes to age stat.
 					ms.GCBytesAge += totalBytes * (nowNanos/1E9 - meta.Timestamp.WallTime/1E9)
 				}
-				ms.KeyBytes += int64(len(iter.Key()))
-				ms.ValBytes += int64(len(iter.Value()))
+				ms.KeyBytes += int64(len(iterKey))
+				ms.ValBytes += int64(len(iterValue))
 				ms.KeyCount++
 				if meta.IsInline() {
 					ms.ValCount++
 				}
 			}
 		} else {
-			totalBytes := int64(len(iter.Value())) + mvccVersionTimestampSize
+			totalBytes := int64(len(iterValue)) + mvccVersionTimestampSize
 			if sys {
 				ms.SysBytes += totalBytes
 			} else {
@@ -1643,15 +1647,15 @@ func MVCCComputeStats(iter Iterator, nowNanos int64) (MVCCStats, error) {
 					if meta.KeyBytes != mvccVersionTimestampSize {
 						return ms, util.Errorf("expected mvcc metadata key bytes to equal %d; got %d", mvccVersionTimestampSize, meta.KeyBytes)
 					}
-					if meta.ValBytes != int64(len(iter.Value())) {
-						return ms, util.Errorf("expected mvcc metadata val bytes to equal %d; got %d", len(iter.Value()), meta.ValBytes)
+					if meta.ValBytes != int64(len(iterValue)) {
+						return ms, util.Errorf("expected mvcc metadata val bytes to equal %d; got %d", len(iterValue), meta.ValBytes)
 					}
 				} else {
 					// Overwritten value; add value bytes to the GC'able bytes age stat.
 					ms.GCBytesAge += totalBytes * (nowNanos/1E9 - ts.WallTime/1E9)
 				}
 				ms.KeyBytes += mvccVersionTimestampSize
-				ms.ValBytes += int64(len(iter.Value()))
+				ms.ValBytes += int64(len(iterValue))
 				ms.ValCount++
 			}
 		}
@@ -1691,15 +1695,8 @@ func mvccEncodeTimestamp(key MVCCKey, timestamp roachpb.Timestamp) MVCCKey {
 	return key
 }
 
-// MVCCDecodeKey decodes encodedKey by binary decoding the leading
-// bytes of encodedKey. If there are no remaining bytes, returns the
-// decoded key, an empty timestamp, and false, to indicate the key is
-// for an MVCC metadata or a raw value. Otherwise, there must be
-// exactly 12 trailing bytes and they're decoded into a timestamp.
-// The decoded key, timestamp and true are returned to indicate the
-// key is for an MVCC versioned value.
-func MVCCDecodeKey(encodedKey MVCCKey) (roachpb.Key, roachpb.Timestamp, bool, error) {
-	tsBytes, key, err := encoding.DecodeBytes(encodedKey, nil)
+func mvccDecodeKey(encodedKey MVCCKey, tmpbuf []byte) (roachpb.Key, roachpb.Timestamp, bool, error) {
+	tsBytes, key, err := encoding.DecodeBytes(encodedKey, tmpbuf)
 	if err != nil {
 		return nil, roachpb.Timestamp{}, false, err
 	}
@@ -1720,6 +1717,17 @@ func MVCCDecodeKey(encodedKey MVCCKey) (roachpb.Key, roachpb.Timestamp, bool, er
 		return nil, roachpb.Timestamp{}, false, err
 	}
 	return key, roachpb.Timestamp{WallTime: int64(walltime), Logical: int32(logical)}, true, nil
+}
+
+// MVCCDecodeKey decodes encodedKey by binary decoding the leading
+// bytes of encodedKey. If there are no remaining bytes, returns the
+// decoded key, an empty timestamp, and false, to indicate the key is
+// for an MVCC metadata or a raw value. Otherwise, there must be
+// exactly 12 trailing bytes and they're decoded into a timestamp.
+// The decoded key, timestamp and true are returned to indicate the
+// key is for an MVCC versioned value.
+func MVCCDecodeKey(encodedKey MVCCKey) (roachpb.Key, roachpb.Timestamp, bool, error) {
+	return mvccDecodeKey(encodedKey, nil)
 }
 
 // willOverflow returns true iff adding both inputs would under- or overflow
