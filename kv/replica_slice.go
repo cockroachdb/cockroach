@@ -146,7 +146,9 @@ func (rs replicaSlice) randPerm(startIndex int, topIndex int, permFn func(int) [
 		return
 	}
 	randIndices := permFn(length)
-	for i := 0; i < length; i++ {
-		rs.Swap(startIndex+i, startIndex+randIndices[i])
+	shuffled := make(replicaSlice, length, length)
+	for i, v := range randIndices {
+		shuffled[i] = rs[v+startIndex]
 	}
+	copy(rs[startIndex:], shuffled)
 }

@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
 func verifyOrdering(attrs []string, replicas replicaSlice, prefixLen int) bool {
@@ -121,21 +120,28 @@ func TestReplicaSetMoveToFront(t *testing.T) {
 func TestReplicaSetRandPerm(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	rs := createReplicaSlice()
-	r := rand.New(rand.NewSource(randutil.NewPseudoSeed()))
+	r := rand.New(rand.NewSource(0))
 	rs.randPerm(0, 4, r.Perm)
 	exp := []roachpb.StoreID{1, 2, 3, 4, 5}
 	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
 		t.Errorf("expected order %s, got %s", exp, stores)
 	}
+	r = rand.New(rand.NewSource(0))
 	rs.randPerm(2, 2, r.Perm)
 	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
 		t.Errorf("expected order %s, got %s", exp, stores)
 	}
-
+	r = rand.New(rand.NewSource(0))
 	rs.randPerm(0, 2, r.Perm)
-	stores := getStores(rs)[3:5]
-	exp = exp[3:5]
-	if !reflect.DeepEqual(stores, exp) {
+	exp = []roachpb.StoreID{2, 3, 1, 4, 5}
+	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
+		t.Errorf("expected order %s, got %s", exp, stores)
+	}
+	r = rand.New(rand.NewSource(0))
+	rs = createReplicaSlice()
+	rs.randPerm(1, 3, r.Perm)
+	exp = []roachpb.StoreID{1, 3, 4, 2, 5}
+	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
 		t.Errorf("expected order %s, got %s", exp, stores)
 	}
 }
