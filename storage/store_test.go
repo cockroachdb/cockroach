@@ -1474,6 +1474,8 @@ func TestStoreBadRequests(t *testing.T) {
 
 	txn := newTransaction("test", roachpb.Key("a"), 1 /* priority */, roachpb.SERIALIZABLE, store.ctx.Clock)
 
+	args0 := getArgs(roachpb.KeyMin)
+
 	args1 := getArgs(roachpb.Key("a"))
 	args1.EndKey = roachpb.Key("b")
 
@@ -1502,6 +1504,7 @@ func TestStoreBadRequests(t *testing.T) {
 		header *roachpb.Header
 		err    string
 	}{
+		{&args0, nil, "point requests to KeyMin are not allowed"},
 		// EndKey for non-Range is invalid.
 		{&args1, nil, "should not be specified"},
 		// Start key must be less than KeyMax.

@@ -93,6 +93,9 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 		if len(end) != 0 {
 			return util.Errorf("end key %q should not be specified for this operation", end)
 		}
+		if bytes.Equal(start, roachpb.KeyMin) {
+			return util.Errorf("point requests to KeyMin are not allowed")
+		}
 		return nil
 	}
 	if end == nil {
@@ -1170,7 +1173,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
 		header := arg.Header()
-		if err := verifyKeys(header.Key, header.EndKey, roachpb.IsRange(arg)); err != nil {
+		if err := verifyKeys(header.Key, header.EndKey, roachpb.IsRange(arg)); err != nil && arg.Method() != roachpb.Noop {
 			return nil, roachpb.NewError(err)
 		}
 	}

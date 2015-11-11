@@ -395,12 +395,16 @@ func TestBadRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if _, err := db.Scan("", "", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
+		t.Fatalf("unexpected error on scan with start=end=KeyMin: %v", err)
+	}
+
 	if _, err := db.Scan("a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
-		t.Fatalf("unexpected error on scan with startkey == endkey: %v", err)
+		t.Fatalf("unexpected error on scan with start=end: %v", err)
 	}
 
 	if _, err := db.ReverseScan("a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
-		t.Fatalf("unexpected error on reverse scan with startkey == endkey: %v", err)
+		t.Fatalf("unexpected error on reverse scan with start=end: %v", err)
 	}
 
 	if err := db.DelRange("x", "a"); !testutils.IsError(err, "truncation resulted in empty batch") {
