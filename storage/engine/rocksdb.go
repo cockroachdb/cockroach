@@ -709,7 +709,10 @@ func (r *rocksDBBatch) Defer(fn func()) {
 }
 
 type rocksDBIterator struct {
-	iter *C.DBIterator
+	iter  *C.DBIterator
+	valid bool
+	key   C.DBSlice
+	value C.DBSlice
 }
 
 // newRocksDBIterator returns a new iterator over the supplied RocksDB
@@ -735,28 +738,28 @@ func (r *rocksDBIterator) Seek(key []byte) {
 	if len(key) == 0 {
 		// start=Key("") needs special treatment since we need
 		// to access start[0] in an explicit seek.
-		C.DBIterSeekToFirst(r.iter)
+		r.setState(C.DBIterSeekToFirst(r.iter))
 	} else {
-		C.DBIterSeek(r.iter, goToCSlice(key))
+		r.setState(C.DBIterSeek(r.iter, goToCSlice(key)))
 	}
 }
 
 func (r *rocksDBIterator) Valid() bool {
-	return C.DBIterValid(r.iter) == 1
+	return r.valid
 }
 
 func (r *rocksDBIterator) Next() {
-	C.DBIterNext(r.iter)
+	r.setState(C.DBIterNext(r.iter))
 }
 
 func (r *rocksDBIterator) SeekReverse(key []byte) {
 	if len(key) == 0 {
-		C.DBIterSeekToLast(r.iter)
+		r.setState(C.DBIterSeekToLast(r.iter))
 	} else {
-		C.DBIterSeek(r.iter, goToCSlice(key))
+		r.setState(C.DBIterSeek(r.iter, goToCSlice(key)))
 		// Maybe the key sorts after the last key in RocksDB.
 		if !r.Valid() {
-			C.DBIterSeekToLast(r.iter)
+			r.setState(C.DBIterSeekToLast(r.iter))
 		}
 		if !r.Valid() {
 			return
@@ -770,44 +773,45 @@ func (r *rocksDBIterator) SeekReverse(key []byte) {
 }
 
 func (r *rocksDBIterator) Prev() {
-	C.DBIterPrev(r.iter)
+	r.setState(C.DBIterPrev(r.iter))
 }
 
 func (r *rocksDBIterator) Key() MVCCKey {
 	// The data returned by rocksdb_iter_{key,value} is not meant to be
 	// freed by the client. It is a direct reference to the data managed
 	// by the iterator, so it is copied instead of freed.
-	data := C.DBIterKey(r.iter)
-	return cSliceToGoBytes(data)
+	return cSliceToGoBytes(r.key)
 }
 
 func (r *rocksDBIterator) Value() []byte {
-	data := C.DBIterValue(r.iter)
-	return cSliceToGoBytes(data)
+	return cSliceToGoBytes(r.value)
 }
 
 func (r *rocksDBIterator) ValueProto(msg proto.Message) error {
-	result := C.DBIterValue(r.iter)
-	if result.len <= 0 {
+	if r.value.len <= 0 {
 		return nil
 	}
 	// Make a byte slice that is backed by result.data. This slice
 	// cannot live past the lifetime of this method, but we're only
 	// using it to unmarshal the roachpb.
-	data := cSliceToUnsafeGoBytes(result)
+	data := cSliceToUnsafeGoBytes(r.value)
 	return proto.Unmarshal(data, msg)
 }
 
 func (r *rocksDBIterator) unsafeKey() MVCCKey {
-	data := C.DBIterKey(r.iter)
-	return cSliceToUnsafeGoBytes(data)
+	return cSliceToUnsafeGoBytes(r.key)
 }
 
 func (r *rocksDBIterator) unsafeValue() []byte {
-	data := C.DBIterValue(r.iter)
-	return cSliceToUnsafeGoBytes(data)
+	return cSliceToUnsafeGoBytes(r.value)
 }
 
 func (r *rocksDBIterator) Error() error {
 	return statusToError(C.DBIterError(r.iter))
+}
+
+func (r *rocksDBIterator) setState(state C.DBIterState) {
+	r.valid = state.valid == 1
+	r.key = state.key
+	r.value = state.value
 }
