@@ -600,7 +600,25 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 	// so grab a copy before unlocking.
 	txn := txnMeta.txn
 	tc.Unlock()
+
+	ba := roachpb.BatchRequest{}
+	ba.Timestamp = tc.clock.Now()
+	ba.CmdID = ba.GetOrCreateCmdID(ba.Timestamp.WallTime)
+	ba.Txn = txn.Clone()
+
 	if !proceed {
+		// Actively abort the transaction and its intents since we assume it's abandoned
+		ab := &roachpb.EndTransactionRequest{
+			Commit:  false,
+			Intents: txnMeta.intents(),
+		}
+		ba.Add(ab)
+		if _, err := tc.wrapped.Send(ctx, ba); err != nil {
+			if log.V(1) {
+				log.Warningf("heartbeat abort to %s failed: %s ", txn, err)
+			}
+
+		}
 		return false
 	}
 
