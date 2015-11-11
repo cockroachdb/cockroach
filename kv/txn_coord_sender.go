@@ -592,6 +592,7 @@ func (tc *TxnCoordSender) heartbeat(txnID uuid.UUID, trace opentracing.Span, ctx
 	tc.Lock()
 	proceed := true
 	txnMeta := tc.txns[txnID]
+	var intentSpans []roachpb.Span
 	// Before we send a heartbeat, determine whether this transaction
 	// should be considered abandoned. If so, exit heartbeat.
 	if txnMeta.hasClientAbandonedCoord(tc.clock.PhysicalNow()) {
@@ -605,21 +606,44 @@ func (tc *TxnCoordSender) heartbeat(txnID uuid.UUID, trace opentracing.Span, ctx
 				txnMeta.txn)
 		}
 		proceed = false
+		// Grab the intents here to avoid potential race.
+		intentSpans = txnMeta.intentSpans()
+		txnMeta.keys.Clear()
 	}
 	// txnMeta.txn is possibly replaced concurrently,
 	// so grab a copy before unlocking.
 	txn := txnMeta.txn
 	tc.Unlock()
+
+	ba := roachpb.BatchRequest{}
+	ba.Timestamp = tc.clock.Now()
+	txnClone := txn.Clone()
+	ba.Txn = &txnClone
+
 	if !proceed {
+		// Actively abort the transaction and its intents since we assume it's abandoned.
+		et := &roachpb.EndTransactionRequest{
+			Span: roachpb.Span{
+				Key: txn.Key,
+			},
+			Commit:      false,
+			IntentSpans: intentSpans,
+		}
+		ba.Add(et)
+		tc.stopper.RunAsyncTask(func() {
+			// Use the wrapped sender since the normal Sender
+			// does not allow clients to specify intents.
+			if _, pErr := tc.wrapped.Send(ctx, ba); pErr != nil {
+				if log.V(1) {
+					log.Warningf("abort due to inactivity failed for %s: %s ", txn, pErr)
+				}
+			}
+		})
 		return false
 	}
 
 	hb := &roachpb.HeartbeatTxnRequest{}
 	hb.Key = txn.Key
-	ba := roachpb.BatchRequest{}
-	ba.Timestamp = tc.clock.Now()
-	txnClone := txn.Clone()
-	ba.Txn = &txnClone
 	ba.Add(hb)
 
 	trace.LogEvent("heartbeat")
