@@ -114,7 +114,7 @@ func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 				firstNotOrdered++
 			}
 		}
-		rs.randPerm(firstNotOrdered, topIndex, rand.Perm)
+		rs.randPerm(firstNotOrdered, topIndex, rand.Intn)
 		if firstNotOrdered == 0 {
 			return bucket
 		}
@@ -137,7 +137,7 @@ func (rs replicaSlice) MoveToFront(i int) {
 	rs[0] = front
 }
 
-func (rs replicaSlice) randPerm(startIndex int, topIndex int, permFn func(int) []int) {
+func (rs replicaSlice) randPerm(startIndex int, topIndex int, intnFn func(int) int) {
 	if topIndex >= len(rs)-1 {
 		return
 	}
@@ -145,10 +145,8 @@ func (rs replicaSlice) randPerm(startIndex int, topIndex int, permFn func(int) [
 	if length < 2 {
 		return
 	}
-	randIndices := permFn(length)
-	shuffled := make(replicaSlice, length, length)
-	for i, v := range randIndices {
-		shuffled[i] = rs[v+startIndex]
+	for i := 1; i < length; i++ {
+		j := intnFn(i + 1)
+		rs.Swap(startIndex+i, startIndex+j)
 	}
-	copy(rs[startIndex:], shuffled)
 }

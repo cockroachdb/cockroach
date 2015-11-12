@@ -121,26 +121,26 @@ func TestReplicaSetRandPerm(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	rs := createReplicaSlice()
 	r := rand.New(rand.NewSource(0))
-	rs.randPerm(0, 4, r.Perm)
+	rs.randPerm(0, 4, r.Intn)
 	exp := []roachpb.StoreID{1, 2, 3, 4, 5}
 	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
 		t.Errorf("expected order %s, got %s", exp, stores)
 	}
 	r = rand.New(rand.NewSource(0))
-	rs.randPerm(2, 2, r.Perm)
+	rs.randPerm(2, 2, r.Intn)
 	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
 		t.Errorf("expected order %s, got %s", exp, stores)
 	}
 	r = rand.New(rand.NewSource(0))
-	rs.randPerm(0, 2, r.Perm)
-	exp = []roachpb.StoreID{2, 3, 1, 4, 5}
+	rs.randPerm(0, 2, r.Intn)
+	exp = []roachpb.StoreID{3, 1, 2, 4, 5}
 	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
 		t.Errorf("expected order %s, got %s", exp, stores)
 	}
 	r = rand.New(rand.NewSource(0))
 	rs = createReplicaSlice()
-	rs.randPerm(1, 3, r.Perm)
-	exp = []roachpb.StoreID{1, 3, 4, 2, 5}
+	rs.randPerm(1, 3, r.Intn)
+	exp = []roachpb.StoreID{1, 4, 2, 3, 5}
 	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
 		t.Errorf("expected order %s, got %s", exp, stores)
 	}
