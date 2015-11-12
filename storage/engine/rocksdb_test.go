@@ -138,61 +138,52 @@ func TestRocksDBCompaction(t *testing.T) {
 func setupMVCCScanData(numVersions, numKeys, valueBytes int, b *testing.B) (*RocksDB, *stop.Stopper) {
 	loc := fmt.Sprintf("mvcc_scan_%d_%d_%d", numVersions, numKeys, valueBytes)
 
-	const cacheSize = 8 << 30 // 8 GB
-
+	exists := true
 	if _, err := os.Stat(loc); os.IsNotExist(err) {
-		log.Infof("creating mvcc data: %s", loc)
+		exists = false
+	}
 
-		stopper := stop.NewStopper()
-		rocksdb := NewRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize, stopper)
-		if err := rocksdb.Open(); err != nil {
+	const cacheSize = 8 << 30 // 8 GB
+	stopper := stop.NewStopper()
+	rocksdb := NewRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize, stopper)
+	if err := rocksdb.Open(); err != nil {
+		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
+	}
+
+	if exists {
+		return rocksdb, stopper
+	}
+
+	log.Infof("creating mvcc data: %s", loc)
+
+	rng, _ := randutil.NewPseudoRand()
+	keys := make([]roachpb.Key, numKeys)
+	nvs := make([]int, numKeys)
+	for t := 1; t <= numVersions; t++ {
+		walltime := int64(5 * t)
+		ts := makeTS(walltime, 0)
+		batch := rocksdb.NewBatch()
+		for i := 0; i < numKeys; i++ {
+			if t == 1 {
+				keys[i] = roachpb.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))
+				nvs[i] = rand.Intn(numVersions) + 1
+			}
+			// Only write values if this iteration is less than the random
+			// number of versions chosen for this key.
+			if t <= nvs[i] {
+				value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
+				value.InitChecksum(keys[i])
+				if err := MVCCPut(batch, nil, keys[i], ts, value, nil); err != nil {
+					b.Fatal(err)
+				}
+			}
+		}
+		if err := batch.Commit(); err != nil {
 			b.Fatal(err)
 		}
-
-		rng, _ := randutil.NewPseudoRand()
-		keys := make([]roachpb.Key, numKeys)
-		nvs := make([]int, numKeys)
-		for t := 1; t <= numVersions; t++ {
-			walltime := int64(5 * t)
-			ts := makeTS(walltime, 0)
-			batch := rocksdb.NewBatch()
-			for i := 0; i < numKeys; i++ {
-				if t == 1 {
-					keys[i] = roachpb.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))
-					nvs[i] = rand.Intn(numVersions) + 1
-				}
-				// Only write values if this iteration is less than the random
-				// number of versions chosen for this key.
-				if t <= nvs[i] {
-					value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
-					value.InitChecksum(keys[i])
-					if err := MVCCPut(batch, nil, keys[i], ts, value, nil); err != nil {
-						b.Fatal(err)
-					}
-				}
-			}
-			if err := batch.Commit(); err != nil {
-				b.Fatal(err)
-			}
-			batch.Close()
-		}
-		rocksdb.CompactRange(nil, nil)
-		stopper.Stop()
+		batch.Close()
 	}
-
-	locDirty := loc + "_dirty"
-	if err := os.RemoveAll(locDirty); err != nil {
-		b.Fatal(err)
-	}
-	if err := shutil.CopyTree(loc, locDirty, nil); err != nil {
-		b.Fatal(err)
-	}
-
-	stopper := stop.NewStopper()
-	rocksdb := NewRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, locDirty, cacheSize, stopper)
-	if err := rocksdb.Open(); err != nil {
-		b.Fatal(err)
-	}
+	rocksdb.CompactRange(nil, nil)
 
 	return rocksdb, stopper
 }
@@ -501,19 +492,34 @@ func runMVCCDeleteRange(valueBytes int, b *testing.B) {
 	const rangeBytes = 512 * 1024
 	const overhead = 48 // Per key/value overhead (empirically determined)
 	numKeys := rangeBytes / (overhead + valueBytes)
+	rocksdb, stopper := setupMVCCScanData(1, numKeys, valueBytes, b)
+	stopper.Stop()
 
 	b.SetBytes(rangeBytes)
 	b.StopTimer()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		rocksdb, stopper := setupMVCCScanData(1, numKeys, valueBytes, b)
+		locDirty := rocksdb.dir + "_dirty"
+		if err := os.RemoveAll(locDirty); err != nil {
+			b.Fatal(err)
+		}
+		if err := shutil.CopyTree(rocksdb.dir, locDirty, nil); err != nil {
+			b.Fatal(err)
+		}
+		stopper := stop.NewStopper()
+		rocksdb := NewRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, locDirty, rocksdb.cacheSize, stopper)
+		if err := rocksdb.Open(); err != nil {
+			b.Fatal(err)
+		}
+
 		b.StartTimer()
 		_, err := MVCCDeleteRange(rocksdb, &MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, roachpb.MaxTimestamp, nil)
 		if err != nil {
 			b.Fatal(err)
 		}
 		b.StopTimer()
+
 		stopper.Stop()
 	}
 }
