@@ -77,7 +77,7 @@ func TestRocksDBCompaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rocksdb := newMemRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
+	rocksdb := newMemRocksDB(roachpb.Attributes{}, testCacheSize, stopper)
 	err := rocksdb.Open()
 	if err != nil {
 		t.Fatalf("could not create new in-memory rocksdb db instance: %v", err)
@@ -145,7 +145,7 @@ func setupMVCCScanData(numVersions, numKeys, valueBytes int, b *testing.B) (*Roc
 
 	const cacheSize = 8 << 30 // 8 GB
 	stopper := stop.NewStopper()
-	rocksdb := NewRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize, stopper)
+	rocksdb := NewRocksDB(roachpb.Attributes{}, loc, cacheSize, stopper)
 	if err := rocksdb.Open(); err != nil {
 		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}
@@ -348,7 +348,7 @@ func runMVCCPut(valueSize int, b *testing.B) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rocksdb := NewInMem(roachpb.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
+	rocksdb := NewInMem(roachpb.Attributes{}, testCacheSize, stopper)
 
 	b.SetBytes(int64(valueSize))
 	b.ResetTimer()
@@ -387,7 +387,7 @@ func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rocksdb := NewInMem(roachpb.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
+	rocksdb := NewInMem(roachpb.Attributes{}, testCacheSize, stopper)
 
 	b.SetBytes(int64(valueSize))
 	b.ResetTimer()
@@ -438,7 +438,7 @@ func BenchmarkMVCCBatch100000Put10(b *testing.B) {
 func runMVCCMerge(value *roachpb.Value, numKeys int, b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rocksdb := NewInMem(roachpb.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
+	rocksdb := NewInMem(roachpb.Attributes{}, testCacheSize, stopper)
 
 	// Precompute keys so we don't waste time formatting them at each iteration.
 	keys := make([]roachpb.Key, numKeys)
@@ -508,7 +508,7 @@ func runMVCCDeleteRange(valueBytes int, b *testing.B) {
 			b.Fatal(err)
 		}
 		stopper := stop.NewStopper()
-		rocksdb := NewRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, locDirty, rocksdb.cacheSize, stopper)
+		rocksdb := NewRocksDB(roachpb.Attributes{}, locDirty, rocksdb.cacheSize, stopper)
 		if err := rocksdb.Open(); err != nil {
 			b.Fatal(err)
 		}
