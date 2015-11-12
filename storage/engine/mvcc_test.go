@@ -675,8 +675,8 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 			consistent: true,
 			txn:        nil,
 			expIntents: []roachpb.Intent{
-				{Key: testKey1, Txn: *txn1},
-				{Key: testKey4, Txn: *txn2},
+				{Span: roachpb.Span{Key: testKey1}, Txn: *txn1},
+				{Span: roachpb.Span{Key: testKey4}, Txn: *txn2},
 			},
 			// would be []roachpb.KeyValue{fixtureKVs[3], fixtureKVs[4]} without WriteIntentError
 			expValues: nil,
@@ -685,7 +685,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 			consistent: true,
 			txn:        txn1,
 			expIntents: []roachpb.Intent{
-				{Key: testKey4, Txn: *txn2},
+				{Span: roachpb.Span{Key: testKey4}, Txn: *txn2},
 			},
 			expValues: nil, // []roachpb.KeyValue{fixtureKVs[2], fixtureKVs[3], fixtureKVs[4]},
 		},
@@ -693,7 +693,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 			consistent: true,
 			txn:        txn2,
 			expIntents: []roachpb.Intent{
-				{Key: testKey1, Txn: *txn1},
+				{Span: roachpb.Span{Key: testKey1}, Txn: *txn1},
 			},
 			expValues: nil, // []roachpb.KeyValue{fixtureKVs[3], fixtureKVs[4], fixtureKVs[5]},
 		},
@@ -701,8 +701,8 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 			consistent: false,
 			txn:        nil,
 			expIntents: []roachpb.Intent{
-				{Key: testKey1, Txn: *txn1},
-				{Key: testKey4, Txn: *txn2},
+				{Span: roachpb.Span{Key: testKey1}, Txn: *txn1},
+				{Span: roachpb.Span{Key: testKey4}, Txn: *txn2},
 			},
 			expValues: []roachpb.KeyValue{fixtureKVs[0], fixtureKVs[3], fixtureKVs[4], fixtureKVs[1]},
 		},
@@ -1092,8 +1092,8 @@ func TestMVCCScanInconsistent(t *testing.T) {
 	}
 
 	expIntents := []roachpb.Intent{
-		{Key: testKey1, Txn: *txn1},
-		{Key: testKey3, Txn: *txn2},
+		{Span: roachpb.Span{Key: testKey1}, Txn: *txn1},
+		{Span: roachpb.Span{Key: testKey3}, Txn: *txn2},
 	}
 	kvs, intents, err := MVCCScan(engine, testKey1, testKey4.Next(), 0, makeTS(7, 0), false, nil)
 	if !reflect.DeepEqual(intents, expIntents) {

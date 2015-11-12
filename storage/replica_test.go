@@ -796,7 +796,7 @@ func TestRangeNoGossipConfig(t *testing.T) {
 	bt, _ := beginTxnArgs(key, txn)
 	req1 := putArgs(key, []byte("foo"))
 	req2, _ := endTxnArgs(txn, true /* commit */)
-	req2.Intents = []roachpb.Intent{{Key: key}}
+	req2.IntentSpans = []roachpb.Span{{Key: key}}
 	req3 := getArgs(key)
 
 	testCases := []struct {
@@ -850,7 +850,7 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 		t.Fatal(err)
 	}
 	req2, h := endTxnArgs(txn, true /* commit */)
-	req2.Intents = []roachpb.Intent{{Key: key}}
+	req2.IntentSpans = []roachpb.Span{{Key: key}}
 	txn.Sequence++
 	if _, err := client.SendWrappedWith(tc.Sender(), nil, h, &req2); err != nil {
 		t.Fatal(err)
@@ -1932,19 +1932,19 @@ func TestEndTransactionGC(t *testing.T) {
 	splitKey := roachpb.RKey("c")
 	splitTestRange(tc.store, splitKey, splitKey, t)
 	for i, test := range []struct {
-		intents []roachpb.Intent
+		intents []roachpb.Span
 		expGC   bool
 	}{
 		// Range inside.
-		{[]roachpb.Intent{{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}}, true},
+		{[]roachpb.Span{{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}}, true},
 		// Two intents inside.
-		{[]roachpb.Intent{{Key: roachpb.Key("a")}, {Key: roachpb.Key("b")}}, true},
+		{[]roachpb.Span{{Key: roachpb.Key("a")}, {Key: roachpb.Key("b")}}, true},
 		// Intent range spilling over right endpoint.
-		{[]roachpb.Intent{{Key: roachpb.Key("a"), EndKey: splitKey.Next().AsRawKey()}}, false},
+		{[]roachpb.Span{{Key: roachpb.Key("a"), EndKey: splitKey.Next().AsRawKey()}}, false},
 		// Intent range completely outside.
-		{[]roachpb.Intent{{Key: splitKey.AsRawKey(), EndKey: roachpb.Key("q")}}, false},
+		{[]roachpb.Span{{Key: splitKey.AsRawKey(), EndKey: roachpb.Key("q")}}, false},
 		// Intent inside and outside.
-		{[]roachpb.Intent{{Key: roachpb.Key("a")}, {Key: splitKey.AsRawKey()}}, false},
+		{[]roachpb.Span{{Key: roachpb.Key("a")}, {Key: splitKey.AsRawKey()}}, false},
 	} {
 		key := roachpb.Key("a")
 		txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
@@ -1953,7 +1953,7 @@ func TestEndTransactionGC(t *testing.T) {
 			t.Fatal(err)
 		}
 		args, h := endTxnArgs(txn, true)
-		args.Intents = test.intents
+		args.IntentSpans = test.intents
 		txn.Sequence++
 		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args); err != nil {
 			t.Fatal(err)
@@ -2011,7 +2011,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 
 	// End the transaction and resolve the intents.
 	args, h := endTxnArgs(txn, true /* commit */)
-	args.Intents = []roachpb.Intent{{Key: key, EndKey: splitKey.Next().AsRawKey()}}
+	args.IntentSpans = []roachpb.Span{{Key: key, EndKey: splitKey.Next().AsRawKey()}}
 	txn.Sequence++
 	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args); err != nil {
 		t.Fatal(err)
@@ -2022,6 +2022,19 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	_, err := client.SendWrapped(newRng, newRng.context(), &gArgs)
 	if _, ok := err.(*roachpb.WriteIntentError); !ok {
 		t.Errorf("expected write intent error, but got %s", err)
+	}
+
+	txn.Sequence++
+	hbArgs, h := heartbeatArgs(txn)
+	reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &hbArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hbResp := reply.(*roachpb.HeartbeatTxnResponse)
+	expIntents := []roachpb.Span{{Key: splitKey.AsRawKey(), EndKey: splitKey.AsRawKey().Next()}}
+	if !reflect.DeepEqual(hbResp.Txn.Intents, expIntents) {
+		t.Fatalf("expected persisted intents %v, got %v",
+			expIntents, hbResp.Txn.Intents)
 	}
 }
 
@@ -3193,17 +3206,17 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 
 func TestIntentIntersect(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	iPt := roachpb.Intent{
+	iPt := roachpb.Span{
 		Key:    roachpb.Key("asd"),
 		EndKey: nil,
 	}
-	iRn := roachpb.Intent{
+	iRn := roachpb.Span{
 		Key:    roachpb.Key("c"),
 		EndKey: roachpb.Key("x"),
 	}
 
 	suffix := roachpb.RKey("abcd")
-	iLc := roachpb.Intent{
+	iLc := roachpb.Span{
 		Key:    keys.MakeRangeKey(roachpb.RKey("c"), suffix, nil),
 		EndKey: keys.MakeRangeKey(roachpb.RKey("x"), suffix, nil),
 	}
@@ -3211,7 +3224,7 @@ func TestIntentIntersect(t *testing.T) {
 	kl2 := string(iLc.EndKey)
 
 	for i, tc := range []struct {
-		intent   roachpb.Intent
+		intent   roachpb.Span
 		from, to string
 		exp      []string
 	}{
@@ -3238,7 +3251,7 @@ func TestIntentIntersect(t *testing.T) {
 		{intent: iLc, from: "a", to: "z", exp: []string{kl1, kl2}},
 	} {
 		var all []string
-		in, out := intersectIntent(tc.intent, roachpb.RangeDescriptor{
+		in, out := intersectSpan(tc.intent, roachpb.RangeDescriptor{
 			StartKey: roachpb.RKey(tc.from),
 			EndKey:   roachpb.RKey(tc.to),
 		})

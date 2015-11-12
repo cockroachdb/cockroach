@@ -135,12 +135,13 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 	return tm.getLastUpdate() < timeout
 }
 
-// intents collects the intents to be resolved for the transaction. It does
-// not create copies, so the caller must not alter the returned data.
-func (tm *txnMetadata) intents() []roachpb.Intent {
-	intents := make([]roachpb.Intent, 0, tm.keys.Len())
+// intentSpans collects the spans of the intents to be resolved for the
+// transaction. It does not create copies, so the caller must not alter the
+// returned data.
+func (tm *txnMetadata) intentSpans() []roachpb.Span {
+	intents := make([]roachpb.Span, 0, tm.keys.Len())
 	for _, o := range tm.keys.GetOverlaps(roachpb.KeyMin, roachpb.KeyMax) {
-		intent := roachpb.Intent{
+		intent := roachpb.Span{
 			Key: o.Key.Start().(roachpb.Key),
 		}
 		if endKey := o.Key.End().(roachpb.Key); !intent.Key.IsPrev(endKey) {
@@ -343,7 +344,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			// Remember when EndTransaction started in case we want to
 			// be linearizable.
 			startNS = tc.clock.PhysicalNow()
-			if len(et.Intents) > 0 {
+			if len(et.IntentSpans) > 0 {
 				// TODO(tschottdorf): it may be useful to allow this later.
 				// That would be part of a possible plan to allow txns which
 				// write on multiple coordinators.
@@ -352,11 +353,11 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			tc.Lock()
 			txnMeta, metaOK := tc.txns[id]
 			if id != "" && metaOK {
-				et.Intents = txnMeta.intents()
+				et.IntentSpans = txnMeta.intentSpans()
 			}
 			tc.Unlock()
 
-			if intents := ba.GetIntents(); len(intents) > 0 {
+			if intentSpans := ba.GetIntentSpans(); len(intentSpans) > 0 {
 				// Writes in Batch, so EndTransaction is fine. Should add
 				// outstanding intents to EndTransaction, though.
 				// TODO(tschottdorf): possible issues when the batch fails,
@@ -365,7 +366,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 				// by others, for example {[a,b), a}). This can lead to
 				// some extra requests when those are non-local to the txn
 				// record. But it doesn't seem worth optimizing now.
-				et.Intents = append(et.Intents, intents...)
+				et.IntentSpans = append(et.IntentSpans, intentSpans...)
 			} else if !metaOK {
 				// If we don't have the transaction, then this must be a retry
 				// by the client. We can no longer reconstruct a correct
@@ -376,14 +377,14 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 				// TransactionAbortedError instead of this ambivalent error.
 				return nil, roachpb.NewError(util.Errorf("transaction is already committed or aborted"))
 			}
-			if len(et.Intents) == 0 {
+			if len(et.IntentSpans) == 0 {
 				// If there aren't any intents, then there's factually no
 				// transaction to end. Read-only txns have all of their state in
 				// the client.
 				return nil, roachpb.NewError(util.Errorf("cannot commit a read-only transaction"))
 			}
 			if log.V(1) {
-				for _, intent := range et.Intents {
+				for _, intent := range et.IntentSpans {
 					trace.Event(fmt.Sprintf("intent: [%s,%s)", intent.Key, intent.EndKey))
 				}
 			}
@@ -727,7 +728,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		// after all, it **has** laid down intents and only the coordinator
 		// can augment a potential EndTransaction call).
 		// consider re-using those.
-		if intents := ba.GetIntents(); len(intents) > 0 && (err == nil || newTxn.Writing) {
+		if intents := ba.GetIntentSpans(); len(intents) > 0 && (err == nil || newTxn.Writing) {
 			if txnMeta == nil {
 				if !newTxn.Writing {
 					panic("txn with intents marked as non-writing")

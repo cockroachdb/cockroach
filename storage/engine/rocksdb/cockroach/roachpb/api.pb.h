@@ -42,7 +42,6 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
 void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
 void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
 
-class Span;
 class ResponseHeader;
 class GetRequest;
 class GetResponse;
@@ -137,115 +136,6 @@ inline bool PushTxnType_Parse(
     PushTxnType_descriptor(), name, value);
 }
 // ===================================================================
-
-class Span : public ::google::protobuf::Message {
- public:
-  Span();
-  virtual ~Span();
-
-  Span(const Span& from);
-
-  inline Span& operator=(const Span& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const Span& default_instance();
-
-  void Swap(Span* other);
-
-  // implements Message ----------------------------------------------
-
-  inline Span* New() const { return New(NULL); }
-
-  Span* New(::google::protobuf::Arena* arena) const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const Span& from);
-  void MergeFrom(const Span& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  void InternalSwap(Span* other);
-  private:
-  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
-    return _internal_metadata_.arena();
-  }
-  inline void* MaybeArenaPtr() const {
-    return _internal_metadata_.raw_arena_ptr();
-  }
-  public:
-
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // optional bytes key = 3;
-  bool has_key() const;
-  void clear_key();
-  static const int kKeyFieldNumber = 3;
-  const ::std::string& key() const;
-  void set_key(const ::std::string& value);
-  void set_key(const char* value);
-  void set_key(const void* value, size_t size);
-  ::std::string* mutable_key();
-  ::std::string* release_key();
-  void set_allocated_key(::std::string* key);
-
-  // optional bytes end_key = 4;
-  bool has_end_key() const;
-  void clear_end_key();
-  static const int kEndKeyFieldNumber = 4;
-  const ::std::string& end_key() const;
-  void set_end_key(const ::std::string& value);
-  void set_end_key(const char* value);
-  void set_end_key(const void* value, size_t size);
-  ::std::string* mutable_end_key();
-  ::std::string* release_end_key();
-  void set_allocated_end_key(::std::string* end_key);
-
-  // @@protoc_insertion_point(class_scope:cockroach.roachpb.Span)
- private:
-  inline void set_has_key();
-  inline void clear_has_key();
-  inline void set_has_end_key();
-  inline void clear_has_end_key();
-
-  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::google::protobuf::internal::ArenaStringPtr key_;
-  ::google::protobuf::internal::ArenaStringPtr end_key_;
-  friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
-  friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
-  friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
-
-  void InitAsDefaultInstance();
-  static Span* default_instance_;
-};
-// -------------------------------------------------------------------
 
 class ResponseHeader : public ::google::protobuf::Message {
  public:
@@ -2220,17 +2110,17 @@ class EndTransactionRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::InternalCommitTrigger* release_internal_commit_trigger();
   void set_allocated_internal_commit_trigger(::cockroach::roachpb::InternalCommitTrigger* internal_commit_trigger);
 
-  // repeated .cockroach.roachpb.Intent intents = 5;
-  int intents_size() const;
-  void clear_intents();
-  static const int kIntentsFieldNumber = 5;
-  const ::cockroach::roachpb::Intent& intents(int index) const;
-  ::cockroach::roachpb::Intent* mutable_intents(int index);
-  ::cockroach::roachpb::Intent* add_intents();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent >&
-      intents() const;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent >*
-      mutable_intents();
+  // repeated .cockroach.roachpb.Span intent_spans = 5;
+  int intent_spans_size() const;
+  void clear_intent_spans();
+  static const int kIntentSpansFieldNumber = 5;
+  const ::cockroach::roachpb::Span& intent_spans(int index) const;
+  ::cockroach::roachpb::Span* mutable_intent_spans(int index);
+  ::cockroach::roachpb::Span* add_intent_spans();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+      intent_spans() const;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
+      mutable_intent_spans();
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.EndTransactionRequest)
  private:
@@ -2249,7 +2139,7 @@ class EndTransactionRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::Span* header_;
   ::cockroach::roachpb::Timestamp* deadline_;
   ::cockroach::roachpb::InternalCommitTrigger* internal_commit_trigger_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent > intents_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intent_spans_;
   bool commit_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
@@ -6051,116 +5941,6 @@ class BatchResponse : public ::google::protobuf::Message {
 // ===================================================================
 
 #if !PROTOBUF_INLINE_NOT_IN_HEADERS
-// Span
-
-// optional bytes key = 3;
-inline bool Span::has_key() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void Span::set_has_key() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void Span::clear_has_key() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void Span::clear_key() {
-  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_key();
-}
-inline const ::std::string& Span::key() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Span.key)
-  return key_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void Span::set_key(const ::std::string& value) {
-  set_has_key();
-  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Span.key)
-}
-inline void Span::set_key(const char* value) {
-  set_has_key();
-  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Span.key)
-}
-inline void Span::set_key(const void* value, size_t size) {
-  set_has_key();
-  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Span.key)
-}
-inline ::std::string* Span::mutable_key() {
-  set_has_key();
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Span.key)
-  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline ::std::string* Span::release_key() {
-  clear_has_key();
-  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void Span::set_allocated_key(::std::string* key) {
-  if (key != NULL) {
-    set_has_key();
-  } else {
-    clear_has_key();
-  }
-  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Span.key)
-}
-
-// optional bytes end_key = 4;
-inline bool Span::has_end_key() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void Span::set_has_end_key() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void Span::clear_has_end_key() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void Span::clear_end_key() {
-  end_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_end_key();
-}
-inline const ::std::string& Span::end_key() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Span.end_key)
-  return end_key_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void Span::set_end_key(const ::std::string& value) {
-  set_has_end_key();
-  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Span.end_key)
-}
-inline void Span::set_end_key(const char* value) {
-  set_has_end_key();
-  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Span.end_key)
-}
-inline void Span::set_end_key(const void* value, size_t size) {
-  set_has_end_key();
-  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Span.end_key)
-}
-inline ::std::string* Span::mutable_end_key() {
-  set_has_end_key();
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Span.end_key)
-  return end_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline ::std::string* Span::release_end_key() {
-  clear_has_end_key();
-  return end_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void Span::set_allocated_end_key(::std::string* end_key) {
-  if (end_key != NULL) {
-    set_has_end_key();
-  } else {
-    clear_has_end_key();
-  }
-  end_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), end_key);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Span.end_key)
-}
-
-// -------------------------------------------------------------------
-
 // ResponseHeader
 
 // optional .cockroach.roachpb.Timestamp timestamp = 2;
@@ -7628,34 +7408,34 @@ inline void EndTransactionRequest::set_allocated_internal_commit_trigger(::cockr
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.EndTransactionRequest.internal_commit_trigger)
 }
 
-// repeated .cockroach.roachpb.Intent intents = 5;
-inline int EndTransactionRequest::intents_size() const {
-  return intents_.size();
+// repeated .cockroach.roachpb.Span intent_spans = 5;
+inline int EndTransactionRequest::intent_spans_size() const {
+  return intent_spans_.size();
 }
-inline void EndTransactionRequest::clear_intents() {
-  intents_.Clear();
+inline void EndTransactionRequest::clear_intent_spans() {
+  intent_spans_.Clear();
 }
-inline const ::cockroach::roachpb::Intent& EndTransactionRequest::intents(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.EndTransactionRequest.intents)
-  return intents_.Get(index);
+inline const ::cockroach::roachpb::Span& EndTransactionRequest::intent_spans(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.EndTransactionRequest.intent_spans)
+  return intent_spans_.Get(index);
 }
-inline ::cockroach::roachpb::Intent* EndTransactionRequest::mutable_intents(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.EndTransactionRequest.intents)
-  return intents_.Mutable(index);
+inline ::cockroach::roachpb::Span* EndTransactionRequest::mutable_intent_spans(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.EndTransactionRequest.intent_spans)
+  return intent_spans_.Mutable(index);
 }
-inline ::cockroach::roachpb::Intent* EndTransactionRequest::add_intents() {
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.EndTransactionRequest.intents)
-  return intents_.Add();
+inline ::cockroach::roachpb::Span* EndTransactionRequest::add_intent_spans() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.EndTransactionRequest.intent_spans)
+  return intent_spans_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent >&
-EndTransactionRequest::intents() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.EndTransactionRequest.intents)
-  return intents_;
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+EndTransactionRequest::intent_spans() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.EndTransactionRequest.intent_spans)
+  return intent_spans_;
 }
-inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent >*
-EndTransactionRequest::mutable_intents() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.EndTransactionRequest.intents)
-  return &intents_;
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
+EndTransactionRequest::mutable_intent_spans() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.EndTransactionRequest.intent_spans)
+  return &intent_spans_;
 }
 
 // -------------------------------------------------------------------
@@ -12093,8 +11873,6 @@ BatchResponse::mutable_responses() {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
-// -------------------------------------------------------------------
-
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
