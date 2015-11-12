@@ -1475,10 +1475,10 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	}
 }
 
-// TestRangeResponseCacheReadError verifies that an error is returned to the
-// client in the event that a response cache entry is found but is not
+// TestRangeSequenceCacheReadError verifies that an error is returned to the
+// client in the event that a sequence cache entry is found but is not
 // decodable.
-func TestRangeResponseCacheReadError(t *testing.T) {
+func TestRangeSequenceCacheReadError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
@@ -1495,8 +1495,8 @@ func TestRangeResponseCacheReadError(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Overwrite response cache entry with garbage for the last op.
-	key := keys.ResponseCacheKey(tc.rng.Desc().RangeID, txn.ID)
+	// Overwrite sequence cache entry with garbage for the last op.
+	key := keys.SequenceCacheKey(tc.rng.Desc().RangeID, txn.ID)
 	err := engine.MVCCPut(tc.engine, nil, key, roachpb.ZeroTimestamp, roachpb.MakeValueFromString("\xff"), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1511,9 +1511,9 @@ func TestRangeResponseCacheReadError(t *testing.T) {
 	}
 }
 
-// TestRangeResponseCacheStoredError verifies that if a cached entry is present,
+// TestRangeSequenceCacheStoredError verifies that if a cached entry is present,
 // a transaction restart error is returned.
-func TestRangeResponseCacheStoredTxnRetryError(t *testing.T) {
+func TestRangeSequenceCacheStoredTxnRetryError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
@@ -1523,7 +1523,7 @@ func TestRangeResponseCacheStoredTxnRetryError(t *testing.T) {
 	for i, pastError := range []error{errors.New("boom"), nil} {
 		txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
 		txn.Sequence = int32(1 + i)
-		_ = tc.rng.respCache.PutSequence(tc.engine, txn.ID, int64(txn.Sequence), pastError)
+		_ = tc.rng.sequence.PutSequence(tc.engine, txn.ID, int64(txn.Sequence), pastError)
 
 		args := incrementArgs(key, 1)
 		_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
@@ -2048,7 +2048,7 @@ func TestPushTxnBadKey(t *testing.T) {
 func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// This test simulates running into an open intent and resolving it
-	// using the Txn table. If we auto-gc'ed entries here, the entry would
+	// using the Txn span. If we auto-gc'ed entries here, the entry would
 	// be deleted and the intents resolved instantaneously on successful
 	// commit (since they're on the same Range). Could split the range and have
 	// non-local intents if we ever wanted to get rid of this.

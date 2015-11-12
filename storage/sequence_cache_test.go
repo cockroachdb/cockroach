@@ -37,21 +37,21 @@ func init() {
 	batchR.Add(&incR)
 }
 
-// createTestResponseCache creates an in-memory engine and
-// returns a response cache using the supplied Range ID.
-func createTestResponseCache(t *testing.T, rangeID roachpb.RangeID, stopper *stop.Stopper) (*ResponseCache, engine.Engine) {
-	return NewResponseCache(rangeID), engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+// createTestSequenceCache creates an in-memory engine and
+// returns a sequence cache using the supplied Range ID.
+func createTestSequenceCache(t *testing.T, rangeID roachpb.RangeID, stopper *stop.Stopper) (*SequenceCache, engine.Engine) {
+	return NewSequenceCache(rangeID), engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 }
 
 var family = []byte("testfamily")
 
-// TestResponseCachePutGetClearData tests basic get & put functionality as well as
+// TestSequenceCachePutGetClearData tests basic get & put functionality as well as
 // clearing the cache.
-func TestResponseCachePutGetClearData(t *testing.T) {
+func TestSequenceCachePutGetClearData(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rc, e := createTestResponseCache(t, 1, stopper)
+	rc, e := createTestSequenceCache(t, 1, stopper)
 	// Start with a get for an unseen id/sequence combo.
 	if seq, readErr := rc.GetSequence(e, family); seq > 0 {
 		t.Errorf("expected no response for family %s", family)
@@ -79,12 +79,12 @@ func TestResponseCachePutGetClearData(t *testing.T) {
 	tryHit(false)
 }
 
-// TestResponseCacheEmptyParams tests operation with empty parameters.
-func TestResponseCacheEmptyParams(t *testing.T) {
+// TestSequenceCacheEmptyParams tests operation with empty parameters.
+func TestSequenceCacheEmptyParams(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rc, e := createTestResponseCache(t, 1, stopper)
+	rc, e := createTestSequenceCache(t, 1, stopper)
 	// Put value for test response.
 	if err := rc.PutSequence(e, family, 0, nil); err != errEmptyID {
 		t.Errorf("unexpected error putting response: %v", err)
@@ -97,14 +97,14 @@ func TestResponseCacheEmptyParams(t *testing.T) {
 	}
 }
 
-// TestResponseCacheCopyInto tests that responses cached in one cache get
+// TestSequenceCacheCopyInto tests that entries in one cache get
 // transferred correctly to another cache using CopyInto().
-func TestResponseCacheCopyInto(t *testing.T) {
+func TestSequenceCacheCopyInto(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rc1, e := createTestResponseCache(t, 1, stopper)
-	rc2, _ := createTestResponseCache(t, 2, stopper)
+	rc1, e := createTestSequenceCache(t, 1, stopper)
+	rc2, _ := createTestSequenceCache(t, 2, stopper)
 	const seq = 123
 	// Store an increment with new value one in the first cache.
 	if err := rc1.PutSequence(e, family, seq, nil); err != nil {
@@ -112,9 +112,9 @@ func TestResponseCacheCopyInto(t *testing.T) {
 	}
 	// Copy the first cache into the second.
 	if err := rc1.CopyInto(e, rc2.rangeID); err != nil {
-		t.Errorf("unexpected error while copying response cache: %s", err)
+		t.Errorf("unexpected error while copying sequence cache: %s", err)
 	}
-	for _, cache := range []*ResponseCache{rc1, rc2} {
+	for _, cache := range []*SequenceCache{rc1, rc2} {
 		// Get should return 1 for both caches.
 		if actSeq, readErr := cache.GetSequence(e, family); readErr != nil {
 			t.Errorf("unexpected failure getting response from source: %s", readErr)
@@ -124,14 +124,14 @@ func TestResponseCacheCopyInto(t *testing.T) {
 	}
 }
 
-// TestResponseCacheCopyFrom tests that responses cached in one cache get
+// TestSequenceCacheCopyFrom tests that entries in one cache get
 // transferred correctly to another cache using CopyFrom().
-func TestResponseCacheCopyFrom(t *testing.T) {
+func TestSequenceCacheCopyFrom(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rc1, e := createTestResponseCache(t, 1, stopper)
-	rc2, _ := createTestResponseCache(t, 2, stopper)
+	rc1, e := createTestSequenceCache(t, 1, stopper)
+	rc2, _ := createTestSequenceCache(t, 2, stopper)
 	const seq = 321
 	// Store an increment with new value one in the first cache.
 	if err := rc1.PutSequence(e, family, seq, nil); err != nil {
@@ -140,11 +140,11 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 
 	// Copy the first cache into the second.
 	if err := rc2.CopyFrom(e, rc1.rangeID); err != nil {
-		t.Errorf("unexpected error while copying response cache: %s", err)
+		t.Errorf("unexpected error while copying sequence cache: %s", err)
 	}
 
 	// Get should hit both caches.
-	for _, cache := range []*ResponseCache{rc1, rc2} {
+	for _, cache := range []*SequenceCache{rc1, rc2} {
 		if actSeq, readErr := cache.GetSequence(e, family); readErr != nil {
 			t.Fatalf("unxpected read error: %s", readErr)
 		} else if actSeq != seq {
@@ -153,12 +153,12 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 	}
 }
 
-// TestResponseCacheShouldCache verifies conditions for caching responses.
-func TestResponseCacheShouldCache(t *testing.T) {
+// TestSequenceCacheShouldCache verifies conditions for caching responses.
+func TestSequenceCacheShouldCache(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rc, _ := createTestResponseCache(t, 1, stopper)
+	rc, _ := createTestSequenceCache(t, 1, stopper)
 
 	testCases := []struct {
 		err         error

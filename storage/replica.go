@@ -158,7 +158,7 @@ type Replica struct {
 	systemDBHash []byte         // sha1 hash of the system config @ last gossip
 	lease        unsafe.Pointer // Information for leader lease, updated atomically
 	llMu         sync.Mutex     // Synchronizes readers' requests for leader lease
-	respCache    *ResponseCache // Provides idempotence for retries
+	sequence     *SequenceCache // Provides txn replay protection
 
 	// proposeRaftCommandFn can be set to mock out the propose operation.
 	proposeRaftCommandFn func(cmdIDKey, roachpb.RaftCommand) <-chan error
@@ -191,7 +191,7 @@ func NewReplica(desc *roachpb.RangeDescriptor, rm *Store) (*Replica, error) {
 		store:       rm,
 		cmdQ:        NewCommandQueue(),
 		tsCache:     NewTimestampCache(rm.Clock()),
-		respCache:   NewResponseCache(desc.RangeID),
+		sequence:    NewSequenceCache(desc.RangeID),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
 	r.pendingReplica.Cond = sync.NewCond(r)
@@ -1026,16 +1026,16 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// Create a new batch for the command to ensure all or nothing semantics.
 	btch := r.store.Engine().NewBatch()
 
-	// Check the response cache for this batch to ensure idempotency. Only applies
+	// Check the sequence for this batch to ensure idempotency. Only applies
 	// to transactional requests.
 	if ba.IsWrite() && ba.Txn != nil {
-		if sequence, readErr := r.respCache.GetSequence(btch, ba.Txn.ID); readErr != nil {
-			return btch, nil, nil, newReplicaCorruptionError(util.Errorf("could not read from response cache"), readErr)
+		if sequence, readErr := r.sequence.GetSequence(btch, ba.Txn.ID); readErr != nil {
+			return btch, nil, nil, newReplicaCorruptionError(util.Errorf("could not read from sequence cache"), readErr)
 		} else if sequence >= int64(ba.Txn.Sequence) {
 			if log.V(1) {
-				log.Infoc(ctx, "found response cache entry for %s@%d", ba.Txn.Short(), ba.Txn.Sequence)
+				log.Infoc(ctx, "found sequence cache entry for %s@%d", ba.Txn.Short(), ba.Txn.Sequence)
 			}
-			// We successfully read from the response cache, so let the
+			// We successfully read from the sequence cache, so let the
 			// transaction restart.
 			return btch, nil, nil, roachpb.NewTransactionRetryError(ba.Txn)
 		}
@@ -1059,7 +1059,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			// through Raft, a read which was not taken into account may have been
 			// served. Hence, we must retry at the current leader.
 			//
-			// It's crucial that we don't update the response cache for the
+			// It's crucial that we don't update the sequence cache for the
 			// error returned below since the request is going to be retried
 			// with the same sequence number and would get the distributed
 			// sender stuck in an infinite loop, retrieving a stale
@@ -1072,7 +1072,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// Execute the commands.
 	br, intents, err := r.executeBatch(btch, ms, ba)
 
-	// Regardless of error, add result to the response cache if this is
+	// Regardless of error, add result to the sequence cache if this is
 	// a write method. This must be done as part of the execution of
 	// raft commands so that every replica maintains the same responses
 	// to continue request idempotence, even if leadership changes.
@@ -1088,15 +1088,15 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			// roachpb.Response{With->Or}Error.
 			br = &roachpb.BatchResponse{}
 			// Otherwise, reset the batch to clear out partial execution and
-			// prepare for the failed response cache entry.
+			// prepare for the failed sequence cache entry.
 			btch.Close()
 			btch = r.store.Engine().NewBatch()
 		}
 		// Only transactional requests have replay protection.
 		if ba.Txn != nil {
-			if putErr := r.respCache.PutSequence(btch, ba.Txn.ID, int64(ba.Txn.Sequence), err); putErr != nil {
+			if putErr := r.sequence.PutSequence(btch, ba.Txn.ID, int64(ba.Txn.Sequence), err); putErr != nil {
 				// TODO(tschottdorf): ReplicaCorruptionError.
-				log.Fatalc(ctx, "putting a response cache entry in a batch should never fail: %s", putErr)
+				log.Fatalc(ctx, "putting a sequence cache entry in a batch should never fail: %s", putErr)
 			}
 		}
 	}

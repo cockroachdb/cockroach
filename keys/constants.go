@@ -27,7 +27,7 @@ var (
 	// the store and/or ranges which they refer to. Storing this
 	// information in the normal system keyspace would place the data on
 	// an arbitrary set of stores, with no guarantee of collocation.
-	// Local data includes store metadata, range metadata, response
+	// Local data includes store metadata, range metadata, sequence
 	// cache values, transaction records, range-spanning binary tree
 	// node pointers, and message queues.
 	//
@@ -36,7 +36,7 @@ var (
 	// via the meta range addressing indexes.
 	//
 	// Some local data are not replicated, such as the store's 'ident'
-	// record. Most local data are replicated, such as response cache
+	// record. Most local data are replicated, such as sequence cache
 	// entries and transaction rows, but are not addressable as normal
 	// MVCC values as part of transactions. Finally, some local data are
 	// stored as MVCC values and are addressable as part of distributed
@@ -61,17 +61,15 @@ var (
 	// indexed by Range ID. The Range ID is appended to this prefix,
 	// encoded using EncodeUvarint. The specific sort of per-range
 	// metadata is identified by one of the suffixes listed below, along
-	// with potentially additional encoded key info, such as a command
-	// ID in the case of response cache entry.
+	// with potentially additional encoded key info, for instance in the
+	// case of sequence cache entry.
 	//
 	// NOTE: LocalRangeIDPrefix must be kept in sync with the value
 	// in storage/engine/rocksdb/db.cc.
 	LocalRangeIDPrefix = roachpb.RKey(MakeKey(localPrefix, roachpb.Key("i")))
-	// LocalResponseCacheSuffix is the suffix for keys storing
-	// command responses used to guarantee idempotency (see ResponseCache).
-	// NOTE: if this value changes, it must be updated in C++
-	// (storage/engine/rocksdb/db.cc).
-	LocalResponseCacheSuffix = []byte("res-")
+	// LocalSequenceCacheSuffix is the suffix used for the replay protection
+	// mechanism.
+	LocalSequenceCacheSuffix = []byte("res-")
 	// localRaftLeaderLeaseSuffix is the suffix for the raft leader lease.
 	localRaftLeaderLeaseSuffix = []byte("rfll")
 	// localRaftTombstoneSuffix is the suffix for the raft tombstone.
