@@ -106,10 +106,10 @@ type MultiRaft struct {
 	Events          chan []interface{}
 	nodeID          roachpb.NodeID
 	storeID         roachpb.StoreID
-	reqChan         chan *RaftMessageRequest
-	createGroupChan chan *createGroupOp
-	removeGroupChan chan *removeGroupOp
-	proposalChan    chan *proposal
+	reqChan         chan RaftMessageRequest
+	createGroupChan chan createGroupOp
+	removeGroupChan chan removeGroupOp
+	proposalChan    chan proposal
 	// callbackChan is a generic hook to run a callback in the raft thread.
 	callbackChan chan func()
 }
@@ -159,10 +159,10 @@ func NewMultiRaft(nodeID roachpb.NodeID, storeID roachpb.StoreID, config *Config
 		Events: make(chan []interface{}),
 
 		// Input channels.
-		reqChan:         make(chan *RaftMessageRequest, reqBufferSize),
-		createGroupChan: make(chan *createGroupOp),
-		removeGroupChan: make(chan *removeGroupOp),
-		proposalChan:    make(chan *proposal),
+		reqChan:         make(chan RaftMessageRequest, reqBufferSize),
+		createGroupChan: make(chan createGroupOp),
+		removeGroupChan: make(chan removeGroupOp),
+		proposalChan:    make(chan proposal),
 		callbackChan:    make(chan func()),
 	}
 
@@ -183,7 +183,7 @@ func (m *MultiRaft) Start() {
 // enqueued without waiting for it to be processed.
 func (ms *multiraftServer) RaftMessage(req *RaftMessageRequest) (*RaftMessageResponse, error) {
 	select {
-	case ms.reqChan <- req:
+	case ms.reqChan <- *req:
 		return nil, nil
 	case <-ms.stopper.ShouldStop():
 		return nil, ErrStopped
@@ -196,7 +196,7 @@ func (s *state) sendEvent(event interface{}) {
 
 // fanoutHeartbeat sends the given heartbeat to all groups which believe that
 // their leader resides on the sending node.
-func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
+func (s *state) fanoutHeartbeat(req RaftMessageRequest) {
 	// A heartbeat message is expanded into a heartbeat for each group
 	// that the remote node is a part of.
 	fromID := roachpb.NodeID(req.Message.From)
@@ -269,7 +269,7 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 
 // fanoutHeartbeatResponse sends the given heartbeat response to all groups
 // which overlap with the sender's groups and consider themselves leader.
-func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
+func (s *state) fanoutHeartbeatResponse(req RaftMessageRequest) {
 	fromID := roachpb.NodeID(req.Message.From)
 	originNode, ok := s.nodes[fromID]
 	if !ok {
@@ -330,7 +330,7 @@ func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
 // CreateGroup creates a new consensus group and joins it. The initial membership of this
 // group is determined by the InitialState method of the group's Storage object.
 func (m *MultiRaft) CreateGroup(groupID roachpb.RangeID) error {
-	op := &createGroupOp{
+	op := createGroupOp{
 		groupID: groupID,
 		ch:      make(chan error, 1),
 	}
@@ -342,7 +342,7 @@ func (m *MultiRaft) CreateGroup(groupID roachpb.RangeID) error {
 // No events for this group will be emitted after this method returns
 // (but some events may still be in the channel buffer).
 func (m *MultiRaft) RemoveGroup(groupID roachpb.RangeID) error {
-	op := &removeGroupOp{
+	op := removeGroupOp{
 		groupID: groupID,
 		ch:      make(chan error, 1),
 	}
@@ -359,7 +359,7 @@ func (m *MultiRaft) SubmitCommand(groupID roachpb.RangeID, commandID string, com
 		log.Infof("node %v submitting command to group %v", m.nodeID, groupID)
 	}
 	ch := make(chan error, 1)
-	m.proposalChan <- &proposal{
+	m.proposalChan <- proposal{
 		groupID:   groupID,
 		commandID: commandID,
 		fn: func() {
@@ -385,7 +385,7 @@ func (m *MultiRaft) ChangeGroupMembership(groupID roachpb.RangeID, commandID str
 		ch <- err
 		return ch
 	}
-	m.proposalChan <- &proposal{
+	m.proposalChan <- proposal{
 		groupID:   groupID,
 		commandID: commandID,
 		fn: func() {
@@ -444,7 +444,7 @@ type group struct {
 	// committed in the current term. When a proposal is committed, nil
 	// is written to proposal.ch and it is removed from this
 	// map.
-	pending map[string]*proposal
+	pending map[string]proposal
 	// writing is true while an active writeTask exists for this group.
 	// We need to keep track of this since groups can be removed and
 	// re-added at any time, and we don't want a writeTask started by
@@ -644,10 +644,7 @@ func (s *state) start() {
 	})
 }
 
-func (s *state) removePending(g *group, prop *proposal, err error) {
-	if prop == nil {
-		return
-	}
+func (s *state) removePending(g *group, prop proposal, err error) {
 	// Because of the way we re-queue proposals during leadership
 	// changes, we may finish the same proposal object twice.
 	if prop.ch != nil {
@@ -738,7 +735,7 @@ func (s *state) removeNode(nodeID roachpb.NodeID, g *group) error {
 	return nil
 }
 
-func (s *state) handleMessage(req *RaftMessageRequest) {
+func (s *state) handleMessage(req RaftMessageRequest) {
 	// We only want to lazily create the group if it's not heartbeat-related;
 	// our heartbeats are coalesced and contain a dummy GroupID.
 	switch req.Message.Type {
@@ -888,7 +885,7 @@ func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID
 	g := &group{
 		groupID:   groupID,
 		replicaID: replicaID,
-		pending:   map[string]*proposal{},
+		pending:   make(map[string]proposal),
 	}
 	s.groups[groupID] = g
 
@@ -967,7 +964,7 @@ func (s *state) removeGroup(groupID roachpb.RangeID) error {
 	return nil
 }
 
-func (s *state) propose(p *proposal) {
+func (s *state) propose(p proposal) {
 	g, ok := s.groups[p.groupID]
 	if !ok {
 		s.removePending(nil /* group */, p, ErrGroupDeleted)
