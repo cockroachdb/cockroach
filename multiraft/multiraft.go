@@ -107,9 +107,9 @@ type MultiRaft struct {
 	nodeID          roachpb.NodeID
 	storeID         roachpb.StoreID
 	reqChan         chan *RaftMessageRequest
-	createGroupChan chan *createGroupOp
-	removeGroupChan chan *removeGroupOp
-	proposalChan    chan *proposal
+	createGroupChan chan createGroupOp
+	removeGroupChan chan removeGroupOp
+	proposalChan    chan proposal
 	// callbackChan is a generic hook to run a callback in the raft thread.
 	callbackChan chan func()
 }
@@ -160,9 +160,9 @@ func NewMultiRaft(nodeID roachpb.NodeID, storeID roachpb.StoreID, config *Config
 
 		// Input channels.
 		reqChan:         make(chan *RaftMessageRequest, reqBufferSize),
-		createGroupChan: make(chan *createGroupOp),
-		removeGroupChan: make(chan *removeGroupOp),
-		proposalChan:    make(chan *proposal),
+		createGroupChan: make(chan createGroupOp),
+		removeGroupChan: make(chan removeGroupOp),
+		proposalChan:    make(chan proposal),
 		callbackChan:    make(chan func()),
 	}
 
@@ -330,7 +330,7 @@ func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
 // CreateGroup creates a new consensus group and joins it. The initial membership of this
 // group is determined by the InitialState method of the group's Storage object.
 func (m *MultiRaft) CreateGroup(groupID roachpb.RangeID) error {
-	op := &createGroupOp{
+	op := createGroupOp{
 		groupID: groupID,
 		ch:      make(chan error, 1),
 	}
@@ -342,7 +342,7 @@ func (m *MultiRaft) CreateGroup(groupID roachpb.RangeID) error {
 // No events for this group will be emitted after this method returns
 // (but some events may still be in the channel buffer).
 func (m *MultiRaft) RemoveGroup(groupID roachpb.RangeID) error {
-	op := &removeGroupOp{
+	op := removeGroupOp{
 		groupID: groupID,
 		ch:      make(chan error, 1),
 	}
@@ -359,7 +359,7 @@ func (m *MultiRaft) SubmitCommand(groupID roachpb.RangeID, commandID string, com
 		log.Infof("node %v submitting command to group %v", m.nodeID, groupID)
 	}
 	ch := make(chan error, 1)
-	m.proposalChan <- &proposal{
+	m.proposalChan <- proposal{
 		groupID:   groupID,
 		commandID: commandID,
 		fn: func() {
@@ -385,7 +385,7 @@ func (m *MultiRaft) ChangeGroupMembership(groupID roachpb.RangeID, commandID str
 		ch <- err
 		return ch
 	}
-	m.proposalChan <- &proposal{
+	m.proposalChan <- proposal{
 		groupID:   groupID,
 		commandID: commandID,
 		fn: func() {
@@ -591,7 +591,7 @@ func (s *state) start() {
 				op.ch <- s.removeGroup(op.groupID)
 
 			case prop := <-s.proposalChan:
-				s.propose(prop)
+				s.propose(&prop)
 
 			case s.readyGroups = <-raftReady:
 				// readyGroups are saved in a local variable until they can be sent to
@@ -644,10 +644,7 @@ func (s *state) start() {
 	})
 }
 
-func (s *state) removePending(g *group, prop *proposal, err error) {
-	if prop == nil {
-		return
-	}
+func (prop *proposal) removeFromPending(g *group, err error) {
 	// Because of the way we re-queue proposals during leadership
 	// changes, we may finish the same proposal object twice.
 	if prop.ch != nil {
@@ -888,7 +885,7 @@ func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID
 	g := &group{
 		groupID:   groupID,
 		replicaID: replicaID,
-		pending:   map[string]*proposal{},
+		pending:   make(map[string]*proposal),
 	}
 	s.groups[groupID] = g
 
@@ -947,7 +944,7 @@ func (s *state) removeGroup(groupID roachpb.RangeID) error {
 
 	// Cancel commands which are still in transit.
 	for _, prop := range g.pending {
-		s.removePending(g, prop, ErrGroupDeleted)
+		prop.removeFromPending(g, ErrGroupDeleted)
 	}
 
 	if err := s.multiNode.RemoveGroup(uint64(groupID)); err != nil {
@@ -970,7 +967,7 @@ func (s *state) removeGroup(groupID roachpb.RangeID) error {
 func (s *state) propose(p *proposal) {
 	g, ok := s.groups[p.groupID]
 	if !ok {
-		s.removePending(nil /* group */, p, ErrGroupDeleted)
+		p.removeFromPending(nil /* group */, ErrGroupDeleted)
 		return
 	}
 
@@ -995,7 +992,7 @@ func (s *state) propose(p *proposal) {
 		// (which will trigger another re-proposal that will succeed), or the
 		// proposal is committed.
 		if _, ok := g.pending[p.commandID]; !ok {
-			s.removePending(nil, p, ErrGroupDeleted)
+			p.removeFromPending(nil, ErrGroupDeleted)
 		}
 		return
 	}
@@ -1313,7 +1310,9 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 			// applied too?
 			// This could be done with a Callback as in EventMembershipChangeCommitted
 			// or perhaps we should move away from a channel to a callback-based system.
-			s.removePending(g, g.pending[commandID], nil /* err */)
+			if p, ok := g.pending[commandID]; ok {
+				p.removeFromPending(g, nil /* err */)
+			}
 		}
 
 		if !raft.IsEmptySnap(ready.Snapshot) {
