@@ -60,7 +60,8 @@ type Storage interface {
 	CanApplySnapshot(groupID roachpb.RangeID, snap raftpb.Snapshot) bool
 
 	// AppliedIndex returns the last index which has been applied to the given group's
-	// state machine.
+	// state machine. It is called when a group is created and is not called
+	// again during the lifetime of the group.
 	AppliedIndex(groupID roachpb.RangeID) (uint64, error)
 
 	// RaftLocker returns a lock which (if non-nil) will be acquired
@@ -128,6 +129,7 @@ func (m *MemoryStorage) CanApplySnapshot(_ roachpb.RangeID, _ raftpb.Snapshot) b
 // AppliedIndex returns the last index which has been applied to the given group's
 // state machine.
 func (m *MemoryStorage) AppliedIndex(groupID roachpb.RangeID) (uint64, error) {
+	// MemoryStorage always starts from an empty slate.
 	return 0, nil
 }
 

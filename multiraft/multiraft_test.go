@@ -249,7 +249,10 @@ func TestLeaderElectionEvent(t *testing.T) {
 	}
 	// This may be dirty, but it seems this is the only way to make testrace pass.
 	cluster.nodes[1].callbackChan <- func() {
-		cluster.nodes[1].maybeSendLeaderEvent(groupID, cluster.nodes[1].groups[groupID],
+		s := cluster.nodes[1]
+		s.lockStorage()
+		defer s.unlockStorage()
+		s.maybeSendLeaderEvent(groupID, s.groups[groupID],
 			&raft.Ready{
 				Entries:          []raftpb.Entry{entry},
 				CommittedEntries: []raftpb.Entry{entry},

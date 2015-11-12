@@ -523,6 +523,10 @@ func (s *state) lockStorage() {
 	if s.storageLocked {
 		panic("storage already locked")
 	}
+	// s.storageLocked, like all fields of `state`, is only accessed
+	// through the state goroutine so it doesn't need any synchronization.
+	// The ordering of storageLocked relative to RaftLocker differs between
+	// lock and unlock to avoid the panic in Storage().
 	s.storageLocked = true
 	locker := s.Storage().RaftLocker()
 	if locker != nil {
@@ -1277,6 +1281,7 @@ func (s *state) sendMessage(g *group, msg raftpb.Message) {
 // proposals).
 // It may call into Storage so it must be called with the storage lock held.
 func (s *state) maybeSendLeaderEvent(groupID roachpb.RangeID, g *group, ready *raft.Ready) {
+	s.assertStorageLocked()
 	term := g.committedTerm
 	if ready.SoftState != nil {
 		// Always save the leader whenever it changes.
