@@ -251,6 +251,10 @@ type Store struct {
 	nodeDesc          *roachpb.NodeDescriptor
 	initComplete      sync.WaitGroup // Signaled by async init tasks
 
+	// Lock ordering notes: The processRaft goroutine and the multiraft goroutine
+	// act as a kind of mutex. To avoid deadlocks, the following lock order
+	// must be obeyed: processRaft goroutine < multiraft goroutine < Store.mu.
+	// (i.e. multiraft methods must not be called while holding Store.mu).
 	mu             sync.RWMutex                 // Protects variables below...
 	replicas       map[roachpb.RangeID]*Replica // Map of replicas by Range ID
 	replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
@@ -912,7 +916,40 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		return util.Errorf("orig range is not splittable by new range: %+v, %+v", origDesc, newDesc)
 	}
 
+	// Here be concurrency dragons: we must release the lock in order to
+	// call multiraft.RemoveGroup (see lock order comments at the
+	// declaration of store.mu). The range may be recreated by an
+	// incoming raft message while the lock is released, so we must
+	// retry until it stays gone after we reacquire the lock. Replicas
+	// are only created in two places (after startup): this method
+	// creates initialized replicas (and this method cannot race with
+	// itself because it is only called on the processRaft goroutine),
+	// and GroupStorage creates uninitialized replicas. Uninitialized
+	// replicas can only become initialized by the application of an
+	// initial snapshot, which will be blocked as long as we have not
+	// yet updated replicasByKey. Therefore we do not need to worry
+	// about initialized replicas being created concurrently, only
+	// uninitialized ones.
 	s.mu.Lock()
+	for {
+		if _, ok := s.uninitReplicas[newDesc.RangeID]; !ok {
+			break
+		}
+		// If we have an uninitialized replica of the new range, delete it
+		// to make way for the complete one created by the split. A live
+		// uninitialized multiraft group cannot be converted to an
+		// initialized one (because of the tricks we do to change
+		// FirstIndex from 0 to raftInitialLogIndex), so the group must be
+		// removed before we install the new range into s.replicas.
+		delete(s.uninitReplicas, newDesc.RangeID)
+		delete(s.replicas, newDesc.RangeID)
+		s.mu.Unlock()
+		if err := s.multiraft.RemoveGroup(newDesc.RangeID); err != nil {
+			return util.Errorf("couldn't remove uninitialized range's group %d: %s", newDesc.RangeID, err)
+		}
+		s.mu.Lock()
+	}
+	// The lock is held without interruption for the remainder of this method.
 	defer s.mu.Unlock()
 
 	// Replace the end key of the original range with the start key of
@@ -929,17 +966,6 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		return util.Errorf("couldn't insert range %v in rangesByKey btree", origRng)
 	}
 
-	// If we have an uninitialized replica of the new range, delete it to make
-	// way for the complete one created by the split. We also need to prevent an
-	// uninitialized group from updating its raft state, so we remove it as well
-	// which requires the raftGroupLocker.
-	if _, ok := s.uninitReplicas[newDesc.RangeID]; ok {
-		delete(s.uninitReplicas, newDesc.RangeID)
-		delete(s.replicas, newDesc.RangeID)
-		if err := s.multiraft.RemoveGroup(newDesc.RangeID); err != nil {
-			return util.Errorf("couldn't remove uninitialized range's group %d: %s", newDesc.RangeID, err)
-		}
-	}
 	if err := s.addReplicaInternal(newRng); err != nil {
 		return util.Errorf("couldn't insert range %v in rangesByKey btree: %s", newRng, err)
 	}
