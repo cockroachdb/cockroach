@@ -553,7 +553,7 @@ func mvccGetInternal(engine Engine, key roachpb.Key, metaKey MVCCKey,
 		// ignore the intent by insisting that the timestamp we're reading
 		// at is a historical timestamp < the intent timestamp. However, we
 		// return the intent separately; the caller may want to resolve it.
-		ignoredIntents = append(ignoredIntents, roachpb.Intent{Key: key, Txn: *meta.Txn})
+		ignoredIntents = append(ignoredIntents, roachpb.Intent{Span: roachpb.Span{Key: key}, Txn: *meta.Txn})
 		timestamp = meta.Timestamp.Prev()
 	}
 
@@ -564,7 +564,7 @@ func mvccGetInternal(engine Engine, key roachpb.Key, metaKey MVCCKey,
 		// Trying to read the last value, but it's another transaction's
 		// intent; the reader will have to act on this.
 		return nil, nil, &roachpb.WriteIntentError{
-			Intents: []roachpb.Intent{{Key: key, Txn: *meta.Txn}},
+			Intents: []roachpb.Intent{{Span: roachpb.Span{Key: key}, Txn: *meta.Txn}},
 		}
 	} else if ownIntent := meta.IsIntentOf(txn); !timestamp.Less(meta.Timestamp) || ownIntent {
 		// We are reading the latest value, which is either an intent written
@@ -791,7 +791,7 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp ro
 			if txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID) {
 				// The current Put operation does not come from the same
 				// transaction.
-				return &roachpb.WriteIntentError{Intents: []roachpb.Intent{{Key: key, Txn: *meta.Txn}}}
+				return &roachpb.WriteIntentError{Intents: []roachpb.Intent{{Span: roachpb.Span{Key: key}, Txn: *meta.Txn}}}
 			} else if txn.Epoch < meta.Txn.Epoch {
 				return util.Errorf("put with epoch %d came after put with epoch %d in txn %s",
 					txn.Epoch, meta.Txn.Epoch, txn.ID)

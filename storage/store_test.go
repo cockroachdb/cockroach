@@ -1387,7 +1387,7 @@ func TestStoreScanIntents(t *testing.T) {
 				etArgs, h := endTxnArgs(txn, true)
 				txn.Sequence++
 				for _, key := range keys {
-					etArgs.Intents = append(etArgs.Intents, roachpb.Intent{Key: key})
+					etArgs.Intents = append(etArgs.Intents, roachpb.Span{Key: key})
 				}
 				if _, err := client.SendWrappedWith(store.testSender(), nil, h, &etArgs); err != nil {
 					t.Fatal(err)

@@ -271,6 +271,12 @@ message Transaction {
   optional int32 Sequence = 14 [(gogoproto.nullable) = false];
 }
 
+// A Intent is a Span together with a Transaction.
+message Intent {
+  optional Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional Transaction txn = 2 [(gogoproto.nullable) = false];
+}
+
 // Lease contains information about leader leases including the
 // expiration and lease holder.
 message Lease {
@@ -284,13 +290,6 @@ message Lease {
   optional Timestamp expiration = 2 [(gogoproto.nullable) = false];
   // The address of the would-be lease holder.
   optional ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
-}
-
-// Intent is used to communicate the location of an intent.
-message Intent {
-  optional bytes key = 1 [(gogoproto.casttype) = "Key"];
-  optional bytes end_key = 2 [(gogoproto.casttype) = "Key"];
-  optional Transaction txn = 3 [(gogoproto.nullable) = false];
 }
 
 // GCMetadata holds information about the last complete key/value

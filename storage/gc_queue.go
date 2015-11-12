@@ -153,7 +153,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 
 	// Maps from txn ID to txn and intent key slice.
 	txnMap := map[string]*roachpb.Transaction{}
-	intentMap := map[string][]roachpb.Intent{}
+	intentMap := map[string][]roachpb.Span{}
 
 	// updateOldestIntent atomically updates the oldest intent.
 	updateOldestIntent := func(intentNanos int64) {
@@ -184,7 +184,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 					if meta.Timestamp.Less(intentExp) {
 						id := string(meta.Txn.ID)
 						txnMap[id] = meta.Txn
-						intentMap[id] = append(intentMap[id], roachpb.Intent{Key: expBaseKey})
+						intentMap[id] = append(intentMap[id], roachpb.Span{Key: expBaseKey})
 					} else {
 						updateOldestIntent(meta.Txn.OrigTimestamp.WallTime)
 					}
@@ -243,8 +243,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	for id, txn := range txnMap {
 		if txn.Status != roachpb.PENDING {
 			for _, intent := range intentMap[id] {
-				intent.Txn = *txn
-				intents = append(intents, intent)
+				intents = append(intents, roachpb.Intent{Span: intent, Txn: *txn})
 			}
 		}
 	}

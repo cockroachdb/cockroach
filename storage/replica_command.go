@@ -328,12 +328,12 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		reply.Txn.Status = roachpb.ABORTED
 	}
 
-	for i := range args.Intents {
-		// Set the transaction into the intents (TxnCoordSender avoids sending
-		// all of that redundant info over the wire).
-		// This needs to be done before the commit status check because
-		// the TransactionAbortedError branch below returns these intents.
-		args.Intents[i].Txn = *(reply.Txn)
+	asSkippedIntents := func(txn *roachpb.Transaction, intents []roachpb.Span) []roachpb.Intent {
+		ret := make([]roachpb.Intent, len(intents))
+		for i := range intents {
+			ret[i].Span, ret[i].Txn = intents[i], *txn
+		}
+		return ret
 	}
 
 	if deadlineLapsed {
@@ -343,7 +343,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		// and (b) not able to write on error (see #1989), we can't write
 		// ABORTED into the master transaction record, which remains
 		// PENDING, and that's pretty bad.
-		return reply, args.Intents, roachpb.NewTransactionAbortedError(reply.Txn)
+		return reply, asSkippedIntents(reply.Txn, args.Intents), roachpb.NewTransactionAbortedError(reply.Txn)
 	}
 
 	// If the transaction record already exists, verify that we can either
@@ -358,7 +358,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 			// that we know them, so we return them all for asynchronous
 			// resolution (we're currently not able to write on error, but
 			// see #1989).
-			return reply, args.Intents, roachpb.NewTransactionAbortedError(reply.Txn)
+			return reply, asSkippedIntents(reply.Txn, args.Intents), roachpb.NewTransactionAbortedError(reply.Txn)
 		} else if h.Txn.Epoch < reply.Txn.Epoch {
 			// TODO(tschottdorf): this leaves the Txn record (and more
 			// importantly, intents) dangling; we can't currently write on
@@ -418,27 +418,25 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	}
 
 	var externalIntents []roachpb.Intent
-	for _, intent := range args.Intents {
-		// Update the intent; we set the txn before (for handling
-		// TransactionAbortedError) but have changed the status in the
-		// meantime.
-		intent.Txn = *reply.Txn
+	for _, span := range args.Intents {
 		if err := func() error {
-			if len(intent.EndKey) == 0 {
+			if len(span.EndKey) == 0 {
 				// For single-key intents, do a KeyAddress-aware check of
 				// whether it's contained in our Range.
-				if !containsKey(desc, intent.Key) {
-					externalIntents = append(externalIntents, intent)
+				if !containsKey(desc, span.Key) {
+					externalIntents = append(externalIntents, roachpb.Intent{Span: span, Txn: *reply.Txn})
 					return nil
 				}
 				return engine.MVCCResolveWriteIntent(batch, ms,
-					intent.Key, reply.Txn.Timestamp, reply.Txn)
+					span.Key, reply.Txn.Timestamp, reply.Txn)
 			}
 			// For intent ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
 			// an intent range for range-local data is correctly considered local.
-			insideIntent, outsideIntents := intersectIntent(intent, desc)
-			externalIntents = append(externalIntents, outsideIntents...)
+			insideIntent, outsideIntents := intersectSpan(span, desc)
+			for _, itn := range outsideIntents {
+				externalIntents = append(externalIntents, roachpb.Intent{Span: itn, Txn: *reply.Txn})
+			}
 			if insideIntent != nil {
 				_, err := engine.MVCCResolveWriteIntentRange(batch, ms,
 					insideIntent.Key, insideIntent.EndKey, 0, reply.Txn.Timestamp, reply.Txn)
@@ -449,7 +447,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 			// TODO(tschottdorf): any legitimate reason for this to happen?
 			// Figure that out and if not, should still be ReplicaCorruption
 			// and not a panic.
-			panic(fmt.Sprintf("error resolving intent at %s on end transaction [%s]: %s", intent, reply.Txn.Status, err))
+			panic(fmt.Sprintf("error resolving intent at %s on end transaction [%s]: %s", span, reply.Txn.Status, err))
 		}
 	}
 
@@ -503,7 +501,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	return reply, externalIntents, nil
 }
 
-// intersectIntent takes an intent and a descriptor. It then splits the
+// intersectSpan takes an intent and a descriptor. It then splits the
 // intent's range into up to three pieces: A first piece which is contained in
 // the Range, and a slice of up to two further intents which are outside of the
 // key range. An intent for which [Key, EndKey) is empty does not result in any
@@ -513,43 +511,43 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 // which begins range-local but ends non-local results in a panic.
 // TODO(tschottdorf) move to proto, make more gen-purpose - kv.truncate does
 // some similar things.
-func intersectIntent(intent roachpb.Intent, desc roachpb.RangeDescriptor) (middle *roachpb.Intent, outside []roachpb.Intent) {
+func intersectSpan(span roachpb.Span, desc roachpb.RangeDescriptor) (middle *roachpb.Span, outside []roachpb.Span) {
 	start, end := desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey()
-	if len(intent.EndKey) == 0 {
-		outside = append(outside, intent)
+	if len(span.EndKey) == 0 {
+		outside = append(outside, span)
 		return
 	}
-	if bytes.Compare(intent.Key, keys.LocalRangeMax) < 0 {
-		if bytes.Compare(intent.EndKey, keys.LocalRangeMax) >= 0 {
+	if bytes.Compare(span.Key, keys.LocalRangeMax) < 0 {
+		if bytes.Compare(span.EndKey, keys.LocalRangeMax) >= 0 {
 			panic("a local intent range may not have a non-local portion")
 		}
-		if containsKeyRange(desc, intent.Key, intent.EndKey) {
-			return &intent, nil
+		if containsKeyRange(desc, span.Key, span.EndKey) {
+			return &span, nil
 		}
-		return nil, append(outside, intent)
+		return nil, append(outside, span)
 	}
 	// From now on, we're dealing with plain old key ranges - no more local
 	// addressing.
-	if bytes.Compare(intent.Key, start) < 0 {
+	if bytes.Compare(span.Key, start) < 0 {
 		// Intent spans a part to the left of [start, end).
-		iCopy := intent
-		if bytes.Compare(start, intent.EndKey) < 0 {
+		iCopy := span
+		if bytes.Compare(start, span.EndKey) < 0 {
 			iCopy.EndKey = start
 		}
-		intent.Key = iCopy.EndKey
+		span.Key = iCopy.EndKey
 		outside = append(outside, iCopy)
 	}
-	if bytes.Compare(intent.Key, intent.EndKey) < 0 && bytes.Compare(end, intent.EndKey) < 0 {
+	if bytes.Compare(span.Key, span.EndKey) < 0 && bytes.Compare(end, span.EndKey) < 0 {
 		// Intent spans a part to the right of [start, end).
-		iCopy := intent
+		iCopy := span
 		if bytes.Compare(iCopy.Key, end) < 0 {
 			iCopy.Key = end
 		}
-		intent.EndKey = iCopy.Key
+		span.EndKey = iCopy.Key
 		outside = append(outside, iCopy)
 	}
-	if bytes.Compare(intent.Key, intent.EndKey) < 0 && bytes.Compare(intent.Key, start) >= 0 && bytes.Compare(end, intent.EndKey) >= 0 {
-		middle = &intent
+	if bytes.Compare(span.Key, span.EndKey) < 0 && bytes.Compare(span.Key, start) >= 0 && bytes.Compare(end, span.EndKey) >= 0 {
+		middle = &span
 	}
 	return
 }

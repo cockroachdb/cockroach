@@ -98,15 +98,15 @@ func (br *BatchResponse) Header() *BatchResponse_Header {
 // TODO(tschottdorf): use roachpb.Span here instead of []Intent. Actually
 // Intent should be Intents = {Txn, []Span} so that a []Span can
 // be turned into Intents easily by just adding a Txn.
-func (ba *BatchRequest) GetIntents() []Intent {
-	var intents []Intent
+func (ba *BatchRequest) GetIntents() []Span {
+	var intents []Span
 	for _, arg := range ba.Requests {
 		req := arg.GetInner()
 		if !IsTransactionWrite(req) {
 			continue
 		}
 		h := req.Header()
-		intents = append(intents, Intent{Key: h.Key, EndKey: h.EndKey})
+		intents = append(intents, Span{Key: h.Key, EndKey: h.EndKey})
 	}
 	return intents
 }

@@ -75,8 +75,8 @@
 		InternalCommitTrigger
 		NodeList
 		Transaction
-		Lease
 		Intent
+		Lease
 		GCMetadata
 		NotLeaderError
 		NodeUnavailableError
@@ -451,7 +451,7 @@ type EndTransactionRequest struct {
 	Deadline              *Timestamp             `protobuf:"bytes,3,opt,name=deadline" json:"deadline,omitempty"`
 	InternalCommitTrigger *InternalCommitTrigger `protobuf:"bytes,4,opt,name=internal_commit_trigger" json:"internal_commit_trigger,omitempty"`
 	// List of intents written by the transaction.
-	Intents []Intent `protobuf:"bytes,5,rep,name=intents" json:"intents"`
+	Intents []Span `protobuf:"bytes,5,rep,name=intents" json:"intents"`
 }
 
 func (m *EndTransactionRequest) Reset()         { *m = EndTransactionRequest{} }
@@ -6236,7 +6236,7 @@ func (m *EndTransactionRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Intents = append(m.Intents, Intent{})
+			m.Intents = append(m.Intents, Span{})
 			if err := m.Intents[len(m.Intents)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}

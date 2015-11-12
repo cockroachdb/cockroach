@@ -52,8 +52,8 @@ class ModifiedSpanTrigger;
 class InternalCommitTrigger;
 class NodeList;
 class Transaction;
-class Lease;
 class Intent;
+class Lease;
 class GCMetadata;
 
 enum ValueType {
@@ -1574,6 +1574,109 @@ class Transaction : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class Intent : public ::google::protobuf::Message {
+ public:
+  Intent();
+  virtual ~Intent();
+
+  Intent(const Intent& from);
+
+  inline Intent& operator=(const Intent& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const Intent& default_instance();
+
+  void Swap(Intent* other);
+
+  // implements Message ----------------------------------------------
+
+  inline Intent* New() const { return New(NULL); }
+
+  Intent* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const Intent& from);
+  void MergeFrom(const Intent& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(Intent* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .cockroach.roachpb.Span span = 1;
+  bool has_span() const;
+  void clear_span();
+  static const int kSpanFieldNumber = 1;
+  const ::cockroach::roachpb::Span& span() const;
+  ::cockroach::roachpb::Span* mutable_span();
+  ::cockroach::roachpb::Span* release_span();
+  void set_allocated_span(::cockroach::roachpb::Span* span);
+
+  // optional .cockroach.roachpb.Transaction txn = 2;
+  bool has_txn() const;
+  void clear_txn();
+  static const int kTxnFieldNumber = 2;
+  const ::cockroach::roachpb::Transaction& txn() const;
+  ::cockroach::roachpb::Transaction* mutable_txn();
+  ::cockroach::roachpb::Transaction* release_txn();
+  void set_allocated_txn(::cockroach::roachpb::Transaction* txn);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.Intent)
+ private:
+  inline void set_has_span();
+  inline void clear_has_span();
+  inline void set_has_txn();
+  inline void clear_has_txn();
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::cockroach::roachpb::Span* span_;
+  ::cockroach::roachpb::Transaction* txn_;
+  friend void  protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2froachpb_2fdata_2eproto();
+
+  void InitAsDefaultInstance();
+  static Intent* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class Lease : public ::google::protobuf::Message {
  public:
   Lease();
@@ -1686,127 +1789,6 @@ class Lease : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static Lease* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class Intent : public ::google::protobuf::Message {
- public:
-  Intent();
-  virtual ~Intent();
-
-  Intent(const Intent& from);
-
-  inline Intent& operator=(const Intent& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const Intent& default_instance();
-
-  void Swap(Intent* other);
-
-  // implements Message ----------------------------------------------
-
-  inline Intent* New() const { return New(NULL); }
-
-  Intent* New(::google::protobuf::Arena* arena) const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const Intent& from);
-  void MergeFrom(const Intent& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  void InternalSwap(Intent* other);
-  private:
-  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
-    return _internal_metadata_.arena();
-  }
-  inline void* MaybeArenaPtr() const {
-    return _internal_metadata_.raw_arena_ptr();
-  }
-  public:
-
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // optional bytes key = 1;
-  bool has_key() const;
-  void clear_key();
-  static const int kKeyFieldNumber = 1;
-  const ::std::string& key() const;
-  void set_key(const ::std::string& value);
-  void set_key(const char* value);
-  void set_key(const void* value, size_t size);
-  ::std::string* mutable_key();
-  ::std::string* release_key();
-  void set_allocated_key(::std::string* key);
-
-  // optional bytes end_key = 2;
-  bool has_end_key() const;
-  void clear_end_key();
-  static const int kEndKeyFieldNumber = 2;
-  const ::std::string& end_key() const;
-  void set_end_key(const ::std::string& value);
-  void set_end_key(const char* value);
-  void set_end_key(const void* value, size_t size);
-  ::std::string* mutable_end_key();
-  ::std::string* release_end_key();
-  void set_allocated_end_key(::std::string* end_key);
-
-  // optional .cockroach.roachpb.Transaction txn = 3;
-  bool has_txn() const;
-  void clear_txn();
-  static const int kTxnFieldNumber = 3;
-  const ::cockroach::roachpb::Transaction& txn() const;
-  ::cockroach::roachpb::Transaction* mutable_txn();
-  ::cockroach::roachpb::Transaction* release_txn();
-  void set_allocated_txn(::cockroach::roachpb::Transaction* txn);
-
-  // @@protoc_insertion_point(class_scope:cockroach.roachpb.Intent)
- private:
-  inline void set_has_key();
-  inline void clear_has_key();
-  inline void set_has_end_key();
-  inline void clear_has_end_key();
-  inline void set_has_txn();
-  inline void clear_has_txn();
-
-  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::google::protobuf::internal::ArenaStringPtr key_;
-  ::google::protobuf::internal::ArenaStringPtr end_key_;
-  ::cockroach::roachpb::Transaction* txn_;
-  friend void  protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
-  friend void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto();
-  friend void protobuf_ShutdownFile_cockroach_2froachpb_2fdata_2eproto();
-
-  void InitAsDefaultInstance();
-  static Intent* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -3478,6 +3460,96 @@ inline void Transaction::set_sequence(::google::protobuf::int32 value) {
 
 // -------------------------------------------------------------------
 
+// Intent
+
+// optional .cockroach.roachpb.Span span = 1;
+inline bool Intent::has_span() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void Intent::set_has_span() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void Intent::clear_has_span() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void Intent::clear_span() {
+  if (span_ != NULL) span_->::cockroach::roachpb::Span::Clear();
+  clear_has_span();
+}
+inline const ::cockroach::roachpb::Span& Intent::span() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.span)
+  return span_ != NULL ? *span_ : *default_instance_->span_;
+}
+inline ::cockroach::roachpb::Span* Intent::mutable_span() {
+  set_has_span();
+  if (span_ == NULL) {
+    span_ = new ::cockroach::roachpb::Span;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Intent.span)
+  return span_;
+}
+inline ::cockroach::roachpb::Span* Intent::release_span() {
+  clear_has_span();
+  ::cockroach::roachpb::Span* temp = span_;
+  span_ = NULL;
+  return temp;
+}
+inline void Intent::set_allocated_span(::cockroach::roachpb::Span* span) {
+  delete span_;
+  span_ = span;
+  if (span) {
+    set_has_span();
+  } else {
+    clear_has_span();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Intent.span)
+}
+
+// optional .cockroach.roachpb.Transaction txn = 2;
+inline bool Intent::has_txn() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void Intent::set_has_txn() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void Intent::clear_has_txn() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void Intent::clear_txn() {
+  if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
+  clear_has_txn();
+}
+inline const ::cockroach::roachpb::Transaction& Intent::txn() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.txn)
+  return txn_ != NULL ? *txn_ : *default_instance_->txn_;
+}
+inline ::cockroach::roachpb::Transaction* Intent::mutable_txn() {
+  set_has_txn();
+  if (txn_ == NULL) {
+    txn_ = new ::cockroach::roachpb::Transaction;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Intent.txn)
+  return txn_;
+}
+inline ::cockroach::roachpb::Transaction* Intent::release_txn() {
+  clear_has_txn();
+  ::cockroach::roachpb::Transaction* temp = txn_;
+  txn_ = NULL;
+  return temp;
+}
+inline void Intent::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
+  delete txn_;
+  txn_ = txn;
+  if (txn) {
+    set_has_txn();
+  } else {
+    clear_has_txn();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Intent.txn)
+}
+
+// -------------------------------------------------------------------
+
 // Lease
 
 // optional .cockroach.roachpb.Timestamp start = 1;
@@ -3607,159 +3679,6 @@ inline void Lease::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor
     clear_has_replica();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.replica)
-}
-
-// -------------------------------------------------------------------
-
-// Intent
-
-// optional bytes key = 1;
-inline bool Intent::has_key() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void Intent::set_has_key() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void Intent::clear_has_key() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void Intent::clear_key() {
-  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_key();
-}
-inline const ::std::string& Intent::key() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.key)
-  return key_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void Intent::set_key(const ::std::string& value) {
-  set_has_key();
-  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Intent.key)
-}
-inline void Intent::set_key(const char* value) {
-  set_has_key();
-  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Intent.key)
-}
-inline void Intent::set_key(const void* value, size_t size) {
-  set_has_key();
-  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Intent.key)
-}
-inline ::std::string* Intent::mutable_key() {
-  set_has_key();
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Intent.key)
-  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline ::std::string* Intent::release_key() {
-  clear_has_key();
-  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void Intent::set_allocated_key(::std::string* key) {
-  if (key != NULL) {
-    set_has_key();
-  } else {
-    clear_has_key();
-  }
-  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Intent.key)
-}
-
-// optional bytes end_key = 2;
-inline bool Intent::has_end_key() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void Intent::set_has_end_key() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void Intent::clear_has_end_key() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void Intent::clear_end_key() {
-  end_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_end_key();
-}
-inline const ::std::string& Intent::end_key() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.end_key)
-  return end_key_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void Intent::set_end_key(const ::std::string& value) {
-  set_has_end_key();
-  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Intent.end_key)
-}
-inline void Intent::set_end_key(const char* value) {
-  set_has_end_key();
-  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Intent.end_key)
-}
-inline void Intent::set_end_key(const void* value, size_t size) {
-  set_has_end_key();
-  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Intent.end_key)
-}
-inline ::std::string* Intent::mutable_end_key() {
-  set_has_end_key();
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Intent.end_key)
-  return end_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline ::std::string* Intent::release_end_key() {
-  clear_has_end_key();
-  return end_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void Intent::set_allocated_end_key(::std::string* end_key) {
-  if (end_key != NULL) {
-    set_has_end_key();
-  } else {
-    clear_has_end_key();
-  }
-  end_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), end_key);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Intent.end_key)
-}
-
-// optional .cockroach.roachpb.Transaction txn = 3;
-inline bool Intent::has_txn() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void Intent::set_has_txn() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void Intent::clear_has_txn() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void Intent::clear_txn() {
-  if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
-  clear_has_txn();
-}
-inline const ::cockroach::roachpb::Transaction& Intent::txn() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.txn)
-  return txn_ != NULL ? *txn_ : *default_instance_->txn_;
-}
-inline ::cockroach::roachpb::Transaction* Intent::mutable_txn() {
-  set_has_txn();
-  if (txn_ == NULL) {
-    txn_ = new ::cockroach::roachpb::Transaction;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Intent.txn)
-  return txn_;
-}
-inline ::cockroach::roachpb::Transaction* Intent::release_txn() {
-  clear_has_txn();
-  ::cockroach::roachpb::Transaction* temp = txn_;
-  txn_ = NULL;
-  return temp;
-}
-inline void Intent::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
-  delete txn_;
-  txn_ = txn;
-  if (txn) {
-    set_has_txn();
-  } else {
-    clear_has_txn();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Intent.txn)
 }
 
 // -------------------------------------------------------------------

@@ -137,10 +137,10 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 
 // intents collects the intents to be resolved for the transaction. It does
 // not create copies, so the caller must not alter the returned data.
-func (tm *txnMetadata) intents() []roachpb.Intent {
-	intents := make([]roachpb.Intent, 0, tm.keys.Len())
+func (tm *txnMetadata) intents() []roachpb.Span {
+	intents := make([]roachpb.Span, 0, tm.keys.Len())
 	for _, o := range tm.keys.GetOverlaps(roachpb.KeyMin, roachpb.KeyMax) {
-		intent := roachpb.Intent{
+		intent := roachpb.Span{
 			Key: o.Key.Start().(roachpb.Key),
 		}
 		if endKey := o.Key.End().(roachpb.Key); !intent.Key.IsPrev(endKey) {
