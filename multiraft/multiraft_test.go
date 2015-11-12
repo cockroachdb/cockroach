@@ -422,6 +422,7 @@ func TestMembershipChange(t *testing.T) {
 // leader must have removed itself.
 func TestRemoveLeader(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("TODO(bdarnell): https://github.com/cockroachdb/cockroach/issues/2639")
 	stopper := stop.NewStopper()
 	const clusterSize = 6
 	const groupSize = 3
