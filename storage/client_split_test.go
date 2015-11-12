@@ -204,7 +204,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 
 // TestStoreRangeSplit executes a split of a range and verifies that the
 // resulting ranges respond to the right key ranges and that their stats
-// and response caches have been properly accounted for.
+// and sequence cache have been properly accounted for.
 func TestStoreRangeSplitIdempotency(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
@@ -223,7 +223,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Increments are a good way of testing the response cache. Up here, we
+	// Increments are a good way of testing the sequence cache. Up here, we
 	// address them to the original range, then later to the one that contains
 	// the key.
 	txn := roachpb.NewTransaction("test", []byte("c"), 10, roachpb.SERIALIZABLE,
@@ -297,7 +297,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		Txn: txn,
 	}, &lIncArgs)
 	if _, ok := err.(*roachpb.TransactionRetryError); !ok {
-		t.Fatalf("unexpected response cache miss: %v", err)
+		t.Fatalf("unexpected sequence cache miss: %v", err)
 	}
 
 	// Send out the same increment copied from above (same txn/sequence), but
@@ -307,7 +307,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		Txn:     txn,
 	}, &rIncArgs)
 	if _, ok := err.(*roachpb.TransactionRetryError); !ok {
-		t.Fatalf("unexpected response cache miss: %v", err)
+		t.Fatalf("unexpected sequence cache miss: %v", err)
 	}
 
 	// Compare stats of split ranges to ensure they are non zero and

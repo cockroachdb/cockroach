@@ -290,7 +290,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	snapData.RangeDescriptor = desc
 
 	// Iterate over all the data in the range, including local-only data like
-	// the response cache.
+	// the sequence cache.
 	iter := newReplicaDataIterator(&desc, snap)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
