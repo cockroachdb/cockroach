@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -507,6 +508,7 @@ func (t *logicTest) success(file string) {
 
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	defer csql.TestingWaitForMetadata()()
 
 	// TODO(marc): splitting ranges at table boundaries causes
 	// a blocked task and won't drain. Investigate and fix.

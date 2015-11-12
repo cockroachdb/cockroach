@@ -20,12 +20,15 @@ package sql
 import (
 	"fmt"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/gogo/protobuf/proto"
 )
 
 // DropDatabase drops a database.
@@ -80,11 +83,22 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 		return nil, err
 	}
 
+	zoneKey := MakeZoneKey(dbDesc.ID)
+
 	b := &client.Batch{}
 	b.Del(descKey)
 	b.Del(nameKey)
 	// Delete the zone config entry for this database.
-	b.Del(MakeZoneKey(dbDesc.ID))
+	b.Del(zoneKey)
+
+	p.testingVerifyMetadata = func(systemConfig config.SystemConfig) error {
+		for _, key := range [...]roachpb.Key{descKey, nameKey, zoneKey} {
+			if err := expectDeleted(systemConfig, key); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 
 	if err := p.txn.Run(b); err != nil {
 		return nil, err
@@ -199,12 +213,23 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 			return nil, err
 		}
 
+		zoneKey := MakeZoneKey(tableDesc.ID)
+
 		// Delete table descriptor
 		b := &client.Batch{}
 		b.Del(descKey)
 		b.Del(nameKey)
 		// Delete the zone config entry for this table.
-		b.Del(MakeZoneKey(tableDesc.ID))
+		b.Del(zoneKey)
+
+		p.testingVerifyMetadata = func(systemConfig config.SystemConfig) error {
+			for _, key := range [...]roachpb.Key{descKey, nameKey, zoneKey} {
+				if err := expectDeleted(systemConfig, key); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
 
 		if err := p.txn.Run(b); err != nil {
 			return nil, err
