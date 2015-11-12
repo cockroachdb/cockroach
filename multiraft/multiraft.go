@@ -104,8 +104,8 @@ type MultiRaft struct {
 	nodeID          roachpb.NodeID
 	storeID         roachpb.StoreID
 	reqChan         chan *RaftMessageRequest
-	createGroupChan chan *createGroupOp
-	removeGroupChan chan *removeGroupOp
+	createGroupChan chan createGroupOp
+	removeGroupChan chan removeGroupOp
 	proposalChan    chan *proposal
 	// callbackChan is a generic hook to run a callback in the raft thread.
 	callbackChan chan func()
@@ -157,8 +157,8 @@ func NewMultiRaft(nodeID roachpb.NodeID, storeID roachpb.StoreID, config *Config
 
 		// Input channels.
 		reqChan:         make(chan *RaftMessageRequest, reqBufferSize),
-		createGroupChan: make(chan *createGroupOp),
-		removeGroupChan: make(chan *removeGroupOp),
+		createGroupChan: make(chan createGroupOp),
+		removeGroupChan: make(chan removeGroupOp),
 		proposalChan:    make(chan *proposal),
 		callbackChan:    make(chan func()),
 	}
@@ -331,7 +331,7 @@ func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
 // CreateGroup creates a new consensus group and joins it. The initial membership of this
 // group is determined by the InitialState method of the group's Storage object.
 func (m *MultiRaft) CreateGroup(groupID roachpb.RangeID) error {
-	op := &createGroupOp{
+	op := createGroupOp{
 		groupID: groupID,
 		ch:      make(chan error, 1),
 	}
@@ -343,7 +343,7 @@ func (m *MultiRaft) CreateGroup(groupID roachpb.RangeID) error {
 // No events for this group will be emitted after this method returns
 // (but some events may still be in the channel buffer).
 func (m *MultiRaft) RemoveGroup(groupID roachpb.RangeID) error {
-	op := &removeGroupOp{
+	op := removeGroupOp{
 		groupID: groupID,
 		ch:      make(chan error, 1),
 	}
