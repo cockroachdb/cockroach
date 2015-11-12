@@ -612,12 +612,13 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 			Intents: txnMeta.intents(),
 		}
 		ba.Add(et)
-		if _, err := tc.wrapped.Send(ctx, ba); err != nil {
-			if log.V(1) {
-				log.Warningf("abort due to inactivty for %s failed: %s ", txn, err)
+		tc.stopper.RunAsyncTask(func() {
+			if _, err := tc.Send(ctx, ba); err != nil {
+				if log.V(1) {
+					log.Warningf("abort due to inactivty for %s failed: %s ", txn, err)
+				}
 			}
-
-		}
+		})
 		return false
 	}
 
