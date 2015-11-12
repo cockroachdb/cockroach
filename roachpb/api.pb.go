@@ -514,7 +514,7 @@ func (*EndTransactionResponse) ProtoMessage()    {}
 // The new range contains range replicas located on the same stores;
 // no range data is moved during this operation. The split can be
 // thought of as a mostly logical operation, though some other
-// metadata (e.g. response cache and range stats must be copied or
+// metadata (e.g. sequence cache and range stats must be copied or
 // recomputed).
 type AdminSplitRequest struct {
 	Span     `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`

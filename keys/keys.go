@@ -64,8 +64,7 @@ func MakeRangeIDPrefix(rangeID roachpb.RangeID) roachpb.Key {
 }
 
 // MakeRangeIDKey creates a range-local key based on the range's
-// Range ID, metadata key suffix, and optional detail (e.g. the
-// encoded command ID for a response cache entry, etc.).
+// Range ID, metadata key suffix, and optional detail.
 func MakeRangeIDKey(rangeID roachpb.RangeID, suffix, detail roachpb.RKey) roachpb.Key {
 	if len(suffix) != localSuffixLength {
 		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, localSuffixLength))
@@ -120,11 +119,11 @@ func RangeStatsKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDKey(rangeID, localRangeStatsSuffix, roachpb.RKey{})
 }
 
-// ResponseCacheKey returns a range-local key by Range ID for a
-// response cache entry, with detail specified by encoding the
+// SequenceCacheKey returns a range-local key by Range ID for a
+// sequence cache entry, with detail specified by encoding the
 // supplied client command ID.
-func ResponseCacheKey(rangeID roachpb.RangeID, family []byte) roachpb.Key {
-	return MakeRangeIDKey(rangeID, LocalResponseCacheSuffix, encoding.EncodeBytes(nil, family))
+func SequenceCacheKey(rangeID roachpb.RangeID, family []byte) roachpb.Key {
+	return MakeRangeIDKey(rangeID, LocalSequenceCacheSuffix, encoding.EncodeBytes(nil, family))
 }
 
 // MakeRangeKey creates a range-local key based on the range
@@ -160,7 +159,7 @@ func DecodeRangeKey(key roachpb.Key) (startKey, suffix, detail roachpb.Key, err 
 		return nil, nil, nil, util.Errorf("key %q does not have suffix of length %d",
 			key, localSuffixLength)
 	}
-	// Cut the response cache suffix.
+	// Cut the suffix.
 	suffix = b[:localSuffixLength]
 	detail = b[localSuffixLength:]
 	return
@@ -208,7 +207,7 @@ func TransactionKey(key roachpb.Key, id []byte) roachpb.Key {
 // However, not all local keys are addressable in the global map. Only range
 // local keys incorporating a range key (start key or transaction key) are
 // addressable (e.g. range metadata and txn records). Range local keys
-// incorporating the Range ID are not (e.g. response cache entries, and range
+// incorporating the Range ID are not (e.g. sequence cache entries, and range
 // stats).
 //
 // TODO(pmattis): Should KeyAddress return an error when the key is malformed?

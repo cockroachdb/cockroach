@@ -29,48 +29,48 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-var errEmptyID = errors.New("empty CommandID used in response cache")
+var errEmptyID = errors.New("empty CommandID used in sequence cache")
 
-// A ResponseCache provides idempotence for request retries. Each
+// The SequenceCache provides idempotence for request retries. Each
 // transactional request to a range specifies an ID and sequence number
 // which uniquely identifies a client command. After commands have
 // been replicated via Raft, they are executed against the state
-// machine and the results are stored in the ResponseCache.
+// machine and the results are stored in the SequenceCache.
 //
-// The ResponseCache stores responses in the underlying engine, using
+// The SequenceCache stores responses in the underlying engine, using
 // keys derived from Range ID, txn ID and sequence number.
 //
-// A ResponseCache is not thread safe. Access to it is serialized
+// A SequenceCache is not thread safe. Access to it is serialized
 // through Raft.
-type ResponseCache struct {
+type SequenceCache struct {
 	rangeID roachpb.RangeID
 }
 
-// NewResponseCache returns a new response cache. Every range replica
-// maintains a response cache, not just the leader.
-func NewResponseCache(rangeID roachpb.RangeID) *ResponseCache {
-	return &ResponseCache{
+// NewSequenceCache returns a new sequence cache. Every range replica
+// maintains a sequence cache, not just the leader.
+func NewSequenceCache(rangeID roachpb.RangeID) *SequenceCache {
+	return &SequenceCache{
 		rangeID: rangeID,
 	}
 }
 
-// ClearData removes all items stored in the persistent cache.
-func (rc *ResponseCache) ClearData(e engine.Engine) error {
-	from := keys.ResponseCacheKey(rc.rangeID, roachpb.KeyMin)
-	to := keys.ResponseCacheKey(rc.rangeID, roachpb.KeyMax)
+// ClearData removes all persisted items stored in the persistent.
+func (rc *SequenceCache) ClearData(e engine.Engine) error {
+	from := keys.SequenceCacheKey(rc.rangeID, roachpb.KeyMin)
+	to := keys.SequenceCacheKey(rc.rangeID, roachpb.KeyMax)
 	_, err := engine.ClearRange(e, engine.MVCCEncodeKey(from), engine.MVCCEncodeKey(to))
 	return err
 }
 
 // GetSequence looks up the latest sequence number recorded for this family. On a
-// cache miss, zero is returned.
-func (rc *ResponseCache) GetSequence(e engine.Engine, family []byte) (int64, error) {
+// miss, zero is returned.
+func (rc *SequenceCache) GetSequence(e engine.Engine, family []byte) (int64, error) {
 	if len(family) == 0 {
 		return 0, errEmptyID
 	}
 
-	// Pull response from the cache and read into reply if available.
-	key := keys.ResponseCacheKey(rc.rangeID, family)
+	// Pull response from disk and read into reply if available.
+	key := keys.SequenceCacheKey(rc.rangeID, family)
 	v, _, err := engine.MVCCGet(e, key, roachpb.ZeroTimestamp, true, nil)
 	if err != nil {
 		return 0, err
@@ -81,29 +81,28 @@ func (rc *ResponseCache) GetSequence(e engine.Engine, family []byte) (int64, err
 	return v.GetInt()
 }
 
-// CopyInto copies all the cached results from this response cache
-// into the destRangeID response cache. Failures decoding individual
-// cache entries return an error.
-func (rc *ResponseCache) CopyInto(e engine.Engine, destRangeID roachpb.RangeID) error {
+// CopyInto copies all the results from this sequence cache into the destRangeID
+// sequence cache. Failures decoding individual cache entries return an error.
+func (rc *SequenceCache) CopyInto(e engine.Engine, destRangeID roachpb.RangeID) error {
 	start := engine.MVCCEncodeKey(
-		keys.ResponseCacheKey(rc.rangeID, roachpb.KeyMin))
+		keys.SequenceCacheKey(rc.rangeID, roachpb.KeyMin))
 	end := engine.MVCCEncodeKey(
-		keys.ResponseCacheKey(rc.rangeID, roachpb.KeyMax))
+		keys.SequenceCacheKey(rc.rangeID, roachpb.KeyMax))
 
 	return e.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
 		// Decode the key into a cmd, skipping on error. Otherwise,
 		// write it to the corresponding key in the new cache.
-		family, err := rc.decodeResponseCacheKey(kv.Key)
+		family, err := rc.decodeSequenceCacheKey(kv.Key)
 		if err != nil {
-			return false, util.Errorf("could not decode a response cache key %s: %s",
+			return false, util.Errorf("could not decode a sequence cache key %s: %s",
 				roachpb.Key(kv.Key), err)
 		}
-		key := keys.ResponseCacheKey(destRangeID, family)
+		key := keys.SequenceCacheKey(destRangeID, family)
 		encKey := engine.MVCCEncodeKey(key)
 		// Decode the value, update the checksum and re-encode.
 		meta := &engine.MVCCMetadata{}
 		if err := proto.Unmarshal(kv.Value, meta); err != nil {
-			return false, util.Errorf("could not decode response cache value %s [% x]: %s",
+			return false, util.Errorf("could not decode sequence cache value %s [% x]: %s",
 				roachpb.Key(kv.Key), kv.Value, err)
 		}
 		meta.Value.Checksum = nil
@@ -113,31 +112,31 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRangeID roachpb.RangeID) 
 	})
 }
 
-// CopyFrom copies all the cached results from the originRangeID
-// response cache into this one. Note that the cache will not be
+// CopyFrom copies all the persisted results from the originRangeID
+// sequence cache into this one. Note that the cache will not be
 // locked while copying is in progress. Failures decoding individual
-// cache entries return an error. The copy is done directly using the
-// engine instead of interpreting values through MVCC for efficiency.
-func (rc *ResponseCache) CopyFrom(e engine.Engine, originRangeID roachpb.RangeID) error {
+// entries return an error. The copy is done directly using the engine
+// instead of interpreting values through MVCC for efficiency.
+func (rc *SequenceCache) CopyFrom(e engine.Engine, originRangeID roachpb.RangeID) error {
 	start := engine.MVCCEncodeKey(
-		keys.ResponseCacheKey(originRangeID, roachpb.KeyMin))
+		keys.SequenceCacheKey(originRangeID, roachpb.KeyMin))
 	end := engine.MVCCEncodeKey(
-		keys.ResponseCacheKey(originRangeID, roachpb.KeyMax))
+		keys.SequenceCacheKey(originRangeID, roachpb.KeyMax))
 
 	return e.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
 		// Decode the key into a cmd, skipping on error. Otherwise,
 		// write it to the corresponding key in the new cache.
-		family, err := rc.decodeResponseCacheKey(kv.Key)
+		family, err := rc.decodeSequenceCacheKey(kv.Key)
 		if err != nil {
-			return false, util.Errorf("could not decode a response cache key %s: %s",
+			return false, util.Errorf("could not decode a sequence cache key %s: %s",
 				roachpb.Key(kv.Key), err)
 		}
-		key := keys.ResponseCacheKey(rc.rangeID, family)
+		key := keys.SequenceCacheKey(rc.rangeID, family)
 		encKey := engine.MVCCEncodeKey(key)
 		// Decode the value, update the checksum and re-encode.
 		meta := &engine.MVCCMetadata{}
 		if err := proto.Unmarshal(kv.Value, meta); err != nil {
-			return false, util.Errorf("could not decode response cache value %s [% x]: %s",
+			return false, util.Errorf("could not decode sequence cache value %s [% x]: %s",
 				roachpb.Key(kv.Key), kv.Value, err)
 		}
 		meta.Value.Checksum = nil
@@ -148,7 +147,7 @@ func (rc *ResponseCache) CopyFrom(e engine.Engine, originRangeID roachpb.RangeID
 }
 
 // PutSequence writes a sequence number for the specified family.
-func (rc *ResponseCache) PutSequence(e engine.Engine, family []byte, sequence int64, err error) error {
+func (rc *SequenceCache) PutSequence(e engine.Engine, family []byte, sequence int64, err error) error {
 	if sequence <= 0 || len(family) == 0 {
 		return errEmptyID
 	}
@@ -157,16 +156,16 @@ func (rc *ResponseCache) PutSequence(e engine.Engine, family []byte, sequence in
 	}
 
 	// Write the response value to the engine.
-	key := keys.ResponseCacheKey(rc.rangeID, family)
+	key := keys.SequenceCacheKey(rc.rangeID, family)
 	var v roachpb.Value
 	v.SetInt(sequence)
 	return engine.MVCCPut(e, nil /* ms */, key, roachpb.ZeroTimestamp, v, nil /* txn */)
 }
 
 // Responses with write-too-old, write-intent and not leader errors
-// are retried on the server, and so are not recorded in the response
+// are retried on the server, and so are not recorded in the sequence
 // cache in the hopes of retrying to a successful outcome.
-func (rc *ResponseCache) shouldCacheError(err error) bool {
+func (rc *SequenceCache) shouldCacheError(err error) bool {
 	switch err.(type) {
 	case *roachpb.WriteTooOldError, *roachpb.WriteIntentError, *roachpb.NotLeaderError:
 		return false
@@ -174,7 +173,7 @@ func (rc *ResponseCache) shouldCacheError(err error) bool {
 	return true
 }
 
-func (rc *ResponseCache) decodeResponseCacheKey(encKey engine.MVCCKey) ([]byte, error) {
+func (rc *SequenceCache) decodeSequenceCacheKey(encKey engine.MVCCKey) ([]byte, error) {
 	key, _, isValue, err := engine.MVCCDecodeKey(encKey)
 	if err != nil {
 		return nil, err
@@ -191,12 +190,12 @@ func (rc *ResponseCache) decodeResponseCacheKey(encKey engine.MVCCKey) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
-	if !bytes.HasPrefix(b, keys.LocalResponseCacheSuffix) {
-		return nil, util.Errorf("key %s does not contain the response cache suffix %s",
-			key, keys.LocalResponseCacheSuffix)
+	if !bytes.HasPrefix(b, keys.LocalSequenceCacheSuffix) {
+		return nil, util.Errorf("key %s does not contain the sequence cache suffix %s",
+			key, keys.LocalSequenceCacheSuffix)
 	}
-	// Cut the response cache suffix.
-	b = b[len(keys.LocalResponseCacheSuffix):]
+	// Cut the sequence cache suffix.
+	b = b[len(keys.LocalSequenceCacheSuffix):]
 	// Decode the family.
 	b, fm, err := encoding.DecodeBytes(b, nil)
 	if err != nil {

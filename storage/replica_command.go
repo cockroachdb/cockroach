@@ -1284,7 +1284,7 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 }
 
 // splitTrigger is called on a successful commit of an AdminSplit
-// transaction. It copies the response cache for the new range and
+// transaction. It copies the sequence cache for the new range and
 // recomputes stats for both the existing, updated range and the new
 // range.
 func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger) error {
@@ -1326,9 +1326,9 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 
-	// Initialize the new range's response cache by copying the original's.
-	if err = r.respCache.CopyInto(batch, split.NewDesc.RangeID); err != nil {
-		return util.Errorf("unable to copy response cache to new split range: %s", err)
+	// Initialize the new range's sequence cache by copying the original's.
+	if err = r.sequence.CopyInto(batch, split.NewDesc.RangeID); err != nil {
+		return util.Errorf("unable to copy sequence cache to new split range: %s", err)
 	}
 
 	// Add the new split replica to the store. This step atomically
@@ -1489,9 +1489,9 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger)
 		return util.Errorf("subsumed  range ID must be provided: %d", merge.SubsumedRangeID)
 	}
 
-	// Copy the subsumed range's response cache to the subsuming one.
-	if err := r.respCache.CopyFrom(batch, merge.SubsumedRangeID); err != nil {
-		return util.Errorf("unable to copy response cache to new split range: %s", err)
+	// Copy the subsumed range's sequence cache to the subsuming one.
+	if err := r.sequence.CopyFrom(batch, merge.SubsumedRangeID); err != nil {
+		return util.Errorf("unable to copy sequence cache to new split range: %s", err)
 	}
 
 	// Remove the subsumed range's metadata.
