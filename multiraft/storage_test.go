@@ -57,8 +57,12 @@ func (b *BlockableStorage) CanApplySnapshot(groupID roachpb.RangeID, snap raftpb
 	return b.storage.CanApplySnapshot(groupID, snap)
 }
 
-func (b *BlockableStorage) GroupLocker() sync.Locker {
-	return b.storage.GroupLocker()
+func (b *BlockableStorage) AppliedIndex(groupID roachpb.RangeID) (uint64, error) {
+	return b.storage.AppliedIndex(groupID)
+}
+
+func (b *BlockableStorage) RaftLocker() sync.Locker {
+	return b.storage.RaftLocker()
 }
 
 type blockableGroupStorage struct {

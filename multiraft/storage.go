@@ -59,21 +59,18 @@ type Storage interface {
 	// panics.
 	CanApplySnapshot(groupID roachpb.RangeID, snap raftpb.Snapshot) bool
 
-	// GroupLocker returns a lock which (if non-nil) will be acquired
-	// when a group is being created (which entails multiple calls to
-	// Storage and StateMachine methods and may race with the removal of
-	// a previous incarnation of a group). If it returns a non-nil value
-	// it must return the same value on every call.
-	GroupLocker() sync.Locker
-}
-
-// The StateMachine interface is supplied by the application to manage a persistent
-// state machine (in Cockroach the StateMachine and the Storage are the same thing
-// but they are logically distinct and systems like etcd keep them separate).
-type StateMachine interface {
 	// AppliedIndex returns the last index which has been applied to the given group's
-	// state machine.
+	// state machine. It is called when a group is created and is not called
+	// again during the lifetime of the group.
 	AppliedIndex(groupID roachpb.RangeID) (uint64, error)
+
+	// RaftLocker returns a lock which (if non-nil) will be acquired
+	// before calling any other Storage method. Multiple calls may be
+	// made under a single lock. If it returns a non-nil value it must
+	// return the same value on every call.
+	// This lock *may or may not* be held when calling methods of
+	// WriteableGroupStorage.
+	RaftLocker() sync.Locker
 }
 
 // MemoryStorage is an in-memory implementation of Storage for testing.
@@ -129,8 +126,15 @@ func (m *MemoryStorage) CanApplySnapshot(_ roachpb.RangeID, _ raftpb.Snapshot) b
 	return true
 }
 
-// GroupLocker implements the Storage interface by returning nil.
-func (m *MemoryStorage) GroupLocker() sync.Locker {
+// AppliedIndex returns the last index which has been applied to the given group's
+// state machine.
+func (m *MemoryStorage) AppliedIndex(groupID roachpb.RangeID) (uint64, error) {
+	// MemoryStorage always starts from an empty slate.
+	return 0, nil
+}
+
+// RaftLocker implements the Storage interface by returning nil.
+func (m *MemoryStorage) RaftLocker() sync.Locker {
 	return nil
 }
 
@@ -209,7 +213,14 @@ func (w *writeTask) start(stopper *stop.Stopper) {
 			response := &writeResponse{make(map[roachpb.RangeID]*groupWriteResponse)}
 
 			for groupID, groupReq := range request.groups {
+				locker := w.storage.RaftLocker()
+				if locker != nil {
+					locker.Lock()
+				}
 				group, err := w.storage.GroupStorage(groupID, groupReq.replicaID)
+				if locker != nil {
+					locker.Unlock()
+				}
 				if err == ErrGroupDeleted {
 					if log.V(4) {
 						log.Infof("dropping write to deleted group %v", groupID)
