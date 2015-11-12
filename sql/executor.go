@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var testingWaitForMetadata bool
@@ -356,8 +357,10 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 				if verify(e.systemConfig) != nil {
 					e.systemConfigCond.Wait()
 				} else {
-					if i != 1 {
-						err = util.Errorf("expected %s to require one gossip update, but it required %d", stmt, i)
+					if i == 0 {
+						err = util.Errorf("expected %q to require a gossip update, but it did not", stmt)
+					} else if i > 1 {
+						log.Infof("%q unexpectedly required %d gossip updates", stmt, i)
 					}
 					break
 				}
