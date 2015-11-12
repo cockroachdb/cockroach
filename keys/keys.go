@@ -409,7 +409,7 @@ var (
 		suffix []byte
 		ppFunc func(key roachpb.Key) string
 	}{
-		{name: "ResponseCache", suffix: LocalResponseCacheSuffix, ppFunc: responseCacheKeyPrint},
+		{name: "ResponseCache", suffix: LocalResponseCacheSuffix, ppFunc: decodeKeyPrint},
 		{name: "RaftLeaderLease", suffix: localRaftLeaderLeaseSuffix},
 		{name: "RaftTombstone", suffix: localRaftTombstoneSuffix},
 		{name: "RaftHardState", suffix: localRaftHardStateSuffix},
@@ -439,22 +439,6 @@ func localStoreKeyPrint(key roachpb.Key) string {
 	}
 
 	return fmt.Sprintf("%q", []byte(key))
-}
-
-func responseCacheKeyPrint(key roachpb.Key) string {
-	var wallTime, rand uint64
-	var err error
-	key, wallTime, err = encoding.DecodeUvarint(key)
-	if err != nil {
-		return fmt.Sprintf("/err<%v:%q>", err, []byte(key))
-	}
-
-	key, rand, err = encoding.DecodeUint64(key)
-	if err != nil {
-		return fmt.Sprintf("/err<%v:%q>", err, []byte(key))
-	}
-
-	return fmt.Sprintf("/WallTime:%d/Random:%d", wallTime, rand)
 }
 
 func raftLogKeyPrint(key roachpb.Key) string {

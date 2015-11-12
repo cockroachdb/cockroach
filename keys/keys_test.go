@@ -369,7 +369,7 @@ func TestPrettyPrint(t *testing.T) {
 	}{
 		// local
 		{StoreIdentKey(), "/Local/Store/storeIdent"},
-		{ResponseCacheKey(roachpb.RangeID(1000001), &roachpb.ClientCmdID{WallTime: 9999, Random: 111}), "/Local/RangeID/1000001/ResponseCache/WallTime:9999/Random:111"},
+		{ResponseCacheKey(roachpb.RangeID(1000001), []byte("test0")), `/Local/RangeID/1000001/ResponseCache/"test0"`},
 		{RaftLeaderLeaseKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftLeaderLease"},
 		{RaftTombstoneKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftTombstone"},
 		{RaftHardStateKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftHardState"},
