@@ -211,7 +211,7 @@ message EndTransactionRequest {
   optional Timestamp deadline = 3;
   optional InternalCommitTrigger internal_commit_trigger = 4;
   // List of intents written by the transaction.
-  repeated Span intents = 5 [(gogoproto.nullable) = false];
+  repeated Span intent_spans = 5 [(gogoproto.nullable) = false];
 }
 
 // An EndTransactionResponse is the return value from the

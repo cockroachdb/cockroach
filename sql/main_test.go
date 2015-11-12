@@ -61,8 +61,8 @@ func checkEndTransactionTrigger(req roachpb.Request, _ roachpb.Header) error {
 	modifiedSystemSpan := modifiedSpanTrigger != nil && modifiedSpanTrigger.SystemDBSpan
 
 	var hasSystemKey bool
-	for _, it := range args.Intents {
-		addr := keys.Addr(it.Key)
+	for _, span := range args.IntentSpans {
+		addr := keys.Addr(span.Key)
 		if bytes.Compare(addr, keys.SystemDBSpan.Key) >= 0 && bytes.Compare(addr, keys.SystemDBSpan.EndKey) < 0 {
 			hasSystemKey = true
 			break

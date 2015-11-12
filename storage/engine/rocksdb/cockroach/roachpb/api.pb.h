@@ -2110,17 +2110,17 @@ class EndTransactionRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::InternalCommitTrigger* release_internal_commit_trigger();
   void set_allocated_internal_commit_trigger(::cockroach::roachpb::InternalCommitTrigger* internal_commit_trigger);
 
-  // repeated .cockroach.roachpb.Span intents = 5;
-  int intents_size() const;
-  void clear_intents();
-  static const int kIntentsFieldNumber = 5;
-  const ::cockroach::roachpb::Span& intents(int index) const;
-  ::cockroach::roachpb::Span* mutable_intents(int index);
-  ::cockroach::roachpb::Span* add_intents();
+  // repeated .cockroach.roachpb.Span intent_spans = 5;
+  int intent_spans_size() const;
+  void clear_intent_spans();
+  static const int kIntentSpansFieldNumber = 5;
+  const ::cockroach::roachpb::Span& intent_spans(int index) const;
+  ::cockroach::roachpb::Span* mutable_intent_spans(int index);
+  ::cockroach::roachpb::Span* add_intent_spans();
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-      intents() const;
+      intent_spans() const;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
-      mutable_intents();
+      mutable_intent_spans();
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.EndTransactionRequest)
  private:
@@ -2139,7 +2139,7 @@ class EndTransactionRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::Span* header_;
   ::cockroach::roachpb::Timestamp* deadline_;
   ::cockroach::roachpb::InternalCommitTrigger* internal_commit_trigger_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intents_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intent_spans_;
   bool commit_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
@@ -7408,34 +7408,34 @@ inline void EndTransactionRequest::set_allocated_internal_commit_trigger(::cockr
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.EndTransactionRequest.internal_commit_trigger)
 }
 
-// repeated .cockroach.roachpb.Span intents = 5;
-inline int EndTransactionRequest::intents_size() const {
-  return intents_.size();
+// repeated .cockroach.roachpb.Span intent_spans = 5;
+inline int EndTransactionRequest::intent_spans_size() const {
+  return intent_spans_.size();
 }
-inline void EndTransactionRequest::clear_intents() {
-  intents_.Clear();
+inline void EndTransactionRequest::clear_intent_spans() {
+  intent_spans_.Clear();
 }
-inline const ::cockroach::roachpb::Span& EndTransactionRequest::intents(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.EndTransactionRequest.intents)
-  return intents_.Get(index);
+inline const ::cockroach::roachpb::Span& EndTransactionRequest::intent_spans(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.EndTransactionRequest.intent_spans)
+  return intent_spans_.Get(index);
 }
-inline ::cockroach::roachpb::Span* EndTransactionRequest::mutable_intents(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.EndTransactionRequest.intents)
-  return intents_.Mutable(index);
+inline ::cockroach::roachpb::Span* EndTransactionRequest::mutable_intent_spans(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.EndTransactionRequest.intent_spans)
+  return intent_spans_.Mutable(index);
 }
-inline ::cockroach::roachpb::Span* EndTransactionRequest::add_intents() {
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.EndTransactionRequest.intents)
-  return intents_.Add();
+inline ::cockroach::roachpb::Span* EndTransactionRequest::add_intent_spans() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.EndTransactionRequest.intent_spans)
+  return intent_spans_.Add();
 }
 inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-EndTransactionRequest::intents() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.EndTransactionRequest.intents)
-  return intents_;
+EndTransactionRequest::intent_spans() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.EndTransactionRequest.intent_spans)
+  return intent_spans_;
 }
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
-EndTransactionRequest::mutable_intents() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.EndTransactionRequest.intents)
-  return &intents_;
+EndTransactionRequest::mutable_intent_spans() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.EndTransactionRequest.intent_spans)
+  return &intent_spans_;
 }
 
 // -------------------------------------------------------------------

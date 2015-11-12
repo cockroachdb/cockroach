@@ -796,7 +796,7 @@ func TestRangeNoGossipConfig(t *testing.T) {
 	bt, _ := beginTxnArgs(key, txn)
 	req1 := putArgs(key, []byte("foo"))
 	req2, _ := endTxnArgs(txn, true /* commit */)
-	req2.Intents = []roachpb.Span{{Key: key}}
+	req2.IntentSpans = []roachpb.Span{{Key: key}}
 	req3 := getArgs(key)
 
 	testCases := []struct {
@@ -850,7 +850,7 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 		t.Fatal(err)
 	}
 	req2, h := endTxnArgs(txn, true /* commit */)
-	req2.Intents = []roachpb.Span{{Key: key}}
+	req2.IntentSpans = []roachpb.Span{{Key: key}}
 	txn.Sequence++
 	if _, err := client.SendWrappedWith(tc.Sender(), nil, h, &req2); err != nil {
 		t.Fatal(err)
@@ -1953,7 +1953,7 @@ func TestEndTransactionGC(t *testing.T) {
 			t.Fatal(err)
 		}
 		args, h := endTxnArgs(txn, true)
-		args.Intents = test.intents
+		args.IntentSpans = test.intents
 		txn.Sequence++
 		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args); err != nil {
 			t.Fatal(err)
@@ -2011,7 +2011,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 
 	// End the transaction and resolve the intents.
 	args, h := endTxnArgs(txn, true /* commit */)
-	args.Intents = []roachpb.Span{{Key: key, EndKey: splitKey.Next().AsRawKey()}}
+	args.IntentSpans = []roachpb.Span{{Key: key, EndKey: splitKey.Next().AsRawKey()}}
 	txn.Sequence++
 	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args); err != nil {
 		t.Fatal(err)

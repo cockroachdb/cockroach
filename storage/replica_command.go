@@ -328,10 +328,10 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		reply.Txn.Status = roachpb.ABORTED
 	}
 
-	asSkippedIntents := func(txn *roachpb.Transaction, intents []roachpb.Span) []roachpb.Intent {
-		ret := make([]roachpb.Intent, len(intents))
-		for i := range intents {
-			ret[i].Span, ret[i].Txn = intents[i], *txn
+	asSkippedIntents := func(txn *roachpb.Transaction, spans []roachpb.Span) []roachpb.Intent {
+		ret := make([]roachpb.Intent, len(spans))
+		for i := range spans {
+			ret[i].Span, ret[i].Txn = spans[i], *txn
 		}
 		return ret
 	}
@@ -343,7 +343,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		// and (b) not able to write on error (see #1989), we can't write
 		// ABORTED into the master transaction record, which remains
 		// PENDING, and that's pretty bad.
-		return reply, asSkippedIntents(reply.Txn, args.Intents), roachpb.NewTransactionAbortedError(reply.Txn)
+		return reply, asSkippedIntents(reply.Txn, args.IntentSpans), roachpb.NewTransactionAbortedError(reply.Txn)
 	}
 
 	// If the transaction record already exists, verify that we can either
@@ -358,7 +358,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 			// that we know them, so we return them all for asynchronous
 			// resolution (we're currently not able to write on error, but
 			// see #1989).
-			return reply, asSkippedIntents(reply.Txn, args.Intents), roachpb.NewTransactionAbortedError(reply.Txn)
+			return reply, asSkippedIntents(reply.Txn, args.IntentSpans), roachpb.NewTransactionAbortedError(reply.Txn)
 		} else if h.Txn.Epoch < reply.Txn.Epoch {
 			// TODO(tschottdorf): this leaves the Txn record (and more
 			// importantly, intents) dangling; we can't currently write on
@@ -418,7 +418,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	}
 
 	var externalIntents []roachpb.Intent
-	for _, span := range args.Intents {
+	for _, span := range args.IntentSpans {
 		if err := func() error {
 			if len(span.EndKey) == 0 {
 				// For single-key intents, do a KeyAddress-aware check of
@@ -433,13 +433,13 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 			// For intent ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
 			// an intent range for range-local data is correctly considered local.
-			insideIntent, outsideIntents := intersectSpan(span, desc)
-			for _, itn := range outsideIntents {
-				externalIntents = append(externalIntents, roachpb.Intent{Span: itn, Txn: *reply.Txn})
+			inSpan, outSpans := intersectSpan(span, desc)
+			for _, span := range outSpans {
+				externalIntents = append(externalIntents, roachpb.Intent{Span: span, Txn: *reply.Txn})
 			}
-			if insideIntent != nil {
+			if inSpan != nil {
 				_, err := engine.MVCCResolveWriteIntentRange(batch, ms,
-					insideIntent.Key, insideIntent.EndKey, 0, reply.Txn.Timestamp, reply.Txn)
+					inSpan.Key, inSpan.EndKey, 0, reply.Txn.Timestamp, reply.Txn)
 				return err
 			}
 			return nil
@@ -458,7 +458,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		var err error
 		if txnAutoGC && len(externalIntents) == 0 {
 			if log.V(1) {
-				log.Infof("auto-gc'ed %s (%d intents)", h.Txn.Short(), len(args.Intents))
+				log.Infof("auto-gc'ed %s (%d intents)", h.Txn.Short(), len(args.IntentSpans))
 			}
 			err = engine.MVCCDelete(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */)
 		} else {

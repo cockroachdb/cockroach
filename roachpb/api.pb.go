@@ -451,7 +451,7 @@ type EndTransactionRequest struct {
 	Deadline              *Timestamp             `protobuf:"bytes,3,opt,name=deadline" json:"deadline,omitempty"`
 	InternalCommitTrigger *InternalCommitTrigger `protobuf:"bytes,4,opt,name=internal_commit_trigger" json:"internal_commit_trigger,omitempty"`
 	// List of intents written by the transaction.
-	Intents []Span `protobuf:"bytes,5,rep,name=intents" json:"intents"`
+	IntentSpans []Span `protobuf:"bytes,5,rep,name=intent_spans" json:"intent_spans"`
 }
 
 func (m *EndTransactionRequest) Reset()         { *m = EndTransactionRequest{} }
@@ -1676,8 +1676,8 @@ func (m *EndTransactionRequest) MarshalTo(data []byte) (int, error) {
 		}
 		i += n27
 	}
-	if len(m.Intents) > 0 {
-		for _, msg := range m.Intents {
+	if len(m.IntentSpans) > 0 {
+		for _, msg := range m.IntentSpans {
 			data[i] = 0x2a
 			i++
 			i = encodeVarintApi(data, i, uint64(msg.Size()))
@@ -3432,8 +3432,8 @@ func (m *EndTransactionRequest) Size() (n int) {
 		l = m.InternalCommitTrigger.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
-	if len(m.Intents) > 0 {
-		for _, e := range m.Intents {
+	if len(m.IntentSpans) > 0 {
+		for _, e := range m.IntentSpans {
 			l = e.Size()
 			n += 1 + l + sovApi(uint64(l))
 		}
@@ -6212,7 +6212,7 @@ func (m *EndTransactionRequest) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Intents", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field IntentSpans", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -6236,8 +6236,8 @@ func (m *EndTransactionRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Intents = append(m.Intents, Span{})
-			if err := m.Intents[len(m.Intents)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			m.IntentSpans = append(m.IntentSpans, Span{})
+			if err := m.IntentSpans[len(m.IntentSpans)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
