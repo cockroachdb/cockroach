@@ -610,6 +610,9 @@ func (t *Transaction) Update(o *Transaction) {
 	if t.Sequence < o.Sequence {
 		t.Sequence = o.Sequence
 	}
+	if len(o.Intents) > 0 {
+		t.Intents = o.Intents
+	}
 }
 
 // UpgradePriority sets transaction priority to the maximum of current

@@ -262,7 +262,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeList, _internal_metadata_),
       -1);
   Transaction_descriptor_ = file->message_type(11);
-  static const int Transaction_offsets_[14] = {
+  static const int Transaction_offsets_[15] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, name_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, key_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, id_),
@@ -277,6 +277,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto() {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, certain_nodes_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, writing_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, sequence_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, intents_),
   };
   Transaction_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -468,7 +469,7 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "\003 \001(\0132(.cockroach.roachpb.ChangeReplicas"
     "Trigger\022E\n\025modified_span_trigger\030\004 \001(\0132&"
     ".cockroach.roachpb.ModifiedSpanTrigger:\004"
-    "\210\240\037\001\"\035\n\010NodeList\022\021\n\005nodes\030\001 \003(\005B\002\020\001\"\302\004\n\013"
+    "\210\240\037\001\"\035\n\010NodeList\022\021\n\005nodes\030\001 \003(\005B\002\020\001\"\362\004\n\013"
     "Transaction\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022\024\n\003key\030\002"
     " \001(\014B\007\372\336\037\003Key\022\022\n\002id\030\003 \001(\014B\006\342\336\037\002ID\022\026\n\010pri"
     "ority\030\004 \001(\005B\004\310\336\037\000\0229\n\tisolation\030\005 \001(\0162 .c"
@@ -483,24 +484,25 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "h.roachpb.TimestampB\004\310\336\037\000\0228\n\rcertain_nod"
     "es\030\014 \001(\0132\033.cockroach.roachpb.NodeListB\004\310"
     "\336\037\000\022\025\n\007Writing\030\r \001(\010B\004\310\336\037\000\022\026\n\010Sequence\030\016"
-    " \001(\005B\004\310\336\037\000:\004\230\240\037\000\"l\n\006Intent\022/\n\004span\030\001 \001(\013"
-    "2\027.cockroach.roachpb.SpanB\010\310\336\037\000\320\336\037\001\0221\n\003t"
-    "xn\030\002 \001(\0132\036.cockroach.roachpb.Transaction"
-    "B\004\310\336\037\000\"\265\001\n\005Lease\0221\n\005start\030\001 \001(\0132\034.cockro"
-    "ach.roachpb.TimestampB\004\310\336\037\000\0226\n\nexpiratio"
-    "n\030\002 \001(\0132\034.cockroach.roachpb.TimestampB\004\310"
-    "\336\037\000\022;\n\007replica\030\003 \001(\0132$.cockroach.roachpb"
-    ".ReplicaDescriptorB\004\310\336\037\000:\004\230\240\037\000\"H\n\nGCMeta"
-    "data\022\035\n\017last_scan_nanos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023o"
-    "ldest_intent_nanos\030\002 \001(\003*Q\n\tValueType\022\013\n"
-    "\007UNKNOWN\020\000\022\007\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BYTES\020"
-    "\003\022\010\n\004TIME\020\004\022\016\n\nTIMESERIES\020d*>\n\021ReplicaCh"
-    "angeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_REPL"
-    "ICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SERIALIZ"
-    "ABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021Transactio"
-    "nStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007A"
-    "BORTED\020\002\032\004\210\243\036\000B\035Z\007roachpb\310\341\036\000\220\343\036\000\310\342\036\001\340\342\036"
-    "\001\320\342\036\001", 2805);
+    " \001(\005B\004\310\336\037\000\022.\n\007Intents\030\017 \003(\0132\027.cockroach."
+    "roachpb.SpanB\004\310\336\037\000:\004\230\240\037\000\"l\n\006Intent\022/\n\004sp"
+    "an\030\001 \001(\0132\027.cockroach.roachpb.SpanB\010\310\336\037\000\320"
+    "\336\037\001\0221\n\003txn\030\002 \001(\0132\036.cockroach.roachpb.Tra"
+    "nsactionB\004\310\336\037\000\"\265\001\n\005Lease\0221\n\005start\030\001 \001(\0132"
+    "\034.cockroach.roachpb.TimestampB\004\310\336\037\000\0226\n\ne"
+    "xpiration\030\002 \001(\0132\034.cockroach.roachpb.Time"
+    "stampB\004\310\336\037\000\022;\n\007replica\030\003 \001(\0132$.cockroach"
+    ".roachpb.ReplicaDescriptorB\004\310\336\037\000:\004\230\240\037\000\"H"
+    "\n\nGCMetadata\022\035\n\017last_scan_nanos\030\001 \001(\003B\004\310"
+    "\336\037\000\022\033\n\023oldest_intent_nanos\030\002 \001(\003*Q\n\tValu"
+    "eType\022\013\n\007UNKNOWN\020\000\022\007\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t"
+    "\n\005BYTES\020\003\022\010\n\004TIME\020\004\022\016\n\nTIMESERIES\020d*>\n\021R"
+    "eplicaChangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REM"
+    "OVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014"
+    "SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021Tr"
+    "ansactionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTE"
+    "D\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\035Z\007roachpb\310\341\036\000\220\343\036"
+    "\000\310\342\036\001\340\342\036\001\320\342\036\001", 2853);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/data.proto", &protobuf_RegisterTypes);
   Span::default_instance_ = new Span();
@@ -5039,6 +5041,7 @@ const int Transaction::kMaxTimestampFieldNumber;
 const int Transaction::kCertainNodesFieldNumber;
 const int Transaction::kWritingFieldNumber;
 const int Transaction::kSequenceFieldNumber;
+const int Transaction::kIntentsFieldNumber;
 #endif  // !_MSC_VER
 
 Transaction::Transaction()
@@ -5169,6 +5172,7 @@ void Transaction::Clear() {
 #undef ZR_HELPER_
 #undef ZR_
 
+  intents_.Clear();
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->Clear();
@@ -5388,6 +5392,23 @@ bool Transaction::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(122)) goto parse_Intents;
+        break;
+      }
+
+      // repeated .cockroach.roachpb.Span Intents = 15;
+      case 15: {
+        if (tag == 122) {
+         parse_Intents:
+          DO_(input->IncrementRecursionDepth());
+         parse_loop_Intents:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtualNoRecursionDepth(
+                input, add_intents()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(122)) goto parse_loop_Intents;
+        input->UnsafeDecrementRecursionDepth();
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -5501,6 +5522,12 @@ void Transaction::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt32(14, this->sequence(), output);
   }
 
+  // repeated .cockroach.roachpb.Span Intents = 15;
+  for (unsigned int i = 0, n = this->intents_size(); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      15, this->intents(i), output);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -5601,6 +5628,13 @@ void Transaction::SerializeWithCachedSizes(
   // optional int32 Sequence = 14;
   if (has_sequence()) {
     target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(14, this->sequence(), target);
+  }
+
+  // repeated .cockroach.roachpb.Span Intents = 15;
+  for (unsigned int i = 0, n = this->intents_size(); i < n; i++) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        15, this->intents(i), target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -5712,6 +5746,14 @@ int Transaction::ByteSize() const {
     }
 
   }
+  // repeated .cockroach.roachpb.Span Intents = 15;
+  total_size += 1 * this->intents_size();
+  for (int i = 0; i < this->intents_size(); i++) {
+    total_size +=
+      ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+        this->intents(i));
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     total_size +=
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
@@ -5737,6 +5779,7 @@ void Transaction::MergeFrom(const ::google::protobuf::Message& from) {
 
 void Transaction::MergeFrom(const Transaction& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  intents_.MergeFrom(from.intents_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_name()) {
       set_has_name();
@@ -5827,6 +5870,7 @@ void Transaction::InternalSwap(Transaction* other) {
   std::swap(certain_nodes_, other->certain_nodes_);
   std::swap(writing_, other->writing_);
   std::swap(sequence_, other->sequence_);
+  intents_.UnsafeArenaSwap(&other->intents_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -6361,6 +6405,36 @@ void Transaction::clear_sequence() {
   set_has_sequence();
   sequence_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.Sequence)
+}
+
+// repeated .cockroach.roachpb.Span Intents = 15;
+int Transaction::intents_size() const {
+  return intents_.size();
+}
+void Transaction::clear_intents() {
+  intents_.Clear();
+}
+ const ::cockroach::roachpb::Span& Transaction::intents(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.Intents)
+  return intents_.Get(index);
+}
+ ::cockroach::roachpb::Span* Transaction::mutable_intents(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.Intents)
+  return intents_.Mutable(index);
+}
+ ::cockroach::roachpb::Span* Transaction::add_intents() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.Transaction.Intents)
+  return intents_.Add();
+}
+ const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+Transaction::intents() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.Intents)
+  return intents_;
+}
+ ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
+Transaction::mutable_intents() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.Transaction.Intents)
+  return &intents_;
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

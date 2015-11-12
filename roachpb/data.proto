@@ -269,6 +269,7 @@ message Transaction {
   // part of the transaction. Used to prevent replay and out-of-order
   // application protection (by means of a transaction retry).
   optional int32 Sequence = 14 [(gogoproto.nullable) = false];
+  repeated Span Intents = 15 [(gogoproto.nullable) = false];
 }
 
 // A Intent is a Span together with a Transaction.

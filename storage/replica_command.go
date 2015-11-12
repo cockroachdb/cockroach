@@ -462,6 +462,10 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 			}
 			err = engine.MVCCDelete(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */)
 		} else {
+			reply.Txn.Intents = make([]roachpb.Span, len(externalIntents))
+			for i := range externalIntents {
+				reply.Txn.Intents[i] = externalIntents[i].Span
+			}
 			err = engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */, reply.Txn)
 		}
 		if err != nil {

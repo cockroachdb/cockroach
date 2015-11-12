@@ -430,7 +430,8 @@ type Transaction struct {
 	// A one-indexed sequence number which is increased on each batch sent as
 	// part of the transaction. Used to prevent replay and out-of-order
 	// application protection (by means of a transaction retry).
-	Sequence int32 `protobuf:"varint,14,opt,name=Sequence" json:"Sequence"`
+	Sequence int32  `protobuf:"varint,14,opt,name=Sequence" json:"Sequence"`
+	Intents  []Span `protobuf:"bytes,15,rep,name=Intents" json:"Intents"`
 }
 
 func (m *Transaction) Reset()      { *m = Transaction{} }
@@ -961,6 +962,18 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x70
 	i++
 	i = encodeVarintData(data, i, uint64(m.Sequence))
+	if len(m.Intents) > 0 {
+		for _, msg := range m.Intents {
+			data[i] = 0x7a
+			i++
+			i = encodeVarintData(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
 	return i, nil
 }
 
@@ -1263,6 +1276,12 @@ func (m *Transaction) Size() (n int) {
 	n += 1 + l + sovData(uint64(l))
 	n += 2
 	n += 1 + sovData(uint64(m.Sequence))
+	if len(m.Intents) > 0 {
+		for _, e := range m.Intents {
+			l = e.Size()
+			n += 1 + l + sovData(uint64(l))
+		}
+	}
 	return n
 }
 
@@ -2978,6 +2997,37 @@ func (m *Transaction) Unmarshal(data []byte) error {
 					break
 				}
 			}
+		case 15:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Intents", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthData
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Intents = append(m.Intents, Span{})
+			if err := m.Intents[len(m.Intents)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])

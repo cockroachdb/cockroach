@@ -2023,6 +2023,19 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	if _, ok := err.(*roachpb.WriteIntentError); !ok {
 		t.Errorf("expected write intent error, but got %s", err)
 	}
+
+	txn.Sequence++
+	hbArgs, h := heartbeatArgs(txn)
+	reply, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &hbArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hbResp := reply.(*roachpb.HeartbeatTxnResponse)
+	expIntents := []roachpb.Span{{Key: splitKey.AsRawKey(), EndKey: splitKey.AsRawKey().Next()}}
+	if !reflect.DeepEqual(hbResp.Txn.Intents, expIntents) {
+		t.Fatalf("expected persisted intents %v, got %v",
+			expIntents, hbResp.Txn.Intents)
+	}
 }
 
 // TestPushTxnBadKey verifies that args.Key equals args.PusheeTxn.ID.

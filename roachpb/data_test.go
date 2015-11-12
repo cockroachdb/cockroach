@@ -418,6 +418,7 @@ func TestTransactionUpdate(t *testing.T) {
 		CertainNodes:  nodes,
 		Writing:       true,
 		Sequence:      123,
+		Intents:       []Span{{Key: []byte("a")}},
 	}
 
 	noZeroField := func(txn Transaction) error {
@@ -443,6 +444,17 @@ func TestTransactionUpdate(t *testing.T) {
 	if err := noZeroField(txn2); err != nil {
 		t.Fatal(err)
 	}
+
+	var txn3 Transaction
+	txn3.ID = uuid.NewUUID4()
+	txn3.Name = "carl"
+	txn3.Isolation = SNAPSHOT
+	txn3.Update(&txn)
+
+	if err := noZeroField(txn3); err != nil {
+		t.Fatal(err)
+	}
+
 }
 
 func TestIsPrev(t *testing.T) {

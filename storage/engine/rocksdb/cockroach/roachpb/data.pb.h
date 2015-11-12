@@ -1517,6 +1517,18 @@ class Transaction : public ::google::protobuf::Message {
   ::google::protobuf::int32 sequence() const;
   void set_sequence(::google::protobuf::int32 value);
 
+  // repeated .cockroach.roachpb.Span Intents = 15;
+  int intents_size() const;
+  void clear_intents();
+  static const int kIntentsFieldNumber = 15;
+  const ::cockroach::roachpb::Span& intents(int index) const;
+  ::cockroach::roachpb::Span* mutable_intents(int index);
+  ::cockroach::roachpb::Span* add_intents();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+      intents() const;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
+      mutable_intents();
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Transaction)
  private:
   inline void set_has_name();
@@ -1565,6 +1577,7 @@ class Transaction : public ::google::protobuf::Message {
   ::cockroach::roachpb::NodeList* certain_nodes_;
   bool writing_;
   ::google::protobuf::int32 sequence_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intents_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fdata_2eproto();
@@ -3456,6 +3469,36 @@ inline void Transaction::set_sequence(::google::protobuf::int32 value) {
   set_has_sequence();
   sequence_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.Sequence)
+}
+
+// repeated .cockroach.roachpb.Span Intents = 15;
+inline int Transaction::intents_size() const {
+  return intents_.size();
+}
+inline void Transaction::clear_intents() {
+  intents_.Clear();
+}
+inline const ::cockroach::roachpb::Span& Transaction::intents(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.Intents)
+  return intents_.Get(index);
+}
+inline ::cockroach::roachpb::Span* Transaction::mutable_intents(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.Intents)
+  return intents_.Mutable(index);
+}
+inline ::cockroach::roachpb::Span* Transaction::add_intents() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.Transaction.Intents)
+  return intents_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+Transaction::intents() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.Intents)
+  return intents_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
+Transaction::mutable_intents() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.Transaction.Intents)
+  return &intents_;
 }
 
 // -------------------------------------------------------------------
