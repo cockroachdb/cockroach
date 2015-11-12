@@ -438,7 +438,7 @@ func localStoreKeyPrint(key roachpb.Key) string {
 		return "/storeIdent"
 	}
 
-	return fmt.Sprintf("%q", key)
+	return fmt.Sprintf("%q", []byte(key))
 }
 
 func responseCacheKeyPrint(key roachpb.Key) string {
@@ -446,12 +446,12 @@ func responseCacheKeyPrint(key roachpb.Key) string {
 	var err error
 	key, wallTime, err = encoding.DecodeUvarint(key)
 	if err != nil {
-		return fmt.Sprintf("/err<%v:%q>", err, key)
+		return fmt.Sprintf("/err<%v:%q>", err, []byte(key))
 	}
 
 	key, rand, err = encoding.DecodeUint64(key)
 	if err != nil {
-		return fmt.Sprintf("/err<%v:%q>", err, key)
+		return fmt.Sprintf("/err<%v:%q>", err, []byte(key))
 	}
 
 	return fmt.Sprintf("/WallTime:%d/Random:%d", wallTime, rand)
@@ -462,7 +462,7 @@ func raftLogKeyPrint(key roachpb.Key) string {
 	var err error
 	key, logIndex, err = encoding.DecodeUint64(key)
 	if err != nil {
-		return fmt.Sprintf("/err<%v:%q>", err, key)
+		return fmt.Sprintf("/err<%v:%q>", err, []byte(key))
 	}
 
 	return fmt.Sprintf("/logIndex:%d", logIndex)
@@ -471,13 +471,13 @@ func raftLogKeyPrint(key roachpb.Key) string {
 func localRangeIDKeyPrint(key roachpb.Key) string {
 	var buf bytes.Buffer
 	if encoding.PeekType(key) != encoding.Int {
-		return fmt.Sprintf("/err<%q>", key)
+		return fmt.Sprintf("/err<%q>", []byte(key))
 	}
 
 	// get range id
 	key, i, err := encoding.DecodeVarint(key)
 	if err != nil {
-		return fmt.Sprintf("/err<%v:%q>", err, key)
+		return fmt.Sprintf("/err<%v:%q>", err, []byte(key))
 	}
 
 	fmt.Fprintf(&buf, "/%d", i)
@@ -502,7 +502,7 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 	if hasSuffix {
 		fmt.Fprintf(&buf, "%s", decodeKeyPrint(key))
 	} else {
-		fmt.Fprintf(&buf, "%q", key)
+		fmt.Fprintf(&buf, "%q", []byte(key))
 	}
 
 	return buf.String()
@@ -523,7 +523,7 @@ func localRangeKeyPrint(key roachpb.Key) string {
 			if begin > 0 {
 				addrKey := key[:begin]
 				id := key[(begin + len(s.suffix)):]
-				fmt.Fprintf(&buf, "/%s/addrKey:%s/id:%q", s.name, decodeKeyPrint(addrKey), id)
+				fmt.Fprintf(&buf, "/%s/addrKey:%s/id:%q", s.name, decodeKeyPrint(addrKey), []byte(id))
 				return buf.String()
 			}
 		}
@@ -533,7 +533,7 @@ func localRangeKeyPrint(key roachpb.Key) string {
 }
 
 func print(key roachpb.Key) string {
-	return fmt.Sprintf("/%q", key)
+	return fmt.Sprintf("/%q", []byte(key))
 }
 
 // TableDataPrefix
@@ -574,7 +574,7 @@ func decodeKeyPrint(key roachpb.Key) string {
 			}
 		default:
 			// This shouldn't ever happen, but if it does let the loop exit.
-			fmt.Fprintf(&buf, "/%q", key)
+			fmt.Fprintf(&buf, "/%q", []byte(key))
 			key = nil
 		}
 
@@ -610,13 +610,13 @@ func PrettyPrint(key roachpb.Key) string {
 			}
 		}
 		if !hasPrefix {
-			fmt.Fprintf(&buf, "/%q", key)
+			fmt.Fprintf(&buf, "/%q", []byte(key))
 		}
 
 		return buf.String()
 	}
 
-	return fmt.Sprintf("%q", key)
+	return fmt.Sprintf("%q", []byte(key))
 }
 
 func init() {

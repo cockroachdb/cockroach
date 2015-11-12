@@ -46,7 +46,7 @@ func TestIntentResolution(t *testing.T) {
 			// All local points, except for "s" and "x"
 			keys:   []string{"a", "x", "b", "c", "s"},
 			ranges: [][2]string{{"d", "e"}},
-			exp:    []string{"s", "x"},
+			exp:    []string{`/Table/"s"`, `/Table/"x"`},
 		},
 		{
 			// h is local, y is covered by the Range below but still gets an
@@ -54,7 +54,7 @@ func TestIntentResolution(t *testing.T) {
 			// seem worth optimizing), and z is an explicit end point.
 			keys:   []string{"h", "y", "z"},
 			ranges: [][2]string{{"g", "z"}},
-			exp:    []string{`"s"-"z"`, "z" /* optimizable: */, "y"},
+			exp:    []string{`/Table/"s"-/Table/"z"`, `/Table/"z"` /* optimizable: */, `/Table/"y"`},
 		},
 		{
 			// This test demonstrates another redundancy. Two overlapping key
@@ -64,7 +64,7 @@ func TestIntentResolution(t *testing.T) {
 			// "s" which is also already covered by the range intents.
 			keys:   []string{"q", "s"},
 			ranges: [][2]string{{"a", "w"}, {"b", "x"}, {"t", "u"}},
-			exp:    []string{`"s"-"w"`, `"s"-"x"` /* optimizable: */, `"t"-"u"`, "s"},
+			exp:    []string{`/Table/"s"-/Table/"w"`, `/Table/"s"-/Table/"x"` /* optimizable: */, `/Table/"t"-/Table/"u"`, `/Table/"s"`},
 		},
 	}
 
@@ -80,7 +80,7 @@ func TestIntentResolution(t *testing.T) {
 			header := args.Header()
 			switch args.(type) {
 			case *roachpb.ResolveIntentRequest:
-				result = append(result, string(header.Key))
+				result = append(result, header.Key.String())
 			case *roachpb.ResolveIntentRangeRequest:
 				result = append(result, fmt.Sprintf("%s-%s", header.Key, header.EndKey))
 			}
