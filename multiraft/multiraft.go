@@ -523,6 +523,10 @@ func (s *state) lockStorage() {
 	if s.storageLocked {
 		panic("storage already locked")
 	}
+	// s.storageLocked, like all fields of `state`, is only accessed
+	// through the state goroutine so it doesn't need any synchronization.
+	// The ordering of storageLocked relative to RaftLocker differs between
+	// lock and unlock to avoid the panic in Storage().
 	s.storageLocked = true
 	locker := s.Storage().RaftLocker()
 	if locker != nil {
