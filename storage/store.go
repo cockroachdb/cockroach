@@ -251,11 +251,6 @@ type Store struct {
 	nodeDesc          *roachpb.NodeDescriptor
 	initComplete      sync.WaitGroup // Signaled by async init tasks
 
-	// Synchronizes raft group creation and range GC. Since lock ordering could
-	// be an issue, if this lock is ever required at the same time as mu, this
-	// lock should be acquired first.
-	raftGroupLocker sync.Mutex
-
 	mu             sync.RWMutex                 // Protects variables below...
 	replicas       map[roachpb.RangeID]*Replica // Map of replicas by Range ID
 	replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
@@ -741,6 +736,12 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.getReplicaLocked(rangeID)
+}
+
+// getReplicaLocked fetches a replica by RangeID. The store's lock must be held
+// in read or read/write mode.
+func (s *Store) getReplicaLocked(rangeID roachpb.RangeID) (*Replica, error) {
 	if rng, ok := s.replicas[rangeID]; ok {
 		return rng, nil
 	}
@@ -911,9 +912,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		return util.Errorf("orig range is not splittable by new range: %+v, %+v", origDesc, newDesc)
 	}
 
-	s.raftGroupLocker.Lock()
 	s.mu.Lock()
-	defer s.raftGroupLocker.Unlock()
 	defer s.mu.Unlock()
 
 	// Replace the end key of the original range with the start key of
@@ -1556,9 +1555,8 @@ func (s *Store) processRaft() {
 }
 
 // GroupStorage implements the multiraft.Storage interface.
+// The caller must hold the store's lock.
 func (s *Store) GroupStorage(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (multiraft.WriteableGroupStorage, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	r, ok := s.replicas[groupID]
 	if !ok {
 		// Before creating the group, see if there is a tombstone which
@@ -1594,8 +1592,9 @@ func (s *Store) GroupStorage(groupID roachpb.RangeID, replicaID roachpb.ReplicaI
 }
 
 // ReplicaDescriptor implements the multiraft.Storage interface.
+// The caller must hold the store's lock.
 func (s *Store) ReplicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
-	rep, err := s.GetReplica(groupID)
+	rep, err := s.getReplicaLocked(groupID)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
@@ -1603,8 +1602,9 @@ func (s *Store) ReplicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.Rep
 }
 
 // ReplicaIDForStore implements the multiraft.Storage interface.
+// The caller must hold the store's lock.
 func (s *Store) ReplicaIDForStore(groupID roachpb.RangeID, storeID roachpb.StoreID) (roachpb.ReplicaID, error) {
-	r, err := s.GetReplica(groupID)
+	r, err := s.getReplicaLocked(groupID)
 	if err != nil {
 		return 0, err
 	}
@@ -1628,13 +1628,12 @@ func (s *Store) ReplicasFromSnapshot(snap raftpb.Snapshot) ([]roachpb.ReplicaDes
 
 // RaftLocker implements the multiraft.Storage interface.
 func (s *Store) RaftLocker() sync.Locker {
-	return &s.raftGroupLocker
+	return &s.mu
 }
 
 // CanApplySnapshot implements the multiraft.Storage interface.
+// The caller must hold the store's lock.
 func (s *Store) CanApplySnapshot(rangeID roachpb.RangeID, snap raftpb.Snapshot) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	if r, ok := s.replicas[rangeID]; ok && r.isInitialized() {
 		// We have the range and it's initialized, so let the snapshot
 		// through.
@@ -1660,12 +1659,11 @@ func (s *Store) CanApplySnapshot(rangeID roachpb.RangeID, snap raftpb.Snapshot) 
 }
 
 // AppliedIndex implements the multiraft.Storage interface.
+// The caller must hold the store's lock.
 func (s *Store) AppliedIndex(groupID roachpb.RangeID) (uint64, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	r, ok := s.replicas[groupID]
-	if !ok {
-		return 0, util.Errorf("range %d not found", groupID)
+	r, err := s.getReplicaLocked(groupID)
+	if err != nil {
+		return 0, err
 	}
 	return atomic.LoadUint64(&r.appliedIndex), nil
 }

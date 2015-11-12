@@ -138,7 +138,7 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 		q.locker.Lock()
 		defer q.locker.Unlock()
 
-		if _, err := rng.store.GetReplica(desc.RangeID); err == nil {
+		if _, err := rng.store.getReplicaLocked(desc.RangeID); err == nil {
 			log.Infof("replica recreated during deletion; aborting deletion")
 			return nil
 		}
