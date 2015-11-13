@@ -515,6 +515,13 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.
 	if s.ctx.Gossip != nil {
+		// Set Gossip NodeID for bootstrap node, so before gossip
+		// ClusterID, gossip.is.NodeID is set. Otherwise a gossip
+		// information with NodeID=0 will cause a loop between
+		// all nodes.
+		// For non-bootstrap node, it's redudant as node will
+		// call gossip.SetNodeDescriptor before this call.
+		s.ctx.Gossip.SetNodeID(s.Ident.NodeID)
 		// Register callbacks for any changes to the system config.
 		// This may trigger splits along structured boundaries,
 		// and update max range bytes.
