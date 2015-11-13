@@ -1497,9 +1497,10 @@ func TestRangeSequenceCacheReadError(t *testing.T) {
 
 	// Overwrite sequence cache entry with garbage for the last op.
 	key, _ := keys.SequenceCacheKey(tc.rng.Desc().RangeID, txn.ID, txn.Sequence)
-	// Make garbageKey sort before key; add an extra byte.
+	// Make garbageKey sort before key (we've chosen Sequence=1 above,
+	// the last byte of which isn't \x00); add an extra byte of garbage.
 	garbageKey := append(roachpb.Key(nil), key[:len(key)-1]...)
-	garbageKey = append(garbageKey, '\x00', '\x00')
+	garbageKey = append(garbageKey, '\x00', '!')
 	err := engine.MVCCPut(tc.engine, nil, garbageKey, roachpb.ZeroTimestamp, roachpb.MakeValueFromString("never read in this test"), nil)
 	if err != nil {
 		t.Fatal(err)
