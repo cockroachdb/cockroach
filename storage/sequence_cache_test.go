@@ -54,14 +54,10 @@ var testEntry = roachpb.SequenceCacheEntry{Key: testTxnKey, Timestamp: testTxnTi
 
 func TestSequenceCacheEncodeDecode(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
 	const rangeID = 123
-	sc, _ := createTestSequenceCache(t, rangeID, stopper)
-
-	const expSeq = 123
+	const expSeq = 987
 	key, _ := keys.SequenceCacheKey(rangeID, testTxnID, expSeq)
-	id, seq, err := sc.decodeKey(key, nil)
+	id, seq, err := decodeSequenceCacheKey(key, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
