@@ -87,9 +87,12 @@ trap prepare_artifacts EXIT
 echo "make check"
 time ${builder} make check | tee "${outdir}/check.log"
 
-# 2. Verify that "go generate" was run.
+# 2.1 Verify that "go generate" was run.
 echo "verifying generated files"
 time ${builder} /bin/bash -c "(go generate ./... && git ls-files --modified --deleted --others --exclude-standard | diff /dev/null -) || (git add -A && git diff -u HEAD && false)" | tee "${outdir}/generate.log"
+# 2.2 Avoid code rot.
+echo "building gossip simulation"
+time ${builder} /bin/bash -c "go run gossip/simulation/gossip.go -size small 2>/dev/null"
 
 # 3. Run "make test".
 echo "make test"
