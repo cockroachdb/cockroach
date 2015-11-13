@@ -694,6 +694,12 @@ func (s *Store) ForceReplicaGCScan(t util.Tester) {
 	}
 }
 
+// DisableRaftLogQueue disables or enables the raft log queue.
+// Exposed only for testing.
+func (s *Store) DisableRaftLogQueue(disabled bool) {
+	s.raftLogQueue.SetDisabled(disabled)
+}
+
 // ForceRaftLogScan iterates over all ranges and enqueues any that need their
 // raft logs truncated. Exposed only for testing.
 func (s *Store) ForceRaftLogScan(t util.Tester) {

@@ -2550,6 +2550,7 @@ func TestTruncateLog(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
+	tc.rng.store.DisableRaftLogQueue(true)
 
 	// Populate the log with 10 entries. Save the LastIndex after each write.
 	var indexes []uint64
@@ -2594,8 +2595,8 @@ func TestTruncateLog(t *testing.T) {
 
 	// But any range that includes the truncated entries returns an error.
 	_, err = tc.rng.Entries(indexes[4], indexes[9], math.MaxUint64)
-	if err != raft.ErrUnavailable {
-		t.Errorf("expected ErrUnavailable, got %s", err)
+	if err != raft.ErrCompacted {
+		t.Errorf("expected ErrCompacted, got %s", err)
 	}
 
 	// The term of the last truncated entry is still available.
@@ -2609,8 +2610,8 @@ func TestTruncateLog(t *testing.T) {
 
 	// The terms of older entries are gone.
 	_, err = tc.rng.Term(indexes[3])
-	if err != raft.ErrUnavailable {
-		t.Errorf("expected ErrUnavailable, got %s", err)
+	if err != raft.ErrCompacted {
+		t.Errorf("expected ErrCompacted, got %s", err)
 	}
 
 	// Truncating logs that have already been truncated should not return an
@@ -3376,5 +3377,199 @@ func TestReplicaDestroy(t *testing.T) {
 	// Now try a fresh descriptor and succeed.
 	if err := rep.Destroy(*rep.Desc()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestEntries(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	tc.rng.store.DisableRaftLogQueue(true)
+
+	// Populate the log with 10 entries. Save the LastIndex after each write.
+	var indexes []uint64
+	for i := 0; i < 10; i++ {
+		args := incrementArgs([]byte("a"), int64(i))
+
+		if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &args); err != nil {
+			t.Fatal(err)
+		}
+		idx, err := tc.rng.LastIndex()
+		if err != nil {
+			t.Fatal(err)
+		}
+		indexes = append(indexes, idx)
+	}
+
+	rng := tc.rng
+	rangeID := rng.Desc().RangeID
+
+	// Discard the first half of the log.
+	truncateArgs := truncateLogArgs(indexes[5], rangeID)
+	if _, err := client.SendWrapped(tc.Sender(), rng.context(), &truncateArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	for i, tc := range []struct {
+		lo             uint64
+		hi             uint64
+		maxBytes       uint64
+		expResultCount int
+		expError       error
+	}{
+		// Case 0: Just most of the entries.
+		{lo: indexes[5], hi: indexes[9], expResultCount: 4},
+		// Case 1: Get a single entry.
+		{lo: indexes[5], hi: indexes[6], expResultCount: 1},
+		// Case 2: Use MaxUint64 instead of 0 for maxBytes.
+		{lo: indexes[5], hi: indexes[9], maxBytes: math.MaxUint64, expResultCount: 4},
+		// Case 3: maxBytes is set low so only a single value should be
+		// returned.
+		{lo: indexes[5], hi: indexes[9], maxBytes: 1, expResultCount: 1},
+		// Case 4: hi value is past the last index, should return all available
+		// entries
+		{lo: indexes[5], hi: indexes[9] + 1, expResultCount: 5},
+		// Case 5: all values have been truncated.
+		{lo: indexes[1], hi: indexes[2], expError: raft.ErrCompacted},
+		// Case 6: hi has just been truncated.
+		{lo: indexes[1], hi: indexes[4], expError: raft.ErrCompacted},
+		// Case 7: another case where hi has just been truncated.
+		{lo: indexes[3], hi: indexes[4], expError: raft.ErrCompacted},
+		// Case 8: lo has been truncated and hi is the truncation point.
+		{lo: indexes[4], hi: indexes[5], expError: raft.ErrCompacted},
+		// Case 9: lo has been truncated but hi is available.
+		{lo: indexes[4], hi: indexes[9], expError: raft.ErrCompacted},
+		// Case 10: lo has been truncated and hi is not available.
+		{lo: indexes[4], hi: indexes[9] + 100, expError: raft.ErrCompacted},
+		// Case 11: lo has been truncated but hi is available, and maxBytes is
+		// set low.
+		{lo: indexes[4], hi: indexes[9], maxBytes: 1, expError: raft.ErrCompacted},
+		// Case 12: lo is available but hi isn't.
+		{lo: indexes[5], hi: indexes[9] + 100, expError: raft.ErrUnavailable},
+		// Case 13: both lo and hi are not available.
+		{lo: indexes[9] + 100, hi: indexes[9] + 1000, expError: raft.ErrUnavailable},
+		// Case 14: lo is available, hi is not, but it was cut off by maxBytes.
+		{lo: indexes[5], hi: indexes[9] + 1000, maxBytes: 1, expResultCount: 1},
+	} {
+		ents, err := rng.Entries(tc.lo, tc.hi, tc.maxBytes)
+		if tc.expError == nil && err != nil {
+			t.Errorf("%d: expected no error, got %s", i, err)
+			continue
+		} else if err != tc.expError {
+			t.Errorf("%d: expected error %s, got %s", i, tc.expError, err)
+			continue
+		}
+		if len(ents) != tc.expResultCount {
+			t.Errorf("%d: expected %d entires, got %d", i, tc.expResultCount, len(ents))
+		}
+	}
+
+	// Case 15: Lo must be less than or equal to hi.
+	if _, err := rng.Entries(indexes[9], indexes[5], 0); err == nil {
+		t.Errorf("15: error expected, got none")
+	}
+
+	// Case 16: add a gap to the indexes.
+	if err := engine.MVCCDelete(tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), roachpb.ZeroTimestamp,
+		nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rng.Entries(indexes[5], indexes[9], 0); err == nil {
+		t.Errorf("16: error expected, got none")
+	}
+
+	// Case 17: don't hit the gap due to maxBytes.
+	ents, err := rng.Entries(indexes[5], indexes[9], 1)
+	if err != nil {
+		t.Errorf("17: expected no error, got %s", err)
+	}
+	if len(ents) != 1 {
+		t.Errorf("17: expected 1 entry, got %d", len(ents))
+	}
+
+	// Case 18: don't hit the gap due to truncation.
+	if _, err := rng.Entries(indexes[4], indexes[9], 0); err != raft.ErrCompacted {
+		t.Errorf("18: expected error %s , got %s", raft.ErrCompacted, err)
+	}
+}
+
+func TestTerm(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	tc.rng.store.DisableRaftLogQueue(true)
+
+	rng := tc.rng
+	rangeID := rng.Desc().RangeID
+
+	// Populate the log with 10 entries. Save the LastIndex after each write.
+	var indexes []uint64
+	for i := 0; i < 10; i++ {
+		args := incrementArgs([]byte("a"), int64(i))
+
+		if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &args); err != nil {
+			t.Fatal(err)
+		}
+		idx, err := tc.rng.LastIndex()
+		if err != nil {
+			t.Fatal(err)
+		}
+		indexes = append(indexes, idx)
+	}
+
+	// Discard the first half of the log.
+	truncateArgs := truncateLogArgs(indexes[5], rangeID)
+	if _, err := client.SendWrapped(tc.Sender(), rng.context(), &truncateArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	firstIndex, err := rng.FirstIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstIndex != indexes[5] {
+		t.Fatalf("expected fristIndex %d to be %d", firstIndex, indexes[4])
+	}
+
+	// Truncated logs should return an ErrCompacted error.
+	if _, err := tc.rng.Term(indexes[1]); err != raft.ErrCompacted {
+		t.Errorf("expected ErrCompacted, got %s", err)
+	}
+	if _, err := tc.rng.Term(indexes[3]); err != raft.ErrCompacted {
+		t.Errorf("expected ErrCompacted, got %s", err)
+	}
+
+	// FirstIndex-1 should return the term of firstIndex.
+	firstIndexTerm, err := tc.rng.Term(firstIndex)
+	if err != nil {
+		t.Errorf("expect no error, got %s", err)
+	}
+
+	term, err := tc.rng.Term(indexes[4])
+	if err != nil {
+		t.Errorf("expect no error, got %s", err)
+	}
+	if term != firstIndexTerm {
+		t.Errorf("expected firstIndex-1's term:%d to equal that of firstIndex:%d", term, firstIndexTerm)
+	}
+
+	lastIndex, err := rng.LastIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Last index should return correctly.
+	if _, err := tc.rng.Term(lastIndex); err != nil {
+		t.Errorf("expected no error, got %s", err)
+	}
+
+	// Terms for after the last index should return ErrUnavailable.
+	if _, err := tc.rng.Term(lastIndex + 1); err != raft.ErrUnavailable {
+		t.Errorf("expected ErrUnavailable, got %s", err)
+	}
+	if _, err := tc.rng.Term(indexes[9] + 1000); err != raft.ErrUnavailable {
+		t.Errorf("expected ErrUnavailable, got %s", err)
 	}
 }
