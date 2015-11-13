@@ -138,7 +138,7 @@ check:
 	@echo "checking for tabs in shell scripts"
 	@! git grep -F '	' -- '*.sh'
 	@echo "checking for forbidden imports"
-	@! go list -f '{{ $$ip := .ImportPath }}{{ range .Imports}}{{ $$ip }}: {{ println . }}{{end}}' $(PKG) | \
+	@! $(GO) list -f '{{ $$ip := .ImportPath }}{{ range .Imports}}{{ $$ip }}: {{ println . }}{{end}}' $(PKG) | \
 		grep -E ' (golang/protobuf/proto|log|path)$$' | \
 		grep -Ev '(base|security|sql/driver|util/(log|stop)): log$$'
 	@echo "ineffassign"
@@ -146,10 +146,10 @@ check:
 	@echo "errcheck"
 	@errcheck -ignore 'bytes:Write.*,io:Close,net:Close,net/http:Close,net/rpc:Close,os:Close,database/sql:Close' $(PKG)
 	@echo "vet"
-	@! go tool vet . 2>&1 | \
+	@! $(GO) tool vet . 2>&1 | \
 	  grep -vE '^vet: cannot process directory .git'
 	@echo "vet --shadow"
-	@! go tool vet --shadow . 2>&1 | \
+	@! $(GO) tool vet --shadow . 2>&1 | \
 	  grep -vE '(declaration of err shadows|^vet: cannot process directory \.git)'
 	@echo "golint"
 	@! golint $(PKG) | \
@@ -185,7 +185,7 @@ GLOCK := ../../../../bin/glock
 #        |~ GOPATH/src/github.com/cockroachdb
 
 $(GLOCK):
-	go get github.com/robfig/glock
+	$(GO) get github.com/robfig/glock
 
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
