@@ -325,6 +325,9 @@ func Example_cput() {
 	// node drained and shutdown: ok
 }
 
+// TODO(tamird): reenable this? it sometimes leakes goroutines.
+// https://github.com/cockroachdb/cockroach/issues/3120
+/*
 func Example_max_results() {
 	c := newCLITest()
 
@@ -358,6 +361,7 @@ func Example_max_results() {
 	// quit
 	// node drained and shutdown: ok
 }
+*/
 
 // TestFlagUsage is a basic test to make sure the fragile
 // help template does not break.
