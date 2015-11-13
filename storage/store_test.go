@@ -149,6 +149,8 @@ func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *stop.
 	if err := store.BootstrapRange(nil); err != nil {
 		t.Fatal(err)
 	}
+	// Have to call g.SetNodeID before call g.AddInfo
+	store.Gossip().SetNodeID(roachpb.NodeID(1))
 	return store, manual, stopper
 }
 

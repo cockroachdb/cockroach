@@ -57,7 +57,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 		t.Fatal(err)
 	}
 	remote = New(rRPCContext, TestBootstrap)
-	if err := local.SetNodeDescriptor(&roachpb.NodeDescriptor{
+	if err := remote.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  2,
 		Address: util.MakeUnresolvedAddr(raddr.Network(), raddr.String()),
 	}); err != nil {

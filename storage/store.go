@@ -433,6 +433,19 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	if s.nodeDesc.NodeID != 0 && s.Ident.NodeID != s.nodeDesc.NodeID {
 		return util.Errorf("node id:%d does not equal the one in node descriptor:%d", s.Ident.NodeID, s.nodeDesc.NodeID)
 	}
+	// Gossip is only ever nil while bootstrapping a cluster and
+	// in unittests.
+	// Set NodeID to gossip as early as possible as NewReplica may
+	// call r.maybeGossipSystemConfig which will call gossip.AddInfo.
+	if s.ctx.Gossip != nil {
+		// Set Gossip NodeID for bootstrapped node, so before gossip
+		// ClusterID, gossip.is.NodeID is set. Otherwise a gossip
+		// information with NodeID=0 will cause a loop between
+		// all nodes.
+		// For non-bootstrapped node, it's redudant as node will
+		// call gossip.SetNodeDescriptor before this call.
+		s.ctx.Gossip.SetNodeID(s.Ident.NodeID)
+	}
 
 	// Create ID allocators.
 	idAlloc, err := newIDAllocator(keys.RangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper)
