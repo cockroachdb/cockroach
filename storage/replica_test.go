@@ -2822,7 +2822,6 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 // we don't erroneously return that descriptor (recently fixed bug) if the
 func TestRangeDanglingMetaIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(tschottdorf): https://github.com/cockroachdb/cockroach/issues/3020")
 	// Test RangeLookup with Scan.
 	testRangeDanglingMetaIntent(t, false)
 	// Test RangeLookup with ReverseScan.
@@ -2864,16 +2863,27 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key)), data)
 	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	// Officially begin the transaction. If not for this, the intent resolution
+	// machinery would simply remove the intent we write below, see #3020.
+	// We send directly to Replica throughout this test, so there's no danger
+	// of the Store aborting this transaction (i.e. we don't have to set a high
+	// priority).
+	bArgs, h := beginTxnArgs(key, txn)
+	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &bArgs); err != nil {
+		t.Fatal(err)
+	}
 
+	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key)), data)
+	txn.Sequence++
 	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn}, &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now lookup the range; should get the value. Since the lookup is
-	// inconsistent, there's no WriteIntentErorr.
-	rlArgs.Key = keys.RangeMetaKey(roachpb.RKey("A"))
+	// inconsistent, there's no WriteIntentError.
+	// Note that 'A' < 'a'.
+	rlArgs.Key = keys.RangeMetaKey(roachpb.RKey{'A'})
 
 	reply, err = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		Timestamp:       roachpb.MinTimestamp,
