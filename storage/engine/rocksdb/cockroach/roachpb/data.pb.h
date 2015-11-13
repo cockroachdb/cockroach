@@ -55,6 +55,7 @@ class Transaction;
 class Intent;
 class Lease;
 class GCMetadata;
+class SequenceCacheEntry;
 
 enum ValueType {
   UNKNOWN = 0,
@@ -1901,6 +1902,112 @@ class GCMetadata : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static GCMetadata* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class SequenceCacheEntry : public ::google::protobuf::Message {
+ public:
+  SequenceCacheEntry();
+  virtual ~SequenceCacheEntry();
+
+  SequenceCacheEntry(const SequenceCacheEntry& from);
+
+  inline SequenceCacheEntry& operator=(const SequenceCacheEntry& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const SequenceCacheEntry& default_instance();
+
+  void Swap(SequenceCacheEntry* other);
+
+  // implements Message ----------------------------------------------
+
+  inline SequenceCacheEntry* New() const { return New(NULL); }
+
+  SequenceCacheEntry* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const SequenceCacheEntry& from);
+  void MergeFrom(const SequenceCacheEntry& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(SequenceCacheEntry* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional bytes key = 1;
+  bool has_key() const;
+  void clear_key();
+  static const int kKeyFieldNumber = 1;
+  const ::std::string& key() const;
+  void set_key(const ::std::string& value);
+  void set_key(const char* value);
+  void set_key(const void* value, size_t size);
+  ::std::string* mutable_key();
+  ::std::string* release_key();
+  void set_allocated_key(::std::string* key);
+
+  // optional .cockroach.roachpb.Timestamp timestamp = 2;
+  bool has_timestamp() const;
+  void clear_timestamp();
+  static const int kTimestampFieldNumber = 2;
+  const ::cockroach::roachpb::Timestamp& timestamp() const;
+  ::cockroach::roachpb::Timestamp* mutable_timestamp();
+  ::cockroach::roachpb::Timestamp* release_timestamp();
+  void set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.SequenceCacheEntry)
+ private:
+  inline void set_has_key();
+  inline void clear_has_key();
+  inline void set_has_timestamp();
+  inline void clear_has_timestamp();
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::internal::ArenaStringPtr key_;
+  ::cockroach::roachpb::Timestamp* timestamp_;
+  friend void  protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2froachpb_2fdata_2eproto();
+
+  void InitAsDefaultInstance();
+  static SequenceCacheEntry* default_instance_;
 };
 // ===================================================================
 
@@ -3776,7 +3883,109 @@ inline void GCMetadata::set_oldest_intent_nanos(::google::protobuf::int64 value)
   // @@protoc_insertion_point(field_set:cockroach.roachpb.GCMetadata.oldest_intent_nanos)
 }
 
+// -------------------------------------------------------------------
+
+// SequenceCacheEntry
+
+// optional bytes key = 1;
+inline bool SequenceCacheEntry::has_key() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void SequenceCacheEntry::set_has_key() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void SequenceCacheEntry::clear_has_key() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void SequenceCacheEntry::clear_key() {
+  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_key();
+}
+inline const ::std::string& SequenceCacheEntry::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.SequenceCacheEntry.key)
+  return key_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void SequenceCacheEntry::set_key(const ::std::string& value) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.SequenceCacheEntry.key)
+}
+inline void SequenceCacheEntry::set_key(const char* value) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.SequenceCacheEntry.key)
+}
+inline void SequenceCacheEntry::set_key(const void* value, size_t size) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.SequenceCacheEntry.key)
+}
+inline ::std::string* SequenceCacheEntry::mutable_key() {
+  set_has_key();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.SequenceCacheEntry.key)
+  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* SequenceCacheEntry::release_key() {
+  clear_has_key();
+  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void SequenceCacheEntry::set_allocated_key(::std::string* key) {
+  if (key != NULL) {
+    set_has_key();
+  } else {
+    clear_has_key();
+  }
+  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.SequenceCacheEntry.key)
+}
+
+// optional .cockroach.roachpb.Timestamp timestamp = 2;
+inline bool SequenceCacheEntry::has_timestamp() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void SequenceCacheEntry::set_has_timestamp() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void SequenceCacheEntry::clear_has_timestamp() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void SequenceCacheEntry::clear_timestamp() {
+  if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
+  clear_has_timestamp();
+}
+inline const ::cockroach::roachpb::Timestamp& SequenceCacheEntry::timestamp() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.SequenceCacheEntry.timestamp)
+  return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
+}
+inline ::cockroach::roachpb::Timestamp* SequenceCacheEntry::mutable_timestamp() {
+  set_has_timestamp();
+  if (timestamp_ == NULL) {
+    timestamp_ = new ::cockroach::roachpb::Timestamp;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.SequenceCacheEntry.timestamp)
+  return timestamp_;
+}
+inline ::cockroach::roachpb::Timestamp* SequenceCacheEntry::release_timestamp() {
+  clear_has_timestamp();
+  ::cockroach::roachpb::Timestamp* temp = timestamp_;
+  timestamp_ = NULL;
+  return temp;
+}
+inline void SequenceCacheEntry::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
+  delete timestamp_;
+  timestamp_ = timestamp;
+  if (timestamp) {
+    set_has_timestamp();
+  } else {
+    clear_has_timestamp();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.SequenceCacheEntry.timestamp)
+}
+
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

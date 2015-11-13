@@ -45,8 +45,9 @@ var errEmptyID = errors.New("empty CommandID used in sequence cache")
 // A SequenceCache is not thread safe. Access to it is serialized
 // through Raft.
 type SequenceCache struct {
-	rangeID  roachpb.RangeID
-	min, max roachpb.Key
+	rangeID      roachpb.RangeID
+	min, max     roachpb.Key
+	scratchEntry roachpb.SequenceCacheEntry
 }
 
 // NewSequenceCache returns a new sequence cache. Every range replica
@@ -75,9 +76,10 @@ func (rc *SequenceCache) ClearData(e engine.Engine) error {
 	return err
 }
 
-// GetSequence looks up the latest sequence number recorded for this id. On a
-// miss, zero is returned.
-func (rc *SequenceCache) GetSequence(e engine.Engine, id []byte) (uint32, error) {
+// Get looks up the latest sequence number recorded for this id. On a miss,
+// zero is returned. If an entry is found and a SequenceCacheEntry is provided,
+// it is populated from the found value.
+func (rc *SequenceCache) Get(e engine.Engine, id []byte, dest *roachpb.SequenceCacheEntry) (uint32, error) {
 	if len(id) == 0 {
 		return 0, errEmptyID
 	}
@@ -97,6 +99,13 @@ func (rc *SequenceCache) GetSequence(e engine.Engine, id []byte) (uint32, error)
 	_, seq, err := rc.decodeKey(key)
 	if err != nil {
 		return 0, err
+	}
+	if dest != nil {
+		dest.Reset()
+		// Caller wants to have the unmarshaled value.
+		if err := kvs[0].Value.GetProto(dest); err != nil {
+			return 0, err
+		}
 	}
 	return seq, nil
 }
@@ -162,7 +171,7 @@ func (rc *SequenceCache) CopyFrom(e engine.Engine, originRangeID roachpb.RangeID
 }
 
 // PutSequence writes a sequence number for the specified id.
-func (rc *SequenceCache) PutSequence(e engine.Engine, id []byte, seq uint32, err error) error {
+func (rc *SequenceCache) PutSequence(e engine.Engine, id []byte, seq uint32, txnKey roachpb.Key, txnTS roachpb.Timestamp, err error) error {
 	if seq <= 0 || len(id) == 0 {
 		return errEmptyID
 	}
@@ -172,8 +181,8 @@ func (rc *SequenceCache) PutSequence(e engine.Engine, id []byte, seq uint32, err
 
 	// Write the response value to the engine.
 	key, _ := keys.SequenceCacheKey(rc.rangeID, id, seq)
-	v := roachpb.MakeValueFromBytes(nil) // TODO(tschottdorf)
-	return engine.MVCCPut(e, nil /* ms */, key, roachpb.ZeroTimestamp, v, nil /* txn */)
+	rc.scratchEntry = roachpb.SequenceCacheEntry{Key: txnKey, Timestamp: txnTS}
+	return engine.MVCCPutProto(e, nil /* ms */, key, roachpb.ZeroTimestamp, nil /* txn */, &rc.scratchEntry)
 }
 
 // Responses with write-too-old, write-intent and not leader errors
