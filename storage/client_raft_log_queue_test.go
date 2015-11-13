@@ -79,7 +79,7 @@ func TestRaftLogQueue(t *testing.T) {
 	// Wait until the firstIndex has increased indicating that the log
 	// truncation has occurred.
 	var currentIndex uint64
-	util.SucceedsWithin(t, time.Second, func() error {
+	util.SucceedsWithin(t, 10*time.Second, func() error {
 		var err error
 		currentIndex, err = rep.FirstIndex()
 		if err != nil {
