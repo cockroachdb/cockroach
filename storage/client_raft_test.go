@@ -1131,6 +1131,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 // number of repetitions adds an unacceptable amount of test runtime).
 func TestRaftRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("TODO(bdarnell): https://github.com/cockroachdb/cockroach/issues/2878")
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
@@ -1210,6 +1211,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 // rebalancing opportunities and add a new replica on another store.
 func TestStoreRangeRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("TODO(mrtracy): https://github.com/cockroachdb/cockroach/issues/3092")
 
 	// Start multiTestContext with replica rebalancing enabled.
 	mtc := &multiTestContext{
@@ -1284,6 +1286,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 // cannot cause other removed nodes to recreate their ranges.
 func TestReplicateRogueRemovedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("TODO(bram): https://github.com/cockroachdb/cockroach/issues/3069")
 
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
