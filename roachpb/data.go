@@ -39,6 +39,8 @@ import (
 const (
 	// MaxPriority is the maximum allowed priority.
 	MaxPriority = math.MaxInt32
+	// TransactionIDLen is the length (in bytes) of the transaction IDs used.
+	TransactionIDLen = 16
 )
 
 var (

@@ -397,30 +397,28 @@ func TestNodeList(t *testing.T) {
 	}
 }
 
-func TestTransactionUpdate(t *testing.T) {
-	nodes := NodeList{
+var ts = makeTS(10, 11)
+var nonZeroTxn = Transaction{
+	Name:          "name",
+	Key:           Key("foo"),
+	ID:            uuid.NewUUID4(),
+	Priority:      957356782,
+	Isolation:     SNAPSHOT,
+	Status:        COMMITTED,
+	Epoch:         2,
+	LastHeartbeat: &Timestamp{1, 2},
+	Timestamp:     makeTS(20, 21),
+	OrigTimestamp: makeTS(30, 31),
+	MaxTimestamp:  makeTS(40, 41),
+	CertainNodes: NodeList{
 		Nodes: []int32{101, 103, 105},
-	}
-	ts := makeTS(10, 11)
+	},
+	Writing:  true,
+	Sequence: 123,
+	Intents:  []Span{{Key: []byte("a")}},
+}
 
-	txn := Transaction{
-		Name:          "name",
-		Key:           Key("foo"),
-		ID:            uuid.NewUUID4(),
-		Priority:      957356782,
-		Isolation:     SNAPSHOT,
-		Status:        COMMITTED,
-		Epoch:         2,
-		LastHeartbeat: &ts,
-		Timestamp:     makeTS(20, 21),
-		OrigTimestamp: makeTS(30, 31),
-		MaxTimestamp:  makeTS(40, 41),
-		CertainNodes:  nodes,
-		Writing:       true,
-		Sequence:      123,
-		Intents:       []Span{{Key: []byte("a")}},
-	}
-
+func TestTransactionUpdate(t *testing.T) {
 	noZeroField := func(txn Transaction) error {
 		ele := reflect.ValueOf(&txn).Elem()
 		eleT := ele.Type()
@@ -433,6 +431,7 @@ func TestTransactionUpdate(t *testing.T) {
 		}
 		return nil
 	}
+	txn := nonZeroTxn
 
 	if err := noZeroField(txn); err != nil {
 		t.Fatal(err)
@@ -567,5 +566,11 @@ func TestRSpanIntersect(t *testing.T) {
 		if _, err := rs.Intersect(&desc); err == nil {
 			t.Errorf("%d: unexpected sucess", i)
 		}
+	}
+}
+
+func TestTransactionIDLen(t *testing.T) {
+	if l := len(nonZeroTxn.ID); l != TransactionIDLen {
+		t.Fatalf("expected %d, got %d", TransactionIDLen, l)
 	}
 }
