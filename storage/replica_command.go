@@ -314,8 +314,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 
 	// Fetch existing transaction.
 	reply.Txn = &roachpb.Transaction{}
-	ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp, true, nil, reply.Txn)
-	if err != nil {
+	if ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp, true, nil, reply.Txn); err != nil {
 		return reply, nil, err
 	} else if !ok {
 		return reply, nil, util.Errorf("transaction does not exist: %s on store %d", h.Txn, r.store.StoreID())
@@ -346,44 +345,42 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		return reply, asSkippedIntents(reply.Txn, args.IntentSpans), roachpb.NewTransactionAbortedError(reply.Txn)
 	}
 
-	// If the transaction record already exists, verify that we can either
-	// commit it or abort it (according to args.Commit), and also that the
-	// Timestamp and Epoch have not suffered regression.
-	if ok {
-		if reply.Txn.Status == roachpb.COMMITTED {
-			return reply, nil, roachpb.NewTransactionStatusError(*reply.Txn, "already committed")
-		} else if reply.Txn.Status == roachpb.ABORTED {
-			// If the transaction was previously aborted by a concurrent
-			// writer's push, any intents written are still open. It's only now
-			// that we know them, so we return them all for asynchronous
-			// resolution (we're currently not able to write on error, but
-			// see #1989).
-			return reply, asSkippedIntents(reply.Txn, args.IntentSpans), roachpb.NewTransactionAbortedError(reply.Txn)
-		} else if h.Txn.Epoch < reply.Txn.Epoch {
-			// TODO(tschottdorf): this leaves the Txn record (and more
-			// importantly, intents) dangling; we can't currently write on
-			// error. Would panic, but that makes TestEndTransactionWithErrors
-			// awkward.
-			return reply, nil, roachpb.NewTransactionStatusError(*reply.Txn, fmt.Sprintf("epoch regression: %d", h.Txn.Epoch))
-		} else if h.Txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(h.Txn.OrigTimestamp) {
-			// The transaction record can only ever be pushed forward, so it's an
-			// error if somehow the transaction record has an earlier timestamp
-			// than the original transaction timestamp.
+	// Verify that we can either commit it or abort it (according
+	// to args.Commit), and also that the Timestamp and Epoch have
+	// not suffered regression.
+	if reply.Txn.Status == roachpb.COMMITTED {
+		return reply, nil, roachpb.NewTransactionStatusError(*reply.Txn, "already committed")
+	} else if reply.Txn.Status == roachpb.ABORTED {
+		// If the transaction was previously aborted by a concurrent
+		// writer's push, any intents written are still open. It's only now
+		// that we know them, so we return them all for asynchronous
+		// resolution (we're currently not able to write on error, but
+		// see #1989).
+		return reply, asSkippedIntents(reply.Txn, args.IntentSpans), roachpb.NewTransactionAbortedError(reply.Txn)
+	} else if h.Txn.Epoch < reply.Txn.Epoch {
+		// TODO(tschottdorf): this leaves the Txn record (and more
+		// importantly, intents) dangling; we can't currently write on
+		// error. Would panic, but that makes TestEndTransactionWithErrors
+		// awkward.
+		return reply, nil, roachpb.NewTransactionStatusError(*reply.Txn, fmt.Sprintf("epoch regression: %d", h.Txn.Epoch))
+	} else if h.Txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(h.Txn.OrigTimestamp) {
+		// The transaction record can only ever be pushed forward, so it's an
+		// error if somehow the transaction record has an earlier timestamp
+		// than the original transaction timestamp.
 
-			// TODO(tschottdorf): see above comment on epoch regression.
-			return reply, nil, roachpb.NewTransactionStatusError(*reply.Txn, fmt.Sprintf("timestamp regression: %s", h.Txn.OrigTimestamp))
-		}
+		// TODO(tschottdorf): see above comment on epoch regression.
+		return reply, nil, roachpb.NewTransactionStatusError(*reply.Txn, fmt.Sprintf("timestamp regression: %s", h.Txn.OrigTimestamp))
+	}
 
-		// Take max of requested epoch and existing epoch. The requester
-		// may have incremented the epoch on retries.
-		if reply.Txn.Epoch < h.Txn.Epoch {
-			reply.Txn.Epoch = h.Txn.Epoch
-		}
-		// Take max of requested priority and existing priority. This isn't
-		// terribly useful, but we do it for completeness.
-		if reply.Txn.Priority < h.Txn.Priority {
-			reply.Txn.Priority = h.Txn.Priority
-		}
+	// Take max of requested epoch and existing epoch. The requester
+	// may have incremented the epoch on retries.
+	if reply.Txn.Epoch < h.Txn.Epoch {
+		reply.Txn.Epoch = h.Txn.Epoch
+	}
+	// Take max of requested priority and existing priority. This isn't
+	// terribly useful, but we do it for completeness.
+	if reply.Txn.Priority < h.Txn.Priority {
+		reply.Txn.Priority = h.Txn.Priority
 	}
 
 	// Take max of requested timestamp and possibly "pushed" txn
