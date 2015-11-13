@@ -56,7 +56,7 @@ func TestSequenceCacheEncodeDecode(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	const rangeID = 123
 	const expSeq = 987
-	key, _ := keys.SequenceCacheKey(rangeID, testTxnID, expSeq)
+	key := keys.SequenceCacheKey(rangeID, testTxnID, expSeq)
 	id, seq, err := decodeSequenceCacheKey(key, nil)
 	if err != nil {
 		t.Fatal(err)

@@ -53,14 +53,11 @@ type SequenceCache struct {
 // NewSequenceCache returns a new sequence cache. Every range replica
 // maintains a sequence cache, not just the leader.
 func NewSequenceCache(rangeID roachpb.RangeID) *SequenceCache {
-	// The sequence number is encoded in decreasing order.
-	seqCacheKeyMin, _ := keys.SequenceCacheKey(rangeID, txnIDMin, math.MaxUint32)
-	seqCacheKeyMax, _ := keys.SequenceCacheKey(rangeID, txnIDMax, 0)
-
 	return &SequenceCache{
 		rangeID: rangeID,
-		min:     seqCacheKeyMin,
-		max:     seqCacheKeyMax,
+		// The sequence number is encoded in decreasing order.
+		min: keys.SequenceCacheKey(rangeID, txnIDMin, math.MaxUint32),
+		max: keys.SequenceCacheKey(rangeID, txnIDMax, 0),
 	}
 }
 
@@ -86,14 +83,13 @@ func (sc *SequenceCache) Get(e engine.Engine, id []byte, dest *roachpb.SequenceC
 	// an entry which isn't ours. To avoid encoding an end key for the scan,
 	// we just scan and check via a simple prefix check whether we read a
 	// key for "our" cache id.
-	key, prefixLen := keys.SequenceCacheKey(sc.rangeID, id, math.MaxUint32)
-	kvs, _, err := engine.MVCCScan(e, key, sc.max, 1, /* num */
+	prefix := keys.SequenceCacheKeyPrefix(sc.rangeID, id)
+	kvs, _, err := engine.MVCCScan(e, prefix, sc.max, 1, /* num */
 		roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */)
-	if err != nil || len(kvs) == 0 || !bytes.HasPrefix(key, kvs[0].Key[:prefixLen]) {
+	if err != nil || len(kvs) == 0 || !bytes.HasPrefix(kvs[0].Key, prefix) {
 		return 0, err
 	}
-	key = kvs[0].Key
-	_, seq, err := decodeSequenceCacheKey(key, sc.scratchBuf[:0])
+	_, seq, err := decodeSequenceCacheKey(kvs[0].Key, sc.scratchBuf[:0])
 	if err != nil {
 		return 0, err
 	}
@@ -118,7 +114,7 @@ func copySeqCache(e engine.Engine, srcID, dstID roachpb.RangeID, keyMin, keyMax 
 				return false, util.Errorf("could not decode a sequence cache key %s: %s",
 					roachpb.Key(kv.Key), err)
 			}
-			key, _ := keys.SequenceCacheKey(dstID, id, seq)
+			key := keys.SequenceCacheKey(dstID, id, seq)
 			encKey := engine.MVCCEncodeKey(key)
 			// Decode the value, update the checksum and re-encode.
 			meta := &engine.MVCCMetadata{}
@@ -147,10 +143,9 @@ func (sc *SequenceCache) CopyInto(e engine.Engine, destRangeID roachpb.RangeID) 
 // entries return an error. The copy is done directly using the engine
 // instead of interpreting values through MVCC for efficiency.
 func (sc *SequenceCache) CopyFrom(e engine.Engine, originRangeID roachpb.RangeID) error {
-	originMin, _ := keys.SequenceCacheKey(originRangeID, txnIDMin, math.MaxUint32)
-	originMax, _ := keys.SequenceCacheKey(originRangeID, txnIDMax, 0)
-	return copySeqCache(e, originRangeID, sc.rangeID,
-		engine.MVCCEncodeKey(originMin), engine.MVCCEncodeKey(originMax))
+	originMin := engine.MVCCEncodeKey(keys.SequenceCacheKey(originRangeID, txnIDMin, math.MaxUint32))
+	originMax := engine.MVCCEncodeKey(keys.SequenceCacheKey(originRangeID, txnIDMax, 0))
+	return copySeqCache(e, originRangeID, sc.rangeID, originMin, originMax)
 }
 
 // PutSequence writes a sequence number for the specified id.
@@ -163,7 +158,7 @@ func (sc *SequenceCache) PutSequence(e engine.Engine, id []byte, seq uint32, txn
 	}
 
 	// Write the response value to the engine.
-	key, _ := keys.SequenceCacheKey(sc.rangeID, id, seq)
+	key := keys.SequenceCacheKey(sc.rangeID, id, seq)
 	sc.scratchEntry = roachpb.SequenceCacheEntry{Key: txnKey, Timestamp: txnTS}
 	return engine.MVCCPutProto(e, nil /* ms */, key, roachpb.ZeroTimestamp, nil /* txn */, &sc.scratchEntry)
 }

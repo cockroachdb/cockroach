@@ -60,14 +60,12 @@ func fakePrevKey(k []byte) roachpb.Key {
 func createRangeData(r *Replica, t *testing.T) []engine.MVCCKey {
 	ts0 := roachpb.ZeroTimestamp
 	ts := roachpb.Timestamp{WallTime: 1}
-	seq0, _ := keys.SequenceCacheKey(r.Desc().RangeID, testTxnID, 2)
-	seq1, _ := keys.SequenceCacheKey(r.Desc().RangeID, testTxnID, 1)
 	keyTSs := []struct {
 		key roachpb.Key
 		ts  roachpb.Timestamp
 	}{
-		{seq0, ts0},
-		{seq1, ts0},
+		{keys.SequenceCacheKey(r.Desc().RangeID, testTxnID, 2), ts0},
+		{keys.SequenceCacheKey(r.Desc().RangeID, testTxnID, 1), ts0},
 		{keys.RaftHardStateKey(r.Desc().RangeID), ts0},
 		{keys.RaftLogKey(r.Desc().RangeID, 1), ts0},
 		{keys.RaftLogKey(r.Desc().RangeID, 2), ts0},
