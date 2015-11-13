@@ -217,22 +217,28 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 // using the clock local to the distributed sender.
 func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(tschottdorf): https://github.com/cockroachdb/cockroach/issues/3122")
 	s, db := setupMultipleRanges(t, "b")
 	defer s.Stop()
 
 	// Write keys "a" and "b", the latter of which is the first key in the
 	// second range.
 	keys := []string{"a", "b"}
-	ts := []time.Time{}
-	for i, key := range keys {
-		b := &client.Batch{}
-		b.Put(key, "value")
-		if err := db.Run(b); err != nil {
-			t.Fatal(err)
+	ts := [2]time.Time{}
+	// This outer loop may seem awkward, but we've actually had issue #3122
+	// since the two timestamps ended up equal. This can happen (very rarely)
+	// since both timestamps are HLC internally and then have their logical
+	// component dropped. Lease changes can push the HLC ahead of the wall
+	// time for short amounts of time, so that losing the logical tick matters.
+	for ts[1].Sub(ts[0]) <= 0 {
+		for i, key := range keys {
+			b := &client.Batch{}
+			b.Put(key, "value")
+			if err := db.Run(b); err != nil {
+				t.Fatal(err)
+			}
+			ts[i] = b.Results[0].Rows[0].Timestamp()
+			log.Infof("%d: %s", i, b.Results[0].Rows[0].Timestamp())
 		}
-		ts = append(ts, b.Results[0].Rows[0].Timestamp())
-		log.Infof("%d: %s", i, b.Results[0].Rows[0].Timestamp())
 	}
 
 	// Do an inconsistent Scan/ReverseScan from a new DistSender and verify
