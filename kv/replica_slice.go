@@ -114,7 +114,9 @@ func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 				firstNotOrdered++
 			}
 		}
-		rs.randPerm(firstNotOrdered, topIndex, rand.Intn)
+		if topIndex < len(rs)-1 {
+			rs.randPerm(firstNotOrdered, topIndex, rand.Intn)
+		}
 		if firstNotOrdered == 0 {
 			return bucket
 		}
@@ -138,13 +140,7 @@ func (rs replicaSlice) MoveToFront(i int) {
 }
 
 func (rs replicaSlice) randPerm(startIndex int, topIndex int, intnFn func(int) int) {
-	if topIndex >= len(rs)-1 {
-		return
-	}
 	length := topIndex - startIndex + 1
-	if length < 2 {
-		return
-	}
 	for i := 1; i < length; i++ {
 		j := intnFn(i + 1)
 		rs.Swap(startIndex+i, startIndex+j)
