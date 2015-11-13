@@ -57,11 +57,11 @@ func TestSequenceCacheEncodeDecode(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	const rangeID = 123
-	rc, _ := createTestSequenceCache(t, rangeID, stopper)
+	sc, _ := createTestSequenceCache(t, rangeID, stopper)
 
 	const expSeq = 123
 	key, _ := keys.SequenceCacheKey(rangeID, testTxnID, expSeq)
-	id, seq, err := rc.decodeKey(key)
+	id, seq, err := sc.decodeKey(key, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,35 +79,40 @@ func TestSequenceCachePutGetClearData(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rc, e := createTestSequenceCache(t, 1, stopper)
+	sc, e := createTestSequenceCache(t, 1, stopper)
 	// Start with a get for an unseen id/sequence combo.
-	if seq, readErr := rc.Get(e, testTxnID, nil); seq > 0 {
+	if seq, readErr := sc.Get(e, testTxnID, nil); seq > 0 {
 		t.Errorf("expected no response for id %s", testTxnID)
 	} else if readErr != nil {
 		t.Fatalf("unxpected read error: %s", readErr)
 	}
 	// Cache the test response.
 	const seq = 123
-	if err := rc.PutSequence(e, testTxnID, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
+	if err := sc.PutSequence(e, testTxnID, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
-	tryHit := func(shouldHit bool) {
+	tryHit := func(expSeq uint32) {
 		var entry roachpb.SequenceCacheEntry
-		if actSeq, readErr := rc.Get(e, testTxnID, &entry); readErr != nil {
+		if actSeq, readErr := sc.Get(e, testTxnID, &entry); readErr != nil {
 			t.Errorf("unexpected failure getting response: %s", readErr)
-		} else if shouldHit != (actSeq == seq) {
-			t.Errorf("wanted hit: %t, got actual %d vs expected %d", shouldHit, actSeq, seq)
-		} else if shouldHit && !reflect.DeepEqual(testEntry, entry) {
+		} else if (expSeq > 0 || actSeq > 0) && expSeq != actSeq {
+			t.Errorf("wanted hit: %t, got actual %d vs expected %d", expSeq > 0, actSeq, expSeq)
+		} else if expSeq > 0 && !reflect.DeepEqual(testEntry, entry) {
 			t.Fatalf("wanted %v, got %v", testEntry, entry)
 		}
 	}
 
-	tryHit(true)
-	if err := rc.ClearData(e); err != nil {
+	tryHit(seq)
+	if err := sc.ClearData(e); err != nil {
 		t.Error(err)
 	}
-	tryHit(false)
+	tryHit(0)
+	if err := sc.PutSequence(e, testTxnID, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
+		t.Errorf("unexpected error putting response: %s", err)
+	}
+	tryHit(2 * seq)
+
 }
 
 // TestSequenceCacheEmptyParams tests operation with empty parameters.
@@ -115,15 +120,15 @@ func TestSequenceCacheEmptyParams(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rc, e := createTestSequenceCache(t, 1, stopper)
+	sc, e := createTestSequenceCache(t, 1, stopper)
 	// Put value for test response.
-	if err := rc.PutSequence(e, testTxnID, 0, testTxnKey, testTxnTimestamp, nil); err != errEmptyID {
+	if err := sc.PutSequence(e, testTxnID, 0, testTxnKey, testTxnTimestamp, nil); err != errEmptyID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if err := rc.PutSequence(e, nil, 10, testTxnKey, testTxnTimestamp, nil); err != errEmptyID {
+	if err := sc.PutSequence(e, nil, 10, testTxnKey, testTxnTimestamp, nil); err != errEmptyID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if _, readErr := rc.Get(e, nil, nil); readErr != errEmptyID {
+	if _, readErr := sc.Get(e, nil, nil); readErr != errEmptyID {
 		t.Fatalf("unxpected read error: %v", readErr)
 	}
 }
@@ -195,7 +200,7 @@ func TestSequenceCacheShouldCache(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rc, _ := createTestSequenceCache(t, 1, stopper)
+	sc, _ := createTestSequenceCache(t, 1, stopper)
 
 	testCases := []struct {
 		err         error
@@ -220,7 +225,7 @@ func TestSequenceCacheShouldCache(t *testing.T) {
 	for i, test := range testCases {
 		br := &roachpb.BatchResponse{}
 		br.Add(&reply)
-		if shouldCache := rc.shouldCacheError(test.err); shouldCache != test.shouldCache {
+		if shouldCache := sc.shouldCacheError(test.err); shouldCache != test.shouldCache {
 			t.Errorf("%d: expected cache? %t; got %t", i, test.shouldCache, shouldCache)
 		}
 	}
