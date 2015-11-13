@@ -533,7 +533,9 @@ func (g *Gossip) manage(stopper *stop.Stopper) {
 			case <-time.After(g.jitteredInterval(checkInterval)):
 				g.doCheckNetwork(stopper)
 			case <-time.After(g.jitteredInterval(stallInterval)):
+				g.mu.Lock()
 				g.maybeSignalStalledLocked()
+				g.mu.Unlock()
 			}
 		}
 	})
