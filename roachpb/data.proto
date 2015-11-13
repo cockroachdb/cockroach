@@ -268,7 +268,7 @@ message Transaction {
   // A one-indexed sequence number which is increased on each batch sent as
   // part of the transaction. Used to prevent replay and out-of-order
   // application protection (by means of a transaction retry).
-  optional int32 Sequence = 14 [(gogoproto.nullable) = false];
+  optional uint32 Sequence = 14 [(gogoproto.nullable) = false];
   repeated Span Intents = 15 [(gogoproto.nullable) = false];
 }
 
@@ -302,3 +302,4 @@ message GCMetadata {
   // Null if there are no unresolved write intents.
   optional int64 oldest_intent_nanos = 2;
 }
+

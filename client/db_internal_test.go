@@ -30,7 +30,7 @@ import (
 func TestClientTxnSequenceNumber(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	count := 0
-	var curSeq int32
+	var curSeq uint32
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		count++
 		if ba.Txn.Sequence <= curSeq {

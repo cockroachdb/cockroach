@@ -430,7 +430,7 @@ type Transaction struct {
 	// A one-indexed sequence number which is increased on each batch sent as
 	// part of the transaction. Used to prevent replay and out-of-order
 	// application protection (by means of a transaction retry).
-	Sequence int32  `protobuf:"varint,14,opt,name=Sequence" json:"Sequence"`
+	Sequence uint32 `protobuf:"varint,14,opt,name=Sequence" json:"Sequence"`
 	Intents  []Span `protobuf:"bytes,15,rep,name=Intents" json:"Intents"`
 }
 
@@ -2992,7 +2992,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.Sequence |= (int32(b) & 0x7F) << shift
+				m.Sequence |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

@@ -41,7 +41,7 @@ func EncodeUint32Decreasing(b []byte, v uint32) []byte {
 }
 
 // DecodeUint32 decodes a uint32 from the input buffer, treating
-// the input as a big-endian 8 byte uint32 representation. The remainder
+// the input as a big-endian 4 byte uint32 representation. The remainder
 // of the input buffer and the decoded uint32 are returned.
 func DecodeUint32(b []byte) ([]byte, uint32, error) {
 	if len(b) < 4 {

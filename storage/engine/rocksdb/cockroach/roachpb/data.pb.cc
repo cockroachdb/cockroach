@@ -484,7 +484,7 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "h.roachpb.TimestampB\004\310\336\037\000\0228\n\rcertain_nod"
     "es\030\014 \001(\0132\033.cockroach.roachpb.NodeListB\004\310"
     "\336\037\000\022\025\n\007Writing\030\r \001(\010B\004\310\336\037\000\022\026\n\010Sequence\030\016"
-    " \001(\005B\004\310\336\037\000\022.\n\007Intents\030\017 \003(\0132\027.cockroach."
+    " \001(\rB\004\310\336\037\000\022.\n\007Intents\030\017 \003(\0132\027.cockroach."
     "roachpb.SpanB\004\310\336\037\000:\004\230\240\037\000\"l\n\006Intent\022/\n\004sp"
     "an\030\001 \001(\0132\027.cockroach.roachpb.SpanB\010\310\336\037\000\320"
     "\336\037\001\0221\n\003txn\030\002 \001(\0132\036.cockroach.roachpb.Tra"
@@ -5082,7 +5082,7 @@ void Transaction::SharedCtor() {
   max_timestamp_ = NULL;
   certain_nodes_ = NULL;
   writing_ = false;
-  sequence_ = 0;
+  sequence_ = 0u;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -5381,12 +5381,12 @@ bool Transaction::MergePartialFromCodedStream(
         break;
       }
 
-      // optional int32 Sequence = 14;
+      // optional uint32 Sequence = 14;
       case 14: {
         if (tag == 112) {
          parse_Sequence:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
                  input, &sequence_)));
           set_has_sequence();
         } else {
@@ -5517,9 +5517,9 @@ void Transaction::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(13, this->writing(), output);
   }
 
-  // optional int32 Sequence = 14;
+  // optional uint32 Sequence = 14;
   if (has_sequence()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt32(14, this->sequence(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteUInt32(14, this->sequence(), output);
   }
 
   // repeated .cockroach.roachpb.Span Intents = 15;
@@ -5625,9 +5625,9 @@ void Transaction::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(13, this->writing(), target);
   }
 
-  // optional int32 Sequence = 14;
+  // optional uint32 Sequence = 14;
   if (has_sequence()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(14, this->sequence(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(14, this->sequence(), target);
   }
 
   // repeated .cockroach.roachpb.Span Intents = 15;
@@ -5738,10 +5738,10 @@ int Transaction::ByteSize() const {
       total_size += 1 + 1;
     }
 
-    // optional int32 Sequence = 14;
+    // optional uint32 Sequence = 14;
     if (has_sequence()) {
       total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int32Size(
+        ::google::protobuf::internal::WireFormatLite::UInt32Size(
           this->sequence());
     }
 
@@ -6383,7 +6383,7 @@ void Transaction::clear_writing() {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.Writing)
 }
 
-// optional int32 Sequence = 14;
+// optional uint32 Sequence = 14;
 bool Transaction::has_sequence() const {
   return (_has_bits_[0] & 0x00002000u) != 0;
 }
@@ -6394,14 +6394,14 @@ void Transaction::clear_has_sequence() {
   _has_bits_[0] &= ~0x00002000u;
 }
 void Transaction::clear_sequence() {
-  sequence_ = 0;
+  sequence_ = 0u;
   clear_has_sequence();
 }
- ::google::protobuf::int32 Transaction::sequence() const {
+ ::google::protobuf::uint32 Transaction::sequence() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.Sequence)
   return sequence_;
 }
- void Transaction::set_sequence(::google::protobuf::int32 value) {
+ void Transaction::set_sequence(::google::protobuf::uint32 value) {
   set_has_sequence();
   sequence_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.Sequence)
