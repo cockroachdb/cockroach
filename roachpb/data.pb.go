@@ -430,7 +430,7 @@ type Transaction struct {
 	// A one-indexed sequence number which is increased on each batch sent as
 	// part of the transaction. Used to prevent replay and out-of-order
 	// application protection (by means of a transaction retry).
-	Sequence int32  `protobuf:"varint,14,opt,name=Sequence" json:"Sequence"`
+	Sequence uint32 `protobuf:"varint,14,opt,name=Sequence" json:"Sequence"`
 	Intents  []Span `protobuf:"bytes,15,rep,name=Intents" json:"Intents"`
 }
 
@@ -476,6 +476,20 @@ type GCMetadata struct {
 func (m *GCMetadata) Reset()         { *m = GCMetadata{} }
 func (m *GCMetadata) String() string { return proto.CompactTextString(m) }
 func (*GCMetadata) ProtoMessage()    {}
+
+// SequenceCacheEntry holds information which together with the key at which
+// it is stored suffices to reconstruct the location of the original transaction
+// record along with its approximate age.
+type SequenceCacheEntry struct {
+	// The key of the associated transaction.
+	Key Key `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
+	// The original timestamp of the associated transaction.
+	Timestamp Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+}
+
+func (m *SequenceCacheEntry) Reset()         { *m = SequenceCacheEntry{} }
+func (m *SequenceCacheEntry) String() string { return proto.CompactTextString(m) }
+func (*SequenceCacheEntry) ProtoMessage()    {}
 
 func init() {
 	proto.RegisterEnum("cockroach.roachpb.ValueType", ValueType_name, ValueType_value)
@@ -1079,6 +1093,38 @@ func (m *GCMetadata) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *SequenceCacheEntry) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *SequenceCacheEntry) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Key != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintData(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
+	}
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
+	n23, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n23
+	return i, nil
+}
+
 func encodeFixed64Data(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	data[offset+1] = uint8(v >> 8)
@@ -1314,6 +1360,18 @@ func (m *GCMetadata) Size() (n int) {
 	if m.OldestIntentNanos != nil {
 		n += 1 + sovData(uint64(*m.OldestIntentNanos))
 	}
+	return n
+}
+
+func (m *SequenceCacheEntry) Size() (n int) {
+	var l int
+	_ = l
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovData(uint64(l))
+	}
+	l = m.Timestamp.Size()
+	n += 1 + l + sovData(uint64(l))
 	return n
 }
 
@@ -2992,7 +3050,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.Sequence |= (int32(b) & 0x7F) << shift
+				m.Sequence |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3367,6 +3425,114 @@ func (m *GCMetadata) Unmarshal(data []byte) error {
 				}
 			}
 			m.OldestIntentNanos = &v
+		default:
+			iNdEx = preIndex
+			skippy, err := skipData(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthData
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SequenceCacheEntry) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SequenceCacheEntry: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SequenceCacheEntry: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthData
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Key = append([]byte{}, data[iNdEx:postIndex]...)
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthData
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Timestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])

@@ -1487,7 +1487,7 @@ func TestRangeSequenceCacheReadError(t *testing.T) {
 	k := []byte("a")
 	txn := newTransaction("test", k, 10, roachpb.SERIALIZABLE, tc.clock)
 	args := incrementArgs(k, 1)
-	txn.Sequence = 12345
+	txn.Sequence = 1
 
 	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		Txn: txn,
@@ -1496,8 +1496,12 @@ func TestRangeSequenceCacheReadError(t *testing.T) {
 	}
 
 	// Overwrite sequence cache entry with garbage for the last op.
-	key := keys.SequenceCacheKey(tc.rng.Desc().RangeID, txn.ID)
-	err := engine.MVCCPut(tc.engine, nil, key, roachpb.ZeroTimestamp, roachpb.MakeValueFromString("\xff"), nil)
+	key := keys.SequenceCacheKey(tc.rng.Desc().RangeID, txn.ID, txn.Sequence)
+	// Make garbageKey sort before key (we've chosen Sequence=1 above,
+	// the last byte of which isn't \x00); add an extra byte of garbage.
+	garbageKey := append(roachpb.Key(nil), key[:len(key)-1]...)
+	garbageKey = append(garbageKey, '\x00', '!')
+	err := engine.MVCCPut(tc.engine, nil, garbageKey, roachpb.ZeroTimestamp, roachpb.MakeValueFromString("never read in this test"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1522,8 +1526,8 @@ func TestRangeSequenceCacheStoredTxnRetryError(t *testing.T) {
 	key := []byte("a")
 	for i, pastError := range []error{errors.New("boom"), nil} {
 		txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
-		txn.Sequence = int32(1 + i)
-		_ = tc.rng.sequence.PutSequence(tc.engine, txn.ID, int64(txn.Sequence), pastError)
+		txn.Sequence = uint32(1 + i)
+		_ = tc.rng.sequence.PutSequence(tc.engine, txn.ID, txn.Sequence, txn.Key, txn.Timestamp, pastError)
 
 		args := incrementArgs(key, 1)
 		_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{

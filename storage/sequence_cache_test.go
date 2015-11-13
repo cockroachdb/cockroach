@@ -18,12 +18,16 @@
 package storage
 
 import (
+	"bytes"
+	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 var (
@@ -43,7 +47,27 @@ func createTestSequenceCache(t *testing.T, rangeID roachpb.RangeID, stopper *sto
 	return NewSequenceCache(rangeID), engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 }
 
-var family = []byte("testfamily")
+var testTxnID = uuid.UUID([]byte("0ce61c17-5eb4-4587-8c36-dcf4062ada4c"))
+var testTxnKey = []byte("a")
+var testTxnTimestamp = roachpb.ZeroTimestamp.Add(123, 456)
+var testEntry = roachpb.SequenceCacheEntry{Key: testTxnKey, Timestamp: testTxnTimestamp}
+
+func TestSequenceCacheEncodeDecode(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	const rangeID = 123
+	const expSeq = 987
+	key := keys.SequenceCacheKey(rangeID, testTxnID, expSeq)
+	id, seq, err := decodeSequenceCacheKey(key, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(id, testTxnID) {
+		t.Fatalf("expected %q, got %q", testTxnID, id)
+	}
+	if seq != expSeq {
+		t.Fatalf("expected %d, got %d", expSeq, seq)
+	}
+}
 
 // TestSequenceCachePutGetClearData tests basic get & put functionality as well as
 // clearing the cache.
@@ -51,32 +75,40 @@ func TestSequenceCachePutGetClearData(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rc, e := createTestSequenceCache(t, 1, stopper)
+	sc, e := createTestSequenceCache(t, 1, stopper)
 	// Start with a get for an unseen id/sequence combo.
-	if seq, readErr := rc.GetSequence(e, family); seq > 0 {
-		t.Errorf("expected no response for family %s", family)
+	if seq, readErr := sc.Get(e, testTxnID, nil); seq > 0 {
+		t.Errorf("expected no response for id %s", testTxnID)
 	} else if readErr != nil {
 		t.Fatalf("unxpected read error: %s", readErr)
 	}
 	// Cache the test response.
 	const seq = 123
-	if err := rc.PutSequence(e, family, seq, nil); err != nil {
+	if err := sc.PutSequence(e, testTxnID, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
-	tryHit := func(shouldHit bool) {
-		if actSeq, readErr := rc.GetSequence(e, family); readErr != nil {
+	tryHit := func(expSeq uint32) {
+		var entry roachpb.SequenceCacheEntry
+		if actSeq, readErr := sc.Get(e, testTxnID, &entry); readErr != nil {
 			t.Errorf("unexpected failure getting response: %s", readErr)
-		} else if shouldHit != (actSeq == seq) {
-			t.Errorf("wanted hit: %t, got actual %d vs expected %d", shouldHit, actSeq, seq)
+		} else if (expSeq > 0 || actSeq > 0) && expSeq != actSeq {
+			t.Errorf("wanted hit: %t, got actual %d vs expected %d", expSeq > 0, actSeq, expSeq)
+		} else if expSeq > 0 && !reflect.DeepEqual(testEntry, entry) {
+			t.Fatalf("wanted %v, got %v", testEntry, entry)
 		}
 	}
 
-	tryHit(true)
-	if err := rc.ClearData(e); err != nil {
+	tryHit(seq)
+	if err := sc.ClearData(e); err != nil {
 		t.Error(err)
 	}
-	tryHit(false)
+	tryHit(0)
+	if err := sc.PutSequence(e, testTxnID, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
+		t.Errorf("unexpected error putting response: %s", err)
+	}
+	tryHit(2 * seq)
+
 }
 
 // TestSequenceCacheEmptyParams tests operation with empty parameters.
@@ -84,15 +116,15 @@ func TestSequenceCacheEmptyParams(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rc, e := createTestSequenceCache(t, 1, stopper)
+	sc, e := createTestSequenceCache(t, 1, stopper)
 	// Put value for test response.
-	if err := rc.PutSequence(e, family, 0, nil); err != errEmptyID {
+	if err := sc.PutSequence(e, testTxnID, 0, testTxnKey, testTxnTimestamp, nil); err != errEmptyID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if err := rc.PutSequence(e, nil, 10, nil); err != errEmptyID {
+	if err := sc.PutSequence(e, nil, 10, testTxnKey, testTxnTimestamp, nil); err != errEmptyID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if _, readErr := rc.GetSequence(e, nil); readErr != errEmptyID {
+	if _, readErr := sc.Get(e, nil, nil); readErr != errEmptyID {
 		t.Fatalf("unxpected read error: %v", readErr)
 	}
 }
@@ -107,7 +139,7 @@ func TestSequenceCacheCopyInto(t *testing.T) {
 	rc2, _ := createTestSequenceCache(t, 2, stopper)
 	const seq = 123
 	// Store an increment with new value one in the first cache.
-	if err := rc1.PutSequence(e, family, seq, nil); err != nil {
+	if err := rc1.PutSequence(e, testTxnID, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	// Copy the first cache into the second.
@@ -115,11 +147,14 @@ func TestSequenceCacheCopyInto(t *testing.T) {
 		t.Errorf("unexpected error while copying sequence cache: %s", err)
 	}
 	for _, cache := range []*SequenceCache{rc1, rc2} {
+		var entry roachpb.SequenceCacheEntry
 		// Get should return 1 for both caches.
-		if actSeq, readErr := cache.GetSequence(e, family); readErr != nil {
+		if actSeq, readErr := cache.Get(e, testTxnID, &entry); readErr != nil {
 			t.Errorf("unexpected failure getting response from source: %s", readErr)
 		} else if actSeq != seq {
 			t.Fatalf("unxpected cache miss")
+		} else if !reflect.DeepEqual(testEntry, entry) {
+			t.Fatalf("wanted %v, got %v", testEntry, entry)
 		}
 	}
 }
@@ -134,7 +169,7 @@ func TestSequenceCacheCopyFrom(t *testing.T) {
 	rc2, _ := createTestSequenceCache(t, 2, stopper)
 	const seq = 321
 	// Store an increment with new value one in the first cache.
-	if err := rc1.PutSequence(e, family, seq, nil); err != nil {
+	if err := rc1.PutSequence(e, testTxnID, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
@@ -144,11 +179,14 @@ func TestSequenceCacheCopyFrom(t *testing.T) {
 	}
 
 	// Get should hit both caches.
-	for _, cache := range []*SequenceCache{rc1, rc2} {
-		if actSeq, readErr := cache.GetSequence(e, family); readErr != nil {
-			t.Fatalf("unxpected read error: %s", readErr)
+	for i, cache := range []*SequenceCache{rc1, rc2} {
+		var entry roachpb.SequenceCacheEntry
+		if actSeq, readErr := cache.Get(e, testTxnID, &entry); readErr != nil {
+			t.Fatalf("%d: unxpected read error: %s", i, readErr)
 		} else if actSeq != seq {
-			t.Errorf("unexpected cache miss")
+			t.Errorf("%d: unexpected cache miss: wanted %d, got %d", i, seq, actSeq)
+		} else if !reflect.DeepEqual(entry, testEntry) {
+			t.Fatalf("expected %v, got %v", testEntry, entry)
 		}
 	}
 }
@@ -158,7 +196,7 @@ func TestSequenceCacheShouldCache(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rc, _ := createTestSequenceCache(t, 1, stopper)
+	sc, _ := createTestSequenceCache(t, 1, stopper)
 
 	testCases := []struct {
 		err         error
@@ -183,7 +221,7 @@ func TestSequenceCacheShouldCache(t *testing.T) {
 	for i, test := range testCases {
 		br := &roachpb.BatchResponse{}
 		br.Add(&reply)
-		if shouldCache := rc.shouldCacheError(test.err); shouldCache != test.shouldCache {
+		if shouldCache := sc.shouldCacheError(test.err); shouldCache != test.shouldCache {
 			t.Errorf("%d: expected cache? %t; got %t", i, test.shouldCache, shouldCache)
 		}
 	}

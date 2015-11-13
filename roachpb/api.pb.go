@@ -78,6 +78,7 @@
 		Intent
 		Lease
 		GCMetadata
+		SequenceCacheEntry
 		NotLeaderError
 		NodeUnavailableError
 		RangeNotFoundError
