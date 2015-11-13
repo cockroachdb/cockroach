@@ -43,7 +43,7 @@ func makeCommandID() string {
 }
 
 type testCluster struct {
-	t         *testing.T
+	t         testing.TB
 	nodes     []*state
 	tickers   []*manualTicker
 	events    []*eventDemux
@@ -54,7 +54,7 @@ type testCluster struct {
 	groups map[roachpb.RangeID][]int
 }
 
-func newTestCluster(transport Transport, size int, stopper *stop.Stopper, t *testing.T) *testCluster {
+func newTestCluster(transport Transport, size int, stopper *stop.Stopper, t testing.TB) *testCluster {
 	if transport == nil {
 		transport = NewLocalRPCTransport(stopper)
 	}
@@ -634,4 +634,91 @@ func TestConfigValidation(t *testing.T) {
 		"TickInterval must be greater than zero") {
 		t.Errorf("Unexpected error of validate: %s", err)
 	}
+}
+
+func runSubmitCommandBenchmark(numNodes, pendingCommands int, b *testing.B) {
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	cluster := newTestCluster(nil, numNodes, stopper, b)
+	groupID := roachpb.RangeID(1)
+	cluster.createGroup(groupID, 0, numNodes)
+	if numNodes > 1 {
+		cluster.elect(0, groupID)
+	}
+
+	// Rate limiting: the producer (main) thread writes to the throttle
+	// channel before submitting a command. The consumer thread started
+	// here reads from the throttle channel as commands are committed.
+	throttle := make(chan struct{}, pendingCommands)
+	stopper.RunWorker(func() {
+		for {
+			select {
+			case <-cluster.events[0].CommandCommitted:
+			case <-stopper.ShouldStop():
+				return
+			}
+			select {
+			case <-throttle:
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
+	// Also drain the other nodes' CommandCommitted channels to prevent deadlock.
+	for i := 1; i < numNodes; i++ {
+		ch := cluster.events[i].CommandCommitted
+		stopper.RunWorker(func() {
+			for range ch {
+			}
+		})
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		throttle <- struct{}{}
+		// SubmitCommand returns a `chan error` but we can't read from it
+		// here without serializing all the commands.
+		_ = cluster.nodes[0].SubmitCommand(groupID, makeCommandID(), nil)
+	}
+	// Flush out all remaining commands.
+	for i := 0; i < pendingCommands; i++ {
+		throttle <- struct{}{}
+	}
+	b.StopTimer()
+}
+
+func BenchmarkSubmitCommand1Node1Pending(b *testing.B) {
+	runSubmitCommandBenchmark(1, 1, b)
+}
+
+func BenchmarkSubmitCommand3Nodes1Pending(b *testing.B) {
+	runSubmitCommandBenchmark(3, 1, b)
+}
+
+func BenchmarkSubmitCommand5Nodes1Pending(b *testing.B) {
+	runSubmitCommandBenchmark(5, 1, b)
+}
+
+func BenchmarkSubmitCommand1Node2Pending(b *testing.B) {
+	runSubmitCommandBenchmark(1, 2, b)
+}
+
+func BenchmarkSubmitCommand3Nodes2Pending(b *testing.B) {
+	runSubmitCommandBenchmark(3, 2, b)
+}
+
+func BenchmarkSubmitCommand5Nodes2Pending(b *testing.B) {
+	runSubmitCommandBenchmark(5, 2, b)
+}
+
+func BenchmarkSubmitCommand1Node4Pending(b *testing.B) {
+	runSubmitCommandBenchmark(1, 4, b)
+}
+
+func BenchmarkSubmitCommand3Nodes4Pending(b *testing.B) {
+	runSubmitCommandBenchmark(3, 4, b)
+}
+
+func BenchmarkSubmitCommand5Nodes4Pending(b *testing.B) {
+	runSubmitCommandBenchmark(5, 4, b)
 }
