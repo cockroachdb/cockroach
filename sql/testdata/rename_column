@@ -65,3 +65,13 @@ SELECT * FROM users
 id username  species
 1  tom       cat
 2  jerry     rat
+
+# Renaming a column updates the column names in an index.
+query TTBITB colnames
+SHOW INDEX FROM users
+----
+Table  Name     Unique  Seq  Column   Storing
+users  primary  true    1    id       false
+users  foo      false   1    username false
+users  bar      true    1    id       false
+users  bar      true    2    username false
