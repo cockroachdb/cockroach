@@ -216,7 +216,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 	}
 
 	idxName := n.Name.Index()
-	i, err := tableDesc.FindIndexByName(idxName)
+	status, i, err := tableDesc.FindIndexByName(idxName)
 	if err != nil {
 		if n.IfExists {
 			// Noop.
@@ -235,7 +235,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return &valuesNode{}, nil
 	}
 
-	if _, err := tableDesc.FindIndexByName(newIdxName); err == nil {
+	if _, _, err := tableDesc.FindIndexByName(newIdxName); err == nil {
 		return nil, fmt.Errorf("index name %q already exists", n.NewName)
 	}
 
@@ -243,7 +243,11 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 	// properly.
 	p.hackNoteSchemaChange(tableDesc)
 
-	tableDesc.Indexes[i].Name = newIdxName
+	if status == DescriptorActive {
+		tableDesc.Indexes[i].Name = newIdxName
+	} else {
+		tableDesc.Mutations[i].GetIndex().Name = newIdxName
+	}
 
 	descKey := MakeDescMetadataKey(tableDesc.GetID())
 	if err := tableDesc.Validate(); err != nil {
@@ -296,12 +300,17 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 	}
 
 	colName := string(n.Name)
-	i, err := tableDesc.FindColumnByName(colName)
+	status, i, err := tableDesc.FindColumnByName(colName)
 	// n.IfExists only applies to table, no need to check here.
 	if err != nil {
 		return nil, err
 	}
-	column := &tableDesc.Columns[i]
+	var column *ColumnDescriptor
+	if status == DescriptorActive {
+		column = &tableDesc.Columns[i]
+	} else {
+		column = tableDesc.Mutations[i].GetColumn()
+	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
 		return nil, err
@@ -312,15 +321,24 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		return &valuesNode{}, nil
 	}
 
-	if _, err := tableDesc.FindColumnByName(newColName); err == nil {
+	if _, _, err := tableDesc.FindColumnByName(newColName); err == nil {
 		return nil, fmt.Errorf("column name %q already exists", newColName)
 	}
 
-	for _, idx := range tableDesc.Indexes {
+	// Rename the column in the indexes.
+	renameColumnInIndex := func(idx *IndexDescriptor) {
 		for i, id := range idx.ColumnIDs {
 			if id == column.ID {
 				idx.ColumnNames[i] = newColName
 			}
+		}
+	}
+	for i := range tableDesc.Indexes {
+		renameColumnInIndex(&tableDesc.Indexes[i])
+	}
+	for _, m := range tableDesc.Mutations {
+		if idx := m.GetIndex(); idx != nil {
+			renameColumnInIndex(idx)
 		}
 	}
 	column.Name = newColName

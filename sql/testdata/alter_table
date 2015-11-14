@@ -119,3 +119,12 @@ RowIdx  Key             Value  Output
 0       /t/primary/1    NULL   true
 1       /t/primary/2    NULL   true
 2       /t/primary/3    NULL   true
+
+statement ok
+ALTER TABLE t ADD d INT UNIQUE 
+
+statement ok
+INSERT INTO t VALUES (4, 1)
+
+statement error duplicate key value \(d\)=\(1\) violates unique constraint \"t_d_key\"
+INSERT INTO t VALUES (5, 1)
