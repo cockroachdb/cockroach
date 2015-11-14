@@ -20,11 +20,9 @@ package sql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/gogo/protobuf/proto"
 )
 
 // CreateDatabase creates a database.
@@ -58,12 +56,21 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 		return nil, err
 	}
 
-	if _, err := tableDesc.FindIndexByName(string(n.Name)); err == nil {
+	status, i, err := tableDesc.FindIndexByName(string(n.Name))
+	if err == nil {
+		if status == DescriptorIncomplete {
+			switch tableDesc.Mutations[i].Direction {
+			case DescriptorMutation_DROP:
+				return nil, fmt.Errorf("index %q being dropped, try again later", string(n.Name))
+
+			case DescriptorMutation_ADD:
+				// Noop, will fail in AllocateIDs below.
+			}
+		}
 		if n.IfNotExists {
 			// Noop.
 			return &valuesNode{}, nil
 		}
-		return nil, fmt.Errorf("index %q already exists", string(n.Name))
 	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
@@ -77,29 +84,19 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 		StoreColumnNames: n.Storing,
 	}
 
-	newTableDesc := proto.Clone(tableDesc).(*TableDescriptor)
+	tableDesc.addIndexMutation(indexDesc, DescriptorMutation_ADD)
 
-	if err := newTableDesc.AddIndex(indexDesc, false); err != nil {
+	if err := tableDesc.AllocateIDs(); err != nil {
 		return nil, err
 	}
 
-	if err := newTableDesc.AllocateIDs(); err != nil {
+	if err := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); err != nil {
 		return nil, err
 	}
 
-	b := client.Batch{}
-	if err := p.backfillBatch(&b, n.Table, tableDesc, newTableDesc); err != nil {
+	// Process mutation synchronously.
+	if err := p.applyMutations(tableDesc, n.Table); err != nil {
 		return nil, err
-	}
-
-	// TODO(pmattis): This is a hack. Remove when schema change operations work
-	// properly.
-	p.hackNoteSchemaChange(newTableDesc)
-
-	b.Put(MakeDescMetadataKey(newTableDesc.GetID()), wrapDescriptor(newTableDesc))
-
-	if err := p.txn.Run(&b); err != nil {
-		return nil, convertBatchError(newTableDesc, b, err)
 	}
 
 	return &valuesNode{}, nil
