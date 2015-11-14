@@ -253,11 +253,10 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 		if err := n.NormalizeColumnName(); err != nil {
 			return nil, err
 		}
-		j, err := tableDesc.FindColumnByName(n.Column())
+		col, err := tableDesc.FindActiveColumnByName(n.Column())
 		if err != nil {
 			return nil, err
 		}
-		col := tableDesc.Columns[j]
 		if _, ok := colIDSet[col.ID]; ok {
 			return nil, fmt.Errorf("multiple assignments to same column \"%s\"", n.Column())
 		}

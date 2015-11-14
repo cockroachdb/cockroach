@@ -107,11 +107,11 @@ func (mt *mutationTest) checkTableSize(t *testing.T, e int) {
 
 // Convert all the mutations into live descriptors for the table
 // and write the updated table descriptor to the DB.
-func (mt mutationTest) makeMutationsLive(t *testing.T) {
+func (mt mutationTest) makeMutationsActive(t *testing.T) {
 	// Remove mutation to check real values in DB using SQL
 	tableDesc := mt.desc.GetTable()
 	if tableDesc.Mutations == nil || len(tableDesc.Mutations) == 0 {
-		return
+		t.Fatalf("No mutations to make active")
 	}
 	if len(tableDesc.Mutations) != 1 {
 		t.Fatalf("%d mutations != 1", len(tableDesc.Mutations))
@@ -137,12 +137,12 @@ func (mt mutationTest) makeMutationsLive(t *testing.T) {
 // descriptor to the DB.
 func (mt mutationTest) writeColumnMutation(t *testing.T, column string, state csql.DescriptorMutation_State) {
 	tableDesc := mt.desc.GetTable()
-	i, err := tableDesc.FindColumnByName(column)
+	_, i, err := tableDesc.FindColumnByName(column)
 	if err != nil {
 		t.Fatal(err)
 	}
-	col := &tableDesc.Columns[i]
-	m := csql.DescriptorMutation{Descriptor_: &csql.DescriptorMutation_Column{Column: col}, State: state}
+	col := tableDesc.Columns[i]
+	m := csql.DescriptorMutation{Descriptor_: &csql.DescriptorMutation_Column{Column: &col}, State: state}
 	// randomly pick add/drop mutation.
 	r := rand.Intn(2)
 	if r == 0 {
@@ -231,7 +231,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i');
 			t.Fatal(err)
 		}
 		// Make column "i" live so that it is read.
-		mTest.makeMutationsLive(t)
+		mTest.makeMutationsActive(t)
 		// Check that we can read all the rows and columns.
 		_ = mTest.checkQueryResponse(t, starQuery, initRows)
 
@@ -251,7 +251,6 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i');
 			// Delete also deletes column "i".
 			afterDelete = [][]string{{"c", "x", "i"}}
 		}
-
 		// Make column "i" a mutation.
 		mTest.writeColumnMutation(t, "i", state)
 		// Insert a row into the table.
@@ -259,7 +258,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i');
 			t.Fatal(err)
 		}
 		// Make column "i" live so that it is read.
-		mTest.makeMutationsLive(t)
+		mTest.makeMutationsActive(t)
 		// Notice that the default value of "i" is only written when the
 		// descriptor is in the WRITE_ONLY state.
 		_ = mTest.checkQueryResponse(t, starQuery, afterInsert)
@@ -271,7 +270,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i');
 			t.Fatal(err)
 		}
 		// Make column "i" live so that it is read.
-		mTest.makeMutationsLive(t)
+		mTest.makeMutationsActive(t)
 		// The above failed update was a noop.
 		_ = mTest.checkQueryResponse(t, starQuery, afterInsert)
 
@@ -282,7 +281,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i');
 			t.Fatal(err)
 		}
 		// Make column "i" live so that it is read.
-		mTest.makeMutationsLive(t)
+		mTest.makeMutationsActive(t)
 		// The update to column "v" is seen; there is no effect on column "i".
 		_ = mTest.checkQueryResponse(t, starQuery, afterUpdate)
 
@@ -293,7 +292,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i');
 			t.Fatal(err)
 		}
 		// Make column "i" live so that it is read.
-		mTest.makeMutationsLive(t)
+		mTest.makeMutationsActive(t)
 		// Row "a" is deleted. numVals is the number of non-NULL values seen,
 		// or the number of KV values belonging to all the rows in the table
 		// excluding row "a" since it's deleted.
@@ -320,12 +319,12 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i');
 // descriptor to the DB.
 func (mt mutationTest) writeIndexMutation(t *testing.T, index string, state csql.DescriptorMutation_State) {
 	tableDesc := mt.desc.GetTable()
-	i, err := tableDesc.FindIndexByName(index)
+	_, i, err := tableDesc.FindIndexByName(index)
 	if err != nil {
 		t.Fatal(err)
 	}
-	idx := &tableDesc.Indexes[i]
-	m := csql.DescriptorMutation{Descriptor_: &csql.DescriptorMutation_Index{Index: idx}, State: state}
+	idx := tableDesc.Indexes[i]
+	m := csql.DescriptorMutation{Descriptor_: &csql.DescriptorMutation_Index{Index: &idx}, State: state}
 	// randomly pick add/drop mutation.
 	r := rand.Intn(2)
 	if r == 0 {
@@ -409,7 +408,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 		}
 		_ = mTest.checkQueryResponse(t, starQuery, [][]string{{"a", "z"}, {"b", "y"}, {"c", "x"}})
 		// Make index "foo" live so that we can read it.
-		mTest.makeMutationsLive(t)
+		mTest.makeMutationsActive(t)
 		if state == csql.DescriptorMutation_DELETE_ONLY {
 			// "x" didn't get added to the index.
 			_ = mTest.checkQueryResponse(t, indexQuery, [][]string{{"y"}, {"z"}})
@@ -430,7 +429,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 		}
 		_ = mTest.checkQueryResponse(t, starQuery, [][]string{{"a", "z"}, {"b", "y"}, {"c", "w"}})
 		// Make index "foo" live so that we can read it.
-		mTest.makeMutationsLive(t)
+		mTest.makeMutationsActive(t)
 		if state == csql.DescriptorMutation_DELETE_ONLY {
 			// updating "x" -> "w" is a noop on the index,
 			// updating "z" -> "z" results in "z" being deleted from the index.
@@ -449,7 +448,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 		}
 		_ = mTest.checkQueryResponse(t, starQuery, [][]string{{"a", "z"}, {"c", "w"}})
 		// Make index "foo" live so that we can read it.
-		mTest.makeMutationsLive(t)
+		mTest.makeMutationsActive(t)
 		// deleting row "b" deletes "y" from the index.
 		if state == csql.DescriptorMutation_DELETE_ONLY {
 			_ = mTest.checkQueryResponse(t, indexQuery, [][]string{})
@@ -465,4 +464,178 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	if err := tableDesc.Validate(); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
 		t.Fatal(err)
 	}
+}
+
+func (mt *mutationTest) writeMutationDirection(t *testing.T, direction csql.DescriptorMutation_Direction) {
+	tableDesc := mt.desc.GetTable()
+	tableDesc.Mutations[0].Direction = direction
+	if err := tableDesc.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mt.kvDB.Put(mt.descKey, mt.desc); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCommandsWithPendingMutations(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer csql.TestDisableTableLeases()()
+	server, sqlDB, kvDB := setup(t)
+	defer cleanup(server, sqlDB)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// read table descriptor
+	nameKey := csql.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
+	gr, err := kvDB.Get(nameKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !gr.Exists() {
+		t.Fatalf("Name entry %q does not exist", nameKey)
+	}
+	descKey := csql.MakeDescMetadataKey(csql.ID(gr.ValueInt()))
+	desc := &csql.Descriptor{}
+	if err := kvDB.GetProto(descKey, desc); err != nil {
+		t.Fatal(err)
+	}
+
+	mt := mutationTest{
+		kvDB:    kvDB,
+		sqlDB:   sqlDB,
+		descKey: descKey,
+		desc:    desc,
+	}
+
+	// Test CREATE INDEX in the presence of mutations.
+
+	// Add index mutation "foo""
+	mt.writeIndexMutation(t, "foo", csql.DescriptorMutation_DELETE_ONLY)
+	// "foo" is being dropped.
+	mt.writeMutationDirection(t, csql.DescriptorMutation_DROP)
+	if _, err := sqlDB.Exec(`CREATE INDEX foo ON t.test (c)`); !testutils.IsError(err, "index \"foo\" being dropped, try again later") {
+		t.Fatal(err)
+	}
+	// "foo" is being added.
+	mt.writeMutationDirection(t, csql.DescriptorMutation_ADD)
+	if _, err := sqlDB.Exec(`CREATE INDEX foo ON t.test (c)`); !testutils.IsError(err, "duplicate index name: \"foo\"") {
+		t.Fatal(err)
+	}
+	// Make "foo" live.
+	mt.makeMutationsActive(t)
+	// Add column mutation "b"
+	mt.writeColumnMutation(t, "b", csql.DescriptorMutation_DELETE_ONLY)
+	// "b" is being dropped.
+	mt.writeMutationDirection(t, csql.DescriptorMutation_DROP)
+	if _, err := sqlDB.Exec(`CREATE INDEX bar ON t.test (b)`); !testutils.IsError(err, "index \"bar\" contains unknown column \"b\"") {
+		t.Fatal(err)
+	}
+	// "b" is being added.
+	mt.writeMutationDirection(t, csql.DescriptorMutation_ADD)
+	// An index referencing a column mutation that is being added
+	// is allowed to be added.
+	if _, err := sqlDB.Exec(`CREATE INDEX bar ON t.test (b)`); err != nil {
+		t.Fatal(err)
+	}
+	// Make "b" live.
+	mt.makeMutationsActive(t)
+
+	// Test DROP INDEX in the presence of mutations.
+
+	// Add index mutation "foo""
+	mt.writeIndexMutation(t, "foo", csql.DescriptorMutation_DELETE_ONLY)
+	// "foo" is being dropped.
+	mt.writeMutationDirection(t, csql.DescriptorMutation_DROP)
+	// Noop
+	if _, err := sqlDB.Exec(`DROP INDEX t.test@foo`); err != nil {
+		t.Fatal(err)
+	}
+	// "foo" is being added.
+	mt.writeMutationDirection(t, csql.DescriptorMutation_ADD)
+	if _, err := sqlDB.Exec(`DROP INDEX t.test@foo`); !testutils.IsError(err, "index \"foo\" in the middle of being added, try again later") {
+		t.Fatal(err)
+	}
+	// Make "foo" live.
+	mt.makeMutationsActive(t)
+
+	// Test ALTER TABLE ADD/DROP column in the presence of mutations.
+
+	// Add column mutation "b"
+	mt.writeColumnMutation(t, "b", csql.DescriptorMutation_DELETE_ONLY)
+	// "b" is being dropped.
+	mt.writeMutationDirection(t, csql.DescriptorMutation_DROP)
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD b CHAR`); !testutils.IsError(err, "column \"b\" being dropped, try again later") {
+		t.Fatal(err)
+	}
+	// Noop
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP b`); err != nil {
+		t.Fatal(err)
+	}
+	// "b" is being added.
+	mt.writeMutationDirection(t, csql.DescriptorMutation_ADD)
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD b CHAR`); !testutils.IsError(err, "duplicate column name: \"b\"") {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP b`); !testutils.IsError(err, "column \"b\" in the middle of being added, try again later") {
+		t.Fatal(err)
+	}
+	// Make "b" live.
+	mt.makeMutationsActive(t)
+
+	// Test ALTER TABLE ADD CONSTRAINT in the presence of mutations.
+
+	// Add index mutation "foo""
+	mt.writeIndexMutation(t, "foo", csql.DescriptorMutation_DELETE_ONLY)
+	// "foo" is being dropped.
+	mt.writeMutationDirection(t, csql.DescriptorMutation_DROP)
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD CONSTRAINT foo UNIQUE (c)`); !testutils.IsError(err, "index \"foo\" being dropped, try again later") {
+		t.Fatal(err)
+	}
+	// "foo" is being added.
+	mt.writeMutationDirection(t, csql.DescriptorMutation_ADD)
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD CONSTRAINT foo UNIQUE (c)`); !testutils.IsError(err, "duplicate index name: \"foo\"") {
+		t.Fatal(err)
+	}
+	// Make "foo" live.
+	mt.makeMutationsActive(t)
+	// Add column mutation "b"
+	mt.writeColumnMutation(t, "b", csql.DescriptorMutation_DELETE_ONLY)
+	// "b" is being dropped.
+	mt.writeMutationDirection(t, csql.DescriptorMutation_DROP)
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD CONSTRAINT bar UNIQUE (b)`); !testutils.IsError(err, "index \"bar\" contains unknown column \"b\"") {
+		t.Fatal(err)
+	}
+	// "b" is being added.
+	mt.writeMutationDirection(t, csql.DescriptorMutation_ADD)
+	// Noop
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD CONSTRAINT bar UNIQUE (b)`); err != nil {
+		t.Fatal(err)
+	}
+	// Make "b" live.
+	mt.makeMutationsActive(t)
+
+	// Test DROP CONSTRAINT in the presence of mutations.
+
+	// Add index mutation "foo""
+	mt.writeIndexMutation(t, "foo", csql.DescriptorMutation_DELETE_ONLY)
+	// "foo" is being dropped.
+	mt.writeMutationDirection(t, csql.DescriptorMutation_DROP)
+	// Noop
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP CONSTRAINT foo`); err != nil {
+		t.Fatal(err)
+	}
+	// "foo" is being added.
+	mt.writeMutationDirection(t, csql.DescriptorMutation_ADD)
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP CONSTRAINT foo`); !testutils.IsError(err, "constraint \"foo\" in the middle of being added, try again later") {
+		t.Fatal(err)
+	}
+	// Make "foo" live.
+	mt.makeMutationsActive(t)
 }

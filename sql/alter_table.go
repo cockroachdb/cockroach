@@ -20,11 +20,9 @@ package sql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/gogo/protobuf/proto"
 )
 
 // AlterTable creates a table.
@@ -65,9 +63,8 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		return nil, err
 	}
 
-	newTableDesc := proto.Clone(tableDesc).(*TableDescriptor)
+	numMutations := len(tableDesc.Mutations)
 
-	b := client.Batch{}
 	for _, cmd := range n.Cmds {
 		switch t := cmd.(type) {
 		case *parser.AlterTableAddColumn:
@@ -76,31 +73,44 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 			if err != nil {
 				return nil, err
 			}
-			newTableDesc.AddColumn(*col)
-			if idx != nil {
-				if err := newTableDesc.AddIndex(*idx, d.PrimaryKey); err != nil {
-					return nil, err
+			status, i, err := tableDesc.FindColumnByName(col.Name)
+			if err == nil {
+				if status == DescriptorIncomplete && tableDesc.Mutations[i].Direction == DescriptorMutation_DROP {
+					return nil, fmt.Errorf("column %q being dropped, try again later", col.Name)
 				}
+			}
+			tableDesc.addColumnMutation(*col, DescriptorMutation_ADD)
+			if idx != nil {
+				tableDesc.addIndexMutation(*idx, DescriptorMutation_ADD)
 			}
 
 		case *parser.AlterTableAddConstraint:
 			switch d := t.ConstraintDef.(type) {
 			case *parser.UniqueConstraintTableDef:
+				if d.PrimaryKey {
+					return nil, fmt.Errorf("multiple primary keys for table %q are not allowed", tableDesc.Name)
+				}
+				name := string(d.Name)
 				idx := IndexDescriptor{
-					Name:             string(d.Name),
+					Name:             name,
 					Unique:           true,
 					ColumnNames:      d.Columns,
 					StoreColumnNames: d.Storing,
 				}
-				if err := newTableDesc.AddIndex(idx, d.PrimaryKey); err != nil {
-					return nil, err
+				status, i, err := tableDesc.FindIndexByName(name)
+				if err == nil {
+					if status == DescriptorIncomplete && tableDesc.Mutations[i].Direction == DescriptorMutation_DROP {
+						return nil, fmt.Errorf("index %q being dropped, try again later", name)
+					}
 				}
+				tableDesc.addIndexMutation(idx, DescriptorMutation_ADD)
+
 			default:
 				return nil, util.Errorf("unsupported constraint: %T", t.ConstraintDef)
 			}
 
 		case *parser.AlterTableDropColumn:
-			i, err := newTableDesc.FindColumnByName(t.Column)
+			status, i, err := tableDesc.FindColumnByName(t.Column)
 			if err != nil {
 				if t.IfExists {
 					// Noop.
@@ -108,21 +118,27 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 				}
 				return nil, err
 			}
+			if status == DescriptorActive {
+				col := tableDesc.Columns[i]
+				if tableDesc.PrimaryIndex.containsColumnID(col.ID) {
+					return nil, fmt.Errorf("column %q is referenced by the primary key", col.Name)
+				}
+				for _, idx := range tableDesc.allIndexes() {
+					if idx.containsColumnID(col.ID) {
+						return nil, fmt.Errorf("column %q is referenced by existing index %q", col.Name, idx.Name)
+					}
+				}
+				tableDesc.addColumnMutation(col, DescriptorMutation_DROP)
+				tableDesc.Columns = append(tableDesc.Columns[:i], tableDesc.Columns[i+1:]...)
 
-			col := newTableDesc.Columns[i]
-			if newTableDesc.PrimaryIndex.containsColumnID(col.ID) {
-				return nil, fmt.Errorf("column %q is referenced by the primary key", col.Name)
-			}
-			for _, idx := range newTableDesc.Indexes {
-				if idx.containsColumnID(col.ID) {
-					return nil, fmt.Errorf("column %q is referenced by existing index %q", col.Name, idx.Name)
+			} else { // DescriptorIncomplete
+				if tableDesc.Mutations[i].Direction == DescriptorMutation_ADD {
+					return nil, fmt.Errorf("column %q in the middle of being added, try again later", t.Column)
 				}
 			}
-
-			newTableDesc.Columns = append(newTableDesc.Columns[:i], newTableDesc.Columns[i+1:]...)
 
 		case *parser.AlterTableDropConstraint:
-			i, err := newTableDesc.FindIndexByName(t.Constraint)
+			status, i, err := tableDesc.FindIndexByName(t.Constraint)
 			if err != nil {
 				if t.IfExists {
 					// Noop.
@@ -130,29 +146,35 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 				}
 				return nil, err
 			}
-			newTableDesc.Indexes = append(newTableDesc.Indexes[:i], newTableDesc.Indexes[i+1:]...)
+			if status == DescriptorActive {
+				tableDesc.addIndexMutation(tableDesc.Indexes[i], DescriptorMutation_DROP)
+				tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
+			} else {
+				if tableDesc.Mutations[i].Direction == DescriptorMutation_ADD {
+					return nil, fmt.Errorf("constraint %q in the middle of being added, try again later", t.Constraint)
+				}
+			}
 
 		default:
 			return nil, util.Errorf("unsupported alter cmd: %T", cmd)
 		}
 	}
+	// Were some mutations added?
+	if numMutations == len(tableDesc.Mutations) {
+		return &valuesNode{}, nil
+	}
 
-	if err := newTableDesc.AllocateIDs(); err != nil {
+	if err := tableDesc.AllocateIDs(); err != nil {
 		return nil, err
 	}
 
-	if err := p.backfillBatch(&b, n.Table, tableDesc, newTableDesc); err != nil {
+	if err := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); err != nil {
 		return nil, err
 	}
 
-	// TODO(pmattis): This is a hack. Remove when schema change operations work
-	// properly.
-	p.hackNoteSchemaChange(newTableDesc)
-
-	b.Put(MakeDescMetadataKey(newTableDesc.GetID()), wrapDescriptor(newTableDesc))
-
-	if err := p.txn.Run(&b); err != nil {
-		return nil, convertBatchError(newTableDesc, b, err)
+	// Process mutations synchronously
+	if err := p.applyMutations(tableDesc, n.Table); err != nil {
+		return nil, err
 	}
 
 	return &valuesNode{}, nil

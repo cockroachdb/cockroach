@@ -186,7 +186,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 	tableDesc := desc.GetTable()
 
-	i, err := tableDesc.FindIndexByName("foo")
+	_, i, err := tableDesc.FindIndexByName("foo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +214,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 	tableDesc = desc.GetTable()
-	if _, err := tableDesc.FindIndexByName("foo"); err == nil {
+	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
 	if err != nil {

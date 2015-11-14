@@ -44,6 +44,21 @@ const (
 	PrimaryKeyIndexName = "primary"
 )
 
+// DescriptorStatus is the status for a descriptor.
+type DescriptorStatus int
+
+const (
+	_ DescriptorStatus = iota
+	// DescriptorAbsent for a descriptor that doesn't exist.
+	DescriptorAbsent
+	// DescriptorIncomplete for a descriptor that is a part of a
+	// schema change, and is still being processed.
+	DescriptorIncomplete
+	// DescriptorActive for a descriptor that is completely active
+	// for read/write and delete operations.
+	DescriptorActive
+)
+
 var errMissingColumns = errors.New("table must contain at least 1 column")
 var errMissingPrimaryKey = errors.New("table must contain a primary key")
 
@@ -74,7 +89,7 @@ func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
 	name := baseName
 
 	exists := func(name string) bool {
-		_, err := tableDesc.FindIndexByName(name)
+		_, _, err := tableDesc.FindIndexByName(name)
 		return err == nil
 	}
 	for i := 1; exists(name); i++ {
@@ -129,16 +144,35 @@ func (desc *TableDescriptor) SetName(name string) {
 	desc.Name = name
 }
 
-// allColumns includes the columns present in mutations.
+// allColumns returns all the columns, including those being added
+// in the mutations.
 func (desc *TableDescriptor) allColumns() []ColumnDescriptor {
 	cols := make([]ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
 	cols = append(cols, desc.Columns...)
 	for _, m := range desc.Mutations {
 		if col := m.GetColumn(); col != nil {
-			cols = append(cols, *col)
+			if m.Direction == DescriptorMutation_ADD {
+				cols = append(cols, *col)
+			}
 		}
 	}
 	return cols
+}
+
+// allIndexes returns all the indexes, including those being added
+// in the mutations.
+func (desc *TableDescriptor) allIndexes() []IndexDescriptor {
+	indexes := make([]IndexDescriptor, 0, len(desc.Indexes)+len(desc.Mutations))
+	indexes = append(indexes, desc.PrimaryIndex)
+	indexes = append(indexes, desc.Indexes...)
+	for _, m := range desc.Mutations {
+		if idx := m.GetIndex(); idx != nil {
+			if m.Direction == DescriptorMutation_ADD {
+				indexes = append(indexes, *idx)
+			}
+		}
+	}
+	return indexes
 }
 
 // AllocateIDs allocates column and index ids for any column or index which has
@@ -155,30 +189,43 @@ func (desc *TableDescriptor) AllocateIDs() error {
 	}
 
 	columnNames := map[string]ColumnID{}
-	for i := range desc.Columns {
-		columnID := desc.Columns[i].ID
+	fillColumnID := func(c *ColumnDescriptor) {
+		columnID := c.ID
 		if columnID == 0 {
 			columnID = desc.NextColumnID
 			desc.NextColumnID++
 		}
-		columnNames[normalizeName(desc.Columns[i].Name)] = columnID
-		desc.Columns[i].ID = columnID
+		columnNames[normalizeName(c.Name)] = columnID
+		c.ID = columnID
+	}
+	for i := range desc.Columns {
+		fillColumnID(&desc.Columns[i])
+	}
+	for _, m := range desc.Mutations {
+		if c := m.GetColumn(); c != nil {
+			fillColumnID(c)
+		}
 	}
 
 	// Keep track of unnamed indexes.
-	anonymousIndexes := make([]*IndexDescriptor, 0, len(desc.Indexes))
+	anonymousIndexes := make([]*IndexDescriptor, 0, len(desc.Indexes)+len(desc.Mutations))
 
 	// Create a slice of modifiable index descriptors.
-	indexes := make([]*IndexDescriptor, 0, len(desc.Indexes)+1)
+	indexes := make([]*IndexDescriptor, 0, 1+len(desc.Indexes)+len(desc.Mutations))
 	indexes = append(indexes, &desc.PrimaryIndex)
-	for i := range desc.Indexes {
-		index := &desc.Indexes[i]
-
+	collectIndexes := func(index *IndexDescriptor) {
 		if len(index.Name) == 0 {
 			anonymousIndexes = append(anonymousIndexes, index)
 		}
-
 		indexes = append(indexes, index)
+	}
+	for i := range desc.Indexes {
+		collectIndexes(&desc.Indexes[i])
+	}
+	for _, m := range desc.Mutations {
+		if index := m.GetIndex(); index != nil {
+			collectIndexes(index)
+		}
 	}
 
 	for _, index := range anonymousIndexes {
@@ -212,11 +259,16 @@ func (desc *TableDescriptor) AllocateIDs() error {
 			index.ImplicitColumnIDs = implicitColumnIDs
 
 			for _, colName := range index.StoreColumnNames {
-				i, err := desc.FindColumnByName(colName)
+				status, i, err := desc.FindColumnByName(colName)
 				if err != nil {
 					return err
 				}
-				col := desc.Columns[i]
+				var col *ColumnDescriptor
+				if status == DescriptorActive {
+					col = &desc.Columns[i]
+				} else {
+					col = desc.Mutations[i].GetColumn()
+				}
 				if desc.PrimaryIndex.containsColumnID(col.ID) {
 					continue
 				}
@@ -271,7 +323,6 @@ func (desc *TableDescriptor) Validate() error {
 		if column.ID == 0 {
 			return fmt.Errorf("invalid column ID %d", column.ID)
 		}
-
 		if _, ok := columnNames[normalizeName(column.Name)]; ok {
 			return fmt.Errorf("duplicate column name: \"%s\"", column.Name)
 		}
@@ -315,7 +366,7 @@ func (desc *TableDescriptor) Validate() error {
 
 	indexNames := map[string]struct{}{}
 	indexIDs := map[IndexID]string{}
-	for _, index := range append([]IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
+	for _, index := range desc.allIndexes() {
 		if err := validateName(index.Name, "index"); err != nil {
 			return err
 		}
@@ -387,17 +438,36 @@ func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
 	return nil
 }
 
-// FindColumnByName finds the column with specified name.
-func (desc *TableDescriptor) FindColumnByName(name string) (int, error) {
+// FindColumnByName finds the column with the specified name. It returns
+// DescriptorStatus for the column, and an index into either the columns
+// (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
+func (desc *TableDescriptor) FindColumnByName(name string) (DescriptorStatus, int, error) {
 	for i, c := range desc.Columns {
 		if equalName(c.Name, name) {
-			return i, nil
+			return DescriptorActive, i, nil
 		}
 	}
-	return -1, fmt.Errorf("column %q does not exist", name)
+	for i, m := range desc.Mutations {
+		if c := m.GetColumn(); c != nil {
+			if equalName(c.Name, name) {
+				return DescriptorIncomplete, i, nil
+			}
+		}
+	}
+	return DescriptorAbsent, -1, fmt.Errorf("column %q does not exist", name)
 }
 
-// FindColumnByID finds the column with specified ID.
+// FindActiveColumnByName finds an active column with the specified name.
+func (desc *TableDescriptor) FindActiveColumnByName(name string) (ColumnDescriptor, error) {
+	for _, c := range desc.Columns {
+		if equalName(c.Name, name) {
+			return c, nil
+		}
+	}
+	return ColumnDescriptor{}, fmt.Errorf("column %q does not exist", name)
+}
+
+// FindColumnByID finds the active column with specified ID.
 func (desc *TableDescriptor) FindColumnByID(id ColumnID) (*ColumnDescriptor, error) {
 	for i, c := range desc.Columns {
 		if c.ID == id {
@@ -407,17 +477,26 @@ func (desc *TableDescriptor) FindColumnByID(id ColumnID) (*ColumnDescriptor, err
 	return nil, util.Errorf("column-id \"%d\" does not exist", id)
 }
 
-// FindIndexByName finds the index with specified name.
-func (desc *TableDescriptor) FindIndexByName(name string) (int, error) {
+// FindIndexByName finds the index with the specified name. It returns
+// DescriptorStatus for the index, and an index into either the indexes
+// (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
+func (desc *TableDescriptor) FindIndexByName(name string) (DescriptorStatus, int, error) {
 	for i, idx := range desc.Indexes {
 		if equalName(idx.Name, name) {
-			return i, nil
+			return DescriptorActive, i, nil
 		}
 	}
-	return -1, fmt.Errorf("index %q does not exist", name)
+	for i, m := range desc.Mutations {
+		if idx := m.GetIndex(); idx != nil {
+			if equalName(idx.Name, name) {
+				return DescriptorIncomplete, i, nil
+			}
+		}
+	}
+	return DescriptorAbsent, -1, fmt.Errorf("index %q does not exist", name)
 }
 
-// FindIndexByID finds the index with specified ID.
+// FindIndexByID finds the active index with specified ID.
 func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error) {
 	indexes := append(desc.Indexes, desc.PrimaryIndex)
 
@@ -427,6 +506,45 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 		}
 	}
 	return nil, util.Errorf("index-id \"%d\" does not exist", id)
+}
+
+func (desc *TableDescriptor) makeMutationComplete(m DescriptorMutation) {
+	switch m.Direction {
+	case DescriptorMutation_ADD:
+		switch t := m.Descriptor_.(type) {
+		case *DescriptorMutation_Column:
+			desc.AddColumn(*t.Column)
+
+		case *DescriptorMutation_Index:
+			if err := desc.AddIndex(*t.Index, false); err != nil {
+				panic(err)
+			}
+		}
+
+	case DescriptorMutation_DROP:
+		// Nothing to be done.
+	}
+}
+
+func (desc *TableDescriptor) addColumnMutation(c ColumnDescriptor, direction DescriptorMutation_Direction) {
+	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Column{Column: &c}, Direction: direction}
+	desc.addMutation(m)
+}
+
+func (desc *TableDescriptor) addIndexMutation(idx IndexDescriptor, direction DescriptorMutation_Direction) {
+	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: &idx}, Direction: direction}
+	desc.addMutation(m)
+}
+
+func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
+	switch m.Direction {
+	case DescriptorMutation_ADD:
+		m.State = DescriptorMutation_DELETE_ONLY
+
+	case DescriptorMutation_DROP:
+		m.State = DescriptorMutation_WRITE_ONLY
+	}
+	desc.Mutations = append(desc.Mutations, m)
 }
 
 // SQLString returns the SQL string corresponding to the type.
