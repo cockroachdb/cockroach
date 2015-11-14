@@ -51,7 +51,7 @@ module Components {
      */
     export interface TableData<T> {
       /**
-       * columns is a function which returns a array of TableColumn objects
+       * columns is a function which returns an array of TableColumn objects
        * describing the columns of the table. Each TableColumn must accept the
        * same row data type as the TableData itself.
        *

@@ -89,7 +89,7 @@ func NewResolver(context *base.Context, spec string) (Resolver, error) {
 	return &socketResolver{typ: typ, addr: addr}, nil
 }
 
-// NewResolverFromAddress takes a net.Addr and contructs a resolver.
+// NewResolverFromAddress takes a net.Addr and constructs a resolver.
 func NewResolverFromAddress(addr net.Addr) Resolver {
 	switch addr.Network() {
 	case "tcp", "unix":

@@ -84,7 +84,7 @@ no noteworthy changes.
 
 `roachpb.ResponseWithError` changes to `roachpb.ResponsesWithError` which also
 contains the index of the first error, if any (or, alternatively, by
-convention the error occured at index `len(rwe.Responses)`).
+convention the error occurred at index `len(rwe.Responses)`).
 
 ## (\*Replica).applyRaftCommand
 

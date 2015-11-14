@@ -791,7 +791,7 @@ func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
 // database. The zone requires three replicas with no other specifications.
 // It also adds the range tree and the root node, the first range, to it.
 // The 'initialValues' are written as well after each value's checksum
-// is initalized.
+// is initialized.
 func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	desc := &roachpb.RangeDescriptor{
 		RangeID:       1,

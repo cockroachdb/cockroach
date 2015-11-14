@@ -103,7 +103,7 @@ SELECT * FROM kv
 ----
 a c
 
-# Abort transaction with a problematic statment, and ignore statements until the end of the transaction block
+# Abort transaction with a problematic statement, and ignore statements until the end of the transaction block
 
 statement ok
 BEGIN
@@ -133,7 +133,7 @@ UPDATE kv SET v = 'b' WHERE k in ('a')
 statement error there is already a transaction in progress
 BEGIN TRANSACTION
 
-statment error current transaction is aborted, commands ignored until end of transaction block
+statement error current transaction is aborted, commands ignored until end of transaction block
 SELECT * FROM kv
 ----
 

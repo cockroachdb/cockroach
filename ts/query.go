@@ -253,7 +253,7 @@ func (ds *dataSpan) newIterator() interpolatingIterator {
 // iterators have real data.  If even a single iterator has real data at an
 // offset, that offset will eventually be visited.
 //
-// In order to faciliate finding the lowest value of nextReal.offset, the set is
+// In order to facilitate finding the lowest value of nextReal.offset, the set is
 // organized as a min heap using Go's heap package.
 type unionIterator []interpolatingIterator
 

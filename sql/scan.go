@@ -537,7 +537,7 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 
 func (n *scanNode) processKV(kv client.KeyValue) bool {
 	if n.indexKey == nil {
-		// Reset the qvals map expressions to nil. The expresssions will get filled
+		// Reset the qvals map expressions to nil. The expressions will get filled
 		// in with the column values as we decode the key-value pairs for the row.
 		for _, qval := range n.qvals {
 			qval.datum = nil

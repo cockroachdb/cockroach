@@ -18,7 +18,7 @@ in code the `storage.Range` type refers to the latter. This was a
 deliberate at the time because (at least in code) the latter is more
 common than the former. However, resolving certain issues related to
 replication and splits requires us to be precise about the difference,
-so I propose separating the the two usages to improve clarity.
+so I propose separating the two usages to improve clarity.
 
 # Detailed design
 

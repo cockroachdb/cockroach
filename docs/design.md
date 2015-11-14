@@ -889,7 +889,7 @@ executed.
 
 When the above two conditions are met, the leader replica processes the
 command. Consistent reads are processed on the leader immediately.
-Write commands are commited into the Raft log so that every replica
+Write commands are committed into the Raft log so that every replica
 will execute the same commands. All commands produce deterministic
 results so that the range replicas keep consistent states among them.
 
