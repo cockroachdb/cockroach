@@ -185,7 +185,7 @@ func RangeLastVerificationTimestampKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDKey(rangeID, localRangeLastVerificationTimestampSuffix, roachpb.RKey{})
 }
 
-// RangeTreeNodeKey returns a range-local key for the the range's
+// RangeTreeNodeKey returns a range-local key for the range's
 // node in the range tree.
 func RangeTreeNodeKey(key roachpb.RKey) roachpb.Key {
 	return MakeRangeKey(key, localRangeTreeNodeSuffix, roachpb.RKey{})

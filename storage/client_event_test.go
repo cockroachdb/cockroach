@@ -200,7 +200,7 @@ func checkMatch(patternMap, lineMap map[roachpb.StoreID][]string) bool {
 }
 
 // TestMultiStoreEventFeed verifies that events on multiple stores are properly
-// recieved by a single event reader.
+// received by a single event reader.
 func TestMultiStoreEventFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	t.Skip("disabled until #1531 is fixed")

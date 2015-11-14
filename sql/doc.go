@@ -184,7 +184,7 @@ At the other end of the performance spectrum, query planners attempt to take
 advantage of secondary indexes to limit the data retrieved, make joining of
 data between two tables easier and faster and to avoid the need to sort data by
 retrieving it in a sorted or partially sorted form. The details of how we
-implement this are in flux and will continue to be in flux for the forseeable
+implement this are in flux and will continue to be in flux for the foreseeable
 future. This section is intended to provide a high-level overview of a few of
 the techniques involved.
 

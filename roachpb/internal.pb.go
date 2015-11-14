@@ -69,7 +69,7 @@ func (*InternalTimeSeriesData) ProtoMessage()    {}
 // correctly without a start timestamp and sample duration.
 //
 // Each sample may contain data gathered from multiple measurements of the same
-// variable, as long as all of those measurements occured within the sample
+// variable, as long as all of those measurements occurred within the sample
 // period. The sample stores several aggregated values from these measurements:
 // - The sum of all measured values
 // - A count of all measurements taken

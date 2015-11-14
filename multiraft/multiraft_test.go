@@ -315,7 +315,7 @@ func TestSlowStorage(t *testing.T) {
 	// Even with the third node blocked, the other nodes can make progress.
 	for i := 0; i < 2; i++ {
 		events := cluster.events[i]
-		log.Infof("waiting for event to be commited on node %v", i)
+		log.Infof("waiting for event to be committed on node %v", i)
 		commit := <-events.CommandCommitted
 		if string(commit.Command) != "command" {
 			t.Errorf("unexpected value in committed command: %v", commit.Command)
@@ -332,7 +332,7 @@ func TestSlowStorage(t *testing.T) {
 
 	// After unblocking the third node, it will catch up.
 	cluster.storages[2].Unblock()
-	log.Infof("waiting for event to be commited on node 2")
+	log.Infof("waiting for event to be committed on node 2")
 	// When we unblock, the backlog is not guaranteed to be processed in order,
 	// and in some cases the leader may need to retransmit some messages.
 	for i := 0; i < 3; i++ {

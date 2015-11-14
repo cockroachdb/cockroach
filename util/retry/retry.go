@@ -73,7 +73,7 @@ func (r *Retry) Reset() {
 	r.isReset = true
 }
 
-// CurrentAttempt it is zero initally and increases with each call to Next()
+// CurrentAttempt it is zero initially and increases with each call to Next()
 // which does not immediately follow a Reset().
 func (r *Retry) CurrentAttempt() int {
 	return r.currentAttempt

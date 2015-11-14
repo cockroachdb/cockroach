@@ -417,7 +417,7 @@ type Transaction struct {
 	// or (if higher, which is in the majority of cases), the time of the node
 	// serving the key at the time of the failed read.
 	// Additionally storing the node, we make sure to set max_timestamp=timestamp
-	// at the time of the read for nodes whose clock we've taken into acount,
+	// at the time of the read for nodes whose clock we've taken into account,
 	// which amounts to reading without any uncertainty.
 	//
 	// Bits of this mechanism are found in the local sender, the range and the

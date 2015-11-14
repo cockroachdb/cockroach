@@ -89,7 +89,7 @@ func (s *rpcSender) Send(args Request) (Response, error) {
 			// number of things that could go wrong is vast, but we don't
 			// want to miss any which should in theory be retried with the
 			// same client command ID. We log the error here as a warning so
-			// there's visiblity that this is happening. Some of the errors
+			// there's visibility that this is happening. Some of the errors
 			// we'll sweep up in this net shouldn't be retried, but we can't
 			// really know for sure which.
 			continue

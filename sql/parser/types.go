@@ -113,7 +113,7 @@ func (node *TimestampType) String() string {
 	return "TIMESTAMP"
 }
 
-// IntervalType represents a INTERVAL type
+// IntervalType represents an INTERVAL type
 type IntervalType struct {
 }
 

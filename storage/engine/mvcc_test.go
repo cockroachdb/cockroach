@@ -286,7 +286,7 @@ func TestMVCCIncrementOldTimestamp(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	// Write a non-interger value.
+	// Write a non-integer value.
 	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
 	if err != nil {
 		t.Fatal(err)

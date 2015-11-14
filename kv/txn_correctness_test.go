@@ -671,7 +671,7 @@ func TestTxnDBInconsistentAnalysisAnomaly(t *testing.T) {
 
 // TestTxnDBLostUpdateAnomaly verifies that neither SI nor SSI isolation
 // are subject to the lost update anomaly. This anomaly is prevented
-// in most cases by using the the READ_COMMITTED ANSI isolation level.
+// in most cases by using the READ_COMMITTED ANSI isolation level.
 // However, only REPEATABLE_READ fully protects against it.
 //
 // With lost update, the write from txn1 is overwritten by the write

@@ -564,7 +564,7 @@ func TestRSpanIntersect(t *testing.T) {
 		desc.StartKey = test.startKey
 		desc.EndKey = test.endKey
 		if _, err := rs.Intersect(&desc); err == nil {
-			t.Errorf("%d: unexpected sucess", i)
+			t.Errorf("%d: unexpected success", i)
 		}
 	}
 }

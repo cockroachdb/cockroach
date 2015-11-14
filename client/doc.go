@@ -26,7 +26,7 @@ provides a simple, synchronous interface well-suited to parallel updates and
 queries.
 
 The simplest way to use the client is through the Run method. Run synchronously
-invokes the call, fills in the the reply and returns an error. The example
+invokes the call, fills in the reply and returns an error. The example
 below shows a get and a put.
 
 	db, err := client.Open("rpcs://root@localhost:26257")

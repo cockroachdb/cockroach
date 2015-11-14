@@ -150,7 +150,7 @@ func (ucb usedCapacityBalancer) improve(store *roachpb.StoreDescriptor, sl Store
 	excluded nodeIDSet) *roachpb.StoreDescriptor {
 	storeFraction := store.Capacity.FractionUsed()
 
-	// If existing replica has stable capacity usage,, return false immediately.
+	// If existing replica has stable capacity usage, return false immediately.
 	if float64(storeFraction) < sl.used.mean*(1+rebalanceFromMean) {
 		return nil
 	}

@@ -78,7 +78,7 @@ var flagUsage = map[string]string{
         - tcp: (default if type is omitted): plain ip address or hostname,
           or "self" for single-node systems.
         - unix: unix socket
-        - lb: RPC load balancer fowarding to an arbitrary node
+        - lb: RPC load balancer forwarding to an arbitrary node
         - http-lb: HTTP load balancer: we query
           http(s)://<address>/_status/details/local
 `,

@@ -237,7 +237,7 @@ const (
 	astHaving = "HAVING"
 )
 
-// newWhere creates a WHERE or HAVING clause out of a Expr. If the expression
+// newWhere creates a WHERE or HAVING clause out of an Expr. If the expression
 // is nil, it returns nil.
 func newWhere(typ string, expr Expr) *Where {
 	if expr == nil {

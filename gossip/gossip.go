@@ -370,7 +370,7 @@ func (g *Gossip) RegisterSystemConfigCallback(method systemConfigCallback) {
 }
 
 // updateSystemConfig is the raw gossip info callback.
-// Unmarshal the system config, and if successfuly, update out
+// Unmarshal the system config, and if successfully, update out
 // copy and run the callbacks.
 func (g *Gossip) updateSystemConfig(key string, content roachpb.Value) {
 	if key != KeySystemConfig {

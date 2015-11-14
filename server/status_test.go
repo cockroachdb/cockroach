@@ -209,7 +209,7 @@ var retryOptions = retry.Options{
 	Multiplier:     2,
 }
 
-// getRequest returns the the results of a get request to the test server with
+// getRequest returns the results of a get request to the test server with
 // the given path.  It returns the contents of the body of the result.
 func getRequest(t *testing.T, ts TestServer, path string) []byte {
 	httpClient, err := testContext.GetHTTPClient()
