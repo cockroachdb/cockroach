@@ -30,11 +30,11 @@ func makeColIDtoRowIndex(row planNode, desc *TableDescriptor) (map[ColumnID]int,
 	columns := row.Columns()
 	colIDtoRowIndex := make(map[ColumnID]int, len(columns))
 	for i, name := range columns {
-		j, err := desc.FindColumnByName(name)
+		col, err := desc.FindActiveColumnByName(name)
 		if err != nil {
 			return nil, err
 		}
-		colIDtoRowIndex[desc.Columns[j].ID] = i
+		colIDtoRowIndex[col.ID] = i
 	}
 	return colIDtoRowIndex, nil
 }
@@ -68,15 +68,29 @@ func (ids indexesByID) Swap(i, j int) {
 
 func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName, oldTableDesc, newTableDesc *TableDescriptor) error {
 	table := &parser.AliasedTableExpr{Expr: tableName}
-
 	var droppedColumnDescs []ColumnDescriptor
-	sort.Sort(columnsByID(oldTableDesc.Columns))
-	sort.Sort(columnsByID(newTableDesc.Columns))
-	for i, j := 0, 0; i < len(oldTableDesc.Columns); i++ {
-		if j == len(newTableDesc.Columns) || oldTableDesc.Columns[i].ID != newTableDesc.Columns[j].ID {
-			droppedColumnDescs = append(droppedColumnDescs, oldTableDesc.Columns[i])
-		} else {
-			j++
+	var droppedIndexDescs []IndexDescriptor
+	var newIndexDescs []IndexDescriptor
+	for _, m := range oldTableDesc.Mutations {
+		switch m.Direction {
+		case DescriptorMutation_ADD:
+			switch t := m.Descriptor_.(type) {
+			case *DescriptorMutation_Column:
+				// TODO(vivek): Add column to new columns and use it
+				// to fill in default values.
+
+			case *DescriptorMutation_Index:
+				newIndexDescs = append(newIndexDescs, *t.Index)
+			}
+
+		case DescriptorMutation_DROP:
+			switch t := m.Descriptor_.(type) {
+			case *DescriptorMutation_Column:
+				droppedColumnDescs = append(droppedColumnDescs, *t.Column)
+
+			case *DescriptorMutation_Index:
+				droppedIndexDescs = append(droppedIndexDescs, *t.Index)
+			}
 		}
 	}
 
@@ -99,17 +113,6 @@ func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName
 		}
 	}
 
-	var droppedIndexDescs []IndexDescriptor
-	sort.Sort(indexesByID(oldTableDesc.Indexes))
-	sort.Sort(indexesByID(newTableDesc.Indexes))
-	for i, j := 0, 0; i < len(oldTableDesc.Indexes); i++ {
-		if j == len(newTableDesc.Indexes) || oldTableDesc.Indexes[i].ID != newTableDesc.Indexes[j].ID {
-			droppedIndexDescs = append(droppedIndexDescs, oldTableDesc.Indexes[i])
-		} else {
-			j++
-		}
-	}
-
 	for _, indexDescriptor := range droppedIndexDescs {
 		indexPrefix := MakeIndexKeyPrefix(newTableDesc.ID, indexDescriptor.ID)
 
@@ -120,13 +123,6 @@ func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName
 			log.Infof("DelRange %s - %s", prettyKey(indexStartKey, 0), prettyKey(indexEndKey, 0))
 		}
 		b.DelRange(indexStartKey, indexEndKey)
-	}
-
-	var newIndexDescs []IndexDescriptor
-	for _, index := range append(newTableDesc.Indexes, newTableDesc.PrimaryIndex) {
-		if index.ID >= oldTableDesc.NextIndexID {
-			newIndexDescs = append(newIndexDescs, index)
-		}
 	}
 
 	if len(newIndexDescs) > 0 {
