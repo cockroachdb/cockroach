@@ -434,6 +434,19 @@ func TestTxnCoordSenderGC(t *testing.T) {
 		s.Sender.Lock()
 		_, ok := s.Sender.txns[string(txn.Proto.ID)]
 		s.Sender.Unlock()
+
+		if !ok {
+			ba := roachpb.BatchRequest{}
+			ba.Timestamp = s.Sender.clock.Now()
+			ba.Txn = txn.Proto.Clone()
+			et := &roachpb.EndTransactionRequest{}
+			ba.Add(et)
+			_, err := s.Sender.Send(context.Background(), ba)
+			if err == nil {
+				t.Error("expected txn to be committed/aborted")
+			}
+		}
+
 		return !ok
 	}, 50*time.Millisecond); err != nil {
 		t.Error("expected garbage collection")
