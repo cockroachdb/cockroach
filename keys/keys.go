@@ -392,8 +392,8 @@ var (
 			{name: "/Range", prefix: LocalRangePrefix, ppFunc: localRangeKeyPrint},
 		}},
 		{name: "/System", start: SystemPrefix, end: SystemMax, entries: []dictEntry{
-			{name: "/Meta2", prefix: Meta2Prefix, ppFunc: print},
-			{name: "/Meta1", prefix: Meta1Prefix, ppFunc: print},
+			{name: "/Meta2", prefix: Meta2Prefix, ppFunc: metaPrint},
+			{name: "/Meta1", prefix: Meta1Prefix, ppFunc: metaPrint},
 			//{name: "Meta", prefix: MetaPrefix},
 			{name: "/StatusStore", prefix: StatusStorePrefix, ppFunc: decodeKeyPrint},
 			{name: "/StatusNode", prefix: StatusNodePrefix, ppFunc: decodeKeyPrint},
@@ -467,7 +467,6 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 	fmt.Fprintf(&buf, "/%d", i)
 
 	// get suffix
-
 	hasSuffix := false
 	for _, s := range rangeIDSuffixDict {
 		if bytes.HasPrefix(key, s.suffix) {
@@ -482,7 +481,6 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 		}
 	}
 
-	// get encode values
 	if hasSuffix {
 		fmt.Fprintf(&buf, "%s", decodeKeyPrint(key))
 	} else {
@@ -516,12 +514,16 @@ func localRangeKeyPrint(key roachpb.Key) string {
 	return buf.String()
 }
 
-func print(key roachpb.Key) string {
+func metaPrint(key roachpb.Key) string {
+	if bytes.Equal(key, roachpb.KeyMax) {
+		return "/Max"
+	}
 	return fmt.Sprintf("/%q", []byte(key))
 }
 
 // TableDataPrefix
 func decodeKeyPrint(key roachpb.Key) string {
+	fmt.Printf("%q", key)
 	var buf bytes.Buffer
 	for k := 0; len(key) > 0; k++ {
 		var err error
@@ -577,23 +579,30 @@ func PrettyPrint(key roachpb.Key) string {
 		if k.end != nil && (key.Compare(k.start) < 0 || key.Compare(k.end) > 0) {
 			continue
 		}
+		
+		fmt.Fprintf(&buf, "[[kaka0] %q ]", []byte(key))
 
 		fmt.Fprintf(&buf, "%s", k.name)
 		if k.end != nil && k.end.Compare(key) == 0 {
 			fmt.Fprintf(&buf, "/Max")
 			return buf.String()
 		}
+		
+		fmt.Fprintf(&buf, "[[kaka1] %q ]", []byte(key))
 
 		hasPrefix := false
 		for _, e := range k.entries {
 			if bytes.HasPrefix(key, e.prefix) {
 				hasPrefix = true
+				fmt.Fprintf(&buf, "[[kaka] %q ]", []byte(key))
 				key = key[len(e.prefix):]
+				
 				fmt.Fprintf(&buf, "%s%s", e.name, e.ppFunc(key))
 				break
 			}
 		}
 		if !hasPrefix {
+			key = key[len(k.start):]
 			fmt.Fprintf(&buf, "/%q", []byte(key))
 		}
 

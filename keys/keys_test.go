@@ -388,6 +388,8 @@ func TestPrettyPrint(t *testing.T) {
 
 		{LocalMax, "/Local/Max"},
 
+		{roachpb.MakeKey(localPrefix, []byte("2222")), `/Local/"2222"`},
+
 		// system
 		{roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo")), `/System/Meta2/"foo"`},
 		{roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo")), `/System/Meta1/"foo"`},
@@ -395,7 +397,11 @@ func TestPrettyPrint(t *testing.T) {
 		{StoreStatusKey(2222), "/System/StatusStore/2222"},
 		{NodeStatusKey(1111), "/System/StatusNode/1111"},
 
+		{Meta1KeyMax, `/System/Meta1/Max`},
+		{Meta2KeyMax, `/System/Meta2/Max`},
 		{SystemMax, "/System/Max"},
+
+		{roachpb.MakeKey(SystemPrefix, roachpb.Key("111")), `/System/"111"`},
 
 		// table
 		{UserTableDataMin, "/Table/1000"},
