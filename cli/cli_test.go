@@ -92,18 +92,18 @@ func Example_basic() {
 	// Output:
 	// kv put a 1 b 2 c 3
 	// kv scan
-	// /Table/"a"	"1"
-	// /Table/"b"	"2"
-	// /Table/"c"	"3"
+	// "a"	"1"
+	// "b"	"2"
+	// "c"	"3"
 	// 3 result(s)
 	// kv revscan
-	// /Table/"c"	"3"
-	// /Table/"b"	"2"
-	// /Table/"a"	"1"
+	// "c"	"3"
+	// "b"	"2"
+	// "a"	"1"
 	// 3 result(s)
 	// kv del a c
 	// kv get a
-	// /Table/"a" not found
+	// "a" not found
 	// kv get b
 	// "2"
 	// kv inc c 1
@@ -117,12 +117,12 @@ func Example_basic() {
 	// kv inc c -- -9
 	// 42
 	// kv scan
-	// /Table/"b"	"2"
-	// /Table/"c"	42
+	// "b"	"2"
+	// "c"	42
 	// 2 result(s)
 	// kv revscan
-	// /Table/"c"	42
-	// /Table/"b"	"2"
+	// "c"	42
+	// "b"	"2"
 	// 2 result(s)
 	// kv inc c b
 	// invalid increment: b: strconv.ParseInt: parsing "b": invalid syntax
@@ -150,10 +150,10 @@ func Example_quoted() {
 	// kv put a\x02 \U000065e5\U0000672c\U00008a9e
 	// kv put a\x03 \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e
 	// kv scan
-	// /Table/"a\x00"	"日本語"
-	// /Table/"a\x01"	"日本語"
-	// /Table/"a\x02"	"日本語"
-	// /Table/"a\x03"	"日本語"
+	// "a\x00"	"日本語"
+	// "a\x01"	"日本語"
+	// "a\x02"	"日本語"
+	// "a\x03"	"日本語"
 	// 4 result(s)
 	// kv get a\x00
 	// "日本語"
@@ -182,8 +182,8 @@ func Example_insecure() {
 	// Output:
 	// kv --insecure put a 1 b 2
 	// kv --insecure scan
-	// /Table/"a"	"1"
-	// /Table/"b"	"2"
+	// "a"	"1"
+	// "b"	"2"
 	// 2 result(s)
 	// quit --insecure
 	// node drained and shutdown: ok
@@ -210,57 +210,57 @@ func Example_ranges() {
 	// Output:
 	// kv put a 1 b 2 c 3 d 4
 	// kv scan
-	// /Table/"a"	"1"
-	// /Table/"b"	"2"
-	// /Table/"c"	"3"
-	// /Table/"d"	"4"
+	// "a"	"1"
+	// "b"	"2"
+	// "c"	"3"
+	// "d"	"4"
 	// 4 result(s)
 	// kv revscan
-	// /Table/"d"	"4"
-	// /Table/"c"	"3"
-	// /Table/"b"	"2"
-	// /Table/"a"	"1"
+	// "d"	"4"
+	// "c"	"3"
+	// "b"	"2"
+	// "a"	"1"
 	// 4 result(s)
 	// range split c
 	// range ls
-	// /Table/""-/Table/"c" [1]
+	// ""-"c" [1]
 	// 	0: node-id=1 store-id=1
-	// /Table/"c"-/Table/"\xff" [2]
+	// "c"-/Table/"\xff" [2]
 	// 	0: node-id=1 store-id=1
 	// 2 result(s)
 	// kv scan
-	// /Table/"a"	"1"
-	// /Table/"b"	"2"
-	// /Table/"c"	"3"
-	// /Table/"d"	"4"
+	// "a"	"1"
+	// "b"	"2"
+	// "c"	"3"
+	// "d"	"4"
 	// 4 result(s)
 	// kv revscan
-	// /Table/"d"	"4"
-	// /Table/"c"	"3"
-	// /Table/"b"	"2"
-	// /Table/"a"	"1"
+	// "d"	"4"
+	// "c"	"3"
+	// "b"	"2"
+	// "a"	"1"
 	// 4 result(s)
 	// range merge b
 	// range ls
-	// /Table/""-/Table/"\xff" [1]
+	// ""-/Table/"\xff" [1]
 	// 	0: node-id=1 store-id=1
 	// 1 result(s)
 	// kv scan
-	// /Table/"a"	"1"
-	// /Table/"b"	"2"
-	// /Table/"c"	"3"
-	// /Table/"d"	"4"
+	// "a"	"1"
+	// "b"	"2"
+	// "c"	"3"
+	// "d"	"4"
 	// 4 result(s)
 	// kv revscan
-	// /Table/"d"	"4"
-	// /Table/"c"	"3"
-	// /Table/"b"	"2"
-	// /Table/"a"	"1"
+	// "d"	"4"
+	// "c"	"3"
+	// "b"	"2"
+	// "a"	"1"
 	// 4 result(s)
 	// kv delrange a c
 	// kv scan
-	// /Table/"c"	"3"
-	// /Table/"d"	"4"
+	// "c"	"3"
+	// "d"	"4"
 	// 2 result(s)
 	// quit
 	// node drained and shutdown: ok
@@ -307,19 +307,19 @@ func Example_cput() {
 	// Output:
 	// kv put a 1 b 2 c 3 d 4
 	// kv scan
-	// /Table/"a"	"1"
-	// /Table/"b"	"2"
-	// /Table/"c"	"3"
-	// /Table/"d"	"4"
+	// "a"	"1"
+	// "b"	"2"
+	// "c"	"3"
+	// "d"	"4"
 	// 4 result(s)
 	// kv cput e 5
 	// kv cput b 3 2
 	// kv scan
-	// /Table/"a"	"1"
-	// /Table/"b"	"3"
-	// /Table/"c"	"3"
-	// /Table/"d"	"4"
-	// /Table/"e"	"5"
+	// "a"	"1"
+	// "b"	"3"
+	// "c"	"3"
+	// "d"	"4"
+	// "e"	"5"
 	// 5 result(s)
 	// quit
 	// node drained and shutdown: ok
@@ -342,20 +342,20 @@ func Example_max_results() {
 	// Output:
 	// kv put a 1 b 2 c 3 d 4
 	// kv scan --max-results=3
-	// /Table/"a"	"1"
-	// /Table/"b"	"2"
-	// /Table/"c"	"3"
+	// "a"	"1"
+	// "b"	"2"
+	// "c"	"3"
 	// 3 result(s)
 	// kv revscan --max-results=2
-	// /Table/"d"	"4"
-	// /Table/"c"	"3"
+	// "d"	"4"
+	// "c"	"3"
 	// 2 result(s)
 	// range split c
 	// range split d
 	// range ls --max-results=2
-	// /Table/""-/Table/"c" [1]
+	// ""-"c" [1]
 	// 	0: node-id=1 store-id=1
-	// /Table/"c"-/Table/"d" [2]
+	// "c"-"d" [2]
 	// 	0: node-id=1 store-id=1
 	// 2 result(s)
 	// quit

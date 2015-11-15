@@ -405,9 +405,9 @@ func TestPrettyPrint(t *testing.T) {
 
 		// table
 		{UserTableDataMin, "/Table/1000"},
-		{MakeKey(TableDataPrefix, []byte("a")), `/Table/"a"`},
 		{MakeKey(TableDataPrefix, []byte("\xff")), `/Table/"\xff"`},
 		{MakeTablePrefix(111), "/Table/111"},
+		{MakeTablePrefix(1024), "/Table/1024"},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey("foo")), `/Table/42/"foo"`},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeFloat(nil, float64(233.221112)))), "/Table/42/233.221112"},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeVarint(nil, 1222)), roachpb.RKey(encoding.EncodeString(nil, "handsome man"))), `/Table/42/1222/"handsome man"`},
@@ -419,6 +419,9 @@ func TestPrettyPrint(t *testing.T) {
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeTime(nil, tm))), "/Table/42/Sat Mar  7 11:06:39 UTC 2015"},
 
 		// others
+		{MakeKey(roachpb.RKey("a")), `"a"`},
+		{MakeKey(roachpb.RKey("abbbaaa")), `"abbbaaa"`},
+		
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x31, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:382: unknown escape>"},
 	}
 	for i, test := range testCases {
