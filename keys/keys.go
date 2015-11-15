@@ -568,19 +568,19 @@ func decodeKeyPrint(key roachpb.Key) string {
 func PrettyPrint(key roachpb.Key) string {
 	var buf bytes.Buffer
 	for _, k := range keyDict {
-		if key.Compare(k.start) >= 0 && (k.end == nil || key.Compare(k.end)<=0){
+		if key.Compare(k.start) >= 0 && (k.end == nil || key.Compare(k.end) <= 0) {
 			fmt.Fprintf(&buf, "%s", k.name)
 			if k.end != nil && k.end.Compare(key) == 0 {
 				fmt.Fprintf(&buf, "/Max")
 				return buf.String()
 			}
-	
+
 			hasPrefix := false
 			for _, e := range k.entries {
 				if bytes.HasPrefix(key, e.prefix) {
 					hasPrefix = true
 					key = key[len(e.prefix):]
-					
+
 					fmt.Fprintf(&buf, "%s%s", e.name, e.ppFunc(key))
 					break
 				}
@@ -589,7 +589,7 @@ func PrettyPrint(key roachpb.Key) string {
 				key = key[len(k.start):]
 				fmt.Fprintf(&buf, "/%q", []byte(key))
 			}
-	
+
 			return buf.String()
 		}
 	}

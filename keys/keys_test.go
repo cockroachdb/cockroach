@@ -421,7 +421,7 @@ func TestPrettyPrint(t *testing.T) {
 		// others
 		{MakeKey(roachpb.RKey("a")), `"a"`},
 		{MakeKey(roachpb.RKey("abbbaaa")), `"abbbaaa"`},
-		
+
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x31, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:382: unknown escape>"},
 	}
 	for i, test := range testCases {
