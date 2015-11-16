@@ -1924,9 +1924,17 @@ func TestEndTransactionWithErrors(t *testing.T) {
 // TestEndTransactionGC verifies that a transaction record is immediately
 // garbage-collected upon EndTransaction iff all of the supplied intents are
 // local relative to the transaction record's location.
-func TestEndTransactionGC(t *testing.T) {
+func TestEndTransactionLocalGC(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	defer setTxnAutoGC(true)()
+	defer func() { TestingCommandFilter = nil }()
+	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
+		// Make sure the direct GC path doesn't interfere with this test.
+		if args.Method() == roachpb.GC {
+			return util.Errorf("boom")
+		}
+		return nil
+	}
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1973,22 +1981,7 @@ func TestEndTransactionGC(t *testing.T) {
 	}
 }
 
-// TestEndTransactionResolveOnlyLocalIntents verifies that an end transaction
-// request resolves only local intents within the same batch.
-func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	tc := testContext{}
-	key := roachpb.Key("a")
-	splitKey := roachpb.RKey(key).Next()
-	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
-		if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey.AsRawKey()) {
-			return util.Errorf("boom")
-		}
-		return nil
-	}
-	tc.Start(t)
-	defer tc.Stop()
-
+func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key, splitKey roachpb.RKey) (*Replica, *roachpb.Transaction) {
 	// Split the range and create an intent in each range.
 	// The keys of the two intents are next to each other.
 	newRng := splitTestRange(tc.store, splitKey, splitKey, t)
@@ -2018,6 +2011,27 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args); err != nil {
 		t.Fatal(err)
 	}
+	return newRng, txn
+}
+
+// TestEndTransactionResolveOnlyLocalIntents verifies that an end transaction
+// request resolves only local intents within the same batch.
+func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	key := roachpb.Key("a")
+	splitKey := roachpb.RKey(key).Next()
+	defer func() { TestingCommandFilter = nil }()
+	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
+		if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey.AsRawKey()) {
+			return util.Errorf("boom")
+		}
+		return nil
+	}
+	tc.Start(t)
+	defer tc.Stop()
+
+	newRng, txn := setupResolutionTest(t, tc, key, splitKey)
 
 	// Check if the intent in the other range has not yet been resolved.
 	gArgs := getArgs(splitKey)
@@ -2038,6 +2052,75 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 		t.Fatalf("expected persisted intents %v, got %v",
 			expIntents, hbResp.Txn.Intents)
 	}
+}
+
+// TestEndTransactionDirectGC verifies that after successfully resolving the
+// external intents of a transaction after EndTransaction, the transaction and
+// sequence cache records are purged.
+func TestEndTransactionDirectGC(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	key := roachpb.Key("a")
+	splitKey := roachpb.RKey(key).Next()
+	tc.Start(t)
+	defer tc.Stop()
+
+	_, txn := setupResolutionTest(t, tc, key, splitKey)
+
+	util.SucceedsWithin(t, 5*time.Second, func() error {
+		if gr, _, err := tc.rng.Get(tc.engine, roachpb.Header{}, roachpb.GetRequest{Span: roachpb.Span{Key: keys.TransactionKey(txn.Key, txn.ID)}}); err != nil {
+			return err
+		} else if gr.Value != nil {
+			return util.Errorf("txn entry still there")
+		}
+
+		var entry roachpb.SequenceCacheEntry
+		if seq, err := tc.rng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
+			return err
+		} else if seq > 0 {
+			return util.Errorf("sequence cache still populated: %v", entry)
+		}
+
+		return nil
+	})
+}
+
+// TestEndTransactionDirectGCFailure verifies that no direct GC takes place if
+// the external intents can't be resolved.
+func TestEndTransactionDirectGCFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	key := roachpb.Key("a")
+	splitKey := roachpb.RKey(key).Next()
+	var count int64
+	defer func() { TestingCommandFilter = nil }()
+	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
+		if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey.AsRawKey()) {
+			atomic.AddInt64(&count, 1)
+			return util.Errorf("boom")
+		} else if args.Method() == roachpb.GC {
+			t.Fatalf("unexpected GCRequest: %+v", args)
+		}
+		return nil
+	}
+	tc.Start(t)
+	defer tc.Stop()
+
+	setupResolutionTest(t, tc, key, splitKey)
+
+	// Now test that no direct GC happens. First, make sure ResolveIntent
+	// happened. Then, issue a bogus Put just to spend a little bit of time
+	// in Raft, in which case it's likely that the GCRequest would sneak in
+	// before us and blow up the test due to the filtering above, rendering
+	// the test (intentionally) flaky.
+	util.SucceedsWithin(t, 5*time.Second, func() error {
+		if atomic.LoadInt64(&count) == 0 {
+			return util.Errorf("intent resolution not attempted yet")
+		} else if err := tc.store.DB().Put("panama", "banana"); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 // TestPushTxnBadKey verifies that args.Key equals args.PusheeTxn.ID.
