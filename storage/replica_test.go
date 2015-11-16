@@ -1116,16 +1116,10 @@ func TestRangeUpdateTSCache(t *testing.T) {
 // range.
 func TestRangeCommandQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	defer func() { TestingCommandFilter = nil }()
-
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-
 	// Intercept commands with matching command IDs and block them.
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
-	defer close(blockingDone) // make sure teardown can happen
+	defer func() { TestingCommandFilter = nil }()
 	TestingCommandFilter = func(_ roachpb.Request, h roachpb.Header) error {
 		if h.GetUserPriority() == 42 {
 			blockingStart <- struct{}{}
@@ -1134,6 +1128,11 @@ func TestRangeCommandQueue(t *testing.T) {
 		return nil
 	}
 
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	defer close(blockingDone) // make sure teardown can happen
 	// Test all four combinations of reads & writes waiting.
 	testCases := []struct {
 		cmd1Read, cmd2Read bool
@@ -1234,11 +1233,6 @@ func TestRangeCommandQueue(t *testing.T) {
 func TestRangeCommandQueueInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	defer func() { TestingCommandFilter = nil }()
-
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-
 	key := roachpb.Key("key1")
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
@@ -1256,6 +1250,10 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 
 		return nil
 	}
+
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
 	cmd1Done := make(chan struct{})
 	go func() {
 		args := putArgs(key, []byte{1})
