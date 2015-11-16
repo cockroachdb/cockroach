@@ -71,7 +71,7 @@ func (b *Batch) initResult(calls, numRows int, err error) {
 		}
 	}
 	if b.Results == nil {
-		b.Results = b.resultsBuf[0:0]
+		b.Results = b.resultsBuf[:0]
 	}
 	b.Results = append(b.Results, r)
 }

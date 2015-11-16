@@ -138,7 +138,7 @@ func (n *indexJoinNode) Next() bool {
 		// The table is out of rows. Pull primary keys from the index.
 		n.table.kvs = nil
 		n.table.kvIndex = 0
-		n.table.spans = n.table.spans[0:0]
+		n.table.spans = n.table.spans[:0]
 
 		for len(n.table.spans) < joinBatchSize {
 			if !n.index.Next() {

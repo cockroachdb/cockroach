@@ -108,7 +108,7 @@ func GetContentType(request *http.Request) string {
 	contentType := request.Header.Get(ContentTypeHeader)
 	semicolonIndex := strings.Index(contentType, ";")
 	if semicolonIndex > -1 {
-		contentType = contentType[0:semicolonIndex]
+		contentType = contentType[:semicolonIndex]
 	}
 	return contentType
 }

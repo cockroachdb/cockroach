@@ -686,7 +686,7 @@ func (g *Gossip) removeClient(c *client) {
 	g.clientsMu.Lock()
 	for i := 0; i < len(g.clients); i++ {
 		if g.clients[i] == c {
-			g.clients = append(g.clients[0:i], g.clients[i+1:]...)
+			g.clients = append(g.clients[:i], g.clients[i+1:]...)
 			break
 		}
 	}

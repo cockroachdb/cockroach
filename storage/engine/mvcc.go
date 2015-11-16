@@ -507,7 +507,7 @@ func MVCCGet(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consis
 	buf := getBufferPool.Get().(*getBuffer)
 	defer getBufferPool.Put(buf)
 
-	metaKey := mvccEncodeKey(buf.key[0:0], key)
+	metaKey := mvccEncodeKey(buf.key[:0], key)
 	ok, _, _, err := engine.GetProto(metaKey, &buf.meta)
 	if err != nil || !ok {
 		return nil, nil, err
@@ -754,7 +754,7 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp ro
 		return emptyKeyError()
 	}
 
-	metaKey := mvccEncodeKey(buf.key[0:0], key)
+	metaKey := mvccEncodeKey(buf.key[:0], key)
 	ok, origMetaKeySize, origMetaValSize, err := engine.GetProto(metaKey, &buf.meta)
 	if err != nil {
 		return err
@@ -1088,12 +1088,12 @@ func MVCCIterate(engine Engine, startKey, endKey roachpb.Key, timestamp roachpb.
 	var encKey, encEndKey MVCCKey
 	var keyBuf []byte
 	if reverse {
-		encEndKey = mvccEncodeKey(buf.key[0:0], startKey)
+		encEndKey = mvccEncodeKey(buf.key[:0], startKey)
 		keyBuf = encEndKey[len(encEndKey):]
 		encKey = mvccEncodeKey(keyBuf, endKey)
 		getMetaKey = getReverseScanMetaKey
 	} else {
-		encEndKey = mvccEncodeKey(buf.key[0:0], endKey)
+		encEndKey = mvccEncodeKey(buf.key[:0], endKey)
 		keyBuf = encEndKey[len(encEndKey):]
 		encKey = mvccEncodeKey(keyBuf, startKey)
 		getMetaKey = getScanMetaKey
