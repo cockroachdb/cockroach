@@ -1494,7 +1494,7 @@ func TestRangeSequenceCacheReadError(t *testing.T) {
 	}
 
 	// Overwrite sequence cache entry with garbage for the last op.
-	key := keys.SequenceCacheKey(tc.rng.Desc().RangeID, txn.ID, txn.Sequence)
+	key := keys.SequenceCacheKey(tc.rng.Desc().RangeID, txn.ID, uint32(txn.Epoch), txn.Sequence)
 	// Make garbageKey sort before key (we've chosen Sequence=1 above,
 	// the last byte of which isn't \x00); add an extra byte of garbage.
 	garbageKey := append(roachpb.Key(nil), key[:len(key)-1]...)
@@ -1525,7 +1525,7 @@ func TestRangeSequenceCacheStoredTxnRetryError(t *testing.T) {
 	for i, pastError := range []error{errors.New("boom"), nil} {
 		txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
 		txn.Sequence = uint32(1 + i)
-		_ = tc.rng.sequence.PutSequence(tc.engine, txn.ID, txn.Sequence, txn.Key, txn.Timestamp, pastError)
+		_ = tc.rng.sequence.PutSequence(tc.engine, txn.ID, uint32(txn.Epoch), txn.Sequence, txn.Key, txn.Timestamp, pastError)
 
 		args := incrementArgs(key, 1)
 		_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
@@ -1548,13 +1548,31 @@ func TestRangeSequenceCacheStoredTxnRetryError(t *testing.T) {
 		return err
 	}
 
-	if firstErr := try(); firstErr != nil {
-		t.Fatal(firstErr)
+	if err := try(); err != nil {
+		t.Fatal(err)
 	}
 	txn.Timestamp.Forward(txn.Timestamp.Add(10, 10)) // can't hurt
-	secondErr := try()
-	if _, ok := secondErr.(*roachpb.TransactionRetryError); !ok {
-		t.Fatal(secondErr)
+	{
+		err := try()
+		if _, ok := err.(*roachpb.TransactionRetryError); !ok {
+			t.Fatal(err)
+		}
+	}
+
+	//  Pretend we restarted by increasing the epoch. We didn't increase
+	//  the sequence though, so still the same error.
+	txn.Epoch++
+	{
+		err := try()
+		if _, ok := err.(*roachpb.TransactionRetryError); !ok {
+			t.Fatal(err)
+		}
+	}
+
+	// Now also increase the size, and we should be good to go.
+	txn.Sequence++
+	if err := try(); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -2075,7 +2093,7 @@ func TestEndTransactionDirectGC(t *testing.T) {
 		}
 
 		var entry roachpb.SequenceCacheEntry
-		if seq, err := tc.rng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
+		if seq, _, err := tc.rng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
 			return err
 		} else if seq > 0 {
 			return util.Errorf("sequence cache still populated: %v", entry)
