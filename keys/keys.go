@@ -121,11 +121,12 @@ func RangeStatsKey(rangeID roachpb.RangeID) roachpb.Key {
 
 // SequenceCacheKey returns a range-local key by Range ID for a
 // sequence cache entry, with detail specified by encoding the
-// supplied transaction ID and sequence number.
-func SequenceCacheKey(rangeID roachpb.RangeID, id []byte, seq uint32) roachpb.Key {
+// supplied transaction ID, epoch and sequence number.
+func SequenceCacheKey(rangeID roachpb.RangeID, id []byte, epoch uint32, seq uint32) roachpb.Key {
 	return MakeRangeIDKey(rangeID, LocalSequenceCacheSuffix,
 		encoding.EncodeUint32Decreasing(
-			encoding.EncodeBytes(nil, id), seq))
+			encoding.EncodeUint32Decreasing(
+				encoding.EncodeBytes(nil, id), epoch), seq))
 }
 
 // SequenceCacheKeyPrefix returns the prefix common to all sequence cache keys
