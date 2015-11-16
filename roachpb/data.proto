@@ -226,7 +226,7 @@ message Transaction {
   optional IsolationType isolation = 5 [(gogoproto.nullable) = false];
   optional TransactionStatus status = 6 [(gogoproto.nullable) = false];
   // Incremented on txn retry.
-  optional int32 epoch = 7 [(gogoproto.nullable) = false];
+  optional uint32 epoch = 7 [(gogoproto.nullable) = false];
   // The last heartbeat timestamp.
   optional Timestamp last_heartbeat = 8;
   // The proposed timestamp for the transaction. This starts as

@@ -1905,7 +1905,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	testCases := []struct {
 		key          roachpb.Key
 		existStatus  roachpb.TransactionStatus
-		existEpoch   int32
+		existEpoch   uint32
 		existTS      roachpb.Timestamp
 		expErrRegexp string
 	}{
@@ -2218,7 +2218,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 	ts1 := roachpb.Timestamp{WallTime: 1}
 	ts2 := roachpb.Timestamp{WallTime: 2}
 	testCases := []struct {
-		startEpoch, epoch, expEpoch int32
+		startEpoch, epoch, expEpoch uint32
 		startTS, ts, expTS          roachpb.Timestamp
 	}{
 		// Move epoch forward.
