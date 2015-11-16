@@ -1444,7 +1444,11 @@ func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []roachpb.GCRequest_G
 			return util.Errorf("unable to marshal mvcc meta: %s", err)
 		}
 		if !gcKey.Timestamp.Less(meta.Timestamp) {
-			if !meta.Deleted {
+			// For version keys, don't allow GC'ing the meta key if it's
+			// not marked deleted. However, for inline values we allow it;
+			// they are internal and GCing them directly saves the extra
+			// deletion step.
+			if !meta.Deleted && !gcKey.Timestamp.Equal(roachpb.ZeroTimestamp) {
 				return util.Errorf("request to GC non-deleted, latest value of %q", gcKey.Key)
 			}
 			if meta.Txn != nil {
