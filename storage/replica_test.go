@@ -2268,7 +2268,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		expTxn.Status = roachpb.ABORTED
 		expTxn.LastHeartbeat = &test.startTS
 
-		if !reflect.DeepEqual(expTxn, reply.PusheeTxn) {
+		if !reflect.DeepEqual(expTxn, &reply.PusheeTxn) {
 			t.Errorf("unexpected push txn in trial %d; expected %+v, got %+v", i, expTxn, reply.PusheeTxn)
 		}
 	}
@@ -2342,7 +2342,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 			if _, ok := err.(*roachpb.TransactionPushError); !ok {
 				t.Errorf("%d: expected txn push error: %s", i, err)
 			}
-		} else if txn := reply.(*roachpb.PushTxnResponse).PusheeTxn; txn == nil || txn.Status != roachpb.ABORTED {
+		} else if txn := reply.(*roachpb.PushTxnResponse).PusheeTxn; txn.Status != roachpb.ABORTED {
 			t.Errorf("%d: expected aborted transaction, got %s", i, txn)
 		}
 	}

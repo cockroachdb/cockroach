@@ -1446,7 +1446,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	wiErr.Resolved = true // success!
 
 	for i, intent := range pushIntents {
-		intent.Txn = *(br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn)
+		intent.Txn = br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
 		resolveIntents = append(resolveIntents, intent)
 	}
 	return resolveIntents, wiErr

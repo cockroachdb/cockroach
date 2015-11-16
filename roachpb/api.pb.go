@@ -700,7 +700,7 @@ type PushTxnResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// pushee_txn is non-nil if the transaction was pushed and contains
 	// the current value of the transaction.
-	PusheeTxn *Transaction `protobuf:"bytes,2,opt,name=pushee_txn" json:"pushee_txn,omitempty"`
+	PusheeTxn Transaction `protobuf:"bytes,2,opt,name=pushee_txn" json:"pushee_txn"`
 }
 
 func (m *PushTxnResponse) Reset()         { *m = PushTxnResponse{} }
@@ -2162,16 +2162,14 @@ func (m *PushTxnResponse) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n46
-	if m.PusheeTxn != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintApi(data, i, uint64(m.PusheeTxn.Size()))
-		n47, err := m.PusheeTxn.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n47
+	data[i] = 0x12
+	i++
+	i = encodeVarintApi(data, i, uint64(m.PusheeTxn.Size()))
+	n47, err := m.PusheeTxn.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
 	}
+	i += n47
 	return i, nil
 }
 
@@ -3592,10 +3590,8 @@ func (m *PushTxnResponse) Size() (n int) {
 	_ = l
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
-	if m.PusheeTxn != nil {
-		l = m.PusheeTxn.Size()
-		n += 1 + l + sovApi(uint64(l))
-	}
+	l = m.PusheeTxn.Size()
+	n += 1 + l + sovApi(uint64(l))
 	return n
 }
 
@@ -7781,9 +7777,6 @@ func (m *PushTxnResponse) Unmarshal(data []byte) error {
 			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
-			}
-			if m.PusheeTxn == nil {
-				m.PusheeTxn = &Transaction{}
 			}
 			if err := m.PusheeTxn.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
