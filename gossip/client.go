@@ -85,10 +85,11 @@ func (c *client) close() {
 // getGossip requests the latest gossip from the remote server by
 // supplying a map of this node's knowledge of other nodes' high water
 // timestamps.
-func (c *client) getGossip(g *Gossip, nodeID roachpb.NodeID, addr, lAddr util.UnresolvedAddr, done chan *netrpc.Call) {
+func (c *client) getGossip(g *Gossip, addr, lAddr util.UnresolvedAddr, done chan *netrpc.Call) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
+	nodeID := g.is.NodeID
 	args := Request{
 		NodeID:          nodeID,
 		Addr:            addr,
@@ -101,13 +102,14 @@ func (c *client) getGossip(g *Gossip, nodeID roachpb.NodeID, addr, lAddr util.Un
 
 // sendGossip sends the latest gossip to the remote server, based on
 // the remote server's high water timestamps map.
-func (c *client) sendGossip(g *Gossip, nodeID roachpb.NodeID, addr, lAddr util.UnresolvedAddr, done chan *netrpc.Call) {
+func (c *client) sendGossip(g *Gossip, addr, lAddr util.UnresolvedAddr, done chan *netrpc.Call) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	if c.sendingGossip {
 		return
 	}
+	nodeID := g.is.NodeID
 	delta := g.is.delta(c.peerID, c.remoteHighWaterStamps)
 	if len(delta) == 0 {
 		return
@@ -126,7 +128,7 @@ func (c *client) sendGossip(g *Gossip, nodeID roachpb.NodeID, addr, lAddr util.U
 
 // handleGossip handles errors, remote forwarding, and combines delta
 // gossip infos from the remote server with this node's infostore.
-func (c *client) handleGossip(g *Gossip, nodeID roachpb.NodeID, call *netrpc.Call) error {
+func (c *client) handleGossip(g *Gossip, call *netrpc.Call) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -165,6 +167,7 @@ func (c *client) handleGossip(g *Gossip, nodeID roachpb.NodeID, call *netrpc.Cal
 	// If we have the sentinel gossip, we're considered connected.
 	g.checkHasConnected()
 
+	nodeID := g.is.NodeID
 	// Check whether this outgoing client is duplicating work already
 	// being done by an incoming client. To avoid mutual shutdown, we
 	// only shutdown our client if our node ID is less than the peer's.
@@ -179,18 +182,19 @@ func (c *client) handleGossip(g *Gossip, nodeID roachpb.NodeID, call *netrpc.Cal
 // in turn. If an alternate is proposed on response, the client addr
 // is modified and method returns for forwarding by caller.
 func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
+	// For un-bootstrapped node, g.is.NodeID is 0 when client start gossip,
+	// so it's better to get nodeID from g.is every time.
 	g.mu.Lock()
-	nodeID := g.is.NodeID
 	addr := util.MakeUnresolvedAddr(g.is.NodeAddr.Network(), g.is.NodeAddr.String())
 	g.mu.Unlock()
 
 	lAddr := util.MakeUnresolvedAddr(c.rpcClient.LocalAddr().Network(), c.rpcClient.LocalAddr().String())
 	done := make(chan *netrpc.Call, 10)
-	c.getGossip(g, nodeID, addr, lAddr, done)
+	c.getGossip(g, addr, lAddr, done)
 
 	// Register a callback for gossip updates.
 	updateCallback := func(_ string, _ roachpb.Value) {
-		c.sendGossip(g, nodeID, addr, lAddr, done)
+		c.sendGossip(g, addr, lAddr, done)
 	}
 	// Defer calling "undoer" callback returned from registration.
 	defer g.RegisterCallback(".*", updateCallback)()
@@ -210,18 +214,18 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 	for {
 		select {
 		case call := <-done:
-			if err := c.handleGossip(g, nodeID, call); err != nil {
+			if err := c.handleGossip(g, call); err != nil {
 				return err
 			}
 			// If this was from a gossip pull request, fetch again.
 			if req, ok := call.Args.(*Request); ok {
 				if req.Delta == nil {
-					c.getGossip(g, nodeID, addr, lAddr, done)
+					c.getGossip(g, addr, lAddr, done)
 				} else {
 					g.mu.Lock()
 					c.sendingGossip = false
 					g.mu.Unlock()
-					c.sendGossip(g, nodeID, addr, lAddr, done)
+					c.sendGossip(g, addr, lAddr, done)
 				}
 			}
 		case <-c.rpcClient.Closed:
