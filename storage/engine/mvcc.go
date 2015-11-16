@@ -956,23 +956,56 @@ func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, value roachpb.Valu
 
 // MVCCDeleteRange deletes the range of key/value pairs specified by
 // start and end keys. Specify max=0 for unbounded deletes.
-func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp, txn *roachpb.Transaction) (int64, error) {
-	// In order to detect the potential write intent by another
-	// concurrent transaction with a newer timestamp, we need
-	// to use the max timestamp for scan.
-	kvs, _, err := MVCCScan(engine, key, endKey, max, roachpb.MaxTimestamp, true /* consistent */, txn)
-	if err != nil {
-		return 0, err
+func MVCCDeleteRange(engine Engine, ms *MVCCStats, startKey, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp, txn *roachpb.Transaction) (int64, error) {
+	if len(endKey) == 0 {
+		return 0, emptyKeyError()
 	}
 
-	num := int64(0)
-	for _, kv := range kvs {
-		if err := MVCCDelete(engine, ms, kv.Key, timestamp, txn); err != nil {
-			return num, err
+	buf := getBufferPool.Get().(*getBuffer)
+	defer getBufferPool.Put(buf)
+
+	// We store encEndKey and encKey in the same buffer to avoid memory
+	// allocations.
+	encEndKey := mvccEncodeKey(buf.key[0:0], endKey)
+	keyBuf := encEndKey[len(encEndKey):]
+
+	// Get a new iterator and define our getter using iter.Seek.
+	iter := engine.NewIterator()
+	defer iter.Close()
+
+	var count int64
+	for {
+		iter.Seek(mvccEncodeKey(keyBuf, startKey))
+		if !iter.Valid() {
+			if err := iter.Error(); err != nil {
+				return count, err
+			}
+			break
 		}
-		num++
+
+		key, metaKey, err := getScanMetaKey(iter, encEndKey)
+		if err != nil {
+			return count, err
+		}
+		// Exceeding the boundary.
+		if key == nil && metaKey == nil {
+			break
+		}
+
+		if err := iter.ValueProto(&buf.meta); err != nil {
+			return count, err
+		}
+
+		if !buf.meta.Deleted {
+			if err := MVCCDelete(engine, ms, key, timestamp, txn); err != nil {
+				return count, err
+			}
+			count++
+		}
+
+		startKey = key.Next()
 	}
-	return num, nil
+	return count, nil
 }
 
 func getScanMetaKey(iter Iterator, encEndKey MVCCKey) (roachpb.Key, MVCCKey, error) {
