@@ -1452,12 +1452,12 @@ class Transaction : public ::google::protobuf::Message {
   ::cockroach::roachpb::TransactionStatus status() const;
   void set_status(::cockroach::roachpb::TransactionStatus value);
 
-  // optional int32 epoch = 7;
+  // optional uint32 epoch = 7;
   bool has_epoch() const;
   void clear_epoch();
   static const int kEpochFieldNumber = 7;
-  ::google::protobuf::int32 epoch() const;
-  void set_epoch(::google::protobuf::int32 value);
+  ::google::protobuf::uint32 epoch() const;
+  void set_epoch(::google::protobuf::uint32 value);
 
   // optional .cockroach.roachpb.Timestamp last_heartbeat = 8;
   bool has_last_heartbeat() const;
@@ -1570,7 +1570,7 @@ class Transaction : public ::google::protobuf::Message {
   ::google::protobuf::int32 priority_;
   int isolation_;
   int status_;
-  ::google::protobuf::int32 epoch_;
+  ::google::protobuf::uint32 epoch_;
   ::cockroach::roachpb::Timestamp* last_heartbeat_;
   ::cockroach::roachpb::Timestamp* timestamp_;
   ::cockroach::roachpb::Timestamp* orig_timestamp_;
@@ -3291,7 +3291,7 @@ inline void Transaction::set_status(::cockroach::roachpb::TransactionStatus valu
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.status)
 }
 
-// optional int32 epoch = 7;
+// optional uint32 epoch = 7;
 inline bool Transaction::has_epoch() const {
   return (_has_bits_[0] & 0x00000040u) != 0;
 }
@@ -3302,14 +3302,14 @@ inline void Transaction::clear_has_epoch() {
   _has_bits_[0] &= ~0x00000040u;
 }
 inline void Transaction::clear_epoch() {
-  epoch_ = 0;
+  epoch_ = 0u;
   clear_has_epoch();
 }
-inline ::google::protobuf::int32 Transaction::epoch() const {
+inline ::google::protobuf::uint32 Transaction::epoch() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.epoch)
   return epoch_;
 }
-inline void Transaction::set_epoch(::google::protobuf::int32 value) {
+inline void Transaction::set_epoch(::google::protobuf::uint32 value) {
   set_has_epoch();
   epoch_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.epoch)

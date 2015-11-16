@@ -1026,17 +1026,20 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// Create a new batch for the command to ensure all or nothing semantics.
 	btch := r.store.Engine().NewBatch()
 
-	// Check the sequence for this batch to ensure idempotency. Only applies
-	// to transactional requests.
+	// Check the sequence for this batch. Only applies to transactional
+	// requests: on a cache hit, the transaction is instructed to restart.
+	// The epoch check allows us to poison the sequence cache to avoid
+	// anomalies when we know that the transaction has been aborted or pushed,
+	// but it itself does not.
+	// TODO(tschottdorf): should return TransactionAborted in some scenarios.
 	if ba.IsWrite() && ba.Txn != nil {
-		if sequence, readErr := r.sequence.Get(btch, ba.Txn.ID, nil); readErr != nil {
+		if epoch, sequence, readErr := r.sequence.Get(btch, ba.Txn.ID, nil); readErr != nil {
 			return btch, nil, nil, newReplicaCorruptionError(util.Errorf("could not read from sequence cache"), readErr)
-		} else if sequence >= ba.Txn.Sequence {
+		} else if sequence >= ba.Txn.Sequence || epoch > ba.Txn.Epoch {
+			// We hit the cache, so let the transaction restart.
 			if log.V(1) {
 				log.Infoc(ctx, "found sequence cache entry for %s@%d", ba.Txn.Short(), ba.Txn.Sequence)
 			}
-			// We successfully read from the sequence cache, so let the
-			// transaction restart.
 			return btch, nil, nil, roachpb.NewTransactionRetryError(ba.Txn)
 		}
 	}
@@ -1094,7 +1097,8 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 		}
 		// Only transactional requests have replay protection.
 		if ba.Txn != nil {
-			if putErr := r.sequence.PutSequence(btch, ba.Txn.ID, ba.Txn.Sequence, ba.Txn.Key, ba.Txn.Timestamp, err); putErr != nil {
+			if putErr := r.sequence.PutSequence(btch, ba.Txn.ID, ba.Txn.Epoch,
+				ba.Txn.Sequence, ba.Txn.Key, ba.Txn.Timestamp, err); putErr != nil {
 				// TODO(tschottdorf): ReplicaCorruptionError.
 				log.Fatalc(ctx, "putting a sequence cache entry in a batch should never fail: %s", putErr)
 			}

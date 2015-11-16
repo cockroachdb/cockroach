@@ -451,7 +451,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 
 	testCases := []struct {
 		err       error
-		expEpoch  int32
+		expEpoch  uint32
 		expPri    int32
 		expTS     roachpb.Timestamp
 		expOrigTS roachpb.Timestamp
