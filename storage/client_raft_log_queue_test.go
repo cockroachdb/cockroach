@@ -42,8 +42,12 @@ func TestRaftLogQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rep := mtc.stores[0].LookupReplica([]byte("a"), nil)
-	originalIndex, err := rep.FirstIndex()
+	desc := mtc.stores[0].LookupReplica([]byte("a"), nil).Desc()
+	raftLeaderRepl, _, err := mtc.getRaftLeader(desc.RangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalIndex, err := raftLeaderRepl.FirstIndex()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,8 +61,11 @@ func TestRaftLogQueue(t *testing.T) {
 	}
 
 	// Check the raft log and make sure it has advanced.
-	desc := rep.Desc()
-	raftStatus := mtc.stores[0].RaftStatus(desc.RangeID)
+	raftLeaderRepl, raftLeaderStore, err := mtc.getRaftLeader(desc.RangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raftStatus := raftLeaderStore.RaftStatus(desc.RangeID)
 	if raftStatus == nil {
 		t.Fatalf("the raft group doesn't exist for range %d", desc.RangeID)
 	}
@@ -76,12 +83,17 @@ func TestRaftLogQueue(t *testing.T) {
 
 	// Ensure that firstIndex has increased indicating that the log
 	// truncation has occurred.
-	currentIndex, err := rep.FirstIndex()
+	raftLeaderRepl, _, err = mtc.getRaftLeader(desc.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if currentIndex <= originalIndex {
-		t.Errorf("raft log has not been truncated yet, currentIndex:%d originalIndex:%d", currentIndex, originalIndex)
+	afterTruncationIndex, err := raftLeaderRepl.FirstIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterTruncationIndex <= originalIndex {
+		t.Fatalf("raft log has not been truncated yet, afterTruncationIndex:%d originalIndex:%d",
+			afterTruncationIndex, originalIndex)
 	}
 
 	// Force a truncation check again to ensure that attempting to truncate an
@@ -90,12 +102,16 @@ func TestRaftLogQueue(t *testing.T) {
 		store.ForceRaftLogScanAndProcess(t)
 	}
 
-	finalIndex, err := rep.FirstIndex()
+	raftLeaderRepl, _, err = mtc.getRaftLeader(desc.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if currentIndex != finalIndex {
-		t.Errorf("raft log was truncated again and it shouldn't have been, post 1st truncation index:%d post 2nd truncation index:%d",
-			currentIndex, finalIndex)
+	after2ndTruncationIndex, err := raftLeaderRepl.FirstIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterTruncationIndex != after2ndTruncationIndex {
+		t.Fatalf("raft log was truncated again and it shouldn't have been, afterTruncationIndex:%d after2ndTruncationIndex:%d",
+			afterTruncationIndex, after2ndTruncationIndex)
 	}
 }

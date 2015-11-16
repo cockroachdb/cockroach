@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/coreos/etcd/raft"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -567,6 +568,29 @@ func (m *multiTestContext) waitForValues(key roachpb.Key, d time.Duration, expec
 // replica sets.
 func (m *multiTestContext) expireLeaderLeases() {
 	m.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration) + 1)
+}
+
+// getRaftLeader returns the replica that is the current raft leader for the
+// specified rangeID and its store.
+func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) (*storage.Replica, *storage.Store, error) {
+	for _, store := range m.stores {
+		raftStatus := store.RaftStatus(rangeID)
+		if raftStatus == nil {
+			// Replica does not exist on this store or there is no raft status
+			// yet.
+			continue
+		}
+		if raftStatus.RaftState != raft.StateLeader {
+			// Replica is not the current raft leader.
+			continue
+		}
+		repl, err := store.GetReplica(rangeID)
+		if err != nil {
+			return nil, nil, err
+		}
+		return repl, store, nil
+	}
+	return nil, nil, util.Errorf("Could not find a raft leader.")
 }
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
