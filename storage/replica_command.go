@@ -896,7 +896,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	// has open intents (which is likely if someone pushes it).
 	if ok {
 		// Start with the persisted transaction record as final transaction.
-		reply.PusheeTxn = existTxn.Clone()
+		reply.PusheeTxn = *existTxn.Clone()
 		// Upgrade the epoch, timestamp and priority as necessary.
 		if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
 			reply.PusheeTxn.Epoch = args.PusheeTxn.Epoch
@@ -907,9 +907,9 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 		}
 	} else {
 		// The transaction doesn't exist yet on disk; we're allowed to abort it.
-		reply.PusheeTxn = args.PusheeTxn.Clone()
+		reply.PusheeTxn = *args.PusheeTxn.Clone()
 		reply.PusheeTxn.Status = roachpb.ABORTED
-		return reply, engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, reply.PusheeTxn)
+		return reply, engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, &reply.PusheeTxn)
 	}
 
 	// If already committed or aborted, return success.
@@ -969,7 +969,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	}
 
 	if !pusherWins {
-		err := roachpb.NewTransactionPushError(args.PusherTxn, *reply.PusheeTxn)
+		err := roachpb.NewTransactionPushError(args.PusherTxn, reply.PusheeTxn)
 		if log.V(1) {
 			log.Info(err)
 		}
@@ -989,7 +989,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	}
 
 	// Persist the pushed transaction using zero timestamp for inline value.
-	if err := engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, reply.PusheeTxn); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, &reply.PusheeTxn); err != nil {
 		return reply, err
 	}
 	return reply, nil

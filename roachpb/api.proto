@@ -414,7 +414,7 @@ message PushTxnResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // pushee_txn is non-nil if the transaction was pushed and contains
   // the current value of the transaction.
-  optional Transaction pushee_txn = 2;
+  optional Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
 }
 
 // A ResolveIntentRequest is arguments to the ResolveIntent()
