@@ -20,11 +20,9 @@ package storage_test
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -73,29 +71,23 @@ func TestRaftLogQueue(t *testing.T) {
 
 	// Force a truncation check.
 	for _, store := range mtc.stores {
-		store.ForceRaftLogScan(t)
+		store.ForceRaftLogScanAndProcess(t)
 	}
 
-	// Wait until the firstIndex has increased indicating that the log
+	// Ensure that firstIndex has increased indicating that the log
 	// truncation has occurred.
-	var currentIndex uint64
-	util.SucceedsWithin(t, time.Second, func() error {
-		var err error
-		currentIndex, err = rep.FirstIndex()
-		if err != nil {
-			return err
-		}
-		if currentIndex <= originalIndex {
-			return util.Errorf("raft log has not been truncated yet, currentIndex:%d originalIndex:%d",
-				currentIndex, originalIndex)
-		}
-		return nil
-	})
+	currentIndex, err := rep.FirstIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if currentIndex <= originalIndex {
+		t.Errorf("raft log has not been truncated yet, currentIndex:%d originalIndex:%d", currentIndex, originalIndex)
+	}
 
 	// Force a truncation check again to ensure that attempting to truncate an
 	// already truncated log has no effect.
 	for _, store := range mtc.stores {
-		store.ForceRaftLogScan(t)
+		store.ForceRaftLogScanAndProcess(t)
 	}
 
 	finalIndex, err := rep.FirstIndex()
