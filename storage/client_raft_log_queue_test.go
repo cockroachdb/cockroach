@@ -20,6 +20,7 @@ package storage_test
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/storage"
@@ -28,12 +29,19 @@ import (
 
 // TestRaftLogQueue verifies that the raft log queue correctly truncates the
 // raft log.
-// TODO(bram): Add a new test case in which the raft leader differs from the
-// lease holder.
 func TestRaftLogQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	mtc := startMultiTestContext(t, 3)
+	mtc := new(multiTestContext)
+
+	// Turn off raft elections so the raft leader won't change out from under
+	// us in this test.
+	sc := storage.TestStoreContext
+	sc.RaftTickInterval = time.Hour * 24
+	sc.RaftElectionTimeoutTicks = 1000000
+	mtc.storeContext = &sc
+
+	mtc.Start(t, 3)
 	defer mtc.Stop()
 
 	// Write a single value to ensure we have a leader.
@@ -42,8 +50,13 @@ func TestRaftLogQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rep := mtc.stores[0].LookupReplica([]byte("a"), nil)
-	originalIndex, err := rep.FirstIndex()
+	// Get the raft leader (and ensure one exists).
+	desc := mtc.stores[0].LookupReplica([]byte("a"), nil).Desc()
+	raftLeaderRepl := mtc.getRaftLeader(desc.RangeID, time.Second)
+	if raftLeaderRepl == nil {
+		t.Fatalf("could not find raft leader replica for range %d", desc.RangeID)
+	}
+	originalIndex, err := raftLeaderRepl.FirstIndex()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,19 +69,6 @@ func TestRaftLogQueue(t *testing.T) {
 		}
 	}
 
-	// Check the raft log and make sure it has advanced.
-	desc := rep.Desc()
-	raftStatus := mtc.stores[0].RaftStatus(desc.RangeID)
-	if raftStatus == nil {
-		t.Fatalf("the raft group doesn't exist for range %d", desc.RangeID)
-	}
-
-	for _, progress := range raftStatus.Progress {
-		if progress.Match <= originalIndex {
-			t.Fatalf("raft log has not advanced, match:%d originalIndex:%d", progress.Match, originalIndex)
-		}
-	}
-
 	// Force a truncation check.
 	for _, store := range mtc.stores {
 		store.ForceRaftLogScanAndProcess(t)
@@ -76,12 +76,13 @@ func TestRaftLogQueue(t *testing.T) {
 
 	// Ensure that firstIndex has increased indicating that the log
 	// truncation has occurred.
-	currentIndex, err := rep.FirstIndex()
+	afterTruncationIndex, err := raftLeaderRepl.FirstIndex()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if currentIndex <= originalIndex {
-		t.Errorf("raft log has not been truncated yet, currentIndex:%d originalIndex:%d", currentIndex, originalIndex)
+	if afterTruncationIndex <= originalIndex {
+		t.Fatalf("raft log has not been truncated yet, afterTruncationIndex:%d originalIndex:%d",
+			afterTruncationIndex, originalIndex)
 	}
 
 	// Force a truncation check again to ensure that attempting to truncate an
@@ -90,12 +91,12 @@ func TestRaftLogQueue(t *testing.T) {
 		store.ForceRaftLogScanAndProcess(t)
 	}
 
-	finalIndex, err := rep.FirstIndex()
+	after2ndTruncationIndex, err := raftLeaderRepl.FirstIndex()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if currentIndex != finalIndex {
-		t.Errorf("raft log was truncated again and it shouldn't have been, post 1st truncation index:%d post 2nd truncation index:%d",
-			currentIndex, finalIndex)
+	if afterTruncationIndex != after2ndTruncationIndex {
+		t.Fatalf("raft log was truncated again and it shouldn't have been, afterTruncationIndex:%d after2ndTruncationIndex:%d",
+			afterTruncationIndex, after2ndTruncationIndex)
 	}
 }
