@@ -615,7 +615,7 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 		tc.stopper.RunAsyncTask(func() {
 			if _, err := tc.Send(ctx, ba); err != nil {
 				if log.V(1) {
-					log.Warningf("abort due to inactivty for %s failed: %s ", txn, err)
+					log.Warningf("abort due to inactivity for %s failed: %s ", txn, err)
 				}
 			}
 		})
