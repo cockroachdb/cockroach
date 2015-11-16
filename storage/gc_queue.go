@@ -251,7 +251,9 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	done := true
 	if len(intents) > 0 {
 		done = false
-		repl.resolveIntents(repl.context(), intents)
+		if err := repl.resolveIntents(repl.context(), intents, true /* wait */); err != nil {
+			return err
+		}
 	}
 
 	// Set start and end keys.

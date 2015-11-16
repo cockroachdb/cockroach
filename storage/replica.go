@@ -1335,21 +1335,58 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 		return
 	}
 	now := r.store.Clock().Now()
+	ctx := r.context()
+	stopper := r.store.Stopper()
 
 	for _, item := range intents {
-		ctx := r.context()
-		stopper := r.store.Stopper()
 		// TODO(tschottdorf): avoid data race related to batch unrolling in ExecuteCmd;
 		// can probably go again when that provisional code there is gone. Should
 		// still be careful though, a retry could happen and race with args.
 		args := proto.Clone(item.args).(roachpb.Request)
 		stopper.RunAsyncTask(func() {
 			h := roachpb.Header{Timestamp: now}
-			err := r.store.resolveWriteIntentError(ctx, &roachpb.WriteIntentError{
+			resolveIntents, err := r.store.resolveWriteIntentError(ctx, &roachpb.WriteIntentError{
 				Intents: item.intents,
 			}, r, args, h, roachpb.CLEANUP_TXN)
 			if wiErr, ok := err.(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
-				log.Warningc(ctx, "failed to resolve on inconsistent read: %s", err)
+				log.Warningc(ctx, "failed to push during intent resolution: %s", err)
+				return
+			}
+			if err := r.resolveIntents(ctx, resolveIntents, true /* wait */); err != nil {
+				log.Warningc(ctx, "failed to resolve intents: %s", err)
+				return
+			}
+			// We successfully resolved the intents, so we're able to GC from
+			// the txn/sequence span directly.
+			// TODO(tschottdorf): down the road, can probably unclog the system
+			// here by batching up a bunch of those GCRequests before proposing.
+			if args.Method() == roachpb.EndTransaction {
+				var ba roachpb.BatchRequest
+				txn := item.intents[0].Txn
+				gcArgs := roachpb.GCRequest{
+					Span: roachpb.Span{Key: r.Desc().StartKey.AsRawKey()},
+				}
+				{
+					prefix := keys.SequenceCacheKeyPrefix(r.Desc().RangeID, txn.ID)
+					kvs, _, err := engine.MVCCScan(r.store.Engine(), prefix,
+						prefix.PrefixEnd(), 0 /* max */, roachpb.ZeroTimestamp,
+						false /* consistent */, nil /* txn */)
+					if err != nil {
+						log.Warning(err)
+					}
+					// Allocate slots for the transaction key and the sequence
+					// cache keys.
+					gcArgs.Keys = make([]roachpb.GCRequest_GCKey, 0, len(kvs)+1)
+					for _, kv := range kvs {
+						gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{Key: kv.Key})
+					}
+				}
+				gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{Key: keys.TransactionKey(txn.Key, txn.ID)})
+
+				ba.Add(&gcArgs)
+				if _, pErr := r.addWriteCmd(ctx, ba, nil /* nil */); pErr != nil {
+					log.Warningf("could not GC completed transaction: %s", pErr)
+				}
 			}
 		})
 	}
@@ -1429,18 +1466,20 @@ func (r *Replica) maybeSetCorrupt(err error) error {
 }
 
 // resolveIntents resolves the given intents. For those which are local to the
-// range, we submit directly to the range-local Raft instance; the call returns
-// as soon as all resolve commands have been **proposed** (not executed). This
-// ensures that if a waiting client retries immediately after conflict
-// resolution, it will not hit the same intents again. All non-local intents
-// are resolved asynchronously in a batch.
+// range, we submit directly to the range-local Raft instance; all non-local
+// intents are resolved asynchronously in a batch. If `wait` is true, all
+// operations are carried out synchronously and an error is returned.
+// Otherwise, the call returns without error as soon as all local resolve
+// commands have been **proposed** (not executed). This ensures that if a
+// waiting client retries immediately after calling this function, it will not
+// hit the same intents again.
 // TODO(tschottdorf): once Txn records have a list of possibly open intents,
 // resolveIntents should send an RPC to update the transaction(s) as well (for
 // those intents with non-pending Txns).
-func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) {
+func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, wait bool) error {
 	trace := tracer.FromCtx(ctx)
 	tracer.ToCtx(ctx, nil) // we're doing async stuff below; those need new traces
-	trace.Event("resolving intents [async]")
+	trace.Event(fmt.Sprintf("resolving intents [wait=%t]", wait))
 
 	var reqsRemote []roachpb.Request
 	baLocal := roachpb.BatchRequest{}
@@ -1481,15 +1520,13 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 	// The local batch goes directly to Raft.
 	var wg sync.WaitGroup
 	if len(baLocal.Requests) > 0 {
-		action := func() {
+		action := func() error {
 			// Trace this under the ID of the intent owner.
 			trace := r.store.Tracer().NewTrace(tracer.Node, baLocal)
 			defer trace.Finalize()
 			ctx := tracer.ToCtx(ctx, trace)
-			if _, err := r.addWriteCmd(ctx, baLocal, &wg); err != nil {
-				if log.V(1) {
-					log.Warningc(ctx, "batch resolve failed: %s", err)
-				}
+			_, err := r.addWriteCmd(ctx, baLocal, &wg)
+			if err != nil {
 				// At this point, as long as the local Replica accepts the
 				// request it should never fail. However, the replica may reject
 				// the request in certain cases (for example, if the replica has
@@ -1504,18 +1541,25 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 					case *roachpb.RangeNotFoundError:
 					default:
 						// TODO(tschottdorf): Does this need to be a panic?
-						panic(fmt.Sprintf("intent resolution failed with unexpected error: %s", err))
+						panic(fmt.Sprintf("local intent resolution failed with unexpected error: %s", err))
 					}
 				}
 			}
+			return err
 		}
 		wg.Add(1)
-		if !r.store.Stopper().RunAsyncTask(action) {
+		if wait || !r.store.Stopper().RunAsyncTask(func() {
+			if err := action(); err != nil {
+				log.Warningf("unable to resolve local intents; %s", err)
+			}
+		}) {
 			// Still run the task when draining. Our caller already has a task and
 			// going async here again is merely for performance, but some intents
 			// need to be resolved because they might block other tasks. See #1684.
 			// Note that handleSkippedIntents has a TODO in case #1684 comes back.
-			action()
+			if err := action(); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -1523,22 +1567,27 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent) 
 	if len(reqsRemote) > 0 {
 		b := &client.Batch{}
 		b.InternalAddRequest(reqsRemote...)
-		action := func() {
+		action := func() error {
 			// TODO(tschottdorf): no tracing here yet.
-			if err := r.store.DB().Run(b); err != nil {
-				log.Warningf("unable to resolve intent: %s", err)
-			}
+			return r.store.DB().Run(b)
 		}
-		if !r.store.Stopper().RunAsyncTask(action) {
+		if wait || !r.store.Stopper().RunAsyncTask(func() {
+			if err := action; err != nil {
+				log.Warningf("unable to resolve external intents: %s", err)
+			}
+		}) {
 			// As with local intents, try async to not keep the caller waiting, but
 			// when draining just go ahead and do it synchronously. See #1684.
-			action()
+			if err := action(); err != nil {
+				return err
+			}
 		}
 	}
 
 	// Wait until the local ResolveIntents batch has been submitted to
 	// raft. No-op if all were non-local.
 	wg.Wait()
+	return nil
 }
 
 var errSystemDBIntent = errors.New("must retry later due to intent on SystemDB")

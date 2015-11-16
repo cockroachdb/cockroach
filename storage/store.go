@@ -1281,7 +1281,15 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 			if ok {
 				args := ba.Requests[index].GetInner()
 				// TODO(tschottdorf): implications of using the batch ts here?
-				err = s.resolveWriteIntentError(ctx, wiErr, rng, args, ba.Header, pushType)
+				var resolveIntents []roachpb.Intent
+				resolveIntents, err = s.resolveWriteIntentError(ctx, wiErr, rng, args, ba.Header, pushType)
+				if len(resolveIntents) > 0 {
+					if resErr := rng.resolveIntents(ctx, resolveIntents, false /* !wait */); resErr != nil {
+						// When resolving asynchronously, should never get an error
+						// back here.
+						panic(resErr)
+					}
+				}
 				// Make sure that if an index is carried in the error, it
 				// remains the one corresponding to the batch here.
 				if iErr, ok := err.(roachpb.IndexedError); ok {
@@ -1343,13 +1351,12 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 // resolveWriteIntentError tries to push the conflicting transaction (if
 // necessary, i.e. if the transaction is pending): either move its timestamp
 // forward on a read/write conflict, or abort it on a write/write conflict. If
-// the push succeeds (or if it wasn't necessary), we immediately issue a
-// resolve intent command and set the error's Resolved flag to true so the
-// client retries the command immediately. If the push fails, we set the
-// error's Resolved flag to false so that the client backs off before reissuing
-// the command.
-// On write/write conflicts, a potential push error is returned; otherwise
-// the updated WriteIntentError.
+// the push succeeds (or if it wasn't necessary), the error's Resolved flag is
+// set to to true and the caller should call resolveIntents and retry its
+// command immediately. If the push fails, the error's Resolved flag is set to
+// false so that the client backs off before reissuing the command. On
+// write/write conflicts, a potential push error is returned; otherwise the
+// updated WriteIntentError is returned.
 //
 // Callers are involved with
 // a) conflict resolution for commands being executed at the Store with the
@@ -1358,7 +1365,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 // c) resolving intents upon EndTransaction which are not local to the given
 //    range. This is the only path in which the transaction is going to be
 //    in non-pending state and doesn't require a push.
-func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.WriteIntentError, rng *Replica, args roachpb.Request, h roachpb.Header, pushType roachpb.PushTxnType) error {
+func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.WriteIntentError, rng *Replica, args roachpb.Request, h roachpb.Header, pushType roachpb.PushTxnType) ([]roachpb.Intent, error) {
 	method := args.Method()
 	pusherTxn := h.Txn
 	readOnly := roachpb.IsReadOnly(args) // TODO(tschottdorf): pass as param
@@ -1426,12 +1433,12 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 		// failure will instruct the client to restart the transaction
 		// with a backoff.
 		if len(pusherTxn.ID) > 0 && !readOnly {
-			return pushErr
+			return nil, pushErr
 		}
 		// For read/write conflicts, return the write intent error which
 		// engages backoff/retry (with !Resolved). We don't need to
 		// restart the txn, only resend the read with a backoff.
-		return wiErr
+		return nil, wiErr
 	}
 	wiErr.Resolved = true // success!
 
@@ -1439,10 +1446,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 		intent.Txn = *(br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn)
 		resolveIntents = append(resolveIntents, intent)
 	}
-
-	rng.resolveIntents(ctx, resolveIntents)
-
-	return wiErr
+	return resolveIntents, wiErr
 }
 
 type proposeOp struct {
