@@ -409,7 +409,7 @@ var (
 		suffix []byte
 		ppFunc func(key roachpb.Key) string
 	}{
-		{name: "ResponseCache", suffix: LocalResponseCacheSuffix, ppFunc: decodeKeyPrint},
+		{name: "SequenceCache", suffix: LocalSequenceCacheSuffix, ppFunc: decodeKeyPrint},
 		{name: "RaftLeaderLease", suffix: localRaftLeaderLeaseSuffix},
 		{name: "RaftTombstone", suffix: localRaftTombstoneSuffix},
 		{name: "RaftHardState", suffix: localRaftHardStateSuffix},
