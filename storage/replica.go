@@ -1037,7 +1037,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			return btch, nil, nil, newReplicaCorruptionError(util.Errorf("could not read from sequence cache"), readErr)
 		} else if sequence == 0 {
 			// No cache hit, just go ahead with the request.
-		} else if sequence >= ba.Txn.Sequence || epoch > uint32(ba.Txn.Epoch) {
+		} else if sequence >= ba.Txn.Sequence || epoch > ba.Txn.Epoch {
 			// We hit the cache, so let the transaction restart.
 			if log.V(1) {
 				log.Infoc(ctx, "found sequence cache entry for %s@%d", ba.Txn.Short(), ba.Txn.Sequence)
@@ -1099,7 +1099,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 		}
 		// Only transactional requests have replay protection.
 		if ba.Txn != nil {
-			if putErr := r.sequence.PutSequence(btch, ba.Txn.ID, uint32(ba.Txn.Epoch),
+			if putErr := r.sequence.PutSequence(btch, ba.Txn.ID, ba.Txn.Epoch,
 				ba.Txn.Sequence, ba.Txn.Key, ba.Txn.Timestamp, err); putErr != nil {
 				// TODO(tschottdorf): ReplicaCorruptionError.
 				log.Fatalc(ctx, "putting a sequence cache entry in a batch should never fail: %s", putErr)

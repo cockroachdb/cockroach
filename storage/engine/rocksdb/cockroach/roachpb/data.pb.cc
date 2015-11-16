@@ -498,7 +498,7 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "ority\030\004 \001(\005B\004\310\336\037\000\0229\n\tisolation\030\005 \001(\0162 .c"
     "ockroach.roachpb.IsolationTypeB\004\310\336\037\000\022:\n\006"
     "status\030\006 \001(\0162$.cockroach.roachpb.Transac"
-    "tionStatusB\004\310\336\037\000\022\023\n\005epoch\030\007 \001(\005B\004\310\336\037\000\0224\n"
+    "tionStatusB\004\310\336\037\000\022\023\n\005epoch\030\007 \001(\rB\004\310\336\037\000\0224\n"
     "\016last_heartbeat\030\010 \001(\0132\034.cockroach.roachp"
     "b.Timestamp\0225\n\ttimestamp\030\t \001(\0132\034.cockroa"
     "ch.roachpb.TimestampB\004\310\336\037\000\022:\n\016orig_times"
@@ -5102,7 +5102,7 @@ void Transaction::SharedCtor() {
   priority_ = 0;
   isolation_ = 0;
   status_ = 0;
-  epoch_ = 0;
+  epoch_ = 0u;
   last_heartbeat_ = NULL;
   timestamp_ = NULL;
   orig_timestamp_ = NULL;
@@ -5313,12 +5313,12 @@ bool Transaction::MergePartialFromCodedStream(
         break;
       }
 
-      // optional int32 epoch = 7;
+      // optional uint32 epoch = 7;
       case 7: {
         if (tag == 56) {
          parse_epoch:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
                  input, &epoch_)));
           set_has_epoch();
         } else {
@@ -5504,9 +5504,9 @@ void Transaction::SerializeWithCachedSizes(
       6, this->status(), output);
   }
 
-  // optional int32 epoch = 7;
+  // optional uint32 epoch = 7;
   if (has_epoch()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt32(7, this->epoch(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteUInt32(7, this->epoch(), output);
   }
 
   // optional .cockroach.roachpb.Timestamp last_heartbeat = 8;
@@ -5607,9 +5607,9 @@ void Transaction::SerializeWithCachedSizes(
       6, this->status(), target);
   }
 
-  // optional int32 epoch = 7;
+  // optional uint32 epoch = 7;
   if (has_epoch()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(7, this->epoch(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(7, this->epoch(), target);
   }
 
   // optional .cockroach.roachpb.Timestamp last_heartbeat = 8;
@@ -5716,10 +5716,10 @@ int Transaction::ByteSize() const {
         ::google::protobuf::internal::WireFormatLite::EnumSize(this->status());
     }
 
-    // optional int32 epoch = 7;
+    // optional uint32 epoch = 7;
     if (has_epoch()) {
       total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int32Size(
+        ::google::protobuf::internal::WireFormatLite::UInt32Size(
           this->epoch());
     }
 
@@ -6147,7 +6147,7 @@ void Transaction::clear_status() {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.status)
 }
 
-// optional int32 epoch = 7;
+// optional uint32 epoch = 7;
 bool Transaction::has_epoch() const {
   return (_has_bits_[0] & 0x00000040u) != 0;
 }
@@ -6158,14 +6158,14 @@ void Transaction::clear_has_epoch() {
   _has_bits_[0] &= ~0x00000040u;
 }
 void Transaction::clear_epoch() {
-  epoch_ = 0;
+  epoch_ = 0u;
   clear_has_epoch();
 }
- ::google::protobuf::int32 Transaction::epoch() const {
+ ::google::protobuf::uint32 Transaction::epoch() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.epoch)
   return epoch_;
 }
- void Transaction::set_epoch(::google::protobuf::int32 value) {
+ void Transaction::set_epoch(::google::protobuf::uint32 value) {
   set_has_epoch();
   epoch_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.epoch)

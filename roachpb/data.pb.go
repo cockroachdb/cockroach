@@ -388,7 +388,7 @@ type Transaction struct {
 	Isolation IsolationType     `protobuf:"varint,5,opt,name=isolation,enum=cockroach.roachpb.IsolationType" json:"isolation"`
 	Status    TransactionStatus `protobuf:"varint,6,opt,name=status,enum=cockroach.roachpb.TransactionStatus" json:"status"`
 	// Incremented on txn retry.
-	Epoch int32 `protobuf:"varint,7,opt,name=epoch" json:"epoch"`
+	Epoch uint32 `protobuf:"varint,7,opt,name=epoch" json:"epoch"`
 	// The last heartbeat timestamp.
 	LastHeartbeat *Timestamp `protobuf:"bytes,8,opt,name=last_heartbeat" json:"last_heartbeat,omitempty"`
 	// The proposed timestamp for the transaction. This starts as
@@ -2858,7 +2858,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.Epoch |= (int32(b) & 0x7F) << shift
+				m.Epoch |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
