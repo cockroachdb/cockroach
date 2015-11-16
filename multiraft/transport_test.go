@@ -21,9 +21,51 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
+
+type localTransport struct {
+	mu        sync.Mutex
+	listeners map[roachpb.StoreID]ServerInterface
+}
+
+// NewLocalTransport creates a minimal local in-memory transport. It
+// has lower overhead than LocalRPCTransport, but does not catch all
+// errors that LocalRPCTransport does.
+func NewLocalTransport() Transport {
+	return &localTransport{
+		listeners: map[roachpb.StoreID]ServerInterface{},
+	}
+}
+
+func (l *localTransport) Listen(id roachpb.StoreID, server ServerInterface) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.listeners[id] = server
+	return nil
+}
+
+func (l *localTransport) Stop(id roachpb.StoreID) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.listeners, id)
+}
+
+func (l *localTransport) Send(req *RaftMessageRequest) error {
+	l.mu.Lock()
+	s, ok := l.listeners[req.ToReplica.StoreID]
+	l.mu.Unlock()
+	if !ok {
+		return util.Errorf("listener %d not found", req.ToReplica.StoreID)
+	}
+	_, err := s.RaftMessage(req)
+	return err
+}
+
+func (*localTransport) Close() {
+}
 
 type localInterceptableTransport struct {
 	mu        sync.Mutex
