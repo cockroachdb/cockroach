@@ -700,15 +700,18 @@ func (s *Store) DisableRaftLogQueue(disabled bool) {
 	s.raftLogQueue.SetDisabled(disabled)
 }
 
-// ForceRaftLogScan iterates over all ranges and enqueues any that need their
-// raft logs truncated. Exposed only for testing.
-func (s *Store) ForceRaftLogScan(t util.Tester) {
+// ForceRaftLogScanAndProcess iterates over all ranges and enqueues any that
+// need their raft logs truncated and then process each of them.
+// Exposed only for testing.
+func (s *Store) ForceRaftLogScanAndProcess(t util.Tester) {
+	// Add each range to the queue.
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	for _, r := range s.replicas {
 		s.raftLogQueue.MaybeAdd(r, s.ctx.Clock.Now())
 	}
+	s.mu.Unlock()
+
+	s.raftLogQueue.drainQueue(s.ctx.Clock)
 }
 
 // Bootstrap writes a new store ident to the underlying engine. To

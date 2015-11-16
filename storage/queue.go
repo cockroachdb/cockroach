@@ -319,8 +319,8 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 	})
 }
 
+// processOne processes the next replica in the queue.
 func (bq *baseQueue) processOne(clock *hlc.Clock) {
-	start := time.Now()
 	bq.Lock()
 	repl := bq.pop()
 	bq.Unlock()
@@ -329,6 +329,13 @@ func (bq *baseQueue) processOne(clock *hlc.Clock) {
 		return
 	}
 
+	bq.processReplica(repl, clock)
+}
+
+// processReplica processes a single replica.
+// This should not be called externally to the queue.
+func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) {
+	start := time.Now()
 	now := clock.Now()
 
 	// Load the system config.
@@ -347,7 +354,6 @@ func (bq *baseQueue) processOne(clock *hlc.Clock) {
 		}
 		return
 	}
-
 	if log.V(3) {
 		log.Infof("processing replica %s from %s queue...", repl, bq.name)
 	}
@@ -388,4 +394,19 @@ func (bq *baseQueue) pop() *Replica {
 func (bq *baseQueue) remove(index int) {
 	item := heap.Remove(&bq.priorityQ, index).(*replicaItem)
 	delete(bq.replicas, item.value.Desc().RangeID)
+}
+
+// drainQueue locks the queue and processes the remaining queued replicas. It
+// processes the replicas in the order they're queued in, one at a time.
+// This function is designed to be used for testing only.
+func (bq *baseQueue) drainQueue(clock *hlc.Clock) {
+	log.Infof("draining %s queue", bq.name)
+	bq.Lock()
+	defer bq.Unlock()
+	repl := bq.pop()
+	for repl != nil {
+		log.Infof("processing replica %s in the %s queue", repl, bq.name)
+		bq.processReplica(repl, clock)
+		repl = bq.pop()
+	}
 }
