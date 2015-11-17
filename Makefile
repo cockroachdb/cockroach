@@ -130,6 +130,19 @@ coverage:
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
 
+# "make stress PKG=./storage TESTS=TestBlah" will build the given test
+# and run it in a loop (the PKG argument is required; if TESTS is not
+# given all tests in the package will be run).
+.PHONY: stress
+stress:
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i -c $(PKG) -o stress.test
+	stress ./stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+
+.PHONY: stressrace
+stressrace:
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -i -c $(PKG) -o stress.test
+	stress ./stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+
 .PHONY: acceptance
 acceptance:
 	@acceptance/run.sh

@@ -10,6 +10,7 @@ cmd github.com/opennota/check/cmd/varcheck
 cmd github.com/robfig/glock
 cmd github.com/tebeka/go2xunit
 cmd golang.org/x/tools/cmd/goimports
+cmd golang.org/x/tools/cmd/stress
 cmd golang.org/x/tools/cmd/stringer
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
 github.com/biogo/store 3b4c041f52c224ee4a44f5c8b150d003a40643a0
