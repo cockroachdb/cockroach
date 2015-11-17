@@ -147,12 +147,38 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	primaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
 	// Secondary indexes needing updating.
-	var indexes []IndexDescriptor
-	for _, index := range tableDesc.Indexes {
+	needsUpdate := func(index IndexDescriptor) bool {
 		for _, id := range index.ColumnIDs {
 			if _, ok := colIDSet[id]; ok {
-				indexes = append(indexes, index)
-				break
+				return true
+			}
+		}
+		return false
+	}
+
+	indexes := make([]IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.Mutations))
+	var deleteOnlyIndex map[int]struct{}
+
+	for _, index := range tableDesc.Indexes {
+		if needsUpdate(index) {
+			indexes = append(indexes, index)
+		}
+	}
+	for _, m := range tableDesc.Mutations {
+		if index := m.GetIndex(); index != nil {
+			if needsUpdate(*index) {
+				indexes = append(indexes, *index)
+
+				switch m.State {
+				case DescriptorMutation_DELETE_ONLY:
+					if deleteOnlyIndex == nil {
+						// Allocate at most once.
+						deleteOnlyIndex = make(map[int]struct{}, len(tableDesc.Mutations))
+					}
+					deleteOnlyIndex[len(indexes)-1] = struct{}{}
+
+				case DescriptorMutation_WRITE_ONLY:
+				}
 			}
 		}
 	}
@@ -210,11 +236,14 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		for i, newSecondaryIndexEntry := range newSecondaryIndexEntries {
 			secondaryIndexEntry := secondaryIndexEntries[i]
 			if !bytes.Equal(newSecondaryIndexEntry.key, secondaryIndexEntry.key) {
-				if log.V(2) {
-					log.Infof("CPut %s -> %v", prettyKey(newSecondaryIndexEntry.key, 0),
-						newSecondaryIndexEntry.value)
+				// Do not update Indexes in the DELETE_ONLY state.
+				if _, ok := deleteOnlyIndex[i]; !ok {
+					if log.V(2) {
+						log.Infof("CPut %s -> %v", prettyKey(newSecondaryIndexEntry.key, 0),
+							newSecondaryIndexEntry.value)
+					}
+					b.CPut(newSecondaryIndexEntry.key, newSecondaryIndexEntry.value, nil)
 				}
-				b.CPut(newSecondaryIndexEntry.key, newSecondaryIndexEntry.value, nil)
 				if log.V(2) {
 					log.Infof("Del %s", prettyKey(secondaryIndexEntry.key, 0))
 				}
