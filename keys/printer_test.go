@@ -38,7 +38,7 @@ func TestPrettyPrint(t *testing.T) {
 		// local
 		{StoreIdentKey(), "/Local/Store/storeIdent"},
 		{SequenceCacheKeyPrefix(roachpb.RangeID(1000001), []byte("test0")), `/Local/RangeID/1000001/SequenceCache/"test0"`},
-		{SequenceCacheKey(roachpb.RangeID(1000001), []byte("test0"), uint32(111)), `/Local/RangeID/1000001/SequenceCache/"test0"/seq:111`},
+		{SequenceCacheKey(roachpb.RangeID(1000001), []byte("test0"), uint32(111), uint32(222)), `/Local/RangeID/1000001/SequenceCache/"test0"/epoch:111/seq:222`},
 		{RaftLeaderLeaseKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftLeaderLease"},
 		{RaftTombstoneKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftTombstone"},
 		{RaftHardStateKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftHardState"},

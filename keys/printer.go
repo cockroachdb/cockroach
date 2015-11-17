@@ -173,19 +173,25 @@ func localRangeKeyPrint(key roachpb.Key) string {
 
 func sequenceCacheKeyPrint(key roachpb.Key) string {
 	b, id, err := encoding.DecodeBytes([]byte(key), nil)
-	if err == nil {
-		if len(b) == 0 {
-			return fmt.Sprintf("/%q", id)
-		}
-
-		_, seq, err := encoding.DecodeUint32Decreasing([]byte(b))
-		if err == nil {
-			return fmt.Sprintf("/%q/seq:%d", id, seq)
-		}
-
+	if err != nil {
+		return fmt.Sprintf("/%q/err:%v", key, err)
 	}
 
-	return fmt.Sprintf("/%q", key)
+	if len(b) == 0 {
+		return fmt.Sprintf("/%q", id)
+	}
+
+	b, epoch, err := encoding.DecodeUint32Decreasing(b)
+	if err != nil {
+		return fmt.Sprintf("/%q/err:%v", id, err)
+	}
+
+	_, seq, err := encoding.DecodeUint32Decreasing(b)
+	if err != nil {
+		return fmt.Sprintf("/%q/epoch:%d/err:%v", id, epoch, err)
+	}
+
+	return fmt.Sprintf("/%q/epoch:%d/seq:%d", id, epoch, seq)
 }
 
 func print(key roachpb.Key) string {
