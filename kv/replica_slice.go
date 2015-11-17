@@ -19,6 +19,8 @@
 package kv
 
 import (
+	"math/rand"
+
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -96,8 +98,6 @@ func (rs replicaSlice) FindReplicaByNodeID(nodeID roachpb.NodeID) int {
 // number of attributes successfully matched to at least one replica is
 // returned (hence, if the return value equals the length of the replicaSlice,
 // at least one replica matched all attributes).
-//
-// TODO(peter): need to randomize the replica order within each bucket.
 func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 	if len(rs) < 2 {
 		return 0
@@ -113,6 +113,9 @@ func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 				rs.Swap(firstNotOrdered, i)
 				firstNotOrdered++
 			}
+		}
+		if topIndex < len(rs)-1 {
+			rs.randPerm(firstNotOrdered, topIndex, rand.Intn)
 		}
 		if firstNotOrdered == 0 {
 			return bucket
@@ -133,4 +136,12 @@ func (rs replicaSlice) MoveToFront(i int) {
 	// Move the first i elements one index to the right
 	copy(rs[1:], rs[:i])
 	rs[0] = front
+}
+
+func (rs replicaSlice) randPerm(startIndex int, topIndex int, intnFn func(int) int) {
+	length := topIndex - startIndex + 1
+	for i := 1; i < length; i++ {
+		j := intnFn(i + 1)
+		rs.Swap(startIndex+i, startIndex+j)
+	}
 }
