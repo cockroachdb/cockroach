@@ -1559,17 +1559,13 @@ func TestRangeSequenceCacheStoredTxnRetryError(t *testing.T) {
 		}
 	}
 
-	//  Pretend we restarted by increasing the epoch. We didn't increase
-	//  the sequence though, so still the same error.
+	//  Pretend we restarted by increasing the epoch. That's all that's needed.
 	txn.Epoch++
-	{
-		err := try()
-		if _, ok := err.(*roachpb.TransactionRetryError); !ok {
-			t.Fatal(err)
-		}
+	if err := try(); err != nil {
+		t.Fatal(err)
 	}
 
-	// Now also increase the size, and we should be good to go.
+	// Now increase the sequence as well. Still good to go.
 	txn.Sequence++
 	if err := try(); err != nil {
 		t.Fatal(err)
@@ -2139,6 +2135,108 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestSequenceCachePoisonOnResolve verifies that when an intent is pushed into
+// the future or aborted, the sequence cache on the respective Range is
+// poisoned and the pushee is presented with a txn retry or abort on its next
+// contact with the Range in the same epoch.
+func TestSequenceCachePoisonOnResolve(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	key := roachpb.Key("a")
+
+	// Isolation of the pushee and whether we're going to abort it.
+	// Run the actual meat of the test, which pushes the pushee and
+	// checks whether we get the correct behaviour as it touches the
+	// Range again.
+	run := func(abort bool, iso roachpb.IsolationType) {
+		tc := testContext{}
+		tc.Start(t)
+		defer tc.Stop()
+
+		pushee := newTransaction("test", key, 1, iso, tc.clock)
+		pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+		pusher.Priority = 2
+		pushee.Priority = 1 // pusher will win
+
+		inc := func(actor *roachpb.Transaction, k roachpb.Key) (*roachpb.IncrementResponse, error) {
+			actor.Sequence++
+			reply, err := client.SendWrappedWith(tc.store, nil, roachpb.Header{
+				Txn:     actor,
+				RangeID: 1,
+			}, &roachpb.IncrementRequest{Span: roachpb.Span{Key: k}, Increment: 123})
+			if err != nil {
+				return nil, err
+			}
+			return reply.(*roachpb.IncrementResponse), err
+		}
+
+		// Begin the pushee's transaction and write an intent.
+		btArgs, btH := beginTxnArgs(key, pushee)
+		if _, err := client.SendWrappedWith(tc.Sender(), nil,
+			btH, &btArgs); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := inc(pushee, key); err != nil {
+			t.Fatal(err)
+		}
+
+		// Have the pusher run into the intent. That pushes our pushee and resolves
+		// the intent, which in turn should poison the sequence cache.
+		var assert func(error)
+		if abort {
+			// Write/Write conflict will abort pushee.
+			if _, err := inc(pusher, key); err != nil {
+				t.Fatal(err)
+			}
+			assert = func(err error) {
+				if _, ok := err.(*roachpb.TransactionAbortedError); !ok {
+					t.Fatalf("abort=%t, iso=%s: expected txn abort, got %s", abort, iso, err)
+				}
+			}
+		} else if iso == roachpb.SNAPSHOT {
+			// At SNAPSHOT, we shouldn't be restart-poisoned.
+			assert = func(err error) {
+				if err != nil {
+					t.Fatalf("abort=%t, iso=%s: unexpected: %s", abort, iso, err)
+				}
+			}
+		} else {
+			// Trigger a Read/Write conflict which pushes pushee's timestamp.
+			if _, err := client.SendWrappedWith(tc.store, nil, roachpb.Header{
+				Txn:       pusher,
+				Timestamp: pusher.Timestamp,
+				RangeID:   1,
+			}, &roachpb.GetRequest{Span: roachpb.Span{Key: key}}); err != nil {
+				t.Fatal(err)
+			}
+			assert = func(err error) {
+				if _, ok := err.(*roachpb.TransactionRetryError); !ok {
+					t.Fatalf("abort=%t, iso=%s: expected txn retry, got %s",
+						abort, iso, err)
+				}
+			}
+		}
+
+		_, err := inc(pushee, key)
+		assert(err)
+		_, err = inc(pushee, key.Next())
+		// Still poisoned (on any key on the Range).
+		assert(err)
+
+		// Pretend we're coming back. This works regardless of retry or restart,
+		// but obviously in practice only on a retry would the Txn actually come
+		// back with an increased epoch.
+		pushee.Epoch++
+		if _, err := inc(pushee, roachpb.Key("b")); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, abort := range []bool{false, true} {
+		run(abort, roachpb.SERIALIZABLE)
+		run(abort, roachpb.SNAPSHOT)
+	}
 }
 
 // TestPushTxnBadKey verifies that args.Key equals args.PusheeTxn.ID.

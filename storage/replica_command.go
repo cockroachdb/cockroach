@@ -995,13 +995,37 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	return reply, nil
 }
 
+// maybePoison inspects the given transaction and, if it's either been aborted
+// or pushed despite being serializable, poisons the sequence cache entry
+// accordingly so that the transaction will be forced to abort or restart,
+// respectively, upon returning to this Range.
+func (r *Replica) maybePoison(batch engine.Engine, txn roachpb.Transaction) error {
+	var poison uint32
+	switch txn.Status {
+	case roachpb.ABORTED:
+		poison = roachpb.SequencePoisonAbort
+	case roachpb.PENDING:
+		poison = roachpb.SequencePoisonRestart
+		if txn.Isolation == roachpb.SNAPSHOT || txn.Timestamp.Equal(txn.OrigTimestamp) {
+			return nil
+		}
+	default:
+		return nil
+	}
+
+	return r.sequence.Put(batch, txn.ID, txn.Epoch, poison,
+		txn.Key, txn.Timestamp, nil)
+}
+
 // ResolveIntent resolves a write intent from the specified key
 // according to the status of the transaction which created it.
 func (r *Replica) ResolveIntent(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.ResolveIntentRequest) (roachpb.ResolveIntentResponse, error) {
 	var reply roachpb.ResolveIntentResponse
 
-	err := engine.MVCCResolveWriteIntent(batch, ms, args.Key, h.Timestamp, &args.IntentTxn)
-	return reply, err
+	if err := engine.MVCCResolveWriteIntent(batch, ms, args.Key, h.Timestamp, &args.IntentTxn); err != nil {
+		return reply, err
+	}
+	return reply, r.maybePoison(batch, args.IntentTxn)
 }
 
 // ResolveIntentRange resolves write intents in the specified
@@ -1010,8 +1034,10 @@ func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
 	h roachpb.Header, args roachpb.ResolveIntentRangeRequest) (roachpb.ResolveIntentRangeResponse, error) {
 	var reply roachpb.ResolveIntentRangeResponse
 
-	_, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, h.Timestamp, &args.IntentTxn)
-	return reply, err
+	if _, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, h.Timestamp, &args.IntentTxn); err != nil {
+		return reply, err
+	}
+	return reply, r.maybePoison(batch, args.IntentTxn)
 }
 
 // Merge is used to merge a value into an existing key. Merge is an

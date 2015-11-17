@@ -606,8 +606,10 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	keyA := "a"
 	keyB := "b"
 	ch := make(chan struct{})
+	var count int
 	go func() {
 		err := s.DB.Txn(func(txn *client.Txn) error {
+			count++
 			// Use a low priority for the transaction so that it can be pushed.
 			txn.InternalSetPriority(1)
 
@@ -615,10 +617,12 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 			if err := txn.Put(keyA, "value1"); err != nil {
 				return err
 			}
-			// Notify txnB to push txnA on get(a).
-			ch <- struct{}{}
-			// Wait for txnB notify us to commit.
-			<-ch
+			if count <= 2 {
+				// Notify txnB to push txnA on get(a).
+				ch <- struct{}{}
+				// Wait for txnB notify us to commit.
+				<-ch
+			}
 			// Do a write to keyB, which will forward txn timestamp.
 			if err := txn.Put(keyB, "value2"); err != nil {
 				return err
@@ -626,11 +630,10 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 			// Now commit...
 			return nil
 		})
+		close(ch)
 		if err != nil {
-			close(ch)
 			t.Fatal(err)
 		}
-		ch <- struct{}{}
 	}()
 
 	// Wait until txnA finishes put(a).
@@ -650,5 +653,18 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	// Notify txnA to commit.
 	ch <- struct{}{}
 	// Wait for txnA to finish.
-	<-ch
+	for range ch {
+	}
+	// We expect two restarts (so a count of three):
+	// 1) Txn restarts after having been pushed (this happens via sequence poisoning
+	//    on the last Put before Commit, but otherwise EndTransaction would do it)
+	// 2) on the second Put to keyB. The reason is that our non-transactional writer
+	//    writes that key with a timestamp higher than keyA, but now it matters that
+	//    we got restarted via sequence poisoning instead of EndTransaction: The
+	//    previous iteration never executed the Put on keyB, so it hasn't taken
+	//    that timestamp into account yet.
+	const expCount = 3
+	if count != expCount {
+		t.Fatalf("expected %d restarts, but got %d", expCount, count)
+	}
 }
