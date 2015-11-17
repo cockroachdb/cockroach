@@ -18,6 +18,7 @@
 package kv
 
 import (
+	"math/rand"
 	"reflect"
 	"testing"
 
@@ -88,12 +89,17 @@ func getStores(rs replicaSlice) (r []roachpb.StoreID) {
 	return
 }
 
-func TestReplicaSetMoveToFront(t *testing.T) {
-	defer leaktest.AfterTest(t)
+func createReplicaSlice() replicaSlice {
 	rs := replicaSlice(nil)
 	for i := 0; i < 5; i++ {
 		rs = append(rs, replicaInfo{ReplicaDescriptor: roachpb.ReplicaDescriptor{StoreID: roachpb.StoreID(i + 1)}})
 	}
+	return rs
+}
+
+func TestReplicaSetMoveToFront(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	rs := createReplicaSlice()
 	rs.MoveToFront(0)
 	exp := []roachpb.StoreID{1, 2, 3, 4, 5}
 	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
@@ -109,4 +115,22 @@ func TestReplicaSetMoveToFront(t *testing.T) {
 	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
 		t.Errorf("expected order %s, got %s", exp, stores)
 	}
+}
+
+func verifyRandPermOrdering(startIndex int, topIndex int, exp []roachpb.StoreID, t *testing.T) {
+	r := rand.New(rand.NewSource(0))
+	rs := createReplicaSlice()
+	rs.randPerm(startIndex, topIndex, r.Intn)
+	if stores := getStores(rs); !reflect.DeepEqual(stores, exp) {
+		t.Errorf("expected order %s, got %s", exp, stores)
+	}
+}
+
+func TestReplicaSetRandPerm(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	verifyRandPermOrdering(2, 2, []roachpb.StoreID{1, 2, 3, 4, 5}, t)
+	verifyRandPermOrdering(3, 4, []roachpb.StoreID{1, 2, 3, 5, 4}, t)
+	verifyRandPermOrdering(0, 2, []roachpb.StoreID{3, 1, 2, 4, 5}, t)
+	verifyRandPermOrdering(1, 3, []roachpb.StoreID{1, 4, 2, 3, 5}, t)
+	verifyRandPermOrdering(0, 4, []roachpb.StoreID{3, 5, 2, 1, 4}, t)
 }
