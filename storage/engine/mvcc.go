@@ -1430,7 +1430,7 @@ func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey roach
 // The timestamp parameter is used to compute the intent age on GC.
 func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []roachpb.GCRequest_GCKey, timestamp roachpb.Timestamp) error {
 	iter := engine.NewIterator()
-
+	defer iter.Close()
 	// Iterate through specified GC keys.
 	for _, gcKey := range keys {
 		encKey := MVCCEncodeKey(gcKey.Key)
