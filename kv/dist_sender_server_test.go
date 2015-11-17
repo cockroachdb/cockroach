@@ -417,5 +417,127 @@ func TestBadRequest(t *testing.T) {
 	if err := db.DelRange("", "z"); !testutils.IsError(err, "must be greater than LocalMax") {
 		t.Fatalf("unexpected error on deletion on [KeyMin, z): %v", err)
 	}
+}
 
+// TestTxnWritingToNewEpoch verifies that DistSender.sendChunk
+// properly propagates the txn.Writing field to a next iteration.
+func TestTxnWritingToNewEpoch(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setupMultipleRanges(t, "b", "c")
+	defer s.Stop()
+
+	// The requests in the transaction below will be chunked and
+	// sent to replicas in the following way:
+	// 1) A batch request containing a BeginTransaction and a
+	//    put on "a" are sent to a replica owning range ["a","b").
+	// 2) A next batch request containing a put on "b" and a put
+	//    on "c" are sent to a replica owning range ["b","c").
+	//   (The range cache has a stale range descriptor.)
+	// 3) The put request on "c" causes a RangeKeyMismatchError.
+	// 4) The dist sender re-sends a request to the same replica.
+	//    This time the request contains only the put on "b" to the
+	//    same replica.
+	// 5) The replica returns a TransactionRetryError since the
+	//    sequence of the transaction is equal to the sequence found
+	//    in the cache.
+	epoch := 0
+	if err := db.Txn(func(txn *client.Txn) error {
+		epoch++
+		if epoch >= 2 {
+			// Writing must be true since we ran the BeginTransaction command.
+			if !txn.Proto.Writing {
+				t.Errorf("unexpected non-writing txn")
+			}
+		} else {
+			// Writing must be false since we haven't run any write command.
+			if txn.Proto.Writing {
+				t.Errorf("unexpected writing txn")
+			}
+		}
+
+		b := &client.Batch{}
+		b.Put("a", "val")
+		b.Put("b", "val")
+		b.Put("c", "val")
+		return txn.CommitInBatch(b)
+	}); err != nil {
+		t.Errorf("unexpected error on transactional Puts: %s", err)
+	}
+
+	if epoch != 2 {
+		t.Errorf("unexpected epoch; the txn must be retried exactly once, but got %d", epoch)
+	}
+}
+
+// TestDoNotPropagateTxnOnError reproduces a bug where txn data (e.g., txn ID)
+// are not propagated to a next epoch on error.
+//
+// TODO(kkaneda): This test is to reproduce a bug and it does not
+// actually test a condition to be held. Fix the bug.
+func TestDoNotPropagateTxnOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setupMultipleRanges(t, "b")
+	defer s.Stop()
+
+	waitForWriteIntent := make(chan struct{})
+	waitForTxnRestart := make(chan struct{})
+	waitForTxnCommit := make(chan struct{})
+	// Create a goroutine that creates a write intent and waits until
+	// another txn created in this test is restarted.
+	go func() {
+		if err := db.Txn(func(txn *client.Txn) error {
+			if err := txn.Put("b", "val"); err != nil {
+				return err
+			}
+			close(waitForWriteIntent)
+			// Wait until another txn in this test is
+			// restarted by a push txn error.
+			<-waitForTxnRestart
+			return txn.CommitInBatch(&client.Batch{})
+		}); err != nil {
+			t.Errorf("unexpected error on transactional Puts: %s", err)
+		}
+		close(waitForTxnCommit)
+	}()
+
+	// Wait until a write intent is created by the above goroutine.
+	<-waitForWriteIntent
+
+	// The transaction below is restarted multiple times.
+	// - The first retry is caused by the write intent created on key "b" by the above goroutine.
+	// - The subsequent retries are caused by the write conflict on key "a". Since the txn
+	//   ID is not propagated, a txn of a new epoch always has a new txn ID different
+	//   from the previous txn's. So, the write intent made by the txn of the previous epoch
+	//   is treated as a write made by some different txn.
+	epoch := 0
+	if err := db.Txn(func(txn *client.Txn) error {
+		// Set low priority so that the intent will not be pushed.
+		txn.InternalSetPriority(1)
+
+		epoch++
+
+		if epoch == 2 {
+			close(waitForTxnRestart)
+			// Wait until the txn created by the goroutine is committed.
+			<-waitForTxnCommit
+		} else if epoch > 2 {
+			// Enough number of retries.
+			return nil
+		}
+
+		if !roachpb.TxnIDEqual(txn.Proto.ID, []byte("")) {
+			t.Errorf("txn ID is set unexpectedly")
+		}
+
+		b := &client.Batch{}
+		b.Put("a", "val")
+		b.Put("b", "val")
+		return txn.CommitInBatch(b)
+	}); err != nil {
+		t.Errorf("unexpected error on transactional Puts: %s", err)
+	}
+
+	if epoch <= 2 {
+		t.Errorf("unexpected epoch; the txn must be retried at least twice, but got %d", epoch)
+	}
 }
