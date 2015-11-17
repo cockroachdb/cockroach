@@ -223,9 +223,9 @@ func Example_ranges() {
 	// 4 result(s)
 	// range split c
 	// range ls
-	// ""-"c" [1]
+	// /Min-"c" [1]
 	// 	0: node-id=1 store-id=1
-	// "c"-"\xff\xff" [2]
+	// "c"-/Max [2]
 	// 	0: node-id=1 store-id=1
 	// 2 result(s)
 	// kv scan
@@ -242,7 +242,7 @@ func Example_ranges() {
 	// 4 result(s)
 	// range merge b
 	// range ls
-	// ""-"\xff\xff" [1]
+	// /Min-/Max [1]
 	// 	0: node-id=1 store-id=1
 	// 1 result(s)
 	// kv scan

@@ -169,6 +169,11 @@ var (
 
 	// UserTableDataMin is the start key of user structured data.
 	UserTableDataMin = roachpb.Key(MakeTablePrefix(MaxReservedDescID + 1))
+
+	// MaxKey is the infinity marker which is larger than any other key.
+	MaxKey = roachpb.KeyMax
+	// MinKey is a minimum key value which sorts before all other keys.
+	MinKey = roachpb.KeyMin
 )
 
 // Various IDs used by the structured data layer.
