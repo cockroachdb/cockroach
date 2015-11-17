@@ -73,6 +73,8 @@ const (
 	// need a periodic gossip to safeguard against failure of a leader
 	// to gossip after performing an update to the map.
 	configGossipInterval = 1 * time.Minute
+	// The default size of the raft entries cache.
+	defaultRaftEntryCacheSize = 100
 )
 
 // TestingCommandFilter may be set in tests to intercept the handling
@@ -185,7 +187,8 @@ type Replica struct {
 		*sync.Cond
 		value roachpb.ReplicaDescriptor
 	}
-	truncatedState unsafe.Pointer // *roachpb.RaftTruncatedState
+	truncatedState unsafe.Pointer  // *roachpb.RaftTruncatedState
+	raftEntryCache *raftEntryCache // Most recent entries
 }
 
 var _ client.Sender = &Replica{}
@@ -193,11 +196,12 @@ var _ client.Sender = &Replica{}
 // NewReplica initializes the replica using the given metadata.
 func NewReplica(desc *roachpb.RangeDescriptor, rm *Store) (*Replica, error) {
 	r := &Replica{
-		store:       rm,
-		cmdQ:        NewCommandQueue(),
-		tsCache:     NewTimestampCache(rm.Clock()),
-		sequence:    NewSequenceCache(desc.RangeID),
-		pendingCmds: map[cmdIDKey]*pendingCmd{},
+		store:          rm,
+		cmdQ:           NewCommandQueue(),
+		tsCache:        NewTimestampCache(rm.Clock()),
+		sequence:       NewSequenceCache(desc.RangeID),
+		pendingCmds:    map[cmdIDKey]*pendingCmd{},
+		raftEntryCache: newRaftEntryCache(defaultRaftEntryCacheSize),
 	}
 	r.pendingReplica.Cond = sync.NewCond(r)
 	r.setDescWithoutProcessUpdate(desc)
@@ -1011,6 +1015,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 		// time it's required.
 		if _, ok := ba.GetArg(roachpb.TruncateLog); ok {
 			r.setCachedTruncatedState(nil)
+			r.raftEntryCache.clearAll()
 		}
 	}
 

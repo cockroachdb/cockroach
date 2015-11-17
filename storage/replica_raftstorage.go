@@ -80,8 +80,6 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // Entries implements the raft.Storage interface. Note that maxBytes is advisory
 // and this method will always return at least one entry even if it exceeds
 // maxBytes. Passing maxBytes equal to zero disables size checking.
-// TODO(bdarnell): consider caching for recent entries, if rocksdb's builtin caching
-// is insufficient.
 func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	if lo > hi {
 		return nil, util.Errorf("lo:%d is greater than hi:%d", lo, hi)
@@ -90,8 +88,24 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	// stopping once we have enough.
 	var ents []raftpb.Entry
 	size := uint64(0)
+
+	hitEnts, hitSize, hitIndex := r.raftEntryCache.getEntry(lo, hi, maxBytes)
+
+	// Did the correct number of results come back? If so, we're all good.
+	if len(hitEnts) == int(hi)-int(lo) {
+		return hitEnts, nil
+	}
+	// Did we hit the size limit? If so, return what we have.
+	if maxBytes > 0 && hitSize > maxBytes {
+		return hitEnts, nil
+	}
+
+	ents = append(ents, hitEnts...)
+	size = size + hitSize
+	newlo := hitIndex
+
 	var ent raftpb.Entry
-	expectedIndex := lo
+	expectedIndex := newlo
 	exceededMaxBytes := false
 	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
 		if err := kv.Value.GetProto(&ent); err != nil {
@@ -110,7 +124,7 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 
 	rangeID := r.Desc().RangeID
 	_, err := engine.MVCCIterate(r.store.Engine(),
-		keys.RaftLogKey(rangeID, lo),
+		keys.RaftLogKey(rangeID, newlo),
 		keys.RaftLogKey(rangeID, hi),
 		roachpb.ZeroTimestamp,
 		true /* consistent */, nil /* txn */, false /* !reverse */, scanFunc)
@@ -405,6 +419,8 @@ func (r *Replica) Append(entries []raftpb.Entry) error {
 	}
 
 	atomic.StoreUint64(&r.lastIndex, lastIndex)
+	r.raftEntryCache.delEntry(lastIndex+1, prevLastIndex)
+	r.raftEntryCache.addEntry(entries)
 	return nil
 }
 
