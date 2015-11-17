@@ -453,11 +453,6 @@ type group struct {
 	writing bool
 	// nodeIDs track the remote nodes associated with this group.
 	nodeIDs []roachpb.NodeID
-	// waitForCallback is a counter that is incremented when a
-	// configuration change callback is created and is decremented
-	// when the callback finishes. The positive value indicates
-	// that there is a pending callback.
-	waitForCallback int
 }
 
 type createGroupOp struct {
@@ -1034,11 +1029,6 @@ func (s *state) propose(p *proposal) {
 		}
 		return
 	}
-	// If configuration change callback is pending, wait for it.
-	if g.waitForCallback > 0 {
-		g.pending[p.commandID] = p
-		return
-	}
 
 	if log.V(3) {
 		log.Infof("group %d: new proposal %x", p.groupID, p.commandID)
@@ -1123,17 +1113,14 @@ func (s *state) processCommittedEntry(groupID roachpb.RangeID, g *group, entry r
 	var commandID string
 	switch entry.Type {
 	case raftpb.EntryNormal:
-		// etcd raft occasionally adds a nil entry (e.g. upon election); ignore these.
-		if entry.Data != nil {
-			var command []byte
-			commandID, command = decodeCommand(entry.Data)
-			s.sendEvent(&EventCommandCommitted{
-				GroupID:   groupID,
-				CommandID: commandID,
-				Command:   command,
-				Index:     entry.Index,
-			})
-		}
+		var command []byte
+		commandID, command = decodeCommand(entry.Data)
+		s.sendEvent(&EventCommandCommitted{
+			GroupID:   groupID,
+			CommandID: commandID,
+			Command:   command,
+			Index:     entry.Index,
+		})
 
 	case raftpb.EntryConfChange:
 		cc := raftpb.ConfChange{}
@@ -1157,7 +1144,6 @@ func (s *state) processCommittedEntry(groupID roachpb.RangeID, g *group, entry r
 			log.Fatalf("could not look up replica info (node %s, group %d, replica %d): %s",
 				s.nodeID, groupID, cc.NodeID, err)
 		}
-		g.waitForCallback++
 		s.sendEvent(&EventMembershipChangeCommitted{
 			GroupID:    groupID,
 			CommandID:  commandID,
@@ -1189,15 +1175,6 @@ func (s *state) processCommittedEntry(groupID roachpb.RangeID, g *group, entry r
 						log.Warningf("aborting configuration change: %s", err)
 						s.multiNode.ApplyConfChange(uint64(groupID),
 							raftpb.ConfChange{})
-					}
-
-					// Re-submit all pending proposals that were held
-					// while the config change was pending
-					g.waitForCallback--
-					if g.waitForCallback <= 0 {
-						for _, prop := range g.pending {
-							s.propose(prop)
-						}
 					}
 				}:
 				case <-s.stopper.ShouldStop():
@@ -1311,11 +1288,6 @@ func (s *state) maybeSendLeaderEvent(groupID roachpb.RangeID, g *group, ready *r
 			ReplicaID: g.leader.ReplicaID,
 			Term:      g.committedTerm,
 		})
-
-		// Re-submit all pending proposals
-		for _, prop := range g.pending {
-			s.propose(prop)
-		}
 	}
 }
 
@@ -1345,8 +1317,23 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 		}
 		g.writing = false
 
-		// Process committed entries.
+		// Process committed entries. etcd raft occasionally adds a nil
+		// entry (our own commands are never empty). This happens in two
+		// situations: When a new leader is elected, and when a config
+		// change is dropped due to the "one at a time" rule. In both
+		// cases we may need to re-submit our pending proposals (In the
+		// former case we re-submit everything because we proposed them to
+		// a former leader that is no longer able to commit them. In the
+		// latter case we only need to re-submit pending config changes,
+		// but it's hard to distinguish so we re-submit everything
+		// anyway). We delay re-submission until after we have processed
+		// the entire batch of entries.
+		hasEmptyEntry := false
 		for _, entry := range ready.CommittedEntries {
+			if entry.Type == raftpb.EntryNormal && len(entry.Data) == 0 {
+				hasEmptyEntry = true
+				continue
+			}
 			commandID := s.processCommittedEntry(raftGroupID, g, entry)
 			// TODO(bdarnell): the command is now committed, but not applied until the
 			// application consumes EventCommandCommitted. Is returning via the channel
@@ -1355,6 +1342,11 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 			// This could be done with a Callback as in EventMembershipChangeCommitted
 			// or perhaps we should move away from a channel to a callback-based system.
 			s.removePending(g, g.pending[commandID], nil /* err */)
+		}
+		if hasEmptyEntry {
+			for _, prop := range g.pending {
+				s.propose(prop)
+			}
 		}
 
 		if !raft.IsEmptySnap(ready.Snapshot) {

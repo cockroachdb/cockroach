@@ -422,7 +422,6 @@ func TestMembershipChange(t *testing.T) {
 // leader must have removed itself.
 func TestRemoveLeader(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(bdarnell): https://github.com/cockroachdb/cockroach/issues/2639")
 	stopper := stop.NewStopper()
 	const clusterSize = 6
 	const groupSize = 3
@@ -495,7 +494,9 @@ func TestRemoveLeader(t *testing.T) {
 	}
 }
 
-func TestRapidMembershipChange(t *testing.T) {
+// TestRapidCreateRemoveGroup tests for races between CreateGroup,
+// SubmitCommand, and RemoveGroup.
+func TestRapidCreateRemoveGroup(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -573,6 +574,62 @@ func TestRapidMembershipChange(t *testing.T) {
 	// otherwise subject to concurrent access from our goroutine and the go
 	// testing machinery.
 	wg.Wait()
+}
+
+// TestReProposeConfigChange verifies the behavior when multiple
+// configuration changes are in flight at once. Raft prohibits this,
+// but any configuration changes that are dropped by this rule should
+// be reproposed when the previous change completes.
+func TestReProposeConfigChange(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	const clusterSize = 4
+	const groupSize = 3
+	cluster := newTestCluster(nil, clusterSize, stopper, t)
+
+	const groupID = roachpb.RangeID(1)
+	const leader = 0
+	const proposer = 1
+	cluster.createGroup(groupID, leader, groupSize)
+	cluster.elect(leader, groupID)
+
+	targetDesc := roachpb.ReplicaDescriptor{
+		NodeID:    cluster.nodes[groupSize].nodeID,
+		StoreID:   roachpb.StoreID(cluster.nodes[groupSize].nodeID),
+		ReplicaID: roachpb.ReplicaID(cluster.nodes[groupSize].nodeID),
+	}
+	// Add a node and immediately remove it without waiting for the
+	// first change to commit.
+	addErrCh := cluster.nodes[proposer].ChangeGroupMembership(groupID, makeCommandID(),
+		raftpb.ConfChangeAddNode, targetDesc, nil)
+	removeErrCh := cluster.nodes[proposer].ChangeGroupMembership(groupID, makeCommandID(),
+		raftpb.ConfChangeRemoveNode, targetDesc, nil)
+
+	// The add command will commit first; then it needs to be applied.
+	// Apply it on the proposer node before the leader.
+	e := <-cluster.events[proposer].MembershipChangeCommitted
+	e.Callback(nil)
+	e = <-cluster.events[leader].MembershipChangeCommitted
+	e.Callback(nil)
+
+	// Now wait for both commands to commit.
+	select {
+	case err := <-addErrCh:
+		if err != nil {
+			t.Errorf("add failed: %s", err)
+		}
+	case <-time.After(time.Second):
+		t.Errorf("add timed out")
+	}
+	select {
+	case err := <-removeErrCh:
+		if err != nil {
+			t.Errorf("remove failed: %s", err)
+		}
+	case <-time.After(time.Second):
+		t.Errorf("remove timed out")
+	}
 }
 
 // TestConfigValidation verifies that the validation of a Config returns
