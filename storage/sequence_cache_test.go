@@ -230,12 +230,12 @@ func TestSequenceCacheShouldCache(t *testing.T) {
 		{&roachpb.TransactionPushError{}, true},
 		{&roachpb.TransactionRetryError{}, true},
 		{&roachpb.RangeNotFoundError{}, true},
-		{&roachpb.RangeKeyMismatchError{}, true},
 		{&roachpb.TransactionStatusError{}, true},
 		{&roachpb.ConditionFailedError{}, true},
 		{&roachpb.WriteIntentError{}, false},
 		{&roachpb.WriteTooOldError{}, false},
 		{&roachpb.NotLeaderError{}, false},
+		{&roachpb.RangeKeyMismatchError{}, false},
 	}
 
 	reply := roachpb.PutResponse{}
