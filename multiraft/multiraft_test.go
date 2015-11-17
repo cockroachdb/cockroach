@@ -640,7 +640,7 @@ func TestConfigValidation(t *testing.T) {
 func runSubmitCommandBenchmark(numNodes, pendingCommands int, b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	cluster := newTestCluster(nil, numNodes, stopper, b)
+	cluster := newTestCluster(NewLocalTransport(), numNodes, stopper, b)
 	groupID := roachpb.RangeID(1)
 	cluster.createGroup(groupID, 0, numNodes)
 	if numNodes > 1 {
