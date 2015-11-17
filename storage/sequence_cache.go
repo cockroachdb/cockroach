@@ -149,7 +149,7 @@ func (sc *SequenceCache) CopyFrom(e engine.Engine, originRangeID roachpb.RangeID
 	return copySeqCache(e, originRangeID, sc.rangeID, originMin, originMax)
 }
 
-// PutSequence writes a sequence number for the specified id.
+// Put writes a sequence number for the specified id.
 func (sc *SequenceCache) Put(e engine.Engine, id []byte, epoch, seq uint32, txnKey roachpb.Key, txnTS roachpb.Timestamp, err error) error {
 	if seq <= 0 || len(id) == 0 {
 		return errEmptyID
