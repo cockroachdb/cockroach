@@ -2426,7 +2426,8 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 			// Compute the stats manually.
 			iter := engine.NewIterator()
 			iter.Seek(keyMin)
-			expMS, err := MVCCComputeStats(iter, int64(i+1)*1E9)
+			var expMS MVCCStats
+			err := iter.ComputeStats(&expMS, roachpb.KeyMin, roachpb.KeyMax, int64(i+1)*1E9)
 			iter.Close()
 			if err != nil {
 				t.Fatal(err)
@@ -2543,7 +2544,8 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	// Verify aggregated stats match computed stats after GC.
 	iter := engine.NewIterator()
 	iter.Seek(keyMin)
-	expMS, err := MVCCComputeStats(iter, ts3.WallTime)
+	var expMS MVCCStats
+	err = iter.ComputeStats(&expMS, roachpb.KeyMin, roachpb.KeyMax, ts3.WallTime)
 	iter.Close()
 	if err != nil {
 		t.Fatal(err)

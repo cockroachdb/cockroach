@@ -554,7 +554,8 @@ func runMVCCComputeStats(valueBytes int, b *testing.B) {
 		iter := rocksdb.NewIterator()
 		iter.Seek(keyMin)
 		var err error
-		stats, err = MVCCComputeStats(iter, 0)
+		stats = MVCCStats{}
+		err = iter.ComputeStats(&stats, roachpb.KeyMin, roachpb.KeyMax, 0)
 		iter.Close()
 		if err != nil {
 			b.Fatal(err)

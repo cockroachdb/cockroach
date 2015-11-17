@@ -811,7 +811,28 @@ func (r *rocksDBIterator) Error() error {
 }
 
 func (r *rocksDBIterator) setState(state C.DBIterState) {
-	r.valid = state.valid == 1
+	r.valid = bool(state.valid)
 	r.key = state.key
 	r.value = state.value
+}
+
+func (r *rocksDBIterator) ComputeStats(ms *MVCCStats, start, end []byte, nowNanos int64) error {
+	result := C.MVCCComputeStats(r.iter, goToCSlice(start), goToCSlice(end), C.int64_t(nowNanos))
+	if err := statusToError(result.status); err != nil {
+		return err
+	}
+	ms.LiveBytes += int64(result.live_bytes)
+	ms.KeyBytes += int64(result.key_bytes)
+	ms.ValBytes += int64(result.val_bytes)
+	ms.IntentBytes += int64(result.intent_bytes)
+	ms.LiveCount += int64(result.live_count)
+	ms.KeyCount += int64(result.key_count)
+	ms.ValCount += int64(result.val_count)
+	ms.IntentCount += int64(result.intent_count)
+	ms.IntentAge += int64(result.intent_age)
+	ms.GCBytesAge += int64(result.gc_bytes_age)
+	ms.SysBytes += int64(result.sys_bytes)
+	ms.SysCount += int64(result.sys_count)
+	ms.LastUpdateNanos = nowNanos
+	return nil
 }

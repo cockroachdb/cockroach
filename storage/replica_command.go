@@ -1282,6 +1282,20 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 	return reply, nil
 }
 
+func (r *Replica) computeStats(d *roachpb.RangeDescriptor, e engine.Engine, nowNanos int64) (engine.MVCCStats, error) {
+	iter := e.NewIterator()
+	defer iter.Close()
+
+	ms := &engine.MVCCStats{}
+	for _, r := range makeReplicaKeyRanges(d) {
+		err := iter.ComputeStats(ms, r.start, r.end, nowNanos)
+		if err != nil {
+			return *ms, err
+		}
+	}
+	return *ms, nil
+}
+
 // splitTrigger is called on a successful commit of an AdminSplit
 // transaction. It copies the sequence cache for the new range and
 // recomputes stats for both the existing, updated range and the new
@@ -1315,9 +1329,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 
 	// Compute stats for updated range.
 	now := r.store.Clock().Timestamp()
-	iter := newReplicaDataIterator(&split.UpdatedDesc, batch)
-	ms, err := engine.MVCCComputeStats(iter, now.WallTime)
-	iter.Close()
+	ms, err := r.computeStats(&split.UpdatedDesc, batch, now.WallTime)
 	if err != nil {
 		return util.Errorf("unable to compute stats for updated range after split: %s", err)
 	}
@@ -1339,9 +1351,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 	}
 
 	// Compute stats for new range.
-	iter = newReplicaDataIterator(&split.NewDesc, batch)
-	ms, err = engine.MVCCComputeStats(iter, now.WallTime)
-	iter.Close()
+	ms, err = r.computeStats(&split.NewDesc, batch, now.WallTime)
 	if err != nil {
 		return util.Errorf("unable to compute stats for new range after split: %s", err)
 	}
@@ -1501,9 +1511,7 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger)
 
 	// Compute stats for updated range.
 	now := r.store.Clock().Timestamp()
-	iter := newReplicaDataIterator(&merge.UpdatedDesc, batch)
-	ms, err := engine.MVCCComputeStats(iter, now.WallTime)
-	iter.Close()
+	ms, err := r.computeStats(&merge.UpdatedDesc, batch, now.WallTime)
 	if err != nil {
 		return util.Errorf("unable to compute stats for the range after merge: %s", err)
 	}
