@@ -89,7 +89,7 @@ func TestSequenceCachePutGetClearData(t *testing.T) {
 	}
 	// Cache the test response.
 	const seq = 123
-	if err := sc.PutSequence(e, testTxnID, testTxnEpoch, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
+	if err := sc.Put(e, testTxnID, testTxnEpoch, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
@@ -115,18 +115,18 @@ func TestSequenceCachePutGetClearData(t *testing.T) {
 	}
 	tryHit(0, 0)
 
-	if err := sc.PutSequence(e, testTxnID, testTxnEpoch, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
+	if err := sc.Put(e, testTxnID, testTxnEpoch, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	tryHit(2*seq, testTxnEpoch)
 
-	if err := sc.PutSequence(e, testTxnID, 2*testTxnEpoch, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
+	if err := sc.Put(e, testTxnID, 2*testTxnEpoch, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
 	tryHit(2*seq, 2*testTxnEpoch)
 
-	if err := sc.PutSequence(e, testTxnID, testTxnEpoch-1, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
+	if err := sc.Put(e, testTxnID, testTxnEpoch-1, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
@@ -140,10 +140,10 @@ func TestSequenceCacheEmptyParams(t *testing.T) {
 	defer stopper.Stop()
 	sc, e := createTestSequenceCache(t, 1, stopper)
 	// Put value for test response.
-	if err := sc.PutSequence(e, testTxnID, testTxnEpoch, 0, testTxnKey, testTxnTimestamp, nil); err != errEmptyID {
+	if err := sc.Put(e, testTxnID, testTxnEpoch, 0, testTxnKey, testTxnTimestamp, nil); err != errEmptyID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if err := sc.PutSequence(e, nil, testTxnEpoch, 10, testTxnKey, testTxnTimestamp, nil); err != errEmptyID {
+	if err := sc.Put(e, nil, testTxnEpoch, 10, testTxnKey, testTxnTimestamp, nil); err != errEmptyID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
 	if _, _, readErr := sc.Get(e, nil, nil); readErr != errEmptyID {
@@ -161,7 +161,7 @@ func TestSequenceCacheCopyInto(t *testing.T) {
 	rc2, _ := createTestSequenceCache(t, 2, stopper)
 	const seq = 123
 	// Store an increment with new value one in the first cache.
-	if err := rc1.PutSequence(e, testTxnID, testTxnEpoch, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
+	if err := rc1.Put(e, testTxnID, testTxnEpoch, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	// Copy the first cache into the second.
@@ -191,7 +191,7 @@ func TestSequenceCacheCopyFrom(t *testing.T) {
 	rc2, _ := createTestSequenceCache(t, 2, stopper)
 	const seq = 321
 	// Store an increment with new value one in the first cache.
-	if err := rc1.PutSequence(e, testTxnID, testTxnEpoch, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
+	if err := rc1.Put(e, testTxnID, testTxnEpoch, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 

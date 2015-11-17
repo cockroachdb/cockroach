@@ -1525,7 +1525,7 @@ func TestRangeSequenceCacheStoredTxnRetryError(t *testing.T) {
 	for i, pastError := range []error{errors.New("boom"), nil} {
 		txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
 		txn.Sequence = uint32(1 + i)
-		_ = tc.rng.sequence.PutSequence(tc.engine, txn.ID, uint32(txn.Epoch), txn.Sequence, txn.Key, txn.Timestamp, pastError)
+		_ = tc.rng.sequence.Put(tc.engine, txn.ID, uint32(txn.Epoch), txn.Sequence, txn.Key, txn.Timestamp, pastError)
 
 		args := incrementArgs(key, 1)
 		_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
