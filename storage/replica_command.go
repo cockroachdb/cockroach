@@ -1083,6 +1083,9 @@ func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roach
 		return reply, nil
 	}
 
+	// Truncate entry cache.
+	r.raftEntryCache.delEntry(r.raftEntryCache.firstIndex, args.Index)
+
 	// Have we already truncated this log? If so, just return without an error.
 	firstIndex, err := r.FirstIndex()
 	if err != nil {
