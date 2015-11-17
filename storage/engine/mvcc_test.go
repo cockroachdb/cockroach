@@ -31,6 +31,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -2426,7 +2427,8 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 			// Compute the stats manually.
 			iter := engine.NewIterator()
 			iter.Seek(keyMin)
-			expMS, err := MVCCComputeStats(iter, int64(i+1)*1E9)
+			var expMS MVCCStats
+			err := iter.ComputeStats(&expMS, roachpb.KeyMin, roachpb.KeyMax, int64(i+1)*1E9)
 			iter.Close()
 			if err != nil {
 				t.Fatal(err)
@@ -2543,12 +2545,34 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	// Verify aggregated stats match computed stats after GC.
 	iter := engine.NewIterator()
 	iter.Seek(keyMin)
-	expMS, err := MVCCComputeStats(iter, ts3.WallTime)
+	var expMS MVCCStats
+	err = iter.ComputeStats(&expMS, roachpb.KeyMin, roachpb.KeyMax, ts3.WallTime)
 	iter.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
 	verifyStats("verification", ms, &expMS, t)
+}
+
+func TestMVCCComputeStatsError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	// Write a MVCC metadata key where the value is not an encoded MVCCMetadata
+	// protobuf.
+	if err := engine.Put(MVCCEncodeKey(roachpb.Key("garbage")), []byte("garbage")); err != nil {
+		t.Fatal(err)
+	}
+
+	var ms MVCCStats
+	iter := engine.NewIterator()
+	err := iter.ComputeStats(&ms, roachpb.KeyMin, roachpb.KeyMax, 100)
+	iter.Close()
+	if e := "unable to decode MVCCMetadata"; !testutils.IsError(err, e) {
+		t.Fatalf("expected %s", e)
+	}
 }
 
 // TestMVCCGarbageCollectNonDeleted verifies that the first value for
