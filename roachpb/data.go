@@ -52,6 +52,10 @@ var (
 	RKeyMax = RKey{0xff, 0xff}
 	// KeyMax is a maximum key value which sorts after all other keys.
 	KeyMax = Key(RKeyMax)
+
+	// PrettyPrintKey is a function to print key with human readable format
+	// it's implement at package git.com/cockroachdb/cockroach/keys to avoid package circle import
+	PrettyPrintKey func(key Key) string
 )
 
 // RKey denotes a Key whose local addressing has been accounted for.
@@ -162,6 +166,10 @@ func (k Key) Compare(b interval.Comparable) int {
 
 // String returns a string-formatted version of the key.
 func (k Key) String() string {
+	if PrettyPrintKey != nil {
+		return PrettyPrintKey(k)
+	}
+
 	return fmt.Sprintf("%q", []byte(k))
 }
 
@@ -169,7 +177,11 @@ func (k Key) String() string {
 func (k Key) Format(f fmt.State, verb rune) {
 	// Note: this implementation doesn't handle the width and precision
 	// specifiers such as "%20.10s".
-	fmt.Fprint(f, strconv.Quote(string(k)))
+	if PrettyPrintKey != nil {
+		fmt.Fprint(f, PrettyPrintKey(k))
+	} else {
+		fmt.Fprintf(f, strconv.Quote(string(k)))
+	}
 }
 
 // Timestamp constant values.
