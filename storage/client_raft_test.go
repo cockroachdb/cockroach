@@ -1411,3 +1411,34 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 	// The range should be synced back up.
 	mtc.waitForValues(roachpb.Key("a"), 3*time.Second, []int64{16, 16, 16})
 }
+
+// TestLeaderRemoveSelf verifies that a leader can remove itself
+// without panicking and future access to the range returns a
+// RangeNotFoundError (not multiraft.ErrGroupDeleted, and even before
+// the ReplicaGCQueue has run).
+func TestLeaderRemoveSelf(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	mtc := startMultiTestContext(t, 2)
+	defer mtc.Stop()
+	// Disable the replica GC queue. This verifies that the replica is
+	// considered removed even before the gc queue has run, and also
+	// helps avoid a deadlock at shutdown.
+	mtc.stores[0].DisableReplicaGCQueue(true)
+	raftID := roachpb.RangeID(1)
+	mtc.replicateRange(raftID, 0, 1)
+	// Remove the replica from first store.
+	mtc.unreplicateRange(raftID, 0, 0)
+	getArgs := getArgs([]byte("a"))
+
+	// Force the read command request a new lease.
+	clock := mtc.clocks[0]
+	header := roachpb.Header{}
+	header.Timestamp = clock.Update(clock.Now().Add(int64(storage.DefaultLeaderLeaseDuration), 0))
+
+	// Expect get a RangeNotFoundError.
+	_, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, header, &getArgs)
+	if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
+		t.Fatalf("expect get RangeNotFoundError, actual get %v ", err)
+	}
+}
