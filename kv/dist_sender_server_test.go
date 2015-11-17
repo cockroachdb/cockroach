@@ -417,5 +417,41 @@ func TestBadRequest(t *testing.T) {
 	if err := db.DelRange("", "z"); !testutils.IsError(err, "must be greater than LocalMax") {
 		t.Fatalf("unexpected error on deletion on [KeyMin, z): %v", err)
 	}
+}
 
+// TestNoSequenceCachePutOnRangeMismatchError verifies that the
+// sequence cache is not updated with RangeKeyMismatchError. This is a
+// higher-level version of TestSequenceCacheShouldCache.
+func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setupMultipleRanges(t, "b", "c")
+	defer s.Stop()
+
+	// The requests in the transaction below will be chunked and
+	// sent to replicas in the following way:
+	// 1) A batch request containing a BeginTransaction and a
+	//    put on "a" are sent to a replica owning range ["a","b").
+	// 2) A next batch request containing a put on "b" and a put
+	//    on "c" are sent to a replica owning range ["b","c").
+	//   (The range cache has a stale range descriptor.)
+	// 3) The put request on "c" causes a RangeKeyMismatchError.
+	// 4) The dist sender re-sends a request to the same replica.
+	//    This time the request contains only the put on "b" to the
+	//    same replica.
+	// 5) The command succeeds since the sequence cache has not yet been updated.
+	epoch := 0
+	if err := db.Txn(func(txn *client.Txn) error {
+		epoch++
+		b := &client.Batch{}
+		b.Put("a", "val")
+		b.Put("b", "val")
+		b.Put("c", "val")
+		return txn.CommitInBatch(b)
+	}); err != nil {
+		t.Errorf("unexpected error on transactional Puts: %s", err)
+	}
+
+	if epoch != 1 {
+		t.Errorf("unexpected epoch; the txn must be retried exactly once, but got %d", epoch)
+	}
 }
