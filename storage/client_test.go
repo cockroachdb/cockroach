@@ -508,7 +508,7 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, sourceStoreIn
 // from the dest store.
 func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, source, dest int) {
 	m.mu.RLock()
-	m.mu.RUnlock()
+	defer m.mu.RUnlock()
 	rng, err := m.stores[source].GetReplica(rangeID)
 	if err != nil {
 		m.t.Fatal(err)
