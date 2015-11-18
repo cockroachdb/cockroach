@@ -1415,6 +1415,18 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 			// Our in-memory state has diverged from the on-disk state.
 			log.Fatalf("failed to update Store after split: %s", err)
 		}
+
+		// To avoid leaving the new range unavailable as it waits to elect
+		// its leader, one (and only one) of the nodes should start an
+		// election as soon as the split is processed. For simplicity, we
+		// choose the first node in the replica list. If this node is
+		// unavailable, the group will have to wait for an election
+		// timeout, just as with any other leader failure. (we could
+		// improve this by e.g. choosing the node that had the leader
+		// lease before the split and is therefore known to be up)
+		if r.store.StoreID() == split.NewDesc.Replicas[0].StoreID {
+			r.store.multiraft.Campaign(split.NewDesc.RangeID)
+		}
 	})
 
 	return nil
