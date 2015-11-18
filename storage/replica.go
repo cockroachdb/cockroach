@@ -770,6 +770,16 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 	// Remove keys from command queue.
 	r.endCmds(cmdKeys, ba, err)
 
+	if err == nil && ba.Txn != nil {
+		// Checking the sequence cache on reads makes sure that when our
+		// transaction has already been aborted, we don't experience anomalous
+		// conditions as described in #2231.
+		// TODO(tschottdorf): we just locked in endCmds, can avoid the
+		// reacquiry here.
+		r.Lock()
+		err = r.checkSequenceCache(r.store.Engine(), *ba.Txn)
+		r.Unlock()
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1032,25 +1042,8 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// anomalies when we know that the transaction has been aborted or pushed,
 	// but it itself does not.
 	if ba.IsWrite() && ba.Txn != nil {
-		var entry roachpb.SequenceCacheEntry // can put this on Replica to save allocs
-		if epoch, sequence, readErr := r.sequence.Get(btch, ba.Txn.ID, &entry); readErr != nil {
-			return btch, nil, nil, newReplicaCorruptionError(util.Errorf("could not read from sequence cache"), readErr)
-		} else if ba.Txn.Epoch > epoch {
-			// No cache hit from current or future epoch, continue.
-		} else if sequence == roachpb.SequencePoisonAbort {
-			// We were poisoned, which means that our Transaction has been
-			// aborted and learns about that right now.
-			abortErr := roachpb.NewTransactionAbortedError(ba.Txn)
-			abortErr.Txn.Timestamp.Forward(entry.Timestamp)
-			return btch, nil, nil, abortErr
-		} else if sequence >= ba.Txn.Sequence || epoch > ba.Txn.Epoch {
-			// We hit the cache, so let the transaction restart.
-			if log.V(1) {
-				log.Infoc(ctx, "found sequence cache entry for %s@%d", ba.Txn.Short(), ba.Txn.Sequence)
-			}
-			retryErr := roachpb.NewTransactionRetryError(ba.Txn)
-			retryErr.Txn.Timestamp.Forward(entry.Timestamp)
-			return btch, nil, nil, retryErr
+		if err := r.checkSequenceCache(btch, *ba.Txn); err != nil {
+			return btch, nil, nil, err
 		}
 	}
 
@@ -1116,6 +1109,35 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	}
 
 	return btch, br, intents, err
+}
+
+// checkSequenceCache checks the sequence cache for the given transaction for
+// entries newer or of the same age as our current operation's. In case of a
+// replay violation or if the transaction has been aborted, transaction retry
+// or transaction abort error is returned, respectively.
+func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) error {
+	var entry roachpb.SequenceCacheEntry
+	if epoch, sequence, readErr := r.sequence.Get(b, txn.ID, &entry); readErr != nil {
+		return newReplicaCorruptionError(util.Errorf("could not read from sequence cache"), readErr)
+	} else if txn.Epoch > epoch {
+		// No cache hit from current or future epoch, continue.
+	} else if sequence == roachpb.SequencePoisonAbort {
+		// We were poisoned, which means that our Transaction has been
+		// aborted and learns about that right now.
+		abortErr := roachpb.NewTransactionAbortedError(&txn)
+		abortErr.Txn.Timestamp.Forward(entry.Timestamp)
+		return abortErr
+	} else if sequence >= txn.Sequence || epoch > txn.Epoch {
+		// We hit the cache, so let the transaction restart.
+		// This is also the path taken by roachpb.SequencePoisonRestart.
+		if log.V(1) {
+			log.Infof("found sequence cache entry for %s@%d", txn.Short(), txn.Sequence)
+		}
+		retryErr := roachpb.NewTransactionRetryError(&txn)
+		retryErr.Txn.Timestamp.Forward(entry.Timestamp)
+		return retryErr
+	}
+	return nil
 }
 
 type intentsWithArg struct {
