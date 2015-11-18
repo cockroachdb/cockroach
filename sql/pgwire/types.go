@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 type formatCode int16
@@ -34,11 +35,6 @@ const (
 	formatText   formatCode = 0
 	formatBinary            = 1
 )
-
-// TODO(bdarnell): it's not quite this simple, especially when dealing
-// with negative years. I can't find authoritative docs but see
-// comments in github.com/lib/pq.
-const pgTimestampFormat = "2006-01-02 15:04:05.999999999"
 
 // pgType contains type metadata used in RowDescription messages.
 type pgType struct {
@@ -61,6 +57,9 @@ type pgType struct {
 
 func typeForDatum(d driver.Datum) pgType {
 	switch d.Payload.(type) {
+	case nil:
+		return pgType{}
+
 	case *driver.Datum_BoolVal:
 		return pgType{oid.T_bool, 1, formatText}
 
@@ -90,6 +89,7 @@ func typeForDatum(d driver.Datum) pgType {
 const secondsInDay = 24 * 60 * 60
 
 func (b *writeBuffer) writeDatum(d driver.Datum) error {
+	log.Infof("pgwire writing datum of type: %T, %#v", d.Payload, d.Payload)
 	switch v := d.Payload.(type) {
 	case nil:
 		// NULL is encoded as -1; all other values have a length prefix.
@@ -126,21 +126,62 @@ func (b *writeBuffer) writeDatum(d driver.Datum) error {
 
 	case *driver.Datum_DateVal:
 		t := time.Unix(v.DateVal*secondsInDay, 0).UTC()
-		s := t.Format(pgTimestampFormat)
+		s := formatTs(t)
 		b.putInt32(int32(len(s)))
-		_, err := b.WriteString(s)
+		_, err := b.Write(s)
 		return err
 
 	case *driver.Datum_TimeVal:
 		t := v.TimeVal.GoTime().UTC()
-		s := t.Format(pgTimestampFormat)
+		s := formatTs(t)
+		b.putInt32(int32(len(s)))
+		_, err := b.Write(s)
+		return err
+
+	case *driver.Datum_IntervalVal:
+		s := time.Duration(v.IntervalVal).String()
 		b.putInt32(int32(len(s)))
 		_, err := b.WriteString(s)
 		return err
 
-	case *driver.Datum_IntervalVal:
-		return util.Errorf("TODO(tamird): add support for %T when we have non-Go tests", v)
 	default:
 		return util.Errorf("unsupported type %T", d.Payload)
 	}
+}
+
+const pgTimeStampFormat = "2006-01-02 15:04:05.999999999-07:00"
+
+// formatTs formats t into a format lib/pq understands.
+// Mostly cribbed from github.com/lib/pq.
+func formatTs(t time.Time) (b []byte) {
+	// Need to send dates before 0001 A.D. with " BC" suffix, instead of the
+	// minus sign preferred by Go.
+	// Beware, "0000" in ISO is "1 BC", "-0001" is "2 BC" and so on
+	bc := false
+	if t.Year() <= 0 {
+		// flip year sign, and add 1, e.g: "0" will be "1", and "-10" will be "11"
+		t = t.AddDate((-t.Year())*2+1, 0, 0)
+		bc = true
+	}
+	b = []byte(t.Format(pgTimeStampFormat))
+
+	_, offset := t.Zone()
+	offset = offset % 60
+	if offset != 0 {
+		// RFC3339Nano already printed the minus sign
+		if offset < 0 {
+			offset = -offset
+		}
+
+		b = append(b, ':')
+		if offset < 10 {
+			b = append(b, '0')
+		}
+		b = strconv.AppendInt(b, int64(offset), 10)
+	}
+
+	if bc {
+		b = append(b, " BC"...)
+	}
+	return b
 }

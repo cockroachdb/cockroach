@@ -32,7 +32,7 @@ import (
 func (p *planner) Show(n *parser.Show) (planNode, error) {
 	name := strings.ToUpper(n.Name)
 
-	v := &valuesNode{columns: []string{name}}
+	v := &valuesNode{columns: []column{{name: name, typ: parser.DummyString}}}
 
 	switch name {
 	case `DATABASE`:
@@ -63,7 +63,14 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	v := &valuesNode{columns: []string{"Field", "Type", "Null", "Default"}}
+	v := &valuesNode{
+		columns: []column{
+			{name: "Field", typ: parser.DummyString},
+			{name: "Type", typ: parser.DummyString},
+			{name: "Null", typ: parser.DummyBool},
+			{name: "Default", typ: parser.DummyString},
+		},
+	}
 	for i, col := range desc.Columns {
 		defaultExpr := parser.Datum(parser.DNull)
 		if e := desc.Columns[i].DefaultExpr; e != nil {
@@ -93,7 +100,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	v := &valuesNode{columns: []string{"Database"}}
+	v := &valuesNode{columns: []column{{name: "Database", typ: parser.DummyString}}}
 	for _, row := range sr {
 		_, name, err := encoding.DecodeString(bytes.TrimPrefix(row.Key, prefix), nil)
 		if err != nil {
@@ -123,7 +130,13 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 		objectType = "Table"
 	}
 
-	v := &valuesNode{columns: []string{objectType, "User", "Privileges"}}
+	v := &valuesNode{
+		columns: []column{
+			{name: objectType, typ: parser.DummyString},
+			{name: "User", typ: parser.DummyString},
+			{name: "Privileges", typ: parser.DummyString},
+		},
+	}
 	var wantedUsers map[string]struct{}
 	if len(n.Grantees) != 0 {
 		wantedUsers = make(map[string]struct{})
@@ -161,7 +174,16 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 		return nil, err
 	}
 
-	v := &valuesNode{columns: []string{"Table", "Name", "Unique", "Seq", "Column", "Storing"}}
+	v := &valuesNode{
+		columns: []column{
+			{name: "Table", typ: parser.DummyString},
+			{name: "Name", typ: parser.DummyString},
+			{name: "Unique", typ: parser.DummyBool},
+			{name: "Seq", typ: parser.DummyInt},
+			{name: "Column", typ: parser.DummyString},
+			{name: "Storing", typ: parser.DummyBool},
+		},
+	}
 
 	name := n.Table.Table()
 	for _, index := range append([]IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
@@ -209,7 +231,7 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	v := &valuesNode{columns: []string{"Table"}}
+	v := &valuesNode{columns: []column{{name: "Table", typ: parser.DummyString}}}
 	for _, name := range tableNames {
 		v.rows = append(v.rows, []parser.Datum{parser.DString(name.Table())})
 	}

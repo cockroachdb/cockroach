@@ -84,12 +84,19 @@ message Response {
       message Row {
         repeated Datum values = 1 [(gogoproto.nullable) = false];
       }
-      // The names of the columns returned in the result set in the order
-      // specified in the SQL statement. The number of columns will equal
-      // the number of values in each Row.
-      repeated string columns = 1;
+
+      // A Column contains the name and type of a SQL "cell".
+      message Column {
+        optional string name = 1 [(gogoproto.nullable) = false];
+        optional Datum typ = 2 [(gogoproto.nullable) = false];
+      }
+
+      // The names and types of the columns returned in the result set
+      // in the order specified in the SQL statement. The number of
+      // columns will equal the number of values in each Row.
+      repeated Column columns = 1;
       // The rows in the result set.
-      repeated Row rows = 2 [(gogoproto.nullable) = false];
+      repeated Row rows = 3 [(gogoproto.nullable) = false];
     }
 
     // Error is non-nil if an error occurred while executing the statement.

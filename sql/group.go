@@ -80,13 +80,13 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 
 	// Replace the render expressions in the scanNode with expressions that
 	// compute only the arguments to the aggregate expressions.
-	s.columns = make([]string, 0, len(funcs))
+	s.columns = make([]column, 0, len(funcs))
 	s.render = make([]parser.Expr, 0, len(funcs))
 	for _, f := range funcs {
 		if len(f.val.expr.Exprs) != 1 {
 			panic(fmt.Sprintf("%s has %d arguments (expected 1)", f.val.expr.Name, len(f.val.expr.Exprs)))
 		}
-		s.columns = append(s.columns, f.val.String())
+		s.columns = append(s.columns, column{name: f.val.String(), typ: f.val.datum})
 		s.render = append(s.render, f.val.expr.Exprs[0])
 	}
 
@@ -97,7 +97,7 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 type groupNode struct {
 	planner         *planner
 	plan            planNode
-	columns         []string
+	columns         []column
 	row             parser.DTuple
 	render          []parser.Expr
 	funcs           []*aggregateFunc
@@ -106,7 +106,7 @@ type groupNode struct {
 	err             error
 }
 
-func (n *groupNode) Columns() []string {
+func (n *groupNode) Columns() []column {
 	return n.columns
 }
 

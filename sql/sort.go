@@ -57,7 +57,7 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, error) {
 				//   SELECT a AS b FROM t ORDER BY b
 				target := string(qname.Base)
 				for j, col := range columns {
-					if equalName(target, col) {
+					if equalName(target, col.name) {
 						index = j + 1
 						break
 					}
@@ -127,13 +127,13 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, error) {
 
 type sortNode struct {
 	plan     planNode
-	columns  []string
+	columns  []column
 	ordering []int
 	needSort bool
 	err      error
 }
 
-func (n *sortNode) Columns() []string {
+func (n *sortNode) Columns() []column {
 	return n.columns
 }
 
@@ -180,7 +180,7 @@ func (n *sortNode) ExplainPlan() (name, description string, children []planNode)
 			o = -o
 			prefix = '-'
 		}
-		strs[i] = fmt.Sprintf("%c%s", prefix, columns[o-1])
+		strs[i] = fmt.Sprintf("%c%s", prefix, columns[o-1].name)
 	}
 	description = strings.Join(strs, ",")
 

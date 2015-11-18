@@ -455,12 +455,12 @@ func (*Response_Result_DDL) ProtoMessage()    {}
 
 // Rows encapsulates the result of an operation that returns rows.
 type Response_Result_Rows struct {
-	// The names of the columns returned in the result set in the order
-	// specified in the SQL statement. The number of columns will equal
-	// the number of values in each Row.
-	Columns []string `protobuf:"bytes,1,rep,name=columns" json:"columns,omitempty"`
+	// The names and types of the columns returned in the result set
+	// in the order specified in the SQL statement. The number of
+	// columns will equal the number of values in each Row.
+	Columns []*Response_Result_Rows_Column `protobuf:"bytes,1,rep,name=columns" json:"columns,omitempty"`
 	// The rows in the result set.
-	Rows []Response_Result_Rows_Row `protobuf:"bytes,2,rep,name=rows" json:"rows"`
+	Rows []Response_Result_Rows_Row `protobuf:"bytes,3,rep,name=rows" json:"rows"`
 }
 
 func (m *Response_Result_Rows) Reset()         { *m = Response_Result_Rows{} }
@@ -476,6 +476,16 @@ func (m *Response_Result_Rows_Row) Reset()         { *m = Response_Result_Rows_R
 func (m *Response_Result_Rows_Row) String() string { return proto.CompactTextString(m) }
 func (*Response_Result_Rows_Row) ProtoMessage()    {}
 
+// A Column contains the name and type of a SQL "cell".
+type Response_Result_Rows_Column struct {
+	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
+	Typ  Datum  `protobuf:"bytes,2,opt,name=typ" json:"typ"`
+}
+
+func (m *Response_Result_Rows_Column) Reset()         { *m = Response_Result_Rows_Column{} }
+func (m *Response_Result_Rows_Column) String() string { return proto.CompactTextString(m) }
+func (*Response_Result_Rows_Column) ProtoMessage()    {}
+
 func init() {
 	proto.RegisterType((*Datum)(nil), "cockroach.sql.driver.Datum")
 	proto.RegisterType((*Datum_Timestamp)(nil), "cockroach.sql.driver.Datum.Timestamp")
@@ -485,6 +495,7 @@ func init() {
 	proto.RegisterType((*Response_Result_DDL)(nil), "cockroach.sql.driver.Response.Result.DDL")
 	proto.RegisterType((*Response_Result_Rows)(nil), "cockroach.sql.driver.Response.Result.Rows")
 	proto.RegisterType((*Response_Result_Rows_Row)(nil), "cockroach.sql.driver.Response.Result.Rows.Row")
+	proto.RegisterType((*Response_Result_Rows_Column)(nil), "cockroach.sql.driver.Response.Result.Rows.Column")
 }
 func (m *Datum) Marshal() (data []byte, err error) {
 	size := m.Size()
@@ -787,23 +798,20 @@ func (m *Response_Result_Rows) MarshalTo(data []byte) (int, error) {
 	var l int
 	_ = l
 	if len(m.Columns) > 0 {
-		for _, s := range m.Columns {
+		for _, msg := range m.Columns {
 			data[i] = 0xa
 			i++
-			l = len(s)
-			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
+			i = encodeVarintWire(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
 			}
-			data[i] = uint8(l)
-			i++
-			i += copy(data[i:], s)
+			i += n
 		}
 	}
 	if len(m.Rows) > 0 {
 		for _, msg := range m.Rows {
-			data[i] = 0x12
+			data[i] = 0x1a
 			i++
 			i = encodeVarintWire(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -843,6 +851,36 @@ func (m *Response_Result_Rows_Row) MarshalTo(data []byte) (int, error) {
 			i += n
 		}
 	}
+	return i, nil
+}
+
+func (m *Response_Result_Rows_Column) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Response_Result_Rows_Column) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintWire(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	data[i] = 0x12
+	i++
+	i = encodeVarintWire(data, i, uint64(m.Typ.Size()))
+	n6, err := m.Typ.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n6
 	return i, nil
 }
 
@@ -1028,8 +1066,8 @@ func (m *Response_Result_Rows) Size() (n int) {
 	var l int
 	_ = l
 	if len(m.Columns) > 0 {
-		for _, s := range m.Columns {
-			l = len(s)
+		for _, e := range m.Columns {
+			l = e.Size()
 			n += 1 + l + sovWire(uint64(l))
 		}
 	}
@@ -1051,6 +1089,16 @@ func (m *Response_Result_Rows_Row) Size() (n int) {
 			n += 1 + l + sovWire(uint64(l))
 		}
 	}
+	return n
+}
+
+func (m *Response_Result_Rows_Column) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovWire(uint64(l))
+	l = m.Typ.Size()
+	n += 1 + l + sovWire(uint64(l))
 	return n
 }
 
@@ -1918,7 +1966,7 @@ func (m *Response_Result_Rows) Unmarshal(data []byte) error {
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
 			}
-			var stringLen uint64
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowWire
@@ -1928,22 +1976,24 @@ func (m *Response_Result_Rows) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
+			if msglen < 0 {
 				return ErrInvalidLengthWire
 			}
-			postIndex := iNdEx + intStringLen
+			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Columns = append(m.Columns, string(data[iNdEx:postIndex]))
+			m.Columns = append(m.Columns, &Response_Result_Rows_Column{})
+			if err := m.Columns[len(m.Columns)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
-		case 2:
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Rows", wireType)
 			}
@@ -2052,6 +2102,115 @@ func (m *Response_Result_Rows_Row) Unmarshal(data []byte) error {
 			}
 			m.Values = append(m.Values, Datum{})
 			if err := m.Values[len(m.Values)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipWire(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Response_Result_Rows_Column) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowWire
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Column: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Column: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Typ", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Typ.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
