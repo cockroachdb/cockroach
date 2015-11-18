@@ -27,8 +27,6 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/sql/pgwire"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 func runBenchmarkSelect1(b *testing.B, db *sql.DB) {
@@ -86,16 +84,7 @@ func BenchmarkSelect1_PGWire(b *testing.B) {
 	s := server.StartTestServer(b)
 	defer s.Stop()
 
-	pgServer := pgwire.NewServer(&pgwire.Context{
-		Context:  &s.Ctx.Context,
-		Executor: s.SQLExecutor(),
-		Stopper:  s.Stopper(),
-	})
-	if err := pgServer.Start(util.CreateTestAddr("tcp")); err != nil {
-		b.Fatal(err)
-	}
-
-	host, port, err := net.SplitHostPort(pgServer.Addr().String())
+	host, port, err := net.SplitHostPort(s.PGAddr())
 	if err != nil {
 		b.Fatal(err)
 	}

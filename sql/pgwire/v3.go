@@ -22,6 +22,7 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/util"
@@ -65,6 +66,7 @@ type v3Conn struct {
 	readBuf  readBuffer
 	writeBuf writeBuffer
 	tagBuf   [64]byte
+	session  sql.Session
 }
 
 func newV3Conn(conn net.Conn, data []byte, executor *sql.Executor) (*v3Conn, error) {
@@ -110,9 +112,20 @@ func (c *v3Conn) serve() error {
 		return err
 	}
 	for {
-		// TODO(bdarnell): change the 'I' below based on transaction status.
 		c.writeBuf.initMsg(serverMsgReady)
-		c.writeBuf.Write([]byte{'I'})
+		var txnStatus byte = 'I'
+		if sessionTxn := c.session.Txn; sessionTxn != nil {
+			switch sessionTxn.Txn.Status {
+			case roachpb.PENDING:
+				txnStatus = 'T'
+			case roachpb.COMMITTED:
+				txnStatus = 'I'
+			case roachpb.ABORTED:
+				txnStatus = 'E'
+			}
+		}
+		log.Infof("pgwire writing transaction status: %q", txnStatus)
+		c.writeBuf.WriteByte(txnStatus)
 		if err := c.writeBuf.finishMsg(c.wr); err != nil {
 			return err
 		}
@@ -147,16 +160,30 @@ func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
 	if err != nil {
 		return err
 	}
+	log.Infof("pgwire running query: %s", query)
 
-	var req driver.Request
-	// TODO(bdarnell): authentication
-	req.User = "root"
-	req.Sql = query
+	c.session.Database = c.opts["DATABASE"]
+
+	req := driver.Request{
+		User:    c.opts["user"],
+		Sql:     query,
+		Session: make([]byte, c.session.Size()),
+	}
+	if _, err := c.session.MarshalTo(req.Session); err != nil {
+		return err
+	}
 
 	resp, _, err := c.executor.Execute(req)
 	if err != nil {
 		return c.sendError(err.Error())
 	}
+
+	c.session.Reset()
+	if err := c.session.Unmarshal(resp.Session); err != nil {
+		return err
+	}
+
+	c.opts["DATABASE"] = c.session.Database
 
 	return c.sendResponse(resp)
 }
@@ -251,8 +278,10 @@ func (c *v3Conn) sendResponse(resp driver.Response) error {
 		case *driver.Response_Result_RowsAffected:
 			// Send CommandComplete.
 			// TODO(bdarnell): tags for other types of commands.
-			n := copy(c.tagBuf[:], "SELECT ")
-			tag := strconv.AppendInt(c.tagBuf[n:], int64(result.RowsAffected), 32)
+			tag := append(c.tagBuf[:0], "SELECT "...)
+			tag = strconv.AppendInt(tag, int64(result.RowsAffected), 32)
+			tag = append(tag, byte(0))
+			log.Infof("pgwire writing tag: %q", tag)
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
@@ -263,13 +292,13 @@ func (c *v3Conn) sendResponse(resp driver.Response) error {
 			// Send RowDescription.
 			c.writeBuf.initMsg(serverMsgRowDescription)
 			c.writeBuf.putInt16(int16(len(resultRows.Columns)))
-			for i, column := range resultRows.Columns {
-				if err := c.writeBuf.writeString(column); err != nil {
+			for _, column := range resultRows.Columns {
+				log.Infof("pgwire writing column %s of type: %T", column.Name, column.Typ.Payload)
+				if err := c.writeBuf.writeString(column.Name); err != nil {
 					return err
 				}
-				// TODO(tamird): Use column metadata instead of first row.
-				// https://github.com/cockroachdb/cockroach/issues/2489
-				typ := typeForDatum(resultRows.Rows[0].Values[i])
+
+				typ := typeForDatum(column.Typ)
 				c.writeBuf.putInt32(0) // Table OID (optional).
 				c.writeBuf.putInt16(0) // Column attribute ID (optional).
 				c.writeBuf.putInt32(int32(typ.oid))
@@ -297,12 +326,14 @@ func (c *v3Conn) sendResponse(resp driver.Response) error {
 
 			// Send CommandComplete.
 			// TODO(bdarnell): tags for other types of commands.
-			n := copy(c.tagBuf[:], "SELECT ")
-			tag := c.tagBuf[:n]
+			tag := append(c.tagBuf[:0], "SELECT "...)
 			tag = appendUint(tag, uint(len(resultRows.Rows)))
+			tag = append(tag, byte(0))
+			log.Infof("pgwire writing tag: %q", tag)
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
+			log.Infof("pgwire sent CommandComplete")
 		}
 	}
 

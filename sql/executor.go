@@ -253,61 +253,31 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 			}
 
 		case parser.Rows:
-			resultRows := &driver.Response_Result_Rows{
-				Columns: plan.Columns(),
+			var resultRows driver.Response_Result_Rows
+			for _, column := range plan.Columns() {
+				datum, err := makeDriverDatum(column.typ)
+				if err != nil {
+					return err
+				}
+
+				resultRows.Columns = append(resultRows.Columns, &driver.Response_Result_Rows_Column{
+					Name: column.name,
+					Typ:  datum,
+				})
 			}
 
 			result.Union = &driver.Response_Result_Rows_{
-				Rows: resultRows,
+				Rows: &resultRows,
 			}
 			for plan.Next() {
 				values := plan.Values()
 				row := driver.Response_Result_Rows_Row{Values: make([]driver.Datum, 0, len(values))}
 				for _, val := range values {
-					if val == parser.DNull {
-						row.Values = append(row.Values, driver.Datum{})
-						continue
+					datum, err := makeDriverDatum(val)
+					if err != nil {
+						return err
 					}
-
-					switch vt := val.(type) {
-					case parser.DBool:
-						row.Values = append(row.Values, driver.Datum{
-							Payload: &driver.Datum_BoolVal{BoolVal: bool(vt)},
-						})
-					case parser.DInt:
-						row.Values = append(row.Values, driver.Datum{
-							Payload: &driver.Datum_IntVal{IntVal: int64(vt)},
-						})
-					case parser.DFloat:
-						row.Values = append(row.Values, driver.Datum{
-							Payload: &driver.Datum_FloatVal{FloatVal: float64(vt)},
-						})
-					case parser.DBytes:
-						row.Values = append(row.Values, driver.Datum{
-							Payload: &driver.Datum_BytesVal{BytesVal: []byte(vt)},
-						})
-					case parser.DString:
-						row.Values = append(row.Values, driver.Datum{
-							Payload: &driver.Datum_StringVal{StringVal: string(vt)},
-						})
-					case parser.DDate:
-						row.Values = append(row.Values, driver.Datum{
-							Payload: &driver.Datum_DateVal{DateVal: int64(vt)},
-						})
-					case parser.DTimestamp:
-						wireTimestamp := driver.Timestamp(vt.Time)
-						row.Values = append(row.Values, driver.Datum{
-							Payload: &driver.Datum_TimeVal{
-								TimeVal: &wireTimestamp,
-							},
-						})
-					case parser.DInterval:
-						row.Values = append(row.Values, driver.Datum{
-							Payload: &driver.Datum_IntervalVal{IntervalVal: vt.Nanoseconds()},
-						})
-					default:
-						return fmt.Errorf("unsupported result type: %s", val.Type())
-					}
+					row.Values = append(row.Values, datum)
 				}
 				resultRows.Rows = append(resultRows.Rows, row)
 			}
@@ -430,5 +400,51 @@ func (p parameters) Arg(name string) (parser.Datum, bool) {
 		return parser.DInterval{Duration: time.Duration(t.IntervalVal)}, true
 	default:
 		panic(fmt.Sprintf("unexpected type %T", t))
+	}
+}
+
+func makeDriverDatum(datum parser.Datum) (driver.Datum, error) {
+	if datum == parser.DNull {
+		return driver.Datum{}, nil
+	}
+
+	switch vt := datum.(type) {
+	case parser.DBool:
+		return driver.Datum{
+			Payload: &driver.Datum_BoolVal{BoolVal: bool(vt)},
+		}, nil
+	case parser.DInt:
+		return driver.Datum{
+			Payload: &driver.Datum_IntVal{IntVal: int64(vt)},
+		}, nil
+	case parser.DFloat:
+		return driver.Datum{
+			Payload: &driver.Datum_FloatVal{FloatVal: float64(vt)},
+		}, nil
+	case parser.DBytes:
+		return driver.Datum{
+			Payload: &driver.Datum_BytesVal{BytesVal: []byte(vt)},
+		}, nil
+	case parser.DString:
+		return driver.Datum{
+			Payload: &driver.Datum_StringVal{StringVal: string(vt)},
+		}, nil
+	case parser.DDate:
+		return driver.Datum{
+			Payload: &driver.Datum_DateVal{DateVal: int64(vt)},
+		}, nil
+	case parser.DTimestamp:
+		wireTimestamp := driver.Timestamp(vt.Time)
+		return driver.Datum{
+			Payload: &driver.Datum_TimeVal{
+				TimeVal: &wireTimestamp,
+			},
+		}, nil
+	case parser.DInterval:
+		return driver.Datum{
+			Payload: &driver.Datum_IntervalVal{IntervalVal: vt.Nanoseconds()},
+		}, nil
+	default:
+		return driver.Datum{}, fmt.Errorf("unsupported result type: %s", datum.Type())
 	}
 }

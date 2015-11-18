@@ -37,9 +37,9 @@ type Server struct {
 	conns    []net.Conn
 }
 
-// NewServer creates a Server.
-func NewServer(context *Context) *Server {
-	s := &Server{
+// MakeServer creates a Server.
+func MakeServer(context *Context) Server {
+	s := Server{
 		context: context,
 	}
 	return s

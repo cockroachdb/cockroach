@@ -25,6 +25,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -193,11 +194,16 @@ func (t *logicTest) setUser(user string) {
 	if t.clients == nil {
 		t.clients = map[string]*sql.DB{}
 	}
-	if c, ok := t.clients[user]; ok {
-		t.db = c
+	if db, ok := t.clients[user]; ok {
+		t.db = db
 		return
 	}
-	db, err := sql.Open("cockroach", "https://"+user+"@"+t.srv.ServingAddr()+"?certs=test_certs")
+	host, port, err := net.SplitHostPort(t.srv.PGAddr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// TODO(tamird): SSL
+	db, err := sql.Open("postgres", fmt.Sprintf("sslmode=disable user=%s host=%s port=%s", user, host, port))
 	if err != nil {
 		t.Fatal(err)
 	}
