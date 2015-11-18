@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
@@ -143,11 +142,6 @@ func (ts *TestServer) EventFeed() *util.Feed {
 	return nil
 }
 
-// SQLExecutor returns the sql.Executor used by the TestServer.
-func (ts *TestServer) SQLExecutor() *sql.Executor {
-	return ts.Server.sqlServer.Executor
-}
-
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
@@ -205,6 +199,11 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 // ServingAddr returns the rpc server's address. Should be used by clients.
 func (ts *TestServer) ServingAddr() string {
 	return ts.rpc.Addr().String()
+}
+
+// PGAddr returns the Postgres-protocol endpoint's address.
+func (ts *TestServer) PGAddr() string {
+	return ts.pgServer.Addr().String()
 }
 
 // Stop stops the TestServer.

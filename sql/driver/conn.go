@@ -83,7 +83,9 @@ func (c *conn) Query(stmt string, args []driver.Value) (driver.Rows, error) {
 	case *Response_Result_Rows_:
 		resultRows := t.Rows
 
-		driverRows.columns = resultRows.Columns
+		for _, column := range resultRows.Columns {
+			driverRows.columns = append(driverRows.columns, column.Name)
+		}
 
 		driverRows.rows = make([][]driver.Value, 0, len(resultRows.Rows))
 		for _, row := range resultRows.Rows {
