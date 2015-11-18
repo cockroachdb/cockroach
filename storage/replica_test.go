@@ -2171,6 +2171,16 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 			return reply.(*roachpb.IncrementResponse), err
 		}
 
+		get := func(actor *roachpb.Transaction, k roachpb.Key) error {
+			actor.Sequence++
+			_, err := client.SendWrappedWith(tc.store, nil, roachpb.Header{
+				Txn:       actor,
+				Timestamp: actor.Timestamp,
+				RangeID:   1,
+			}, &roachpb.GetRequest{Span: roachpb.Span{Key: k}})
+			return err
+		}
+
 		// Begin the pushee's transaction and write an intent.
 		btArgs, btH := beginTxnArgs(key, pushee)
 		if _, err := client.SendWrappedWith(tc.Sender(), nil,
@@ -2203,11 +2213,7 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 			}
 		} else {
 			// Trigger a Read/Write conflict which pushes pushee's timestamp.
-			if _, err := client.SendWrappedWith(tc.store, nil, roachpb.Header{
-				Txn:       pusher,
-				Timestamp: pusher.Timestamp,
-				RangeID:   1,
-			}, &roachpb.GetRequest{Span: roachpb.Span{Key: key}}); err != nil {
+			if err := get(pusher, key); err != nil {
 				t.Fatal(err)
 			}
 			assert = func(err error) {
@@ -2218,10 +2224,16 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 			}
 		}
 
-		_, err := inc(pushee, key)
+		// We shouldn't be able to read or write within the transaction on this
+		// Range.
+		err := get(pushee, key)
+		assert(err)
+		_, err = inc(pushee, key)
+		assert(err)
+		// Still poisoned (on any key on the Range).
+		err = get(pushee, key.Next())
 		assert(err)
 		_, err = inc(pushee, key.Next())
-		// Still poisoned (on any key on the Range).
 		assert(err)
 
 		// Pretend we're coming back. This works regardless of retry or restart,
