@@ -35,6 +35,7 @@ import (
 	"testing"
 	"text/tabwriter"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/security"
@@ -183,7 +184,7 @@ func (t *logicTest) setUser(user string) {
 
 		defer func() {
 			// Propagate the DATABASE setting to the newly-live connection.
-			if _, err := t.db.Exec("SET DATABASE = $1", dbName); err != nil {
+			if _, err := t.db.Exec(fmt.Sprintf("SET DATABASE = %s", dbName)); err != nil {
 				t.Fatal(err)
 			}
 		}()
@@ -469,6 +470,11 @@ func (t *logicTest) execQuery(query logicQuery) {
 				// We split string results on whitespace and append a separate result
 				// for each string. A bit unusual, but otherwise we can't match strings
 				// containing whitespace.
+				if byteArray, ok := val.([]byte); ok {
+					if str := string(byteArray); utf8.ValidString(str) {
+						val = str
+					}
+				}
 				results = append(results, strings.Fields(fmt.Sprint(val))...)
 			} else {
 				results = append(results, "NULL")
