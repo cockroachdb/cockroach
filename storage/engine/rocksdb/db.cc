@@ -18,7 +18,9 @@
 
 #include <algorithm>
 #include <limits>
+#include <stdarg.h>
 #include <google/protobuf/repeated_field.h>
+#include <google/protobuf/stubs/stringprintf.h>
 #include "rocksdb/cache.h"
 #include "rocksdb/compaction_filter.h"
 #include "rocksdb/db.h"
@@ -61,6 +63,8 @@ struct DBSnapshot {
 };
 
 }  // extern "C"
+
+using google::protobuf::StringPrintf;
 
 namespace {
 
@@ -114,6 +118,15 @@ DBStatus ToDBStatus(const rocksdb::Status& status) {
     return kSuccess;
   }
   return ToDBString(status.ToString());
+}
+
+DBStatus FmtStatus(const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  std::string str;
+  google::protobuf::StringAppendV(&str, fmt, ap);
+  va_end(ap);
+  return ToDBString(str);
 }
 
 rocksdb::ReadOptions MakeReadOptions(DBSnapshot* snap) {
@@ -1257,7 +1270,7 @@ MVCCStats MVCCComputeStats(DBIterator* iter, DBSlice start, DBSlice end, int64_t
     rocksdb::Slice buf = key;
     decoded.clear();
     if (!DecodeBytes(&buf, &decoded)) {
-      stats.status = ToDBString("unable to decoded key");
+      stats.status = FmtStatus("unable to decode key");
       break;
     }
 
@@ -1266,7 +1279,8 @@ MVCCStats MVCCComputeStats(DBIterator* iter, DBSlice start, DBSlice end, int64_t
 
     if (!isValue) {
       if (buf.size() != 0) {
-        stats.status = ToDBString("there should be 12 bytes for encoded timestamp");
+        stats.status = FmtStatus("there should be %d bytes for encoded timestamp",
+                                 mvcc_version_timestamp_size);
         break;
       }
 
@@ -1274,7 +1288,7 @@ MVCCStats MVCCComputeStats(DBIterator* iter, DBSlice start, DBSlice end, int64_t
       first = true;
 
       if (!meta.ParseFromArray(value.data(), value.size())) {
-        stats.status = ToDBString("unable to decode MVCCMetadata");
+        stats.status = FmtStatus("unable to decode MVCCMetadata");
         break;
       }
 
@@ -1313,25 +1327,19 @@ MVCCStats MVCCComputeStats(DBIterator* iter, DBSlice start, DBSlice end, int64_t
             stats.intent_age += (now_nanos - meta.timestamp().wall_time()) / 1e9;
           }
           if (meta.key_bytes() != mvcc_version_timestamp_size) {
-            char buf[128];
-            const int n = snprintf(
-                buf, sizeof(buf), "expected mvcc metadata val bytes to equal %d; got %d",
-                mvcc_version_timestamp_size, int(meta.key_bytes()));
-            stats.status = ToDBString(rocksdb::Slice(buf, n));
+            stats.status = FmtStatus("expected mvcc metadata val bytes to equal %d; got %d",
+                                     mvcc_version_timestamp_size, int(meta.key_bytes()));
             break;
           }
           if (meta.val_bytes() != value.size()) {
-            char buf[128];
-            const int n = snprintf(
-                buf, sizeof(buf), "expected mvcc metadata val bytes to equal %d; got %d",
-                int(value.size()), int(meta.val_bytes()));
-            stats.status = ToDBString(rocksdb::Slice(buf, n));
+            stats.status = FmtStatus("expected mvcc metadata val bytes to equal %d; got %d",
+                                     int(value.size()), int(meta.val_bytes()));
             break;
           }
         } else {
           uint64_t wall_time;
           if (!DecodeUint64Decreasing(&buf, &wall_time)) {
-            stats.status = ToDBString("unable to decode mvcc timestamp");
+            stats.status = FmtStatus("unable to decode mvcc timestamp");
             break;
           }
           stats.gc_bytes_age += total_bytes * ((now_nanos - wall_time) / 1e9);

@@ -86,7 +86,8 @@ bool DecodeUvarint64(rocksdb::Slice* buf, uint64_t* value) {
 }
 
 bool DecodeUint64(rocksdb::Slice* buf, uint64_t* value) {
-  if (buf->size() < sizeof(*value)) {
+  const int N = sizeof(*value);
+  if (buf->size() < N) {
     return false;
   }
   const uint8_t* b = reinterpret_cast<const uint8_t*>(buf->data());
@@ -94,7 +95,7 @@ bool DecodeUint64(rocksdb::Slice* buf, uint64_t* value) {
       (uint64_t(b[2]) << 40) | (uint64_t(b[3]) << 32) |
       (uint64_t(b[4]) << 24) | (uint64_t(b[5]) << 16) |
       (uint64_t(b[6]) << 8) | uint64_t(b[7]);
-  buf->remove_prefix(sizeof(*value));
+  buf->remove_prefix(N);
   return true;
 }
 
