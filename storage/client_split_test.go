@@ -869,3 +869,37 @@ func TestStoreSplitReadRace(t *testing.T) {
 		}
 	}
 }
+
+// TestLeaderAfterSplit verifies that a raft group created by a split
+// elects a leader without waiting for an election timeout.
+func TestLeaderAfterSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	storeContext := storage.TestStoreContext
+	storeContext.RaftElectionTimeoutTicks = 1000000
+	mtc := &multiTestContext{
+		storeContext: &storeContext,
+	}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+
+	mtc.replicateRange(1, 0, 1, 2)
+
+	leftKey := roachpb.Key("a")
+	splitKey := roachpb.Key("m")
+	rightKey := roachpb.Key("z")
+
+	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
+	if _, err := client.SendWrapped(mtc.distSender, nil, &splitArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	incArgs := incrementArgs(leftKey, 1)
+	if _, err := client.SendWrapped(mtc.distSender, nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	incArgs = incrementArgs(rightKey, 2)
+	if _, err := client.SendWrapped(mtc.distSender, nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+}
