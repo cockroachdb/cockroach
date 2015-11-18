@@ -107,6 +107,7 @@ type MultiRaft struct {
 	createGroupChan chan createGroupOp
 	removeGroupChan chan removeGroupOp
 	proposalChan    chan *proposal
+	campaignChan    chan roachpb.RangeID
 	// callbackChan is a generic hook to run a callback in the raft thread.
 	callbackChan chan func()
 }
@@ -160,6 +161,7 @@ func NewMultiRaft(nodeID roachpb.NodeID, storeID roachpb.StoreID, config *Config
 		createGroupChan: make(chan createGroupOp),
 		removeGroupChan: make(chan removeGroupOp),
 		proposalChan:    make(chan *proposal),
+		campaignChan:    make(chan roachpb.RangeID),
 		callbackChan:    make(chan func()),
 	}
 
@@ -422,6 +424,13 @@ func (m *MultiRaft) Status(groupID roachpb.RangeID) *raft.Status {
 	return m.multiNode.Status(uint64(groupID))
 }
 
+// Campaign causes this node to start an election. Use with caution as
+// contested elections may cause periods of unavailability. Only use
+// Campaign() when you can be sure that only one replica will call it.
+func (m *MultiRaft) Campaign(groupID roachpb.RangeID) {
+	m.campaignChan <- groupID
+}
+
 type proposal struct {
 	groupID   roachpb.RangeID
 	commandID string
@@ -625,6 +634,18 @@ func (s *state) start() {
 
 			case prop := <-s.proposalChan:
 				s.propose(prop)
+
+			case groupID := <-s.campaignChan:
+				if _, ok := s.groups[groupID]; !ok {
+					if err := s.createGroup(groupID, 0); err != nil {
+						log.Warningf("node %s failed to create group %s during MultiRaft.Campaign: %s",
+							s.nodeID, groupID, err)
+						continue
+					}
+					if err := s.multiNode.Campaign(context.Background(), uint64(groupID)); err != nil {
+						log.Warningf("node %s failed to campaign for group %s: %s", s.nodeID, groupID, err)
+					}
+				}
 
 			case s.readyGroups = <-raftReady:
 				// readyGroups are saved in a local variable until they can be sent to

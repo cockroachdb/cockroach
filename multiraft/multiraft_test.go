@@ -143,6 +143,9 @@ func (c *testCluster) createGroup(groupID roachpb.RangeID, firstNode, numReplica
 // the given node will win the election. Unlike elect(), triggerElection() does not
 // wait for the election to resolve.
 func (c *testCluster) triggerElection(nodeIndex int, groupID roachpb.RangeID) {
+	// TODO(bdarnell): call MultiRaft.Campaign instead of
+	// multiNode.Campaign. Doing so is non-trivial because
+	// heartbeat_test.go is sensitive to minor reorderings of events.
 	if err := c.nodes[nodeIndex].multiNode.Campaign(context.Background(), uint64(groupID)); err != nil {
 		c.t.Fatal(err)
 	}
