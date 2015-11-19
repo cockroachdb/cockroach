@@ -163,6 +163,7 @@ type Replica struct {
 	// proposeRaftCommandFn can be set to mock out the propose operation.
 	proposeRaftCommandFn func(cmdIDKey, roachpb.RaftCommand) <-chan error
 
+	readMu       sync.RWMutex    // Held during read-only commands
 	sync.RWMutex                 // Protects the following fields:
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
 	tsCache      *TimestampCache // Most recent timestamps for keys / key ranges
@@ -762,7 +763,10 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 		}
 	}
 
-	// Execute read-only batch command.
+	r.readMu.RLock()
+	// Execute read-only batch command. It checks for matching key range; note
+	// that holding readMu throughout is important to avoid reads from the
+	// "wrong" key range being served after the range has been split.
 	br, intents, err := r.executeBatch(r.store.Engine(), nil, ba)
 
 	if err == nil && ba.Txn != nil {
@@ -775,6 +779,8 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 
 	// Remove keys from command queue.
 	r.endCmds(cmdKeys, ba, err)
+	// Important to unlock only here to capture the timestamp cache update.
+	r.readMu.RUnlock()
 
 	if err != nil {
 		return nil, err
