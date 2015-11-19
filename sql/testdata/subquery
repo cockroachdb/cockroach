@@ -124,3 +124,14 @@ query I
 SELECT 1 IN (SELECT x FROM xyz ORDER BY x DESC)
 ----
 true
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v STRING)
+
+statement ok
+INSERT INTO kv VALUES (1, 'one')
+
+query IT
+SELECT * FROM kv WHERE k = (SELECT k FROM kv WHERE (k, v) = (1, 'one'))
+----
+1 one

@@ -291,11 +291,6 @@ func (expr Row) normalize(v *normalizeVisitor) Expr {
 	return Tuple(expr)
 }
 
-func (expr DTuple) normalize(_ *normalizeVisitor) Expr {
-	expr.Normalize()
-	return expr
-}
-
 // NormalizeExpr normalizes an expression, simplifying where possible, but
 // guaranteeing that the result of evaluating the expression is
 // unchanged. Example normalizations:

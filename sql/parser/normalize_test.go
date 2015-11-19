@@ -80,6 +80,7 @@ func TestNormalizeExpr(t *testing.T) {
 		{`(SELECT 1)`, `(SELECT 1)`},
 		{`(1, 2, 3) = (SELECT 1, 2, 3)`, `(1, 2, 3) = (SELECT 1, 2, 3)`},
 		{`(1, 2, 3) IN (SELECT 1, 2, 3)`, `(1, 2, 3) IN (SELECT 1, 2, 3)`},
+		{`(1, 'one')`, `(1, 'one')`},
 	}
 	for _, d := range testData {
 		q, err := ParseTraditional("SELECT " + d.expr)
@@ -92,6 +93,14 @@ func TestNormalizeExpr(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		if s := r.String(); d.expected != s {
+			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+		}
+		// Normalizing again should be a no-op.
+		r2, err := defaultContext.NormalizeExpr(r)
+		if err != nil {
+			t.Fatalf("%s: %v", d.expr, err)
+		}
+		if s := r2.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
 	}
