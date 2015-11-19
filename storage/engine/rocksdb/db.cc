@@ -39,32 +39,83 @@
 extern "C" {
 #include "_cgo_export.h"
 
-struct DBBatch {
-  int updates;
-  rocksdb::WriteBatchWithIndex rep;
+struct DBEngine {
+  rocksdb::DB* const rep;
 
-  DBBatch()
-      : updates(0) {
+  DBEngine(rocksdb::DB* r)
+      : rep(r) {
+  }
+  virtual ~DBEngine() { }
+
+  virtual DBStatus Put(DBSlice key, DBSlice value);
+  virtual DBStatus Merge(DBSlice key, DBSlice value);
+  virtual DBStatus Delete(DBSlice key);
+  virtual DBStatus WriteBatch();
+  virtual DBStatus Get(DBSlice key, DBString* value);
+  virtual DBIterator* NewIter();
+};
+
+struct DBImpl : public DBEngine {
+  rocksdb::Env* const memenv;
+
+  DBImpl(rocksdb::DB* r, rocksdb::Env* m)
+      : DBEngine(r),
+        memenv(m) {
+  }
+  virtual ~DBImpl() {
+    delete rep;
+    delete memenv;
   }
 };
 
-struct DBEngine {
-  rocksdb::DB* rep;
-  rocksdb::Env* memenv;
+struct DBBatch : public DBEngine {
+  int updates;
+  rocksdb::WriteBatchWithIndex batch;
+
+  DBBatch(DBEngine* db)
+      : DBEngine(db->rep),
+        updates(0) {
+  }
+  virtual ~DBBatch() {
+  }
+
+  virtual DBStatus Put(DBSlice key, DBSlice value);
+  virtual DBStatus Merge(DBSlice key, DBSlice value);
+  virtual DBStatus Delete(DBSlice key);
+  virtual DBStatus WriteBatch();
+  virtual DBStatus Get(DBSlice key, DBString* value);
+  virtual DBIterator* NewIter();
+};
+
+struct DBSnapshot : public DBEngine {
+  rocksdb::DB* db;
+  const rocksdb::Snapshot* snapshot;
+
+  DBSnapshot(DBEngine *db)
+      : DBEngine(db->rep),
+        snapshot(db->rep->GetSnapshot()) {
+  }
+  virtual ~DBSnapshot() {
+    rep->ReleaseSnapshot(snapshot);
+  }
+
+  virtual DBStatus Put(DBSlice key, DBSlice value);
+  virtual DBStatus Merge(DBSlice key, DBSlice value);
+  virtual DBStatus Delete(DBSlice key);
+  virtual DBStatus WriteBatch();
+  virtual DBStatus Get(DBSlice key, DBString* value);
+  virtual DBIterator* NewIter();
 };
 
 struct DBIterator {
   rocksdb::Iterator* rep;
-};
 
-struct DBSnapshot {
-  rocksdb::DB* db;
-  const rocksdb::Snapshot* rep;
+  ~DBIterator() {
+    delete rep;
+  }
 };
 
 }  // extern "C"
-
-using google::protobuf::StringPrintf;
 
 namespace {
 
@@ -132,7 +183,7 @@ DBStatus FmtStatus(const char *fmt, ...) {
 rocksdb::ReadOptions MakeReadOptions(DBSnapshot* snap) {
   rocksdb::ReadOptions options;
   if (snap != NULL) {
-    options.snapshot = snap->rep;
+    options.snapshot = snap->snapshot;
   }
   return options;
 }
@@ -692,16 +743,31 @@ struct IteratorGetter : public Getter {
 // EngineGetter is an implementation of the Getter interface which
 // retrieves the value for the supplied key from a DBEngine.
 struct EngineGetter : public Getter {
-  EngineGetter(DBEngine* db, DBSlice key)
+  EngineGetter(DBEngine* db, DBSnapshot* snap, DBSlice key)
       : db_(db),
+        snap_(snap),
         key_(key) {
   }
 
   virtual DBStatus Get(DBString* value) {
-    return DBGet(db_, NULL, key_, value);
+    std::string tmp;
+    rocksdb::Status s = db_->rep->Get(MakeReadOptions(snap_), ToSlice(key_), &tmp);
+    if (!s.ok()) {
+      if (s.IsNotFound()) {
+        // This mirrors the logic in rocksdb_get(). It doesn't seem like
+        // a good idea, but some code in engine_test.go depends on it.
+        value->data = NULL;
+        value->len = 0;
+        return kSuccess;
+      }
+      return ToDBStatus(s);
+    }
+    *value = ToDBString(tmp);
+    return kSuccess;
   }
 
   DBEngine* const db_;
+  DBSnapshot* const snap_;
   DBSlice const key_;
 };
 
@@ -1037,9 +1103,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   if (!status.ok()) {
     return ToDBStatus(status);
   }
-  *db = new DBEngine;
-  (*db)->rep = db_ptr;
-  (*db)->memenv = memenv;
+  *db = new DBImpl(db_ptr, memenv);
   return kSuccess;
 }
 
@@ -1049,8 +1113,6 @@ DBStatus DBDestroy(DBSlice dir) {
 }
 
 void DBClose(DBEngine* db) {
-  delete db->rep;
-  delete db->memenv;
   delete db;
 }
 
@@ -1089,66 +1151,145 @@ uint64_t DBApproximateSize(DBEngine* db, DBSlice start, DBSlice end) {
   return result;
 }
 
-DBStatus DBPut(DBEngine* db, DBSlice key, DBSlice value) {
+DBStatus DBEngine::Put(DBSlice key, DBSlice value) {
   rocksdb::WriteOptions options;
-  return ToDBStatus(db->rep->Put(options, ToSlice(key), ToSlice(value)));
+  return ToDBStatus(rep->Put(options, ToSlice(key), ToSlice(value)));
 }
 
-DBStatus DBMerge(DBEngine* db, DBSlice key, DBSlice value) {
-  rocksdb::WriteOptions options;
-  return ToDBStatus(db->rep->Merge(options, ToSlice(key), ToSlice(value)));
-}
-
-DBStatus DBGet(DBEngine* db, DBSnapshot* snap, DBSlice key, DBString* value) {
-  std::string tmp;
-  rocksdb::Status s = db->rep->Get(MakeReadOptions(snap), ToSlice(key), &tmp);
-  if (!s.ok()) {
-    if (s.IsNotFound()) {
-      // This mirrors the logic in rocksdb_get(). It doesn't seem like
-      // a good idea, but some code in engine_test.go depends on it.
-      value->data = NULL;
-      value->len = 0;
-      return kSuccess;
-    }
-    return ToDBStatus(s);
-  }
-  *value = ToDBString(tmp);
+DBStatus DBBatch::Put(DBSlice key, DBSlice value) {
+  ++updates;
+  batch.Put(ToSlice(key), ToSlice(value));
   return kSuccess;
 }
 
-DBStatus DBDelete(DBEngine* db, DBSlice key) {
-  rocksdb::WriteOptions options;
-  return ToDBStatus(db->rep->Delete(options, ToSlice(key)));
+DBStatus DBSnapshot::Put(DBSlice key, DBSlice value) {
+  return FmtStatus("unsupported");
 }
 
-DBStatus DBWrite(DBEngine* db, DBBatch *batch) {
-  if (batch->updates == 0) {
+DBStatus DBPut(DBEngine* db, DBSlice key, DBSlice value) {
+  return db->Put(key, value);
+}
+
+DBStatus DBEngine::Merge(DBSlice key, DBSlice value) {
+  rocksdb::WriteOptions options;
+  return ToDBStatus(rep->Merge(options, ToSlice(key), ToSlice(value)));
+}
+
+DBStatus DBBatch::Merge(DBSlice key, DBSlice value) {
+  ++updates;
+  batch.Merge(ToSlice(key), ToSlice(value));
+  return kSuccess;
+}
+
+DBStatus DBSnapshot::Merge(DBSlice key, DBSlice value) {
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBMerge(DBEngine* db, DBSlice key, DBSlice value) {
+  return db->Merge(key, value);
+}
+
+DBStatus DBEngine::Get(DBSlice key, DBString* value) {
+  EngineGetter base(this, NULL, key);
+  return base.Get(value);
+}
+
+DBStatus DBBatch::Get(DBSlice key, DBString* value) {
+  if (updates == 0) {
+    return DBEngine::Get(key, value);
+  }
+  std::unique_ptr<rocksdb::WBWIIterator> iter(batch.NewIterator());
+  rocksdb::Slice rkey(ToSlice(key));
+  iter->Seek(rkey);
+  EngineGetter base(this, NULL, key);
+  return ProcessDeltaKey(&base, iter.get(), rkey, value);
+}
+
+DBStatus DBSnapshot::Get(DBSlice key, DBString* value) {
+  EngineGetter base(this, this, key);
+  return base.Get(value);
+}
+
+DBStatus DBGet(DBEngine* db, DBSlice key, DBString* value) {
+  return db->Get(key, value);
+}
+
+DBStatus DBEngine::Delete(DBSlice key) {
+  rocksdb::WriteOptions options;
+  return ToDBStatus(rep->Delete(options, ToSlice(key)));
+}
+
+DBStatus DBBatch::Delete(DBSlice key) {
+  ++updates;
+  batch.Delete(ToSlice(key));
+  return kSuccess;
+}
+
+DBStatus DBSnapshot::Delete(DBSlice key) {
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBDelete(DBEngine *db, DBSlice key) {
+  return db->Delete(key);
+}
+
+DBStatus DBEngine::WriteBatch() {
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBBatch::WriteBatch() {
+  if (updates == 0) {
     return kSuccess;
   }
   rocksdb::WriteOptions options;
-  return ToDBStatus(db->rep->Write(options, batch->rep.GetWriteBatch()));
+  return ToDBStatus(rep->Write(options, batch.GetWriteBatch()));
 }
 
-DBSnapshot* DBNewSnapshot(DBEngine* db)  {
-  DBSnapshot *snap = new DBSnapshot;
-  snap->db = db->rep;
-  snap->rep = db->rep->GetSnapshot();
-  return snap;
+DBStatus DBSnapshot::WriteBatch() {
+  return FmtStatus("unsupported");
 }
 
-void DBSnapshotRelease(DBSnapshot* snap) {
-  snap->db->ReleaseSnapshot(snap->rep);
-  delete snap;
+DBStatus DBWriteBatch(DBEngine* db) {
+  return db->WriteBatch();
 }
 
-DBIterator* DBNewIter(DBEngine* db, DBSnapshot* snap) {
+DBEngine* DBNewSnapshot(DBEngine* db)  {
+  return new DBSnapshot(db);
+}
+
+DBEngine* DBNewBatch(DBEngine *db) {
+  return new DBBatch(db);
+}
+
+DBIterator* DBEngine::NewIter() {
   DBIterator* iter = new DBIterator;
-  iter->rep = db->rep->NewIterator(MakeReadOptions(snap));
+  iter->rep = rep->NewIterator(MakeReadOptions(NULL));
   return iter;
 }
 
+DBIterator* DBBatch::NewIter() {
+  if (updates == 0) {
+    return DBEngine::NewIter();
+  }
+
+  DBIterator* iter = new DBIterator;
+  rocksdb::Iterator* base = rep->NewIterator(MakeReadOptions(NULL));
+  rocksdb::WBWIIterator* delta = batch.NewIterator();
+  iter->rep = new BaseDeltaIterator(base, delta);
+  return iter;
+}
+
+DBIterator* DBSnapshot::NewIter() {
+  DBIterator* iter = new DBIterator;
+  iter->rep = rep->NewIterator(MakeReadOptions(this));
+  return iter;
+}
+
+DBIterator* DBNewIter(DBEngine* db) {
+  return db->NewIter();
+}
+
 void DBIterDestroy(DBIterator* iter) {
-  delete iter->rep;
   delete iter;
 }
 
@@ -1181,55 +1322,6 @@ DBStatus DBIterError(DBIterator* iter) {
   return ToDBStatus(iter->rep->status());
 }
 
-DBBatch* DBNewBatch() {
-  return new DBBatch;
-}
-
-void DBBatchDestroy(DBBatch* batch) {
-  delete batch;
-}
-
-void DBBatchPut(DBBatch* batch, DBSlice key, DBSlice value) {
-  ++batch->updates;
-  batch->rep.Put(ToSlice(key), ToSlice(value));
-}
-
-void DBBatchMerge(DBBatch* batch, DBSlice key, DBSlice value) {
-  ++batch->updates;
-  batch->rep.Merge(ToSlice(key), ToSlice(value));
-}
-
-DBStatus DBBatchGet(DBEngine* db, DBBatch* batch, DBSlice key, DBString* value) {
-  if (batch->updates == 0) {
-    return DBGet(db, NULL, key, value);
-  }
-
-  std::unique_ptr<rocksdb::WBWIIterator> iter(batch->rep.NewIterator());
-  rocksdb::Slice rkey(ToSlice(key));
-  iter->Seek(rkey);
-  EngineGetter base(db, key);
-  return ProcessDeltaKey(&base, iter.get(), rkey, value);
-}
-
-void DBBatchDelete(DBBatch* batch, DBSlice key) {
-  ++batch->updates;
-  batch->rep.Delete(ToSlice(key));
-}
-
-DBIterator* DBBatchNewIter(DBEngine* db, DBBatch* batch) {
-  if (batch->updates == 0) {
-    // Don't bother to create a batch iterator if the batch contains
-    // no updates.
-    return DBNewIter(db, NULL);
-  }
-
-  DBIterator* iter = new DBIterator;
-  rocksdb::Iterator* base = db->rep->NewIterator(MakeReadOptions(NULL));
-  rocksdb::WBWIIterator *delta = batch->rep.NewIterator();
-  iter->rep = new BaseDeltaIterator(base, delta);
-  return iter;
-}
-
 DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
   new_value->len = 0;
 
@@ -1249,10 +1341,11 @@ DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
   return MergeResult(&meta, new_value);
 }
 
-MVCCStats MVCCComputeStats(DBIterator* iter, DBSlice start, DBSlice end, int64_t now_nanos) {
+MVCCStatsResult MVCCComputeStats(
+    DBIterator* iter, DBSlice start, DBSlice end, int64_t now_nanos) {
   const int mvcc_version_timestamp_size = 12;
 
-  MVCCStats stats;
+  MVCCStatsResult stats;
   memset(&stats, 0, sizeof(stats));
 
   rocksdb::Iterator *const iter_rep = iter->rep;
