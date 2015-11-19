@@ -80,8 +80,7 @@ type txnMetadata struct {
 
 	// timeoutDuration is the time after which the transaction should be
 	// considered abandoned by the client. That is, when
-	// current_timestamp > lastUpdateTS + timeoutDuration If this value
-	// is set to 0, a default timeout will be used.
+	// current_timestamp > lastUpdateTS + timeoutDuration.
 	timeoutDuration time.Duration
 
 	// txnEnd is closed when the transaction is aborted or committed,
