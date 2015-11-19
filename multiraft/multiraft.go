@@ -1154,7 +1154,13 @@ func (s *state) processCommittedEntry(groupID roachpb.RangeID, g *group, entry r
 			Callback: func(err error) {
 				select {
 				case s.callbackChan <- func() {
-					if err == nil {
+					gInner, ok := s.groups[groupID]
+					if !ok {
+						log.Infof("group %d no longer exists, aborting configuration change", groupID)
+					} else if gInner != g {
+						panic(fmt.Sprintf("passed in group and fetched group objects do not match\noriginal:%+v\nfetched:%+v\n",
+							g, gInner))
+					} else if err == nil {
 						if log.V(3) {
 							log.Infof("node %v applying configuration change %v", s.nodeID, cc)
 						}
