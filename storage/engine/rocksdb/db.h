@@ -39,7 +39,7 @@ typedef struct {
 } DBString;
 
 typedef struct {
-  int valid;
+  bool valid;
   DBSlice key;
   DBSlice value;
 } DBIterState;
@@ -177,6 +177,25 @@ DBIterator* DBBatchNewIter(DBEngine* db, DBBatch* batch);
 // merged with existing. This method is provided for invocation from
 // Go code.
 DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value);
+
+typedef struct {
+  DBStatus status;
+  int64_t live_bytes;
+  int64_t key_bytes;
+  int64_t val_bytes;
+  int64_t intent_bytes;
+  int64_t live_count;
+  int64_t key_count;
+  int64_t val_count;
+  int64_t intent_count;
+  int64_t intent_age;
+  int64_t gc_bytes_age;
+  int64_t sys_bytes;
+  int64_t sys_count;
+  int64_t last_update_nanos;
+} MVCCStats;
+
+MVCCStats MVCCComputeStats(DBIterator* iter, DBSlice start, DBSlice end, int64_t now_nanos);
 
 #ifdef __cplusplus
 }  // extern "C"

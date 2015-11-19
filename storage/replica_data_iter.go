@@ -41,33 +41,36 @@ type replicaDataIterator struct {
 	engine.Iterator
 }
 
-func newReplicaDataIterator(d *roachpb.RangeDescriptor, e engine.Engine) *replicaDataIterator {
-	// The first range in the keyspace starts at KeyMin, which includes the node-local
-	// space. We need the original StartKey to find the range metadata, but the
-	// actual data starts at LocalMax.
+func makeReplicaKeyRanges(d *roachpb.RangeDescriptor) []keyRange {
+	// The first range in the keyspace starts at KeyMin, which includes the
+	// node-local space. We need the original StartKey to find the range
+	// metadata, but the actual data starts at LocalMax.
 	dataStartKey := d.StartKey.AsRawKey()
 	if d.StartKey.Equal(roachpb.RKeyMin) {
 		dataStartKey = keys.LocalMax
 	}
-	ri := &replicaDataIterator{
-		ranges: []keyRange{
-			{
-				start: engine.MVCCEncodeKey(keys.MakeRangeIDPrefix(d.RangeID)),
-				end:   engine.MVCCEncodeKey(keys.MakeRangeIDPrefix(d.RangeID + 1)),
-			},
-			{
-				start: engine.MVCCEncodeKey(keys.MakeRangeKeyPrefix(d.StartKey)),
-				end:   engine.MVCCEncodeKey(keys.MakeRangeKeyPrefix(d.EndKey)),
-			},
-			{
-				start: engine.MVCCEncodeKey(dataStartKey),
-				end:   engine.MVCCEncodeKey(d.EndKey.AsRawKey()),
-			},
+	return []keyRange{
+		{
+			start: engine.MVCCEncodeKey(keys.MakeRangeIDPrefix(d.RangeID)),
+			end:   engine.MVCCEncodeKey(keys.MakeRangeIDPrefix(d.RangeID + 1)),
 		},
+		{
+			start: engine.MVCCEncodeKey(keys.MakeRangeKeyPrefix(d.StartKey)),
+			end:   engine.MVCCEncodeKey(keys.MakeRangeKeyPrefix(d.EndKey)),
+		},
+		{
+			start: engine.MVCCEncodeKey(dataStartKey),
+			end:   engine.MVCCEncodeKey(d.EndKey.AsRawKey()),
+		},
+	}
+}
+
+func newReplicaDataIterator(d *roachpb.RangeDescriptor, e engine.Engine) *replicaDataIterator {
+	ri := &replicaDataIterator{
+		ranges:   makeReplicaKeyRanges(d),
 		Iterator: e.NewIterator(),
 	}
 	ri.Seek(ri.ranges[ri.curIndex].start)
-	ri.advance()
 	return ri
 }
 

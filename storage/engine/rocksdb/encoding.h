@@ -26,8 +26,19 @@ bool DecodeBytes(rocksdb::Slice* buf, std::string* decoded);
 
 // DecodeUvarint64 decodes a varint encoded uint64 from a buffer,
 // returning true on a successful decode. The decoded value is
-// returned in *decoded.
+// returned in *value.
 bool DecodeUvarint64(rocksdb::Slice* buf, uint64_t* value);
+
+// DecodedUint64 decodes a fixed-length encoded uint64 from a buffer,
+// returning true on a successful decode. The decoded value is
+// returned in *value.
+bool DecodeUint64(rocksdb::Slice* buf, uint64_t* value);
+
+// DecodedUint64Decreasing decodes a fixed-length encoded uint64 from
+// a buffer that was encoded using EncodeUint64Increasing, returning
+// true on a successful decode. The decoded value is returned in
+// *value.
+bool DecodeUint64Decreasing(rocksdb::Slice* buf, uint64_t* value);
 
 #endif // ROACHLIB_ENCODING_H
 
