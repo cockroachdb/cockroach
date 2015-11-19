@@ -356,7 +356,7 @@ func (tc *treeContext) insertCase2(node *roachpb.RangeTreeNode) error {
 func (tc *treeContext) insertCase3(node *roachpb.RangeTreeNode) error {
 	uncle, err := tc.getUncle(node)
 	if err != nil {
-		return nil
+		return err
 	}
 	if isRed(uncle) {
 		parent, err := tc.getNode(node.ParentKey)
