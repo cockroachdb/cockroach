@@ -1056,7 +1056,7 @@ func (s *Store) addReplicaInternal(rng *Replica) error {
 		return err
 	}
 
-	if s.replicasByKey.Has(rng) {
+	if s.hasOverlapReplica(rng.Desc()) {
 		return rangeAlreadyExists{rng}
 	}
 	if exRngItem := s.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
@@ -1687,7 +1687,7 @@ func (s *Store) CanApplySnapshot(rangeID roachpb.RangeID, snap raftpb.Snapshot) 
 		return false
 	}
 
-	if s.replicasByKey.Has(rangeBTreeKey(parsedSnap.RangeDescriptor.EndKey)) {
+	if s.hasOverlapReplica(&parsedSnap.RangeDescriptor) {
 		// We have a conflicting range, so we must block the snapshot.
 		// When such a conflict exists, it will be resolved by one range
 		// either being split or garbage collected.
@@ -1821,4 +1821,22 @@ func (s *Store) PublishStatus() error {
 // For unittests only.
 func (s *Store) SetRangeRetryOptions(ro retry.Options) {
 	s.ctx.RangeRetryOptions = ro
+}
+
+// hasReplicaExist used to judgement if "rngDesc" has overlap with ranges
+// in "replicasByKey" btree, it is not thread saft.
+func (s *Store) hasOverlapReplica(rngDesc *roachpb.RangeDescriptor) bool {
+	var rng *Replica
+	s.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(rngDesc.StartKey.Next()), func(i btree.Item) bool {
+		rng = i.(*Replica)
+		return false
+	})
+
+	if rng != nil {
+		if rng.Desc().StartKey.Less(rngDesc.EndKey) {
+			return true
+		}
+	}
+
+	return false
 }
