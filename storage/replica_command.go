@@ -473,6 +473,13 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	// Run triggers if successfully committed.
 	if reply.Txn.Status == roachpb.COMMITTED {
 		ct := args.InternalCommitTrigger
+		if ct != nil {
+			// Hold readMu across the application of any commit trigger.
+			// This makes sure that no reads are happening in parallel;
+			// see #3148.
+			r.readOnlyCmdMu.Lock()
+			batch.Defer(r.readOnlyCmdMu.Unlock)
+		}
 
 		if ct.GetSplitTrigger() != nil {
 			*ms = engine.MVCCStats{} // clear stats, as split will recompute from scratch.
@@ -1365,6 +1372,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 
 	// Initialize the new range's sequence cache by copying the original's.
 	if err = r.sequence.CopyInto(batch, split.NewDesc.RangeID); err != nil {
+		// TODO(tschottdorf): ReplicaCorruptionError.
 		return util.Errorf("unable to copy sequence cache to new split range: %s", err)
 	}
 
@@ -1385,7 +1393,11 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 
-	// Copy the timestamp cache into the new range.
+	// Copy the timestamp cache into the new range. Commit triggers already
+	// acquire the read lock since concurrent reads could add updates that
+	// never make it to the new Range (see #3148), so all we grab here is
+	// the actual lock (at time of writing, this isn't necessary but for
+	// convention).
 	r.Lock()
 	r.tsCache.MergeInto(newRng.tsCache, true /* clear */)
 	r.Unlock()
