@@ -41,6 +41,12 @@ const (
 	MaxPriority = math.MaxInt32
 	// TransactionIDLen is the length (in bytes) of the transaction IDs used.
 	TransactionIDLen = 16
+	// SequencePoisonAbort is a special value for the sequence cache which
+	// commands a TransactionAbortedError.
+	SequencePoisonAbort = math.MaxUint32
+	// SequencePoisonRestart is a special value for the sequence cache which
+	// commands a TransactionRestartError.
+	SequencePoisonRestart = math.MaxUint32 - 1
 )
 
 var (

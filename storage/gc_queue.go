@@ -323,5 +323,5 @@ func (*gcQueue) pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Trans
 		return
 	}
 	// Update the supplied txn on successful push.
-	*txn = *br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
+	*txn = br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
 }
