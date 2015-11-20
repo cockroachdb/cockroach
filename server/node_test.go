@@ -215,7 +215,7 @@ func TestNodeJoin(t *testing.T) {
 	defer stopper2.Stop()
 
 	// Verify new node is able to bootstrap its store.
-	if err := util.IsTrueWithin(func() bool { return node2.lSender.GetStoreCount() == 1 }, 50*time.Millisecond); err != nil {
+	if err := util.IsTrueWithin(func() bool { return node2.lSender.GetStoreCount() == 1 }, time.Second); err != nil {
 		t.Fatal(err)
 	}
 
