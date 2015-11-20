@@ -19,6 +19,7 @@ package storage_test
 
 import (
 	"bytes"
+	"fmt"
 	"math/rand"
 	"reflect"
 	"sync"
@@ -783,4 +784,88 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	}
 	mtc.waitForValues(rightKey, 3*time.Second, []int64{0, 0, 0, 222, 222, 222})
 
+}
+
+// TestStoreSplitReadRace prevents regression of #3148. It begins a couple of
+// read requests and lets them complete while a split is happening; the reads
+// hit the second half of the split. If the split happens non-atomically with
+// respect to the reads (and in particular their update of the timestamp
+// cache), then some of them may not be reflected in the timestamp cache of the
+// new range, in which case this test would fail.
+func TestStoreSplitReadRace(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	defer func() { storage.TestingCommandFilter = nil }()
+	splitKey := roachpb.Key("a")
+	key := func(i int) roachpb.Key {
+		return append(splitKey.Next(), []byte(fmt.Sprintf("%03d", i))...)
+	}
+
+	getContinues := make(chan struct{})
+	var getStarted sync.WaitGroup
+	storage.TestingCommandFilter = func(args roachpb.Request, h roachpb.Header) error {
+		if et, ok := args.(*roachpb.EndTransactionRequest); ok {
+			st := et.InternalCommitTrigger.GetSplitTrigger()
+			if st == nil || !st.UpdatedDesc.EndKey.Equal(splitKey) {
+				return nil
+			}
+			close(getContinues)
+		} else if args.Method() == roachpb.Get &&
+			bytes.HasPrefix(args.Header().Key, splitKey.Next()) {
+			getStarted.Done()
+			<-getContinues
+		}
+		return nil
+	}
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	now := store.Clock().Now()
+	var wg sync.WaitGroup
+
+	ts := func(i int) roachpb.Timestamp {
+		return now.Add(0, int32(1000+i))
+	}
+
+	const num = 10
+
+	for i := 0; i < num; i++ {
+		wg.Add(1)
+		getStarted.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			args := getArgs(key(i))
+			var h roachpb.Header
+			h.Timestamp = ts(i)
+			if _, err := client.SendWrappedWith(rg1(store), nil, h, &args); err != nil {
+				t.Fatal(err)
+			}
+		}(i)
+	}
+
+	getStarted.Wait()
+
+	wg.Add(1)
+	func() {
+		defer wg.Done()
+		args := adminSplitArgs(roachpb.KeyMin, splitKey)
+		if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	wg.Wait()
+
+	for i := 0; i < num; i++ {
+		var h roachpb.Header
+		h.Timestamp = now
+		args := putArgs(key(i), []byte("foo"))
+		h.RangeID = store.LookupReplica(keys.Addr(args.Key), nil).Desc().RangeID
+		reply, err := client.SendWrappedWith(store, nil, h, &args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reply.Header().Timestamp.Less(ts(i)) {
+			t.Fatalf("%d: expected Put to be forced higher than %s by timestamp caches, but wrote at %s", i, ts(i), reply.Header().Timestamp)
+		}
+	}
 }
