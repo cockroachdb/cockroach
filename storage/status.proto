@@ -21,7 +21,7 @@ option go_package = "storage";
 
 import "cockroach/roachpb/metadata.proto";
 import "cockroach/storage/engine/mvcc.proto";
-import "gogoproto/gogo.proto";
+import weak "gogoproto/gogo.proto";
 
 option (gogoproto.goproto_getters_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;

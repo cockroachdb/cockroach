@@ -71,10 +71,10 @@ $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS) $(GOGOPROTO_PROTO)
 	find $(REPO_ROOT) -not -path '*/.*' -name *.pb.h -o -name *.pb.cc | xargs rm
 	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=$(NATIVE_ROOT) $(CPP_PROTOS)
 	$(PROTOC) -I.:$(GOGOPROTO_PATH) --cpp_out=$(NATIVE_ROOT) $(GOGOPROTO_PROTO)
-	# For c++, protoc generates a directory structure mirroring the package
-	# structure (and these directories must be in the include path), but cgo can
-	# only compile a single directory so we symlink the generated pb.cc files
-	# into the storage/engine directory.
+	@# For c++, protoc generates a directory structure mirroring the package
+	@# structure (and these directories must be in the include path), but cgo can
+	@# only compile a single directory so we symlink the generated pb.cc files
+	@# into the storage/engine directory.
 	(cd $(NATIVE_ROOT) && find . -name *.pb.cc | xargs -I % ln -sf % .)
 
 $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES): $(PROTOC) $(ENGINE_CPP_PROTOS)

@@ -7,9 +7,9 @@ package roachpb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 import cockroach_util "github.com/cockroachdb/cockroach/util"
+
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -125,6 +125,16 @@ func (m *StoreDescriptor) Reset()         { *m = StoreDescriptor{} }
 func (m *StoreDescriptor) String() string { return proto.CompactTextString(m) }
 func (*StoreDescriptor) ProtoMessage()    {}
 
+func init() {
+	proto.RegisterType((*Attributes)(nil), "cockroach.roachpb.Attributes")
+	proto.RegisterType((*ReplicaDescriptor)(nil), "cockroach.roachpb.ReplicaDescriptor")
+	proto.RegisterType((*RangeDescriptor)(nil), "cockroach.roachpb.RangeDescriptor")
+	proto.RegisterType((*RangeTree)(nil), "cockroach.roachpb.RangeTree")
+	proto.RegisterType((*RangeTreeNode)(nil), "cockroach.roachpb.RangeTreeNode")
+	proto.RegisterType((*StoreCapacity)(nil), "cockroach.roachpb.StoreCapacity")
+	proto.RegisterType((*NodeDescriptor)(nil), "cockroach.roachpb.NodeDescriptor")
+	proto.RegisterType((*StoreDescriptor)(nil), "cockroach.roachpb.StoreDescriptor")
+}
 func (m *Attributes) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)

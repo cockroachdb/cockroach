@@ -21,7 +21,7 @@ option go_package = "roachpb";
 
 import "cockroach/roachpb/api.proto";
 import "cockroach/roachpb/metadata.proto";
-import "gogoproto/gogo.proto";
+import weak "gogoproto/gogo.proto";
 
 option (gogoproto.goproto_getters_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;

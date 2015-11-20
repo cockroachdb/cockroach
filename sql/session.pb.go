@@ -7,10 +7,10 @@ package sql
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/roachpb"
 import cockroach_sql_driver "github.com/cockroachdb/cockroach/sql/driver"
+
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -132,6 +132,10 @@ func (m *Session_Transaction) Reset()         { *m = Session_Transaction{} }
 func (m *Session_Transaction) String() string { return proto.CompactTextString(m) }
 func (*Session_Transaction) ProtoMessage()    {}
 
+func init() {
+	proto.RegisterType((*Session)(nil), "cockroach.sql.Session")
+	proto.RegisterType((*Session_Transaction)(nil), "cockroach.sql.Session.Transaction")
+}
 func (m *Session) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)

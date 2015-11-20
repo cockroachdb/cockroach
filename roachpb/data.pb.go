@@ -8,7 +8,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -492,6 +492,22 @@ func (m *SequenceCacheEntry) String() string { return proto.CompactTextString(m)
 func (*SequenceCacheEntry) ProtoMessage()    {}
 
 func init() {
+	proto.RegisterType((*Span)(nil), "cockroach.roachpb.Span")
+	proto.RegisterType((*Timestamp)(nil), "cockroach.roachpb.Timestamp")
+	proto.RegisterType((*Value)(nil), "cockroach.roachpb.Value")
+	proto.RegisterType((*KeyValue)(nil), "cockroach.roachpb.KeyValue")
+	proto.RegisterType((*StoreIdent)(nil), "cockroach.roachpb.StoreIdent")
+	proto.RegisterType((*SplitTrigger)(nil), "cockroach.roachpb.SplitTrigger")
+	proto.RegisterType((*MergeTrigger)(nil), "cockroach.roachpb.MergeTrigger")
+	proto.RegisterType((*ChangeReplicasTrigger)(nil), "cockroach.roachpb.ChangeReplicasTrigger")
+	proto.RegisterType((*ModifiedSpanTrigger)(nil), "cockroach.roachpb.ModifiedSpanTrigger")
+	proto.RegisterType((*InternalCommitTrigger)(nil), "cockroach.roachpb.InternalCommitTrigger")
+	proto.RegisterType((*NodeList)(nil), "cockroach.roachpb.NodeList")
+	proto.RegisterType((*Transaction)(nil), "cockroach.roachpb.Transaction")
+	proto.RegisterType((*Intent)(nil), "cockroach.roachpb.Intent")
+	proto.RegisterType((*Lease)(nil), "cockroach.roachpb.Lease")
+	proto.RegisterType((*GCMetadata)(nil), "cockroach.roachpb.GCMetadata")
+	proto.RegisterType((*SequenceCacheEntry)(nil), "cockroach.roachpb.SequenceCacheEntry")
 	proto.RegisterEnum("cockroach.roachpb.ValueType", ValueType_name, ValueType_value)
 	proto.RegisterEnum("cockroach.roachpb.ReplicaChangeType", ReplicaChangeType_name, ReplicaChangeType_value)
 	proto.RegisterEnum("cockroach.roachpb.IsolationType", IsolationType_name, IsolationType_value)

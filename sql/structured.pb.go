@@ -7,9 +7,9 @@ package sql
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/roachpb"
+
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -599,6 +599,13 @@ func _Descriptor_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buf
 }
 
 func init() {
+	proto.RegisterType((*ColumnType)(nil), "cockroach.sql.ColumnType")
+	proto.RegisterType((*ColumnDescriptor)(nil), "cockroach.sql.ColumnDescriptor")
+	proto.RegisterType((*IndexDescriptor)(nil), "cockroach.sql.IndexDescriptor")
+	proto.RegisterType((*DescriptorMutation)(nil), "cockroach.sql.DescriptorMutation")
+	proto.RegisterType((*TableDescriptor)(nil), "cockroach.sql.TableDescriptor")
+	proto.RegisterType((*DatabaseDescriptor)(nil), "cockroach.sql.DatabaseDescriptor")
+	proto.RegisterType((*Descriptor)(nil), "cockroach.sql.Descriptor")
 	proto.RegisterEnum("cockroach.sql.ColumnType_Kind", ColumnType_Kind_name, ColumnType_Kind_value)
 	proto.RegisterEnum("cockroach.sql.DescriptorMutation_State", DescriptorMutation_State_name, DescriptorMutation_State_value)
 	proto.RegisterEnum("cockroach.sql.DescriptorMutation_Direction", DescriptorMutation_Direction_name, DescriptorMutation_Direction_value)

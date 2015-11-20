@@ -8,7 +8,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -69,8 +69,9 @@ type NotLeaderError struct {
 	RangeID RangeID            `protobuf:"varint,3,opt,name=range_id,casttype=RangeID" json:"range_id"`
 }
 
-func (m *NotLeaderError) Reset()      { *m = NotLeaderError{} }
-func (*NotLeaderError) ProtoMessage() {}
+func (m *NotLeaderError) Reset()         { *m = NotLeaderError{} }
+func (m *NotLeaderError) String() string { return proto.CompactTextString(m) }
+func (*NotLeaderError) ProtoMessage()    {}
 
 // A NodeUnavailableError indicates that the sending gateway can
 // not process requests at the time, and that the client should
@@ -78,8 +79,9 @@ func (*NotLeaderError) ProtoMessage() {}
 type NodeUnavailableError struct {
 }
 
-func (m *NodeUnavailableError) Reset()      { *m = NodeUnavailableError{} }
-func (*NodeUnavailableError) ProtoMessage() {}
+func (m *NodeUnavailableError) Reset()         { *m = NodeUnavailableError{} }
+func (m *NodeUnavailableError) String() string { return proto.CompactTextString(m) }
+func (*NodeUnavailableError) ProtoMessage()    {}
 
 // A RangeNotFoundError indicates that a command was sent to a range
 // which is not hosted on this store.
@@ -87,8 +89,9 @@ type RangeNotFoundError struct {
 	RangeID RangeID `protobuf:"varint,1,opt,name=range_id,casttype=RangeID" json:"range_id"`
 }
 
-func (m *RangeNotFoundError) Reset()      { *m = RangeNotFoundError{} }
-func (*RangeNotFoundError) ProtoMessage() {}
+func (m *RangeNotFoundError) Reset()         { *m = RangeNotFoundError{} }
+func (m *RangeNotFoundError) String() string { return proto.CompactTextString(m) }
+func (*RangeNotFoundError) ProtoMessage()    {}
 
 // A RangeKeyMismatchError indicates that a command was sent to a
 // range which did not contain the key(s) specified by the command.
@@ -98,8 +101,9 @@ type RangeKeyMismatchError struct {
 	Range           *RangeDescriptor `protobuf:"bytes,3,opt,name=range" json:"range,omitempty"`
 }
 
-func (m *RangeKeyMismatchError) Reset()      { *m = RangeKeyMismatchError{} }
-func (*RangeKeyMismatchError) ProtoMessage() {}
+func (m *RangeKeyMismatchError) Reset()         { *m = RangeKeyMismatchError{} }
+func (m *RangeKeyMismatchError) String() string { return proto.CompactTextString(m) }
+func (*RangeKeyMismatchError) ProtoMessage()    {}
 
 // A ReadWithinUncertaintyIntervalError indicates that a read at timestamp
 // encountered a versioned value at existing_timestamp within the uncertainty
@@ -112,8 +116,9 @@ type ReadWithinUncertaintyIntervalError struct {
 	Txn               Transaction `protobuf:"bytes,4,opt,name=txn" json:"txn"`
 }
 
-func (m *ReadWithinUncertaintyIntervalError) Reset()      { *m = ReadWithinUncertaintyIntervalError{} }
-func (*ReadWithinUncertaintyIntervalError) ProtoMessage() {}
+func (m *ReadWithinUncertaintyIntervalError) Reset()         { *m = ReadWithinUncertaintyIntervalError{} }
+func (m *ReadWithinUncertaintyIntervalError) String() string { return proto.CompactTextString(m) }
+func (*ReadWithinUncertaintyIntervalError) ProtoMessage()    {}
 
 // A TransactionAbortedError indicates that the transaction was
 // aborted by another concurrent transaction.
@@ -121,8 +126,9 @@ type TransactionAbortedError struct {
 	Txn Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn"`
 }
 
-func (m *TransactionAbortedError) Reset()      { *m = TransactionAbortedError{} }
-func (*TransactionAbortedError) ProtoMessage() {}
+func (m *TransactionAbortedError) Reset()         { *m = TransactionAbortedError{} }
+func (m *TransactionAbortedError) String() string { return proto.CompactTextString(m) }
+func (*TransactionAbortedError) ProtoMessage()    {}
 
 // A TransactionPushError indicates that the transaction could not
 // continue because it encountered a write intent from another
@@ -134,8 +140,9 @@ type TransactionPushError struct {
 	PusheeTxn Transaction  `protobuf:"bytes,2,opt,name=pushee_txn" json:"pushee_txn"`
 }
 
-func (m *TransactionPushError) Reset()      { *m = TransactionPushError{} }
-func (*TransactionPushError) ProtoMessage() {}
+func (m *TransactionPushError) Reset()         { *m = TransactionPushError{} }
+func (m *TransactionPushError) String() string { return proto.CompactTextString(m) }
+func (*TransactionPushError) ProtoMessage()    {}
 
 // A TransactionRetryError indicates that the transaction must be
 // retried, usually with an increased transaction timestamp. The
@@ -144,8 +151,9 @@ type TransactionRetryError struct {
 	Txn Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn"`
 }
 
-func (m *TransactionRetryError) Reset()      { *m = TransactionRetryError{} }
-func (*TransactionRetryError) ProtoMessage() {}
+func (m *TransactionRetryError) Reset()         { *m = TransactionRetryError{} }
+func (m *TransactionRetryError) String() string { return proto.CompactTextString(m) }
+func (*TransactionRetryError) ProtoMessage()    {}
 
 // A TransactionStatusError indicates that the transaction status is
 // incompatible with the requested operation. This might mean the
@@ -158,8 +166,9 @@ type TransactionStatusError struct {
 	Msg string      `protobuf:"bytes,2,opt,name=msg" json:"msg"`
 }
 
-func (m *TransactionStatusError) Reset()      { *m = TransactionStatusError{} }
-func (*TransactionStatusError) ProtoMessage() {}
+func (m *TransactionStatusError) Reset()         { *m = TransactionStatusError{} }
+func (m *TransactionStatusError) String() string { return proto.CompactTextString(m) }
+func (*TransactionStatusError) ProtoMessage()    {}
 
 // A WriteIntentError indicates that one or more write intent
 // belonging to another transaction were encountered leading to a
@@ -177,8 +186,9 @@ type WriteIntentError struct {
 	Index *ErrPosition `protobuf:"bytes,3,opt,name=index" json:"index,omitempty"`
 }
 
-func (m *WriteIntentError) Reset()      { *m = WriteIntentError{} }
-func (*WriteIntentError) ProtoMessage() {}
+func (m *WriteIntentError) Reset()         { *m = WriteIntentError{} }
+func (m *WriteIntentError) String() string { return proto.CompactTextString(m) }
+func (*WriteIntentError) ProtoMessage()    {}
 
 // A WriteTooOldError indicates that a write encountered a versioned
 // value newer than its timestamp, making it impossible to rewrite
@@ -188,8 +198,9 @@ type WriteTooOldError struct {
 	ExistingTimestamp Timestamp `protobuf:"bytes,2,opt,name=existing_timestamp" json:"existing_timestamp"`
 }
 
-func (m *WriteTooOldError) Reset()      { *m = WriteTooOldError{} }
-func (*WriteTooOldError) ProtoMessage() {}
+func (m *WriteTooOldError) Reset()         { *m = WriteTooOldError{} }
+func (m *WriteTooOldError) String() string { return proto.CompactTextString(m) }
+func (*WriteTooOldError) ProtoMessage()    {}
 
 // An OpRequiresTxnError indicates that a command required to be
 // carried out in a transactional context but was not.
@@ -198,8 +209,9 @@ func (*WriteTooOldError) ProtoMessage() {}
 type OpRequiresTxnError struct {
 }
 
-func (m *OpRequiresTxnError) Reset()      { *m = OpRequiresTxnError{} }
-func (*OpRequiresTxnError) ProtoMessage() {}
+func (m *OpRequiresTxnError) Reset()         { *m = OpRequiresTxnError{} }
+func (m *OpRequiresTxnError) String() string { return proto.CompactTextString(m) }
+func (*OpRequiresTxnError) ProtoMessage()    {}
 
 // A ConditionFailedError indicates that the expected value
 // of a ConditionalPutRequest was not found, either
@@ -210,8 +222,9 @@ type ConditionFailedError struct {
 	Index       *ErrPosition `protobuf:"bytes,2,opt,name=index" json:"index,omitempty"`
 }
 
-func (m *ConditionFailedError) Reset()      { *m = ConditionFailedError{} }
-func (*ConditionFailedError) ProtoMessage() {}
+func (m *ConditionFailedError) Reset()         { *m = ConditionFailedError{} }
+func (m *ConditionFailedError) String() string { return proto.CompactTextString(m) }
+func (*ConditionFailedError) ProtoMessage()    {}
 
 // A LeaseRejectedError indicates that the requested replica could
 // not acquire the desired lease because of an existing leader lease.
@@ -221,8 +234,9 @@ type LeaseRejectedError struct {
 	Existing  Lease  `protobuf:"bytes,3,opt,name=existing" json:"existing"`
 }
 
-func (m *LeaseRejectedError) Reset()      { *m = LeaseRejectedError{} }
-func (*LeaseRejectedError) ProtoMessage() {}
+func (m *LeaseRejectedError) Reset()         { *m = LeaseRejectedError{} }
+func (m *LeaseRejectedError) String() string { return proto.CompactTextString(m) }
+func (*LeaseRejectedError) ProtoMessage()    {}
 
 // A SendError indicates that a message could not be delivered to
 // the desired recipient(s).
@@ -231,8 +245,9 @@ type SendError struct {
 	Retryable bool   `protobuf:"varint,2,opt,name=retryable" json:"retryable"`
 }
 
-func (m *SendError) Reset()      { *m = SendError{} }
-func (*SendError) ProtoMessage() {}
+func (m *SendError) Reset()         { *m = SendError{} }
+func (m *SendError) String() string { return proto.CompactTextString(m) }
+func (*SendError) ProtoMessage()    {}
 
 // ErrorDetail is a union type containing all available errors.
 type ErrorDetail struct {
@@ -253,8 +268,9 @@ type ErrorDetail struct {
 	Send                          *SendError                          `protobuf:"bytes,15,opt,name=send" json:"send,omitempty"`
 }
 
-func (m *ErrorDetail) Reset()      { *m = ErrorDetail{} }
-func (*ErrorDetail) ProtoMessage() {}
+func (m *ErrorDetail) Reset()         { *m = ErrorDetail{} }
+func (m *ErrorDetail) String() string { return proto.CompactTextString(m) }
+func (*ErrorDetail) ProtoMessage()    {}
 
 // ErrPosition describes the position of an error in a Batch. A simple nullable
 // primitive field would break compatibility with proto3, where primitive fields
@@ -263,8 +279,9 @@ type ErrPosition struct {
 	Index int32 `protobuf:"varint,1,opt,name=index" json:"index"`
 }
 
-func (m *ErrPosition) Reset()      { *m = ErrPosition{} }
-func (*ErrPosition) ProtoMessage() {}
+func (m *ErrPosition) Reset()         { *m = ErrPosition{} }
+func (m *ErrPosition) String() string { return proto.CompactTextString(m) }
+func (*ErrPosition) ProtoMessage()    {}
 
 // Error is a generic representation including a string message
 // and information about retryability.
@@ -286,6 +303,24 @@ func (m *Error) Reset()      { *m = Error{} }
 func (*Error) ProtoMessage() {}
 
 func init() {
+	proto.RegisterType((*NotLeaderError)(nil), "cockroach.roachpb.NotLeaderError")
+	proto.RegisterType((*NodeUnavailableError)(nil), "cockroach.roachpb.NodeUnavailableError")
+	proto.RegisterType((*RangeNotFoundError)(nil), "cockroach.roachpb.RangeNotFoundError")
+	proto.RegisterType((*RangeKeyMismatchError)(nil), "cockroach.roachpb.RangeKeyMismatchError")
+	proto.RegisterType((*ReadWithinUncertaintyIntervalError)(nil), "cockroach.roachpb.ReadWithinUncertaintyIntervalError")
+	proto.RegisterType((*TransactionAbortedError)(nil), "cockroach.roachpb.TransactionAbortedError")
+	proto.RegisterType((*TransactionPushError)(nil), "cockroach.roachpb.TransactionPushError")
+	proto.RegisterType((*TransactionRetryError)(nil), "cockroach.roachpb.TransactionRetryError")
+	proto.RegisterType((*TransactionStatusError)(nil), "cockroach.roachpb.TransactionStatusError")
+	proto.RegisterType((*WriteIntentError)(nil), "cockroach.roachpb.WriteIntentError")
+	proto.RegisterType((*WriteTooOldError)(nil), "cockroach.roachpb.WriteTooOldError")
+	proto.RegisterType((*OpRequiresTxnError)(nil), "cockroach.roachpb.OpRequiresTxnError")
+	proto.RegisterType((*ConditionFailedError)(nil), "cockroach.roachpb.ConditionFailedError")
+	proto.RegisterType((*LeaseRejectedError)(nil), "cockroach.roachpb.LeaseRejectedError")
+	proto.RegisterType((*SendError)(nil), "cockroach.roachpb.SendError")
+	proto.RegisterType((*ErrorDetail)(nil), "cockroach.roachpb.ErrorDetail")
+	proto.RegisterType((*ErrPosition)(nil), "cockroach.roachpb.ErrPosition")
+	proto.RegisterType((*Error)(nil), "cockroach.roachpb.Error")
 	proto.RegisterEnum("cockroach.roachpb.TransactionRestart", TransactionRestart_name, TransactionRestart_value)
 }
 func (m *NotLeaderError) Marshal() (data []byte, err error) {

@@ -17,7 +17,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -35,6 +35,9 @@ type UnresolvedAddr struct {
 func (m *UnresolvedAddr) Reset()      { *m = UnresolvedAddr{} }
 func (*UnresolvedAddr) ProtoMessage() {}
 
+func init() {
+	proto.RegisterType((*UnresolvedAddr)(nil), "cockroach.util.UnresolvedAddr")
+}
 func (m *UnresolvedAddr) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)

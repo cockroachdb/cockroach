@@ -19,7 +19,7 @@ syntax = "proto2";
 package cockroach.sql;
 option go_package = "sql";
 
-import "gogoproto/gogo.proto";
+import weak "gogoproto/gogo.proto";
 
 option (gogoproto.goproto_getters_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;

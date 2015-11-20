@@ -560,14 +560,14 @@ void protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto() {
     "lable\030\016 \001(\0132\'.cockroach.roachpb.NodeUnav"
     "ailableError\022*\n\004send\030\017 \001(\0132\034.cockroach.r"
     "oachpb.SendError:\004\310\240\037\001\"\"\n\013ErrPosition\022\023\n"
-    "\005index\030\001 \001(\005B\004\310\336\037\000\"\261\001\n\005Error\022\025\n\007message\030"
+    "\005index\030\001 \001(\005B\004\310\336\037\000\"\267\001\n\005Error\022\025\n\007message\030"
     "\001 \001(\tB\004\310\336\037\000\022\027\n\tretryable\030\002 \001(\010B\004\310\336\037\000\022H\n\023"
     "transaction_restart\030\003 \001(\0162%.cockroach.ro"
     "achpb.TransactionRestartB\004\310\336\037\000\022.\n\006detail"
-    "\030\004 \001(\0132\036.cockroach.roachpb.ErrorDetail*;"
-    "\n\022TransactionRestart\022\t\n\005ABORT\020\000\022\013\n\007BACKO"
-    "FF\020\001\022\r\n\tIMMEDIATE\020\002B!Z\007roachpb\330\341\036\000\310\341\036\000\220\343"
-    "\036\000\310\342\036\001\340\342\036\001\320\342\036\001", 3134);
+    "\030\004 \001(\0132\036.cockroach.roachpb.ErrorDetail:\004"
+    "\230\240\037\000*;\n\022TransactionRestart\022\t\n\005ABORT\020\000\022\013\n"
+    "\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020\002B\035Z\007roachpb\310\341\036\000"
+    "\220\343\036\000\310\342\036\001\340\342\036\001\320\342\036\001X\002", 3138);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/errors.proto", &protobuf_RegisterTypes);
   NotLeaderError::default_instance_ = new NotLeaderError();

@@ -19,15 +19,13 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/roachpb"
-
-// discarding unused import cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
+import _ "github.com/cockroachdb/cockroach/roachpb"
 import cockroach_util "github.com/cockroachdb/cockroach/util"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import github_com_cockroachdb_cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 
-import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
 import errors "errors"
 
 import io "io"
@@ -95,6 +93,11 @@ func (m *Info) Reset()         { *m = Info{} }
 func (m *Info) String() string { return proto.CompactTextString(m) }
 func (*Info) ProtoMessage()    {}
 
+func init() {
+	proto.RegisterType((*Request)(nil), "cockroach.gossip.Request")
+	proto.RegisterType((*Response)(nil), "cockroach.gossip.Response")
+	proto.RegisterType((*Info)(nil), "cockroach.gossip.Info")
+}
 func (m *Request) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -132,12 +135,7 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 	}
 	i += n2
 	if len(m.HighWaterStamps) > 0 {
-		keysForHighWaterStamps := make([]int32, 0, len(m.HighWaterStamps))
 		for k := range m.HighWaterStamps {
-			keysForHighWaterStamps = append(keysForHighWaterStamps, k)
-		}
-		github_com_gogo_protobuf_sortkeys.Int32s(keysForHighWaterStamps)
-		for _, k := range keysForHighWaterStamps {
 			data[i] = 0x22
 			i++
 			v := m.HighWaterStamps[k]
@@ -152,12 +150,7 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 		}
 	}
 	if len(m.Delta) > 0 {
-		keysForDelta := make([]string, 0, len(m.Delta))
 		for k := range m.Delta {
-			keysForDelta = append(keysForDelta, k)
-		}
-		github_com_gogo_protobuf_sortkeys.Strings(keysForDelta)
-		for _, k := range keysForDelta {
 			data[i] = 0x2a
 			i++
 			v := m.Delta[k]
@@ -223,12 +216,7 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 		i += n5
 	}
 	if len(m.Delta) > 0 {
-		keysForDelta := make([]string, 0, len(m.Delta))
 		for k := range m.Delta {
-			keysForDelta = append(keysForDelta, k)
-		}
-		github_com_gogo_protobuf_sortkeys.Strings(keysForDelta)
-		for _, k := range keysForDelta {
 			data[i] = 0x22
 			i++
 			v := m.Delta[k]
@@ -253,12 +241,7 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 		}
 	}
 	if len(m.HighWaterStamps) > 0 {
-		keysForHighWaterStamps := make([]int32, 0, len(m.HighWaterStamps))
 		for k := range m.HighWaterStamps {
-			keysForHighWaterStamps = append(keysForHighWaterStamps, k)
-		}
-		github_com_gogo_protobuf_sortkeys.Int32s(keysForHighWaterStamps)
-		for _, k := range keysForHighWaterStamps {
 			data[i] = 0x2a
 			i++
 			v := m.HighWaterStamps[k]

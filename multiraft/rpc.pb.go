@@ -21,7 +21,7 @@ import math "math"
 import cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 import raftpb "github.com/coreos/etcd/raft/raftpb"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import github_com_cockroachdb_cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 
@@ -68,6 +68,11 @@ func (m *ConfChangeContext) Reset()         { *m = ConfChangeContext{} }
 func (m *ConfChangeContext) String() string { return proto.CompactTextString(m) }
 func (*ConfChangeContext) ProtoMessage()    {}
 
+func init() {
+	proto.RegisterType((*RaftMessageRequest)(nil), "cockroach.multiraft.RaftMessageRequest")
+	proto.RegisterType((*RaftMessageResponse)(nil), "cockroach.multiraft.RaftMessageResponse")
+	proto.RegisterType((*ConfChangeContext)(nil), "cockroach.multiraft.ConfChangeContext")
+}
 func (m *RaftMessageRequest) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)

@@ -20,8 +20,8 @@ syntax = "proto2";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "gogoproto/gogo.proto";
 import "cockroach/util/unresolved_addr.proto";
+import weak "gogoproto/gogo.proto";
 
 option (gogoproto.goproto_getters_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;

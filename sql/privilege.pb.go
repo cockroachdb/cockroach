@@ -28,7 +28,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -58,6 +58,10 @@ func (m *PrivilegeDescriptor) Reset()         { *m = PrivilegeDescriptor{} }
 func (m *PrivilegeDescriptor) String() string { return proto.CompactTextString(m) }
 func (*PrivilegeDescriptor) ProtoMessage()    {}
 
+func init() {
+	proto.RegisterType((*UserPrivileges)(nil), "cockroach.sql.UserPrivileges")
+	proto.RegisterType((*PrivilegeDescriptor)(nil), "cockroach.sql.PrivilegeDescriptor")
+}
 func (m *UserPrivileges) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)

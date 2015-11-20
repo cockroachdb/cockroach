@@ -19,7 +19,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -74,6 +74,11 @@ func (m *PingResponse) Reset()         { *m = PingResponse{} }
 func (m *PingResponse) String() string { return proto.CompactTextString(m) }
 func (*PingResponse) ProtoMessage()    {}
 
+func init() {
+	proto.RegisterType((*RemoteOffset)(nil), "cockroach.rpc.RemoteOffset")
+	proto.RegisterType((*PingRequest)(nil), "cockroach.rpc.PingRequest")
+	proto.RegisterType((*PingResponse)(nil), "cockroach.rpc.PingResponse")
+}
 func (m *RemoteOffset) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)

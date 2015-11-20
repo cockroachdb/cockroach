@@ -21,7 +21,7 @@ import math "math"
 import cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/roachpb"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -72,6 +72,11 @@ func (m *SystemConfig) Reset()         { *m = SystemConfig{} }
 func (m *SystemConfig) String() string { return proto.CompactTextString(m) }
 func (*SystemConfig) ProtoMessage()    {}
 
+func init() {
+	proto.RegisterType((*GCPolicy)(nil), "cockroach.config.GCPolicy")
+	proto.RegisterType((*ZoneConfig)(nil), "cockroach.config.ZoneConfig")
+	proto.RegisterType((*SystemConfig)(nil), "cockroach.config.SystemConfig")
+}
 func (m *GCPolicy) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)

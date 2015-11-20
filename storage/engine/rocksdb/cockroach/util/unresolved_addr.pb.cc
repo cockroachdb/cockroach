@@ -86,7 +86,7 @@ void protobuf_AddDesc_cockroach_2futil_2funresolved_5faddr_2eproto() {
     "UnresolvedAddr\022&\n\rnetwork_field\030\001 \001(\tB\017\310"
     "\336\037\000\352\336\037\007network\022&\n\raddress_field\030\002 \001(\tB\017\310"
     "\336\037\000\352\336\037\007address:\004\230\240\037\000B\032Z\004util\310\341\036\000\220\343\036\000\310\342\036\001"
-    "\340\342\036\001\320\342\036\001", 208);
+    "\340\342\036\001\320\342\036\001X\000", 210);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/util/unresolved_addr.proto", &protobuf_RegisterTypes);
   UnresolvedAddr::default_instance_ = new UnresolvedAddr();

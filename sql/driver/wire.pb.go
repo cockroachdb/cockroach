@@ -19,7 +19,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -476,6 +476,16 @@ func (m *Response_Result_Rows_Row) Reset()         { *m = Response_Result_Rows_R
 func (m *Response_Result_Rows_Row) String() string { return proto.CompactTextString(m) }
 func (*Response_Result_Rows_Row) ProtoMessage()    {}
 
+func init() {
+	proto.RegisterType((*Datum)(nil), "cockroach.sql.driver.Datum")
+	proto.RegisterType((*Datum_Timestamp)(nil), "cockroach.sql.driver.Datum.Timestamp")
+	proto.RegisterType((*Request)(nil), "cockroach.sql.driver.Request")
+	proto.RegisterType((*Response)(nil), "cockroach.sql.driver.Response")
+	proto.RegisterType((*Response_Result)(nil), "cockroach.sql.driver.Response.Result")
+	proto.RegisterType((*Response_Result_DDL)(nil), "cockroach.sql.driver.Response.Result.DDL")
+	proto.RegisterType((*Response_Result_Rows)(nil), "cockroach.sql.driver.Response.Result.Rows")
+	proto.RegisterType((*Response_Result_Rows_Row)(nil), "cockroach.sql.driver.Response.Result.Rows.Row")
+}
 func (m *Datum) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
