@@ -1227,6 +1227,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 		}
 
 		// Add the response to the batch, updating the timestamp.
+		reply.Header().Timestamp.Forward(ts)
 		br.Timestamp.Forward(ts)
 		br.Add(reply)
 		if isTxn {
