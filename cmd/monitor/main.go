@@ -24,11 +24,13 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
-	"path/filepath"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -36,15 +38,19 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-var outputDir = flag.String("dir", ".", "Directory in which to output the status logs to.")
-var interval = flag.Duration("interval", 10*time.Second, "Interval in which to poll the cluster's status.")
-var addr = flag.String("addr", ":26257", "The host:port of the cockroach cluster.")
+const (
+	// urlPath is the http path of the status server on each node.
+	urlPath = "_status/details/local"
+)
+
+var interval = flag.Duration("interval", 10*time.Second, "Interval in which to poll each services's status.")
+var addrs = flag.String("addrs", ":26257", "Comma-separated list of host:port addressess to monitor.")
 var insecure = flag.Bool("insecure", false, "True if using an insecure connection.")
 var user = flag.String("user", security.RootUser, "User used to connect to the cluster.")
 var certs = flag.String("certs", "certs", "Directory containing RSA key and x509 certs. This flag is required if --insecure=false.")
-var endpoint = flag.String("endpoint", "_status/nodes", "Status endpoint to monitor and log.")
 
 var retryOptions = retry.Options{
 	InitialBackoff: 100 * time.Millisecond,
@@ -52,71 +58,113 @@ var retryOptions = retry.Options{
 	Multiplier:     2,
 }
 
-// request returns the result of performing a http get request.
-func request(url string, httpClient *http.Client) ([]byte, bool) {
+type statusMonitor struct {
+	addr       string
+	url        string
+	httpClient *http.Client
+	file       *io.Writer
+}
+
+func newStatusMonitor(context *base.Context, addr string) (*statusMonitor, error) {
+	monitor := &statusMonitor{
+		addr: addr,
+	}
+	var err error
+	monitor.httpClient, err = context.GetHTTPClient()
+	if err != nil {
+		return nil, err
+	}
+	monitor.url = fmt.Sprintf("%s://%s/%s", context.HTTPRequestScheme(), monitor.addr, urlPath)
+	return monitor, nil
+}
+
+func (m *statusMonitor) queryStatus() error {
+	var queryErr error
 	for r := retry.Start(retryOptions); r.Next(); {
-		req, err := http.NewRequest("GET", url, nil)
+		if log.V(1) && queryErr != nil {
+			log.Infof("retrying after error: %s", queryErr)
+		}
+
+		// Construct a new HTTP GET Request.
+		req, err := http.NewRequest("GET", m.url, nil)
 		if err != nil {
-			log.Fatal(err)
-			return nil, false
+			queryErr = fmt.Errorf("could not create http request for %s: %s", m.url, err)
+			// Break immediately, this is not recoverable.
+			break
 		}
 		req.Header.Set(util.AcceptHeader, util.JSONContentType)
-		resp, err := httpClient.Do(req)
+
+		// Execute request.
+		resp, err := m.httpClient.Do(req)
 		if err != nil {
-			log.Infof("could not GET %s - %s", url, err)
+			queryErr = fmt.Errorf("could not GET %s - %s", m.url, err)
 			continue
 		}
 		defer resp.Body.Close()
+
+		// Read and verify body of response.
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			log.Infof("could not ready body for %s - %s", url, err)
+			queryErr = fmt.Errorf("could not ready body for %s - %s", m.url, err)
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
-			log.Infof("could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
+			queryErr = fmt.Errorf("could not GET %s - statuscode: %d - body: %s", m.url, resp.StatusCode, body)
 			continue
 		}
 		returnedContentType := resp.Header.Get(util.ContentTypeHeader)
 		if returnedContentType != util.JSONContentType {
-			log.Infof("unexpected content type: %v", returnedContentType)
+			queryErr = fmt.Errorf("unexpected content type: %v", returnedContentType)
 			continue
 		}
-		log.Infof("OK response from %s", url)
-		return body, true
+		return nil
 	}
-	log.Warningf("There was an error retrieving %s", url)
-	return nil, false
+	return queryErr
 }
 
 func main() {
 	flag.Parse()
+	parsedAddrs := strings.Split(*addrs, ",")
 
 	ctx := base.Context{Insecure: *insecure, Certs: *certs, User: *user}
-	httpClient, err := ctx.GetHTTPClient()
-	if err != nil {
-		panic(err)
-	}
 
 	startTime := time.Now()
-	file := filepath.Join(*outputDir, fmt.Sprintf("monitor.%s", strings.Replace(
-		startTime.Format(time.RFC3339), ":", "_", -1)))
-	log.Infof("Logging cluster status to: %s.\n", file)
-	w, err := os.Create(file)
-	if err != nil {
-		panic(err)
-	}
-	defer w.Close()
-
-	url := fmt.Sprintf("%s://%s/%s", ctx.HTTPRequestScheme(), *addr, *endpoint)
-	log.Infof("Cluster Status URL: %s\n", url)
-
-	for range time.Tick(*interval) {
-		resp, found := request(url, httpClient)
-		if !found {
-			log.Warningf("Could not get cluster status. Time since monitor started %s.", time.Since(startTime))
-			break
+	stopper := stop.NewStopper()
+	for _, addr := range parsedAddrs {
+		client, err := newStatusMonitor(&ctx, addr)
+		if err != nil {
+			log.Errorf("error creating client: %s", err)
+			return
 		}
-		log.Infof("Got cluster status.")
-		fmt.Fprintf(w, "%s\n", resp)
+		log.Infof("Monitoring Status URL: %s", client.url)
+		stopper.RunWorker(func() {
+			timer := time.Tick(*interval)
+			for {
+				select {
+				case <-stopper.ShouldStop():
+					return
+				case <-timer:
+					elapsed := time.Since(startTime)
+					if err := client.queryStatus(); err != nil {
+						log.Warningf("Could not get status from url %s. Time since monitor started %s.", client.url, elapsed)
+						stopper.Stop()
+						continue
+					}
+					log.Infof("Got status from url %s. Time since start: %s", client.url, elapsed)
+				}
+			}
+		})
+	}
+
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, os.Interrupt, os.Kill, syscall.SIGTERM)
+	// Block until a termination signal is received, or the stopper is closed by
+	// an error in one of the client routines.
+	select {
+	case <-stopper.ShouldStop():
+		log.Infof("Monitor stopped by error...")
+	case <-signalCh:
+		log.Infof("Stopping status monitor...")
+		stopper.Stop()
 	}
 }
