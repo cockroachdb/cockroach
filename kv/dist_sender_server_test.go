@@ -419,9 +419,10 @@ func TestBadRequest(t *testing.T) {
 	}
 }
 
-// TestTxnWritingToNewEpoch verifies that DistSender.sendChunk
-// properly propagates the txn.Writing field to a next iteration.
-func TestTxnWritingToNewEpoch(t *testing.T) {
+// TestPropagateTxnOnError verifies that DistSender.sendChunk properly
+// propagates the txn data to a next iteration. Use txn.Writing field to
+// verify that.
+func TestPropagateTxnOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, db := setupMultipleRanges(t, "b", "c")
 	defer s.Stop()
@@ -459,7 +460,17 @@ func TestTxnWritingToNewEpoch(t *testing.T) {
 		b.Put("a", "val")
 		b.Put("b", "val")
 		b.Put("c", "val")
-		return txn.CommitInBatch(b)
+		err := txn.CommitInBatch(b)
+		if epoch == 1 {
+			if tErr, ok := err.(*roachpb.TransactionRetryError); ok {
+				if !tErr.Txn.Writing {
+					t.Errorf("unexpected non-writing txn on error")
+				}
+			} else {
+				t.Errorf("expected TransactionRetryError, but got: %s", err)
+			}
+		}
+		return err
 	}); err != nil {
 		t.Errorf("unexpected error on transactional Puts: %s", err)
 	}
@@ -472,8 +483,9 @@ func TestTxnWritingToNewEpoch(t *testing.T) {
 // TestDoNotPropagateTxnOnError reproduces a bug where txn data (e.g., txn ID)
 // are not propagated to a next epoch on error.
 //
-// TODO(kkaneda): This test is to reproduce a bug and it does not
-// actually test a condition to be held. Fix the bug.
+// TODO(kkaneda): Fix #743. The bug happens since not all errors carry
+// a transaction, but range-spanning writes are not atomic (and data
+// may actually have been written).
 func TestDoNotPropagateTxnOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, db := setupMultipleRanges(t, "b")
