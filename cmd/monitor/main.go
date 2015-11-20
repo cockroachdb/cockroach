@@ -42,12 +42,12 @@ import (
 )
 
 const (
-	// urlPath is the http path of the status server on each node.
-	urlPath = "_status/details/local"
+	// urlPath is the http path of the status endpoint at each monitored address.
+	urlPath = "health"
 )
 
-var interval = flag.Duration("interval", 10*time.Second, "Interval in which to poll each services's status.")
-var addrs = flag.String("addrs", ":26257", "Comma-separated list of host:port addressess to monitor.")
+var interval = flag.Duration("interval", 10*time.Second, "Interval in which to poll the status of each monitored address.")
+var addrs = flag.String("addrs", ":26257", "Comma-separated list of host:port addresses to monitor.")
 var insecure = flag.Bool("insecure", false, "True if using an insecure connection.")
 var user = flag.String("user", security.RootUser, "User used to connect to the cluster.")
 var certs = flag.String("certs", "certs", "Directory containing RSA key and x509 certs. This flag is required if --insecure=false.")

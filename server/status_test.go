@@ -102,6 +102,7 @@ func TestStatusJson(t *testing.T) {
     "dependencies": ""
   }
 }`, addr.Network(), addr.String(), regexp.QuoteMeta(runtime.Version()))
+	testCases = append(testCases, TestCase{"/health", expectedResult})
 	testCases = append(testCases, TestCase{"/_status/details/local", expectedResult})
 	testCases = append(testCases, TestCase{"/_status/details/1", expectedResult})
 
@@ -123,18 +124,18 @@ func TestStatusJson(t *testing.T) {
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusOK {
-				t.Errorf("unexpected status code: %v", resp.StatusCode)
+				t.Errorf("endpoint %s unexpected status code: %v", spec.keyPrefix, resp.StatusCode)
 			}
 			returnedContentType := resp.Header.Get(util.ContentTypeHeader)
 			if returnedContentType != util.JSONContentType {
-				t.Errorf("unexpected content type: %v", returnedContentType)
+				t.Errorf("endpoint %s unexpected content type: %v", spec.keyPrefix, returnedContentType)
 			}
 			body, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if re := regexp.MustCompile(spec.expected); !re.Match(body) {
-				t.Errorf("expected match %s; got %s", spec.expected, body)
+				t.Errorf("endpoint %s expected match %s; got %s", spec.keyPrefix, spec.expected, body)
 			}
 		}
 	}

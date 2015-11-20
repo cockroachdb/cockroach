@@ -90,6 +90,10 @@ const (
 	statusStoresPrefix = "/_status/stores/"
 	// statusStorePattern exposes status for a single store.
 	statusStorePattern = "/_status/stores/:store_id"
+
+	// healthEndpoint is a shortcut for local details, intended for use by
+	// monitoring processes to verify that the server is up.
+	healthEndpoint = "/health"
 )
 
 // Pattern for local used when determining the node ID.
@@ -135,6 +139,7 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip, ctx *Context) *status
 	server.router.GET(statusNodePattern, server.handleNodeStatus)
 	server.router.GET(statusStoresPrefix, server.handleStoresStatus)
 	server.router.GET(statusStorePattern, server.handleStoreStatus)
+	server.router.GET(healthEndpoint, server.handleDetailsLocal)
 
 	return server
 }

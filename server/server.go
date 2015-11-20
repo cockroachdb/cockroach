@@ -220,6 +220,7 @@ func (s *Server) initHTTP() {
 	s.mux.Handle(adminEndpoint, s.admin)
 	s.mux.Handle(debugEndpoint, s.admin)
 	s.mux.Handle(statusPrefix, s.status)
+	s.mux.Handle(healthEndpoint, s.status)
 	s.mux.Handle(ts.URLPrefix, s.tsServer)
 
 	// The SQL endpoints handles its own authentication, verifying user
