@@ -18,24 +18,19 @@
 package kv
 
 import (
-	"fmt"
-	"sync"
-
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
 // A LocalSender provides methods to access a collection of local stores.
 type LocalSender struct {
-	mu       sync.RWMutex                       // Protects storeMap and addrs
-	storeMap map[roachpb.StoreID]*storage.Store // Map from StoreID to Store
+	stores *Stores
 }
 
 var _ client.Sender = &LocalSender{}
@@ -44,67 +39,40 @@ var _ rangeDescriptorDB = &LocalSender{}
 // NewLocalSender returns a local-only sender which directly accesses
 // a collection of stores.
 func NewLocalSender() *LocalSender {
-	return &LocalSender{
-		storeMap: map[roachpb.StoreID]*storage.Store{},
-	}
+	return &LocalSender{stores: NewStores()}
 }
 
 // GetStoreCount returns the number of stores this node is exporting.
 func (ls *LocalSender) GetStoreCount() int {
-	ls.mu.RLock()
-	defer ls.mu.RUnlock()
-	return len(ls.storeMap)
+	return ls.stores.GetStoreCount()
 }
 
 // HasStore returns true if the specified store is owned by this LocalSender.
 func (ls *LocalSender) HasStore(storeID roachpb.StoreID) bool {
-	ls.mu.RLock()
-	defer ls.mu.RUnlock()
-	_, ok := ls.storeMap[storeID]
-	return ok
+	return ls.stores.HasStore(storeID)
 }
 
 // GetStore looks up the store by store ID. Returns an error
 // if not found.
 func (ls *LocalSender) GetStore(storeID roachpb.StoreID) (*storage.Store, error) {
-	ls.mu.RLock()
-	store, ok := ls.storeMap[storeID]
-	ls.mu.RUnlock()
-	if !ok {
-		return nil, util.Errorf("store %d not found", storeID)
-	}
-	return store, nil
+	return ls.stores.GetStore(storeID)
 }
 
 // AddStore adds the specified store to the store map.
 func (ls *LocalSender) AddStore(s *storage.Store) {
-	ls.mu.Lock()
-	defer ls.mu.Unlock()
-	if _, ok := ls.storeMap[s.Ident.StoreID]; ok {
-		panic(fmt.Sprintf("cannot add store twice to local db: %+v", s.Ident))
-	}
-	ls.storeMap[s.Ident.StoreID] = s
+	ls.stores.AddStore(s)
 }
 
 // RemoveStore removes the specified store from the store map.
 func (ls *LocalSender) RemoveStore(s *storage.Store) {
-	ls.mu.Lock()
-	defer ls.mu.Unlock()
-	delete(ls.storeMap, s.Ident.StoreID)
+	ls.stores.RemoveStore(s)
 }
 
 // VisitStores implements a visitor pattern over stores in the storeMap.
 // The specified function is invoked with each store in turn. Stores are
 // visited in a random order.
 func (ls *LocalSender) VisitStores(visitor func(s *storage.Store) error) error {
-	ls.mu.RLock()
-	defer ls.mu.RUnlock()
-	for _, s := range ls.storeMap {
-		if err := visitor(s); err != nil {
-			return err
-		}
-	}
-	return nil
+	return ls.stores.VisitStores(visitor)
 }
 
 // Send implements the client.Sender interface. The store is looked up from the
@@ -122,7 +90,7 @@ func (ls *LocalSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roac
 		var repl *roachpb.ReplicaDescriptor
 		var rangeID roachpb.RangeID
 		rs := keys.Range(ba)
-		rangeID, repl, err = ls.lookupReplica(rs.Key, rs.EndKey)
+		rangeID, repl, err = ls.stores.lookupReplica(rs.Key, rs.EndKey)
 		if err == nil {
 			ba.RangeID = rangeID
 			ba.Replica = *repl
@@ -157,42 +125,10 @@ func (ls *LocalSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roac
 	return br, pErr
 }
 
-// lookupReplica looks up replica by key [range]. Lookups are done
-// by consulting each store in turn via Store.LookupRange(key).
-// Returns RangeID and replica on success; RangeKeyMismatch error
-// if not found.
-// This is only for testing usage; performance doesn't matter.
-func (ls *LocalSender) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeID, replica *roachpb.ReplicaDescriptor, err error) {
-	ls.mu.RLock()
-	defer ls.mu.RUnlock()
-	var rng *storage.Replica
-	for _, store := range ls.storeMap {
-		rng = store.LookupReplica(start, end)
-		if rng == nil {
-			if tmpRng := store.LookupReplica(start, nil); tmpRng != nil {
-				log.Warningf(fmt.Sprintf("range not contained in one range: [%s,%s), but have [%s,%s)", start, end, tmpRng.Desc().StartKey, tmpRng.Desc().EndKey))
-			}
-			continue
-		}
-		if replica == nil {
-			rangeID = rng.Desc().RangeID
-			replica = rng.GetReplica()
-			continue
-		}
-		// Should never happen outside of tests.
-		return 0, nil, util.Errorf(
-			"range %+v exists on additional store: %+v", rng, store)
-	}
-	if replica == nil {
-		err = roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), nil)
-	}
-	return rangeID, replica, err
-}
-
 // firstRange implements the rangeDescriptorDB interface. It returns the
 // range descriptor which contains KeyMin.
 func (ls *LocalSender) firstRange() (*roachpb.RangeDescriptor, error) {
-	_, replica, err := ls.lookupReplica(roachpb.RKeyMin, nil)
+	_, replica, err := ls.stores.lookupReplica(roachpb.RKeyMin, nil)
 	if err != nil {
 		return nil, err
 	}
