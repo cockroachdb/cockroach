@@ -8,7 +8,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -33,6 +33,10 @@ func (m *EchoResponse) Reset()         { *m = EchoResponse{} }
 func (m *EchoResponse) String() string { return proto.CompactTextString(m) }
 func (*EchoResponse) ProtoMessage()    {}
 
+func init() {
+	proto.RegisterType((*EchoRequest)(nil), "cockroach.rpc.codec.message.EchoRequest")
+	proto.RegisterType((*EchoResponse)(nil), "cockroach.rpc.codec.message.EchoResponse")
+}
 func (m *EchoRequest) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)

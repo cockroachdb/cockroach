@@ -20,7 +20,7 @@ import fmt "fmt"
 import math "math"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/roachpb"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -96,6 +96,11 @@ func (m *MVCCStats) Reset()         { *m = MVCCStats{} }
 func (m *MVCCStats) String() string { return proto.CompactTextString(m) }
 func (*MVCCStats) ProtoMessage()    {}
 
+func init() {
+	proto.RegisterType((*MVCCValue)(nil), "cockroach.storage.engine.MVCCValue")
+	proto.RegisterType((*MVCCMetadata)(nil), "cockroach.storage.engine.MVCCMetadata")
+	proto.RegisterType((*MVCCStats)(nil), "cockroach.storage.engine.MVCCStats")
+}
 func (m *MVCCValue) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)

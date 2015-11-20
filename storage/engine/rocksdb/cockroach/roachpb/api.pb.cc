@@ -1521,7 +1521,7 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
     "\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000*G\n\013PushTxnType\022\022"
     "\n\016PUSH_TIMESTAMP\020\000\022\r\n\tABORT_TXN\020\001\022\017\n\013CLE"
     "ANUP_TXN\020\002\032\004\210\243\036\000B\035Z\007roachpb\310\341\036\000\220\343\036\000\310\342\036\001\340"
-    "\342\036\001\320\342\036\001", 8887);
+    "\342\036\001\320\342\036\001X\003", 8889);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/api.proto", &protobuf_RegisterTypes);
   ResponseHeader::default_instance_ = new ResponseHeader();

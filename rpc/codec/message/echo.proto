@@ -6,7 +6,7 @@ syntax = "proto2";
 package cockroach.rpc.codec.message;
 option go_package = "message";
 
-import "gogoproto/gogo.proto";
+import weak "gogoproto/gogo.proto";
 
 option (gogoproto.goproto_getters_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;

@@ -249,12 +249,12 @@ void protobuf_AddDesc_cockroach_2froachpb_2fmetadata_2eproto() {
   already_here = true;
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-  ::gogoproto::protobuf_AddDesc_gogoproto_2fgogo_2eproto();
   ::cockroach::util::protobuf_AddDesc_cockroach_2futil_2funresolved_5faddr_2eproto();
+  ::gogoproto::protobuf_AddDesc_gogoproto_2fgogo_2eproto();
   ::google::protobuf::DescriptorPool::InternalAddGeneratedFile(
     "\n cockroach/roachpb/metadata.proto\022\021cock"
-    "roach.roachpb\032\024gogoproto/gogo.proto\032$coc"
-    "kroach/util/unresolved_addr.proto\"8\n\nAtt"
+    "roach.roachpb\032$cockroach/util/unresolved"
+    "_addr.proto\032\024gogoproto/gogo.proto\"8\n\nAtt"
     "ributes\022$\n\005attrs\030\001 \003(\tB\025\362\336\037\021yaml:\"attrs,"
     "flow\":\004\230\240\037\000\"\240\001\n\021ReplicaDescriptor\022)\n\007nod"
     "e_id\030\001 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\372\336\037\006NodeID\022,\n\010"
@@ -284,7 +284,7 @@ void protobuf_AddDesc_cockroach_2froachpb_2fmetadata_2eproto() {
     "(\0132!.cockroach.roachpb.NodeDescriptorB\004\310"
     "\336\037\000\0228\n\010capacity\030\004 \001(\0132 .cockroach.roachp"
     "b.StoreCapacityB\004\310\336\037\000B\035Z\007roachpb\310\341\036\000\220\343\036\000"
-    "\310\342\036\001\340\342\036\001\320\342\036\001", 1292);
+    "\310\342\036\001\340\342\036\001\320\342\036\001X\001", 1294);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/metadata.proto", &protobuf_RegisterTypes);
   Attributes::default_instance_ = new Attributes();

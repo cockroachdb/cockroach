@@ -17,7 +17,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import github_com_cockroachdb_cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 
@@ -69,6 +69,10 @@ func (m *LogEntry_Arg) Reset()         { *m = LogEntry_Arg{} }
 func (m *LogEntry_Arg) String() string { return proto.CompactTextString(m) }
 func (*LogEntry_Arg) ProtoMessage()    {}
 
+func init() {
+	proto.RegisterType((*LogEntry)(nil), "cockroach.util.log.LogEntry")
+	proto.RegisterType((*LogEntry_Arg)(nil), "cockroach.util.log.LogEntry.Arg")
+}
 func (m *LogEntry) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)

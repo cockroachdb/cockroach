@@ -20,7 +20,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -223,6 +223,12 @@ func (m *TimeSeriesQueryResponse_Result) GetDatapoints() []*TimeSeriesDatapoint 
 }
 
 func init() {
+	proto.RegisterType((*TimeSeriesDatapoint)(nil), "cockroach.ts.TimeSeriesDatapoint")
+	proto.RegisterType((*TimeSeriesData)(nil), "cockroach.ts.TimeSeriesData")
+	proto.RegisterType((*TimeSeriesQueryRequest)(nil), "cockroach.ts.TimeSeriesQueryRequest")
+	proto.RegisterType((*TimeSeriesQueryRequest_Query)(nil), "cockroach.ts.TimeSeriesQueryRequest.Query")
+	proto.RegisterType((*TimeSeriesQueryResponse)(nil), "cockroach.ts.TimeSeriesQueryResponse")
+	proto.RegisterType((*TimeSeriesQueryResponse_Result)(nil), "cockroach.ts.TimeSeriesQueryResponse.Result")
 	proto.RegisterEnum("cockroach.ts.TimeSeriesQueryAggregator", TimeSeriesQueryAggregator_name, TimeSeriesQueryAggregator_value)
 }
 func (m *TimeSeriesDatapoint) Marshal() (data []byte, err error) {

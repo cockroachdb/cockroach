@@ -40,7 +40,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -110,6 +110,8 @@ func (m *ResponseHeader) String() string { return proto.CompactTextString(m) }
 func (*ResponseHeader) ProtoMessage()    {}
 
 func init() {
+	proto.RegisterType((*RequestHeader)(nil), "cockroach.rpc.codec.wire.RequestHeader")
+	proto.RegisterType((*ResponseHeader)(nil), "cockroach.rpc.codec.wire.ResponseHeader")
 	proto.RegisterEnum("cockroach.rpc.codec.wire.CompressionType", CompressionType_name, CompressionType_value)
 }
 func (m *RequestHeader) Marshal() (data []byte, err error) {

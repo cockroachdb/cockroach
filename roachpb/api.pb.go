@@ -118,7 +118,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -1041,6 +1041,58 @@ func (m *BatchResponse_Header) String() string { return proto.CompactTextString(
 func (*BatchResponse_Header) ProtoMessage()    {}
 
 func init() {
+	proto.RegisterType((*ResponseHeader)(nil), "cockroach.roachpb.ResponseHeader")
+	proto.RegisterType((*GetRequest)(nil), "cockroach.roachpb.GetRequest")
+	proto.RegisterType((*GetResponse)(nil), "cockroach.roachpb.GetResponse")
+	proto.RegisterType((*PutRequest)(nil), "cockroach.roachpb.PutRequest")
+	proto.RegisterType((*PutResponse)(nil), "cockroach.roachpb.PutResponse")
+	proto.RegisterType((*ConditionalPutRequest)(nil), "cockroach.roachpb.ConditionalPutRequest")
+	proto.RegisterType((*ConditionalPutResponse)(nil), "cockroach.roachpb.ConditionalPutResponse")
+	proto.RegisterType((*IncrementRequest)(nil), "cockroach.roachpb.IncrementRequest")
+	proto.RegisterType((*IncrementResponse)(nil), "cockroach.roachpb.IncrementResponse")
+	proto.RegisterType((*DeleteRequest)(nil), "cockroach.roachpb.DeleteRequest")
+	proto.RegisterType((*DeleteResponse)(nil), "cockroach.roachpb.DeleteResponse")
+	proto.RegisterType((*DeleteRangeRequest)(nil), "cockroach.roachpb.DeleteRangeRequest")
+	proto.RegisterType((*DeleteRangeResponse)(nil), "cockroach.roachpb.DeleteRangeResponse")
+	proto.RegisterType((*ScanRequest)(nil), "cockroach.roachpb.ScanRequest")
+	proto.RegisterType((*ScanResponse)(nil), "cockroach.roachpb.ScanResponse")
+	proto.RegisterType((*ReverseScanRequest)(nil), "cockroach.roachpb.ReverseScanRequest")
+	proto.RegisterType((*ReverseScanResponse)(nil), "cockroach.roachpb.ReverseScanResponse")
+	proto.RegisterType((*BeginTransactionRequest)(nil), "cockroach.roachpb.BeginTransactionRequest")
+	proto.RegisterType((*BeginTransactionResponse)(nil), "cockroach.roachpb.BeginTransactionResponse")
+	proto.RegisterType((*EndTransactionRequest)(nil), "cockroach.roachpb.EndTransactionRequest")
+	proto.RegisterType((*EndTransactionResponse)(nil), "cockroach.roachpb.EndTransactionResponse")
+	proto.RegisterType((*AdminSplitRequest)(nil), "cockroach.roachpb.AdminSplitRequest")
+	proto.RegisterType((*AdminSplitResponse)(nil), "cockroach.roachpb.AdminSplitResponse")
+	proto.RegisterType((*AdminMergeRequest)(nil), "cockroach.roachpb.AdminMergeRequest")
+	proto.RegisterType((*AdminMergeResponse)(nil), "cockroach.roachpb.AdminMergeResponse")
+	proto.RegisterType((*RangeLookupRequest)(nil), "cockroach.roachpb.RangeLookupRequest")
+	proto.RegisterType((*RangeLookupResponse)(nil), "cockroach.roachpb.RangeLookupResponse")
+	proto.RegisterType((*HeartbeatTxnRequest)(nil), "cockroach.roachpb.HeartbeatTxnRequest")
+	proto.RegisterType((*HeartbeatTxnResponse)(nil), "cockroach.roachpb.HeartbeatTxnResponse")
+	proto.RegisterType((*GCRequest)(nil), "cockroach.roachpb.GCRequest")
+	proto.RegisterType((*GCRequest_GCKey)(nil), "cockroach.roachpb.GCRequest.GCKey")
+	proto.RegisterType((*GCResponse)(nil), "cockroach.roachpb.GCResponse")
+	proto.RegisterType((*PushTxnRequest)(nil), "cockroach.roachpb.PushTxnRequest")
+	proto.RegisterType((*PushTxnResponse)(nil), "cockroach.roachpb.PushTxnResponse")
+	proto.RegisterType((*ResolveIntentRequest)(nil), "cockroach.roachpb.ResolveIntentRequest")
+	proto.RegisterType((*ResolveIntentResponse)(nil), "cockroach.roachpb.ResolveIntentResponse")
+	proto.RegisterType((*ResolveIntentRangeRequest)(nil), "cockroach.roachpb.ResolveIntentRangeRequest")
+	proto.RegisterType((*NoopResponse)(nil), "cockroach.roachpb.NoopResponse")
+	proto.RegisterType((*NoopRequest)(nil), "cockroach.roachpb.NoopRequest")
+	proto.RegisterType((*ResolveIntentRangeResponse)(nil), "cockroach.roachpb.ResolveIntentRangeResponse")
+	proto.RegisterType((*MergeRequest)(nil), "cockroach.roachpb.MergeRequest")
+	proto.RegisterType((*MergeResponse)(nil), "cockroach.roachpb.MergeResponse")
+	proto.RegisterType((*TruncateLogRequest)(nil), "cockroach.roachpb.TruncateLogRequest")
+	proto.RegisterType((*TruncateLogResponse)(nil), "cockroach.roachpb.TruncateLogResponse")
+	proto.RegisterType((*LeaderLeaseRequest)(nil), "cockroach.roachpb.LeaderLeaseRequest")
+	proto.RegisterType((*LeaderLeaseResponse)(nil), "cockroach.roachpb.LeaderLeaseResponse")
+	proto.RegisterType((*RequestUnion)(nil), "cockroach.roachpb.RequestUnion")
+	proto.RegisterType((*ResponseUnion)(nil), "cockroach.roachpb.ResponseUnion")
+	proto.RegisterType((*Header)(nil), "cockroach.roachpb.Header")
+	proto.RegisterType((*BatchRequest)(nil), "cockroach.roachpb.BatchRequest")
+	proto.RegisterType((*BatchResponse)(nil), "cockroach.roachpb.BatchResponse")
+	proto.RegisterType((*BatchResponse_Header)(nil), "cockroach.roachpb.BatchResponse.Header")
 	proto.RegisterEnum("cockroach.roachpb.ReadConsistencyType", ReadConsistencyType_name, ReadConsistencyType_value)
 	proto.RegisterEnum("cockroach.roachpb.PushTxnType", PushTxnType_name, PushTxnType_value)
 }

@@ -21,7 +21,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -47,6 +47,10 @@ func (m *ArithResponse) Reset()         { *m = ArithResponse{} }
 func (m *ArithResponse) String() string { return proto.CompactTextString(m) }
 func (*ArithResponse) ProtoMessage()    {}
 
+func init() {
+	proto.RegisterType((*ArithRequest)(nil), "cockroach.rpc.codec.message.ArithRequest")
+	proto.RegisterType((*ArithResponse)(nil), "cockroach.rpc.codec.message.ArithResponse")
+}
 func (m *ArithRequest) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)

@@ -19,7 +19,7 @@ import math "math"
 import cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 import cockroach_storage_engine "github.com/cockroachdb/cockroach/storage/engine"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import github_com_cockroachdb_cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 
@@ -48,6 +48,9 @@ func (m *NodeStatus) Reset()         { *m = NodeStatus{} }
 func (m *NodeStatus) String() string { return proto.CompactTextString(m) }
 func (*NodeStatus) ProtoMessage()    {}
 
+func init() {
+	proto.RegisterType((*NodeStatus)(nil), "cockroach.server.status.NodeStatus")
+}
 func (m *NodeStatus) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)

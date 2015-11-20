@@ -8,7 +8,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-// discarding unused import gogoproto "github.com/cockroachdb/gogoproto"
+// skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
 import io "io"
 
@@ -145,6 +145,15 @@ func (m *RaftSnapshotData_KeyValue) Reset()         { *m = RaftSnapshotData_KeyV
 func (m *RaftSnapshotData_KeyValue) String() string { return proto.CompactTextString(m) }
 func (*RaftSnapshotData_KeyValue) ProtoMessage()    {}
 
+func init() {
+	proto.RegisterType((*RaftCommand)(nil), "cockroach.roachpb.RaftCommand")
+	proto.RegisterType((*InternalTimeSeriesData)(nil), "cockroach.roachpb.InternalTimeSeriesData")
+	proto.RegisterType((*InternalTimeSeriesSample)(nil), "cockroach.roachpb.InternalTimeSeriesSample")
+	proto.RegisterType((*RaftTruncatedState)(nil), "cockroach.roachpb.RaftTruncatedState")
+	proto.RegisterType((*RaftTombstone)(nil), "cockroach.roachpb.RaftTombstone")
+	proto.RegisterType((*RaftSnapshotData)(nil), "cockroach.roachpb.RaftSnapshotData")
+	proto.RegisterType((*RaftSnapshotData_KeyValue)(nil), "cockroach.roachpb.RaftSnapshotData.KeyValue")
+}
 func (m *RaftCommand) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
