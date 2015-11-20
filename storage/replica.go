@@ -1081,7 +1081,9 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 		}
 	}
 
-	// Execute the commands.
+	// Execute the commands. If this returns without an error, the batch must
+	// be committed (EndTransaction with a CommitTrigger may unlock
+	// readOnlyCmdMu via a batch.Defer).
 	br, intents, err := r.executeBatch(btch, ms, ba)
 
 	// Regardless of error, add result to the sequence cache if this is

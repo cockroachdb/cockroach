@@ -481,28 +481,36 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 			batch.Defer(r.readOnlyCmdMu.Unlock)
 		}
 
-		if ct.GetSplitTrigger() != nil {
-			*ms = engine.MVCCStats{} // clear stats, as split will recompute from scratch.
-			if err := r.splitTrigger(batch, ct.SplitTrigger); err != nil {
-				return reply, nil, err
+		if err := func() error {
+			if ct.GetSplitTrigger() != nil {
+				*ms = engine.MVCCStats{} // clear stats, as split will recompute from scratch.
+				if err := r.splitTrigger(batch, ct.SplitTrigger); err != nil {
+					return err
+				}
 			}
-		}
-		if ct.GetMergeTrigger() != nil {
-			*ms = engine.MVCCStats{} // clear stats, as merge will recompute from scratch.
-			if err := r.mergeTrigger(batch, ct.MergeTrigger); err != nil {
-				return reply, nil, err
+			if ct.GetMergeTrigger() != nil {
+				*ms = engine.MVCCStats{} // clear stats, as merge will recompute from scratch.
+				if err := r.mergeTrigger(batch, ct.MergeTrigger); err != nil {
+					return err
+				}
 			}
-		}
-		if ct.GetChangeReplicasTrigger() != nil {
-			if err := r.changeReplicasTrigger(ct.ChangeReplicasTrigger); err != nil {
-				return reply, nil, err
+			if ct.GetChangeReplicasTrigger() != nil {
+				if err := r.changeReplicasTrigger(ct.ChangeReplicasTrigger); err != nil {
+					return err
+				}
 			}
-		}
-		if ct.GetModifiedSpanTrigger() != nil {
-			if ct.ModifiedSpanTrigger.SystemDBSpan {
-				// Check if we need to gossip the system config.
-				batch.Defer(r.maybeGossipSystemConfig)
+			if ct.GetModifiedSpanTrigger() != nil {
+				if ct.ModifiedSpanTrigger.SystemDBSpan {
+					// Check if we need to gossip the system config.
+					batch.Defer(r.maybeGossipSystemConfig)
+				}
 			}
+			return nil
+		}(); err != nil {
+			r.readOnlyCmdMu.Unlock() // since the batch.Defer above won't run
+			// TODO(tschottdorf): should an error here always amount to a
+			// ReplicaCorruptionError?
+			return reply, nil, err
 		}
 	}
 
