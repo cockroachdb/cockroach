@@ -465,12 +465,11 @@ func (*Lease) ProtoMessage() {}
 
 // GCMetadata holds information about the last complete key/value
 // garbage collection scan of a range.
+// TODO(tschottdorf): can avoid an extra message unless we're planning
+// to add more content.
 type GCMetadata struct {
 	// The last GC scan timestamp in nanoseconds since the Unix epoch.
 	LastScanNanos int64 `protobuf:"varint,1,opt,name=last_scan_nanos" json:"last_scan_nanos"`
-	// The oldest unresolved write intent in nanoseconds since epoch.
-	// Null if there are no unresolved write intents.
-	OldestIntentNanos *int64 `protobuf:"varint,2,opt,name=oldest_intent_nanos" json:"oldest_intent_nanos,omitempty"`
 }
 
 func (m *GCMetadata) Reset()         { *m = GCMetadata{} }
@@ -1101,11 +1100,6 @@ func (m *GCMetadata) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x8
 	i++
 	i = encodeVarintData(data, i, uint64(m.LastScanNanos))
-	if m.OldestIntentNanos != nil {
-		data[i] = 0x10
-		i++
-		i = encodeVarintData(data, i, uint64(*m.OldestIntentNanos))
-	}
 	return i, nil
 }
 
@@ -1373,9 +1367,6 @@ func (m *GCMetadata) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovData(uint64(m.LastScanNanos))
-	if m.OldestIntentNanos != nil {
-		n += 1 + sovData(uint64(*m.OldestIntentNanos))
-	}
 	return n
 }
 
@@ -3421,26 +3412,6 @@ func (m *GCMetadata) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field OldestIntentNanos", wireType)
-			}
-			var v int64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowData
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				v |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			m.OldestIntentNanos = &v
 		default:
 			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])

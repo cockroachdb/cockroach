@@ -1416,12 +1416,9 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 					Span: roachpb.Span{Key: r.Desc().StartKey.AsRawKey()},
 				}
 				{
-					prefix := keys.SequenceCacheKeyPrefix(r.Desc().RangeID, txn.ID)
-					kvs, _, err := engine.MVCCScan(r.store.Engine(), prefix,
-						prefix.PrefixEnd(), 0 /* max */, roachpb.ZeroTimestamp,
-						false /* consistent */, nil /* txn */)
+					kvs, err := r.sequence.GetAllID(r.store.Engine(), txn.ID)
 					if err != nil {
-						log.Warning(err)
+						panic(err) // TODO(tschottdorf): ReplicaCorruptionError
 					}
 					// Allocate slots for the transaction key and the sequence
 					// cache keys.
@@ -1522,9 +1519,6 @@ func (r *Replica) maybeSetCorrupt(err error) error {
 // commands have been **proposed** (not executed). This ensures that if a
 // waiting client retries immediately after calling this function, it will not
 // hit the same intents again.
-// TODO(tschottdorf): once Txn records have a list of possibly open intents,
-// resolveIntents should send an RPC to update the transaction(s) as well (for
-// those intents with non-pending Txns).
 func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, wait bool) error {
 	trace := tracer.FromCtx(ctx)
 	tracer.ToCtx(ctx, nil) // we're doing async stuff below; those need new traces
@@ -1589,8 +1583,8 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 					case *roachpb.NotLeaderError:
 					case *roachpb.RangeNotFoundError:
 					default:
-						// TODO(tschottdorf): Does this need to be a panic?
-						panic(fmt.Sprintf("local intent resolution failed with unexpected error: %s", err))
+						log.Warningf("local intent resolution failed with unexpected error: %s", err)
+						return err
 					}
 				}
 			}

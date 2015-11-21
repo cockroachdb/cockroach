@@ -104,6 +104,33 @@ func (sc *SequenceCache) Get(e engine.Engine, id []byte, dest *roachpb.SequenceC
 	return epoch, seq, nil
 }
 
+// GetAllID returns all the key-value pairs for the given ID from the engine.
+func (sc *SequenceCache) GetAllID(e engine.Engine, id []byte) ([]roachpb.KeyValue, error) {
+	prefix := keys.SequenceCacheKeyPrefix(sc.rangeID, id)
+	kvs, _, err := engine.MVCCScan(e, prefix, prefix.PrefixEnd(), 0, /* max */
+		roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */)
+	return kvs, err
+}
+
+// Iterate walks through the sequence cache, invoking the given callback for
+// each unmarshaled entry with the key, the ID and the decoded entry.
+func (sc *SequenceCache) Iterate(e engine.Engine, f func([]byte, []byte, roachpb.SequenceCacheEntry)) {
+	_, _ = engine.MVCCIterate(e, sc.min, sc.max, roachpb.ZeroTimestamp,
+		true /* consistent */, nil /* txn */, false, /* !reverse */
+		func(kv roachpb.KeyValue) (bool, error) {
+			var entry roachpb.SequenceCacheEntry
+			id, _, _, err := decodeSequenceCacheKey(kv.Key, nil)
+			if err != nil {
+				panic(err) // TODO(tschottdorf): ReplicaCorruptionError
+			}
+			if err := kv.Value.GetProto(&entry); err != nil {
+				panic(err) // TODO(tschottdorf): ReplicaCorruptionError
+			}
+			f(kv.Key, id, entry)
+			return false, nil
+		})
+}
+
 func copySeqCache(e engine.Engine, srcID, dstID roachpb.RangeID, keyMin, keyMax engine.MVCCKey) error {
 	var scratch [64]byte
 	return e.Iterate(keyMin, keyMax,
