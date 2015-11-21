@@ -140,13 +140,13 @@ func TestSequenceCacheEmptyParams(t *testing.T) {
 	defer stopper.Stop()
 	sc, e := createTestSequenceCache(t, 1, stopper)
 	// Put value for test response.
-	if err := sc.Put(e, testTxnID, testTxnEpoch, 0, testTxnKey, testTxnTimestamp, nil); err != errEmptyID {
+	if err := sc.Put(e, testTxnID, testTxnEpoch, 0, testTxnKey, testTxnTimestamp, nil); err != errEmptyTxnID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if err := sc.Put(e, nil, testTxnEpoch, 10, testTxnKey, testTxnTimestamp, nil); err != errEmptyID {
+	if err := sc.Put(e, nil, testTxnEpoch, 10, testTxnKey, testTxnTimestamp, nil); err != errEmptyTxnID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if _, _, readErr := sc.Get(e, nil, nil); readErr != errEmptyID {
+	if _, _, readErr := sc.Get(e, nil, nil); readErr != errEmptyTxnID {
 		t.Fatalf("unxpected read error: %v", readErr)
 	}
 }

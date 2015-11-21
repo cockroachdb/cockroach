@@ -295,12 +295,11 @@ message Lease {
 
 // GCMetadata holds information about the last complete key/value
 // garbage collection scan of a range.
+// TODO(tschottdorf): can avoid an extra message unless we're planning
+// to add more content.
 message GCMetadata {
   // The last GC scan timestamp in nanoseconds since the Unix epoch.
   optional int64 last_scan_nanos = 1 [(gogoproto.nullable) = false];
-  // The oldest unresolved write intent in nanoseconds since epoch.
-  // Null if there are no unresolved write intents.
-  optional int64 oldest_intent_nanos = 2;
 }
 
 // SequenceCacheEntry holds information which together with the key at which
