@@ -457,6 +457,63 @@ func TestStoreRangeSet(t *testing.T) {
 	<-done
 }
 
+func TestHasOverlappingReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+	if _, err := store.GetReplica(0); err == nil {
+		t.Error("expected GetRange to fail on missing range")
+	}
+	// Range 1 already exists. Make sure we can fetch it.
+	rng1, err := store.GetReplica(1)
+	if err != nil {
+		t.Error(err)
+	}
+	// Remove range 1.
+	if err := store.RemoveReplica(rng1, *rng1.Desc()); err != nil {
+		t.Error(err)
+	}
+
+	// Create ranges.
+	rngDescs := []struct {
+		id         int
+		start, end roachpb.RKey
+	}{
+		{2, roachpb.RKey("b"), roachpb.RKey("c")},
+		{3, roachpb.RKey("c"), roachpb.RKey("d")},
+		{4, roachpb.RKey("d"), roachpb.RKey("f")},
+	}
+
+	for _, desc := range rngDescs {
+		rng := createRange(store, roachpb.RangeID(desc.id), desc.start, desc.end)
+		if err := store.AddReplicaTest(rng); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	testCases := []struct {
+		start, end roachpb.RKey
+		exp        bool
+	}{
+		{roachpb.RKey("a"), roachpb.RKey("c"), true},
+		{roachpb.RKey("b"), roachpb.RKey("c"), true},
+		{roachpb.RKey("b"), roachpb.RKey("d"), true},
+		{roachpb.RKey("d"), roachpb.RKey("e"), true},
+		{roachpb.RKey("d"), roachpb.RKey("g"), true},
+		{roachpb.RKey("e"), roachpb.RKey("e\x00"), true},
+
+		{roachpb.RKey("f"), roachpb.RKey("g"), false},
+		{roachpb.RKey("a"), roachpb.RKey("b"), false},
+	}
+
+	for i, test := range testCases {
+		rngDesc := &roachpb.RangeDescriptor{StartKey: test.start, EndKey: test.end}
+		if r := store.hasOverlappingReplicaLocked(rngDesc); r != test.exp {
+			t.Errorf("%d: expected range %v; got %v", i, test.exp, r)
+		}
+	}
+}
+
 // TestStoreSend verifies straightforward command execution
 // of both a read-only and a read-write command.
 func TestStoreSend(t *testing.T) {
