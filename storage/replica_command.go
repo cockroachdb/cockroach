@@ -473,29 +473,44 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	// Run triggers if successfully committed.
 	if reply.Txn.Status == roachpb.COMMITTED {
 		ct := args.InternalCommitTrigger
+		if ct != nil {
+			// Hold readMu across the application of any commit trigger.
+			// This makes sure that no reads are happening in parallel;
+			// see #3148.
+			r.readOnlyCmdMu.Lock()
+			batch.Defer(r.readOnlyCmdMu.Unlock)
+		}
 
-		if ct.GetSplitTrigger() != nil {
-			*ms = engine.MVCCStats{} // clear stats, as split will recompute from scratch.
-			if err := r.splitTrigger(batch, ct.SplitTrigger); err != nil {
-				return reply, nil, err
+		if err := func() error {
+			if ct.GetSplitTrigger() != nil {
+				*ms = engine.MVCCStats{} // clear stats, as split will recompute from scratch.
+				if err := r.splitTrigger(batch, ct.SplitTrigger); err != nil {
+					return err
+				}
 			}
-		}
-		if ct.GetMergeTrigger() != nil {
-			*ms = engine.MVCCStats{} // clear stats, as merge will recompute from scratch.
-			if err := r.mergeTrigger(batch, ct.MergeTrigger); err != nil {
-				return reply, nil, err
+			if ct.GetMergeTrigger() != nil {
+				*ms = engine.MVCCStats{} // clear stats, as merge will recompute from scratch.
+				if err := r.mergeTrigger(batch, ct.MergeTrigger); err != nil {
+					return err
+				}
 			}
-		}
-		if ct.GetChangeReplicasTrigger() != nil {
-			if err := r.changeReplicasTrigger(ct.ChangeReplicasTrigger); err != nil {
-				return reply, nil, err
+			if ct.GetChangeReplicasTrigger() != nil {
+				if err := r.changeReplicasTrigger(ct.ChangeReplicasTrigger); err != nil {
+					return err
+				}
 			}
-		}
-		if ct.GetModifiedSpanTrigger() != nil {
-			if ct.ModifiedSpanTrigger.SystemDBSpan {
-				// Check if we need to gossip the system config.
-				batch.Defer(r.maybeGossipSystemConfig)
+			if ct.GetModifiedSpanTrigger() != nil {
+				if ct.ModifiedSpanTrigger.SystemDBSpan {
+					// Check if we need to gossip the system config.
+					batch.Defer(r.maybeGossipSystemConfig)
+				}
 			}
+			return nil
+		}(); err != nil {
+			r.readOnlyCmdMu.Unlock() // since the batch.Defer above won't run
+			// TODO(tschottdorf): should an error here always amount to a
+			// ReplicaCorruptionError?
+			return reply, nil, err
 		}
 	}
 
@@ -1365,6 +1380,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 
 	// Initialize the new range's sequence cache by copying the original's.
 	if err = r.sequence.CopyInto(batch, split.NewDesc.RangeID); err != nil {
+		// TODO(tschottdorf): ReplicaCorruptionError.
 		return util.Errorf("unable to copy sequence cache to new split range: %s", err)
 	}
 
@@ -1385,7 +1401,11 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 
-	// Copy the timestamp cache into the new range.
+	// Copy the timestamp cache into the new range. Commit triggers already
+	// acquire the read lock since concurrent reads could add updates that
+	// never make it to the new Range (see #3148), so all we grab here is
+	// the actual lock (at time of writing, this isn't necessary but for
+	// convention).
 	r.Lock()
 	r.tsCache.MergeInto(newRng.tsCache, true /* clear */)
 	r.Unlock()
