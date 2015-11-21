@@ -666,8 +666,7 @@ func (t Transaction) Short() string {
 // nanoseconds since the Unix epoch.
 func NewGCMetadata(nowNanos int64) *GCMetadata {
 	return &GCMetadata{
-		LastScanNanos:     nowNanos,
-		OldestIntentNanos: proto.Int64(nowNanos),
+		LastScanNanos: nowNanos,
 	}
 }
 
@@ -711,6 +710,16 @@ func (l Lease) Covers(timestamp Timestamp) bool {
 // OwnedBy returns whether the given store is the lease owner.
 func (l Lease) OwnedBy(storeID StoreID) bool {
 	return l.Replica.StoreID == storeID
+}
+
+// AsIntents takes a slice of spans and returns it as a slice of intents for
+// the given transaction.
+func AsIntents(spans []Span, txn *Transaction) []Intent {
+	ret := make([]Intent, len(spans))
+	for i := range spans {
+		ret[i].Span, ret[i].Txn = spans[i], *txn
+	}
+	return ret
 }
 
 // RSpan is a key range with an inclusive start RKey and an exclusive end RKey.

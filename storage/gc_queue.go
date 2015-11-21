@@ -19,13 +19,13 @@ package storage
 
 import (
 	"fmt"
-	"math"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -46,6 +46,12 @@ const (
 	// intentAgeThreshold is the threshold after which an extant intent
 	// will be resolved.
 	intentAgeThreshold = 2 * time.Hour // 2 hour
+	// txnCleanupThreshold is the threshold after which a transaction is
+	// considered abandoned and fit for removal, as measured by the maximum
+	// of its last heartbeat and timestamp.
+	// TODO(tschottdorf): need to enforce at all times that this is much
+	// larger than the heartbeat interval used by the coordinator.
+	txnCleanupThreshold = time.Hour
 )
 
 // gcQueue manages a queue of replicas slated to be scanned in their
@@ -54,8 +60,10 @@ const (
 //
 //  - GC of version data via TTL expiration (and more complex schemes
 //    as implemented going forward).
-//  - Resolve extant write intents and determine oldest non-resolvable
-//    intent.
+//  - Resolve extant write intents (pushing their transactions).
+//  - GC of old transaction and sequence cache entries. This should include
+//    most committed entries almost immediately and, after a threshold on
+//    inactivity, all others.
 //
 // The shouldQueue function combines the need for both tasks into a
 // single priority. If any task is overdue, shouldQueue returns true.
@@ -139,14 +147,17 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now
 	intentExp.WallTime -= intentAgeThreshold.Nanoseconds()
+	txnExp := now
+	txnExp.WallTime -= txnCleanupThreshold.Nanoseconds()
 
-	// TODO(tschottdorf): execution will use a leader-assigned local
-	// timestamp to compute intent age. While this should be fine, could
-	// consider adding a Now timestamp to GCRequest which would be used
-	// instead.
 	gcArgs := &roachpb.GCRequest{}
-	var mu sync.Mutex
-	var oldestIntentNanos int64 = math.MaxInt64
+	// TODO(tschottdorf): This is one of these instances in which we want
+	// to be more careful that the request ends up on the correct Replica,
+	// and we might have to worry about mixing range-local and global keys
+	// in a batch which might up spanning Ranges by the time it executes.
+	gcArgs.Key = desc.StartKey.AsRawKey()
+	gcArgs.EndKey = desc.EndKey.AsRawKey()
+
 	var expBaseKey roachpb.Key
 	var keys []engine.MVCCKey
 	var vals [][]byte
@@ -154,15 +165,6 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	// Maps from txn ID to txn and intent key slice.
 	txnMap := map[string]*roachpb.Transaction{}
 	intentSpanMap := map[string][]roachpb.Span{}
-
-	// updateOldestIntent atomically updates the oldest intent.
-	updateOldestIntent := func(intentNanos int64) {
-		mu.Lock()
-		defer mu.Unlock()
-		if intentNanos < oldestIntentNanos {
-			oldestIntentNanos = intentNanos
-		}
-	}
 
 	// processKeysAndValues is invoked with each key and its set of
 	// values. Intents older than the intent age threshold are sent for
@@ -185,8 +187,6 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 						id := string(meta.Txn.ID)
 						txnMap[id] = meta.Txn
 						intentSpanMap[id] = append(intentSpanMap[id], roachpb.Span{Key: expBaseKey})
-					} else {
-						updateOldestIntent(meta.Txn.OrigTimestamp.WallTime)
 					}
 					// With an active intent, GC ignores MVCC metadata & intent value.
 					startIdx = 2
@@ -230,11 +230,26 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	// Handle last collected set of keys/vals.
 	processKeysAndValues()
 
+	txnKeys, err := processTransactionTable(repl, txnMap, txnExp)
+	if err != nil {
+		return err
+	}
+
+	// From now on, all newly added keys are range-local.
+	// TODO(tschottdorf): Might need to use two requests at some point since we
+	// hard-coded the full non-local key range in the header, but that does
+	// not take into account the range-local keys. It will be OK as long as
+	// we send directly to the Replica, though.
+	gcArgs.Keys = append(gcArgs.Keys, txnKeys...)
+
 	// Process push transactions in parallel.
 	var wg sync.WaitGroup
 	for _, txn := range txnMap {
+		if txn.Status != roachpb.PENDING {
+			continue
+		}
 		wg.Add(1)
-		go gcq.pushTxn(repl, now, txn, updateOldestIntent, &wg)
+		go pushTxn(repl, now, txn, roachpb.ABORT_TXN, &wg)
 	}
 	wg.Wait()
 
@@ -248,32 +263,21 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 		}
 	}
 
-	done := true
-	if len(intents) > 0 {
-		done = false
-		if err := repl.resolveIntents(repl.context(), intents, true /* wait */); err != nil {
-			return err
-		}
+	if err := repl.resolveIntents(repl.context(), intents, true /* wait */); err != nil {
+		return err
 	}
 
-	// Set start and end keys.
-	if len(gcArgs.Keys) > 0 {
-		done = false
-		gcArgs.Key = gcArgs.Keys[0].Key
-		gcArgs.EndKey = gcArgs.Keys[len(gcArgs.Keys)-1].Key.Next()
-	}
-
-	if done {
-		return nil
-	}
+	// Deal with any leftover sequence cache keys. There shouldn't be many of
+	// them.
+	gcArgs.Keys = append(gcArgs.Keys, processSequenceCache(repl, now, txnExp)...)
 
 	// Send GC request through range.
-	gcMeta.OldestIntentNanos = proto.Int64(oldestIntentNanos)
 	gcArgs.GCMeta = *gcMeta
 
 	var ba roachpb.BatchRequest
 	// Technically not needed since we're talking directly to the Range.
 	ba.RangeID = desc.RangeID
+	ba.Timestamp = now
 	ba.Add(gcArgs)
 	if _, pErr := repl.Send(repl.context(), ba); pErr != nil {
 		return pErr.GoError()
@@ -288,17 +292,134 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	return nil
 }
 
+// processSequenceCache iterates through the local sequence cache entries,
+// pushing the transactions (in cleanup mode) for those entries which appear
+// to be old enough. In case the transaction indicates that it's terminated,
+// the sequence cache keys are included in the result.
+func processSequenceCache(r *Replica, now, cutoff roachpb.Timestamp) []roachpb.GCRequest_GCKey {
+	snap := r.store.Engine().NewSnapshot()
+	defer snap.Close()
+
+	txns := make(map[string]*roachpb.Transaction)
+	idToKeys := make(map[string][]roachpb.GCRequest_GCKey)
+	r.sequence.Iterate(snap, func(key, id []byte, v roachpb.SequenceCacheEntry) {
+		if !cutoff.Less(v.Timestamp) {
+			idStr := string(id)
+			txns[idStr] = &roachpb.Transaction{ID: id, Key: v.Key, Status: roachpb.PENDING}
+			idToKeys[idStr] = append(idToKeys[idStr], roachpb.GCRequest_GCKey{Key: key})
+		}
+	})
+
+	var wg sync.WaitGroup
+	wg.Add(len(txns))
+	for _, txn := range txns {
+		// Check if the Txn is still alive. If this indicates that the Txn is
+		// aborted and old enough to guarantee that any running coordinator
+		// would have realized that the transaction wasn't running by means
+		// of a heartbeat, then we're free to remove the sequence cache entry.
+		// In the most likely case, there isn't even an entry (which will
+		// be apparent by a zero timestamp and nil last heartbeat).
+		go pushTxn(r, now, txn, roachpb.CLEANUP_TXN, &wg)
+	}
+	wg.Wait()
+
+	var gcKeys []roachpb.GCRequest_GCKey
+	for idStr, txn := range txns {
+		if txn.Status == roachpb.PENDING {
+			continue
+		}
+		ts := txn.Timestamp
+		if txn.LastHeartbeat != nil {
+			ts.Forward(*txn.LastHeartbeat)
+		}
+		if !cutoff.Less(ts) {
+			// This is it, we can delete our sequence cache entries.
+			gcKeys = append(gcKeys, idToKeys[idStr]...)
+		}
+	}
+	return gcKeys
+}
+
+// processTransactionTable scans the transaction table and updates txnMap with
+// those transactions which are old and either PENDING or with intents
+// registered. In the first case we want to push the transaction so that it is
+// aborted, and in the second case we may have to resolve the intents success-
+// fully before GCing the entry. The transaction records which can be gc'ed are
+// returned separately and are not added to txnMap nor intentSpanMap.
+func processTransactionTable(r *Replica, txnMap map[string]*roachpb.Transaction, cutoff roachpb.Timestamp) ([]roachpb.GCRequest_GCKey, error) {
+	snap := r.store.Engine().NewSnapshot()
+	defer snap.Close()
+
+	var gcKeys []roachpb.GCRequest_GCKey
+	handleOne := func(kv roachpb.KeyValue) error {
+		var txn roachpb.Transaction
+		if err := kv.Value.GetProto(&txn); err != nil {
+			return err
+		}
+		ts := txn.Timestamp
+		if heartbeatTS := txn.LastHeartbeat; heartbeatTS != nil {
+			ts.Forward(*heartbeatTS)
+		}
+		if !ts.Less(cutoff) {
+			return nil
+		}
+
+		id := string(txn.ID)
+
+		// The transaction record should be considered for removal.
+		switch txn.Status {
+		case roachpb.PENDING:
+			// Marked as running, so we need to push it to abort it but won't
+			// try to GC it in this cycle.
+			txnMap[id] = &txn
+			return nil
+		case roachpb.ABORTED:
+			// If we remove this transaction, it effectively still counts as
+			// ABORTED (by design). So this can be GC'ed even if we can't
+			// resolve the intents.
+			// Note: Most aborted transaction weren't aborted by their client,
+			// but instead by the coordinator - those will not have any intents
+			// persisted, though they still might exist in the system.
+			if err := r.resolveIntents(r.context(),
+				roachpb.AsIntents(txn.Intents, &txn), true /* wait */); err != nil {
+				log.Warningf("failed to resolve intents of aborted txn on gc: %s", err)
+			}
+		case roachpb.COMMITTED:
+			// It's committed, so it doesn't need a push but we can only
+			// GC it after its intents are resolved.
+			if err := r.resolveIntents(r.context(),
+				roachpb.AsIntents(txn.Intents, &txn), true /* wait */); err != nil {
+				log.Warningf("unable to resolve intents of committed txn on gc: %s", err)
+				// Returning the error here would abort the whole GC run, and
+				// we don't want that. Instead, we simply don't GC this entry.
+				return nil
+			}
+		default:
+			panic(fmt.Sprintf("invalid transaction state: %s", txn))
+		}
+		gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: kv.Key}) // zero timestamp
+		return nil
+	}
+
+	startKey := keys.TransactionKey(roachpb.KeyMin, nil)
+	endKey := keys.TransactionKey(roachpb.KeyMax, nil)
+
+	_, err := engine.MVCCIterate(snap, startKey, endKey, roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */, false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
+		return false, handleOne(kv)
+	})
+	return gcKeys, err
+}
+
 // timer returns a constant duration to space out GC processing
 // for successive queued replicas.
 func (*gcQueue) timer() time.Duration {
 	return gcQueueTimerDuration
 }
 
-// pushTxn attempts to abort the txn via push. If the transaction
-// cannot be aborted, the oldestIntentNanos value is atomically
-// updated to the min of oldestIntentNanos and the intent's
-// timestamp. The wait group is signaled on completion.
-func (*gcQueue) pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Transaction, updateOldestIntent func(int64), wg *sync.WaitGroup) {
+// pushTxn attempts to abort the txn via push. The wait group is signaled on
+// completion.
+func pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Transaction,
+	typ roachpb.PushTxnType, wg *sync.WaitGroup) {
 	defer wg.Done() // signal wait group always on completion
 	if log.V(1) {
 		log.Infof("pushing txn %s ts=%s", txn, txn.OrigTimestamp)
@@ -312,14 +433,13 @@ func (*gcQueue) pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Trans
 		Now:       now,
 		PusherTxn: roachpb.Transaction{Priority: roachpb.MaxPriority},
 		PusheeTxn: *txn,
-		PushType:  roachpb.ABORT_TXN,
+		PushType:  typ,
 	}
 	b := &client.Batch{}
 	b.InternalAddRequest(pushArgs)
 	br, err := repl.store.DB().RunWithResponse(b)
 	if err != nil {
 		log.Warningf("push of txn %s failed: %s", txn, err)
-		updateOldestIntent(txn.OrigTimestamp.WallTime)
 		return
 	}
 	// Update the supplied txn on successful push.

@@ -20,13 +20,16 @@ package storage
 import (
 	"fmt"
 	"math"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/gogo/protobuf/proto"
@@ -300,9 +303,6 @@ func TestGCQueueProcess(t *testing.T) {
 	if gcMeta.LastScanNanos != now {
 		t.Errorf("expected last scan nanos=%d; got %d", now, gcMeta.LastScanNanos)
 	}
-	if *gcMeta.OldestIntentNanos != ts4.WallTime {
-		t.Errorf("expected oldest intent nanos=%d; got %d", ts4.WallTime, gcMeta.OldestIntentNanos)
-	}
 
 	// Verify that the last verification timestamp was updated as whole range was scanned.
 	ts, err := tc.rng.GetLastVerificationTimestamp()
@@ -312,6 +312,138 @@ func TestGCQueueProcess(t *testing.T) {
 	if gcMeta.LastScanNanos != ts.WallTime {
 		t.Errorf("expected walltime nanos %d; got %d", gcMeta.LastScanNanos, ts.WallTime)
 	}
+}
+
+func TestGCQueueTransactionTable(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	const now time.Duration = 3 * 24 * time.Hour
+	const dAbandon = -2 * DefaultHeartbeatInterval
+	type spec struct {
+		status      roachpb.TransactionStatus
+		ts          time.Duration
+		heartbeatTS time.Duration
+		intentSpans []roachpb.Span
+		seqGC       bool // expect sequence cache entries removed?
+	}
+	// Describes the state of the Txn table before the test.
+	before := map[string]spec{
+		// Too young, should not touch.
+		"a": {roachpb.PENDING, now - txnCleanupThreshold + 1, 0, []roachpb.Span{{Key: roachpb.Key("q")}}, false},
+		// Old, but still heartbeat. No GC.
+		"b": {roachpb.PENDING, 0, now - txnCleanupThreshold + 1, nil, false},
+		// Old and aborted, should delete.
+		"c": {roachpb.ABORTED, now - txnCleanupThreshold - 1, 0, nil, true},
+		// Abandoned and pending, so should push and abort it successfully.
+		// But it's not old enough to actively go after the sequence cache.
+		// There's some room for optimization here by ways of sharing the
+		// transaction grooming results with the corresponding operation for
+		// the sequence cache, but that's only worthwhile in weird cases.
+		"d": {roachpb.PENDING, now - dAbandon, 0, nil, false},
+		// Committed and fresh, so no action.
+		"e": {roachpb.COMMITTED, now - txnCleanupThreshold + 1, 0, nil, false},
+		// Committed, old and intentless. Bye bye.
+		"f": {roachpb.COMMITTED, now - txnCleanupThreshold - 1, 0, nil, true},
+		// Committed and old, but with intent. The intent is resolvable,
+		// so the txn entry should be GC'ed.
+		"g": {roachpb.COMMITTED, now - txnCleanupThreshold - 1, 0,
+			[]roachpb.Span{{Key: roachpb.Key("z")}}, true},
+		// Same as the previous one, but we've rigged things so that the intent
+		// resolution here will fail and consequently no GC is expected.
+		"h": {roachpb.COMMITTED, now - txnCleanupThreshold - 1, 0,
+			[]roachpb.Span{{Key: roachpb.Key("z")}}, true},
+	}
+
+	after := map[string]*spec{}
+	for k := range before {
+		sCopy := before[k]
+		after[k] = &sCopy
+	}
+
+	// Test outcome follows, described as changes to the previous state.
+	// A status of -1 corresponds to a GC'ed record.
+	after["a"].intentSpans = nil // expect no attempts to resolve the intent
+	after["c"].status = -1
+	after["d"].status = roachpb.ABORTED
+	after["f"].status = -1
+	after["g"].status = -1
+
+	resolved := map[string][]roachpb.Span{}
+	TestingCommandFilter = func(req roachpb.Request, _ roachpb.Header) error {
+		if resArgs, ok := req.(*roachpb.ResolveIntentRequest); ok {
+			id := string(resArgs.IntentTxn.Key)
+			resolved[id] = append(resolved[id], roachpb.Span{
+				Key:    resArgs.Key,
+				EndKey: resArgs.EndKey,
+			})
+			// We've special cased one test case. Note that the intent is still
+			// counted in `resolved`.
+			if id == "h" {
+				return util.Errorf("boom")
+			}
+		}
+		return nil
+	}
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	defer func() { TestingCommandFilter = nil }()
+	tc.manualClock.Set(int64(now))
+
+	txns := map[string]roachpb.Transaction{}
+	var epo uint32
+	for strKey, sp := range before {
+		epo++
+		baseKey := roachpb.Key(strKey)
+		txnClock := hlc.NewClock(hlc.NewManualClock(int64(sp.ts)).UnixNano)
+		txn := newTransaction("txn1", baseKey, 1, roachpb.SERIALIZABLE, txnClock)
+		txn.Status = sp.status
+		txn.Intents = sp.intentSpans
+		txn.LastHeartbeat = &roachpb.Timestamp{WallTime: int64(sp.heartbeatTS)}
+		txns[strKey] = *txn
+		key := keys.TransactionKey(baseKey, txn.ID)
+		if err := engine.MVCCPutProto(tc.engine, nil, key, roachpb.ZeroTimestamp, nil, txn); err != nil {
+			t.Fatal(err)
+		}
+		if err := tc.rng.sequence.Put(tc.engine, txn.ID, epo, 2*epo, txn.Key, txn.Timestamp, nil /* err */); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Run GC.
+	gcQ := newGCQueue(tc.gossip)
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
+		t.Fatal("nil config")
+	}
+
+	if err := gcQ.process(tc.clock.Now(), tc.rng, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	util.SucceedsWithin(t, time.Second, func() error {
+		for strKey, sp := range after {
+			txn := &roachpb.Transaction{}
+			key := keys.TransactionKey(roachpb.Key(strKey), txns[strKey].ID)
+			ok, err := engine.MVCCGetProto(tc.engine, key, roachpb.ZeroTimestamp, true, nil, txn)
+			if err != nil {
+				return err
+			}
+			if expGC := (sp.status == -1); expGC != !ok {
+				return fmt.Errorf("%s: expected gc: %t, but found %s", strKey, expGC, txn)
+			}
+			if !reflect.DeepEqual(resolved[strKey], sp.intentSpans) {
+				return fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s",
+					strKey, sp.intentSpans, resolved[strKey])
+			}
+			if kvs, err := tc.rng.sequence.GetAllID(tc.store.Engine(), txns[strKey].ID); err != nil {
+				t.Fatal(err)
+			} else if (len(kvs) != 0) == sp.seqGC {
+				return fmt.Errorf("%s: expected sequence cache gc: %t, found %+v", strKey, sp.seqGC, kvs)
+			}
+		}
+		return nil
+	})
 }
 
 // TestGCQueueIntentResolution verifies intent resolution with many
