@@ -1131,6 +1131,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 // number of repetitions adds an unacceptable amount of test runtime).
 func TestRaftRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("#3187, #3178 and others; very flaky since PR #3175")
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
