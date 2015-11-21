@@ -781,6 +781,22 @@ func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 	return rng
 }
 
+// hasOverlappingReplicaLocked returns true if a Replica overlapping the given
+// descriptor is present on the Store.
+func (s *Store) hasOverlappingReplicaLocked(rngDesc *roachpb.RangeDescriptor) bool {
+	var rng *Replica
+	s.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(rngDesc.StartKey.Next()), func(i btree.Item) bool {
+		rng = i.(*Replica)
+		return false
+	})
+
+	if rng != nil && rng.Desc().StartKey.Less(rngDesc.EndKey) {
+		return true
+	}
+
+	return false
+}
+
 // RaftStatus returns the current raft status of the given range.
 func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
 	return s.multiraft.Status(rangeID)
@@ -1056,7 +1072,7 @@ func (s *Store) addReplicaInternal(rng *Replica) error {
 		return err
 	}
 
-	if s.replicasByKey.Has(rng) {
+	if s.hasOverlappingReplicaLocked(rng.Desc()) {
 		return rangeAlreadyExists{rng}
 	}
 	if exRngItem := s.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
@@ -1687,7 +1703,7 @@ func (s *Store) CanApplySnapshot(rangeID roachpb.RangeID, snap raftpb.Snapshot) 
 		return false
 	}
 
-	if s.replicasByKey.Has(rangeBTreeKey(parsedSnap.RangeDescriptor.EndKey)) {
+	if s.hasOverlappingReplicaLocked(&parsedSnap.RangeDescriptor) {
 		// We have a conflicting range, so we must block the snapshot.
 		// When such a conflict exists, it will be resolved by one range
 		// either being split or garbage collected.
