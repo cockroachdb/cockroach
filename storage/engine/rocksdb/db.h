@@ -49,10 +49,8 @@ typedef struct {
 // operation. If DBStatus.data == NULL the operation succeeded.
 typedef DBString DBStatus;
 
-typedef struct DBBatch DBBatch;
 typedef struct DBEngine DBEngine;
 typedef struct DBIterator DBIterator;
-typedef struct DBSnapshot DBSnapshot;
 
 // DBOptions contains local database options.
 typedef struct {
@@ -96,31 +94,30 @@ DBStatus DBPut(DBEngine* db, DBSlice key, DBSlice value);
 // Merge the database entry (if any) for "key" with "value".
 DBStatus DBMerge(DBEngine* db, DBSlice key, DBSlice value);
 
-// Retrieves the database entry for "key" at the specified
-// snapshot. If snapshot==NULL retrieves the current database entry
-// for "key".
-DBStatus DBGet(DBEngine* db, DBSnapshot* snapshot, DBSlice key, DBString* value);
+// Retrieves the database entry for "key".
+DBStatus DBGet(DBEngine* db, DBSlice key, DBString* value);
 
 // Deletes the database entry for "key".
 DBStatus DBDelete(DBEngine* db, DBSlice key);
 
 // Applies a batch of operations (puts, merges and deletes) to the
-// database atomically.
-DBStatus DBWrite(DBEngine* db, DBBatch *batch);
+// database atomically. It is only valid to call this function on an
+// engine created by DBNewBatch.
+DBStatus DBWriteBatch(DBEngine* db);
 
 // Creates a new snapshot of the database for use in DBGet() and
-// DBNewIter(). It is the callers responsibility to call
-// DBSnapshotRelease().
-DBSnapshot* DBNewSnapshot(DBEngine* db);
+// DBNewIter(). It is the callers responsibility to call DBClose().
+DBEngine* DBNewSnapshot(DBEngine* db);
 
-// Releases a snapshot, freeing up any associated memory and other
-// resources.
-void DBSnapshotRelease(DBSnapshot* snapshot);
+// Creates a new batch for performing a series of operations
+// atomically. Use DBWriteBatch() on the returned engine to apply the
+// batch to the database. It is the callers responsibility to call
+// DBClose().
+DBEngine* DBNewBatch(DBEngine *db);
 
-// Creates a new database iterator. If snapshot==NULL the iterator
-// will iterate over the current state of the database. It is the
-// callers responsibility to call DBIterDestroy().
-DBIterator* DBNewIter(DBEngine* db, DBSnapshot* snapshot);
+// Creates a new database iterator. It is the callers responsibility
+// to call DBIterDestroy().
+DBIterator* DBNewIter(DBEngine* db);
 
 // Destroys an iterator, freeing up any associated memory.
 void DBIterDestroy(DBIterator* iter);
@@ -147,32 +144,6 @@ DBIterState DBIterPrev(DBIterator* iter);
 // Returns any error associated with the iterator.
 DBStatus DBIterError(DBIterator* iter);
 
-// Creates a new batch for performing a series of operations
-// atomically. Use DBWrite() to apply the batch to a database.
-DBBatch* DBNewBatch();
-
-// Destroys a batch, freeing any associated memory.
-void DBBatchDestroy(DBBatch* batch);
-
-// Sets the database entry for "key" to "value".
-void DBBatchPut(DBBatch* batch, DBSlice key, DBSlice value);
-
-// Merge the database entry (if any) for "key" with "value".
-void DBBatchMerge(DBBatch* batch, DBSlice key, DBSlice value);
-
-// Retrieves the database entry for "key" within the specified
-// batch. If the key has not been put or deleted within the batch it
-// is retrieved from the base db.
-DBStatus DBBatchGet(DBEngine* db, DBBatch* batch, DBSlice key, DBString* value);
-
-// Deletes the database entry for "key".
-void DBBatchDelete(DBBatch* batch, DBSlice key);
-
-// Creates a new database iterator that iterates over both the
-// underlying engine and the updates that have been made to batch. It
-// is the callers responsibility to call DBIterDestroy().
-DBIterator* DBBatchNewIter(DBEngine* db, DBBatch* batch);
-
 // Implements the merge operator on a single pair of values. update is
 // merged with existing. This method is provided for invocation from
 // Go code.
@@ -193,9 +164,9 @@ typedef struct {
   int64_t sys_bytes;
   int64_t sys_count;
   int64_t last_update_nanos;
-} MVCCStats;
+} MVCCStatsResult;
 
-MVCCStats MVCCComputeStats(DBIterator* iter, DBSlice start, DBSlice end, int64_t now_nanos);
+MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBSlice start, DBSlice end, int64_t now_nanos);
 
 #ifdef __cplusplus
 }  // extern "C"

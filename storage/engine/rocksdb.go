@@ -148,23 +148,12 @@ func (r *RocksDB) Attrs() roachpb.Attributes {
 	return r.attrs
 }
 
-func emptyKeyError() error {
-	return util.ErrorfSkipFrames(1, "attempted access to empty key")
-}
-
 // Put sets the given key to the value provided.
 //
 // The key and value byte slices may be reused safely. put takes a copy of
 // them before returning.
 func (r *RocksDB) Put(key MVCCKey, value []byte) error {
-	if len(key) == 0 {
-		return emptyKeyError()
-	}
-
-	// *Put, *Get, and *Delete call memcpy() (by way of MemTable::Add)
-	// when called, so we do not need to worry about these byte slices
-	// being reclaimed by the GC.
-	return statusToError(C.DBPut(r.rdb, goToCSlice(key), goToCSlice(value)))
+	return dbPut(r.rdb, key, value)
 }
 
 // Merge implements the RocksDB merge operator using the function goMergeInit
@@ -176,102 +165,29 @@ func (r *RocksDB) Put(key MVCCKey, value []byte) error {
 // The key and value byte slices may be reused safely. merge takes a copy
 // of them before returning.
 func (r *RocksDB) Merge(key MVCCKey, value []byte) error {
-	if len(key) == 0 {
-		return emptyKeyError()
-	}
-
-	// DBMerge calls memcpy() (by way of MemTable::Add)
-	// when called, so we do not need to worry about these byte slices being
-	// reclaimed by the GC.
-	return statusToError(C.DBMerge(r.rdb, goToCSlice(key), goToCSlice(value)))
+	return dbMerge(r.rdb, key, value)
 }
 
 // Get returns the value for the given key.
 func (r *RocksDB) Get(key MVCCKey) ([]byte, error) {
-	return r.getInternal(key, nil)
-}
-
-// getInternal returns the value for the given key.
-func (r *RocksDB) getInternal(key MVCCKey, snapshotHandle *C.DBSnapshot) ([]byte, error) {
-	if len(key) == 0 {
-		return nil, emptyKeyError()
-	}
-	var result C.DBString
-	err := statusToError(C.DBGet(r.rdb, snapshotHandle, goToCSlice(key), &result))
-	if err != nil {
-		return nil, err
-	}
-	return cStringToGoBytes(result), nil
+	return dbGet(r.rdb, key)
 }
 
 // GetProto fetches the value at the specified key and unmarshals it.
 func (r *RocksDB) GetProto(key MVCCKey, msg proto.Message) (
 	ok bool, keyBytes, valBytes int64, err error) {
-	return r.getProtoInternal(key, msg, nil)
-}
-
-func (r *RocksDB) getProtoInternal(key MVCCKey, msg proto.Message,
-	snapshotHandle *C.DBSnapshot) (ok bool, keyBytes, valBytes int64, err error) {
-	if len(key) == 0 {
-		err = emptyKeyError()
-		return
-	}
-	var result C.DBString
-	if err = statusToError(C.DBGet(r.rdb, snapshotHandle, goToCSlice(key), &result)); err != nil {
-		return
-	}
-	if result.len <= 0 {
-		msg.Reset()
-		return
-	}
-	ok = true
-	if msg != nil {
-		// Make a byte slice that is backed by result.data. This slice
-		// cannot live past the lifetime of this method, but we're only
-		// using it to unmarshal the roachpb.
-		data := cSliceToUnsafeGoBytes(C.DBSlice(result))
-		err = proto.Unmarshal(data, msg)
-	}
-	C.free(unsafe.Pointer(result.data))
-	keyBytes = int64(len(key))
-	valBytes = int64(result.len)
-	return
+	return dbGetProto(r.rdb, key, msg)
 }
 
 // Clear removes the item from the db with the given key.
 func (r *RocksDB) Clear(key MVCCKey) error {
-	if len(key) == 0 {
-		return emptyKeyError()
-	}
-	return statusToError(C.DBDelete(r.rdb, goToCSlice(key)))
+	return dbClear(r.rdb, key)
 }
 
 // Iterate iterates from start to end keys, invoking f on each
 // key/value pair. See engine.Iterate for details.
 func (r *RocksDB) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
-	return r.iterateInternal(start, end, f, nil)
-}
-
-func (r *RocksDB) iterateInternal(start, end MVCCKey, f func(MVCCKeyValue) (bool, error),
-	snapshotHandle *C.DBSnapshot) error {
-	if bytes.Compare(start, end) >= 0 {
-		return nil
-	}
-	it := newRocksDBIterator(r.rdb, snapshotHandle)
-	defer it.Close()
-
-	it.Seek(start)
-	for ; it.Valid(); it.Next() {
-		k := it.Key()
-		if !it.Key().Less(end) {
-			break
-		}
-		if done, err := f(MVCCKeyValue{Key: k, Value: it.Value()}); done || err != nil {
-			return err
-		}
-	}
-	// Check for any errors during iteration.
-	return it.Error()
+	return dbIterate(r.rdb, start, end, f)
 }
 
 // Capacity queries the underlying file system for disk capacity information.
@@ -335,84 +251,9 @@ func (r *RocksDB) Flush() error {
 	return statusToError(C.DBFlush(r.rdb))
 }
 
-// goToCSlice converts a go byte slice to a DBSlice. Note that this is
-// potentially dangerous as the DBSlice holds a reference to the go
-// byte slice memory that the Go GC does not know about. This method
-// is only intended for use in converting arguments to C
-// functions. The C function must copy any data that it wishes to
-// retain once the function returns.
-func goToCSlice(b []byte) C.DBSlice {
-	if len(b) == 0 {
-		return C.DBSlice{data: nil, len: 0}
-	}
-	return C.DBSlice{
-		data: (*C.char)(unsafe.Pointer(&b[0])),
-		len:  C.int(len(b)),
-	}
-}
-
-func cStringToGoString(s C.DBString) string {
-	if s.data == nil {
-		return ""
-	}
-	result := C.GoStringN(s.data, s.len)
-	C.free(unsafe.Pointer(s.data))
-	return result
-}
-
-func cStringToGoBytes(s C.DBString) []byte {
-	if s.data == nil {
-		return nil
-	}
-	result := C.GoBytes(unsafe.Pointer(s.data), s.len)
-	C.free(unsafe.Pointer(s.data))
-	return result
-}
-
-func cSliceToGoBytes(s C.DBSlice) []byte {
-	if s.data == nil {
-		return nil
-	}
-	return C.GoBytes(unsafe.Pointer(s.data), s.len)
-}
-
-func cSliceToUnsafeGoBytes(s C.DBSlice) []byte {
-	if s.data == nil {
-		return nil
-	}
-	// Go limits arrays to a length that will fit in a (signed) 32-bit
-	// integer. Fall back to using cSliceToGoBytes if our slice is
-	// larger.
-	const maxLen = 0x7fffffff
-	if s.len > maxLen {
-		return cSliceToGoBytes(s)
-	}
-	return (*[maxLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
-}
-
-func statusToError(s C.DBStatus) error {
-	if s.data == nil {
-		return nil
-	}
-	return errors.New(cStringToGoString(s))
-}
-
-// goMerge takes existing and update byte slices that are expected to
-// be marshalled roachpb.Values and merges the two values returning a
-// marshalled roachpb.Value or an error.
-func goMerge(existing, update []byte) ([]byte, error) {
-	var result C.DBString
-	status := C.DBMergeOne(goToCSlice(existing), goToCSlice(update), &result)
-	if status.data != nil {
-		return nil, util.Errorf("%s: existing=%q, update=%q",
-			cStringToGoString(status), existing, update)
-	}
-	return cStringToGoBytes(result), nil
-}
-
 // NewIterator returns an iterator over this rocksdb engine.
 func (r *RocksDB) NewIterator() Iterator {
-	return newRocksDBIterator(r.rdb, nil)
+	return newRocksDBIterator(r.rdb)
 }
 
 // NewSnapshot creates a snapshot handle from engine and returns a
@@ -444,7 +285,7 @@ func (r *RocksDB) Defer(func()) {
 
 type rocksDBSnapshot struct {
 	parent *RocksDB
-	handle *C.DBSnapshot
+	handle *C.DBEngine
 }
 
 // Open is a noop.
@@ -454,7 +295,7 @@ func (r *rocksDBSnapshot) Open() error {
 
 // Close releases the snapshot handle.
 func (r *rocksDBSnapshot) Close() {
-	C.DBSnapshotRelease(r.handle)
+	C.DBClose(r.handle)
 }
 
 // Attrs returns the engine/store attributes.
@@ -470,19 +311,19 @@ func (r *rocksDBSnapshot) Put(key MVCCKey, value []byte) error {
 // Get returns the value for the given key, nil otherwise using
 // the snapshot handle.
 func (r *rocksDBSnapshot) Get(key MVCCKey) ([]byte, error) {
-	return r.parent.getInternal(key, r.handle)
+	return dbGet(r.handle, key)
 }
 
 func (r *rocksDBSnapshot) GetProto(key MVCCKey, msg proto.Message) (
 	ok bool, keyBytes, valBytes int64, err error) {
-	return r.parent.getProtoInternal(key, msg, r.handle)
+	return dbGetProto(r.handle, key, msg)
 }
 
 // Iterate iterates over the keys between start inclusive and end
 // exclusive, invoking f() on each key/value pair using the snapshot
 // handle.
 func (r *rocksDBSnapshot) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
-	return r.parent.iterateInternal(start, end, f, r.handle)
+	return dbIterate(r.handle, start, end, f)
 }
 
 // Clear is illegal for snapshot and returns an error.
@@ -518,7 +359,7 @@ func (r *rocksDBSnapshot) Flush() error {
 // NewIterator returns a new instance of an Iterator over the
 // engine using the snapshot handle.
 func (r *rocksDBSnapshot) NewIterator() Iterator {
-	return newRocksDBIterator(r.parent.rdb, r.handle)
+	return newRocksDBIterator(r.handle)
 }
 
 // NewSnapshot is illegal for snapshot.
@@ -543,14 +384,14 @@ func (r *rocksDBSnapshot) Defer(func()) {
 
 type rocksDBBatch struct {
 	parent *RocksDB
-	batch  *C.DBBatch
+	batch  *C.DBEngine
 	defers []func()
 }
 
 func newRocksDBBatch(r *RocksDB) *rocksDBBatch {
 	return &rocksDBBatch{
 		parent: r,
-		batch:  C.DBNewBatch(),
+		batch:  C.DBNewBatch(r.rdb),
 	}
 }
 
@@ -560,7 +401,7 @@ func (r *rocksDBBatch) Open() error {
 
 func (r *rocksDBBatch) Close() {
 	if r.batch != nil {
-		C.DBBatchDestroy(r.batch)
+		C.DBClose(r.batch)
 	}
 }
 
@@ -570,89 +411,28 @@ func (r *rocksDBBatch) Attrs() roachpb.Attributes {
 }
 
 func (r *rocksDBBatch) Put(key MVCCKey, value []byte) error {
-	if len(key) == 0 {
-		return emptyKeyError()
-	}
-	C.DBBatchPut(r.batch, goToCSlice(key), goToCSlice(value))
-	return nil
+	return dbPut(r.batch, key, value)
 }
 
 func (r *rocksDBBatch) Merge(key MVCCKey, value []byte) error {
-	if len(key) == 0 {
-		return emptyKeyError()
-	}
-	C.DBBatchMerge(r.batch, goToCSlice(key), goToCSlice(value))
-	return nil
+	return dbMerge(r.batch, key, value)
 }
 
 func (r *rocksDBBatch) Get(key MVCCKey) ([]byte, error) {
-	if len(key) == 0 {
-		return nil, emptyKeyError()
-	}
-	var result C.DBString
-	err := statusToError(C.DBBatchGet(r.parent.rdb, r.batch, goToCSlice(key), &result))
-	if err != nil {
-		return nil, err
-	}
-	return cStringToGoBytes(result), nil
+	return dbGet(r.batch, key)
 }
 
 func (r *rocksDBBatch) GetProto(key MVCCKey, msg proto.Message) (
 	ok bool, keyBytes, valBytes int64, err error) {
-	if len(key) == 0 {
-		err = emptyKeyError()
-		return
-	}
-	var result C.DBString
-	if err = statusToError(C.DBBatchGet(r.parent.rdb, r.batch, goToCSlice(key), &result)); err != nil {
-		return
-	}
-	if result.len <= 0 {
-		return
-	}
-	ok = true
-	if msg != nil {
-		// Make a byte slice that is backed by result.data. This slice
-		// cannot live past the lifetime of this method, but we're only
-		// using it to unmarshal the roachpb.
-		data := cSliceToUnsafeGoBytes(C.DBSlice(result))
-		err = proto.Unmarshal(data, msg)
-	}
-	C.free(unsafe.Pointer(result.data))
-	keyBytes = int64(len(key))
-	valBytes = int64(result.len)
-	return
+	return dbGetProto(r.batch, key, msg)
 }
 
 func (r *rocksDBBatch) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
-	if bytes.Compare(start, end) >= 0 {
-		return nil
-	}
-	it := &rocksDBIterator{
-		iter: C.DBBatchNewIter(r.parent.rdb, r.batch),
-	}
-	defer it.Close()
-
-	it.Seek(start)
-	for ; it.Valid(); it.Next() {
-		k := it.Key()
-		if !it.Key().Less(end) {
-			break
-		}
-		if done, err := f(MVCCKeyValue{Key: k, Value: it.Value()}); done || err != nil {
-			return err
-		}
-	}
-	// Check for any errors during iteration.
-	return it.Error()
+	return dbIterate(r.batch, start, end, f)
 }
 
 func (r *rocksDBBatch) Clear(key MVCCKey) error {
-	if len(key) == 0 {
-		return emptyKeyError()
-	}
-	C.DBBatchDelete(r.batch, goToCSlice(key))
-	return nil
+	return dbClear(r.batch, key)
 }
 
 func (r *rocksDBBatch) Capacity() (roachpb.StoreCapacity, error) {
@@ -672,9 +452,7 @@ func (r *rocksDBBatch) Flush() error {
 }
 
 func (r *rocksDBBatch) NewIterator() Iterator {
-	return &rocksDBIterator{
-		iter: C.DBBatchNewIter(r.parent.rdb, r.batch),
-	}
+	return newRocksDBIterator(r.batch)
 }
 
 func (r *rocksDBBatch) NewSnapshot() Engine {
@@ -689,10 +467,10 @@ func (r *rocksDBBatch) Commit() error {
 	if r.batch == nil {
 		panic("this batch was already committed")
 	}
-	if err := statusToError(C.DBWrite(r.parent.rdb, r.batch)); err != nil {
+	if err := statusToError(C.DBWriteBatch(r.batch)); err != nil {
 		return err
 	}
-	C.DBBatchDestroy(r.batch)
+	C.DBClose(r.batch)
 	r.batch = nil
 
 	// On success, run the deferred functions in reverse order.
@@ -719,13 +497,13 @@ type rocksDBIterator struct {
 // instance. If snapshotHandle is not nil, uses the indicated snapshot.
 // The caller must call rocksDBIterator.Close() when finished with the
 // iterator to free up resources.
-func newRocksDBIterator(rdb *C.DBEngine, snapshotHandle *C.DBSnapshot) *rocksDBIterator {
+func newRocksDBIterator(rdb *C.DBEngine) *rocksDBIterator {
 	// In order to prevent content displacement, caching is disabled
 	// when performing scans. Any options set within the shared read
 	// options field that should be carried over needs to be set here
 	// as well.
 	return &rocksDBIterator{
-		iter: C.DBNewIter(rdb, snapshotHandle),
+		iter: C.DBNewIter(rdb),
 	}
 }
 
@@ -835,4 +613,175 @@ func (r *rocksDBIterator) ComputeStats(ms *MVCCStats, start, end []byte, nowNano
 	ms.SysCount += int64(result.sys_count)
 	ms.LastUpdateNanos = nowNanos
 	return nil
+}
+
+// goToCSlice converts a go byte slice to a DBSlice. Note that this is
+// potentially dangerous as the DBSlice holds a reference to the go
+// byte slice memory that the Go GC does not know about. This method
+// is only intended for use in converting arguments to C
+// functions. The C function must copy any data that it wishes to
+// retain once the function returns.
+func goToCSlice(b []byte) C.DBSlice {
+	if len(b) == 0 {
+		return C.DBSlice{data: nil, len: 0}
+	}
+	return C.DBSlice{
+		data: (*C.char)(unsafe.Pointer(&b[0])),
+		len:  C.int(len(b)),
+	}
+}
+
+func cStringToGoString(s C.DBString) string {
+	if s.data == nil {
+		return ""
+	}
+	result := C.GoStringN(s.data, s.len)
+	C.free(unsafe.Pointer(s.data))
+	return result
+}
+
+func cStringToGoBytes(s C.DBString) []byte {
+	if s.data == nil {
+		return nil
+	}
+	result := C.GoBytes(unsafe.Pointer(s.data), s.len)
+	C.free(unsafe.Pointer(s.data))
+	return result
+}
+
+func cSliceToGoBytes(s C.DBSlice) []byte {
+	if s.data == nil {
+		return nil
+	}
+	return C.GoBytes(unsafe.Pointer(s.data), s.len)
+}
+
+func cSliceToUnsafeGoBytes(s C.DBSlice) []byte {
+	if s.data == nil {
+		return nil
+	}
+	// Go limits arrays to a length that will fit in a (signed) 32-bit
+	// integer. Fall back to using cSliceToGoBytes if our slice is
+	// larger.
+	const maxLen = 0x7fffffff
+	if s.len > maxLen {
+		return cSliceToGoBytes(s)
+	}
+	return (*[maxLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
+}
+
+func statusToError(s C.DBStatus) error {
+	if s.data == nil {
+		return nil
+	}
+	return errors.New(cStringToGoString(s))
+}
+
+// goMerge takes existing and update byte slices that are expected to
+// be marshalled roachpb.Values and merges the two values returning a
+// marshalled roachpb.Value or an error.
+func goMerge(existing, update []byte) ([]byte, error) {
+	var result C.DBString
+	status := C.DBMergeOne(goToCSlice(existing), goToCSlice(update), &result)
+	if status.data != nil {
+		return nil, util.Errorf("%s: existing=%q, update=%q",
+			cStringToGoString(status), existing, update)
+	}
+	return cStringToGoBytes(result), nil
+}
+
+func emptyKeyError() error {
+	return util.ErrorfSkipFrames(1, "attempted access to empty key")
+}
+
+func dbPut(rdb *C.DBEngine, key MVCCKey, value []byte) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
+
+	// *Put, *Get, and *Delete call memcpy() (by way of MemTable::Add)
+	// when called, so we do not need to worry about these byte slices
+	// being reclaimed by the GC.
+	return statusToError(C.DBPut(rdb, goToCSlice(key), goToCSlice(value)))
+}
+
+func dbMerge(rdb *C.DBEngine, key MVCCKey, value []byte) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
+
+	// DBMerge calls memcpy() (by way of MemTable::Add)
+	// when called, so we do not need to worry about these byte slices being
+	// reclaimed by the GC.
+	return statusToError(C.DBMerge(rdb, goToCSlice(key), goToCSlice(value)))
+}
+
+// dbGet returns the value for the given key.
+func dbGet(rdb *C.DBEngine, key MVCCKey) ([]byte, error) {
+	if len(key) == 0 {
+		return nil, emptyKeyError()
+	}
+	var result C.DBString
+	err := statusToError(C.DBGet(rdb, goToCSlice(key), &result))
+	if err != nil {
+		return nil, err
+	}
+	return cStringToGoBytes(result), nil
+}
+
+func dbGetProto(rdb *C.DBEngine, key MVCCKey,
+	msg proto.Message) (ok bool, keyBytes, valBytes int64, err error) {
+	if len(key) == 0 {
+		err = emptyKeyError()
+		return
+	}
+	var result C.DBString
+	if err = statusToError(C.DBGet(rdb, goToCSlice(key), &result)); err != nil {
+		return
+	}
+	if result.len <= 0 {
+		msg.Reset()
+		return
+	}
+	ok = true
+	if msg != nil {
+		// Make a byte slice that is backed by result.data. This slice
+		// cannot live past the lifetime of this method, but we're only
+		// using it to unmarshal the roachpb.
+		data := cSliceToUnsafeGoBytes(C.DBSlice(result))
+		err = proto.Unmarshal(data, msg)
+	}
+	C.free(unsafe.Pointer(result.data))
+	keyBytes = int64(len(key))
+	valBytes = int64(result.len)
+	return
+}
+
+func dbClear(rdb *C.DBEngine, key MVCCKey) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
+	return statusToError(C.DBDelete(rdb, goToCSlice(key)))
+}
+
+func dbIterate(rdb *C.DBEngine, start, end MVCCKey,
+	f func(MVCCKeyValue) (bool, error)) error {
+	if bytes.Compare(start, end) >= 0 {
+		return nil
+	}
+	it := newRocksDBIterator(rdb)
+	defer it.Close()
+
+	it.Seek(start)
+	for ; it.Valid(); it.Next() {
+		k := it.Key()
+		if !it.Key().Less(end) {
+			break
+		}
+		if done, err := f(MVCCKeyValue{Key: k, Value: it.Value()}); done || err != nil {
+			return err
+		}
+	}
+	// Check for any errors during iteration.
+	return it.Error()
 }
