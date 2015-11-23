@@ -481,7 +481,6 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 // which doesn't need to be subdivided further before going to a range (so no
 // mixing of forward and reverse scans, etc).
 func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	considerIntents := false
 	isReverse := ba.IsReverse()
 
 	trace := tracer.FromCtx(ctx)
@@ -494,6 +493,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 	var br *roachpb.BatchResponse
 	// Send the request to one range per iteration.
 	for {
+		considerIntents := false
 		var curReply *roachpb.BatchResponse
 		var desc *roachpb.RangeDescriptor
 		var needAnother bool
