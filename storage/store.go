@@ -1215,7 +1215,7 @@ func (s *Store) ReplicaCount() int {
 func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	ctx = s.Context(ctx)
 	trace := tracer.FromCtx(ctx)
-	// If the request has a zero timestamp, initialize to this node's clock.
+
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
 		header := arg.Header()
