@@ -14,10 +14,10 @@ INSERT INTO t VALUES
   ('2015-08-25 04:45:45.53453'::timestamp, '2015-08-25'::date, '2h45m2s234ms'::interval),
   ('2015-08-29 23:10:09.98763'::timestamp, '2015-08-29'::date, '234h45m2s234ms'::interval)
 
-query TII
+query TTT
 SELECT * FROM t WHERE a = '2015-08-25 05:45:45.53453+01:00'::timestamp
 ----
-2015-08-25 04:45:45.53453 +0000 UTC   2015-08-25   2h45m2.234s
+2015-08-25 04:45:45.53453 +0000 +0000   2015-08-25 00:00:00 +0000 +0000   2h45m2.234s
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t WHERE a = '2015-08-25 06:45:45.53453+02:00'::timestamp
@@ -58,20 +58,20 @@ INSERT INTO u VALUES
   (234, '2015-08-25 04:45:45.53453'::timestamp, '2015-08-25'::date, '2h45m2s234ms'::interval),
   (456, '2015-08-29 23:10:09.98763'::timestamp, '2015-08-29'::date, '234h45m2s234ms'::interval)
 
-query ITII
+query ITTT
 SELECT * FROM u WHERE a = 234
 ----
-234 2015-08-25 04:45:45.53453 +0000 UTC   2015-08-25   2h45m2.234s
+234 2015-08-25 04:45:45.53453 +0000 +0000   2015-08-25 00:00:00 +0000 +0000   2h45m2.234s
 
-query TII
+query TTT
 SELECT MAX(b), MAX(c), MAX(d) FROM u
 ----
-2015-08-30 03:34:45.34567 +0000 UTC 2015-08-30 234h45m2.234s
+2015-08-30 03:34:45.34567 +0000 +0000   2015-08-30 00:00:00 +0000 +0000  234h45m2.234s
 
-query TII
+query TTT
 SELECT MIN(b), MIN(c), MIN(d) FROM u
 ----
-2015-08-25 04:45:45.53453 +0000 UTC 2015-08-25 2h45m2.234s
+2015-08-25 04:45:45.53453 +0000 +0000   2015-08-25 00:00:00 +0000 +0000  2h45m2.234s
 
 query BB
 SELECT now() < now() + '1m'::interval, now() <= now() + '1m'::interval
@@ -85,7 +85,7 @@ true true
 
 # TIMESTAMP/DATE builtins.
 
-query I
+query T
 SELECT age(timestamp '2001-04-10 22:06:45', timestamp '1957-06-13')
 ----
 384190h6m45s
@@ -271,7 +271,7 @@ SELECT extract(nansecond from timestamp '2001-04-10 12:04:59.34565423')
 query T
 SELECT '2015-08-25 05:45:45.53453'::timestamp
 ----
-2015-08-25 05:45:45.53453 +0000 UTC
+2015-08-25 05:45:45.53453 +0000 +0000
 
 statement ok
 SET TIME ZONE 'Europe/Rome'
@@ -279,7 +279,7 @@ SET TIME ZONE 'Europe/Rome'
 query T
 SELECT '2015-08-25 05:45:45.53453 CET'::timestamp
 ----
-2015-08-25 04:45:45.53453 +0000 UTC
+2015-08-25 04:45:45.53453 +0000 +0000
 
 statement ok
 SET TIME ZONE "America/New_York"
@@ -287,24 +287,24 @@ SET TIME ZONE "America/New_York"
 query T
 SELECT '2015-08-24 23:45:45.53453 EST'::timestamp
 ----
-2015-08-25 04:45:45.53453 +0000 UTC
+2015-08-25 04:45:45.53453 +0000 +0000
 
 query T
 SELECT '2015-08-24 23:45:45.53453 EDT'::timestamp
 ----
-2015-08-25 03:45:45.53453 +0000 UTC
+2015-08-25 03:45:45.53453 +0000 +0000
 
 # PST is not interpreted properly.
 query T
 SELECT '2015-08-24 23:45:45.53453 PST'::timestamp
 ----
-2015-08-24 23:45:45.53453 +0000 UTC
+2015-08-24 23:45:45.53453 +0000 +0000
 
 # A missing time zome is interpretted in the same way as EDT
 query T
 SELECT '2015-08-24 23:45:45.53453'::timestamp
 ----
-2015-08-25 03:45:45.53453 +0000 UTC
+2015-08-25 03:45:45.53453 +0000 +0000
 
 statement error cannot find foobar.*
 SET TIME ZONE 'foobar'
@@ -315,19 +315,19 @@ SET TIME ZONE INTERVAL '-7h'
 query T
 SELECT '2015-08-24 21:45:45.53453'::timestamp
 ----
-2015-08-25 04:45:45.53453 +0000 UTC
+2015-08-25 04:45:45.53453 +0000 +0000
 
 # Check that casting from a timestamp to a date and vice versa
 # uses the time zone.
-query I
+query T
 SELECT b::date FROM u WHERE a = 123
 ----
-2015-08-29
+2015-08-29 00:00:00 +0000 +0000
 
 query T
 SELECT c::timestamp FROM u WHERE a = 123
 ----
-2015-08-30 07:00:00 +0000 UTC
+2015-08-30 07:00:00 +0000 +0000
 
 statement ok
 SET TIME ZONE -7
@@ -335,7 +335,7 @@ SET TIME ZONE -7
 query T
 SELECT '2015-08-24 21:45:45.53453'::timestamp
 ----
-2015-08-25 04:45:45.53453 +0000 UTC
+2015-08-25 04:45:45.53453 +0000 +0000
 
 statement ok
 SET TIME ZONE -7.5
@@ -343,12 +343,12 @@ SET TIME ZONE -7.5
 query T
 SELECT '2015-08-24 21:15:45.53453'::timestamp
 ----
-2015-08-25 04:45:45.53453 +0000 UTC
+2015-08-25 04:45:45.53453 +0000 +0000
 
 query T
 SELECT '2015-08-24 21:15:45.53453'::timestamp
 ----
-2015-08-25 04:45:45.53453 +0000 UTC
+2015-08-25 04:45:45.53453 +0000 +0000
 
 statement ok
 SET TIME ZONE LOCAL
@@ -356,7 +356,7 @@ SET TIME ZONE LOCAL
 query T
 SELECT '2015-08-25 04:45:45.53453'::timestamp
 ----
-2015-08-25 04:45:45.53453 +0000 UTC
+2015-08-25 04:45:45.53453 +0000 +0000
 
 statement ok
 SET TIME ZONE DEFAULT
@@ -364,7 +364,7 @@ SET TIME ZONE DEFAULT
 query T
 SELECT '2015-08-25 04:45:45.53453'::timestamp
 ----
-2015-08-25 04:45:45.53453 +0000 UTC
+2015-08-25 04:45:45.53453 +0000 +0000
 
 # reset for what follows.
 statement ok
