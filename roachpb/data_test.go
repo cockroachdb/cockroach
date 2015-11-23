@@ -214,6 +214,7 @@ func TestTimestampNext(t *testing.T) {
 		{makeTS(1, 2), makeTS(1, 3)},
 		{makeTS(1, math.MaxInt32-1), makeTS(1, math.MaxInt32)},
 		{makeTS(1, math.MaxInt32), makeTS(2, 0)},
+		{makeTS(math.MaxInt32, math.MaxInt32), makeTS(math.MaxInt32+1, 0)},
 	}
 	for i, c := range testCases {
 		if next := c.ts.Next(); !next.Equal(c.expNext) {
