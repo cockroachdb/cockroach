@@ -18,33 +18,24 @@
 package status
 
 import (
-	"fmt"
 	"strconv"
-	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/rcrowley/go-metrics"
 )
 
 const (
 	// storeTimeSeriesNameFmt is the current format for cockroach's
 	// store-specific time series keys. Each key has a prefix of "cr.store",
-	// followed by the name of the specific stat, followed by the StoreID.
-	//
-	// For example, the livebytes stats for Store with ID 1 would be stored with
-	// key:
-	//		cr.store.livebytes.1
-	//
-	// This format has been chosen to put the StoreID as the suffix of keys, in
-	// anticipation of an initially simple query system where only key suffixes
-	// can be wildcarded.
-	storeTimeSeriesNameFmt = "cr.store.%s"
+	// followed by the name of the specific stat.
+	storeTimeSeriesPrefix = "cr.store."
 	// nodeTimeSeriesFmt is the current format for time series keys which record
 	// node-specific data.
-	nodeTimeSeriesNameFmt = "cr.node.%s"
+	nodeTimeSeriesPrefix = "cr.node."
 	// runtimeStatTimeSeriesFmt is the current format for time series keys which
 	// record runtime system stats on a node.
 	runtimeStatTimeSeriesNameFmt = "cr.node.sys.%s"
@@ -65,22 +56,6 @@ func NewNodeStatusRecorder(monitor *NodeStatusMonitor, clock *hlc.Clock) *NodeSt
 	return &NodeStatusRecorder{
 		NodeStatusMonitor: monitor,
 		clock:             clock,
-	}
-}
-
-// recordInt records a single int64 value from the NodeStatusMonitor as a
-// ts.TimeSeriesData object.
-func (nsr *NodeStatusRecorder) recordInt(timestampNanos int64, name string,
-	data int64) ts.TimeSeriesData {
-	return ts.TimeSeriesData{
-		Name:   fmt.Sprintf(nodeTimeSeriesNameFmt, name),
-		Source: nsr.source,
-		Datapoints: []*ts.TimeSeriesDatapoint{
-			{
-				TimestampNanos: timestampNanos,
-				Value:          float64(data),
-			},
-		},
 	}
 }
 
@@ -105,39 +80,24 @@ func (nsr *NodeStatusRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
 
 	// Record node stats.
 	now := nsr.clock.PhysicalNow()
-	data = append(data, nsr.recordInt(now, "calls.success", atomic.LoadInt64(&nsr.callCount)))
-	data = append(data, nsr.recordInt(now, "calls.error", atomic.LoadInt64(&nsr.callErrors)))
+	recorder := registryRecorder{
+		registry:       nsr.registry,
+		prefix:         nodeTimeSeriesPrefix,
+		source:         nsr.source,
+		timestampNanos: now,
+	}
+	recorder.record(&data)
 
 	// Record per store stats.
 	nsr.visitStoreMonitors(func(ssm *StoreStatusMonitor) {
 		now := nsr.clock.PhysicalNow()
-		ssr := storeStatusRecorder{
-			StoreStatusMonitor: ssm,
-			timestampNanos:     now,
-			source:             strconv.FormatInt(int64(ssm.ID), 10),
+		storeRecorder := registryRecorder{
+			registry:       ssm.registry,
+			prefix:         storeTimeSeriesPrefix,
+			source:         strconv.FormatInt(int64(ssm.ID), 10),
+			timestampNanos: now,
 		}
-		data = append(data, ssr.recordInt("livebytes", ssr.stats.LiveBytes))
-		data = append(data, ssr.recordInt("keybytes", ssr.stats.KeyBytes))
-		data = append(data, ssr.recordInt("valbytes", ssr.stats.ValBytes))
-		data = append(data, ssr.recordInt("intentbytes", ssr.stats.IntentBytes))
-		data = append(data, ssr.recordInt("livecount", ssr.stats.LiveCount))
-		data = append(data, ssr.recordInt("keycount", ssr.stats.KeyCount))
-		data = append(data, ssr.recordInt("valcount", ssr.stats.ValCount))
-		data = append(data, ssr.recordInt("intentcount", ssr.stats.IntentCount))
-		data = append(data, ssr.recordInt("intentage", ssr.stats.IntentAge))
-		data = append(data, ssr.recordInt("gcbytesage", ssr.stats.GCBytesAge))
-		data = append(data, ssr.recordInt("lastupdatenanos", ssr.stats.LastUpdateNanos))
-		data = append(data, ssr.recordInt("ranges", ssr.rangeCount))
-		data = append(data, ssr.recordInt("ranges.leader", int64(ssr.leaderRangeCount)))
-		data = append(data, ssr.recordInt("ranges.replicated", int64(ssr.replicatedRangeCount)))
-		data = append(data, ssr.recordInt("ranges.available", int64(ssr.availableRangeCount)))
-
-		// Record statistics from descriptor.
-		if ssr.desc != nil {
-			capacity := ssr.desc.Capacity
-			data = append(data, ssr.recordInt("capacity", int64(capacity.Capacity)))
-			data = append(data, ssr.recordInt("capacity.available", int64(capacity.Available)))
-		}
+		storeRecorder.record(&data)
 	})
 	nsr.lastDataCount = len(data)
 	return data
@@ -174,10 +134,10 @@ func (nsr *NodeStatusRecorder) GetStatusSummaries() (*NodeStatus, []storage.Stor
 		// Accumulate per-store values into node status.
 		nodeStat.StoreIDs = append(nodeStat.StoreIDs, ssm.ID)
 		nodeStat.Stats.Add(&ssm.stats)
-		nodeStat.RangeCount += int32(ssm.rangeCount)
-		nodeStat.LeaderRangeCount += ssm.leaderRangeCount
-		nodeStat.ReplicatedRangeCount += ssm.replicatedRangeCount
-		nodeStat.AvailableRangeCount += ssm.availableRangeCount
+		nodeStat.RangeCount += int32(ssm.rangeCount.Count())
+		nodeStat.LeaderRangeCount += int32(ssm.leaderRangeCount.Value())
+		nodeStat.ReplicatedRangeCount += int32(ssm.replicatedRangeCount.Value())
+		nodeStat.AvailableRangeCount += int32(ssm.availableRangeCount.Value())
 
 		// Its difficult to guarantee that we have the store descriptor yet; we
 		// may not have processed a StoreStatusEvent yet for this store. Just
@@ -191,35 +151,43 @@ func (nsr *NodeStatusRecorder) GetStatusSummaries() (*NodeStatus, []storage.Stor
 			UpdatedAt:            now,
 			StartedAt:            ssm.startedAt,
 			Stats:                ssm.stats,
-			RangeCount:           int32(ssm.rangeCount),
-			LeaderRangeCount:     ssm.leaderRangeCount,
-			ReplicatedRangeCount: ssm.replicatedRangeCount,
-			AvailableRangeCount:  ssm.availableRangeCount,
+			RangeCount:           int32(ssm.rangeCount.Count()),
+			LeaderRangeCount:     int32(ssm.leaderRangeCount.Value()),
+			ReplicatedRangeCount: int32(ssm.replicatedRangeCount.Value()),
+			AvailableRangeCount:  int32(ssm.availableRangeCount.Value()),
 		}
 		storeStats = append(storeStats, status)
 	})
 	return nodeStat, storeStats
 }
 
-// storeStatusRecorder is a helper class for recording time series datapoints
-// from a single StoreStatusMonitor.
-type storeStatusRecorder struct {
-	*StoreStatusMonitor
+// registryRecorder is a helper class for recording time series datapoints
+// from a metrics Registry.
+type registryRecorder struct {
+	registry       metrics.Registry
+	prefix         string
 	source         string
 	timestampNanos int64
 }
 
-// recordInt records a single int64 value from the StoreStatusMonitor as a
-// ts.TimeSeriesData object.
-func (ssr *storeStatusRecorder) recordInt(name string, data int64) ts.TimeSeriesData {
-	return ts.TimeSeriesData{
-		Name:   fmt.Sprintf(storeTimeSeriesNameFmt, name),
-		Source: ssr.source,
-		Datapoints: []*ts.TimeSeriesDatapoint{
-			{
-				TimestampNanos: ssr.timestampNanos,
-				Value:          float64(data),
+func (rr registryRecorder) record(dest *[]ts.TimeSeriesData) {
+	rr.registry.Each(func(name string, metric interface{}) {
+		data := ts.TimeSeriesData{
+			Name:   rr.prefix + name,
+			Source: rr.source,
+			Datapoints: []*ts.TimeSeriesDatapoint{
+				{
+					TimestampNanos: rr.timestampNanos,
+				},
 			},
-		},
-	}
+		}
+		// The method for extracting data differs based on the type of metric.
+		switch metric := metric.(type) {
+		case metrics.Counter:
+			data.Datapoints[0].Value = float64(metric.Count())
+		case metrics.Gauge:
+			data.Datapoints[0].Value = float64(metric.Value())
+		}
+		*dest = append(*dest, data)
+	})
 }

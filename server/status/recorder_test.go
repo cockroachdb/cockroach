@@ -18,7 +18,6 @@
 package status
 
 import (
-	"fmt"
 	"reflect"
 	"sort"
 	"strconv"
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/kr/pretty"
 )
 
 // byTimeAndName is a slice of ts.TimeSeriesData.
@@ -209,7 +209,7 @@ func TestNodeStatusRecorder(t *testing.T) {
 
 	generateNodeData := func(nodeId int, name string, time, val int64) ts.TimeSeriesData {
 		return ts.TimeSeriesData{
-			Name:   fmt.Sprintf(nodeTimeSeriesNameFmt, name),
+			Name:   nodeTimeSeriesPrefix + name,
 			Source: strconv.FormatInt(int64(nodeId), 10),
 			Datapoints: []*ts.TimeSeriesDatapoint{
 				{
@@ -222,7 +222,7 @@ func TestNodeStatusRecorder(t *testing.T) {
 
 	generateStoreData := func(storeId int, name string, time, val int64) ts.TimeSeriesData {
 		return ts.TimeSeriesData{
-			Name:   fmt.Sprintf(storeTimeSeriesNameFmt, name),
+			Name:   storeTimeSeriesPrefix + name,
 			Source: strconv.FormatInt(int64(storeId), 10),
 			Datapoints: []*ts.TimeSeriesDatapoint{
 				{
@@ -284,7 +284,7 @@ func TestNodeStatusRecorder(t *testing.T) {
 	sort.Sort(byTimeAndName(actual))
 	sort.Sort(byTimeAndName(expected))
 	if a, e := actual, expected; !reflect.DeepEqual(a, e) {
-		t.Errorf("recorder did not yield expected time series collection; expected:\n %v, got:\n %v", e, a)
+		t.Errorf("recorder did not yield expected time series collection; diff:\n %v", pretty.Diff(e, a))
 	}
 
 	expectedNodeSummary := &NodeStatus{
@@ -335,9 +335,9 @@ func TestNodeStatusRecorder(t *testing.T) {
 	sort.Sort(byStoreDescID(storeSummaries))
 	sort.Sort(byStoreID(nodeSummary.StoreIDs))
 	if a, e := nodeSummary, expectedNodeSummary; !reflect.DeepEqual(a, e) {
-		t.Errorf("recorder did not produce expected NodeSummary; expected:\n %v\n got:\n %v", e, a)
+		t.Errorf("recorder did not produce expected NodeSummary; diff:\n %v", pretty.Diff(e, a))
 	}
 	if a, e := storeSummaries, expectedStoreSummaries; !reflect.DeepEqual(a, e) {
-		t.Errorf("recorder did not produce expected StoreSummaries; expected:\n %v, got:\n %v", e, a)
+		t.Errorf("recorder did not produce expected StoreSummaries; diff:\n %v", pretty.Diff(e, a))
 	}
 }
