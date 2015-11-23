@@ -10,7 +10,7 @@ CREATE TABLE users (
 statement ok
 INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 
-query TTTTT colnames
+query TTTTTT colnames
 SHOW INDEX FROM users
 ----
 Table Name    Unique Seq Column Storing
@@ -34,7 +34,7 @@ ALTER INDEX IF EXISTS users@ffo RENAME TO ufo
 statement ok
 ALTER INDEX users@foo RENAME TO ufo
 
-query TTTTT colnames
+query TTTTTT colnames
 SHOW INDEX FROM users
 ----
 Table Name    Unique Seq Column Storing
@@ -58,7 +58,7 @@ user testuser
 statement ok
 ALTER INDEX users@bar RENAME TO rar
 
-query TTTTT colnames
+query TTTTTT colnames
 SHOW INDEX FROM users
 ----
 Table Name    Unique Seq Column Storing

@@ -273,16 +273,22 @@ SET DATABASE = test;
 			} else {
 				// TODO(pmattis): Parse "query <type-string> <sort-mode> <label>". The
 				// type string specifies the number of columns and their types: T for
-				// text, I for integer and R for floating point. The sort mode is one
-				// of "nosort", "rowsort" or "valuesort". The default is "nosort".
+				// text, I for integer, R for floating point, and B for boolean. The
+				// sort mode is one of "nosort", "rowsort", "valuesort", or "colnames".
+				// The default is "nosort".
 				//
 				// The label is optional. If specified, the test runner stores a hash
 				// of the results of the query under the given label. If the label is
-				// reused, the test runner verifieds that the results are the
+				// reused, the test runner verifies that the results are the
 				// same. This can be used to verify that two or more queries in the
 				// same test script that are logically equivalent always generate the
 				// same output.
 				query.colTypes = fields[1]
+				for _, c := range query.colTypes {
+					if !strings.ContainsRune("TIRB", c) {
+						t.Fatalf("%s: unknown type in type string: %c in %s", query.pos, c, query.colTypes)
+					}
+				}
 				if len(fields) >= 3 {
 					for _, opt := range strings.Split(fields[2], ",") {
 						switch opt {
@@ -297,6 +303,9 @@ SET DATABASE = test;
 
 						case "colnames":
 							query.colNames = true
+
+						default:
+							t.Fatalf("%s: unknown sort mode: %s", query.pos, opt)
 						}
 					}
 				}
@@ -353,7 +362,7 @@ SET DATABASE = test;
 			t.execQuery(query)
 			t.success(path)
 
-		case "halt":
+		case "halt", "hash-threshold":
 			break
 
 		case "user":
@@ -367,6 +376,9 @@ SET DATABASE = test;
 
 		case "skipif", "onlyif":
 			t.Fatalf("unimplemented test statement: %s", s.Text())
+
+		default:
+			t.Fatalf("%s:%d: unknown command: %s", path, s.line, cmd)
 		}
 	}
 
@@ -416,6 +428,10 @@ func (t *logicTest) execQuery(query logicQuery) {
 	cols, err := rows.Columns()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(query.colTypes) != len(cols) {
+		t.Fatalf("%s: expected %d columns based on type-string, but found %d",
+			query.pos, len(query.colTypes), len(cols))
 	}
 	vals := make([]interface{}, len(cols))
 	for i := range vals {

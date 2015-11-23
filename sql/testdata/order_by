@@ -48,7 +48,7 @@ EXPLAIN SELECT a, b FROM t ORDER BY b DESC
 0 sort -b
 1 scan t@primary -
 
-query II
+query I
 SELECT a FROM t ORDER BY 1 DESC
 ----
 3
@@ -108,13 +108,11 @@ SELECT a, b FROM t ORDER BY b, a DESC
 2 8
 1 9
 
-SELECT II
+query III
 SELECT a, b, a+b AS ab FROM t WHERE b = 7 ORDER BY ab DESC, a
 ----
 5 7 12
 4 7 11
-1 9 10
-2 8 10
 3 7 10
 
 query I
@@ -235,12 +233,12 @@ SELECT a FROM abc ORDER BY a DESC OFFSET 1
 ----
 1
 
-query I
+query TTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
 0 scan abc@bc /2-/3
 
-query I
+query TTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
 0 revscan abc@bc /2-/3

@@ -23,7 +23,7 @@ SELECT COUNT(k, v) FROM kv
 query error unimplemented ORDER BY with GROUP BY/aggregation
 SELECT COUNT(k) FROM kv ORDER BY v
 
-query I colnames
+query IIII colnames
 SELECT COUNT(*), COUNT(kv.*), COUNT(k), COUNT(kv.v) FROM kv
 ----
 COUNT(*) COUNT(kv.*) COUNT(k) COUNT(kv.v)

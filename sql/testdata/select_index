@@ -111,7 +111,7 @@ query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t WHERE a > 1 AND b > 'b'
 ----
 
-query ITTB
+query ITT
 EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 ----
 0 scan -
@@ -198,7 +198,7 @@ EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a + 1 = 4
 ----
 0 /t/ab/3/4 NULL true
 
-query ITTB
+query ITT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
 ----
 0 scan -
