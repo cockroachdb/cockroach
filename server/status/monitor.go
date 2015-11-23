@@ -19,7 +19,8 @@ package status
 
 import (
 	"sync"
-	"sync/atomic"
+
+	"github.com/rcrowley/go-metrics"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
@@ -29,21 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
-// StoreStatusMonitor monitors the status of a single store on the server.
-// Status information is collected from event feeds provided by lower level
-// components.
-type StoreStatusMonitor struct {
-	rangeDataAccumulator
-	ID        roachpb.StoreID
-	desc      *roachpb.StoreDescriptor
-	startedAt int64
-
-	// replication counts.
-	leaderRangeCount     int32
-	replicatedRangeCount int32
-	availableRangeCount  int32
-}
-
 // NodeStatusMonitor monitors the status of a server node. Status information
 // is collected from event feeds provided by lower level components.
 //
@@ -51,18 +37,24 @@ type StoreStatusMonitor struct {
 // interesting subsets of data on the node. NodeStatusMonitor is responsible
 // for passing event feed data to these subset structures for accumulation.
 type NodeStatusMonitor struct {
-	sync.RWMutex
-	stores     map[roachpb.StoreID]*StoreStatusMonitor
-	desc       roachpb.NodeDescriptor
-	startedAt  int64
-	callCount  int64
-	callErrors int64
+	callCount  metrics.Counter
+	callErrors metrics.Counter
+
+	sync.RWMutex // Mutex to guard the following fields
+	registry     metrics.Registry
+	stores       map[roachpb.StoreID]*StoreStatusMonitor
+	desc         roachpb.NodeDescriptor
+	startedAt    int64
 }
 
 // NewNodeStatusMonitor initializes a new NodeStatusMonitor instance.
 func NewNodeStatusMonitor() *NodeStatusMonitor {
+	registry := metrics.NewRegistry()
 	return &NodeStatusMonitor{
-		stores: make(map[roachpb.StoreID]*StoreStatusMonitor),
+		registry:   registry,
+		callCount:  metrics.NewRegisteredCounter("calls.success", registry),
+		callErrors: metrics.NewRegisteredCounter("calls.error", registry),
+		stores:     make(map[roachpb.StoreID]*StoreStatusMonitor),
 	}
 }
 
@@ -83,9 +75,7 @@ func (nsm *NodeStatusMonitor) GetStoreMonitor(id roachpb.StoreID) *StoreStatusMo
 	if s, ok = nsm.stores[id]; ok {
 		return s
 	}
-	s = &StoreStatusMonitor{
-		ID: id,
-	}
+	s = NewStoreStatusMonitor(id)
 	nsm.stores[id] = s
 	return s
 }
@@ -151,12 +141,17 @@ func (nsm *NodeStatusMonitor) OnMergeRange(event *storage.MergeRangeEvent) {
 // store.StoreEventListener.
 func (nsm *NodeStatusMonitor) OnStartStore(event *storage.StartStoreEvent) {
 	ssm := nsm.GetStoreMonitor(event.StoreID)
-	atomic.StoreInt64(&ssm.startedAt, event.StartedAt)
+	ssm.Lock()
+	defer ssm.Unlock()
+	ssm.startedAt = event.StartedAt
 }
 
 // OnBeginScanRanges receives BeginScanRangesEvents retrieved from a storage
 // event subscription. This method is part of the implementation of
 // store.StoreEventListener.
+// TODO(mrtracy): We have clearly moved away from the model of having multiple
+// range-data listeners. This event should be removed from the feeds, as well as
+// this monitor.
 func (nsm *NodeStatusMonitor) OnBeginScanRanges(event *storage.BeginScanRangesEvent) {
 	nsm.GetStoreMonitor(event.StoreID).beginScanRanges(event)
 }
@@ -176,6 +171,9 @@ func (nsm *NodeStatusMonitor) OnStoreStatus(event *storage.StoreStatusEvent) {
 	ssm.Lock()
 	defer ssm.Unlock()
 	ssm.desc = event.Desc
+	// Update capacity gauges on the store monitor.
+	ssm.capacity.Update(ssm.desc.Capacity.Capacity)
+	ssm.available.Update(ssm.desc.Capacity.Available)
 }
 
 // OnReplicationStatus receives ReplicationStatusEvents retrieved from a storage
@@ -185,9 +183,9 @@ func (nsm *NodeStatusMonitor) OnReplicationStatus(event *storage.ReplicationStat
 	ssm := nsm.GetStoreMonitor(event.StoreID)
 	ssm.Lock()
 	defer ssm.Unlock()
-	ssm.leaderRangeCount = event.LeaderRangeCount
-	ssm.replicatedRangeCount = event.ReplicatedRangeCount
-	ssm.availableRangeCount = event.AvailableRangeCount
+	ssm.leaderRangeCount.Update(event.LeaderRangeCount)
+	ssm.replicatedRangeCount.Update(event.ReplicatedRangeCount)
+	ssm.availableRangeCount.Update(event.AvailableRangeCount)
 }
 
 // OnStartNode receives StartNodeEvents from a node event subscription. This
@@ -202,13 +200,13 @@ func (nsm *NodeStatusMonitor) OnStartNode(event *StartNodeEvent) {
 // OnCallSuccess receives CallSuccessEvents from a node event subscription. This
 // method is part of the implementation of NodeEventListener.
 func (nsm *NodeStatusMonitor) OnCallSuccess(event *CallSuccessEvent) {
-	atomic.AddInt64(&nsm.callCount, 1)
+	nsm.callCount.Inc(1)
 }
 
 // OnCallError receives CallErrorEvents from a node event subscription. This
 // method is part of the implementation of NodeEventListener.
 func (nsm *NodeStatusMonitor) OnCallError(event *CallErrorEvent) {
-	atomic.AddInt64(&nsm.callErrors, 1)
+	nsm.callErrors.Inc(1)
 }
 
 // OnTrace receives Trace objects from a node event subscription. This method
@@ -219,91 +217,114 @@ func (nsm *NodeStatusMonitor) OnTrace(trace *tracer.Trace) {
 	}
 }
 
-// rangeDataAccumulator maintains a set of accumulated stats for a set of
-// ranges, computed from an incoming stream of storage events. Stats will be
-// changed by any events sent to this type; higher level components are
-// responsible for selecting the specific ranges accumulated by a
-// rangeDataAccumulator instance.
-type rangeDataAccumulator struct {
-	sync.Mutex
+// StoreStatusMonitor monitors the status of a single store on the server.
+// Status information is collected from event feeds provided by lower level
+// components.
+type StoreStatusMonitor struct {
+	// Range data metrics.
+	rangeCount           metrics.Counter
+	leaderRangeCount     metrics.Gauge
+	replicatedRangeCount metrics.Gauge
+	availableRangeCount  metrics.Gauge
+
+	// Storage metrics.
+	liveBytes       metrics.Gauge
+	keyBytes        metrics.Gauge
+	valBytes        metrics.Gauge
+	intentBytes     metrics.Gauge
+	liveCount       metrics.Gauge
+	keyCount        metrics.Gauge
+	valCount        metrics.Gauge
+	intentCount     metrics.Gauge
+	intentAge       metrics.Gauge
+	gcBytesAge      metrics.Gauge
+	lastUpdateNanos metrics.Gauge
+	capacity        metrics.Gauge
+	available       metrics.Gauge
+
+	sync.Mutex // Mutex to guard the following fields
+	registry   metrics.Registry
 	stats      engine.MVCCStats
-	rangeCount int64
-	// 'scanning' is a special mode used to initialize a rangeDataAccumulator.
-	// During typical operation stats are monitored using per-operation deltas;
-	// however, when a rangeDataAccumulator is initialized it must first read
-	// the total value of all stats at the time when it is created.
-	//
-	// The scanning mode is used to facilitate this: the underlying store will
-	// initiate a scan with "beginScanRanges", and then send an AddRangeEvent
-	// for each range in the store.
-	//
-	// During a scan it is not possible for ranges to be added, removed, split
-	// or merged; however, it is possible for UpdateRangeEvents to occur during
-	// a scan. The seenScan collection is used to properly handle
-	// UpdateRangeEvents in this case.
-	isScanning bool
-	seenScan   map[roachpb.RangeID]struct{}
+	ID         roachpb.StoreID
+	desc       *roachpb.StoreDescriptor
+	startedAt  int64
 }
 
-func (rda *rangeDataAccumulator) registerRange(event *storage.RegisterRangeEvent) {
-	rda.Lock()
-	defer rda.Unlock()
-	// Either we're scanning and this is for a scan, or we're not scanning and
-	// then we don't want scan events.
-	if rda.isScanning != event.Scan {
-		return
+// NewStoreStatusMonitor constructs a StoreStatusMonitor with the given ID.
+func NewStoreStatusMonitor(id roachpb.StoreID) *StoreStatusMonitor {
+	registry := metrics.NewRegistry()
+	return &StoreStatusMonitor{
+		ID:                   id,
+		registry:             registry,
+		rangeCount:           metrics.NewRegisteredCounter("ranges", registry),
+		leaderRangeCount:     metrics.NewRegisteredGauge("ranges.leader", registry),
+		replicatedRangeCount: metrics.NewRegisteredGauge("ranges.replicated", registry),
+		availableRangeCount:  metrics.NewRegisteredGauge("ranges.available", registry),
+		liveBytes:            metrics.NewRegisteredGauge("livebytes", registry),
+		keyBytes:             metrics.NewRegisteredGauge("keybytes", registry),
+		valBytes:             metrics.NewRegisteredGauge("valbytes", registry),
+		intentBytes:          metrics.NewRegisteredGauge("intentbytes", registry),
+		liveCount:            metrics.NewRegisteredGauge("livecount", registry),
+		keyCount:             metrics.NewRegisteredGauge("keycount", registry),
+		valCount:             metrics.NewRegisteredGauge("valcount", registry),
+		intentCount:          metrics.NewRegisteredGauge("intentcount", registry),
+		intentAge:            metrics.NewRegisteredGauge("intentage", registry),
+		gcBytesAge:           metrics.NewRegisteredGauge("gcbytesage", registry),
+		lastUpdateNanos:      metrics.NewRegisteredGauge("lastupdatenanos", registry),
+		capacity:             metrics.NewRegisteredGauge("capacity", registry),
+		available:            metrics.NewRegisteredGauge("capacity.available", registry),
 	}
-	if event.Scan {
-		rda.seenScan[event.Desc.RangeID] = struct{}{}
-		rda.rangeCount++
-	}
-	rda.stats.Add(&event.Stats)
 }
 
-func (rda *rangeDataAccumulator) updateRange(event *storage.UpdateRangeEvent) {
-	rda.Lock()
-	defer rda.Unlock()
-	if rda.isScanning {
-		// Skip if we are in an active scan and have not yet accumulated the
-		// data for this range.
-		if _, seen := rda.seenScan[event.Desc.RangeID]; !seen {
-			return
-		}
-	}
-	rda.stats.Add(&event.Delta)
+func (ssm *StoreStatusMonitor) registerRange(event *storage.RegisterRangeEvent) {
+	ssm.Lock()
+	defer ssm.Unlock()
+	ssm.stats.Add(&event.Stats)
+	ssm.rangeCount.Inc(1)
+	ssm.updateStorageGaugesLocked()
 }
 
-func (rda *rangeDataAccumulator) removeRange(event *storage.RemoveRangeEvent) {
-	rda.Lock()
-	defer rda.Unlock()
-	rda.stats.Subtract(&event.Stats)
-	rda.rangeCount--
+func (ssm *StoreStatusMonitor) updateRange(event *storage.UpdateRangeEvent) {
+	ssm.Lock()
+	defer ssm.Unlock()
+	ssm.stats.Add(&event.Delta)
+	ssm.updateStorageGaugesLocked()
 }
 
-func (rda *rangeDataAccumulator) splitRange(event *storage.SplitRangeEvent) {
-	rda.Lock()
-	defer rda.Unlock()
-	rda.rangeCount++
+func (ssm *StoreStatusMonitor) removeRange(event *storage.RemoveRangeEvent) {
+	ssm.Lock()
+	defer ssm.Unlock()
+	ssm.stats.Subtract(&event.Stats)
+	ssm.updateStorageGaugesLocked()
+	ssm.rangeCount.Dec(1)
 }
 
-func (rda *rangeDataAccumulator) mergeRange(event *storage.MergeRangeEvent) {
-	rda.Lock()
-	defer rda.Unlock()
-	rda.rangeCount--
+func (ssm *StoreStatusMonitor) splitRange(event *storage.SplitRangeEvent) {
+	ssm.rangeCount.Inc(1)
 }
 
-func (rda *rangeDataAccumulator) beginScanRanges(event *storage.BeginScanRangesEvent) {
-	rda.Lock()
-	defer rda.Unlock()
-	rda.isScanning = true
-	rda.stats = engine.MVCCStats{}
-	rda.rangeCount = 0
-	rda.seenScan = make(map[roachpb.RangeID]struct{})
+func (ssm *StoreStatusMonitor) mergeRange(event *storage.MergeRangeEvent) {
+	ssm.rangeCount.Dec(1)
 }
 
-func (rda *rangeDataAccumulator) endScanRanges(event *storage.EndScanRangesEvent) {
-	rda.Lock()
-	defer rda.Unlock()
-	rda.isScanning = false
-	rda.seenScan = nil
+func (ssm *StoreStatusMonitor) updateStorageGaugesLocked() {
+	ssm.liveBytes.Update(ssm.stats.LiveBytes)
+	ssm.keyBytes.Update(ssm.stats.KeyBytes)
+	ssm.valBytes.Update(ssm.stats.ValBytes)
+	ssm.intentBytes.Update(ssm.stats.IntentBytes)
+	ssm.liveCount.Update(ssm.stats.LiveCount)
+	ssm.keyCount.Update(ssm.stats.KeyCount)
+	ssm.valCount.Update(ssm.stats.ValCount)
+	ssm.intentCount.Update(ssm.stats.IntentCount)
+	ssm.intentAge.Update(ssm.stats.IntentAge)
+	ssm.gcBytesAge.Update(ssm.stats.GCBytesAge)
+	ssm.lastUpdateNanos.Update(ssm.stats.LastUpdateNanos)
+}
+
+func (ssm *StoreStatusMonitor) beginScanRanges(event *storage.BeginScanRangesEvent) {
+	// TODO(mrtracy): Remove these events completely.
+}
+
+func (ssm *StoreStatusMonitor) endScanRanges(event *storage.EndScanRangesEvent) {
+	// TODO(mrtracy): Remove these events completely.
 }

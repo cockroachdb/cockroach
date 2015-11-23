@@ -21,6 +21,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/kr/pretty"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -66,41 +68,16 @@ func TestNodeStatusMonitor(t *testing.T) {
 			&storage.StartStoreEvent{
 				StoreID: id,
 			},
-			&storage.BeginScanRangesEvent{ // Begin scan phase.
+			&storage.RegisterRangeEvent{
 				StoreID: id,
+				Desc:    desc1,
+				Stats:   stats,
 			},
-			&storage.UpdateRangeEvent{ // Update during scan, expect it to be ignored.
+			&storage.UpdateRangeEvent{
 				StoreID: id,
 				Desc:    desc1,
 				Stats:   stats,
 				Delta:   stats,
-			},
-			&storage.RegisterRangeEvent{
-				StoreID: id,
-				Desc:    desc2,
-				Stats:   stats,
-				Scan:    false, // should lead to this being ignored
-			},
-			&storage.RegisterRangeEvent{
-				StoreID: id,
-				Desc:    desc1,
-				Stats:   stats,
-				Scan:    true, // not ignored
-			},
-			&storage.UpdateRangeEvent{ // Update during scan after register, should be picked up
-				StoreID: id,
-				Desc:    desc1,
-				Stats:   stats,
-				Delta:   stats,
-			},
-			&storage.EndScanRangesEvent{ // End Scan.
-				StoreID: id,
-			},
-			&storage.RegisterRangeEvent{
-				StoreID: id,
-				Desc:    desc2,
-				Stats:   stats,
-				Scan:    true, // ignored, not in ScanRanges mode
 			},
 			&storage.UpdateRangeEvent{
 				StoreID: id,
@@ -126,7 +103,6 @@ func TestNodeStatusMonitor(t *testing.T) {
 					StoreID: id,
 					Desc:    desc2,
 					Stats:   stats,
-					Scan:    false,
 				},
 			},
 			&storage.UpdateRangeEvent{
@@ -181,17 +157,17 @@ func TestNodeStatusMonitor(t *testing.T) {
 	}
 	for id, store := range monitor.stores {
 		if a, e := store.stats, expectedStats; !reflect.DeepEqual(a, e) {
-			t.Errorf("monitored stats for store %d did not match expectation: %v != %v", id, a, e)
+			t.Errorf("monitored stats for store %d did not match expectation: %v", id, pretty.Diff(a, e))
 		}
-		if a, e := store.rangeCount, int64(2); a != e {
+		if a, e := store.rangeCount.Count(), int64(2); a != e {
 			t.Errorf("monitored range count for store %d did not match expectation: %d != %d", id, a, e)
 		}
 	}
 
-	if a, e := monitor.callCount, int64(6); a != e {
+	if a, e := monitor.callCount.Count(), int64(6); a != e {
 		t.Errorf("monitored stats for node recorded wrong number of ops %d, expected %d", a, e)
 	}
-	if a, e := monitor.callErrors, int64(3); a != e {
+	if a, e := monitor.callErrors.Count(), int64(3); a != e {
 		t.Errorf("monitored stats for node recorded wrong number of errors %d, expected %d", a, e)
 	}
 }

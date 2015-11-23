@@ -103,9 +103,9 @@ type ReplicationStatusEvent struct {
 	// periodically polling the ranges of each store.
 	// TODO(mrtracy): See if this information could be computed incrementally
 	// from other events.
-	LeaderRangeCount     int32
-	ReplicatedRangeCount int32
-	AvailableRangeCount  int32
+	LeaderRangeCount     int64
+	ReplicatedRangeCount int64
+	AvailableRangeCount  int64
 }
 
 // BeginScanRangesEvent occurs when the store is about to scan over all ranges.
@@ -187,7 +187,7 @@ func (sef StoreEventFeed) storeStatus(desc *roachpb.StoreDescriptor) {
 }
 
 // replicationStatus publishes a ReplicationStatusEvent to this feed.
-func (sef StoreEventFeed) replicationStatus(leaders, replicated, available int32) {
+func (sef StoreEventFeed) replicationStatus(leaders, replicated, available int64) {
 	sef.f.Publish(&ReplicationStatusEvent{
 		StoreID:              sef.id,
 		LeaderRangeCount:     leaders,

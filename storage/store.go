@@ -1774,7 +1774,7 @@ func (s *Store) GetStatus() (*StoreStatus, error) {
 // ranges. An ideal solution would be to create incremental events whenever
 // availability changes.
 func (s *Store) computeReplicationStatus(now int64) (
-	leaderRangeCount, replicatedRangeCount, availableRangeCount int32) {
+	leaderRangeCount, replicatedRangeCount, availableRangeCount int64) {
 	// Load the system config.
 	cfg := s.Gossip().GetSystemConfig()
 	if cfg == nil {
