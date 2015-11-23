@@ -484,27 +484,27 @@ SELECT mod(-9223372036854775808, -1)
 ----
 0
 
-qery T
+query T
 SELECT mod(9223372036854775807, -1)
 ----
 0
 
-qery T
+query T
 SELECT mod(9223372036854775807, -2)
 ----
 1
 
-qery T
+query T
 SELECT mod(9223372036854775807, 1)
 ----
 0
 
-qery T
+query T
 SELECT mod(9223372036854775807, 2)
 ----
 1
 
-qery T
+query T
 SELECT mod(9223372036854775807, 4)
 ----
 3
@@ -706,7 +706,7 @@ SELECT experimental_unique_int() < experimental_unique_int()
 ----
 true
 
-query B
+query BI
 SELECT experimental_uuid_v4() != experimental_uuid_v4(), length(experimental_uuid_v4())
 ----
 true 16

@@ -25,7 +25,7 @@ CREATE TABLE a (id INT PRIMARY KEY)
 statement error duplicate column name: "id"
 CREATE TABLE a (id INT PRIMARY KEY, id INT)
 
-multiple primary keys for table "b" are not allowed
+statement error multiple primary keys for table "b" are not allowed
 CREATE TABLE b (id INT PRIMARY KEY, id2 INT PRIMARY KEY)
 
 statement ok
