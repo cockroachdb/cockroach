@@ -1077,9 +1077,15 @@ class BaseDeltaIterator : public rocksdb::Iterator {
 }  // namespace
 
 DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
+  // Divide the cache space into two levels: the fast row cache
+  // and the slower but more space-efficient block cache.
+  // TODO(bdarnell): do we need both? how much of each?
+  const auto row_cache_size = db_opts.cache_size / 2;
+  const auto block_cache_size = db_opts.cache_size - row_cache_size;
+  const int num_cache_shard_bits = 4;
   rocksdb::BlockBasedTableOptions table_options;
   table_options.block_cache = rocksdb::NewLRUCache(
-      db_opts.cache_size, 4 /* num-shard-bits */);
+      block_cache_size, num_cache_shard_bits);
 
   rocksdb::Options options;
   options.allow_os_buffer = db_opts.allow_os_buffer;
@@ -1092,6 +1098,8 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.write_buffer_size = 64 << 20;           // 64 MB
   options.target_file_size_base = 64 << 20;       // 64 MB
   options.max_bytes_for_level_base = 512 << 20;   // 512 MB
+  options.row_cache = rocksdb::NewLRUCache(
+      row_cache_size, num_cache_shard_bits);
 
   std::unique_ptr<rocksdb::Env> memenv;
   if (dir.len == 0) {
