@@ -1,4 +1,4 @@
-query ITT colnames
+query III colnames
 VALUES (1, 2, 3), (4, 5, 6)
 ----
 column1 column2 column3
