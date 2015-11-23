@@ -1416,7 +1416,7 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 					Span: roachpb.Span{Key: r.Desc().StartKey.AsRawKey()},
 				}
 				{
-					kvs, err := r.sequence.GetAllID(r.store.Engine(), txn.ID)
+					kvs, err := r.sequence.GetAllTransactionID(r.store.Engine(), txn.ID)
 					if err != nil {
 						panic(err) // TODO(tschottdorf): ReplicaCorruptionError
 					}
@@ -1569,25 +1569,6 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 			defer trace.Finalize()
 			ctx := tracer.ToCtx(ctx, trace)
 			_, err := r.addWriteCmd(ctx, baLocal, &wg)
-			if err != nil {
-				// At this point, as long as the local Replica accepts the
-				// request it should never fail. However, the replica may reject
-				// the request in certain cases (for example, if the replica has
-				// been removed from its range via a rebalancing a command).
-				// Therefore, we inspect the returned error to detect cases
-				// where the command was rejected, and can safely ignore those
-				// errors.
-				if err != multiraft.ErrGroupDeleted {
-					switch err.(type) {
-					case *roachpb.RangeKeyMismatchError:
-					case *roachpb.NotLeaderError:
-					case *roachpb.RangeNotFoundError:
-					default:
-						log.Warningf("local intent resolution failed with unexpected error: %s", err)
-						return err
-					}
-				}
-			}
 			return err
 		}
 		wg.Add(1)

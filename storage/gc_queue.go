@@ -65,7 +65,7 @@ const (
 //    most committed entries almost immediately and, after a threshold on
 //    inactivity, all others.
 //
-// The shouldQueue function combines the need for both tasks into a
+// The shouldQueue function combines the need for the above tasks into a
 // single priority. If any task is overdue, shouldQueue returns true.
 type gcQueue struct {
 	baseQueue
@@ -154,7 +154,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	// TODO(tschottdorf): This is one of these instances in which we want
 	// to be more careful that the request ends up on the correct Replica,
 	// and we might have to worry about mixing range-local and global keys
-	// in a batch which might up spanning Ranges by the time it executes.
+	// in a batch which might end up spanning Ranges by the time it executes.
 	gcArgs.Key = desc.StartKey.AsRawKey()
 	gcArgs.EndKey = desc.EndKey.AsRawKey()
 
@@ -292,6 +292,79 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	return nil
 }
 
+// processTransactionTable scans the transaction table and updates txnMap with
+// those transactions which are old and either PENDING or with intents
+// registered. In the first case we want to push the transaction so that it is
+// aborted, and in the second case we may have to resolve the intents success-
+// fully before GCing the entry. The transaction records which can be gc'ed are
+// returned separately and are not added to txnMap nor intentSpanMap.
+func processTransactionTable(r *Replica, txnMap map[string]*roachpb.Transaction, cutoff roachpb.Timestamp) ([]roachpb.GCRequest_GCKey, error) {
+	snap := r.store.Engine().NewSnapshot()
+	defer snap.Close()
+
+	var gcKeys []roachpb.GCRequest_GCKey
+	handleOne := func(kv roachpb.KeyValue) error {
+		var txn roachpb.Transaction
+		if err := kv.Value.GetProto(&txn); err != nil {
+			return err
+		}
+		ts := txn.Timestamp
+		if heartbeatTS := txn.LastHeartbeat; heartbeatTS != nil {
+			ts.Forward(*heartbeatTS)
+		}
+		if !ts.Less(cutoff) {
+			return nil
+		}
+
+		id := string(txn.ID)
+
+		// The transaction record should be considered for removal.
+		switch txn.Status {
+		case roachpb.PENDING:
+			// Marked as running, so we need to push it to abort it but won't
+			// try to GC it in this cycle (for convenience).
+			// TODO(tschottdorf): refactor so that we can GC PENDING entries
+			// in the same cycle, but keeping the calls to pushTxn in a central
+			// location (keeping it easy to batch them up in the future).
+			txnMap[id] = &txn
+			return nil
+		case roachpb.ABORTED:
+			// If we remove this transaction, it effectively still counts as
+			// ABORTED (by design). So this can be GC'ed even if we can't
+			// resolve the intents.
+			// Note: Most aborted transaction weren't aborted by their client,
+			// but instead by the coordinator - those will not have any intents
+			// persisted, though they still might exist in the system.
+			if err := r.resolveIntents(r.context(),
+				roachpb.AsIntents(txn.Intents, &txn), true /* wait */); err != nil {
+				log.Warningf("failed to resolve intents of aborted txn on gc: %s", err)
+			}
+		case roachpb.COMMITTED:
+			// It's committed, so it doesn't need a push but we can only
+			// GC it after its intents are resolved.
+			if err := r.resolveIntents(r.context(),
+				roachpb.AsIntents(txn.Intents, &txn), true /* wait */); err != nil {
+				log.Warningf("unable to resolve intents of committed txn on gc: %s", err)
+				// Returning the error here would abort the whole GC run, and
+				// we don't want that. Instead, we simply don't GC this entry.
+				return nil
+			}
+		default:
+			panic(fmt.Sprintf("invalid transaction state: %s", txn))
+		}
+		gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: kv.Key}) // zero timestamp
+		return nil
+	}
+
+	startKey := keys.TransactionKey(roachpb.KeyMin, nil)
+	endKey := keys.TransactionKey(roachpb.KeyMax, nil)
+
+	_, err := engine.MVCCIterate(snap, startKey, endKey, roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */, false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
+		return false, handleOne(kv)
+	})
+	return gcKeys, err
+}
+
 // processSequenceCache iterates through the local sequence cache entries,
 // pushing the transactions (in cleanup mode) for those entries which appear
 // to be old enough. In case the transaction indicates that it's terminated,
@@ -338,76 +411,6 @@ func processSequenceCache(r *Replica, now, cutoff roachpb.Timestamp) []roachpb.G
 		}
 	}
 	return gcKeys
-}
-
-// processTransactionTable scans the transaction table and updates txnMap with
-// those transactions which are old and either PENDING or with intents
-// registered. In the first case we want to push the transaction so that it is
-// aborted, and in the second case we may have to resolve the intents success-
-// fully before GCing the entry. The transaction records which can be gc'ed are
-// returned separately and are not added to txnMap nor intentSpanMap.
-func processTransactionTable(r *Replica, txnMap map[string]*roachpb.Transaction, cutoff roachpb.Timestamp) ([]roachpb.GCRequest_GCKey, error) {
-	snap := r.store.Engine().NewSnapshot()
-	defer snap.Close()
-
-	var gcKeys []roachpb.GCRequest_GCKey
-	handleOne := func(kv roachpb.KeyValue) error {
-		var txn roachpb.Transaction
-		if err := kv.Value.GetProto(&txn); err != nil {
-			return err
-		}
-		ts := txn.Timestamp
-		if heartbeatTS := txn.LastHeartbeat; heartbeatTS != nil {
-			ts.Forward(*heartbeatTS)
-		}
-		if !ts.Less(cutoff) {
-			return nil
-		}
-
-		id := string(txn.ID)
-
-		// The transaction record should be considered for removal.
-		switch txn.Status {
-		case roachpb.PENDING:
-			// Marked as running, so we need to push it to abort it but won't
-			// try to GC it in this cycle.
-			txnMap[id] = &txn
-			return nil
-		case roachpb.ABORTED:
-			// If we remove this transaction, it effectively still counts as
-			// ABORTED (by design). So this can be GC'ed even if we can't
-			// resolve the intents.
-			// Note: Most aborted transaction weren't aborted by their client,
-			// but instead by the coordinator - those will not have any intents
-			// persisted, though they still might exist in the system.
-			if err := r.resolveIntents(r.context(),
-				roachpb.AsIntents(txn.Intents, &txn), true /* wait */); err != nil {
-				log.Warningf("failed to resolve intents of aborted txn on gc: %s", err)
-			}
-		case roachpb.COMMITTED:
-			// It's committed, so it doesn't need a push but we can only
-			// GC it after its intents are resolved.
-			if err := r.resolveIntents(r.context(),
-				roachpb.AsIntents(txn.Intents, &txn), true /* wait */); err != nil {
-				log.Warningf("unable to resolve intents of committed txn on gc: %s", err)
-				// Returning the error here would abort the whole GC run, and
-				// we don't want that. Instead, we simply don't GC this entry.
-				return nil
-			}
-		default:
-			panic(fmt.Sprintf("invalid transaction state: %s", txn))
-		}
-		gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: kv.Key}) // zero timestamp
-		return nil
-	}
-
-	startKey := keys.TransactionKey(roachpb.KeyMin, nil)
-	endKey := keys.TransactionKey(roachpb.KeyMax, nil)
-
-	_, err := engine.MVCCIterate(snap, startKey, endKey, roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */, false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
-		return false, handleOne(kv)
-	})
-	return gcKeys, err
 }
 
 // timer returns a constant duration to space out GC processing

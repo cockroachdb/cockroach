@@ -913,7 +913,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 			reply.PusheeTxn.Priority = args.PusheeTxn.Priority
 		}
 	} else {
-		// The transaction doesn't exist yet on disk; we're allowed to abort it.
+		// The transaction doesn't exist on disk; we're allowed to abort it.
 		reply.PusheeTxn = *args.PusheeTxn.Clone()
 		reply.PusheeTxn.Status = roachpb.ABORTED
 		if args.PushType == roachpb.CLEANUP_TXN {
