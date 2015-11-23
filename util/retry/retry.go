@@ -21,18 +21,16 @@ import (
 	"math"
 	"math/rand"
 	"time"
-
-	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // Options provides reusable configuration of Retry objects.
 type Options struct {
-	InitialBackoff      time.Duration // Default retry backoff interval
-	MaxBackoff          time.Duration // Maximum retry backoff interval
-	Multiplier          float64       // Default backoff constant
-	MaxRetries          int           // Maximum number of attempts (0 for infinite)
-	RandomizationFactor float64       // Randomize the backoff interval by constant
-	Stopper             *stop.Stopper // Optionally end retry loop on stopper signal
+	InitialBackoff      time.Duration   // Default retry backoff interval
+	MaxBackoff          time.Duration   // Maximum retry backoff interval
+	Multiplier          float64         // Default backoff constant
+	MaxRetries          int             // Maximum number of attempts (0 for infinite)
+	RandomizationFactor float64         // Randomize the backoff interval by constant
+	Closer              <-chan struct{} // Optionally end retry loop channel close.
 }
 
 // Retry implements the public methods necessary to control an exponential-
@@ -110,7 +108,7 @@ func (r *Retry) Next() bool {
 	case <-time.After(r.retryIn()):
 		r.currentAttempt++
 		return true
-	case <-r.opts.Stopper.ShouldStop():
+	case <-r.opts.Closer:
 		return false
 	}
 }
