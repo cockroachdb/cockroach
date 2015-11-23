@@ -41,7 +41,7 @@ import (
 // limit on number of attempts so we don't get stuck behind indefinite
 // backoff/retry loops. If MaxAttempts is reached, transaction will
 // return retry error.
-func setCorrectnessRetryOptions(lSender *LocalSender) {
+func setCorrectnessRetryOptions(stores *storage.Stores) {
 	client.DefaultTxnRetryOptions = retry.Options{
 		InitialBackoff: 1 * time.Millisecond,
 		MaxBackoff:     50 * time.Millisecond,
@@ -49,7 +49,7 @@ func setCorrectnessRetryOptions(lSender *LocalSender) {
 		MaxRetries:     2,
 	}
 
-	if err := lSender.VisitStores(func(s *storage.Store) error {
+	if err := stores.VisitStores(func(s *storage.Store) error {
 		s.SetRangeRetryOptions(client.DefaultTxnRetryOptions)
 		return nil
 	}); err != nil {
@@ -619,7 +619,7 @@ func checkConcurrency(name string, isolations []roachpb.IsolationType, txns []st
 	verifier := newHistoryVerifier(name, txns, verify, expSuccess, t)
 	s := createTestDB(t)
 	defer s.Stop()
-	setCorrectnessRetryOptions(s.localSender)
+	setCorrectnessRetryOptions(s.stores)
 	verifier.run(isolations, s.DB, t)
 }
 

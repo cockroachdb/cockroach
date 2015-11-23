@@ -174,12 +174,12 @@ func TestBootstrapNewStore(t *testing.T) {
 	// store) will be bootstrapped by the node upon start. This happens
 	// in a goroutine, so we'll have to wait a bit (maximum 1s) until
 	// we can find the new node.
-	if err := util.IsTrueWithin(func() bool { return node.lSender.GetStoreCount() == 3 }, 1*time.Second); err != nil {
+	if err := util.IsTrueWithin(func() bool { return node.stores.GetStoreCount() == 3 }, 1*time.Second); err != nil {
 		t.Error(err)
 	}
 
 	// Check whether all stores are started properly.
-	if err := node.lSender.VisitStores(func(s *storage.Store) error {
+	if err := node.stores.VisitStores(func(s *storage.Store) error {
 		if s.IsStarted() == false {
 			return util.Errorf("fail to start store: %s", s)
 		}
@@ -215,7 +215,7 @@ func TestNodeJoin(t *testing.T) {
 	defer stopper2.Stop()
 
 	// Verify new node is able to bootstrap its store.
-	if err := util.IsTrueWithin(func() bool { return node2.lSender.GetStoreCount() == 1 }, time.Second); err != nil {
+	if err := util.IsTrueWithin(func() bool { return node2.stores.GetStoreCount() == 1 }, time.Second); err != nil {
 		t.Fatal(err)
 	}
 
@@ -416,7 +416,7 @@ func TestStatusSummaries(t *testing.T) {
 	defer ts.Stop()
 
 	// Retrieve the first store from the Node.
-	s, err := ts.node.lSender.GetStore(roachpb.StoreID(1))
+	s, err := ts.node.stores.GetStore(roachpb.StoreID(1))
 	if err != nil {
 		t.Fatal(err)
 	}

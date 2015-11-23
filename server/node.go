@@ -65,7 +65,7 @@ type Node struct {
 	ClusterID  string                 // UUID for Cockroach cluster
 	Descriptor roachpb.NodeDescriptor // Node ID, network/physical topology
 	ctx        storage.StoreContext   // Context to use and pass to stores
-	lSender    *kv.LocalSender        // Local KV sender for access to node-local stores
+	stores     *storage.Stores        // Access to node-local stores
 	feed       status.NodeEventFeed   // Feed publisher for local events
 	status     *status.NodeStatusMonitor
 	startedAt  int64
@@ -103,8 +103,8 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 	ctx.ScanInterval = 10 * time.Minute
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
 	// Create a KV DB with a local sender.
-	lSender := kv.NewLocalSender()
-	sender := kv.NewTxnCoordSender(lSender, ctx.Clock, false, nil, stopper)
+	stores := storage.NewStores()
+	sender := kv.NewTxnCoordSender(stores, ctx.Clock, false, nil, stopper)
 	ctx.DB = client.NewDB(sender)
 	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 	for i, eng := range engines {
@@ -142,7 +142,7 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 			return nil, err
 		}
 
-		lSender.AddStore(s)
+		stores.AddStore(s)
 
 		// Initialize node and store ids.  Only initialize the node once.
 		if i == 0 {
@@ -162,9 +162,9 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 // NewNode returns a new instance of Node.
 func NewNode(ctx storage.StoreContext) *Node {
 	return &Node{
-		ctx:     ctx,
-		status:  status.NewNodeStatusMonitor(),
-		lSender: kv.NewLocalSender(),
+		ctx:    ctx,
+		status: status.NewNodeStatusMonitor(),
+		stores: storage.NewStores(),
 	}
 }
 
@@ -284,7 +284,7 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 			return util.Errorf("could not query store capacity: %s", err)
 		}
 		log.Infof("initialized store %s: %+v", s, capacity)
-		n.lSender.AddStore(s)
+		n.stores.AddStore(s)
 	}
 
 	// Verify all initialized stores agree on cluster and node IDs.
@@ -316,7 +316,7 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 // cluster ID and node ID. The node's ident is initialized based on
 // the agreed-upon cluster and node IDs.
 func (n *Node) validateStores() error {
-	return n.lSender.VisitStores(func(s *storage.Store) error {
+	return n.stores.VisitStores(func(s *storage.Store) error {
 		if n.ClusterID == "" {
 			n.ClusterID = s.Ident.ClusterID
 			n.initNodeID(s.Ident.NodeID)
@@ -359,7 +359,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List, stopper *stop.Stopper) {
 		if err := s.Start(stopper); err != nil {
 			log.Fatal(err)
 		}
-		n.lSender.AddStore(s)
+		n.stores.AddStore(s)
 		sIdent.StoreID++
 		log.Infof("bootstrapped store %s", s)
 		// Done regularly in Node.startGossip, but this cuts down the time
@@ -413,7 +413,7 @@ func (n *Node) startGossip(stopper *stop.Stopper) {
 
 // gossipStores broadcasts each store to the gossip network.
 func (n *Node) gossipStores() {
-	if err := n.lSender.VisitStores(func(s *storage.Store) error {
+	if err := n.stores.VisitStores(func(s *storage.Store) error {
 		s.GossipStore()
 		return nil
 	}); err != nil {
@@ -444,7 +444,7 @@ func (n *Node) startPublishStatuses(stopper *stop.Stopper) {
 
 // publishStoreStatuses calls publishStatus on each store on the node.
 func (n *Node) publishStoreStatuses() error {
-	return n.lSender.VisitStores(func(store *storage.Store) error {
+	return n.stores.VisitStores(func(store *storage.Store) error {
 		return store.PublishStatus()
 	})
 }
@@ -460,13 +460,13 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 	defer trace.Epoch("node")()
 	ctx := tracer.ToCtx((*Node)(n).context(), trace)
 
-	br, pErr := n.lSender.Send(ctx, *ba)
+	br, pErr := n.stores.Send(ctx, *ba)
 	if pErr != nil {
 		br = &roachpb.BatchResponse{}
 		trace.Event(fmt.Sprintf("error: %T", pErr.GoError()))
 	}
 	if br.Error != nil {
-		panic(roachpb.ErrorUnexpectedlySet(n.lSender, br))
+		panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
 	}
 	n.feed.CallComplete(*ba, pErr)
 	br.Error = pErr
