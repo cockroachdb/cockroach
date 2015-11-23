@@ -102,7 +102,7 @@ Level  Type     Description
 1      sort     +y + z
 2      scan     xyz@foo -
 
-query II
+query I
 SELECT DISTINCT y AS w FROM xyz ORDER by z
 ----
 2
@@ -117,7 +117,7 @@ Level  Type     Description
 1      nosort   +z
 2      scan     xyz@foo -
 
-query II
+query I
 SELECT DISTINCT y AS w FROM xyz ORDER by y
 ----
 2

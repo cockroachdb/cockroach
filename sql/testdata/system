@@ -53,26 +53,26 @@ SELECT length(descriptor) * (id - 1) FROM system.descriptor WHERE id = 1
 0
 
 # Verify format of system tables.
-query TTT
+query TTBT
 SHOW COLUMNS FROM system.namespace;
 ----
 parentID INT    true NULL
 name     STRING true NULL
 id       INT    true NULL
 
-query TTT
+query TTBT
 SHOW COLUMNS FROM system.descriptor;
 ----
 id         INT   true NULL
 descriptor BYTES true NULL
 
-query TTT
+query TTBT
 SHOW COLUMNS FROM system.users;
 ----
 username       STRING true NULL
 hashedPassword BYTES  true NULL
 
-query TTT
+query TTBT
 SHOW COLUMNS FROM system.zones;
 ----
 id     INT   true NULL

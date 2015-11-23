@@ -262,7 +262,7 @@ INSERT INTO kv4 (int, float) VALUES (5, 1)
 statement ok
 INSERT INTO kv4 (int, float) VALUES (5, 2.3)
 
-query TT
+query IIBTR
 SELECT * from kv4
 ----
 1    NULL NULL NULL NULL
@@ -286,7 +286,7 @@ EXPLAIN (DEBUG) SELECT * FROM kv5@a
 ----
 0 /kv5/a/NULL/'a' true
 
-query ITTB
+query TT
 SELECT * FROM kv5@a
 ----
 NULL a

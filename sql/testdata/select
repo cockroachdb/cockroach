@@ -65,7 +65,7 @@ foo
 statement ok
 INSERT INTO abc VALUES (0, 1, 2)
 
-query I
+query II
 SELECT a,b FROM abc WHERE CASE WHEN a != 0 THEN b/a > 1.5 ELSE false END
 ----
 1 2
@@ -142,7 +142,7 @@ CREATE TABLE kw ("from" INT PRIMARY KEY)
 statement ok
 INSERT INTO kw VALUES (1)
 
-query I colnames
+query III colnames
 SELECT *, "from", kw."from" FROM kw
 ----
 from from from
@@ -174,22 +174,22 @@ SELECT * FROM xyzw OFFSET 1 + 0.0
 query error unsupported result type: tuple
 SELECT (x,y) FROM xyzw
 
-query III
+query IIII
 SELECT * FROM xyzw LIMIT 0
 ----
 
-query III
+query IIII
 SELECT * FROM xyzw LIMIT 1
 ----
 1 2 3 4
 
-query III
+query IIII
 SELECT * FROM xyzw LIMIT 1 OFFSET 1
 ----
 4 5 6 7
 
 # Multiplying by zero so the result is deterministic.
-query III
+query IIII
 SELECT * FROM xyzw LIMIT (RANDOM() * 0.0)::int OFFSET (RANDOM() * 0.0)::int
 ----
 
