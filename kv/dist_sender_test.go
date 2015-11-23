@@ -278,7 +278,7 @@ func TestSendRPCOrder(t *testing.T) {
 
 	ctx := &DistSenderContext{
 		RPCSend: testFn,
-		RangeDescriptorDB: mockRangeDescriptorDB(func(roachpb.RKey, LookupOptions) ([]roachpb.RangeDescriptor, error) {
+		RangeDescriptorDB: mockRangeDescriptorDB(func(roachpb.RKey, bool, bool) ([]roachpb.RangeDescriptor, error) {
 			return []roachpb.RangeDescriptor{descriptor}, nil
 		}),
 	}
@@ -345,20 +345,20 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 }
 
-type mockRangeDescriptorDB func(roachpb.RKey, LookupOptions) ([]roachpb.RangeDescriptor, error)
+type mockRangeDescriptorDB func(roachpb.RKey, bool, bool) ([]roachpb.RangeDescriptor, error)
 
-func (mdb mockRangeDescriptorDB) RangeLookup(key roachpb.RKey, options LookupOptions, _ *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
+func (mdb mockRangeDescriptorDB) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, error) {
 	if bytes.HasPrefix(key, keys.Meta2Prefix) {
-		return mdb(key[len(keys.Meta1Prefix):], options)
+		return mdb(key[len(keys.Meta1Prefix):], considerIntents, useReverseScan)
 	}
 	if bytes.HasPrefix(key, keys.Meta1Prefix) {
-		return mdb(keys.MakeKey(keys.Meta2Prefix, key[len(keys.Meta1Prefix):]), options)
+		return mdb(keys.MakeKey(keys.Meta2Prefix, key[len(keys.Meta1Prefix):]), considerIntents, useReverseScan)
 	}
 	// First range.
-	return mdb(nil, options)
+	return mdb(nil, considerIntents, useReverseScan)
 }
 func (mdb mockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
-	rs, err := mdb.RangeLookup(nil, LookupOptions{}, nil)
+	rs, err := mdb.RangeLookup(nil, nil, false /* considerIntents */, false /* useReverseScan */)
 	if err != nil || len(rs) == 0 {
 		return nil, err
 	}
@@ -392,7 +392,7 @@ func TestOwnNodeCertain(t *testing.T) {
 
 	ctx := &DistSenderContext{
 		RPCSend: testFn,
-		RangeDescriptorDB: mockRangeDescriptorDB(func(_ roachpb.RKey, _ LookupOptions) ([]roachpb.RangeDescriptor, error) {
+		RangeDescriptorDB: mockRangeDescriptorDB(func(_ roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, error) {
 			return []roachpb.RangeDescriptor{testRangeDescriptor}, nil
 		}),
 	}
@@ -435,7 +435,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 
 	ctx := &DistSenderContext{
 		RPCSend: testFn,
-		RangeDescriptorDB: mockRangeDescriptorDB(func(_ roachpb.RKey, _ LookupOptions) ([]roachpb.RangeDescriptor, error) {
+		RangeDescriptorDB: mockRangeDescriptorDB(func(_ roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, error) {
 			return []roachpb.RangeDescriptor{testRangeDescriptor}, nil
 		}),
 	}
@@ -474,7 +474,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 
 	ctx := &DistSenderContext{
 		RPCSend: testFn,
-		RangeDescriptorDB: mockRangeDescriptorDB(func(k roachpb.RKey, _ LookupOptions) ([]roachpb.RangeDescriptor, error) {
+		RangeDescriptorDB: mockRangeDescriptorDB(func(k roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, error) {
 			// Return next error and truncate the prefix of the errors array.
 			var err error
 			if k != nil {
@@ -541,7 +541,7 @@ func TestEvictCacheOnError(t *testing.T) {
 
 		ctx := &DistSenderContext{
 			RPCSend: testFn,
-			RangeDescriptorDB: mockRangeDescriptorDB(func(_ roachpb.RKey, _ LookupOptions) ([]roachpb.RangeDescriptor, error) {
+			RangeDescriptorDB: mockRangeDescriptorDB(func(_ roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, error) {
 				return []roachpb.RangeDescriptor{testRangeDescriptor}, nil
 			}),
 		}
@@ -702,7 +702,7 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 	ctx := &DistSenderContext{
 		RPCSend: testFn,
-		RangeDescriptorDB: mockRangeDescriptorDB(func(_ roachpb.RKey, _ LookupOptions) ([]roachpb.RangeDescriptor, error) {
+		RangeDescriptorDB: mockRangeDescriptorDB(func(_ roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, error) {
 			return []roachpb.RangeDescriptor{descriptor}, nil
 		}),
 	}
@@ -797,7 +797,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	}
 	ctx := &DistSenderContext{
 		RPCSend: testFn,
-		RangeDescriptorDB: mockRangeDescriptorDB(func(key roachpb.RKey, _ LookupOptions) ([]roachpb.RangeDescriptor, error) {
+		RangeDescriptorDB: mockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, error) {
 			if !merged {
 				// Assume a range merge operation happened.
 				merged = true
@@ -822,7 +822,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 }
 
 // TestRangeLookupOptionOnReverseScan verifies that a lookup triggered by a
-// ReverseScan request has the `UseReverseScan` option specified.
+// ReverseScan request has the useReverseScan specified.
 func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	g, s := makeTestGossip(t)
@@ -834,8 +834,8 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 
 	ctx := &DistSenderContext{
 		RPCSend: testFn,
-		RangeDescriptorDB: mockRangeDescriptorDB(func(k roachpb.RKey, opts LookupOptions) ([]roachpb.RangeDescriptor, error) {
-			if len(k) > 0 && !opts.UseReverseScan {
+		RangeDescriptorDB: mockRangeDescriptorDB(func(k roachpb.RKey, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, error) {
+			if len(k) > 0 && !useReverseScan {
 				t.Fatalf("expected UseReverseScan to be set")
 			}
 			return []roachpb.RangeDescriptor{testRangeDescriptor}, nil
@@ -894,7 +894,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 			},
 		},
 	}
-	descDB := mockRangeDescriptorDB(func(key roachpb.RKey, _ LookupOptions) ([]roachpb.RangeDescriptor, error) {
+	descDB := mockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, error) {
 		desc := descriptor1
 		if key.Equal(roachpb.RKey("b")) {
 			desc = descriptor2

@@ -192,12 +192,6 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	return ds
 }
 
-// LookupOptions capture additional options to pass to RangeLookup.
-type LookupOptions struct {
-	ConsiderIntents bool
-	UseReverseScan  bool
-}
-
 // RangeLookup dispatches an RangeLookup request for the given
 // metadata key to the replicas of the given range. Note that we allow
 // inconsistent reads when doing range lookups for efficiency. Getting
@@ -207,8 +201,7 @@ type LookupOptions struct {
 // DistSender's Send() method, so there is no error inspection and
 // retry logic here; this is not an issue since the lookup performs a
 // single inconsistent read only.
-func (ds *DistSender) RangeLookup(key roachpb.RKey, options LookupOptions,
-	desc *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
+func (ds *DistSender) RangeLookup(key roachpb.RKey, desc *roachpb.RangeDescriptor, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
@@ -218,8 +211,8 @@ func (ds *DistSender) RangeLookup(key roachpb.RKey, options LookupOptions,
 			Key: key.AsRawKey(),
 		},
 		MaxRanges:       ds.rangeLookupMaxRanges,
-		ConsiderIntents: options.ConsiderIntents,
-		Reverse:         options.UseReverseScan,
+		ConsiderIntents: considerIntents,
+		Reverse:         useReverseScan,
 	})
 	replicas := newReplicaSlice(ds.gossip, desc)
 	// TODO(tschottdorf) consider a Trace here, potentially that of the request
@@ -386,16 +379,16 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 // Note that `from` and `to` are not necessarily Key and EndKey from a
 // RequestHeader; it's assumed that they've been translated to key addresses
 // already (via KeyAddress).
-func (ds *DistSender) getDescriptors(rs roachpb.RSpan, options LookupOptions) (*roachpb.RangeDescriptor, bool, func(), *roachpb.Error) {
+func (ds *DistSender) getDescriptors(rs roachpb.RSpan, considerIntents, useReverseScan bool) (*roachpb.RangeDescriptor, bool, func(), *roachpb.Error) {
 	var desc *roachpb.RangeDescriptor
 	var err error
 	var descKey roachpb.RKey
-	if !options.UseReverseScan {
+	if !useReverseScan {
 		descKey = rs.Key
 	} else {
 		descKey = rs.EndKey
 	}
-	desc, err = ds.rangeCache.LookupRangeDescriptor(descKey, options)
+	desc, err = ds.rangeCache.LookupRangeDescriptor(descKey, considerIntents, useReverseScan)
 
 	if err != nil {
 		return nil, false, nil, roachpb.NewError(err)
@@ -410,10 +403,10 @@ func (ds *DistSender) getDescriptors(rs roachpb.RSpan, options LookupOptions) (*
 	}
 
 	evict := func() {
-		ds.rangeCache.EvictCachedRangeDescriptor(descKey, desc, options.UseReverseScan)
+		ds.rangeCache.EvictCachedRangeDescriptor(descKey, desc, useReverseScan)
 	}
 
-	return desc, needAnother(desc, options.UseReverseScan), evict, nil
+	return desc, needAnother(desc, useReverseScan), evict, nil
 }
 
 // sendAttempt gathers and rearranges the replicas, and makes an RPC call.
@@ -488,6 +481,7 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 // which doesn't need to be subdivided further before going to a range (so no
 // mixing of forward and reverse scans, etc).
 func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	considerIntents := false
 	isReverse := ba.IsReverse()
 
 	trace := tracer.FromCtx(ctx)
@@ -500,10 +494,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 	var br *roachpb.BatchResponse
 	// Send the request to one range per iteration.
 	for {
-		options := LookupOptions{
-			UseReverseScan: isReverse,
-		}
-
 		var curReply *roachpb.BatchResponse
 		var desc *roachpb.RangeDescriptor
 		var needAnother bool
@@ -514,7 +504,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// refresh (likely from the cache) on every retry.
 			descDone := trace.Epoch("meta descriptor lookup")
 			var evictDesc func()
-			desc, needAnother, evictDesc, pErr = ds.getDescriptors(rs, options)
+			desc, needAnother, evictDesc, pErr = ds.getDescriptors(rs, considerIntents, isReverse)
 			descDone()
 
 			// getDescriptors may fail retryably if the first range isn't
@@ -616,7 +606,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				// the two cases where the intent's txn hasn't yet been
 				// committed (the previous value is correct), or the intent's
 				// txn has been committed (the intent value is correct).
-				options.ConsiderIntents = true
+				considerIntents = true
 				continue
 			case *roachpb.NotLeaderError:
 				trace.Event(fmt.Sprintf("reply error: %T", tErr))
