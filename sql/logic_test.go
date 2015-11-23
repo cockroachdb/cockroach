@@ -273,8 +273,8 @@ SET DATABASE = test;
 			} else {
 				// TODO(pmattis): Parse "query <type-string> <sort-mode> <label>". The
 				// type string specifies the number of columns and their types: T for
-				// text, I for integer, R for floating point, and B for boolean. The 
-				// sort mode is one of "nosort", "rowsort", "valuesort", or "colnames". 
+				// text, I for integer, R for floating point, and B for boolean. The
+				// sort mode is one of "nosort", "rowsort", "valuesort", or "colnames".
 				// The default is "nosort".
 				//
 				// The label is optional. If specified, the test runner stores a hash
@@ -426,6 +426,10 @@ func (t *logicTest) execQuery(query logicQuery) {
 	cols, err := rows.Columns()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(query.colTypes) != len(cols) {
+		t.Fatalf("%s: expected %d columns based on type-string, but found %d",
+			query.pos, len(query.colTypes), len(cols))
 	}
 	vals := make([]interface{}, len(cols))
 	for i := range vals {
