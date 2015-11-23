@@ -360,7 +360,7 @@ SET DATABASE = test;
 			t.execQuery(query)
 			t.success(path)
 
-		case "halt":
+		case "halt", "hash-threshold":
 			break
 
 		case "user":
