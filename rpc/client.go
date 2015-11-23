@@ -76,12 +76,16 @@ type internalConn struct {
 
 // Client is a Cockroach-specific RPC client.
 type Client struct {
-	key       string // cache key for later removal from cache
-	addr      util.UnresolvedAddr
-	Closed    chan struct{}
-	conn      unsafe.Pointer // holds a `internalConn`
-	healthy   atomic.Value   // holds a `chan struct{}` exposed in `Healthy`
-	tlsConfig *tls.Config
+	key  string // cache key for later removal from cache
+	addr util.UnresolvedAddr
+	// `closer` is `close()`d when `Close` is called on the client.
+	// It signals the end of the heartbeat run loop. When the run loop
+	// exits, it `close()`es `Closed`, which signals to the outside
+	// that the client has indeed stopped.
+	closer, Closed chan struct{}
+	conn           unsafe.Pointer // holds a `internalConn`
+	healthy        atomic.Value   // holds a `chan struct{}` exposed in `Healthy`
+	tlsConfig      *tls.Config
 
 	clock        *hlc.Clock
 	remoteClocks *RemoteClockMonitor
@@ -118,6 +122,7 @@ func NewClient(addr net.Addr, context *Context) *Client {
 	}
 
 	c := &Client{
+		closer:       make(chan struct{}),
 		Closed:       make(chan struct{}),
 		key:          key,
 		addr:         unresolvedAddr,
@@ -133,10 +138,12 @@ func NewClient(addr net.Addr, context *Context) *Client {
 	}
 
 	retryOpts := clientRetryOptions
-	retryOpts.Stopper = context.Stopper
+	retryOpts.Closer = context.Stopper.ShouldStop()
 
 	context.Stopper.RunWorker(func() {
-		c.runHeartbeat(retryOpts, context.Stopper.ShouldStop())
+		c.runHeartbeat(retryOpts)
+
+		close(c.Closed)
 
 		if conn := c.internalConn(); conn != nil {
 			conn.client.Close()
@@ -184,25 +191,30 @@ func (c *Client) Healthy() <-chan struct{} {
 	return c.healthy.Load().(chan struct{})
 }
 
-// Close closes the Closed channel, which triggers the end of the run loop and
-// removal from the clients map.
+// Close closes the client, removing it from the clients cache and returning
+// when the heartbeat goroutine has exited.
 func (c *Client) Close() {
+	c.close()
+	<-c.Closed
+}
+
+func (c *Client) close() {
 	clientMu.Lock()
 	defer clientMu.Unlock()
 
 	select {
+	case <-c.closer:
 	case <-c.Closed:
-		return
 	default:
 		delete(clients, c.key)
-		close(c.Closed)
+		close(c.closer)
 	}
 }
 
 // runHeartbeat sends periodic heartbeats to client, marking the client healthy
 // or unhealthy and reconnecting appropriately until either the Client or the
 // supplied channel is closed.
-func (c *Client) runHeartbeat(retryOpts retry.Options, closer <-chan struct{}) {
+func (c *Client) runHeartbeat(retryOpts retry.Options) {
 	isHealthy := false
 	setHealthy := func() {
 		if isHealthy {
@@ -221,6 +233,15 @@ func (c *Client) runHeartbeat(retryOpts retry.Options, closer <-chan struct{}) {
 	var err = errUnstarted // initial condition
 	for {
 		for r := retry.Start(retryOpts); r.Next(); {
+			select {
+			case <-c.closer:
+				return
+			case <-retryOpts.Closer:
+				c.close()
+				return
+			default:
+			}
+
 			// Reconnect on failure.
 			if err != nil {
 				if err = c.connect(); err != nil {
@@ -231,7 +252,7 @@ func (c *Client) runHeartbeat(retryOpts retry.Options, closer <-chan struct{}) {
 			}
 
 			// Heartbeat regardless of failure.
-			if err = c.heartbeat(); err != nil {
+			if err = c.heartbeat(retryOpts.Closer); err != nil {
 				setUnhealthy()
 				log.Warning(err)
 				continue
@@ -244,10 +265,10 @@ func (c *Client) runHeartbeat(retryOpts retry.Options, closer <-chan struct{}) {
 		// Wait after the heartbeat so that the first iteration gets a wait-free
 		// heartbeat attempt.
 		select {
-		case <-closer:
-			c.Close()
+		case <-c.closer:
 			return
-		case <-c.Closed:
+		case <-retryOpts.Closer:
+			c.close()
 			return
 		case <-time.After(heartbeatInterval):
 			// TODO(tamird): Perhaps retry more aggressively when the client is unhealthy.
@@ -268,7 +289,7 @@ func (c *Client) RemoteAddr() net.Addr {
 // heartbeat sends a single heartbeat RPC. As part of the heartbeat protocol,
 // it measures the clock of the remote to determine the node's clock offset
 // from the remote.
-func (c *Client) heartbeat() error {
+func (c *Client) heartbeat(closer <-chan struct{}) error {
 	request := &PingRequest{Offset: c.remoteOffset, Addr: c.LocalAddr().String()}
 	response := &PingResponse{}
 	sendTime := c.clock.PhysicalNow()
@@ -276,7 +297,9 @@ func (c *Client) heartbeat() error {
 	call := c.Go("Heartbeat.Ping", request, response, nil)
 
 	select {
-	case <-c.Closed:
+	case <-closer:
+		return errClosed
+	case <-c.closer:
 		return errClosed
 	case <-call.Done:
 		if err := call.Error; err != nil {

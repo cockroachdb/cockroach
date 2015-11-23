@@ -111,6 +111,19 @@ func TestClientHeartbeatBadServer(t *testing.T) {
 	<-c.Healthy()
 }
 
+// TestClientCloseBeforeConnect verifies that the client goroutine
+// does not leak if the client is closed before connecting.
+func TestClientCloseBeforeConnect(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	c := NewClient(
+		util.MakeUnresolvedAddr("tcp", ":1337"),
+		&Context{Stopper: stop.NewStopper()},
+	)
+
+	c.Close()
+}
+
 func TestOffsetMeasurement(t *testing.T) {
 	defer leaktest.AfterTest(t)
 

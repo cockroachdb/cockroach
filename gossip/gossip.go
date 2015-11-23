@@ -624,10 +624,10 @@ func (g *Gossip) maybeWarnAboutInit(stopper *stop.Stopper) {
 		case <-time.After(5 * time.Second):
 		}
 		retryOptions := retry.Options{
-			InitialBackoff: 5 * time.Second,  // first backoff at 5s
-			MaxBackoff:     60 * time.Second, // max backoff is 60s
-			Multiplier:     2,                // doubles
-			Stopper:        stopper,          // stop no matter what on stopper
+			InitialBackoff: 5 * time.Second,      // first backoff at 5s
+			MaxBackoff:     60 * time.Second,     // max backoff is 60s
+			Multiplier:     2,                    // doubles
+			Closer:         stopper.ShouldStop(), // stop no matter what on stopper
 		}
 		// This will never error because of infinite retries.
 		for r := retry.Start(retryOptions); r.Next(); {

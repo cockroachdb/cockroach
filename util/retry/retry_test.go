@@ -20,8 +20,6 @@ package retry
 import (
 	"testing"
 	"time"
-
-	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 func TestRetryExceedsMaxBackoff(t *testing.T) {
@@ -94,20 +92,22 @@ func TestRetryReset(t *testing.T) {
 }
 
 func TestRetryStop(t *testing.T) {
+	closer := make(chan struct{})
+
 	opts := Options{
 		InitialBackoff: time.Second,
 		MaxBackoff:     time.Second,
 		Multiplier:     2,
-		Stopper:        stop.NewStopper(),
+		Closer:         closer,
 	}
 
 	var attempts int
 
 	// Create a retry loop which will never stop without stopper.
 	for r := Start(opts); r.Next(); attempts++ {
-		go opts.Stopper.Stop()
+		go close(closer)
 		// Don't race the stopper, just wait for it to do its thing.
-		<-opts.Stopper.ShouldStop()
+		<-opts.Closer
 	}
 
 	if expAttempts := 1; attempts != expAttempts {
