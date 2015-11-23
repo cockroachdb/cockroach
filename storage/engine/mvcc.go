@@ -96,12 +96,6 @@ func (meta MVCCMetadata) IsInline() bool {
 	return meta.Value != nil
 }
 
-// HasWriteIntentError returns whether the metadata has an open intent which
-// has not been laid down by the given transaction (which may be nil).
-func (meta MVCCMetadata) HasWriteIntentError(txn *roachpb.Transaction) bool {
-	return meta.Txn != nil && (txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID))
-}
-
 // IsIntentOf returns true if the meta record is an intent of the supplied
 // transaction.
 func (meta MVCCMetadata) IsIntentOf(txn *roachpb.Transaction) bool {
@@ -560,13 +554,14 @@ func mvccGetInternal(engine Engine, key roachpb.Key, metaKey MVCCKey,
 	var valueKey MVCCKey
 	value := &buf.value
 
-	if !timestamp.Less(meta.Timestamp) && meta.HasWriteIntentError(txn) {
-		// Trying to read the last value, but it's another transaction's
-		// intent; the reader will have to act on this.
+	ownIntent := meta.IsIntentOf(txn)
+	if !timestamp.Less(meta.Timestamp) && meta.Txn != nil && !ownIntent {
+		// Trying to read the last value, but it's another transaction's intent;
+		// the reader will have to act on this.
 		return nil, nil, &roachpb.WriteIntentError{
 			Intents: []roachpb.Intent{{Span: roachpb.Span{Key: key}, Txn: *meta.Txn}},
 		}
-	} else if ownIntent := meta.IsIntentOf(txn); !timestamp.Less(meta.Timestamp) || ownIntent {
+	} else if !timestamp.Less(meta.Timestamp) || ownIntent {
 		// We are reading the latest value, which is either an intent written
 		// by this transaction or not an intent at all (so there's no
 		// conflict). Note that when reading the own intent, the timestamp
