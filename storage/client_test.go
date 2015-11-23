@@ -55,6 +55,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+// Check that Stores implements the RangeDescriptorDB interface.
+var _ kv.RangeDescriptorDB = &storage.Stores{}
+
 func rg1(s *storage.Store) client.Sender {
 	return client.Wrap(s, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
 		if ba.RangeID == 0 {
@@ -86,7 +89,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	}
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	sCtx.Gossip = gossip.New(rpcContext, gossip.TestBootstrap)
-	localSender := kv.NewLocalSender()
+	localSender := storage.NewStores()
 	rpcSend := func(_ rpc.Options, _ string, _ []net.Addr,
 		getArgs func(addr net.Addr) proto.Message, _ func() proto.Message,
 		_ *rpc.Context) ([]proto.Message, error) {
@@ -152,7 +155,7 @@ type multiTestContext struct {
 	// use distinct clocks per store.
 	clocks  []*hlc.Clock
 	engines []engine.Engine
-	senders []*kv.LocalSender
+	senders []*storage.Stores
 	idents  []roachpb.StoreIdent
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. clientStopper is for 'db', transportStopper is
@@ -213,7 +216,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	}
 
 	// Always create the first sender.
-	m.senders = append(m.senders, kv.NewLocalSender())
+	m.senders = append(m.senders, storage.NewStores())
 
 	if m.db == nil {
 		m.distSender = kv.NewDistSender(&kv.DistSenderContext{
@@ -408,7 +411,7 @@ func (m *multiTestContext) addStore() {
 	store.WaitForInit()
 	m.stores = append(m.stores, store)
 	if len(m.senders) == idx {
-		m.senders = append(m.senders, kv.NewLocalSender())
+		m.senders = append(m.senders, storage.NewStores())
 	}
 	m.senders[idx].AddStore(store)
 	if err := gossipNodeDesc(m.gossip, nodeID); err != nil {

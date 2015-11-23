@@ -15,7 +15,7 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package kv
+package storage
 
 import (
 	"errors"
@@ -24,17 +24,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-func TestLocalSenderAddStore(t *testing.T) {
+func TestStoresAddStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewLocalSender()
-	store := storage.Store{}
+	ls := NewStores()
+	store := Store{}
 	ls.AddStore(&store)
 	if !ls.HasStore(store.Ident.StoreID) {
 		t.Errorf("expected local sender to contain storeID=%d", store.Ident.StoreID)
@@ -44,47 +43,47 @@ func TestLocalSenderAddStore(t *testing.T) {
 	}
 }
 
-func TestLocalSenderRemoveStore(t *testing.T) {
+func TestStoresRemoveStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewLocalSender()
+	ls := NewStores()
 
 	storeID := roachpb.StoreID(89)
 
-	ls.AddStore(&storage.Store{Ident: roachpb.StoreIdent{StoreID: storeID}})
+	ls.AddStore(&Store{Ident: roachpb.StoreIdent{StoreID: storeID}})
 
-	ls.RemoveStore(&storage.Store{Ident: roachpb.StoreIdent{StoreID: storeID}})
+	ls.RemoveStore(&Store{Ident: roachpb.StoreIdent{StoreID: storeID}})
 
 	if ls.HasStore(storeID) {
 		t.Errorf("expted local sender to remove storeID=%d", storeID)
 	}
 }
 
-func TestLocalSenderGetStoreCount(t *testing.T) {
+func TestStoresGetStoreCount(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewLocalSender()
+	ls := NewStores()
 	if ls.GetStoreCount() != 0 {
 		t.Errorf("expected 0 stores in new local sender")
 	}
 
 	expectedCount := 10
 	for i := 0; i < expectedCount; i++ {
-		ls.AddStore(&storage.Store{Ident: roachpb.StoreIdent{StoreID: roachpb.StoreID(i)}})
+		ls.AddStore(&Store{Ident: roachpb.StoreIdent{StoreID: roachpb.StoreID(i)}})
 	}
 	if count := ls.GetStoreCount(); count != expectedCount {
 		t.Errorf("expected store count to be %d but was %d", expectedCount, count)
 	}
 }
 
-func TestLocalSenderVisitStores(t *testing.T) {
+func TestStoresVisitStores(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewLocalSender()
+	ls := NewStores()
 	numStores := 10
 	for i := 0; i < numStores; i++ {
-		ls.AddStore(&storage.Store{Ident: roachpb.StoreIdent{StoreID: roachpb.StoreID(i)}})
+		ls.AddStore(&Store{Ident: roachpb.StoreIdent{StoreID: roachpb.StoreID(i)}})
 	}
 
 	visit := make([]bool, numStores)
-	err := ls.VisitStores(func(s *storage.Store) error { visit[s.Ident.StoreID] = true; return nil })
+	err := ls.VisitStores(func(s *Store) error { visit[s.Ident.StoreID] = true; return nil })
 	if err != nil {
 		t.Errorf("unexpected error on visit: %s", err.Error())
 	}
@@ -95,16 +94,16 @@ func TestLocalSenderVisitStores(t *testing.T) {
 		}
 	}
 
-	err = ls.VisitStores(func(s *storage.Store) error { return errors.New("") })
+	err = ls.VisitStores(func(s *Store) error { return errors.New("") })
 	if err == nil {
 		t.Errorf("expected visit error")
 	}
 }
 
-func TestLocalSenderGetStore(t *testing.T) {
+func TestStoresGetStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewLocalSender()
-	store := storage.Store{}
+	ls := NewStores()
+	store := Store{}
 	replica := roachpb.ReplicaDescriptor{StoreID: store.Ident.StoreID}
 	s, err := ls.GetStore(replica.StoreID)
 	if s != nil || err == nil {
@@ -123,18 +122,18 @@ func TestLocalSenderGetStore(t *testing.T) {
 	}
 }
 
-func TestLocalSenderLookupReplica(t *testing.T) {
+func TestStoresLookupReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	ctx := storage.TestStoreContext
+	ctx := TestStoreContext
 	manualClock := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manualClock.UnixNano)
-	ls := NewLocalSender()
+	ls := NewStores()
 
 	// Create two new stores with ranges we care about.
 	var e [2]engine.Engine
-	var s [2]*storage.Store
+	var s [2]*Store
 	var d [2]*roachpb.RangeDescriptor
 	ranges := []struct {
 		storeID    roachpb.StoreID
@@ -147,7 +146,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		e[i] = engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 		ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 		defer ctx.Transport.Close()
-		s[i] = storage.NewStore(ctx, e[i], &roachpb.NodeDescriptor{NodeID: 1})
+		s[i] = NewStore(ctx, e[i], &roachpb.NodeDescriptor{NodeID: 1})
 		s[i].Ident.StoreID = rng.storeID
 
 		d[i] = &roachpb.RangeDescriptor{
@@ -156,7 +155,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 			EndKey:   rng.end,
 			Replicas: []roachpb.ReplicaDescriptor{{StoreID: rng.storeID}},
 		}
-		newRng, err := storage.NewReplica(d[i], s[i])
+		newRng, err := NewReplica(d[i], s[i])
 		if err != nil {
 			t.Fatal(err)
 		}
