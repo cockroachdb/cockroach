@@ -8,7 +8,7 @@ CREATE TABLE t (
 statement ok
 INSERT INTO t VALUES (1, 9, true), (2, 8, false), (3, 7, NULL)
 
-query T
+query B
 SELECT c FROM t ORDER BY c
 ----
 NULL

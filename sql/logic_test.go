@@ -437,35 +437,33 @@ func (t *logicTest) execQuery(query logicQuery) {
 	if query.colNames {
 		results = append(results, cols...)
 	}
-	for firstRow := true; rows.Next(); firstRow = false {
+	for rows.Next() {
 		if err := rows.Scan(vals...); err != nil {
 			t.Fatal(err)
 		}
 		for i, v := range vals {
 			if val := *v.(*interface{}); val != nil {
-				if firstRow {
-					valT := reflect.TypeOf(val).Kind()
-					colT := query.colTypes[i]
-					switch colT {
-					case 'T':
-						if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
-							t.Fatalf("%s: expected text value for column %d, but found %s", query.pos, i, valT)
-						}
-					case 'I':
-						if valT != reflect.Int64 {
-							t.Fatalf("%s: expected int value for column %d, but found %s", query.pos, i, valT)
-						}
-					case 'R':
-						if valT != reflect.Float64 {
-							t.Fatalf("%s: expected float value for column %d, but found %s", query.pos, i, valT)
-						}
-					case 'B':
-						if valT != reflect.Bool {
-							t.Fatalf("%s: expected boolean value for column %d, but found %s", query.pos, i, valT)
-						}
-					default:
-						t.Fatalf("%s: unknown type in type string: %c in %s", query.pos, colT, query.colTypes)
+				valT := reflect.TypeOf(val).Kind()
+				colT := query.colTypes[i]
+				switch colT {
+				case 'T':
+					if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
+						t.Fatalf("%s: expected text value for column %d, but found %s", query.pos, i, valT)
 					}
+				case 'I':
+					if valT != reflect.Int64 {
+						t.Fatalf("%s: expected int value for column %d, but found %s", query.pos, i, valT)
+					}
+				case 'R':
+					if valT != reflect.Float64 {
+						t.Fatalf("%s: expected float value for column %d, but found %s", query.pos, i, valT)
+					}
+				case 'B':
+					if valT != reflect.Bool {
+						t.Fatalf("%s: expected boolean value for column %d, but found %s", query.pos, i, valT)
+					}
+				default:
+					t.Fatalf("%s: unknown type in type string: %c in %s", query.pos, colT, query.colTypes)
 				}
 
 				// We split string results on whitespace and append a separate result
