@@ -163,6 +163,7 @@ func main() {
 	select {
 	case <-stopper.ShouldStop():
 		log.Infof("Monitor stopped by error...")
+		os.Exit(1)
 	case <-signalCh:
 		log.Infof("Stopping status monitor...")
 		stopper.Stop()
