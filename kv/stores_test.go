@@ -31,60 +31,60 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-func TestLocalSenderAddStore(t *testing.T) {
+func TestStoresAddStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewLocalSender()
+	s := NewStores()
 	store := storage.Store{}
-	ls.AddStore(&store)
-	if !ls.HasStore(store.Ident.StoreID) {
+	s.AddStore(&store)
+	if !s.HasStore(store.Ident.StoreID) {
 		t.Errorf("expected local sender to contain storeID=%d", store.Ident.StoreID)
 	}
-	if ls.HasStore(store.Ident.StoreID + 1) {
+	if s.HasStore(store.Ident.StoreID + 1) {
 		t.Errorf("expected local sender to not contain storeID=%d", store.Ident.StoreID+1)
 	}
 }
 
-func TestLocalSenderRemoveStore(t *testing.T) {
+func TestStoresRemoveStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewLocalSender()
+	s := NewStores()
 
 	storeID := roachpb.StoreID(89)
 
-	ls.AddStore(&storage.Store{Ident: roachpb.StoreIdent{StoreID: storeID}})
+	s.AddStore(&storage.Store{Ident: roachpb.StoreIdent{StoreID: storeID}})
 
-	ls.RemoveStore(&storage.Store{Ident: roachpb.StoreIdent{StoreID: storeID}})
+	s.RemoveStore(&storage.Store{Ident: roachpb.StoreIdent{StoreID: storeID}})
 
-	if ls.HasStore(storeID) {
+	if s.HasStore(storeID) {
 		t.Errorf("expted local sender to remove storeID=%d", storeID)
 	}
 }
 
-func TestLocalSenderGetStoreCount(t *testing.T) {
+func TestStoresGetStoreCount(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewLocalSender()
-	if ls.GetStoreCount() != 0 {
+	s := NewStores()
+	if s.GetStoreCount() != 0 {
 		t.Errorf("expected 0 stores in new local sender")
 	}
 
 	expectedCount := 10
 	for i := 0; i < expectedCount; i++ {
-		ls.AddStore(&storage.Store{Ident: roachpb.StoreIdent{StoreID: roachpb.StoreID(i)}})
+		s.AddStore(&storage.Store{Ident: roachpb.StoreIdent{StoreID: roachpb.StoreID(i)}})
 	}
-	if count := ls.GetStoreCount(); count != expectedCount {
+	if count := s.GetStoreCount(); count != expectedCount {
 		t.Errorf("expected store count to be %d but was %d", expectedCount, count)
 	}
 }
 
-func TestLocalSenderVisitStores(t *testing.T) {
+func TestStoresVisitStores(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewLocalSender()
+	s := NewStores()
 	numStores := 10
 	for i := 0; i < numStores; i++ {
-		ls.AddStore(&storage.Store{Ident: roachpb.StoreIdent{StoreID: roachpb.StoreID(i)}})
+		s.AddStore(&storage.Store{Ident: roachpb.StoreIdent{StoreID: roachpb.StoreID(i)}})
 	}
 
 	visit := make([]bool, numStores)
-	err := ls.VisitStores(func(s *storage.Store) error { visit[s.Ident.StoreID] = true; return nil })
+	err := s.VisitStores(func(s *storage.Store) error { visit[s.Ident.StoreID] = true; return nil })
 	if err != nil {
 		t.Errorf("unexpected error on visit: %s", err.Error())
 	}
@@ -95,24 +95,24 @@ func TestLocalSenderVisitStores(t *testing.T) {
 		}
 	}
 
-	err = ls.VisitStores(func(s *storage.Store) error { return errors.New("") })
+	err = s.VisitStores(func(s *storage.Store) error { return errors.New("") })
 	if err == nil {
 		t.Errorf("expected visit error")
 	}
 }
 
-func TestLocalSenderGetStore(t *testing.T) {
+func TestStoresGetStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewLocalSender()
+	stores := NewStores()
 	store := storage.Store{}
 	replica := roachpb.ReplicaDescriptor{StoreID: store.Ident.StoreID}
-	s, err := ls.GetStore(replica.StoreID)
+	s, err := stores.GetStore(replica.StoreID)
 	if s != nil || err == nil {
 		t.Errorf("expected no stores in new local sender")
 	}
 
-	ls.AddStore(&store)
-	s, err = ls.GetStore(replica.StoreID)
+	stores.AddStore(&store)
+	s, err = stores.GetStore(replica.StoreID)
 	if s == nil {
 		t.Errorf("expected store")
 	} else if s.Ident.StoreID != store.Ident.StoreID {
@@ -123,14 +123,14 @@ func TestLocalSenderGetStore(t *testing.T) {
 	}
 }
 
-func TestLocalSenderLookupReplica(t *testing.T) {
+func TestStoresLookupReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	ctx := storage.TestStoreContext
 	manualClock := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manualClock.UnixNano)
-	ls := NewLocalSender()
+	stores := NewStores()
 
 	// Create two new stores with ranges we care about.
 	var e [2]engine.Engine
@@ -163,26 +163,27 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		if err := s[i].AddReplicaTest(newRng); err != nil {
 			t.Error(err)
 		}
-		ls.AddStore(s[i])
+		stores.AddStore(s[i])
 	}
 
-	if _, r, err := ls.lookupReplica(roachpb.RKey("a"), roachpb.RKey("c")); r.StoreID != s[0].Ident.StoreID || err != nil {
+	if _, r, err := stores.lookupReplica(roachpb.RKey("a"), roachpb.RKey("c")); r.StoreID != s[0].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
 	}
-	if _, r, err := ls.lookupReplica(roachpb.RKey("b"), nil); r.StoreID != s[0].Ident.StoreID || err != nil {
+	if _, r, err := stores.lookupReplica(roachpb.RKey("b"), nil); r.StoreID != s[0].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
 	}
-	if _, r, err := ls.lookupReplica(roachpb.RKey("b"), roachpb.RKey("d")); r != nil || err == nil {
+	if _, r, err := stores.lookupReplica(roachpb.RKey("b"), roachpb.RKey("d")); r != nil || err == nil {
 		t.Errorf("expected store 0 and error got %d", r.StoreID)
 	}
-	if _, r, err := ls.lookupReplica(roachpb.RKey("x"), roachpb.RKey("z")); r.StoreID != s[1].Ident.StoreID {
+	if _, r, err := stores.lookupReplica(roachpb.RKey("x"), roachpb.RKey("z")); r.StoreID != s[1].Ident.StoreID {
 		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}
-	if _, r, err := ls.lookupReplica(roachpb.RKey("y"), nil); r.StoreID != s[1].Ident.StoreID || err != nil {
+	if _, r, err := stores.lookupReplica(roachpb.RKey("y"), nil); r.StoreID != s[1].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}
-
-	if desc, err := ls.firstRange(); err != nil || !reflect.DeepEqual(desc, d[0]) {
+	// TODO(vivek): Move out of this test.
+	sender := &LocalSender{stores: stores}
+	if desc, err := sender.firstRange(); err != nil || !reflect.DeepEqual(desc, d[0]) {
 		t.Fatalf("first range not as expected: error=%v, desc=%+v", err, desc)
 	}
 }
