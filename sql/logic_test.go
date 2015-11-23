@@ -284,8 +284,10 @@ SET DATABASE = test;
 				// same test script that are logically equivalent always generate the
 				// same output.
 				query.colTypes = fields[1]
-				if !strings.ContainsAny(query.colTypes, "TIRB") {
-					t.Fatalf("%s: unknown type string: %s", query.pos, query.colTypes)
+				for _, c := range query.colTypes {
+					if !strings.ContainsRune("TIRB", c) {
+						t.Fatalf("%s: unknown type in type string: %c in %s", query.pos, c, query.colTypes)
+					}
 				}
 				if len(fields) >= 3 {
 					for _, opt := range strings.Split(fields[2], ",") {
