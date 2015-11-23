@@ -133,10 +133,10 @@ func NewClient(addr net.Addr, context *Context) *Client {
 	}
 
 	retryOpts := clientRetryOptions
-	retryOpts.Stopper = context.Stopper
+	retryOpts.Closer = context.Stopper.ShouldStop()
 
 	context.Stopper.RunWorker(func() {
-		c.runHeartbeat(retryOpts, context.Stopper.ShouldStop())
+		c.runHeartbeat(retryOpts, retryOpts.Closer)
 
 		if conn := c.internalConn(); conn != nil {
 			conn.client.Close()
