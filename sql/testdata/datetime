@@ -14,7 +14,7 @@ INSERT INTO t VALUES
   ('2015-08-25 04:45:45.53453'::timestamp, '2015-08-25'::date, '2h45m2s234ms'::interval),
   ('2015-08-29 23:10:09.98763'::timestamp, '2015-08-29'::date, '234h45m2s234ms'::interval)
 
-query TTT
+query TII
 SELECT * FROM t WHERE a = '2015-08-25 05:45:45.53453+01:00'::timestamp
 ----
 2015-08-25 04:45:45.53453 +0000 UTC   2015-08-25   2h45m2.234s
@@ -58,17 +58,17 @@ INSERT INTO u VALUES
   (234, '2015-08-25 04:45:45.53453'::timestamp, '2015-08-25'::date, '2h45m2s234ms'::interval),
   (456, '2015-08-29 23:10:09.98763'::timestamp, '2015-08-29'::date, '234h45m2s234ms'::interval)
 
-query TTTT
+query ITII
 SELECT * FROM u WHERE a = 234
 ----
 234 2015-08-25 04:45:45.53453 +0000 UTC   2015-08-25   2h45m2.234s
 
-query TTT
+query TII
 SELECT MAX(b), MAX(c), MAX(d) FROM u
 ----
 2015-08-30 03:34:45.34567 +0000 UTC 2015-08-30 234h45m2.234s
 
-query TTT
+query TII
 SELECT MIN(b), MIN(c), MIN(d) FROM u
 ----
 2015-08-25 04:45:45.53453 +0000 UTC 2015-08-25 2h45m2.234s
@@ -85,7 +85,7 @@ true true
 
 # TIMESTAMP/DATE builtins.
 
-query T
+query I
 SELECT age(timestamp '2001-04-10 22:06:45', timestamp '1957-06-13')
 ----
 384190h6m45s
@@ -147,12 +147,12 @@ CREATE TABLE kv (
 statement ok
 INSERT INTO kv (k,v) VALUES ('a', transaction_timestamp())
 
-query I
+query T
 SELECT k FROM kv
 ----
 a
 
-query I
+query T
 SELECT k FROM kv where v = transaction_timestamp()
 ----
 a
@@ -182,82 +182,82 @@ SELECT COUNT(DISTINCT v) FROM kv
 ----
 4
 
-query T
+query I
 SELECT extract(year from timestamp '2001-04-10 12:04:59')
 ----
 2001
 
-query T
+query I
 SELECT extract(quarter from timestamp '2001-04-10 12:04:59')
 ----
 2
 
-query T
+query I
 SELECT extract(month from timestamp '2001-04-10 12:04:59')
 ----
 4
 
-query T
+query I
 SELECT extract(week from timestamp '2001-04-10 12:04:59')
 ----
 15
 
-query T
+query I
 SELECT extract(day from timestamp '2001-04-10 12:04:59')
 ----
 10
 
-query T
+query I
 SELECT extract(dayofweek from timestamp '2001-04-10 12:04:59')
 ----
 2
 
-query T
+query I
 SELECT extract(dow from timestamp '2001-04-12 12:04:59')
 ----
 4
 
-query T
+query I
 SELECT extract(dayofyear from timestamp '2001-04-10 12:04:59')
 ----
 100
 
-query T
+query I
 SELECT extract(doy from timestamp '2001-04-12 12:04:59')
 ----
 102
 
-query T
+query I
 SELECT extract(epoch from timestamp '2001-04-10 12:04:59')
 ----
 986904299
 
-query T
+query I
 SELECT extract(hour from timestamp '2001-04-10 12:04:59')
 ----
 12
 
-query T
+query I
 SELECT extract(minute from timestamp '2001-04-10 12:04:59')
 ----
 4
 
-query T
+query I
 SELECT extract(second from timestamp '2001-04-10 12:04:59.234')
 ----
 59
 
-query T
+query I
 SELECT extract(millisecond from timestamp '2001-04-10 12:04:59.234567')
 ----
 234
 
-query T
+query I
 SELECT extract(microsecond from timestamp '2001-04-10 12:04:59.34565423')
 ----
 345654
 
-query T
+query I
 SELECT extract(nanosecond from timestamp '2001-04-10 12:04:59.34565423')
 ----
 345654230
@@ -319,7 +319,7 @@ SELECT '2015-08-24 21:45:45.53453'::timestamp
 
 # Check that casting from a timestamp to a date and vice versa
 # uses the time zone.
-query T
+query I
 SELECT b::date FROM u WHERE a = 123
 ----
 2015-08-29

@@ -284,11 +284,6 @@ SET DATABASE = test;
 				// same test script that are logically equivalent always generate the
 				// same output.
 				query.colTypes = fields[1]
-				for _, c := range query.colTypes {
-					if !strings.ContainsRune("TIRB", c) {
-						t.Fatalf("%s: unknown type in type string: %c in %s", query.pos, c, query.colTypes)
-					}
-				}
 				if len(fields) >= 3 {
 					for _, opt := range strings.Split(fields[2], ",") {
 						switch opt {
@@ -446,8 +441,31 @@ func (t *logicTest) execQuery(query logicQuery) {
 		if err := rows.Scan(vals...); err != nil {
 			t.Fatal(err)
 		}
-		for _, v := range vals {
+		for i, v := range vals {
 			if val := *v.(*interface{}); val != nil {
+				valT := reflect.TypeOf(val).Kind()
+				colT := query.colTypes[i]
+				switch colT {
+				case 'T':
+					if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
+						t.Fatalf("%s: expected text value for column %d, but found %s", query.pos, i, valT)
+					}
+				case 'I':
+					if valT != reflect.Int64 {
+						t.Fatalf("%s: expected int value for column %d, but found %s", query.pos, i, valT)
+					}
+				case 'R':
+					if valT != reflect.Float64 {
+						t.Fatalf("%s: expected float value for column %d, but found %s", query.pos, i, valT)
+					}
+				case 'B':
+					if valT != reflect.Bool {
+						t.Fatalf("%s: expected boolean value for column %d, but found %s", query.pos, i, valT)
+					}
+				default:
+					t.Fatalf("%s: unknown type in type string: %c in %s", query.pos, colT, query.colTypes)
+				}
+
 				// We split string results on whitespace and append a separate result
 				// for each string. A bit unusual, but otherwise we can't match strings
 				// containing whitespace.

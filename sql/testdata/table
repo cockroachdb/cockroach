@@ -50,7 +50,7 @@ CREATE TABLE c (
   UNIQUE (bar)
 )
 
-query TTTTTT colnames
+query TTBITB colnames
 SHOW INDEX FROM c
 ----
 Table Name       Unique Seq Column Storing
@@ -96,7 +96,7 @@ CREATE TABLE test.users (
   UNIQUE INDEX bar (id, name)
 )
 
-query TTTT colnames
+query TTBT colnames
 SHOW COLUMNS FROM test.users
 ----
 Field Type   Null  Default
@@ -104,7 +104,7 @@ id    INT    true  NULL
 name  STRING false NULL
 title STRING true  NULL
 
-query TTTTTT colnames
+query TTBITB colnames
 SHOW INDEX FROM test.users
 ----
 Table Name    Unique Seq Column Storing

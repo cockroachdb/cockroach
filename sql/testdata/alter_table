@@ -20,7 +20,7 @@ user root
 statement ok
 ALTER TABLE t ADD b INT
 
-query TTTT colnames
+query TTBT colnames
 SHOW COLUMNS FROM t
 ----
 Field Type Null Default
@@ -41,7 +41,7 @@ ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 statement error multiple primary keys for table "t" are not allowed
 ALTER TABLE t ADD CONSTRAINT bar PRIMARY KEY (b)
 
-query TTTTTT colnames
+query TTBITB colnames
 SHOW INDEX FROM t
 ----
 Table  Name     Unique  Seq  Column  Storing
@@ -91,7 +91,7 @@ ALTER TABLE t DROP CONSTRAINT IF EXISTS bar
 statement ok
 ALTER TABLE t DROP CONSTRAINT foo
 
-query TTTTTT colnames
+query TTBITB colnames
 SHOW INDEX FROM t
 ----
 Table  Name     Unique  Seq  Column  Storing

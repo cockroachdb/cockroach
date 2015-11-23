@@ -8,14 +8,14 @@ CREATE TABLE t (
 statement ok
 INSERT INTO t VALUES (1, 9, true), (2, 8, false), (3, 7, NULL)
 
-query T
+query B
 SELECT c FROM t ORDER BY c
 ----
 NULL
 false
 true
 
-query T
+query B
 SELECT c FROM t ORDER BY c DESC
 ----
 true
@@ -233,12 +233,12 @@ SELECT a FROM abc ORDER BY a DESC OFFSET 1
 ----
 1
 
-query TTT
+query ITT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
 0 scan abc@bc /2-/3
 
-query TTT
+query ITT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
 0 revscan abc@bc /2-/3

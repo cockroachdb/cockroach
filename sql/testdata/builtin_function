@@ -175,12 +175,12 @@ SELECT repeat('Pg', -1) || 'empty'
 ----
 empty
 
-query T
+query I
 SELECT ascii('x')
 ----
 120
 
-query T
+query I
 select ascii('禅');
 ----
 31109
@@ -418,7 +418,7 @@ SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0)
 ----
 -1.1071487177940904 1.1071487177940904
 
-query III
+query RRR
 SELECT ceil(-0.5), ceil(0.5), ceiling(0.5)
 ----
 -0 1 1
@@ -443,7 +443,7 @@ SELECT exp(-1.0), exp(1.0)
 ----
 0.36787944117144233 2.718281828459045
 
-query II
+query RR
 SELECT floor(-1.5), floor(1.5)
 ----
 -2 1
@@ -453,12 +453,12 @@ SELECT ln(-2.0), ln(2.0)
 ----
 NaN 0.6931471805599453
 
-query I
+query R
 SELECT log(10.0)
 ----
 1
 
-query III
+query RRI
 SELECT mod(5.0, 2.0), mod(1.0, 0.0), mod(5, 2)
 ----
 1 NaN 1
@@ -530,23 +530,23 @@ SELECT radians(-45.0), radians(45.0)
 query error round: number of digits must be greater than 0
 SELECT round(41.2, -1)
 
-query II
+query RR
 SELECT round(4.2, 0), round(4.2, 50)
 ----
 4 4.2
 
-query I
+query R
 SELECT round(1e-308, 324)
 ----
 1e-308
 
 # round to nearest even
-query IIII
+query RRRR
 SELECT round(-2.5, 0), round(-1.5, 0), round(1.5, 0), round(2.5, 0)
 ----
 -2 -2 2 2
 
-query IIIIII
+query RRRRRR
 SELECT round(-2.5), round(-1.5), round(-0.0), round(0.0), round(1.5), round(2.5)
 ----
 -2 -2 -0 0 2 2
@@ -569,7 +569,7 @@ SELECT sign(-2), sign(0), sign(2)
 ----
 -1 0 1
 
-query IIII
+query RRRR
 SELECT sign(-2.0), sign(-0.0), sign(0.0), sign(2.0)
 ----
 -1 0 0 1
