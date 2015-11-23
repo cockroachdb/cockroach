@@ -221,6 +221,16 @@ func (c *Client) runHeartbeat(retryOpts retry.Options, closer <-chan struct{}) {
 	var err = errUnstarted // initial condition
 	for {
 		for r := retry.Start(retryOpts); r.Next(); {
+			// Check whether the client is closed.
+			select {
+			case <-closer:
+				c.Close()
+				return
+			case <-c.Closed:
+				return
+			default:
+			}
+
 			// Reconnect on failure.
 			if err != nil {
 				if err = c.connect(); err != nil {
