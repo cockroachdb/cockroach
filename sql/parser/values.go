@@ -23,20 +23,15 @@
 
 package parser
 
-import (
-	"bytes"
-	"fmt"
-)
+import "strings"
 
 // Values represents a VALUES clause.
 type Values []Tuple
 
 func (node Values) String() string {
-	prefix := "VALUES "
-	var buf bytes.Buffer
+	strs := make([]string, 0, len(node))
 	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%s", prefix, n)
-		prefix = ", "
+		strs = append(strs, n.String())
 	}
-	return buf.String()
+	return "VALUES " + strings.Join(strs, ", ")
 }
