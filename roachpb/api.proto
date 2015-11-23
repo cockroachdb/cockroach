@@ -425,6 +425,9 @@ message ResolveIntentRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The transaction whose intent is being resolved.
   optional Transaction intent_txn = 2 [(gogoproto.nullable) = false];
+  // Optionally poison the sequence cache for the transaction the intent's
+  // range.
+  optional bool poison = 3 [(gogoproto.nullable) = false];
 }
 
 // A ResolveIntentResponse is the return value from the
@@ -441,6 +444,9 @@ message ResolveIntentRangeRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The transaction whose intents are being resolved.
   optional Transaction intent_txn = 2 [(gogoproto.nullable) = false];
+  // Optionally poison the sequence cache for the transaction on all ranges
+  // on which the intents reside.
+  optional bool poison = 3 [(gogoproto.nullable) = false];
 }
 
 // A NoopResponse is the return value from a no-op operation.

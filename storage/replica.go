@@ -1401,7 +1401,7 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 				log.Warningc(ctx, "failed to push during intent resolution: %s", err)
 				return
 			}
-			if err := r.resolveIntents(ctx, resolveIntents, true /* wait */); err != nil {
+			if err := r.resolveIntents(ctx, resolveIntents, true /* wait */, true /* poison */); err != nil {
 				log.Warningc(ctx, "failed to resolve intents: %s", err)
 				return
 			}
@@ -1519,7 +1519,7 @@ func (r *Replica) maybeSetCorrupt(err error) error {
 // commands have been **proposed** (not executed). This ensures that if a
 // waiting client retries immediately after calling this function, it will not
 // hit the same intents again.
-func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, wait bool) error {
+func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, wait bool, poison bool) error {
 	trace := tracer.FromCtx(ctx)
 	tracer.ToCtx(ctx, nil) // we're doing async stuff below; those need new traces
 	trace.Event(fmt.Sprintf("resolving intents [wait=%t]", wait))
@@ -1540,12 +1540,14 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 				resolveArgs = &roachpb.ResolveIntentRequest{
 					Span:      header,
 					IntentTxn: intent.Txn,
+					Poison:    poison,
 				}
 				local = r.ContainsKey(intent.Key)
 			} else {
 				resolveArgs = &roachpb.ResolveIntentRangeRequest{
 					Span:      header,
 					IntentTxn: intent.Txn,
+					Poison:    poison,
 				}
 				local = r.ContainsKeyRange(intent.Key, intent.EndKey)
 			}

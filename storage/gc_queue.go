@@ -263,7 +263,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 		}
 	}
 
-	if err := repl.resolveIntents(repl.context(), intents, true /* wait */); err != nil {
+	if err := repl.resolveIntents(repl.context(), intents, true /* wait */, false /* !poison */); err != nil {
 		return err
 	}
 
@@ -336,14 +336,14 @@ func processTransactionTable(r *Replica, txnMap map[string]*roachpb.Transaction,
 			// but instead by the coordinator - those will not have any intents
 			// persisted, though they still might exist in the system.
 			if err := r.resolveIntents(r.context(),
-				roachpb.AsIntents(txn.Intents, &txn), true /* wait */); err != nil {
+				roachpb.AsIntents(txn.Intents, &txn), true /* wait */, false /* !poison */); err != nil {
 				log.Warningf("failed to resolve intents of aborted txn on gc: %s", err)
 			}
 		case roachpb.COMMITTED:
 			// It's committed, so it doesn't need a push but we can only
 			// GC it after its intents are resolved.
 			if err := r.resolveIntents(r.context(),
-				roachpb.AsIntents(txn.Intents, &txn), true /* wait */); err != nil {
+				roachpb.AsIntents(txn.Intents, &txn), true /* wait */, false /* !poison */); err != nil {
 				log.Warningf("unable to resolve intents of committed txn on gc: %s", err)
 				// Returning the error here would abort the whole GC run, and
 				// we don't want that. Instead, we simply don't GC this entry.

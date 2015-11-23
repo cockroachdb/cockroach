@@ -1010,7 +1010,10 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 // or pushed despite being serializable, poisons the sequence cache entry
 // accordingly so that the transaction will be forced to abort or restart,
 // respectively, upon returning to this Range.
-func (r *Replica) maybePoison(batch engine.Engine, txn roachpb.Transaction) error {
+func (r *Replica) maybePoison(batch engine.Engine, shouldPoison bool, txn roachpb.Transaction) error {
+	if !shouldPoison {
+		return nil
+	}
 	var poison uint32
 	switch txn.Status {
 	case roachpb.ABORTED:
@@ -1036,7 +1039,7 @@ func (r *Replica) ResolveIntent(batch engine.Engine, ms *engine.MVCCStats, h roa
 	if err := engine.MVCCResolveWriteIntent(batch, ms, args.Key, h.Timestamp, &args.IntentTxn); err != nil {
 		return reply, err
 	}
-	return reply, r.maybePoison(batch, args.IntentTxn)
+	return reply, r.maybePoison(batch, args.Poison, args.IntentTxn)
 }
 
 // ResolveIntentRange resolves write intents in the specified
@@ -1048,7 +1051,7 @@ func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
 	if _, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, h.Timestamp, &args.IntentTxn); err != nil {
 		return reply, err
 	}
-	return reply, r.maybePoison(batch, args.IntentTxn)
+	return reply, r.maybePoison(batch, args.Poison, args.IntentTxn)
 }
 
 // Merge is used to merge a value into an existing key. Merge is an
