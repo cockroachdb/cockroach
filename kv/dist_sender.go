@@ -657,6 +657,10 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			return nil, pErr
 		}
 
+		if ba.Txn != nil {
+			ba.Txn.Update(curReply.Txn)
+		}
+
 		first := br == nil
 		if first {
 			// First response from a Range.

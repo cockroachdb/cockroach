@@ -19,6 +19,7 @@ package kv_test
 
 import (
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -452,5 +454,167 @@ func TestNoSequenceCacheUpdateWithRangeKeyMismatchError(t *testing.T) {
 
 	if epoch != 1 {
 		t.Errorf("unexpected epoch; the txn must be retried exactly once, but got %d", epoch)
+	}
+}
+
+// TestPropagateTxnOnError verifies that DistSender.sendChunk properly
+// propagates the txn data to a next iteration. Use txn.Writing field to
+// verify that.
+func TestPropagateTxnOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setupMultipleRanges(t, "b")
+	defer s.Stop()
+
+	// Set up a filter to so that the first CPut operation will
+	// get a ReadWithinUncertaintyIntervalError.
+	targetKey := roachpb.Key("b")
+	var numGets int32
+	storage.TestingCommandFilter = func(args roachpb.Request, h roachpb.Header) error {
+		if _, ok := args.(*roachpb.ConditionalPutRequest); ok && args.Header().Key.Equal(targetKey) {
+			if atomic.AddInt32(&numGets, 1) == 1 {
+				return &roachpb.ReadWithinUncertaintyIntervalError{
+					Timestamp:         h.Timestamp,
+					ExistingTimestamp: h.Timestamp,
+				}
+
+			}
+		}
+		return nil
+	}
+	defer func() {
+		storage.TestingCommandFilter = nil
+	}()
+
+	// Set the initial value on the target key "b".
+	origVal := "val"
+	if err := db.Put(targetKey, origVal); err != nil {
+		t.Fatal(err)
+	}
+
+	// The following txn creates a batch request that are split
+	// into two requests: Put and CPut. The CPut operation will
+	// get a ReadWithinUncertaintyIntervalError and the txn will be
+	// retried.
+	epoch := 0
+	if err := db.Txn(func(txn *client.Txn) error {
+		epoch++
+		if epoch >= 2 {
+			// Writing must be true since we ran the BeginTransaction command.
+			if !txn.Proto.Writing {
+				t.Errorf("unexpected non-writing txn")
+			}
+		} else {
+			// Writing must be false since we haven't run any write command.
+			if txn.Proto.Writing {
+				t.Errorf("unexpected writing txn")
+			}
+		}
+
+		b := &client.Batch{}
+		b.Put("a", "val")
+		b.CPut(targetKey, "new_val", origVal)
+		err := txn.CommitInBatch(b)
+		if epoch == 1 {
+			if tErr, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); ok {
+				if !tErr.Txn.Writing {
+					t.Errorf("unexpected non-writing txn on error")
+				}
+			} else {
+				t.Errorf("expected ReadWithinUncertaintyIntervalError, but got: %s", err)
+			}
+		}
+		return err
+	}); err != nil {
+		t.Errorf("unexpected error on transactional Puts: %s", err)
+	}
+
+	if epoch != 2 {
+		t.Errorf("unexpected epoch; the txn must be retried exactly once, but got %d", epoch)
+	}
+}
+
+// TestDoNotPropagateTxnOnError reproduces a bug where txn data (e.g., txn ID)
+// are not propagated to a next epoch on error.
+//
+// TODO(kkaneda): Fix #743. The bug happens since not all errors carry
+// a transaction, but range-spanning writes are not atomic (and data
+// may actually have been written).
+func TestDoNotPropagateTxnOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setupMultipleRanges(t, "b")
+	defer s.Stop()
+
+	waitForWriteIntent := make(chan struct{})
+	waitForTxnRestart := make(chan struct{})
+	waitForTxnCommit := make(chan struct{})
+	// Create a goroutine that creates a write intent and waits until
+	// another txn created in this test is restarted.
+	go func() {
+		if err := db.Txn(func(txn *client.Txn) error {
+			if err := txn.Put("b", "val"); err != nil {
+				return err
+			}
+			close(waitForWriteIntent)
+			// Wait until another txn in this test is
+			// restarted by a push txn error.
+			<-waitForTxnRestart
+			return txn.CommitInBatch(&client.Batch{})
+		}); err != nil {
+			t.Errorf("unexpected error on transactional Puts: %s", err)
+		}
+		close(waitForTxnCommit)
+	}()
+
+	// Wait until a write intent is created by the above goroutine.
+	<-waitForWriteIntent
+
+	// The transaction below is restarted multiple times.
+	// - The first retry is caused by the write intent created on key "b" by the above goroutine.
+	// - The subsequent retries are caused by the write conflict on key "a". Since the txn
+	//   ID is not propagated, a txn of a new epoch always has a new txn ID different
+	//   from the previous txn's. So, the write intent made by the txn of the previous epoch
+	//   is treated as a write made by some different txn.
+	epoch := 0
+	if err := db.Txn(func(txn *client.Txn) error {
+		// Set low priority so that the intent will not be pushed.
+		txn.InternalSetPriority(1)
+
+		epoch++
+
+		if epoch == 2 {
+			close(waitForTxnRestart)
+			// Wait until the txn created by the goroutine is committed.
+			<-waitForTxnCommit
+		} else if epoch > 2 {
+			// Enough number of retries.
+			return nil
+		}
+
+		if !roachpb.TxnIDEqual(txn.Proto.ID, []byte("")) {
+			t.Errorf("txn ID is set unexpectedly")
+		}
+
+		b := &client.Batch{}
+		b.Put("a", "val")
+		b.Put("b", "val")
+		// The commit returns an error, but it will not be
+		// passed to the next iteration. txnSender.Send() does
+		// not update the txn data since
+		// TransactionPushError.Transaction() returns nil.
+		err := txn.CommitInBatch(b)
+		if tErr, ok := err.(*roachpb.TransactionPushError); ok {
+			if roachpb.TxnIDEqual(tErr.Txn.ID, []byte("")) {
+				t.Errorf("txn ID is not set unexpectedly: %s", tErr.Txn.ID)
+			}
+		} else {
+			t.Errorf("expected TransactionRetryError, but got: %s", err)
+		}
+		return err
+	}); err != nil {
+		t.Errorf("unexpected error on transactional Puts: %s", err)
+	}
+
+	if epoch <= 2 {
+		t.Errorf("unexpected epoch; the txn must be retried at least twice, but got %d", epoch)
 	}
 }
