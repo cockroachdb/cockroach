@@ -182,7 +182,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}
 
-	if desc, err := ls.firstRange(); err != nil || !reflect.DeepEqual(desc, d[0]) {
+	if desc, err := ls.FirstRange(); err != nil || !reflect.DeepEqual(desc, d[0]) {
 		t.Fatalf("first range not as expected: error=%v, desc=%+v", err, desc)
 	}
 }

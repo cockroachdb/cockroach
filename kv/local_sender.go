@@ -39,7 +39,7 @@ type LocalSender struct {
 }
 
 var _ client.Sender = &LocalSender{}
-var _ rangeDescriptorDB = &LocalSender{}
+var _ RangeDescriptorDB = &LocalSender{}
 
 // NewLocalSender returns a local-only sender which directly accesses
 // a collection of stores.
@@ -189,9 +189,9 @@ func (ls *LocalSender) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.R
 	return rangeID, replica, err
 }
 
-// firstRange implements the rangeDescriptorDB interface. It returns the
+// FirstRange implements the RangeDescriptorDB interface. It returns the
 // range descriptor which contains KeyMin.
-func (ls *LocalSender) firstRange() (*roachpb.RangeDescriptor, error) {
+func (ls *LocalSender) FirstRange() (*roachpb.RangeDescriptor, error) {
 	_, replica, err := ls.lookupReplica(roachpb.RKeyMin, nil)
 	if err != nil {
 		return nil, err
@@ -208,9 +208,9 @@ func (ls *LocalSender) firstRange() (*roachpb.RangeDescriptor, error) {
 	return rpl.Desc(), nil
 }
 
-// rangeLookup implements the rangeDescriptorDB interface. It looks up
+// RangeLookup implements the RangeDescriptorDB interface. It looks up
 // the descriptors for the given (meta) key.
-func (ls *LocalSender) rangeLookup(key roachpb.RKey, options lookupOptions, _ *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
+func (ls *LocalSender) RangeLookup(key roachpb.RKey, options LookupOptions, _ *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
@@ -219,8 +219,8 @@ func (ls *LocalSender) rangeLookup(key roachpb.RKey, options lookupOptions, _ *r
 			Key: key.AsRawKey(),
 		},
 		MaxRanges:       1,
-		ConsiderIntents: options.considerIntents,
-		Reverse:         options.useReverseScan,
+		ConsiderIntents: options.ConsiderIntents,
+		Reverse:         options.UseReverseScan,
 	})
 	br, pErr := ls.Send(context.Background(), ba)
 	if pErr != nil {
