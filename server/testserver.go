@@ -211,7 +211,7 @@ func (ts *TestServer) Stop() {
 
 // SetRangeRetryOptions sets the retry options for stores in TestServer.
 func (ts *TestServer) SetRangeRetryOptions(ro retry.Options) {
-	if err := ts.node.lSender.VisitStores(func(s *storage.Store) error {
+	if err := ts.node.stores.VisitStores(func(s *storage.Store) error {
 		s.SetRangeRetryOptions(ro)
 		return nil
 	}); err != nil {

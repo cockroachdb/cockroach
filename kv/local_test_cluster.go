@@ -48,17 +48,17 @@ import (
 // in that it doesn't use a distributed sender and doesn't start a
 // server node. There is no RPC traffic.
 type LocalTestCluster struct {
-	Manual      *hlc.ManualClock
-	Clock       *hlc.Clock
-	Gossip      *gossip.Gossip
-	Eng         engine.Engine
-	Store       *storage.Store
-	DB          *client.DB
-	localSender *LocalSender
-	Sender      *TxnCoordSender
-	distSender  *DistSender
-	Stopper     *stop.Stopper
-	tester      util.Tester
+	Manual     *hlc.ManualClock
+	Clock      *hlc.Clock
+	Gossip     *gossip.Gossip
+	Eng        engine.Engine
+	Store      *storage.Store
+	DB         *client.DB
+	stores     *storage.Stores
+	Sender     *TxnCoordSender
+	distSender *DistSender
+	Stopper    *stop.Stopper
+	tester     util.Tester
 }
 
 // Start starts the test cluster by bootstrapping an in-memory store
@@ -78,17 +78,17 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Gossip = gossip.New(rpcContext, gossip.TestBootstrap)
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20, ltc.Stopper)
 
-	ltc.localSender = NewLocalSender()
+	ltc.stores = storage.NewStores()
 	var rpcSend rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr,
 		getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message,
 		_ *rpc.Context) ([]proto.Message, error) {
 		// TODO(tschottdorf): remove getReply().
-		br, pErr := ltc.localSender.Send(context.Background(), *getArgs(nil).(*roachpb.BatchRequest))
+		br, pErr := ltc.stores.Send(context.Background(), *getArgs(nil).(*roachpb.BatchRequest))
 		if br == nil {
 			br = &roachpb.BatchResponse{}
 		}
 		if br.Error != nil {
-			panic(roachpb.ErrorUnexpectedlySet(ltc.localSender, br))
+			panic(roachpb.ErrorUnexpectedlySet(ltc.stores, br))
 		}
 		br.Error = pErr
 		return []proto.Message{br}, nil
@@ -100,8 +100,8 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 		LeaderCacheSize:          defaultLeaderCacheSize,
 		RPCRetryOptions:          &defaultRPCRetryOptions,
 		nodeDescriptor:           nodeDesc,
-		RPCSend:                  rpcSend,         // defined above
-		RangeDescriptorDB:        ltc.localSender, // for descriptor lookup
+		RPCSend:                  rpcSend,    // defined above
+		RangeDescriptorDB:        ltc.stores, // for descriptor lookup
 	}, ltc.Gossip)
 
 	ltc.Sender = NewTxnCoordSender(ltc.distSender, ltc.Clock, false /* !linearizable */, nil /* tracer */, ltc.Stopper)
@@ -118,7 +118,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	if err := ltc.Store.Bootstrap(roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
-	ltc.localSender.AddStore(ltc.Store)
+	ltc.stores.AddStore(ltc.Store)
 	if err := ltc.Store.BootstrapRange(nil); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}

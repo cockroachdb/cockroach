@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -141,7 +142,7 @@ type DistSenderContext struct {
 	// The RPC dispatcher. Defaults to rpc.Send but can be changed here
 	// for testing purposes.
 	RPCSend           rpcSendFn
-	RangeDescriptorDB RangeDescriptorDB
+	RangeDescriptorDB storage.RangeDescriptorDB
 }
 
 // NewDistSender returns a batch.Sender instance which connects to the
@@ -192,12 +193,6 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	return ds
 }
 
-// LookupOptions capture additional options to pass to RangeLookup.
-type LookupOptions struct {
-	ConsiderIntents bool
-	UseReverseScan  bool
-}
-
 // RangeLookup dispatches an RangeLookup request for the given
 // metadata key to the replicas of the given range. Note that we allow
 // inconsistent reads when doing range lookups for efficiency. Getting
@@ -207,7 +202,7 @@ type LookupOptions struct {
 // DistSender's Send() method, so there is no error inspection and
 // retry logic here; this is not an issue since the lookup performs a
 // single inconsistent read only.
-func (ds *DistSender) RangeLookup(key roachpb.RKey, options LookupOptions,
+func (ds *DistSender) RangeLookup(key roachpb.RKey, options storage.LookupOptions,
 	desc *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
@@ -386,7 +381,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 // Note that `from` and `to` are not necessarily Key and EndKey from a
 // RequestHeader; it's assumed that they've been translated to key addresses
 // already (via KeyAddress).
-func (ds *DistSender) getDescriptors(rs roachpb.RSpan, options LookupOptions) (*roachpb.RangeDescriptor, bool, func(), *roachpb.Error) {
+func (ds *DistSender) getDescriptors(rs roachpb.RSpan, options storage.LookupOptions) (*roachpb.RangeDescriptor, bool, func(), *roachpb.Error) {
 	var desc *roachpb.RangeDescriptor
 	var err error
 	var descKey roachpb.RKey
@@ -500,7 +495,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 	var br *roachpb.BatchResponse
 	// Send the request to one range per iteration.
 	for {
-		options := LookupOptions{
+		options := storage.LookupOptions{
 			UseReverseScan: isReverse,
 		}
 

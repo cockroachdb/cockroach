@@ -25,6 +25,7 @@ import (
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -47,25 +48,13 @@ func meta(k roachpb.RKey) roachpb.RKey {
 	return keys.Addr(keys.RangeMetaKey(k))
 }
 
-// RangeDescriptorDB is a type which can query range descriptors from an
-// underlying datastore. This interface is used by rangeDescriptorCache to
-// initially retrieve information which will be cached.
-type RangeDescriptorDB interface {
-	// rangeLookup takes a meta key to look up descriptors for,
-	// for example \x00\x00meta1aa or \x00\x00meta2f.
-	RangeLookup(roachpb.RKey, LookupOptions, *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error)
-	// FirstRange returns the descriptor for the first Range. This is the
-	// Range containing all \x00\x00meta1 entries.
-	FirstRange() (*roachpb.RangeDescriptor, error)
-}
-
 // rangeDescriptorCache is used to retrieve range descriptors for
 // arbitrary keys. Descriptors are initially queried from storage
 // using a RangeDescriptorDB, but is cached for subsequent lookups.
 type rangeDescriptorCache struct {
 	// RangeDescriptorDB is used to retrieve range descriptors from the
 	// database, which will be cached by this structure.
-	db RangeDescriptorDB
+	db storage.RangeDescriptorDB
 	// rangeCache caches replica metadata for key ranges. The cache is
 	// filled while servicing read and write requests to the key value
 	// store.
@@ -77,7 +66,7 @@ type rangeDescriptorCache struct {
 // newRangeDescriptorCache returns a new RangeDescriptorCache which
 // uses the given RangeDescriptorDB as the underlying source of range
 // descriptors.
-func newRangeDescriptorCache(db RangeDescriptorDB, size int) *rangeDescriptorCache {
+func newRangeDescriptorCache(db storage.RangeDescriptorDB, size int) *rangeDescriptorCache {
 	return &rangeDescriptorCache{
 		db: db,
 		rangeCache: cache.NewOrderedCache(cache.Config{
@@ -117,7 +106,7 @@ func (rdc *rangeDescriptorCache) stringLocked() string {
 // This method returns the RangeDescriptor for the range containing
 // the key's data, or an error if any occurred.
 func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey,
-	options LookupOptions) (*roachpb.RangeDescriptor, error) {
+	options storage.LookupOptions) (*roachpb.RangeDescriptor, error) {
 	if _, r := rdc.getCachedRangeDescriptor(key, options.UseReverseScan); r != nil {
 		return r, nil
 	}
@@ -127,7 +116,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey,
 	} else if log.V(1) {
 		log.Infof("lookup range descriptor: key=%s", key)
 	}
-	rs, err := func(key roachpb.RKey, options LookupOptions) ([]roachpb.RangeDescriptor, error) {
+	rs, err := func(key roachpb.RKey, options storage.LookupOptions) ([]roachpb.RangeDescriptor, error) {
 		var (
 			// metadataKey is sent to rangeLookup to find the
 			// RangeDescriptor which contains key.

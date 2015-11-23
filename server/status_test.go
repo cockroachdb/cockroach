@@ -512,12 +512,12 @@ func TestStoreStatusResponse(t *testing.T) {
 	}
 	storeStatuses := wrapper.Data
 
-	if len(storeStatuses) != ts.node.lSender.GetStoreCount() {
-		t.Errorf("expected %d node statuses, got %d", ts.node.lSender.GetStoreCount(), len(storeStatuses))
+	if len(storeStatuses) != ts.node.stores.GetStoreCount() {
+		t.Errorf("expected %d node statuses, got %d", ts.node.stores.GetStoreCount(), len(storeStatuses))
 	}
 	for _, storeStatus := range storeStatuses {
 		storeID := storeStatus.Desc.StoreID
-		store, err := ts.node.lSender.GetStore(storeID)
+		store, err := ts.node.stores.GetStore(storeID)
 		if err != nil {
 			t.Fatal(err)
 		}

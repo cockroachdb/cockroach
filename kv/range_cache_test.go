@@ -25,6 +25,7 @@ import (
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -71,7 +72,7 @@ func (db *testDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return nil, nil
 }
 
-func (db *testDescriptorDB) RangeLookup(key roachpb.RKey, _ LookupOptions, _ *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
+func (db *testDescriptorDB) RangeLookup(key roachpb.RKey, _ storage.LookupOptions, _ *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
 	db.lookupCount++
 	if bytes.HasPrefix(key, keys.Meta2Prefix) {
 		return db.getDescriptor(key[len(keys.Meta2Prefix):]), nil
@@ -127,7 +128,7 @@ func (db *testDescriptorDB) assertLookupCount(t *testing.T, expected int, key st
 }
 
 func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) *roachpb.RangeDescriptor {
-	r, err := rc.LookupRangeDescriptor(roachpb.RKey(key), LookupOptions{})
+	r, err := rc.LookupRangeDescriptor(roachpb.RKey(key), storage.LookupOptions{})
 	if err != nil {
 		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", err.Error())
 	}

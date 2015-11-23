@@ -15,7 +15,7 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package kv
+package storage
 
 import (
 	"fmt"
@@ -26,38 +26,55 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
-// A LocalSender provides methods to access a collection of local stores.
-type LocalSender struct {
-	mu       sync.RWMutex                       // Protects storeMap and addrs
-	storeMap map[roachpb.StoreID]*storage.Store // Map from StoreID to Store
+// LookupOptions capture additional options to pass to RangeLookup.
+type LookupOptions struct {
+	ConsiderIntents bool
+	UseReverseScan  bool
 }
 
-var _ client.Sender = &LocalSender{}
-var _ RangeDescriptorDB = &LocalSender{}
+// RangeDescriptorDB is a type which can query range descriptors from an
+// underlying datastore. This interface is used by rangeDescriptorCache to
+// initially retrieve information which will be cached.
+type RangeDescriptorDB interface {
+	// rangeLookup takes a meta key to look up descriptors for,
+	// for example \x00\x00meta1aa or \x00\x00meta2f.
+	RangeLookup(roachpb.RKey, LookupOptions, *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error)
+	// FirstRange returns the descriptor for the first Range. This is the
+	// Range containing all \x00\x00meta1 entries.
+	FirstRange() (*roachpb.RangeDescriptor, error)
+}
 
-// NewLocalSender returns a local-only sender which directly accesses
+// A Stores provides methods to access a collection of local stores.
+type Stores struct {
+	mu       sync.RWMutex               // Protects storeMap and addrs
+	storeMap map[roachpb.StoreID]*Store // Map from StoreID to Store
+}
+
+var _ client.Sender = &Stores{}
+var _ RangeDescriptorDB = &Stores{}
+
+// NewStores returns a local-only sender which directly accesses
 // a collection of stores.
-func NewLocalSender() *LocalSender {
-	return &LocalSender{
-		storeMap: map[roachpb.StoreID]*storage.Store{},
+func NewStores() *Stores {
+	return &Stores{
+		storeMap: map[roachpb.StoreID]*Store{},
 	}
 }
 
 // GetStoreCount returns the number of stores this node is exporting.
-func (ls *LocalSender) GetStoreCount() int {
+func (ls *Stores) GetStoreCount() int {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	return len(ls.storeMap)
 }
 
-// HasStore returns true if the specified store is owned by this LocalSender.
-func (ls *LocalSender) HasStore(storeID roachpb.StoreID) bool {
+// HasStore returns true if the specified store is owned by this Stores.
+func (ls *Stores) HasStore(storeID roachpb.StoreID) bool {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	_, ok := ls.storeMap[storeID]
@@ -66,7 +83,7 @@ func (ls *LocalSender) HasStore(storeID roachpb.StoreID) bool {
 
 // GetStore looks up the store by store ID. Returns an error
 // if not found.
-func (ls *LocalSender) GetStore(storeID roachpb.StoreID) (*storage.Store, error) {
+func (ls *Stores) GetStore(storeID roachpb.StoreID) (*Store, error) {
 	ls.mu.RLock()
 	store, ok := ls.storeMap[storeID]
 	ls.mu.RUnlock()
@@ -77,7 +94,7 @@ func (ls *LocalSender) GetStore(storeID roachpb.StoreID) (*storage.Store, error)
 }
 
 // AddStore adds the specified store to the store map.
-func (ls *LocalSender) AddStore(s *storage.Store) {
+func (ls *Stores) AddStore(s *Store) {
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
 	if _, ok := ls.storeMap[s.Ident.StoreID]; ok {
@@ -87,7 +104,7 @@ func (ls *LocalSender) AddStore(s *storage.Store) {
 }
 
 // RemoveStore removes the specified store from the store map.
-func (ls *LocalSender) RemoveStore(s *storage.Store) {
+func (ls *Stores) RemoveStore(s *Store) {
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
 	delete(ls.storeMap, s.Ident.StoreID)
@@ -96,7 +113,7 @@ func (ls *LocalSender) RemoveStore(s *storage.Store) {
 // VisitStores implements a visitor pattern over stores in the storeMap.
 // The specified function is invoked with each store in turn. Stores are
 // visited in a random order.
-func (ls *LocalSender) VisitStores(visitor func(s *storage.Store) error) error {
+func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	for _, s := range ls.storeMap {
@@ -111,9 +128,9 @@ func (ls *LocalSender) VisitStores(visitor func(s *storage.Store) error) error {
 // store map if specified by the request; otherwise, the command is being
 // executed locally, and the replica is determined via lookup through each
 // store's LookupRange method. The latter path is taken only by unit tests.
-func (ls *LocalSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	trace := tracer.FromCtx(ctx)
-	var store *storage.Store
+	var store *Store
 	var err error
 
 	// If we aren't given a Replica, then a little bending over
@@ -162,10 +179,10 @@ func (ls *LocalSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roac
 // Returns RangeID and replica on success; RangeKeyMismatch error
 // if not found.
 // This is only for testing usage; performance doesn't matter.
-func (ls *LocalSender) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeID, replica *roachpb.ReplicaDescriptor, err error) {
+func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeID, replica *roachpb.ReplicaDescriptor, err error) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
-	var rng *storage.Replica
+	var rng *Replica
 	for _, store := range ls.storeMap {
 		rng = store.LookupReplica(start, end)
 		if rng == nil {
@@ -191,7 +208,7 @@ func (ls *LocalSender) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.R
 
 // FirstRange implements the RangeDescriptorDB interface. It returns the
 // range descriptor which contains KeyMin.
-func (ls *LocalSender) FirstRange() (*roachpb.RangeDescriptor, error) {
+func (ls *Stores) FirstRange() (*roachpb.RangeDescriptor, error) {
 	_, replica, err := ls.lookupReplica(roachpb.RKeyMin, nil)
 	if err != nil {
 		return nil, err
@@ -210,7 +227,7 @@ func (ls *LocalSender) FirstRange() (*roachpb.RangeDescriptor, error) {
 
 // RangeLookup implements the RangeDescriptorDB interface. It looks up
 // the descriptors for the given (meta) key.
-func (ls *LocalSender) RangeLookup(key roachpb.RKey, options LookupOptions, _ *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
+func (ls *Stores) RangeLookup(key roachpb.RKey, options LookupOptions, _ *roachpb.RangeDescriptor) ([]roachpb.RangeDescriptor, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
