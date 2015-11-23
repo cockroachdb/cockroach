@@ -914,8 +914,10 @@ type Header struct {
 	// performed. If the timestamp is set to zero value, its value
 	// is initialized to the wall time of the receiving node.
 	Timestamp Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
-	// cmd_id is optionally specified for request idempotence
-	// (i.e. replay protection).
+	// replica specifies the location where the request was sent to.
+	// replica location cached by distsender may stale, this is checked
+	// by locasender to ensure the replica was still hold by the given
+	// store.
 	Replica ReplicaDescriptor `protobuf:"bytes,2,opt,name=replica" json:"replica"`
 	// range_id specifies the ID of the Raft consensus group which the key
 	// range belongs to. This is used by the receiving node to route the
