@@ -1303,7 +1303,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 				var resolveIntents []roachpb.Intent
 				resolveIntents, err = s.resolveWriteIntentError(ctx, wiErr, rng, args, ba.Header, pushType)
 				if len(resolveIntents) > 0 {
-					if resErr := rng.resolveIntents(ctx, resolveIntents, false /* !wait */); resErr != nil {
+					if resErr := rng.resolveIntents(ctx, resolveIntents, false /* !wait */, true /* poison */); resErr != nil {
 						// When resolving asynchronously, should never get an error
 						// back here.
 						panic(resErr)
