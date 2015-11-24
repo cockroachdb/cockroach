@@ -27,7 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -39,10 +38,8 @@ import (
 // independent keys, while nodes are being killed and restarted continuously.
 // The test measures not write performance, but cluster recovery.
 func TestChaos(t *testing.T) {
-	t.Skip("TODO(tschottdorf): currently unstable")
-	l := localcluster.Create(*numNodes, stopper)
-	l.Start()
-	defer l.AssertAndStop(t)
+	c := StartCluster()
+	defer c.AssertAndStop(t)
 
 	checkRangeReplication(t, l, 20*time.Second)
 
