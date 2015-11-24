@@ -565,7 +565,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 			}
 		}
 		return true
-	}, 1*time.Second); err != nil {
+	}, 3*time.Second); err != nil {
 		t.Fatal(err)
 	}
 }
