@@ -25,7 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -37,7 +36,7 @@ type checkGossipFunc func(map[string]interface{}) error
 // checkGossip fetches the gossip infoStore from each node and invokes the given
 // function. The test passes if the function returns 0 for every node,
 // retrying for up to the given duration.
-func checkGossip(t *testing.T, l *localcluster.Cluster, d time.Duration,
+func checkGossip(t *testing.T, c Cluster, d time.Duration,
 	f checkGossipFunc) {
 	util.SucceedsWithin(t, d, func() error {
 		select {
@@ -47,9 +46,9 @@ func checkGossip(t *testing.T, l *localcluster.Cluster, d time.Duration,
 		case <-time.After(1 * time.Second):
 		}
 
-		for i, node := range l.Nodes {
+		for i := 0; i < c.NumNodes(); i++ {
 			var m map[string]interface{}
-			if err := node.GetJSON("", "/_status/gossip/local", &m); err != nil {
+			if err := c.Get(i, "/_status/gossip/local", &m); err != nil {
 				return err
 			}
 			infos := m["infos"].(map[string]interface{})
@@ -96,67 +95,69 @@ func hasClusterID(infos map[string]interface{}) error {
 }
 
 func TestGossipPeerings(t *testing.T) {
-	l := localcluster.Create(*numNodes, stopper)
-	l.Start()
-	defer l.AssertAndStop(t)
+	c := StartCluster()
+	defer c.AssertAndStop(t)
+	num := c.NumNodes()
 
-	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
+	checkGossip(t, c, 20*time.Second, hasPeers(num))
 
 	// Restart the first node.
 	log.Infof("restarting node 0")
-	if err := l.Nodes[0].Restart(5); err != nil {
+	if err := c.Restart(0); err != nil {
 		t.Fatal(err)
 	}
-	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
+	checkGossip(t, c, 20*time.Second, hasPeers(num))
 
 	// Restart another node.
 	rand.Seed(randutil.NewPseudoSeed())
-	pickedNode := rand.Intn(len(l.Nodes)-1) + 1
+	pickedNode := rand.Intn(num-1) + 1
 	log.Infof("restarting node %d", pickedNode)
-	if err := l.Nodes[pickedNode].Restart(5); err != nil {
+	if err := c.Restart(pickedNode); err != nil {
 		t.Fatal(err)
 	}
-	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
+	checkGossip(t, c, 20*time.Second, hasPeers(num))
 }
 
 // TestGossipRestart verifies that the gossip network can be
 // re-bootstrapped after a time when all nodes were down
 // simultaneously.
 func TestGossipRestart(t *testing.T) {
-	l := localcluster.Create(*numNodes, stopper)
-	l.Start()
-	defer l.AssertAndStop(t)
-
-	log.Infof("waiting for initial gossip connections")
-	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
-	checkGossip(t, l, time.Second, hasClusterID)
-	checkGossip(t, l, time.Second, hasSentinel)
-
+	// This already replicates the first range (in the local setup).
 	// The replication of the first range is important: as long as the
 	// first range only exists on one node, that node can trivially
 	// acquire the leader lease. Once the range is replicated, however,
 	// nodes must be able to discover each other over gossip before the
 	// lease can be acquired.
-	log.Infof("waiting for range replication")
-	checkRangeReplication(t, l, 10*time.Second)
+	c := StartCluster()
+	defer c.AssertAndStop(t)
+	num := c.NumNodes()
+
+	log.Infof("waiting for initial gossip connections")
+	checkGossip(t, c, 20*time.Second, hasPeers(num))
+	checkGossip(t, c, time.Second, hasClusterID)
+	checkGossip(t, c, time.Second, hasSentinel)
 
 	log.Infof("killing all nodes")
-	for _, node := range l.Nodes {
-		node.Kill()
+	for i := 0; i < num; i++ {
+		if err := c.Kill(i); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	log.Infof("restarting all nodes")
-	for _, node := range l.Nodes {
-		node.Restart(5)
+	for i := 0; i < num; i++ {
+		if err := c.Restart(i); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	log.Infof("waiting for gossip to be connected")
-	checkGossip(t, l, 20*time.Second, hasPeers(len(l.Nodes)))
-	checkGossip(t, l, time.Second, hasClusterID)
-	checkGossip(t, l, time.Second, hasSentinel)
+	checkGossip(t, c, 20*time.Second, hasPeers(num))
+	checkGossip(t, c, time.Second, hasClusterID)
+	checkGossip(t, c, time.Second, hasSentinel)
 
-	for i := range l.Nodes {
-		db, dbStopper := makeDBClient(t, l, i)
+	for i := 0; i < num; i++ {
+		db, dbStopper := c.MakeClient(i)
 		if kv, err := db.Inc("count", 1); err != nil {
 			t.Fatal(err)
 		} else if v := kv.ValueInt(); v != int64(i+1) {
@@ -164,5 +165,4 @@ func TestGossipRestart(t *testing.T) {
 		}
 		dbStopper.Stop()
 	}
-
 }

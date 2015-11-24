@@ -28,7 +28,7 @@ import (
 )
 
 func TestBuildInfo(t *testing.T) {
-	l := localcluster.Create(1, stopper)
+	l := localcluster.Create(1, stopper) // intentionally using a local cluster
 	l.Start()
 	defer l.AssertAndStop(t)
 

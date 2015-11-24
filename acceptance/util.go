@@ -21,21 +21,20 @@
 package acceptance
 
 import (
-	"testing"
-
 	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // makeDBClient creates a DB client for node 'i' using the cluster certs dir.
-func makeDBClient(t *testing.T, cluster *localcluster.Cluster, node int) (*client.DB, *stop.Stopper) {
+func makeDBClient(t util.Tester, cluster *localcluster.Cluster, node int) (*client.DB, *stop.Stopper) {
 	return makeDBClientForUser(t, cluster, security.NodeUser, node)
 }
 
 // makeDBClientForUser creates a DB client for node 'i' and user 'user'.
-func makeDBClientForUser(t *testing.T, cluster *localcluster.Cluster, user string, node int) (*client.DB, *stop.Stopper) {
+func makeDBClientForUser(t util.Tester, cluster *localcluster.Cluster, user string, node int) (*client.DB, *stop.Stopper) {
 	stopper := stop.NewStopper()
 
 	// We need to run with "InsecureSkipVerify" (set when Certs="" inside the http sender).

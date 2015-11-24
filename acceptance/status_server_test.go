@@ -94,7 +94,7 @@ func checkNode(t *testing.T, node *localcluster.Container, nodeID, otherNodeID, 
 // TestStatusServer starts up an N node cluster and tests the status server on
 // each node.
 func TestStatusServer(t *testing.T) {
-	l := localcluster.Create(*numNodes, stopper)
+	l := localcluster.Create(*numNodes, stopper) // intentionally using local cluster
 	l.ForceLogging = true
 	l.Start()
 	defer l.AssertAndStop(t)
