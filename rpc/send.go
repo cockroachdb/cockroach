@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -231,10 +232,16 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 	return replies, nil
 }
 
-// sendOne invokes the specified RPC on the supplied client when the
-// client is ready. On success, the reply is sent on the channel;
-// otherwise an error is sent.
+// sendOne invokes the specified RPC on the supplied client when the client
+// is ready. If sents to the local, calls the function directly. On success,
+// the reply is sent on the channel; otherwise an error is sent.
 func sendOne(client *Client, timeout time.Duration, method string, args, reply proto.Message, done chan *rpc.Call) {
+
+	if client.localServer != nil {
+		localCall(client.localServer, method, args, done)
+		return
+	}
+
 	var timeoutChan <-chan time.Time
 	if timeout != 0 {
 		timeoutChan = time.After(timeout)
@@ -247,4 +254,35 @@ func sendOne(client *Client, timeout time.Duration, method string, args, reply p
 	case <-timeoutChan:
 		done <- &rpc.Call{Error: newRPCError(util.Errorf("rpc to %s: client not ready after %s", method, timeout))}
 	}
+}
+
+// localCall invokes the specified method directly.
+func localCall(s *Server, method string, args proto.Message, done chan *rpc.Call) {
+	s.mu.RLock()
+	m := s.methods[method]
+	s.mu.RUnlock()
+
+	if m.handler == nil {
+		done <- &rpc.Call{
+			Error: newRPCError(util.Errorf("rpc:couldn't find method: %s", method)),
+		}
+		return
+	}
+
+	if _, err := security.CheckRequestUser(args, m.public); err != nil {
+		done <- &rpc.Call{
+			Error: err,
+		}
+		return
+	}
+
+	argv := proto.Clone(args)
+	m.handler(argv, func(reply proto.Message, err error) {
+		done <- &rpc.Call{
+			ServiceMethod: method,
+			Error:         err,
+			Reply:         reply,
+			Args:          args,
+		}
+	})
 }

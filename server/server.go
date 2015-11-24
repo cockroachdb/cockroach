@@ -116,6 +116,8 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.rpc = rpc.NewServer(util.MakeUnresolvedAddr("tcp", addr), rpcContext)
 	s.stopper.AddCloser(s.rpc)
+	rpcContext.SetLocalServer(s.rpc)
+
 	s.gossip = gossip.New(rpcContext, s.ctx.GossipBootstrapResolvers)
 	s.storePool = storage.NewStorePool(s.gossip, ctx.TimeUntilStoreDead, stopper)
 

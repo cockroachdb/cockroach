@@ -90,6 +90,8 @@ type Client struct {
 	clock        *hlc.Clock
 	remoteClocks *RemoteClockMonitor
 	remoteOffset RemoteOffset
+
+	localServer *Server // holds the local RPC server handle
 }
 
 // NewClient returns a client RPC stub for the specified address
@@ -135,6 +137,10 @@ func NewClient(addr net.Addr, context *Context) *Client {
 
 	if !context.DisableCache {
 		clients[key] = c
+	}
+
+	if context.localServer != nil && context.localServer.Addr().String() == c.RemoteAddr().String() {
+		c.localServer = context.localServer
 	}
 
 	retryOpts := clientRetryOptions
