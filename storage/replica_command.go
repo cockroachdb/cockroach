@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -1424,7 +1425,19 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 		// improve this by e.g. choosing the node that had the leader
 		// lease before the split and is therefore known to be up)
 		if r.store.StoreID() == split.NewDesc.Replicas[0].StoreID {
-			r.store.multiraft.Campaign(split.NewDesc.RangeID)
+			// Schedule the campaign a short time in the future. As
+			// followers process the split, they destroy and recreate their
+			// raft groups, which can cause messages to be dropped. In
+			// general a shorter delay (perhaps all the way down to zero) is
+			// better in production, because the race is rare and the worst
+			// case scenario is that we simply wait for an election timeout.
+			// However, the test for this feature disables election timeouts
+			// and relies solely on this campaign trigger, so it is unacceptably
+			// flaky without a bit of a delay.
+			r.store.stopper.RunAsyncTask(func() {
+				time.Sleep(10 * time.Millisecond)
+				r.store.multiraft.Campaign(split.NewDesc.RangeID)
+			})
 		}
 	})
 
