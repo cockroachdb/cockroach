@@ -9,7 +9,6 @@
 		cockroach/storage/engine/mvcc.proto
 
 	It has these top-level messages:
-		MVCCValue
 		MVCCMetadata
 		MVCCStats
 */
@@ -28,20 +27,6 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
-
-// MVCCValue differentiates between normal versioned values and
-// deletion tombstones.
-type MVCCValue struct {
-	// True to indicate a deletion tombstone. If false, value should not
-	// be nil.
-	Deleted bool `protobuf:"varint,1,opt,name=deleted" json:"deleted"`
-	// The value. Nil if deleted is true; not nil otherwise.
-	Value *cockroach_roachpb1.Value `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
-}
-
-func (m *MVCCValue) Reset()         { *m = MVCCValue{} }
-func (m *MVCCValue) String() string { return proto.CompactTextString(m) }
-func (*MVCCValue) ProtoMessage()    {}
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 type MVCCMetadata struct {
@@ -97,46 +82,9 @@ func (m *MVCCStats) String() string { return proto.CompactTextString(m) }
 func (*MVCCStats) ProtoMessage()    {}
 
 func init() {
-	proto.RegisterType((*MVCCValue)(nil), "cockroach.storage.engine.MVCCValue")
 	proto.RegisterType((*MVCCMetadata)(nil), "cockroach.storage.engine.MVCCMetadata")
 	proto.RegisterType((*MVCCStats)(nil), "cockroach.storage.engine.MVCCStats")
 }
-func (m *MVCCValue) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *MVCCValue) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	if m.Deleted {
-		data[i] = 1
-	} else {
-		data[i] = 0
-	}
-	i++
-	if m.Value != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintMvcc(data, i, uint64(m.Value.Size()))
-		n1, err := m.Value.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n1
-	}
-	return i, nil
-}
-
 func (m *MVCCMetadata) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -156,20 +104,20 @@ func (m *MVCCMetadata) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintMvcc(data, i, uint64(m.Txn.Size()))
-		n2, err := m.Txn.MarshalTo(data[i:])
+		n1, err := m.Txn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n2
+		i += n1
 	}
 	data[i] = 0x12
 	i++
 	i = encodeVarintMvcc(data, i, uint64(m.Timestamp.Size()))
-	n3, err := m.Timestamp.MarshalTo(data[i:])
+	n2, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n3
+	i += n2
 	data[i] = 0x18
 	i++
 	if m.Deleted {
@@ -188,11 +136,11 @@ func (m *MVCCMetadata) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x32
 		i++
 		i = encodeVarintMvcc(data, i, uint64(m.Value.Size()))
-		n4, err := m.Value.MarshalTo(data[i:])
+		n3, err := m.Value.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n4
+		i += n3
 	}
 	return i, nil
 }
@@ -283,17 +231,6 @@ func encodeVarintMvcc(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	return offset + 1
 }
-func (m *MVCCValue) Size() (n int) {
-	var l int
-	_ = l
-	n += 2
-	if m.Value != nil {
-		l = m.Value.Size()
-		n += 1 + l + sovMvcc(uint64(l))
-	}
-	return n
-}
-
 func (m *MVCCMetadata) Size() (n int) {
 	var l int
 	_ = l
@@ -344,109 +281,6 @@ func sovMvcc(x uint64) (n int) {
 }
 func sozMvcc(x uint64) (n int) {
 	return sovMvcc(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *MVCCValue) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowMvcc
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: MVCCValue: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: MVCCValue: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Deleted", wireType)
-			}
-			var v int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				v |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			m.Deleted = bool(v != 0)
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMvcc
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Value == nil {
-				m.Value = &cockroach_roachpb1.Value{}
-			}
-			if err := m.Value.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipMvcc(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthMvcc
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
 }
 func (m *MVCCMetadata) Unmarshal(data []byte) error {
 	l := len(data)

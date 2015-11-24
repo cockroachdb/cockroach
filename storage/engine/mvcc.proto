@@ -28,16 +28,6 @@ option (gogoproto.marshaler_all) = true;
 option (gogoproto.sizer_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
-// MVCCValue differentiates between normal versioned values and
-// deletion tombstones.
-message MVCCValue {
-  // True to indicate a deletion tombstone. If false, value should not
-  // be nil.
-  optional bool deleted = 1 [(gogoproto.nullable) = false];
-  // The value. Nil if deleted is true; not nil otherwise.
-  optional roachpb.Value value = 2;
-}
-
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 message MVCCMetadata {
   optional roachpb.Transaction txn = 1;

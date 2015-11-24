@@ -40,112 +40,10 @@ void protobuf_AddDesc_cockroach_2fstorage_2fengine_2fmvcc_2eproto();
 void protobuf_AssignDesc_cockroach_2fstorage_2fengine_2fmvcc_2eproto();
 void protobuf_ShutdownFile_cockroach_2fstorage_2fengine_2fmvcc_2eproto();
 
-class MVCCValue;
 class MVCCMetadata;
 class MVCCStats;
 
 // ===================================================================
-
-class MVCCValue : public ::google::protobuf::Message {
- public:
-  MVCCValue();
-  virtual ~MVCCValue();
-
-  MVCCValue(const MVCCValue& from);
-
-  inline MVCCValue& operator=(const MVCCValue& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const MVCCValue& default_instance();
-
-  void Swap(MVCCValue* other);
-
-  // implements Message ----------------------------------------------
-
-  inline MVCCValue* New() const { return New(NULL); }
-
-  MVCCValue* New(::google::protobuf::Arena* arena) const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const MVCCValue& from);
-  void MergeFrom(const MVCCValue& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  void InternalSwap(MVCCValue* other);
-  private:
-  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
-    return _internal_metadata_.arena();
-  }
-  inline void* MaybeArenaPtr() const {
-    return _internal_metadata_.raw_arena_ptr();
-  }
-  public:
-
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // optional bool deleted = 1;
-  bool has_deleted() const;
-  void clear_deleted();
-  static const int kDeletedFieldNumber = 1;
-  bool deleted() const;
-  void set_deleted(bool value);
-
-  // optional .cockroach.roachpb.Value value = 2;
-  bool has_value() const;
-  void clear_value();
-  static const int kValueFieldNumber = 2;
-  const ::cockroach::roachpb::Value& value() const;
-  ::cockroach::roachpb::Value* mutable_value();
-  ::cockroach::roachpb::Value* release_value();
-  void set_allocated_value(::cockroach::roachpb::Value* value);
-
-  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.MVCCValue)
- private:
-  inline void set_has_deleted();
-  inline void clear_has_deleted();
-  inline void set_has_value();
-  inline void clear_has_value();
-
-  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::cockroach::roachpb::Value* value_;
-  bool deleted_;
-  friend void  protobuf_AddDesc_cockroach_2fstorage_2fengine_2fmvcc_2eproto();
-  friend void protobuf_AssignDesc_cockroach_2fstorage_2fengine_2fmvcc_2eproto();
-  friend void protobuf_ShutdownFile_cockroach_2fstorage_2fengine_2fmvcc_2eproto();
-
-  void InitAsDefaultInstance();
-  static MVCCValue* default_instance_;
-};
-// -------------------------------------------------------------------
 
 class MVCCMetadata : public ::google::protobuf::Message {
  public:
@@ -505,77 +403,6 @@ class MVCCStats : public ::google::protobuf::Message {
 // ===================================================================
 
 #if !PROTOBUF_INLINE_NOT_IN_HEADERS
-// MVCCValue
-
-// optional bool deleted = 1;
-inline bool MVCCValue::has_deleted() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void MVCCValue::set_has_deleted() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void MVCCValue::clear_has_deleted() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void MVCCValue::clear_deleted() {
-  deleted_ = false;
-  clear_has_deleted();
-}
-inline bool MVCCValue::deleted() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.MVCCValue.deleted)
-  return deleted_;
-}
-inline void MVCCValue::set_deleted(bool value) {
-  set_has_deleted();
-  deleted_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCValue.deleted)
-}
-
-// optional .cockroach.roachpb.Value value = 2;
-inline bool MVCCValue::has_value() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void MVCCValue::set_has_value() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void MVCCValue::clear_has_value() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void MVCCValue::clear_value() {
-  if (value_ != NULL) value_->::cockroach::roachpb::Value::Clear();
-  clear_has_value();
-}
-inline const ::cockroach::roachpb::Value& MVCCValue::value() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.MVCCValue.value)
-  return value_ != NULL ? *value_ : *default_instance_->value_;
-}
-inline ::cockroach::roachpb::Value* MVCCValue::mutable_value() {
-  set_has_value();
-  if (value_ == NULL) {
-    value_ = new ::cockroach::roachpb::Value;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.MVCCValue.value)
-  return value_;
-}
-inline ::cockroach::roachpb::Value* MVCCValue::release_value() {
-  clear_has_value();
-  ::cockroach::roachpb::Value* temp = value_;
-  value_ = NULL;
-  return temp;
-}
-inline void MVCCValue::set_allocated_value(::cockroach::roachpb::Value* value) {
-  delete value_;
-  value_ = value;
-  if (value) {
-    set_has_value();
-  } else {
-    clear_has_value();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.MVCCValue.value)
-}
-
-// -------------------------------------------------------------------
-
 // MVCCMetadata
 
 // optional .cockroach.roachpb.Transaction txn = 1;
@@ -1096,8 +923,6 @@ inline void MVCCStats::set_last_update_nanos(::google::protobuf::int64 value) {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
-// -------------------------------------------------------------------
-
 // -------------------------------------------------------------------
 
 
