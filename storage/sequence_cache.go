@@ -30,10 +30,10 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-var errEmptyID = errors.New("empty CommandID used in sequence cache")
+var errEmptyTxnID = errors.New("empty Transaction ID used in sequence cache")
 
 // The SequenceCache provides idempotence for request retries. Each
-// transactional request to a range specifies an ID and sequence number
+// transactional request to a range specifies an Transaction ID and sequence number
 // which uniquely identifies a client command. After commands have
 // been replicated via Raft, they are executed against the state
 // machine and the results are stored in the SequenceCache.
@@ -70,13 +70,13 @@ func (sc *SequenceCache) ClearData(e engine.Engine) error {
 	return err
 }
 
-// Get looks up the latest sequence number recorded for this id. The latest
-// entry is that with the highest epoch (and then, highest sequence). On a
-// miss, zero is returned for both. If an entry is found and a
+// Get looks up the latest sequence number recorded for this transaction ID.
+// The latest entry is that with the highest epoch (and then, highest
+// sequence). On a miss, zero is returned for both. If an entry is found and a
 // SequenceCacheEntry is provided, it is populated from the found value.
 func (sc *SequenceCache) Get(e engine.Engine, id []byte, dest *roachpb.SequenceCacheEntry) (uint32, uint32, error) {
 	if len(id) == 0 {
-		return 0, 0, errEmptyID
+		return 0, 0, errEmptyTxnID
 	}
 
 	// Pull response from disk and read into reply if available. Sequence
@@ -102,6 +102,35 @@ func (sc *SequenceCache) Get(e engine.Engine, id []byte, dest *roachpb.SequenceC
 		}
 	}
 	return epoch, seq, nil
+}
+
+// GetAllTransactionID returns all the key-value pairs for the given transaction ID from
+// the engine.
+func (sc *SequenceCache) GetAllTransactionID(e engine.Engine, id []byte) ([]roachpb.KeyValue, error) {
+	prefix := keys.SequenceCacheKeyPrefix(sc.rangeID, id)
+	kvs, _, err := engine.MVCCScan(e, prefix, prefix.PrefixEnd(), 0, /* max */
+		roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */)
+	return kvs, err
+}
+
+// Iterate walks through the sequence cache, invoking the given callback for
+// each unmarshaled entry with the key, the transaction ID and the decoded
+// entry.
+func (sc *SequenceCache) Iterate(e engine.Engine, f func([]byte, []byte, roachpb.SequenceCacheEntry)) {
+	_, _ = engine.MVCCIterate(e, sc.min, sc.max, roachpb.ZeroTimestamp,
+		true /* consistent */, nil /* txn */, false, /* !reverse */
+		func(kv roachpb.KeyValue) (bool, error) {
+			var entry roachpb.SequenceCacheEntry
+			id, _, _, err := decodeSequenceCacheKey(kv.Key, nil)
+			if err != nil {
+				panic(err) // TODO(tschottdorf): ReplicaCorruptionError
+			}
+			if err := kv.Value.GetProto(&entry); err != nil {
+				panic(err) // TODO(tschottdorf): ReplicaCorruptionError
+			}
+			f(kv.Key, id, entry)
+			return false, nil
+		})
 }
 
 func copySeqCache(e engine.Engine, srcID, dstID roachpb.RangeID, keyMin, keyMax engine.MVCCKey) error {
@@ -149,10 +178,10 @@ func (sc *SequenceCache) CopyFrom(e engine.Engine, originRangeID roachpb.RangeID
 	return copySeqCache(e, originRangeID, sc.rangeID, originMin, originMax)
 }
 
-// Put writes a sequence number for the specified id.
+// Put writes a sequence number for the specified transaction ID.
 func (sc *SequenceCache) Put(e engine.Engine, id []byte, epoch, seq uint32, txnKey roachpb.Key, txnTS roachpb.Timestamp, err error) error {
 	if seq <= 0 || len(id) == 0 {
-		return errEmptyID
+		return errEmptyTxnID
 	}
 	if !sc.shouldCacheError(err) {
 		return nil

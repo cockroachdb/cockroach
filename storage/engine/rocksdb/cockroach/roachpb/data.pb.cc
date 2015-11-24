@@ -327,9 +327,8 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, _internal_metadata_),
       -1);
   GCMetadata_descriptor_ = file->message_type(14);
-  static const int GCMetadata_offsets_[2] = {
+  static const int GCMetadata_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GCMetadata, last_scan_nanos_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GCMetadata, oldest_intent_nanos_),
   };
   GCMetadata_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -515,19 +514,19 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "\034.cockroach.roachpb.TimestampB\004\310\336\037\000\0226\n\ne"
     "xpiration\030\002 \001(\0132\034.cockroach.roachpb.Time"
     "stampB\004\310\336\037\000\022;\n\007replica\030\003 \001(\0132$.cockroach"
-    ".roachpb.ReplicaDescriptorB\004\310\336\037\000:\004\230\240\037\000\"H"
+    ".roachpb.ReplicaDescriptorB\004\310\336\037\000:\004\230\240\037\000\"+"
     "\n\nGCMetadata\022\035\n\017last_scan_nanos\030\001 \001(\003B\004\310"
-    "\336\037\000\022\033\n\023oldest_intent_nanos\030\002 \001(\003\"a\n\022Sequ"
-    "enceCacheEntry\022\024\n\003key\030\001 \001(\014B\007\372\336\037\003Key\0225\n\t"
-    "timestamp\030\002 \001(\0132\034.cockroach.roachpb.Time"
-    "stampB\004\310\336\037\000*Q\n\tValueType\022\013\n\007UNKNOWN\020\000\022\007\n"
-    "\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BYTES\020\003\022\010\n\004TIME\020\004\022\016"
-    "\n\nTIMESERIES\020d*>\n\021ReplicaChangeType\022\017\n\013A"
-    "DD_REPLICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5"
-    "\n\rIsolationType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNA"
-    "PSHOT\020\001\032\004\210\243\036\000*B\n\021TransactionStatus\022\013\n\007PE"
-    "NDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036"
-    "\000B\035Z\007roachpb\310\341\036\000\220\343\036\000\310\342\036\001\340\342\036\001\320\342\036\001X\001", 2954);
+    "\336\037\000\"a\n\022SequenceCacheEntry\022\024\n\003key\030\001 \001(\014B\007"
+    "\372\336\037\003Key\0225\n\ttimestamp\030\002 \001(\0132\034.cockroach.r"
+    "oachpb.TimestampB\004\310\336\037\000*Q\n\tValueType\022\013\n\007U"
+    "NKNOWN\020\000\022\007\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BYTES\020\003\022"
+    "\010\n\004TIME\020\004\022\016\n\nTIMESERIES\020d*>\n\021ReplicaChan"
+    "geType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_REPLIC"
+    "A\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SERIALIZAB"
+    "LE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021TransactionS"
+    "tatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABO"
+    "RTED\020\002\032\004\210\243\036\000B\035Z\007roachpb\310\341\036\000\220\343\036\000\310\342\036\001\340\342\036\001\320"
+    "\342\036\001X\001", 2925);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/data.proto", &protobuf_RegisterTypes);
   Span::default_instance_ = new Span();
@@ -7305,7 +7304,6 @@ void Lease::clear_replica() {
 
 #ifndef _MSC_VER
 const int GCMetadata::kLastScanNanosFieldNumber;
-const int GCMetadata::kOldestIntentNanosFieldNumber;
 #endif  // !_MSC_VER
 
 GCMetadata::GCMetadata()
@@ -7328,7 +7326,6 @@ GCMetadata::GCMetadata(const GCMetadata& from)
 void GCMetadata::SharedCtor() {
   _cached_size_ = 0;
   last_scan_nanos_ = GOOGLE_LONGLONG(0);
-  oldest_intent_nanos_ = GOOGLE_LONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -7368,19 +7365,7 @@ GCMetadata* GCMetadata::New(::google::protobuf::Arena* arena) const {
 }
 
 void GCMetadata::Clear() {
-#define ZR_HELPER_(f) reinterpret_cast<char*>(\
-  &reinterpret_cast<GCMetadata*>(16)->f)
-
-#define ZR_(first, last) do {\
-  ::memset(&first, 0,\
-           ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
-} while (0)
-
-  ZR_(last_scan_nanos_, oldest_intent_nanos_);
-
-#undef ZR_HELPER_
-#undef ZR_
-
+  last_scan_nanos_ = GOOGLE_LONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->Clear();
@@ -7404,21 +7389,6 @@ bool GCMetadata::MergePartialFromCodedStream(
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
                  input, &last_scan_nanos_)));
           set_has_last_scan_nanos();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(16)) goto parse_oldest_intent_nanos;
-        break;
-      }
-
-      // optional int64 oldest_intent_nanos = 2;
-      case 2: {
-        if (tag == 16) {
-         parse_oldest_intent_nanos:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &oldest_intent_nanos_)));
-          set_has_oldest_intent_nanos();
         } else {
           goto handle_unusual;
         }
@@ -7456,11 +7426,6 @@ void GCMetadata::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->last_scan_nanos(), output);
   }
 
-  // optional int64 oldest_intent_nanos = 2;
-  if (has_oldest_intent_nanos()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->oldest_intent_nanos(), output);
-  }
-
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -7476,11 +7441,6 @@ void GCMetadata::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->last_scan_nanos(), target);
   }
 
-  // optional int64 oldest_intent_nanos = 2;
-  if (has_oldest_intent_nanos()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(2, this->oldest_intent_nanos(), target);
-  }
-
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -7492,22 +7452,13 @@ void GCMetadata::SerializeWithCachedSizes(
 int GCMetadata::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
-    // optional int64 last_scan_nanos = 1;
-    if (has_last_scan_nanos()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->last_scan_nanos());
-    }
-
-    // optional int64 oldest_intent_nanos = 2;
-    if (has_oldest_intent_nanos()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->oldest_intent_nanos());
-    }
-
+  // optional int64 last_scan_nanos = 1;
+  if (has_last_scan_nanos()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int64Size(
+        this->last_scan_nanos());
   }
+
   if (_internal_metadata_.have_unknown_fields()) {
     total_size +=
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
@@ -7536,9 +7487,6 @@ void GCMetadata::MergeFrom(const GCMetadata& from) {
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_last_scan_nanos()) {
       set_last_scan_nanos(from.last_scan_nanos());
-    }
-    if (from.has_oldest_intent_nanos()) {
-      set_oldest_intent_nanos(from.oldest_intent_nanos());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -7569,7 +7517,6 @@ void GCMetadata::Swap(GCMetadata* other) {
 }
 void GCMetadata::InternalSwap(GCMetadata* other) {
   std::swap(last_scan_nanos_, other->last_scan_nanos_);
-  std::swap(oldest_intent_nanos_, other->oldest_intent_nanos_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -7608,30 +7555,6 @@ void GCMetadata::clear_last_scan_nanos() {
   set_has_last_scan_nanos();
   last_scan_nanos_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.GCMetadata.last_scan_nanos)
-}
-
-// optional int64 oldest_intent_nanos = 2;
-bool GCMetadata::has_oldest_intent_nanos() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-void GCMetadata::set_has_oldest_intent_nanos() {
-  _has_bits_[0] |= 0x00000002u;
-}
-void GCMetadata::clear_has_oldest_intent_nanos() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-void GCMetadata::clear_oldest_intent_nanos() {
-  oldest_intent_nanos_ = GOOGLE_LONGLONG(0);
-  clear_has_oldest_intent_nanos();
-}
- ::google::protobuf::int64 GCMetadata::oldest_intent_nanos() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.GCMetadata.oldest_intent_nanos)
-  return oldest_intent_nanos_;
-}
- void GCMetadata::set_oldest_intent_nanos(::google::protobuf::int64 value) {
-  set_has_oldest_intent_nanos();
-  oldest_intent_nanos_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.GCMetadata.oldest_intent_nanos)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

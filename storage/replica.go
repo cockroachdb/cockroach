@@ -1401,7 +1401,7 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 				log.Warningc(ctx, "failed to push during intent resolution: %s", err)
 				return
 			}
-			if err := r.resolveIntents(ctx, resolveIntents, true /* wait */); err != nil {
+			if err := r.resolveIntents(ctx, resolveIntents, true /* wait */, true /* poison */); err != nil {
 				log.Warningc(ctx, "failed to resolve intents: %s", err)
 				return
 			}
@@ -1416,12 +1416,9 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 					Span: roachpb.Span{Key: r.Desc().StartKey.AsRawKey()},
 				}
 				{
-					prefix := keys.SequenceCacheKeyPrefix(r.Desc().RangeID, txn.ID)
-					kvs, _, err := engine.MVCCScan(r.store.Engine(), prefix,
-						prefix.PrefixEnd(), 0 /* max */, roachpb.ZeroTimestamp,
-						false /* consistent */, nil /* txn */)
+					kvs, err := r.sequence.GetAllTransactionID(r.store.Engine(), txn.ID)
 					if err != nil {
-						log.Warning(err)
+						panic(err) // TODO(tschottdorf): ReplicaCorruptionError
 					}
 					// Allocate slots for the transaction key and the sequence
 					// cache keys.
@@ -1522,10 +1519,7 @@ func (r *Replica) maybeSetCorrupt(err error) error {
 // commands have been **proposed** (not executed). This ensures that if a
 // waiting client retries immediately after calling this function, it will not
 // hit the same intents again.
-// TODO(tschottdorf): once Txn records have a list of possibly open intents,
-// resolveIntents should send an RPC to update the transaction(s) as well (for
-// those intents with non-pending Txns).
-func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, wait bool) error {
+func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, wait bool, poison bool) error {
 	trace := tracer.FromCtx(ctx)
 	tracer.ToCtx(ctx, nil) // we're doing async stuff below; those need new traces
 	trace.Event(fmt.Sprintf("resolving intents [wait=%t]", wait))
@@ -1546,12 +1540,14 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 				resolveArgs = &roachpb.ResolveIntentRequest{
 					Span:      header,
 					IntentTxn: intent.Txn,
+					Poison:    poison,
 				}
 				local = r.ContainsKey(intent.Key)
 			} else {
 				resolveArgs = &roachpb.ResolveIntentRangeRequest{
 					Span:      header,
 					IntentTxn: intent.Txn,
+					Poison:    poison,
 				}
 				local = r.ContainsKeyRange(intent.Key, intent.EndKey)
 			}
@@ -1575,25 +1571,6 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 			defer trace.Finalize()
 			ctx := tracer.ToCtx(ctx, trace)
 			_, err := r.addWriteCmd(ctx, baLocal, &wg)
-			if err != nil {
-				// At this point, as long as the local Replica accepts the
-				// request it should never fail. However, the replica may reject
-				// the request in certain cases (for example, if the replica has
-				// been removed from its range via a rebalancing a command).
-				// Therefore, we inspect the returned error to detect cases
-				// where the command was rejected, and can safely ignore those
-				// errors.
-				if err != multiraft.ErrGroupDeleted {
-					switch err.(type) {
-					case *roachpb.RangeKeyMismatchError:
-					case *roachpb.NotLeaderError:
-					case *roachpb.RangeNotFoundError:
-					default:
-						// TODO(tschottdorf): Does this need to be a panic?
-						panic(fmt.Sprintf("local intent resolution failed with unexpected error: %s", err))
-					}
-				}
-			}
 			return err
 		}
 		wg.Add(1)

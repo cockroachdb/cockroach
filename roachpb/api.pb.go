@@ -715,6 +715,9 @@ type ResolveIntentRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// The transaction whose intent is being resolved.
 	IntentTxn Transaction `protobuf:"bytes,2,opt,name=intent_txn" json:"intent_txn"`
+	// Optionally poison the sequence cache for the transaction the intent's
+	// range.
+	Poison bool `protobuf:"varint,3,opt,name=poison" json:"poison"`
 }
 
 func (m *ResolveIntentRequest) Reset()         { *m = ResolveIntentRequest{} }
@@ -739,6 +742,9 @@ type ResolveIntentRangeRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// The transaction whose intents are being resolved.
 	IntentTxn Transaction `protobuf:"bytes,2,opt,name=intent_txn" json:"intent_txn"`
+	// Optionally poison the sequence cache for the transaction on all ranges
+	// on which the intents reside.
+	Poison bool `protobuf:"varint,3,opt,name=poison" json:"poison"`
 }
 
 func (m *ResolveIntentRangeRequest) Reset()         { *m = ResolveIntentRangeRequest{} }
@@ -2255,6 +2261,14 @@ func (m *ResolveIntentRequest) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n49
+	data[i] = 0x18
+	i++
+	if m.Poison {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
 	return i, nil
 }
 
@@ -2315,6 +2329,14 @@ func (m *ResolveIntentRangeRequest) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n52
+	data[i] = 0x18
+	i++
+	if m.Poison {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
 	return i, nil
 }
 
@@ -3653,6 +3675,7 @@ func (m *ResolveIntentRequest) Size() (n int) {
 	n += 1 + l + sovApi(uint64(l))
 	l = m.IntentTxn.Size()
 	n += 1 + l + sovApi(uint64(l))
+	n += 2
 	return n
 }
 
@@ -3671,6 +3694,7 @@ func (m *ResolveIntentRangeRequest) Size() (n int) {
 	n += 1 + l + sovApi(uint64(l))
 	l = m.IntentTxn.Size()
 	n += 1 + l + sovApi(uint64(l))
+	n += 2
 	return n
 }
 
@@ -7943,6 +7967,26 @@ func (m *ResolveIntentRequest) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Poison", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Poison = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipApi(data[iNdEx:])
@@ -8133,6 +8177,26 @@ func (m *ResolveIntentRangeRequest) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Poison", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Poison = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipApi(data[iNdEx:])

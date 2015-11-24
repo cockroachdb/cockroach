@@ -1877,25 +1877,15 @@ class GCMetadata : public ::google::protobuf::Message {
   ::google::protobuf::int64 last_scan_nanos() const;
   void set_last_scan_nanos(::google::protobuf::int64 value);
 
-  // optional int64 oldest_intent_nanos = 2;
-  bool has_oldest_intent_nanos() const;
-  void clear_oldest_intent_nanos();
-  static const int kOldestIntentNanosFieldNumber = 2;
-  ::google::protobuf::int64 oldest_intent_nanos() const;
-  void set_oldest_intent_nanos(::google::protobuf::int64 value);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.GCMetadata)
  private:
   inline void set_has_last_scan_nanos();
   inline void clear_has_last_scan_nanos();
-  inline void set_has_oldest_intent_nanos();
-  inline void clear_has_oldest_intent_nanos();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::int64 last_scan_nanos_;
-  ::google::protobuf::int64 oldest_intent_nanos_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fdata_2eproto();
@@ -3857,30 +3847,6 @@ inline void GCMetadata::set_last_scan_nanos(::google::protobuf::int64 value) {
   set_has_last_scan_nanos();
   last_scan_nanos_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.GCMetadata.last_scan_nanos)
-}
-
-// optional int64 oldest_intent_nanos = 2;
-inline bool GCMetadata::has_oldest_intent_nanos() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void GCMetadata::set_has_oldest_intent_nanos() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void GCMetadata::clear_has_oldest_intent_nanos() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void GCMetadata::clear_oldest_intent_nanos() {
-  oldest_intent_nanos_ = GOOGLE_LONGLONG(0);
-  clear_has_oldest_intent_nanos();
-}
-inline ::google::protobuf::int64 GCMetadata::oldest_intent_nanos() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.GCMetadata.oldest_intent_nanos)
-  return oldest_intent_nanos_;
-}
-inline void GCMetadata::set_oldest_intent_nanos(::google::protobuf::int64 value) {
-  set_has_oldest_intent_nanos();
-  oldest_intent_nanos_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.GCMetadata.oldest_intent_nanos)
 }
 
 // -------------------------------------------------------------------

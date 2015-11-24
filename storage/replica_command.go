@@ -327,14 +327,6 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		reply.Txn.Status = roachpb.ABORTED
 	}
 
-	asSkippedIntents := func(txn *roachpb.Transaction, spans []roachpb.Span) []roachpb.Intent {
-		ret := make([]roachpb.Intent, len(spans))
-		for i := range spans {
-			ret[i].Span, ret[i].Txn = spans[i], *txn
-		}
-		return ret
-	}
-
 	if deadlineLapsed {
 		// FIXME(#3037):
 		// If the deadline has lapsed, return all the intents for
@@ -342,7 +334,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		// and (b) not able to write on error (see #1989), we can't write
 		// ABORTED into the master transaction record, which remains
 		// PENDING, and that's pretty bad.
-		return reply, asSkippedIntents(reply.Txn, args.IntentSpans), roachpb.NewTransactionAbortedError(reply.Txn)
+		return reply, roachpb.AsIntents(args.IntentSpans, reply.Txn), roachpb.NewTransactionAbortedError(reply.Txn)
 	}
 
 	// Verify that we can either commit it or abort it (according
@@ -356,7 +348,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		// that we know them, so we return them all for asynchronous
 		// resolution (we're currently not able to write on error, but
 		// see #1989).
-		return reply, asSkippedIntents(reply.Txn, args.IntentSpans), roachpb.NewTransactionAbortedError(reply.Txn)
+		return reply, roachpb.AsIntents(args.IntentSpans, reply.Txn), roachpb.NewTransactionAbortedError(reply.Txn)
 	} else if h.Txn.Epoch < reply.Txn.Epoch {
 		// TODO(tschottdorf): this leaves the Txn record (and more
 		// importantly, intents) dangling; we can't currently write on
@@ -921,9 +913,13 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 			reply.PusheeTxn.Priority = args.PusheeTxn.Priority
 		}
 	} else {
-		// The transaction doesn't exist yet on disk; we're allowed to abort it.
+		// The transaction doesn't exist on disk; we're allowed to abort it.
 		reply.PusheeTxn = *args.PusheeTxn.Clone()
 		reply.PusheeTxn.Status = roachpb.ABORTED
+		if args.PushType == roachpb.CLEANUP_TXN {
+			// If we're only here to clean up, no reason to persist anything.
+			return reply, nil
+		}
 		return reply, engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, &reply.PusheeTxn)
 	}
 
@@ -1014,7 +1010,10 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 // or pushed despite being serializable, poisons the sequence cache entry
 // accordingly so that the transaction will be forced to abort or restart,
 // respectively, upon returning to this Range.
-func (r *Replica) maybePoison(batch engine.Engine, txn roachpb.Transaction) error {
+func (r *Replica) maybePoison(batch engine.Engine, shouldPoison bool, txn roachpb.Transaction) error {
+	if !shouldPoison {
+		return nil
+	}
 	var poison uint32
 	switch txn.Status {
 	case roachpb.ABORTED:
@@ -1040,7 +1039,7 @@ func (r *Replica) ResolveIntent(batch engine.Engine, ms *engine.MVCCStats, h roa
 	if err := engine.MVCCResolveWriteIntent(batch, ms, args.Key, h.Timestamp, &args.IntentTxn); err != nil {
 		return reply, err
 	}
-	return reply, r.maybePoison(batch, args.IntentTxn)
+	return reply, r.maybePoison(batch, args.Poison, args.IntentTxn)
 }
 
 // ResolveIntentRange resolves write intents in the specified
@@ -1052,7 +1051,7 @@ func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
 	if _, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, h.Timestamp, &args.IntentTxn); err != nil {
 		return reply, err
 	}
-	return reply, r.maybePoison(batch, args.IntentTxn)
+	return reply, r.maybePoison(batch, args.Poison, args.IntentTxn)
 }
 
 // Merge is used to merge a value into an existing key. Merge is an
