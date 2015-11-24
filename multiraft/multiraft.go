@@ -1158,8 +1158,8 @@ func (s *state) processCommittedEntry(groupID roachpb.RangeID, g *group, entry r
 					if !ok {
 						log.Infof("group %d no longer exists, aborting configuration change", groupID)
 					} else if gInner != g {
-						panic(fmt.Sprintf("passed in group and fetched group objects do not match\noriginal:%+v\nfetched:%+v\n",
-							g, gInner))
+						log.Infof("passed in group and fetched group objects do not match\noriginal:%+v\nfetched:%+v\n, aborting configuration change",
+							g, gInner)
 					} else if err == nil {
 						if log.V(3) {
 							log.Infof("node %v applying configuration change %v", s.nodeID, cc)
