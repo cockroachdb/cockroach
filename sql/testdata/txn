@@ -74,6 +74,7 @@ a b
 query TT
 SELECT * FROM kv; COMMIT; BEGIN; UPDATE kv SET v = 'd' WHERE k in ('a'); SELECT * FROM kv
 ----
+a b
 a d
 
 statement ok
