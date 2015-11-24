@@ -642,9 +642,9 @@ func (s *state) start() {
 							s.nodeID, groupID, err)
 						continue
 					}
-					if err := s.multiNode.Campaign(context.Background(), uint64(groupID)); err != nil {
-						log.Warningf("node %s failed to campaign for group %s: %s", s.nodeID, groupID, err)
-					}
+				}
+				if err := s.multiNode.Campaign(context.Background(), uint64(groupID)); err != nil {
+					log.Warningf("node %s failed to campaign for group %s: %s", s.nodeID, groupID, err)
 				}
 
 			case s.readyGroups = <-raftReady:
