@@ -38,7 +38,6 @@ import (
 // independent keys, while nodes are being killed and restarted continuously.
 // The test measures not write performance, but cluster recovery.
 func TestChaos(t *testing.T) {
-	t.Skip("TODO(tschottdorf): currently unstable")
 	c := StartCluster()
 	defer c.AssertAndStop(t)
 
