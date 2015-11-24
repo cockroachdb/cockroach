@@ -482,38 +482,23 @@ func MVCCGet(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consis
 		return nil, nil, emptyKeyError()
 	}
 
-	// Create a function which scans for the first key between start and end keys.
-	getValue := func(engine Engine, start, end MVCCKey,
-		msg proto.Message) (MVCCKey, error) {
-		iter := engine.NewIterator()
-		defer iter.Close()
-		iter.Seek(start)
-		if !iter.Valid() {
-			return nil, iter.Error()
-		}
-		key := iter.Key()
-		if bytes.Compare(key, end) >= 0 {
-			return nil, iter.Error()
-		}
-		return key, iter.ValueProto(msg)
-	}
-
 	buf := getBufferPool.Get().(*getBuffer)
 	defer getBufferPool.Put(buf)
 
+	iter := engine.NewIterator()
+	defer iter.Close()
+
 	metaKey := mvccEncodeKey(buf.key[:0], key)
-	ok, _, _, err := engine.GetProto(metaKey, &buf.meta)
-	if err != nil || !ok {
+	iter.Seek(metaKey)
+	if !iter.Valid() || bytes.Compare(iter.unsafeKey(), metaKey) != 0 {
+		return nil, nil, nil
+	}
+	if err := iter.ValueProto(&buf.meta); err != nil {
 		return nil, nil, err
 	}
 
-	return mvccGetInternal(engine, key, metaKey, timestamp, consistent, txn, getValue, buf)
+	return mvccGetInternal(iter, key, metaKey, timestamp, consistent, txn, buf)
 }
-
-// getValueFunc fetches a version of a key between start and end.
-// Returns the key as an encoded byte slice, and error, if applicable.
-type getValueFunc func(engine Engine, start, end MVCCKey,
-	msg proto.Message) (MVCCKey, error)
 
 // mvccGetInternal parses the MVCCMetadata from the specified raw key
 // value, and reads the versioned value indicated by timestamp, taking
@@ -525,9 +510,9 @@ type getValueFunc func(engine Engine, start, end MVCCKey,
 // most recent non-intent value instead. In the event that an inconsistent read
 // does encounter an intent (currently there can only be one), it is returned
 // via the roachpb.Intent slice, in addition to the result.
-func mvccGetInternal(engine Engine, key roachpb.Key, metaKey MVCCKey,
+func mvccGetInternal(iter Iterator, key roachpb.Key, metaKey MVCCKey,
 	timestamp roachpb.Timestamp, consistent bool, txn *roachpb.Transaction,
-	getValue getValueFunc, buf *getBuffer) (*roachpb.Value, []roachpb.Intent, error) {
+	buf *getBuffer) (*roachpb.Value, []roachpb.Intent, error) {
 	if !consistent && txn != nil {
 		return nil, nil, util.Errorf("cannot allow inconsistent reads within a transaction")
 	}
@@ -551,9 +536,6 @@ func mvccGetInternal(engine Engine, key roachpb.Key, metaKey MVCCKey,
 		timestamp = meta.Timestamp.Prev()
 	}
 
-	var valueKey MVCCKey
-	value := &buf.value
-
 	ownIntent := meta.IsIntentOf(txn) // false if txn == nil
 	if !timestamp.Less(meta.Timestamp) && meta.Txn != nil && !ownIntent {
 		// Trying to read the last value, but it's another transaction's intent;
@@ -561,34 +543,29 @@ func mvccGetInternal(engine Engine, key roachpb.Key, metaKey MVCCKey,
 		return nil, nil, &roachpb.WriteIntentError{
 			Intents: []roachpb.Intent{{Span: roachpb.Span{Key: key}, Txn: *meta.Txn}},
 		}
-	} else if !timestamp.Less(meta.Timestamp) || ownIntent {
+	}
+
+	var seekKey MVCCKey
+	var checkValueTimestamp bool
+
+	if !timestamp.Less(meta.Timestamp) || ownIntent {
 		// We are reading the latest value, which is either an intent written
 		// by this transaction or not an intent at all (so there's no
 		// conflict). Note that when reading the own intent, the timestamp
 		// specified is irrelevant; we always want to see the intent (see
 		// TestMVCCReadWithPushedTimestamp).
-		latestKey := mvccEncodeTimestamp(metaKey, meta.Timestamp)
+		seekKey = mvccEncodeTimestamp(metaKey, meta.Timestamp)
 
 		// Check for case where we're reading our own txn's intent
 		// but it's got a different epoch. This can happen if the
 		// txn was restarted and an earlier iteration wrote the value
 		// we're now reading. In this case, we skip the intent.
-		var err error
 		if ownIntent && txn.Epoch != meta.Txn.Epoch {
 			if txn.Epoch < meta.Txn.Epoch {
 				return nil, nil, util.Errorf("failed to read with epoch %d due to a write intent with epoch %d",
 					txn.Epoch, meta.Txn.Epoch)
 			}
-			valueKey, err = getValue(engine, latestKey.Next(), MVCCEncodeKey(key.Next()), value)
-		} else {
-			var ok bool
-			ok, _, _, err = engine.GetProto(latestKey, value)
-			if ok {
-				valueKey = latestKey
-			}
-		}
-		if err != nil {
-			return nil, nil, err
+			seekKey = seekKey.Next()
 		}
 	} else if txn != nil && timestamp.Less(txn.MaxTimestamp) {
 		// In this branch, the latest timestamp is ahead, and so the read of an
@@ -609,61 +586,60 @@ func mvccGetInternal(engine Engine, key roachpb.Key, metaKey MVCCKey,
 
 		// We want to know if anything has been written ahead of timestamp, but
 		// before MaxTimestamp.
-		nextKey := MVCCEncodeVersionKey(key, txn.MaxTimestamp)
-		var err error
-		valueKey, err = getValue(engine, nextKey, MVCCEncodeKey(key.Next()), value)
-		if err != nil {
+		seekKey = MVCCEncodeVersionKey(key, txn.MaxTimestamp)
+		checkValueTimestamp = true
+	} else {
+		// Fifth case: We're reading a historic value either outside of
+		// a transaction, or in the absence of future versions that clock
+		// uncertainty would apply to.
+		seekKey = MVCCEncodeVersionKey(key, timestamp)
+	}
+
+	iter.Seek(seekKey)
+	if !iter.Valid() {
+		if err := iter.Error(); err != nil {
 			return nil, nil, err
 		}
-		if valueKey != nil {
-			_, ts, _, err := MVCCDecodeKey(valueKey)
-			if err != nil {
-				return nil, nil, err
-			}
-			if timestamp.Less(ts) {
-				// Third case: Our read timestamp is sufficiently behind the newest
-				// value, but there is another previous write with the same issues
-				// as in the second case, so the reader will have to come again
-				// with a higher read timestamp.
-				return nil, nil, &roachpb.ReadWithinUncertaintyIntervalError{
-					Timestamp:         timestamp,
-					ExistingTimestamp: ts,
-				}
+		return nil, ignoredIntents, nil
+	}
+
+	valueKey, ts, isValue, err := mvccDecodeKey(iter.unsafeKey(), nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !bytes.Equal(key, valueKey) {
+		return nil, ignoredIntents, nil
+	}
+	if !isValue {
+		return nil, nil, util.Errorf("expected scan to versioned value reading key %s; got %s",
+			key, roachpb.Key(iter.unsafeKey()))
+	}
+
+	if checkValueTimestamp {
+		if timestamp.Less(ts) {
+			// Third case: Our read timestamp is sufficiently behind the newest
+			// value, but there is another previous write with the same issues
+			// as in the second case, so the reader will have to come again
+			// with a higher read timestamp.
+			return nil, nil, &roachpb.ReadWithinUncertaintyIntervalError{
+				Timestamp:         timestamp,
+				ExistingTimestamp: ts,
 			}
 		}
 		// Fourth case: There's no value in our future up to MaxTimestamp, and
 		// those are the only ones that we're not certain about. The correct
 		// key has already been read above, so there's nothing left to do.
-	} else {
-		// Fifth case: We're reading a historic value either outside of
-		// a transaction, or in the absence of future versions that clock
-		// uncertainty would apply to.
-		var err error
-		nextKey := MVCCEncodeVersionKey(key, timestamp)
-		valueKey, err = getValue(engine, nextKey, MVCCEncodeKey(key.Next()), value)
-		if err != nil {
-			return nil, nil, err
-		}
 	}
 
-	if valueKey == nil {
-		return nil, ignoredIntents, nil
-	}
-
-	_, ts, isValue, err := MVCCDecodeKey(valueKey)
-	if err != nil {
+	value := &buf.value
+	if err := iter.ValueProto(value); err != nil {
 		return nil, nil, err
-	}
-	if !isValue {
-		return nil, nil, util.Errorf("expected scan to versioned value reading key %q; got %q", key, valueKey)
 	}
 
 	if value.Deleted {
 		value.Value = nil
-	}
-
-	// Set the timestamp if the value is not nil (i.e. not a deletion tombstone).
-	if value.Value != nil {
+	} else if value.Value != nil {
+		// Set the timestamp if the value is not nil (i.e. not a deletion tombstone).
 		value.Value.Timestamp = &ts
 		if err := value.Value.Verify(key); err != nil {
 			return nil, nil, err
@@ -1024,7 +1000,7 @@ func getReverseScanMetaKey(iter Iterator, encEndKey MVCCKey) (roachpb.Key, MVCCK
 // in descending instead of ascending order.
 func mvccScanInternal(engine Engine, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp,
 	consistent bool, txn *roachpb.Transaction, reverse bool) ([]roachpb.KeyValue, []roachpb.Intent, error) {
-	res := []roachpb.KeyValue{}
+	var res []roachpb.KeyValue
 	intents, err := MVCCIterate(engine, key, endKey, timestamp, consistent, txn, reverse,
 		func(kv roachpb.KeyValue) (bool, error) {
 			res = append(res, kv)
@@ -1094,21 +1070,9 @@ func MVCCIterate(engine Engine, startKey, endKey roachpb.Key, timestamp roachpb.
 		getMetaKey = getScanMetaKey
 	}
 
-	// Get a new iterator and define our getter using iter.Seek.
+	// Get a new iterator.
 	iter := engine.NewIterator()
 	defer iter.Close()
-	getValue := func(engine Engine, start, end MVCCKey,
-		msg proto.Message) (MVCCKey, error) {
-		iter.Seek(start)
-		if !iter.Valid() {
-			return nil, iter.Error()
-		}
-		key := iter.Key()
-		if bytes.Compare(key, end) >= 0 {
-			return nil, iter.Error()
-		}
-		return key, iter.ValueProto(msg)
-	}
 
 	// Seeking for the first defined position.
 	if reverse {
@@ -1151,7 +1115,7 @@ func MVCCIterate(engine Engine, startKey, endKey roachpb.Key, timestamp roachpb.
 		if err := iter.ValueProto(&buf.meta); err != nil {
 			return nil, err
 		}
-		value, newIntents, err := mvccGetInternal(engine, key, metaKey, timestamp, consistent, txn, getValue, buf)
+		value, newIntents, err := mvccGetInternal(iter, key, metaKey, timestamp, consistent, txn, buf)
 		intents = append(intents, newIntents...)
 		if value != nil {
 			done, err := f(roachpb.KeyValue{Key: key, Value: *value})

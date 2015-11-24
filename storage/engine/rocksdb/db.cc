@@ -1080,7 +1080,8 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   // Divide the cache space into two levels: the fast row cache
   // and the slower but more space-efficient block cache.
   // TODO(bdarnell): do we need both? how much of each?
-  const auto row_cache_size = db_opts.cache_size / 2;
+  // TODO(peter): disabled for now until benchmarks show improvement.
+  const auto row_cache_size = 0 * db_opts.cache_size;
   const auto block_cache_size = db_opts.cache_size - row_cache_size;
   const int num_cache_shard_bits = 4;
   rocksdb::BlockBasedTableOptions table_options;
