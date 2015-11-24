@@ -41,7 +41,7 @@ func (node *DropDatabase) String() string {
 	return buf.String()
 }
 
-// DropIndex represents a DROP DATABASE statement.
+// DropIndex represents a DROP INDEX statement.
 type DropIndex struct {
 	Names    QualifiedNames
 	IfExists bool

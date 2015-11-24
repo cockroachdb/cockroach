@@ -20,8 +20,6 @@ package sql
 import (
 	"fmt"
 
-	"github.com/gogo/protobuf/proto"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
@@ -111,7 +109,6 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 //   Notes: postgres allows only the index owner to DROP an index.
 //          mysql requires the INDEX privilege on the table.
 func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
-	b := client.Batch{}
 	for _, indexQualifiedName := range n.Names {
 		if err := indexQualifiedName.NormalizeTableName(p.session.Database); err != nil {
 			return nil, err
@@ -126,10 +123,8 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 			return nil, err
 		}
 
-		newTableDesc := proto.Clone(tableDesc).(*TableDescriptor)
-
 		idxName := indexQualifiedName.Index()
-		i, err := newTableDesc.FindIndexByName(idxName)
+		status, i, err := tableDesc.FindIndexByName(idxName)
 		if err != nil {
 			if n.IfExists {
 				// Noop.
@@ -138,24 +133,32 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 			// Index does not exist, but we want it to: error out.
 			return nil, err
 		}
-		newTableDesc.Indexes = append(newTableDesc.Indexes[:i], newTableDesc.Indexes[i+1:]...)
+		switch status {
+		case DescriptorActive:
+			tableDesc.addIndexMutation(tableDesc.Indexes[i], DescriptorMutation_DROP)
+			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
 
-		if err := p.backfillBatch(&b, indexQualifiedName, tableDesc, newTableDesc); err != nil {
+		case DescriptorIncomplete:
+			switch tableDesc.Mutations[i].Direction {
+			case DescriptorMutation_ADD:
+				return nil, fmt.Errorf("index %q in the middle of being added, try again later", idxName)
+
+			case DescriptorMutation_DROP:
+				return &valuesNode{}, nil
+			}
+		}
+		if err := tableDesc.Validate(); err != nil {
 			return nil, err
 		}
 
-		if err := newTableDesc.Validate(); err != nil {
+		if err := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); err != nil {
 			return nil, err
 		}
-
-		descKey := MakeDescMetadataKey(newTableDesc.GetID())
-		b.Put(descKey, wrapDescriptor(newTableDesc))
+		// Process mutation synchronously.
+		if err := p.applyMutations(tableDesc, indexQualifiedName); err != nil {
+			return nil, err
+		}
 	}
-
-	if err := p.txn.Run(&b); err != nil {
-		return nil, err
-	}
-
 	return &valuesNode{}, nil
 }
 
