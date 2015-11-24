@@ -95,6 +95,8 @@ type Client struct {
 	remoteOffset      RemoteOffset
 	heartbeatInterval time.Duration
 	heartbeatTimeout  time.Duration
+
+	localServer *Server // holds the local RPC server handle
 }
 
 // NewClient returns a client RPC stub for the specified address
@@ -152,6 +154,10 @@ func NewClient(addr net.Addr, context *Context) *Client {
 
 	if !context.DisableCache {
 		clients[key] = c
+	}
+
+	if context.localServer != nil && context.localAddr == c.RemoteAddr().String() {
+		c.localServer = context.localServer
 	}
 
 	retryOpts := clientRetryOptions

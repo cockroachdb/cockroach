@@ -22,9 +22,11 @@ import (
 	"math/rand"
 	"net"
 	"net/rpc"
+	"os"
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -207,6 +209,10 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 	}
 }
 
+// Allow local calls to be dispatched directly to the local server without
+// sending an RPC.
+var enableLocalCalls = os.Getenv("ENABLE_LOCAL_CALLS") == "1"
+
 // sendOneFn is overwritten in tests to mock sendOne.
 var sendOneFn = sendOne
 
@@ -232,6 +238,11 @@ func sendOne(client *Client, timeout time.Duration, method string,
 		log.Infof("%s: sending request to %s: %+v", method, addr, args)
 	}
 	trace.Event(fmt.Sprintf("sending to %s", addr))
+
+	if enableLocalCalls && client.localServer != nil {
+		localCall(client.localServer, method, args, done)
+		return
+	}
 
 	reply := getReply()
 
@@ -260,4 +271,34 @@ func sendOne(client *Client, timeout time.Duration, method string,
 				util.Errorf("rpc to %s: client not ready after %s", method, timeout))}
 		}
 	}()
+}
+
+// localCall invokes the specified method directly.
+func localCall(s *Server, method string, args proto.Message, done chan *rpc.Call) {
+	s.mu.RLock()
+	m := s.methods[method]
+	s.mu.RUnlock()
+
+	if m.handler == nil {
+		done <- &rpc.Call{
+			Error: newRPCError(util.Errorf("rpc:couldn't find method: %s", method)),
+		}
+		return
+	}
+
+	if _, err := security.CheckRequestUser(args, m.public); err != nil {
+		done <- &rpc.Call{
+			Error: err,
+		}
+		return
+	}
+
+	m.handler(args, func(reply proto.Message, err error) {
+		done <- &rpc.Call{
+			ServiceMethod: method,
+			Error:         err,
+			Reply:         reply,
+			Args:          args,
+		}
+	})
 }

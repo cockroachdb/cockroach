@@ -139,3 +139,25 @@ func UserAuthHook(insecureMode bool, tlsState *tls.ConnectionState) (
 		return nil
 	}, nil
 }
+
+// CheckRequestUser extracts user from the request and verify.
+// TODO(marc): we may eventually need stricter user syntax rules.
+func CheckRequestUser(request proto.Message, public bool) (string, error) {
+	// RequestWithUser must be implemented.
+	requestWithUser, ok := request.(RequestWithUser)
+	if !ok {
+		return "", util.Errorf("unknown request type: %T", request)
+	}
+
+	// Extract user and verify.
+	requestedUser := requestWithUser.GetUser()
+	if len(requestedUser) == 0 {
+		return "", util.Errorf("missing User in request: %+v", request)
+	}
+
+	if !public && requestedUser != NodeUser {
+		return "", util.Errorf("user %s is not allowed", requestedUser)
+	}
+
+	return requestedUser, nil
+}
