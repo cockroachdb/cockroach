@@ -83,7 +83,7 @@ module AdminViews {
 
         public constructor(nodeId?: string) {
           this._refresh();
-          this._interval = setInterval(() => this._refresh(), Controller._queryEveryMS);
+          this._interval = window.setInterval(() => this._refresh(), Controller._queryEveryMS);
         }
 
         public onunload(): void {
@@ -252,7 +252,7 @@ module AdminViews {
 
           this.exec = new Metrics.Executor(this._query);
           this._refresh();
-          this._interval = setInterval(() => this._refresh(), Controller._queryEveryMS);
+          this._interval = window.setInterval(() => this._refresh(), Controller._queryEveryMS);
         }
 
         public RenderPrimaryStats(): MithrilElement {
