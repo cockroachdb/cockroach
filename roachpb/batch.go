@@ -60,10 +60,20 @@ func (ba *BatchRequest) IsRange() bool {
 	return (ba.flags() & isRange) != 0
 }
 
-// GetArg returns the first request of the given type, if possible.
+// GetArg returns the request of the given type.
+// If the given type is EndTransaction, just look at the last entry.
+// or else, returns the first request which match the given type
 func (ba *BatchRequest) GetArg(method Method) (Request, bool) {
-	// TODO(tschottdorf): when looking for EndTransaction, just look at the
-	// last entry.
+	// when looking for EndTransaction, just look at the last entry.
+	if method == EndTransaction {
+		if length := len(ba.Requests); length > 0 {
+			if req := ba.Requests[length-1].GetInner(); req.Method() == EndTransaction {
+				return req, true
+			}
+		}
+		return nil, false
+	}
+
 	for _, arg := range ba.Requests {
 		if req := arg.GetInner(); req.Method() == method {
 			return req, true
