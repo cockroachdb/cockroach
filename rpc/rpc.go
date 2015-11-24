@@ -14,7 +14,8 @@ type Context struct {
 	localClock   *hlc.Clock
 	Stopper      *stop.Stopper
 	RemoteClocks *RemoteClockMonitor
-	DisableCache bool // Disable client cache when calling NewClient()
+	DisableCache bool    // Disable client cache when calling NewClient()
+	localServer  *Server // Holds the local RPC server handle
 }
 
 // NewContext creates an rpc Context with the supplied values.
@@ -37,5 +38,11 @@ func (c *Context) Copy() *Context {
 		Stopper:      c.Stopper,
 		RemoteClocks: newRemoteClockMonitor(c.localClock),
 		DisableCache: c.DisableCache,
+		localServer:  c.localServer,
 	}
+}
+
+// SetLocalServer sets the local RPC server handle to the context.
+func (c *Context) SetLocalServer(s *Server) {
+	c.localServer = s
 }
