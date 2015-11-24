@@ -22,6 +22,9 @@ type Context struct {
 
 	heartbeatInterval time.Duration
 	heartbeatTimeout  time.Duration
+
+	localServer *Server // Holds the local RPC server handle
+	localAddr   string
 }
 
 // NewContext creates an rpc Context with the supplied values.
@@ -42,4 +45,10 @@ func (c *Context) Copy() *Context {
 	copy := *c
 	copy.RemoteClocks = newRemoteClockMonitor(c.localClock)
 	return &copy
+}
+
+// SetLocalServer sets the local RPC server handle to the context.
+func (c *Context) SetLocalServer(s *Server, addr string) {
+	c.localServer = s
+	c.localAddr = addr
 }

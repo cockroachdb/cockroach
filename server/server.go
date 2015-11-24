@@ -225,6 +225,7 @@ func (s *Server) Start(selfBootstrap bool) error {
 
 	addr := ln.Addr()
 	addrStr := addr.String()
+	s.rpcContext.SetLocalServer(s.rpc, addrStr)
 
 	// Handle self-bootstrapping case for a single node.
 	if selfBootstrap {
