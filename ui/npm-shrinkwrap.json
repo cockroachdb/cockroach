@@ -71,6 +71,9 @@
     "arrify": {
       "version": "1.0.0"
     },
+    "ascli": {
+      "version": "1.0.0"
+    },
     "asn1": {
       "version": "0.1.11"
     },
@@ -90,7 +93,7 @@
       "version": "0.6.0"
     },
     "balanced-match": {
-      "version": "0.2.1"
+      "version": "0.3.0"
     },
     "beeper": {
       "version": "1.1.0"
@@ -1426,13 +1429,19 @@
       }
     },
     "brace-expansion": {
-      "version": "1.1.1"
+      "version": "1.1.2"
     },
     "braces": {
       "version": "1.8.2"
     },
+    "bufferview": {
+      "version": "1.0.1"
+    },
     "builtin-modules": {
       "version": "1.1.0"
+    },
+    "bytebuffer": {
+      "version": "5.0.0"
     },
     "bytes": {
       "version": "2.1.0"
@@ -1464,8 +1473,14 @@
     "clone-stats": {
       "version": "0.0.1"
     },
+    "code-point-at": {
+      "version": "1.0.0"
+    },
     "colors": {
       "version": "1.1.2"
+    },
+    "colour": {
+      "version": "0.7.1"
     },
     "combined-stream": {
       "version": "1.0.5"
@@ -1565,9 +1580,12 @@
           "version": "1.0.0"
         },
         "readable-stream": {
-          "version": "2.0.4"
+          "version": "2.0.3"
         }
       }
+    },
+    "dustjs-linkedin": {
+      "version": "2.3.6"
     },
     "ee-first": {
       "version": "1.1.1"
@@ -1597,9 +1615,6 @@
       "version": "1.8.1"
     },
     "extend": {
-      "version": "2.0.1"
-    },
-    "extend-shallow": {
       "version": "2.0.1"
     },
     "extglob": {
@@ -2140,11 +2155,8 @@
     "gulp-typescript": {
       "version": "2.9.2",
       "dependencies": {
-        "extend": {
-          "version": "3.0.0"
-        },
         "glob-stream": {
-          "version": "5.2.0",
+          "version": "5.0.0",
           "dependencies": {
             "readable-stream": {
               "version": "1.0.33"
@@ -2158,10 +2170,7 @@
           "version": "2.0.10"
         },
         "ordered-read-streams": {
-          "version": "0.3.0"
-        },
-        "readable-stream": {
-          "version": "2.0.4"
+          "version": "0.2.0"
         },
         "unique-stream": {
           "version": "2.2.0"
@@ -2195,7 +2204,7 @@
       "version": "0.1.0"
     },
     "hawk": {
-      "version": "3.1.0"
+      "version": "3.1.1"
     },
     "hoek": {
       "version": "2.16.3"
@@ -2254,20 +2263,20 @@
     "is-equal-shallow": {
       "version": "0.1.3"
     },
-    "is-extendable": {
-      "version": "0.1.1"
-    },
     "is-extglob": {
       "version": "1.0.0"
     },
     "is-finite": {
       "version": "1.0.1"
     },
+    "is-fullwidth-code-point": {
+      "version": "1.0.0"
+    },
     "is-glob": {
       "version": "2.0.1"
     },
     "is-my-json-valid": {
-      "version": "2.12.2"
+      "version": "2.12.3"
     },
     "is-npm": {
       "version": "1.0.0"
@@ -2428,6 +2437,9 @@
     "lodash.templatesettings": {
       "version": "3.1.0"
     },
+    "long": {
+      "version": "3.0.1"
+    },
     "longest": {
       "version": "1.0.1"
     },
@@ -2456,7 +2468,7 @@
       "version": "1.0.0",
       "dependencies": {
         "readable-stream": {
-          "version": "2.0.4"
+          "version": "2.0.3"
         }
       }
     },
@@ -2535,7 +2547,7 @@
       "version": "1.0.1"
     },
     "node-uuid": {
-      "version": "1.4.3"
+      "version": "1.4.4"
     },
     "normalize-package-data": {
       "version": "2.3.5"
@@ -3370,7 +3382,7 @@
       "version": "2.3.0"
     },
     "once": {
-      "version": "1.3.2"
+      "version": "1.3.3"
     },
     "open": {
       "version": "0.0.5"
@@ -3382,6 +3394,9 @@
           "version": "0.0.10"
         }
       }
+    },
+    "optjs": {
+      "version": "3.2.1-boom"
     },
     "orchestrator": {
       "version": "0.3.7"
@@ -3455,6 +3470,47 @@
     "process-nextick-args": {
       "version": "1.0.3"
     },
+    "proto2typescript": {
+      "version": "2.2.0",
+      "dependencies": {
+        "cliui": {
+          "version": "3.0.3"
+        },
+        "long": {
+          "version": "2.4.0"
+        },
+        "protobufjs": {
+          "version": "4.0.0",
+          "dependencies": {
+            "bytebuffer": {
+              "version": "4.1.0"
+            }
+          }
+        },
+        "window-size": {
+          "version": "0.1.4"
+        },
+        "yargs": {
+          "version": "3.30.0"
+        }
+      }
+    },
+    "protobufjs": {
+      "version": "5.0.1",
+      "from": "git+https://github.com/cockroachdb/protobuf.js.git",
+      "resolved": "git+https://github.com/cockroachdb/protobuf.js.git#659d311cd4fee32e2661a48ddcf007c12ad43977",
+      "dependencies": {
+        "cliui": {
+          "version": "3.1.0"
+        },
+        "window-size": {
+          "version": "0.1.4"
+        },
+        "yargs": {
+          "version": "3.30.0"
+        }
+      }
+    },
     "qs": {
       "version": "2.2.5"
     },
@@ -3471,7 +3527,7 @@
       "version": "3.0.1",
       "dependencies": {
         "readable-stream": {
-          "version": "2.0.4"
+          "version": "2.0.3"
         }
       }
     },
@@ -3491,7 +3547,7 @@
           "version": "2.0.10"
         },
         "readable-stream": {
-          "version": "2.0.4"
+          "version": "2.0.3"
         }
       }
     },
@@ -3608,6 +3664,9 @@
     "string-length": {
       "version": "1.0.1"
     },
+    "string-width": {
+      "version": "1.0.1"
+    },
     "stringstream": {
       "version": "0.0.5"
     },
@@ -3672,7 +3731,7 @@
       "version": "2.0.0",
       "dependencies": {
         "readable-stream": {
-          "version": "2.0.4"
+          "version": "2.0.3"
         }
       }
     },
@@ -3684,9 +3743,6 @@
     },
     "timed-out": {
       "version": "2.0.0"
-    },
-    "to-absolute-glob": {
-      "version": "0.1.1"
     },
     "topo": {
       "version": "1.1.0"
@@ -3738,7 +3794,7 @@
           "version": "2.0.10"
         },
         "typescript": {
-          "version": "1.8.0-dev.20151105"
+          "version": "1.8.0-dev.20151112"
         }
       }
     },
@@ -3822,6 +3878,14 @@
     "vinyl": {
       "version": "0.5.3"
     },
+    "vinyl-file": {
+      "version": "1.3.0",
+      "dependencies": {
+        "vinyl": {
+          "version": "1.1.0"
+        }
+      }
+    },
     "vinyl-fs": {
       "version": "0.3.14",
       "dependencies": {
@@ -3867,6 +3931,9 @@
     },
     "wordwrap": {
       "version": "0.0.2"
+    },
+    "wrap-ansi": {
+      "version": "1.0.0"
     },
     "wrappy": {
       "version": "1.0.1"
