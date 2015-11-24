@@ -2215,7 +2215,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	mKeySize := int64(len(MVCCEncodeKey(key)))
 	mValSize := encodedSize(&MVCCMetadata{Timestamp: ts}, t)
 	vKeySize := mvccVersionTimestampSize
-	vValSize := encodedSize(&MVCCValue{Value: &value}, t)
+	vValSize := encodedSize(&value, t)
 
 	expMS := MVCCStats{
 		LiveBytes: mKeySize + mValSize + vKeySize + vValSize,
@@ -2235,7 +2235,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	}
 	m2ValSize := encodedSize(&MVCCMetadata{Timestamp: ts2, Deleted: true, Txn: txn}, t)
 	v2KeySize := mvccVersionTimestampSize
-	v2ValSize := encodedSize(&MVCCValue{Deleted: true}, t)
+	v2ValSize := int64(0)
 	expMS2 := MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize,
 		KeyCount:    1,
@@ -2277,7 +2277,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	mKey2Size := int64(len(MVCCEncodeKey(key2)))
 	mVal2Size := encodedSize(&MVCCMetadata{Timestamp: ts4, Txn: txn}, t)
 	vKey2Size := mvccVersionTimestampSize
-	vVal2Size := encodedSize(&MVCCValue{Value: &value2}, t)
+	vVal2Size := encodedSize(&value2, t)
 	expMS3 := MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
 		KeyCount:    2,

@@ -1009,23 +1009,6 @@ func truncateLogArgs(index uint64, rangeID roachpb.RangeID) roachpb.TruncateLogR
 	}
 }
 
-// getSerializedMVCCValue produces a byte slice of the serialized
-// mvcc value. If value is nil, MVCCValue.Deleted is set to true;
-// otherwise MVCCValue.Value is set to value.
-func getSerializedMVCCValue(value *roachpb.Value) []byte {
-	mvccVal := &engine.MVCCValue{}
-	if value != nil {
-		mvccVal.Value = value
-	} else {
-		mvccVal.Deleted = true
-	}
-	data, err := proto.Marshal(&engine.MVCCValue{Value: value})
-	if err != nil {
-		panic("unexpected marshal error")
-	}
-	return data
-}
-
 // TestAcquireLeaderLease verifies that the leader lease is acquired
 // for read and write methods.
 func TestAcquireLeaderLease(t *testing.T) {
@@ -2676,7 +2659,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS := engine.MVCCStats{LiveBytes: 42, KeyBytes: 16, ValBytes: 26, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, SysBytes: 63, SysCount: 1}
+	expMS := engine.MVCCStats{LiveBytes: 38, KeyBytes: 16, ValBytes: 22, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, SysBytes: 63, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Put a 2nd value transactionally.
@@ -2686,7 +2669,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn}, &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 138, KeyBytes: 32, ValBytes: 106, IntentBytes: 26, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 63, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 130, KeyBytes: 32, ValBytes: 98, IntentBytes: 22, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, SysBytes: 63, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Resolve the 2nd value.
@@ -2701,7 +2684,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), rArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 84, KeyBytes: 32, ValBytes: 52, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, SysBytes: 63, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 76, KeyBytes: 32, ValBytes: 44, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, SysBytes: 63, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 
 	// Delete the 1st value.
@@ -2710,7 +2693,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &dArgs); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 42, KeyBytes: 44, ValBytes: 54, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, SysBytes: 63, SysCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 38, KeyBytes: 44, ValBytes: 44, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, SysBytes: 63, SysCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
 }
 
