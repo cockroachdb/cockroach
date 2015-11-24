@@ -776,18 +776,28 @@ class SplitTrigger : public ::google::protobuf::Message {
   ::cockroach::roachpb::RangeDescriptor* release_new_desc();
   void set_allocated_new_desc(::cockroach::roachpb::RangeDescriptor* new_desc);
 
+  // optional int32 initial_leader_store_id = 3;
+  bool has_initial_leader_store_id() const;
+  void clear_initial_leader_store_id();
+  static const int kInitialLeaderStoreIdFieldNumber = 3;
+  ::google::protobuf::int32 initial_leader_store_id() const;
+  void set_initial_leader_store_id(::google::protobuf::int32 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.SplitTrigger)
  private:
   inline void set_has_updated_desc();
   inline void clear_has_updated_desc();
   inline void set_has_new_desc();
   inline void clear_has_new_desc();
+  inline void set_has_initial_leader_store_id();
+  inline void clear_has_initial_leader_store_id();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::RangeDescriptor* updated_desc_;
   ::cockroach::roachpb::RangeDescriptor* new_desc_;
+  ::google::protobuf::int32 initial_leader_store_id_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fdata_2eproto();
@@ -2607,6 +2617,30 @@ inline void SplitTrigger::set_allocated_new_desc(::cockroach::roachpb::RangeDesc
     clear_has_new_desc();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.SplitTrigger.new_desc)
+}
+
+// optional int32 initial_leader_store_id = 3;
+inline bool SplitTrigger::has_initial_leader_store_id() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void SplitTrigger::set_has_initial_leader_store_id() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void SplitTrigger::clear_has_initial_leader_store_id() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void SplitTrigger::clear_initial_leader_store_id() {
+  initial_leader_store_id_ = 0;
+  clear_has_initial_leader_store_id();
+}
+inline ::google::protobuf::int32 SplitTrigger::initial_leader_store_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.SplitTrigger.initial_leader_store_id)
+  return initial_leader_store_id_;
+}
+inline void SplitTrigger::set_initial_leader_store_id(::google::protobuf::int32 value) {
+  set_has_initial_leader_store_id();
+  initial_leader_store_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.SplitTrigger.initial_leader_store_id)
 }
 
 // -------------------------------------------------------------------
