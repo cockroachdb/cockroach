@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 )
@@ -196,7 +195,8 @@ func newWriteTask(storage Storage) *writeTask {
 }
 
 // start runs the storage loop in a goroutine.
-func (w *writeTask) start(stopper *stop.Stopper) {
+func (w *writeTask) start(s *state) {
+	stopper := s.stopper
 	stopper.RunWorker(func() {
 		for {
 			var request *writeRequest
@@ -233,10 +233,17 @@ func (w *writeTask) start(stopper *stop.Stopper) {
 				groupResp := &groupWriteResponse{raftpb.HardState{}, -1, -1, groupReq.entries}
 				response.groups[groupID] = groupResp
 				if !raft.IsEmptySnap(groupReq.snapshot) {
-					err := group.ApplySnapshot(groupReq.snapshot)
-					if err != nil {
-						panic(err) // TODO(bdarnell)
-					}
+					gID := groupID
+					s.sendEvent(&EventSnapshot{
+						GroupID:  gID,
+						Snapshot: groupReq.snapshot,
+						Callback: func() {
+							g := s.groups[gID]
+							g.pendingSnapshotLock.Lock()
+							g.pendingSnapshot = false
+							g.pendingSnapshotLock.Unlock()
+						},
+					})
 				}
 				if len(groupReq.entries) > 0 {
 					err := group.Append(groupReq.entries)

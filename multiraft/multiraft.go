@@ -20,6 +20,7 @@ package multiraft
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -469,8 +470,14 @@ type group struct {
 	writing bool
 	// nodeIDs track the remote nodes associated with this group.
 	nodeIDs []roachpb.NodeID
+
 	// raftGroup is the raft.RawNode
 	raftGroup *raft.RawNode
+
+	// pendingSnapshot mark if recevie snapshot message until apply finished.
+	// All the ther message will be ignored execept heartbeat.
+	pendingSnapshot     bool
+	pendingSnapshotLock sync.Mutex
 }
 
 type createGroupOp struct {
@@ -578,7 +585,7 @@ func (s *state) start() {
 		if log.V(1) {
 			log.Infof("node %v starting", s.nodeID)
 		}
-		s.writeTask.start(s.stopper)
+		s.writeTask.start(s)
 		// Counts up to heartbeat interval and is then reset.
 		ticks := 0
 		// checkReadyGroupIDs keeps track of all the groupIDs which
@@ -868,6 +875,21 @@ func (s *state) handleMessage(req *RaftMessageRequest) {
 			return
 		}
 	}
+
+	// Ignore all message execept heartbeat when recevie snapshot until apply finish.
+	g := s.groups[req.GroupID]
+	g.pendingSnapshotLock.Lock()
+	if g.pendingSnapshot {
+		g.pendingSnapshotLock.Unlock()
+		return
+	}
+
+	if req.Message.Type == raftpb.MsgSnap {
+		if req.Message.Snapshot.Metadata.Index != 10 {
+			g.pendingSnapshot = true
+		}
+	}
+	g.pendingSnapshotLock.Unlock()
 
 	if err := s.groups[req.GroupID].raftGroup.Step(req.Message); err != nil {
 		if log.V(4) {

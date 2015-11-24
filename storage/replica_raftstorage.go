@@ -305,6 +305,37 @@ func setLastIndex(eng engine.Engine, rangeID roachpb.RangeID, lastIndex uint64) 
 
 // Snapshot implements the raft.Storage interface.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
+	if snap, ok := <-r.snapshotData; ok {
+		close(r.snapshotData)
+		r.pendingSnapshotLock.Lock()
+		r.pendingSnapshot = false
+		r.pendingSnapshotLock.Unlock()
+		return snap.snapshot, snap.err
+	}
+
+	r.pendingSnapshotLock.Lock()
+	if r.pendingSnapshot {
+		r.pendingSnapshotLock.Unlock()
+		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+	}
+
+	r.pendingSnapshot = true
+	r.pendingSnapshotLock.Unlock()
+	go r.processSnapshotReq()
+	return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+}
+
+func (r *Replica) processSnapshotReq() {
+	snapshot, err := r.createSnapshot()
+	r.snapshotData = make(chan snapshotData, 1)
+	r.snapshotData <- snapshotData{
+		snapshot: snapshot,
+		err:      err,
+	}
+}
+
+// createSnapshot create snapshot data
+func (r *Replica) createSnapshot() (raftpb.Snapshot, error) {
 	// Copy all the data from a consistent RocksDB snapshot into a RaftSnapshotData.
 	snap := r.store.NewSnapshot()
 	defer snap.Close()

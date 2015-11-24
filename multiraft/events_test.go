@@ -30,6 +30,7 @@ type eventDemux struct {
 	LeaderElection            chan *EventLeaderElection
 	CommandCommitted          chan *EventCommandCommitted
 	MembershipChangeCommitted chan *EventMembershipChangeCommitted
+	Snapshot                  chan *EventSnapshot
 
 	events <-chan []interface{}
 }
@@ -39,6 +40,7 @@ func newEventDemux(events <-chan []interface{}) *eventDemux {
 		make(chan *EventLeaderElection, 1000),
 		make(chan *EventCommandCommitted, 1000),
 		make(chan *EventMembershipChangeCommitted, 1000),
+		make(chan *EventSnapshot, 1000),
 		events,
 	}
 }
@@ -59,6 +61,9 @@ func (e *eventDemux) start(stopper *stop.Stopper) {
 					case *EventMembershipChangeCommitted:
 						e.MembershipChangeCommitted <- event
 
+					case *EventSnapshot:
+						e.Snapshot <- event
+
 					default:
 						panic(fmt.Sprintf("got unknown event type %T", event))
 					}
@@ -67,6 +72,7 @@ func (e *eventDemux) start(stopper *stop.Stopper) {
 				close(e.CommandCommitted)
 				close(e.MembershipChangeCommitted)
 				close(e.LeaderElection)
+				close(e.Snapshot)
 				return
 			}
 		}

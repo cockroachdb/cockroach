@@ -1021,6 +1021,9 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 				}
 				_, err := rng.Snapshot()
 				if err != nil {
+					if err == raft.ErrSnapshotTemporarilyUnavailable {
+						continue
+					}
 					t.Fatalf("failed to snapshot min range: %s", err)
 				}
 
@@ -1030,6 +1033,9 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 				}
 				_, err = rng.Snapshot()
 				if err != nil {
+					if err == raft.ErrSnapshotTemporarilyUnavailable {
+						continue
+					}
 					t.Fatalf("failed to snapshot max range: %s", err)
 				}
 			}
