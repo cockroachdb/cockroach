@@ -13,3 +13,7 @@ tsd.installed
 # Generated intermediates
 /build
 /index.html
+
+# Generated proto json/typescript/javascript
+/generated
+/ts/generated
