@@ -447,7 +447,7 @@ func MVCCPutProto(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roach
 
 type getBuffer struct {
 	meta  MVCCMetadata
-	value MVCCValue
+	value roachpb.Value
 	key   [1024]byte
 }
 
@@ -497,7 +497,13 @@ func MVCCGet(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consis
 		return nil, nil, err
 	}
 
-	return mvccGetInternal(iter, key, metaKey, timestamp, consistent, txn, buf)
+	value, intents, err := mvccGetInternal(iter, key, metaKey, timestamp, consistent, txn, buf)
+	if value == &buf.value {
+		value = &roachpb.Value{}
+		*value = buf.value
+		buf.value.Reset()
+	}
+	return value, intents, err
 }
 
 // mvccGetInternal parses the MVCCMetadata from the specified raw key
@@ -631,25 +637,21 @@ func mvccGetInternal(iter Iterator, key roachpb.Key, metaKey MVCCKey,
 		// already been read above, so there's nothing left to do.
 	}
 
+	if len(iter.unsafeValue()) == 0 {
+		// Value is deleted.
+		return nil, ignoredIntents, nil
+	}
+
 	value := &buf.value
 	if err := iter.ValueProto(value); err != nil {
 		return nil, nil, err
 	}
-
-	if value.Deleted {
-		value.Value = nil
-	} else if value.Value != nil {
-		// Set the timestamp if the value is not nil (i.e. not a deletion tombstone).
-		value.Value.Timestamp = &ts
-		if err := value.Value.Verify(key); err != nil {
-			return nil, nil, err
-		}
-	} else if !value.Deleted {
-		// Sanity check.
-		panic(fmt.Sprintf("encountered MVCC value at key %q with a nil roachpb.Value but with !Deleted: %+v", key, value))
+	// Set the timestamp if the value is not nil (i.e. not a deletion tombstone).
+	value.Timestamp = &ts
+	if err := value.Verify(key); err != nil {
+		return nil, nil, err
 	}
-
-	return value.Value, ignoredIntents, nil
+	return value, ignoredIntents, nil
 }
 
 // putBuffer holds pointer data needed by mvccPutInternal. Bundling
@@ -659,8 +661,7 @@ func mvccGetInternal(iter Iterator, key roachpb.Key, metaKey MVCCKey,
 type putBuffer struct {
 	meta    MVCCMetadata
 	newMeta MVCCMetadata
-	value   MVCCValue
-	pvalue  roachpb.Value
+	value   roachpb.Value
 	key     [1024]byte
 }
 
@@ -689,11 +690,9 @@ func MVCCPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Ti
 	}
 
 	buf := putBufferPool.Get().(*putBuffer)
-	buf.pvalue = value
-	buf.value.Reset()
-	buf.value.Value = &buf.pvalue
+	buf.value = value
 
-	err := mvccPutInternal(engine, ms, key, timestamp, buf.value, txn, buf)
+	err := mvccPutInternal(engine, ms, key, timestamp, &buf.value, txn, buf)
 
 	// Using defer would be more convenient, but it is measurably
 	// slower.
@@ -707,9 +706,8 @@ func MVCCDelete(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb
 	txn *roachpb.Transaction) error {
 	buf := putBufferPool.Get().(*putBuffer)
 	buf.value.Reset()
-	buf.value.Deleted = true
 
-	err := mvccPutInternal(engine, ms, key, timestamp, buf.value, txn, buf)
+	err := mvccPutInternal(engine, ms, key, timestamp, nil, txn, buf)
 
 	// Using defer would be more convenient, but it is measurably
 	// slower.
@@ -720,7 +718,7 @@ func MVCCDelete(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb
 // mvccPutInternal adds a new timestamped value to the specified key.
 // If value is nil, creates a deletion tombstone value.
 func mvccPutInternal(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
-	value MVCCValue, txn *roachpb.Transaction, buf *putBuffer) error {
+	value *roachpb.Value, txn *roachpb.Transaction, buf *putBuffer) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -739,10 +737,10 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp ro
 	}
 	if putIsInline {
 		var metaKeySize, metaValSize int64
-		if value.Deleted {
+		if value == nil {
 			metaKeySize, metaValSize, err = 0, 0, engine.Clear(metaKey)
 		} else {
-			buf.meta = MVCCMetadata{Value: value.Value}
+			buf.meta = MVCCMetadata{Value: value}
 			metaKeySize, metaValSize, err = PutProto(engine, metaKey, &buf.meta)
 		}
 		updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
@@ -787,22 +785,25 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp ro
 	} else {
 		// No existing metadata record. If this is a delete, do nothing;
 		// otherwise we can perform the write.
-		if value.Deleted {
+		if value == nil {
 			return nil
 		}
 	}
 	buf.newMeta = MVCCMetadata{Txn: txn, Timestamp: timestamp}
 	newMeta := &buf.newMeta
 
-	// Make sure to zero the redundant timestamp (timestamp is encoded
-	// into the key, so don't need it in both places).
-	if value.Value != nil {
-		value.Value.Timestamp = nil
-	}
-
 	// The metaKey is always the prefix of the versionKey.
 	versionKey := mvccEncodeTimestamp(metaKey, timestamp)
-	_, valueSize, err := PutProto(engine, versionKey, &buf.value)
+
+	var valueSize int64
+	if value != nil {
+		// Make sure to zero the redundant timestamp (timestamp is encoded into the
+		// key, so don't need it in both places).
+		value.Timestamp = nil
+		_, valueSize, err = PutProto(engine, versionKey, value)
+	} else {
+		err = engine.Put(versionKey, nil)
+	}
 	if err != nil {
 		return err
 	}
@@ -810,7 +811,7 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp ro
 	// Write the mvcc metadata now that we have sizes for the latest versioned value.
 	newMeta.KeyBytes = mvccVersionTimestampSize
 	newMeta.ValBytes = valueSize
-	newMeta.Deleted = value.Deleted
+	newMeta.Deleted = value == nil
 	metaKeySize, metaValSize, err := PutProto(engine, metaKey, newMeta)
 	if err != nil {
 		return err
@@ -1307,16 +1308,16 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, times
 			return util.Errorf("expected an MVCC value key: %s", kvs[0].Key)
 		}
 		// Get the bytes for the next version so we have size for stat counts.
-		value := MVCCValue{}
+		value := roachpb.Value{}
 		var valueSize int64
 		ok, _, valueSize, err = engine.GetProto(kvs[0].Key, &value)
-		if err != nil || !ok {
-			return util.Errorf("unable to fetch previous version for key %q (%t): %s", kvs[0].Key, ok, err)
+		if err != nil {
+			return util.Errorf("unable to fetch previous version for key %q: %s", kvs[0].Key, err)
 		}
 		// Update the keyMetadata with the next version.
 		newMeta := &MVCCMetadata{
 			Timestamp: ts,
-			Deleted:   value.Deleted,
+			Deleted:   !ok,
 			KeyBytes:  mvccVersionTimestampSize,
 			ValBytes:  valueSize,
 		}

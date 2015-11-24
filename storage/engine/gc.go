@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/gogo/protobuf/proto"
 )
 
 // GarbageCollector GCs MVCC key/values using a zone-specific GC
@@ -68,15 +67,11 @@ func (gc *GarbageCollector) Filter(keys []MVCCKey, values [][]byte) roachpb.Time
 			log.Errorf("unexpected MVCC metadata encountered: %q", key)
 			return roachpb.ZeroTimestamp
 		}
-		mvccVal := MVCCValue{}
-		if err := proto.Unmarshal(values[i], &mvccVal); err != nil {
-			log.Errorf("unable to unmarshal MVCC value %q: %v", key, err)
-			return roachpb.ZeroTimestamp
-		}
+		deleted := len(values[i]) == 0
 		if i == 0 {
 			// If the first value isn't a deletion tombstone, don't consider
 			// it for GC. It should always survive if non-deleted.
-			if !mvccVal.Deleted {
+			if !deleted {
 				survivors = true
 				continue
 			}
@@ -85,7 +80,7 @@ func (gc *GarbageCollector) Filter(keys []MVCCKey, values [][]byte) roachpb.Time
 		if ts.Less(gc.expiration) {
 			delTS = ts
 			break
-		} else if !mvccVal.Deleted {
+		} else if !deleted {
 			survivors = true
 		}
 	}

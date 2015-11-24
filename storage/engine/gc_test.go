@@ -40,8 +40,11 @@ var (
 	}
 )
 
-func serializedMVCCValue(deleted bool, t *testing.T) []byte {
-	data, err := proto.Marshal(&MVCCValue{Deleted: deleted})
+func serializedValue(deleted bool, t *testing.T) []byte {
+	if deleted {
+		return nil
+	}
+	data, err := proto.Marshal(&roachpb.Value{})
 	if err != nil {
 		t.Fatalf("unexpected marshal error: %v", err)
 	}
@@ -54,8 +57,8 @@ func TestGarbageCollectorFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	gcA := NewGarbageCollector(makeTS(0, 0), config.GCPolicy{TTLSeconds: 1})
 	gcB := NewGarbageCollector(makeTS(0, 0), config.GCPolicy{TTLSeconds: 2})
-	n := serializedMVCCValue(false, t)
-	d := serializedMVCCValue(true, t)
+	n := serializedValue(false, t)
+	d := serializedValue(true, t)
 	testData := []struct {
 		gc       *GarbageCollector
 		time     roachpb.Timestamp
