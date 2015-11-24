@@ -10,7 +10,7 @@ CREATE TABLE users (
 statement ok
 INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 
-query TTTTT colnames
+query TTBITB colnames
 SHOW INDEX FROM users
 ----
 Table Name    Unique Seq Column Storing
@@ -25,7 +25,7 @@ DROP INDEX users@ffo
 statement ok
 DROP INDEX IF EXISTS users@ffo
 
-query TTTTT colnames
+query TTBITB colnames
 SHOW INDEX FROM users
 ----
 Table Name    Unique Seq Column Storing
@@ -37,7 +37,7 @@ users bar     true   2   name   false
 statement ok
 DROP INDEX IF EXISTS users@foo
 
-query TTTTT colnames
+query TTBITB colnames
 SHOW INDEX FROM users
 ----
 Table Name    Unique Seq Column Storing
@@ -60,7 +60,7 @@ user testuser
 statement ok
 DROP INDEX users@bar
 
-query TTTTT colnames
+query TTBITB colnames
 SHOW INDEX FROM users
 ----
 Table Name    Unique Seq Column Storing

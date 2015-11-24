@@ -62,7 +62,7 @@ SELECT (SELECT a FROM abc WHERE false)
 ----
 NULL
 
-query I
+query II
 VALUES (1, (SELECT (2)))
 ----
 1 2
@@ -120,7 +120,7 @@ SELECT * FROM xyz
 4 5  6
 7 11 12
 
-query I
+query B
 SELECT 1 IN (SELECT x FROM xyz ORDER BY x DESC)
 ----
 true

@@ -8,7 +8,7 @@ CREATE TABLE t (
   UNIQUE INDEX c_idx (c) STORING (a, b, d)
 )
 
-query TTTTT colnames
+query TTBITB colnames
 SHOW INDEX FROM t
 ----
 Table Name    Unique Seq Column Storing

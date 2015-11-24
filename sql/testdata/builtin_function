@@ -175,12 +175,12 @@ SELECT repeat('Pg', -1) || 'empty'
 ----
 empty
 
-query T
+query I
 SELECT ascii('x')
 ----
 120
 
-query T
+query I
 select ascii('禅');
 ----
 31109
@@ -380,7 +380,7 @@ SELECT right('abcde💩', 2)
 ----
 e💩
 
-query T
+query RRRII
 SELECT abs(-1.2), abs(1.2), abs(-0.0), abs(0), abs(1)
 ----
 1.2 1.2 0 0 1
@@ -388,77 +388,77 @@ SELECT abs(-1.2), abs(1.2), abs(-0.0), abs(0), abs(1)
 query error abs: abs of min integer value \(-9223372036854775808\) not defined
 SELECT abs(-9223372036854775808)
 
-query T
+query I
 SELECT abs(-9223372036854775807)
 ----
 9223372036854775807
 
-query T
+query B
 SELECT abs(sin(pi())) < 1e-12
 ----
 true
 
-query T
+query RR
 SELECT acos(-0.5), acos(0.5)
 ----
 2.0943951023931957 1.0471975511965976
 
-query T
+query RRR
 SELECT asin(-0.5), asin(0.5), asin(1.5)
 ----
 -0.5235987755982989 0.5235987755982989 NaN
 
-query T
+query RR
 SELECT atan(-0.5), atan(0.5)
 ----
 -0.4636476090008061 0.4636476090008061
 
-query T
+query RR
 SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0)
 ----
 -1.1071487177940904 1.1071487177940904
 
-query T
+query RRR
 SELECT ceil(-0.5), ceil(0.5), ceiling(0.5)
 ----
 -0 1 1
 
-query T
+query RR
 SELECT cos(-0.5), cos(0.5)
 ----
 0.8775825618903728 0.8775825618903728
 
-query T
+query RR
 SELECT degrees(-0.5), degrees(0.5)
 ----
 -28.64788975654116 28.64788975654116
 
-query T
+query RRR
 SELECT div(-1.0, 2.0), div(1.0, 2.0), div(1.0, 0.0)
 ----
 -0.5 0.5 +Inf
 
-query T
+query RR
 SELECT exp(-1.0), exp(1.0)
 ----
 0.36787944117144233 2.718281828459045
 
-query T
+query RR
 SELECT floor(-1.5), floor(1.5)
 ----
 -2 1
 
-query T
+query RR
 SELECT ln(-2.0), ln(2.0)
 ----
 NaN 0.6931471805599453
 
-query T
+query R
 SELECT log(10.0)
 ----
 1
 
-query T
+query RRI
 SELECT mod(5.0, 2.0), mod(1.0, 0.0), mod(5, 2)
 ----
 1 NaN 1
@@ -469,57 +469,57 @@ SELECT mod(5.0, 2.0), mod(1.0, 0.0), mod(5, 2)
 query error mod: zero modulus
 SELECT mod(5, 0)
 
-query T
+query II
 SELECT mod(-100, -8), mod(-100, 8)
 ----
 -4 -4
 
-query T
+query I
 SELECT mod(-9223372036854775808, 3)
 ----
 -2
 
-query T
+query I
 SELECT mod(-9223372036854775808, -1)
 ----
 0
 
-qery T
+query I
 SELECT mod(9223372036854775807, -1)
 ----
 0
 
-qery T
+query I
 SELECT mod(9223372036854775807, -2)
 ----
 1
 
-qery T
+query I
 SELECT mod(9223372036854775807, 1)
 ----
 0
 
-qery T
+query I
 SELECT mod(9223372036854775807, 2)
 ----
 1
 
-qery T
+query I
 SELECT mod(9223372036854775807, 4)
 ----
 3
 
-query T
+query R
 SELECT pi()
 ----
 3.141592653589793
 
-query T
+query RR
 SELECT pow(-3.0, 2.0), pow(3.0, 2.0)
 ----
 9 9
 
-query T
+query RR
 SELECT radians(-45.0), radians(45.0)
 ----
 -0.7853981633974483 0.7853981633974483
@@ -530,23 +530,23 @@ SELECT radians(-45.0), radians(45.0)
 query error round: number of digits must be greater than 0
 SELECT round(41.2, -1)
 
-query T
+query RR
 SELECT round(4.2, 0), round(4.2, 50)
 ----
 4 4.2
 
-query T
+query R
 SELECT round(1e-308, 324)
 ----
 1e-308
 
 # round to nearest even
-query T
+query RRRR
 SELECT round(-2.5, 0), round(-1.5, 0), round(1.5, 0), round(2.5, 0)
 ----
 -2 -2 2 2
 
-query T
+query RRRRRR
 SELECT round(-2.5), round(-1.5), round(-0.0), round(0.0), round(1.5), round(2.5)
 ----
 -2 -2 -0 0 2 2
@@ -554,47 +554,47 @@ SELECT round(-2.5), round(-1.5), round(-0.0), round(0.0), round(1.5), round(2.5)
 # Test rounding to 14 digits, because the logic test itself
 # formats floats rounded to 15 digits behind the decimal point.
 
-query T
+query RRR
 SELECT round(-2.123456789, 5), round(2.123456789, 5), round(2.12345678901234567890, 14)
 ----
 -2.12346 2.12346 2.12345678901235
 
-query T
+query RR
 SELECT round(-1.7976931348623157e+308, 1), round(1.7976931348623157e+308, 1)
 ----
 -1.7976931348623157e+308 1.7976931348623157e+308
 
-query T
+query III
 SELECT sign(-2), sign(0), sign(2)
 ----
 -1 0 1
 
-query T
+query RRRR
 SELECT sign(-2.0), sign(-0.0), sign(0.0), sign(2.0)
 ----
 -1 0 0 1
 
-query T
+query RRR
 SELECT sin(-1.0), sin(0.0), sin(1.0)
 ----
 -0.8414709848078965 0 0.8414709848078965
 
-query T
+query RR
 SELECT sqrt(-1.0), sqrt(4.0)
 ----
 NaN 2
 
-query T
+query RR
 SELECT cbrt(-1.0), cbrt(27.0)
 ----
 -1 3
 
-query T
+query RRR
 SELECT tan(-5.0), tan(0.0), tan(5.0)
 ----
 3.3805150062465854 0 -3.3805150062465854
 
-query T
+query RRR
 SELECT trunc(-0.0), trunc(0.0), trunc(1.9)
 ----
 -0 0 1
@@ -696,7 +696,7 @@ foobarbaz
 query error regexp_replace: invalid regexp flag: 'z'
 SELECT regexp_replace(E'fooBar\nbaz', 'b(..)$', E'X\\&Y', 'z')
 
-query B
+query BI
 SELECT experimental_unique_bytes() < experimental_unique_bytes(), length(experimental_unique_bytes())
 ----
 true 9
@@ -706,7 +706,7 @@ SELECT experimental_unique_int() < experimental_unique_int()
 ----
 true
 
-query B
+query BI
 SELECT experimental_uuid_v4() != experimental_uuid_v4(), length(experimental_uuid_v4())
 ----
 true 16
@@ -717,47 +717,47 @@ SELECT GREATEST()
 query error syntax error at or near.*
 SELECT LEAST()
 
-query T
+query I
 SELECT GREATEST(4, 5, 7, 1, 2)
 ----
 7
 
-query T
+query I
 SELECT LEAST(4, 5, 7, 1, 2)
 ----
 1
 
-query T
+query I
 SELECT GREATEST(4, NULL, 7, 1, 2)
 ----
 7
 
-query T
+query I
 SELECT GREATEST(NULL, NULL, 7, NULL, 2)
 ----
 7
 
-query T
+query I
 SELECT GREATEST(NULL, NULL, NULL, NULL, 2)
 ----
 2
 
-query T
+query I
 SELECT GREATEST(2, NULL, NULL, NULL, NULL)
 ----
 2
 
-query T
+query I
 SELECT LEAST(4, NULL, 7, 1, 2)
 ----
 1
 
-query T
+query I
 SELECT GREATEST(NULL, NULL, NULL)
 ----
 NULL
 
-query T
+query I
 SELECT LEAST(NULL, NULL, NULL)
 ----
 NULL

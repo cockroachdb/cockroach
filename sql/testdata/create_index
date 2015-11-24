@@ -23,7 +23,7 @@ user root
 statement ok
 CREATE INDEX foo ON t (b)
 
-query TTTTT colnames
+query TTBITB colnames
 SHOW INDEX FROM t
 ----
 Table Name    Unique Seq Column Storing
@@ -47,7 +47,7 @@ EXPLAIN (DEBUG) SELECT * FROM t@foo
 statement error duplicate key value \(b\)=\(1\) violates unique constraint "bar"
 CREATE UNIQUE INDEX bar ON t (b)
 
-query TTTTT colnames
+query TTBITB colnames
 SHOW INDEX FROM t
 ----
 Table Name    Unique Seq Column Storing

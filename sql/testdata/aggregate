@@ -23,7 +23,7 @@ SELECT COUNT(k, v) FROM kv
 query error unimplemented ORDER BY with GROUP BY/aggregation
 SELECT COUNT(k) FROM kv ORDER BY v
 
-query I colnames
+query IIII colnames
 SELECT COUNT(*), COUNT(kv.*), COUNT(k), COUNT(kv.v) FROM kv
 ----
 COUNT(*) COUNT(kv.*) COUNT(k) COUNT(kv.v)
@@ -104,12 +104,12 @@ CREATE TABLE abc (
 statement ok
 INSERT INTO abc VALUES ('one', 1.5, true), ('two', 2.0, false)
 
-query RRR
+query TRB
 SELECT MIN(a), MIN(b), MIN(c) FROM abc
 ----
 one 1.5 false
 
-query RRR
+query TRB
 SELECT MAX(a), MAX(b), MAX(c) FROM abc
 ----
 two 2 true

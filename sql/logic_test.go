@@ -273,12 +273,13 @@ SET DATABASE = test;
 			} else {
 				// TODO(pmattis): Parse "query <type-string> <sort-mode> <label>". The
 				// type string specifies the number of columns and their types: T for
-				// text, I for integer and R for floating point. The sort mode is one
-				// of "nosort", "rowsort" or "valuesort". The default is "nosort".
+				// text, I for integer, R for floating point, and B for boolean. The
+				// sort mode is one of "nosort", "rowsort", "valuesort", or "colnames".
+				// The default is "nosort".
 				//
 				// The label is optional. If specified, the test runner stores a hash
 				// of the results of the query under the given label. If the label is
-				// reused, the test runner verifieds that the results are the
+				// reused, the test runner verifies that the results are the
 				// same. This can be used to verify that two or more queries in the
 				// same test script that are logically equivalent always generate the
 				// same output.
@@ -297,6 +298,9 @@ SET DATABASE = test;
 
 						case "colnames":
 							query.colNames = true
+
+						default:
+							t.Fatalf("%s: unknown sort mode: %s", query.pos, opt)
 						}
 					}
 				}
@@ -353,7 +357,7 @@ SET DATABASE = test;
 			t.execQuery(query)
 			t.success(path)
 
-		case "halt":
+		case "halt", "hash-threshold":
 			break
 
 		case "user":
@@ -367,6 +371,9 @@ SET DATABASE = test;
 
 		case "skipif", "onlyif":
 			t.Fatalf("unimplemented test statement: %s", s.Text())
+
+		default:
+			t.Fatalf("%s:%d: unknown command: %s", path, s.line, cmd)
 		}
 	}
 
@@ -417,6 +424,10 @@ func (t *logicTest) execQuery(query logicQuery) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(query.colTypes) != len(cols) {
+		t.Fatalf("%s: expected %d columns based on type-string, but found %d",
+			query.pos, len(query.colTypes), len(cols))
+	}
 	vals := make([]interface{}, len(cols))
 	for i := range vals {
 		vals[i] = new(interface{})
@@ -430,8 +441,31 @@ func (t *logicTest) execQuery(query logicQuery) {
 		if err := rows.Scan(vals...); err != nil {
 			t.Fatal(err)
 		}
-		for _, v := range vals {
+		for i, v := range vals {
 			if val := *v.(*interface{}); val != nil {
+				valT := reflect.TypeOf(val).Kind()
+				colT := query.colTypes[i]
+				switch colT {
+				case 'T':
+					if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
+						t.Fatalf("%s: expected text value for column %d, but found %s", query.pos, i, valT)
+					}
+				case 'I':
+					if valT != reflect.Int64 {
+						t.Fatalf("%s: expected int value for column %d, but found %s", query.pos, i, valT)
+					}
+				case 'R':
+					if valT != reflect.Float64 {
+						t.Fatalf("%s: expected float value for column %d, but found %s", query.pos, i, valT)
+					}
+				case 'B':
+					if valT != reflect.Bool {
+						t.Fatalf("%s: expected boolean value for column %d, but found %s", query.pos, i, valT)
+					}
+				default:
+					t.Fatalf("%s: unknown type in type string: %c in %s", query.pos, colT, query.colTypes)
+				}
+
 				// We split string results on whitespace and append a separate result
 				// for each string. A bit unusual, but otherwise we can't match strings
 				// containing whitespace.

@@ -8,7 +8,7 @@ CREATE TABLE t (
   c FLOAT DEFAULT random()
 )
 
-query TTTT colnames
+query TTBT colnames
 SHOW COLUMNS FROM t
 ----
 Field Type      Null Default

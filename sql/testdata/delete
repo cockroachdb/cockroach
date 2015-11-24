@@ -33,15 +33,15 @@ query II
 SELECT * FROM kv
 ----
 
-query T
+query TTTT
 EXPLAIN (DEBUG) SELECT * FROM kv
 ----
 
-query T
+query TTTT
 EXPLAIN (DEBUG) SELECT * FROM kv@foo
 ----
 
-query T
+query TTTT
 EXPLAIN (DEBUG) SELECT * FROM kv@bar
 ----
 
