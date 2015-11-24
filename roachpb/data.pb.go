@@ -274,6 +274,9 @@ func (*StoreIdent) ProtoMessage()    {}
 type SplitTrigger struct {
 	UpdatedDesc RangeDescriptor `protobuf:"bytes,1,opt,name=updated_desc" json:"updated_desc"`
 	NewDesc     RangeDescriptor `protobuf:"bytes,2,opt,name=new_desc" json:"new_desc"`
+	// initial_leader_store_id designates the replica which should start
+	// a raft election upon processing this split.
+	InitialLeaderStoreID StoreID `protobuf:"varint,3,opt,name=initial_leader_store_id,casttype=StoreID" json:"initial_leader_store_id"`
 }
 
 func (m *SplitTrigger) Reset()         { *m = SplitTrigger{} }
@@ -699,6 +702,9 @@ func (m *SplitTrigger) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n4
+	data[i] = 0x18
+	i++
+	i = encodeVarintData(data, i, uint64(m.InitialLeaderStoreID))
 	return i, nil
 }
 
@@ -1231,6 +1237,7 @@ func (m *SplitTrigger) Size() (n int) {
 	n += 1 + l + sovData(uint64(l))
 	l = m.NewDesc.Size()
 	n += 1 + l + sovData(uint64(l))
+	n += 1 + sovData(uint64(m.InitialLeaderStoreID))
 	return n
 }
 
@@ -2047,6 +2054,25 @@ func (m *SplitTrigger) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field InitialLeaderStoreID", wireType)
+			}
+			m.InitialLeaderStoreID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.InitialLeaderStoreID |= (StoreID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
