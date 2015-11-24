@@ -448,19 +448,19 @@ func (t *logicTest) execQuery(query logicQuery) {
 				switch colT {
 				case 'T':
 					if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
-						t.Fatalf("%s: expected text value for column %d, but found %s", query.pos, i, valT)
+						t.Fatalf("%s: expected text value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				case 'I':
 					if valT != reflect.Int64 {
-						t.Fatalf("%s: expected int value for column %d, but found %s", query.pos, i, valT)
+						t.Fatalf("%s: expected int value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				case 'R':
 					if valT != reflect.Float64 {
-						t.Fatalf("%s: expected float value for column %d, but found %s", query.pos, i, valT)
+						t.Fatalf("%s: expected float value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				case 'B':
 					if valT != reflect.Bool {
-						t.Fatalf("%s: expected boolean value for column %d, but found %s", query.pos, i, valT)
+						t.Fatalf("%s: expected boolean value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				default:
 					t.Fatalf("%s: unknown type in type string: %c in %s", query.pos, colT, query.colTypes)
