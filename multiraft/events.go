@@ -61,6 +61,14 @@ type EventMembershipChangeCommitted struct {
 	Callback func(error)
 }
 
+// An EventSnapshot is broadcast whenever a snapshot message coming.
+type EventSnapshot struct {
+	GroupID  roachpb.RangeID
+	Snapshot raftpb.Snapshot
+	// Callback should be invoked when snapshot have been applied.
+	Callback func()
+}
+
 // Commands are encoded with a 1-byte version (currently 0), a 16-byte ID,
 // followed by the payload. This inflexible encoding is used so we can efficiently
 // parse the command id while processing the logs.

@@ -92,6 +92,7 @@ type Client struct {
 	clock        *hlc.Clock
 	remoteClocks *RemoteClockMonitor
 	remoteOffset RemoteOffset
+	ctx          *Context
 }
 
 // NewClient returns a client RPC stub for the specified address
@@ -131,6 +132,7 @@ func NewClient(addr net.Addr, context *Context) *Client {
 		tlsConfig:    tlsConfig,
 		clock:        context.localClock,
 		remoteClocks: context.RemoteClocks,
+		ctx:          context,
 	}
 
 	c.healthy.Store(make(chan struct{}))
@@ -243,7 +245,9 @@ func (c *Client) close() {
 	case <-c.closer:
 	case <-c.Closed:
 	default:
-		delete(clients, c.key)
+		if !c.ctx.DisableCache {
+			delete(clients, c.key)
+		}
 		close(c.closer)
 	}
 }

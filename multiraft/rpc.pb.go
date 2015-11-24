@@ -12,6 +12,7 @@
 		RaftMessageRequest
 		RaftMessageResponse
 		ConfChangeContext
+		MultiPackageMessageRequest
 */
 package multiraft
 
@@ -26,6 +27,8 @@ import raftpb "github.com/coreos/etcd/raft/raftpb"
 import github_com_cockroachdb_cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 
 import io "io"
+
+import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -68,10 +71,24 @@ func (m *ConfChangeContext) Reset()         { *m = ConfChangeContext{} }
 func (m *ConfChangeContext) String() string { return proto.CompactTextString(m) }
 func (*ConfChangeContext) ProtoMessage()    {}
 
+// MultiPackageMessageRequest is the request used to send snapshot messages splited into multi-package using our
+// protobuf-based RPC codec.
+type MultiPackageMessageRequest struct {
+	GroupID github_com_cockroachdb_cockroach_roachpb.RangeID `protobuf:"varint,1,req,name=group_id,casttype=github.com/cockroachdb/cockroach/roachpb.RangeID" json:"group_id"`
+	// package id from 0 to int_max, -1 means the last package.
+	PackageId int32  `protobuf:"varint,2,opt,name=package_id" json:"package_id"`
+	RawBytes  []byte `protobuf:"bytes,3,opt,name=raw_bytes" json:"raw_bytes,omitempty"`
+}
+
+func (m *MultiPackageMessageRequest) Reset()         { *m = MultiPackageMessageRequest{} }
+func (m *MultiPackageMessageRequest) String() string { return proto.CompactTextString(m) }
+func (*MultiPackageMessageRequest) ProtoMessage()    {}
+
 func init() {
 	proto.RegisterType((*RaftMessageRequest)(nil), "cockroach.multiraft.RaftMessageRequest")
 	proto.RegisterType((*RaftMessageResponse)(nil), "cockroach.multiraft.RaftMessageResponse")
 	proto.RegisterType((*ConfChangeContext)(nil), "cockroach.multiraft.ConfChangeContext")
+	proto.RegisterType((*MultiPackageMessageRequest)(nil), "cockroach.multiraft.MultiPackageMessageRequest")
 }
 func (m *RaftMessageRequest) Marshal() (data []byte, err error) {
 	size := m.Size()
@@ -172,6 +189,36 @@ func (m *ConfChangeContext) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *MultiPackageMessageRequest) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *MultiPackageMessageRequest) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintRpc(data, i, uint64(m.GroupID))
+	data[i] = 0x10
+	i++
+	i = encodeVarintRpc(data, i, uint64(m.PackageId))
+	if m.RawBytes != nil {
+		data[i] = 0x1a
+		i++
+		i = encodeVarintRpc(data, i, uint64(len(m.RawBytes)))
+		i += copy(data[i:], m.RawBytes)
+	}
+	return i, nil
+}
+
 func encodeFixed64Rpc(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	data[offset+1] = uint8(v >> 8)
@@ -229,6 +276,18 @@ func (m *ConfChangeContext) Size() (n int) {
 	}
 	l = m.Replica.Size()
 	n += 1 + l + sovRpc(uint64(l))
+	return n
+}
+
+func (m *MultiPackageMessageRequest) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovRpc(uint64(m.GroupID))
+	n += 1 + sovRpc(uint64(m.PackageId))
+	if m.RawBytes != nil {
+		l = len(m.RawBytes)
+		n += 1 + l + sovRpc(uint64(l))
+	}
 	return n
 }
 
@@ -584,6 +643,127 @@ func (m *ConfChangeContext) Unmarshal(data []byte) error {
 			}
 			iNdEx += skippy
 		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MultiPackageMessageRequest) Unmarshal(data []byte) error {
+	var hasFields [1]uint64
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRpc
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MultiPackageMessageRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MultiPackageMessageRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GroupID", wireType)
+			}
+			m.GroupID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.GroupID |= (github_com_cockroachdb_cockroach_roachpb.RangeID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			hasFields[0] |= uint64(0x00000001)
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PackageId", wireType)
+			}
+			m.PackageId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.PackageId |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RawBytes", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthRpc
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.RawBytes = append([]byte{}, data[iNdEx:postIndex]...)
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRpc(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRpc
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("group_id")
 	}
 
 	if iNdEx > l {

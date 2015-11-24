@@ -305,6 +305,39 @@ func setLastIndex(eng engine.Engine, rangeID roachpb.RangeID, lastIndex uint64) 
 
 // Snapshot implements the raft.Storage interface.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
+	r.snapshotLock.Lock()
+	defer r.snapshotLock.Unlock()
+
+	if r.finishSnapshot {
+		r.finishSnapshot = false
+		snap := <-r.snapshotData
+		return snap.snapshot, snap.err
+	}
+
+	if r.pendingSnapshot {
+		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+	}
+
+	r.pendingSnapshot = true
+	go r.processSnapshotReq()
+	return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+}
+
+func (r *Replica) processSnapshotReq() {
+	snapshot, err := r.createSnapshot()
+	r.snapshotData <- snapshotData{
+		snapshot: snapshot,
+		err:      err,
+	}
+
+	r.snapshotLock.Lock()
+	defer r.snapshotLock.Unlock()
+	r.pendingSnapshot = false
+	r.finishSnapshot = true
+}
+
+// createSnapshot create snapshot data
+func (r *Replica) createSnapshot() (raftpb.Snapshot, error) {
 	// Copy all the data from a consistent RocksDB snapshot into a RaftSnapshotData.
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
@@ -444,8 +477,8 @@ func (r *Replica) updateRangeInfo() error {
 	return nil
 }
 
-// ApplySnapshot implements the multiraft.WriteableGroupStorage interface.
-func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
+// applySnapshot restore the snapshot into the replica.
+func (r *Replica) applySnapshot(snap raftpb.Snapshot) error {
 	snapData := roachpb.RaftSnapshotData{}
 	err := proto.Unmarshal(snap.Data, &snapData)
 	if err != nil {

@@ -53,3 +53,15 @@ message ConfChangeContext {
   // Replica contains full details about the replica being added or removed.
   optional roachpb.ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
 }
+
+// MultiPackageMessageRequest is the request used to send snapshot messages splited into multi-package using our
+// protobuf-based RPC codec.
+message MultiPackageMessageRequest {
+  required uint64 group_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "GroupID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+
+  // package id from 0 to int_max, -1 means the last package.
+  optional int32 package_id = 2 [(gogoproto.nullable) = false];
+  optional bytes raw_bytes = 3;
+}
