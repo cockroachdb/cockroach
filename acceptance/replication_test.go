@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/acceptance/localcluster"
+	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -40,14 +40,14 @@ func countRangeReplicas(db *client.DB) (int, error) {
 	return len(desc.Replicas), nil
 }
 
-func checkRangeReplication(t *testing.T, cluster *localcluster.Cluster, d time.Duration) {
+func checkRangeReplication(t util.Tester, c *cluster.LocalCluster, d time.Duration) {
 	// Always talk to node 0.
-	client, dbStopper := makeDBClient(t, cluster, 0)
+	client, dbStopper := c.MakeClient(t, 0)
 	defer dbStopper.Stop()
 
 	wantedReplicas := 3
-	if len(cluster.Nodes) < 3 {
-		wantedReplicas = len(cluster.Nodes)
+	if len(c.Nodes) < 3 {
+		wantedReplicas = len(c.Nodes)
 	}
 
 	log.Infof("waiting for first range to have %d replicas", wantedReplicas)
@@ -74,7 +74,7 @@ func checkRangeReplication(t *testing.T, cluster *localcluster.Cluster, d time.D
 }
 
 func TestRangeReplication(t *testing.T) {
-	l := localcluster.Create(*numNodes, stopper)
+	l := cluster.CreateLocal(*numNodes, stopper) // intentionally using local cluster
 	l.Start()
 	defer l.AssertAndStop(t)
 

@@ -38,31 +38,31 @@ import (
 // independent keys, while nodes are being killed and restarted continuously.
 // The test measures not write performance, but cluster recovery.
 func TestChaos(t *testing.T) {
-	c := StartCluster()
+	c := StartCluster(t)
 	defer c.AssertAndStop(t)
 
-	checkRangeReplication(t, l, 20*time.Second)
+	num := c.NumNodes()
 
-	errs := make(chan error, *numNodes)
+	errs := make(chan error, num)
 	start := time.Now()
 	deadline := start.Add(*duration)
 	var count int64
-	counts := make([]int64, *numNodes)
+	counts := make([]int64, num)
 	clients := make([]struct {
 		sync.RWMutex
 		db      *client.DB
 		stopper *stop.Stopper
-	}, *numNodes)
+	}, num)
 
 	initClient := func(i int) {
-		db, dbStopper := makeDBClient(t, l, i)
+		db, dbStopper := c.MakeClient(t, i)
 		if clients[i].stopper != nil {
 			clients[i].stopper.Stop()
 		}
 		clients[i].db, clients[i].stopper = db, dbStopper
 	}
 
-	for i := 0; i < *numNodes; i++ {
+	for i := 0; i < num; i++ {
 		initClient(i)
 		go func(i int) {
 			r, _ := randutil.NewPseudoRand()
@@ -111,28 +111,28 @@ func TestChaos(t *testing.T) {
 				return
 			default:
 			}
-			nodes := rnd.Perm(*numNodes)[:rnd.Intn(*numNodes)+1]
+			nodes := rnd.Perm(num)[:rnd.Intn(num)+1]
 
 			log.Infof("round %d: restarting nodes %v", round, nodes)
-			for _, i := range nodes {
+			for i := 0; i < num; i++ {
 				clients[i].Lock()
 			}
-			for _, i := range nodes {
+			for i := 0; i < num; i++ {
 				log.Infof("restarting %v", i)
-				l.Nodes[i].Kill()
-				l.Nodes[i].Restart(5)
+				c.Kill(i)
+				c.Restart(i)
 				initClient(i)
 				clients[i].Unlock()
 			}
 			for cur := atomic.LoadInt64(&count); time.Now().Before(deadline) &&
 				atomic.LoadInt64(&count) == cur; time.Sleep(time.Second) {
-				l.Assert(t)
+				c.Assert(t)
 				log.Warningf("monkey sleeping while cluster recovers...")
 			}
 		}
 	}()
 
-	for i := 0; i < *numNodes; {
+	for i := 0; i < num; {
 		select {
 		case <-teardown:
 		case <-stopper:
@@ -145,7 +145,7 @@ func TestChaos(t *testing.T) {
 		case <-time.After(1 * time.Second):
 			// Periodically print out progress so that we know the test is still
 			// running.
-			cur := make([]string, *numNodes)
+			cur := make([]string, num)
 			for i := range cur {
 				cur[i] = fmt.Sprintf("%d", atomic.LoadInt64(&counts[i]))
 			}

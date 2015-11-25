@@ -23,12 +23,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/acceptance/localcluster"
+	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/util"
 )
 
 func TestBuildInfo(t *testing.T) {
-	l := localcluster.Create(1, stopper)
+	l := cluster.CreateLocal(1, stopper) // intentionally using a local cluster
 	l.Start()
 	defer l.AssertAndStop(t)
 

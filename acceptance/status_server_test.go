@@ -27,7 +27,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/acceptance/localcluster"
+	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -45,11 +45,11 @@ var retryOptions = retry.Options{
 }
 
 // get performs an HTTPS GET to the specified path for a specific node.
-func get(t *testing.T, node *localcluster.Container, path string) []byte {
+func get(t *testing.T, node *cluster.Container, path string) []byte {
 	url := fmt.Sprintf("https://%s%s", node.Addr(""), path)
 	// TODO(bram) #2059: Remove retry logic.
 	for r := retry.Start(retryOptions); r.Next(); {
-		resp, err := localcluster.HTTPClient.Get(url)
+		resp, err := cluster.HTTPClient.Get(url)
 		if err != nil {
 			log.Infof("could not GET %s - %s", url, err)
 			continue
@@ -74,7 +74,7 @@ func get(t *testing.T, node *localcluster.Container, path string) []byte {
 // checkNode checks all the endpoints of the status server hosted by node and
 // requests info for the node with otherNodeID. That node could be the same
 // other node, the same node or "local".
-func checkNode(t *testing.T, node *localcluster.Container, nodeID, otherNodeID, expectedNodeID string) {
+func checkNode(t *testing.T, node *cluster.Container, nodeID, otherNodeID, expectedNodeID string) {
 	body := get(t, node, "/_status/details/"+otherNodeID)
 	var detail details
 	if err := json.Unmarshal(body, &detail); err != nil {
@@ -94,7 +94,7 @@ func checkNode(t *testing.T, node *localcluster.Container, nodeID, otherNodeID, 
 // TestStatusServer starts up an N node cluster and tests the status server on
 // each node.
 func TestStatusServer(t *testing.T) {
-	l := localcluster.Create(*numNodes, stopper)
+	l := cluster.CreateLocal(*numNodes, stopper) // intentionally using local cluster
 	l.ForceLogging = true
 	l.Start()
 	defer l.AssertAndStop(t)

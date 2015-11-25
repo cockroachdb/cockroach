@@ -25,7 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
@@ -33,19 +32,17 @@ import (
 // TestPut starts up an N node cluster and runs N workers that write
 // to independent keys.
 func TestPut(t *testing.T) {
-	l := localcluster.Create(*numNodes, stopper)
-	l.Start()
-	defer l.AssertAndStop(t)
+	c := StartCluster(t)
+	defer c.AssertAndStop(t)
 
-	db, dbStopper := makeDBClient(t, l, 0)
+	db, dbStopper := c.MakeClient(t, 0)
 	defer dbStopper.Stop()
-	checkRangeReplication(t, l, 20*time.Second)
 
-	errs := make(chan error, *numNodes)
+	errs := make(chan error, c.NumNodes())
 	start := time.Now()
 	deadline := start.Add(*duration)
 	var count int64
-	for i := 0; i < *numNodes; i++ {
+	for i := 0; i < c.NumNodes(); i++ {
 		go func() {
 			r, _ := randutil.NewPseudoRand()
 			value := randutil.RandBytes(r, 8192)
@@ -62,7 +59,7 @@ func TestPut(t *testing.T) {
 		}()
 	}
 
-	for i := 0; i < *numNodes; {
+	for i := 0; i < c.NumNodes(); {
 		baseCount := atomic.LoadInt64(&count)
 		select {
 		case <-stopper:
@@ -77,7 +74,7 @@ func TestPut(t *testing.T) {
 			// running.
 			count := atomic.LoadInt64(&count)
 			log.Infof("%d (%d/s)", count, count-baseCount)
-			l.Assert(t)
+			c.Assert(t)
 		}
 	}
 
