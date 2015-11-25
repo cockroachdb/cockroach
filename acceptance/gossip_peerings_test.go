@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -109,9 +110,12 @@ func TestGossipPeerings(t *testing.T) {
 	}
 	checkGossip(t, c, 20*time.Second, hasPeers(num))
 
-	// Restart another node.
+	// Restart another node (if there is one).
 	rand.Seed(randutil.NewPseudoSeed())
-	pickedNode := rand.Intn(num-1) + 1
+	var pickedNode int
+	if num > 1 {
+		pickedNode = rand.Intn(num-1) + 1
+	}
 	log.Infof("restarting node %d", pickedNode)
 	if err := c.Restart(pickedNode); err != nil {
 		t.Fatal(err)
@@ -159,7 +163,15 @@ func TestGossipRestart(t *testing.T) {
 
 	for i := 0; i < num; i++ {
 		db, dbStopper := c.MakeClient(t, i)
-		if kv, err := db.Inc("count", 1); err != nil {
+		if err := db.Del("count"); err != nil {
+			t.Fatal(err)
+		}
+		var kv client.KeyValue
+		if err := db.Txn(func(txn *client.Txn) error {
+			var err error
+			kv, err = txn.Inc("count", 1)
+			return err
+		}); err != nil {
 			t.Fatal(err)
 		} else if v := kv.ValueInt(); v != int64(i+1) {
 			t.Fatalf("unexpected value %d for write #%d (expected %d)", v, i, i+1)
