@@ -38,7 +38,7 @@ To add or update a go dependency:
 - create a PR with all the changes
 
 ### Style guide
-We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wiki/CodeReviewComments) fairly closely. In particular, you want to watch out for proper punctuation and capitalization in comments. We use two-space indents in non-Go code (in Go, we follow `gofmt` which indents with tabs). Format your code assuming it will be read in a window 100 columns wide. Wrap code and comments at 100 characters unless doing so makes the code less legible".
+We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wiki/CodeReviewComments) fairly closely. In particular, you want to watch out for proper punctuation and capitalization in comments. We use two-space indents in non-Go code (in Go, we follow `gofmt` which indents with tabs). Format your code assuming it will be read in a window 100 columns wide. Wrap code and comments at 100 characters unless doing so makes the code less legible.
 
 ### Code review workflow
 
