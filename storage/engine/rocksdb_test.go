@@ -204,19 +204,19 @@ func prewarmCache(rocksdb *RocksDB) {
 // timer). It then performs b.N MVCCScans in increments of numRows
 // keys over all of the data in the rocksdb instance, restarting at
 // the beginning of the keyspace, as many times as necessary.
-func runMVCCScan(numRows, numVersions int, b *testing.B) {
+func runMVCCScan(numRows, numVersions, valueSize int, b *testing.B) {
 	// Use the same number of keys for all of the mvcc scan
 	// benchmarks. Using a different number of keys per test gives
 	// preferential treatment to tests with fewer keys. Note that the
 	// datasets all fit in cache and the cache is pre-warmed.
 	const numKeys = 100000
 
-	rocksdb, stopper := setupMVCCScanData(numVersions, numKeys, 1024, b)
+	rocksdb, stopper := setupMVCCScanData(numVersions, numKeys, valueSize, b)
 	defer stopper.Stop()
 
 	prewarmCache(rocksdb)
 
-	b.SetBytes(int64(numRows * 1024))
+	b.SetBytes(int64(numRows * valueSize))
 	b.ResetTimer()
 
 	b.RunParallel(func(pb *testing.PB) {
@@ -240,72 +240,133 @@ func runMVCCScan(numRows, numVersions int, b *testing.B) {
 	b.StopTimer()
 }
 
-// The 1 version tests generate a rocksdb database that is 105M.
-func BenchmarkMVCCScan1Version1Row(b *testing.B) {
-	runMVCCScan(1, 1, b)
+func BenchmarkMVCCScan1Version1Row8Bytes(b *testing.B) {
+	runMVCCScan(1, 1, 8, b)
 }
 
-func BenchmarkMVCCScan1Version10Rows(b *testing.B) {
-	runMVCCScan(10, 1, b)
+func BenchmarkMVCCScan1Version1Row64Bytes(b *testing.B) {
+	runMVCCScan(1, 1, 64, b)
 }
 
-func BenchmarkMVCCScan1Version100Rows(b *testing.B) {
-	runMVCCScan(100, 1, b)
+func BenchmarkMVCCScan1Version1Row512Bytes(b *testing.B) {
+	runMVCCScan(1, 1, 512, b)
 }
 
-func BenchmarkMVCCScan1Version1000Rows(b *testing.B) {
-	runMVCCScan(1000, 1, b)
+func BenchmarkMVCCScan1Version10Rows8Bytes(b *testing.B) {
+	runMVCCScan(10, 1, 8, b)
 }
 
-// The 10 version tests generate a rocksdb database that is 564M.
-func BenchmarkMVCCScan10Versions1Row(b *testing.B) {
-	runMVCCScan(1, 10, b)
+func BenchmarkMVCCScan1Version10Rows64Bytes(b *testing.B) {
+	runMVCCScan(10, 1, 64, b)
 }
 
-func BenchmarkMVCCScan10Versions10Rows(b *testing.B) {
-	runMVCCScan(10, 10, b)
+func BenchmarkMVCCScan1Version10Rows512Bytes(b *testing.B) {
+	runMVCCScan(10, 1, 512, b)
 }
 
-func BenchmarkMVCCScan10Versions100Rows(b *testing.B) {
-	runMVCCScan(100, 10, b)
+func BenchmarkMVCCScan1Version100Rows8Bytes(b *testing.B) {
+	runMVCCScan(100, 1, 8, b)
 }
 
-func BenchmarkMVCCScan10Versions1000Rows(b *testing.B) {
-	runMVCCScan(1000, 10, b)
+func BenchmarkMVCCScan1Version100Rows64Bytes(b *testing.B) {
+	runMVCCScan(100, 1, 64, b)
 }
 
-// The 100 version tests generate a rocksdb database that is ~5G.
-func BenchmarkMVCCScan100Versions1Row(b *testing.B) {
-	runMVCCScan(1, 100, b)
+func BenchmarkMVCCScan1Version100Rows512Bytes(b *testing.B) {
+	runMVCCScan(100, 1, 512, b)
 }
 
-func BenchmarkMVCCScan100Versions10Rows(b *testing.B) {
-	runMVCCScan(10, 100, b)
+func BenchmarkMVCCScan1Version1000Rows8Bytes(b *testing.B) {
+	runMVCCScan(1000, 1, 8, b)
 }
 
-func BenchmarkMVCCScan100Versions100Rows(b *testing.B) {
-	runMVCCScan(100, 100, b)
+func BenchmarkMVCCScan1Version1000Rows64Bytes(b *testing.B) {
+	runMVCCScan(1000, 1, 64, b)
 }
 
-func BenchmarkMVCCScan100Versions1000Rows(b *testing.B) {
-	runMVCCScan(1000, 100, b)
+func BenchmarkMVCCScan1Version1000Rows512Bytes(b *testing.B) {
+	runMVCCScan(1000, 1, 512, b)
+}
+
+func BenchmarkMVCCScan10Versions1Row8Bytes(b *testing.B) {
+	runMVCCScan(1, 10, 8, b)
+}
+
+func BenchmarkMVCCScan10Versions1Row64Bytes(b *testing.B) {
+	runMVCCScan(1, 10, 64, b)
+}
+
+func BenchmarkMVCCScan10Versions1Row512Bytes(b *testing.B) {
+	runMVCCScan(1, 10, 512, b)
+}
+
+func BenchmarkMVCCScan10Versions10Rows8Bytes(b *testing.B) {
+	runMVCCScan(10, 10, 8, b)
+}
+
+func BenchmarkMVCCScan10Versions10Rows64Bytes(b *testing.B) {
+	runMVCCScan(10, 10, 64, b)
+}
+
+func BenchmarkMVCCScan10Versions10Rows512Bytes(b *testing.B) {
+	runMVCCScan(10, 10, 512, b)
+}
+
+func BenchmarkMVCCScan10Versions100Rows8Bytes(b *testing.B) {
+	runMVCCScan(100, 10, 8, b)
+}
+
+func BenchmarkMVCCScan10Versions100Rows64Bytes(b *testing.B) {
+	runMVCCScan(100, 10, 64, b)
+}
+
+func BenchmarkMVCCScan10Versions100Rows512Bytes(b *testing.B) {
+	runMVCCScan(100, 10, 512, b)
+}
+
+func BenchmarkMVCCScan10Versions1000Rows8Bytes(b *testing.B) {
+	runMVCCScan(1000, 10, 8, b)
+}
+
+func BenchmarkMVCCScan10Versions1000Rows64Bytes(b *testing.B) {
+	runMVCCScan(1000, 10, 64, b)
+}
+
+func BenchmarkMVCCScan10Versions1000Rows512Bytes(b *testing.B) {
+	runMVCCScan(1000, 10, 512, b)
+}
+
+func BenchmarkMVCCScan100Versions1Row512Bytes(b *testing.B) {
+	runMVCCScan(1, 100, 512, b)
+}
+
+func BenchmarkMVCCScan100Versions10Rows512Bytes(b *testing.B) {
+	runMVCCScan(10, 100, 512, b)
+}
+
+func BenchmarkMVCCScan100Versions100Rows512Bytes(b *testing.B) {
+	runMVCCScan(100, 100, 512, b)
+}
+
+func BenchmarkMVCCScan100Versions1000Rows512Bytes(b *testing.B) {
+	runMVCCScan(1000, 100, 512, b)
 }
 
 // runMVCCGet first creates test data (and resets the benchmarking
 // timer). It then performs b.N MVCCGets.
-func runMVCCGet(numVersions int, b *testing.B) {
+func runMVCCGet(numVersions, valueSize int, b *testing.B) {
 	// Use the same number of keys for all of the mvcc get
 	// benchmarks. Using a different number of keys per test gives
 	// preferential treatment to tests with fewer keys. Note that the
 	// datasets all fit in cache and the cache is pre-warmed.
 	const numKeys = 100000
 
-	rocksdb, stopper := setupMVCCScanData(numVersions, numKeys, 1024, b)
+	rocksdb, stopper := setupMVCCScanData(numVersions, numKeys, valueSize, b)
 	defer stopper.Stop()
 
 	prewarmCache(rocksdb)
 
-	b.SetBytes(1024)
+	b.SetBytes(int64(valueSize))
 	b.ResetTimer()
 
 	b.RunParallel(func(pb *testing.PB) {
@@ -320,7 +381,7 @@ func runMVCCGet(numVersions int, b *testing.B) {
 				b.Fatalf("failed get: %s", err)
 			} else if valueBytes, err := v.GetBytes(); err != nil {
 				b.Fatal(err)
-			} else if len(valueBytes) != 1024 {
+			} else if len(valueBytes) != valueSize {
 				b.Fatalf("unexpected value size: %d", len(valueBytes))
 			}
 		}
@@ -329,16 +390,40 @@ func runMVCCGet(numVersions int, b *testing.B) {
 	b.StopTimer()
 }
 
-func BenchmarkMVCCGet1Version(b *testing.B) {
-	runMVCCGet(1, b)
+func BenchmarkMVCCGet1Version8Bytes(b *testing.B) {
+	runMVCCGet(1, 8, b)
 }
 
-func BenchmarkMVCCGet10Versions(b *testing.B) {
-	runMVCCGet(10, b)
+func BenchmarkMVCCGet1Version64Bytes(b *testing.B) {
+	runMVCCGet(1, 64, b)
 }
 
-func BenchmarkMVCCGet100Versions(b *testing.B) {
-	runMVCCGet(100, b)
+func BenchmarkMVCCGet1Version512Bytes(b *testing.B) {
+	runMVCCGet(1, 512, b)
+}
+
+func BenchmarkMVCCGet10Versions8Bytes(b *testing.B) {
+	runMVCCGet(10, 8, b)
+}
+
+func BenchmarkMVCCGet10Versions64Bytes(b *testing.B) {
+	runMVCCGet(10, 64, b)
+}
+
+func BenchmarkMVCCGet10Versions512Bytes(b *testing.B) {
+	runMVCCGet(10, 512, b)
+}
+
+func BenchmarkMVCCGet100Versions8Bytes(b *testing.B) {
+	runMVCCGet(100, 8, b)
+}
+
+func BenchmarkMVCCGet100Versions64Bytes(b *testing.B) {
+	runMVCCGet(100, 64, b)
+}
+
+func BenchmarkMVCCGet100Versions512Bytes(b *testing.B) {
+	runMVCCGet(100, 512, b)
 }
 
 func runMVCCPut(valueSize int, b *testing.B) {
