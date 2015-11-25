@@ -100,6 +100,8 @@ func TestSendAndReceive(t *testing.T) {
 		defer server.Close()
 
 		addr := server.Addr()
+		// Have to call g.SetNodeID before call g.AddInfo
+		g.SetNodeID(roachpb.NodeID(nodeID))
 		if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
 			&roachpb.NodeDescriptor{
 				Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
@@ -250,6 +252,8 @@ func TestInOrderDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	addr := server.Addr()
+	// Have to set gossip.NodeID before call gossip.AddInofXXX
+	g.SetNodeID(nodeID)
 	if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
 		&roachpb.NodeDescriptor{
 			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),

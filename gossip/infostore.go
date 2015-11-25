@@ -111,6 +111,9 @@ func newInfoStore(nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr) infoStore
 // newInfo allocates and returns a new info object using specified key,
 // value, and time-to-live.
 func (is *infoStore) newInfo(val []byte, ttl time.Duration) *Info {
+	if is.NodeID == 0 {
+		panic("gossip infostore's NodeID is 0")
+	}
 	now := monotonicUnixNano()
 	ttlStamp := now + int64(ttl)
 	if ttl == 0 {

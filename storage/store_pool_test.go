@@ -57,6 +57,8 @@ func createTestStorePool(timeUntilStoreDead time.Duration) (*stop.Stopper, *goss
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
 	g := gossip.New(rpcContext, gossip.TestBootstrap)
+	// Have to call g.SetNodeID before call g.AddInfo
+	g.SetNodeID(roachpb.NodeID(1))
 	storePool := NewStorePool(g, timeUntilStoreDead, stopper)
 	return stopper, g, storePool
 }

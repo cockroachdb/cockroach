@@ -43,7 +43,8 @@ func gossipForTest(t *testing.T) (*gossip.Gossip, *stop.Stopper) {
 
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
 	g := gossip.New(rpcContext, gossip.TestBootstrap)
-
+	// Have to call g.SetNodeID before call g.AddInfo
+	g.SetNodeID(roachpb.NodeID(1))
 	// Put an empty system config into gossip.
 	if err := g.AddInfoProto(gossip.KeySystemConfig,
 		&config.SystemConfig{}, 0); err != nil {

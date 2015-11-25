@@ -179,6 +179,13 @@ func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	return nil
 }
 
+// SetNodeID sets the infostore's node ID.
+func (g *Gossip) SetNodeID(nodeID roachpb.NodeID) {
+	g.mu.Lock()
+	g.is.NodeID = nodeID
+	g.mu.Unlock()
+}
+
 // SetResolvers initializes the set of gossip resolvers used to
 // find nodes to bootstrap the gossip network.
 func (g *Gossip) SetResolvers(resolvers []resolver.Resolver) {

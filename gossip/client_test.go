@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/gogo/protobuf/proto"
 )
 
 // startGossip creates local and remote gossip instances.
@@ -57,7 +58,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 		t.Fatal(err)
 	}
 	remote = New(rRPCContext, TestBootstrap)
-	if err := local.SetNodeDescriptor(&roachpb.NodeDescriptor{
+	if err := remote.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  2,
 		Address: util.MakeUnresolvedAddr(raddr.Network(), raddr.String()),
 	}); err != nil {
@@ -65,6 +66,63 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 	}
 	local.start(lserver, stopper)
 	remote.start(rserver, stopper)
+	time.Sleep(time.Millisecond)
+	return
+}
+
+type fakeGossipServer struct {
+	nodeAddr   util.UnresolvedAddr
+	nodeIDChan chan roachpb.NodeID
+}
+
+func newFakeGossipServer(rpcServer *rpc.Server, stopper *stop.Stopper) (*fakeGossipServer, error) {
+	s := &fakeGossipServer{
+		nodeIDChan: make(chan roachpb.NodeID),
+	}
+	if err := rpcServer.Register("Gossip.Gossip", s.Gossip, &Request{}); err != nil {
+		return nil, util.Errorf("unable to register gossip service with RPC server: %s", err)
+	}
+	return s, nil
+}
+
+func (s *fakeGossipServer) Gossip(argsI proto.Message) (proto.Message, error) {
+	args := argsI.(*Request)
+	reply := &Response{}
+	s.nodeIDChan <- args.NodeID
+
+	return reply, nil
+}
+
+// startFakeServerGossip creates local gossip instances and remote faked gossip instance.
+// The remote gossip instance launches its faked gossip service just for
+// check the client message.
+func startFakeServerGossip(t *testing.T) (local *Gossip, remote *fakeGossipServer, stopper *stop.Stopper) {
+	lclock := hlc.NewClock(hlc.UnixNano)
+	stopper = stop.NewStopper()
+	lRPCContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
+
+	laddr := util.CreateTestAddr("tcp")
+	lserver := rpc.NewServer(laddr, lRPCContext)
+	if err := lserver.Start(); err != nil {
+		t.Fatal(err)
+	}
+	local = New(lRPCContext, TestBootstrap)
+	local.start(lserver, stopper)
+
+	rclock := hlc.NewClock(hlc.UnixNano)
+	raddr := util.CreateTestAddr("tcp")
+	rRPCContext := rpc.NewContext(&base.Context{Insecure: true}, rclock, stopper)
+	rserver := rpc.NewServer(raddr, rRPCContext)
+	if err := rserver.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	remote, err := newFakeGossipServer(rserver, stopper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := rserver.Addr()
+	remote.nodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 	time.Sleep(time.Millisecond)
 	return
 }
@@ -90,7 +148,7 @@ func TestClientGossip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Use an insecure context. We're talking to unix socket which are not in the certs.
+	// Use an insecure context. We're talking to tcp socket which are not in the certs.
 	lclock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
 	client.start(local, disconnected, rpcContext, stopper)
@@ -103,5 +161,43 @@ func TestClientGossip(t *testing.T) {
 			return err
 		}
 		return nil
+	})
+}
+
+// TestClientNodeID verifies a client's gossip request with correct NodeID.
+func TestClientNodeID(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	local, remote, stopper := startFakeServerGossip(t)
+	disconnected := make(chan *client, 1)
+
+	// Use an insecure context. We're talking to tcp socket which are not in the certs.
+	lclock := hlc.NewClock(hlc.UnixNano)
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
+
+	// Start a gossip client.
+	c := newClient(remote.nodeAddr)
+	defer func() {
+		stopper.Stop()
+		if c != <-disconnected {
+			t.Errorf("expected client disconnect after remote close")
+		}
+	}()
+	c.start(local, disconnected, rpcContext, stopper)
+	// Wait for c.gossip to start.
+	receivedNodeID := <-remote.nodeIDChan
+
+	nodeID := roachpb.NodeID(1)
+	// Simulate a nodeID setting after c.gossip started.
+	local.SetNodeID(nodeID)
+	// Check if client send the correct NodeID after new nodeID take effect.
+	util.SucceedsWithin(t, time.Second, func() error {
+		select {
+		case receivedNodeID = <-remote.nodeIDChan:
+			if receivedNodeID == nodeID {
+				return nil
+			}
+		}
+		return util.Errorf("client should send NodeID with %v, got %v", nodeID, receivedNodeID)
 	})
 }
