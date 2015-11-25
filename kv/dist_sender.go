@@ -433,6 +433,13 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba roachpb.BatchRequest, 
 		}
 	}
 
+	// Increase the sequence counter to account for the fact that
+	// in the multi-range-query loop, we're likely sending
+	// multiple requests to the same Replica. For example, we
+	// might send multiple requests to the same Replica if the
+	// descriptor cache has post-split descriptors that are still
+	// write intents and the split has not yet been completed.
+	ba.SetNewRequest()
 	br, err := ds.sendRPC(trace, desc.RangeID, replicas, order, ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)

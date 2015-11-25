@@ -955,3 +955,115 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestSequenceUpdateOnMultiRangeQueryLoop reproduces #3206 and
+// verifies that the sequence is updated in the DistSender
+// multi-range-query loop.
+//
+// More specifically, the issue was that DistSender might send
+// multiple batch requests to the same replica when it finds a
+// post-split range descriptor in the cache while the split has not
+// yet been fully completed. By giving a higher sequence to the second
+// request, we can avoid an infinite txn restart error by hitting the
+// sequence cache.
+func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	g, s := makeTestGossip(t)
+	defer s()
+
+	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	nd := &roachpb.NodeDescriptor{
+		NodeID:  roachpb.NodeID(1),
+		Address: util.MakeUnresolvedAddr(testAddress.Network(), testAddress.String()),
+	}
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(1)), nd, time.Hour); err != nil {
+		t.Fatal(err)
+
+	}
+
+	// Fill mockRangeDescriptorDB with two descriptors.
+	var descriptor1 = roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKey("b"),
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	var descriptor2 = roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: roachpb.RKey("b"),
+		EndKey:   roachpb.RKey("c"),
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	descDB := mockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, error) {
+		desc := descriptor1
+		if key.Equal(roachpb.RKey("b")) {
+			desc = descriptor2
+		}
+		return []roachpb.RangeDescriptor{desc}, nil
+	})
+
+	// Define our rpcSend stub which checks the span of the batch
+	// requests. The first request should be the point request on
+	// "a". The second request should be on "b". The sequence of the
+	// second request will be incremented by one from that of the
+	// first request.
+	first := true
+	var firstSequence uint32
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
+		if method != "Node.Batch" {
+			return nil, util.Errorf("unexpected method %v", method)
+		}
+
+		ba := getArgs(testAddress).(*roachpb.BatchRequest)
+		rs := keys.Range(*ba)
+		if first {
+			if !(rs.Key.Equal(roachpb.RKey("a")) && rs.EndKey.Equal(roachpb.RKey("a").Next())) {
+				t.Errorf("unexpected span [%s,%s)", rs.Key, rs.EndKey)
+			}
+			first = false
+			firstSequence = ba.Txn.Sequence
+		} else {
+			if !(rs.Key.Equal(roachpb.RKey("b")) && rs.EndKey.Equal(roachpb.RKey("b").Next())) {
+				t.Errorf("unexpected span [%s,%s)", rs.Key, rs.EndKey)
+			}
+			if ba.Txn.Sequence != firstSequence+1 {
+				t.Errorf("unexpected sequence; exepected %d, but got %d", firstSequence+1, ba.Txn.Sequence)
+			}
+		}
+
+		batchReply := getReply().(*roachpb.BatchResponse)
+		reply := &roachpb.PutResponse{}
+		batchReply.Add(reply)
+		return []proto.Message{batchReply}, nil
+	}
+
+	ctx := &DistSenderContext{
+		RPCSend:           testFn,
+		RangeDescriptorDB: descDB,
+	}
+	ds := NewDistSender(ctx, g)
+
+	// Send a batch request contains two puts.
+	ba := roachpb.BatchRequest{}
+	ba.Txn = &roachpb.Transaction{Name: "test"}
+	val := roachpb.MakeValueFromString("val")
+	ba.Add(roachpb.NewPut(roachpb.Key("a"), val).(*roachpb.PutRequest))
+	ba.Add(roachpb.NewPut(roachpb.Key("b"), val).(*roachpb.PutRequest))
+
+	_, pErr := ds.Send(context.Background(), ba)
+	if err := pErr.GoError(); err != nil {
+		t.Fatal(err)
+	}
+}
