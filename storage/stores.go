@@ -148,6 +148,9 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		trace.Event("read has no clock uncertainty")
 		ba.Txn.MaxTimestamp = ba.Txn.Timestamp
 	}
+	// Increase the sequence counter to account for the fact that while
+	// chunking, we're likely sending multiple requests to the same Replica.
+	ba.SetNewRequest()
 	br, pErr := store.Send(ctx, ba)
 	if br != nil && br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(store, br))

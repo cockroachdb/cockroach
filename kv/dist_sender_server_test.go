@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -618,5 +619,57 @@ func TestDoNotPropagateTxnOnError(t *testing.T) {
 
 	if epoch <= 2 {
 		t.Errorf("unexpected epoch; the txn must be retried at least twice, but got %d", epoch)
+	}
+}
+
+// TestSendTwoBatchRequestsToSameReplica reproduces #3206 and verifies
+// that updating a txn sequence in Stores.Send will prevent a txn
+// retry when a request is not chunked properly and two separate batch
+// requests are sent to the same replica.
+func TestSendTwoBatchRequestsToSameReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	// Set up a filter to so that resolve intent requests will always fail.
+	storage.TestingCommandFilter = func(args roachpb.Request, h roachpb.Header) error {
+		if _, ok := args.(*roachpb.ResolveIntentRequest); ok {
+			return util.Errorf("Test")
+		}
+		return nil
+	}
+	defer func() {
+		storage.TestingCommandFilter = nil
+	}()
+
+	s, db := setupMultipleRanges(t, "b", "c")
+	defer s.Stop()
+
+	// The requests in the transaction below will be chunked and
+	// sent to replicas in the following way:
+	// 1) A batch request containing a BeginTransaction and a
+	//    put on "a" are sent to a replica owning range ["a","b").
+	// 2) A next batch request containing a put on "b" and a put
+	//    on "c" are sent to a replica owning range ["b","c").
+	//   (The range cache has a stale range descriptor.)
+	// 3) The put request on "c" causes a RangeKeyMismatchError.
+	// 4) The dist sender re-sends a request to the same replica.
+	//    As no write intents haven't been resolved, the dist sender
+	//    still attempts to send a put request on "c" to a wrong replica.
+	//    Two batch requests (put on "b" and put on "c") are sent to
+	//    to the same replica.
+	// 5) Both requests increment the sequences and no txn retry will happen.
+	epoch := 0
+	if err := db.Txn(func(txn *client.Txn) error {
+		epoch++
+		b := &client.Batch{}
+		b.Put("a", "val")
+		b.Put("b", "val")
+		b.Put("c", "val")
+		return txn.CommitInBatch(b)
+	}); err != nil {
+		t.Errorf("unexpected error on transactional Puts: %s", err)
+	}
+
+	if epoch != 1 {
+		t.Errorf("unexpected epoch; the txn must not be retried, but got %d retries", epoch)
 	}
 }
