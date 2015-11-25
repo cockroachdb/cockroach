@@ -15,7 +15,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package localcluster
+package cluster
 
 import (
 	"encoding/json"
@@ -29,9 +29,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/samalba/dockerclient"
 )
 
@@ -46,7 +48,7 @@ var cockroachImage = flag.String("i", builderImage, "the docker image to run")
 var cockroachBinary = flag.String("b", defaultBinary(), "the binary to run (if image == "+builderImage+")")
 var cockroachEntry = flag.String("e", "", "the entry point for the image")
 var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
-var logDirectory = flag.String("l", "", "the directory to store log files, relative to where the test source")
+var logDirectory = flag.String("l", "", "the directory to store log files, relative to the test source")
 var pwd = filepath.Clean(os.ExpandEnv("${PWD}"))
 
 // keyLen is the length (in bits) of the generated CA and node certs.
@@ -94,11 +96,11 @@ type Event struct {
 	Status    string
 }
 
-// Cluster manages a local cockroach cluster running on docker. The cluster is
-// composed of a "dns" container which automatically registers dns entries for
-// the cockroach nodes, a "volumes" container which manages the persistent
-// volumes used for certs and node data and N cockroach nodes.
-type Cluster struct {
+// LocalCluster manages a local cockroach cluster running on docker. The
+// cluster is composed of a "dns" container which automatically registers dns
+// entries for the cockroach nodes, a "volumes" container which manages the
+// persistent volumes used for certs and node data and N cockroach nodes.
+type LocalCluster struct {
 	client         dockerclient.Client
 	stopper        chan struct{}
 	mu             sync.Mutex // Protects the fields below
@@ -114,10 +116,10 @@ type Cluster struct {
 	ForceLogging   bool // Forces logging to disk on a per test basis
 }
 
-// Create creates a new local cockroach cluster. The stopper is used to
+// CreateLocal creates a new local cockroach cluster. The stopper is used to
 // gracefully shutdown the channel (e.g. when a signal arrives). The cluster
 // must be started before being used.
-func Create(numNodes int, stopper chan struct{}) *Cluster {
+func CreateLocal(numNodes int, stopper chan struct{}) *LocalCluster {
 	select {
 	case <-stopper:
 		// The stopper was already closed, exit early.
@@ -129,7 +131,7 @@ func Create(numNodes int, stopper chan struct{}) *Cluster {
 		log.Fatalf("\"%s\": does not exist", *cockroachBinary)
 	}
 
-	return &Cluster{
+	return &LocalCluster{
 		client:   newDockerClient(),
 		stopper:  stopper,
 		numNodes: numNodes,
@@ -139,7 +141,7 @@ func Create(numNodes int, stopper chan struct{}) *Cluster {
 	}
 }
 
-func (l *Cluster) expectEvent(c *Container, msgs ...string) {
+func (l *LocalCluster) expectEvent(c *Container, msgs ...string) {
 	for index, ctr := range l.Nodes {
 		if c.ID != ctr.ID {
 			continue
@@ -155,7 +157,7 @@ func (l *Cluster) expectEvent(c *Container, msgs ...string) {
 // to tear down the cluster if a panic occurs while starting it. If the panic
 // was initiated by the stopper being closed (which panicOnStop notices) then
 // the process is exited with a failure code.
-func (l *Cluster) stopOnPanic() {
+func (l *LocalCluster) stopOnPanic() {
 	if r := recover(); r != nil {
 		l.stop()
 		if r != l {
@@ -169,7 +171,7 @@ func (l *Cluster) stopOnPanic() {
 // it has. This allows polling for whether to stop and avoids nasty locking
 // complications with trying to call Stop at arbitrary points such as in the
 // middle of creating a container.
-func (l *Cluster) panicOnStop() {
+func (l *LocalCluster) panicOnStop() {
 	if l.stopper == nil {
 		panic(l)
 	}
@@ -182,7 +184,7 @@ func (l *Cluster) panicOnStop() {
 	}
 }
 
-func (l *Cluster) runDockerSpy() {
+func (l *LocalCluster) runDockerSpy() {
 	l.panicOnStop()
 
 	create := func() (*Container, error) {
@@ -214,7 +216,7 @@ func (l *Cluster) runDockerSpy() {
 
 // create the volumes container that keeps all of the volumes used by
 // the cluster.
-func (l *Cluster) initCluster() {
+func (l *LocalCluster) initCluster() {
 	log.Infof("initializing cluster")
 	l.panicOnStop()
 
@@ -292,7 +294,7 @@ func (l *Cluster) initCluster() {
 	l.vols.Name = "volumes"
 }
 
-func (l *Cluster) createRoach(i int, cmd ...string) *Container {
+func (l *LocalCluster) createRoach(i int, cmd ...string) *Container {
 	l.panicOnStop()
 
 	var hostname string
@@ -324,12 +326,12 @@ func (l *Cluster) createRoach(i int, cmd ...string) *Container {
 	return c
 }
 
-func (l *Cluster) createCACert() {
+func (l *LocalCluster) createCACert() {
 	log.Infof("creating ca (%dbit) in: %s", keyLen, l.CertsDir)
 	maybePanic(security.RunCreateCACert(l.CertsDir, keyLen))
 }
 
-func (l *Cluster) createNodeCerts() {
+func (l *LocalCluster) createNodeCerts() {
 	log.Infof("creating node (%dbit) certs in: %s", keyLen, l.CertsDir)
 	nodes := []string{dockerIP().String()}
 	for i := 0; i < l.numNodes; i++ {
@@ -338,7 +340,7 @@ func (l *Cluster) createNodeCerts() {
 	maybePanic(security.RunCreateNodeCert(l.CertsDir, keyLen, nodes))
 }
 
-func (l *Cluster) startNode(i int) *Container {
+func (l *LocalCluster) startNode(i int) *Container {
 	gossipNodes := []string{}
 	for i := 0; i < l.numNodes; i++ {
 		gossipNodes = append(gossipNodes, fmt.Sprintf("%s:%d", node(i), cockroachPort))
@@ -382,7 +384,7 @@ func (l *Cluster) startNode(i int) *Container {
 	return c
 }
 
-func (l *Cluster) processEvent(e dockerclient.EventOrError, monitorStopper chan struct{}) bool {
+func (l *LocalCluster) processEvent(e dockerclient.EventOrError, monitorStopper chan struct{}) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -428,7 +430,7 @@ func (l *Cluster) processEvent(e dockerclient.EventOrError, monitorStopper chan 
 	return false
 }
 
-func (l *Cluster) monitor(monitorStopper chan struct{}) {
+func (l *LocalCluster) monitor(monitorStopper chan struct{}) {
 	// MonitorEvents will (as of Docker 1.7) block until the first event is
 	// received.
 	ch, err := l.client.MonitorEvents(nil, l.monitorStopper)
@@ -444,7 +446,7 @@ func (l *Cluster) monitor(monitorStopper chan struct{}) {
 }
 
 // Start starts the cluster.
-func (l *Cluster) Start() {
+func (l *LocalCluster) Start() {
 	defer l.stopOnPanic()
 
 	l.mu.Lock()
@@ -469,7 +471,7 @@ func (l *Cluster) Start() {
 // Tester receives a fatal error.
 // Currently, the only events generated (and asserted against) are "die" and
 // "restart", to maximize compatibility across different versions of Docker.
-func (l *Cluster) Assert(t util.Tester) {
+func (l *LocalCluster) Assert(t util.Tester) {
 	const almostZero = 50 * time.Millisecond
 	filter := func(ch chan Event, wait time.Duration) *Event {
 		for {
@@ -508,13 +510,13 @@ func (l *Cluster) Assert(t util.Tester) {
 
 // AssertAndStop calls Assert and then stops the cluster. It is safe to stop
 // the cluster multiple times.
-func (l *Cluster) AssertAndStop(t util.Tester) {
+func (l *LocalCluster) AssertAndStop(t util.Tester) {
 	defer l.stop()
 	l.Assert(t)
 }
 
 // stop stops the cluster.
-func (l *Cluster) stop() {
+func (l *LocalCluster) stop() {
 	if *waitOnStop {
 		log.Infof("waiting for interrupt")
 		select {
@@ -577,4 +579,48 @@ func (l *Cluster) stop() {
 		_ = os.RemoveAll(l.LogDir)
 		l.LogDir = ""
 	}
+}
+
+// MakeClient creates a DB client for node 'i' using the cluster certs dir.
+func (l *LocalCluster) MakeClient(t util.Tester, node int) (*client.DB, *stop.Stopper) {
+	return makeDBClientForUser(t, l, security.NodeUser, node)
+}
+
+// NumNodes returns the number of nodes in the cluster.
+func (l *LocalCluster) NumNodes() int {
+	return len(l.Nodes)
+}
+
+// Kill kills the i-th node.
+func (l *LocalCluster) Kill(i int) error {
+	return l.Nodes[i].Kill()
+}
+
+// Restart restarts the given node. If the node isn't running, this starts it.
+func (l *LocalCluster) Restart(i int) error {
+	return l.Nodes[i].Restart(5)
+}
+
+// Get gets the given path from the i-th node and unmarshals into the given
+// interface.
+func (l *LocalCluster) Get(i int, path string, dest interface{}) error {
+	return l.Nodes[i].GetJSON("", path, dest)
+}
+
+// makeDBClientForUser creates a DB client for node 'i' and user 'user'.
+func makeDBClientForUser(t util.Tester, lc *LocalCluster, user string, node int) (*client.DB, *stop.Stopper) {
+	stopper := stop.NewStopper()
+
+	// We need to run with "InsecureSkipVerify" (set when Certs="" inside the http sender).
+	// This is due to the fact that we're running outside docker, so we cannot use a fixed hostname
+	// to reach the cluster. This in turn means that we do not have a verified server name in the certs.
+	db, err := client.Open(stopper, "rpcs://"+user+"@"+
+		lc.Nodes[node].Addr("").String()+
+		"?certs="+lc.CertsDir)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return db, stopper
 }

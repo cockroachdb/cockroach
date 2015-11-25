@@ -24,7 +24,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -33,15 +32,13 @@ import (
 // up an N node cluster and running N workers that are all
 // incrementing the value associated with a single key.
 func TestSingleKey(t *testing.T) {
-	l := localcluster.Create(*numNodes, stopper)
-	l.Start()
-	defer l.AssertAndStop(t)
-
-	checkRangeReplication(t, l, 20*time.Second)
+	c := StartCluster(t)
+	defer c.AssertAndStop(t)
+	num := c.NumNodes()
 
 	// Initialize the value for our test key to zero.
 	const key = "test-key"
-	db, initDBStopper := makeDBClient(t, l, 0)
+	db, initDBStopper := c.MakeClient(t, 0)
 	defer initDBStopper.Stop()
 	if err := db.Put(key, 0); err != nil {
 		t.Fatal(err)
@@ -53,15 +50,15 @@ func TestSingleKey(t *testing.T) {
 		maxLatency time.Duration
 	}
 
-	resultCh := make(chan result, *numNodes)
+	resultCh := make(chan result, num)
 	deadline := time.Now().Add(*duration)
 	var expected int64
 
 	// Start up numNodes workers each reading and writing the same
 	// key. Each worker is configured to talk to a different node in the
 	// cluster.
-	for i := 0; i < *numNodes; i++ {
-		db, dbStopper := makeDBClient(t, l, i)
+	for i := 0; i < num; i++ {
+		db, dbStopper := c.MakeClient(t, i)
 		defer dbStopper.Stop()
 		go func() {
 			var r result
@@ -93,7 +90,7 @@ func TestSingleKey(t *testing.T) {
 
 	// Verify that none of the workers encountered an error.
 	var results []result
-	for len(results) < *numNodes {
+	for len(results) < num {
 		select {
 		case <-stopper:
 			t.Fatalf("interrupted")

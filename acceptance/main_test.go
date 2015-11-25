@@ -25,11 +25,21 @@ import (
 	"os/signal"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/acceptance/cluster"
 )
 
 var duration = flag.Duration("d", 5*time.Second, "duration to run the test")
 var numNodes = flag.Int("num", 3, "the number of nodes to start (if not otherwise specified by a test)")
 var stopper = make(chan struct{})
+
+// StartCluster starts a cluster from the relevant flags.
+func StartCluster(t *testing.T) cluster.Cluster {
+	l := cluster.CreateLocal(*numNodes, stopper)
+	l.Start()
+	checkRangeReplication(t, l, 20*time.Second)
+	return l
+}
 
 func TestMain(m *testing.M) {
 	go func() {

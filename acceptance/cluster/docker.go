@@ -15,7 +15,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package localcluster
+package cluster
 
 import (
 	"crypto/tls"
@@ -132,13 +132,13 @@ func dockerIP() net.IP {
 type Container struct {
 	ID      string
 	Name    string
-	cluster *Cluster
+	cluster *LocalCluster
 }
 
 // createContainer creates a new container using the specified options. Per the
 // docker API, the created container is not running and must be started
 // explicitly.
-func createContainer(l *Cluster, config dockerclient.ContainerConfig) (*Container, error) {
+func createContainer(l *LocalCluster, config dockerclient.ContainerConfig) (*Container, error) {
 	id, err := l.client.CreateContainer(&config, "")
 	if err != nil {
 		return nil, err
