@@ -249,7 +249,7 @@ func decodeKeyPrint(key roachpb.Key) string {
 }
 
 // PrettyPrint print the key in a human readable format, which organized as:
-// Key's Name												Key's Value
+// Key's Format												Key's Value
 // /Local/...												"\x00\x00\x00"+...
 // 		/Store/...											"\x00\x00\x00s"+...
 //		/RangeID/...										"\x00\x00\x00s"+[rangeid]
@@ -266,7 +266,7 @@ func decodeKeyPrint(key roachpb.Key) string {
 //			/[rangeid]/RangeStats							"\x00\x00\x00s"+[rangeid]+"stat"
 //		/Range/...											"\x00\x00\x00k"+...
 //			/RangeDescriptor/[key]							"\x00\x00\x00k"+[key]+"rdsc"
-//			/RangeTreeNode/[ky]								"\x00\x00\x00k"+[key]+"rtn-"
+//			/RangeTreeNode/[key]							"\x00\x00\x00k"+[key]+"rtn-"
 //			/Transaction/addrKey:[key]/id:[id]				"\x00\x00\x00k"+[key]+"txn-"+[id]
 // /Local/Max 												"\x00\x00\x01"
 //
