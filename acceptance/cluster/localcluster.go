@@ -77,11 +77,11 @@ func exists(path string) bool {
 	return true
 }
 
-func node(i int) string {
+func nodeStr(i int) string {
 	return fmt.Sprintf("roach%d.%s", i, domain)
 }
 
-func data(i int) string {
+func dataStr(i int) string {
 	return fmt.Sprintf("/data%d", i)
 }
 
@@ -222,7 +222,7 @@ func (l *LocalCluster) initCluster() {
 
 	vols := map[string]struct{}{}
 	for i := 0; i < l.numNodes; i++ {
-		vols[data(i)] = struct{}{}
+		vols[dataStr(i)] = struct{}{}
 	}
 	create := func() (*Container, error) {
 		var entrypoint []string
@@ -235,7 +235,7 @@ func (l *LocalCluster) initCluster() {
 			Image:      *cockroachImage,
 			Volumes:    vols,
 			Entrypoint: entrypoint,
-			Cmd:        []string{"init", "--stores=ssd=" + data(0)},
+			Cmd:        []string{"init", "--stores=ssd=" + dataStr(0)},
 		})
 	}
 	c, err := create()
@@ -335,7 +335,7 @@ func (l *LocalCluster) createNodeCerts() {
 	log.Infof("creating node (%dbit) certs in: %s", keyLen, l.CertsDir)
 	nodes := []string{dockerIP().String()}
 	for i := 0; i < l.numNodes; i++ {
-		nodes = append(nodes, node(i))
+		nodes = append(nodes, nodeStr(i))
 	}
 	maybePanic(security.RunCreateNodeCert(l.CertsDir, keyLen, nodes))
 }
@@ -343,21 +343,21 @@ func (l *LocalCluster) createNodeCerts() {
 func (l *LocalCluster) startNode(i int) *Container {
 	gossipNodes := []string{}
 	for i := 0; i < l.numNodes; i++ {
-		gossipNodes = append(gossipNodes, fmt.Sprintf("%s:%d", node(i), cockroachPort))
+		gossipNodes = append(gossipNodes, fmt.Sprintf("%s:%d", nodeStr(i), cockroachPort))
 	}
 
 	cmd := []string{
 		"start",
-		"--stores=ssd=" + data(i),
+		"--stores=ssd=" + dataStr(i),
 		"--certs=/certs",
-		"--addr=" + fmt.Sprintf("%s:%d", node(i), cockroachPort),
+		"--addr=" + fmt.Sprintf("%s:%d", nodeStr(i), cockroachPort),
 		"--gossip=" + strings.Join(gossipNodes, ","),
 		"--scan-max-idle-time=200ms", // set low to speed up tests
 	}
 	var localLogDir string
 	if len(l.LogDir) > 0 {
-		dockerLogDir := "/logs/" + node(i)
-		localLogDir = filepath.Join(l.LogDir, node(i))
+		dockerLogDir := "/logs/" + nodeStr(i)
+		localLogDir = filepath.Join(l.LogDir, nodeStr(i))
 		if !exists(localLogDir) {
 			if err := os.Mkdir(localLogDir, 0777); err != nil {
 				log.Fatal(err)
@@ -371,7 +371,7 @@ func (l *LocalCluster) startNode(i int) *Container {
 	}
 	c := l.createRoach(i, cmd...)
 	maybePanic(c.Start(nil, l.dns, l.vols))
-	c.Name = node(i)
+	c.Name = nodeStr(i)
 	uri := fmt.Sprintf("https://%s", c.Addr(""))
 	// Infof doesn't take positional parameters, hence the Sprintf.
 	log.Infof(fmt.Sprintf(`*** started %[1]s ***
@@ -555,7 +555,7 @@ func (l *LocalCluster) stop() {
 		if len(l.LogDir) > 0 {
 			// TODO(bdarnell): make these filenames more consistent with
 			// structured logs?
-			file := filepath.Join(l.LogDir, node(i),
+			file := filepath.Join(l.LogDir, nodeStr(i),
 				fmt.Sprintf("stderr.%s.log", strings.Replace(
 					time.Now().Format(time.RFC3339), ":", "_", -1)))
 			w, err := os.Create(file)
@@ -583,7 +583,17 @@ func (l *LocalCluster) stop() {
 
 // MakeClient creates a DB client for node 'i' using the cluster certs dir.
 func (l *LocalCluster) MakeClient(t util.Tester, node int) (*client.DB, *stop.Stopper) {
-	return makeDBClientForUser(t, l, security.NodeUser, node)
+	stopper := stop.NewStopper()
+
+	db, err := client.Open(stopper, "rpcs://"+security.NodeUser+"@"+
+		l.Nodes[node].Addr("").String()+
+		"?certs="+l.CertsDir)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return db, stopper
 }
 
 // NumNodes returns the number of nodes in the cluster.
@@ -605,22 +615,4 @@ func (l *LocalCluster) Restart(i int) error {
 // interface.
 func (l *LocalCluster) Get(i int, path string, dest interface{}) error {
 	return l.Nodes[i].GetJSON("", path, dest)
-}
-
-// makeDBClientForUser creates a DB client for node 'i' and user 'user'.
-func makeDBClientForUser(t util.Tester, lc *LocalCluster, user string, node int) (*client.DB, *stop.Stopper) {
-	stopper := stop.NewStopper()
-
-	// We need to run with "InsecureSkipVerify" (set when Certs="" inside the http sender).
-	// This is due to the fact that we're running outside docker, so we cannot use a fixed hostname
-	// to reach the cluster. This in turn means that we do not have a verified server name in the certs.
-	db, err := client.Open(stopper, "rpcs://"+user+"@"+
-		lc.Nodes[node].Addr("").String()+
-		"?certs="+lc.CertsDir)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return db, stopper
 }
