@@ -235,6 +235,14 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		m.transportStopper = stop.NewStopper()
 	}
 	m.transportStopper.AddCloser(m.transport)
+
+	// Wait for gossip to startup.
+	util.SucceedsWithin(t, 100*time.Millisecond, func() error {
+		if m.gossip.GetSystemConfig() == nil {
+			return util.Errorf("system config not available")
+		}
+		return nil
+	})
 }
 
 func (m *multiTestContext) Stop() {

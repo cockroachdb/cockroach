@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -69,21 +70,28 @@ func TestRaftLogQueue(t *testing.T) {
 		}
 	}
 
-	// Force a truncation check.
-	for _, store := range mtc.stores {
-		store.ForceRaftLogScanAndProcess(t)
-	}
+	// Sadly, occasionally the queue has a race with the force processing so
+	// this succeeds within will captures those rare cases.
+	var afterTruncationIndex uint64
+	util.SucceedsWithin(t, time.Second, func() error {
+		// Force a truncation check.
+		for _, store := range mtc.stores {
+			store.ForceRaftLogScanAndProcess(t)
+		}
 
-	// Ensure that firstIndex has increased indicating that the log
-	// truncation has occurred.
-	afterTruncationIndex, err := raftLeaderRepl.FirstIndex()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if afterTruncationIndex <= originalIndex {
-		t.Fatalf("raft log has not been truncated yet, afterTruncationIndex:%d originalIndex:%d",
-			afterTruncationIndex, originalIndex)
-	}
+		// Ensure that firstIndex has increased indicating that the log
+		// truncation has occurred.
+		var err error
+		afterTruncationIndex, err = raftLeaderRepl.FirstIndex()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if afterTruncationIndex <= originalIndex {
+			t.Fatalf("raft log has not been truncated yet, afterTruncationIndex:%d originalIndex:%d",
+				afterTruncationIndex, originalIndex)
+		}
+		return nil
+	})
 
 	// Force a truncation check again to ensure that attempting to truncate an
 	// already truncated log has no effect.
