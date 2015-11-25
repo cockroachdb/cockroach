@@ -23,6 +23,7 @@ import (
 	"flag"
 	"os"
 	"os/signal"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,15 +31,25 @@ import (
 )
 
 var duration = flag.Duration("d", 5*time.Second, "duration to run the test")
-var numNodes = flag.Int("num", 3, "the number of nodes to start (if not otherwise specified by a test)")
+var numNodes = flag.Int("num", 0, "start a local cluster of the given size")
+var peers = flag.String("peers", "", "comma-separated list of remote cluster nodes")
 var stopper = make(chan struct{})
 
 // StartCluster starts a cluster from the relevant flags.
 func StartCluster(t *testing.T) cluster.Cluster {
-	l := cluster.CreateLocal(*numNodes, stopper)
-	l.Start()
-	checkRangeReplication(t, l, 20*time.Second)
-	return l
+	if *numNodes > 0 {
+		if len(*peers) > 0 {
+			t.Fatal("cannot both specify -num and -peers")
+		}
+		l := cluster.CreateLocal(*numNodes, stopper)
+		l.Start()
+		checkRangeReplication(t, l, 20*time.Second)
+		return l
+	}
+	if len(*peers) == 0 {
+		t.Fatal("need to either specify -num or -peers")
+	}
+	return cluster.CreateRemote(strings.Split(*peers, ","))
 }
 
 func TestMain(m *testing.M) {
