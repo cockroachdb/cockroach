@@ -131,9 +131,9 @@ func runLsZones(cmd *cobra.Command, args []string) {
 // A rmZoneCmd command removes a zone config by ID.
 var rmZoneCmd = &cobra.Command{
 	Use:   "rm [options] <object-id>",
-	Short: "remove a zone config by object id",
+	Short: "remove a zone config by object ID",
 	Long: `
-Remove an existing zone config by object id. No action is taken if no
+Remove an existing zone config by object ID. No action is taken if no
 zone configuration exists for the specified object ID.
 `,
 	Run: runRmZone,
