@@ -61,7 +61,11 @@ func (p *planner) Explain(n *parser.Explain) (planNode, error) {
 		return plan, nil
 	case explainPlan:
 		v := &valuesNode{}
-		v.columns = []string{"Level", "Type", "Description"}
+		v.columns = []column{
+			{name: "Level", typ: parser.DummyInt},
+			{name: "Type", typ: parser.DummyString},
+			{name: "Description", typ: parser.DummyString},
+		}
 		populateExplain(v, plan, 0)
 		plan = v
 	default:
@@ -74,7 +78,12 @@ func markDebug(plan planNode, mode explainMode) (planNode, error) {
 	switch t := plan.(type) {
 	case *scanNode:
 		// Mark the node as being explained.
-		t.columns = []string{"RowIdx", "Key", "Value", "Output"}
+		t.columns = []column{
+			{name: "RowIdx", typ: parser.DummyInt},
+			{name: "Key", typ: parser.DummyString},
+			{name: "Value", typ: parser.DummyString},
+			{name: "Output", typ: parser.DummyBool},
+		}
 		t.explain = mode
 		return t, nil
 

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/driver"
+	"github.com/cockroachdb/cockroach/sql/pgwire"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/ui"
@@ -69,6 +70,7 @@ type Server struct {
 	db            *client.DB
 	kvDB          *kv.DBServer
 	sqlServer     sql.Server
+	pgServer      pgwire.Server
 	node          *Node
 	recorder      *status.NodeStatusRecorder
 	admin         *adminServer
@@ -143,6 +145,12 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		return nil, err
 	}
 
+	s.pgServer = pgwire.MakeServer(&pgwire.Context{
+		Context:  &s.ctx.Context,
+		Executor: s.sqlServer.Executor,
+		Stopper:  stopper,
+	})
+
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
 		Clock:           s.clock,
@@ -176,9 +184,12 @@ func (s *Server) Start(selfBootstrap bool) error {
 		return util.Errorf("could not listen on %s: %s", s.ctx.Addr, err)
 	}
 
+	addr := s.rpc.Addr()
+	addrStr := addr.String()
+
 	// Handle self-bootstrapping case for a single node.
 	if selfBootstrap {
-		selfResolver, err := resolver.NewResolver(&s.ctx.Context, s.rpc.Addr().String())
+		selfResolver, err := resolver.NewResolver(&s.ctx.Context, addrStr)
 		if err != nil {
 			return err
 		}
@@ -203,10 +214,17 @@ func (s *Server) Start(selfBootstrap bool) error {
 
 	s.sqlServer.SetNodeID(s.node.Descriptor.NodeID)
 
-	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), s.rpc.Addr())
+	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), addr)
 	s.initHTTP()
 	s.rpc.Serve(s)
-	return nil
+
+	// TODO(tamird): pick a port here
+	host, _, err := net.SplitHostPort(addrStr)
+	if err != nil {
+		return err
+	}
+
+	return s.pgServer.Start(util.MakeUnresolvedAddr("tcp", net.JoinHostPort(host, "0")))
 }
 
 // initHTTP registers http prefixes.

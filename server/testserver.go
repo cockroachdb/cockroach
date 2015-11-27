@@ -201,6 +201,11 @@ func (ts *TestServer) ServingAddr() string {
 	return ts.rpc.Addr().String()
 }
 
+// PGAddr returns the Postgres-protocol endpoint's address.
+func (ts *TestServer) PGAddr() string {
+	return ts.pgServer.Addr().String()
+}
+
 // Stop stops the TestServer.
 func (ts *TestServer) Stop() {
 	if r := recover(); r != nil {

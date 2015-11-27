@@ -18,8 +18,8 @@
 package sql
 
 import (
-	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
@@ -30,17 +30,33 @@ func (p *planner) Values(n parser.Values) (planNode, error) {
 		rows: make([]parser.DTuple, 0, len(n)),
 	}
 
-	nCols := 0
-	for _, tuple := range n {
+	for num, tuple := range n {
+		if num == 0 {
+			v.columns = make([]column, 0, len(tuple))
+		} else if a, e := len(tuple), len(v.columns); a != e {
+			return nil, fmt.Errorf("VALUES lists must all be the same length, %d for %d", a, e)
+		}
+
 		for i := range tuple {
 			var err error
-			tuple[i], err = p.parser.TypeCheckAndNormalizeExpr(p.evalCtx, tuple[i])
-			if err != nil {
-				return nil, err
-			}
 			tuple[i], err = p.expandSubqueries(tuple[i], 1)
 			if err != nil {
 				return nil, err
+			}
+			typ, err := tuple[i].TypeCheck()
+			if err != nil {
+				return nil, err
+			}
+			tuple[i], err = p.parser.NormalizeExpr(p.evalCtx, tuple[i])
+			if err != nil {
+				return nil, err
+			}
+			if num == 0 {
+				v.columns = append(v.columns, column{name: "column" + strconv.Itoa(i+1), typ: typ})
+			} else if v.columns[i].typ == parser.DNull {
+				v.columns[i].typ = typ
+			} else if typ != parser.DNull && typ != v.columns[i].typ {
+				return nil, fmt.Errorf("VALUES list type mismatch, %s for %s", typ.Type(), v.columns[i].typ.Type())
 			}
 		}
 		data, err := tuple.Eval(p.evalCtx)
@@ -51,29 +67,20 @@ func (p *planner) Values(n parser.Values) (planNode, error) {
 		if !ok {
 			return nil, fmt.Errorf("expected a tuple, but found %T", data)
 		}
-		if len(v.rows) == 0 {
-			nCols = len(vals)
-		} else if nCols != len(vals) {
-			return nil, errors.New("VALUES lists must all be the same length")
-		}
 		v.rows = append(v.rows, vals)
 	}
 
-	v.columns = make([]string, nCols)
-	for i := 0; i < nCols; i++ {
-		v.columns[i] = fmt.Sprintf("column%d", i+1)
-	}
 	return v, nil
 }
 
 type valuesNode struct {
-	columns  []string
+	columns  []column
 	ordering []int
 	rows     []parser.DTuple
 	nextRow  int // The index of the next row.
 }
 
-func (n *valuesNode) Columns() []string {
+func (n *valuesNode) Columns() []column {
 	return n.columns
 }
 

@@ -156,7 +156,7 @@ type scanNode struct {
 	visibleCols      []ColumnDescriptor
 	isSecondaryIndex bool
 	reverse          bool
-	columns          []string
+	columns          []column
 	columnIDs        []ColumnID
 	ordering         []int
 	exactPrefix      int
@@ -179,7 +179,7 @@ type scanNode struct {
 	explainValue     parser.Datum
 }
 
-func (n *scanNode) Columns() []string {
+func (n *scanNode) Columns() []column {
 	return n.columns
 }
 
@@ -488,18 +488,20 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 			}
 
 			if n.isSecondaryIndex {
-				for i, col := range n.index.ColumnNames {
-					n.columns = append(n.columns, col)
+				for _, id := range n.index.ColumnIDs {
 					var col *ColumnDescriptor
-					if col, n.err = n.desc.FindColumnByID(n.index.ColumnIDs[i]); n.err != nil {
+					if col, n.err = n.desc.FindColumnByID(id); n.err != nil {
 						return n.err
 					}
-					n.render = append(n.render, n.getQVal(*col))
+					qval := n.getQVal(*col)
+					n.columns = append(n.columns, column{name: col.Name, typ: qval.datum})
+					n.render = append(n.render, qval)
 				}
 			} else {
 				for _, col := range n.desc.Columns {
-					n.columns = append(n.columns, col.Name)
-					n.render = append(n.render, n.getQVal(col))
+					qval := n.getQVal(col)
+					n.columns = append(n.columns, column{name: col.Name, typ: qval.datum})
+					n.render = append(n.render, qval)
 				}
 			}
 			return nil
@@ -512,13 +514,16 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 	if resolved, n.err = n.resolveQNames(target.Expr); n.err != nil {
 		return n.err
 	}
-	// Type check the expression to memoize operators and functions.
-	var normalized parser.Expr
-	normalized, n.err = n.planner.parser.TypeCheckAndNormalizeExpr(n.planner.evalCtx, resolved)
-	if n.err != nil {
+	if resolved, n.err = n.planner.expandSubqueries(resolved, 1); n.err != nil {
 		return n.err
 	}
-	if normalized, n.err = n.planner.expandSubqueries(normalized, 1); n.err != nil {
+	var typ parser.Datum
+	if typ, n.err = resolved.TypeCheck(); n.err != nil {
+		return n.err
+	}
+	var normalized parser.Expr
+	normalized, n.err = n.planner.parser.NormalizeExpr(n.planner.evalCtx, resolved)
+	if n.err != nil {
 		return n.err
 	}
 	n.render = append(n.render, normalized)
@@ -531,7 +536,7 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 			outputName = t.Column()
 		}
 	}
-	n.columns = append(n.columns, outputName)
+	n.columns = append(n.columns, column{name: outputName, typ: typ})
 	return nil
 }
 
