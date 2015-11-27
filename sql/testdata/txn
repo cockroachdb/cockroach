@@ -72,12 +72,14 @@ SELECT * FROM kv
 a b
 
 query TT
-SELECT * FROM kv; COMMIT; BEGIN; UPDATE kv SET v = 'd' WHERE k in ('a'); SELECT * FROM kv
+SELECT * FROM kv; COMMIT; BEGIN; UPDATE kv SET v = 'd' WHERE k in ('a')
+----
+a b
+
+query TT
+SELECT * FROM kv; UPDATE kv SET v = 'c' WHERE k in ('a'); COMMIT
 ----
 a d
-
-statement ok
-UPDATE kv SET v = 'c' WHERE k in ('a'); COMMIT
 
 query TT
 SELECT * FROM kv

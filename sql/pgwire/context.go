@@ -13,25 +13,19 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Peter Mattis (peter@cockroachlabs.com)
+// Author: Ben Darnell
 
-// This code was derived from https://github.com/youtube/vitess.
-//
-// Copyright 2012, Google Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file
+package pgwire
 
-package parser
+import (
+	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/util/stop"
+)
 
-import "strings"
-
-// Values represents a VALUES clause.
-type Values []Tuple
-
-func (node Values) String() string {
-	strs := make([]string, 0, len(node))
-	for _, n := range node {
-		strs = append(strs, n.String())
-	}
-	return "VALUES " + strings.Join(strs, ", ")
+// Context holds parameters needed to setup a postgres-compatible server.
+type Context struct {
+	*base.Context
+	Executor *sql.Executor
+	Stopper  *stop.Stopper
 }

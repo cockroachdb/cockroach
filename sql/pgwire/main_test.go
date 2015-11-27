@@ -13,25 +13,24 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Peter Mattis (peter@cockroachlabs.com)
+// Author: Ben Darnell
 
-// This code was derived from https://github.com/youtube/vitess.
-//
-// Copyright 2012, Google Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file
+package pgwire
 
-package parser
+import (
+	"testing"
 
-import "strings"
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/security/securitytest"
+	"github.com/cockroachdb/cockroach/util/leaktest"
+)
 
-// Values represents a VALUES clause.
-type Values []Tuple
+func init() {
+	security.SetReadFileFn(securitytest.Asset)
+}
 
-func (node Values) String() string {
-	strs := make([]string, 0, len(node))
-	for _, n := range node {
-		strs = append(strs, n.String())
-	}
-	return "VALUES " + strings.Join(strs, ", ")
+//go:generate ../../util/leaktest/add-leaktest.sh *_test.go
+
+func TestMain(m *testing.M) {
+	leaktest.TestMainWithLeakCheck(m)
 }

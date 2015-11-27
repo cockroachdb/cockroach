@@ -25,6 +25,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -35,6 +36,7 @@ import (
 	"testing"
 	"text/tabwriter"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/security"
@@ -183,7 +185,7 @@ func (t *logicTest) setUser(user string) {
 
 		defer func() {
 			// Propagate the DATABASE setting to the newly-live connection.
-			if _, err := t.db.Exec("SET DATABASE = $1", dbName); err != nil {
+			if _, err := t.db.Exec(fmt.Sprintf("SET DATABASE = %s", dbName)); err != nil {
 				t.Fatal(err)
 			}
 		}()
@@ -192,11 +194,16 @@ func (t *logicTest) setUser(user string) {
 	if t.clients == nil {
 		t.clients = map[string]*sql.DB{}
 	}
-	if c, ok := t.clients[user]; ok {
-		t.db = c
+	if db, ok := t.clients[user]; ok {
+		t.db = db
 		return
 	}
-	db, err := sql.Open("cockroach", "https://"+user+"@"+t.srv.ServingAddr()+"?certs=test_certs")
+	host, port, err := net.SplitHostPort(t.srv.PGAddr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// TODO(tamird): SSL
+	db, err := sql.Open("postgres", fmt.Sprintf("sslmode=disable user=%s host=%s port=%s", user, host, port))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -448,24 +455,35 @@ func (t *logicTest) execQuery(query logicQuery) {
 				switch colT {
 				case 'T':
 					if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
-						t.Fatalf("%s: expected text value for column %d, but found %s", query.pos, i, valT)
+						t.Fatalf("%s: expected text value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				case 'I':
 					if valT != reflect.Int64 {
-						t.Fatalf("%s: expected int value for column %d, but found %s", query.pos, i, valT)
+						t.Fatalf("%s: expected int value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				case 'R':
 					if valT != reflect.Float64 {
-						t.Fatalf("%s: expected float value for column %d, but found %s", query.pos, i, valT)
+						t.Fatalf("%s: expected float value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				case 'B':
 					if valT != reflect.Bool {
-						t.Fatalf("%s: expected boolean value for column %d, but found %s", query.pos, i, valT)
+						t.Fatalf("%s: expected boolean value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				default:
 					t.Fatalf("%s: unknown type in type string: %c in %s", query.pos, colT, query.colTypes)
 				}
 
+				if byteArray, ok := val.([]byte); ok {
+					// The postgres wire protocol does not distinguish between
+					// strings and byte arrays, but out tests do. In order to do
+					// The Right Thing™, we replace byte arrays which are valid
+					// UTF-8 with strings. This allows byte arrays which are not
+					// valid UTF-8 to print as a list of bytes (e.g. `[124 107]`)
+					// while printing valid strings naturally.
+					if str := string(byteArray); utf8.ValidString(str) {
+						val = str
+					}
+				}
 				// We split string results on whitespace and append a separate result
 				// for each string. A bit unusual, but otherwise we can't match strings
 				// containing whitespace.
