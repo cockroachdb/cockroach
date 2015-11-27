@@ -1302,6 +1302,18 @@ func (r *Replica) maybeGossipFirstRange() error {
 
 	desc := r.Desc()
 
+	// When multiple nodes are initialized with overlapping Gossip addresses, they all
+	// will attempt to gossip their cluster ID. This is a fairly obvious misconfiguration,
+	// so we error out below.
+	bytes, err := r.store.Gossip().GetInfo(gossip.KeyClusterID)
+	if err == nil && bytes != nil {
+		gossipClusterID := string(bytes)
+		if gossipClusterID != r.store.ClusterID() {
+			log.Fatalc(ctx, "store %d belongs to cluster %s, but attemp to join cluster %s via gossip",
+				r.store.StoreID(), r.store.ClusterID(), gossipClusterID)
+		}
+	}
+
 	// Gossip the cluster ID from all replicas of the first range.
 	if log.V(1) {
 		log.Infoc(ctx, "gossiping cluster id %s from store %d, range %d", r.store.ClusterID(),
