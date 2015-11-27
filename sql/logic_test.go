@@ -475,7 +475,7 @@ func (t *logicTest) execQuery(query logicQuery) {
 
 				if byteArray, ok := val.([]byte); ok {
 					// The postgres wire protocol does not distinguish between
-					// strings and byte arrays, but out tests do. In order to do
+					// strings and byte arrays, but our tests do. In order to do
 					// The Right Thing™, we replace byte arrays which are valid
 					// UTF-8 with strings. This allows byte arrays which are not
 					// valid UTF-8 to print as a list of bytes (e.g. `[124 107]`)
