@@ -34,6 +34,16 @@ type dictEntry struct {
 }
 
 var (
+	constKeyDict = []struct {
+		name  string
+		value roachpb.Key
+	}{
+		{"/Max", MaxKey},
+		{"/Min", MinKey},
+		{"/System/Meta1/Max", Meta1KeyMax},
+		{"/System/Meta2/Max", Meta2KeyMax},
+	}
+
 	keyDict = []struct {
 		name    string
 		start   roachpb.Key
@@ -46,9 +56,7 @@ var (
 			{name: "/Range", prefix: LocalRangePrefix, ppFunc: localRangeKeyPrint},
 		}},
 		{name: "/System", start: SystemPrefix, end: SystemMax, entries: []dictEntry{
-			{name: "/Meta2", prefix: Meta2Prefix, ppFunc: print},
-			{name: "/Meta1", prefix: Meta1Prefix, ppFunc: print},
-			//{name: "Meta", prefix: MetaPrefix},
+
 			{name: "/StatusStore", prefix: StatusStorePrefix, ppFunc: decodeKeyPrint},
 			{name: "/StatusNode", prefix: StatusNodePrefix, ppFunc: decodeKeyPrint},
 			//{name: "Status", prefix: StatusPrefix},
@@ -56,6 +64,16 @@ var (
 		{name: "/Table", start: TableDataPrefix, end: nil, entries: []dictEntry{
 			{name: "", prefix: TableDataPrefix, ppFunc: decodeKeyPrint},
 		}},
+	}
+
+	// keyofKeyDict means the key of suffix which is itself a key,  should recursively pretty print it, see issue #3228
+	keyOfKeyDict = []struct {
+		name   string
+		prefix []byte
+	}{
+		{name: "/System/Meta2", prefix: Meta2Prefix},
+		{name: "/System/Meta1", prefix: Meta1Prefix},
+		//{name: "Meta", prefix: MetaPrefix},
 	}
 
 	rangeIDSuffixDict = []struct {
@@ -248,53 +266,15 @@ func decodeKeyPrint(key roachpb.Key) string {
 	return buf.String()
 }
 
-// PrettyPrint print the key in a human readable format, which organized as:
-// Key's Format												Key's Value
-// /Local/...												"\x00\x00\x00"+...
-// 		/Store/...											"\x00\x00\x00s"+...
-//		/RangeID/...										"\x00\x00\x00s"+[rangeid]
-//			/[rangeid]/SequenceCache/[id]/seq:[seq]			"\x00\x00\x00s"+[rangeid]+"res-"+[id]+[seq]
-//			/[rangeid]/RaftLeaderLease						"\x00\x00\x00s"+[rangeid]+"rfll"
-//			/[rangeid]/RaftTombstone						"\x00\x00\x00s"+[rangeid]+"rftb"
-//			/[rangeid]/RaftHardState						"\x00\x00\x00s"+[rangeid]+"rfth"
-//			/[rangeid]/RaftAppliedIndex						"\x00\x00\x00s"+[rangeid]+"rfta"
-//			/[rangeid]/RaftLog/logIndex:[logIndex]			"\x00\x00\x00s"+[rangeid]+"rftl"+[logIndex]
-//			/[rangeid]/RaftTruncatedState					"\x00\x00\x00s"+[rangeid]+"rftt"
-//			/[rangeid]/RaftLastIndex						"\x00\x00\x00s"+[rangeid]+"rfti"
-//			/[rangeid]/RangeGCMetadata						"\x00\x00\x00s"+[rangeid]+"rgcm"
-//			/[rangeid]/RangeLastVerificationTimestamp		"\x00\x00\x00s"+[rangeid]+"rlvt"
-//			/[rangeid]/RangeStats							"\x00\x00\x00s"+[rangeid]+"stat"
-//		/Range/...											"\x00\x00\x00k"+...
-//			/RangeDescriptor/[key]							"\x00\x00\x00k"+[key]+"rdsc"
-//			/RangeTreeNode/[key]							"\x00\x00\x00k"+[key]+"rtn-"
-//			/Transaction/addrKey:[key]/id:[id]				"\x00\x00\x00k"+[key]+"txn-"+[id]
-// /Local/Max 												"\x00\x00\x01"
-//
-// /System/...												"\x00"
-//		/Meta1/[key]										"\x00\x00meta1"+[key]
-//		/Meta2/[key]										"\x00\x00meta2"+[key]
-//		/StatusStore/[key]									"\x00status-store-"+[key]
-//		/StatusNode/[key]									"\x00status-node-"+[key]
-// /System/Max												"\x01"
-//
-// /Table/[key]												"\xff"+[key]
-//
-// /Min														""
-// /Max														"\xff\xff"
-func PrettyPrint(key roachpb.Key) string {
-	if bytes.Equal(key, MaxKey) {
-		return "/Max"
-	} else if bytes.Equal(key, MinKey) {
-		return "/Min"
-	}
-
+func prettyPrintInternal(key roachpb.Key) (string, bool) {
 	var buf bytes.Buffer
+	formatted := true
 	for _, k := range keyDict {
 		if key.Compare(k.start) >= 0 && (k.end == nil || key.Compare(k.end) <= 0) {
 			fmt.Fprintf(&buf, "%s", k.name)
 			if k.end != nil && k.end.Compare(key) == 0 {
 				fmt.Fprintf(&buf, "/Max")
-				return buf.String()
+				return buf.String(), formatted
 			}
 
 			hasPrefix := false
@@ -312,11 +292,72 @@ func PrettyPrint(key roachpb.Key) string {
 				fmt.Fprintf(&buf, "/%q", []byte(key))
 			}
 
-			return buf.String()
+			return buf.String(), formatted
 		}
 	}
 
-	return fmt.Sprintf("%q", []byte(key))
+	return fmt.Sprintf("%q", []byte(key)), false
+}
+
+// PrettyPrint print the key in a human readable format, which organized as:
+// Key's Format										Key's Value
+// /Local/...										"\x00\x00\x00"+...
+// 		/Store/...									"\x00\x00\x00s"+...
+//		/RangeID/...								"\x00\x00\x00s"+[rangeid]
+//			/[rangeid]/SequenceCache/[id]/seq:[seq]				"\x00\x00\x00s"+[rangeid]+"res-"+[id]+[seq]
+//			/[rangeid]/RaftLeaderLease					"\x00\x00\x00s"+[rangeid]+"rfll"
+//			/[rangeid]/RaftTombstone						"\x00\x00\x00s"+[rangeid]+"rftb"
+//			/[rangeid]/RaftHardState						"\x00\x00\x00s"+[rangeid]+"rfth"
+//			/[rangeid]/RaftAppliedIndex					"\x00\x00\x00s"+[rangeid]+"rfta"
+//			/[rangeid]/RaftLog/logIndex:[logIndex]				"\x00\x00\x00s"+[rangeid]+"rftl"+[logIndex]
+//			/[rangeid]/RaftTruncatedState					"\x00\x00\x00s"+[rangeid]+"rftt"
+//			/[rangeid]/RaftLastIndex						"\x00\x00\x00s"+[rangeid]+"rfti"
+//			/[rangeid]/RangeGCMetadata					"\x00\x00\x00s"+[rangeid]+"rgcm"
+//			/[rangeid]/RangeLastVerificationTimestamp				"\x00\x00\x00s"+[rangeid]+"rlvt"
+//			/[rangeid]/RangeStats						"\x00\x00\x00s"+[rangeid]+"stat"
+//		/Range/...								"\x00\x00\x00k"+...
+//			/RangeDescriptor/[key]						"\x00\x00\x00k"+[key]+"rdsc"
+//			/RangeTreeNode/[key]						"\x00\x00\x00k"+[key]+"rtn-"
+//			/Transaction/addrKey:[key]/id:[id]					"\x00\x00\x00k"+[key]+"txn-"+[id]
+// /Local/Max 										"\x00\x00\x01"
+//
+// /System/...										"\x00"
+//		/StatusStore/[key]							"\x00status-store-"+[key]
+//		/StatusNode/[key]							"\x00status-node-"+[key]
+// /System/Max										"\x01"
+//
+// /Table/[key]										"\xff"+[key]
+//
+// "%q"											others
+//
+// /Min											""
+// /Max											"\xff\xff"
+// /System/Meta1/Max									"\x00\x00meta1\xff"
+// /System/Meta2/Max									"\x00\x00meta2\xff"
+//
+// /System/Meta1/[recursively key]								"\x00\x00meta1"+[recursively key]
+// /System/Meta2/[recursively key]								"\x00\x00meta2"+[recursively key]
+// the recursively key referece issue #3228
+func PrettyPrint(key roachpb.Key) string {
+	for _, k := range constKeyDict {
+		if bytes.Equal(key, k.value) {
+			return k.name
+		}
+	}
+
+	for _, k := range keyOfKeyDict {
+		if bytes.HasPrefix(key, k.prefix) {
+			key = key[len(k.prefix):]
+			str, formatted := prettyPrintInternal(key)
+			if formatted {
+				return fmt.Sprintf("%s%s", k.name, str)
+			}
+
+			return fmt.Sprintf("%s/%s", k.name, str)
+		}
+	}
+	str, _ := prettyPrintInternal(key)
+	return str
 }
 
 func init() {
