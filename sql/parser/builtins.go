@@ -29,6 +29,7 @@ import (
 	"math/rand"
 	"reflect"
 	"regexp"
+	"regexp/syntax"
 	"strconv"
 	"strings"
 	"sync"
@@ -1145,46 +1146,63 @@ func regexpReplace(ctx EvalContext, s, pattern, to, sqlFlags string) (Datum, err
 	return DString(newString.String()), nil
 }
 
+var flagToByte = map[syntax.Flags]byte{
+	syntax.FoldCase: 'i',
+	syntax.DotNL:    's',
+}
+
+var flagToNotByte = map[syntax.Flags]byte{
+	syntax.OneLine: 'm',
+}
+
 // regexpEvalFlags evaluates the provided Postgres regexp flags in
 // accordance with their definitions provided at
 // http://www.postgresql.org/docs/9.0/static/functions-matching.html#POSIX-EMBEDDED-OPTIONS-TABLE.
 // It then returns an adjusted regexp pattern.
 func regexpEvalFlags(pattern, sqlFlags string) (string, error) {
-	goReFlags := map[rune]struct{}{'s': {}, 'm': {}}
+	var flags syntax.Flags = syntax.DotNL
 
-	for _, flag := range sqlFlags {
-		switch flag {
+	for _, sqlFlag := range sqlFlags {
+		switch sqlFlag {
 		case 'g':
-			// Ignore for now, valid flag that should be handled elsewhere.
+			// Handled in `regexpReplace`.
 		case 'i':
-			goReFlags['i'] = struct{}{}
+			flags |= syntax.FoldCase
 		case 'c':
-			delete(goReFlags, 'i')
+			flags &= ^syntax.FoldCase
 		case 's':
-			goReFlags['s'] = struct{}{}
+			flags |= syntax.DotNL
 		case 'm', 'n':
-			delete(goReFlags, 's')
-			delete(goReFlags, 'm')
+			flags &= ^syntax.DotNL
+			flags |= syntax.OneLine
 		case 'p':
-			goReFlags['s'] = struct{}{}
-			delete(goReFlags, 'm')
+			flags |= syntax.DotNL
+			flags |= syntax.OneLine
 		case 'w':
-			delete(goReFlags, 's')
-			goReFlags['m'] = struct{}{}
+			flags |= syntax.DotNL
+			flags &= ^syntax.OneLine
 		default:
-			return "", fmt.Errorf("invalid regexp flag: %q", flag)
+			return "", fmt.Errorf("invalid regexp flag: %q", sqlFlag)
 		}
 	}
 
-	if len(goReFlags) == 0 {
+	var goFlags bytes.Buffer
+	for flag, b := range flagToByte {
+		if flags&flag != 0 {
+			goFlags.WriteByte(b)
+		}
+	}
+	for flag, b := range flagToNotByte {
+		if flags&flag == 0 {
+			goFlags.WriteByte(b)
+		}
+	}
+	// Bytes() instead of String() to save an allocation.
+	bs := goFlags.Bytes()
+	if len(bs) == 0 {
 		return pattern, nil
 	}
-
-	var flagString bytes.Buffer
-	for flag := range goReFlags {
-		flagString.WriteRune(flag)
-	}
-	return fmt.Sprintf("(?%s:%s)", flagString.String(), pattern), nil
+	return fmt.Sprintf("(?%s:%s)", bs, pattern), nil
 }
 
 func overlay(s, to string, pos, size int) (Datum, error) {
