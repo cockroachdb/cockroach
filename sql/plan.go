@@ -18,6 +18,7 @@
 package sql
 
 import (
+	"errors"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -216,6 +217,8 @@ func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, er
 	return desc, nil
 }
 
+var errDontUpdateTableDescriptor = errors.New("don't update table descriptor")
+
 func (p *planner) hackNoteSchemaChange(tableDesc *TableDescriptor) {
 	tableDesc.Version++
 	p.modifiedSchemas = append(p.modifiedSchemas, schemaInfo{tableDesc.ID, tableDesc.Version})
@@ -235,17 +238,9 @@ func (p *planner) releaseLeases(db client.DB) {
 	// properly.
 	if p.modifiedSchemas != nil {
 		for _, d := range p.modifiedSchemas {
-			var lease *LeaseState
-			err := db.Txn(func(txn *client.Txn) error {
-				var err error
-				lease, err = p.leaseMgr.Acquire(txn, d.id, d.version)
-				return err
-			})
-			if err != nil {
-				log.Warning(err)
-				continue
-			}
-			if err := p.leaseMgr.Release(lease); err != nil {
+			// To prevent Publish() from writing a new version of the
+			// table descriptor, the function passed in returns an error.
+			if err := p.leaseMgr.Publish(d.id, func(desc *TableDescriptor) error { return errDontUpdateTableDescriptor }); err != nil && err != errDontUpdateTableDescriptor {
 				log.Warning(err)
 			}
 		}
