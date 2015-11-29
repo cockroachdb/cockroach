@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
+const rangeSplitTimeout = 10 * time.Second
+
 // getFastScanContext returns a test context with fast scan.
 func getFastScanContext() *server.Context {
 	c := server.NewTestContext()
@@ -98,7 +100,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 			t.Fatalf("failed to retrieve range list: %s", err)
 		}
 		return num == 2
-	}, 10*time.Second); err != nil {
+	}, rangeSplitTimeout); err != nil {
 		t.Errorf("missing split: %s", err)
 	}
 
@@ -125,7 +127,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 		}
 		t.Logf("Num ranges: %d", num)
 		return num == 3
-	}, 10*time.Second); err != nil {
+	}, rangeSplitTimeout); err != nil {
 		t.Errorf("missing split: %s", err)
 	}
 
