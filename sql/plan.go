@@ -235,19 +235,7 @@ func (p *planner) releaseLeases(db client.DB) {
 	// properly.
 	if p.modifiedSchemas != nil {
 		for _, d := range p.modifiedSchemas {
-			var lease *LeaseState
-			err := db.Txn(func(txn *client.Txn) error {
-				var err error
-				lease, err = p.leaseMgr.Acquire(txn, d.id, d.version)
-				return err
-			})
-			if err != nil {
-				log.Warning(err)
-				continue
-			}
-			if err := p.leaseMgr.Release(lease); err != nil {
-				log.Warning(err)
-			}
+			p.leaseMgr.tryWait(d.id, d.version)
 		}
 		p.modifiedSchemas = nil
 	}
