@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -77,11 +76,11 @@ type Executor struct {
 
 // newExecutor creates an Executor and registers a callback on the
 // system config.
-func newExecutor(db client.DB, gossip *gossip.Gossip, clock *hlc.Clock) *Executor {
+func newExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager) *Executor {
 	exec := &Executor{
 		db:       db,
 		reCache:  parser.NewRegexpCache(512),
-		leaseMgr: NewLeaseManager(0, db, clock),
+		leaseMgr: leaseMgr,
 	}
 	exec.systemConfigCond = sync.NewCond(&exec.systemConfigMu)
 	gossip.RegisterSystemConfigCallback(exec.updateSystemConfig)
