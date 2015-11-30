@@ -49,18 +49,30 @@ type CallResolver struct {
 var defaultRE = func() *regexp.Regexp {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
-		panic("unable to look up location")
+		return regexp.MustCompile(`^$`) // strip nothing
 	}
 	const sep = string(os.PathSeparator)
+	qSep := regexp.QuoteMeta(sep)
 	path := filepath.Dir(file)
+	// Coverage tests report back as `[...]/util/caller/_test/_obj_test`;
+	// strip back to this package's directory.
+	for strings.Contains(path, sep) && !strings.HasSuffix(path, "caller") {
+		path = filepath.Dir(filepath.Clean(path))
+	}
 	// Strip to $GOPATH/src.
 	for i := 0; i < 5; i++ {
 		path = filepath.Dir(filepath.Clean(path))
 	}
+	if !strings.Contains(path, sep) {
+		// This is again the unusual case above. The actual callsites will have
+		// a "real" caller, so we'll just best-effort match them. Again, this
+		// is only happening in coverage tests (and maybe some other non-standard
+		// ones).
+		return regexp.MustCompile(".*src" + qSep + strings.Repeat(strings.Join([]string{"[^", "]+", ""}, qSep), 3) + "(.*)")
+	}
 	if !strings.HasSuffix(path, sep+"src") {
 		panic("unable to find base path for default call resolver, got " + path)
 	}
-	qSep := regexp.QuoteMeta(sep)
 	return regexp.MustCompile(regexp.QuoteMeta(path) + qSep + strings.Repeat(strings.Join([]string{"[^", "]+", ""}, qSep), 3) + "(.*)")
 }()
 
