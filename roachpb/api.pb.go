@@ -445,11 +445,11 @@ type EndTransactionRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// False to abort and rollback.
 	Commit bool `protobuf:"varint,2,opt,name=commit" json:"commit"`
+	// The deadline by which the transaction must commit, if present.
+	Deadline *Timestamp `protobuf:"bytes,3,opt,name=deadline" json:"deadline,omitempty"`
 	// Optional commit triggers. Note that commit triggers are for
 	// internal use only and will cause an error if requested through the
 	// external-facing KV API.
-	// The deadline by which the transaction must commit, if present.
-	Deadline              *Timestamp             `protobuf:"bytes,3,opt,name=deadline" json:"deadline,omitempty"`
 	InternalCommitTrigger *InternalCommitTrigger `protobuf:"bytes,4,opt,name=internal_commit_trigger" json:"internal_commit_trigger,omitempty"`
 	// List of intents written by the transaction.
 	IntentSpans []Span `protobuf:"bytes,5,rep,name=intent_spans" json:"intent_spans"`
