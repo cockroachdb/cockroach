@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"os"
 	"reflect"
 	"testing"
 
@@ -48,15 +47,11 @@ func TestRunQuery(t *testing.T) {
 	defer db.Close()
 	defer s.Stop()
 
-	// Override osStdout with our own writer.
+	// Use a buffer as the io.Writer.
 	var b bytes.Buffer
-	osStdout = &b
-	defer func() {
-		osStdout = os.Stdout
-	}()
 
 	// Non-query statement.
-	if err := runPrettyQuery(db, `SET DATABASE=system`); err != nil {
+	if err := runPrettyQuery(db, &b, `SET DATABASE=system`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -88,7 +83,7 @@ OK
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
 	}
 
-	if err := runPrettyQuery(db, `SHOW COLUMNS FROM system.namespace`); err != nil {
+	if err := runPrettyQuery(db, &b, `SHOW COLUMNS FROM system.namespace`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -108,7 +103,7 @@ OK
 	b.Reset()
 
 	// Test placeholders.
-	if err := runPrettyQuery(db, `SELECT * FROM system.namespace WHERE name=$1`, "descriptor"); err != nil {
+	if err := runPrettyQuery(db, &b, `SELECT * FROM system.namespace WHERE name=$1`, "descriptor"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -129,7 +124,7 @@ OK
 		return fmt.Sprintf("--> %#v <--", val)
 	}
 
-	if err := runPrettyQueryWithFormat(db, fmtMap{"name": newFormat},
+	if err := runPrettyQueryWithFormat(db, &b, fmtMap{"name": newFormat},
 		`SELECT * FROM system.namespace WHERE name=$1`, "descriptor"); err != nil {
 		t.Fatal(err)
 	}
@@ -145,5 +140,4 @@ OK
 		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
 	}
 	b.Reset()
-
 }

@@ -18,6 +18,8 @@
 package cli
 
 import (
+	"os"
+
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/log"
 
@@ -40,7 +42,8 @@ func runGetUser(cmd *cobra.Command, args []string) {
 		return
 	}
 	db := makeSQLClient()
-	err := runPrettyQuery(db, `SELECT * FROM system.users WHERE username=$1`, args[0])
+	defer func() { _ = db.Close() }()
+	err := runPrettyQuery(db, os.Stdout, `SELECT * FROM system.users WHERE username=$1`, args[0])
 	if err != nil {
 		log.Error(err)
 		return
@@ -63,7 +66,8 @@ func runLsUsers(cmd *cobra.Command, args []string) {
 		return
 	}
 	db := makeSQLClient()
-	err := runPrettyQuery(db, `SELECT username FROM system.users`)
+	defer func() { _ = db.Close() }()
+	err := runPrettyQuery(db, os.Stdout, `SELECT username FROM system.users`)
 	if err != nil {
 		log.Error(err)
 		return
@@ -86,7 +90,8 @@ func runRmUser(cmd *cobra.Command, args []string) {
 		return
 	}
 	db := makeSQLClient()
-	err := runPrettyQuery(db, `DELETE FROM system.users WHERE username=$1`, args[0])
+	defer func() { _ = db.Close() }()
+	err := runPrettyQuery(db, os.Stdout, `DELETE FROM system.users WHERE username=$1`, args[0])
 	if err != nil {
 		log.Error(err)
 		return
@@ -119,8 +124,9 @@ func runSetUser(cmd *cobra.Command, args []string) {
 		return
 	}
 	db := makeSQLClient()
+	defer func() { _ = db.Close() }()
 	// TODO(marc): switch to UPSERT.
-	err = runPrettyQuery(db, `INSERT INTO system.users VALUES ($1, $2)`, args[0], hashed)
+	err = runPrettyQuery(db, os.Stdout, `INSERT INTO system.users VALUES ($1, $2)`, args[0], hashed)
 	if err != nil {
 		log.Error(err)
 		return
