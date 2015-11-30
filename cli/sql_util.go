@@ -20,6 +20,7 @@ package cli
 import (
 	"database/sql"
 	"fmt"
+	"io"
 
 	"github.com/olekukonko/tablewriter"
 
@@ -69,21 +70,21 @@ func runQueryWithFormat(db *sql.DB, format fmtMap, query string, parameters ...i
 }
 
 // runPrettyQueryWithFormat takes a 'query' with optional 'parameters'.
-// It runs the sql query and writes pretty output to osStdout.
-func runPrettyQuery(db *sql.DB, query string, parameters ...interface{}) error {
-	return runPrettyQueryWithFormat(db, nil, query, parameters...)
+// It runs the sql query and writes pretty output to 'w'.
+func runPrettyQuery(db *sql.DB, w io.Writer, query string, parameters ...interface{}) error {
+	return runPrettyQueryWithFormat(db, w, nil, query, parameters...)
 }
 
 // runPrettyQueryWithFormat takes a 'query' with optional 'parameters'.
-// It runs the sql query and writes pretty output to osStdout.
+// It runs the sql query and writes pretty output to 'w'.
 // If 'format' is not nil, the values with column name
 // found in the map are run through the corresponding callback.
-func runPrettyQueryWithFormat(db *sql.DB, format fmtMap, query string, parameters ...interface{}) error {
+func runPrettyQueryWithFormat(db *sql.DB, w io.Writer, format fmtMap, query string, parameters ...interface{}) error {
 	cols, allRows, err := runQueryWithFormat(db, format, query, parameters...)
 	if err != nil {
 		return err
 	}
-	return printQueryOutput(cols, allRows)
+	return printQueryOutput(w, cols, allRows)
 }
 
 // sqlRowsToStrings turns 'rows' into a list of rows, each of which
@@ -129,16 +130,16 @@ func sqlRowsToStrings(rows *sql.Rows, format fmtMap) ([]string, [][]string, erro
 }
 
 // printQueryOutput takes a list of column names and a list of row contents
-// writes a pretty table to osStdout, or "OK" if empty.
-func printQueryOutput(cols []string, allRows [][]string) error {
+// writes a pretty table to 'w', or "OK" if empty.
+func printQueryOutput(w io.Writer, cols []string, allRows [][]string) error {
 	if len(cols) == 0 {
 		// This operation did not return rows, just show success.
-		fmt.Fprintln(osStdout, "OK")
+		fmt.Fprintln(w, "OK")
 		return nil
 	}
 
 	// Initialize tablewriter and set column names as the header row.
-	table := tablewriter.NewWriter(osStdout)
+	table := tablewriter.NewWriter(w)
 	table.SetAutoFormatHeaders(false)
 	table.SetAutoWrapText(false)
 	table.SetHeader(cols)
