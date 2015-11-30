@@ -1602,10 +1602,7 @@ func (s *Store) processRaft() {
 							groupID, cmd)
 						log.Error(err)
 					} else {
-						err = r.processRaftCommand(cmdIDKey(commandID), index, cmd)
-					}
-					if callback != nil {
-						callback(err)
+						r.addApplyQueue(cmdIDKey(commandID), index, cmd, callback)
 					}
 				}
 
