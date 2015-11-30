@@ -360,9 +360,7 @@ func (m *InternalCommitTrigger) GetModifiedSpanTrigger() *ModifiedSpanTrigger {
 // NodeList keeps a growing set of NodeIDs as a sorted slice, with Add()
 // adding to the set and Contains() verifying membership.
 type NodeList struct {
-	// Note that this does not use the NodeID custom type because that appears
-	// to interact badly with the repeated and/or packed options.
-	Nodes []int32 `protobuf:"varint,1,rep,packed,name=nodes" json:"nodes,omitempty"`
+	Nodes []NodeID `protobuf:"varint,1,rep,packed,name=nodes,casttype=NodeID" json:"nodes,omitempty"`
 }
 
 func (m *NodeList) Reset()         { *m = NodeList{} }
@@ -2622,7 +2620,7 @@ func (m *NodeList) Unmarshal(data []byte) error {
 					return io.ErrUnexpectedEOF
 				}
 				for iNdEx < postIndex {
-					var v int32
+					var v NodeID
 					for shift := uint(0); ; shift += 7 {
 						if shift >= 64 {
 							return ErrIntOverflowData
@@ -2632,7 +2630,7 @@ func (m *NodeList) Unmarshal(data []byte) error {
 						}
 						b := data[iNdEx]
 						iNdEx++
-						v |= (int32(b) & 0x7F) << shift
+						v |= (NodeID(b) & 0x7F) << shift
 						if b < 0x80 {
 							break
 						}
@@ -2640,7 +2638,7 @@ func (m *NodeList) Unmarshal(data []byte) error {
 					m.Nodes = append(m.Nodes, v)
 				}
 			} else if wireType == 0 {
-				var v int32
+				var v NodeID
 				for shift := uint(0); ; shift += 7 {
 					if shift >= 64 {
 						return ErrIntOverflowData
@@ -2650,7 +2648,7 @@ func (m *NodeList) Unmarshal(data []byte) error {
 					}
 					b := data[iNdEx]
 					iNdEx++
-					v |= (int32(b) & 0x7F) << shift
+					v |= (NodeID(b) & 0x7F) << shift
 					if b < 0x80 {
 						break
 					}

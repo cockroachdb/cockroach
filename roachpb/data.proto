@@ -200,9 +200,7 @@ enum TransactionStatus {
 // NodeList keeps a growing set of NodeIDs as a sorted slice, with Add()
 // adding to the set and Contains() verifying membership.
 message NodeList {
-  // Note that this does not use the NodeID custom type because that appears
-  // to interact badly with the repeated and/or packed options.
-  repeated int32 nodes = 1 [packed=true];
+  repeated int32 nodes = 1 [packed = true, (gogoproto.casttype) = "NodeID"];
 }
 
 // A Transaction is a unit of work performed on the database.

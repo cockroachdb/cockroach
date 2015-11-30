@@ -412,7 +412,7 @@ var nonZeroTxn = Transaction{
 	OrigTimestamp: makeTS(30, 31),
 	MaxTimestamp:  makeTS(40, 41),
 	CertainNodes: NodeList{
-		Nodes: []int32{101, 103, 105},
+		Nodes: []NodeID{101, 103, 105},
 	},
 	Writing:  true,
 	Sequence: 123,

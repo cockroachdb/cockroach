@@ -621,7 +621,7 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 
 	// Copy the list of nodes without time uncertainty.
-	t.CertainNodes = NodeList{Nodes: append(Int32Slice(nil),
+	t.CertainNodes = NodeList{Nodes: append(NodeIDSlice(nil),
 		o.CertainNodes.Nodes...)}
 	t.UpgradePriority(o.Priority)
 	// We can't assert against regression here since it can actually happen
@@ -674,8 +674,8 @@ func NewGCMetadata(nowNanos int64) *GCMetadata {
 // and restores ordering.
 func (s *NodeList) Add(nodeID NodeID) {
 	if !s.Contains(nodeID) {
-		(*s).Nodes = append(s.Nodes, int32(nodeID))
-		sort.Sort(Int32Slice(s.Nodes))
+		s.Nodes = append(s.Nodes, nodeID)
+		sort.Sort(NodeIDSlice(s.Nodes))
 	}
 }
 
@@ -685,13 +685,6 @@ func (s NodeList) Contains(nodeID NodeID) bool {
 	i := sort.Search(len(ns), func(i int) bool { return NodeID(ns[i]) >= nodeID })
 	return i < len(ns) && NodeID(ns[i]) == nodeID
 }
-
-// Int32Slice implements sort.Interface.
-type Int32Slice []int32
-
-func (s Int32Slice) Len() int           { return len(s) }
-func (s Int32Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s Int32Slice) Less(i, j int) bool { return s[i] < s[j] }
 
 var _ fmt.Stringer = &Lease{}
 
