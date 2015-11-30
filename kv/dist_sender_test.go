@@ -404,7 +404,7 @@ func TestOwnNodeCertain(t *testing.T) {
 	}, put); err != nil {
 		t.Fatalf("put encountered error: %s", err)
 	}
-	if expNodes := []int32{expNodeID}; !reflect.DeepEqual(act.Nodes, expNodes) {
+	if expNodes := []roachpb.NodeID{expNodeID}; !reflect.DeepEqual(act.Nodes, expNodes) {
 		t.Fatalf("got %v, expected %v", act.Nodes, expNodes)
 	}
 
