@@ -174,7 +174,7 @@ func TestGossipRestart(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		} else if v := kv.ValueInt(); v != int64(i+1) {
-			t.Fatalf("unexpected value %d for write #%d (expected %d)", v, i, i+1)
+			t.Fatalf("unexpected value %d for write #%d (expected %d)", v, i+1, i+1)
 		}
 		dbStopper.Stop()
 	}
