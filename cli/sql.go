@@ -20,6 +20,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/peterh/liner"
@@ -50,13 +51,14 @@ func runTerm(cmd *cobra.Command, args []string) {
 	}
 
 	db := makeSQLClient()
+	defer func() { _ = db.Close() }()
 
 	liner := liner.NewLiner()
 	defer func() {
 		_ = liner.Close()
 	}()
 
-	fmt.Fprint(osStdout, infoMessage)
+	fmt.Print(infoMessage)
 
 	// Default prompt is "hostname> "
 	// continued statement prompt it: "        -> "
@@ -111,8 +113,8 @@ func runTerm(cmd *cobra.Command, args []string) {
 		fullStmt := strings.Join(stmt, "\n")
 		liner.AppendHistory(fullStmt)
 
-		if err := runPrettyQuery(db, fullStmt); err != nil {
-			fmt.Fprintln(osStdout, err)
+		if err := runPrettyQuery(db, os.Stdout, fullStmt); err != nil {
+			fmt.Println(err)
 		}
 
 		// Clear the saved statement.

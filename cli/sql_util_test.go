@@ -18,10 +18,10 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"database/sql"
 	"fmt"
-	"os"
 	"reflect"
 	"testing"
 
@@ -50,15 +50,13 @@ func TestRunQuery(t *testing.T) {
 
 	// Override osStdout with our own writer.
 	var b bytes.Buffer
-	osStdout = &b
-	defer func() {
-		osStdout = os.Stdout
-	}()
+	w := bufio.NewWriter(&b)
 
 	// Non-query statement.
-	if err := runPrettyQuery(db, `SET DATABASE=system`); err != nil {
+	if err := runPrettyQuery(db, w, `SET DATABASE=system`); err != nil {
 		t.Fatal(err)
 	}
+	_ = w.Flush()
 
 	expected := `
 OK
@@ -88,9 +86,10 @@ OK
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
 	}
 
-	if err := runPrettyQuery(db, `SHOW COLUMNS FROM system.namespace`); err != nil {
+	if err := runPrettyQuery(db, w, `SHOW COLUMNS FROM system.namespace`); err != nil {
 		t.Fatal(err)
 	}
+	_ = w.Flush()
 
 	expected = `
 +----------+--------+------+---------+
@@ -108,9 +107,10 @@ OK
 	b.Reset()
 
 	// Test placeholders.
-	if err := runPrettyQuery(db, `SELECT * FROM system.namespace WHERE name=$1`, "descriptor"); err != nil {
+	if err := runPrettyQuery(db, w, `SELECT * FROM system.namespace WHERE name=$1`, "descriptor"); err != nil {
 		t.Fatal(err)
 	}
+	_ = w.Flush()
 
 	expected = `
 +----------+------------+----+
@@ -129,10 +129,11 @@ OK
 		return fmt.Sprintf("--> %#v <--", val)
 	}
 
-	if err := runPrettyQueryWithFormat(db, fmtMap{"name": newFormat},
+	if err := runPrettyQueryWithFormat(db, w, fmtMap{"name": newFormat},
 		`SELECT * FROM system.namespace WHERE name=$1`, "descriptor"); err != nil {
 		t.Fatal(err)
 	}
+	_ = w.Flush()
 
 	expected = `
 +----------+----------------------+----+
@@ -145,5 +146,4 @@ OK
 		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
 	}
 	b.Reset()
-
 }
