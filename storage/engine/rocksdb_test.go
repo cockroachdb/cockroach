@@ -135,15 +135,15 @@ func TestRocksDBCompaction(t *testing.T) {
 // for larger numbers of versions. The database is persisted between
 // runs and stored in the current directory as
 // "mvcc_scan_<versions>_<keys>_<valueBytes>".
-func setupMVCCScanData(numVersions, numKeys, valueBytes int, b *testing.B) (*RocksDB, *stop.Stopper) {
-	loc := fmt.Sprintf("mvcc_scan_%d_%d_%d", numVersions, numKeys, valueBytes)
+func setupMVCCData(numVersions, numKeys, valueBytes int, b *testing.B) (*RocksDB, *stop.Stopper) {
+	loc := fmt.Sprintf("mvcc_data_%d_%d_%d", numVersions, numKeys, valueBytes)
 
 	exists := true
 	if _, err := os.Stat(loc); os.IsNotExist(err) {
 		exists = false
 	}
 
-	const cacheSize = 8 << 30 // 8 GB
+	const cacheSize = 0
 	stopper := stop.NewStopper()
 	rocksdb := NewRocksDB(roachpb.Attributes{}, loc, cacheSize, stopper)
 	if err := rocksdb.Open(); err != nil {
@@ -157,25 +157,36 @@ func setupMVCCScanData(numVersions, numKeys, valueBytes int, b *testing.B) (*Roc
 	log.Infof("creating mvcc data: %s", loc)
 
 	rng, _ := randutil.NewPseudoRand()
+
 	keys := make([]roachpb.Key, numKeys)
-	nvs := make([]int, numKeys)
-	for t := 1; t <= numVersions; t++ {
-		walltime := int64(5 * t)
-		ts := makeTS(walltime, 0)
+	var order []int
+	for i := 0; i < numKeys; i++ {
+		keys[i] = roachpb.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))
+		keyVersions := rng.Intn(numVersions) + 1
+		for j := 1; j <= keyVersions; j++ {
+			order = append(order, i)
+		}
+	}
+
+	// Randomize the order in which the keys are written.
+	for i, n := 0, len(order); i < n; i++ {
+		j := rng.Intn(n)
+		order[i], order[j] = order[j], order[i]
+	}
+
+	counts := make([]int, numKeys)
+	for i, n := 0, len(order); i < n; {
 		batch := rocksdb.NewBatch()
-		for i := 0; i < numKeys; i++ {
-			if t == 1 {
-				keys[i] = roachpb.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))
-				nvs[i] = rand.Intn(numVersions) + 1
-			}
-			// Only write values if this iteration is less than the random
-			// number of versions chosen for this key.
-			if t <= nvs[i] {
-				value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
-				value.InitChecksum(keys[i])
-				if err := MVCCPut(batch, nil, keys[i], ts, value, nil); err != nil {
-					b.Fatal(err)
-				}
+		for j := 0; j < 100 && i < n; i++ {
+			j++
+			idx := order[i]
+			key := keys[idx]
+			ts := makeTS(int64(counts[idx]+1)*5, 0)
+			counts[idx]++
+			value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
+			value.InitChecksum(key)
+			if err := MVCCPut(batch, nil, key, ts, value, nil); err != nil {
+				b.Fatal(err)
 			}
 		}
 		if err := batch.Commit(); err != nil {
@@ -183,21 +194,8 @@ func setupMVCCScanData(numVersions, numKeys, valueBytes int, b *testing.B) (*Roc
 		}
 		batch.Close()
 	}
-	rocksdb.CompactRange(nil, nil)
 
 	return rocksdb, stopper
-}
-
-// prewarmCache prewarms the rocksdb cache by iterating over the
-// entire database.
-func prewarmCache(rocksdb *RocksDB) {
-	iter := rocksdb.NewIterator()
-	iter.Seek(keyMin)
-	defer iter.Close()
-
-	for iter.Valid() {
-		iter.Next()
-	}
 }
 
 // runMVCCScan first creates test data (and resets the benchmarking
@@ -211,10 +209,8 @@ func runMVCCScan(numRows, numVersions, valueSize int, b *testing.B) {
 	// datasets all fit in cache and the cache is pre-warmed.
 	const numKeys = 100000
 
-	rocksdb, stopper := setupMVCCScanData(numVersions, numKeys, valueSize, b)
+	rocksdb, stopper := setupMVCCData(numVersions, numKeys, valueSize, b)
 	defer stopper.Stop()
-
-	prewarmCache(rocksdb)
 
 	b.SetBytes(int64(numRows * valueSize))
 	b.ResetTimer()
@@ -355,37 +351,34 @@ func BenchmarkMVCCScan100Versions1000Rows512Bytes(b *testing.B) {
 // runMVCCGet first creates test data (and resets the benchmarking
 // timer). It then performs b.N MVCCGets.
 func runMVCCGet(numVersions, valueSize int, b *testing.B) {
-	// Use the same number of keys for all of the mvcc get
-	// benchmarks. Using a different number of keys per test gives
-	// preferential treatment to tests with fewer keys. Note that the
-	// datasets all fit in cache and the cache is pre-warmed.
-	const numKeys = 100000
+	const overhead = 48 // Per key/value overhead (empirically determined)
+	// Adjust the number of keys so that each test has approximately the same
+	// amount of data.
+	numKeys := 512 * 1000000 / ((overhead + valueSize) * (1 + (numVersions-1)/2))
 
-	rocksdb, stopper := setupMVCCScanData(numVersions, numKeys, valueSize, b)
+	rocksdb, stopper := setupMVCCData(numVersions, numKeys, valueSize, b)
 	defer stopper.Stop()
-
-	prewarmCache(rocksdb)
 
 	b.SetBytes(int64(valueSize))
 	b.ResetTimer()
 
-	b.RunParallel(func(pb *testing.PB) {
-		keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
-		for pb.Next() {
-			// Choose a random key to retrieve.
-			keyIdx := rand.Int31n(int32(numKeys))
-			key := roachpb.Key(encoding.EncodeUvarint(keyBuf[:4], uint64(keyIdx)))
-			walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
-			ts := makeTS(walltime, 0)
-			if v, _, err := MVCCGet(rocksdb, key, ts, true, nil); err != nil {
-				b.Fatalf("failed get: %s", err)
-			} else if valueBytes, err := v.GetBytes(); err != nil {
-				b.Fatal(err)
-			} else if len(valueBytes) != valueSize {
-				b.Fatalf("unexpected value size: %d", len(valueBytes))
-			}
+	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+	for i := 0; i < b.N; i++ {
+		// Choose a random key to retrieve.
+		keyIdx := rand.Int31n(int32(numKeys))
+		key := roachpb.Key(encoding.EncodeUvarint(keyBuf[:4], uint64(keyIdx)))
+		walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
+		ts := makeTS(walltime, 0)
+		if v, _, err := MVCCGet(rocksdb, key, ts, true, nil); err != nil {
+			b.Fatalf("failed get: %s", err)
+		} else if v == nil {
+			b.Fatalf("failed get (key not found): %d@%d", keyIdx, walltime)
+		} else if valueBytes, err := v.GetBytes(); err != nil {
+			b.Fatal(err)
+		} else if len(valueBytes) != valueSize {
+			b.Fatalf("unexpected value size: %d", len(valueBytes))
 		}
-	})
+	}
 
 	b.StopTimer()
 }
@@ -394,36 +387,12 @@ func BenchmarkMVCCGet1Version8Bytes(b *testing.B) {
 	runMVCCGet(1, 8, b)
 }
 
-func BenchmarkMVCCGet1Version64Bytes(b *testing.B) {
-	runMVCCGet(1, 64, b)
-}
-
-func BenchmarkMVCCGet1Version512Bytes(b *testing.B) {
-	runMVCCGet(1, 512, b)
-}
-
 func BenchmarkMVCCGet10Versions8Bytes(b *testing.B) {
 	runMVCCGet(10, 8, b)
 }
 
-func BenchmarkMVCCGet10Versions64Bytes(b *testing.B) {
-	runMVCCGet(10, 64, b)
-}
-
-func BenchmarkMVCCGet10Versions512Bytes(b *testing.B) {
-	runMVCCGet(10, 512, b)
-}
-
 func BenchmarkMVCCGet100Versions8Bytes(b *testing.B) {
 	runMVCCGet(100, 8, b)
-}
-
-func BenchmarkMVCCGet100Versions64Bytes(b *testing.B) {
-	runMVCCGet(100, 64, b)
-}
-
-func BenchmarkMVCCGet100Versions512Bytes(b *testing.B) {
-	runMVCCGet(100, 512, b)
 }
 
 func runMVCCPut(valueSize int, b *testing.B) {
@@ -577,7 +546,7 @@ func runMVCCDeleteRange(valueBytes int, b *testing.B) {
 	const rangeBytes = 512 * 1024
 	const overhead = 48 // Per key/value overhead (empirically determined)
 	numKeys := rangeBytes / (overhead + valueBytes)
-	rocksdb, stopper := setupMVCCScanData(1, numKeys, valueBytes, b)
+	rocksdb, stopper := setupMVCCData(1, numKeys, valueBytes, b)
 	stopper.Stop()
 
 	b.SetBytes(rangeBytes)
@@ -626,17 +595,15 @@ func runMVCCComputeStats(valueBytes int, b *testing.B) {
 	const rangeBytes = 64 * 1024 * 1024
 	const overhead = 48 // Per key/value overhead (empirically determined)
 	numKeys := rangeBytes / (overhead + valueBytes)
-	rocksdb, stopper := setupMVCCScanData(1, numKeys, valueBytes, b)
+	rocksdb, stopper := setupMVCCData(1, numKeys, valueBytes, b)
 	defer stopper.Stop()
-
-	prewarmCache(rocksdb)
 
 	b.SetBytes(rangeBytes)
 	b.ResetTimer()
 
 	var stats MVCCStats
 	for i := 0; i < b.N; i++ {
-		iter := rocksdb.NewIterator()
+		iter := rocksdb.NewIterator(false)
 		iter.Seek(keyMin)
 		stats = MVCCStats{}
 		err := iter.ComputeStats(&stats, roachpb.KeyMin, roachpb.KeyMax, 0)

@@ -115,9 +115,10 @@ DBEngine* DBNewSnapshot(DBEngine* db);
 // DBClose().
 DBEngine* DBNewBatch(DBEngine *db);
 
-// Creates a new database iterator. It is the callers responsibility
-// to call DBIterDestroy().
-DBIterator* DBNewIter(DBEngine* db);
+// Creates a new database iterator. If prefix is true, DBIterSeek and
+// DBIterNext may only return entries sharing the same MVCC user-key
+// prefix. It is the callers responsibility to call DBIterDestroy().
+DBIterator* DBNewIter(DBEngine* db, bool prefix);
 
 // Destroys an iterator, freeing up any associated memory.
 void DBIterDestroy(DBIterator* iter);

@@ -131,10 +131,11 @@ type Engine interface {
 	// Flush causes the engine to write all in-memory data to disk
 	// immediately.
 	Flush() error
-	// NewIterator returns a new instance of an Iterator over this
-	// engine. The caller must invoke Iterator.Close() when finished with
-	// the iterator to free resources.
-	NewIterator() Iterator
+	// NewIterator returns a new instance of an Iterator over this engine. If
+	// prefix is true, Seek and Next may only return entries sharing the same
+	// MVCC user-key prefix. The caller must invoke Iterator.Close() when
+	// finished with the iterator to free resources.
+	NewIterator(prefix bool) Iterator
 	// NewSnapshot returns a new instance of a read-only snapshot
 	// engine. Snapshots are instantaneous and, as long as they're
 	// released relatively quickly, inexpensive. Snapshots are released
