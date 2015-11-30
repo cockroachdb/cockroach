@@ -34,21 +34,10 @@ import (
 	"runtime"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/samalba/dockerclient"
 )
-
-// HTTPClient is an http.Client configured for querying the running
-// local cluster.
-var HTTPClient = http.Client{
-	Timeout: base.NetworkTimeout,
-	Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
-	}}
 
 func getTLSConfig() *tls.Config {
 	certPath := os.Getenv("DOCKER_CERT_PATH")
@@ -329,25 +318,5 @@ func (c *Container) Addr(name string) *net.TCPAddr {
 // GetJSON retrieves the URL specified by https://Addr(<port>)<path>
 // and unmarshals the result as JSON.
 func (c *Container) GetJSON(port, path string, v interface{}) error {
-	resp, err := HTTPClient.Get(fmt.Sprintf("https://%s%s", c.Addr(port), path))
-	if err != nil {
-		if log.V(1) {
-			log.Info(err)
-		}
-		return err
-	}
-	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		if log.V(1) {
-			log.Info(err)
-		}
-		return err
-	}
-	if err := json.Unmarshal(b, v); err != nil {
-		if log.V(1) {
-			log.Info(err)
-		}
-	}
-	return nil
+	return getJSON(true /* tls */, c.Addr(port).String(), path, v)
 }
