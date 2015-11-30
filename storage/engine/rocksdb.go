@@ -252,8 +252,8 @@ func (r *RocksDB) Flush() error {
 }
 
 // NewIterator returns an iterator over this rocksdb engine.
-func (r *RocksDB) NewIterator() Iterator {
-	return newRocksDBIterator(r.rdb)
+func (r *RocksDB) NewIterator(prefix bool) Iterator {
+	return newRocksDBIterator(r.rdb, prefix)
 }
 
 // NewSnapshot creates a snapshot handle from engine and returns a
@@ -358,8 +358,8 @@ func (r *rocksDBSnapshot) Flush() error {
 
 // NewIterator returns a new instance of an Iterator over the
 // engine using the snapshot handle.
-func (r *rocksDBSnapshot) NewIterator() Iterator {
-	return newRocksDBIterator(r.handle)
+func (r *rocksDBSnapshot) NewIterator(prefix bool) Iterator {
+	return newRocksDBIterator(r.handle, prefix)
 }
 
 // NewSnapshot is illegal for snapshot.
@@ -451,8 +451,8 @@ func (r *rocksDBBatch) Flush() error {
 	return util.Errorf("cannot flush a batch")
 }
 
-func (r *rocksDBBatch) NewIterator() Iterator {
-	return newRocksDBIterator(r.batch)
+func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
+	return newRocksDBIterator(r.batch, prefix)
 }
 
 func (r *rocksDBBatch) NewSnapshot() Engine {
@@ -497,13 +497,13 @@ type rocksDBIterator struct {
 // instance. If snapshotHandle is not nil, uses the indicated snapshot.
 // The caller must call rocksDBIterator.Close() when finished with the
 // iterator to free up resources.
-func newRocksDBIterator(rdb *C.DBEngine) *rocksDBIterator {
+func newRocksDBIterator(rdb *C.DBEngine, prefix bool) *rocksDBIterator {
 	// In order to prevent content displacement, caching is disabled
 	// when performing scans. Any options set within the shared read
 	// options field that should be carried over needs to be set here
 	// as well.
 	return &rocksDBIterator{
-		iter: C.DBNewIter(rdb),
+		iter: C.DBNewIter(rdb, C.bool(prefix)),
 	}
 }
 
@@ -769,7 +769,7 @@ func dbIterate(rdb *C.DBEngine, start, end MVCCKey,
 	if bytes.Compare(start, end) >= 0 {
 		return nil
 	}
-	it := newRocksDBIterator(rdb)
+	it := newRocksDBIterator(rdb, false)
 	defer it.Close()
 
 	it.Seek(start)
