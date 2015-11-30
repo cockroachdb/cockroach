@@ -21,6 +21,7 @@ package acceptance
 
 import (
 	"fmt"
+	"net/rpc"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -29,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -77,7 +79,7 @@ func TestChaos(t *testing.T) {
 					// These originate from DistSender when, for example, the
 					// leader is down. With more realistic retry options, we
 					// should probably not see them.
-					if _, ok := err.(*roachpb.SendError); ok {
+					if _, ok := err.(*roachpb.SendError); ok || testutils.IsError(err, rpc.ErrShutdown.Error()) {
 						log.Warning(err)
 					} else {
 						errs <- err
