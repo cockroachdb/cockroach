@@ -94,6 +94,10 @@ func checkNode(t *testing.T, node *cluster.Container, nodeID, otherNodeID, expec
 // TestStatusServer starts up an N node cluster and tests the status server on
 // each node.
 func TestStatusServer(t *testing.T) {
+	if *numNodes == 0 {
+		t.Skip("skipping since not run against local cluster")
+	}
+
 	l := cluster.CreateLocal(*numNodes, stopper) // intentionally using local cluster
 	l.ForceLogging = true
 	l.Start()
