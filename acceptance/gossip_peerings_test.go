@@ -163,8 +163,10 @@ func TestGossipRestart(t *testing.T) {
 
 	for i := 0; i < num; i++ {
 		db, dbStopper := c.MakeClient(t, i)
-		if err := db.Del("count"); err != nil {
-			t.Fatal(err)
+		if i == 0 {
+			if err := db.Del("count"); err != nil {
+				t.Fatal(err)
+			}
 		}
 		var kv client.KeyValue
 		if err := db.Txn(func(txn *client.Txn) error {
@@ -174,7 +176,7 @@ func TestGossipRestart(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		} else if v := kv.ValueInt(); v != int64(i+1) {
-			t.Fatalf("unexpected value %d for write #%d (expected %d)", v, i+1, i+1)
+			t.Fatalf("unexpected value %d for write #%d (expected %d)", v, i, i+1)
 		}
 		dbStopper.Stop()
 	}
