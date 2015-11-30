@@ -25,8 +25,11 @@
 #include "rocksdb/compaction_filter.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
+#include "rocksdb/filter_policy.h"
 #include "rocksdb/merge_operator.h"
 #include "rocksdb/options.h"
+#include "rocksdb/slice_transform.h"
+#include "rocksdb/statistics.h"
 #include "rocksdb/table.h"
 #include "rocksdb/utilities/write_batch_with_index.h"
 #include "cockroach/roachpb/api.pb.h"
@@ -52,7 +55,7 @@ struct DBEngine {
   virtual DBStatus Delete(DBSlice key) = 0;
   virtual DBStatus WriteBatch() = 0;
   virtual DBStatus Get(DBSlice key, DBString* value) = 0;
-  virtual DBIterator* NewIter() = 0;
+  virtual DBIterator* NewIter(bool prefix) = 0;
 };
 
 struct DBImpl : public DBEngine {
@@ -69,6 +72,11 @@ struct DBImpl : public DBEngine {
         rep_deleter(r) {
   }
   virtual ~DBImpl() {
+    const rocksdb::Options &opts = rep->GetOptions();
+    const std::shared_ptr<rocksdb::Statistics> &s = opts.statistics;
+    rocksdb::Info(opts.info_log, "bloom filter utility:    %0.1f%%",
+                  (100.0 * s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_USEFUL)) /
+                  s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_CHECKED));
   }
 
   virtual DBStatus Put(DBSlice key, DBSlice value);
@@ -76,7 +84,7 @@ struct DBImpl : public DBEngine {
   virtual DBStatus Delete(DBSlice key);
   virtual DBStatus WriteBatch();
   virtual DBStatus Get(DBSlice key, DBString* value);
-  virtual DBIterator* NewIter();
+  virtual DBIterator* NewIter(bool prefix);
 };
 
 struct DBBatch : public DBEngine {
@@ -96,7 +104,7 @@ struct DBBatch : public DBEngine {
   virtual DBStatus Delete(DBSlice key);
   virtual DBStatus WriteBatch();
   virtual DBStatus Get(DBSlice key, DBString* value);
-  virtual DBIterator* NewIter();
+  virtual DBIterator* NewIter(bool prefix);
 };
 
 struct DBSnapshot : public DBEngine {
@@ -117,7 +125,7 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus Delete(DBSlice key);
   virtual DBStatus WriteBatch();
   virtual DBStatus Get(DBSlice key, DBString* value);
-  virtual DBIterator* NewIter();
+  virtual DBIterator* NewIter(bool prefix);
 };
 
 struct DBIterator {
@@ -322,6 +330,39 @@ class DBCompactionFilterFactory : public rocksdb::CompactionFilterFactory {
  private:
   google::protobuf::Mutex mu_; // Protects values below.
   int64_t min_txn_ts_;
+};
+
+class DBPrefixExtractor : public rocksdb::SliceTransform {
+ public:
+  DBPrefixExtractor() {
+  }
+
+  virtual const char* Name() const {
+    return "cockroach_prefix_extractor";
+  }
+
+  // MVCC keys are encoded as <user-key>/<timestamp>. Extract the <user-key>
+  // prefix which will allow for more efficient iteration over the keys
+  // matching a particular <user-key>. Specifically, the <user-key> will be
+  // added to the per table bloom filters and will this be able to skip tables
+  // which do not contain the <user-key>.
+  virtual rocksdb::Slice Transform(const rocksdb::Slice& src) const {
+    const char kTerm[] = "\x00\x01";
+    const int kTermSize = sizeof(kTerm) - 1;
+    const char* p = reinterpret_cast<const char*>(memmem(src.data(), src.size(), kTerm, kTermSize));
+    if (!p) {
+      return src;
+    }
+    return rocksdb::Slice(src.data(), p - src.data());
+  }
+
+  virtual bool InDomain(const rocksdb::Slice& src) const {
+    return true;
+  }
+
+  virtual bool InRange(const rocksdb::Slice& dst) const {
+    return Transform(dst) == dst;
+  }
 };
 
 bool WillOverflow(int64_t a, int64_t b) {
@@ -1089,6 +1130,8 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
     table_options.block_cache = rocksdb::NewLRUCache(
         block_cache_size, num_cache_shard_bits);
   }
+  table_options.filter_policy.reset(rocksdb::NewBloomFilterPolicy(10));
+  table_options.format_version = 2;
 
   rocksdb::Options options;
   options.allow_os_buffer = db_opts.allow_os_buffer;
@@ -1097,6 +1140,8 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.create_if_missing = true;
   options.info_log.reset(new DBLogger(db_opts.logging_enabled));
   options.merge_operator.reset(new DBMergeOperator);
+  options.prefix_extractor.reset(new DBPrefixExtractor);
+  options.statistics = rocksdb::CreateDBStatistics();
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
   options.write_buffer_size = 64 << 20;           // 64 MB
   options.target_file_size_base = 64 << 20;       // 64 MB
@@ -1275,15 +1320,19 @@ DBEngine* DBNewBatch(DBEngine *db) {
   return new DBBatch(db);
 }
 
-DBIterator* DBImpl::NewIter() {
+DBIterator* DBImpl::NewIter(bool prefix) {
   DBIterator* iter = new DBIterator;
-  iter->rep.reset(rep->NewIterator(read_opts));
+  rocksdb::ReadOptions opts = read_opts;
+  opts.total_order_seek = !prefix;
+  iter->rep.reset(rep->NewIterator(opts));
   return iter;
 }
 
-DBIterator* DBBatch::NewIter() {
+DBIterator* DBBatch::NewIter(bool prefix) {
   DBIterator* iter = new DBIterator;
-  rocksdb::Iterator* base = rep->NewIterator(read_opts);
+  rocksdb::ReadOptions opts = read_opts;
+  opts.total_order_seek = !prefix;
+  rocksdb::Iterator* base = rep->NewIterator(opts);
   if (updates == 0) {
     iter->rep.reset(base);
   } else {
@@ -1293,14 +1342,16 @@ DBIterator* DBBatch::NewIter() {
   return iter;
 }
 
-DBIterator* DBSnapshot::NewIter() {
+DBIterator* DBSnapshot::NewIter(bool prefix) {
   DBIterator* iter = new DBIterator;
-  iter->rep.reset(rep->NewIterator(read_opts));
+  rocksdb::ReadOptions opts = read_opts;
+  opts.total_order_seek = !prefix;
+  iter->rep.reset(rep->NewIterator(opts));
   return iter;
 }
 
-DBIterator* DBNewIter(DBEngine* db) {
-  return db->NewIter();
+DBIterator* DBNewIter(DBEngine* db, bool prefix) {
+  return db->NewIter(prefix);
 }
 
 void DBIterDestroy(DBIterator* iter) {

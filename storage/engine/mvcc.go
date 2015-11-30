@@ -485,7 +485,7 @@ func MVCCGet(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consis
 	buf := getBufferPool.Get().(*getBuffer)
 	defer getBufferPool.Put(buf)
 
-	iter := engine.NewIterator()
+	iter := engine.NewIterator(true /* prefix iteration */)
 	defer iter.Close()
 
 	metaKey := mvccEncodeKey(buf.key[:0], key)
@@ -1072,7 +1072,7 @@ func MVCCIterate(engine Engine, startKey, endKey roachpb.Key, timestamp roachpb.
 	}
 
 	// Get a new iterator.
-	iter := engine.NewIterator()
+	iter := engine.NewIterator(false)
 	defer iter.Close()
 
 	// Seeking for the first defined position.
@@ -1389,7 +1389,7 @@ func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey roach
 // key, clearing all values with timestamps <= to expiration.
 // The timestamp parameter is used to compute the intent age on GC.
 func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []roachpb.GCRequest_GCKey, timestamp roachpb.Timestamp) error {
-	iter := engine.NewIterator()
+	iter := engine.NewIterator(false)
 	defer iter.Close()
 	// Iterate through specified GC keys.
 	for _, gcKey := range keys {
