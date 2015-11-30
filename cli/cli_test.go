@@ -55,7 +55,10 @@ func newCLITest() cliTest {
 
 func (c cliTest) Run(line string) {
 	a := strings.Fields(line)
+	c.RunWithArgs(a)
+}
 
+func (c cliTest) RunWithArgs(a []string) {
 	var args []string
 	args = append(args, a[0])
 	args = append(args, fmt.Sprintf("--addr=%s", c.ServingAddr()))
@@ -64,7 +67,7 @@ func (c cliTest) Run(line string) {
 	args = append(args, a[1:]...)
 
 	fmt.Fprintf(os.Stderr, "%s\n", args)
-	fmt.Println(line)
+	fmt.Println(strings.Join(a, " "))
 	if err := Run(args); err != nil {
 		fmt.Println(err)
 	}
@@ -362,6 +365,57 @@ func Example_max_results() {
 	// node drained and shutdown: ok
 }
 */
+
+func Example_zone() {
+	c := newCLITest()
+
+	zone100 := `replicas:
+- attrs: [us-east-1a,ssd]
+- attrs: [us-east-1b,ssd]
+- attrs: [us-west-1b,ssd]
+range_min_bytes: 8388608
+range_max_bytes: 67108864
+`
+	c.Run("zone ls")
+	// Call RunWithArgs to bypass the "split-by-whitespace" arg builder.
+	c.RunWithArgs([]string{"zone", "set", "100", zone100})
+	c.Run("zone ls")
+	c.Run("zone get 100")
+	c.Run("zone rm 100")
+	c.Run("zone ls")
+	c.Run("quit")
+
+	// Output:
+	// zone ls
+	// zone set 100 replicas:
+	// - attrs: [us-east-1a,ssd]
+	// - attrs: [us-east-1b,ssd]
+	// - attrs: [us-west-1b,ssd]
+	// range_min_bytes: 8388608
+	// range_max_bytes: 67108864
+	//
+	// zone ls
+	// Object 100:
+	// replicas:
+	// - attrs: [us-east-1a, ssd]
+	// - attrs: [us-east-1b, ssd]
+	// - attrs: [us-west-1b, ssd]
+	// range_min_bytes: 8388608
+	// range_max_bytes: 67108864
+	//
+	// zone get 100
+	// replicas:
+	// - attrs: [us-east-1a, ssd]
+	// - attrs: [us-east-1b, ssd]
+	// - attrs: [us-west-1b, ssd]
+	// range_min_bytes: 8388608
+	// range_max_bytes: 67108864
+	//
+	// zone rm 100
+	// zone ls
+	// quit
+	// node drained and shutdown: ok
+}
 
 // TestFlagUsage is a basic test to make sure the fragile
 // help template does not break.

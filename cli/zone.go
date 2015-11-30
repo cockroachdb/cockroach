@@ -20,7 +20,6 @@ package cli
 
 import (
 	"fmt"
-	"io/ioutil"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/config"
@@ -33,9 +32,9 @@ import (
 
 // zoneProtoToYAMLString takes a marshalled proto and returns
 // its yaml representation.
-func zoneProtoToYAMLString(val string) (string, error) {
+func zoneProtoToYAMLString(val []byte) (string, error) {
 	var zone config.ZoneConfig
-	if err := proto.Unmarshal([]byte(val), &zone); err != nil {
+	if err := proto.Unmarshal(val, &zone); err != nil {
 		return "", err
 	}
 	ret, err := yaml.Marshal(zone)
@@ -48,8 +47,8 @@ func zoneProtoToYAMLString(val string) (string, error) {
 // formatZone is a callback used to format the raw zone config
 // protobuf in a sql.Rows column for pretty printing.
 func formatZone(val interface{}) string {
-	if str, ok := val.(string); ok {
-		if ret, err := zoneProtoToYAMLString(str); err == nil {
+	if raw, ok := val.([]byte); ok {
+		if ret, err := zoneProtoToYAMLString(raw); err == nil {
 			return ret
 		}
 	}
@@ -93,7 +92,7 @@ func runGetZone(cmd *cobra.Command, args []string) {
 		log.Errorf("Object %d: no zone config found", id)
 		return
 	}
-	fmt.Fprintln(osStdout, rows[0][1])
+	fmt.Println(rows[0][1])
 }
 
 // A lsZonesCmd command displays a list of zone configs by object ID.
@@ -124,7 +123,7 @@ func runLsZones(cmd *cobra.Command, args []string) {
 		return
 	}
 	for _, r := range rows {
-		fmt.Fprintf(osStdout, "Object %s:\n%s\n", r[0], r[1])
+		fmt.Printf("Object %s:\n%s\n", r[0], r[1])
 	}
 }
 
@@ -161,12 +160,11 @@ func runRmZone(cmd *cobra.Command, args []string) {
 
 // A setZoneCmd command creates a new or updates an existing zone config.
 var setZoneCmd = &cobra.Command{
-	Use:   "set [options] <object-id> <zone-config-file>",
+	Use:   "set [options] <object-id> <zone-config>",
 	Short: "create or update zone config for object ID",
 	Long: `
-Create or update a zone config for the specified object ID (first
-argument: <object-id>) to the contents of the specified file
-(second argument: <zone-config-file>).
+Create or update a zone config for the specified object ID (first argument: <object-id>)
+to the specified zone-config (second argument: <zone-config>).
 
 The zone config format has the following YAML schema:
 
@@ -176,14 +174,13 @@ The zone config format has the following YAML schema:
   range_min_bytes: <size-in-bytes>
   range_max_bytes: <size-in-bytes>
 
-For example:
-
-  replicas:
-    - attrs: [us-east-1a, ssd]
-    - attrs: [us-east-1b, ssd]
-    - attrs: [us-west-1b, ssd]
-  range_min_bytes: 8388608
-  range_max_bytes: 67108864
+For example, to set the zone config for object 100, run:
+cockroach zone set 100 "replicas:
+- attrs: [us-east-1a, ssd]
+- attrs: [us-east-1b, ssd]
+- attrs: [us-west-1b, ssd]
+range_min_bytes: 8388608
+range_max_bytes: 67108864"
 `,
 	Run: runSetZone,
 }
@@ -202,18 +199,11 @@ func runSetZone(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	// Read in the config file.
-	body, err := ioutil.ReadFile(args[1])
-	if err != nil {
-		log.Errorf("unable to read zone config file %q: %s", args[1], err)
-		return
-	}
-
 	// Convert it to proto and marshal it again to put into the table.
 	// This is a bit more tedious than taking protos directly,
 	// but yaml is a more widely understood format.
 	var pbZoneConfig config.ZoneConfig
-	if err := yaml.Unmarshal(body, &pbZoneConfig); err != nil {
+	if err := yaml.Unmarshal([]byte(args[1]), &pbZoneConfig); err != nil {
 		log.Errorf("unable to parse zone config file %q: %s", args[1], err)
 		return
 	}
