@@ -140,7 +140,9 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		return nil, err
 	}
 
-	s.sqlServer = sql.MakeServer(&s.ctx.Context, *s.db, s.gossip, s.clock)
+	leaseMgr := sql.NewLeaseManager(0, *s.db, s.clock)
+	leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
+	s.sqlServer = sql.MakeServer(&s.ctx.Context, *s.db, s.gossip, leaseMgr)
 	if err := s.sqlServer.RegisterRPC(s.rpc); err != nil {
 		return nil, err
 	}

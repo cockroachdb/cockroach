@@ -27,12 +27,17 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -439,10 +444,30 @@ func (t *tableState) acquire(txn *client.Txn, version uint32, store LeaseStore) 
 				return nil, err
 			}
 			t.active.insert(s)
+			if err := t.releaseNonLatest(store); err != nil {
+				log.Warning(err)
+			}
 		}
 
 		// A new lease was added, so loop and perform the lookup again.
 	}
+}
+
+// releaseNonLatest releases all unused non-latest leases.
+func (t *tableState) releaseNonLatest(store LeaseStore) error {
+	// Skip the last lease.
+	for i := 0; i < len(t.active.data)-1; {
+		s := t.active.data[i]
+		if s.Refcount() == 0 {
+			t.active.remove(s)
+			if err := t.releaseNodeLease(s, store); err != nil {
+				return err
+			}
+		} else {
+			i++
+		}
+	}
+	return nil
 }
 
 func (t *tableState) acquireWait() {
@@ -454,17 +479,18 @@ func (t *tableState) acquireWait() {
 	<-acquiring
 }
 
-func (t *tableState) acquireNodeLease(txn *client.Txn, version uint32, store LeaseStore) (*LeaseState, error) {
+func (t *tableState) acquireNodeLease(txn *client.Txn, minVersion uint32, store LeaseStore) (*LeaseState, error) {
 	// We're called with mu locked, but need to unlock it during lease
 	// acquisition.
 	t.mu.Unlock()
 	defer t.mu.Lock()
-	return store.Acquire(txn, t.id, version)
+	return store.Acquire(txn, t.id, minVersion)
 }
 
 func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	s := t.active.find(lease.Version, lease.expiration)
 	if s == nil {
 		return util.Errorf("table %d version %d not found", lease.ID, lease.Version)
@@ -502,6 +528,13 @@ func (t *tableState) releaseNodeLease(lease *LeaseState, store LeaseStore) error
 // for testing.
 type LeaseManager struct {
 	LeaseStore
+
+	// System Config and mutex.
+	systemConfig   config.SystemConfig
+	systemConfigMu sync.RWMutex
+	// A channel used to notify the lease manager of a new config.
+	newConfig chan struct{}
+
 	mu     sync.Mutex
 	tables map[ID]*tableState
 }
@@ -514,7 +547,10 @@ func NewLeaseManager(nodeID uint32, db client.DB, clock *hlc.Clock) *LeaseManage
 			clock:  clock,
 			nodeID: nodeID,
 		},
-		tables: make(map[ID]*tableState),
+		// Create channel that receives new system config notifications.
+		// The channel has a size of 1 to prevent gossip from blocking on it.
+		newConfig: make(chan struct{}, 1),
+		tables:    make(map[ID]*tableState),
 	}
 }
 
@@ -547,4 +583,104 @@ func (m *LeaseManager) findTableState(tableID ID, create bool) *tableState {
 		m.tables[tableID] = t
 	}
 	return t
+}
+
+// updateSystemConfig is called whenever the system config gossip entry is updated.
+func (m *LeaseManager) updateSystemConfig(cfg *config.SystemConfig) {
+	m.systemConfigMu.Lock()
+	defer m.systemConfigMu.Unlock()
+	m.systemConfig = *cfg
+	// notify manager about the new config.
+	select {
+	case m.newConfig <- struct{}{}:
+	default:
+	}
+}
+
+// getSystemConfig returns a pointer to the latest system config.
+func (m *LeaseManager) getSystemConfig() config.SystemConfig {
+	m.systemConfigMu.RLock()
+	defer m.systemConfigMu.RUnlock()
+	return m.systemConfig
+}
+
+// RefreshLeases starts a goroutine that refreshes the lease manager
+// leases for tables received in the latest system configuration via gossip.
+func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gossip.Gossip) {
+	s.RunWorker(func() {
+		descKeyPrefix := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
+		gossip.RegisterSystemConfigCallback(m.updateSystemConfig)
+		for {
+			select {
+			case <-m.newConfig:
+				// Read all tables and their versions
+				cfg := m.getSystemConfig()
+				if log.V(2) {
+					log.Info("received a new config %v", cfg)
+				}
+
+				// Loop through the configuration to find all the tables.
+				for _, kv := range cfg.Values {
+					if kv.Value.Tag != roachpb.ValueType_BYTES {
+						continue
+					}
+
+					if !bytes.HasPrefix(kv.Key, descKeyPrefix) {
+						continue
+					}
+					// Attempt to unmarshal config into a table/database descriptor.
+					var descriptor Descriptor
+					if err := kv.Value.GetProto(&descriptor); err != nil {
+						log.Warningf("unable to unmarshal descriptor %v", kv.Value)
+						continue
+					}
+					switch union := descriptor.Union.(type) {
+					case *Descriptor_Table:
+						table := union.Table
+						if err := table.Validate(); err != nil {
+							log.Errorf("received invalid table descriptor: %v", table)
+							continue
+						}
+						if log.V(2) {
+							log.Infof("refreshing lease table: %d, version: %d", table.ID, table.Version)
+						}
+						// Try to refresh the table lease to one >= this version.
+						if err := m.refreshLease(db, table.ID, table.Version); err != nil {
+							log.Warning(err)
+						}
+
+					case *Descriptor_Database:
+						// Ignore.
+					}
+				}
+
+			case <-s.ShouldStop():
+				return
+			}
+		}
+	})
+}
+
+// refreshLease tries to refresh the node's table lease.
+func (m *LeaseManager) refreshLease(db *client.DB, id ID, minVersion uint32) error {
+	// Only attempt to update a lease for a table that is already leased.
+	if t := m.findTableState(id, false); t == nil {
+		return nil
+	}
+	// Acquire and release a lease on the table at a version >= minVersion.
+	var lease *LeaseState
+	if err := db.Txn(func(txn *client.Txn) error {
+		var err error
+		// Acquire() can only acquire a lease at a version if it has
+		// already been acquired at that version, or that version
+		// is the latest version. If the latest version is > minVersion
+		// then the node acquires a lease at the latest version but
+		// Acquire() itself returns an error. This is okay, because
+		// we want to update the node lease.
+		lease, err = m.Acquire(txn, id, minVersion)
+		return err
+	}); err != nil {
+		return err
+	}
+	return m.Release(lease)
 }
