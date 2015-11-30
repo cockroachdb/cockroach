@@ -466,7 +466,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	if err := util.IsTrueWithin(func() bool {
 		rng = store.LookupReplica(keys.MakeTablePrefix(1000), nil)
 		return rng.Desc().RangeID != originalRange.Desc().RangeID
-	}, 50*time.Millisecond); err != nil {
+	}, time.Second); err != nil {
 		t.Fatalf("failed to notice range max bytes update: %s", err)
 	}
 
@@ -483,12 +483,13 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	// Look in the range after prefix we're writing to.
 	fillRange(store, rng.Desc().RangeID, keys.MakeTablePrefix(1000), maxBytes, t)
 
-	// Verify that the range is in fact split (give it a second for very slow test machines).
+	// Verify that the range is in fact split (give it a few seconds for very
+	// slow test machines).
 	var newRng *storage.Replica
 	if err := util.IsTrueWithin(func() bool {
 		newRng = store.LookupReplica(keys.MakeTablePrefix(2000), nil)
 		return newRng.Desc().RangeID != rng.Desc().RangeID
-	}, time.Second); err != nil {
+	}, 5*time.Second); err != nil {
 		t.Errorf("expected range to split within 1s")
 	}
 
