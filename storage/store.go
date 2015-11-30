@@ -982,7 +982,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		delete(s.uninitReplicas, newDesc.RangeID)
 		delete(s.replicas, newDesc.RangeID)
 		s.mu.Unlock()
-		if err := s.multiraft.RemoveGroup(newDesc.RangeID); err != nil {
+		if err := s.multiraft.RemoveGroup(newDesc.RangeID, 0); err != nil {
 			return util.Errorf("couldn't remove uninitialized range's group %d: %s", newDesc.RangeID, err)
 		}
 		s.mu.Lock()
@@ -1127,9 +1127,16 @@ func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor) er
 func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor) error {
 	desc := rep.Desc()
 	rangeID := desc.RangeID
-	if _, rd := desc.FindReplica(s.StoreID()); rd != nil && rd.ReplicaID >= origDesc.NextReplicaID {
+	_, rd := desc.FindReplica(s.StoreID())
+	if rd != nil && rd.ReplicaID >= origDesc.NextReplicaID {
 		return util.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
 			rep, rd.ReplicaID, origDesc.NextReplicaID)
+	}
+	var replicaID roachpb.ReplicaID
+	if rd != nil {
+		replicaID = rd.ReplicaID
+	} else {
+		replicaID = 0
 	}
 
 	// RemoveGroup needs to access the storage, which in turn needs the
@@ -1137,7 +1144,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	// from multiraft outside the scope of s.mu; this is effectively
 	// synchronized by the fact that this method runs on the processRaft
 	// goroutine.
-	if err := s.multiraft.RemoveGroup(rangeID); err != nil {
+	if err := s.multiraft.RemoveGroup(rangeID, replicaID); err != nil {
 		return err
 	}
 	s.mu.Lock()
