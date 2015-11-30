@@ -204,11 +204,11 @@ message EndTransactionRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // False to abort and rollback.
   optional bool commit = 2 [(gogoproto.nullable) = false];
+  // The deadline by which the transaction must commit, if present.
+  optional Timestamp deadline = 3;
   // Optional commit triggers. Note that commit triggers are for
   // internal use only and will cause an error if requested through the
   // external-facing KV API.
-  // The deadline by which the transaction must commit, if present.
-  optional Timestamp deadline = 3;
   optional InternalCommitTrigger internal_commit_trigger = 4;
   // List of intents written by the transaction.
   repeated Span intent_spans = 5 [(gogoproto.nullable) = false];
