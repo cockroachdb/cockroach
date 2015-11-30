@@ -44,24 +44,41 @@ type CallResolver struct {
 	re    *regexp.Regexp
 }
 
+var reStripNothing = regexp.MustCompile(`^$`)
+
 // defaultPattern strips src/github.com/organization/project/module/submodule/file.go
-// down to module/submodule/file.go.
+// down to module/submodule/file.go. It falls back to stripping nothing when
+// it's unable to look up its own location via runtime.Caller().
 var defaultRE = func() *regexp.Regexp {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
-		panic("unable to look up location")
+		return reStripNothing
 	}
 	const sep = string(os.PathSeparator)
 	path := filepath.Dir(file)
+	// Coverage tests report back as `[...]/util/caller/_test/_obj_test`;
+	// strip back to this package's directory.
+	for strings.Contains(path, sep) && !strings.HasSuffix(path, "caller") {
+		path = filepath.Dir(filepath.Clean(path))
+	}
 	// Strip to $GOPATH/src.
 	for i := 0; i < 5; i++ {
 		path = filepath.Dir(filepath.Clean(path))
 	}
+	qSep := regexp.QuoteMeta(sep)
+	// Part of the regexp that matches `/github.com/username/reponame/`.
+	pkgStrip := qSep + strings.Repeat(strings.Join([]string{"[^", "]+", ""}, qSep), 3) + "(.*)"
+	if !strings.Contains(path, sep) {
+		// This is again the unusual case above. The actual callsites will have
+		// a "real" caller, so now we don't exactly know what to strip; going
+		// up to the rightmost "src" directory will be correct unless someone
+		// creates packages inside of a "src" directory within their GOPATH.
+		return regexp.MustCompile(".*" + qSep + "src" + pkgStrip)
+	}
 	if !strings.HasSuffix(path, sep+"src") {
 		panic("unable to find base path for default call resolver, got " + path)
 	}
-	qSep := regexp.QuoteMeta(sep)
-	return regexp.MustCompile(regexp.QuoteMeta(path) + qSep + strings.Repeat(strings.Join([]string{"[^", "]+", ""}, qSep), 3) + "(.*)")
+	return regexp.MustCompile(regexp.QuoteMeta(path) + pkgStrip)
 }()
 
 var defaultCallResolver = NewCallResolver(0, defaultRE)
