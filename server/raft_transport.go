@@ -138,7 +138,9 @@ func (t *rpcTransport) processQueue(nodeID roachpb.NodeID, storeID roachpb.Store
 
 	addr, err := t.gossip.GetNodeIDAddress(nodeID)
 	if err != nil {
-		log.Errorf("could not get address for node %d: %s", nodeID, err)
+		if log.V(1) {
+			log.Errorf("could not get address for node %d: %s", nodeID, err)
+		}
 		return
 	}
 	client := rpc.NewClient(addr, t.rpcContext)
