@@ -100,6 +100,9 @@ const (
 
 	// DefaultLeaderLeaseDuration is the default duration of the leader lease.
 	DefaultLeaderLeaseDuration = time.Second
+
+	// cmdQueueChanSize is the length of cmdQueueChan
+	cmdQueueChanSize = 1000
 )
 
 // tsCacheMethods specifies the set of methods which affect the
@@ -138,6 +141,14 @@ type pendingCmd struct {
 }
 
 type cmdIDKey string
+
+// committedCmd is a raft command for processReplicaCmd queue.
+type committedCmd struct {
+	idKey    cmdIDKey
+	index    uint64
+	raftCmd  roachpb.RaftCommand
+	callback func(error)
+}
 
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
@@ -186,6 +197,10 @@ type Replica struct {
 		value roachpb.ReplicaDescriptor
 	}
 	truncatedState unsafe.Pointer // *roachpb.RaftTruncatedState
+
+	cmdQueueChan chan committedCmd // Command queue
+	stopFlagLock sync.Mutex        // Protect stopFlag
+	stopFlag     bool              // Mark processReplicaCmd goroutine if already stop
 }
 
 var _ client.Sender = &Replica{}
@@ -193,11 +208,13 @@ var _ client.Sender = &Replica{}
 // NewReplica initializes the replica using the given metadata.
 func NewReplica(desc *roachpb.RangeDescriptor, rm *Store) (*Replica, error) {
 	r := &Replica{
-		store:       rm,
-		cmdQ:        NewCommandQueue(),
-		tsCache:     NewTimestampCache(rm.Clock()),
-		sequence:    NewSequenceCache(desc.RangeID),
-		pendingCmds: map[cmdIDKey]*pendingCmd{},
+		store:        rm,
+		cmdQ:         NewCommandQueue(),
+		tsCache:      NewTimestampCache(rm.Clock()),
+		sequence:     NewSequenceCache(desc.RangeID),
+		pendingCmds:  map[cmdIDKey]*pendingCmd{},
+		cmdQueueChan: make(chan committedCmd, cmdQueueChanSize),
+		stopFlag:     true,
 	}
 	r.pendingReplica.Cond = sync.NewCond(r)
 	r.setDescWithoutProcessUpdate(desc)
@@ -1659,4 +1676,56 @@ func (r *Replica) maybeAddToSplitQueue() {
 	if maxBytes > 0 && r.stats.KeyBytes+r.stats.ValBytes > maxBytes {
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
+}
+
+// processReplicaCmd get a raft command from command queue and
+// call processRaftCommand to execute in a loop until there is
+// not any command in the queue for 5 seconds.
+func (r *Replica) processReplicaCmd() {
+	for {
+		select {
+		case cmd := <-r.cmdQueueChan:
+			err := r.processRaftCommand(cmd.idKey, cmd.index, cmd.raftCmd)
+			if cmd.callback != nil {
+				cmd.callback(err)
+			}
+
+		case <-time.After(5 * time.Second):
+			r.stopFlagLock.Lock()
+			if len(r.cmdQueueChan) == 0 {
+				r.stopFlag = true
+				r.stopFlagLock.Unlock()
+				return
+			}
+			r.stopFlagLock.Unlock()
+
+		case <-r.store.stopper.ShouldStop():
+			return
+		}
+	}
+}
+
+// addCmdQueue insert a raft command into command queue on each replica.
+// If replica's process goroutine already stopped, start a new one to get
+// and execute the command in command queue.
+func (r *Replica) addCmdQueue(idKey cmdIDKey, index uint64, raftCmd roachpb.RaftCommand, f func(error)) {
+	r.cmdQueueChan <- committedCmd{
+		idKey:    idKey,
+		index:    index,
+		raftCmd:  raftCmd,
+		callback: f,
+	}
+
+	r.stopFlagLock.Lock()
+	if r.stopFlag {
+		r.stopFlag = false
+		r.stopFlagLock.Unlock()
+
+		r.store.stopper.RunWorker(func() {
+			r.processReplicaCmd()
+		})
+		return
+	}
+
+	r.stopFlagLock.Unlock()
 }
