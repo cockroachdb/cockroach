@@ -543,7 +543,7 @@ func TestRapidCreateRemoveGroup(t *testing.T) {
 					return
 				}
 			}
-			if err := cluster.nodes[0].RemoveGroup(groupID); err != nil {
+			if err := cluster.nodes[0].RemoveGroup(groupID, 0); err != nil {
 				t.Fatal(err)
 			}
 		}

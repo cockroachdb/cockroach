@@ -53,6 +53,10 @@ var ErrGroupDeleted = errors.New("raft group deleted")
 // node was stopped.
 var ErrStopped = errors.New("raft processing stopped")
 
+// ErrReplicaIDMismatch is returned for commands which are have a different replicaID
+// with that group.
+var ErrReplicaIDMismatch = errors.New("raft group replicaID mismtach")
+
 // Config contains the parameters necessary to construct a MultiRaft object.
 type Config struct {
 	Storage   Storage
@@ -343,10 +347,11 @@ func (m *MultiRaft) CreateGroup(groupID roachpb.RangeID) error {
 // RemoveGroup destroys the consensus group with the given ID.
 // No events for this group will be emitted after this method returns
 // (but some events may still be in the channel buffer).
-func (m *MultiRaft) RemoveGroup(groupID roachpb.RangeID) error {
+func (m *MultiRaft) RemoveGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) error {
 	op := removeGroupOp{
-		groupID: groupID,
-		ch:      make(chan error, 1),
+		groupID:   groupID,
+		replicaID: replicaID,
+		ch:        make(chan error, 1),
 	}
 	m.removeGroupChan <- op
 	return <-op.ch
@@ -474,8 +479,9 @@ type createGroupOp struct {
 }
 
 type removeGroupOp struct {
-	groupID roachpb.RangeID
-	ch      chan error
+	groupID   roachpb.RangeID
+	replicaID roachpb.ReplicaID
+	ch        chan error
 }
 
 type statusOp struct {
@@ -622,7 +628,7 @@ func (s *state) start() {
 				if log.V(6) {
 					log.Infof("node %v: got op %#v", s.nodeID, op)
 				}
-				op.ch <- s.removeGroup(op.groupID)
+				op.ch <- s.removeGroup(op.groupID, op.replicaID)
 
 			case prop := <-s.proposalChan:
 				s.propose(prop)
@@ -841,7 +847,7 @@ func (s *state) handleMessage(req *RaftMessageRequest) {
 			// remnants of the old group.
 			log.Infof("node %v: got message for group %s with newer replica ID (%s vs %s), recreating group",
 				s.nodeID, req.GroupID, req.ToReplica.ReplicaID, g.replicaID)
-			if err := s.removeGroup(req.GroupID); err != nil {
+			if err := s.removeGroup(req.GroupID, g.replicaID); err != nil {
 				log.Warningf("Error removing group %d (in response to incoming message): %s",
 					req.GroupID, err)
 				return
@@ -999,16 +1005,22 @@ func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID
 	return nil
 }
 
-func (s *state) removeGroup(groupID roachpb.RangeID) error {
+func (s *state) removeGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) error {
 	// Group creation is lazy and idempotent; so is removal.
 	g, ok := s.groups[groupID]
 	if !ok {
 		return nil
 	}
 	if log.V(3) {
-		log.Infof("node %v removing group %v", s.nodeID, groupID)
+		log.Infof("node %v removing group %v replicaID %v", s.nodeID, groupID, replicaID)
 	}
 
+	if replicaID == 0 {
+		replicaID = g.replicaID
+	}
+	if g.replicaID > replicaID {
+		return ErrReplicaIDMismatch
+	}
 	// Cancel commands which are still in transit.
 	for _, prop := range g.pending {
 		s.removePending(g, prop, ErrGroupDeleted)
