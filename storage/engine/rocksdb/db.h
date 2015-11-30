@@ -115,9 +115,12 @@ DBEngine* DBNewSnapshot(DBEngine* db);
 // DBClose().
 DBEngine* DBNewBatch(DBEngine *db);
 
-// Creates a new database iterator. It is the callers responsibility
-// to call DBIterDestroy().
-DBIterator* DBNewIter(DBEngine* db);
+// Creates a new database iterator. When prefix is true, Seek will use the
+// user-key prefix of the supplied MVCC key to restrict which sstables are
+// searched, but iteration (using Next) over keys without the same user-key
+// prefix will not work correctly (keys may be skipped). It is the callers
+// responsibility to call DBIterDestroy().
+DBIterator* DBNewIter(DBEngine* db, bool prefix);
 
 // Destroys an iterator, freeing up any associated memory.
 void DBIterDestroy(DBIterator* iter);

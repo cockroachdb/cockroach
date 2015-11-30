@@ -1324,7 +1324,7 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 }
 
 func (r *Replica) computeStats(d *roachpb.RangeDescriptor, e engine.Engine, nowNanos int64) (engine.MVCCStats, error) {
-	iter := e.NewIterator()
+	iter := e.NewIterator(false)
 	defer iter.Close()
 
 	ms := &engine.MVCCStats{}
