@@ -88,7 +88,7 @@ func (t *leaseTest) expectLeases(descID csql.ID, expected string) {
 	}
 }
 
-func (t *leaseTest) acquire(nodeID uint32, descID csql.ID, version uint32) (*csql.LeaseState, error) {
+func (t *leaseTest) acquire(nodeID uint32, descID csql.ID, version csql.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
 	err := t.server.DB().Txn(func(txn *client.Txn) error {
 		var err error
@@ -98,7 +98,7 @@ func (t *leaseTest) acquire(nodeID uint32, descID csql.ID, version uint32) (*csq
 	return lease, err
 }
 
-func (t *leaseTest) mustAcquire(nodeID uint32, descID csql.ID, version uint32) *csql.LeaseState {
+func (t *leaseTest) mustAcquire(nodeID uint32, descID csql.ID, version csql.DescriptorVersion) *csql.LeaseState {
 	lease, err := t.acquire(nodeID, descID, version)
 	if err != nil {
 		t.Fatal(err)

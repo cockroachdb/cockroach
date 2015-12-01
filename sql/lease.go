@@ -91,7 +91,7 @@ func (s LeaseStore) jitteredLeaseDuration() time.Duration {
 }
 
 // Acquire a lease on the most recent version of a table descriptor.
-func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion uint32) (*LeaseState, error) {
+func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVersion) (*LeaseState, error) {
 	lease := &LeaseState{}
 	lease.expiration = parser.DTimestamp{
 		Time: time.Unix(0, s.clock.Now().WallTime).Add(s.jitteredLeaseDuration()),
@@ -268,7 +268,7 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) err
 
 // countLeases returns the number of unexpired leases for a particular version
 // of a descriptor.
-func (s LeaseStore) countLeases(descID ID, version uint32, expiration time.Time) (int, error) {
+func (s LeaseStore) countLeases(descID ID, version DescriptorVersion, expiration time.Time) (int, error) {
 	var count int
 	err := s.db.Txn(func(txn *client.Txn) error {
 		p := planner{txn: txn, user: security.RootUser}
@@ -329,14 +329,14 @@ func (l *leaseSet) remove(s *LeaseState) {
 	l.data = append(l.data[:i], l.data[i+1:]...)
 }
 
-func (l *leaseSet) find(version uint32, expiration parser.DTimestamp) *LeaseState {
+func (l *leaseSet) find(version DescriptorVersion, expiration parser.DTimestamp) *LeaseState {
 	if i, match := l.findIndex(version, expiration); match {
 		return l.data[i]
 	}
 	return nil
 }
 
-func (l *leaseSet) findIndex(version uint32, expiration parser.DTimestamp) (int, bool) {
+func (l *leaseSet) findIndex(version DescriptorVersion, expiration parser.DTimestamp) (int, bool) {
 	i := sort.Search(len(l.data), func(i int) bool {
 		s := l.data[i]
 		if s.Version == version {
@@ -354,7 +354,7 @@ func (l *leaseSet) findIndex(version uint32, expiration parser.DTimestamp) (int,
 	return i, false
 }
 
-func (l *leaseSet) findNewest(version uint32) *LeaseState {
+func (l *leaseSet) findNewest(version DescriptorVersion) *LeaseState {
 	if len(l.data) == 0 {
 		return nil
 	}
@@ -394,7 +394,7 @@ type tableState struct {
 	acquiring chan struct{}
 }
 
-func (t *tableState) acquire(txn *client.Txn, version uint32, store LeaseStore) (*LeaseState, error) {
+func (t *tableState) acquire(txn *client.Txn, version DescriptorVersion, store LeaseStore) (*LeaseState, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -479,7 +479,7 @@ func (t *tableState) acquireWait() {
 	<-acquiring
 }
 
-func (t *tableState) acquireNodeLease(txn *client.Txn, minVersion uint32, store LeaseStore) (*LeaseState, error) {
+func (t *tableState) acquireNodeLease(txn *client.Txn, minVersion DescriptorVersion, store LeaseStore) (*LeaseState, error) {
 	// We're called with mu locked, but need to unlock it during lease
 	// acquisition.
 	t.mu.Unlock()
@@ -558,7 +558,7 @@ func NewLeaseManager(nodeID uint32, db client.DB, clock *hlc.Clock) *LeaseManage
 // non-zero the lease is grabbed for the specified version. Otherwise it is
 // grabbed for the most recent version of the descriptor that the lease manager
 // knows about.
-func (m *LeaseManager) Acquire(txn *client.Txn, tableID ID, version uint32) (*LeaseState, error) {
+func (m *LeaseManager) Acquire(txn *client.Txn, tableID ID, version DescriptorVersion) (*LeaseState, error) {
 	t := m.findTableState(tableID, true)
 	return t.acquire(txn, version, m.LeaseStore)
 }
@@ -662,7 +662,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 }
 
 // refreshLease tries to refresh the node's table lease.
-func (m *LeaseManager) refreshLease(db *client.DB, id ID, minVersion uint32) error {
+func (m *LeaseManager) refreshLease(db *client.DB, id ID, minVersion DescriptorVersion) error {
 	// Only attempt to update a lease for a table that is already leased.
 	if t := m.findTableState(id, false); t == nil {
 		return nil

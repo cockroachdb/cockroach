@@ -161,7 +161,7 @@ message TableDescriptor {
   optional uint32 parent_id = 4 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
   // Monotonically increasing version of the table descriptor.
-  optional uint32 version = 5 [(gogoproto.nullable) = false];
+  optional uint32 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
   // Last modification time of the table descriptor.
   optional roachpb.Timestamp modification_time = 6 [(gogoproto.nullable) = false];
   repeated ColumnDescriptor columns = 7 [(gogoproto.nullable) = false];
