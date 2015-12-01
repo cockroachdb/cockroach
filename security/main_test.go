@@ -31,7 +31,7 @@ func init() {
 }
 
 // ResetTest sets up the test environment. In particular, it embeds the
-// test_certs folder and makes the tls package load from there.
+// EmbeddedCertsDir folder and makes the tls package load from there.
 func ResetTest() {
 	security.SetReadFileFn(securitytest.Asset)
 }
