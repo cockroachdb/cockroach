@@ -30,7 +30,7 @@ import (
 
 type schemaInfo struct {
 	id      ID
-	version uint32
+	version Version
 }
 
 // planner is the centerpiece of SQL statement execution combining session

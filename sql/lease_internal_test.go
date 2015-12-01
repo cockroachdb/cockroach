@@ -29,14 +29,14 @@ func TestLeaseSet(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	type data struct {
-		version    uint32
+		version    Version
 		expiration int64
 	}
 	type insert data
 	type remove data
 
 	type newest struct {
-		version uint32
+		version Version
 	}
 
 	testData := []struct {

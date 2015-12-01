@@ -39,6 +39,9 @@ type ColumnID uint32
 // IndexID is a custom type for IndexDescriptor IDs.
 type IndexID uint32
 
+// Version is a custom type for TableDescriptor Versions.
+type Version uint32
+
 const (
 	// PrimaryKeyIndexName is the name of the index for the primary key.
 	PrimaryKeyIndexName = "primary"
