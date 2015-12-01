@@ -70,7 +70,7 @@ type Server struct {
 	db            *client.DB
 	kvDB          *kv.DBServer
 	sqlServer     sql.Server
-	pgServer      pgwire.Server
+	pgServer      *pgwire.Server
 	node          *Node
 	recorder      *status.NodeStatusRecorder
 	admin         *adminServer
