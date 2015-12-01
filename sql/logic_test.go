@@ -202,8 +202,14 @@ func (t *logicTest) setUser(user string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// TODO(tamird): SSL
-	db, err := sql.Open("postgres", fmt.Sprintf("sslmode=disable user=%s host=%s port=%s", user, host, port))
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	certDir := filepath.Join(filepath.Dir(dir), "resource", security.EmbeddedCertsDir)
+	db, err := sql.Open("postgres",
+		fmt.Sprintf("sslmode=verify-full sslrootcert=%s user=%s host=%s port=%s",
+			filepath.Join(certDir, "ca.crt"), user, host, port))
 	if err != nil {
 		t.Fatal(err)
 	}
