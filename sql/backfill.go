@@ -18,6 +18,7 @@
 package sql
 
 import (
+	"bytes"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -94,22 +95,34 @@ func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName
 		}
 	}
 
-	if len(droppedColumnDescs) > 0 {
-		var updateExprs parser.UpdateExprs
-		for _, droppedColumnDesc := range droppedColumnDescs {
-			updateExprs = append(updateExprs, &parser.UpdateExpr{
-				Names: parser.QualifiedNames{&parser.QualifiedName{Base: parser.Name(droppedColumnDesc.Name)}},
-				Expr:  parser.DNull,
-			})
-		}
+	// TODO(vivek): Break these backfill operations into chunks. All of them
+	// will fail on big tables.
 
-		// Run `UPDATE <table> SET col1 = NULL, col2 = NULL, ...` to clear
-		// the data stored in the columns being dropped.
-		if _, err := p.Update(&parser.Update{
-			Table: table,
-			Exprs: updateExprs,
-		}); err != nil {
+	// Delete the entire dropped columns.
+	// This used to use SQL UPDATE in the past to update the dropped
+	// column to NULL; but a column in the process of being
+	// dropped is placed in the table descriptor mutations, and
+	// a SQL UPDATE of a column in mutations will fail.
+	if len(droppedColumnDescs) > 0 {
+		// Run a scan across the table using the primary key.
+		start := roachpb.Key(MakeIndexKeyPrefix(newTableDesc.ID, newTableDesc.PrimaryIndex.ID))
+		// Use a different batch to perform the scan.
+		batch := &client.Batch{}
+		batch.Scan(start, start.PrefixEnd(), 0)
+		if err := p.txn.Run(batch); err != nil {
 			return err
+		}
+		for _, result := range batch.Results {
+			var sentinelKey roachpb.Key
+			for _, kv := range result.Rows {
+				if sentinelKey == nil || !bytes.HasPrefix(kv.Key, sentinelKey) {
+					sentinelKey = kv.Key
+					for _, columnDesc := range droppedColumnDescs {
+						// Delete the dropped column.
+						b.Del(MakeColumnKey(columnDesc.ID, sentinelKey))
+					}
+				}
+			}
 		}
 	}
 
