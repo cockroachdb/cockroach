@@ -350,7 +350,7 @@ type TableDescriptor struct {
 	// ID of the parent database.
 	ParentID ID `protobuf:"varint,4,opt,name=parent_id,casttype=ID" json:"parent_id"`
 	// Monotonically increasing version of the table descriptor.
-	Version uint32 `protobuf:"varint,5,opt,name=version" json:"version"`
+	Version DescriptorVersion `protobuf:"varint,5,opt,name=version,casttype=DescriptorVersion" json:"version"`
 	// Last modification time of the table descriptor.
 	ModificationTime cockroach_roachpb1.Timestamp `protobuf:"bytes,6,opt,name=modification_time" json:"modification_time"`
 	Columns          []ColumnDescriptor           `protobuf:"bytes,7,rep,name=columns" json:"columns"`
@@ -398,7 +398,7 @@ func (m *TableDescriptor) GetParentID() ID {
 	return 0
 }
 
-func (m *TableDescriptor) GetVersion() uint32 {
+func (m *TableDescriptor) GetVersion() DescriptorVersion {
 	if m != nil {
 		return m.Version
 	}
@@ -2011,7 +2011,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.Version |= (uint32(b) & 0x7F) << shift
+				m.Version |= (DescriptorVersion(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
