@@ -498,11 +498,10 @@ func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 		return err
 	}
 
-	// Copy range stats to new range.
-	oldStats := r.stats
-	r.stats, err = newRangeStats(desc.RangeID, batch)
+	// Load updated range stats. The local newStats variable will be assigned
+	// to r.stats after the batch commits.
+	newStats, err := newRangeStats(desc.RangeID, batch)
 	if err != nil {
-		r.stats = oldStats
 		return err
 	}
 
@@ -521,6 +520,9 @@ func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 	if err := batch.Commit(); err != nil {
 		return err
 	}
+
+	// Update the range stats.
+	r.stats.Replace(newStats)
 
 	// As outlined above, last and applied index are the same after applying
 	// the snapshot.
