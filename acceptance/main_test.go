@@ -33,6 +33,7 @@ import (
 var duration = flag.Duration("d", 5*time.Second, "duration to run the test")
 var numNodes = flag.Int("num", 0, "start a local cluster of the given size")
 var peers = flag.String("peers", "", "comma-separated list of remote cluster nodes")
+var stall = flag.Duration("stall", time.Minute, "duration after which if no forward progress is made, consider the test stalled")
 var stopper = make(chan struct{})
 
 // StartCluster starts a cluster from the relevant flags.

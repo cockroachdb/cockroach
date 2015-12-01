@@ -49,6 +49,7 @@ func TestChaos(t *testing.T) {
 	start := time.Now()
 	deadline := start.Add(*duration)
 	var count int64
+	var roundCopy int64
 	counts := make([]int64, num)
 	clients := make([]struct {
 		sync.RWMutex
@@ -89,6 +90,7 @@ func TestChaos(t *testing.T) {
 				}
 				clients[i].RUnlock()
 			}
+			log.Infof("client %d shutting down", i)
 			errs <- nil
 		}(i)
 	}
@@ -113,27 +115,39 @@ func TestChaos(t *testing.T) {
 				return
 			default:
 			}
+			atomic.StoreInt64(&roundCopy, int64(round))
 			nodes := rnd.Perm(num)[:rnd.Intn(num)+1]
-
 			log.Infof("round %d: restarting nodes %v", round, nodes)
 			for i := 0; i < num; i++ {
 				clients[i].Lock()
 			}
-			for i := 0; i < num; i++ {
-				log.Infof("restarting %v", i)
+			for _, i := range nodes {
+				select {
+				case <-stopper:
+					break
+				default:
+				}
+				if time.Now().After(deadline) {
+					break
+				}
+				log.Infof("restarting %d", i)
 				c.Kill(i)
 				c.Restart(i)
 				initClient(i)
+			}
+			for i := 0; i < num; i++ {
 				clients[i].Unlock()
 			}
-			for cur := atomic.LoadInt64(&count); time.Now().Before(deadline) &&
-				atomic.LoadInt64(&count) == cur; time.Sleep(time.Second) {
+			for cur := atomic.LoadInt64(&count); time.Now().Before(deadline) && atomic.LoadInt64(&count) == cur; time.Sleep(time.Second) {
 				c.Assert(t)
 				log.Warningf("monkey sleeping while cluster recovers...")
 			}
 		}
 	}()
 
+	oldRound := atomic.LoadInt64(&roundCopy)
+	stallTime := time.Now().Add(*stall)
+	var oldOutput string
 	for i := 0; i < num; {
 		select {
 		case <-teardown:
@@ -145,13 +159,33 @@ func TestChaos(t *testing.T) {
 			}
 			i++
 		case <-time.After(1 * time.Second):
-			// Periodically print out progress so that we know the test is still
-			// running.
-			cur := make([]string, num)
-			for i := range cur {
-				cur[i] = fmt.Sprintf("%d", atomic.LoadInt64(&counts[i]))
+			var newOutput string
+			if time.Now().Before(deadline) {
+				curRound := atomic.LoadInt64(&roundCopy)
+				if curRound == oldRound {
+					if time.Now().After(stallTime) {
+						close(stopper)
+						t.Fatalf("Stall detected, no forward progress for %s", *stall)
+					}
+				} else {
+					oldRound = curRound
+					stallTime = time.Now().Add(*stall)
+				}
+				// Periodically print out progress so that we know the test is
+				// still running and making progress.
+				cur := make([]string, num)
+				for j := range cur {
+					cur[j] = fmt.Sprintf("%d", atomic.LoadInt64(&counts[j]))
+				}
+				newOutput = fmt.Sprintf("round %d: %d (%s)", atomic.LoadInt64(&roundCopy), atomic.LoadInt64(&count), strings.Join(cur, ", "))
+			} else {
+				newOutput = fmt.Sprintf("test finished, waiting for shutdown of %d clients", num-i)
 			}
-			log.Infof("%d (%s)", atomic.LoadInt64(&count), strings.Join(cur, ", "))
+			// This just stops the logs from being a bit too spammy.
+			if newOutput != oldOutput {
+				log.Infof(newOutput)
+				oldOutput = newOutput
+			}
 		}
 	}
 
