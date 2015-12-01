@@ -156,8 +156,10 @@ module AdminViews {
           columns: ctrl.columns,
           rows: storeStatuses.allStatuses,
         };
+
+        let mostRecentlyUpdated: number = _.max(_.map(storeStatuses.allStatuses(), (s: StoreStatus) => s.updated_at ));
         return m(".page", [
-          m.component(Topbar, {title: "Stores"}),
+          m.component(Topbar, {title: "Stores", updated: mostRecentlyUpdated}),
           m(".section", ctrl.RenderPrimaryStats()),
           m(".section.table", m(".stats-table", Components.Table.create(comparisonData))),
         ]);
@@ -346,8 +348,11 @@ module AdminViews {
           primaryContent = ctrl.RenderPrimaryStats();
         }
 
+        let storeStatus: StoreStatus = storeStatuses.GetStatus(ctrl.GetStoreId());
+        let updated: number = (storeStatus ? storeStatus.updated_at : 0);
+
         return m(".page", [
-          m.component(Components.Topbar, {title: title}),
+          m.component(Components.Topbar, {title: title, updated: updated}),
           m.component(NavigationBar, {ts: ctrl.TargetSet()}),
           m(".section", primaryContent),
         ]);
