@@ -20,6 +20,7 @@ package pgwire
 import (
 	"bytes"
 	"net"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -34,15 +35,17 @@ var (
 type Server struct {
 	context  *Context
 	listener net.Listener
-	conns    []net.Conn
+	mu       sync.Mutex // Mutex protects the fields below
+	conns    map[net.Conn]struct{}
+	closing  bool
 }
 
 // MakeServer creates a Server.
-func MakeServer(context *Context) Server {
-	s := Server{
+func MakeServer(context *Context) *Server {
+	return &Server{
 		context: context,
+		conns:   make(map[net.Conn]struct{}),
 	}
-	return s
 }
 
 // Start a server on the given address.
@@ -74,23 +77,46 @@ func (s *Server) serve(ln net.Listener) {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			log.Error(err)
+			if !s.isClosing() {
+				log.Error(err)
+			}
 			return
 		}
 
-		s.conns = append(s.conns, conn)
+		s.mu.Lock()
+		s.conns[conn] = struct{}{}
+		s.mu.Unlock()
+
 		go func() {
+			defer func() {
+				s.mu.Lock()
+				delete(s.conns, conn)
+				s.mu.Unlock()
+				conn.Close()
+			}()
+
 			if err := s.serveConn(conn); err != nil {
-				log.Error(err)
+				if !s.isClosing() {
+					log.Error(err)
+				}
 			}
 		}()
 	}
 }
 
+func (s *Server) isClosing() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closing
+}
+
 // close this server, and all client connections.
 func (s *Server) close() {
 	s.listener.Close()
-	for _, conn := range s.conns {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closing = true
+	for conn := range s.conns {
 		conn.Close()
 	}
 }
@@ -98,7 +124,6 @@ func (s *Server) close() {
 // serveConn serves a single connection, driving the handshake process
 // and delegating to the appropriate connection type.
 func (s *Server) serveConn(conn net.Conn) error {
-	defer conn.Close()
 	var buf readBuffer
 	if err := buf.readUntypedMsg(conn); err != nil {
 		return err
