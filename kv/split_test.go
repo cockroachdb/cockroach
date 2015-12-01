@@ -36,6 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
+const cleanMVCCScanTimeout = 500 * time.Millisecond
+
 // setTestRetryOptions sets client retry options for speedier testing.
 func setTestRetryOptions() {
 	client.DefaultTxnRetryOptions = retry.Options{
@@ -119,7 +121,7 @@ func TestRangeSplitMeta(t *testing.T) {
 			return false
 		}
 		return true
-	}, 500*time.Millisecond); err != nil {
+	}, cleanMVCCScanTimeout); err != nil {
 		t.Error("failed to verify no dangling intents within 500ms")
 	}
 }
@@ -218,7 +220,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 			return false
 		}
 		return true
-	}, 500*time.Millisecond); err != nil {
+	}, cleanMVCCScanTimeout); err != nil {
 		t.Error("failed to verify no dangling intents within 500ms")
 	}
 }

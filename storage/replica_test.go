@@ -49,6 +49,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+const runUnmarshalCallbackTimeout = 100 * time.Millisecond
+
 func testRangeDescriptor() *roachpb.RangeDescriptor {
 	return &roachpb.RangeDescriptor{
 		RangeID:  1,
@@ -206,10 +208,9 @@ func (tc *testContext) initConfigs(realRange bool) error {
 		return err
 	}
 
-	// Wait for the unmarshalling callback to run.
 	if err := util.IsTrueWithin(func() bool {
 		return tc.gossip.GetSystemConfig() != nil
-	}, 100*time.Millisecond); err != nil {
+	}, runUnmarshalCallbackTimeout); err != nil {
 		return err
 	}
 
@@ -598,7 +599,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 			}
 			numValues := len(cfg.Values)
 			return numValues == 1 && cfg.Values[numValues-1].Key.Equal(key)
-		}, 100*time.Millisecond) == nil
+		}, runUnmarshalCallbackTimeout) == nil
 	}
 
 	// If this actually failed, we would have gossiped from MVCCPutProto.

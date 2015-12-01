@@ -35,6 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+const queueItemProcessTimeout = 250 * time.Millisecond
+
 func gossipForTest(t *testing.T) (*gossip.Gossip, *stop.Stopper) {
 	stopper := stop.NewStopper()
 
@@ -285,14 +287,14 @@ func TestBaseQueueProcess(t *testing.T) {
 	testQueue.blocker <- struct{}{}
 	if err := util.IsTrueWithin(func() bool {
 		return atomic.LoadInt32(&testQueue.processed) == 1
-	}, 250*time.Millisecond); err != nil {
+	}, queueItemProcessTimeout); err != nil {
 		t.Error(err)
 	}
 
 	testQueue.blocker <- struct{}{}
 	if err := util.IsTrueWithin(func() bool {
 		return atomic.LoadInt32(&testQueue.processed) >= 2
-	}, 250*time.Millisecond); err != nil {
+	}, queueItemProcessTimeout); err != nil {
 		t.Error(err)
 	}
 }
@@ -399,7 +401,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 
 	if err := util.IsTrueWithin(func() bool {
 		return atomic.LoadInt32(&testQueue.processed) == 2
-	}, 250*time.Millisecond); err != nil {
+	}, queueItemProcessTimeout); err != nil {
 		t.Error(err)
 	}
 
@@ -425,7 +427,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 
 	if err := util.IsTrueWithin(func() bool {
 		return atomic.LoadInt32(&testQueue.processed) == 3
-	}, 250*time.Millisecond); err != nil {
+	}, queueItemProcessTimeout); err != nil {
 		t.Error(err)
 	}
 

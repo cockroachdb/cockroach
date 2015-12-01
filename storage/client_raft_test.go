@@ -45,6 +45,8 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
+const replicaReadTimeout = 1 * time.Second
+
 // mustGetInt decodes an int64 value from the bytes field of the receiver
 // and panics if the bytes field is not 0 or 8 bytes in length.
 func mustGetInt(v *roachpb.Value) int64 {
@@ -260,7 +262,7 @@ func TestReplicateRange(t *testing.T) {
 	})
 
 	// Verify that the same data is available on the replica.
-	util.SucceedsWithin(t, 1*time.Second, func() error {
+	util.SucceedsWithin(t, replicaReadTimeout, func() error {
 		getArgs := getArgs([]byte("a"))
 		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
@@ -341,7 +343,7 @@ func TestRestoreReplicas(t *testing.T) {
 			return false
 		}
 		return mustGetInt(reply.(*roachpb.GetResponse).Value) == 39
-	}, 1*time.Second); err != nil {
+	}, replicaReadTimeout); err != nil {
 		t.Fatal(err)
 	}
 
@@ -501,7 +503,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 			log.Infof("read value %d", mustGetInt(getResp.Value))
 		}
 		return mustGetInt(getResp.Value) == 16
-	}, 1*time.Second); err != nil {
+	}, replicaReadTimeout); err != nil {
 		t.Fatal(err)
 	}
 
@@ -531,7 +533,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		getResp := reply.(*roachpb.GetResponse)
 		log.Infof("read value %d", mustGetInt(getResp.Value))
 		return mustGetInt(getResp.Value) == 39
-	}, 1*time.Second); err != nil {
+	}, replicaReadTimeout); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -565,7 +567,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 			}
 		}
 		return true
-	}, 3*time.Second); err != nil {
+	}, replicationTimeout); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -996,7 +998,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 			log.Infof("read value %d", mustGetInt(getResp.Value))
 		}
 		return mustGetInt(getResp.Value) == 11
-	}, 1*time.Second); err != nil {
+	}, replicaReadTimeout); err != nil {
 		t.Fatal(err)
 	}
 }

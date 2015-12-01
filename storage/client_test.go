@@ -55,6 +55,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+const replicationTimeout = 3 * time.Second
+
 // Check that Stores implements the RangeDescriptorDB interface.
 var _ kv.RangeDescriptorDB = &storage.Stores{}
 
@@ -504,7 +506,7 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, sourceStoreIn
 	}
 
 	// Wait for the replication to complete on all destination nodes.
-	util.SucceedsWithin(m.t, 3*time.Second, func() error {
+	util.SucceedsWithin(m.t, replicationTimeout, func() error {
 		for _, dest := range dests {
 			// Use LookupRange(keys) instead of GetRange(rangeID) to ensure that the
 			// snapshot has been transferred and the descriptor initialized.
