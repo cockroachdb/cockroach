@@ -22,12 +22,13 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/lib/pq/oid"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/lib/pq/oid"
 )
 
 type messageType byte

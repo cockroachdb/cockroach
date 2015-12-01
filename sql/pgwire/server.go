@@ -19,6 +19,8 @@ package pgwire
 
 import (
 	"bytes"
+	"crypto/tls"
+	"encoding/binary"
 	"net"
 	"sync"
 
@@ -26,10 +28,22 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+// ErrSSLRequired is returned when a client attempts to connect to a
+// secure server in cleartext.
+const ErrSSLRequired = "cleartext connections are not permitted"
+
 var (
-	versionSSL = []byte{0x12, 0x34, 0x56, 0x79}
-	version30  = []byte{0x00, 0x03, 0x00, 0x00}
+	version30  = make([]byte, 4)
+	versionSSL = make([]byte, 4)
+
+	sslSupported   = []byte{'S'}
+	sslUnsupported = []byte{'N'}
 )
+
+func init() {
+	binary.BigEndian.PutUint32(version30, 196608)
+	binary.BigEndian.PutUint32(versionSSL, 80877103)
+}
 
 // Server implements the server side of the PostgreSQL wire protocol.
 type Server struct {
@@ -128,19 +142,46 @@ func (s *Server) serveConn(conn net.Conn) error {
 	if err := buf.readUntypedMsg(conn); err != nil {
 		return err
 	}
-	version := buf.msg[:4]
-	rest := buf.msg[4:]
-	if bytes.Compare(version, versionSSL) == 0 {
+	version, rest := buf.msg[:4], buf.msg[4:]
+	errSSLRequired := false
+	if bytes.Equal(version, versionSSL) {
 		if len(rest) > 0 {
-			return util.Errorf("unexpected data after SSL request")
+			return util.Errorf("unexpected data after SSLRequest: %q", rest)
 		}
-		panic("TODO(bdarnell): ssl mode")
-	} else if bytes.Compare(version, version30) == 0 {
+
+		if s.context.Insecure {
+			if _, err := conn.Write(sslUnsupported); err != nil {
+				return err
+			}
+		} else {
+			if _, err := conn.Write(sslSupported); err != nil {
+				return err
+			}
+			tlsConfig, err := s.context.GetServerTLSConfig()
+			if err != nil {
+				return err
+			}
+			conn = tls.Server(conn, tlsConfig)
+		}
+
+		if err := buf.readUntypedMsg(conn); err != nil {
+			return err
+		}
+		version, rest = buf.msg[:4], buf.msg[4:]
+	} else if !s.context.Insecure {
+		errSSLRequired = true
+	}
+
+	if bytes.Equal(version, version30) {
 		v3conn, err := newV3Conn(conn, rest, s.context.Executor)
 		if err != nil {
 			return err
 		}
+		if errSSLRequired {
+			return v3conn.sendError(ErrSSLRequired)
+		}
 		return v3conn.serve()
 	}
-	return util.Errorf("unknown protocol version %q", version)
+
+	return util.Errorf("unknown protocol version %d", binary.BigEndian.Uint32(version))
 }
