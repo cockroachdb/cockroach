@@ -30,9 +30,10 @@ import (
 )
 
 func makeTestDBClient(t *testing.T, s *server.TestServer) *sql.DB {
-	db, err := sql.Open("cockroach", fmt.Sprintf("https://%s@%s?certs=test_certs",
+	db, err := sql.Open("cockroach", fmt.Sprintf("https://%s@%s?certs=%s",
 		security.RootUser,
-		s.ServingAddr()))
+		s.ServingAddr(),
+		security.EmbeddedCertsDir))
 	if err != nil {
 		t.Fatal(err)
 	}
