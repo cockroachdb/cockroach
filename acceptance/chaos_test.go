@@ -49,6 +49,7 @@ func TestChaos(t *testing.T) {
 	start := time.Now()
 	deadline := start.Add(*duration)
 	var count int64
+	var round int64
 	counts := make([]int64, num)
 	clients := make([]struct {
 		sync.RWMutex
@@ -56,6 +57,7 @@ func TestChaos(t *testing.T) {
 		stopper *stop.Stopper
 	}, num)
 
+	// initClient requires that the caller holds the client's write lock.
 	initClient := func(i int) {
 		db, dbStopper := c.MakeClient(t, i)
 		if clients[i].stopper != nil {
@@ -65,7 +67,9 @@ func TestChaos(t *testing.T) {
 	}
 
 	for i := 0; i < num; i++ {
+		clients[i].Lock()
 		initClient(i)
+		clients[i].Unlock()
 		go func(i int) {
 			r, _ := randutil.NewPseudoRand()
 			value := randutil.RandBytes(r, 8192)
@@ -75,6 +79,8 @@ func TestChaos(t *testing.T) {
 				k := atomic.AddInt64(&count, 1)
 				atomic.AddInt64(&counts[i], 1)
 				v := value[:r.Intn(len(value))]
+				// TODO(bram): fix the retry options so the puts don't block
+				// occasionally for a full min during shutdown.
 				if err := clients[i].db.Put(fmt.Sprintf("%08d", k), v); err != nil {
 					// These originate from DistSender when, for example, the
 					// leader is down. With more realistic retry options, we
@@ -89,6 +95,7 @@ func TestChaos(t *testing.T) {
 				}
 				clients[i].RUnlock()
 			}
+			log.Infof("client %d shutting down", i)
 			errs <- nil
 		}(i)
 	}
@@ -97,6 +104,8 @@ func TestChaos(t *testing.T) {
 	defer func() {
 		<-teardown
 		for i := range clients {
+			clients[i].RLock()
+			defer clients[i].RUnlock()
 			clients[i].stopper.Stop()
 			clients[i].stopper = nil
 		}
@@ -107,33 +116,47 @@ func TestChaos(t *testing.T) {
 		defer close(teardown)
 		rnd, seed := randutil.NewPseudoRand()
 		log.Warningf("monkey starts (seed %d)", seed)
-		for round := 1; time.Now().Before(deadline); round++ {
+		for atomic.StoreInt64(&round, 1); time.Now().Before(deadline); atomic.AddInt64(&round, 1) {
+			curRound := atomic.LoadInt64(&round)
 			select {
 			case <-stopper:
 				return
 			default:
 			}
 			nodes := rnd.Perm(num)[:rnd.Intn(num)+1]
-
-			log.Infof("round %d: restarting nodes %v", round, nodes)
+			log.Infof("round %d: restarting nodes %v", curRound, nodes)
 			for i := 0; i < num; i++ {
 				clients[i].Lock()
 			}
-			for i := 0; i < num; i++ {
-				log.Infof("restarting %v", i)
+			for _, i := range nodes {
+				// Two early exit conditions.
+				select {
+				case <-stopper:
+					break
+				default:
+				}
+				if time.Now().After(deadline) {
+					break
+				}
+				log.Infof("round %d: restarting %d", curRound, i)
 				c.Kill(i)
 				c.Restart(i)
 				initClient(i)
+			}
+			for i := 0; i < num; i++ {
 				clients[i].Unlock()
 			}
 			for cur := atomic.LoadInt64(&count); time.Now().Before(deadline) &&
 				atomic.LoadInt64(&count) == cur; time.Sleep(time.Second) {
 				c.Assert(t)
-				log.Warningf("monkey sleeping while cluster recovers...")
+				log.Warningf("round %d: monkey sleeping while cluster recovers...", curRound)
 			}
 		}
 	}()
 
+	prevRound := atomic.LoadInt64(&round)
+	stallTime := time.Now().Add(*stall)
+	var prevOutput string
 	for i := 0; i < num; {
 		select {
 		case <-teardown:
@@ -145,13 +168,32 @@ func TestChaos(t *testing.T) {
 			}
 			i++
 		case <-time.After(1 * time.Second):
-			// Periodically print out progress so that we know the test is still
-			// running.
-			cur := make([]string, num)
-			for i := range cur {
-				cur[i] = fmt.Sprintf("%d", atomic.LoadInt64(&counts[i]))
+			var newOutput string
+			if time.Now().Before(deadline) {
+				curRound := atomic.LoadInt64(&round)
+				if curRound == prevRound {
+					if time.Now().After(stallTime) {
+						t.Fatalf("Stall detected, no forward progress for %s", *stall)
+					}
+				} else {
+					prevRound = curRound
+					stallTime = time.Now().Add(*stall)
+				}
+				// Periodically print out progress so that we know the test is
+				// still running and making progress.
+				cur := make([]string, num)
+				for j := range cur {
+					cur[j] = fmt.Sprintf("%d", atomic.LoadInt64(&counts[j]))
+				}
+				newOutput = fmt.Sprintf("round %d: %d (%s)", curRound, atomic.LoadInt64(&count), strings.Join(cur, ", "))
+			} else {
+				newOutput = fmt.Sprintf("test finished, waiting for shutdown of %d clients", num-i)
 			}
-			log.Infof("%d (%s)", atomic.LoadInt64(&count), strings.Join(cur, ", "))
+			// This just stops the logs from being a bit too spammy.
+			if newOutput != prevOutput {
+				log.Infof(newOutput)
+				prevOutput = newOutput
+			}
 		}
 	}
 
