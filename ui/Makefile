@@ -76,8 +76,6 @@ GOBINDATA_DEBUG_TARGET  := ./embedded_debug.go
 PROTO_FILES       := ../sql/driver/wire.proto
 PROTO_DEPS        := ../../../gogo/protobuf/
 PROTO_JSON_TARGET := $(GENERATED_ROOT)/wireproto.json
-PROTO_DEFS_TARGET := $(GENERATED_PROTO_ROOT)/wireproto.d.ts
-PROTO_TS_TARGET   := $(GENERATED_PROTO_ROOT)/wireproto.ts
 
 .PHONY:
 all: $(GOBINDATA_TARGET) $(TEST_TARGET)
@@ -103,24 +101,11 @@ $(PROTO_JSON_TARGET): $(PROTO_FILES) $(PROTO_DEPS)
 	mkdir -p generated
 	pbjs $(PROTO_FILES) --path $(PROTO_DEPS) > $@
 
-$(PROTO_DEFS_TARGET): $(PROTO_JSON_TARGET)
-	mkdir -p ts/generated/protos
-	proto2typescript --f generated/wireproto.json > $@
-
-$(PROTO_TS_TARGET): $(PROTO_FILES) $(PROTO_DEPS)
-	mkdir -p ts/generated/protos
-	echo -n "///<reference path="../../../typings/protobufjs/protobufjs.d.ts"/> \n\
-\n\
-module Protos { \n\
-\n\
-  declare var dcodeIO: {ProtoBuf: any;}; \n\
-\n\
-  export " > $@
-	pbjs $(PROTO_FILES) --path $(PROTO_DEPS) --target=js >> $@
-	echo "\n}" >> ts/generated/protos/wireproto.ts
-
-$(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS) $(PROTO_DEFS_TARGET) $(PROTO_TS_TARGET)
-	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -path $(TS_ROOT)/generated -prune -o -name '*.ts' -type f -print)
+$(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
+	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) \
+	  -path $(TS_ROOT)/generated -prune -o \
+	  -path $(TS_ROOT)/external -prune -o \
+	  -name '*.ts' -type f -print)
 	tsc -p $(TS_ROOT)
 
 $(TEST_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
