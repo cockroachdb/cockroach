@@ -109,7 +109,7 @@ func TestIntentResolution(t *testing.T) {
 			}
 
 			if err := s.db.Txn(func(txn *client.Txn) error {
-				b := &client.Batch{}
+				b := txn.NewBatch()
 				for _, key := range tc.keys {
 					b.Put(key, "test")
 				}

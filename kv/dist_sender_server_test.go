@@ -150,7 +150,7 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	// Delete the keys within a transaction. Implicitly, the intents are
 	// resolved via ResolveIntentRange upon completion.
 	if err := db.Txn(func(txn *client.Txn) error {
-		b := &client.Batch{}
+		b := txn.NewBatch()
 		b.DelRange("a", "b")
 		b.DelRange("e", "f")
 		b.DelRange(keys.LocalMax, roachpb.KeyMax)
@@ -190,7 +190,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	// Delete the keys within a transaction. Implicitly, the intents are
 	// resolved via ResolveIntentRange upon completion.
 	if err := db.Txn(func(txn *client.Txn) error {
-		b := &client.Batch{}
+		b := txn.NewBatch()
 		b.DelRange("a", "d")
 		return txn.CommitInBatch(b)
 	}); err != nil {
