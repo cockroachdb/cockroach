@@ -51,6 +51,13 @@ func newRangeStats(rangeID roachpb.RangeID, e engine.Engine) (*rangeStats, error
 	return rs, nil
 }
 
+// Replace *rs with the contents of *other.
+func (rs *rangeStats) Replace(other *rangeStats) {
+	rs.Lock()
+	defer rs.Unlock()
+	rs.MVCCStats = other.MVCCStats
+}
+
 // GetMVCC returns a copy of the underlying MVCCStats. Use this for
 // thread-safe access from goroutines other than the store multiraft
 // processing goroutine.
