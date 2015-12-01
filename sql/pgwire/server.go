@@ -21,12 +21,15 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/binary"
-	"errors"
 	"net"
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
+
+// ErrSSLRequired is returned when a client attempts to connect to a
+// secure server in cleartext.
+const ErrSSLRequired = "cleartext connections are not permitted"
 
 var (
 	version30  = make([]byte, 4)
@@ -34,8 +37,6 @@ var (
 
 	sslSupported   = []byte{'S'}
 	sslUnsupported = []byte{'N'}
-
-	errSSLRequired = errors.New("plaintext connections are not permitted")
 )
 
 func init() {
@@ -117,6 +118,7 @@ func (s *Server) serveConn(conn net.Conn) error {
 		return err
 	}
 	version, rest := buf.msg[:4], buf.msg[4:]
+	errSSLRequired := false
 	if bytes.Equal(version, versionSSL) {
 		if len(rest) > 0 {
 			return util.Errorf("unexpected data after SSLRequest: %q", rest)
@@ -142,13 +144,16 @@ func (s *Server) serveConn(conn net.Conn) error {
 		}
 		version, rest = buf.msg[:4], buf.msg[4:]
 	} else if !s.context.Insecure {
-		return errSSLRequired
+		errSSLRequired = true
 	}
 
 	if bytes.Equal(version, version30) {
 		v3conn, err := newV3Conn(conn, rest, s.context.Executor)
 		if err != nil {
 			return err
+		}
+		if errSSLRequired {
+			return v3conn.sendError(ErrSSLRequired)
 		}
 		return v3conn.serve()
 	}
