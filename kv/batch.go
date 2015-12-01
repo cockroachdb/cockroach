@@ -153,9 +153,6 @@ func (cs *chunkingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 	var rplChunks []*roachpb.BatchResponse
 	for _, part := range parts {
 		ba.Requests = part
-		// Increase the sequence counter to account for the fact that while
-		// chunking, we're likely sending multiple requests to the same Replica.
-		ba.SetNewRequest()
 		rpl, err := cs.f(ctx, ba)
 		if err != nil {
 			return nil, err

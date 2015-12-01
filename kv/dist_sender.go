@@ -433,6 +433,13 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba roachpb.BatchRequest, 
 		}
 	}
 
+	// Increase the sequence counter in the per-range loop (not
+	// outside) since we might hit the same range twice by
+	// accident. For example, we might send multiple requests to
+	// the same Replica if (1) the descriptor cache has post-split
+	// descriptors that are still write intents and (2) the split
+	// has not yet been completed.
+	ba.SetNewRequest()
 	br, err := ds.sendRPC(trace, desc.RangeID, replicas, order, ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
@@ -646,6 +653,8 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 		if pErr != nil {
 			return nil, pErr
 		}
+
+		ba.Txn.Update(curReply.Txn)
 
 		first := br == nil
 		if first {
