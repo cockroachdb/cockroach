@@ -96,14 +96,14 @@ func setup(t *testing.T) (*server.TestServer, *sql.DB, *client.DB) {
 func setupWithContext(t *testing.T, ctx *server.Context) (*server.TestServer, *sql.DB, *client.DB) {
 	s := setupTestServer(t)
 	// SQL requests use "root" which has ALL permissions on everything.
-	sqlDB, err := sql.Open("cockroach", fmt.Sprintf("https://%s@%s?certs=test_certs",
-		security.RootUser, s.ServingAddr()))
+	sqlDB, err := sql.Open("cockroach", fmt.Sprintf("https://%s@%s?certs=%s",
+		security.RootUser, s.ServingAddr(), security.EmbeddedCertsDir))
 	if err != nil {
 		t.Fatal(err)
 	}
 	// All KV requests need "node" certs.
-	kvDB, err := client.Open(s.Stopper(), fmt.Sprintf("rpcs://%s@%s?certs=test_certs",
-		security.NodeUser, s.ServingAddr()))
+	kvDB, err := client.Open(s.Stopper(), fmt.Sprintf("rpcs://%s@%s?certs=%s",
+		security.NodeUser, s.ServingAddr(), security.EmbeddedCertsDir))
 	if err != nil {
 		t.Fatal(err)
 	}

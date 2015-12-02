@@ -25,6 +25,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -39,7 +40,7 @@ func BenchmarkBank(b *testing.B) {
 	s := server.StartTestServer(b)
 	defer s.Stop()
 
-	db, err := sql.Open("cockroach", "https://root@"+s.ServingAddr()+"?certs=test_certs")
+	db, err := sql.Open("cockroach", "https://root@"+s.ServingAddr()+"?certs="+security.EmbeddedCertsDir)
 	if err != nil {
 		b.Fatal(err)
 	}

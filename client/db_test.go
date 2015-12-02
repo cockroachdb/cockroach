@@ -33,9 +33,10 @@ import (
 
 func setup() (*server.TestServer, *client.DB) {
 	s := server.StartTestServer(nil)
-	db, err := client.Open(s.Stopper(), fmt.Sprintf("rpcs://%s@%s?certs=test_certs",
+	db, err := client.Open(s.Stopper(), fmt.Sprintf("rpcs://%s@%s?certs=%s",
 		security.NodeUser,
-		s.ServingAddr()))
+		s.ServingAddr(),
+		security.EmbeddedCertsDir))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -302,8 +303,8 @@ func TestOpenArgs(t *testing.T) {
 		addr      string
 		expectErr bool
 	}{
-		{"rpcs://" + server.TestUser + "@" + s.ServingAddr() + "?certs=test_certs", false},
-		{"rpcs://" + s.ServingAddr() + "?certs=test_certs", false},
+		{"rpcs://" + server.TestUser + "@" + s.ServingAddr() + "?certs=" + security.EmbeddedCertsDir, false},
+		{"rpcs://" + s.ServingAddr() + "?certs=" + security.EmbeddedCertsDir, false},
 		{"rpcs://" + s.ServingAddr() + "?certs=foo", true},
 		{s.ServingAddr(), true},
 	}
