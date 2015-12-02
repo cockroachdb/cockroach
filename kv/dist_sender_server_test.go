@@ -535,13 +535,10 @@ func TestPropagateTxnOnError(t *testing.T) {
 	}
 }
 
-// TestDoNotPropagateTxnOnError reproduces a bug where txn data (e.g., txn ID)
-// are not propagated to a next epoch on error.
-//
-// TODO(kkaneda): Fix #743. The bug happens since not all errors carry
-// a transaction, but range-spanning writes are not atomic (and data
-// may actually have been written).
-func TestDoNotPropagateTxnOnError(t *testing.T) {
+// TestPropagateTxnOnPushError is similar to TestPropagateTxnOnError,
+// but verifies that txn data are propagated to the next iteration on
+// TransactionPushError.
+func TestPropagateTxnOnPushError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, db := setupMultipleRanges(t, "b")
 	defer s.Stop()
@@ -577,6 +574,7 @@ func TestDoNotPropagateTxnOnError(t *testing.T) {
 	//   from the previous txn's. So, the write intent made by the txn of the previous epoch
 	//   is treated as a write made by some different txn.
 	epoch := 0
+	var txnID []byte
 	if err := db.Txn(func(txn *client.Txn) error {
 		// Set low priority so that the intent will not be pushed.
 		txn.InternalSetPriority(1)
@@ -587,13 +585,9 @@ func TestDoNotPropagateTxnOnError(t *testing.T) {
 			close(waitForTxnRestart)
 			// Wait until the txn created by the goroutine is committed.
 			<-waitForTxnCommit
-		} else if epoch > 2 {
-			// Enough number of retries.
-			return nil
-		}
-
-		if !roachpb.TxnIDEqual(txn.Proto.ID, []byte("")) {
-			t.Errorf("txn ID is set unexpectedly")
+			if !roachpb.TxnIDEqual(txn.Proto.ID, txnID) {
+				t.Errorf("txn ID is not propagated; got %s", txn.Proto.ID)
+			}
 		}
 
 		b := txn.NewBatch()
@@ -604,19 +598,22 @@ func TestDoNotPropagateTxnOnError(t *testing.T) {
 		// not update the txn data since
 		// TransactionPushError.Transaction() returns nil.
 		err := txn.CommitInBatch(b)
-		if tErr, ok := err.(*roachpb.TransactionPushError); ok {
-			if roachpb.TxnIDEqual(tErr.Txn.ID, []byte("")) {
-				t.Errorf("txn ID is not set unexpectedly: %s", tErr.Txn.ID)
+		if epoch == 1 {
+			if tErr, ok := err.(*roachpb.TransactionPushError); ok {
+				if len(tErr.Txn.ID) == 0 {
+					t.Errorf("txn ID is not set unexpectedly: %s", tErr)
+				}
+				txnID = tErr.Txn.ID
+			} else {
+				t.Errorf("expected TransactionRetryError, but got: %s", err)
 			}
-		} else {
-			t.Errorf("expected TransactionRetryError, but got: %s", err)
 		}
 		return err
 	}); err != nil {
 		t.Errorf("unexpected error on transactional Puts: %s", err)
 	}
 
-	if epoch <= 2 {
-		t.Errorf("unexpected epoch; the txn must be retried at least twice, but got %d", epoch)
+	if e := 2; epoch != e {
+		t.Errorf("unexpected epoch; the txn must be attempted %d times, but got %d attempts", e, epoch)
 	}
 }
