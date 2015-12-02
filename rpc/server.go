@@ -168,7 +168,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Construct an authentication hook for this security mode and TLS state.
-	authHook, err := security.AuthenticationHook(s.context.Insecure, r.TLS)
+	authHook, err := security.ProtoAuthHook(s.context.Insecure, r.TLS)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
