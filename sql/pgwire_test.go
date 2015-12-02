@@ -57,8 +57,14 @@ func TestPGWire(t *testing.T) {
 		}
 
 		if err := trivialQuery(fmt.Sprintf("host=%s port=%s", host, port)); err != nil {
-			if !(insecure && err == pq.ErrSSLNotSupported) {
-				t.Fatal(err)
+			if insecure {
+				if err != pq.ErrSSLNotSupported {
+					t.Fatal(err)
+				}
+			} else {
+				if err != nil {
+					t.Fatal(err)
+				}
 			}
 		}
 
