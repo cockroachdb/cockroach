@@ -315,6 +315,7 @@ func TestSendRPCOrder(t *testing.T) {
 					Attrs: tc.attrs,
 				},
 			}
+			g.SetNodeID(nd.NodeID)
 			if err := g.SetNodeDescriptor(nd); err != nil {
 				t.Fatal(err)
 			}
@@ -374,6 +375,7 @@ func TestOwnNodeCertain(t *testing.T) {
 		NodeID:  expNodeID,
 		Address: util.MakeUnresolvedAddr("tcp", "foobar:1234"),
 	}
+	g.SetNodeID(nd.NodeID)
 	if err := g.SetNodeDescriptor(nd); err != nil {
 		t.Fatal(err)
 	}
@@ -662,6 +664,7 @@ func TestSendRPCRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	g, s := makeTestGossip(t)
 	defer s()
+	g.SetNodeID(1)
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -724,6 +727,7 @@ func TestGetNodeDescriptor(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 	ds := NewDistSender(&DistSenderContext{}, g)
+	g.SetNodeID(5)
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 5}); err != nil {
 		t.Fatal(err)
 	}
@@ -857,6 +861,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 
+	g.SetNodeID(1)
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
 		t.Fatal(err)
 	}

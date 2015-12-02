@@ -63,6 +63,7 @@ func TestSendAndReceive(t *testing.T) {
 	defer stopper.Stop()
 	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
 	g := gossip.New(nodeRPCContext, gossip.TestBootstrap)
+	g.SetNodeID(roachpb.NodeID(1))
 
 	// Create several servers, each of which has two stores (A multiraft
 	// node ID addresses a store). Node 1 has stores 1 and 2, node 2 has
@@ -75,8 +76,8 @@ func TestSendAndReceive(t *testing.T) {
 	const numServers = 3
 	const storesPerServer = 2
 	const numStores = numServers * storesPerServer
-	nextNodeID := roachpb.NodeID(1)
-	nextStoreID := roachpb.StoreID(1)
+	nextNodeID := roachpb.NodeID(2)
+	nextStoreID := roachpb.StoreID(2)
 
 	// Per-node state.
 	transports := map[roachpb.NodeID]multiraft.Transport{}
@@ -233,6 +234,7 @@ func TestInOrderDelivery(t *testing.T) {
 	defer stopper.Stop()
 	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
 	g := gossip.New(nodeRPCContext, gossip.TestBootstrap)
+	g.SetNodeID(roachpb.NodeID(1))
 
 	server := rpc.NewServer(util.CreateTestAddr("tcp"), nodeRPCContext)
 	if err := server.Start(); err != nil {
@@ -241,7 +243,7 @@ func TestInOrderDelivery(t *testing.T) {
 	defer server.Close()
 
 	const numMessages = 100
-	nodeID := roachpb.NodeID(1)
+	nodeID := roachpb.NodeID(roachpb.NodeID(2))
 	serverTransport, err := newRPCTransport(g, server, nodeRPCContext)
 	if err != nil {
 		t.Fatal(err)

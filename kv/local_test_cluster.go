@@ -124,6 +124,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	if err := ltc.Store.Start(ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
+	ltc.Gossip.SetNodeID(nodeDesc.NodeID)
 	if err := ltc.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatalf("unable to set node descriptor: %s", err)
 	}

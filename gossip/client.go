@@ -72,7 +72,7 @@ func (c *client) start(g *Gossip, done chan *client, context *rpc.Context, stopp
 		done <- c
 
 		if err != nil {
-			log.Infof("gossip client to %s: %s", c.addr, err)
+			log.Infof("closing client to %s: %s", c.addr, err)
 		}
 	})
 }
@@ -139,17 +139,16 @@ func (c *client) handleGossip(g *Gossip, call *netrpc.Call) error {
 
 	// Combine remote node's infostore delta with ours.
 	if reply.Delta != nil {
+		freshCount := g.is.combine(reply.Delta, reply.NodeID)
 		if infoCount := len(reply.Delta); infoCount > 0 {
-			if log.V(2) {
-				log.Infof("gossip: received %s from %s", reply.Delta, c.addr)
-			} else if log.V(1) {
-				log.Infof("gossip: received %d info(s) from %s", infoCount, c.addr)
+			if log.V(1) {
+				log.Infof("received %s from %s (%d fresh)", reply.Delta, c.addr, freshCount)
+			} else {
+				log.Infof("received %d (%d fresh) info(s) from %s", infoCount, freshCount, c.addr)
 			}
 		}
-		freshCount := g.is.combine(reply.Delta, reply.NodeID)
-		if freshCount > 0 {
-			log.Infof("gossip: %d info(s) were fresh from %s", freshCount, c.addr)
-		}
+	} else {
+		log.Infof("sent %d info(s) to %s", len(call.Args.(*Request).Delta), c.addr)
 	}
 	c.peerID = reply.NodeID
 	g.outgoing.addNode(c.peerID)
