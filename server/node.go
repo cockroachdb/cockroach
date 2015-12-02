@@ -208,7 +208,7 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 		if id == 0 {
 			log.Fatal("new node allocated illegal ID 0")
 		}
-
+		n.ctx.Gossip.SetNodeID(id)
 	} else {
 		log.Infof("node ID %d initialized", id)
 	}

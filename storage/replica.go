@@ -191,11 +191,11 @@ type Replica struct {
 var _ client.Sender = &Replica{}
 
 // NewReplica initializes the replica using the given metadata.
-func NewReplica(desc *roachpb.RangeDescriptor, rm *Store) (*Replica, error) {
+func NewReplica(desc *roachpb.RangeDescriptor, store *Store) (*Replica, error) {
 	r := &Replica{
-		store:       rm,
+		store:       store,
 		cmdQ:        NewCommandQueue(),
-		tsCache:     NewTimestampCache(rm.Clock()),
+		tsCache:     NewTimestampCache(store.Clock()),
 		sequence:    NewSequenceCache(desc.RangeID),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
@@ -224,7 +224,7 @@ func NewReplica(desc *roachpb.RangeDescriptor, rm *Store) (*Replica, error) {
 		r.maybeGossipSystemConfig()
 	}
 
-	if r.stats, err = newRangeStats(desc.RangeID, rm.Engine()); err != nil {
+	if r.stats, err = newRangeStats(desc.RangeID, store.Engine()); err != nil {
 		return nil, err
 	}
 
@@ -1275,9 +1275,15 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, error) {
 		hasLease = err == nil
 		if err != nil {
 			switch e := err.(type) {
-			// NotLeaderError means there is an active lease, leaseRejectedError
-			// means we tried to get one but someone beat us to it.
-			case *roachpb.NotLeaderError, *roachpb.LeaseRejectedError:
+			case *roachpb.NotLeaderError:
+				// NotLeaderError means there is an active lease, but only if
+				// the leader is set; otherwise, it's likely a timeout.
+				if e.Leader != nil {
+					err = nil
+				}
+			case *roachpb.LeaseRejectedError:
+				// leaseRejectedError means we tried to get one but someone
+				// beat us to it.
 				err = nil
 			default:
 				// Any other error is worth being logged visibly.
@@ -1299,7 +1305,6 @@ func (r *Replica) maybeGossipFirstRange() error {
 	}
 
 	ctx := r.context()
-
 	desc := r.Desc()
 
 	// Gossip the cluster ID from all replicas of the first range.
@@ -1310,7 +1315,6 @@ func (r *Replica) maybeGossipFirstRange() error {
 	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, []byte(r.store.ClusterID()), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
-
 	if ok, err := r.getLeaseForGossip(ctx); !ok || err != nil {
 		return err
 	}
@@ -1336,7 +1340,7 @@ func (r *Replica) maybeGossipFirstRange() error {
 // Note that maybeGossipSystemConfig gossips information only when the
 // lease is actually held. The method does not request a leader lease
 // here since LeaderLease and applyRaftCommand call the method and we
-// need to avoid deadlocking in redirectOnOrObtainLeaderLease.
+// need to avoid deadlocking in redirectOnOrAcquireLeaderLease.
 // TODO(tschottdorf): Can possibly simplify.
 func (r *Replica) maybeGossipSystemConfig() {
 	r.Lock()

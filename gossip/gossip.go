@@ -92,6 +92,11 @@ const (
 	// incoming and outgoing connections to the gossip network are
 	// insufficient to keep the network connected.
 	stallInterval = 1 * time.Second
+
+	// bootstrapInterval is the minimum time between successive
+	// bootstrapping attempts to avoid busy-looping trying to find
+	// the sentinel gossip info.
+	bootstrapInterval = 1 * time.Second
 )
 
 var (
@@ -159,31 +164,33 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver) *Gossip {
 	return g
 }
 
-// GetNodeID returns the instance's saved NodeID.
+// GetNodeID returns the instance's saved node ID.
 func (g *Gossip) GetNodeID() roachpb.NodeID {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.is.NodeID
 }
 
+// SetNodeID sets the infostore's node ID.
+func (g *Gossip) SetNodeID(nodeID roachpb.NodeID) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.is.NodeID != 0 && g.is.NodeID != nodeID {
+		// TODO(spencer): change this to a panic after fixing unittests
+		//   which do invoke this with different node IDs.
+		log.Errorf("different node IDs were set for the same gossip instance (%d, %d)", g.is.NodeID, nodeID)
+	}
+	g.is.NodeID = nodeID
+}
+
 // SetNodeDescriptor adds the node descriptor to the gossip network
 // and sets the infostore's node ID.
 func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	log.Infof("gossiping node descriptor %+v", desc)
-	g.mu.Lock()
-	g.is.NodeID = desc.NodeID
-	g.mu.Unlock()
 	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, ttlNodeIDGossip); err != nil {
 		return util.Errorf("couldn't gossip descriptor for node %d: %v", desc.NodeID, err)
 	}
 	return nil
-}
-
-// SetNodeID sets the infostore's node ID.
-func (g *Gossip) SetNodeID(nodeID roachpb.NodeID) {
-	g.mu.Lock()
-	g.is.NodeID = nodeID
-	g.mu.Unlock()
 }
 
 // SetResolvers initializes the set of gossip resolvers used to
@@ -496,7 +503,6 @@ func (g *Gossip) bootstrap(stopper *stop.Stopper) {
 				g.mu.Unlock()
 				return
 			}
-			// Check whether or not we need bootstrap.
 			haveClients := g.outgoing.len() > 0
 			haveSentinel := g.is.getInfo(KeySentinel) != nil
 			if !haveClients || !haveSentinel {
@@ -507,6 +513,13 @@ func (g *Gossip) bootstrap(stopper *stop.Stopper) {
 			}
 			g.mu.Unlock()
 
+			// Pause an interval before next possible bootstrap.
+			select {
+			case <-time.After(bootstrapInterval):
+				// continue
+			case <-stopper.ShouldStop():
+				return
+			}
 			// Block until we need bootstrapping again.
 			select {
 			case <-g.stalled:
@@ -600,7 +613,7 @@ func (g *Gossip) maybeSignalStalledLocked() {
 	if g.outgoing.len()+g.incoming.len() == 0 {
 		g.signalStalled()
 	} else if g.is.getInfo(KeySentinel) == nil {
-		log.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", g.is.NodeID)
+		log.Warningf("missing sentinel gossip; assuming partition and reconnecting")
 		g.signalStalled()
 	}
 }
