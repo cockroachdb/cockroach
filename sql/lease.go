@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
@@ -621,10 +620,6 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 
 				// Loop through the configuration to find all the tables.
 				for _, kv := range cfg.Values {
-					if kv.Value.Tag != roachpb.ValueType_BYTES {
-						continue
-					}
-
 					if !bytes.HasPrefix(kv.Key, descKeyPrefix) {
 						continue
 					}
