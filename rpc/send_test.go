@@ -168,7 +168,7 @@ func TestUnretryableError(t *testing.T) {
 	getArgs := func(addr net.Addr) proto.Message {
 		return &roachpb.Span{}
 	}
-	// Make getRetry return a BrokenResponse so that the proto
+	// Make getReply return a BrokenResponse so that the proto
 	// integrity check fails.
 	getReply := func() proto.Message {
 		return &BrokenResponse{&roachpb.ResponseHeader{}}
