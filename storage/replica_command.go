@@ -502,6 +502,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 			r.readOnlyCmdMu.Unlock() // since the batch.Defer above won't run
 			// TODO(tschottdorf): should an error here always amount to a
 			// ReplicaCorruptionError?
+			log.Errorf("Range %d transaction commit trigger fail: %s", r.Desc().RangeID, err)
 			return reply, nil, err
 		}
 	}
