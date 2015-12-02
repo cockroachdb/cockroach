@@ -12,14 +12,17 @@ set -euo pipefail
 if [ "${1-}" = "docker" ]; then
     time make STATIC=1 build
     time make STATIC=1 testbuild PKG=./sql
+    time make STATIC=1 testbuild PKG=./acceptance TAGS=acceptance
 
     # Make sure the created binary is statically linked.  Seems
     # awkward to do this programmatically, but this should work.
     file cockroach | grep -F 'statically linked' > /dev/null
     file sql/sql.test | grep -F 'statically linked' > /dev/null
+    file acceptance/acceptance.test | grep -F 'statically linked' > /dev/null
 
     strip -S cockroach
     strip -S sql/sql.test
+    strip -S acceptance/acceptance.test
     exit 0
 fi
 
