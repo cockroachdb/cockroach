@@ -152,7 +152,7 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	// Delete the keys within a transaction. Implicitly, the intents are
 	// resolved via ResolveIntentRange upon completion.
 	if err := db.Txn(func(txn *client.Txn) error {
-		b := &client.Batch{}
+		b := txn.NewBatch()
 		b.DelRange("a", "b")
 		b.DelRange("e", "f")
 		b.DelRange(keys.LocalMax, roachpb.KeyMax)
@@ -192,7 +192,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	// Delete the keys within a transaction. Implicitly, the intents are
 	// resolved via ResolveIntentRange upon completion.
 	if err := db.Txn(func(txn *client.Txn) error {
-		b := &client.Batch{}
+		b := txn.NewBatch()
 		b.DelRange("a", "d")
 		return txn.CommitInBatch(b)
 	}); err != nil {
@@ -444,7 +444,7 @@ func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 	epoch := 0
 	if err := db.Txn(func(txn *client.Txn) error {
 		epoch++
-		b := &client.Batch{}
+		b := txn.NewBatch()
 		b.Put("a", "val")
 		b.Put("b", "val")
 		b.Put("c", "val")
@@ -512,7 +512,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 			}
 		}
 
-		b := &client.Batch{}
+		b := txn.NewBatch()
 		b.Put("a", "val")
 		b.CPut(targetKey, "new_val", origVal)
 		err := txn.CommitInBatch(b)
@@ -560,7 +560,7 @@ func TestDoNotPropagateTxnOnError(t *testing.T) {
 			// Wait until another txn in this test is
 			// restarted by a push txn error.
 			<-waitForTxnRestart
-			return txn.CommitInBatch(&client.Batch{})
+			return txn.CommitInBatch(txn.NewBatch())
 		}); err != nil {
 			t.Errorf("unexpected error on transactional Puts: %s", err)
 		}
@@ -596,7 +596,7 @@ func TestDoNotPropagateTxnOnError(t *testing.T) {
 			t.Errorf("txn ID is set unexpectedly")
 		}
 
-		b := &client.Batch{}
+		b := txn.NewBatch()
 		b.Put("a", "val")
 		b.Put("b", "val")
 		// The commit returns an error, but it will not be

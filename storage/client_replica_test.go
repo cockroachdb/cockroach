@@ -264,7 +264,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 				<-waitFirstGet
 			}
 
-			b := &client.Batch{}
+			b := txn.NewBatch()
 			err = txn.CommitInBatch(b)
 			return err
 		}); err != nil {

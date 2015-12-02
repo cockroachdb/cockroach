@@ -227,7 +227,7 @@ func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
 			return ba.CreateReply(), nil
 		}, nil))
 		if err := db.Txn(func(txn *Txn) error {
-			b := &Batch{}
+			b := txn.NewBatch()
 			if withGet {
 				b.Get("foo")
 			}
@@ -324,7 +324,7 @@ func TestCommitTransactionOnce(t *testing.T) {
 		return ba.CreateReply(), nil
 	}, nil))
 	if err := db.Txn(func(txn *Txn) error {
-		b := &Batch{}
+		b := txn.NewBatch()
 		b.Put("z", "adding a write exposed a bug in #1882")
 		return txn.CommitInBatch(b)
 	}); err != nil {
@@ -548,5 +548,15 @@ func TestTransactionStatus(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestCommitInBatchWithResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	db := NewDB(newTestSender(nil, nil))
+	txn := NewTxn(*db)
+	b := &Batch{}
+	if _, err := txn.CommitInBatchWithResponse(b); err == nil {
+		t.Error("this batch should not be committed")
 	}
 }
