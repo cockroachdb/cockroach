@@ -126,7 +126,28 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 	// Inherit permissions from the database descriptor.
 	desc.Privileges = dbDesc.GetPrivileges()
 
-	if err := desc.AllocateIDs(); err != nil {
+	err = desc.AllocateIDs()
+	if err == errMissingPrimaryKey {
+		// Ensure a Primary Key exists.
+		s := "experimental_unique_int()"
+		col := ColumnDescriptor{
+			Name: "rowid",
+			Type: ColumnType{
+				Kind: ColumnType_INT,
+			},
+			DefaultExpr: &s,
+		}
+		desc.AddColumn(col)
+		idx := IndexDescriptor{
+			Unique:      true,
+			ColumnNames: []string{col.Name},
+		}
+		if err := desc.AddIndex(idx, true); err != nil {
+			return nil, err
+		}
+		err = desc.AllocateIDs()
+	}
+	if err != nil {
 		return nil, err
 	}
 
