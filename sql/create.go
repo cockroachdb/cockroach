@@ -95,7 +95,7 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 	}
 
 	// Process mutation synchronously.
-	if err := p.applyMutations(tableDesc, n.Table); err != nil {
+	if err := p.applyMutations(tableDesc); err != nil {
 		return nil, err
 	}
 

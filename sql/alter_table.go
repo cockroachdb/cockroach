@@ -190,7 +190,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 	}
 
 	// Process mutations synchronously.
-	if err := p.applyMutations(tableDesc, n.Table); err != nil {
+	if err := p.applyMutations(tableDesc); err != nil {
 		return nil, err
 	}
 
