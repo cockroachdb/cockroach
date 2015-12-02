@@ -61,35 +61,35 @@ const (
 	statusPrefix = "/_status/"
 
 	// statusGossipPattern exposes a view of the gossip network.
-	statusGossipPattern = "/_status/gossip/:node_id"
+	statusGossipPattern = statusPrefix + "gossip/:node_id"
 
 	// statusDetailsPattern exposes a node's details.
-	statusDetailsPattern = "/_status/details/:node_id"
+	statusDetailsPattern = statusPrefix + "details/:node_id"
 
 	// statusLogFilesListPattern exposes a list of log files.
-	statusLogFilesListPattern = "/_status/logfiles/:node_id"
+	statusLogFilesListPattern = statusPrefix + "logfiles/:node_id"
 	// statusLogFilePattern exposes a specific file on a node.
-	statusLogFilePattern = "/_status/logfiles/:node_id/:file"
+	statusLogFilePattern = statusPrefix + "logfiles/:node_id/:file"
 
 	// statusLogKeyPrefix exposes the logs for each node.
-	statusLogsPattern = "/_status/logs/:node_id"
+	statusLogsPattern = statusPrefix + "logs/:node_id"
 	// Default Maximum number of log entries returned.
 	defaultMaxLogEntries = 1000
 
 	// statusStacksPattern exposes the stack traces of running goroutines.
-	statusStacksPattern = "/_status/stacks/:node_id"
+	statusStacksPattern = statusPrefix + "stacks/:node_id"
 	// stackTraceApproxSize is the approximate size of a goroutine stack trace.
 	stackTraceApproxSize = 1024
 
 	// statusNodesPrefix exposes status for all nodes in the cluster.
-	statusNodesPrefix = "/_status/nodes/"
+	statusNodesPrefix = statusPrefix + "nodes/"
 	// statusNodePattern exposes status for a single node.
-	statusNodePattern = "/_status/nodes/:node_id"
+	statusNodePattern = statusPrefix + "nodes/:node_id"
 
 	// statusStoresPrefix exposes status for all stores in the cluster.
-	statusStoresPrefix = "/_status/stores/"
+	statusStoresPrefix = statusPrefix + "stores/"
 	// statusStorePattern exposes status for a single store.
-	statusStorePattern = "/_status/stores/:store_id"
+	statusStorePattern = statusPrefix + "stores/:store_id"
 
 	// healthEndpoint is a shortcut for local details, intended for use by
 	// monitoring processes to verify that the server is up.
