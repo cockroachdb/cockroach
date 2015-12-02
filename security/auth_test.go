@@ -114,7 +114,7 @@ func TestAuthenticationHook(t *testing.T) {
 	}
 
 	for tcNum, tc := range testCases {
-		hook, err := security.AuthenticationHook(tc.insecure, tc.tls)
+		hook, err := security.ProtoAuthHook(tc.insecure, tc.tls)
 		if (err == nil) != tc.buildHookSuccess {
 			t.Fatalf("#%d: expected success=%t, got err=%v", tcNum, tc.buildHookSuccess, err)
 		}
