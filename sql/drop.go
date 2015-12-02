@@ -155,7 +155,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 			return nil, err
 		}
 		// Process mutation synchronously.
-		if err := p.applyMutations(tableDesc, indexQualifiedName); err != nil {
+		if err := p.applyMutations(tableDesc); err != nil {
 			return nil, err
 		}
 	}

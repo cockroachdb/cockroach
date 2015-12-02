@@ -41,6 +41,11 @@ import (
 //          mysql requires SELECT.
 func (p *planner) Select(n *parser.Select) (planNode, error) {
 	scan := &scanNode{planner: p, txn: p.txn}
+	return p.selectWithScan(scan, n)
+}
+
+// Run select using the scan node. n.desc might have already been populated.
+func (p *planner) selectWithScan(scan *scanNode, n *parser.Select) (planNode, error) {
 	if err := scan.initFrom(p, n.From); err != nil {
 		return nil, err
 	}

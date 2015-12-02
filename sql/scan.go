@@ -244,7 +244,7 @@ func (n *scanNode) ExplainPlan() (name, description string, children []planNode)
 func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
 	switch len(from) {
 	case 0:
-		// n.desc remains nil.
+		// n.desc is nil, but can be set externally.
 		return nil
 
 	case 1:
@@ -294,8 +294,7 @@ func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
 			}
 			n.isSecondaryIndex = true
 		} else {
-			n.index = &n.desc.PrimaryIndex
-			n.visibleCols = n.desc.Columns
+			n.initDescDefaults()
 		}
 
 		return nil
@@ -304,6 +303,11 @@ func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
 		n.err = util.Errorf("TODO(pmattis): unsupported FROM: %s", from)
 		return n.err
 	}
+}
+
+func (n *scanNode) initDescDefaults() {
+	n.index = &n.desc.PrimaryIndex
+	n.visibleCols = n.desc.Columns
 }
 
 // initScan initializes (and performs) the key-value scan.
