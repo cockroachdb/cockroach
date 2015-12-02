@@ -167,6 +167,8 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 	return reply, 0, nil
 }
 
+var errDontUpdateTableDescriptorVersion = errors.New("don't update table descriptor version")
+
 // exec executes the request. Any error encountered is returned; it is
 // the caller's responsibility to update the response.
 func (e *Executor) execStmts(sql string, planMaker *planner) driver.Response {
@@ -190,6 +192,24 @@ func (e *Executor) execStmts(sql string, planMaker *planner) driver.Response {
 		// TODO(pmattis): Need to record the leases used by a transaction within
 		// the transaction state and restore it when the transaction is restored.
 		planMaker.releaseLeases(e.db)
+
+		// The previous statement finished executing a schema change. Wait for
+		// the schema change to propagate to all nodes, so that once the executor
+		// returns the new schema is live everywhere. This is not needed for
+		// correctness but is done to make the UI experience/tests predictable.
+		if planMaker.completedSchemaChange != nil {
+			for _, id := range planMaker.completedSchemaChange {
+				// To prevent Publish() from writing a new version of the
+				// table descriptor, the function passed in returns an error.
+				if err := planMaker.leaseMgr.Publish(id, func(desc *TableDescriptor) error {
+					return errDontUpdateTableDescriptorVersion
+				}); err != nil && err != errDontUpdateTableDescriptorVersion {
+					log.Warning(err)
+				}
+			}
+			planMaker.completedSchemaChange = nil
+		}
+
 	}
 	return resp
 }
