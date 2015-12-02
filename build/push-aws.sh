@@ -39,7 +39,7 @@ function push_one_binary {
 
   if [ "${latest_date}" == "${today}" ]; then
     echo "Latest binary is from today, skipping: ${contents}"
-    exit 0
+    return 0
   fi
 
   # Latest file did not exist, was empty, or pointed to an old binary.
