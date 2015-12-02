@@ -18,6 +18,7 @@
 package gossip
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -44,6 +45,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 		t.Fatal(err)
 	}
 	local = New(lRPCContext, TestBootstrap)
+	local.SetNodeID(1)
 	if err := local.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  1,
 		Address: util.MakeUnresolvedAddr(laddr.Network(), laddr.String()),
@@ -58,6 +60,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 		t.Fatal(err)
 	}
 	remote = New(rRPCContext, TestBootstrap)
+	remote.SetNodeID(2)
 	if err := remote.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  2,
 		Address: util.MakeUnresolvedAddr(raddr.Network(), raddr.String()),
@@ -199,5 +202,49 @@ func TestClientNodeID(t *testing.T) {
 			}
 		}
 		return util.Errorf("client should send NodeID with %v, got %v", nodeID, receivedNodeID)
+	})
+}
+
+// TestClientDisconnectRedundant verifies that the gossip server
+// will drop an outgoing client connection that is already an
+// inbound client connection of another node.
+func TestClientDisconnectRedundant(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	local, remote, stopper := startGossip(t)
+	defer stopper.Stop()
+	// startClient doesn't lock the underlying gossip
+	// object, so we acquire those locks here.
+	local.mu.Lock()
+	remote.mu.Lock()
+	rAddr := remote.is.NodeAddr
+	lAddr := local.is.NodeAddr
+	lclock := hlc.NewClock(hlc.UnixNano)
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
+	local.startClient(rAddr, rpcContext, stopper)
+	remote.startClient(lAddr, rpcContext, stopper)
+	local.mu.Unlock()
+	remote.mu.Unlock()
+	local.manage(stopper)
+	remote.manage(stopper)
+	wasConnected1, wasConnected2 := false, false
+	util.SucceedsWithin(t, 10*time.Second, func() error {
+		// Check which of the clients is connected to the other.
+		ok1 := local.findClient(func(c *client) bool { return c.addr.String() == rAddr.String() }) != nil
+		ok2 := remote.findClient(func(c *client) bool { return c.addr.String() == lAddr.String() }) != nil
+		if ok1 {
+			wasConnected1 = true
+		}
+		if ok2 {
+			wasConnected2 = true
+		}
+		// Check if at some point both nodes were connected to
+		// each other, but now aren't any more.
+		// Unfortunately it's difficult to get a more direct
+		// read on what's happening without really messing with
+		// the internals.
+		if wasConnected1 && wasConnected2 && (!ok1 || !ok2) {
+			return nil
+		}
+		return errors.New("not connected")
 	})
 }

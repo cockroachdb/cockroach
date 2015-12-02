@@ -130,6 +130,7 @@ func BenchmarkTxnWrites(b *testing.B) {
 func disableOwnNodeCertain(tc *LocalTestCluster) {
 	desc := tc.distSender.getNodeDescriptor()
 	desc.NodeID = 999
+	tc.distSender.gossip.SetNodeID(desc.NodeID)
 	if err := tc.distSender.gossip.SetNodeDescriptor(desc); err != nil {
 		panic(err)
 	}

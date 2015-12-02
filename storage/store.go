@@ -418,8 +418,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		}
 
 		// Read store ident and return a not-bootstrapped error if necessary.
-		ok, err := engine.MVCCGetProto(s.engine, keys.StoreIdentKey(), roachpb.ZeroTimestamp, true,
-			nil, &s.Ident)
+		ok, err := engine.MVCCGetProto(s.engine, keys.StoreIdentKey(), roachpb.ZeroTimestamp, true, nil, &s.Ident)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -432,17 +431,8 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	if s.nodeDesc.NodeID != 0 && s.Ident.NodeID != s.nodeDesc.NodeID {
 		return util.Errorf("node id:%d does not equal the one in node descriptor:%d", s.Ident.NodeID, s.nodeDesc.NodeID)
 	}
-	// Gossip is only ever nil while bootstrapping a cluster and
-	// in unittests.
-	// Set NodeID to gossip as early as possible as NewReplica may
-	// call r.maybeGossipSystemConfig which will call gossip.AddInfo.
+	// Always set gossip NodeID before gossiping any info.
 	if s.ctx.Gossip != nil {
-		// Set Gossip NodeID for bootstrapped node, so before gossip
-		// ClusterID, gossip.is.NodeID is set. Otherwise a gossip
-		// information with NodeID=0 will cause a loop between
-		// all nodes.
-		// For non-bootstrapped node, it's redudant as node will
-		// call gossip.SetNodeDescriptor before this call.
 		s.ctx.Gossip.SetNodeID(s.Ident.NodeID)
 	}
 
@@ -621,13 +611,31 @@ func (s *Store) startGossip() {
 	})
 }
 
-// maybeGossipFirstRange checks whether the store has a replia of the first
-// range and if so, reminds it to gossip the first range descriptor and
-// sentinel gossip.
+// maybeGossipFirstRange checks whether the store has a replica of the
+// first range and if so instructs it to gossip the cluster ID,
+// sentinel gossip and first range descriptor. This is done in a retry
+// loop in the event that the returned error indicates the state of
+// the leader lease is not known. This can happen on lease command
+// timeouts. The retry loop makes sure we try hard to keep asking for
+// the lease instead of waiting for the next clusterIDGossipInterval
+// to transpire.
 func (s *Store) maybeGossipFirstRange() error {
-	rng := s.LookupReplica(roachpb.RKeyMin, nil)
-	if rng != nil {
-		return rng.maybeGossipFirstRange()
+	retryOptions := retry.Options{
+		InitialBackoff: 100 * time.Millisecond, // first backoff at 100ms
+		MaxBackoff:     1 * time.Second,        // max backoff is 1s
+		Multiplier:     2,                      // doubles
+		Closer:         s.stopper.ShouldStop(), // stop no matter what on stopper
+	}
+	for loop := retry.Start(retryOptions); loop.Next(); {
+		rng := s.LookupReplica(roachpb.RKeyMin, nil)
+		if rng != nil {
+			err := rng.maybeGossipFirstRange()
+			if nlErr, ok := err.(*roachpb.NotLeaderError); !ok || nlErr.Leader != nil {
+				return err
+			}
+		} else {
+			return nil
+		}
 	}
 	return nil
 }
