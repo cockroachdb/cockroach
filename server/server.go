@@ -147,7 +147,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		return nil, err
 	}
 
-	s.pgServer = pgwire.MakeServer(&pgwire.Context{
+	s.pgServer = pgwire.NewServer(&pgwire.Context{
 		Context:  &s.ctx.Context,
 		Executor: s.sqlServer.Executor,
 		Stopper:  stopper,

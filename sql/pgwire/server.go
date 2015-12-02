@@ -49,8 +49,8 @@ type Server struct {
 	closing  bool
 }
 
-// MakeServer creates a Server.
-func MakeServer(context *Context) *Server {
+// NewServer creates a Server.
+func NewServer(context *Context) *Server {
 	return &Server{
 		context: context,
 		conns:   make(map[net.Conn]struct{}),
