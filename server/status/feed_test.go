@@ -214,7 +214,7 @@ func TestServerNodeEventFeed(t *testing.T) {
 
 	// Add some data in a transaction
 	err = db.Txn(func(txn *client.Txn) error {
-		b := &client.Batch{}
+		b := txn.NewBatch()
 		b.Put("a", "asdf")
 		b.Put("c", "jkl;")
 		return txn.CommitInBatch(b)

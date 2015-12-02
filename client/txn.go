@@ -153,7 +153,7 @@ func (txn *Txn) SystemDBTrigger() bool {
 
 // NewBatch creates and returns a new empty batch object for use with the Txn.
 func (txn *Txn) NewBatch() *Batch {
-	return &Batch{DB: &txn.db}
+	return &Batch{DB: &txn.db, txn: txn}
 }
 
 // Get retrieves the value for a key, returning the retrieved key/value or an
@@ -321,6 +321,7 @@ func (txn *Txn) CommitNoCleanup() error {
 // commits the transaction. Explicitly committing a transaction is
 // optional, but more efficient than relying on the implicit commit
 // performed when the transaction function returns without error.
+// The batch must be created by this transaction.
 func (txn *Txn) CommitInBatch(b *Batch) error {
 	_, err := txn.CommitInBatchWithResponse(b)
 	return err
@@ -329,6 +330,9 @@ func (txn *Txn) CommitInBatch(b *Batch) error {
 // CommitInBatchWithResponse is a version of CommitInBatch that returns the
 // BatchResponse.
 func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, error) {
+	if txn != b.txn {
+		return nil, fmt.Errorf("a batch b can only be committed by b.txn")
+	}
 	b.reqs = append(b.reqs, endTxnReq(true /* commit */, nil, txn.SystemDBTrigger()))
 	b.initResult(1, 0, nil)
 	return txn.RunWithResponse(b)

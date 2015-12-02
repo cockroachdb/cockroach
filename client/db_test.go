@@ -240,7 +240,7 @@ func ExampleTxn_Commit() {
 	defer s.Stop()
 
 	err := db.Txn(func(txn *client.Txn) error {
-		b := &client.Batch{}
+		b := txn.NewBatch()
 		b.Put("aa", "1")
 		b.Put("ab", "2")
 		return txn.CommitInBatch(b)

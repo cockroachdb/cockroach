@@ -69,7 +69,7 @@ func TestSingleKey(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					b := &client.Batch{}
+					b := txn.NewBatch()
 					b.Put(key, r.ValueInt()+1)
 					return txn.CommitInBatch(b)
 				})
