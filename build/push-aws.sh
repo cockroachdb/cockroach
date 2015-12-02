@@ -56,3 +56,4 @@ function push_one_binary {
 
 push_one_binary cockroach
 push_one_binary sql/sql.test
+push_one_binary acceptance/acceptance.test

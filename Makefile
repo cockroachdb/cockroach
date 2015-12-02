@@ -82,13 +82,13 @@ install:
 # eg: to statically build the sql tests, run:
 #   make testbuild PKG=./sql STATIC=1
 .PHONY: testbuild
-testbuild: TESTS := $(shell $(GO) list $(PKG))
+testbuild: TESTS := $(shell $(GO) list -tags '$(TAGS)' $(PKG))
 testbuild: GOFLAGS += -c
 testbuild:
 	for p in $(TESTS); do \
 	  NAME=$$(basename "$$p"); \
 	  OUT="$$NAME.test"; \
-	  DIR=$$($(GO) list -f {{.Dir}} $$p); \
+	  DIR=$$($(GO) list -f {{.Dir}} -tags '$(TAGS)' $$p); \
 	  $(GO) test $(GOFLAGS) -tags '$(TAGS)' -o "$$DIR"/"$$OUT" -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
 	done
 
