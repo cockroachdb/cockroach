@@ -94,15 +94,16 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 
 	// We split up to the largest allocated descriptor ID, be it a table
 	// or a database.
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, rangeSplitTimeout, func() error {
 		num, err := getNumRanges(kvDB)
 		if err != nil {
-			t.Fatalf("failed to retrieve range list: %s", err)
+			return err
 		}
-		return num == 2
-	}, rangeSplitTimeout); err != nil {
-		t.Errorf("missing split: %s", err)
-	}
+		if e := 2; num != e {
+			return util.Errorf("expected %d splits, found %d", e, num)
+		}
+		return nil
+	})
 
 	// Verify the actual splits.
 	objectID := uint32(keys.MaxReservedDescID + 1)
@@ -120,16 +121,16 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, rangeSplitTimeout, func() error {
 		num, err := getNumRanges(kvDB)
 		if err != nil {
-			t.Fatalf("failed to retrieve range list: %s", err)
+			return err
 		}
-		t.Logf("Num ranges: %d", num)
-		return num == 3
-	}, rangeSplitTimeout); err != nil {
-		t.Errorf("missing split: %s", err)
-	}
+		if e := 3; num != e {
+			return util.Errorf("expected %d splits, found %d", e, num)
+		}
+		return nil
+	})
 
 	// Verify the actual splits.
 	splits = []roachpb.RKey{keys.MakeTablePrefix(objectID), keys.MakeTablePrefix(objectID + 1), roachpb.RKeyMax}
