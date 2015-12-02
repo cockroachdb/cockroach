@@ -67,8 +67,7 @@ func (ids indexesByID) Swap(i, j int) {
 	ids[i], ids[j] = ids[j], ids[i]
 }
 
-func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName, oldTableDesc, newTableDesc *TableDescriptor) error {
-	table := &parser.AliasedTableExpr{Expr: tableName}
+func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *TableDescriptor) error {
 	var droppedColumnDescs []ColumnDescriptor
 	var droppedIndexDescs []IndexDescriptor
 	var newIndexDescs []IndexDescriptor
@@ -142,10 +141,21 @@ func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName
 		// Get all the rows affected.
 		// TODO(vivek): Avoid going through Select.
 		// TODO(tamird): Support partial indexes?
-		rows, err := p.Select(&parser.Select{
-			Exprs: parser.SelectExprs{parser.StarSelectExpr()},
-			From:  parser.TableExprs{table},
-		})
+		n := &parser.Select{}
+		scan := &scanNode{planner: p, txn: p.txn, desc: oldTableDesc, index: &oldTableDesc.PrimaryIndex, visibleCols: oldTableDesc.Columns}
+		if err := scan.initTargets(parser.SelectExprs{parser.StarSelectExpr()}); err != nil {
+			return err
+		}
+		group, err := p.groupBy(n, scan)
+		if err != nil {
+			return err
+		}
+		sort, err := p.orderBy(n, scan)
+		if err != nil {
+			return err
+		}
+
+		rows, err := p.selectIndex(scan, group, sort)
 		if err != nil {
 			return err
 		}

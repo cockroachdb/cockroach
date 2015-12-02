@@ -19,7 +19,6 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -27,8 +26,7 @@ import (
 // queued schema changes and processes them.
 //
 // applyMutations applies the queued mutations for a table.
-// TODO(vivek): Eliminate the need to pass in tableName.
-func (p *planner) applyMutations(tableDesc *TableDescriptor, tableName *parser.QualifiedName) error {
+func (p *planner) applyMutations(tableDesc *TableDescriptor) error {
 	if len(tableDesc.Mutations) == 0 {
 		return nil
 	}
@@ -43,7 +41,7 @@ func (p *planner) applyMutations(tableDesc *TableDescriptor, tableName *parser.Q
 	}
 
 	b := client.Batch{}
-	if err := p.backfillBatch(&b, tableName, tableDesc, newTableDesc); err != nil {
+	if err := p.backfillBatch(&b, tableDesc, newTableDesc); err != nil {
 		return err
 	}
 	// TODO(pmattis): This is a hack. Remove when schema change operations work
