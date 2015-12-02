@@ -22,99 +22,93 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 )
 
-// truncate restricts all contained requests to the given key range.
-// Even on error, the returned closure must be executed; it undoes any
-// truncations performed.
-// All requests contained in the batch are "truncated" to the given
+var emptySpan = roachpb.Span{}
+
+// truncate restricts all contained requests to the given key range
+// and returns a new BatchRequest.
+// All requests contained in that batch are "truncated" to the given
 // span, inserting NoopRequest appropriately to replace requests which
 // are left without a key range to operate on. The number of non-noop
-// requests after truncation is returned along with a closure which
-// must be executed to undo the truncation, even in case of an error.
-// TODO(tschottdorf): Consider returning a new BatchRequest, which has more
-// overhead in the common case of a batch which never needs truncation but is
-// less magical.
-func truncate(br *roachpb.BatchRequest, rs roachpb.RSpan) (func(), int, error) {
-	truncateOne := func(args roachpb.Request) (bool, []func(), error) {
+// requests after truncation is returned.
+func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, int, error) {
+	truncateOne := func(args roachpb.Request) (bool, roachpb.Span, error) {
 		if _, ok := args.(*roachpb.NoopRequest); ok {
-			return true, nil, nil
+			return true, emptySpan, nil
 		}
-		header := args.Header()
+		header := *args.Header()
 		if !roachpb.IsRange(args) {
 			// This is a point request.
 			if len(header.EndKey) > 0 {
-				return false, nil, util.Errorf("%T is not a range command, but EndKey is set", args)
+				return false, emptySpan, util.Errorf("%T is not a range command, but EndKey is set", args)
 			}
 			if !rs.ContainsKey(keys.Addr(header.Key)) {
-				return true, nil, nil
+				return false, emptySpan, nil
 			}
-			return false, nil, nil
+			return true, header, nil
 		}
 		// We're dealing with a range-spanning request.
-		var undo []func()
 		keyAddr, endKeyAddr := keys.Addr(header.Key), keys.Addr(header.EndKey)
 		if l, r := !keyAddr.Equal(header.Key), !endKeyAddr.Equal(header.EndKey); l || r {
 			if !rs.ContainsKeyRange(keyAddr, endKeyAddr) {
-				return false, nil, util.Errorf("local key range must not span ranges")
+				return false, emptySpan, util.Errorf("local key range must not span ranges")
 			}
 			if !l || !r {
-				return false, nil, util.Errorf("local key mixed with global key in range")
+				return false, emptySpan, util.Errorf("local key mixed with global key in range")
 			}
-			return false, nil, nil
+			// Range-local local key range.
+			return true, header, nil
 		}
 		// Below, {end,}keyAddr equals header.{End,}Key, so nothing is local.
 		if keyAddr.Less(rs.Key) {
-			{
-				origKey := header.Key
-				undo = append(undo, func() { header.Key = origKey })
-			}
 			header.Key = rs.Key.AsRawKey() // "key" can't be local
 			keyAddr = rs.Key
 		}
 		if !endKeyAddr.Less(rs.EndKey) {
-			{
-				origEndKey := header.EndKey
-				undo = append(undo, func() { header.EndKey = origEndKey })
-			}
 			header.EndKey = rs.EndKey.AsRawKey() // "endKey" can't be local
 			endKeyAddr = rs.EndKey
 		}
 		// Check whether the truncation has left any keys in the range. If not,
 		// we need to cut it out of the request.
-		return !keyAddr.Less(endKeyAddr), undo, nil
-	}
-
-	var fns []func()
-	gUndo := func() {
-		for _, f := range fns {
-			f()
+		if !keyAddr.Less(endKeyAddr) {
+			return false, emptySpan, nil
 		}
+		return true, header, nil
 	}
 
 	var numNoop int
-	for pos, arg := range br.Requests {
-		omit, undo, err := truncateOne(arg.GetInner())
-		if omit {
+	origRequests := ba.Requests
+	ba.Requests = make([]roachpb.RequestUnion, len(ba.Requests))
+	for pos, arg := range origRequests {
+		hasRequest, newHeader, err := truncateOne(arg.GetInner())
+		if !hasRequest {
+			// We omit this one, i.e. replace it with a Noop.
 			numNoop++
-			nReq := &roachpb.RequestUnion{}
+			nReq := roachpb.RequestUnion{}
 			if !nReq.SetValue(&roachpb.NoopRequest{}) {
 				panic("RequestUnion excludes NoopRequest")
 			}
-			oReq := br.Requests[pos]
-			br.Requests[pos] = *nReq
-			posCpy := pos // for closure
-			undo = append(undo, func() {
-				br.Requests[posCpy] = oReq
-			})
+			ba.Requests[pos] = nReq
+		} else {
+			// Keep the old one. If we must adjust the header, must copy.
+			// TODO(tschottdorf): this could wind up cloning big chunks of data.
+			// Can optimize by creating a new Request manually, but with the old
+			// data.
+			if newHeader.Equal(*origRequests[pos].GetInner().Header()) {
+				ba.Requests[pos] = origRequests[pos]
+			} else {
+				ba.Requests[pos] = *proto.Clone(&origRequests[pos]).(*roachpb.RequestUnion)
+				*ba.Requests[pos].GetInner().Header() = newHeader
+			}
 		}
-		fns = append(fns, undo...)
 		if err != nil {
-			return gUndo, 0, err
+			return roachpb.BatchRequest{}, 0, err
 		}
 	}
-	return gUndo, len(br.Requests) - numNoop, nil
+	return ba, len(ba.Requests) - numNoop, nil
 }
 
 // SenderFn is a function that implements a Sender.
