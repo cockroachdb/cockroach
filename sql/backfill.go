@@ -67,8 +67,7 @@ func (ids indexesByID) Swap(i, j int) {
 	ids[i], ids[j] = ids[j], ids[i]
 }
 
-func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName, oldTableDesc, newTableDesc *TableDescriptor) error {
-	table := &parser.AliasedTableExpr{Expr: tableName}
+func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *TableDescriptor) error {
 	var droppedColumnDescs []ColumnDescriptor
 	var droppedIndexDescs []IndexDescriptor
 	var newIndexDescs []IndexDescriptor
@@ -142,10 +141,16 @@ func (p *planner) backfillBatch(b *client.Batch, tableName *parser.QualifiedName
 		// Get all the rows affected.
 		// TODO(vivek): Avoid going through Select.
 		// TODO(tamird): Support partial indexes?
-		rows, err := p.Select(&parser.Select{
-			Exprs: parser.SelectExprs{parser.StarSelectExpr()},
-			From:  parser.TableExprs{table},
-		})
+		// Use a scanNode with SELECT to pass in a TableDescriptor
+		// to the SELECT without needing to use a parser.QualifiedName,
+		// because we want to run schema changes from a gossip feed of
+		// table IDs.
+		scan := &scanNode{
+			planner: p,
+			txn:     p.txn,
+			desc:    oldTableDesc,
+		}
+		rows, err := p.selectWithScan(scan, &parser.Select{Exprs: parser.SelectExprs{parser.StarSelectExpr()}})
 		if err != nil {
 			return err
 		}
