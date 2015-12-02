@@ -25,6 +25,16 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
+var (
+	TypeBytes     = func(DTuple) (Datum, error) { return DummyBytes, nil }
+	TypeDate      = func(DTuple) (Datum, error) { return DummyDate, nil }
+	TypeFloat     = func(DTuple) (Datum, error) { return DummyFloat, nil }
+	TypeInt       = func(DTuple) (Datum, error) { return DummyInt, nil }
+	TypeInterval  = func(DTuple) (Datum, error) { return DummyInterval, nil }
+	TypeString    = func(DTuple) (Datum, error) { return DummyString, nil }
+	TypeTimestamp = func(DTuple) (Datum, error) { return DummyTimestamp, nil }
+)
+
 // TypeCheck implements the Expr interface.
 func (expr *AndExpr) TypeCheck() (Datum, error) {
 	return typeCheckBooleanExprs(expr.Left, expr.Right)
@@ -206,11 +216,6 @@ func (expr *ExistsExpr) TypeCheck() (Datum, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr *FuncExpr) TypeCheck() (Datum, error) {
-	// Cache is warm and `fn` encodes its return type.
-	if expr.fn.returnType != nil {
-		return expr.fn.returnType, nil
-	}
-
 	dummyArgs := make(DTuple, 0, len(expr.Exprs))
 	types := make(typeList, 0, len(expr.Exprs))
 	for _, e := range expr.Exprs {
@@ -220,6 +225,15 @@ func (expr *FuncExpr) TypeCheck() (Datum, error) {
 		}
 		dummyArgs = append(dummyArgs, dummyArg)
 		types = append(types, reflect.TypeOf(dummyArg))
+	}
+
+	// Cache is warm and `fn` encodes its return type.
+	if expr.fn.returnType != nil {
+		datum, err := expr.fn.returnType(dummyArgs)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %v", expr.Name, err)
+		}
+		return datum, nil
 	}
 
 	// Cache is cold, do the lookup.
@@ -255,7 +269,11 @@ func (expr *FuncExpr) TypeCheck() (Datum, error) {
 
 	// Function lookup succeeded and `fn` encodes its return type.
 	if expr.fn.returnType != nil {
-		return expr.fn.returnType, nil
+		datum, err := expr.fn.returnType(dummyArgs)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %v", expr.Name, err)
+		}
+		return datum, nil
 	}
 
 	// Function lookup succeeded but `fn` doesn't encode its return type.
