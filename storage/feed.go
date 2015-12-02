@@ -251,7 +251,7 @@ func makeRegisterRangeEvent(id roachpb.StoreID, rng *Replica, scan bool) *Regist
 	return &RegisterRangeEvent{
 		StoreID: id,
 		Desc:    rng.Desc(),
-		Stats:   rng.stats.GetMVCC(),
+		Stats:   rng.stats().GetMVCC(),
 		Scan:    scan,
 	}
 }
@@ -260,7 +260,7 @@ func makeUpdateRangeEvent(id roachpb.StoreID, rng *Replica, method roachpb.Metho
 	return &UpdateRangeEvent{
 		StoreID: id,
 		Desc:    rng.Desc(),
-		Stats:   rng.stats.GetMVCC(),
+		Stats:   rng.stats().GetMVCC(),
 		Method:  method,
 		Delta:   *delta,
 	}
@@ -270,7 +270,7 @@ func makeRemoveRangeEvent(id roachpb.StoreID, rng *Replica) *RemoveRangeEvent {
 	return &RemoveRangeEvent{
 		StoreID: id,
 		Desc:    rng.Desc(),
-		Stats:   rng.stats.GetMVCC(),
+		Stats:   rng.stats().GetMVCC(),
 	}
 }
 
@@ -279,11 +279,11 @@ func makeSplitRangeEvent(id roachpb.StoreID, rngOrig, rngNew *Replica) *SplitRan
 		StoreID: id,
 		Original: UpdateRangeEvent{
 			Desc:  rngOrig.Desc(),
-			Stats: rngOrig.stats.GetMVCC(),
+			Stats: rngOrig.stats().GetMVCC(),
 		},
 		New: RegisterRangeEvent{
 			Desc:  rngNew.Desc(),
-			Stats: rngNew.stats.GetMVCC(),
+			Stats: rngNew.stats().GetMVCC(),
 		},
 	}
 	// Size delta of original range is the additive inverse of stats for
@@ -297,11 +297,11 @@ func makeMergeRangeEvent(id roachpb.StoreID, rngMerged, rngRemoved *Replica) *Me
 		StoreID: id,
 		Merged: UpdateRangeEvent{
 			Desc:  rngMerged.Desc(),
-			Stats: rngMerged.stats.GetMVCC(),
+			Stats: rngMerged.stats().GetMVCC(),
 		},
 		Removed: RemoveRangeEvent{
 			Desc:  rngRemoved.Desc(),
-			Stats: rngRemoved.stats.GetMVCC(),
+			Stats: rngRemoved.stats().GetMVCC(),
 		},
 	}
 	mre.Merged.Delta = mre.Removed.Stats

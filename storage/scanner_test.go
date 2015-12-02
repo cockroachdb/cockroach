@@ -51,17 +51,17 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 			EndKey:   roachpb.RKey(fmt.Sprintf("%03d", i+1)),
 		}
 		// Initialize the range stat so the scanner can use it.
-		rng := &Replica{
-			stats: &rangeStats{
-				rangeID: desc.RangeID,
-				MVCCStats: engine.MVCCStats{
-					KeyBytes:  1,
-					ValBytes:  2,
-					KeyCount:  1,
-					LiveCount: 1,
-				},
+		stats := &rangeStats{
+			rangeID: desc.RangeID,
+			MVCCStats: engine.MVCCStats{
+				KeyBytes:  1,
+				ValBytes:  2,
+				KeyCount:  1,
+				LiveCount: 1,
 			},
 		}
+		rng := &Replica{}
+		rng.setStats(stats)
 		if err := rng.setDesc(desc); err != nil {
 			t.Fatal(err)
 		}

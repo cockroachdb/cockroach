@@ -112,7 +112,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 			IntentAge:   test.intentAge,
 			GCBytesAge:  test.gcBytesAge,
 		}
-		if err := tc.rng.stats.SetMVCCStats(tc.rng.store.Engine(), stats); err != nil {
+		if err := tc.rng.stats().SetMVCCStats(tc.rng.store.Engine(), stats); err != nil {
 			t.Fatal(err)
 		}
 		shouldQ, priority := gcQ.shouldQueue(test.now, tc.rng, cfg)

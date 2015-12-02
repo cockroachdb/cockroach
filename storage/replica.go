@@ -148,8 +148,8 @@ type cmdIDKey string
 type Replica struct {
 	desc     unsafe.Pointer // Atomic pointer for *roachpb.RangeDescriptor
 	store    *Store
-	stats    *rangeStats // Range statistics
-	maxBytes int64       // Max bytes before split.
+	_stats   unsafe.Pointer // Atomic pointer for *Range statistics
+	maxBytes int64          // Max bytes before split.
 	// Last index persisted to the raft log (not necessarily committed).
 	// Updated atomically.
 	lastIndex uint64
@@ -224,9 +224,11 @@ func NewReplica(desc *roachpb.RangeDescriptor, rm *Store) (*Replica, error) {
 		r.maybeGossipSystemConfig()
 	}
 
-	if r.stats, err = newRangeStats(desc.RangeID, rm.Engine()); err != nil {
+	stats, err := newRangeStats(desc.RangeID, rm.Engine())
+	if err != nil {
 		return nil, err
 	}
+	atomic.StorePointer(&r._stats, unsafe.Pointer(stats))
 
 	return r, nil
 }
@@ -464,6 +466,16 @@ func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
 	atomic.StorePointer(&r.desc, unsafe.Pointer(desc))
 }
 
+// stats atomically returns the range's stats.
+func (r *Replica) stats() *rangeStats {
+	return (*rangeStats)(atomic.LoadPointer(&r._stats))
+}
+
+// setStats atomically set the range's stats.
+func (r *Replica) setStats(stats *rangeStats) {
+	atomic.StorePointer(&r._stats, unsafe.Pointer(stats))
+}
+
 // getCachedTruncatedState atomically returns the range's cached truncated
 // state.
 func (r *Replica) getCachedTruncatedState() *roachpb.RaftTruncatedState {
@@ -502,7 +514,7 @@ func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.Replic
 
 // GetMVCCStats returns a copy of the MVCC stats object for this range.
 func (r *Replica) GetMVCCStats() engine.MVCCStats {
-	return r.stats.GetMVCC()
+	return r.stats().GetMVCC()
 }
 
 // ContainsKey returns whether this range contains the specified key.
@@ -1093,7 +1105,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	if ba.IsWrite() {
 		if err == nil {
 			// If command was successful, flush the MVCC stats to the batch.
-			if err := r.stats.MergeMVCCStats(btch, ms, ba.Timestamp.WallTime); err != nil {
+			if err := r.stats().MergeMVCCStats(btch, ms, ba.Timestamp.WallTime); err != nil {
 				// TODO(tschottdorf): ReplicaCorruptionError.
 				log.Fatalc(ctx, "setting mvcc stats in a batch should never fail: %s", err)
 			}
@@ -1656,7 +1668,7 @@ func (r *Replica) loadSystemDBSpan() ([]roachpb.KeyValue, []byte, error) {
 // range is added to the split queue.
 func (r *Replica) maybeAddToSplitQueue() {
 	maxBytes := r.GetMaxBytes()
-	if maxBytes > 0 && r.stats.KeyBytes+r.stats.ValBytes > maxBytes {
+	if maxBytes > 0 && r.stats().KeyBytes+r.stats().ValBytes > maxBytes {
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 }

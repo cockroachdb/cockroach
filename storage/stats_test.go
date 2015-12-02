@@ -33,7 +33,7 @@ func TestRangeStatsEmpty(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	s := tc.rng.stats
+	s := tc.rng.stats()
 	if !reflect.DeepEqual(s.MVCCStats, engine.MVCCStats{}) {
 		t.Errorf("expected empty stats; got %+v", s.MVCCStats)
 	}
@@ -89,7 +89,7 @@ func TestRangeStatsMerge(t *testing.T) {
 		GCBytesAge:      1,
 		LastUpdateNanos: 1 * 1E9,
 	}
-	if err := tc.rng.stats.MergeMVCCStats(tc.engine, &ms, 10*1E9); err != nil {
+	if err := tc.rng.stats().MergeMVCCStats(tc.engine, &ms, 10*1E9); err != nil {
 		t.Fatal(err)
 	}
 	expMS := engine.MVCCStats{
@@ -113,7 +113,7 @@ func TestRangeStatsMerge(t *testing.T) {
 	}
 
 	// Merge again, but with 10 more ns.
-	if err := tc.rng.stats.MergeMVCCStats(tc.engine, &ms, 20*1E9); err != nil {
+	if err := tc.rng.stats().MergeMVCCStats(tc.engine, &ms, 20*1E9); err != nil {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{
@@ -135,7 +135,7 @@ func TestRangeStatsMerge(t *testing.T) {
 	if !reflect.DeepEqual(ms, expMS) {
 		t.Errorf("expected %+v; got %+v", expMS, ms)
 	}
-	if !reflect.DeepEqual(tc.rng.stats.MVCCStats, expMS) {
-		t.Errorf("expected %+v; got %+v", expMS, tc.rng.stats.MVCCStats)
+	if !reflect.DeepEqual(tc.rng.stats().MVCCStats, expMS) {
+		t.Errorf("expected %+v; got %+v", expMS, tc.rng.stats().MVCCStats)
 	}
 }

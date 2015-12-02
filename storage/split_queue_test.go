@@ -80,7 +80,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		if err := tc.rng.stats.SetMVCCStats(tc.rng.store.Engine(), engine.MVCCStats{KeyBytes: test.bytes}); err != nil {
+		if err := tc.rng.stats().SetMVCCStats(tc.rng.store.Engine(), engine.MVCCStats{KeyBytes: test.bytes}); err != nil {
 			t.Fatal(err)
 		}
 		copy := *tc.rng.Desc()

@@ -1373,7 +1373,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 	if err != nil {
 		return util.Errorf("unable to compute stats for updated range after split: %s", err)
 	}
-	if err := r.stats.SetMVCCStats(batch, ms); err != nil {
+	if err := r.stats().SetMVCCStats(batch, ms); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 
@@ -1396,7 +1396,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 	if err != nil {
 		return util.Errorf("unable to compute stats for new range after split: %s", err)
 	}
-	if err = newRng.stats.SetMVCCStats(batch, ms); err != nil {
+	if err = newRng.stats().SetMVCCStats(batch, ms); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 
@@ -1560,7 +1560,7 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger)
 	if err != nil {
 		return util.Errorf("unable to compute stats for the range after merge: %s", err)
 	}
-	if err = r.stats.SetMVCCStats(batch, ms); err != nil {
+	if err = r.stats().SetMVCCStats(batch, ms); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 

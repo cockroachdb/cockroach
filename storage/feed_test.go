@@ -43,31 +43,33 @@ func TestStoreEventFeed(t *testing.T) {
 		StartKey: roachpb.RKey("b"),
 		EndKey:   roachpb.RKey("c"),
 	}
-	rng1 := &Replica{
-		stats: &rangeStats{
-			rangeID: desc1.RangeID,
-			MVCCStats: engine.MVCCStats{
-				LiveBytes:       400,
-				KeyBytes:        40,
-				ValBytes:        360,
-				LastUpdateNanos: 10 * 1E9,
-			},
+	stats1 := &rangeStats{
+		rangeID: desc1.RangeID,
+		MVCCStats: engine.MVCCStats{
+			LiveBytes:       400,
+			KeyBytes:        40,
+			ValBytes:        360,
+			LastUpdateNanos: 10 * 1E9,
 		},
 	}
+
+	rng1 := &Replica{}
+	rng1.setStats(stats1)
 	if err := rng1.setDesc(desc1); err != nil {
 		t.Fatal(err)
 	}
-	rng2 := &Replica{
-		stats: &rangeStats{
-			rangeID: desc2.RangeID,
-			MVCCStats: engine.MVCCStats{
-				LiveBytes:       200,
-				KeyBytes:        30,
-				ValBytes:        170,
-				LastUpdateNanos: 20 * 1E9,
-			},
+	stats2 := &rangeStats{
+		rangeID: desc2.RangeID,
+		MVCCStats: engine.MVCCStats{
+			LiveBytes:       200,
+			KeyBytes:        30,
+			ValBytes:        170,
+			LastUpdateNanos: 20 * 1E9,
 		},
 	}
+
+	rng2 := &Replica{}
+	rng2.setStats(stats2)
 	if err := rng2.setDesc(desc2); err != nil {
 		t.Fatal(err)
 	}

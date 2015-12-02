@@ -499,12 +499,11 @@ func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 	}
 
 	// Copy range stats to new range.
-	oldStats := r.stats
-	r.stats, err = newRangeStats(desc.RangeID, batch)
+	stats, err := newRangeStats(desc.RangeID, batch)
 	if err != nil {
-		r.stats = oldStats
 		return err
 	}
+	atomic.StorePointer(&r._stats, unsafe.Pointer(stats))
 
 	// The next line sets the persisted last index to the last applied index.
 	// This is not a correctness issue, but means that we may have just
