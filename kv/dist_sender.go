@@ -551,15 +551,13 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				if iErr != nil {
 					return nil, roachpb.NewError(iErr)
 				}
-				untruncate, numActive, trErr := truncate(&ba, intersected)
+				ba, numActive, trErr := truncate(ba, intersected)
 				if numActive == 0 && trErr == nil {
-					untruncate()
 					// This shouldn't happen in the wild, but some tests
 					// exercise it.
 					return nil, roachpb.NewError(util.Errorf("truncation resulted in empty batch on [%s,%s): %s",
 						rs.Key, rs.EndKey, ba))
 				}
-				defer untruncate()
 				if trErr != nil {
 					return nil, roachpb.NewError(trErr)
 				}
