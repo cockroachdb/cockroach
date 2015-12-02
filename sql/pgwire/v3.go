@@ -108,8 +108,12 @@ func (c *v3Conn) parseOptions(data []byte) error {
 	}
 }
 
-func (c *v3Conn) serve() error {
-	// TODO(bdarnell): real auth flow. For now just accept anything.
+func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
+	if authenticationHook != nil {
+		if err := authenticationHook(c.opts.user, true /* public */); err != nil {
+			return c.sendError(err.Error())
+		}
+	}
 	c.writeBuf.initMsg(serverMsgAuth)
 	c.writeBuf.putInt32(authOK)
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {

@@ -90,7 +90,7 @@ func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check request user against client certificate user.
-	if err := authenticationHook(&args, true /*public*/); err != nil {
+	if err := authenticationHook(&args, true /* public */); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}

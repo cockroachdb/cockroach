@@ -207,9 +207,20 @@ func (t *logicTest) setUser(user string) {
 		t.Fatal(err)
 	}
 	certDir := filepath.Join(filepath.Dir(dir), "resource", security.EmbeddedCertsDir)
+
+	certPath := security.ClientCertPath(certDir, user)
+	keyPath := security.ClientKeyPath(certDir, user)
+	// `github.com/lib/pq` requires that private key file permissions are
+	// "u=rw (0600) or less".
+	if err := os.Chmod(keyPath, 0600); err != nil {
+		t.Fatal(err)
+	}
 	db, err := sql.Open("postgres",
-		fmt.Sprintf("sslmode=verify-full sslrootcert=%s user=%s host=%s port=%s",
-			filepath.Join(certDir, "ca.crt"), user, host, port))
+		fmt.Sprintf("sslmode=verify-full sslrootcert=%s sslcert=%s sslkey=%s user=%s host=%s port=%s",
+			filepath.Join(certDir, "ca.crt"),
+			certPath,
+			keyPath,
+			user, host, port))
 	if err != nil {
 		t.Fatal(err)
 	}

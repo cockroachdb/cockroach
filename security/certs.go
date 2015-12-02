@@ -28,12 +28,16 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-func clientCertFile(username string) string {
-	return username + ".client.crt"
+// ClientCertPath returns a path to a certificate file for the given
+// username in the given certDir.
+func ClientCertPath(certDir, username string) string {
+	return filepath.Join(certDir, username+".client.crt")
 }
 
-func clientKeyFile(username string) string {
-	return username + ".client.key"
+// ClientKeyPath returns a path to a key file for the given username in
+// the given certDir.
+func ClientKeyPath(certDir, username string) string {
+	return filepath.Join(certDir, username+".client.key")
 }
 
 // loadCACertAndKey loads the certificate and key files in the specified
