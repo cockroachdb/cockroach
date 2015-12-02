@@ -18,7 +18,6 @@
 package sql
 
 import (
-	"errors"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -27,11 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
-
-type schemaInfo struct {
-	id      ID
-	version DescriptorVersion
-}
 
 // planner is the centerpiece of SQL statement execution combining session
 // state and database state with the logic for SQL execution.
@@ -43,10 +37,18 @@ type planner struct {
 	leases       map[ID]*LeaseState
 	leaseMgr     *LeaseManager
 	systemConfig config.SystemConfig
-
-	// TODO(pmattis): This is a hack to force updating to the latest version of a
-	// lease after a schema change operation such as CREATE INDEX.
-	modifiedSchemas []schemaInfo
+	// Keep track of tables that had schema changes that were completed.
+	// The executor has the option to wait on completed schema changes
+	// propagating to all nodes so that future commands use the latest
+	// schema. This is not required for correctness, but it makes the UI
+	// experience/tests predictable.
+	//
+	// TODO(vivek): Well, this is still needed for correctness as
+	// long as the schema change is still executed in one transaction
+	// without a staged process that takes the schema through all the state
+	// changes. Once the staged process is rolled out delete this
+	// TODO comment.
+	completedSchemaChange []ID
 
 	testingVerifyMetadata func(config.SystemConfig) error
 
@@ -217,11 +219,9 @@ func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, er
 	return desc, nil
 }
 
-var errDontUpdateTableDescriptor = errors.New("don't update table descriptor")
-
-func (p *planner) hackNoteSchemaChange(tableDesc *TableDescriptor) {
-	tableDesc.Version++
-	p.modifiedSchemas = append(p.modifiedSchemas, schemaInfo{tableDesc.ID, tableDesc.Version})
+// notify that the schema change is completed.
+func (p *planner) notifyCompletedSchemaChange(id ID) {
+	p.completedSchemaChange = append(p.completedSchemaChange, id)
 }
 
 func (p *planner) releaseLeases(db client.DB) {
@@ -232,19 +232,6 @@ func (p *planner) releaseLeases(db client.DB) {
 			}
 		}
 		p.leases = nil
-	}
-
-	// TODO(pmattis): This is a hack. Remove when schema change operations work
-	// properly.
-	if p.modifiedSchemas != nil {
-		for _, d := range p.modifiedSchemas {
-			// To prevent Publish() from writing a new version of the
-			// table descriptor, the function passed in returns an error.
-			if err := p.leaseMgr.Publish(d.id, func(desc *TableDescriptor) error { return errDontUpdateTableDescriptor }); err != nil && err != errDontUpdateTableDescriptor {
-				log.Warning(err)
-			}
-		}
-		p.modifiedSchemas = nil
 	}
 }
 

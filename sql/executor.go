@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 var testingWaitForMetadata bool
@@ -190,6 +191,15 @@ func (e *Executor) execStmts(sql string, planMaker *planner) driver.Response {
 		// TODO(pmattis): Need to record the leases used by a transaction within
 		// the transaction state and restore it when the transaction is restored.
 		planMaker.releaseLeases(e.db)
+
+		// The previous statement finished executing a schema change. Wait for
+		// the schema change to propagate to all nodes, so that once the executor
+		// returns the new schema is live everywhere. This is not needed for
+		// correctness but is done to make the UI experience/tests predictable.
+		if err := e.waitForCompletedSchemaChangesToPropagate(planMaker); err != nil {
+			log.Warning(err)
+		}
+
 	}
 	return resp
 }
@@ -338,6 +348,29 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 	}
 
 	return result, err
+}
+
+func (e *Executor) waitForCompletedSchemaChangesToPropagate(planMaker *planner) error {
+	for _, id := range planMaker.completedSchemaChange {
+		retryOpts := retry.Options{
+			InitialBackoff: 20 * time.Millisecond,
+			MaxBackoff:     200 * time.Millisecond,
+			Multiplier:     2,
+		}
+		for r := retry.Start(retryOpts); r.Next(); {
+			// Wait until there are no unexpired leases on the previous version
+			// of the table.
+			wait, _, err := e.leaseMgr.prevVersionPresent(id)
+			if err != nil {
+				return err
+			}
+			if !wait {
+				break
+			}
+		}
+	}
+	planMaker.completedSchemaChange = nil
+	return nil
 }
 
 // If we hit an error and there is a pending transaction, rollback

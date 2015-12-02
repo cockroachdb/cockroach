@@ -176,13 +176,43 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 	})
 }
 
+// prevVersionPresent reads the table descriptor and checks if there are
+// any unexpired leases on the previous version of the table descriptor.
+// It returns false with the descriptor version when no old leases exist
+// on the table.
+func (s LeaseStore) prevVersionPresent(tableID ID) (bool, DescriptorVersion, error) {
+	desc := &Descriptor{}
+	descKey := MakeDescMetadataKey(tableID)
+
+	// Get the current version of the table descriptor non-transactionally.
+	//
+	// TODO(pmattis): Do an inconsistent read here?
+	if err := s.db.GetProto(descKey, desc); err != nil {
+		return false, 0, err
+	}
+	tableDesc := desc.GetTable()
+	if tableDesc == nil {
+		return false, 0, util.Errorf("ID %d is not a table", tableID)
+	}
+	// Check to see if there are any leases that still exist on the previous
+	// version of the descriptor.
+	now := s.clock.Now()
+	count, err := s.countLeases(tableDesc.ID, tableDesc.Version-1, now.GoTime())
+	if err != nil {
+		return false, 0, err
+	}
+	oldLeases := count != 0
+	if oldLeases {
+		log.Infof("publish (count leases): descID=%d version=%d count=%d",
+			tableDesc.ID, tableDesc.Version-1, count)
+	}
+	return oldLeases, tableDesc.Version, nil
+}
+
 // Publish a new version of a table descriptor. The update closure may be
 // called multiple times if retries occur: make sure it does not have side
 // effects.
 func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) error {
-	desc := &Descriptor{}
-	descKey := MakeDescMetadataKey(tableID)
-
 	retryOpts := retry.Options{
 		InitialBackoff: 20 * time.Millisecond,
 		MaxBackoff:     2 * time.Second,
@@ -190,35 +220,23 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) err
 	}
 
 	for r := retry.Start(retryOpts); r.Next(); {
-		// Get the current version of the table descriptor non-transactionally.
-		//
-		// TODO(pmattis): Do an inconsistent read here?
-		if err := s.db.GetProto(descKey, desc); err != nil {
-			return err
-		}
-		tableDesc := desc.GetTable()
-		if tableDesc == nil {
-			return util.Errorf("ID %d is not a table", tableID)
-		}
-		// Check to see if there are any leases that still exist on the previous
-		// version of the descriptor.
-		now := s.clock.Now()
-		count, err := s.countLeases(tableDesc.ID, tableDesc.Version-1, now.GoTime())
+		// Wait until there are no unexpired leases on the previous version
+		// of the table.
+		wait, expectedVersion, err := s.prevVersionPresent(tableID)
 		if err != nil {
 			return err
 		}
-		if count != 0 {
-			log.Infof("publish (count leases): descID=%d version=%d count=%d",
-				tableDesc.ID, tableDesc.Version-1, count)
+		if wait {
 			continue
 		}
-
 		// At this point, desc.Version is the only version of the descriptor that
 		// has leases outstanding. Lease acquisition (see acquire()) maintains the
 		// invariant that no new leases for desc.Version-1 will be granted once
 		// desc.Version exists.
-		expectedVersion := tableDesc.Version
 		err = s.db.Txn(func(txn *client.Txn) error {
+			desc := &Descriptor{}
+			descKey := MakeDescMetadataKey(tableID)
+
 			// Re-read the current version of the table descriptor, this time
 			// transactionally.
 			if err := txn.GetProto(descKey, desc); err != nil {
@@ -245,6 +263,7 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) err
 
 			// Bump the version and modification time.
 			tableDesc.Version = tableDesc.Version + 1
+			now := s.clock.Now()
 			tableDesc.ModificationTime = now
 			if log.V(3) {
 				log.Infof("publish: descID=%d version=%d mtime=%s",
