@@ -21,6 +21,8 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	"io/ioutil"
+	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -119,4 +121,18 @@ func cleanupTestServer(s *server.TestServer) {
 func cleanup(s *server.TestServer, db *sql.DB) {
 	_ = db.Close()
 	cleanupTestServer(s)
+}
+
+// `github.com/lib/pq` requires that private key file permissions are
+// "u=rw (0600) or less".
+func tempRestrictedCopy(t *testing.T, keyPath, tempDir string) string {
+	key, err := ioutil.ReadFile(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpKeyPath := filepath.Join(tempDir, "tempRestrictedCopy")
+	if err := ioutil.WriteFile(tmpKeyPath, key, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return tmpKeyPath
 }

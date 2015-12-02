@@ -20,11 +20,16 @@ package sql_test
 import (
 	"database/sql"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"net/url"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lib/pq"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql/pgwire"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -46,6 +51,30 @@ func trivialQuery(datasource string) error {
 func TestPGWire(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	certDir := filepath.Join(filepath.Dir(dir), "resource", security.EmbeddedCertsDir)
+
+	certUser := server.TestUser
+	certPath := security.ClientCertPath(certDir, certUser)
+	keyPath := security.ClientKeyPath(certDir, certUser)
+
+	// `github.com/lib/pq` requires that private key file permissions are
+	// "u=rw (0600) or less".
+	tempDir, err := ioutil.TempDir(os.TempDir(), "TestPGWire")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			// Not Fatal() because we might already be panicking.
+			t.Error(err)
+		}
+	}()
+	tmpKeyPath := tempRestrictedCopy(t, keyPath, tempDir)
+
 	for _, insecure := range [...]bool{true, false} {
 		ctx := server.NewTestContext()
 		ctx.Insecure = insecure
@@ -56,20 +85,26 @@ func TestPGWire(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := trivialQuery(fmt.Sprintf("host=%s port=%s", host, port)); err != nil {
+		basePgUrl := url.URL{
+			Scheme: "postgres",
+			Host:   net.JoinHostPort(host, port),
+		}
+		if err := trivialQuery(basePgUrl.String()); err != nil {
 			if insecure {
 				if err != pq.ErrSSLNotSupported {
 					t.Fatal(err)
 				}
 			} else {
-				if err != nil {
+				if !testutils.IsError(err, "no client certificates in request") {
 					t.Fatal(err)
 				}
 			}
 		}
 
 		{
-			err := trivialQuery(fmt.Sprintf("sslmode=disable host=%s port=%s", host, port))
+			disablePgUrl := basePgUrl
+			disablePgUrl.RawQuery = "sslmode=disable"
+			err := trivialQuery(disablePgUrl.String())
 			if insecure {
 				if err != nil {
 					t.Fatal(err)
@@ -82,14 +117,43 @@ func TestPGWire(t *testing.T) {
 		}
 
 		{
-			err := trivialQuery(fmt.Sprintf("sslmode=require host=%s port=%s", host, port))
+			requirePgUrlNoCert := basePgUrl
+			requirePgUrlNoCert.RawQuery = "sslmode=require"
+			err := trivialQuery(requirePgUrlNoCert.String())
 			if insecure {
 				if err != pq.ErrSSLNotSupported {
 					t.Fatal(err)
 				}
 			} else {
-				if err != nil {
+				if !testutils.IsError(err, "no client certificates in request") {
 					t.Fatal(err)
+				}
+			}
+		}
+
+		{
+			for _, optUser := range []string{certUser, security.RootUser} {
+				requirePgUrlWithCert := basePgUrl
+				requirePgUrlWithCert.User = url.User(optUser)
+				requirePgUrlWithCert.RawQuery = fmt.Sprintf("sslmode=require&sslcert=%s&sslkey=%s",
+					url.QueryEscape(certPath),
+					url.QueryEscape(tmpKeyPath),
+				)
+				err := trivialQuery(requirePgUrlWithCert.String())
+				if insecure {
+					if err != pq.ErrSSLNotSupported {
+						t.Fatal(err)
+					}
+				} else {
+					if optUser == certUser {
+						if err != nil {
+							t.Fatal(err)
+						}
+					} else {
+						if !testutils.IsError(err, `requested user is \w+, but certificate is for \w+`) {
+							t.Fatal(err)
+						}
+					}
 				}
 			}
 		}

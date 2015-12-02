@@ -25,7 +25,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -175,7 +177,7 @@ func (t *logicTest) close() {
 }
 
 // setUser sets the DB client to the specified user.
-func (t *logicTest) setUser(user string) {
+func (t *logicTest) setUser(tempDir, user string) {
 	if t.db != nil {
 		var dbName string
 
@@ -207,9 +209,26 @@ func (t *logicTest) setUser(user string) {
 		t.Fatal(err)
 	}
 	certDir := filepath.Join(filepath.Dir(dir), "resource", security.EmbeddedCertsDir)
-	db, err := sql.Open("postgres",
-		fmt.Sprintf("sslmode=verify-full sslrootcert=%s user=%s host=%s port=%s",
-			filepath.Join(certDir, "ca.crt"), user, host, port))
+
+	certPath := security.ClientCertPath(certDir, user)
+	keyPath := security.ClientKeyPath(certDir, user)
+
+	// `github.com/lib/pq` requires that private key file permissions are
+	// "u=rw (0600) or less".
+	tmpKeyPath := tempRestrictedCopy(t.T, keyPath, tempDir)
+
+	pgUrl := url.URL{
+		Scheme: "postgres",
+		User:   url.User(user),
+		Host:   net.JoinHostPort(host, port),
+		RawQuery: fmt.Sprintf("sslmode=verify-full&sslrootcert=%s&sslcert=%s&sslkey=%s",
+			url.QueryEscape(filepath.Join(certDir, "ca.crt")),
+			url.QueryEscape(certPath),
+			url.QueryEscape(tmpKeyPath),
+		),
+	}
+
+	db, err := sql.Open("postgres", pgUrl.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,9 +254,22 @@ func (t *logicTest) run(path string) {
 	// MySQL or Postgres instance.
 	t.srv = setupTestServer(t.T)
 
+	// `github.com/lib/pq` requires that private key file permissions are
+	// "u=rw (0600) or less".
+	tempDir, err := ioutil.TempDir(os.TempDir(), "TestLogic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			// Not Fatal() because we might already be panicking.
+			t.Error(err)
+		}
+	}()
+
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
-	t.setUser(security.RootUser)
+	t.setUser(tempDir, security.RootUser)
 
 	if _, err := t.db.Exec(`
 CREATE DATABASE test;
@@ -380,7 +412,7 @@ SET DATABASE = test;
 			if len(fields[1]) == 0 {
 				t.Fatal("user command requires a non-blank argument")
 			}
-			t.setUser(fields[1])
+			t.setUser(tempDir, fields[1])
 
 		case "skipif", "onlyif":
 			t.Fatalf("unimplemented test statement: %s", s.Text())
