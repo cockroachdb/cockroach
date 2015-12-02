@@ -174,9 +174,10 @@ func (s *Server) serveConn(conn net.Conn) error {
 	}
 
 	if version == version30 {
-		v3conn, err := newV3Conn(conn, buf.msg, s.context.Executor)
-		if err != nil {
-			return err
+		v3conn := makeV3Conn(conn, s.context.Executor)
+
+		if err := v3conn.parseOptions(buf.msg); err != nil {
+			return v3conn.sendError(err.Error())
 		}
 		if errSSLRequired {
 			return v3conn.sendError(ErrSSLRequired)
