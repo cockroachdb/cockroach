@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -1312,6 +1313,11 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 				SplitTrigger: &roachpb.SplitTrigger{
 					UpdatedDesc: updatedDesc,
 					NewDesc:     *newDesc,
+					// Designate this store as the preferred leader for the new
+					// range. The choice of store here doesn't matter for
+					// correctness, but for best performance it should be one
+					// that we believe is currently up.
+					InitialLeaderStoreID: r.store.StoreID(),
 				},
 			},
 		})
@@ -1414,6 +1420,25 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 		if err := r.store.SplitRange(r, newRng); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
 			log.Fatalf("failed to update Store after split: %s", err)
+		}
+
+		// To avoid leaving the new range unavailable as it waits to elect
+		// its leader, one (and only one) of the nodes should start an
+		// election as soon as the split is processed.
+		if r.store.StoreID() == split.InitialLeaderStoreID {
+			// Schedule the campaign a short time in the future. As
+			// followers process the split, they destroy and recreate their
+			// raft groups, which can cause messages to be dropped. In
+			// general a shorter delay (perhaps all the way down to zero) is
+			// better in production, because the race is rare and the worst
+			// case scenario is that we simply wait for an election timeout.
+			// However, the test for this feature disables election timeouts
+			// and relies solely on this campaign trigger, so it is unacceptably
+			// flaky without a bit of a delay.
+			r.store.stopper.RunAsyncTask(func() {
+				time.Sleep(10 * time.Millisecond)
+				r.store.multiraft.Campaign(split.NewDesc.RangeID)
+			})
 		}
 	})
 

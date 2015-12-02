@@ -167,9 +167,10 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreIdent, _internal_metadata_),
       -1);
   SplitTrigger_descriptor_ = file->message_type(5);
-  static const int SplitTrigger_offsets_[2] = {
+  static const int SplitTrigger_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(SplitTrigger, updated_desc_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(SplitTrigger, new_desc_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(SplitTrigger, initial_leader_store_id_),
   };
   SplitTrigger_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -467,66 +468,68 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "pb.ValueB\004\310\336\037\000\"\214\001\n\nStoreIdent\022%\n\ncluster"
     "_id\030\001 \001(\tB\021\310\336\037\000\342\336\037\tClusterID\022)\n\007node_id\030"
     "\002 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\372\336\037\006NodeID\022,\n\010store"
-    "_id\030\003 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\372\336\037\007StoreID\"\212\001"
+    "_id\030\003 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\372\336\037\007StoreID\"\324\001"
     "\n\014SplitTrigger\022>\n\014updated_desc\030\001 \001(\0132\".c"
     "ockroach.roachpb.RangeDescriptorB\004\310\336\037\000\022:"
     "\n\010new_desc\030\002 \001(\0132\".cockroach.roachpb.Ran"
-    "geDescriptorB\004\310\336\037\000\"\215\001\n\014MergeTrigger\022>\n\014u"
-    "pdated_desc\030\001 \001(\0132\".cockroach.roachpb.Ra"
-    "ngeDescriptorB\004\310\336\037\000\022=\n\021subsumed_range_id"
-    "\030\002 \001(\003B\"\310\336\037\000\342\336\037\017SubsumedRangeID\372\336\037\007Range"
-    "ID\"\230\002\n\025ChangeReplicasTrigger\022\?\n\013change_t"
-    "ype\030\001 \001(\0162$.cockroach.roachpb.ReplicaCha"
-    "ngeTypeB\004\310\336\037\000\022;\n\007replica\030\002 \001(\0132$.cockroa"
-    "ch.roachpb.ReplicaDescriptorB\004\310\336\037\000\022D\n\020up"
-    "dated_replicas\030\003 \003(\0132$.cockroach.roachpb"
-    ".ReplicaDescriptorB\004\310\336\037\000\022;\n\017next_replica"
-    "_id\030\004 \001(\005B\"\310\336\037\000\342\336\037\rNextReplicaID\372\336\037\tRepl"
-    "icaID\"C\n\023ModifiedSpanTrigger\022,\n\016system_d"
-    "b_span\030\001 \001(\010B\024\310\336\037\000\342\336\037\014SystemDBSpan\"\237\002\n\025I"
-    "nternalCommitTrigger\0226\n\rsplit_trigger\030\001 "
-    "\001(\0132\037.cockroach.roachpb.SplitTrigger\0226\n\r"
-    "merge_trigger\030\002 \001(\0132\037.cockroach.roachpb."
-    "MergeTrigger\022I\n\027change_replicas_trigger\030"
-    "\003 \001(\0132(.cockroach.roachpb.ChangeReplicas"
-    "Trigger\022E\n\025modified_span_trigger\030\004 \001(\0132&"
-    ".cockroach.roachpb.ModifiedSpanTrigger:\004"
-    "\210\240\037\001\"\'\n\010NodeList\022\033\n\005nodes\030\001 \003(\005B\014\020\001\372\336\037\006N"
-    "odeID\"\362\004\n\013Transaction\022\022\n\004name\030\001 \001(\tB\004\310\336\037"
-    "\000\022\024\n\003key\030\002 \001(\014B\007\372\336\037\003Key\022\022\n\002id\030\003 \001(\014B\006\342\336\037"
-    "\002ID\022\026\n\010priority\030\004 \001(\005B\004\310\336\037\000\0229\n\tisolation"
-    "\030\005 \001(\0162 .cockroach.roachpb.IsolationType"
-    "B\004\310\336\037\000\022:\n\006status\030\006 \001(\0162$.cockroach.roach"
-    "pb.TransactionStatusB\004\310\336\037\000\022\023\n\005epoch\030\007 \001("
-    "\rB\004\310\336\037\000\0224\n\016last_heartbeat\030\010 \001(\0132\034.cockro"
-    "ach.roachpb.Timestamp\0225\n\ttimestamp\030\t \001(\013"
-    "2\034.cockroach.roachpb.TimestampB\004\310\336\037\000\022:\n\016"
-    "orig_timestamp\030\n \001(\0132\034.cockroach.roachpb"
-    ".TimestampB\004\310\336\037\000\0229\n\rmax_timestamp\030\013 \001(\0132"
-    "\034.cockroach.roachpb.TimestampB\004\310\336\037\000\0228\n\rc"
-    "ertain_nodes\030\014 \001(\0132\033.cockroach.roachpb.N"
-    "odeListB\004\310\336\037\000\022\025\n\007Writing\030\r \001(\010B\004\310\336\037\000\022\026\n\010"
-    "Sequence\030\016 \001(\rB\004\310\336\037\000\022.\n\007Intents\030\017 \003(\0132\027."
-    "cockroach.roachpb.SpanB\004\310\336\037\000:\004\230\240\037\000\"l\n\006In"
-    "tent\022/\n\004span\030\001 \001(\0132\027.cockroach.roachpb.S"
-    "panB\010\310\336\037\000\320\336\037\001\0221\n\003txn\030\002 \001(\0132\036.cockroach.r"
-    "oachpb.TransactionB\004\310\336\037\000\"\265\001\n\005Lease\0221\n\005st"
-    "art\030\001 \001(\0132\034.cockroach.roachpb.TimestampB"
-    "\004\310\336\037\000\0226\n\nexpiration\030\002 \001(\0132\034.cockroach.ro"
-    "achpb.TimestampB\004\310\336\037\000\022;\n\007replica\030\003 \001(\0132$"
-    ".cockroach.roachpb.ReplicaDescriptorB\004\310\336"
-    "\037\000:\004\230\240\037\000\"+\n\nGCMetadata\022\035\n\017last_scan_nano"
-    "s\030\001 \001(\003B\004\310\336\037\000\"a\n\022SequenceCacheEntry\022\024\n\003k"
-    "ey\030\001 \001(\014B\007\372\336\037\003Key\0225\n\ttimestamp\030\002 \001(\0132\034.c"
-    "ockroach.roachpb.TimestampB\004\310\336\037\000*Q\n\tValu"
-    "eType\022\013\n\007UNKNOWN\020\000\022\007\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t"
-    "\n\005BYTES\020\003\022\010\n\004TIME\020\004\022\016\n\nTIMESERIES\020d*>\n\021R"
-    "eplicaChangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REM"
-    "OVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014"
-    "SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021Tr"
-    "ansactionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTE"
-    "D\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\035Z\007roachpb\310\341\036\000\220\343\036"
-    "\000\310\342\036\001\340\342\036\001\320\342\036\001X\001", 2935);
+    "geDescriptorB\004\310\336\037\000\022H\n\027initial_leader_sto"
+    "re_id\030\003 \001(\005B\'\310\336\037\000\342\336\037\024InitialLeaderStoreI"
+    "D\372\336\037\007StoreID\"\215\001\n\014MergeTrigger\022>\n\014updated"
+    "_desc\030\001 \001(\0132\".cockroach.roachpb.RangeDes"
+    "criptorB\004\310\336\037\000\022=\n\021subsumed_range_id\030\002 \001(\003"
+    "B\"\310\336\037\000\342\336\037\017SubsumedRangeID\372\336\037\007RangeID\"\230\002\n"
+    "\025ChangeReplicasTrigger\022\?\n\013change_type\030\001 "
+    "\001(\0162$.cockroach.roachpb.ReplicaChangeTyp"
+    "eB\004\310\336\037\000\022;\n\007replica\030\002 \001(\0132$.cockroach.roa"
+    "chpb.ReplicaDescriptorB\004\310\336\037\000\022D\n\020updated_"
+    "replicas\030\003 \003(\0132$.cockroach.roachpb.Repli"
+    "caDescriptorB\004\310\336\037\000\022;\n\017next_replica_id\030\004 "
+    "\001(\005B\"\310\336\037\000\342\336\037\rNextReplicaID\372\336\037\tReplicaID\""
+    "C\n\023ModifiedSpanTrigger\022,\n\016system_db_span"
+    "\030\001 \001(\010B\024\310\336\037\000\342\336\037\014SystemDBSpan\"\237\002\n\025Interna"
+    "lCommitTrigger\0226\n\rsplit_trigger\030\001 \001(\0132\037."
+    "cockroach.roachpb.SplitTrigger\0226\n\rmerge_"
+    "trigger\030\002 \001(\0132\037.cockroach.roachpb.MergeT"
+    "rigger\022I\n\027change_replicas_trigger\030\003 \001(\0132"
+    "(.cockroach.roachpb.ChangeReplicasTrigge"
+    "r\022E\n\025modified_span_trigger\030\004 \001(\0132&.cockr"
+    "oach.roachpb.ModifiedSpanTrigger:\004\210\240\037\001\"\'"
+    "\n\010NodeList\022\033\n\005nodes\030\001 \003(\005B\014\020\001\372\336\037\006NodeID\""
+    "\362\004\n\013Transaction\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022\024\n\003k"
+    "ey\030\002 \001(\014B\007\372\336\037\003Key\022\022\n\002id\030\003 \001(\014B\006\342\336\037\002ID\022\026\n"
+    "\010priority\030\004 \001(\005B\004\310\336\037\000\0229\n\tisolation\030\005 \001(\016"
+    "2 .cockroach.roachpb.IsolationTypeB\004\310\336\037\000"
+    "\022:\n\006status\030\006 \001(\0162$.cockroach.roachpb.Tra"
+    "nsactionStatusB\004\310\336\037\000\022\023\n\005epoch\030\007 \001(\rB\004\310\336\037"
+    "\000\0224\n\016last_heartbeat\030\010 \001(\0132\034.cockroach.ro"
+    "achpb.Timestamp\0225\n\ttimestamp\030\t \001(\0132\034.coc"
+    "kroach.roachpb.TimestampB\004\310\336\037\000\022:\n\016orig_t"
+    "imestamp\030\n \001(\0132\034.cockroach.roachpb.Times"
+    "tampB\004\310\336\037\000\0229\n\rmax_timestamp\030\013 \001(\0132\034.cock"
+    "roach.roachpb.TimestampB\004\310\336\037\000\0228\n\rcertain"
+    "_nodes\030\014 \001(\0132\033.cockroach.roachpb.NodeLis"
+    "tB\004\310\336\037\000\022\025\n\007Writing\030\r \001(\010B\004\310\336\037\000\022\026\n\010Sequen"
+    "ce\030\016 \001(\rB\004\310\336\037\000\022.\n\007Intents\030\017 \003(\0132\027.cockro"
+    "ach.roachpb.SpanB\004\310\336\037\000:\004\230\240\037\000\"l\n\006Intent\022/"
+    "\n\004span\030\001 \001(\0132\027.cockroach.roachpb.SpanB\010\310"
+    "\336\037\000\320\336\037\001\0221\n\003txn\030\002 \001(\0132\036.cockroach.roachpb"
+    ".TransactionB\004\310\336\037\000\"\265\001\n\005Lease\0221\n\005start\030\001 "
+    "\001(\0132\034.cockroach.roachpb.TimestampB\004\310\336\037\000\022"
+    "6\n\nexpiration\030\002 \001(\0132\034.cockroach.roachpb."
+    "TimestampB\004\310\336\037\000\022;\n\007replica\030\003 \001(\0132$.cockr"
+    "oach.roachpb.ReplicaDescriptorB\004\310\336\037\000:\004\230\240"
+    "\037\000\"+\n\nGCMetadata\022\035\n\017last_scan_nanos\030\001 \001("
+    "\003B\004\310\336\037\000\"a\n\022SequenceCacheEntry\022\024\n\003key\030\001 \001"
+    "(\014B\007\372\336\037\003Key\0225\n\ttimestamp\030\002 \001(\0132\034.cockroa"
+    "ch.roachpb.TimestampB\004\310\336\037\000*Q\n\tValueType\022"
+    "\013\n\007UNKNOWN\020\000\022\007\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BYTE"
+    "S\020\003\022\010\n\004TIME\020\004\022\016\n\nTIMESERIES\020d*>\n\021Replica"
+    "ChangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_RE"
+    "PLICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SERIAL"
+    "IZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021Transact"
+    "ionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n"
+    "\007ABORTED\020\002\032\004\210\243\036\000B\035Z\007roachpb\310\341\036\000\220\343\036\000\310\342\036\001\340"
+    "\342\036\001\320\342\036\001X\001", 3009);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/data.proto", &protobuf_RegisterTypes);
   Span::default_instance_ = new Span();
@@ -2736,6 +2739,7 @@ void StoreIdent::clear_store_id() {
 #ifndef _MSC_VER
 const int SplitTrigger::kUpdatedDescFieldNumber;
 const int SplitTrigger::kNewDescFieldNumber;
+const int SplitTrigger::kInitialLeaderStoreIdFieldNumber;
 #endif  // !_MSC_VER
 
 SplitTrigger::SplitTrigger()
@@ -2761,6 +2765,7 @@ void SplitTrigger::SharedCtor() {
   _cached_size_ = 0;
   updated_desc_ = NULL;
   new_desc_ = NULL;
+  initial_leader_store_id_ = 0;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -2802,13 +2807,14 @@ SplitTrigger* SplitTrigger::New(::google::protobuf::Arena* arena) const {
 }
 
 void SplitTrigger::Clear() {
-  if (_has_bits_[0 / 32] & 3u) {
+  if (_has_bits_[0 / 32] & 7u) {
     if (has_updated_desc()) {
       if (updated_desc_ != NULL) updated_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
     }
     if (has_new_desc()) {
       if (new_desc_ != NULL) new_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
     }
+    initial_leader_store_id_ = 0;
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -2844,6 +2850,21 @@ bool SplitTrigger::MergePartialFromCodedStream(
          parse_new_desc:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_new_desc()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(24)) goto parse_initial_leader_store_id;
+        break;
+      }
+
+      // optional int32 initial_leader_store_id = 3;
+      case 3: {
+        if (tag == 24) {
+         parse_initial_leader_store_id:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &initial_leader_store_id_)));
+          set_has_initial_leader_store_id();
         } else {
           goto handle_unusual;
         }
@@ -2888,6 +2909,11 @@ void SplitTrigger::SerializeWithCachedSizes(
       2, *this->new_desc_, output);
   }
 
+  // optional int32 initial_leader_store_id = 3;
+  if (has_initial_leader_store_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->initial_leader_store_id(), output);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -2912,6 +2938,11 @@ void SplitTrigger::SerializeWithCachedSizes(
         2, *this->new_desc_, target);
   }
 
+  // optional int32 initial_leader_store_id = 3;
+  if (has_initial_leader_store_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(3, this->initial_leader_store_id(), target);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -2923,7 +2954,7 @@ void SplitTrigger::SerializeWithCachedSizes(
 int SplitTrigger::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 7) {
     // optional .cockroach.roachpb.RangeDescriptor updated_desc = 1;
     if (has_updated_desc()) {
       total_size += 1 +
@@ -2936,6 +2967,13 @@ int SplitTrigger::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *this->new_desc_);
+    }
+
+    // optional int32 initial_leader_store_id = 3;
+    if (has_initial_leader_store_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->initial_leader_store_id());
     }
 
   }
@@ -2971,6 +3009,9 @@ void SplitTrigger::MergeFrom(const SplitTrigger& from) {
     if (from.has_new_desc()) {
       mutable_new_desc()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.new_desc());
     }
+    if (from.has_initial_leader_store_id()) {
+      set_initial_leader_store_id(from.initial_leader_store_id());
+    }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -3001,6 +3042,7 @@ void SplitTrigger::Swap(SplitTrigger* other) {
 void SplitTrigger::InternalSwap(SplitTrigger* other) {
   std::swap(updated_desc_, other->updated_desc_);
   std::swap(new_desc_, other->new_desc_);
+  std::swap(initial_leader_store_id_, other->initial_leader_store_id_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -3101,6 +3143,30 @@ void SplitTrigger::clear_new_desc() {
     clear_has_new_desc();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.SplitTrigger.new_desc)
+}
+
+// optional int32 initial_leader_store_id = 3;
+bool SplitTrigger::has_initial_leader_store_id() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+void SplitTrigger::set_has_initial_leader_store_id() {
+  _has_bits_[0] |= 0x00000004u;
+}
+void SplitTrigger::clear_has_initial_leader_store_id() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+void SplitTrigger::clear_initial_leader_store_id() {
+  initial_leader_store_id_ = 0;
+  clear_has_initial_leader_store_id();
+}
+ ::google::protobuf::int32 SplitTrigger::initial_leader_store_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.SplitTrigger.initial_leader_store_id)
+  return initial_leader_store_id_;
+}
+ void SplitTrigger::set_initial_leader_store_id(::google::protobuf::int32 value) {
+  set_has_initial_leader_store_id();
+  initial_leader_store_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.SplitTrigger.initial_leader_store_id)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
