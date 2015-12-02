@@ -18,9 +18,7 @@
 package pgwire
 
 import (
-	"bytes"
 	"crypto/tls"
-	"encoding/binary"
 	"net"
 	"sync"
 
@@ -32,18 +30,15 @@ import (
 // secure server in cleartext.
 const ErrSSLRequired = "cleartext connections are not permitted"
 
-var (
-	version30  = make([]byte, 4)
-	versionSSL = make([]byte, 4)
+const (
+	version30  = 196608
+	versionSSL = 80877103
+)
 
+var (
 	sslSupported   = []byte{'S'}
 	sslUnsupported = []byte{'N'}
 )
-
-func init() {
-	binary.BigEndian.PutUint32(version30, 196608)
-	binary.BigEndian.PutUint32(versionSSL, 80877103)
-}
 
 // Server implements the server side of the PostgreSQL wire protocol.
 type Server struct {
@@ -142,11 +137,14 @@ func (s *Server) serveConn(conn net.Conn) error {
 	if err := buf.readUntypedMsg(conn); err != nil {
 		return err
 	}
-	version, rest := buf.msg[:4], buf.msg[4:]
+	version, err := buf.getInt32()
+	if err != nil {
+		return err
+	}
 	errSSLRequired := false
-	if bytes.Equal(version, versionSSL) {
-		if len(rest) > 0 {
-			return util.Errorf("unexpected data after SSLRequest: %q", rest)
+	if version == versionSSL {
+		if len(buf.msg) > 0 {
+			return util.Errorf("unexpected data after SSLRequest: %q", buf.msg)
 		}
 
 		if s.context.Insecure {
@@ -167,13 +165,16 @@ func (s *Server) serveConn(conn net.Conn) error {
 		if err := buf.readUntypedMsg(conn); err != nil {
 			return err
 		}
-		version, rest = buf.msg[:4], buf.msg[4:]
+		version, err = buf.getInt32()
+		if err != nil {
+			return err
+		}
 	} else if !s.context.Insecure {
 		errSSLRequired = true
 	}
 
-	if bytes.Equal(version, version30) {
-		v3conn, err := newV3Conn(conn, rest, s.context.Executor)
+	if version == version30 {
+		v3conn, err := newV3Conn(conn, buf.msg, s.context.Executor)
 		if err != nil {
 			return err
 		}
@@ -183,5 +184,5 @@ func (s *Server) serveConn(conn net.Conn) error {
 		return v3conn.serve()
 	}
 
-	return util.Errorf("unknown protocol version %d", binary.BigEndian.Uint32(version))
+	return util.Errorf("unknown protocol version %d", version)
 }
