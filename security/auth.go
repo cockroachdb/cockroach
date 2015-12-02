@@ -77,13 +77,34 @@ type RequestWithUser interface {
 	GetUser() string
 }
 
-// AuthenticationHook builds an authentication hook based on the
-// security mode and client certificate.
-// Must be called at connection time and passed the TLS state.
-// Returns a func(proto.Message,bool) error. The passed-in proto must implement
-// the GetUser interface.
-func AuthenticationHook(insecureMode bool, tlsState *tls.ConnectionState) (
-	func(request proto.Message, public bool) error, error) {
+// ProtoAuthHook builds an authentication hook based on the security
+// mode and client certificate.
+// The proto.Message passed to the hook must implement RequestWithUser.
+func ProtoAuthHook(insecureMode bool, tlsState *tls.ConnectionState) (
+	func(proto.Message, bool) error, error) {
+	userHook, err := UserAuthHook(insecureMode, tlsState)
+	if err != nil {
+		return nil, err
+	}
+
+	return func(request proto.Message, public bool) error {
+		// RequestWithUser must be implemented.
+		requestWithUser, ok := request.(RequestWithUser)
+		if !ok {
+			return util.Errorf("unknown request type: %T", request)
+		}
+
+		if err := userHook(requestWithUser.GetUser(), public); err != nil {
+			return util.Errorf("%s error in request: %s", err, request)
+		}
+		return nil
+	}, nil
+}
+
+// UserAuthHook builds an authentication hook based on the security
+// mode and client certificate.
+func UserAuthHook(insecureMode bool, tlsState *tls.ConnectionState) (
+	func(string, bool) error, error) {
 	var certUser string
 
 	if !insecureMode {
@@ -94,18 +115,10 @@ func AuthenticationHook(insecureMode bool, tlsState *tls.ConnectionState) (
 		}
 	}
 
-	return func(request proto.Message, public bool) error {
-		// RequestWithUser must be implemented.
-		requestWithUser, ok := request.(RequestWithUser)
-		if !ok {
-			return util.Errorf("unknown request type: %T", request)
-		}
-
-		// Extract user and verify.
+	return func(requestedUser string, public bool) error {
 		// TODO(marc): we may eventually need stricter user syntax rules.
-		requestedUser := requestWithUser.GetUser()
 		if len(requestedUser) == 0 {
-			return util.Errorf("missing User in request: %+v", request)
+			return util.Errorf("user is missing")
 		}
 
 		if !public && requestedUser != NodeUser {

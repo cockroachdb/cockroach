@@ -64,7 +64,7 @@ func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check TLS settings.
-	authenticationHook, err := security.AuthenticationHook(s.context.Insecure, r.TLS)
+	authenticationHook, err := security.ProtoAuthHook(s.context.Insecure, r.TLS)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
@@ -90,7 +90,7 @@ func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check request user against client certificate user.
-	if err := authenticationHook(&args, true /*public*/); err != nil {
+	if err := authenticationHook(&args, true /* public */); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}

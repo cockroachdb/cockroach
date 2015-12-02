@@ -121,11 +121,11 @@ func LoadInsecureTLSConfig() *tls.Config {
 // - <username>.client.key -- the certificate key
 // If the path is prefixed with "embedded=", load the embedded certs.
 func LoadClientTLSConfig(certDir, username string) (*tls.Config, error) {
-	certPEM, err := readFileFn(filepath.Join(certDir, clientCertFile(username)))
+	certPEM, err := readFileFn(ClientCertPath(certDir, username))
 	if err != nil {
 		return nil, err
 	}
-	keyPEM, err := readFileFn(filepath.Join(certDir, clientKeyFile(username)))
+	keyPEM, err := readFileFn(ClientKeyPath(certDir, username))
 	if err != nil {
 		return nil, err
 	}

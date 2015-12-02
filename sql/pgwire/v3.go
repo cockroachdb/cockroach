@@ -61,7 +61,7 @@ type parsedQuery struct {
 type v3Conn struct {
 	rd       *bufio.Reader
 	wr       *bufio.Writer
-	opts     map[string]string
+	opts     opts
 	executor *sql.Executor
 	parsed   map[string]parsedQuery
 	readBuf  readBuffer
@@ -70,18 +70,17 @@ type v3Conn struct {
 	session  sql.Session
 }
 
-func newV3Conn(conn net.Conn, data []byte, executor *sql.Executor) (*v3Conn, error) {
-	v3conn := &v3Conn{
+type opts struct {
+	user, database string
+}
+
+func makeV3Conn(conn net.Conn, executor *sql.Executor) v3Conn {
+	return v3Conn{
 		rd:       bufio.NewReader(conn),
 		wr:       bufio.NewWriter(conn),
-		opts:     map[string]string{},
 		executor: executor,
-		parsed:   map[string]parsedQuery{},
+		parsed:   make(map[string]parsedQuery),
 	}
-	if err := v3conn.parseOptions(data); err != nil {
-		return nil, err
-	}
-	return v3conn, nil
 }
 
 func (c *v3Conn) parseOptions(data []byte) error {
@@ -98,12 +97,23 @@ func (c *v3Conn) parseOptions(data []byte) error {
 		if err != nil {
 			return util.Errorf("error reading option value: %s", err)
 		}
-		c.opts[key] = value
+		switch key {
+		case "database":
+			c.opts.database = value
+		case "user":
+			c.opts.user = value
+		default:
+			log.Warningf("unrecognized configuration parameter %q", key)
+		}
 	}
 }
 
-func (c *v3Conn) serve() error {
-	// TODO(bdarnell): real auth flow. For now just accept anything.
+func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
+	if authenticationHook != nil {
+		if err := authenticationHook(c.opts.user, true /* public */); err != nil {
+			return c.sendError(err.Error())
+		}
+	}
 	c.writeBuf.initMsg(serverMsgAuth)
 	c.writeBuf.putInt32(authOK)
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
@@ -164,14 +174,13 @@ func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
 		return err
 	}
 
-	c.session.Database = c.opts["DATABASE"]
+	c.session.Database = c.opts.database
 
 	req := driver.Request{
-		User:    c.opts["user"],
-		Sql:     query,
-		Session: make([]byte, c.session.Size()),
+		User: c.opts.user,
+		Sql:  query,
 	}
-	if _, err := c.session.MarshalTo(req.Session); err != nil {
+	if req.Session, err = c.session.Marshal(); err != nil {
 		return err
 	}
 
@@ -185,7 +194,7 @@ func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
 		return err
 	}
 
-	c.opts["DATABASE"] = c.session.Database
+	c.opts.database = c.session.Database
 
 	return c.sendResponse(resp)
 }
