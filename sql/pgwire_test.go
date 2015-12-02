@@ -21,10 +21,13 @@ import (
 	"database/sql"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lib/pq"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql/pgwire"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -62,7 +65,7 @@ func TestPGWire(t *testing.T) {
 					t.Fatal(err)
 				}
 			} else {
-				if err != nil {
+				if !testutils.IsError(err, "no client certificates in request") {
 					t.Fatal(err)
 				}
 			}
@@ -88,8 +91,47 @@ func TestPGWire(t *testing.T) {
 					t.Fatal(err)
 				}
 			} else {
-				if err != nil {
+				if !testutils.IsError(err, "no client certificates in request") {
 					t.Fatal(err)
+				}
+			}
+		}
+
+		{
+			dir, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			certDir := filepath.Join(filepath.Dir(dir), "resource", security.EmbeddedCertsDir)
+
+			certUser := server.TestUser
+			certPath := security.ClientCertPath(certDir, certUser)
+			keyPath := security.ClientKeyPath(certDir, certUser)
+			// `github.com/lib/pq` requires that private key file permissions are
+			// "u=rw (0600) or less".
+			if err := os.Chmod(keyPath, 0600); err != nil {
+				t.Fatal(err)
+			}
+			for _, optUser := range []string{certUser, security.RootUser} {
+				err := trivialQuery(
+					fmt.Sprintf("sslmode=require sslcert=%s sslkey=%s user=%s host=%s port=%s",
+						certPath,
+						keyPath,
+						optUser, host, port))
+				if insecure {
+					if err != pq.ErrSSLNotSupported {
+						t.Fatal(err)
+					}
+				} else {
+					if optUser == certUser {
+						if err != nil {
+							t.Fatal(err)
+						}
+					} else {
+						if !testutils.IsError(err, `requested user is \w+, but certificate is for \w+`) {
+							t.Fatal(err)
+						}
+					}
 				}
 			}
 		}

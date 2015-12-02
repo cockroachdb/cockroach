@@ -22,6 +22,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -175,14 +176,21 @@ func (s *Server) serveConn(conn net.Conn) error {
 
 	if version == version30 {
 		v3conn := makeV3Conn(conn, s.context.Executor)
-
-		if err := v3conn.parseOptions(buf.msg); err != nil {
-			return v3conn.sendError(err.Error())
-		}
 		if errSSLRequired {
 			return v3conn.sendError(ErrSSLRequired)
 		}
-		return v3conn.serve()
+		if err := v3conn.parseOptions(buf.msg); err != nil {
+			return v3conn.sendError(err.Error())
+		}
+		if tlsConn, ok := conn.(*tls.Conn); ok {
+			tlsState := tlsConn.ConnectionState()
+			authenticationHook, err := security.UserAuthHook(s.context.Insecure, &tlsState)
+			if err != nil {
+				return v3conn.sendError(err.Error())
+			}
+			return v3conn.serve(authenticationHook)
+		}
+		return v3conn.serve(nil)
 	}
 
 	return util.Errorf("unknown protocol version %d", version)
