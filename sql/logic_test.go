@@ -25,6 +25,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -210,16 +211,32 @@ func (t *logicTest) setUser(user string) {
 
 	certPath := security.ClientCertPath(certDir, user)
 	keyPath := security.ClientKeyPath(certDir, user)
+
 	// `github.com/lib/pq` requires that private key file permissions are
 	// "u=rw (0600) or less".
-	if err := os.Chmod(keyPath, 0600); err != nil {
+	f, err := ioutil.TempFile(os.TempDir(), "roach_logic_test_key")
+	if err != nil {
 		t.Fatal(err)
 	}
+	tmpKeyPath := f.Name()
+	defer os.Remove(tmpKeyPath)
+
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	key, err := ioutil.ReadFile(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ioutil.WriteFile(tmpKeyPath, key, 0600); err != nil {
+		t.Fatal(err)
+	}
+
 	db, err := sql.Open("postgres",
-		fmt.Sprintf("sslmode=verify-full sslrootcert=%s sslcert=%s sslkey=%s user=%s host=%s port=%s",
+		fmt.Sprintf("sslmode=verify-full sslrootcert='%s' sslcert='%s' sslkey='%s' user=%s host=%s port=%s",
 			filepath.Join(certDir, "ca.crt"),
 			certPath,
-			keyPath,
+			tmpKeyPath,
 			user, host, port))
 	if err != nil {
 		t.Fatal(err)
