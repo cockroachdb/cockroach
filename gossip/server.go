@@ -103,18 +103,14 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 		}
 	}
 
-	// Update infostore with gossiped infos.
-	if infoCount := len(args.Delta); infoCount > 0 {
-		if log.V(1) {
-			log.Infof("gossip: received %s from %s", args.Delta, addr)
-		} else {
-			log.Infof("gossip: received %d info(s) from %s", infoCount, addr)
-		}
-	}
-
 	// Combine incoming infos if specified and exit.
 	if args.Delta != nil {
-		s.is.combine(args.Delta, args.NodeID)
+		freshCount := s.is.combine(args.Delta, args.NodeID)
+		if log.V(1) {
+			log.Infof("received %s from %s (%d fresh)", args.Delta, addr, freshCount)
+		} else {
+			log.Infof("received %d (%d fresh) info(s) from %s", len(args.Delta), freshCount, addr)
+		}
 		if s.closed {
 			return nil, util.Errorf("gossip server shutdown")
 		}

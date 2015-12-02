@@ -145,6 +145,9 @@ func (is *infoStore) getInfo(key string) *Info {
 //
 // Returns nil if info was added; error otherwise.
 func (is *infoStore) addInfo(key string, i *Info) error {
+	if i.NodeID == 0 {
+		panic("gossip info's NodeID is 0")
+	}
 	// Only replace an existing info if new timestamp is greater, or if
 	// timestamps are equal, but new hops is smaller.
 	if existingInfo, ok := is.Infos[key]; ok {
