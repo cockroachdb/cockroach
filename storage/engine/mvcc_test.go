@@ -2425,7 +2425,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		// Every 10th step, verify the stats via manual engine scan.
 		if i%10 == 0 {
 			// Compute the stats manually.
-			iter := engine.NewIterator()
+			iter := engine.NewIterator(false)
 			iter.Seek(keyMin)
 			var expMS MVCCStats
 			err := iter.ComputeStats(&expMS, roachpb.KeyMin, roachpb.KeyMax, int64(i+1)*1E9)
@@ -2543,7 +2543,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	}
 
 	// Verify aggregated stats match computed stats after GC.
-	iter := engine.NewIterator()
+	iter := engine.NewIterator(false)
 	iter.Seek(keyMin)
 	var expMS MVCCStats
 	err = iter.ComputeStats(&expMS, roachpb.KeyMin, roachpb.KeyMax, ts3.WallTime)
@@ -2567,7 +2567,7 @@ func TestMVCCComputeStatsError(t *testing.T) {
 	}
 
 	var ms MVCCStats
-	iter := engine.NewIterator()
+	iter := engine.NewIterator(false)
 	err := iter.ComputeStats(&ms, roachpb.KeyMin, roachpb.KeyMax, 100)
 	iter.Close()
 	if e := "unable to decode MVCCMetadata"; !testutils.IsError(err, e) {
