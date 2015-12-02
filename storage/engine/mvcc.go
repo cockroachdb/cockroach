@@ -928,23 +928,125 @@ func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, value roachpb.Valu
 
 // MVCCDeleteRange deletes the range of key/value pairs specified by
 // start and end keys. Specify max=0 for unbounded deletes.
-func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp, txn *roachpb.Transaction) (int64, error) {
-	// In order to detect the potential write intent by another
-	// concurrent transaction with a newer timestamp, we need
-	// to use the max timestamp for scan.
-	kvs, _, err := MVCCScan(engine, key, endKey, max, roachpb.MaxTimestamp, true /* consistent */, txn)
-	if err != nil {
-		return 0, err
+func MVCCDeleteRange(engine Engine, ms *MVCCStats, startKey, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp, txn *roachpb.Transaction) (int64, error) {
+	if len(endKey) == 0 {
+		return 0, emptyKeyError()
 	}
 
-	num := int64(0)
-	for _, kv := range kvs {
-		if err := MVCCDelete(engine, ms, kv.Key, timestamp, txn); err != nil {
-			return num, err
+	buf := putBufferPool.Get().(*putBuffer)
+	defer putBufferPool.Put(buf)
+	buf.value.Reset()
+	buf.value.Deleted = true
+
+	// We store encEndKey and encKey in the same buffer to avoid memory
+	// allocations.
+	encEndKey := mvccEncodeKey(buf.key[:0], endKey)
+	keyBuf := encEndKey[len(encEndKey):]
+
+	// Get a new iterator and define our getter using iter.Seek.
+	iter := engine.NewIterator()
+	defer iter.Close()
+
+	var count int64
+	for {
+		iter.Seek(mvccEncodeKey(keyBuf, startKey))
+		if !iter.Valid() {
+			if err := iter.Error(); err != nil {
+				return count, err
+			}
+			break
 		}
-		num++
+
+		key, metaKey, err := getScanMetaKey(iter, encEndKey)
+		if err != nil {
+			return count, err
+		}
+		// Exceeding the boundary.
+		if key == nil && metaKey == nil {
+			break
+		}
+
+		if err := iter.ValueProto(&buf.meta); err != nil {
+			return count, err
+		}
+
+		if !buf.meta.Deleted {
+			origMetaKeySize := int64(len(iter.unsafeKey()))
+			origMetaValSize := int64(len(iter.unsafeValue()))
+
+			// Verify we're not mixing inline and non-inline values.
+			putIsInline := timestamp.Equal(roachpb.ZeroTimestamp)
+			if putIsInline {
+				metaKeySize, metaValSize, err := int64(0), int64(0), engine.Clear(metaKey)
+				updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
+				if err != nil {
+					return count, err
+				}
+				count++
+				startKey = key.Next()
+				continue
+			}
+
+			// There is existing metadata for this key; ensure our write is permitted.
+			meta := &buf.meta
+			origAgeSeconds := timestamp.WallTime/1E9 - meta.Timestamp.WallTime/1E9
+
+			if meta.Txn != nil {
+				// There is an uncommitted write intent.
+
+				if txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID) {
+					// The current DeleteRange operation does not come from the same
+					// transaction.
+					return count, &roachpb.WriteIntentError{Intents: []roachpb.Intent{{Span: roachpb.Span{Key: key}, Txn: *meta.Txn}}}
+				} else if txn.Epoch < meta.Txn.Epoch {
+					return count, util.Errorf("put with epoch %d came after put with epoch %d in txn %s",
+						txn.Epoch, meta.Txn.Epoch, txn.ID)
+				}
+
+				// We are replacing our own older write intent. If we are
+				// writing at the same timestamp we can simply overwrite it;
+				// otherwise we must explicitly delete the obsolete intent.
+				if !timestamp.Equal(meta.Timestamp) {
+					versionKey := mvccEncodeTimestamp(metaKey, meta.Timestamp)
+					if err := engine.Clear(versionKey); err != nil {
+						return count, err
+					}
+				}
+			} else {
+				// No pending transaction, so we can write as long as it is not
+				// in the past.
+				if !meta.Timestamp.Less(timestamp) {
+					return count, &roachpb.WriteTooOldError{Timestamp: timestamp, ExistingTimestamp: meta.Timestamp}
+				}
+			}
+			buf.newMeta = MVCCMetadata{Txn: txn, Timestamp: timestamp}
+			newMeta := &buf.newMeta
+
+			// The metaKey is always the prefix of the versionKey.
+			versionKey := mvccEncodeTimestamp(metaKey, timestamp)
+			_, valueSize, err := PutProto(engine, versionKey, &buf.value)
+			if err != nil {
+				return count, err
+			}
+
+			// Write the mvcc metadata now that we have sizes for the latest versioned value.
+			newMeta.KeyBytes = mvccVersionTimestampSize
+			newMeta.ValBytes = valueSize
+			newMeta.Deleted = true
+			metaKeySize, metaValSize, err := PutProto(engine, metaKey, newMeta)
+			if err != nil {
+				return count, err
+			}
+
+			// Update MVCC stats.
+			updateStatsOnPut(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta, origAgeSeconds)
+
+			count++
+		}
+
+		startKey = key.Next()
 	}
-	return num, nil
+	return count, nil
 }
 
 func getScanMetaKey(iter Iterator, encEndKey MVCCKey) (roachpb.Key, MVCCKey, error) {
