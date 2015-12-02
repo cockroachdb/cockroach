@@ -44,14 +44,13 @@ func (p *planner) applyMutations(tableDesc *TableDescriptor) error {
 	if err := p.backfillBatch(&b, tableDesc, newTableDesc); err != nil {
 		return err
 	}
-	// TODO(pmattis): This is a hack. Remove when schema change operations work
-	// properly.
-	p.hackNoteSchemaChange(newTableDesc)
+	newTableDesc.Version++
 
 	b.Put(MakeDescMetadataKey(newTableDesc.GetID()), wrapDescriptor(newTableDesc))
 
 	if err := p.txn.Run(&b); err != nil {
 		return convertBatchError(newTableDesc, b, err)
 	}
+	p.notifyCompletedSchemaChange(newTableDesc.ID)
 	return nil
 }

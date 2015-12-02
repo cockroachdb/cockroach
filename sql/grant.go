@@ -41,10 +41,9 @@ func (p *planner) changePrivileges(targets parser.TargetList, grantees parser.Na
 		return nil, err
 	}
 
-	if tableDesc, ok := descriptor.(*TableDescriptor); ok {
-		// TODO(pmattis): This is a hack. Remove when schema change operations work
-		// properly.
-		p.hackNoteSchemaChange(tableDesc)
+	tableDesc, ok := descriptor.(*TableDescriptor)
+	if ok {
+		tableDesc.Version++
 	}
 
 	// Now update the descriptor.
@@ -54,7 +53,9 @@ func (p *planner) changePrivileges(targets parser.TargetList, grantees parser.Na
 	if err := p.txn.Put(descKey, wrapDescriptor(descriptor)); err != nil {
 		return nil, err
 	}
-
+	if ok {
+		p.notifyCompletedSchemaChange(tableDesc.ID)
+	}
 	return &valuesNode{}, nil
 }
 
