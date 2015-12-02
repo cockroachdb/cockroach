@@ -70,18 +70,14 @@ type v3Conn struct {
 	session  sql.Session
 }
 
-func newV3Conn(conn net.Conn, data []byte, executor *sql.Executor) (*v3Conn, error) {
-	v3conn := &v3Conn{
+func makeV3Conn(conn net.Conn, executor *sql.Executor) v3Conn {
+	return v3Conn{
 		rd:       bufio.NewReader(conn),
 		wr:       bufio.NewWriter(conn),
 		opts:     map[string]string{},
 		executor: executor,
-		parsed:   map[string]parsedQuery{},
+		parsed:   make(map[string]parsedQuery),
 	}
-	if err := v3conn.parseOptions(data); err != nil {
-		return nil, err
-	}
-	return v3conn, nil
 }
 
 func (c *v3Conn) parseOptions(data []byte) error {
