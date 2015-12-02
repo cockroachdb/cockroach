@@ -61,7 +61,7 @@ type parsedQuery struct {
 type v3Conn struct {
 	rd       *bufio.Reader
 	wr       *bufio.Writer
-	opts     map[string]string
+	opts     opts
 	executor *sql.Executor
 	parsed   map[string]parsedQuery
 	readBuf  readBuffer
@@ -70,11 +70,14 @@ type v3Conn struct {
 	session  sql.Session
 }
 
+type opts struct {
+	user, database string
+}
+
 func makeV3Conn(conn net.Conn, executor *sql.Executor) v3Conn {
 	return v3Conn{
 		rd:       bufio.NewReader(conn),
 		wr:       bufio.NewWriter(conn),
-		opts:     map[string]string{},
 		executor: executor,
 		parsed:   make(map[string]parsedQuery),
 	}
@@ -94,7 +97,14 @@ func (c *v3Conn) parseOptions(data []byte) error {
 		if err != nil {
 			return util.Errorf("error reading option value: %s", err)
 		}
-		c.opts[key] = value
+		switch key {
+		case "database":
+			c.opts.database = value
+		case "user":
+			c.opts.user = value
+		default:
+			log.Warningf("unrecognized configuration parameter %q", key)
+		}
 	}
 }
 
@@ -160,10 +170,10 @@ func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
 		return err
 	}
 
-	c.session.Database = c.opts["DATABASE"]
+	c.session.Database = c.opts.database
 
 	req := driver.Request{
-		User: c.opts["user"],
+		User: c.opts.user,
 		Sql:  query,
 	}
 	if req.Session, err = c.session.Marshal(); err != nil {
@@ -180,7 +190,7 @@ func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
 		return err
 	}
 
-	c.opts["DATABASE"] = c.session.Database
+	c.opts.database = c.session.Database
 
 	return c.sendResponse(resp)
 }
