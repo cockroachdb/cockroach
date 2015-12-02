@@ -167,11 +167,10 @@ func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
 	c.session.Database = c.opts["DATABASE"]
 
 	req := driver.Request{
-		User:    c.opts["user"],
-		Sql:     query,
-		Session: make([]byte, c.session.Size()),
+		User: c.opts["user"],
+		Sql:  query,
 	}
-	if _, err := c.session.MarshalTo(req.Session); err != nil {
+	if req.Session, err = c.session.Marshal(); err != nil {
 		return err
 	}
 
