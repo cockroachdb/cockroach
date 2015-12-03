@@ -497,12 +497,15 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 					if col, n.err = n.desc.FindColumnByID(id); n.err != nil {
 						return n.err
 					}
+					if col.Hidden {
+						continue
+					}
 					qval := n.getQVal(*col)
 					n.columns = append(n.columns, column{name: col.Name, typ: qval.datum})
 					n.render = append(n.render, qval)
 				}
 			} else {
-				for _, col := range n.desc.Columns {
+				for _, col := range n.desc.VisibleColumns() {
 					qval := n.getQVal(col)
 					n.columns = append(n.columns, column{name: col.Name, typ: qval.datum})
 					n.render = append(n.render, qval)
