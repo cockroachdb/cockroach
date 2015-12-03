@@ -49,7 +49,7 @@ type rpcTransport struct {
 	gossip     *gossip.Gossip
 	rpcServer  *rpc.Server
 	rpcContext *rpc.Context
-	mu         sync.Mutex
+	mu         sync.RWMutex
 	servers    map[roachpb.StoreID]multiraft.ServerInterface
 	queues     map[roachpb.StoreID]chan *multiraft.RaftMessageRequest
 }
@@ -79,9 +79,9 @@ func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *r
 func (t *rpcTransport) RaftMessage(args proto.Message, callback func(proto.Message, error)) {
 	req := args.(*multiraft.RaftMessageRequest)
 
-	t.mu.Lock()
+	t.mu.RLock()
 	server, ok := t.servers[req.ToReplica.StoreID]
-	t.mu.Unlock()
+	t.mu.RUnlock()
 
 	if !ok {
 		callback(nil, util.Errorf("Unable to proxy message to node: %d", req.Message.To))
@@ -123,9 +123,9 @@ func (t *rpcTransport) Stop(id roachpb.StoreID) {
 // need a feedback mechanism for that. Potentially easiest is to arrange for
 // the next call to Send() to fail appropriately.
 func (t *rpcTransport) processQueue(nodeID roachpb.NodeID, storeID roachpb.StoreID) {
-	t.mu.Lock()
+	t.mu.RLock()
 	ch, ok := t.queues[storeID]
-	t.mu.Unlock()
+	t.mu.RUnlock()
 	if !ok {
 		return
 	}
