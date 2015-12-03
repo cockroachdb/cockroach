@@ -60,11 +60,15 @@ func TestPrettyPrint(t *testing.T) {
 		// system
 		{roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo")), `/System/Meta2/"foo"`},
 		{roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo")), `/System/Meta1/"foo"`},
-
+		{RangeMetaKey(roachpb.RKey("f")), `/System/Meta2/"f"`},
 		{StoreStatusKey(2222), "/System/StatusStore/2222"},
 		{NodeStatusKey(1111), "/System/StatusNode/1111"},
-
 		{SystemMax, "/System/Max"},
+
+		// key of key
+		{RangeMetaKey(roachpb.RKey(MakeRangeKeyPrefix(roachpb.RKey("ok")))), `/System/Meta2/Local/Range/"ok"`},
+		{RangeMetaKey(roachpb.RKey(MakeKey(MakeTablePrefix(42), roachpb.RKey("foo")))), `/System/Meta2/Table/42/"foo"`},
+		{RangeMetaKey(roachpb.RKey(roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo")))), `/System/Meta1/"foo"`},
 
 		// table
 		{UserTableDataMin, "/Table/1000"},
@@ -82,6 +86,8 @@ func TestPrettyPrint(t *testing.T) {
 		// others
 		{MakeKey(TableDataPrefix, []byte("\xff")), "/Max"},
 		{MakeKey([]byte("")), "/Min"},
+		{Meta1KeyMax, "/System/Meta1/Max"},
+		{Meta2KeyMax, "/System/Meta2/Max"},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x31, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:382: unknown escape>"},
 	}
 	for i, test := range testCases {
