@@ -417,7 +417,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 }
 
 // fillRange writes keys with the given prefix and associated values
-// until bytes bytes have been written.
+// until bytes bytes have been written or the given range has split.
 func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key, bytes int64, t *testing.T) {
 	src := rand.New(rand.NewSource(0))
 	for {
@@ -432,9 +432,14 @@ func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key
 		key := append(append([]byte(nil), prefix...), randutil.RandBytes(src, 100)...)
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs := putArgs(key, val)
-		if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+		_, err := client.SendWrappedWith(store, nil, roachpb.Header{
 			RangeID: rangeID,
-		}, &pArgs); err != nil {
+		}, &pArgs)
+		// When the split occurs in the background, our writes may start failing.
+		// We know we can stop writing when this happens.
+		if _, ok := err.(*roachpb.RangeKeyMismatchError); ok {
+			return
+		} else if err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -486,12 +491,13 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	// Verify that the range is in fact split (give it a few seconds for very
 	// slow test machines).
 	var newRng *storage.Replica
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, 5*time.Second, func() error {
 		newRng = store.LookupReplica(keys.MakeTablePrefix(2000), nil)
-		return newRng.Desc().RangeID != rng.Desc().RangeID
-	}, 5*time.Second); err != nil {
-		t.Errorf("expected range to split within 1s")
-	}
+		if newRng.Desc().RangeID == rng.Desc().RangeID {
+			return util.Errorf("range has not yet split")
+		}
+		return nil
+	})
 
 	// Make sure the new range goes to the end.
 	if !roachpb.RKeyMax.Equal(newRng.Desc().EndKey) {
