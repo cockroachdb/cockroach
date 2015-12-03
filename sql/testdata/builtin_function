@@ -762,10 +762,10 @@ SELECT LEAST(NULL, NULL, NULL)
 ----
 NULL
 
-query error GREATEST: unsupported comparison operator: <int> < <string>
+query error GREATEST: incompatible argument types int, string
 SELECT GREATEST(2, '4')
 
-query error LEAST: unsupported comparison operator: <string> < <int>
+query error LEAST: incompatible argument types int, string
 SELECT LEAST(2, '4')
 
 query T
@@ -778,5 +778,5 @@ SELECT LEAST('foo', 'bar', 'foobar')
 ----
 bar
 
-query error GREATEST: unsupported comparison operator: <int> < <float>
+query error GREATEST: incompatible argument types int, float
 SELECT GREATEST(1, 1.2)
