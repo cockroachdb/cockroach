@@ -35,6 +35,32 @@ SELECT count(rowid) FROM t
 statement ok
 ALTER TABLE t ADD c STRING
 
-# TODO(mjibson): should be statement ok
-statement error value type string doesn't match type INT of column "rowid"
+statement ok
 INSERT INTO t VALUES (5, 6, '7')
+
+query IIT
+select * from t rowsort
+----
+1 2 NULL
+1 2 NULL
+3 4 NULL
+5 6 7
+
+statement ok
+SELECT a, b, c, rowid FROM t
+
+statement ok
+INSERT INTO t (a, rowid) VALUES (10, 11)
+
+query I
+SELECT rowid FROM t WHERE a = 10
+----
+11
+
+query TTBT
+SHOW COLUMNS FROM t;
+----
+a INT true NULL
+b INT true NULL
+rowid INT false experimental_unique_int()
+c STRING true NULL

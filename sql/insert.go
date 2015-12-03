@@ -243,7 +243,13 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 func (p *planner) processColumns(tableDesc *TableDescriptor,
 	node parser.QualifiedNames) ([]ColumnDescriptor, error) {
 	if node == nil {
-		return tableDesc.Columns, nil
+		var cols []ColumnDescriptor
+		for _, col := range tableDesc.Columns {
+			if !col.Hidden {
+				cols = append(cols, col)
+			}
+		}
+		return cols, nil
 	}
 
 	cols := make([]ColumnDescriptor, len(node))
