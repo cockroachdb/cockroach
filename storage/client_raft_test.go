@@ -19,7 +19,6 @@ package storage_test
 
 import (
 	"fmt"
-	"math/rand"
 	"reflect"
 	"strings"
 	"sync"
@@ -39,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -368,9 +366,6 @@ func TestRestoreReplicas(t *testing.T) {
 func TestFailedReplicaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	defer func() { storage.TestingCommandFilter = nil }()
-	seed := randutil.NewPseudoSeed()
-	rand.Seed(seed)
-	log.Infof("using seed %d", seed)
 
 	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()

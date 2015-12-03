@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
 var duration = flag.Duration("d", 5*time.Second, "duration to run the test")
@@ -53,6 +54,7 @@ func StartCluster(t *testing.T) cluster.Cluster {
 }
 
 func TestMain(m *testing.M) {
+	randutil.SeedForTests()
 	go func() {
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, os.Interrupt)
