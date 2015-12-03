@@ -105,6 +105,10 @@ var flagUsage = map[string]string{
         high may decrease transaction performance in the presence of
         contention.
 `,
+	"memtable-budget": `
+        Total size in bytes for memtables, shared evenly if there are multiple
+        storage devices.
+`,
 	"metrics-frequency": `
         Adjust the frequency at which the server records its own internal metrics.
 `,
@@ -189,6 +193,7 @@ func initFlags(ctx *server.Context) {
 
 		// Engine flags.
 		f.Int64Var(&ctx.CacheSize, "cache-size", ctx.CacheSize, flagUsage["cache-size"])
+		f.Int64Var(&ctx.MemtableBudget, "memtable-budget", ctx.MemtableBudget, flagUsage["memtable-budget"])
 		f.DurationVar(&ctx.ScanInterval, "scan-interval", ctx.ScanInterval, flagUsage["scan-interval"])
 		f.DurationVar(&ctx.ScanMaxIdleTime, "scan-max-idle-time", ctx.ScanMaxIdleTime, flagUsage["scan-max-idle-time"])
 		f.DurationVar(&ctx.TimeUntilStoreDead, "time-until-store-dead", ctx.TimeUntilStoreDead, flagUsage["time-until-store-dead"])
