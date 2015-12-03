@@ -346,6 +346,16 @@ var cmpOps = map[cmpArgs]cmpOp{
 			return DBool(left.(DFloat) == right.(DFloat)), nil
 		},
 	},
+	cmpArgs{EQ, floatType, intType}: {
+		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DFloat) == DFloat(right.(DInt))), nil
+		},
+	},
+	cmpArgs{EQ, intType, floatType}: {
+		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			return DBool(DFloat(left.(DInt)) == right.(DFloat)), nil
+		},
+	},
 	cmpArgs{EQ, dateType, dateType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DDate) == right.(DDate)), nil
@@ -387,6 +397,16 @@ var cmpOps = map[cmpArgs]cmpOp{
 			return DBool(left.(DFloat) < right.(DFloat)), nil
 		},
 	},
+	cmpArgs{LT, floatType, intType}: {
+		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DFloat) < DFloat(right.(DInt))), nil
+		},
+	},
+	cmpArgs{LT, intType, floatType}: {
+		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			return DBool(DFloat(left.(DInt)) < right.(DFloat)), nil
+		},
+	},
 	cmpArgs{LT, dateType, dateType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DDate) < right.(DDate)), nil
@@ -426,6 +446,16 @@ var cmpOps = map[cmpArgs]cmpOp{
 	cmpArgs{LE, floatType, floatType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DFloat) <= right.(DFloat)), nil
+		},
+	},
+	cmpArgs{LE, floatType, intType}: {
+		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			return DBool(left.(DFloat) <= DFloat(right.(DInt))), nil
+		},
+	},
+	cmpArgs{LE, intType, floatType}: {
+		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			return DBool(DFloat(left.(DInt)) <= right.(DFloat)), nil
 		},
 	},
 	cmpArgs{LE, dateType, dateType}: {
