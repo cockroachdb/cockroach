@@ -1,0 +1,40 @@
+query error duplicate column name: "rowid"
+CREATE TABLE t (
+  rowid INT
+)
+
+statement ok
+CREATE TABLE t (
+  a INT,
+  b INT
+)
+
+statement ok
+INSERT INTO t VALUES (1, 2)
+
+statement ok
+INSERT INTO t VALUES (1, 2)
+
+statement ok
+INSERT INTO t VALUES (3, 4)
+
+query II rowsort
+SELECT a, b FROM t
+----
+1 2
+1 2
+3 4
+
+query I
+SELECT count(rowid) FROM t
+----
+3
+
+# Make sure column order for insertion is not affected by the rowid column.
+
+statement ok
+ALTER TABLE t ADD c STRING
+
+# TODO(mjibson): should be statement ok
+statement error value type string doesn't match type INT of column "rowid"
+INSERT INTO t VALUES (5, 6, '7')
