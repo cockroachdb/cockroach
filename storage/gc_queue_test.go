@@ -235,12 +235,10 @@ func TestGCQueueProcess(t *testing.T) {
 		key roachpb.Key
 		ts  roachpb.Timestamp
 	}{
-		{key1, roachpb.ZeroTimestamp},
 		{key1, ts5},
 		{key3, roachpb.ZeroTimestamp},
 		{key3, ts5},
 		{key3, ts2},
-		{key4, roachpb.ZeroTimestamp},
 		{key4, ts2},
 		{key6, roachpb.ZeroTimestamp},
 		{key6, ts5},
@@ -248,7 +246,6 @@ func TestGCQueueProcess(t *testing.T) {
 		{key7, roachpb.ZeroTimestamp},
 		{key7, ts4},
 		{key7, ts2},
-		{key8, roachpb.ZeroTimestamp},
 		{key8, ts2},
 	}
 	// Read data directly from engine to avoid intent errors from MVCC.
@@ -419,7 +416,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			}
 			if expGC := (sp.newStatus == -1); expGC {
 				if expGC != !ok {
-					return fmt.Errorf("%s: expected gc: %t, but found %s", strKey, expGC, txn)
+					return fmt.Errorf("%s: expected gc: %t, but found %s\n%s", strKey, expGC, txn, roachpb.Key(strKey))
 				}
 			} else if sp.newStatus != txn.Status {
 				return fmt.Errorf("%s: expected status %s, but found %s", strKey, sp.newStatus, txn.Status)

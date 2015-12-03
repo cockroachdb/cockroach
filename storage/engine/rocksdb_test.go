@@ -18,9 +18,13 @@
 package engine
 
 import (
+	"bufio"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -116,6 +120,23 @@ func TestRocksDBCompaction(t *testing.T) {
 	}
 }
 
+// readAllFiles reads all of the files matching pattern thus ensuring they are
+// in the OS buffer cache.
+func readAllFiles(pattern string) {
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return
+	}
+	for _, m := range matches {
+		f, err := os.Open(m)
+		if err != nil {
+			continue
+		}
+		_, _ = io.Copy(ioutil.Discard, bufio.NewReader(f))
+		f.Close()
+	}
+}
+
 // setupMVCCData writes up to numVersions values at each of numKeys
 // keys. The number of versions written for each key is chosen
 // randomly according to a uniform distribution. Each successive
@@ -140,7 +161,7 @@ func setupMVCCData(numVersions, numKeys, valueBytes int, b *testing.B) (*RocksDB
 	}
 
 	const cacheSize = 0
-	const memtableBudget = 2 << 30 // 8 GB (only flush when explictly asked)
+	const memtableBudget = 512 << 20 // 512 MB
 	stopper := stop.NewStopper()
 	rocksdb := NewRocksDB(roachpb.Attributes{}, loc, cacheSize, memtableBudget, stopper)
 	if err := rocksdb.Open(); err != nil {
@@ -148,12 +169,14 @@ func setupMVCCData(numVersions, numKeys, valueBytes int, b *testing.B) (*RocksDB
 	}
 
 	if exists {
+		readAllFiles(filepath.Join(loc, "*"))
 		return rocksdb, stopper
 	}
 
 	log.Infof("creating mvcc data: %s", loc)
 
-	rng, _ := randutil.NewPseudoRand()
+	// Generate the same data every time.
+	rng := rand.New(rand.NewSource(1449168817))
 
 	keys := make([]roachpb.Key, numKeys)
 	var order []int
@@ -174,16 +197,21 @@ func setupMVCCData(numVersions, numKeys, valueBytes int, b *testing.B) (*RocksDB
 	counts := make([]int, numKeys)
 	batch := rocksdb.NewBatch()
 	for i, idx := range order {
-		// Output the keys in batches. If we used a single batch to output all of
-		// the keys rocksdb would create a single sstable. We want multiple
+		// Output the keys in ~20 batches. If we used a single batch to output all
+		// of the keys rocksdb would create a single sstable. We want multiple
 		// sstables in order to exercise filtering of which sstables are examined
-		// during iterator seeking.
-		if i > 0 && i%100 == 0 {
+		// during iterator seeking. We fix the number of batches we output so that
+		// optimizations which change the data size result in the same number of
+		// sstables.
+		if i > 0 && (i%(len(order)/20)) == 0 {
 			if err := batch.Commit(); err != nil {
 				b.Fatal(err)
 			}
 			batch.Close()
 			batch = rocksdb.NewBatch()
+			if err := rocksdb.Flush(); err != nil {
+				b.Fatal(err)
+			}
 		}
 
 		key := keys[idx]
@@ -199,6 +227,9 @@ func setupMVCCData(numVersions, numKeys, valueBytes int, b *testing.B) (*RocksDB
 		b.Fatal(err)
 	}
 	batch.Close()
+	if err := rocksdb.Flush(); err != nil {
+		b.Fatal(err)
+	}
 
 	return rocksdb, stopper
 }
@@ -220,23 +251,21 @@ func runMVCCScan(numRows, numVersions, valueSize int, b *testing.B) {
 	b.SetBytes(int64(numRows * valueSize))
 	b.ResetTimer()
 
-	b.RunParallel(func(pb *testing.PB) {
-		keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
-		for pb.Next() {
-			// Choose a random key to start scan.
-			keyIdx := rand.Int31n(int32(numKeys - numRows))
-			startKey := roachpb.Key(encoding.EncodeUvarint(keyBuf[:4], uint64(keyIdx)))
-			walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
-			ts := makeTS(walltime, 0)
-			kvs, _, err := MVCCScan(rocksdb, startKey, keyMax, int64(numRows), ts, true, nil)
-			if err != nil {
-				b.Fatalf("failed scan: %s", err)
-			}
-			if len(kvs) != numRows {
-				b.Fatalf("failed to scan: %d != %d", len(kvs), numRows)
-			}
+	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+	for i := 0; i < b.N; i++ {
+		// Choose a random key to start scan.
+		keyIdx := rand.Int31n(int32(numKeys - numRows))
+		startKey := roachpb.Key(encoding.EncodeUvarint(keyBuf[:4], uint64(keyIdx)))
+		walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
+		ts := makeTS(walltime, 0)
+		kvs, _, err := MVCCScan(rocksdb, startKey, keyMax, int64(numRows), ts, true, nil)
+		if err != nil {
+			b.Fatalf("failed scan: %s", err)
 		}
-	})
+		if len(kvs) != numRows {
+			b.Fatalf("failed to scan: %d != %d", len(kvs), numRows)
+		}
+	}
 
 	b.StopTimer()
 }

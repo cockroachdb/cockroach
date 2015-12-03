@@ -35,15 +35,17 @@ Notes on MVCC architecture
 
 Each MVCC value contains a metadata key/value pair and one or more
 version key/value pairs. The MVCC metadata key is the actual key for
-the value, binary encoded using the SQL binary encoding scheme which
-contains a sentinel byte of 0x25, following by a 7-bit encoding of the
-key data with 1s in the high bit and terminated by a nil byte. The
-MVCC metadata value is of type MVCCMetadata and contains the
-most recent version timestamp and an optional roachpb.Transaction
-message. If set, the most recent version of the MVCC value is a
-transactional "intent". It also contains some information on the size
-of the most recent version's key and value for efficient stat counter
-computations.
+the value, using the util/encoding.EncodeBytes scheme. The MVCC
+metadata value is of type MVCCMetadata and contains the most recent
+version timestamp and an optional roachpb.Transaction message. If
+set, the most recent version of the MVCC value is a transactional
+"intent". It also contains some information on the size of the most
+recent version's key and value for efficient stat counter
+computations. Notice that it is not necessary to explicitly store the
+MVCC metadata as its contents can be reconstructed from the most
+recent versioned value as long as an intent is not present. The
+implementation takes advantage of this and deletes the MVCC metadata
+when possible.
 
 Each MVCC version key/value pair has a key which is also
 binary-encoded, but is suffixed with a decreasing, big-endian

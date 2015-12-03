@@ -204,25 +204,26 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 
 	// Iterate through the keys and values of this replica's range.
 	for ; iter.Valid(); iter.Next() {
-		baseKey, ts, isValue, err := engine.MVCCDecodeKey(iter.Key())
+		baseKey, _, isValue, err := engine.MVCCDecodeKey(iter.Key())
 		if err != nil {
 			log.Errorf("unable to decode MVCC key: %q: %v", iter.Key(), err)
 			continue
 		}
-		if !isValue {
+		if !isValue || !baseKey.Equal(expBaseKey) {
 			// Moving to the next key (& values).
 			processKeysAndValues()
 			expBaseKey = baseKey
-			keys = []engine.MVCCKey{iter.Key()}
-			vals = [][]byte{iter.Value()}
-		} else {
-			if !baseKey.Equal(expBaseKey) {
-				log.Errorf("unexpectedly found a value for %q with ts=%s; expected key %q", baseKey, ts, expBaseKey)
+			if !isValue {
+				keys = []engine.MVCCKey{iter.Key()}
+				vals = [][]byte{iter.Value()}
 				continue
 			}
-			keys = append(keys, iter.Key())
-			vals = append(vals, iter.Value())
+			// An implicit metadata.
+			keys = []engine.MVCCKey{engine.MVCCEncodeKey(baseKey)}
+			vals = [][]byte{nil}
 		}
+		keys = append(keys, iter.Key())
+		vals = append(vals, iter.Value())
 	}
 	if iter.Error() != nil {
 		return iter.Error()

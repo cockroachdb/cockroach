@@ -1422,7 +1422,8 @@ MVCCStatsResult MVCCComputeStats(
   const rocksdb::Slice end_key = ToSlice(end);
 
   cockroach::storage::engine::MVCCMetadata meta;
-  std::string decoded;
+  std::string prev_key;
+  std::string decoded_key;
   bool first = false;
 
   for (; iter_rep->Valid() && iter_rep->key().compare(end_key) < 0; iter_rep->Next()) {
@@ -1430,26 +1431,48 @@ MVCCStatsResult MVCCComputeStats(
     const rocksdb::Slice value = iter_rep->value();
 
     rocksdb::Slice buf = key;
-    decoded.clear();
-    if (!DecodeBytes(&buf, &decoded)) {
+    decoded_key.clear();
+    if (!DecodeBytes(&buf, &decoded_key)) {
       stats.status = FmtStatus("unable to decode key");
       break;
     }
 
-    const bool isSys = (rocksdb::Slice(decoded).compare(kKeyLocalMax) < 0);
+    const bool isSys = (rocksdb::Slice(decoded_key).compare(kKeyLocalMax) < 0);
     const bool isValue = (buf.size() == mvcc_version_timestamp_size);
+    const bool implicitMeta = isValue && decoded_key != prev_key;
+    prev_key = decoded_key;
 
-    if (!isValue) {
-      if (buf.size() != 0) {
+    if (implicitMeta) {
+      // No MVCCMetadata entry for this series of keys.
+      meta.Clear();
+      meta.set_key_bytes(mvcc_version_timestamp_size);
+      meta.set_val_bytes(value.size());
+      meta.set_deleted(value.size() == 0);
+
+      uint64_t wall_time;
+      rocksdb::Slice tmp = buf;
+      if (!DecodeUint64Decreasing(&tmp, &wall_time)) {
+        stats.status = FmtStatus("unable to decode mvcc timestamp");
+        break;
+      }
+      meta.mutable_timestamp()->set_wall_time(int64_t(wall_time));
+    }
+
+    if (!isValue || implicitMeta) {
+      if (!implicitMeta && buf.size() != 0) {
         stats.status = FmtStatus("there should be %d bytes for encoded timestamp",
                                  mvcc_version_timestamp_size);
         break;
       }
 
-      const int64_t total_bytes = key.size() + value.size();
+      const int64_t meta_key_size =
+          key.size() - (implicitMeta ? mvcc_version_timestamp_size : 0);
+      const int64_t meta_val_size =
+          implicitMeta ? 0 : value.size();
+      const int64_t total_bytes = meta_key_size + meta_val_size;
       first = true;
 
-      if (!meta.ParseFromArray(value.data(), value.size())) {
+      if (!implicitMeta && !meta.ParseFromArray(value.data(), value.size())) {
         stats.status = FmtStatus("unable to decode MVCCMetadata");
         break;
       }
@@ -1464,52 +1487,55 @@ MVCCStatsResult MVCCComputeStats(
         } else {
           stats.gc_bytes_age += total_bytes * ((now_nanos - meta.timestamp().wall_time()) / 1e9);
         }
-        stats.key_bytes += key.size();
-        stats.val_bytes += value.size();
+        stats.key_bytes += meta_key_size;
+        stats.val_bytes += meta_val_size;
         stats.key_count++;
         if (meta.has_value()) {
           stats.val_count++;
         }
       }
-    } else {
-      const int64_t total_bytes = value.size() + mvcc_version_timestamp_size;
-      if (isSys) {
-        stats.sys_bytes += total_bytes;
-      } else {
-        if (first) {
-          first = false;
-          if (!meta.deleted()) {
-            stats.live_bytes += total_bytes;
-          } else {
-            stats.gc_bytes_age += total_bytes * ((now_nanos - meta.timestamp().wall_time()) / 1e9);
-          }
-          if (meta.has_txn()) {
-            stats.intent_bytes += total_bytes;
-            stats.intent_count++;
-            stats.intent_age += (now_nanos - meta.timestamp().wall_time()) / 1e9;
-          }
-          if (meta.key_bytes() != mvcc_version_timestamp_size) {
-            stats.status = FmtStatus("expected mvcc metadata val bytes to equal %d; got %d",
-                                     mvcc_version_timestamp_size, int(meta.key_bytes()));
-            break;
-          }
-          if (meta.val_bytes() != value.size()) {
-            stats.status = FmtStatus("expected mvcc metadata val bytes to equal %d; got %d",
-                                     int(value.size()), int(meta.val_bytes()));
-            break;
-          }
-        } else {
-          uint64_t wall_time;
-          if (!DecodeUint64Decreasing(&buf, &wall_time)) {
-            stats.status = FmtStatus("unable to decode mvcc timestamp");
-            break;
-          }
-          stats.gc_bytes_age += total_bytes * ((now_nanos - wall_time) / 1e9);
-        }
-        stats.key_bytes += mvcc_version_timestamp_size;
-        stats.val_bytes += value.size();
-        stats.val_count++;
+      if (!implicitMeta) {
+        continue;
       }
+    }
+
+    const int64_t total_bytes = value.size() + mvcc_version_timestamp_size;
+    if (isSys) {
+      stats.sys_bytes += total_bytes;
+    } else {
+      if (first) {
+        first = false;
+        if (!meta.deleted()) {
+          stats.live_bytes += total_bytes;
+        } else {
+          stats.gc_bytes_age += total_bytes * ((now_nanos - meta.timestamp().wall_time()) / 1e9);
+        }
+        if (meta.has_txn()) {
+          stats.intent_bytes += total_bytes;
+          stats.intent_count++;
+          stats.intent_age += (now_nanos - meta.timestamp().wall_time()) / 1e9;
+        }
+        if (meta.key_bytes() != mvcc_version_timestamp_size) {
+          stats.status = FmtStatus("expected mvcc metadata val bytes to equal %d; got %d",
+                                   mvcc_version_timestamp_size, int(meta.key_bytes()));
+          break;
+        }
+        if (meta.val_bytes() != value.size()) {
+          stats.status = FmtStatus("expected mvcc metadata val bytes to equal %d; got %d",
+                                   int(value.size()), int(meta.val_bytes()));
+          break;
+        }
+      } else {
+        uint64_t wall_time;
+        if (!DecodeUint64Decreasing(&buf, &wall_time)) {
+          stats.status = FmtStatus("unable to decode mvcc timestamp");
+          break;
+        }
+        stats.gc_bytes_age += total_bytes * ((now_nanos - wall_time) / 1e9);
+      }
+      stats.key_bytes += mvcc_version_timestamp_size;
+      stats.val_bytes += value.size();
+      stats.val_count++;
     }
   }
 
