@@ -916,12 +916,11 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 		}
 	} else {
 		// The transaction doesn't exist on disk; we're allowed to abort it.
+		// TODO(tschottdorf): for GC purposes, don't always want to write
+		// a new entry, but #3219 shows that we need to do so carefully.
+
 		reply.PusheeTxn = *args.PusheeTxn.Clone()
 		reply.PusheeTxn.Status = roachpb.ABORTED
-		if args.PushType == roachpb.CLEANUP_TXN {
-			// If we're only here to clean up, no reason to persist anything.
-			return reply, nil
-		}
 		return reply, engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, &reply.PusheeTxn)
 	}
 
