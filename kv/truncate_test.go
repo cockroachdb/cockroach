@@ -89,19 +89,20 @@ func TestTruncate(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		ba := &roachpb.BatchRequest{}
+		goldenOriginal := roachpb.BatchRequest{}
 		for _, ks := range test.keys {
 			if len(ks[1]) > 0 {
-				ba.Add(&roachpb.ScanRequest{
+				goldenOriginal.Add(&roachpb.ScanRequest{
 					Span: roachpb.Span{Key: roachpb.Key(ks[0]), EndKey: roachpb.Key(ks[1])},
 				})
 			} else {
-				ba.Add(&roachpb.GetRequest{
+				goldenOriginal.Add(&roachpb.GetRequest{
 					Span: roachpb.Span{Key: roachpb.Key(ks[0])},
 				})
 			}
 		}
-		original := proto.Clone(ba).(*roachpb.BatchRequest)
+
+		original := *proto.Clone(&goldenOriginal).(*roachpb.BatchRequest)
 
 		desc := &roachpb.RangeDescriptor{
 			StartKey: roachpb.RKey(test.desc[0]), EndKey: roachpb.RKey(test.desc[1]),
@@ -118,7 +119,7 @@ func TestTruncate(t *testing.T) {
 			t.Errorf("%d: intersection failure: %v", i, err)
 			continue
 		}
-		undo, num, err := truncate(ba, rs)
+		ba, num, err := truncate(original, rs)
 		if err != nil || test.err != "" {
 			if test.err == "" || !testutils.IsError(err, test.err) {
 				t.Errorf("%d: %v (expected: %s)", i, err, test.err)
@@ -140,10 +141,9 @@ func TestTruncate(t *testing.T) {
 		if reqs != num {
 			t.Errorf("%d: counted %d requests, but truncation indicated %d", i, reqs, num)
 		}
-		undo()
-		if !reflect.DeepEqual(ba, original) {
-			t.Errorf("%d: undoing truncation failed:\nexpected: %s\nactual: %s",
-				i, original, ba)
+		if !reflect.DeepEqual(original, goldenOriginal) {
+			t.Errorf("%d: truncation mutated original:\nexpected: %s\nactual: %s",
+				i, goldenOriginal, original)
 		}
 	}
 }
