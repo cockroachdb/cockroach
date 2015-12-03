@@ -22,7 +22,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io/ioutil"
-	"path/filepath"
+	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -123,16 +123,32 @@ func cleanup(s *server.TestServer, db *sql.DB) {
 	cleanupTestServer(s)
 }
 
-// `github.com/lib/pq` requires that private key file permissions are
-// "u=rw (0600) or less".
-func tempRestrictedCopy(t *testing.T, keyPath, tempDir string) string {
-	key, err := ioutil.ReadFile(keyPath)
+func tempRestrictedCopy(t *testing.T, tempdir, path, prefix string) (string, func()) {
+	contents, err := securitytest.Asset(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmpKeyPath := filepath.Join(tempDir, "tempRestrictedCopy")
-	if err := ioutil.WriteFile(tmpKeyPath, key, 0600); err != nil {
+
+	tempFile, err := ioutil.TempFile(tempdir, prefix)
+	if err != nil {
 		t.Fatal(err)
 	}
-	return tmpKeyPath
+	if err := tempFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+	tempPath := tempFile.Name()
+	if err := os.Remove(tempPath); err != nil {
+		t.Fatal(err)
+	}
+	// `github.com/lib/pq` requires that private key file permissions are
+	// "u=rw (0600) or less".
+	if err := ioutil.WriteFile(tempPath, contents, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return tempPath, func() {
+		if err := os.Remove(tempPath); err != nil {
+			// Not Fatal() because we might already be panicking.
+			t.Error(err)
+		}
+	}
 }

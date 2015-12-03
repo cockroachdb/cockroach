@@ -20,11 +20,9 @@ package sql_test
 import (
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/lib/pq"
@@ -51,29 +49,16 @@ func trivialQuery(datasource string) error {
 func TestPGWire(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	certDir := filepath.Join(filepath.Dir(dir), "resource", security.EmbeddedCertsDir)
-
 	certUser := server.TestUser
-	certPath := security.ClientCertPath(certDir, certUser)
-	keyPath := security.ClientKeyPath(certDir, certUser)
+	certPath := security.ClientCertPath(security.EmbeddedCertsDir, certUser)
+	keyPath := security.ClientKeyPath(security.EmbeddedCertsDir, certUser)
 
-	// `github.com/lib/pq` requires that private key file permissions are
-	// "u=rw (0600) or less".
-	tempDir, err := ioutil.TempDir(os.TempDir(), "TestPGWire")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(tempDir); err != nil {
-			// Not Fatal() because we might already be panicking.
-			t.Error(err)
-		}
-	}()
-	tmpKeyPath := tempRestrictedCopy(t, keyPath, tempDir)
+	// Copy these assets to disk from embedded strings, so this test can
+	// run from a standalone binary.
+	tempCertPath, tempCertCleanup := tempRestrictedCopy(t, os.TempDir(), certPath, "TestPGWire_cert")
+	defer tempCertCleanup()
+	tempKeyPath, tempKeyCleanup := tempRestrictedCopy(t, os.TempDir(), keyPath, "TestPGWire_key")
+	defer tempKeyCleanup()
 
 	for _, insecure := range [...]bool{true, false} {
 		ctx := server.NewTestContext()
@@ -136,8 +121,8 @@ func TestPGWire(t *testing.T) {
 				requirePgUrlWithCert := basePgUrl
 				requirePgUrlWithCert.User = url.User(optUser)
 				requirePgUrlWithCert.RawQuery = fmt.Sprintf("sslmode=require&sslcert=%s&sslkey=%s",
-					url.QueryEscape(certPath),
-					url.QueryEscape(tmpKeyPath),
+					url.QueryEscape(tempCertPath),
+					url.QueryEscape(tempKeyPath),
 				)
 				err := trivialQuery(requirePgUrlWithCert.String())
 				if insecure {
