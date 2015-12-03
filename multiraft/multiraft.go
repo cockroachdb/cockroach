@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	"golang.org/x/net/context"
 )
 
 const (
@@ -53,6 +52,10 @@ var ErrGroupDeleted = errors.New("raft group deleted")
 // ErrStopped is returned for commands that could not be completed before the
 // node was stopped.
 var ErrStopped = errors.New("raft processing stopped")
+
+// ErrReplicaIDMismatch is returned for commands which have different replicaID
+// with that group.
+var ErrReplicaIDMismatch = errors.New("raft group replicaID mismatch")
 
 // Config contains the parameters necessary to construct a MultiRaft object.
 type Config struct {
@@ -99,7 +102,6 @@ func (c *Config) validate() error {
 type MultiRaft struct {
 	Config
 	stopper         *stop.Stopper
-	multiNode       raft.MultiNode
 	Events          chan []interface{}
 	nodeID          roachpb.NodeID
 	storeID         roachpb.StoreID
@@ -108,6 +110,7 @@ type MultiRaft struct {
 	removeGroupChan chan removeGroupOp
 	proposalChan    chan *proposal
 	campaignChan    chan roachpb.RangeID
+	statusChan      chan statusOp
 	// callbackChan is a generic hook to run a callback in the raft thread.
 	callbackChan chan func()
 }
@@ -147,11 +150,10 @@ func NewMultiRaft(nodeID roachpb.NodeID, storeID roachpb.StoreID, config *Config
 	}
 
 	m := &MultiRaft{
-		Config:    *config,
-		stopper:   stopper,
-		multiNode: raft.StartMultiNode(0),
-		nodeID:    nodeID,
-		storeID:   storeID,
+		Config:  *config,
+		stopper: stopper,
+		nodeID:  nodeID,
+		storeID: storeID,
 
 		// Output channel.
 		Events: make(chan []interface{}),
@@ -163,6 +165,7 @@ func NewMultiRaft(nodeID roachpb.NodeID, storeID roachpb.StoreID, config *Config
 		proposalChan:    make(chan *proposal),
 		campaignChan:    make(chan roachpb.RangeID),
 		callbackChan:    make(chan func()),
+		statusChan:      make(chan statusOp),
 	}
 
 	if err := m.Transport.Listen(storeID, (*multiraftServer)(m)); err != nil {
@@ -241,7 +244,7 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 				From: uint64(fromRepID),
 			}
 
-			if err := s.multiNode.Step(context.Background(), uint64(groupID), groupMsg); err != nil {
+			if err := s.groups[groupID].raftGroup.Step(groupMsg); err != nil {
 				if log.V(4) {
 					log.Infof("node %v: coalesced heartbeat step to group %v failed for message %s", s.nodeID, groupID,
 						raft.DescribeMessage(req.Message, s.EntryFormatter))
@@ -316,7 +319,7 @@ func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
 			To:   uint64(toRepID),
 		}
 
-		if err := s.multiNode.Step(context.Background(), uint64(groupID), msg); err != nil {
+		if err := s.groups[groupID].raftGroup.Step(msg); err != nil {
 			if log.V(4) {
 				log.Infof("node %v: coalesced heartbeat response step to group %v failed", s.nodeID, groupID)
 			}
@@ -344,10 +347,11 @@ func (m *MultiRaft) CreateGroup(groupID roachpb.RangeID) error {
 // RemoveGroup destroys the consensus group with the given ID.
 // No events for this group will be emitted after this method returns
 // (but some events may still be in the channel buffer).
-func (m *MultiRaft) RemoveGroup(groupID roachpb.RangeID) error {
+func (m *MultiRaft) RemoveGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) error {
 	op := removeGroupOp{
-		groupID: groupID,
-		ch:      make(chan error, 1),
+		groupID:   groupID,
+		replicaID: replicaID,
+		ch:        make(chan error, 1),
 	}
 	m.removeGroupChan <- op
 	return <-op.ch
@@ -365,9 +369,8 @@ func (m *MultiRaft) SubmitCommand(groupID roachpb.RangeID, commandID string, com
 	m.proposalChan <- &proposal{
 		groupID:   groupID,
 		commandID: commandID,
-		fn: func() {
-			if err := m.multiNode.Propose(context.Background(), uint64(groupID),
-				encodeCommand(commandID, command)); err != nil {
+		fn: func(rn *raft.RawNode) {
+			if err := rn.Propose(encodeCommand(commandID, command)); err != nil {
 				log.Errorf("node %v: error proposing command to group %v: %s", m.nodeID, groupID, err)
 			}
 		},
@@ -391,7 +394,7 @@ func (m *MultiRaft) ChangeGroupMembership(groupID roachpb.RangeID, commandID str
 	m.proposalChan <- &proposal{
 		groupID:   groupID,
 		commandID: commandID,
-		fn: func() {
+		fn: func(rn *raft.RawNode) {
 			ctx := ConfChangeContext{
 				CommandID: commandID,
 				Payload:   payload,
@@ -402,12 +405,11 @@ func (m *MultiRaft) ChangeGroupMembership(groupID roachpb.RangeID, commandID str
 				log.Errorf("node %v: error encoding context protobuf", m.nodeID)
 				return
 			}
-			if err := m.multiNode.ProposeConfChange(context.Background(), uint64(groupID),
-				raftpb.ConfChange{
-					Type:    changeType,
-					NodeID:  uint64(replica.ReplicaID),
-					Context: encodedCtx,
-				},
+			if err := rn.ProposeConfChange(raftpb.ConfChange{
+				Type:    changeType,
+				NodeID:  uint64(replica.ReplicaID),
+				Context: encodedCtx,
+			},
 			); err != nil {
 				log.Errorf("node %v: error proposing membership change to node %v: %s", m.nodeID,
 					groupID, err)
@@ -421,7 +423,12 @@ func (m *MultiRaft) ChangeGroupMembership(groupID roachpb.RangeID, commandID str
 
 // Status returns the current status of the given group.
 func (m *MultiRaft) Status(groupID roachpb.RangeID) *raft.Status {
-	return m.multiNode.Status(uint64(groupID))
+	statusOp := statusOp{
+		groupID: groupID,
+		ch:      make(chan *raft.Status),
+	}
+	m.statusChan <- statusOp
+	return <-statusOp.ch
 }
 
 // Campaign causes this node to start an election. Use with caution as
@@ -434,7 +441,7 @@ func (m *MultiRaft) Campaign(groupID roachpb.RangeID) {
 type proposal struct {
 	groupID   roachpb.RangeID
 	commandID string
-	fn        func()
+	fn        func(*raft.RawNode)
 	ch        chan<- error
 }
 
@@ -462,6 +469,8 @@ type group struct {
 	writing bool
 	// nodeIDs track the remote nodes associated with this group.
 	nodeIDs []roachpb.NodeID
+	// raftGroup is the raft.RawNode
+	raftGroup *raft.RawNode
 }
 
 type createGroupOp struct {
@@ -470,8 +479,14 @@ type createGroupOp struct {
 }
 
 type removeGroupOp struct {
+	groupID   roachpb.RangeID
+	replicaID roachpb.ReplicaID
+	ch        chan error
+}
+
+type statusOp struct {
 	groupID roachpb.RangeID
-	ch      chan error
+	ch      chan *raft.Status
 }
 
 // node represents a connection to a remote node.
@@ -504,8 +519,6 @@ type state struct {
 	// Buffer the events and send them in batch to avoid the deadlock
 	// between s.Events channel and callbackChan.
 	pendingEvents []interface{}
-
-	readyGroups map[uint64]raft.Ready
 }
 
 func newState(m *MultiRaft) *state {
@@ -566,38 +579,21 @@ func (s *state) start() {
 			log.Infof("node %v starting", s.nodeID)
 		}
 		s.writeTask.start(s.stopper)
-		// The maps s.readyGroups and writingGroups form a kind of state
-		// machine: We don't want to read from the ready channel until the
-		// groups we got from the last read have made their way through
-		// the rest of the pipeline.
-		var writingGroups map[uint64]raft.Ready
 		// Counts up to heartbeat interval and is then reset.
 		ticks := 0
+		// checkReadyGroupIDs keeps track of all the groupIDs which
+		// should be checked if there is any pending Ready for that group.
+		checkReadyGroupIDs := map[roachpb.RangeID]struct{}{}
 		for {
-			// raftReady signals that the Raft state machine has pending
-			// work. That work is supplied over the raftReady channel as a map
-			// from group ID to raft.Ready struct.
-			var raftReady <-chan map[uint64]raft.Ready
 			// writeReady is set to the write task's ready channel, which
 			// receives when the write task is prepared to persist ready data
 			// from the Raft state machine.
-			// The writeReady mechanism is currently disabled as we are testing
-			// performing all writes synchronously.
-			// TODO(bdarnell): either reinstate writeReady or rip it out completely.
-			//var writeReady chan struct{}
+			var writeReady chan struct{}
 			var eventsChan chan []interface{}
 
-			// The order of operations in this loop structure is as follows:
-			// start by setting raftReady to the multiNode's Ready()
-			// channel. Once a new raftReady has been consumed from the
-			// channel, set writeReady to the write task's ready channel and
-			// set raftReady back to nil. This advances our read-from-raft /
-			// write-to-storage state machine to the next step: wait for the
-			// write task to be ready to persist the new data.
-			if s.readyGroups != nil {
-				//writeReady = s.writeTask.ready
-			} else if writingGroups == nil {
-				raftReady = s.multiNode.Ready()
+			// If there is pending check, then check if writeTask is ready to do its work.
+			if len(checkReadyGroupIDs) > 0 {
+				writeReady = s.writeTask.ready
 			}
 
 			// If there is any pending events, then check the s.Events to see
@@ -619,23 +615,29 @@ func (s *state) start() {
 						raft.DescribeMessage(req.Message, s.EntryFormatter))
 				}
 				s.handleMessage(req)
+				checkReadyGroupIDs[req.GroupID] = struct{}{}
 
 			case op := <-s.createGroupChan:
 				if log.V(6) {
 					log.Infof("node %v: got op %#v", s.nodeID, op)
 				}
 				op.ch <- s.createGroup(op.groupID, 0)
+				checkReadyGroupIDs[op.groupID] = struct{}{}
 
 			case op := <-s.removeGroupChan:
 				if log.V(6) {
 					log.Infof("node %v: got op %#v", s.nodeID, op)
 				}
-				op.ch <- s.removeGroup(op.groupID)
+				op.ch <- s.removeGroup(op.groupID, op.replicaID)
 
 			case prop := <-s.proposalChan:
 				s.propose(prop)
+				checkReadyGroupIDs[prop.groupID] = struct{}{}
 
 			case groupID := <-s.campaignChan:
+				if log.V(6) {
+					log.Infof("node %v: got campaign for group %#v", s.nodeID, groupID)
+				}
 				if _, ok := s.groups[groupID]; !ok {
 					if err := s.createGroup(groupID, 0); err != nil {
 						log.Warningf("node %s failed to create group %s during MultiRaft.Campaign: %s",
@@ -643,30 +645,31 @@ func (s *state) start() {
 						continue
 					}
 				}
-				if err := s.multiNode.Campaign(context.Background(), uint64(groupID)); err != nil {
+				if err := s.groups[groupID].raftGroup.Campaign(); err != nil {
 					log.Warningf("node %s failed to campaign for group %s: %s", s.nodeID, groupID, err)
 				}
+				checkReadyGroupIDs[groupID] = struct{}{}
 
-			case s.readyGroups = <-raftReady:
-				// readyGroups are saved in a local variable until they can be sent to
-				// the write task (and then the real work happens after the write is
-				// complete). All we do for now is log them.
-				s.logRaftReady()
-
-				select {
-				case s.writeTask.ready <- struct{}{}:
-				case <-s.stopper.ShouldStop():
-					return
+			case writeReady <- struct{}{}:
+				writingGroups := s.handleWriteReady(checkReadyGroupIDs)
+				checkReadyGroupIDs = map[roachpb.RangeID]struct{}{}
+				// No Ready for any group
+				if len(writingGroups) == 0 {
+					break
 				}
-				s.handleWriteReady()
-				writingGroups = s.readyGroups
-				s.readyGroups = nil
+				s.logRaftReady(writingGroups)
 
 				select {
 				case resp := <-s.writeTask.out:
 					s.handleWriteResponse(resp, writingGroups)
-					s.multiNode.Advance(writingGroups)
-					writingGroups = nil
+					// Advance rd and check these groups again.
+					// handleWriteResponse may call s.proposal to generate new Ready.
+					for groupID, rd := range writingGroups {
+						if g, ok := s.groups[groupID]; ok {
+							g.raftGroup.Advance(rd)
+							checkReadyGroupIDs[groupID] = struct{}{}
+						}
+					}
 				case <-s.stopper.ShouldStop():
 					return
 				}
@@ -675,7 +678,10 @@ func (s *state) start() {
 				if log.V(8) {
 					log.Infof("node %v: got tick", s.nodeID)
 				}
-				s.multiNode.Tick()
+				for groupID, g := range s.groups {
+					g.raftGroup.Tick()
+					checkReadyGroupIDs[groupID] = struct{}{}
+				}
 				ticks++
 				if ticks >= s.HeartbeatIntervalTicks {
 					ticks = 0
@@ -693,6 +699,18 @@ func (s *state) start() {
 					log.Infof("node %v: send pendingEvents len %d", s.nodeID, len(s.pendingEvents))
 				}
 				s.pendingEvents = nil
+
+			case statusOp := <-s.statusChan:
+				if log.V(8) {
+					log.Infof("node %v: receive status groupID %d", s.nodeID, statusOp.groupID)
+				}
+				g := s.groups[statusOp.groupID]
+				if g == nil {
+					log.Infof("node %v: g is nil for statusOp for gropuID %v", s.nodeID, statusOp.groupID)
+					statusOp.ch <- nil
+					break
+				}
+				statusOp.ch <- g.raftGroup.Status()
 			}
 		}
 	})
@@ -740,7 +758,6 @@ func (s *state) stop() {
 	if log.V(6) {
 		log.Infof("store %s stopping", s.storeID)
 	}
-	s.MultiRaft.multiNode.Stop()
 	s.MultiRaft.Transport.Stop(s.storeID)
 
 	// Ensure that any remaining commands are not left hanging.
@@ -810,7 +827,7 @@ func (s *state) handleMessage(req *RaftMessageRequest) {
 		s.unlockStorage()
 		if !canApply {
 			// If the storage cannot accept the snapshot, drop it before
-			// passing it to multiNode.Step, since our error handling
+			// passing it to RawNode.Step, since our error handling
 			// options past that point are limited.
 			return
 		}
@@ -830,7 +847,7 @@ func (s *state) handleMessage(req *RaftMessageRequest) {
 			// remnants of the old group.
 			log.Infof("node %v: got message for group %s with newer replica ID (%s vs %s), recreating group",
 				s.nodeID, req.GroupID, req.ToReplica.ReplicaID, g.replicaID)
-			if err := s.removeGroup(req.GroupID); err != nil {
+			if err := s.removeGroup(req.GroupID, g.replicaID); err != nil {
 				log.Warningf("Error removing group %d (in response to incoming message): %s",
 					req.GroupID, err)
 				return
@@ -852,9 +869,9 @@ func (s *state) handleMessage(req *RaftMessageRequest) {
 		}
 	}
 
-	if err := s.multiNode.Step(context.Background(), uint64(req.GroupID), req.Message); err != nil {
+	if err := s.groups[req.GroupID].raftGroup.Step(req.Message); err != nil {
 		if log.V(4) {
-			log.Infof("node %v: multinode step to group %v failed for message %.200s", s.nodeID, req.GroupID,
+			log.Infof("node %v: step to group %v failed for message %.200s", s.nodeID, req.GroupID,
 				raft.DescribeMessage(req.Message, s.EntryFormatter))
 		}
 	}
@@ -933,13 +950,15 @@ func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID
 		MaxInflightMsgs: 256,
 		Logger:          &raftLogger{group: uint64(groupID)},
 	}
-	if err := s.multiNode.CreateGroup(uint64(groupID), raftCfg, nil); err != nil {
+	raftGroup, err := raft.NewRawNode(raftCfg, nil)
+	if err != nil {
 		return err
 	}
 	g := &group{
 		groupID:   groupID,
 		replicaID: replicaID,
 		pending:   map[string]*proposal{},
+		raftGroup: raftGroup,
 	}
 	s.groups[groupID] = g
 
@@ -978,7 +997,7 @@ func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID
 		}
 		if replica.StoreID == s.storeID {
 			log.Infof("node %s campaigning because initial confstate is %v", s.nodeID, cs.Nodes)
-			if err := s.multiNode.Campaign(context.Background(), uint64(groupID)); err != nil {
+			if err := raftGroup.Campaign(); err != nil {
 				return err
 			}
 		}
@@ -986,34 +1005,35 @@ func (s *state) createGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID
 	return nil
 }
 
-func (s *state) removeGroup(groupID roachpb.RangeID) error {
+func (s *state) removeGroup(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) error {
 	// Group creation is lazy and idempotent; so is removal.
 	g, ok := s.groups[groupID]
 	if !ok {
 		return nil
 	}
 	if log.V(3) {
-		log.Infof("node %v removing group %v", s.nodeID, groupID)
+		log.Infof("node %v removing group %v replicaID %v", s.nodeID, groupID, replicaID)
 	}
 
+	if replicaID == 0 {
+		replicaID = g.replicaID
+	}
+	// Use ">" check other than "!=" check to ignore obsolete removing.
+	// See TestStoreRemoveReplicaOldDescriptor.
+	if g.replicaID > replicaID {
+		return ErrReplicaIDMismatch
+	}
 	// Cancel commands which are still in transit.
 	for _, prop := range g.pending {
 		s.removePending(g, prop, ErrGroupDeleted)
-	}
-
-	if err := s.multiNode.RemoveGroup(uint64(groupID)); err != nil {
-		return err
 	}
 
 	for _, nodeID := range g.nodeIDs {
 		s.nodes[nodeID].unregisterGroup(groupID)
 	}
 
-	// Delete any entries for this group in readyGroups.
-	if s.readyGroups != nil {
-		delete(s.readyGroups, uint64(groupID))
-	}
-
+	// groupID is not deleted from checkReadyGroupIDs, but
+	// s.handleWriteReady can handle this case.
 	delete(s.groups, groupID)
 	return nil
 }
@@ -1055,11 +1075,11 @@ func (s *state) propose(p *proposal) {
 		log.Infof("group %d: new proposal %x", p.groupID, p.commandID)
 	}
 	g.pending[p.commandID] = p
-	p.fn()
+	p.fn(g.raftGroup)
 }
 
-func (s *state) logRaftReady() {
-	for groupID, ready := range s.readyGroups {
+func (s *state) logRaftReady(readyGroups map[roachpb.RangeID]raft.Ready) {
+	for groupID, ready := range readyGroups {
 		if log.V(5) {
 			log.Infof("node %v: group %v raft ready", s.nodeID, groupID)
 			if ready.SoftState != nil {
@@ -1086,27 +1106,33 @@ func (s *state) logRaftReady() {
 
 // handleWriteReady converts a set of raft.Ready structs into a writeRequest
 // to be persisted, marks the group as writing and sends it to the writeTask.
-func (s *state) handleWriteReady() {
+// It will only do this for groups which are tagged via the map.
+func (s *state) handleWriteReady(checkReadyGroupIDs map[roachpb.RangeID]struct{}) map[roachpb.RangeID]raft.Ready {
 	if log.V(6) {
 		log.Infof("node %v write ready, preparing request", s.nodeID)
 	}
 	s.lockStorage()
 	defer s.unlockStorage()
 	writeRequest := newWriteRequest()
-	for groupID, ready := range s.readyGroups {
-		raftGroupID := roachpb.RangeID(groupID)
-		g, ok := s.groups[raftGroupID]
+	readys := make(map[roachpb.RangeID]raft.Ready)
+	for groupID := range checkReadyGroupIDs {
+		g, ok := s.groups[groupID]
 		if !ok {
 			if log.V(6) {
 				log.Infof("dropping write request to group %d", groupID)
 			}
 			continue
 		}
+		if !g.raftGroup.HasReady() {
+			continue
+		}
+		ready := g.raftGroup.Ready()
+		readys[groupID] = ready
 		g.writing = true
 
 		gwr := &groupWriteRequest{}
 		var err error
-		gwr.replicaID, err = s.Storage().ReplicaIDForStore(roachpb.RangeID(groupID), s.storeID)
+		gwr.replicaID, err = s.Storage().ReplicaIDForStore(groupID, s.storeID)
 		if err != nil {
 			if log.V(1) {
 				log.Warningf("failed to look up replica ID for range %v (disabling replica ID check): %s",
@@ -1123,9 +1149,14 @@ func (s *state) handleWriteReady() {
 		if len(ready.Entries) > 0 {
 			gwr.entries = ready.Entries
 		}
-		writeRequest.groups[raftGroupID] = gwr
+		writeRequest.groups[groupID] = gwr
 	}
-	s.writeTask.in <- writeRequest
+	// If no ready, don't write to writeTask as caller will
+	// not wait on s.writeTask.out when len(readys) == 0.
+	if len(readys) > 0 {
+		s.writeTask.in <- writeRequest
+	}
+	return readys
 }
 
 // processCommittedEntry tells the application that a command was committed.
@@ -1197,11 +1228,10 @@ func (s *state) processCommittedEntry(groupID roachpb.RangeID, g *group, entry r
 						if err != nil {
 							log.Errorf("error applying configuration change %v: %s", cc, err)
 						}
-						s.multiNode.ApplyConfChange(uint64(groupID), cc)
+						g.raftGroup.ApplyConfChange(cc)
 					} else {
 						log.Warningf("aborting configuration change: %s", err)
-						s.multiNode.ApplyConfChange(uint64(groupID),
-							raftpb.ConfChange{})
+						g.raftGroup.ApplyConfChange(raftpb.ConfChange{})
 					}
 				}:
 				case <-s.stopper.ShouldStop():
@@ -1267,7 +1297,7 @@ func (s *state) sendMessage(g *group, msg raftpb.Message) {
 	if err != nil {
 		log.Warningf("node %v failed to send message to %v: %s", s.nodeID, toReplica.NodeID, err)
 		if groupID != noGroup {
-			s.multiNode.ReportUnreachable(msg.To, uint64(groupID))
+			g.raftGroup.ReportUnreachable(msg.To)
 		}
 		snapStatus = raft.SnapshotFailure
 	}
@@ -1275,7 +1305,7 @@ func (s *state) sendMessage(g *group, msg raftpb.Message) {
 		// TODO(bdarnell): add an ack for snapshots and don't report status until
 		// ack, error, or timeout.
 		if groupID != noGroup {
-			s.multiNode.ReportSnapshot(msg.To, uint64(groupID), snapStatus)
+			g.raftGroup.ReportSnapshot(msg.To, snapStatus)
 		}
 	}
 }
@@ -1319,7 +1349,7 @@ func (s *state) maybeSendLeaderEvent(groupID roachpb.RangeID, g *group, ready *r
 }
 
 // handleWriteResponse updates the state machine and sends messages for a raft Ready batch.
-func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uint64]raft.Ready) {
+func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[roachpb.RangeID]raft.Ready) {
 	if log.V(6) {
 		log.Infof("node %v got write response: %#v", s.nodeID, *response)
 	}

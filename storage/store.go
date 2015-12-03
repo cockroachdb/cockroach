@@ -982,7 +982,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		delete(s.uninitReplicas, newDesc.RangeID)
 		delete(s.replicas, newDesc.RangeID)
 		s.mu.Unlock()
-		if err := s.multiraft.RemoveGroup(newDesc.RangeID); err != nil {
+		if err := s.multiraft.RemoveGroup(newDesc.RangeID, 0); err != nil {
 			return util.Errorf("couldn't remove uninitialized range's group %d: %s", newDesc.RangeID, err)
 		}
 		s.mu.Lock()
@@ -1127,9 +1127,16 @@ func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor) er
 func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor) error {
 	desc := rep.Desc()
 	rangeID := desc.RangeID
-	if _, rd := desc.FindReplica(s.StoreID()); rd != nil && rd.ReplicaID >= origDesc.NextReplicaID {
+	_, rd := desc.FindReplica(s.StoreID())
+	if rd != nil && rd.ReplicaID >= origDesc.NextReplicaID {
 		return util.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
 			rep, rd.ReplicaID, origDesc.NextReplicaID)
+	}
+	var replicaID roachpb.ReplicaID
+	if rd != nil {
+		replicaID = rd.ReplicaID
+	} else {
+		replicaID = 0
 	}
 
 	// RemoveGroup needs to access the storage, which in turn needs the
@@ -1137,7 +1144,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	// from multiraft outside the scope of s.mu; this is effectively
 	// synchronized by the fact that this method runs on the processRaft
 	// goroutine.
-	if err := s.multiraft.RemoveGroup(rangeID); err != nil {
+	if err := s.multiraft.RemoveGroup(rangeID, replicaID); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -1783,6 +1790,26 @@ func (s *Store) computeReplicationStatus(now int64) (
 	}
 
 	timestamp := roachpb.Timestamp{WallTime: now}
+	// s.RaftStatus will call s.multiraft.Status, so we should not hold the s.mu
+	// before call it, otherwise this may cause deadlock. Consider the following
+	// deadlock scenario:
+	// 1. hold s.mu, then call s.RaftStatus, it will call s.multiraft.Status
+	// 2. at the same time MultiRaft.state.run call s.createGroup, it will try
+	// to hold s.mu
+	raftStatusMap := make(map[roachpb.RangeID]*raft.Status)
+	s.mu.Lock()
+	for rangeID := range s.replicas {
+		raftStatusMap[rangeID] = nil
+	}
+	s.mu.Unlock()
+	for rangeID := range raftStatusMap {
+		raftStatus := s.RaftStatus(rangeID)
+		if raftStatus == nil {
+			delete(raftStatusMap, rangeID)
+			continue
+		}
+		raftStatusMap[rangeID] = raftStatus
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for rangeID, rng := range s.replicas {
@@ -1791,8 +1818,8 @@ func (s *Store) computeReplicationStatus(now int64) (
 			log.Error(err)
 			continue
 		}
-		raftStatus := s.RaftStatus(rangeID)
-		if raftStatus == nil {
+		raftStatus, ok := raftStatusMap[rangeID]
+		if !ok {
 			continue
 		}
 		if raftStatus.SoftState.RaftState == raft.StateLeader {
