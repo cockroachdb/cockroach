@@ -51,7 +51,7 @@ type builtin struct {
 	// Set to typeList{} for nullary functions and to nil for varidic
 	// functions.
 	types      typeList
-	returnType Datum
+	returnType func(DTuple) (Datum, error)
 	// Set to true when a function potentially returns a different value
 	// when called in the same statement with the same parameters.
 	// e.g.: random(), clock_timestamp(). Some functions like now()
@@ -83,21 +83,21 @@ var builtins = map[string][]builtin{
 	"length": {
 		stringBuiltin1(func(s string) (Datum, error) {
 			return DInt(utf8.RuneCountInString(s)), nil
-		}, DummyInt),
+		}, typeInt),
 		bytesBuiltin1(func(s string) (Datum, error) {
 			return DInt(len(s)), nil
-		}, DummyInt),
+		}, typeInt),
 	},
 
 	// TODO(pmattis): What string functions should also support bytesType?
 
 	"lower": {stringBuiltin1(func(s string) (Datum, error) {
 		return DString(strings.ToLower(s)), nil
-	}, DummyString)},
+	}, typeString)},
 
 	"upper": {stringBuiltin1(func(s string) (Datum, error) {
 		return DString(strings.ToUpper(s)), nil
-	}, DummyString)},
+	}, typeString)},
 
 	"substr":    substringImpls,
 	"substring": substringImpls,
@@ -106,7 +106,7 @@ var builtins = map[string][]builtin{
 	// NULL arguments are ignored.
 	"concat": {
 		builtin{
-			returnType: DummyString,
+			returnType: typeString,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				var buffer bytes.Buffer
 				for _, d := range args {
@@ -126,7 +126,7 @@ var builtins = map[string][]builtin{
 
 	"concat_ws": {
 		builtin{
-			returnType: DummyString,
+			returnType: typeString,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				dstr, ok := args[0].(DString)
 				if !ok {
@@ -152,7 +152,7 @@ var builtins = map[string][]builtin{
 	"split_part": {
 		builtin{
 			types:      typeList{stringType, stringType, intType},
-			returnType: DummyString,
+			returnType: typeString,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				text := string(args[0].(DString))
 				sep := string(args[1].(DString))
@@ -174,7 +174,7 @@ var builtins = map[string][]builtin{
 	"repeat": {
 		builtin{
 			types:      typeList{stringType, intType},
-			returnType: DummyString,
+			returnType: typeString,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				s := string(args[0].(DString))
 				count := int(args[1].(DInt))
@@ -191,24 +191,24 @@ var builtins = map[string][]builtin{
 			return DInt(ch), nil
 		}
 		return nil, errEmptyInputString
-	}, DummyInt)},
+	}, typeInt)},
 
 	"md5": {stringBuiltin1(func(s string) (Datum, error) {
 		return DString(fmt.Sprintf("%x", md5.Sum([]byte(s)))), nil
-	}, DummyString)},
+	}, typeString)},
 
 	"sha1": {stringBuiltin1(func(s string) (Datum, error) {
 		return DString(fmt.Sprintf("%x", sha1.Sum([]byte(s)))), nil
-	}, DummyString)},
+	}, typeString)},
 
 	"sha256": {stringBuiltin1(func(s string) (Datum, error) {
 		return DString(fmt.Sprintf("%x", sha256.Sum256([]byte(s)))), nil
-	}, DummyString)},
+	}, typeString)},
 
 	"to_hex": {
 		builtin{
 			types:      typeList{intType},
-			returnType: DummyString,
+			returnType: typeString,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				return DString(fmt.Sprintf("%x", int64(args[0].(DInt)))), nil
 			},
@@ -223,12 +223,12 @@ var builtins = map[string][]builtin{
 		}
 
 		return DInt(utf8.RuneCountInString(s[:index]) + 1), nil
-	}, DummyInt)},
+	}, typeInt)},
 
 	"overlay": {
 		builtin{
 			types:      typeList{stringType, stringType, intType},
-			returnType: DummyString,
+			returnType: typeString,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				s := string(args[0].(DString))
 				to := string(args[1].(DString))
@@ -239,7 +239,7 @@ var builtins = map[string][]builtin{
 		},
 		builtin{
 			types:      typeList{stringType, stringType, intType, intType},
-			returnType: DummyString,
+			returnType: typeString,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				s := string(args[0].(DString))
 				to := string(args[1].(DString))
@@ -254,30 +254,30 @@ var builtins = map[string][]builtin{
 	"btrim": {
 		stringBuiltin2(func(s, chars string) (Datum, error) {
 			return DString(strings.Trim(s, chars)), nil
-		}, DummyString),
+		}, typeString),
 		stringBuiltin1(func(s string) (Datum, error) {
 			return DString(strings.TrimSpace(s)), nil
-		}, DummyString),
+		}, typeString),
 	},
 
 	// The SQL parser coerces TRIM(LEADING ...) to LTRIM(...).
 	"ltrim": {
 		stringBuiltin2(func(s, chars string) (Datum, error) {
 			return DString(strings.TrimLeft(s, chars)), nil
-		}, DummyString),
+		}, typeString),
 		stringBuiltin1(func(s string) (Datum, error) {
 			return DString(strings.TrimLeftFunc(s, unicode.IsSpace)), nil
-		}, DummyString),
+		}, typeString),
 	},
 
 	// The SQL parser coerces TRIM(TRAILING ...) to RTRIM(...).
 	"rtrim": {
 		stringBuiltin2(func(s, chars string) (Datum, error) {
 			return DString(strings.TrimRight(s, chars)), nil
-		}, DummyString),
+		}, typeString),
 		stringBuiltin1(func(s string) (Datum, error) {
 			return DString(strings.TrimRightFunc(s, unicode.IsSpace)), nil
-		}, DummyString),
+		}, typeString),
 	},
 
 	"reverse": {stringBuiltin1(func(s string) (Datum, error) {
@@ -286,11 +286,11 @@ var builtins = map[string][]builtin{
 			runes[i], runes[j] = runes[j], runes[i]
 		}
 		return DString(string(runes)), nil
-	}, DummyString)},
+	}, typeString)},
 
 	"replace": {stringBuiltin3(func(s, from, to string) (Datum, error) {
 		return DString(strings.Replace(s, from, to, -1)), nil
-	}, DummyString)},
+	}, typeString)},
 
 	"translate": {stringBuiltin3(func(s, from, to string) (Datum, error) {
 		const deletionRune = utf8.MaxRune + 1
@@ -316,12 +316,12 @@ var builtins = map[string][]builtin{
 			}
 		}
 		return DString(string(runes)), nil
-	}, DummyString)},
+	}, typeString)},
 
 	"regexp_extract": {
 		builtin{
 			types:      typeList{stringType, stringType},
-			returnType: DummyString,
+			returnType: typeString,
 			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
 				s := string(args[0].(DString))
 				pattern := string(args[1].(DString))
@@ -333,7 +333,7 @@ var builtins = map[string][]builtin{
 	"regexp_replace": {
 		builtin{
 			types:      typeList{stringType, stringType, stringType},
-			returnType: DummyString,
+			returnType: typeString,
 			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
 				s := string(args[0].(DString))
 				pattern := string(args[1].(DString))
@@ -343,7 +343,7 @@ var builtins = map[string][]builtin{
 		},
 		builtin{
 			types:      typeList{stringType, stringType, stringType, stringType},
-			returnType: DummyString,
+			returnType: typeString,
 			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
 				s := string(args[0].(DString))
 				pattern := string(args[1].(DString))
@@ -356,12 +356,12 @@ var builtins = map[string][]builtin{
 
 	"initcap": {stringBuiltin1(func(s string) (Datum, error) {
 		return DString(strings.Title(strings.ToLower(s))), nil
-	}, DummyString)},
+	}, typeString)},
 
 	"left": {
 		builtin{
 			types:      typeList{bytesType, intType},
-			returnType: DummyBytes,
+			returnType: typeBytes,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				bytes := []byte(args[0].(DBytes))
 				n := int(args[1].(DInt))
@@ -378,7 +378,7 @@ var builtins = map[string][]builtin{
 		},
 		builtin{
 			types:      typeList{stringType, intType},
-			returnType: DummyString,
+			returnType: typeString,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				runes := []rune(string(args[0].(DString)))
 				n := int(args[1].(DInt))
@@ -398,7 +398,7 @@ var builtins = map[string][]builtin{
 	"right": {
 		builtin{
 			types:      typeList{bytesType, intType},
-			returnType: DummyBytes,
+			returnType: typeBytes,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				bytes := []byte(args[0].(DBytes))
 				n := int(args[1].(DInt))
@@ -415,7 +415,7 @@ var builtins = map[string][]builtin{
 		},
 		builtin{
 			types:      typeList{stringType, intType},
-			returnType: DummyString,
+			returnType: typeString,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				runes := []rune(string(args[0].(DString)))
 				n := int(args[1].(DInt))
@@ -435,7 +435,7 @@ var builtins = map[string][]builtin{
 	"random": {
 		builtin{
 			types:      typeList{},
-			returnType: DummyFloat,
+			returnType: typeFloat,
 			impure:     true,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				return DFloat(rand.Float64()), nil
@@ -446,7 +446,7 @@ var builtins = map[string][]builtin{
 	"experimental_unique_bytes": {
 		builtin{
 			types:      typeList{},
-			returnType: DummyBytes,
+			returnType: typeBytes,
 			impure:     true,
 			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
 				return generateUniqueBytes(ctx.NodeID), nil
@@ -457,7 +457,7 @@ var builtins = map[string][]builtin{
 	"experimental_unique_int": {
 		builtin{
 			types:      typeList{},
-			returnType: DummyInt,
+			returnType: typeInt,
 			impure:     true,
 			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
 				return generateUniqueInt(ctx.NodeID), nil
@@ -468,7 +468,7 @@ var builtins = map[string][]builtin{
 	"experimental_uuid_v4": {
 		builtin{
 			types:      typeList{},
-			returnType: DummyBytes,
+			returnType: typeBytes,
 			impure:     true,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				return DBytes(uuid.NewUUID4()), nil
@@ -478,7 +478,8 @@ var builtins = map[string][]builtin{
 
 	"greatest": {
 		builtin{
-			types: nil,
+			types:      nil,
+			returnType: typeTuple,
 			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
 				return pickFromTuple(ctx, true /* greatest */, args)
 			},
@@ -487,7 +488,8 @@ var builtins = map[string][]builtin{
 
 	"least": {
 		builtin{
-			types: nil,
+			types:      nil,
+			returnType: typeTuple,
 			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
 				return pickFromTuple(ctx, false /* !greatest */, args)
 			},
@@ -499,14 +501,14 @@ var builtins = map[string][]builtin{
 	"age": {
 		builtin{
 			types:      typeList{timestampType},
-			returnType: DummyInterval,
+			returnType: typeInterval,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
 				return DInterval{Duration: e.StmtTimestamp.Sub(args[0].(DTimestamp).Time)}, nil
 			},
 		},
 		builtin{
 			types:      typeList{timestampType, timestampType},
-			returnType: DummyInterval,
+			returnType: typeInterval,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				return DInterval{Duration: args[0].(DTimestamp).Sub(args[1].(DTimestamp).Time)}, nil
 			},
@@ -516,7 +518,7 @@ var builtins = map[string][]builtin{
 	"current_date": {
 		builtin{
 			types:      typeList{},
-			returnType: DummyDate,
+			returnType: typeDate,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
 				return e.makeDDate(e.StmtTimestamp.Time)
 			},
@@ -530,7 +532,7 @@ var builtins = map[string][]builtin{
 	"clock_timestamp": {
 		builtin{
 			types:      typeList{},
-			returnType: DummyTimestamp,
+			returnType: typeTimestamp,
 			impure:     true,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				return DTimestamp{Time: time.Now()}, nil
@@ -541,7 +543,7 @@ var builtins = map[string][]builtin{
 	"transaction_timestamp": {
 		builtin{
 			types:      typeList{},
-			returnType: DummyTimestamp,
+			returnType: typeTimestamp,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
 				return e.TxnTimestamp, nil
 			},
@@ -551,7 +553,7 @@ var builtins = map[string][]builtin{
 	"extract": {
 		builtin{
 			types:      typeList{stringType, timestampType},
-			returnType: DummyInt,
+			returnType: typeInt,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				// extract timeSpan fromTime.
 				fromTime := args[1].(DTimestamp)
@@ -612,7 +614,7 @@ var builtins = map[string][]builtin{
 	"avg": {
 		builtin{
 			types:      typeList{intType},
-			returnType: DummyFloat,
+			returnType: typeFloat,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				if args[0] == DNull {
 					return args[0], nil
@@ -623,7 +625,7 @@ var builtins = map[string][]builtin{
 		},
 		builtin{
 			types:      typeList{floatType},
-			returnType: DummyFloat,
+			returnType: typeFloat,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				return args[0], nil
 			},
@@ -640,14 +642,14 @@ var builtins = map[string][]builtin{
 
 	"abs": {
 		builtin{
-			returnType: DummyFloat,
+			returnType: typeFloat,
 			types:      typeList{floatType},
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				return DFloat(math.Abs(float64(args[0].(DFloat)))), nil
 			},
 		},
 		builtin{
-			returnType: DummyInt,
+			returnType: typeInt,
 			types:      typeList{intType},
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				x := args[0].(DInt)
@@ -742,7 +744,7 @@ var builtins = map[string][]builtin{
 			return DFloat(math.Mod(x, y)), nil
 		}),
 		builtin{
-			returnType: DummyInt,
+			returnType: typeInt,
 			types:      typeList{intType, intType},
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				y := args[1].(DInt)
@@ -757,7 +759,7 @@ var builtins = map[string][]builtin{
 
 	"pi": {
 		builtin{
-			returnType: DummyFloat,
+			returnType: typeFloat,
 			types:      typeList{},
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				return DFloat(math.Pi), nil
@@ -779,7 +781,7 @@ var builtins = map[string][]builtin{
 			return round(x, 0)
 		}),
 		builtin{
-			returnType: DummyFloat,
+			returnType: typeFloat,
 			types:      typeList{floatType, intType},
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				return round(float64(args[0].(DFloat)), int64(args[1].(DInt)))
@@ -804,7 +806,7 @@ var builtins = map[string][]builtin{
 			return DFloat(1), nil
 		}),
 		builtin{
-			returnType: DummyInt,
+			returnType: typeInt,
 			types:      typeList{intType},
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				x := args[0].(DInt)
@@ -860,7 +862,7 @@ func countImpls() []builtin {
 	for _, t := range types {
 		r = append(r, builtin{
 			types:      typeList{t},
-			returnType: DummyInt,
+			returnType: typeInt,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				if _, ok := args[0].(DInt); ok {
 					return args[0], nil
@@ -876,7 +878,7 @@ func countImpls() []builtin {
 var substringImpls = []builtin{
 	{
 		types:      typeList{stringType, intType},
-		returnType: DummyString,
+		returnType: typeString,
 		fn: func(_ EvalContext, args DTuple) (Datum, error) {
 			runes := []rune(string(args[0].(DString)))
 			// SQL strings are 1-indexed.
@@ -893,7 +895,7 @@ var substringImpls = []builtin{
 	},
 	{
 		types:      typeList{stringType, intType, intType},
-		returnType: DummyString,
+		returnType: typeString,
 		fn: func(_ EvalContext, args DTuple) (Datum, error) {
 			runes := []rune(string(args[0].(DString)))
 			// SQL strings are 1-indexed.
@@ -922,7 +924,7 @@ var substringImpls = []builtin{
 	},
 	{
 		types:      typeList{stringType, stringType},
-		returnType: DummyString,
+		returnType: typeString,
 		fn: func(ctx EvalContext, args DTuple) (Datum, error) {
 			s := string(args[0].(DString))
 			pattern := string(args[1].(DString))
@@ -931,7 +933,7 @@ var substringImpls = []builtin{
 	},
 	{
 		types:      typeList{stringType, stringType, stringType},
-		returnType: DummyString,
+		returnType: typeString,
 		fn: func(ctx EvalContext, args DTuple) (Datum, error) {
 			s := string(args[0].(DString))
 			pattern := string(args[1].(DString))
@@ -947,7 +949,7 @@ var ceilImpl = floatBuiltin1(func(x float64) (Datum, error) {
 
 var nowImpl = builtin{
 	types:      typeList{},
-	returnType: DummyTimestamp,
+	returnType: typeTimestamp,
 	fn: func(e EvalContext, args DTuple) (Datum, error) {
 		return e.StmtTimestamp, nil
 	},
@@ -960,7 +962,7 @@ var powImpl = floatBuiltin2(func(x, y float64) (Datum, error) {
 func floatBuiltin1(f func(float64) (Datum, error)) builtin {
 	return builtin{
 		types:      typeList{floatType},
-		returnType: DummyFloat,
+		returnType: typeFloat,
 		fn: func(_ EvalContext, args DTuple) (Datum, error) {
 			return f(float64(args[0].(DFloat)))
 		},
@@ -970,7 +972,7 @@ func floatBuiltin1(f func(float64) (Datum, error)) builtin {
 func floatBuiltin2(f func(float64, float64) (Datum, error)) builtin {
 	return builtin{
 		types:      typeList{floatType, floatType},
-		returnType: DummyFloat,
+		returnType: typeFloat,
 		fn: func(_ EvalContext, args DTuple) (Datum, error) {
 			return f(float64(args[0].(DFloat)),
 				float64(args[1].(DFloat)))
@@ -978,7 +980,7 @@ func floatBuiltin2(f func(float64, float64) (Datum, error)) builtin {
 	}
 }
 
-func stringBuiltin1(f func(string) (Datum, error), returnType Datum) builtin {
+func stringBuiltin1(f func(string) (Datum, error), returnType func(DTuple) (Datum, error)) builtin {
 	return builtin{
 		types:      typeList{stringType},
 		returnType: returnType,
@@ -988,7 +990,7 @@ func stringBuiltin1(f func(string) (Datum, error), returnType Datum) builtin {
 	}
 }
 
-func stringBuiltin2(f func(string, string) (Datum, error), returnType Datum) builtin {
+func stringBuiltin2(f func(string, string) (Datum, error), returnType func(DTuple) (Datum, error)) builtin {
 	return builtin{
 		types:      typeList{stringType, stringType},
 		returnType: returnType,
@@ -998,7 +1000,7 @@ func stringBuiltin2(f func(string, string) (Datum, error), returnType Datum) bui
 	}
 }
 
-func stringBuiltin3(f func(string, string, string) (Datum, error), returnType Datum) builtin {
+func stringBuiltin3(f func(string, string, string) (Datum, error), returnType func(DTuple) (Datum, error)) builtin {
 	return builtin{
 		types:      typeList{stringType, stringType, stringType},
 		returnType: returnType,
@@ -1008,7 +1010,7 @@ func stringBuiltin3(f func(string, string, string) (Datum, error), returnType Da
 	}
 }
 
-func stringBuiltin4(f func(string, string, string, string) (Datum, error), returnType Datum) builtin {
+func stringBuiltin4(f func(string, string, string, string) (Datum, error), returnType func(DTuple) (Datum, error)) builtin {
 	return builtin{
 		types:      typeList{stringType, stringType, stringType, stringType},
 		returnType: returnType,
@@ -1018,7 +1020,7 @@ func stringBuiltin4(f func(string, string, string, string) (Datum, error), retur
 	}
 }
 
-func bytesBuiltin1(f func(string) (Datum, error), returnType Datum) builtin {
+func bytesBuiltin1(f func(string) (Datum, error), returnType func(DTuple) (Datum, error)) builtin {
 	return builtin{
 		types:      typeList{bytesType},
 		returnType: returnType,
@@ -1248,6 +1250,28 @@ func round(x float64, n int64) (Datum, error) {
 	const b = 64
 	y, err := strconv.ParseFloat(strconv.FormatFloat(x, 'f', int(n), b), b)
 	return DFloat(y), err
+}
+
+// typeTuple returns the Datum type that all arguments share, or an error
+// if they do not share types.
+func typeTuple(args DTuple) (Datum, error) {
+	var typ reflect.Type
+	datum := DNull
+	for _, arg := range args {
+		if arg == DNull {
+			continue
+		}
+		// Find the first non-null argument.
+		if datum == DNull {
+			datum = arg
+			typ = reflect.TypeOf(datum)
+			continue
+		}
+		if reflect.TypeOf(arg) != typ {
+			return nil, errors.New("all arguments must be of the same type")
+		}
+	}
+	return datum, nil
 }
 
 // Pick the greatest (or least value) from a tuple.
