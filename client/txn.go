@@ -70,10 +70,8 @@ func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachp
 		ts.Proto = roachpb.Transaction{
 			Name:      ts.Proto.Name,
 			Isolation: ts.Proto.Isolation,
-		}
-		if abrtTxn := abrtErr.Transaction(); abrtTxn != nil {
 			// Acts as a minimum priority on restart.
-			ts.Proto.Priority = abrtTxn.Priority
+			Priority: abrtErr.Txn.Priority,
 		}
 	} else if txnErr, ok := err.(roachpb.TransactionRestartError); ok {
 		ts.Proto.Update(txnErr.Transaction())
