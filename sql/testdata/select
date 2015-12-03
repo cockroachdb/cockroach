@@ -66,7 +66,7 @@ statement ok
 INSERT INTO abc VALUES (0, 1, 2)
 
 query II
-SELECT a,b FROM abc WHERE CASE WHEN a != 0 THEN b/a > 1.5 ELSE false END
+SELECT a,b FROM abc WHERE CASE WHEN a != 0 THEN b::float/a::float > 1.5 ELSE false END
 ----
 1 2
 
@@ -231,3 +231,14 @@ query I
 SELECT value FROM boolean_table
 ----
 NULL
+
+query IR
+SELECT 1/2, 1.0/2.0
+----
+0 0.5
+
+statement error unsupported binary operator: <float> / <int>
+SELECT 1.0/2
+
+statement error unsupported binary operator: <int> / <float>
+SELECT 1/2.0

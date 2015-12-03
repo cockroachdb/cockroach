@@ -235,13 +235,13 @@ var binOps = map[binArgs]binOp{
 	},
 
 	binArgs{Div, intType, intType}: {
-		returnType: DummyFloat,
+		returnType: DummyInt,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			rInt := right.(DInt)
 			if rInt == 0 {
 				return nil, errDivByZero
 			}
-			return DFloat(left.(DInt)) / DFloat(rInt), nil
+			return left.(DInt) / rInt, nil
 		},
 	},
 	binArgs{Div, floatType, floatType}: {
