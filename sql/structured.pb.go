@@ -196,6 +196,7 @@ type ColumnDescriptor struct {
 	// Default expression to use to populate the column on insert if no
 	// value is provided.
 	DefaultExpr *string `protobuf:"bytes,5,opt,name=default_expr" json:"default_expr,omitempty"`
+	Hidden      bool    `protobuf:"varint,6,opt,name=hidden" json:"hidden"`
 }
 
 func (m *ColumnDescriptor) Reset()         { *m = ColumnDescriptor{} }
@@ -681,6 +682,14 @@ func (m *ColumnDescriptor) MarshalTo(data []byte) (int, error) {
 		i = encodeVarintStructured(data, i, uint64(len(*m.DefaultExpr)))
 		i += copy(data[i:], *m.DefaultExpr)
 	}
+	data[i] = 0x30
+	i++
+	if m.Hidden {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
 	return i, nil
 }
 
@@ -1060,6 +1069,7 @@ func (m *ColumnDescriptor) Size() (n int) {
 		l = len(*m.DefaultExpr)
 		n += 1 + l + sovStructured(uint64(l))
 	}
+	n += 2
 	return n
 }
 
@@ -1483,6 +1493,26 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 			s := string(data[iNdEx:postIndex])
 			m.DefaultExpr = &s
 			iNdEx = postIndex
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Hidden", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Hidden = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipStructured(data[iNdEx:])
