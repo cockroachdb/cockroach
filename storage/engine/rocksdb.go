@@ -50,35 +50,40 @@ func init() {
 
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
-	rdb         *C.DBEngine
-	attrs       roachpb.Attributes // Attributes for this engine
-	dir         string             // The data directory
-	cacheSize   int64              // Memory to use to cache values.
-	stopper     *stop.Stopper
-	deallocated chan struct{} // Closed when the underlying handle is deallocated.
+	rdb            *C.DBEngine
+	attrs          roachpb.Attributes // Attributes for this engine
+	dir            string             // The data directory
+	cacheSize      int64              // Memory to use to cache values.
+	memtableBudget int64              // Memory to use for the memory table.
+	stopper        *stop.Stopper
+	deallocated    chan struct{} // Closed when the underlying handle is deallocated.
 }
 
 // NewRocksDB allocates and returns a new RocksDB object.
-func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize int64, stopper *stop.Stopper) *RocksDB {
+func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize, memtableBudget int64,
+	stopper *stop.Stopper) *RocksDB {
 	if dir == "" {
 		panic(util.Errorf("dir must be non-empty"))
 	}
 	return &RocksDB{
-		attrs:       attrs,
-		dir:         dir,
-		cacheSize:   cacheSize,
-		stopper:     stopper,
-		deallocated: make(chan struct{}),
+		attrs:          attrs,
+		dir:            dir,
+		cacheSize:      cacheSize,
+		memtableBudget: memtableBudget,
+		stopper:        stopper,
+		deallocated:    make(chan struct{}),
 	}
 }
 
-func newMemRocksDB(attrs roachpb.Attributes, cacheSize int64, stopper *stop.Stopper) *RocksDB {
+func newMemRocksDB(attrs roachpb.Attributes, cacheSize, memtableBudget int64,
+	stopper *stop.Stopper) *RocksDB {
 	return &RocksDB{
 		attrs: attrs,
 		// dir: empty dir == "mem" RocksDB instance.
-		cacheSize:   cacheSize,
-		stopper:     stopper,
-		deallocated: make(chan struct{}),
+		cacheSize:      cacheSize,
+		memtableBudget: memtableBudget,
+		stopper:        stopper,
+		deallocated:    make(chan struct{}),
 	}
 }
 
@@ -105,6 +110,7 @@ func (r *RocksDB) Open() error {
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)),
 		C.DBOptions{
 			cache_size:      C.int64_t(r.cacheSize),
+			memtable_budget: C.int64_t(r.memtableBudget),
 			allow_os_buffer: C.bool(true),
 			logging_enabled: C.bool(log.V(3)),
 		})

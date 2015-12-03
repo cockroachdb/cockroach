@@ -38,7 +38,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-const testCacheSize = 1 << 30 // GB.
+const testCacheSize = 1 << 30 // 1 GB
 
 // encodePutResponse creates a put response using the specified
 // timestamp and encodes it using gogoprotobuf.
@@ -77,11 +77,7 @@ func TestRocksDBCompaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rocksdb := newMemRocksDB(roachpb.Attributes{}, testCacheSize, stopper)
-	err := rocksdb.Open()
-	if err != nil {
-		t.Fatalf("could not create new in-memory rocksdb db instance: %v", err)
-	}
+	rocksdb := NewInMem(roachpb.Attributes{}, testCacheSize, stopper)
 	rocksdb.SetGCTimeouts(1)
 
 	// Write two transaction values such that exactly one should be GC'd based
@@ -144,8 +140,9 @@ func setupMVCCData(numVersions, numKeys, valueBytes int, b *testing.B) (*RocksDB
 	}
 
 	const cacheSize = 0
+	const memtableBudget = 2 << 30 // 8 GB (only flush when explictly asked)
 	stopper := stop.NewStopper()
-	rocksdb := NewRocksDB(roachpb.Attributes{}, loc, cacheSize, stopper)
+	rocksdb := NewRocksDB(roachpb.Attributes{}, loc, cacheSize, memtableBudget, stopper)
 	if err := rocksdb.Open(); err != nil {
 		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}
@@ -571,7 +568,8 @@ func runMVCCDeleteRange(valueBytes int, b *testing.B) {
 			b.Fatal(err)
 		}
 		stopper := stop.NewStopper()
-		rocksdb := NewRocksDB(roachpb.Attributes{}, locDirty, rocksdb.cacheSize, stopper)
+		rocksdb := NewRocksDB(roachpb.Attributes{}, locDirty, rocksdb.cacheSize,
+			rocksdb.memtableBudget, stopper)
 		if err := rocksdb.Open(); err != nil {
 			b.Fatal(err)
 		}

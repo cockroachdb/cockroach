@@ -39,7 +39,8 @@ import (
 const (
 	defaultAddr               = ":26257"
 	defaultMaxOffset          = 250 * time.Millisecond
-	defaultCacheSize          = 1 << 29 // 512MB
+	defaultCacheSize          = 512 << 20 // 512 MB
+	defaultMemtableBudget     = 512 << 20 // 512 MB
 	defaultScanInterval       = 10 * time.Minute
 	defaultScanMaxIdleTime    = 5 * time.Second
 	defaultMetricsFrequency   = 10 * time.Second
@@ -94,6 +95,10 @@ type Context struct {
 	// The value is split evenly between the stores if there are more than one.
 	CacheSize int64
 
+	// MemtableBudget is the amount of memory in bytes to use for the memory
+	// table. The value is split evenly between the stores if there are more than one.
+	MemtableBudget int64
+
 	// BalanceMode determines how this node makes balancing decisions.
 	BalanceMode storage.BalanceMode
 
@@ -140,6 +145,7 @@ func (ctx *Context) InitDefaults() {
 	ctx.Addr = defaultAddr
 	ctx.MaxOffset = defaultMaxOffset
 	ctx.CacheSize = defaultCacheSize
+	ctx.MemtableBudget = defaultMemtableBudget
 	ctx.ScanInterval = defaultScanInterval
 	ctx.ScanMaxIdleTime = defaultScanMaxIdleTime
 	ctx.MetricsFrequency = defaultMetricsFrequency
@@ -212,7 +218,10 @@ func (ctx *Context) initEngine(attrsStr, path string, stopper *stop.Stopper) (en
 		}
 		return engine.NewInMem(attrs, int64(size), stopper), nil
 	}
-	return engine.NewRocksDB(attrs, path, ctx.CacheSize, stopper), nil
+	// TODO(peter): The comments and docs say that CacheSize and MemtableBudget
+	// are split evenly if there are multiple stores, but we aren't doing that
+	// currently.
+	return engine.NewRocksDB(attrs, path, ctx.CacheSize, ctx.MemtableBudget, stopper), nil
 }
 
 // SelfGossipAddr is a special flag that configures a node to gossip

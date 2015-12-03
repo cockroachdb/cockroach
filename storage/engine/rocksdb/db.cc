@@ -1133,9 +1133,16 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   table_options.filter_policy.reset(rocksdb::NewBloomFilterPolicy(10));
   table_options.format_version = 2;
 
-  rocksdb::Options options;
+  rocksdb::ColumnFamilyOptions cf_options;
+  cf_options.OptimizeLevelStyleCompaction(db_opts.memtable_budget);
+  // OptimizeLevelStyleCompaction sets no-compression for L0 and
+  // L1. Current benchmarks and tests show no benefit to doing this.
+  for (int i = 0; i < cf_options.compression_per_level.size(); i++) {
+    cf_options.compression_per_level[i] = rocksdb::kSnappyCompression;
+  }
+
+  rocksdb::Options options(rocksdb::DBOptions(), cf_options);
   options.allow_os_buffer = db_opts.allow_os_buffer;
-  options.compression = rocksdb::kSnappyCompression;
   options.compaction_filter_factory.reset(new DBCompactionFilterFactory());
   options.create_if_missing = true;
   options.info_log.reset(new DBLogger(db_opts.logging_enabled));
@@ -1143,9 +1150,6 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.prefix_extractor.reset(new DBPrefixExtractor);
   options.statistics = rocksdb::CreateDBStatistics();
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
-  options.write_buffer_size = 64 << 20;           // 64 MB
-  options.target_file_size_base = 64 << 20;       // 64 MB
-  options.max_bytes_for_level_base = 512 << 20;   // 512 MB
   if (row_cache_size > 0) {
     options.row_cache = rocksdb::NewLRUCache(
         row_cache_size, num_cache_shard_bits);

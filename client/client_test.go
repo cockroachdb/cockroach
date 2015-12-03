@@ -674,7 +674,8 @@ const valueSize = 1 << 10
 
 func setupClientBenchData(useSSL bool, numVersions, numKeys int, b *testing.B) (
 	*server.TestServer, *client.DB) {
-	const cacheSize = 8 << 30 // 8 GB
+	const cacheSize = 8 << 30        // 8 GB
+	const memtableBudget = 512 << 20 // 512 MB
 	loc := fmt.Sprintf("client_bench_%d_%d", numVersions, numKeys)
 
 	exists := true
@@ -689,7 +690,10 @@ func setupClientBenchData(useSSL bool, numVersions, numKeys int, b *testing.B) (
 		s.Ctx.Insecure = true
 	}
 	stopper := stop.NewStopper()
-	s.Ctx.Engines = []engine.Engine{engine.NewRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize, stopper)}
+	s.Ctx.Engines = []engine.Engine{
+		engine.NewRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, loc,
+			cacheSize, memtableBudget, stopper),
+	}
 	if err := s.StartWithStopper(stopper); err != nil {
 		b.Fatal(err)
 	}
