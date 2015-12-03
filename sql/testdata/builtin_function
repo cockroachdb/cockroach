@@ -780,3 +780,30 @@ bar
 
 query error GREATEST: incompatible argument types int, float
 SELECT GREATEST(1, 1.2)
+
+# Test float and int comparison.
+
+query BBBB
+select 1 = 1.0, 1.0 = 1, 1 = 2.0, 2.0 = 1
+----
+true true false false
+
+query BBBB
+select 1 < 2.0, 1.0 < 2, 2.0 < 1, 2 < 1.0
+----
+true true false false
+
+query BBBB
+select 1 <= 1.0, 1.0 <= 1, 2.0 <= 1, 2 <= 1.0
+----
+true true false false
+
+query BBBB
+select 2 > 1.0, 2.0 > 1, 1 > 2.0, 1.0 > 2
+----
+true true false false
+
+query BBBB
+select 1 >= 1.0, 1.0 >= 1, 1.0 >= 2, 1 >= 2.0
+----
+true true false false
