@@ -70,17 +70,16 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
-	"math/rand"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
 const (
@@ -272,7 +271,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 func main() {
 	// Seed the random number generator for non-determinism across
 	// multiple runs.
-	rand.Seed(time.Now().UnixNano())
+	randutil.SeedForTests()
 
 	if f := flag.Lookup("alsologtostderr"); f != nil {
 		fmt.Println("Starting simulation. Add -alsologtostderr to see progress.")

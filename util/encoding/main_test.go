@@ -17,4 +17,14 @@
 
 package encoding_test
 
-import _ "github.com/cockroachdb/cockroach/util/log" // for flags
+import (
+	"testing"
+
+	_ "github.com/cockroachdb/cockroach/util/log" // for flags
+	"github.com/cockroachdb/cockroach/util/randutil"
+)
+
+func TestMain(m *testing.M) {
+	randutil.SeedForTests()
+	m.Run()
+}

@@ -25,7 +25,6 @@ import (
 	"math/rand"
 	"sort"
 	"testing"
-	"time"
 )
 
 func TestVarint(t *testing.T) {
@@ -80,8 +79,6 @@ func (p byteSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 // TestVarintOrdering ensures that lexicographical and numeric ordering
 // for varints are the same
 func TestVarintOrdering(t *testing.T) {
-	seed := time.Now().Unix()
-	rand.Seed(seed)
 	ints := make(uint64Slice, 50)
 	varints := make(byteSlice, len(ints))
 	for i := range ints {
@@ -97,7 +94,7 @@ func TestVarintOrdering(t *testing.T) {
 	for i := range ints {
 		decoded, _ := getUvarint(varints[i])
 		if decoded != ints[i] {
-			t.Errorf("mismatched ordering at index %d: expected: %d, got %d [seed: %d]", i, ints[i], decoded, seed)
+			t.Errorf("mismatched ordering at index %d: expected: %d, got %d", i, ints[i], decoded)
 		}
 	}
 }

@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
 type checkGossipFunc func(map[string]interface{}) error
@@ -111,7 +110,6 @@ func TestGossipPeerings(t *testing.T) {
 	checkGossip(t, c, 20*time.Second, hasPeers(num))
 
 	// Restart another node (if there is one).
-	rand.Seed(randutil.NewPseudoSeed())
 	var pickedNode int
 	if num > 1 {
 		pickedNode = rand.Intn(num-1) + 1
