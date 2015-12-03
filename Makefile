@@ -23,12 +23,6 @@ GO ?= go
 GOFLAGS :=
 # Set to 1 to use static linking for all builds (including tests).
 STATIC :=
-# The cockroach image to be used for starting Docker containers
-# during acceptance tests. Usually cockroachdb/cockroach{,-dev}
-# depending on the context.
-COCKROACH_IMAGE :=
-
-RUN := run
 
 # Variables to be overridden on the command line, e.g.
 #   make test PKG=./storage TESTFLAGS=--vmodule=multiraft=1
@@ -43,20 +37,17 @@ DUPLFLAGS    := -t 100
 
 ifeq ($(STATIC),1)
 # The netgo build tag instructs the net package to try to build a
-# Go-only resolver.
+# Go-only resolver. As of Go 1.5, netgo is the default...but apparently
+# not when using cgo (???).
 TAGS += netgo
-# The installsuffix makes sure we actually get the netgo build, see
-# https://github.com/golang/go/issues/9369#issuecomment-69864440
-GOFLAGS += -installsuffix netgo
-LDFLAGS += -extldflags "-static"
+LDFLAGS += -extldflags '-static'
 endif
 
 .PHONY: all
 all: build test check
 
-# On a release build, rebuild everything (except stdlib)
-# to make sure that the 'release' build tag is taken
-# into account.
+# On a release build, rebuild everything to make sure that the
+# 'release' build tag is taken into account.
 .PHONY: release
 release: TAGS += release
 release: GOFLAGS += -a
