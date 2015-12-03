@@ -264,9 +264,9 @@ func (e *TransactionAbortedError) CanRestartTransaction() TransactionRestart {
 	return TransactionRestart_BACKOFF
 }
 
-// Transaction implements TransactionRestartError. It returns nil.
-func (*TransactionAbortedError) Transaction() *Transaction {
-	return nil
+// Transaction implements TransactionRestartError.
+func (e *TransactionAbortedError) Transaction() *Transaction {
+	return &e.Txn
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.
@@ -296,8 +296,8 @@ func (e *TransactionPushError) CanRestartTransaction() TransactionRestart {
 }
 
 // Transaction implements the TransactionRestartError interface.
-func (*TransactionPushError) Transaction() *Transaction {
-	return nil // pusher's txn doesn't change on a Push.
+func (e *TransactionPushError) Transaction() *Transaction {
+	return e.Txn
 }
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
