@@ -22,11 +22,14 @@ import (
 	"database/sql"
 	"fmt"
 	"net"
+	"net/url"
+	"os"
 	"testing"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 )
 
@@ -38,9 +41,29 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *sql.DB)) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	datasource := fmt.Sprintf("sslmode=disable user=root host=%s port=%s", host, port)
 
-	db, err := sql.Open("postgres", datasource)
+	user := security.RootUser
+	certPath := security.ClientCertPath(security.EmbeddedCertsDir, user)
+	keyPath := security.ClientKeyPath(security.EmbeddedCertsDir, user)
+
+	// Copy these assets to disk from embedded strings, so this test can
+	// run from a standalone binary.
+	tempCertPath, tempCertCleanup := tempRestrictedCopy(b, os.TempDir(), certPath, "TestPGWire_cert")
+	defer tempCertCleanup()
+	tempKeyPath, tempKeyCleanup := tempRestrictedCopy(b, os.TempDir(), keyPath, "TestPGWire_key")
+	defer tempKeyCleanup()
+
+	pgUrl := url.URL{
+		Scheme: "postgres",
+		Host:   net.JoinHostPort(host, port),
+		User:   url.User(user),
+		RawQuery: fmt.Sprintf("sslmode=require&sslcert=%s&sslkey=%s",
+			url.QueryEscape(tempCertPath),
+			url.QueryEscape(tempKeyPath),
+		),
+	}
+
+	db, err := sql.Open("postgres", pgUrl.String())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -54,7 +77,7 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *sql.DB)) {
 }
 
 func benchmarkPostgres(b *testing.B, f func(b *testing.B, db *sql.DB)) {
-	db, err := sql.Open("postgres", "sslmode=disable host=localhost port=5432")
+	db, err := sql.Open("postgres", "sslmode=require host=localhost port=5432")
 	if err != nil {
 		b.Fatal(err)
 	}

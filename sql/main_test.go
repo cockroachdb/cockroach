@@ -123,32 +123,32 @@ func cleanup(s *server.TestServer, db *sql.DB) {
 	cleanupTestServer(s)
 }
 
-func tempRestrictedCopy(t *testing.T, tempdir, path, prefix string) (string, func()) {
+func tempRestrictedCopy(tb testing.TB, tempdir, path, prefix string) (string, func()) {
 	contents, err := securitytest.Asset(path)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 
 	tempFile, err := ioutil.TempFile(tempdir, prefix)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 	if err := tempFile.Close(); err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 	tempPath := tempFile.Name()
 	if err := os.Remove(tempPath); err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 	// `github.com/lib/pq` requires that private key file permissions are
 	// "u=rw (0600) or less".
 	if err := ioutil.WriteFile(tempPath, contents, 0600); err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 	return tempPath, func() {
 		if err := os.Remove(tempPath); err != nil {
 			// Not Fatal() because we might already be panicking.
-			t.Error(err)
+			tb.Error(err)
 		}
 	}
 }
