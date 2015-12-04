@@ -31,6 +31,7 @@ func (p *planner) applyMutations(tableDesc *TableDescriptor) error {
 		return nil
 	}
 	newTableDesc := proto.Clone(tableDesc).(*TableDescriptor)
+	p.applyUpVersion(newTableDesc)
 	// Make all mutations active.
 	for _, mutation := range newTableDesc.Mutations {
 		newTableDesc.makeMutationComplete(mutation)
@@ -44,7 +45,6 @@ func (p *planner) applyMutations(tableDesc *TableDescriptor) error {
 	if err := p.backfillBatch(&b, tableDesc, newTableDesc); err != nil {
 		return err
 	}
-	newTableDesc.Version++
 
 	b.Put(MakeDescMetadataKey(newTableDesc.GetID()), wrapDescriptor(newTableDesc))
 
@@ -53,4 +53,12 @@ func (p *planner) applyMutations(tableDesc *TableDescriptor) error {
 	}
 	p.notifyCompletedSchemaChange(newTableDesc.ID)
 	return nil
+}
+
+// applyUpVersion only increments the version of the table descriptor.
+func (p *planner) applyUpVersion(tableDesc *TableDescriptor) {
+	if tableDesc.UpVersion {
+		tableDesc.UpVersion = false
+		tableDesc.Version++
+	}
 }
