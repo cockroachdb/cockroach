@@ -21,12 +21,13 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"net"
+	"os"
 	"testing"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 )
 
@@ -34,13 +35,10 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *sql.DB)) {
 	s := server.StartTestServer(b)
 	defer s.Stop()
 
-	host, port, err := net.SplitHostPort(s.PGAddr())
-	if err != nil {
-		b.Fatal(err)
-	}
-	datasource := fmt.Sprintf("sslmode=disable user=root host=%s port=%s", host, port)
+	pgUrl, cleanupFn := pgURL(b, s, security.RootUser, os.TempDir(), "benchmarkCockroach")
+	defer cleanupFn()
 
-	db, err := sql.Open("postgres", datasource)
+	db, err := sql.Open("postgres", pgUrl.String())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -54,7 +52,7 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *sql.DB)) {
 }
 
 func benchmarkPostgres(b *testing.B, f func(b *testing.B, db *sql.DB)) {
-	db, err := sql.Open("postgres", "sslmode=disable host=localhost port=5432")
+	db, err := sql.Open("postgres", "sslmode=require host=localhost port=5432")
 	if err != nil {
 		b.Fatal(err)
 	}
