@@ -34,8 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func trivialQuery(datasource string) error {
-	db, err := sql.Open("postgres", datasource)
+func trivialQuery(pgUrl url.URL) error {
+	db, err := sql.Open("postgres", pgUrl.String())
 	if err != nil {
 		return err
 	}
@@ -74,7 +74,7 @@ func TestPGWire(t *testing.T) {
 			Scheme: "postgres",
 			Host:   net.JoinHostPort(host, port),
 		}
-		if err := trivialQuery(basePgUrl.String()); err != nil {
+		if err := trivialQuery(basePgUrl); err != nil {
 			if insecure {
 				if err != pq.ErrSSLNotSupported {
 					t.Fatal(err)
@@ -89,7 +89,7 @@ func TestPGWire(t *testing.T) {
 		{
 			disablePgUrl := basePgUrl
 			disablePgUrl.RawQuery = "sslmode=disable"
-			err := trivialQuery(disablePgUrl.String())
+			err := trivialQuery(disablePgUrl)
 			if insecure {
 				if err != nil {
 					t.Fatal(err)
@@ -104,7 +104,7 @@ func TestPGWire(t *testing.T) {
 		{
 			requirePgUrlNoCert := basePgUrl
 			requirePgUrlNoCert.RawQuery = "sslmode=require"
-			err := trivialQuery(requirePgUrlNoCert.String())
+			err := trivialQuery(requirePgUrlNoCert)
 			if insecure {
 				if err != pq.ErrSSLNotSupported {
 					t.Fatal(err)
@@ -124,7 +124,7 @@ func TestPGWire(t *testing.T) {
 					url.QueryEscape(tempCertPath),
 					url.QueryEscape(tempKeyPath),
 				)
-				err := trivialQuery(requirePgUrlWithCert.String())
+				err := trivialQuery(requirePgUrlWithCert)
 				if insecure {
 					if err != pq.ErrSSLNotSupported {
 						t.Fatal(err)
