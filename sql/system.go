@@ -19,7 +19,6 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -103,91 +102,58 @@ var (
 		keys.ZonesTableID:      privilege.ReadWriteData,
 	}
 
-	// NumUsedSystemIDs is only used in tests that need to know the
-	// number of system objects created at initialization.
-	// It gets automatically set to "number of created system tables"
-	// + 1 (for system database).
-	NumUsedSystemIDs = 1
+	// NumSystemDescriptors should be set to the number of system descriptors
+	// above (SystemDB and each system table). This is used by tests which need
+	// to know the number of system descriptors intended for installation; it starts at
+	// 1 for the SystemDB descriptor created above, and is incremented by every
+	// call to createSystemTable().
+	NumSystemDescriptors = 1
 )
 
-func createSystemTable(id ID, cmd string) TableDescriptor {
-	stmts, err := parser.ParseTraditional(cmd)
+func createSystemTable(id ID, schema string) TableDescriptor {
+	NumSystemDescriptors++
+
+	// System tables have the system database as a parent, with privileges from
+	// the SystemAllowedPrivileges table assigned to the root user.
+	return createTableDescriptor(id, keys.SystemDatabaseID, schema,
+		NewPrivilegeDescriptor(security.RootUser, SystemAllowedPrivileges[id]))
+}
+
+func createTableDescriptor(id, parentID ID, schema string, privileges *PrivilegeDescriptor) TableDescriptor {
+	stmts, err := parser.ParseTraditional(schema)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	desc, err := makeTableDesc(stmts[0].(*parser.CreateTable), keys.SystemDatabaseID)
+	desc, err := makeTableDesc(stmts[0].(*parser.CreateTable), parentID)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Assign max privileges to root user.
-	desc.Privileges = NewPrivilegeDescriptor(security.RootUser,
-		SystemAllowedPrivileges[id])
+	desc.Privileges = privileges
 
 	desc.ID = id
 	if err := desc.AllocateIDs(); err != nil {
 		log.Fatal(err)
 	}
 
-	NumUsedSystemIDs++
 	return desc
 }
 
-// GetInitialSystemValues returns a list of key/value pairs.
-// They are written at cluster bootstrap time (see storage/node.go:BootstrapCLuster).
-func GetInitialSystemValues() []roachpb.KeyValue {
-	systemData := []struct {
-		parentID ID
-		desc     descriptorProto
-	}{
-		{keys.RootNamespaceID, &SystemDB},
-		{SystemDB.ID, &NamespaceTable},
-		{SystemDB.ID, &DescriptorTable},
-		{SystemDB.ID, &LeaseTable},
-		{SystemDB.ID, &UsersTable},
-		{SystemDB.ID, &ZonesTable},
-	}
+// addSystemDatabaseToSchema populates the supplied MetadataSchema with the
+// System database and its tables. The descriptors for these objects exist
+// statically in this file, but a MetadataSchema can be used to persist these
+// descriptors to the cockroach store.
+func addSystemDatabaseToSchema(target *MetadataSchema) {
+	// Add system database.
+	target.AddSystemDescriptor(keys.RootNamespaceID, &SystemDB)
 
-	// Initial kv pairs:
-	// - ID generator
-	// - 2 per table/database
-	numEntries := 1 + len(systemData)*2
-	ret := make([]roachpb.KeyValue, numEntries, numEntries)
-	i := 0
-
-	// Descriptor ID generator.
-	value := roachpb.Value{}
-	value.SetInt(int64(keys.MaxReservedDescID + 1))
-	ret[i] = roachpb.KeyValue{
-		Key:   keys.DescIDGenerator,
-		Value: value,
-	}
-	i++
-
-	// System database and tables.
-	for _, d := range systemData {
-		value = roachpb.Value{}
-		value.SetInt(int64(d.desc.GetID()))
-		ret[i] = roachpb.KeyValue{
-			Key:   MakeNameMetadataKey(d.parentID, d.desc.GetName()),
-			Value: value,
-		}
-		i++
-
-		value = roachpb.Value{}
-		desc := wrapDescriptor(d.desc)
-		if err := value.SetProto(desc); err != nil {
-			log.Fatalf("could not marshal %v", desc)
-		}
-		ret[i] = roachpb.KeyValue{
-			Key:   MakeDescMetadataKey(d.desc.GetID()),
-			Value: value,
-		}
-		i++
-	}
-
-	return ret
+	// Add system tables.
+	target.AddSystemDescriptor(keys.SystemDatabaseID, &NamespaceTable)
+	target.AddSystemDescriptor(keys.SystemDatabaseID, &DescriptorTable)
+	target.AddSystemDescriptor(keys.SystemDatabaseID, &LeaseTable)
+	target.AddSystemDescriptor(keys.SystemDatabaseID, &UsersTable)
+	target.AddSystemDescriptor(keys.SystemDatabaseID, &ZonesTable)
 }
 
 // IsSystemID returns true if this ID is reserved for system objects.

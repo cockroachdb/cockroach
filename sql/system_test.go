@@ -20,16 +20,54 @@ package sql_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestInitialKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	kv := sql.GetInitialSystemValues()
-	// IDGenerator + 2 for each table/database.
-	if actual, expected := len(kv), 1+2*sql.NumUsedSystemIDs; actual != expected {
+	ms := sql.MakeMetadataSchema()
+	// IDGenerator + 2 for each system object in the default schema.
+	kv := ms.GetInitialValues()
+	if actual, expected := len(kv), 1+2*sql.NumSystemDescriptors; actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
+	}
+
+	// Add a non-system database and table.
+	db := sql.MakeMetadataDatabase("testdb", sql.NewPrivilegeDescriptor(security.RootUser, privilege.List{privilege.ALL}))
+	db.AddTable("CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)", sql.NewPrivilegeDescriptor(security.RootUser, privilege.List{privilege.ALL}))
+	ms.AddDatabase(db)
+	kv = ms.GetInitialValues()
+	// IDGenerator + 2 for each system object + 2 for testdb + 2 for test table
+	if actual, expected := len(kv), 1+2*sql.NumSystemDescriptors+4; actual != expected {
+		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
+	}
+
+	// Verify that IDGenerator value is correct.
+	found := false
+	var idgenkv roachpb.KeyValue
+	for _, v := range kv {
+		if v.Key.Equal(keys.DescIDGenerator) {
+			idgenkv = v
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Fatal("Could not find descriptor ID generator in initial key set")
+	}
+	// Expect 2 non-reserved IDs to have been allocated.
+	i, err := idgenkv.Value.GetInt()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, e := i, int64(keys.MaxReservedDescID+3); a != e {
+		t.Fatalf("Expected next descriptor ID to be %d, was %d", e, a)
 	}
 }

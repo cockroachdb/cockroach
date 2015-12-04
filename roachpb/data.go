@@ -765,3 +765,23 @@ func (rs RSpan) Intersect(desc *RangeDescriptor) (RSpan, error) {
 	}
 	return RSpan{key, endKey}, nil
 }
+
+// KeyValueByKey implements sorting of a slice of KeyValues by key.
+type KeyValueByKey []KeyValue
+
+// Len implements sort.Interface.
+func (kv KeyValueByKey) Len() int {
+	return len(kv)
+}
+
+// Less implements sort.Interface.
+func (kv KeyValueByKey) Less(i, j int) bool {
+	return bytes.Compare(kv[i].Key, kv[j].Key) < 0
+}
+
+// Swap implements sort.Interface.
+func (kv KeyValueByKey) Swap(i, j int) {
+	kv[i], kv[j] = kv[j], kv[i]
+}
+
+var _ sort.Interface = KeyValueByKey{}
