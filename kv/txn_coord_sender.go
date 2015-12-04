@@ -162,7 +162,7 @@ type txnCoordStats struct {
 }
 
 // A TxnCoordSender is an implementation of client.Sender which
-// wraps a lower-level Sender (either a LocalSender or a DistSender)
+// wraps a lower-level Sender (either a storage.Stores or a DistSender)
 // to which it sends commands. It acts as a man-in-the-middle,
 // coordinating transaction state for clients.  After a transaction is
 // started, the TxnCoordSender starts asynchronously sending heartbeat
