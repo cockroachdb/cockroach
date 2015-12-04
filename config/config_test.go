@@ -176,7 +176,7 @@ func TestGetLargestID(t *testing.T) {
 		}, 12, ""},
 
 		// Real SQL layout.
-		{sql.GetInitialSystemValues(), keys.ZonesTableID, ""},
+		{sql.MakeMetadataSchema().GetInitialValues(), keys.ZonesTableID, ""},
 	}
 
 	cfg := config.SystemConfig{}
@@ -204,9 +204,9 @@ func TestComputeSplits(t *testing.T) {
 	const start = keys.MaxReservedDescID + 1
 
 	// Real SQL system tables only.
-	baseSql := sql.GetInitialSystemValues()
+	baseSql := sql.MakeMetadataSchema().GetInitialValues()
 	// Real SQL system tables plus some user stuff.
-	userSql := append(sql.GetInitialSystemValues(),
+	userSql := append(sql.MakeMetadataSchema().GetInitialValues(),
 		descriptor(start), descriptor(start+1), descriptor(start+5))
 
 	allSplits := []uint32{start, start + 1, start + 2, start + 3, start + 4, start + 5}

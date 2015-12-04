@@ -546,7 +546,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	initialSystemValues := sql.GetInitialSystemValues()
+	initialSystemValues := sql.MakeMetadataSchema().GetInitialValues()
 	numInitialValues := len(initialSystemValues)
 	// Write the initial sql values to the system DB as well
 	// as the equivalent of table descriptors for X user tables.
