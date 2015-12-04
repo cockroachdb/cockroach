@@ -85,6 +85,7 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 	}
 
 	tableDesc.addIndexMutation(indexDesc, DescriptorMutation_ADD)
+	tableDesc.UpVersion = true
 
 	if err := tableDesc.AllocateIDs(); err != nil {
 		return nil, err
