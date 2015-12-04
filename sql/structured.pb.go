@@ -350,6 +350,32 @@ type TableDescriptor struct {
 	// ID of the parent database.
 	ParentID ID `protobuf:"varint,4,opt,name=parent_id,casttype=ID" json:"parent_id"`
 	// Monotonically increasing version of the table descriptor.
+	//
+	// Invariants:
+	// 1. not more than two subsequent versions of the table
+	// descriptor can be leased. This is to make the system
+	// easy to reason about, by permiting mutation state
+	// changes (reflected in the next version), only when the existing
+	// state (reflected in the current version) is present on all
+	// outstanding unexpired leases.
+	// 2. A schema change command (ALTER, RENAME, etc) never directly
+	// increments the version. This allows the command to execute without
+	// waiting for the entire cluster to converge to a single version.
+	// The commands can be viewed as scheduling a schema change, and
+	// multiple schema changes in the same transaction simply schedule
+	// multiple schema changes.
+	//
+	// The actual schema change execution that follows a schema change
+	// command ups the version of the table descriptor while maintaining
+	// the 2 version invariant. Multiple schema changes can be grouped
+	// together in a particular version.
+	//
+	// TODO(vivek): Implement the above invariants by ensuring that
+	// the Version is only incremented in LeaseManager.Publish().
+	// Move applyMutation() and upVersion() out of the transaction for
+	// schema commands and into LeaseManager.Publish(), and remove
+	// Version++ from them.
+	//
 	Version DescriptorVersion `protobuf:"varint,5,opt,name=version,casttype=DescriptorVersion" json:"version"`
 	// Last modification time of the table descriptor.
 	ModificationTime cockroach_roachpb1.Timestamp `protobuf:"bytes,6,opt,name=modification_time" json:"modification_time"`
@@ -364,6 +390,19 @@ type TableDescriptor struct {
 	Privileges  *PrivilegeDescriptor `protobuf:"bytes,12,opt,name=privileges" json:"privileges,omitempty"`
 	// Columns or indexes being added or deleted in a FIFO order.
 	Mutations []DescriptorMutation `protobuf:"bytes,13,rep,name=mutations" json:"mutations"`
+	// Schema change commands schedule schema changes, never increment
+	// the version, and depend on the schema change execution to increment
+	// the version. Some schema change operations like RENAME for simplicity can
+	// run the the schema change execution along with the command. But since the
+	// command cannot increment the version, the version is updated separately
+	// in a separate future transaction. This boolean acts as a notification
+	// to the schema execution engine to simply increment the version.
+	//
+	// If these kinds of schema changes are safe to do without incrementing
+	// the version, why do it in the first place? We increment the version
+	// to ensure that all the nodes renew their leases with the new version
+	// and get to see the schema change quickly.
+	UpVersion bool `protobuf:"varint,14,opt,name=up_version" json:"up_version"`
 }
 
 func (m *TableDescriptor) Reset()         { *m = TableDescriptor{} }
@@ -459,6 +498,13 @@ func (m *TableDescriptor) GetMutations() []DescriptorMutation {
 		return m.Mutations
 	}
 	return nil
+}
+
+func (m *TableDescriptor) GetUpVersion() bool {
+	if m != nil {
+		return m.UpVersion
+	}
+	return false
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
@@ -920,6 +966,14 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 			i += n
 		}
 	}
+	data[i] = 0x70
+	i++
+	if m.UpVersion {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
 	return i, nil
 }
 
@@ -1162,6 +1216,7 @@ func (m *TableDescriptor) Size() (n int) {
 			n += 1 + l + sovStructured(uint64(l))
 		}
 	}
+	n += 2
 	return n
 }
 
@@ -2240,6 +2295,26 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 14:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UpVersion", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.UpVersion = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipStructured(data[iNdEx:])

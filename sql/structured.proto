@@ -161,6 +161,32 @@ message TableDescriptor {
   optional uint32 parent_id = 4 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
   // Monotonically increasing version of the table descriptor.
+  //
+  // Invariants:
+  // 1. not more than two subsequent versions of the table
+  // descriptor can be leased. This is to make the system
+  // easy to reason about, by permiting mutation state
+  // changes (reflected in the next version), only when the existing
+  // state (reflected in the current version) is present on all
+  // outstanding unexpired leases.
+  // 2. A schema change command (ALTER, RENAME, etc) never directly
+  // increments the version. This allows the command to execute without
+  // waiting for the entire cluster to converge to a single version.
+  // The commands can be viewed as scheduling a schema change, and
+  // multiple schema changes in the same transaction simply schedule
+  // multiple schema changes.
+  //
+  // The actual schema change execution that follows a schema change
+  // command ups the version of the table descriptor while maintaining
+  // the 2 version invariant. Multiple schema changes can be grouped
+  // together in a particular version.
+  //
+  // TODO(vivek): Implement the above invariants by ensuring that
+  // the Version is only incremented in LeaseManager.Publish().
+  // Move applyMutation() and upVersion() out of the transaction for
+  // schema commands and into LeaseManager.Publish(), and remove
+  // Version++ from them. 
+  //
   optional uint32 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
   // Last modification time of the table descriptor.
   optional roachpb.Timestamp modification_time = 6 [(gogoproto.nullable) = false];
@@ -177,6 +203,19 @@ message TableDescriptor {
   optional PrivilegeDescriptor privileges = 12;
   // Columns or indexes being added or deleted in a FIFO order.
   repeated DescriptorMutation mutations = 13 [(gogoproto.nullable) = false];
+  // Schema change commands schedule schema changes, never increment
+  // the version, and depend on the schema change execution to increment
+  // the version. Some schema change operations like RENAME for simplicity can
+  // run the the schema change execution along with the command. But since the
+  // command cannot increment the version, the version is updated separately
+  // in a separate future transaction. This boolean acts as a notification
+  // to the schema execution engine to simply increment the version.
+  //
+  // If these kinds of schema changes are safe to do without incrementing
+  // the version, why do it in the first place? We increment the version
+  // to ensure that all the nodes renew their leases with the new version
+  // and get to see the schema change quickly.
+  optional bool up_version = 14 [(gogoproto.nullable) = false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

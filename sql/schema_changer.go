@@ -54,3 +54,9 @@ func (p *planner) applyMutations(tableDesc *TableDescriptor) error {
 	p.notifyCompletedSchemaChange(newTableDesc.ID)
 	return nil
 }
+
+// applyUpVersion only increments the version of the table descriptor.
+func (p *planner) applyUpVersion(tableDesc *TableDescriptor) {
+	tableDesc.UpVersion = false
+	tableDesc.Version++
+}
