@@ -147,6 +147,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 				return &valuesNode{}, nil
 			}
 		}
+		tableDesc.UpVersion = true
 		if err := tableDesc.Validate(); err != nil {
 			return nil, err
 		}
