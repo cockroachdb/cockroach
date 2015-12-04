@@ -204,27 +204,25 @@ func (t *logicTest) setUser(tempDir, user string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	certDir := filepath.Join(filepath.Dir(dir), "resource", security.EmbeddedCertsDir)
 
-	certPath := security.ClientCertPath(certDir, user)
-	keyPath := security.ClientKeyPath(certDir, user)
+	caPath := filepath.Join(security.EmbeddedCertsDir, "ca.crt")
+	certPath := security.ClientCertPath(security.EmbeddedCertsDir, user)
+	keyPath := security.ClientKeyPath(security.EmbeddedCertsDir, user)
 
-	// `github.com/lib/pq` requires that private key file permissions are
-	// "u=rw (0600) or less".
-	tmpKeyPath := tempRestrictedCopy(t.T, keyPath, tempDir)
+	// Copy these assets to disk from embedded strings, so this test can
+	// run from a standalone binary.
+	tempCAPath, _ := tempRestrictedCopy(t.T, tempDir, caPath, "TestLogic_ca")
+	tempCertPath, _ := tempRestrictedCopy(t.T, tempDir, certPath, "TestLogic_cert")
+	tempKeyPath, _ := tempRestrictedCopy(t.T, tempDir, keyPath, "TestLogic_key")
 
 	pgUrl := url.URL{
 		Scheme: "postgres",
 		User:   url.User(user),
 		Host:   net.JoinHostPort(host, port),
 		RawQuery: fmt.Sprintf("sslmode=verify-full&sslrootcert=%s&sslcert=%s&sslkey=%s",
-			url.QueryEscape(filepath.Join(certDir, "ca.crt")),
-			url.QueryEscape(certPath),
-			url.QueryEscape(tmpKeyPath),
+			url.QueryEscape(tempCAPath),
+			url.QueryEscape(tempCertPath),
+			url.QueryEscape(tempKeyPath),
 		),
 	}
 
@@ -254,8 +252,7 @@ func (t *logicTest) run(path string) {
 	// MySQL or Postgres instance.
 	t.srv = setupTestServer(t.T)
 
-	// `github.com/lib/pq` requires that private key file permissions are
-	// "u=rw (0600) or less".
+	// Make a temporary directory to hold all our on-disk crypto assets.
 	tempDir, err := ioutil.TempDir(os.TempDir(), "TestLogic")
 	if err != nil {
 		t.Fatal(err)
