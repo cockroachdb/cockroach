@@ -350,20 +350,69 @@ type TableDescriptor struct {
 	// ID of the parent database.
 	ParentID ID `protobuf:"varint,4,opt,name=parent_id,casttype=ID" json:"parent_id"`
 	// Monotonically increasing version of the table descriptor.
+	//
+	// Invariants:
+	// 1. not more than two subsequent versions of the table
+	// descriptor can be leased. This is to make the system
+	// easy to reason about, by permiting mutation state
+	// changes (reflected in the next version), only when the existing
+	// state (reflected in the current version) is present on all
+	// outstanding unexpired leases.
+	// 2. A schema change command (ALTER, RENAME, etc) never directly
+	// increments the version. This allows the command to execute without
+	// waiting for the entire cluster to converge to a single version
+	// preventing weird deadlock situations. For instance, a transaction
+	// with a schema change command might use a descriptor lease that is
+	// at version: v - 1, and therefore deadlock when it tries to wait
+	// for version: v, in the process of incrementing it to v + 1.
+	// Therefore, a schema change command never increments the version,
+	// and instead, sets the up_version boolean to notify the schema
+	// changer execution engine that runs a future transaction to
+	// increment the version.
+	//
+	// The schema change commands must therefore make *safe* modifications
+	// to the table descriptor, such as scheduling long running schema
+	// changes through mutations for future execution, or making simple
+	// schema changes like RENAME that only modify the table descriptor in a
+	// single transaction.
+	//
+	// Multiple schema changes in the same transaction set up_version.
+	// The actual schema change execution that follows a schema change
+	// command sees the up_version boolean set, and increments the
+	// table version after ensuring that there are no unexpired leases
+	// for version - 1. The schema change execution must increment
+	// the version before executing future state changes, to ensure
+	// that the scheduled mutations made by the original commands are
+	// visible on all leases. Multiple schema change mutations can be
+	// grouped together on a particular version increment.
+	//
+	// If schema change commands are safe to run without incrementing
+	// the version, why do it later on? We increment the version
+	// to ensure that all the nodes renew their leases with the new version
+	// and get to see what the schema change command has done quickly.
+	//
+	// TODO(vivek): Implement the above invariants by ensuring that
+	// the Version is only incremented in LeaseManager.Publish().
+	// Move applyMutation() and applyUpVersion() out of the transaction for
+	// schema commands and into LeaseManager.Publish(), and remove
+	// Version++ from applyUpVersion().
+	//
 	Version DescriptorVersion `protobuf:"varint,5,opt,name=version,casttype=DescriptorVersion" json:"version"`
+	// See comment above.
+	UpVersion bool `protobuf:"varint,6,opt,name=up_version" json:"up_version"`
 	// Last modification time of the table descriptor.
-	ModificationTime cockroach_roachpb1.Timestamp `protobuf:"bytes,6,opt,name=modification_time" json:"modification_time"`
-	Columns          []ColumnDescriptor           `protobuf:"bytes,7,rep,name=columns" json:"columns"`
+	ModificationTime cockroach_roachpb1.Timestamp `protobuf:"bytes,7,opt,name=modification_time" json:"modification_time"`
+	Columns          []ColumnDescriptor           `protobuf:"bytes,8,rep,name=columns" json:"columns"`
 	// next_column_id is used to ensure that deleted column ids are not reused.
-	NextColumnID ColumnID        `protobuf:"varint,8,opt,name=next_column_id,casttype=ColumnID" json:"next_column_id"`
-	PrimaryIndex IndexDescriptor `protobuf:"bytes,9,opt,name=primary_index" json:"primary_index"`
+	NextColumnID ColumnID        `protobuf:"varint,9,opt,name=next_column_id,casttype=ColumnID" json:"next_column_id"`
+	PrimaryIndex IndexDescriptor `protobuf:"bytes,10,opt,name=primary_index" json:"primary_index"`
 	// indexes are all the secondary indexes.
-	Indexes []IndexDescriptor `protobuf:"bytes,10,rep,name=indexes" json:"indexes"`
+	Indexes []IndexDescriptor `protobuf:"bytes,11,rep,name=indexes" json:"indexes"`
 	// next_index_id is used to ensure that deleted index ids are not reused.
-	NextIndexID IndexID              `protobuf:"varint,11,opt,name=next_index_id,casttype=IndexID" json:"next_index_id"`
-	Privileges  *PrivilegeDescriptor `protobuf:"bytes,12,opt,name=privileges" json:"privileges,omitempty"`
+	NextIndexID IndexID              `protobuf:"varint,12,opt,name=next_index_id,casttype=IndexID" json:"next_index_id"`
+	Privileges  *PrivilegeDescriptor `protobuf:"bytes,13,opt,name=privileges" json:"privileges,omitempty"`
 	// Columns or indexes being added or deleted in a FIFO order.
-	Mutations []DescriptorMutation `protobuf:"bytes,13,rep,name=mutations" json:"mutations"`
+	Mutations []DescriptorMutation `protobuf:"bytes,14,rep,name=mutations" json:"mutations"`
 }
 
 func (m *TableDescriptor) Reset()         { *m = TableDescriptor{} }
@@ -403,6 +452,13 @@ func (m *TableDescriptor) GetVersion() DescriptorVersion {
 		return m.Version
 	}
 	return 0
+}
+
+func (m *TableDescriptor) GetUpVersion() bool {
+	if m != nil {
+		return m.UpVersion
+	}
+	return false
 }
 
 func (m *TableDescriptor) GetModificationTime() cockroach_roachpb1.Timestamp {
@@ -852,7 +908,15 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x28
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.Version))
-	data[i] = 0x32
+	data[i] = 0x30
+	i++
+	if m.UpVersion {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
+	data[i] = 0x3a
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.ModificationTime.Size()))
 	n5, err := m.ModificationTime.MarshalTo(data[i:])
@@ -862,7 +926,7 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	i += n5
 	if len(m.Columns) > 0 {
 		for _, msg := range m.Columns {
-			data[i] = 0x3a
+			data[i] = 0x42
 			i++
 			i = encodeVarintStructured(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -872,10 +936,10 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 			i += n
 		}
 	}
-	data[i] = 0x40
+	data[i] = 0x48
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.NextColumnID))
-	data[i] = 0x4a
+	data[i] = 0x52
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.PrimaryIndex.Size()))
 	n6, err := m.PrimaryIndex.MarshalTo(data[i:])
@@ -885,7 +949,7 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	i += n6
 	if len(m.Indexes) > 0 {
 		for _, msg := range m.Indexes {
-			data[i] = 0x52
+			data[i] = 0x5a
 			i++
 			i = encodeVarintStructured(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -895,11 +959,11 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 			i += n
 		}
 	}
-	data[i] = 0x58
+	data[i] = 0x60
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.NextIndexID))
 	if m.Privileges != nil {
-		data[i] = 0x62
+		data[i] = 0x6a
 		i++
 		i = encodeVarintStructured(data, i, uint64(m.Privileges.Size()))
 		n7, err := m.Privileges.MarshalTo(data[i:])
@@ -910,7 +974,7 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	}
 	if len(m.Mutations) > 0 {
 		for _, msg := range m.Mutations {
-			data[i] = 0x6a
+			data[i] = 0x72
 			i++
 			i = encodeVarintStructured(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -1134,6 +1198,7 @@ func (m *TableDescriptor) Size() (n int) {
 	n += 1 + sovStructured(uint64(m.ID))
 	n += 1 + sovStructured(uint64(m.ParentID))
 	n += 1 + sovStructured(uint64(m.Version))
+	n += 2
 	l = m.ModificationTime.Size()
 	n += 1 + l + sovStructured(uint64(l))
 	if len(m.Columns) > 0 {
@@ -2017,6 +2082,26 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UpVersion", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.UpVersion = bool(v != 0)
+		case 7:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ModificationTime", wireType)
 			}
@@ -2046,7 +2131,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 7:
+		case 8:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
 			}
@@ -2077,7 +2162,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 8:
+		case 9:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field NextColumnID", wireType)
 			}
@@ -2096,7 +2181,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 9:
+		case 10:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field PrimaryIndex", wireType)
 			}
@@ -2126,7 +2211,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 10:
+		case 11:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Indexes", wireType)
 			}
@@ -2157,7 +2242,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 11:
+		case 12:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field NextIndexID", wireType)
 			}
@@ -2176,7 +2261,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 12:
+		case 13:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Privileges", wireType)
 			}
@@ -2209,7 +2294,7 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 13:
+		case 14:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Mutations", wireType)
 			}

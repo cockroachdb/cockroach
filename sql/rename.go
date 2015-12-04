@@ -239,13 +239,13 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, fmt.Errorf("index name %q already exists", n.NewName)
 	}
 
-	tableDesc.Version++
-
 	if status == DescriptorActive {
 		tableDesc.Indexes[i].Name = newIdxName
 	} else {
 		tableDesc.Mutations[i].GetIndex().Name = newIdxName
 	}
+	tableDesc.UpVersion = true
+	p.applyUpVersion(tableDesc)
 
 	descKey := MakeDescMetadataKey(tableDesc.GetID())
 	if err := tableDesc.Validate(); err != nil {
@@ -254,6 +254,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 	if err := p.txn.Put(descKey, wrapDescriptor(tableDesc)); err != nil {
 		return nil, err
 	}
+
 	p.notifyCompletedSchemaChange(tableDesc.ID)
 	return &valuesNode{}, nil
 }
@@ -340,8 +341,8 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		}
 	}
 	column.Name = newColName
-
-	tableDesc.Version++
+	tableDesc.UpVersion = true
+	p.applyUpVersion(tableDesc)
 
 	descKey := MakeDescMetadataKey(tableDesc.GetID())
 	if err := tableDesc.Validate(); err != nil {
