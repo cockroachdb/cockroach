@@ -180,6 +180,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 	if numMutations == len(tableDesc.Mutations) {
 		return &valuesNode{}, nil
 	}
+	tableDesc.UpVersion = true
 
 	if err := tableDesc.AllocateIDs(); err != nil {
 		return nil, err

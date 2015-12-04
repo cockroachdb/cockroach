@@ -43,7 +43,8 @@ func (p *planner) changePrivileges(targets parser.TargetList, grantees parser.Na
 
 	tableDesc, ok := descriptor.(*TableDescriptor)
 	if ok {
-		tableDesc.Version++
+		tableDesc.UpVersion = true
+		p.applyUpVersion(tableDesc)
 	}
 
 	// Now update the descriptor.
