@@ -44,7 +44,7 @@ type MVCCMetadata struct {
 	// and subsequent version rows. If timestamp == (0, 0), then there
 	// is only a single MVCC metadata row with value inlined, and with
 	// empty timestamp, key_bytes, and val_bytes.
-	Value *cockroach_roachpb1.Value `protobuf:"bytes,6,opt,name=value" json:"value,omitempty"`
+	RawBytes []byte `protobuf:"bytes,6,opt,name=raw_bytes" json:"raw_bytes,omitempty"`
 }
 
 func (m *MVCCMetadata) Reset()         { *m = MVCCMetadata{} }
@@ -132,15 +132,11 @@ func (m *MVCCMetadata) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x28
 	i++
 	i = encodeVarintMvcc(data, i, uint64(m.ValBytes))
-	if m.Value != nil {
+	if m.RawBytes != nil {
 		data[i] = 0x32
 		i++
-		i = encodeVarintMvcc(data, i, uint64(m.Value.Size()))
-		n3, err := m.Value.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n3
+		i = encodeVarintMvcc(data, i, uint64(len(m.RawBytes)))
+		i += copy(data[i:], m.RawBytes)
 	}
 	return i, nil
 }
@@ -243,8 +239,8 @@ func (m *MVCCMetadata) Size() (n int) {
 	n += 2
 	n += 1 + sovMvcc(uint64(m.KeyBytes))
 	n += 1 + sovMvcc(uint64(m.ValBytes))
-	if m.Value != nil {
-		l = m.Value.Size()
+	if m.RawBytes != nil {
+		l = len(m.RawBytes)
 		n += 1 + l + sovMvcc(uint64(l))
 	}
 	return n
@@ -434,9 +430,9 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 			}
 		case 6:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RawBytes", wireType)
 			}
-			var msglen int
+			var byteLen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMvcc
@@ -446,24 +442,19 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if msglen < 0 {
+			if byteLen < 0 {
 				return ErrInvalidLengthMvcc
 			}
-			postIndex := iNdEx + msglen
+			postIndex := iNdEx + byteLen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Value == nil {
-				m.Value = &cockroach_roachpb1.Value{}
-			}
-			if err := m.Value.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
+			m.RawBytes = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
