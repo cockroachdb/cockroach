@@ -91,8 +91,9 @@ func createRangeData(r *Replica, t *testing.T) []engine.MVCCKey {
 		if err := engine.MVCCPut(r.store.Engine(), nil, keyTS.key, keyTS.ts, roachpb.MakeValueFromString("value"), nil); err != nil {
 			t.Fatal(err)
 		}
-		keys = append(keys, engine.MVCCEncodeKey(keyTS.key))
-		if !keyTS.ts.Equal(ts0) {
+		if keyTS.ts.Equal(ts0) {
+			keys = append(keys, engine.MVCCEncodeKey(keyTS.key))
+		} else {
 			keys = append(keys, engine.MVCCEncodeVersionKey(keyTS.key, keyTS.ts))
 		}
 	}
