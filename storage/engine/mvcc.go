@@ -135,9 +135,14 @@ func init() {
 	}
 }
 
+// Value returns the inline value.
+func (meta MVCCMetadata) Value() roachpb.Value {
+	return roachpb.Value{RawBytes: meta.RawBytes}
+}
+
 // IsInline returns true if the value is inlined in the metadata.
 func (meta MVCCMetadata) IsInline() bool {
-	return meta.Value != nil
+	return meta.RawBytes != nil
 }
 
 // IsIntentOf returns true if the meta record is an intent of the supplied
@@ -595,10 +600,12 @@ func mvccGetInternal(iter Iterator, metaKey MVCCKey,
 
 	// If value is inline, return immediately; txn & timestamp are irrelevant.
 	if meta.IsInline() {
-		if err := meta.Value.Verify(metaKey.Key); err != nil {
+		value := &buf.value
+		*value = roachpb.Value{RawBytes: meta.RawBytes}
+		if err := value.Verify(metaKey.Key); err != nil {
 			return nil, nil, err
 		}
-		return meta.Value, nil, nil
+		return value, nil, nil
 	}
 	var ignoredIntents []roachpb.Intent
 	if !consistent && meta.Txn != nil && !timestamp.Less(meta.Timestamp) {
@@ -714,9 +721,7 @@ func mvccGetInternal(iter Iterator, metaKey MVCCKey,
 	}
 
 	value := &buf.value
-	if err := iter.ValueProto(value); err != nil {
-		return nil, nil, err
-	}
+	value.RawBytes = iter.Value()
 	// Set the timestamp if the value is not nil (i.e. not a deletion tombstone).
 	ts := unsafeKey.Timestamp
 	value.Timestamp = &ts
@@ -733,7 +738,6 @@ func mvccGetInternal(iter Iterator, metaKey MVCCKey,
 type putBuffer struct {
 	meta    MVCCMetadata
 	newMeta MVCCMetadata
-	value   roachpb.Value
 }
 
 var putBufferPool = sync.Pool{
@@ -761,9 +765,8 @@ func MVCCPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Ti
 	}
 
 	buf := putBufferPool.Get().(*putBuffer)
-	buf.value = value
 
-	err := mvccPutInternal(engine, ms, key, timestamp, &buf.value, txn, buf)
+	err := mvccPutInternal(engine, ms, key, timestamp, value.RawBytes, txn, buf)
 
 	// Using defer would be more convenient, but it is measurably
 	// slower.
@@ -776,7 +779,6 @@ func MVCCPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Ti
 func MVCCDelete(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
 	txn *roachpb.Transaction) error {
 	buf := putBufferPool.Get().(*putBuffer)
-	buf.value.Reset()
 
 	err := mvccPutInternal(engine, ms, key, timestamp, nil, txn, buf)
 
@@ -789,7 +791,7 @@ func MVCCDelete(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb
 // mvccPutInternal adds a new timestamped value to the specified key.
 // If value is nil, creates a deletion tombstone value.
 func mvccPutInternal(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
-	value *roachpb.Value, txn *roachpb.Transaction, buf *putBuffer) error {
+	value []byte, txn *roachpb.Transaction, buf *putBuffer) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -814,7 +816,7 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp ro
 		if value == nil {
 			metaKeySize, metaValSize, err = 0, 0, engine.Clear(metaKey)
 		} else {
-			buf.meta = MVCCMetadata{Value: value}
+			buf.meta = MVCCMetadata{RawBytes: value}
 			metaKeySize, metaValSize, err = PutProto(engine, metaKey, &buf.meta)
 		}
 		updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
@@ -869,17 +871,7 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp ro
 
 	versionKey := metaKey
 	versionKey.Timestamp = timestamp
-
-	var valueSize int64
-	if value != nil {
-		// Make sure to zero the redundant timestamp (timestamp is encoded into the
-		// key, so don't need it in both places).
-		value.Timestamp = nil
-		_, valueSize, err = PutProto(engine, versionKey, value)
-	} else {
-		err = engine.Put(versionKey, nil)
-	}
-	if err != nil {
+	if err := engine.Put(versionKey, value); err != nil {
 		return err
 	}
 
@@ -888,7 +880,7 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp ro
 	// mvccVersionTimestampSize. The size of the metadata key is accounted for
 	// separately.
 	newMeta.KeyBytes = mvccVersionTimestampSize
-	newMeta.ValBytes = valueSize
+	newMeta.ValBytes = int64(len(value))
 	newMeta.Deleted = value == nil
 
 	var metaKeySize, metaValSize int64
@@ -975,7 +967,7 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp
 
 	if expValPresent, existValPresent := expVal != nil, existVal != nil; expValPresent && existValPresent {
 		// Every type flows through here, so we can't use the typed getters.
-		if !(expVal.Tag == existVal.Tag && bytes.Equal(expVal.RawBytes, existVal.RawBytes)) {
+		if !bytes.Equal(expVal.RawBytes, existVal.RawBytes) {
 			return &roachpb.ConditionFailedError{
 				ActualValue: existVal,
 			}
@@ -1000,7 +992,7 @@ func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, value roachpb.Valu
 	metaKey := MakeMVCCMetadataKey(key)
 
 	// Encode and merge the MVCC metadata with inlined value.
-	meta := &MVCCMetadata{Value: &value}
+	meta := &MVCCMetadata{RawBytes: value.RawBytes}
 	data, err := proto.Marshal(meta)
 	if err != nil {
 		return err

@@ -66,22 +66,25 @@ enum ValueType {
   TIMESERIES = 100;
 }
 
-// Value specifies the value at a key. Multiple values at the same key
-// are supported based on timestamp.
+// Value specifies the value at a key. Multiple values at the same key are
+// supported based on timestamp. The data stored within a value is typed
+// (ValueType) and custom encoded into the raw_bytes field. A custom encoding
+// is used instead of separate proto fields to avoid proto overhead and to
+// avoid unnecessary encoding and decoding as the value gets read from disk and
+// passed through the network. The format is:
+//
+//   <4-byte-checksum><1-byte-tag><encoded-data>
+//
+// A CRC-32-IEEE checksum is computed from the associated key, tag and encoded
+// data, in that order.
+//
+// TODO(peter): Is a 4-byte checksum overkill when most (all?) values
+// will be less than 64KB?
 message Value {
-  // raw_bytes is the byte slice value.
+  // raw_bytes contains the encoded value and checksum.
   optional bytes raw_bytes = 1;
-  // checksum is a CRC-32-IEEE checksum of the key + value, in that order.
-  // If this is an integer value, then the value is interpreted as an 8
-  // byte, big-endian encoded value. This value is set by the client on
-  // writes to do end-to-end integrity verification. If the checksum is
-  // incorrect, the write operation will fail. If the client does not
-  // wish to use end-to-end checksumming, this value should be nil.
-  optional fixed32 checksum = 3;
   // Timestamp of value.
-  optional Timestamp timestamp = 4;
-  // tag is the optional type of the value.
-  optional ValueType tag = 5 [(gogoproto.nullable) = false];
+  optional Timestamp timestamp = 2;
 }
 
 // KeyValue is a pair of Key and Value for returned Key/Value pairs

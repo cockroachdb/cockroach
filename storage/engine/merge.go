@@ -36,7 +36,7 @@ func MergeInternalTimeSeriesData(sources ...*roachpb.InternalTimeSeriesData) (
 			return nil, err
 		}
 		bytes, err := proto.Marshal(&MVCCMetadata{
-			Value: &val,
+			RawBytes: val.RawBytes,
 		})
 		if err != nil {
 			return nil, err
@@ -57,11 +57,11 @@ func MergeInternalTimeSeriesData(sources ...*roachpb.InternalTimeSeriesData) (
 	}
 
 	// Unmarshal merged bytes and extract the time series value within.
-	var mvccValue MVCCMetadata
-	if err := proto.Unmarshal(mergedBytes, &mvccValue); err != nil {
+	var meta MVCCMetadata
+	if err := proto.Unmarshal(mergedBytes, &meta); err != nil {
 		return nil, err
 	}
-	mergedTS, err := mvccValue.Value.GetTimeseries()
+	mergedTS, err := meta.Value().GetTimeseries()
 	if err != nil {
 		return nil, err
 	}
