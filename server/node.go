@@ -133,7 +133,9 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 		if i == 0 {
 			// TODO(marc): this is better than having storage/ import sql, but still
 			// not great. Find a better place to keep those.
-			initialValues := sql.GetInitialSystemValues()
+			initialDatabase := sql.NewMetadataSchema()
+			sql.AddSystemDatabaseToSchema(initialDatabase)
+			initialValues := initialDatabase.GetInitialValues()
 			if err := s.BootstrapRange(initialValues); err != nil {
 				return nil, err
 			}

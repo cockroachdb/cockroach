@@ -138,6 +138,8 @@ func TestGet(t *testing.T) {
 
 func TestGetLargestID(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	schema := sql.NewMetadataSchema()
+	sql.AddSystemDatabaseToSchema(schema)
 	testCases := []struct {
 		values  []roachpb.KeyValue
 		largest uint32
@@ -176,7 +178,7 @@ func TestGetLargestID(t *testing.T) {
 		}, 12, ""},
 
 		// Real SQL layout.
-		{sql.GetInitialSystemValues(), keys.ZonesTableID, ""},
+		{schema.GetInitialValues(), keys.ZonesTableID, ""},
 	}
 
 	cfg := config.SystemConfig{}
@@ -203,10 +205,12 @@ func TestComputeSplits(t *testing.T) {
 
 	const start = keys.MaxReservedDescID + 1
 
+	schema := sql.NewMetadataSchema()
+	sql.AddSystemDatabaseToSchema(schema)
 	// Real SQL system tables only.
-	baseSql := sql.GetInitialSystemValues()
+	baseSql := schema.GetInitialValues()
 	// Real SQL system tables plus some user stuff.
-	userSql := append(sql.GetInitialSystemValues(),
+	userSql := append(schema.GetInitialValues(),
 		descriptor(start), descriptor(start+1), descriptor(start+5))
 
 	allSplits := []uint32{start, start + 1, start + 2, start + 3, start + 4, start + 5}

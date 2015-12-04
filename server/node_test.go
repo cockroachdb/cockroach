@@ -134,7 +134,9 @@ func TestBootstrapCluster(t *testing.T) {
 		roachpb.Key("\x00store-idgen"),
 	}
 	// Add the initial keys for sql.
-	for _, kv := range sql.GetInitialSystemValues() {
+	schema := sql.NewMetadataSchema()
+	sql.AddSystemDatabaseToSchema(schema)
+	for _, kv := range schema.GetInitialValues() {
 		expectedKeys = append(expectedKeys, kv.Key)
 	}
 	// Resort the list. The sql values are not sorted.

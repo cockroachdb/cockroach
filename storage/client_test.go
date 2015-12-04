@@ -126,7 +126,9 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	}
 	localSender.AddStore(store)
 	if bootstrap {
-		if err := store.BootstrapRange(sql.GetInitialSystemValues()); err != nil {
+		schema := sql.NewMetadataSchema()
+		sql.AddSystemDatabaseToSchema(schema)
+		if err := store.BootstrapRange(schema.GetInitialValues()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -410,7 +412,9 @@ func (m *multiTestContext) addStore() {
 
 		// Bootstrap the initial range on the first store
 		if idx == 0 {
-			if err := store.BootstrapRange(sql.GetInitialSystemValues()); err != nil {
+			schema := sql.NewMetadataSchema()
+			sql.AddSystemDatabaseToSchema(schema)
+			if err := store.BootstrapRange(schema.GetInitialValues()); err != nil {
 				m.t.Fatal(err)
 			}
 		}

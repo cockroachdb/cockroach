@@ -327,7 +327,9 @@ func TestSingleRangeReverseScan(t *testing.T) {
 	}
 	// Case 3: Test roachpb.KeyMax
 	// This span covers the system DB keys.
-	wanted := 1 + len(sql.GetInitialSystemValues())
+	schema := sql.NewMetadataSchema()
+	sql.AddSystemDatabaseToSchema(schema)
+	wanted := 1 + len(schema.GetInitialValues())
 	if rows, err := db.ReverseScan("g", roachpb.KeyMax, 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != wanted {
