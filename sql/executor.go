@@ -153,6 +153,9 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 	// Send back the session state even if there were application-level errors.
 	// Add transaction to session state.
 	if planMaker.txn != nil {
+		// TODO(pmattis): Need to record the leases used by a transaction within
+		// the transaction state and restore it when the transaction is restored.
+		planMaker.releaseLeases(e.db)
 		planMaker.session.Txn = &Session_Transaction{Txn: planMaker.txn.Proto, Timestamp: driver.Timestamp(planMaker.evalCtx.TxnTimestamp.Time)}
 		planMaker.session.MutatesSystemDB = planMaker.txn.SystemDBTrigger()
 	} else {
@@ -185,21 +188,18 @@ func (e *Executor) execStmts(sql string, planMaker *planner) driver.Response {
 			result = makeResultFromError(planMaker, err)
 		}
 		resp.Results = append(resp.Results, result)
-		// TODO(pmattis): Is this the correct time to be releasing leases acquired
-		// during execution of the statement?
-		//
-		// TODO(pmattis): Need to record the leases used by a transaction within
-		// the transaction state and restore it when the transaction is restored.
-		planMaker.releaseLeases(e.db)
+		// Release the leases once a transaction is complete.
+		if planMaker.txn == nil {
+			planMaker.releaseLeases(e.db)
 
-		// The previous statement finished executing a schema change. Wait for
-		// the schema change to propagate to all nodes, so that once the executor
-		// returns the new schema is live everywhere. This is not needed for
-		// correctness but is done to make the UI experience/tests predictable.
-		if err := e.waitForCompletedSchemaChangesToPropagate(planMaker); err != nil {
-			log.Warning(err)
+			// The previous transaction finished executing some schema changes. Wait for
+			// the schema changes to propagate to all nodes, so that once the executor
+			// returns the new schema are live everywhere. This is not needed for
+			// correctness but is done to make the UI experience/tests predictable.
+			if err := e.waitForCompletedSchemaChangesToPropagate(planMaker); err != nil {
+				log.Warning(err)
+			}
 		}
-
 	}
 	return resp
 }
