@@ -253,7 +253,8 @@ func (b *Batch) Put(key, value interface{}) {
 
 // CPut conditionally sets the value for a key if the existing value is equal
 // to expValue. To conditionally set a value only if there is no existing entry
-// pass nil for expValue.
+// pass nil for expValue. Note that this must be an interface{}(nil), not a
+// typed nil value (e.g. []byte(nil)).
 //
 // A new result will be appended to the batch which will contain a single row
 // and Result.Err will indicate success or failure.

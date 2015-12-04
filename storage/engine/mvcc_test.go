@@ -59,7 +59,7 @@ var (
 	value2       = roachpb.MakeValueFromString("testValue2")
 	value3       = roachpb.MakeValueFromString("testValue3")
 	value4       = roachpb.MakeValueFromString("testValue4")
-	valueEmpty   = roachpb.Value{}
+	valueEmpty   = roachpb.MakeValueFromString("")
 )
 
 // createTestEngine returns a new in-memory engine with 1MB of storage
@@ -1107,10 +1107,15 @@ func TestMVCCScanInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	makeTimestampedValue := func(v roachpb.Value, ts roachpb.Timestamp) roachpb.Value {
+		v.Timestamp = &ts
+		return v
+	}
+
 	expKVs := []roachpb.KeyValue{
-		{Key: testKey1, Value: roachpb.MakeValueFromBytesAndTimestamp(value1.RawBytes, ts1)},
-		{Key: testKey2, Value: roachpb.MakeValueFromBytesAndTimestamp(value2.RawBytes, ts4)},
-		{Key: testKey4, Value: roachpb.MakeValueFromBytesAndTimestamp(value4.RawBytes, ts6)},
+		{Key: testKey1, Value: makeTimestampedValue(value1, ts1)},
+		{Key: testKey2, Value: makeTimestampedValue(value2, ts4)},
+		{Key: testKey4, Value: makeTimestampedValue(value4, ts6)},
 	}
 	if !reflect.DeepEqual(kvs, expKVs) {
 		t.Errorf("expected key values equal %v != %v", kvs, expKVs)
@@ -1123,8 +1128,8 @@ func TestMVCCScanInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 	expKVs = []roachpb.KeyValue{
-		{Key: testKey1, Value: roachpb.MakeValueFromBytesAndTimestamp(value1.RawBytes, ts1)},
-		{Key: testKey2, Value: roachpb.MakeValueFromBytesAndTimestamp(value1.RawBytes, ts3)},
+		{Key: testKey1, Value: makeTimestampedValue(value1, ts1)},
+		{Key: testKey2, Value: makeTimestampedValue(value1, ts3)},
 	}
 	if !reflect.DeepEqual(kvs, expKVs) {
 		t.Errorf("expected key values equal %v != %v", kvs, expKVs)
@@ -2200,7 +2205,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	}
 	mKeySize := int64(mvccKey(key).EncodedSize())
 	vKeySize := mvccVersionTimestampSize
-	vValSize := encodedSize(&value, t)
+	vValSize := int64(len(value.RawBytes))
 
 	expMS := MVCCStats{
 		LiveBytes: mKeySize + vKeySize + vValSize,
@@ -2262,7 +2267,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	mKey2Size := int64(mvccKey(key2).EncodedSize())
 	mVal2Size := encodedSize(&MVCCMetadata{Timestamp: ts4, Txn: txn}, t)
 	vKey2Size := mvccVersionTimestampSize
-	vVal2Size := encodedSize(&value2, t)
+	vVal2Size := int64(len(value2.RawBytes))
 	expMS3 := MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
 		KeyCount:    2,
@@ -2315,7 +2320,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	txnKeySize := int64(mvccKey(txnKey).EncodedSize())
-	txnValSize := encodedSize(&MVCCMetadata{Value: &txnVal}, t)
+	txnValSize := encodedSize(&MVCCMetadata{RawBytes: txnVal.RawBytes}, t)
 	expMS6 := expMS5
 	expMS6.SysBytes += txnKeySize + txnValSize
 	expMS6.SysCount++

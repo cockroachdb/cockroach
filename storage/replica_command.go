@@ -1788,12 +1788,16 @@ func updateRangeDescriptor(b *client.Batch, descKey roachpb.Key, oldDesc, newDes
 	if err := newDesc.Validate(); err != nil {
 		return err
 	}
-	var oldValue []byte
+	// This is subtle: []byte(nil) != interface{}(nil). A []byte(nil) refers to
+	// an empty value. An interface{}(nil) refers to a non-existent value. So
+	// we're careful to construct an interface{}(nil) when oldDesc is nil.
+	var oldValue interface{}
 	if oldDesc != nil {
-		var err error
-		if oldValue, err = proto.Marshal(oldDesc); err != nil {
+		oldBytes, err := proto.Marshal(oldDesc)
+		if err != nil {
 			return err
 		}
+		oldValue = oldBytes
 	}
 	newValue, err := proto.Marshal(newDesc)
 	if err != nil {

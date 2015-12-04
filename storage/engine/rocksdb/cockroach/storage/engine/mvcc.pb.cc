@@ -45,7 +45,7 @@ void protobuf_AssignDesc_cockroach_2fstorage_2fengine_2fmvcc_2eproto() {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, deleted_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, key_bytes_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, val_bytes_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, value_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, raw_bytes_),
   };
   MVCCMetadata_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -123,23 +123,22 @@ void protobuf_AddDesc_cockroach_2fstorage_2fengine_2fmvcc_2eproto() {
   ::google::protobuf::DescriptorPool::InternalAddGeneratedFile(
     "\n#cockroach/storage/engine/mvcc.proto\022\030c"
     "ockroach.storage.engine\032\034cockroach/roach"
-    "pb/data.proto\032\024gogoproto/gogo.proto\"\344\001\n\014"
+    "pb/data.proto\032\024gogoproto/gogo.proto\"\316\001\n\014"
     "MVCCMetadata\022+\n\003txn\030\001 \001(\0132\036.cockroach.ro"
     "achpb.Transaction\0225\n\ttimestamp\030\002 \001(\0132\034.c"
     "ockroach.roachpb.TimestampB\004\310\336\037\000\022\025\n\007dele"
     "ted\030\003 \001(\010B\004\310\336\037\000\022\027\n\tkey_bytes\030\004 \001(\003B\004\310\336\037\000"
-    "\022\027\n\tval_bytes\030\005 \001(\003B\004\310\336\037\000\022\'\n\005value\030\006 \001(\013"
-    "2\030.cockroach.roachpb.Value\"\362\002\n\tMVCCStats"
-    "\022\030\n\nlive_bytes\030\001 \001(\003B\004\310\336\037\000\022\027\n\tkey_bytes\030"
-    "\002 \001(\003B\004\310\336\037\000\022\027\n\tval_bytes\030\003 \001(\003B\004\310\336\037\000\022\032\n\014"
-    "intent_bytes\030\004 \001(\003B\004\310\336\037\000\022\030\n\nlive_count\030\005"
-    " \001(\003B\004\310\336\037\000\022\027\n\tkey_count\030\006 \001(\003B\004\310\336\037\000\022\027\n\tv"
-    "al_count\030\007 \001(\003B\004\310\336\037\000\022\032\n\014intent_count\030\010 \001"
-    "(\003B\004\310\336\037\000\022\030\n\nintent_age\030\t \001(\003B\004\310\336\037\000\022(\n\014gc"
-    "_bytes_age\030\n \001(\003B\022\310\336\037\000\342\336\037\nGCBytesAge\022\027\n\t"
-    "sys_bytes\030\014 \001(\003B\004\310\336\037\000\022\027\n\tsys_count\030\r \001(\003"
-    "B\004\310\336\037\000\022\037\n\021last_update_nanos\030\036 \001(\003B\004\310\336\037\000B"
-    "\010Z\006engineX\001", 731);
+    "\022\027\n\tval_bytes\030\005 \001(\003B\004\310\336\037\000\022\021\n\traw_bytes\030\006"
+    " \001(\014\"\362\002\n\tMVCCStats\022\030\n\nlive_bytes\030\001 \001(\003B\004"
+    "\310\336\037\000\022\027\n\tkey_bytes\030\002 \001(\003B\004\310\336\037\000\022\027\n\tval_byt"
+    "es\030\003 \001(\003B\004\310\336\037\000\022\032\n\014intent_bytes\030\004 \001(\003B\004\310\336"
+    "\037\000\022\030\n\nlive_count\030\005 \001(\003B\004\310\336\037\000\022\027\n\tkey_coun"
+    "t\030\006 \001(\003B\004\310\336\037\000\022\027\n\tval_count\030\007 \001(\003B\004\310\336\037\000\022\032"
+    "\n\014intent_count\030\010 \001(\003B\004\310\336\037\000\022\030\n\nintent_age"
+    "\030\t \001(\003B\004\310\336\037\000\022(\n\014gc_bytes_age\030\n \001(\003B\022\310\336\037\000"
+    "\342\336\037\nGCBytesAge\022\027\n\tsys_bytes\030\014 \001(\003B\004\310\336\037\000\022"
+    "\027\n\tsys_count\030\r \001(\003B\004\310\336\037\000\022\037\n\021last_update_"
+    "nanos\030\036 \001(\003B\004\310\336\037\000B\010Z\006engineX\001", 709);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/storage/engine/mvcc.proto", &protobuf_RegisterTypes);
   MVCCMetadata::default_instance_ = new MVCCMetadata();
@@ -174,7 +173,7 @@ const int MVCCMetadata::kTimestampFieldNumber;
 const int MVCCMetadata::kDeletedFieldNumber;
 const int MVCCMetadata::kKeyBytesFieldNumber;
 const int MVCCMetadata::kValBytesFieldNumber;
-const int MVCCMetadata::kValueFieldNumber;
+const int MVCCMetadata::kRawBytesFieldNumber;
 #endif  // !_MSC_VER
 
 MVCCMetadata::MVCCMetadata()
@@ -186,7 +185,6 @@ MVCCMetadata::MVCCMetadata()
 void MVCCMetadata::InitAsDefaultInstance() {
   txn_ = const_cast< ::cockroach::roachpb::Transaction*>(&::cockroach::roachpb::Transaction::default_instance());
   timestamp_ = const_cast< ::cockroach::roachpb::Timestamp*>(&::cockroach::roachpb::Timestamp::default_instance());
-  value_ = const_cast< ::cockroach::roachpb::Value*>(&::cockroach::roachpb::Value::default_instance());
 }
 
 MVCCMetadata::MVCCMetadata(const MVCCMetadata& from)
@@ -198,13 +196,14 @@ MVCCMetadata::MVCCMetadata(const MVCCMetadata& from)
 }
 
 void MVCCMetadata::SharedCtor() {
+  ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
   txn_ = NULL;
   timestamp_ = NULL;
   deleted_ = false;
   key_bytes_ = GOOGLE_LONGLONG(0);
   val_bytes_ = GOOGLE_LONGLONG(0);
-  value_ = NULL;
+  raw_bytes_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -214,10 +213,10 @@ MVCCMetadata::~MVCCMetadata() {
 }
 
 void MVCCMetadata::SharedDtor() {
+  raw_bytes_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != default_instance_) {
     delete txn_;
     delete timestamp_;
-    delete value_;
   }
 }
 
@@ -264,8 +263,8 @@ void MVCCMetadata::Clear() {
       if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
     }
     deleted_ = false;
-    if (has_value()) {
-      if (value_ != NULL) value_->::cockroach::roachpb::Value::Clear();
+    if (has_raw_bytes()) {
+      raw_bytes_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
     }
   }
 
@@ -354,16 +353,16 @@ bool MVCCMetadata::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(50)) goto parse_value;
+        if (input->ExpectTag(50)) goto parse_raw_bytes;
         break;
       }
 
-      // optional .cockroach.roachpb.Value value = 6;
+      // optional bytes raw_bytes = 6;
       case 6: {
         if (tag == 50) {
-         parse_value:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_value()));
+         parse_raw_bytes:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_raw_bytes()));
         } else {
           goto handle_unusual;
         }
@@ -423,10 +422,10 @@ void MVCCMetadata::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(5, this->val_bytes(), output);
   }
 
-  // optional .cockroach.roachpb.Value value = 6;
-  if (has_value()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      6, *this->value_, output);
+  // optional bytes raw_bytes = 6;
+  if (has_raw_bytes()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      6, this->raw_bytes(), output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -468,11 +467,11 @@ void MVCCMetadata::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(5, this->val_bytes(), target);
   }
 
-  // optional .cockroach.roachpb.Value value = 6;
-  if (has_value()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        6, *this->value_, target);
+  // optional bytes raw_bytes = 6;
+  if (has_raw_bytes()) {
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
+        6, this->raw_bytes(), target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -520,11 +519,11 @@ int MVCCMetadata::ByteSize() const {
           this->val_bytes());
     }
 
-    // optional .cockroach.roachpb.Value value = 6;
-    if (has_value()) {
+    // optional bytes raw_bytes = 6;
+    if (has_raw_bytes()) {
       total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *this->value_);
+        ::google::protobuf::internal::WireFormatLite::BytesSize(
+          this->raw_bytes());
     }
 
   }
@@ -569,8 +568,9 @@ void MVCCMetadata::MergeFrom(const MVCCMetadata& from) {
     if (from.has_val_bytes()) {
       set_val_bytes(from.val_bytes());
     }
-    if (from.has_value()) {
-      mutable_value()->::cockroach::roachpb::Value::MergeFrom(from.value());
+    if (from.has_raw_bytes()) {
+      set_has_raw_bytes();
+      raw_bytes_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.raw_bytes_);
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -605,7 +605,7 @@ void MVCCMetadata::InternalSwap(MVCCMetadata* other) {
   std::swap(deleted_, other->deleted_);
   std::swap(key_bytes_, other->key_bytes_);
   std::swap(val_bytes_, other->val_bytes_);
-  std::swap(value_, other->value_);
+  raw_bytes_.Swap(&other->raw_bytes_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -780,47 +780,57 @@ void MVCCMetadata::clear_val_bytes() {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCMetadata.val_bytes)
 }
 
-// optional .cockroach.roachpb.Value value = 6;
-bool MVCCMetadata::has_value() const {
+// optional bytes raw_bytes = 6;
+bool MVCCMetadata::has_raw_bytes() const {
   return (_has_bits_[0] & 0x00000020u) != 0;
 }
-void MVCCMetadata::set_has_value() {
+void MVCCMetadata::set_has_raw_bytes() {
   _has_bits_[0] |= 0x00000020u;
 }
-void MVCCMetadata::clear_has_value() {
+void MVCCMetadata::clear_has_raw_bytes() {
   _has_bits_[0] &= ~0x00000020u;
 }
-void MVCCMetadata::clear_value() {
-  if (value_ != NULL) value_->::cockroach::roachpb::Value::Clear();
-  clear_has_value();
+void MVCCMetadata::clear_raw_bytes() {
+  raw_bytes_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_raw_bytes();
 }
- const ::cockroach::roachpb::Value& MVCCMetadata::value() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.MVCCMetadata.value)
-  return value_ != NULL ? *value_ : *default_instance_->value_;
+ const ::std::string& MVCCMetadata::raw_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.MVCCMetadata.raw_bytes)
+  return raw_bytes_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
- ::cockroach::roachpb::Value* MVCCMetadata::mutable_value() {
-  set_has_value();
-  if (value_ == NULL) {
-    value_ = new ::cockroach::roachpb::Value;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.MVCCMetadata.value)
-  return value_;
+ void MVCCMetadata::set_raw_bytes(const ::std::string& value) {
+  set_has_raw_bytes();
+  raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCMetadata.raw_bytes)
 }
- ::cockroach::roachpb::Value* MVCCMetadata::release_value() {
-  clear_has_value();
-  ::cockroach::roachpb::Value* temp = value_;
-  value_ = NULL;
-  return temp;
+ void MVCCMetadata::set_raw_bytes(const char* value) {
+  set_has_raw_bytes();
+  raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.MVCCMetadata.raw_bytes)
 }
- void MVCCMetadata::set_allocated_value(::cockroach::roachpb::Value* value) {
-  delete value_;
-  value_ = value;
-  if (value) {
-    set_has_value();
+ void MVCCMetadata::set_raw_bytes(const void* value, size_t size) {
+  set_has_raw_bytes();
+  raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.MVCCMetadata.raw_bytes)
+}
+ ::std::string* MVCCMetadata::mutable_raw_bytes() {
+  set_has_raw_bytes();
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.MVCCMetadata.raw_bytes)
+  return raw_bytes_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ ::std::string* MVCCMetadata::release_raw_bytes() {
+  clear_has_raw_bytes();
+  return raw_bytes_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void MVCCMetadata::set_allocated_raw_bytes(::std::string* raw_bytes) {
+  if (raw_bytes != NULL) {
+    set_has_raw_bytes();
   } else {
-    clear_has_value();
+    clear_has_raw_bytes();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.MVCCMetadata.value)
+  raw_bytes_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), raw_bytes);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.MVCCMetadata.raw_bytes)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

@@ -19,6 +19,7 @@ package roachpb
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"hash"
 	"hash/crc32"
@@ -275,23 +276,63 @@ func (t Timestamp) GoTime() time.Time {
 	return time.Unix(0, t.WallTime)
 }
 
+const (
+	checksumUnitialized = 0
+	checksumSize        = 4
+	tagPos              = checksumSize
+	headerSize          = tagPos + 1
+)
+
+func (v Value) checksum() uint32 {
+	if len(v.RawBytes) < checksumSize {
+		return 0
+	}
+	_, u, err := encoding.DecodeUint32(v.RawBytes[:checksumSize])
+	if err != nil {
+		panic(err)
+	}
+	return u
+}
+
+func (v *Value) setChecksum(cksum uint32) {
+	if len(v.RawBytes) >= checksumSize {
+		encoding.EncodeUint32(v.RawBytes[:0], cksum)
+	}
+}
+
 // InitChecksum initializes a checksum based on the provided key and
 // the contents of the value. If the value contains a byte slice, the
 // checksum includes it directly.
+//
+// TODO(peter): This method should return an error if the Value is corrupted
+// (e.g. the RawBytes field is > 0 but smaller than the header size).
 func (v *Value) InitChecksum(key []byte) {
-	if v.Checksum == nil {
-		v.Checksum = proto.Uint32(v.computeChecksum(key))
+	if v.RawBytes == nil {
+		return
 	}
+	// TODO(peter): Is this guard to avoid re-initializing the checksum if it is
+	// already initialized necessary? Is this a safety or a performance concern?
+	if v.checksum() == checksumUnitialized {
+		v.setChecksum(v.computeChecksum(key))
+	}
+}
+
+// ClearChecksum clears the checksum value.
+func (v *Value) ClearChecksum() {
+	v.setChecksum(0)
 }
 
 // Verify verifies the value's Checksum matches a newly-computed
 // checksum of the value's contents. If the value's Checksum is not
 // set the verification is a noop.
 func (v Value) Verify(key []byte) error {
-	if v.Checksum != nil {
-		if cksum := v.computeChecksum(key); cksum != *v.Checksum {
-			return fmt.Errorf("invalid checksum (%d) for key %s, value [% x]",
-				cksum, Key(key), v)
+	if n := len(v.RawBytes); n > 0 && n < headerSize {
+		return fmt.Errorf("%s: invalid header size: %d", Key(key), n)
+	}
+	if sum := v.checksum(); sum != 0 {
+		if computedSum := v.computeChecksum(key); computedSum != sum {
+			return fmt.Errorf("%s: invalid checksum (%x) value [% x]",
+				Key(key), computedSum, v.RawBytes)
 		}
 	}
 	return nil
@@ -319,71 +360,91 @@ func MakeValueFromBytesAndTimestamp(bs []byte, t Timestamp) Value {
 	return v
 }
 
-// SetBytes sets the bytes and tag field of the receiver.
+// GetTag retrieves the value type.
+func (v Value) GetTag() ValueType {
+	if len(v.RawBytes) <= tagPos {
+		return ValueType_UNKNOWN
+	}
+	return ValueType(v.RawBytes[tagPos])
+}
+
+func (v *Value) setTag(t ValueType) {
+	v.RawBytes[tagPos] = byte(t)
+}
+
+func (v Value) dataBytes() []byte {
+	return v.RawBytes[headerSize:]
+}
+
+// SetBytes sets the bytes and tag field of the receiver and clears the checksum.
 func (v *Value) SetBytes(b []byte) {
-	v.RawBytes = b
-	v.Tag = ValueType_BYTES
+	v.RawBytes = make([]byte, headerSize+len(b))
+	copy(v.dataBytes(), b)
+	v.setTag(ValueType_BYTES)
 }
 
 // SetFloat encodes the specified float64 value into the bytes field of the
-// receiver and sets the tag.
+// receiver, sets the tag and clears the checksum.
 func (v *Value) SetFloat(f float64) {
-	v.RawBytes = encoding.EncodeUint64(nil, math.Float64bits(f))
-	v.Tag = ValueType_FLOAT
+	v.RawBytes = make([]byte, headerSize+8)
+	encoding.EncodeUint64(v.RawBytes[headerSize:headerSize], math.Float64bits(f))
+	v.setTag(ValueType_FLOAT)
 }
 
 // SetInt encodes the specified int64 value into the bytes field of the
-// receiver and sets the tag.
+// receiver, sets the tag and clears the checksum.
 func (v *Value) SetInt(i int64) {
-	v.RawBytes = encoding.EncodeUint64(nil, uint64(i))
-	v.Tag = ValueType_INT
+	v.RawBytes = make([]byte, headerSize+binary.MaxVarintLen64)
+	n := binary.PutVarint(v.RawBytes[headerSize:], i)
+	v.RawBytes = v.RawBytes[:headerSize+n]
+	v.setTag(ValueType_INT)
 }
 
-// SetProto encodes the specified proto message into the bytes field of
-// the receiver. If the proto message is an InternalTimeSeriesData,
-// the tag will be set to TIMESERIES rather than BYTES.
+// SetProto encodes the specified proto message into the bytes field of the
+// receiver and clears the checksum. If the proto message is an
+// InternalTimeSeriesData, the tag will be set to TIMESERIES rather than BYTES.
 func (v *Value) SetProto(msg proto.Message) error {
 	data, err := proto.Marshal(msg)
 	if err != nil {
 		return err
 	}
 	v.SetBytes(data)
-
-	// Special handling for ts data.
+	// Special handling for timeseries data.
 	if _, ok := msg.(*InternalTimeSeriesData); ok {
-		v.Tag = ValueType_TIMESERIES
+		v.setTag(ValueType_TIMESERIES)
 	}
-
 	return nil
 }
 
 // SetTime encodes the specified time value into the bytes field of the
-// receiver and sets the tag.
+// receiver, sets the tag and clears the checksum.
 func (v *Value) SetTime(t time.Time) {
-	v.RawBytes = encoding.EncodeTime(nil, t)
-	v.Tag = ValueType_TIME
+	v.RawBytes = make([]byte, headerSize, 16)
+	v.RawBytes = encoding.EncodeTime(v.RawBytes[:headerSize], t)
+	v.setTag(ValueType_TIME)
 }
 
 // GetBytes returns the bytes field of the receiver. If the tag is not
 // BYTES an error will be returned.
 func (v Value) GetBytes() ([]byte, error) {
-	if tag := v.Tag; tag != ValueType_BYTES {
+	if tag := v.GetTag(); tag != ValueType_BYTES {
 		return nil, fmt.Errorf("value type is not %s: %s", ValueType_BYTES, tag)
 	}
-	return v.RawBytes, nil
+	return v.dataBytes(), nil
 }
 
 // GetFloat decodes a float64 value from the bytes field of the receiver. If
 // the bytes field is not 8 bytes in length or the tag is not FLOAT an error
 // will be returned.
 func (v Value) GetFloat() (float64, error) {
-	if tag := v.Tag; tag != ValueType_FLOAT {
+	if tag := v.GetTag(); tag != ValueType_FLOAT {
 		return 0, fmt.Errorf("value type is not %s: %s", ValueType_FLOAT, tag)
 	}
-	if len(v.RawBytes) != 8 {
-		return 0, fmt.Errorf("float64 value should be exactly 8 bytes: %d", len(v.RawBytes))
+	dataBytes := v.dataBytes()
+	if len(dataBytes) != 8 {
+		return 0, fmt.Errorf("float64 value should be exactly 8 bytes: %d", len(dataBytes))
 	}
-	_, u, err := encoding.DecodeUint64(v.RawBytes)
+	_, u, err := encoding.DecodeUint64(dataBytes)
 	if err != nil {
 		return 0, err
 	}
@@ -391,20 +452,16 @@ func (v Value) GetFloat() (float64, error) {
 }
 
 // GetInt decodes an int64 value from the bytes field of the receiver. If the
-// bytes field is not 8 bytes in length or the tag is not INT an error will be
-// returned.
+// tag is not INT or the value cannot be decoded an error will be returned.
 func (v Value) GetInt() (int64, error) {
-	if tag := v.Tag; tag != ValueType_INT {
+	if tag := v.GetTag(); tag != ValueType_INT {
 		return 0, fmt.Errorf("value type is not %s: %s", ValueType_INT, tag)
 	}
-	if len(v.RawBytes) != 8 {
-		return 0, fmt.Errorf("uint64 value should be exactly 8 bytes: %d", len(v.RawBytes))
+	i, n := binary.Varint(v.dataBytes())
+	if n <= 0 {
+		return 0, fmt.Errorf("int64 varint decoding failed: %d", n)
 	}
-	_, u, err := encoding.DecodeUint64(v.RawBytes)
-	if err != nil {
-		return 0, err
-	}
-	return int64(u), nil
+	return i, nil
 }
 
 // GetProto unmarshals the bytes field of the receiver into msg. If
@@ -418,29 +475,23 @@ func (v Value) GetProto(msg proto.Message) error {
 		expectedTag = ValueType_TIMESERIES
 	}
 
-	if tag := v.Tag; tag != expectedTag {
+	if tag := v.GetTag(); tag != expectedTag {
 		return fmt.Errorf("value type is not %s: %s", expectedTag, tag)
 	}
-	return proto.Unmarshal(v.RawBytes, msg)
+	return proto.Unmarshal(v.dataBytes(), msg)
 }
 
 // GetTime decodes a time value from the bytes field of the receiver. If the
 // tag is not TIME an error will be returned.
 func (v Value) GetTime() (time.Time, error) {
-	if tag := v.Tag; tag != ValueType_TIME {
+	if tag := v.GetTag(); tag != ValueType_TIME {
 		return time.Time{}, fmt.Errorf("value type is not %s: %s", ValueType_TIME, tag)
 	}
-	_, t, err := encoding.DecodeTime(v.RawBytes)
+	_, t, err := encoding.DecodeTime(v.dataBytes())
 	if err != nil {
 		return t, err
 	}
 	return t, nil
-}
-
-var crc32Pool = sync.Pool{
-	New: func() interface{} {
-		return crc32.NewIEEE()
-	},
 }
 
 // GetTimeseries decodes an InternalTimeSeriesData value from the bytes
@@ -451,22 +502,34 @@ func (v Value) GetTimeseries() (InternalTimeSeriesData, error) {
 	return ts, v.GetProto(&ts)
 }
 
+var crc32Pool = sync.Pool{
+	New: func() interface{} {
+		return crc32.NewIEEE()
+	},
+}
+
 // computeChecksum computes a checksum based on the provided key and
-// the contents of the value. If the value contains a byte slice, the
-// checksum includes it directly.
+// the contents of the value.
 func (v Value) computeChecksum(key []byte) uint32 {
+	if len(v.RawBytes) < headerSize {
+		return 0
+	}
 	crc := crc32Pool.Get().(hash.Hash32)
 	if _, err := crc.Write(key); err != nil {
 		panic(err)
 	}
-	if v.RawBytes != nil {
-		if _, err := crc.Write(v.RawBytes); err != nil {
-			panic(err)
-		}
+	if _, err := crc.Write(v.RawBytes[checksumSize:]); err != nil {
+		panic(err)
 	}
 	sum := crc.Sum32()
 	crc.Reset()
 	crc32Pool.Put(crc)
+	// We reserved the value 0 (checksumUnitialized) to indicate that a checksum
+	// has not been initialized. This reservation is accomplished by folding a
+	// computed checksum of 0 to the value 1.
+	if sum == checksumUnitialized {
+		return 1
+	}
 	return sum
 }
 
