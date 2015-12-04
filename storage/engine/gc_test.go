@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/gogo/protobuf/proto"
 )
 
 func mvccVersionKey(key roachpb.Key, ts roachpb.Timestamp) MVCCKey {
@@ -44,25 +43,14 @@ var (
 	}
 )
 
-func serializedValue(deleted bool, t *testing.T) []byte {
-	if deleted {
-		return nil
-	}
-	data, err := proto.Marshal(&roachpb.Value{})
-	if err != nil {
-		t.Fatalf("unexpected marshal error: %v", err)
-	}
-	return data
-}
-
 // TestGarbageCollectorFilter verifies the filter policies for
 // different sorts of MVCC keys.
 func TestGarbageCollectorFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	gcA := NewGarbageCollector(makeTS(0, 0), config.GCPolicy{TTLSeconds: 1})
 	gcB := NewGarbageCollector(makeTS(0, 0), config.GCPolicy{TTLSeconds: 2})
-	n := serializedValue(false, t)
-	d := serializedValue(true, t)
+	n := []byte("data")
+	d := []byte(nil)
 	testData := []struct {
 		gc       *GarbageCollector
 		time     roachpb.Timestamp

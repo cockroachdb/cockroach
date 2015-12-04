@@ -281,6 +281,43 @@ DBIterState DBIterGetState(DBIterator* iter) {
   return state;
 }
 
+const int kChecksumSize = 4;
+const int kTagPos = kChecksumSize;
+const int kHeaderSize = kTagPos + 1;
+
+rocksdb::Slice ValueDataBytes(const std::string &val) {
+  if (val.size() < kHeaderSize) {
+    return rocksdb::Slice();
+  }
+  return rocksdb::Slice(val.data() + kHeaderSize, val.size() - kHeaderSize);
+}
+
+cockroach::roachpb::ValueType GetTag(const std::string &val) {
+  if (val.size() < kHeaderSize) {
+    return cockroach::roachpb::UNKNOWN;
+  }
+  return cockroach::roachpb::ValueType(val[kTagPos]);
+}
+
+void SetTag(std::string *val, cockroach::roachpb::ValueType tag) {
+  (*val)[kTagPos] = tag;
+}
+
+bool ParseProtoFromValue(const std::string &val, google::protobuf::Message *msg) {
+  if (val.size() < kHeaderSize) {
+    return false;
+  }
+  const rocksdb::Slice d = ValueDataBytes(val);
+  return msg->ParseFromArray(d.data(), d.size());
+}
+
+void SerializeProtoToValue(std::string *val, const google::protobuf::Message &msg) {
+  val->resize(kHeaderSize);
+  std::fill(val->begin(), val->end(), 0);
+  SetTag(val, cockroach::roachpb::BYTES);
+  msg.AppendToString(val);
+}
+
 // DBCompactionFilter implements our garbage collection policy for
 // key/value pairs which can be considered in isolation. This
 // includes:
@@ -336,7 +373,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
       // *error_msg = (char*)"failed to parse mvcc metadata entry";
       return false;
     }
-    if (!meta.has_value()) {
+    if (!meta.has_raw_bytes()) {
       // *error_msg = (char*)"not an inlined mvcc value";
       return false;
     }
@@ -345,7 +382,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
     // system-wide minimum write intent is periodically computed via
     // map-reduce over all ranges and gossiped.
     cockroach::roachpb::Transaction txn;
-    if (!txn.ParseFromArray(meta.value().raw_bytes().data(), meta.value().raw_bytes().size())) {
+    if (!ParseProtoFromValue(meta.raw_bytes(), &txn)) {
       // *error_msg = (char*)"failed to parse transaction entry";
       return false;
     }
@@ -494,139 +531,144 @@ bool WillOverflow(int64_t a, int64_t b) {
 // Method used to sort InternalTimeSeriesSamples.
 bool TimeSeriesSampleOrdering(const cockroach::roachpb::InternalTimeSeriesSample* a,
         const cockroach::roachpb::InternalTimeSeriesSample* b) {
-    return a->offset() < b->offset();
+  return a->offset() < b->offset();
 }
 
 // IsTimeSeriesData returns true if the given protobuffer Value contains a
 // TimeSeriesData message.
-bool IsTimeSeriesData(const cockroach::roachpb::Value *val) {
-    return val->has_tag()
-        && val->tag() == cockroach::roachpb::TIMESERIES;
+bool IsTimeSeriesData(const std::string &val) {
+  return GetTag(val) == cockroach::roachpb::TIMESERIES;
 }
 
 double GetMax(const cockroach::roachpb::InternalTimeSeriesSample *sample) {
-    if (sample->has_max()) return sample->max();
-    if (sample->has_sum()) return sample->sum();
-    return std::numeric_limits<double>::min();
+  if (sample->has_max()) return sample->max();
+  if (sample->has_sum()) return sample->sum();
+  return std::numeric_limits<double>::min();
 }
 
 double GetMin(const cockroach::roachpb::InternalTimeSeriesSample *sample) {
-    if (sample->has_min()) return sample->min();
-    if (sample->has_sum()) return sample->sum();
-    return std::numeric_limits<double>::max();
+  if (sample->has_min()) return sample->min();
+  if (sample->has_sum()) return sample->sum();
+  return std::numeric_limits<double>::max();
 }
 
 // AccumulateTimeSeriesSamples accumulates the individual values of two
 // InternalTimeSeriesSamples which have a matching timestamp. The dest parameter
 // is modified to contain the accumulated values.
 void AccumulateTimeSeriesSamples(cockroach::roachpb::InternalTimeSeriesSample* dest,
-        const cockroach::roachpb::InternalTimeSeriesSample &src) {
-    // Accumulate integer values
-    int total_count = dest->count() + src.count();
-    if (total_count > 1) {
-        // Keep explicit max and min values.
-        dest->set_max(std::max(GetMax(dest), GetMax(&src)));
-        dest->set_min(std::min(GetMin(dest), GetMin(&src)));
-    }
-    if (total_count > 0) {
-        dest->set_sum(dest->sum() + src.sum());
-    }
-    dest->set_count(total_count);
+                                 const cockroach::roachpb::InternalTimeSeriesSample &src) {
+  // Accumulate integer values
+  int total_count = dest->count() + src.count();
+  if (total_count > 1) {
+    // Keep explicit max and min values.
+    dest->set_max(std::max(GetMax(dest), GetMax(&src)));
+    dest->set_min(std::min(GetMin(dest), GetMin(&src)));
+  }
+  if (total_count > 0) {
+    dest->set_sum(dest->sum() + src.sum());
+  }
+  dest->set_count(total_count);
+}
+
+void SerializeTimeSeriesToValue(
+    std::string *val, const cockroach::roachpb::InternalTimeSeriesData &ts) {
+  SerializeProtoToValue(val, ts);
+  SetTag(val, cockroach::roachpb::TIMESERIES);
 }
 
 // MergeTimeSeriesValues attempts to merge two Values which contain
 // InternalTimeSeriesData messages. The messages cannot be merged if they have
 // different start timestamps or sample durations. Returns true if the merge is
 // successful.
-bool MergeTimeSeriesValues(cockroach::roachpb::Value *left, const cockroach::roachpb::Value &right,
-        bool full_merge, rocksdb::Logger* logger) {
-    // Attempt to parse TimeSeriesData from both Values.
-    cockroach::roachpb::InternalTimeSeriesData left_ts;
-    cockroach::roachpb::InternalTimeSeriesData right_ts;
-    if (!left_ts.ParseFromString(left->raw_bytes())) {
-        rocksdb::Warn(logger,
-                "left InternalTimeSeriesData could not be parsed from bytes.");
-        return false;
-    }
-    if (!right_ts.ParseFromString(right.raw_bytes())) {
-        rocksdb::Warn(logger,
-                "right InternalTimeSeriesData could not be parsed from bytes.");
-        return false;
-    }
+bool MergeTimeSeriesValues(
+    std::string *left, const std::string &right, bool full_merge, rocksdb::Logger* logger) {
+  // Attempt to parse TimeSeriesData from both Values.
+  cockroach::roachpb::InternalTimeSeriesData left_ts;
+  cockroach::roachpb::InternalTimeSeriesData right_ts;
+  if (!ParseProtoFromValue(*left, &left_ts)) {
+    rocksdb::Warn(logger,
+                  "left InternalTimeSeriesData could not be parsed from bytes.");
+    return false;
+  }
+  if (!ParseProtoFromValue(right, &right_ts)) {
+    rocksdb::Warn(logger,
+                  "right InternalTimeSeriesData could not be parsed from bytes.");
+    return false;
+  }
 
-    // Ensure that both InternalTimeSeriesData have the same timestamp and
-    // sample_duration.
-    if (left_ts.start_timestamp_nanos() != right_ts.start_timestamp_nanos()) {
-        rocksdb::Warn(logger,
-                "TimeSeries merge failed due to mismatched start timestamps");
-        return false;
-    }
-    if (left_ts.sample_duration_nanos() !=
-            right_ts.sample_duration_nanos()) {
-        rocksdb::Warn(logger,
-                "TimeSeries merge failed due to mismatched sample durations.");
-        return false;
-    }
+  // Ensure that both InternalTimeSeriesData have the same timestamp and
+  // sample_duration.
+  if (left_ts.start_timestamp_nanos() != right_ts.start_timestamp_nanos()) {
+    rocksdb::Warn(logger,
+                  "TimeSeries merge failed due to mismatched start timestamps");
+    return false;
+  }
+  if (left_ts.sample_duration_nanos() !=
+      right_ts.sample_duration_nanos()) {
+    rocksdb::Warn(logger,
+                  "TimeSeries merge failed due to mismatched sample durations.");
+    return false;
+  }
 
-    // If only a partial merge, do not sort and combine - instead, just quickly
-    // merge the two values together. Values will be processed later after a
-    // full merge.
-    if (!full_merge) {
-        left_ts.MergeFrom(right_ts);
-        left_ts.SerializeToString(left->mutable_raw_bytes());
-        return true;
-    }
-
-    // Initialize new_ts and its primitive data fields. Values from the left and
-    // right collections will be merged into the new collection.
-    cockroach::roachpb::InternalTimeSeriesData new_ts;
-    new_ts.set_start_timestamp_nanos(left_ts.start_timestamp_nanos());
-    new_ts.set_sample_duration_nanos(left_ts.sample_duration_nanos());
-
-    // Sort values in right_ts. Assume values in left_ts have been sorted.
-    std::sort(right_ts.mutable_samples()->pointer_begin(),
-              right_ts.mutable_samples()->pointer_end(),
-              TimeSeriesSampleOrdering);
-
-    // Merge sample values of left and right into new_ts.
-    auto left_front = left_ts.samples().begin();
-    auto left_end = left_ts.samples().end();
-    auto right_front = right_ts.samples().begin();
-    auto right_end = right_ts.samples().end();
-
-    // Loop until samples from both sides have been exhausted.
-    while (left_front != left_end || right_front != right_end) {
-        // Select the lowest offset from either side.
-        long next_offset;
-        if (left_front == left_end) {
-            next_offset = right_front->offset();
-        } else if (right_front == right_end) {
-            next_offset = left_front->offset();
-        } else if (left_front->offset()<=right_front->offset()) {
-            next_offset = left_front->offset();
-        } else {
-            next_offset = right_front->offset();
-        }
-
-        // Create an empty sample in the output collection with the selected
-        // offset.  Accumulate data from all samples at the front of either left
-        // or right which match the selected timestamp. This behavior is needed
-        // because each side may individually have duplicated offsets.
-        cockroach::roachpb::InternalTimeSeriesSample* ns = new_ts.add_samples();
-        ns->set_offset(next_offset);
-        while (left_front != left_end && left_front->offset() == ns->offset()) {
-            AccumulateTimeSeriesSamples(ns, *left_front);
-            left_front++;
-        }
-        while (right_front != right_end && right_front->offset() == ns->offset()) {
-            AccumulateTimeSeriesSamples(ns, *right_front);
-            right_front++;
-        }
-    }
-
-    // Serialize the new TimeSeriesData into the left value's byte field.
-    new_ts.SerializeToString(left->mutable_raw_bytes());
+  // If only a partial merge, do not sort and combine - instead, just quickly
+  // merge the two values together. Values will be processed later after a
+  // full merge.
+  if (!full_merge) {
+    left_ts.MergeFrom(right_ts);
+    SerializeTimeSeriesToValue(left, left_ts);
     return true;
+  }
+
+  // Initialize new_ts and its primitive data fields. Values from the left and
+  // right collections will be merged into the new collection.
+  cockroach::roachpb::InternalTimeSeriesData new_ts;
+  new_ts.set_start_timestamp_nanos(left_ts.start_timestamp_nanos());
+  new_ts.set_sample_duration_nanos(left_ts.sample_duration_nanos());
+
+  // Sort values in right_ts. Assume values in left_ts have been sorted.
+  std::sort(right_ts.mutable_samples()->pointer_begin(),
+            right_ts.mutable_samples()->pointer_end(),
+            TimeSeriesSampleOrdering);
+
+  // Merge sample values of left and right into new_ts.
+  auto left_front = left_ts.samples().begin();
+  auto left_end = left_ts.samples().end();
+  auto right_front = right_ts.samples().begin();
+  auto right_end = right_ts.samples().end();
+
+  // Loop until samples from both sides have been exhausted.
+  while (left_front != left_end || right_front != right_end) {
+    // Select the lowest offset from either side.
+    long next_offset;
+    if (left_front == left_end) {
+      next_offset = right_front->offset();
+    } else if (right_front == right_end) {
+      next_offset = left_front->offset();
+    } else if (left_front->offset()<=right_front->offset()) {
+      next_offset = left_front->offset();
+    } else {
+      next_offset = right_front->offset();
+    }
+
+    // Create an empty sample in the output collection with the selected
+    // offset.  Accumulate data from all samples at the front of either left
+    // or right which match the selected timestamp. This behavior is needed
+    // because each side may individually have duplicated offsets.
+    cockroach::roachpb::InternalTimeSeriesSample* ns = new_ts.add_samples();
+    ns->set_offset(next_offset);
+    while (left_front != left_end && left_front->offset() == ns->offset()) {
+      AccumulateTimeSeriesSamples(ns, *left_front);
+      left_front++;
+    }
+    while (right_front != right_end && right_front->offset() == ns->offset()) {
+      AccumulateTimeSeriesSamples(ns, *right_front);
+      right_front++;
+    }
+  }
+
+  // Serialize the new TimeSeriesData into the left value's byte field.
+  SerializeTimeSeriesToValue(left, new_ts);
+  return true;
 }
 
 // ConsolidateTimeSeriesValue processes a single value which contains
@@ -635,75 +677,76 @@ bool MergeTimeSeriesValues(cockroach::roachpb::Value *left, const cockroach::roa
 // the single-value equivalent of MergeTimeSeriesValues, and is used in the case
 // where the first value is merged into the key. Returns true if the merge is
 // successful.
-bool ConsolidateTimeSeriesValue(cockroach::roachpb::Value *val, rocksdb::Logger* logger) {
-    // Attempt to parse TimeSeriesData from both Values.
-    cockroach::roachpb::InternalTimeSeriesData val_ts;
-    if (!val_ts.ParseFromString(val->raw_bytes())) {
-        rocksdb::Warn(logger,
-                "InternalTimeSeriesData could not be parsed from bytes.");
-        return false;
+bool ConsolidateTimeSeriesValue(std::string *val, rocksdb::Logger* logger) {
+  // Attempt to parse TimeSeriesData from both Values.
+  cockroach::roachpb::InternalTimeSeriesData val_ts;
+  if (!ParseProtoFromValue(*val, &val_ts)) {
+    rocksdb::Warn(logger,
+                  "InternalTimeSeriesData could not be parsed from bytes.");
+    return false;
+  }
+
+  // Initialize new_ts and its primitive data fields.
+  cockroach::roachpb::InternalTimeSeriesData new_ts;
+  new_ts.set_start_timestamp_nanos(val_ts.start_timestamp_nanos());
+  new_ts.set_sample_duration_nanos(val_ts.sample_duration_nanos());
+
+  // Sort values in the ts value.
+  std::sort(val_ts.mutable_samples()->pointer_begin(),
+            val_ts.mutable_samples()->pointer_end(),
+            TimeSeriesSampleOrdering);
+
+  // Merge sample values of left and right into new_ts.
+  auto front = val_ts.samples().begin();
+  auto end = val_ts.samples().end();
+
+  // Loop until samples have been exhausted.
+  while (front != end) {
+    // Create an empty sample in the output collection with the selected
+    // offset.  Accumulate data from all samples at the front of the sample
+    // collection which match the selected timestamp. This behavior is
+    // needed because even a single value may have duplicated offsets.
+    cockroach::roachpb::InternalTimeSeriesSample* ns = new_ts.add_samples();
+    ns->set_offset(front->offset());
+    while (front != end && front->offset() == ns->offset()) {
+      AccumulateTimeSeriesSamples(ns, *front);
+      ++front;
     }
+  }
 
-    // Initialize new_ts and its primitive data fields.
-    cockroach::roachpb::InternalTimeSeriesData new_ts;
-    new_ts.set_start_timestamp_nanos(val_ts.start_timestamp_nanos());
-    new_ts.set_sample_duration_nanos(val_ts.sample_duration_nanos());
-
-    // Sort values in the ts value.
-    std::sort(val_ts.mutable_samples()->pointer_begin(),
-              val_ts.mutable_samples()->pointer_end(),
-              TimeSeriesSampleOrdering);
-
-    // Merge sample values of left and right into new_ts.
-    auto front = val_ts.samples().begin();
-    auto end = val_ts.samples().end();
-
-    // Loop until samples have been exhausted.
-    while (front != end) {
-        // Create an empty sample in the output collection with the selected
-        // offset.  Accumulate data from all samples at the front of the sample
-        // collection which match the selected timestamp. This behavior is
-        // needed because even a single value may have duplicated offsets.
-        cockroach::roachpb::InternalTimeSeriesSample* ns = new_ts.add_samples();
-        ns->set_offset(front->offset());
-        while (front != end && front->offset() == ns->offset()) {
-            AccumulateTimeSeriesSamples(ns, *front);
-            ++front;
-        }
-    }
-
-    // Serialize the new TimeSeriesData into the value's byte field.
-    new_ts.SerializeToString(val->mutable_raw_bytes());
-    return true;
+  // Serialize the new TimeSeriesData into the value's byte field.
+  SerializeTimeSeriesToValue(val, new_ts);
+  return true;
 }
 
-bool MergeValues(cockroach::roachpb::Value *left, const cockroach::roachpb::Value &right,
-        bool full_merge, rocksdb::Logger* logger) {
-    if (left->has_raw_bytes()) {
-        if (!right.has_raw_bytes()) {
-            rocksdb::Warn(logger,
-                    "inconsistent value types for merge (left = bytes, right = ?)");
-            return false;
-        }
-        if (IsTimeSeriesData(left) || IsTimeSeriesData(&right)) {
-            // The right operand must also be a time series.
-            if (!IsTimeSeriesData(left) || !IsTimeSeriesData(&right)) {
-                rocksdb::Warn(logger,
-                        "inconsistent value types for merging time series data (type(left) != type(right))");
-                return false;
-            }
-            return MergeTimeSeriesValues(left, right, full_merge, logger);
-        } else {
-            *left->mutable_raw_bytes() += right.raw_bytes();
-        }
-        return true;
-    } else {
-        *left = right;
-        if (full_merge && IsTimeSeriesData(left)) {
-            ConsolidateTimeSeriesValue(left, logger);
-        }
-        return true;
+bool MergeValues(cockroach::storage::engine::MVCCMetadata *left,
+                 const cockroach::storage::engine::MVCCMetadata &right,
+                 bool full_merge, rocksdb::Logger* logger) {
+  if (left->has_raw_bytes()) {
+    if (!right.has_raw_bytes()) {
+      rocksdb::Warn(logger, "inconsistent value types for merge (left = bytes, right = ?)");
+      return false;
     }
+    if (IsTimeSeriesData(left->raw_bytes()) || IsTimeSeriesData(right.raw_bytes())) {
+      // The right operand must also be a time series.
+      if (!IsTimeSeriesData(left->raw_bytes()) || !IsTimeSeriesData(right.raw_bytes())) {
+        rocksdb::Warn(logger,
+                      "inconsistent value types for merging time series data (type(left) != type(right))");
+        return false;
+      }
+      return MergeTimeSeriesValues(left->mutable_raw_bytes(), right.raw_bytes(), full_merge, logger);
+    } else {
+      const rocksdb::Slice rdata = ValueDataBytes(right.raw_bytes());
+      left->mutable_raw_bytes()->append(rdata.data(), rdata.size());
+    }
+    return true;
+  } else {
+    left->mutable_raw_bytes()->assign(right.raw_bytes());
+    if (full_merge && IsTimeSeriesData(left->raw_bytes())) {
+      ConsolidateTimeSeriesValue(left->mutable_raw_bytes(), logger);
+    }
+    return true;
+  }
 }
 
 
@@ -712,7 +755,6 @@ DBStatus MergeResult(cockroach::storage::engine::MVCCMetadata* meta, DBString* r
   // TODO(pmattis): Should recompute checksum here. Need a crc32
   // implementation and need to verify the checksumming is identical
   // to what is being done in Go. Zlib's crc32 should be sufficient.
-  meta->mutable_value()->clear_checksum();
   result->len = meta->ByteSize();
   result->data = static_cast<char*>(malloc(result->len));
   if (!meta->SerializeToArray(result->data, result->len)) {
@@ -801,8 +843,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
       rocksdb::Warn(logger, "corrupted operand value");
       return false;
     }
-    return MergeValues(meta->mutable_value(), operand_meta.value(),
-                       full_merge, logger);
+    return MergeValues(meta, operand_meta, full_merge, logger);
   }
 };
 
@@ -1526,7 +1567,7 @@ DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
     return ToDBString("corrupted update value");
   }
 
-  if (!MergeValues(meta.mutable_value(), update_meta.value(), true, NULL)) {
+  if (!MergeValues(&meta, update_meta, true, NULL)) {
     return ToDBString("incompatible merge values");
   }
   return MergeResult(&meta, new_value);
@@ -1596,7 +1637,7 @@ MVCCStatsResult MVCCComputeStats(
         stats.key_bytes += meta_key_size;
         stats.val_bytes += meta_val_size;
         stats.key_count++;
-        if (meta.has_value()) {
+        if (meta.has_raw_bytes()) {
           stats.val_count++;
         }
       }

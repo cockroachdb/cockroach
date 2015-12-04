@@ -220,22 +220,25 @@ type Timestamp struct {
 func (m *Timestamp) Reset()      { *m = Timestamp{} }
 func (*Timestamp) ProtoMessage() {}
 
-// Value specifies the value at a key. Multiple values at the same key
-// are supported based on timestamp.
+// Value specifies the value at a key. Multiple values at the same key are
+// supported based on timestamp. The data stored within a value is typed
+// (ValueType) and custom encoded into the raw_bytes field. A custom encoding
+// is used instead of separate proto fields to avoid proto overhead and to
+// avoid unnecessary encoding and decoding as the value gets read from disk and
+// passed through the network. The format is:
+//
+//   <4-byte-checksum><1-byte-tag><encoded-data>
+//
+// A CRC-32-IEEE checksum is computed from the associated key, tag and encoded
+// data, in that order.
+//
+// TODO(peter): Is a 4-byte checksum overkill when most (all?) values
+// will be less than 64KB?
 type Value struct {
-	// raw_bytes is the byte slice value.
+	// raw_bytes contains the encoded value and checksum.
 	RawBytes []byte `protobuf:"bytes,1,opt,name=raw_bytes" json:"raw_bytes,omitempty"`
-	// checksum is a CRC-32-IEEE checksum of the key + value, in that order.
-	// If this is an integer value, then the value is interpreted as an 8
-	// byte, big-endian encoded value. This value is set by the client on
-	// writes to do end-to-end integrity verification. If the checksum is
-	// incorrect, the write operation will fail. If the client does not
-	// wish to use end-to-end checksumming, this value should be nil.
-	Checksum *uint32 `protobuf:"fixed32,3,opt,name=checksum" json:"checksum,omitempty"`
 	// Timestamp of value.
-	Timestamp *Timestamp `protobuf:"bytes,4,opt,name=timestamp" json:"timestamp,omitempty"`
-	// tag is the optional type of the value.
-	Tag ValueType `protobuf:"varint,5,opt,name=tag,enum=cockroach.roachpb.ValueType" json:"tag"`
+	Timestamp *Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp,omitempty"`
 }
 
 func (m *Value) Reset()         { *m = Value{} }
@@ -588,13 +591,8 @@ func (m *Value) MarshalTo(data []byte) (int, error) {
 		i = encodeVarintData(data, i, uint64(len(m.RawBytes)))
 		i += copy(data[i:], m.RawBytes)
 	}
-	if m.Checksum != nil {
-		data[i] = 0x1d
-		i++
-		i = encodeFixed32Data(data, i, uint32(*m.Checksum))
-	}
 	if m.Timestamp != nil {
-		data[i] = 0x22
+		data[i] = 0x12
 		i++
 		i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
 		n1, err := m.Timestamp.MarshalTo(data[i:])
@@ -603,9 +601,6 @@ func (m *Value) MarshalTo(data []byte) (int, error) {
 		}
 		i += n1
 	}
-	data[i] = 0x28
-	i++
-	i = encodeVarintData(data, i, uint64(m.Tag))
 	return i, nil
 }
 
@@ -1195,14 +1190,10 @@ func (m *Value) Size() (n int) {
 		l = len(m.RawBytes)
 		n += 1 + l + sovData(uint64(l))
 	}
-	if m.Checksum != nil {
-		n += 5
-	}
 	if m.Timestamp != nil {
 		l = m.Timestamp.Size()
 		n += 1 + l + sovData(uint64(l))
 	}
-	n += 1 + sovData(uint64(m.Tag))
 	return n
 }
 
@@ -1651,21 +1642,7 @@ func (m *Value) Unmarshal(data []byte) error {
 			}
 			m.RawBytes = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
-		case 3:
-			if wireType != 5 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Checksum", wireType)
-			}
-			var v uint32
-			if (iNdEx + 4) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += 4
-			v = uint32(data[iNdEx-4])
-			v |= uint32(data[iNdEx-3]) << 8
-			v |= uint32(data[iNdEx-2]) << 16
-			v |= uint32(data[iNdEx-1]) << 24
-			m.Checksum = &v
-		case 4:
+		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
 			}
@@ -1698,25 +1675,6 @@ func (m *Value) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 5:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Tag", wireType)
-			}
-			m.Tag = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowData
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.Tag |= (ValueType(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])

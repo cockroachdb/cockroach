@@ -38,7 +38,7 @@ message MVCCMetadata {
   // and subsequent version rows. If timestamp == (0, 0), then there
   // is only a single MVCC metadata row with value inlined, and with
   // empty timestamp, key_bytes, and val_bytes.
-  optional roachpb.Value value = 6;
+  optional bytes raw_bytes = 6;
 }
 
 // MVCCStats tracks byte and instance counts for:

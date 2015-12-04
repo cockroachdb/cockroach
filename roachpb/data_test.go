@@ -266,7 +266,7 @@ func TestValueChecksumWithBytes(t *testing.T) {
 		t.Error("expected checksum verification failure on different key")
 	}
 	// Mess with value.
-	v.SetBytes([]byte("abcd"))
+	copy(v.RawBytes[headerSize:], "cba")
 	if err := v.Verify(k); err == nil {
 		t.Error("expected checksum verification failure on different value")
 	}
