@@ -26,17 +26,21 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+func mvccVersionKey(key roachpb.Key, ts roachpb.Timestamp) MVCCKey {
+	return MVCCKey{Key: key, Timestamp: ts}
+}
+
 var (
 	aKey  = roachpb.Key("a")
 	bKey  = roachpb.Key("b")
 	aKeys = []MVCCKey{
-		MVCCEncodeVersionKey(aKey, makeTS(2E9, 0)),
-		MVCCEncodeVersionKey(aKey, makeTS(1E9, 1)),
-		MVCCEncodeVersionKey(aKey, makeTS(1E9, 0)),
+		mvccVersionKey(aKey, makeTS(2E9, 0)),
+		mvccVersionKey(aKey, makeTS(1E9, 1)),
+		mvccVersionKey(aKey, makeTS(1E9, 0)),
 	}
 	bKeys = []MVCCKey{
-		MVCCEncodeVersionKey(bKey, makeTS(2E9, 0)),
-		MVCCEncodeVersionKey(bKey, makeTS(1E9, 0)),
+		mvccVersionKey(bKey, makeTS(2E9, 0)),
+		mvccVersionKey(bKey, makeTS(1E9, 0)),
 	}
 )
 

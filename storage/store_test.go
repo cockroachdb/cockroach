@@ -226,7 +226,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
 	// Put some random garbage into the engine.
-	if err := eng.Put(engine.MVCCKey("foo"), []byte("bar")); err != nil {
+	if err := eng.Put(engine.MakeMVCCMetadataKey(roachpb.Key("foo")), []byte("bar")); err != nil {
 		t.Errorf("failure putting key foo into engine: %s", err)
 	}
 	ctx := TestStoreContext

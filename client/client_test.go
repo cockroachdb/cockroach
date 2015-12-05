@@ -738,7 +738,7 @@ func setupClientBenchData(useSSL bool, numVersions, numKeys int, b *testing.B) (
 	}
 
 	if r, ok := s.Ctx.Engines[0].(*engine.RocksDB); ok {
-		r.CompactRange(nil, nil)
+		r.CompactRange(engine.NilKey, engine.NilKey)
 	}
 
 	return s, db

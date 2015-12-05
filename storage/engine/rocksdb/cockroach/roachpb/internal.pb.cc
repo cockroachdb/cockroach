@@ -153,9 +153,11 @@ void protobuf_AssignDesc_cockroach_2froachpb_2finternal_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData, _internal_metadata_),
       -1);
   RaftSnapshotData_KeyValue_descriptor_ = RaftSnapshotData_descriptor_->nested_type(0);
-  static const int RaftSnapshotData_KeyValue_offsets_[2] = {
+  static const int RaftSnapshotData_KeyValue_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData_KeyValue, key_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData_KeyValue, value_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData_KeyValue, wall_time_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData_KeyValue, logical_),
   };
   RaftSnapshotData_KeyValue_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -243,12 +245,13 @@ void protobuf_AddDesc_cockroach_2froachpb_2finternal_2eproto() {
     "=\n\022RaftTruncatedState\022\023\n\005index\030\001 \001(\004B\004\310\336"
     "\037\000\022\022\n\004term\030\002 \001(\004B\004\310\336\037\000\"L\n\rRaftTombstone\022"
     ";\n\017next_replica_id\030\001 \001(\005B\"\310\336\037\000\342\336\037\rNextRe"
-    "plicaID\372\336\037\tReplicaID\"\300\001\n\020RaftSnapshotDat"
+    "plicaID\372\336\037\tReplicaID\"\360\001\n\020RaftSnapshotDat"
     "a\022B\n\020range_descriptor\030\001 \001(\0132\".cockroach."
     "roachpb.RangeDescriptorB\004\310\336\037\000\022@\n\002KV\030\002 \003("
     "\0132,.cockroach.roachpb.RaftSnapshotData.K"
-    "eyValueB\006\342\336\037\002KV\032&\n\010KeyValue\022\013\n\003key\030\001 \001(\014"
-    "\022\r\n\005value\030\002 \001(\014B\tZ\007roachpbX\002", 948);
+    "eyValueB\006\342\336\037\002KV\032V\n\010KeyValue\022\013\n\003key\030\001 \001(\014"
+    "\022\r\n\005value\030\002 \001(\014\022\027\n\twall_time\030\003 \001(\003B\004\310\336\037\000"
+    "\022\025\n\007logical\030\004 \001(\005B\004\310\336\037\000B\tZ\007roachpbX\002", 996);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/internal.proto", &protobuf_RegisterTypes);
   RaftCommand::default_instance_ = new RaftCommand();
@@ -2245,6 +2248,8 @@ void RaftTombstone::clear_next_replica_id() {
 #ifndef _MSC_VER
 const int RaftSnapshotData_KeyValue::kKeyFieldNumber;
 const int RaftSnapshotData_KeyValue::kValueFieldNumber;
+const int RaftSnapshotData_KeyValue::kWallTimeFieldNumber;
+const int RaftSnapshotData_KeyValue::kLogicalFieldNumber;
 #endif  // !_MSC_VER
 
 RaftSnapshotData_KeyValue::RaftSnapshotData_KeyValue()
@@ -2269,6 +2274,8 @@ void RaftSnapshotData_KeyValue::SharedCtor() {
   _cached_size_ = 0;
   key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   value_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  wall_time_ = GOOGLE_LONGLONG(0);
+  logical_ = 0;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -2310,7 +2317,16 @@ RaftSnapshotData_KeyValue* RaftSnapshotData_KeyValue::New(::google::protobuf::Ar
 }
 
 void RaftSnapshotData_KeyValue::Clear() {
-  if (_has_bits_[0 / 32] & 3u) {
+#define ZR_HELPER_(f) reinterpret_cast<char*>(\
+  &reinterpret_cast<RaftSnapshotData_KeyValue*>(16)->f)
+
+#define ZR_(first, last) do {\
+  ::memset(&first, 0,\
+           ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
+} while (0)
+
+  if (_has_bits_[0 / 32] & 15u) {
+    ZR_(wall_time_, logical_);
     if (has_key()) {
       key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
     }
@@ -2318,6 +2334,10 @@ void RaftSnapshotData_KeyValue::Clear() {
       value_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
     }
   }
+
+#undef ZR_HELPER_
+#undef ZR_
+
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->Clear();
@@ -2352,6 +2372,36 @@ bool RaftSnapshotData_KeyValue::MergePartialFromCodedStream(
          parse_value:
           DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
                 input, this->mutable_value()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(24)) goto parse_wall_time;
+        break;
+      }
+
+      // optional int64 wall_time = 3;
+      case 3: {
+        if (tag == 24) {
+         parse_wall_time:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &wall_time_)));
+          set_has_wall_time();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(32)) goto parse_logical;
+        break;
+      }
+
+      // optional int32 logical = 4;
+      case 4: {
+        if (tag == 32) {
+         parse_logical:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &logical_)));
+          set_has_logical();
         } else {
           goto handle_unusual;
         }
@@ -2396,6 +2446,16 @@ void RaftSnapshotData_KeyValue::SerializeWithCachedSizes(
       2, this->value(), output);
   }
 
+  // optional int64 wall_time = 3;
+  if (has_wall_time()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(3, this->wall_time(), output);
+  }
+
+  // optional int32 logical = 4;
+  if (has_logical()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(4, this->logical(), output);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -2420,6 +2480,16 @@ void RaftSnapshotData_KeyValue::SerializeWithCachedSizes(
         2, this->value(), target);
   }
 
+  // optional int64 wall_time = 3;
+  if (has_wall_time()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(3, this->wall_time(), target);
+  }
+
+  // optional int32 logical = 4;
+  if (has_logical()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(4, this->logical(), target);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -2431,7 +2501,7 @@ void RaftSnapshotData_KeyValue::SerializeWithCachedSizes(
 int RaftSnapshotData_KeyValue::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 15) {
     // optional bytes key = 1;
     if (has_key()) {
       total_size += 1 +
@@ -2444,6 +2514,20 @@ int RaftSnapshotData_KeyValue::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::BytesSize(
           this->value());
+    }
+
+    // optional int64 wall_time = 3;
+    if (has_wall_time()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->wall_time());
+    }
+
+    // optional int32 logical = 4;
+    if (has_logical()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->logical());
     }
 
   }
@@ -2481,6 +2565,12 @@ void RaftSnapshotData_KeyValue::MergeFrom(const RaftSnapshotData_KeyValue& from)
       set_has_value();
       value_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.value_);
     }
+    if (from.has_wall_time()) {
+      set_wall_time(from.wall_time());
+    }
+    if (from.has_logical()) {
+      set_logical(from.logical());
+    }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -2511,6 +2601,8 @@ void RaftSnapshotData_KeyValue::Swap(RaftSnapshotData_KeyValue* other) {
 void RaftSnapshotData_KeyValue::InternalSwap(RaftSnapshotData_KeyValue* other) {
   key_.Swap(&other->key_);
   value_.Swap(&other->value_);
+  std::swap(wall_time_, other->wall_time_);
+  std::swap(logical_, other->logical_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -2909,6 +3001,54 @@ void RaftSnapshotData_KeyValue::clear_value() {
   }
   value_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RaftSnapshotData.KeyValue.value)
+}
+
+// optional int64 wall_time = 3;
+bool RaftSnapshotData_KeyValue::has_wall_time() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+void RaftSnapshotData_KeyValue::set_has_wall_time() {
+  _has_bits_[0] |= 0x00000004u;
+}
+void RaftSnapshotData_KeyValue::clear_has_wall_time() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+void RaftSnapshotData_KeyValue::clear_wall_time() {
+  wall_time_ = GOOGLE_LONGLONG(0);
+  clear_has_wall_time();
+}
+ ::google::protobuf::int64 RaftSnapshotData_KeyValue::wall_time() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RaftSnapshotData.KeyValue.wall_time)
+  return wall_time_;
+}
+ void RaftSnapshotData_KeyValue::set_wall_time(::google::protobuf::int64 value) {
+  set_has_wall_time();
+  wall_time_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RaftSnapshotData.KeyValue.wall_time)
+}
+
+// optional int32 logical = 4;
+bool RaftSnapshotData_KeyValue::has_logical() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+void RaftSnapshotData_KeyValue::set_has_logical() {
+  _has_bits_[0] |= 0x00000008u;
+}
+void RaftSnapshotData_KeyValue::clear_has_logical() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+void RaftSnapshotData_KeyValue::clear_logical() {
+  logical_ = 0;
+  clear_has_logical();
+}
+ ::google::protobuf::int32 RaftSnapshotData_KeyValue::logical() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RaftSnapshotData.KeyValue.logical)
+  return logical_;
+}
+ void RaftSnapshotData_KeyValue::set_logical(::google::protobuf::int32 value) {
+  set_has_logical();
+  logical_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RaftSnapshotData.KeyValue.logical)
 }
 
 // -------------------------------------------------------------------

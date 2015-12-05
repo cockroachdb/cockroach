@@ -117,11 +117,6 @@ var (
 	// (storage/engine/rocksdb/db.cc).
 	localTransactionSuffix = roachpb.RKey("txn-")
 
-	// SystemPrefix indicates the beginning of the key range for
-	// global, system data which are replicated across the cluster.
-	SystemPrefix = roachpb.Key("\x04")
-	SystemMax    = roachpb.Key("\x05")
-
 	// Meta1Prefix is the first level of key addressing. It is selected such that
 	// all range addressing records sort before any system tables which they
 	// might describe. The value is a RangeDescriptor struct.
@@ -140,6 +135,11 @@ var (
 	MetaMin = Meta1Prefix
 	// MetaMax is the end of the range of addressing keys.
 	MetaMax = roachpb.Key("\x04")
+
+	// SystemPrefix indicates the beginning of the key range for
+	// global, system data which are replicated across the cluster.
+	SystemPrefix = roachpb.Key("\x04")
+	SystemMax    = roachpb.Key("\x05")
 
 	// DescIDGenerator is the global descriptor ID generator sequence used for
 	// table and namespace IDs.

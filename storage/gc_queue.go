@@ -223,22 +223,18 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 
 	// Iterate through the keys and values of this replica's range.
 	for ; iter.Valid(); iter.Next() {
-		baseKey, _, isValue, err := engine.MVCCDecodeKey(iter.Key())
-		if err != nil {
-			log.Errorf("unable to decode MVCC key: %q: %v", iter.Key(), err)
-			continue
-		}
-		if !isValue || !baseKey.Equal(expBaseKey) {
+		iterKey := iter.Key()
+		if !iterKey.IsValue() || !iterKey.Key.Equal(expBaseKey) {
 			// Moving to the next key (& values).
 			processKeysAndValues()
-			expBaseKey = baseKey
-			if !isValue {
+			expBaseKey = iterKey.Key
+			if !iterKey.IsValue() {
 				keys = []engine.MVCCKey{iter.Key()}
 				vals = [][]byte{iter.Value()}
 				continue
 			}
 			// An implicit metadata.
-			keys = []engine.MVCCKey{engine.MVCCEncodeKey(baseKey)}
+			keys = []engine.MVCCKey{engine.MakeMVCCMetadataKey(iterKey.Key)}
 			// A nil value for the encoded MVCCMetadata. This will unmarshal to an
 			// empty MVCCMetadata which is sufficient for processKeysAndValues to
 			// determine that there is no intent.

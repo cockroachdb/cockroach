@@ -137,8 +137,10 @@ func (m *RaftSnapshotData) String() string { return proto.CompactTextString(m) }
 func (*RaftSnapshotData) ProtoMessage()    {}
 
 type RaftSnapshotData_KeyValue struct {
-	Key   []byte `protobuf:"bytes,1,opt,name=key" json:"key,omitempty"`
-	Value []byte `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
+	Key      []byte `protobuf:"bytes,1,opt,name=key" json:"key,omitempty"`
+	Value    []byte `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
+	WallTime int64  `protobuf:"varint,3,opt,name=wall_time" json:"wall_time"`
+	Logical  int32  `protobuf:"varint,4,opt,name=logical" json:"logical"`
 }
 
 func (m *RaftSnapshotData_KeyValue) Reset()         { *m = RaftSnapshotData_KeyValue{} }
@@ -374,6 +376,12 @@ func (m *RaftSnapshotData_KeyValue) MarshalTo(data []byte) (int, error) {
 		i = encodeVarintInternal(data, i, uint64(len(m.Value)))
 		i += copy(data[i:], m.Value)
 	}
+	data[i] = 0x18
+	i++
+	i = encodeVarintInternal(data, i, uint64(m.WallTime))
+	data[i] = 0x20
+	i++
+	i = encodeVarintInternal(data, i, uint64(m.Logical))
 	return i, nil
 }
 
@@ -484,6 +492,8 @@ func (m *RaftSnapshotData_KeyValue) Size() (n int) {
 		l = len(m.Value)
 		n += 1 + l + sovInternal(uint64(l))
 	}
+	n += 1 + sovInternal(uint64(m.WallTime))
+	n += 1 + sovInternal(uint64(m.Logical))
 	return n
 }
 
@@ -1245,6 +1255,44 @@ func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
 			}
 			m.Value = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field WallTime", wireType)
+			}
+			m.WallTime = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowInternal
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.WallTime |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Logical", wireType)
+			}
+			m.Logical = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowInternal
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Logical |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipInternal(data[iNdEx:])

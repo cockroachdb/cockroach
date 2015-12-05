@@ -66,7 +66,7 @@ var txnIDMax = bytes.Repeat([]byte{'\xff'}, roachpb.TransactionIDLen)
 
 // ClearData removes all persisted items stored in the cache.
 func (sc *SequenceCache) ClearData(e engine.Engine) error {
-	_, err := engine.ClearRange(e, engine.MVCCEncodeKey(sc.min), engine.MVCCEncodeKey(sc.max))
+	_, err := engine.ClearRange(e, engine.MakeMVCCMetadataKey(sc.min), engine.MakeMVCCMetadataKey(sc.max))
 	return err
 }
 
@@ -142,15 +142,15 @@ func copySeqCache(e engine.Engine, srcID, dstID roachpb.RangeID, keyMin, keyMax 
 			id, epoch, seq, err := decodeSequenceCacheMVCCKey(kv.Key, scratch[:0])
 			if err != nil {
 				return false, util.Errorf("could not decode a sequence cache key %s: %s",
-					roachpb.Key(kv.Key), err)
+					kv.Key, err)
 			}
 			key := keys.SequenceCacheKey(dstID, id, epoch, seq)
-			encKey := engine.MVCCEncodeKey(key)
+			encKey := engine.MakeMVCCMetadataKey(key)
 			// Decode the value, update the checksum and re-encode.
 			meta := &engine.MVCCMetadata{}
 			if err := proto.Unmarshal(kv.Value, meta); err != nil {
 				return false, util.Errorf("could not decode sequence cache value %s [% x]: %s",
-					roachpb.Key(kv.Key), kv.Value, err)
+					kv.Key, kv.Value, err)
 			}
 			meta.Value.Checksum = nil
 			meta.Value.InitChecksum(key)
@@ -164,7 +164,7 @@ func copySeqCache(e engine.Engine, srcID, dstID roachpb.RangeID, keyMin, keyMax 
 // sequence cache. Failures decoding individual cache entries return an error.
 func (sc *SequenceCache) CopyInto(e engine.Engine, destRangeID roachpb.RangeID) error {
 	return copySeqCache(e, sc.rangeID, destRangeID,
-		engine.MVCCEncodeKey(sc.min), engine.MVCCEncodeKey(sc.max))
+		engine.MakeMVCCMetadataKey(sc.min), engine.MakeMVCCMetadataKey(sc.max))
 }
 
 // CopyFrom copies all the persisted results from the originRangeID
@@ -173,8 +173,10 @@ func (sc *SequenceCache) CopyInto(e engine.Engine, destRangeID roachpb.RangeID) 
 // entries return an error. The copy is done directly using the engine
 // instead of interpreting values through MVCC for efficiency.
 func (sc *SequenceCache) CopyFrom(e engine.Engine, originRangeID roachpb.RangeID) error {
-	originMin := engine.MVCCEncodeKey(keys.SequenceCacheKey(originRangeID, txnIDMin, math.MaxUint32, math.MaxUint32))
-	originMax := engine.MVCCEncodeKey(keys.SequenceCacheKey(originRangeID, txnIDMax, 0, 0))
+	originMin := engine.MakeMVCCMetadataKey(
+		keys.SequenceCacheKey(originRangeID, txnIDMin, math.MaxUint32, math.MaxUint32))
+	originMax := engine.MakeMVCCMetadataKey(
+		keys.SequenceCacheKey(originRangeID, txnIDMax, 0, 0))
 	return copySeqCache(e, originRangeID, sc.rangeID, originMin, originMax)
 }
 
@@ -244,12 +246,8 @@ func decodeSequenceCacheKey(key roachpb.Key, dest []byte) ([]byte, uint32, uint3
 }
 
 func decodeSequenceCacheMVCCKey(encKey engine.MVCCKey, dest []byte) ([]byte, uint32, uint32, error) {
-	key, _, isValue, err := engine.MVCCDecodeKey(encKey)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	if isValue {
+	if encKey.IsValue() {
 		return nil, 0, 0, util.Errorf("key %s is not a raw MVCC value", encKey)
 	}
-	return decodeSequenceCacheKey(key, dest)
+	return decodeSequenceCacheKey(encKey.Key, dest)
 }

@@ -34,10 +34,10 @@ type Iterator interface {
 	Close()
 	// Seek advances the iterator to the first key in the engine which
 	// is >= the provided key.
-	Seek(key []byte)
+	Seek(key MVCCKey)
 	// SeekReverse advances the iterator to the first key in the engine which
 	// is <= the provided key.
-	SeekReverse(key []byte)
+	SeekReverse(key MVCCKey)
 	// Valid returns true if the iterator is currently valid. An
 	// iterator which hasn't been seeked or has gone past the end of the
 	// key range is invalid.
@@ -73,7 +73,7 @@ type Iterator interface {
 	// KeyMin). The nowNanos arg specifies the wall time in nanoseconds since the
 	// epoch and is used to compute the total age of all intents. The computed
 	// stats are accumulated (not assigned) to the ms parameter.
-	ComputeStats(ms *MVCCStats, start, end []byte, nowNanos int64) error
+	ComputeStats(ms *MVCCStats, start, end MVCCKey, nowNanos int64) error
 }
 
 // Engine is the interface that wraps the core operations of a
@@ -181,7 +181,8 @@ func PutProto(engine Engine, key MVCCKey, msg proto.Message) (keyBytes, valBytes
 		bufferPool.Put(buf)
 		return
 	}
-	keyBytes = int64(len(key))
+
+	keyBytes = int64(key.EncodedSize())
 	valBytes = int64(len(data))
 
 	bufferPool.Put(buf)
