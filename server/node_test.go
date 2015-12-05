@@ -127,11 +127,11 @@ func TestBootstrapCluster(t *testing.T) {
 		foundKeys = append(foundKeys, kv.Key)
 	}
 	var expectedKeys = keySlice{
-		roachpb.MakeKey(roachpb.Key("\x00\x00meta1"), roachpb.KeyMax),
-		roachpb.MakeKey(roachpb.Key("\x00\x00meta2"), roachpb.KeyMax),
-		roachpb.Key("\x00node-idgen"),
-		roachpb.Key("\x00range-tree-root"),
-		roachpb.Key("\x00store-idgen"),
+		roachpb.MakeKey(roachpb.Key("\x01\x01meta1"), roachpb.KeyMax),
+		roachpb.MakeKey(roachpb.Key("\x01\x01meta2"), roachpb.KeyMax),
+		roachpb.Key("\x01node-idgen"),
+		roachpb.Key("\x01range-tree-root"),
+		roachpb.Key("\x01store-idgen"),
 	}
 	// Add the initial keys for sql.
 	for _, kv := range sql.GetInitialSystemValues() {

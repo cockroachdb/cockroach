@@ -82,7 +82,7 @@ func createRangeData(r *Replica, t *testing.T) []engine.MVCCKey {
 		//{r.Desc().StartKey.Next(), ts},
 		// The following line is similar to StartKey.Next() but adds more to the key to
 		// avoid falling into the system-local space.
-		{append(append([]byte{}, r.Desc().StartKey...), '\x01'), ts},
+		{append(append([]byte{}, r.Desc().StartKey...), '\x02'), ts},
 		{fakePrevKey(r.Desc().EndKey), ts},
 	}
 
@@ -212,7 +212,7 @@ func TestReplicaDataIterator(t *testing.T) {
 	}
 
 	// Verify the keys in pre & post ranges.
-	for _, test := range []struct {
+	for j, test := range []struct {
 		r    *Replica
 		keys []engine.MVCCKey
 	}{
@@ -238,7 +238,7 @@ func TestReplicaDataIterator(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				t.Errorf("%d: key mismatch %q(%d) != %q(%d)", i, k1, ts1, k2, ts2)
+				t.Errorf("%d/%d: key mismatch %q(%d) != %q(%d) [%x]", j, i, k1, ts1, k2, ts2, []byte(k2))
 			}
 			i++
 		}

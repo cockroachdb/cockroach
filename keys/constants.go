@@ -42,7 +42,7 @@ var (
 	// stored as MVCC values and are addressable as part of distributed
 	// transactions, such as range metadata, range-spanning binary tree
 	// node pointers, and message queues.
-	localPrefix = []byte("\x00\x00\x00")
+	localPrefix = []byte("\x01\x01\x01")
 
 	// localSuffixLength specifies the length in bytes of all local
 	// key suffixes.
@@ -120,13 +120,13 @@ var (
 
 	// SystemPrefix indicates the beginning of the key range for
 	// global, system data which are replicated across the cluster.
-	SystemPrefix = roachpb.Key("\x00")
-	SystemMax    = roachpb.Key("\x01")
+	SystemPrefix = roachpb.Key("\x01")
+	SystemMax    = roachpb.Key("\x02")
 
 	// MetaPrefix is the prefix for range metadata keys. Notice that
 	// an extra null character in the prefix causes all range addressing
 	// records to sort before any system tables which they might describe.
-	MetaPrefix = MakeKey(SystemPrefix, roachpb.RKey("\x00meta"))
+	MetaPrefix = MakeKey(SystemPrefix, roachpb.RKey("\x01meta"))
 	// Meta1Prefix is the first level of key addressing. The value is a
 	// RangeDescriptor struct.
 	Meta1Prefix = roachpb.Key(MakeKey(MetaPrefix, roachpb.RKey("1")))
@@ -141,7 +141,7 @@ var (
 	Meta2KeyMax = roachpb.Key(MakeKey(Meta2Prefix, roachpb.RKeyMax))
 
 	// MetaMax is the end of the range of addressing keys.
-	MetaMax = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("\x01")))
+	MetaMax = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("\x02")))
 
 	// DescIDGenerator is the global descriptor ID generator sequence used for
 	// table and namespace IDs.

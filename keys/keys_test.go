@@ -85,27 +85,27 @@ func TestRangeMetaKey(t *testing.T) {
 			expKey: roachpb.RKeyMin,
 		},
 		{
-			key:    roachpb.RKey("\x00\x00meta2\x00zonefoo"),
-			expKey: roachpb.RKey("\x00\x00meta1\x00zonefoo"),
+			key:    roachpb.RKey("\x01\x01meta2\x01zonefoo"),
+			expKey: roachpb.RKey("\x01\x01meta1\x01zonefoo"),
 		},
 		{
-			key:    roachpb.RKey("\x00\x00meta1\x00zonefoo"),
+			key:    roachpb.RKey("\x01\x01meta1\x01zonefoo"),
 			expKey: roachpb.RKeyMin,
 		},
 		{
 			key:    roachpb.RKey("foo"),
-			expKey: roachpb.RKey("\x00\x00meta2foo"),
+			expKey: roachpb.RKey("\x01\x01meta2foo"),
 		},
 		{
 			key:    roachpb.RKey("foo"),
-			expKey: roachpb.RKey("\x00\x00meta2foo"),
+			expKey: roachpb.RKey("\x01\x01meta2foo"),
 		},
 		{
-			key:    roachpb.RKey("\x00\x00meta2foo"),
-			expKey: roachpb.RKey("\x00\x00meta1foo"),
+			key:    roachpb.RKey("\x01\x01meta2foo"),
+			expKey: roachpb.RKey("\x01\x01meta1foo"),
 		},
 		{
-			key:    roachpb.RKey("\x00\x00meta1foo"),
+			key:    roachpb.RKey("\x01\x01meta1foo"),
 			expKey: roachpb.RKeyMin,
 		},
 	}
