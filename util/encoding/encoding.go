@@ -95,9 +95,11 @@ func DecodeUint64Decreasing(b []byte) ([]byte, uint64, error) {
 	return leftover, ^v, err
 }
 
-const intMin = 0x02
-const intMid = intMin + 8
-const intMax = intMid + 8
+const (
+	intMin  = encodedNotNull + 1 // 0x02
+	intZero = intMin + 8         // 0x0a
+	intMax  = intZero + 8        // 0x12
+)
 
 // EncodeVarint encodes the int64 value using a variable length
 // (length-prefixed) representation. The length is encoded as a single
@@ -147,7 +149,7 @@ func DecodeVarint(b []byte) ([]byte, int64, error) {
 	if len(b) == 0 {
 		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value")
 	}
-	length := int(b[0]) - intMid
+	length := int(b[0]) - intZero
 	if length < 0 {
 		length = -length
 		remB := b[1:]
@@ -257,7 +259,7 @@ func DecodeUvarint(b []byte) ([]byte, uint64, error) {
 	if len(b) == 0 {
 		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value")
 	}
-	length := int(b[0]) - intMid
+	length := int(b[0]) - intZero
 	b = b[1:] // skip length byte
 	if length < 0 || length > 8 {
 		return nil, 0, util.Errorf("invalid uvarint length of %d", length)
@@ -279,7 +281,7 @@ func DecodeUvarintDecreasing(b []byte) ([]byte, uint64, error) {
 	if len(b) == 0 {
 		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value")
 	}
-	length := intMid - int(b[0])
+	length := intZero - int(b[0])
 	b = b[1:] // skip length byte
 	if length < 0 || length > 8 {
 		return nil, 0, util.Errorf("invalid uvarint length of %d", length)
@@ -301,7 +303,7 @@ const (
 	escaped00   byte = 0xff
 	escapedFF   byte = 0x00
 	// The prefix that is added to every encoded byte/string.
-	bytesMarker byte = 0x31
+	bytesMarker byte = floatInfinity + 1
 )
 
 type escapes struct {
@@ -471,8 +473,8 @@ func DecodeStringDecreasing(b []byte, r []byte) ([]byte, string, error) {
 }
 
 const (
-	encodedNull    byte = 0x00
-	encodedNotNull byte = 0x01
+	encodedNull    = 0x00
+	encodedNotNull = 0x01
 )
 
 // EncodeNull encodes a NULL value. The encodes bytes are appended to the
@@ -519,7 +521,7 @@ func DecodeIfNotNull(b []byte) ([]byte, bool) {
 }
 
 const (
-	timeMarker byte = 0x32
+	timeMarker byte = bytesMarker + 1
 )
 
 // EncodeTime encodes a time value, appends it to the supplied buffer,

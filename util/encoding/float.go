@@ -34,16 +34,16 @@ import (
 
 // Direct mappings or prefixes of encoded data dependent on the type.
 const (
-	floatNaN              = 0x13
-	floatNegativeInfinity = 0x14
-	floatZero             = 0x22
-	floatInfinity         = 0x30
-	floatNegLarge         = floatZero - 13
-	floatNegMedium        = floatZero - 2
-	floatNegSmall         = floatZero - 1
+	floatNaN              = intMax + 1                // 0x13
+	floatNegativeInfinity = floatNaN + 1              // 0x14
+	floatNegLarge         = floatNegativeInfinity + 1 // 0x15
+	floatNegMedium        = floatNegLarge + 11
+	floatNegSmall         = floatNegMedium + 1
+	floatZero             = floatNegSmall + 1
 	floatPosSmall         = floatZero + 1
-	floatPosMedium        = floatZero + 2
-	floatPosLarge         = floatZero + 13
+	floatPosMedium        = floatPosSmall + 1
+	floatPosLarge         = floatPosMedium + 11
+	floatInfinity         = floatPosLarge + 1
 	floatTerminator       = 0x00
 )
 
