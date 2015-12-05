@@ -50,11 +50,11 @@ struct DBEngine {
   }
   virtual ~DBEngine() { }
 
-  virtual DBStatus Put(DBSlice key, DBSlice value) = 0;
-  virtual DBStatus Merge(DBSlice key, DBSlice value) = 0;
-  virtual DBStatus Delete(DBSlice key) = 0;
+  virtual DBStatus Put(DBKey key, DBSlice value) = 0;
+  virtual DBStatus Merge(DBKey key, DBSlice value) = 0;
+  virtual DBStatus Delete(DBKey key) = 0;
   virtual DBStatus WriteBatch() = 0;
-  virtual DBStatus Get(DBSlice key, DBString* value) = 0;
+  virtual DBStatus Get(DBKey key, DBString* value) = 0;
   virtual DBIterator* NewIter(bool prefix) = 0;
 };
 
@@ -79,11 +79,11 @@ struct DBImpl : public DBEngine {
                   s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_CHECKED));
   }
 
-  virtual DBStatus Put(DBSlice key, DBSlice value);
-  virtual DBStatus Merge(DBSlice key, DBSlice value);
-  virtual DBStatus Delete(DBSlice key);
+  virtual DBStatus Put(DBKey key, DBSlice value);
+  virtual DBStatus Merge(DBKey key, DBSlice value);
+  virtual DBStatus Delete(DBKey key);
   virtual DBStatus WriteBatch();
-  virtual DBStatus Get(DBSlice key, DBString* value);
+  virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(bool prefix);
 };
 
@@ -99,11 +99,11 @@ struct DBBatch : public DBEngine {
   virtual ~DBBatch() {
   }
 
-  virtual DBStatus Put(DBSlice key, DBSlice value);
-  virtual DBStatus Merge(DBSlice key, DBSlice value);
-  virtual DBStatus Delete(DBSlice key);
+  virtual DBStatus Put(DBKey key, DBSlice value);
+  virtual DBStatus Merge(DBKey key, DBSlice value);
+  virtual DBStatus Delete(DBKey key);
   virtual DBStatus WriteBatch();
-  virtual DBStatus Get(DBSlice key, DBString* value);
+  virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(bool prefix);
 };
 
@@ -120,16 +120,17 @@ struct DBSnapshot : public DBEngine {
     rep->ReleaseSnapshot(snapshot);
   }
 
-  virtual DBStatus Put(DBSlice key, DBSlice value);
-  virtual DBStatus Merge(DBSlice key, DBSlice value);
-  virtual DBStatus Delete(DBSlice key);
+  virtual DBStatus Put(DBKey key, DBSlice value);
+  virtual DBStatus Merge(DBKey key, DBSlice value);
+  virtual DBStatus Delete(DBKey key);
   virtual DBStatus WriteBatch();
-  virtual DBStatus Get(DBSlice key, DBString* value);
+  virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(bool prefix);
 };
 
 struct DBIterator {
   std::unique_ptr<rocksdb::Iterator> rep;
+  std::string key;
 };
 
 }  // extern "C"
@@ -157,6 +158,38 @@ rocksdb::Slice ToSlice(DBSlice s) {
 
 rocksdb::Slice ToSlice(DBString s) {
   return rocksdb::Slice(s.data, s.len);
+}
+
+std::string EncodeKey(DBKey k) {
+  std::string s;
+  EncodeBytes(&s, k.key.data, k.key.len);
+  if (k.walltime != 0 || k.logical != 0) {
+    EncodeUint64Decreasing(&s, uint64_t(k.walltime));
+    EncodeUint32Decreasing(&s, uint32_t(k.logical));
+  }
+  return s;
+}
+
+const int mvcc_version_timestamp_size = 12;
+
+bool DecodeKey(rocksdb::Slice buf, std::string *key, int64_t *walltime, int32_t *logical) {
+  key->clear();
+  if (!DecodeBytes(&buf, key)) {
+    return false;
+  }
+  if (buf.size() == mvcc_version_timestamp_size) {
+    uint64_t w;
+    if (!DecodeUint64Decreasing(&buf, &w)) {
+      return false;
+    }
+    uint32_t l;
+    if (!DecodeUint32Decreasing(&buf, &l)) {
+      return false;
+    }
+    *walltime = int64_t(w);
+    *logical = int32_t(l);
+  }
+  return true;
 }
 
 DBSlice ToDBSlice(const rocksdb::Slice& s) {
@@ -200,14 +233,20 @@ DBStatus FmtStatus(const char *fmt, ...) {
 DBIterState DBIterGetState(DBIterator* iter) {
   DBIterState state;
   state.valid = iter->rep->Valid();
+  state.key.key.data = NULL;
+  state.key.key.len = 0;
+  state.key.walltime = 0;
+  state.key.logical = 0;
+  state.value.data = NULL;
+  state.value.len = 0;
+
   if (state.valid) {
-    state.key = ToDBSlice(iter->rep->key());
-    state.value = ToDBSlice(iter->rep->value());
-  } else {
-    state.key.data = NULL;
-    state.key.len = 0;
-    state.value.data = NULL;
-    state.value.len = 0;
+    state.valid = DecodeKey(iter->rep->key(), &iter->key,
+                            &state.key.walltime, &state.key.logical);
+    if (state.valid) {
+      state.key.key = ToDBSlice(iter->key);
+      state.value = ToDBSlice(iter->rep->value());
+    }
   }
   return state;
 }
@@ -776,10 +815,10 @@ struct DBGetter : public Getter {
   rocksdb::ReadOptions const options;
   rocksdb::Slice const key;
 
-  DBGetter(rocksdb::DB *const r, rocksdb::ReadOptions opts, DBSlice k)
+  DBGetter(rocksdb::DB *const r, rocksdb::ReadOptions opts, rocksdb::Slice k)
       : rep(r),
         options(opts),
-        key(ToSlice(k)) {
+        key(k) {
   }
 
   virtual DBStatus Get(DBString* value) {
@@ -1178,108 +1217,114 @@ void DBSetGCTimeouts(DBEngine * db, int64_t min_txn_ts) {
   db_cff->SetGCTimeouts(min_txn_ts);
 }
 
-DBStatus DBCompactRange(DBEngine* db, DBSlice* start, DBSlice* end) {
+DBStatus DBCompactRange(DBEngine* db, DBKey* start, DBKey* end) {
+  std::string sbuf;
+  std::string ebuf;
   rocksdb::Slice s;
   rocksdb::Slice e;
   rocksdb::Slice* sPtr = NULL;
   rocksdb::Slice* ePtr = NULL;
   if (start != NULL) {
     sPtr = &s;
-    s = ToSlice(*start);
+    sbuf = EncodeKey(*start);
+    s = sbuf;
   }
   if (end != NULL) {
     ePtr = &e;
-    e = ToSlice(*end);
+    ebuf = EncodeKey(*end);
+    e = ebuf;
   }
   return ToDBStatus(db->rep->CompactRange(rocksdb::CompactRangeOptions(), sPtr, ePtr));
 }
 
-uint64_t DBApproximateSize(DBEngine* db, DBSlice start, DBSlice end) {
-  const rocksdb::Range r(ToSlice(start), ToSlice(end));
+uint64_t DBApproximateSize(DBEngine* db, DBKey start, DBKey end) {
+  std::string s = EncodeKey(start);
+  std::string e = EncodeKey(end);
+  const rocksdb::Range r(s, e);
   uint64_t result;
   db->rep->GetApproximateSizes(&r, 1, &result);
   return result;
 }
 
-DBStatus DBImpl::Put(DBSlice key, DBSlice value) {
+DBStatus DBImpl::Put(DBKey key, DBSlice value) {
   rocksdb::WriteOptions options;
-  return ToDBStatus(rep->Put(options, ToSlice(key), ToSlice(value)));
+  return ToDBStatus(rep->Put(options, EncodeKey(key), ToSlice(value)));
 }
 
-DBStatus DBBatch::Put(DBSlice key, DBSlice value) {
+DBStatus DBBatch::Put(DBKey key, DBSlice value) {
   ++updates;
-  batch.Put(ToSlice(key), ToSlice(value));
+  batch.Put(EncodeKey(key), ToSlice(value));
   return kSuccess;
 }
 
-DBStatus DBSnapshot::Put(DBSlice key, DBSlice value) {
+DBStatus DBSnapshot::Put(DBKey key, DBSlice value) {
   return FmtStatus("unsupported");
 }
 
-DBStatus DBPut(DBEngine* db, DBSlice key, DBSlice value) {
+DBStatus DBPut(DBEngine* db, DBKey key, DBSlice value) {
   return db->Put(key, value);
 }
 
-DBStatus DBImpl::Merge(DBSlice key, DBSlice value) {
+DBStatus DBImpl::Merge(DBKey key, DBSlice value) {
   rocksdb::WriteOptions options;
-  return ToDBStatus(rep->Merge(options, ToSlice(key), ToSlice(value)));
+  return ToDBStatus(rep->Merge(options, EncodeKey(key), ToSlice(value)));
 }
 
-DBStatus DBBatch::Merge(DBSlice key, DBSlice value) {
+DBStatus DBBatch::Merge(DBKey key, DBSlice value) {
   ++updates;
-  batch.Merge(ToSlice(key), ToSlice(value));
+  batch.Merge(EncodeKey(key), ToSlice(value));
   return kSuccess;
 }
 
-DBStatus DBSnapshot::Merge(DBSlice key, DBSlice value) {
+DBStatus DBSnapshot::Merge(DBKey key, DBSlice value) {
   return FmtStatus("unsupported");
 }
 
-DBStatus DBMerge(DBEngine* db, DBSlice key, DBSlice value) {
+DBStatus DBMerge(DBEngine* db, DBKey key, DBSlice value) {
   return db->Merge(key, value);
 }
 
-DBStatus DBImpl::Get(DBSlice key, DBString* value) {
-  DBGetter base(rep, read_opts, key);
+DBStatus DBImpl::Get(DBKey key, DBString* value) {
+  DBGetter base(rep, read_opts, EncodeKey(key));
   return base.Get(value);
 }
 
-DBStatus DBBatch::Get(DBSlice key, DBString* value) {
-  DBGetter base(rep, read_opts, key);
+DBStatus DBBatch::Get(DBKey key, DBString* value) {
+  std::string encoded_key = EncodeKey(key);
+  DBGetter base(rep, read_opts, encoded_key);
   if (updates == 0) {
     return base.Get(value);
   }
   std::unique_ptr<rocksdb::WBWIIterator> iter(batch.NewIterator());
-  rocksdb::Slice rkey(ToSlice(key));
-  iter->Seek(rkey);
-  return ProcessDeltaKey(&base, iter.get(), rkey, value);
+  iter->Seek(encoded_key);
+  return ProcessDeltaKey(&base, iter.get(), encoded_key, value);
 }
 
-DBStatus DBSnapshot::Get(DBSlice key, DBString* value) {
-  DBGetter base(rep, read_opts, key);
+DBStatus DBSnapshot::Get(DBKey key, DBString* value) {
+  DBGetter base(rep, read_opts, EncodeKey(key));
   return base.Get(value);
 }
 
-DBStatus DBGet(DBEngine* db, DBSlice key, DBString* value) {
+DBStatus DBGet(DBEngine* db, DBKey key, DBString* value) {
   return db->Get(key, value);
 }
 
-DBStatus DBImpl::Delete(DBSlice key) {
+DBStatus DBImpl::Delete(DBKey key) {
   rocksdb::WriteOptions options;
-  return ToDBStatus(rep->Delete(options, ToSlice(key)));
+  return ToDBStatus(rep->Delete(options, EncodeKey(key)));
 }
 
-DBStatus DBBatch::Delete(DBSlice key) {
+DBStatus DBBatch::Delete(DBKey key) {
   ++updates;
-  batch.Delete(ToSlice(key));
+  batch.Delete(EncodeKey(key));
   return kSuccess;
 }
 
-DBStatus DBSnapshot::Delete(DBSlice key) {
+DBStatus DBSnapshot::Delete(DBKey key) {
   return FmtStatus("unsupported");
 }
 
-DBStatus DBDelete(DBEngine *db, DBSlice key) {
+DBStatus DBDelete(DBEngine *db, DBKey key) {
   return db->Delete(key);
 }
 
@@ -1349,8 +1394,8 @@ void DBIterDestroy(DBIterator* iter) {
   delete iter;
 }
 
-DBIterState DBIterSeek(DBIterator* iter, DBSlice key) {
-  iter->rep->Seek(ToSlice(key));
+DBIterState DBIterSeek(DBIterator* iter, DBKey key) {
+  iter->rep->Seek(EncodeKey(key));
   return DBIterGetState(iter);
 }
 
@@ -1398,15 +1443,13 @@ DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
 }
 
 MVCCStatsResult MVCCComputeStats(
-    DBIterator* iter, DBSlice start, DBSlice end, int64_t now_nanos) {
-  const int mvcc_version_timestamp_size = 12;
-
+    DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos) {
   MVCCStatsResult stats;
   memset(&stats, 0, sizeof(stats));
 
   rocksdb::Iterator *const iter_rep = iter->rep.get();
-  iter_rep->Seek(ToSlice(start));
-  const rocksdb::Slice end_key = ToSlice(end);
+  iter_rep->Seek(EncodeKey(start));
+  const std::string end_key = EncodeKey(end);
 
   cockroach::storage::engine::MVCCMetadata meta;
   std::string prev_key;

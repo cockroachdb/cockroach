@@ -51,16 +51,16 @@ func makeReplicaKeyRanges(d *roachpb.RangeDescriptor) []keyRange {
 	}
 	return []keyRange{
 		{
-			start: engine.MVCCEncodeKey(keys.MakeRangeIDPrefix(d.RangeID)),
-			end:   engine.MVCCEncodeKey(keys.MakeRangeIDPrefix(d.RangeID + 1)),
+			start: engine.MakeMVCCKey(keys.MakeRangeIDPrefix(d.RangeID)),
+			end:   engine.MakeMVCCKey(keys.MakeRangeIDPrefix(d.RangeID + 1)),
 		},
 		{
-			start: engine.MVCCEncodeKey(keys.MakeRangeKeyPrefix(d.StartKey)),
-			end:   engine.MVCCEncodeKey(keys.MakeRangeKeyPrefix(d.EndKey)),
+			start: engine.MakeMVCCKey(keys.MakeRangeKeyPrefix(d.StartKey)),
+			end:   engine.MakeMVCCKey(keys.MakeRangeKeyPrefix(d.EndKey)),
 		},
 		{
-			start: engine.MVCCEncodeKey(dataStartKey),
-			end:   engine.MVCCEncodeKey(d.EndKey.AsRawKey()),
+			start: engine.MakeMVCCKey(dataStartKey),
+			end:   engine.MakeMVCCKey(d.EndKey.AsRawKey()),
 		},
 	}
 }
@@ -81,7 +81,7 @@ func (ri *replicaDataIterator) Close() {
 }
 
 // Seek seeks to the specified key.
-func (ri *replicaDataIterator) Seek(key []byte) {
+func (ri *replicaDataIterator) Seek(key engine.MVCCKey) {
 	ri.Iterator.Seek(key)
 	ri.advance()
 }

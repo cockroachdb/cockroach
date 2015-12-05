@@ -103,7 +103,7 @@ func TestRocksDBCompaction(t *testing.T) {
 	}
 
 	// Compact range and scan remaining values to compare.
-	rocksdb.CompactRange(nil, nil)
+	rocksdb.CompactRange(NilKey, NilKey)
 	actualKVs, _, err := MVCCScan(rocksdb, keyMin, keyMax, 0, roachpb.ZeroTimestamp, true, nil)
 	if err != nil {
 		t.Fatalf("could not run scan: %v", err)
@@ -640,9 +640,8 @@ func runMVCCComputeStats(valueBytes int, b *testing.B) {
 	var stats MVCCStats
 	for i := 0; i < b.N; i++ {
 		iter := rocksdb.NewIterator(false)
-		iter.Seek(keyMin)
 		stats = MVCCStats{}
-		err := iter.ComputeStats(&stats, roachpb.KeyMin, roachpb.KeyMax, 0)
+		err := iter.ComputeStats(&stats, mvccKey(roachpb.KeyMin), mvccKey(roachpb.KeyMax), 0)
 		iter.Close()
 		if err != nil {
 			b.Fatal(err)

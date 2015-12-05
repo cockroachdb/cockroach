@@ -249,46 +249,27 @@ func TestGCQueueProcess(t *testing.T) {
 		{key8, ts2},
 	}
 	// Read data directly from engine to avoid intent errors from MVCC.
-	kvs, err := engine.Scan(tc.store.Engine(), engine.MVCCEncodeKey(key1), engine.MVCCEncodeKey(keys.TableDataPrefix), 0)
+	kvs, err := engine.Scan(tc.store.Engine(), engine.MakeMVCCKey(key1), engine.MakeMVCCKey(keys.TableDataPrefix), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i, kv := range kvs {
-		if key, ts, isValue, err := engine.MVCCDecodeKey(kv.Key); isValue {
-			if err != nil {
-				t.Fatal(err)
-			}
-			if log.V(1) {
-				log.Infof("%d: %q, ts=%s", i, key, ts)
-			}
-		} else {
-			if log.V(1) {
-				log.Infof("%d: %q meta", i, key)
-			}
+		if log.V(1) {
+			log.Infof("%d: %s", i, kv.Key)
 		}
 	}
 	if len(kvs) != len(expKVs) {
 		t.Fatalf("expected length %d; got %d", len(expKVs), len(kvs))
 	}
 	for i, kv := range kvs {
-		key, ts, isValue, err := engine.MVCCDecodeKey(kv.Key)
-		if err != nil {
-			t.Fatal(err)
+		if !kv.Key.Key.Equal(expKVs[i].key) {
+			t.Errorf("%d: expected key %q; got %q", i, expKVs[i].key, kv.Key.Key)
 		}
-		if !key.Equal(expKVs[i].key) {
-			t.Errorf("%d: expected key %q; got %q", i, expKVs[i].key, key)
+		if !kv.Key.Timestamp.Equal(expKVs[i].ts) {
+			t.Errorf("%d: expected ts=%s; got %s", i, expKVs[i].ts, kv.Key.Timestamp)
 		}
-		if !ts.Equal(expKVs[i].ts) {
-			t.Errorf("%d: expected ts=%s; got %s", i, expKVs[i].ts, ts)
-		}
-		if isValue {
-			if log.V(1) {
-				log.Infof("%d: %q, ts=%s", i, key, ts)
-			}
-		} else {
-			if log.V(1) {
-				log.Infof("%d: %q meta", i, key)
-			}
+		if log.V(1) {
+			log.Infof("%d: %s", i, kv.Key)
 		}
 	}
 
@@ -488,15 +469,13 @@ func TestGCQueueIntentResolution(t *testing.T) {
 
 	// Iterate through all values to ensure intents have been fully resolved.
 	meta := &engine.MVCCMetadata{}
-	err := tc.store.Engine().Iterate(engine.MVCCEncodeKey(roachpb.KeyMin), engine.MVCCEncodeKey(roachpb.KeyMax), func(kv engine.MVCCKeyValue) (bool, error) {
-		if key, _, isValue, err := engine.MVCCDecodeKey(kv.Key); err != nil {
-			return false, err
-		} else if !isValue {
+	err := tc.store.Engine().Iterate(engine.MakeMVCCKey(roachpb.KeyMin), engine.MakeMVCCKey(roachpb.KeyMax), func(kv engine.MVCCKeyValue) (bool, error) {
+		if !kv.Key.IsValue() {
 			if err := proto.Unmarshal(kv.Value, meta); err != nil {
 				return false, err
 			}
 			if meta.Txn != nil {
-				return false, util.Errorf("non-nil Txn after GC for key %s", key)
+				return false, util.Errorf("non-nil Txn after GC for key %s", kv.Key)
 			}
 		}
 		return false, nil

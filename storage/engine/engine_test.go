@@ -39,7 +39,7 @@ func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byt
 		t.Errorf("length mismatch. expected %s, got %s", sortedKeys, keyvals)
 	}
 	for i, kv := range keyvals {
-		if sortedKeys[i] != string(kv.Key) {
+		if sortedKeys[i] != string(kv.Key.Key) {
 			t.Errorf("key mismatch at index %d: expected %q, got %q", i, sortedKeys[i], kv.Key)
 		}
 		if !bytes.Equal(keyMap[sortedKeys[i]], kv.Value) {
@@ -68,7 +68,7 @@ func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 func TestEngineBatchCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	numWrites := 10000
-	key := MVCCKey("a")
+	key := mvccKey("a")
 	finalVal := []byte(strconv.Itoa(numWrites - 1))
 
 	runWithAllEngines(func(e Engine, t *testing.T) {
@@ -120,7 +120,7 @@ func TestEngineBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		numShuffles := 100
-		key := MVCCKey("a")
+		key := mvccKey("a")
 		// Those are randomized below.
 		type data struct {
 			key   MVCCKey
@@ -222,7 +222,7 @@ func TestEngineBatch(t *testing.T) {
 				if currentBatch[len(currentBatch)-1].value != nil {
 					t.Errorf("%d: batch seek invalid", i)
 				}
-			} else if !bytes.Equal(iter.Key(), key) {
+			} else if !iter.Key().Equal(key) {
 				t.Errorf("%d: batch seek expected key %s, but got %s", i, key, iter.Key())
 			} else {
 				m := &MVCCMetadata{}
@@ -256,19 +256,19 @@ func TestEnginePutGetDelete(t *testing.T) {
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		// Test for correct handling of empty keys, which should produce errors.
 		for i, err := range []error{
-			engine.Put([]byte(""), []byte("")),
-			engine.Put(nil, []byte("")),
+			engine.Put(mvccKey(""), []byte("")),
+			engine.Put(NilKey, []byte("")),
 			func() error {
-				_, err := engine.Get([]byte(""))
+				_, err := engine.Get(mvccKey(""))
 				return err
 			}(),
-			engine.Clear(nil),
+			engine.Clear(NilKey),
 			func() error {
-				_, err := engine.Get(nil)
+				_, err := engine.Get(NilKey)
 				return err
 			}(),
-			engine.Clear(nil),
-			engine.Clear([]byte("")),
+			engine.Clear(NilKey),
+			engine.Clear(mvccKey("")),
 		} {
 			if err == nil {
 				t.Fatalf("%d: illegal handling of empty key", i)
@@ -277,13 +277,14 @@ func TestEnginePutGetDelete(t *testing.T) {
 
 		// Test for allowed keys, which should go through.
 		testCases := []struct {
-			key, value []byte
+			key   MVCCKey
+			value []byte
 		}{
-			{[]byte("dog"), []byte("woof")},
-			{[]byte("cat"), []byte("meow")},
-			{[]byte("emptyval"), nil},
-			{[]byte("emptyval2"), []byte("")},
-			{[]byte("server"), []byte("42")},
+			{mvccKey("dog"), []byte("woof")},
+			{mvccKey("cat"), []byte("meow")},
+			{mvccKey("emptyval"), nil},
+			{mvccKey("emptyval2"), []byte("")},
+			{mvccKey("server"), []byte("42")},
 		}
 		for _, c := range testCases {
 			val, err := engine.Get(c.key)
@@ -329,7 +330,7 @@ func TestEngineMerge(t *testing.T) {
 			expected []byte
 		}{
 			{
-				MVCCKey("haste not in life"),
+				mvccKey("haste not in life"),
 				[][]byte{
 					appender("x"),
 					appender("y"),
@@ -338,7 +339,7 @@ func TestEngineMerge(t *testing.T) {
 				appender("xyz"),
 			},
 			{
-				MVCCKey("timeseriesmerged"),
+				mvccKey("timeseriesmerged"),
 				[][]byte{
 					timeSeries(testtime, 1000, []tsSample{
 						{1, 1, 5, 5, 5},
@@ -389,53 +390,54 @@ func TestEngineScan1(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		testCases := []struct {
-			key, value []byte
+			key   MVCCKey
+			value []byte
 		}{
-			{[]byte("dog"), []byte("woof")},
-			{[]byte("cat"), []byte("meow")},
-			{[]byte("server"), []byte("42")},
-			{[]byte("french"), []byte("Allô?")},
-			{[]byte("german"), []byte("hallo")},
-			{[]byte("chinese"), []byte("你好")},
+			{mvccKey("dog"), []byte("woof")},
+			{mvccKey("cat"), []byte("meow")},
+			{mvccKey("server"), []byte("42")},
+			{mvccKey("french"), []byte("Allô?")},
+			{mvccKey("german"), []byte("hallo")},
+			{mvccKey("chinese"), []byte("你好")},
 		}
 		keyMap := map[string][]byte{}
 		for _, c := range testCases {
 			if err := engine.Put(c.key, c.value); err != nil {
 				t.Errorf("could not put key %q: %v", c.key, err)
 			}
-			keyMap[string(c.key)] = c.value
+			keyMap[string(c.key.Key)] = c.value
 		}
 		sortedKeys := make([]string, len(testCases))
 		for i, t := range testCases {
-			sortedKeys[i] = string(t.key)
+			sortedKeys[i] = string(t.key.Key)
 		}
 		sort.Strings(sortedKeys)
 
-		keyvals, err := Scan(engine, []byte("chinese"), []byte("german"), 0)
+		keyvals, err := Scan(engine, mvccKey("chinese"), mvccKey("german"), 0)
 		if err != nil {
 			t.Fatalf("could not run scan: %v", err)
 		}
 		ensureRangeEqual(t, sortedKeys[1:4], keyMap, keyvals)
 
 		// Check an end of range which does not equal an existing key.
-		keyvals, err = Scan(engine, []byte("chinese"), []byte("german1"), 0)
+		keyvals, err = Scan(engine, mvccKey("chinese"), mvccKey("german1"), 0)
 		if err != nil {
 			t.Fatalf("could not run scan: %v", err)
 		}
 		ensureRangeEqual(t, sortedKeys[1:5], keyMap, keyvals)
 
-		keyvals, err = Scan(engine, []byte("chinese"), []byte("german"), 2)
+		keyvals, err = Scan(engine, mvccKey("chinese"), mvccKey("german"), 2)
 		if err != nil {
 			t.Fatalf("could not run scan: %v", err)
 		}
 		ensureRangeEqual(t, sortedKeys[1:3], keyMap, keyvals)
 
-		// Should return all key/value pairs in lexicographic order.
-		// Note that []byte("") is the lowest key possible and is
-		// a special case in engine.scan, that's why we test it here.
-		startKeys := []MVCCKey{MVCCKey("cat"), MVCCKey("")}
+		// Should return all key/value pairs in lexicographic order. Note that ""
+		// is the lowest key possible and is a special case in engine.scan, that's
+		// why we test it here.
+		startKeys := []MVCCKey{mvccKey("cat"), mvccKey("")}
 		for _, startKey := range startKeys {
-			keyvals, err = Scan(engine, startKey, MVCCKey(roachpb.RKeyMax), 0)
+			keyvals, err = Scan(engine, startKey, mvccKey(roachpb.RKeyMax), 0)
 			if err != nil {
 				t.Fatalf("could not run scan: %v", err)
 			}
@@ -447,16 +449,15 @@ func TestEngineScan1(t *testing.T) {
 func verifyScan(start, end MVCCKey, max int64, expKeys []MVCCKey, engine Engine, t *testing.T) {
 	kvs, err := Scan(engine, start, end, max)
 	if err != nil {
-		t.Errorf("scan %q-%q: expected no error, but got %s", string(start), string(end), err)
+		t.Errorf("scan %q-%q: expected no error, but got %s", start, end, err)
 	}
 	if len(kvs) != len(expKeys) {
 		t.Errorf("scan %q-%q: expected scanned keys mismatch %d != %d: %v",
 			start, end, len(kvs), len(expKeys), kvs)
 	}
 	for i, kv := range kvs {
-		if !bytes.Equal(kv.Key, expKeys[i]) {
-			t.Errorf("scan %q-%q: expected keys equal %q != %q", string(start), string(end),
-				string(kv.Key), string(expKeys[i]))
+		if !kv.Key.Equal(expKeys[i]) {
+			t.Errorf("scan %q-%q: expected keys equal %q != %q", start, end, kv.Key, expKeys[i])
 		}
 	}
 }
@@ -467,30 +468,30 @@ func TestEngineScan2(t *testing.T) {
 	// either verifyScan or the other helper function.
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		keys := []MVCCKey{
-			MVCCKey("a"),
-			MVCCKey("aa"),
-			MVCCKey("aaa"),
-			MVCCKey("ab"),
-			MVCCKey("abc"),
-			MVCCKey(roachpb.RKeyMax),
+			mvccKey("a"),
+			mvccKey("aa"),
+			mvccKey("aaa"),
+			mvccKey("ab"),
+			mvccKey("abc"),
+			mvccKey(roachpb.RKeyMax),
 		}
 
 		insertKeys(keys, engine, t)
 
 		// Scan all keys (non-inclusive of final key).
-		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 10, keys[:5], engine, t)
-		verifyScan(MVCCKey("a"), MVCCKey(roachpb.RKeyMax), 10, keys[:5], engine, t)
+		verifyScan(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 10, keys[:5], engine, t)
+		verifyScan(mvccKey("a"), mvccKey(roachpb.RKeyMax), 10, keys[:5], engine, t)
 
 		// Scan sub range.
-		verifyScan(MVCCKey("aab"), MVCCKey("abcc"), 10, keys[3:5], engine, t)
-		verifyScan(MVCCKey("aa0"), MVCCKey("abcc"), 10, keys[2:5], engine, t)
+		verifyScan(mvccKey("aab"), mvccKey("abcc"), 10, keys[3:5], engine, t)
+		verifyScan(mvccKey("aa0"), mvccKey("abcc"), 10, keys[2:5], engine, t)
 
 		// Scan with max values.
-		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 3, keys[:3], engine, t)
-		verifyScan(MVCCKey("a0"), MVCCKey(roachpb.RKeyMax), 3, keys[1:4], engine, t)
+		verifyScan(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 3, keys[:3], engine, t)
+		verifyScan(mvccKey("a0"), mvccKey(roachpb.RKeyMax), 3, keys[1:4], engine, t)
 
 		// Scan with max value 0 gets all values.
-		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 0, keys[:5], engine, t)
+		verifyScan(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0, keys[:5], engine, t)
 	}, t)
 }
 
@@ -498,21 +499,21 @@ func TestEngineDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		keys := []MVCCKey{
-			MVCCKey("a"),
-			MVCCKey("aa"),
-			MVCCKey("aaa"),
-			MVCCKey("ab"),
-			MVCCKey("abc"),
-			MVCCKey(roachpb.RKeyMax),
+			mvccKey("a"),
+			mvccKey("aa"),
+			mvccKey("aaa"),
+			mvccKey("ab"),
+			mvccKey("abc"),
+			mvccKey(roachpb.RKeyMax),
 		}
 
 		insertKeys(keys, engine, t)
 
 		// Scan all keys (non-inclusive of final key).
-		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 10, keys[:5], engine, t)
+		verifyScan(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 10, keys[:5], engine, t)
 
 		// Delete a range of keys
-		numDeleted, err := ClearRange(engine, MVCCKey("aa"), MVCCKey("abc"))
+		numDeleted, err := ClearRange(engine, mvccKey("aa"), mvccKey("abc"))
 		// Verify what was deleted
 		if err != nil {
 			t.Error("Not expecting an error")
@@ -521,15 +522,15 @@ func TestEngineDeleteRange(t *testing.T) {
 			t.Errorf("Expected to delete 3 entries; was %v", numDeleted)
 		}
 		// Verify what's left
-		verifyScan(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 10,
-			[]MVCCKey{MVCCKey("a"), MVCCKey("abc")}, engine, t)
+		verifyScan(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 10,
+			[]MVCCKey{mvccKey("a"), mvccKey("abc")}, engine, t)
 	}, t)
 }
 
 func TestSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
-		key := []byte("a")
+		key := mvccKey("a")
 		val1 := []byte("1")
 		if err := engine.Put(key, val1); err != nil {
 			t.Fatal(err)
@@ -561,8 +562,8 @@ func TestSnapshot(t *testing.T) {
 				valSnapshot, val1)
 		}
 
-		keyvals, _ := Scan(engine, key, MVCCKey(roachpb.RKeyMax), 0)
-		keyvalsSnapshot, error := Scan(snap, key, MVCCKey(roachpb.RKeyMax), 0)
+		keyvals, _ := Scan(engine, key, mvccKey(roachpb.RKeyMax), 0)
+		keyvalsSnapshot, error := Scan(snap, key, mvccKey(roachpb.RKeyMax), 0)
 		if error != nil {
 			t.Fatalf("error : %s", error)
 		}
@@ -582,7 +583,7 @@ func TestSnapshot(t *testing.T) {
 func TestSnapshotMethods(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
-		keys := [][]byte{[]byte("a"), []byte("b")}
+		keys := []MVCCKey{mvccKey("a"), mvccKey("b")}
 		vals := [][]byte{[]byte("1"), []byte("2")}
 		for i := range keys {
 			if err := engine.Put(keys[i], vals[i]); err != nil {
@@ -603,7 +604,7 @@ func TestSnapshotMethods(t *testing.T) {
 		}
 
 		// Verify Put is error.
-		if err := snap.Put([]byte("c"), []byte("3")); err == nil {
+		if err := snap.Put(mvccKey("c"), []byte("3")); err == nil {
 			t.Error("expected error on Put to snapshot")
 		}
 
@@ -618,8 +619,8 @@ func TestSnapshotMethods(t *testing.T) {
 		}
 
 		// Verify Scan.
-		keyvals, _ := Scan(engine, MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 0)
-		keyvalsSnapshot, err := Scan(snap, MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 0)
+		keyvals, _ := Scan(engine, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0)
+		keyvalsSnapshot, err := Scan(snap, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -630,8 +631,8 @@ func TestSnapshotMethods(t *testing.T) {
 
 		// Verify Iterate.
 		index := 0
-		if err := snap.Iterate(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), func(kv MVCCKeyValue) (bool, error) {
-			if !bytes.Equal(kv.Key, keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
+		if err := snap.Iterate(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), func(kv MVCCKeyValue) (bool, error) {
+			if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
 				t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
 					index, keys[index], vals[index], kv.Key, kv.Value)
 			}
@@ -647,7 +648,7 @@ func TestSnapshotMethods(t *testing.T) {
 		}
 
 		// Verify Merge is error.
-		if err := snap.Merge([]byte("merge-key"), appender("x")); err == nil {
+		if err := snap.Merge(mvccKey("merge-key"), appender("x")); err == nil {
 			t.Error("expected error on Merge to snapshot")
 		}
 
@@ -667,11 +668,11 @@ func TestSnapshotMethods(t *testing.T) {
 		}
 
 		// Verify ApproximateSize.
-		approx, err := engine.ApproximateSize(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax))
+		approx, err := engine.ApproximateSize(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax))
 		if err != nil {
 			t.Fatal(err)
 		}
-		approxSnapshot, err := snap.ApproximateSize(MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax))
+		approxSnapshot, err := snap.ApproximateSize(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -680,7 +681,7 @@ func TestSnapshotMethods(t *testing.T) {
 		}
 
 		// Write a new key to engine.
-		newKey := []byte("c")
+		newKey := mvccKey("c")
 		newVal := []byte("3")
 		if err := engine.Put(newKey, newVal); err != nil {
 			t.Fatal(err)
@@ -742,7 +743,7 @@ func TestApproximateSize(t *testing.T) {
 			valueLen = 10
 		)
 		for i := 0; i < count; i++ {
-			keys[i] = []byte(fmt.Sprintf("key%8d", i))
+			keys[i] = mvccKey(fmt.Sprintf("key%8d", i))
 			values[i] = randutil.RandBytes(rand, valueLen)
 		}
 
@@ -752,7 +753,7 @@ func TestApproximateSize(t *testing.T) {
 			t.Fatalf("Error flushing InMem: %s", err)
 		}
 
-		sizePerRecord := (len([]byte(keys[0])) + valueLen)
+		sizePerRecord := len(keys[0].Key) + valueLen
 		verifyApproximateSize(keys, engine, sizePerRecord, 0.15, t)
 		verifyApproximateSize(keys[:count/2], engine, sizePerRecord, 0.15, t)
 		verifyApproximateSize(keys[:count/4], engine, sizePerRecord, 0.15, t)

@@ -39,8 +39,14 @@ typedef struct {
 } DBString;
 
 typedef struct {
-  bool valid;
   DBSlice key;
+  int64_t walltime;
+  int32_t logical;
+} DBKey;
+
+typedef struct {
+  bool valid;
+  DBKey key;
   DBSlice value;
 } DBIterState;
 
@@ -83,23 +89,23 @@ void DBSetGCTimeouts(DBEngine * db, int64_t min_txn_ts);
 // database. end==NULL is treated as a key after all keys in the
 // database. DBCompactRange(db, NULL, NULL) will compact the entire
 // database.
-DBStatus DBCompactRange(DBEngine* db, DBSlice* start, DBSlice* end);
+DBStatus DBCompactRange(DBEngine* db, DBKey* start, DBKey* end);
 
 // Returns the approximate file system spaced used by keys in the
 // range [start,end].
-uint64_t DBApproximateSize(DBEngine* db, DBSlice start, DBSlice end);
+uint64_t DBApproximateSize(DBEngine* db, DBKey start, DBKey end);
 
 // Sets the database entry for "key" to "value".
-DBStatus DBPut(DBEngine* db, DBSlice key, DBSlice value);
+DBStatus DBPut(DBEngine* db, DBKey key, DBSlice value);
 
 // Merge the database entry (if any) for "key" with "value".
-DBStatus DBMerge(DBEngine* db, DBSlice key, DBSlice value);
+DBStatus DBMerge(DBEngine* db, DBKey key, DBSlice value);
 
 // Retrieves the database entry for "key".
-DBStatus DBGet(DBEngine* db, DBSlice key, DBString* value);
+DBStatus DBGet(DBEngine* db, DBKey key, DBString* value);
 
 // Deletes the database entry for "key".
-DBStatus DBDelete(DBEngine* db, DBSlice key);
+DBStatus DBDelete(DBEngine* db, DBKey key);
 
 // Applies a batch of operations (puts, merges and deletes) to the
 // database atomically. It is only valid to call this function on an
@@ -127,7 +133,7 @@ DBIterator* DBNewIter(DBEngine* db, bool prefix);
 void DBIterDestroy(DBIterator* iter);
 
 // Positions the iterator at the first key that is >= "key".
-DBIterState DBIterSeek(DBIterator* iter, DBSlice key);
+DBIterState DBIterSeek(DBIterator* iter, DBKey key);
 
 // Positions the iterator at the first key in the database.
 DBIterState DBIterSeekToFirst(DBIterator* iter);
@@ -170,7 +176,7 @@ typedef struct {
   int64_t last_update_nanos;
 } MVCCStatsResult;
 
-MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBSlice start, DBSlice end, int64_t now_nanos);
+MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos);
 
 #ifdef __cplusplus
 }  // extern "C"

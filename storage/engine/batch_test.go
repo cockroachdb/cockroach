@@ -19,6 +19,7 @@ package engine
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -27,6 +28,21 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
 )
+
+func mvccKey(k interface{}) MVCCKey {
+	switch k := k.(type) {
+	case string:
+		return MakeMVCCKey(roachpb.Key(k))
+	case []byte:
+		return MakeMVCCKey(roachpb.Key(k))
+	case roachpb.Key:
+		return MakeMVCCKey(k)
+	case roachpb.RKey:
+		return MakeMVCCKey(roachpb.Key(k))
+	default:
+		panic(fmt.Sprintf("unsupported type: %T", k))
+	}
+}
 
 // TestBatchBasics verifies that all commands work in a batch, aren't
 // visible until commit, and then are all visible after commit.
@@ -39,45 +55,45 @@ func TestBatchBasics(t *testing.T) {
 	b := e.NewBatch()
 	defer b.Close()
 
-	if err := b.Put(MVCCKey("a"), []byte("value")); err != nil {
+	if err := b.Put(mvccKey("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
 	// Write an engine value to be deleted.
-	if err := e.Put(MVCCKey("b"), []byte("value")); err != nil {
+	if err := e.Put(mvccKey("b"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Clear(MVCCKey("b")); err != nil {
+	if err := b.Clear(mvccKey("b")); err != nil {
 		t.Fatal(err)
 	}
 	// Write an engine value to be merged.
-	if err := e.Put(MVCCKey("c"), appender("foo")); err != nil {
+	if err := e.Put(mvccKey("c"), appender("foo")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(MVCCKey("c"), appender("bar")); err != nil {
+	if err := b.Merge(mvccKey("c"), appender("bar")); err != nil {
 		t.Fatal(err)
 	}
 
 	// Check all keys are in initial state (nothing from batch has gone
 	// through to engine until commit).
 	expValues := []MVCCKeyValue{
-		{Key: MVCCKey("b"), Value: []byte("value")},
-		{Key: MVCCKey("c"), Value: appender("foo")},
+		{Key: mvccKey("b"), Value: []byte("value")},
+		{Key: mvccKey("c"), Value: appender("foo")},
 	}
-	kvs, err := Scan(e, MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 0)
+	kvs, err := Scan(e, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(expValues, kvs) {
-		t.Errorf("%v != %v", kvs, expValues)
+		t.Fatalf("%v != %v", kvs, expValues)
 	}
 
 	// Now, merged values should be:
 	expValues = []MVCCKeyValue{
-		{Key: MVCCKey("a"), Value: []byte("value")},
-		{Key: MVCCKey("c"), Value: appender("foobar")},
+		{Key: mvccKey("a"), Value: []byte("value")},
+		{Key: mvccKey("c"), Value: appender("foobar")},
 	}
 	// Scan values from batch directly.
-	kvs, err = Scan(b, MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 0)
+	kvs, err = Scan(b, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +105,7 @@ func TestBatchBasics(t *testing.T) {
 	if err := b.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	kvs, err = Scan(e, MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 0)
+	kvs, err = Scan(e, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,27 +124,27 @@ func TestBatchGet(t *testing.T) {
 	defer b.Close()
 
 	// Write initial values, then write to batch.
-	if err := e.Put(MVCCKey("b"), []byte("value")); err != nil {
+	if err := e.Put(mvccKey("b"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Put(MVCCKey("c"), appender("foo")); err != nil {
+	if err := e.Put(mvccKey("c"), appender("foo")); err != nil {
 		t.Fatal(err)
 	}
 	// Write batch values.
-	if err := b.Put(MVCCKey("a"), []byte("value")); err != nil {
+	if err := b.Put(mvccKey("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Clear(MVCCKey("b")); err != nil {
+	if err := b.Clear(mvccKey("b")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(MVCCKey("c"), appender("bar")); err != nil {
+	if err := b.Merge(mvccKey("c"), appender("bar")); err != nil {
 		t.Fatal(err)
 	}
 
 	expValues := []MVCCKeyValue{
-		{Key: MVCCKey("a"), Value: []byte("value")},
-		{Key: MVCCKey("b"), Value: nil},
-		{Key: MVCCKey("c"), Value: appender("foobar")},
+		{Key: mvccKey("a"), Value: []byte("value")},
+		{Key: mvccKey("b"), Value: nil},
+		{Key: mvccKey("c"), Value: appender("foobar")},
 	}
 	for i, expKV := range expValues {
 		kv, err := b.Get(expKV.Key)
@@ -162,29 +178,29 @@ func TestBatchMerge(t *testing.T) {
 	defer b.Close()
 
 	// Write batch put, delete & merge.
-	if err := b.Put(MVCCKey("a"), appender("a-value")); err != nil {
+	if err := b.Put(mvccKey("a"), appender("a-value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Clear(MVCCKey("b")); err != nil {
+	if err := b.Clear(mvccKey("b")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(MVCCKey("c"), appender("c-value")); err != nil {
+	if err := b.Merge(mvccKey("c"), appender("c-value")); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now, merge to all three keys.
-	if err := b.Merge(MVCCKey("a"), appender("append")); err != nil {
+	if err := b.Merge(mvccKey("a"), appender("append")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(MVCCKey("b"), appender("append")); err != nil {
+	if err := b.Merge(mvccKey("b"), appender("append")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(MVCCKey("c"), appender("append")); err != nil {
+	if err := b.Merge(mvccKey("c"), appender("append")); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify values.
-	val, err := b.Get(MVCCKey("a"))
+	val, err := b.Get(mvccKey("a"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +208,7 @@ func TestBatchMerge(t *testing.T) {
 		t.Error("mismatch of \"a\"")
 	}
 
-	val, err = b.Get(MVCCKey("b"))
+	val, err = b.Get(mvccKey("b"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +216,7 @@ func TestBatchMerge(t *testing.T) {
 		t.Error("mismatch of \"b\"")
 	}
 
-	val, err = b.Get(MVCCKey("c"))
+	val, err = b.Get(mvccKey("c"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,16 +235,16 @@ func TestBatchProto(t *testing.T) {
 	defer b.Close()
 
 	val := roachpb.MakeValueFromString("value")
-	if _, _, err := PutProto(b, MVCCKey("proto"), &val); err != nil {
+	if _, _, err := PutProto(b, mvccKey("proto"), &val); err != nil {
 		t.Fatal(err)
 	}
 	getVal := &roachpb.Value{}
-	ok, keySize, valSize, err := b.GetProto(MVCCKey("proto"), getVal)
+	ok, keySize, valSize, err := b.GetProto(mvccKey("proto"), getVal)
 	if !ok || err != nil {
 		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
 	}
-	if keySize != 5 {
-		t.Errorf("expected key size 5; got %d", keySize)
+	if keySize != 8 {
+		t.Errorf("expected key size 8; got %d", keySize)
 	}
 	data, err := val.Marshal()
 	if err != nil {
@@ -241,14 +257,14 @@ func TestBatchProto(t *testing.T) {
 		t.Errorf("expected %v; got %v", &val, getVal)
 	}
 	// Before commit, proto will not be available via engine.
-	if ok, _, _, err := e.GetProto(MVCCKey("proto"), getVal); ok || err != nil {
+	if ok, _, _, err := e.GetProto(mvccKey("proto"), getVal); ok || err != nil {
 		t.Fatalf("expected GetProto to fail ok=%t: %s", ok, err)
 	}
 	// Commit and verify the proto can be read directly from the engine.
 	if err := b.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	if ok, _, _, err := e.GetProto(MVCCKey("proto"), getVal); !ok || err != nil {
+	if ok, _, _, err := e.GetProto(mvccKey("proto"), getVal); !ok || err != nil {
 		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
 	}
 	if !proto.Equal(getVal, &val) {
@@ -266,19 +282,19 @@ func TestBatchScan(t *testing.T) {
 	defer b.Close()
 
 	existingVals := []MVCCKeyValue{
-		{Key: MVCCKey("a"), Value: []byte("1")},
-		{Key: MVCCKey("b"), Value: []byte("2")},
-		{Key: MVCCKey("c"), Value: []byte("3")},
-		{Key: MVCCKey("d"), Value: []byte("4")},
-		{Key: MVCCKey("e"), Value: []byte("5")},
-		{Key: MVCCKey("f"), Value: []byte("6")},
-		{Key: MVCCKey("g"), Value: []byte("7")},
-		{Key: MVCCKey("h"), Value: []byte("8")},
-		{Key: MVCCKey("i"), Value: []byte("9")},
-		{Key: MVCCKey("j"), Value: []byte("10")},
-		{Key: MVCCKey("k"), Value: []byte("11")},
-		{Key: MVCCKey("l"), Value: []byte("12")},
-		{Key: MVCCKey("m"), Value: []byte("13")},
+		{Key: mvccKey("a"), Value: []byte("1")},
+		{Key: mvccKey("b"), Value: []byte("2")},
+		{Key: mvccKey("c"), Value: []byte("3")},
+		{Key: mvccKey("d"), Value: []byte("4")},
+		{Key: mvccKey("e"), Value: []byte("5")},
+		{Key: mvccKey("f"), Value: []byte("6")},
+		{Key: mvccKey("g"), Value: []byte("7")},
+		{Key: mvccKey("h"), Value: []byte("8")},
+		{Key: mvccKey("i"), Value: []byte("9")},
+		{Key: mvccKey("j"), Value: []byte("10")},
+		{Key: mvccKey("k"), Value: []byte("11")},
+		{Key: mvccKey("l"), Value: []byte("12")},
+		{Key: mvccKey("m"), Value: []byte("13")},
 	}
 	for _, kv := range existingVals {
 		if err := e.Put(kv.Key, kv.Value); err != nil {
@@ -287,16 +303,16 @@ func TestBatchScan(t *testing.T) {
 	}
 
 	batchVals := []MVCCKeyValue{
-		{Key: MVCCKey("a"), Value: []byte("b1")},
-		{Key: MVCCKey("bb"), Value: []byte("b2")},
-		{Key: MVCCKey("c"), Value: []byte("b3")},
-		{Key: MVCCKey("dd"), Value: []byte("b4")},
-		{Key: MVCCKey("e"), Value: []byte("b5")},
-		{Key: MVCCKey("ff"), Value: []byte("b6")},
-		{Key: MVCCKey("g"), Value: []byte("b7")},
-		{Key: MVCCKey("hh"), Value: []byte("b8")},
-		{Key: MVCCKey("i"), Value: []byte("b9")},
-		{Key: MVCCKey("jj"), Value: []byte("b10")},
+		{Key: mvccKey("a"), Value: []byte("b1")},
+		{Key: mvccKey("bb"), Value: []byte("b2")},
+		{Key: mvccKey("c"), Value: []byte("b3")},
+		{Key: mvccKey("dd"), Value: []byte("b4")},
+		{Key: mvccKey("e"), Value: []byte("b5")},
+		{Key: mvccKey("ff"), Value: []byte("b6")},
+		{Key: mvccKey("g"), Value: []byte("b7")},
+		{Key: mvccKey("hh"), Value: []byte("b8")},
+		{Key: mvccKey("i"), Value: []byte("b9")},
+		{Key: mvccKey("jj"), Value: []byte("b10")},
 	}
 	for _, kv := range batchVals {
 		if err := b.Put(kv.Key, kv.Value); err != nil {
@@ -309,17 +325,17 @@ func TestBatchScan(t *testing.T) {
 		max        int64
 	}{
 		// Full monty.
-		{start: MVCCKey("a"), end: MVCCKey("z"), max: 0},
+		{start: mvccKey("a"), end: mvccKey("z"), max: 0},
 		// Select ~half.
-		{start: MVCCKey("a"), end: MVCCKey("z"), max: 9},
+		{start: mvccKey("a"), end: mvccKey("z"), max: 9},
 		// Select one.
-		{start: MVCCKey("a"), end: MVCCKey("z"), max: 1},
+		{start: mvccKey("a"), end: mvccKey("z"), max: 1},
 		// Select half by end key.
-		{start: MVCCKey("a"), end: MVCCKey("f0"), max: 0},
+		{start: mvccKey("a"), end: mvccKey("f0"), max: 0},
 		// Start at half and select rest.
-		{start: MVCCKey("f"), end: MVCCKey("z"), max: 0},
+		{start: mvccKey("f"), end: mvccKey("z"), max: 0},
 		// Start at last and select max=10.
-		{start: MVCCKey("m"), end: MVCCKey("z"), max: 10},
+		{start: mvccKey("m"), end: mvccKey("z"), max: 10},
 	}
 
 	// Scan each case using the batch and store the results.
@@ -359,13 +375,13 @@ func TestBatchScanWithDelete(t *testing.T) {
 	defer b.Close()
 
 	// Write initial value, then delete via batch.
-	if err := e.Put(MVCCKey("a"), []byte("value")); err != nil {
+	if err := e.Put(mvccKey("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Clear(MVCCKey("a")); err != nil {
+	if err := b.Clear(mvccKey("a")); err != nil {
 		t.Fatal(err)
 	}
-	kvs, err := Scan(b, MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 0)
+	kvs, err := Scan(b, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -387,22 +403,22 @@ func TestBatchScanMaxWithDeleted(t *testing.T) {
 	defer b.Close()
 
 	// Write two values.
-	if err := e.Put(MVCCKey("a"), []byte("value1")); err != nil {
+	if err := e.Put(mvccKey("a"), []byte("value1")); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Put(MVCCKey("b"), []byte("value2")); err != nil {
+	if err := e.Put(mvccKey("b"), []byte("value2")); err != nil {
 		t.Fatal(err)
 	}
 	// Now, delete "a" in batch.
-	if err := b.Clear(MVCCKey("a")); err != nil {
+	if err := b.Clear(mvccKey("a")); err != nil {
 		t.Fatal(err)
 	}
 	// A scan with max=1 should scan "b".
-	kvs, err := Scan(b, MVCCKey(roachpb.RKeyMin), MVCCKey(roachpb.RKeyMax), 1)
+	kvs, err := Scan(b, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(kvs) != 1 || !bytes.Equal(kvs[0].Key, []byte("b")) {
+	if len(kvs) != 1 || !bytes.Equal(kvs[0].Key.Key, []byte("b")) {
 		t.Errorf("expected scan of \"b\"; got %v", kvs)
 	}
 }
@@ -421,10 +437,10 @@ func TestBatchConcurrency(t *testing.T) {
 	defer b.Close()
 
 	// Write a merge to the batch.
-	if err := b.Merge(MVCCKey("a"), appender("bar")); err != nil {
+	if err := b.Merge(mvccKey("a"), appender("bar")); err != nil {
 		t.Fatal(err)
 	}
-	val, err := b.Get(MVCCKey("a"))
+	val, err := b.Get(mvccKey("a"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -432,11 +448,11 @@ func TestBatchConcurrency(t *testing.T) {
 		t.Error("mismatch of \"a\"")
 	}
 	// Write an engine value.
-	if err := e.Put(MVCCKey("a"), appender("foo")); err != nil {
+	if err := e.Put(mvccKey("a"), appender("foo")); err != nil {
 		t.Fatal(err)
 	}
 	// Now, read again and verify that the merge happens on top of the mod.
-	val, err = b.Get(MVCCKey("a"))
+	val, err = b.Get(mvccKey("a"))
 	if err != nil {
 		t.Fatal(err)
 	}

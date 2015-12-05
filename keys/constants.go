@@ -123,7 +123,7 @@ var (
 	SystemMax    = roachpb.Key("\x03")
 
 	// MetaPrefix is the prefix for range metadata keys. Notice that
-	// an extra null character in the prefix causes all range addressing
+	// an \0x01 character in the prefix causes all range addressing
 	// records to sort before any system tables which they might describe.
 	MetaPrefix = MakeKey(SystemPrefix, roachpb.RKey("\x01m"))
 	// Meta1Prefix is the first level of key addressing. The value is a

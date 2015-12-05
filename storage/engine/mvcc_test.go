@@ -48,13 +48,13 @@ var (
 	testKey2     = roachpb.Key("/db2")
 	testKey3     = roachpb.Key("/db3")
 	testKey4     = roachpb.Key("/db4")
-	txn1         = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn1"), Epoch: 1}
-	txn1Commit   = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn1"), Epoch: 1, Status: roachpb.COMMITTED}
+	txn1         = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn1"), Epoch: 1, Timestamp: makeTS(0, 1)}
+	txn1Commit   = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn1"), Epoch: 1, Status: roachpb.COMMITTED, Timestamp: makeTS(0, 1)}
 	txn1Abort    = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn1"), Epoch: 1, Status: roachpb.ABORTED}
-	txn1e2       = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn1"), Epoch: 2}
-	txn1e2Commit = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn1"), Epoch: 2, Status: roachpb.COMMITTED}
-	txn2         = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn2")}
-	txn2Commit   = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn2"), Status: roachpb.COMMITTED}
+	txn1e2       = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn1"), Epoch: 2, Timestamp: makeTS(0, 1)}
+	txn1e2Commit = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn1"), Epoch: 2, Status: roachpb.COMMITTED, Timestamp: makeTS(0, 1)}
+	txn2         = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn2"), Timestamp: makeTS(0, 1)}
+	txn2Commit   = &roachpb.Transaction{Key: roachpb.Key("a"), ID: []byte("Txn2"), Status: roachpb.COMMITTED, Timestamp: makeTS(0, 1)}
 	value1       = roachpb.MakeValueFromString("testValue1")
 	value2       = roachpb.MakeValueFromString("testValue2")
 	value3       = roachpb.MakeValueFromString("testValue3")
@@ -84,6 +84,12 @@ func makeTS(nanos int64, logical int32) roachpb.Timestamp {
 	}
 }
 
+type mvccKeys []MVCCKey
+
+func (n mvccKeys) Len() int           { return len(n) }
+func (n mvccKeys) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
+func (n mvccKeys) Less(i, j int) bool { return n[i].Less(n[j]) }
+
 // Verify the sort ordering of successive keys with metadata and
 // versioned values. In particular, the following sequence of keys /
 // versions:
@@ -100,19 +106,19 @@ func TestMVCCKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	aKey := roachpb.Key("a")
 	a0Key := roachpb.Key("a\x00")
-	keys := []string{
-		string(MVCCEncodeKey(aKey)),
-		string(MVCCEncodeVersionKey(aKey, makeTS(math.MaxInt64, 0))),
-		string(MVCCEncodeVersionKey(aKey, makeTS(1, 0))),
-		string(MVCCEncodeVersionKey(aKey, makeTS(0, 0))),
-		string(MVCCEncodeKey(a0Key)),
-		string(MVCCEncodeVersionKey(a0Key, makeTS(math.MaxInt64, 0))),
-		string(MVCCEncodeVersionKey(a0Key, makeTS(1, 0))),
-		string(MVCCEncodeVersionKey(a0Key, makeTS(0, 0))),
+	keys := mvccKeys{
+		mvccKey(aKey),
+		mvccVersionKey(aKey, makeTS(math.MaxInt64, 0)),
+		mvccVersionKey(aKey, makeTS(1, 0)),
+		mvccVersionKey(aKey, makeTS(0, 1)),
+		mvccKey(a0Key),
+		mvccVersionKey(a0Key, makeTS(math.MaxInt64, 0)),
+		mvccVersionKey(a0Key, makeTS(1, 0)),
+		mvccVersionKey(a0Key, makeTS(0, 1)),
 	}
-	sortKeys := make([]string, len(keys))
+	sortKeys := make(mvccKeys, len(keys))
 	copy(sortKeys, keys)
-	sort.Strings(sortKeys)
+	sort.Sort(sortKeys)
 	if !reflect.DeepEqual(sortKeys, keys) {
 		t.Errorf("expected keys to sort in order %s, but got %s", keys, sortKeys)
 	}
@@ -565,7 +571,7 @@ func TestMVCCDeleteMissingKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Verify nothing is written to the engine.
-	if val, err := engine.Get(MVCCEncodeKey(testKey1)); err != nil || val != nil {
+	if val, err := engine.Get(MakeMVCCKey(testKey1)); err != nil || val != nil {
 		t.Fatalf("expected no mvcc metadata after delete of a missing key; got %q: %s", val, err)
 	}
 }
@@ -1443,7 +1449,7 @@ func TestMVCCAbortTxn(t *testing.T) {
 	if err != nil || value != nil {
 		t.Fatalf("the value should be empty: %s", err)
 	}
-	meta, err := engine.Get(MVCCEncodeKey(testKey1))
+	meta, err := engine.Get(MakeMVCCKey(testKey1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1466,7 +1472,7 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	meta, err := engine.Get(MVCCEncodeKey(testKey1))
+	meta, err := engine.Get(MakeMVCCKey(testKey1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1528,7 +1534,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 	// Attempt to read older timestamp; should fail.
 	value, _, err := MVCCGet(engine, testKey1, makeTS(0, 0), true, nil)
 	if value != nil || err != nil {
-		t.Errorf("expected value nil, err nil; got %+v, %v", value, err)
+		t.Fatalf("expected value nil, err nil; got %+v, %v", value, err)
 	}
 	// Read at correct timestamp.
 	value, _, err = MVCCGet(engine, testKey1, makeTS(1, 0), true, nil)
@@ -2203,7 +2209,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	// Verify size of mvccVersionTimestampSize.
 	ts := makeTS(1*1E9, 0)
 	key := roachpb.Key("a")
-	keySize := int64(len(MVCCEncodeVersionKey(key, ts)) - len(MVCCEncodeKey(key)))
+	keySize := int64(mvccVersionKey(key, ts).EncodedSize() - MakeMVCCKey(key).EncodedSize())
 	if keySize != mvccVersionTimestampSize {
 		t.Errorf("expected version timestamp size %d; got %d", mvccVersionTimestampSize, keySize)
 	}
@@ -2213,7 +2219,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	if err := MVCCPut(engine, ms, key, ts, value, nil); err != nil {
 		t.Fatal(err)
 	}
-	mKeySize := int64(len(MVCCEncodeKey(key)))
+	mKeySize := int64(MakeMVCCKey(key).EncodedSize())
 	vKeySize := mvccVersionTimestampSize
 	vValSize := encodedSize(&value, t)
 
@@ -2274,7 +2280,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	if err := MVCCPut(engine, ms, key2, ts4, value2, txn); err != nil {
 		t.Fatal(err)
 	}
-	mKey2Size := int64(len(MVCCEncodeKey(key2)))
+	mKey2Size := int64(MakeMVCCKey(key2).EncodedSize())
 	mVal2Size := encodedSize(&MVCCMetadata{Timestamp: ts4, Txn: txn}, t)
 	vKey2Size := mvccVersionTimestampSize
 	vVal2Size := encodedSize(&value2, t)
@@ -2329,7 +2335,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	if err := MVCCPut(engine, ms, txnKey, roachpb.ZeroTimestamp, txnVal, nil); err != nil {
 		t.Fatal(err)
 	}
-	txnKeySize := int64(len(MVCCEncodeKey(txnKey)))
+	txnKeySize := int64(MakeMVCCKey(txnKey).EncodedSize())
 	txnValSize := encodedSize(&MVCCMetadata{Value: &txnVal}, t)
 	expMS6 := expMS5
 	expMS6.SysBytes += txnKeySize + txnValSize
@@ -2356,6 +2362,9 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 	// either commit or abort.
 	keys := map[int32][]byte{}
 	for i := int32(0); i < int32(1000); i++ {
+		if log.V(1) {
+			log.Infof("*** cycle %d", i)
+		}
 		// Manually advance aggregate intent age based on one extra second of simulation.
 		ms.IntentAge += ms.IntentCount
 		// Same for aggregate gc'able bytes age.
@@ -2424,9 +2433,9 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		if i%10 == 0 {
 			// Compute the stats manually.
 			iter := engine.NewIterator(false)
-			iter.Seek(keyMin)
 			var expMS MVCCStats
-			err := iter.ComputeStats(&expMS, roachpb.KeyMin, roachpb.KeyMax, int64(i+1)*1E9)
+			err := iter.ComputeStats(&expMS, MakeMVCCKey(roachpb.KeyMin),
+				MakeMVCCKey(roachpb.KeyMax), int64(i+1)*1E9)
 			iter.Close()
 			if err != nil {
 				t.Fatal(err)
@@ -2489,17 +2498,13 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			}
 		}
 	}
-	kvsn, err := Scan(engine, MVCCEncodeKey(keyMin), MVCCEncodeKey(keyMax), 0)
+	kvsn, err := Scan(engine, MakeMVCCKey(keyMin), MakeMVCCKey(keyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i, kv := range kvsn {
-		key, ts, _, err := MVCCDecodeKey(kv.Key)
-		if err != nil {
-			t.Fatal(err)
-		}
 		if log.V(1) {
-			log.Infof("%d: %q, ts=%s", i, key, ts)
+			log.Infof("%d: %s", i, kv.Key)
 		}
 	}
 
@@ -2514,12 +2519,12 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	}
 
 	expEncKeys := []MVCCKey{
-		MVCCEncodeVersionKey(roachpb.Key("a"), ts2),
-		MVCCEncodeVersionKey(roachpb.Key("b"), ts3),
-		MVCCEncodeVersionKey(roachpb.Key("b"), ts2),
-		MVCCEncodeVersionKey(roachpb.Key("b-del"), ts3),
+		mvccVersionKey(roachpb.Key("a"), ts2),
+		mvccVersionKey(roachpb.Key("b"), ts3),
+		mvccVersionKey(roachpb.Key("b"), ts2),
+		mvccVersionKey(roachpb.Key("b-del"), ts3),
 	}
-	kvs, err := Scan(engine, MVCCEncodeKey(keyMin), MVCCEncodeKey(keyMax), 0)
+	kvs, err := Scan(engine, MakeMVCCKey(keyMin), MakeMVCCKey(keyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2534,9 +2539,9 @@ func TestMVCCGarbageCollect(t *testing.T) {
 
 	// Verify aggregated stats match computed stats after GC.
 	iter := engine.NewIterator(false)
-	iter.Seek(keyMin)
 	var expMS MVCCStats
-	err = iter.ComputeStats(&expMS, roachpb.KeyMin, roachpb.KeyMax, ts3.WallTime)
+	err = iter.ComputeStats(&expMS, MakeMVCCKey(roachpb.KeyMin),
+		MakeMVCCKey(roachpb.KeyMax), ts3.WallTime)
 	iter.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -2552,13 +2557,14 @@ func TestMVCCComputeStatsError(t *testing.T) {
 
 	// Write a MVCC metadata key where the value is not an encoded MVCCMetadata
 	// protobuf.
-	if err := engine.Put(MVCCEncodeKey(roachpb.Key("garbage")), []byte("garbage")); err != nil {
+	if err := engine.Put(MakeMVCCKey(roachpb.Key("garbage")), []byte("garbage")); err != nil {
 		t.Fatal(err)
 	}
 
 	var ms MVCCStats
 	iter := engine.NewIterator(false)
-	err := iter.ComputeStats(&ms, roachpb.KeyMin, roachpb.KeyMax, 100)
+	err := iter.ComputeStats(&ms, MakeMVCCKey(roachpb.KeyMin),
+		MakeMVCCKey(roachpb.KeyMax), 100)
 	iter.Close()
 	if e := "unable to decode MVCCMetadata"; !testutils.IsError(err, e) {
 		t.Fatalf("expected %s", e)
@@ -2643,7 +2649,7 @@ func TestResovleIntentWithLowerEpoch(t *testing.T) {
 	}
 
 	// Check that the intent was not cleared.
-	metaKey := MVCCEncodeKey(testKey1)
+	metaKey := MakeMVCCKey(testKey1)
 	meta := &MVCCMetadata{}
 	ok, _, _, err := engine.GetProto(metaKey, meta)
 	if err != nil {
