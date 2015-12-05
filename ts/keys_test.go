@@ -39,21 +39,21 @@ func TestDataKeys(t *testing.T) {
 			"testsource",
 			0,
 			Resolution10s,
-			31,
+			30,
 		},
 		{
 			"test.no.source",
 			"",
 			1429114700000000000,
 			Resolution10s,
-			27,
+			26,
 		},
 		{
 			"",
 			"",
 			-1429114700000000000,
 			Resolution10s,
-			13,
+			12,
 		},
 	}
 

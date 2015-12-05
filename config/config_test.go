@@ -72,10 +72,10 @@ func TestObjectIDForKey(t *testing.T) {
 		{roachpb.RKeyMax, false, 0},
 
 		// In system span, but no Uvarint ID.
-		{keys.MakeKey(keys.TableDataPrefix, roachpb.RKey("foo")), false, 0},
+		{keys.MakeKey(keys.TableDataPrefix, roachpb.RKey("\xb3")), false, 0},
 
 		// Valid, even if there are things after the ID.
-		{keys.MakeKey(keys.MakeTablePrefix(42), roachpb.RKey("foo")), true, 42},
+		{keys.MakeKey(keys.MakeTablePrefix(42), roachpb.RKey("\xb3")), true, 42},
 		{keys.MakeTablePrefix(0), true, 0},
 		{keys.MakeTablePrefix(999), true, 999},
 	}

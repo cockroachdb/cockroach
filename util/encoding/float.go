@@ -34,9 +34,9 @@ import (
 
 // Direct mappings or prefixes of encoded data dependent on the type.
 const (
-	floatNaN              = intMax + 1                // 0x13
-	floatNegativeInfinity = floatNaN + 1              // 0x14
-	floatNegLarge         = floatNegativeInfinity + 1 // 0x15
+	floatNaN              = intMax + 1
+	floatNegativeInfinity = floatNaN + 1
+	floatNegLarge         = floatNegativeInfinity + 1
 	floatNegMedium        = floatNegLarge + 11
 	floatNegSmall         = floatNegMedium + 1
 	floatZero             = floatNegSmall + 1

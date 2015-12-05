@@ -96,9 +96,10 @@ func DecodeUint64Decreasing(b []byte) ([]byte, uint64, error) {
 }
 
 const (
-	intMin  = encodedNotNull + 1 // 0x02
-	intZero = intMin + 8         // 0x0a
-	intMax  = intZero + 8        // 0x12
+	intMin   = encodedNotNull + 1 // 0x03
+	intZero  = intMin + 8         // 0x0b
+	intSmall = 63
+	intMax   = intZero + intSmall + 8 // 0x92
 )
 
 // EncodeVarint encodes the int64 value using a variable length
@@ -190,8 +191,8 @@ func DecodeVarintDecreasing(b []byte) ([]byte, int64, error) {
 // supplied buffer and the final buffer is returned.
 func EncodeUvarint(b []byte, v uint64) []byte {
 	switch {
-	case v == 0:
-		return append(b, intMax-8)
+	case v <= intSmall:
+		return append(b, intZero+byte(v))
 	case v <= 0xff:
 		return append(b, intMax-7, byte(v))
 	case v <= 0xffff:
@@ -261,6 +262,10 @@ func DecodeUvarint(b []byte) ([]byte, uint64, error) {
 	}
 	length := int(b[0]) - intZero
 	b = b[1:] // skip length byte
+	if length <= intSmall {
+		return b, uint64(length), nil
+	}
+	length -= intSmall
 	if length < 0 || length > 8 {
 		return nil, 0, util.Errorf("invalid uvarint length of %d", length)
 	} else if len(b) < length {
@@ -474,7 +479,7 @@ func DecodeStringDecreasing(b []byte, r []byte) ([]byte, string, error) {
 
 const (
 	encodedNull    = 0x00
-	encodedNotNull = 0x01
+	encodedNotNull = 0x02
 )
 
 // EncodeNull encodes a NULL value. The encodes bytes are appended to the
