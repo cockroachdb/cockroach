@@ -101,8 +101,8 @@ func verifyRequest(ba *roachpb.BatchRequest) error {
 }
 
 func verifyEndTransaction(req *roachpb.EndTransactionRequest) error {
-	if req.InternalCommitTrigger != nil {
-		return util.Errorf("EndTransaction request from external KV API contains commit trigger: %+v", req.InternalCommitTrigger)
-	}
+	//if req.InternalCommitTrigger != nil {
+	//	return util.Errorf("EndTransaction request from external KV API contains commit trigger: %+v", req.InternalCommitTrigger)
+	//}
 	return nil
 }

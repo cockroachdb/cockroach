@@ -177,6 +177,16 @@ message TableDescriptor {
   optional PrivilegeDescriptor privileges = 12;
   // Columns or indexes being added or deleted in a FIFO order.
   repeated DescriptorMutation mutations = 13 [(gogoproto.nullable) = false];
+  // The table leader lease. A single goroutine across a cockroach cluster
+  // can own it and as a result will execute scheduled schema changes for
+  // this table. 
+  message LeaderLease {
+    // A unique id used by the goroutine.
+    optional string leader = 1 [(gogoproto.nullable) = false];
+    // Seconds since the Unix epoch.
+    optional int64 expiration_time = 2 [(gogoproto.nullable) = false];
+  }
+  optional LeaderLease lease = 14;
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

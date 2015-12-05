@@ -449,7 +449,7 @@ var builtins = map[string][]builtin{
 			returnType: typeBytes,
 			impure:     true,
 			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
-				return generateUniqueBytes(ctx.NodeID), nil
+				return GenerateUniqueBytes(ctx.NodeID), nil
 			},
 		},
 	},
@@ -1300,7 +1300,8 @@ var uniqueBytesState struct {
 	nanos uint64
 }
 
-func generateUniqueBytes(nodeID uint32) DBytes {
+// GenerateUniqueBytes generates unique bytes for a unique id.
+func GenerateUniqueBytes(nodeID uint32) DBytes {
 	// Unique bytes are composed of the current time in nanoseconds and the
 	// node-id. If the nanosecond value is the same on two consecutive calls to
 	// time.Now() the nanoseconds value is incremented. The node-id is varint
@@ -1343,7 +1344,7 @@ func generateUniqueInt(nodeID uint32) DInt {
 	// (Jan 1, 2015) in order to utilize the entire timestamp range.
 	//
 	// Note that generateUniqueInt() imposes a limit on node IDs while
-	// generateUniqueBytes() does not.
+	// GenerateUniqueBytes() does not.
 	//
 	// TODO(pmattis): Do we have to worry about persisting the milliseconds value
 	// periodically to avoid the clock ever going backwards (e.g. due to NTP
