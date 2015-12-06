@@ -25,7 +25,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -134,8 +133,6 @@ func (pq *storePoolPQ) dequeue() *storeDetail {
 // StorePool maintains a list of all known stores in the cluster and
 // information on their health.
 type StorePool struct {
-	gossip             *gossip.Gossip
-	clock              *hlc.Clock
 	timeUntilStoreDead time.Duration
 
 	// Each storeDetail is contained in both a map and a priorityQueue; pointers
