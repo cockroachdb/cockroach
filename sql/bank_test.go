@@ -83,12 +83,9 @@ CREATE TABLE IF NOT EXISTS bank.accounts (
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			from := rand.Intn(*numAccounts)
-			var to int
-			for {
-				to = rand.Intn(*numAccounts)
-				if from != to {
-					break
-				}
+			to := rand.Intn(*numAccounts - 1)
+			if from == to {
+				to = *numAccounts - 1
 			}
 
 			amount := rand.Intn(*maxTransfer)
