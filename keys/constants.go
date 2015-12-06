@@ -119,19 +119,16 @@ var (
 
 	// SystemPrefix indicates the beginning of the key range for
 	// global, system data which are replicated across the cluster.
-	SystemPrefix = roachpb.Key("\x02")
-	SystemMax    = roachpb.Key("\x03")
+	SystemPrefix = roachpb.Key("\x04")
+	SystemMax    = roachpb.Key("\x05")
 
-	// MetaPrefix is the prefix for range metadata keys. Notice that
-	// an extra null character in the prefix causes all range addressing
-	// records to sort before any system tables which they might describe.
-	MetaPrefix = MakeKey(SystemPrefix, roachpb.RKey("\x01m"))
-	// Meta1Prefix is the first level of key addressing. The value is a
-	// RangeDescriptor struct.
-	Meta1Prefix = roachpb.Key(MakeKey(MetaPrefix, roachpb.RKey("1")))
+	// Meta1Prefix is the first level of key addressing. It is selected such that
+	// all range addressing records sort before any system tables which they
+	// might describe. The value is a RangeDescriptor struct.
+	Meta1Prefix = roachpb.Key("\x02")
 	// Meta2Prefix is the second level of key addressing. The value is a
 	// RangeDescriptor struct.
-	Meta2Prefix = roachpb.Key(MakeKey(MetaPrefix, roachpb.RKey("2")))
+	Meta2Prefix = roachpb.Key("\x03")
 	// Meta1KeyMax is the end of the range of the first level of key addressing.
 	// The value is a RangeDescriptor struct.
 	Meta1KeyMax = roachpb.Key(MakeKey(Meta1Prefix, roachpb.RKeyMax))
@@ -139,8 +136,10 @@ var (
 	// The value is a RangeDescriptor struct.
 	Meta2KeyMax = roachpb.Key(MakeKey(Meta2Prefix, roachpb.RKeyMax))
 
+	// MetaMin is the end of the range of addressing keys.
+	MetaMin = Meta1Prefix
 	// MetaMax is the end of the range of addressing keys.
-	MetaMax = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("\x02")))
+	MetaMax = roachpb.Key("\x04")
 
 	// DescIDGenerator is the global descriptor ID generator sequence used for
 	// table and namespace IDs.
@@ -164,6 +163,9 @@ var (
 	// TableDataPrefix prefixes all table data. It is specifically chosen to
 	// occur after the range of common user data prefixes so that tests which use
 	// those prefixes will not see table data.
+	//
+	// TODO(peter): Replace with TableDataMin and TableDataMax which are the min
+	// and max int tag values from util/encoding/encoding.go:int{Min,Max}.
 	TableDataPrefix = roachpb.Key("\xff")
 
 	// UserTableDataMin is the start key of user structured data.

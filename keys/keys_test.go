@@ -37,7 +37,7 @@ func TestKeySorting(t *testing.T) {
 		roachpb.RKey("\x01").Less(roachpb.RKey("\x01\x00"))) {
 		t.Fatalf("something is seriously wrong with this machine")
 	}
-	if bytes.Compare(localPrefix, MetaPrefix) >= 0 {
+	if bytes.Compare(localPrefix, Meta1Prefix) >= 0 {
 		t.Fatalf("local key spilling into replicated ranges")
 	}
 	if !bytes.Equal(roachpb.Key(""), roachpb.Key(nil)) || !bytes.Equal(roachpb.Key(""), roachpb.Key(nil)) {
@@ -85,31 +85,31 @@ func TestRangeMetaKey(t *testing.T) {
 			expKey: roachpb.RKeyMin,
 		},
 		{
-			key:    roachpb.RKey("\x02\x01m2\x02zonefoo"),
-			expKey: roachpb.RKey("\x02\x01m1\x02zonefoo"),
+			key:    roachpb.RKey("\x03\x04zonefoo"),
+			expKey: roachpb.RKey("\x02\x04zonefoo"),
 		},
 		{
-			key:    roachpb.RKey("\x02\x01m1\x02zonefoo"),
+			key:    roachpb.RKey("\x02\x04zonefoo"),
 			expKey: roachpb.RKeyMin,
 		},
 		{
 			key:    roachpb.RKey("foo"),
-			expKey: roachpb.RKey("\x02\x01m2foo"),
+			expKey: roachpb.RKey("\x03foo"),
 		},
 		{
-			key:    roachpb.RKey("\x02\x01m2foo"),
-			expKey: roachpb.RKey("\x02\x01m1foo"),
+			key:    roachpb.RKey("\x03foo"),
+			expKey: roachpb.RKey("\x02foo"),
 		},
 		{
-			key:    roachpb.RKey("\x02\x01m1foo"),
+			key:    roachpb.RKey("\x02foo"),
 			expKey: roachpb.RKeyMin,
 		},
 	}
 	for i, test := range testCases {
 		result := RangeMetaKey(test.key)
 		if !bytes.Equal(result, test.expKey) {
-			t.Errorf("%d: expected range meta for key %q doesn't match %q (%x)",
-				i, test.key, test.expKey, []byte(result))
+			t.Errorf("%d: expected range meta for key %q doesn't match %q (%q)",
+				i, test.key, test.expKey, result)
 		}
 	}
 }
@@ -267,7 +267,6 @@ func TestValidateRangeMetaKey(t *testing.T) {
 	}{
 		{roachpb.RKeyMin, false},
 		{roachpb.RKey("\x00"), true},
-		{Meta1Prefix[:len(Meta1Prefix)-1], true},
 		{Meta1Prefix, false},
 		{roachpb.MakeKey(Meta1Prefix, roachpb.RKeyMax), false},
 		{roachpb.MakeKey(Meta2Prefix, roachpb.RKeyMax), false},

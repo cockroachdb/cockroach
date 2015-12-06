@@ -58,8 +58,8 @@ func TestPrettyPrint(t *testing.T) {
 		{LocalMax, "/Local/Max"},
 
 		// system
-		{roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo")), `/System/Meta2/"foo"`},
-		{roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo")), `/System/Meta1/"foo"`},
+		{roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo")), `/Meta2/"foo"`},
+		{roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo")), `/Meta1/"foo"`},
 
 		{StoreStatusKey(2222), "/System/StatusStore/2222"},
 		{NodeStatusKey(1111), "/System/StatusNode/1111"},

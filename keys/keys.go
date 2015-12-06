@@ -249,14 +249,14 @@ func RangeMetaKey(key roachpb.RKey) roachpb.Key {
 	if len(key) == 0 {
 		return roachpb.KeyMin
 	}
-	if !bytes.HasPrefix(key, MetaPrefix) {
+	switch key[0] {
+	case Meta1Prefix[0]:
+		return roachpb.KeyMin
+	case Meta2Prefix[0]:
+		return MakeKey(Meta1Prefix, key[len(Meta2Prefix):])
+	default:
 		return MakeKey(Meta2Prefix, key)
 	}
-	if bytes.HasPrefix(key, Meta2Prefix) {
-		return MakeKey(Meta1Prefix, key[len(Meta2Prefix):])
-	}
-
-	return roachpb.KeyMin
 }
 
 // validateRangeMetaKey validates that the given key is a valid Range Metadata

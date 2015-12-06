@@ -45,13 +45,15 @@ var (
 			{name: "/RangeID", prefix: roachpb.Key(LocalRangeIDPrefix), ppFunc: localRangeIDKeyPrint},
 			{name: "/Range", prefix: LocalRangePrefix, ppFunc: localRangeKeyPrint},
 		}},
+		{name: "/Meta1", start: Meta1Prefix, end: Meta1KeyMax, entries: []dictEntry{
+			{name: "", prefix: Meta1Prefix, ppFunc: print},
+		}},
+		{name: "/Meta2", start: Meta2Prefix, end: Meta2KeyMax, entries: []dictEntry{
+			{name: "", prefix: Meta2Prefix, ppFunc: print},
+		}},
 		{name: "/System", start: SystemPrefix, end: SystemMax, entries: []dictEntry{
-			{name: "/Meta2", prefix: Meta2Prefix, ppFunc: print},
-			{name: "/Meta1", prefix: Meta1Prefix, ppFunc: print},
-			//{name: "Meta", prefix: MetaPrefix},
 			{name: "/StatusStore", prefix: StatusStorePrefix, ppFunc: decodeKeyPrint},
 			{name: "/StatusNode", prefix: StatusNodePrefix, ppFunc: decodeKeyPrint},
-			//{name: "Status", prefix: StatusPrefix},
 		}},
 		{name: "/Table", start: TableDataPrefix, end: nil, entries: []dictEntry{
 			{name: "", prefix: TableDataPrefix, ppFunc: decodeKeyPrint},
@@ -250,32 +252,32 @@ func decodeKeyPrint(key roachpb.Key) string {
 
 // PrettyPrint print the key in a human readable format, which organized as:
 // Key's Format												Key's Value
-// /Local/...												"\x00\x00\x00"+...
-// 		/Store/...											"\x00\x00\x00s"+...
-//		/RangeID/...										"\x00\x00\x00s"+[rangeid]
-//			/[rangeid]/SequenceCache/[id]/seq:[seq]			"\x00\x00\x00s"+[rangeid]+"res-"+[id]+[seq]
-//			/[rangeid]/RaftLeaderLease						"\x00\x00\x00s"+[rangeid]+"rfll"
-//			/[rangeid]/RaftTombstone						"\x00\x00\x00s"+[rangeid]+"rftb"
-//			/[rangeid]/RaftHardState						"\x00\x00\x00s"+[rangeid]+"rfth"
-//			/[rangeid]/RaftAppliedIndex						"\x00\x00\x00s"+[rangeid]+"rfta"
-//			/[rangeid]/RaftLog/logIndex:[logIndex]			"\x00\x00\x00s"+[rangeid]+"rftl"+[logIndex]
-//			/[rangeid]/RaftTruncatedState					"\x00\x00\x00s"+[rangeid]+"rftt"
-//			/[rangeid]/RaftLastIndex						"\x00\x00\x00s"+[rangeid]+"rfti"
-//			/[rangeid]/RangeGCMetadata						"\x00\x00\x00s"+[rangeid]+"rgcm"
-//			/[rangeid]/RangeLastVerificationTimestamp		"\x00\x00\x00s"+[rangeid]+"rlvt"
-//			/[rangeid]/RangeStats							"\x00\x00\x00s"+[rangeid]+"stat"
-//		/Range/...											"\x00\x00\x00k"+...
-//			/RangeDescriptor/[key]							"\x00\x00\x00k"+[key]+"rdsc"
-//			/RangeTreeNode/[key]							"\x00\x00\x00k"+[key]+"rtn-"
-//			/Transaction/addrKey:[key]/id:[id]				"\x00\x00\x00k"+[key]+"txn-"+[id]
-// /Local/Max 												"\x00\x00\x01"
+// /Local/...												"\x01"+...
+// 		/Store/...											"\x01s"+...
+//		/RangeID/...										"\x01s"+[rangeid]
+//			/[rangeid]/SequenceCache/[id]/seq:[seq]			"\x01s"+[rangeid]+"res-"+[id]+[seq]
+//			/[rangeid]/RaftLeaderLease						"\x01s"+[rangeid]+"rfll"
+//			/[rangeid]/RaftTombstone						"\x01s"+[rangeid]+"rftb"
+//			/[rangeid]/RaftHardState						"\x01s"+[rangeid]+"rfth"
+//			/[rangeid]/RaftAppliedIndex						"\x01s"+[rangeid]+"rfta"
+//			/[rangeid]/RaftLog/logIndex:[logIndex]			"\x01s"+[rangeid]+"rftl"+[logIndex]
+//			/[rangeid]/RaftTruncatedState					"\x01s"+[rangeid]+"rftt"
+//			/[rangeid]/RaftLastIndex						"\x01s"+[rangeid]+"rfti"
+//			/[rangeid]/RangeGCMetadata						"\x01s"+[rangeid]+"rgcm"
+//			/[rangeid]/RangeLastVerificationTimestamp		"\x01s"+[rangeid]+"rlvt"
+//			/[rangeid]/RangeStats							"\x01s"+[rangeid]+"stat"
+//		/Range/...											"\x01k"+...
+//			/RangeDescriptor/[key]							"\x01k"+[key]+"rdsc"
+//			/RangeTreeNode/[key]							"\x01k"+[key]+"rtn-"
+//			/Transaction/addrKey:[key]/id:[id]				"\x01k"+[key]+"txn-"+[id]
+// /Local/Max 												"\x02"
 //
-// /System/...												"\x00"
-//		/Meta1/[key]										"\x00\x00meta1"+[key]
-//		/Meta2/[key]										"\x00\x00meta2"+[key]
-//		/StatusStore/[key]									"\x00status-store-"+[key]
-//		/StatusNode/[key]									"\x00status-node-"+[key]
-// /System/Max												"\x01"
+// /Meta1/[key]										    "\x02"+[key]
+// /Meta2/[key]										    "\x03"+[key]
+// /System/...												"\x04"
+//		/StatusStore/[key]									"\x04status-store-"+[key]
+//		/StatusNode/[key]									"\x04status-node-"+[key]
+// /System/Max												"\x05"
 //
 // /Table/[key]												"\xff"+[key]
 //
