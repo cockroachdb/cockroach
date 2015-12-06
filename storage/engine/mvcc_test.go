@@ -1860,36 +1860,36 @@ func TestValidSplitKeys(t *testing.T) {
 		key   roachpb.Key
 		valid bool
 	}{
-		{roachpb.Key("\x01"), false},
-		{roachpb.Key("\x01\x01"), false},
-		{roachpb.Key("\x01\x01meta1"), false},
-		{roachpb.Key("\x01\x01meta1\x00"), false},
-		{roachpb.Key("\x01\x01meta1\xff"), false},
-		{roachpb.Key("\x01\x01meta2"), true},
-		{roachpb.Key("\x01\x01meta2\x00"), true},
-		{roachpb.Key("\x01\x01meta2\xff"), true},
-		{roachpb.Key("\x01\x01meta2\xff\xff"), false},
-		{roachpb.Key("\x01\x01meta3"), true},
-		{roachpb.Key("\x01\x02"), true},
+		{roachpb.Key("\x02"), false},
+		{roachpb.Key("\x02\x01"), false},
+		{roachpb.Key("\x02\x01m1"), false},
+		{roachpb.Key("\x02\x01m1\x00"), false},
+		{roachpb.Key("\x02\x01m1\xff"), false},
+		{roachpb.Key("\x02\x01m2"), true},
+		{roachpb.Key("\x02\x01m2\x00"), true},
+		{roachpb.Key("\x02\x01m2\xff"), true},
+		{roachpb.Key("\x02\x01m2\xff\xff"), false},
+		{roachpb.Key("\x02\x01meta3"), true},
+		{roachpb.Key("\x02\x02"), true},
 		// Deprecated accounting config key. Valid split.
-		{roachpb.Key("\x01accs\xff"), true},
-		{roachpb.Key("\x01acct"), true},
-		{roachpb.Key("\x01acct\x00"), true},
-		{roachpb.Key("\x01acct\xff"), true},
-		{roachpb.Key("\x01accu"), true},
-		{roachpb.Key("\x01perl"), true},
-		{roachpb.Key("\x01perm"), true},
+		{roachpb.Key("\x02accs\xff"), true},
+		{roachpb.Key("\x02acct"), true},
+		{roachpb.Key("\x02acct\x00"), true},
+		{roachpb.Key("\x02acct\xff"), true},
+		{roachpb.Key("\x02accu"), true},
+		{roachpb.Key("\x02perl"), true},
+		{roachpb.Key("\x02perm"), true},
 		// Deprecated permission config key. Valid split.
-		{roachpb.Key("\x01perm\x00"), true},
-		{roachpb.Key("\x01perm\xff"), true},
-		{roachpb.Key("\x01pern"), true},
-		{roachpb.Key("\x01zond"), true},
-		{roachpb.Key("\x01zone"), true},
+		{roachpb.Key("\x02perm\x00"), true},
+		{roachpb.Key("\x02perm\xff"), true},
+		{roachpb.Key("\x02pern"), true},
+		{roachpb.Key("\x02zond"), true},
+		{roachpb.Key("\x02zone"), true},
 		// Deprecated zone config key. Valid split.
-		{roachpb.Key("\x01zone\x00"), true},
-		{roachpb.Key("\x01zone\xff"), true},
-		{roachpb.Key("\x01zonf"), true},
-		{roachpb.Key("\x02"), true},
+		{roachpb.Key("\x02zone\x00"), true},
+		{roachpb.Key("\x02zone\xff"), true},
+		{roachpb.Key("\x02zonf"), true},
+		{roachpb.Key("\x03"), true},
 		{roachpb.Key("a"), true},
 		{roachpb.Key("\xff"), true},
 		{roachpb.Key("\xff\x01"), false},
@@ -1954,12 +1954,12 @@ func TestFindValidSplitKeys(t *testing.T) {
 		expSplit roachpb.Key
 		expError bool
 	}{
-		// All meta1 cannot be split.
+		// All m1 cannot be split.
 		{
 			keys: []roachpb.Key{
-				roachpb.Key("\x01\x01meta1"),
-				roachpb.Key("\x01\x01meta1\x00"),
-				roachpb.Key("\x01\x01meta1\xff"),
+				roachpb.Key("\x02\x01m1"),
+				roachpb.Key("\x02\x01m1\x00"),
+				roachpb.Key("\x02\x01m1\xff"),
 			},
 			expSplit: nil,
 			expError: true,
@@ -1976,47 +1976,47 @@ func TestFindValidSplitKeys(t *testing.T) {
 		// Between meta1 and meta2, splits at meta2.
 		{
 			keys: []roachpb.Key{
-				roachpb.Key("\x01\x01meta1"),
-				roachpb.Key("\x01\x01meta1\x00"),
-				roachpb.Key("\x01\x01meta1\xff"),
-				roachpb.Key("\x01\x01meta2"),
-				roachpb.Key("\x01\x01meta2\x00"),
-				roachpb.Key("\x01\x01meta2\xff"),
+				roachpb.Key("\x02\x01m1"),
+				roachpb.Key("\x02\x01m1\x00"),
+				roachpb.Key("\x02\x01m1\xff"),
+				roachpb.Key("\x02\x01m2"),
+				roachpb.Key("\x02\x01m2\x00"),
+				roachpb.Key("\x02\x01m2\xff"),
 			},
-			expSplit: roachpb.Key("\x01\x01meta2"),
+			expSplit: roachpb.Key("\x02\x01m2"),
 			expError: false,
 		},
 		// Even lopsided, always split at meta2.
 		{
 			keys: []roachpb.Key{
-				roachpb.Key("\x01\x01meta1"),
-				roachpb.Key("\x01\x01meta1\x00"),
-				roachpb.Key("\x01\x01meta1\xff"),
-				roachpb.Key("\x01\x01meta2"),
+				roachpb.Key("\x02\x01m1"),
+				roachpb.Key("\x02\x01m1\x00"),
+				roachpb.Key("\x02\x01m1\xff"),
+				roachpb.Key("\x02\x01m2"),
 			},
-			expSplit: roachpb.Key("\x01\x01meta2"),
+			expSplit: roachpb.Key("\x02\x01m2"),
 			expError: false,
 		},
 		// Lopsided, truncate non-zone prefix.
 		{
 			keys: []roachpb.Key{
-				roachpb.Key("\x01zond"),
-				roachpb.Key("\x01zone"),
-				roachpb.Key("\x01zone\x00"),
-				roachpb.Key("\x01zone\xff"),
+				roachpb.Key("\x02zond"),
+				roachpb.Key("\x02zone"),
+				roachpb.Key("\x02zone\x00"),
+				roachpb.Key("\x02zone\xff"),
 			},
-			expSplit: roachpb.Key("\x01zone\x00"),
+			expSplit: roachpb.Key("\x02zone\x00"),
 			expError: false,
 		},
 		// Lopsided, truncate non-zone suffix.
 		{
 			keys: []roachpb.Key{
-				roachpb.Key("\x01zone"),
-				roachpb.Key("\x01zone\x00"),
-				roachpb.Key("\x01zone\xff"),
-				roachpb.Key("\x01zonf"),
+				roachpb.Key("\x02zone"),
+				roachpb.Key("\x02zone\x00"),
+				roachpb.Key("\x02zone\xff"),
+				roachpb.Key("\x02zonf"),
 			},
-			expSplit: roachpb.Key("\x01zone\xff"),
+			expSplit: roachpb.Key("\x02zone\xff"),
 			expError: false,
 		},
 	}
@@ -2129,7 +2129,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 		}
 		snap := engine.NewSnapshot()
 		defer snap.Close()
-		splitKey, err := MVCCFindSplitKey(snap, rangeID, roachpb.RKey("\x01"), roachpb.RKeyMax)
+		splitKey, err := MVCCFindSplitKey(snap, rangeID, roachpb.RKey("\x02"), roachpb.RKeyMax)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 			continue

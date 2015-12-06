@@ -42,7 +42,9 @@ var (
 	// stored as MVCC values and are addressable as part of distributed
 	// transactions, such as range metadata, range-spanning binary tree
 	// node pointers, and message queues.
-	localPrefix = []byte("\x01\x01\x01")
+	localPrefix = []byte("\x01")
+	// LocalMax is the end of the local key range.
+	LocalMax = roachpb.Key("\x02")
 
 	// localSuffixLength specifies the length in bytes of all local
 	// key suffixes.
@@ -115,18 +117,15 @@ var (
 	// (storage/engine/rocksdb/db.cc).
 	localTransactionSuffix = roachpb.RKey("txn-")
 
-	// LocalMax is the end of the local key range.
-	LocalMax = roachpb.Key(localPrefix).PrefixEnd()
-
 	// SystemPrefix indicates the beginning of the key range for
 	// global, system data which are replicated across the cluster.
-	SystemPrefix = roachpb.Key("\x01")
-	SystemMax    = roachpb.Key("\x02")
+	SystemPrefix = roachpb.Key("\x02")
+	SystemMax    = roachpb.Key("\x03")
 
 	// MetaPrefix is the prefix for range metadata keys. Notice that
 	// an extra null character in the prefix causes all range addressing
 	// records to sort before any system tables which they might describe.
-	MetaPrefix = MakeKey(SystemPrefix, roachpb.RKey("\x01meta"))
+	MetaPrefix = MakeKey(SystemPrefix, roachpb.RKey("\x01m"))
 	// Meta1Prefix is the first level of key addressing. The value is a
 	// RangeDescriptor struct.
 	Meta1Prefix = roachpb.Key(MakeKey(MetaPrefix, roachpb.RKey("1")))
