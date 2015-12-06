@@ -20,16 +20,18 @@
 SHELL            := /bin/bash
 
 # Update the path to prefer binstubs over globals
-PATH             := node_modules/.bin:$(PATH)
+PATH                 := node_modules/.bin:$(PATH)
 
-REPO_ROOT        := $(realpath ..)
-ORG_ROOT         := $(REPO_ROOT)/..
-GITHUB_ROOT      := $(ORG_ROOT)/..
-BOWER_COMPONENTS := bower_components
-NODE_MODULES     := node_modules
-TS_ROOT          := ts
-STYL_ROOT        := styl
-TEST_ROOT        := ts/test
+REPO_ROOT            := $(realpath ..)
+ORG_ROOT             := $(REPO_ROOT)/..
+GITHUB_ROOT          := $(ORG_ROOT)/..
+BOWER_COMPONENTS     := bower_components
+NODE_MODULES         := node_modules
+TS_ROOT              := ts
+STYL_ROOT            := styl
+TEST_ROOT            := ts/test
+GENERATED_ROOT       := generated
+GENERATED_PROTO_ROOT := ts/generated/protos
 
 # Ensure we only have one entry in GOPATH
 GOPATH := $(GITHUB_ROOT)/../..
@@ -54,15 +56,26 @@ GOBINDATA_SOURCES       := $(BOWER_COMPONENTS)/d3/d3.min.js \
                            $(BOWER_COMPONENTS)/mithriljs/mithril.js \
                            $(BOWER_COMPONENTS)/nvd3/build/nv.d3.min.css \
                            $(BOWER_COMPONENTS)/nvd3/build/nv.d3.min.js \
+                           $(BOWER_COMPONENTS)/bytebuffer/dist/ByteBufferAB.min.js \
+                           $(BOWER_COMPONENTS)/protobuf/dist/ProtoBuf-light.min.js \
                            $(GOBINDATA_FONTS)
 GOBINDATA_DEBUG_SOURCES := $(BOWER_COMPONENTS)/d3/d3.js \
                            $(BOWER_COMPONENTS)/lodash/lodash.js \
                            $(BOWER_COMPONENTS)/mithriljs/mithril.js \
                            $(BOWER_COMPONENTS)/nvd3/build/nv.d3.css \
                            $(BOWER_COMPONENTS)/nvd3/build/nv.d3.js \
+                           $(BOWER_COMPONENTS)/bytebuffer/dist/ByteBufferAB.js \
+                           $(BOWER_COMPONENTS)/protobuf/dist/ProtoBuf-light.js \
                            $(GOBINDATA_FONTS)
 GOBINDATA_TARGET        := ./embedded.go
 GOBINDATA_DEBUG_TARGET  := ./embedded_debug.go
+
+# Generated proto files
+# TODO: generate all automatically
+
+PROTO_FILES       := ../sql/driver/wire.proto
+PROTO_DEPS        := ../../../gogo/protobuf/
+PROTO_JSON_TARGET := $(GENERATED_ROOT)/wireproto.json
 
 .PHONY:
 all: $(GOBINDATA_TARGET) $(TEST_TARGET)
@@ -84,8 +97,15 @@ tsd.installed: tsd.json npm.installed
 	tsd install
 	touch $@
 
+$(PROTO_JSON_TARGET): $(PROTO_FILES) $(PROTO_DEPS)
+	mkdir -p generated
+	pbjs $(PROTO_FILES) --path $(PROTO_DEPS) > $@
+
 $(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
-	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts')
+	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) \
+	  -path $(TS_ROOT)/generated -prune -o \
+	  -path $(TS_ROOT)/external -prune -o \
+	  -name '*.ts' -type f -print)
 	tsc -p $(TS_ROOT)
 
 $(TEST_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
