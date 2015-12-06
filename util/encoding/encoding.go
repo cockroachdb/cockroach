@@ -27,6 +27,31 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
+const (
+	encodedNull    = 0x00
+	encodedNotNull = 0x01
+
+	intMin   = encodedNotNull + 2 // 0x03
+	intZero  = intMin + 8         // 0x0b
+	intSmall = 63
+	intMax   = intZero + intSmall + 8 // 0x92
+
+	floatNaN              = intMax + 1
+	floatNegativeInfinity = floatNaN + 1
+	floatNegLarge         = floatNegativeInfinity + 1
+	floatNegMedium        = floatNegLarge + 11
+	floatNegSmall         = floatNegMedium + 1
+	floatZero             = floatNegSmall + 1
+	floatPosSmall         = floatZero + 1
+	floatPosMedium        = floatPosSmall + 1
+	floatPosLarge         = floatPosMedium + 11
+	floatInfinity         = floatPosLarge + 1
+	floatTerminator       = 0x00
+
+	bytesMarker byte = floatInfinity + 1
+	timeMarker  byte = bytesMarker + 1
+)
+
 // EncodeUint32 encodes the uint32 value using a big-endian 8 byte
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.
@@ -94,13 +119,6 @@ func DecodeUint64Decreasing(b []byte) ([]byte, uint64, error) {
 	leftover, v, err := DecodeUint64(b)
 	return leftover, ^v, err
 }
-
-const (
-	intMin   = encodedNotNull + 1 // 0x03
-	intZero  = intMin + 8         // 0x0b
-	intSmall = 63
-	intMax   = intZero + intSmall + 8 // 0x92
-)
 
 // EncodeVarint encodes the int64 value using a variable length
 // (length-prefixed) representation. The length is encoded as a single
@@ -307,8 +325,6 @@ const (
 	escapedTerm byte = 0x01
 	escaped00   byte = 0xff
 	escapedFF   byte = 0x00
-	// The prefix that is added to every encoded byte/string.
-	bytesMarker byte = floatInfinity + 1
 )
 
 type escapes struct {
@@ -477,11 +493,6 @@ func DecodeStringDecreasing(b []byte, r []byte) ([]byte, string, error) {
 	return b, string(r), err
 }
 
-const (
-	encodedNull    = 0x00
-	encodedNotNull = 0x02
-)
-
 // EncodeNull encodes a NULL value. The encodes bytes are appended to the
 // supplied buffer and the final buffer is returned. The encoded value for a
 // NULL is guaranteed to not be a prefix for the EncodeVarint, EncodeFloat,
@@ -524,10 +535,6 @@ func DecodeIfNotNull(b []byte) ([]byte, bool) {
 	}
 	return b, false
 }
-
-const (
-	timeMarker byte = bytesMarker + 1
-)
 
 // EncodeTime encodes a time value, appends it to the supplied buffer,
 // and returns the final buffer. The encoding is guaranteed to be ordered
