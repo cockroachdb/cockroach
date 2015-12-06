@@ -140,10 +140,10 @@ namespace {
 // storage/engine/keys.go. Both kKeyLocalRangeIDPrefix and
 // kKeyLocalRangePrefix are the mvcc-encoded prefixes.
 const int kKeyLocalRangePrefixSize = 4;
-const rocksdb::Slice kKeyLocalRangeIDPrefix("\x31\x00\xff\x00\xff\x00\xffi", 8);
-const rocksdb::Slice kKeyLocalRangePrefix("\x31\x00\xff\x00\xff\x00\xffk", 8);
-const rocksdb::Slice kKeyLocalTransactionSuffix("\x00\x01txn-", 6);
-const rocksdb::Slice kKeyLocalMax("\x00\x00\x01", 3);
+const rocksdb::Slice kKeyLocalRangeIDPrefix("\x71\x01i", 3);
+const rocksdb::Slice kKeyLocalRangePrefix("\x71\x01k", 3);
+const rocksdb::Slice kKeyLocalTransactionSuffix("\x01txn-", 5);
+const rocksdb::Slice kKeyLocalMax("\x02", 1);
 
 const DBStatus kSuccess = { NULL, 0 };
 
@@ -226,19 +226,6 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
   DBCompactionFilter(int64_t min_txn_ts)
       : min_txn_ts_(min_txn_ts) {
   }
-
-  // For debugging:
-  // static std::string BinaryToHex(const rocksdb::Slice& b) {
-  //   const char kHexChars[] = "0123456789abcdef";
-  //   std::string h(b.size() * 2 + (b.size() - 1), ' ');
-  //   const uint8_t* p = (const uint8_t*)b.data();
-  //   for (int i = 0; i < b.size(); ++i) {
-  //     const int c = p[i];
-  //     h[3 * i] = kHexChars[c >> 4];
-  //     h[3 * i + 1] = kHexChars[c & 0xf];
-  //   }
-  //   return h;
-  // }
 
   bool IsTransactionRecord(rocksdb::Slice key) const {
     // The transaction key format is:

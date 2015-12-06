@@ -23,17 +23,24 @@ namespace {
 const uint8_t kEscape      = 0x00;
 const uint8_t kEscapedTerm = 0x01;
 const uint8_t kEscapedNul  = 0xff;
-const uint8_t kMarker      = 0x31;
+const uint8_t kBytesMarker = 0x71; // util/encoding/encoding.go:bytesMarker
+
+const int kIntZero = 0x0b;
+const int kIntSmall = 63;
 
 template <typename T>
 bool DecodeUvarint(rocksdb::Slice* buf, T* value) {
   if (buf->empty()) {
     return false;
   }
-  int len = (*buf)[0] - 10;
+  int len = (*buf)[0] - kIntZero;
   if (len < 0) {
     return false;
   }
+  if (len <= kIntSmall) {
+    *value = T(len);
+  }
+  len -= kIntSmall;
   if ((len + 1) > buf->size()) {
     return false;
   }
@@ -58,7 +65,7 @@ bool DecodeUvarint(rocksdb::Slice* buf, T* value) {
 // difficult by "go test" because _test.go files cannot 'import "C"'.
 bool DecodeBytes(rocksdb::Slice* buf, std::string* decoded) {
   const uint8_t *data = reinterpret_cast<const uint8_t*>(buf->data());
-  if (buf->size() == 0 || data[0] != kMarker) {
+  if (buf->size() == 0 || data[0] != kBytesMarker) {
     return false;
   }
   int copyStart = 1;

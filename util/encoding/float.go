@@ -32,21 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// Direct mappings or prefixes of encoded data dependent on the type.
-const (
-	floatNaN              = 0x13
-	floatNegativeInfinity = 0x14
-	floatZero             = 0x22
-	floatInfinity         = 0x30
-	floatNegLarge         = floatZero - 13
-	floatNegMedium        = floatZero - 2
-	floatNegSmall         = floatZero - 1
-	floatPosSmall         = floatZero + 1
-	floatPosMedium        = floatZero + 2
-	floatPosLarge         = floatZero + 13
-	floatTerminator       = 0x00
-)
-
 // EncodeFloat returns the resulting byte slice with the encoded float64
 // appended to b.
 //
