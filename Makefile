@@ -36,10 +36,12 @@ TESTFLAGS    :=
 DUPLFLAGS    := -t 100
 
 ifeq ($(STATIC),1)
-# The netgo build tag instructs the net package to try to build a
-# Go-only resolver. As of Go 1.5, netgo is the default...but apparently
-# not when using cgo (???).
-TAGS += netgo
+# Static linking with glibc is a bad time; see
+# https://github.com/golang/go/issues/13470.
+# If a static build is requested, assume musl is installed (it is in
+# the cockroachdb/builder docker container) and link against it
+# instead.
+CC = /usr/local/musl/bin/musl-gcc
 # `-v` so warnings from the linker aren't suppressed.
 # `-a` so dependencies are rebuilt (they may have been dynamically
 # linked).
