@@ -36,6 +36,9 @@ TESTFLAGS    :=
 DUPLFLAGS    := -t 100
 
 ifeq ($(STATIC),1)
+# Static linking with glibc is a bad time. If we're building statically,
+# assume musl is installed and use that.
+CC = /usr/local/musl/bin/musl-gcc
 # The netgo build tag instructs the net package to try to build a
 # Go-only resolver. As of Go 1.5, netgo is the default...but apparently
 # not when using cgo (???).
