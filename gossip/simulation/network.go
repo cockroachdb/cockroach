@@ -73,6 +73,7 @@ func NewNetwork(nodeCount int, networkType string) *Network {
 
 		gossipNode := gossip.New(rpcContext, resolvers)
 		addr := leftNode.Server.Addr()
+		gossipNode.SetNodeID(roachpb.NodeID(i + 1))
 		if err := gossipNode.SetNodeDescriptor(&roachpb.NodeDescriptor{
 			NodeID:  roachpb.NodeID(i + 1),
 			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),

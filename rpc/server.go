@@ -150,6 +150,14 @@ func (s *Server) AddCloseCallback(cb func(conn net.Conn)) {
 	s.closeCallbacks = append(s.closeCallbacks, cb)
 }
 
+func (s *Server) runCloseCallbacks(conn net.Conn) {
+	s.mu.Lock()
+	for _, cb := range s.closeCallbacks {
+		cb(conn)
+	}
+	s.mu.Unlock()
+}
+
 // ServeHTTP implements an http.Handler that answers RPC requests.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != rpc.DefaultRPCPath {
@@ -189,24 +197,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	codec := codec.NewServerCodec(conn)
 	responses := make(chan serverResponse)
-	var wg sync.WaitGroup
-	wg.Add(1)
 	go func() {
 		s.sendResponses(codec, responses)
-		wg.Done()
 	}()
-	s.readRequests(codec, authHook, responses)
-	wg.Wait()
-
+	s.readRequests(conn, codec, authHook, responses)
 	codec.Close()
-
-	s.mu.Lock()
-	if s.closeCallbacks != nil {
-		for _, cb := range s.closeCallbacks {
-			cb(conn)
-		}
-	}
-	s.mu.Unlock()
 	conn.Close()
 }
 
@@ -350,10 +345,14 @@ func (s *Server) Close() {
 // when the handler finishes the response is written to the responses
 // channel. When the connection is closed (and any pending requests
 // have finished), we close the responses channel.
-func (s *Server) readRequests(codec rpc.ServerCodec, authHook func(proto.Message, bool) error, responses chan<- serverResponse) {
+func (s *Server) readRequests(conn net.Conn, codec rpc.ServerCodec, authHook func(proto.Message, bool) error, responses chan<- serverResponse) {
 	var wg sync.WaitGroup
+	var closed bool
 	defer func() {
 		wg.Wait()
+		if !closed {
+			s.runCloseCallbacks(conn)
+		}
 		close(responses)
 	}()
 
@@ -361,6 +360,8 @@ func (s *Server) readRequests(codec rpc.ServerCodec, authHook func(proto.Message
 		req, meth, args, err := s.readRequest(codec)
 		if err != nil {
 			if err == io.EOF || err == io.ErrUnexpectedEOF || isClosedConnection(err) {
+				closed = true
+				s.runCloseCallbacks(conn)
 				return
 			}
 			log.Warningf("rpc: server cannot decode request: %s", err)
