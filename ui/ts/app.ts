@@ -6,6 +6,7 @@
 /// <reference path="pages/log.ts" />
 /// <reference path="pages/nodes.ts" />
 /// <reference path="pages/stores.ts" />
+/// <reference path="pages/sql.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
@@ -28,4 +29,5 @@ m.route(document.getElementById("root"), "/nodes", {
   "/stores/:store_id": AdminViews.Stores.StorePage,
   "/store/:store_id/:detail": AdminViews.Stores.StorePage,
   "/stores/:store_id/:detail": AdminViews.Stores.StorePage,
+  "/sql": AdminViews.SQL.Page,
 });
