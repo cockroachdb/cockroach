@@ -46,19 +46,19 @@ module AdminViews {
             return {
               title: col.name,
               view: function (row: Row): string {
-              let type: string = _.keys(col.typ.Payload)[0];
-              let payload: Datum = row.values[i].Payload;
-              let viewVal: string = "";
-              if (type === "BytesVal") {
-                viewVal = payload.BytesVal.toString();
-              } else if (type === "TimeVal") {
-                viewVal = Utils.Convert.TimestampToMoment(payload.TimeVal).toString();
-              } else if (type === "DateVal") {
-                viewVal = moment.utc(0).add(payload.DateVal, "days").format("YYYY-MM-DD");
-              } else {
-                viewVal = payload[type].toString();
-              }
-              return viewVal;
+                let payload: Datum = row.values[i].Payload;
+                let type: string = _.keys(payload)[0];
+                let viewVal: string = "";
+                if (type === "BytesVal") {
+                  viewVal = payload.BytesVal.toString();
+                } else if (type === "TimeVal") {
+                  viewVal = Utils.Convert.TimestampToMoment(payload.TimeVal).toString();
+                } else if (type === "DateVal") {
+                  viewVal = moment.utc(0).add(payload.DateVal, "days").format("YYYY-MM-DD");
+                } else {
+                  viewVal = payload[type].toString();
+                }
+                return viewVal;
               },
             };
           }));
