@@ -187,6 +187,21 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, e
 	return &desc, nil
 }
 
+// get the table descriptor for the ID passed in using the planner's txn.
+func (p *planner) getTableDescFromID(id ID) (*TableDescriptor, error) {
+	desc := &Descriptor{}
+	descKey := MakeDescMetadataKey(id)
+
+	if err := p.txn.GetProto(descKey, desc); err != nil {
+		return nil, err
+	}
+	tableDesc := desc.GetTable()
+	if tableDesc == nil {
+		return nil, util.Errorf("ID %d is not a table", id)
+	}
+	return tableDesc, nil
+}
+
 // getTableLease acquires a lease for the specified table. The lease will be
 // released when the planner closes.
 func (p *planner) getTableLease(qname *parser.QualifiedName) (*TableDescriptor, error) {
