@@ -1424,7 +1424,22 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 		// To avoid leaving the new range unavailable as it waits to elect
 		// its leader, one (and only one) of the nodes should start an
 		// election as soon as the split is processed.
-		if r.store.StoreID() == split.InitialLeaderStoreID {
+		//
+		// If there is only one replica, raft instantly makes it the leader.
+		// Otherwise, we must trigger a campaign here.
+		//
+		// TODO(bdarnell): The asynchronous campaign can cause a problem
+		// with merges, by recreating a replica that should have been
+		// destroyed. This will probably be addressed as a part of the
+		// general work to be done for merges
+		// (https://github.com/cockroachdb/cockroach/issues/2433), but for
+		// now we're safe because we only perform the asynchronous
+		// campaign when there are multiple replicas, and we only perform
+		// merges in testing scenarios with a single replica.
+		// Note that in multi-node scenarios the async campaign is safe
+		// because it has exactly the same behavior as an incoming message
+		// from another node; the problem here is only with merges.
+		if len(split.NewDesc.Replicas) > 1 && r.store.StoreID() == split.InitialLeaderStoreID {
 			// Schedule the campaign a short time in the future. As
 			// followers process the split, they destroy and recreate their
 			// raft groups, which can cause messages to be dropped. In
