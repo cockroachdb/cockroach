@@ -40,6 +40,8 @@ ifeq ($(STATIC),1)
 # Go-only resolver. As of Go 1.5, netgo is the default...but apparently
 # not when using cgo (???).
 TAGS += netgo
+# `-v` so warnings from the linker aren't suppressed.
+GOFLAGS += -v
 LDFLAGS += -extldflags '-static'
 endif
 
@@ -58,14 +60,14 @@ build: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTag=$(shell git
 build: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 build: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildDeps=$(shell GOPATH=${GOPATH} build/depvers.sh)"
 build:
-	$(GO) build -tags '$(TAGS)' $(GOFLAGS) -ldflags '$(LDFLAGS)' -v -i -o cockroach
+	$(GO) build -tags '$(TAGS)' $(GOFLAGS) -ldflags '$(LDFLAGS)' -i -o cockroach
 
 .PHONY: install
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTag=$(shell git describe --dirty)"
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildDeps=$(shell GOPATH=${GOPATH} build/depvers.sh)"
 install:
-	$(GO) install -tags '$(TAGS)' $(GOFLAGS) -ldflags '$(LDFLAGS)' -v
+	$(GO) install -tags '$(TAGS)' $(GOFLAGS) -ldflags '$(LDFLAGS)'
 
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.
