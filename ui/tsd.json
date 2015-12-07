@@ -19,6 +19,15 @@
     },
     "lodash/lodash.d.ts": {
       "commit": "3b7f250dcf631f1c3c545e28d9ff25920c60b5f7"
+    },
+    "moment/moment.d.ts": {
+      "commit": "e5a27ea95e47b95333784f1f0d590127b4e39a89"
+    },
+    "moment/moment-node.d.ts": {
+      "commit": "e5a27ea95e47b95333784f1f0d590127b4e39a89"
+    },
+    "moment-timezone/moment-timezone.d.ts": {
+      "commit": "e5a27ea95e47b95333784f1f0d590127b4e39a89"
     }
   }
 }
