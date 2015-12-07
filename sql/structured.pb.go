@@ -412,7 +412,8 @@ type TableDescriptor struct {
 	NextIndexID IndexID              `protobuf:"varint,12,opt,name=next_index_id,casttype=IndexID" json:"next_index_id"`
 	Privileges  *PrivilegeDescriptor `protobuf:"bytes,13,opt,name=privileges" json:"privileges,omitempty"`
 	// Columns or indexes being added or deleted in a FIFO order.
-	Mutations []DescriptorMutation `protobuf:"bytes,14,rep,name=mutations" json:"mutations"`
+	Mutations []DescriptorMutation               `protobuf:"bytes,14,rep,name=mutations" json:"mutations"`
+	Lease     *TableDescriptor_SchemaChangeLease `protobuf:"bytes,15,opt,name=lease" json:"lease,omitempty"`
 }
 
 func (m *TableDescriptor) Reset()         { *m = TableDescriptor{} }
@@ -516,6 +517,31 @@ func (m *TableDescriptor) GetMutations() []DescriptorMutation {
 	}
 	return nil
 }
+
+func (m *TableDescriptor) GetLease() *TableDescriptor_SchemaChangeLease {
+	if m != nil {
+		return m.Lease
+	}
+	return nil
+}
+
+// The schema update lease. A single goroutine across a cockroach cluster
+// can own it, and will execute pending schema changes for this table.
+// Since the execution of a pending schema change is through transactions,
+// it is legal for more than one goroutine to attempt to execute it. This
+// lease reduces write contention on the schema change.
+type TableDescriptor_SchemaChangeLease struct {
+	// A unique id used by the goroutine.
+	ID string `protobuf:"bytes,1,opt,name=id" json:"id"`
+	// node id is used for debugging.
+	Node uint32 `protobuf:"varint,2,opt,name=node" json:"node"`
+	// Seconds since the Unix epoch.
+	ExpirationTime int64 `protobuf:"varint,3,opt,name=expiration_time" json:"expiration_time"`
+}
+
+func (m *TableDescriptor_SchemaChangeLease) Reset()         { *m = TableDescriptor_SchemaChangeLease{} }
+func (m *TableDescriptor_SchemaChangeLease) String() string { return proto.CompactTextString(m) }
+func (*TableDescriptor_SchemaChangeLease) ProtoMessage()    {}
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
 // in a structured metadata key. The DatabaseDescriptor has a globally-unique
@@ -660,6 +686,7 @@ func init() {
 	proto.RegisterType((*IndexDescriptor)(nil), "cockroach.sql.IndexDescriptor")
 	proto.RegisterType((*DescriptorMutation)(nil), "cockroach.sql.DescriptorMutation")
 	proto.RegisterType((*TableDescriptor)(nil), "cockroach.sql.TableDescriptor")
+	proto.RegisterType((*TableDescriptor_SchemaChangeLease)(nil), "cockroach.sql.TableDescriptor.SchemaChangeLease")
 	proto.RegisterType((*DatabaseDescriptor)(nil), "cockroach.sql.DatabaseDescriptor")
 	proto.RegisterType((*Descriptor)(nil), "cockroach.sql.Descriptor")
 	proto.RegisterEnum("cockroach.sql.ColumnType_Kind", ColumnType_Kind_name, ColumnType_Kind_value)
@@ -984,6 +1011,44 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 			i += n
 		}
 	}
+	if m.Lease != nil {
+		data[i] = 0x7a
+		i++
+		i = encodeVarintStructured(data, i, uint64(m.Lease.Size()))
+		n8, err := m.Lease.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n8
+	}
+	return i, nil
+}
+
+func (m *TableDescriptor_SchemaChangeLease) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TableDescriptor_SchemaChangeLease) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintStructured(data, i, uint64(len(m.ID)))
+	i += copy(data[i:], m.ID)
+	data[i] = 0x10
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.Node))
+	data[i] = 0x18
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.ExpirationTime))
 	return i, nil
 }
 
@@ -1013,11 +1078,11 @@ func (m *DatabaseDescriptor) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintStructured(data, i, uint64(m.Privileges.Size()))
-		n8, err := m.Privileges.MarshalTo(data[i:])
+		n9, err := m.Privileges.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n8
+		i += n9
 	}
 	return i, nil
 }
@@ -1038,11 +1103,11 @@ func (m *Descriptor) MarshalTo(data []byte) (int, error) {
 	var l int
 	_ = l
 	if m.Union != nil {
-		nn9, err := m.Union.MarshalTo(data[i:])
+		nn10, err := m.Union.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += nn9
+		i += nn10
 	}
 	return i, nil
 }
@@ -1053,11 +1118,11 @@ func (m *Descriptor_Table) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintStructured(data, i, uint64(m.Table.Size()))
-		n10, err := m.Table.MarshalTo(data[i:])
+		n11, err := m.Table.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n10
+		i += n11
 	}
 	return i, nil
 }
@@ -1067,11 +1132,11 @@ func (m *Descriptor_Database) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x12
 		i++
 		i = encodeVarintStructured(data, i, uint64(m.Database.Size()))
-		n11, err := m.Database.MarshalTo(data[i:])
+		n12, err := m.Database.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n11
+		i += n12
 	}
 	return i, nil
 }
@@ -1227,6 +1292,20 @@ func (m *TableDescriptor) Size() (n int) {
 			n += 1 + l + sovStructured(uint64(l))
 		}
 	}
+	if m.Lease != nil {
+		l = m.Lease.Size()
+		n += 1 + l + sovStructured(uint64(l))
+	}
+	return n
+}
+
+func (m *TableDescriptor_SchemaChangeLease) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.ID)
+	n += 1 + l + sovStructured(uint64(l))
+	n += 1 + sovStructured(uint64(m.Node))
+	n += 1 + sovStructured(uint64(m.ExpirationTime))
 	return n
 }
 
@@ -2325,6 +2404,156 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 15:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Lease", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Lease == nil {
+				m.Lease = &TableDescriptor_SchemaChangeLease{}
+			}
+			if err := m.Lease.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipStructured(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthStructured
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TableDescriptor_SchemaChangeLease) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowStructured
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SchemaChangeLease: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SchemaChangeLease: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ID = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Node", wireType)
+			}
+			m.Node = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Node |= (uint32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ExpirationTime", wireType)
+			}
+			m.ExpirationTime = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.ExpirationTime |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipStructured(data[iNdEx:])
