@@ -20,16 +20,18 @@
 SHELL            := /bin/bash
 
 # Update the path to prefer binstubs over globals
-PATH             := node_modules/.bin:$(PATH)
+PATH                 := node_modules/.bin:$(PATH)
 
-REPO_ROOT        := $(realpath ..)
-ORG_ROOT         := $(REPO_ROOT)/..
-GITHUB_ROOT      := $(ORG_ROOT)/..
-BOWER_COMPONENTS := bower_components
-NODE_MODULES     := node_modules
-TS_ROOT          := ts
-STYL_ROOT        := styl
-TEST_ROOT        := ts/test
+REPO_ROOT            := $(realpath ..)
+ORG_ROOT             := $(REPO_ROOT)/..
+GITHUB_ROOT          := $(ORG_ROOT)/..
+BOWER_COMPONENTS     := bower_components
+NODE_MODULES         := node_modules
+TS_ROOT              := ts
+STYL_ROOT            := styl
+TEST_ROOT            := ts/test
+GENERATED_ROOT       := generated
+GENERATED_PROTO_ROOT := ts/generated/protos
 
 # Ensure we only have one entry in GOPATH
 GOPATH := $(GITHUB_ROOT)/../..
@@ -68,12 +70,19 @@ GOBINDATA_DEBUG_SOURCES := $(BOWER_COMPONENTS)/d3/d3.js \
 GOBINDATA_TARGET        := ./embedded.go
 GOBINDATA_DEBUG_TARGET  := ./embedded_debug.go
 
+# Generated proto files
+# TODO: generate all automatically
+
+PROTO_FILES       := ../sql/driver/wire.proto
+PROTO_DEPS        := ../../../gogo/protobuf/
+PROTO_JSON_TARGET := $(GENERATED_ROOT)/wireproto.json
+
 .PHONY:
-all: $(GOBINDATA_TARGET) $(TEST_TARGET)
+all: $(GOBINDATA_TARGET) $(TEST_TARGET) $(PROTO_JSON_TARGET)
 	rm -f $(GOBINDATA_DEBUG_TARGET)
 
 .PHONY:
-debug: $(GOBINDATA_DEBUG_TARGET) $(TEST_TARGET)
+debug: $(GOBINDATA_DEBUG_TARGET) $(TEST_TARGET) $(PROTO_JSON_TARGET)
 	rm -f $(GOBINDATA_TARGET)
 
 bower.installed: bower.json npm.installed
@@ -87,6 +96,10 @@ npm.installed: npm-shrinkwrap.json
 tsd.installed: tsd.json npm.installed
 	tsd install
 	touch $@
+
+$(PROTO_JSON_TARGET): $(PROTO_FILES) $(PROTO_DEPS)
+	mkdir -p generated
+	pbjs $(PROTO_FILES) --path $(PROTO_DEPS) > $@
 
 $(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
 	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) \
