@@ -22,10 +22,11 @@ module AdminViews {
       import TableColumn = Components.Table.TableColumn;
       import MithrilController = _mithril.MithrilController;
       import Datum = Models.Proto.Datum;
+      import Property = Utils.Property;
 
       let data: MithrilBasicProperty<Response> = m.prop({});
-      let columns: Utils.Property<TableColumn<Row>[]> = Utils.Prop([]);
-      let rows: Utils.Property<Row[]> = Utils.Prop([]);
+      let columns: Property<TableColumn<Row>[]> = Utils.Prop([]);
+      let rows: Property<Row[]> = Utils.Prop([]);
 
       let tableData: TableData<Row> = {
         columns: columns,
@@ -40,8 +41,8 @@ module AdminViews {
       function populateTableDataFromResult(result: Response, table: TableData<Row>): void {
         let cols: Column[] = _.get(result, "results[0].Union.Rows.columns", []);
         let resultRows: Row[] = _.get(result, "results[0].Union.Rows.rows", []);
-
-        (<Utils.Property<TableColumn<Row>[]>>table.columns)(_.map<Column, TableColumn<Row>>(cols, function (col: Column, i: number): TableColumn<Row> {
+        let tableColumns: Property<TableColumn<Row>[]> = <Property<TableColumn<Row>[]>>table.columns;
+        tableColumns(_.map<Column, TableColumn<Row>>(cols, function (col: Column, i: number): TableColumn<Row> {
             return {
               title: col.name,
               view: function (row: Row): string {
@@ -62,7 +63,7 @@ module AdminViews {
             };
           }));
 
-        (<Utils.Property<Row[]>>table.rows)(resultRows);
+        (<Property<Row[]>>table.rows)(resultRows);
       }
 
       class DisplayToggler implements MithrilController {

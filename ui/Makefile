@@ -74,11 +74,13 @@ GOBINDATA_DEBUG_TARGET  := ./embedded_debug.go
 # TODO: generate all automatically
 
 PROTO_FILES       := ../sql/driver/wire.proto
-PROTO_DEPS        := ../../../gogo/protobuf/
+GOGOPROTO_FOLDER  := $(GOPATH)/src/github.com/gogo/protobuf/
+GOGOPROTO         := $(GOGOPROTO_FOLDER)/gogoproto/gogo.proto
 PROTO_JSON_TARGET := $(GENERATED_ROOT)/wireproto.json
 
 .PHONY:
 all: $(GOBINDATA_TARGET) $(TEST_TARGET) $(PROTO_JSON_TARGET)
+	echo $(GOGOPROTO)
 	rm -f $(GOBINDATA_DEBUG_TARGET)
 
 .PHONY:
@@ -97,14 +99,12 @@ tsd.installed: tsd.json npm.installed
 	tsd install
 	touch $@
 
-$(PROTO_JSON_TARGET): $(PROTO_FILES) $(PROTO_DEPS)
-	mkdir -p generated
-	pbjs $(PROTO_FILES) --path $(PROTO_DEPS) > $@
+$(PROTO_JSON_TARGET): $(PROTO_FILES) $(GOGOPROTO)
+	mkdir -p $(GENERATED_ROOT)
+	pbjs $(PROTO_FILES) --path $(PROTO_DEPS_FOLDER) > $@
 
 $(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
-	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) \
-	  -path $(TS_ROOT)/external -prune -o \
-	  -name '*.ts' -type f -print)
+	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts')
 	tsc -p $(TS_ROOT)
 
 $(TEST_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)

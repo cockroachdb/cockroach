@@ -6,7 +6,12 @@
       "version": "0.20.5"
     },
     "align-text": {
-      "version": "0.1.3"
+      "version": "0.1.3",
+      "dependencies": {
+        "kind-of": {
+          "version": "2.0.1"
+        }
+      }
     },
     "amdefine": {
       "version": "1.0.0"
@@ -33,16 +38,13 @@
       "version": "1.0.3"
     },
     "arr-diff": {
-      "version": "1.1.0"
+      "version": "2.0.0"
     },
     "arr-flatten": {
       "version": "1.0.1"
     },
     "array-differ": {
       "version": "1.0.0"
-    },
-    "array-slice": {
-      "version": "0.2.3"
     },
     "array-union": {
       "version": "1.0.1"
@@ -1342,7 +1344,7 @@
       "version": "2.0.0"
     },
     "fill-range": {
-      "version": "2.2.2"
+      "version": "2.2.3"
     },
     "find-index": {
       "version": "0.1.1"
@@ -2008,7 +2010,7 @@
       "version": "1.0.0"
     },
     "is-number": {
-      "version": "1.1.2"
+      "version": "2.1.0"
     },
     "is-path-cwd": {
       "version": "1.0.0"
@@ -2047,7 +2049,7 @@
       "version": "1.2.0"
     },
     "isobject": {
-      "version": "1.0.2"
+      "version": "2.0.0"
     },
     "isstream": {
       "version": "0.1.2"
@@ -2086,7 +2088,7 @@
       "version": "1.2.2"
     },
     "kind-of": {
-      "version": "2.0.1"
+      "version": "3.0.2"
     },
     "latest-version": {
       "version": "1.0.1"
@@ -2211,7 +2213,7 @@
       }
     },
     "micromatch": {
-      "version": "2.3.3"
+      "version": "2.3.5"
     },
     "mime-db": {
       "version": "1.20.0"
@@ -3429,13 +3431,8 @@
     "randomatic": {
       "version": "1.1.3",
       "dependencies": {
-        "is-number": {
-          "version": "2.1.0",
-          "dependencies": {
-            "kind-of": {
-              "version": "3.0.2"
-            }
-          }
+        "kind-of": {
+          "version": "2.0.1"
         }
       }
     },
@@ -3626,7 +3623,7 @@
       "version": "1.0.4"
     },
     "stylint": {
-      "version": "1.3.1",
+      "version": "1.3.5",
       "dependencies": {
         "async": {
           "version": "1.4.2"

@@ -9,13 +9,7 @@
  * Once running, you can type in SQL commands and the client will execute them against the default local cockroach
  * instance.
  *
- *   > BEGIN TRANSACTION;
- *   ...
  *   > CREATE DATABASE JS;
- *   ...
- *   > SHOW DATABASES;
- *   ...
- *   > ROLLBACK;
  *   ...
  *   > SHOW DATABASES;
  *   ...
@@ -102,6 +96,7 @@ process.stdin.on("data", function (text) {
  * @param cb {function(err, response)} handles the response
  */
 function protobufRequester(requestJSON, cb) {
+  console.log("Using protobufs format.");
   var requestProto = new SQL.Request(requestJSON);
   var requestBuffer = requestProto.encode().toBuffer();
 
@@ -128,6 +123,7 @@ function protobufRequester(requestJSON, cb) {
  * @param cb {function(err, response)} handles the response
  */
 function jsonRequester(requestJSON, cb) {
+  console.log("Using JSON format.");
   request({
     uri: addr + "/sql/Execute",
     headers: {
