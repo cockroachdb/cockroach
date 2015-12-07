@@ -214,7 +214,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		if m.timeUntilStoreDead == 0 {
 			m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff
 		}
-		m.storePool = storage.NewStorePool(m.gossip, m.timeUntilStoreDead, m.clientStopper)
+		m.storePool = storage.NewStorePool(m.gossip, m.clock, m.timeUntilStoreDead, m.clientStopper)
 	}
 
 	// Always create the first sender.

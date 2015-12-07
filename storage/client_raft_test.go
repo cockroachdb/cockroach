@@ -1179,7 +1179,8 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	// This can't use SucceedsWithin as using the backoff mechanic won't work
 	// as it requires a specific cadence of re-gossiping the alive stores to
 	// maintain their alive status.
-	ticker := time.NewTicker(storage.TestTimeUntilStoreDead / 2)
+	tickerDur := storage.TestTimeUntilStoreDead / 2
+	ticker := time.NewTicker(tickerDur)
 	defer ticker.Stop()
 
 	maxTime := 5 * time.Second
@@ -1190,6 +1191,8 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 		case <-maxTimeout:
 			t.Fatalf("Failed to remove the dead replica within %s", maxTime)
 		case <-ticker.C:
+			mtc.manualClock.Increment(int64(tickerDur))
+
 			// Keep gossiping the alive stores.
 			sg.GossipWithFunction(aliveStoreIDs, func() {
 				mtc.stores[0].GossipStore()
