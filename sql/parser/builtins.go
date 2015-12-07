@@ -37,6 +37,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -449,7 +450,7 @@ var builtins = map[string][]builtin{
 			returnType: typeBytes,
 			impure:     true,
 			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
-				return generateUniqueBytes(ctx.NodeID), nil
+				return DBytes(GenerateUniqueBytes(ctx.NodeID)), nil
 			},
 		},
 	},
@@ -1300,7 +1301,9 @@ var uniqueBytesState struct {
 	nanos uint64
 }
 
-func generateUniqueBytes(nodeID uint32) DBytes {
+// GenerateUniqueBytes generates unique bytes. The bytes are monotonically
+// increasing for a particular cockroach node.
+func GenerateUniqueBytes(nodeID roachpb.NodeID) []byte {
 	// Unique bytes are composed of the current time in nanoseconds and the
 	// node-id. If the nanosecond value is the same on two consecutive calls to
 	// time.Now() the nanoseconds value is incremented. The node-id is varint
@@ -1324,7 +1327,7 @@ func generateUniqueBytes(nodeID uint32) DBytes {
 	// former uses less space for values < 128 which is a common occurrence for
 	// node IDs.
 	n := binary.PutUvarint(b[len(b):len(b)+binary.MaxVarintLen32], uint64(nodeID))
-	return DBytes(b[:len(b)+n])
+	return b[:len(b)+n]
 }
 
 var uniqueIntState struct {
@@ -1334,7 +1337,7 @@ var uniqueIntState struct {
 
 var uniqueIDEpoch = time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano()
 
-func generateUniqueInt(nodeID uint32) DInt {
+func generateUniqueInt(nodeID roachpb.NodeID) DInt {
 	// Unique ints are composed of the current time at a 10-microsecond
 	// granularity and the node-id. The node-id is stored in the lower 15 bits of
 	// the returned value and the timestamp is stored in the upper 48 bits. The
@@ -1343,7 +1346,7 @@ func generateUniqueInt(nodeID uint32) DInt {
 	// (Jan 1, 2015) in order to utilize the entire timestamp range.
 	//
 	// Note that generateUniqueInt() imposes a limit on node IDs while
-	// generateUniqueBytes() does not.
+	// GenerateUniqueBytes() does not.
 	//
 	// TODO(pmattis): Do we have to worry about persisting the milliseconds value
 	// periodically to avoid the clock ever going backwards (e.g. due to NTP

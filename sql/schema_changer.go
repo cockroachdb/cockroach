@@ -18,7 +18,13 @@
 package sql
 
 import (
+	"errors"
+	"time"
+
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -61,4 +67,82 @@ func (p *planner) applyUpVersion(tableDesc *TableDescriptor) {
 		tableDesc.UpVersion = false
 		tableDesc.Version++
 	}
+}
+
+// SchemaChanger is used to change the schema on a table.
+type SchemaChanger struct {
+	tableID ID
+	node    roachpb.NodeID
+	txn     *client.Txn
+}
+
+// NewSchemaChangerForTesting only for tests.
+func NewSchemaChangerForTesting(tableID ID, node roachpb.NodeID, txn *client.Txn) SchemaChanger {
+	return SchemaChanger{tableID: tableID, node: node, txn: txn}
+}
+
+var errExistingSchemaChangeLease = errors.New("an outstanding schema change lease exists")
+
+func (t *SchemaChanger) createSchemaChangeLease() TableDescriptor_SchemaChangeLease {
+	id := parser.GenerateUniqueBytes(t.node)
+	return TableDescriptor_SchemaChangeLease{ID: string(id), Node: uint32(t.node), ExpirationTime: time.Now().Add(jitteredLeaseDuration()).Unix()}
+}
+
+// AcquireLease acquires a schema change lease on the table if
+// an unexpired lease doesn't exist. It returns the lease.
+func (t *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, error) {
+	t.txn.SetSystemDBTrigger()
+	tableDesc, err := getTableDescFromID(t.txn, t.tableID)
+	if err != nil {
+		return TableDescriptor_SchemaChangeLease{}, err
+	}
+
+	// Add 5 seconds to the lease expiration to deal with time uncertainty across nodes.
+	if tableDesc.Lease != nil && time.Unix(tableDesc.Lease.ExpirationTime+5, 0).After(time.Now()) {
+		// Return the existing lease with an error.
+		return *tableDesc.Lease, errExistingSchemaChangeLease
+	}
+	lease := t.createSchemaChangeLease()
+	tableDesc.Lease = &lease
+	err = t.txn.Put(MakeDescMetadataKey(tableDesc.ID), wrapDescriptor(tableDesc))
+	return lease, err
+}
+
+func (t *SchemaChanger) findTableWithLease(lease TableDescriptor_SchemaChangeLease) (*TableDescriptor, error) {
+	tableDesc, err := getTableDescFromID(t.txn, t.tableID)
+	if err != nil {
+		return nil, err
+	}
+	if tableDesc.Lease == nil {
+		return nil, util.Errorf("no lease present for tableID: %d", t.tableID)
+	}
+	if tableDesc.Lease.ID != lease.ID {
+		return nil, util.Errorf("table: %d has lease: %v, expected: %v", t.tableID, tableDesc.Lease, lease)
+	}
+	return tableDesc, nil
+}
+
+// ReleaseLease the table lease if it is the one registered with
+// the table descriptor.
+func (t *SchemaChanger) ReleaseLease(lease TableDescriptor_SchemaChangeLease) error {
+	tableDesc, err := t.findTableWithLease(lease)
+	if err != nil {
+		return err
+	}
+	tableDesc.Lease = nil
+	t.txn.SetSystemDBTrigger()
+	return t.txn.Put(MakeDescMetadataKey(tableDesc.ID), wrapDescriptor(tableDesc))
+}
+
+// ExtendLease for the current leaser.
+func (t *SchemaChanger) ExtendLease(lease TableDescriptor_SchemaChangeLease) (TableDescriptor_SchemaChangeLease, error) {
+	tableDesc, err := t.findTableWithLease(lease)
+	if err != nil {
+		return TableDescriptor_SchemaChangeLease{}, err
+	}
+	lease = t.createSchemaChangeLease()
+	tableDesc.Lease = &lease
+	t.txn.SetSystemDBTrigger()
+	err = t.txn.Put(MakeDescMetadataKey(tableDesc.ID), wrapDescriptor(tableDesc))
+	return lease, err
 }
