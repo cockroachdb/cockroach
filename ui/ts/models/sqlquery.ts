@@ -19,9 +19,7 @@ module Models {
         /**
          * TODO: receive data as protobuf instead of JSON
          *
-         * Currently there are two issues blocking us from automatically
-         * generating typescript definitions from .proto files and from using
-         * the binary protobuf format over the wire.
+         * Currently there are two separate protobuf issues:
          *
          * 1) Mithril doesn't support sending/receiving binary data, but xhr
          * does. We just need the following lines to send/receive binary

@@ -41,7 +41,7 @@ module AdminViews {
       function populateTableDataFromResult(result: Response, table: TableData<Row>): void {
         let cols: Column[] = _.get(result, "results[0].Union.Rows.columns", []);
         let resultRows: Row[] = _.get(result, "results[0].Union.Rows.rows", []);
-        let tableColumns: Property<TableColumn<Row>[]> = <Property<TableColumn<Row>[]>>table.columns;
+        let tableColumns = <Property<TableColumn<Row>[]>>table.columns;
         tableColumns(_.map<Column, TableColumn<Row>>(cols, function (col: Column, i: number): TableColumn<Row> {
             return {
               title: col.name,

@@ -74,13 +74,12 @@ GOBINDATA_DEBUG_TARGET  := ./embedded_debug.go
 # TODO: generate all automatically
 
 PROTO_FILES       := ../sql/driver/wire.proto
-GOGOPROTO_FOLDER  := $(GOPATH)/src/github.com/gogo/protobuf/
+GOGOPROTO_FOLDER  := $(GOPATH)/src/github.com/gogo/protobuf
 GOGOPROTO         := $(GOGOPROTO_FOLDER)/gogoproto/gogo.proto
 PROTO_JSON_TARGET := $(GENERATED_ROOT)/wireproto.json
 
 .PHONY:
 all: $(GOBINDATA_TARGET) $(TEST_TARGET) $(PROTO_JSON_TARGET)
-	echo $(GOGOPROTO)
 	rm -f $(GOBINDATA_DEBUG_TARGET)
 
 .PHONY:
