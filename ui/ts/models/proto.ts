@@ -1,3 +1,5 @@
+/// <reference path="../external/bytebuffer.d.ts" />
+
 // source: models/proto.ts
 // Author: Matt Tracy (matt@cockroachlabs.com)
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
@@ -289,5 +291,69 @@ module Models {
       key: string;
       stacks: string;
     }
+
+    /*****************************
+     * sql/driver/wire.proto
+     ****************************/
+
+      export interface Payload  {
+        Payload?: Datum;
+      }
+
+      export interface Datum {
+        BoolVal?: boolean;
+        IntVal?: number;
+        FloatVal?: number;
+        BytesVal?: ByteBuffer;
+        StringVal?: string;
+        DateVal?: number;
+        TimeVal?: Timestamp;
+        IntervalVal?: number;
+      }
+
+      export interface Timestamp {
+        sec?: number;
+        nsec?: number;
+      }
+
+      export interface Request {
+        user?: string;
+        session?: ByteBuffer;
+        sql?: string;
+        params?: Datum[];
+      }
+
+      export interface Response {
+        session?: ByteBuffer;
+        results?: Result[];
+      }
+
+      export interface Result {
+        Union?: Union;
+      }
+
+      export interface Union {
+        error?: string;
+        ddl?: DDL;
+        rows_affected?: number;
+        rows?: Rows;
+      }
+
+      export interface DDL {
+      }
+
+      export interface Rows {
+        columns?: Column[];
+        rows?: Row[];
+      }
+
+      export interface Row {
+        values?: Payload[];
+      }
+
+      export interface Column {
+        name?: string;
+        typ?: Payload;
+      }
   }
 }
