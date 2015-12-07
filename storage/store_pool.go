@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -44,13 +45,13 @@ type storeDetail struct {
 	dead            bool
 	gossiped        bool // Was this store updated via gossip?
 	timesDied       int
-	foundDeadOn     time.Time
-	lastUpdatedTime time.Time // This is also the priority for the queue.
-	index           int       // index of the item in the heap, required for heap.Interface
+	foundDeadOn     roachpb.Timestamp
+	lastUpdatedTime roachpb.Timestamp // This is also the priority for the queue.
+	index           int               // index of the item in the heap, required for heap.Interface
 }
 
 // markDead sets the storeDetail to dead(inactive).
-func (sd *storeDetail) markDead(foundDeadOn time.Time) {
+func (sd *storeDetail) markDead(foundDeadOn roachpb.Timestamp) {
 	sd.dead = true
 	sd.foundDeadOn = foundDeadOn
 	sd.timesDied++
@@ -59,7 +60,7 @@ func (sd *storeDetail) markDead(foundDeadOn time.Time) {
 
 // markAlive sets the storeDetail to alive(active) and saves the updated time
 // and descriptor.
-func (sd *storeDetail) markAlive(foundAliveOn time.Time, storeDesc roachpb.StoreDescriptor, gossiped bool) {
+func (sd *storeDetail) markAlive(foundAliveOn roachpb.Timestamp, storeDesc roachpb.StoreDescriptor, gossiped bool) {
 	sd.desc = storeDesc
 	sd.dead = false
 	sd.gossiped = gossiped
@@ -77,7 +78,7 @@ func (pq storePoolPQ) Len() int {
 
 // Less implements the sort.Interface.
 func (pq storePoolPQ) Less(i, j int) bool {
-	return pq[i].lastUpdatedTime.Before(pq[j].lastUpdatedTime)
+	return pq[i].lastUpdatedTime.Less(pq[j].lastUpdatedTime)
 }
 
 // Swap implements the sort.Interface.
@@ -133,6 +134,7 @@ func (pq *storePoolPQ) dequeue() *storeDetail {
 // StorePool maintains a list of all known stores in the cluster and
 // information on their health.
 type StorePool struct {
+	clock              *hlc.Clock
 	timeUntilStoreDead time.Duration
 
 	// Each storeDetail is contained in both a map and a priorityQueue; pointers
@@ -144,8 +146,9 @@ type StorePool struct {
 
 // NewStorePool creates a StorePool and registers the store updating callback
 // with gossip.
-func NewStorePool(g *gossip.Gossip, timeUntilStoreDead time.Duration, stopper *stop.Stopper) *StorePool {
+func NewStorePool(g *gossip.Gossip, clock *hlc.Clock, timeUntilStoreDead time.Duration, stopper *stop.Stopper) *StorePool {
 	sp := &StorePool{
+		clock:              clock,
 		timeUntilStoreDead: timeUntilStoreDead,
 		stores:             make(map[roachpb.StoreID]*storeDetail),
 	}
@@ -176,7 +179,7 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 		detail = &storeDetail{index: -1}
 		sp.stores[storeDesc.StoreID] = detail
 	}
-	detail.markAlive(time.Now(), storeDesc, true)
+	detail.markAlive(sp.clock.Now(), storeDesc, true)
 	sp.queue.enqueue(detail)
 }
 
@@ -193,9 +196,9 @@ func (sp *StorePool) start(stopper *stop.Stopper) {
 				timeout = sp.timeUntilStoreDead
 			} else {
 				// Check to see if the store should be marked as dead.
-				deadAsOf := detail.lastUpdatedTime.Add(sp.timeUntilStoreDead)
-				now := time.Now()
-				if now.After(deadAsOf) {
+				deadAsOf := detail.lastUpdatedTime.GoTime().Add(sp.timeUntilStoreDead)
+				now := sp.clock.Now()
+				if now.GoTime().After(deadAsOf) {
 					deadDetail := sp.queue.dequeue()
 					deadDetail.markDead(now)
 					// The next store might be dead as well, set the timeout to
@@ -204,7 +207,7 @@ func (sp *StorePool) start(stopper *stop.Stopper) {
 				} else {
 					// Store is still alive, schedule the next check for when
 					// it should timeout.
-					timeout = deadAsOf.Sub(now)
+					timeout = deadAsOf.Sub(now.GoTime())
 				}
 			}
 			sp.mu.Unlock()
@@ -229,7 +232,7 @@ func (sp *StorePool) getStoreDetail(storeID roachpb.StoreID) storeDetail {
 		// considered dead.
 		detail = &storeDetail{index: -1}
 		sp.stores[storeID] = detail
-		detail.markAlive(time.Now(), roachpb.StoreDescriptor{StoreID: storeID}, false)
+		detail.markAlive(sp.clock.Now(), roachpb.StoreDescriptor{StoreID: storeID}, false)
 		sp.queue.enqueue(detail)
 	}
 

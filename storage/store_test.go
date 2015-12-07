@@ -133,9 +133,9 @@ func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *stop.
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
 	ctx := TestStoreContext
 	ctx.Gossip = gossip.New(rpcContext, gossip.TestBootstrap)
-	ctx.StorePool = NewStorePool(ctx.Gossip, TestTimeUntilStoreDeadOff, stopper)
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
+	ctx.StorePool = NewStorePool(ctx.Gossip, ctx.Clock, TestTimeUntilStoreDeadOff, stopper)
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20, stopper)
 	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 	stopper.AddCloser(ctx.Transport)

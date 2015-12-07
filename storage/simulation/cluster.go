@@ -64,7 +64,7 @@ func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWrit
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
 	g := gossip.New(rpcContext, gossip.TestBootstrap)
-	storePool := storage.NewStorePool(g, storage.TestTimeUntilStoreDeadOff, stopper)
+	storePool := storage.NewStorePool(g, clock, storage.TestTimeUntilStoreDeadOff, stopper)
 	c := &Cluster{
 		stopper:   stopper,
 		clock:     clock,
