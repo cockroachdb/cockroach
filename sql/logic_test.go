@@ -26,8 +26,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
-	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -200,32 +198,8 @@ func (t *logicTest) setUser(tempDir, user string) {
 		t.db = db
 		return
 	}
-	host, port, err := net.SplitHostPort(t.srv.PGAddr())
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	caPath := filepath.Join(security.EmbeddedCertsDir, "ca.crt")
-	certPath := security.ClientCertPath(security.EmbeddedCertsDir, user)
-	keyPath := security.ClientKeyPath(security.EmbeddedCertsDir, user)
-
-	// Copy these assets to disk from embedded strings, so this test can
-	// run from a standalone binary.
-	tempCAPath, _ := tempRestrictedCopy(t.T, tempDir, caPath, "TestLogic_ca")
-	tempCertPath, _ := tempRestrictedCopy(t.T, tempDir, certPath, "TestLogic_cert")
-	tempKeyPath, _ := tempRestrictedCopy(t.T, tempDir, keyPath, "TestLogic_key")
-
-	pgUrl := url.URL{
-		Scheme: "postgres",
-		User:   url.User(user),
-		Host:   net.JoinHostPort(host, port),
-		RawQuery: fmt.Sprintf("sslmode=verify-full&sslrootcert=%s&sslcert=%s&sslkey=%s",
-			url.QueryEscape(tempCAPath),
-			url.QueryEscape(tempCertPath),
-			url.QueryEscape(tempKeyPath),
-		),
-	}
-
+	pgUrl, _ := pgURL(t.T, t.srv, user, tempDir, "TestLogic")
 	db, err := sql.Open("postgres", pgUrl.String())
 	if err != nil {
 		t.Fatal(err)
