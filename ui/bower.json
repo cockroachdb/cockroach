@@ -4,7 +4,10 @@
     "d3": "3.5.8",
     "lodash": "3.10.1",
     "mithriljs": "df114a4ee27ed64d3602741dc461d052fbc9c284",
-    "nvd3": "1.8.1"
+    "nvd3": "1.8.1",
+    "protobuf": "https://github.com/cockroachdb/protobuf.js.git#~5.0.0",
+    "moment": "~2.10.6",
+    "moment-timezone": "~0.4.1"
   },
   "devDependencies": {
     "chai": "~3.4.0",
