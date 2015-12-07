@@ -65,7 +65,7 @@ var plannerPool = sync.Pool{
 // An Executor executes SQL statements.
 type Executor struct {
 	db       client.DB
-	nodeID   uint32
+	nodeID   roachpb.NodeID
 	reCache  *parser.RegexpCache
 	leaseMgr *LeaseManager
 
@@ -91,8 +91,8 @@ func newExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager) *E
 // SetNodeID sets the node ID for the SQL server. This method must be called
 // before actually using the Executor.
 func (e *Executor) SetNodeID(nodeID roachpb.NodeID) {
-	e.nodeID = uint32(nodeID)
-	e.leaseMgr.nodeID = e.nodeID
+	e.nodeID = nodeID
+	e.leaseMgr.nodeID = uint32(nodeID)
 }
 
 // updateSystemConfig is called whenever the system config gossip entry is updated.

@@ -85,7 +85,7 @@ type LeaseStore struct {
 
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
 // [0.75 * leaseDuration, 1.25 * leaseDuration].
-func (s LeaseStore) jitteredLeaseDuration() time.Duration {
+func jitteredLeaseDuration() time.Duration {
 	return time.Duration(float64(LeaseDuration) * (0.75 + 0.5*rand.Float64()))
 }
 
@@ -93,7 +93,7 @@ func (s LeaseStore) jitteredLeaseDuration() time.Duration {
 func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVersion) (*LeaseState, error) {
 	lease := &LeaseState{}
 	lease.expiration = parser.DTimestamp{
-		Time: time.Unix(0, s.clock.Now().WallTime).Add(s.jitteredLeaseDuration()),
+		Time: time.Unix(0, s.clock.Now().WallTime).Add(jitteredLeaseDuration()),
 	}
 
 	// Use the supplied (user) transaction to look up the descriptor because the
