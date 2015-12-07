@@ -71,7 +71,7 @@ module AdminViews {
           this.axis = Metrics.NewAxis(this.successCount, this.errorCount)
             .label("Count");
           this.manager.refresh();
-          this.interval = setInterval(() => this.manager.refresh(), 10000);
+          this.interval = window.setInterval(() => this.manager.refresh(), 10000);
         }
       }
 

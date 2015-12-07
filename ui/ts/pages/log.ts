@@ -103,7 +103,7 @@ module AdminViews {
           entries.endTime(parseInt(m.route.param("endTime"), 10) || null);
           entries.pattern(m.route.param("pattern") || null);
           this._Refresh();
-          this._interval = setInterval(() => this._Refresh(), Controller._queryEveryMS);
+          this._interval = window.setInterval(() => this._Refresh(), Controller._queryEveryMS);
         }
       };
 

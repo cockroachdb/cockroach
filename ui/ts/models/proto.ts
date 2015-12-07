@@ -1,5 +1,3 @@
-/// <reference path="../external/bytebuffer.d.ts" />
-
 // source: models/proto.ts
 // Author: Matt Tracy (matt@cockroachlabs.com)
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
@@ -304,7 +302,7 @@ module Models {
         BoolVal?: boolean;
         IntVal?: number;
         FloatVal?: number;
-        BytesVal?: ByteBuffer;
+        BytesVal?: ArrayBuffer;
         StringVal?: string;
         DateVal?: number;
         TimeVal?: Timestamp;
@@ -318,13 +316,13 @@ module Models {
 
       export interface Request {
         user?: string;
-        session?: ByteBuffer;
+        session?: ArrayBuffer;
         sql?: string;
         params?: Datum[];
       }
 
       export interface Response {
-        session?: ByteBuffer;
+        session?: ArrayBuffer;
         results?: Result[];
       }
 
