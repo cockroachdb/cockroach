@@ -154,8 +154,10 @@ module AdminViews {
           columns: ctrl.columns,
           rows: nodeStatuses.allStatuses,
         };
+
+        let mostRecentlyUpdated: number = _.max(_.map(nodeStatuses.allStatuses(), (s: NodeStatus) => s.updated_at ));
         return m(".page", [
-          m.component(Components.Topbar, {title: "Nodes"}),
+          m.component(Components.Topbar, {title: "Nodes", updated: mostRecentlyUpdated }),
           m(".section", ctrl.RenderPrimaryStats()),
           m(".section.table", m(".stats-table", Components.Table.create(comparisonData))),
         ]);
@@ -309,8 +311,11 @@ module AdminViews {
           primaryContent = ctrl.RenderPrimaryStats();
         }
 
+        let nodeStatus: NodeStatus = nodeStatuses.GetStatus(ctrl.GetNodeId());
+        let updated: number = (nodeStatus ? nodeStatus.updated_at : 0);
+
         return m(".page", [
-          m.component(Components.Topbar, {title: title}),
+          m.component(Components.Topbar, {title: title, updated: updated}),
           m.component(NavigationBar, {ts: ctrl.TargetSet()}),
           m(".section", primaryContent),
         ]);
