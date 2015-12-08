@@ -144,7 +144,8 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	leaseMgr := sql.NewLeaseManager(0, *s.db, s.clock)
 	leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
-	s.sqlServer = sql.MakeServer(&s.ctx.Context, *s.db, s.gossip, leaseMgr)
+	sqlExecutor := sql.NewExecutor(*s.db, s.gossip, leaseMgr)
+	s.sqlServer = sql.MakeServer(&s.ctx.Context, sqlExecutor)
 	if err := s.sqlServer.RegisterRPC(s.rpc); err != nil {
 		return nil, err
 	}

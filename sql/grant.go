@@ -44,7 +44,6 @@ func (p *planner) changePrivileges(targets parser.TargetList, grantees parser.Na
 	tableDesc, ok := descriptor.(*TableDescriptor)
 	if ok {
 		tableDesc.UpVersion = true
-		p.applyUpVersion(tableDesc)
 	}
 
 	// Now update the descriptor.
@@ -55,7 +54,7 @@ func (p *planner) changePrivileges(targets parser.TargetList, grantees parser.Na
 		return nil, err
 	}
 	if ok {
-		p.notifyCompletedSchemaChange(tableDesc.ID)
+		p.notifySchemaChange(tableDesc.ID, invalidMutationID)
 	}
 	return &valuesNode{}, nil
 }

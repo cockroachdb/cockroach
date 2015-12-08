@@ -24,8 +24,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/driver"
@@ -43,8 +41,8 @@ type Server struct {
 }
 
 // MakeServer creates a Server.
-func MakeServer(ctx *base.Context, db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager) Server {
-	return Server{context: ctx, Executor: newExecutor(db, gossip, leaseMgr)}
+func MakeServer(ctx *base.Context, executor *Executor) Server {
+	return Server{context: ctx, Executor: executor}
 }
 
 // ServeHTTP serves the SQL API by treating the request URL path

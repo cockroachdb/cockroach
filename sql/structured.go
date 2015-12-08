@@ -42,6 +42,11 @@ type IndexID uint32
 // DescriptorVersion is a custom type for TableDescriptor Versions.
 type DescriptorVersion uint32
 
+// MutationID is custom type for TableDescriptor mutations.
+type MutationID uint32
+
+var invalidMutationID = MutationID(0)
+
 const (
 	// PrimaryKeyIndexName is the name of the index for the primary key.
 	PrimaryKeyIndexName = "primary"
@@ -189,6 +194,9 @@ func (desc *TableDescriptor) AllocateIDs() error {
 	}
 	if desc.Version == 0 {
 		desc.Version = 1
+	}
+	if desc.NextMutationID == invalidMutationID {
+		desc.NextMutationID = 1
 	}
 
 	columnNames := map[string]ColumnID{}
@@ -549,7 +557,12 @@ func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
 	case DescriptorMutation_DROP:
 		m.State = DescriptorMutation_WRITE_ONLY
 	}
+	m.MutationID = desc.NextMutationID
 	desc.Mutations = append(desc.Mutations, m)
+}
+
+func (desc *TableDescriptor) acquireMutationLease() {
+
 }
 
 // SQLString returns the SQL string corresponding to the type.

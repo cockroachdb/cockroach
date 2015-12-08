@@ -71,7 +71,11 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *Tab
 	var droppedColumnDescs []ColumnDescriptor
 	var droppedIndexDescs []IndexDescriptor
 	var newIndexDescs []IndexDescriptor
+	mutationID := oldTableDesc.Mutations[0].MutationID
 	for _, m := range oldTableDesc.Mutations {
+		if m.MutationID != mutationID {
+			break
+		}
 		switch m.Direction {
 		case DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {

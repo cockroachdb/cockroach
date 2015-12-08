@@ -122,7 +122,6 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 		if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
 			return nil, err
 		}
-
 		idxName := indexQualifiedName.Index()
 		status, i, err := tableDesc.FindIndexByName(idxName)
 		if err != nil {
@@ -148,6 +147,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 			}
 		}
 		tableDesc.UpVersion = true
+		tableDesc.NextMutationID++
 		if err := tableDesc.Validate(); err != nil {
 			return nil, err
 		}
@@ -155,10 +155,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 		if err := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); err != nil {
 			return nil, err
 		}
-		// Process mutation synchronously.
-		if err := p.applyMutations(tableDesc); err != nil {
-			return nil, err
-		}
+		p.notifySchemaChange(tableDesc.ID, tableDesc.NextMutationID-1)
 	}
 	return &valuesNode{}, nil
 }

@@ -261,12 +261,16 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) err
 			}
 
 			// Bump the version and modification time.
-			tableDesc.Version = tableDesc.Version + 1
+			tableDesc.Version++
 			now := s.clock.Now()
 			tableDesc.ModificationTime = now
 			if log.V(3) {
 				log.Infof("publish: descID=%d version=%d mtime=%s",
 					tableDesc.ID, tableDesc.Version, now.GoTime())
+			}
+
+			if err := tableDesc.Validate(); err != nil {
+				return err
 			}
 
 			// Write the updated descriptor.

@@ -67,9 +67,10 @@ func TestAllocateIDs(t *testing.T) {
 			{ID: 3, Name: "e", ColumnIDs: []sql.ColumnID{2}, ColumnNames: []string{"b"},
 				ImplicitColumnIDs: []sql.ColumnID{1}},
 		},
-		Privileges:   sql.NewDefaultPrivilegeDescriptor(),
-		NextColumnID: 4,
-		NextIndexID:  4,
+		Privileges:     sql.NewDefaultPrivilegeDescriptor(),
+		NextColumnID:   4,
+		NextIndexID:    4,
+		NextMutationID: 1,
 	}
 	if !reflect.DeepEqual(expected, desc) {
 		a, _ := json.MarshalIndent(expected, "", "  ")

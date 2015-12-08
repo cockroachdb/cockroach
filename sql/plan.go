@@ -37,18 +37,10 @@ type planner struct {
 	leases       map[ID]*LeaseState
 	leaseMgr     *LeaseManager
 	systemConfig config.SystemConfig
-	// Keep track of tables that had schema changes that were completed.
-	// The executor has the option to wait on completed schema changes
-	// propagating to all nodes so that future commands use the latest
-	// schema. This is not required for correctness, but it makes the UI
-	// experience/tests predictable.
-	//
-	// TODO(vivek): Well, this is still needed for correctness as
-	// long as the schema change is still executed in one transaction
-	// without a staged process that takes the schema through all the state
-	// changes. Once the staged process is rolled out delete this
-	// TODO comment.
-	completedSchemaChange []ID
+	// schema changes created by some of the commands in the transaction.
+	// The executor can execute these schema changes if it is able to
+	// acquire the lease for them.
+	schemaChangers []SchemaChanger
 
 	testingVerifyMetadata func(config.SystemConfig) error
 
@@ -219,9 +211,15 @@ func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, er
 	return desc, nil
 }
 
-// notify that the schema change is completed.
-func (p *planner) notifyCompletedSchemaChange(id ID) {
-	p.completedSchemaChange = append(p.completedSchemaChange, id)
+// notify that an outstanding schema change exists for the table.
+func (p *planner) notifySchemaChange(id ID, mutationID MutationID) {
+	p.schemaChangers = append(p.schemaChangers, SchemaChanger{
+		tableID:    id,
+		mutationID: mutationID,
+		nodeID:     p.evalCtx.NodeID,
+		cfg:        p.systemConfig,
+		leaseMgr:   p.leaseMgr,
+	})
 }
 
 func (p *planner) releaseLeases(db client.DB) {
