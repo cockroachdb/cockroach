@@ -24,6 +24,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/rpc"
 	"strings"
 	"sync"
 	"time"
@@ -35,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/multiraft"
-	"github.com/cockroachdb/cockroach/rpc"
+	crpc "github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/driver"
@@ -46,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	netutil "github.com/cockroachdb/cockroach/util/net"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
 	assetfs "github.com/elazarl/go-bindata-assetfs"
@@ -62,9 +64,11 @@ var (
 type Server struct {
 	ctx *Context
 
+	listener net.Listener
+
 	mux           *http.ServeMux
 	clock         *hlc.Clock
-	rpc           *rpc.Server
+	rpc           *crpc.Server
 	gossip        *gossip.Gossip
 	storePool     *storage.StorePool
 	db            *client.DB
@@ -87,9 +91,8 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		return nil, util.Errorf("ctx must not be null")
 	}
 
-	addr := ctx.Addr
-	if _, err := net.ResolveTCPAddr("tcp", addr); err != nil {
-		return nil, util.Errorf("unable to resolve RPC address %q: %v", addr, err)
+	if _, err := net.ResolveTCPAddr("tcp", ctx.Addr); err != nil {
+		return nil, util.Errorf("unable to resolve RPC address %q: %v", ctx.Addr, err)
 	}
 
 	if ctx.Insecure {
@@ -111,18 +114,18 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.clock.SetMaxOffset(ctx.MaxOffset)
 
-	rpcContext := rpc.NewContext(&ctx.Context, s.clock, stopper)
+	rpcContext := crpc.NewContext(&ctx.Context, s.clock, stopper)
 	stopper.RunWorker(func() {
 		rpcContext.RemoteClocks.MonitorRemoteOffsets(stopper)
 	})
 
-	s.rpc = rpc.NewServer(util.MakeUnresolvedAddr("tcp", addr), rpcContext)
-	s.stopper.AddCloser(s.rpc)
+	s.rpc = crpc.NewServer(rpcContext)
+
 	s.gossip = gossip.New(rpcContext, s.ctx.GossipBootstrapResolvers)
 	s.storePool = storage.NewStorePool(s.gossip, s.clock, ctx.TimeUntilStoreDead, stopper)
 
 	feed := util.NewFeed(stopper)
-	tracer := tracer.NewTracer(feed, addr)
+	tracer := tracer.NewTracer(feed, ctx.Addr)
 
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.clock}, s.gossip)
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, tracer, s.stopper)
@@ -182,11 +185,20 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 // selfBootstrap is true, uses the rpc server's address as the gossip
 // bootstrap), and starts the node using the supplied engines slice.
 func (s *Server) Start(selfBootstrap bool) error {
-	if err := s.rpc.Listen(); err != nil {
-		return util.Errorf("could not listen on %s: %s", s.ctx.Addr, err)
+	tlsConfig, err := s.ctx.GetServerTLSConfig()
+	if err != nil {
+		return err
 	}
 
-	addr := s.rpc.Addr()
+	unresolvedAddr := util.MakeUnresolvedAddr("tcp", s.ctx.Addr)
+	ln, err := netutil.ListenAndServe(s.stopper, s, unresolvedAddr, tlsConfig)
+	if err != nil {
+		return err
+	}
+
+	s.listener = ln
+
+	addr := ln.Addr()
 	addrStr := addr.String()
 
 	// Handle self-bootstrapping case for a single node.
@@ -197,9 +209,9 @@ func (s *Server) Start(selfBootstrap bool) error {
 		}
 		s.gossip.SetResolvers([]resolver.Resolver{selfResolver})
 	}
-	s.gossip.Start(s.rpc, s.stopper)
+	s.gossip.Start(s.rpc, addr, s.stopper)
 
-	if err := s.node.start(s.rpc, s.ctx.Engines, s.ctx.NodeAttributes, s.stopper); err != nil {
+	if err := s.node.start(s.rpc, addr, s.ctx.Engines, s.ctx.NodeAttributes, s.stopper); err != nil {
 		return err
 	}
 
@@ -218,7 +230,6 @@ func (s *Server) Start(selfBootstrap bool) error {
 
 	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), addr)
 	s.initHTTP()
-	s.rpc.Serve(s)
 
 	// TODO(tamird): pick a port here
 	host, _, err := net.SplitHostPort(addrStr)
@@ -231,6 +242,8 @@ func (s *Server) Start(selfBootstrap bool) error {
 
 // initHTTP registers http prefixes.
 func (s *Server) initHTTP() {
+	s.mux.Handle(rpc.DefaultRPCPath, s.rpc)
+
 	s.mux.Handle("/", http.FileServer(
 		&assetfs.AssetFS{Asset: ui.Asset, AssetDir: ui.AssetDir}))
 

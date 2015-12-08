@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc/codec"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	netutil "github.com/cockroachdb/cockroach/util/net"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
 )
@@ -59,9 +60,14 @@ var (
 	raftMessageName = "MultiRaft.RaftMessage"
 )
 
+type serverWithAddr struct {
+	server *crpc.Server
+	addr   net.Addr
+}
+
 type localRPCTransport struct {
 	mu      sync.Mutex
-	servers map[roachpb.StoreID]*crpc.Server
+	servers map[roachpb.StoreID]serverWithAddr
 	clients map[roachpb.StoreID]*netrpc.Client
 	conns   map[net.Conn]struct{}
 	closed  chan struct{}
@@ -75,7 +81,7 @@ type localRPCTransport struct {
 // Because this is just for local testing, it doesn't use TLS.
 func NewLocalRPCTransport(stopper *stop.Stopper) Transport {
 	return &localRPCTransport{
-		servers: make(map[roachpb.StoreID]*crpc.Server),
+		servers: make(map[roachpb.StoreID]serverWithAddr),
 		clients: make(map[roachpb.StoreID]*netrpc.Client),
 		conns:   make(map[net.Conn]struct{}),
 		closed:  make(chan struct{}),
@@ -84,14 +90,14 @@ func NewLocalRPCTransport(stopper *stop.Stopper) Transport {
 }
 
 func (lt *localRPCTransport) Listen(id roachpb.StoreID, server ServerInterface) error {
-	addr := util.CreateTestAddr("tcp")
-	rpcServer := crpc.NewServer(addr, &crpc.Context{
+	ctx := crpc.Context{
 		Context: base.Context{
 			Insecure: true,
 		},
 		Stopper:      lt.stopper,
 		DisableCache: true,
-	})
+	}
+	rpcServer := crpc.NewServer(&ctx)
 	err := rpcServer.RegisterAsync(raftMessageName, false, /*not public*/
 		func(argsI proto.Message, callback func(proto.Message, error)) {
 			args := argsI.(*RaftMessageRequest)
@@ -102,20 +108,30 @@ func (lt *localRPCTransport) Listen(id roachpb.StoreID, server ServerInterface) 
 		return err
 	}
 
+	tlsConfig, err := ctx.GetServerTLSConfig()
+	if err != nil {
+		return err
+	}
+
+	addr := util.CreateTestAddr("tcp")
+	ln, err := netutil.ListenAndServe(ctx.Stopper, rpcServer, addr, tlsConfig)
+	if err != nil {
+		return err
+	}
+
 	lt.mu.Lock()
 	if _, ok := lt.servers[id]; ok {
 		log.Fatalf("node %d already listening", id)
 	}
-	lt.servers[id] = rpcServer
+	lt.servers[id] = serverWithAddr{rpcServer, ln.Addr()}
 	lt.mu.Unlock()
 
-	return rpcServer.Start()
+	return nil
 }
 
 func (lt *localRPCTransport) Stop(id roachpb.StoreID) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
-	lt.servers[id].Close()
 	delete(lt.servers, id)
 	if client, ok := lt.clients[id]; ok {
 		client.Close()
@@ -138,11 +154,11 @@ func (lt *localRPCTransport) getClient(id roachpb.StoreID) (*netrpc.Client, erro
 		return client, nil
 	}
 
-	server, ok := lt.servers[id]
+	srvWithAddr, ok := lt.servers[id]
 	if !ok {
 		return nil, util.Errorf("unknown peer %v", id)
 	}
-	address := server.Addr().String()
+	address := srvWithAddr.addr.String()
 
 	// If this wasn't test code we wouldn't want to call Dial while holding the lock.
 	conn, err := codec.TLSDialHTTP("tcp", address, base.NetworkTimeout, nil)
@@ -192,8 +208,5 @@ func (lt *localRPCTransport) Close() {
 	}
 	for conn := range lt.conns {
 		conn.Close()
-	}
-	for _, s := range lt.servers {
-		s.Close()
 	}
 }

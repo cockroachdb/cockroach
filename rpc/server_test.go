@@ -22,55 +22,18 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
-
-func checkUpdateMatches(t *testing.T, network, oldAddrString, newAddrString, expAddrString string) {
-	oldAddr := util.MakeUnresolvedAddr(network, oldAddrString)
-	newAddr := util.MakeUnresolvedAddr(network, newAddrString)
-	expAddr := util.MakeUnresolvedAddr(network, expAddrString)
-
-	retAddr, err := updatedAddr(oldAddr, newAddr)
-	if err != nil {
-		t.Fatalf("updatedAddr failed on %v, %v: %v", oldAddr, newAddr, err)
-	}
-
-	if retAddr.String() != expAddrString {
-		t.Fatalf("updatedAddr(%v, %v) was %s; expected %s", oldAddr, newAddr, retAddr, expAddr)
-	}
-}
-
-func checkUpdateFails(t *testing.T, network, oldAddrString, newAddrString string) {
-	oldAddr := util.MakeUnresolvedAddr(network, oldAddrString)
-	newAddr := util.MakeUnresolvedAddr(network, newAddrString)
-
-	retAddr, err := updatedAddr(oldAddr, newAddr)
-	if err == nil {
-		t.Fatalf("updatedAddr(%v, %v) should have failed; instead returned %v", oldAddr, newAddr, retAddr)
-	}
-}
-
-func TestUpdatedAddr(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	for _, network := range []string{"tcp", "tcp4", "tcp6"} {
-		checkUpdateMatches(t, network, "localhost:0", "127.0.0.1:1234", "localhost:1234")
-		checkUpdateMatches(t, network, "localhost:1234", "127.0.0.1:1234", "localhost:1234")
-		// This case emits a warning, but doesn't fail.
-		checkUpdateMatches(t, network, "localhost:1234", "127.0.0.1:1235", "localhost:1235")
-	}
-
-	checkUpdateMatches(t, "unix", "address", "address", "address")
-	checkUpdateFails(t, "unix", "address", "anotheraddress")
-}
 
 func TestDuplicateRegistration(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	s := NewServer(util.CreateTestAddr("tcp"), NewNodeTestContext(nil, stopper))
+	s := Server{
+		methods: make(map[string]method),
+	}
 	heartbeat := &Heartbeat{}
 	if err := s.RegisterPublic("Foo.Bar", heartbeat.Ping, &PingRequest{}); err != nil {
 		t.Fatalf("unexpected failure on first registration: %s", err)
@@ -84,9 +47,9 @@ func TestUnregisteredMethod(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	nodeContext := NewNodeTestContext(nil, stopper)
+	nodeContext := newNodeTestContext(nil, stopper)
 
-	s := createAndStartNewServer(t, nodeContext)
+	_, ln := newTestServer(t, nodeContext, false)
 
 	opts := Options{
 		N: 1,
@@ -94,12 +57,12 @@ func TestUnregisteredMethod(t *testing.T) {
 
 	// Sending an invalid method fails cleanly, but leaves the connection
 	// in a valid state.
-	_, err := sendRPC(opts, []net.Addr{s.Addr()}, nodeContext, "Foo.Bar",
+	_, err := sendRPC(opts, []net.Addr{ln.Addr()}, nodeContext, "Foo.Bar",
 		&PingRequest{}, &PingResponse{})
 	if !testutils.IsError(err, ".*rpc: couldn't find method: Foo.Bar") {
 		t.Fatalf("expected 'couldn't find method' but got %s", err)
 	}
-	if _, err := sendPing(opts, []net.Addr{s.Addr()}, nodeContext); err != nil {
+	if _, err := sendPing(opts, []net.Addr{ln.Addr()}, nodeContext); err != nil {
 		t.Fatalf("unexpected failure sending ping after unknown request: %s", err)
 	}
 }

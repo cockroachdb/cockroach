@@ -149,7 +149,7 @@ check:
 	@echo "checking for forbidden imports"
 	@! $(GO) list -f '{{ $$ip := .ImportPath }}{{ range .Imports}}{{ $$ip }}: {{ println . }}{{end}}' $(PKG) | \
 		grep -E ' (golang/protobuf/proto|log|path)$$' | \
-		grep -Ev '(base|security|sql/driver|util/(log|randutil|stop)): log$$'
+		grep -Ev '(base|security|sql/driver|util/(log|net|randutil|stop)): log$$'
 	@echo "ineffassign"
 	@! ineffassign . | grep -vF gossip/gossip.pb.go
 	@echo "errcheck"

@@ -430,10 +430,10 @@ func (g *Gossip) Outgoing() []roachpb.NodeID {
 //
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
-func (g *Gossip) Start(rpcServer *rpc.Server, stopper *stop.Stopper) {
-	g.server.start(rpcServer, stopper) // serve gossip protocol
-	g.bootstrap(stopper)               // bootstrap gossip client
-	g.manage(stopper)                  // manage gossip clients
+func (g *Gossip) Start(rpcServer *rpc.Server, addr net.Addr, stopper *stop.Stopper) {
+	g.server.start(rpcServer, addr, stopper) // serve gossip protocol
+	g.bootstrap(stopper)                     // bootstrap gossip client
+	g.manage(stopper)                        // manage gossip clients
 	g.maybeWarnAboutInit(stopper)
 }
 

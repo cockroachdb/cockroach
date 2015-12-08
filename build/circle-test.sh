@@ -92,7 +92,7 @@ echo "verifying generated files"
 time ${builder} /bin/bash -c "(go generate ./... && git ls-files --modified --deleted --others --exclude-standard | diff /dev/null -) || (git add -A && git diff -u HEAD && false)" | tee "${outdir}/generate.log"
 # 2.2 Avoid code rot.
 echo "building gossip simulation"
-time ${builder} /bin/bash -c "go run gossip/simulation/gossip.go -size small 2>/dev/null"
+time ${builder} /bin/bash -c "go build ./gossip/simulation/..."
 
 # 3. Run "make test".
 echo "make test"

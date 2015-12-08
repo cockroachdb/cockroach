@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	netutil "github.com/cockroachdb/cockroach/util/net"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
 )
@@ -35,13 +36,18 @@ import (
 // startGossip creates local and remote gossip instances.
 // The remote gossip instance launches its gossip service.
 func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
-	lclock := hlc.NewClock(hlc.UnixNano)
 	stopper = stop.NewStopper()
+	lclock := hlc.NewClock(hlc.UnixNano)
 	lRPCContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
 
 	laddr := util.CreateTestAddr("tcp")
-	lserver := rpc.NewServer(laddr, lRPCContext)
-	if err := lserver.Start(); err != nil {
+	lserver := rpc.NewServer(lRPCContext)
+	lTLSConfig, err := lRPCContext.GetServerTLSConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	lln, err := netutil.ListenAndServe(stopper, lserver, laddr, lTLSConfig)
+	if err != nil {
 		t.Fatal(err)
 	}
 	local = New(lRPCContext, TestBootstrap)
@@ -53,10 +59,16 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 		t.Fatal(err)
 	}
 	rclock := hlc.NewClock(hlc.UnixNano)
-	raddr := util.CreateTestAddr("tcp")
 	rRPCContext := rpc.NewContext(&base.Context{Insecure: true}, rclock, stopper)
-	rserver := rpc.NewServer(raddr, rRPCContext)
-	if err := rserver.Start(); err != nil {
+
+	raddr := util.CreateTestAddr("tcp")
+	rserver := rpc.NewServer(rRPCContext)
+	rTLSConfig, err := rRPCContext.GetServerTLSConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rln, err := netutil.ListenAndServe(stopper, rserver, raddr, rTLSConfig)
+	if err != nil {
 		t.Fatal(err)
 	}
 	remote = New(rRPCContext, TestBootstrap)
@@ -67,8 +79,8 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	local.start(lserver, stopper)
-	remote.start(rserver, stopper)
+	local.start(lserver, lln.Addr(), stopper)
+	remote.start(rserver, rln.Addr(), stopper)
 	time.Sleep(time.Millisecond)
 	return
 }
@@ -100,31 +112,41 @@ func (s *fakeGossipServer) Gossip(argsI proto.Message) (proto.Message, error) {
 // The remote gossip instance launches its faked gossip service just for
 // check the client message.
 func startFakeServerGossip(t *testing.T) (local *Gossip, remote *fakeGossipServer, stopper *stop.Stopper) {
-	lclock := hlc.NewClock(hlc.UnixNano)
 	stopper = stop.NewStopper()
+	lclock := hlc.NewClock(hlc.UnixNano)
 	lRPCContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
 
 	laddr := util.CreateTestAddr("tcp")
-	lserver := rpc.NewServer(laddr, lRPCContext)
-	if err := lserver.Start(); err != nil {
-		t.Fatal(err)
-	}
-	local = New(lRPCContext, TestBootstrap)
-	local.start(lserver, stopper)
-
-	rclock := hlc.NewClock(hlc.UnixNano)
-	raddr := util.CreateTestAddr("tcp")
-	rRPCContext := rpc.NewContext(&base.Context{Insecure: true}, rclock, stopper)
-	rserver := rpc.NewServer(raddr, rRPCContext)
-	if err := rserver.Start(); err != nil {
-		t.Fatal(err)
-	}
-
-	remote, err := newFakeGossipServer(rserver, stopper)
+	lserver := rpc.NewServer(lRPCContext)
+	lTLSConfig, err := lRPCContext.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	addr := rserver.Addr()
+	lln, err := netutil.ListenAndServe(stopper, lserver, laddr, lTLSConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	local = New(lRPCContext, TestBootstrap)
+	local.start(lserver, lln.Addr(), stopper)
+
+	rclock := hlc.NewClock(hlc.UnixNano)
+	rRPCContext := rpc.NewContext(&base.Context{Insecure: true}, rclock, stopper)
+
+	raddr := util.CreateTestAddr("tcp")
+	rserver := rpc.NewServer(rRPCContext)
+	rTLSConfig, err := rRPCContext.GetServerTLSConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rln, err := netutil.ListenAndServe(stopper, rserver, raddr, rTLSConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if remote, err = newFakeGossipServer(rserver, stopper); err != nil {
+		t.Fatal(err)
+	}
+	addr := rln.Addr()
 	remote.nodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 	time.Sleep(time.Millisecond)
 	return
