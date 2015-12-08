@@ -1554,7 +1554,7 @@ func TestStoreBadRequests(t *testing.T) {
 	tArgs3, tHeader3 := heartbeatArgs(txn)
 	tHeader3.Txn.Key = tHeader3.Txn.Key.Next()
 
-	tArgs4 := pushTxnArgs(txn, txn, roachpb.ABORT_TXN)
+	tArgs4 := pushTxnArgs(txn, txn, roachpb.PUSH_ABORT)
 	tArgs4.PusheeTxn.Key = txn.Key.Next()
 
 	testCases := []struct {

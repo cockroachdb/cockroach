@@ -124,7 +124,26 @@ func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 // process iterates through all keys in a replica's range, calling the garbage
 // collector for each key and associated set of values. GC'd keys are batched
 // into GC calls. Extant intents are resolved if intents are older than
-// intentAgeThreshold.
+// intentAgeThreshold. The transaction and sequence cache records are also
+// scanned and old entries evicted. During normal operation, both of these
+// records are cleaned up when their respective transaction finishes, so the
+// amount of work done here is expected to be small.
+//
+// Some care needs to be taken to avoid cyclic recreation of entries during GC:
+// * a Push initiated due to an intent may recreate a transaction entry
+// * resolving an intent may write a new sequence cache entry
+// * obtaining the transaction for a sequence cache entry requires a Push
+//
+// The following order is taken below:
+// 1) collect all intents with sufficiently old txn record
+// 2) collect these intents' transactions
+// 3) scan the transaction table, collecting abandoned or completed txns
+// 4) push all of these transactions (possibly recreating entries)
+// 5) resolve all intents (unless the txn is still PENDING), which will recreate
+//    sequence cache entries (but with the txn timestamp; i.e. likely gc'able)
+// 6) scan the sequence table for old entries
+// 7) push these transactions (again, recreating txn entries).
+// 8) send a GCRequest.
 func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	sysCfg *config.SystemConfig) error {
 
@@ -253,7 +272,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 			continue
 		}
 		wg.Add(1)
-		go pushTxn(repl, now, txn, roachpb.ABORT_TXN, &wg)
+		go pushTxn(repl, now, txn, roachpb.PUSH_ABORT, &wg)
 	}
 	wg.Wait()
 
@@ -402,7 +421,7 @@ func processSequenceCache(r *Replica, now, cutoff roachpb.Timestamp, prevTxns ma
 		// of a heartbeat, then we're free to remove the sequence cache entry.
 		// In the most likely case, there isn't even an entry (which will
 		// be apparent by a zero timestamp and nil last heartbeat).
-		go pushTxn(r, now, txn, roachpb.CLEANUP_TXN, &wg)
+		go pushTxn(r, now, txn, roachpb.PUSH_TOUCH, &wg)
 	}
 	wg.Wait()
 

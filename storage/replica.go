@@ -1400,7 +1400,7 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 			h := roachpb.Header{Timestamp: now}
 			resolveIntents, err := r.store.resolveWriteIntentError(ctx, &roachpb.WriteIntentError{
 				Intents: item.intents,
-			}, r, args, h, roachpb.CLEANUP_TXN)
+			}, r, args, h, roachpb.PUSH_TOUCH)
 			if wiErr, ok := err.(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
 				log.Warningc(ctx, "failed to push during intent resolution: %s", err)
 				return

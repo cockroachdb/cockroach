@@ -2246,7 +2246,7 @@ func TestPushTxnBadKey(t *testing.T) {
 	pusher := newTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, tc.clock)
 	pushee := newTransaction("test", roachpb.Key("b"), 1, roachpb.SERIALIZABLE, tc.clock)
 
-	args := pushTxnArgs(pusher, pushee, roachpb.ABORT_TXN)
+	args := pushTxnArgs(pusher, pushee, roachpb.PUSH_ABORT)
 	args.Key = pusher.Key
 
 	if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &args); !testutils.IsError(err, ".*should match pushee.*") {
@@ -2288,7 +2288,7 @@ func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 		}
 
 		// Now try to push what's already committed or aborted.
-		args := pushTxnArgs(pusher, pushee, roachpb.ABORT_TXN)
+		args := pushTxnArgs(pusher, pushee, roachpb.PUSH_ABORT)
 		resp, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &args)
 		if err != nil {
 			t.Fatal(err)
@@ -2350,7 +2350,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		// Now, attempt to push the transaction using updated values for epoch & timestamp.
 		pushee.Epoch = test.epoch
 		pushee.Timestamp = test.ts
-		args := pushTxnArgs(pusher, pushee, roachpb.ABORT_TXN)
+		args := pushTxnArgs(pusher, pushee, roachpb.PUSH_ABORT)
 
 		resp, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &args)
 		if err != nil {
@@ -2387,23 +2387,23 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		expSuccess  bool
 	}{
 		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_TIMESTAMP, false}, // using 0 as time is awkward
-		{roachpb.ZeroTimestamp, 1, roachpb.ABORT_TXN, false},
-		{roachpb.ZeroTimestamp, 1, roachpb.CLEANUP_TXN, false},
+		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_ABORT, false},
+		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_TOUCH, false},
 		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_TIMESTAMP, false},
-		{roachpb.ZeroTimestamp, ns, roachpb.ABORT_TXN, false},
-		{roachpb.ZeroTimestamp, ns, roachpb.CLEANUP_TXN, false},
+		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_ABORT, false},
+		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_TOUCH, false},
 		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_TIMESTAMP, false},
-		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.ABORT_TXN, false},
-		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.CLEANUP_TXN, false},
+		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_ABORT, false},
+		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_TOUCH, false},
 		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_TIMESTAMP, false},
-		{roachpb.ZeroTimestamp, ns * 2, roachpb.ABORT_TXN, false},
-		{roachpb.ZeroTimestamp, ns * 2, roachpb.CLEANUP_TXN, false},
+		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_ABORT, false},
+		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_TOUCH, false},
 		{ts, ns*2 + 1, roachpb.PUSH_TIMESTAMP, false},
-		{ts, ns*2 + 1, roachpb.ABORT_TXN, false},
-		{ts, ns*2 + 1, roachpb.CLEANUP_TXN, false},
+		{ts, ns*2 + 1, roachpb.PUSH_ABORT, false},
+		{ts, ns*2 + 1, roachpb.PUSH_TOUCH, false},
 		{ts, ns*2 + 2, roachpb.PUSH_TIMESTAMP, true},
-		{ts, ns*2 + 2, roachpb.ABORT_TXN, true},
-		{ts, ns*2 + 2, roachpb.CLEANUP_TXN, true},
+		{ts, ns*2 + 2, roachpb.PUSH_ABORT, true},
+		{ts, ns*2 + 2, roachpb.PUSH_TOUCH, true},
 	}
 
 	for i, test := range testCases {
@@ -2462,25 +2462,25 @@ func TestPushTxnPriorities(t *testing.T) {
 		expSuccess                     bool
 	}{
 		// Pusher has higher priority succeeds.
-		{2, 1, ts1, ts1, roachpb.ABORT_TXN, true},
+		{2, 1, ts1, ts1, roachpb.PUSH_ABORT, true},
 		// Pusher has lower priority fails.
-		{1, 2, ts1, ts1, roachpb.ABORT_TXN, false},
+		{1, 2, ts1, ts1, roachpb.PUSH_ABORT, false},
 		{1, 2, ts1, ts1, roachpb.PUSH_TIMESTAMP, false},
 		// Pusher has lower priority fails, even with older txn timestamp.
-		{1, 2, ts1, ts2, roachpb.ABORT_TXN, false},
+		{1, 2, ts1, ts2, roachpb.PUSH_ABORT, false},
 		// Pusher has lower priority, but older txn timestamp allows success if !abort.
 		{1, 2, ts1, ts2, roachpb.PUSH_TIMESTAMP, true},
 		// With same priorities, older txn timestamp succeeds.
-		{1, 1, ts1, ts2, roachpb.ABORT_TXN, true},
+		{1, 1, ts1, ts2, roachpb.PUSH_ABORT, true},
 		// With same priorities, same txn timestamp fails.
-		{1, 1, ts1, ts1, roachpb.ABORT_TXN, false},
+		{1, 1, ts1, ts1, roachpb.PUSH_ABORT, false},
 		{1, 1, ts1, ts1, roachpb.PUSH_TIMESTAMP, false},
 		// With same priorities, newer txn timestamp fails.
-		{1, 1, ts2, ts1, roachpb.ABORT_TXN, false},
+		{1, 1, ts2, ts1, roachpb.PUSH_ABORT, false},
 		{1, 1, ts2, ts1, roachpb.PUSH_TIMESTAMP, false},
 		// When confirming, priority never wins.
-		{2, 1, ts1, ts1, roachpb.CLEANUP_TXN, false},
-		{1, 2, ts1, ts1, roachpb.CLEANUP_TXN, false},
+		{2, 1, ts1, ts1, roachpb.PUSH_TOUCH, false},
+		{1, 2, ts1, ts1, roachpb.PUSH_TOUCH, false},
 	}
 
 	for i, test := range testCases {
