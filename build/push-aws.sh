@@ -13,7 +13,7 @@
 
 set -eux
 
-BUCKET_PATH="cockroachdb/bin"
+BUCKET_PATH="cockroach/bin"
 LATEST_SUFFIX=".LATEST"
 
 now=$(date +"%Y%m%d-%H%M%S")
