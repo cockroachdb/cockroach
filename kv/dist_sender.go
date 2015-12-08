@@ -454,6 +454,13 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba roachpb.BatchRequest, 
 // the Batch into batches admissible for sending (preventing certain
 // illegal mixtures of requests), executes each individual part
 // (which may span multiple ranges), and recombines the response.
+// When the request spans ranges, it is split up and the corresponding
+// ranges queried serially, in ascending order.
+// In particular, the first write in a transaction may not be part of the first
+// request sent. This is relevant since the first write is a BeginTransaction
+// request, thus opening up a window of time during which there may be intents
+// of a transaction, but no entry. Pushing such a transaction will succeed, and
+// may lead to the transaction being aborted early.
 func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
