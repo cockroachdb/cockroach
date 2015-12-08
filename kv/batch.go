@@ -18,12 +18,10 @@
 package kv
 
 import (
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/gogo/protobuf/proto"
-	"golang.org/x/net/context"
 )
 
 var emptySpan = roachpb.Span{}
@@ -109,64 +107,6 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 		}
 	}
 	return ba, len(ba.Requests) - numNoop, nil
-}
-
-// SenderFn is a function that implements a Sender.
-type senderFn func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
-
-// Send implements batch.Sender.
-func (f senderFn) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	return f(ctx, ba)
-}
-
-// A ChunkingSender sends batches, subdividing them appropriately.
-type chunkingSender struct {
-	f senderFn
-}
-
-// NewChunkingSender returns a new chunking sender which sends through the supplied
-// SenderFn.
-func newChunkingSender(f senderFn) client.Sender {
-	return &chunkingSender{f: f}
-}
-
-// Send implements Sender.
-// TODO(tschottdorf): We actually don't want to chop EndTransaction off for
-// single-range requests (but that happens now since EndTransaction has the
-// isAlone flag). Whether it is one or not is unknown right now (you can only
-// find out after you've sent to the Range/looked up a descriptor that suggests
-// that you're multi-range. In those cases, the wrapped sender should return an
-// error so that we split and retry once the chunk which contains
-// EndTransaction (i.e. the last one).
-func (cs *chunkingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	if len(ba.Requests) < 1 {
-		panic("empty batch")
-	}
-
-	parts := ba.Split()
-	var rplChunks []*roachpb.BatchResponse
-	for _, part := range parts {
-		ba.Requests = part
-		rpl, err := cs.f(ctx, ba)
-		if err != nil {
-			return nil, err
-		}
-		// Propagate transaction from last reply to next request. The final
-		// update is taken and put into the response's main header.
-		ba.Txn.Update(rpl.Header().Txn)
-
-		rplChunks = append(rplChunks, rpl)
-	}
-
-	reply := rplChunks[0]
-	for _, rpl := range rplChunks[1:] {
-		reply.Responses = append(reply.Responses, rpl.Responses...)
-	}
-	lastHeader := rplChunks[len(rplChunks)-1].BatchResponse_Header
-	reply.Error = lastHeader.Error
-	reply.Timestamp = lastHeader.Timestamp
-	reply.Txn = ba.Txn
-	return reply, nil
 }
 
 // prev gives the right boundary of the union of all requests which don't
