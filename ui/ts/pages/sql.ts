@@ -14,7 +14,6 @@ module AdminViews {
     export module Page {
       import MithrilVirtualElement = _mithril.MithrilVirtualElement;
       import MithrilBasicProperty = _mithril.MithrilBasicProperty;
-      import MithrilView = _mithril.MithrilView;
       import TableData = Components.Table.TableData;
       import Column = Models.Proto.Column;
       import Row = Models.Proto.Row;
@@ -24,17 +23,7 @@ module AdminViews {
       import Datum = Models.Proto.Datum;
       import Property = Utils.Property;
 
-      let data: MithrilBasicProperty<Response> = m.prop({});
-      let columns: Property<TableColumn<Row>[]> = Utils.Prop([]);
-      let rows: Property<Row[]> = Utils.Prop([]);
-
-      let tableData: TableData<Row> = {
-        columns: columns,
-        rows: rows,
-      };
-      let query: MithrilBasicProperty<string> = m.prop("");
-
-      function runQuery(q: string): void {
+      function runQuery(q: string, data: MithrilBasicProperty<Response>): void {
         Models.SQLQuery.runQuery(q).then(data);
       }
 
@@ -42,7 +31,7 @@ module AdminViews {
         let cols: Column[] = _.get(result, "results[0].Union.Rows.columns", []);
         let resultRows: Row[] = _.get(result, "results[0].Union.Rows.rows", []);
         let tableColumns = <Property<TableColumn<Row>[]>>table.columns;
-        tableColumns(_.map<Column, TableColumn<Row>>(cols, function (col: Column, i: number): TableColumn<Row> {
+        tableColumns(_.map(cols, function (col: Column, i: number): TableColumn<Row> {
             return {
               title: col.name,
               view: function (row: Row): string {
@@ -66,12 +55,18 @@ module AdminViews {
         (<Property<Row[]>>table.rows)(resultRows);
       }
 
-      class DisplayToggler implements MithrilController {
-        displayJSON: boolean;
+      class SQLController implements MithrilController {
+        displayJSON: boolean = false;
+        data: MithrilBasicProperty<Response> = m.prop({});
+        columns: Property<TableColumn<Row>[]> = Utils.Prop([]);
+        rows: Property<Row[]> = Utils.Prop([]);
 
-        constructor() {
-          this.displayJSON = false;
-        }
+        tableData: TableData<Row> = {
+          columns: this.columns,
+          rows: this.rows,
+        };
+
+        query: MithrilBasicProperty<string> = m.prop("");
 
         toggleDisplayJSON(): void {
           this.displayJSON = !this.displayJSON;
@@ -81,25 +76,36 @@ module AdminViews {
         };
       }
 
-      export function controller(): DisplayToggler {
-        query(m.route.param("q"));
-        runQuery(query());
-        return new DisplayToggler();
+      export function controller(): SQLController {
+        let ctrl: SQLController = new SQLController();
+        ctrl.query(m.route.param("q"));
+        runQuery(ctrl.query(), ctrl.data);
+        return ctrl;
       }
 
-      export let view: MithrilView<DisplayToggler> = function (ctrl: DisplayToggler): MithrilVirtualElement {
+      export function view(ctrl: SQLController): MithrilVirtualElement {
 
-        populateTableDataFromResult(data(), tableData);
+        populateTableDataFromResult(ctrl.data(), ctrl.tableData);
 
         return m(".page", [
           m.component(Components.Topbar, {title: m.route.param("title")}),
           m(".section",
             m(
               ".sql-table", [
-                Components.Table.create(tableData),
-                m("a.toggle", {onclick: function(): void { ctrl.toggleDisplayJSON(); } }, ctrl.toggleText()),
-                m("pre", {style: {display: ctrl.displayJSON ? null : "none"}}, JSON.stringify(data(), null, 2)),
-              ])),
+                Components.Table.create(ctrl.tableData),
+                m(
+                  "a.toggle",
+                  {onclick: function(): void { ctrl.toggleDisplayJSON(); } },
+                  ctrl.toggleText()
+                ),
+                m(
+                  "pre",
+                  {style: {display: ctrl.displayJSON ? null : "none"}},
+                  JSON.stringify(ctrl.data(), null, 2)
+                ),
+              ]
+            )
+          ),
         ]);
       };
     }
