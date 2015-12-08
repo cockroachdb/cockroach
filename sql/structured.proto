@@ -161,22 +161,71 @@ message TableDescriptor {
   optional uint32 parent_id = 4 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
   // Monotonically increasing version of the table descriptor.
+  //
+  // Invariants:
+  // 1. not more than two subsequent versions of the table
+  // descriptor can be leased. This is to make the system
+  // easy to reason about, by permiting mutation state
+  // changes (reflected in the next version), only when the existing
+  // state (reflected in the current version) is present on all
+  // outstanding unexpired leases.
+  // 2. A schema change command (ALTER, RENAME, etc) never directly
+  // increments the version. This allows the command to execute without
+  // waiting for the entire cluster to converge to a single version
+  // preventing weird deadlock situations. For instance, a transaction
+  // with a schema change command might use a descriptor lease that is
+  // at version: v - 1, and therefore deadlock when it tries to wait
+  // for version: v, in the process of incrementing it to v + 1.
+  // Therefore, a schema change command never increments the version,
+  // and instead, sets the up_version boolean to notify the schema
+  // changer execution engine that runs a future transaction to
+  // increment the version.
+  //
+  // The schema change commands must therefore make *safe* modifications
+  // to the table descriptor, such as scheduling long running schema
+  // changes through mutations for future execution, or making simple
+  // schema changes like RENAME that only modify the table descriptor in a
+  // single transaction.
+  //
+  // Multiple schema changes in the same transaction set up_version.
+  // The actual schema change execution that follows a schema change
+  // command sees the up_version boolean set, and increments the
+  // table version after ensuring that there are no unexpired leases
+  // for version - 1. The schema change execution must increment
+  // the version before executing future state changes, to ensure
+  // that the scheduled mutations made by the original commands are
+  // visible on all leases. Multiple schema change mutations can be
+  // grouped together on a particular version increment.
+  //
+  // If schema change commands are safe to run without incrementing
+  // the version, why do it later on? We increment the version
+  // to ensure that all the nodes renew their leases with the new version
+  // and get to see what the schema change command has done quickly.
+  //
+  // TODO(vivek): Implement the above invariants by ensuring that
+  // the Version is only incremented in LeaseManager.Publish().
+  // Move applyMutation() and applyUpVersion() out of the transaction for
+  // schema commands and into LeaseManager.Publish(), and remove
+  // Version++ from applyUpVersion(). 
+  //
   optional uint32 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+  // See comment above.
+  optional bool up_version = 6 [(gogoproto.nullable) = false];
   // Last modification time of the table descriptor.
-  optional roachpb.Timestamp modification_time = 6 [(gogoproto.nullable) = false];
-  repeated ColumnDescriptor columns = 7 [(gogoproto.nullable) = false];
+  optional roachpb.Timestamp modification_time = 7 [(gogoproto.nullable) = false];
+  repeated ColumnDescriptor columns = 8 [(gogoproto.nullable) = false];
   // next_column_id is used to ensure that deleted column ids are not reused.
-  optional uint32 next_column_id = 8 [(gogoproto.nullable) = false,
+  optional uint32 next_column_id = 9 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextColumnID", (gogoproto.casttype) = "ColumnID"];
-  optional IndexDescriptor primary_index = 9 [(gogoproto.nullable) = false];
+  optional IndexDescriptor primary_index = 10 [(gogoproto.nullable) = false];
   // indexes are all the secondary indexes.
-  repeated IndexDescriptor indexes = 10 [(gogoproto.nullable) = false];
+  repeated IndexDescriptor indexes = 11 [(gogoproto.nullable) = false];
   // next_index_id is used to ensure that deleted index ids are not reused.
-  optional uint32 next_index_id = 11 [(gogoproto.nullable) = false,
+  optional uint32 next_index_id = 12 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextIndexID", (gogoproto.casttype) = "IndexID"];
-  optional PrivilegeDescriptor privileges = 12;
+  optional PrivilegeDescriptor privileges = 13;
   // Columns or indexes being added or deleted in a FIFO order.
-  repeated DescriptorMutation mutations = 13 [(gogoproto.nullable) = false];
+  repeated DescriptorMutation mutations = 14 [(gogoproto.nullable) = false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
