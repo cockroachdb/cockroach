@@ -37,6 +37,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -1300,7 +1301,7 @@ var uniqueBytesState struct {
 	nanos uint64
 }
 
-func generateUniqueBytes(nodeID uint32) DBytes {
+func generateUniqueBytes(nodeID roachpb.NodeID) DBytes {
 	// Unique bytes are composed of the current time in nanoseconds and the
 	// node-id. If the nanosecond value is the same on two consecutive calls to
 	// time.Now() the nanoseconds value is incremented. The node-id is varint
@@ -1334,7 +1335,7 @@ var uniqueIntState struct {
 
 var uniqueIDEpoch = time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano()
 
-func generateUniqueInt(nodeID uint32) DInt {
+func generateUniqueInt(nodeID roachpb.NodeID) DInt {
 	// Unique ints are composed of the current time at a 10-microsecond
 	// granularity and the node-id. The node-id is stored in the lower 15 bits of
 	// the returned value and the timestamp is stored in the upper 48 bits. The
