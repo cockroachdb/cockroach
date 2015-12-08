@@ -1319,7 +1319,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 		if wiErr, ok := err.(*roachpb.WriteIntentError); ok {
 			var pushType roachpb.PushTxnType
 			if ba.IsWrite() {
-				pushType = roachpb.ABORT_TXN
+				pushType = roachpb.PUSH_ABORT
 			} else {
 				pushType = roachpb.PUSH_TIMESTAMP
 			}

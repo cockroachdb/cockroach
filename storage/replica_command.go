@@ -862,7 +862,7 @@ func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header
 //
 // Lower Txn Priority: If pushee txn has a lower priority than pusher,
 // adjust pushee's persisted txn depending on value of
-// args.PushType. If args.PushType is ABORT_TXN, set txn.Status to
+// args.PushType. If args.PushType is PUSH_ABORT, set txn.Status to
 // ABORTED, and priority to one less than the pusher's priority and
 // return success. If args.PushType is PUSH_TIMESTAMP, set
 // txn.Timestamp to just after PushTo.
@@ -916,9 +916,10 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 		}
 	} else {
 		// The transaction doesn't exist on disk; we're allowed to abort it.
-		// TODO(tschottdorf): for GC purposes, don't always want to write
-		// a new entry, but #3219 shows that we need to do so carefully.
-
+		// TODO(tschottdorf): especially for SNAPSHOT transactions, there's
+		// something to win here by not aborting, but instead pushing the
+		// timestamp. For SERIALIZABLE it's less important, but still better
+		// to have them restart than abort. See #3344.
 		reply.PusheeTxn = *args.PusheeTxn.Clone()
 		reply.PusheeTxn.Status = roachpb.ABORTED
 		return reply, engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, &reply.PusheeTxn)
@@ -960,13 +961,13 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 		pusherWins = true
 		// When cleaning up, actually clean up (as opposed to simply pushing
 		// the garbage in the path of future writers).
-		args.PushType = roachpb.ABORT_TXN
+		args.PushType = roachpb.PUSH_ABORT
 	} else if reply.PusheeTxn.Isolation == roachpb.SNAPSHOT && args.PushType == roachpb.PUSH_TIMESTAMP {
 		if log.V(1) {
 			log.Infof("pushing timestamp for snapshot isolation txn")
 		}
 		pusherWins = true
-	} else if args.PushType == roachpb.CLEANUP_TXN {
+	} else if args.PushType == roachpb.PUSH_TOUCH {
 		// If just attempting to cleanup old or already-committed txns, don't push.
 		pusherWins = false
 	} else if reply.PusheeTxn.Priority < priority ||
@@ -992,7 +993,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	reply.PusheeTxn.UpgradePriority(priority - 1)
 
 	// If aborting transaction, set new status and return success.
-	if args.PushType == roachpb.ABORT_TXN {
+	if args.PushType == roachpb.PUSH_ABORT {
 		reply.PusheeTxn.Status = roachpb.ABORTED
 	} else if args.PushType == roachpb.PUSH_TIMESTAMP {
 		// Otherwise, update timestamp to be one greater than the request's timestamp.
