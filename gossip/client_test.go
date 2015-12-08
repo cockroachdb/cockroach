@@ -210,6 +210,7 @@ func TestClientNodeID(t *testing.T) {
 // inbound client connection of another node.
 func TestClientDisconnectRedundant(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("TODO(spencer): #3350")
 	local, remote, stopper := startGossip(t)
 	defer stopper.Stop()
 	// startClient doesn't lock the underlying gossip
