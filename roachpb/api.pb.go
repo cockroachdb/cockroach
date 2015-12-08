@@ -181,20 +181,21 @@ const (
 	// Push the timestamp forward if possible to accommodate a concurrent reader.
 	PUSH_TIMESTAMP PushTxnType = 0
 	// Abort the transaction if possible to accommodate a concurrent writer.
-	ABORT_TXN PushTxnType = 1
-	// Cleanup the transaction if already committed/aborted, or if too old.
-	CLEANUP_TXN PushTxnType = 2
+	PUSH_ABORT PushTxnType = 1
+	// Abort the transaction if it's abandoned, but don't attempt to mutate it
+	// otherwise.
+	PUSH_TOUCH PushTxnType = 2
 )
 
 var PushTxnType_name = map[int32]string{
 	0: "PUSH_TIMESTAMP",
-	1: "ABORT_TXN",
-	2: "CLEANUP_TXN",
+	1: "PUSH_ABORT",
+	2: "PUSH_TOUCH",
 }
 var PushTxnType_value = map[string]int32{
 	"PUSH_TIMESTAMP": 0,
-	"ABORT_TXN":      1,
-	"CLEANUP_TXN":    2,
+	"PUSH_ABORT":     1,
+	"PUSH_TOUCH":     2,
 }
 
 func (x PushTxnType) Enum() *PushTxnType {
@@ -678,12 +679,11 @@ type PushTxnRequest struct {
 	// necessarily advance with the node clock across retries and hence cannot
 	// detect abandoned transactions.
 	Now Timestamp `protobuf:"bytes,5,opt,name=now" json:"now"`
-	// Readers set this to PUSH_TIMESTAMP to move PusheeTxn's commit
-	// timestamp forward. Writers set this to ABORT_TXN to request that
-	// the PushTxn be aborted if possible. This is done in the event of
-	// a writer conflicting with PusheeTxn. Inconsistent readers set
-	// this to CLEANUP_TXN to determine whether dangling intents
-	// may be resolved.
+	// Readers set this to PUSH_TIMESTAMP to move pushee_txn's provisional
+	// commit timestamp forward. Writers set this to PUSH_ABORT to request
+	// that pushee_txn be aborted if possible. Inconsistent readers set
+	// this to PUSH_TOUCH to determine whether the pushee can be aborted
+	// due to inactivity (based on the now field).
 	PushType PushTxnType `protobuf:"varint,6,opt,name=push_type,enum=cockroach.roachpb.PushTxnType" json:"push_type"`
 }
 
