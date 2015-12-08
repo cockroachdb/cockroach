@@ -18,6 +18,7 @@
 package simulation
 
 import (
+	"net"
 	"time"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	netutil "github.com/cockroachdb/cockroach/util/net"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -38,6 +40,7 @@ import (
 type Node struct {
 	Gossip *gossip.Gossip
 	Server *rpc.Server
+	Addr   net.Addr
 }
 
 // Network provides access to a test gossip network of nodes.
@@ -57,22 +60,30 @@ func NewNetwork(nodeCount int, networkType string) *Network {
 	stopper := stop.NewStopper()
 
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
+	tlsConfig, err := rpcContext.GetServerTLSConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	nodes := make([]*Node, nodeCount)
 	for i := range nodes {
-		server := rpc.NewServer(util.CreateTestAddr(networkType), rpcContext)
-		if err := server.Start(); err != nil {
+		server := rpc.NewServer(rpcContext)
+
+		testAddr := util.CreateTestAddr(networkType)
+		ln, err := netutil.ListenAndServe(stopper, server, testAddr, tlsConfig)
+		if err != nil {
 			log.Fatal(err)
 		}
-		nodes[i] = &Node{Server: server}
+
+		nodes[i] = &Node{Server: server, Addr: ln.Addr()}
 	}
 
 	for i, leftNode := range nodes {
 		// Build new resolvers for each instance or we'll get data races.
-		resolvers := []resolver.Resolver{resolver.NewResolverFromAddress(nodes[0].Server.Addr())}
+		resolvers := []resolver.Resolver{resolver.NewResolverFromAddress(nodes[0].Addr)}
 
 		gossipNode := gossip.New(rpcContext, resolvers)
-		addr := leftNode.Server.Addr()
+		addr := leftNode.Addr
 		gossipNode.SetNodeID(roachpb.NodeID(i + 1))
 		if err := gossipNode.SetNodeDescriptor(&roachpb.NodeDescriptor{
 			NodeID:  roachpb.NodeID(i + 1),
@@ -83,9 +94,8 @@ func NewNetwork(nodeCount int, networkType string) *Network {
 		if err := gossipNode.AddInfo(addr.String(), encoding.EncodeUint64(nil, 0), time.Hour); err != nil {
 			log.Fatal(err)
 		}
-		gossipNode.Start(leftNode.Server, stopper)
+		gossipNode.Start(leftNode.Server, addr, stopper)
 		gossipNode.EnableSimulationCycler(true)
-		stopper.AddCloser(leftNode.Server)
 
 		leftNode.Gossip = gossipNode
 	}
@@ -101,7 +111,7 @@ func NewNetwork(nodeCount int, networkType string) *Network {
 // provided network address, or nil if there is no such node.
 func (n *Network) GetNodeFromAddr(addr string) (*Node, bool) {
 	for _, node := range n.Nodes {
-		if node.Server.Addr().String() == addr {
+		if node.Addr.String() == addr {
 			return node, true
 		}
 	}
@@ -138,7 +148,7 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 		}
 		// Every node gossips cycle.
 		for _, node := range nodes {
-			if err := node.Gossip.AddInfo(node.Server.Addr().String(), encoding.EncodeUint64(nil, uint64(cycle)), time.Hour); err != nil {
+			if err := node.Gossip.AddInfo(node.Addr.String(), encoding.EncodeUint64(nil, uint64(cycle)), time.Hour); err != nil {
 				log.Fatal(err)
 			}
 			node.Gossip.SimulationCycle()
@@ -176,7 +186,7 @@ func (n *Network) RunUntilFullyConnected() int {
 func (n *Network) IsNetworkConnected() bool {
 	for _, leftNode := range n.Nodes {
 		for _, rightNode := range n.Nodes {
-			if _, err := leftNode.Gossip.GetInfo(rightNode.Server.Addr().String()); err != nil {
+			if _, err := leftNode.Gossip.GetInfo(rightNode.Addr.String()); err != nil {
 				return false
 			}
 		}

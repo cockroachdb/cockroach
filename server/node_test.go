@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	netutil "github.com/cockroachdb/cockroach/util/net"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -49,25 +50,30 @@ import (
 // of engines. The server, clock and node are returned. If gossipBS is
 // not nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
-	*rpc.Server, *hlc.Clock, *Node, *stop.Stopper) {
+	*rpc.Server, net.Addr, *hlc.Clock, *Node, *stop.Stopper) {
 	ctx := storage.StoreContext{}
 
 	stopper := stop.NewStopper()
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
 	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, ctx.Clock, stopper)
 	ctx.ScanInterval = 10 * time.Hour
-	rpcServer := rpc.NewServer(addr, nodeRPCContext)
-	if err := rpcServer.Start(); err != nil {
+	rpcServer := rpc.NewServer(nodeRPCContext)
+	tlsConfig, err := nodeRPCContext.GetServerTLSConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := netutil.ListenAndServe(stopper, rpcServer, addr, tlsConfig)
+	if err != nil {
 		t.Fatal(err)
 	}
 	g := gossip.New(nodeRPCContext, testContext.GossipBootstrapResolvers)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
 		if gossipBS == addr {
-			gossipBS = rpcServer.Addr()
+			gossipBS = ln.Addr()
 		}
 		g.SetResolvers([]resolver.Resolver{resolver.NewResolverFromAddress(gossipBS)})
-		g.Start(rpcServer, stopper)
+		g.Start(rpcServer, ln.Addr(), stopper)
 	}
 	ctx.Gossip = g
 	sender := kv.NewDistSender(&kv.DistSenderContext{Clock: ctx.Clock}, g)
@@ -77,17 +83,17 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 	ctx.EventFeed = util.NewFeed(stopper)
 	node := NewNode(ctx)
-	return rpcServer, ctx.Clock, node, stopper
+	return rpcServer, ln.Addr(), ctx.Clock, node, stopper
 }
 
 // createAndStartTestNode creates a new test node and starts it. The server and node are returned.
 func createAndStartTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
-	*rpc.Server, *Node, *stop.Stopper) {
-	rpcServer, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	if err := node.start(rpcServer, engines, roachpb.Attributes{}, stopper); err != nil {
+	*rpc.Server, net.Addr, *Node, *stop.Stopper) {
+	rpcServer, addr, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
+	if err := node.start(rpcServer, addr, engines, roachpb.Attributes{}, stopper); err != nil {
 		t.Fatal(err)
 	}
-	return rpcServer, node, stopper
+	return rpcServer, addr, node, stopper
 }
 
 func formatKeys(keys []roachpb.Key) string {
@@ -167,7 +173,7 @@ func TestBootstrapNewStore(t *testing.T) {
 		engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper),
 		engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper),
 	}
-	_, node, stopper := createAndStartTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
+	_, _, node, stopper := createAndStartTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
 	defer stopper.Stop()
 
 	// Non-initialized stores (in this case the new in-memory-based
@@ -206,12 +212,12 @@ func TestNodeJoin(t *testing.T) {
 	// Start the bootstrap node.
 	engines1 := []engine.Engine{e}
 	addr1 := util.CreateTestAddr("tcp")
-	server1, node1, stopper1 := createAndStartTestNode(addr1, engines1, addr1, t)
+	_, server1Addr, node1, stopper1 := createAndStartTestNode(addr1, engines1, addr1, t)
 	defer stopper1.Stop()
 
 	// Create a new node.
 	engines2 := []engine.Engine{engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)}
-	server2, node2, stopper2 := createAndStartTestNode(util.CreateTestAddr("tcp"), engines2, server1.Addr(), t)
+	_, server2Addr, node2, stopper2 := createAndStartTestNode(util.CreateTestAddr("tcp"), engines2, server1Addr, t)
 	defer stopper2.Stop()
 
 	// Verify new node is able to bootstrap its store.
@@ -227,15 +233,15 @@ func TestNodeJoin(t *testing.T) {
 		if err := node1.ctx.Gossip.GetInfoProto(node2Key, nodeDesc1); err != nil {
 			return false
 		}
-		if addr2 := nodeDesc1.Address.AddressField; addr2 != server2.Addr().String() {
-			t.Errorf("addr2 gossip %s doesn't match addr2 address %s", addr2, server2.Addr().String())
+		if addr2 := nodeDesc1.Address.AddressField; addr2 != server2Addr.String() {
+			t.Errorf("addr2 gossip %s doesn't match addr2 address %s", addr2, server2Addr.String())
 		}
 		nodeDesc2 := &roachpb.NodeDescriptor{}
 		if err := node2.ctx.Gossip.GetInfoProto(node1Key, nodeDesc2); err != nil {
 			return false
 		}
-		if addr1 := nodeDesc2.Address.AddressField; addr1 != server1.Addr().String() {
-			t.Errorf("addr1 gossip %s doesn't match addr1 address %s", addr1, server1.Addr().String())
+		if addr1 := nodeDesc2.Address.AddressField; addr1 != server1Addr.String() {
+			t.Errorf("addr1 gossip %s doesn't match addr1 address %s", addr1, server1Addr.String())
 		}
 		return true
 	}, 50*time.Millisecond); err != nil {
@@ -268,8 +274,8 @@ func TestCorruptedClusterID(t *testing.T) {
 	}
 
 	engines := []engine.Engine{e}
-	server, _, node, stopper := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
-	if err := node.start(server, engines, roachpb.Attributes{}, stopper); err == nil {
+	server, serverAddr, _, node, stopper := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
+	if err := node.start(server, serverAddr, engines, roachpb.Attributes{}, stopper); err == nil {
 		t.Errorf("unexpected success")
 	}
 	stopper.Stop()

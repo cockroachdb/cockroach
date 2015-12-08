@@ -116,27 +116,23 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	nodeContext := NewNodeTestContext(nil, stopper)
-	serverAddr := util.CreateTestAddr("tcp")
-	// Start heartbeat.
-	s := NewServer(serverAddr, nodeContext)
-	if err := s.Start(); err != nil {
-		t.Fatal(err)
-	}
+	ctx := newNodeTestContext(nil, stopper)
+	_, ln := newTestServer(t, ctx, false)
 	// Create a client and set its remote offset. On first heartbeat,
 	// it will update the server's remote clocks map. We create the
 	// client manually here to allow us to set the remote offset
 	// before the first heartbeat.
-	tlsConfig, err := nodeContext.GetClientTLSConfig()
+	tlsConfig, err := ctx.GetClientTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
+	serverAddr := ln.Addr()
 	client := &Client{
 		Closed:       make(chan struct{}),
-		addr:         util.MakeUnresolvedAddr(s.Addr().Network(), s.Addr().String()),
+		addr:         util.MakeUnresolvedAddr(serverAddr.Network(), serverAddr.String()),
 		tlsConfig:    tlsConfig,
-		clock:        nodeContext.localClock,
-		remoteClocks: nodeContext.RemoteClocks,
+		clock:        ctx.localClock,
+		remoteClocks: ctx.RemoteClocks,
 		remoteOffset: RemoteOffset{
 			Offset:      10,
 			Uncertainty: 5,
@@ -147,27 +143,27 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nodeContext.RemoteClocks.mu.Lock()
+	ctx.RemoteClocks.mu.Lock()
 	remoteAddr := client.RemoteAddr().String()
-	o := nodeContext.RemoteClocks.offsets[remoteAddr]
-	nodeContext.RemoteClocks.mu.Unlock()
+	o := ctx.RemoteClocks.offsets[remoteAddr]
+	ctx.RemoteClocks.mu.Unlock()
 	expServerOffset := RemoteOffset{Offset: -10, Uncertainty: 5, MeasuredAt: 20}
 	if proto.Equal(&o, &expServerOffset) {
 		t.Errorf("expected updated offset %v, instead %v", expServerOffset, o)
 	}
-	s.Close()
+	ln.Close()
 
 	// Remove the offset from RemoteClocks and close the connection from the
 	// remote end. A new offset for the server should not be added to the clock
 	// monitor.
-	nodeContext.RemoteClocks.mu.Lock()
-	delete(nodeContext.RemoteClocks.offsets, remoteAddr)
-	s.Close()
-	nodeContext.RemoteClocks.mu.Unlock()
+	ctx.RemoteClocks.mu.Lock()
+	delete(ctx.RemoteClocks.offsets, remoteAddr)
+	ln.Close()
+	ctx.RemoteClocks.mu.Unlock()
 
-	nodeContext.RemoteClocks.mu.Lock()
-	if offset, ok := nodeContext.RemoteClocks.offsets[remoteAddr]; ok {
+	ctx.RemoteClocks.mu.Lock()
+	if offset, ok := ctx.RemoteClocks.offsets[remoteAddr]; ok {
 		t.Errorf("unexpected updated offset: %v", offset)
 	}
-	nodeContext.RemoteClocks.mu.Unlock()
+	ctx.RemoteClocks.mu.Unlock()
 }
