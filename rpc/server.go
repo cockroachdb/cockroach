@@ -18,13 +18,11 @@
 package rpc
 
 import (
-	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/rpc"
 	"reflect"
-	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/rpc/codec"
@@ -59,26 +57,20 @@ func (s syncAdapter) exec(args proto.Message, callback func(proto.Message, error
 //
 // TODO(spencer): heartbeat protocol should also measure link latency.
 type Server struct {
-	listener net.Listener // Server listener
+	insecure bool
 
-	activeConns map[net.Conn]struct{}
-	handler     http.Handler
-
-	context *Context
-
-	mu             sync.RWMutex          // Mutex protects the fields below
-	addr           net.Addr              // Server address; may change if picking unused port
-	closed         bool                  // Set upon invocation of Close()
-	closeCallbacks []func(conn net.Conn) // Slice of callbacks to invoke on conn close
+	mu             sync.RWMutex
+	activeConns    map[net.Conn]struct{}
+	closeCallbacks []func(conn net.Conn)
 	methods        map[string]method
 }
 
 // NewServer creates a new instance of Server.
-func NewServer(addr net.Addr, context *Context) *Server {
+func NewServer(context *Context) *Server {
 	s := &Server{
-		context: context,
-		addr:    addr,
-		methods: map[string]method{},
+		insecure:    context.Insecure,
+		activeConns: make(map[net.Conn]struct{}),
+		methods:     map[string]method{},
 	}
 	heartbeat := &HeartbeatService{
 		clock:              context.localClock,
@@ -152,31 +144,24 @@ func (s *Server) AddCloseCallback(cb func(conn net.Conn)) {
 
 func (s *Server) runCloseCallbacks(conn net.Conn) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	for _, cb := range s.closeCallbacks {
 		cb(conn)
 	}
-	s.mu.Unlock()
 }
 
-// ServeHTTP implements an http.Handler that answers RPC requests.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != rpc.DefaultRPCPath {
-		if s.handler != nil {
-			s.handler.ServeHTTP(w, r)
-			return
-		}
-		http.NotFound(w, r)
-		return
-	}
+var _ http.Handler = &Server{}
 
+// ServeHTTP implements an http.Handler that answers RPC requests.
+func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// Note: this code was adapted from net/rpc.Server.ServeHTTP.
-	if r.Method != "CONNECT" {
+	if req.Method != "CONNECT" {
 		http.Error(w, "405 must CONNECT", http.StatusMethodNotAllowed)
 		return
 	}
 
 	// Construct an authentication hook for this security mode and TLS state.
-	authHook, err := security.ProtoAuthHook(s.context.Insecure, r.TLS)
+	authHook, err := security.ProtoAuthHook(s.insecure, req.TLS)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
@@ -184,12 +169,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	conn, _, err := w.(http.Hijacker).Hijack()
 	if err != nil {
-		log.Infof("rpc hijacking %s: %s", r.RemoteAddr, err)
+		log.Infof("rpc hijacking ", req.RemoteAddr, ": ", err)
 		return
 	}
+
 	if log.V(3) {
-		security.LogTLSState("RPC", r.TLS)
+		security.LogTLSState("RPC", req.TLS)
 	}
+
 	if _, err := io.WriteString(conn, "HTTP/1.0 "+codec.Connected+"\n\n"); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
@@ -200,144 +187,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		s.sendResponses(codec, responses)
 	}()
-	s.readRequests(conn, codec, authHook, responses)
-	codec.Close()
-	conn.Close()
-}
-
-// Listen listens on the configured address but does not start
-// accepting connections until Serve is called.
-func (s *Server) Listen() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	tlsConfig, err := s.context.GetServerTLSConfig()
-	if err != nil {
-		return err
-	}
-	ln, err := tlsListen(s.addr.Network(), s.addr.String(), tlsConfig)
-	if err != nil {
-		return err
-	}
-	s.listener = ln
-
-	addr, err := updatedAddr(s.addr, ln.Addr())
-	if err != nil {
-		s.Close()
-		return err
-	}
-	s.addr = addr
-
-	return nil
-}
-
-// Serve accepts and services connections on the already started
-// listener.
-func (s *Server) Serve(handler http.Handler) {
-	s.handler = handler
-	s.activeConns = make(map[net.Conn]struct{})
-
-	server := &http.Server{
-		Handler: s,
-		ConnState: func(conn net.Conn, state http.ConnState) {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-
-			switch state {
-			case http.StateNew:
-				if s.closed {
-					conn.Close()
-					return
-				}
-				s.activeConns[conn] = struct{}{}
-			case http.StateClosed:
-				delete(s.activeConns, conn)
-			}
-		},
-	}
-
-	s.context.Stopper.RunWorker(func() {
-		if err := server.Serve(s.listener); err != nil && !isClosedConnection(err) {
-			log.Fatal(err)
-		}
-	})
-
-	s.context.Stopper.RunWorker(func() {
-		<-s.context.Stopper.ShouldStop()
-		s.Close()
-	})
-}
-
-// Start runs the RPC server. After this method returns, the socket
-// will have been bound. Use Server.Addr() to ascertain server address.
-func (s *Server) Start() error {
-	if err := s.Listen(); err != nil {
-		return err
-	}
-	s.Serve(s)
-	return nil
-}
-
-// updatedAddr returns our "official" address based on the address we asked for
-// (oldAddr) and the address we successfully bound to (newAddr). It's kind of
-// hacky, but necessary to make TLS work.
-func updatedAddr(oldAddr, newAddr net.Addr) (net.Addr, error) {
-	switch oldAddr.Network() {
-	case "tcp", "tcp4", "tcp6":
-		// After binding, it's possible that our host and/or port will be
-		// different from what we requested. If the hostname is different, we
-		// want to keep the original one since it's more likely to match our
-		// TLS certificate. But if the port is different, it should be because
-		// we asked for ":0" and got an arbitrary unused port; that needs to be
-		// reflected in our addr.
-		host, oldPort, err := net.SplitHostPort(util.EnsureHostPort(oldAddr.String()))
-		if err != nil {
-			return nil, fmt.Errorf("unable to parse original addr '%s': %v",
-				oldAddr.String(), err)
-		}
-		_, newPort, err := net.SplitHostPort(newAddr.String())
-		if err != nil {
-			return nil, fmt.Errorf("unable to parse new addr '%s': %v",
-				newAddr.String(), err)
-		}
-
-		if newPort != oldPort && oldPort != "0" {
-			log.Warningf("asked for port %s, got %s", oldPort, newPort)
-		}
-
-		return util.MakeUnresolvedAddr("tcp", net.JoinHostPort(host, newPort)), nil
-
-	case "unix":
-		if oldAddr.String() != newAddr.String() {
-			return nil, fmt.Errorf("asked for unix addr %s, got %s", oldAddr, newAddr)
-		}
-		return newAddr, nil
-
-	default:
-		return nil, fmt.Errorf("unexpected network type: %s", oldAddr.Network())
-	}
-}
-
-// Addr returns the server's network address.
-func (s *Server) Addr() net.Addr {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.addr
-}
-
-// Close closes the listener.
-func (s *Server) Close() {
-	// If the server didn't start properly, it might not have a listener.
-	if s.listener != nil {
-		s.listener.Close()
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.closed = true
-
-	for conn := range s.activeConns {
+	go func() {
+		s.readRequests(conn, codec, authHook, responses)
+		codec.Close()
 		conn.Close()
-	}
+	}()
 }
 
 // readRequests synchronously reads a stream of requests from a
@@ -359,7 +213,7 @@ func (s *Server) readRequests(conn net.Conn, codec rpc.ServerCodec, authHook fun
 	for {
 		req, meth, args, err := s.readRequest(codec)
 		if err != nil {
-			if err == io.EOF || err == io.ErrUnexpectedEOF || isClosedConnection(err) {
+			if err == io.EOF || err == io.ErrUnexpectedEOF || util.IsClosedConnection(err) {
 				closed = true
 				s.runCloseCallbacks(conn)
 				return
@@ -438,9 +292,4 @@ func (s *Server) sendResponses(codec rpc.ServerCodec, responses <-chan serverRes
 			// net/rpc just swallows the error.
 		}
 	}
-}
-
-// isClosedConnection returns true if err is the net package's errClosed.
-func isClosedConnection(err error) bool {
-	return err != nil && strings.HasSuffix(err.Error(), "use of closed network connection")
 }

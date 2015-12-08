@@ -53,8 +53,8 @@ func TestSendToOneClient(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	nodeContext := NewNodeTestContext(nil, stopper)
-	s := createAndStartNewServer(t, nodeContext)
+	ctx := newNodeTestContext(nil, stopper)
+	_, ln := newTestServer(t, ctx, false)
 
 	opts := Options{
 		N:               1,
@@ -62,7 +62,7 @@ func TestSendToOneClient(t *testing.T) {
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         1 * time.Second,
 	}
-	replies, err := sendPing(opts, []net.Addr{s.Addr()}, nodeContext)
+	replies, err := sendPing(opts, []net.Addr{ln.Addr()}, ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,13 +79,13 @@ func TestSendToMultipleClients(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	nodeContext := NewNodeTestContext(nil, stopper)
+	nodeContext := newNodeTestContext(nil, stopper)
 
 	numServers := 4
 	var addrs []net.Addr
 	for i := 0; i < numServers; i++ {
-		s := createAndStartNewServer(t, nodeContext)
-		addrs = append(addrs, s.Addr())
+		_, ln := newTestServer(t, nodeContext, false)
+		addrs = append(addrs, ln.Addr())
 	}
 	for n := 1; n < numServers; n++ {
 		// Send n requests.
@@ -113,13 +113,23 @@ func TestRetryableError(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	nodeContext := NewNodeTestContext(nil, stopper)
-	s := createAndStartNewServer(t, nodeContext)
+	nodeContext := newNodeTestContext(nil, stopper)
+	_, ln := newTestServer(t, nodeContext, false)
 
-	c := NewClient(s.Addr(), nodeContext)
-	// Wait until the client becomes ready and shut down the server.
+	c := NewClient(ln.Addr(), nodeContext)
+	// Wait until the client becomes healthy and shut down the server.
 	<-c.Healthy()
-	s.Close()
+	ln.Close()
+	// Wait until the client becomes unhealthy.
+	func() {
+		for r := retry.Start(retry.Options{}); r.Next(); {
+			select {
+			case <-c.Healthy():
+			case <-time.After(1 * time.Nanosecond):
+				return
+			}
+		}
+	}()
 
 	opts := Options{
 		N:               1,
@@ -127,7 +137,7 @@ func TestRetryableError(t *testing.T) {
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         1 * time.Second,
 	}
-	if _, err := sendPing(opts, []net.Addr{s.Addr()}, nodeContext); err != nil {
+	if _, err := sendPing(opts, []net.Addr{ln.Addr()}, nodeContext); err != nil {
 		retryErr, ok := err.(retry.Retryable)
 		if !ok {
 			t.Fatalf("Unexpected error type: %v", err)
@@ -156,8 +166,8 @@ func TestUnretryableError(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	nodeContext := NewNodeTestContext(nil, stopper)
-	s := createAndStartNewServer(t, nodeContext)
+	nodeContext := newNodeTestContext(nil, stopper)
+	_, ln := newTestServer(t, nodeContext, false)
 
 	opts := Options{
 		N:               1,
@@ -173,7 +183,7 @@ func TestUnretryableError(t *testing.T) {
 	getReply := func() proto.Message {
 		return &BrokenResponse{&roachpb.ResponseHeader{}}
 	}
-	_, err := Send(opts, "Heartbeat.Ping", []net.Addr{s.Addr()}, getArgs, getReply, nodeContext)
+	_, err := Send(opts, "Heartbeat.Ping", []net.Addr{ln.Addr()}, getArgs, getReply, nodeContext)
 	if err == nil {
 		t.Fatalf("Unexpected success")
 	}
@@ -201,20 +211,11 @@ func TestClientNotReady(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	nodeContext := NewNodeTestContext(nil, stopper)
-
-	addr := util.CreateTestAddr("tcp")
+	nodeContext := newNodeTestContext(nil, stopper)
 
 	// Construct a server that listens but doesn't do anything.
-	s := &Server{
-		context: nodeContext,
-		addr:    addr,
-		methods: map[string]method{},
-	}
+	s, ln := newTestServer(t, nodeContext, true)
 	if err := s.RegisterPublic("Heartbeat.Ping", (&Heartbeat{}).Ping, &PingRequest{}); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -226,7 +227,7 @@ func TestClientNotReady(t *testing.T) {
 	}
 
 	// Send RPC to an address where no server is running.
-	if _, err := sendPing(opts, []net.Addr{s.Addr()}, nodeContext); err != nil {
+	if _, err := sendPing(opts, []net.Addr{ln.Addr()}, nodeContext); err != nil {
 		retryErr, ok := err.(retry.Retryable)
 		if !ok {
 			t.Fatalf("Unexpected error type: %v", err)
@@ -243,7 +244,7 @@ func TestClientNotReady(t *testing.T) {
 	opts.Timeout = 0
 	c := make(chan struct{})
 	go func() {
-		if _, err := sendPing(opts, []net.Addr{s.Addr()}, nodeContext); err == nil {
+		if _, err := sendPing(opts, []net.Addr{ln.Addr()}, nodeContext); err == nil {
 			t.Fatalf("expected error when client is closed")
 		} else if !strings.Contains(err.Error(), "failed as client connection was closed") {
 			t.Fatal(err)
@@ -258,7 +259,7 @@ func TestClientNotReady(t *testing.T) {
 
 	// Grab the client for our invalid address and close it. This will
 	// cause the blocked ping RPC to finish.
-	NewClient(s.Addr(), nodeContext).Close()
+	NewClient(ln.Addr(), nodeContext).Close()
 	select {
 	case <-c:
 	case <-time.After(100 * time.Millisecond):
@@ -274,7 +275,7 @@ func TestComplexScenarios(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	nodeContext := NewNodeTestContext(nil, stopper)
+	nodeContext := newNodeTestContext(nil, stopper)
 
 	testCases := []struct {
 		numServers               int
@@ -315,8 +316,8 @@ func TestComplexScenarios(t *testing.T) {
 
 		var serverAddrs []net.Addr
 		for j := 0; j < test.numServers; j++ {
-			s := createAndStartNewServer(t, nodeContext)
-			serverAddrs = append(serverAddrs, s.Addr())
+			_, ln := newTestServer(t, nodeContext, false)
+			serverAddrs = append(serverAddrs, ln.Addr())
 		}
 
 		opts := Options{
@@ -371,15 +372,6 @@ func TestComplexScenarios(t *testing.T) {
 			t.Errorf("%d: Unexpected error: %v", i, retryErr)
 		}
 	}
-}
-
-// createAndStartNewServer creates and starts a new server with a test address.
-func createAndStartNewServer(t *testing.T, ctx *Context) *Server {
-	s := NewServer(util.CreateTestAddr("tcp"), ctx)
-	if err := s.Start(); err != nil {
-		t.Fatal(err)
-	}
-	return s
 }
 
 // sendPing sends Ping requests to specified addresses using Send.

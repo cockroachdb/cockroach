@@ -206,7 +206,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 			if otherNode == simNode {
 				continue // skip the node's own info
 			}
-			infoKey := otherNode.Server.Addr().String()
+			infoKey := otherNode.Addr.String()
 			if info, err := node.GetInfo(infoKey); err != nil {
 				log.Infof("error getting info for key %q: %s", infoKey, err)
 				incomplete++

@@ -222,9 +222,9 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 // start starts the node by registering the storage instance for the
 // RPC service "Node" and initializing stores for each specified
 // engine. Launches periodic store gossiping in a goroutine.
-func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
+func (n *Node) start(rpcServer *rpc.Server, addr net.Addr, engines []engine.Engine,
 	attrs roachpb.Attributes, stopper *stop.Stopper) error {
-	n.initDescriptor(rpcServer.Addr(), attrs)
+	n.initDescriptor(addr, attrs)
 	const method = "Node.Batch"
 	if err := rpcServer.Register(method, n.executeCmd, &roachpb.BatchRequest{}); err != nil {
 		log.Fatalf("unable to register node service with RPC server: %s", err)

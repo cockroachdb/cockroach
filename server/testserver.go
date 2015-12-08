@@ -198,7 +198,7 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 
 // ServingAddr returns the rpc server's address. Should be used by clients.
 func (ts *TestServer) ServingAddr() string {
-	return ts.rpc.Addr().String()
+	return ts.listener.Addr().String()
 }
 
 // PGAddr returns the Postgres-protocol endpoint's address.
