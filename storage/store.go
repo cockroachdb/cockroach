@@ -1539,12 +1539,6 @@ func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd roachpb.RaftCommand) 
 		etr, ok := args.(*roachpb.EndTransactionRequest)
 		if ok {
 			if crt := etr.InternalCommitTrigger.GetChangeReplicasTrigger(); crt != nil {
-				// TODO(tschottdorf): the real check is that EndTransaction needs
-				// to be the last element in the batch. Any caveats to solve before
-				// changing this?
-				if len(cmd.Cmd.Requests) != 1 {
-					panic("EndTransaction should only ever occur by itself in a batch")
-				}
 				// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
 				// needs to understand it; it cannot simply be an opaque command.
 				log.Infof("raft: %s %v for range %d", crt.ChangeType, crt.Replica, cmd.RangeID)

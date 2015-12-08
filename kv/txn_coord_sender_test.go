@@ -39,6 +39,14 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+// senderFn is a function that implements a Sender.
+type senderFn func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+
+// Send implements batch.Sender.
+func (f senderFn) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	return f(ctx, ba)
+}
+
 // teardownHeartbeats goes through the coordinator's active transactions and
 // has the associated heartbeat tasks quit. This is useful for tests which
 // don't finish transactions.
