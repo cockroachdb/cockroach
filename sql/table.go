@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -185,6 +186,21 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, e
 		return nil, err
 	}
 	return &desc, nil
+}
+
+// get the table descriptor for the ID passed in using the planner's txn.
+func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, error) {
+	desc := &Descriptor{}
+	descKey := MakeDescMetadataKey(id)
+
+	if err := txn.GetProto(descKey, desc); err != nil {
+		return nil, err
+	}
+	tableDesc := desc.GetTable()
+	if tableDesc == nil {
+		return nil, util.Errorf("ID %d is not a table", id)
+	}
+	return tableDesc, nil
 }
 
 // getTableLease acquires a lease for the specified table. The lease will be
