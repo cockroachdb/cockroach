@@ -371,6 +371,35 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	}
 }
 
+// TestTxnCoordSenderAddIntentOnError verifies that intents are tracked if
+// the transaction is, even on error.
+func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := createTestDB(t)
+	defer s.Stop()
+
+	// Create a transaction with intent at "a".
+	key := roachpb.Key("x")
+	txn := client.NewTxn(*s.DB)
+	// Write so that the coordinator begins tracking this txn.
+	if err := txn.Put("x", "y"); err != nil {
+		t.Fatal(err)
+	}
+	err, ok := txn.CPut(key, []byte("x"), []byte("born to fail")).(*roachpb.ConditionFailedError)
+	if !ok {
+		t.Fatal(err)
+	}
+	s.Sender.Lock()
+	intentSpans := s.Sender.txns[string(txn.Proto.ID)].intentSpans()
+	expSpans := []roachpb.Span{{Key: key, EndKey: []byte("")}}
+	equal := !reflect.DeepEqual(intentSpans, expSpans)
+	s.Sender.Unlock()
+	_ = txn.Rollback()
+	if !equal {
+		t.Fatalf("expected stored intents %v, got %v", expSpans, intentSpans)
+	}
+}
+
 // TestTxnCoordSenderCleanupOnAborted verifies that if a txn receives a
 // TransactionAbortedError, the coordinator cleans up the transaction.
 func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {

@@ -726,9 +726,9 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		// performed with a Writing transaction which the coordinator rejects
 		// unless it is tracking it (on top of it making sense to track it;
 		// after all, it **has** laid down intents and only the coordinator
-		// can augment a potential EndTransaction call).
-		// consider re-using those.
-		if intents := ba.GetIntentSpans(); len(intents) > 0 && (err == nil || newTxn.Writing) {
+		// can augment a potential EndTransaction call). See #3303.
+		intents := ba.GetIntentSpans()
+		if len(intents) > 0 && (err == nil || newTxn.Writing) {
 			if txnMeta == nil {
 				if !newTxn.Writing {
 					panic("txn with intents marked as non-writing")
@@ -762,9 +762,6 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 					}
 				}
 			}
-			for _, intent := range intents {
-				txnMeta.addKeyRange(intent.Key, intent.EndKey)
-			}
 		}
 		// Update our record of this transaction, even on error.
 		if txnMeta != nil {
@@ -773,6 +770,12 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 				panic("tracking a non-writing txn")
 			}
 			txnMeta.setLastUpdate(tc.clock.PhysicalNow())
+			// Adding the intents even on error reduces the likelyhood of dangling
+			// intents blocking concurrent writers for extended periods of time.
+			// See #3346.
+			for _, intent := range intents {
+				txnMeta.addKeyRange(intent.Key, intent.EndKey)
+			}
 		}
 		if err == nil {
 			// For successful transactional requests, always send the updated txn
