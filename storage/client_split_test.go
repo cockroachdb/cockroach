@@ -809,7 +809,7 @@ func TestStoreSplitReadRace(t *testing.T) {
 
 	getContinues := make(chan struct{})
 	var getStarted sync.WaitGroup
-	storage.TestingCommandFilter = func(args roachpb.Request, h roachpb.Header) error {
+	storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
 		if et, ok := args.(*roachpb.EndTransactionRequest); ok {
 			st := et.InternalCommitTrigger.GetSplitTrigger()
 			if st == nil || !st.UpdatedDesc.EndKey.Equal(splitKey) {

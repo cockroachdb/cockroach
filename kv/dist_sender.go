@@ -18,6 +18,7 @@
 package kv
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"sync/atomic"
@@ -409,8 +410,8 @@ func (ds *DistSender) getDescriptors(rs roachpb.RSpan, considerIntents, useRever
 	return desc, needAnother(desc, useReverseScan), evict, nil
 }
 
-// sendAttempt gathers and rearranges the replicas, and makes an RPC call.
-func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor) (*roachpb.BatchResponse, *roachpb.Error) {
+// sendSingleRange gathers and rearranges the replicas, and makes an RPC call.
+func (ds *DistSender) sendSingleRange(trace *tracer.Trace, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor) (*roachpb.BatchResponse, *roachpb.Error) {
 	defer trace.Epoch("sending RPC")()
 
 	leader := ds.leaderCache.Lookup(roachpb.RangeID(desc.RangeID))
@@ -464,12 +465,7 @@ func (ds *DistSender) sendAttempt(trace *tracer.Trace, ba roachpb.BatchRequest, 
 func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
-	// TODO(tschottdorf): right place for this?
 	if ba.ReadConsistency == roachpb.INCONSISTENT && ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
-		// Make sure that after the call, args hasn't changed.
-		defer func(timestamp roachpb.Timestamp) {
-			ba.Timestamp = timestamp
-		}(ba.Timestamp)
 		ba.Timestamp = ds.clock.Now()
 	}
 
@@ -487,14 +483,54 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		}
 	}
 
-	// TODO(tschottdorf): provisional instantiation.
-	return newChunkingSender(ds.sendChunk).Send(ctx, ba)
+	if len(ba.Requests) < 1 {
+		panic("empty batch")
+	}
+
+	var rplChunks []*roachpb.BatchResponse
+	parts := ba.Split(false /* don't split ET */)
+	for len(parts) > 0 {
+		part := parts[0]
+		ba.Requests = part
+		rpl, pErr, shouldSplitET := ds.sendChunk(ctx, ba)
+		if shouldSplitET {
+			// If we tried to send a single round-trip EndTransaction but
+			// it looks like it's going to hit multiple ranges, split it
+			// here and try again.
+			if len(parts) != 1 {
+				panic("EndTransaction not in last chunk of batch")
+			}
+			parts = ba.Split(true /* split ET */)
+			if len(parts) != 2 {
+				panic("split of final EndTransaction chunk resulted in != 2 parts")
+			}
+			continue
+		}
+		if pErr != nil {
+			return nil, pErr
+		}
+		// Propagate transaction from last reply to next request. The final
+		// update is taken and put into the response's main header.
+		ba.Txn.Update(rpl.Header().Txn)
+		rplChunks = append(rplChunks, rpl)
+		parts = parts[1:]
+	}
+
+	reply := rplChunks[0]
+	for _, rpl := range rplChunks[1:] {
+		reply.Responses = append(reply.Responses, rpl.Responses...)
+	}
+	*reply.Header() = rplChunks[len(rplChunks)-1].BatchResponse_Header
+	return reply, nil
 }
 
 // sendChunk is in charge of sending an "admissible" piece of batch, i.e. one
 // which doesn't need to be subdivided further before going to a range (so no
-// mixing of forward and reverse scans, etc).
-func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+// mixing of forward and reverse scans, etc). The parameters and return values
+// correspond to client.Sender with the exception of the returned boolean,
+// which is true when indicating that the caller should retry but needs to send
+// EndTransaction in a separate request.
+func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error, bool) {
 	isReverse := ba.IsReverse()
 
 	trace := tracer.FromCtx(ctx)
@@ -533,13 +569,26 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				break
 			}
 
-			// If there's no transaction and op spans ranges, possibly
-			// re-run as part of a transaction for consistency. The
-			// case where we don't need to re-run is if the read
-			// consistency is not required.
-			if needAnother && ba.Txn == nil && ba.IsPossibleTransaction() &&
-				ba.ReadConsistency != roachpb.INCONSISTENT {
-				return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{})
+			if needAnother && br == nil {
+				// TODO(tschottdorf): we should have a mechanism for discovering
+				// range merges (descriptor staleness will mostly go unnoticed),
+				// or we'll be turning single-range queries into multi-range
+				// queries for no good reason.
+
+				// If there's no transaction and op spans ranges, possibly
+				// re-run as part of a transaction for consistency. The
+				// case where we don't need to re-run is if the read
+				// consistency is not required.
+				if ba.Txn == nil && ba.IsPossibleTransaction() &&
+					ba.ReadConsistency != roachpb.INCONSISTENT {
+					return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{}), false
+				}
+				// If the request is more than but ends with EndTransaction, we
+				// want the caller to come again with the EndTransaction in an
+				// extra call.
+				if l := len(ba.Requests) - 1; l > 0 && ba.Requests[l].GetInner().Method() == roachpb.EndTransaction {
+					return nil, roachpb.NewError(errors.New("cannot send 1PC txn to multiple ranges")), true /* shouldSplitET */
+				}
 			}
 
 			// It's possible that the returned descriptor misses parts of the
@@ -558,7 +607,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				if iErr != nil {
 					return nil, roachpb.NewError(iErr)
 				}
-				baNew, numActive, trErr := truncate(ba, intersected)
+				truncBA, numActive, trErr := truncate(ba, intersected)
 				if numActive == 0 && trErr == nil {
 					// This shouldn't happen in the wild, but some tests
 					// exercise it.
@@ -568,18 +617,16 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				if trErr != nil {
 					return nil, roachpb.NewError(trErr)
 				}
-				reply, err := ds.sendAttempt(trace, baNew, desc)
 
-				if err != nil {
-					if log.V(1) {
-						log.Warningf("failed to invoke %s: %s", baNew, err)
-					}
-				}
-				return reply, err
+				return ds.sendSingleRange(trace, truncBA, desc)
 			}()
 			// If sending succeeded, break this loop.
 			if pErr == nil {
 				break
+			}
+
+			if log.V(1) {
+				log.Warningf("failed to invoke %s: %s", ba, pErr)
 			}
 
 			// Error handling below.
@@ -656,21 +703,19 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 
 		// Immediately return if querying a range failed non-retryably.
 		if pErr != nil {
-			return nil, pErr
+			return nil, pErr, false
 		}
 
 		ba.Txn.Update(curReply.Txn)
 
-		first := br == nil
-		if first {
+		if br == nil {
 			// First response from a Range.
 			br = curReply
 		} else {
 			// This was the second or later call in a cross-Range request.
 			// Combine the new response with the existing one.
 			if err := br.Combine(curReply); err != nil {
-				// TODO(tschottdorf): return nil, roachpb.NewError(err)
-				panic(err)
+				return nil, roachpb.NewError(err), false
 			}
 		}
 
@@ -686,7 +731,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// batch request; only if that's all requests does needAnother
 			// remain false.
 			needAnother = false
-			if first {
+			if br == nil {
 				// Clone ba.Requests. This is because we're multi-range, and
 				// some requests may be bounded, which could lead to them being
 				// masked out once they're saturated. We don't want to risk
@@ -736,7 +781,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 
 		// If this was the last range accessed by this call, exit loop.
 		if !needAnother {
-			return br, nil
+			return br, nil, false
 		}
 
 		if isReverse {

@@ -82,7 +82,7 @@ const (
 // be run once for each replica and must produce consistent results
 // each time. Should only be used in tests in the storage and
 // storage_test packages.
-var TestingCommandFilter func(roachpb.Request, roachpb.Header) error
+var TestingCommandFilter func(roachpb.StoreID, roachpb.Request, roachpb.Header) error
 
 // This flag controls whether Transaction entries are automatically gc'ed
 // upon EndTransaction if they only have local intents (which can be

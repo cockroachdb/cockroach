@@ -18,6 +18,7 @@
 package storage_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -30,13 +31,46 @@ import (
 
 // TestReplicaGCQueueDropReplica verifies that a removed replica is
 // immediately cleaned up.
-func TestReplicaGCQueueDropReplica(t *testing.T) {
+func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	mtc := &multiTestContext{}
+	const numStores = 3
+	rangeID := roachpb.RangeID(1)
 
-	mtc := startMultiTestContext(t, 3)
+	// In this test, the Replica on the second Node is removed, and the test
+	// verifies that that Node adds this Replica to its RangeGCQueue. However,
+	// the queue does a consistent lookup which will usually be read from
+	// Node 1. Hence, if Node 1 hasn't processed the removal when Node 2 has,
+	// no GC will take place since the consistent RangeLookup hits the first
+	// Node. We use the TestingCommandFilter to make sure that the second Node
+	// waits for the first.
+	storage.TestingCommandFilter = func(id roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+		et, ok := args.(*roachpb.EndTransactionRequest)
+		if !ok || id != 2 {
+			return nil
+		}
+		rct := et.InternalCommitTrigger.GetChangeReplicasTrigger()
+		if rct == nil || rct.ChangeType != roachpb.REMOVE_REPLICA {
+			return nil
+		}
+		util.SucceedsWithin(t, time.Second, func() error {
+			r, err := mtc.stores[0].GetReplica(rangeID)
+			if err != nil {
+				return err
+			}
+			if i, _ := r.Desc().FindReplica(2); i >= 0 {
+				return errors.New("expected second node gone from first node's known replicas")
+			}
+			return nil
+		})
+		return nil
+	}
+
+	defer func() { storage.TestingCommandFilter = nil }()
+
+	mtc.Start(t, numStores)
 	defer mtc.Stop()
 
-	rangeID := roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 0, 1, 2)
 	mtc.unreplicateRange(rangeID, 0, 1)
 

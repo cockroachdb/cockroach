@@ -331,7 +331,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	}
 
 	resolved := map[string][]roachpb.Span{}
-	TestingCommandFilter = func(req roachpb.Request, _ roachpb.Header) error {
+	TestingCommandFilter = func(_ roachpb.StoreID, req roachpb.Request, _ roachpb.Header) error {
 		if resArgs, ok := req.(*roachpb.ResolveIntentRequest); ok {
 			id := string(resArgs.IntentTxn.Key)
 			resolved[id] = append(resolved[id], roachpb.Span{

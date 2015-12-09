@@ -1068,3 +1068,120 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestMultiRangeSplitEndTransaction verifies that when a chunk of batch looks
+// like it's going to be dispatched to more than one range, it will be split
+// up if it it contains EndTransaction.
+func TestMultiRangeSplitEndTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	g, s := makeTestGossip(t)
+	defer s()
+
+	testCases := []struct {
+		put1, put2, et roachpb.Key
+		exp            [][]roachpb.Method
+	}{
+		{
+			// Everything hits the first range, so we get a 1PC txn.
+			roachpb.Key("a1"), roachpb.Key("a2"), roachpb.Key("a3"),
+			[][]roachpb.Method{{roachpb.Put, roachpb.Put, roachpb.EndTransaction}},
+		},
+		{
+			// Only EndTransaction hits the second range.
+			roachpb.Key("a1"), roachpb.Key("a2"), roachpb.Key("b"),
+			[][]roachpb.Method{{roachpb.Put, roachpb.Put}, {roachpb.EndTransaction}},
+		},
+		{
+			// One write hits the second range, so EndTransaction has to be split off.
+			// In this case, going in the usual order without splitting off
+			// would actually be fine, but it doesn't seem worth optimizing at
+			// this point.
+			roachpb.Key("a1"), roachpb.Key("b1"), roachpb.Key("a1"),
+			[][]roachpb.Method{{roachpb.Put, roachpb.Noop}, {roachpb.Noop, roachpb.Put}, {roachpb.EndTransaction}},
+		},
+		{
+			// Both writes go to the second range, but not EndTransaction.
+			roachpb.Key("b1"), roachpb.Key("b2"), roachpb.Key("a1"),
+			[][]roachpb.Method{{roachpb.Put, roachpb.Put}, {roachpb.EndTransaction}},
+		},
+	}
+
+	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	nd := &roachpb.NodeDescriptor{
+		NodeID:  roachpb.NodeID(1),
+		Address: util.MakeUnresolvedAddr(testAddress.Network(), testAddress.String()),
+	}
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(1)), nd, time.Hour); err != nil {
+		t.Fatal(err)
+
+	}
+
+	// Fill mockRangeDescriptorDB with two descriptors.
+	var descriptor1 = roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKey("b"),
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	var descriptor2 = roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: roachpb.RKey("b"),
+		EndKey:   roachpb.RKeyMax,
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	descDB := mockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, error) {
+		desc := descriptor1
+		if !key.Less(roachpb.RKey("b")) {
+			desc = descriptor2
+		}
+		return []roachpb.RangeDescriptor{desc}, nil
+	})
+
+	for _, test := range testCases {
+		var act [][]roachpb.Method
+		var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, ga func(addr net.Addr) proto.Message, _ func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
+			ba := ga(testAddress).(*roachpb.BatchRequest)
+			var cur []roachpb.Method
+			for _, union := range ba.Requests {
+				cur = append(cur, union.GetInner().Method())
+			}
+			act = append(act, cur)
+			return []proto.Message{ba.CreateReply()}, nil
+		}
+
+		ctx := &DistSenderContext{
+			RPCSend:           testFn,
+			RangeDescriptorDB: descDB,
+		}
+		ds := NewDistSender(ctx, g)
+
+		// Send a batch request containing two puts.
+		var ba roachpb.BatchRequest
+		ba.Txn = &roachpb.Transaction{Name: "test"}
+		val := roachpb.MakeValueFromString("val")
+		ba.Add(roachpb.NewPut(roachpb.Key(test.put1), val).(*roachpb.PutRequest))
+		ba.Add(roachpb.NewPut(roachpb.Key(test.put2), val).(*roachpb.PutRequest))
+		ba.Add(&roachpb.EndTransactionRequest{Span: roachpb.Span{Key: test.et}})
+
+		_, pErr := ds.Send(context.Background(), ba)
+		if err := pErr.GoError(); err != nil {
+			t.Fatal(err)
+		}
+
+		if !reflect.DeepEqual(test.exp, act) {
+			t.Fatalf("expected %v, got %v", test.exp, act)
+		}
+	}
+}

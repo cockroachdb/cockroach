@@ -166,7 +166,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 
 	numIncrements := 0
 
-	storage.TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
+	storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		if _, ok := args.(*roachpb.IncrementRequest); ok && args.Header().Key.Equal(roachpb.Key("a")) {
 			numIncrements++
 		}
@@ -373,7 +373,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	var runFilter atomic.Value
 	runFilter.Store(true)
 
-	storage.TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
+	storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		if runFilter.Load().(bool) {
 			if et, ok := args.(*roachpb.EndTransactionRequest); ok && et.Commit {
 				return util.Errorf("boom")

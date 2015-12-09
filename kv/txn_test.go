@@ -102,15 +102,18 @@ func TestTxnDBBasics(t *testing.T) {
 	}
 }
 
-// BenchmarkTxnWrites benchmarks a number of transactions writing to the
-// same key back to back, without using Prepare/Flush.
-func BenchmarkTxnWrites(b *testing.B) {
-	s := createTestDB(b)
+// benchmarkSingleRoundtripWithLatency runs a number of transactions writing to
+// the same key back to back in a single round-trip. Latency is simulated
+// by pausing before each RPC sent.
+func benchmarkSingleRoundtripWithLatency(b *testing.B, latency time.Duration) {
+	s := &LocalTestCluster{}
+	s.Latency = latency
+	s.Start(b)
 	defer s.Stop()
+	defer b.StopTimer()
 	key := roachpb.Key("key")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		s.Manual.Increment(1)
 		if tErr := s.DB.Txn(func(txn *client.Txn) error {
 			b := txn.NewBatch()
 			b.Put(key, fmt.Sprintf("value-%d", i))
@@ -119,6 +122,14 @@ func BenchmarkTxnWrites(b *testing.B) {
 			b.Fatal(tErr)
 		}
 	}
+}
+
+func BenchmarkSingleRoundtripTxnWithLatency_0(b *testing.B) {
+	benchmarkSingleRoundtripWithLatency(b, 0)
+}
+
+func BenchmarkSingleRoundtripTxnWithLatency_10(b *testing.B) {
+	benchmarkSingleRoundtripWithLatency(b, 10*time.Millisecond)
 }
 
 // disableOwnNodeCertain is used in tests which want to verify uncertainty

@@ -154,16 +154,31 @@ func TestBatchSplit(t *testing.T) {
 	bt := &BeginTransactionRequest{}
 	et := &EndTransactionRequest{}
 	rv := &ReverseScanRequest{}
+	np := &NoopRequest{}
 	testCases := []struct {
-		reqs  []Request
-		sizes []int
+		reqs       []Request
+		sizes      []int
+		canSplitET bool
 	}{
-		{[]Request{get, put}, []int{1, 1}},
-		{[]Request{get, get, get, put, put, get, get}, []int{3, 2, 2}},
-		{[]Request{get, scan, get, dr, rv, put, et}, []int{3, 1, 1, 1, 1}},
-		{[]Request{spl, get, scan, spl, get}, []int{1, 2, 1, 1}},
-		{[]Request{spl, spl, get, spl}, []int{1, 1, 1, 1}},
-		{[]Request{bt, put, et}, []int{2, 1}},
+		{[]Request{get, put}, []int{1, 1}, true},
+		{[]Request{get, get, get, put, put, get, get}, []int{3, 2, 2}, true},
+		{[]Request{spl, get, scan, spl, get}, []int{1, 2, 1, 1}, true},
+		{[]Request{spl, spl, get, spl}, []int{1, 1, 1, 1}, true},
+		{[]Request{bt, put, et}, []int{2, 1}, true},
+		{[]Request{get, scan, get, dr, rv, put, et}, []int{3, 1, 1, 1, 1}, true},
+		// Same one again, but this time don't allow EndTransaction to be split.
+		{[]Request{get, scan, get, dr, rv, put, et}, []int{3, 1, 1, 2}, false},
+		// An invalid request in real life, but it demonstrates that we'll always
+		// split **after** an EndTransaction (because either the next request
+		// wants to be alone, or its flags can't match the current flags, which
+		// have isAlone set). Could be useful if we ever want to allow executing
+		// multiple batches back-to-back.
+		{[]Request{et, scan, et}, []int{1, 2}, false},
+		// Check that Noop can mix with other requests regardless of flags.
+		{[]Request{np, put, np}, []int{3}, true},
+		{[]Request{np, spl, np}, []int{3}, true},
+		{[]Request{np, rv, np}, []int{3}, true},
+		{[]Request{np, np, et}, []int{3}, true}, // et does not split off
 	}
 
 	for i, test := range testCases {
@@ -173,7 +188,7 @@ func TestBatchSplit(t *testing.T) {
 		}
 		var partLen []int
 		var recombined []RequestUnion
-		for _, part := range ba.Split() {
+		for _, part := range ba.Split(test.canSplitET) {
 			recombined = append(recombined, part...)
 			partLen = append(partLen, len(part))
 		}
