@@ -528,8 +528,7 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "PLICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SERIAL"
     "IZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021Transact"
     "ionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n"
-    "\007ABORTED\020\002\032\004\210\243\036\000B\035Z\007roachpb\310\341\036\000\220\343\036\000\310\342\036\001\340"
-    "\342\036\001\320\342\036\001X\001", 3009);
+    "\007ABORTED\020\002\032\004\210\243\036\000B\tZ\007roachpbX\001", 2989);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/data.proto", &protobuf_RegisterTypes);
   Span::default_instance_ = new Span();

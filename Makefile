@@ -178,6 +178,10 @@ clean:
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -f .bootstrap
 
+.PHONY: protobuf
+protobuf:
+	$(MAKE) -C .. -f cockroach/build/protobuf.mk
+
 ifneq ($(SKIP_BOOTSTRAP),1)
 
 GITHOOKS := $(subst githooks/,.git/hooks/,$(wildcard githooks/*))

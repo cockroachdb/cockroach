@@ -23,12 +23,6 @@ import "cockroach/roachpb/data.proto";
 import "cockroach/sql/driver/wire.proto";
 import weak "gogoproto/gogo.proto";
 
-option (gogoproto.goproto_getters_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.sizer_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 message Session {
   optional string database = 1 [(gogoproto.nullable) = false];
   optional int32 syntax = 2 [(gogoproto.nullable) = false];

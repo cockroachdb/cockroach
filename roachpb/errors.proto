@@ -29,12 +29,6 @@ import weak "gogoproto/gogo.proto";
 // `String() string`.
 // option (gogoproto.goproto_stringer_all) = false;
 
-option (gogoproto.goproto_getters_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.sizer_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 // A NotLeaderError indicates that the current range is not the
 // leader. If the leader is known, its Replica is set in the error.
 message NotLeaderError {

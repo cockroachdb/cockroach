@@ -19,7 +19,6 @@ package roachpb
 
 import (
 	"encoding/hex"
-	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -59,15 +58,6 @@ func TestSetGoErrorNil(t *testing.T) {
 	if err := br.GoError(); err != nil {
 		t.Errorf("expected nil error; got %s", err)
 	}
-}
-
-type XX interface {
-	Run()
-}
-type YY int
-
-func (i YY) Run() {
-	fmt.Println(i)
 }
 
 // TestCombinable tests the correct behaviour of some types that implement

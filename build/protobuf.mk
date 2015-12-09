@@ -26,13 +26,13 @@ GOGOPROTO_ROOT := $(GITHUB_ROOT)/gogo/protobuf
 NATIVE_ROOT := $(REPO_ROOT)/storage/engine/rocksdb
 
 # Ensure we have an unambiguous GOPATH
-GOPATH := $(GITHUB_ROOT)/../..
-#                        ^  ^~ GOPATH
-#                        |~ GOPATH/src
+GOPATH := $(realpath $(GITHUB_ROOT)/../..)
+#                                   ^  ^~ GOPATH
+#                                   |~ GOPATH/src
 
 GOPATH_BIN      := $(GOPATH)/bin
 PROTOC          := $(GOPATH_BIN)/protoc
-PLUGIN_SUFFIX   := gogo
+PLUGIN_SUFFIX   := gogoroach
 PROTOC_PLUGIN   := $(GOPATH_BIN)/protoc-gen-$(PLUGIN_SUFFIX)
 GOGOPROTO_PROTO := $(GOGOPROTO_ROOT)/gogoproto/gogo.proto
 GOGOPROTO_PATH  := $(GOGOPROTO_ROOT):$(GOGOPROTO_ROOT)/protobuf
@@ -56,7 +56,7 @@ protos: $(GO_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(ENGINE_CPP_HEADERS) $(ENGI
 REPO_NAME := cockroachdb
 IMPORT_PREFIX := github.com/$(REPO_NAME)/
 
-$(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC_PLUGIN)
+$(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	find $(REPO_ROOT) -not -path '*/.*' -name *.pb.go | xargs rm
 	for dir in $(sort $(dir $(GO_PROTOS))); do \
 	  $(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=import_prefix=$(IMPORT_PREFIX):$(ORG_ROOT) $$dir/*.proto; \

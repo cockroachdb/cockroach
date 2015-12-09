@@ -24,12 +24,6 @@ import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/errors.proto";
 import weak "gogoproto/gogo.proto";
 
-option (gogoproto.goproto_getters_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.sizer_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 // ReadConsistencyType specifies what type of consistency is observed
 // during read operations.
 enum ReadConsistencyType {
@@ -354,6 +348,7 @@ message GCResponse {
 // TxnPushType determines what action to take when pushing a transaction.
 enum PushTxnType {
   option (gogoproto.goproto_enum_prefix) = false;
+
   // Push the timestamp forward if possible to accommodate a concurrent reader.
   PUSH_TIMESTAMP = 0;
   // Abort the transaction if possible to accommodate a concurrent writer.

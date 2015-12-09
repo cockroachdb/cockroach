@@ -8,12 +8,6 @@ option go_package = "message";
 
 import weak "gogoproto/gogo.proto";
 
-option (gogoproto.goproto_getters_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.sizer_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 message ArithRequest {
 	optional int32 a = 1 [(gogoproto.nullable) = false];
 	optional int32 b = 2 [(gogoproto.nullable) = false];

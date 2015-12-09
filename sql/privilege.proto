@@ -21,12 +21,6 @@ option go_package = "sql";
 
 import weak "gogoproto/gogo.proto";
 
-option (gogoproto.goproto_getters_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.sizer_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 // UserPrivileges describes the list of privileges available for a given user.
 message UserPrivileges {
   optional string user = 1 [(gogoproto.nullable) = false];
