@@ -24,10 +24,10 @@ var (
 	Meta1Span = roachpb.Span{Key: roachpb.KeyMin, EndKey: Meta2Prefix}
 
 	// UserDataSpan is the non-meta and non-structured portion of the key space.
-	UserDataSpan = roachpb.Span{Key: SystemMax, EndKey: TableDataPrefix}
+	UserDataSpan = roachpb.Span{Key: TableDataMax, EndKey: MaxKey}
 
 	// SystemDBSpan is the range of system objects for structured data.
-	SystemDBSpan = roachpb.Span{Key: TableDataPrefix, EndKey: UserTableDataMin}
+	SystemDBSpan = roachpb.Span{Key: TableDataMin, EndKey: UserTableDataMin}
 
 	// NoSplitSpans describes the ranges that should never be split.
 	// Meta1Span: needed to find other ranges.

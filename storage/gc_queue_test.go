@@ -250,7 +250,7 @@ func TestGCQueueProcess(t *testing.T) {
 	}
 	// Read data directly from engine to avoid intent errors from MVCC.
 	kvs, err := engine.Scan(tc.store.Engine(), engine.MakeMVCCMetadataKey(key1),
-		engine.MakeMVCCMetadataKey(keys.TableDataPrefix), 0)
+		engine.MakeMVCCMetadataKey(keys.MaxKey), 0)
 	if err != nil {
 		t.Fatal(err)
 	}

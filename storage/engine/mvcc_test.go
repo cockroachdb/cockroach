@@ -1877,7 +1877,7 @@ func TestValidSplitKeys(t *testing.T) {
 		{roachpb.Key("\x05"), true},
 		{roachpb.Key("a"), true},
 		{roachpb.Key("\xff"), true},
-		{roachpb.Key("\xff\x01"), false},
+		{roachpb.Key("\xff\x01"), true},
 		{roachpb.Key(keys.MakeTablePrefix(keys.MaxReservedDescID)), false},
 		{roachpb.Key(keys.MakeTablePrefix(keys.MaxReservedDescID + 1)), true},
 	}
@@ -1905,7 +1905,7 @@ func TestFindSplitKey(t *testing.T) {
 	// as the middle key of the interval.
 	splitReservoirSize := 100
 	for i := 0; i < splitReservoirSize; i++ {
-		k := fmt.Sprintf("%09d", i)
+		k := fmt.Sprintf("\xff%09d", i)
 		v := strings.Repeat("X", 10-len(k))
 		val := roachpb.MakeValueFromString(v)
 		// Write the key and value through MVCC
@@ -1923,7 +1923,7 @@ func TestFindSplitKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ind, _ := strconv.Atoi(string(humanSplitKey))
+	ind, _ := strconv.Atoi(string(humanSplitKey[1:]))
 	if diff := splitReservoirSize/2 - ind; diff > 1 || diff < -1 {
 		t.Fatalf("wanted key #%d+-1, but got %d (diff %d)", ind+diff, ind, diff)
 	}
@@ -2099,7 +2099,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 		ms := &MVCCStats{}
 		var expKey roachpb.Key
 		for j, keySize := range test.keySizes {
-			key := roachpb.Key(fmt.Sprintf("%d%s", j, strings.Repeat("X", keySize)))
+			key := roachpb.Key(fmt.Sprintf("\xff%d%s", j, strings.Repeat("X", keySize)))
 			if test.expSplit == j {
 				expKey = key
 			}

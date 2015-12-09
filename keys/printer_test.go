@@ -68,7 +68,6 @@ func TestPrettyPrint(t *testing.T) {
 
 		// table
 		{UserTableDataMin, "/Table/1000"},
-		{MakeKey(TableDataPrefix, []byte("\xfe")), `/Table/"\xfe"`},
 		{MakeTablePrefix(111), "/Table/111"},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey("\xb4")), `/Table/42/"\xb4"`},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeFloat(nil, float64(233.221112)))), "/Table/42/233.221112"},
@@ -80,7 +79,6 @@ func TestPrettyPrint(t *testing.T) {
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeTime(nil, tm))), "/Table/42/Sat Mar  7 11:06:39 UTC 2015"},
 
 		// others
-		{MakeKey(TableDataPrefix, []byte("\xff")), "/Max"},
 		{MakeKey([]byte("")), "/Min"},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x73, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:405: unknown escape>"},
 	}

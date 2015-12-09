@@ -131,7 +131,7 @@ var (
 	// The value is a RangeDescriptor struct.
 	Meta2KeyMax = roachpb.Key(MakeKey(Meta2Prefix, roachpb.RKeyMax))
 
-	// MetaMin is the end of the range of addressing keys.
+	// MetaMin is the start of the range of addressing keys.
 	MetaMin = Meta1Prefix
 	// MetaMax is the end of the range of addressing keys.
 	MetaMax = roachpb.Key("\x04")
@@ -160,13 +160,10 @@ var (
 	// StatusNodePrefix stores all status info for nodes.
 	StatusNodePrefix = roachpb.Key(MakeKey(StatusPrefix, roachpb.RKey("node-")))
 
-	// TableDataPrefix prefixes all table data. It is specifically chosen to
-	// occur after the range of common user data prefixes so that tests which use
-	// those prefixes will not see table data.
-	//
-	// TODO(peter): Replace with TableDataMin and TableDataMax which are the min
-	// and max int tag values from util/encoding/encoding.go:int{Min,Max}.
-	TableDataPrefix = roachpb.Key("\xff")
+	// TableDataMin is the start of the range of table data keys.
+	TableDataMin = roachpb.Key{0x05}
+	// TableDataMin is the end of the range of table data keys.
+	TableDataMax = roachpb.Key{0x55}
 
 	// UserTableDataMin is the start key of user structured data.
 	UserTableDataMin = roachpb.Key(MakeTablePrefix(MaxReservedDescID + 1))

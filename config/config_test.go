@@ -65,14 +65,9 @@ func TestObjectIDForKey(t *testing.T) {
 	}{
 		// Before the structured span.
 		{roachpb.RKeyMin, false, 0},
-		{keys.Addr(keys.SystemMax), false, 0},
 
 		// Boundaries of structured span.
-		{keys.Addr(keys.TableDataPrefix), false, 0},
 		{roachpb.RKeyMax, false, 0},
-
-		// In system span, but no Uvarint ID.
-		{keys.MakeKey(keys.TableDataPrefix, roachpb.RKey("\xff")), false, 0},
 
 		// Valid, even if there are things after the ID.
 		{keys.MakeKey(keys.MakeTablePrefix(42), roachpb.RKey("\xff")), true, 42},

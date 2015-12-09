@@ -1024,7 +1024,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 					t.Fatalf("failed to snapshot min range: %s", err)
 				}
 
-				rng = mtc.stores[0].LookupReplica(roachpb.RKey("Z"), nil)
+				rng = mtc.stores[0].LookupReplica(roachpb.RKey("\xffZ"), nil)
 				if rng == nil {
 					t.Fatal("failed to look up max range")
 				}
@@ -1045,7 +1045,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 			t.Fatal("failed to look up min range")
 		}
 		desc := rng.Desc()
-		args := adminSplitArgs(roachpb.KeyMin, []byte(fmt.Sprintf("A%03d", i)))
+		args := adminSplitArgs(roachpb.KeyMin, []byte(fmt.Sprintf("\xffA%03d", i)))
 		if _, err := rng.AdminSplit(args, desc); err != nil {
 			t.Fatal(err)
 		}
@@ -1053,12 +1053,12 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 
 	// Split again, carving chunks off the beginning of the final range.
 	for i := 0; i < 20; i++ {
-		rng := mtc.stores[0].LookupReplica(roachpb.RKey("Z"), nil)
+		rng := mtc.stores[0].LookupReplica(roachpb.RKey("\xffZ"), nil)
 		if rng == nil {
 			t.Fatal("failed to look up max range")
 		}
 		desc := rng.Desc()
-		args := adminSplitArgs(roachpb.KeyMin, []byte(fmt.Sprintf("B%03d", i)))
+		args := adminSplitArgs(roachpb.KeyMin, []byte(fmt.Sprintf("\xffB%03d", i)))
 		if _, err := rng.AdminSplit(args, desc); err != nil {
 			t.Fatal(err)
 		}

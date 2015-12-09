@@ -155,8 +155,8 @@ func EncodeVarint(b []byte, v int64) []byte {
 	return EncodeUvarint(b, uint64(v))
 }
 
-// EncodeVarintDecreasing encodes the uint64 value so that it sorts in
-// reverse order, from largest to smallest.
+// EncodeVarintDecreasing encodes the int64 value so that it sorts in reverse
+// order, from largest to smallest.
 func EncodeVarintDecreasing(b []byte, v int64) []byte {
 	return EncodeVarint(b, ^v)
 }

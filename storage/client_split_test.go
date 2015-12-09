@@ -85,14 +85,14 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 	}
 }
 
-// TestStoreRangeSplitAtTablePrefix verifies a range can be split
-// at TableDataPrefix and still gossip the SystemConfig properly.
+// TestStoreRangeSplitAtTablePrefix verifies a range can be split at
+// TableDataMin and still gossip the SystemConfig properly.
 func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	key := keys.TableDataPrefix
+	key := keys.TableDataMin
 	args := adminSplitArgs(key, key)
 	_, err := client.SendWrapped(rg1(store), nil, &args)
 	if err != nil {

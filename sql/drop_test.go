@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/gogo/protobuf/proto"
 )
@@ -96,10 +95,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("database zone config entry not found")
 	}
 
-	var tablePrefix []byte
-	tablePrefix = append(tablePrefix, keys.TableDataPrefix...)
-	tablePrefix = encoding.EncodeUvarint(tablePrefix, uint64(tbDesc.ID))
-
+	tablePrefix := keys.MakeTablePrefix(uint32(tbDesc.ID))
 	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
 	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
@@ -268,10 +264,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("zone config entry not found")
 	}
 
-	var tablePrefix []byte
-	tablePrefix = append(tablePrefix, keys.TableDataPrefix...)
-	tablePrefix = encoding.EncodeUvarint(tablePrefix, uint64(tableDesc.ID))
-
+	tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
 	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
 	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {

@@ -337,10 +337,7 @@ func MetaReverseScanBounds(key roachpb.RKey) (roachpb.Key, roachpb.Key, error) {
 
 // MakeTablePrefix returns the key prefix used for the table's data.
 func MakeTablePrefix(tableID uint32) []byte {
-	var key []byte
-	key = append(key, TableDataPrefix...)
-	key = encoding.EncodeUvarint(key, uint64(tableID))
-	return key
+	return encoding.EncodeUvarint(nil, uint64(tableID))
 }
 
 // Range returns a key range encompassing all the keys in the Batch.
