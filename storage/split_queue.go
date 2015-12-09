@@ -111,10 +111,10 @@ func (sq *splitQueue) process(now roachpb.Timestamp, rng *Replica,
 	// FIXME: why is this implementation not the same as the one above?
 	if float64(rng.stats.GetSize())/float64(zone.RangeMaxBytes) > 1 {
 		log.Infof("splitting %s size=%d max=%d", rng, rng.stats.GetSize(), zone.RangeMaxBytes)
-		if _, err = client.SendWrapped(rng, rng.context(), &roachpb.AdminSplitRequest{
+		if _, pErr := client.SendWrapped(rng, rng.context(), &roachpb.AdminSplitRequest{
 			Span: roachpb.Span{Key: desc.StartKey.AsRawKey()},
-		}); err != nil {
-			return err
+		}); pErr != nil {
+			return pErr.GoError()
 		}
 	}
 	return nil

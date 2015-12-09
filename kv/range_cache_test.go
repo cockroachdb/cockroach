@@ -66,11 +66,11 @@ func (db *testDescriptorDB) getDescriptor(key roachpb.RKey) []roachpb.RangeDescr
 	return response
 }
 
-func (db *testDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
+func (db *testDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
 	return nil, nil
 }
 
-func (db *testDescriptorDB) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, _, _ bool) ([]roachpb.RangeDescriptor, error) {
+func (db *testDescriptorDB) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, _, _ bool) ([]roachpb.RangeDescriptor, *roachpb.Error) {
 	db.lookupCount++
 	if bytes.HasPrefix(key, keys.Meta2Prefix) {
 		return db.getDescriptor(key[len(keys.Meta2Prefix):]), nil
@@ -126,9 +126,9 @@ func (db *testDescriptorDB) assertLookupCount(t *testing.T, expected int, key st
 }
 
 func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) *roachpb.RangeDescriptor {
-	r, err := rc.LookupRangeDescriptor(roachpb.RKey(key), false /* considerIntents */, false /* useReverseScan */)
-	if err != nil {
-		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", err.Error())
+	r, pErr := rc.LookupRangeDescriptor(roachpb.RKey(key), false /* considerIntents */, false /* useReverseScan */)
+	if pErr != nil {
+		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", pErr.GoError().Error())
 	}
 	if !r.ContainsKey(keys.Addr(roachpb.Key(key))) {
 		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)

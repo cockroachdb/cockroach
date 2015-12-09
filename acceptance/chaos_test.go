@@ -78,7 +78,8 @@ func TestChaos(t *testing.T) {
 			for time.Now().Before(deadline) && atomic.LoadInt32(&stalled) == 0 {
 				clients[i].RLock()
 				v := value[:r.Intn(len(value))]
-				if err := clients[i].db.Put(fmt.Sprintf("%08d", k), v); err != nil {
+				if pErr := clients[i].db.Put(fmt.Sprintf("%08d", k), v); pErr != nil {
+					err := pErr.GoError()
 					if _, ok := err.(*roachpb.SendError); ok || testutils.IsError(err, rpc.ErrShutdown.Error()) || testutils.IsError(err, "client is unhealthy") {
 						// Common errors we can ignore. Also suppress the
 						// log messages so they don't get spammy.

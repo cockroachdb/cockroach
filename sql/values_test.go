@@ -89,16 +89,16 @@ func TestValues(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		plan, err := func() (_ planNode, err error) {
+		plan, pErr := func() (_ planNode, pErr *roachpb.Error) {
 			defer func() {
 				if r := recover(); r != nil {
-					err = fmt.Errorf("%v", r)
+					pErr = roachpb.NewErrorf("%v", r)
 				}
 			}()
 			return p.Values(tc.stmt)
 		}()
-		if err == nil != tc.ok {
-			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, err)
+		if pErr == nil != tc.ok {
+			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, pErr)
 		}
 		if plan != nil {
 			var rows []parser.DTuple

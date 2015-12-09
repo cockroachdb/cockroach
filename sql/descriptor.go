@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 var (
@@ -63,17 +62,17 @@ type descriptorProto interface {
 }
 
 // checkPrivilege verifies that p.user has `privilege` on `descriptor`.
-func (p *planner) checkPrivilege(descriptor descriptorProto, privilege privilege.Kind) error {
+func (p *planner) checkPrivilege(descriptor descriptorProto, privilege privilege.Kind) *roachpb.Error {
 	if descriptor.GetPrivileges().CheckPrivilege(p.user, privilege) {
 		return nil
 	}
-	return fmt.Errorf("user %s does not have %s privilege on %s %s",
+	return roachpb.NewUErrorf("user %s does not have %s privilege on %s %s",
 		p.user, privilege, descriptor.TypeName(), descriptor.GetName())
 }
 
 // createDescriptor takes a Table or Database descriptor and creates it
 // if needed, incrementing the descriptor counter.
-func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptorProto, ifNotExists bool) error {
+func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptorProto, ifNotExists bool) *roachpb.Error {
 	idKey := plainKey.Key()
 	// Check whether idKey exists.
 	gr, err := p.txn.Get(idKey)
@@ -87,7 +86,7 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 			return nil
 		}
 		// Key exists, but we don't want it to: error out.
-		return fmt.Errorf("%s %q already exists", descriptor.TypeName(), plainKey.Name())
+		return roachpb.NewUErrorf("%s %q already exists", descriptor.TypeName(), plainKey.Name())
 	}
 
 	// Increment unique descriptor counter.
@@ -126,13 +125,13 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 
 // getDescriptor looks up the descriptor for `plainKey`, validates it,
 // and unmarshals it into `descriptor`.
-func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorProto) error {
+func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorProto) *roachpb.Error {
 	gr, err := p.txn.Get(plainKey.Key())
 	if err != nil {
 		return err
 	}
 	if !gr.Exists() {
-		return fmt.Errorf("%s %q does not exist", descriptor.TypeName(), plainKey.Name())
+		return roachpb.NewUErrorf("%s %q does not exist", descriptor.TypeName(), plainKey.Name())
 	}
 
 	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
@@ -145,29 +144,29 @@ func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorPro
 	case *TableDescriptor:
 		table := desc.GetTable()
 		if table == nil {
-			return util.Errorf("%q is not a table", plainKey.Name())
+			return roachpb.NewErrorf("%q is not a table", plainKey.Name())
 		}
 		*t = *table
 	case *DatabaseDescriptor:
 		database := desc.GetDatabase()
 		if database == nil {
-			return util.Errorf("%q is not a database", plainKey.Name())
+			return roachpb.NewErrorf("%q is not a database", plainKey.Name())
 		}
 		*t = *database
 	}
 
-	return descriptor.Validate()
+	return roachpb.NewError(descriptor.Validate())
 }
 
 // getDescriptorFromTargetList examines a TargetList and fetches the
 // appropriate descriptor.
 // TODO(marc): support multiple targets.
-func (p *planner) getDescriptorFromTargetList(targets parser.TargetList) (descriptorProto, error) {
+func (p *planner) getDescriptorFromTargetList(targets parser.TargetList) (descriptorProto, *roachpb.Error) {
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
-			return nil, errNoDatabase
+			return nil, roachpb.NewError(errNoDatabase)
 		} else if len(targets.Databases) != 1 {
-			return nil, util.Errorf("TODO(marc): multiple targets not implemented")
+			return nil, roachpb.NewErrorf("TODO(marc): multiple targets not implemented")
 		}
 		descriptor, err := p.getDatabaseDesc(targets.Databases[0])
 		if err != nil {
@@ -177,9 +176,9 @@ func (p *planner) getDescriptorFromTargetList(targets parser.TargetList) (descri
 	}
 
 	if len(targets.Tables) == 0 {
-		return nil, errNoTable
+		return nil, roachpb.NewError(errNoTable)
 	} else if len(targets.Tables) != 1 {
-		return nil, util.Errorf("TODO(marc): multiple targets not implemented")
+		return nil, roachpb.NewErrorf("TODO(marc): multiple targets not implemented")
 	}
 	descriptor, err := p.getTableDesc(targets.Tables[0])
 	if err != nil {

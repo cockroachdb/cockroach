@@ -33,8 +33,8 @@ import (
 
 func countRangeReplicas(db *client.DB) (int, error) {
 	desc := &roachpb.RangeDescriptor{}
-	if err := db.GetProto(keys.RangeDescriptorKey(roachpb.RKeyMin), desc); err != nil {
-		return 0, err
+	if pErr := db.GetProto(keys.RangeDescriptorKey(roachpb.RKeyMin), desc); pErr != nil {
+		return 0, pErr.GoError()
 	}
 	return len(desc.Replicas), nil
 }

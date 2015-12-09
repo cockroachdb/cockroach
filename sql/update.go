@@ -18,13 +18,12 @@ package sql
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -32,23 +31,23 @@ import (
 // Privileges: UPDATE and SELECT on table. We currently always use a select statement.
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
-func (p *planner) Update(n *parser.Update) (planNode, error) {
-	tableDesc, err := p.getAliasedTableLease(n.Table)
-	if err != nil {
-		return nil, err
+func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
+	tableDesc, pErr := p.getAliasedTableLease(n.Table)
+	if pErr != nil {
+		return nil, pErr
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.UPDATE); err != nil {
-		return nil, err
+	if pErr := p.checkPrivilege(tableDesc, privilege.UPDATE); pErr != nil {
+		return nil, pErr
 	}
 
 	// Determine which columns we're inserting into.
 	var names parser.QualifiedNames
 	for _, expr := range n.Exprs {
-		var err error
-		expr.Expr, err = p.expandSubqueries(expr.Expr, len(expr.Names))
-		if err != nil {
-			return nil, err
+		var epErr *roachpb.Error
+		expr.Expr, epErr = p.expandSubqueries(expr.Expr, len(expr.Names))
+		if epErr != nil {
+			return nil, epErr
 		}
 
 		if expr.Tuple {
@@ -62,18 +61,18 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 			case parser.DTuple:
 				n = len(t)
 			default:
-				return nil, util.Errorf("unsupported tuple assignment: %T", expr.Expr)
+				return nil, roachpb.NewErrorf("unsupported tuple assignment: %T", expr.Expr)
 			}
 			if len(expr.Names) != n {
-				return nil, fmt.Errorf("number of columns (%d) does not match number of values (%d)",
+				return nil, roachpb.NewUErrorf("number of columns (%d) does not match number of values (%d)",
 					len(expr.Names), n)
 			}
 		}
 		names = append(names, expr.Names...)
 	}
-	cols, err := p.processColumns(tableDesc, names)
-	if err != nil {
-		return nil, err
+	cols, pErr := p.processColumns(tableDesc, names)
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	// Set of columns being updated
@@ -84,13 +83,13 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	// Don't allow updating any column that is part of the primary key.
 	for i, id := range tableDesc.PrimaryIndex.ColumnIDs {
 		if _, ok := colIDSet[id]; ok {
-			return nil, fmt.Errorf("primary key column %q cannot be updated", tableDesc.PrimaryIndex.ColumnNames[i])
+			return nil, roachpb.NewUErrorf("primary key column %q cannot be updated", tableDesc.PrimaryIndex.ColumnNames[i])
 		}
 	}
 
-	defaultExprs, err := p.makeDefaultExprs(cols)
-	if err != nil {
-		return nil, err
+	defaultExprs, pErr := p.makeDefaultExprs(cols)
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	// Generate the list of select targets. We need to select all of the columns
@@ -120,13 +119,13 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	}
 
 	// Query the rows that need updating.
-	rows, err := p.Select(&parser.Select{
+	rows, pErr := p.Select(&parser.Select{
 		Exprs: targets,
 		From:  parser.TableExprs{n.Table},
 		Where: n.Where,
 	})
-	if err != nil {
-		return nil, err
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	// Construct a map from column ID to the index the value appears at within a
@@ -184,16 +183,16 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		rowVals := rows.Values()
 		result.rows = append(result.rows, parser.DTuple(nil))
 
-		primaryIndexKey, _, err := encodeIndexKey(
+		primaryIndexKey, _, pErr := encodeIndexKey(
 			primaryIndex.ColumnIDs, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
-		if err != nil {
-			return nil, err
+		if pErr != nil {
+			return nil, pErr
 		}
 		// Compute the current secondary index key:value pairs for this row.
-		secondaryIndexEntries, err := encodeSecondaryIndexes(
+		secondaryIndexEntries, pErr := encodeSecondaryIndexes(
 			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
-		if err != nil {
-			return nil, err
+		if pErr != nil {
+			return nil, pErr
 		}
 
 		// Our updated value expressions occur immediately after the plain
@@ -203,7 +202,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		for i, col := range cols {
 			val := newVals[i]
 			if !col.Nullable && val == parser.DNull {
-				return nil, fmt.Errorf("null value in column %q violates not-null constraint", col.Name)
+				return nil, roachpb.NewUErrorf("null value in column %q violates not-null constraint", col.Name)
 			}
 			rowVals[colIDtoRowIndex[col.ID]] = val
 		}
@@ -212,17 +211,17 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		// happen before index encoding because certain datum types (i.e. tuple)
 		// cannot be used as index values.
 		for i, val := range newVals {
-			var err error
-			if marshalled[i], err = marshalColumnValue(cols[i], val); err != nil {
-				return nil, err
+			var mpErr *roachpb.Error
+			if marshalled[i], mpErr = marshalColumnValue(cols[i], val); mpErr != nil {
+				return nil, mpErr
 			}
 		}
 
 		// Compute the new secondary index key:value pairs for this row.
-		newSecondaryIndexEntries, err := encodeSecondaryIndexes(
+		newSecondaryIndexEntries, epErr := encodeSecondaryIndexes(
 			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
-		if err != nil {
-			return nil, err
+		if epErr != nil {
+			return nil, epErr
 		}
 
 		// Update secondary indexes.
@@ -270,11 +269,11 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		}
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
+	if pErr := rows.PErr(); pErr != nil {
+		return nil, pErr
 	}
-	if err := p.txn.Run(&b); err != nil {
-		return nil, convertBatchError(tableDesc, b, err)
+	if pErr := p.txn.Run(&b); pErr != nil {
+		return nil, convertBatchError(tableDesc, b, pErr)
 	}
 
 	return result, nil

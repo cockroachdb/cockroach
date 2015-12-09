@@ -120,8 +120,8 @@ func createTableDescriptor(id, parentID ID, schema string, privileges *Privilege
 		log.Fatal(err)
 	}
 
-	desc, err := makeTableDesc(stmt.(*parser.CreateTable), parentID)
-	if err != nil {
+	desc, pErr := makeTableDesc(stmt.(*parser.CreateTable), parentID)
+	if pErr != nil {
 		log.Fatal(err)
 	}
 

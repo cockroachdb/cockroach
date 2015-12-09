@@ -143,7 +143,7 @@ func (kv *KeyValue) ValueProto(msg proto.Message) error {
 type Result struct {
 	calls int
 	// Err contains any error encountered when performing the operation.
-	Err error
+	PErr *roachpb.Error
 	// Rows contains the key/value pairs for the operation. The number of rows
 	// returned varies by operation. For Get, Put, CPut, Inc and Del the number
 	// of rows returned is the number of keys operated on. For Scan the number of
@@ -153,8 +153,8 @@ type Result struct {
 }
 
 func (r Result) String() string {
-	if r.Err != nil {
-		return r.Err.Error()
+	if r.PErr != nil {
+		return r.PErr.GoError().Error()
 	}
 	var buf bytes.Buffer
 	for i, row := range r.Rows {
@@ -277,7 +277,7 @@ func (db *DB) NewBatch() *Batch {
 //   // string(r.Key) == "a"
 //
 // key can be either a byte slice or a string.
-func (db *DB) Get(key interface{}) (KeyValue, error) {
+func (db *DB) Get(key interface{}) (KeyValue, *roachpb.Error) {
 	b := db.NewBatch()
 	b.Get(key)
 	return runOneRow(db, b)
@@ -287,23 +287,23 @@ func (db *DB) Get(key interface{}) (KeyValue, error) {
 // message.
 //
 // key can be either a byte slice or a string.
-func (db *DB) GetProto(key interface{}, msg proto.Message) error {
-	r, err := db.Get(key)
-	if err != nil {
-		return err
+func (db *DB) GetProto(key interface{}, msg proto.Message) *roachpb.Error {
+	r, pErr := db.Get(key)
+	if pErr != nil {
+		return pErr
 	}
-	return r.ValueProto(msg)
+	return roachpb.NewError(r.ValueProto(msg))
 }
 
 // Put sets the value for a key.
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc).
-func (db *DB) Put(key, value interface{}) error {
+func (db *DB) Put(key, value interface{}) *roachpb.Error {
 	b := db.NewBatch()
 	b.Put(key, value)
-	_, err := runOneResult(db, b)
-	return err
+	_, pErr := runOneResult(db, b)
+	return pErr
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal
@@ -313,11 +313,11 @@ func (db *DB) Put(key, value interface{}) error {
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc).
-func (db *DB) CPut(key, value, expValue interface{}) error {
+func (db *DB) CPut(key, value, expValue interface{}) *roachpb.Error {
 	b := db.NewBatch()
 	b.CPut(key, value, expValue)
-	_, err := runOneResult(db, b)
-	return err
+	_, pErr := runOneResult(db, b)
+	return pErr
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -325,21 +325,21 @@ func (db *DB) CPut(key, value, expValue interface{}) error {
 // key exists but was set using Put or CPut an error will be returned.
 //
 // key can be either a byte slice or a string.
-func (db *DB) Inc(key interface{}, value int64) (KeyValue, error) {
+func (db *DB) Inc(key interface{}, value int64) (KeyValue, *roachpb.Error) {
 	b := db.NewBatch()
 	b.Inc(key, value)
 	return runOneRow(db, b)
 }
 
-func (db *DB) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]KeyValue, error) {
+func (db *DB) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]KeyValue, *roachpb.Error) {
 	b := db.NewBatch()
 	if !isReverse {
 		b.Scan(begin, end, maxRows)
 	} else {
 		b.ReverseScan(begin, end, maxRows)
 	}
-	r, err := runOneResult(db, b)
-	return r.Rows, err
+	r, pErr := runOneResult(db, b)
+	return r.Rows, pErr
 }
 
 // Scan retrieves the rows between begin (inclusive) and end (exclusive) in
@@ -348,7 +348,7 @@ func (db *DB) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]Key
 // The returned []KeyValue will contain up to maxRows elements.
 //
 // key can be either a byte slice or a string.
-func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
+func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, *roachpb.Error) {
 	return db.scan(begin, end, maxRows, false)
 }
 
@@ -358,18 +358,18 @@ func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
 // The returned []KeyValue will contain up to maxRows elements.
 //
 // key can be either a byte slice or a string.
-func (db *DB) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
+func (db *DB) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, *roachpb.Error) {
 	return db.scan(begin, end, maxRows, true)
 }
 
 // Del deletes one or more keys.
 //
 // key can be either a byte slice or a string.
-func (db *DB) Del(keys ...interface{}) error {
+func (db *DB) Del(keys ...interface{}) *roachpb.Error {
 	b := db.NewBatch()
 	b.Del(keys...)
-	_, err := runOneResult(db, b)
-	return err
+	_, pErr := runOneResult(db, b)
+	return pErr
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -377,11 +377,11 @@ func (db *DB) Del(keys ...interface{}) error {
 // TODO(pmattis): Perhaps the result should return which rows were deleted.
 //
 // key can be either a byte slice or a string.
-func (db *DB) DelRange(begin, end interface{}) error {
+func (db *DB) DelRange(begin, end interface{}) *roachpb.Error {
 	b := db.NewBatch()
 	b.DelRange(begin, end)
-	_, err := runOneResult(db, b)
-	return err
+	_, pErr := runOneResult(db, b)
+	return pErr
 }
 
 // AdminMerge merges the range containing key and the subsequent
@@ -390,27 +390,27 @@ func (db *DB) DelRange(begin, end interface{}) error {
 // and the subsequent range will no longer exist.
 //
 // key can be either a byte slice or a string.
-func (db *DB) AdminMerge(key interface{}) error {
+func (db *DB) AdminMerge(key interface{}) *roachpb.Error {
 	b := db.NewBatch()
 	b.adminMerge(key)
-	_, err := runOneResult(db, b)
-	return err
+	_, pErr := runOneResult(db, b)
+	return pErr
 }
 
 // AdminSplit splits the range at splitkey.
 //
 // key can be either a byte slice or a string.
-func (db *DB) AdminSplit(splitKey interface{}) error {
+func (db *DB) AdminSplit(splitKey interface{}) *roachpb.Error {
 	b := db.NewBatch()
 	b.adminSplit(splitKey)
-	_, err := runOneResult(db, b)
-	return err
+	_, pErr := runOneResult(db, b)
+	return pErr
 }
 
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
-func sendAndFill(send func(...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Error), b *Batch) (*roachpb.BatchResponse, error) {
+func sendAndFill(send func(...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Error), b *Batch) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Errors here will be attached to the results, so we will get them from
 	// the call to fillResults in the regular case in which an individual call
 	// fails. But send() also returns its own errors, so there's some dancing
@@ -419,12 +419,12 @@ func sendAndFill(send func(...roachpb.Request) (*roachpb.BatchResponse, *roachpb
 	br, pErr := send(b.reqs...)
 	if pErr != nil {
 		_ = b.fillResults(nil, pErr)
-		return nil, pErr.GoError()
+		return nil, pErr
 	}
-	err := b.fillResults(br, nil)
+	pErr = b.fillResults(br, nil)
 
-	if err != nil {
-		return nil, err
+	if pErr != nil {
+		return nil, pErr
 	}
 	return br, nil
 }
@@ -440,15 +440,15 @@ func sendAndFill(send func(...roachpb.Request) (*roachpb.BatchResponse, *roachpb
 // Upon completion, Batch.Results will contain the results for each
 // operation. The order of the results matches the order the operations were
 // added to the batch.
-func (db *DB) Run(b *Batch) error {
-	_, err := db.RunWithResponse(b)
-	return err
+func (db *DB) Run(b *Batch) *roachpb.Error {
+	_, pErr := db.RunWithResponse(b)
+	return pErr
 }
 
 // RunWithResponse is a version of Run that returns the BatchResponse.
-func (db *DB) RunWithResponse(b *Batch) (*roachpb.BatchResponse, error) {
-	if err := b.prepare(); err != nil {
-		return nil, err
+func (db *DB) RunWithResponse(b *Batch) (*roachpb.BatchResponse, *roachpb.Error) {
+	if pErr := b.prepare(); pErr != nil {
+		return nil, pErr
 	}
 	return sendAndFill(db.send, b)
 }
@@ -460,7 +460,7 @@ func (db *DB) RunWithResponse(b *Batch) (*roachpb.BatchResponse, error) {
 // cause problems in the event it must be run more than once.
 //
 // TODO(pmattis): Allow transaction options to be specified.
-func (db *DB) Txn(retryable func(txn *Txn) error) error {
+func (db *DB) Txn(retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
 	txn := NewTxn(*db)
 	txn.SetDebugName("", 1)
 	return txn.exec(retryable)
@@ -491,21 +491,21 @@ func (db *DB) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Er
 
 // Runner only exports the Run method on a batch of operations.
 type Runner interface {
-	Run(b *Batch) error
+	Run(b *Batch) *roachpb.Error
 }
 
-func runOneResult(r Runner, b *Batch) (Result, error) {
-	if err := r.Run(b); err != nil {
-		return Result{Err: err}, err
+func runOneResult(r Runner, b *Batch) (Result, *roachpb.Error) {
+	if pErr := r.Run(b); pErr != nil {
+		return Result{PErr: pErr}, pErr
 	}
 	res := b.Results[0]
-	return res, res.Err
+	return res, res.PErr
 }
 
-func runOneRow(r Runner, b *Batch) (KeyValue, error) {
-	if err := r.Run(b); err != nil {
-		return KeyValue{}, err
+func runOneRow(r Runner, b *Batch) (KeyValue, *roachpb.Error) {
+	if pErr := r.Run(b); pErr != nil {
+		return KeyValue{}, pErr
 	}
 	res := b.Results[0]
-	return res.Rows[0], res.Err
+	return res.Rows[0], res.PErr
 }

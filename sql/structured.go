@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -108,7 +109,7 @@ func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
 }
 
 // Fill in column names and directions.
-func (desc *IndexDescriptor) fillColumns(elems parser.IndexElemList) error {
+func (desc *IndexDescriptor) fillColumns(elems parser.IndexElemList) *roachpb.Error {
 	desc.ColumnNames = make([]string, 0, len(elems))
 	desc.ColumnDirections = make([]IndexDescriptor_Direction, 0, len(elems))
 	for _, c := range elems {
@@ -119,7 +120,7 @@ func (desc *IndexDescriptor) fillColumns(elems parser.IndexElemList) error {
 		case parser.Descending:
 			desc.ColumnDirections = append(desc.ColumnDirections, IndexDescriptor_DESC)
 		default:
-			return fmt.Errorf("invalid direction %s for column %s", c.Direction, c.Column)
+			return roachpb.NewUErrorf("invalid direction %s for column %s", c.Direction, c.Column)
 		}
 	}
 	return nil
@@ -203,7 +204,7 @@ func (desc *TableDescriptor) allNonDropIndexes() []IndexDescriptor {
 
 // AllocateIDs allocates column and index ids for any column or index which has
 // an ID of 0.
-func (desc *TableDescriptor) AllocateIDs() error {
+func (desc *TableDescriptor) AllocateIDs() *roachpb.Error {
 	if desc.NextColumnID == 0 {
 		desc.NextColumnID = 1
 	}
@@ -302,7 +303,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 					continue
 				}
 				if index.containsColumnID(col.ID) {
-					return fmt.Errorf("index \"%s\" already contains column \"%s\"", index.Name, col.Name)
+					return roachpb.NewUErrorf("index \"%s\" already contains column \"%s\"", index.Name, col.Name)
 				}
 				index.ImplicitColumnIDs = append(index.ImplicitColumnIDs, col.ID)
 			}
@@ -316,9 +317,9 @@ func (desc *TableDescriptor) AllocateIDs() error {
 	if desc.ID == 0 {
 		desc.ID = keys.MaxReservedDescID + 1
 	}
-	err := desc.Validate()
+	pErr := roachpb.NewError(desc.Validate())
 	desc.ID = savedID
-	return err
+	return pErr
 }
 
 // Validate validates that the table descriptor is well formed. Checks include
@@ -453,7 +454,7 @@ func (desc *TableDescriptor) AddColumn(col ColumnDescriptor) {
 }
 
 // AddIndex adds an index to the table.
-func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
+func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) *roachpb.Error {
 	if primary {
 		// PrimaryIndex is unset.
 		if desc.PrimaryIndex.Name == "" {
@@ -463,7 +464,7 @@ func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
 			}
 			desc.PrimaryIndex = idx
 		} else {
-			return fmt.Errorf("multiple primary keys for table %q are not allowed", desc.Name)
+			return roachpb.NewUErrorf("multiple primary keys for table %q are not allowed", desc.Name)
 		}
 	} else {
 		desc.Indexes = append(desc.Indexes, idx)
@@ -474,7 +475,7 @@ func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
 // FindColumnByName finds the column with the specified name. It returns
 // DescriptorStatus for the column, and an index into either the columns
 // (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
-func (desc *TableDescriptor) FindColumnByName(name string) (DescriptorStatus, int, error) {
+func (desc *TableDescriptor) FindColumnByName(name string) (DescriptorStatus, int, *roachpb.Error) {
 	for i, c := range desc.Columns {
 		if equalName(c.Name, name) {
 			return DescriptorActive, i, nil
@@ -487,33 +488,33 @@ func (desc *TableDescriptor) FindColumnByName(name string) (DescriptorStatus, in
 			}
 		}
 	}
-	return DescriptorAbsent, -1, fmt.Errorf("column %q does not exist", name)
+	return DescriptorAbsent, -1, roachpb.NewUErrorf("column %q does not exist", name)
 }
 
 // FindActiveColumnByName finds an active column with the specified name.
-func (desc *TableDescriptor) FindActiveColumnByName(name string) (ColumnDescriptor, error) {
+func (desc *TableDescriptor) FindActiveColumnByName(name string) (ColumnDescriptor, *roachpb.Error) {
 	for _, c := range desc.Columns {
 		if equalName(c.Name, name) {
 			return c, nil
 		}
 	}
-	return ColumnDescriptor{}, fmt.Errorf("column %q does not exist", name)
+	return ColumnDescriptor{}, roachpb.NewUErrorf("column %q does not exist", name)
 }
 
 // FindColumnByID finds the active column with specified ID.
-func (desc *TableDescriptor) FindColumnByID(id ColumnID) (*ColumnDescriptor, error) {
+func (desc *TableDescriptor) FindColumnByID(id ColumnID) (*ColumnDescriptor, *roachpb.Error) {
 	for i, c := range desc.Columns {
 		if c.ID == id {
 			return &desc.Columns[i], nil
 		}
 	}
-	return nil, util.Errorf("column-id \"%d\" does not exist", id)
+	return nil, roachpb.NewErrorf("column-id \"%d\" does not exist", id)
 }
 
 // FindIndexByName finds the index with the specified name. It returns
 // DescriptorStatus for the index, and an index into either the indexes
 // (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
-func (desc *TableDescriptor) FindIndexByName(name string) (DescriptorStatus, int, error) {
+func (desc *TableDescriptor) FindIndexByName(name string) (DescriptorStatus, int, *roachpb.Error) {
 	for i, idx := range desc.Indexes {
 		if equalName(idx.Name, name) {
 			return DescriptorActive, i, nil
@@ -526,11 +527,11 @@ func (desc *TableDescriptor) FindIndexByName(name string) (DescriptorStatus, int
 			}
 		}
 	}
-	return DescriptorAbsent, -1, fmt.Errorf("index %q does not exist", name)
+	return DescriptorAbsent, -1, roachpb.NewUErrorf("index %q does not exist", name)
 }
 
 // FindIndexByID finds the active index with specified ID.
-func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error) {
+func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, *roachpb.Error) {
 	indexes := append(desc.Indexes, desc.PrimaryIndex)
 
 	for i, c := range indexes {
@@ -538,7 +539,7 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 			return &indexes[i], nil
 		}
 	}
-	return nil, util.Errorf("index-id \"%d\" does not exist", id)
+	return nil, roachpb.NewErrorf("index-id \"%d\" does not exist", id)
 }
 
 func (desc *TableDescriptor) makeMutationComplete(m DescriptorMutation) {

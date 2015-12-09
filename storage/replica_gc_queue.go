@@ -99,9 +99,9 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 		},
 		MaxRanges: 1,
 	})
-	br, err := q.db.RunWithResponse(b)
-	if err != nil {
-		return err
+	br, pErr := q.db.RunWithResponse(b)
+	if pErr != nil {
+		return pErr.GoError()
 	}
 	reply := br.Responses[0].GetInner().(*roachpb.RangeLookupResponse)
 
@@ -144,10 +144,10 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 	} else {
 		// This range is a current member of the raft group. Acquire the lease
 		// to avoid processing this range again before the next inactivity threshold.
-		if err := rng.requestLeaderLease(now); err != nil {
-			if _, ok := err.(*roachpb.LeaseRejectedError); !ok {
+		if pErr := rng.requestLeaderLease(now); pErr != nil {
+			if _, ok := pErr.GoError().(*roachpb.LeaseRejectedError); !ok {
 				if log.V(1) {
-					log.Infof("unable to acquire lease from valid range %s: %s", rng, err)
+					log.Infof("unable to acquire lease from valid range %s: %s", rng, pErr)
 				}
 			}
 		}
