@@ -19,6 +19,7 @@ package kv
 
 import (
 	"net"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -57,6 +58,7 @@ type LocalTestCluster struct {
 	Sender     *TxnCoordSender
 	distSender *DistSender
 	Stopper    *stop.Stopper
+	Latency    time.Duration // sleep for each RPC sent
 	tester     util.Tester
 }
 
@@ -82,6 +84,9 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 		getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message,
 		_ *rpc.Context) ([]proto.Message, error) {
 		// TODO(tschottdorf): remove getReply().
+		if ltc.Latency > 0 {
+			time.Sleep(ltc.Latency)
+		}
 		br, pErr := ltc.stores.Send(context.Background(), *getArgs(nil).(*roachpb.BatchRequest))
 		if br == nil {
 			br = &roachpb.BatchResponse{}
