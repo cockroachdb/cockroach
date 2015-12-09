@@ -37,7 +37,7 @@ var (
 
 // TypeCheck implements the Expr interface.
 func (expr *AndExpr) TypeCheck() (Datum, error) {
-	return typeCheckBooleanExprs(expr.Left, expr.Right)
+	return typeCheckBooleanExprs("AND", expr.Left, expr.Right)
 }
 
 // TypeCheck implements the Expr interface.
@@ -324,7 +324,7 @@ func (expr *IsOfTypeExpr) TypeCheck() (Datum, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr *NotExpr) TypeCheck() (Datum, error) {
-	return typeCheckBooleanExprs(expr.Expr)
+	return typeCheckBooleanExprs("NOT", expr.Expr)
 }
 
 // TypeCheck implements the Expr interface.
@@ -348,7 +348,7 @@ func (expr *NullIfExpr) TypeCheck() (Datum, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr *OrExpr) TypeCheck() (Datum, error) {
-	return typeCheckBooleanExprs(expr.Left, expr.Right)
+	return typeCheckBooleanExprs("OR", expr.Left, expr.Right)
 }
 
 // TypeCheck implements the Expr interface.
@@ -507,7 +507,7 @@ func (expr DTuple) TypeCheck() (Datum, error) {
 	return tuple, nil
 }
 
-func typeCheckBooleanExprs(exprs ...Expr) (Datum, error) {
+func typeCheckBooleanExprs(op string, exprs ...Expr) (Datum, error) {
 	for _, expr := range exprs {
 		dummyExpr, err := expr.TypeCheck()
 		if err != nil {
@@ -517,7 +517,7 @@ func typeCheckBooleanExprs(exprs ...Expr) (Datum, error) {
 			continue
 		}
 		if _, ok := dummyExpr.(DBool); !ok {
-			return nil, fmt.Errorf("incompatible AND argument type %s", dummyExpr.Type())
+			return nil, fmt.Errorf("incompatible %s argument type %s", op, dummyExpr.Type())
 		}
 	}
 	return DummyBool, nil
