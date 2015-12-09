@@ -108,9 +108,7 @@ func MakeColumnKey(colID ColumnID, primaryKey []byte) roachpb.Key {
 
 // MakeIndexKeyPrefix returns the key prefix used for the index's data.
 func MakeIndexKeyPrefix(tableID ID, indexID IndexID) []byte {
-	var key []byte
-	key = append(key, keys.TableDataPrefix...)
-	key = encoding.EncodeUvarint(key, uint64(tableID))
+	key := keys.MakeTablePrefix(uint32(tableID))
 	key = encoding.EncodeUvarint(key, uint64(indexID))
 	return key
 }

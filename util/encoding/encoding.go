@@ -31,12 +31,7 @@ const (
 	encodedNull    = 0x00
 	encodedNotNull = 0x01
 
-	intMin   = encodedNotNull + 2 // 0x03
-	intZero  = intMin + 8         // 0x0b
-	intSmall = 63
-	intMax   = intZero + intSmall + 8 // 0x92
-
-	floatNaN              = intMax + 1
+	floatNaN              = encodedNotNull + 1
 	floatNegativeInfinity = floatNaN + 1
 	floatNegLarge         = floatNegativeInfinity + 1
 	floatNegMedium        = floatNegLarge + 11
@@ -50,6 +45,14 @@ const (
 
 	bytesMarker byte = floatInfinity + 1
 	timeMarker  byte = bytesMarker + 1
+
+	// IntMin is chosen such that the range of int tags does not overlap the
+	// ascii character set that is frequently used in testing.
+	IntMin   = 0x80
+	intZero  = IntMin + 8
+	intSmall = IntMax - intZero - 8 // 111
+	// IntMax is the maximum int tag value.
+	IntMax = 0xff
 )
 
 // EncodeUint32 encodes the uint32 value using a big-endian 8 byte
@@ -130,24 +133,24 @@ func EncodeVarint(b []byte, v int64) []byte {
 	if v < 0 {
 		switch {
 		case v >= -0xff:
-			return append(b, intMin+7, byte(v))
+			return append(b, IntMin+7, byte(v))
 		case v >= -0xffff:
-			return append(b, intMin+6, byte(v>>8), byte(v))
+			return append(b, IntMin+6, byte(v>>8), byte(v))
 		case v >= -0xffffff:
-			return append(b, intMin+5, byte(v>>16), byte(v>>8), byte(v))
+			return append(b, IntMin+5, byte(v>>16), byte(v>>8), byte(v))
 		case v >= -0xffffffff:
-			return append(b, intMin+4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+			return append(b, IntMin+4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 		case v >= -0xffffffffff:
-			return append(b, intMin+3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
+			return append(b, IntMin+3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
 				byte(v))
 		case v >= -0xffffffffffff:
-			return append(b, intMin+2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
+			return append(b, IntMin+2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
 				byte(v>>8), byte(v))
 		case v >= -0xffffffffffffff:
-			return append(b, intMin+1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
+			return append(b, IntMin+1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
 				byte(v>>16), byte(v>>8), byte(v))
 		default:
-			return append(b, intMin, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+			return append(b, IntMin, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
 				byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 		}
 	}
@@ -155,8 +158,8 @@ func EncodeVarint(b []byte, v int64) []byte {
 	return EncodeUvarint(b, uint64(v))
 }
 
-// EncodeVarintDecreasing encodes the uint64 value so that it sorts in
-// reverse order, from largest to smallest.
+// EncodeVarintDecreasing encodes the int64 value so that it sorts in reverse
+// order, from largest to smallest.
 func EncodeVarintDecreasing(b []byte, v int64) []byte {
 	return EncodeVarint(b, ^v)
 }
@@ -212,24 +215,24 @@ func EncodeUvarint(b []byte, v uint64) []byte {
 	case v <= intSmall:
 		return append(b, intZero+byte(v))
 	case v <= 0xff:
-		return append(b, intMax-7, byte(v))
+		return append(b, IntMax-7, byte(v))
 	case v <= 0xffff:
-		return append(b, intMax-6, byte(v>>8), byte(v))
+		return append(b, IntMax-6, byte(v>>8), byte(v))
 	case v <= 0xffffff:
-		return append(b, intMax-5, byte(v>>16), byte(v>>8), byte(v))
+		return append(b, IntMax-5, byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffff:
-		return append(b, intMax-4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+		return append(b, IntMax-4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffffff:
-		return append(b, intMax-3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
+		return append(b, IntMax-3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
 			byte(v))
 	case v <= 0xffffffffffff:
-		return append(b, intMax-2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
+		return append(b, IntMax-2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
 			byte(v>>8), byte(v))
 	case v <= 0xffffffffffffff:
-		return append(b, intMax-1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
+		return append(b, IntMax-1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
 			byte(v>>16), byte(v>>8), byte(v))
 	default:
-		return append(b, intMax, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+		return append(b, IntMax, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
 			byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	}
 }
@@ -239,34 +242,34 @@ func EncodeUvarint(b []byte, v uint64) []byte {
 func EncodeUvarintDecreasing(b []byte, v uint64) []byte {
 	switch {
 	case v == 0:
-		return append(b, intMin+8)
+		return append(b, IntMin+8)
 	case v <= 0xff:
 		v = ^v
-		return append(b, intMin+7, byte(v))
+		return append(b, IntMin+7, byte(v))
 	case v <= 0xffff:
 		v = ^v
-		return append(b, intMin+6, byte(v>>8), byte(v))
+		return append(b, IntMin+6, byte(v>>8), byte(v))
 	case v <= 0xffffff:
 		v = ^v
-		return append(b, intMin+5, byte(v>>16), byte(v>>8), byte(v))
+		return append(b, IntMin+5, byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffff:
 		v = ^v
-		return append(b, intMin+4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+		return append(b, IntMin+4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffffff:
 		v = ^v
-		return append(b, intMin+3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
+		return append(b, IntMin+3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
 			byte(v))
 	case v <= 0xffffffffffff:
 		v = ^v
-		return append(b, intMin+2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
+		return append(b, IntMin+2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
 			byte(v>>8), byte(v))
 	case v <= 0xffffffffffffff:
 		v = ^v
-		return append(b, intMin+1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
+		return append(b, IntMin+1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
 			byte(v>>16), byte(v>>8), byte(v))
 	default:
 		v = ^v
-		return append(b, intMin, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+		return append(b, IntMin, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
 			byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	}
 }
@@ -337,7 +340,7 @@ type escapes struct {
 
 var (
 	ascendingEscapes  = escapes{escape, escapedTerm, escaped00, escapedFF, bytesMarker}
-	descendingEscapes = escapes{^escape, ^escapedTerm, ^escaped00, ^escapedFF, ^bytesMarker}
+	descendingEscapes = escapes{^escape, ^escapedTerm, ^escaped00, ^escapedFF, bytesMarker}
 )
 
 // EncodeBytes encodes the []byte value using an escape-based
@@ -369,7 +372,7 @@ func EncodeBytes(b []byte, data []byte) []byte {
 func EncodeBytesDecreasing(b []byte, data []byte) []byte {
 	n := len(b)
 	b = EncodeBytes(b, data)
-	onesComplement(b[n:])
+	onesComplement(b[n+1:])
 	return b
 }
 
@@ -597,7 +600,7 @@ func PeekType(b []byte) Type {
 			return Bytes
 		case m == timeMarker:
 			return Time
-		case m >= intMin && m <= intMax:
+		case m >= IntMin && m <= IntMax:
 			return Int
 		case m >= floatNaN && m <= floatInfinity:
 			return Float

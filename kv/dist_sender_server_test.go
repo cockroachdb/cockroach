@@ -323,6 +323,9 @@ func TestSingleRangeReverseScan(t *testing.T) {
 		t.Errorf("expected %d rows; got %d", wanted, l)
 	}
 	// Case 4: Test keys.SystemMax
+	// This span covers the system DB keys. Note sql.GetInitialSystemValues
+	// returns one key before keys.SystemMax, but our scan is including one key
+	// (\xffa) created for the test.
 	if rows, err := db.ReverseScan(keys.SystemMax, "b", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 1 {

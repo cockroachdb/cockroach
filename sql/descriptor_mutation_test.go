@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -93,10 +92,8 @@ func (mt mutationTest) checkQueryResponse(q string, e [][]string) int {
 // in the table equals e.
 func (mt mutationTest) checkTableSize(e int) {
 	// Check that there are no hidden values
-	var tablePrefix []byte
-	tablePrefix = append(tablePrefix, keys.TableDataPrefix...)
 	tableDesc := mt.desc.GetTable()
-	tablePrefix = encoding.EncodeUvarint(tablePrefix, uint64(tableDesc.ID))
+	tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
 	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
 	if kvs, err := mt.kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {

@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
@@ -393,11 +392,10 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, e
 }
 
 func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, error) {
-	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
+	if encoding.PeekType(key) != encoding.Int {
 		return 0, nil, util.Errorf("%s: invalid key prefix: %q", desc.Name, key)
 	}
 
-	key = bytes.TrimPrefix(key, keys.TableDataPrefix)
 	key, tableID, err := encoding.DecodeUvarint(key)
 	if err != nil {
 		return 0, nil, err
