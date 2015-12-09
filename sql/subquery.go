@@ -48,9 +48,17 @@ func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, par
 	}
 	v.path = append(v.path, expr)
 
+	var exists *parser.ExistsExpr
 	subquery, ok := expr.(*parser.Subquery)
 	if !ok {
-		return v, expr
+		exists, ok = expr.(*parser.ExistsExpr)
+		if !ok {
+			return v, expr
+		}
+		subquery, ok = exists.Subquery.(*parser.Subquery)
+		if !ok {
+			return v, expr
+		}
 	}
 
 	// Calling makePlan() might recursively invoke expandSubqueries, so we need a
@@ -59,6 +67,19 @@ func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, par
 	var plan planNode
 	if plan, v.err = planMaker.makePlan(subquery.Select); v.err != nil {
 		return nil, expr
+	}
+
+	if exists != nil {
+		// For EXISTS expression, all we want to know is if there is at lease one
+		// result.
+		if plan.Next() {
+			return v, parser.DBool(true)
+		}
+		v.err = plan.Err()
+		if v.err != nil {
+			return nil, expr
+		}
+		return v, parser.DBool(false)
 	}
 
 	columns, multipleRows := v.getSubqueryContext()

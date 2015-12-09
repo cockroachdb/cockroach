@@ -875,7 +875,8 @@ func (expr *ComparisonExpr) Eval(ctx EvalContext) (Datum, error) {
 
 // Eval implements the Expr interface.
 func (t *ExistsExpr) Eval(ctx EvalContext) (Datum, error) {
-	return t.Subquery.Eval(ctx)
+	// Exists expressions are handle during subquery expansion.
+	return nil, util.Errorf("unhandled type %T", t)
 }
 
 // Eval implements the Expr interface.
@@ -1077,6 +1078,7 @@ func (t *RangeCond) Eval(_ EvalContext) (Datum, error) {
 
 // Eval implements the Expr interface.
 func (t *Subquery) Eval(_ EvalContext) (Datum, error) {
+	// Subquery expressions are handle during subquery expansion.
 	return nil, util.Errorf("unhandled type %T", t)
 }
 

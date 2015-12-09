@@ -135,3 +135,13 @@ query IT
 SELECT * FROM kv WHERE k = (SELECT k FROM kv WHERE (k, v) = (1, 'one'))
 ----
 1 one
+
+query B
+SELECT EXISTS(SELECT 1 FROM kv AS x WHERE x.k = 1)
+----
+true
+
+query B
+SELECT EXISTS(SELECT 1 FROM kv WHERE k = 2)
+----
+false
