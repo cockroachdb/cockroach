@@ -75,7 +75,7 @@ func (expr *ComparisonExpr) Walk(v Visitor) {
 
 // Walk implements the Expr interface.
 func (expr *ExistsExpr) Walk(v Visitor) {
-	WalkStmt(v, expr.Subquery.Select)
+	expr.Subquery = WalkExpr(v, expr.Subquery)
 }
 
 // Walk implements the Expr interface.

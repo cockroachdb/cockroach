@@ -192,7 +192,7 @@ func (node *IsOfTypeExpr) String() string {
 
 // ExistsExpr represents an EXISTS expression.
 type ExistsExpr struct {
-	Subquery *Subquery
+	Subquery Expr
 }
 
 func (node *ExistsExpr) String() string {
