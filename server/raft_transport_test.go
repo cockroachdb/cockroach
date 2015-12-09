@@ -94,13 +94,17 @@ func TestSendAndReceive(t *testing.T) {
 	for serverIndex := 0; serverIndex < numServers; serverIndex++ {
 		nodeID := nextNodeID
 		nextNodeID++
-		server := rpc.NewServer(util.CreateTestAddr("tcp"), nodeRPCContext)
-		if err := server.Start(); err != nil {
+		server := rpc.NewServer(nodeRPCContext)
+		tlsConfig, err := nodeRPCContext.GetServerTLSConfig()
+		if err != nil {
 			t.Fatal(err)
 		}
-		defer server.Close()
+		ln, err := util.ListenAndServe(stopper, server, util.CreateTestAddr("tcp"), tlsConfig)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-		addr := server.Addr()
+		addr := ln.Addr()
 		// Have to call g.SetNodeID before call g.AddInfo
 		g.SetNodeID(roachpb.NodeID(nodeID))
 		if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
@@ -236,11 +240,15 @@ func TestInOrderDelivery(t *testing.T) {
 	g := gossip.New(nodeRPCContext, gossip.TestBootstrap)
 	g.SetNodeID(roachpb.NodeID(1))
 
-	server := rpc.NewServer(util.CreateTestAddr("tcp"), nodeRPCContext)
-	if err := server.Start(); err != nil {
+	server := rpc.NewServer(nodeRPCContext)
+	tlsConfig, err := nodeRPCContext.GetServerTLSConfig()
+	if err != nil {
 		t.Fatal(err)
 	}
-	defer server.Close()
+	ln, err := util.ListenAndServe(stopper, server, util.CreateTestAddr("tcp"), tlsConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	const numMessages = 100
 	nodeID := roachpb.NodeID(roachpb.NodeID(2))
@@ -253,7 +261,7 @@ func TestInOrderDelivery(t *testing.T) {
 	if err := serverTransport.Listen(roachpb.StoreID(nodeID), serverChannel); err != nil {
 		t.Fatal(err)
 	}
-	addr := server.Addr()
+	addr := ln.Addr()
 	// Have to set gossip.NodeID before call gossip.AddInofXXX
 	g.SetNodeID(nodeID)
 	if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID),

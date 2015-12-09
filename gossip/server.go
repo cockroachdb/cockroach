@@ -179,8 +179,7 @@ func (s *server) maxPeers() int {
 // then begins processing connecting clients in an infinite select
 // loop via goroutine. Periodically, clients connected and awaiting
 // the next round of gossip are awoken via the conditional variable.
-func (s *server) start(rpcServer *rpc.Server, stopper *stop.Stopper) {
-	addr := rpcServer.Addr()
+func (s *server) start(rpcServer *rpc.Server, addr net.Addr, stopper *stop.Stopper) {
 	s.is.NodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 	if err := rpcServer.Register("Gossip.Gossip", s.Gossip, &Request{}); err != nil {
 		log.Fatalf("unable to register gossip service with RPC server: %s", err)

@@ -428,12 +428,16 @@ func (g *Gossip) Outgoing() []roachpb.NodeID {
 // gossip network using the supplied rpc server and the gossip
 // bootstrap addresses specified via command-line flag: --gossip.
 //
+// The supplied address is used to identify the gossip instance in the
+// gossip network; it will be used by other instances to connect to
+// this instance.
+//
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
-func (g *Gossip) Start(rpcServer *rpc.Server, stopper *stop.Stopper) {
-	g.server.start(rpcServer, stopper) // serve gossip protocol
-	g.bootstrap(stopper)               // bootstrap gossip client
-	g.manage(stopper)                  // manage gossip clients
+func (g *Gossip) Start(rpcServer *rpc.Server, addr net.Addr, stopper *stop.Stopper) {
+	g.server.start(rpcServer, addr, stopper) // serve gossip protocol
+	g.bootstrap(stopper)                     // bootstrap gossip client
+	g.manage(stopper)                        // manage gossip clients
 	g.maybeWarnAboutInit(stopper)
 }
 
