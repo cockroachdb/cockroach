@@ -211,7 +211,11 @@ func (expr *ComparisonExpr) TypeCheck() (Datum, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr *ExistsExpr) TypeCheck() (Datum, error) {
-	return expr.Subquery.TypeCheck()
+	_, err := expr.Subquery.TypeCheck()
+	if err != nil {
+		return nil, err
+	}
+	return DummyBool, nil
 }
 
 // TypeCheck implements the Expr interface.
