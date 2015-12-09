@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -132,7 +131,7 @@ func (e *Executor) getSystemConfig() config.SystemConfig {
 }
 
 // StatementResult returns the result types of the given statement(s).
-func (e *Executor) StatementResult(user string, stmt parser.Statement, args parser.MapArgs) ([]*driver.Response_Result_Rows_Column, error) {
+func (e *Executor) StatementResult(user string, stmt parser.Statement, args parser.MapArgs) ([]*driver.Response_Result_Rows_Column, *roachpb.Error) {
 	planMaker := plannerPool.Get().(*planner)
 	defer plannerPool.Put(planMaker)
 
@@ -249,7 +248,7 @@ func (e *Executor) execStmts(sql string, planMaker *planner) driver.Response {
 	if err != nil {
 		// A parse error occurred: we can't determine if there were multiple
 		// statements or only one, so just pretend there was one.
-		resp.Results = append(resp.Results, makeResultFromError(planMaker, err))
+		resp.Results = append(resp.Results, makeResultFromError(planMaker, roachpb.NewError(err)))
 		return resp
 	}
 	for _, stmt := range stmts {
@@ -274,12 +273,12 @@ func (e *Executor) execStmts(sql string, planMaker *planner) driver.Response {
 	return resp
 }
 
-func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.Response_Result, error) {
+func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.Response_Result, *roachpb.Error) {
 	var result driver.Response_Result
 	switch stmt.(type) {
 	case *parser.BeginTransaction:
 		if planMaker.txn != nil {
-			return result, errTransactionInProgress
+			return result, roachpb.NewError(errTransactionInProgress)
 		}
 		// Start a transaction here and not in planMaker to prevent begin
 		// transaction from being called within an auto-transaction below.
@@ -287,7 +286,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 		planMaker.txn.SetDebugName("sql", 0)
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		if planMaker.txn == nil {
-			return result, errNoTransactionInProgress
+			return result, roachpb.NewError(errNoTransactionInProgress)
 		} else if planMaker.txn.Proto.Status == roachpb.ABORTED {
 			// Reset to allow starting a new transaction.
 			planMaker.resetTxn()
@@ -295,17 +294,17 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 		}
 	case *parser.SetTransaction:
 		if planMaker.txn == nil {
-			return result, errNoTransactionInProgress
+			return result, roachpb.NewError(errNoTransactionInProgress)
 		}
 	default:
 		if planMaker.txn != nil && planMaker.txn.Proto.Status == roachpb.ABORTED {
-			return result, errTransactionAborted
+			return result, roachpb.NewError(errTransactionAborted)
 		}
 	}
 
 	// Bind all the placeholder variables in the stmt to actual values.
 	if err := parser.FillArgs(stmt, &planMaker.params); err != nil {
-		return result, err
+		return result, roachpb.NewError(err)
 	}
 
 	// Create a function which both makes and executes the plan, populating
@@ -314,7 +313,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 	// TODO(pmattis): Should this be a separate function? Perhaps we should move
 	// some of the common code back out into execStmts and have execStmt contain
 	// only the body of this closure.
-	f := func(timestamp time.Time, autoCommit bool) error {
+	f := func(timestamp time.Time, autoCommit bool) *roachpb.Error {
 		planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: timestamp}
 		plan, err := planMaker.makePlan(stmt, autoCommit)
 		if err != nil {
@@ -389,7 +388,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 
 	// No transaction. Run the command as a retryable block in an
 	// auto-transaction.
-	err := e.db.Txn(func(txn *client.Txn) error {
+	err := e.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		timestamp := time.Now()
 		planMaker.setTxn(txn, timestamp)
 		err := f(timestamp, true)
@@ -407,7 +406,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 					e.systemConfigCond.Wait()
 				} else {
 					if i == 0 {
-						err = util.Errorf("expected %q to require a gossip update, but it did not", stmt)
+						err = roachpb.NewErrorf("expected %q to require a gossip update, but it did not", stmt)
 					} else if i > 1 {
 						log.Infof("%q unexpectedly required %d gossip updates", stmt, i)
 					}
@@ -420,7 +419,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 	return result, err
 }
 
-func (e *Executor) waitForCompletedSchemaChangesToPropagate(planMaker *planner) error {
+func (e *Executor) waitForCompletedSchemaChangesToPropagate(planMaker *planner) *roachpb.Error {
 	for _, id := range planMaker.completedSchemaChange {
 		retryOpts := retry.Options{
 			InitialBackoff: 20 * time.Millisecond,
@@ -440,13 +439,14 @@ func (e *Executor) waitForCompletedSchemaChangesToPropagate(planMaker *planner) 
 // If we hit an error and there is a pending transaction, rollback
 // the transaction before returning. The client does not have to
 // deal with cleaning up transaction state.
-func makeResultFromError(planMaker *planner, err error) driver.Response_Result {
+func makeResultFromError(planMaker *planner, err *roachpb.Error) driver.Response_Result {
 	if planMaker.txn != nil {
-		if err != errTransactionAborted {
+		// TODO(kaneda): Use type check?
+		if err.GoError().Error() != errTransactionAborted.Error() {
 			planMaker.txn.Cleanup(err)
 		}
 	}
-	errString := err.Error()
+	errString := err.GoError().Error()
 	return driver.Response_Result{Error: &errString}
 }
 
@@ -569,7 +569,7 @@ func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
 	panic(fmt.Sprintf("unexpected type %T", arg))
 }
 
-func makeDriverDatum(datum parser.Datum) (driver.Datum, error) {
+func makeDriverDatum(datum parser.Datum) (driver.Datum, *roachpb.Error) {
 	if datum == parser.DNull {
 		return driver.Datum{}, nil
 	}
@@ -611,6 +611,6 @@ func makeDriverDatum(datum parser.Datum) (driver.Datum, error) {
 			Payload: &driver.Datum_IntervalVal{IntervalVal: vt.Nanoseconds()},
 		}, nil
 	default:
-		return driver.Datum{}, fmt.Errorf("unsupported result type: %s", datum.Type())
+		return driver.Datum{}, roachpb.NewUErrorf("unsupported result type: %s", datum.Type())
 	}
 }

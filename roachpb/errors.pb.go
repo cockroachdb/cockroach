@@ -181,9 +181,6 @@ func (*TransactionStatusError) ProtoMessage()    {}
 type WriteIntentError struct {
 	Intents  []Intent `protobuf:"bytes,1,rep,name=intents" json:"intents"`
 	Resolved bool     `protobuf:"varint,2,opt,name=resolved" json:"resolved"`
-	// The index, if given, contains the index of the request (in the batch)
-	// whose execution caused the error.
-	Index *ErrPosition `protobuf:"bytes,3,opt,name=index" json:"index,omitempty"`
 }
 
 func (m *WriteIntentError) Reset()         { *m = WriteIntentError{} }
@@ -218,8 +215,7 @@ func (*OpRequiresTxnError) ProtoMessage()    {}
 // because it was missing or was not equal. The error will
 // contain the actual value found.
 type ConditionFailedError struct {
-	ActualValue *Value       `protobuf:"bytes,1,opt,name=actual_value" json:"actual_value,omitempty"`
-	Index       *ErrPosition `protobuf:"bytes,2,opt,name=index" json:"index,omitempty"`
+	ActualValue *Value `protobuf:"bytes,1,opt,name=actual_value" json:"actual_value,omitempty"`
 }
 
 func (m *ConditionFailedError) Reset()         { *m = ConditionFailedError{} }
@@ -249,6 +245,28 @@ func (m *SendError) Reset()         { *m = SendError{} }
 func (m *SendError) String() string { return proto.CompactTextString(m) }
 func (*SendError) ProtoMessage()    {}
 
+// A RaftGroupDeletedError indicates a raft group has been deleted for
+// the replica.
+type RaftGroupDeletedError struct {
+}
+
+func (m *RaftGroupDeletedError) Reset()         { *m = RaftGroupDeletedError{} }
+func (m *RaftGroupDeletedError) String() string { return proto.CompactTextString(m) }
+func (*RaftGroupDeletedError) ProtoMessage()    {}
+
+// A ReplicaCorruptionError indicates that the replica has experienced
+// an error which puts its integrity at risk.
+type ReplicaCorruptionError struct {
+	ErrorMsg string `protobuf:"bytes,1,opt,name=error_msg" json:"error_msg"`
+	// processed indicates that the error has been taken into account and
+	// necessary steps will be taken. For now, required for testing.
+	Processed bool `protobuf:"varint,2,opt,name=processed" json:"processed"`
+}
+
+func (m *ReplicaCorruptionError) Reset()         { *m = ReplicaCorruptionError{} }
+func (m *ReplicaCorruptionError) String() string { return proto.CompactTextString(m) }
+func (*ReplicaCorruptionError) ProtoMessage()    {}
+
 // ErrorDetail is a union type containing all available errors.
 type ErrorDetail struct {
 	NotLeader                     *NotLeaderError                     `protobuf:"bytes,1,opt,name=not_leader" json:"not_leader,omitempty"`
@@ -266,6 +284,8 @@ type ErrorDetail struct {
 	LeaseRejected                 *LeaseRejectedError                 `protobuf:"bytes,13,opt,name=lease_rejected" json:"lease_rejected,omitempty"`
 	NodeUnavailable               *NodeUnavailableError               `protobuf:"bytes,14,opt,name=node_unavailable" json:"node_unavailable,omitempty"`
 	Send                          *SendError                          `protobuf:"bytes,15,opt,name=send" json:"send,omitempty"`
+	RaftGroupDeleted              *RaftGroupDeletedError              `protobuf:"bytes,16,opt,name=raft_group_deleted" json:"raft_group_deleted,omitempty"`
+	ReplicaCorruptionError        *ReplicaCorruptionError             `protobuf:"bytes,17,opt,name=replica_corruption_error" json:"replica_corruption_error,omitempty"`
 }
 
 func (m *ErrorDetail) Reset()         { *m = ErrorDetail{} }
@@ -294,9 +314,14 @@ type Error struct {
 	// If transaction_restart is not ABORT, the error condition may be handled by
 	// restarting the transaction (with or without a backoff).
 	TransactionRestart TransactionRestart `protobuf:"varint,3,opt,name=transaction_restart,enum=cockroach.roachpb.TransactionRestart" json:"transaction_restart"`
+	// Transaction where the error is generated.
+	Txn *Transaction `protobuf:"bytes,4,opt,name=txn" json:"txn,omitempty"`
 	// If an ErrorDetail is present, it may contain additional structured data
 	// about the error.
-	Detail *ErrorDetail `protobuf:"bytes,4,opt,name=detail" json:"detail,omitempty"`
+	Detail *ErrorDetail `protobuf:"bytes,5,opt,name=detail" json:"detail,omitempty"`
+	// The index, if given, contains the index of the request (in the batch)
+	// whose execution caused the error.
+	Index *ErrPosition `protobuf:"bytes,6,opt,name=index" json:"index,omitempty"`
 }
 
 func (m *Error) Reset()      { *m = Error{} }
@@ -318,6 +343,8 @@ func init() {
 	proto.RegisterType((*ConditionFailedError)(nil), "cockroach.roachpb.ConditionFailedError")
 	proto.RegisterType((*LeaseRejectedError)(nil), "cockroach.roachpb.LeaseRejectedError")
 	proto.RegisterType((*SendError)(nil), "cockroach.roachpb.SendError")
+	proto.RegisterType((*RaftGroupDeletedError)(nil), "cockroach.roachpb.RaftGroupDeletedError")
+	proto.RegisterType((*ReplicaCorruptionError)(nil), "cockroach.roachpb.ReplicaCorruptionError")
 	proto.RegisterType((*ErrorDetail)(nil), "cockroach.roachpb.ErrorDetail")
 	proto.RegisterType((*ErrPosition)(nil), "cockroach.roachpb.ErrPosition")
 	proto.RegisterType((*Error)(nil), "cockroach.roachpb.Error")
@@ -641,16 +668,6 @@ func (m *WriteIntentError) MarshalTo(data []byte) (int, error) {
 		data[i] = 0
 	}
 	i++
-	if m.Index != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.Index.Size()))
-		n12, err := m.Index.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n12
-	}
 	return i, nil
 }
 
@@ -672,19 +689,19 @@ func (m *WriteTooOldError) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintErrors(data, i, uint64(m.Timestamp.Size()))
-	n13, err := m.Timestamp.MarshalTo(data[i:])
+	n12, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n12
+	data[i] = 0x12
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.ExistingTimestamp.Size()))
+	n13, err := m.ExistingTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n13
-	data[i] = 0x12
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.ExistingTimestamp.Size()))
-	n14, err := m.ExistingTimestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n14
 	return i, nil
 }
 
@@ -725,21 +742,11 @@ func (m *ConditionFailedError) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.ActualValue.Size()))
-		n15, err := m.ActualValue.MarshalTo(data[i:])
+		n14, err := m.ActualValue.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n15
-	}
-	if m.Index != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintErrors(data, i, uint64(m.Index.Size()))
-		n16, err := m.Index.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n16
+		i += n14
 	}
 	return i, nil
 }
@@ -766,19 +773,19 @@ func (m *LeaseRejectedError) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintErrors(data, i, uint64(m.Requested.Size()))
-	n17, err := m.Requested.MarshalTo(data[i:])
+	n15, err := m.Requested.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n17
+	i += n15
 	data[i] = 0x1a
 	i++
 	i = encodeVarintErrors(data, i, uint64(m.Existing.Size()))
-	n18, err := m.Existing.MarshalTo(data[i:])
+	n16, err := m.Existing.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n18
+	i += n16
 	return i, nil
 }
 
@@ -812,6 +819,54 @@ func (m *SendError) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *RaftGroupDeletedError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *RaftGroupDeletedError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	return i, nil
+}
+
+func (m *ReplicaCorruptionError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ReplicaCorruptionError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintErrors(data, i, uint64(len(m.ErrorMsg)))
+	i += copy(data[i:], m.ErrorMsg)
+	data[i] = 0x10
+	i++
+	if m.Processed {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
+	return i, nil
+}
+
 func (m *ErrorDetail) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -831,147 +886,171 @@ func (m *ErrorDetail) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.NotLeader.Size()))
-		n19, err := m.NotLeader.MarshalTo(data[i:])
+		n17, err := m.NotLeader.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n19
+		i += n17
 	}
 	if m.RangeNotFound != nil {
 		data[i] = 0x12
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.RangeNotFound.Size()))
-		n20, err := m.RangeNotFound.MarshalTo(data[i:])
+		n18, err := m.RangeNotFound.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n20
+		i += n18
 	}
 	if m.RangeKeyMismatch != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.RangeKeyMismatch.Size()))
-		n21, err := m.RangeKeyMismatch.MarshalTo(data[i:])
+		n19, err := m.RangeKeyMismatch.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n21
+		i += n19
 	}
 	if m.ReadWithinUncertaintyInterval != nil {
 		data[i] = 0x22
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.ReadWithinUncertaintyInterval.Size()))
-		n22, err := m.ReadWithinUncertaintyInterval.MarshalTo(data[i:])
+		n20, err := m.ReadWithinUncertaintyInterval.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n22
+		i += n20
 	}
 	if m.TransactionAborted != nil {
 		data[i] = 0x2a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.TransactionAborted.Size()))
-		n23, err := m.TransactionAborted.MarshalTo(data[i:])
+		n21, err := m.TransactionAborted.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n23
+		i += n21
 	}
 	if m.TransactionPush != nil {
 		data[i] = 0x32
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.TransactionPush.Size()))
-		n24, err := m.TransactionPush.MarshalTo(data[i:])
+		n22, err := m.TransactionPush.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n24
+		i += n22
 	}
 	if m.TransactionRetry != nil {
 		data[i] = 0x3a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.TransactionRetry.Size()))
-		n25, err := m.TransactionRetry.MarshalTo(data[i:])
+		n23, err := m.TransactionRetry.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n25
+		i += n23
 	}
 	if m.TransactionStatus != nil {
 		data[i] = 0x42
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.TransactionStatus.Size()))
-		n26, err := m.TransactionStatus.MarshalTo(data[i:])
+		n24, err := m.TransactionStatus.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n26
+		i += n24
 	}
 	if m.WriteIntent != nil {
 		data[i] = 0x4a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.WriteIntent.Size()))
-		n27, err := m.WriteIntent.MarshalTo(data[i:])
+		n25, err := m.WriteIntent.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n27
+		i += n25
 	}
 	if m.WriteTooOld != nil {
 		data[i] = 0x52
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.WriteTooOld.Size()))
-		n28, err := m.WriteTooOld.MarshalTo(data[i:])
+		n26, err := m.WriteTooOld.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n28
+		i += n26
 	}
 	if m.OpRequiresTxn != nil {
 		data[i] = 0x5a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.OpRequiresTxn.Size()))
-		n29, err := m.OpRequiresTxn.MarshalTo(data[i:])
+		n27, err := m.OpRequiresTxn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n29
+		i += n27
 	}
 	if m.ConditionFailed != nil {
 		data[i] = 0x62
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.ConditionFailed.Size()))
-		n30, err := m.ConditionFailed.MarshalTo(data[i:])
+		n28, err := m.ConditionFailed.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n30
+		i += n28
 	}
 	if m.LeaseRejected != nil {
 		data[i] = 0x6a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.LeaseRejected.Size()))
-		n31, err := m.LeaseRejected.MarshalTo(data[i:])
+		n29, err := m.LeaseRejected.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n31
+		i += n29
 	}
 	if m.NodeUnavailable != nil {
 		data[i] = 0x72
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.NodeUnavailable.Size()))
-		n32, err := m.NodeUnavailable.MarshalTo(data[i:])
+		n30, err := m.NodeUnavailable.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n32
+		i += n30
 	}
 	if m.Send != nil {
 		data[i] = 0x7a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.Send.Size()))
-		n33, err := m.Send.MarshalTo(data[i:])
+		n31, err := m.Send.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n31
+	}
+	if m.RaftGroupDeleted != nil {
+		data[i] = 0x82
+		i++
+		data[i] = 0x1
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.RaftGroupDeleted.Size()))
+		n32, err := m.RaftGroupDeleted.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n32
+	}
+	if m.ReplicaCorruptionError != nil {
+		data[i] = 0x8a
+		i++
+		data[i] = 0x1
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.ReplicaCorruptionError.Size()))
+		n33, err := m.ReplicaCorruptionError.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -1031,15 +1110,35 @@ func (m *Error) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x18
 	i++
 	i = encodeVarintErrors(data, i, uint64(m.TransactionRestart))
-	if m.Detail != nil {
+	if m.Txn != nil {
 		data[i] = 0x22
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.Detail.Size()))
-		n34, err := m.Detail.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.Txn.Size()))
+		n34, err := m.Txn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n34
+	}
+	if m.Detail != nil {
+		data[i] = 0x2a
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.Detail.Size()))
+		n35, err := m.Detail.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n35
+	}
+	if m.Index != nil {
+		data[i] = 0x32
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.Index.Size()))
+		n36, err := m.Index.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n36
 	}
 	return i, nil
 }
@@ -1178,10 +1277,6 @@ func (m *WriteIntentError) Size() (n int) {
 		}
 	}
 	n += 2
-	if m.Index != nil {
-		l = m.Index.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
 	return n
 }
 
@@ -1208,10 +1303,6 @@ func (m *ConditionFailedError) Size() (n int) {
 		l = m.ActualValue.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
-	if m.Index != nil {
-		l = m.Index.Size()
-		n += 1 + l + sovErrors(uint64(l))
-	}
 	return n
 }
 
@@ -1231,6 +1322,21 @@ func (m *SendError) Size() (n int) {
 	var l int
 	_ = l
 	l = len(m.Message)
+	n += 1 + l + sovErrors(uint64(l))
+	n += 2
+	return n
+}
+
+func (m *RaftGroupDeletedError) Size() (n int) {
+	var l int
+	_ = l
+	return n
+}
+
+func (m *ReplicaCorruptionError) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.ErrorMsg)
 	n += 1 + l + sovErrors(uint64(l))
 	n += 2
 	return n
@@ -1299,6 +1405,14 @@ func (m *ErrorDetail) Size() (n int) {
 		l = m.Send.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
+	if m.RaftGroupDeleted != nil {
+		l = m.RaftGroupDeleted.Size()
+		n += 2 + l + sovErrors(uint64(l))
+	}
+	if m.ReplicaCorruptionError != nil {
+		l = m.ReplicaCorruptionError.Size()
+		n += 2 + l + sovErrors(uint64(l))
+	}
 	return n
 }
 
@@ -1316,8 +1430,16 @@ func (m *Error) Size() (n int) {
 	n += 1 + l + sovErrors(uint64(l))
 	n += 2
 	n += 1 + sovErrors(uint64(m.TransactionRestart))
+	if m.Txn != nil {
+		l = m.Txn.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
 	if m.Detail != nil {
 		l = m.Detail.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
+	if m.Index != nil {
+		l = m.Index.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
 	return n
@@ -1382,6 +1504,12 @@ func (this *ErrorDetail) GetValue() interface{} {
 	if this.Send != nil {
 		return this.Send
 	}
+	if this.RaftGroupDeleted != nil {
+		return this.RaftGroupDeleted
+	}
+	if this.ReplicaCorruptionError != nil {
+		return this.ReplicaCorruptionError
+	}
 	return nil
 }
 
@@ -1417,6 +1545,10 @@ func (this *ErrorDetail) SetValue(value interface{}) bool {
 		this.NodeUnavailable = vt
 	case *SendError:
 		this.Send = vt
+	case *RaftGroupDeletedError:
+		this.RaftGroupDeleted = vt
+	case *ReplicaCorruptionError:
+		this.ReplicaCorruptionError = vt
 	default:
 		return false
 	}
@@ -2436,39 +2568,6 @@ func (m *WriteIntentError) Unmarshal(data []byte) error {
 				}
 			}
 			m.Resolved = bool(v != 0)
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Index", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowErrors
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthErrors
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Index == nil {
-				m.Index = &ErrPosition{}
-			}
-			if err := m.Index.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipErrors(data[iNdEx:])
@@ -2712,39 +2811,6 @@ func (m *ConditionFailedError) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Index", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowErrors
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthErrors
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Index == nil {
-				m.Index = &ErrPosition{}
-			}
-			if err := m.Index.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipErrors(data[iNdEx:])
@@ -2983,6 +3049,155 @@ func (m *SendError) Unmarshal(data []byte) error {
 				}
 			}
 			m.Retryable = bool(v != 0)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipErrors(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthErrors
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RaftGroupDeletedError) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowErrors
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RaftGroupDeletedError: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RaftGroupDeletedError: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipErrors(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthErrors
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ReplicaCorruptionError) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowErrors
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ReplicaCorruptionError: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ReplicaCorruptionError: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ErrorMsg", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthErrors
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ErrorMsg = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Processed", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Processed = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipErrors(data[iNdEx:])
@@ -3528,6 +3743,72 @@ func (m *ErrorDetail) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 16:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RaftGroupDeleted", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthErrors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.RaftGroupDeleted == nil {
+				m.RaftGroupDeleted = &RaftGroupDeletedError{}
+			}
+			if err := m.RaftGroupDeleted.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 17:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReplicaCorruptionError", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthErrors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ReplicaCorruptionError == nil {
+				m.ReplicaCorruptionError = &ReplicaCorruptionError{}
+			}
+			if err := m.ReplicaCorruptionError.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipErrors(data[iNdEx:])
@@ -3717,6 +3998,39 @@ func (m *Error) Unmarshal(data []byte) error {
 			}
 		case 4:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthErrors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Txn == nil {
+				m.Txn = &Transaction{}
+			}
+			if err := m.Txn.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Detail", wireType)
 			}
 			var msglen int
@@ -3745,6 +4059,39 @@ func (m *Error) Unmarshal(data []byte) error {
 				m.Detail = &ErrorDetail{}
 			}
 			if err := m.Detail.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Index", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthErrors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Index == nil {
+				m.Index = &ErrPosition{}
+			}
+			if err := m.Index.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

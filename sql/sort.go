@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -28,7 +29,7 @@ import (
 // orderBy constructs a sortNode based on the ORDER BY clause. Construction of
 // the sortNode might adjust the number of render targets in the scanNode if
 // any ordering expressions are specified.
-func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, error) {
+func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, *roachpb.Error) {
 	if n.OrderBy == nil {
 		return nil, nil
 	}
@@ -45,7 +46,7 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, error) {
 		// constant expressions and unwrapping expressions like "((a))" to "a".
 		expr, err := p.parser.NormalizeExpr(p.evalCtx, o.Expr)
 		if err != nil {
-			return nil, err
+			return nil, roachpb.NewError(err)
 		}
 
 		if qname, ok := expr.(*parser.QualifiedName); ok {
@@ -69,7 +70,7 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, error) {
 				//
 				//   SELECT a AS b FROM t ORDER BY a
 				if err := qname.NormalizeColumnName(); err != nil {
-					return nil, err
+					return nil, roachpb.NewError(err)
 				}
 				if qname.Table() == "" || equalName(s.desc.Alias, qname.Table()) {
 					for j, r := range s.render {
@@ -94,11 +95,11 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, error) {
 				//   SELECT * FROM t ORDER BY 1
 				i, ok := datum.(parser.DInt)
 				if !ok {
-					return nil, fmt.Errorf("invalid ORDER BY: %s", expr)
+					return nil, roachpb.NewErrorf("invalid ORDER BY: %s", expr)
 				}
 				index = int(i)
 				if index < 1 || index > len(columns) {
-					return nil, fmt.Errorf("invalid ORDER BY index: %d not in range [1, %d]",
+					return nil, roachpb.NewErrorf("invalid ORDER BY index: %d not in range [1, %d]",
 						index, len(columns))
 				}
 			} else {
@@ -129,7 +130,7 @@ type sortNode struct {
 	columns  []column
 	ordering []int
 	needSort bool
-	err      error
+	err      *roachpb.Error
 }
 
 func (n *sortNode) Columns() []column {
@@ -160,7 +161,7 @@ func (n *sortNode) Next() bool {
 	return n.plan.Next()
 }
 
-func (n *sortNode) Err() error {
+func (n *sortNode) Err() *roachpb.Error {
 	return n.err
 }
 

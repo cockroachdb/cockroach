@@ -42,20 +42,16 @@ func (e errUniquenessConstraintViolation) Error() string {
 		e.index.Name)
 }
 
-func convertBatchError(tableDesc *TableDescriptor, b client.Batch, err error) error {
-	iErr, ok := err.(roachpb.IndexedError)
-	if !ok {
+func convertBatchError(tableDesc *TableDescriptor, b client.Batch, err *roachpb.Error) *roachpb.Error {
+	if err.Index == nil {
 		return err
 	}
-	index, ok := iErr.ErrorIndex()
-	if !ok {
-		return err
-	}
+	index := err.Index.Index
 	if index >= int32(len(b.Results)) {
 		panic(fmt.Sprintf("index %d outside of results: %+v", index, b.Results))
 	}
 	result := b.Results[index]
-	if _, ok := err.(*roachpb.ConditionFailedError); ok {
+	if _, ok := err.GoError().(*roachpb.ConditionFailedError); ok {
 		for _, row := range result.Rows {
 			indexID, key, err := decodeIndexKeyPrefix(tableDesc, row.Key)
 			if err != nil {
@@ -74,7 +70,7 @@ func convertBatchError(tableDesc *TableDescriptor, b client.Batch, err error) er
 				return err
 			}
 
-			return errUniquenessConstraintViolation{index: index, vals: vals}
+			return roachpb.NewError(errUniquenessConstraintViolation{index: index, vals: vals})
 		}
 	}
 	return err

@@ -93,6 +93,8 @@
 		ConditionFailedError
 		LeaseRejectedError
 		SendError
+		RaftGroupDeletedError
+		ReplicaCorruptionError
 		ErrorDetail
 		ErrPosition
 		Error

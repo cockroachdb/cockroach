@@ -69,7 +69,7 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 			return
 		default:
 			first := true
-			err := db.Txn(func(txn *client.Txn) error {
+			err := db.Txn(func(txn *client.Txn) *roachpb.Error {
 				if first && txnChannel != nil {
 					select {
 					case txnChannel <- struct{}{}:
@@ -241,7 +241,7 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 		t.Fatal(err)
 	}
 	log.Infof("split at key %q first time complete", splitKey)
-	ch := make(chan error)
+	ch := make(chan *roachpb.Error)
 	go func() {
 		// should return error other than infinite loop
 		ch <- s.DB.AdminSplit(splitKey)

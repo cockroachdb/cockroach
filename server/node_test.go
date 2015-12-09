@@ -121,9 +121,9 @@ func TestBootstrapCluster(t *testing.T) {
 	defer stopper.Stop()
 
 	// Scan the complete contents of the local database.
-	rows, err := localDB.Scan(keys.LocalMax, roachpb.KeyMax, 0)
-	if err != nil {
-		t.Fatal(err)
+	rows, pErr := localDB.Scan(keys.LocalMax, roachpb.KeyMax, 0)
+	if pErr != nil {
+		t.Fatal(pErr.GoError())
 	}
 	var foundKeys keySlice
 	for _, kv := range rows {
@@ -435,9 +435,9 @@ func TestStatusSummaries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	storeDesc, err := s.Descriptor()
-	if err != nil {
-		t.Fatal(err)
+	storeDesc, pErr := s.Descriptor()
+	if pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Wait for full replication of initial ranges.

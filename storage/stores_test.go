@@ -116,7 +116,7 @@ func TestStoresGetStore(t *testing.T) {
 		t.Errorf("expected storeID to be %d but was %d",
 			s.Ident.StoreID, store.Ident.StoreID)
 	} else if err != nil {
-		t.Errorf("expected no error, instead had err=%s", err.Error())
+		t.Errorf("expected no error, instead had err=%s", err.GoError().Error())
 	}
 }
 

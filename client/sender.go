@@ -80,7 +80,7 @@ func newSender(u *url.URL, ctx *base.Context, stopper *stop.Stopper) (Sender, er
 // and sends it via the provided Sender at the given timestamp. It returns the
 // unwrapped response or an error. It's valid to pass a `nil` context;
 // context.Background() is used in that case.
-func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.Header, args roachpb.Request) (roachpb.Response, error) {
+func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.Header, args roachpb.Request) (roachpb.Response, *roachpb.Error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -88,8 +88,8 @@ func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.Header, args 
 	ba.Header = h
 	ba.Add(args)
 
-	br, pErr := sender.Send(ctx, ba)
-	if err := pErr.GoError(); err != nil {
+	br, err := sender.Send(ctx, ba)
+	if err != nil {
 		return nil, err
 	}
 	unwrappedReply := br.Responses[0].GetInner()
@@ -98,7 +98,7 @@ func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.Header, args 
 }
 
 // SendWrapped is identical to SendWrappedAt with a zero header.
-func SendWrapped(sender Sender, ctx context.Context, args roachpb.Request) (roachpb.Response, error) {
+func SendWrapped(sender Sender, ctx context.Context, args roachpb.Request) (roachpb.Response, *roachpb.Error) {
 	return SendWrappedWith(sender, ctx, roachpb.Header{}, args)
 }
 

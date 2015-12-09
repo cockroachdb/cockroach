@@ -95,7 +95,7 @@ func (ia *idAllocator) start() {
 			var newValue int64
 			for newValue <= int64(ia.minID) {
 				var (
-					err error
+					err *roachpb.Error
 					res client.KeyValue
 				)
 				for r := retry.Start(idAllocationRetryOpts); r.Next(); {

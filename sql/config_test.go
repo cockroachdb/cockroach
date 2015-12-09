@@ -51,7 +51,7 @@ func forceNewConfig(t *testing.T, s *server.TestServer) (*config.SystemConfig, e
 	}
 
 	// This needs to be done in a transaction with the system trigger set.
-	if err := s.DB().Txn(func(txn *client.Txn) error {
+	if err := s.DB().Txn(func(txn *client.Txn) *roachpb.Error {
 		txn.SetSystemDBTrigger()
 		return txn.Put(configDescKey, configDesc)
 	}); err != nil {

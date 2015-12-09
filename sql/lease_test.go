@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -89,12 +90,12 @@ func (t *leaseTest) expectLeases(descID csql.ID, expected string) {
 
 func (t *leaseTest) acquire(nodeID uint32, descID csql.ID, version csql.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
-	err := t.server.DB().Txn(func(txn *client.Txn) error {
-		var err error
+	err := t.server.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+		var err *roachpb.Error
 		lease, err = t.node(nodeID).Acquire(txn, descID, version)
 		return err
 	})
-	return lease, err
+	return lease, err.GoError()
 }
 
 func (t *leaseTest) mustAcquire(nodeID uint32, descID csql.ID, version csql.DescriptorVersion) *csql.LeaseState {
@@ -105,7 +106,7 @@ func (t *leaseTest) mustAcquire(nodeID uint32, descID csql.ID, version csql.Desc
 	return lease
 }
 
-func (t *leaseTest) release(nodeID uint32, lease *csql.LeaseState) error {
+func (t *leaseTest) release(nodeID uint32, lease *csql.LeaseState) *roachpb.Error {
 	return t.node(nodeID).Release(lease)
 }
 
@@ -115,7 +116,7 @@ func (t *leaseTest) mustRelease(nodeID uint32, lease *csql.LeaseState) {
 	}
 }
 
-func (t *leaseTest) publish(nodeID uint32, descID csql.ID) error {
+func (t *leaseTest) publish(nodeID uint32, descID csql.ID) *roachpb.Error {
 	return t.node(nodeID).Publish(descID,
 		func(*csql.TableDescriptor) error {
 			return nil

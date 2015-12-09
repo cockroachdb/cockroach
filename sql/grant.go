@@ -17,11 +17,12 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 )
 
-func (p *planner) changePrivileges(targets parser.TargetList, grantees parser.NameList, changePrivilege func(*PrivilegeDescriptor, string)) (planNode, error) {
+func (p *planner) changePrivileges(targets parser.TargetList, grantees parser.NameList, changePrivilege func(*PrivilegeDescriptor, string)) (planNode, *roachpb.Error) {
 	descriptor, err := p.getDescriptorFromTargetList(targets)
 	if err != nil {
 		return nil, err
@@ -37,7 +38,7 @@ func (p *planner) changePrivileges(targets parser.TargetList, grantees parser.Na
 	}
 
 	if err := descriptor.Validate(); err != nil {
-		return nil, err
+		return nil, roachpb.NewError(err)
 	}
 
 	tableDesc, ok := descriptor.(*TableDescriptor)
@@ -68,7 +69,7 @@ func (p *planner) changePrivileges(targets parser.TargetList, grantees parser.Na
 // Privileges: GRANT on database/table.
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
-func (p *planner) Grant(n *parser.Grant) (planNode, error) {
+func (p *planner) Grant(n *parser.Grant) (planNode, *roachpb.Error) {
 	return p.changePrivileges(n.Targets, n.Grantees, func(privDesc *PrivilegeDescriptor, grantee string) {
 		privDesc.Grant(grantee, n.Privileges)
 	})
@@ -83,7 +84,7 @@ func (p *planner) Grant(n *parser.Grant) (planNode, error) {
 // Privileges: GRANT on database/table.
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
-func (p *planner) Revoke(n *parser.Revoke) (planNode, error) {
+func (p *planner) Revoke(n *parser.Revoke) (planNode, *roachpb.Error) {
 	return p.changePrivileges(n.Targets, n.Grantees, func(privDesc *PrivilegeDescriptor, grantee string) {
 		privDesc.Revoke(grantee, n.Privileges)
 	})

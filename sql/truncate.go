@@ -29,7 +29,7 @@ import (
 // Privileges: DROP on table.
 //   Notes: postgres requires TRUNCATE.
 //          mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
-func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
+func (p *planner) Truncate(n *parser.Truncate) (planNode, *roachpb.Error) {
 	b := client.Batch{}
 	for _, tableQualifiedName := range n.Tables {
 		tableDesc, err := p.getTableLease(tableQualifiedName)

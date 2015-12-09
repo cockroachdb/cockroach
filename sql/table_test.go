@@ -108,9 +108,9 @@ func TestMakeTableDescColumns(t *testing.T) {
 		if err := create.Table.NormalizeTableName(""); err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		schema, err := makeTableDesc(create, 1)
-		if err != nil {
-			t.Fatalf("%d: %v", i, err)
+		schema, pErr := makeTableDesc(create, 1)
+		if pErr != nil {
+			t.Fatalf("%d: %v", i, pErr)
 		}
 		if !reflect.DeepEqual(d.colType, schema.Columns[0].Type) {
 			t.Fatalf("%d: expected %+v, but got %+v", i, d.colType, schema.Columns[0])
@@ -203,9 +203,9 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		if err := create.Table.NormalizeTableName(""); err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		schema, err := makeTableDesc(create, 1)
+		schema, pErr := makeTableDesc(create, 1)
 		if err != nil {
-			t.Fatalf("%d: %v", i, err)
+			t.Fatalf("%d: %v", i, pErr)
 		}
 		if !reflect.DeepEqual(d.primary, schema.PrimaryIndex) {
 			t.Fatalf("%d: expected %+v, but got %+v", i, d.primary, schema.PrimaryIndex)
@@ -228,11 +228,12 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	if err := create.Table.NormalizeTableName(""); err != nil {
 		t.Fatal(err)
 	}
-	desc, err := makeTableDesc(create, 1)
-	if err != nil {
-		t.Fatal(err)
+	desc, pErr := makeTableDesc(create, 1)
+	if pErr != nil {
+		t.Fatal(pErr)
 	}
-	if err := desc.AllocateIDs(); err != errMissingPrimaryKey {
-		t.Fatal(err)
+	// TODO(kaneda): Use type check?
+	if pErr := desc.AllocateIDs(); pErr.GoError().Error() != errMissingPrimaryKey.Error() {
+		t.Fatal(pErr)
 	}
 }

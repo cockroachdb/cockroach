@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
@@ -70,7 +71,7 @@ type distinctNode struct {
 	// encoding of the non-columnInOrder columns for rows sharing the same
 	// prefixSeen value.
 	suffixSeen map[string]struct{}
-	err        error
+	err        *roachpb.Error
 }
 
 func (n *distinctNode) Next() bool {
@@ -113,7 +114,7 @@ func (n *distinctNode) Next() bool {
 	return false
 }
 
-func (n *distinctNode) Err() error {
+func (n *distinctNode) Err() *roachpb.Error {
 	return n.err
 }
 

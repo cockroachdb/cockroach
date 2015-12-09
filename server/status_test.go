@@ -520,9 +520,9 @@ func TestStoreStatusResponse(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		desc, err := store.Descriptor()
-		if err != nil {
-			t.Fatal(err)
+		desc, pErr := store.Descriptor()
+		if pErr != nil {
+			t.Fatal(pErr)
 		}
 		// The capacities fluctuate a lot, so drop them for the deep equal.
 		desc.Capacity = roachpb.StoreCapacity{}
@@ -559,7 +559,7 @@ func TestMetricsRecording(t *testing.T) {
 	checkTimeSeriesKey := func(now int64, keyName string) error {
 		key := ts.MakeDataKey(keyName, "", ts.Resolution10s, now)
 		data := roachpb.InternalTimeSeriesData{}
-		return tsrv.db.GetProto(key, &data)
+		return tsrv.db.GetProto(key, &data).GoError()
 	}
 
 	// Verify that metrics for the current timestamp are recorded. This should

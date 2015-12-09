@@ -34,10 +34,10 @@ type indexJoinNode struct {
 	table            *scanNode
 	primaryKeyPrefix roachpb.Key
 	colIDtoRowIndex  map[ColumnID]int
-	err              error
+	err              *roachpb.Error
 }
 
-func makeIndexJoin(indexScan *scanNode, exactPrefix int) (*indexJoinNode, error) {
+func makeIndexJoin(indexScan *scanNode, exactPrefix int) (*indexJoinNode, *roachpb.Error) {
 	// Copy the index scan node into a new table scan node and reset the fields
 	// that were set up for the index scan.
 	table := &scanNode{}
@@ -173,7 +173,7 @@ func (n *indexJoinNode) Next() bool {
 	return false
 }
 
-func (n *indexJoinNode) Err() error {
+func (n *indexJoinNode) Err() *roachpb.Error {
 	return n.err
 }
 

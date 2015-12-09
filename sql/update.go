@@ -18,13 +18,12 @@ package sql
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -32,7 +31,7 @@ import (
 // Privileges: UPDATE and SELECT on table. We currently always use a select statement.
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
-func (p *planner) Update(n *parser.Update) (planNode, error) {
+func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 	tableDesc, err := p.getAliasedTableLease(n.Table)
 	if err != nil {
 		return nil, err
@@ -45,7 +44,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	// Determine which columns we're inserting into.
 	var names parser.QualifiedNames
 	for _, expr := range n.Exprs {
-		var err error
+		var err *roachpb.Error
 		expr.Expr, err = p.expandSubqueries(expr.Expr, len(expr.Names))
 		if err != nil {
 			return nil, err
@@ -62,10 +61,10 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 			case parser.DTuple:
 				n = len(t)
 			default:
-				return nil, util.Errorf("unsupported tuple assignment: %T", expr.Expr)
+				return nil, roachpb.NewErrorf("unsupported tuple assignment: %T", expr.Expr)
 			}
 			if len(expr.Names) != n {
-				return nil, fmt.Errorf("number of columns (%d) does not match number of values (%d)",
+				return nil, roachpb.NewUErrorf("number of columns (%d) does not match number of values (%d)",
 					len(expr.Names), n)
 			}
 		}
@@ -84,7 +83,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	// Don't allow updating any column that is part of the primary key.
 	for i, id := range tableDesc.PrimaryIndex.ColumnIDs {
 		if _, ok := colIDSet[id]; ok {
-			return nil, fmt.Errorf("primary key column %q cannot be updated", tableDesc.PrimaryIndex.ColumnNames[i])
+			return nil, roachpb.NewUErrorf("primary key column %q cannot be updated", tableDesc.PrimaryIndex.ColumnNames[i])
 		}
 	}
 
@@ -203,7 +202,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		for i, col := range cols {
 			val := newVals[i]
 			if !col.Nullable && val == parser.DNull {
-				return nil, fmt.Errorf("null value in column %q violates not-null constraint", col.Name)
+				return nil, roachpb.NewUErrorf("null value in column %q violates not-null constraint", col.Name)
 			}
 			rowVals[colIDtoRowIndex[col.ID]] = val
 		}
@@ -212,7 +211,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		// happen before index encoding because certain datum types (i.e. tuple)
 		// cannot be used as index values.
 		for i, val := range newVals {
-			var err error
+			var err *roachpb.Error
 			if marshalled[i], err = marshalColumnValue(cols[i], val); err != nil {
 				return nil, err
 			}

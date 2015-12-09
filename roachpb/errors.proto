@@ -114,9 +114,6 @@ message TransactionStatusError {
 message WriteIntentError {
   repeated Intent intents = 1 [(gogoproto.nullable) = false];
   optional bool resolved = 2 [(gogoproto.nullable) = false];
-  // The index, if given, contains the index of the request (in the batch)
-  // whose execution caused the error.
-  optional ErrPosition index = 3;
 }
 
 // A WriteTooOldError indicates that a write encountered a versioned
@@ -140,7 +137,6 @@ message OpRequiresTxnError {
 // contain the actual value found.
 message ConditionFailedError {
   optional Value actual_value = 1;
-  optional ErrPosition index = 2;
 }
 
 // A LeaseRejectedError indicates that the requested replica could
@@ -156,6 +152,20 @@ message LeaseRejectedError {
 message SendError {
   optional string message = 1 [(gogoproto.nullable) = false];
   optional bool retryable = 2 [(gogoproto.nullable) = false];
+}
+
+// A RaftGroupDeletedError indicates a raft group has been deleted for
+// the replica.
+message RaftGroupDeletedError {
+}
+
+// A ReplicaCorruptionError indicates that the replica has experienced
+// an error which puts its integrity at risk.
+message ReplicaCorruptionError {
+  optional string error_msg = 1 [(gogoproto.nullable) = false];;
+  // processed indicates that the error has been taken into account and
+  // necessary steps will be taken. For now, required for testing.
+  optional bool processed = 2 [(gogoproto.nullable) = false];;
 }
 
 // ErrorDetail is a union type containing all available errors.
@@ -177,6 +187,8 @@ message ErrorDetail {
   optional LeaseRejectedError lease_rejected = 13;
   optional NodeUnavailableError node_unavailable = 14;
   optional SendError send = 15;
+  optional RaftGroupDeletedError raft_group_deleted = 16;
+  optional ReplicaCorruptionError replica_corruption_error = 17;
 }
 
 // TransactionRestart indicates how an error should be handled in a
@@ -218,7 +230,14 @@ message Error {
   // restarting the transaction (with or without a backoff).
   optional TransactionRestart transaction_restart = 3 [(gogoproto.nullable) = false];
 
+  // Transaction where the error is generated.
+  optional Transaction txn = 4;
+
   // If an ErrorDetail is present, it may contain additional structured data
   // about the error.
-  optional ErrorDetail detail = 4;
+  optional ErrorDetail detail = 5;
+
+  // The index, if given, contains the index of the request (in the batch)
+  // whose execution caused the error.
+  optional ErrPosition index = 6;
 }

@@ -43,7 +43,7 @@ func getFastScanContext() *server.Context {
 func getRangeKeys(db *client.DB) ([]roachpb.Key, error) {
 	rows, err := db.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 	if err != nil {
-		return nil, err
+		return nil, err.GoError()
 	}
 	ret := make([]roachpb.Key, len(rows), len(rows))
 	for i := 0; i < len(rows); i++ {

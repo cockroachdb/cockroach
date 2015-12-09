@@ -89,10 +89,10 @@ func TestValues(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		plan, err := func() (_ planNode, err error) {
+		plan, err := func() (_ planNode, err *roachpb.Error) {
 			defer func() {
 				if r := recover(); r != nil {
-					err = fmt.Errorf("%v", r)
+					err = roachpb.NewErrorf("%v", r)
 				}
 			}()
 			return p.Values(tc.stmt)

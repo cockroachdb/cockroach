@@ -182,7 +182,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		err := db.Run(b)
 		if err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, args.Method())
-		} else if !testutils.IsError(err, "contains an internal request|contains commit trigger") {
+		} else if !testutils.IsError(err.GoError(), "contains an internal request|contains commit trigger") {
 			t.Errorf("%d: unexpected error for %s: %s", i, args.Method(), err)
 		}
 	}
@@ -199,7 +199,7 @@ func TestKVDBTransaction(t *testing.T) {
 
 	key := roachpb.Key("db-txn-test")
 	value := []byte("value")
-	err := db.Txn(func(txn *client.Txn) error {
+	err := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		// Use snapshot isolation so non-transactional read can always push.
 		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 			return err

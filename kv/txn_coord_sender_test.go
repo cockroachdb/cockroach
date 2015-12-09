@@ -292,7 +292,7 @@ func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (bool, *roachpb.Tra
 		Txn: txn,
 	}, hb)
 	if err != nil {
-		return false, nil, err
+		return false, nil, err.GoError()
 	}
 	return true, reply.(*roachpb.HeartbeatTxnResponse).Txn, nil
 }
@@ -335,7 +335,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		}
 
 		{
-			var err error
+			var err *roachpb.Error
 			switch i {
 			case 0:
 				// No deadline.
@@ -359,7 +359,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 				}
 			case 1:
 				// Past deadline.
-				if _, ok := err.(*roachpb.TransactionAbortedError); !ok {
+				if _, ok := err.GoError().(*roachpb.TransactionAbortedError); !ok {
 					t.Errorf("expected TransactionAbortedError but got %T: %s", err, err)
 				}
 			case 2:
@@ -392,7 +392,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 	if err := txn.Put("x", "y"); err != nil {
 		t.Fatal(err)
 	}
-	err, ok := txn.CPut(key, []byte("x"), []byte("born to fail")).(*roachpb.ConditionFailedError)
+	err, ok := txn.CPut(key, []byte("x"), []byte("born to fail")).GoError().(*roachpb.ConditionFailedError)
 	if !ok {
 		t.Fatal(err)
 	}
@@ -432,7 +432,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	// Now end the transaction and verify we've cleanup up, even though
 	// end transaction failed.
 	err := txn1.Commit()
-	switch err.(type) {
+	switch err.GoError().(type) {
 	case *roachpb.TransactionAbortedError:
 		// Expected
 	default:
@@ -482,7 +482,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	origTS := makeTS(123, 0)
 	testCases := []struct {
-		err              error
+		err              *roachpb.Error
 		expEpoch         uint32
 		expPri           int32
 		expTS, expOrigTS roachpb.Timestamp
@@ -499,10 +499,10 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		{
 			// On uncertainty error, new epoch begins and node is seen.
 			// Timestamp moves ahead of the existing write.
-			err: &roachpb.ReadWithinUncertaintyIntervalError{
+			err: roachpb.NewError(&roachpb.ReadWithinUncertaintyIntervalError{
 				NodeID:            1,
 				ExistingTimestamp: origTS.Add(10, 10),
-			},
+			}),
 			expEpoch:  1,
 			expPri:    1,
 			expTS:     origTS.Add(10, 11),
@@ -512,21 +512,21 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		{
 			// On abort, nothing changes but we get a new priority to use for
 			// the next attempt.
-			err: &roachpb.TransactionAbortedError{
+			err: roachpb.NewError(&roachpb.TransactionAbortedError{
 				Txn: roachpb.Transaction{
 					Timestamp: origTS.Add(20, 10), Priority: 10,
 				},
-			},
+			}),
 			expPri: 10,
 		},
 		{
 			// On failed push, new epoch begins just past the pushed timestamp.
 			// Additionally, priority ratchets up to just below the pusher's.
-			err: &roachpb.TransactionPushError{
+			err: roachpb.NewError(&roachpb.TransactionPushError{
 				PusheeTxn: roachpb.Transaction{
 					Timestamp: origTS.Add(10, 10),
 					Priority:  int32(10)},
-			},
+			}),
 			expEpoch:  1,
 			expPri:    9,
 			expTS:     origTS.Add(10, 11),
@@ -534,10 +534,10 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		},
 		{
 			// On retry, restart with new epoch, timestamp and priority.
-			err: &roachpb.TransactionRetryError{
+			err: roachpb.NewError(&roachpb.TransactionRetryError{
 				Txn: roachpb.Transaction{
 					Timestamp: origTS.Add(10, 10), Priority: int32(10)},
-			},
+			}),
 			expEpoch:  1,
 			expPri:    10,
 			expTS:     origTS.Add(10, 10),
@@ -557,7 +557,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			if test.err == nil {
 				reply = ba.CreateReply()
 			}
-			return reply, roachpb.NewError(test.err)
+			return reply, test.err
 		}), clock, false, nil, stopper)
 		db := client.NewDB(ts)
 		txn := client.NewTxn(*db)
@@ -634,7 +634,7 @@ func TestTxnDrainingNode(t *testing.T) {
 	// Attempt to start another transaction, but it should be too late.
 	txn2 := client.NewTxn(*s.DB)
 	err := txn2.Put(key, []byte("value"))
-	if _, ok := err.(*roachpb.NodeUnavailableError); !ok {
+	if _, ok := err.GoError().(*roachpb.NodeUnavailableError); !ok {
 		teardownHeartbeats(s.Sender)
 		t.Fatal(err)
 	}

@@ -315,9 +315,9 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		}
 		pq.inTypes[i-1] = id
 	}
-	cols, err := c.executor.StatementResult(c.opts.user, stmt, args)
-	if err != nil {
-		return c.sendError(err.Error())
+	cols, pErr := c.executor.StatementResult(c.opts.user, stmt, args)
+	if pErr != nil {
+		return c.sendError(pErr.GoError().Error())
 	}
 	pq.columns = cols
 	c.preparedStatements[name] = pq

@@ -18,7 +18,6 @@ package storage
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -88,10 +87,6 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 	roachpb.ADD_REPLICA:    raftpb.ConfChangeAddNode,
 	roachpb.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
 }
-
-// errRaftGroupDeleted is returned for commands which are pending
-// while their group is deleted.
-var errRaftGroupDeleted = errors.New("raft group deleted")
 
 // verifyKeys verifies keys. If checkEndKey is true, then the end key
 // is verified to be non-nil and greater than start key. If
@@ -657,7 +652,7 @@ func (s *Store) startGossip() {
 // timeouts. The retry loop makes sure we try hard to keep asking for
 // the lease instead of waiting for the next clusterIDGossipInterval
 // to transpire.
-func (s *Store) maybeGossipFirstRange() error {
+func (s *Store) maybeGossipFirstRange() *roachpb.Error {
 	retryOptions := retry.Options{
 		InitialBackoff: 100 * time.Millisecond, // first backoff at 100ms
 		MaxBackoff:     1 * time.Second,        // max backoff is 1s
@@ -668,7 +663,7 @@ func (s *Store) maybeGossipFirstRange() error {
 		rng := s.LookupReplica(roachpb.RKeyMin, nil)
 		if rng != nil {
 			err := rng.maybeGossipFirstRange()
-			if nlErr, ok := err.(*roachpb.NotLeaderError); !ok || nlErr.Leader != nil {
+			if nlErr, ok := err.GoError().(*roachpb.NotLeaderError); !ok || nlErr.Leader != nil {
 				return err
 			}
 		} else {
@@ -680,7 +675,7 @@ func (s *Store) maybeGossipFirstRange() error {
 
 // maybeGossipSystemConfig looks for the range containing SystemDB keys and
 // lets that range gossip them.
-func (s *Store) maybeGossipSystemConfig() error {
+func (s *Store) maybeGossipSystemConfig() *roachpb.Error {
 	rng := s.LookupReplica(roachpb.RKey(keys.SystemDBSpan.Key), nil)
 	if rng == nil {
 		// This store has no range with this configuration.
@@ -1264,8 +1259,8 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 			// before we reach that point.
 			offset := time.Duration(ba.Timestamp.WallTime - s.Clock().PhysicalNow())
 			if offset > s.Clock().MaxOffset() {
-				return nil, roachpb.NewError(util.Errorf("Rejecting command with timestamp in the future: %d (%s ahead)",
-					ba.Timestamp.WallTime, offset))
+				return nil, roachpb.NewErrorf("Rejecting command with timestamp in the future: %d (%s ahead)",
+					ba.Timestamp.WallTime, offset)
 			}
 		}
 		// Update our clock with the incoming request timestamp. This
@@ -1296,24 +1291,23 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 		return r.Next()
 	}
 	var rng *Replica
-	var err error
+	var pErr *roachpb.Error
 
 	// Add the command to the range for execution; exit retry loop on success.
 	for r := retry.Start(s.ctx.RangeRetryOptions); next(&r); {
 		// Get range and add command to the range for execution.
-		rng, err = s.GetReplica(ba.RangeID)
-		if err != nil {
-			return nil, roachpb.NewError(err)
+		{
+			var err error
+			rng, err = s.GetReplica(ba.RangeID)
+			if err != nil {
+				pErr = roachpb.NewError(err)
+				return nil, pErr
+			}
 		}
 
 		var br *roachpb.BatchResponse
-		{
-			var pErr *roachpb.Error
-			br, pErr = rng.Send(ctx, ba)
-			err = pErr.GoError()
-		}
-
-		if err == nil {
+		br, pErr = rng.Send(ctx, ba)
+		if pErr == nil {
 			return br, nil
 		}
 
@@ -1321,7 +1315,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 		// because this is the code path with the requesting client
 		// waiting. We don't want every replica to attempt to resolve the
 		// intent independently, so we can't do it there.
-		if wiErr, ok := err.(*roachpb.WriteIntentError); ok {
+		if wiErr, ok := pErr.GoError().(*roachpb.WriteIntentError); ok {
 			var pushType roachpb.PushTxnType
 			if ba.IsWrite() {
 				pushType = roachpb.PUSH_ABORT
@@ -1329,12 +1323,12 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 				pushType = roachpb.PUSH_TIMESTAMP
 			}
 
-			index, ok := wiErr.ErrorIndex()
-			if ok {
-				args := ba.Requests[index].GetInner()
+			index := pErr.Index
+			if index != nil {
+				args := ba.Requests[index.Index].GetInner()
 				// TODO(tschottdorf): implications of using the batch ts here?
 				var resolveIntents []roachpb.Intent
-				resolveIntents, err = s.resolveWriteIntentError(ctx, wiErr, rng, args, ba.Header, pushType)
+				resolveIntents, pErr = s.resolveWriteIntentError(ctx, wiErr, rng, args, ba.Header, pushType)
 				if len(resolveIntents) > 0 {
 					if resErr := rng.resolveIntents(ctx, resolveIntents, false /* !wait */, true /* poison */); resErr != nil {
 						// When resolving asynchronously, should never get an error
@@ -1344,34 +1338,32 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 				}
 				// Make sure that if an index is carried in the error, it
 				// remains the one corresponding to the batch here.
-				if iErr, ok := err.(roachpb.IndexedError); ok {
-					if _, ok := iErr.ErrorIndex(); ok {
-						iErr.SetErrorIndex(index)
-					}
+				if pErr.Index != nil {
+					pErr.SetErrorIndex(index.Index)
 				}
 			}
 		}
 
-		switch t := err.(type) {
+		switch t := pErr.GoError().(type) {
 		case *roachpb.ReadWithinUncertaintyIntervalError:
 			t.NodeID = ba.Replica.NodeID
 		case *roachpb.WriteTooOldError:
-			trace.Event(fmt.Sprintf("error: %T", err))
+			trace.Event(fmt.Sprintf("error: %T", pErr.GoError()))
 			// Update request timestamp and retry immediately.
 			ba.Timestamp = t.ExistingTimestamp.Next()
 			r.Reset()
 			if log.V(1) {
-				log.Warning(err)
+				log.Warning(pErr)
 			}
 			continue
 		case *roachpb.WriteIntentError:
-			trace.Event(fmt.Sprintf("error: %T", err))
+			trace.Event(fmt.Sprintf("error: %T", pErr.GoError()))
 			// If write intent error is resolved, exit retry/backoff loop to
 			// immediately retry.
 			if t.Resolved {
 				r.Reset()
 				if log.V(1) {
-					log.Warning(err)
+					log.Warning(pErr)
 				}
 				continue
 			}
@@ -1383,11 +1375,11 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 				}
 			}
 			if log.V(1) {
-				log.Warning(err)
+				log.Warning(pErr)
 			}
 			continue
 		}
-		return nil, roachpb.NewError(err)
+		return nil, pErr
 	}
 
 	// By default, retries are indefinite. However, some unittests set a
@@ -1395,9 +1387,11 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 	// and the original error otherwise.
 	trace.Event("store retry limit exceeded") // good to check for if tests fail
 	if ba.Txn != nil {
-		return nil, roachpb.NewError(roachpb.NewTransactionRetryError(ba.Txn))
+		pErr := roachpb.NewError(roachpb.NewTransactionRetryError(ba.Txn))
+		pErr.Txn = ba.Txn
+		return nil, pErr
 	}
-	return nil, roachpb.NewError(err)
+	return nil, pErr
 }
 
 // resolveWriteIntentError tries to push the conflicting transaction (if
@@ -1417,7 +1411,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 // c) resolving intents upon EndTransaction which are not local to the given
 //    range. This is the only path in which the transaction is going to be
 //    in non-pending state and doesn't require a push.
-func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.WriteIntentError, rng *Replica, args roachpb.Request, h roachpb.Header, pushType roachpb.PushTxnType) ([]roachpb.Intent, error) {
+func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.WriteIntentError, rng *Replica, args roachpb.Request, h roachpb.Header, pushType roachpb.PushTxnType) ([]roachpb.Intent, *roachpb.Error) {
 	method := args.Method()
 	pusherTxn := h.Txn
 	readOnly := roachpb.IsReadOnly(args) // TODO(tschottdorf): pass as param
@@ -1472,6 +1466,8 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 			PushType: pushType,
 		})
 	}
+	// TODO(kaneda): Setting up the txn??
+
 	b := &client.Batch{}
 	b.InternalAddRequest(pushReqs...)
 	br, pushErr := s.db.RunWithResponse(b)
@@ -1490,7 +1486,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 		// For read/write conflicts, return the write intent error which
 		// engages backoff/retry (with !Resolved). We don't need to
 		// restart the txn, only resend the read with a backoff.
-		return nil, wiErr
+		return nil, roachpb.NewError(wiErr)
 	}
 	wiErr.Resolved = true // success!
 
@@ -1498,7 +1494,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 		intent.Txn = br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
 		resolveIntents = append(resolveIntents, intent)
 	}
-	return resolveIntents, wiErr
+	return resolveIntents, roachpb.NewError(wiErr)
 }
 
 // TODO(bdarnell): is this buffering necessary? sufficient?
@@ -1599,7 +1595,6 @@ func (s *Store) processRaft() {
 					continue
 				}
 				replicas = append(replicas, r)
-
 			}
 			if len(s.pendingRaftGroups) > 0 {
 				s.pendingRaftGroups = map[roachpb.RangeID]struct{}{}
@@ -1660,7 +1655,7 @@ func (s *Store) getOrCreateReplicaLocked(groupID roachpb.RangeID, replicaID roac
 		return nil, err
 	} else if ok {
 		if replicaID != 0 && replicaID < tombstone.NextReplicaID {
-			return nil, errRaftGroupDeleted
+			return nil, &roachpb.RaftGroupDeletedError{}
 		}
 	}
 
@@ -1782,7 +1777,7 @@ func (s *Store) GetStatus() (*StoreStatus, error) {
 	key := keys.StoreStatusKey(int32(s.Ident.StoreID))
 	status := &StoreStatus{}
 	if err := s.db.GetProto(key, status); err != nil {
-		return nil, err
+		return nil, err.GoError()
 	}
 	return status, nil
 }

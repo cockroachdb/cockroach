@@ -79,7 +79,7 @@ type cmd struct {
 	txnIdx      int    // transaction index in the history
 	historyIdx  int    // this suffixes key so tests get unique keys
 	fn          func(
-		c *cmd, txn *client.Txn, t *testing.T) error // execution function
+		c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error // execution function
 	ch   chan struct{}    // channel for other commands to wait
 	prev <-chan struct{}  // channel this command must wait on before executing
 	env  map[string]int64 // contains all previously read values
@@ -95,7 +95,7 @@ func (c *cmd) init(prevCmd *cmd) {
 	c.debug = ""
 }
 
-func (c *cmd) execute(txn *client.Txn, t *testing.T) (string, error) {
+func (c *cmd) execute(txn *client.Txn, t *testing.T) (string, *roachpb.Error) {
 	if c.prev != nil {
 		<-c.prev
 	}
@@ -144,7 +144,7 @@ func (c *cmd) String() string {
 }
 
 // readCmd reads a value from the db and stores it in the env.
-func readCmd(c *cmd, txn *client.Txn, t *testing.T) error {
+func readCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 	r, err := txn.Get(c.getKey())
 	if err != nil {
 		return err
@@ -157,12 +157,12 @@ func readCmd(c *cmd, txn *client.Txn, t *testing.T) error {
 }
 
 // deleteRngCmd deletes the range of values from the db from [key, endKey).
-func deleteRngCmd(c *cmd, txn *client.Txn, t *testing.T) error {
+func deleteRngCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 	return txn.DelRange(c.getKey(), c.getEndKey())
 }
 
 // scanCmd reads the values from the db from [key, endKey).
-func scanCmd(c *cmd, txn *client.Txn, t *testing.T) error {
+func scanCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 	rows, err := txn.Scan(c.getKey(), c.getEndKey(), 0)
 	if err != nil {
 		return err
@@ -180,7 +180,7 @@ func scanCmd(c *cmd, txn *client.Txn, t *testing.T) error {
 
 // incCmd adds one to the value of c.key in the env and writes
 // it to the db. If c.key isn't in the db, writes 1.
-func incCmd(c *cmd, txn *client.Txn, t *testing.T) error {
+func incCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 	r, err := txn.Inc(c.getKey(), 1)
 	if err != nil {
 		return err
@@ -192,7 +192,7 @@ func incCmd(c *cmd, txn *client.Txn, t *testing.T) error {
 
 // sumCmd sums the values of all keys != c.key read during the transaction and
 // writes the result to the db.
-func sumCmd(c *cmd, txn *client.Txn, t *testing.T) error {
+func sumCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 	sum := int64(0)
 	for k, v := range c.env {
 		if k != c.key {
@@ -205,13 +205,13 @@ func sumCmd(c *cmd, txn *client.Txn, t *testing.T) error {
 }
 
 // commitCmd commits the transaction.
-func commitCmd(c *cmd, txn *client.Txn, t *testing.T) error {
+func commitCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 	return txn.CommitNoCleanup()
 }
 
 // cmdDict maps from command name to function implementing the command.
 // Use only upper case letters for commands. More than one letter is OK.
-var cmdDict = map[string]func(c *cmd, txn *client.Txn, t *testing.T) error{
+var cmdDict = map[string]func(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error{
 	"R":   readCmd,
 	"I":   incCmd,
 	"DR":  deleteRngCmd,
@@ -534,7 +534,7 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 		c.historyIdx = historyIdx
 		c.env = verifyEnv
 		c.init(nil)
-		err := db.Txn(func(txn *client.Txn) error {
+		err := db.Txn(func(txn *client.Txn) *roachpb.Error {
 			fmtStr, err := c.execute(txn, t)
 			if err != nil {
 				return err
@@ -545,7 +545,7 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 		})
 		if err != nil {
 			t.Errorf("failed on execution of verification cmd %s: %s", c, err)
-			return err
+			return err.GoError()
 		}
 	}
 
@@ -567,7 +567,7 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 	isolation roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
 	var retry int
 	txnName := fmt.Sprintf("txn%d", txnIdx)
-	err := db.Txn(func(txn *client.Txn) error {
+	err := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		txn.SetDebugName(txnName, 0)
 		if isolation == roachpb.SNAPSHOT {
 			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
@@ -601,10 +601,10 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 		return nil
 	})
 	hv.wg.Done()
-	return err
+	return err.GoError()
 }
 
-func (hv *historyVerifier) runCmd(txn *client.Txn, txnIdx, retry, cmdIdx int, cmds []*cmd, t *testing.T) error {
+func (hv *historyVerifier) runCmd(txn *client.Txn, txnIdx, retry, cmdIdx int, cmds []*cmd, t *testing.T) *roachpb.Error {
 	fmtStr, err := cmds[cmdIdx].execute(txn, t)
 	if err != nil {
 		return err

@@ -17,17 +17,17 @@
 package sql
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
 // Set sets session variables.
 // Privileges: None.
 //   Notes: postgres/mysql do not require privileges for session variables (some exceptions).
-func (p *planner) Set(n *parser.Set) (planNode, error) {
+func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 	// By using QualifiedName.String() here any variables that are keywords will
 	// be double quoted.
 	name := strings.ToUpper(n.Name.String())
@@ -56,35 +56,35 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		case normalizeName(parser.Traditional.String()):
 			p.session.Syntax = int32(parser.Traditional)
 		default:
-			return nil, fmt.Errorf("%s: \"%s\" is not in (%q, %q)", name, s, parser.Modern, parser.Traditional)
+			return nil, roachpb.NewUErrorf("%s: \"%s\" is not in (%q, %q)", name, s, parser.Modern, parser.Traditional)
 		}
 
 	default:
-		return nil, fmt.Errorf("unknown variable: %q", name)
+		return nil, roachpb.NewUErrorf("unknown variable: %q", name)
 	}
 	return &valuesNode{}, nil
 }
 
-func (p *planner) getStringVal(name string, values parser.Exprs) (string, error) {
+func (p *planner) getStringVal(name string, values parser.Exprs) (string, *roachpb.Error) {
 	if len(values) != 1 {
-		return "", fmt.Errorf("%s: requires a single string value", name)
+		return "", roachpb.NewUErrorf("%s: requires a single string value", name)
 	}
 	val, err := values[0].Eval(p.evalCtx)
 	if err != nil {
-		return "", err
+		return "", roachpb.NewError(err)
 	}
 	s, ok := val.(parser.DString)
 	if !ok {
-		return "", fmt.Errorf("%s: requires a single string value: %s is a %s",
+		return "", roachpb.NewUErrorf("%s: requires a single string value: %s is a %s",
 			name, values[0], val.Type())
 	}
 	return string(s), nil
 }
 
-func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
+func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, *roachpb.Error) {
 	d, err := n.Value.Eval(p.evalCtx)
 	if err != nil {
-		return nil, err
+		return nil, roachpb.NewError(err)
 	}
 	var offset int64
 	switch v := d.(type) {
@@ -94,7 +94,7 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 			location = "UTC"
 		}
 		if _, err := time.LoadLocation(location); err != nil {
-			return nil, err
+			return nil, roachpb.NewError(err)
 		}
 		p.session.Timezone = &Session_Location{Location: location}
 
@@ -108,7 +108,7 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 		offset = int64(float64(v) * 60.0 * 60.0)
 
 	default:
-		return nil, fmt.Errorf("bad time zone value: %v", n.Value)
+		return nil, roachpb.NewUErrorf("bad time zone value: %v", n.Value)
 	}
 	if offset != 0 {
 		p.session.Timezone = &Session_Offset{Offset: offset}

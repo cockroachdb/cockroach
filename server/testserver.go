@@ -244,7 +244,7 @@ func (ts *TestServer) WaitForInitialSplits() error {
 		// Scan all keys in the Meta2Prefix; we only need a count.
 		rows, err := kvDB.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {
-			return err
+			return err.GoError()
 		}
 		if a, e := len(rows), expectedRanges; a != e {
 			return util.Errorf("had %d ranges at startup, expected %d", a, e)

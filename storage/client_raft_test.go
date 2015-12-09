@@ -98,7 +98,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		defer stopper.Stop()
 		store := createTestStoreWithEngine(t, eng, clock, true, nil, stopper)
 
-		increment := func(rangeID roachpb.RangeID, key roachpb.Key, value int64) (*roachpb.IncrementResponse, error) {
+		increment := func(rangeID roachpb.RangeID, key roachpb.Key, value int64) (*roachpb.IncrementResponse, *roachpb.Error) {
 			args := incrementArgs(key, value)
 			resp, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 				RangeID: rangeID,
@@ -321,7 +321,7 @@ func TestRestoreReplicas(t *testing.T) {
 	incArgs = incrementArgs([]byte("a"), 11)
 	{
 		_, err := client.SendWrapped(rg1(mtc.stores[1]), nil, &incArgs)
-		if _, ok := err.(*roachpb.NotLeaderError); !ok {
+		if _, ok := err.GoError().(*roachpb.NotLeaderError); !ok {
 			t.Fatalf("expected not leader error; got %s", err)
 		}
 	}
@@ -1431,7 +1431,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 
 // TestLeaderRemoveSelf verifies that a leader can remove itself
 // without panicking and future access to the range returns a
-// RangeNotFoundError (not errRaftGroupDeleted, and even before
+// RangeNotFoundError (not RaftGroupDeletedError, and even before
 // the ReplicaGCQueue has run).
 func TestLeaderRemoveSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)
@@ -1455,7 +1455,7 @@ func TestLeaderRemoveSelf(t *testing.T) {
 
 	// Expect get a RangeNotFoundError.
 	_, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, header, &getArgs)
-	if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
+	if _, ok := err.GoError().(*roachpb.RangeNotFoundError); !ok {
 		t.Fatalf("expect get RangeNotFoundError, actual get %v ", err)
 	}
 }

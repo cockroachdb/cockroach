@@ -234,7 +234,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		// Start a txn that does read-after-write.
 		// The txn will be restarted twice, and the out-of-order put
 		// will happen in the second epoch.
-		if err := store.DB().Txn(func(txn *client.Txn) error {
+		if err := store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
 			epoch++
 
 			if epoch == 1 {
@@ -351,7 +351,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}
 	util.SucceedsWithin(t, time.Second, func() error {
 		_, err := client.SendWrapped(rg1(store), nil, &scanArgs)
-		return err
+		return err.GoError()
 	})
 
 	revScanArgs := func(key []byte, maxResults int32) *roachpb.RangeLookupRequest {

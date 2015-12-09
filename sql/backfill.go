@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func makeColIDtoRowIndex(row planNode, desc *TableDescriptor) (map[ColumnID]int, error) {
+func makeColIDtoRowIndex(row planNode, desc *TableDescriptor) (map[ColumnID]int, *roachpb.Error) {
 	columns := row.Columns()
 	colIDtoRowIndex := make(map[ColumnID]int, len(columns))
 	for i, column := range columns {
@@ -67,7 +67,7 @@ func (ids indexesByID) Swap(i, j int) {
 	ids[i], ids[j] = ids[j], ids[i]
 }
 
-func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *TableDescriptor) error {
+func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *TableDescriptor) *roachpb.Error {
 	var droppedColumnDescs []ColumnDescriptor
 	var droppedIndexDescs []IndexDescriptor
 	var newIndexDescs []IndexDescriptor

@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -30,7 +29,7 @@ import (
 // queued schema changes and processes them.
 //
 // applyMutations applies the queued mutations for a table.
-func (p *planner) applyMutations(tableDesc *TableDescriptor) error {
+func (p *planner) applyMutations(tableDesc *TableDescriptor) *roachpb.Error {
 	if len(tableDesc.Mutations) == 0 {
 		return nil
 	}
@@ -42,7 +41,7 @@ func (p *planner) applyMutations(tableDesc *TableDescriptor) error {
 	}
 	newTableDesc.Mutations = nil
 	if err := newTableDesc.Validate(); err != nil {
-		return err
+		return roachpb.NewError(err)
 	}
 
 	b := client.Batch{}
@@ -87,9 +86,9 @@ func (sc *SchemaChanger) createSchemaChangeLease() TableDescriptor_SchemaChangeL
 
 // AcquireLease acquires a schema change lease on the table if
 // an unexpired lease doesn't exist. It returns the lease.
-func (sc *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, error) {
+func (sc *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, *roachpb.Error) {
 	var lease TableDescriptor_SchemaChangeLease
-	err := sc.db.Txn(func(txn *client.Txn) error {
+	err := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		txn.SetSystemDBTrigger()
 		tableDesc, err := getTableDescFromID(txn, sc.tableID)
 		if err != nil {
@@ -104,7 +103,7 @@ func (sc *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, erro
 		expirationTimeUncertainty := time.Second
 
 		if tableDesc.Lease != nil && time.Unix(0, tableDesc.Lease.ExpirationTime).Add(expirationTimeUncertainty).After(time.Now()) {
-			return errExistingSchemaChangeLease
+			return roachpb.NewError(errExistingSchemaChangeLease)
 		}
 		lease = sc.createSchemaChangeLease()
 		tableDesc.Lease = &lease
@@ -113,24 +112,24 @@ func (sc *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, erro
 	return lease, err
 }
 
-func (sc *SchemaChanger) findTableWithLease(txn *client.Txn, lease TableDescriptor_SchemaChangeLease) (*TableDescriptor, error) {
+func (sc *SchemaChanger) findTableWithLease(txn *client.Txn, lease TableDescriptor_SchemaChangeLease) (*TableDescriptor, *roachpb.Error) {
 	tableDesc, err := getTableDescFromID(txn, sc.tableID)
 	if err != nil {
 		return nil, err
 	}
 	if tableDesc.Lease == nil {
-		return nil, util.Errorf("no lease present for tableID: %d", sc.tableID)
+		return nil, roachpb.NewErrorf("no lease present for tableID: %d", sc.tableID)
 	}
 	if *tableDesc.Lease != lease {
-		return nil, util.Errorf("table: %d has lease: %v, expected: %v", sc.tableID, tableDesc.Lease, lease)
+		return nil, roachpb.NewErrorf("table: %d has lease: %v, expected: %v", sc.tableID, tableDesc.Lease, lease)
 	}
 	return tableDesc, nil
 }
 
 // ReleaseLease the table lease if it is the one registered with
 // the table descriptor.
-func (sc *SchemaChanger) ReleaseLease(lease TableDescriptor_SchemaChangeLease) error {
-	return sc.db.Txn(func(txn *client.Txn) error {
+func (sc *SchemaChanger) ReleaseLease(lease TableDescriptor_SchemaChangeLease) *roachpb.Error {
+	return sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		tableDesc, err := sc.findTableWithLease(txn, lease)
 		if err != nil {
 			return err
@@ -142,8 +141,8 @@ func (sc *SchemaChanger) ReleaseLease(lease TableDescriptor_SchemaChangeLease) e
 }
 
 // ExtendLease for the current leaser.
-func (sc *SchemaChanger) ExtendLease(lease TableDescriptor_SchemaChangeLease) (TableDescriptor_SchemaChangeLease, error) {
-	err := sc.db.Txn(func(txn *client.Txn) error {
+func (sc *SchemaChanger) ExtendLease(lease TableDescriptor_SchemaChangeLease) (TableDescriptor_SchemaChangeLease, *roachpb.Error) {
+	err := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		tableDesc, err := sc.findTableWithLease(txn, lease)
 		if err != nil {
 			return err
