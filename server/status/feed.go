@@ -92,10 +92,8 @@ func (nef NodeEventFeed) StartNode(desc roachpb.NodeDescriptor, startedAt int64)
 func (nef NodeEventFeed) CallComplete(ba roachpb.BatchRequest, d time.Duration, pErr *roachpb.Error) {
 	if pErr != nil && pErr.TransactionRestart == roachpb.TransactionRestart_ABORT {
 		method := roachpb.Batch
-		if iErr, ok := pErr.GoError().(roachpb.IndexedError); ok {
-			if index, ok := iErr.ErrorIndex(); ok {
-				method = ba.Requests[index].GetInner().Method()
-			}
+		if pErr.Index != nil {
+			method = ba.Requests[pErr.Index.Index].GetInner().Method()
 		}
 		nef.f.Publish(&CallErrorEvent{
 			NodeID:   nef.id,

@@ -95,25 +95,25 @@ func (ia *idAllocator) start() {
 			var newValue int64
 			for newValue <= int64(ia.minID) {
 				var (
-					err error
-					res client.KeyValue
+					pErr *roachpb.Error
+					res  client.KeyValue
 				)
 				for r := retry.Start(idAllocationRetryOpts); r.Next(); {
 					idKey := ia.idKey.Load().(roachpb.Key)
 					if !ia.stopper.RunTask(func() {
-						res, err = ia.db.Inc(idKey, int64(ia.blockSize))
+						res, pErr = ia.db.Inc(idKey, int64(ia.blockSize))
 					}) {
 						return
 					}
-					if err == nil {
+					if pErr == nil {
 						newValue = res.ValueInt()
 						break
 					}
 
-					log.Warningf("unable to allocate %d ids from %s: %s", ia.blockSize, idKey, err)
+					log.Warningf("unable to allocate %d ids from %s: %s", ia.blockSize, idKey, pErr)
 				}
-				if err != nil {
-					panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", err))
+				if pErr != nil {
+					panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", pErr))
 				}
 			}
 

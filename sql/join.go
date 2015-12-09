@@ -34,10 +34,10 @@ type indexJoinNode struct {
 	table            *scanNode
 	primaryKeyPrefix roachpb.Key
 	colIDtoRowIndex  map[ColumnID]int
-	err              error
+	pErr             *roachpb.Error
 }
 
-func makeIndexJoin(indexScan *scanNode, exactPrefix int) (*indexJoinNode, error) {
+func makeIndexJoin(indexScan *scanNode, exactPrefix int) (*indexJoinNode, *roachpb.Error) {
 	// Copy the index scan node into a new table scan node and reset the fields
 	// that were set up for the index scan.
 	table := &scanNode{}
@@ -130,7 +130,7 @@ func (n *indexJoinNode) Next() bool {
 		if tableLookup && n.table.Next() {
 			return true
 		}
-		if n.err = n.table.Err(); n.err != nil {
+		if n.pErr = n.table.PErr(); n.pErr != nil {
 			return false
 		}
 
@@ -142,7 +142,7 @@ func (n *indexJoinNode) Next() bool {
 		for len(n.table.spans) < joinBatchSize {
 			if !n.index.Next() {
 				// The index is out of rows or an error occurred.
-				if n.err = n.index.Err(); n.err != nil {
+				if n.pErr = n.index.PErr(); n.pErr != nil {
 					return false
 				}
 				if len(n.table.spans) == 0 {
@@ -154,9 +154,9 @@ func (n *indexJoinNode) Next() bool {
 
 			vals := n.index.Values()
 			var primaryIndexKey []byte
-			primaryIndexKey, _, n.err = encodeIndexKey(
+			primaryIndexKey, _, n.pErr = encodeIndexKey(
 				n.table.index.ColumnIDs, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
-			if n.err != nil {
+			if n.pErr != nil {
 				return false
 			}
 			key := roachpb.Key(primaryIndexKey)
@@ -173,8 +173,8 @@ func (n *indexJoinNode) Next() bool {
 	return false
 }
 
-func (n *indexJoinNode) Err() error {
-	return n.err
+func (n *indexJoinNode) PErr() *roachpb.Error {
+	return n.pErr
 }
 
 func (n *indexJoinNode) ExplainPlan() (name, description string, children []planNode) {

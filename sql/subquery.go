@@ -17,28 +17,27 @@
 package sql
 
 import (
-	"fmt"
-
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
-func (p *planner) expandSubqueries(expr parser.Expr, columns int) (parser.Expr, error) {
+func (p *planner) expandSubqueries(expr parser.Expr, columns int) (parser.Expr, *roachpb.Error) {
 	p.subqueryVisitor = subqueryVisitor{planner: p, columns: columns}
 	expr = parser.WalkExpr(&p.subqueryVisitor, expr)
-	return expr, p.subqueryVisitor.err
+	return expr, p.subqueryVisitor.pErr
 }
 
 type subqueryVisitor struct {
 	*planner
 	columns int
 	path    []parser.Expr // parent expressions
-	err     error
+	pErr    *roachpb.Error
 }
 
 var _ parser.Visitor = &subqueryVisitor{}
 
 func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
-	if v.err != nil {
+	if v.pErr != nil {
 		return nil, expr
 	}
 	if !pre {
@@ -64,7 +63,7 @@ func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, par
 	// copy of the planner in order for there to have a separate subqueryVisitor.
 	planMaker := *v.planner
 	var plan planNode
-	if plan, v.err = planMaker.makePlan(subquery.Select, false); v.err != nil {
+	if plan, v.pErr = planMaker.makePlan(subquery.Select, false); v.pErr != nil {
 		return nil, expr
 	}
 
@@ -74,8 +73,8 @@ func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, par
 		if plan.Next() {
 			return v, parser.DBool(true)
 		}
-		v.err = plan.Err()
-		if v.err != nil {
+		v.pErr = plan.PErr()
+		if v.pErr != nil {
 			return nil, expr
 		}
 		return v, parser.DBool(false)
@@ -85,9 +84,9 @@ func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, par
 	if n := len(plan.Columns()); columns != n {
 		switch columns {
 		case 1:
-			v.err = fmt.Errorf("subquery must return only one column, found %d", n)
+			v.pErr = roachpb.NewUErrorf("subquery must return only one column, found %d", n)
 		default:
-			v.err = fmt.Errorf("subquery must return %d columns, found %d", columns, n)
+			v.pErr = roachpb.NewUErrorf("subquery must return %d columns, found %d", columns, n)
 		}
 		return nil, expr
 	}
@@ -127,14 +126,14 @@ func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, par
 				result = valuesCopy
 			}
 			if plan.Next() {
-				v.err = fmt.Errorf("more than one row returned by a subquery used as an expression")
+				v.pErr = roachpb.NewUErrorf("more than one row returned by a subquery used as an expression")
 				return nil, expr
 			}
 		}
 	}
 
-	v.err = plan.Err()
-	if v.err != nil {
+	v.pErr = plan.PErr()
+	if v.pErr != nil {
 		return nil, expr
 	}
 	return v, result

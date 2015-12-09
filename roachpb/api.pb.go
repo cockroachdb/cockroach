@@ -93,6 +93,12 @@
 		ConditionFailedError
 		LeaseRejectedError
 		SendError
+		RaftGroupDeletedError
+		ReplicaCorruptionError
+		LeaseVersionChangedError
+		DidntUpdateDescriptorError
+		SqlTransactionAbortedError
+		ExistingSchemaChangeLeaseError
 		ErrorDetail
 		ErrPosition
 		Error

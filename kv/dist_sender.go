@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -213,7 +212,7 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 // DistSender's Send() method, so there is no error inspection and
 // retry logic here; this is not an issue since the lookup performs a
 // single inconsistent read only.
-func (ds *DistSender) RangeLookup(key roachpb.RKey, desc *roachpb.RangeDescriptor, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, error) {
+func (ds *DistSender) RangeLookup(key roachpb.RKey, desc *roachpb.RangeDescriptor, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, *roachpb.Error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
@@ -233,21 +232,21 @@ func (ds *DistSender) RangeLookup(key roachpb.RKey, desc *roachpb.RangeDescripto
 	if err != nil {
 		return nil, err
 	}
-	if err := br.GoError(); err != nil {
-		return nil, err
+	if br.Error != nil {
+		return nil, br.Error
 	}
 	return br.Responses[0].GetInner().(*roachpb.RangeLookupResponse).Ranges, nil
 }
 
 // FirstRange returns the RangeDescriptor for the first range on the cluster,
 // which is retrieved from the gossip protocol instead of the datastore.
-func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
+func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
 	if ds.gossip == nil {
 		panic("with `nil` Gossip, DistSender must not use itself as rangeDescriptorDB")
 	}
 	rangeDesc := &roachpb.RangeDescriptor{}
 	if err := ds.gossip.GetInfoProto(gossip.KeyFirstRangeDescriptor, rangeDesc); err != nil {
-		return nil, firstRangeMissingError{}
+		return nil, roachpb.NewError(firstRangeMissingError{})
 	}
 	return rangeDesc, nil
 }
@@ -313,9 +312,9 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 // Note that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
 func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, replicas replicaSlice, order rpc.OrderingPolicy,
-	ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+	ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(replicas) == 0 {
-		return nil, noNodeAddrsAvailError{}
+		return nil, roachpb.NewError(noNodeAddrsAvailError{})
 	}
 
 	// Build a slice of replica addresses.
@@ -372,7 +371,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 	const method = "Node.Batch"
 	replies, err := ds.rpcSend(rpcOpts, method, addrs, getArgs, getReply, ds.rpcContext)
 	if err != nil {
-		return nil, err
+		return nil, roachpb.NewError(err)
 	}
 	return replies[0].(*roachpb.BatchResponse), nil
 }
@@ -389,17 +388,17 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 // already (via KeyAddress).
 func (ds *DistSender) getDescriptors(rs roachpb.RSpan, considerIntents, useReverseScan bool) (*roachpb.RangeDescriptor, bool, func(), *roachpb.Error) {
 	var desc *roachpb.RangeDescriptor
-	var err error
+	var pErr *roachpb.Error
 	var descKey roachpb.RKey
 	if !useReverseScan {
 		descKey = rs.Key
 	} else {
 		descKey = rs.EndKey
 	}
-	desc, err = ds.rangeCache.LookupRangeDescriptor(descKey, considerIntents, useReverseScan)
+	desc, pErr = ds.rangeCache.LookupRangeDescriptor(descKey, considerIntents, useReverseScan)
 
-	if err != nil {
-		return nil, false, nil, roachpb.NewError(err)
+	if pErr != nil {
+		return nil, false, nil, pErr
 	}
 
 	// Checks whether need to get next range descriptor. If so, returns true.
@@ -448,12 +447,12 @@ func (ds *DistSender) sendSingleRange(trace *tracer.Trace, ba roachpb.BatchReque
 	// descriptors that are still write intents and (2) the split
 	// has not yet been completed.
 	ba.SetNewRequest()
-	br, err := ds.sendRPC(trace, desc.RangeID, replicas, order, ba)
-	if err != nil {
-		return nil, roachpb.NewError(err)
+	br, pErr := ds.sendRPC(trace, desc.RangeID, replicas, order, ba)
+	if pErr != nil {
+		return nil, pErr
 	}
 	// Untangle the error from the received response.
-	pErr := br.Error
+	pErr = br.Error
 	br.Error = nil // scrub the response error
 	return br, pErr
 }
@@ -618,8 +617,8 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				if numActive == 0 && trErr == nil {
 					// This shouldn't happen in the wild, but some tests
 					// exercise it.
-					return nil, roachpb.NewError(util.Errorf("truncation resulted in empty batch on [%s,%s): %s",
-						rs.Key, rs.EndKey, ba))
+					return nil, roachpb.NewErrorf("truncation resulted in empty batch on [%s,%s): %s",
+						rs.Key, rs.EndKey, ba)
 				}
 				if trErr != nil {
 					return nil, roachpb.NewError(trErr)

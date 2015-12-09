@@ -407,10 +407,10 @@ func (db *DB) Query(query TimeSeriesQueryRequest_Query, r Resolution,
 		// query.
 		startKey := MakeDataKey(query.Name, "" /* source */, r, startNanos)
 		endKey := MakeDataKey(query.Name, "" /* source */, r, endNanos).PrefixEnd()
-		var err error
-		rows, err = db.db.Scan(startKey, endKey, 0)
-		if err != nil {
-			return nil, nil, err
+		var pErr *roachpb.Error
+		rows, pErr = db.db.Scan(startKey, endKey, 0)
+		if pErr != nil {
+			return nil, nil, pErr.GoError()
 		}
 	} else {
 		b := db.db.NewBatch()
@@ -422,9 +422,9 @@ func (db *DB) Query(query TimeSeriesQueryRequest_Query, r Resolution,
 				b.Get(key)
 			}
 		}
-		err := db.db.Run(b)
-		if err != nil {
-			return nil, nil, err
+		pErr := db.db.Run(b)
+		if pErr != nil {
+			return nil, nil, pErr.GoError()
 		}
 		for _, result := range b.Results {
 			row := result.Rows[0]

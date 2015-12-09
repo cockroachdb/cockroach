@@ -242,7 +242,7 @@ func TestSequenceCacheShouldCache(t *testing.T) {
 	for i, test := range testCases {
 		br := &roachpb.BatchResponse{}
 		br.Add(&reply)
-		if shouldCache := sc.shouldCacheError(test.err); shouldCache != test.shouldCache {
+		if shouldCache := sc.shouldCacheError(roachpb.NewError(test.err)); shouldCache != test.shouldCache {
 			t.Errorf("%d: expected cache? %t; got %t", i, test.shouldCache, shouldCache)
 		}
 	}
