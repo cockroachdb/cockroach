@@ -12,7 +12,7 @@ set -euo pipefail
 # commands in the if-branch to be executed within the docker
 # container.
 if [ "${1-}" = "docker" ]; then
-    time make STATIC=1 release
+    time make release
 
     # Make sure the created binary is statically linked.  Seems
     # awkward to do this programmatically, but this should work.

@@ -2,7 +2,7 @@
 # Push binaries to AWS.
 # This is run by circle-ci after successful docker push.
 # Requisites:
-# - binaries must be statically linked by running build/build-static-binaries.sh
+# - binaries must be built by running build/build-binaries.sh
 # - circleci must have AWS credentials configured
 # - AWS credentials must have S3 write permissions on the bucket
 # - the aws cli must be installed on the machine

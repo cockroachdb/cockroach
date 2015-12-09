@@ -30,5 +30,5 @@ deployment:
             build/push-docker-deploy.sh
           fi
       - aws configure set region us-east-1
-      - build/build-static-binaries.sh
+      - build/build-binaries.sh
       - build/push-aws.sh
