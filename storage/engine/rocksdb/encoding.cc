@@ -25,40 +25,6 @@ const uint8_t kEscapedTerm = 0x01;
 const uint8_t kEscapedNul  = 0xff;
 const uint8_t kBytesMarker = 0x71; // util/encoding/encoding.go:bytesMarker
 
-const int kIntZero = 0x0b;
-const int kIntSmall = 63;
-
-template <typename T>
-bool DecodeUvarint(rocksdb::Slice* buf, T* value) {
-  if (buf->empty()) {
-    return false;
-  }
-  int len = (*buf)[0] - kIntZero;
-  if (len < 0) {
-    return false;
-  }
-  if (len <= kIntSmall) {
-    *value = T(len);
-  }
-  len -= kIntSmall;
-  if ((len + 1) > buf->size()) {
-    return false;
-  }
-  if (len > sizeof(T)) {
-    // Decoded value will overflow.
-    return false;
-  }
-
-  *value = 0;
-  const uint8_t* ptr = reinterpret_cast<const uint8_t*>(buf->data()) + len;
-  for (int i = 0; i < len; ++i) {
-    *value |= static_cast<T>(*ptr--) << (i * 8);
-  }
-  buf->remove_prefix(len + 1);
-
-  return true;
-}
-
 }  // namespace
 
 void EncodeBytes(std::string* buf, const char* ptr, int n) {
@@ -149,10 +115,6 @@ bool DecodeUint32Decreasing(rocksdb::Slice* buf, uint32_t* value) {
   }
   *value = ~*value;
   return true;
-}
-
-bool DecodeUvarint64(rocksdb::Slice* buf, uint64_t* value) {
-  return DecodeUvarint(buf, value);
 }
 
 bool DecodeUint64(rocksdb::Slice* buf, uint64_t* value) {

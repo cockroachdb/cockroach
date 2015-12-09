@@ -31,10 +31,10 @@ const (
 	encodedNull    = 0x00
 	encodedNotNull = 0x01
 
-	intMin   = encodedNotNull + 2 // 0x03
-	intZero  = intMin + 8         // 0x0b
+	intMin   = 0x05 // keys.SystemMax
+	intZero  = intMin + 8
 	intSmall = 63
-	intMax   = intZero + intSmall + 8 // 0x92
+	intMax   = intZero + intSmall + 8
 
 	floatNaN              = intMax + 1
 	floatNegativeInfinity = floatNaN + 1
