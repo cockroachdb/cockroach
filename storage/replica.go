@@ -640,7 +640,7 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 // key ranges. This method will block if there are any overlapping commands
 // already in the queue. Returns the command queue insertion keys, to be
 // supplied to a subsequent invocation of endCmds().
-func (r *Replica) beginCmds(ba *roachpb.BatchRequest) ([]interface{}, error) {
+func (r *Replica) beginCmds(ba *roachpb.BatchRequest) []interface{} {
 	var cmdKeys []interface{}
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
@@ -671,7 +671,7 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) ([]interface{}, error) {
 		}
 	}
 
-	return cmdKeys, nil
+	return cmdKeys
 }
 
 // endCmds removes pending commands from the command queue and updates
@@ -752,11 +752,8 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 	// Add the read to the command queue to gate subsequent
 	// overlapping commands until this command completes.
 	qDone := trace.Epoch("command queue")
-	cmdKeys, err := r.beginCmds(&ba)
+	cmdKeys := r.beginCmds(&ba)
 	qDone()
-	if err != nil {
-		return nil, err
-	}
 
 	// If there are command keys (there might not be if reads are
 	// inconsistent), the read requires the leader lease.
@@ -820,11 +817,8 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 	// timestamp cache is only updated after preceding commands have
 	// been run to successful completion.
 	qDone := trace.Epoch("command queue")
-	cmdKeys, err := r.beginCmds(&ba)
+	cmdKeys := r.beginCmds(&ba)
 	qDone()
-	if err != nil {
-		return nil, err
-	}
 
 	// This replica must have leader lease to process a write.
 	if err := r.redirectOnOrAcquireLeaderLease(trace, ba.Timestamp); err != nil {
@@ -883,6 +877,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 
 	// First wait for raft to commit or abort the command.
 	var br *roachpb.BatchResponse
+	var err error
 	if err = <-errChan; err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		respWithErr := <-pendingCmd.done
