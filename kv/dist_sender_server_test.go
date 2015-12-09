@@ -68,20 +68,8 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	// intent error. If it did, it would go into a deadloop attempting
 	// to push the transaction, which in turn requires another range
 	// lookup, etc, ad nauseam.
-	errors := make(chan error)
-	go func() {
-		_, err := db.Get("a")
-		errors <- err
-	}()
-
-	select {
-	case err := <-errors:
-		if err != nil {
-			t.Fatal(err)
-		}
-		// Hurrah!
-	case <-time.After(5 * time.Second):
-		t.Errorf("get request did not succeed in face of range metadata intent")
+	if _, err := db.Get("a"); err != nil {
+		t.Fatal(err)
 	}
 }
 
