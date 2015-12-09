@@ -44,6 +44,7 @@ import (
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var (
@@ -401,7 +402,7 @@ SET DATABASE = test;
 }
 
 func (t *logicTest) execStatement(stmt logicStatement) {
-	if testing.Verbose() {
+	if testing.Verbose() || log.V(1) {
 		fmt.Printf("%s: %s\n", stmt.pos, stmt.sql)
 	}
 	_, err := t.db.Exec(stmt.sql)
@@ -420,7 +421,7 @@ func (t *logicTest) execStatement(stmt logicStatement) {
 }
 
 func (t *logicTest) execQuery(query logicQuery) {
-	if testing.Verbose() {
+	if testing.Verbose() || log.V(1) {
 		fmt.Printf("%s: %s\n", query.pos, query.sql)
 	}
 	rows, err := t.db.Query(query.sql)
