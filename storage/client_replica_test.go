@@ -187,7 +187,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	key := "key"
 	// Set up a filter to so that the get operation at Step 3 will return an error.
 	var numGets int32
-	storage.TestingCommandFilter = func(args roachpb.Request, h roachpb.Header) error {
+	storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
 		if _, ok := args.(*roachpb.GetRequest); ok &&
 			args.Header().Key.Equal(roachpb.Key(key)) &&
 			h.Txn == nil {

@@ -1105,7 +1105,7 @@ func TestRangeCommandQueue(t *testing.T) {
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
 	defer func() { TestingCommandFilter = nil }()
-	TestingCommandFilter = func(_ roachpb.Request, h roachpb.Header) error {
+	TestingCommandFilter = func(_ roachpb.StoreID, _ roachpb.Request, h roachpb.Header) error {
 		if h.GetUserPriority() == 42 {
 			blockingStart <- struct{}{}
 			<-blockingDone
@@ -1221,7 +1221,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	key := roachpb.Key("key1")
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
-	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
+	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		if put, ok := args.(*roachpb.PutRequest); ok {
 			putBytes, err := put.Value.GetBytes()
 			if err != nil {
@@ -1927,7 +1927,7 @@ func TestEndTransactionLocalGC(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	defer setTxnAutoGC(true)()
 	defer func() { TestingCommandFilter = nil }()
-	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
+	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		// Make sure the direct GC path doesn't interfere with this test.
 		if args.Method() == roachpb.GC {
 			return util.Errorf("boom")
@@ -2021,7 +2021,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
 	defer func() { TestingCommandFilter = nil }()
-	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
+	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey.AsRawKey()) {
 			return util.Errorf("boom")
 		}
@@ -2093,7 +2093,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	splitKey := roachpb.RKey(key).Next()
 	var count int64
 	defer func() { TestingCommandFilter = nil }()
-	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
+	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey.AsRawKey()) {
 			atomic.AddInt64(&count, 1)
 			return util.Errorf("boom")

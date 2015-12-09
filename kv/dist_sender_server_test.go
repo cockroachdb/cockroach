@@ -468,7 +468,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	// get a ReadWithinUncertaintyIntervalError.
 	targetKey := roachpb.Key("b")
 	var numGets int32
-	storage.TestingCommandFilter = func(args roachpb.Request, h roachpb.Header) error {
+	storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
 		if _, ok := args.(*roachpb.ConditionalPutRequest); ok && args.Header().Key.Equal(targetKey) {
 			if atomic.AddInt32(&numGets, 1) == 1 {
 				return &roachpb.ReadWithinUncertaintyIntervalError{

@@ -56,7 +56,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if TestingCommandFilter != nil {
-		if err := TestingCommandFilter(args, h); err != nil {
+		if err := TestingCommandFilter(r.store.StoreID(), args, h); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -488,7 +488,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 				}
 			}
 			if ct.GetChangeReplicasTrigger() != nil {
-				if err := r.changeReplicasTrigger(ct.ChangeReplicasTrigger); err != nil {
+				if err := r.changeReplicasTrigger(batch, ct.ChangeReplicasTrigger); err != nil {
 					return err
 				}
 			}
@@ -1622,7 +1622,7 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger)
 	return nil
 }
 
-func (r *Replica) changeReplicasTrigger(change *roachpb.ChangeReplicasTrigger) error {
+func (r *Replica) changeReplicasTrigger(batch engine.Engine, change *roachpb.ChangeReplicasTrigger) error {
 	defer r.clearPendingChangeReplicas()
 	cpy := *r.Desc()
 	cpy.Replicas = change.UpdatedReplicas
@@ -1632,11 +1632,17 @@ func (r *Replica) changeReplicasTrigger(change *roachpb.ChangeReplicasTrigger) e
 	}
 	// If we're removing the current replica, add it to the range GC queue.
 	if change.ChangeType == roachpb.REMOVE_REPLICA && r.store.StoreID() == change.Replica.StoreID {
-		if err := r.store.replicaGCQueue.Add(r, 1.0); err != nil {
-			// Log the error; this shouldn't prevent the commit; the range
-			// will be GC'd eventually.
-			log.Errorf("unable to add range %s to GC queue: %s", r, err)
-		}
+		// Defer this to make it run as late as possible, maximizing the chances
+		// that the other nodes have finished this command as well (since
+		// processing the removal from the queue looks up the Range at the
+		// leader, being too early here turns this into a no-op).
+		batch.Defer(func() {
+			if err := r.store.replicaGCQueue.Add(r, 1.0); err != nil {
+				// Log the error; this shouldn't prevent the commit; the range
+				// will be GC'd eventually.
+				log.Errorf("unable to add range %s to GC queue: %s", r, err)
+			}
+		})
 	}
 	return nil
 }

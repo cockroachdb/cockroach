@@ -1354,7 +1354,7 @@ func TestStoreScanIntents(t *testing.T) {
 	var count int32
 	countPtr := &count
 
-	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
+	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		if _, ok := args.(*roachpb.ScanRequest); ok {
 			atomic.AddInt32(countPtr, 1)
 		}
@@ -1470,7 +1470,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	defer setTxnAutoGC(false)()
 	var intercept atomic.Value
 	intercept.Store(true)
-	TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
+	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		if _, ok := args.(*roachpb.ResolveIntentRequest); ok && intercept.Load().(bool) {
 			return util.Errorf("error on purpose")
 		}

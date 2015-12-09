@@ -74,7 +74,7 @@ func TestIntentResolution(t *testing.T) {
 		var result []string
 		var mu sync.Mutex
 		closer := make(chan struct{}, 2)
-		storage.TestingCommandFilter = func(args roachpb.Request, _ roachpb.Header) error {
+		storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 			mu.Lock()
 			defer mu.Unlock()
 			header := args.Header()
