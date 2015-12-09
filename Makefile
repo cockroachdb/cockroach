@@ -41,7 +41,9 @@ ifeq ($(STATIC),1)
 # not when using cgo (???).
 TAGS += netgo
 # `-v` so warnings from the linker aren't suppressed.
-GOFLAGS += -v
+# `-a` so dependencies are rebuilt (they may have been dynamically
+# linked).
+GOFLAGS += -a -v
 LDFLAGS += -extldflags '-static'
 endif
 
