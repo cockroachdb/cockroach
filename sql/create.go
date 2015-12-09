@@ -80,9 +80,24 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 	indexDesc := IndexDescriptor{
 		Name:             string(n.Name),
 		Unique:           n.Unique,
-		ColumnNames:      n.Columns,
 		StoreColumnNames: n.Storing,
 	}
+	// Fill in columns and directions.
+	cols := make([]string, len(n.Columns), len(n.Columns))
+	dirs := make([]IndexDescriptor_Direction, len(n.Columns), len(n.Columns))
+	for i, c := range n.Columns {
+		cols[i] = string(c.Column)
+		switch c.Direction {
+		case parser.Ascending, parser.DefaultDirection:
+			dirs[i] = IndexDescriptor_ASC
+		case parser.Descending:
+			dirs[i] = IndexDescriptor_DESC
+		default:
+			return nil, fmt.Errorf("invalid direction %s for column %s", c.Direction.String(), c.Column)
+		}
+	}
+	indexDesc.ColumnNames = cols
+	indexDesc.ColumnDirections = dirs
 
 	tableDesc.addIndexMutation(indexDesc, DescriptorMutation_ADD)
 
