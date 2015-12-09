@@ -91,11 +91,7 @@ func createRangeData(r *Replica, t *testing.T) []engine.MVCCKey {
 		if err := engine.MVCCPut(r.store.Engine(), nil, keyTS.key, keyTS.ts, roachpb.MakeValueFromString("value"), nil); err != nil {
 			t.Fatal(err)
 		}
-		if keyTS.ts.Equal(ts0) {
-			keys = append(keys, engine.MVCCEncodeKey(keyTS.key))
-		} else {
-			keys = append(keys, engine.MVCCEncodeVersionKey(keyTS.key, keyTS.ts))
-		}
+		keys = append(keys, engine.MVCCKey{Key: keyTS.key, Timestamp: keyTS.ts})
 	}
 	return keys
 }
@@ -172,14 +168,8 @@ func TestReplicaDataIterator(t *testing.T) {
 			t.Fatal("there are more keys in the iteration than expected")
 		}
 		if key := iter.Key(); !key.Equal(curKeys[i]) {
-			k1, ts1, _, err := engine.MVCCDecodeKey(key)
-			if err != nil {
-				t.Fatal(err)
-			}
-			k2, ts2, _, err := engine.MVCCDecodeKey(curKeys[i])
-			if err != nil {
-				t.Fatal(err)
-			}
+			k1, ts1 := key.Key, key.Timestamp
+			k2, ts2 := curKeys[i].Key, curKeys[i].Timestamp
 			t.Errorf("%d: expected %q(%d); got %q(%d)", i, k2, ts2, k1, ts1)
 		}
 		i++
@@ -196,10 +186,7 @@ func TestReplicaDataIterator(t *testing.T) {
 	defer iter.Close()
 	if iter.Valid() {
 		// If the range is destroyed, only a tombstone key should be there.
-		k1, _, _, err := engine.MVCCDecodeKey(iter.Key())
-		if err != nil {
-			t.Fatal(err)
-		}
+		k1 := iter.Key().Key
 		if tombstoneKey := keys.RaftTombstoneKey(tc.rng.Desc().RangeID); !bytes.Equal(k1, tombstoneKey) {
 			t.Errorf("expected a tombstone key %q, but found %q", tombstoneKey, k1)
 		}
@@ -223,10 +210,7 @@ func TestReplicaDataIterator(t *testing.T) {
 		defer iter.Close()
 		i = 0
 		for ; iter.Valid(); iter.Next() {
-			k1, ts1, _, err := engine.MVCCDecodeKey(iter.Key())
-			if err != nil {
-				t.Fatal(err)
-			}
+			k1, ts1 := iter.Key().Key, iter.Key().Timestamp
 			if bytes.HasPrefix(k1, keys.StatusPrefix) {
 				// Some data is written into the system prefix by Store.BootstrapRange,
 				// but it is not in our expected key list so skip it.
@@ -234,10 +218,7 @@ func TestReplicaDataIterator(t *testing.T) {
 				continue
 			}
 			if key := iter.Key(); !key.Equal(test.keys[i]) {
-				k2, ts2, _, err := engine.MVCCDecodeKey(test.keys[i])
-				if err != nil {
-					t.Fatal(err)
-				}
+				k2, ts2 := test.keys[i].Key, test.keys[i].Timestamp
 				t.Errorf("%d/%d: key mismatch %q(%d) != %q(%d) [%x]", j, i, k1, ts1, k2, ts2, []byte(k2))
 			}
 			i++

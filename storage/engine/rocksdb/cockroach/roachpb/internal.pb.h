@@ -680,18 +680,38 @@ class RaftSnapshotData_KeyValue : public ::google::protobuf::Message {
   ::std::string* release_value();
   void set_allocated_value(::std::string* value);
 
+  // optional int64 wall_time = 3;
+  bool has_wall_time() const;
+  void clear_wall_time();
+  static const int kWallTimeFieldNumber = 3;
+  ::google::protobuf::int64 wall_time() const;
+  void set_wall_time(::google::protobuf::int64 value);
+
+  // optional int32 logical = 4;
+  bool has_logical() const;
+  void clear_logical();
+  static const int kLogicalFieldNumber = 4;
+  ::google::protobuf::int32 logical() const;
+  void set_logical(::google::protobuf::int32 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RaftSnapshotData.KeyValue)
  private:
   inline void set_has_key();
   inline void clear_has_key();
   inline void set_has_value();
   inline void clear_has_value();
+  inline void set_has_wall_time();
+  inline void clear_has_wall_time();
+  inline void set_has_logical();
+  inline void clear_has_logical();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::google::protobuf::internal::ArenaStringPtr value_;
+  ::google::protobuf::int64 wall_time_;
+  ::google::protobuf::int32 logical_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2finternal_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2finternal_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2finternal_2eproto();
@@ -1317,6 +1337,54 @@ inline void RaftSnapshotData_KeyValue::set_allocated_value(::std::string* value)
   }
   value_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RaftSnapshotData.KeyValue.value)
+}
+
+// optional int64 wall_time = 3;
+inline bool RaftSnapshotData_KeyValue::has_wall_time() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void RaftSnapshotData_KeyValue::set_has_wall_time() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void RaftSnapshotData_KeyValue::clear_has_wall_time() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void RaftSnapshotData_KeyValue::clear_wall_time() {
+  wall_time_ = GOOGLE_LONGLONG(0);
+  clear_has_wall_time();
+}
+inline ::google::protobuf::int64 RaftSnapshotData_KeyValue::wall_time() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RaftSnapshotData.KeyValue.wall_time)
+  return wall_time_;
+}
+inline void RaftSnapshotData_KeyValue::set_wall_time(::google::protobuf::int64 value) {
+  set_has_wall_time();
+  wall_time_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RaftSnapshotData.KeyValue.wall_time)
+}
+
+// optional int32 logical = 4;
+inline bool RaftSnapshotData_KeyValue::has_logical() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void RaftSnapshotData_KeyValue::set_has_logical() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void RaftSnapshotData_KeyValue::clear_has_logical() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void RaftSnapshotData_KeyValue::clear_logical() {
+  logical_ = 0;
+  clear_has_logical();
+}
+inline ::google::protobuf::int32 RaftSnapshotData_KeyValue::logical() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RaftSnapshotData.KeyValue.logical)
+  return logical_;
+}
+inline void RaftSnapshotData_KeyValue::set_logical(::google::protobuf::int32 value) {
+  set_has_logical();
+  logical_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RaftSnapshotData.KeyValue.logical)
 }
 
 // -------------------------------------------------------------------

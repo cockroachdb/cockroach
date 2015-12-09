@@ -61,6 +61,49 @@ bool DecodeUvarint(rocksdb::Slice* buf, T* value) {
 
 }  // namespace
 
+void EncodeBytes(std::string* buf, const char* ptr, int n) {
+  buf->reserve(n + 3);
+  buf->push_back(kBytesMarker);
+  const char* end = ptr + n;
+  for (; ptr != end;) {
+    const char* tmp = static_cast<const char*>(memchr(ptr, kEscape, end - ptr));
+    if (!tmp) {
+      break;
+    }
+    const int i = tmp - ptr;
+    buf->append(ptr, i);
+    buf->push_back(kEscape);
+    buf->push_back(kEscapedNul);
+    ptr += i + 1;
+  }
+  buf->append(ptr, end - ptr);
+  buf->push_back(kEscape);
+  buf->push_back(kEscapedTerm);
+}
+
+void EncodeUint32(std::string* buf, uint32_t v) {
+  const uint8_t tmp[sizeof(v)] = {
+    uint8_t(v >> 24), uint8_t(v >> 16), uint8_t(v >> 8), uint8_t(v),
+  };
+  buf->append(reinterpret_cast<const char*>(tmp), sizeof(tmp));
+}
+
+void EncodeUint32Decreasing(std::string* buf, uint32_t v) {
+  return EncodeUint32(buf, ~v);
+}
+
+void EncodeUint64(std::string* buf, uint64_t v) {
+  const uint8_t tmp[sizeof(v)] = {
+    uint8_t(v >> 56), uint8_t(v >> 48), uint8_t(v >> 40), uint8_t(v >> 32),
+    uint8_t(v >> 24), uint8_t(v >> 16), uint8_t(v >> 8), uint8_t(v),
+  };
+  buf->append(reinterpret_cast<const char*>(tmp), sizeof(tmp));
+}
+
+void EncodeUint64Decreasing(std::string* buf, uint64_t v) {
+  return EncodeUint64(buf, ~v);
+}
+
 // TODO(pmattis): These functions are not tested. Doing so is made
 // difficult by "go test" because _test.go files cannot 'import "C"'.
 bool DecodeBytes(rocksdb::Slice* buf, std::string* decoded) {
@@ -86,6 +129,26 @@ bool DecodeBytes(rocksdb::Slice* buf, std::string* decoded) {
     }
   }
   return false;
+}
+
+bool DecodeUint32(rocksdb::Slice* buf, uint32_t* value) {
+  const int N = sizeof(*value);
+  if (buf->size() < N) {
+    return false;
+  }
+  const uint8_t* b = reinterpret_cast<const uint8_t*>(buf->data());
+  *value = (uint32_t(b[0]) << 24) | (uint32_t(b[1]) << 16) |
+      (uint32_t(b[2]) << 8) | uint32_t(b[3]);
+  buf->remove_prefix(N);
+  return true;
+}
+
+bool DecodeUint32Decreasing(rocksdb::Slice* buf, uint32_t* value) {
+  if (!DecodeUint32(buf, value)) {
+    return false;
+  }
+  *value = ~*value;
+  return true;
 }
 
 bool DecodeUvarint64(rocksdb::Slice* buf, uint64_t* value) {

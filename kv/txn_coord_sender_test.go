@@ -299,7 +299,7 @@ func verifyCleanup(key roachpb.Key, coord *TxnCoordSender, eng engine.Engine, t 
 			return fmt.Errorf("expected empty transactions map; got %d", l)
 		}
 		meta := &engine.MVCCMetadata{}
-		ok, _, _, err := eng.GetProto(engine.MVCCEncodeKey(key), meta)
+		ok, _, _, err := eng.GetProto(engine.MakeMVCCMetadataKey(key), meta)
 		if err != nil {
 			return fmt.Errorf("error getting MVCC metadata: %s", err)
 		}

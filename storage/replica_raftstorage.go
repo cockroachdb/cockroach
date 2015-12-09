@@ -338,8 +338,14 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	iter := newReplicaDataIterator(&desc, snap)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
+		key := iter.Key()
 		snapData.KV = append(snapData.KV,
-			&roachpb.RaftSnapshotData_KeyValue{Key: iter.Key(), Value: iter.Value()})
+			&roachpb.RaftSnapshotData_KeyValue{
+				Key:      key.Key,
+				Value:    iter.Value(),
+				WallTime: key.Timestamp.WallTime,
+				Logical:  key.Timestamp.Logical,
+			})
 	}
 
 	data, err := proto.Marshal(&snapData)
@@ -474,7 +480,11 @@ func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 
 	// Write the snapshot into the range.
 	for _, kv := range snapData.KV {
-		if err := batch.Put(kv.Key, kv.Value); err != nil {
+		mvccKey := engine.MVCCKey{
+			Key:       kv.Key,
+			Timestamp: roachpb.Timestamp{WallTime: kv.WallTime, Logical: kv.Logical},
+		}
+		if err := batch.Put(mvccKey, kv.Value); err != nil {
 			return err
 		}
 	}
