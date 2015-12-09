@@ -116,7 +116,7 @@ func (e *internalError) CanRestartTransaction() TransactionRestart {
 // Transaction implements the TransactionRestartError interface by returning
 // nil. The idea is that an error which isn't an ErrorDetail can't hold a
 // transaction (this is asserted by SetGoError()).
-func (e *internalError) Transaction() *Transaction {
+func (*internalError) Transaction() *Transaction {
 	return nil
 }
 
@@ -178,7 +178,7 @@ func (e *Error) SetGoError(err error) {
 }
 
 // Error formats error.
-func (e *NodeUnavailableError) Error() string {
+func (*NodeUnavailableError) Error() string {
 	return "node unavailable; try another peer"
 }
 
@@ -194,7 +194,7 @@ func (e *LeaseRejectedError) Error() string {
 
 // CanRetry indicates that this error can not be retried; it should never
 // make it back to the client anyways.
-func (e *LeaseRejectedError) CanRetry() bool {
+func (*LeaseRejectedError) CanRetry() bool {
 	return false
 }
 
@@ -219,7 +219,7 @@ func (e *RangeNotFoundError) Error() string {
 }
 
 // CanRetry indicates whether or not this RangeNotFoundError can be retried.
-func (e *RangeNotFoundError) CanRetry() bool {
+func (*RangeNotFoundError) CanRetry() bool {
 	return true
 }
 
@@ -242,7 +242,7 @@ func (e *RangeKeyMismatchError) Error() string {
 }
 
 // CanRetry indicates whether or not this RangeKeyMismatchError can be retried.
-func (e *RangeKeyMismatchError) CanRetry() bool {
+func (*RangeKeyMismatchError) CanRetry() bool {
 	return true
 }
 
@@ -260,7 +260,7 @@ func (e *TransactionAbortedError) Error() string {
 var _ TransactionRestartError = &TransactionAbortedError{}
 
 // CanRestartTransaction implements the TransactionRestartError interface.
-func (e *TransactionAbortedError) CanRestartTransaction() TransactionRestart {
+func (*TransactionAbortedError) CanRestartTransaction() TransactionRestart {
 	return TransactionRestart_BACKOFF
 }
 
@@ -291,7 +291,7 @@ func (e *TransactionPushError) Error() string {
 var _ TransactionRestartError = &TransactionPushError{}
 
 // CanRestartTransaction implements the TransactionRestartError interface.
-func (e *TransactionPushError) CanRestartTransaction() TransactionRestart {
+func (*TransactionPushError) CanRestartTransaction() TransactionRestart {
 	return TransactionRestart_BACKOFF
 }
 
@@ -369,7 +369,7 @@ func (e *ReadWithinUncertaintyIntervalError) Error() string {
 var _ TransactionRestartError = &ReadWithinUncertaintyIntervalError{}
 
 // CanRestartTransaction implements the TransactionRestartError interface.
-func (e *ReadWithinUncertaintyIntervalError) CanRestartTransaction() TransactionRestart {
+func (*ReadWithinUncertaintyIntervalError) CanRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
 }
 
@@ -379,7 +379,7 @@ func (e *ReadWithinUncertaintyIntervalError) Transaction() *Transaction {
 }
 
 // Error formats error.
-func (e *OpRequiresTxnError) Error() string {
+func (*OpRequiresTxnError) Error() string {
 	return "the operation requires transactional context"
 }
 
