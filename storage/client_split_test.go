@@ -94,8 +94,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 
 	key := keys.MakeNonColumnKey(append([]byte(nil), keys.UserTableDataMin...))
 	args := adminSplitArgs(key, key)
-	_, err := client.SendWrapped(rg1(store), nil, &args)
-	if err != nil {
+	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
 		t.Fatalf("%q: split unexpected error: %s", key, err)
 	}
 
@@ -106,7 +105,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	}
 
 	// Update SystemConfig to trigger gossip.
-	if err := store.DB().Txn(func(txn *client.Txn) error {
+	if err := store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
 		txn.SetSystemDBTrigger()
 		// We don't care about the values, just the keys.
 		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + 1))
@@ -350,7 +349,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	_, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		Txn: txn,
 	}, &lIncArgs)
-	if _, ok := err.(*roachpb.TransactionRetryError); !ok {
+	if _, ok := err.GoError().(*roachpb.TransactionRetryError); !ok {
 		t.Fatalf("unexpected sequence cache miss: %v", err)
 	}
 
@@ -360,7 +359,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		RangeID: newRng.RangeID,
 		Txn:     txn,
 	}, &rIncArgs)
-	if _, ok := err.(*roachpb.TransactionRetryError); !ok {
+	if _, ok := err.GoError().(*roachpb.TransactionRetryError); !ok {
 		t.Fatalf("unexpected sequence cache miss: %v", err)
 	}
 
@@ -494,7 +493,7 @@ func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key
 		}, &pArgs)
 		// When the split occurs in the background, our writes may start failing.
 		// We know we can stop writing when this happens.
-		if _, ok := err.(*roachpb.RangeKeyMismatchError); ok {
+		if _, ok := err.GoError().(*roachpb.RangeKeyMismatchError); ok {
 			return
 		} else if err != nil {
 			t.Fatal(err)
@@ -611,7 +610,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	// - descriptor IDs are used to determine split keys
 	// - the write triggers a SystemConfig update and gossip.
 	// We should end up with splits at each user table prefix.
-	if err := store.DB().Txn(func(txn *client.Txn) error {
+	if err := store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
 		txn.SetSystemDBTrigger()
 		for i, kv := range initialSystemValues {
 			bytes, err := kv.Value.GetBytes()
@@ -650,7 +649,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		util.SucceedsWithinDepth(1, t, 5*time.Second, func() error {
 			rows, err := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 			if err != nil {
-				return err
+				return err.GoError()
 			}
 			keys := make([]roachpb.Key, 0, len(expKeys))
 			for _, r := range rows {
@@ -668,7 +667,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	numTotalValues := numInitialValues + 5
 
 	// Write another, disjoint descriptor for a user table.
-	if err := store.DB().Txn(func(txn *client.Txn) error {
+	if err := store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
 		txn.SetSystemDBTrigger()
 		// This time, only write the last table descriptor. Splits
 		// still occur for every intervening ID.

@@ -21,8 +21,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -74,7 +74,7 @@ func (p *planner) resetTxn() {
 //
 // Note: The autoCommit parameter enables operations to enable the 1PC
 // optimization. This is a bit hackish/preliminary at present.
-func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, error) {
+func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *roachpb.Error) {
 	// This will set the system DB trigger for transactions containing
 	// DDL statements that have no effect, such as
 	// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
@@ -152,22 +152,22 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, er
 	case parser.Values:
 		return p.Values(n)
 	default:
-		return nil, util.Errorf("unknown statement type: %T", stmt)
+		return nil, roachpb.NewErrorf("unknown statement type: %T", stmt)
 	}
 }
 
-func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
+func (p *planner) query(sql string, args ...interface{}) (planNode, *roachpb.Error) {
 	stmt, err := parser.ParseOneTraditional(sql)
 	if err != nil {
-		return nil, err
+		return nil, roachpb.NewError(err)
 	}
 	if err := parser.FillArgs(stmt, golangParameters(args)); err != nil {
-		return nil, err
+		return nil, roachpb.NewError(err)
 	}
 	return p.makePlan(stmt, false)
 }
 
-func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, error) {
+func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, *roachpb.Error) {
 	plan, err := p.query(sql, args...)
 	if err != nil {
 		return nil, err
@@ -180,7 +180,7 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 	}
 	values := plan.Values()
 	if plan.Next() {
-		return nil, util.Errorf("%s: unexpected multiple results", sql)
+		return nil, roachpb.NewErrorf("%s: unexpected multiple results", sql)
 	}
 	if err := plan.Err(); err != nil {
 		return nil, err
@@ -188,7 +188,7 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 	return values, nil
 }
 
-func (p *planner) exec(sql string, args ...interface{}) (int, error) {
+func (p *planner) exec(sql string, args ...interface{}) (int, *roachpb.Error) {
 	plan, err := p.query(sql, args...)
 	if err != nil {
 		return 0, err
@@ -202,14 +202,14 @@ func (p *planner) exec(sql string, args ...interface{}) (int, error) {
 
 // getAliasedTableLease looks up the table descriptor for an alias table
 // expression.
-func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, error) {
+func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, *roachpb.Error) {
 	ate, ok := n.(*parser.AliasedTableExpr)
 	if !ok {
-		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
+		return nil, roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
 	table, ok := ate.Expr.(*parser.QualifiedName)
 	if !ok {
-		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
+		return nil, roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
 	desc, err := p.getTableLease(table)
 	if err != nil {
@@ -264,7 +264,7 @@ type planNode interface {
 	// or if there is no next row.
 	Next() bool
 	// Err returns the error, if any, encountered during iteration.
-	Err() error
+	Err() *roachpb.Error
 	// ExplainPlan returns a name and description and a list of child nodes.
 	ExplainPlan() (name, description string, children []planNode)
 }

@@ -227,7 +227,7 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	mtc.replicateRange(rangeID, 0, 1, 2)
 
 	// Add some data in a transaction
-	err := mtc.db.Txn(func(txn *client.Txn) error {
+	err := mtc.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		b := txn.NewBatch()
 		b.Put("a", "asdf")
 		b.Put("c", "jkl;")

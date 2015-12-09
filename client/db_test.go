@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util/caller"
@@ -239,7 +240,7 @@ func ExampleTxn_Commit() {
 	s, db := setup()
 	defer s.Stop()
 
-	err := db.Txn(func(txn *client.Txn) error {
+	err := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		b := txn.NewBatch()
 		b.Put("aa", "1")
 		b.Put("ab", "2")
@@ -283,9 +284,9 @@ func ExampleDB_Put_insecure() {
 	if err := db.Put("aa", "1"); err != nil {
 		panic(err)
 	}
-	result, err := db.Get("aa")
-	if err != nil {
-		panic(err)
+	result, pErr := db.Get("aa")
+	if pErr != nil {
+		panic(pErr)
 	}
 	fmt.Printf("aa=%s\n", result.ValueBytes())
 
@@ -324,7 +325,7 @@ func TestDebugName(t *testing.T) {
 	defer s.Stop()
 
 	file, _, _ := caller.Lookup(0)
-	_ = db.Txn(func(txn *client.Txn) error {
+	_ = db.Txn(func(txn *client.Txn) *roachpb.Error {
 		if !strings.HasPrefix(txn.DebugName(), file+":") {
 			t.Fatalf("expected \"%s\" to have the prefix \"%s:\"", txn.DebugName(), file)
 		}

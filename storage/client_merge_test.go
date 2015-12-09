@@ -41,7 +41,7 @@ func adminMergeArgs(key roachpb.Key) roachpb.AdminMergeRequest {
 	}
 }
 
-func createSplitRanges(store *storage.Store) (*roachpb.RangeDescriptor, *roachpb.RangeDescriptor, error) {
+func createSplitRanges(store *storage.Store) (*roachpb.RangeDescriptor, *roachpb.RangeDescriptor, *roachpb.Error) {
 	args := adminSplitArgs(roachpb.KeyMin, []byte("b"))
 	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
 		return nil, nil, err
@@ -296,7 +296,7 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 
 	// Merge last range.
 	args := adminMergeArgs(roachpb.KeyMin)
-	if _, err := client.SendWrapped(rg1(store), nil, &args); !testutils.IsError(err, "cannot merge final range") {
+	if _, err := client.SendWrapped(rg1(store), nil, &args); !testutils.IsError(err.GoError(), "cannot merge final range") {
 		t.Fatalf("expected 'cannot merge final range' error; got %s", err)
 	}
 }
@@ -346,7 +346,7 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 	// Attempt to merge.
 	rangeADesc = rangeA.Desc()
 	argsMerge := adminMergeArgs(roachpb.Key(rangeADesc.StartKey))
-	if _, err := rangeA.AdminMerge(argsMerge, rangeADesc); !testutils.IsError(err, "ranges not collocated") {
-		t.Fatalf("did not got expected error; got %s", err)
+	if _, pErr := rangeA.AdminMerge(argsMerge, rangeADesc); !testutils.IsError(pErr.GoError(), "ranges not collocated") {
+		t.Fatalf("did not got expected error; got %s", pErr)
 	}
 }

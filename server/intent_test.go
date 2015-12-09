@@ -113,7 +113,7 @@ func TestIntentResolution(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := s.db.Txn(func(txn *client.Txn) error {
+			if err := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
 				b := txn.NewBatch()
 				for _, key := range tc.keys {
 					b.Put(key, "test")

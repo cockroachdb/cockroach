@@ -142,7 +142,7 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 
 	// Delete the keys within a transaction. The range [c,d) doesn't have
 	// any active requests.
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		b := txn.NewBatch()
 		b.DelRange("a", "b")
 		b.DelRange("e", "f")
@@ -182,7 +182,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 
 	// Delete the keys within a transaction. Implicitly, the intents are
 	// resolved via ResolveIntentRange upon completion.
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		b := txn.NewBatch()
 		b.DelRange("a", "d")
 		return txn.CommitInBatch(b)
@@ -408,19 +408,19 @@ func TestBadRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := db.Scan("a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
+	if _, err := db.Scan("a", "a", 0); !testutils.IsError(err.GoError(), "truncation resulted in empty batch") {
 		t.Fatalf("unexpected error on scan with startkey == endkey: %v", err)
 	}
 
-	if _, err := db.ReverseScan("a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
+	if _, err := db.ReverseScan("a", "a", 0); !testutils.IsError(err.GoError(), "truncation resulted in empty batch") {
 		t.Fatalf("unexpected error on reverse scan with startkey == endkey: %v", err)
 	}
 
-	if err := db.DelRange("x", "a"); !testutils.IsError(err, "truncation resulted in empty batch") {
+	if err := db.DelRange("x", "a"); !testutils.IsError(err.GoError(), "truncation resulted in empty batch") {
 		t.Fatalf("unexpected error on deletion on [x, a): %v", err)
 	}
 
-	if err := db.DelRange("", "z"); !testutils.IsError(err, "must be greater than LocalMax") {
+	if err := db.DelRange("", "z"); !testutils.IsError(err.GoError(), "must be greater than LocalMax") {
 		t.Fatalf("unexpected error on deletion on [KeyMin, z): %v", err)
 	}
 }
@@ -447,7 +447,7 @@ func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 	//    same replica.
 	// 5) The command succeeds since the sequence cache has not yet been updated.
 	epoch := 0
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		epoch++
 		b := txn.NewBatch()
 		b.Put("a", "val")
@@ -504,7 +504,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	// get a ReadWithinUncertaintyIntervalError and the txn will be
 	// retried.
 	epoch := 0
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		epoch++
 		if epoch >= 2 {
 			// Writing must be true since we ran the BeginTransaction command.
@@ -523,7 +523,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 		b.CPut(targetKey, "new_val", origVal)
 		err := txn.CommitInBatch(b)
 		if epoch == 1 {
-			if tErr, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); ok {
+			if tErr, ok := err.GoError().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
 				if !tErr.Txn.Writing {
 					t.Errorf("unexpected non-writing txn on error")
 				}
@@ -556,7 +556,7 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 	// Create a goroutine that creates a write intent and waits until
 	// another txn created in this test is restarted.
 	go func() {
-		if err := db.Txn(func(txn *client.Txn) error {
+		if err := db.Txn(func(txn *client.Txn) *roachpb.Error {
 			if err := txn.Put("b", "val"); err != nil {
 				return err
 			}
@@ -582,7 +582,7 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 	//   is treated as a write made by some different txn.
 	epoch := 0
 	var txnID []byte
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		// Set low priority so that the intent will not be pushed.
 		txn.InternalSetPriority(1)
 
@@ -606,7 +606,7 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 		// TransactionPushError.Transaction() returns nil.
 		err := txn.CommitInBatch(b)
 		if epoch == 1 {
-			if tErr, ok := err.(*roachpb.TransactionPushError); ok {
+			if tErr, ok := err.GoError().(*roachpb.TransactionPushError); ok {
 				if len(tErr.Txn.ID) == 0 {
 					t.Errorf("txn ID is not set unexpectedly: %s", tErr)
 				}

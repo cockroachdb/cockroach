@@ -17,8 +17,7 @@
 package sql
 
 import (
-	"fmt"
-
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -28,13 +27,13 @@ import (
 // Privileges: "root" user.
 //   Notes: postgres requires superuser or "CREATEDB".
 //          mysql uses the mysqladmin command.
-func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
+func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, *roachpb.Error) {
 	if n.Name == "" {
-		return nil, errEmptyDatabaseName
+		return nil, roachpb.NewError(errEmptyDatabaseName)
 	}
 
 	if p.user != security.RootUser {
-		return nil, fmt.Errorf("only %s is allowed to create databases", security.RootUser)
+		return nil, roachpb.NewUErrorf("only %s is allowed to create databases", security.RootUser)
 	}
 
 	desc := makeDatabaseDesc(n)
@@ -49,7 +48,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
 //          mysql requires INDEX on the table.
-func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
+func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, *roachpb.Error) {
 	tableDesc, err := p.getTableDesc(n.Table)
 	if err != nil {
 		return nil, err
@@ -60,8 +59,8 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 		if status == DescriptorIncomplete {
 			switch tableDesc.Mutations[i].Direction {
 			case DescriptorMutation_DROP:
-				return nil, fmt.Errorf("index %q being dropped, try again later", string(n.Name))
-
+				return nil, roachpb.NewUErrorf("index %q being dropped, try again later", string(n.Name))
+				
 			case DescriptorMutation_ADD:
 				// Noop, will fail in AllocateIDs below.
 			}
@@ -92,8 +91,8 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 		return nil, err
 	}
 
-	if err := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); err != nil {
-		return nil, err
+	if pErr := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); pErr != nil {
+		return nil, pErr
 	}
 
 	// Process mutation synchronously.
@@ -107,9 +106,9 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 // CreateTable creates a table.
 // Privileges: CREATE on database.
 //   Notes: postgres/mysql require CREATE on database.
-func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
+func (p *planner) CreateTable(n *parser.CreateTable) (planNode, *roachpb.Error) {
 	if err := n.Table.NormalizeTableName(p.session.Database); err != nil {
-		return nil, err
+		return nil, roachpb.NewError(err)
 	}
 
 	dbDesc, err := p.getDatabaseDesc(n.Table.Database())

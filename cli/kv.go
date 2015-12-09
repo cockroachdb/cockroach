@@ -150,7 +150,7 @@ func runCPut(cmd *cobra.Command, args []string) {
 
 	key := unquoteArg(args[0], true /* disallow system keys */)
 	value := unquoteArg(args[1], false)
-	var err error
+	var err *roachpb.Error
 	if len(args) == 3 {
 		err = kvDB.CPut(key, value, unquoteArg(args[2], false))
 	} else {

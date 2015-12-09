@@ -96,7 +96,7 @@ func (s *Store) testSender() client.Sender {
 // TODO(tschottdorf): {kv->storage}.LocalSender
 func (db *testSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	if et, ok := ba.GetArg(roachpb.EndTransaction); ok {
-		return nil, roachpb.NewError(util.Errorf("%s method not supported", et.Method()))
+		return nil, roachpb.NewErrorf("%s method not supported", et.Method())
 	}
 	// Lookup range and direct request.
 	rs := keys.Range(ba)
@@ -107,7 +107,7 @@ func (db *testSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 	ba.RangeID = rng.RangeID
 	replica := rng.GetReplica()
 	if replica == nil {
-		return nil, roachpb.NewError(util.Errorf("own replica missing in range"))
+		return nil, roachpb.NewErrorf("own replica missing in range")
 	}
 	ba.Replica = *replica
 	br, pErr := db.store.Send(ctx, ba)
@@ -571,29 +571,29 @@ func TestStoreVerifyKeys(t *testing.T) {
 	defer stopper.Stop()
 	// Try a start key == KeyMax.
 	gArgs := getArgs(roachpb.KeyMax)
-	if _, err := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsError(err, "must be less than KeyMax") {
+	if _, err := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsError(err.GoError(), "must be less than KeyMax") {
 		t.Fatalf("expected error for start key == KeyMax: %v", err)
 	}
 	// Try a get with an end key specified (get requires only a start key and should fail).
 	gArgs.EndKey = roachpb.KeyMax
-	if _, err := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsError(err, "must be less than KeyMax") {
+	if _, err := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsError(err.GoError(), "must be less than KeyMax") {
 		t.Fatalf("unexpected error for end key specified on a non-range-based operation: %v", err)
 	}
 	// Try a scan with end key < start key.
 	sArgs := scanArgs([]byte("b"), []byte("a"))
-	if _, err := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsError(err, "must be greater than") {
+	if _, err := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsError(err.GoError(), "must be greater than") {
 		t.Fatalf("unexpected error for end key < start: %v", err)
 	}
 	// Try a scan with start key == end key.
 	sArgs.Key = []byte("a")
 	sArgs.EndKey = sArgs.Key
-	if _, err := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsError(err, "must be greater than") {
+	if _, err := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsError(err.GoError(), "must be greater than") {
 		t.Fatalf("unexpected error for start == end key: %v", err)
 	}
 	// Try a scan with range-local start key, but "regular" end key.
 	sArgs.Key = keys.MakeRangeKey([]byte("test"), []byte("sffx"), nil)
 	sArgs.EndKey = []byte("z")
-	if _, err := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsError(err, "range-local") {
+	if _, err := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsError(err.GoError(), "range-local") {
 		t.Fatalf("unexpected error for local start, non-local end key: %v", err)
 	}
 
@@ -903,7 +903,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 				t.Errorf("expected pushee to be aborted; got %s", txn.Status)
 			}
 		} else {
-			if rErr, ok := err.(*roachpb.TransactionPushError); !ok {
+			if rErr, ok := err.GoError().(*roachpb.TransactionPushError); !ok {
 				t.Errorf("expected txn push error; got %s", err)
 			} else if !bytes.Equal(rErr.PusheeTxn.ID, pushee.ID) {
 				t.Errorf("expected txn to match pushee %q; got %s", pushee.ID, rErr)
@@ -1043,7 +1043,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 						expTimestamp, etReply.Txn)
 				}
 			} else {
-				if _, ok := cErr.(*roachpb.TransactionRetryError); !ok {
+				if _, ok := cErr.GoError().(*roachpb.TransactionRetryError); !ok {
 					t.Errorf("expected transaction retry error; got %s", cErr)
 				}
 			}
@@ -1063,7 +1063,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 				if err == nil {
 					t.Errorf("expected read to fail")
 				}
-				if _, ok := err.(*roachpb.TransactionRetryError); !ok {
+				if _, ok := err.GoError().(*roachpb.TransactionRetryError); !ok {
 					t.Errorf("expected transaction retry error; got %T", err)
 				}
 			}
@@ -1219,7 +1219,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	if err == nil {
 		t.Errorf("unexpected success committing transaction")
 	}
-	if _, ok := err.(*roachpb.TransactionAbortedError); !ok {
+	if _, ok := err.GoError().(*roachpb.TransactionAbortedError); !ok {
 		t.Errorf("expected transaction aborted error; got %s", err)
 	}
 }
@@ -1523,7 +1523,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 		if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &sArgs); err != nil {
-			return err
+			return err.GoError()
 		} else if sReply := reply.(*roachpb.ScanResponse); len(sReply.Rows) != 10 {
 			return util.Errorf("could not read rows as expected")
 		}
@@ -1595,7 +1595,7 @@ func TestStoreBadRequests(t *testing.T) {
 		if test.header.Txn != nil {
 			test.header.Txn.Sequence++
 		}
-		if _, err := client.SendWrappedWith(store.testSender(), nil, *test.header, test.args); err == nil || test.err == "" || !testutils.IsError(err, test.err) {
+		if _, err := client.SendWrappedWith(store.testSender(), nil, *test.header, test.args); err == nil || test.err == "" || !testutils.IsError(err.GoError(), test.err) {
 			t.Errorf("%d unexpected result: %s", i, err)
 		}
 	}

@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -33,12 +32,12 @@ func TestClientTxnSequenceNumber(t *testing.T) {
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		count++
 		if ba.Txn.Sequence <= curSeq {
-			return nil, roachpb.NewError(util.Errorf("sequence number %d did not increase", curSeq))
+			return nil, roachpb.NewErrorf("sequence number %d did not increase", curSeq)
 		}
 		curSeq = ba.Txn.Sequence
 		return ba.CreateReply(), nil
 	}, nil))
-	if err := db.Txn(func(txn *Txn) error {
+	if err := db.Txn(func(txn *Txn) *roachpb.Error {
 		for range []int{1, 2, 3} {
 			if err := txn.Put("a", "b"); err != nil {
 				return err

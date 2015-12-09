@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -32,7 +33,7 @@ var aggregates = map[string]func() aggregateImpl{
 	"sum":   newSumAggregate,
 }
 
-func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
+func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, *roachpb.Error) {
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
 	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
@@ -46,13 +47,13 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 	// that determination is made during validation, which will require matching
 	// expressions.
 	for i := range n.GroupBy {
-		norm, err := s.resolveQNames(n.GroupBy[i])
-		if err != nil {
-			return nil, err
+		norm, pErr := s.resolveQNames(n.GroupBy[i])
+		if pErr != nil {
+			return nil, pErr
 		}
-		norm, err = p.parser.NormalizeExpr(p.evalCtx, norm)
+		norm, err := p.parser.NormalizeExpr(p.evalCtx, norm)
 		if err != nil {
-			return nil, err
+			return nil, roachpb.NewError(err)
 		}
 		// If a col index is specified, replace it with that expression first.
 		// NB: This is not a deep copy, and thus when extractAggregateFuncs runs
@@ -69,32 +70,32 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 	}
 
 	if err := checkAggregateExprs(n.GroupBy, s.render); err != nil {
-		return nil, err
+		return nil, roachpb.NewError(err)
 	}
 
 	// Normalize and check the HAVING expression too if it exists.
 	if n.Having != nil {
-		having, err := s.resolveQNames(n.Having.Expr)
-		if err != nil {
-			return nil, err
+		having, pErr := s.resolveQNames(n.Having.Expr)
+		if pErr != nil {
+			return nil, pErr
 		}
 
-		having, err = p.parser.NormalizeExpr(p.evalCtx, having)
+		having, err := p.parser.NormalizeExpr(p.evalCtx, having)
 		if err != nil {
-			return nil, err
+			return nil, roachpb.NewError(err)
 		}
 
 		havingType, err := having.TypeCheck(p.evalCtx.Args)
 		if err != nil {
-			return nil, err
+			return nil, roachpb.NewError(err)
 		}
 		if !(havingType == parser.DummyBool || havingType == parser.DNull) {
-			return nil, fmt.Errorf("argument of HAVING must be type %s, not type %s", parser.DummyBool.Type(), havingType.Type())
+			return nil, roachpb.NewUErrorf("argument of HAVING must be type %s, not type %s", parser.DummyBool.Type(), havingType.Type())
 		}
 		n.Having.Expr = having
 
 		if err := checkAggregateExprs(n.GroupBy, []parser.Expr{n.Having.Expr}); err != nil {
-			return nil, err
+			return nil, roachpb.NewError(err)
 		}
 	}
 
@@ -112,7 +113,7 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 	for i := range group.render {
 		expr, err := p.extractAggregateFuncs(group, group.render[i])
 		if err != nil {
-			return nil, err
+			return nil, roachpb.NewError(err)
 		}
 		group.render[i] = expr
 	}
@@ -120,7 +121,7 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 	if n.Having != nil {
 		having, err := p.extractAggregateFuncs(group, n.Having.Expr)
 		if err != nil {
-			return nil, err
+			return nil, roachpb.NewError(err)
 		}
 		group.having = having
 	}
@@ -176,7 +177,7 @@ type groupNode struct {
 	currentBucket string
 
 	desiredOrdering []int
-	err             error
+	err             *roachpb.Error
 }
 
 func (n *groupNode) Columns() []column {
@@ -214,7 +215,9 @@ func (n *groupNode) computeAggregates() {
 		// TODO(dt): optimization: skip buckets when underlying plan is ordered by grouped values.
 
 		var encoded []byte
-		encoded, n.err = encodeDTuple(scratch, groupedValues)
+		var err error
+		encoded, err = encodeDTuple(scratch, groupedValues)
+		n.err = roachpb.NewError(err)
 		if n.err != nil {
 			return
 		}
@@ -250,11 +253,11 @@ func (n *groupNode) computeAggregates() {
 		if n.having != nil {
 			res, err := n.having.Eval(n.planner.evalCtx)
 			if err != nil {
-				n.err = err
+				n.err = roachpb.NewError(err)
 				return
 			}
 			if res, err := parser.GetBool(res); err != nil {
-				n.err = err
+				n.err = roachpb.NewError(err)
 				return
 			} else if !res {
 				continue
@@ -265,7 +268,7 @@ func (n *groupNode) computeAggregates() {
 		for _, r := range n.render {
 			res, err := r.Eval(n.planner.evalCtx)
 			if err != nil {
-				n.err = err
+				n.err = roachpb.NewError(err)
 				return
 			}
 			row = append(row, res)
@@ -276,7 +279,7 @@ func (n *groupNode) computeAggregates() {
 
 }
 
-func (n *groupNode) Err() error {
+func (n *groupNode) Err() *roachpb.Error {
 	return n.err
 }
 
@@ -537,7 +540,7 @@ type aggregateFunc struct {
 	seen    map[string]struct{}
 }
 
-func (a *aggregateFunc) add(bucket []byte, d parser.Datum) error {
+func (a *aggregateFunc) add(bucket []byte, d parser.Datum) *roachpb.Error {
 	// NB: the compiler *should* optimize `myMap[string(myBytes)]`. See:
 	// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf
 
@@ -559,7 +562,7 @@ func (a *aggregateFunc) add(bucket []byte, d parser.Datum) error {
 		a.buckets[string(bucket)] = impl
 	}
 
-	return impl.add(d)
+	return roachpb.NewError(impl.add(d))
 }
 
 func (*aggregateFunc) Variable() {}
@@ -597,19 +600,20 @@ func (a *aggregateFunc) Eval(ctx parser.EvalContext) (parser.Datum, error) {
 	return datum.Eval(ctx)
 }
 
-func encodeDatum(b []byte, d parser.Datum) ([]byte, error) {
+func encodeDatum(b []byte, d parser.Datum) ([]byte, *roachpb.Error) {
 	if values, ok := d.(parser.DTuple); ok {
-		return encodeDTuple(b, values)
+		dt, err := encodeDTuple(b, values)
+		return dt, roachpb.NewError(err)
 	}
 	return encodeTableKey(b, d)
 }
 
 func encodeDTuple(b []byte, d parser.DTuple) ([]byte, error) {
 	for _, val := range d {
-		var err error
+		var err *roachpb.Error
 		b, err = encodeDatum(b, val)
 		if err != nil {
-			return nil, err
+			return nil, err.GoError()
 		}
 	}
 	return b, nil

@@ -19,7 +19,6 @@ package kv
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"reflect"
 	"sync"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -50,7 +50,7 @@ func TestTxnDBBasics(t *testing.T) {
 	for _, commit := range []bool{true, false} {
 		key := []byte(fmt.Sprintf("key-%t", commit))
 
-		err := s.DB.Txn(func(txn *client.Txn) error {
+		err := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 			// Use snapshot isolation so non-transactional read can always push.
 			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 				return err
@@ -65,25 +65,25 @@ func TestTxnDBBasics(t *testing.T) {
 			if gr, err := s.DB.Get(key); err != nil {
 				return err
 			} else if gr.Exists() {
-				return util.Errorf("expected nil value; got %v", gr.Value)
+				return roachpb.NewErrorf("expected nil value; got %v", gr.Value)
 			}
 
 			// Read within the transaction.
 			if gr, err := txn.Get(key); err != nil {
 				return err
 			} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value) {
-				return util.Errorf("expected value %q; got %q", value, gr.Value)
+				return roachpb.NewErrorf("expected value %q; got %q", value, gr.Value)
 			}
 
 			if !commit {
-				return errors.New("purposefully failing transaction")
+				return roachpb.NewErrorf("purposefully failing transaction")
 			}
 			return nil
 		})
 
 		if commit != (err == nil) {
 			t.Errorf("expected success? %t; got %s", commit, err)
-		} else if !commit && err.Error() != "purposefully failing transaction" {
+		} else if !commit && !testutils.IsError(err.GoError(), "purposefully failing transaction") {
 			t.Errorf("unexpected failure with !commit: %s", err)
 		}
 
@@ -113,7 +113,7 @@ func benchmarkSingleRoundtripWithLatency(b *testing.B, latency time.Duration) {
 	key := roachpb.Key("key")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if tErr := s.DB.Txn(func(txn *client.Txn) error {
+		if tErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 			b := txn.NewBatch()
 			b.Put(key, fmt.Sprintf("value-%d", i))
 			return txn.CommitInBatch(b)
@@ -206,20 +206,20 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			sender := NewTxnCoordSender(s.distSender, txnClock, false, nil, s.Stopper)
 			txnDB := client.NewDB(sender)
 
-			if err := txnDB.Txn(func(txn *client.Txn) error {
+			if err := txnDB.Txn(func(txn *client.Txn) *roachpb.Error {
 				// Read within the transaction.
 				gr, err := txn.Get(key)
 				if err != nil {
-					if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); ok {
+					if _, ok := err.GoError().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
 						return err
 					}
-					return util.Errorf("unexpected read error of type %s: %s", reflect.TypeOf(err), err)
+					return roachpb.NewErrorf("unexpected read error of type %s: %s", reflect.TypeOf(err), err)
 				}
 				if !gr.Exists() {
-					return util.Errorf("no value read")
+					return roachpb.NewErrorf("no value read")
 				}
 				if !bytes.Equal(gr.ValueBytes(), readValue) {
-					return util.Errorf("%d: read wrong value %v at %s, wanted %q",
+					return roachpb.NewErrorf("%d: read wrong value %v at %s, wanted %q",
 						i, gr.Value, futureTS, readValue)
 				}
 				return nil
@@ -295,7 +295,7 @@ func TestUncertaintyRestarts(t *testing.T) {
 	wantedBytes := []byte("value-0")
 
 	i := -1
-	tErr := s.DB.Txn(func(txn *client.Txn) error {
+	tErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 		i++
 		s.Manual.Increment(1)
 		futureTS := s.Clock.Now()
@@ -360,7 +360,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	}
 
 	i := 0
-	if tErr := s.DB.Txn(func(txn *client.Txn) error {
+	if tErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 		i++
 		// The first command serves to start a Txn, fixing the timestamps.
 		// There will be a restart, but this is idempotent.
@@ -409,7 +409,7 @@ func TestTxnTimestampRegression(t *testing.T) {
 
 	keyA := "a"
 	keyB := "b"
-	err := s.DB.Txn(func(txn *client.Txn) error {
+	err := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 		// Use snapshot isolation so non-transactional read can always push.
 		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 			return err
@@ -453,7 +453,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	keyB := roachpb.Key("b")
 	ch := make(chan struct{})
 	go func() {
-		err := s.DB.Txn(func(txn *client.Txn) error {
+		err := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 			// Use snapshot isolation.
 			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 				return err
@@ -483,7 +483,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	<-ch
 	// Delay for longer than the cache window.
 	s.Manual.Set((storage.MinTSCacheWindow + time.Second).Nanoseconds())
-	err := s.DB.Txn(func(txn *client.Txn) error {
+	err := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 		// Use snapshot isolation.
 		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 			return err
@@ -529,7 +529,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	splitKey := roachpb.Key("b")
 	ch := make(chan struct{})
 	go func() {
-		err := s.DB.Txn(func(txn *client.Txn) error {
+		err := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 			// Use snapshot isolation.
 			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 				return err
@@ -558,7 +558,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	// Wait till txnA finish put(a).
 	<-ch
 
-	err := s.DB.Txn(func(txn *client.Txn) error {
+	err := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 		// Use snapshot isolation.
 		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 			return err
@@ -619,7 +619,7 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	ch := make(chan struct{})
 	var count int
 	go func() {
-		err := s.DB.Txn(func(txn *client.Txn) error {
+		err := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 			count++
 			// Use a low priority for the transaction so that it can be pushed.
 			txn.InternalSetPriority(1)

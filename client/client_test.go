@@ -21,7 +21,6 @@ package client_test
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -37,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -157,7 +156,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 		// doneCall signals when the non-txn read or write has completed.
 		doneCall := make(chan struct{})
 		count := 0 // keeps track of retries
-		err := db.Txn(func(txn *client.Txn) error {
+		err := db.Txn(func(txn *client.Txn) *roachpb.Error {
 			if test.isolation == roachpb.SNAPSHOT {
 				if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 					return err
@@ -181,14 +180,14 @@ func TestClientRetryNonTxn(t *testing.T) {
 				// it might have to retry and will only succeed immediately in
 				// the event we can push.
 				go func() {
-					var err error
+					var err *roachpb.Error
 					for i := 0; ; i++ {
 						if _, ok := test.args.(*roachpb.GetRequest); ok {
 							_, err = db.Get(key)
 						} else {
 							err = db.Put(key, "value")
 						}
-						if _, ok := err.(*roachpb.WriteIntentError); !ok {
+						if _, ok := err.GoError().(*roachpb.WriteIntentError); !ok {
 							break
 						}
 					}
@@ -251,7 +250,7 @@ func TestClientRunTransaction(t *testing.T) {
 		key := []byte(fmt.Sprintf("%s/key-%t", testUser, commit))
 
 		// Use snapshot isolation so non-transactional read can always push.
-		err := db.Txn(func(txn *client.Txn) error {
+		err := db.Txn(func(txn *client.Txn) *roachpb.Error {
 			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 				return err
 			}
@@ -264,23 +263,23 @@ func TestClientRunTransaction(t *testing.T) {
 			if gr, err := db.Get(key); err != nil {
 				return err
 			} else if gr.Value != nil {
-				return util.Errorf("expected nil value; got %+v", gr.Value)
+				return roachpb.NewErrorf("expected nil value; got %+v", gr.Value)
 			}
 			// Read within the transaction.
 			if gr, err := txn.Get(key); err != nil {
 				return err
 			} else if gr.Value == nil || !bytes.Equal(gr.ValueBytes(), value) {
-				return util.Errorf("expected value %q; got %q", value, gr.ValueBytes())
+				return roachpb.NewErrorf("expected value %q; got %q", value, gr.ValueBytes())
 			}
 			if !commit {
-				return errors.New("purposefully failing transaction")
+				return roachpb.NewErrorf("purposefully failing transaction")
 			}
 			return nil
 		})
 
 		if commit != (err == nil) {
 			t.Errorf("expected success? %t; got %s", commit, err)
-		} else if !commit && err.Error() != "purposefully failing transaction" {
+		} else if !commit && !testutils.IsError(err.GoError(), "purposefully failing transaction") {
 			t.Errorf("unexpected failure with !commit: %s", err)
 		}
 
@@ -515,7 +514,7 @@ func TestClientBatch(t *testing.T) {
 
 		b := &client.Batch{}
 		b.CPut(key, "goodbyte", nil) // should fail
-		if err := db.Txn(func(txn *client.Txn) error {
+		if err := db.Txn(func(txn *client.Txn) *roachpb.Error {
 			return txn.Run(b)
 		}); err == nil {
 			t.Error("unexpected success")
@@ -555,7 +554,7 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 			// Wait until the other goroutines are running.
 			wgStart.Wait()
 
-			if err := db.Txn(func(txn *client.Txn) error {
+			if err := db.Txn(func(txn *client.Txn) *roachpb.Error {
 				txn.SetDebugName(fmt.Sprintf("test-%d", i), 0)
 
 				// Retrieve the other key.

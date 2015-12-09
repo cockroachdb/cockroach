@@ -17,8 +17,6 @@
 package client
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/roachpb"
 )
 
@@ -52,7 +50,7 @@ type Batch struct {
 	rowsIdx    int
 }
 
-func (b *Batch) prepare() error {
+func (b *Batch) prepare() *roachpb.Error {
 	for _, r := range b.Results {
 		if err := r.Err; err != nil {
 			return err
@@ -63,7 +61,7 @@ func (b *Batch) prepare() error {
 
 func (b *Batch) initResult(calls, numRows int, err error) {
 	// TODO(tschottdorf): assert that calls is 0 or 1?
-	r := Result{calls: calls, Err: err}
+	r := Result{calls: calls, Err: roachpb.NewError(err)}
 	if numRows > 0 {
 		if b.rowsIdx+numRows <= len(b.rowsBuf) {
 			r.Rows = b.rowsBuf[b.rowsIdx : b.rowsIdx+numRows]
@@ -78,7 +76,7 @@ func (b *Batch) initResult(calls, numRows int, err error) {
 	b.Results = append(b.Results, r)
 }
 
-func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) error {
+func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
 	offset := 0
 	for i := range b.Results {
 		result := &b.Results[i]
@@ -88,7 +86,7 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) erro
 
 			var reply roachpb.Response
 			if result.Err == nil {
-				result.Err = pErr.GoError()
+				result.Err = pErr
 				if result.Err == nil {
 					if br != nil && offset+k < len(br.Responses) {
 						reply = br.Responses[offset+k].GetInner()
@@ -177,7 +175,7 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) erro
 
 			default:
 				if result.Err == nil {
-					result.Err = fmt.Errorf("unsupported reply: %T", reply)
+					result.Err = roachpb.NewErrorf("unsupported reply: %T", reply)
 				}
 			}
 		}

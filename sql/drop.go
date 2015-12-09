@@ -17,15 +17,12 @@
 package sql
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // DropDatabase drops a database.
@@ -36,22 +33,22 @@ import (
 // (cockroach database == postgres schema). the postgres default of not
 // dropping the schema if there are dependent objects is more sensible
 // (see the RESTRICT and CASCADE options).
-func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
+func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error) {
 	if n.Name == "" {
-		return nil, errEmptyDatabaseName
+		return nil, roachpb.NewError(errEmptyDatabaseName)
 	}
 
 	nameKey := MakeNameMetadataKey(keys.RootNamespaceID, string(n.Name))
-	gr, err := p.txn.Get(nameKey)
-	if err != nil {
-		return nil, err
+	gr, pErr := p.txn.Get(nameKey)
+	if pErr != nil {
+		return nil, pErr
 	}
 	if !gr.Exists() {
 		if n.IfExists {
 			// Noop.
 			return &valuesNode{}, nil
 		}
-		return nil, fmt.Errorf("database %q does not exist", n.Name)
+		return nil, roachpb.NewUErrorf("database %q does not exist", n.Name)
 	}
 
 	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
@@ -61,10 +58,10 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 	}
 	dbDesc := desc.GetDatabase()
 	if dbDesc == nil {
-		return nil, util.Errorf("%q is not a database", n.Name)
+		return nil, roachpb.NewErrorf("%q is not a database", n.Name)
 	}
 	if err := dbDesc.Validate(); err != nil {
-		return nil, err
+		return nil, roachpb.NewError(err)
 	}
 
 	if err := p.checkPrivilege(dbDesc, privilege.DROP); err != nil {
@@ -107,10 +104,10 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 // Privileges: CREATE on table.
 //   Notes: postgres allows only the index owner to DROP an index.
 //          mysql requires the INDEX privilege on the table.
-func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
+func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 	for _, indexQualifiedName := range n.Names {
 		if err := indexQualifiedName.NormalizeTableName(p.session.Database); err != nil {
-			return nil, err
+			return nil, roachpb.NewError(err)
 		}
 
 		tableDesc, err := p.getTableDesc(indexQualifiedName)
@@ -140,7 +137,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 		case DescriptorIncomplete:
 			switch tableDesc.Mutations[i].Direction {
 			case DescriptorMutation_ADD:
-				return nil, fmt.Errorf("index %q in the middle of being added, try again later", idxName)
+				return nil, roachpb.NewUErrorf("index %q in the middle of being added, try again later", idxName)
 
 			case DescriptorMutation_DROP:
 				return &valuesNode{}, nil
@@ -148,7 +145,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 		}
 		tableDesc.UpVersion = true
 		if err := tableDesc.Validate(); err != nil {
-			return nil, err
+			return nil, roachpb.NewError(err)
 		}
 
 		if err := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); err != nil {
@@ -166,12 +163,12 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 // Privileges: DROP on table.
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
-func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
+func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 	// TODO(XisiHuang): should do truncate and delete descriptor in
 	// the same txn
 	for i, tableQualifiedName := range n.Names {
 		if err := tableQualifiedName.NormalizeTableName(p.session.Database); err != nil {
-			return nil, err
+			return nil, roachpb.NewError(err)
 		}
 
 		dbDesc, err := p.getDatabaseDesc(tableQualifiedName.Database())
@@ -181,9 +178,9 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 
 		tbKey := tableKey{dbDesc.ID, tableQualifiedName.Table()}
 		nameKey := tbKey.Key()
-		gr, err := p.txn.Get(nameKey)
-		if err != nil {
-			return nil, err
+		gr, pErr := p.txn.Get(nameKey)
+		if pErr != nil {
+			return nil, pErr
 		}
 
 		if !gr.Exists() {
@@ -192,7 +189,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 				continue
 			}
 			// Key does not exist, but we want it to: error out.
-			return nil, fmt.Errorf("table %q does not exist", tbKey.Name())
+			return nil, roachpb.NewUErrorf("table %q does not exist", tbKey.Name())
 		}
 
 		desc := &Descriptor{}
@@ -202,10 +199,10 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 		}
 		tableDesc := desc.GetTable()
 		if tableDesc == nil {
-			return nil, util.Errorf("%q is not a table", tbKey.Name())
+			return nil, roachpb.NewErrorf("%q is not a table", tbKey.Name())
 		}
 		if err := tableDesc.Validate(); err != nil {
-			return nil, err
+			return nil, roachpb.NewError(err)
 		}
 
 		if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {

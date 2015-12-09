@@ -37,13 +37,13 @@ import (
 // Privileges: SELECT on table
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
-func (p *planner) Select(n *parser.Select) (planNode, error) {
+func (p *planner) Select(n *parser.Select) (planNode, *roachpb.Error) {
 	scan := &scanNode{planner: p, txn: p.txn}
 	return p.selectWithScan(scan, n)
 }
 
 // Run select using the scan node. n.desc might have already been populated.
-func (p *planner) selectWithScan(scan *scanNode, n *parser.Select) (planNode, error) {
+func (p *planner) selectWithScan(scan *scanNode, n *parser.Select) (planNode, *roachpb.Error) {
 	if err := scan.initFrom(p, n.From); err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (p *planner) selectWithScan(scan *scanNode, n *parser.Select) (planNode, er
 // constraints is created for the index. The candidate indexes are ranked using
 // these constraints and the best index is selected. The contraints are then
 // transformed into a set of spans to scan within the index.
-func (p *planner) selectIndex(s *scanNode, group *groupNode, sort *sortNode) (planNode, error) {
+func (p *planner) selectIndex(s *scanNode, group *groupNode, sort *sortNode) (planNode, *roachpb.Error) {
 	var ordering []int
 	if group != nil {
 		ordering = group.desiredOrdering
@@ -210,7 +210,7 @@ func (p *planner) selectIndex(s *scanNode, group *groupNode, sort *sortNode) (pl
 		s.initOrdering(c.exactPrefix)
 		plan = s
 	} else {
-		var err error
+		var err *roachpb.Error
 		plan, err = makeIndexJoin(s, c.exactPrefix)
 		if err != nil {
 			return nil, err
@@ -609,7 +609,7 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 				case parser.DTuple:
 					start = buf[:0]
 					for _, i := range c.tupleMap {
-						var err error
+						var err *roachpb.Error
 						if start, err = encodeTableKey(start, t[i]); err != nil {
 							panic(err)
 						}
@@ -623,7 +623,7 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 							if i+1 == len(c.tupleMap) {
 								d = d.Next()
 							}
-							var err error
+							var err *roachpb.Error
 							if end, err = encodeTableKey(end, d); err != nil {
 								panic(err)
 							}
@@ -631,14 +631,14 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 					}
 
 				default:
-					var err error
+					var err *roachpb.Error
 					if start, err = encodeTableKey(buf[:0], datum); err != nil {
 						panic(err)
 					}
 
 					end = start
 					if lastEnd {
-						var err error
+						var err *roachpb.Error
 						if end, err = encodeTableKey(nil, datum.Next()); err != nil {
 							panic(err)
 						}

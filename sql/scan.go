@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -133,7 +132,7 @@ type scanNode struct {
 	columnIDs        []ColumnID
 	ordering         []int
 	exactPrefix      int
-	err              error
+	err              *roachpb.Error
 	indexKey         []byte            // the index key of the current row
 	kvs              []client.KeyValue // the raw key/value pairs
 	kvIndex          int               // current index into the key/value pairs
@@ -195,7 +194,7 @@ func (n *scanNode) Next() bool {
 	}
 }
 
-func (n *scanNode) Err() error {
+func (n *scanNode) Err() *roachpb.Error {
 	return n.err
 }
 
@@ -214,7 +213,7 @@ func (n *scanNode) ExplainPlan() (name, description string, children []planNode)
 	return name, description, nil
 }
 
-func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
+func (n *scanNode) initFrom(p *planner, from parser.TableExprs) *roachpb.Error {
 	switch len(from) {
 	case 0:
 		// n.desc is nil, but can be set externally.
@@ -242,7 +241,7 @@ func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
 				}
 			}
 			if n.index == nil {
-				n.err = fmt.Errorf("index \"%s\" not found", indexName)
+				n.err = roachpb.NewUErrorf("index \"%s\" not found", indexName)
 				return n.err
 			}
 			// If the table was not aliased, use the index name instead of the table
@@ -273,7 +272,7 @@ func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
 		return nil
 
 	default:
-		n.err = util.Errorf("TODO(pmattis): unsupported FROM: %s", from)
+		n.err = roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", from)
 		return n.err
 	}
 }
@@ -356,24 +355,28 @@ func (n *scanNode) initScan() bool {
 	return true
 }
 
-func (n *scanNode) initWhere(where *parser.Where) error {
+func (n *scanNode) initWhere(where *parser.Where) *roachpb.Error {
 	if where == nil {
 		return nil
 	}
 	n.filter, n.err = n.resolveQNames(where.Expr)
 	if n.err == nil {
 		var whereType parser.Datum
-		whereType, n.err = n.filter.TypeCheck(n.planner.evalCtx.Args)
+		var err error
+		whereType, err = n.filter.TypeCheck(n.planner.evalCtx.Args)
+		n.err = roachpb.NewError(err)
 		if n.err == nil {
 			if !(whereType == parser.DummyBool || whereType == parser.DNull) {
-				n.err = fmt.Errorf("argument of WHERE must be type %s, not type %s", parser.DummyBool.Type(), whereType.Type())
+				n.err = roachpb.NewUErrorf("argument of WHERE must be type %s, not type %s", parser.DummyBool.Type(), whereType.Type())
 			}
 		}
 	}
 	if n.err == nil {
 		// Normalize the expression (this will also evaluate any branches that are
 		// constant).
-		n.filter, n.err = n.planner.parser.NormalizeExpr(n.planner.evalCtx, n.filter)
+		var err error
+		n.filter, err = n.planner.parser.NormalizeExpr(n.planner.evalCtx, n.filter)
+		n.err = roachpb.NewError(err)
 	}
 	if n.err == nil {
 		n.filter, n.err = n.planner.expandSubqueries(n.filter, 1)
@@ -381,7 +384,7 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 	return n.err
 }
 
-func (n *scanNode) initTargets(targets parser.SelectExprs) error {
+func (n *scanNode) initTargets(targets parser.SelectExprs) *roachpb.Error {
 	// Loop over the select expressions and expand them into the expressions
 	// we're going to use to generate the returned column set and the names for
 	// those columns.
@@ -437,7 +440,7 @@ func (n *scanNode) computeOrdering(columnIDs []ColumnID) []int {
 	return ordering
 }
 
-func (n *scanNode) addRender(target parser.SelectExpr) error {
+func (n *scanNode) addRender(target parser.SelectExpr) *roachpb.Error {
 	// When generating an output column name it should exactly match the original
 	// expression, so determine the output column name before we perform any
 	// manipulations to the expression (such as star expansion).
@@ -452,19 +455,19 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 	// prefix of the qualified name to one of the tables in the query and
 	// then expand the "*" into a list of columns.
 	if qname, ok := target.Expr.(*parser.QualifiedName); ok {
-		if n.err = qname.NormalizeColumnName(); n.err != nil {
+		if n.err = roachpb.NewError(qname.NormalizeColumnName()); n.err != nil {
 			return n.err
 		}
 		if qname.IsStar() {
 			if n.desc == nil {
-				return fmt.Errorf("\"%s\" with no tables specified is not valid", qname)
+				return roachpb.NewUErrorf("\"%s\" with no tables specified is not valid", qname)
 			}
 			if target.As != "" {
-				return fmt.Errorf("\"%s\" cannot be aliased", qname)
+				return roachpb.NewUErrorf("\"%s\" cannot be aliased", qname)
 			}
 			tableName := qname.Table()
 			if tableName != "" && !equalName(n.desc.Alias, tableName) {
-				return fmt.Errorf("table \"%s\" not found", tableName)
+				return roachpb.NewUErrorf("table \"%s\" not found", tableName)
 			}
 
 			if n.isSecondaryIndex {
@@ -498,11 +501,15 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 		return n.err
 	}
 	var typ parser.Datum
-	if typ, n.err = resolved.TypeCheck(n.planner.evalCtx.Args); n.err != nil {
+	var err error
+	typ, err = resolved.TypeCheck(n.planner.evalCtx.Args)
+	n.err = roachpb.NewError(err)
+	if n.err != nil {
 		return n.err
 	}
 	var normalized parser.Expr
-	normalized, n.err = n.planner.parser.NormalizeExpr(n.planner.evalCtx, resolved)
+	normalized, err = n.planner.parser.NormalizeExpr(n.planner.evalCtx, resolved)
+	n.err = roachpb.NewError(err)
 	if n.err != nil {
 		return n.err
 	}
@@ -520,17 +527,17 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 	return nil
 }
 
-func (n *scanNode) colIndex(expr parser.Expr) (int, error) {
+func (n *scanNode) colIndex(expr parser.Expr) (int, *roachpb.Error) {
 	switch i := expr.(type) {
 	case parser.DInt:
 		index := int(i)
 		if numCols := len(n.originalCols); index < 1 || index > numCols {
-			return -1, fmt.Errorf("invalid column index: %d not in range [1, %d]", index, numCols)
+			return -1, roachpb.NewUErrorf("invalid column index: %d not in range [1, %d]", index, numCols)
 		}
 		return index - 1, nil
 
 	case parser.Datum:
-		return -1, fmt.Errorf("non-integer constant column index: %s", expr)
+		return -1, roachpb.NewUErrorf("non-integer constant column index: %s", expr)
 
 	default:
 		// expr doesn't look like a col index (i.e. not a constant).
@@ -548,8 +555,7 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 	}
 
 	var remaining []byte
-	remaining, n.err = decodeIndexKey(n.desc, *n.index, n.valTypes, n.vals, kv.Key)
-	if n.err != nil {
+	if remaining, n.err = decodeIndexKey(n.desc, *n.index, n.valTypes, n.vals, kv.Key); n.err != nil {
 		return false
 	}
 
@@ -570,7 +576,9 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 
 	if !n.isSecondaryIndex && len(remaining) > 0 {
 		var v uint64
-		_, v, n.err = encoding.DecodeUvarint(remaining)
+		var err error
+		_, v, err = encoding.DecodeUvarint(remaining)
+		n.err = roachpb.NewError(err)
 		if n.err != nil {
 			return false
 		}
@@ -692,7 +700,9 @@ func (n *scanNode) filterRow() bool {
 	}
 
 	var d parser.Datum
-	d, n.err = n.filter.Eval(n.planner.evalCtx)
+	var err error
+	d, err = n.filter.Eval(n.planner.evalCtx)
+	n.err = roachpb.NewError(err)
 	if n.err != nil {
 		return false
 	}
@@ -712,7 +722,9 @@ func (n *scanNode) renderRow() {
 		n.row = make([]parser.Datum, len(n.render))
 	}
 	for i, e := range n.render {
-		n.row[i], n.err = e.Eval(n.planner.evalCtx)
+		var err error
+		n.row[i], err = e.Eval(n.planner.evalCtx)
+		n.err = roachpb.NewError(err)
 		if n.err != nil {
 			return
 		}
@@ -766,7 +778,7 @@ func (n *scanNode) prettyKey() string {
 func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 	kind, ok := n.colKind[n.colID]
 	if !ok {
-		n.err = fmt.Errorf("column-id \"%d\" does not exist", n.colID)
+		n.err = roachpb.NewUErrorf("column-id \"%d\" does not exist", n.colID)
 		return nil, false
 	}
 	var d parser.Datum
@@ -814,7 +826,7 @@ func (n *scanNode) getQVal(col ColumnDescriptor) *qvalue {
 
 type qnameVisitor struct {
 	*scanNode
-	err error
+	err *roachpb.Error
 }
 
 var _ parser.Visitor = &qnameVisitor{}
@@ -838,12 +850,12 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 	case *parser.QualifiedName:
 		qname := t
 
-		v.err = qname.NormalizeColumnName()
+		v.err = roachpb.NewError(qname.NormalizeColumnName())
 		if v.err != nil {
 			return nil, expr
 		}
 		if qname.IsStar() {
-			v.err = fmt.Errorf("qualified name \"%s\" not found", qname)
+			v.err = roachpb.NewUErrorf("qualified name \"%s\" not found", qname)
 			return nil, expr
 		}
 
@@ -857,7 +869,7 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 			}
 		}
 
-		v.err = fmt.Errorf("qualified name \"%s\" not found", qname)
+		v.err = roachpb.NewUErrorf("qualified name \"%s\" not found", qname)
 		return nil, expr
 
 	case *parser.FuncExpr:
@@ -876,7 +888,7 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 		if !ok {
 			break
 		}
-		v.err = qname.NormalizeColumnName()
+		v.err = roachpb.NewError(qname.NormalizeColumnName())
 		if v.err != nil {
 			return nil, expr
 		}
@@ -923,7 +935,7 @@ func (v *qnameVisitor) getDesc(qname *parser.QualifiedName) *TableDescriptor {
 	return nil
 }
 
-func (n *scanNode) resolveQNames(expr parser.Expr) (parser.Expr, error) {
+func (n *scanNode) resolveQNames(expr parser.Expr) (parser.Expr, *roachpb.Error) {
 	if expr == nil {
 		return expr, nil
 	}
