@@ -40,7 +40,7 @@ import (
 // appropriate storage API command. It returns the response, an error,
 // and a slice of intents that were skipped during execution.
 // If an error is returned, any returned intents should still be resolved.
-func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.Request) (roachpb.Response, []roachpb.Intent, error) {
+func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.Request) (roachpb.Response, []roachpb.Intent, *roachpb.Error) {
 	// Verify key is contained within range here to catch any range split
 	// or merge activity.
 	ts := h.Timestamp
@@ -49,14 +49,17 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 		return &roachpb.NoopResponse{}, nil, nil
 	}
 
-	if err := r.checkCmdHeader(args.Header()); err != nil {
-		return nil, nil, err
+	if pErr := r.checkCmdHeader(args.Header()); pErr != nil {
+		pErr.Txn = h.Txn
+		return nil, nil, pErr
 	}
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if TestingCommandFilter != nil {
 		if err := TestingCommandFilter(r.store.StoreID(), args, h); err != nil {
-			return nil, nil, err
+			pErr := roachpb.NewError(err)
+			pErr.Txn = h.Txn
+			return nil, nil, pErr
 		}
 	}
 
@@ -174,7 +177,18 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 		tErr.ExistingTimestamp.Forward(r.store.Clock().Now())
 	}
 
-	return reply, intents, err
+	// Create a roachpb.Error by initializing txn from the request/response header.
+	var pErr *roachpb.Error
+	if err != nil {
+		pErr = roachpb.NewError(err)
+		if reply.Header() != nil {
+			pErr.Txn = reply.Header().Txn
+		}
+		if pErr.Txn == nil {
+			pErr.Txn = h.Txn
+		}
+	}
+	return reply, intents, pErr
 }
 
 // Get returns the value for a specified key.
@@ -863,6 +877,10 @@ func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header
 func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.PushTxnRequest) (roachpb.PushTxnResponse, error) {
 	var reply roachpb.PushTxnResponse
 
+	if len(args.PusherTxn.ID) != 0 {
+		reply.Txn = &args.PusherTxn
+	}
+
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
 		return reply, util.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key)
 	}
@@ -1214,7 +1232,7 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 // Conditional Put on the RangeDescriptor to ensure that no other operation has
 // modified the range in the time the decision was being made.
 // TODO(tschottdorf): should assert that split key is not a local key.
-func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.RangeDescriptor) (roachpb.AdminSplitResponse, error) {
+func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.RangeDescriptor) (roachpb.AdminSplitResponse, *roachpb.Error) {
 	var reply roachpb.AdminSplitResponse
 
 	// Determine split key if not provided with args. This scan is
@@ -1229,23 +1247,23 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 			var err error
 			foundSplitKey, err = engine.MVCCFindSplitKey(snap, desc.RangeID, desc.StartKey, desc.EndKey)
 			if err != nil {
-				return reply, util.Errorf("unable to determine split key: %s", err)
+				return reply, roachpb.NewErrorf("unable to determine split key: %s", err)
 			}
 		} else if !r.ContainsKey(foundSplitKey) {
-			return reply, roachpb.NewRangeKeyMismatchError(args.SplitKey, args.SplitKey, desc)
+			return reply, roachpb.NewError(roachpb.NewRangeKeyMismatchError(args.SplitKey, args.SplitKey, desc))
 		}
 
 		foundSplitKey, err := keys.MakeSplitKey(foundSplitKey)
 		if err != nil {
-			return reply, util.Errorf("cannot split range at key %s: %v", splitKey, err)
+			return reply, roachpb.NewErrorf("cannot split range at key %s: %v", splitKey, err)
 		}
 
 		splitKey = keys.Addr(foundSplitKey)
 		if !splitKey.Equal(foundSplitKey) {
-			return reply, util.Errorf("cannot split range at range-local key %s", splitKey)
+			return reply, roachpb.NewErrorf("cannot split range at range-local key %s", splitKey)
 		}
 		if !engine.IsValidSplitKey(foundSplitKey) {
-			return reply, util.Errorf("cannot split range at key %s", splitKey)
+			return reply, roachpb.NewErrorf("cannot split range at key %s", splitKey)
 		}
 	}
 
@@ -1253,13 +1271,13 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 	// roachpb.NewRangeKeyMismatchError if splitKey equals to desc.EndKey,
 	// otherwise it will cause infinite retry loop.
 	if desc.StartKey.Equal(splitKey) || desc.EndKey.Equal(splitKey) {
-		return reply, util.Errorf("range is already split at key %s", splitKey)
+		return reply, roachpb.NewErrorf("range is already split at key %s", splitKey)
 	}
 
 	// Create new range descriptor with newly-allocated replica IDs and Range IDs.
 	newDesc, err := r.store.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
 	if err != nil {
-		return reply, util.Errorf("unable to allocate new range descriptor: %s", err)
+		return reply, roachpb.NewErrorf("unable to allocate new range descriptor: %s", err)
 	}
 
 	// Init updated version of existing range descriptor.
@@ -1268,23 +1286,23 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 
 	log.Infof("initiating a split of %s at key %s", r, splitKey)
 
-	if err := r.store.DB().Txn(func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
 		// Create range descriptor for second half of split.
 		// Note that this put must go first in order to locate the
 		// transaction record on the correct range.
 		b := &client.Batch{}
 		desc1Key := keys.RangeDescriptorKey(newDesc.StartKey)
 		if err := updateRangeDescriptor(b, desc1Key, nil, newDesc); err != nil {
-			return err
+			return roachpb.NewError(err)
 		}
 		// Update existing range descriptor for first half of split.
 		desc2Key := keys.RangeDescriptorKey(updatedDesc.StartKey)
 		if err := updateRangeDescriptor(b, desc2Key, desc, &updatedDesc); err != nil {
-			return err
+			return roachpb.NewError(err)
 		}
 		// Update range descriptor addressing record(s).
 		if err := splitRangeAddressing(b, newDesc, &updatedDesc); err != nil {
-			return err
+			return roachpb.NewError(err)
 		}
 		if err := txn.Run(b); err != nil {
 			return err
@@ -1292,7 +1310,7 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 		// Update the RangeTree.
 		b = &client.Batch{}
 		if err := InsertRange(txn, b, newDesc.StartKey); err != nil {
-			return err
+			return roachpb.NewError(err)
 		}
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
@@ -1312,7 +1330,7 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 		})
 		return txn.Run(b)
 	}); err != nil {
-		return reply, util.Errorf("split at key %s failed: %s", splitKey, err)
+		return reply, roachpb.NewErrorf("split at key %s failed: %s", splitKey, err)
 	}
 
 	return reply, nil
@@ -1454,12 +1472,12 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 //
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
-func (r *Replica) AdminMerge(args roachpb.AdminMergeRequest, origLeftDesc *roachpb.RangeDescriptor) (roachpb.AdminMergeResponse, error) {
+func (r *Replica) AdminMerge(args roachpb.AdminMergeRequest, origLeftDesc *roachpb.RangeDescriptor) (roachpb.AdminMergeResponse, *roachpb.Error) {
 	var reply roachpb.AdminMergeResponse
 
 	if origLeftDesc.EndKey.Equal(roachpb.RKeyMax) {
 		// Merging the final range doesn't make sense.
-		return reply, util.Errorf("cannot merge final range")
+		return reply, roachpb.NewErrorf("cannot merge final range")
 	}
 
 	updatedLeftDesc := *origLeftDesc
@@ -1473,20 +1491,20 @@ func (r *Replica) AdminMerge(args roachpb.AdminMergeRequest, origLeftDesc *roach
 	{
 		rightRng := r.store.LookupReplica(origLeftDesc.EndKey, nil)
 		if rightRng == nil {
-			return reply, util.Errorf("ranges not collocated")
+			return reply, roachpb.NewErrorf("ranges not collocated")
 		}
 
 		updatedLeftDesc.EndKey = rightRng.Desc().EndKey
 		log.Infof("initiating a merge of %s into %s", rightRng, r)
 	}
 
-	if err := r.store.DB().Txn(func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
 		// Update the range descriptor for the receiving range.
 		{
 			b := &client.Batch{}
 			leftDescKey := keys.RangeDescriptorKey(updatedLeftDesc.StartKey)
 			if err := updateRangeDescriptor(b, leftDescKey, origLeftDesc, &updatedLeftDesc); err != nil {
-				return err
+				return roachpb.NewError(err)
 			}
 			// Commit this batch on its own to ensure that the transaction record
 			// is created in the right place (our triggers rely on this).
@@ -1505,15 +1523,15 @@ func (r *Replica) AdminMerge(args roachpb.AdminMergeRequest, origLeftDesc *roach
 		// Verify that the two ranges are mergeable.
 		if !bytes.Equal(origLeftDesc.EndKey, rightDesc.StartKey) {
 			// Should never happen, but just in case.
-			return util.Errorf("ranges are not adjacent; %s != %s", origLeftDesc.EndKey, rightDesc.StartKey)
+			return roachpb.NewErrorf("ranges are not adjacent; %s != %s", origLeftDesc.EndKey, rightDesc.StartKey)
 		}
 		if !bytes.Equal(rightDesc.EndKey, updatedLeftDesc.EndKey) {
 			// This merge raced with a split of the right-hand range.
 			// TODO(bdarnell): needs a test.
-			return util.Errorf("range changed during merge; %s != %s", rightDesc.EndKey, updatedLeftDesc.EndKey)
+			return roachpb.NewErrorf("range changed during merge; %s != %s", rightDesc.EndKey, updatedLeftDesc.EndKey)
 		}
 		if !replicaSetsEqual(origLeftDesc.Replicas, rightDesc.Replicas) {
-			return util.Errorf("ranges not collocated")
+			return roachpb.NewErrorf("ranges not collocated")
 		}
 
 		b := &client.Batch{}
@@ -1522,12 +1540,12 @@ func (r *Replica) AdminMerge(args roachpb.AdminMergeRequest, origLeftDesc *roach
 		b.Del(rightDescKey)
 
 		if err := mergeRangeAddressing(b, origLeftDesc, &updatedLeftDesc); err != nil {
-			return err
+			return roachpb.NewError(err)
 		}
 
 		// Update the RangeTree.
 		if err := DeleteRange(txn, b, rightDesc.StartKey); err != nil {
-			return err
+			return roachpb.NewError(err)
 		}
 
 		// End the transaction manually instead of letting RunTransaction
@@ -1543,7 +1561,7 @@ func (r *Replica) AdminMerge(args roachpb.AdminMergeRequest, origLeftDesc *roach
 		})
 		return txn.Run(b)
 	}); err != nil {
-		return reply, util.Errorf("merge of range into %d failed: %s", origLeftDesc.RangeID, err)
+		return reply, roachpb.NewErrorf("merge of range into %d failed: %s", origLeftDesc.RangeID, err)
 	}
 
 	return reply, nil
@@ -1681,19 +1699,19 @@ func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica r
 		return err
 	}
 
-	err = r.store.DB().Txn(func(txn *client.Txn) error {
+	err = r.store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.
 		b := &client.Batch{}
 		descKey := keys.RangeDescriptorKey(updatedDesc.StartKey)
 
 		if err := updateRangeDescriptor(b, descKey, desc, &updatedDesc); err != nil {
-			return err
+			return roachpb.NewError(err)
 		}
 
 		// Update range descriptor addressing record(s).
 		if err := updateRangeAddressing(b, &updatedDesc); err != nil {
-			return err
+			return roachpb.NewError(err)
 		}
 
 		// End the transaction manually instead of letting RunTransaction
@@ -1710,7 +1728,7 @@ func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica r
 			},
 		})
 		return txn.Run(b)
-	})
+	}).GoError()
 	if err != nil {
 		return util.Errorf("change replicas of %d failed: %s", desc.RangeID, err)
 	}

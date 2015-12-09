@@ -17,12 +17,9 @@
 package sql
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // databaseKey implements descriptorKey.
@@ -46,17 +43,17 @@ func makeDatabaseDesc(p *parser.CreateDatabase) DatabaseDescriptor {
 }
 
 // getDatabaseDesc looks up the database descriptor given its name.
-func (p *planner) getDatabaseDesc(name string) (*DatabaseDescriptor, error) {
+func (p *planner) getDatabaseDesc(name string) (*DatabaseDescriptor, *roachpb.Error) {
 	desc := &DatabaseDescriptor{}
-	if err := p.getDescriptor(databaseKey{name}, desc); err != nil {
-		return nil, err
+	if pErr := p.getDescriptor(databaseKey{name}, desc); pErr != nil {
+		return nil, pErr
 	}
 	return desc, nil
 }
 
 // getCachedDatabaseDesc looks up the database descriptor given its name in the
 // descriptor cache.
-func (p *planner) getCachedDatabaseDesc(name string) (*DatabaseDescriptor, error) {
+func (p *planner) getCachedDatabaseDesc(name string) (*DatabaseDescriptor, *roachpb.Error) {
 	if name == SystemDB.Name {
 		return &SystemDB, nil
 	}
@@ -64,28 +61,28 @@ func (p *planner) getCachedDatabaseDesc(name string) (*DatabaseDescriptor, error
 	nameKey := databaseKey{name}
 	nameVal := p.systemConfig.GetValue(nameKey.Key())
 	if nameVal == nil {
-		return nil, fmt.Errorf("database %q does not exist in system cache", name)
+		return nil, roachpb.NewUErrorf("database %q does not exist in system cache", name)
 	}
 
 	id, err := nameVal.GetInt()
 	if err != nil {
-		return nil, err
+		return nil, roachpb.NewError(err)
 	}
 
 	descKey := MakeDescMetadataKey(ID(id))
 	descVal := p.systemConfig.GetValue(descKey)
 	if descVal == nil {
-		return nil, fmt.Errorf("database %q has name entry, but no descriptor in system cache", name)
+		return nil, roachpb.NewUErrorf("database %q has name entry, but no descriptor in system cache", name)
 	}
 
 	desc := &Descriptor{}
 	if err := descVal.GetProto(desc); err != nil {
-		return nil, err
+		return nil, roachpb.NewError(err)
 	}
 
 	database := desc.GetDatabase()
 	if database == nil {
-		return nil, util.Errorf("%q is not a database", name)
+		return nil, roachpb.NewErrorf("%q is not a database", name)
 	}
-	return database, database.Validate()
+	return database, roachpb.NewError(database.Validate())
 }

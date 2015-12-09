@@ -301,8 +301,8 @@ func (s *Server) writeSummaries() error {
 	nodeStatus, storeStatuses := s.recorder.GetStatusSummaries()
 	if nodeStatus != nil {
 		key := keys.NodeStatusKey(int32(nodeStatus.Desc.NodeID))
-		if err := s.db.Put(key, nodeStatus); err != nil {
-			return err
+		if pErr := s.db.Put(key, nodeStatus); pErr != nil {
+			return pErr.GoError()
 		}
 		if log.V(1) {
 			statusJSON, err := json.Marshal(nodeStatus)
@@ -315,8 +315,8 @@ func (s *Server) writeSummaries() error {
 
 	for _, ss := range storeStatuses {
 		key := keys.StoreStatusKey(int32(ss.Desc.StoreID))
-		if err := s.db.Put(key, &ss); err != nil {
-			return err
+		if pErr := s.db.Put(key, &ss); pErr != nil {
+			return pErr.GoError()
 		}
 		if log.V(1) {
 			statusJSON, err := json.Marshal(&ss)

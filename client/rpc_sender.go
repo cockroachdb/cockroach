@@ -17,7 +17,6 @@
 package client
 
 import (
-	"fmt"
 	"net"
 	"net/url"
 
@@ -81,8 +80,7 @@ func newRPCSender(server string, context *base.Context, stopper *stop.Stopper) (
 // the same client command ID and be given the cached response.
 func (s *rpcSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	if !s.client.WaitHealthy() {
-		return nil, roachpb.NewError(
-			fmt.Errorf("failed to send RPC request %s: client is unhealthy", method))
+		return nil, roachpb.NewErrorf("failed to send RPC request %s: client is unhealthy", method)
 	}
 
 	br := &roachpb.BatchResponse{}

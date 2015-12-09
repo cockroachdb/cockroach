@@ -27,13 +27,13 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func makeColIDtoRowIndex(row planNode, desc *TableDescriptor) (map[ColumnID]int, error) {
+func makeColIDtoRowIndex(row planNode, desc *TableDescriptor) (map[ColumnID]int, *roachpb.Error) {
 	columns := row.Columns()
 	colIDtoRowIndex := make(map[ColumnID]int, len(columns))
 	for i, column := range columns {
-		col, err := desc.FindActiveColumnByName(column.name)
-		if err != nil {
-			return nil, err
+		col, pErr := desc.FindActiveColumnByName(column.name)
+		if pErr != nil {
+			return nil, pErr
 		}
 		colIDtoRowIndex[col.ID] = i
 	}
@@ -67,7 +67,7 @@ func (ids indexesByID) Swap(i, j int) {
 	ids[i], ids[j] = ids[j], ids[i]
 }
 
-func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *TableDescriptor) error {
+func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *TableDescriptor) *roachpb.Error {
 	var droppedColumnDescs []ColumnDescriptor
 	var droppedIndexDescs []IndexDescriptor
 	var newIndexDescs []IndexDescriptor
@@ -108,8 +108,8 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *Tab
 		// Use a different batch to perform the scan.
 		batch := &client.Batch{}
 		batch.Scan(start, start.PrefixEnd(), 0)
-		if err := p.txn.Run(batch); err != nil {
-			return err
+		if pErr := p.txn.Run(batch); pErr != nil {
+			return pErr
 		}
 		for _, result := range batch.Results {
 			var sentinelKey roachpb.Key
@@ -158,16 +158,16 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *Tab
 			desc:    oldTableDesc,
 		}
 		scan.initDescDefaults()
-		rows, err := p.selectWithScan(scan, &parser.Select{Exprs: oldTableDesc.allColumnsSelector()})
-		if err != nil {
-			return err
+		rows, pErr := p.selectWithScan(scan, &parser.Select{Exprs: oldTableDesc.allColumnsSelector()})
+		if pErr != nil {
+			return pErr
 		}
 
 		// Construct a map from column ID to the index the value appears at within a
 		// row.
-		colIDtoRowIndex, err := makeColIDtoRowIndex(rows, oldTableDesc)
-		if err != nil {
-			return err
+		colIDtoRowIndex, pErr := makeColIDtoRowIndex(rows, oldTableDesc)
+		if pErr != nil {
+			return pErr
 		}
 
 		// TODO(tamird): This will fall down in production use. We need to do
@@ -185,10 +185,10 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *Tab
 			rowVals := rows.Values()
 
 			for _, newIndexDesc := range newIndexDescs {
-				secondaryIndexEntries, err := encodeSecondaryIndexes(
+				secondaryIndexEntries, pErr := encodeSecondaryIndexes(
 					oldTableDesc.ID, []IndexDescriptor{newIndexDesc}, colIDtoRowIndex, rowVals)
-				if err != nil {
-					return err
+				if pErr != nil {
+					return pErr
 				}
 
 				for _, secondaryIndexEntry := range secondaryIndexEntries {
@@ -201,7 +201,7 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *Tab
 			}
 		}
 
-		return rows.Err()
+		return rows.PErr()
 	}
 
 	return nil

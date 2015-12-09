@@ -103,20 +103,20 @@ func TestStoresGetStore(t *testing.T) {
 	ls := NewStores()
 	store := Store{}
 	replica := roachpb.ReplicaDescriptor{StoreID: store.Ident.StoreID}
-	s, err := ls.GetStore(replica.StoreID)
-	if s != nil || err == nil {
+	s, pErr := ls.GetStore(replica.StoreID)
+	if s != nil || pErr == nil {
 		t.Errorf("expected no stores in new local sender")
 	}
 
 	ls.AddStore(&store)
-	s, err = ls.GetStore(replica.StoreID)
+	s, pErr = ls.GetStore(replica.StoreID)
 	if s == nil {
 		t.Errorf("expected store")
 	} else if s.Ident.StoreID != store.Ident.StoreID {
 		t.Errorf("expected storeID to be %d but was %d",
 			s.Ident.StoreID, store.Ident.StoreID)
-	} else if err != nil {
-		t.Errorf("expected no error, instead had err=%s", err.Error())
+	} else if pErr != nil {
+		t.Errorf("expected no error, instead had err=%s", pErr.GoError().Error())
 	}
 }
 

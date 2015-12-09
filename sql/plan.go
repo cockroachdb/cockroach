@@ -21,8 +21,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -74,7 +74,7 @@ func (p *planner) resetTxn() {
 //
 // Note: The autoCommit parameter enables operations to enable the 1PC
 // optimization. This is a bit hackish/preliminary at present.
-func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, error) {
+func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *roachpb.Error) {
 	// This will set the system DB trigger for transactions containing
 	// DDL statements that have no effect, such as
 	// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
@@ -152,68 +152,68 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, er
 	case parser.Values:
 		return p.Values(n)
 	default:
-		return nil, util.Errorf("unknown statement type: %T", stmt)
+		return nil, roachpb.NewErrorf("unknown statement type: %T", stmt)
 	}
 }
 
-func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
+func (p *planner) query(sql string, args ...interface{}) (planNode, *roachpb.Error) {
 	stmt, err := parser.ParseOneTraditional(sql)
 	if err != nil {
-		return nil, err
+		return nil, roachpb.NewError(err)
 	}
 	if err := parser.FillArgs(stmt, golangParameters(args)); err != nil {
-		return nil, err
+		return nil, roachpb.NewError(err)
 	}
 	return p.makePlan(stmt, false)
 }
 
-func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, error) {
+func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, *roachpb.Error) {
 	plan, err := p.query(sql, args...)
 	if err != nil {
 		return nil, err
 	}
 	if !plan.Next() {
-		if err := plan.Err(); err != nil {
-			return nil, err
+		if pErr := plan.PErr(); pErr != nil {
+			return nil, pErr
 		}
 		return nil, nil
 	}
 	values := plan.Values()
 	if plan.Next() {
-		return nil, util.Errorf("%s: unexpected multiple results", sql)
+		return nil, roachpb.NewErrorf("%s: unexpected multiple results", sql)
 	}
-	if err := plan.Err(); err != nil {
-		return nil, err
+	if pErr := plan.PErr(); pErr != nil {
+		return nil, pErr
 	}
 	return values, nil
 }
 
-func (p *planner) exec(sql string, args ...interface{}) (int, error) {
-	plan, err := p.query(sql, args...)
-	if err != nil {
-		return 0, err
+func (p *planner) exec(sql string, args ...interface{}) (int, *roachpb.Error) {
+	plan, pErr := p.query(sql, args...)
+	if pErr != nil {
+		return 0, pErr
 	}
 	count := 0
 	for plan.Next() {
 		count++
 	}
-	return count, plan.Err()
+	return count, plan.PErr()
 }
 
 // getAliasedTableLease looks up the table descriptor for an alias table
 // expression.
-func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, error) {
+func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, *roachpb.Error) {
 	ate, ok := n.(*parser.AliasedTableExpr)
 	if !ok {
-		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
+		return nil, roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
 	table, ok := ate.Expr.(*parser.QualifiedName)
 	if !ok {
-		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
+		return nil, roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
-	desc, err := p.getTableLease(table)
-	if err != nil {
-		return nil, err
+	desc, pErr := p.getTableLease(table)
+	if pErr != nil {
+		return nil, pErr
 	}
 	if ate.As != "" {
 		desc.Alias = string(ate.As)
@@ -231,8 +231,8 @@ func (p *planner) notifyCompletedSchemaChange(id ID) {
 func (p *planner) releaseLeases(db client.DB) {
 	if p.leases != nil {
 		for _, lease := range p.leases {
-			if err := p.leaseMgr.Release(lease); err != nil {
-				log.Warning(err)
+			if pErr := p.leaseMgr.Release(lease); pErr != nil {
+				log.Warning(pErr)
 			}
 		}
 		p.leases = nil
@@ -263,8 +263,8 @@ type planNode interface {
 	// Next advances to the next row, returning false if an error is encountered
 	// or if there is no next row.
 	Next() bool
-	// Err returns the error, if any, encountered during iteration.
-	Err() error
+	// PErr returns the error, if any, encountered during iteration.
+	PErr() *roachpb.Error
 	// ExplainPlan returns a name and description and a list of child nodes.
 	ExplainPlan() (name, description string, children []planNode)
 }

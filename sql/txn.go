@@ -19,45 +19,44 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // BeginTransaction starts a new transaction.
-func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, error) {
+func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, *roachpb.Error) {
 	if p.txn == nil {
-		return nil, util.Errorf("the server should have already created a transaction")
+		return nil, roachpb.NewErrorf("the server should have already created a transaction")
 	}
-	if err := p.setIsolationLevel(n.Isolation); err != nil {
-		return nil, err
+	if pErr := p.setIsolationLevel(n.Isolation); pErr != nil {
+		return nil, pErr
 	}
 	return &valuesNode{}, nil
 }
 
 // CommitTransaction commits a transaction.
-func (p *planner) CommitTransaction(n *parser.CommitTransaction) (planNode, error) {
-	err := p.txn.Commit()
+func (p *planner) CommitTransaction(n *parser.CommitTransaction) (planNode, *roachpb.Error) {
+	pErr := p.txn.Commit()
 	// Reset transaction.
 	p.resetTxn()
-	return &valuesNode{}, err
+	return &valuesNode{}, pErr
 }
 
 // RollbackTransaction rolls back a transaction.
-func (p *planner) RollbackTransaction(n *parser.RollbackTransaction) (planNode, error) {
-	err := p.txn.Rollback()
+func (p *planner) RollbackTransaction(n *parser.RollbackTransaction) (planNode, *roachpb.Error) {
+	pErr := p.txn.Rollback()
 	// Reset transaction.
 	p.resetTxn()
-	return &valuesNode{}, err
+	return &valuesNode{}, pErr
 }
 
 // SetTransaction sets a transaction's isolation level
-func (p *planner) SetTransaction(n *parser.SetTransaction) (planNode, error) {
-	if err := p.setIsolationLevel(n.Isolation); err != nil {
-		return nil, err
+func (p *planner) SetTransaction(n *parser.SetTransaction) (planNode, *roachpb.Error) {
+	if pErr := p.setIsolationLevel(n.Isolation); pErr != nil {
+		return nil, pErr
 	}
 	return &valuesNode{}, nil
 }
 
-func (p *planner) setIsolationLevel(level parser.IsolationLevel) error {
+func (p *planner) setIsolationLevel(level parser.IsolationLevel) *roachpb.Error {
 	switch level {
 	case parser.UnspecifiedIsolation:
 		return nil
@@ -66,6 +65,6 @@ func (p *planner) setIsolationLevel(level parser.IsolationLevel) error {
 	case parser.SerializableIsolation:
 		return p.txn.SetIsolation(roachpb.SERIALIZABLE)
 	default:
-		return util.Errorf("unknown isolation level: %s", level)
+		return roachpb.NewErrorf("unknown isolation level: %s", level)
 	}
 }
