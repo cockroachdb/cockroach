@@ -74,6 +74,8 @@ func unimplemented() {
   alterTableCmd  AlterTableCmd
   alterTableCmds AlterTableCmds
   isoLevel       IsolationLevel
+  idxElem        IndexElem
+  idxElems       IndexElemList
 }
 
 %type <stmts> stmt_block
@@ -136,7 +138,7 @@ func unimplemented() {
 %type <strs> opt_column_list
 %type <orderBy> sort_clause opt_sort_clause
 %type <orders> sortby_list
-%type <strs> index_params
+%type <idxElems> index_params
 %type <strs> name_list opt_name_list
 %type <empty> opt_array_bounds
 %type <tblExprs> from_clause from_list
@@ -204,7 +206,7 @@ func unimplemented() {
 %type <expr> numeric_only
 %type <str> alias_clause opt_alias_clause
 %type <order> sortby
-%type <str> index_elem
+%type <idxElem> index_elem
 %type <tblExpr> table_ref
 %type <tblExpr> joined_table
 %type <qname> relation_expr
@@ -1129,20 +1131,20 @@ col_qualification_elem:
 | REFERENCES qualified_name opt_column_list key_match key_actions { unimplemented() }
 
 index_def:
-  INDEX opt_name '(' name_list ')' opt_storing
+  INDEX opt_name '(' index_params ')' opt_storing
   {
     $$ = &IndexTableDef{
       Name:    Name($2),
-      Columns: NameList($4),
+      Columns: $4,
       Storing: $6,
     }
   }
-| UNIQUE INDEX opt_name '(' name_list ')' opt_storing
+| UNIQUE INDEX opt_name '(' index_params ')' opt_storing
   {
     $$ = &UniqueConstraintTableDef{
       IndexTableDef: IndexTableDef {
         Name:    Name($3),
-        Columns: NameList($5),
+        Columns: $5,
         Storing: $7,
       },
     }
@@ -1168,7 +1170,7 @@ constraint_elem:
   {
     $$ = &UniqueConstraintTableDef{
       IndexTableDef: IndexTableDef{
-        Columns: NameList($3),
+        Columns: NameListToIndexElems($3),
         Storing: $5,
       },
     }
@@ -1177,7 +1179,7 @@ constraint_elem:
   {
     $$ = &UniqueConstraintTableDef{
       IndexTableDef: IndexTableDef{
-        Columns: NameList($4),
+        Columns: NameListToIndexElems($4),
       },
       PrimaryKey:    true,
     }
@@ -1306,7 +1308,7 @@ opt_unique:
 index_params:
   index_elem
   {
-    $$ = []string{$1}
+    $$ = IndexElemList{$1}
   }
 | index_params ',' index_elem
   {
@@ -1319,8 +1321,7 @@ index_params:
 index_elem:
   name opt_collate opt_asc_desc
   {
-    // TODO(pmattis): Support opt_asc_desc.
-    $$ = $1
+    $$ = IndexElem{Column: Name($1), Direction: $3}
   }
 | func_expr_windowless opt_collate opt_asc_desc { unimplemented() }
 | '(' a_expr ')' opt_collate opt_asc_desc { unimplemented() }
@@ -1468,6 +1469,8 @@ insert_rest:
     $$ = &Insert{}
   }
 
+// TODO(andrei): If this is ever supported, `opt_conf_expr` needs to use something different
+// than `index_params`.
 opt_on_conflict:
   ON CONFLICT opt_conf_expr DO UPDATE SET set_clause_list where_clause { unimplemented() }
 | ON CONFLICT opt_conf_expr DO NOTHING { unimplemented() }

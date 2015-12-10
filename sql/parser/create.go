@@ -26,6 +26,7 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
 
 // CreateDatabase represents a CREATE DATABASE statement.
@@ -44,14 +45,41 @@ func (node *CreateDatabase) String() string {
 	return buf.String()
 }
 
+// IndexElem represents a column with a direction in a CREATE INDEX statement.
+type IndexElem struct {
+	Column    Name
+	Direction Direction
+}
+
+func (node IndexElem) String() string {
+	if node.Direction == DefaultDirection {
+		return node.Column.String()
+	}
+	return fmt.Sprintf("%s %s", node.Column, node.Direction)
+}
+
+// IndexElemList is list of IndexElem.
+type IndexElemList []IndexElem
+
+// String formats the contained names as a comma-separated, escaped string.
+func (l IndexElemList) String() string {
+	colStrs := make([]string, 0, len(l))
+	for _, indexElem := range l {
+		colStrs = append(colStrs, indexElem.String())
+	}
+	return strings.Join(colStrs, ", ")
+}
+
 // CreateIndex represents a CREATE INDEX statement.
 type CreateIndex struct {
 	Name        Name
 	Table       *QualifiedName
 	Unique      bool
 	IfNotExists bool
-	Columns     NameList
-	Storing     NameList
+	Columns     IndexElemList
+	// Extra columns to be stored together with the indexed ones as an optimization
+	// for improved reading performance.
+	Storing NameList
 }
 
 func (node *CreateIndex) String() string {
@@ -199,11 +227,21 @@ type PrimaryKeyConstraint struct{}
 // UniqueConstraint represents UNIQUE on a column.
 type UniqueConstraint struct{}
 
+// NameListToIndexElems converts a NameList to an IndexElemList with all
+// members using the `DefaultDirection`.
+func NameListToIndexElems(lst NameList) IndexElemList {
+	elems := make(IndexElemList, 0, len(lst))
+	for _, n := range lst {
+		elems = append(elems, IndexElem{Column: Name(n), Direction: DefaultDirection})
+	}
+	return elems
+}
+
 // IndexTableDef represents an index definition within a CREATE TABLE
 // statement.
 type IndexTableDef struct {
 	Name    Name
-	Columns NameList
+	Columns IndexElemList
 	Storing NameList
 }
 

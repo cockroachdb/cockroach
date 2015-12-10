@@ -65,3 +65,24 @@ EXPLAIN (DEBUG) SELECT * FROM t@foo
 ----
 0  /t/foo/1/1  NULL  true
 1  /t/foo/1/2  NULL  true
+
+# test for DESC index
+
+statement ok
+DROP TABLE t
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT
+)
+
+statement ok
+CREATE INDEX b_desc ON t (b DESC)
+
+statement ok
+CREATE INDEX b_asc ON t (b ASC, c DESC)
+
+statement ok
+INSERT INTO t VALUES (1,1,1)
