@@ -28,19 +28,21 @@ function push_one_binary {
   rel_path=$1
   binary_name=$(basename $1)
 
-  # Fetch name of most recent binary.
-  # TODO(marc): some versions of `aws s3 cp` allow - for stdin/stdout, but not all.
-  tmpfile=$(mktemp /tmp/cockroach-push.XXXXXX)
-  # Don't exit on errors, clearing the latest file is an easy way to force multiple uploads.
-  time aws s3 cp s3://${BUCKET_PATH}/${binary_name}${LATEST_SUFFIX} ${tmpfile} || true
-  contents=$(cat ${tmpfile})
-  rm -f ${tmpfile}
-  latest_date=$(echo ${contents} | sed "s/${binary_name}.\([0-9]\+\)-.*/\1/")
-
-  if [ "${latest_date}" == "${today}" ]; then
-    echo "Latest binary is from today, skipping: ${contents}"
-    return 0
-  fi
+  # TODO(marc): uncomment the following blocks to limit pushes to once a day.
+  # # Fetch name of most recent binary.
+  # # TODO(marc): some versions of `aws s3 cp` allow - for stdin/stdout, but not all.
+  # tmpfile=$(mktemp /tmp/cockroach-push.XXXXXX)
+  # # Don't exit on errors, clearing the latest file is an easy way to force multiple uploads.
+  # time aws s3 cp s3://${BUCKET_PATH}/${binary_name}${LATEST_SUFFIX} ${tmpfile} || true
+  # contents=$(cat ${tmpfile})
+  # rm -f ${tmpfile}
+  # latest_date=$(echo ${contents} | sed "s/${binary_name}.\([0-9]\+\)-.*/\1/")
+  #
+  # # Push binaries at most once a day.
+  # if [ "${latest_date}" == "${today}" ]; then
+  #   echo "Latest binary is from today, skipping: ${contents}"
+  #   return 0
+  # fi
 
   # Latest file did not exist, was empty, or pointed to an old binary.
   # Upload binary.
