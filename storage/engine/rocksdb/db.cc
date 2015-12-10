@@ -92,10 +92,7 @@ struct DBBatch : public DBEngine {
   rocksdb::WriteBatchWithIndex batch;
   rocksdb::ReadOptions const read_opts;
 
-  DBBatch(DBEngine* db)
-      : DBEngine(db->rep),
-        updates(0) {
-  }
+  DBBatch(DBEngine* db);
   virtual ~DBBatch() {
   }
 
@@ -130,7 +127,6 @@ struct DBSnapshot : public DBEngine {
 
 struct DBIterator {
   std::unique_ptr<rocksdb::Iterator> rep;
-  std::string key;
 };
 
 }  // extern "C"
@@ -140,10 +136,10 @@ namespace {
 // NOTE: these constants must be kept in sync with the values in
 // storage/engine/keys.go. Both kKeyLocalRangeIDPrefix and
 // kKeyLocalRangePrefix are the mvcc-encoded prefixes.
-const int kKeyLocalRangePrefixSize = 4;
-const rocksdb::Slice kKeyLocalRangeIDPrefix("\x71\x01i", 3);
-const rocksdb::Slice kKeyLocalRangePrefix("\x71\x01k", 3);
-const rocksdb::Slice kKeyLocalTransactionSuffix("\x01txn-", 5);
+const int kKeyLocalRangePrefixSize = 2;
+const rocksdb::Slice kKeyLocalRangeIDPrefix("\x01i", 2);
+const rocksdb::Slice kKeyLocalRangePrefix("\x01k", 2);
+const rocksdb::Slice kKeyLocalTransactionSuffix("\x00\x01txn-", 6);
 const rocksdb::Slice kKeyLocalMax("\x02", 1);
 
 const DBStatus kSuccess = { NULL, 0 };
@@ -162,36 +158,67 @@ rocksdb::Slice ToSlice(DBString s) {
 
 const int kMVCCVersionTimestampSize = 12;
 
+// MVCC keys are encoded as <key>[<walltime>[<logical>]]<#timestamp-bytes>. A
+// custom RocksDB comparator (DBComparator) is used to maintain the desired
+// ordering as these keys do not sort lexicographically correctly.
 std::string EncodeKey(DBKey k) {
   std::string s;
   const bool ts = k.walltime != 0 || k.logical != 0;
-  s.reserve(k.key.len + 3 + (ts ? kMVCCVersionTimestampSize : 0));
-  EncodeBytes(&s, k.key.data, k.key.len);
+  s.reserve(k.key.len + 1 + (ts ? 1 + kMVCCVersionTimestampSize : 0));
+  s.append(k.key.data, k.key.len);
   if (ts) {
-    EncodeUint64Decreasing(&s, uint64_t(k.walltime));
-    EncodeUint32Decreasing(&s, uint32_t(k.logical));
+    // Add a NUL prefix to the timestamp data. See DBPrefixExtractor.Transform
+    // for more details.
+    s.push_back(0);
+    EncodeUint64(&s, uint64_t(k.walltime));
+    if (k.logical != 0) {
+      // TODO(peter): Use varint encoding here. Logical values will
+      // usually be small.
+      EncodeUint32(&s, uint32_t(k.logical));
+    }
   }
+  s.push_back(char(s.size() - k.key.len));
   return s;
 }
 
-bool DecodeKey(rocksdb::Slice buf, std::string *key, int64_t *walltime, int32_t *logical) {
-  key->clear();
-  if (!DecodeBytes(&buf, key)) {
+bool SplitKey(rocksdb::Slice buf, rocksdb::Slice *key, rocksdb::Slice *timestamp) {
+  if (buf.empty()) {
     return false;
   }
-  if (buf.size() == kMVCCVersionTimestampSize) {
+  const char ts_size = buf[buf.size() - 1];
+  if (ts_size >= buf.size()) {
+    return false;
+  }
+  *key = rocksdb::Slice(buf.data(), buf.size() - ts_size - 1);
+  *timestamp = rocksdb::Slice(key->data() + key->size(), ts_size);
+  return true;
+}
+
+bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice *key, int64_t *walltime, int32_t *logical) {
+  key->clear();
+
+  rocksdb::Slice timestamp;
+  if (!SplitKey(buf, key, &timestamp)) {
+    return false;
+  }
+  if (timestamp.size() > 0) {
+    timestamp.remove_prefix(1);  // The NUL prefix.
     uint64_t w;
-    if (!DecodeUint64Decreasing(&buf, &w)) {
-      return false;
-    }
-    uint32_t l;
-    if (!DecodeUint32Decreasing(&buf, &l)) {
+    if (!DecodeUint64(&timestamp, &w)) {
       return false;
     }
     *walltime = int64_t(w);
-    *logical = int32_t(l);
+    *logical = 0;
+    if (timestamp.size() > 0) {
+      // TODO(peter): Use varint decoding here.
+      uint32_t l;
+      if (!DecodeUint32(&timestamp, &l)) {
+        return false;
+      }
+      *logical = int32_t(l);
+    }
   }
-  return buf.empty();
+  return timestamp.empty();
 }
 
 DBSlice ToDBSlice(const rocksdb::Slice& s) {
@@ -243,10 +270,11 @@ DBIterState DBIterGetState(DBIterator* iter) {
   state.value.len = 0;
 
   if (state.valid) {
-    state.valid = DecodeKey(iter->rep->key(), &iter->key,
+    rocksdb::Slice key;
+    state.valid = DecodeKey(iter->rep->key(), &key,
                             &state.key.walltime, &state.key.logical);
     if (state.valid) {
-      state.key.key = ToDBSlice(iter->key);
+      state.key.key = ToDBSlice(key);
       state.value = ToDBSlice(iter->rep->value());
     }
   }
@@ -275,20 +303,20 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
       return false;
     }
 
-    std::string decStr;
-    if (!DecodeBytes(&key, &decStr)) {
+    rocksdb::Slice dec_key;
+    rocksdb::Slice dummy;
+    if (!SplitKey(key, &dec_key, &dummy)) {
       return false;
     }
-    rocksdb::Slice decKey(decStr);
-    decKey.remove_prefix(kKeyLocalRangePrefixSize);
+    dec_key.remove_prefix(kKeyLocalRangePrefixSize);
 
-    // Search for "suffix" within "decKey".
+    // Search for "suffix" within "dec_key".
     const rocksdb::Slice suffix(kKeyLocalTransactionSuffix);
     const char *result = std::search(
-        decKey.data(), decKey.data() + decKey.size(),
+        dec_key.data(), dec_key.data() + dec_key.size(),
         suffix.data(), suffix.data() + suffix.size());
-    const int xpos = result - decKey.data();
-    return xpos + suffix.size() <= decKey.size();
+    const int xpos = result - dec_key.data();
+    return xpos + suffix.size() <= dec_key.size();
   }
 
   virtual bool Filter(int level,
@@ -360,6 +388,55 @@ class DBCompactionFilterFactory : public rocksdb::CompactionFilterFactory {
   int64_t min_txn_ts_;
 };
 
+class DBComparator : public rocksdb::Comparator {
+ public:
+  DBComparator() {
+  }
+
+  virtual const char* Name() const override {
+    return "cockroach_comparator";
+  }
+
+  virtual int Compare(const rocksdb::Slice &a, const rocksdb::Slice &b) const override {
+    rocksdb::Slice key_a, key_b;
+    rocksdb::Slice ts_a, ts_b;
+    if (!SplitKey(a, &key_a, &ts_a) ||
+        !SplitKey(b, &key_b, &ts_b)) {
+      // This should never happen unless there is some sort of corruption of
+      // the keys.
+      return a.compare(b);
+    }
+
+    const int c = key_a.compare(key_b);
+    if (c != 0) {
+      return c;
+    }
+    if (ts_a.empty()) {
+      if (ts_b.empty()) {
+        return 0;
+      }
+      return -1;
+    } else if (ts_b.empty()) {
+      return +1;
+    }
+    return ts_b.compare(ts_a);
+  }
+
+  virtual bool Equal(const rocksdb::Slice &a, const rocksdb::Slice &b) const override {
+    return a == b;
+  }
+
+  // The RocksDB docs say it is safe to leave these two methods unimplemented.
+  virtual void FindShortestSeparator(
+      std::string *start, const rocksdb::Slice &limit) const override {
+  }
+
+  virtual void FindShortSuccessor(std::string *key) const override {
+  }
+};
+
+const DBComparator kComparator;
+
 class DBPrefixExtractor : public rocksdb::SliceTransform {
  public:
   DBPrefixExtractor() {
@@ -375,13 +452,20 @@ class DBPrefixExtractor : public rocksdb::SliceTransform {
   // added to the per table bloom filters and will this be able to skip tables
   // which do not contain the <user-key>.
   virtual rocksdb::Slice Transform(const rocksdb::Slice& src) const {
-    const char kTerm[] = "\x00\x01";
-    const int kTermSize = sizeof(kTerm) - 1;
-    const char* p = reinterpret_cast<const char*>(memmem(src.data(), src.size(), kTerm, kTermSize));
-    if (!p) {
+    rocksdb::Slice key;
+    rocksdb::Slice ts;
+    if (!SplitKey(src, &key, &ts)) {
       return src;
     }
-    return rocksdb::Slice(src.data(), p - src.data());
+    // RocksDB requires that keys generated via Transform be comparable with
+    // normal encoded MVCC keys. Encoded MVCC keys have a suffix indicating the
+    // number of bytes of timestamp data. MVCC keys without a timestamp have a
+    // suffix of 0. We're careful in EncodeKey to make sure that the user-key
+    // always has a trailing 0. If there is no timestamp this falls out
+    // naturally. If there is a timestamp we prepend a 0 to the encoded
+    // timestamp data.
+    assert(src.size() > key.size() && src[key.size()] == 0);
+    return rocksdb::Slice(key.data(), key.size() + 1);
   }
 
   virtual bool InDomain(const rocksdb::Slice& src) const {
@@ -511,7 +595,7 @@ bool MergeTimeSeriesValues(cockroach::roachpb::Value *left, const cockroach::roa
     auto right_end = right_ts.samples().end();
 
     // Loop until samples from both sides have been exhausted.
-    while(left_front != left_end || right_front != right_end) {
+    while (left_front != left_end || right_front != right_end) {
         // Select the lowest offset from either side.
         long next_offset;
         if (left_front == left_end) {
@@ -931,8 +1015,7 @@ class BaseDeltaIterator : public rocksdb::Iterator {
         equal_keys_(false),
         status_(rocksdb::Status::OK()),
         base_iterator_(base_iterator),
-        delta_iterator_(delta_iterator),
-        comparator_(rocksdb::BytewiseComparator()) {
+        delta_iterator_(delta_iterator) {
     merged_.data = NULL;
   }
 
@@ -1001,8 +1084,8 @@ class BaseDeltaIterator : public rocksdb::Iterator {
   // 1 -- delta more advanced than base
   int Compare() const {
     assert(delta_iterator_->Valid() && base_iterator_->Valid());
-    return comparator_->Compare(delta_iterator_->Entry().key,
-                                base_iterator_->key());
+    return kComparator.Compare(delta_iterator_->Entry().key,
+                               base_iterator_->key());
   }
   void AssertInvariants() {
 #ifndef NDEBUG
@@ -1019,8 +1102,8 @@ class BaseDeltaIterator : public rocksdb::Iterator {
     }
     // we don't support those yet
     assert(delta_iterator_->Entry().type != rocksdb::kLogDataRecord);
-    int compare = comparator_->Compare(delta_iterator_->Entry().key,
-                                       base_iterator_->key());
+    int compare = kComparator.Compare(delta_iterator_->Entry().key,
+                                      base_iterator_->key());
     // current_at_base -> compare < 0
     assert(!current_at_base_ || compare < 0);
     // !current_at_base -> compare <= 0
@@ -1140,10 +1223,15 @@ class BaseDeltaIterator : public rocksdb::Iterator {
   mutable DBString merged_;
   std::unique_ptr<rocksdb::Iterator> base_iterator_;
   std::unique_ptr<rocksdb::WBWIIterator> delta_iterator_;
-  const rocksdb::Comparator* comparator_;  // not owned
 };
 
 }  // namespace
+
+DBBatch::DBBatch(DBEngine* db)
+    : DBEngine(db->rep),
+      batch(&kComparator),
+      updates(0) {
+}
 
 DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   // Divide the cache space into two levels: the fast row cache
@@ -1172,6 +1260,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   rocksdb::Options options(rocksdb::DBOptions(), cf_options);
   options.allow_os_buffer = db_opts.allow_os_buffer;
   options.compaction_filter_factory.reset(new DBCompactionFilterFactory());
+  options.comparator = &kComparator;
   options.create_if_missing = true;
   options.info_log.reset(new DBLogger(db_opts.logging_enabled));
   options.merge_operator.reset(new DBMergeOperator);
@@ -1455,24 +1544,25 @@ MVCCStatsResult MVCCComputeStats(
 
   cockroach::storage::engine::MVCCMetadata meta;
   std::string prev_key;
-  std::string decoded_key;
   bool first = false;
 
-  for (; iter_rep->Valid() && iter_rep->key().compare(end_key) < 0; iter_rep->Next()) {
+  for (; iter_rep->Valid() && kComparator.Compare(iter_rep->key(), end_key) < 0;
+       iter_rep->Next()) {
     const rocksdb::Slice key = iter_rep->key();
     const rocksdb::Slice value = iter_rep->value();
 
-    rocksdb::Slice buf = key;
-    decoded_key.clear();
-    if (!DecodeBytes(&buf, &decoded_key)) {
+    rocksdb::Slice decoded_key;
+    int64_t walltime = 0;
+    int32_t logical = 0;
+    if (!DecodeKey(key, &decoded_key, &walltime, &logical)) {
       stats.status = FmtStatus("unable to decode key");
       break;
     }
 
     const bool isSys = (rocksdb::Slice(decoded_key).compare(kKeyLocalMax) < 0);
-    const bool isValue = (buf.size() == kMVCCVersionTimestampSize);
+    const bool isValue = (walltime != 0 || logical != 0);
     const bool implicitMeta = isValue && decoded_key != prev_key;
-    prev_key = decoded_key;
+    prev_key.assign(decoded_key.data(), decoded_key.size());
 
     if (implicitMeta) {
       // No MVCCMetadata entry for this series of keys.
@@ -1480,27 +1570,12 @@ MVCCStatsResult MVCCComputeStats(
       meta.set_key_bytes(kMVCCVersionTimestampSize);
       meta.set_val_bytes(value.size());
       meta.set_deleted(value.size() == 0);
-
-      uint64_t wall_time;
-      rocksdb::Slice tmp = buf;
-      if (!DecodeUint64Decreasing(&tmp, &wall_time)) {
-        stats.status = FmtStatus("unable to decode mvcc timestamp");
-        break;
-      }
-      meta.mutable_timestamp()->set_wall_time(int64_t(wall_time));
+      meta.mutable_timestamp()->set_wall_time(walltime);
     }
 
     if (!isValue || implicitMeta) {
-      if (!implicitMeta && buf.size() != 0) {
-        stats.status = FmtStatus("there should be %d bytes for encoded timestamp",
-                                 kMVCCVersionTimestampSize);
-        break;
-      }
-
-      const int64_t meta_key_size =
-          key.size() - (implicitMeta ? kMVCCVersionTimestampSize : 0);
-      const int64_t meta_val_size =
-          implicitMeta ? 0 : value.size();
+      const int64_t meta_key_size = decoded_key.size() + 1;
+      const int64_t meta_val_size = implicitMeta ? 0 : value.size();
       const int64_t total_bytes = meta_key_size + meta_val_size;
       first = true;
 
@@ -1558,12 +1633,7 @@ MVCCStatsResult MVCCComputeStats(
           break;
         }
       } else {
-        uint64_t wall_time;
-        if (!DecodeUint64Decreasing(&buf, &wall_time)) {
-          stats.status = FmtStatus("unable to decode mvcc timestamp");
-          break;
-        }
-        stats.gc_bytes_age += total_bytes * ((now_nanos - wall_time) / 1e9);
+        stats.gc_bytes_age += total_bytes * ((now_nanos - walltime) / 1e9);
       }
       stats.key_bytes += kMVCCVersionTimestampSize;
       stats.val_bytes += value.size();
