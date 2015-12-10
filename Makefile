@@ -33,6 +33,7 @@ TESTTIMEOUT  := 1m10s
 RACETIMEOUT  := 5m
 BENCHTIMEOUT := 5m
 TESTFLAGS    :=
+STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
 
 ifeq ($(STATIC),1)
@@ -133,12 +134,12 @@ coverage:
 .PHONY: stress
 stress:
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i -c $(PKG) -o stress.test
-	stress ./stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+	stress $(STRESSFLAGS) ./stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 .PHONY: stressrace
 stressrace:
 	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -i -c $(PKG) -o stress.test
-	stress ./stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+	stress $(STRESSFLAGS) ./stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 .PHONY: acceptance
 acceptance:
