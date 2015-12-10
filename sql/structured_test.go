@@ -27,6 +27,20 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
+// Makes an IndexDescriptor with all columns being ascending.
+func makeIndexDescriptor(name string, columnNames []string) sql.IndexDescriptor {
+	dirs := make([]sql.IndexDescriptor_Direction, 0, len(columnNames))
+	for range columnNames {
+		dirs = append(dirs, sql.IndexDescriptor_ASC)
+	}
+	idx := sql.IndexDescriptor{
+		Name:             name,
+		ColumnNames:      columnNames,
+		ColumnDirections: dirs,
+	}
+	return idx
+}
+
 func TestAllocateIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
@@ -39,10 +53,10 @@ func TestAllocateIDs(t *testing.T) {
 			{Name: "b"},
 			{Name: "c"},
 		},
-		PrimaryIndex: sql.IndexDescriptor{Name: "c", ColumnNames: []string{"a", "b"}},
+		PrimaryIndex: makeIndexDescriptor("c", []string{"a", "b"}),
 		Indexes: []sql.IndexDescriptor{
-			{Name: "d", ColumnNames: []string{"b", "a"}},
-			{Name: "e", ColumnNames: []string{"b"}},
+			makeIndexDescriptor("d", []string{"b", "a"}),
+			makeIndexDescriptor("e", []string{"b"}),
 		},
 		Privileges: sql.NewDefaultPrivilegeDescriptor(),
 	}
@@ -61,10 +75,16 @@ func TestAllocateIDs(t *testing.T) {
 			{ID: 3, Name: "c"},
 		},
 		PrimaryIndex: sql.IndexDescriptor{
-			ID: 1, Name: "c", ColumnIDs: []sql.ColumnID{1, 2}, ColumnNames: []string{"a", "b"}},
+			ID: 1, Name: "c", ColumnIDs: []sql.ColumnID{1, 2},
+			ColumnNames: []string{"a", "b"},
+			ColumnDirections: []sql.IndexDescriptor_Direction{sql.IndexDescriptor_ASC,
+				sql.IndexDescriptor_ASC}},
 		Indexes: []sql.IndexDescriptor{
-			{ID: 2, Name: "d", ColumnIDs: []sql.ColumnID{2, 1}, ColumnNames: []string{"b", "a"}},
+			{ID: 2, Name: "d", ColumnIDs: []sql.ColumnID{2, 1}, ColumnNames: []string{"b", "a"},
+				ColumnDirections: []sql.IndexDescriptor_Direction{sql.IndexDescriptor_ASC,
+					sql.IndexDescriptor_ASC}},
 			{ID: 3, Name: "e", ColumnIDs: []sql.ColumnID{2}, ColumnNames: []string{"b"},
+				ColumnDirections:  []sql.IndexDescriptor_Direction{sql.IndexDescriptor_ASC},
 				ImplicitColumnIDs: []sql.ColumnID{1}},
 		},
 		Privileges:   sql.NewDefaultPrivilegeDescriptor(),
@@ -162,7 +182,9 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: sql.IndexDescriptor{ID: 0},
+				PrimaryIndex: sql.IndexDescriptor{
+					ID:               0,
+					ColumnDirections: []sql.IndexDescriptor_Direction{sql.IndexDescriptor_ASC}},
 				NextColumnID: 2,
 			}},
 		{`invalid index ID 0`,
@@ -173,7 +195,9 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: sql.IndexDescriptor{ID: 0, Name: "bar", ColumnIDs: []sql.ColumnID{0}},
+				PrimaryIndex: sql.IndexDescriptor{ID: 0, Name: "bar",
+					ColumnIDs:        []sql.ColumnID{0},
+					ColumnDirections: []sql.IndexDescriptor_Direction{sql.IndexDescriptor_ASC}},
 				NextColumnID: 2,
 			}},
 		{`index "bar" must contain at least 1 column`,
@@ -184,7 +208,10 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "primary", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"bar"}},
+				PrimaryIndex: sql.IndexDescriptor{
+					ID: 1, Name: "primary", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"bar"},
+					ColumnDirections: []sql.IndexDescriptor_Direction{sql.IndexDescriptor_ASC},
+				},
 				Indexes: []sql.IndexDescriptor{
 					{ID: 2, Name: "bar"},
 				},
@@ -213,7 +240,10 @@ func TestValidateTableDesc(t *testing.T) {
 					{ID: 1, Name: "bar"},
 					{ID: 2, Name: "blah"},
 				},
-				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"bar", "blah"}},
+				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar",
+					ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"bar", "blah"},
+					ColumnDirections: []sql.IndexDescriptor_Direction{sql.IndexDescriptor_ASC},
+				},
 				NextColumnID: 3,
 				NextIndexID:  2,
 			}},
@@ -225,9 +255,15 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"bar"}},
+				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar",
+					ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"bar"},
+					ColumnDirections: []sql.IndexDescriptor_Direction{sql.IndexDescriptor_ASC},
+				},
 				Indexes: []sql.IndexDescriptor{
-					{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"bar"}},
+					{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{1},
+						ColumnNames:      []string{"bar"},
+						ColumnDirections: []sql.IndexDescriptor_Direction{sql.IndexDescriptor_ASC},
+					},
 				},
 				NextColumnID: 2,
 				NextIndexID:  2,
@@ -240,9 +276,15 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"bar"}},
+				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{1},
+					ColumnNames:      []string{"bar"},
+					ColumnDirections: []sql.IndexDescriptor_Direction{sql.IndexDescriptor_ASC},
+				},
 				Indexes: []sql.IndexDescriptor{
-					{ID: 1, Name: "blah", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"bar"}},
+					{ID: 1, Name: "blah", ColumnIDs: []sql.ColumnID{1},
+						ColumnNames:      []string{"bar"},
+						ColumnDirections: []sql.IndexDescriptor_Direction{sql.IndexDescriptor_ASC},
+					},
 				},
 				NextColumnID: 2,
 				NextIndexID:  2,
@@ -255,7 +297,10 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{2}, ColumnNames: []string{"bar"}},
+				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{2},
+					ColumnNames:      []string{"bar"},
+					ColumnDirections: []sql.IndexDescriptor_Direction{sql.IndexDescriptor_ASC},
+				},
 				NextColumnID: 2,
 				NextIndexID:  2,
 			}},
@@ -267,7 +312,24 @@ func TestValidateTableDesc(t *testing.T) {
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
-				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"blah"}},
+				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{1},
+					ColumnNames:      []string{"blah"},
+					ColumnDirections: []sql.IndexDescriptor_Direction{sql.IndexDescriptor_ASC},
+				},
+				NextColumnID: 2,
+				NextIndexID:  2,
+			}},
+		{`mismatched column IDs (1) and directions (0)`,
+			sql.TableDescriptor{
+				ID:       2,
+				ParentID: 1,
+				Name:     "foo",
+				Columns: []sql.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{1},
+					ColumnNames: []string{"blah"},
+				},
 				NextColumnID: 2,
 				NextIndexID:  2,
 			}},

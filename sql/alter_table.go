@@ -94,8 +94,10 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 				idx := IndexDescriptor{
 					Name:             name,
 					Unique:           true,
-					ColumnNames:      d.Columns,
 					StoreColumnNames: d.Storing,
+				}
+				if err := idx.fillColumns(d.Columns); err != nil {
+					return nil, err
 				}
 				status, i, err := tableDesc.FindIndexByName(name)
 				if err == nil {

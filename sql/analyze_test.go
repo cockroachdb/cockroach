@@ -43,6 +43,7 @@ func testTableDesc() *TableDescriptor {
 		},
 		PrimaryIndex: IndexDescriptor{
 			Name: "primary", Unique: true, ColumnNames: []string{"a"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 		},
 		Privileges: NewDefaultPrivilegeDescriptor(),
 	}

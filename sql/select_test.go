@@ -31,10 +31,16 @@ func makeTestIndex(t *testing.T, columns []string) (*TableDescriptor, *IndexDesc
 		Name:        "foo",
 		ColumnNames: columns,
 	})
+	idx := &desc.Indexes[len(desc.Indexes)-1]
+	// Fill in the directions for the columns.
+	for range columns {
+		idx.ColumnDirections = append(idx.ColumnDirections, IndexDescriptor_ASC)
+	}
+
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
-	return desc, &desc.Indexes[len(desc.Indexes)-1]
+	return desc, idx
 }
 
 func makeConstraints(t *testing.T, sql string, desc *TableDescriptor,

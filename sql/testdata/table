@@ -47,17 +47,20 @@ CREATE TABLE c (
   bar INT,
   INDEX c_foo_idx (foo),
   INDEX (foo),
+  INDEX c_foo_bar_idx (foo ASC, bar DESC),
   UNIQUE (bar)
 )
 
 query TTBITB colnames
 SHOW INDEX FROM c
 ----
-Table Name       Unique Seq Column Storing
-c     primary    true   1   id     false
-c     c_foo_idx  false  1   foo    false
-c     c_foo_idx1 false  1   foo    false
-c     c_bar_key  true   1   bar    false
+Table Name           Unique Seq Column Storing
+c     primary        true   1   id     false
+c     c_foo_idx      false  1   foo    false
+c     c_foo_idx1     false  1   foo    false
+c     c_foo_bar_idx  false  1   foo    false
+c     c_foo_bar_idx  false  2   bar    false
+c     c_bar_key      true   1   bar    false
 
 query T
 SHOW TABLES FROM test

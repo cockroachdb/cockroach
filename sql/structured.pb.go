@@ -74,6 +74,40 @@ func (x *ColumnType_Kind) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// The direction of a column in the index.
+type IndexDescriptor_Direction int32
+
+const (
+	IndexDescriptor_ASC  IndexDescriptor_Direction = 0
+	IndexDescriptor_DESC IndexDescriptor_Direction = 1
+)
+
+var IndexDescriptor_Direction_name = map[int32]string{
+	0: "ASC",
+	1: "DESC",
+}
+var IndexDescriptor_Direction_value = map[string]int32{
+	"ASC":  0,
+	"DESC": 1,
+}
+
+func (x IndexDescriptor_Direction) Enum() *IndexDescriptor_Direction {
+	p := new(IndexDescriptor_Direction)
+	*p = x
+	return p
+}
+func (x IndexDescriptor_Direction) String() string {
+	return proto.EnumName(IndexDescriptor_Direction_name, int32(x))
+}
+func (x *IndexDescriptor_Direction) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(IndexDescriptor_Direction_value, data, "IndexDescriptor_Direction")
+	if err != nil {
+		return err
+	}
+	*x = IndexDescriptor_Direction(value)
+	return nil
+}
+
 // A descriptor within a mutation is unavailable for reads, writes
 // and deletes. It is only available for implicit (internal to
 // the database) writes and deletes depending on the state of the mutation.
@@ -211,6 +245,8 @@ type IndexDescriptor struct {
 	// names here proves to be prohibitive, we could clear this field before
 	// saving and reconstruct it after loading.
 	ColumnNames []string `protobuf:"bytes,4,rep,name=column_names" json:"column_names,omitempty"`
+	// Parallel with column_names - the sort direction of each column.
+	ColumnDirections []IndexDescriptor_Direction `protobuf:"varint,8,rep,name=column_directions,enum=cockroach.sql.IndexDescriptor_Direction" json:"column_directions,omitempty"`
 	// An ordered list of column names which the index stores in
 	// addition to the columns which are explicitly part of the index.
 	StoreColumnNames []string `protobuf:"bytes,5,rep,name=store_column_names" json:"store_column_names,omitempty"`
@@ -607,6 +643,7 @@ func init() {
 	proto.RegisterType((*DatabaseDescriptor)(nil), "cockroach.sql.DatabaseDescriptor")
 	proto.RegisterType((*Descriptor)(nil), "cockroach.sql.Descriptor")
 	proto.RegisterEnum("cockroach.sql.ColumnType_Kind", ColumnType_Kind_name, ColumnType_Kind_value)
+	proto.RegisterEnum("cockroach.sql.IndexDescriptor_Direction", IndexDescriptor_Direction_name, IndexDescriptor_Direction_value)
 	proto.RegisterEnum("cockroach.sql.DescriptorMutation_State", DescriptorMutation_State_name, DescriptorMutation_State_value)
 	proto.RegisterEnum("cockroach.sql.DescriptorMutation_Direction", DescriptorMutation_Direction_name, DescriptorMutation_Direction_value)
 }
@@ -754,6 +791,13 @@ func (m *IndexDescriptor) MarshalTo(data []byte) (int, error) {
 	if len(m.ImplicitColumnIDs) > 0 {
 		for _, num := range m.ImplicitColumnIDs {
 			data[i] = 0x38
+			i++
+			i = encodeVarintStructured(data, i, uint64(num))
+		}
+	}
+	if len(m.ColumnDirections) > 0 {
+		for _, num := range m.ColumnDirections {
+			data[i] = 0x40
 			i++
 			i = encodeVarintStructured(data, i, uint64(num))
 		}
@@ -1089,6 +1133,11 @@ func (m *IndexDescriptor) Size() (n int) {
 	}
 	if len(m.ImplicitColumnIDs) > 0 {
 		for _, e := range m.ImplicitColumnIDs {
+			n += 1 + sovStructured(uint64(e))
+		}
+	}
+	if len(m.ColumnDirections) > 0 {
+		for _, e := range m.ColumnDirections {
 			n += 1 + sovStructured(uint64(e))
 		}
 	}
@@ -1699,6 +1748,26 @@ func (m *IndexDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 			m.ImplicitColumnIDs = append(m.ImplicitColumnIDs, v)
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ColumnDirections", wireType)
+			}
+			var v IndexDescriptor_Direction
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (IndexDescriptor_Direction(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.ColumnDirections = append(m.ColumnDirections, v)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipStructured(data[iNdEx:])
