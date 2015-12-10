@@ -44,14 +44,28 @@ func (node *CreateDatabase) String() string {
 	return buf.String()
 }
 
+// IndexElem represents a column with a direction in a CREATE INDEX statement.
+type IndexElem struct {
+	Column    Name
+	Direction Direction
+}
+
+func (node IndexElem) String() string {
+	if node.Direction == DefaultDirection {
+		return node.Column.String()
+	}
+	return fmt.Sprintf("%s %s", node.Column, node.Direction)
+}
+
 // CreateIndex represents a CREATE INDEX statement.
 type CreateIndex struct {
 	Name        Name
 	Table       *QualifiedName
 	Unique      bool
 	IfNotExists bool
-	Columns     NameList
-	Storing     NameList
+	Columns     []IndexElem
+	// Extra columns to be stored together with the indexed ones as an optimization.
+	Storing NameList
 }
 
 func (node *CreateIndex) String() string {
@@ -67,7 +81,18 @@ func (node *CreateIndex) String() string {
 	if node.Name != "" {
 		fmt.Fprintf(&buf, "%s ", node.Name)
 	}
-	fmt.Fprintf(&buf, "ON %s (%s)", node.Table, node.Columns)
+
+	// Accumulate the columns and their directions.
+	var colsBuf bytes.Buffer
+	for i, n := range node.Columns {
+		if i > 0 {
+			colsBuf.WriteString(", ")
+		}
+		colsBuf.WriteString(IndexElem(n).String())
+	}
+
+	fmt.Fprintf(&buf, "ON %s (%s)", node.Table, colsBuf.String())
+
 	if node.Storing != nil {
 		fmt.Fprintf(&buf, " STORING (%s)", node.Storing)
 	}
