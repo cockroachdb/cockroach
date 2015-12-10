@@ -341,10 +341,9 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		key := iter.Key()
 		snapData.KV = append(snapData.KV,
 			&roachpb.RaftSnapshotData_KeyValue{
-				Key:      key.Key,
-				Value:    iter.Value(),
-				WallTime: key.Timestamp.WallTime,
-				Logical:  key.Timestamp.Logical,
+				Key:       key.Key,
+				Value:     iter.Value(),
+				Timestamp: key.Timestamp,
 			})
 	}
 
@@ -482,7 +481,7 @@ func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 	for _, kv := range snapData.KV {
 		mvccKey := engine.MVCCKey{
 			Key:       kv.Key,
-			Timestamp: roachpb.Timestamp{WallTime: kv.WallTime, Logical: kv.Logical},
+			Timestamp: kv.Timestamp,
 		}
 		if err := batch.Put(mvccKey, kv.Value); err != nil {
 			return err

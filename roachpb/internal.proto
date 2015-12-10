@@ -20,6 +20,7 @@ package cockroach.roachpb;
 option go_package = "roachpb";
 
 import "cockroach/roachpb/api.proto";
+import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/metadata.proto";
 import weak "gogoproto/gogo.proto";
 
@@ -119,8 +120,7 @@ message RaftSnapshotData {
   message KeyValue {
     optional bytes key = 1;
     optional bytes value = 2;
-    optional int64 wall_time = 3 [(gogoproto.nullable) = false];
-    optional int32 logical = 4 [(gogoproto.nullable) = false];
+    optional Timestamp timestamp = 3 [(gogoproto.nullable) = false];
   }
   // The latest RangeDescriptor
   optional RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false];
