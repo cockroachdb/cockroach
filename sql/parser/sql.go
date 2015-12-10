@@ -60,7 +60,7 @@ type sqlSymType struct {
 	alterTableCmd  AlterTableCmd
 	alterTableCmds AlterTableCmds
 	isoLevel       IsolationLevel
-	idxElem        *IndexElem
+	idxElem        IndexElem
 	idxElems       []IndexElem
 }
 
@@ -4912,19 +4912,19 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1310
 		{
-			sqlVAL.idxElems = []IndexElem{*sqlDollar[1].idxElem}
+			sqlVAL.idxElems = []IndexElem{sqlDollar[1].idxElem}
 		}
 	case 207:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:1314
 		{
-			sqlVAL.idxElems = append(sqlDollar[1].idxElems, *sqlDollar[3].idxElem)
+			sqlVAL.idxElems = append(sqlDollar[1].idxElems, sqlDollar[3].idxElem)
 		}
 	case 208:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:1323
 		{
-			sqlVAL.idxElem = &IndexElem{Column: Name(sqlDollar[1].str), Direction: sqlDollar[3].dir}
+			sqlVAL.idxElem = IndexElem{Column: Name(sqlDollar[1].str), Direction: sqlDollar[3].dir}
 		}
 	case 209:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]

@@ -83,8 +83,8 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 		StoreColumnNames: n.Storing,
 	}
 	// Fill in columns and directions.
-	cols := make([]string, len(n.Columns), len(n.Columns))
-	dirs := make([]IndexDescriptor_Direction, len(n.Columns), len(n.Columns))
+	cols := make([]string, len(n.Columns))
+	dirs := make([]IndexDescriptor_Direction, len(n.Columns))
 	for i, c := range n.Columns {
 		cols[i] = string(c.Column)
 		switch c.Direction {

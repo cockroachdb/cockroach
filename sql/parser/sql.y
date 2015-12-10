@@ -74,8 +74,8 @@ func unimplemented() {
   alterTableCmd  AlterTableCmd
   alterTableCmds AlterTableCmds
   isoLevel       IsolationLevel
-  idxElem        *IndexElem
-  idxElems       []IndexElem 	
+  idxElem        IndexElem
+  idxElems       []IndexElem
 }
 
 %type <stmts> stmt_block
@@ -1308,11 +1308,11 @@ opt_unique:
 index_params:
   index_elem
   {
-    $$ = []IndexElem{*$1}
+    $$ = []IndexElem{$1}
   }
 | index_params ',' index_elem
   {
-    $$ = append($1, *$3)
+    $$ = append($1, $3)
   }
 
 // Index attributes can be either simple column references, or arbitrary
@@ -1321,7 +1321,7 @@ index_params:
 index_elem:
   name opt_collate opt_asc_desc
   {
-		$$ = &IndexElem{Column: Name($1), Direction: $3}
+    $$ = IndexElem{Column: Name($1), Direction: $3}
   }
 | func_expr_windowless opt_collate opt_asc_desc { unimplemented() }
 | '(' a_expr ')' opt_collate opt_asc_desc { unimplemented() }

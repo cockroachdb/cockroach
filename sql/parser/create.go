@@ -79,7 +79,7 @@ func (node *CreateIndex) String() string {
 		buf.WriteString("IF NOT EXISTS ")
 	}
 	if node.Name != "" {
-		fmt.Fprintf(&buf, "%s ", node.Name)
+		buf.WriteString(string(node.Name))
 	}
 
 	// Accumulate the columns and their directions.
@@ -91,7 +91,7 @@ func (node *CreateIndex) String() string {
 		colsBuf.WriteString(IndexElem(n).String())
 	}
 
-	fmt.Fprintf(&buf, "ON %s (%s)", node.Table, colsBuf.String())
+	fmt.Fprintf(&buf, "ON %s (%s)", node.Table, colsBuf)
 
 	if node.Storing != nil {
 		fmt.Fprintf(&buf, " STORING (%s)", node.Storing)
