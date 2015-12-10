@@ -27,16 +27,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
-	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -551,12 +547,6 @@ func (t *tableState) releaseNodeLease(lease *LeaseState, store LeaseStore) error
 type LeaseManager struct {
 	LeaseStore
 
-	// System Config and mutex.
-	systemConfig   config.SystemConfig
-	systemConfigMu sync.RWMutex
-	// A channel used to notify the lease manager of a new config.
-	newConfig chan struct{}
-
 	mu     sync.Mutex
 	tables map[ID]*tableState
 }
@@ -569,10 +559,7 @@ func NewLeaseManager(nodeID uint32, db client.DB, clock *hlc.Clock) *LeaseManage
 			clock:  clock,
 			nodeID: nodeID,
 		},
-		// Create channel that receives new system config notifications.
-		// The channel has a size of 1 to prevent gossip from blocking on it.
-		newConfig: make(chan struct{}, 1),
-		tables:    make(map[ID]*tableState),
+		tables: make(map[ID]*tableState),
 	}
 }
 
@@ -605,78 +592,6 @@ func (m *LeaseManager) findTableState(tableID ID, create bool) *tableState {
 		m.tables[tableID] = t
 	}
 	return t
-}
-
-// updateSystemConfig is called whenever the system config gossip entry is updated.
-func (m *LeaseManager) updateSystemConfig(cfg *config.SystemConfig) {
-	m.systemConfigMu.Lock()
-	defer m.systemConfigMu.Unlock()
-	m.systemConfig = *cfg
-	// notify manager about the new config.
-	select {
-	case m.newConfig <- struct{}{}:
-	default:
-	}
-}
-
-// getSystemConfig returns a pointer to the latest system config.
-func (m *LeaseManager) getSystemConfig() config.SystemConfig {
-	m.systemConfigMu.RLock()
-	defer m.systemConfigMu.RUnlock()
-	return m.systemConfig
-}
-
-// RefreshLeases starts a goroutine that refreshes the lease manager
-// leases for tables received in the latest system configuration via gossip.
-func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gossip.Gossip) {
-	s.RunWorker(func() {
-		descKeyPrefix := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
-		gossip.RegisterSystemConfigCallback(m.updateSystemConfig)
-		for {
-			select {
-			case <-m.newConfig:
-				// Read all tables and their versions
-				cfg := m.getSystemConfig()
-				if log.V(2) {
-					log.Info("received a new config %v", cfg)
-				}
-
-				// Loop through the configuration to find all the tables.
-				for _, kv := range cfg.Values {
-					if !bytes.HasPrefix(kv.Key, descKeyPrefix) {
-						continue
-					}
-					// Attempt to unmarshal config into a table/database descriptor.
-					var descriptor Descriptor
-					if err := kv.Value.GetProto(&descriptor); err != nil {
-						log.Warningf("unable to unmarshal descriptor %v", kv.Value)
-						continue
-					}
-					switch union := descriptor.Union.(type) {
-					case *Descriptor_Table:
-						table := union.Table
-						if err := table.Validate(); err != nil {
-							log.Errorf("received invalid table descriptor: %v", table)
-							continue
-						}
-						if log.V(2) {
-							log.Infof("refreshing lease table: %d, version: %d", table.ID, table.Version)
-						}
-						// Try to refresh the table lease to one >= this version.
-						if err := m.refreshLease(db, table.ID, table.Version); err != nil {
-							log.Warning(err)
-						}
-
-					case *Descriptor_Database:
-						// Ignore.
-					}
-				}
-
-			case <-s.ShouldStop():
-				return
-			}
-		}
-	})
 }
 
 // refreshLease tries to refresh the node's table lease.
