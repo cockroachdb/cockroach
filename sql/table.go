@@ -79,8 +79,10 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 		case *parser.IndexTableDef:
 			idx := IndexDescriptor{
 				Name:             string(d.Name),
-				ColumnNames:      d.Columns,
 				StoreColumnNames: d.Storing,
+			}
+			if err := idx.fillColumns(d.Columns); err != nil {
+				return desc, err
 			}
 			if err := desc.AddIndex(idx, false); err != nil {
 				return desc, err
@@ -89,8 +91,10 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 			idx := IndexDescriptor{
 				Name:             string(d.Name),
 				Unique:           true,
-				ColumnNames:      d.Columns,
 				StoreColumnNames: d.Storing,
+			}
+			if err := idx.fillColumns(d.Columns); err != nil {
+				return desc, err
 			}
 			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
 				return desc, err
@@ -163,8 +167,9 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 	var idx *IndexDescriptor
 	if d.PrimaryKey || d.Unique {
 		idx = &IndexDescriptor{
-			Unique:      true,
-			ColumnNames: []string{string(d.Name)},
+			Unique:           true,
+			ColumnNames:      []string{string(d.Name)},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 		}
 	}
 

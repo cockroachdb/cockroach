@@ -47,6 +47,7 @@ func TestParse(t *testing.T) {
 		{`CREATE INDEX a ON b.c (d)`},
 		{`CREATE INDEX ON a (b)`},
 		{`CREATE INDEX ON a (b) STORING (c)`},
+		{`CREATE INDEX ON a (b ASC, c DESC)`},
 		{`CREATE UNIQUE INDEX a ON b (c)`},
 		{`CREATE UNIQUE INDEX a ON b (c) STORING (d)`},
 		{`CREATE UNIQUE INDEX a ON b.c (d)`},
@@ -73,6 +74,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT, UNIQUE (b) STORING (c))`},
 		{`CREATE TABLE a (b INT, INDEX (b))`},
 		{`CREATE TABLE a (b INT, INDEX (b) STORING (c))`},
+		{`CREATE TABLE a (b INT, c TEXT, INDEX (b ASC, c DESC) STORING (c))`},
 		{`CREATE TABLE a.b (b INT)`},
 		{`CREATE TABLE IF NOT EXISTS a (b INT)`},
 
@@ -392,7 +394,6 @@ func TestParse2(t *testing.T) {
 		sql      string
 		expected string
 	}{
-		{`CREATE INDEX ON a (b ASC, c DESC)`, `CREATE INDEX ON a (b, c)`},
 		{`CREATE TABLE a (b INT, UNIQUE INDEX foo (b))`,
 			`CREATE TABLE a (b INT, CONSTRAINT foo UNIQUE (b))`},
 		{`CREATE INDEX ON a (b) COVERING (c)`, `CREATE INDEX ON a (b) STORING (c)`},

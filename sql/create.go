@@ -80,8 +80,10 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 	indexDesc := IndexDescriptor{
 		Name:             string(n.Name),
 		Unique:           n.Unique,
-		ColumnNames:      n.Columns,
 		StoreColumnNames: n.Storing,
+	}
+	if err := indexDesc.fillColumns(n.Columns); err != nil {
+		return nil, err
 	}
 
 	tableDesc.addIndexMutation(indexDesc, DescriptorMutation_ADD)
@@ -139,8 +141,9 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		}
 		desc.AddColumn(col)
 		idx := IndexDescriptor{
-			Unique:      true,
-			ColumnNames: []string{col.Name},
+			Unique:           true,
+			ColumnNames:      []string{col.Name},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 		}
 		if err := desc.AddIndex(idx, true); err != nil {
 			return nil, err
