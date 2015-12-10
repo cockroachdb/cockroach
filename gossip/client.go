@@ -147,7 +147,7 @@ func (c *client) handleGossip(g *Gossip, call *netrpc.Call) error {
 				log.Infof("received %d (%d fresh) info(s) from %s", infoCount, freshCount, c.addr)
 			}
 		}
-	} else {
+	} else if reply.Alternate != nil {
 		log.Infof("sent %d info(s) to %s", len(call.Args.(*Request).Delta), c.addr)
 	}
 	c.peerID = reply.NodeID
