@@ -46,10 +46,6 @@ void EncodeUint64Decreasing(std::string* buf, uint64_t v);
 // successful decode. The decoded bytes are returned in *decoded.
 bool DecodeBytes(rocksdb::Slice* buf, std::string* decoded);
 
-// DecodeUvarint64 decodes a varint encoded uint64 from a buffer, returning
-// true on a successful decode. The decoded value is returned in *value.
-bool DecodeUvarint64(rocksdb::Slice* buf, uint64_t* value);
-
 // DecodedUint32 decodes a fixed-length encoded uint32 from a buffer, returning
 // true on a successful decode. The decoded value is returned in *value.
 bool DecodeUint32(rocksdb::Slice* buf, uint32_t* value);

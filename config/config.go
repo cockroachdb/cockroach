@@ -101,18 +101,12 @@ func ObjectIDForKey(key roachpb.RKey) (uint32, bool) {
 	if key.Equal(roachpb.RKeyMax) {
 		return 0, false
 	}
-	if key.Equal(keys.TableDataPrefix) {
+	if encoding.PeekType(key) != encoding.Int {
 		// TODO(marc): this should eventually return SystemDatabaseID.
 		return 0, false
 	}
-	remaining := bytes.TrimPrefix(key, keys.TableDataPrefix)
-	if len(remaining) == len(key) {
-		// TrimPrefix returns the input untouched if the prefix doesn't match.
-		return 0, false
-	}
-
 	// Consume first encoded int.
-	_, id64, err := encoding.DecodeUvarint(remaining)
+	_, id64, err := encoding.DecodeUvarint(key)
 	return uint32(id64), err == nil
 }
 

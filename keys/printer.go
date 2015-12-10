@@ -55,8 +55,8 @@ var (
 			{name: "/StatusStore", prefix: StatusStorePrefix, ppFunc: decodeKeyPrint},
 			{name: "/StatusNode", prefix: StatusNodePrefix, ppFunc: decodeKeyPrint},
 		}},
-		{name: "/Table", start: TableDataPrefix, end: nil, entries: []dictEntry{
-			{name: "", prefix: TableDataPrefix, ppFunc: decodeKeyPrint},
+		{name: "/Table", start: TableDataMin, end: TableDataMax, entries: []dictEntry{
+			{name: "", prefix: nil, ppFunc: decodeKeyPrint},
 		}},
 	}
 
@@ -200,7 +200,6 @@ func print(key roachpb.Key) string {
 	return fmt.Sprintf("/%q", []byte(key))
 }
 
-// TableDataPrefix
 func decodeKeyPrint(key roachpb.Key) string {
 	var buf bytes.Buffer
 	for k := 0; len(key) > 0; k++ {

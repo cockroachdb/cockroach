@@ -1877,7 +1877,7 @@ func TestValidSplitKeys(t *testing.T) {
 		{roachpb.Key("\x05"), true},
 		{roachpb.Key("a"), true},
 		{roachpb.Key("\xff"), true},
-		{roachpb.Key("\xff\x01"), false},
+		{roachpb.Key("\xff\x01"), true},
 		{roachpb.Key(keys.MakeTablePrefix(keys.MaxReservedDescID)), false},
 		{roachpb.Key(keys.MakeTablePrefix(keys.MaxReservedDescID + 1)), true},
 	}

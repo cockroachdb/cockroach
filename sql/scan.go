@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -74,11 +73,9 @@ type span struct {
 // prettyKey pretty-prints the specified key, skipping over the first skip
 // fields.
 func prettyKey(key roachpb.Key, skip int) string {
-	if !bytes.HasPrefix(key, keys.TableDataPrefix) {
-		return fmt.Sprintf("index key missing table data prefix: %q vs %q",
-			key, keys.TableDataPrefix)
+	if encoding.PeekType(key) != encoding.Int {
+		return fmt.Sprintf("invalid key prefix: %q", key)
 	}
-	key = key[len(keys.TableDataPrefix):]
 
 	var buf bytes.Buffer
 	for k := 0; len(key) > 0; k++ {
