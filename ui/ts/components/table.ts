@@ -44,6 +44,16 @@ module Components {
        * of view() will be used to sort the column.
        */
       sortValue?: (r: T) => any;
+      /**
+       * rollup is a function that takes the table values and reduces them to
+       * a single value - typically average or sum.
+       */
+       rollup?: (rows: T[]) => string|MithrilElement;
+       /**
+        * section is a string that indicates the column section this column
+        * is part of
+        */
+       section?: string;
     }
 
     /**
@@ -64,6 +74,11 @@ module Components {
        */
       rows: Utils.ReadOnlyProperty<T[]>;
     }
+
+    interface SectionWidth {
+      name: string;
+      width: number;
+    };
 
     class Controller<T> {
       data: TableData<T>;
@@ -123,6 +138,44 @@ module Components {
       }
 
       /**
+       * RenderSectionHeaders returns a mithril element which contains the
+       * header section row for the table. If there are no sections it
+       * returns null.
+       */
+      RenderSectionHeaders(): MithrilElement {
+        let cols = this.data.columns();
+
+        let sections: SectionWidth[] = _.reduce(
+            cols,
+            function(memo: SectionWidth[], col: TableColumn<T>): SectionWidth[] {
+              let lastSection = _.last(memo);
+              let name: string = col.section || null;
+              if (!lastSection || (lastSection.name !== name)) {
+                memo.push({
+                  name: name,
+                  width: 1,
+                });
+              } else {
+                lastSection.width += 1;
+              }
+              return memo;
+            },
+            []
+          );
+        if (sections.length === 1 && !sections[0].name ) {
+          return null;
+        } else {
+          let renderedSections = sections.map((section: SectionWidth) =>
+            m(
+              "th",
+              {colspan: section.width, class: (section.name ? "header-section" : "") },
+              section.name
+            ));
+          return m("tr.header-section", renderedSections);
+        }
+      }
+
+      /**
        * RenderHeaders returns a mithril element which contains the header row
        * for the table.
        */
@@ -130,13 +183,36 @@ module Components {
         let cols = this.data.columns();
         let sortClass = "sorted" + (this._sortAscend() ? " ascending" : "");
         let renderedCols = cols.map((col: TableColumn<T>) =>
-          m("th",
+          m("th.column",
             {
               onclick: (e: any): void => this.SetSortColumn(col),
               className: this.IsSortColumn(col) ? sortClass : "",
             },
             col.title));
-        return m("tr", renderedCols);
+        return m("tr.column", renderedCols);
+      }
+
+      /**
+       * RenderRollups returns a mithril element which contains the rolled-up
+       * value for the column. If there are no rollups it returns null.
+       */
+      RenderRollups(): MithrilElement {
+        let cols = this.data.columns();
+        let rows = this.sortedRows();
+        let showRollups: boolean = false;
+        let renderedRollups = _.map(cols, (col: TableColumn<T>) => {
+          if (col.rollup) {
+            showRollups = true;
+            return m("th.rollup", col.rollup(rows));
+          } else {
+            return m("th.rollup");
+          }
+        });
+        if (showRollups) {
+          return m("tr.rollup", renderedRollups);
+        } else {
+          return null;
+        }
       }
 
       /**
@@ -165,7 +241,7 @@ module Components {
 
     export function view<T>(ctrl: Controller<T>): MithrilElement {
       return m("table", [
-        m("thead", ctrl.RenderHeaders()),
+        m("thead", [ctrl.RenderSectionHeaders(), ctrl.RenderHeaders(), ctrl.RenderRollups()]),
         m("tbody", ctrl.RenderRows()),
       ]);
     }
