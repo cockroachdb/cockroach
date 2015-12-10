@@ -31,12 +31,7 @@ const (
 	encodedNull    = 0x00
 	encodedNotNull = 0x01
 
-	intMin   = 0x05 // keys.SystemMax
-	intZero  = intMin + 8
-	intSmall = 63
-	intMax   = intZero + intSmall + 8
-
-	floatNaN              = intMax + 1
+	floatNaN              = encodedNotNull + 1
 	floatNegativeInfinity = floatNaN + 1
 	floatNegLarge         = floatNegativeInfinity + 1
 	floatNegMedium        = floatNegLarge + 11
@@ -50,6 +45,13 @@ const (
 
 	bytesMarker byte = floatInfinity + 1
 	timeMarker  byte = bytesMarker + 1
+
+	// intMin is chosen such that the range of int tags does not overlap the
+	// ascii character set that is frequently used in testing.
+	intMin   = 0x80
+	intZero  = intMin + 8
+	intSmall = 111
+	intMax   = intZero + intSmall + 8 // 0xff
 )
 
 // EncodeUint32 encodes the uint32 value using a big-endian 8 byte
@@ -337,7 +339,7 @@ type escapes struct {
 
 var (
 	ascendingEscapes  = escapes{escape, escapedTerm, escaped00, escapedFF, bytesMarker}
-	descendingEscapes = escapes{^escape, ^escapedTerm, ^escaped00, ^escapedFF, ^bytesMarker}
+	descendingEscapes = escapes{^escape, ^escapedTerm, ^escaped00, ^escapedFF, bytesMarker}
 )
 
 // EncodeBytes encodes the []byte value using an escape-based
@@ -369,7 +371,7 @@ func EncodeBytes(b []byte, data []byte) []byte {
 func EncodeBytesDecreasing(b []byte, data []byte) []byte {
 	n := len(b)
 	b = EncodeBytes(b, data)
-	onesComplement(b[n:])
+	onesComplement(b[n+1:])
 	return b
 }
 

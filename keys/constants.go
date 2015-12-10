@@ -161,9 +161,9 @@ var (
 	StatusNodePrefix = roachpb.Key(MakeKey(StatusPrefix, roachpb.RKey("node-")))
 
 	// TableDataMin is the start of the range of table data keys.
-	TableDataMin = roachpb.Key{0x05}
+	TableDataMin = roachpb.Key{0x80}
 	// TableDataMin is the end of the range of table data keys.
-	TableDataMax = roachpb.Key{0x55}
+	TableDataMax = roachpb.Key{0xff, 0xff}
 
 	// UserTableDataMin is the start key of user structured data.
 	UserTableDataMin = roachpb.Key(MakeTablePrefix(MaxReservedDescID + 1))

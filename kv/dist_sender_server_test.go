@@ -280,14 +280,14 @@ func initReverseScanTestEnv(t *testing.T) (*server.TestServer, *client.DB) {
 
 	// Set up multiple ranges:
 	// ["", "b"),["b", "e") ,["e", "g") and ["g", "\xff\xff").
-	for _, key := range []string{"\xffb", "\xffe", "\xffg"} {
+	for _, key := range []string{"b", "e", "g"} {
 		// Split the keyspace at the given key.
 		if err := db.AdminSplit(key); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// Write keys before, at, and after the split key.
-	for _, key := range []string{"\xffa", "\xffb", "\xffc", "\xffd", "\xffe", "\xfff", "\xffg", "\xffh"} {
+	for _, key := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
 		if err := db.Put(key, "value"); err != nil {
 			t.Fatal(err)
 		}
@@ -303,32 +303,30 @@ func TestSingleRangeReverseScan(t *testing.T) {
 	defer s.Stop()
 
 	// Case 1: Request.EndKey is in the middle of the range.
-	if rows, err := db.ReverseScan("\xffb", "\xffd", 0); err != nil {
+	if rows, err := db.ReverseScan("b", "d", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 2 {
 		t.Errorf("expected 2 rows; got %d", l)
 	}
 	// Case 2: Request.EndKey is equal to the EndKey of the range.
-	if rows, err := db.ReverseScan("\xffe", "\xffg", 0); err != nil {
+	if rows, err := db.ReverseScan("e", "g", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 2 {
 		t.Errorf("expected 2 rows; got %d", l)
 	}
 	// Case 3: Test roachpb.KeyMax
-	if rows, err := db.ReverseScan("\xffg", roachpb.KeyMax, 0); err != nil {
-		t.Fatalf("unexpected error on ReverseScan: %s", err)
-	} else if l := len(rows); l != 2 {
-		t.Errorf("expected 2 rows; got %d", l)
-	}
-	// Case 4: Test keys.SystemMax
-	// This span covers the system DB keys. Note sql.GetInitialSystemValues
-	// returns one key before keys.SystemMax, but our scan is including one key
-	// (\xffa) created for the test.
-	wanted := len(sql.GetInitialSystemValues())
-	if rows, err := db.ReverseScan(keys.SystemMax, "\xffb", 0); err != nil {
+	// This span covers the system DB keys.
+	wanted := 1 + len(sql.GetInitialSystemValues())
+	if rows, err := db.ReverseScan("g", roachpb.KeyMax, 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != wanted {
 		t.Errorf("expected %d rows; got %d", wanted, l)
+	}
+	// Case 4: Test keys.SystemMax
+	if rows, err := db.ReverseScan(keys.SystemMax, "b", 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
+	} else if l := len(rows); l != 1 {
+		t.Errorf("expected 1 row; got %d", l)
 	}
 }
 
@@ -340,13 +338,13 @@ func TestMultiRangeReverseScan(t *testing.T) {
 	defer s.Stop()
 
 	// Case 1: Request.EndKey is in the middle of the range.
-	if rows, err := db.ReverseScan("\xffa", "\xffd", 0); err != nil {
+	if rows, err := db.ReverseScan("a", "d", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
 	}
 	// Case 2: Request.EndKey is equal to the EndKey of the range.
-	if rows, err := db.ReverseScan("\xffd", "\xffg", 0); err != nil {
+	if rows, err := db.ReverseScan("d", "g", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
@@ -362,11 +360,11 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 
 	// Case 1: An encounter with a range split.
 	// Split the range ["b", "e") at "c".
-	if err := db.AdminSplit("\xffc"); err != nil {
+	if err := db.AdminSplit("c"); err != nil {
 		t.Fatal(err)
 	}
 	// The ReverseScan will run into a stale descriptor.
-	if rows, err := db.ReverseScan("\xffa", "\xffd", 0); err != nil {
+	if rows, err := db.ReverseScan("a", "d", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
@@ -374,10 +372,10 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 
 	// Case 2: encounter with range merge .
 	// Merge the range ["e", "g") and ["g", "\xff\xff") .
-	if err := db.AdminMerge("\xffe"); err != nil {
+	if err := db.AdminMerge("e"); err != nil {
 		t.Fatal(err)
 	}
-	if rows, err := db.ReverseScan("\xffd", "\xffg", 0); err != nil {
+	if rows, err := db.ReverseScan("d", "g", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)

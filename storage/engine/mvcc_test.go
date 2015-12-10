@@ -1905,7 +1905,7 @@ func TestFindSplitKey(t *testing.T) {
 	// as the middle key of the interval.
 	splitReservoirSize := 100
 	for i := 0; i < splitReservoirSize; i++ {
-		k := fmt.Sprintf("\xff%09d", i)
+		k := fmt.Sprintf("%09d", i)
 		v := strings.Repeat("X", 10-len(k))
 		val := roachpb.MakeValueFromString(v)
 		// Write the key and value through MVCC

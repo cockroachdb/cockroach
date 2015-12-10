@@ -74,7 +74,7 @@ type span struct {
 // fields.
 func prettyKey(key roachpb.Key, skip int) string {
 	if encoding.PeekType(key) != encoding.Int {
-		return fmt.Sprintf("index key missing table data prefix: %q", key)
+		return fmt.Sprintf("invalid key prefix: %q", key)
 	}
 
 	var buf bytes.Buffer

@@ -73,65 +73,61 @@ func (c cliTest) RunWithArgs(a []string) {
 	}
 }
 
-// Note: The tests below need to avoid using keys containing valid table data
-// prefixes since such keys are pretty-printed. To do so we prepend "~" (0x7e)
-// to all of the keys.
-
 func Example_basic() {
 	c := newCLITest()
 
-	c.Run("kv put ~a 1 ~b 2 ~c 3")
+	c.Run("kv put a 1 b 2 c 3")
 	c.Run("kv scan")
 	c.Run("kv revscan")
-	c.Run("kv del ~a ~c")
-	c.Run("kv get ~a")
-	c.Run("kv get ~b")
-	c.Run("kv inc ~c 1")
-	c.Run("kv inc ~c 10")
-	c.Run("kv inc ~c 100")
-	c.Run("kv inc ~c -- -60")
-	c.Run("kv inc ~c -- -9")
+	c.Run("kv del a c")
+	c.Run("kv get a")
+	c.Run("kv get b")
+	c.Run("kv inc c 1")
+	c.Run("kv inc c 10")
+	c.Run("kv inc c 100")
+	c.Run("kv inc c -- -60")
+	c.Run("kv inc c -- -9")
 	c.Run("kv scan")
 	c.Run("kv revscan")
-	c.Run("kv inc ~c b")
+	c.Run("kv inc c b")
 	c.Run("quit")
 
 	// Output:
-	// kv put ~a 1 ~b 2 ~c 3
+	// kv put a 1 b 2 c 3
 	// kv scan
-	// "~a"	"1"
-	// "~b"	"2"
-	// "~c"	"3"
+	// "a"	"1"
+	// "b"	"2"
+	// "c"	"3"
 	// 3 result(s)
 	// kv revscan
-	// "~c"	"3"
-	// "~b"	"2"
-	// "~a"	"1"
+	// "c"	"3"
+	// "b"	"2"
+	// "a"	"1"
 	// 3 result(s)
-	// kv del ~a ~c
-	// kv get ~a
-	// "~a" not found
-	// kv get ~b
+	// kv del a c
+	// kv get a
+	// "a" not found
+	// kv get b
 	// "2"
-	// kv inc ~c 1
+	// kv inc c 1
 	// 1
-	// kv inc ~c 10
+	// kv inc c 10
 	// 11
-	// kv inc ~c 100
+	// kv inc c 100
 	// 111
-	// kv inc ~c -- -60
+	// kv inc c -- -60
 	// 51
-	// kv inc ~c -- -9
+	// kv inc c -- -9
 	// 42
 	// kv scan
-	// "~b"	"2"
-	// "~c"	42
+	// "b"	"2"
+	// "c"	42
 	// 2 result(s)
 	// kv revscan
-	// "~c"	42
-	// "~b"	"2"
+	// "c"	42
+	// "b"	"2"
 	// 2 result(s)
-	// kv inc ~c b
+	// kv inc c b
 	// invalid increment: b: strconv.ParseInt: parsing "b": invalid syntax
 	// quit
 	// node drained and shutdown: ok
@@ -140,34 +136,34 @@ func Example_basic() {
 func Example_quoted() {
 	c := newCLITest()
 
-	c.Run(`kv put ~a\x00 日本語`)                                  // UTF-8 input text
-	c.Run(`kv put ~a\x01 \u65e5\u672c\u8a9e`)                   // explicit Unicode code points
-	c.Run(`kv put ~a\x02 \U000065e5\U0000672c\U00008a9e`)       // explicit Unicode code points
-	c.Run(`kv put ~a\x03 \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e`) // explicit UTF-8 bytes
+	c.Run(`kv put a\x00 日本語`)                                  // UTF-8 input text
+	c.Run(`kv put a\x01 \u65e5\u672c\u8a9e`)                   // explicit Unicode code points
+	c.Run(`kv put a\x02 \U000065e5\U0000672c\U00008a9e`)       // explicit Unicode code points
+	c.Run(`kv put a\x03 \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e`) // explicit UTF-8 bytes
 	c.Run(`kv scan`)
-	c.Run(`kv get ~a\x00`)
-	c.Run(`kv del ~a\x00`)
-	c.Run(`kv inc ~1\x01`)
-	c.Run(`kv get ~1\x01`)
+	c.Run(`kv get a\x00`)
+	c.Run(`kv del a\x00`)
+	c.Run(`kv inc 1\x01`)
+	c.Run(`kv get 1\x01`)
 	c.Run("quit")
 
 	// Output:
-	// kv put ~a\x00 日本語
-	// kv put ~a\x01 \u65e5\u672c\u8a9e
-	// kv put ~a\x02 \U000065e5\U0000672c\U00008a9e
-	// kv put ~a\x03 \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e
+	// kv put a\x00 日本語
+	// kv put a\x01 \u65e5\u672c\u8a9e
+	// kv put a\x02 \U000065e5\U0000672c\U00008a9e
+	// kv put a\x03 \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e
 	// kv scan
-	// "~a\x00"	"日本語"
-	// "~a\x01"	"日本語"
-	// "~a\x02"	"日本語"
-	// "~a\x03"	"日本語"
+	// "a\x00"	"日本語"
+	// "a\x01"	"日本語"
+	// "a\x02"	"日本語"
+	// "a\x03"	"日本語"
 	// 4 result(s)
-	// kv get ~a\x00
+	// kv get a\x00
 	// "日本語"
-	// kv del ~a\x00
-	// kv inc ~1\x01
+	// kv del a\x00
+	// kv inc 1\x01
 	// 1
-	// kv get ~1\x01
+	// kv get 1\x01
 	// 1
 	// quit
 	// node drained and shutdown: ok
@@ -182,15 +178,15 @@ func Example_insecure() {
 		log.Fatalf("Could not start server: %v", err)
 	}
 
-	c.Run("kv --insecure put ~a 1 ~b 2")
+	c.Run("kv --insecure put a 1 b 2")
 	c.Run("kv --insecure scan")
 	c.Run("quit --insecure")
 
 	// Output:
-	// kv --insecure put ~a 1 ~b 2
+	// kv --insecure put a 1 b 2
 	// kv --insecure scan
-	// "~a"	"1"
-	// "~b"	"2"
+	// "a"	"1"
+	// "b"	"2"
 	// 2 result(s)
 	// quit --insecure
 	// node drained and shutdown: ok
@@ -199,75 +195,75 @@ func Example_insecure() {
 func Example_ranges() {
 	c := newCLITest()
 
-	c.Run("kv put ~a 1 ~b 2 ~c 3 ~d 4")
+	c.Run("kv put a 1 b 2 c 3 d 4")
 	c.Run("kv scan")
 	c.Run("kv revscan")
-	c.Run("range split ~c")
+	c.Run("range split c")
 	c.Run("range ls")
 	c.Run("kv scan")
 	c.Run("kv revscan")
-	c.Run("range merge ~b")
+	c.Run("range merge b")
 	c.Run("range ls")
 	c.Run("kv scan")
 	c.Run("kv revscan")
-	c.Run("kv delrange ~a ~c")
+	c.Run("kv delrange a c")
 	c.Run("kv scan")
 	c.Run("quit")
 
 	// Output:
-	// kv put ~a 1 ~b 2 ~c 3 ~d 4
+	// kv put a 1 b 2 c 3 d 4
 	// kv scan
-	// "~a"	"1"
-	// "~b"	"2"
-	// "~c"	"3"
-	// "~d"	"4"
+	// "a"	"1"
+	// "b"	"2"
+	// "c"	"3"
+	// "d"	"4"
 	// 4 result(s)
 	// kv revscan
-	// "~d"	"4"
-	// "~c"	"3"
-	// "~b"	"2"
-	// "~a"	"1"
+	// "d"	"4"
+	// "c"	"3"
+	// "b"	"2"
+	// "a"	"1"
 	// 4 result(s)
-	// range split ~c
+	// range split c
 	// range ls
-	// /Min-"~c" [1]
+	// /Min-"c" [1]
 	// 	0: node-id=1 store-id=1
-	// "~c"-/Max [2]
+	// "c"-/Max [2]
 	// 	0: node-id=1 store-id=1
 	// 2 result(s)
 	// kv scan
-	// "~a"	"1"
-	// "~b"	"2"
-	// "~c"	"3"
-	// "~d"	"4"
+	// "a"	"1"
+	// "b"	"2"
+	// "c"	"3"
+	// "d"	"4"
 	// 4 result(s)
 	// kv revscan
-	// "~d"	"4"
-	// "~c"	"3"
-	// "~b"	"2"
-	// "~a"	"1"
+	// "d"	"4"
+	// "c"	"3"
+	// "b"	"2"
+	// "a"	"1"
 	// 4 result(s)
-	// range merge ~b
+	// range merge b
 	// range ls
 	// /Min-/Max [1]
 	// 	0: node-id=1 store-id=1
 	// 1 result(s)
 	// kv scan
-	// "~a"	"1"
-	// "~b"	"2"
-	// "~c"	"3"
-	// "~d"	"4"
+	// "a"	"1"
+	// "b"	"2"
+	// "c"	"3"
+	// "d"	"4"
 	// 4 result(s)
 	// kv revscan
-	// "~d"	"4"
-	// "~c"	"3"
-	// "~b"	"2"
-	// "~a"	"1"
+	// "d"	"4"
+	// "c"	"3"
+	// "b"	"2"
+	// "a"	"1"
 	// 4 result(s)
-	// kv delrange ~a ~c
+	// kv delrange a c
 	// kv scan
-	// "~c"	"3"
-	// "~d"	"4"
+	// "c"	"3"
+	// "d"	"4"
 	// 2 result(s)
 	// quit
 	// node drained and shutdown: ok
@@ -304,29 +300,29 @@ func Example_logging() {
 func Example_cput() {
 	c := newCLITest()
 
-	c.Run("kv put ~a 1 ~b 2 ~c 3 ~d 4")
+	c.Run("kv put a 1 b 2 c 3 d 4")
 	c.Run("kv scan")
-	c.Run("kv cput ~e 5")
-	c.Run("kv cput ~b 3 2")
+	c.Run("kv cput e 5")
+	c.Run("kv cput b 3 2")
 	c.Run("kv scan")
 	c.Run("quit")
 
 	// Output:
-	// kv put ~a 1 ~b 2 ~c 3 ~d 4
+	// kv put a 1 b 2 c 3 d 4
 	// kv scan
-	// "~a"	"1"
-	// "~b"	"2"
-	// "~c"	"3"
-	// "~d"	"4"
+	// "a"	"1"
+	// "b"	"2"
+	// "c"	"3"
+	// "d"	"4"
 	// 4 result(s)
-	// kv cput ~e 5
-	// kv cput ~b 3 2
+	// kv cput e 5
+	// kv cput b 3 2
 	// kv scan
-	// "~a"	"1"
-	// "~b"	"3"
-	// "~c"	"3"
-	// "~d"	"4"
-	// "~e"	"5"
+	// "a"	"1"
+	// "b"	"3"
+	// "c"	"3"
+	// "d"	"4"
+	// "e"	"5"
 	// 5 result(s)
 	// quit
 	// node drained and shutdown: ok
