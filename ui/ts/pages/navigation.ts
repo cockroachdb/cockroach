@@ -43,6 +43,16 @@ module AdminViews {
             route: "/stores",
             icon: SvgIcons.storesIcon,
           },
+          {
+            title: "Users",
+            route: "/sql?title=Users&q=" + encodeURIComponent("SELECT * FROM SYSTEM.USERS;"),
+            icon: SvgIcons.usersIcon,
+          },
+          {
+            title: "Databases",
+            route: "/sql?title=Databases&q=" + encodeURIComponent("SHOW DATABASES;"),
+            icon: SvgIcons.databaseIcon,
+          },
         ].map(function(v: {title: string; route: string; icon: string; liClass?: string; }): NavigationBar.Target {
           return {
             view: [
