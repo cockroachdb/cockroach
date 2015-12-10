@@ -706,7 +706,7 @@ func (s *state) start() {
 				}
 				g := s.groups[statusOp.groupID]
 				if g == nil {
-					log.Infof("node %v: g is nil for statusOp for gropuID %v", s.nodeID, statusOp.groupID)
+					log.Infof("node %v: g is nil for statusOp for groupID %v", s.nodeID, statusOp.groupID)
 					statusOp.ch <- nil
 					break
 				}
