@@ -227,6 +227,31 @@ func TestClientNodeID(t *testing.T) {
 	})
 }
 
+// TestClientDisconnectLoopback verifies that the gossip server
+// will drop an outgoing client connection that is already an
+// inbound client connection of another node.
+func TestClientDisconnectLoopback(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	local, _, stopper := startGossip(t)
+	defer stopper.Stop()
+	// startClient doesn't lock the underlying gossip
+	// object, so we acquire those locks here.
+	local.mu.Lock()
+	lAddr := local.is.NodeAddr
+	lclock := hlc.NewClock(hlc.UnixNano)
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
+	local.startClient(lAddr, rpcContext, stopper)
+	local.mu.Unlock()
+	local.manage(stopper)
+	util.SucceedsWithin(t, 10*time.Second, func() error {
+		ok := local.findClient(func(c *client) bool { return c.addr.String() == lAddr.String() }) != nil
+		if !ok {
+			return nil
+		}
+		return errors.New("local client still connected to itself")
+	})
+}
+
 // TestClientDisconnectRedundant verifies that the gossip server
 // will drop an outgoing client connection that is already an
 // inbound client connection of another node.

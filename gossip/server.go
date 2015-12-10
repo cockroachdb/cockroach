@@ -75,10 +75,6 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 		s.mu.Unlock()
 	}()
 
-	addr, err := args.Addr.Resolve()
-	if err != nil {
-		return nil, util.Errorf("addr %s could not be converted to net.Addr: %s", args.Addr, err)
-	}
 	lAddr, err := args.LAddr.Resolve()
 	if err != nil {
 		return nil, util.Errorf("local addr %s could not be converted to net.Addr: %s", args.LAddr, err)
@@ -107,9 +103,9 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 	if args.Delta != nil {
 		freshCount := s.is.combine(args.Delta, args.NodeID)
 		if log.V(1) {
-			log.Infof("received %s from %s (%d fresh)", args.Delta, addr, freshCount)
+			log.Infof("received %s from node %d (%d fresh)", args.Delta, args.NodeID, freshCount)
 		} else {
-			log.Infof("received %d (%d fresh) info(s) from %s", len(args.Delta), freshCount, addr)
+			log.Infof("received %d (%d fresh) info(s) from node %d", len(args.Delta), freshCount, args.NodeID)
 		}
 		if s.closed {
 			return nil, util.Errorf("gossip server shutdown")
@@ -133,7 +129,10 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 				randIdx := rand.Int31n(int32(len(s.lAddrMap)))
 				for _, cInfo := range s.lAddrMap {
 					if randIdx == 0 {
-						reply.Alternate = cInfo.addr
+						reply.AlternateAddr = cInfo.addr
+						reply.AlternateNodeID = cInfo.id
+						log.Infof("refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
+							args.NodeID, s.incoming.maxSize, cInfo.id, cInfo.addr)
 						break
 					}
 					randIdx--
