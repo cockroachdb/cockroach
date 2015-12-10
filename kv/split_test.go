@@ -103,7 +103,7 @@ func TestRangeSplitMeta(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 
-	splitKeys := []roachpb.RKey{roachpb.RKey("\xffG"), meta(roachpb.RKey("F")),
+	splitKeys := []roachpb.RKey{roachpb.RKey("G"), meta(roachpb.RKey("F")),
 		meta(roachpb.RKey("K")), meta(roachpb.RKey("H"))}
 
 	// Execute the consecutive splits.
@@ -139,13 +139,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 	txnChannel := make(chan struct{}, 1000)
 
 	// Set five split keys, about evenly spaced along the range of random keys.
-	splitKeys := []roachpb.Key{
-		roachpb.Key("\xffG"),
-		roachpb.Key("\xffR"),
-		roachpb.Key("\xffa"),
-		roachpb.Key("\xffl"),
-		roachpb.Key("\xffs"),
-	}
+	splitKeys := []roachpb.Key{roachpb.Key("G"), roachpb.Key("R"), roachpb.Key("a"), roachpb.Key("l"), roachpb.Key("s")}
 
 	// Start up the concurrent goroutines which run transactions.
 	const concurrency = 10
