@@ -62,11 +62,13 @@ type Response struct {
 	// Address of the responding client.
 	Addr cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=addr" json:"addr"`
 	// Non-nil means client should retry with this address.
-	Alternate *cockroach_util.UnresolvedAddr `protobuf:"bytes,3,opt,name=alternate" json:"alternate,omitempty"`
+	AlternateAddr *cockroach_util.UnresolvedAddr `protobuf:"bytes,3,opt,name=alternate_addr" json:"alternate_addr,omitempty"`
+	// Node ID of the alternate address, if alternate_addr is not nil.
+	AlternateNodeID github_com_cockroachdb_cockroach_roachpb.NodeID `protobuf:"varint,4,opt,name=alternate_node_id,proto3,casttype=github.com/cockroachdb/cockroach/roachpb.NodeID" json:"alternate_node_id,omitempty"`
 	// Delta of Infos originating at nodes newer than specified high water timestamps.
-	Delta map[string]*Info `protobuf:"bytes,4,rep,name=delta" json:"delta,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
+	Delta map[string]*Info `protobuf:"bytes,5,rep,name=delta" json:"delta,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 	// Map of all high water timestamps, by node, seen by the responder.
-	HighWaterStamps map[int32]int64 `protobuf:"bytes,5,rep,name=high_water_stamps" json:"high_water_stamps,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
+	HighWaterStamps map[int32]int64 `protobuf:"bytes,6,rep,name=high_water_stamps" json:"high_water_stamps,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
 }
 
 func (m *Response) Reset()         { *m = Response{} }
@@ -205,19 +207,24 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n4
-	if m.Alternate != nil {
+	if m.AlternateAddr != nil {
 		data[i] = 0x1a
 		i++
-		i = encodeVarintGossip(data, i, uint64(m.Alternate.Size()))
-		n5, err := m.Alternate.MarshalTo(data[i:])
+		i = encodeVarintGossip(data, i, uint64(m.AlternateAddr.Size()))
+		n5, err := m.AlternateAddr.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n5
 	}
+	if m.AlternateNodeID != 0 {
+		data[i] = 0x20
+		i++
+		i = encodeVarintGossip(data, i, uint64(m.AlternateNodeID))
+	}
 	if len(m.Delta) > 0 {
 		for k := range m.Delta {
-			data[i] = 0x22
+			data[i] = 0x2a
 			i++
 			v := m.Delta[k]
 			if v == nil {
@@ -242,7 +249,7 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 	}
 	if len(m.HighWaterStamps) > 0 {
 		for k := range m.HighWaterStamps {
-			data[i] = 0x2a
+			data[i] = 0x32
 			i++
 			v := m.HighWaterStamps[k]
 			mapSize := 1 + sovGossip(uint64(k)) + 1 + sovGossip(uint64(v))
@@ -377,9 +384,12 @@ func (m *Response) Size() (n int) {
 	}
 	l = m.Addr.Size()
 	n += 1 + l + sovGossip(uint64(l))
-	if m.Alternate != nil {
-		l = m.Alternate.Size()
+	if m.AlternateAddr != nil {
+		l = m.AlternateAddr.Size()
 		n += 1 + l + sovGossip(uint64(l))
+	}
+	if m.AlternateNodeID != 0 {
+		n += 1 + sovGossip(uint64(m.AlternateNodeID))
 	}
 	if len(m.Delta) > 0 {
 		for k, v := range m.Delta {
@@ -856,7 +866,7 @@ func (m *Response) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Alternate", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field AlternateAddr", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -880,14 +890,33 @@ func (m *Response) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Alternate == nil {
-				m.Alternate = &cockroach_util.UnresolvedAddr{}
+			if m.AlternateAddr == nil {
+				m.AlternateAddr = &cockroach_util.UnresolvedAddr{}
 			}
-			if err := m.Alternate.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.AlternateAddr.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AlternateNodeID", wireType)
+			}
+			m.AlternateNodeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGossip
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.AlternateNodeID |= (github_com_cockroachdb_cockroach_roachpb.NodeID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Delta", wireType)
 			}
@@ -1003,7 +1032,7 @@ func (m *Response) Unmarshal(data []byte) error {
 			}
 			m.Delta[mapkey] = mapvalue
 			iNdEx = postIndex
-		case 5:
+		case 6:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field HighWaterStamps", wireType)
 			}
