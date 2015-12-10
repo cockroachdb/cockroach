@@ -114,12 +114,12 @@ func (e *Executor) getSystemConfig() config.SystemConfig {
 
 // Execute the statement(s) in the given request and return a response.
 // On error, the returned integer is an HTTP error code.
-func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
+func (e *Executor) ExecuteStatement(user string, session Session, Sql string, params []driver.Datum) (driver.Response, int, error) {
 	planMaker := plannerPool.Get().(*planner)
 	defer plannerPool.Put(planMaker)
 
 	*planMaker = planner{
-		user: args.GetUser(),
+		user: user,
 		evalCtx: parser.EvalContext{
 			NodeID:  e.nodeID,
 			ReCache: e.reCache,
@@ -129,12 +129,9 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 		},
 		leaseMgr:     e.leaseMgr,
 		systemConfig: e.getSystemConfig(),
+		session: session,
 	}
 
-	// Pick up current session state.
-	if err := proto.Unmarshal(args.Session, &planMaker.session); err != nil {
-		return args.CreateReply(), http.StatusBadRequest, err
-	}
 	// Resume a pending transaction if present.
 	if planMaker.session.Txn != nil {
 		txn := client.NewTxn(e.db)
@@ -147,8 +144,8 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	planMaker.params = parameters(args.Params)
-	reply := e.execStmts(args.Sql, planMaker)
+	planMaker.params = parameters(params)
+	reply := e.execStmts(Sql, planMaker)
 
 	// Send back the session state even if there were application-level errors.
 	// Add transaction to session state.
@@ -164,11 +161,21 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 	}
 	bytes, err := proto.Marshal(&planMaker.session)
 	if err != nil {
-		return args.CreateReply(), http.StatusInternalServerError, err
+		return driver.Response{}, http.StatusInternalServerError, err
 	}
 	reply.Session = bytes
 
 	return reply, 0, nil
+}
+
+// Execute the statement(s) in the given request and return a response.
+// On error, the returned integer is an HTTP error code.
+func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
+	var session Session
+	if err := proto.Unmarshal(args.Session, &session); err != nil {
+		return args.CreateReply(), http.StatusBadRequest, err
+	}
+	return e.ExecuteStatement(args.GetUser(), session, args.Sql, args.Params)
 }
 
 // exec executes the request. Any error encountered is returned; it is

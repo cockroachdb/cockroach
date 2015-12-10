@@ -200,6 +200,9 @@ func (DTimestamp) Walk(_ Visitor) {}
 // Walk implements the Expr interface.
 func (DTuple) Walk(_ Visitor) {}
 
+// Walk implements the Expr interface.
+func (DValArg) Walk(_ Visitor) {}
+
 // WalkExpr traverses the nodes in an expression.
 func WalkExpr(v Visitor, expr Expr) Expr {
 	v, expr = v.Visit(expr, true)
@@ -219,9 +222,17 @@ type Args interface {
 	Arg(name string) (Datum, bool)
 }
 
+type MapArgs map[string]Datum
+
+func (m MapArgs) Arg(name string) (Datum, bool) {
+	d, ok := m[name]
+	return d, ok
+}
+
 type argVisitor struct {
-	args Args
-	err  error
+	args     Args
+	optional bool
+	err      error
 }
 
 var _ Visitor = &argVisitor{}
@@ -236,6 +247,9 @@ func (v *argVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 	}
 	d, found := v.args.Arg(placeholder.name)
 	if !found {
+		if v.optional {
+			return v, expr
+		}
 		v.err = fmt.Errorf("arg %s not found", placeholder)
 		return nil, expr
 	}
@@ -246,6 +260,17 @@ func (v *argVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 // supplied with the query.
 func FillArgs(stmt Statement, args Args) error {
 	v := argVisitor{args: args}
+	WalkStmt(&v, stmt)
+	return v.err
+}
+
+// FillArgsOptional replaces any placeholder nodes in the expression with
+// arguments supplied with the query. Missing args are ignored.
+func FillArgsOptional(stmt Statement, args Args) error {
+	v := argVisitor{
+		args:     args,
+		optional: true,
+	}
 	WalkStmt(&v, stmt)
 	return v.err
 }

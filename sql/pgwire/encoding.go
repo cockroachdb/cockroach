@@ -21,6 +21,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"unsafe"
 
@@ -106,6 +107,24 @@ func (b *readBuffer) getString() (string, error) {
 	return *((*string)(unsafe.Pointer(&s))), nil
 }
 
+func (b *readBuffer) getByte() (byte, error) {
+	if len(b.msg) < 1 {
+		return 0, util.Errorf("insufficient data: %d", len(b.msg))
+	}
+	v := b.msg[0]
+	b.msg = b.msg[1:]
+	return v, nil
+}
+
+func (b *readBuffer) getBytes(n int32) ([]byte, error) {
+	if len(b.msg) < n {
+		return 0, util.Errorf("insufficient data: %d", len(b.msg))
+	}
+	v := b.msg[:n]
+	b.msg = b.msg[n:]
+	return v, nil
+}
+
 func (b *readBuffer) getInt16() (int16, error) {
 	if len(b.msg) < 2 {
 		return 0, util.Errorf("insufficient data: %d", len(b.msg))
@@ -153,6 +172,7 @@ func (b *writeBuffer) putInt64(v int64) {
 }
 
 func (b *writeBuffer) initMsg(typ messageType) {
+	fmt.Println("SEND", string(typ))
 	b.Reset()
 	b.putbuf[0] = byte(typ)
 	b.Write(b.putbuf[:5]) // message type + message length

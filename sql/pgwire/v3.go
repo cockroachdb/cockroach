@@ -19,6 +19,7 @@ package pgwire
 
 import (
 	"bufio"
+	"fmt"
 	"net"
 	"strconv"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/driver"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -35,18 +37,23 @@ type messageType byte
 
 // http://www.postgresql.org/docs/9.4/static/protocol-message-formats.html
 const (
-	serverMsgAuth            messageType = 'R'
-	serverMsgCommandComplete             = 'C'
-	serverMsgDataRow                     = 'D'
-	serverMsgErrorResponse               = 'E'
-	serverMsgParseComplete               = '1'
-	serverMsgReady                       = 'Z'
-	serverMsgRowDescription              = 'T'
-	serverMsgEmptyQuery                  = 'I'
+	serverMsgAuth                 messageType = 'R'
+	serverMsgCommandComplete                  = 'C'
+	serverMsgDataRow                          = 'D'
+	serverMsgErrorResponse                    = 'E'
+	serverMsgParseComplete                    = '1'
+	serverMsgReady                            = 'Z'
+	serverMsgRowDescription                   = 'T'
+	serverMsgEmptyQuery                       = 'I'
+	serverMsgParameterDescription             = 't'
 
 	clientMsgSimpleQuery = 'Q'
 	clientMsgParse       = 'P'
 	clientMsgTerminate   = 'X'
+	clientMsgDescribe    = 'D'
+	clientMsgSync        = 'S'
+	clientMsgClose       = 'C'
+	clientBind = 'B'
 )
 
 const (
@@ -54,8 +61,10 @@ const (
 )
 
 type parsedQuery struct {
-	query string
-	types []oid.Oid
+	query   string
+	stmt    parser.Statement
+	types   []oid.Oid
+	columns []*driver.Response_Result_Rows_Column
 }
 
 type v3Conn struct {
@@ -122,42 +131,60 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	if err := c.wr.Flush(); err != nil {
 		return err
 	}
+	inExtendedQuery := false
 	for {
-		c.writeBuf.initMsg(serverMsgReady)
-		var txnStatus byte = 'I'
-		if sessionTxn := c.session.Txn; sessionTxn != nil {
-			switch sessionTxn.Txn.Status {
-			case roachpb.PENDING:
-				txnStatus = 'T'
-			case roachpb.COMMITTED:
-				txnStatus = 'I'
-			case roachpb.ABORTED:
-				txnStatus = 'E'
+		if !inExtendedQuery {
+			fmt.Println("SEND MSG READY")
+			c.writeBuf.initMsg(serverMsgReady)
+			var txnStatus byte = 'I'
+			if sessionTxn := c.session.Txn; sessionTxn != nil {
+				switch sessionTxn.Txn.Status {
+				case roachpb.PENDING:
+					txnStatus = 'T'
+				case roachpb.COMMITTED:
+					txnStatus = 'I'
+				case roachpb.ABORTED:
+					txnStatus = 'E'
+				}
 			}
-		}
-		if log.V(2) {
-			log.Infof("pgwire writing transaction status: %q", txnStatus)
-		}
-		c.writeBuf.WriteByte(txnStatus)
-		if err := c.writeBuf.finishMsg(c.wr); err != nil {
-			return err
-		}
-		if err := c.wr.Flush(); err != nil {
-			return err
+			if log.V(2) {
+				log.Infof("pgwire writing transaction status: %q", txnStatus)
+			}
+			c.writeBuf.WriteByte(txnStatus)
+			if err := c.writeBuf.finishMsg(c.wr); err != nil {
+				return err
+			}
+			if err := c.wr.Flush(); err != nil {
+				return err
+			}
 		}
 		typ, err := c.readBuf.readTypedMsg(c.rd)
 		if err != nil {
 			return err
 		}
+		fmt.Println("GOT", string(typ))
 		switch typ {
 		case clientMsgSimpleQuery:
 			err = c.handleSimpleQuery(&c.readBuf)
 
 		case clientMsgParse:
+			inExtendedQuery = true
 			err = c.handleParse(&c.readBuf)
 
 		case clientMsgTerminate:
 			return nil
+
+		case clientMsgDescribe:
+			err = c.handleDescribe(&c.readBuf)
+
+		case clientMsgSync:
+			inExtendedQuery = false
+
+		case clientMsgClose:
+			err = c.handleClose(&c.readBuf)
+			
+		case clientBind:
+			err = c.handleBind(&c.readBuf)
 
 		default:
 			log.Fatalf("unrecognized client message type %c", typ)
@@ -205,18 +232,29 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		return err
 	}
 	if _, ok := c.parsed[name]; ok && name != "" {
-		return util.Errorf("prepared statement %q already exists", name)
+		return c.sendError(fmt.Sprintf("prepared statement %q already exists", name))
 	}
 	query, err := buf.getString()
 	if err != nil {
 		return err
 	}
-	pq := parsedQuery{query: query}
+	stmts, err := parser.ParseTraditional(query)
+	if err != nil {
+		return c.sendError(err.Error())
+	}
+	if len(stmts) != 1 {
+		return c.sendError("expected exactly one statement")
+	}
+	stmt := stmts[0]
 	numTypes, err := buf.getInt16()
 	if err != nil {
 		return err
 	}
-	pq.types = make([]oid.Oid, numTypes)
+	pq := parsedQuery{
+		query: query,
+		stmt:  stmt,
+		types: make([]oid.Oid, numTypes),
+	}
 	for i := int16(0); i < numTypes; i++ {
 		typ, err := buf.getInt32()
 		if err != nil {
@@ -224,9 +262,156 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		}
 		pq.types[i] = oid.Oid(typ)
 	}
+	args := make(parser.MapArgs)
+	for i, t := range pq.types {
+		v, ok := oidToDatum[t]
+		if !ok {
+			return c.sendError(fmt.Sprintf("unknown oid type: %v", t))
+		}
+		args[fmt.Sprint(i+1)] = v
+	}
+	if err := parser.FillArgsOptional(stmt, args); err != nil {
+		return c.sendError(err.Error())
+	}
+	if err := CheckArgs(stmt, args); err != nil {
+		return c.sendError(err.Error())
+	}
+	if err := parser.FillArgs(stmt, args); err != nil {
+		return c.sendError(err.Error())
+	}
+	// Check a second time with no args to make sure there are no ValArgs left.
+	if err := CheckArgs(stmt, nil); err != nil {
+		return c.sendError(err.Error())
+	}
+	pq.types = make([]oid.Oid, len(args))
+	for k, v := range args {
+		i, err := strconv.Atoi(k)
+		if err != nil {
+			return c.sendError(fmt.Sprintf("non-integer parameter name: %s", k))
+		}
+		id, ok := datumToOid[v]
+		if !ok {
+			return c.sendError(fmt.Sprintf("unknown datum type: %s", v))
+		}
+		pq.types[i-1] = id
+	}
+	cols, err := c.executor.StatementResult(c.opts.user, stmt)
+	if err != nil {
+		return c.sendError(err.Error())
+	}
+	pq.columns = cols
 	c.parsed[name] = pq
 	c.writeBuf.initMsg(serverMsgParseComplete)
 	return c.writeBuf.finishMsg(c.wr)
+}
+
+type checkVisitor struct {
+	args parser.MapArgs
+	err  error
+}
+
+func (v *checkVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
+	if !pre || v.err != nil {
+		return nil, expr
+	}
+	_, err := expr.TypeCheck(v.args)
+	if err != nil {
+		v.err = err
+	}
+	return v, expr
+}
+
+func CheckArgs(stmt parser.Statement, args parser.MapArgs) error {
+	v := checkVisitor{args: args}
+	parser.WalkStmt(&v, stmt)
+	return v.err
+}
+
+func (c *v3Conn) handleDescribe(buf *readBuffer) error {
+	kind, err := buf.getByte()
+	if err != nil {
+		return err
+	} else if kind != 'S' {
+		return c.sendError("portals are unsupported")
+	}
+	name, err := buf.getString()
+	if err != nil {
+		return err
+	}
+	pq, ok := c.parsed[name]
+	if !ok {
+		return c.sendError(fmt.Sprintf("unknown prepared statement %q", name))
+	}
+	c.writeBuf.initMsg(serverMsgParameterDescription)
+	c.writeBuf.putInt16(int16(len(pq.types)))
+	for _, t := range pq.types {
+		c.writeBuf.putInt32(int32(t))
+	}
+	if err := c.writeBuf.finishMsg(c.wr); err != nil {
+		return err
+	}
+	return c.sendRowDescription(pq.columns)
+}
+
+func (c *v3Conn) handleClose(buf *readBuffer) error {
+	kind, err := buf.getByte()
+	if err != nil {
+		return err
+	} else if kind != 'S' {
+		return c.sendError("portals are unsupported")
+	}
+	name, err := buf.getString()
+	if err != nil {
+		return err
+	}
+	delete(c.parsed, name)
+	return nil
+}
+
+func (c *v3Conn) handleBind(buf *readBuffer) error {
+	if portal, err := buf.getString(); err != nil {
+		return err
+	} else if portal != "" {
+		return c.sendError("portals are unsupported")
+	}
+	name, err := buf.getString()
+	if err != nil {
+		return err
+	}
+	pq, ok := c.parsed[name]
+	if !ok {
+		return c.sendError(fmt.Sprintf("unknown prepared statement %q", name))
+	}
+	numCodes, err := buf.getInt16()
+	if err != nil {
+		return err
+	}
+	formatCodes := make([]int16, numCodes)
+	for i := range formatCodes {
+		formatCodes[i], err = buf.getInt16()
+		if err != nil {
+			return err
+		}
+	}
+	numParams, err := buf.getInt16()
+	if err != nil {
+		return err
+	}
+	if numParams != len(pq.types) {
+		return c.sendError(fmt.Sprintf("expected %d parameters, got %d", len(pq.types), numParams))
+	}
+	params := make([]driver.Datum, len(numParams))
+	for i, t := range pq.types {
+		plen, err := buf.getInt32()
+		if err != nil {
+			return err
+		}
+		b, err := buf.getBytes(plen)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *v3Conn) sendCommandComplete(tag []byte) error {
@@ -299,26 +484,7 @@ func (c *v3Conn) sendResponse(resp driver.Response) error {
 		case *driver.Response_Result_Rows_:
 			resultRows := result.Rows
 
-			// Send RowDescription.
-			c.writeBuf.initMsg(serverMsgRowDescription)
-			c.writeBuf.putInt16(int16(len(resultRows.Columns)))
-			for _, column := range resultRows.Columns {
-				if log.V(2) {
-					log.Infof("pgwire writing column %s of type: %T", column.Name, column.Typ.Payload)
-				}
-				if err := c.writeBuf.writeString(column.Name); err != nil {
-					return err
-				}
-
-				typ := typeForDatum(column.Typ)
-				c.writeBuf.putInt32(0) // Table OID (optional).
-				c.writeBuf.putInt16(0) // Column attribute ID (optional).
-				c.writeBuf.putInt32(int32(typ.oid))
-				c.writeBuf.putInt16(int16(typ.size))
-				c.writeBuf.putInt32(0) // Type modifier (none of our supported types have modifiers).
-				c.writeBuf.putInt16(int16(typ.preferredFormat))
-			}
-			if err := c.writeBuf.finishMsg(c.wr); err != nil {
+			if err := c.sendRowDescription(resultRows.Columns); err != nil {
 				return err
 			}
 
@@ -348,6 +514,28 @@ func (c *v3Conn) sendResponse(resp driver.Response) error {
 	}
 
 	return nil
+}
+
+func (c *v3Conn) sendRowDescription(columns []*driver.Response_Result_Rows_Column) error {
+	c.writeBuf.initMsg(serverMsgRowDescription)
+	c.writeBuf.putInt16(int16(len(columns)))
+	for _, column := range columns {
+		if log.V(2) {
+			log.Infof("pgwire writing column %s of type: %T", column.Name, column.Typ.Payload)
+		}
+		if err := c.writeBuf.writeString(column.Name); err != nil {
+			return err
+		}
+
+		typ := typeForDatum(column.Typ)
+		c.writeBuf.putInt32(0) // Table OID (optional).
+		c.writeBuf.putInt16(0) // Column attribute ID (optional).
+		c.writeBuf.putInt32(int32(typ.oid))
+		c.writeBuf.putInt16(int16(typ.size))
+		c.writeBuf.putInt32(0) // Type modifier (none of our supported types have modifiers).
+		c.writeBuf.putInt16(int16(typ.preferredFormat))
+	}
+	return c.writeBuf.finishMsg(c.wr)
 }
 
 func appendUint(in []byte, u uint) []byte {

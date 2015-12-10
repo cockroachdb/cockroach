@@ -49,7 +49,9 @@ var (
 	// dummyTuple is a placeholder DTuple value.
 	dummyTuple Datum = DTuple{}
 	// DNull is the NULL Datum.
-	DNull Datum = dNull{}
+	DNull       Datum = dNull{}
+	// dummyValArg is a placeholder DValArg value.
+	dummyValArg Datum = DValArg("")
 
 	boolType      = reflect.TypeOf(DummyBool)
 	intType       = reflect.TypeOf(DummyInt)
@@ -614,4 +616,36 @@ func (d dNull) IsMin() bool {
 
 func (d dNull) String() string {
 	return "NULL"
+}
+
+// DValArg is the ValArg Datum.
+type DValArg string
+
+// Type implements the Datum interface.
+func (d DValArg) Type() string {
+	return "valarg"
+}
+
+// Compare implements the Datum interface.
+func (d DValArg) Compare(other Datum) int {
+	panic("DValArg.Compare not supported")
+}
+
+// Next implements the Datum interface.
+func (d DValArg) Next() Datum {
+	panic("DValArg.Next not supported")
+}
+
+// IsMax implements the Datum interface.
+func (d DValArg) IsMax() bool {
+	return true
+}
+
+// IsMin implements the Datum interface.
+func (d DValArg) IsMin() bool {
+	return true
+}
+
+func (d DValArg) String() string {
+	return "$" + string(d)
 }

@@ -146,3 +146,47 @@ func TestPGWire(t *testing.T) {
 		cleanupTestServer(s)
 	}
 }
+
+func TestPGPrepared(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	ctx := server.NewTestContext()
+	ctx.Insecure = true
+	s := setupTestServerWithContext(t, ctx)
+	defer cleanupTestServer(s)
+
+	host, port, err := net.SplitHostPort(s.PGAddr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pgUrl := url.URL{
+		Scheme: "postgres",
+		Host:   net.JoinHostPort(host, port),
+		RawQuery: "sslmode=disable",
+	}
+
+	db, err := sql.Open("postgres", pgUrl.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	stmt, err := db.Prepare("SELECT TRUE AND $1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var v bool
+	if err := stmt.QueryRow(true).Scan(&v); err != nil {
+		t.Fatal(err)
+	} else if !v {
+		t.Fatal("expected true")
+	}
+	if err := stmt.QueryRow(false).Scan(&v); err != nil {
+		t.Fatal(err)
+	} else if v {
+		t.Fatal("expected false")
+	}
+	if err := stmt.QueryRow(1).Scan(&v); err != nil {
+		t.Fatal(err)
+	}
+}
