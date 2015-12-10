@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -83,6 +84,13 @@ func newRPCSender(server string, context *base.Context, retryOpts retry.Options,
 // and been executed successfully. We retry here to eventually get through with
 // the same client command ID and be given the cached response.
 func (s *rpcSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	timeout := 5 * s.retryOpts.MaxBackoff
+	select {
+	case <-s.client.Dialed:
+	case <-time.After(timeout):
+		return nil, roachpb.NewError(fmt.Errorf("failed to send RPC request %s: client took longer than %s to dial", method, timeout))
+	}
+
 	var err error
 	var br roachpb.BatchResponse
 	for r := retry.Start(s.retryOpts); r.Next(); {
