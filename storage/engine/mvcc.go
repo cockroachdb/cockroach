@@ -94,6 +94,7 @@ func (k MVCCKey) IsValue() bool {
 
 // EncodedSize returns the size of the MVCCKey when encoded.
 func (k MVCCKey) EncodedSize() int {
+	// TODO(peter): This should now be "+ 1". Fix me.
 	n := len(k.Key) + 3
 	if k.IsValue() {
 		n += int(mvccVersionTimestampSize)
