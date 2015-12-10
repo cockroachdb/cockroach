@@ -25,7 +25,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -71,8 +70,12 @@ func CreateRemote(peers []string) *RemoteCluster {
 
 // Exec executes the given command on the i-th node, returning (in that order)
 // stdout, stderr and an error.
-func (r *RemoteCluster) Exec(i int, cmd string) (string, string, error) {
-	return execute(r.user, r.nodes[i].Addr+":22", r.cert, cmd)
+func (r *RemoteCluster) Exec(i int, cmd string) error {
+	stdout, stderr, err := execute(r.user, r.nodes[i].Addr+":22", r.cert, cmd)
+	if err != nil {
+		return fmt.Errorf("failed: %s: %s\nstdout:\n%s\nstderr:\n%s", cmd, err, stdout, stderr)
+	}
+	return nil
 }
 
 // NumNodes returns the number of nodes in the cluster, running or not.
@@ -104,29 +107,23 @@ func (r *RemoteCluster) Assert(t util.Tester) {}
 // dismantle the cluster.
 func (r *RemoteCluster) AssertAndStop(t util.Tester) {}
 
-func (r *RemoteCluster) execLauncher(i int, action string, background bool) error {
-	cmd := "./launch.sh " + action
-	if background {
-		cmd = "nohup " + cmd + " &> logs/nohup.out < /dev/null &"
-	}
-	o, e, err := r.Exec(i, cmd)
-	if err != nil {
-		log.Warningf("%s failed: %s\nstdout:\n%s\nstderr:\n%s", cmd, err, o, e)
-	}
-	return err
+func (r *RemoteCluster) execSupervisor(i int, action string) error {
+	return r.Exec(i, "supervisorctl -c supervisor.conf "+action)
 }
 
 // Kill terminates the cockroach process running on the given node number.
 // The given integer must be in the range [0,NumNodes()-1].
 func (r *RemoteCluster) Kill(i int) error {
-	return r.execLauncher(i, "kill", false /* !background */)
+	return r.Exec(i, "pkill -9 cockroach")
 }
 
 // Restart terminates the cockroach process running on the given node
 // number, unless it is already stopped, and restarts it.
 // The given integer must be in the range [0,NumNodes()-1].
 func (r *RemoteCluster) Restart(i int) error {
-	return r.execLauncher(i, "restart", true /* background */)
+	_ = r.Kill(i)
+	// supervisorctl is horrible with exit codes (cockroachdb/cockroach-prod#59).
+	return r.execSupervisor(i, "start cockroach")
 }
 
 // Get queries the given node's HTTP endpoint for the given path, unmarshaling
