@@ -134,7 +134,9 @@ func (r *RocksDB) Close() {
 		return
 	}
 	if len(r.dir) == 0 {
-		log.Infof("closing in-memory rocksdb instance")
+		if log.V(1) {
+			log.Infof("closing in-memory rocksdb instance")
+		}
 	} else {
 		log.Infof("closing rocksdb instance at %q", r.dir)
 	}
