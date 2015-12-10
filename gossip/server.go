@@ -40,12 +40,13 @@ type clientInfo struct {
 // server maintains an array of connected peers to which it gossips
 // newly arrived information on a periodic basis.
 type server struct {
-	mu       sync.Mutex            // Protects the fields below
-	is       infoStore             // The backing infostore
-	closed   bool                  // True if server was closed
-	incoming nodeSet               // Incoming client node IDs
-	lAddrMap map[string]clientInfo // Incoming client's local address -> client's node info
-	ready    *sync.Cond            // Broadcasts wakeup to waiting gossip requests
+	mu       sync.Mutex                // Protects the fields below
+	is       infoStore                 // The backing infostore
+	closed   bool                      // True if server was closed
+	incoming nodeSet                   // Incoming client node IDs
+	lAddrMap map[string]clientInfo     // Incoming client's local address -> client's node info
+	nodeMap  map[roachpb.NodeID]string // Incoming client's node ID -> local address (string)
+	ready    *sync.Cond                // Broadcasts wakeup to waiting gossip requests
 
 	simulationCycler *sync.Cond // Used when simulating the network to signal next cycle
 }
@@ -56,6 +57,7 @@ func newServer() *server {
 		is:       newInfoStore(0, util.UnresolvedAddr{}),
 		incoming: makeNodeSet(1),
 		lAddrMap: map[string]clientInfo{},
+		nodeMap:  map[roachpb.NodeID]string{},
 	}
 	s.ready = sync.NewCond(&s.mu)
 	return s
@@ -67,6 +69,7 @@ func newServer() *server {
 func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 	args := argsI.(*Request)
 	reply := &Response{}
+
 	s.mu.Lock()
 	defer func() {
 		if s.simulationCycler != nil {
@@ -75,10 +78,6 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 		s.mu.Unlock()
 	}()
 
-	addr, err := args.Addr.Resolve()
-	if err != nil {
-		return nil, util.Errorf("addr %s could not be converted to net.Addr: %s", args.Addr, err)
-	}
 	lAddr, err := args.LAddr.Resolve()
 	if err != nil {
 		return nil, util.Errorf("local addr %s could not be converted to net.Addr: %s", args.LAddr, err)
@@ -100,6 +99,16 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 			// the incoming addr set when its connection is closed. See
 			// server.serveConn() below.
 			s.lAddrMap[lAddr.String()] = clientInfo{args.NodeID, &args.Addr}
+			// This lookup map restricts incoming connections to a single
+			// connection per node ID.
+			s.nodeMap[args.NodeID] = lAddr.String()
+		}
+	} else {
+		// Verify that there aren't multiple incoming clients from same
+		// node, but with different connections. This can happen when
+		// bootstrap connections are initiated through a load balancer.
+		if lAddrStr, ok := s.nodeMap[args.NodeID]; ok && lAddrStr != lAddr.String() {
+			return nil, util.Errorf("duplicate connection from node %d", args.NodeID)
 		}
 	}
 
@@ -107,9 +116,9 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 	if args.Delta != nil {
 		freshCount := s.is.combine(args.Delta, args.NodeID)
 		if log.V(1) {
-			log.Infof("received %s from %s (%d fresh)", args.Delta, addr, freshCount)
+			log.Infof("received %s from node %d (%d fresh)", args.Delta, args.NodeID, freshCount)
 		} else {
-			log.Infof("received %d (%d fresh) info(s) from %s", len(args.Delta), freshCount, addr)
+			log.Infof("received %d (%d fresh) info(s) from node %d", len(args.Delta), freshCount, args.NodeID)
 		}
 		if s.closed {
 			return nil, util.Errorf("gossip server shutdown")
@@ -133,7 +142,10 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 				randIdx := rand.Int31n(int32(len(s.lAddrMap)))
 				for _, cInfo := range s.lAddrMap {
 					if randIdx == 0 {
-						reply.Alternate = cInfo.addr
+						reply.AlternateAddr = cInfo.addr
+						reply.AlternateNodeID = cInfo.id
+						log.Infof("refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
+							args.NodeID, s.incoming.maxSize, cInfo.id, cInfo.addr)
 						break
 					}
 					randIdx--
@@ -193,13 +205,10 @@ func (s *server) start(rpcServer *rpc.Server, addr net.Addr, stopper *stop.Stopp
 	unregister := s.is.registerCallback(".*", updateCallback)
 
 	stopper.RunWorker(func() {
-		// Periodically wakeup blocked client gossip requests.
-		for {
-			select {
-			case <-stopper.ShouldStop():
-				s.stop(unregister)
-				return
-			}
+		select {
+		case <-stopper.ShouldStop():
+			s.stop(unregister)
+			return
 		}
 	})
 }
@@ -219,8 +228,11 @@ func (s *server) stop(unregister func()) {
 func (s *server) onClose(conn net.Conn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if cInfo, ok := s.lAddrMap[conn.RemoteAddr().String()]; ok {
+	remoteAddr := conn.RemoteAddr().String()
+	if cInfo, ok := s.lAddrMap[remoteAddr]; ok {
 		s.incoming.removeNode(cInfo.id)
+		delete(s.nodeMap, cInfo.id)
+		delete(s.lAddrMap, remoteAddr)
 		s.ready.Broadcast() // wake up clients
 	}
 }

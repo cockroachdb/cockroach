@@ -49,11 +49,14 @@ message Response {
   // Address of the responding client.
   util.UnresolvedAddr addr = 2 [(gogoproto.nullable) = false];
   // Non-nil means client should retry with this address.
-  util.UnresolvedAddr alternate = 3;
+  util.UnresolvedAddr alternate_addr = 3;
+  // Node ID of the alternate address, if alternate_addr is not nil.
+  int32 alternate_node_id = 4 [(gogoproto.customname) = "AlternateNodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
   // Delta of Infos originating at nodes newer than specified high water timestamps.
-  map<string, Info> delta = 4;
+  map<string, Info> delta = 5;
   // Map of all high water timestamps, by node, seen by the responder.
-  map<int32, int64> high_water_stamps = 5;
+  map<int32, int64> high_water_stamps = 6;
 }
 
 // Info is the basic unit of information traded over the

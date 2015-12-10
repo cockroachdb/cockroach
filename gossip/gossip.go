@@ -448,6 +448,13 @@ func (g *Gossip) hasIncoming(nodeID roachpb.NodeID) bool {
 	return g.incoming.hasNode(nodeID)
 }
 
+// hasOutgoing returns whether the server has an outgoing gossip
+// client matching the provided node ID. Mutex should be held by
+// caller.
+func (g *Gossip) hasOutgoing(nodeID roachpb.NodeID) bool {
+	return g.outgoing.hasNode(nodeID)
+}
+
 // filterExtant removes any nodes from the supplied nodeSet which
 // are already connected to this node, either via outgoing or incoming
 // client connections.

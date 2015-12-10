@@ -143,8 +143,8 @@ func (s *Server) AddCloseCallback(cb func(conn net.Conn)) {
 }
 
 func (s *Server) runCloseCallbacks(conn net.Conn) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	for _, cb := range s.closeCallbacks {
 		cb(conn)
 	}

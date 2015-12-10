@@ -227,6 +227,37 @@ func TestClientNodeID(t *testing.T) {
 	})
 }
 
+func verifyServerMaps(g *Gossip, expCount int) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return len(g.lAddrMap) == expCount && len(g.nodeMap) == expCount
+}
+
+// TestClientDisconnectLoopback verifies that the gossip server
+// will drop an outgoing client connection that is already an
+// inbound client connection of another node.
+func TestClientDisconnectLoopback(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	local, _, stopper := startGossip(t)
+	defer stopper.Stop()
+	// startClient requires locks are held, so acquire here.
+	local.mu.Lock()
+	lAddr := local.is.NodeAddr
+	lclock := hlc.NewClock(hlc.UnixNano)
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
+	rpcContext.DisableCache = true
+	local.startClient(lAddr, rpcContext, stopper)
+	local.mu.Unlock()
+	local.manage(stopper)
+	util.SucceedsWithin(t, 10*time.Second, func() error {
+		ok := local.findClient(func(c *client) bool { return c.addr.String() == lAddr.String() }) != nil
+		if !ok && verifyServerMaps(local, 0) {
+			return nil
+		}
+		return errors.New("local client still connected to itself")
+	})
+}
+
 // TestClientDisconnectRedundant verifies that the gossip server
 // will drop an outgoing client connection that is already an
 // inbound client connection of another node.
@@ -234,14 +265,15 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	local, remote, stopper := startGossip(t)
 	defer stopper.Stop()
-	// startClient doesn't lock the underlying gossip
-	// object, so we acquire those locks here.
+	// startClient requires locks are held, so acquire here.
 	local.mu.Lock()
 	remote.mu.Lock()
+
 	rAddr := remote.is.NodeAddr
 	lAddr := local.is.NodeAddr
 	lclock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
+	rpcContext.DisableCache = true
 	local.startClient(rAddr, rpcContext, stopper)
 	remote.startClient(lAddr, rpcContext, stopper)
 	local.mu.Unlock()
@@ -260,9 +292,47 @@ func TestClientDisconnectRedundant(t *testing.T) {
 			if err := local.AddInfo("local-key", nil, time.Second); err != nil {
 				t.Fatal(err)
 			}
-		} else if !ok1 && ok2 {
+		} else if !ok1 && ok2 && verifyServerMaps(local, 1) && verifyServerMaps(remote, 0) {
 			return nil
 		}
 		return errors.New("local client to remote not yet closed as redundant")
+	})
+}
+
+// TestClientDisallowMultipleConns verifies that the server disallows
+// multiple connections from the same client node ID.
+func TestClientDisallowMultipleConns(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	local, remote, stopper := startGossip(t)
+	defer stopper.Stop()
+	local.mu.Lock()
+	remote.mu.Lock()
+	rAddr := remote.is.NodeAddr
+	lclock := hlc.NewClock(hlc.UnixNano)
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
+	rpcContext.DisableCache = true
+	// Start two clients from local to remote. RPC client cache is
+	// disabled via the context, so we'll start two different outgoing
+	// connections.
+	local.startClient(rAddr, rpcContext, stopper)
+	local.startClient(rAddr, rpcContext, stopper)
+	local.mu.Unlock()
+	remote.mu.Unlock()
+	local.manage(stopper)
+	remote.manage(stopper)
+	util.SucceedsWithin(t, 10*time.Second, func() error {
+		// Verify that the remote server has only a single incoming
+		// connection and the local server has only a single outgoing
+		// connection.
+		local.mu.Lock()
+		remote.mu.Lock()
+		outgoing := local.outgoing.len()
+		incoming := remote.incoming.len()
+		local.mu.Unlock()
+		remote.mu.Unlock()
+		if outgoing == 1 && incoming == 1 && verifyServerMaps(local, 0) && verifyServerMaps(remote, 1) {
+			return nil
+		}
+		return util.Errorf("incorrect number of incoming (%d) or outgoing (%d) connections", incoming, outgoing)
 	})
 }
