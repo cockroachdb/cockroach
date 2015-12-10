@@ -137,10 +137,9 @@ func (m *RaftSnapshotData) String() string { return proto.CompactTextString(m) }
 func (*RaftSnapshotData) ProtoMessage()    {}
 
 type RaftSnapshotData_KeyValue struct {
-	Key      []byte `protobuf:"bytes,1,opt,name=key" json:"key,omitempty"`
-	Value    []byte `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
-	WallTime int64  `protobuf:"varint,3,opt,name=wall_time" json:"wall_time"`
-	Logical  int32  `protobuf:"varint,4,opt,name=logical" json:"logical"`
+	Key       []byte    `protobuf:"bytes,1,opt,name=key" json:"key,omitempty"`
+	Value     []byte    `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
+	Timestamp Timestamp `protobuf:"bytes,3,opt,name=timestamp" json:"timestamp"`
 }
 
 func (m *RaftSnapshotData_KeyValue) Reset()         { *m = RaftSnapshotData_KeyValue{} }
@@ -376,12 +375,14 @@ func (m *RaftSnapshotData_KeyValue) MarshalTo(data []byte) (int, error) {
 		i = encodeVarintInternal(data, i, uint64(len(m.Value)))
 		i += copy(data[i:], m.Value)
 	}
-	data[i] = 0x18
+	data[i] = 0x1a
 	i++
-	i = encodeVarintInternal(data, i, uint64(m.WallTime))
-	data[i] = 0x20
-	i++
-	i = encodeVarintInternal(data, i, uint64(m.Logical))
+	i = encodeVarintInternal(data, i, uint64(m.Timestamp.Size()))
+	n4, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n4
 	return i, nil
 }
 
@@ -492,8 +493,8 @@ func (m *RaftSnapshotData_KeyValue) Size() (n int) {
 		l = len(m.Value)
 		n += 1 + l + sovInternal(uint64(l))
 	}
-	n += 1 + sovInternal(uint64(m.WallTime))
-	n += 1 + sovInternal(uint64(m.Logical))
+	l = m.Timestamp.Size()
+	n += 1 + l + sovInternal(uint64(l))
 	return n
 }
 
@@ -1256,10 +1257,10 @@ func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
 			m.Value = append([]byte{}, data[iNdEx:postIndex]...)
 			iNdEx = postIndex
 		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field WallTime", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
 			}
-			m.WallTime = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowInternal
@@ -1269,30 +1270,22 @@ func (m *RaftSnapshotData_KeyValue) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.WallTime |= (int64(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-		case 4:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Logical", wireType)
+			if msglen < 0 {
+				return ErrInvalidLengthInternal
 			}
-			m.Logical = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowInternal
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.Logical |= (int32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
 			}
+			if err := m.Timestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipInternal(data[iNdEx:])
