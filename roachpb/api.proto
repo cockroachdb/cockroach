@@ -646,7 +646,7 @@ message BatchResponse {
     // transaction. The transaction timestamp and/or priority may have
     // been updated, depending on the outcome of the request.
     optional Transaction txn = 3;
-}
+  }
   optional Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
 }
