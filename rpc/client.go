@@ -87,6 +87,11 @@ type Client struct {
 	healthy        atomic.Value   // holds a `chan struct{}` exposed in `Healthy`
 	tlsConfig      *tls.Config
 
+	// Closed the first time an outbound `dial` attempt completes,
+	// regardless of success. This is only used in tests to signal the
+	// completion of TLS certificate loading.
+	Dialed chan struct{}
+
 	clock        *hlc.Clock
 	remoteClocks *RemoteClockMonitor
 	remoteOffset RemoteOffset
@@ -122,6 +127,8 @@ func NewClient(addr net.Addr, context *Context) *Client {
 	}
 
 	c := &Client{
+		Dialed: make(chan struct{}),
+
 		closer:       make(chan struct{}),
 		Closed:       make(chan struct{}),
 		key:          key,
@@ -171,6 +178,11 @@ func (c *Client) internalConn() *internalConn {
 func (c *Client) connect() error {
 	conn, err := codec.TLSDialHTTP(
 		c.addr.NetworkField, c.addr.AddressField, base.NetworkTimeout, c.tlsConfig)
+	select {
+	case <-c.Dialed:
+	default:
+		close(c.Dialed)
+	}
 	if err != nil {
 		return err
 	}

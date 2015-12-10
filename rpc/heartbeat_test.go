@@ -129,6 +129,7 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	serverAddr := ln.Addr()
 	client := &Client{
 		Closed:       make(chan struct{}),
+		Dialed:       make(chan struct{}),
 		addr:         util.MakeUnresolvedAddr(serverAddr.Network(), serverAddr.String()),
 		tlsConfig:    tlsConfig,
 		clock:        ctx.localClock,
