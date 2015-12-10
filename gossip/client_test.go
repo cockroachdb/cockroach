@@ -33,7 +33,7 @@ import (
 )
 
 // startGossip creates local and remote gossip instances.
-// The remote gossip instance launches its gossip service.
+// Both remote and local instances launch the gossip service.
 func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 	stopper = stop.NewStopper()
 	lclock := hlc.NewClock(hlc.UnixNano)
@@ -57,6 +57,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+
 	rclock := hlc.NewClock(hlc.UnixNano)
 	rRPCContext := rpc.NewContext(&base.Context{Insecure: true}, rclock, stopper)
 
@@ -231,7 +232,6 @@ func TestClientNodeID(t *testing.T) {
 // inbound client connection of another node.
 func TestClientDisconnectRedundant(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(spencer): #3350")
 	local, remote, stopper := startGossip(t)
 	defer stopper.Stop()
 	// startClient doesn't lock the underlying gossip
@@ -248,25 +248,21 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	remote.mu.Unlock()
 	local.manage(stopper)
 	remote.manage(stopper)
-	wasConnected1, wasConnected2 := false, false
 	util.SucceedsWithin(t, 10*time.Second, func() error {
 		// Check which of the clients is connected to the other.
 		ok1 := local.findClient(func(c *client) bool { return c.addr.String() == rAddr.String() }) != nil
 		ok2 := remote.findClient(func(c *client) bool { return c.addr.String() == lAddr.String() }) != nil
-		if ok1 {
-			wasConnected1 = true
-		}
-		if ok2 {
-			wasConnected2 = true
-		}
-		// Check if at some point both nodes were connected to
-		// each other, but now aren't any more.
-		// Unfortunately it's difficult to get a more direct
-		// read on what's happening without really messing with
-		// the internals.
-		if wasConnected1 && wasConnected2 && (!ok1 || !ok2) {
+		// We expect node 1 to disconnect; if both are still connected,
+		// it's possible that node 1 gossiped before node 2 connected, in
+		// which case we have to gossip from node 1 to trigger the
+		// disconnect redundant client code.
+		if ok1 && ok2 {
+			if err := local.AddInfo("local-key", nil, time.Second); err != nil {
+				t.Fatal(err)
+			}
+		} else if !ok1 && ok2 {
 			return nil
 		}
-		return errors.New("not connected")
+		return errors.New("local client to remote not yet closed as redundant")
 	})
 }

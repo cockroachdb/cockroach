@@ -90,8 +90,8 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 	// as a permanent peer. We always accept its input and return
 	// our delta.
 	canAccept := true
-	s.incoming.setMaxSize(s.maxPeers())
 	if !s.incoming.hasNode(args.NodeID) {
+		s.incoming.setMaxSize(s.maxPeers())
 		if !s.incoming.hasSpace() {
 			canAccept = false
 		} else {

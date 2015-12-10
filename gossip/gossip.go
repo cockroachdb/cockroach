@@ -80,8 +80,8 @@ const (
 	// excessive tightening of the network.
 	minPeers = 3
 
-	// ttlNodeIDGossip is time-to-live for node ID -> address.
-	ttlNodeIDGossip = 0 * time.Second
+	// ttlNodeDescriptorGossip is time-to-live for node ID -> address.
+	ttlNodeDescriptorGossip = 0 * time.Second
 
 	// checkInterval is the default interval for checking for bad gossip
 	// states, including a badly connected network and the least useful
@@ -186,8 +186,8 @@ func (g *Gossip) SetNodeID(nodeID roachpb.NodeID) {
 // SetNodeDescriptor adds the node descriptor to the gossip network
 // and sets the infostore's node ID.
 func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
-	log.Infof("gossiping node descriptor %+v", desc)
-	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, ttlNodeIDGossip); err != nil {
+	log.Infof("setting node descriptor %+v", desc)
+	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, ttlNodeDescriptorGossip); err != nil {
 		return util.Errorf("couldn't gossip descriptor for node %d: %v", desc.NodeID, err)
 	}
 	return nil
@@ -617,7 +617,7 @@ func (g *Gossip) maybeSignalStalledLocked() {
 	if g.outgoing.len()+g.incoming.len() == 0 {
 		g.signalStalled()
 	} else if g.is.getInfo(KeySentinel) == nil {
-		log.Warningf("missing sentinel gossip; assuming partition and reconnecting")
+		log.Warningf("missing sentinel gossip; assuming partition in gossip network")
 		g.signalStalled()
 	}
 }
@@ -656,6 +656,7 @@ func (g *Gossip) maybeWarnAboutInit(stopper *stop.Stopper) {
 		// This will never error because of infinite retries.
 		for r := retry.Start(retryOptions); r.Next(); {
 			g.mu.Lock()
+			hasConnections := g.outgoing.len()+g.incoming.len() > 0
 			hasSentinel := g.is.getInfo(KeySentinel) != nil
 			triedAll := g.triedAll
 			g.mu.Unlock()
@@ -663,10 +664,10 @@ func (g *Gossip) maybeWarnAboutInit(stopper *stop.Stopper) {
 			if hasSentinel {
 				break
 			}
-			// Otherwise, if all bootstrap hosts are connected, warn.
-			if triedAll {
-				log.Warningf("connected to gossip but missing sentinel. Has the cluster been initialized? " +
-					"Use \"cockroach init\" to initialize.")
+			if !hasConnections {
+				log.Warningf("not connected to gossip; check that gossip flag is set appropriately")
+			} else if triedAll {
+				log.Warningf("missing gossip sentinel; first range unavailable or cluster not initialized")
 			}
 		}
 	})
@@ -675,7 +676,8 @@ func (g *Gossip) maybeWarnAboutInit(stopper *stop.Stopper) {
 // checkHasConnected checks whether this gossip instance is connected
 // to enough of the gossip network that it has received the cluster ID
 // gossip info. Once connected, the "Connected" channel is closed to
-// signal to any waiters that the gossip instance is ready.
+// signal to any waiters that the gossip instance is ready. The gossip
+// mutex should be held by caller.
 func (g *Gossip) checkHasConnected() {
 	// Check if we have the cluster ID gossip to start.
 	// If so, then mark ourselves as trivially connected to the gossip network.
@@ -722,8 +724,8 @@ func (g *Gossip) removeClient(c *client) {
 func (g *Gossip) findClient(match func(*client) bool) *client {
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
-	for i := 0; i < len(g.clients); i++ {
-		if c := g.clients[i]; match(c) {
+	for _, c := range g.clients {
+		if match(c) {
 			return c
 		}
 	}
