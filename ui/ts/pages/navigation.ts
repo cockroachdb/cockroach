@@ -34,6 +34,11 @@ module AdminViews {
             liClass: "cockroach",
           },
           {
+            title: "Cluster",
+            route: "/cluster", // TODO: currently goes to node page, create cluster page
+            icon: SvgIcons.clusterIcon,
+          },
+          {
             title: "Nodes",
             route: "/nodes",
             icon: SvgIcons.nodesIcon,

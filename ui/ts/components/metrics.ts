@@ -54,7 +54,8 @@ module Components {
           .showLegend(true)
           .showYAxis(true)
           .showXAxis(true)
-          .xScale(d3.time.scale());
+          .xScale(d3.time.scale())
+          .margin({top: 0, right: 0, bottom: 0, left: 0});
 
         constructor(public vm: ViewModel) {
           // Set xAxis ticks to properly format.
@@ -134,11 +135,21 @@ module Components {
       }
 
       export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
+        let g: _mithril.MithrilVirtualElement = null;
         if (ctrl.hasData()) {
-          return m(".linegraph", { style: "width:500px;height:300px;" }, m("svg.graph", { config: ctrl.drawGraph }));
+          g = m(".linegraph", m("svg.graph", { config: ctrl.drawGraph }));
         } else {
-          return m("", "loading...");
+          g = m("", "loading...");
         }
+        return m(
+          ".visualization-wrapper",
+          [
+            // TODO: pass in and display info icon tooltip
+            m(".viz-top", m(".viz-info-icon", m(".icon-cockroach-17"))), // Icon Cockroach 17 is the info icon.
+            g,
+            m(".viz-bottom", m(".viz-title", ctrl.vm.axis.title())),
+          ]
+        );
       }
 
       /**
@@ -157,4 +168,3 @@ module Components {
     }
   }
 }
-

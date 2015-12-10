@@ -1,5 +1,6 @@
 // source: models/status.ts
 /// <reference path="../../typings/lodash/lodash.d.ts" />
+/// <reference path="../../typings/moment/moment.d.ts" />
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../util/http.ts" />
 /// <reference path="../util/querycache.ts" />
@@ -11,6 +12,7 @@ module Models {
   "use strict";
   export module Status {
     import promise = _mithril.MithrilPromise;
+    import Moment = moment.Moment;
 
     export interface StoreStatusResponseSet {
       d: Proto.StoreStatus[];
@@ -26,6 +28,18 @@ module Models {
 
     export interface NodeStatusMap {
       [nodeId: string]: Proto.NodeStatus;
+    }
+
+    export function staleStatus(lastUpdate: Moment): string {
+      let _1min: Moment = moment().subtract(1, "minute");
+      let _10min: Moment = moment().subtract(10, "minutes");
+      if (lastUpdate.isBefore(_10min)) {
+        return "red";
+      } else if (lastUpdate.isBefore(_1min)) {
+        return "yellow";
+      } else {
+        return "green";
+      }
     }
 
     export class Stores {
