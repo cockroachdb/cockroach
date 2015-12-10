@@ -20,11 +20,13 @@ package sql
 import (
 	"bytes"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -57,6 +59,23 @@ func (g *GossipUpdater) getSystemConfig() config.SystemConfig {
 	return g.systemConfig
 }
 
+var (
+	disableSyncSchemaChangeExec   = false
+	asyncSchemaChangeExecInterval = 60 * time.Second
+	asyncSchemaChangeExecDelay    = 360 * time.Second
+)
+
+func TestDisableSyncSchemaChangeExec() func() {
+	disableSyncSchemaChangeExec = true
+	asyncSchemaChangeExecInterval = 20 * time.Millisecond
+	asyncSchemaChangeExecDelay = 20 * time.Millisecond
+	return func() {
+		disableSyncSchemaChangeExec = false
+		asyncSchemaChangeExecInterval = 60 * time.Second
+		asyncSchemaChangeExecDelay = 360 * time.Second
+	}
+}
+
 // RefreshLeases starts a goroutine that refreshes the lease manager
 // leases for tables received in the latest system configuration via gossip.
 func (g *GossipUpdater) Start(s *stop.Stopper, db *client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager) {
@@ -66,6 +85,9 @@ func (g *GossipUpdater) Start(s *stop.Stopper, db *client.DB, gossip *gossip.Gos
 		g.newConfig = make(chan struct{}, 1)
 		descKeyPrefix := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
 		gossip.RegisterSystemConfigCallback(g.updateSystemConfig)
+		schemaChanger := SchemaChanger{nodeID: roachpb.NodeID(leaseMgr.nodeID), db: *db, leaseMgr: leaseMgr}
+		var schemaChangers []SchemaChanger
+		ticker := time.NewTicker(asyncSchemaChangeExecInterval)
 		for {
 			select {
 			case <-g.newConfig:
@@ -74,7 +96,7 @@ func (g *GossipUpdater) Start(s *stop.Stopper, db *client.DB, gossip *gossip.Gos
 				if log.V(2) {
 					log.Info("received a new config %v", cfg)
 				}
-
+				schemaChangers = nil
 				// Loop through the configuration to find all the tables.
 				for _, kv := range cfg.Values {
 					if !bytes.HasPrefix(kv.Key, descKeyPrefix) {
@@ -101,11 +123,62 @@ func (g *GossipUpdater) Start(s *stop.Stopper, db *client.DB, gossip *gossip.Gos
 							log.Warning(err)
 						}
 
+						// Keep track of outstanding schema changes.
+						// If all schema change commands set UpVersion, why
+						// check for the presence of mutaions?
+						// a schema change execution might fail soon after
+						// unsetting UpVersion, and we still want to process
+						// outstanding mutations.
+						if table.UpVersion || len(table.Mutations) > 0 {
+							// Only track the first schema change. We depend on
+							// gossip to renotify us when a schema change has been
+							// completed.
+							schemaChanger.tableID = table.ID
+							if len(table.Mutations) == 0 {
+								schemaChanger.mutationID = invalidMutationID
+							} else {
+								schemaChanger.mutationID = table.Mutations[0].MutationID
+							}
+							schemaChanger.cfg = cfg
+							// The same schema change gets recreated with a new
+							// time everytime it is seen through gossip. This can result
+							// in a schema change getting starved from being executed
+							// if a ton of schema changes are occurring in parallel
+							// resulting in a continuous stream of gossip notifications.
+							// But that's not a realistic outcome; after the dust settles
+							// the schema change will get a fixed creation time and will
+							// eventually execute.
+							schemaChanger.creationTime = time.Now()
+							schemaChangers = append(schemaChangers, schemaChanger)
+						}
+
 					case *Descriptor_Database:
 						// Ignore.
 					}
 				}
 
+			case <-ticker.C:
+				for i, sc := range schemaChangers {
+					if time.Since(sc.creationTime) > asyncSchemaChangeExecDelay {
+						// Run schema changer in a separate goroutine because it can
+						// wait on leases getting refreshed above through this
+						// goroutine. Each time the ticker fires we might attempt
+						// to run the same schema change in another goroutine, but that's
+						// not a big deal because only one goroutine is likely to hold
+						// the lease.
+						s.RunAsyncTask(func() {
+							// Try to run one schema change.
+							if err := sc.exec(); err != nil && err != errExistingSchemaChangeLease {
+								log.Info(err)
+							}
+						})
+						// Only attempt to run one schema change. Place schema change
+						// at the end of the queue.
+						schemaChangers = append(schemaChangers[:i], schemaChangers[i+1:]...)
+						schemaChangers = append(schemaChangers, sc)
+						break
+					}
+				}
 			case <-s.ShouldStop():
 				return
 			}

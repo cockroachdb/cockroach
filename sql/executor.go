@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 var testingWaitForMetadata bool
@@ -190,10 +191,32 @@ func (e *Executor) execStmts(sql string, planMaker *planner) driver.Response {
 		if planMaker.txn == nil {
 			planMaker.releaseLeases(e.db)
 			// Execute any schema changes that were scheduled.
-			for _, sc := range planMaker.schemaChangers {
-				sc.db = e.db
-				if err := sc.exec(); err != nil {
-					result = makeResultFromError(planMaker, err)
+			if !disableSyncSchemaChangeExec {
+				for _, sc := range planMaker.schemaChangers {
+					sc.db = e.db
+					retryOpts := retry.Options{
+						InitialBackoff: 20 * time.Millisecond,
+						MaxBackoff:     200 * time.Millisecond,
+						Multiplier:     2,
+					}
+					for r := retry.Start(retryOpts); r.Next(); {
+						done, errDone := sc.isDone()
+						if errDone != nil {
+							log.Warning(errDone)
+							break
+						}
+						if done {
+							break
+						}
+						if err := sc.exec(); err != nil {
+							if err == errExistingSchemaChangeLease {
+								// Try again.
+								continue
+							}
+							result = makeResultFromError(planMaker, err)
+						}
+						break
+					}
 				}
 			}
 		}

@@ -44,6 +44,10 @@ type SchemaChanger struct {
 	// Do we really need this?
 	cfg      config.SystemConfig
 	leaseMgr *LeaseManager
+	// Time created within the asynchronous
+	// schema changer. Only used by the
+	// asynchronous schema changer.
+	creationTime time.Time
 }
 
 // applyMutations runs the backfill for the mutations.
@@ -177,7 +181,7 @@ func (sc *SchemaChanger) ExtendLease(lease TableDescriptor_SchemaChangeLease) (T
 }
 
 // execute the entire schema change in steps.
-func (sc *SchemaChanger) exec() error {
+func (sc SchemaChanger) exec() error {
 	// Acquire lease.
 	lease, err := sc.AcquireLease()
 	if err != nil {
@@ -371,4 +375,30 @@ func (sc *SchemaChanger) purgeMutations() error {
 	// Mark the mutations as completed, and wait until the latest version
 	// is visible on all leases.
 	return sc.done()
+}
+
+// Is the work scheduled for the schema changer already done.
+func (sc *SchemaChanger) isDone() (bool, error) {
+	var done bool
+	err := sc.db.Txn(func(txn *client.Txn) error {
+		tableDesc, err := getTableDescFromID(txn, sc.tableID)
+		if err != nil {
+			return err
+		}
+		if sc.mutationID == invalidMutationID {
+			if !tableDesc.UpVersion {
+				done = true
+			}
+		} else {
+			done = true
+			for _, mutation := range tableDesc.Mutations {
+				if mutation.MutationID == sc.mutationID {
+					done = false
+					break
+				}
+			}
+		}
+		return nil
+	})
+	return done, err
 }
