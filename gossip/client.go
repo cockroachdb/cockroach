@@ -135,6 +135,7 @@ func (c *client) handleGossip(g *Gossip, call *netrpc.Call) error {
 	if call.Error != nil {
 		return call.Error
 	}
+	args := call.Args.(*Request)
 	reply := call.Reply.(*Response)
 
 	// Combine remote node's infostore delta with ours.
@@ -147,8 +148,8 @@ func (c *client) handleGossip(g *Gossip, call *netrpc.Call) error {
 				log.Infof("received %d (%d fresh) info(s) from %s", infoCount, freshCount, c.addr)
 			}
 		}
-	} else {
-		log.Infof("sent %d info(s) to %s", len(call.Args.(*Request).Delta), c.addr)
+	} else if len(args.Delta) > 0 {
+		log.Infof("sent %d info(s) to %s", len(args.Delta), c.addr)
 	}
 	c.peerID = reply.NodeID
 	g.outgoing.addNode(c.peerID)
@@ -216,16 +217,18 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 			if err := c.handleGossip(g, call); err != nil {
 				return err
 			}
+			req := call.Args.(*Request)
 			// If this was from a gossip pull request, fetch again.
-			if req, ok := call.Args.(*Request); ok {
-				if req.Delta == nil {
-					c.getGossip(g, addr, lAddr, done)
-				} else {
-					g.mu.Lock()
-					c.sendingGossip = false
-					g.mu.Unlock()
-					c.sendGossip(g, addr, lAddr, done)
-				}
+			if req.Delta == nil {
+				c.getGossip(g, addr, lAddr, done)
+			} else {
+				// Otherwise, it's a gossip push request; set sendingGossip
+				// flag false and maybe send more gossip if there have been
+				// additional updates.
+				g.mu.Lock()
+				c.sendingGossip = false
+				g.mu.Unlock()
+				c.sendGossip(g, addr, lAddr, done)
 			}
 		case <-c.rpcClient.Closed:
 			return util.Errorf("client closed")
