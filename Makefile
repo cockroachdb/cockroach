@@ -36,10 +36,16 @@ TESTFLAGS    :=
 DUPLFLAGS    := -t 100
 
 ifeq ($(STATIC),1)
-# The netgo build tag instructs the net package to try to build a
-# Go-only resolver. As of Go 1.5, netgo is the default...but apparently
-# not when using cgo (???).
-TAGS += netgo
+# Static linking with glibc is a bad time; see
+# https://github.com/golang/go/issues/13470.
+# If a static build is requested, assume musl is installed (it is in
+# the cockroachdb/builder docker container) and link against it
+# instead.
+CC = /usr/local/musl/bin/musl-gcc
+# `-v` so warnings from the linker aren't suppressed.
+# `-a` so dependencies are rebuilt (they may have been dynamically
+# linked).
+GOFLAGS += -a -v
 LDFLAGS += -extldflags '-static'
 endif
 
@@ -58,14 +64,14 @@ build: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTag=$(shell git
 build: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 build: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildDeps=$(shell GOPATH=${GOPATH} build/depvers.sh)"
 build:
-	$(GO) build -tags '$(TAGS)' $(GOFLAGS) -ldflags '$(LDFLAGS)' -v -i -o cockroach
+	$(GO) build -tags '$(TAGS)' $(GOFLAGS) -ldflags '$(LDFLAGS)' -i -o cockroach
 
 .PHONY: install
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTag=$(shell git describe --dirty)"
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildDeps=$(shell GOPATH=${GOPATH} build/depvers.sh)"
 install:
-	$(GO) install -tags '$(TAGS)' $(GOFLAGS) -ldflags '$(LDFLAGS)' -v
+	$(GO) install -tags '$(TAGS)' $(GOFLAGS) -ldflags '$(LDFLAGS)'
 
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.
