@@ -5,6 +5,15 @@
 
 set -euo pipefail
 
+function check_static() {
+    local libs=$(ldd $1 | egrep -v '(linux-vdso\.|librt\.|libpthread\.|libm\.|libc\.|ld-linux-)')
+    if [ -n "${libs}" ]; then
+	echo "$1 is not properly statically linked"
+	ldd $1
+	exit 1
+    fi
+}
+
 # This is mildly tricky: This script runs itself recursively. The
 # first time it is run it does not take the if-branch below and
 # executes on the host computer. It uses the builder.sh script to run
@@ -13,6 +22,8 @@ set -euo pipefail
 # container.
 if [ "${1-}" = "docker" ]; then
     time make STATIC=1 release
+
+    check_static cockroach
 
     mv cockroach build/deploy/cockroach
 
