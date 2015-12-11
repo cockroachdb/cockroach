@@ -575,11 +575,7 @@ func (r *rocksDBIterator) ValueProto(msg proto.Message) error {
 	if r.value.len <= 0 {
 		return nil
 	}
-	err := proto.Unmarshal(r.unsafeValue(), msg)
-	if err != nil {
-		fmt.Printf("ValueProto: %T: %v\n%x\n%x\n", msg, err, r.unsafeKey(), r.unsafeValue())
-	}
-	return err
+	return proto.Unmarshal(r.unsafeValue(), msg)
 }
 
 func (r *rocksDBIterator) unsafeKey() MVCCKey {

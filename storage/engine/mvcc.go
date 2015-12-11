@@ -94,8 +94,11 @@ func (k MVCCKey) IsValue() bool {
 
 // EncodedSize returns the size of the MVCCKey when encoded.
 func (k MVCCKey) EncodedSize() int {
-	n := len(k.Key) + 3
+	n := len(k.Key) + 1
 	if k.IsValue() {
+		// Note that this isn't quite accurate: timestamps consume between 8-13
+		// bytes. Fixing this only adjusts the accounting for timestamps, not the
+		// actual on disk storage.
 		n += int(mvccVersionTimestampSize)
 	}
 	return n

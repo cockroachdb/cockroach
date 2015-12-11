@@ -20,49 +20,21 @@
 
 #include <stdint.h>
 
-// EncodeBytes encodes the n bytes at ptr using an escape-based encoding. The
-// encoded value is terminated with the sequence "\x00\x01" which is guaranteed
-// to not occur elsewhere in the encoded value. The encoded bytes are appended
-// to the supplied buffer.
-void EncodeBytes(std::string* buf, const char* ptr, int n);
-
 // EncodeUint32 encodes the uint32 value using a big-endian 4 byte
 // representation. The bytes are appended to the supplied buffer.
 void EncodeUint32(std::string* buf, uint32_t v);
-
-// EncodeUint32Decreasing encodes the uint32 value so that it sorts in reverse
-// order, from largest to smallest.
-void EncodeUint32Decreasing(std::string* buf, uint32_t v);
 
 // EncodeUint64 encodes the uint64 value using a big-endian 8 byte
 // representation. The encoded bytes are appended to the supplied buffer.
 void EncodeUint64(std::string* buf, uint64_t v);
 
-// EncodeUint64Decreasing encodes the uint64 value so that it sorts in reverse
-// order, from largest to smallest.
-void EncodeUint64Decreasing(std::string* buf, uint64_t v);
-
-// DecodeBytes decodes a byte slice from a buffer, returning true on a
-// successful decode. The decoded bytes are returned in *decoded.
-bool DecodeBytes(rocksdb::Slice* buf, std::string* decoded);
-
 // DecodedUint32 decodes a fixed-length encoded uint32 from a buffer, returning
 // true on a successful decode. The decoded value is returned in *value.
 bool DecodeUint32(rocksdb::Slice* buf, uint32_t* value);
 
-// DecodedUint32Decreasing decodes a fixed-length encoded uint32 from a buffer
-// that was encoded using EncodeUint32Decreasing, returning true on a
-// successful decode. The decoded value is returned in *value.
-bool DecodeUint32Decreasing(rocksdb::Slice* buf, uint32_t* value);
-
 // DecodedUint64 decodes a fixed-length encoded uint64 from a buffer, returning
 // true on a successful decode. The decoded value is returned in *value.
 bool DecodeUint64(rocksdb::Slice* buf, uint64_t* value);
-
-// DecodedUint64Decreasing decodes a fixed-length encoded uint64 from a buffer
-// that was encoded using EncodeUint64Decreasing, returning true on a
-// successful decode. The decoded value is returned in *value.
-bool DecodeUint64Decreasing(rocksdb::Slice* buf, uint64_t* value);
 
 #endif // ROACHLIB_ENCODING_H
 

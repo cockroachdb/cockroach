@@ -243,8 +243,8 @@ func TestBatchProto(t *testing.T) {
 	if !ok || err != nil {
 		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
 	}
-	if keySize != 8 {
-		t.Errorf("expected key size 8; got %d", keySize)
+	if keySize != 6 {
+		t.Errorf("expected key size 6; got %d", keySize)
 	}
 	data, err := val.Marshal()
 	if err != nil {
