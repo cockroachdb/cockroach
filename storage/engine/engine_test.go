@@ -589,6 +589,11 @@ func TestSnapshotMethods(t *testing.T) {
 			if err := engine.Put(keys[i], vals[i]); err != nil {
 				t.Fatal(err)
 			}
+			if val, err := engine.Get(keys[i]); err != nil {
+				t.Fatal(err)
+			} else if !bytes.Equal(vals[i], val) {
+				t.Fatalf("expected %s, but found %s", vals[i], val)
+			}
 		}
 		snap := engine.NewSnapshot()
 		defer snap.Close()
@@ -609,13 +614,15 @@ func TestSnapshotMethods(t *testing.T) {
 		}
 
 		// Verify Get.
-		valSnapshot, err := snap.Get(keys[0])
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal(vals[0], valSnapshot) {
-			t.Fatalf("the value %s in get result does not match the value %s in snapshot",
-				vals[0], valSnapshot)
+		for i := range keys {
+			valSnapshot, err := snap.Get(keys[i])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(vals[i], valSnapshot) {
+				t.Fatalf("the value %s in get result does not match the value %s in snapshot",
+					vals[i], valSnapshot)
+			}
 		}
 
 		// Verify Scan.

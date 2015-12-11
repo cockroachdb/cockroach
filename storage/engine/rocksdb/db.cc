@@ -899,9 +899,9 @@ struct IteratorGetter : public Getter {
 struct DBGetter : public Getter {
   rocksdb::DB *const rep;
   rocksdb::ReadOptions const options;
-  rocksdb::Slice const key;
+  std::string const key;
 
-  DBGetter(rocksdb::DB *const r, rocksdb::ReadOptions opts, rocksdb::Slice k)
+  DBGetter(rocksdb::DB *const r, rocksdb::ReadOptions opts, const std::string &k)
       : rep(r),
         options(opts),
         key(k) {
@@ -1381,14 +1381,13 @@ DBStatus DBImpl::Get(DBKey key, DBString* value) {
 }
 
 DBStatus DBBatch::Get(DBKey key, DBString* value) {
-  std::string encoded_key = EncodeKey(key);
-  DBGetter base(rep, read_opts, encoded_key);
+  DBGetter base(rep, read_opts, EncodeKey(key));
   if (updates == 0) {
     return base.Get(value);
   }
   std::unique_ptr<rocksdb::WBWIIterator> iter(batch.NewIterator());
-  iter->Seek(encoded_key);
-  return ProcessDeltaKey(&base, iter.get(), encoded_key, value);
+  iter->Seek(base.key);
+  return ProcessDeltaKey(&base, iter.get(), base.key, value);
 }
 
 DBStatus DBSnapshot::Get(DBKey key, DBString* value) {
