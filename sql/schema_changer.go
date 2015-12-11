@@ -33,7 +33,6 @@ import (
 
 var errNoMutations = errors.New("no mutations")
 var errNoUpVersion = errors.New("no up version")
-var errReadyToApply = errors.New("ready to apply")
 
 // SchemaChanger is used to change the schema on a table.
 type SchemaChanger struct {
@@ -180,7 +179,7 @@ func (sc *SchemaChanger) ExtendLease(lease TableDescriptor_SchemaChangeLease) (T
 	return lease, err
 }
 
-// execute the entire schema change in steps.
+// Execute the entire schema change in steps.
 func (sc SchemaChanger) exec() error {
 	// Acquire lease.
 	lease, err := sc.AcquireLease()
@@ -199,13 +198,21 @@ func (sc SchemaChanger) exec() error {
 		return err
 	}
 
+	// Wait for the schema change to propagate to all nodes
+	// after this function returns, so that the new schema is live everywhere.
+	// This is not needed for correctness but is done to make the UI
+	// experience/tests predictable.
+	defer func() {
+		_ = sc.waitToUpdateLeases()
+	}()
+
 	if sc.mutationID == invalidMutationID {
 		// Nothing more to do.
-		return sc.waitToUpdateLeases()
+		return nil
 	}
 
 	// Another transaction might set the up_version bit again,
-	// but we're not anymore responsible for taking care of that.
+	// but we're no longer responsible for taking care of that.
 
 	// Run through mutation state machine before backfill.
 	if err := sc.runStateMachineBeforeBackfill(); err != nil {
@@ -248,8 +255,7 @@ func (sc *SchemaChanger) maybeIncrementVersion() error {
 
 // Pick the mutation version that is going to be applied, move the
 // state forward and wait to ensure that all nodes are seeing the
-// latest version of the table. return the version of the mutation
-// picked (which is not necessarily the latest version).
+// latest version of the table.
 func (sc *SchemaChanger) runStateMachineBeforeBackfill() error {
 	if err := sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
 		var workDone bool
@@ -309,7 +315,7 @@ func (sc *SchemaChanger) waitToUpdateLeases() error {
 }
 
 func (sc *SchemaChanger) done() error {
-	if err := sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
+	return sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
 		i := 0
 		for _, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
@@ -320,20 +326,12 @@ func (sc *SchemaChanger) done() error {
 		}
 		desc.Mutations = desc.Mutations[i:]
 		return nil
-	}); err != nil {
-		return err
-	}
-	// Finished executing some schema changes. Wait for the schema change
-	// to propagate to all nodes, so that the new schema is live everywhere.
-	// This is not needed for correctness but is done to make the UI
-	// experience/tests predictable.
-	_ = sc.waitToUpdateLeases()
-	return nil
+	})
 }
 
 // Purge all mutations with the mutationID. This is called after
 // hitting an irrecoverable error. Reverse the direction of the mutations
-// and run through the mutations until their deleted.
+// and run through the state machine until the mutations are deleted.
 func (sc *SchemaChanger) purgeMutations() error {
 	// Reverse the flow of the state machine.
 	if err := sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
@@ -363,17 +361,16 @@ func (sc *SchemaChanger) purgeMutations() error {
 		return err
 	}
 
-	// apply backfill and don't run purge on hitting an error.
+	// Apply backfill and don't run purge on hitting an error.
 	// TODO(vivek): If this fails we can get into a permanent
 	// failure with some mutations, where subsequent schema
 	// changers keep attempting to apply and purge mutations.
-	// we try to apply and purge the mutations
+	// This is a theoretical problem at this stage (2015/12).
 	if err := sc.applyMutations(); err != nil {
 		return err
 	}
 
-	// Mark the mutations as completed, and wait until the latest version
-	// is visible on all leases.
+	// Mark the mutations as completed.
 	return sc.done()
 }
 

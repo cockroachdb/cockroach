@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+// GossipUpdater receives gossip updates on behalf of
+// the sql layer.
 type GossipUpdater struct {
 	// System Config and mutex.
 	systemConfig   config.SystemConfig
@@ -65,6 +67,10 @@ var (
 	asyncSchemaChangeExecDelay    = 360 * time.Second
 )
 
+// TestDisableSyncSchemaChangeExec is used in tests to
+// disable the synchronous execution of schema changes,
+// so that the asynchronous schema changer can run the
+// schema changes.
 func TestDisableSyncSchemaChangeExec() func() {
 	disableSyncSchemaChangeExec = true
 	asyncSchemaChangeExecInterval = 20 * time.Millisecond
@@ -76,8 +82,8 @@ func TestDisableSyncSchemaChangeExec() func() {
 	}
 }
 
-// RefreshLeases starts a goroutine that refreshes the lease manager
-// leases for tables received in the latest system configuration via gossip.
+// Start starts a goroutine that reads table schema received in the latest
+// system configuration via gossip and applies updates.
 func (g *GossipUpdater) Start(s *stop.Stopper, db *client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager) {
 	s.RunWorker(func() {
 		// Create channel that receives new system config notifications.
