@@ -37,6 +37,9 @@ STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
 
 ifeq ($(STATIC),1)
+# The Go resolver should work well enough for now; better than musl, anyway.
+# See #3404.
+TAGS += netgo
 # Static linking with glibc is a bad time; see
 # https://github.com/golang/go/issues/13470.
 # If a static build is requested, assume musl is installed (it is in
