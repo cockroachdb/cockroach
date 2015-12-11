@@ -192,3 +192,23 @@ func (n *Network) IsNetworkConnected() bool {
 	}
 	return true
 }
+
+// InfosSent returns the total count of infos sent from all nodes in
+// the network.
+func (n *Network) InfosSent() int {
+	var count int
+	for _, node := range n.Nodes {
+		count += node.Gossip.InfosSent()
+	}
+	return count
+}
+
+// InfosReceived returns the total count of infos received from all
+// nodes in the network.
+func (n *Network) InfosReceived() int {
+	var count int
+	for _, node := range n.Nodes {
+		count += node.Gossip.InfosReceived()
+	}
+	return count
+}

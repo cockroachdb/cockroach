@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // verifyConvergence verifies that info from each node is visible from
@@ -33,6 +34,7 @@ func verifyConvergence(numNodes, maxCycles int, t *testing.T) {
 		t.Errorf("expected a fully-connected network within %d cycles; took %d",
 			maxCycles, connectedCycle)
 	}
+	log.Infof("connected info sent: %d, received: %d", network.InfosSent(), network.InfosReceived())
 	network.Stop()
 }
 

@@ -32,20 +32,26 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+// A clientInfo holds information about an incoming client connection
+// and is stored in the server's lAddrMap, which is keyed by an
+// incoming client's local address.
 type clientInfo struct {
-	id   roachpb.NodeID
-	addr *util.UnresolvedAddr
+	id              roachpb.NodeID
+	addr            *util.UnresolvedAddr
+	highWaterStamps map[int32]int64
 }
 
 // server maintains an array of connected peers to which it gossips
 // newly arrived information on a periodic basis.
 type server struct {
-	mu       sync.Mutex            // Protects the fields below
-	is       infoStore             // The backing infostore
-	closed   bool                  // True if server was closed
-	incoming nodeSet               // Incoming client node IDs
-	lAddrMap map[string]clientInfo // Incoming client's local address -> client's node info
-	ready    *sync.Cond            // Broadcasts wakeup to waiting gossip requests
+	mu       sync.Mutex             // Protects the fields below
+	is       infoStore              // The backing infostore
+	closed   bool                   // True if server was closed
+	incoming nodeSet                // Incoming client node IDs
+	lAddrMap map[string]*clientInfo // Incoming client's local address -> client's node info
+	sent     int                    // Count of infos sent from this server to clients
+	received int                    // Count of infos received from clients
+	ready    *sync.Cond             // Broadcasts wakeup to waiting gossip requests
 
 	simulationCycler *sync.Cond // Used when simulating the network to signal next cycle
 }
@@ -55,7 +61,7 @@ func newServer() *server {
 	s := &server{
 		is:       newInfoStore(0, util.UnresolvedAddr{}),
 		incoming: makeNodeSet(1),
-		lAddrMap: map[string]clientInfo{},
+		lAddrMap: map[string]*clientInfo{},
 	}
 	s.ready = sync.NewCond(&s.mu)
 	return s
@@ -99,12 +105,15 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 			// This lookup map allows the incoming client to be removed from
 			// the incoming addr set when its connection is closed. See
 			// server.serveConn() below.
-			s.lAddrMap[lAddr.String()] = clientInfo{args.NodeID, &args.Addr}
+			s.lAddrMap[lAddr.String()] = &clientInfo{args.NodeID, &args.Addr, nil}
 		}
+	} else {
+		s.lAddrMap[lAddr.String()].highWaterStamps = args.HighWaterStamps
 	}
 
 	// Combine incoming infos if specified and exit.
 	if args.Delta != nil {
+		s.received += len(args.Delta)
 		freshCount := s.is.combine(args.Delta, args.NodeID)
 		if log.V(1) {
 			log.Infof("received %s from %s (%d fresh)", args.Delta, addr, freshCount)
@@ -124,7 +133,9 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 		if s.closed {
 			return nil, util.Errorf("gossip server shutdown")
 		}
-		reply.Delta = s.is.delta(args.NodeID, args.HighWaterStamps)
+		if canAccept {
+			reply.Delta = s.is.delta(args.NodeID, s.lAddrMap[lAddr.String()].highWaterStamps)
+		}
 		if len(reply.Delta) > 0 || !canAccept {
 			// If there is no more capacity to accept incoming clients, return
 			// a random already-being-serviced incoming client as an alternate.
@@ -140,6 +151,7 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 				}
 			}
 			reply.HighWaterStamps = s.is.getHighWaterStamps()
+			s.sent += len(reply.Delta)
 			return reply, nil
 		}
 		// Wait for server to get new gossip set before computing delta.
@@ -149,6 +161,20 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 			return nil, util.Errorf("client connection closed")
 		}
 	}
+}
+
+// InfosSent returns the total count of infos sent to clients.
+func (s *server) InfosSent() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.sent
+}
+
+// InfosReceived returns the total count of infos received from clients.
+func (s *server) InfosReceived() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.received
 }
 
 // maxPeers returns the maximum number of peers each gossip node

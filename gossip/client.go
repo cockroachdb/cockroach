@@ -116,10 +116,11 @@ func (c *client) sendGossip(g *Gossip, addr, lAddr util.UnresolvedAddr, done cha
 	}
 
 	args := Request{
-		NodeID: nodeID,
-		Addr:   addr,
-		LAddr:  lAddr,
-		Delta:  delta,
+		NodeID:          nodeID,
+		Addr:            addr,
+		LAddr:           lAddr,
+		Delta:           delta,
+		HighWaterStamps: g.is.getHighWaterStamps(),
 	}
 	reply := Response{}
 	c.rpcClient.Go("Gossip.Gossip", &args, &reply, done)
