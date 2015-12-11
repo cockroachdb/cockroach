@@ -3,6 +3,8 @@
 
 set -euo pipefail
 
+source $(dirname $0)/build-common.sh
+
 # This is mildly tricky: This script runs itself recursively. The
 # first time it is run it does not take the if-branch below and
 # executes on the host computer. It uses the builder.sh script to run
@@ -14,11 +16,9 @@ if [ "${1-}" = "docker" ]; then
     time make STATIC=1 testbuild PKG=./sql
     time make STATIC=1 testbuild PKG=./acceptance TAGS=acceptance
 
-    # Make sure the created binary is statically linked.  Seems
-    # awkward to do this programmatically, but this should work.
-    file cockroach | grep -F 'statically linked' > /dev/null
-    file sql/sql.test | grep -F 'statically linked' > /dev/null
-    file acceptance/acceptance.test | grep -F 'statically linked' > /dev/null
+    check_static cockroach
+    check_static sql/sql.test
+    check_static acceptance/acceptance.test
 
     strip -S cockroach
     strip -S sql/sql.test

@@ -5,6 +5,8 @@
 
 set -euo pipefail
 
+source $(dirname $0)/build-common.sh
+
 # This is mildly tricky: This script runs itself recursively. The
 # first time it is run it does not take the if-branch below and
 # executes on the host computer. It uses the builder.sh script to run
@@ -13,6 +15,8 @@ set -euo pipefail
 # container.
 if [ "${1-}" = "docker" ]; then
     time make STATIC=1 release
+
+    check_static cockroach
 
     mv cockroach build/deploy/cockroach
 
