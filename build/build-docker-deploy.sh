@@ -14,10 +14,6 @@ set -euo pipefail
 if [ "${1-}" = "docker" ]; then
     time make STATIC=1 release
 
-    # Make sure the created binary is statically linked.  Seems
-    # awkward to do this programmatically, but this should work.
-    file cockroach | grep -F 'statically linked' > /dev/null
-
     mv cockroach build/deploy/cockroach
 
     exit 0

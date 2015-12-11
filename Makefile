@@ -38,16 +38,14 @@ DUPLFLAGS    := -t 100
 
 ifeq ($(STATIC),1)
 # Static linking with glibc is a bad time; see
-# https://github.com/golang/go/issues/13470.
-# If a static build is requested, assume musl is installed (it is in
-# the cockroachdb/builder docker container) and link against it
-# instead.
-CC = /usr/local/musl/bin/musl-gcc
+# https://github.com/golang/go/issues/13470. If a static build is
+# requested, only link libgcc and libstdc++ statically.
 # `-v` so warnings from the linker aren't suppressed.
 # `-a` so dependencies are rebuilt (they may have been dynamically
 # linked).
 GOFLAGS += -a -v
-LDFLAGS += -extldflags '-static'
+# TODO(peter): Allow this only when `go env CC` reports "gcc".
+LDFLAGS += -extldflags "-static-libgcc -static-libstdc++"
 endif
 
 .PHONY: all
