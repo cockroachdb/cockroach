@@ -599,6 +599,16 @@ func (desc *TableDescriptor) VisibleColumns() []ColumnDescriptor {
 	return cols
 }
 
+func (desc *TableDescriptor) allColumnsSelector() parser.SelectExprs {
+	exprs := make(parser.SelectExprs, len(desc.Columns))
+	qnames := make([]parser.QualifiedName, len(desc.Columns))
+	for i, col := range desc.Columns {
+		qnames[i].Base = parser.Name(col.Name)
+		exprs[i].Expr = &qnames[i]
+	}
+	return exprs
+}
+
 // SQLString returns the SQL string corresponding to the type.
 func (c *ColumnType) SQLString() string {
 	switch c.Kind {

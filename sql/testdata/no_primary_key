@@ -64,3 +64,6 @@ a INT true NULL
 b INT true NULL
 rowid INT false experimental_unique_int()
 c STRING true NULL
+
+statement ok
+CREATE INDEX a_idx ON t (a);

@@ -99,8 +99,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	// expressions for tuple assignments just as we flattened the column names
 	// above. So "UPDATE t SET (a, b) = (1, 2)" translates into select targets of
 	// "*, 1, 2", not "*, (1, 2)".
-	targets := make(parser.SelectExprs, 0, len(n.Exprs)+1)
-	targets = append(targets, parser.StarSelectExpr())
+	targets := tableDesc.allColumnsSelector()
 	for _, expr := range n.Exprs {
 		if expr.Tuple {
 			switch t := expr.Expr.(type) {
