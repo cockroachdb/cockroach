@@ -27,7 +27,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-// Future home of the aysynchronous schema changer that picks up
+// Future home of the asynchronous schema changer that picks up
 // queued schema changes and processes them.
 //
 // applyMutations applies the queued mutations for a table.

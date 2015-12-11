@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -100,6 +101,24 @@ func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
 	}
 
 	desc.Name = name
+}
+
+// Fill in column names and directions.
+func (desc *IndexDescriptor) fillColumns(elems parser.IndexElemList) error {
+	desc.ColumnNames = make([]string, 0, len(elems))
+	desc.ColumnDirections = make([]IndexDescriptor_Direction, 0, len(elems))
+	for _, c := range elems {
+		desc.ColumnNames = append(desc.ColumnNames, string(c.Column))
+		switch c.Direction {
+		case parser.Ascending, parser.DefaultDirection:
+			desc.ColumnDirections = append(desc.ColumnDirections, IndexDescriptor_ASC)
+		case parser.Descending:
+			desc.ColumnDirections = append(desc.ColumnDirections, IndexDescriptor_DESC)
+		default:
+			return fmt.Errorf("invalid direction %s for column %s", c.Direction, c.Column)
+		}
+	}
+	return nil
 }
 
 // containsColumnID returns true if the index descriptor contains the specified
@@ -396,6 +415,10 @@ func (desc *TableDescriptor) Validate() error {
 		if len(index.ColumnIDs) != len(index.ColumnNames) {
 			return fmt.Errorf("mismatched column IDs (%d) and names (%d)",
 				len(index.ColumnIDs), len(index.ColumnNames))
+		}
+		if len(index.ColumnIDs) != len(index.ColumnDirections) {
+			return fmt.Errorf("mismatched column IDs (%d) and directions (%d)",
+				len(index.ColumnIDs), len(index.ColumnDirections))
 		}
 
 		if len(index.ColumnIDs) == 0 {

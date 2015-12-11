@@ -57,6 +57,12 @@ message ColumnDescriptor {
 }
 
 message IndexDescriptor {
+  // The direction of a column in the index.
+  enum Direction {
+    ASC = 0;
+    DESC = 1;
+  }
+
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "IndexID"];
@@ -66,6 +72,9 @@ message IndexDescriptor {
   // names here proves to be prohibitive, we could clear this field before
   // saving and reconstruct it after loading.
   repeated string column_names = 4;
+  // Parallel with column_names - the sort direction of each column.
+  repeated Direction column_directions = 8;
+
   // An ordered list of column names which the index stores in
   // addition to the columns which are explicitly part of the index.
   repeated string store_column_names = 5;
