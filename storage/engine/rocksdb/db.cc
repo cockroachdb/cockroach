@@ -901,10 +901,10 @@ struct DBGetter : public Getter {
   rocksdb::ReadOptions const options;
   std::string const key;
 
-  DBGetter(rocksdb::DB *const r, rocksdb::ReadOptions opts, const std::string &k)
+  DBGetter(rocksdb::DB *const r, rocksdb::ReadOptions opts, std::string &&k)
       : rep(r),
         options(opts),
-        key(k) {
+        key(std::move(k)) {
   }
 
   virtual DBStatus Get(DBString* value) {
