@@ -96,9 +96,9 @@ type SelectExpr struct {
 	As   Name
 }
 
-// StarSelectExpr is a convenience function that represents an unqualified "*"
+// starSelectExpr is a convenience function that represents an unqualified "*"
 // in a select expression.
-func StarSelectExpr() SelectExpr {
+func starSelectExpr() SelectExpr {
 	return SelectExpr{Expr: StarExpr()}
 }
 

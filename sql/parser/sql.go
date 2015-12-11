@@ -5275,7 +5275,7 @@ sqldefault:
 		//line sql.y:1675
 		{
 			sqlVAL.selectStmt = &Select{
-				Exprs:       SelectExprs{StarSelectExpr()},
+				Exprs:       SelectExprs{starSelectExpr()},
 				From:        TableExprs{&AliasedTableExpr{Expr: sqlDollar[2].qname}},
 				tableSelect: true,
 			}
@@ -7358,7 +7358,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3346
 		{
-			sqlVAL.selExpr = StarSelectExpr()
+			sqlVAL.selExpr = starSelectExpr()
 		}
 	case 659:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
