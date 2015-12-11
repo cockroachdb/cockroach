@@ -37,7 +37,7 @@ CockroachDB is currently in alpha. See our
 
 #### Using Docker
 
-Install Docker! On OSX ([official docs](http://docs.docker.com/engine/installation/mac/#from-your-shell)):
+Install Docker! On OSX ([official docs](https://docs.docker.com/engine/installation/mac/#from-your-shell)):
 ```bash
 # install docker and docker-machine:
 $ brew install docker docker-machine
