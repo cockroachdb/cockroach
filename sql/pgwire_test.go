@@ -186,7 +186,7 @@ func TestPGPrepared(t *testing.T) {
 	} else if v {
 		t.Fatal("expected false")
 	}
-	if err := stmt.QueryRow(1).Scan(&v); err != nil {
-		t.Fatal(err)
+	if err := stmt.QueryRow(1).Scan(&v); err == nil {
+		t.Fatal("expected error")
 	}
 }

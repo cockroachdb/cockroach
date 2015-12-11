@@ -116,9 +116,9 @@ func (b *readBuffer) getByte() (byte, error) {
 	return v, nil
 }
 
-func (b *readBuffer) getBytes(n int32) ([]byte, error) {
+func (b *readBuffer) getBytes(n int) ([]byte, error) {
 	if len(b.msg) < n {
-		return 0, util.Errorf("insufficient data: %d", len(b.msg))
+		return nil, util.Errorf("insufficient data: %d", len(b.msg))
 	}
 	v := b.msg[:n]
 	b.msg = b.msg[n:]

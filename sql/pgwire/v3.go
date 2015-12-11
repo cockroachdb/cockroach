@@ -46,6 +46,7 @@ const (
 	serverMsgRowDescription                   = 'T'
 	serverMsgEmptyQuery                       = 'I'
 	serverMsgParameterDescription             = 't'
+	serverMsgBindComplete                     = '2'
 
 	clientMsgSimpleQuery = 'Q'
 	clientMsgParse       = 'P'
@@ -53,7 +54,8 @@ const (
 	clientMsgDescribe    = 'D'
 	clientMsgSync        = 'S'
 	clientMsgClose       = 'C'
-	clientBind = 'B'
+	clientBind           = 'B'
+	clientExecute        = 'E'
 )
 
 const (
@@ -62,21 +64,23 @@ const (
 
 type parsedQuery struct {
 	query   string
-	stmt    parser.Statement
 	types   []oid.Oid
 	columns []*driver.Response_Result_Rows_Column
+	params  []driver.Datum
 }
 
 type v3Conn struct {
-	rd       *bufio.Reader
-	wr       *bufio.Writer
-	opts     opts
-	executor *sql.Executor
-	parsed   map[string]parsedQuery
-	readBuf  readBuffer
-	writeBuf writeBuffer
-	tagBuf   [64]byte
-	session  sql.Session
+	rd              *bufio.Reader
+	wr              *bufio.Writer
+	opts            opts
+	executor        *sql.Executor
+	parsed          map[string]parsedQuery
+	readBuf         readBuffer
+	writeBuf        writeBuffer
+	tagBuf          [64]byte
+	session         sql.Session
+	pq              *parsedQuery
+	inExtendedQuery bool
 }
 
 type opts struct {
@@ -131,10 +135,12 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	if err := c.wr.Flush(); err != nil {
 		return err
 	}
-	inExtendedQuery := false
+	// Check Postgres sources for when this should be set.
+	// https://github.com/postgres/postgres/blob/master/src/backend/tcop/postgres.c
+	c.inExtendedQuery = false
 	for {
-		if !inExtendedQuery {
-			fmt.Println("SEND MSG READY")
+		if !c.inExtendedQuery {
+			fmt.Println("SRV SEND MSG READY")
 			c.writeBuf.initMsg(serverMsgReady)
 			var txnStatus byte = 'I'
 			if sessionTxn := c.session.Txn; sessionTxn != nil {
@@ -162,29 +168,36 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println("GOT", string(typ))
+		fmt.Println("SRV GOT", string(typ))
 		switch typ {
 		case clientMsgSimpleQuery:
 			err = c.handleSimpleQuery(&c.readBuf)
 
 		case clientMsgParse:
-			inExtendedQuery = true
+			c.inExtendedQuery = true
 			err = c.handleParse(&c.readBuf)
 
 		case clientMsgTerminate:
 			return nil
 
 		case clientMsgDescribe:
+			c.inExtendedQuery = true
 			err = c.handleDescribe(&c.readBuf)
 
 		case clientMsgSync:
-			inExtendedQuery = false
+			c.inExtendedQuery = false
 
 		case clientMsgClose:
+			c.inExtendedQuery = true
 			err = c.handleClose(&c.readBuf)
-			
+
 		case clientBind:
+			c.inExtendedQuery = true
 			err = c.handleBind(&c.readBuf)
+
+		case clientExecute:
+			c.inExtendedQuery = true
+			err = c.handleExecute(&c.readBuf)
 
 		default:
 			log.Fatalf("unrecognized client message type %c", typ)
@@ -223,7 +236,7 @@ func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
 
 	c.opts.database = c.session.Database
 
-	return c.sendResponse(resp)
+	return c.sendResponse(resp, true)
 }
 
 func (c *v3Conn) handleParse(buf *readBuffer) error {
@@ -252,7 +265,6 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	}
 	pq := parsedQuery{
 		query: query,
-		stmt:  stmt,
 		types: make([]oid.Oid, numTypes),
 	}
 	for i := int16(0); i < numTypes; i++ {
@@ -386,32 +398,103 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	if err != nil {
 		return err
 	}
-	formatCodes := make([]int16, numCodes)
-	for i := range formatCodes {
-		formatCodes[i], err = buf.getInt16()
+	formatCodes := make(map[int]int16)
+	for i := 0; i < int(numCodes); i++ {
+		c, err := buf.getInt16()
 		if err != nil {
 			return err
 		}
+		formatCodes[i] = c
+		fmt.Println("SRV FMT CODE", i, formatCodes[i])
 	}
-	numParams, err := buf.getInt16()
+	np, err := buf.getInt16()
 	if err != nil {
 		return err
 	}
+	numParams := int(np)
 	if numParams != len(pq.types) {
 		return c.sendError(fmt.Sprintf("expected %d parameters, got %d", len(pq.types), numParams))
 	}
-	params := make([]driver.Datum, len(numParams))
+	if len(formatCodes) == 1 {
+		for i := 1; i < numParams; i++ {
+			formatCodes[i] = formatCodes[0]
+		}
+	}
+	params := make([]driver.Datum, numParams)
 	for i, t := range pq.types {
+		_, _ = i, t
 		plen, err := buf.getInt32()
 		if err != nil {
 			return err
 		}
-		b, err := buf.getBytes(plen)
+		if plen == -1 {
+			// TODO(mjibson): a NULL parameter, figure out what this should do
+			continue
+		}
+		b, err := buf.getBytes(int(plen))
 		if err != nil {
 			return err
 		}
+		fmt.Println("SRV PARAM", i, plen, string(b), b)
+		var d driver.Datum
+		switch t {
+		case oid.T_bool:
+			switch formatCodes[i] {
+			case 0:
+				var v bool
+				switch string(b) {
+				case "true":
+					v = true
+				case "false":
+					v = false
+				default:
+					fmt.Println("SRV NOT BOOL", string(b))
+					return c.sendError(fmt.Sprintf("unknown bool value: %s", b))
+				}
+				d.Payload = &driver.Datum_BoolVal{BoolVal: v}
+			default:
+				return c.sendError("unsupported: binary bool parameter")
+			}
+		default:
+			return c.sendError(fmt.Sprintf("unsupported: %v", t))
+		}
+		params[i] = d
 	}
-	return nil
+	pq.params = params
+	c.pq = &pq
+	c.writeBuf.initMsg(serverMsgBindComplete)
+	return c.writeBuf.finishMsg(c.wr)
+}
+
+func (c *v3Conn) handleExecute(buf *readBuffer) error {
+	if portal, err := buf.getString(); err != nil {
+		return err
+	} else if portal != "" {
+		return c.sendError("portals are unsupported")
+	}
+	limit, err := buf.getInt32()
+	if err != nil {
+		return err
+	}
+	if limit != 0 {
+		return c.sendError("execute row count limits not supported")
+	}
+
+	c.session.Database = c.opts.database
+
+	resp, _, err := c.executor.ExecuteStatement(c.opts.user, c.session, c.pq.query, c.pq.params)
+	if err != nil {
+		return c.sendError(err.Error())
+	}
+
+	// TODO(mjibson): is this session stuff correct?
+	c.session.Reset()
+	if err := c.session.Unmarshal(resp.Session); err != nil {
+		return err
+	}
+
+	c.opts.database = c.session.Database
+	return c.sendResponse(resp, false)
 }
 
 func (c *v3Conn) sendCommandComplete(tag []byte) error {
@@ -421,6 +504,7 @@ func (c *v3Conn) sendCommandComplete(tag []byte) error {
 }
 
 func (c *v3Conn) sendError(errToSend string) error {
+	c.inExtendedQuery = false
 	c.writeBuf.initMsg(serverMsgErrorResponse)
 	if err := c.writeBuf.WriteByte('S'); err != nil {
 		return err
@@ -453,7 +537,7 @@ func (c *v3Conn) sendError(errToSend string) error {
 	return c.wr.Flush()
 }
 
-func (c *v3Conn) sendResponse(resp driver.Response) error {
+func (c *v3Conn) sendResponse(resp driver.Response, sendDescription bool) error {
 	if len(resp.Results) == 0 {
 		return c.sendCommandComplete(nil)
 	}
@@ -484,8 +568,10 @@ func (c *v3Conn) sendResponse(resp driver.Response) error {
 		case *driver.Response_Result_Rows_:
 			resultRows := result.Rows
 
-			if err := c.sendRowDescription(resultRows.Columns); err != nil {
-				return err
+			if sendDescription {
+				if err := c.sendRowDescription(resultRows.Columns); err != nil {
+					return err
+				}
 			}
 
 			// Send DataRows.
