@@ -1,7 +1,7 @@
 ![logo](/resource/doc/cockroach_db.png?raw=true "Cockroach Labs logo")
 
 
-[![Circle CI](https://circleci.com/gh/cockroachdb/cockroach.svg?style=svg)](https://circleci.com/gh/cockroachdb/cockroach) [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.png)](https://godoc.org/github.com/cockroachdb/cockroach) ![Project Status](http://img.shields.io/badge/status-alpha-red.svg) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/cockroachdb/cockroach?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Circle CI](https://circleci.com/gh/cockroachdb/cockroach.svg?style=svg)](https://circleci.com/gh/cockroachdb/cockroach) [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.png)](https://godoc.org/github.com/cockroachdb/cockroach) ![Project Status](https://img.shields.io/badge/status-alpha-red.svg) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/cockroachdb/cockroach?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 ## A Scalable, Geo-Replicated, Transactional Datastore
 
@@ -37,7 +37,7 @@ CockroachDB is currently in alpha. See our
 
 #### Using Docker
 
-Install Docker! On OSX ([official docs](https://docs.docker.com/installation/mac/#from-your-shell)):
+Install Docker! On OSX ([official docs](https://docs.docker.com/engine/installation/mac/#from-your-shell)):
 ```bash
 # install docker and docker-machine:
 $ brew install docker docker-machine
@@ -168,7 +168,7 @@ Once that's done, take a look at our [open issues](https://github.com/cockroachd
 ### Older talks
 
 * [Venue: The NoSQL User Group Cologne](https://www.youtube.com/watch?v=jI3LiKhqN0E), by [Tobias Schottdorf](https://github.com/tschottdorf) on (11/5/2014), 1h25min.
-* [Venue: Yelp!](http://www.youtube.com/watch?v=MEAuFgsmND0&feature=youtu.be), by [Spencer Kimball](https://github.com/spencerkimball) on (9/5/2014), 1h.
+* [Venue: Yelp!](https://www.youtube.com/watch?feature=youtu.be&v=MEAuFgsmND0), by [Spencer Kimball](https://github.com/spencerkimball) on (9/5/2014), 1h.
 
 
 ## Design
@@ -359,14 +359,14 @@ coordinator and distributed sender used by the DB client gateway.
 ![Client Architecture](/resource/doc/client-architecture.png?raw=true)
 
 [0]: http://rocksdb.org/
-[1]: https://code.google.com/p/leveldb/
+[1]: https://github.com/google/leveldb
 [2]: https://ramcloud.stanford.edu/wiki/download/attachments/11370504/raft.pdf
 [3]: http://research.google.com/archive/spanner.html
 [4]: http://research.google.com/pubs/pub36971.html
 [5]: https://github.com/cockroachdb/cockroach/tree/master/sql
-[7]: http://godoc.org/github.com/cockroachdb/cockroach/kv
+[7]: https://godoc.org/github.com/cockroachdb/cockroach/kv
 [8]: https://github.com/cockroachdb/cockroach/tree/master/kv
-[9]: http://godoc.org/github.com/cockroachdb/cockroach/server
+[9]: https://godoc.org/github.com/cockroachdb/cockroach/server
 [10]: https://github.com/cockroachdb/cockroach/tree/master/server
-[11]: http://godoc.org/github.com/cockroachdb/cockroach/storage
+[11]: https://godoc.org/github.com/cockroachdb/cockroach/storage
 [12]: https://github.com/cockroachdb/cockroach/tree/master/storage
