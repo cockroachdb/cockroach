@@ -29,11 +29,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/samalba/dockerclient"
 )
 
@@ -106,7 +104,7 @@ type LocalCluster struct {
 	mu             sync.Mutex // Protects the fields below
 	dns            *Container
 	vols           *Container
-	numNodes       int
+	numLocal       int
 	Nodes          []*Container
 	events         chan Event
 	expectedEvents chan Event
@@ -119,7 +117,7 @@ type LocalCluster struct {
 // CreateLocal creates a new local cockroach cluster. The stopper is used to
 // gracefully shutdown the channel (e.g. when a signal arrives). The cluster
 // must be started before being used.
-func CreateLocal(numNodes int, stopper chan struct{}) *LocalCluster {
+func CreateLocal(numLocal int, stopper chan struct{}) *LocalCluster {
 	select {
 	case <-stopper:
 		// The stopper was already closed, exit early.
@@ -134,7 +132,7 @@ func CreateLocal(numNodes int, stopper chan struct{}) *LocalCluster {
 	return &LocalCluster{
 		client:   newDockerClient(),
 		stopper:  stopper,
-		numNodes: numNodes,
+		numLocal: numLocal,
 		// TODO(tschottdorf): deadlocks will occur if these channels fill up.
 		events:         make(chan Event, 1000),
 		expectedEvents: make(chan Event, 1000),
@@ -221,7 +219,7 @@ func (l *LocalCluster) initCluster() {
 	l.panicOnStop()
 
 	vols := map[string]struct{}{}
-	for i := 0; i < l.numNodes; i++ {
+	for i := 0; i < l.numLocal; i++ {
 		vols[dataStr(i)] = struct{}{}
 	}
 	create := func() (*Container, error) {
@@ -334,7 +332,7 @@ func (l *LocalCluster) createCACert() {
 func (l *LocalCluster) createNodeCerts() {
 	log.Infof("creating node (%dbit) certs in: %s", keyLen, l.CertsDir)
 	nodes := []string{dockerIP().String()}
-	for i := 0; i < l.numNodes; i++ {
+	for i := 0; i < l.numLocal; i++ {
 		nodes = append(nodes, nodeStr(i))
 	}
 	maybePanic(security.RunCreateNodeCert(l.CertsDir, keyLen, nodes))
@@ -342,7 +340,7 @@ func (l *LocalCluster) createNodeCerts() {
 
 func (l *LocalCluster) startNode(i int) *Container {
 	gossipNodes := []string{}
-	for i := 0; i < l.numNodes; i++ {
+	for i := 0; i < l.numLocal; i++ {
 		gossipNodes = append(gossipNodes, fmt.Sprintf("%s:%d", nodeStr(i), cockroachPort))
 	}
 
@@ -459,7 +457,7 @@ func (l *LocalCluster) Start() {
 
 	l.monitorStopper = make(chan struct{})
 	go l.monitor(l.monitorStopper)
-	l.Nodes = make([]*Container, l.numNodes)
+	l.Nodes = make([]*Container, l.numLocal)
 	for i := range l.Nodes {
 		l.Nodes[i] = l.startNode(i)
 	}
@@ -581,19 +579,11 @@ func (l *LocalCluster) stop() {
 	}
 }
 
-// MakeClient creates a DB client for node 'i' using the cluster certs dir.
-func (l *LocalCluster) MakeClient(t util.Tester, node int) (*client.DB, *stop.Stopper) {
-	stopper := stop.NewStopper()
-
-	db, err := client.Open(stopper, "rpcs://"+security.NodeUser+"@"+
-		l.Nodes[node].Addr("").String()+
-		"?certs="+l.CertsDir)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return db, stopper
+// ConnString creates a connections string.
+func (l *LocalCluster) ConnString(i int) string {
+	return "rpcs://" + security.NodeUser + "@" +
+		l.Nodes[i].Addr("").String() +
+		"?certs=" + l.CertsDir
 }
 
 // NumNodes returns the number of nodes in the cluster.
@@ -611,8 +601,7 @@ func (l *LocalCluster) Restart(i int) error {
 	return l.Nodes[i].Restart(5)
 }
 
-// Get gets the given path from the i-th node and unmarshals into the given
-// interface.
-func (l *LocalCluster) Get(i int, path string, dest interface{}) error {
-	return l.Nodes[i].GetJSON("", path, dest)
+// URL returns the base url.
+func (l *LocalCluster) URL(i int) string {
+	return "https://" + l.Nodes[i].Addr("26257/tcp").String()
 }

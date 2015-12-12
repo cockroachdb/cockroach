@@ -59,7 +59,7 @@ func TestChaos(t *testing.T) {
 
 	// initClient requires that the caller holds the client's write lock.
 	initClient := func(i int) {
-		db, dbStopper := c.MakeClient(t, i)
+		db, dbStopper := makeClient(t, c.ConnString(i))
 		if clients[i].stopper != nil {
 			clients[i].stopper.Stop()
 		}

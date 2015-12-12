@@ -28,7 +28,7 @@ import (
 )
 
 func TestBuildInfo(t *testing.T) {
-	if *numNodes == 0 {
+	if *numLocal == 0 {
 		t.Skip("skipping since not run against local cluster")
 	}
 	l := cluster.CreateLocal(1, stopper) // intentionally using a local cluster
