@@ -20,38 +20,60 @@
 package acceptance
 
 import (
+	"crypto/tls"
+	"encoding/json"
 	"flag"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach-prod/tools/terrafarm"
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 var duration = flag.Duration("d", 5*time.Second, "duration to run the test")
-var numNodes = flag.Int("num", 0, "start a local cluster of the given size")
-var peers = flag.String("peers", "", "comma-separated list of remote cluster nodes")
+var numLocal = flag.Int("num-local", 0, "start a local cluster of the given size")
+var numRemote = flag.Int("num-remote", 0, "start a remote cluster of the given size")
+var cwd = flag.String("cwd", "../../cockroach-prod/terraform/aws", "directory to run terraform from")
 var stall = flag.Duration("stall", time.Minute, "duration after which if no forward progress is made, consider the test stalled")
+var keyName = flag.String("key-name", "cockroach", "name of key for remote cluster")
 var stopper = make(chan struct{})
 
 // StartCluster starts a cluster from the relevant flags.
 func StartCluster(t *testing.T) cluster.Cluster {
-	if *numNodes > 0 {
-		if len(*peers) > 0 {
-			t.Fatal("cannot both specify -num and -peers")
+	if *numLocal > 0 {
+		if *numRemote > 0 {
+			t.Fatal("cannot both specify -num-local and -num-remote")
 		}
-		l := cluster.CreateLocal(*numNodes, stopper)
+		l := cluster.CreateLocal(*numLocal, stopper)
 		l.Start()
 		checkRangeReplication(t, l, 20*time.Second)
 		return l
 	}
-	if len(*peers) == 0 {
-		t.Fatal("need to either specify -num or -peers")
+	if *numRemote == 0 {
+		t.Fatal("need to either specify -num-local or -num-remote")
 	}
-	return cluster.CreateRemote(strings.Split(*peers, ","))
+	f := &terrafarm.Farmer{
+		Debug:   true,
+		Cwd:     *cwd,
+		KeyName: *keyName,
+	}
+	if err := f.Destroy(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Add(*numRemote, 0); err != nil {
+		t.Fatal(err)
+	}
+	return f
 }
 
 func TestMain(m *testing.M) {
@@ -69,4 +91,54 @@ func TestMain(m *testing.M) {
 		}
 	}()
 	os.Exit(m.Run())
+}
+
+func makeClient(t util.Tester, str string) (*client.DB, *stop.Stopper) {
+	stopper := stop.NewStopper()
+
+	db, err := client.Open(stopper, str)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return db, stopper
+}
+
+// HTTPClient is an http.Client configured for querying a cluster. We need to
+// run with "InsecureSkipVerify" (at least on Docker) due to the fact that we
+// cannot use a fixed hostname to reach the cluster. This in turn means that we
+// do not have a verified server name in the certs.
+var HTTPClient = http.Client{
+	Timeout: base.NetworkTimeout,
+	Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}}
+
+// getJSON retrieves the URL specified by the parameters and
+// and unmarshals the result into the supplied interface.
+func getJSON(url, rel string, v interface{}) error {
+	resp, err := HTTPClient.Get(url + rel)
+	if err != nil {
+		if log.V(1) {
+			log.Info(err)
+		}
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		if log.V(1) {
+			log.Info(err)
+		}
+		return err
+	}
+	if err := json.Unmarshal(b, v); err != nil {
+		if log.V(1) {
+			log.Info(err)
+		}
+	}
+	return nil
 }

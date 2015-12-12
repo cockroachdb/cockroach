@@ -38,7 +38,7 @@ func TestSingleKey(t *testing.T) {
 
 	// Initialize the value for our test key to zero.
 	const key = "test-key"
-	db, initDBStopper := c.MakeClient(t, 0)
+	db, initDBStopper := makeClient(t, c.ConnString(0))
 	defer initDBStopper.Stop()
 	if err := db.Put(key, 0); err != nil {
 		t.Fatal(err)
@@ -54,11 +54,11 @@ func TestSingleKey(t *testing.T) {
 	deadline := time.Now().Add(*duration)
 	var expected int64
 
-	// Start up numNodes workers each reading and writing the same
+	// Start up num workers each reading and writing the same
 	// key. Each worker is configured to talk to a different node in the
 	// cluster.
 	for i := 0; i < num; i++ {
-		db, dbStopper := c.MakeClient(t, i)
+		db, dbStopper := makeClient(t, c.ConnString(i))
 		defer dbStopper.Stop()
 		go func() {
 			var r result

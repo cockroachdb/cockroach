@@ -35,7 +35,7 @@ func TestPut(t *testing.T) {
 	c := StartCluster(t)
 	defer c.AssertAndStop(t)
 
-	db, dbStopper := c.MakeClient(t, 0)
+	db, dbStopper := makeClient(t, c.ConnString(0))
 	defer dbStopper.Stop()
 
 	errs := make(chan error, c.NumNodes())

@@ -49,7 +49,7 @@ func checkGossip(t *testing.T, c cluster.Cluster, d time.Duration,
 
 		for i := 0; i < c.NumNodes(); i++ {
 			var m map[string]interface{}
-			if err := c.Get(i, "/_status/gossip/local", &m); err != nil {
+			if err := getJSON(c.URL(i), "/_status/gossip/local", &m); err != nil {
 				return err
 			}
 			infos := m["infos"].(map[string]interface{})
@@ -160,7 +160,7 @@ func TestGossipRestart(t *testing.T) {
 	checkGossip(t, c, time.Second, hasSentinel)
 
 	for i := 0; i < num; i++ {
-		db, dbStopper := c.MakeClient(t, i)
+		db, dbStopper := makeClient(t, c.ConnString(i))
 		if i == 0 {
 			if err := db.Del("count"); err != nil {
 				t.Fatal(err)

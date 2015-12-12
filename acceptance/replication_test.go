@@ -42,7 +42,7 @@ func countRangeReplicas(db *client.DB) (int, error) {
 
 func checkRangeReplication(t util.Tester, c *cluster.LocalCluster, d time.Duration) {
 	// Always talk to node 0.
-	client, dbStopper := c.MakeClient(t, 0)
+	client, dbStopper := makeClient(t, c.ConnString(0))
 	defer dbStopper.Stop()
 
 	wantedReplicas := 3
@@ -74,10 +74,10 @@ func checkRangeReplication(t util.Tester, c *cluster.LocalCluster, d time.Durati
 }
 
 func TestRangeReplication(t *testing.T) {
-	if *numNodes == 0 {
+	if *numLocal == 0 {
 		t.Skip("skipping since not run against local cluster")
 	}
-	l := cluster.CreateLocal(*numNodes, stopper) // intentionally using local cluster
+	l := cluster.CreateLocal(*numLocal, stopper) // intentionally using local cluster
 	l.Start()
 	defer l.AssertAndStop(t)
 

@@ -17,11 +17,7 @@
 
 package cluster
 
-import (
-	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/stop"
-)
+import "github.com/cockroachdb/cockroach/util"
 
 // A Cluster is an abstraction away from a concrete cluster deployment (i.e.
 // a local docker cluster, or an AWS-provisioned one). It exposes a shared
@@ -29,9 +25,8 @@ import (
 type Cluster interface {
 	// NumNodes returns the number of nodes in the cluster, running or not.
 	NumNodes() int
-	// MakeClient returns a client which is pointing at the node with the given
-	// index. The given integer must be in the range [0,NumNodes()-1].
-	MakeClient(util.Tester, int) (*client.DB, *stop.Stopper)
+	// ConnString returns a connection string for the given node.
+	ConnString(int) string
 	// Assert verifies that the cluster state is as expected (i.e. no unexpected
 	// restarts or node deaths occurred). Tests can call this periodically to
 	// ascertain cluster health.
@@ -46,7 +41,6 @@ type Cluster interface {
 	// number, unless it is already stopped, and restarts it.
 	// The given integer must be in the range [0,NumNodes()-1].
 	Restart(int) error
-	// Get queries the given node's HTTP endpoint for the given path, unmarshaling
-	// into the supplied interface (or returning an error).
-	Get(int, string, interface{}) error
+	// URL returns the HTTP(s) endpoint.
+	URL(int) string
 }

@@ -1,5 +1,6 @@
 cmd github.com/cockroachdb/c-protobuf/cmd/protoc
 cmd github.com/cockroachdb/cockroach/protoc-gen-gogoroach
+cmd github.com/cockroachdb/cockroach-prod
 cmd github.com/cockroachdb/yacc
 cmd github.com/golang/lint/golint
 cmd github.com/gordonklaus/ineffassign
