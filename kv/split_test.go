@@ -39,11 +39,15 @@ import (
 const cleanMVCCScanTimeout = 500 * time.Millisecond
 
 // setTestRetryOptions sets client retry options for speedier testing.
-func setTestRetryOptions() {
+func setTestRetryOptions() func() {
+	origRetryOpts := client.DefaultTxnRetryOptions
 	client.DefaultTxnRetryOptions = retry.Options{
 		InitialBackoff: 1 * time.Millisecond,
 		MaxBackoff:     10 * time.Millisecond,
 		Multiplier:     2,
+	}
+	return func() {
+		client.DefaultTxnRetryOptions = origRetryOpts
 	}
 }
 
@@ -185,7 +189,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// This is purely to silence log spam.
 	config.TestingSetupZoneConfigHook(s.Stopper)
 	defer s.Stop()
-	setTestRetryOptions()
+	defer setTestRetryOptions()()
 
 	// Start test writer write about a 32K/key so there aren't too many writes necessary to split 64K range.
 	done := make(chan struct{})
