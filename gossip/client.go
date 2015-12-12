@@ -72,7 +72,11 @@ func (c *client) start(g *Gossip, done chan *client, context *rpc.Context, stopp
 		done <- c
 
 		if err != nil {
-			log.Infof("closing client to %s: %s", c.addr, err)
+			if c.peerID != 0 {
+				log.Infof("closing client to node %d (%s): %s", c.peerID, c.addr, err)
+			} else {
+				log.Infof("closing client to %s: %s", c.addr, err)
+			}
 		}
 	})
 }
@@ -143,36 +147,44 @@ func (c *client) handleGossip(g *Gossip, call *netrpc.Call) error {
 		freshCount := g.is.combine(reply.Delta, reply.NodeID)
 		if infoCount := len(reply.Delta); infoCount > 0 {
 			if log.V(1) {
-				log.Infof("received %s from %s (%d fresh)", reply.Delta, c.addr, freshCount)
+				log.Infof("received %s from node %d (%d fresh)", reply.Delta, reply.NodeID, freshCount)
 			} else {
-				log.Infof("received %d (%d fresh) info(s) from %s", infoCount, freshCount, c.addr)
+				log.Infof("received %d (%d fresh) info(s) from node %d", infoCount, freshCount, reply.NodeID)
 			}
 		}
 	} else if len(args.Delta) > 0 {
-		log.Infof("sent %d info(s) to %s", len(args.Delta), c.addr)
+		log.Infof("sent %d info(s) to node %d", len(args.Delta), reply.NodeID)
 	}
 	c.peerID = reply.NodeID
 	g.outgoing.addNode(c.peerID)
 	c.remoteHighWaterStamps = reply.HighWaterStamps
 
 	// Handle remote forwarding.
-	if reply.Alternate != nil {
-		var err error
-		if c.forwardAddr, err = reply.Alternate.Resolve(); err != nil {
-			return util.Errorf("unable to resolve alternate address: %s: %s", reply.Alternate, err)
+	if reply.AlternateAddr != nil {
+		if g.hasIncoming(reply.AlternateNodeID) || g.hasOutgoing(reply.AlternateNodeID) {
+			return util.Errorf("received forward from node %d to %d (%s); already have active connection, skipping",
+				reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
 		}
-		return util.Errorf("received forward from %s to %s", c.addr, reply.Alternate)
+		forwardAddr, err := reply.AlternateAddr.Resolve()
+		if err != nil {
+			return util.Errorf("unable to resolve alternate address %s for node %d: %s", reply.AlternateAddr, reply.AlternateNodeID, err)
+		}
+		c.forwardAddr = forwardAddr
+		return util.Errorf("received forward from node %d to %d (%s)", reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
 	}
 
 	// If we have the sentinel gossip, we're considered connected.
 	g.checkHasConnected()
 
-	nodeID := g.is.NodeID
 	// Check whether this outgoing client is duplicating work already
-	// being done by an incoming client. To avoid mutual shutdown, we
-	// only shutdown our client if our node ID is less than the peer's.
-	if g.hasIncoming(c.peerID) && nodeID < c.peerID {
-		return util.Errorf("stopping outgoing client %d @ %s; already have incoming", c.peerID, c.addr)
+	// being done by an incoming client, either because an outgoing
+	// matches an incoming or the client is connecting to itself.
+	if g.is.NodeID == c.peerID {
+		return util.Errorf("stopping outgoing client to node %d (%s); loopback connection", c.peerID, c.addr)
+	} else if g.hasIncoming(c.peerID) && g.is.NodeID < c.peerID {
+		// To avoid mutual shutdown, we only shutdown our client if our
+		// node ID is less than the peer's.
+		return util.Errorf("stopping outgoing client to node %d (%s); already have incoming", c.peerID, c.addr)
 	}
 
 	return nil
