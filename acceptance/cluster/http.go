@@ -64,7 +64,7 @@ func getJSON(tls bool, hostport, path string, v interface{}) error {
 	}
 	if err := json.Unmarshal(b, v); err != nil {
 		if log.V(1) {
-			log.Info(err)
+			log.Infof("%v\n%s", err, b)
 		}
 	}
 	return nil
