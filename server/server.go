@@ -131,7 +131,15 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	// A custom RetryOptions is created which uses stopper.ShouldDrain() as
 	// the Closer. This prevents infinite retry loops from occuring during
-	// graceful server shutdown.
+	// graceful server shutdown
+	//
+	// Such a loop loop occurs with the DistSender attempts a connection to the
+	// local server during shutdown, and receives an internal server error (HTTP
+	// Code 5xx). This is the correct error for a server to return when it is
+	// shutting down, and is normally retryable in a cluster environment.
+	// However, on a single-node setup (such as a test), retries will never
+	// succeed because the only server has been shut down; thus, thus the
+	// DistSender needs to know that it should not retry in this situation.
 	retryOpts := kv.GetDefaultDistSenderRetryOptions()
 	retryOpts.Closer = stopper.ShouldDrain()
 	ds := kv.NewDistSender(&kv.DistSenderContext{
