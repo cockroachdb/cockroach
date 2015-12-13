@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -83,9 +82,14 @@ func setupMultipleRanges(t *testing.T, splitAt ...string) (*server.TestServer, *
 	s := server.StartTestServer(t)
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
+	// Wait for initial splits to finish.
+	s.WaitForInitialSplits(t, time.Second)
+
 	// Split the keyspace at the given keys.
 	for _, key := range splitAt {
 		if err := db.AdminSplit(key); err != nil {
+			// Don't leak server goroutines.
+			defer s.Stop()
 			t.Fatal(err)
 		}
 	}
@@ -282,9 +286,9 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	}
 }
 
-func initReverseScanTestEnv(t *testing.T) (*server.TestServer, *client.DB) {
-	s := server.StartTestServer(t)
+func initReverseScanTestEnv(s *server.TestServer, t *testing.T) *client.DB {
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	s.WaitForInitialSplits(t, time.Second)
 
 	// Set up multiple ranges:
 	// ["", "b"),["b", "e") ,["e", "g") and ["g", "\xff\xff").
@@ -300,15 +304,16 @@ func initReverseScanTestEnv(t *testing.T) (*server.TestServer, *client.DB) {
 			t.Fatal(err)
 		}
 	}
-	return s, db
+	return db
 }
 
 // TestSingleRangeReverseScan verifies that ReverseScan gets the right results
 // on a single range.
 func TestSingleRangeReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	s, db := initReverseScanTestEnv(t)
+	s := server.StartTestServer(t)
 	defer s.Stop()
+	db := initReverseScanTestEnv(s, t)
 
 	// Case 1: Request.EndKey is in the middle of the range.
 	if rows, err := db.ReverseScan("b", "d", 0); err != nil {
@@ -324,7 +329,7 @@ func TestSingleRangeReverseScan(t *testing.T) {
 	}
 	// Case 3: Test roachpb.KeyMax
 	// This span covers the system DB keys.
-	wanted := 1 + len(sql.MakeMetadataSchema().GetInitialValues())
+	wanted := 1 + len(server.GetBootstrapSchema().GetInitialValues())
 	if rows, err := db.ReverseScan("g", roachpb.KeyMax, 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != wanted {
@@ -345,8 +350,9 @@ func TestSingleRangeReverseScan(t *testing.T) {
 // across multiple ranges.
 func TestMultiRangeReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	s, db := initReverseScanTestEnv(t)
+	s := server.StartTestServer(t)
 	defer s.Stop()
+	db := initReverseScanTestEnv(s, t)
 
 	// Case 1: Request.EndKey is in the middle of the range.
 	if rows, err := db.ReverseScan("a", "d", 0); err != nil {
@@ -366,14 +372,16 @@ func TestMultiRangeReverseScan(t *testing.T) {
 // across multiple ranges while range splits and merges happen.
 func TestReverseScanWithSplitAndMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	s, db := initReverseScanTestEnv(t)
+	s := server.StartTestServer(t)
 	defer s.Stop()
+	db := initReverseScanTestEnv(s, t)
 
 	// Case 1: An encounter with a range split.
 	// Split the range ["b", "e") at "c".
 	if err := db.AdminSplit("c"); err != nil {
 		t.Fatal(err)
 	}
+
 	// The ReverseScan will run into a stale descriptor.
 	if rows, err := db.ReverseScan("a", "d", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)

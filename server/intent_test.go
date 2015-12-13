@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -78,6 +79,11 @@ func TestIntentResolution(t *testing.T) {
 			mu.Lock()
 			defer mu.Unlock()
 			header := args.Header()
+			// Ignore anything outside of the intent key range of "a" - "z"
+			if header.Key.Compare(roachpb.Key("a")) < 0 || header.Key.Compare(roachpb.Key("z")) > 0 {
+				fmt.Printf("Ignoring header: %v\n", header)
+				return nil
+			}
 			switch args.(type) {
 			case *roachpb.ResolveIntentRequest:
 				result = append(result, string(header.Key))
@@ -104,9 +110,9 @@ func TestIntentResolution(t *testing.T) {
 			}()
 
 			// Split the Range. This should not have any asynchronous intents.
-			if err := s.db.AdminSplit(splitKey); err != nil {
-				t.Fatal(err)
-			}
+			util.SucceedsWithin(t, 500*time.Millisecond, func() error {
+				return s.db.AdminSplit(splitKey)
+			})
 
 			if err := s.db.Txn(func(txn *client.Txn) error {
 				b := txn.NewBatch()

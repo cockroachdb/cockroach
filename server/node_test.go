@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
-	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -139,7 +138,7 @@ func TestBootstrapCluster(t *testing.T) {
 		roachpb.Key("\x04store-idgen"),
 	}
 	// Add the initial keys for sql.
-	for _, kv := range sql.MakeMetadataSchema().GetInitialValues() {
+	for _, kv := range GetBootstrapSchema().GetInitialValues() {
 		expectedKeys = append(expectedKeys, kv.Key)
 	}
 	// Resort the list. The sql values are not sorted.

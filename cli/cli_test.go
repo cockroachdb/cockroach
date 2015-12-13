@@ -210,60 +210,67 @@ func Example_ranges() {
 	c.Run("kv scan")
 	c.Run("quit")
 
-	// Output:
 	// kv put a 1 b 2 c 3 d 4
 	// kv scan
-	// "a"	"1"
-	// "b"	"2"
-	// "c"	"3"
-	// "d"	"4"
+	// "a"     "1"
+	// "b"     "2"
+	// "c"     "3"
+	// "d"     "4"
 	// 4 result(s)
 	// kv revscan
-	// "d"	"4"
-	// "c"	"3"
-	// "b"	"2"
-	// "a"	"1"
+	// "d"     "4"
+	// "c"     "3"
+	// "b"     "2"
+	// "a"     "1"
 	// 4 result(s)
 	// range split c
 	// range ls
 	// /Min-"c" [1]
-	// 	0: node-id=1 store-id=1
-	// "c"-/Max [2]
-	// 	0: node-id=1 store-id=1
-	// 2 result(s)
+	// 0: node-id=1 store-id=1
+	// "c"-/Table/501 [4]
+	// 0: node-id=1 store-id=1
+	// /Table/501-/Table/502 [2]
+	// 0: node-id=1 store-id=1
+	// /Table/502-/Max [3]
+	// 0: node-id=1 store-id=1
+	// 4 result(s)
 	// kv scan
-	// "a"	"1"
-	// "b"	"2"
-	// "c"	"3"
-	// "d"	"4"
+	// "a"     "1"
+	// "b"     "2"
+	// "c"     "3"
+	// "d"     "4"
 	// 4 result(s)
 	// kv revscan
-	// "d"	"4"
-	// "c"	"3"
-	// "b"	"2"
-	// "a"	"1"
+	// "d"     "4"
+	// "c"     "3"
+	// "b"     "2"
+	// "a"     "1"
 	// 4 result(s)
 	// range merge b
 	// range ls
-	// /Min-/Max [1]
-	// 	0: node-id=1 store-id=1
-	// 1 result(s)
+	// /Min-/Table/501 [1]
+	// 0: node-id=1 store-id=1
+	// /Table/501-/Table/502 [2]
+	// 0: node-id=1 store-id=1
+	// /Table/502-/Max [3]
+	// 0: node-id=1 store-id=1
+	// 3 result(s)
 	// kv scan
-	// "a"	"1"
-	// "b"	"2"
-	// "c"	"3"
-	// "d"	"4"
+	// "a"     "1"
+	// "b"     "2"
+	// "c"     "3"
+	// "d"     "4"
 	// 4 result(s)
 	// kv revscan
-	// "d"	"4"
-	// "c"	"3"
-	// "b"	"2"
-	// "a"	"1"
+	// "d"     "4"
+	// "c"     "3"
+	// "b"     "2"
+	// "a"     "1"
 	// 4 result(s)
 	// kv delrange a c
 	// kv scan
-	// "c"	"3"
-	// "d"	"4"
+	// "c"     "3"
+	// "d"     "4"
 	// 2 result(s)
 	// quit
 	// node drained and shutdown: ok

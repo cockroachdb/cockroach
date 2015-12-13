@@ -466,7 +466,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	}
 
 	// Wait for the range to be split along table boundaries.
-	originalRange := store.LookupReplica(roachpb.RKeyMin, nil)
+	originalRange := store.LookupReplica(roachpb.RKey(keys.UserTableDataMin), nil)
 	var rng *storage.Replica
 	if err := util.IsTrueWithin(func() bool {
 		rng = store.LookupReplica(keys.MakeTablePrefix(1000), nil)

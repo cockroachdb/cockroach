@@ -43,8 +43,8 @@ func TestInitialKeys(t *testing.T) {
 	db.AddTable("CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)", sql.NewPrivilegeDescriptor(security.RootUser, privilege.List{privilege.ALL}))
 	ms.AddDatabase(db)
 	kv = ms.GetInitialValues()
-	// IDGenerator + 2 for each system object + 2 for testdb + 2 for test table
-	if actual, expected := len(kv), 1+2*sql.NumSystemDescriptors+4; actual != expected {
+	// IDGenerator + 2 for each descriptor in the schema
+	if actual, expected := len(kv), 1+2*ms.DescriptorCount(); actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
 	}
 
