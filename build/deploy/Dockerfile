@@ -1,4 +1,4 @@
-FROM busybox
+FROM buildpack-deps:jessie-curl
 
 MAINTAINER Tobias Schottdorf <tobias.schottdorf@gmail.com>
 
