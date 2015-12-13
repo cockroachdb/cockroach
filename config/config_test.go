@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -136,23 +138,24 @@ func TestGetLargestID(t *testing.T) {
 	testCases := []struct {
 		values  []roachpb.KeyValue
 		largest uint32
+		maxID   uint32
 		errStr  string
 	}{
 		// No data.
-		{nil, 0, "empty system values"},
+		{nil, 0, 0, "empty system values"},
 
 		// Some data, but not from the system span.
-		{[]roachpb.KeyValue{plainKV("a", "b")}, 0, "descriptor table not found"},
+		{[]roachpb.KeyValue{plainKV("a", "b")}, 0, 0, "descriptor table not found"},
 
 		// Some real data, but no descriptors.
 		{[]roachpb.KeyValue{
 			sqlKV(keys.NamespaceTableID, 1, 1),
 			sqlKV(keys.NamespaceTableID, 1, 2),
 			sqlKV(keys.UsersTableID, 1, 3),
-		}, 0, "descriptor table not found"},
+		}, 0, 0, "descriptor table not found"},
 
 		// Single correct descriptor entry.
-		{[]roachpb.KeyValue{sqlKV(keys.DescriptorTableID, 1, 1)}, 1, ""},
+		{[]roachpb.KeyValue{sqlKV(keys.DescriptorTableID, 1, 1)}, 1, 0, ""},
 
 		// Surrounded by other data.
 		{[]roachpb.KeyValue{
@@ -160,7 +163,7 @@ func TestGetLargestID(t *testing.T) {
 			sqlKV(keys.NamespaceTableID, 1, 30),
 			sqlKV(keys.DescriptorTableID, 1, 8),
 			sqlKV(keys.ZonesTableID, 1, 40),
-		}, 8, ""},
+		}, 8, 0, ""},
 
 		// Descriptors with holes. Index ID does not matter.
 		{[]roachpb.KeyValue{
@@ -168,16 +171,32 @@ func TestGetLargestID(t *testing.T) {
 			sqlKV(keys.DescriptorTableID, 2, 5),
 			sqlKV(keys.DescriptorTableID, 3, 8),
 			sqlKV(keys.DescriptorTableID, 4, 12),
-		}, 12, ""},
+		}, 12, 0, ""},
 
 		// Real SQL layout.
-		{sql.MakeMetadataSchema().GetInitialValues(), keys.ZonesTableID, ""},
+		{sql.MakeMetadataSchema().GetInitialValues(), keys.ZonesTableID, 0, ""},
+
+		// Test non-zero max.
+		{[]roachpb.KeyValue{
+			sqlKV(keys.DescriptorTableID, 1, 1),
+			sqlKV(keys.DescriptorTableID, 2, 5),
+			sqlKV(keys.DescriptorTableID, 3, 8),
+			sqlKV(keys.DescriptorTableID, 4, 12),
+		}, 8, 8, ""},
+
+		// Test non-zero max.
+		{[]roachpb.KeyValue{
+			sqlKV(keys.DescriptorTableID, 1, 1),
+			sqlKV(keys.DescriptorTableID, 2, 5),
+			sqlKV(keys.DescriptorTableID, 3, 8),
+			sqlKV(keys.DescriptorTableID, 4, 12),
+		}, 5, 7, ""},
 	}
 
 	cfg := config.SystemConfig{}
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
-		ret, err := cfg.GetLargestObjectID()
+		ret, err := cfg.GetLargestObjectID(tc.maxID)
 		if tc.errStr == "" {
 			if err != nil {
 				t.Errorf("#%d: error: %v", tcNum, err)
@@ -196,15 +215,31 @@ func TestGetLargestID(t *testing.T) {
 func TestComputeSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	const start = keys.MaxReservedDescID + 1
+	const (
+		start         = keys.MaxReservedDescID + 1
+		reservedStart = keys.MaxSystemDescID + 1
+	)
 
+	schema := sql.MakeMetadataSchema()
 	// Real SQL system tables only.
-	baseSql := sql.MakeMetadataSchema().GetInitialValues()
+	baseSql := schema.GetInitialValues()
 	// Real SQL system tables plus some user stuff.
-	userSql := append(sql.MakeMetadataSchema().GetInitialValues(),
+	userSql := append(schema.GetInitialValues(),
+		descriptor(start), descriptor(start+1), descriptor(start+5))
+	// Real SQL system with reserved non-system tables.
+	allPrivileges := sql.NewPrivilegeDescriptor(security.RootUser, privilege.List{privilege.ALL})
+	db := sql.MakeMetadataDatabase("testdb", allPrivileges)
+	db.AddTable("CREATE TABLE testdb.test (i INT PRIMARY KEY)", allPrivileges)
+	db.AddTable("CREATE TABLE testdb.test2 (i INT PRIMARY KEY)", allPrivileges)
+	schema.AddDatabase(db)
+	reservedSql := schema.GetInitialValues()
+	// Real SQL system with reserved non-system and user database.
+	allSql := append(schema.GetInitialValues(),
 		descriptor(start), descriptor(start+1), descriptor(start+5))
 
-	allSplits := []uint32{start, start + 1, start + 2, start + 3, start + 4, start + 5}
+	allUserSplits := []uint32{start, start + 1, start + 2, start + 3, start + 4, start + 5}
+	allReservedSplits := []uint32{reservedStart, reservedStart + 1, reservedStart + 2}
+	allSplits := append(allReservedSplits, allUserSplits...)
 
 	testCases := []struct {
 		values     []roachpb.KeyValue
@@ -225,21 +260,41 @@ func TestComputeSplits(t *testing.T) {
 		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), nil},
 
 		// User descriptors.
-		{userSql, roachpb.RKeyMin, roachpb.RKeyMax, allSplits},
-		{userSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, allSplits[1:]},
-		{userSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), allSplits[1:]},
-		{userSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), allSplits},
-		{userSql, keys.MakeTablePrefix(start + 4), keys.MakeTablePrefix(start + 10), allSplits[5:]},
+		{userSql, roachpb.RKeyMin, roachpb.RKeyMax, allUserSplits},
+		{userSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, allUserSplits[1:]},
+		{userSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), allUserSplits[1:]},
+		{userSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), allUserSplits},
+		{userSql, keys.MakeTablePrefix(start + 4), keys.MakeTablePrefix(start + 10), allUserSplits[5:]},
 		{userSql, keys.MakeTablePrefix(start + 5), keys.MakeTablePrefix(start + 10), nil},
 		{userSql, keys.MakeTablePrefix(start + 6), keys.MakeTablePrefix(start + 10), nil},
 		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			keys.MakeTablePrefix(start + 10), allSplits[1:]},
+			keys.MakeTablePrefix(start + 10), allUserSplits[1:]},
 		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			keys.MakeTablePrefix(start + 5), allSplits[1:5]},
+			keys.MakeTablePrefix(start + 5), allUserSplits[1:5]},
 		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			keys.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("bar")), allSplits[1:]},
+			keys.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("bar")), allUserSplits[1:]},
 		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
 			keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("morefoo")), nil},
+
+		// Reserved descriptors.
+		{reservedSql, roachpb.RKeyMin, roachpb.RKeyMax, allReservedSplits},
+		{reservedSql, keys.MakeTablePrefix(reservedStart), roachpb.RKeyMax, allReservedSplits[1:]},
+		{reservedSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, nil},
+		{reservedSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(start + 10), allReservedSplits[1:]},
+		{reservedSql, roachpb.RKeyMin, keys.MakeTablePrefix(reservedStart + 2), allReservedSplits[:2]},
+		{reservedSql, roachpb.RKeyMin, keys.MakeTablePrefix(reservedStart + 10), allReservedSplits},
+		{reservedSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(reservedStart + 2), allReservedSplits[1:2]},
+		{reservedSql, keys.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
+			keys.MakeKey(keys.MakeTablePrefix(start+10), roachpb.RKey("foo")), allReservedSplits[1:]},
+
+		// Reserved/User mix.
+		{allSql, roachpb.RKeyMin, roachpb.RKeyMax, allSplits},
+		{allSql, keys.MakeTablePrefix(reservedStart + 1), roachpb.RKeyMax, allSplits[2:]},
+		{allSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, allSplits[4:]},
+		{allSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(start + 10), allSplits[1:]},
+		{allSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 2), allSplits[:5]},
+		{allSql, keys.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
+			keys.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("foo")), allSplits[1:9]},
 	}
 
 	cfg := config.SystemConfig{}

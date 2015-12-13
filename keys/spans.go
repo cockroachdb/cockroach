@@ -27,7 +27,7 @@ var (
 	UserDataSpan = roachpb.Span{Key: SystemMax, EndKey: TableDataMin}
 
 	// SystemDBSpan is the range of system objects for structured data.
-	SystemDBSpan = roachpb.Span{Key: TableDataMin, EndKey: UserTableDataMin}
+	SystemDBSpan = roachpb.Span{Key: TableDataMin, EndKey: ReservedTableDataMin}
 
 	// NoSplitSpans describes the ranges that should never be split.
 	// Meta1Span: needed to find other ranges.

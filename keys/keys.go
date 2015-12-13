@@ -340,6 +340,16 @@ func MakeTablePrefix(tableID uint32) []byte {
 	return encoding.EncodeUvarint(nil, uint64(tableID))
 }
 
+// DecodeTablePrefix validates that the given key has a table prefix, returning
+// the remainder of the key (with the prefix removed) and the decoded descriptor
+// ID of the table.
+func DecodeTablePrefix(key roachpb.Key) ([]byte, uint64, error) {
+	if encoding.PeekType(key) != encoding.Int {
+		return key, 0, util.Errorf("key %q does not have an encoded varint prefix", key)
+	}
+	return encoding.DecodeUvarint(key)
+}
+
 // Range returns a key range encompassing all the keys in the Batch.
 // TODO(tschottdorf): there is no protection for doubly-local keys here;
 // maybe Range should return an error.
