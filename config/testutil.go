@@ -43,10 +43,13 @@ func TestingSetupZoneConfigHook(stopper *stop.Stopper) {
 	testingZoneConfig = map[uint32]*ZoneConfig{}
 	testingPreviousHook = ZoneConfigHook
 	ZoneConfigHook = testingZoneConfigHook
-	testingLargestIDHook = func() (max uint32) {
+	testingLargestIDHook = func(maxID uint32) (max uint32) {
 		testingLock.Lock()
 		defer testingLock.Unlock()
 		for id := range testingZoneConfig {
+			if maxID > 0 && id > maxID {
+				continue
+			}
 			if id > max {
 				max = id
 			}

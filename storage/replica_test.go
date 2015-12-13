@@ -585,7 +585,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	tc.rng.setDescWithoutProcessUpdate(rngDesc)
 
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
-	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
+	key := keys.MakeTablePrefix(keys.MaxSystemDescID)
 	var val roachpb.Value
 	val.SetInt(42)
 	if err := engine.MVCCPut(tc.engine, nil, key, roachpb.MinTimestamp, val, nil); err != nil {

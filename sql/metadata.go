@@ -99,6 +99,15 @@ func (md *MetadataDatabase) AddTable(definition string, privileges *PrivilegeDes
 func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 	var ret []roachpb.KeyValue
 
+	// Save the ID generator value, which will generate descriptor IDs for user
+	// objects.
+	value := roachpb.Value{}
+	value.SetInt(int64(keys.MaxReservedDescID + 1))
+	ret = append(ret, roachpb.KeyValue{
+		Key:   keys.DescIDGenerator,
+		Value: value,
+	})
+
 	// addDescriptor generates the needed KeyValue objects to install a
 	// descriptor on a new cluster.
 	addDescriptor := func(parentID ID, desc descriptorProto) {
@@ -128,9 +137,9 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 		addDescriptor(sysObj.parentID, sysObj.desc)
 	}
 
-	// Initial value of descriptor ID generator. Descriptor IDs will be generated
-	// sequentially for non-system tables created as part of the initial schema.
-	initialDescID := keys.MaxReservedDescID + 1
+	// Descriptor IDs for non-system databases and objects will be generated
+	// sequentially within the non-system reserved range.
+	initialDescID := keys.MaxSystemDescID + 1
 	nextID := func() ID {
 		next := initialDescID
 		initialDescID++
@@ -152,14 +161,6 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 			addDescriptor(dbID, &desc)
 		}
 	}
-
-	// Save ID generator value.
-	value := roachpb.Value{}
-	value.SetInt(int64(initialDescID))
-	ret = append(ret, roachpb.KeyValue{
-		Key:   keys.DescIDGenerator,
-		Value: value,
-	})
 
 	// Sort returned key values; this is valuable because it matches the way the
 	// objects would be sorted if read from the engine.
