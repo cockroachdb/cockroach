@@ -85,6 +85,7 @@ type Client struct {
 	closer, Closed chan struct{}
 	conn           unsafe.Pointer // holds a `internalConn`
 	healthy        atomic.Value   // holds a `chan struct{}` exposed in `Healthy`
+	healthWait     time.Time
 	tlsConfig      *tls.Config
 
 	clock        *hlc.Clock
@@ -132,6 +133,7 @@ func NewClient(addr net.Addr, context *Context) *Client {
 	}
 
 	c.healthy.Store(make(chan struct{}))
+	c.healthWait = time.Now().Add(context.HealthWait)
 
 	if !context.DisableCache {
 		clients[key] = c
@@ -189,6 +191,30 @@ func (c *Client) connect() error {
 // return a new channel.
 func (c *Client) Healthy() <-chan struct{} {
 	return c.healthy.Load().(chan struct{})
+}
+
+// WaitHealthy blocks until the channel is healthy or the HealthWait time has
+// expired.
+func (c *Client) WaitHealthy() bool {
+	// If the channel is healthy.
+	select {
+	case <-c.Healthy():
+		return true
+	default:
+	}
+
+	now := time.Now()
+	delta := c.healthWait.Sub(now)
+	if delta <= 0 {
+		return false
+	}
+
+	select {
+	case <-c.Healthy():
+		return true
+	case <-time.After(delta):
+		return false
+	}
 }
 
 // Close closes the client, removing it from the clients cache and returning

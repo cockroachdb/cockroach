@@ -250,11 +250,13 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	}
 	sr := reply.(*roachpb.ScanResponse)
 
-	if l := len(sr.Rows); l != 1 {
-		t.Fatalf("expected 1 row; got %d", l)
+	if l := len(sr.Rows); l != len(keys) {
+		t.Fatalf("expected %d rows; got %d", len(keys), l)
 	}
-	if key := string(sr.Rows[0].Key); keys[0] != key {
-		t.Errorf("expected key %q; got %q", keys[0], key)
+	for i := range sr.Rows {
+		if key := string(sr.Rows[i].Key); keys[i] != key {
+			t.Errorf("expected key %q; got %q", keys[i], key)
+		}
 	}
 
 	// ReverseScan.
@@ -266,11 +268,13 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 	rsr := reply.(*roachpb.ReverseScanResponse)
-	if l := len(rsr.Rows); l != 1 {
-		t.Fatalf("expected 1 row; got %d", l)
+	if l := len(rsr.Rows); l != len(keys) {
+		t.Fatalf("expected %d rows; got %d", len(keys), l)
 	}
-	if key := string(rsr.Rows[0].Key); keys[0] != key {
-		t.Errorf("expected key %q; got %q", keys[0], key)
+	for i := range rsr.Rows {
+		if key := string(rsr.Rows[len(rsr.Rows)-1-i].Key); keys[i] != key {
+			t.Errorf("expected key %q; got %q", keys[i], key)
+		}
 	}
 }
 
