@@ -100,9 +100,8 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 	// descriptor might have been created within the transaction.
 	p := planner{txn: txn, user: security.RootUser}
 
-	const getDescriptor = `SELECT descriptor FROM system.descriptor WHERE id = %d`
-	sql := fmt.Sprintf(getDescriptor, tableID)
-	values, err := p.queryRow(sql)
+	const getDescriptor = `SELECT descriptor FROM system.descriptor WHERE id = $1`
+	values, err := p.queryRow(getDescriptor, int(tableID))
 	if err != nil {
 		return nil, err
 	}
@@ -142,14 +141,13 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 	err = s.db.Txn(func(txn *client.Txn) error {
 		p := planner{txn: txn, user: security.RootUser}
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
-			`VALUES (%d, %d, %d, '%s'::timestamp)`
-		sql = fmt.Sprintf(insertLease, lease.ID, lease.Version, s.nodeID, lease.expiration)
-		count, err := p.exec(sql)
+			`VALUES ($1, $2, $3, $4)`
+		count, err := p.exec(insertLease, lease.ID, int(lease.Version), s.nodeID, lease.expiration)
 		if err != nil {
 			return err
 		}
 		if count != 1 {
-			return util.Errorf("%s: expected 1 result, found %d", sql, count)
+			return util.Errorf("%s: expected 1 result, found %d", insertLease, count)
 		}
 		return nil
 	})
@@ -162,14 +160,13 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 		p := planner{txn: txn, user: security.RootUser}
 
 		const deleteLease = `DELETE FROM system.lease ` +
-			`WHERE (descID, version, nodeID, expiration) = (%d, %d, %d, '%s'::timestamp)`
-		sql := fmt.Sprintf(deleteLease, lease.ID, lease.Version, s.nodeID, lease.expiration)
-		count, err := p.exec(sql)
+			`WHERE (descID, version, nodeID, expiration) = ($1, $2, $3, $4)`
+		count, err := p.exec(deleteLease, lease.ID, int(lease.Version), s.nodeID, lease.expiration)
 		if err != nil {
 			return err
 		}
 		if count != 1 {
-			return util.Errorf("%s: expected 1 result, found %d", sql, count)
+			return util.Errorf("%s: expected 1 result, found %d", deleteLease, count)
 		}
 		return nil
 	})
@@ -292,9 +289,8 @@ func (s LeaseStore) countLeases(descID ID, version DescriptorVersion, expiration
 		p := planner{txn: txn, user: security.RootUser}
 
 		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
-			`WHERE descID = %d AND version = %d AND expiration > '%s'::timestamp`
-		sql := fmt.Sprintf(countLeases, descID, version, parser.DTimestamp{Time: expiration})
-		values, err := p.queryRow(sql)
+			`WHERE descID = $1 AND version = $2 AND expiration > $3`
+		values, err := p.queryRow(countLeases, descID, int(version), expiration)
 		if err != nil {
 			return err
 		}

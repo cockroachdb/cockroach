@@ -152,7 +152,7 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 	}
 }
 
-func (p *planner) query(sql string) (planNode, error) {
+func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 	stmts, err := parser.ParseTraditional(sql)
 	if err != nil {
 		return nil, err
@@ -160,11 +160,14 @@ func (p *planner) query(sql string) (planNode, error) {
 	if len(stmts) != 1 {
 		return nil, util.Errorf("expected single statement, found %d", len(stmts))
 	}
+	if err := parser.FillArgs(stmts[0], golangParameters(args)); err != nil {
+		return nil, err
+	}
 	return p.makePlan(stmts[0])
 }
 
-func (p *planner) queryRow(sql string) (parser.DTuple, error) {
-	plan, err := p.query(sql)
+func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, error) {
+	plan, err := p.query(sql, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -184,8 +187,8 @@ func (p *planner) queryRow(sql string) (parser.DTuple, error) {
 	return values, nil
 }
 
-func (p *planner) exec(sql string) (int, error) {
-	plan, err := p.query(sql)
+func (p *planner) exec(sql string, args ...interface{}) (int, error) {
+	plan, err := p.query(sql, args...)
 	if err != nil {
 		return 0, err
 	}
