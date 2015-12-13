@@ -34,7 +34,7 @@ deployment:
       - mkdir -p "${CIRCLE_ARTIFACTS}/acceptance_deploy"
       - time acceptance/acceptance.test -test.v -test.timeout 5m \
         -i cockroachdb/cockroach -num-local 3 \
-        -l "${CIRCLE_ARTIFACTS}"/acceptance_deploy 2>&1 | \
-        tr -d '\r' | tee "${CIRCLE_ARTIFACTS}/acceptance_deploy.log" | \
+        -l "${CIRCLE_ARTIFACTS}"/acceptance_deploy 2>&1 |
+        tr -d '\r' | tee "${CIRCLE_ARTIFACTS}/acceptance_deploy.log" |
         grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)" | awk '{print "acceptance:", $0}'
       - build/push-aws.sh
