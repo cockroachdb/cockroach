@@ -54,6 +54,11 @@ type infoStore struct {
 	callbacks       []*callback
 }
 
+var monoTime struct {
+	sync.Mutex
+	last int64
+}
+
 // monotonicUnixNano returns a monotonically increasing value for
 // nanoseconds in Unix time. Since equal times are ignored with
 // updates to infos, we're careful to avoid incorrectly ignoring a
@@ -61,14 +66,14 @@ type infoStore struct {
 // nanosecond. Really unlikely except for the case of unittests, but
 // better safe than sorry.
 func monotonicUnixNano() int64 {
-	monoTimeMu.Lock()
-	defer monoTimeMu.Unlock()
+	monoTime.Lock()
+	defer monoTime.Unlock()
 
 	now := time.Now().UnixNano()
-	if now <= lastTime {
-		now = lastTime + 1
+	if now <= monoTime.last {
+		now = monoTime.last + 1
 	}
-	lastTime = now
+	monoTime.last = now
 	return now
 }
 
@@ -92,11 +97,6 @@ func (is *infoStore) String() string {
 	}
 	return buf.String()
 }
-
-var (
-	monoTimeMu sync.Mutex
-	lastTime   int64
-)
 
 // newInfoStore allocates and returns a new infoStore.
 func newInfoStore(nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr) infoStore {
@@ -195,7 +195,7 @@ func (is *infoStore) maxHops() uint32 {
 // getHighWaterStamps returns a copy of the high water timestamps map
 // maintained by this infostore.
 func (is *infoStore) getHighWaterStamps() map[int32]int64 {
-	copy := map[int32]int64{}
+	copy := make(map[int32]int64, len(is.highWaterStamps))
 	for k, v := range is.highWaterStamps {
 		copy[k] = v
 	}
