@@ -18,14 +18,17 @@
 package server
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
@@ -203,6 +206,38 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 	}
 
 	return nil
+}
+
+// ExpectedInitialRangeCount returns the expected number of ranges that should
+// be on the server after initial (asynchronous) splits have been completed,
+// assuming no additional information is added outside of the normal bootstrap
+// process.
+func ExpectedInitialRangeCount() int {
+	return GetBootstrapSchema().DescriptorCount() - sql.NumSystemDescriptors + 1
+}
+
+// WaitForInitialSplits waits for the server to complete its expected initial
+// splits at startup. If the expected range count is not reached within the
+// supplied timeout, the current test will be aborted.
+func (ts *TestServer) WaitForInitialSplits(t util.Tester, timeout time.Duration) {
+	kvDB, err := client.Open(ts.Stopper(), fmt.Sprintf("rpcs://%s@%s?certs=%s",
+		security.NodeUser, ts.ServingAddr(), security.EmbeddedCertsDir))
+	if err != nil {
+		t.Fatalf("Unable to open connection to test server: %s", err)
+	}
+
+	expectedRanges := ExpectedInitialRangeCount()
+	util.SucceedsWithin(t, timeout, func() error {
+		// Scan all keys in the Meta2Prefix; we only need a count.
+		rows, err := kvDB.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+		if err != nil {
+			return err
+		}
+		if a, e := len(rows), expectedRanges; a != e {
+			return util.Errorf("Server has %d ranges at startup, expect %d", a, e)
+		}
+		return nil
+	})
 }
 
 // ServingAddr returns the rpc server's address. Should be used by clients.

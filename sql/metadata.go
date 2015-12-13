@@ -93,6 +93,17 @@ func (md *MetadataDatabase) AddTable(definition string, privileges *PrivilegeDes
 	})
 }
 
+// DescriptorCount returns the number of descriptors that will be created by
+// this schema. This value is needed to automate certain tests.
+func (ms MetadataSchema) DescriptorCount() int {
+	count := len(ms.systemObjects)
+	count += len(ms.databases)
+	for _, db := range ms.databases {
+		count += len(db.tables)
+	}
+	return count
+}
+
 // GetInitialValues returns the set of initial K/V values which should be added to
 // a bootstrapping CockroachDB cluster in order to create the tables contained
 // in the schema.
