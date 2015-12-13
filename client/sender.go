@@ -59,8 +59,10 @@ func (f SenderFunc) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb
 // NewSenderFunc creates a new sender for the registered scheme.
 type NewSenderFunc func(u *url.URL, ctx *base.Context, retryOpts retry.Options, stopper *stop.Stopper) (Sender, error)
 
-var sendersMu sync.Mutex
-var senders = map[string]NewSenderFunc{}
+var senders = struct {
+	sync.Mutex
+	m map[string]NewSenderFunc
+}{m: map[string]NewSenderFunc{}}
 
 // RegisterSender registers the specified function to be used for
 // creation of a new sender when the specified scheme is encountered.
@@ -68,18 +70,18 @@ func RegisterSender(scheme string, f NewSenderFunc) {
 	if f == nil {
 		log.Fatalf("unable to register nil function for \"%s\"", scheme)
 	}
-	sendersMu.Lock()
-	defer sendersMu.Unlock()
-	if _, ok := senders[scheme]; ok {
+	senders.Lock()
+	defer senders.Unlock()
+	if _, ok := senders.m[scheme]; ok {
 		log.Fatalf("sender already registered for \"%s\"", scheme)
 	}
-	senders[scheme] = f
+	senders.m[scheme] = f
 }
 
 func newSender(u *url.URL, ctx *base.Context, retryOptions retry.Options, stopper *stop.Stopper) (Sender, error) {
-	sendersMu.Lock()
-	defer sendersMu.Unlock()
-	f := senders[u.Scheme]
+	senders.Lock()
+	defer senders.Unlock()
+	f := senders.m[u.Scheme]
 	if f == nil {
 		return nil, fmt.Errorf("no sender registered for \"%s\"", u.Scheme)
 	}
