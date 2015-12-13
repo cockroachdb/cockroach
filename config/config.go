@@ -58,7 +58,7 @@ var (
 
 	// testingLargestIDHook is a function used to bypass GetLargestObjectID
 	// in tests.
-	testingLargestIDHook func() uint32
+	testingLargestIDHook func(uint32) uint32
 
 	// testingDisableTableSplits is a testing-only variable that disables
 	// splits of tables into separate ranges.
@@ -142,35 +142,7 @@ func (s SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
 	return index, true
 }
 
-// GetLargestObjectID returns the largest object ID found in the config.
-// This could be either a table or a database.
-func (s SystemConfig) GetLargestObjectID() (uint32, error) {
-	testingLock.Lock()
-	hook := testingLargestIDHook
-	testingLock.Unlock()
-	if hook != nil {
-		return hook(), nil
-	}
-
-	if len(s.Values) == 0 {
-		return 0, fmt.Errorf("empty system values in config")
-	}
-
-	// Search for the first key after the descriptor table.
-	// We can't use GetValue as we don't mind if there is nothing after
-	// the descriptor table.
-	key := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID + 1))
-	index := sort.Search(len(s.Values), func(i int) bool {
-		return bytes.Compare(s.Values[i].Key, key) >= 0
-	})
-
-	if index == 0 {
-		return 0, fmt.Errorf("descriptor table not found in system config of %d values", len(s.Values))
-	}
-
-	// This is the last key of the descriptor table.
-	key = s.Values[index-1].Key
-
+func decodeDescMetadataID(key roachpb.Key) (uint64, error) {
 	// Extract object ID from key.
 	// TODO(marc): move sql/keys.go to keys (or similar) and use a DecodeDescMetadataKey.
 	// We should also check proper encoding.
@@ -178,7 +150,7 @@ func (s SystemConfig) GetLargestObjectID() (uint32, error) {
 	remaining := bytes.TrimPrefix(key, descriptorPrefix)
 	// TrimPrefix returns the bytes unchanged if the prefix does not match.
 	if len(remaining) == len(key) {
-		return 0, fmt.Errorf("descriptor table not found in system config of %d values", len(s.Values))
+		return 0, fmt.Errorf("key is not a descriptor table entry: %v", key)
 	}
 	// DescriptorTable.PrimaryIndex.ID
 	remaining, _, err := encoding.DecodeUvarint(remaining)
@@ -187,6 +159,86 @@ func (s SystemConfig) GetLargestObjectID() (uint32, error) {
 	}
 	// descID
 	_, id, err := encoding.DecodeUvarint(remaining)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+// GetLargestObjectID returns the largest object ID found in the config which is
+// less than or equal to maxID. If maxID is 0, returns the largest ID in the
+// config.
+func (s SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
+	testingLock.Lock()
+	hook := testingLargestIDHook
+	testingLock.Unlock()
+	if hook != nil {
+		return hook(maxID), nil
+	}
+
+	if len(s.Values) == 0 {
+		return 0, fmt.Errorf("empty system values in config")
+	}
+
+	// Search for the descriptor table entries within the SystemConfig.
+	highBound := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID + 1))
+	highIndex := sort.Search(len(s.Values), func(i int) bool {
+		return bytes.Compare(s.Values[i].Key, highBound) >= 0
+	})
+	lowBound := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
+	lowIndex := sort.Search(len(s.Values), func(i int) bool {
+		return bytes.Compare(s.Values[i].Key, lowBound) >= 0
+	})
+
+	if highIndex == lowIndex {
+		return 0, fmt.Errorf("descriptor table not found in system config of %d values", len(s.Values))
+	}
+
+	// No maximum specified; maximum ID is the last entry in the descriptor
+	// table.
+	if maxID == 0 {
+		id, err := decodeDescMetadataID(s.Values[highIndex-1].Key)
+		if err != nil {
+			return 0, err
+		}
+		return uint32(id), nil
+	}
+
+	// Maximum specified: need to search the descriptor table.  Binary search
+	// through all descriptor table values to find the first descriptor with ID
+	// >= maxID.
+	searchSlice := s.Values[lowIndex:highIndex]
+	var err error
+	maxIdx := sort.Search(len(searchSlice), func(i int) bool {
+		var id uint64
+		id, err = decodeDescMetadataID(searchSlice[i].Key)
+		if err != nil {
+			return false
+		}
+		return uint32(id) >= maxID
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	// If we found an index within the list, maxIdx might point to a descriptor
+	// with exactly maxID.
+	if maxIdx < len(searchSlice) {
+		id, err := decodeDescMetadataID(searchSlice[maxIdx].Key)
+		if err != nil {
+			return 0, err
+		}
+		if uint32(id) == maxID {
+			return uint32(id), nil
+		}
+	}
+
+	if maxIdx == 0 {
+		return 0, fmt.Errorf("no descriptors present with ID < %d", maxID)
+	}
+
+	// Return ID of the immediately preceding descriptor.
+	id, err := decodeDescMetadataID(searchSlice[maxIdx-1].Key)
 	if err != nil {
 		return 0, err
 	}
@@ -230,50 +282,70 @@ func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.
 		return nil
 	}
 
-	tableStart := roachpb.RKey(keys.UserTableDataMin)
+	tableStart := roachpb.RKey(keys.ReservedTableDataMin)
 	if !tableStart.Less(endKey) {
 		// This range is before the user tables span: no required splits.
 		return nil
 	}
 
 	startID, ok := ObjectIDForKey(startKey)
-	if !ok || startID <= keys.MaxReservedDescID {
+	if !ok || startID <= keys.MaxSystemDescID {
 		// The start key is either:
 		// - not part of the structured data span
 		// - part of the system span
 		// In either case, start looking for splits at the first ID usable
 		// by the user data span.
-		startID = keys.MaxReservedDescID + 1
+		startID = keys.MaxSystemDescID + 1
 	} else {
 		// The start key is either already a split key, or after the split
 		// key for its ID. We can skip straight to the next one.
 		startID++
 	}
 
-	// Find the largest object ID.
-	// We can't keep splitting until we reach endKey as it could be roachpb.KeyMax.
-	endID, err := s.GetLargestObjectID()
+	// Build key prefixes for sequential table IDs until we reach endKey. Note
+	// that there are two disjoint sets of sequential keys: non-system reserved
+	// tables have sequential IDs, as do user tables, but the two ranges contain a
+	// gap.
+	var splitKeys []roachpb.RKey
+	var key roachpb.RKey
+
+	// appendSplitKeys generates all possible split keys between the given range
+	// of IDs and adds them to splitKeys.
+	appendSplitKeys := func(startID, endID uint32) {
+		// endID could be smaller than startID if we don't have user tables.
+		for id := startID; id <= endID; id++ {
+			key = keys.MakeTablePrefix(id)
+			// Skip if this ID matches the startKey passed to ComputeSplitKeys.
+			if !startKey.Less(key) {
+				continue
+			}
+			// Handle the case where EndKey is already a table prefix.
+			if !key.Less(endKey) {
+				break
+			}
+			splitKeys = append(splitKeys, key)
+		}
+	}
+
+	// If they startKey falls within the non-system reserved range, compute
+	// those keys first.
+	if startID <= keys.MaxReservedDescID {
+		endID, err := s.GetLargestObjectID(keys.MaxReservedDescID)
+		if err != nil {
+			log.Errorf("unable to determine largest reserved object ID from system config: %s", err)
+			return nil
+		}
+		appendSplitKeys(startID, endID)
+		startID = keys.MaxReservedDescID + 1
+	}
+
+	// Append keys in the user space.
+	endID, err := s.GetLargestObjectID(0)
 	if err != nil {
 		log.Errorf("unable to determine largest object ID from system config: %s", err)
 		return nil
 	}
-
-	// Build key prefixes for sequential table IDs until we reach endKey.
-	var splitKeys []roachpb.RKey
-	var key roachpb.RKey
-	// endID could be smaller than startID if we don't have user tables.
-	for id := startID; id <= endID; id++ {
-		key = keys.MakeTablePrefix(id)
-		// Skip if the range starts on a split key.
-		if !startKey.Less(key) {
-			continue
-		}
-		// Handle the case where EndKey is already a table prefix.
-		if !key.Less(endKey) {
-			break
-		}
-		splitKeys = append(splitKeys, key)
-	}
+	appendSplitKeys(startID, endID)
 
 	return splitKeys
 }

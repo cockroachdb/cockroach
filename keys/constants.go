@@ -168,6 +168,10 @@ var (
 	// TableDataMin is the end of the range of table data keys.
 	TableDataMax = roachpb.Key{encoding.IntMax, 0xff}
 
+	// ReservedTableDataMin is the start key of reserved structured data
+	// (excluding SystemDB).
+	ReservedTableDataMin = roachpb.Key(MakeTablePrefix(MaxSystemDescID + 1))
+
 	// UserTableDataMin is the start key of user structured data.
 	UserTableDataMin = roachpb.Key(MakeTablePrefix(MaxReservedDescID + 1))
 
@@ -180,9 +184,14 @@ var (
 // Various IDs used by the structured data layer.
 // NOTE: these must not change during the lifetime of a cluster.
 const (
-	// MaxReservedDescID is the maximum value of the system IDs
-	// under 'TableDataPrefix'.
-	// It is here only so that we may define keys/ranges using it.
+	// MaxSystemDescID is the maximum value of the system IDs under
+	// 'TableDataPrefix'. Reserved objects with IDs in this range are considered
+	// "system" objects and have considerable special semantics.
+	MaxSystemDescID = 500
+
+	// MaxReservedDescID is the maximum value of reserved descriptor IDs
+	// under 'TableDataPrefix'. Reserved IDs are used by namespaces and tables
+	// used internally by cockroach.
 	MaxReservedDescID = 999
 
 	// RootNamespaceID is the ID of the root namespace.
@@ -190,7 +199,7 @@ const (
 
 	// SystemDatabaseID and following are the database/table IDs for objects
 	// in the system span.
-	// NOTE: IDs should remain <= MaxReservedDescID.
+	// NOTE: IDs should remain <= MaxSystemDescID..
 	SystemDatabaseID  = 1
 	NamespaceTableID  = 2
 	DescriptorTableID = 3
