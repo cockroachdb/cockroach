@@ -70,6 +70,7 @@ func newRPCSender(server string, context *base.Context, retryOpts retry.Options,
 
 	ctx := rpc.NewContext(context, hlc.NewClock(hlc.UnixNano), stopper)
 	client := rpc.NewClient(addr, ctx)
+
 	return &rpcSender{
 		client:    client,
 		retryOpts: retryOpts,
@@ -83,17 +84,14 @@ func newRPCSender(server string, context *base.Context, retryOpts retry.Options,
 // and been executed successfully. We retry here to eventually get through with
 // the same client command ID and be given the cached response.
 func (s *rpcSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	if !s.client.WaitHealthy() {
+		return nil, roachpb.NewError(
+			fmt.Errorf("failed to send RPC request %s: client is unhealthy", method))
+	}
+
 	var err error
 	var br roachpb.BatchResponse
 	for r := retry.Start(s.retryOpts); r.Next(); {
-		select {
-		case <-s.client.Healthy():
-		default:
-			err = fmt.Errorf("failed to send RPC request %s: client is unhealthy", method)
-			log.Warning(err)
-			continue
-		}
-
 		if err = s.client.Call(method, &ba, &br); err != nil {
 			br.Reset() // don't trust anyone.
 			// Assume all errors sending request are retryable. The actual
