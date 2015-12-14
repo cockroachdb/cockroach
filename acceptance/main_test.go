@@ -30,8 +30,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach-prod/tools/terrafarm"
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/util"
@@ -43,9 +43,9 @@ import (
 var duration = flag.Duration("d", 5*time.Second, "duration to run the test")
 var numLocal = flag.Int("num-local", 0, "start a local cluster of the given size")
 var numRemote = flag.Int("num-remote", 0, "start a remote cluster of the given size")
-var cwd = flag.String("cwd", "../../cockroach-prod/terraform/aws", "directory to run terraform from")
+var cwd = flag.String("cwd", "../cloud/aws", "directory to run terraform from")
 var stall = flag.Duration("stall", time.Minute, "duration after which if no forward progress is made, consider the test stalled")
-var keyName = flag.String("key-name", "cockroach", "name of key for remote cluster")
+var keyName = flag.String("key-name", "", "name of key for remote cluster")
 var stopper = make(chan struct{})
 
 // StartCluster starts a cluster from the relevant flags.
@@ -61,6 +61,9 @@ func StartCluster(t *testing.T) cluster.Cluster {
 	}
 	if *numRemote == 0 {
 		t.Fatal("need to either specify -num-local or -num-remote")
+	}
+	if *keyName == "" {
+		t.Fatal("-key-name is required") // saves a lot of trouble
 	}
 	f := &terrafarm.Farmer{
 		Debug:   true,
