@@ -18,6 +18,7 @@
 package kv_test
 
 import (
+	"errors"
 	"reflect"
 	"sync/atomic"
 	"testing"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -217,20 +219,25 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	// second range.
 	keys := [2]string{"a", "b"}
 	ts := [2]time.Time{}
-	// This outer loop may seem awkward, but we've actually had issue #3122
-	// since the two timestamps ended up equal. This can happen (very rarely)
-	// since both timestamps are HLC internally and then have their logical
-	// component dropped. Lease changes can push the HLC ahead of the wall
-	// time for short amounts of time, so that losing the logical tick matters.
-	for !ts[1].After(ts[0]) {
-		for i, key := range keys {
-			b := &client.Batch{}
-			b.Put(key, "value")
-			if err := db.Run(b); err != nil {
-				t.Fatal(err)
-			}
-			ts[i] = b.Results[0].Rows[0].Timestamp()
-			log.Infof("%d: %d.%d", i, ts[i].Unix(), ts[i].Nanosecond())
+	for i, key := range keys {
+		b := &client.Batch{}
+		b.Put(key, "value")
+		if err := db.Run(b); err != nil {
+			t.Fatal(err)
+		}
+		ts[i] = b.Results[0].Rows[0].Timestamp()
+		log.Infof("%d: %d.%d", i, ts[i].Unix(), ts[i].Nanosecond())
+		if i == 0 {
+			util.SucceedsWithin(t, time.Second, func() error {
+				// Enforce that when we write the second key, it's written
+				// with a strictly higher timestamp. We're dropping logical
+				// ticks and the clock may just have been pushed into the
+				// future, so that's necessary. See #3122.
+				if !s.Clock().PhysicalTime().After(ts[0]) {
+					return errors.New("time stands still")
+				}
+				return nil
+			})
 		}
 	}
 
