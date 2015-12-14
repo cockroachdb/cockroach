@@ -77,7 +77,7 @@ func TestRangeReplication(t *testing.T) {
 	if *numLocal == 0 {
 		t.Skip("skipping since not run against local cluster")
 	}
-	l := cluster.CreateLocal(*numLocal, stopper) // intentionally using local cluster
+	l := cluster.CreateLocal(*numLocal, *logDir, stopper) // intentionally using local cluster
 	l.Start()
 	defer l.AssertAndStop(t)
 

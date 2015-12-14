@@ -46,7 +46,32 @@ var numRemote = flag.Int("num-remote", 0, "start a remote cluster of the given s
 var cwd = flag.String("cwd", "../cloud/aws", "directory to run terraform from")
 var stall = flag.Duration("stall", time.Minute, "duration after which if no forward progress is made, consider the test stalled")
 var keyName = flag.String("key-name", "", "name of key for remote cluster")
+var logDir = flag.String("l", "", "the directory to store log files, relative to the test source")
 var stopper = make(chan struct{})
+
+func farmer(t *testing.T) *terrafarm.Farmer {
+	if *numRemote <= 0 {
+		t.Skip("running in docker mode")
+	}
+	if *keyName == "" {
+		t.Fatal("-key-name is required") // saves a lot of trouble
+	}
+	logDir := *logDir
+	if logDir == "" {
+		var err error
+		logDir, err = ioutil.TempDir(os.TempDir(), "clustertest_")
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	f := &terrafarm.Farmer{
+		Debug:   true,
+		Cwd:     *cwd,
+		LogDir:  logDir,
+		KeyName: *keyName,
+	}
+	return f
+}
 
 // StartCluster starts a cluster from the relevant flags.
 func StartCluster(t *testing.T) cluster.Cluster {
@@ -54,7 +79,7 @@ func StartCluster(t *testing.T) cluster.Cluster {
 		if *numRemote > 0 {
 			t.Fatal("cannot both specify -num-local and -num-remote")
 		}
-		l := cluster.CreateLocal(*numLocal, stopper)
+		l := cluster.CreateLocal(*numLocal, *logDir, stopper)
 		l.Start()
 		checkRangeReplication(t, l, 20*time.Second)
 		return l
@@ -62,14 +87,7 @@ func StartCluster(t *testing.T) cluster.Cluster {
 	if *numRemote == 0 {
 		t.Fatal("need to either specify -num-local or -num-remote")
 	}
-	if *keyName == "" {
-		t.Fatal("-key-name is required") // saves a lot of trouble
-	}
-	f := &terrafarm.Farmer{
-		Debug:   true,
-		Cwd:     *cwd,
-		KeyName: *keyName,
-	}
+	f := farmer(t)
 	if err := f.Destroy(); err != nil {
 		t.Fatal(err)
 	}

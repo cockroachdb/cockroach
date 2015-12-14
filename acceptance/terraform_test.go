@@ -15,54 +15,22 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package terrafarm_test // intentionally; prevents access to internals
+// +build acceptance
+
+package acceptance
 
 import (
-	"flag"
-	"io/ioutil"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
 )
-
-var cwd = flag.String("cwd", func() string {
-	const relPath = "../../terraform/aws"
-	absPath, err := filepath.Abs(relPath)
-	if err != nil {
-		return relPath
-	}
-	return absPath
-}(), "directory to run terraform from")
-var keyName = flag.String("key-name", "cockroach", "name of key for cluster")
-var logDir = flag.String("l", "", "log dir (empty for temporary)")
-var duration = flag.Duration("d", 5*time.Minute, "duration for each test")
-
-func farmer(t *testing.T) *terrafarm.Farmer {
-	logDir := *logDir
-	if logDir == "" {
-		var err error
-		logDir, err = ioutil.TempDir(os.TempDir(), "clustertest_")
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	f := &terrafarm.Farmer{
-		Debug:   true,
-		Cwd:     *cwd,
-		LogDir:  logDir,
-		KeyName: *keyName,
-	}
-	return f
-}
 
 // TestBuildCluster resizes the cluster to one node, one writer.
 // It does not tear down the cluster after it's done and is mostly
 // useful for testing code changes in the `terrafarm` package.
 func TestBuildCluster(t *testing.T) {
+	t.Skip("only enabled during testing")
 	f := farmer(t)
 	defer f.CollectLogs()
 	if err := f.Resize(1, 1); err != nil {
@@ -71,8 +39,9 @@ func TestBuildCluster(t *testing.T) {
 	f.Assert(t)
 }
 
-// TestFiveNodesAndWriters runs a five node cluster and five writers.
-// The test runs until SIGINT is received (or the test times out).
+// TestFiveNodesAndWriters runs a cluster and one writer per node.
+// The test runs until SIGINT is received or the specified duration
+// has passed.
 func TestFiveNodesAndWriters(t *testing.T) {
 	deadline := time.After(*duration)
 	f := farmer(t)

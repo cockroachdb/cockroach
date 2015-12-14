@@ -98,7 +98,7 @@ func TestStatusServer(t *testing.T) {
 		t.Skip("skipping since not run against local cluster")
 	}
 
-	l := cluster.CreateLocal(*numLocal, stopper) // intentionally using local cluster
+	l := cluster.CreateLocal(*numLocal, *logDir, stopper) // intentionally using local cluster
 	l.ForceLogging = true
 	l.Start()
 	defer l.AssertAndStop(t)
