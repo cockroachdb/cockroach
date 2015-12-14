@@ -54,7 +54,7 @@ func (mt mutationTest) checkQueryResponse(q string, e [][]string) int {
 		mt.Fatal(err)
 	}
 	if len(e) > 0 && len(cols) != len(e[0]) {
-		mt.Fatalf("wrong number of columns %d", len(cols))
+		mt.Fatalf("wrong number of columns %d in response to query %s", len(cols), q)
 	}
 	vals := make([]interface{}, len(cols))
 	for i := range vals {
@@ -663,7 +663,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	// Make "ufo" live.
 	mt.makeMutationsActive()
 	// The index has been renamed to ufo, and the column to d.
-	_ = mt.checkQueryResponse("SHOW INDEX FROM t.test", [][]string{{"test", "primary", "true", "1", "a", "false"}, {"test", "ufo", "false", "1", "d", "false"}})
+	_ = mt.checkQueryResponse("SHOW INDEX FROM t.test", [][]string{{"test", "primary", "true", "1", "a", "ASC", "false"}, {"test", "ufo", "false", "1", "d", "ASC", "false"}})
 
 	// Rename column under mutation works properly.
 

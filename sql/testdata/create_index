@@ -29,12 +29,12 @@ CREATE INDEX foo ON t (a)
 statement error index \"bar\" contains unknown column \"c\"
 CREATE INDEX bar ON t (c)
 
-query TTBITB colnames
+query TTBITTB colnames
 SHOW INDEX FROM t
 ----
-Table Name    Unique Seq Column Storing
-t     primary true   1   a      false
-t     foo     false  1   b      false
+Table Name    Unique Seq Column Direction Storing
+t     primary true   1   a      ASC       false
+t     foo     false  1   b      ASC       false
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@foo
@@ -53,12 +53,12 @@ EXPLAIN (DEBUG) SELECT * FROM t@foo
 statement error duplicate key value \(b\)=\(1\) violates unique constraint "bar"
 CREATE UNIQUE INDEX bar ON t (b)
 
-query TTBITB colnames
+query TTBITTB colnames
 SHOW INDEX FROM t
 ----
-Table Name    Unique Seq Column Storing
-t     primary true   1   a      false
-t     foo     false  1   b      false
+Table Name    Unique Seq Column Direction Storing
+t     primary true   1   a      ASC       false
+t     foo     false  1   b      ASC       false
 
 query ITTB
 EXPLAIN (DEBUG) SELECT * FROM t@foo
@@ -83,6 +83,16 @@ CREATE INDEX b_desc ON t (b DESC)
 
 statement ok
 CREATE INDEX b_asc ON t (b ASC, c DESC)
+
+query TTBITTB colnames
+SHOW INDEX FROM t
+----
+Table Name    Unique Seq Column Direction  Storing
+t     primary true   1   a      ASC        false
+t     b_desc  false  1   b      DESC       false
+t     b_asc   false  1   b      ASC        false
+t     b_asc   false  2   c      DESC       false
+
 
 statement ok
 INSERT INTO t VALUES (1,1,1)
