@@ -210,7 +210,6 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 // using the clock local to the distributed sender.
 func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skipf("TODO(tschottdorf): fix me")
 
 	s, db := setupMultipleRanges(t, "b")
 	defer s.Stop()
