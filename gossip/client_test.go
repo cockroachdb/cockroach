@@ -19,6 +19,7 @@ package gossip
 
 import (
 	"errors"
+	"math"
 	"testing"
 	"time"
 
@@ -92,7 +93,7 @@ type fakeGossipServer struct {
 
 func newFakeGossipServer(rpcServer *rpc.Server, stopper *stop.Stopper) (*fakeGossipServer, error) {
 	s := &fakeGossipServer{
-		nodeIDChan: make(chan roachpb.NodeID),
+		nodeIDChan: make(chan roachpb.NodeID, 1),
 	}
 	if err := rpcServer.Register("Gossip.Gossip", s.Gossip, &Request{}); err != nil {
 		return nil, util.Errorf("unable to register gossip service with RPC server: %s", err)
@@ -102,8 +103,14 @@ func newFakeGossipServer(rpcServer *rpc.Server, stopper *stop.Stopper) (*fakeGos
 
 func (s *fakeGossipServer) Gossip(argsI proto.Message) (proto.Message, error) {
 	args := argsI.(*Request)
-	reply := &Response{}
-	s.nodeIDChan <- args.NodeID
+	reply := &Response{
+		// Just don't conflict with other nodes.
+		NodeID: math.MaxInt32,
+	}
+	select {
+	case s.nodeIDChan <- args.NodeID:
+	default:
+	}
 
 	return reply, nil
 }
@@ -222,6 +229,7 @@ func TestClientNodeID(t *testing.T) {
 			if receivedNodeID == nodeID {
 				return nil
 			}
+		default:
 		}
 		return util.Errorf("client should send NodeID with %v, got %v", nodeID, receivedNodeID)
 	})
