@@ -10,14 +10,14 @@ CREATE TABLE users (
 statement ok
 INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 
-query TTBITB colnames
+query TTBITTB colnames
 SHOW INDEX FROM users
 ----
-Table Name    Unique Seq Column Storing
-users primary true   1   id     false
-users foo     false  1   name   false
-users bar     true   1   id     false
-users bar     true   2   name   false
+Table Name    Unique Seq Column Direction Storing
+users primary true   1   id     Ascending false
+users foo     false  1   name   Ascending false
+users bar     true   1   id     Ascending false
+users bar     true   2   name   Ascending false
 
 statement error index name "bar" already exists
 ALTER INDEX users@foo RENAME TO bar
@@ -34,14 +34,14 @@ ALTER INDEX IF EXISTS users@ffo RENAME TO ufo
 statement ok
 ALTER INDEX users@foo RENAME TO ufo
 
-query TTBITB colnames
+query TTBITTB colnames
 SHOW INDEX FROM users
 ----
-Table Name    Unique Seq Column Storing
-users primary true   1   id     false
-users ufo     false  1   name   false
-users bar     true   1   id     false
-users bar     true   2   name   false
+Table Name    Unique Seq Column Direction Storing
+users primary true   1   id     Ascending false
+users ufo     false  1   name   Ascending false
+users bar     true   1   id     Ascending false
+users bar     true   2   name   Ascending false
 
 user testuser
 
@@ -58,14 +58,14 @@ user testuser
 statement ok
 ALTER INDEX users@bar RENAME TO rar
 
-query TTBITB colnames
+query TTBITTB colnames
 SHOW INDEX FROM users
 ----
-Table Name    Unique Seq Column Storing
-users primary true   1   id     false
-users ufo     false  1   name   false
-users rar     true   1   id     false
-users rar     true   2   name   false
+Table Name    Unique Seq Column Direction Storing
+users primary true   1   id     Ascending false
+users ufo     false  1   name   Ascending false
+users rar     true   1   id     Ascending false
+users rar     true   2   name   Ascending false
 
 user root
 

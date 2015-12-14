@@ -181,6 +181,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 			{name: "Unique", typ: parser.DummyBool},
 			{name: "Seq", typ: parser.DummyInt},
 			{name: "Column", typ: parser.DummyString},
+			{name: "Direction", typ: parser.DummyString},
 			{name: "Storing", typ: parser.DummyBool},
 		},
 	}
@@ -189,14 +190,30 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 	for _, index := range append([]IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
 		j := 1
 		for i, cols := range [][]string{index.ColumnNames, index.StoreColumnNames} {
-			for _, col := range cols {
+			for k, col := range cols {
+				var direction string
+				var isStored bool
+				var err error
+				if i == 0 {
+					// This column is part of the index.
+					direction, err = index.DirectionToUserString(index.ColumnDirections[k])
+					if err != nil {
+						return nil, err
+					}
+					isStored = false
+				} else {
+					// This column is just a "stored" one.
+					direction = ""
+					isStored = true
+				}
 				v.rows = append(v.rows, []parser.Datum{
 					parser.DString(name),
 					parser.DString(index.Name),
 					parser.DBool(index.Unique),
 					parser.DInt(j),
 					parser.DString(col),
-					parser.DBool(i == 1),
+					parser.DString(direction),
+					parser.DBool(isStored),
 				})
 				j++
 			}

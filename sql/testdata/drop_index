@@ -10,14 +10,14 @@ CREATE TABLE users (
 statement ok
 INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 
-query TTBITB colnames
+query TTBITTB colnames
 SHOW INDEX FROM users
 ----
-Table Name    Unique Seq Column Storing
-users primary true   1   id     false
-users foo     false  1   name   false
-users bar     true   1   id     false
-users bar     true   2   name   false
+Table Name    Unique Seq Column Direction Storing
+users primary true   1   id     Ascending false
+users foo     false  1   name   Ascending false
+users bar     true   1   id     Ascending false
+users bar     true   2   name   Ascending false
 
 statement error index "ffo" does not exist
 DROP INDEX users@ffo
@@ -25,25 +25,25 @@ DROP INDEX users@ffo
 statement ok
 DROP INDEX IF EXISTS users@ffo
 
-query TTBITB colnames
+query TTBITTB colnames
 SHOW INDEX FROM users
 ----
-Table Name    Unique Seq Column Storing
-users primary true   1   id     false
-users foo     false  1   name   false
-users bar     true   1   id     false
-users bar     true   2   name   false
+Table Name    Unique Seq Column Direction Storing
+users primary true   1   id     Ascending false
+users foo     false  1   name   Ascending false
+users bar     true   1   id     Ascending false
+users bar     true   2   name   Ascending false
 
 statement ok
 DROP INDEX IF EXISTS users@foo
 
-query TTBITB colnames
+query TTBITTB colnames
 SHOW INDEX FROM users
 ----
-Table Name    Unique Seq Column Storing
-users primary true   1   id     false
-users bar     true   1   id     false
-users bar     true   2   name   false
+Table Name    Unique Seq Column Direction Storing
+users primary true   1   id     Ascending false
+users bar     true   1   id     Ascending false
+users bar     true   2   name   Ascending false
 
 user testuser
 
@@ -60,11 +60,11 @@ user testuser
 statement ok
 DROP INDEX users@bar
 
-query TTBITB colnames
+query TTBITTB colnames
 SHOW INDEX FROM users
 ----
-Table Name    Unique Seq Column Storing
-users primary true   1   id     false
+Table Name    Unique Seq Column Direction Storing
+users primary true   1   id     Ascending false
 
 user root
 

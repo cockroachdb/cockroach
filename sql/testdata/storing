@@ -8,18 +8,18 @@ CREATE TABLE t (
   UNIQUE INDEX c_idx (c) STORING (a, b, d)
 )
 
-query TTBITB colnames
+query TTBITTB colnames
 SHOW INDEX FROM t
 ----
-Table Name    Unique Seq Column Storing
-t     primary true   1   a      false
-t     b_idx   false  1   b      false
-t     b_idx   false  2   c      true
-t     b_idx   false  3   d      true
-t     c_idx   true   1   c      false
-t     c_idx   true   2   a      true
-t     c_idx   true   3   b      true
-t     c_idx   true   4   d      true
+Table Name    Unique Seq Column Direction Storing
+t     primary true   1   a      Ascending false
+t     b_idx   false  1   b      Ascending false
+t     b_idx   false  2   c                true
+t     b_idx   false  3   d                true
+t     c_idx   true   1   c      Ascending false
+t     c_idx   true   2   a                true
+t     c_idx   true   3   b                true
+t     c_idx   true   4   d                true
 
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4)

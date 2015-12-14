@@ -74,6 +74,19 @@ func validateName(name, typ string) error {
 	return nil
 }
 
+// DirectionToUserString returns a printable string for a direction, intended
+// to be returned to users and more stable than `IndexDescriptor_Direction.String()`.
+func (desc *IndexDescriptor) DirectionToUserString(dir IndexDescriptor_Direction) (str string, err error) {
+	switch dir {
+	case IndexDescriptor_ASC:
+		return "Ascending", nil
+	case IndexDescriptor_DESC:
+		return "Descending", nil
+	default:
+		return "", fmt.Errorf("invalid direction: %s", dir)
+	}
+}
+
 // allocateName sets desc.Name to a value that is not equalName to any
 // of tableDesc's indexes. allocateName roughly follows PostgreSQL's
 // convention for automatically-named indexes.

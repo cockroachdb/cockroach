@@ -41,12 +41,12 @@ ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 statement error multiple primary keys for table "t" are not allowed
 ALTER TABLE t ADD CONSTRAINT bar PRIMARY KEY (b)
 
-query TTBITB colnames
+query TTBITTB colnames
 SHOW INDEX FROM t
 ----
-Table  Name     Unique  Seq  Column  Storing
-t      primary  true    1    a       false
-t      foo      true    1    b       false
+Table  Name     Unique  Seq  Column  Direction  Storing
+t      primary  true    1    a       Ascending  false
+t      foo      true    1    b       Ascending  false
 
 query II
 SELECT * FROM t
@@ -91,11 +91,11 @@ ALTER TABLE t DROP CONSTRAINT IF EXISTS bar
 statement ok
 ALTER TABLE t DROP CONSTRAINT foo
 
-query TTBITB colnames
+query TTBITTB colnames
 SHOW INDEX FROM t
 ----
-Table  Name     Unique  Seq  Column  Storing
-t      primary  true    1    a       false
+Table  Name     Unique  Seq  Column  Direction  Storing
+t      primary  true    1    a       Ascending  false
 
 query ITTB colnames
 EXPLAIN (DEBUG) SELECT * FROM t
