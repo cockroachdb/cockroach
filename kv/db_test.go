@@ -36,7 +36,7 @@ func createTestClient(t *testing.T, stopper *stop.Stopper, addr string) *client.
 }
 
 func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user string) *client.DB {
-	db, err := client.Open(stopper, fmt.Sprintf("rpcs://%s@%s?certs=%s&failfast=1",
+	db, err := client.Open(stopper, fmt.Sprintf("rpcs://%s@%s?certs=%s",
 		user, addr, security.EmbeddedCertsDir))
 	if err != nil {
 		t.Fatal(err)
