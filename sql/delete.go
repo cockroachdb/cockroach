@@ -42,7 +42,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 	// TODO(tamird,pmattis): avoid going through Select to avoid encoding
 	// and decoding keys.
 	rows, err := p.Select(&parser.Select{
-		Exprs: parser.SelectExprs{parser.StarSelectExpr()},
+		Exprs: tableDesc.allColumnsSelector(),
 		From:  parser.TableExprs{n.Table},
 		Where: n.Where,
 	})

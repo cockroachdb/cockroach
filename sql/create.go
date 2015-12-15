@@ -138,6 +138,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 				Kind: ColumnType_INT,
 			},
 			DefaultExpr: &s,
+			Hidden:      true,
 		}
 		desc.AddColumn(col)
 		idx := IndexDescriptor{

@@ -575,6 +575,27 @@ func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
 	desc.Mutations = append(desc.Mutations, m)
 }
 
+// VisibleColumns returns all non hidden columns.
+func (desc *TableDescriptor) VisibleColumns() []ColumnDescriptor {
+	var cols []ColumnDescriptor
+	for _, col := range desc.Columns {
+		if !col.Hidden {
+			cols = append(cols, col)
+		}
+	}
+	return cols
+}
+
+func (desc *TableDescriptor) allColumnsSelector() parser.SelectExprs {
+	exprs := make(parser.SelectExprs, len(desc.Columns))
+	qnames := make([]parser.QualifiedName, len(desc.Columns))
+	for i, col := range desc.Columns {
+		qnames[i].Base = parser.Name(col.Name)
+		exprs[i].Expr = &qnames[i]
+	}
+	return exprs
+}
+
 // SQLString returns the SQL string corresponding to the type.
 func (c *ColumnType) SQLString() string {
 	switch c.Kind {

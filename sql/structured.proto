@@ -54,6 +54,7 @@ message ColumnDescriptor {
   // Default expression to use to populate the column on insert if no
   // value is provided.
   optional string default_expr = 5;
+  optional bool hidden = 6 [(gogoproto.nullable) = false];
 }
 
 message IndexDescriptor {
