@@ -86,6 +86,23 @@ testbuild:
 	  $(GO) test $(GOFLAGS) -tags '$(TAGS)' -o "$$DIR"/"$$OUT" -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
 	done
 
+# Build all tests into DIR and strips each.
+# DIR is required.
+.PHONY: testbuildall
+testbuildall: TESTS := $(shell $(GO) list $(PKG))
+testbuildall: GOFLAGS += -c
+testbuildall:
+ifndef DIR
+	$(error DIR is undefined)
+endif
+	for p in $(TESTS); do \
+	  NAME=$$(basename "$$p"); \
+	  PKGDIR=$$($(GO) list -f {{.ImportPath}} $$p); \
+		OUTPUT_FILE="$(DIR)/$${PKGDIR}/$${NAME}.test"; \
+	  $(GO) test $(GOFLAGS) -o $${OUTPUT_FILE} -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
+	  if [ -s $${OUTPUT_FILE} ]; then strip -S $${OUTPUT_FILE}; fi \
+	done
+
 # Similar to "testrace", we want to cache the build before running the
 # tests.
 .PHONY: test
