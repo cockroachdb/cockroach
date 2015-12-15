@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -64,12 +65,16 @@ func farmer(t *testing.T) *terrafarm.Farmer {
 			t.Fatal(err)
 		}
 	}
+	if !filepath.IsAbs(logDir) {
+		logDir = filepath.Join(filepath.Clean(os.ExpandEnv("${PWD}")), logDir)
+	}
 	f := &terrafarm.Farmer{
 		Debug:   true,
 		Cwd:     *cwd,
 		LogDir:  logDir,
 		KeyName: *keyName,
 	}
+	log.Infof("logging to %s", logDir)
 	return f
 }
 
