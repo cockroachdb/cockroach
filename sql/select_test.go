@@ -140,6 +140,8 @@ func TestMakeConstraints(t *testing.T) {
 		{`(b, a) IN ((1, 2))`, []string{"a", "b"}, `[(b, a) IN ((1, 2))]`},
 		{`(b, a) IN ((1, 2))`, []string{"a"}, `[(b, a) IN ((1, 2))]`},
 
+		{`a <= 5 AND b >= 6 AND (a, b) IN ((1, 2))`, []string{"a", "b"}, `[(a, b) IN ((1, 2))]`},
+
 		{`a IS NULL`, []string{"a"}, `[a IS NULL]`},
 		{`a IS NOT NULL`, []string{"a"}, `[a IS NOT NULL]`},
 	}
@@ -305,6 +307,7 @@ func TestApplyConstraints(t *testing.T) {
 		{`a >= 1 AND a <= 3 AND b = 2`, []string{"a", "b"}, `a >= 1 AND a <= 3 AND b = 2`},
 		{`(a, b) = (1, 2) AND c IS NOT NULL`, []string{"a", "b", "c"}, `<nil>`},
 		{`a IN (1, 2) AND b = 3`, []string{"a", "b"}, `b = 3`},
+		{`a <= 5 AND b >= 6 AND (a, b) IN ((1, 2))`, []string{"a", "b"}, `a <= 5 AND b >= 6`},
 	}
 	for _, d := range testData {
 		desc, index := makeTestIndex(t, d.columns)
