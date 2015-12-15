@@ -275,6 +275,9 @@ func (e *TransactionAbortedError) Transaction() *Transaction {
 func NewTransactionPushError(txn, pusheeTxn Transaction) *TransactionPushError {
 	err := &TransactionPushError{PusheeTxn: *pusheeTxn.Clone()}
 	if len(txn.ID) != 0 {
+		// Set only when the Txn ID is set since a pusher Txn
+		// can be a fake one that contains priority without ID
+		// (see Store.resolveWriteIntentError).
 		err.Txn = txn.Clone()
 	}
 	return err
