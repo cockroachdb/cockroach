@@ -201,11 +201,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 	for _, index := range append([]IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
 		sequence := 1
 		for i, col := range index.ColumnNames {
-			direction, err := index.ColumnDirections[i].UserString()
-			if err != nil {
-				return nil, err
-			}
-			appendRow(index, col, sequence, direction, false)
+			appendRow(index, col, sequence, index.ColumnDirections[i].String(), false)
 			sequence++
 		}
 		for _, col := range index.StoreColumnNames {
