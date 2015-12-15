@@ -46,7 +46,6 @@ var cockroachImage = flag.String("i", builderImage, "the docker image to run")
 var cockroachBinary = flag.String("b", defaultBinary(), "the binary to run (if image == "+builderImage+")")
 var cockroachEntry = flag.String("e", "", "the entry point for the image")
 var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
-var logDirectory = flag.String("l", "", "the directory to store log files, relative to the test source")
 var pwd = filepath.Clean(os.ExpandEnv("${PWD}"))
 
 // keyLen is the length (in bits) of the generated CA and node certs.
@@ -110,14 +109,14 @@ type LocalCluster struct {
 	expectedEvents chan Event
 	CertsDir       string
 	monitorStopper chan struct{}
-	LogDir         string
+	logDir         string
 	ForceLogging   bool // Forces logging to disk on a per test basis
 }
 
 // CreateLocal creates a new local cockroach cluster. The stopper is used to
 // gracefully shutdown the channel (e.g. when a signal arrives). The cluster
 // must be started before being used.
-func CreateLocal(numLocal int, stopper chan struct{}) *LocalCluster {
+func CreateLocal(numLocal int, logDir string, stopper chan struct{}) *LocalCluster {
 	select {
 	case <-stopper:
 		// The stopper was already closed, exit early.
@@ -136,6 +135,7 @@ func CreateLocal(numLocal int, stopper chan struct{}) *LocalCluster {
 		// TODO(tschottdorf): deadlocks will occur if these channels fill up.
 		events:         make(chan Event, 1000),
 		expectedEvents: make(chan Event, 1000),
+		logDir:         logDir,
 	}
 }
 
@@ -264,19 +264,17 @@ func (l *LocalCluster) initCluster() {
 		filepath.Join(pwd, "..") + ":/go/src/github.com/cockroachdb/cockroach",
 	}
 
-	if logDirectory != nil && len(*logDirectory) > 0 {
-		if filepath.IsAbs(*logDirectory) {
-			l.LogDir = *logDirectory
-		} else {
-			l.LogDir = filepath.Join(pwd, *logDirectory)
+	if l.logDir != "" {
+		if !filepath.IsAbs(l.logDir) {
+			l.logDir = filepath.Join(pwd, l.logDir)
 		}
-		binds = append(binds, l.LogDir+":/logs")
+		binds = append(binds, l.logDir+":/logs")
 	} else if l.ForceLogging {
-		l.LogDir, err = ioutil.TempDir(pwd, ".localcluster.logs.")
+		l.logDir, err = ioutil.TempDir(pwd, ".localcluster.logs.")
 		if err != nil {
 			panic(err)
 		}
-		binds = append(binds, l.LogDir+":/logs")
+		binds = append(binds, l.logDir+":/logs")
 	}
 	if *cockroachImage == builderImage {
 		path, err := filepath.Abs(*cockroachBinary)
@@ -352,18 +350,18 @@ func (l *LocalCluster) startNode(i int) *Container {
 		"--gossip=" + strings.Join(gossipNodes, ","),
 		"--scan-max-idle-time=200ms", // set low to speed up tests
 	}
-	var localLogDir string
-	if len(l.LogDir) > 0 {
-		dockerLogDir := "/logs/" + nodeStr(i)
-		localLogDir = filepath.Join(l.LogDir, nodeStr(i))
-		if !exists(localLogDir) {
-			if err := os.Mkdir(localLogDir, 0777); err != nil {
+	var locallogDir string
+	if len(l.logDir) > 0 {
+		dockerlogDir := "/logs/" + nodeStr(i)
+		locallogDir = filepath.Join(l.logDir, nodeStr(i))
+		if !exists(locallogDir) {
+			if err := os.Mkdir(locallogDir, 0777); err != nil {
 				log.Fatal(err)
 			}
 		}
 		cmd = append(
 			cmd,
-			"--log-dir="+dockerLogDir,
+			"--log-dir="+dockerlogDir,
 			"--logtostderr=false",
 			"--alsologtostderr=true")
 	}
@@ -378,7 +376,7 @@ func (l *LocalCluster) startNode(i int) *Container {
   logs:  %[3]s/cockroach.INFO
   certs: %[4]s
   pprof: docker exec -it %[5]s /bin/bash -c 'go tool pprof /cockroach <(wget --no-check-certificate -qO- https://$(hostname):26257/debug/pprof/heap)'`,
-		c.Name, uri, localLogDir, l.CertsDir, c.ID[:5]))
+		c.Name, uri, locallogDir, l.CertsDir, c.ID[:5]))
 	return c
 }
 
@@ -550,10 +548,10 @@ func (l *LocalCluster) stop() {
 		ci, err := n.Inspect()
 		crashed := err != nil || (!ci.State.Running && ci.State.ExitCode != 0)
 		maybePanic(n.Kill())
-		if len(l.LogDir) > 0 {
+		if len(l.logDir) > 0 {
 			// TODO(bdarnell): make these filenames more consistent with
 			// structured logs?
-			file := filepath.Join(l.LogDir, nodeStr(i),
+			file := filepath.Join(l.logDir, nodeStr(i),
 				fmt.Sprintf("stderr.%s.log", strings.Replace(
 					time.Now().Format(time.RFC3339), ":", "_", -1)))
 			w, err := os.Create(file)
@@ -570,12 +568,12 @@ func (l *LocalCluster) stop() {
 	}
 	l.Nodes = nil
 	// Only delete the logging directory if ForceLogging was set and there was
-	// no passed in logDirectory flag. This must be after the killing of the
+	// no passed in l.logDir flag. This must be after the killing of the
 	// nodes or there might be a panic when it tries to log that it is killing
 	// the node.
-	if l.ForceLogging && !(logDirectory != nil && len(*logDirectory) > 0) {
-		_ = os.RemoveAll(l.LogDir)
-		l.LogDir = ""
+	if l.ForceLogging && l.logDir != "" {
+		_ = os.RemoveAll(l.logDir)
+		l.logDir = ""
 	}
 }
 
