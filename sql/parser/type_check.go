@@ -26,13 +26,13 @@ import (
 )
 
 var (
-	typeBytes     = func(DTuple) (Datum, error) { return DummyBytes, nil }
-	typeDate      = func(DTuple) (Datum, error) { return DummyDate, nil }
-	typeFloat     = func(DTuple) (Datum, error) { return DummyFloat, nil }
-	typeInt       = func(DTuple) (Datum, error) { return DummyInt, nil }
-	typeInterval  = func(DTuple) (Datum, error) { return DummyInterval, nil }
-	typeString    = func(DTuple) (Datum, error) { return DummyString, nil }
-	typeTimestamp = func(DTuple) (Datum, error) { return DummyTimestamp, nil }
+	typeBytes     = func(MapArgs, DTuple) (Datum, error) { return DummyBytes, nil }
+	typeDate      = func(MapArgs, DTuple) (Datum, error) { return DummyDate, nil }
+	typeFloat     = func(MapArgs, DTuple) (Datum, error) { return DummyFloat, nil }
+	typeInt       = func(MapArgs, DTuple) (Datum, error) { return DummyInt, nil }
+	typeInterval  = func(MapArgs, DTuple) (Datum, error) { return DummyInterval, nil }
+	typeString    = func(MapArgs, DTuple) (Datum, error) { return DummyString, nil }
+	typeTimestamp = func(MapArgs, DTuple) (Datum, error) { return DummyTimestamp, nil }
 )
 
 // TypeCheck implements the Expr interface.
@@ -265,7 +265,7 @@ func (expr *FuncExpr) TypeCheck(args MapArgs) (Datum, error) {
 
 	// Cache is warm and `fn` encodes its return type.
 	if expr.fn.returnType != nil {
-		datum, err := expr.fn.returnType(dummyArgs)
+		datum, err := expr.fn.returnType(args, dummyArgs)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %v", expr.Name, err)
 		}
@@ -305,7 +305,7 @@ func (expr *FuncExpr) TypeCheck(args MapArgs) (Datum, error) {
 
 	// Function lookup succeeded and `fn` encodes its return type.
 	if expr.fn.returnType != nil {
-		datum, err := expr.fn.returnType(dummyArgs)
+		datum, err := expr.fn.returnType(args, dummyArgs)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %v", expr.Name, err)
 		}

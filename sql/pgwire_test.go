@@ -273,6 +273,28 @@ func TestPGPrepared(t *testing.T) {
 				nil,
 			},
 		},
+		"SELECT GREATEST($1, 0, $2), $2": {
+			{
+				[]interface{}{1, -1},
+				"",
+				[]interface{}{1, -1},
+			},
+			{
+				[]interface{}{-1, 10},
+				"",
+				[]interface{}{10, 10},
+			},
+			{
+				[]interface{}{"-2", "-1"},
+				"",
+				[]interface{}{0, -1},
+			},
+			{
+				[]interface{}{1, 2.1},
+				"pq: unknown int value: 2.1",
+				nil,
+			},
+		},
 	}
 
 	defer leaktest.AfterTest(t)

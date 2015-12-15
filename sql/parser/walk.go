@@ -229,6 +229,18 @@ func (m MapArgs) Arg(name string) (Datum, bool) {
 	return d, ok
 }
 
+func (m MapArgs) SetValArg(d, typ Datum) (set bool, err error) {
+	v, ok := d.(DValArg)
+	if !ok {
+		return false, nil
+	}
+	if t, ok := m[string(v)]; ok && typ != t {
+		return false, fmt.Errorf("duplicate parameters of differing types: %s, %s", typ.Type(), t.Type())
+	}
+	m[string(v)] = typ
+	return true,  nil
+}
+
 type argVisitor struct {
 	args     Args
 	optional bool
