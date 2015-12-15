@@ -83,7 +83,7 @@ all: lint $(GOBINDATA_TARGET) $(TEST_TARGET) $(PROTO_JSON_TARGET)
 	rm -f $(GOBINDATA_DEBUG_TARGET)
 
 .PHONY:
-lint:
+lint: npm.installed
 	stylint -c .stylintrc $(STYL_ROOT)
 	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts')
 
