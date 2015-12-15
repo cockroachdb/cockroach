@@ -49,9 +49,9 @@ var (
 	// dummyTuple is a placeholder DTuple value.
 	dummyTuple Datum = DTuple{}
 	// DNull is the NULL Datum.
-	DNull       Datum = dNull{}
+	DNull Datum = dNull{}
 	// dummyValArg is a placeholder DValArg value.
-	dummyValArg Datum = DValArg("")
+	dummyValArg Datum = DValArg{}
 
 	boolType      = reflect.TypeOf(DummyBool)
 	intType       = reflect.TypeOf(DummyInt)
@@ -619,33 +619,35 @@ func (d dNull) String() string {
 }
 
 // DValArg is the ValArg Datum.
-type DValArg string
+type DValArg struct {
+	name string
+}
 
 // Type implements the Datum interface.
-func (d DValArg) Type() string {
+func (DValArg) Type() string {
 	return "valarg"
 }
 
 // Compare implements the Datum interface.
 func (d DValArg) Compare(other Datum) int {
-	panic("DValArg.Compare not supported")
+	panic(d.Type() + ".Compare not supported")
 }
 
 // Next implements the Datum interface.
 func (d DValArg) Next() Datum {
-	panic("DValArg.Next not supported")
+	panic(d.Type() + ".Next not supported")
 }
 
 // IsMax implements the Datum interface.
-func (d DValArg) IsMax() bool {
+func (DValArg) IsMax() bool {
 	return true
 }
 
 // IsMin implements the Datum interface.
-func (d DValArg) IsMin() bool {
+func (DValArg) IsMin() bool {
 	return true
 }
 
 func (d DValArg) String() string {
-	return "$" + string(d)
+	return "$" + d.name
 }

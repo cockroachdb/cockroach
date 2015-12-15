@@ -36,6 +36,7 @@ import (
 type messageType byte
 
 // http://www.postgresql.org/docs/9.4/static/protocol-message-formats.html
+//go:generate stringer -type=messageType
 const (
 	serverMsgAuth                 messageType = 'R'
 	serverMsgCommandComplete                  = 'C'
@@ -58,30 +59,47 @@ const (
 	clientExecute        = 'E'
 )
 
+type prepareType byte
+
+const (
+	statement prepareType = 'S'
+	portal                = 'P'
+)
+
 const (
 	authOK int32 = 0
 )
 
-type parsedQuery struct {
-	query   string
-	types   []oid.Oid
-	columns []*driver.Response_Result_Rows_Column
-	params  []driver.Datum
+type preparedStatement struct {
+	query       string
+	inTypes     []oid.Oid
+	columns     []*driver.Response_Result_Rows_Column
+	portalNames map[string]struct{}
+}
+
+type preparedPortal struct {
+	statement     preparedStatement
+	statementName string
+	params        []driver.Datum
 }
 
 type v3Conn struct {
-	rd              *bufio.Reader
-	wr              *bufio.Writer
-	opts            opts
-	executor        *sql.Executor
-	parsed          map[string]parsedQuery
-	readBuf         readBuffer
-	writeBuf        writeBuffer
-	tagBuf          [64]byte
-	session         sql.Session
-	pq              *parsedQuery
-	inExtendedQuery bool
-	waitForSync bool
+	rd       *bufio.Reader
+	wr       *bufio.Writer
+	opts     opts
+	executor *sql.Executor
+	readBuf  readBuffer
+	writeBuf writeBuffer
+	tagBuf   [64]byte
+	session  sql.Session
+
+	preparedStatements map[string]preparedStatement
+	preparedPortals    map[string]preparedPortal
+
+	// The logic governing these guys is hairy, and is not sufficiently
+	// specified in documentation. Consult the sources before you modify:
+	// https://github.com/postgres/postgres/blob/master/src/backend/tcop/postgres.c
+	doingExtendedQueryMessage, ignoreTillSync bool
 }
 
 type opts struct {
@@ -90,10 +108,11 @@ type opts struct {
 
 func makeV3Conn(conn net.Conn, executor *sql.Executor) v3Conn {
 	return v3Conn{
-		rd:       bufio.NewReader(conn),
-		wr:       bufio.NewWriter(conn),
-		executor: executor,
-		parsed:   make(map[string]parsedQuery),
+		rd:                 bufio.NewReader(conn),
+		wr:                 bufio.NewWriter(conn),
+		executor:           executor,
+		preparedStatements: make(map[string]preparedStatement),
+		preparedPortals:    make(map[string]preparedPortal),
 	}
 }
 
@@ -136,11 +155,9 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	if err := c.wr.Flush(); err != nil {
 		return err
 	}
-	// Check Postgres sources for when this should be set.
-	// https://github.com/postgres/postgres/blob/master/src/backend/tcop/postgres.c
-	c.inExtendedQuery = false
+
 	for {
-		if !c.inExtendedQuery {
+		if !c.doingExtendedQueryMessage {
 			c.writeBuf.initMsg(serverMsgReady)
 			var txnStatus byte = 'I'
 			if sessionTxn := c.session.Txn; sessionTxn != nil {
@@ -154,58 +171,65 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 				}
 			}
 			if log.V(2) {
-				log.Infof("pgwire writing transaction status: %q", txnStatus)
+				log.Infof("pgwire: %s: %q", serverMsgReady, txnStatus)
 			}
 			c.writeBuf.WriteByte(txnStatus)
 			if err := c.writeBuf.finishMsg(c.wr); err != nil {
 				return err
 			}
-			if err := c.wr.Flush(); err != nil {
-				return err
-			}
+		}
+		// If the buffer is empty (which is the case if ignoring messages),
+		// this does nothing.
+		if err := c.wr.Flush(); err != nil {
+			return err
 		}
 		typ, err := c.readBuf.readTypedMsg(c.rd)
 		if err != nil {
 			return err
 		}
-		fmt.Println("SRV GOT", string(typ))
-		if c.waitForSync && typ != clientMsgSync {
-			fmt.Println("SRV wait for sync, ignore", string(typ))
+		if c.ignoreTillSync && typ != clientMsgSync {
+			if log.V(2) {
+				log.Infof("pgwire: ignoring %s till sync", typ)
+			}
 			continue
+		}
+		if log.V(2) {
+			log.Infof("pgwire: processing %s", typ)
 		}
 		switch typ {
 		case clientMsgSimpleQuery:
+			c.doingExtendedQueryMessage = false
 			err = c.handleSimpleQuery(&c.readBuf)
 
 		case clientMsgParse:
-			c.inExtendedQuery = true
+			c.doingExtendedQueryMessage = true
 			err = c.handleParse(&c.readBuf)
 
 		case clientMsgTerminate:
 			return nil
 
 		case clientMsgDescribe:
-			c.inExtendedQuery = true
+			c.doingExtendedQueryMessage = true
 			err = c.handleDescribe(&c.readBuf)
 
 		case clientMsgSync:
-			c.inExtendedQuery = false
-			c.waitForSync = false
+			c.doingExtendedQueryMessage = false
+			c.ignoreTillSync = false
 
 		case clientMsgClose:
-			c.inExtendedQuery = true
+			c.doingExtendedQueryMessage = true
 			err = c.handleClose(&c.readBuf)
 
 		case clientBind:
-			c.inExtendedQuery = true
+			c.doingExtendedQueryMessage = true
 			err = c.handleBind(&c.readBuf)
 
 		case clientExecute:
-			c.inExtendedQuery = true
+			c.doingExtendedQueryMessage = true
 			err = c.handleExecute(&c.readBuf)
 
 		default:
-			log.Fatalf("unrecognized client message type %c", typ)
+			err = c.sendError(fmt.Sprintf("unrecognized client message type %s", typ))
 		}
 		if err != nil {
 			return err
@@ -249,38 +273,37 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	if err != nil {
 		return err
 	}
-	if _, ok := c.parsed[name]; ok && name != "" {
-		return c.sendError(fmt.Sprintf("prepared statement %q already exists", name))
+	// The unnamed prepared statement can be freely overwritten.
+	if name != "" {
+		if _, ok := c.preparedStatements[name]; ok {
+			return c.sendError(fmt.Sprintf("prepared statement %q already exists", name))
+		}
 	}
 	query, err := buf.getString()
 	if err != nil {
 		return err
 	}
-	stmts, err := parser.ParseTraditional(query)
-	if err != nil {
-		return c.sendError(err.Error())
-	}
-	if len(stmts) != 1 {
-		return c.sendError("expected exactly one statement")
-	}
-	stmt := stmts[0]
 	numTypes, err := buf.getInt16()
 	if err != nil {
 		return err
 	}
-	pq := parsedQuery{
-		query: query,
-		types: make([]oid.Oid, numTypes),
+	pq := preparedStatement{
+		query:   query,
+		inTypes: make([]oid.Oid, 0, numTypes),
 	}
-	for i := int16(0); i < numTypes; i++ {
+	for i := 0; i < int(numTypes); i++ {
 		typ, err := buf.getInt32()
 		if err != nil {
 			return err
 		}
-		pq.types[i] = oid.Oid(typ)
+		pq.inTypes = append(pq.inTypes, oid.Oid(typ))
+	}
+	stmt, err := parser.ParseOne(query, parser.Traditional)
+	if err != nil {
+		return c.sendError(err.Error())
 	}
 	args := make(parser.MapArgs)
-	for i, t := range pq.types {
+	for i, t := range pq.inTypes {
 		v, ok := oidToDatum[t]
 		if !ok {
 			return c.sendError(fmt.Sprintf("unknown oid type: %v", t))
@@ -290,17 +313,17 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	if err := parser.FillArgsOptional(stmt, args); err != nil {
 		return c.sendError(err.Error())
 	}
-	if err := CheckArgs(stmt, args); err != nil {
+	if err := parser.CheckArgs(stmt, args); err != nil {
 		return c.sendError(err.Error())
 	}
 	if err := parser.FillArgs(stmt, args); err != nil {
 		return c.sendError(err.Error())
 	}
 	// Check a second time with no args to make sure there are no ValArgs left.
-	if err := CheckArgs(stmt, nil); err != nil {
+	if err := parser.CheckArgs(stmt, nil); err != nil {
 		return c.sendError(err.Error())
 	}
-	pq.types = make([]oid.Oid, len(args))
+	pq.inTypes = make([]oid.Oid, len(args))
 	for k, v := range args {
 		i, err := strconv.Atoi(k)
 		if err != nil {
@@ -310,126 +333,131 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		if !ok {
 			return c.sendError(fmt.Sprintf("unknown datum type: %s", v))
 		}
-		pq.types[i-1] = id
+		pq.inTypes[i-1] = id
 	}
 	cols, err := c.executor.StatementResult(c.opts.user, stmt)
 	if err != nil {
 		return c.sendError(err.Error())
 	}
 	pq.columns = cols
-	c.parsed[name] = pq
+	c.preparedStatements[name] = pq
 	c.writeBuf.initMsg(serverMsgParseComplete)
 	return c.writeBuf.finishMsg(c.wr)
 }
 
-type checkVisitor struct {
-	args parser.MapArgs
-	err  error
-}
-
-func (v *checkVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
-	if !pre || v.err != nil {
-		return nil, expr
-	}
-	_, err := expr.TypeCheck(v.args)
-	if err != nil {
-		v.err = err
-	}
-	return v, expr
-}
-
-func CheckArgs(stmt parser.Statement, args parser.MapArgs) error {
-	v := checkVisitor{args: args}
-	parser.WalkStmt(&v, stmt)
-	return v.err
-}
-
 func (c *v3Conn) handleDescribe(buf *readBuffer) error {
-	kind, err := buf.getByte()
+	typ, err := buf.getPrepareType()
 	if err != nil {
-		return err
-	} else if kind != 'S' {
-		return c.sendError("portals are unsupported")
+		return c.sendError(err.Error())
 	}
 	name, err := buf.getString()
 	if err != nil {
 		return err
 	}
-	pq, ok := c.parsed[name]
-	if !ok {
-		return c.sendError(fmt.Sprintf("unknown prepared statement %q", name))
+	var stmt preparedStatement
+	switch typ {
+	case statement:
+		var ok bool
+		if stmt, ok = c.preparedStatements[name]; !ok {
+			return c.sendError(fmt.Sprintf("unknown prepared statement %q", name))
+		}
+		c.writeBuf.initMsg(serverMsgParameterDescription)
+		c.writeBuf.putInt16(int16(len(stmt.inTypes)))
+		for _, t := range stmt.inTypes {
+			c.writeBuf.putInt32(int32(t))
+		}
+		if err := c.writeBuf.finishMsg(c.wr); err != nil {
+			return err
+		}
+	case portal:
+		prtl, ok := c.preparedPortals[name]
+		if !ok {
+			return c.sendError(fmt.Sprintf("unknown portal %q", name))
+		}
+		if stmt, ok = c.preparedStatements[prtl.statementName]; !ok {
+			return c.sendError(fmt.Sprintf("unknown prepared statement %q", name))
+		}
 	}
-	c.writeBuf.initMsg(serverMsgParameterDescription)
-	c.writeBuf.putInt16(int16(len(pq.types)))
-	for _, t := range pq.types {
-		c.writeBuf.putInt32(int32(t))
-	}
-	if err := c.writeBuf.finishMsg(c.wr); err != nil {
-		return err
-	}
-	return c.sendRowDescription(pq.columns)
+
+	return c.sendRowDescription(stmt.columns)
 }
 
 func (c *v3Conn) handleClose(buf *readBuffer) error {
-	kind, err := buf.getByte()
+	typ, err := buf.getPrepareType()
 	if err != nil {
-		return err
-	} else if kind != 'S' {
-		return c.sendError("portals are unsupported")
+		return c.sendError(err.Error())
 	}
 	name, err := buf.getString()
 	if err != nil {
 		return err
 	}
-	delete(c.parsed, name)
-	c.pq = nil
+	switch typ {
+	case statement:
+		if stmt, ok := c.preparedStatements[name]; ok {
+			for portalName := range stmt.portalNames {
+				delete(c.preparedPortals, portalName)
+			}
+		}
+		delete(c.preparedStatements, name)
+	case portal:
+		if prtl, ok := c.preparedPortals[name]; ok {
+			if stmt, ok := c.preparedStatements[prtl.statementName]; ok {
+				delete(stmt.portalNames, name)
+			}
+		}
+		delete(c.preparedPortals, name)
+	}
 	return nil
 }
 
 func (c *v3Conn) handleBind(buf *readBuffer) error {
-	c.pq = nil
-	if portal, err := buf.getString(); err != nil {
-		return err
-	} else if portal != "" {
-		return c.sendError("portals are unsupported")
-	}
-	name, err := buf.getString()
+	portalName, err := buf.getString()
 	if err != nil {
 		return err
 	}
-	pq, ok := c.parsed[name]
+	// The unnamed portal can be freely overwritten.
+	if portalName != "" {
+		if _, ok := c.preparedPortals[portalName]; ok {
+			return c.sendError(fmt.Sprintf("portal %q already exists", portalName))
+		}
+	}
+	statementName, err := buf.getString()
+	if err != nil {
+		return err
+	}
+	stmt, ok := c.preparedStatements[statementName]
 	if !ok {
-		return c.sendError(fmt.Sprintf("unknown prepared statement %q", name))
+		return c.sendError(fmt.Sprintf("unknown prepared statement %q", statementName))
 	}
-	numCodes, err := buf.getInt16()
+	numFormatCodes, err := buf.getInt16()
 	if err != nil {
 		return err
 	}
-	formatCodes := make(map[int]int16)
-	for i := 0; i < int(numCodes); i++ {
+	numParams := len(stmt.inTypes)
+	formatCodes := make([]int16, numParams)
+	for i := 0; i < int(numFormatCodes); i++ {
 		c, err := buf.getInt16()
 		if err != nil {
 			return err
 		}
 		formatCodes[i] = c
-		fmt.Println("SRV FMT CODE", i, formatCodes[i])
 	}
-	np, err := buf.getInt16()
+	numValues, err := buf.getInt16()
 	if err != nil {
 		return err
 	}
-	numParams := int(np)
-	if numParams != len(pq.types) {
-		return c.sendError(fmt.Sprintf("expected %d parameters, got %d", len(pq.types), numParams))
+	if int(numValues) != numParams {
+		return c.sendError(fmt.Sprintf("expected %d parameters, got %d", numParams, numValues))
 	}
 	if len(formatCodes) == 1 {
-		for i := 1; i < numParams; i++ {
-			formatCodes[i] = formatCodes[0]
+		formatCode := formatCodes[0]
+
+		for i := 1; i < int(numValues); i++ {
+			formatCodes[i] = formatCode
 		}
 	}
-	params := make([]driver.Datum, numParams)
-	for i, t := range pq.types {
-		_, _ = i, t
+	params := make([]driver.Datum, numValues)
+	for i, t := range stmt.inTypes {
 		plen, err := buf.getInt32()
 		if err != nil {
 			return err
@@ -487,17 +515,24 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		}
 		params[i] = d
 	}
-	pq.params = params
-	c.pq = &pq
+
+	c.preparedPortals[portalName] = preparedPortal{
+		statement:     stmt,
+		statementName: statementName,
+		params:        params,
+	}
 	c.writeBuf.initMsg(serverMsgBindComplete)
 	return c.writeBuf.finishMsg(c.wr)
 }
 
 func (c *v3Conn) handleExecute(buf *readBuffer) error {
-	if portal, err := buf.getString(); err != nil {
+	portalName, err := buf.getString()
+	if err != nil {
 		return err
-	} else if portal != "" {
-		return c.sendError("portals are unsupported")
+	}
+	portal, ok := c.preparedPortals[portalName]
+	if !ok {
+		return c.sendError(fmt.Sprintf("unknown portal %q", portalName))
 	}
 	limit, err := buf.getInt32()
 	if err != nil {
@@ -506,13 +541,10 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 	if limit != 0 {
 		return c.sendError("execute row count limits not supported")
 	}
-	if c.pq == nil {
-		return c.sendError("no existing prepared statement")
-	}
 
 	c.session.Database = c.opts.database
 
-	resp, _, err := c.executor.ExecuteStatement(c.opts.user, c.session, c.pq.query, c.pq.params)
+	resp, _, err := c.executor.ExecuteStatement(c.opts.user, c.session, portal.statement.query, portal.params)
 	if err != nil {
 		return c.sendError(err.Error())
 	}
@@ -534,9 +566,10 @@ func (c *v3Conn) sendCommandComplete(tag []byte) error {
 }
 
 func (c *v3Conn) sendError(errToSend string) error {
-	if c.inExtendedQuery {
-		c.waitForSync = true
+	if c.doingExtendedQueryMessage {
+		c.ignoreTillSync = true
 	}
+
 	c.writeBuf.initMsg(serverMsgErrorResponse)
 	if err := c.writeBuf.WriteByte('S'); err != nil {
 		return err
@@ -563,10 +596,7 @@ func (c *v3Conn) sendError(errToSend string) error {
 	if err := c.writeBuf.WriteByte(0); err != nil {
 		return err
 	}
-	if err := c.writeBuf.finishMsg(c.wr); err != nil {
-		return err
-	}
-	return c.wr.Flush()
+	return c.writeBuf.finishMsg(c.wr)
 }
 
 func (c *v3Conn) sendResponse(resp driver.Response, sendDescription bool) error {

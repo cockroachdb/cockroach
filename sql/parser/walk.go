@@ -234,10 +234,10 @@ func (m MapArgs) SetValArg(d, typ Datum) (set bool, err error) {
 	if !ok {
 		return false, nil
 	}
-	if t, ok := m[string(v)]; ok && typ != t {
+	if t, ok := m[v.name]; ok && typ != t {
 		return false, fmt.Errorf("duplicate parameters of differing types: %s, %s", typ.Type(), t.Type())
 	}
-	m[string(v)] = typ
+	m[v.name] = typ
 	return true,  nil
 }
 
@@ -271,7 +271,10 @@ func (v *argVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 // FillArgs replaces any placeholder nodes in the expression with arguments
 // supplied with the query.
 func FillArgs(stmt Statement, args Args) error {
-	v := argVisitor{args: args}
+	v := argVisitor{
+		args:     args,
+		optional: false,
+	}
 	WalkStmt(&v, stmt)
 	return v.err
 }
@@ -366,4 +369,28 @@ func containsSubquery(expr Expr) bool {
 	v := containsSubqueryVisitor{containsSubquery: false}
 	_ = WalkExpr(&v, expr)
 	return v.containsSubquery
+}
+
+type checkVisitor struct {
+	args MapArgs
+	err  error
+}
+
+func (v *checkVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
+	if !pre || v.err != nil {
+		return nil, expr
+	}
+	_, err := expr.TypeCheck(v.args)
+	if err != nil {
+		v.err = err
+	}
+	return v, expr
+}
+
+// CheckArgs populates `args` with the inferred types of `stmt`s
+// placeholders.
+func CheckArgs(stmt Statement, args MapArgs) error {
+	v := checkVisitor{args: args}
+	WalkStmt(&v, stmt)
+	return v.err
 }

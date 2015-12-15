@@ -176,6 +176,8 @@ func (s *Server) serveConn(conn net.Conn) error {
 
 	if version == version30 {
 		v3conn := makeV3Conn(conn, s.context.Executor)
+		// This is better than always flushing on error.
+		defer v3conn.wr.Flush()
 		if errSSLRequired {
 			return v3conn.sendError(ErrSSLRequired)
 		}

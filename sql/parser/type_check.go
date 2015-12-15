@@ -124,7 +124,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 	switch expr.Type.(type) {
 	case *BoolType:
 		if v, ok := dummyExpr.(DValArg); ok {
-			args[string(v)] = DummyBool
+			args[v.name] = DummyBool
 			return DummyBool, nil
 		}
 		switch dummyExpr {
@@ -134,7 +134,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 
 	case *IntType:
 		if v, ok := dummyExpr.(DValArg); ok {
-			args[string(v)] = DummyInt
+			args[v.name] = DummyInt
 			return DummyInt, nil
 		}
 		switch dummyExpr {
@@ -144,7 +144,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 
 	case *FloatType:
 		if v, ok := dummyExpr.(DValArg); ok {
-			args[string(v)] = DummyFloat
+			args[v.name] = DummyFloat
 			return DummyFloat, nil
 		}
 		switch dummyExpr {
@@ -154,7 +154,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 
 	case *StringType:
 		if v, ok := dummyExpr.(DValArg); ok {
-			args[string(v)] = DummyString
+			args[v.name] = DummyString
 			return DummyString, nil
 		}
 		switch dummyExpr {
@@ -164,7 +164,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 
 	case *BytesType:
 		if v, ok := dummyExpr.(DValArg); ok {
-			args[string(v)] = DummyBytes
+			args[v.name] = DummyBytes
 			return DummyBytes, nil
 		}
 		switch dummyExpr {
@@ -174,7 +174,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 
 	case *DateType:
 		if v, ok := dummyExpr.(DValArg); ok {
-			args[string(v)] = DummyDate
+			args[v.name] = DummyDate
 			return DummyDate, nil
 		}
 		switch dummyExpr {
@@ -184,7 +184,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 
 	case *TimestampType:
 		if v, ok := dummyExpr.(DValArg); ok {
-			args[string(v)] = DummyTimestamp
+			args[v.name] = DummyTimestamp
 			return DummyTimestamp, nil
 		}
 		switch dummyExpr {
@@ -194,7 +194,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 
 	case *IntervalType:
 		if v, ok := dummyExpr.(DValArg); ok {
-			args[string(v)] = DummyInterval
+			args[v.name] = DummyInterval
 			return DummyInterval, nil
 		}
 		switch dummyExpr {
@@ -485,7 +485,7 @@ func (expr ValArg) TypeCheck(args MapArgs) (Datum, error) {
 	if args == nil {
 		return nil, util.Errorf("unhandled parameter: %s", expr, expr)
 	}
-	return DValArg(expr.name), nil
+	return DValArg{expr.name}, nil
 }
 
 // TypeCheck implements the Expr interface.
@@ -562,7 +562,7 @@ func typeCheckBooleanExprs(args MapArgs, op string, exprs ...Expr) (Datum, error
 		}
 		if args != nil {
 			if v, ok := dummyExpr.(DValArg); ok {
-				args[string(v)] = DummyBool
+				args[v.name] = DummyBool
 				continue
 			}
 		}
@@ -575,10 +575,10 @@ func typeCheckBooleanExprs(args MapArgs, op string, exprs ...Expr) (Datum, error
 
 func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight Datum) (Datum, cmpOp, error) {
 	if v, ok := dummyLeft.(DValArg); ok {
-		args[string(v)] = dummyRight
+		args[v.name] = dummyRight
 		dummyLeft = dummyRight
 	} else if v, ok := dummyRight.(DValArg); ok {
-		args[string(v)] = dummyLeft
+		args[v.name] = dummyLeft
 		dummyRight = dummyLeft
 	}
 
