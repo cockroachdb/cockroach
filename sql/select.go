@@ -573,8 +573,8 @@ func (v indexInfoByCost) Sort() {
 }
 
 // makeSpans constructs the spans for an index given a set of constraints.
-func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span {
-	prefix := roachpb.Key(MakeIndexKeyPrefix(tableID, indexID))
+func makeSpans(constraints indexConstraints, tableID ID, index *IndexDescriptor) []span {
+	prefix := roachpb.Key(MakeIndexKeyPrefix(tableID, index.ID))
 	spans := []span{{
 		start: append(roachpb.Key(nil), prefix...),
 		end:   append(roachpb.Key(nil), prefix...),
@@ -617,7 +617,8 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 					start = buf[:0]
 					for _, i := range c.tupleMap {
 						var err error
-						if start, err = encodeTableKey(start, t[i]); err != nil {
+						if start, err = encodeTableKey(start, t[i],
+							index.ColumnDirections[i].ToEncodingDirection()); err != nil {
 							panic(err)
 						}
 					}
@@ -625,28 +626,30 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 					end = start
 					if lastEnd {
 						end = nil
-						for i := range c.tupleMap {
+						for i, col_idx := range c.tupleMap {
 							d := t[c.tupleMap[i]]
 							if i+1 == len(c.tupleMap) {
 								d = d.Next()
 							}
 							var err error
-							if end, err = encodeTableKey(end, d); err != nil {
+							if end, err = encodeTableKey(end, d,
+								index.ColumnDirections[col_idx].ToEncodingDirection()); err != nil {
 								panic(err)
 							}
 						}
 					}
 
 				default:
+					firstColDir := index.ColumnDirections[col_idx].ToEncodingDirection()
 					var err error
-					if start, err = encodeTableKey(buf[:0], datum); err != nil {
+					if start, err = encodeTableKey(buf[:0], datum, firstColDir); err != nil {
 						panic(err)
 					}
 
 					end = start
 					if lastEnd {
 						var err error
-						if end, err = encodeTableKey(nil, datum.Next()); err != nil {
+						if end, err = encodeTableKey(nil, datum.Next(), firstColDir); err != nil {
 							panic(err)
 						}
 					}
