@@ -23,6 +23,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/lib/pq"
@@ -148,6 +149,132 @@ func TestPGWire(t *testing.T) {
 }
 
 func TestPGPrepared(t *testing.T) {
+	queryTests := map[string][]struct {
+		params []interface{}
+		error  string
+		result []interface{}
+	}{
+		"SELECT $1 > 0": {
+			{
+				[]interface{}{1},
+				"",
+				[]interface{}{true},
+			},
+			{
+				[]interface{}{"1"},
+				"",
+				[]interface{}{true},
+			},
+			{
+				[]interface{}{1.1},
+				"pq: unknown int value: 1.1",
+				[]interface{}{true},
+			},
+			{
+				[]interface{}{"1.0"},
+				"pq: unknown int value: 1.0",
+				nil,
+			},
+			{
+				[]interface{}{true},
+				"pq: unknown int value: true",
+				nil,
+			},
+		},
+		"SELECT TRUE AND $1": {
+			{
+				[]interface{}{true},
+				"",
+				[]interface{}{true},
+			},
+			{
+				[]interface{}{false},
+				"",
+				[]interface{}{false},
+			},
+			{
+				[]interface{}{1},
+				"pq: unknown bool value: 1",
+				nil,
+			},
+			{
+				[]interface{}{""},
+				"pq: unknown bool value: ",
+				nil,
+			},
+			// Make sure we can run another after a failure.
+			{
+				[]interface{}{true},
+				"",
+				[]interface{}{true},
+			},
+		},
+		"SELECT $1::bool": {
+			{
+				[]interface{}{true},
+				"",
+				[]interface{}{true},
+			},
+			{
+				[]interface{}{"true"},
+				"",
+				[]interface{}{true},
+			},
+			{
+				[]interface{}{"false"},
+				"",
+				[]interface{}{false},
+			},
+			{
+				[]interface{}{"1"},
+				"pq: unknown bool value: 1",
+				nil,
+			},
+			{
+				[]interface{}{2},
+				"pq: unknown bool value: 2",
+				nil,
+			},
+			{
+				[]interface{}{3.1},
+				"pq: unknown bool value: 3.1",
+				nil,
+			},
+			{
+				[]interface{}{""},
+				"pq: unknown bool value: ",
+				nil,
+			},
+		},
+		"SELECT $1::int > $2::float": {
+			{
+				[]interface{}{"2", 1},
+				"",
+				[]interface{}{true},
+			},
+			{
+				[]interface{}{1, "2"},
+				"",
+				[]interface{}{false},
+			},
+			{
+				[]interface{}{"2", "1.0"},
+				"",
+				[]interface{}{true},
+			},
+			{
+				[]interface{}{"2.0", "1"},
+				"pq: unknown int value: 2.0",
+				nil,
+			},
+			{
+				[]interface{}{2.1, 1},
+				"pq: unknown int value: 2.1",
+				nil,
+			},
+		},
+	}
+
 	defer leaktest.AfterTest(t)
 
 	ctx := server.NewTestContext()
@@ -160,8 +287,8 @@ func TestPGPrepared(t *testing.T) {
 		t.Fatal(err)
 	}
 	pgUrl := url.URL{
-		Scheme: "postgres",
-		Host:   net.JoinHostPort(host, port),
+		Scheme:   "postgres",
+		Host:     net.JoinHostPort(host, port),
 		RawQuery: "sslmode=disable",
 	}
 
@@ -171,22 +298,48 @@ func TestPGPrepared(t *testing.T) {
 	}
 	defer db.Close()
 
-	stmt, err := db.Prepare("SELECT TRUE AND $1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var v bool
-	if err := stmt.QueryRow(true).Scan(&v); err != nil {
-		t.Fatal(err)
-	} else if !v {
-		t.Fatal("expected true")
-	}
-	if err := stmt.QueryRow(false).Scan(&v); err != nil {
-		t.Fatal(err)
-	} else if v {
-		t.Fatal("expected false")
-	}
-	if err := stmt.QueryRow(1).Scan(&v); err == nil {
-		t.Fatal("expected error")
+	for query, tests := range queryTests {
+		fmt.Println("\nPREPARE", query)
+		stmt, err := db.Prepare(query)
+		if err != nil {
+			t.Fatalf("prepare error: %s: %s", query, err)
+		}
+		for _, test := range tests {
+			fmt.Printf("\nBIND %#v\n", test.params)
+			rows, err := stmt.Query(test.params...)
+			if err != nil {
+				if test.error == "" {
+					t.Fatalf("%s: %#v: unexpected error: %s", query, test.params, err)
+				}
+				if test.error != err.Error() {
+					t.Fatalf("%s: %#v: expected error: %s, got %s", query, test.params, test.error, err)
+				}
+				continue
+			}
+			if test.error != "" && err == nil {
+				t.Fatalf("expected error: %s: %#v", query, test.params)
+			}
+			dst := make([]interface{}, len(test.result))
+			for i, d := range test.result {
+				dst[i] = reflect.New(reflect.TypeOf(d)).Interface()
+			}
+			if !rows.Next() {
+				t.Fatalf("expected row: %s: %#v", query, test.params)
+			}
+			if err := rows.Scan(dst...); err != nil {
+				t.Fatal(err)
+			}
+			rows.Close()
+			for i, d := range dst {
+				v := reflect.Indirect(reflect.ValueOf(d)).Interface()
+				dst[i] = v
+			}
+			if !reflect.DeepEqual(dst, test.result) {
+				t.Fatalf("%s: %#v: expected %v, got %v", query, test.params, test.result, dst)
+			}
+		}
+		if err := stmt.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

@@ -172,7 +172,7 @@ func (b *writeBuffer) putInt64(v int64) {
 }
 
 func (b *writeBuffer) initMsg(typ messageType) {
-	fmt.Println("SEND", string(typ))
+	fmt.Println("SRV SEND", string(typ))
 	b.Reset()
 	b.putbuf[0] = byte(typ)
 	b.Write(b.putbuf[:5]) // message type + message length

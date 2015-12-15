@@ -81,6 +81,7 @@ type v3Conn struct {
 	session         sql.Session
 	pq              *parsedQuery
 	inExtendedQuery bool
+	waitForSync bool
 }
 
 type opts struct {
@@ -140,7 +141,6 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	c.inExtendedQuery = false
 	for {
 		if !c.inExtendedQuery {
-			fmt.Println("SRV SEND MSG READY")
 			c.writeBuf.initMsg(serverMsgReady)
 			var txnStatus byte = 'I'
 			if sessionTxn := c.session.Txn; sessionTxn != nil {
@@ -169,6 +169,10 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			return err
 		}
 		fmt.Println("SRV GOT", string(typ))
+		if c.waitForSync && typ != clientMsgSync {
+			fmt.Println("SRV wait for sync, ignore", string(typ))
+			continue
+		}
 		switch typ {
 		case clientMsgSimpleQuery:
 			err = c.handleSimpleQuery(&c.readBuf)
@@ -186,6 +190,7 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 
 		case clientMsgSync:
 			c.inExtendedQuery = false
+			c.waitForSync = false
 
 		case clientMsgClose:
 			c.inExtendedQuery = true
@@ -377,10 +382,12 @@ func (c *v3Conn) handleClose(buf *readBuffer) error {
 		return err
 	}
 	delete(c.parsed, name)
+	c.pq = nil
 	return nil
 }
 
 func (c *v3Conn) handleBind(buf *readBuffer) error {
+	c.pq = nil
 	if portal, err := buf.getString(); err != nil {
 		return err
 	} else if portal != "" {
@@ -435,7 +442,6 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println("SRV PARAM", i, plen, string(b), b)
 		var d driver.Datum
 		switch t {
 		case oid.T_bool:
@@ -448,12 +454,33 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 				case "false":
 					v = false
 				default:
-					fmt.Println("SRV NOT BOOL", string(b))
 					return c.sendError(fmt.Sprintf("unknown bool value: %s", b))
 				}
 				d.Payload = &driver.Datum_BoolVal{BoolVal: v}
 			default:
 				return c.sendError("unsupported: binary bool parameter")
+			}
+		case oid.T_int8:
+			switch formatCodes[i] {
+			case 0:
+				i, err := strconv.ParseInt(string(b), 10, 64)
+				if err != nil {
+					return c.sendError(fmt.Sprintf("unknown int value: %s", b))
+				}
+				d.Payload = &driver.Datum_IntVal{IntVal: i}
+			default:
+				return c.sendError("unsupported: binary int parameter")
+			}
+		case oid.T_float8:
+			switch formatCodes[i] {
+			case 0:
+				f, err := strconv.ParseFloat(string(b), 64)
+				if err != nil {
+					return c.sendError(fmt.Sprintf("unknown float value: %s", b))
+				}
+				d.Payload = &driver.Datum_FloatVal{FloatVal: f}
+			default:
+				return c.sendError("unsupported: binary float parameter")
 			}
 		default:
 			return c.sendError(fmt.Sprintf("unsupported: %v", t))
@@ -478,6 +505,9 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 	}
 	if limit != 0 {
 		return c.sendError("execute row count limits not supported")
+	}
+	if c.pq == nil {
+		return c.sendError("no existing prepared statement")
 	}
 
 	c.session.Database = c.opts.database
@@ -504,7 +534,9 @@ func (c *v3Conn) sendCommandComplete(tag []byte) error {
 }
 
 func (c *v3Conn) sendError(errToSend string) error {
-	c.inExtendedQuery = false
+	if c.inExtendedQuery {
+		c.waitForSync = true
+	}
 	c.writeBuf.initMsg(serverMsgErrorResponse)
 	if err := c.writeBuf.WriteByte('S'); err != nil {
 		return err
