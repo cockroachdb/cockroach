@@ -296,6 +296,13 @@ func TestPGPrepared(t *testing.T) {
 				nil,
 			},
 		},
+		"SELECT $1::int, $1::float": {
+			{
+				[]interface{}{"1"},
+				"",
+				[]interface{}{1, 1.0},
+			},
+		},
 	}
 
 	defer leaktest.AfterTest(t)
@@ -320,6 +327,14 @@ func TestPGPrepared(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+
+	{
+		stmt, err := db.Prepare("SELECT $1::int")
+		if err != nil {
+			t.Fatal(err)
+		}
+		stmt.Close()
+	}
 
 	for query, tests := range queryTests {
 		fmt.Println("\nPREPARE", query)
@@ -363,6 +378,24 @@ func TestPGPrepared(t *testing.T) {
 		}
 		if err := stmt.Close(); err != nil {
 			t.Fatal(err)
+		}
+	}
+
+	testFailures := map[string]string{
+		"SELECT $1 = $1":             "pq: unsupported comparison operator: <valarg> = <valarg>",
+		"SELECT $1 > 0 AND $1 > 0.0": "pq: parameter $1 has multiple types: float, int",
+		"SELECT $1":                  "pq: arg $1 not found",
+	}
+
+	for query, reason := range testFailures {
+		stmt, err := db.Prepare(query)
+		if err == nil {
+			t.Errorf("expected error: %s", query)
+			stmt.Close()
+			continue
+		}
+		if err.Error() != reason {
+			t.Errorf("unexpected error: %s: %s", query, err)
 		}
 	}
 }

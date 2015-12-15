@@ -229,17 +229,30 @@ func (m MapArgs) Arg(name string) (Datum, bool) {
 	return d, ok
 }
 
-func (m MapArgs) SetValArg(d, typ Datum) (set bool, err error) {
+func (m MapArgs) SetValArg(d, typ Datum) (set Datum, err error) {
+	if m == nil {
+		return nil, nil
+	}
 	v, ok := d.(DValArg)
 	if !ok {
-		return false, nil
+		return nil, nil
 	}
 	if t, ok := m[v.name]; ok && typ != t {
-		return false, fmt.Errorf("duplicate parameters of differing types: %s, %s", typ.Type(), t.Type())
+		return nil, fmt.Errorf("parameter %s has multiple types: %s, %s", v, typ.Type(), t.Type())
 	}
 	m[v.name] = typ
-	return true,  nil
+	v.typ = ValArgWrapper{typ}
+	fmt.Printf("SVA %v, %T\n", v, typ)
+	return typ, nil
 }
+
+type ValArgWrapper struct {
+	Datum
+}
+
+var _ VariableExpr = ValArgWrapper{}
+
+func (ValArgWrapper) Variable() {}
 
 type argVisitor struct {
 	args     Args

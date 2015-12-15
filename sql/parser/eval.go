@@ -23,6 +23,7 @@ import (
 	"math"
 	"reflect"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -694,6 +695,10 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		case DFloat:
 			return DBool(v != 0), nil
 		case DString:
+			if string(v) == "" {
+				debug.PrintStack()
+				panic("EMPTY ParseBool")
+			}
 			// TODO(pmattis): strconv.ParseBool is more permissive than the SQL
 			// spec. Is that ok?
 			b, err := strconv.ParseBool(string(v))
@@ -715,6 +720,10 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		case DFloat:
 			return DInt(v), nil
 		case DString:
+			if string(v) == "" {
+				debug.PrintStack()
+				panic("EMPTY PARSEINT")
+			}
 			i, err := strconv.ParseInt(string(v), 0, 64)
 			if err != nil {
 				return DNull, err
@@ -734,6 +743,10 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		case DFloat:
 			return d, nil
 		case DString:
+			if string(v) == "" {
+				debug.PrintStack()
+				panic("EMPTY ParseFloat")
+			}
 			f, err := strconv.ParseFloat(string(v), 64)
 			if err != nil {
 				return DNull, err

@@ -123,9 +123,8 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 
 	switch expr.Type.(type) {
 	case *BoolType:
-		if v, ok := dummyExpr.(DValArg); ok {
-			args[v.name] = DummyBool
-			return DummyBool, nil
+		if set, err := args.SetValArg(dummyExpr, DummyString); set != nil || err != nil {
+			return DummyBool, err
 		}
 		switch dummyExpr {
 		case DummyBool, DummyInt, DummyFloat, DummyString:
@@ -133,9 +132,8 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 	case *IntType:
-		if v, ok := dummyExpr.(DValArg); ok {
-			args[v.name] = DummyInt
-			return DummyInt, nil
+		if set, err := args.SetValArg(dummyExpr, DummyString); set != nil || err != nil {
+			return DummyInt, err
 		}
 		switch dummyExpr {
 		case DummyBool, DummyInt, DummyFloat, DummyString:
@@ -143,9 +141,8 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 	case *FloatType:
-		if v, ok := dummyExpr.(DValArg); ok {
-			args[v.name] = DummyFloat
-			return DummyFloat, nil
+		if set, err := args.SetValArg(dummyExpr, DummyString); set != nil || err != nil {
+			return DummyFloat, err
 		}
 		switch dummyExpr {
 		case DummyBool, DummyInt, DummyFloat, DummyString:
@@ -153,9 +150,8 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 	case *StringType:
-		if v, ok := dummyExpr.(DValArg); ok {
-			args[v.name] = DummyString
-			return DummyString, nil
+		if set, err := args.SetValArg(dummyExpr, DummyString); set != nil || err != nil {
+			return DummyString, err
 		}
 		switch dummyExpr {
 		case DummyBool, DummyInt, DummyFloat, DNull, DummyString, DummyBytes:
@@ -163,9 +159,8 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 	case *BytesType:
-		if v, ok := dummyExpr.(DValArg); ok {
-			args[v.name] = DummyBytes
-			return DummyBytes, nil
+		if set, err := args.SetValArg(dummyExpr, DummyString); set != nil || err != nil {
+			return DummyBytes, err
 		}
 		switch dummyExpr {
 		case DummyBytes, DummyString:
@@ -173,9 +168,8 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 	case *DateType:
-		if v, ok := dummyExpr.(DValArg); ok {
-			args[v.name] = DummyDate
-			return DummyDate, nil
+		if set, err := args.SetValArg(dummyExpr, DummyString); set != nil || err != nil {
+			return DummyDate, err
 		}
 		switch dummyExpr {
 		case DummyString, DummyTimestamp:
@@ -183,9 +177,8 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 	case *TimestampType:
-		if v, ok := dummyExpr.(DValArg); ok {
-			args[v.name] = DummyTimestamp
-			return DummyTimestamp, nil
+		if set, err := args.SetValArg(dummyExpr, DummyString); set != nil || err != nil {
+			return DummyTimestamp, err
 		}
 		switch dummyExpr {
 		case DummyString, DummyDate:
@@ -193,9 +186,8 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 	case *IntervalType:
-		if v, ok := dummyExpr.(DValArg); ok {
-			args[v.name] = DummyInterval
-			return DummyInterval, nil
+		if set, err := args.SetValArg(dummyExpr, DummyString); set != nil || err != nil {
+			return DummyInterval, err
 		}
 		switch dummyExpr {
 		case DummyString, DummyInt:
@@ -483,9 +475,9 @@ func (expr Tuple) TypeCheck(args MapArgs) (Datum, error) {
 // TypeCheck implements the Expr interface.
 func (expr ValArg) TypeCheck(args MapArgs) (Datum, error) {
 	if args == nil {
-		return nil, util.Errorf("unhandled parameter: %s", expr, expr)
+		return nil, util.Errorf("unhandled parameter: %s", expr)
 	}
-	return DValArg{expr.name}, nil
+	return DValArg{name: expr.name}, nil
 }
 
 // TypeCheck implements the Expr interface.
@@ -548,6 +540,9 @@ func (expr DTuple) TypeCheck(args MapArgs) (Datum, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr DValArg) TypeCheck(args MapArgs) (Datum, error) {
+	if expr.typ != nil {
+		return expr.typ, nil
+	}
 	return dummyValArg, nil
 }
 
@@ -560,11 +555,10 @@ func typeCheckBooleanExprs(args MapArgs, op string, exprs ...Expr) (Datum, error
 		if dummyExpr == DNull {
 			continue
 		}
-		if args != nil {
-			if v, ok := dummyExpr.(DValArg); ok {
-				args[v.name] = DummyBool
-				continue
-			}
+		if set, err := args.SetValArg(dummyExpr, DummyBool); err != nil {
+			return nil, err
+		} else if set != nil {
+			continue
 		}
 		if _, ok := dummyExpr.(DBool); !ok {
 			return nil, fmt.Errorf("incompatible %s argument type: %s", op, dummyExpr.Type())
@@ -574,12 +568,14 @@ func typeCheckBooleanExprs(args MapArgs, op string, exprs ...Expr) (Datum, error
 }
 
 func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight Datum) (Datum, cmpOp, error) {
-	if v, ok := dummyLeft.(DValArg); ok {
-		args[v.name] = dummyRight
-		dummyLeft = dummyRight
-	} else if v, ok := dummyRight.(DValArg); ok {
-		args[v.name] = dummyLeft
-		dummyRight = dummyLeft
+	if set, err := args.SetValArg(dummyLeft, dummyRight); err != nil {
+		return nil, cmpOp{}, err
+	} else if set != nil {
+		dummyLeft = set
+	} else if set, err := args.SetValArg(dummyRight, dummyLeft); err != nil {
+		return nil, cmpOp{}, err
+	} else if set != nil {
+		dummyRight = set
 	}
 
 	if dummyLeft == DNull || dummyRight == DNull {
