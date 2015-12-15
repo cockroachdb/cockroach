@@ -234,12 +234,7 @@ func Open(stopper *stop.Stopper, addr string) (*DB, error) {
 		ctx.Certs = dir[0]
 	}
 
-	retryOpts := defaultRetryOptions
-	if failFast := q["failfast"]; len(failFast) > 0 {
-		retryOpts.MaxRetries = 1
-	}
-
-	sender, err := newSender(u, ctx, retryOpts, stopper)
+	sender, err := newSender(u, ctx, stopper)
 	if err != nil {
 		return nil, err
 	}
