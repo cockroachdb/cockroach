@@ -55,6 +55,16 @@ const (
 	IntMax = 0xff
 )
 
+// Direction for ordering results.
+type Direction int
+
+// Direction values.
+const (
+	DefaultDirection Direction = iota
+	Ascending
+	Descending
+)
+
 // EncodeUint32 encodes the uint32 value using a big-endian 8 byte
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.
@@ -121,6 +131,14 @@ func DecodeUint64(b []byte) ([]byte, uint64, error) {
 func DecodeUint64Decreasing(b []byte) ([]byte, uint64, error) {
 	leftover, v, err := DecodeUint64(b)
 	return leftover, ^v, err
+}
+
+func EncodeVarintWithDir(b []byte, v int64, dir Direction) []byte {
+	if dir == Ascending {
+		return EncodeVarint(b, v)
+	} else {
+		return EncodeVarintDecreasing(b, v)
+	}
 }
 
 // EncodeVarint encodes the int64 value using a variable length

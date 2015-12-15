@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 // ID, ColumnID, and IndexID are all uint32, but are each given a
@@ -72,6 +73,17 @@ func validateName(name, typ string) error {
 	}
 	// TODO(pmattis): Do we want to be more restrictive than this?
 	return nil
+}
+
+func (dir IndexDescriptor_Direction) ToEncodingDirection() (encoding.Direction, error) {
+	switch dir {
+	case IndexDescriptor_ASC:
+		return encoding.Ascending, nil
+	case IndexDescriptor_DESC:
+		return encoding.Descending, nil
+	default:
+		return encoding.DefaultDirection, util.Errorf("invalid direction: %s", dir)
+	}
 }
 
 // UserString returns a printable string for a direction, intended

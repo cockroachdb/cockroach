@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -371,7 +372,7 @@ func encodeDatum(b []byte, d parser.Datum) ([]byte, error) {
 		}
 		return b, nil
 	}
-	return encodeTableKey(b, d)
+	return encodeTableKey(b, d, encoding.Ascending)
 }
 
 type aggregateImpl interface {

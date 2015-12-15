@@ -308,13 +308,27 @@ func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNam
 	return qualifiedNames, nil
 }
 
-func encodeIndexKey(columnIDs []ColumnID, colMap map[ColumnID]int,
+func encodeIndexKey(desc IndexDescriptor, colMap map[ColumnID]int,
+	values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
+	dirs := make([]encoding.Direction, 0, len(desc.ColumnIDs))
+	for _, dir := range desc.ColumnDirections {
+		converted_dir, err := dir.ToEncodingDirection()
+		if err != nil {
+			return nil, false, err
+		}
+		dirs = append(dirs, converted_dir)
+	}
+	return encodeColumns(desc.ColumnIDs, dirs, colMap, values, indexKey)
+}
+
+// Version of encodeIndexKey that takes ColumnIDs and directions explicitly.
+func encodeColumns(columnIDs []ColumnID, directions []encoding.Direction, colMap map[ColumnID]int,
 	values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
 	var key []byte
 	var containsNull bool
 	key = append(key, indexKey...)
 
-	for _, id := range columnIDs {
+	for c_idx, id := range columnIDs {
 		var val parser.Datum
 		if i, ok := colMap[id]; ok {
 			// TODO(pmattis): Need to convert the values[i] value to the type
@@ -328,15 +342,16 @@ func encodeIndexKey(columnIDs []ColumnID, colMap map[ColumnID]int,
 			containsNull = true
 		}
 
-		var err error
-		if key, err = encodeTableKey(key, val); err != nil {
+		if key, err := encodeTableKey(key, val, directions[c_idx]); err != nil {
 			return nil, containsNull, err
 		}
 	}
 	return key, containsNull, nil
 }
 
-func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
+// Encodes `val` into `b` and returns the new buffer.
+func encodeTableKey(b []byte, val parser.Datum, direction encoding.Direction) (
+	[]byte, error) {
 	if val == parser.DNull {
 		return encoding.EncodeNull(b), nil
 	}
@@ -344,11 +359,11 @@ func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
 	switch t := val.(type) {
 	case parser.DBool:
 		if t {
-			return encoding.EncodeVarint(b, 1), nil
+			return encoding.EncodeVarintWithDir(b, 1, direction), nil
 		}
-		return encoding.EncodeVarint(b, 0), nil
+		return encoding.EncodeVarintWithDir(b, 0, direction), nil
 	case parser.DInt:
-		return encoding.EncodeVarint(b, int64(t)), nil
+		return encoding.EncodeVarintWithDir(b, int64(t), direction), nil
 	case parser.DFloat:
 		return encoding.EncodeFloat(b, float64(t)), nil
 	case parser.DString:
@@ -356,11 +371,11 @@ func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
 	case parser.DBytes:
 		return encoding.EncodeString(b, string(t)), nil
 	case parser.DDate:
-		return encoding.EncodeVarint(b, int64(t)), nil
+		return encoding.EncodeVarintWithDir(b, int64(t), direction), nil
 	case parser.DTimestamp:
 		return encoding.EncodeTime(b, t.Time), nil
 	case parser.DInterval:
-		return encoding.EncodeVarint(b, int64(t.Duration)), nil
+		return encoding.EncodeVarintWithDir(b, int64(t.Duration), direction), nil
 	}
 	return nil, fmt.Errorf("unable to encode table key: %T", val)
 }
@@ -493,18 +508,24 @@ type indexEntry struct {
 	value []byte
 }
 
+// colMap maps ColumnIds to indexes in `values`.
 func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
 	colMap map[ColumnID]int, values []parser.Datum) ([]indexEntry, error) {
 	var secondaryIndexEntries []indexEntry
 	for _, secondaryIndex := range indexes {
 		secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
 		secondaryIndexKey, containsNull, err := encodeIndexKey(
-			secondaryIndex.ColumnIDs, colMap, values, secondaryIndexKeyPrefix)
+			secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}
 
-		extraKey, _, err := encodeIndexKey(secondaryIndex.ImplicitColumnIDs, colMap, values, nil)
+		implicitDirs := make([]encoding.Direction, 0, len(secondaryIndex.ImplicitColumnIDs))
+		for range secondaryIndex.ImplicitColumnIDs {
+			implicitDirs = append(implicitDirs, encoding.Ascending)
+		}
+		extraKey, _, err := encodeColumns(secondaryIndex.ImplicitColumnIDs, implicitDirs,
+			colMap, values, nil)
 		if err != nil {
 			return nil, err
 		}
