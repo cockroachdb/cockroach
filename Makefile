@@ -72,6 +72,8 @@ install:
 
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.
+# DIR is the base directory for binaries. If empty, 'go list {{.Root}}' is used.
+# STRIPPED: if set to 1, binaries are stripped.
 # If STATIC=1, tests are statically linked.
 # eg: to statically build the sql tests, run:
 #   make testbuild PKG=./sql STATIC=1
@@ -79,11 +81,15 @@ install:
 testbuild: TESTS := $(shell $(GO) list -tags '$(TAGS)' $(PKG))
 testbuild: GOFLAGS += -c
 testbuild:
+	ROOT="$(DIR)"; \
 	for p in $(TESTS); do \
 	  NAME=$$(basename "$$p"); \
 	  OUT="$$NAME.test"; \
-	  DIR=$$($(GO) list -f {{.Dir}} -tags '$(TAGS)' $$p); \
-	  $(GO) test $(GOFLAGS) -tags '$(TAGS)' -o "$$DIR"/"$$OUT" -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
+	  DIRROOT=$${ROOT-$$($(go) list -f {{.Root}} -tags '$(TAGS)' $$p)}; \
+	  OUTDIR=$$($(GO) list -f $${DIRROOT}/{{.ImportPath}} -tags '$(TAGS)' $$p); \
+	  $(GO) test $(GOFLAGS) -tags '$(TAGS)' -o "$$OUTDIR"/"$$OUT" -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
+	  # Silence output from strip, it complains when running on packages without tests. \
+	  if [ $${STRIPPED-0} -eq 1 ]; then strip -S "$$OUTDIR"/"$$OUT" >/dev/null 2>&1 || true; fi \
 	done
 
 # Similar to "testrace", we want to cache the build before running the
