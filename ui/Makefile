@@ -79,8 +79,13 @@ GOGOPROTO         := $(GOGOPROTO_FOLDER)/gogoproto/gogo.proto
 PROTO_JSON_TARGET := $(GENERATED_ROOT)/wireproto.json
 
 .PHONY:
-all: $(GOBINDATA_TARGET) $(TEST_TARGET) $(PROTO_JSON_TARGET)
+all: lint $(GOBINDATA_TARGET) $(TEST_TARGET) $(PROTO_JSON_TARGET)
 	rm -f $(GOBINDATA_DEBUG_TARGET)
+
+.PHONY:
+lint:
+	stylint -c .stylintrc $(STYL_ROOT)
+	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts')
 
 .PHONY:
 debug: $(GOBINDATA_DEBUG_TARGET) $(TEST_TARGET) $(PROTO_JSON_TARGET)
@@ -103,14 +108,12 @@ $(PROTO_JSON_TARGET): $(PROTO_FILE) $(GOGOPROTO)
 	pbjs $(PROTO_FILE) --path $(PROTO_DEPS_FOLDER) > $@
 
 $(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
-	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts')
 	tsc -p $(TS_ROOT)
 
 $(TEST_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
 	tsc -p $(TEST_ROOT)
 
-$(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed .stylintrc
-	stylint -c .stylintrc $(STYL_ROOT)
+$(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
 	stylus $(STYL_ROOT)/app.styl \
 	       --compress \
 	       --include-css \
