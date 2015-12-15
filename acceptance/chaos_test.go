@@ -73,11 +73,10 @@ func TestChaos(t *testing.T) {
 		go func(i int) {
 			r, _ := randutil.NewPseudoRand()
 			value := randutil.RandBytes(r, 8192)
+			k := atomic.LoadInt64(&count)
 
 			for time.Now().Before(deadline) {
 				clients[i].RLock()
-				k := atomic.AddInt64(&count, 1)
-				atomic.AddInt64(&counts[i], 1)
 				v := value[:r.Intn(len(value))]
 				// TODO(bram): fix the retry options so the puts don't block
 				// occasionally for a full min during shutdown.
@@ -85,7 +84,7 @@ func TestChaos(t *testing.T) {
 					// These originate from DistSender when, for example, the
 					// leader is down. With more realistic retry options, we
 					// should probably not see them.
-					if _, ok := err.(*roachpb.SendError); ok || testutils.IsError(err, rpc.ErrShutdown.Error()) {
+					if _, ok := err.(*roachpb.SendError); ok || testutils.IsError(err, rpc.ErrShutdown.Error()) || testutils.IsError(err, "client is unhealthy") {
 						log.Warning(err)
 					} else {
 						errs <- err
@@ -93,6 +92,8 @@ func TestChaos(t *testing.T) {
 						return
 					}
 				}
+				k = atomic.AddInt64(&count, 1)
+				atomic.AddInt64(&counts[i], 1)
 				clients[i].RUnlock()
 			}
 			log.Infof("client %d shutting down", i)
