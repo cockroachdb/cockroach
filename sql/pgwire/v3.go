@@ -303,7 +303,6 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		}
 		pq.inTypes[i] = oid.Oid(typ)
 	}
-	fmt.Println("PARSE", query)
 	stmt, err := parser.ParseOne(query, parser.Traditional)
 	if err != nil {
 		return c.sendError(err.Error())
@@ -316,24 +315,9 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		}
 		args[fmt.Sprint(i+1)] = v
 	}
-	println(1)
-	if err := parser.FillArgsOptional(stmt, args); err != nil {
-		return c.sendError(err.Error())
-	}
-	println(2)
 	if err := parser.CheckArgs(stmt, args); err != nil {
 		return c.sendError(err.Error())
 	}
-	println(3)
-	if err := parser.FillArgs(stmt, args); err != nil {
-		return c.sendError(err.Error())
-	}
-	println(4)
-	// Check a second time with no args to make sure there are no ValArgs left.
-	if err := parser.CheckArgs(stmt, nil); err != nil {
-		return c.sendError(err.Error())
-	}
-	println(5)
 	pq.inTypes = make([]oid.Oid, len(args))
 	for k, v := range args {
 		i, err := strconv.Atoi(k)
@@ -345,14 +329,11 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 			return c.sendError(fmt.Sprintf("unknown datum type: %s", v))
 		}
 		pq.inTypes[i-1] = id
-		fmt.Printf("ARG %v type: %T, id: %v\n", i, v, id)
 	}
-	println(6)
-	cols, err := c.executor.StatementResult(c.opts.user, stmt)
+	cols, err := c.executor.StatementResult(c.opts.user, stmt, args)
 	if err != nil {
 		return c.sendError(err.Error())
 	}
-	println(7)
 	pq.columns = cols
 	c.preparedStatements[name] = pq
 	c.writeBuf.initMsg(serverMsgParseComplete)
@@ -489,13 +470,8 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		case oid.T_bool:
 			switch paramFormatCodes[i] {
 			case formatText:
-				var v bool
-				switch string(b) {
-				case "true":
-					v = true
-				case "false":
-					v = false
-				default:
+				v, err := strconv.ParseBool(string(b))
+				if err != nil {
 					return c.sendError(fmt.Sprintf("unknown bool value: %s", b))
 				}
 				d.Payload = &driver.Datum_BoolVal{BoolVal: v}
@@ -523,6 +499,13 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 				d.Payload = &driver.Datum_FloatVal{FloatVal: f}
 			default:
 				return c.sendError("unsupported: binary float parameter")
+			}
+		case oid.T_text:
+			switch paramFormatCodes[i] {
+			case formatText:
+				d.Payload = &driver.Datum_StringVal{StringVal: string(b)}
+			default:
+				return c.sendError("unsupported: binary string parameter")
 			}
 		default:
 			return c.sendError(fmt.Sprintf("unsupported: %v", t))

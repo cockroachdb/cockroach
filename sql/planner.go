@@ -8,7 +8,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
-func (e *Executor) StatementResult(user string, stmt parser.Statement) ([]*driver.Response_Result_Rows_Column, error) {
+func (e *Executor) StatementResult(user string, stmt parser.Statement, args parser.MapArgs) ([]*driver.Response_Result_Rows_Column, error) {
 	planMaker := plannerPool.Get().(*planner)
 	defer plannerPool.Put(planMaker)
 
@@ -20,6 +20,7 @@ func (e *Executor) StatementResult(user string, stmt parser.Statement) ([]*drive
 			// Copy existing GetLocation closure. See plannerPool.New() for the
 			// initial setting.
 			GetLocation: planMaker.evalCtx.GetLocation,
+			Args:        args,
 		},
 		leaseMgr:     e.leaseMgr,
 		systemConfig: e.getSystemConfig(),

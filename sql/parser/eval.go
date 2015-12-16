@@ -23,7 +23,6 @@ import (
 	"math"
 	"reflect"
 	"regexp"
-	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -559,6 +558,7 @@ type EvalContext struct {
 	TxnTimestamp  DTimestamp
 	ReCache       *RegexpCache
 	GetLocation   func() (*time.Location, error)
+	Args          MapArgs
 }
 
 var defaultContext = EvalContext{
@@ -624,7 +624,7 @@ func (expr *BinaryExpr) Eval(ctx EvalContext) (Datum, error) {
 	}
 
 	if expr.fn.fn == nil {
-		if _, err := expr.TypeCheck(nil); err != nil {
+		if _, err := expr.TypeCheck(ctx.Args); err != nil {
 			return nil, err
 		}
 	}
@@ -695,10 +695,6 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		case DFloat:
 			return DBool(v != 0), nil
 		case DString:
-			if string(v) == "" {
-				debug.PrintStack()
-				panic("EMPTY ParseBool")
-			}
 			// TODO(pmattis): strconv.ParseBool is more permissive than the SQL
 			// spec. Is that ok?
 			b, err := strconv.ParseBool(string(v))
@@ -720,10 +716,6 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		case DFloat:
 			return DInt(v), nil
 		case DString:
-			if string(v) == "" {
-				debug.PrintStack()
-				panic("EMPTY PARSEINT")
-			}
 			i, err := strconv.ParseInt(string(v), 0, 64)
 			if err != nil {
 				return DNull, err
@@ -743,10 +735,6 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		case DFloat:
 			return d, nil
 		case DString:
-			if string(v) == "" {
-				debug.PrintStack()
-				panic("EMPTY ParseFloat")
-			}
 			f, err := strconv.ParseFloat(string(v), 64)
 			if err != nil {
 				return DNull, err
@@ -867,7 +855,7 @@ func (expr *ComparisonExpr) Eval(ctx EvalContext) (Datum, error) {
 
 	// Make sure the expression's cmpOp function is memoized
 	if expr.fn.fn == nil {
-		if _, err := expr.TypeCheck(nil); err != nil {
+		if _, err := expr.TypeCheck(ctx.Args); err != nil {
 			return DNull, err
 		}
 
@@ -906,7 +894,7 @@ func (expr *FuncExpr) Eval(ctx EvalContext) (Datum, error) {
 	}
 
 	if expr.fn.fn == nil {
-		if _, err := expr.TypeCheck(nil); err != nil {
+		if _, err := expr.TypeCheck(ctx.Args); err != nil {
 			return DNull, err
 		}
 	}
@@ -1102,7 +1090,7 @@ func (expr *UnaryExpr) Eval(ctx EvalContext) (Datum, error) {
 		return DNull, err
 	}
 	if expr.fn.fn == nil {
-		if _, err := expr.TypeCheck(nil); err != nil {
+		if _, err := expr.TypeCheck(ctx.Args); err != nil {
 			return DNull, err
 		}
 	}

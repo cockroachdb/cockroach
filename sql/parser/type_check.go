@@ -474,10 +474,15 @@ func (expr Tuple) TypeCheck(args MapArgs) (Datum, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr ValArg) TypeCheck(args MapArgs) (Datum, error) {
-	if args == nil {
-		return nil, util.Errorf("unhandled parameter: %s", expr)
+	if v, ok := args[expr.name]; ok {
+		return v, nil
 	}
 	return DValArg{name: expr.name}, nil
+}
+
+// TypeCheck implements the Expr interface.
+func (expr DValArg) TypeCheck(args MapArgs) (Datum, error) {
+	return nil, util.Errorf("unsupported")
 }
 
 // TypeCheck implements the Expr interface.
@@ -536,14 +541,6 @@ func (expr DTuple) TypeCheck(args MapArgs) (Datum, error) {
 		tuple = append(tuple, d)
 	}
 	return tuple, nil
-}
-
-// TypeCheck implements the Expr interface.
-func (expr DValArg) TypeCheck(args MapArgs) (Datum, error) {
-	if v, ok := args[expr.name]; ok {
-		return v, nil
-	}
-	return dummyValArg, nil
 }
 
 func typeCheckBooleanExprs(args MapArgs, op string, exprs ...Expr) (Datum, error) {

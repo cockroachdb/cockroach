@@ -195,12 +195,12 @@ func TestPGPrepared(t *testing.T) {
 			},
 			{
 				[]interface{}{1},
-				"pq: unknown bool value: 1",
-				nil,
+				"",
+				[]interface{}{true},
 			},
 			{
 				[]interface{}{""},
-				"pq: unknown bool value: ",
+				`pq: unknown bool value: `,
 				nil,
 			},
 			// Make sure we can run another after a failure.
@@ -228,22 +228,22 @@ func TestPGPrepared(t *testing.T) {
 			},
 			{
 				[]interface{}{"1"},
-				"pq: unknown bool value: 1",
-				nil,
+				"",
+				[]interface{}{true},
 			},
 			{
 				[]interface{}{2},
-				"pq: unknown bool value: 2",
+				`pq: strconv.ParseBool: parsing "2": invalid syntax`,
 				nil,
 			},
 			{
 				[]interface{}{3.1},
-				"pq: unknown bool value: 3.1",
+				`pq: strconv.ParseBool: parsing "3.1": invalid syntax`,
 				nil,
 			},
 			{
 				[]interface{}{""},
-				"pq: unknown bool value: ",
+				`pq: strconv.ParseBool: parsing "": invalid syntax`,
 				nil,
 			},
 		},
@@ -265,12 +265,12 @@ func TestPGPrepared(t *testing.T) {
 			},
 			{
 				[]interface{}{"2.0", "1"},
-				"pq: unknown int value: 2.0",
+				`pq: strconv.ParseInt: parsing "2.0": invalid syntax`,
 				nil,
 			},
 			{
 				[]interface{}{2.1, 1},
-				"pq: unknown int value: 2.1",
+				`pq: strconv.ParseInt: parsing "2.1": invalid syntax`,
 				nil,
 			},
 		},
@@ -328,22 +328,12 @@ func TestPGPrepared(t *testing.T) {
 	}
 	defer db.Close()
 
-	{
-		stmt, err := db.Prepare("SELECT $1::int")
-		if err != nil {
-			t.Fatal(err)
-		}
-		stmt.Close()
-	}
-
 	for query, tests := range queryTests {
-		fmt.Println("\nPREPARE", query)
 		stmt, err := db.Prepare(query)
 		if err != nil {
 			t.Fatalf("prepare error: %s: %s", query, err)
 		}
 		for _, test := range tests {
-			fmt.Printf("\nBIND %#v\n", test.params)
 			rows, err := stmt.Query(test.params...)
 			if err != nil {
 				if test.error == "" {
@@ -383,8 +373,8 @@ func TestPGPrepared(t *testing.T) {
 
 	testFailures := map[string]string{
 		"SELECT $1 = $1":             "pq: unsupported comparison operator: <valarg> = <valarg>",
-		"SELECT $1 > 0 AND $1 > 0.0": "pq: parameter $1 has multiple types: float, int",
-		"SELECT $1":                  "pq: arg $1 not found",
+		"SELECT $1 > 0 AND NOT $1": "pq: incompatible NOT argument type: int",
+		"SELECT $1":                  "pq: unknown type parser.DValArg",
 	}
 
 	for query, reason := range testFailures {

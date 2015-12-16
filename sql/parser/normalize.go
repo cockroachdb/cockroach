@@ -350,7 +350,6 @@ func (v *normalizeVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 	} else {
 		// Evaluate all constant expressions.
 		if v.isConst(expr) {
-			fmt.Printf("IS CONST %v, %T\n", expr, expr)
 			expr, v.err = expr.Eval(v.ctx)
 			if v.err != nil {
 				return nil, expr
@@ -418,7 +417,6 @@ func (v *isConstVisitor) run(expr Expr) bool {
 
 func isVar(expr Expr) bool {
 	_, ok := expr.(VariableExpr)
-	fmt.Printf("ISVAR %v, %T: %v\n", ok, expr, expr)
 	return ok
 }
 

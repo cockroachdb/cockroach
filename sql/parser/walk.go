@@ -241,7 +241,6 @@ func (m MapArgs) SetValArg(d, typ Datum) (set Datum, err error) {
 		return nil, fmt.Errorf("parameter %s has multiple types: %s, %s", v, typ.Type(), t.Type())
 	}
 	m[v.name] = typ
-	fmt.Printf("SVA %v, %T\n", v, typ)
 	return typ, nil
 }
 
@@ -255,7 +254,6 @@ func (ValArgWrapper) Variable() {}
 
 type argVisitor struct {
 	args     Args
-	optional bool
 	err      error
 }
 
@@ -271,9 +269,6 @@ func (v *argVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 	}
 	d, found := v.args.Arg(placeholder.name)
 	if !found {
-		if v.optional {
-			return v, expr
-		}
 		v.err = fmt.Errorf("arg %s not found", placeholder)
 		return nil, expr
 	}
@@ -285,18 +280,6 @@ func (v *argVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 func FillArgs(stmt Statement, args Args) error {
 	v := argVisitor{
 		args:     args,
-		optional: false,
-	}
-	WalkStmt(&v, stmt)
-	return v.err
-}
-
-// FillArgsOptional replaces any placeholder nodes in the expression with
-// arguments supplied with the query. Missing args are ignored.
-func FillArgsOptional(stmt Statement, args Args) error {
-	v := argVisitor{
-		args:     args,
-		optional: true,
 	}
 	WalkStmt(&v, stmt)
 	return v.err

@@ -50,8 +50,6 @@ var (
 	dummyTuple Datum = DTuple{}
 	// DNull is the NULL Datum.
 	DNull Datum = dNull{}
-	// dummyValArg is a placeholder DValArg value.
-	dummyValArg Datum = DValArg{}
 
 	boolType      = reflect.TypeOf(DummyBool)
 	intType       = reflect.TypeOf(DummyInt)

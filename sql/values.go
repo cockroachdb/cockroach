@@ -43,7 +43,7 @@ func (p *planner) Values(n parser.Values) (planNode, error) {
 			if err != nil {
 				return nil, err
 			}
-			typ, err := tuple[i].TypeCheck(nil)
+			typ, err := tuple[i].TypeCheck(p.evalCtx.Args)
 			if err != nil {
 				return nil, err
 			}
