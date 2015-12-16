@@ -499,7 +499,7 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 					n.render = append(n.render, qval)
 				}
 			} else {
-				for _, col := range n.desc.Columns {
+				for _, col := range n.desc.VisibleColumns() {
 					qval := n.getQVal(col)
 					n.columns = append(n.columns, column{name: col.Name, typ: qval.datum})
 					n.render = append(n.render, qval)
@@ -858,8 +858,7 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 			return nil, expr
 		}
 
-		desc := v.getDesc(qname)
-		if desc != nil {
+		if desc := v.getDesc(qname); desc != nil {
 			name := qname.Column()
 			for _, col := range v.visibleCols {
 				if !equalName(name, col.Name) {

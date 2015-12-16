@@ -128,7 +128,7 @@ type Container struct {
 // docker API, the created container is not running and must be started
 // explicitly.
 func createContainer(l *LocalCluster, config dockerclient.ContainerConfig) (*Container, error) {
-	id, err := l.client.CreateContainer(&config, "")
+	id, err := l.client.CreateContainer(&config, "", nil)
 	if err != nil {
 		return nil, err
 	}

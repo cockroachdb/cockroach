@@ -384,8 +384,13 @@ var _ parser.Args = parameters{}
 
 type parameters []driver.Datum
 
-// Arg implements the parser.Args interface.
-func (p parameters) Arg(name string) (parser.Datum, bool) {
+var errNamedArgument = errors.New("named arguments are not supported")
+
+// processPositionalArgument is a helper function that processes a positional
+// integer argument passed to an implementation of parser.Args. Currently, only
+// positional arguments (non-negative integers) are supported, but named arguments may
+// be supported in the future.
+func processPositionalArgument(name string) (int64, error) {
 	if len(name) == 0 {
 		// This shouldn't happen unless the parser let through an invalid parameter
 		// specification.
@@ -394,9 +399,14 @@ func (p parameters) Arg(name string) (parser.Datum, bool) {
 	if ch := name[0]; ch < '0' || ch > '9' {
 		// TODO(pmattis): Add support for named parameters (vs the numbered
 		// parameter support below).
-		return nil, false
+		return 0, errNamedArgument
 	}
-	i, err := strconv.ParseInt(name, 10, 0)
+	return strconv.ParseInt(name, 10, 0)
+}
+
+// Arg implements the parser.Args interface.
+func (p parameters) Arg(name string) (parser.Datum, bool) {
+	i, err := processPositionalArgument(name)
 	if err != nil {
 		return nil, false
 	}
@@ -424,6 +434,56 @@ func (p parameters) Arg(name string) (parser.Datum, bool) {
 		return parser.DTimestamp{Time: t.TimeVal.GoTime()}, true
 	case *driver.Datum_IntervalVal:
 		return parser.DInterval{Duration: time.Duration(t.IntervalVal)}, true
+	default:
+		panic(fmt.Sprintf("unexpected type %T", t))
+	}
+}
+
+var _ parser.Args = golangParameters{}
+
+type golangParameters []interface{}
+
+// Arg implements the parser.Args interface.
+// TODO: This does not support arguments of the SQL 'Date' type, as there is not
+// an equivalent type in Go's standard library. It's not currently needed by any
+// of our internal tables.
+func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
+	i, err := processPositionalArgument(name)
+	if err != nil {
+		return nil, false
+	}
+	if i < 1 || int(i) > len(gp) {
+		return nil, false
+	}
+	arg := gp[i-1]
+	if arg == nil {
+		return parser.DNull, true
+	}
+	switch t := arg.(type) {
+	case bool:
+		return parser.DBool(t), true
+	case int:
+		return parser.DInt(t), true
+	case int32:
+		return parser.DInt(t), true
+	case uint32:
+		return parser.DInt(t), true
+	case int64:
+		return parser.DInt(t), true
+	case uint64:
+		return parser.DInt(t), true
+	case ID:
+		return parser.DInt(t), true
+	case []byte:
+		return parser.DBytes(t), true
+	case string:
+		return parser.DString(t), true
+	case time.Time:
+		return parser.DTimestamp{Time: t}, true
+	case time.Duration:
+		return parser.DInterval{Duration: t}, true
+	case parser.DTimestamp:
+		return t, true
 	default:
 		panic(fmt.Sprintf("unexpected type %T", t))
 	}

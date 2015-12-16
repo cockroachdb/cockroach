@@ -1677,7 +1677,7 @@ simple_select:
 | TABLE relation_expr
   {
     $$ = &Select{
-      Exprs:       SelectExprs{StarSelectExpr()},
+      Exprs:       SelectExprs{starSelectExpr()},
       From:        TableExprs{&AliasedTableExpr{Expr: $2}},
       tableSelect: true,
     }
@@ -3347,7 +3347,7 @@ target_elem:
   }
 | '*'
   {
-    $$ = StarSelectExpr()
+    $$ = starSelectExpr()
   }
 
 // Names and constants.

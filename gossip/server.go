@@ -32,9 +32,13 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+// A clientInfo holds information about an incoming client connection
+// and is stored in the server's lAddrMap, which is keyed by an
+// incoming client's local address.
 type clientInfo struct {
-	id   roachpb.NodeID
-	addr *util.UnresolvedAddr
+	id              roachpb.NodeID
+	addr            *util.UnresolvedAddr
+	highWaterStamps map[int32]int64
 }
 
 // server maintains an array of connected peers to which it gossips
@@ -46,6 +50,8 @@ type server struct {
 	incoming nodeSet                   // Incoming client node IDs
 	lAddrMap map[string]clientInfo     // Incoming client's local address -> client's node info
 	nodeMap  map[roachpb.NodeID]string // Incoming client's node ID -> local address (string)
+	sent     int                       // Count of infos sent from this server to clients
+	received int                       // Count of infos received from clients
 	ready    *sync.Cond                // Broadcasts wakeup to waiting gossip requests
 
 	simulationCycler *sync.Cond // Used when simulating the network to signal next cycle
@@ -95,10 +101,6 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 			canAccept = false
 		} else {
 			s.incoming.addNode(args.NodeID)
-			// This lookup map allows the incoming client to be removed from
-			// the incoming addr set when its connection is closed. See
-			// server.serveConn() below.
-			s.lAddrMap[lAddr.String()] = clientInfo{args.NodeID, &args.Addr}
 			// This lookup map restricts incoming connections to a single
 			// connection per node ID.
 			s.nodeMap[args.NodeID] = lAddr.String()
@@ -111,9 +113,16 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 			return nil, util.Errorf("duplicate connection from node %d", args.NodeID)
 		}
 	}
+	// Update the lAddrMap, which allows the incoming client to be
+	// removed from the incoming addr set when its connection is
+	// closed. See server.serveConn() below.
+	if canAccept {
+		s.lAddrMap[lAddr.String()] = clientInfo{args.NodeID, &args.Addr, args.HighWaterStamps}
+	}
 
 	// Combine incoming infos if specified and exit.
 	if args.Delta != nil {
+		s.received += len(args.Delta)
 		freshCount := s.is.combine(args.Delta, args.NodeID)
 		if log.V(1) {
 			log.Infof("received %s from node %d (%d fresh)", args.Delta, args.NodeID, freshCount)
@@ -133,7 +142,9 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 		if s.closed {
 			return nil, util.Errorf("gossip server shutdown")
 		}
-		reply.Delta = s.is.delta(args.NodeID, args.HighWaterStamps)
+		if canAccept {
+			reply.Delta = s.is.delta(args.NodeID, s.lAddrMap[lAddr.String()].highWaterStamps)
+		}
 		if len(reply.Delta) > 0 || !canAccept {
 			// If there is no more capacity to accept incoming clients, return
 			// a random already-being-serviced incoming client as an alternate.
@@ -152,6 +163,7 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 				}
 			}
 			reply.HighWaterStamps = s.is.getHighWaterStamps()
+			s.sent += len(reply.Delta)
 			return reply, nil
 		}
 		// Wait for server to get new gossip set before computing delta.
@@ -161,6 +173,20 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 			return nil, util.Errorf("client connection closed")
 		}
 	}
+}
+
+// InfosSent returns the total count of infos sent to clients.
+func (s *server) InfosSent() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.sent
+}
+
+// InfosReceived returns the total count of infos received from clients.
+func (s *server) InfosReceived() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.received
 }
 
 // maxPeers returns the maximum number of peers each gossip node

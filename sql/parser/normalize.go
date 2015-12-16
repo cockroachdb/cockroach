@@ -123,20 +123,25 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 				//   /     \            /     \
 				//  a       1          2       1
 
+				rotating := true
 				switch left.Operator {
-				case Plus, Minus, Div:
-					// Clear the function caches; we're about to change stuff.
+				case Plus:
+					left.Operator = Minus
+				case Minus:
+					left.Operator = Plus
+				case Div:
+					left.Operator = Mult
+				default:
+					rotating = false
+				}
+
+				if rotating {
+					// Clear the function caches since we're rotating.
 					expr.fn.fn = nil
 					left.fn.fn = nil
+
 					expr.Left = left.Left
 					left.Left = expr.Right
-					if left.Operator == Plus {
-						left.Operator = Minus
-					} else if left.Operator == Minus {
-						left.Operator = Plus
-					} else {
-						left.Operator = Mult
-					}
 					expr.Right, v.err = left.Eval(v.ctx)
 					if v.err != nil {
 						return nil

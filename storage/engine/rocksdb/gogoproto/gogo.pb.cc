@@ -132,7 +132,10 @@ void protobuf_AddDesc_gogoproto_2fgogo_2eproto() {
     ".FieldOptions\030\355\373\003 \001(\t:1\n\010moretags\022\035.goog"
     "le.protobuf.FieldOptions\030\356\373\003 \001(\t:1\n\010cast"
     "type\022\035.google.protobuf.FieldOptions\030\357\373\003 "
-    "\001(\tB!\n\023com.google.protobufB\nGoGoProtos", 3038);
+    "\001(\t:0\n\007castkey\022\035.google.protobuf.FieldOp"
+    "tions\030\360\373\003 \001(\t:2\n\tcastvalue\022\035.google.prot"
+    "obuf.FieldOptions\030\361\373\003 \001(\tB!\n\023com.google."
+    "protobufB\nGoGoProtos", 3140);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "gogoproto/gogo.proto", &protobuf_RegisterTypes);
   ::google::protobuf::internal::ExtensionSet::RegisterExtension(
@@ -291,6 +294,12 @@ void protobuf_AddDesc_gogoproto_2fgogo_2eproto() {
   ::google::protobuf::internal::ExtensionSet::RegisterExtension(
     &::google::protobuf::FieldOptions::default_instance(),
     65007, 9, false, false);
+  ::google::protobuf::internal::ExtensionSet::RegisterExtension(
+    &::google::protobuf::FieldOptions::default_instance(),
+    65008, 9, false, false);
+  ::google::protobuf::internal::ExtensionSet::RegisterExtension(
+    &::google::protobuf::FieldOptions::default_instance(),
+    65009, 9, false, false);
   ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_gogoproto_2fgogo_2eproto);
 }
 
@@ -461,6 +470,14 @@ const ::std::string casttype_default("");
 ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FieldOptions,
     ::google::protobuf::internal::StringTypeTraits, 9, false >
   casttype(kCasttypeFieldNumber, casttype_default);
+const ::std::string castkey_default("");
+::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FieldOptions,
+    ::google::protobuf::internal::StringTypeTraits, 9, false >
+  castkey(kCastkeyFieldNumber, castkey_default);
+const ::std::string castvalue_default("");
+::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FieldOptions,
+    ::google::protobuf::internal::StringTypeTraits, 9, false >
+  castvalue(kCastvalueFieldNumber, castvalue_default);
 
 // @@protoc_insertion_point(namespace_scope)
 

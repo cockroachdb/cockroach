@@ -181,25 +181,32 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 			{name: "Unique", typ: parser.DummyBool},
 			{name: "Seq", typ: parser.DummyInt},
 			{name: "Column", typ: parser.DummyString},
+			{name: "Direction", typ: parser.DummyString},
 			{name: "Storing", typ: parser.DummyBool},
 		},
 	}
 
-	name := n.Table.Table()
+	appendRow := func(index IndexDescriptor, colName string, sequence int,
+		direction string, isStored bool) {
+		v.rows = append(v.rows, []parser.Datum{
+			parser.DString(n.Table.Table()),
+			parser.DString(index.Name),
+			parser.DBool(index.Unique),
+			parser.DInt(sequence),
+			parser.DString(colName),
+			parser.DString(direction),
+			parser.DBool(isStored),
+		})
+	}
 	for _, index := range append([]IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
-		j := 1
-		for i, cols := range [][]string{index.ColumnNames, index.StoreColumnNames} {
-			for _, col := range cols {
-				v.rows = append(v.rows, []parser.Datum{
-					parser.DString(name),
-					parser.DString(index.Name),
-					parser.DBool(index.Unique),
-					parser.DInt(j),
-					parser.DString(col),
-					parser.DBool(i == 1),
-				})
-				j++
-			}
+		sequence := 1
+		for i, col := range index.ColumnNames {
+			appendRow(index, col, sequence, index.ColumnDirections[i].String(), false)
+			sequence++
+		}
+		for _, col := range index.StoreColumnNames {
+			appendRow(index, col, sequence, "N/A", true)
+			sequence++
 		}
 	}
 	return v, nil

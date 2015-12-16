@@ -71,9 +71,25 @@ prepare_artifacts() {
 
   if [ $ret -ne 0 ]; then
     if [ "${CIRCLE_BRANCH-}" = "master" ] && [ -n "${GITHUB_API_TOKEN-}" ]; then
-      curl -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
-        "https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/issues" \
-        -d "{ \"title\": \"Test failure in CI build ${CIRCLE_BUILD_NUM}\", \"body\": \"The following test appears to have failed:\n\n[#${CIRCLE_BUILD_NUM}](https://circleci.com/gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/${CIRCLE_BUILD_NUM}):\n\n\`\`\`\n$(python -c 'import json,sys; print json.dumps(sys.stdin.read()).strip("\"")' < ${outdir}/excerpt.txt)\n\`\`\`\nPlease assign, take a look and update the issue accordingly.\", \"labels\": [\"test-failure\"] }" > /dev/null
+      function post() {
+        curl -v -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
+        "https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/$1" \
+        -d "${2}"
+      }
+
+      # Generate string of failed tests: 'TestRaftRemoveRace TestChaos TestHoneyBooBoo'
+      FAILEDTESTS=$(grep -oh '^--- FAIL: \w*' "${outdir}/excerpt.txt" | sed -e 's/--- FAIL: //' | tr '\n' ' ')
+      # Generate string for JSON labels below:
+      # '"test-failure", "TestRaftRemoveRace", "TestChaos", "TestHoneyBooBoo"'
+      LABELSTR='"test-failure"'
+      for t in ${FAILEDTESTS}; do
+        # Need to make sure the label exists, or posting the issue will fail.
+        post labels "{ \"name\": \"${t}\", \"color\": \"e11d21\" }" > /dev/null
+        LABELSTR+=", \"${t}\""
+      done
+
+      # JSON monster to post the issue.
+      post issues "{ \"title\": \"Failed tests (${CIRCLE_BUILD_NUM}): ${FAILEDTESTS}\", \"body\": \"The following test appears to have failed:\n\n[#${CIRCLE_BUILD_NUM}](https://circleci.com/gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/${CIRCLE_BUILD_NUM}):\n\n\`\`\`\n$(python -c 'import json,sys; print json.dumps(sys.stdin.read()).strip("\"")' < ${outdir}/excerpt.txt)\n\`\`\`\nPlease assign, take a look and update the issue accordingly.\", \"labels\": [${LABELSTR}] }" > /dev/null
       echo "Found test/race failures in test logs, see excerpt.log and the newly created issue on our issue tracker"
     fi
 

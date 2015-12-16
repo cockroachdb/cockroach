@@ -249,6 +249,14 @@ static const int kCasttypeFieldNumber = 65007;
 extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FieldOptions,
     ::google::protobuf::internal::StringTypeTraits, 9, false >
   casttype;
+static const int kCastkeyFieldNumber = 65008;
+extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FieldOptions,
+    ::google::protobuf::internal::StringTypeTraits, 9, false >
+  castkey;
+static const int kCastvalueFieldNumber = 65009;
+extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FieldOptions,
+    ::google::protobuf::internal::StringTypeTraits, 9, false >
+  castvalue;
 
 // ===================================================================
 

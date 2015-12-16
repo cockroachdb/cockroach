@@ -21,25 +21,14 @@ import (
 	"fmt"
 	"net/url"
 	"sync"
-	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
-
-// defaultRetryOptions sets the retry options for handling retryable errors and
-// connection I/O errors.
-var defaultRetryOptions = retry.Options{
-	InitialBackoff: 250 * time.Millisecond,
-	MaxBackoff:     5 * time.Second,
-	Multiplier:     2,
-	MaxRetries:     5,
-}
 
 // Sender is the interface used to call into a Cockroach instance.
 // If the returned *roachpb.Error is not nil, no response should be returned.
@@ -56,17 +45,17 @@ func (f SenderFunc) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb
 	return f(ctx, ba)
 }
 
-// NewSenderFunc creates a new sender for the registered scheme.
-type NewSenderFunc func(u *url.URL, ctx *base.Context, retryOpts retry.Options, stopper *stop.Stopper) (Sender, error)
+// newSenderFunc creates a new sender for the registered scheme.
+type newSenderFunc func(u *url.URL, ctx *base.Context, stopper *stop.Stopper) (Sender, error)
 
 var senders = struct {
 	sync.Mutex
-	m map[string]NewSenderFunc
-}{m: map[string]NewSenderFunc{}}
+	m map[string]newSenderFunc
+}{m: map[string]newSenderFunc{}}
 
 // RegisterSender registers the specified function to be used for
 // creation of a new sender when the specified scheme is encountered.
-func RegisterSender(scheme string, f NewSenderFunc) {
+func RegisterSender(scheme string, f newSenderFunc) {
 	if f == nil {
 		log.Fatalf("unable to register nil function for \"%s\"", scheme)
 	}
@@ -78,14 +67,14 @@ func RegisterSender(scheme string, f NewSenderFunc) {
 	senders.m[scheme] = f
 }
 
-func newSender(u *url.URL, ctx *base.Context, retryOptions retry.Options, stopper *stop.Stopper) (Sender, error) {
+func newSender(u *url.URL, ctx *base.Context, stopper *stop.Stopper) (Sender, error) {
 	senders.Lock()
 	defer senders.Unlock()
 	f := senders.m[u.Scheme]
 	if f == nil {
 		return nil, fmt.Errorf("no sender registered for \"%s\"", u.Scheme)
 	}
-	return f(u, ctx, retryOptions, stopper)
+	return f(u, ctx, stopper)
 }
 
 // SendWrappedWith is a convenience function which wraps the request in a batch

@@ -51,16 +51,16 @@ CREATE TABLE c (
   UNIQUE (bar)
 )
 
-query TTBITB colnames
+query TTBITTB colnames
 SHOW INDEX FROM c
 ----
-Table Name           Unique Seq Column Storing
-c     primary        true   1   id     false
-c     c_foo_idx      false  1   foo    false
-c     c_foo_idx1     false  1   foo    false
-c     c_foo_bar_idx  false  1   foo    false
-c     c_foo_bar_idx  false  2   bar    false
-c     c_bar_key      true   1   bar    false
+Table Name           Unique Seq Column Direction  Storing
+c     primary        true   1   id     ASC        false
+c     c_foo_idx      false  1   foo    ASC        false
+c     c_foo_idx1     false  1   foo    ASC        false
+c     c_foo_bar_idx  false  1   foo    ASC        false
+c     c_foo_bar_idx  false  2   bar    DESC       false
+c     c_bar_key      true   1   bar    ASC        false
 
 query T
 SHOW TABLES FROM test
@@ -107,11 +107,11 @@ id    INT    true  NULL
 name  STRING false NULL
 title STRING true  NULL
 
-query TTBITB colnames
+query TTBITTB colnames
 SHOW INDEX FROM test.users
 ----
-Table Name    Unique Seq Column Storing
-users primary true   1   id     false
-users foo     false  1   name   false
-users bar     true   1   id     false
-users bar     true   2   name   false
+Table Name    Unique Seq Column Direction Storing
+users primary true   1   id     ASC       false
+users foo     false  1   name   ASC       false
+users bar     true   1   id     ASC       false
+users bar     true   2   name   ASC       false
