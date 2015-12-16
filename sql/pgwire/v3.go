@@ -47,8 +47,8 @@ const (
 	clientMsgDescribe    clientMessageType = 'D'
 	clientMsgSync        clientMessageType = 'S'
 	clientMsgClose       clientMessageType = 'C'
-	clientBind           clientMessageType = 'B'
-	clientExecute        clientMessageType = 'E'
+	clientMsgBind        clientMessageType = 'B'
+	clientMsgExecute     clientMessageType = 'E'
 
 	serverMsgAuth                 serverMessageType = 'R'
 	serverMsgCommandComplete      serverMessageType = 'C'
@@ -224,11 +224,11 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			c.doingExtendedQueryMessage = true
 			err = c.handleClose(&c.readBuf)
 
-		case clientBind:
+		case clientMsgBind:
 			c.doingExtendedQueryMessage = true
 			err = c.handleBind(&c.readBuf)
 
-		case clientExecute:
+		case clientMsgExecute:
 			c.doingExtendedQueryMessage = true
 			err = c.handleExecute(&c.readBuf)
 
