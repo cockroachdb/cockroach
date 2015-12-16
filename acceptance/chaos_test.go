@@ -50,6 +50,7 @@ func TestChaos(t *testing.T) {
 	deadline := start.Add(*duration)
 	var count int64
 	var round int64
+	var stalled int32
 	counts := make([]int64, num)
 	clients := make([]struct {
 		sync.RWMutex
@@ -74,26 +75,30 @@ func TestChaos(t *testing.T) {
 			r, _ := randutil.NewPseudoRand()
 			value := randutil.RandBytes(r, 8192)
 			k := atomic.LoadInt64(&count)
-
-			for time.Now().Before(deadline) {
+			var prevErrorOutput string
+			for time.Now().Before(deadline) && atomic.LoadInt32(&stalled) == 0 {
 				clients[i].RLock()
 				v := value[:r.Intn(len(value))]
-				// TODO(bram): fix the retry options so the puts don't block
-				// occasionally for a full min during shutdown.
 				if err := clients[i].db.Put(fmt.Sprintf("%08d", k), v); err != nil {
-					// These originate from DistSender when, for example, the
-					// leader is down. With more realistic retry options, we
-					// should probably not see them.
 					if _, ok := err.(*roachpb.SendError); ok || testutils.IsError(err, rpc.ErrShutdown.Error()) || testutils.IsError(err, "client is unhealthy") {
-						log.Warning(err)
+						// Common errors we can ignore. Also suppress the
+						// log messages so they don't get spammy.
+						curErrorOutput := fmt.Sprintf("client %d: %s", i, err)
+						if prevErrorOutput != curErrorOutput {
+							log.Warning(curErrorOutput)
+							prevErrorOutput = curErrorOutput
+						}
 					} else {
+						// Unknown error, the test should fail.
 						errs <- err
 						clients[i].RUnlock()
 						return
 					}
+				} else {
+					// Only advance the counts on a successful put.
+					k = atomic.AddInt64(&count, 1)
+					atomic.AddInt64(&counts[i], 1)
 				}
-				k = atomic.AddInt64(&count, 1)
-				atomic.AddInt64(&counts[i], 1)
 				clients[i].RUnlock()
 			}
 			log.Infof("client %d shutting down", i)
@@ -117,7 +122,7 @@ func TestChaos(t *testing.T) {
 		defer close(teardown)
 		rnd, seed := randutil.NewPseudoRand()
 		log.Warningf("monkey starts (seed %d)", seed)
-		for atomic.StoreInt64(&round, 1); time.Now().Before(deadline); atomic.AddInt64(&round, 1) {
+		for atomic.StoreInt64(&round, 1); time.Now().Before(deadline) && atomic.LoadInt32(&stalled) == 0; atomic.AddInt64(&round, 1) {
 			curRound := atomic.LoadInt64(&round)
 			select {
 			case <-stopper:
@@ -125,10 +130,10 @@ func TestChaos(t *testing.T) {
 			default:
 			}
 			nodes := rnd.Perm(num)[:rnd.Intn(num)+1]
-			log.Infof("round %d: restarting nodes %v", curRound, nodes)
 			for i := 0; i < num; i++ {
 				clients[i].Lock()
 			}
+			log.Infof("round %d: restarting nodes %v", curRound, nodes)
 			for _, i := range nodes {
 				// Two early exit conditions.
 				select {
@@ -147,10 +152,14 @@ func TestChaos(t *testing.T) {
 			for i := 0; i < num; i++ {
 				clients[i].Unlock()
 			}
+			first := true
 			for cur := atomic.LoadInt64(&count); time.Now().Before(deadline) &&
-				atomic.LoadInt64(&count) == cur; time.Sleep(time.Second) {
+				atomic.LoadInt64(&count) == cur && atomic.LoadInt32(&stalled) == 0; time.Sleep(time.Second) {
 				c.Assert(t)
-				log.Warningf("round %d: monkey sleeping while cluster recovers...", curRound)
+				if first {
+					first = false
+					log.Warningf("round %d: monkey sleeping while cluster recovers...", curRound)
+				}
 			}
 		}
 	}()
@@ -168,13 +177,14 @@ func TestChaos(t *testing.T) {
 				t.Error(err)
 			}
 			i++
-		case <-time.After(1 * time.Second):
+		case <-time.After(time.Second):
 			var newOutput string
 			if time.Now().Before(deadline) {
 				curRound := atomic.LoadInt64(&round)
 				if curRound == prevRound {
-					if time.Now().After(stallTime) {
-						t.Fatalf("Stall detected, no forward progress for %s", *stall)
+					if time.Now().After(stallTime) && time.Now().Before(deadline) {
+						atomic.StoreInt32(&stalled, 1)
+						t.Fatalf("Stall detected at round %d, no forward progress for %s", curRound, *stall)
 					}
 				} else {
 					prevRound = curRound
