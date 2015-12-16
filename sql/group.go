@@ -362,16 +362,20 @@ func (a *aggregateFunc) add(d parser.Datum) error {
 
 func encodeDatum(b []byte, d parser.Datum) ([]byte, error) {
 	if values, ok := d.(parser.DTuple); ok {
-		for _, val := range values {
-			var err error
-			b, err = encodeDatum(b, val)
-			if err != nil {
-				return nil, err
-			}
-		}
-		return b, nil
+		return encodeDTuple(b, values)
 	}
 	return encodeTableKey(b, d)
+}
+
+func encodeDTuple(b []byte, d parser.DTuple) ([]byte, error) {
+	for _, val := range d {
+		var err error
+		b, err = encodeDatum(b, val)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return b, nil
 }
 
 type aggregateImpl interface {
