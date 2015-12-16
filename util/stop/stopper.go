@@ -57,6 +57,7 @@ func (f CloserFn) Close() {
 // be added to the stopper via AddCloser(), to be closed after the
 // stopper has stopped.
 type Stopper struct {
+	drainer  chan struct{}  // Closed when draining
 	stopper  chan struct{}  // Closed when stopping
 	stopped  chan struct{}  // Closed when stopped completely
 	stop     sync.WaitGroup // Incremented for outstanding workers
@@ -71,6 +72,7 @@ type Stopper struct {
 // NewStopper returns an instance of Stopper.
 func NewStopper() *Stopper {
 	s := &Stopper{
+		drainer: make(chan struct{}),
 		stopper: make(chan struct{}),
 		stopped: make(chan struct{}),
 		tasks:   map[string]int{},
@@ -210,6 +212,16 @@ func (s *Stopper) Stop() {
 	close(s.stopped)
 }
 
+// ShouldDrain returns a channel which will be closed when Stop() has been
+// invoked and outstanding tasks should begin to drain.
+func (s *Stopper) ShouldDrain() <-chan struct{} {
+	if s == nil {
+		// A nil stopper will never signal ShouldDrain, but will also never panic.
+		return nil
+	}
+	return s.drainer
+}
+
 // ShouldStop returns a channel which will be closed when Stop() has been
 // invoked and outstanding tasks have drained.
 func (s *Stopper) ShouldStop() <-chan struct{} {
@@ -235,7 +247,10 @@ func (s *Stopper) IsStopped() <-chan struct{} {
 func (s *Stopper) Quiesce() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.draining = true
+	if !s.draining {
+		s.draining = true
+		close(s.drainer)
+	}
 	for s.numTasks > 0 {
 		// Use stdlib "log" instead of "cockroach/util/log" due to import cycles.
 		log.Print("draining; tasks left:\n", s.runningTasksLocked())

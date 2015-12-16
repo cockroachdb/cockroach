@@ -22,14 +22,17 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 func TestStopper(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := stop.NewStopper()
 	running := make(chan struct{})
 	waiting := make(chan struct{})
+	cleanup := make(chan struct{})
 
 	s.RunWorker(func() {
 		<-running
@@ -50,10 +53,12 @@ func TestStopper(t *testing.T) {
 		case <-time.After(100 * time.Millisecond):
 			t.Fatal("stopper should have finished waiting")
 		}
+		close(cleanup)
 	}()
 
 	s.Stop()
 	close(waiting)
+	<-cleanup
 }
 
 type blockingCloser struct {
@@ -73,6 +78,7 @@ func (bc *blockingCloser) Close() {
 }
 
 func TestStopperIsStopped(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := stop.NewStopper()
 	bc := newBlockingCloser()
 	s.AddCloser(bc)
@@ -99,6 +105,7 @@ func TestStopperIsStopped(t *testing.T) {
 }
 
 func TestStopperMultipleStopees(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	const count = 3
 	s := stop.NewStopper()
 
@@ -122,6 +129,7 @@ func TestStopperMultipleStopees(t *testing.T) {
 }
 
 func TestStopperStartFinishTasks(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := stop.NewStopper()
 
 	if !s.RunTask(func() {
@@ -145,6 +153,7 @@ func TestStopperStartFinishTasks(t *testing.T) {
 }
 
 func TestStopperRunWorker(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := stop.NewStopper()
 	s.RunWorker(func() {
 		select {
@@ -167,6 +176,7 @@ func TestStopperRunWorker(t *testing.T) {
 
 // TestStopperQuiesce tests coordinate drain with Quiesce.
 func TestStopperQuiesce(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	var stoppers []*stop.Stopper
 	for i := 0; i < 3; i++ {
 		stoppers = append(stoppers, stop.NewStopper())
@@ -175,19 +185,20 @@ func TestStopperQuiesce(t *testing.T) {
 	var runTaskDone []chan struct{}
 
 	for _, s := range stoppers {
+		thisStopper := s
 		qc := make(chan struct{})
 		quiesceDone = append(quiesceDone, qc)
 		sc := make(chan struct{})
 		runTaskDone = append(runTaskDone, sc)
-		s.RunWorker(func() {
+		thisStopper.RunWorker(func() {
 			// Wait until Quiesce() is called.
 			<-qc
-			if s.RunTask(func() {}) {
+			if thisStopper.RunTask(func() {}) {
 				t.Error("expected RunTask to fail")
 			}
 			// Make the stoppers call Stop().
 			close(sc)
-			<-s.ShouldStop()
+			<-thisStopper.ShouldStop()
 		})
 	}
 
@@ -206,12 +217,16 @@ func TestStopperQuiesce(t *testing.T) {
 			<-sc
 		}
 
+		for _, s := range stoppers {
+			s.Stop()
+			<-s.IsStopped()
+		}
 		close(done)
 	}()
 
 	select {
 	case <-done:
-	case <-time.After(10 * time.Millisecond):
+	case <-time.After(50 * time.Millisecond):
 		t.Errorf("timed out waiting for stop")
 	}
 }
@@ -223,6 +238,7 @@ func (tc *testCloser) Close() {
 }
 
 func TestStopperClosers(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := stop.NewStopper()
 	var tc1, tc2 testCloser
 	s.AddCloser(&tc1)
@@ -234,6 +250,7 @@ func TestStopperClosers(t *testing.T) {
 }
 
 func TestStopperNumTasks(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := stop.NewStopper()
 	var tasks []chan bool
 	for i := 0; i < 3; i++ {
@@ -286,6 +303,7 @@ func TestStopperNumTasks(t *testing.T) {
 // RunAsyncTask has a similar bit of logic, but it is not testable because
 // we cannot insert a recover() call in the right place.
 func TestStopperRunTaskPanic(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s := stop.NewStopper()
 	// If RunTask were not panic-safe, Stop() would deadlock.
 	defer s.Stop()
@@ -297,4 +315,63 @@ func TestStopperRunTaskPanic(t *testing.T) {
 			panic("ouch")
 		})
 	}()
+}
+
+func TestStopperShouldDrain(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := stop.NewStopper()
+	running := make(chan struct{})
+	runningTask := make(chan struct{})
+	waiting := make(chan struct{})
+	cleanup := make(chan struct{})
+
+	// Run a worker. A call to stopper.Stop() will not close until all workers
+	// have completed, and this worker will complete when the "running" channel
+	// is closed.
+	s.RunWorker(func() {
+		<-running
+	})
+	// Run an asynchronous task. A stopper which has been Stop()ed will not
+	// close it's ShouldStop() channel until all tasks have completed. This task
+	// will complete when the "runningTask" channel is closed.
+	s.RunAsyncTask(func() {
+		<-runningTask
+	})
+
+	go func() {
+		// The ShouldDrain() channel should close as soon as the stopper is
+		// Stop()ed.
+		<-s.ShouldDrain()
+		// However, the ShouldStop() channel should still be blocked because the
+		// async task started above is still running, meaning we haven't drained
+		// yet.
+		select {
+		case <-s.ShouldStop():
+			t.Fatal("expected ShouldStop() to block until draining complete")
+		case <-time.After(1 * time.Millisecond):
+			// Expected.
+		}
+		// After completing the running task, the ShouldStop() channel should
+		// now close.
+		close(runningTask)
+		<-s.ShouldStop()
+		// However, the working running above prevents the call to Stop() from
+		// returning; it blocks until the runner's goroutine is finished. We
+		// use the "waiting" channel to detect this.
+		select {
+		case <-waiting:
+			t.Fatal("expected stopper to have blocked")
+		case <-time.After(1 * time.Millisecond):
+			// Expected.
+		}
+		// Finally, close the "running" channel, which should cause the original
+		// call to Stop() to return.
+		close(running)
+		<-waiting
+		close(cleanup)
+	}()
+
+	s.Stop()
+	close(waiting)
+	<-cleanup
 }
