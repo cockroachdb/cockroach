@@ -238,7 +238,7 @@ type Value struct {
 	// raw_bytes contains the encoded value and checksum.
 	RawBytes []byte `protobuf:"bytes,1,opt,name=raw_bytes" json:"raw_bytes,omitempty"`
 	// Timestamp of value.
-	Timestamp *Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp,omitempty"`
+	Timestamp Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 }
 
 func (m *Value) Reset()         { *m = Value{} }
@@ -591,16 +591,14 @@ func (m *Value) MarshalTo(data []byte) (int, error) {
 		i = encodeVarintData(data, i, uint64(len(m.RawBytes)))
 		i += copy(data[i:], m.RawBytes)
 	}
-	if m.Timestamp != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-		n1, err := m.Timestamp.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n1
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
+	n1, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
 	}
+	i += n1
 	return i, nil
 }
 
@@ -1190,10 +1188,8 @@ func (m *Value) Size() (n int) {
 		l = len(m.RawBytes)
 		n += 1 + l + sovData(uint64(l))
 	}
-	if m.Timestamp != nil {
-		l = m.Timestamp.Size()
-		n += 1 + l + sovData(uint64(l))
-	}
+	l = m.Timestamp.Size()
+	n += 1 + l + sovData(uint64(l))
 	return n
 }
 
@@ -1667,9 +1663,6 @@ func (m *Value) Unmarshal(data []byte) error {
 			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
-			}
-			if m.Timestamp == nil {
-				m.Timestamp = &Timestamp{}
 			}
 			if err := m.Timestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
