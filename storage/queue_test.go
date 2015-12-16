@@ -352,7 +352,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	if err := neverSplits.setDesc(&roachpb.RangeDescriptor{
 		RangeID:  1,
 		StartKey: roachpb.RKeyMin,
-		EndKey:   keys.Addr(keys.UserTableDataMin),
+		EndKey:   keys.Addr(keys.ReservedTableDataMin),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -361,7 +361,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	willSplit := &Replica{}
 	if err := willSplit.setDesc(&roachpb.RangeDescriptor{
 		RangeID:  2,
-		StartKey: keys.Addr(keys.UserTableDataMin),
+		StartKey: keys.Addr(keys.ReservedTableDataMin),
 		EndKey:   roachpb.RKeyMax,
 	}); err != nil {
 		t.Fatal(err)
