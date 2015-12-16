@@ -50,8 +50,8 @@ resource "aws_instance" "benchmark" {
 
   provisioner "remote-exec" {
     inline = [
-      "sudo apt-get -qqy update",
-      "sudo apt-get -qqy install supervisor",
+      "sudo apt-get -y update",
+      "sudo apt-get -y install supervisor",
       "sudo service supervisor stop",
       "chmod 755 benchmarks.sh",
       "bash download_binary.sh cockroach/static-tests.tar.gz ${var.benchmarks_sha}",
