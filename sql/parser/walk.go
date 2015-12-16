@@ -253,8 +253,8 @@ var _ VariableExpr = ValArgWrapper{}
 func (ValArgWrapper) Variable() {}
 
 type argVisitor struct {
-	args     Args
-	err      error
+	args Args
+	err  error
 }
 
 var _ Visitor = &argVisitor{}
@@ -279,7 +279,7 @@ func (v *argVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 // supplied with the query.
 func FillArgs(stmt Statement, args Args) error {
 	v := argVisitor{
-		args:     args,
+		args: args,
 	}
 	WalkStmt(&v, stmt)
 	return v.err

@@ -372,9 +372,9 @@ func TestPGPrepared(t *testing.T) {
 	}
 
 	testFailures := map[string]string{
-		"SELECT $1 = $1":             "pq: unsupported comparison operator: <valarg> = <valarg>",
+		"SELECT $1 = $1":           "pq: unsupported comparison operator: <valarg> = <valarg>",
 		"SELECT $1 > 0 AND NOT $1": "pq: incompatible NOT argument type: int",
-		"SELECT $1":                  "pq: unknown type parser.DValArg",
+		"SELECT $1":                "pq: unknown type parser.DValArg",
 	}
 
 	for query, reason := range testFailures {

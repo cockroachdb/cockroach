@@ -129,7 +129,7 @@ func (e *Executor) ExecuteStatement(user string, session Session, Sql string, pa
 		},
 		leaseMgr:     e.leaseMgr,
 		systemConfig: e.getSystemConfig(),
-		session: session,
+		session:      session,
 	}
 
 	// Resume a pending transaction if present.
