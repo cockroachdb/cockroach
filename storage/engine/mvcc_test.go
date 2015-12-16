@@ -637,7 +637,7 @@ func TestMVCCGetWriteIntentError(t *testing.T) {
 
 func mkVal(s string, ts roachpb.Timestamp) roachpb.Value {
 	v := roachpb.MakeValueFromString(s)
-	v.Timestamp = &ts
+	v.Timestamp = ts
 	return v
 }
 
@@ -665,8 +665,8 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 			txn = txn2
 		}
 		v := *proto.Clone(&kv.Value).(*roachpb.Value)
-		v.Timestamp = nil
-		err := MVCCPut(engine, nil, kv.Key, *kv.Value.Timestamp, v, txn)
+		v.Timestamp = roachpb.ZeroTimestamp
+		err := MVCCPut(engine, nil, kv.Key, kv.Value.Timestamp, v, txn)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1108,7 +1108,7 @@ func TestMVCCScanInconsistent(t *testing.T) {
 	}
 
 	makeTimestampedValue := func(v roachpb.Value, ts roachpb.Timestamp) roachpb.Value {
-		v.Timestamp = &ts
+		v.Timestamp = ts
 		return v
 	}
 
@@ -2469,14 +2469,14 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			}
 			for _, val := range test.vals[i : i+1] {
 				if i == len(test.vals)-1 && test.isDeleted {
-					if err := MVCCDelete(engine, ms, test.key, *val.Timestamp, nil); err != nil {
+					if err := MVCCDelete(engine, ms, test.key, val.Timestamp, nil); err != nil {
 						t.Fatal(err)
 					}
 					continue
 				}
 				valCpy := *proto.Clone(&val).(*roachpb.Value)
-				valCpy.Timestamp = nil
-				if err := MVCCPut(engine, ms, test.key, *val.Timestamp, valCpy, nil); err != nil {
+				valCpy.Timestamp = roachpb.ZeroTimestamp
+				if err := MVCCPut(engine, ms, test.key, val.Timestamp, valCpy, nil); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -2572,8 +2572,8 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 	vals := []roachpb.Value{val1, val2}
 	for _, val := range vals {
 		valCpy := *proto.Clone(&val).(*roachpb.Value)
-		valCpy.Timestamp = nil
-		if err := MVCCPut(engine, nil, key, *val.Timestamp, valCpy, nil); err != nil {
+		valCpy.Timestamp = roachpb.ZeroTimestamp
+		if err := MVCCPut(engine, nil, key, val.Timestamp, valCpy, nil); err != nil {
 			t.Fatal(err)
 		}
 	}

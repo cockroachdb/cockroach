@@ -349,7 +349,7 @@ func MakeValueFromBytes(bs []byte) Value {
 // MakeValueFromBytesAndTimestamp returns a value with bytes, timestamp and
 // tag set.
 func MakeValueFromBytesAndTimestamp(bs []byte, t Timestamp) Value {
-	v := Value{Timestamp: &t}
+	v := Value{Timestamp: t}
 	v.SetBytes(bs)
 	return v
 }

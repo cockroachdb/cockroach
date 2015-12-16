@@ -722,9 +722,7 @@ func mvccGetInternal(iter Iterator, metaKey MVCCKey,
 
 	value := &buf.value
 	value.RawBytes = iter.Value()
-	// Set the timestamp if the value is not nil (i.e. not a deletion tombstone).
-	ts := unsafeKey.Timestamp
-	value.Timestamp = &ts
+	value.Timestamp = unsafeKey.Timestamp
 	if err := value.Verify(metaKey.Key); err != nil {
 		return nil, nil, err
 	}
@@ -760,7 +758,7 @@ var putBufferPool = sync.Pool{
 // the value. In addition, zero timestamp values may be merged.
 func MVCCPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
 	value roachpb.Value, txn *roachpb.Transaction) error {
-	if value.Timestamp != nil {
+	if value.Timestamp != roachpb.ZeroTimestamp {
 		return util.Errorf("cannot have timestamp set in value on Put")
 	}
 
