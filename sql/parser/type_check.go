@@ -540,8 +540,8 @@ func (expr DTuple) TypeCheck(args MapArgs) (Datum, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr DValArg) TypeCheck(args MapArgs) (Datum, error) {
-	if expr.typ != nil {
-		return expr.typ, nil
+	if v, ok := args[expr.name]; ok {
+		return v, nil
 	}
 	return dummyValArg, nil
 }

@@ -621,7 +621,6 @@ func (d dNull) String() string {
 // DValArg is the ValArg Datum.
 type DValArg struct {
 	name string
-	typ Datum
 }
 
 func (DValArg) Variable() {}

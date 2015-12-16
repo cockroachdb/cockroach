@@ -241,7 +241,6 @@ func (m MapArgs) SetValArg(d, typ Datum) (set Datum, err error) {
 		return nil, fmt.Errorf("parameter %s has multiple types: %s, %s", v, typ.Type(), t.Type())
 	}
 	m[v.name] = typ
-	v.typ = ValArgWrapper{typ}
 	fmt.Printf("SVA %v, %T\n", v, typ)
 	return typ, nil
 }
