@@ -209,9 +209,11 @@ func TestSimplifyExpr(t *testing.T) {
 		{`(a, b) = (1, 2)`, `(a, b) IN ((1, 2))`, true},
 		{`(a, b) = (1, 2) OR (a, b) = (3, 4)`, `(a, b) IN ((1, 2), (3, 4))`, true},
 		{`(a, b) IN ((2, 1), (1, 2), (1, 2), (2, 1))`, `(a, b) IN ((1, 2), (2, 1))`, true},
+
 		// Expressions that don't simplify as of Dec 2015, although they could:
 		// {`a <= 5 AND (a, b) IN ((1, 2))`, `(a, b) IN ((1, 2))`, true},
 		// {`a <= 5 AND b >= 6 AND (a, b) IN ((1, 2))`, `false`, true},
+		// {`(a, b) IN ((1, 2)) AND a = 1`, `(a, b) IN ((1, 2))`, true},
 
 		{`i LIKE '%foo'`, `true`, false},
 		{`i LIKE 'foo'`, `i = 'foo'`, false},
