@@ -87,13 +87,13 @@ func (kv *KeyValue) PrettyValue() string {
 
 func (kv *KeyValue) setTimestamp(t roachpb.Timestamp) {
 	if kv.Value != nil {
-		kv.Value.Timestamp = &t
+		kv.Value.Timestamp = t
 	}
 }
 
 // Timestamp returns the timestamp the value was written at.
 func (kv *KeyValue) Timestamp() time.Time {
-	if kv.Value == nil || kv.Value.Timestamp == nil {
+	if kv.Value == nil {
 		return time.Time{}
 	}
 	return kv.Value.Timestamp.GoTime()

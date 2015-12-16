@@ -28,7 +28,7 @@ import (
 func newInfo(val float64) Info {
 	now := time.Now()
 
-	v := roachpb.Value{Timestamp: &roachpb.Timestamp{WallTime: now.UnixNano()}}
+	v := roachpb.Value{Timestamp: roachpb.Timestamp{WallTime: now.UnixNano()}}
 	v.SetFloat(val)
 
 	return Info{
