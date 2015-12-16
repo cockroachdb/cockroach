@@ -305,8 +305,6 @@ func TestPGPrepared(t *testing.T) {
 		},
 	}
 
-	defer leaktest.AfterTest(t)
-
 	ctx := server.NewTestContext()
 	ctx.Insecure = true
 	s := setupTestServerWithContext(t, ctx)
