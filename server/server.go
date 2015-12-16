@@ -129,7 +129,16 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	feed := util.NewFeed(stopper)
 	tracer := tracer.NewTracer(feed, ctx.Addr)
 
-	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.clock, RPCContext: s.rpcContext}, s.gossip)
+	// A custom RetryOptions is created which uses stopper.ShouldDrain() as
+	// the Closer. This prevents infinite retry loops from occuring during
+	// graceful server shutdown.
+	retryOpts := kv.GetDefaultDistSenderRetryOptions()
+	retryOpts.Closer = stopper.ShouldDrain()
+	ds := kv.NewDistSender(&kv.DistSenderContext{
+		Clock:           s.clock,
+		RPCContext:      s.rpcContext,
+		RPCRetryOptions: &retryOpts,
+	}, s.gossip)
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, tracer, s.stopper)
 	s.db = client.NewDB(sender)
 
