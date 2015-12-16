@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+//go:generate stringer -type=formatCode
 type formatCode int16
 
 const (
@@ -47,7 +48,7 @@ type pgType struct {
 	// as needed.
 	// This field does *not* correspond to the encoded length of a
 	// data type, so it's unclear what, if anything, it is used for.
-	// To get the right value, "SELECT oid, typelen FROM pg_types"
+	// To get the right value, "SELECT oid, typlen FROM pg_type"
 	// on a postgres server.
 	size int
 
@@ -65,7 +66,7 @@ func typeForDatum(d driver.Datum) pgType {
 		return pgType{oid.T_bool, 1, formatText}
 
 	case *driver.Datum_IntVal:
-		return pgType{oid.T_int8, 8, formatBinary}
+		return pgType{oid.T_int8, 8, formatText}
 
 	case *driver.Datum_FloatVal:
 		return pgType{oid.T_float8, 8, formatText}
@@ -89,9 +90,9 @@ func typeForDatum(d driver.Datum) pgType {
 
 const secondsInDay = 24 * 60 * 60
 
-func (b *writeBuffer) writeDatum(d driver.Datum) error {
+func (b *writeBuffer) writeTextDatum(d driver.Datum) error {
 	if log.V(2) {
-		log.Infof("pgwire writing datum of type: %T, %#v", d.Payload, d.Payload)
+		log.Infof("pgwire writing TEXT datum of type: %T, %#v", d.Payload, d.Payload)
 	}
 	switch v := d.Payload.(type) {
 	case nil:
@@ -106,9 +107,11 @@ func (b *writeBuffer) writeDatum(d driver.Datum) error {
 		return b.WriteByte('f')
 
 	case *driver.Datum_IntVal:
-		b.putInt32(8)
-		b.putInt64(v.IntVal)
-		return nil
+		// start at offset 4 because `putInt32` clobbers the first 4 bytes.
+		s := strconv.AppendInt(b.putbuf[4:4], v.IntVal, 10)
+		b.putInt32(int32(len(s)))
+		_, err := b.Write(s)
+		return err
 
 	case *driver.Datum_FloatVal:
 		// start at offset 4 because `putInt32` clobbers the first 4 bytes.
@@ -146,6 +149,26 @@ func (b *writeBuffer) writeDatum(d driver.Datum) error {
 		b.putInt32(int32(len(s)))
 		_, err := b.WriteString(s)
 		return err
+
+	default:
+		return util.Errorf("unsupported type %T", d.Payload)
+	}
+}
+
+func (b *writeBuffer) writeBinaryDatum(d driver.Datum) error {
+	if log.V(2) {
+		log.Infof("pgwire writing BINARY datum of type: %T, %#v", d.Payload, d.Payload)
+	}
+	switch v := d.Payload.(type) {
+	case nil:
+		// NULL is encoded as -1; all other values have a length prefix.
+		b.putInt32(-1)
+		return nil
+
+	case *driver.Datum_IntVal:
+		b.putInt32(8)
+		b.putInt64(v.IntVal)
+		return nil
 
 	default:
 		return util.Errorf("unsupported type %T", d.Payload)

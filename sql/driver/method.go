@@ -14,16 +14,14 @@
 // for names of contributors.
 //
 // Author: Vivek Menezes (vivek@cockroachlabs.com)
-//
-//go:generate stringer -type=Method
 
 package driver
 
 // Method is the enumerated type for methods.
 type Method int
 
+//go:generate stringer -type=Method
 const (
-	// Execute runs all the sql statements in a SQLRequest and
-	// returns a SQLResponse.
-	Execute Method = iota
+	_ Method = iota
+	Execute
 )

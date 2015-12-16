@@ -149,6 +149,7 @@ func TestPGWire(t *testing.T) {
 }
 
 func TestPGPrepared(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	queryTests := map[string][]struct {
 		params []interface{}
 		error  string

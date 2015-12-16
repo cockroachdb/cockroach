@@ -9,8 +9,9 @@ const _Syntax_name = "TraditionalModern"
 var _Syntax_index = [...]uint8{0, 11, 17}
 
 func (i Syntax) String() string {
+	i -= 1
 	if i < 0 || i >= Syntax(len(_Syntax_index)-1) {
-		return fmt.Sprintf("Syntax(%d)", i)
+		return fmt.Sprintf("Syntax(%d)", i+1)
 	}
 	return _Syntax_name[_Syntax_index[i]:_Syntax_index[i+1]]
 }

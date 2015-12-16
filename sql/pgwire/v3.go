@@ -33,37 +33,40 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-type messageType byte
+//go:generate stringer -type=clientMessageType
+type clientMessageType byte
+
+//go:generate stringer -type=serverMessageType
+type serverMessageType byte
 
 // http://www.postgresql.org/docs/9.4/static/protocol-message-formats.html
-//go:generate stringer -type=messageType
 const (
-	serverMsgAuth                 messageType = 'R'
-	serverMsgCommandComplete                  = 'C'
-	serverMsgDataRow                          = 'D'
-	serverMsgErrorResponse                    = 'E'
-	serverMsgParseComplete                    = '1'
-	serverMsgReady                            = 'Z'
-	serverMsgRowDescription                   = 'T'
-	serverMsgEmptyQuery                       = 'I'
-	serverMsgParameterDescription             = 't'
-	serverMsgBindComplete                     = '2'
+	clientMsgSimpleQuery clientMessageType = 'Q'
+	clientMsgParse       clientMessageType = 'P'
+	clientMsgTerminate   clientMessageType = 'X'
+	clientMsgDescribe    clientMessageType = 'D'
+	clientMsgSync        clientMessageType = 'S'
+	clientMsgClose       clientMessageType = 'C'
+	clientBind           clientMessageType = 'B'
+	clientExecute        clientMessageType = 'E'
 
-	clientMsgSimpleQuery = 'Q'
-	clientMsgParse       = 'P'
-	clientMsgTerminate   = 'X'
-	clientMsgDescribe    = 'D'
-	clientMsgSync        = 'S'
-	clientMsgClose       = 'C'
-	clientBind           = 'B'
-	clientExecute        = 'E'
+	serverMsgAuth                 serverMessageType = 'R'
+	serverMsgCommandComplete      serverMessageType = 'C'
+	serverMsgDataRow              serverMessageType = 'D'
+	serverMsgErrorResponse        serverMessageType = 'E'
+	serverMsgParseComplete        serverMessageType = '1'
+	serverMsgReady                serverMessageType = 'Z'
+	serverMsgRowDescription       serverMessageType = 'T'
+	serverMsgEmptyQuery           serverMessageType = 'I'
+	serverMsgParameterDescription serverMessageType = 't'
+	serverMsgBindComplete         serverMessageType = '2'
 )
 
 type prepareType byte
 
 const (
 	statement prepareType = 'S'
-	portal                = 'P'
+	portal    prepareType = 'P'
 )
 
 const (
@@ -81,6 +84,7 @@ type preparedPortal struct {
 	statement     preparedStatement
 	statementName string
 	params        []driver.Datum
+	outFormats    []formatCode
 }
 
 type v3Conn struct {
@@ -265,7 +269,7 @@ func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
 
 	c.opts.database = c.session.Database
 
-	return c.sendResponse(resp, true)
+	return c.sendResponse(resp, nil, true)
 }
 
 func (c *v3Conn) handleParse(buf *readBuffer) error {
@@ -283,20 +287,21 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	if err != nil {
 		return err
 	}
-	numTypes, err := buf.getInt16()
+	numParamTypes, err := buf.getInt16()
 	if err != nil {
 		return err
 	}
 	pq := preparedStatement{
-		query:   query,
-		inTypes: make([]oid.Oid, 0, numTypes),
+		query:       query,
+		inTypes:     make([]oid.Oid, numParamTypes),
+		portalNames: make(map[string]struct{}),
 	}
-	for i := 0; i < int(numTypes); i++ {
+	for i := range pq.inTypes {
 		typ, err := buf.getInt32()
 		if err != nil {
 			return err
 		}
-		pq.inTypes = append(pq.inTypes, oid.Oid(typ))
+		pq.inTypes[i] = oid.Oid(typ)
 	}
 	stmt, err := parser.ParseOne(query, parser.Traditional)
 	if err != nil {
@@ -429,18 +434,25 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	if !ok {
 		return c.sendError(fmt.Sprintf("unknown prepared statement %q", statementName))
 	}
-	numFormatCodes, err := buf.getInt16()
+	numParamFormatCodes, err := buf.getInt16()
 	if err != nil {
 		return err
 	}
 	numParams := len(stmt.inTypes)
-	formatCodes := make([]int16, numParams)
-	for i := 0; i < int(numFormatCodes); i++ {
+	paramFormatCodes := make([]formatCode, numParams)
+	for i := range paramFormatCodes[:numParamFormatCodes] {
 		c, err := buf.getInt16()
 		if err != nil {
 			return err
 		}
-		formatCodes[i] = c
+		paramFormatCodes[i] = formatCode(c)
+	}
+	if numParamFormatCodes == 1 {
+		fmtCode := paramFormatCodes[0]
+
+		for i := range paramFormatCodes {
+			paramFormatCodes[i] = fmtCode
+		}
 	}
 	numValues, err := buf.getInt16()
 	if err != nil {
@@ -449,14 +461,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	if int(numValues) != numParams {
 		return c.sendError(fmt.Sprintf("expected %d parameters, got %d", numParams, numValues))
 	}
-	if len(formatCodes) == 1 {
-		formatCode := formatCodes[0]
-
-		for i := 1; i < int(numValues); i++ {
-			formatCodes[i] = formatCode
-		}
-	}
-	params := make([]driver.Datum, numValues)
+	params := make([]driver.Datum, numParams)
 	for i, t := range stmt.inTypes {
 		plen, err := buf.getInt32()
 		if err != nil {
@@ -473,8 +478,8 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		var d driver.Datum
 		switch t {
 		case oid.T_bool:
-			switch formatCodes[i] {
-			case 0:
+			switch paramFormatCodes[i] {
+			case formatText:
 				var v bool
 				switch string(b) {
 				case "true":
@@ -489,8 +494,8 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 				return c.sendError("unsupported: binary bool parameter")
 			}
 		case oid.T_int8:
-			switch formatCodes[i] {
-			case 0:
+			switch paramFormatCodes[i] {
+			case formatText:
 				i, err := strconv.ParseInt(string(b), 10, 64)
 				if err != nil {
 					return c.sendError(fmt.Sprintf("unknown int value: %s", b))
@@ -500,8 +505,8 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 				return c.sendError("unsupported: binary int parameter")
 			}
 		case oid.T_float8:
-			switch formatCodes[i] {
-			case 0:
+			switch paramFormatCodes[i] {
+			case formatText:
 				f, err := strconv.ParseFloat(string(b), 64)
 				if err != nil {
 					return c.sendError(fmt.Sprintf("unknown float value: %s", b))
@@ -516,10 +521,33 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		params[i] = d
 	}
 
+	numColumnFormatCodes, err := buf.getInt16()
+	if err != nil {
+		return err
+	}
+	numColumns := len(stmt.columns)
+	columnFormatCodes := make([]formatCode, numColumns)
+	for i := range columnFormatCodes[:numColumnFormatCodes] {
+		c, err := buf.getInt16()
+		if err != nil {
+			return err
+		}
+		columnFormatCodes[i] = formatCode(c)
+	}
+	if numColumnFormatCodes == 1 {
+		fmtCode := columnFormatCodes[0]
+
+		for i := range columnFormatCodes {
+			columnFormatCodes[i] = formatCode(fmtCode)
+		}
+	}
+
+	stmt.portalNames[portalName] = struct{}{}
 	c.preparedPortals[portalName] = preparedPortal{
 		statement:     stmt,
 		statementName: statementName,
 		params:        params,
+		outFormats:    columnFormatCodes,
 	}
 	c.writeBuf.initMsg(serverMsgBindComplete)
 	return c.writeBuf.finishMsg(c.wr)
@@ -556,7 +584,7 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 	}
 
 	c.opts.database = c.session.Database
-	return c.sendResponse(resp, false)
+	return c.sendResponse(resp, portal.outFormats, false)
 }
 
 func (c *v3Conn) sendCommandComplete(tag []byte) error {
@@ -599,7 +627,7 @@ func (c *v3Conn) sendError(errToSend string) error {
 	return c.writeBuf.finishMsg(c.wr)
 }
 
-func (c *v3Conn) sendResponse(resp driver.Response, sendDescription bool) error {
+func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, sendDescription bool) error {
 	if len(resp.Results) == 0 {
 		return c.sendCommandComplete(nil)
 	}
@@ -636,13 +664,29 @@ func (c *v3Conn) sendResponse(resp driver.Response, sendDescription bool) error 
 				}
 			}
 
+			if formatCodes == nil {
+				formatCodes = make([]formatCode, len(resultRows.Columns))
+				for i, column := range resultRows.Columns {
+					formatCodes[i] = typeForDatum(column.Typ).preferredFormat
+				}
+			}
+
 			// Send DataRows.
 			for _, row := range resultRows.Rows {
 				c.writeBuf.initMsg(serverMsgDataRow)
 				c.writeBuf.putInt16(int16(len(row.Values)))
-				for _, col := range row.Values {
-					if err := c.writeBuf.writeDatum(col); err != nil {
-						return err
+				for i, col := range row.Values {
+					switch formatCode := formatCodes[i]; formatCode {
+					case formatText:
+						if err := c.writeBuf.writeTextDatum(col); err != nil {
+							return err
+						}
+					case formatBinary:
+						if err := c.writeBuf.writeBinaryDatum(col); err != nil {
+							return err
+						}
+					default:
+						return util.Errorf("unsupported format code %s", formatCode)
 					}
 				}
 				if err := c.writeBuf.finishMsg(c.wr); err != nil {
