@@ -459,6 +459,11 @@ func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
 	if arg == nil {
 		return parser.DNull, true
 	}
+	// TODO: This type switch has been created primarily for convenience, but
+	// the fact that multiple integer types are part of the switch is inelegant
+	// and prone to errors (it has been described as "whack-a-mole".) There is
+	// likely a better way to capture all of the various integer types using
+	// reflection.
 	switch t := arg.(type) {
 	case bool:
 		return parser.DBool(t), true
@@ -482,7 +487,7 @@ func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
 		return parser.DTimestamp{Time: t}, true
 	case time.Duration:
 		return parser.DInterval{Duration: t}, true
-	case parser.DTimestamp:
+	case parser.Datum:
 		return t, true
 	default:
 		panic(fmt.Sprintf("unexpected type %T", t))
