@@ -18,6 +18,7 @@
 package stop_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -297,4 +298,46 @@ func TestStopperRunTaskPanic(t *testing.T) {
 			panic("ouch")
 		})
 	}()
+}
+
+func TestStopperShouldDrain(t *testing.T) {
+	s := stop.NewStopper()
+	running := make(chan struct{})
+	runningTask := make(chan struct{})
+	waiting := make(chan struct{})
+
+	s.RunWorker(func() {
+		<-running
+	})
+	s.RunAsyncTask(func() {
+		<-runningTask
+	})
+
+	go func() {
+		<-s.ShouldDrain()
+		select {
+		case <-s.ShouldStop():
+			t.Fatal("expected ShouldStop() to block until draining complete")
+		case <-time.After(1 * time.Millisecond):
+			fmt.Println("default case")
+		}
+		close(runningTask)
+		<-s.ShouldStop()
+		select {
+		case <-waiting:
+			t.Fatal("expected stopper to have blocked")
+		case <-time.After(1 * time.Millisecond):
+			// Expected.
+		}
+		close(running)
+		select {
+		case <-waiting:
+			// Success.
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("stopper should have finished waiting")
+		}
+	}()
+
+	s.Stop()
+	close(waiting)
 }
