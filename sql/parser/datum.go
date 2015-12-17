@@ -616,14 +616,15 @@ func (d dNull) String() string {
 	return "NULL"
 }
 
+var _ VariableExpr = DValArg{}
+
 // DValArg is the ValArg Datum.
 type DValArg struct {
 	name string
 }
 
+// Variable implements the VariableExpr interface.
 func (DValArg) Variable() {}
-
-var _ VariableExpr = DValArg{}
 
 // Type implements the Datum interface.
 func (DValArg) Type() string {

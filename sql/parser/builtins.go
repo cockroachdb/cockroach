@@ -1277,7 +1277,7 @@ func typeTuple(params MapArgs, args DTuple) (Datum, error) {
 	}
 	if hasValArgs {
 		for _, arg := range args {
-			_, err := params.SetValArg(arg, datum)
+			_, err := params.setValArg(arg, datum)
 			if err != nil {
 				return nil, err
 			}

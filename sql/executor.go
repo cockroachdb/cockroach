@@ -112,9 +112,9 @@ func (e *Executor) getSystemConfig() config.SystemConfig {
 	return cfg
 }
 
-// Execute the statement(s) in the given request and return a response.
+// ExecuteStatements executes the given statement(s) and returns a response.
 // On error, the returned integer is an HTTP error code.
-func (e *Executor) ExecuteStatement(user string, session Session, Sql string, params []driver.Datum) (driver.Response, int, error) {
+func (e *Executor) ExecuteStatements(user string, session Session, stmts string, params []driver.Datum) (driver.Response, int, error) {
 	planMaker := plannerPool.Get().(*planner)
 	defer plannerPool.Put(planMaker)
 
@@ -145,7 +145,7 @@ func (e *Executor) ExecuteStatement(user string, session Session, Sql string, pa
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
 	planMaker.params = parameters(params)
-	reply := e.execStmts(Sql, planMaker)
+	reply := e.execStmts(stmts, planMaker)
 
 	// Send back the session state even if there were application-level errors.
 	// Add transaction to session state.
@@ -153,7 +153,10 @@ func (e *Executor) ExecuteStatement(user string, session Session, Sql string, pa
 		// TODO(pmattis): Need to record the leases used by a transaction within
 		// the transaction state and restore it when the transaction is restored.
 		planMaker.releaseLeases(e.db)
-		planMaker.session.Txn = &Session_Transaction{Txn: planMaker.txn.Proto, Timestamp: driver.Timestamp(planMaker.evalCtx.TxnTimestamp.Time)}
+		planMaker.session.Txn = &Session_Transaction{
+			Txn:       planMaker.txn.Proto,
+			Timestamp: driver.Timestamp(planMaker.evalCtx.TxnTimestamp.Time),
+		}
 		planMaker.session.MutatesSystemDB = planMaker.txn.SystemDBTrigger()
 	} else {
 		planMaker.session.Txn = nil
@@ -168,14 +171,14 @@ func (e *Executor) ExecuteStatement(user string, session Session, Sql string, pa
 	return reply, 0, nil
 }
 
-// Execute the statement(s) in the given request and return a response.
+// Execute the statement(s) in the given request and returns a response.
 // On error, the returned integer is an HTTP error code.
 func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 	var session Session
 	if err := proto.Unmarshal(args.Session, &session); err != nil {
 		return args.CreateReply(), http.StatusBadRequest, err
 	}
-	return e.ExecuteStatement(args.GetUser(), session, args.Sql, args.Params)
+	return e.ExecuteStatements(args.GetUser(), session, args.Sql, args.Params)
 }
 
 // exec executes the request. Any error encountered is returned; it is

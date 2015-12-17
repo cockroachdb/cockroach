@@ -14,6 +14,7 @@
 // for names of contributors.
 //
 // Author: Ben Darnell
+// Author: Tamir Duberstein (tamird@gmail.com)
 
 package pgwire
 
@@ -564,7 +565,7 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 
 	c.session.Database = c.opts.database
 
-	resp, _, err := c.executor.ExecuteStatement(c.opts.user, c.session, portal.statement.query, portal.params)
+	resp, _, err := c.executor.ExecuteStatements(c.opts.user, c.session, portal.statement.query, portal.params)
 	if err != nil {
 		return c.sendError(err.Error())
 	}

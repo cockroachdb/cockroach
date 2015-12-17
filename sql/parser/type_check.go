@@ -123,7 +123,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 
 	switch expr.Type.(type) {
 	case *BoolType:
-		if set, err := args.SetValArg(dummyExpr, DummyString); set != nil || err != nil {
+		if set, err := args.setValArg(dummyExpr, DummyString); set != nil || err != nil {
 			return DummyBool, err
 		}
 		switch dummyExpr {
@@ -132,7 +132,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 	case *IntType:
-		if set, err := args.SetValArg(dummyExpr, DummyString); set != nil || err != nil {
+		if set, err := args.setValArg(dummyExpr, DummyString); set != nil || err != nil {
 			return DummyInt, err
 		}
 		switch dummyExpr {
@@ -141,7 +141,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 	case *FloatType:
-		if set, err := args.SetValArg(dummyExpr, DummyString); set != nil || err != nil {
+		if set, err := args.setValArg(dummyExpr, DummyString); set != nil || err != nil {
 			return DummyFloat, err
 		}
 		switch dummyExpr {
@@ -150,7 +150,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 	case *StringType:
-		if set, err := args.SetValArg(dummyExpr, DummyString); set != nil || err != nil {
+		if set, err := args.setValArg(dummyExpr, DummyString); set != nil || err != nil {
 			return DummyString, err
 		}
 		switch dummyExpr {
@@ -159,7 +159,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 	case *BytesType:
-		if set, err := args.SetValArg(dummyExpr, DummyString); set != nil || err != nil {
+		if set, err := args.setValArg(dummyExpr, DummyString); set != nil || err != nil {
 			return DummyBytes, err
 		}
 		switch dummyExpr {
@@ -168,7 +168,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 	case *DateType:
-		if set, err := args.SetValArg(dummyExpr, DummyString); set != nil || err != nil {
+		if set, err := args.setValArg(dummyExpr, DummyString); set != nil || err != nil {
 			return DummyDate, err
 		}
 		switch dummyExpr {
@@ -177,7 +177,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 	case *TimestampType:
-		if set, err := args.SetValArg(dummyExpr, DummyString); set != nil || err != nil {
+		if set, err := args.setValArg(dummyExpr, DummyString); set != nil || err != nil {
 			return DummyTimestamp, err
 		}
 		switch dummyExpr {
@@ -186,7 +186,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 	case *IntervalType:
-		if set, err := args.SetValArg(dummyExpr, DummyString); set != nil || err != nil {
+		if set, err := args.setValArg(dummyExpr, DummyString); set != nil || err != nil {
 			return DummyInterval, err
 		}
 		switch dummyExpr {
@@ -482,7 +482,7 @@ func (expr ValArg) TypeCheck(args MapArgs) (Datum, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr DValArg) TypeCheck(args MapArgs) (Datum, error) {
-	return nil, util.Errorf("unsupported")
+	return nil, util.Errorf("unhandled type %T", expr)
 }
 
 // TypeCheck implements the Expr interface.
@@ -552,7 +552,7 @@ func typeCheckBooleanExprs(args MapArgs, op string, exprs ...Expr) (Datum, error
 		if dummyExpr == DNull {
 			continue
 		}
-		if set, err := args.SetValArg(dummyExpr, DummyBool); err != nil {
+		if set, err := args.setValArg(dummyExpr, DummyBool); err != nil {
 			return nil, err
 		} else if set != nil {
 			continue
@@ -565,11 +565,11 @@ func typeCheckBooleanExprs(args MapArgs, op string, exprs ...Expr) (Datum, error
 }
 
 func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight Datum) (Datum, cmpOp, error) {
-	if set, err := args.SetValArg(dummyLeft, dummyRight); err != nil {
+	if set, err := args.setValArg(dummyLeft, dummyRight); err != nil {
 		return nil, cmpOp{}, err
 	} else if set != nil {
 		dummyLeft = set
-	} else if set, err := args.SetValArg(dummyRight, dummyLeft); err != nil {
+	} else if set, err := args.setValArg(dummyRight, dummyLeft); err != nil {
 		return nil, cmpOp{}, err
 	} else if set != nil {
 		dummyRight = set

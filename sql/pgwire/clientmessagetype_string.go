@@ -5,14 +5,14 @@ package pgwire
 import "fmt"
 
 const (
-	_clientMessageType_name_0 = "clientBindclientMsgCloseclientMsgDescribeclientExecute"
+	_clientMessageType_name_0 = "clientMsgBindclientMsgCloseclientMsgDescribeclientMsgExecute"
 	_clientMessageType_name_1 = "clientMsgParseclientMsgSimpleQuery"
 	_clientMessageType_name_2 = "clientMsgSync"
 	_clientMessageType_name_3 = "clientMsgTerminate"
 )
 
 var (
-	_clientMessageType_index_0 = [...]uint8{0, 10, 24, 41, 54}
+	_clientMessageType_index_0 = [...]uint8{0, 13, 27, 44, 60}
 	_clientMessageType_index_1 = [...]uint8{0, 14, 34}
 	_clientMessageType_index_2 = [...]uint8{0, 13}
 	_clientMessageType_index_3 = [...]uint8{0, 18}

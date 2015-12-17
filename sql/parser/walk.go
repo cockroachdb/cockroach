@@ -222,14 +222,20 @@ type Args interface {
 	Arg(name string) (Datum, bool)
 }
 
+var _ Args = MapArgs{}
+
+// MapArgs is an Args implementation which is used for the type
+// inference necessary to support the postgres wire protocol.
+// See various TypeCheck() implementations for details.
 type MapArgs map[string]Datum
 
+// Arg implements the Args interface.
 func (m MapArgs) Arg(name string) (Datum, bool) {
 	d, ok := m[name]
 	return d, ok
 }
 
-func (m MapArgs) SetValArg(d, typ Datum) (set Datum, err error) {
+func (m MapArgs) setValArg(d, typ Datum) (set Datum, err error) {
 	if m == nil {
 		return nil, nil
 	}
@@ -243,14 +249,6 @@ func (m MapArgs) SetValArg(d, typ Datum) (set Datum, err error) {
 	m[v.name] = typ
 	return typ, nil
 }
-
-type ValArgWrapper struct {
-	Datum
-}
-
-var _ VariableExpr = ValArgWrapper{}
-
-func (ValArgWrapper) Variable() {}
 
 type argVisitor struct {
 	args Args

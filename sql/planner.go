@@ -8,6 +8,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
+// StatementResult prepares the given statement(s) and returns the result types.
 func (e *Executor) StatementResult(user string, stmt parser.Statement, args parser.MapArgs) ([]*driver.Response_Result_Rows_Column, error) {
 	planMaker := plannerPool.Get().(*planner)
 	defer plannerPool.Put(planMaker)
