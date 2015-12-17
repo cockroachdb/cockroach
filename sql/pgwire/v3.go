@@ -207,7 +207,7 @@ func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
 
 	c.opts.database = c.session.Database
 
-	return c.sendResponse(resp)
+	return c.sendResponse(resp, nil)
 }
 
 func (c *v3Conn) handleParse(buf *readBuffer) error {
@@ -276,7 +276,7 @@ func (c *v3Conn) sendError(errToSend string) error {
 	return c.writeBuf.finishMsg(c.wr)
 }
 
-func (c *v3Conn) sendResponse(resp driver.Response) error {
+func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode) error {
 	if len(resp.Results) == 0 {
 		return c.sendCommandComplete(nil)
 	}
@@ -307,26 +307,14 @@ func (c *v3Conn) sendResponse(resp driver.Response) error {
 		case *driver.Response_Result_Rows_:
 			resultRows := result.Rows
 
-			// Send RowDescription.
-			c.writeBuf.initMsg(serverMsgRowDescription)
-			c.writeBuf.putInt16(int16(len(resultRows.Columns)))
-			for _, column := range resultRows.Columns {
-				if log.V(2) {
-					log.Infof("pgwire writing column %s of type: %T", column.Name, column.Typ.Payload)
+			if formatCodes == nil {
+				formatCodes = make([]formatCode, len(resultRows.Columns))
+				for i, column := range resultRows.Columns {
+					formatCodes[i] = typeForDatum(column.Typ).preferredFormat
 				}
-				if err := c.writeBuf.writeString(column.Name); err != nil {
-					return err
-				}
-
-				typ := typeForDatum(column.Typ)
-				c.writeBuf.putInt32(0) // Table OID (optional).
-				c.writeBuf.putInt16(0) // Column attribute ID (optional).
-				c.writeBuf.putInt32(int32(typ.oid))
-				c.writeBuf.putInt16(int16(typ.size))
-				c.writeBuf.putInt32(0) // Type modifier (none of our supported types have modifiers).
-				c.writeBuf.putInt16(int16(typ.preferredFormat))
 			}
-			if err := c.writeBuf.finishMsg(c.wr); err != nil {
+
+			if err := c.sendRowDescription(resultRows.Columns, formatCodes); err != nil {
 				return err
 			}
 
@@ -334,9 +322,18 @@ func (c *v3Conn) sendResponse(resp driver.Response) error {
 			for _, row := range resultRows.Rows {
 				c.writeBuf.initMsg(serverMsgDataRow)
 				c.writeBuf.putInt16(int16(len(row.Values)))
-				for _, col := range row.Values {
-					if err := c.writeBuf.writeDatum(col); err != nil {
-						return err
+				for i, col := range row.Values {
+					switch formatCode := formatCodes[i]; formatCode {
+					case formatText:
+						if err := c.writeBuf.writeTextDatum(col); err != nil {
+							return err
+						}
+					case formatBinary:
+						if err := c.writeBuf.writeBinaryDatum(col); err != nil {
+							return err
+						}
+					default:
+						return util.Errorf("unsupported format code %s", formatCode)
 					}
 				}
 				if err := c.writeBuf.finishMsg(c.wr); err != nil {
@@ -356,6 +353,28 @@ func (c *v3Conn) sendResponse(resp driver.Response) error {
 	}
 
 	return nil
+}
+
+func (c *v3Conn) sendRowDescription(columns []*driver.Response_Result_Rows_Column, formatCodes []formatCode) error {
+	c.writeBuf.initMsg(serverMsgRowDescription)
+	c.writeBuf.putInt16(int16(len(columns)))
+	for i, column := range columns {
+		if log.V(2) {
+			log.Infof("pgwire writing column %s of type: %T", column.Name, column.Typ.Payload)
+		}
+		if err := c.writeBuf.writeString(column.Name); err != nil {
+			return err
+		}
+
+		typ := typeForDatum(column.Typ)
+		c.writeBuf.putInt32(0) // Table OID (optional).
+		c.writeBuf.putInt16(0) // Column attribute ID (optional).
+		c.writeBuf.putInt32(int32(typ.oid))
+		c.writeBuf.putInt16(int16(typ.size))
+		c.writeBuf.putInt32(0) // Type modifier (none of our supported types have modifiers).
+		c.writeBuf.putInt16(int16(formatCodes[i]))
+	}
+	return c.writeBuf.finishMsg(c.wr)
 }
 
 func appendUint(in []byte, u uint) []byte {
