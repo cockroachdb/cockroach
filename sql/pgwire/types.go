@@ -47,7 +47,7 @@ type pgType struct {
 	// as needed.
 	// This field does *not* correspond to the encoded length of a
 	// data type, so it's unclear what, if anything, it is used for.
-	// To get the right value, "SELECT oid, typelen FROM pg_types"
+	// To get the right value, "SELECT oid, typlen FROM pg_type"
 	// on a postgres server.
 	size int
 
