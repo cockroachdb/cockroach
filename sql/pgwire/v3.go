@@ -14,6 +14,7 @@
 // for names of contributors.
 //
 // Author: Ben Darnell
+// Author: Tamir Duberstein (tamird@gmail.com)
 
 package pgwire
 
