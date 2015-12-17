@@ -202,7 +202,7 @@ func (p *planner) selectIndex(s *scanNode, group *groupNode, sort *sortNode) (pl
 	c := candidates[0]
 	s.index = c.index
 	s.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
-	s.spans = makeSpans(c.constraints, c.desc.ID, c.index.ID)
+	s.spans = makeSpans(c.constraints, c.desc.ID, c.index)
 	if len(s.spans) == 0 {
 		// There are no spans to scan.
 		s.desc = nil
@@ -272,6 +272,10 @@ func (c indexConstraint) String() string {
 	return buf.String()
 }
 
+// indexConstraints is a set of constraints on a prefix of the columns
+// in a single index. The constraints are ordered as the columns in the index,
+// except a constraint referencing a tuple account for several columns (the size of
+// its .tupleMap).
 type indexConstraints []indexConstraint
 
 func (c indexConstraints) String() string {
@@ -531,6 +535,9 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 			endDone = true
 		}
 		if startDone && endDone {
+			// The rest of the expressions don't matter; when we'll construct index spans
+			// based on these constraints we won't be able to accumulate more in either
+			// the start key prefix nor the end key prefix.
 			break
 		}
 	}
@@ -581,13 +588,18 @@ func makeSpans(constraints indexConstraints, tableID ID, index *IndexDescriptor)
 	}}
 	var buf [100]byte
 
+	colIdx := -1 // The column that the current constraint refers to.
 	for i, c := range constraints {
+		colIdx++
 		// Is this the last end constraint? We perform special processing on the
 		// last end constraint to account for the exclusive nature of the scan end
 		// key.
 		lastEnd := c.end != nil &&
 			(i+1 == len(constraints) || constraints[i+1].end == nil)
 
+		// Special handling of IN exprssions. Such expressions apply to both the
+		// start and end key, but also cause an explosion in the number of spans
+		// searched within an index.
 		if (c.start != nil && c.start.Operator == parser.In) ||
 			(c.end != nil && c.end.Operator == parser.In) {
 			var e *parser.ComparisonExpr
@@ -597,9 +609,6 @@ func makeSpans(constraints indexConstraints, tableID ID, index *IndexDescriptor)
 				e = c.end
 			}
 
-			// Special handling of IN exprssions. Such expressions apply to both the
-			// start and end key, but also cause an explosion in the number of spans
-			// searched within an index.
 			tuple, ok := e.Right.(parser.DTuple)
 			if !ok {
 				break
@@ -614,11 +623,16 @@ func makeSpans(constraints indexConstraints, tableID ID, index *IndexDescriptor)
 
 				switch t := datum.(type) {
 				case parser.DTuple:
+					colIdx += len(c.tupleMap) - 1 // Skip over the columns covered by the tuple.
 					start = buf[:0]
-					for _, i := range c.tupleMap {
+					log.Infof("!!! constraint: %s. tuple map len: %d : %d . index: %s", c, len(c.tupleMap), c.tupleMap[0], index)
+					for i, tupleIdx := range c.tupleMap {
 						var err error
-						if start, err = encodeTableKey(start, t[i],
-							index.ColumnDirections[i].ToEncodingDirection()); err != nil {
+						var dir encoding.Direction
+						if dir, err = index.ColumnDirections[i].ToEncodingDirection(); err != nil {
+							panic(err)
+						}
+						if start, err = encodeTableKey(start, t[tupleIdx], dir); err != nil {
 							panic(err)
 						}
 					}
@@ -626,30 +640,36 @@ func makeSpans(constraints indexConstraints, tableID ID, index *IndexDescriptor)
 					end = start
 					if lastEnd {
 						end = nil
-						for i, col_idx := range c.tupleMap {
-							d := t[c.tupleMap[i]]
+						for i, tupleIdx := range c.tupleMap {
+							d := t[tupleIdx]
 							if i+1 == len(c.tupleMap) {
 								d = d.Next()
 							}
 							var err error
-							if end, err = encodeTableKey(end, d,
-								index.ColumnDirections[col_idx].ToEncodingDirection()); err != nil {
+							var dir encoding.Direction
+							if dir, err = index.ColumnDirections[i].ToEncodingDirection(); err != nil {
+								panic(err)
+							}
+							if end, err = encodeTableKey(end, d, dir); err != nil {
 								panic(err)
 							}
 						}
 					}
 
 				default:
-					firstColDir := index.ColumnDirections[col_idx].ToEncodingDirection()
 					var err error
-					if start, err = encodeTableKey(buf[:0], datum, firstColDir); err != nil {
+					var dir encoding.Direction
+					if dir, err = index.ColumnDirections[colIdx].ToEncodingDirection(); err != nil {
+						panic(err)
+					}
+					if start, err = encodeTableKey(buf[:0], datum, dir); err != nil {
 						panic(err)
 					}
 
 					end = start
 					if lastEnd {
 						var err error
-						if end, err = encodeTableKey(nil, datum.Next(), firstColDir); err != nil {
+						if end, err = encodeTableKey(nil, datum.Next(), dir); err != nil {
 							panic(err)
 						}
 					}
@@ -680,7 +700,12 @@ func makeSpans(constraints indexConstraints, tableID ID, index *IndexDescriptor)
 				}
 			default:
 				if datum, ok := c.start.Right.(parser.Datum); ok {
-					key, err := encodeTableKey(buf[:0], datum)
+					var dir encoding.Direction
+					var err error
+					if dir, err = index.ColumnDirections[colIdx].ToEncodingDirection(); err != nil {
+						panic(err)
+					}
+					key, err := encodeTableKey(buf[:0], datum, dir)
 					if err != nil {
 						panic(err)
 					}
@@ -706,7 +731,12 @@ func makeSpans(constraints indexConstraints, tableID ID, index *IndexDescriptor)
 					if lastEnd && c.end.Operator != parser.LT {
 						datum = datum.Next()
 					}
-					key, err := encodeTableKey(buf[:0], datum)
+					var dir encoding.Direction
+					var err error
+					if dir, err = index.ColumnDirections[colIdx].ToEncodingDirection(); err != nil {
+						panic(err)
+					}
+					key, err := encodeTableKey(buf[:0], datum, dir)
 					if err != nil {
 						panic(err)
 					}
@@ -718,7 +748,7 @@ func makeSpans(constraints indexConstraints, tableID ID, index *IndexDescriptor)
 
 				if c.start == nil && (i == 0 || constraints[i-1].start != nil) {
 					// This is the first constraint for which we don't have a start
-					// constraint. Add a not-NULL endpoint.
+					// expression. Add a not-NULL start point - the column
 					for i := range spans {
 						spans[i].start = encoding.EncodeNotNull(spans[i].start)
 					}

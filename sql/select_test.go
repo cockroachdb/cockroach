@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func makeTestIndex(t *testing.T, columns []string) (*TableDescriptor, *IndexDescriptor) {
@@ -242,9 +243,10 @@ func TestMakeSpans(t *testing.T) {
 		{`a IN (1) AND b IS NOT NULL`, []string{"a", "b"}, `/1/#-/2`},
 	}
 	for _, d := range testData {
+		log.Infof("!!! testing select: %s. Index columns: %s", d.expr, d.columns)
 		desc, index := makeTestIndex(t, d.columns)
 		constraints, _ := makeConstraints(t, d.expr, desc, index)
-		spans := makeSpans(constraints, desc.ID, index.ID)
+		spans := makeSpans(constraints, desc.ID, index)
 		if s := prettySpans(spans, 2); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}

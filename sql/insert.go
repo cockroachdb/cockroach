@@ -166,7 +166,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		}
 
 		primaryIndexKey, _, err := encodeIndexKey(
-			primaryIndex, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
+			&primaryIndex, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}

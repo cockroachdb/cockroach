@@ -67,7 +67,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 		result.rows = append(result.rows, parser.DTuple(nil))
 
 		primaryIndexKey, _, err := encodeIndexKey(
-			primaryIndex, colIDtoRowIndex,
+			&primaryIndex, colIDtoRowIndex,
 			rowVals, primaryIndexKeyPrefix)
 		if err != nil {
 			return nil, err

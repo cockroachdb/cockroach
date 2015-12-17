@@ -364,7 +364,9 @@ var (
 // EncodeBytes encodes the []byte value using an escape-based
 // encoding. The encoded value is terminated with the sequence
 // "\x00\x01" which is guaranteed to not occur elsewhere in the
-// encoded value. The encoded bytes are append to the supplied buffer
+// encoded value. This terminal also needs to sort before valid
+// sequence, to preserve the natural input ordering.
+// The encoded bytes are append to the supplied buffer
 // and the resulting buffer is returned.
 func EncodeBytes(b []byte, data []byte) []byte {
 	b = append(b, bytesMarker)

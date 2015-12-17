@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func TestPrettyPrint(t *testing.T) {
@@ -80,12 +81,13 @@ func TestPrettyPrint(t *testing.T) {
 
 		// others
 		{MakeKey([]byte("")), "/Min"},
-		{MakeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x20, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:408: unknown escape>"},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x20, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:426: unknown escape>"}, // 0x00 is the escape char
 	}
 	for i, test := range testCases {
 		keyInfo := PrettyPrint(test.key)
+		log.Infof("!!! test.ext: %s", test.key)
 		if test.exp != keyInfo {
-			t.Fatalf("%d: expected %s, got %s", i, test.exp, keyInfo)
+			t.Fatalf("%d: expected %v, got %v", i, test.exp, keyInfo)
 		}
 
 		if test.exp != test.key.String() {

@@ -308,7 +308,7 @@ func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNam
 	return qualifiedNames, nil
 }
 
-func encodeIndexKey(desc IndexDescriptor, colMap map[ColumnID]int,
+func encodeIndexKey(desc *IndexDescriptor, colMap map[ColumnID]int,
 	values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
 	dirs := make([]encoding.Direction, 0, len(desc.ColumnIDs))
 	for _, dir := range desc.ColumnDirections {
@@ -342,7 +342,8 @@ func encodeColumns(columnIDs []ColumnID, directions []encoding.Direction, colMap
 			containsNull = true
 		}
 
-		if key, err := encodeTableKey(key, val, directions[c_idx]); err != nil {
+		var err error
+		if key, err = encodeTableKey(key, val, directions[c_idx]); err != nil {
 			return nil, containsNull, err
 		}
 	}
@@ -515,7 +516,7 @@ func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
 	for _, secondaryIndex := range indexes {
 		secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
 		secondaryIndexKey, containsNull, err := encodeIndexKey(
-			secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+			&secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}
