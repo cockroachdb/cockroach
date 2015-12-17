@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+//go:generate stringer -type=formatCode
 type formatCode int16
 
 const (
