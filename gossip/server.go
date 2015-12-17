@@ -95,22 +95,24 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 	// as a permanent peer. We always accept its input and return
 	// our delta.
 	canAccept := true
-	if !s.incoming.hasNode(args.NodeID) {
-		s.incoming.setMaxSize(s.maxPeers())
-		if !s.incoming.hasSpace() {
-			canAccept = false
+	if args.NodeID != 0 {
+		if !s.incoming.hasNode(args.NodeID) {
+			s.incoming.setMaxSize(s.maxPeers())
+			if !s.incoming.hasSpace() {
+				canAccept = false
+			} else {
+				s.incoming.addNode(args.NodeID)
+				// This lookup map restricts incoming connections to a single
+				// connection per node ID.
+				s.nodeMap[args.NodeID] = lAddr.String()
+			}
 		} else {
-			s.incoming.addNode(args.NodeID)
-			// This lookup map restricts incoming connections to a single
-			// connection per node ID.
-			s.nodeMap[args.NodeID] = lAddr.String()
-		}
-	} else {
-		// Verify that there aren't multiple incoming clients from same
-		// node, but with different connections. This can happen when
-		// bootstrap connections are initiated through a load balancer.
-		if lAddrStr, ok := s.nodeMap[args.NodeID]; ok && lAddrStr != lAddr.String() {
-			return nil, util.Errorf("duplicate connection from node %d", args.NodeID)
+			// Verify that there aren't multiple incoming clients from same
+			// node, but with different connections. This can happen when
+			// bootstrap connections are initiated through a load balancer.
+			if lAddrStr, ok := s.nodeMap[args.NodeID]; ok && lAddrStr != lAddr.String() {
+				return nil, util.Errorf("duplicate connection from node %d", args.NodeID)
+			}
 		}
 	}
 	// Update the lAddrMap, which allows the incoming client to be
