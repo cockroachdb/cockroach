@@ -89,7 +89,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 
 		for _, secondaryIndexEntry := range secondaryIndexEntries {
 			if log.V(2) {
-				log.Infof("Del %s", prettyKey(secondaryIndexEntry.key, 0))
+				log.Infof("Del %s", secondaryIndexEntry.key)
 			}
 			b.Del(secondaryIndexEntry.key)
 		}
@@ -98,7 +98,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 		rowStartKey := roachpb.Key(primaryIndexKey)
 		rowEndKey := rowStartKey.PrefixEnd()
 		if log.V(2) {
-			log.Infof("DelRange %s - %s", prettyKey(rowStartKey, 0), prettyKey(rowEndKey, 0))
+			log.Infof("DelRange %s - %s", rowStartKey, rowEndKey)
 		}
 		b.DelRange(rowStartKey, rowEndKey)
 	}

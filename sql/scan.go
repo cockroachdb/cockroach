@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -70,54 +69,31 @@ type span struct {
 	count int64
 }
 
-// prettyKey pretty-prints the specified key, skipping over the first skip
-// fields.
+// prettyKey pretty-prints the specified key, skipping over the first `skip`
+// fields. The pretty printed key looks like:
+//
+//   /Table/<tableID>/<indexID>/...
+//
+// We always strip off the /Table prefix and then `skip` more fields. Note that
+// this assumes that the fields themselves do not contain '/', but that is
+// currently true for the fields we care about stripping (the table and index
+// ID).
 func prettyKey(key roachpb.Key, skip int) string {
-	if encoding.PeekType(key) != encoding.Int {
-		return fmt.Sprintf("invalid key prefix: %q", key)
+	p := key.String()
+	for i := 0; i <= skip; i++ {
+		n := strings.IndexByte(p[1:], '/')
+		if n == -1 {
+			return ""
+		}
+		p = p[n+1:]
 	}
+	return p
+}
 
+func prettyDatums(vals []parser.Datum) string {
 	var buf bytes.Buffer
-	for k := 0; len(key) > 0; k++ {
-		var d interface{}
-		var err error
-		switch encoding.PeekType(key) {
-		case encoding.Null:
-			key, _ = encoding.DecodeIfNull(key)
-			d = parser.DNull
-		case encoding.NotNull:
-			key, _ = encoding.DecodeIfNotNull(key)
-			d = "#"
-		case encoding.Int:
-			var i int64
-			key, i, err = encoding.DecodeVarint(key)
-			d = parser.DInt(i)
-		case encoding.Float:
-			var f float64
-			key, f, err = encoding.DecodeFloat(key, nil)
-			d = parser.DFloat(f)
-		case encoding.Bytes:
-			var s string
-			key, s, err = encoding.DecodeString(key, nil)
-			d = parser.DString(s)
-		case encoding.Time:
-			var t time.Time
-			key, t, err = encoding.DecodeTime(key)
-			d = parser.DTimestamp{Time: t}
-		default:
-			// This shouldn't ever happen, but if it does let the loop exit.
-			key = nil
-			d = "unknown"
-		}
-		if skip > 0 {
-			skip--
-			continue
-		}
-		if err != nil {
-			fmt.Fprintf(&buf, "/<%v>", err)
-			continue
-		}
-		fmt.Fprintf(&buf, "/%s", d)
+	for _, v := range vals {
+		fmt.Fprintf(&buf, "/%v", v)
 	}
 	return buf.String()
 }
@@ -585,14 +561,14 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 			}
 			qval.datum = value
 			if log.V(2) {
-				log.Infof("Scan %s -> %v", prettyKey(kv.Key, 0), value)
+				log.Infof("Scan %s -> %v", kv.Key, value)
 			}
 		} else {
 			// No need to unmarshal the column value. Either the column was part of
 			// the index key or it isn't needed by any of the render or filter
 			// expressions.
 			if log.V(2) {
-				log.Infof("Scan %s -> [%d] (skipped)", prettyKey(kv.Key, 0), n.colID)
+				log.Infof("Scan %s -> [%d] (skipped)", kv.Key, n.colID)
 			}
 		}
 	} else {
@@ -609,9 +585,9 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 
 		if log.V(2) {
 			if n.implicitVals != nil {
-				log.Infof("Scan %s -> %s", prettyKey(kv.Key, 0), prettyKeyVals(n.implicitVals))
+				log.Infof("Scan %s -> %s", kv.Key, prettyDatums(n.implicitVals))
 			} else {
-				log.Infof("Scan %s", prettyKey(kv.Key, 0))
+				log.Infof("Scan %s", kv.Key)
 			}
 		}
 	}
@@ -730,7 +706,7 @@ func (n *scanNode) explainDebug(endOfRow, outputRow bool) {
 	n.row[0] = parser.DInt(n.rowIndex)
 	n.row[1] = parser.DString(n.prettyKey())
 	if n.implicitVals != nil {
-		n.row[2] = parser.DString(prettyKeyVals(n.implicitVals))
+		n.row[2] = parser.DString(prettyDatums(n.implicitVals))
 	} else {
 		// This conversion to DString is odd. `n.explainValue` is already a
 		// `Datum`, but logic_test currently expects EXPLAIN DEBUG output
@@ -754,7 +730,7 @@ func (n *scanNode) prettyKey() string {
 		return ""
 	}
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "/%s/%s%s", n.desc.Name, n.index.Name, prettyKeyVals(n.vals))
+	fmt.Fprintf(&buf, "/%s/%s%s", n.desc.Name, n.index.Name, prettyDatums(n.vals))
 	if n.colID > 0 {
 		// TODO(pmattis): This is inefficient, but does it matter?
 		col, err := n.desc.FindColumnByID(n.colID)
@@ -762,14 +738,6 @@ func (n *scanNode) prettyKey() string {
 			panic(err)
 		}
 		fmt.Fprintf(&buf, "/%s", col.Name)
-	}
-	return buf.String()
-}
-
-func prettyKeyVals(vals []parser.Datum) string {
-	var buf bytes.Buffer
-	for _, v := range vals {
-		fmt.Fprintf(&buf, "/%v", v)
 	}
 	return buf.String()
 }
