@@ -50,11 +50,10 @@ func testTableDesc() *TableDescriptor {
 }
 
 func parseAndNormalizeExpr(t *testing.T, sql string) (parser.Expr, qvalMap) {
-	q, err := parser.ParseTraditional("SELECT " + sql)
+	expr, err := parser.ParseExprTraditional(sql)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
-	expr := q[0].(*parser.Select).Exprs[0].Expr
 	expr, err = (parser.EvalContext{}).NormalizeExpr(expr)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)

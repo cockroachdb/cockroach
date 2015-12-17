@@ -29,11 +29,10 @@ import (
 func TestRetryResolveQNames(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	q, err := parser.ParseTraditional(`SELECT COUNT(a)`)
+	expr, err := parser.ParseExprTraditional(`COUNT(a)`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	expr := q[0].(*parser.Select).Exprs[0].Expr
 
 	for i := 0; i < 2; i++ {
 		s := &scanNode{}

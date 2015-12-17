@@ -59,17 +59,17 @@ func TestParseColumnType(t *testing.T) {
 	}
 	for i, d := range testData {
 		sql := fmt.Sprintf("CREATE TABLE a (b %s)", d.str)
-		stmts, err := ParseTraditional(sql)
+		stmt, err := ParseOneTraditional(sql)
 		if err != nil {
 			t.Errorf("%d: %s", i, err)
 			continue
 		}
-		if sql != stmts.String() {
-			t.Errorf("%d: expected %s, but got %s", i, sql, stmts)
+		if sql != stmt.String() {
+			t.Errorf("%d: expected %s, but got %s", i, sql, stmt)
 		}
-		createTable, ok := stmts[0].(*CreateTable)
+		createTable, ok := stmt.(*CreateTable)
 		if !ok {
-			t.Errorf("%d: expected CreateTable, but got %T", i, stmts[0])
+			t.Errorf("%d: expected CreateTable, but got %T", i, stmt)
 			continue
 		}
 		columnDef, ok2 := createTable.Defs[0].(*ColumnTableDef)

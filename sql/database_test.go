@@ -27,11 +27,11 @@ import (
 func TestMakeDatabaseDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	stmt, err := parser.ParseTraditional("CREATE DATABASE test")
+	stmt, err := parser.ParseOneTraditional("CREATE DATABASE test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	desc := makeDatabaseDesc(stmt[0].(*parser.CreateDatabase))
+	desc := makeDatabaseDesc(stmt.(*parser.CreateDatabase))
 	if desc.Name != "test" {
 		t.Fatalf("expected Name == test, got %s", desc.Name)
 	}

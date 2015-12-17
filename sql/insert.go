@@ -322,7 +322,7 @@ func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, erro
 			defaultExprs = append(defaultExprs, parser.DNull)
 			continue
 		}
-		expr, err := parser.ParseExpr(*col.DefaultExpr, parser.Traditional)
+		expr, err := parser.ParseExprTraditional(*col.DefaultExpr)
 		if err != nil {
 			return nil, err
 		}

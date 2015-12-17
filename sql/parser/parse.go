@@ -100,32 +100,51 @@ func (p *Parser) TypeCheckAndNormalizeExpr(ctx EvalContext, expr Expr) (Expr, er
 	return p.NormalizeExpr(ctx, expr)
 }
 
-// Parse parses the sql and returns a list of statements.
-func Parse(sql string, syntax Syntax) (StatementList, error) {
+// parse parses the sql and returns a list of statements.
+func parse(sql string, syntax Syntax) (StatementList, error) {
 	var p Parser
 	return p.Parse(sql, syntax)
 }
 
-// ParseTraditional is short-hand for Parse(sql, Traditional)
-func ParseTraditional(sql string) (StatementList, error) {
-	return Parse(sql, Traditional)
+// parseTraditional is short-hand for parse(sql, Traditional)
+func parseTraditional(sql string) (StatementList, error) {
+	return parse(sql, Traditional)
 }
 
-// ParseExpr parses a sql expression.
-func ParseExpr(expr string, syntax Syntax) (Expr, error) {
-	stmts, err := Parse(`SELECT `+expr, syntax)
+// parseOne parses a sql statement.
+func parseOne(sql string, syntax Syntax) (Statement, error) {
+	stmts, err := parse(sql, syntax)
 	if err != nil {
 		return nil, err
 	}
 	if len(stmts) != 1 {
 		return nil, util.Errorf("expected 1 statement, but found %d", len(stmts))
 	}
-	sel, ok := stmts[0].(*Select)
+	return stmts[0], nil
+}
+
+// ParseOneTraditional is short-hand for parseOne(sql, Traditional)
+func ParseOneTraditional(sql string) (Statement, error) {
+	return parseOne(sql, Traditional)
+}
+
+// parseExpr parses a sql expression.
+func parseExpr(expr string, syntax Syntax) (Expr, error) {
+	stmt, err := parseOne(`SELECT `+expr, syntax)
+	if err != nil {
+		return nil, err
+	}
+	sel, ok := stmt.(*Select)
 	if !ok {
-		return nil, util.Errorf("expected a SELECT statement, but found %T", stmts[0])
+		return nil, util.Errorf("expected a SELECT statement, but found %T", stmt)
 	}
 	if n := len(sel.Exprs); n != 1 {
 		return nil, util.Errorf("expected 1 expression, but found %d", n)
 	}
 	return sel.Exprs[0].Expr, nil
+}
+
+// ParseExprTraditional is a short-hand for parseExpr(sql, Traditional)
+func ParseExprTraditional(sql string) (Expr, error) {
+	return parseExpr(sql, Traditional)
 }

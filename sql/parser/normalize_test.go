@@ -83,11 +83,10 @@ func TestNormalizeExpr(t *testing.T) {
 		{`(1, 'one')`, `(1, 'one')`},
 	}
 	for _, d := range testData {
-		q, err := ParseTraditional("SELECT " + d.expr)
+		expr, err := ParseExprTraditional(d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		expr := q[0].(*Select).Exprs[0].Expr
 		r, err := defaultContext.NormalizeExpr(expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
@@ -114,11 +113,10 @@ func TestNormalizeExprError(t *testing.T) {
 		{`9223372036854775808`, `integer value out of range`},
 	}
 	for _, d := range testData {
-		q, err := ParseTraditional("SELECT " + d.expr)
+		expr, err := ParseExprTraditional(d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		expr := q[0].(*Select).Exprs[0].Expr
 		if _, err := defaultContext.NormalizeExpr(expr); !testutils.IsError(err, d.expected) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
