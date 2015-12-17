@@ -249,39 +249,40 @@ func decodeKeyPrint(key roachpb.Key) string {
 	return buf.String()
 }
 
-// PrettyPrint print the key in a human readable format, which organized as:
-// Key's Format												Key's Value
-// /Local/...												"\x01"+...
-// 		/Store/...											"\x01s"+...
-//		/RangeID/...										"\x01s"+[rangeid]
-//			/[rangeid]/SequenceCache/[id]/seq:[seq]			"\x01s"+[rangeid]+"res-"+[id]+[seq]
-//			/[rangeid]/RaftLeaderLease						"\x01s"+[rangeid]+"rfll"
-//			/[rangeid]/RaftTombstone						"\x01s"+[rangeid]+"rftb"
-//			/[rangeid]/RaftHardState						"\x01s"+[rangeid]+"rfth"
-//			/[rangeid]/RaftAppliedIndex						"\x01s"+[rangeid]+"rfta"
-//			/[rangeid]/RaftLog/logIndex:[logIndex]			"\x01s"+[rangeid]+"rftl"+[logIndex]
-//			/[rangeid]/RaftTruncatedState					"\x01s"+[rangeid]+"rftt"
-//			/[rangeid]/RaftLastIndex						"\x01s"+[rangeid]+"rfti"
-//			/[rangeid]/RangeGCMetadata						"\x01s"+[rangeid]+"rgcm"
-//			/[rangeid]/RangeLastVerificationTimestamp		"\x01s"+[rangeid]+"rlvt"
-//			/[rangeid]/RangeStats							"\x01s"+[rangeid]+"stat"
-//		/Range/...											"\x01k"+...
-//			/RangeDescriptor/[key]							"\x01k"+[key]+"rdsc"
-//			/RangeTreeNode/[key]							"\x01k"+[key]+"rtn-"
+// PrettyPrint prints the key in a human readable format:
+//
+// Key's Format                                   Key's Value
+// /Local/...                                     "\x01"+...
+// 		/Store/...                                  "\x01s"+...
+//		/RangeID/...                                "\x01s"+[rangeid]
+//			/[rangeid]/SequenceCache/[id]/seq:[seq]   "\x01s"+[rangeid]+"res-"+[id]+[seq]
+//			/[rangeid]/RaftLeaderLease                "\x01s"+[rangeid]+"rfll"
+//			/[rangeid]/RaftTombstone                  "\x01s"+[rangeid]+"rftb"
+//			/[rangeid]/RaftHardState						      "\x01s"+[rangeid]+"rfth"
+//			/[rangeid]/RaftAppliedIndex						    "\x01s"+[rangeid]+"rfta"
+//			/[rangeid]/RaftLog/logIndex:[logIndex]    "\x01s"+[rangeid]+"rftl"+[logIndex]
+//			/[rangeid]/RaftTruncatedState             "\x01s"+[rangeid]+"rftt"
+//			/[rangeid]/RaftLastIndex                  "\x01s"+[rangeid]+"rfti"
+//			/[rangeid]/RangeGCMetadata						    "\x01s"+[rangeid]+"rgcm"
+//			/[rangeid]/RangeLastVerificationTimestamp "\x01s"+[rangeid]+"rlvt"
+//			/[rangeid]/RangeStats                     "\x01s"+[rangeid]+"stat"
+//		/Range/...                                  "\x01k"+...
+//			/RangeDescriptor/[key]                    "\x01k"+[key]+"rdsc"
+//			/RangeTreeNode/[key]                      "\x01k"+[key]+"rtn-"
 //			/Transaction/addrKey:[key]/id:[id]				"\x01k"+[key]+"txn-"+[id]
-// /Local/Max 												"\x02"
+// /Local/Max                                     "\x02"
 //
-// /Meta1/[key]										    "\x02"+[key]
-// /Meta2/[key]										    "\x03"+[key]
-// /System/...												"\x04"
-//		/StatusStore/[key]									"\x04status-store-"+[key]
-//		/StatusNode/[key]									"\x04status-node-"+[key]
-// /System/Max												"\x05"
+// /Meta1/[key]                                   "\x02"+[key]
+// /Meta2/[key]                                   "\x03"+[key]
+// /System/...                                    "\x04"
+//		/StatusStore/[key]                          "\x04status-store-"+[key]
+//		/StatusNode/[key]                           "\x04status-node-"+[key]
+// /System/Max                                    "\x05"
 //
-// /Table/[key]												"\xff"+[key]
+// /Table/[key]                                   [key]
 //
-// /Min														""
-// /Max														"\xff\xff"
+// /Min                                           ""
+// /Max                                           "\xff\xff"
 func PrettyPrint(key roachpb.Key) string {
 	if bytes.Equal(key, MaxKey) {
 		return "/Max"

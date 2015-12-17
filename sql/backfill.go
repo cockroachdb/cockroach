@@ -132,7 +132,7 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *Tab
 		indexStartKey := roachpb.Key(indexPrefix)
 		indexEndKey := indexStartKey.PrefixEnd()
 		if log.V(2) {
-			log.Infof("DelRange %s - %s", prettyKey(indexStartKey, 0), prettyKey(indexEndKey, 0))
+			log.Infof("DelRange %s - %s", indexStartKey, indexEndKey)
 		}
 		b.DelRange(indexStartKey, indexEndKey)
 	}
@@ -186,7 +186,7 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *Tab
 
 				for _, secondaryIndexEntry := range secondaryIndexEntries {
 					if log.V(2) {
-						log.Infof("CPut %s -> %v", prettyKey(secondaryIndexEntry.key, 0),
+						log.Infof("CPut %s -> %v", secondaryIndexEntry.key,
 							secondaryIndexEntry.value)
 					}
 					b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)

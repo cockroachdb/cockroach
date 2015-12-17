@@ -238,13 +238,13 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 				// Do not update Indexes in the DELETE_ONLY state.
 				if _, ok := deleteOnlyIndex[i]; !ok {
 					if log.V(2) {
-						log.Infof("CPut %s -> %v", prettyKey(newSecondaryIndexEntry.key, 0),
+						log.Infof("CPut %s -> %v", newSecondaryIndexEntry.key,
 							newSecondaryIndexEntry.value)
 					}
 					b.CPut(newSecondaryIndexEntry.key, newSecondaryIndexEntry.value, nil)
 				}
 				if log.V(2) {
-					log.Infof("Del %s", prettyKey(secondaryIndexEntry.key, 0))
+					log.Infof("Del %s", secondaryIndexEntry.key)
 				}
 				b.Del(secondaryIndexEntry.key)
 			}
@@ -260,7 +260,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
 				if log.V(2) {
-					log.Infof("Put %s -> %v", prettyKey(key, 0), val)
+					log.Infof("Put %s -> %v", key, val)
 				}
 
 				b.Put(key, marshalled[i])
@@ -268,7 +268,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 				// The column might have already existed but is being set to NULL, so
 				// delete it.
 				if log.V(2) {
-					log.Infof("Del %s", prettyKey(key, 0))
+					log.Infof("Del %s", key)
 				}
 
 				b.Del(key)
