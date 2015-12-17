@@ -201,7 +201,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		}
 		// This is subtle: []byte(nil) != interface{}(nil). A []byte(nil) creates
 		// an empty value. An interface{}(nil) deletes the value.
-		b.CPut(primaryIndexKey, []byte(nil), nil)
+		b.CPut(primaryIndexKey, []byte{}, nil)
 
 		// Write the row columns.
 		for i, val := range rowVals {

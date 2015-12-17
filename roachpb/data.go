@@ -277,16 +277,17 @@ func (t Timestamp) GoTime() time.Time {
 }
 
 const (
-	checksumSize = 4
-	tagPos       = checksumSize
-	headerSize   = tagPos + 1
+	checksumUnitialized = 0
+	checksumSize        = 4
+	tagPos              = checksumSize
+	headerSize          = tagPos + 1
 )
 
-func (v *Value) checksum() uint32 {
+func (v Value) checksum() uint32 {
 	if len(v.RawBytes) < checksumSize {
 		return 0
 	}
-	_, u, err := encoding.DecodeUint32(v.RawBytes[0:4])
+	_, u, err := encoding.DecodeUint32(v.RawBytes[:checksumSize])
 	if err != nil {
 		panic(err)
 	}
@@ -295,7 +296,7 @@ func (v *Value) checksum() uint32 {
 
 func (v *Value) setChecksum(cksum uint32) {
 	if len(v.RawBytes) >= checksumSize {
-		encoding.EncodeUint32(v.RawBytes[0:0], cksum)
+		encoding.EncodeUint32(v.RawBytes[:0], cksum)
 	}
 }
 
@@ -306,7 +307,9 @@ func (v *Value) InitChecksum(key []byte) {
 	if v.RawBytes == nil {
 		return
 	}
-	if v.checksum() == 0 {
+	// TODO(peter): Is this guard to avoid re-initializing the checksum if it is
+	// already initialized necesary? Is this a safety or a performance concern?
+	if v.checksum() == checksumUnitialized {
 		v.setChecksum(v.computeChecksum(key))
 	}
 }
@@ -353,7 +356,7 @@ func MakeValueFromBytesAndTimestamp(bs []byte, t Timestamp) Value {
 
 // GetTag retrieves the value type.
 func (v Value) GetTag() ValueType {
-	if len(v.RawBytes) < headerSize {
+	if len(v.RawBytes) <= tagPos {
 		return ValueType_UNKNOWN
 	}
 	return ValueType(v.RawBytes[tagPos])
@@ -411,7 +414,7 @@ func (v *Value) SetProto(msg proto.Message) error {
 // receiver and sets the tag.
 func (v *Value) SetTime(t time.Time) {
 	v.RawBytes = make([]byte, headerSize, 16)
-	v.RawBytes = encoding.EncodeTime(v.RawBytes[0:headerSize], t)
+	v.RawBytes = encoding.EncodeTime(v.RawBytes[:headerSize], t)
 	v.setTag(ValueType_TIME)
 }
 
@@ -509,13 +512,16 @@ func (v Value) computeChecksum(key []byte) uint32 {
 	if _, err := crc.Write(key); err != nil {
 		panic(err)
 	}
-	if _, err := crc.Write(v.RawBytes[4:]); err != nil {
+	if _, err := crc.Write(v.RawBytes[checksumSize:]); err != nil {
 		panic(err)
 	}
 	sum := crc.Sum32()
 	crc.Reset()
 	crc32Pool.Put(crc)
-	if sum == 0 {
+	// We reserved the value 0 (checksumUnitialized) to indicate that a checksum
+	// has not been initialized. This reservation is accomplished by folding a
+	// computed checksum of 0 to the value 1.
+	if sum == checksumUnitialized {
 		return 1
 	}
 	return sum

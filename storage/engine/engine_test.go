@@ -171,7 +171,7 @@ func TestEngineBatch(t *testing.T) {
 			if err := proto.Unmarshal(b, m); err != nil {
 				t.Fatal(err)
 			}
-			if m.RawBytes == nil {
+			if !m.IsInline() {
 				return nil
 			}
 			valueBytes, err := m.Value().GetBytes()
