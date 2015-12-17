@@ -51,6 +51,7 @@ type Syntax int
 
 //go:generate stringer -type=Syntax
 const (
+	// Implicit default, must stay in the zero-value position.
 	Traditional Syntax = iota
 	Modern
 )

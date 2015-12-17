@@ -29,11 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+//go:generate stringer -type=formatCode
 type formatCode int16
 
 const (
 	formatText   formatCode = 0
-	formatBinary            = 1
+	formatBinary formatCode = 1
 )
 
 // pgType contains type metadata used in RowDescription messages.
