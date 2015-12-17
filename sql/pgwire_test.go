@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/pgwire"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func trivialQuery(pgUrl url.URL) error {
@@ -78,11 +79,11 @@ func TestPGWire(t *testing.T) {
 		if err := trivialQuery(basePgUrl); err != nil {
 			if insecure {
 				if err != pq.ErrSSLNotSupported {
-					t.Fatal(err)
+					t.Error(err)
 				}
 			} else {
 				if !testutils.IsError(err, "no client certificates in request") {
-					t.Fatal(err)
+					t.Error(err)
 				}
 			}
 		}
@@ -93,11 +94,11 @@ func TestPGWire(t *testing.T) {
 			err := trivialQuery(disablePgUrl)
 			if insecure {
 				if err != nil {
-					t.Fatal(err)
+					t.Error(err)
 				}
 			} else {
 				if !testutils.IsError(err, pgwire.ErrSSLRequired) {
-					t.Fatal(err)
+					t.Error(err)
 				}
 			}
 		}
@@ -108,11 +109,11 @@ func TestPGWire(t *testing.T) {
 			err := trivialQuery(requirePgUrlNoCert)
 			if insecure {
 				if err != pq.ErrSSLNotSupported {
-					t.Fatal(err)
+					t.Error(err)
 				}
 			} else {
 				if !testutils.IsError(err, "no client certificates in request") {
-					t.Fatal(err)
+					t.Error(err)
 				}
 			}
 		}
@@ -128,16 +129,16 @@ func TestPGWire(t *testing.T) {
 				err := trivialQuery(requirePgUrlWithCert)
 				if insecure {
 					if err != pq.ErrSSLNotSupported {
-						t.Fatal(err)
+						t.Error(err)
 					}
 				} else {
 					if optUser == certUser {
 						if err != nil {
-							t.Fatal(err)
+							t.Error(err)
 						}
 					} else {
 						if !testutils.IsError(err, `requested user is \w+, but certificate is for \w+`) {
-							t.Fatal(err)
+							t.Error(err)
 						}
 					}
 				}
@@ -168,17 +169,17 @@ func TestPGPrepared(t *testing.T) {
 			},
 			{
 				[]interface{}{1.1},
-				"pq: unknown int value: 1.1",
+				`pq: unknown int value: "1.1"`,
 				[]interface{}{true},
 			},
 			{
 				[]interface{}{"1.0"},
-				"pq: unknown int value: 1.0",
+				`pq: unknown int value: "1.0"`,
 				nil,
 			},
 			{
 				[]interface{}{true},
-				"pq: unknown int value: true",
+				`pq: unknown int value: "true"`,
 				nil,
 			},
 		},
@@ -200,7 +201,7 @@ func TestPGPrepared(t *testing.T) {
 			},
 			{
 				[]interface{}{""},
-				`pq: unknown bool value: `,
+				`pq: unknown bool value: ""`,
 				nil,
 			},
 			// Make sure we can run another after a failure.
@@ -292,7 +293,7 @@ func TestPGPrepared(t *testing.T) {
 			},
 			{
 				[]interface{}{1, 2.1},
-				"pq: unknown int value: 2.1",
+				`pq: unknown int value: "2.1"`,
 				nil,
 			},
 		},
@@ -319,32 +320,34 @@ func TestPGPrepared(t *testing.T) {
 
 	for query, tests := range queryTests {
 		stmt, err := db.Prepare(query)
+		log.Infof("prepare: %s, err: %s", query, err)
 		if err != nil {
-			t.Fatalf("prepare error: %s: %s", query, err)
+			t.Errorf("prepare error: %s: %s", query, err)
 		}
 		for _, test := range tests {
 			rows, err := stmt.Query(test.params...)
+			log.Infof("query: %s, params: %v, err: %s", query, test.params, err)
 			if err != nil {
 				if test.error == "" {
-					t.Fatalf("%s: %#v: unexpected error: %s", query, test.params, err)
+					t.Errorf("%s: %#v: unexpected error: %s", query, test.params, err)
 				}
 				if test.error != err.Error() {
-					t.Fatalf("%s: %#v: expected error: %s, got %s", query, test.params, test.error, err)
+					t.Errorf("%s: %#v: expected error: %s, got %s", query, test.params, test.error, err)
 				}
 				continue
 			}
 			if test.error != "" && err == nil {
-				t.Fatalf("expected error: %s: %#v", query, test.params)
+				t.Errorf("expected error: %s: %#v", query, test.params)
 			}
 			dst := make([]interface{}, len(test.result))
 			for i, d := range test.result {
 				dst[i] = reflect.New(reflect.TypeOf(d)).Interface()
 			}
 			if !rows.Next() {
-				t.Fatalf("expected row: %s: %#v", query, test.params)
+				t.Errorf("expected row: %s: %#v", query, test.params)
 			}
 			if err := rows.Scan(dst...); err != nil {
-				t.Fatal(err)
+				t.Error(err)
 			}
 			rows.Close()
 			for i, d := range dst {
@@ -352,11 +355,11 @@ func TestPGPrepared(t *testing.T) {
 				dst[i] = v
 			}
 			if !reflect.DeepEqual(dst, test.result) {
-				t.Fatalf("%s: %#v: expected %v, got %v", query, test.params, test.result, dst)
+				t.Errorf("%s: %#v: expected %v, got %v", query, test.params, test.result, dst)
 			}
 		}
 		if err := stmt.Close(); err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 	}
 

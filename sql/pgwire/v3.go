@@ -473,40 +473,40 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 			case formatText:
 				v, err := strconv.ParseBool(string(b))
 				if err != nil {
-					return c.sendError(fmt.Sprintf("unknown bool value: %s", b))
+					return c.sendError(fmt.Sprintf("unknown bool value: %q", b))
 				}
 				d.Payload = &driver.Datum_BoolVal{BoolVal: v}
 			default:
-				return c.sendError("unsupported: binary bool parameter")
+				return c.sendError(fmt.Sprintf("unsupported: binary bool parameter: %q", b))
 			}
 		case oid.T_int8:
 			switch paramFormatCodes[i] {
 			case formatText:
 				i, err := strconv.ParseInt(string(b), 10, 64)
 				if err != nil {
-					return c.sendError(fmt.Sprintf("unknown int value: %s", b))
+					return c.sendError(fmt.Sprintf("unknown int value: %q", b))
 				}
 				d.Payload = &driver.Datum_IntVal{IntVal: i}
 			default:
-				return c.sendError("unsupported: binary int parameter")
+				return c.sendError(fmt.Sprintf("unsupported: binary int parameter: %q", b))
 			}
 		case oid.T_float8:
 			switch paramFormatCodes[i] {
 			case formatText:
 				f, err := strconv.ParseFloat(string(b), 64)
 				if err != nil {
-					return c.sendError(fmt.Sprintf("unknown float value: %s", b))
+					return c.sendError(fmt.Sprintf("unknown float value: %q", b))
 				}
 				d.Payload = &driver.Datum_FloatVal{FloatVal: f}
 			default:
-				return c.sendError("unsupported: binary float parameter")
+				return c.sendError(fmt.Sprintf("unsupported: binary float parameter: %q", b))
 			}
 		case oid.T_text:
 			switch paramFormatCodes[i] {
 			case formatText:
 				d.Payload = &driver.Datum_StringVal{StringVal: string(b)}
 			default:
-				return c.sendError("unsupported: binary string parameter")
+				return c.sendError(fmt.Sprintf("unsupported: binary string parameter: %q", b))
 			}
 		default:
 			return c.sendError(fmt.Sprintf("unsupported: %v", t))
