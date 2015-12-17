@@ -148,6 +148,8 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 		if err := c.writeBuf.finishMsg(c.wr); err != nil {
 			return err
 		}
+		// If the buffer is empty (which is the case if ignoring messages),
+		// this does nothing.
 		if err := c.wr.Flush(); err != nil {
 			return err
 		}
@@ -271,10 +273,7 @@ func (c *v3Conn) sendError(errToSend string) error {
 	if err := c.writeBuf.WriteByte(0); err != nil {
 		return err
 	}
-	if err := c.writeBuf.finishMsg(c.wr); err != nil {
-		return err
-	}
-	return c.wr.Flush()
+	return c.writeBuf.finishMsg(c.wr)
 }
 
 func (c *v3Conn) sendResponse(resp driver.Response) error {
