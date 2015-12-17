@@ -59,7 +59,7 @@ var (
 	value2       = roachpb.MakeValueFromString("testValue2")
 	value3       = roachpb.MakeValueFromString("testValue3")
 	value4       = roachpb.MakeValueFromString("testValue4")
-	valueEmpty   = roachpb.Value{}
+	valueEmpty   = roachpb.MakeValueFromString("")
 )
 
 // createTestEngine returns a new in-memory engine with 1MB of storage
@@ -637,7 +637,7 @@ func TestMVCCGetWriteIntentError(t *testing.T) {
 
 func mkVal(s string, ts roachpb.Timestamp) roachpb.Value {
 	v := roachpb.MakeValueFromString(s)
-	v.Timestamp = &ts
+	v.Timestamp = ts
 	return v
 }
 
@@ -665,8 +665,8 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 			txn = txn2
 		}
 		v := *proto.Clone(&kv.Value).(*roachpb.Value)
-		v.Timestamp = nil
-		err := MVCCPut(engine, nil, kv.Key, *kv.Value.Timestamp, v, txn)
+		v.Timestamp = roachpb.ZeroTimestamp
+		err := MVCCPut(engine, nil, kv.Key, kv.Value.Timestamp, v, txn)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1107,10 +1107,15 @@ func TestMVCCScanInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	makeTimestampedValue := func(v roachpb.Value, ts roachpb.Timestamp) roachpb.Value {
+		v.Timestamp = ts
+		return v
+	}
+
 	expKVs := []roachpb.KeyValue{
-		{Key: testKey1, Value: roachpb.MakeValueFromBytesAndTimestamp(value1.RawBytes, ts1)},
-		{Key: testKey2, Value: roachpb.MakeValueFromBytesAndTimestamp(value2.RawBytes, ts4)},
-		{Key: testKey4, Value: roachpb.MakeValueFromBytesAndTimestamp(value4.RawBytes, ts6)},
+		{Key: testKey1, Value: makeTimestampedValue(value1, ts1)},
+		{Key: testKey2, Value: makeTimestampedValue(value2, ts4)},
+		{Key: testKey4, Value: makeTimestampedValue(value4, ts6)},
 	}
 	if !reflect.DeepEqual(kvs, expKVs) {
 		t.Errorf("expected key values equal %v != %v", kvs, expKVs)
@@ -1123,8 +1128,8 @@ func TestMVCCScanInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 	expKVs = []roachpb.KeyValue{
-		{Key: testKey1, Value: roachpb.MakeValueFromBytesAndTimestamp(value1.RawBytes, ts1)},
-		{Key: testKey2, Value: roachpb.MakeValueFromBytesAndTimestamp(value1.RawBytes, ts3)},
+		{Key: testKey1, Value: makeTimestampedValue(value1, ts1)},
+		{Key: testKey2, Value: makeTimestampedValue(value1, ts3)},
 	}
 	if !reflect.DeepEqual(kvs, expKVs) {
 		t.Errorf("expected key values equal %v != %v", kvs, expKVs)
@@ -2200,7 +2205,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	}
 	mKeySize := int64(mvccKey(key).EncodedSize())
 	vKeySize := mvccVersionTimestampSize
-	vValSize := encodedSize(&value, t)
+	vValSize := int64(len(value.RawBytes))
 
 	expMS := MVCCStats{
 		LiveBytes: mKeySize + vKeySize + vValSize,
@@ -2262,7 +2267,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	mKey2Size := int64(mvccKey(key2).EncodedSize())
 	mVal2Size := encodedSize(&MVCCMetadata{Timestamp: ts4, Txn: txn}, t)
 	vKey2Size := mvccVersionTimestampSize
-	vVal2Size := encodedSize(&value2, t)
+	vVal2Size := int64(len(value2.RawBytes))
 	expMS3 := MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
 		KeyCount:    2,
@@ -2315,7 +2320,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	txnKeySize := int64(mvccKey(txnKey).EncodedSize())
-	txnValSize := encodedSize(&MVCCMetadata{Value: &txnVal}, t)
+	txnValSize := encodedSize(&MVCCMetadata{RawBytes: txnVal.RawBytes}, t)
 	expMS6 := expMS5
 	expMS6.SysBytes += txnKeySize + txnValSize
 	expMS6.SysCount++
@@ -2464,14 +2469,14 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			}
 			for _, val := range test.vals[i : i+1] {
 				if i == len(test.vals)-1 && test.isDeleted {
-					if err := MVCCDelete(engine, ms, test.key, *val.Timestamp, nil); err != nil {
+					if err := MVCCDelete(engine, ms, test.key, val.Timestamp, nil); err != nil {
 						t.Fatal(err)
 					}
 					continue
 				}
 				valCpy := *proto.Clone(&val).(*roachpb.Value)
-				valCpy.Timestamp = nil
-				if err := MVCCPut(engine, ms, test.key, *val.Timestamp, valCpy, nil); err != nil {
+				valCpy.Timestamp = roachpb.ZeroTimestamp
+				if err := MVCCPut(engine, ms, test.key, val.Timestamp, valCpy, nil); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -2567,8 +2572,8 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 	vals := []roachpb.Value{val1, val2}
 	for _, val := range vals {
 		valCpy := *proto.Clone(&val).(*roachpb.Value)
-		valCpy.Timestamp = nil
-		if err := MVCCPut(engine, nil, key, *val.Timestamp, valCpy, nil); err != nil {
+		valCpy.Timestamp = roachpb.ZeroTimestamp
+		if err := MVCCPut(engine, nil, key, val.Timestamp, valCpy, nil); err != nil {
 			t.Fatal(err)
 		}
 	}

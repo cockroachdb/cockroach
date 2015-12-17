@@ -424,47 +424,27 @@ class Value : public ::google::protobuf::Message {
   ::std::string* release_raw_bytes();
   void set_allocated_raw_bytes(::std::string* raw_bytes);
 
-  // optional fixed32 checksum = 3;
-  bool has_checksum() const;
-  void clear_checksum();
-  static const int kChecksumFieldNumber = 3;
-  ::google::protobuf::uint32 checksum() const;
-  void set_checksum(::google::protobuf::uint32 value);
-
-  // optional .cockroach.roachpb.Timestamp timestamp = 4;
+  // optional .cockroach.roachpb.Timestamp timestamp = 2;
   bool has_timestamp() const;
   void clear_timestamp();
-  static const int kTimestampFieldNumber = 4;
+  static const int kTimestampFieldNumber = 2;
   const ::cockroach::roachpb::Timestamp& timestamp() const;
   ::cockroach::roachpb::Timestamp* mutable_timestamp();
   ::cockroach::roachpb::Timestamp* release_timestamp();
   void set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp);
 
-  // optional .cockroach.roachpb.ValueType tag = 5;
-  bool has_tag() const;
-  void clear_tag();
-  static const int kTagFieldNumber = 5;
-  ::cockroach::roachpb::ValueType tag() const;
-  void set_tag(::cockroach::roachpb::ValueType value);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Value)
  private:
   inline void set_has_raw_bytes();
   inline void clear_has_raw_bytes();
-  inline void set_has_checksum();
-  inline void clear_has_checksum();
   inline void set_has_timestamp();
   inline void clear_has_timestamp();
-  inline void set_has_tag();
-  inline void clear_has_tag();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::internal::ArenaStringPtr raw_bytes_;
   ::cockroach::roachpb::Timestamp* timestamp_;
-  ::google::protobuf::uint32 checksum_;
-  int tag_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fdata_2eproto();
@@ -2232,39 +2212,15 @@ inline void Value::set_allocated_raw_bytes(::std::string* raw_bytes) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Value.raw_bytes)
 }
 
-// optional fixed32 checksum = 3;
-inline bool Value::has_checksum() const {
+// optional .cockroach.roachpb.Timestamp timestamp = 2;
+inline bool Value::has_timestamp() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void Value::set_has_checksum() {
+inline void Value::set_has_timestamp() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void Value::clear_has_checksum() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void Value::clear_checksum() {
-  checksum_ = 0u;
-  clear_has_checksum();
-}
-inline ::google::protobuf::uint32 Value::checksum() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Value.checksum)
-  return checksum_;
-}
-inline void Value::set_checksum(::google::protobuf::uint32 value) {
-  set_has_checksum();
-  checksum_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Value.checksum)
-}
-
-// optional .cockroach.roachpb.Timestamp timestamp = 4;
-inline bool Value::has_timestamp() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void Value::set_has_timestamp() {
-  _has_bits_[0] |= 0x00000004u;
-}
 inline void Value::clear_has_timestamp() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000002u;
 }
 inline void Value::clear_timestamp() {
   if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
@@ -2297,31 +2253,6 @@ inline void Value::set_allocated_timestamp(::cockroach::roachpb::Timestamp* time
     clear_has_timestamp();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Value.timestamp)
-}
-
-// optional .cockroach.roachpb.ValueType tag = 5;
-inline bool Value::has_tag() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
-}
-inline void Value::set_has_tag() {
-  _has_bits_[0] |= 0x00000008u;
-}
-inline void Value::clear_has_tag() {
-  _has_bits_[0] &= ~0x00000008u;
-}
-inline void Value::clear_tag() {
-  tag_ = 0;
-  clear_has_tag();
-}
-inline ::cockroach::roachpb::ValueType Value::tag() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Value.tag)
-  return static_cast< ::cockroach::roachpb::ValueType >(tag_);
-}
-inline void Value::set_tag(::cockroach::roachpb::ValueType value) {
-  assert(::cockroach::roachpb::ValueType_IsValid(value));
-  set_has_tag();
-  tag_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Value.tag)
 }
 
 // -------------------------------------------------------------------

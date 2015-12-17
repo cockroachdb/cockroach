@@ -152,12 +152,13 @@ func copySeqCache(e engine.Engine, srcID, dstID roachpb.RangeID, keyMin, keyMax 
 				return false, util.Errorf("could not decode sequence cache value %s [% x]: %s",
 					kv.Key, kv.Value, err)
 			}
-			meta.Value.Checksum = nil
-			meta.Value.InitChecksum(key)
+			value := meta.Value()
+			value.ClearChecksum()
+			value.InitChecksum(key)
+			meta.RawBytes = value.RawBytes
 			_, _, err = engine.PutProto(e, encKey, meta)
 			return false, err
 		})
-
 }
 
 // CopyInto copies all the results from this sequence cache into the destRangeID

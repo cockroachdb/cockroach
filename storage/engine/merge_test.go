@@ -57,7 +57,7 @@ func mustMarshal(m proto.Message) []byte {
 
 func appender(s string) []byte {
 	val := roachpb.MakeValueFromString(s)
-	v := &MVCCMetadata{Value: &val}
+	v := &MVCCMetadata{RawBytes: val.RawBytes}
 	return mustMarshal(v)
 }
 
@@ -84,7 +84,7 @@ func timeSeries(start int64, duration int64, samples ...tsSample) []byte {
 	if err := v.SetProto(ts); err != nil {
 		panic(err)
 	}
-	return mustMarshal(&MVCCMetadata{Value: &v})
+	return mustMarshal(&MVCCMetadata{RawBytes: v.RawBytes})
 }
 
 // TestGoMerge tests the function goMerge but not the integration with
@@ -145,7 +145,7 @@ func TestGoMerge(t *testing.T) {
 	}{
 		{appender(""), appender(""), appender("")},
 		{nil, appender(""), appender("")},
-		{nil, nil, mustMarshal(&MVCCMetadata{Value: &roachpb.Value{}})},
+		{nil, nil, mustMarshal(&MVCCMetadata{RawBytes: []byte{}})},
 		{appender("\n "), appender(" \t "), appender("\n  \t ")},
 		{appender("ქართული"), appender("\nKhartuli"), appender("ქართული\nKhartuli")},
 		{appender(gibber1), appender(gibber2), appender(gibber1 + gibber2)},
@@ -291,11 +291,11 @@ func unmarshalTimeSeries(t testing.TB, b []byte) *roachpb.InternalTimeSeriesData
 	if b == nil {
 		return nil
 	}
-	var mvccValue MVCCMetadata
-	if err := proto.Unmarshal(b, &mvccValue); err != nil {
+	var meta MVCCMetadata
+	if err := proto.Unmarshal(b, &meta); err != nil {
 		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
 	}
-	valueTS, err := mvccValue.Value.GetTimeseries()
+	valueTS, err := meta.Value().GetTimeseries()
 	if err != nil {
 		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
 	}

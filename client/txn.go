@@ -194,7 +194,8 @@ func (txn *Txn) Put(key, value interface{}) error {
 
 // CPut conditionally sets the value for a key if the existing value is equal
 // to expValue. To conditionally set a value only if there is no existing entry
-// pass nil for expValue.
+// pass nil for expValue. Note that this must be an interface{}(nil), not a
+// typed nil value (e.g. []byte(nil)).
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc).

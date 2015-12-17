@@ -148,14 +148,17 @@ class MVCCMetadata : public ::google::protobuf::Message {
   ::google::protobuf::int64 val_bytes() const;
   void set_val_bytes(::google::protobuf::int64 value);
 
-  // optional .cockroach.roachpb.Value value = 6;
-  bool has_value() const;
-  void clear_value();
-  static const int kValueFieldNumber = 6;
-  const ::cockroach::roachpb::Value& value() const;
-  ::cockroach::roachpb::Value* mutable_value();
-  ::cockroach::roachpb::Value* release_value();
-  void set_allocated_value(::cockroach::roachpb::Value* value);
+  // optional bytes raw_bytes = 6;
+  bool has_raw_bytes() const;
+  void clear_raw_bytes();
+  static const int kRawBytesFieldNumber = 6;
+  const ::std::string& raw_bytes() const;
+  void set_raw_bytes(const ::std::string& value);
+  void set_raw_bytes(const char* value);
+  void set_raw_bytes(const void* value, size_t size);
+  ::std::string* mutable_raw_bytes();
+  ::std::string* release_raw_bytes();
+  void set_allocated_raw_bytes(::std::string* raw_bytes);
 
   // @@protoc_insertion_point(class_scope:cockroach.storage.engine.MVCCMetadata)
  private:
@@ -169,8 +172,8 @@ class MVCCMetadata : public ::google::protobuf::Message {
   inline void clear_has_key_bytes();
   inline void set_has_val_bytes();
   inline void clear_has_val_bytes();
-  inline void set_has_value();
-  inline void clear_has_value();
+  inline void set_has_raw_bytes();
+  inline void clear_has_raw_bytes();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -179,7 +182,7 @@ class MVCCMetadata : public ::google::protobuf::Message {
   ::cockroach::roachpb::Timestamp* timestamp_;
   ::google::protobuf::int64 key_bytes_;
   ::google::protobuf::int64 val_bytes_;
-  ::cockroach::roachpb::Value* value_;
+  ::google::protobuf::internal::ArenaStringPtr raw_bytes_;
   bool deleted_;
   friend void  protobuf_AddDesc_cockroach_2fstorage_2fengine_2fmvcc_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fstorage_2fengine_2fmvcc_2eproto();
@@ -563,47 +566,57 @@ inline void MVCCMetadata::set_val_bytes(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCMetadata.val_bytes)
 }
 
-// optional .cockroach.roachpb.Value value = 6;
-inline bool MVCCMetadata::has_value() const {
+// optional bytes raw_bytes = 6;
+inline bool MVCCMetadata::has_raw_bytes() const {
   return (_has_bits_[0] & 0x00000020u) != 0;
 }
-inline void MVCCMetadata::set_has_value() {
+inline void MVCCMetadata::set_has_raw_bytes() {
   _has_bits_[0] |= 0x00000020u;
 }
-inline void MVCCMetadata::clear_has_value() {
+inline void MVCCMetadata::clear_has_raw_bytes() {
   _has_bits_[0] &= ~0x00000020u;
 }
-inline void MVCCMetadata::clear_value() {
-  if (value_ != NULL) value_->::cockroach::roachpb::Value::Clear();
-  clear_has_value();
+inline void MVCCMetadata::clear_raw_bytes() {
+  raw_bytes_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_raw_bytes();
 }
-inline const ::cockroach::roachpb::Value& MVCCMetadata::value() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.MVCCMetadata.value)
-  return value_ != NULL ? *value_ : *default_instance_->value_;
+inline const ::std::string& MVCCMetadata::raw_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.MVCCMetadata.raw_bytes)
+  return raw_bytes_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::cockroach::roachpb::Value* MVCCMetadata::mutable_value() {
-  set_has_value();
-  if (value_ == NULL) {
-    value_ = new ::cockroach::roachpb::Value;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.MVCCMetadata.value)
-  return value_;
+inline void MVCCMetadata::set_raw_bytes(const ::std::string& value) {
+  set_has_raw_bytes();
+  raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCMetadata.raw_bytes)
 }
-inline ::cockroach::roachpb::Value* MVCCMetadata::release_value() {
-  clear_has_value();
-  ::cockroach::roachpb::Value* temp = value_;
-  value_ = NULL;
-  return temp;
+inline void MVCCMetadata::set_raw_bytes(const char* value) {
+  set_has_raw_bytes();
+  raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.MVCCMetadata.raw_bytes)
 }
-inline void MVCCMetadata::set_allocated_value(::cockroach::roachpb::Value* value) {
-  delete value_;
-  value_ = value;
-  if (value) {
-    set_has_value();
+inline void MVCCMetadata::set_raw_bytes(const void* value, size_t size) {
+  set_has_raw_bytes();
+  raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.MVCCMetadata.raw_bytes)
+}
+inline ::std::string* MVCCMetadata::mutable_raw_bytes() {
+  set_has_raw_bytes();
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.MVCCMetadata.raw_bytes)
+  return raw_bytes_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* MVCCMetadata::release_raw_bytes() {
+  clear_has_raw_bytes();
+  return raw_bytes_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void MVCCMetadata::set_allocated_raw_bytes(::std::string* raw_bytes) {
+  if (raw_bytes != NULL) {
+    set_has_raw_bytes();
   } else {
-    clear_has_value();
+    clear_has_raw_bytes();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.MVCCMetadata.value)
+  raw_bytes_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), raw_bytes);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.MVCCMetadata.raw_bytes)
 }
 
 // -------------------------------------------------------------------

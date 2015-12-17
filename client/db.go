@@ -56,7 +56,7 @@ func (kv *KeyValue) PrettyValue() string {
 	if kv.Value == nil {
 		return "nil"
 	}
-	switch kv.Value.Tag {
+	switch kv.Value.GetTag() {
 	case roachpb.ValueType_INT:
 		v, err := kv.Value.GetInt()
 		if err != nil {
@@ -87,13 +87,13 @@ func (kv *KeyValue) PrettyValue() string {
 
 func (kv *KeyValue) setTimestamp(t roachpb.Timestamp) {
 	if kv.Value != nil {
-		kv.Value.Timestamp = &t
+		kv.Value.Timestamp = t
 	}
 }
 
 // Timestamp returns the timestamp the value was written at.
 func (kv *KeyValue) Timestamp() time.Time {
-	if kv.Value == nil || kv.Value.Timestamp == nil {
+	if kv.Value == nil {
 		return time.Time{}
 	}
 	return kv.Value.Timestamp.GoTime()
@@ -302,7 +302,8 @@ func (db *DB) Put(key, value interface{}) error {
 
 // CPut conditionally sets the value for a key if the existing value is equal
 // to expValue. To conditionally set a value only if there is no existing entry
-// pass nil for expValue.
+// pass nil for expValue. Note that this must be an interface{}(nil), not a
+// typed nil value (e.g. []byte(nil)).
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc).
