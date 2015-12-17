@@ -189,7 +189,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 		for _, secondaryIndexEntry := range secondaryIndexEntries {
 			if log.V(2) {
-				log.Infof("CPut %s -> %v", prettyKey(secondaryIndexEntry.key, 0),
+				log.Infof("CPut %s -> %v", secondaryIndexEntry.key,
 					secondaryIndexEntry.value)
 			}
 			b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
@@ -197,7 +197,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 		// Write the row sentinel.
 		if log.V(2) {
-			log.Infof("CPut %s -> NULL", prettyKey(primaryIndexKey, 0))
+			log.Infof("CPut %s -> NULL", primaryIndexKey)
 		}
 		b.CPut(primaryIndexKey, nil, nil)
 
@@ -218,7 +218,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 				key := MakeColumnKey(col.ID, primaryIndexKey)
 				if log.V(2) {
-					log.Infof("CPut %s -> %v", prettyKey(key, 0), val)
+					log.Infof("CPut %s -> %v", key, val)
 				}
 
 				b.CPut(key, marshalled[i], nil)

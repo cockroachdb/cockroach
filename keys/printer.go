@@ -249,7 +249,7 @@ func decodeKeyPrint(key roachpb.Key) string {
 	return buf.String()
 }
 
-// PrettyPrint print the key in a human readable format, which organized as:
+// PrettyPrint prints the key in a human readable format, which organized as:
 // Key's Format												Key's Value
 // /Local/...												"\x01"+...
 // 		/Store/...											"\x01s"+...

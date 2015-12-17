@@ -48,7 +48,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 		tableStartKey := roachpb.Key(tablePrefix)
 		tableEndKey := tableStartKey.PrefixEnd()
 		if log.V(2) {
-			log.Infof("DelRange %s - %s", prettyKey(tableStartKey, 0), prettyKey(tableEndKey, 0))
+			log.Infof("DelRange %s - %s", tableStartKey, tableEndKey)
 		}
 		b.DelRange(tableStartKey, tableEndKey)
 	}
