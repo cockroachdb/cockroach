@@ -57,11 +57,10 @@ func TestTypeCheck(t *testing.T) {
 		`true IS NOT FALSE`,
 	}
 	for _, d := range testData {
-		q, err := ParseTraditional("SELECT " + d)
+		expr, err := ParseExprTraditional(d)
 		if err != nil {
 			t.Fatalf("%s: %v", d, err)
 		}
-		expr := q[0].(*Select).Exprs[0].Expr
 		if _, err := expr.TypeCheck(); err != nil {
 			t.Errorf("%s: unexpected error %s", d, err)
 		}
@@ -106,11 +105,10 @@ func TestTypeCheckError(t *testing.T) {
 		{`COALESCE(1, 2, 3, 4, '5')`, `incompatible COALESCE expressions int, string`},
 	}
 	for _, d := range testData {
-		q, err := ParseTraditional("SELECT " + d.expr)
+		expr, err := ParseExprTraditional(d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		expr := q[0].(*Select).Exprs[0].Expr
 		if _, err := expr.TypeCheck(); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}

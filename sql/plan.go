@@ -153,17 +153,14 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 }
 
 func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
-	stmts, err := parser.ParseTraditional(sql)
+	stmt, err := parser.ParseOneTraditional(sql)
 	if err != nil {
 		return nil, err
 	}
-	if len(stmts) != 1 {
-		return nil, util.Errorf("expected single statement, found %d", len(stmts))
-	}
-	if err := parser.FillArgs(stmts[0], golangParameters(args)); err != nil {
+	if err := parser.FillArgs(stmt, golangParameters(args)); err != nil {
 		return nil, err
 	}
-	return p.makePlan(stmts[0])
+	return p.makePlan(stmt)
 }
 
 func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, error) {
