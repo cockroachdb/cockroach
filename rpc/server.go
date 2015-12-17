@@ -61,6 +61,7 @@ type Server struct {
 
 	mu             sync.RWMutex
 	activeConns    map[net.Conn]struct{}
+	openCallbacks  []func(conn net.Conn)
 	closeCallbacks []func(conn net.Conn)
 	methods        map[string]method
 }
@@ -134,6 +135,22 @@ func (s *Server) RegisterAsync(name string, public bool,
 	return nil
 }
 
+// AddOpenCallback adds a callback to the openCallbacks slice to
+// be invoked when a connection is opend.
+func (s *Server) AddOpenCallback(cb func(conn net.Conn)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.openCallbacks = append(s.openCallbacks, cb)
+}
+
+func (s *Server) runOpenCallbacks(conn net.Conn) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, cb := range s.openCallbacks {
+		cb(conn)
+	}
+}
+
 // AddCloseCallback adds a callback to the closeCallbacks slice to
 // be invoked when a connection is closed.
 func (s *Server) AddCloseCallback(cb func(conn net.Conn)) {
@@ -181,6 +198,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
+
+	// Run open callbacks.
+	s.runOpenCallbacks(conn)
 
 	codec := codec.NewServerCodec(conn)
 	responses := make(chan serverResponse)
