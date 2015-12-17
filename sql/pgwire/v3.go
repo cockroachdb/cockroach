@@ -19,6 +19,7 @@ package pgwire
 
 import (
 	"bufio"
+	"fmt"
 	"net"
 	"strconv"
 
@@ -31,8 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+//go:generate stringer -type=clientMessageType
 type clientMessageType byte
 
+//go:generate stringer -type=serverMessageType
 type serverMessageType byte
 
 // http://www.postgresql.org/docs/9.4/static/protocol-message-formats.html
@@ -124,6 +127,7 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	if err := c.wr.Flush(); err != nil {
 		return err
 	}
+
 	for {
 		c.writeBuf.initMsg(serverMsgReady)
 		var txnStatus byte = 'I'
@@ -138,7 +142,7 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			}
 		}
 		if log.V(2) {
-			log.Infof("pgwire writing transaction status: %q", txnStatus)
+			log.Infof("pgwire: %s: %q", serverMsgReady, txnStatus)
 		}
 		c.writeBuf.WriteByte(txnStatus)
 		if err := c.writeBuf.finishMsg(c.wr); err != nil {
@@ -151,6 +155,9 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 		if err != nil {
 			return err
 		}
+		if log.V(2) {
+			log.Infof("pgwire: processing %s", typ)
+		}
 		switch typ {
 		case clientMsgSimpleQuery:
 			err = c.handleSimpleQuery(&c.readBuf)
@@ -162,7 +169,7 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			return nil
 
 		default:
-			log.Fatalf("unrecognized client message type %c", typ)
+			err = c.sendError(fmt.Sprintf("unrecognized client message type %s", typ))
 		}
 		if err != nil {
 			return err

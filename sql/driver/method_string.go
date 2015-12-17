@@ -9,8 +9,9 @@ const _Method_name = "Execute"
 var _Method_index = [...]uint8{0, 7}
 
 func (i Method) String() string {
+	i -= 1
 	if i < 0 || i >= Method(len(_Method_index)-1) {
-		return fmt.Sprintf("Method(%d)", i)
+		return fmt.Sprintf("Method(%d)", i+1)
 	}
 	return _Method_name[_Method_index[i]:_Method_index[i+1]]
 }
