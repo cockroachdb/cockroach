@@ -100,12 +100,12 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 	}
 	for i, d := range testData {
-		stmt, err := parser.ParseTraditional(
+		stmt, err := parser.ParseOneTraditional(
 			"CREATE TABLE foo.test (a " + d.sqlType + " PRIMARY KEY)")
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		create := stmt[0].(*parser.CreateTable)
+		create := stmt.(*parser.CreateTable)
 		if err := create.Table.NormalizeTableName(""); err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
@@ -196,11 +196,11 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		},
 	}
 	for i, d := range testData {
-		stmt, err := parser.ParseTraditional("CREATE TABLE foo.test (" + d.sql + ")")
+		stmt, err := parser.ParseOneTraditional("CREATE TABLE foo.test (" + d.sql + ")")
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		create := stmt[0].(*parser.CreateTable)
+		create := stmt.(*parser.CreateTable)
 		if err := create.Table.NormalizeTableName(""); err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
@@ -220,12 +220,12 @@ func TestMakeTableDescIndexes(t *testing.T) {
 
 func TestPrimaryKeyUnspecified(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	stmt, err := parser.ParseTraditional(
+	stmt, err := parser.ParseOneTraditional(
 		"CREATE TABLE foo.test (a INT, b INT, CONSTRAINT c UNIQUE (b))")
 	if err != nil {
 		t.Fatal(err)
 	}
-	create := stmt[0].(*parser.CreateTable)
+	create := stmt.(*parser.CreateTable)
 	if err := create.Table.NormalizeTableName(""); err != nil {
 		t.Fatal(err)
 	}
