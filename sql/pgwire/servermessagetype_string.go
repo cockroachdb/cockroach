@@ -5,27 +5,30 @@ package pgwire
 import "fmt"
 
 const (
-	_serverMessageType_name_0 = "serverMsgParseComplete"
+	_serverMessageType_name_0 = "serverMsgParseCompleteserverMsgBindComplete"
 	_serverMessageType_name_1 = "serverMsgCommandCompleteserverMsgDataRowserverMsgErrorResponse"
 	_serverMessageType_name_2 = "serverMsgEmptyQuery"
 	_serverMessageType_name_3 = "serverMsgAuth"
 	_serverMessageType_name_4 = "serverMsgRowDescription"
 	_serverMessageType_name_5 = "serverMsgReady"
+	_serverMessageType_name_6 = "serverMsgParameterDescription"
 )
 
 var (
-	_serverMessageType_index_0 = [...]uint8{0, 22}
+	_serverMessageType_index_0 = [...]uint8{0, 22, 43}
 	_serverMessageType_index_1 = [...]uint8{0, 24, 40, 62}
 	_serverMessageType_index_2 = [...]uint8{0, 19}
 	_serverMessageType_index_3 = [...]uint8{0, 13}
 	_serverMessageType_index_4 = [...]uint8{0, 23}
 	_serverMessageType_index_5 = [...]uint8{0, 14}
+	_serverMessageType_index_6 = [...]uint8{0, 29}
 )
 
 func (i serverMessageType) String() string {
 	switch {
-	case i == 49:
-		return _serverMessageType_name_0
+	case 49 <= i && i <= 50:
+		i -= 49
+		return _serverMessageType_name_0[_serverMessageType_index_0[i]:_serverMessageType_index_0[i+1]]
 	case 67 <= i && i <= 69:
 		i -= 67
 		return _serverMessageType_name_1[_serverMessageType_index_1[i]:_serverMessageType_index_1[i+1]]
@@ -37,6 +40,8 @@ func (i serverMessageType) String() string {
 		return _serverMessageType_name_4
 	case i == 90:
 		return _serverMessageType_name_5
+	case i == 116:
+		return _serverMessageType_name_6
 	default:
 		return fmt.Sprintf("serverMessageType(%d)", i)
 	}
