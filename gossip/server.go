@@ -88,6 +88,10 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 	if err != nil {
 		return nil, util.Errorf("local addr %s could not be converted to net.Addr: %s", args.LAddr, err)
 	}
+	// Verify that the client connection is valid and hasn't been closed.
+	if _, ok := s.lAddrMap[lAddr.String()]; !ok {
+		return nil, util.Errorf("connection already closed; ignoring gossip")
+	}
 
 	reply.NodeID = s.is.NodeID
 
@@ -222,6 +226,7 @@ func (s *server) start(rpcServer *rpc.Server, addr net.Addr, stopper *stop.Stopp
 	if err := rpcServer.Register("Gossip.Gossip", s.Gossip, &Request{}); err != nil {
 		log.Fatalf("unable to register gossip service with RPC server: %s", err)
 	}
+	rpcServer.AddOpenCallback(s.onOpen)
 	rpcServer.AddCloseCallback(s.onClose)
 
 	updateCallback := func(_ string, _ roachpb.Value) {
@@ -247,6 +252,21 @@ func (s *server) stop(unregister func()) {
 	unregister()
 	s.closed = true
 	s.ready.Broadcast() // wake up clients
+}
+
+// onOpen is invoked by the rpcServer each time a client connects.
+// Add a placeholder value for the lAddrMap. This prevents races
+// where inflight RPCs re-add gossip clients to the incoming map
+// even when the incoming connection has been closed out from
+// under them.
+//
+// TODO(spencer): remove use of onOpen callback once gossip is using
+//   streaming with gRPC.
+func (s *server) onOpen(conn net.Conn) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	remoteAddr := conn.RemoteAddr().String()
+	s.lAddrMap[remoteAddr] = clientInfo{}
 }
 
 // onClose is invoked by the rpcServer each time a connected client

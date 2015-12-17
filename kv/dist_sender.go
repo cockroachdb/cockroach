@@ -115,6 +115,7 @@ type DistSender struct {
 	// RPCSend is used to send RPC calls and defaults to rpc.Send
 	// outside of tests.
 	rpcSend         rpcSendFn
+	rpcContext      *rpc.Context
 	rpcRetryOptions retry.Options
 }
 
@@ -142,6 +143,7 @@ type DistSenderContext struct {
 	// The RPC dispatcher. Defaults to rpc.Send but can be changed here
 	// for testing purposes.
 	RPCSend           rpcSendFn
+	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
 }
 
@@ -184,6 +186,9 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	ds.rpcSend = rpc.Send
 	if ctx.RPCSend != nil {
 		ds.rpcSend = ctx.RPCSend
+	}
+	if ctx.RPCContext != nil {
+		ds.rpcContext = ctx.RPCContext
 	}
 	ds.rpcRetryOptions = defaultRPCRetryOptions
 	if ctx.RPCRetryOptions != nil {
@@ -359,8 +364,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 	}
 
 	const method = "Node.Batch"
-	replies, err := ds.rpcSend(rpcOpts, method, addrs, getArgs, getReply,
-		ds.gossip.RPCContext)
+	replies, err := ds.rpcSend(rpcOpts, method, addrs, getArgs, getReply, ds.rpcContext)
 	if err != nil {
 		return nil, err
 	}

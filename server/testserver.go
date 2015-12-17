@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -114,6 +115,14 @@ func (ts *TestServer) Gossip() *gossip.Gossip {
 func (ts *TestServer) Clock() *hlc.Clock {
 	if ts != nil {
 		return ts.clock
+	}
+	return nil
+}
+
+// RPCContext returns the rpc context used by the TestServer.
+func (ts *TestServer) RPCContext() *rpc.Context {
+	if ts != nil {
+		return ts.rpcContext
 	}
 	return nil
 }

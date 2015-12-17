@@ -67,6 +67,7 @@ type Server struct {
 
 	mux           *http.ServeMux
 	clock         *hlc.Clock
+	rpcContext    *crpc.Context
 	rpc           *crpc.Server
 	gossip        *gossip.Gossip
 	storePool     *storage.StorePool
@@ -113,25 +114,25 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.clock.SetMaxOffset(ctx.MaxOffset)
 
-	rpcContext := crpc.NewContext(&ctx.Context, s.clock, stopper)
+	s.rpcContext = crpc.NewContext(&ctx.Context, s.clock, stopper)
 	stopper.RunWorker(func() {
-		rpcContext.RemoteClocks.MonitorRemoteOffsets(stopper)
+		s.rpcContext.RemoteClocks.MonitorRemoteOffsets(stopper)
 	})
 
-	s.rpc = crpc.NewServer(rpcContext)
+	s.rpc = crpc.NewServer(s.rpcContext)
 
-	s.gossip = gossip.New(rpcContext, s.ctx.GossipBootstrapResolvers)
+	s.gossip = gossip.New(s.rpcContext, s.ctx.GossipBootstrapResolvers)
 	s.storePool = storage.NewStorePool(s.gossip, s.clock, ctx.TimeUntilStoreDead, stopper)
 
 	feed := util.NewFeed(stopper)
 	tracer := tracer.NewTracer(feed, ctx.Addr)
 
-	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.clock}, s.gossip)
+	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.clock, RPCContext: s.rpcContext}, s.gossip)
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, tracer, s.stopper)
 	s.db = client.NewDB(sender)
 
 	var err error
-	s.raftTransport, err = newRPCTransport(s.gossip, s.rpc, rpcContext)
+	s.raftTransport, err = newRPCTransport(s.gossip, s.rpc, s.rpcContext)
 	if err != nil {
 		return nil, err
 	}
