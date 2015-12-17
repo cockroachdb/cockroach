@@ -288,11 +288,17 @@ SET DATABASE = test;
 			} else if len(fields) < 2 {
 				t.Fatalf("%s: invalid test statement: %s", query.pos, s.Text())
 			} else {
-				// TODO(pmattis): Parse "query <type-string> <sort-mode> <label>". The
-				// type string specifies the number of columns and their types: T for
-				// text, I for integer, R for floating point, and B for boolean. The
-				// sort mode is one of "nosort", "rowsort", "valuesort", or "colnames".
-				// The default is "nosort".
+				// Parse "query <type-string> <sort-mode> <label>"
+				// The type string specifies the number of columns and their types:
+				//   - T for text
+				//   - I for integer
+				//   - R for floating point
+				//   - B for boolean
+				// The sort mode is one of:
+				//   - "nosort" (default)
+				//   - "rowsort"
+				//   - "valuesort"
+				//   - "colnames"
 				//
 				// The label is optional. If specified, the test runner stores a hash
 				// of the results of the query under the given label. If the label is
