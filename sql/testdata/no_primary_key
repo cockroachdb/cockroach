@@ -38,8 +38,8 @@ ALTER TABLE t ADD c STRING
 statement ok
 INSERT INTO t VALUES (5, 6, '7')
 
-query IIT
-select * from t rowsort
+query IIT rowsort
+select * from t
 ----
 1 2 NULL
 1 2 NULL
