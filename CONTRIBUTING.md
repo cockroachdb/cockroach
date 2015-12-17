@@ -2,28 +2,26 @@
 
 ### Getting and building
 
-### Assumed
- * A working C++ compiler (on mac os x something like `xcode-select
-   --install` will get you started). The compiler must support C++11
-   (GCC 4.9+ and clang 3.6+ are known to work).
- * [Go environment](http://golang.org/doc/code.html). Currently a
-   64-bit version of go 1.5 is required.
- * Git 1.8+ and Mercurial (for retrieving dependencies).
+1.  Install the following prerequisites, as necessary. If you're on Mac OS X, [homebrew](http://brew.sh/) can be very helpful to fulfill these dependencies.
+    - A C++ compiler that supports C++11 (GCC 4.9+ and clang 3.6+ are known to work). On Mac OS X, Xcode should suffice. 
+    - [Go environment](http://golang.org/doc/code.html). Currently, a 64-bit version of Go 1.5 is required.
+    - Git 1.8+ 
 
-If you're on Mac OS X, [homebrew](http://brew.sh/) can be very helpful to fulfill these dependencies.
+2.  Get the CockroachDB code from your Go workspace directory (specified in your `GOPATH` environment variable):
 
-You can `go get -d github.com/cockroachdb/cockroach` or, alternatively,
+    ```bash
+    go get -d github.com/cockroachdb/cockroach
+    cd cockroach
+    ```
 
-```bash
-mkdir -p $GOPATH/src/github.com/cockroachdb/
-cd $GOPATH/src/github.com/cockroachdb/
-git clone git@github.com:cockroachdb/cockroach.git
-cd cockroach
-```
+    Alternately:
 
-Now you should be all set for `make build`, `make test` and everything else our Makefile has to
-offer. Note that the first time you run `make` various dependent libraries and tools will be
-downloaded and installed which can be somewhat time consuming. Be patient.
+    ```bash
+    git clone git@github.com:cockroachdb/cockroach.git
+    cd cockroach
+    ```
+
+3.  Run `make build`, `make test`, or anything else our Makefile offers. Note that the first time you run `make`, it can take some time to download and install various dependent libraries and tools. 
 
 Note that if you edit a `.proto` or `.ts` file, you will need to manually regenerate the associated `.pb.{go,cc,h}` or `.js` files using `go generate ./...`.
 `go generate` requires a collection of node modules which are installed via npm. If you don't have npm, it typically comes with node. To get it via homebrew:
