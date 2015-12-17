@@ -106,6 +106,20 @@ func (b *readBuffer) getString() (string, error) {
 	return *((*string)(unsafe.Pointer(&s))), nil
 }
 
+func (b *readBuffer) getPrepareType() (prepareType, error) {
+	v, err := b.getBytes(1)
+	return prepareType(v[0]), err
+}
+
+func (b *readBuffer) getBytes(n int) ([]byte, error) {
+	if len(b.msg) < n {
+		return nil, util.Errorf("insufficient data: %d", len(b.msg))
+	}
+	v := b.msg[:n]
+	b.msg = b.msg[n:]
+	return v, nil
+}
+
 func (b *readBuffer) getInt16() (int16, error) {
 	if len(b.msg) < 2 {
 		return 0, util.Errorf("insufficient data: %d", len(b.msg))

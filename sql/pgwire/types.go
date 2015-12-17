@@ -25,6 +25,7 @@ import (
 	"github.com/lib/pq/oid"
 
 	"github.com/cockroachdb/cockroach/sql/driver"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -207,3 +208,25 @@ func formatTs(t time.Time) (b []byte) {
 	}
 	return b
 }
+
+var (
+	oidToDatum = map[oid.Oid]parser.Datum{
+		oid.T_bool:      parser.DummyBool,
+		oid.T_int8:      parser.DummyInt,
+		oid.T_float8:    parser.DummyFloat,
+		oid.T_text:      parser.DummyString,
+		oid.T_date:      parser.DummyDate,
+		oid.T_timestamp: parser.DummyTimestamp,
+		oid.T_interval:  parser.DummyInterval,
+	}
+	datumToOid = map[parser.Datum]oid.Oid{
+		parser.DummyBytes:     oid.T_text,
+		parser.DummyBool:      oid.T_bool,
+		parser.DummyInt:       oid.T_int8,
+		parser.DummyFloat:     oid.T_float8,
+		parser.DummyString:    oid.T_text,
+		parser.DummyDate:      oid.T_date,
+		parser.DummyTimestamp: oid.T_timestamp,
+		parser.DummyInterval:  oid.T_interval,
+	}
+)
