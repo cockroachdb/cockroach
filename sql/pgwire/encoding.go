@@ -84,12 +84,12 @@ func (b *readBuffer) readUntypedMsg(rd io.Reader) error {
 }
 
 // readTypedMsg reads a message, returning its type code and body.
-func (b *readBuffer) readTypedMsg(rd bufferedReader) (messageType, error) {
+func (b *readBuffer) readTypedMsg(rd bufferedReader) (clientMessageType, error) {
 	typ, err := rd.ReadByte()
 	if err != nil {
 		return 0, err
 	}
-	return messageType(typ), b.readUntypedMsg(rd)
+	return clientMessageType(typ), b.readUntypedMsg(rd)
 }
 
 // getString reads a null-terminated string.
@@ -152,7 +152,7 @@ func (b *writeBuffer) putInt64(v int64) {
 	b.Write(b.putbuf[:8])
 }
 
-func (b *writeBuffer) initMsg(typ messageType) {
+func (b *writeBuffer) initMsg(typ serverMessageType) {
 	b.Reset()
 	b.putbuf[0] = byte(typ)
 	b.Write(b.putbuf[:5]) // message type + message length

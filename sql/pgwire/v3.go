@@ -31,22 +31,24 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-type messageType byte
+type clientMessageType byte
+
+type serverMessageType byte
 
 // http://www.postgresql.org/docs/9.4/static/protocol-message-formats.html
 const (
-	serverMsgAuth            messageType = 'R'
-	serverMsgCommandComplete             = 'C'
-	serverMsgDataRow                     = 'D'
-	serverMsgErrorResponse               = 'E'
-	serverMsgParseComplete               = '1'
-	serverMsgReady                       = 'Z'
-	serverMsgRowDescription              = 'T'
-	serverMsgEmptyQuery                  = 'I'
+	clientMsgSimpleQuery clientMessageType = 'Q'
+	clientMsgParse       clientMessageType = 'P'
+	clientMsgTerminate   clientMessageType = 'X'
 
-	clientMsgSimpleQuery = 'Q'
-	clientMsgParse       = 'P'
-	clientMsgTerminate   = 'X'
+	serverMsgAuth                 serverMessageType = 'R'
+	serverMsgCommandComplete      serverMessageType = 'C'
+	serverMsgDataRow              serverMessageType = 'D'
+	serverMsgErrorResponse        serverMessageType = 'E'
+	serverMsgParseComplete        serverMessageType = '1'
+	serverMsgReady                serverMessageType = 'Z'
+	serverMsgRowDescription       serverMessageType = 'T'
+	serverMsgEmptyQuery           serverMessageType = 'I'
 )
 
 const (
