@@ -375,7 +375,7 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE IF EXISTS a DROP COLUMN IF EXISTS b, DROP CONSTRAINT a_idx`},
 	}
 	for _, d := range testData {
-		stmts, err := ParseTraditional(d.sql)
+		stmts, err := parseTraditional(d.sql)
 		if err != nil {
 			t.Fatalf("%s: expected success, but found %s", d.sql, err)
 		}
@@ -518,7 +518,7 @@ func TestParse2(t *testing.T) {
 			`SELECT RTRIM('xyxtrimyyx')`},
 	}
 	for _, d := range testData {
-		stmts, err := ParseTraditional(d.sql)
+		stmts, err := parseTraditional(d.sql)
 		if err != nil {
 			t.Fatalf("%s: expected success, but found %s", d.sql, err)
 		}
@@ -526,7 +526,7 @@ func TestParse2(t *testing.T) {
 		if d.expected != s {
 			t.Errorf("expected %s, but found %s", d.expected, s)
 		}
-		if _, err := ParseTraditional(s); err != nil {
+		if _, err := parseTraditional(s); err != nil {
 			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
 		}
 	}
@@ -545,7 +545,7 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT '\x' FROM t`},
 	}
 	for _, d := range testData {
-		if _, err := ParseTraditional(d.sql); err != nil {
+		if _, err := parseTraditional(d.sql); err != nil {
 			t.Fatalf("%s: expected success, but not parsable %s", d.sql, err)
 		}
 	}
@@ -654,7 +654,7 @@ SELECT POSITION('high', 'a')
 		},
 	}
 	for _, d := range testData {
-		_, err := ParseTraditional(d.sql)
+		_, err := parseTraditional(d.sql)
 		if err == nil || err.Error() != d.expected {
 			t.Fatalf("%s: expected\n%s, but found\n%v", d.sql, d.expected, err)
 		}
@@ -679,7 +679,7 @@ func TestParsePanic(t *testing.T) {
 		"(F(F(F(F(F(F(F(F(F(F" +
 		"(F(F(F(F(F(F(F(F(F((" +
 		"F(0"
-	_, err := ParseTraditional(s)
+	_, err := parseTraditional(s)
 	expected := `syntax error at or near "EOF"`
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
@@ -831,11 +831,10 @@ func TestParsePrecedence(t *testing.T) {
 		{`1 OR 2 OR 3`, or(or(one, two), three)},
 	}
 	for _, d := range testData {
-		q, err := ParseTraditional("SELECT " + d.sql)
+		expr, err := ParseExprTraditional(d.sql)
 		if err != nil {
 			t.Fatalf("%s: %v", d.sql, err)
 		}
-		expr := q[0].(*Select).Exprs[0].Expr
 		if !reflect.DeepEqual(d.expected, expr) {
 			t.Fatalf("%s: expected %s, but found %s", d.sql, d.expected, expr)
 		}

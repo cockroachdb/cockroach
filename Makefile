@@ -186,7 +186,7 @@ check:
 	  # https://golang.org/pkg/database/sql/driver/#Result :(
 	@echo "varcheck"
 	@! varcheck -e $(PKG) | \
-	  grep -vE '(ValueType_UNKNOWN|sql/parser/(yacctab|sql\.y))'
+	  grep -vE '(_string.go|sql/parser/(yacctab|sql\.y))'
 	@echo "gofmt (simplify)"
 	@! gofmt -s -d -l . 2>&1 | grep -vE '^\.git/'
 	@echo "goimports"

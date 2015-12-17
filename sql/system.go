@@ -120,12 +120,12 @@ func createSystemTable(id ID, schema string) TableDescriptor {
 }
 
 func createTableDescriptor(id, parentID ID, schema string, privileges *PrivilegeDescriptor) TableDescriptor {
-	stmts, err := parser.ParseTraditional(schema)
+	stmt, err := parser.ParseOneTraditional(schema)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	desc, err := makeTableDesc(stmts[0].(*parser.CreateTable), parentID)
+	desc, err := makeTableDesc(stmt.(*parser.CreateTable), parentID)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -329,11 +329,10 @@ func TestEval(t *testing.T) {
 		{`'NaN'::double precision`, `NaN`},
 	}
 	for _, d := range testData {
-		q, err := ParseTraditional("SELECT " + d.expr)
+		expr, err := ParseExprTraditional(d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		expr := q[0].(*Select).Exprs[0].Expr
 		if expr, err = defaultContext.NormalizeExpr(expr); err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -363,11 +362,10 @@ func TestEvalError(t *testing.T) {
 		// {`~0 + 1`, `0`},
 	}
 	for _, d := range testData {
-		q, err := ParseTraditional("SELECT " + d.expr)
+		expr, err := ParseExprTraditional(d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		expr := q[0].(*Select).Exprs[0].Expr
 		if _, err := expr.Eval(defaultContext); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}

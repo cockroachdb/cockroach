@@ -85,14 +85,14 @@ func TestFillArgs(t *testing.T) {
 	}
 
 	for _, d := range testData {
-		q, err := ParseTraditional("SELECT " + d.expr)
+		q, err := ParseOneTraditional("SELECT " + d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if err := FillArgs(q[0], d.args); err != nil {
+		if err := FillArgs(q, d.args); err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if s := q[0].(*Select).Exprs[0].Expr.String(); d.expected != s {
+		if s := q.(*Select).Exprs[0].Expr.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
 	}
@@ -108,11 +108,11 @@ func TestFillArgsError(t *testing.T) {
 		{`$2 AND $1`, `arg $2 not found`, mapArgs{}},
 	}
 	for _, d := range testData {
-		q, err := ParseTraditional("SELECT " + d.expr)
+		q, err := ParseOneTraditional("SELECT " + d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if err := FillArgs(q[0], d.args); err == nil {
+		if err := FillArgs(q, d.args); err == nil {
 			t.Fatalf("%s: expected failure, but found success", d.expr)
 		} else if d.expected != err.Error() {
 			t.Fatalf("%s: expected %s, but found %v", d.expr, d.expected, err)
@@ -143,20 +143,20 @@ func TestWalkStmt(t *testing.T) {
 			mapArgs{`1`: DString(`a`), `2`: DString(`b`), `3`: DInt(2)}},
 	}
 	for _, d := range testData {
-		q, err := ParseTraditional(d.sql)
+		q, err := ParseOneTraditional(d.sql)
 		if err != nil {
 			t.Fatalf("%s: %v", d.sql, err)
 		}
-		if err := FillArgs(q[0], d.args); err != nil {
+		if err := FillArgs(q, d.args); err != nil {
 			t.Fatalf("%s: %v", d.sql, err)
 		}
-		e, err := ParseTraditional(d.expected)
+		e, err := ParseOneTraditional(d.expected)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expected, err)
 		}
 		// Verify that all expressions match up
-		if q[0].String() != e[0].String() {
-			log.Fatalf("%s not eq expected: %s", q[0].String(), e[0].String())
+		if q.String() != e.String() {
+			log.Fatalf("%s not eq expected: %s", q.String(), e.String())
 		}
 	}
 }
