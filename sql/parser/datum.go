@@ -615,3 +615,42 @@ func (d dNull) IsMin() bool {
 func (d dNull) String() string {
 	return "NULL"
 }
+
+var _ VariableExpr = DValArg{}
+
+// DValArg is the named bind var argument Datum.
+type DValArg struct {
+	name string
+}
+
+// Variable implements the VariableExpr interface.
+func (DValArg) Variable() {}
+
+// Type implements the Datum interface.
+func (DValArg) Type() string {
+	return "valarg"
+}
+
+// Compare implements the Datum interface.
+func (d DValArg) Compare(other Datum) int {
+	panic(d.Type() + ".Compare not supported")
+}
+
+// Next implements the Datum interface.
+func (d DValArg) Next() Datum {
+	panic(d.Type() + ".Next not supported")
+}
+
+// IsMax implements the Datum interface.
+func (DValArg) IsMax() bool {
+	return true
+}
+
+// IsMin implements the Datum interface.
+func (DValArg) IsMin() bool {
+	return true
+}
+
+func (d DValArg) String() string {
+	return "$" + d.name
+}
