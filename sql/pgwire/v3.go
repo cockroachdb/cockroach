@@ -335,7 +335,7 @@ func (c *v3Conn) sendResponse(resp driver.Response) error {
 				c.writeBuf.initMsg(serverMsgDataRow)
 				c.writeBuf.putInt16(int16(len(row.Values)))
 				for _, col := range row.Values {
-					if err := c.writeBuf.writeDatum(col); err != nil {
+					if err := c.writeBuf.writeTextDatum(col); err != nil {
 						return err
 					}
 				}
