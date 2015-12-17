@@ -305,20 +305,11 @@ func TestPGPrepared(t *testing.T) {
 		},
 	}
 
-	ctx := server.NewTestContext()
-	ctx.Insecure = true
-	s := setupTestServerWithContext(t, ctx)
-	defer cleanupTestServer(s)
+	s := server.StartTestServer(t)
+	defer s.Stop()
 
-	host, port, err := net.SplitHostPort(s.PGAddr())
-	if err != nil {
-		t.Fatal(err)
-	}
-	pgUrl := url.URL{
-		Scheme:   "postgres",
-		Host:     net.JoinHostPort(host, port),
-		RawQuery: "sslmode=disable",
-	}
+	pgUrl, cleanupFn := pgURL(t, s, security.RootUser, os.TempDir(), "TestPGPrepared")
+	defer cleanupFn()
 
 	db, err := sql.Open("postgres", pgUrl.String())
 	if err != nil {
