@@ -28,7 +28,7 @@ $stats-table-th--bg     = white
 $stats-table-tr--bg     = white
 $stats-table-tr--bg-alt = $secondary-gray-7
 
-// ---- Data table ---- 
+// ---- Data table ----
 .stats-table, .sql-table
   color -color('dark')
   table
@@ -36,12 +36,20 @@ $stats-table-tr--bg-alt = $secondary-gray-7
     margin-bottom 2rem
 
   thead
-    border $stats-table-cell--border
-    border-left none
-
     tr
-      height 71px
+      border $stats-table-cell--border
+      border-left none
+      height 30px
       vertical-align top
+      &.header-section
+        height 30px
+      &.column
+        border-bottom none
+      &.rollup
+        border-top none
+      &:last-child
+        th
+          padding-bottom 15px
 
   tbody tr
       height 45px
@@ -50,6 +58,8 @@ $stats-table-tr--bg-alt = $secondary-gray-7
         background-color $stats-table-tr--bg-alt
       &:last-child
         border-bottom $stats-table-cell--border
+      &:first-child
+        border-top $stats-table-cell--border
 
   th
     color $stats-table-th--fg
@@ -59,6 +69,25 @@ $stats-table-tr--bg-alt = $secondary-gray-7
     font-weight normal
     text-align left
     background-color $stats-table-th--bg
+    white-space nowrap
+    &.column
+      border-bottom none
+
+    &.header-section
+      font-size 12px
+      font-family Lato-Medium
+      letter-spacing 2px
+      text-transform uppercase
+      color $secondary-light-gray
+      padding 10px 20px
+
+    &.rollup
+      border-top none
+      font-family Lato-Medium
+      color $main-navy
+      font-size 19px
+      padding-top 0
+
     &.sorted
       &:after
         content "▼"
@@ -71,11 +100,23 @@ $stats-table-tr--bg-alt = $secondary-gray-7
     font-family Lato-Medium
     font-size 16px
     letter-spacing .33px
+    white-space nowrap
 
   td
   th
-    padding 15px 20px
+    padding 10px 20px 0
     border-right $stats-table-cell--border
+    .missing
+      color $secondary-red
+    .stale
+      color $secondary-gold
+    .healthy
+      color $main-green
+
+table
+  a
+    color $main-green
+    text-decoration none
 
 .sql-table
   thead

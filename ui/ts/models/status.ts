@@ -1,5 +1,6 @@
 // source: models/status.ts
 /// <reference path="../../typings/lodash/lodash.d.ts" />
+/// <reference path="../../typings/moment/moment.d.ts" />
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../util/http.ts" />
 /// <reference path="../util/querycache.ts" />
@@ -11,6 +12,9 @@ module Models {
   "use strict";
   export module Status {
     import promise = _mithril.MithrilPromise;
+    import Moment = moment.Moment;
+    import StoreStatus = Models.Proto.StoreStatus;
+    import NodeStatus = Models.Proto.NodeStatus;
 
     export interface StoreStatusResponseSet {
       d: Proto.StoreStatus[];
@@ -26,6 +30,52 @@ module Models {
 
     export interface NodeStatusMap {
       [nodeId: string]: Proto.NodeStatus;
+    }
+
+    /**
+     * staleStatus returns the "status" of the node depending on how long ago
+     * the last status update was received.
+     *
+     *   healthy <=1min
+     *   stale   <1min & <=10min
+     *   missing >10min
+     *
+     * @param  {Moment} lastUpdate - the last updated time received
+     * @return {string} - healthy/stale/missing
+     */
+    export function staleStatus(lastUpdate: Moment): string {
+      if (lastUpdate.isBefore(moment().subtract(10, "minutes"))) {
+        return "missing";
+      }
+      if (lastUpdate.isBefore(moment().subtract(1, "minute"))) {
+        return "stale";
+      }
+      return "healthy";
+    }
+
+    export interface BytesAndCount {
+      bytes: number;
+      count: number;
+    }
+
+    export function bytesAndCountReducer(byteAttr: string, countAttr: string, rows: (NodeStatus|StoreStatus)[]): BytesAndCount {
+      return _.reduce(
+        rows,
+        function(memo: BytesAndCount, row: (NodeStatus|StoreStatus)): BytesAndCount {
+          memo.bytes += <number>_.get(row, byteAttr);
+          memo.count += <number>_.get(row, countAttr);
+          return memo;
+        },
+        {bytes: 0, count: 0});
+    }
+
+    export function sumReducer(attr: string, rows: (NodeStatus|StoreStatus)[]): number {
+      return _.reduce(
+        rows,
+        function(memo: number, row: (NodeStatus|StoreStatus)): number {
+          return memo + <number>_.get(row, attr);
+        },
+        0);
     }
 
     export class Stores {
