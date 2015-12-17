@@ -308,13 +308,6 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode) er
 		case *driver.Response_Result_Rows_:
 			resultRows := result.Rows
 
-			if formatCodes == nil {
-				formatCodes = make([]formatCode, len(resultRows.Columns))
-				for i, column := range resultRows.Columns {
-					formatCodes[i] = typeForDatum(column.Typ).preferredFormat
-				}
-			}
-
 			if err := c.sendRowDescription(resultRows.Columns, formatCodes); err != nil {
 				return err
 			}
@@ -324,7 +317,11 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode) er
 				c.writeBuf.initMsg(serverMsgDataRow)
 				c.writeBuf.putInt16(int16(len(row.Values)))
 				for i, col := range row.Values {
-					switch formatCode := formatCodes[i]; formatCode {
+					fmtCode := formatText
+					if formatCodes != nil {
+						fmtCode = formatCodes[i]
+					}
+					switch fmtCode {
 					case formatText:
 						if err := c.writeBuf.writeTextDatum(col); err != nil {
 							return err
@@ -334,7 +331,7 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode) er
 							return err
 						}
 					default:
-						return util.Errorf("unsupported format code %s", formatCode)
+						return util.Errorf("unsupported format code %s", fmtCode)
 					}
 				}
 				if err := c.writeBuf.finishMsg(c.wr); err != nil {
@@ -373,7 +370,11 @@ func (c *v3Conn) sendRowDescription(columns []*driver.Response_Result_Rows_Colum
 		c.writeBuf.putInt32(int32(typ.oid))
 		c.writeBuf.putInt16(int16(typ.size))
 		c.writeBuf.putInt32(0) // Type modifier (none of our supported types have modifiers).
-		c.writeBuf.putInt16(int16(formatCodes[i]))
+		if formatCodes == nil {
+			c.writeBuf.putInt16(int16(formatText))
+		} else {
+			c.writeBuf.putInt16(int16(formatCodes[i]))
+		}
 	}
 	return c.writeBuf.finishMsg(c.wr)
 }

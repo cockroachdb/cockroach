@@ -50,10 +50,6 @@ type pgType struct {
 	// To get the right value, "SELECT oid, typlen FROM pg_type"
 	// on a postgres server.
 	size int
-
-	// preferredFormat is the one we use when sending this type to the
-	// client.
-	preferredFormat formatCode
 }
 
 func typeForDatum(d driver.Datum) pgType {
@@ -62,25 +58,25 @@ func typeForDatum(d driver.Datum) pgType {
 		return pgType{}
 
 	case *driver.Datum_BoolVal:
-		return pgType{oid.T_bool, 1, formatText}
+		return pgType{oid.T_bool, 1}
 
 	case *driver.Datum_IntVal:
-		return pgType{oid.T_int8, 8, formatText}
+		return pgType{oid.T_int8, 8}
 
 	case *driver.Datum_FloatVal:
-		return pgType{oid.T_float8, 8, formatText}
+		return pgType{oid.T_float8, 8}
 
 	case *driver.Datum_BytesVal, *driver.Datum_StringVal:
-		return pgType{oid.T_text, -1, formatText}
+		return pgType{oid.T_text, -1}
 
 	case *driver.Datum_DateVal:
-		return pgType{oid.T_date, 8, formatText}
+		return pgType{oid.T_date, 8}
 
 	case *driver.Datum_TimeVal:
-		return pgType{oid.T_timestamp, 8, formatText}
+		return pgType{oid.T_timestamp, 8}
 
 	case *driver.Datum_IntervalVal:
-		return pgType{oid.T_interval, 8, formatText}
+		return pgType{oid.T_interval, 8}
 
 	default:
 		panic(fmt.Sprintf("unsupported type %T", d.Payload))
