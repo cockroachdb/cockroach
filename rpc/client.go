@@ -82,16 +82,16 @@ type Client struct {
 	// It signals the end of the heartbeat run loop. When the run loop
 	// exits, it `close()`es `Closed`, which signals to the outside
 	// that the client has indeed stopped.
-	closer, Closed chan struct{}
-	conn           unsafe.Pointer // holds a `internalConn`
-	healthy        atomic.Value   // holds a `chan struct{}` exposed in `Healthy`
-	healthWaitTime time.Time
-	healthReceived chan struct{}
-	tlsConfig      *tls.Config
-
-	clock        *hlc.Clock
-	remoteClocks *RemoteClockMonitor
-	remoteOffset RemoteOffset
+	closer, Closed    chan struct{}
+	conn              unsafe.Pointer // holds a `internalConn`
+	healthy           atomic.Value   // holds a `chan struct{}` exposed in `Healthy`
+	healthWaitTime    time.Time
+	healthReceived    chan struct{}
+	tlsConfig         *tls.Config
+	disableReconnects bool
+	clock             *hlc.Clock
+	remoteClocks      *RemoteClockMonitor
+	remoteOffset      RemoteOffset
 }
 
 // NewClient returns a client RPC stub for the specified address
@@ -124,13 +124,14 @@ func NewClient(addr net.Addr, context *Context) *Client {
 	}
 
 	c := &Client{
-		closer:       make(chan struct{}),
-		Closed:       make(chan struct{}),
-		key:          key,
-		addr:         unresolvedAddr,
-		tlsConfig:    tlsConfig,
-		clock:        context.localClock,
-		remoteClocks: context.RemoteClocks,
+		closer:            make(chan struct{}),
+		Closed:            make(chan struct{}),
+		key:               key,
+		addr:              unresolvedAddr,
+		tlsConfig:         tlsConfig,
+		disableReconnects: context.DisableReconnects,
+		clock:             context.localClock,
+		remoteClocks:      context.RemoteClocks,
 	}
 
 	c.healthy.Store(make(chan struct{}))
@@ -291,6 +292,10 @@ func (c *Client) runHeartbeat(retryOpts retry.Options) {
 
 			// Reconnect on failure.
 			if err != nil {
+				// If reconnects are disabled, and we already have a failed connection, return now.
+				if c.disableReconnects && c.internalConn() != nil {
+					return
+				}
 				if err = c.connect(); err != nil {
 					setUnhealthy()
 					log.Warning(err)

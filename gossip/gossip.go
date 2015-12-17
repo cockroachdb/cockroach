@@ -110,8 +110,7 @@ var (
 type Gossip struct {
 	Connected     chan struct{}       // Closed upon initial connection
 	hasConnected  bool                // Set first time network is connected
-	RPCContext    *rpc.Context        // The context required for RPC
-	bsRPCContext  *rpc.Context        // Context for bootstrap RPCs
+	rpcContext    *rpc.Context        // The context required for RPC
 	*server                           // Embedded gossip RPC server
 	outgoing      nodeSet             // Set of outgoing client node IDs
 	bootstrapping map[string]struct{} // Set of active bootstrap clients
@@ -140,7 +139,6 @@ type Gossip struct {
 func New(rpcContext *rpc.Context, resolvers []resolver.Resolver) *Gossip {
 	g := &Gossip{
 		Connected:     make(chan struct{}),
-		RPCContext:    rpcContext,
 		server:        newServer(),
 		outgoing:      makeNodeSet(1),
 		bootstrapping: map[string]struct{}{},
@@ -150,13 +148,15 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver) *Gossip {
 		resolverIdx:   len(resolvers) - 1,
 		resolvers:     resolvers,
 	}
-	// Create the bootstrapping RPC context. This context doesn't
-	// measure clock offsets and doesn't cache clients because bootstrap
-	// connections may go through a load balancer.
+	// The gossip RPC context doesn't measure clock offsets, isn't
+	// shared with the other RPC clients which the node may be using,
+	// and disables reconnects to make it possible to know for certain
+	// which other nodes in the cluster are incoming via gossip.
 	if rpcContext != nil {
-		g.bsRPCContext = rpcContext.Copy()
-		g.bsRPCContext.DisableCache = true
-		g.bsRPCContext.RemoteClocks = nil
+		g.rpcContext = rpcContext.Copy()
+		g.rpcContext.DisableCache = true
+		g.rpcContext.DisableReconnects = true
+		g.rpcContext.RemoteClocks = nil
 	}
 
 	// Add ourselves as a SystemConfig watcher.
@@ -519,7 +519,7 @@ func (g *Gossip) bootstrap(stopper *stop.Stopper) {
 			if !haveClients || !haveSentinel {
 				// Try to get another bootstrap address from the resolvers.
 				if addr := g.getNextBootstrapAddress(); addr != nil {
-					g.startClient(addr, g.bsRPCContext, stopper)
+					g.startClient(addr, stopper)
 				}
 			}
 			g.mu.Unlock()
@@ -591,7 +591,7 @@ func (g *Gossip) doCheckNetwork(stopper *stop.Stopper) {
 		if nodeAddr, err := g.getNodeIDAddressLocked(nodeID); err != nil {
 			log.Errorf("node %d: %s", nodeID, err)
 		} else {
-			g.startClient(nodeAddr, g.RPCContext, stopper)
+			g.startClient(nodeAddr, stopper)
 		}
 	} else if !g.outgoing.hasSpace() {
 		// Otherwise, find least useful peer and close it. Make sure
@@ -612,7 +612,7 @@ func (g *Gossip) doDisconnected(stopper *stop.Stopper, c *client) {
 
 	// If the client was disconnected with a forwarding address, connect now.
 	if c.forwardAddr != nil {
-		g.startClient(c.forwardAddr, g.RPCContext, stopper)
+		g.startClient(c.forwardAddr, stopper)
 	}
 	g.maybeSignalStalledLocked()
 }
@@ -697,13 +697,13 @@ func (g *Gossip) checkHasConnected() {
 // startClient launches a new client connected to remote address.
 // The client is added to the outgoing address set and launched in
 // a goroutine.
-func (g *Gossip) startClient(addr net.Addr, context *rpc.Context, stopper *stop.Stopper) {
+func (g *Gossip) startClient(addr net.Addr, stopper *stop.Stopper) {
 	log.Infof("starting client to %s", addr)
 	c := newClient(addr)
 	g.clientsMu.Lock()
 	g.clients = append(g.clients, c)
 	g.clientsMu.Unlock()
-	c.start(g, g.disconnected, context, stopper)
+	c.start(g, g.disconnected, g.rpcContext, stopper)
 }
 
 // closeClient finds and removes a client from the clients slice.

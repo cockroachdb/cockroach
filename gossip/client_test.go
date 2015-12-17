@@ -251,10 +251,7 @@ func TestClientDisconnectLoopback(t *testing.T) {
 	// startClient requires locks are held, so acquire here.
 	local.mu.Lock()
 	lAddr := local.is.NodeAddr
-	lclock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
-	rpcContext.DisableCache = true
-	local.startClient(lAddr, rpcContext, stopper)
+	local.startClient(lAddr, stopper)
 	local.mu.Unlock()
 	local.manage(stopper)
 	util.SucceedsWithin(t, 10*time.Second, func() error {
@@ -279,11 +276,8 @@ func TestClientDisconnectRedundant(t *testing.T) {
 
 	rAddr := remote.is.NodeAddr
 	lAddr := local.is.NodeAddr
-	lclock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
-	rpcContext.DisableCache = true
-	local.startClient(rAddr, rpcContext, stopper)
-	remote.startClient(lAddr, rpcContext, stopper)
+	local.startClient(rAddr, stopper)
+	remote.startClient(lAddr, stopper)
 	local.mu.Unlock()
 	remote.mu.Unlock()
 	local.manage(stopper)
@@ -316,14 +310,11 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 	local.mu.Lock()
 	remote.mu.Lock()
 	rAddr := remote.is.NodeAddr
-	lclock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
-	rpcContext.DisableCache = true
 	// Start two clients from local to remote. RPC client cache is
 	// disabled via the context, so we'll start two different outgoing
 	// connections.
-	local.startClient(rAddr, rpcContext, stopper)
-	local.startClient(rAddr, rpcContext, stopper)
+	local.startClient(rAddr, stopper)
+	local.startClient(rAddr, stopper)
 	local.mu.Unlock()
 	remote.mu.Unlock()
 	local.manage(stopper)

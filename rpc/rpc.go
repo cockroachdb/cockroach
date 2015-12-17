@@ -13,11 +13,12 @@ type Context struct {
 	// Embed the base context.
 	base.Context
 
-	localClock   *hlc.Clock
-	Stopper      *stop.Stopper
-	RemoteClocks *RemoteClockMonitor
-	DisableCache bool // Disable client cache when calling NewClient()
-	HealthWait   time.Duration
+	localClock        *hlc.Clock
+	Stopper           *stop.Stopper
+	RemoteClocks      *RemoteClockMonitor
+	DisableCache      bool // Disable client cache when calling NewClient()
+	DisableReconnects bool // Disable client reconnects
+	HealthWait        time.Duration
 }
 
 // NewContext creates an rpc Context with the supplied values.

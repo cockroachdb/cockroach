@@ -246,7 +246,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	// the first key to verify it's used to read only key "a".
 	manual := hlc.NewManualClock(ts[1].UnixNano() - 1)
 	clock := hlc.NewClock(manual.UnixNano)
-	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: clock}, s.Gossip())
+	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: clock, RPCContext: s.RPCContext()}, s.Gossip())
 
 	// Scan.
 	sa := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("c"), 0).(*roachpb.ScanRequest)
