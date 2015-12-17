@@ -32,7 +32,7 @@ type Expr interface {
 	Walk(Visitor)
 	// TypeCheck returns the zero value of the expression's type, or an
 	// error if the expression doesn't type-check.
-	TypeCheck() (Datum, error)
+	TypeCheck(args MapArgs) (Datum, error)
 	// Eval evaluates an SQL expression. Expression evaluation is a mostly
 	// straightforward walk over the parse tree. The only significant complexity is
 	// the handling of types and implicit conversions. See binOps and cmpOps for

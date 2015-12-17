@@ -61,7 +61,7 @@ func TestTypeCheck(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d, err)
 		}
-		if _, err := expr.TypeCheck(); err != nil {
+		if _, err := expr.TypeCheck(nil); err != nil {
 			t.Errorf("%s: unexpected error %s", d, err)
 		}
 	}
@@ -109,7 +109,7 @@ func TestTypeCheckError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if _, err := expr.TypeCheck(); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
+		if _, err := expr.TypeCheck(nil); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
 	}
