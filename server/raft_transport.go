@@ -28,20 +28,29 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 
 	gorpc "net/rpc"
 )
 
 const (
-	raftServiceName = "MultiRaft"
-	raftMessageName = raftServiceName + ".RaftMessage"
+	raftServiceName         = "MultiRaft"
+	raftMessageName         = raftServiceName + ".RaftMessage"
+	multiPackageMessageName = raftServiceName + ".MultiPackageMessage"
+
 	// Outgoing messages are queued on a per-node basis on a channel of
 	// this size.
 	raftSendBufferSize = 500
 	// When no message has been sent to a Node for that duration, the
 	// corresponding instance of processQueue will shut down.
 	raftIdleTimeout = time.Minute
+
+	// When send snapshot, the maximum package size can not execeed 1M.
+	maximumPackageSize = 1024 * 1024
+
+	// Last package id
+	lastPackageID = -1
 )
 
 // rpcTransport handles the rpc messages for multiraft.
@@ -52,17 +61,24 @@ type rpcTransport struct {
 	mu         sync.Mutex
 	servers    map[roachpb.StoreID]multiraft.ServerInterface
 	queues     map[roachpb.StoreID]chan *multiraft.RaftMessageRequest
+
+	multiPackageMessageLock sync.Mutex
+	multiPackageMessage     map[roachpb.RangeID]*[]byte
+	workingLock             sync.Mutex
+	working                 map[roachpb.ReplicaDescriptor]struct{}
 }
 
 // newRPCTransport creates a new rpcTransport with specified gossip and rpc server.
 func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *rpc.Context) (
 	multiraft.Transport, error) {
 	t := &rpcTransport{
-		gossip:     gossip,
-		rpcServer:  rpcServer,
-		rpcContext: rpcContext,
-		servers:    make(map[roachpb.StoreID]multiraft.ServerInterface),
-		queues:     make(map[roachpb.StoreID]chan *multiraft.RaftMessageRequest),
+		gossip:              gossip,
+		rpcServer:           rpcServer,
+		rpcContext:          rpcContext,
+		servers:             make(map[roachpb.StoreID]multiraft.ServerInterface),
+		queues:              make(map[roachpb.StoreID]chan *multiraft.RaftMessageRequest),
+		multiPackageMessage: make(map[roachpb.RangeID]*[]byte),
+		working:             make(map[roachpb.ReplicaDescriptor]struct{}),
 	}
 
 	if t.rpcServer != nil {
@@ -70,9 +86,50 @@ func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *r
 			t.RaftMessage, &multiraft.RaftMessageRequest{}); err != nil {
 			return nil, err
 		}
+
+		if err := t.rpcServer.RegisterAsync(multiPackageMessageName, false, /*not public*/
+			t.MultiPackageMessage, &multiraft.MultiPackageMessageRequest{}); err != nil {
+			return nil, err
+		}
 	}
 
 	return t, nil
+}
+
+// MultiPackageMessage merges incoming multi-package request into the real request,
+// and proxies to the listening server interface. If received request's package id
+// is 0, maybe the leader fail and restart to send from package 0. So We drop the
+// old data and restart caching the new one.
+func (t *rpcTransport) MultiPackageMessage(args proto.Message, callback func(proto.Message, error)) {
+	req := args.(*multiraft.MultiPackageMessageRequest)
+
+	t.multiPackageMessageLock.Lock()
+	_, ok := t.multiPackageMessage[req.GroupID]
+	if !ok || req.PackageId == 0 {
+		t.multiPackageMessage[req.GroupID] = &[]byte{}
+	}
+	data := t.multiPackageMessage[req.GroupID]
+	*data = append(*data, req.RawBytes...)
+
+	// Not receive all the packages, return and wait for next package.
+	if req.PackageId != lastPackageID {
+		t.multiPackageMessageLock.Unlock()
+		callback(nil, nil)
+		return
+	}
+
+	delete(t.multiPackageMessage, req.GroupID)
+	t.multiPackageMessageLock.Unlock()
+
+	// Now, we get all the packages. Unmasharl it and get the real message.
+	var msg multiraft.RaftMessageRequest
+	err := proto.Unmarshal(*data, &msg)
+	if err != nil {
+		callback(nil, util.Errorf("Unable to unmarshal multi-package message of group: %d", req.GroupID))
+		return
+	}
+
+	t.RaftMessage(&msg, callback)
 }
 
 // RaftMessage proxies the incoming request to the listening server interface.
@@ -189,6 +246,16 @@ func (t *rpcTransport) processQueue(nodeID roachpb.NodeID, storeID roachpb.Store
 
 // Send a message to the recipient specified in the request.
 func (t *rpcTransport) Send(req *multiraft.RaftMessageRequest) error {
+	if req.Message.Type == raftpb.MsgSnap {
+		t.workingLock.Lock()
+		if _, ok := t.working[req.ToReplica]; !ok {
+			t.working[req.ToReplica] = struct{}{}
+			go t.sendSnapshot(req)
+		}
+		t.workingLock.Unlock()
+		return nil
+	}
+
 	t.mu.Lock()
 	ch, ok := t.queues[req.ToReplica.StoreID]
 	if !ok {
@@ -209,4 +276,83 @@ func (t *rpcTransport) Send(req *multiraft.RaftMessageRequest) error {
 // Close shuts down an rpcTransport.
 func (t *rpcTransport) Close() {
 	// No-op since we share the global cache of client connections.
+}
+
+// sendSnapshot create a new standalone rpc client without cache to send
+// snapshot to avoid block raft heartbeat message. But snapshot may be
+// very large or network is slow, lead to rpc transmission time over rpc
+// heartbeat timeout. So snapshot data is divided into small packets
+// that not exceed "maximumPackageSize". Receiver will buffer all the packages
+// and merge them to get the real request message.
+func (t *rpcTransport) sendSnapshot(req *multiraft.RaftMessageRequest) {
+	nodeID := req.ToReplica.NodeID
+	addr, err := t.gossip.GetNodeIDAddress(nodeID)
+	if err != nil {
+		log.Errorf("could not get address for node %d: %s", nodeID, err)
+		return
+	}
+
+	defer func() {
+		t.workingLock.Lock()
+		delete(t.working, req.ToReplica)
+		t.workingLock.Unlock()
+	}()
+
+	// start a new connection to send snapshot alone.
+	ctx := t.rpcContext.Copy()
+	ctx.DisableCache = true
+	client := rpc.NewClient(addr, ctx)
+	defer client.Close()
+
+	// Encode the whole RaftMessageRequest,
+	// calculate the number of packages to send.
+	data, err := req.Marshal()
+	if err != nil {
+		log.Errorf("node %d request marshal fail: %s", nodeID, err)
+		return
+	}
+
+	dataSize := len(data)
+	inteval := dataSize / maximumPackageSize
+	reminder := dataSize % maximumPackageSize
+
+	for i := 0; i < inteval+1; i++ {
+		select {
+		case <-t.rpcContext.Stopper.ShouldStop():
+			return
+		case <-time.After(raftIdleTimeout):
+			if log.V(1) {
+				log.Infof("closing Raft transport to %d due to inactivity", nodeID)
+			}
+			return
+		case <-client.Closed:
+			log.Warningf("raft client for node %d closed", nodeID)
+			return
+		case <-client.Healthy():
+		}
+
+		var mreq multiraft.MultiPackageMessageRequest
+		mreq.GroupID = req.GroupID
+		mreq.PackageId = int32(i)
+
+		startIndex := i * maximumPackageSize
+		endIndex := (i + 1) * maximumPackageSize
+
+		// The last package, mark PackageId "-1".
+		if i == inteval && reminder != 0 {
+			endIndex = startIndex + reminder
+			mreq.PackageId = int32(lastPackageID)
+		}
+
+		mreq.RawBytes = data[startIndex:endIndex]
+		protoResp := &multiraft.RaftMessageResponse{}
+		done := make(chan *gorpc.Call, 1)
+
+		client.Go(multiPackageMessageName, &mreq, protoResp, done)
+		call := <-done
+		if call.Error != nil {
+			log.Errorf("snapshot message to node %d failed: %s", nodeID, call.Error)
+			return
+		}
+	}
 }

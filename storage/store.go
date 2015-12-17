@@ -1596,6 +1596,28 @@ func (s *Store) processRaft() {
 							log.Infof("store %s: new committed membership change at index %d", s, e.Index)
 						}
 
+					case *multiraft.EventSnapshot:
+						groupID = e.GroupID
+						snapshot := e.Snapshot
+						callback := e.Callback
+
+						s.mu.RLock()
+						r, ok := s.replicas[groupID]
+						s.mu.RUnlock()
+
+						if !ok {
+							err := util.Errorf("got committed raft command for %d but have no range with that ID: %+v",
+								groupID, cmd)
+							log.Error(err)
+							continue
+						}
+
+						err := r.applySnapshot(snapshot)
+						if err != nil {
+							panic(err)
+						}
+						callback()
+						continue
 					default:
 						continue
 					}

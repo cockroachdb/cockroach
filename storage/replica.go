@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -137,6 +138,11 @@ type pendingCmd struct {
 	done chan roachpb.ResponseWithError // Used to signal waiting RPC handler
 }
 
+type snapshotData struct {
+	snapshot raftpb.Snapshot
+	err      error
+}
+
 type cmdIDKey string
 
 // A Replica is a contiguous keyspace with writes managed via an
@@ -186,6 +192,11 @@ type Replica struct {
 		value roachpb.ReplicaDescriptor
 	}
 	truncatedState unsafe.Pointer // *roachpb.RaftTruncatedState
+
+	snapshotData    chan snapshotData
+	snapshotLock    sync.Mutex
+	pendingSnapshot bool
+	finishSnapshot  bool
 }
 
 var _ client.Sender = &Replica{}
@@ -201,6 +212,9 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store) (*Replica, error) {
 	}
 	r.pendingReplica.Cond = sync.NewCond(r)
 	r.setDescWithoutProcessUpdate(desc)
+	r.snapshotData = make(chan snapshotData, 1)
+	r.pendingSnapshot = false
+	r.finishSnapshot = false
 
 	lastIndex, err := r.loadLastIndex()
 	if err != nil {
