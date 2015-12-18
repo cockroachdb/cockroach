@@ -81,9 +81,9 @@ func TestMakeConstraints(t *testing.T) {
 		{`a = 1 AND b IN (1,2,3)`, []string{"a", "b"}, `[a = 1, b IN (1, 2, 3)]`},
 
 		// Prefer EQ over IN.
-		//
+		{`a IN (1) AND a = 1`, []string{"a"}, `[a = 1]`},
 		// TODO(pmattis): We could conceivably propagate the "a = 1" down to the IN
-		// expression and simplify. Doesn't seem worth it at this time.
+		// expression and simplify. Doesn't seem worth it at this time. Issue #3472.
 		{`a = 1 AND (a, b) IN ((1, 2))`, []string{"a", "b"}, `[a = 1]`},
 		{`(a, b) IN ((1, 2)) AND a = 1`, []string{"a", "b"}, `[a = 1]`},
 
@@ -308,6 +308,11 @@ func TestApplyConstraints(t *testing.T) {
 		{`(a, b) = (1, 2) AND c IS NOT NULL`, []string{"a", "b", "c"}, `<nil>`},
 		{`a IN (1, 2) AND b = 3`, []string{"a", "b"}, `b = 3`},
 		{`a <= 5 AND b >= 6 AND (a, b) IN ((1, 2))`, []string{"a", "b"}, `a <= 5 AND b >= 6`},
+		{`a IN (1) AND a = 1`, []string{"a"}, `<nil>`},
+		// Filters that are not trimmed as of Dec 2015, although they could be.
+		// Issue #3473.
+		// {`a > 1`, []string{"a"}, `<nil>`},
+		// {`a < 1`, []string{"a"}, `<nil>`},
 	}
 	for _, d := range testData {
 		desc, index := makeTestIndex(t, d.columns)
