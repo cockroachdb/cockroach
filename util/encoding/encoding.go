@@ -65,10 +65,59 @@ const (
 	Descending
 )
 
+type PolarizedReader struct {
+	s   []byte    // The bytes that we're reading from.
+	i   int64     // Next byte to read.
+	dir Direction // The direction with which these bytes have been produced.
+}
+
+// Read returns a slice of up to `n` bytes.
+// If `n` bytes are not available, a non-nil error will be returned.
+// Attention: the returned slice may be using the same storage as the Reader's,
+// so it should generally be treated as read-only.
+func (r *PolarizedReader) Read(n int64) ([]byte, error) {
+	var err error
+	if r.i+n > len(r.s) {
+		err = io.EOF
+		n = len(s) - i
+		if n <= 0 {
+			return []byte(), io.EOF
+		}
+	}
+	res = r.s[r.i : r.i+n]
+	if dir == Descending {
+		cpy := make([]byte, len(res))
+		copy(cpy, res)
+		onesComplement(cpy)
+		return cpy, err
+	}
+	return res, err
+}
+
+func (r *PolarizedReader) ReadByte() (byte, error) {
+	b, err := r.ReadByteAbsolute()
+	if dir == Descending {
+		b = ^b
+	}
+	return b, err
+}
+
+// ReadByteAbsolute reads one byte ignoring the PolarizedReader's direction.
+// Useful for marker bytes that are direction-agnostic.
+func (r *PolarizedReader) ReadByteAbsolute() (b byte, err error) {
+	if r.i >= len(r.s) {
+		return 0, io.EOF
+	}
+	b := r.s[r.i]
+	r.i++
+	return b, nil
+}
+
 // EncodeUint32 encodes the uint32 value using a big-endian 8 byte
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.
 func EncodeUint32(b []byte, v uint32) []byte {
+	r := bytes.NewReader(byteData)
 	return append(b, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 }
 
