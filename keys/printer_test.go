@@ -10,8 +10,7 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
+// permissions and limitations under the License.
 //
 // Author: Veteran Lu (23907238@qq.com)
 
@@ -80,7 +79,7 @@ func TestPrettyPrint(t *testing.T) {
 
 		// others
 		{MakeKey([]byte("")), "/Min"},
-		{MakeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x20, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:408: unknown escape>"},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x20, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:407: unknown escape>"},
 	}
 	for i, test := range testCases {
 		keyInfo := PrettyPrint(test.key)
