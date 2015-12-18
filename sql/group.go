@@ -34,6 +34,23 @@ var aggregates = map[string]func() aggregateImpl{
 }
 
 func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
+	// Start by normalizing the GROUP BY expressions (to match what has been done to
+	// the SELECT expressions in addRenderer) so that we can compare them later.
+	// This is done before determining if aggregation is being performed, because
+	// that determination is made during validation, which will require matching
+	// expressions.
+	for i := range n.GroupBy {
+		norm, err := s.resolveQNames(n.GroupBy[i])
+		if err != nil {
+			return nil, err
+		}
+		norm, err = p.parser.NormalizeExpr(p.evalCtx, norm)
+		if err != nil {
+			return nil, err
+		}
+		n.GroupBy[i] = norm
+	}
+
 	// TODO(pmattis): This only handles aggregate functions, not GROUP BY.
 
 	// Loop over the render expressions and extract any aggregate functions.
