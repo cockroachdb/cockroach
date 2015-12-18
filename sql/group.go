@@ -24,12 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-var aggregates = map[string]aggregateImpl{
-	"avg":   &avgAggregate{},
-	"count": &countAggregate{},
-	"max":   &maxAggregate{},
-	"min":   &minAggregate{},
-	"sum":   &sumAggregate{},
+var aggregates = map[string]func() aggregateImpl{
+	"avg":   newAvgAggregate,
+	"count": newCountAggregate,
+	"max":   newMaxAggregate,
+	"min":   newMinAggregate,
+	"sum":   newSumAggregate,
 }
 
 func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
@@ -128,7 +128,7 @@ func (n *groupNode) Next() bool {
 	for n.plan.Next() {
 		values := n.plan.Values()
 		for i, f := range n.funcs {
-			if n.err = f.Add(values[i]); n.err != nil {
+			if n.err = f.add(values[i]); n.err != nil {
 				return false
 			}
 		}
@@ -141,7 +141,7 @@ func (n *groupNode) Next() bool {
 
 	// Fill in the aggregate function result value.
 	for _, f := range n.funcs {
-		if f.val.datum, n.err = f.impl.Result(); n.err != nil {
+		if f.val.datum, n.err = f.impl.result(); n.err != nil {
 			return false
 		}
 	}
@@ -263,7 +263,7 @@ func (v *extractAggregatesVisitor) Visit(expr parser.Expr, pre bool) (parser.Vis
 				val: aggregateValue{
 					expr: t,
 				},
-				impl: impl.New(),
+				impl: impl(),
 			}
 			if t.Distinct {
 				f.seen = make(map[string]struct{})
@@ -343,7 +343,7 @@ type aggregateFunc struct {
 	seen map[string]struct{}
 }
 
-func (a *aggregateFunc) Add(d parser.Datum) error {
+func (a *aggregateFunc) add(d parser.Datum) error {
 	if a.seen != nil {
 		encoded, err := encodeDatum(nil, d)
 		if err != nil {
@@ -356,7 +356,7 @@ func (a *aggregateFunc) Add(d parser.Datum) error {
 		}
 		a.seen[e] = struct{}{}
 	}
-	return a.impl.Add(d)
+	return a.impl.add(d)
 }
 
 func encodeDatum(b []byte, d parser.Datum) ([]byte, error) {
@@ -374,9 +374,8 @@ func encodeDatum(b []byte, d parser.Datum) ([]byte, error) {
 }
 
 type aggregateImpl interface {
-	New() aggregateImpl
-	Add(parser.Datum) error
-	Result() (parser.Datum, error)
+	add(parser.Datum) error
+	result() (parser.Datum, error)
 }
 
 var _ aggregateImpl = &avgAggregate{}
@@ -390,23 +389,23 @@ type avgAggregate struct {
 	count int
 }
 
-func (a *avgAggregate) New() aggregateImpl {
+func newAvgAggregate() aggregateImpl {
 	return &avgAggregate{}
 }
 
-func (a *avgAggregate) Add(datum parser.Datum) error {
+func (a *avgAggregate) add(datum parser.Datum) error {
 	if datum == parser.DNull {
 		return nil
 	}
-	if err := a.sumAggregate.Add(datum); err != nil {
+	if err := a.sumAggregate.add(datum); err != nil {
 		return err
 	}
 	a.count++
 	return nil
 }
 
-func (a *avgAggregate) Result() (parser.Datum, error) {
-	sum, err := a.sumAggregate.Result()
+func (a *avgAggregate) result() (parser.Datum, error) {
+	sum, err := a.sumAggregate.result()
 	if err != nil {
 		return parser.DNull, err
 	}
@@ -427,11 +426,11 @@ type countAggregate struct {
 	count int
 }
 
-func (a *countAggregate) New() aggregateImpl {
+func newCountAggregate() aggregateImpl {
 	return &countAggregate{}
 }
 
-func (a *countAggregate) Add(datum parser.Datum) error {
+func (a *countAggregate) add(datum parser.Datum) error {
 	if datum == parser.DNull {
 		return nil
 	}
@@ -449,7 +448,7 @@ func (a *countAggregate) Add(datum parser.Datum) error {
 	return nil
 }
 
-func (a *countAggregate) Result() (parser.Datum, error) {
+func (a *countAggregate) result() (parser.Datum, error) {
 	return parser.DInt(a.count), nil
 }
 
@@ -457,11 +456,11 @@ type maxAggregate struct {
 	max parser.Datum
 }
 
-func (a *maxAggregate) New() aggregateImpl {
+func newMaxAggregate() aggregateImpl {
 	return &maxAggregate{}
 }
 
-func (a *maxAggregate) Add(datum parser.Datum) error {
+func (a *maxAggregate) add(datum parser.Datum) error {
 	if datum == parser.DNull {
 		return nil
 	}
@@ -476,7 +475,7 @@ func (a *maxAggregate) Add(datum parser.Datum) error {
 	return nil
 }
 
-func (a *maxAggregate) Result() (parser.Datum, error) {
+func (a *maxAggregate) result() (parser.Datum, error) {
 	if a.max == nil {
 		return parser.DNull, nil
 	}
@@ -487,11 +486,11 @@ type minAggregate struct {
 	min parser.Datum
 }
 
-func (a *minAggregate) New() aggregateImpl {
+func newMinAggregate() aggregateImpl {
 	return &minAggregate{}
 }
 
-func (a *minAggregate) Add(datum parser.Datum) error {
+func (a *minAggregate) add(datum parser.Datum) error {
 	if datum == parser.DNull {
 		return nil
 	}
@@ -506,7 +505,7 @@ func (a *minAggregate) Add(datum parser.Datum) error {
 	return nil
 }
 
-func (a *minAggregate) Result() (parser.Datum, error) {
+func (a *minAggregate) result() (parser.Datum, error) {
 	if a.min == nil {
 		return parser.DNull, nil
 	}
@@ -517,11 +516,11 @@ type sumAggregate struct {
 	sum parser.Datum
 }
 
-func (a *sumAggregate) New() aggregateImpl {
+func newSumAggregate() aggregateImpl {
 	return &sumAggregate{}
 }
 
-func (a *sumAggregate) Add(datum parser.Datum) error {
+func (a *sumAggregate) add(datum parser.Datum) error {
 	if datum == parser.DNull {
 		return nil
 	}
@@ -547,7 +546,7 @@ func (a *sumAggregate) Add(datum parser.Datum) error {
 	return fmt.Errorf("unexpected SUM argument type: %s", datum.Type())
 }
 
-func (a *sumAggregate) Result() (parser.Datum, error) {
+func (a *sumAggregate) result() (parser.Datum, error) {
 	if a.sum == nil {
 		return parser.DNull, nil
 	}
