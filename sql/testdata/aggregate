@@ -11,7 +11,7 @@ query error column "k" must appear in the GROUP BY clause or be used in an aggre
 SELECT COUNT(*), k FROM kv
 
 # TODO(pmattis): fix
-query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
+query error GROUP BY not supported yet
 SELECT COUNT(*), k FROM kv GROUP BY k
 
 query error syntax error at or near ","
