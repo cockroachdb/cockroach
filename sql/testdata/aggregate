@@ -10,9 +10,15 @@ INSERT INTO kv VALUES (1, 2), (3, 4), (5, NULL), (6, 2), (7, 2), (8, 4)
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT COUNT(*), k FROM kv
 
-# TODO(pmattis): fix
-query error GROUP BY not supported yet
+query II rowsort
 SELECT COUNT(*), k FROM kv GROUP BY k
+----
+1 1
+1 3
+1 5
+1 6
+1 7
+1 8
 
 query error syntax error at or near ","
 SELECT COUNT(*, 1) FROM kv
@@ -236,3 +242,60 @@ EXPLAIN SELECT MAX(x) FROM xyz WHERE (z, y) = (3, 2)
 ----
 0 group   MAX(x)
 1 revscan xyz@zyx 1:/3/2/#-/3/3
+
+statement ok
+CREATE TABLE links (
+  id INT PRIMARY KEY,
+  up INT,
+  down INT,
+  hide BOOLEAN,
+  tag STRING
+)
+
+statement OK
+INSERT INTO links VALUES
+(1, 2, 3, true, 'a'),
+(2, 3, 1, false, 'b'),
+(3, 1, 4, true, 'a'),
+(4, 10, NULL, NULL, 'c'),
+(5, 1, 1, false,  NULL),
+(6, 1, 1, false,  'C');
+
+query I
+SELECT COUNT(*) FROM links
+----
+6
+
+query TI rowsort
+SELECT tag, COUNT(*) FROM links GROUP BY tag
+----
+C 1
+NULL 1
+a 2
+b 1
+c 1
+
+query TI rowsort
+SELECT UPPER(tag), COUNT(*) FROM links GROUP BY tag
+----
+A 2
+B 1
+C 1
+C 1
+NULL 1
+
+query TIIIR rowsort
+SELECT UPPER(tag), COUNT(*), SUM(up), SUM(down), AVG(up+down) as avg_votes FROM links GROUP BY UPPER(tag)
+----
+A 2 3 7 5
+B 1 3 1 4
+C 2 11 1 2
+NULL 1 1 1 2
+
+query II rowsort
+SELECT count(links.id) AS count_1, links.up + links.down AS lx FROM links GROUP BY links.up + links.down
+----
+1 4
+1 NULL
+2 2
+2 5
