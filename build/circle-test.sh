@@ -77,8 +77,18 @@ prepare_artifacts() {
         -d "${2}"
       }
 
+      echo "Posting an issue"
       # Generate string of failed tests: 'TestRaftRemoveRace TestChaos TestHoneyBooBoo'
-      FAILEDTESTS=$(grep -oh '^--- FAIL: \w*' "${outdir}/excerpt.txt" | sed -e 's/--- FAIL: //' | tr '\n' ' ')
+      FAILEDTESTS=$(grep -oh '^--- FAIL: \w*' "${outdir}/excerpt.txt" | sed -e 's/--- FAIL: //' | tr '\n' ' ' || true)
+      if [ -z "${FAILEDTESTS}" -a -n "${CIRCLE_TEST_REPORTS-}" ]; then
+        # If a test timed out, try to grab that from the xml. This is already
+        # almost trying too hard to be clever.
+        FAILEDTESTS=$(find "${CIRCLE_TEST_REPORTS}" -type f -iname '*.xml' |
+          xargs cat |
+          grep -Pzo 'name="[^"]+".*\n.*failure' |
+          sed -E -e 's/.*name="([^"]+)".*/\1/' |
+          head -n 1 || true)
+      fi
       # Generate string for JSON labels below:
       # '"test-failure", "TestRaftRemoveRace", "TestChaos", "TestHoneyBooBoo"'
       LABELSTR='"test-failure"'
