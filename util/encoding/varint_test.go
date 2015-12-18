@@ -10,8 +10,7 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
-// permissions and limitations under the License. See the AUTHORS file
-// for names of contributors.
+// permissions and limitations under the License.
 //
 // An ordered key encoding scheme based on sqlite4's key encoding:
 // http://sqlite.org/src4/doc/trunk/www/key_encoding.wiki
