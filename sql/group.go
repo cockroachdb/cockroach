@@ -51,6 +51,15 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 		n.GroupBy[i] = norm
 	}
 
+	// Determine if aggregation is being performed and, if so, if it is valid.
+	// Check each render expressions and verify that the only qvalues mentioned
+	// in it are either aggregated or appear in GROUP BY expressions.
+	if aggregation, err := checkAggregateExprs(n.GroupBy, s.render); !aggregation {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
 	// TODO(pmattis): This only handles aggregate functions, not GROUP BY.
 
 	// Loop over the render expressions and extract any aggregate functions.
@@ -65,19 +74,6 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 	}
 	if len(funcs) == 0 {
 		return nil, nil
-	}
-
-	// Aggregation is being performed. Loop over the render expressions again and
-	// verify that the only qvalues mentioned by GROUP BY expressions are allowed
-	// outside of the aggregate function arguments. For example, the following is
-	// illegal because k is used outside of the aggregate function and not part
-	// of a GROUP BY expression.
-	//
-	//   SELECT COUNT(k), k FROM kv GROUP BY v
-	for _, r := range s.render {
-		if err := checkAggregateExpr(r); err != nil {
-			return nil, err
-		}
 	}
 
 	if log.V(2) {
@@ -304,7 +300,9 @@ func (p *planner) extractAggregateFuncs(expr parser.Expr) (parser.Expr, []*aggre
 }
 
 type checkAggregateVisitor struct {
-	err error
+	groupStrs  map[string]struct{}
+	aggregated bool
+	err        error
 }
 
 var _ parser.Visitor = &checkAggregateVisitor{}
@@ -313,19 +311,58 @@ func (v *checkAggregateVisitor) Visit(expr parser.Expr, pre bool) (parser.Visito
 	if !pre || v.err != nil {
 		return nil, expr
 	}
-	switch t := expr.(type) {
-	case *qvalue:
-		// TODO(pmattis): Check that the qvalue is part of a GROUP BY expression.
+
+	if t, ok := expr.(*parser.FuncExpr); ok {
+		if _, ok := aggregates[strings.ToLower(string(t.Name.Base))]; ok {
+			v.aggregated = true
+			return nil, expr
+		}
+	}
+
+	if t, ok := expr.(*qvalue); ok {
+		if _, ok := v.groupStrs[t.String()]; ok {
+			return nil, expr
+		}
 		v.err = fmt.Errorf("column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function", t.col.Name)
+		return v, expr
+	}
+
+	if _, ok := v.groupStrs[expr.String()]; ok {
 		return nil, expr
 	}
 	return v, expr
 }
 
-func checkAggregateExpr(expr parser.Expr) error {
+// Check if expressions use aggregation and, if so, if they are valid.
+// "Valid" expressions must either contain no unaggregated qvalues
+// or must appear, verbatim, in the group-by clause. Expressions are
+// string-compared to the group-by clauses (as an approximation of) a
+// recursive expression-tree equality check.
+func checkAggregateExprs(group parser.GroupBy, exprs []parser.Expr) (bool, error) {
+	aggregated := len(group) > 0
+
+	//TODO(davidt): remove when group by is implemented
+	if aggregated {
+		return aggregated, fmt.Errorf("GROUP BY not supported yet")
+	}
+
 	v := checkAggregateVisitor{}
-	_ = parser.WalkExpr(&v, expr)
-	return v.err
+
+	v.groupStrs = make(map[string]struct{}, len(group))
+	for i := range group {
+		v.groupStrs[group[i].String()] = struct{}{}
+	}
+
+	for _, expr := range exprs {
+		_ = parser.WalkExpr(&v, expr)
+		if v.aggregated {
+			aggregated = true
+		}
+		if v.err != nil {
+			return aggregated, v.err
+		}
+	}
+	return aggregated, nil
 }
 
 type aggregateValue struct {
