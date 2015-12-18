@@ -1,7 +1,6 @@
 #!/bin/bash
 #
-# Update the cockroach homebrew formula. Requires
-# github.com/samertm/homebrew-go-resources. Expected usage:
+# Update the cockroach homebrew formula. Expected usage:
 #
 # 1. Tag a new release on https://github.com/cockroachdb/cockroach/releases
 #   a. The tag should have a name like v0.1-alpha
@@ -29,11 +28,20 @@ line=$(grep -n '### GO RESOURCES ###' ${template} | cut -d ":" -f 1)
     echo "### DO NOT EDIT!'"
     echo
     head -n $((line-1)) ${template} | sed -e s/@VERSION@/${version}/g -e s/@REVISION@/${revision}/g
-    # homebrew-go-resources outputs some urls with "https///". We
-    # could potentially generate this section from the GLOCKFILE,
-    # though the dependencies there are more than what we need to
-    # build just the cockroach binary.
-    homebrew-go-resources . | sed 's,https///,https://,g'
+
+    for dep in $(build/depvers.sh); do
+        repo=$(echo ${dep} | cut -f1 -d:)
+        if test "${repo}" = "github.com/cockroachdb/cockroach"; then
+            continue
+        fi
+        rev=$(echo ${dep} | cut -f2 -d:)
+        echo
+        echo "  go_resource \"${repo}\" do"
+        echo "    url \"https://${repo}.git\","
+        echo "      :revision => \"${rev}\""
+        echo "  end"
+    done
+
     tail -n +$(($line+1)) ${template}
 } > ${output}
 
