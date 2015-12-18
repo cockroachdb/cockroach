@@ -21,17 +21,13 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestDesiredAggregateOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	extractAggregateFuncs := func(expr parser.Expr) (parser.Expr, []*aggregateFunc, error) {
-		var v extractAggregatesVisitor
-		return v.run(expr)
-	}
+	p := planner{}
 
 	testData := []struct {
 		expr     string
@@ -53,11 +49,12 @@ func TestDesiredAggregateOrder(t *testing.T) {
 	}
 	for _, d := range testData {
 		expr, _ := parseAndNormalizeExpr(t, d.expr)
-		_, funcs, err := extractAggregateFuncs(expr)
+		group := &groupNode{}
+		_, err := p.extractAggregateFuncs(group, expr)
 		if err != nil {
 			t.Fatal(err)
 		}
-		ordering := desiredAggregateOrdering(funcs)
+		ordering := desiredAggregateOrdering(group.funcs)
 		if !reflect.DeepEqual(d.ordering, ordering) {
 			t.Fatalf("%s: expected %d, but found %d", d.expr, d.ordering, ordering)
 		}
