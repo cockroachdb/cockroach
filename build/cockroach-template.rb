@@ -25,15 +25,23 @@ class Cockroach < Formula
     mv files, buildpath/"src/github.com/cockroachdb/cockroach"
     Language::Go.stage_deps resources, buildpath/"src"
 
-    # We use `xcrun make` instead of `make` to avoid homebrew mucking
-    # with the HOMEBREW_CCCFG variable which in turn causes the C
-    # compiler to behave in a way that is not supported by cgo.
-    #
-    # TODO(peter): build/depvers is returning nothing. Figure out why.
-    system "xcrun", "make", "-C",
-           "src/github.com/cockroachdb/cockroach", "build",
-           "GOFLAGS=-v", "SKIP_BOOTSTRAP=1"
-    bin.install "src/github.com/cockroachdb/cockroach/cockroach" => "cockroach"
+    # We can't use build/depvers.sh in the homebrew environment
+    # because dependencies have not had their git repos copied
+    # over. But we already have all of the revision information
+    # available, we just have to build up the same command line "make
+    # build" would create.
+    deps = format("%s:%s ", "github.com/cockroachdb/cockroach", active_spec.specs[:revision])
+    deps += resources.grep(Resource::Go) do |resource|
+      format("%s:%s", resource.name, resource.specs[:revision])
+    end.sort.join(" ")
+    tag = `git -C src/github.com/cockroachdb/cockroach describe --dirty --tags`.strip
+    date = `date -u '+%Y/%m/%d %H:%M:%S'`.strip
+
+    system "go", "build", "-v", "-o", bin/"cockroach", "-ldflags",
+           "-X \"github.com/cockroachdb/cockroach/util.buildTag=#{tag}\"" \
+           " -X \"github.com/cockroachdb/cockroach/util.buildTime=#{date}\"" \
+           " -X \"github.com/cockroachdb/cockroach/util.buildDeps=#{deps}\"",
+           "github.com/cockroachdb/cockroach"
   end
 
   test do

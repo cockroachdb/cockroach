@@ -29,12 +29,7 @@ pkgs=$(go list -f '{{printf "%s\n" .ImportPath}}{{range .Deps}}{{printf "%s\n" .
   sort -u | egrep '[^/]+\.[^/]+/')
 
 # For each package, list the package directory and package root.
-pkginfo=($(go list -f '{{.Dir}} {{.Root}}' ${pkgs} 2>/dev/null))
-
-# Loop over the package info which comes in pairs in the pkginfo
-# array.
-for (( i=0; i < ${#pkginfo[@]}; i+=2 )); do
-  dir=${pkginfo[$i]}
+go list -f '{{.Dir}} {{.Root}}' ${pkgs} 2>/dev/null | while read dir root; do
   if ! test -d "${dir}"; then
     continue
   fi
@@ -61,6 +56,5 @@ for (( i=0; i < ${#pkginfo[@]}; i+=2 )); do
     vers=$(hg --cwd "${dir}" parent --template '{node}')
   fi
 
-  root=${pkginfo[$i+1]}
   echo ${toplevel#$root/src/}:${vers}
 done
