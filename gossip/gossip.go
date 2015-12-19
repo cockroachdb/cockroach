@@ -82,10 +82,10 @@ const (
 	// ttlNodeDescriptorGossip is time-to-live for node ID -> address.
 	ttlNodeDescriptorGossip = 0 * time.Second
 
-	// checkInterval is the default interval for checking for bad gossip
-	// states, including a badly connected network and the least useful
-	// clients.
-	checkInterval = 60 * time.Second
+	// cullInterval is the default interval for culling the least
+	// "useful" outgoing gossip connection to free up space for a
+	// more efficiently targeted connection to the most distant node.
+	cullInterval = 60 * time.Second
 
 	// stallInterval is the default interval for checking whether the
 	// incoming and outgoing connections to the gossip network are
@@ -430,6 +430,16 @@ func (g *Gossip) Outgoing() []roachpb.NodeID {
 	return g.outgoing.asSlice()
 }
 
+// MaxHops returns the maximum number of hops to reach any other
+// node in the system, according to the infos which have reached
+// this node via gossip network.
+func (g *Gossip) MaxHops() uint32 {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	_, maxHops := g.is.mostDistant()
+	return maxHops
+}
+
 // Start launches the gossip instance, which commences joining the
 // gossip network using the supplied rpc server and the gossip
 // bootstrap addresses specified via command-line flag: --gossip.
@@ -560,15 +570,16 @@ func (g *Gossip) bootstrap(stopper *stop.Stopper) {
 // is notified via the stalled conditional variable.
 func (g *Gossip) manage(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
-		// Loop until closed and there are no remaining outgoing connections.
 		for {
 			select {
 			case <-stopper.ShouldStop():
 				return
 			case c := <-g.disconnected:
 				g.doDisconnected(stopper, c)
-			case <-time.After(g.jitteredInterval(checkInterval)):
-				g.doCheckNetwork(stopper)
+			case nodeID := <-g.tighten:
+				g.tightenNetwork(stopper, nodeID)
+			case <-time.After(g.jitteredInterval(cullInterval)):
+				g.cullNetwork()
 			case <-time.After(g.jitteredInterval(stallInterval)):
 				g.mu.Lock()
 				g.maybeSignalStalledLocked()
@@ -584,31 +595,40 @@ func (g *Gossip) jitteredInterval(interval time.Duration) time.Duration {
 	return time.Duration(float64(interval) * (0.75 + 0.5*rand.Float64()))
 }
 
-func (g *Gossip) doCheckNetwork(stopper *stop.Stopper) {
+// tightenNetwork "tightens" the network by starting a new gossip
+// client to the most distant node as measured in required gossip hops
+// to propagate info from the distant node to this node.
+func (g *Gossip) tightenNetwork(stopper *stop.Stopper, distantNodeID roachpb.NodeID) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	// Check whether the graph needs to be tightened to
-	// accommodate distant infos.
-	distant := g.filterExtant(g.is.distant(MaxHops))
 	g.outgoing.setMaxSize(g.maxPeers())
-	// If there are distant nodes, start a client if we have space.
-	if g.outgoing.hasSpace() && distant.len() > 0 {
-		nodeID := distant.selectRandom()
-		if nodeAddr, err := g.getNodeIDAddressLocked(nodeID); err != nil {
-			log.Errorf("node %d: %s", nodeID, err)
+	if g.outgoing.hasSpace() {
+		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
+			log.Errorf("node %d: %s", distantNodeID, err)
 		} else {
+			log.Infof("starting client to distant node %d to tighten network graph", distantNodeID)
 			g.startClient(nodeAddr, stopper)
 		}
-	} else if !g.outgoing.hasSpace() {
-		// Otherwise, find least useful peer and close it. Make sure
-		// here that we only consider outgoing clients which are
-		// connected.
-		nodeID := g.is.leastUseful(g.outgoing)
-		if nodeID != 0 {
-			log.Infof("closing least useful client %d to tighten network graph", nodeID)
-			g.closeClient(nodeID)
-		}
 	}
+}
+
+// cullNetwork is called periodically to remove the least "useful"
+// outoing node to free up an outgoing spot for a more targeting
+// tightening (via tightenNetwork).
+func (g *Gossip) cullNetwork() {
+	// If there's no space, find and remove least useful peer, if possible.
+	if g.outgoing.hasSpace() {
+		return
+	}
+	leastUsefulID := g.is.leastUseful(g.outgoing)
+	if leastUsefulID == 0 {
+		if log.V(1) {
+			log.Infof("couldn't find least useful client to close")
+		}
+		return
+	}
+	log.Infof("closing least useful client to node %d to tighten network graph", leastUsefulID)
+	g.closeClient(leastUsefulID)
 }
 
 func (g *Gossip) doDisconnected(stopper *stop.Stopper, c *client) {

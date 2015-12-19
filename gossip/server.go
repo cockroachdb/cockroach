@@ -35,9 +35,9 @@ import (
 // and is stored in the server's lAddrMap, which is keyed by an
 // incoming client's local address.
 type clientInfo struct {
-	id              roachpb.NodeID
-	addr            *util.UnresolvedAddr
-	highWaterStamps map[int32]int64
+	id    roachpb.NodeID
+	addr  *util.UnresolvedAddr
+	nodes map[int32]*Node
 }
 
 // server maintains an array of connected peers to which it gossips
@@ -49,6 +49,7 @@ type server struct {
 	incoming nodeSet                   // Incoming client node IDs
 	lAddrMap map[string]clientInfo     // Incoming client's local address -> client's node info
 	nodeMap  map[roachpb.NodeID]string // Incoming client's node ID -> local address (string)
+	tighten  chan roachpb.NodeID       // Channel of too-distant node IDs
 	sent     int                       // Count of infos sent from this server to clients
 	received int                       // Count of infos received from clients
 	ready    *sync.Cond                // Broadcasts wakeup to waiting gossip requests
@@ -63,6 +64,7 @@ func newServer() *server {
 		incoming: makeNodeSet(1),
 		lAddrMap: map[string]clientInfo{},
 		nodeMap:  map[roachpb.NodeID]string{},
+		tighten:  make(chan roachpb.NodeID, 1),
 	}
 	s.ready = sync.NewCond(&s.mu)
 	return s
@@ -89,7 +91,7 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 	}
 	// Verify that the client connection is valid and hasn't been closed.
 	if _, ok := s.lAddrMap[lAddr.String()]; !ok {
-		return nil, util.Errorf("connection already closed; ignoring gossip")
+		return nil, util.Errorf("node %d: connection already closed from node %d (%s); ignoring gossip", s.is.NodeID, args.NodeID, lAddr)
 	}
 
 	reply.NodeID = s.is.NodeID
@@ -122,23 +124,25 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 	// removed from the incoming addr set when its connection is
 	// closed. See server.serveConn() below.
 	if canAccept {
-		s.lAddrMap[lAddr.String()] = clientInfo{args.NodeID, &args.Addr, args.HighWaterStamps}
-	}
+		s.lAddrMap[lAddr.String()] = clientInfo{args.NodeID, &args.Addr, args.Nodes}
 
-	// Combine incoming infos if specified and exit.
-	if args.Delta != nil {
-		s.received += len(args.Delta)
-		freshCount := s.is.combine(args.Delta, args.NodeID)
-		if log.V(1) {
-			log.Infof("received %s from node %d (%d fresh)", args.Delta, args.NodeID, freshCount)
-		} else {
-			log.Infof("received %d (%d fresh) info(s) from node %d", len(args.Delta), freshCount, args.NodeID)
+		// If incoming infos are specified, combine and exit. This is a
+		// "push" from the incoming client.
+		if args.Delta != nil {
+			s.received += len(args.Delta)
+			freshCount := s.is.combine(args.Delta, args.NodeID)
+			if log.V(1) {
+				log.Infof("received %s from node %d (%d fresh)", args.Delta, args.NodeID, freshCount)
+			} else {
+				log.Infof("node %d received %d (%d fresh) info(s) from node %d", s.is.NodeID, len(args.Delta), freshCount, args.NodeID)
+			}
+			if s.closed {
+				return nil, util.Errorf("gossip server shutdown")
+			}
+			s.maybeTighten()
+			reply.Nodes = s.is.getNodes()
+			return reply, nil
 		}
-		if s.closed {
-			return nil, util.Errorf("gossip server shutdown")
-		}
-		reply.HighWaterStamps = s.is.getHighWaterStamps()
-		return reply, nil
 	}
 
 	// Otherwise, loop until the server has deltas for the client.
@@ -148,33 +152,35 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 			return nil, util.Errorf("gossip server shutdown")
 		}
 		if canAccept {
-			reply.Delta = s.is.delta(args.NodeID, s.lAddrMap[lAddr.String()].highWaterStamps)
-		}
-		if len(reply.Delta) > 0 || !canAccept {
+			reply.Delta = s.is.delta(args.NodeID, s.lAddrMap[lAddr.String()].nodes)
+			if len(reply.Delta) > 0 {
+				log.Infof("node %d returned %d info(s) to node %d", s.is.NodeID, len(reply.Delta), args.NodeID)
+				reply.Nodes = s.is.getNodes()
+				s.sent += len(reply.Delta)
+				return reply, nil
+			}
+		} else {
 			// If there is no more capacity to accept incoming clients, return
 			// a random already-being-serviced incoming client as an alternate.
-			if !canAccept {
-				// Map iteration order is random.
-				randIdx := rand.Int31n(int32(len(s.lAddrMap)))
-				for _, cInfo := range s.lAddrMap {
-					if randIdx == 0 {
-						reply.AlternateAddr = cInfo.addr
-						reply.AlternateNodeID = cInfo.id
-						log.Infof("refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
-							args.NodeID, s.incoming.maxSize, cInfo.id, cInfo.addr)
-						break
-					}
-					randIdx--
+			var addrs []string
+			for addr, cInfo := range s.lAddrMap {
+				if cInfo.id != 0 && cInfo.id != s.is.NodeID {
+					addrs = append(addrs, addr)
 				}
 			}
-			reply.HighWaterStamps = s.is.getHighWaterStamps()
-			s.sent += len(reply.Delta)
-			return reply, nil
+			if len(addrs) > 0 {
+				cInfo := s.lAddrMap[addrs[int(rand.Int31n(int32(len(addrs))))]]
+				reply.AlternateAddr = cInfo.addr
+				reply.AlternateNodeID = cInfo.id
+				log.Infof("refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
+					args.NodeID, s.incoming.maxSize, cInfo.id, cInfo.addr)
+				return reply, nil
+			}
 		}
 		// Wait for server to get new gossip set before computing delta.
 		s.ready.Wait()
 		// If the client connection was closed, exit.
-		if !s.incoming.hasNode(args.NodeID) {
+		if _, ok := s.lAddrMap[lAddr.String()]; !ok {
 			return nil, util.Errorf("client connection closed")
 		}
 	}
@@ -194,6 +200,23 @@ func (s *server) InfosReceived() int {
 	return s.received
 }
 
+// maybeTighten examines the infostore for the most distant node and
+// if more distant than MaxHops, sends on the tightenNetwork channel
+// to start a new client connection.
+func (s *server) maybeTighten() {
+	distantNodeID, distantHops := s.is.mostDistant()
+	log.Infof("@%d: distantHops: %d from %d", s.is.NodeID, distantHops, distantNodeID)
+	if distantHops > MaxHops {
+		select {
+		case s.tighten <- distantNodeID:
+			log.Infof("if possible, tightening network to node %d (%d > %d)",
+				distantNodeID, distantHops, MaxHops)
+		default:
+			// Do nothing.
+		}
+	}
+}
+
 // maxPeers returns the maximum number of peers each gossip node
 // may connect to. This is based on maxHops, which is a preset
 // maximum for number of hops allowed before the gossip network
@@ -211,7 +234,7 @@ func (s *server) maxPeers() int {
 		panic(err)
 	}
 
-	peers := int(math.Ceil(math.Exp(2 * math.Log(float64(nodeCount)) / float64(MaxHops-1))))
+	peers := int(math.Ceil(math.Exp(math.Log(float64(nodeCount)) / float64(MaxHops-1))))
 	if peers < minPeers {
 		return minPeers
 	}
@@ -267,7 +290,9 @@ func (s *server) onOpen(conn net.Conn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	remoteAddr := conn.RemoteAddr().String()
-	s.lAddrMap[remoteAddr] = clientInfo{}
+	if _, ok := s.lAddrMap[remoteAddr]; !ok {
+		s.lAddrMap[remoteAddr] = clientInfo{}
+	}
 }
 
 // onClose is invoked by the rpcServer each time a connected client

@@ -74,7 +74,7 @@ func TestInfoStoreGetInfo(t *testing.T) {
 	if infoCount := len(is.Infos); infoCount != 1 {
 		t.Errorf("infostore count incorrect %d != 1", infoCount)
 	}
-	if is.highWaterStamps[1] != i.OrigStamp {
+	if is.nodes[1].HighWaterStamp != i.OrigStamp {
 		t.Error("high water timestamps map wasn't updated")
 	}
 	if is.getInfo("a") != i {
@@ -174,18 +174,21 @@ func createTestInfoStore(t *testing.T) infoStore {
 	for i := 0; i < 10; i++ {
 		infoA := is.newInfo(nil, time.Second)
 		infoA.NodeID = 1
+		infoA.Hops = 1
 		if err := is.addInfo(fmt.Sprintf("a.%d", i), infoA); err != nil {
 			t.Fatal(err)
 		}
 
 		infoB := is.newInfo(nil, time.Second)
 		infoB.NodeID = 2
+		infoB.Hops = 2
 		if err := is.addInfo(fmt.Sprintf("b.%d", i), infoB); err != nil {
 			t.Fatal(err)
 		}
 
 		infoC := is.newInfo(nil, time.Second)
 		infoC.NodeID = 3
+		infoC.Hops = 3
 		if err := is.addInfo(fmt.Sprintf("c.%d", i), infoC); err != nil {
 			t.Fatal(err)
 		}
@@ -199,17 +202,17 @@ func TestInfoStoreDelta(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	is := createTestInfoStore(t)
 
-	// Verify deltas with successive timestamps.
-	infos := is.delta(4, map[int32]int64{})
+	// Verify deltas with successive high water timestamps & min hops.
+	infos := is.delta(4, map[int32]*Node{})
 	for i := 0; i < 10; i++ {
 		if i > 0 {
 			infoA := is.getInfo(fmt.Sprintf("a.%d", i-1))
 			infoB := is.getInfo(fmt.Sprintf("b.%d", i-1))
 			infoC := is.getInfo(fmt.Sprintf("c.%d", i-1))
-			infos = is.delta(4, map[int32]int64{
-				1: infoA.OrigStamp,
-				2: infoB.OrigStamp,
-				3: infoC.OrigStamp,
+			infos = is.delta(4, map[int32]*Node{
+				1: {infoA.OrigStamp, 0},
+				2: {infoB.OrigStamp, 0},
+				3: {infoC.OrigStamp, 0},
 			})
 		}
 
@@ -223,18 +226,18 @@ func TestInfoStoreDelta(t *testing.T) {
 		}
 	}
 
-	if infos := is.delta(4, map[int32]int64{
-		1: math.MaxInt64,
-		2: math.MaxInt64,
-		3: math.MaxInt64,
+	if infos := is.delta(4, map[int32]*Node{
+		1: {math.MaxInt64, 10},
+		2: {math.MaxInt64, 10},
+		3: {math.MaxInt64, 10},
 	}); len(infos) != 0 {
 		t.Errorf("fetching delta of infostore at maximum timestamp should return empty, got %v", infos)
 	}
 }
 
-// TestInfoStoreDistant verifies selection of infos from store with
-// Hops > maxHops.
-func TestInfoStoreDistant(t *testing.T) {
+// TestInfoStoreMostDistant verifies selection of most distant node &
+// associated hops.
+func TestInfoStoreMostDistant(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	nodes := []roachpb.NodeID{
 		roachpb.NodeID(1),
@@ -250,12 +253,12 @@ func TestInfoStoreDistant(t *testing.T) {
 		if err := is.addInfo(fmt.Sprintf("b.%d", i), inf); err != nil {
 			t.Fatal(err)
 		}
-	}
-
-	for i := 0; i < len(nodes); i++ {
-		nodesLen := is.distant(uint32(i)).len()
-		if nodesLen != 3-i {
-			t.Errorf("%d nodes (not %d) should be over maxHops = %d", 3-i, nodesLen, i)
+		nodeID, hops := is.mostDistant()
+		if nodeID != inf.NodeID {
+			t.Errorf("%d: expected node %d; got %d", i, inf.NodeID, nodeID)
+		}
+		if hops != inf.Hops {
+			t.Errorf("%d: expected node %d; got %d", i, inf.Hops, hops)
 		}
 	}
 }
