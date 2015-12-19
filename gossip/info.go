@@ -17,22 +17,27 @@
 
 package gossip
 
-import (
-	"github.com/cockroachdb/cockroach/roachpb"
-)
+import "github.com/cockroachdb/cockroach/roachpb"
 
 // expired returns true if the node's time to live (TTL) has expired.
 func (i *Info) expired(now int64) bool {
 	return i.TTLStamp <= now
 }
 
-// isFresh returns true if the info has an originating timestamp newer
-// than timestamp and didn't originate from the same node.
-func (i *Info) isFresh(nodeID roachpb.NodeID, timestamp int64) bool {
-	if (nodeID != 0 && nodeID == i.NodeID) || i.OrigStamp <= timestamp {
+// isFresh returns false if the info originated at this node, or if
+// the info has an originating timestamp earlier than the latest seen
+// by this node, or if the timestamps are equal but the hops the info
+// has taken to arrive at this node is greater than the minimum seen
+// from the originating node.
+func (i *Info) isFresh(thisNodeID roachpb.NodeID, n *Node) bool {
+	if thisNodeID != 0 && thisNodeID == i.NodeID {
 		return false
 	}
-	return true
+	if n == nil || (i.OrigStamp > n.HighWaterStamp ||
+		(i.OrigStamp == n.HighWaterStamp && i.Hops+1 < n.MinHops)) {
+		return true
+	}
+	return false
 }
 
 // infoMap is a map of keys to info object pointers.

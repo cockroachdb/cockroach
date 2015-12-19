@@ -27,7 +27,7 @@ import (
 // verifyConvergence verifies that info from each node is visible from
 // every node in the network within numCycles cycles of the gossip protocol.
 func verifyConvergence(numNodes, maxCycles int, t *testing.T) {
-	network := simulation.NewNetwork(numNodes, "tcp")
+	network := simulation.NewNetwork(numNodes)
 
 	if connectedCycle := network.RunUntilFullyConnected(); connectedCycle > maxCycles {
 		t.Errorf("expected a fully-connected network within %d cycles; took %d",
