@@ -58,20 +58,45 @@ func TestIsFresh(t *testing.T) {
 	node3 := roachpb.NodeID(3)
 	i := newInfo(float64(1))
 	i.NodeID = node1
-	if !i.isFresh(node3, i.OrigStamp-1) {
+	i.Hops = 3
+	if !i.isFresh(node3, nil) {
 		t.Error("info should be fresh:", i)
 	}
-	if i.isFresh(node3, i.OrigStamp+1) {
+	if i.isFresh(node1, nil) {
 		t.Error("info should not be fresh:", i)
 	}
-	if i.isFresh(node1, i.OrigStamp-1) {
+	if !i.isFresh(node3, &Node{i.OrigStamp - 1, 3}) {
+		t.Error("info should be fresh:", i)
+	}
+	if !i.isFresh(node3, &Node{i.OrigStamp - 1, 4}) {
+		t.Error("info should be fresh:", i)
+	}
+	if i.isFresh(node3, &Node{i.OrigStamp, 3}) {
 		t.Error("info should not be fresh:", i)
 	}
-	if !i.isFresh(node2, i.OrigStamp-1) {
+	if i.isFresh(node3, &Node{i.OrigStamp, 4}) {
+		t.Error("info should not be fresh:", i)
+	}
+	if !i.isFresh(node3, &Node{i.OrigStamp, 5}) {
+		t.Error("info should be fresh:", i)
+	}
+	if i.isFresh(node3, &Node{i.OrigStamp, 2}) {
+		t.Error("info should not be fresh (hops + 1 will not be better):", i)
+	}
+	if i.isFresh(node3, &Node{i.OrigStamp + 1, 3}) {
+		t.Error("info should not be fresh:", i)
+	}
+	if i.isFresh(node3, &Node{i.OrigStamp + 1, 2}) {
+		t.Error("info should not be fresh:", i)
+	}
+	if i.isFresh(node1, &Node{i.OrigStamp - 1, 2}) {
+		t.Error("info should not be fresh:", i)
+	}
+	if !i.isFresh(node2, &Node{i.OrigStamp - 1, 3}) {
 		t.Error("info should be fresh:", i)
 	}
 	// Using node 0 will always yield fresh data.
-	if !i.isFresh(0, 0) {
+	if !i.isFresh(0, &Node{0, 0}) {
 		t.Error("info should be fresh from node0:", i)
 	}
 }

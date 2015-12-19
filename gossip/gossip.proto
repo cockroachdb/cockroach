@@ -24,6 +24,16 @@ import "cockroach/roachpb/metadata.proto";
 import "cockroach/util/unresolved_addr.proto";
 import weak "gogoproto/gogo.proto";
 
+// Node contains information about a gossip node.
+message Node {
+  // High_water_stamp is the most recent timestamp of any info which
+  // originated at this node.
+  int64 high_water_stamp = 1;
+  // Min_hops is the minimum number of hops seen for any info which
+  // originated at this node.
+  uint32 min_hops = 2;
+}
+
 // Request is the request struct passed with the Gossip RPC.
 message Request {
   // Requesting node's ID.
@@ -34,8 +44,8 @@ message Request {
   // Local address of client on requesting node (this is a kludge to
   // allow gossip to know when client connections are dropped).
   util.UnresolvedAddr l_addr = 3 [(gogoproto.nullable) = false];
-  // Map of all high water timestamps, by node, seen by the requester.
-  map<int32, int64> high_water_stamps = 4;
+  // Map of information about other nodes, as seen by the requester.
+  map<int32, Node> nodes = 4;
   // Delta of Infos originating at sender.
   map<string, Info> delta = 5;
 }
@@ -53,10 +63,11 @@ message Response {
   // Node ID of the alternate address, if alternate_addr is not nil.
   int32 alternate_node_id = 4 [(gogoproto.customname) = "AlternateNodeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
-  // Delta of Infos originating at nodes newer than specified high water timestamps.
+  // Delta of Infos which are fresh according to the map of Node info messages
+  // passed with the request.
   map<string, Info> delta = 5;
   // Map of all high water timestamps, by node, seen by the responder.
-  map<int32, int64> high_water_stamps = 6;
+  map<int32, Node> nodes = 6;
 }
 
 // Info is the basic unit of information traded over the
