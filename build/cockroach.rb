@@ -149,29 +149,24 @@ class Cockroach < Formula
     ENV["GOPATH"] = buildpath
     ENV["GOHOME"] = buildpath
 
-    files = Dir.glob("*")
+    # Move everything in the current directory (i.e. the cockroach
+    # repo), except for .brew_home, to where it would reside in a
+    # normal Go source layout.
+    files = Dir.glob("*") + Dir.glob(".[a-z]*")
+    files.delete(".brew_home")
     mkdir_p buildpath/"src/github.com/cockroachdb/cockroach"
     mv files, buildpath/"src/github.com/cockroachdb/cockroach"
     Language::Go.stage_deps resources, buildpath/"src"
 
-    # TODO(peter): We should be using the cockroach makefile so that
-    # we can get the build information baked into the
-    # binary. Unfortunately, this is dying with some weird dwarf
-    # linker error:
+    # We use `xcrun make` instead of `make` to avoid homebrew mucking
+    # with the HOMEBREW_CCCFG variable which in turn causes the C
+    # compiler to behave in a way that is not supported by cgo.
     #
-    #   make -C src/github.com/cockroachdb/cockroach build SKIP_BOOTSTRAP=1
-    #
-    # Something truly bizarre is going on. The error is:
-    #
-    # # github.com/cockroachdb/c-snappy
-    # cannot load DWARF output from $WORK/github.com/cockroachdb/c-snappy/_obj//_cgo_.o: decoding dwarf section info at offset 0x0: too short
-    #
-    # But that error only happens when building with make. Using go
-    # directly and everything works fine. Additionally,
-    # build/depvers.sh returns nothing when run in the homebrew build
-    # environment. But if I execute the "go list" directives inside
-    # the debugging shell it works. Wtf?
-    system "go", "build", "-v", "-o", bin/"cockroach", "github.com/cockroachdb/cockroach"
+    # TODO(peter): build/depvers is returning nothing. Figure out why.
+    system "xcrun", "make", "-C",
+           "src/github.com/cockroachdb/cockroach", "build",
+           "GOFLAGS=-v", "SKIP_BOOTSTRAP=1"
+    bin.install "src/github.com/cockroachdb/cockroach/cockroach" => "cockroach"
   end
 
   test do
