@@ -626,7 +626,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 			m.updateSystemConfig(config)
 		}
 	}()
-	gossip.RegisterSystemConfigCallback(configC)
+	gossip.RegisterSystemConfigChannel(configC)
 
 	s.RunWorker(func() {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(DescriptorTable.ID))

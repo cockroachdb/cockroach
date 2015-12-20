@@ -382,15 +382,15 @@ func (g *Gossip) GetSystemConfig() *config.SystemConfig {
 
 type systemConfigCallback func(*config.SystemConfig)
 
-// RegisterSystemConfigCallback registers a callback for the unmarshalled
-// system config. It is called after registration, and whenever a new
+// RegisterSystemConfigChannel registers an update channel for the unmarshalled
+// system config. It is delivered configs after registration, and whenever a new
 // system config is successfully unmarshalled.
-func (g *Gossip) RegisterSystemConfigCallback(c chan<- *config.SystemConfig) {
+func (g *Gossip) RegisterSystemConfigChannel(c chan<- *config.SystemConfig) {
 	g.systemConfigMu.Lock()
 	defer g.systemConfigMu.Unlock()
 	g.systemConfigChannels = append(g.systemConfigChannels, c)
 
-	// Run the callback right away if we have a config.
+	// Send to the channel right away if we have a config.
 	if g.systemConfig != nil {
 		c <- g.systemConfig
 	}
@@ -398,7 +398,7 @@ func (g *Gossip) RegisterSystemConfigCallback(c chan<- *config.SystemConfig) {
 
 // updateSystemConfig is the raw gossip info callback.
 // Unmarshal the system config, and if successfully, update out
-// copy and run the callbacks.
+// copy and send to each registered config channel.
 func (g *Gossip) updateSystemConfig(key string, content roachpb.Value) {
 	if key != KeySystemConfig {
 		log.Fatalf("wrong key received on SystemConfig callback: %s", key)

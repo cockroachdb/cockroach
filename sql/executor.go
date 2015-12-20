@@ -90,7 +90,7 @@ func newExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager) *E
 			exec.updateSystemConfig(config)
 		}
 	}()
-	gossip.RegisterSystemConfigCallback(configC)
+	gossip.RegisterSystemConfigChannel(configC)
 
 	return exec
 }

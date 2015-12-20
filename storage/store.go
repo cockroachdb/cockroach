@@ -524,7 +524,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 				s.systemGossipUpdate(config)
 			}
 		}()
-		s.ctx.Gossip.RegisterSystemConfigCallback(configC)
+		s.ctx.Gossip.RegisterSystemConfigChannel(configC)
 
 		// Start a single goroutine in charge of periodically gossiping the
 		// sentinel and first range metadata if we have a first range.
