@@ -515,10 +515,16 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.
 	if s.ctx.Gossip != nil {
-		// Register callbacks for any changes to the system config.
-		// This may trigger splits along structured boundaries,
+		// Register config update channel to receive any changes to the
+		// system config. This may trigger splits along structured boundaries,
 		// and update max range bytes.
-		s.ctx.Gossip.RegisterSystemConfigCallback(s.systemGossipUpdate)
+		configC := make(chan *config.SystemConfig, 4)
+		go func() {
+			for config := range configC {
+				s.systemGossipUpdate(config)
+			}
+		}()
+		s.ctx.Gossip.RegisterSystemConfigChannel(configC)
 
 		// Start a single goroutine in charge of periodically gossiping the
 		// sentinel and first range metadata if we have a first range.

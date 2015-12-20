@@ -109,7 +109,7 @@ func (tc *testContext) Start(t testing.TB) {
 	config.TestingSetupZoneConfigHook(tc.stopper)
 	if tc.gossip == nil {
 		rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), tc.stopper)
-		tc.gossip = gossip.New(rpcContext, gossip.TestBootstrap)
+		tc.gossip = gossip.New(rpcContext, gossip.TestBootstrap, tc.stopper)
 		tc.gossip.SetNodeID(1)
 	}
 	if tc.manualClock == nil {

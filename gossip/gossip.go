@@ -117,15 +117,16 @@ type Gossip struct {
 	clients       []*client           // Slice of clients
 	disconnected  chan *client        // Channel of disconnected clients
 	stalled       chan struct{}       // Channel to wakeup stalled bootstrap
+	stopper       *stop.Stopper       // Stopper to stop gossip notifications
 
 	// The system config is treated unlike other info objects.
 	// It is used so often that we keep an unmarshalled version of it
 	// here and its own set of callbacks.
 	// We do not use the infostore to avoid unmarshalling under the
 	// main gossip lock.
-	systemConfig          *config.SystemConfig
-	systemConfigMu        sync.RWMutex
-	systemConfigCallbacks []systemConfigCallback
+	systemConfig         *config.SystemConfig
+	systemConfigMu       sync.RWMutex
+	systemConfigChannels []chan<- *config.SystemConfig
 
 	// resolvers is a list of resolvers used to determine
 	// bootstrap hosts for connecting to the gossip network.
@@ -135,10 +136,10 @@ type Gossip struct {
 }
 
 // New creates an instance of a gossip node.
-func New(rpcContext *rpc.Context, resolvers []resolver.Resolver) *Gossip {
+func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.Stopper) *Gossip {
 	g := &Gossip{
 		Connected:     make(chan struct{}),
-		server:        newServer(),
+		server:        newServer(stopper),
 		outgoing:      makeNodeSet(1),
 		bootstrapping: map[string]struct{}{},
 		clients:       []*client{},
@@ -146,6 +147,7 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver) *Gossip {
 		stalled:       make(chan struct{}, 1),
 		resolverIdx:   len(resolvers) - 1,
 		resolvers:     resolvers,
+		stopper:       stopper,
 	}
 	// The gossip RPC context doesn't measure clock offsets, isn't
 	// shared with the other RPC clients which the node may be using,
@@ -160,7 +162,21 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver) *Gossip {
 
 	// Add ourselves as a SystemConfig watcher.
 	g.is.registerCallback(KeySystemConfig, g.updateSystemConfig)
+
+	// Register ourselves as a closer to the stopper.
+	g.stopper.AddCloser(g)
+
 	return g
+}
+
+// Close implements the Closer interface
+func (g *Gossip) Close() {
+	g.systemConfigMu.Lock()
+	defer g.systemConfigMu.Unlock()
+	for _, c := range g.systemConfigChannels {
+		close(c)
+	}
+	g.systemConfigChannels = nil
 }
 
 // GetNodeID returns the instance's saved node ID.
@@ -366,25 +382,23 @@ func (g *Gossip) GetSystemConfig() *config.SystemConfig {
 
 type systemConfigCallback func(*config.SystemConfig)
 
-// RegisterSystemConfigCallback registers a callback for the unmarshalled
-// system config. It is called after registration, and whenever a new
+// RegisterSystemConfigChannel registers an update channel for the unmarshalled
+// system config. It is delivered configs after registration, and whenever a new
 // system config is successfully unmarshalled.
-func (g *Gossip) RegisterSystemConfigCallback(method systemConfigCallback) {
+func (g *Gossip) RegisterSystemConfigChannel(c chan<- *config.SystemConfig) {
 	g.systemConfigMu.Lock()
 	defer g.systemConfigMu.Unlock()
-	g.systemConfigCallbacks = append(g.systemConfigCallbacks, method)
+	g.systemConfigChannels = append(g.systemConfigChannels, c)
 
-	if g.systemConfig == nil {
-		return
+	// Send to the channel right away if we have a config.
+	if g.systemConfig != nil {
+		c <- g.systemConfig
 	}
-
-	// Run the callback right away if we have a config.
-	go method(g.systemConfig)
 }
 
 // updateSystemConfig is the raw gossip info callback.
 // Unmarshal the system config, and if successfully, update out
-// copy and run the callbacks.
+// copy and send to each registered config channel.
 func (g *Gossip) updateSystemConfig(key string, content roachpb.Value) {
 	if key != KeySystemConfig {
 		log.Fatalf("wrong key received on SystemConfig callback: %s", key)
@@ -399,8 +413,8 @@ func (g *Gossip) updateSystemConfig(key string, content roachpb.Value) {
 	g.systemConfigMu.Lock()
 	defer g.systemConfigMu.Unlock()
 	g.systemConfig = cfg
-	for _, cb := range g.systemConfigCallbacks {
-		go cb(cfg)
+	for _, c := range g.systemConfigChannels {
+		c <- g.systemConfig
 	}
 }
 
@@ -433,11 +447,11 @@ func (g *Gossip) Outgoing() []roachpb.NodeID {
 //
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
-func (g *Gossip) Start(rpcServer *rpc.Server, addr net.Addr, stopper *stop.Stopper) {
-	g.server.start(rpcServer, addr, stopper) // serve gossip protocol
-	g.bootstrap(stopper)                     // bootstrap gossip client
-	g.manage(stopper)                        // manage gossip clients
-	g.maybeWarnAboutInit(stopper)
+func (g *Gossip) Start(rpcServer *rpc.Server, addr net.Addr) {
+	g.server.start(rpcServer, addr) // serve gossip protocol
+	g.bootstrap(g.stopper)          // bootstrap gossip client
+	g.manage(g.stopper)             // manage gossip clients
+	g.maybeWarnAboutInit(g.stopper)
 }
 
 // hasIncoming returns whether the server has an incoming gossip

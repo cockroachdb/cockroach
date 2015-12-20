@@ -620,9 +620,16 @@ func (m *LeaseManager) getSystemConfig() config.SystemConfig {
 // RefreshLeases starts a goroutine that refreshes the lease manager
 // leases for tables received in the latest system configuration via gossip.
 func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gossip.Gossip) {
+	configC := make(chan *config.SystemConfig, 4)
+	go func() {
+		for config := range configC {
+			m.updateSystemConfig(config)
+		}
+	}()
+	gossip.RegisterSystemConfigChannel(configC)
+
 	s.RunWorker(func() {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
-		gossip.RegisterSystemConfigCallback(m.updateSystemConfig)
 		for {
 			select {
 			case <-m.newConfig:

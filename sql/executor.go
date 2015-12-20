@@ -83,7 +83,15 @@ func newExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager) *E
 		leaseMgr: leaseMgr,
 	}
 	exec.systemConfigCond = sync.NewCond(&exec.systemConfigMu)
-	gossip.RegisterSystemConfigCallback(exec.updateSystemConfig)
+
+	configC := make(chan *config.SystemConfig, 4)
+	go func() {
+		for config := range configC {
+			exec.updateSystemConfig(config)
+		}
+	}()
+	gossip.RegisterSystemConfigChannel(configC)
+
 	return exec
 }
 
