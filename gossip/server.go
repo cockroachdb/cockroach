@@ -52,17 +52,19 @@ type server struct {
 	sent     int                       // Count of infos sent from this server to clients
 	received int                       // Count of infos received from clients
 	ready    *sync.Cond                // Broadcasts wakeup to waiting gossip requests
+	stopper  *stop.Stopper
 
 	simulationCycler *sync.Cond // Used when simulating the network to signal next cycle
 }
 
 // newServer creates and returns a server struct.
-func newServer() *server {
+func newServer(stopper *stop.Stopper) *server {
 	s := &server{
 		is:       newInfoStore(0, util.UnresolvedAddr{}),
 		incoming: makeNodeSet(1),
 		lAddrMap: map[string]clientInfo{},
 		nodeMap:  map[roachpb.NodeID]string{},
+		stopper:  stopper,
 	}
 	s.ready = sync.NewCond(&s.mu)
 	return s
@@ -220,7 +222,7 @@ func (s *server) maxPeers() int {
 // then begins processing connecting clients in an infinite select
 // loop via goroutine. Periodically, clients connected and awaiting
 // the next round of gossip are awoken via the conditional variable.
-func (s *server) start(rpcServer *rpc.Server, addr net.Addr, stopper *stop.Stopper) {
+func (s *server) start(rpcServer *rpc.Server, addr net.Addr) {
 	s.is.NodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 	if err := rpcServer.Register("Gossip.Gossip", s.Gossip, &Request{}); err != nil {
 		log.Fatalf("unable to register gossip service with RPC server: %s", err)
@@ -234,9 +236,9 @@ func (s *server) start(rpcServer *rpc.Server, addr net.Addr, stopper *stop.Stopp
 	}
 	unregister := s.is.registerCallback(".*", updateCallback)
 
-	stopper.RunWorker(func() {
+	s.stopper.RunWorker(func() {
 		select {
-		case <-stopper.ShouldStop():
+		case <-s.stopper.ShouldStop():
 			s.stop(unregister)
 			return
 		}

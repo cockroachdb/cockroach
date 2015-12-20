@@ -120,7 +120,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.rpc = crpc.NewServer(s.rpcContext)
 
-	s.gossip = gossip.New(s.rpcContext, s.ctx.GossipBootstrapResolvers)
+	s.gossip = gossip.New(s.rpcContext, s.ctx.GossipBootstrapResolvers, stopper)
 	s.storePool = storage.NewStorePool(s.gossip, s.clock, ctx.TimeUntilStoreDead, stopper)
 
 	feed := util.NewFeed(stopper)
@@ -208,7 +208,7 @@ func (s *Server) Start(selfBootstrap bool) error {
 		}
 		s.gossip.SetResolvers([]resolver.Resolver{selfResolver})
 	}
-	s.gossip.Start(s.rpc, addr, s.stopper)
+	s.gossip.Start(s.rpc, addr)
 
 	if err := s.node.start(s.rpc, addr, s.ctx.Engines, s.ctx.NodeAttributes, s.stopper); err != nil {
 		return err

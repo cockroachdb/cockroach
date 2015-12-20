@@ -166,7 +166,7 @@ func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator
 	stopper := stop.NewStopper()
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
-	g := gossip.New(rpcContext, gossip.TestBootstrap)
+	g := gossip.New(rpcContext, gossip.TestBootstrap, stopper)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	storePool := NewStorePool(g, clock, TestTimeUntilStoreDeadOff, stopper)
@@ -1076,13 +1076,13 @@ func (ts *testStore) rebalance(ots *testStore, bytes int64) {
 }
 
 func Example_rebalancing() {
-	// Model a set of stores in a cluster,
-	// randomly adding / removing stores and adding bytes.
-	g := gossip.New(nil, nil)
-	// Have to call g.SetNodeID before call g.AddInfo
-	g.SetNodeID(roachpb.NodeID(1))
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	// Model a set of stores in a cluster,
+	// randomly adding / removing stores and adding bytes.
+	g := gossip.New(nil, nil, stopper)
+	// Have to call g.SetNodeID before call g.AddInfo
+	g.SetNodeID(roachpb.NodeID(1))
 	sp := NewStorePool(g, hlc.NewClock(hlc.UnixNano), TestTimeUntilStoreDeadOff, stopper)
 	alloc := MakeAllocator(sp, AllocatorOptions{AllowRebalance: true, Deterministic: true})
 

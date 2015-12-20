@@ -131,7 +131,7 @@ func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *stop.
 	config.TestingSetupZoneConfigHook(stopper)
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
 	ctx := TestStoreContext
-	ctx.Gossip = gossip.New(rpcContext, gossip.TestBootstrap)
+	ctx.Gossip = gossip.New(rpcContext, gossip.TestBootstrap, stopper)
 	ctx.Gossip.SetNodeID(1)
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
