@@ -97,6 +97,24 @@ performed via a `Put` instead of a `Del`.
 
 # Alternatives
 
+* We could introduce a richer KV layer api that pushes knowledge of
+columns from the SQL layer down to the KV layer. This is not as
+radical as it sounds as it is essentially the Bigtable/HBase
+API. Specifically, we could enhance KV to know about rows and columns
+where columns are identified by integers but not restricted to a
+predefined schemas. This is actually a somewhat more limited version
+of the Bigtable API which allows columns to be arbitrary strings and
+also has the concept of column families. The upside to this approach
+is that the encoding of the data at the MVCC layer would be
+unchanged. We'd still have a key/value per column. But we'd get
+something akin to prefix compression at the network level where
+setting or retrieving multiple columns for a single row would only
+send the row key once. Additionally, we could likely get away with a
+single intent per row as opposed to an intent per column in the
+existing system. The downside to this approach is that it appears to
+be much more invasive than the column group change. Would every
+consumer of the KV api need to change?
+
 # Unresolved questions
 
 # Performance Experiments
