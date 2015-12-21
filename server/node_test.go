@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -80,7 +81,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	// (or attach LocalRPCTransport.Close to the stopper)
 	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 	ctx.EventFeed = util.NewFeed(stopper)
-	node := NewNode(ctx)
+	node := NewNode(ctx, metric.NewRegistry(stopper.ShouldStop()), stopper)
 	return rpcServer, ln.Addr(), ctx.Clock, node, stopper
 }
 
@@ -88,7 +89,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 func createAndStartTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
 	*rpc.Server, net.Addr, *Node, *stop.Stopper) {
 	rpcServer, addr, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	if err := node.start(rpcServer, addr, engines, roachpb.Attributes{}, stopper); err != nil {
+	if err := node.start(rpcServer, addr, engines, roachpb.Attributes{}); err != nil {
 		t.Fatal(err)
 	}
 	return rpcServer, addr, node, stopper
@@ -273,7 +274,7 @@ func TestCorruptedClusterID(t *testing.T) {
 
 	engines := []engine.Engine{e}
 	server, serverAddr, _, node, stopper := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
-	if err := node.start(server, serverAddr, engines, roachpb.Attributes{}, stopper); err == nil {
+	if err := node.start(server, serverAddr, engines, roachpb.Attributes{}); err == nil {
 		t.Errorf("unexpected success")
 	}
 	stopper.Stop()

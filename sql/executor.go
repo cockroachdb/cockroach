@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
@@ -68,6 +69,8 @@ type Executor struct {
 	reCache  *parser.RegexpCache
 	leaseMgr *LeaseManager
 
+	latency metric.Histograms
+
 	// System Config and mutex.
 	systemConfig     config.SystemConfig
 	systemConfigMu   sync.RWMutex
@@ -76,11 +79,13 @@ type Executor struct {
 
 // newExecutor creates an Executor and registers a callback on the
 // system config.
-func newExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager) *Executor {
+func newExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, metaRegistry metric.Registry) *Executor {
 	exec := &Executor{
 		db:       db,
 		reCache:  parser.NewRegexpCache(512),
 		leaseMgr: leaseMgr,
+
+		latency: metric.RegisterLatency("sql.latency%s", metaRegistry),
 	}
 	exec.systemConfigCond = sync.NewCond(&exec.systemConfigMu)
 	gossip.RegisterSystemConfigCallback(exec.updateSystemConfig)
@@ -114,6 +119,10 @@ func (e *Executor) getSystemConfig() config.SystemConfig {
 // Execute the statement(s) in the given request and return a response.
 // On error, the returned integer is an HTTP error code.
 func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
+	{
+		tStart := time.Now()
+		defer func() { e.latency.RecordValue(time.Now().Sub(tStart).Nanoseconds()) }()
+	}
 	planMaker := plannerPool.Get().(*planner)
 	defer plannerPool.Put(planMaker)
 
