@@ -102,6 +102,42 @@ SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM kv GROUP BY kv.v + kv.w
 1  NULL
 2  5
 
+query TI rowsort
+SELECT s, COUNT(*) FROM kv GROUP BY s HAVING COUNT(*) > 1
+----
+a 2
+b 2
+
+query TII rowsort
+SELECT UPPER(s), COUNT(DISTINCT s), COUNT(DISTINCT UPPER(s)) FROM kv GROUP BY UPPER(s) HAVING COUNT(DISTINCT s) > 1
+----
+A 2 1
+
+query II rowsort
+SELECT MAX(k), MIN(v) FROM kv HAVING MIN(v) > 2;
+----
+
+query II rowsort
+SELECT MAX(k), MIN(v) FROM kv HAVING MAX(v) > 2;
+----
+8 2
+
+query error argument of HAVING must be type bool, not type int
+SELECT MAX(k), MIN(v) FROM kv HAVING k;
+
+query I rowsort
+SELECT k FROM kv GROUP BY k HAVING k > 7;
+----
+8
+
+query I rowsort
+SELECT 3 FROM kv HAVING TRUE;
+----
+3
+
+query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT k FROM kv HAVING k > 7;
+
 query error syntax error at or near ","
 SELECT COUNT(*, 1) FROM kv
 
