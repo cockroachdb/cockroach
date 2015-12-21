@@ -33,6 +33,13 @@ var aggregates = map[string]func() aggregateImpl{
 }
 
 func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
+	// Determine if aggregation is being performed. This check is done on the raw
+	// Select expressions as simplification might have removed aggregation
+	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
+	if isAggregate := isAggregateExprs(n); !isAggregate {
+		return nil, nil
+	}
+
 	// Start by normalizing the GROUP BY expressions (to match what has been done to
 	// the SELECT expressions in addRender) so that we can compare to them later.
 	// This is done before determining if aggregation is being performed, because
@@ -50,14 +57,34 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 		n.GroupBy[i] = norm
 	}
 
-	// Determine if aggregation is being performed. This check is done on the raw
-	// Select expressions as simplification might have removed aggregation
-	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
-	if isAggregate := isAggregateExprs(n); !isAggregate {
-		return nil, nil
-	}
 	if err := checkAggregateExprs(n.GroupBy, s.render); err != nil {
 		return nil, err
+	}
+
+	// Normalize and check the HAVING expression too if it exists.
+	if n.Having != nil {
+		having, err := s.resolveQNames(n.Having.Expr)
+		if err != nil {
+			return nil, err
+		}
+
+		having, err = p.parser.NormalizeExpr(p.evalCtx, having)
+		if err != nil {
+			return nil, err
+		}
+
+		havingType, err := having.TypeCheck(p.evalCtx.Args)
+		if err != nil {
+			return nil, err
+		}
+		if !(havingType == parser.DummyBool || havingType == parser.DNull) {
+			return nil, fmt.Errorf("argument of HAVING must be type %s, not type %s", parser.DummyBool.Type(), havingType.Type())
+		}
+		n.Having.Expr = having
+
+		if err := checkAggregateExprs(n.GroupBy, []parser.Expr{n.Having.Expr}); err != nil {
+			return nil, err
+		}
 	}
 
 	group := &groupNode{
@@ -77,6 +104,14 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 			return nil, err
 		}
 		group.render[i] = expr
+	}
+
+	if n.Having != nil {
+		having, err := p.extractAggregateFuncs(group, n.Having.Expr)
+		if err != nil {
+			return nil, err
+		}
+		group.having = having
 	}
 
 	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was aggregated.
@@ -115,6 +150,7 @@ type groupNode struct {
 	plan    planNode
 
 	render []parser.Expr
+	having parser.Expr
 
 	funcs []*aggregateFunc
 	// The set of bucket keys.
@@ -197,6 +233,20 @@ func (n *groupNode) computeAggregates() {
 	n.values.rows = make([]parser.DTuple, 0, len(n.buckets))
 	for k := range n.buckets {
 		n.currentBucket = k
+
+		if n.having != nil {
+			res, err := n.having.Eval(n.planner.evalCtx)
+			if err != nil {
+				n.err = err
+				return
+			}
+			if res, err := parser.GetBool(res); err != nil {
+				n.err = err
+				return
+			} else if !res {
+				continue
+			}
+		}
 
 		row := make(parser.DTuple, 0, len(n.render))
 		for _, r := range n.render {
@@ -379,7 +429,7 @@ func (v *isAggregateVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, 
 }
 
 func isAggregateExprs(n *parser.Select) bool {
-	if len(n.GroupBy) > 0 {
+	if n.Having != nil || len(n.GroupBy) > 0 {
 		return true
 	}
 
