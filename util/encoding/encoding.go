@@ -19,6 +19,7 @@ package encoding
 
 import (
 	"bytes"
+	"io"
 	"math"
 	"reflect"
 	"time"
@@ -28,7 +29,10 @@ import (
 )
 
 const (
-	encodedNull    = 0x00
+	encodedNull = 0x00
+	// A marker greater than NULL but lower than any other value.
+	// This value is not actually ever present in a stored key, but
+	// it's used in keys used as span boundaries for index scans.
 	encodedNotNull = 0x01
 
 	floatNaN              = encodedNotNull + 1
@@ -65,27 +69,103 @@ const (
 	Descending
 )
 
-type PolarizedReader struct {
-	s   []byte    // The bytes that we're reading from.
-	i   int64     // Next byte to read.
-	dir Direction // The direction with which these bytes have been produced.
+type Reader interface {
+	// Read returns a slice of up to `n` bytes.
+	// If `n` bytes are not available, a io.EOF will be returned as the error.
+	// Attention: the returned slice may be using the same storage as the Reader's,
+	// so it should generally be treated as read-only.
+	Read(n int) ([]byte, error)
+	ReadByte() (byte, error)
+	PeekByte() (byte, error)
+}
+
+// BufferReader is a reader that consumes a []byte.
+type BufferReader struct {
+	// The buffer that we're reading from. The slice is always resliced to
+	// represent unread bytes.
+	s []byte
+}
+
+func NewBufferReader(s []byte) *BufferReader {
+	return &BufferReader{s: s}
+}
+
+func (r *BufferReader) Read(n int) ([]byte, error) {
+	var err error
+	if n > len(r.s) {
+		err = io.EOF
+		n = len(r.s)
+		if n <= 0 {
+			return []byte{}, io.EOF
+		}
+	}
+	res := r.s[:n]
+	r.s = r.s[n:]
+	return res, err
+}
+
+func (r *BufferReader) ReadByte() (byte, error) {
+	if len(r.s) == 0 {
+		return 0, io.EOF
+	}
+	b := r.s[0]
+	r.s = r.s[1:]
+	return b, nil
+}
+
+func (r *BufferReader) PeekByte() (byte, error) {
+	if len(r.s) == 0 {
+		return 0, io.EOF
+	}
+	return r.s[0], nil
+}
+
+// Reader on top of a SQL encoded key.
+// This reader is aware of the encoding directions of the
+// column constituents.
+type KeyReader struct {
+	s []byte // The buffer that we're reading from.
+	i int    // Next byte to read.
+	// The direction with which the bytes corresponding to the
+	// various columns have been written.
+	dirs []Direction
+	// The index of the direction of the column `i`
+	// is positioned on.
+	dirIdx int
+	dir    Direction // dirs[dirIdx]
+}
+
+func NewKeyReader(s []byte, dirs []Direction) *KeyReader {
+	return &KeyReader{s: s, i: 0, dirs: dirs, dirIdx: 0, dir: dirs[0]}
+}
+
+func (r *KeyReader) AdvanceColumn() error {
+	r.dirIdx++
+	if r.dirIdx == len(r.dirs) {
+		return io.EOF
+	}
+	if r.dirIdx > len(r.dirs) {
+		return util.Errorf("No more columns to read.")
+	}
+	r.dir = r.dirs[r.dirIdx]
+	return nil
 }
 
 // Read returns a slice of up to `n` bytes.
-// If `n` bytes are not available, a non-nil error will be returned.
+// If `n` bytes are not available, a io.EOF will be returned as the error.
 // Attention: the returned slice may be using the same storage as the Reader's,
 // so it should generally be treated as read-only.
-func (r *PolarizedReader) Read(n int64) ([]byte, error) {
+func (r *KeyReader) Read(n int) ([]byte, error) {
 	var err error
 	if r.i+n > len(r.s) {
 		err = io.EOF
-		n = len(s) - i
+		n = len(r.s) - r.i
 		if n <= 0 {
-			return []byte(), io.EOF
+			return []byte{}, io.EOF
 		}
 	}
-	res = r.s[r.i : r.i+n]
-	if dir == Descending {
+	res := r.s[r.i : r.i+n]
+	if r.dir == Descending {
 		cpy := make([]byte, len(res))
 		copy(cpy, res)
 		onesComplement(cpy)
@@ -94,30 +174,40 @@ func (r *PolarizedReader) Read(n int64) ([]byte, error) {
 	return res, err
 }
 
-func (r *PolarizedReader) ReadByte() (byte, error) {
-	b, err := r.ReadByteAbsolute()
-	if dir == Descending {
+func (r *KeyReader) ReadByte() (byte, error) {
+	if r.i >= len(r.s) {
+		return 0, io.EOF
+	}
+	b := r.s[r.i]
+	if r.dir == Descending {
+		b = ^b
+	}
+	r.i++
+	return b, nil
+}
+
+func (r *KeyReader) PeekByte() (byte, error) {
+	b, err := r.PeekByteAbsolute()
+	if r.dir == Descending {
 		b = ^b
 	}
 	return b, err
 }
 
-// ReadByteAbsolute reads one byte ignoring the PolarizedReader's direction.
+// !!! is this needed?
+// PeekByteAbsolute reads one byte ignoring the KeyReader's direction.
 // Useful for marker bytes that are direction-agnostic.
-func (r *PolarizedReader) ReadByteAbsolute() (b byte, err error) {
+func (r *KeyReader) PeekByteAbsolute() (byte, error) {
 	if r.i >= len(r.s) {
 		return 0, io.EOF
 	}
-	b := r.s[r.i]
-	r.i++
-	return b, nil
+	return r.s[r.i], nil
 }
 
 // EncodeUint32 encodes the uint32 value using a big-endian 8 byte
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.
 func EncodeUint32(b []byte, v uint32) []byte {
-	r := bytes.NewReader(byteData)
 	return append(b, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 }
 
@@ -232,44 +322,40 @@ func EncodeVarintDecreasing(b []byte, v int64) []byte {
 }
 
 // DecodeVarint decodes a varint encoded int64 from the input
-// buffer. The remainder of the input buffer and the decoded int64
-// are returned.
-func DecodeVarint(b []byte) ([]byte, int64, error) {
-	if len(b) == 0 {
-		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value")
+// key.
+func DecodeVarint(r Reader) (int64, error) {
+	var b byte
+	var length int
+	var err error
+	if b, err = r.ReadByte(); err != nil {
+		return 0, err
 	}
-	length := int(b[0]) - intZero
+	length = int(b) - intZero
 	if length < 0 {
 		length = -length
-		remB := b[1:]
-		if len(remB) < length {
-			return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value: %s", remB)
+		var remB []byte
+		remB, err = r.Read(length)
+		if err == io.EOF {
+			return 0, util.Errorf("insufficient bytes to decode var uint64 int value: %s", remB)
 		}
 		var v int64
 		// Use the ones-complement of each encoded byte in order to build
 		// up a positive number, then take the ones-complement again to
 		// arrive at our negative value.
-		for _, t := range remB[:length] {
+		for _, t := range remB {
 			v = (v << 8) | int64(^t)
 		}
-		return remB[length:], ^v, nil
+		return ^v, nil
 	}
 
-	remB, v, err := DecodeUvarint(b)
+	v, err := DecodeUvarint(r)
 	if err != nil {
-		return remB, 0, err
+		return 0, err
 	}
 	if v > math.MaxInt64 {
-		return nil, 0, util.Errorf("varint %d overflows int64", v)
+		return 0, util.Errorf("varint %d overflows int64", v)
 	}
-	return remB, int64(v), nil
-}
-
-// DecodeVarintDecreasing decodes a uint64 value which was encoded
-// using EncodeVarintDecreasing.
-func DecodeVarintDecreasing(b []byte) ([]byte, int64, error) {
-	leftover, v, err := DecodeVarint(b)
-	return leftover, ^v, err
+	return int64(v), nil
 }
 
 // EncodeUvarint encodes the uint64 value using a variable length
@@ -342,30 +428,35 @@ func EncodeUvarintDecreasing(b []byte, v uint64) []byte {
 }
 
 // DecodeUvarint decodes a varint encoded uint64 from the input
-// buffer. The remainder of the input buffer and the decoded uint64
-// are returned.
-func DecodeUvarint(b []byte) ([]byte, uint64, error) {
-	if len(b) == 0 {
-		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value")
+// key.
+func DecodeUvarint(r Reader) (uint64, error) {
+	var b byte
+	var length int
+	var err error
+	if b, err = r.ReadByte(); err != nil {
+		return 0, err
 	}
-	length := int(b[0]) - intZero
-	b = b[1:] // skip length byte
+	length = int(b) - intZero
 	if length <= intSmall {
-		return b, uint64(length), nil
+		return uint64(length), nil
 	}
 	length -= intSmall
+	var buf []byte
 	if length < 0 || length > 8 {
-		return nil, 0, util.Errorf("invalid uvarint length of %d", length)
-	} else if len(b) < length {
-		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value: %v", b)
+		return 0, util.Errorf("invalid uvarint length of %d", length)
+	} else {
+		buf, err = r.Read(length)
+		if err == io.EOF {
+			return 0, util.Errorf("insufficient bytes to decode var uint64 int value: %v", buf)
+		}
 	}
 	var v uint64
 	// It is faster to range over the elements in a slice than to index
 	// into the slice on each loop iteration.
-	for _, t := range b[:length] {
+	for _, t := range buf {
 		v = (v << 8) | uint64(t)
 	}
-	return b[length:], v, nil
+	return v, nil
 }
 
 // DecodeUvarintDecreasing decodes a uint64 value which was encoded
@@ -391,6 +482,10 @@ func DecodeUvarintDecreasing(b []byte) ([]byte, uint64, error) {
 const (
 	// <term>     -> \x00\x01
 	// \x00       -> \x00\xff
+
+	// escape needs to be the smallest byte value so that
+	// it doesn't change the sort order of strings of
+	// different lengths.
 	escape      byte = 0x00
 	escapedTerm byte = 0x01
 	escaped00   byte = 0xff
@@ -413,8 +508,8 @@ var (
 // EncodeBytes encodes the []byte value using an escape-based
 // encoding. The encoded value is terminated with the sequence
 // "\x00\x01" which is guaranteed to not occur elsewhere in the
-// encoded value. This terminal also needs to sort before valid
-// sequence, to preserve the natural input ordering.
+// encoded value. This terminal also needs to sort before any
+// valid sequence, to preserve the natural input ordering.
 // The encoded bytes are append to the supplied buffer
 // and the resulting buffer is returned.
 func EncodeBytes(b []byte, data []byte) []byte {
@@ -580,32 +675,43 @@ func EncodeNotNull(b []byte) []byte {
 	return append(b, encodedNotNull)
 }
 
-// DecodeIfNull decodes a NULL value from the input buffer. If the input buffer
-// contains a null at the start of the buffer then it is removed from the
-// buffer and true is returned for the second result. Otherwise, the buffer is
-// returned unchanged and false is returned for the second result. Since the
-// NULL value encoding is guaranteed to never occur as the prefix for the
-// EncodeVarint, EncodeFloat, EncodeBytes and EncodeString encodings, it is
+// DecodeIfNull decodes a NULL value from the input key. If the key contains a
+// null at the start of the buffer then it is removed from the buffer and true
+// is returned. Otherwise, the key is left unchanged and false is returned.
+// Since the NULL value encoding is guaranteed to never occur as the prefix for
+// the EncodeVarint, EncodeFloat, EncodeBytes and EncodeString encodings, it is
 // safe to call DecodeIfNull on their encoded values.
-func DecodeIfNull(b []byte) ([]byte, bool) {
-	if PeekType(b) == Null {
-		return b[1:], true
+func DecodeIfNull(r *KeyReader) (bool, error) {
+	var b byte
+	var err error
+	if b, err = r.PeekByte(); err != nil {
+		return false, err
 	}
-	return b, false
+	if b == encodedNull {
+		r.ReadByte()
+		return true, nil
+	}
+	return false, nil
 }
 
-// DecodeIfNotNull decodes a not-NULL value from the input buffer. If the input
-// buffer contains a not-NULL marker at the start of the buffer then it is
-// removed from the buffer and true is returned for the second
-// result. Otherwise, the buffer is returned unchanged and false is returned
-// for the second result. Note that the not-NULL marker is identical to the
-// empty string encoding, so do not use this routine where it is necessary to
-// distinguish not-NULL from the empty string.
-func DecodeIfNotNull(b []byte) ([]byte, bool) {
-	if PeekType(b) == NotNull {
-		return b[1:], true
+// DecodeIfNotNull decodes a not-NULL value from the input key. If the key
+// contains a not-NULL marker at the start of the buffer then it is removed
+// from the buffer and true is returned. Otherwise, the key is left unchanged
+// and false is returned.
+// Note that the not-NULL marker is identical to the empty string encoding, so
+// do not use this routine where it is necessary to distinguish not-NULL from
+// the empty string.
+func DecodeIfNotNull(r *KeyReader) (bool, error) {
+	var b byte
+	var err error
+	if b, err = r.PeekByte(); err != nil {
+		return false, err
 	}
-	return b, false
+	if b == encodedNotNull {
+		r.ReadByte()
+		return true, nil
+	}
+	return false, nil
 }
 
 // EncodeTime encodes a time value, appends it to the supplied buffer,
@@ -625,20 +731,20 @@ func EncodeTime(b []byte, t time.Time) []byte {
 // DecodeTime decodes a time.Time value which was encoded using
 // EncodeTime. The remainder of the input buffer and the decoded
 // time.Time are returned.
-func DecodeTime(b []byte) ([]byte, time.Time, error) {
-	if PeekType(b) != Time {
-		return nil, time.Time{}, util.Errorf("did not find marker")
+func DecodeTime(r Reader) (time.Time, error) {
+	if PeekType(r) != Time {
+		return time.Time{}, util.Errorf("did not find marker")
 	}
-	b = b[1:]
-	b, sec, err := DecodeVarint(b)
+	r.ReadByte()
+	sec, err := DecodeVarint(r)
 	if err != nil {
-		return b, time.Time{}, err
+		return time.Time{}, err
 	}
-	b, nsec, err := DecodeVarint(b)
+	nsec, err := DecodeVarint(r)
 	if err != nil {
-		return b, time.Time{}, err
+		return time.Time{}, err
 	}
-	return b, time.Unix(sec, nsec), nil
+	return time.Unix(sec, nsec), nil
 }
 
 // Type represents the type of a value encoded by
@@ -656,24 +762,26 @@ const (
 	Time
 )
 
-// PeekType peeks at the type of the value encoded at the start of b.
-func PeekType(b []byte) Type {
-	if len(b) >= 1 {
-		m := b[0]
-		switch {
-		case m == encodedNull:
-			return Null
-		case m == encodedNotNull:
-			return NotNull
-		case m == bytesMarker:
-			return Bytes
-		case m == timeMarker:
-			return Time
-		case m >= IntMin && m <= IntMax:
-			return Int
-		case m >= floatNaN && m <= floatInfinity:
-			return Float
-		}
+// PeekType peeks at the type of the value encoded at the start of the input key.
+func PeekType(r Reader) Type {
+	var marker byte
+	var err error
+	if marker, err = r.PeekByte(); err != nil {
+		return Unknown
+	}
+	switch {
+	case marker == encodedNull:
+		return Null
+	case marker == encodedNotNull:
+		return NotNull
+	case marker == bytesMarker:
+		return Bytes
+	case marker == timeMarker:
+		return Time
+	case marker >= IntMin && marker <= IntMax:
+		return Int
+	case marker >= floatNaN && marker <= floatInfinity:
+		return Float
 	}
 	return Unknown
 }

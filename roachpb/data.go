@@ -430,7 +430,7 @@ func (v Value) GetTime() (time.Time, error) {
 	if tag := v.Tag; tag != ValueType_TIME {
 		return time.Time{}, fmt.Errorf("value type is not %s: %s", ValueType_TIME, tag)
 	}
-	_, t, err := encoding.DecodeTime(v.RawBytes)
+	t, err := encoding.DecodeTime(encoding.NewBufferReader(v.RawBytes))
 	if err != nil {
 		return t, err
 	}

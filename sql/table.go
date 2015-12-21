@@ -443,12 +443,20 @@ func decodeIndexKey(desc *TableDescriptor, index IndexDescriptor, valTypes, vals
 	if err != nil {
 		return nil, err
 	}
-
 	if indexID != index.ID {
 		return nil, util.Errorf("%s: unexpected index ID: %d != %d", desc.Name, index.ID, indexID)
 	}
 
-	return decodeKeyVals(valTypes, vals, remaining)
+	dirs := make([]encoding.Direction, 0, len(desc.ColumnIDs))
+	for _, dir := range desc.ColumnDirections {
+		converted_dir, err := dir.ToEncodingDirection()
+		if err != nil {
+			return nil, err
+		}
+		dirs = append(dirs, converted_dir)
+	}
+	keyReader := encoding.NewKeyReader(remaining, dirs)
+	return decodeKeyVals(valTypes, vals, keyReader)
 }
 
 // decodeKeyVals decodes the values that are part of the key. ValTypes is a
@@ -456,49 +464,52 @@ func decodeIndexKey(desc *TableDescriptor, index IndexDescriptor, valTypes, vals
 // parameter while the valTypes parameter is unmodified. Note that len(vals) >=
 // len(valTypes). The types of the decoded values will match the corresponding
 // entry in the valTypes parameter with the exception that a value might also
-// be parser.DNull. The remaining bytes in the key after decoding the values
-// are returned.
-func decodeKeyVals(valTypes, vals []parser.Datum, key []byte) ([]byte, error) {
+// be parser.DNull. `reader` is advanced past the bytes for the values decoded.
+func decodeKeyVals(valTypes, vals []parser.Datum, reader *encoding.KeyReader) error {
+	var err error
 	for j := range valTypes {
-		var err error
-		vals[j], key, err = decodeTableKey(valTypes[j], key)
-		if err != nil {
-			return nil, err
+		if err {
+			return err
 		}
+		vals[j], key, err = decodeTableKey(valTypes[j], reader)
+		if err != nil {
+			return err
+		}
+		err = reader.AdvanceColumn()
 	}
-	return key, nil
+	return nil
 }
 
-func decodeTableKey(valType parser.Datum, key []byte) (parser.Datum, []byte, error) {
+func decodeTableKey(valType parser.Datum, reader *encoding.KeyReader) (parser.Datum, error) {
 	var isNull bool
-	if key, isNull = encoding.DecodeIfNull(key); isNull {
-		return parser.DNull, key, nil
+	if isNull = encoding.DecodeIfNull(reader); isNull {
+		return parser.DNull, nil
 	}
 	switch valType.(type) {
 	case parser.DBool:
-		rkey, i, err := encoding.DecodeVarint(key)
-		return parser.DBool(i != 0), rkey, err
+		rkey, i, err := encoding.DecodeVarint(reader)
+		return parser.DBool(i != 0), err
 	case parser.DInt:
-		rkey, i, err := encoding.DecodeVarint(key)
-		return parser.DInt(i), rkey, err
+		rkey, i, err := encoding.DecodeVarint(reader)
+		return parser.DInt(i), err
 	case parser.DFloat:
-		rkey, f, err := encoding.DecodeFloat(key, nil)
-		return parser.DFloat(f), rkey, err
+		rkey, f, err := encoding.DecodeFloat(reader, nil)
+		return parser.DFloat(f), err
 	case parser.DString:
-		rkey, r, err := encoding.DecodeString(key, nil)
-		return parser.DString(r), rkey, err
+		rkey, r, err := encoding.DecodeString(reader, nil)
+		return parser.DString(r), err
 	case parser.DBytes:
-		rkey, r, err := encoding.DecodeString(key, nil)
-		return parser.DBytes(r), rkey, err
+		rkey, r, err := encoding.DecodeString(reader, nil)
+		return parser.DBytes(r), err
 	case parser.DDate:
-		rkey, t, err := encoding.DecodeVarint(key)
-		return parser.DDate(t), rkey, err
+		rkey, t, err := encoding.DecodeVarint(reader)
+		return parser.DDate(t), err
 	case parser.DTimestamp:
-		rkey, t, err := encoding.DecodeTime(key)
-		return parser.DTimestamp{Time: t}, rkey, err
+		rkey, t, err := encoding.DecodeTime(reader)
+		return parser.DTimestamp{Time: t}, err
 	case parser.DInterval:
-		rkey, d, err := encoding.DecodeVarint(key)
-		return parser.DInterval{Duration: time.Duration(d)}, rkey, err
+		rkey, d, err := encoding.DecodeVarint(reader)
+		return parser.DInterval{Duration: time.Duration(d)}, err
 	default:
 		return nil, nil, util.Errorf("TODO(pmattis): decoded index key: %s", valType.Type())
 	}
