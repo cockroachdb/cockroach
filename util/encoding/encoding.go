@@ -77,6 +77,8 @@ type Reader interface {
 	Read(n int) ([]byte, error)
 	ReadByte() (byte, error)
 	PeekByte() (byte, error)
+	RawBytesRemaining() []byte
+	EOF() bool
 }
 
 // BufferReader is a reader that consumes a []byte.
@@ -88,6 +90,18 @@ type BufferReader struct {
 
 func NewBufferReader(s []byte) *BufferReader {
 	return &BufferReader{s: s}
+}
+
+func (r *BufferReader) RawBytesRemaining() []byte {
+	return r.s
+}
+
+func (r *BufferReader) CompareToKey() int {
+	return bytes.Compare(r.RawBytesRemaining())
+}
+
+func (r *BufferReader) EOF() bool {
+	return len(r.s) == 0
 }
 
 func (r *BufferReader) Read(n int) ([]byte, error) {
@@ -124,19 +138,20 @@ func (r *BufferReader) PeekByte() (byte, error) {
 // This reader is aware of the encoding directions of the
 // column constituents.
 type KeyReader struct {
-	s []byte // The buffer that we're reading from.
-	i int    // Next byte to read.
+	// The buffer that we're reading from. The slice is always resliced to
+	// represent unread bytes.
+	s []byte
 	// The direction with which the bytes corresponding to the
 	// various columns have been written.
 	dirs []Direction
 	// The index of the direction of the column `i`
 	// is positioned on.
-	dirIdx int
+	dirIdx int       // !!! get rid of this and just reslice dirs
 	dir    Direction // dirs[dirIdx]
 }
 
 func NewKeyReader(s []byte, dirs []Direction) *KeyReader {
-	return &KeyReader{s: s, i: 0, dirs: dirs, dirIdx: 0, dir: dirs[0]}
+	return &KeyReader{s: s, dirs: dirs, dirIdx: 0, dir: dirs[0]}
 }
 
 func (r *KeyReader) AdvanceColumn() error {
@@ -151,20 +166,40 @@ func (r *KeyReader) AdvanceColumn() error {
 	return nil
 }
 
+func (r *KeyReader) RawBytesRemaining() []byte {
+	return r.s
+}
+
+func (r *KeyReader) EOF() bool {
+	return len(r.s) > 0
+}
+
+func (r *KeyReader) CompareToKey() int {
+	if r.dir == Descending {
+		cpy := make([]byte, len(res))
+		copy(cpy, res)
+		onesComplement(cpy)
+
+	} else {
+		return bytes.Compare(r.RawBytesRemaining())
+	}
+}
+
 // Read returns a slice of up to `n` bytes.
 // If `n` bytes are not available, a io.EOF will be returned as the error.
 // Attention: the returned slice may be using the same storage as the Reader's,
 // so it should generally be treated as read-only.
 func (r *KeyReader) Read(n int) ([]byte, error) {
 	var err error
-	if r.i+n > len(r.s) {
+	if n > len(r.s) {
 		err = io.EOF
-		n = len(r.s) - r.i
+		n = len(r.s)
 		if n <= 0 {
 			return []byte{}, io.EOF
 		}
 	}
-	res := r.s[r.i : r.i+n]
+	res := r.s[:n]
+	r.s = r.s[r.n:]
 	if r.dir == Descending {
 		cpy := make([]byte, len(res))
 		copy(cpy, res)
@@ -175,14 +210,14 @@ func (r *KeyReader) Read(n int) ([]byte, error) {
 }
 
 func (r *KeyReader) ReadByte() (byte, error) {
-	if r.i >= len(r.s) {
+	if len(r.s) == 0 {
 		return 0, io.EOF
 	}
-	b := r.s[r.i]
+	b := r.s[0]
 	if r.dir == Descending {
 		b = ^b
 	}
-	r.i++
+	r.s = r.s[1:]
 	return b, nil
 }
 

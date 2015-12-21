@@ -30,7 +30,7 @@ type dictEntry struct {
 	name   string
 	prefix roachpb.Key
 	// print the key's pretty value, key has been removed prefix data
-	ppFunc func(key roachpb.Key) string
+	ppFunc func(r encoding.Reader) string
 }
 
 var (
@@ -63,7 +63,7 @@ var (
 	rangeIDSuffixDict = []struct {
 		name   string
 		suffix []byte
-		ppFunc func(key roachpb.Key) string
+		ppFunc func(r Reader) string
 	}{
 		{name: "SequenceCache", suffix: LocalSequenceCacheSuffix, ppFunc: sequenceCacheKeyPrint},
 		{name: "RaftLeaderLease", suffix: localRaftLeaderLeaseSuffix},
@@ -89,35 +89,35 @@ var (
 	}
 )
 
-func localStoreKeyPrint(key roachpb.Key) string {
-	if bytes.HasPrefix(key, localStoreIdentSuffix) {
+func localStoreKeyPrint(key encoding.Reader) string {
+	if bytes.HasPrefix(key.RawBytesRemaining(), localStoreIdentSuffix) {
 		return "/storeIdent"
 	}
 
 	return fmt.Sprintf("%q", []byte(key))
 }
 
-func raftLogKeyPrint(key roachpb.Key) string {
+func raftLogKeyPrint(key encoding.Reader) string {
 	var logIndex uint64
 	var err error
-	key, logIndex, err = encoding.DecodeUint64(key)
+	logIndex, err = encoding.DecodeUint64(key)
 	if err != nil {
-		return fmt.Sprintf("/err<%v:%q>", err, []byte(key))
+		return fmt.Sprintf("/err<%v:%q>", err, key.RawBytesRemaining())
 	}
 
 	return fmt.Sprintf("/logIndex:%d", logIndex)
 }
 
-func localRangeIDKeyPrint(key roachpb.Key) string {
+func localRangeIDKeyPrint(key encoding.Reader) string {
 	var buf bytes.Buffer
 	if encoding.PeekType(key) != encoding.Int {
-		return fmt.Sprintf("/err<%q>", []byte(key))
+		return fmt.Sprintf("/err<%q>", key.RawBytesRemaining())
 	}
 
 	// get range id
-	key, i, err := encoding.DecodeVarint(key)
+	i, err := encoding.DecodeVarint(key)
 	if err != nil {
-		return fmt.Sprintf("/err<%v:%q>", err, []byte(key))
+		return fmt.Sprintf("/err<%v:%q>", err, key.RawbytesRemaining())
 	}
 
 	fmt.Fprintf(&buf, "/%d", i)
@@ -126,10 +126,13 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 
 	hasSuffix := false
 	for _, s := range rangeIDSuffixDict {
-		if bytes.HasPrefix(key, s.suffix) {
+		if bytes.HasPrefix(key.RawBytesRemaining(), s.suffix) {
 			fmt.Fprintf(&buf, "/%s", s.name)
-			key = key[len(s.suffix):]
-			if s.ppFunc != nil && len(key) != 0 {
+			_, err = key.Read(len(s.suffix))
+			if err {
+				panic(err)
+			}
+			if s.ppFunc != nil && len(key.RawBytesRemaining()) != 0 {
 				fmt.Fprintf(&buf, "%s", s.ppFunc(key))
 				return buf.String()
 			}
@@ -142,28 +145,36 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 	if hasSuffix {
 		fmt.Fprintf(&buf, "%s", decodeKeyPrint(key))
 	} else {
-		fmt.Fprintf(&buf, "%q", []byte(key))
+		fmt.Fprintf(&buf, "%q", key.RawBytesRemaining())
 	}
 
 	return buf.String()
 }
 
-func localRangeKeyPrint(key roachpb.Key) string {
+func localRangeKeyPrint(key encoding.Reader) string {
 	var buf bytes.Buffer
 
 	for _, s := range rangeSuffixDict {
 		if s.atEnd {
 			if bytes.HasSuffix(key, s.suffix) {
-				key = key[:len(key)-len(s.suffix)]
+				key = encoding.NewBufferReader(key.RawBytesRemaining()[:len(key)-len(s.suffix)])
 				fmt.Fprintf(&buf, "/%s%s", s.name, decodeKeyPrint(key))
 				return buf.String()
 			}
 		} else {
-			begin := bytes.Index(key, s.suffix)
+			begin := bytes.Index(key.RawBytesRemaining(), s.suffix)
 			if begin > 0 {
-				addrKey := key[:begin]
-				id := key[(begin + len(s.suffix)):]
-				fmt.Fprintf(&buf, "/%s/addrKey:%s/id:%q", s.name, decodeKeyPrint(addrKey), []byte(id))
+				addrKey, err := key.Read(begin)
+				if err {
+					panic(err)
+				}
+				_, err := key.Read(len(s.suffix))
+				if err {
+					panic(err)
+				}
+				id, err := key.RawBytesRemaining()
+				fmt.Fprintf(&buf, "/%s/addrKey:%s/id:%q", s.name,
+					decodeKeyPrint(encoding.NewBufferReader(addrKey)), []byte(id))
 				return buf.String()
 			}
 		}
@@ -173,22 +184,22 @@ func localRangeKeyPrint(key roachpb.Key) string {
 	return buf.String()
 }
 
-func sequenceCacheKeyPrint(key roachpb.Key) string {
-	b, id, err := encoding.DecodeBytes([]byte(key), nil)
+func sequenceCacheKeyPrint(key Reader) string {
+	id, err := encoding.DecodeBytes(key, nil)
 	if err != nil {
-		return fmt.Sprintf("/%q/err:%v", key, err)
+		return fmt.Sprintf("/%q/err:%v", key.RawBytesRemaining(), err)
 	}
 
-	if len(b) == 0 {
+	if key.EOF == 0 {
 		return fmt.Sprintf("/%q", id)
 	}
 
-	b, epoch, err := encoding.DecodeUint32Decreasing(b)
+	epoch, err := encoding.DecodeUint32Decreasing(key)
 	if err != nil {
 		return fmt.Sprintf("/%q/err:%v", id, err)
 	}
 
-	_, seq, err := encoding.DecodeUint32Decreasing(b)
+	seq, err := encoding.DecodeUint32Decreasing(key)
 	if err != nil {
 		return fmt.Sprintf("/%q/epoch:%d/err:%v", id, epoch, err)
 	}
@@ -196,17 +207,18 @@ func sequenceCacheKeyPrint(key roachpb.Key) string {
 	return fmt.Sprintf("/%q/epoch:%d/seq:%d", id, epoch, seq)
 }
 
+// !!! who calls this
 func print(key roachpb.Key) string {
 	return fmt.Sprintf("/%q", []byte(key))
 }
 
-func decodeKeyPrint(key roachpb.Key) string {
+func decodeKeyPrint(key Reader) string {
 	var buf bytes.Buffer
 	for k := 0; len(key) > 0; k++ {
 		var err error
 		switch encoding.PeekType(key) {
 		case encoding.Null:
-			key, _ = encoding.DecodeIfNull(key)
+			_ = encoding.DecodeIfNull(key)
 			fmt.Fprintf(&buf, "/NULL")
 		case encoding.NotNull:
 			key, _ = encoding.DecodeIfNotNull(key)
@@ -283,7 +295,7 @@ func decodeKeyPrint(key roachpb.Key) string {
 // /Min														""
 // /Max														"\xff\xff"
 func PrettyPrint(key roachpb.Key) string {
-	if bytes.Equal(key, MaxKey) {
+	if bytes.Equal(key.RawBytesRemaining(), MaxKey) {
 		return "/Max"
 	} else if bytes.Equal(key, MinKey) {
 		return "/Min"
