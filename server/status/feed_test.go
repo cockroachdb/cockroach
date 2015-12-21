@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -65,7 +66,7 @@ func TestNodeEventFeed(t *testing.T) {
 		},
 		{
 			publishTo: func(nef status.NodeEventFeed) {
-				nef.CallComplete(wrap(roachpb.NewGet(roachpb.Key("abc"))), nil)
+				nef.CallComplete(wrap(roachpb.NewGet(roachpb.Key("abc"))), 0, nil)
 			},
 			expected: &status.CallSuccessEvent{
 				NodeID: roachpb.NodeID(1),
@@ -74,7 +75,7 @@ func TestNodeEventFeed(t *testing.T) {
 		},
 		{
 			publishTo: func(nef status.NodeEventFeed) {
-				nef.CallComplete(wrap(roachpb.NewPut(roachpb.Key("abc"), roachpb.MakeValueFromString("def"))), nil)
+				nef.CallComplete(wrap(roachpb.NewPut(roachpb.Key("abc"), roachpb.MakeValueFromString("def"))), 0, nil)
 			},
 			expected: &status.CallSuccessEvent{
 				NodeID: roachpb.NodeID(1),
@@ -83,7 +84,7 @@ func TestNodeEventFeed(t *testing.T) {
 		},
 		{
 			publishTo: func(nef status.NodeEventFeed) {
-				nef.CallComplete(wrap(roachpb.NewGet(roachpb.Key("abc"))), roachpb.NewError(util.Errorf("error")))
+				nef.CallComplete(wrap(roachpb.NewGet(roachpb.Key("abc"))), 0, roachpb.NewError(util.Errorf("error")))
 			},
 			expected: &status.CallErrorEvent{
 				NodeID: roachpb.NodeID(1),
@@ -92,7 +93,7 @@ func TestNodeEventFeed(t *testing.T) {
 		},
 		{
 			publishTo: func(nef status.NodeEventFeed) {
-				nef.CallComplete(wrap(roachpb.NewGet(roachpb.Key("abc"))), &roachpb.Error{
+				nef.CallComplete(wrap(roachpb.NewGet(roachpb.Key("abc"))), time.Minute, &roachpb.Error{
 					Detail: &roachpb.ErrorDetail{
 						WriteIntent: &roachpb.WriteIntentError{
 							Index: &roachpb.ErrPosition{Index: 0},
@@ -102,8 +103,9 @@ func TestNodeEventFeed(t *testing.T) {
 				})
 			},
 			expected: &status.CallErrorEvent{
-				NodeID: roachpb.NodeID(1),
-				Method: roachpb.Get,
+				NodeID:   roachpb.NodeID(1),
+				Method:   roachpb.Get,
+				Duration: time.Minute,
 			},
 		},
 	}
@@ -309,14 +311,16 @@ func TestNodeEventFeedTransactionRestart(t *testing.T) {
 	ner := nodeEventReader{}
 	ner.readEvents(feed)
 
+	d := 5 * time.Second
+
 	get := wrap(&roachpb.GetRequest{})
-	nodefeed.CallComplete(get, &roachpb.Error{
+	nodefeed.CallComplete(get, d, &roachpb.Error{
 		TransactionRestart: roachpb.TransactionRestart_BACKOFF})
-	nodefeed.CallComplete(get, &roachpb.Error{
+	nodefeed.CallComplete(get, d, &roachpb.Error{
 		TransactionRestart: roachpb.TransactionRestart_IMMEDIATE})
-	nodefeed.CallComplete(wrap(&roachpb.PutRequest{}), &roachpb.Error{
+	nodefeed.CallComplete(wrap(&roachpb.PutRequest{}), d, &roachpb.Error{
 		TransactionRestart: roachpb.TransactionRestart_ABORT})
-	nodefeed.CallComplete(wrap(&roachpb.PutRequest{}), &roachpb.Error{
+	nodefeed.CallComplete(wrap(&roachpb.PutRequest{}), d, &roachpb.Error{
 		Detail: &roachpb.ErrorDetail{
 			WriteIntent: &roachpb.WriteIntentError{
 				Index: &roachpb.ErrPosition{Index: 0},
