@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -90,6 +91,8 @@ const (
 	// statusStorePattern exposes status for a single store.
 	statusStorePattern = statusPrefix + "stores/:store_id"
 
+	statusTransientPattern = statusPrefix + "transient/:store_id"
+
 	// healthEndpoint is a shortcut for local details, intended for use by
 	// monitoring processes to verify that the server is up.
 	healthEndpoint = "/health"
@@ -100,15 +103,16 @@ var localRE = regexp.MustCompile(`(?i)local`)
 
 // A statusServer provides a RESTful status API.
 type statusServer struct {
-	db          *client.DB
-	gossip      *gossip.Gossip
-	router      *httprouter.Router
-	ctx         *Context
-	proxyClient *http.Client
+	db           *client.DB
+	gossip       *gossip.Gossip
+	metaRegistry metric.Registry
+	router       *httprouter.Router
+	ctx          *Context
+	proxyClient  *http.Client
 }
 
 // newStatusServer allocates and returns a statusServer.
-func newStatusServer(db *client.DB, gossip *gossip.Gossip, ctx *Context) *statusServer {
+func newStatusServer(db *client.DB, gossip *gossip.Gossip, metaRegistry metric.Registry, ctx *Context) *statusServer {
 	// Create an http client with a timeout
 	tlsConfig, err := ctx.GetClientTLSConfig()
 	if err != nil {
@@ -121,11 +125,12 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip, ctx *Context) *status
 	}
 
 	server := &statusServer{
-		db:          db,
-		gossip:      gossip,
-		router:      httprouter.New(),
-		ctx:         ctx,
-		proxyClient: httpClient,
+		db:           db,
+		gossip:       gossip,
+		metaRegistry: metaRegistry,
+		router:       httprouter.New(),
+		ctx:          ctx,
+		proxyClient:  httpClient,
 	}
 
 	server.router.GET(statusGossipPattern, server.handleGossip)
@@ -138,8 +143,9 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip, ctx *Context) *status
 	server.router.GET(statusNodePattern, server.handleNodeStatus)
 	server.router.GET(statusStoresPrefix, server.handleStoresStatus)
 	server.router.GET(statusStorePattern, server.handleStoreStatus)
-	server.router.GET(healthEndpoint, server.handleDetailsLocal)
+	server.router.GET(statusTransientPattern, server.handleTransient)
 
+	server.router.GET(healthEndpoint, server.handleDetailsLocal)
 	return server
 }
 
@@ -590,6 +596,20 @@ func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	respondAsJSON(w, r, storeStatus)
+}
+
+func (s *statusServer) handleTransient(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	nodeID, local, err := s.extractNodeID(ps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if !local {
+		s.proxyRequest(nodeID, w, r)
+		return
+	}
+	respondAsJSON(w, r, s.metaRegistry)
 }
 
 func respondAsJSON(w http.ResponseWriter, r *http.Request, response interface{}) {

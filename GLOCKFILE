@@ -12,6 +12,7 @@ cmd github.com/tebeka/go2xunit
 cmd golang.org/x/tools/cmd/goimports
 cmd golang.org/x/tools/cmd/stress
 cmd golang.org/x/tools/cmd/stringer
+github.com/VividCortex/ewma c34099b489e4ac33ca8d8c5f9d29d6eeaf69f2ed
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
 github.com/biogo/store 3b4c041f52c224ee4a44f5c8b150d003a40643a0
 github.com/cockroachdb/c-lz4 c40aaae2fc50293eb8750b34632bc3efe813e23f
@@ -19,6 +20,7 @@ github.com/cockroachdb/c-protobuf 6a18bfcdd5169966cd1235edb71d749c950216e8
 github.com/cockroachdb/c-rocksdb bf15ead80bdc205a19b3d33415b23c156a3cf371
 github.com/cockroachdb/c-snappy 5c6d0932e0adaffce4bfca7bdf2ac37f79952ccf
 github.com/cockroachdb/yacc 443154b1852a8702b07d675da6cd97cd9177a316
+github.com/codahale/hdrhistogram 954f16e8b9ef0e5d5189456aa4c1202758e04f17
 github.com/coreos/etcd 0eb46eb1457bf277a5d6093287290b2b5cd6a964
 github.com/cpuguy83/go-md2man 71acacd42f85e5e82f70a55327789582a5200a90
 github.com/docker/docker 5e0283effa73223e5528c61beb4e05b5018c5d6b
