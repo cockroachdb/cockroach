@@ -24,19 +24,11 @@ class Cockroach < Formula
     ENV["GOPATH"] = buildpath
     ENV["GOHOME"] = buildpath
 
-    # Install glock and all of our dependencies. We don't bother
-    # installing commands (e.g. protoc) because we don't need them for
-    # building the cockroach binary.
-    system "go", "get", "github.com/robfig/glock"
-    system "grep -v ^cmd src/github.com/cockroachdb/cockroach/GLOCKFILE | " \
-           "bin/glock sync -n"
-
     # We use `xcrun make` instead of `make` to avoid homebrew mucking
     # with the HOMEBREW_CCCFG variable which in turn causes the C
     # compiler to behave in a way that is not supported by cgo.
-    system "xcrun", "make", "-C",
-           "src/github.com/cockroachdb/cockroach", "build",
-           "GOFLAGS=-v", "SKIP_BOOTSTRAP=1"
+    system "xcrun", "make", "GOFLAGS=-v", "-C",
+           "src/github.com/cockroachdb/cockroach", "build"
     bin.install "src/github.com/cockroachdb/cockroach/cockroach" => "cockroach"
   end
 
