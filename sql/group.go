@@ -92,6 +92,32 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 		log.Infof("Group: %s", strings.Join(strs, ", "))
 	}
 
+	if n.Having != nil {
+		having, err := s.resolveQNames(n.Having.Expr)
+		if err != nil {
+			return nil, err
+		}
+
+		having, err = p.parser.NormalizeExpr(p.evalCtx, having)
+		if err != nil {
+			return nil, err
+		}
+
+		havingType, err := having.TypeCheck(p.evalCtx.Args)
+		if err != nil {
+			return nil, err
+		}
+		if !(havingType == parser.DummyBool || havingType == parser.DNull) {
+			return nil, fmt.Errorf("argument of HAVING must be type %s, not type %s", parser.DummyBool.Type(), havingType.Type())
+		}
+
+		having, err = p.extractAggregateFuncs(group, having)
+		if err != nil {
+			return nil, err
+		}
+		group.having = having
+	}
+
 	// Replace the render expressions in the scanNode with expressions that
 	// compute only the arguments to the aggregate expressions.
 	s.render = make([]parser.Expr, len(group.funcs))
@@ -115,6 +141,7 @@ type groupNode struct {
 	plan    planNode
 
 	render []parser.Expr
+	having parser.Expr
 
 	funcs []*aggregateFunc
 	// The set of bucket keys.
@@ -197,6 +224,20 @@ func (n *groupNode) computeAggregates() {
 	n.values.rows = make([]parser.DTuple, 0, len(n.buckets))
 	for k := range n.buckets {
 		n.currentBucket = k
+
+		if n.having != nil {
+			res, err := n.having.Eval(n.planner.evalCtx)
+			if err != nil {
+				n.err = err
+				return
+			}
+			if res, err := parser.GetBool(res); err != nil {
+				n.err = err
+				return
+			} else if !res {
+				continue
+			}
+		}
 
 		row := make(parser.DTuple, 0, len(n.render))
 		for _, r := range n.render {
@@ -379,7 +420,7 @@ func (v *isAggregateVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, 
 }
 
 func isAggregateExprs(n *parser.Select) bool {
-	if len(n.GroupBy) > 0 {
+	if n.Having != nil || len(n.GroupBy) > 0 {
 		return true
 	}
 
