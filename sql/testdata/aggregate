@@ -102,6 +102,26 @@ SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM kv GROUP BY kv.v + kv.w
 1  NULL
 2  5
 
+query TI rowsort
+SELECT s, COUNT(*) FROM kv GROUP BY s HAVING COUNT(*) > 1
+----
+a 2
+b 2
+
+query TII rowsort
+SELECT UPPER(s), COUNT(DISTINCT s), COUNT(DISTINCT UPPER(s)) FROM kv GROUP BY UPPER(s) HAVING COUNT(DISTINCT s) > 1
+----
+A 2 1
+
+query II rowsort
+SELECT MAX(k), MIN(v) FROM kv HAVING MIN(v) > 2;
+----
+
+query II rowsort
+SELECT MAX(k), MIN(v) FROM kv HAVING MAX(v) > 2;
+----
+8 2
+
 query error syntax error at or near ","
 SELECT COUNT(*, 1) FROM kv
 
