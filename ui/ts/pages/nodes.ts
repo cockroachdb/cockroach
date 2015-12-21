@@ -217,7 +217,7 @@ module AdminViews {
 
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("calls.error"))
+              Metrics.Select.AvgRate(_nodeMetric("exec.num.error"))
                 .sources(this.sources)
                 .title("Error Calls")
               ));
@@ -381,14 +381,14 @@ module AdminViews {
           this._query = Metrics.NewQuery();
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("calls.success"))
+              Metrics.Select.AvgRate(_nodeMetric("exec.num.success"))
                 .sources([nodeId])
                 .title("Successful Calls")
               )
               .label("Count / 10 sec."));
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("calls.error"))
+              Metrics.Select.AvgRate(_nodeMetric("exec.num.error"))
                 .sources([nodeId])
                 .title("Error Calls")
               )

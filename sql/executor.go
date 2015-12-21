@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -69,6 +70,8 @@ type Executor struct {
 	reCache  *parser.RegexpCache
 	leaseMgr *LeaseManager
 
+	latency metric.Histograms
+
 	// System Config and mutex.
 	systemConfig     config.SystemConfig
 	systemConfigMu   sync.RWMutex
@@ -77,11 +80,13 @@ type Executor struct {
 
 // newExecutor creates an Executor and registers a callback on the
 // system config.
-func newExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, stopper *stop.Stopper) *Executor {
+func newExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, metaRegistry metric.Registry, stopper *stop.Stopper) *Executor {
 	exec := &Executor{
 		db:       db,
 		reCache:  parser.NewRegexpCache(512),
 		leaseMgr: leaseMgr,
+
+		latency: metric.RegisterLatency("sql.latency%s", metaRegistry),
 	}
 	exec.systemConfigCond = sync.NewCond(&exec.systemConfigMu)
 
@@ -225,6 +230,10 @@ func (e *Executor) ExecuteStatements(user string, session Session, stmts string,
 // Execute the statement(s) in the given request and returns a response.
 // On error, the returned integer is an HTTP error code.
 func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
+	{
+		tStart := time.Now()
+		defer func() { e.latency.RecordValue(time.Now().Sub(tStart).Nanoseconds()) }()
+	}
 	var session Session
 	if err := proto.Unmarshal(args.Session, &session); err != nil {
 		return driver.Response{}, http.StatusBadRequest, err
