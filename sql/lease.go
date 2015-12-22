@@ -545,8 +545,6 @@ type LeaseManager struct {
 	// System Config and mutex.
 	systemConfig   config.SystemConfig
 	systemConfigMu sync.RWMutex
-	// A channel used to notify the lease manager of a new config.
-	newConfig chan struct{}
 
 	mu     sync.Mutex
 	tables map[ID]*tableState
@@ -560,10 +558,7 @@ func NewLeaseManager(nodeID uint32, db client.DB, clock *hlc.Clock) *LeaseManage
 			clock:  clock,
 			nodeID: nodeID,
 		},
-		// Create channel that receives new system config notifications.
-		// The channel has a size of 1 to prevent gossip from blocking on it.
-		newConfig: make(chan struct{}, 1),
-		tables:    make(map[ID]*tableState),
+		tables: make(map[ID]*tableState),
 	}
 }
 
@@ -599,15 +594,10 @@ func (m *LeaseManager) findTableState(tableID ID, create bool) *tableState {
 }
 
 // updateSystemConfig is called whenever the system config gossip entry is updated.
-func (m *LeaseManager) updateSystemConfig(cfg *config.SystemConfig) {
+func (m *LeaseManager) updateSystemConfig(cfg config.SystemConfig) {
 	m.systemConfigMu.Lock()
 	defer m.systemConfigMu.Unlock()
-	m.systemConfig = *cfg
-	// notify manager about the new config.
-	select {
-	case m.newConfig <- struct{}{}:
-	default:
-	}
+	m.systemConfig = cfg
 }
 
 // getSystemConfig returns a pointer to the latest system config.
@@ -622,12 +612,14 @@ func (m *LeaseManager) getSystemConfig() config.SystemConfig {
 func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gossip.Gossip) {
 	s.RunWorker(func() {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
-		gossip.RegisterSystemConfigCallback(m.updateSystemConfig)
+		gossipUpdateC := gossip.RegisterSystemConfigChannel()
 		for {
 			select {
-			case <-m.newConfig:
+			case <-gossipUpdateC:
+				cfg := *gossip.GetSystemConfig()
+				m.updateSystemConfig(cfg)
+
 				// Read all tables and their versions
-				cfg := m.getSystemConfig()
 				if log.V(2) {
 					log.Info("received a new config %v", cfg)
 				}
