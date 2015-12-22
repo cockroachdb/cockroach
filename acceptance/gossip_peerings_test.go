@@ -31,6 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+const longWaitTime = 2 * time.Minute
+const shortWaitTime = 20 * time.Second
+
 type checkGossipFunc func(map[string]interface{}) error
 
 // checkGossip fetches the gossip infoStore from each node and invokes the given
@@ -99,25 +102,34 @@ func TestGossipPeerings(t *testing.T) {
 	defer c.AssertAndStop(t)
 	num := c.NumNodes()
 
-	checkGossip(t, c, 20*time.Second, hasPeers(num))
+	deadline := time.Now().Add(*duration)
 
-	// Restart the first node.
-	log.Infof("restarting node 0")
-	if err := c.Restart(0); err != nil {
-		t.Fatal(err)
+	waitTime := longWaitTime
+	if *duration < waitTime {
+		waitTime = shortWaitTime
 	}
-	checkGossip(t, c, 20*time.Second, hasPeers(num))
 
-	// Restart another node (if there is one).
-	var pickedNode int
-	if num > 1 {
-		pickedNode = rand.Intn(num-1) + 1
+	for time.Now().Before(deadline) {
+		checkGossip(t, c, waitTime, hasPeers(num))
+
+		// Restart the first node.
+		log.Infof("restarting node 0")
+		if err := c.Restart(0); err != nil {
+			t.Fatal(err)
+		}
+		checkGossip(t, c, waitTime, hasPeers(num))
+
+		// Restart another node (if there is one).
+		var pickedNode int
+		if num > 1 {
+			pickedNode = rand.Intn(num-1) + 1
+		}
+		log.Infof("restarting node %d", pickedNode)
+		if err := c.Restart(pickedNode); err != nil {
+			t.Fatal(err)
+		}
+		checkGossip(t, c, waitTime, hasPeers(num))
 	}
-	log.Infof("restarting node %d", pickedNode)
-	if err := c.Restart(pickedNode); err != nil {
-		t.Fatal(err)
-	}
-	checkGossip(t, c, 20*time.Second, hasPeers(num))
 }
 
 // TestGossipRestart verifies that the gossip network can be
@@ -134,47 +146,56 @@ func TestGossipRestart(t *testing.T) {
 	defer c.AssertAndStop(t)
 	num := c.NumNodes()
 
-	log.Infof("waiting for initial gossip connections")
-	checkGossip(t, c, 20*time.Second, hasPeers(num))
-	checkGossip(t, c, time.Second, hasClusterID)
-	checkGossip(t, c, time.Second, hasSentinel)
+	deadline := time.Now().Add(*duration)
 
-	log.Infof("killing all nodes")
-	for i := 0; i < num; i++ {
-		if err := c.Kill(i); err != nil {
-			t.Fatal(err)
-		}
+	waitTime := longWaitTime
+	if *duration < waitTime {
+		waitTime = shortWaitTime
 	}
 
-	log.Infof("restarting all nodes")
-	for i := 0; i < num; i++ {
-		if err := c.Restart(i); err != nil {
-			t.Fatal(err)
-		}
-	}
+	for time.Now().Before(deadline) {
+		log.Infof("waiting for initial gossip connections")
+		checkGossip(t, c, waitTime, hasPeers(num))
+		checkGossip(t, c, waitTime, hasClusterID)
+		checkGossip(t, c, waitTime, hasSentinel)
 
-	log.Infof("waiting for gossip to be connected")
-	checkGossip(t, c, 20*time.Second, hasPeers(num))
-	checkGossip(t, c, time.Second, hasClusterID)
-	checkGossip(t, c, time.Second, hasSentinel)
-
-	for i := 0; i < num; i++ {
-		db, dbStopper := makeClient(t, c.ConnString(i))
-		if i == 0 {
-			if err := db.Del("count"); err != nil {
+		log.Infof("killing all nodes")
+		for i := 0; i < num; i++ {
+			if err := c.Kill(i); err != nil {
 				t.Fatal(err)
 			}
 		}
-		var kv client.KeyValue
-		if err := db.Txn(func(txn *client.Txn) error {
-			var err error
-			kv, err = txn.Inc("count", 1)
-			return err
-		}); err != nil {
-			t.Fatal(err)
-		} else if v := kv.ValueInt(); v != int64(i+1) {
-			t.Fatalf("unexpected value %d for write #%d (expected %d)", v, i, i+1)
+
+		log.Infof("restarting all nodes")
+		for i := 0; i < num; i++ {
+			if err := c.Restart(i); err != nil {
+				t.Fatal(err)
+			}
 		}
-		dbStopper.Stop()
+
+		log.Infof("waiting for gossip to be connected")
+		checkGossip(t, c, waitTime, hasPeers(num))
+		checkGossip(t, c, waitTime, hasClusterID)
+		checkGossip(t, c, waitTime, hasSentinel)
+
+		for i := 0; i < num; i++ {
+			db, dbStopper := makeClient(t, c.ConnString(i))
+			if i == 0 {
+				if err := db.Del("count"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var kv client.KeyValue
+			if err := db.Txn(func(txn *client.Txn) error {
+				var err error
+				kv, err = txn.Inc("count", 1)
+				return err
+			}); err != nil {
+				t.Fatal(err)
+			} else if v := kv.ValueInt(); v != int64(i+1) {
+				t.Fatalf("unexpected value %d for write #%d (expected %d)", v, i, i+1)
+			}
+			dbStopper.Stop()
+		}
 	}
 }

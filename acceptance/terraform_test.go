@@ -25,10 +25,10 @@ import (
 	"time"
 )
 
-// TestBuildCluster resizes the cluster to one node, one writer.
+// TestBuildBabyCluster resizes the cluster to one node, one writer.
 // It does not tear down the cluster after it's done and is mostly
 // useful for testing code changes in the `terrafarm` package.
-func TestBuildCluster(t *testing.T) {
+func TestBuildBabyCluster(t *testing.T) {
 	t.Skip("only enabled during testing")
 	f := farmer(t)
 	defer f.CollectLogs()

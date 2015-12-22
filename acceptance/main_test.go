@@ -73,6 +73,7 @@ func farmer(t *testing.T) *terrafarm.Farmer {
 		LogDir:  logDir,
 		KeyName: *keyName,
 	}
+	f.WaitReady(t, *duration/5)
 	log.Infof("logging to %s", logDir)
 	return f
 }
@@ -92,10 +93,7 @@ func StartCluster(t *testing.T) cluster.Cluster {
 		t.Fatal("need to either specify -num-local or -num-remote")
 	}
 	f := farmer(t)
-	if err := f.Destroy(); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Add(*numRemote, 0); err != nil {
+	if err := f.Resize(*numRemote, 0); err != nil {
 		t.Fatal(err)
 	}
 	return f
