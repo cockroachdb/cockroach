@@ -63,7 +63,7 @@ var (
 	rangeIDSuffixDict = []struct {
 		name   string
 		suffix []byte
-		ppFunc func(r Reader) string
+		ppFunc func(r encoding.Reader) string
 	}{
 		{name: "SequenceCache", suffix: LocalSequenceCacheSuffix, ppFunc: sequenceCacheKeyPrint},
 		{name: "RaftLeaderLease", suffix: localRaftLeaderLeaseSuffix},
@@ -94,7 +94,7 @@ func localStoreKeyPrint(key encoding.Reader) string {
 		return "/storeIdent"
 	}
 
-	return fmt.Sprintf("%q", []byte(key))
+	return fmt.Sprintf("%q", key.RawBytesRemaining())
 }
 
 func raftLogKeyPrint(key encoding.Reader) string {
@@ -117,7 +117,7 @@ func localRangeIDKeyPrint(key encoding.Reader) string {
 	// get range id
 	i, err := encoding.DecodeVarint(key)
 	if err != nil {
-		return fmt.Sprintf("/err<%v:%q>", err, key.RawbytesRemaining())
+		return fmt.Sprintf("/err<%v:%q>", err, key.RawBytesRemaining())
 	}
 
 	fmt.Fprintf(&buf, "/%d", i)
@@ -128,8 +128,7 @@ func localRangeIDKeyPrint(key encoding.Reader) string {
 	for _, s := range rangeIDSuffixDict {
 		if bytes.HasPrefix(key.RawBytesRemaining(), s.suffix) {
 			fmt.Fprintf(&buf, "/%s", s.name)
-			_, err = key.Read(len(s.suffix))
-			if err {
+			if _, err = key.Read(len(s.suffix)); err != nil {
 				panic(err)
 			}
 			if s.ppFunc != nil && len(key.RawBytesRemaining()) != 0 {
@@ -156,23 +155,22 @@ func localRangeKeyPrint(key encoding.Reader) string {
 
 	for _, s := range rangeSuffixDict {
 		if s.atEnd {
-			if bytes.HasSuffix(key, s.suffix) {
-				key = encoding.NewBufferReader(key.RawBytesRemaining()[:len(key)-len(s.suffix)])
+			rawBytes := key.RawBytesRemaining()
+			if bytes.HasSuffix(rawBytes, s.suffix) {
+				key = encoding.NewBufferReader(rawBytes[:len(rawBytes)-len(s.suffix)])
 				fmt.Fprintf(&buf, "/%s%s", s.name, decodeKeyPrint(key))
 				return buf.String()
 			}
 		} else {
 			begin := bytes.Index(key.RawBytesRemaining(), s.suffix)
 			if begin > 0 {
-				addrKey, err := key.Read(begin)
-				if err {
+				if addrKey, err := key.Read(begin); err != nil {
 					panic(err)
 				}
-				_, err := key.Read(len(s.suffix))
-				if err {
+				if _, err = key.Read(len(s.suffix)); err != nil {
 					panic(err)
 				}
-				id, err := key.RawBytesRemaining()
+				id := key.RawBytesRemaining()
 				fmt.Fprintf(&buf, "/%s/addrKey:%s/id:%q", s.name,
 					decodeKeyPrint(encoding.NewBufferReader(addrKey)), []byte(id))
 				return buf.String()
@@ -184,7 +182,7 @@ func localRangeKeyPrint(key encoding.Reader) string {
 	return buf.String()
 }
 
-func sequenceCacheKeyPrint(key Reader) string {
+func sequenceCacheKeyPrint(key encoding.Reader) string {
 	id, err := encoding.DecodeBytes(key, nil)
 	if err != nil {
 		return fmt.Sprintf("/%q/err:%v", key.RawBytesRemaining(), err)
@@ -207,21 +205,24 @@ func sequenceCacheKeyPrint(key Reader) string {
 	return fmt.Sprintf("/%q/epoch:%d/seq:%d", id, epoch, seq)
 }
 
-// !!! who calls this
-func print(key roachpb.Key) string {
-	return fmt.Sprintf("/%q", []byte(key))
+func print(key encoding.Reader) string {
+	return fmt.Sprintf("/%q", key.RawBytesRemaining())
 }
 
-func decodeKeyPrint(key Reader) string {
+func decodeKeyPrint(key encoding.Reader) string {
 	var buf bytes.Buffer
-	for k := 0; len(key) > 0; k++ {
+	for k := 0; !key.EOF(); k++ {
 		var err error
 		switch encoding.PeekType(key) {
 		case encoding.Null:
-			_ = encoding.DecodeIfNull(key)
+			if _, err = encoding.DecodeIfNull(key); err != nil {
+				panic(err)
+			}
 			fmt.Fprintf(&buf, "/NULL")
 		case encoding.NotNull:
-			key, _ = encoding.DecodeIfNotNull(key)
+			if _, err = encoding.DecodeIfNotNull(key); err != nil {
+				panic(err)
+			}
 			fmt.Fprintf(&buf, "/#")
 		case encoding.Int:
 			var i int64
@@ -261,7 +262,10 @@ func decodeKeyPrint(key Reader) string {
 	return buf.String()
 }
 
-// PrettyPrint print the key in a human readable format, which organized as:
+// PrettyPrint print the key in a human readable format, which organized as below.
+//
+// Note: all components of `key` are assumed to be encoded ascendingly.
+//
 // Key's Format												Key's Value
 // /Local/...												"\x01"+...
 // 		/Store/...											"\x01s"+...

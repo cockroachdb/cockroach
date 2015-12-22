@@ -96,9 +96,11 @@ func (r *BufferReader) RawBytesRemaining() []byte {
 	return r.s
 }
 
+/* !!!
 func (r *BufferReader) CompareToKey() int {
 	return bytes.Compare(r.RawBytesRemaining())
 }
+*/
 
 func (r *BufferReader) EOF() bool {
 	return len(r.s) == 0
@@ -119,7 +121,7 @@ func (r *BufferReader) Read(n int) ([]byte, error) {
 }
 
 func (r *BufferReader) ReadByte() (byte, error) {
-	if len(r.s) == 0 {
+	if r.EOF() {
 		return 0, io.EOF
 	}
 	b := r.s[0]
@@ -128,7 +130,7 @@ func (r *BufferReader) ReadByte() (byte, error) {
 }
 
 func (r *BufferReader) PeekByte() (byte, error) {
-	if len(r.s) == 0 {
+	if r.EOF() {
 		return 0, io.EOF
 	}
 	return r.s[0], nil
@@ -174,6 +176,7 @@ func (r *KeyReader) EOF() bool {
 	return len(r.s) > 0
 }
 
+/* !!!
 func (r *KeyReader) CompareToKey() int {
 	if r.dir == Descending {
 		cpy := make([]byte, len(res))
@@ -184,6 +187,7 @@ func (r *KeyReader) CompareToKey() int {
 		return bytes.Compare(r.RawBytesRemaining())
 	}
 }
+*/
 
 // Read returns a slice of up to `n` bytes.
 // If `n` bytes are not available, a io.EOF will be returned as the error.
@@ -194,14 +198,14 @@ func (r *KeyReader) Read(n int) ([]byte, error) {
 	if n > len(r.s) {
 		err = io.EOF
 		n = len(r.s)
-		if n <= 0 {
+		if n == 0 {
 			return []byte{}, io.EOF
 		}
 	}
 	res := r.s[:n]
-	r.s = r.s[r.n:]
+	r.s = r.s[n:]
 	if r.dir == Descending {
-		cpy := make([]byte, len(res))
+		cpy := make([]byte, n)
 		copy(cpy, res)
 		onesComplement(cpy)
 		return cpy, err
@@ -210,7 +214,7 @@ func (r *KeyReader) Read(n int) ([]byte, error) {
 }
 
 func (r *KeyReader) ReadByte() (byte, error) {
-	if len(r.s) == 0 {
+	if r.EOF() {
 		return 0, io.EOF
 	}
 	b := r.s[0]
@@ -233,10 +237,10 @@ func (r *KeyReader) PeekByte() (byte, error) {
 // PeekByteAbsolute reads one byte ignoring the KeyReader's direction.
 // Useful for marker bytes that are direction-agnostic.
 func (r *KeyReader) PeekByteAbsolute() (byte, error) {
-	if r.i >= len(r.s) {
+	if r.EOF() {
 		return 0, io.EOF
 	}
-	return r.s[r.i], nil
+	return r.s[0], nil
 }
 
 // EncodeUint32 encodes the uint32 value using a big-endian 8 byte
@@ -716,7 +720,7 @@ func EncodeNotNull(b []byte) []byte {
 // Since the NULL value encoding is guaranteed to never occur as the prefix for
 // the EncodeVarint, EncodeFloat, EncodeBytes and EncodeString encodings, it is
 // safe to call DecodeIfNull on their encoded values.
-func DecodeIfNull(r *KeyReader) (bool, error) {
+func DecodeIfNull(r Reader) (bool, error) {
 	var b byte
 	var err error
 	if b, err = r.PeekByte(); err != nil {
@@ -736,7 +740,7 @@ func DecodeIfNull(r *KeyReader) (bool, error) {
 // Note that the not-NULL marker is identical to the empty string encoding, so
 // do not use this routine where it is necessary to distinguish not-NULL from
 // the empty string.
-func DecodeIfNotNull(r *KeyReader) (bool, error) {
+func DecodeIfNotNull(r Reader) (bool, error) {
 	var b byte
 	var err error
 	if b, err = r.PeekByte(); err != nil {

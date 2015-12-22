@@ -166,6 +166,7 @@ func (k Key) Equal(l Key) bool {
 }
 
 // Compare implements the interval.Comparable interface for tree nodes.
+// !!! still needed? And the functions around.
 func (k Key) Compare(b interval.Comparable) int {
 	return bytes.Compare(k, b.(Key))
 }
