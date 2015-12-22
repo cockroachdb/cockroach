@@ -87,18 +87,21 @@ func (nef NodeEventFeed) StartNode(desc roachpb.NodeDescriptor, startedAt int64)
 // - on error without index information, a failure of the Batch, and
 // - on an indexed error a failure of the individual request.
 func (nef NodeEventFeed) CallComplete(ba roachpb.BatchRequest, pErr *roachpb.Error) {
-	if pErr != nil && pErr.TransactionRestart == roachpb.TransactionRestart_ABORT {
-		method := roachpb.Batch
-		if iErr, ok := pErr.GoError().(roachpb.IndexedError); ok {
-			if index, ok := iErr.ErrorIndex(); ok {
-				method = ba.Requests[index].GetInner().Method()
+	if pErr != nil {
+		if tErr, ok := pErr.GoError().(roachpb.TransactionRestartError); !ok ||
+			tErr.CanRestartTransaction() == roachpb.TransactionRestart_ABORT {
+			method := roachpb.Batch
+			if iErr, ok := pErr.GoError().(roachpb.IndexedError); ok {
+				if index, ok := iErr.ErrorIndex(); ok {
+					method = ba.Requests[index].GetInner().Method()
+				}
 			}
+			nef.f.Publish(&CallErrorEvent{
+				NodeID: nef.id,
+				Method: method,
+			})
+			return
 		}
-		nef.f.Publish(&CallErrorEvent{
-			NodeID: nef.id,
-			Method: method,
-		})
-		return
 	}
 	for _, union := range ba.Requests {
 		nef.f.Publish(&CallSuccessEvent{

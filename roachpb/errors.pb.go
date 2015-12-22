@@ -291,9 +291,6 @@ type Error struct {
 	// If retryable is true, the error condition may be transient and the failed
 	// operation may be retried (within the same transaction).
 	Retryable bool `protobuf:"varint,2,opt,name=retryable" json:"retryable"`
-	// If transaction_restart is not ABORT, the error condition may be handled by
-	// restarting the transaction (with or without a backoff).
-	TransactionRestart TransactionRestart `protobuf:"varint,3,opt,name=transaction_restart,enum=cockroach.roachpb.TransactionRestart" json:"transaction_restart"`
 	// If an ErrorDetail is present, it may contain additional structured data
 	// about the error.
 	Detail *ErrorDetail `protobuf:"bytes,4,opt,name=detail" json:"detail,omitempty"`
@@ -1028,9 +1025,6 @@ func (m *Error) MarshalTo(data []byte) (int, error) {
 		data[i] = 0
 	}
 	i++
-	data[i] = 0x18
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.TransactionRestart))
 	if m.Detail != nil {
 		data[i] = 0x22
 		i++
@@ -1315,7 +1309,6 @@ func (m *Error) Size() (n int) {
 	l = len(m.Message)
 	n += 1 + l + sovErrors(uint64(l))
 	n += 2
-	n += 1 + sovErrors(uint64(m.TransactionRestart))
 	if m.Detail != nil {
 		l = m.Detail.Size()
 		n += 1 + l + sovErrors(uint64(l))
@@ -3696,25 +3689,6 @@ func (m *Error) Unmarshal(data []byte) error {
 				}
 			}
 			m.Retryable = bool(v != 0)
-		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TransactionRestart", wireType)
-			}
-			m.TransactionRestart = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowErrors
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.TransactionRestart |= (TransactionRestart(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Detail", wireType)

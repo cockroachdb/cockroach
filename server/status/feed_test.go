@@ -298,19 +298,15 @@ func TestNodeEventFeedTransactionRestart(t *testing.T) {
 	ner.readEvents(feed)
 
 	get := wrap(&roachpb.GetRequest{})
-	nodefeed.CallComplete(get, &roachpb.Error{
-		TransactionRestart: roachpb.TransactionRestart_BACKOFF})
-	nodefeed.CallComplete(get, &roachpb.Error{
-		TransactionRestart: roachpb.TransactionRestart_IMMEDIATE})
-	nodefeed.CallComplete(wrap(&roachpb.PutRequest{}), &roachpb.Error{
-		TransactionRestart: roachpb.TransactionRestart_ABORT})
+	nodefeed.CallComplete(get, roachpb.NewError(&roachpb.TransactionAbortedError{}))
+	nodefeed.CallComplete(get, roachpb.NewError(&roachpb.TransactionRetryError{}))
+	nodefeed.CallComplete(wrap(&roachpb.PutRequest{}), roachpb.NewError(util.Errorf("test")))
 	nodefeed.CallComplete(wrap(&roachpb.PutRequest{}), &roachpb.Error{
 		Detail: &roachpb.ErrorDetail{
 			WriteIntent: &roachpb.WriteIntentError{
 				Index: &roachpb.ErrPosition{Index: 0},
 			},
 		},
-		TransactionRestart: roachpb.TransactionRestart_ABORT,
 	})
 
 	feed.Flush()
