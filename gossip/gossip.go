@@ -123,9 +123,9 @@ type Gossip struct {
 	// here and its own set of callbacks.
 	// We do not use the infostore to avoid unmarshalling under the
 	// main gossip lock.
-	systemConfig          *config.SystemConfig
-	systemConfigMu        sync.RWMutex
-	systemConfigCallbacks []systemConfigCallback
+	systemConfig         *config.SystemConfig
+	systemConfigMu       sync.RWMutex
+	systemConfigChannels []chan<- struct{}
 
 	// resolvers is a list of resolvers used to determine
 	// bootstrap hosts for connecting to the gossip network.
@@ -366,20 +366,24 @@ func (g *Gossip) GetSystemConfig() *config.SystemConfig {
 
 type systemConfigCallback func(*config.SystemConfig)
 
-// RegisterSystemConfigCallback registers a callback for the unmarshalled
-// system config. It is called after registration, and whenever a new
+// RegisterSystemConfigChannel registers a channel to signify updates for the
+// system config. It is notified after registration, and whenever a new
 // system config is successfully unmarshalled.
-func (g *Gossip) RegisterSystemConfigCallback(method systemConfigCallback) {
+func (g *Gossip) RegisterSystemConfigChannel() <-chan struct{} {
 	g.systemConfigMu.Lock()
 	defer g.systemConfigMu.Unlock()
-	g.systemConfigCallbacks = append(g.systemConfigCallbacks, method)
 
-	if g.systemConfig == nil {
-		return
+	// Create channel that receives new system config notifications.
+	// The channel has a size of 1 to prevent gossip from blocking on it.
+	c := make(chan struct{}, 1)
+	g.systemConfigChannels = append(g.systemConfigChannels, c)
+
+	// Notify the channel right away if we have a config.
+	if g.systemConfig != nil {
+		c <- struct{}{}
 	}
 
-	// Run the callback right away if we have a config.
-	go method(g.systemConfig)
+	return c
 }
 
 // updateSystemConfig is the raw gossip info callback.
@@ -399,8 +403,11 @@ func (g *Gossip) updateSystemConfig(key string, content roachpb.Value) {
 	g.systemConfigMu.Lock()
 	defer g.systemConfigMu.Unlock()
 	g.systemConfig = cfg
-	for _, cb := range g.systemConfigCallbacks {
-		go cb(cfg)
+	for _, c := range g.systemConfigChannels {
+		select {
+		case c <- struct{}{}:
+		default:
+		}
 	}
 }
 

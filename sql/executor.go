@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 var testingWaitForMetadata bool
@@ -76,14 +77,27 @@ type Executor struct {
 
 // newExecutor creates an Executor and registers a callback on the
 // system config.
-func newExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager) *Executor {
+func newExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, stopper *stop.Stopper) *Executor {
 	exec := &Executor{
 		db:       db,
 		reCache:  parser.NewRegexpCache(512),
 		leaseMgr: leaseMgr,
 	}
 	exec.systemConfigCond = sync.NewCond(&exec.systemConfigMu)
-	gossip.RegisterSystemConfigCallback(exec.updateSystemConfig)
+
+	gossipUpdateC := gossip.RegisterSystemConfigChannel()
+	stopper.RunWorker(func() {
+		for {
+			select {
+			case <-gossipUpdateC:
+				cfg := gossip.GetSystemConfig()
+				exec.updateSystemConfig(cfg)
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
+
 	return exec
 }
 
