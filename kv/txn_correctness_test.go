@@ -655,7 +655,7 @@ func checkConcurrency(name string, isolations []roachpb.IsolationType, txns []st
 // reads keys A & B, the other reads and then writes keys A & B. The
 // reader must not see intermediate results from the reader/writer.
 //
-// Lost update would typically fail with a history such as:
+// Inconsistent analysis would typically fail with a history such as:
 //    R1(A) R2(B) W2(B) R2(A) W2(A) R1(B) C1 C2
 func TestTxnDBInconsistentAnalysisAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)
