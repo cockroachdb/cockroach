@@ -214,11 +214,7 @@ message Error {
   // operation may be retried (within the same transaction).
   optional bool retryable = 2 [(gogoproto.nullable) = false];
 
-  // If transaction_restart is not ABORT, the error condition may be handled by
-  // restarting the transaction (with or without a backoff).
-  optional TransactionRestart transaction_restart = 3 [(gogoproto.nullable) = false];
-
   // If an ErrorDetail is present, it may contain additional structured data
   // about the error.
-  optional ErrorDetail detail = 4;
+  optional ErrorDetail detail = 3;
 }

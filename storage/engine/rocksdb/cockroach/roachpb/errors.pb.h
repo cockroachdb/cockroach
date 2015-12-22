@@ -2052,13 +2052,6 @@ class Error : public ::google::protobuf::Message {
   bool retryable() const;
   void set_retryable(bool value);
 
-  // optional .cockroach.roachpb.TransactionRestart transaction_restart = 3;
-  bool has_transaction_restart() const;
-  void clear_transaction_restart();
-  static const int kTransactionRestartFieldNumber = 3;
-  ::cockroach::roachpb::TransactionRestart transaction_restart() const;
-  void set_transaction_restart(::cockroach::roachpb::TransactionRestart value);
-
   // optional .cockroach.roachpb.ErrorDetail detail = 4;
   bool has_detail() const;
   void clear_detail();
@@ -2074,8 +2067,6 @@ class Error : public ::google::protobuf::Message {
   inline void clear_has_message();
   inline void set_has_retryable();
   inline void clear_has_retryable();
-  inline void set_has_transaction_restart();
-  inline void clear_has_transaction_restart();
   inline void set_has_detail();
   inline void clear_has_detail();
 
@@ -2083,9 +2074,8 @@ class Error : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::internal::ArenaStringPtr message_;
-  bool retryable_;
-  int transaction_restart_;
   ::cockroach::roachpb::ErrorDetail* detail_;
+  bool retryable_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
@@ -4104,40 +4094,15 @@ inline void Error::set_retryable(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Error.retryable)
 }
 
-// optional .cockroach.roachpb.TransactionRestart transaction_restart = 3;
-inline bool Error::has_transaction_restart() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void Error::set_has_transaction_restart() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void Error::clear_has_transaction_restart() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void Error::clear_transaction_restart() {
-  transaction_restart_ = 0;
-  clear_has_transaction_restart();
-}
-inline ::cockroach::roachpb::TransactionRestart Error::transaction_restart() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Error.transaction_restart)
-  return static_cast< ::cockroach::roachpb::TransactionRestart >(transaction_restart_);
-}
-inline void Error::set_transaction_restart(::cockroach::roachpb::TransactionRestart value) {
-  assert(::cockroach::roachpb::TransactionRestart_IsValid(value));
-  set_has_transaction_restart();
-  transaction_restart_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Error.transaction_restart)
-}
-
 // optional .cockroach.roachpb.ErrorDetail detail = 4;
 inline bool Error::has_detail() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 inline void Error::set_has_detail() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000004u;
 }
 inline void Error::clear_has_detail() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void Error::clear_detail() {
   if (detail_ != NULL) detail_->::cockroach::roachpb::ErrorDetail::Clear();

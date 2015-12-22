@@ -370,10 +370,9 @@ void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrPosition, _internal_metadata_),
       -1);
   Error_descriptor_ = file->message_type(17);
-  static const int Error_offsets_[4] = {
+  static const int Error_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, message_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, retryable_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, transaction_restart_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, detail_),
   };
   Error_reflection_ =
@@ -560,13 +559,12 @@ void protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto() {
     "lable\030\016 \001(\0132\'.cockroach.roachpb.NodeUnav"
     "ailableError\022*\n\004send\030\017 \001(\0132\034.cockroach.r"
     "oachpb.SendError:\004\310\240\037\001\"\"\n\013ErrPosition\022\023\n"
-    "\005index\030\001 \001(\005B\004\310\336\037\000\"\267\001\n\005Error\022\025\n\007message\030"
-    "\001 \001(\tB\004\310\336\037\000\022\027\n\tretryable\030\002 \001(\010B\004\310\336\037\000\022H\n\023"
-    "transaction_restart\030\003 \001(\0162%.cockroach.ro"
-    "achpb.TransactionRestartB\004\310\336\037\000\022.\n\006detail"
-    "\030\004 \001(\0132\036.cockroach.roachpb.ErrorDetail:\004"
-    "\230\240\037\000*;\n\022TransactionRestart\022\t\n\005ABORT\020\000\022\013\n"
-    "\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020\002B\tZ\007roachpbX\002", 3118);
+    "\005index\030\001 \001(\005B\004\310\336\037\000\"m\n\005Error\022\025\n\007message\030\001"
+    " \001(\tB\004\310\336\037\000\022\027\n\tretryable\030\002 \001(\010B\004\310\336\037\000\022.\n\006d"
+    "etail\030\004 \001(\0132\036.cockroach.roachpb.ErrorDet"
+    "ail:\004\230\240\037\000*;\n\022TransactionRestart\022\t\n\005ABORT"
+    "\020\000\022\013\n\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020\002B\tZ\007roachp"
+    "bX\002", 3043);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/errors.proto", &protobuf_RegisterTypes);
   NotLeaderError::default_instance_ = new NotLeaderError();
@@ -7855,7 +7853,6 @@ void ErrPosition::clear_index() {
 #ifndef _MSC_VER
 const int Error::kMessageFieldNumber;
 const int Error::kRetryableFieldNumber;
-const int Error::kTransactionRestartFieldNumber;
 const int Error::kDetailFieldNumber;
 #endif  // !_MSC_VER
 
@@ -7882,7 +7879,6 @@ void Error::SharedCtor() {
   _cached_size_ = 0;
   message_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   retryable_ = false;
-  transaction_restart_ = 0;
   detail_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
@@ -7925,27 +7921,15 @@ Error* Error::New(::google::protobuf::Arena* arena) const {
 }
 
 void Error::Clear() {
-#define ZR_HELPER_(f) reinterpret_cast<char*>(\
-  &reinterpret_cast<Error*>(16)->f)
-
-#define ZR_(first, last) do {\
-  ::memset(&first, 0,\
-           ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
-} while (0)
-
-  if (_has_bits_[0 / 32] & 15u) {
-    ZR_(retryable_, transaction_restart_);
+  if (_has_bits_[0 / 32] & 7u) {
     if (has_message()) {
       message_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
     }
+    retryable_ = false;
     if (has_detail()) {
       if (detail_ != NULL) detail_->::cockroach::roachpb::ErrorDetail::Clear();
     }
   }
-
-#undef ZR_HELPER_
-#undef ZR_
-
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->Clear();
@@ -7986,26 +7970,6 @@ bool Error::MergePartialFromCodedStream(
                    bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
                  input, &retryable_)));
           set_has_retryable();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(24)) goto parse_transaction_restart;
-        break;
-      }
-
-      // optional .cockroach.roachpb.TransactionRestart transaction_restart = 3;
-      case 3: {
-        if (tag == 24) {
-         parse_transaction_restart:
-          int value;
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
-                 input, &value)));
-          if (::cockroach::roachpb::TransactionRestart_IsValid(value)) {
-            set_transaction_restart(static_cast< ::cockroach::roachpb::TransactionRestart >(value));
-          } else {
-            mutable_unknown_fields()->AddVarint(3, value);
-          }
         } else {
           goto handle_unusual;
         }
@@ -8066,12 +8030,6 @@ void Error::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(2, this->retryable(), output);
   }
 
-  // optional .cockroach.roachpb.TransactionRestart transaction_restart = 3;
-  if (has_transaction_restart()) {
-    ::google::protobuf::internal::WireFormatLite::WriteEnum(
-      3, this->transaction_restart(), output);
-  }
-
   // optional .cockroach.roachpb.ErrorDetail detail = 4;
   if (has_detail()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
@@ -8104,12 +8062,6 @@ void Error::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(2, this->retryable(), target);
   }
 
-  // optional .cockroach.roachpb.TransactionRestart transaction_restart = 3;
-  if (has_transaction_restart()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteEnumToArray(
-      3, this->transaction_restart(), target);
-  }
-
   // optional .cockroach.roachpb.ErrorDetail detail = 4;
   if (has_detail()) {
     target = ::google::protobuf::internal::WireFormatLite::
@@ -8128,7 +8080,7 @@ void Error::SerializeWithCachedSizes(
 int Error::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 15) {
+  if (_has_bits_[0 / 32] & 7) {
     // optional string message = 1;
     if (has_message()) {
       total_size += 1 +
@@ -8139,12 +8091,6 @@ int Error::ByteSize() const {
     // optional bool retryable = 2;
     if (has_retryable()) {
       total_size += 1 + 1;
-    }
-
-    // optional .cockroach.roachpb.TransactionRestart transaction_restart = 3;
-    if (has_transaction_restart()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::EnumSize(this->transaction_restart());
     }
 
     // optional .cockroach.roachpb.ErrorDetail detail = 4;
@@ -8188,9 +8134,6 @@ void Error::MergeFrom(const Error& from) {
     if (from.has_retryable()) {
       set_retryable(from.retryable());
     }
-    if (from.has_transaction_restart()) {
-      set_transaction_restart(from.transaction_restart());
-    }
     if (from.has_detail()) {
       mutable_detail()->::cockroach::roachpb::ErrorDetail::MergeFrom(from.detail());
     }
@@ -8224,7 +8167,6 @@ void Error::Swap(Error* other) {
 void Error::InternalSwap(Error* other) {
   message_.Swap(&other->message_);
   std::swap(retryable_, other->retryable_);
-  std::swap(transaction_restart_, other->transaction_restart_);
   std::swap(detail_, other->detail_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
@@ -8319,40 +8261,15 @@ void Error::clear_retryable() {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Error.retryable)
 }
 
-// optional .cockroach.roachpb.TransactionRestart transaction_restart = 3;
-bool Error::has_transaction_restart() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-void Error::set_has_transaction_restart() {
-  _has_bits_[0] |= 0x00000004u;
-}
-void Error::clear_has_transaction_restart() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-void Error::clear_transaction_restart() {
-  transaction_restart_ = 0;
-  clear_has_transaction_restart();
-}
- ::cockroach::roachpb::TransactionRestart Error::transaction_restart() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Error.transaction_restart)
-  return static_cast< ::cockroach::roachpb::TransactionRestart >(transaction_restart_);
-}
- void Error::set_transaction_restart(::cockroach::roachpb::TransactionRestart value) {
-  assert(::cockroach::roachpb::TransactionRestart_IsValid(value));
-  set_has_transaction_restart();
-  transaction_restart_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Error.transaction_restart)
-}
-
 // optional .cockroach.roachpb.ErrorDetail detail = 4;
 bool Error::has_detail() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 void Error::set_has_detail() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000004u;
 }
 void Error::clear_has_detail() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 void Error::clear_detail() {
   if (detail_ != NULL) detail_->::cockroach::roachpb::ErrorDetail::Clear();

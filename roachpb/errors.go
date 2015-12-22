@@ -109,7 +109,7 @@ func (e *internalError) CanRetry() bool {
 
 // CanRestartTransaction implements the TransactionRestartError interface.
 func (e *internalError) CanRestartTransaction() TransactionRestart {
-	return e.TransactionRestart
+	return TransactionRestart_ABORT
 }
 
 // Transaction implements the TransactionRestartError interface by returning
@@ -139,17 +139,6 @@ func (e *Error) GoError() error {
 			panic(fmt.Sprintf("inconsistent error proto; expected %T to be retryable", err))
 		}
 	}
-	if r, ok := err.(TransactionRestartError); ok {
-		if r.CanRestartTransaction() != e.TransactionRestart {
-			panic(fmt.Sprintf("inconsistent error proto; expected %T to have restart mode %v",
-				err, e.TransactionRestart))
-		}
-	} else {
-		// Error type doesn't implement TransactionRestartError, so expect it to have the default.
-		if e.TransactionRestart != TransactionRestart_ABORT {
-			panic(fmt.Sprintf("inconsistent error proto; expected %T to have restart mode ABORT", err))
-		}
-	}
 	return err
 }
 
@@ -162,11 +151,7 @@ func (e *Error) SetGoError(err error) {
 	if r, ok := err.(retry.Retryable); ok {
 		e.Retryable = r.CanRetry()
 	}
-	var isTxnError bool
-	if r, ok := err.(TransactionRestartError); ok {
-		isTxnError = true
-		e.TransactionRestart = r.CanRestartTransaction()
-	}
+	_, isTxnError := err.(TransactionRestartError)
 	// If the specific error type exists in the detail union, set it.
 	detail := &ErrorDetail{}
 	if detail.SetValue(err) {
