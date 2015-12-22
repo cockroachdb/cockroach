@@ -25,6 +25,7 @@ import (
 	"github.com/lib/pq/oid"
 
 	"github.com/cockroachdb/cockroach/sql/driver"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -206,4 +207,78 @@ func formatTs(t time.Time) (b []byte) {
 		b = append(b, " BC"...)
 	}
 	return b
+}
+
+var (
+	oidToDatum = map[oid.Oid]parser.Datum{
+		oid.T_bool:      parser.DummyBool,
+		oid.T_int8:      parser.DummyInt,
+		oid.T_float8:    parser.DummyFloat,
+		oid.T_text:      parser.DummyString,
+		oid.T_date:      parser.DummyDate,
+		oid.T_timestamp: parser.DummyTimestamp,
+		oid.T_interval:  parser.DummyInterval,
+	}
+	datumToOid = map[parser.Datum]oid.Oid{
+		parser.DummyBytes:     oid.T_text,
+		parser.DummyBool:      oid.T_bool,
+		parser.DummyInt:       oid.T_int8,
+		parser.DummyFloat:     oid.T_float8,
+		parser.DummyString:    oid.T_text,
+		parser.DummyDate:      oid.T_date,
+		parser.DummyTimestamp: oid.T_timestamp,
+		parser.DummyInterval:  oid.T_interval,
+	}
+)
+
+// decodeOidDatum decodes bytes with specified Oid and format code into
+// a datum.
+func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error) {
+	var d driver.Datum
+	switch id {
+	case oid.T_bool:
+		switch code {
+		case formatText:
+			v, err := strconv.ParseBool(string(b))
+			if err != nil {
+				return d, fmt.Errorf("unknown bool value")
+			}
+			d.Payload = &driver.Datum_BoolVal{BoolVal: v}
+		default:
+			return d, fmt.Errorf("unsupported: binary bool parameter")
+		}
+	case oid.T_int8:
+		switch code {
+		case formatText:
+			i, err := strconv.ParseInt(string(b), 10, 64)
+			if err != nil {
+				return d, fmt.Errorf("unknown int value")
+			}
+			d.Payload = &driver.Datum_IntVal{IntVal: i}
+		default:
+			return d, fmt.Errorf("unsupported: binary int parameter")
+		}
+	case oid.T_float8:
+		switch code {
+		case formatText:
+			f, err := strconv.ParseFloat(string(b), 64)
+			if err != nil {
+				return d, fmt.Errorf("unknown float value")
+			}
+			d.Payload = &driver.Datum_FloatVal{FloatVal: f}
+		default:
+			return d, fmt.Errorf("unsupported: binary float parameter")
+		}
+	case oid.T_text:
+		switch code {
+		case formatText:
+			d.Payload = &driver.Datum_StringVal{StringVal: string(b)}
+		default:
+			return d, fmt.Errorf("unsupported: binary string parameter")
+		}
+	// TODO(mjibson): implement date/time types
+	default:
+		return d, fmt.Errorf("unsupported: %v", id)
+	}
+	return d, nil
 }
