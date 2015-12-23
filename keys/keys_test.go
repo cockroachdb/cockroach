@@ -18,11 +18,13 @@ package keys
 
 import (
 	"bytes"
+	"math"
 	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -347,6 +349,67 @@ func TestBatchRange(t *testing.T) {
 		rs := Range(ba)
 		if actPair := [2]string{string(rs.Key), string(rs.EndKey)}; !reflect.DeepEqual(actPair, c.exp) {
 			t.Fatalf("%d: expected [%q,%q), got [%q,%q)", i, c.exp[0], c.exp[1], actPair[0], actPair[1])
+		}
+	}
+}
+
+func TestMakeColumnKey(t *testing.T) {
+	const maxColID = math.MaxUint32
+	key := MakeColumnKey(nil, maxColID)
+	if expected, n := 6, len(key); expected != n {
+		t.Fatalf("expected %d bytes, but got %d: [% x]", expected, n, []byte(key))
+	}
+}
+
+func TestMakeSplitKey(t *testing.T) {
+	e := func(vals ...uint64) roachpb.Key {
+		var k roachpb.Key
+		for _, v := range vals {
+			k = encoding.EncodeUvarint(k, v)
+		}
+		return k
+	}
+
+	goodData := []struct {
+		in       roachpb.Key
+		expected roachpb.Key
+	}{
+		{e(1, 2, 0), e(1, 2)},          // /Table/1/2/0 -> /Table/1/2
+		{e(1, 2, 1), e(1)},             // /Table/1/2/1 -> /Table/1
+		{e(1, 2, 2), e()},              // /Table/1/2/2 -> /Table
+		{e(1, 2, 3, 0), e(1, 2, 3)},    // /Table/1/2/3/0 -> /Table/1/2/3
+		{e(1, 2, 3, 1), e(1, 2)},       // /Table/1/2/3/1 -> /Table/1/2
+		{e(1, 2, 200, 2), e(1, 2)},     // /Table/1/2/200/2 -> /Table/1/2
+		{e(1, 2, 3, 4, 1), e(1, 2, 3)}, // /Table/1/2/3/4/1 -> /Table/1/2/3
+	}
+	for i, d := range goodData {
+		out, err := MakeSplitKey(d.in)
+		if err != nil {
+			t.Fatalf("%d: %s: unexpected error: %v", i, d.in, err)
+		}
+		if !d.expected.Equal(out) {
+			t.Fatalf("%d: %s: expected %s, but got %s", i, d.in, d.expected, out)
+		}
+	}
+
+	errorData := []struct {
+		in  roachpb.Key
+		err string
+	}{
+		// Column ID suffix size is too large.
+		{e(1), "malformed table key"},
+		{e(1, 2), "malformed table key"},
+		// The table ID is invalid.
+		{e(200)[:1], "insufficient bytes to decode uvarint value"},
+		// The index ID is invalid.
+		{e(1, 200)[:2], "insufficient bytes to decode uvarint value"},
+		// The column ID suffix is invalid.
+		{e(1, 2, 200)[:3], "insufficient bytes to decode uvarint value"},
+	}
+	for i, d := range errorData {
+		_, err := MakeSplitKey(d.in)
+		if !testutils.IsError(err, d.err) {
+			t.Fatalf("%d: %s: expected %s, but got %v", i, d.in, d.err, err)
 		}
 	}
 }

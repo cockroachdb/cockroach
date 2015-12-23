@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
@@ -253,7 +254,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		for i, val := range newVals {
 			col := cols[i]
 
-			key := MakeColumnKey(col.ID, primaryIndexKey)
+			key := keys.MakeColumnKey(primaryIndexKey, uint32(col.ID))
 			if marshalled[i] != nil {
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
