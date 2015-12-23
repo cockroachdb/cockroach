@@ -111,27 +111,10 @@ func (k MVCCKey) String() string {
 	return fmt.Sprintf("%s/%s", k.Key, k.Timestamp)
 }
 
-type encodedSpan struct {
-	start, end MVCCKey
-}
-
 // MVCCKeyValue contains the raw bytes of the value for a key.
 type MVCCKeyValue struct {
 	Key   MVCCKey
 	Value []byte
-}
-
-// illegalSplitKeySpans lists spans of keys that should not be split.
-var illegalSplitKeySpans []encodedSpan
-
-func init() {
-	for _, r := range keys.NoSplitSpans {
-		illegalSplitKeySpans = append(illegalSplitKeySpans,
-			encodedSpan{
-				start: MakeMVCCMetadataKey(r.Key),
-				end:   MakeMVCCMetadataKey(r.EndKey),
-			})
-	}
 }
 
 // Value returns the inline value.
@@ -1519,26 +1502,17 @@ func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []roachpb.GCRequest_G
 	return nil
 }
 
-// IsValidSplitKey returns whether the key is a valid split key.
-// Certain key ranges cannot be split; split keys chosen within
-// any of these ranges are considered invalid.
-//
-//   - \x00\x00meta1 < SplitKey < \x00\x00meta2
-//   - \x00zone < SplitKey < \x00zonf
-// And split key equal to Meta2KeyMax (\x00\x00meta2\xff\xff) is
-// considered invalid.
+// IsValidSplitKey returns whether the key is a valid split key. Certain key
+// ranges cannot be split (the meta1 span and the system DB span); split keys
+// chosen within any of these ranges are considered invalid. And a split key
+// equal to Meta2KeyMax (\x03\xff\xff) is considered invalid.
 func IsValidSplitKey(key roachpb.Key) bool {
+	// TODO(peter): What is this restriction about? Document.
 	if keys.Meta2KeyMax.Equal(key) {
 		return false
 	}
-	return isValidEncodedSplitKey(MakeMVCCMetadataKey(key))
-}
-
-// isValidEncodedSplitKey iterates through the illegal ranges and
-// returns true if the specified key falls within any; false otherwise.
-func isValidEncodedSplitKey(key MVCCKey) bool {
-	for _, rng := range illegalSplitKeySpans {
-		if rng.start.Less(key) && key.Less(rng.end) {
+	for _, span := range keys.NoSplitSpans {
+		if span.ContainsKey(key) {
 			return false
 		}
 	}
@@ -1574,7 +1548,7 @@ func MVCCFindSplitKey(engine Engine, rangeID roachpb.RangeID, key, endKey roachp
 
 	if err := engine.Iterate(encStartKey, encEndKey, func(kv MVCCKeyValue) (bool, error) {
 		// Is key within a legal key range?
-		valid := isValidEncodedSplitKey(kv.Key)
+		valid := IsValidSplitKey(kv.Key.Key)
 
 		// Determine if this key would make a better split than last "best" key.
 		diff := targetSize - sizeSoFar
@@ -1606,8 +1580,8 @@ func MVCCFindSplitKey(engine Engine, rangeID roachpb.RangeID, key, endKey roachp
 		return nil, util.Errorf("the range cannot be split; considered range %q-%q has no valid splits", key, endKey)
 	}
 
-	// The key is an MVCC key, so to avoid corrupting MVCC we get the
-	// associated mvcc metadata key, which is fine to split in front of.
+	// The key is an MVCC (versioned) key, so to avoid corrupting MVCC we only
+	// return the base portion, which is fine to split in front of.
 	return bestSplitKey.Key, nil
 }
 

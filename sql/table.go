@@ -488,7 +488,7 @@ func decodeTableKey(valType parser.Datum, key []byte) (parser.Datum, []byte, err
 }
 
 type indexEntry struct {
-	key   []byte
+	key   roachpb.Key
 	value []byte
 }
 
@@ -515,6 +515,11 @@ func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
 			// extraKey to the key in order to make it unique.
 			entry.key = append(entry.key, extraKey...)
 		}
+
+		// Index keys do not have a column ID suffix, so encode 0 for the size of
+		// the column ID.
+		entry.key = encoding.EncodeUvarint(entry.key, 0)
+
 		if secondaryIndex.Unique {
 			// Note that a unique secondary index that contains a NULL column value
 			// will have extraKey appended to the key and stored in the value. We

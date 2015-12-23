@@ -784,6 +784,11 @@ func (s Span) Equal(o Span) bool {
 	return bytes.Equal(s.Key, o.Key) && bytes.Equal(s.EndKey, o.EndKey)
 }
 
+// ContainsKey returns whether this span contains the specified key.
+func (s Span) ContainsKey(key Key) bool {
+	return bytes.Compare(key, s.Key) >= 0 && bytes.Compare(key, s.EndKey) < 0
+}
+
 // RSpan is a key range with an inclusive start RKey and an exclusive end RKey.
 type RSpan struct {
 	Key, EndKey RKey
