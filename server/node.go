@@ -159,7 +159,7 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 }
 
 // NewNode returns a new instance of Node.
-func NewNode(ctx storage.StoreContext, metaRegistry metric.Registry, stopper *stop.Stopper) *Node {
+func NewNode(ctx storage.StoreContext, metaRegistry *metric.Registry, stopper *stop.Stopper) *Node {
 	return &Node{
 		ctx:     ctx,
 		stopper: stopper,
