@@ -18,10 +18,13 @@ package terrafarm
 
 import (
 	"fmt"
+	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -33,11 +36,23 @@ type Farmer struct {
 	Args           []string
 	KeyName        string
 	nodes, writers []string
+	elb            string
 }
 
 func (f *Farmer) refresh() {
 	f.nodes = f.output("instances")
 	f.writers = f.output("example_block_writer")
+	if elbs := f.output("elb_address"); len(elbs) > 0 {
+		f.elb = elbs[0]
+	}
+}
+
+// LoadBalancer returns the load balancer address.
+func (f *Farmer) LoadBalancer() string {
+	if f.elb == "" {
+		f.refresh()
+	}
+	return f.elb
 }
 
 // Nodes returns a (copied) slice of provisioned nodes' host names.
@@ -153,6 +168,27 @@ func (f *Farmer) ConnString(i int) string {
 	return "rpc://" + "root" + "@" +
 		util.EnsureHostPort(f.Nodes()[i]) +
 		"?certs=" + "certswhocares"
+}
+
+// WaitReady waits until the infrastructure is in a state that *should* allow
+// for a healthy cluster. Currently, this means waiting for the load balancer
+// to resolve from all nodes.
+func (f *Farmer) WaitReady(t util.Tester, d time.Duration) {
+	util.SucceedsWithin(t, d, func() error {
+		elb, _, err := net.SplitHostPort(f.LoadBalancer())
+		if err != nil || elb == "" {
+			return fmt.Errorf("ELB not found: %v", err)
+		}
+		for i := range f.Nodes() {
+			if err := f.Exec(i, "nslookup "+elb); err != nil {
+				if _, ok := err.(*exec.ExitError); !ok {
+					t.Fatal(err)
+				}
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // Assert verifies that the cluster state is as expected (i.e. no unexpected
