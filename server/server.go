@@ -82,7 +82,7 @@ type Server struct {
 	tsDB          *ts.DB
 	tsServer      *ts.Server
 	raftTransport multiraft.Transport
-	metaRegistry  metric.Registry
+	metaRegistry  *metric.Registry
 	stopper       *stop.Stopper
 }
 

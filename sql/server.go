@@ -44,7 +44,7 @@ type Server struct {
 }
 
 // MakeServer creates a Server.
-func MakeServer(ctx *base.Context, db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, metaRegistry metric.Registry, stopper *stop.Stopper) Server {
+func MakeServer(ctx *base.Context, db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, metaRegistry *metric.Registry, stopper *stop.Stopper) Server {
 	return Server{
 		context:  ctx,
 		Executor: newExecutor(db, gossip, leaseMgr, metaRegistry, stopper),

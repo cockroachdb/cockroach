@@ -91,7 +91,7 @@ const (
 	// statusStorePattern exposes status for a single store.
 	statusStorePattern = statusPrefix + "stores/:store_id"
 
-	statusTransientPattern = statusPrefix + "transient/:store_id"
+	statusMetricsPattern = statusPrefix + "metrics/:store_id"
 
 	// healthEndpoint is a shortcut for local details, intended for use by
 	// monitoring processes to verify that the server is up.
@@ -105,14 +105,14 @@ var localRE = regexp.MustCompile(`(?i)local`)
 type statusServer struct {
 	db           *client.DB
 	gossip       *gossip.Gossip
-	metaRegistry metric.Registry
+	metaRegistry *metric.Registry
 	router       *httprouter.Router
 	ctx          *Context
 	proxyClient  *http.Client
 }
 
 // newStatusServer allocates and returns a statusServer.
-func newStatusServer(db *client.DB, gossip *gossip.Gossip, metaRegistry metric.Registry, ctx *Context) *statusServer {
+func newStatusServer(db *client.DB, gossip *gossip.Gossip, metaRegistry *metric.Registry, ctx *Context) *statusServer {
 	// Create an http client with a timeout
 	tlsConfig, err := ctx.GetClientTLSConfig()
 	if err != nil {
@@ -143,7 +143,7 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip, metaRegistry metric.R
 	server.router.GET(statusNodePattern, server.handleNodeStatus)
 	server.router.GET(statusStoresPrefix, server.handleStoresStatus)
 	server.router.GET(statusStorePattern, server.handleStoreStatus)
-	server.router.GET(statusTransientPattern, server.handleTransient)
+	server.router.GET(statusMetricsPattern, server.handleMetrics)
 
 	server.router.GET(healthEndpoint, server.handleDetailsLocal)
 	return server
@@ -598,7 +598,7 @@ func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request,
 	respondAsJSON(w, r, storeStatus)
 }
 
-func (s *statusServer) handleTransient(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	nodeID, local, err := s.extractNodeID(ps)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
