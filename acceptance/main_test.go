@@ -68,12 +68,11 @@ func farmer(t *testing.T) *terrafarm.Farmer {
 		logDir = filepath.Join(filepath.Clean(os.ExpandEnv("${PWD}")), logDir)
 	}
 	f := &terrafarm.Farmer{
-		Debug:   true,
+		Output:  os.Stderr,
 		Cwd:     *cwd,
 		LogDir:  logDir,
 		KeyName: *keyName,
 	}
-	f.WaitReady(t, *duration/5)
 	log.Infof("logging to %s", logDir)
 	return f
 }
@@ -95,6 +94,10 @@ func StartCluster(t *testing.T) cluster.Cluster {
 	f := farmer(t)
 	if err := f.Resize(*numRemote, 0); err != nil {
 		t.Fatal(err)
+	}
+	if err := f.WaitReady(5 * time.Minute); err != nil {
+		_ = f.Destroy()
+		t.Fatalf("cluster not ready in time: %v", err)
 	}
 	return f
 }

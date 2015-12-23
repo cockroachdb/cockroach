@@ -45,9 +45,14 @@ func TestFiveNodesAndWriters(t *testing.T) {
 	deadline := time.After(*duration)
 	f := farmer(t)
 	defer f.MustDestroy()
-	if err := f.Resize(5, 5); err != nil {
+	const size = 5
+	if err := f.Resize(size, size); err != nil {
 		t.Fatal(err)
 	}
+	if err := f.WaitReady(3 * time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	checkGossip(t, f, longWaitTime, hasPeers(size))
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)

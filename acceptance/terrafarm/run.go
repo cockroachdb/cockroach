@@ -20,7 +20,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 )
@@ -36,9 +35,7 @@ func (f *Farmer) run(cmd string, args ...string) (_ string, _ string, err error)
 		}
 		_ = p.Close() // no input
 	}
-	if f.Debug {
-		fmt.Printf("%s %s\n", cmd, strings.Join(args, " "))
-	}
+	f.logf("%s %s\n", cmd, strings.Join(args, " "))
 	o, err := c.StdoutPipe()
 	if err != nil {
 		return "", "", err
@@ -53,18 +50,14 @@ func (f *Farmer) run(cmd string, args ...string) (_ string, _ string, err error)
 		for scanO.Scan() {
 			line := scanO.Text() + "\n"
 			_, _ = outBuf.WriteString(line)
-			if f.Debug {
-				fmt.Print(line)
-			}
+			f.logf(line)
 		}
 	}()
 	go func() {
 		for scanE.Scan() {
 			line := scanE.Text() + "\n"
 			_, _ = errBuf.WriteString(line)
-			if f.Debug {
-				fmt.Print(line)
-			}
+			f.logf(line)
 		}
 	}()
 
@@ -98,8 +91,8 @@ func (f *Farmer) apply(args ...string) error {
 
 func (f *Farmer) output(key string) []string {
 	o, _, err := f.run("terraform", "output", key)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	if _, ok := err.(*exec.ExitError); err != nil && !ok {
+		f.logf("%s", err)
 		return nil
 	}
 	o = strings.TrimSpace(o)
