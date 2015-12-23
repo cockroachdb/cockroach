@@ -80,13 +80,13 @@ type Executor struct {
 
 // newExecutor creates an Executor and registers a callback on the
 // system config.
-func newExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, metaRegistry metric.Registry, stopper *stop.Stopper) *Executor {
+func newExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, metaRegistry *metric.Registry, stopper *stop.Stopper) *Executor {
 	exec := &Executor{
 		db:       db,
 		reCache:  parser.NewRegexpCache(512),
 		leaseMgr: leaseMgr,
 
-		latency: metric.RegisterLatency("sql.latency%s", metaRegistry),
+		latency: metaRegistry.Latency("sql.latency%s"),
 	}
 	exec.systemConfigCond = sync.NewCond(&exec.systemConfigMu)
 

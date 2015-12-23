@@ -32,8 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-const d = time.Second
-
 func wrap(args roachpb.Request) roachpb.BatchRequest {
 	var ba roachpb.BatchRequest
 	ba.Add(args)
@@ -300,6 +298,8 @@ func TestNodeEventFeedTransactionRestart(t *testing.T) {
 	nodefeed := status.NewNodeEventFeed(nodeID, feed)
 	ner := nodeEventReader{}
 	ner.readEvents(feed)
+
+	d := 5 * time.Second
 
 	get := wrap(&roachpb.GetRequest{})
 	nodefeed.CallComplete(get, d, &roachpb.Error{

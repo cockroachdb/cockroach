@@ -16,12 +16,9 @@ type timeScale struct {
 	d    time.Duration
 }
 
-var scale5S = timeScale{"5s", 5 * time.Second}
 var scale1M = timeScale{"1m", 1 * time.Minute}
-var scale5M = timeScale{"5m", 5 * time.Minute}
-var scale30M = timeScale{"30m", 30 * time.Minute}
+var scale10M = timeScale{"10m", 10 * time.Minute}
 var scale1H = timeScale{"1h", time.Hour}
-var scale1D = timeScale{"1d", 24 * time.Hour}
 
 // Iterable provides a method for synchronized access to interior objects.
 type Iterable interface {
@@ -33,13 +30,7 @@ type Iterable interface {
 var _ Iterable = &Gauge{}
 var _ Iterable = &Counter{}
 var _ Iterable = &Histogram{}
-var _ Iterable = &EWMA{}
-
-// Registry contains methods to collect metrics.
-type Registry interface {
-	Iterable
-	Add(string, Iterable)
-}
+var _ Iterable = &Rate{}
 
 type periodic interface {
 	tickInterval() time.Duration
@@ -47,13 +38,11 @@ type periodic interface {
 }
 
 var _ periodic = &Histogram{}
-var _ periodic = &EWMA{}
+var _ periodic = &Rate{}
 
-var _ Registry = &registry{}
-
-// A registry bundles up various registries to provide a single point of
-// access to them.
-type registry struct {
+// A Registry bundles up various iterables (i.e. typically metrics or other
+// registries) to provide a single point of access to them.
+type Registry struct {
 	sync.Mutex
 	tracked map[string]Iterable
 	closer  <-chan struct{}
@@ -62,8 +51,8 @@ type registry struct {
 // NewRegistry creates a new Registry. Some types of metrics require an associated
 // goroutine to ping them at fixed intervals; these goroutines will select on the
 // supplied closer.
-func NewRegistry(closer <-chan struct{}) Registry {
-	return &registry{
+func NewRegistry(closer <-chan struct{}) *Registry {
+	return &Registry{
 		tracked: map[string]Iterable{},
 		closer:  closer,
 	}
@@ -86,11 +75,11 @@ func periodicAction(pi periodic, closer <-chan struct{}) {
 	}
 }
 
-// Add links the given registry into this registry using the given format
+// Add links the given Iterable into this registry using the given format
 // string. The individual items in the registry will be formatted via
 // fmt.Sprintf(format, <name>). As a special case, metrics itself also implement
 // Iterable and can thus be added to a registry.
-func (r *registry) Add(format string, item Iterable) {
+func (r *Registry) Add(format string, item Iterable) {
 	r.Lock()
 	r.tracked[format] = item
 	if pi, ok := item.(periodic); ok {
@@ -102,7 +91,7 @@ func (r *registry) Add(format string, item Iterable) {
 }
 
 // Each calls the given closure for all metrics.
-func (r *registry) Each(f func(name string, val interface{})) {
+func (r *Registry) Each(f func(name string, val interface{})) {
 	r.Lock()
 	defer r.Unlock()
 	for format, registry := range r.tracked {
@@ -117,7 +106,7 @@ func (r *registry) Each(f func(name string, val interface{})) {
 }
 
 // MarshalJSON marshals to JSON.
-func (r *registry) MarshalJSON() ([]byte, error) {
+func (r *Registry) MarshalJSON() ([]byte, error) {
 	m := make(map[string]interface{})
 	r.Each(func(name string, v interface{}) {
 		m[name] = v
@@ -157,10 +146,10 @@ func (h *Histogram) tickFn() {
 	h.mu.Unlock()
 }
 
-// RegisterHistogram registers a new windowed HDRHistogram with the given
+// Histogram registers a new windowed HDRHistogram with the given
 // parameters. Data is kept in the active window for approximately the given
 // duration.
-func RegisterHistogram(name string, duration time.Duration, unit Unit, maxVal MaxVal, sigFigs int, r Registry) *Histogram {
+func (r *Registry) Histogram(name string, duration time.Duration, unit Unit, maxVal MaxVal, sigFigs int) *Histogram {
 	const n = 4
 	h := &Histogram{}
 	h.maxVal = int64(maxVal)
@@ -172,15 +161,15 @@ func RegisterHistogram(name string, duration time.Duration, unit Unit, maxVal Ma
 	return h
 }
 
-// RegisterLatency is a convenience function which registers histograms with
+// Latency is a convenience function which registers histograms with
 // suitable defaults for latency tracking on millisecond to minute time scales.
 // The generated names of the metric can be controlled via the given format
 // string.
-func RegisterLatency(format string, r Registry) Histograms {
-	windows := []timeScale{scale5M, scale1H, scale1D}
+func (r *Registry) Latency(format string) Histograms {
+	windows := []timeScale{scale1M, scale10M, scale1H}
 	hs := make([]*Histogram, 0, 3)
 	for _, w := range windows {
-		h := RegisterHistogram(fmt.Sprintf(format, w.name), w.d, UnitMs, MaxMinute, 2, r)
+		h := r.Histogram(fmt.Sprintf(format, w.name), w.d, UnitMs, MaxMinute, 2)
 		hs = append(hs, h)
 	}
 	return hs
@@ -233,8 +222,8 @@ func (c *Counter) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Counter.Count())
 }
 
-// RegisterCounter registers a new counter under the given name.
-func RegisterCounter(name string, r Registry) *Counter {
+// Counter registers a new counter under the given name.
+func (r *Registry) Counter(name string) *Counter {
 	c := &Counter{metrics.NewCounter()}
 	r.Add(name, c)
 	return c
@@ -253,32 +242,32 @@ func (g *Gauge) MarshalJSON() ([]byte, error) {
 	return json.Marshal(g.Gauge.Value())
 }
 
-// RegisterGauge registers a new Gauge with the given name.
-func RegisterGauge(name string, r Registry) *Gauge {
+// Gauge registers a new Gauge with the given name.
+func (r *Registry) Gauge(name string) *Gauge {
 	g := &Gauge{metrics.NewGauge()}
 	r.Add(name, g)
 	return g
 }
 
-// An EWMA is a exponential weighted moving average.
-type EWMA struct {
-	curSum   float64
+// A Rate is a exponential weighted moving average.
+type Rate struct {
 	interval time.Duration
 
-	mu      sync.Mutex
+	mu      sync.Mutex // protects fields below
+	curSum  float64
 	wrapped ewma.MovingAverage
 }
 
-// RegisterEWMA registers an EWMA over the given timescale. Timescales at or
-// below 2s are illegal and will cause a panic.
-func RegisterEWMA(name string, timescale time.Duration, r Registry) *EWMA {
+// Rate registers an EWMA rate over the given timescale. Timescales at
+// or below 2s are illegal and will cause a panic.
+func (r *Registry) Rate(name string, timescale time.Duration) *Rate {
 	const tickInterval = time.Second
 	if timescale <= 2*time.Second {
 		panic(fmt.Sprintf("EWMA with per-second ticks makes no sense on timescale %s", timescale))
 	}
 	avgAge := float64(timescale) / float64(2*tickInterval)
 
-	e := &EWMA{
+	e := &Rate{
 		interval: tickInterval,
 		wrapped:  ewma.NewMovingAverage(avgAge),
 	}
@@ -286,55 +275,55 @@ func RegisterEWMA(name string, timescale time.Duration, r Registry) *EWMA {
 	return e
 }
 
-func (e *EWMA) tickInterval() time.Duration {
+func (e *Rate) tickInterval() time.Duration {
 	return e.interval
 }
 
-func (e *EWMA) tickFn() {
+func (e *Rate) tickFn() {
 	e.mu.Lock()
 	e.wrapped.Add(e.curSum)
 	e.curSum = 0
 	e.mu.Unlock()
 }
 
-// Add adds the given measurement to the EWMA.
-func (e *EWMA) Add(v float64) {
+// Add adds the given measurement to the Rate.
+func (e *Rate) Add(v float64) {
 	e.mu.Lock()
 	e.curSum += v
 	e.mu.Unlock()
 }
 
-// Each calls the given closure with the empty string and the EWMA.
-func (e *EWMA) Each(f func(string, interface{})) {
+// Each calls the given closure with the empty string and the Rate.
+func (e *Rate) Each(f func(string, interface{})) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	f("", e.wrapped.Value())
 }
 
 // MarshalJSON marshals to JSON.
-func (e *EWMA) MarshalJSON() ([]byte, error) {
+func (e *Rate) MarshalJSON() ([]byte, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return json.Marshal(e.wrapped.Value())
 }
 
-// EWMAS is a slice of EWMA metrics.
-type EWMAS []*EWMA
+// Rates is a slice of EWMA backed rates.
+type Rates []*Rate
 
-// RegisterEWMAS returns a slice of EWMAs with the given format string and
+// Rates returns a slice of EWMAs with the given format string and
 // various "standard" timescales.
-func RegisterEWMAS(format string, r Registry) EWMAS {
-	scales := []timeScale{scale5S, scale1M, scale30M, scale1H}
-	es := make([]*EWMA, 0, len(scales))
+func (r *Registry) Rates(format string) Rates {
+	scales := []timeScale{scale1M, scale10M, scale1H}
+	es := make([]*Rate, 0, len(scales))
 	for _, scale := range scales {
-		es = append(es, RegisterEWMA(fmt.Sprintf(format, scale.name),
-			scale.d, r))
+		es = append(es, r.Rate(fmt.Sprintf(format, scale.name),
+			scale.d))
 	}
 	return es
 }
 
-// Add adds the given value to all underlying EWMAs.
-func (es EWMAS) Add(v float64) {
+// Add adds the given value to all underlying Rates.
+func (es Rates) Add(v float64) {
 	for _, e := range es {
 		e.Add(v)
 	}

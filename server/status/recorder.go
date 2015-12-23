@@ -164,7 +164,7 @@ func (nsr *NodeStatusRecorder) GetStatusSummaries() (*NodeStatus, []storage.Stor
 // registryRecorder is a helper class for recording time series datapoints
 // from a metrics Registry.
 type registryRecorder struct {
-	registry       metric.Registry
+	registry       *metric.Registry
 	prefix         string
 	source         string
 	timestampNanos int64
