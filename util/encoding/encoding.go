@@ -85,6 +85,71 @@ type Reader interface {
 	EOF() bool
 }
 
+// !!!
+type RReader struct {
+	s []byte
+	i int
+}
+
+func NewRReader(s []byte) *RReader {
+	return &RReader{s: s, i: 0}
+}
+
+func (r *RReader) RawBytesRemaining() []byte {
+	return r.s[r.i:]
+}
+
+func (r *RReader) EOF() bool {
+	return r.i >= len(r.s)
+}
+
+type UnsafeArray [0x7fffffff]byte
+
+func (r *RReader) Read(n int) (*UnsafeArray, error) {
+	if n > len(r.s) {
+		return nil, io.EOF
+	}
+	ptr := (*UnsafeArray)(unsafe.Pointer(&r.s[r.i]))
+	r.i += n
+	return ptr, nil
+}
+
+func (r *RReader) ReadInto(n int, buf *[]byte) ([]byte, error) {
+	var err error
+	if n > len(r.s) {
+		err = io.EOF
+		n = len(r.s)
+		if n <= 0 {
+			return []byte{}, io.EOF
+		}
+	}
+	var slice []byte
+	if buf == nil {
+		slice = r.s[:n]
+	} else {
+		slice = append(*buf, r.s[:n]...)
+		*buf = slice
+	}
+	r.s = r.s[n:]
+	return slice, err
+}
+
+func (r *RReader) ReadByte() (byte, error) {
+	if r.EOF() {
+		return 0, io.EOF
+	}
+	b := r.s[0]
+	r.i++
+	return b, nil
+}
+
+func (r *RReader) PeekByte() (byte, error) {
+	if r.EOF() {
+		return 0, io.EOF
+	}
+	return r.s[0], nil
+}
+
 // BufferReader is a reader that consumes a []byte.
 type BufferReader struct {
 	// The buffer that we're reading from. The slice is always resliced to
@@ -110,8 +175,26 @@ func (r *BufferReader) EOF() bool {
 	return len(r.s) == 0
 }
 
+// !!!
+var aa = []byte{1, 2, 3, 4}
+
 func (r *BufferReader) Read(n int) ([]byte, error) {
-	return r.ReadInto(n, nil)
+	//return r.ReadInto(n, nil)
+
+	//if n > len(r.s) {
+	//  n = len(r.s)
+	//  if n <= 0 {
+	//    return []byte{}, io.EOF
+	//  }
+	//}
+
+	//return []byte{1, 2, 3, 4}, nil
+
+	slice := r.s[:n]
+	//_ = r.s[n:]
+	aa = r.s[n:]
+	//r.s = r.s[n:]
+	return slice, nil
 }
 
 func (r *BufferReader) ReadInto(n int, buf *[]byte) ([]byte, error) {
