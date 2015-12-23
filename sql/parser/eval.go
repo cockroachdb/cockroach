@@ -557,6 +557,7 @@ type EvalContext struct {
 	TxnTimestamp  DTimestamp
 	ReCache       *RegexpCache
 	GetLocation   func() (*time.Location, error)
+	Args          MapArgs
 }
 
 var defaultContext = EvalContext{
@@ -622,7 +623,7 @@ func (expr *BinaryExpr) Eval(ctx EvalContext) (Datum, error) {
 	}
 
 	if expr.fn.fn == nil {
-		if _, err := expr.TypeCheck(); err != nil {
+		if _, err := expr.TypeCheck(ctx.Args); err != nil {
 			return nil, err
 		}
 	}
@@ -853,7 +854,7 @@ func (expr *ComparisonExpr) Eval(ctx EvalContext) (Datum, error) {
 
 	// Make sure the expression's cmpOp function is memoized
 	if expr.fn.fn == nil {
-		if _, err := expr.TypeCheck(); err != nil {
+		if _, err := expr.TypeCheck(ctx.Args); err != nil {
 			return DNull, err
 		}
 
@@ -892,7 +893,7 @@ func (expr *FuncExpr) Eval(ctx EvalContext) (Datum, error) {
 	}
 
 	if expr.fn.fn == nil {
-		if _, err := expr.TypeCheck(); err != nil {
+		if _, err := expr.TypeCheck(ctx.Args); err != nil {
 			return DNull, err
 		}
 	}
@@ -1088,7 +1089,7 @@ func (expr *UnaryExpr) Eval(ctx EvalContext) (Datum, error) {
 		return DNull, err
 	}
 	if expr.fn.fn == nil {
-		if _, err := expr.TypeCheck(); err != nil {
+		if _, err := expr.TypeCheck(ctx.Args); err != nil {
 			return DNull, err
 		}
 	}
@@ -1199,6 +1200,11 @@ func (t DTimestamp) Eval(_ EvalContext) (Datum, error) {
 
 // Eval implements the Expr interface.
 func (t DTuple) Eval(_ EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the Expr interface.
+func (t DValArg) Eval(_ EvalContext) (Datum, error) {
 	return t, nil
 }
 

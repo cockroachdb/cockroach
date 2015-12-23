@@ -51,8 +51,8 @@ func (q *qvalue) Walk(v parser.Visitor) {
 	q.datum = parser.WalkExpr(v, q.datum).(parser.Datum)
 }
 
-func (q *qvalue) TypeCheck() (parser.Datum, error) {
-	return q.datum.TypeCheck()
+func (q *qvalue) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
+	return q.datum.TypeCheck(args)
 }
 
 func (q *qvalue) Eval(ctx parser.EvalContext) (parser.Datum, error) {
@@ -362,7 +362,7 @@ func (n *scanNode) initWhere(where *parser.Where) error {
 	n.filter, n.err = n.resolveQNames(where.Expr)
 	if n.err == nil {
 		var whereType parser.Datum
-		whereType, n.err = n.filter.TypeCheck()
+		whereType, n.err = n.filter.TypeCheck(n.planner.evalCtx.Args)
 		if n.err == nil {
 			if !(whereType == parser.DummyBool || whereType == parser.DNull) {
 				n.err = fmt.Errorf("argument of WHERE must be type %s, not type %s", parser.DummyBool.Type(), whereType.Type())
@@ -494,7 +494,7 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 		return n.err
 	}
 	var typ parser.Datum
-	if typ, n.err = resolved.TypeCheck(); n.err != nil {
+	if typ, n.err = resolved.TypeCheck(n.planner.evalCtx.Args); n.err != nil {
 		return n.err
 	}
 	var normalized parser.Expr

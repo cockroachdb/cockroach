@@ -65,6 +65,6 @@ func (s *httpSender) Send(args Request) (Response, error) {
 	if args.GetUser() == "" {
 		args.User = s.ctx.Context.User
 	}
-	reply := args.CreateReply()
+	reply := Response{}
 	return reply, httpPost(s.ctx, &args, &reply, args.Method())
 }

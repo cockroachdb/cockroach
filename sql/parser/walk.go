@@ -199,6 +199,9 @@ func (DTimestamp) Walk(_ Visitor) {}
 // Walk implements the Expr interface.
 func (DTuple) Walk(_ Visitor) {}
 
+// Walk implements the Expr interface.
+func (DValArg) Walk(_ Visitor) {}
+
 // WalkExpr traverses the nodes in an expression.
 func WalkExpr(v Visitor, expr Expr) Expr {
 	v, expr = v.Visit(expr, true)
@@ -216,6 +219,38 @@ func WalkExpr(v Visitor, expr Expr) Expr {
 // second return value if the argument cannot be found.
 type Args interface {
 	Arg(name string) (Datum, bool)
+}
+
+var _ Args = MapArgs{}
+
+// MapArgs is an Args implementation which is used for the type
+// inference necessary to support the postgres wire protocol.
+// See various TypeCheck() implementations for details.
+type MapArgs map[string]Datum
+
+// Arg implements the Args interface.
+func (m MapArgs) Arg(name string) (Datum, bool) {
+	d, ok := m[name]
+	return d, ok
+}
+
+// setValArg sets the bind var argument d to the type typ in m. If m is nil
+// or d is not a DValArg, nil is returned. If the bind var argument is set,
+// typ is returned. An error is returned if typ cannot be set because a
+// different type is already present.
+func (m MapArgs) setInferredType(d, typ Datum) (set Datum, err error) {
+	if m == nil {
+		return nil, nil
+	}
+	v, ok := d.(DValArg)
+	if !ok {
+		return nil, nil
+	}
+	if t, ok := m[v.name]; ok && typ != t {
+		return nil, fmt.Errorf("parameter %s has multiple types: %s, %s", v, typ.Type(), t.Type())
+	}
+	m[v.name] = typ
+	return typ, nil
 }
 
 type argVisitor struct {
@@ -328,4 +363,25 @@ func containsSubquery(expr Expr) bool {
 	v := containsSubqueryVisitor{containsSubquery: false}
 	_ = WalkExpr(&v, expr)
 	return v.containsSubquery
+}
+
+type checkVisitor struct {
+	args MapArgs
+	err  error
+}
+
+func (v *checkVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
+	if !pre || v.err != nil {
+		return nil, expr
+	}
+	_, v.err = expr.TypeCheck(v.args)
+	// Return nil to stop recursion since TypeCheck above recurses.
+	return nil, expr
+}
+
+// InferArgs populates args with the inferred types of stmt's placeholders.
+func InferArgs(stmt Statement, args MapArgs) error {
+	v := checkVisitor{args: args}
+	WalkStmt(&v, stmt)
+	return v.err
 }

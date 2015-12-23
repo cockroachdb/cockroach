@@ -125,14 +125,52 @@ func (e *Executor) getSystemConfig() config.SystemConfig {
 	return cfg
 }
 
-// Execute the statement(s) in the given request and return a response.
-// On error, the returned integer is an HTTP error code.
-func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
+// StatementResult returns the result types of the given statement(s).
+func (e *Executor) StatementResult(user string, stmt parser.Statement, args parser.MapArgs) ([]*driver.Response_Result_Rows_Column, error) {
 	planMaker := plannerPool.Get().(*planner)
 	defer plannerPool.Put(planMaker)
 
 	*planMaker = planner{
-		user: args.GetUser(),
+		user: user,
+		evalCtx: parser.EvalContext{
+			NodeID:  e.nodeID,
+			ReCache: e.reCache,
+			// Copy existing GetLocation closure. See plannerPool.New() for the
+			// initial setting.
+			GetLocation: planMaker.evalCtx.GetLocation,
+			Args:        args,
+		},
+		leaseMgr:     e.leaseMgr,
+		systemConfig: e.getSystemConfig(),
+	}
+
+	planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: time.Now()}
+	plan, err := planMaker.makePlan(stmt)
+	if err != nil {
+		return nil, err
+	}
+	cols := make([]*driver.Response_Result_Rows_Column, len(plan.Columns()))
+	for i, c := range plan.Columns() {
+		d, err := makeDriverDatum(c.typ)
+		if err != nil {
+			return nil, err
+		}
+		cols[i] = &driver.Response_Result_Rows_Column{
+			Name: c.name,
+			Typ:  d,
+		}
+	}
+	return cols, nil
+}
+
+// ExecuteStatements executes the given statement(s) and returns a response.
+// On error, the returned integer is an HTTP error code.
+func (e *Executor) ExecuteStatements(user string, session Session, stmts string, params []driver.Datum) (driver.Response, int, error) {
+	planMaker := plannerPool.Get().(*planner)
+	defer plannerPool.Put(planMaker)
+
+	*planMaker = planner{
+		user: user,
 		evalCtx: parser.EvalContext{
 			NodeID:  e.nodeID,
 			ReCache: e.reCache,
@@ -142,12 +180,9 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 		},
 		leaseMgr:     e.leaseMgr,
 		systemConfig: e.getSystemConfig(),
+		session:      session,
 	}
 
-	// Pick up current session state.
-	if err := proto.Unmarshal(args.Session, &planMaker.session); err != nil {
-		return args.CreateReply(), http.StatusBadRequest, err
-	}
 	// Resume a pending transaction if present.
 	if planMaker.session.Txn != nil {
 		txn := client.NewTxn(e.db)
@@ -160,8 +195,8 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	planMaker.params = parameters(args.Params)
-	reply := e.execStmts(args.Sql, planMaker)
+	planMaker.params = parameters(params)
+	reply := e.execStmts(stmts, planMaker)
 
 	// Send back the session state even if there were application-level errors.
 	// Add transaction to session state.
@@ -169,7 +204,10 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 		// TODO(pmattis): Need to record the leases used by a transaction within
 		// the transaction state and restore it when the transaction is restored.
 		planMaker.releaseLeases(e.db)
-		planMaker.session.Txn = &Session_Transaction{Txn: planMaker.txn.Proto, Timestamp: driver.Timestamp(planMaker.evalCtx.TxnTimestamp.Time)}
+		planMaker.session.Txn = &Session_Transaction{
+			Txn:       planMaker.txn.Proto,
+			Timestamp: driver.Timestamp(planMaker.evalCtx.TxnTimestamp.Time),
+		}
 		planMaker.session.MutatesSystemDB = planMaker.txn.SystemDBTrigger()
 	} else {
 		planMaker.session.Txn = nil
@@ -177,11 +215,21 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 	}
 	bytes, err := proto.Marshal(&planMaker.session)
 	if err != nil {
-		return args.CreateReply(), http.StatusInternalServerError, err
+		return driver.Response{}, http.StatusInternalServerError, err
 	}
 	reply.Session = bytes
 
 	return reply, 0, nil
+}
+
+// Execute the statement(s) in the given request and returns a response.
+// On error, the returned integer is an HTTP error code.
+func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
+	var session Session
+	if err := proto.Unmarshal(args.Session, &session); err != nil {
+		return driver.Response{}, http.StatusBadRequest, err
+	}
+	return e.ExecuteStatements(args.GetUser(), session, args.Sql, args.Params)
 }
 
 // exec executes the request. Any error encountered is returned; it is

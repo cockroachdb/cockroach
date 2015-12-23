@@ -94,7 +94,7 @@ func (p *Parser) NormalizeExpr(ctx EvalContext, expr Expr) (Expr, error) {
 // NormalizeExpr() return one, and otherwise returns the Expr returned by
 // NormalizeExpr().
 func (p *Parser) TypeCheckAndNormalizeExpr(ctx EvalContext, expr Expr) (Expr, error) {
-	if _, err := expr.TypeCheck(); err != nil {
+	if _, err := expr.TypeCheck(ctx.Args); err != nil {
 		return nil, err
 	}
 	return p.NormalizeExpr(ctx, expr)

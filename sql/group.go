@@ -329,8 +329,8 @@ func (av *aggregateValue) Walk(v parser.Visitor) {
 	// But it seems `av.datum` is sometimes nil.
 }
 
-func (av *aggregateValue) TypeCheck() (parser.Datum, error) {
-	return av.expr.TypeCheck()
+func (av *aggregateValue) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
+	return av.expr.TypeCheck(args)
 }
 
 func (av *aggregateValue) Eval(ctx parser.EvalContext) (parser.Datum, error) {
