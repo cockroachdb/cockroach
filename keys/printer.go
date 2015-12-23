@@ -163,8 +163,10 @@ func localRangeKeyPrint(key encoding.Reader) string {
 			}
 		} else {
 			begin := bytes.Index(key.RawBytesRemaining(), s.suffix)
+			var addrKey []byte
+			var err error
 			if begin > 0 {
-				if addrKey, err := key.Read(begin); err != nil {
+				if addrKey, err = key.Read(begin); err != nil {
 					panic(err)
 				}
 				if _, err = key.Read(len(s.suffix)); err != nil {

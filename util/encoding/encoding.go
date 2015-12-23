@@ -75,6 +75,10 @@ type Reader interface {
 	// Attention: the returned slice may be using the same storage as the Reader's,
 	// so it should generally be treated as read-only.
 	Read(n int) ([]byte, error)
+	// !!! document that r is pointer so we can pass nil to signify no user buffer.
+	// !!! also document that we always return the new slice, although we also modify
+	// the pointer if passed.
+	ReadInto(n int, r *[]byte) ([]byte, error)
 	ReadByte() (byte, error)
 	PeekByte() (byte, error)
 	RawBytesRemaining() []byte
@@ -107,6 +111,10 @@ func (r *BufferReader) EOF() bool {
 }
 
 func (r *BufferReader) Read(n int) ([]byte, error) {
+	return r.ReadInto(n, nil)
+}
+
+func (r *BufferReader) ReadInto(n int, buf *[]byte) ([]byte, error) {
 	var err error
 	if n > len(r.s) {
 		err = io.EOF
@@ -115,9 +123,15 @@ func (r *BufferReader) Read(n int) ([]byte, error) {
 			return []byte{}, io.EOF
 		}
 	}
-	res := r.s[:n]
+	var slice []byte
+	if buf == nil {
+		slice = r.s[:n]
+	} else {
+		slice = append(*buf, r.s[:n]...)
+		*buf = slice
+	}
 	r.s = r.s[n:]
-	return res, err
+	return slice, err
 }
 
 func (r *BufferReader) ReadByte() (byte, error) {
@@ -173,7 +187,7 @@ func (r *KeyReader) RawBytesRemaining() []byte {
 }
 
 func (r *KeyReader) EOF() bool {
-	return len(r.s) > 0
+	return len(r.s) == 0
 }
 
 /* !!!
@@ -189,11 +203,11 @@ func (r *KeyReader) CompareToKey() int {
 }
 */
 
-// Read returns a slice of up to `n` bytes.
-// If `n` bytes are not available, a io.EOF will be returned as the error.
-// Attention: the returned slice may be using the same storage as the Reader's,
-// so it should generally be treated as read-only.
 func (r *KeyReader) Read(n int) ([]byte, error) {
+	return r.ReadInto(n, nil)
+}
+
+func (r *KeyReader) ReadInto(n int, buf *[]byte) ([]byte, error) {
 	var err error
 	if n > len(r.s) {
 		err = io.EOF
@@ -202,15 +216,64 @@ func (r *KeyReader) Read(n int) ([]byte, error) {
 			return []byte{}, io.EOF
 		}
 	}
-	res := r.s[:n]
+	tmp := r.s[:n]
 	r.s = r.s[n:]
-	if r.dir == Descending {
-		cpy := make([]byte, n)
-		copy(cpy, res)
-		onesComplement(cpy)
-		return cpy, err
+	// tmp has the new bytes we want to return. We might want to copy them to
+	// buf, we might want to invert them.
+	if buf != nil {
+		*buf = append(*buf, tmp...)
+		tmp = (*buf)[len(*buf)-n:]
 	}
-	return res, err
+	if r.dir == Descending {
+		// If we were using r's storage, we need to allocate a new slice.
+		var complementSlice []byte
+		if buf != nil {
+			complementSlice = tmp
+		} else {
+			complementSlice = make([]byte, n)
+			copy(complementSlice, tmp)
+		}
+		onesComplement(complementSlice)
+		if buf != nil {
+			return *buf, err
+		} else {
+			return complementSlice, err
+		}
+	} else {
+		if buf != nil {
+			return *buf, err
+		} else {
+			return tmp, err
+		}
+	}
+
+	/* !!!!
+	// `slice` will point to a slice
+	var slice *[]byte
+	if buf != nil {
+		slice = buf
+		fmt.Printf("!!! ReadInto. about to read into chars: %v\n", r.s[:n])
+		*buf = append(*slice, r.s[:n]...)
+	} else {
+		tmp := r.s[:n]
+		slice = &tmp
+	}
+	r.s = r.s[n:]
+	fmt.Printf("!!! ReadInto. after ReadInto the remaining slice is: %v\n", r.s)
+	if r.dir == Descending {
+		// If we were using r's storage, we need to allocate a new slice.
+		var complementSlice []byte
+		if buf == nil {
+			complementSlice = make([]byte, n)
+			copy(complementSlice, *slice)
+		} else {
+			complementSlice = *slice
+		}
+		onesComplement(complementSlice)
+		return complementSlice, err
+	}
+	return *slice, err
+	*/
 }
 
 func (r *KeyReader) ReadByte() (byte, error) {
@@ -253,26 +316,23 @@ func EncodeUint32(b []byte, v uint32) []byte {
 // EncodeUint32Decreasing encodes the uint32 value so that it sorts in
 // reverse order, from largest to smallest.
 func EncodeUint32Decreasing(b []byte, v uint32) []byte {
-	return EncodeUint32(b, ^v)
+	l := len(b)
+	b = EncodeUint32(b, v)
+	onesComplement(b[l:])
+	return b
 }
 
 // DecodeUint32 decodes a uint32 from the input buffer, treating
-// the input as a big-endian 4 byte uint32 representation. The remainder
-// of the input buffer and the decoded uint32 are returned.
-func DecodeUint32(b []byte) ([]byte, uint32, error) {
-	if len(b) < 4 {
-		return nil, 0, util.Errorf("insufficient bytes to decode uint32 int value")
+// the input as a big-endian 4 byte uint32 representation.
+func DecodeUint32(r Reader) (uint32, error) {
+	var b []byte
+	var err error
+	if b, err = r.Read(4); err != nil {
+		return 0, util.Errorf("insufficient bytes to decode uint32 int value")
 	}
 	v := (uint32(b[0]) << 24) | (uint32(b[1]) << 16) |
 		(uint32(b[2]) << 8) | uint32(b[3])
-	return b[4:], v, nil
-}
-
-// DecodeUint32Decreasing decodes a uint32 value which was encoded
-// using EncodeUint32Decreasing.
-func DecodeUint32Decreasing(b []byte) ([]byte, uint32, error) {
-	leftover, v, err := DecodeUint32(b)
-	return leftover, ^v, err
+	return v, nil
 }
 
 // EncodeUint64 encodes the uint64 value using a big-endian 8 byte
@@ -287,30 +347,28 @@ func EncodeUint64(b []byte, v uint64) []byte {
 // EncodeUint64Decreasing encodes the uint64 value so that it sorts in
 // reverse order, from largest to smallest.
 func EncodeUint64Decreasing(b []byte, v uint64) []byte {
-	return EncodeUint64(b, ^v)
+	l := len(b)
+	b = EncodeUint64(b, v)
+	onesComplement(b[l:])
+	return b
 }
 
 // DecodeUint64 decodes a uint64 from the input buffer, treating
-// the input as a big-endian 8 byte uint64 representation. The remainder
-// of the input buffer and the decoded uint64 are returned.
-func DecodeUint64(b []byte) ([]byte, uint64, error) {
-	if len(b) < 8 {
-		return nil, 0, util.Errorf("insufficient bytes to decode uint64 int value")
+// the input as a big-endian 8 byte uint64 representation.
+func DecodeUint64(r Reader) (uint64, error) {
+	var b []byte
+	var err error
+	if b, err = r.Read(8); err != nil {
+		return 0, util.Errorf("insufficient bytes to decode uint64 int value")
 	}
 	v := (uint64(b[0]) << 56) | (uint64(b[1]) << 48) |
 		(uint64(b[2]) << 40) | (uint64(b[3]) << 32) |
 		(uint64(b[4]) << 24) | (uint64(b[5]) << 16) |
 		(uint64(b[6]) << 8) | uint64(b[7])
-	return b[8:], v, nil
+	return v, nil
 }
 
-// DecodeUint64Decreasing decodes a uint64 value which was encoded
-// using EncodeUint64Decreasing.
-func DecodeUint64Decreasing(b []byte) ([]byte, uint64, error) {
-	leftover, v, err := DecodeUint64(b)
-	return leftover, ^v, err
-}
-
+// !!!
 func EncodeVarintWithDir(b []byte, v int64, dir Direction) []byte {
 	if dir == Ascending {
 		return EncodeVarint(b, v)
@@ -357,7 +415,10 @@ func EncodeVarint(b []byte, v int64) []byte {
 // EncodeVarintDecreasing encodes the int64 value so that it sorts in reverse
 // order, from largest to smallest.
 func EncodeVarintDecreasing(b []byte, v int64) []byte {
-	return EncodeVarint(b, ^v)
+	l := len(b)
+	b = EncodeVarint(b, v)
+	onesComplement(b[l:])
+	return b
 }
 
 // DecodeVarint decodes a varint encoded int64 from the input
@@ -366,12 +427,13 @@ func DecodeVarint(r Reader) (int64, error) {
 	var b byte
 	var length int
 	var err error
-	if b, err = r.ReadByte(); err != nil {
+	if b, err = r.PeekByte(); err != nil {
 		return 0, err
 	}
 	length = int(b) - intZero
 	if length < 0 {
 		length = -length
+		r.ReadByte()
 		var remB []byte
 		remB, err = r.Read(length)
 		if err == io.EOF {
@@ -432,38 +494,10 @@ func EncodeUvarint(b []byte, v uint64) []byte {
 // EncodeUvarintDecreasing encodes the uint64 value so that it sorts in
 // reverse order, from largest to smallest.
 func EncodeUvarintDecreasing(b []byte, v uint64) []byte {
-	switch {
-	case v == 0:
-		return append(b, IntMin+8)
-	case v <= 0xff:
-		v = ^v
-		return append(b, IntMin+7, byte(v))
-	case v <= 0xffff:
-		v = ^v
-		return append(b, IntMin+6, byte(v>>8), byte(v))
-	case v <= 0xffffff:
-		v = ^v
-		return append(b, IntMin+5, byte(v>>16), byte(v>>8), byte(v))
-	case v <= 0xffffffff:
-		v = ^v
-		return append(b, IntMin+4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
-	case v <= 0xffffffffff:
-		v = ^v
-		return append(b, IntMin+3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
-			byte(v))
-	case v <= 0xffffffffffff:
-		v = ^v
-		return append(b, IntMin+2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
-			byte(v>>8), byte(v))
-	case v <= 0xffffffffffffff:
-		v = ^v
-		return append(b, IntMin+1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
-			byte(v>>16), byte(v>>8), byte(v))
-	default:
-		v = ^v
-		return append(b, IntMin, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
-			byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
-	}
+	l := len(b)
+	b = EncodeUvarint(b, v)
+	onesComplement(b[l:])
+	return b
 }
 
 // DecodeUvarint decodes a varint encoded uint64 from the input
@@ -496,26 +530,6 @@ func DecodeUvarint(r Reader) (uint64, error) {
 		v = (v << 8) | uint64(t)
 	}
 	return v, nil
-}
-
-// DecodeUvarintDecreasing decodes a uint64 value which was encoded
-// using EncodeUvarintDecreasing.
-func DecodeUvarintDecreasing(b []byte) ([]byte, uint64, error) {
-	if len(b) == 0 {
-		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value")
-	}
-	length := intZero - int(b[0])
-	b = b[1:] // skip length byte
-	if length < 0 || length > 8 {
-		return nil, 0, util.Errorf("invalid uvarint length of %d", length)
-	} else if len(b) < length {
-		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value: %v", b)
-	}
-	var x uint64
-	for _, t := range b[:length] {
-		x = (x << 8) | uint64(^t)
-	}
-	return b[length:], x, nil
 }
 
 const (
@@ -575,64 +589,78 @@ func EncodeBytes(b []byte, data []byte) []byte {
 func EncodeBytesDecreasing(b []byte, data []byte) []byte {
 	n := len(b)
 	b = EncodeBytes(b, data)
-	onesComplement(b[n+1:])
+	onesComplement(b[n:])
 	return b
 }
 
-func decodeBytes(b []byte, r []byte, e escapes) ([]byte, []byte, error) {
-	if len(b) == 0 || b[0] != e.marker {
-		return nil, nil, util.Errorf("did not find marker")
+// !!! make IndexByte a method on the reader. Stop taking escapes in?
+// !!! figure out if buf should be *[]byte. That's what it is in ReadInto.
+func decodeBytes(r Reader, buf []byte, e escapes) ([]byte, error) {
+	marker, err := r.PeekByte()
+	if (err != nil) || (marker != e.marker) {
+		return nil, util.Errorf("did not find marker")
 	}
-	b = b[1:]
+	r.ReadByte()
 
 	for {
-		i := bytes.IndexByte(b, e.escape)
+		i := bytes.IndexByte(r.RawBytesRemaining(), e.escape)
 		if i == -1 {
-			return nil, nil, util.Errorf("did not find terminator")
+			return nil, util.Errorf("did not find terminator")
 		}
-		if i+1 >= len(b) {
-			return nil, nil, util.Errorf("malformed escape")
+		if i+1 >= len(r.RawBytesRemaining()) {
+			return nil, util.Errorf("malformed escape")
 		}
 
-		v := b[i+1]
+		v := r.RawBytesRemaining()[i+1]
 		if v == e.escapedTerm {
-			if r == nil {
-				r = b[:i]
+			if buf == nil {
+				buf, err = r.Read(i)
 			} else {
-				r = append(r, b[:i]...)
+				buf, err = r.ReadInto(i, &buf)
 			}
-			return b[i+2:], r, nil
+			if err != nil {
+				panic(err)
+			}
+			// Discard the escaped terminal.
+			r.Read(2) // !!! make this more efficient - add a skip method
+			return buf, nil
 		}
 
-		if v == e.escaped00 {
-			r = append(r, b[:i]...)
-			r = append(r, e.escapedFF)
+		if v != e.escaped00 {
+			return nil, util.Errorf("unknown escape")
+		}
+		if buf == nil {
+			buf, err = r.Read(i)
 		} else {
-			return nil, nil, util.Errorf("unknown escape")
+			buf, err = r.ReadInto(i, &buf)
 		}
-
-		b = b[i+2:]
+		if err != nil {
+			panic(err)
+		}
+		buf = append(buf, 0x00)
+		// Discard the escaped char.
+		r.Read(2) // !!! make this more efficient - add a skip method
 	}
 }
 
 // DecodeBytes decodes a []byte value from the input buffer which was
-// encoded using EncodeBytes. The decoded bytes are appended to r. The
-// remainder of the input buffer and the decoded []byte are returned.
-func DecodeBytes(b []byte, r []byte) ([]byte, []byte, error) {
-	return decodeBytes(b, r, ascendingEscapes)
+// encoded using EncodeBytes. The decoded bytes are appended to `buf`.
+// `buf` can be nil, in which case a new buffer is allocated.
+// The buffer to which the bytes have been appended is returned.
+func DecodeBytes(r Reader, buf []byte) ([]byte, error) {
+	return decodeBytes(r, buf, ascendingEscapes)
 }
 
 // DecodeBytesDecreasing decodes a []byte value from the input buffer
 // which was encoded using EncodeBytesDecreasing. The decoded bytes
 // are appended to r. The remainder of the input buffer and the
 // decoded []byte are returned.
-func DecodeBytesDecreasing(b []byte, r []byte) ([]byte, []byte, error) {
-	if r == nil {
-		r = []byte{}
-	}
-	b, r, err := decodeBytes(b, r, descendingEscapes)
-	onesComplement(r)
-	return b, r, err
+// !!! delete this function once we no longer use separate escapes for asc and desc
+func DecodeBytesDecreasing(r Reader, buf []byte) ([]byte, error) {
+	return decodeBytes(r, buf, descendingEscapes)
+	// !!!
+	// onesComplement(r)
+	//return b, r, err
 }
 
 // EncodeString encodes the string value using an escape-based encoding. See
@@ -658,28 +686,21 @@ func EncodeString(b []byte, s string) []byte {
 // encoding. See EncodeBytesDecreasing for details. The encoded bytes are
 // append to the supplied buffer and the resulting buffer is returned.
 func EncodeStringDecreasing(b []byte, s string) []byte {
-	if len(s) == 0 {
-		return EncodeBytesDecreasing(b, nil)
-	}
-	// We unsafely convert the string to a []byte to avoid the
-	// usual allocation when converting to a []byte. This is
-	// kosher because we know that EncodeBytes{,Decreasing} does
-	// not keep a reference to the value it encodes. The first
-	// step is getting access to the string internals.
-	hdr := (*reflect.StringHeader)(unsafe.Pointer(&s))
-	// Next we treat the string data as a maximally sized array which we
-	// slice. This usage is safe because the pointer value remains in the string.
-	arg := (*[0x7fffffff]byte)(unsafe.Pointer(hdr.Data))[:len(s):len(s)]
-	return EncodeBytesDecreasing(b, arg)
+	l := len(b)
+	b = EncodeString(b, s)
+	onesComplement(b[l:])
+	return b
 }
 
 // DecodeString decodes a string value from the input buffer which was encoded
 // using EncodeString or EncodeBytes. The r []byte is used as a temporary
 // buffer in order to avoid memory allocations. The remainder of the input
 // buffer and the decoded string are returned.
-func DecodeString(b []byte, r []byte) ([]byte, string, error) {
-	b, r, err := decodeBytes(b, r, ascendingEscapes)
-	return b, string(r), err
+// !!! comment
+func DecodeString(r Reader, buf []byte) (string, error) {
+	buf = buf[:0] // Clear buf but keep the capacity.
+	buf, err := decodeBytes(r, buf, ascendingEscapes)
+	return string(buf), err
 }
 
 // DecodeStringDecreasing decodes a string value from the input buffer which
@@ -687,16 +708,14 @@ func DecodeString(b []byte, r []byte) ([]byte, string, error) {
 // []byte is used as a temporary buffer in order to avoid memory
 // allocations. The remainder of the input buffer and the decoded string are
 // returned.
-func DecodeStringDecreasing(b []byte, r []byte) ([]byte, string, error) {
-	// We need to pass in a non-nil "r" parameter here so that the output is
-	// always copied to a new string instead of just returning the input when
-	// when there are no embedded escapes.
-	if r == nil {
-		r = []byte{}
-	}
-	b, r, err := decodeBytes(b, r, descendingEscapes)
-	onesComplement(r)
-	return b, string(r), err
+// !!! comment
+func DecodeStringDecreasing(r Reader, buf []byte) (string, error) {
+	buf = buf[:0] // Clear buf but keep the capacity.
+	// !!! get rid of escapes
+	buf, err := decodeBytes(r, buf, descendingEscapes)
+	return string(buf), err
+	// !!! onesComplement(r)
+	// return b, string(r), err
 }
 
 // EncodeNull encodes a NULL value. The encodes bytes are appended to the
@@ -713,6 +732,8 @@ func EncodeNull(b []byte) []byte {
 func EncodeNotNull(b []byte) []byte {
 	return append(b, encodedNotNull)
 }
+
+// !!! Add Encode/Decode{Not}NullDecreasing.
 
 // DecodeIfNull decodes a NULL value from the input key. If the key contains a
 // null at the start of the buffer then it is removed from the buffer and true

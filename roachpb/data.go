@@ -384,7 +384,7 @@ func (v Value) GetFloat() (float64, error) {
 	if len(v.RawBytes) != 8 {
 		return 0, fmt.Errorf("float64 value should be exactly 8 bytes: %d", len(v.RawBytes))
 	}
-	_, u, err := encoding.DecodeUint64(v.RawBytes)
+	u, err := encoding.DecodeUint64(encoding.NewBufferReader(v.RawBytes))
 	if err != nil {
 		return 0, err
 	}
@@ -401,7 +401,7 @@ func (v Value) GetInt() (int64, error) {
 	if len(v.RawBytes) != 8 {
 		return 0, fmt.Errorf("uint64 value should be exactly 8 bytes: %d", len(v.RawBytes))
 	}
-	_, u, err := encoding.DecodeUint64(v.RawBytes)
+	u, err := encoding.DecodeUint64(encoding.NewBufferReader(v.RawBytes))
 	if err != nil {
 		return 0, err
 	}

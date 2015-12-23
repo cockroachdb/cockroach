@@ -28,7 +28,7 @@ import (
 )
 
 func testBasicEncodeDecode32(encFunc func([]byte, uint32) []byte,
-	dec func([]byte) ([]byte, uint32, error), decreasing bool, t *testing.T) {
+	decFunc func(Reader) (uint32, error), decreasing bool, t *testing.T) {
 	testCases := []uint32{
 		0, 1,
 		1<<8 - 1, 1 << 8,
@@ -46,13 +46,20 @@ func testBasicEncodeDecode32(encFunc func([]byte, uint32) []byte,
 				t.Errorf("ordered constraint violated for %d: [% x] vs. [% x]", v, enc, lastEnc)
 			}
 		}
-		b, decode, err := dec(enc)
+		var dirs []Direction
+		if decreasing {
+			dirs = []Direction{Descending}
+		} else {
+			dirs = []Direction{Ascending}
+		}
+		r := NewKeyReader(enc, dirs)
+		decode, err := decFunc(r)
 		if err != nil {
 			t.Error(err)
 			continue
 		}
-		if len(b) != 0 {
-			t.Errorf("leftover bytes: [% x]", b)
+		if !r.EOF() {
+			t.Errorf("leftover bytes: [% x]", r.RawBytesRemaining())
 		}
 		if decode != v {
 			t.Errorf("decode yielded different value than input: %d vs. %d", decode, v)
@@ -88,7 +95,7 @@ func TestEncodeDecodeUint32(t *testing.T) {
 }
 
 func TestEncodeDecodeUint32Decreasing(t *testing.T) {
-	testBasicEncodeDecode32(EncodeUint32Decreasing, DecodeUint32Decreasing, true, t)
+	testBasicEncodeDecode32(EncodeUint32Decreasing, DecodeUint32, true, t)
 	testCases := []testCaseUint32{
 		{0, []byte{0xff, 0xff, 0xff, 0xff}},
 		{1, []byte{0xff, 0xff, 0xff, 0xfe}},
@@ -99,7 +106,7 @@ func TestEncodeDecodeUint32Decreasing(t *testing.T) {
 }
 
 func testBasicEncodeDecodeUint64(encFunc func([]byte, uint64) []byte,
-	dec func([]byte) ([]byte, uint64, error), decreasing bool, t *testing.T) {
+	decFunc func(Reader) (uint64, error), decreasing bool, t *testing.T) {
 	testCases := []uint64{
 		0, 1,
 		1<<8 - 1, 1 << 8,
@@ -121,13 +128,20 @@ func testBasicEncodeDecodeUint64(encFunc func([]byte, uint64) []byte,
 				t.Errorf("ordered constraint violated for %d: [% x] vs. [% x]", v, enc, lastEnc)
 			}
 		}
-		b, decode, err := dec(enc)
+		var dirs []Direction
+		if decreasing {
+			dirs = []Direction{Descending}
+		} else {
+			dirs = []Direction{Ascending}
+		}
+		r := NewKeyReader(enc, dirs)
+		decode, err := decFunc(r)
 		if err != nil {
 			t.Error(err)
 			continue
 		}
-		if len(b) != 0 {
-			t.Errorf("leftover bytes: [% x]", b)
+		if !r.EOF() {
+			t.Errorf("leftover bytes: [% x]", r.RawBytesRemaining())
 		}
 		if decode != v {
 			t.Errorf("decode yielded different value than input: %d vs. %d", decode, v)
@@ -137,7 +151,7 @@ func testBasicEncodeDecodeUint64(encFunc func([]byte, uint64) []byte,
 }
 
 func testBasicEncodeDecodeInt64(encFunc func([]byte, int64) []byte,
-	dec func([]byte) ([]byte, int64, error), decreasing bool, t *testing.T) {
+	decFunc func(Reader) (int64, error), decreasing bool, t *testing.T) {
 	testCases := []int64{
 		math.MinInt64, math.MinInt64 + 1,
 		-1<<56 - 1, -1 << 56,
@@ -158,6 +172,12 @@ func testBasicEncodeDecodeInt64(encFunc func([]byte, int64) []byte,
 		math.MaxInt64 - 1, math.MaxInt64,
 	}
 
+	var dirs []Direction
+	if decreasing {
+		dirs = []Direction{Descending}
+	} else {
+		dirs = []Direction{Ascending}
+	}
 	var lastEnc []byte
 	for i, v := range testCases {
 		enc := encFunc(nil, v)
@@ -167,13 +187,14 @@ func testBasicEncodeDecodeInt64(encFunc func([]byte, int64) []byte,
 				t.Errorf("ordered constraint violated for %d: [% x] vs. [% x]", v, enc, lastEnc)
 			}
 		}
-		b, decode, err := dec(enc)
+		r := NewKeyReader(enc, dirs)
+		decode, err := decFunc(r)
 		if err != nil {
 			t.Errorf("%v: %d [%x]", err, v, enc)
 			continue
 		}
-		if len(b) != 0 {
-			t.Errorf("leftover bytes: [% x]", b)
+		if !r.EOF() {
+			t.Errorf("leftover bytes: [% x]", r.RawBytesRemaining())
 		}
 		if decode != v {
 			t.Errorf("decode yielded different value than input: %d vs. %d [%x]", decode, v, enc)
@@ -224,16 +245,18 @@ func TestEncodeDecodeUint64(t *testing.T) {
 }
 
 func TestEncodeDecodeUint64Decreasing(t *testing.T) {
-	testBasicEncodeDecodeUint64(EncodeUint64Decreasing, DecodeUint64Decreasing, true, t)
-	testCases := []testCaseUint64{
-		{0, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
-		{1, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}},
-		{1 << 8, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff}},
-		{math.MaxUint64, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
+	testBasicEncodeDecodeUint64(EncodeUint64Decreasing, DecodeUint64, true, t)
+	nums := []uint64{0, 1, 1 << 8, math.MaxUint64}
+	var testCases []testCaseUint64
+	for _, n := range nums {
+		enc := EncodeUint64(nil, n)
+		onesComplement(enc)
+		testCases = append(testCases, testCaseUint64{n, enc})
 	}
 	testCustomEncodeUint64(testCases, EncodeUint64Decreasing, t)
 }
 
+// !!! unify all these pairs of tests after I make the encoding be direction-agnostic
 func TestEncodeDecodeVarint(t *testing.T) {
 	testBasicEncodeDecodeInt64(EncodeVarint, DecodeVarint, false, t)
 	testCases := []testCaseInt64{
@@ -252,18 +275,14 @@ func TestEncodeDecodeVarint(t *testing.T) {
 }
 
 func TestEncodeDecodeVarintDecreasing(t *testing.T) {
-	testBasicEncodeDecodeInt64(EncodeVarintDecreasing, DecodeVarintDecreasing, true, t)
-	testCases := []testCaseInt64{
-		{math.MinInt64, []byte{0xff, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
-		{math.MinInt64 + 1, []byte{0xff, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}},
-		{-1 << 8, []byte{0xf8, 0xff}},
-		{-112, []byte{0xf7}},
-		{-111, []byte{0xf6}},
-		{-1, []byte{0x88}},
-		{0, []byte{0x87, 0xff}},
-		{1, []byte{0x87, 0xfe}},
-		{1 << 8, []byte{0x86, 0xfe, 0xff}},
-		{math.MaxInt64, []byte{0x80, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
+	testBasicEncodeDecodeInt64(EncodeVarintDecreasing, DecodeVarint, true, t)
+	nums := []int64{math.MinInt64, math.MinInt64 + 1, -1 << 8,
+		-112, -111, -1, 0, 1, 1 << 8, math.MaxInt64}
+	var testCases []testCaseInt64
+	for _, n := range nums {
+		enc := EncodeVarint(nil, n)
+		onesComplement(enc)
+		testCases = append(testCases, testCaseInt64{n, enc})
 	}
 	testCustomEncodeInt64(testCases, EncodeVarintDecreasing, t)
 }
@@ -286,78 +305,97 @@ func TestDecodeInvalid(t *testing.T) {
 	tests := []struct {
 		name    string             // name printed with errors.
 		buf     []byte             // buf contains an invalid uvarint to decode.
+		desc    bool               // true if we decode as a descendingly-encoded buffer
 		pattern string             // pattern matches the panic string.
-		decode  func([]byte) error // decode is called with buf.
+		decode  func(Reader) error // decode is called with buf.
 	}{
 		{
 			name:    "DecodeVarint, overflows int64",
 			buf:     []byte{IntMax, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+			desc:    false,
 			pattern: "varint [0-9]+ overflows int64",
-			decode:  func(b []byte) error { _, _, err := DecodeVarint(b); return err },
+			decode:  func(r Reader) error { _, err := DecodeVarint(r); return err },
 		},
 		{
 			name:    "Bytes, no marker",
 			buf:     []byte{'a'},
+			desc:    false,
 			pattern: "did not find marker",
-			decode:  func(b []byte) error { _, _, err := DecodeBytes(b, nil); return err },
+			decode:  func(r Reader) error { _, err := DecodeBytes(r, nil); return err },
 		},
 		{
 			name:    "Bytes, no terminator",
 			buf:     []byte{bytesMarker, 'a'},
+			desc:    false,
 			pattern: "did not find terminator",
-			decode:  func(b []byte) error { _, _, err := DecodeBytes(b, nil); return err },
+			decode:  func(r Reader) error { _, err := DecodeBytes(r, nil); return err },
 		},
 		{
 			name:    "Bytes, malformed escape",
 			buf:     []byte{bytesMarker, 'a', 0x00},
+			desc:    false,
 			pattern: "malformed escape",
-			decode:  func(b []byte) error { _, _, err := DecodeBytes(b, nil); return err },
+			decode:  func(r Reader) error { _, err := DecodeBytes(r, nil); return err },
 		},
 		{
 			name:    "Bytes, invalid escape 1",
 			buf:     []byte{bytesMarker, 'a', 0x00, 0x00},
+			desc:    false,
 			pattern: "unknown escape",
-			decode:  func(b []byte) error { _, _, err := DecodeBytes(b, nil); return err },
+			decode:  func(r Reader) error { _, err := DecodeBytes(r, nil); return err },
 		},
 		{
 			name:    "Bytes, invalid escape 2",
 			buf:     []byte{bytesMarker, 'a', 0x00, 0x02},
+			desc:    false,
 			pattern: "unknown escape",
-			decode:  func(b []byte) error { _, _, err := DecodeBytes(b, nil); return err },
+			decode:  func(r Reader) error { _, err := DecodeBytes(r, nil); return err },
 		},
 		{
 			name:    "BytesDecreasing, no marker",
 			buf:     []byte{'a'},
+			desc:    false,
 			pattern: "did not find marker",
-			decode:  func(b []byte) error { _, _, err := DecodeBytes(b, nil); return err },
+			decode:  func(r Reader) error { _, err := DecodeBytes(r, nil); return err },
 		},
 		{
 			name:    "BytesDecreasing, no terminator",
-			buf:     []byte{bytesMarker, ^byte('a')},
+			buf:     []byte{^bytesMarker, ^byte('a')},
+			desc:    true,
 			pattern: "did not find terminator",
-			decode:  func(b []byte) error { _, _, err := DecodeBytesDecreasing(b, nil); return err },
+			decode:  func(r Reader) error { _, err := DecodeBytesDecreasing(r, nil); return err },
 		},
 		{
 			name:    "BytesDecreasing, malformed escape",
-			buf:     []byte{bytesMarker, ^byte('a'), 0xff},
+			buf:     []byte{^bytesMarker, ^byte('a'), 0xff},
+			desc:    true,
 			pattern: "malformed escape",
-			decode:  func(b []byte) error { _, _, err := DecodeBytesDecreasing(b, nil); return err },
+			decode:  func(r Reader) error { _, err := DecodeBytesDecreasing(r, nil); return err },
 		},
 		{
 			name:    "BytesDecreasing, invalid escape 1",
-			buf:     []byte{bytesMarker, ^byte('a'), 0xff, 0xff},
+			buf:     []byte{^bytesMarker, ^byte('a'), 0xff, 0xff},
+			desc:    true,
 			pattern: "unknown escape",
-			decode:  func(b []byte) error { _, _, err := DecodeBytesDecreasing(b, nil); return err },
+			decode:  func(r Reader) error { _, err := DecodeBytesDecreasing(r, nil); return err },
 		},
 		{
 			name:    "BytesDecreasing, invalid escape 2",
-			buf:     []byte{bytesMarker, ^byte('a'), 0xff, 0xfd},
+			buf:     []byte{^bytesMarker, ^byte('a'), 0xff, 0xfd},
+			desc:    true,
 			pattern: "unknown escape",
-			decode:  func(b []byte) error { _, _, err := DecodeBytesDecreasing(b, nil); return err },
+			decode:  func(r Reader) error { _, err := DecodeBytesDecreasing(r, nil); return err },
 		},
 	}
 	for _, test := range tests {
-		err := test.decode(test.buf)
+		var dirs []Direction
+		if test.desc {
+			dirs = []Direction{Descending}
+		} else {
+			dirs = []Direction{Ascending}
+		}
+		r := NewKeyReader(test.buf, dirs)
+		err := test.decode(r)
 		if !regexp.MustCompile(test.pattern).MatchString(err.Error()) {
 			t.Errorf("%q, pattern %q doesn't match %q", test.name, test.pattern, err)
 		}
@@ -365,13 +403,13 @@ func TestDecodeInvalid(t *testing.T) {
 }
 
 func TestEncodeDecodeUvarintDecreasing(t *testing.T) {
-	testBasicEncodeDecodeUint64(EncodeUvarintDecreasing, DecodeUvarintDecreasing, true, t)
-	testCases := []testCaseUint64{
-		{0, []byte{0x88}},
-		{1, []byte{0x87, 0xfe}},
-		{1 << 8, []byte{0x86, 0xfe, 0xff}},
-		{math.MaxUint64 - 1, []byte{0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}},
-		{math.MaxUint64, []byte{0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
+	testBasicEncodeDecodeUint64(EncodeUvarintDecreasing, DecodeUvarint, true, t)
+	nums := []uint64{0, 1, 1 << 8, math.MaxUint64 - 1, math.MaxUint64}
+	var testCases []testCaseUint64
+	for _, n := range nums {
+		enc := EncodeUvarint(nil, n)
+		onesComplement(enc)
+		testCases = append(testCases, testCaseUint64{n, enc})
 	}
 	testCustomEncodeUint64(testCases, EncodeUvarintDecreasing, t)
 }
@@ -404,7 +442,9 @@ func TestEncodeDecodeBytes(t *testing.T) {
 					c.value, testCases[i-1].encoded, enc)
 			}
 		}
-		remainder, dec, err := DecodeBytes(enc, nil)
+		dirs := []Direction{Ascending}
+		r := NewKeyReader(enc, dirs)
+		dec, err := DecodeBytes(r, nil)
 		if err != nil {
 			t.Error(err)
 			continue
@@ -412,38 +452,48 @@ func TestEncodeDecodeBytes(t *testing.T) {
 		if !bytes.Equal(c.value, dec) {
 			t.Errorf("unexpected decoding mismatch for %v. got %v", c.value, dec)
 		}
-		if len(remainder) != 0 {
-			t.Errorf("unexpected remaining bytes: %v", remainder)
+		if !r.EOF() {
+			t.Errorf("unexpected remaining bytes: %v", r.RawBytesRemaining())
 		}
 
+		// Test again with a remainder. The reader will be reset.
+		enc = EncodeBytes(nil, c.value)
 		enc = append(enc, []byte("remainder")...)
-		remainder, _, err = DecodeBytes(enc, nil)
+		r = NewKeyReader(enc, dirs)
+		_, err = DecodeBytes(r, nil)
 		if err != nil {
 			t.Error(err)
 			continue
 		}
-		if string(remainder) != "remainder" {
-			t.Errorf("unexpected remaining bytes: %v", remainder)
+		if string(r.RawBytesRemaining()) != "remainder" {
+			t.Errorf("unexpected remaining bytes: %v", r.RawBytesRemaining())
 		}
 	}
 }
 
 func TestEncodeDecodeBytesDecreasing(t *testing.T) {
-	testCases := []struct {
+	vals := [][]byte{
+		[]byte("hello"),
+		[]byte{'b', 0xff},
+		[]byte{'b', 0, 0, 'a'},
+		[]byte{'b', 0, 0},
+		[]byte{'b', 0},
+		[]byte{'b'},
+		[]byte{'a'},
+		[]byte{0, 0xff, 'a'},
+		[]byte{0, 'a'},
+		[]byte{0, 1, 'a'}}
+	type testCaseBytes struct {
 		value   []byte
 		encoded []byte
-	}{
-		{[]byte("hello"), []byte{0x20, ^byte('h'), ^byte('e'), ^byte('l'), ^byte('l'), ^byte('o'), 0xff, 0xfe}},
-		{[]byte{'b', 0xff}, []byte{0x20, ^byte('b'), 0x00, 0xff, 0xfe}},
-		{[]byte{'b', 0, 0, 'a'}, []byte{0x20, ^byte('b'), 0xff, 0x00, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{[]byte{'b', 0, 0}, []byte{0x20, ^byte('b'), 0xff, 0x00, 0xff, 0x00, 0xff, 0xfe}},
-		{[]byte{'b', 0}, []byte{0x20, ^byte('b'), 0xff, 0x00, 0xff, 0xfe}},
-		{[]byte{'b'}, []byte{0x20, ^byte('b'), 0xff, 0xfe}},
-		{[]byte{'a'}, []byte{0x20, ^byte('a'), 0xff, 0xfe}},
-		{[]byte{0, 0xff, 'a'}, []byte{0x20, 0xff, 0x00, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{[]byte{0, 'a'}, []byte{0x20, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{[]byte{0, 1, 'a'}, []byte{0x20, 0xff, 0x00, 0xfe, ^byte('a'), 0xff, 0xfe}},
 	}
+	var testCases []testCaseBytes
+	for _, v := range vals {
+		enc := EncodeBytes(nil, v)
+		onesComplement(enc)
+		testCases = append(testCases, testCaseBytes{v, enc})
+	}
+
 	for i, c := range testCases {
 		enc := EncodeBytesDecreasing(nil, c.value)
 		if !bytes.Equal(enc, c.encoded) {
@@ -456,7 +506,9 @@ func TestEncodeDecodeBytesDecreasing(t *testing.T) {
 					c.value, testCases[i-1].encoded, enc)
 			}
 		}
-		remainder, dec, err := DecodeBytesDecreasing(enc, nil)
+		dirs := []Direction{Descending}
+		r := NewKeyReader(enc, dirs)
+		dec, err := DecodeBytesDecreasing(r, nil)
 		if err != nil {
 			t.Error(err)
 			continue
@@ -464,18 +516,20 @@ func TestEncodeDecodeBytesDecreasing(t *testing.T) {
 		if !bytes.Equal(c.value, dec) {
 			t.Errorf("unexpected decoding mismatch for %v. got %v", c.value, dec)
 		}
-		if len(remainder) != 0 {
-			t.Errorf("unexpected remaining bytes: %v", remainder)
+		if !r.EOF() {
+			t.Errorf("unexpected remaining bytes: %v", r.RawBytesRemaining())
 		}
 
+		// Test again with a remainder. The reader will be reset.
 		enc = append(enc, []byte("remainder")...)
-		remainder, _, err = DecodeBytesDecreasing(enc, nil)
+		r = NewKeyReader(enc, dirs)
+		_, err = DecodeBytesDecreasing(r, nil)
 		if err != nil {
 			t.Error(err)
 			continue
 		}
-		if string(remainder) != "remainder" {
-			t.Errorf("unexpected remaining bytes: %v", remainder)
+		if string(r.RawBytesRemaining()) != "remainder" {
+			t.Errorf("unexpected remaining bytes: %v", r.RawBytesRemaining())
 		}
 	}
 }
@@ -495,6 +549,7 @@ func TestEncodeDecodeString(t *testing.T) {
 		{"b\x00\x00a", []byte{0x20, 'b', 0x00, 0xff, 0x00, 0xff, 'a', 0x00, 0x01}},
 		{"b\xff", []byte{0x20, 'b', 0xff, 0x00, 0x01}},
 		{"hello", []byte{0x20, 'h', 'e', 'l', 'l', 'o', 0x00, 0x01}},
+		// !!! add test for empty string
 	}
 	for i, c := range testCases {
 		enc := EncodeString(nil, c.value)
@@ -508,7 +563,9 @@ func TestEncodeDecodeString(t *testing.T) {
 					c.value, testCases[i-1].encoded, enc)
 			}
 		}
-		remainder, dec, err := DecodeString(enc, nil)
+		dirs := []Direction{Ascending}
+		r := NewKeyReader(enc, dirs)
+		dec, err := DecodeString(r, nil)
 		if err != nil {
 			t.Error(err)
 			continue
@@ -516,38 +573,39 @@ func TestEncodeDecodeString(t *testing.T) {
 		if c.value != dec {
 			t.Errorf("unexpected decoding mismatch for %v. got %v", c.value, dec)
 		}
-		if len(remainder) != 0 {
-			t.Errorf("unexpected remaining bytes: %v", remainder)
+		if !r.EOF() {
+			t.Errorf("unexpected remaining bytes: %v", r.RawBytesRemaining())
 		}
 
+		// Test again with a remainder. The reader will be reset.
+		enc = EncodeString(nil, c.value)
 		enc = append(enc, "remainder"...)
-		remainder, _, err = DecodeString(enc, nil)
+		r = NewKeyReader(enc, dirs)
+		_, err = DecodeString(r, nil)
 		if err != nil {
 			t.Error(err)
 			continue
 		}
-		if string(remainder) != "remainder" {
-			t.Errorf("unexpected remaining bytes: %v", remainder)
+		if string(r.RawBytesRemaining()) != "remainder" {
+			t.Errorf("unexpected remaining bytes: %v", r.RawBytesRemaining())
 		}
 	}
 }
 
 func TestEncodeDecodeStringDecreasing(t *testing.T) {
-	testCases := []struct {
+	vals := []string{"hello", "b\xff", "b\x00\x00a", "b\x00\x00", "b\x00", "b",
+		"a", "\x00\xffa", "\x00a", "\x00\x01a"}
+	type stringTestCase struct {
 		value   string
 		encoded []byte
-	}{
-		{"hello", []byte{0x20, ^byte('h'), ^byte('e'), ^byte('l'), ^byte('l'), ^byte('o'), 0xff, 0xfe}},
-		{"b\xff", []byte{0x20, ^byte('b'), 0x00, 0xff, 0xfe}},
-		{"b\x00\x00a", []byte{0x20, ^byte('b'), 0xff, 0x00, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{"b\x00\x00", []byte{0x20, ^byte('b'), 0xff, 0x00, 0xff, 0x00, 0xff, 0xfe}},
-		{"b\x00", []byte{0x20, ^byte('b'), 0xff, 0x00, 0xff, 0xfe}},
-		{"b", []byte{0x20, ^byte('b'), 0xff, 0xfe}},
-		{"a", []byte{0x20, ^byte('a'), 0xff, 0xfe}},
-		{"\x00\xffa", []byte{0x20, 0xff, 0x00, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{"\x00a", []byte{0x20, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{"\x00\x01a", []byte{0x20, 0xff, 0x00, 0xfe, ^byte('a'), 0xff, 0xfe}},
 	}
+	var testCases []stringTestCase
+	for _, s := range vals {
+		enc := EncodeString(nil, s)
+		onesComplement(enc)
+		testCases = append(testCases, stringTestCase{s, enc})
+	}
+
 	for i, c := range testCases {
 		enc := EncodeStringDecreasing(nil, c.value)
 		if !bytes.Equal(enc, c.encoded) {
@@ -560,7 +618,9 @@ func TestEncodeDecodeStringDecreasing(t *testing.T) {
 					c.value, testCases[i-1].encoded, enc)
 			}
 		}
-		remainder, dec, err := DecodeStringDecreasing(enc, nil)
+		dirs := []Direction{Descending}
+		r := NewKeyReader(enc, dirs)
+		dec, err := DecodeStringDecreasing(r, nil)
 		if err != nil {
 			t.Error(err)
 			continue
@@ -568,18 +628,21 @@ func TestEncodeDecodeStringDecreasing(t *testing.T) {
 		if c.value != dec {
 			t.Errorf("unexpected decoding mismatch for %v. got %v", c.value, dec)
 		}
-		if len(remainder) != 0 {
-			t.Errorf("unexpected remaining bytes: %v", remainder)
+		if !r.EOF() {
+			t.Errorf("unexpected remaining bytes: %v", r.RawBytesRemaining())
 		}
 
+		// Test again with a remainder. The reader will be reset.
+		enc = EncodeStringDecreasing(nil, c.value)
 		enc = append(enc, "remainder"...)
-		remainder, _, err = DecodeStringDecreasing(enc, nil)
+		r = NewKeyReader(enc, dirs)
+		_, err = DecodeStringDecreasing(r, nil)
 		if err != nil {
 			t.Error(err)
 			continue
 		}
-		if string(remainder) != "remainder" {
-			t.Errorf("unexpected remaining bytes: %v", remainder)
+		if string(r.RawBytesRemaining()) != "remainder" {
+			t.Errorf("unexpected remaining bytes: %v", r.RawBytesRemaining())
 		}
 	}
 }
@@ -593,16 +656,23 @@ func TestEncodeDecodeNull(t *testing.T) {
 		t.Fatalf("expected %q, but found %q", expected, buf)
 	}
 
-	if remaining, isNull := DecodeIfNull([]byte(hello)); isNull {
+	dirs := []Direction{Ascending}
+	r := NewKeyReader([]byte(hello), dirs)
+	if isNull, err := DecodeIfNull(r); isNull || err != nil {
 		t.Fatalf("expected isNull=false, but found isNull=%v", isNull)
-	} else if hello != string(remaining) {
-		t.Fatalf("expected %q, but found %q", hello, remaining)
+	} else if hello != string(r.RawBytesRemaining()) {
+		t.Fatalf("expected %q, but found %q", hello, r.RawBytesRemaining())
 	}
 
-	if remaining, isNull := DecodeIfNull([]byte("\x00" + hello)); !isNull {
+	r = NewKeyReader([]byte("\x00"+hello), dirs)
+	isNull, err := DecodeIfNull(r)
+	if err != nil {
+		t.Fatalf("Error decoding null: ", err)
+	}
+	if !isNull {
 		t.Fatalf("expected isNull=true, but found isNull=%v", isNull)
-	} else if hello != string(remaining) {
-		t.Fatalf("expected %q, but found %q", hello, remaining)
+	} else if hello != string(r.RawBytesRemaining()) {
+		t.Fatalf("expected %q, but found %q", hello, r.RawBytesRemaining())
 	}
 }
 
@@ -651,10 +721,12 @@ func TestEncodeDecodeTime(t *testing.T) {
 			t.Fatal(err)
 		}
 		current := zeroTime.Add(d)
-		var b []byte
+		var enc []byte
 		if !last.IsZero() {
-			b = EncodeTime(b, current)
-			_, decodedCurrent, err := DecodeTime(b)
+			enc = EncodeTime(enc, current)
+			dirs := []Direction{Ascending}
+			r := NewKeyReader(enc, dirs)
+			decodedCurrent, err := DecodeTime(r)
 			if err != nil {
 				t.Error(err)
 				continue
@@ -662,12 +734,12 @@ func TestEncodeDecodeTime(t *testing.T) {
 			if !decodedCurrent.Equal(current) {
 				t.Fatalf("lossy transport: before (%v) vs after (%v)", current, decodedCurrent)
 			}
-			if bytes.Compare(lastEncoded, b) >= 0 {
+			if bytes.Compare(lastEncoded, enc) >= 0 {
 				t.Fatalf("encodings %s, %s not increasing", testCases[i-1], testCases[i])
 			}
 		}
 		last = current
-		lastEncoded = b
+		lastEncoded = enc
 	}
 
 	// Check that the encoding hasn't changed.
@@ -690,7 +762,9 @@ func TestPeekType(t *testing.T) {
 		{EncodeTime(nil, time.Now()), Time},
 	}
 	for i, c := range testCases {
-		typ := PeekType(c.enc)
+		// PeekType is only used with all-ascending keys, so we use a BufferReader.
+		r := NewBufferReader(c.enc)
+		typ := PeekType(r)
 		if c.typ != typ {
 			t.Fatalf("%d: expected %d, but found %d", i, c.typ, typ)
 		}
@@ -721,9 +795,11 @@ func BenchmarkDecodeUint32(b *testing.B) {
 		vals[i] = EncodeUint32(nil, uint32(rng.Int31()))
 	}
 
+	dirs := []Direction{Ascending}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _ = DecodeUint32(vals[i%len(vals)])
+		r := NewKeyReader(vals[i%len(vals)], dirs)
+		_, _ = DecodeUint32(r)
 	}
 }
 
@@ -751,9 +827,11 @@ func BenchmarkDecodeUint64(b *testing.B) {
 		vals[i] = EncodeUint64(nil, uint64(rng.Int63()))
 	}
 
+	dirs := []Direction{Ascending}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _ = DecodeUint64(vals[i%len(vals)])
+		r := NewKeyReader(vals[i%len(vals)], dirs)
+		_, _ = DecodeUint64(r)
 	}
 }
 
@@ -781,9 +859,11 @@ func BenchmarkDecodeVarint(b *testing.B) {
 		vals[i] = EncodeVarint(nil, rng.Int63())
 	}
 
+	dirs := []Direction{Ascending}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _ = DecodeVarint(vals[i%len(vals)])
+		r := NewKeyReader(vals[i%len(vals)], dirs)
+		_, _ = DecodeVarint(r)
 	}
 }
 
@@ -811,9 +891,11 @@ func BenchmarkDecodeUvarint(b *testing.B) {
 		vals[i] = EncodeUvarint(nil, uint64(rng.Int63()))
 	}
 
+	dirs := []Direction{Ascending}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _ = DecodeUvarint(vals[i%len(vals)])
+		r := NewKeyReader(vals[i%len(vals)], dirs)
+		_, _ = DecodeUvarint(r)
 	}
 }
 
@@ -861,7 +943,8 @@ func BenchmarkDecodeBytes(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _ = DecodeBytes(vals[i%len(vals)], buf)
+		r := NewKeyReader(vals[i%len(vals)], []Direction{Ascending})
+		_, _ = DecodeBytes(r, buf)
 	}
 }
 
@@ -877,7 +960,8 @@ func BenchmarkDecodeBytesDecreasing(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _ = DecodeBytesDecreasing(vals[i%len(vals)], buf)
+		r := NewKeyReader(vals[i%len(vals)], []Direction{Descending})
+		_, _ = DecodeBytesDecreasing(r, buf)
 	}
 }
 
@@ -925,7 +1009,8 @@ func BenchmarkDecodeString(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _ = DecodeString(vals[i%len(vals)], buf)
+		r := NewKeyReader(vals[i%len(vals)], []Direction{Ascending})
+		_, _ = DecodeString(r, buf)
 	}
 }
 
@@ -941,6 +1026,7 @@ func BenchmarkDecodeStringDecreasing(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _ = DecodeStringDecreasing(vals[i%len(vals)], buf)
+		r := NewKeyReader(vals[i%len(vals)], []Direction{Descending})
+		_, _ = DecodeStringDecreasing(r, buf)
 	}
 }

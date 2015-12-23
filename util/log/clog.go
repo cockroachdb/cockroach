@@ -376,7 +376,7 @@ func (lr *EntryDecoder) Decode(entry *LogEntry) error {
 	if err != nil {
 		return err
 	}
-	_, sz, err := encoding.DecodeUint32(szBuf)
+	sz, err := encoding.DecodeUint32(encoding.NewBufferReader(szBuf))
 	if err != nil {
 		return err
 	}
