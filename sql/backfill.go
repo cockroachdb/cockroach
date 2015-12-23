@@ -21,6 +21,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -114,10 +115,17 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *Tab
 			var sentinelKey roachpb.Key
 			for _, kv := range result.Rows {
 				if sentinelKey == nil || !bytes.HasPrefix(kv.Key, sentinelKey) {
-					sentinelKey = kv.Key
+					// Sentinel keys have a 0 suffix indicating 0 bytes of column
+					// ID. Strip off that suffix to determine the prefix shared with the
+					// other keys for the row.
+					sentinelKey = stripColumnIDLength(kv.Key)
 					for _, columnDesc := range droppedColumnDescs {
 						// Delete the dropped column.
-						b.Del(MakeColumnKey(columnDesc.ID, sentinelKey))
+						colKey := keys.EncodeColumnKey(sentinelKey, uint32(columnDesc.ID))
+						if log.V(2) {
+							log.Infof("Del %s", colKey)
+						}
+						b.Del(colKey)
 					}
 				}
 			}

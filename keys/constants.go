@@ -17,6 +17,8 @@
 package keys
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
@@ -163,9 +165,9 @@ var (
 	StatusNodePrefix = roachpb.Key(MakeKey(StatusPrefix, roachpb.RKey("node-")))
 
 	// TableDataMin is the start of the range of table data keys.
-	TableDataMin = roachpb.Key{encoding.IntMin}
+	TableDataMin = roachpb.Key(encoding.EncodeVarint(nil, math.MinInt64))
 	// TableDataMin is the end of the range of table data keys.
-	TableDataMax = roachpb.Key{encoding.IntMax, 0xff}
+	TableDataMax = roachpb.Key(encoding.EncodeVarint(nil, math.MaxInt64))
 
 	// ReservedTableDataMin is the start key of reserved structured data
 	// (excluding SystemDB).

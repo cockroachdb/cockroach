@@ -1251,6 +1251,11 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 			return reply, roachpb.NewRangeKeyMismatchError(args.SplitKey, args.SplitKey, desc)
 		}
 
+		foundSplitKey, err := keys.MakeSplitKey(foundSplitKey)
+		if err != nil {
+			return reply, util.Errorf("cannot split range at key %s: %v", splitKey, err)
+		}
+
 		splitKey = keys.Addr(foundSplitKey)
 		if !splitKey.Equal(foundSplitKey) {
 			return reply, util.Errorf("cannot split range at range-local key %s", splitKey)
