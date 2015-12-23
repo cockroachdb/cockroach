@@ -349,6 +349,69 @@ func DecodeTablePrefix(key roachpb.Key) ([]byte, uint64, error) {
 	return encoding.DecodeUvarint(key)
 }
 
+// MakeSplitKey transforms an SQL table key such that it is a valid split key
+// (i.e. does not occur in the middle of a row).
+func MakeSplitKey(key roachpb.Key) (roachpb.Key, error) {
+	if encoding.PeekType(key) != encoding.Int {
+		// Not a table key, so already a split key.
+		return key, nil
+	}
+
+	// We have a table key. Unfortunately we can't just look at the suffix
+	// because certain parts of the system, such as ComputeSplitKeys (and user
+	// initiated splits), generate split keys that look like table keys but
+	// without the column ID length suffix. So we take the approach of decoding
+	// the table ID and the index ID which are required parts of any valid SQL
+	// row key.
+
+	// Decode and discard the table ID.
+	buf, _, err := encoding.DecodeUvarint(key)
+	if err != nil {
+		return nil, err
+	}
+	if encoding.PeekType(buf) != encoding.Int {
+		// No index ID.
+		return key, nil
+	}
+	// Decode and discard the index ID.
+	buf, _, err = encoding.DecodeUvarint(buf)
+	if err != nil {
+		return nil, err
+	}
+
+	n := len(buf)
+	if n == 0 {
+		return key, nil
+	}
+	// The column ID length is encoded as a varint and we take advantage of the
+	// fact that the column ID itself will be encoded in 0-13 bytes and thus the
+	// length of the column ID data will fit in a single byte.
+	buf = buf[n-1:]
+	if encoding.PeekType(buf) != encoding.Int {
+		// The last byte is not a valid column ID suffix.
+		return key, nil
+	}
+
+	// Strip off the column ID suffix from the buf. The last byte of the buf
+	// contains the length of the column ID suffix (which might be 0 if the buf
+	// does not contain a column ID suffix).
+	_, colIDLen, err := encoding.DecodeUvarint(buf)
+	if err != nil {
+		return nil, err
+	}
+	if int(colIDLen)+1 > n {
+		// The column ID length was impossible. colIDLen is the length of the
+		// encoded column ID suffix. We add 1 to account for the byte holding the
+		// length of the encoded column ID and if that total (colIDLen+1) is
+		// greater than the key suffix (n == len(buf)) then we bail. Note that we
+		// don't consider this an error because MakeSplitKey can be called on keys
+		// that look like table keys but which do not have a column ID length
+		// suffix (e.g SystemConfig.ComputeSplitKeys).
+		return key, nil
+	}
+	return key[:len(key)-int(colIDLen)-1], nil
+}
+
 // Range returns a key range encompassing all the keys in the Batch.
 // TODO(tschottdorf): there is no protection for doubly-local keys here;
 // maybe Range should return an error.

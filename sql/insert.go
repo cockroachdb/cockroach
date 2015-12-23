@@ -20,9 +20,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -196,11 +198,12 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 		// Write the row sentinel.
 		if log.V(2) {
-			log.Infof("CPut %s -> NULL", primaryIndexKey)
+			log.Infof("CPut %s -> NULL", roachpb.Key(primaryIndexKey))
 		}
 		// This is subtle: An interface{}(nil) deletes the value, so we pass in
-		// []byte{} as a non-nil value.
-		b.CPut(primaryIndexKey, []byte{}, nil)
+		// []byte{} as a non-nil value. Row sentinel keys do not have a column ID
+		// suffix, so encode 0 for the size of the column ID.
+		b.CPut(encoding.EncodeVarint(primaryIndexKey, 0), []byte{}, nil)
 
 		// Write the row columns.
 		for i, val := range rowVals {

@@ -37,12 +37,12 @@ import (
 // timestamp. This is similar to roachpb.KeyValue except that the value may be
 // nil.
 type KeyValue struct {
-	Key   []byte
+	Key   roachpb.Key
 	Value *roachpb.Value
 }
 
 func (kv *KeyValue) String() string {
-	return string(kv.Key) + "=" + kv.PrettyValue()
+	return kv.Key.String() + "=" + kv.PrettyValue()
 }
 
 // Exists returns true iff the value exists.
