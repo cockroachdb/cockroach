@@ -18,20 +18,21 @@ package terrafarm
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 // A Farmer sets up and manipulates a test cluster via terraform.
 type Farmer struct {
-	Debug          bool
+	Output         io.Writer
 	Cwd, LogDir    string
 	Args           []string
 	KeyName        string
@@ -131,7 +132,7 @@ func (f *Farmer) CollectLogs() {
 		dest += strconv.Itoa(i)
 		if err := f.scp(host, f.defaultKeyFile(), src,
 			filepath.Join(f.AbsLogDir(), dest)); err != nil {
-			fmt.Fprintf(os.Stderr, "error collecting %s from host %s: %s", src, host, err)
+			f.logf("error collecting %s from host %s: %s", src, host, err)
 		}
 	}
 }
@@ -139,8 +140,8 @@ func (f *Farmer) CollectLogs() {
 // Destroy collects the logs and tears down the cluster.
 func (f *Farmer) Destroy() error {
 	f.CollectLogs()
-	if f.Debug && f.LogDir != "" {
-		defer fmt.Fprintln(os.Stderr, "logs copied to", f.AbsLogDir())
+	if f.LogDir != "" {
+		defer f.logf("logs copied to %s", f.AbsLogDir())
 	}
 	return f.Resize(0, 0)
 }
@@ -173,22 +174,30 @@ func (f *Farmer) ConnString(i int) string {
 // WaitReady waits until the infrastructure is in a state that *should* allow
 // for a healthy cluster. Currently, this means waiting for the load balancer
 // to resolve from all nodes.
-func (f *Farmer) WaitReady(t util.Tester, d time.Duration) {
-	util.SucceedsWithin(t, d, func() error {
-		elb, _, err := net.SplitHostPort(f.LoadBalancer())
+func (f *Farmer) WaitReady(d time.Duration) error {
+	var rOpts = retry.Options{
+		InitialBackoff: time.Second,
+		MaxBackoff:     time.Minute,
+		Multiplier:     1.5,
+	}
+	var err error
+	for r := retry.Start(rOpts); r.Next(); {
+		var elb string
+		elb, _, err = net.SplitHostPort(f.LoadBalancer())
 		if err != nil || elb == "" {
-			return fmt.Errorf("ELB not found: %v", err)
+			err = fmt.Errorf("ELB not found: %v", err)
+			continue
 		}
 		for i := range f.Nodes() {
-			if err := f.Exec(i, "nslookup "+elb); err != nil {
-				if _, ok := err.(*exec.ExitError); !ok {
-					t.Fatal(err)
-				}
-				return err
+			if err = f.Exec(i, "nslookup "+elb); err != nil {
+				break
 			}
 		}
-		return nil
-	})
+		if err == nil {
+			return nil
+		}
+	}
+	return err
 }
 
 // Assert verifies that the cluster state is as expected (i.e. no unexpected
@@ -242,4 +251,10 @@ func (f *Farmer) Restart(i int) error {
 // URL returns the HTTP(s) endpoint.
 func (f *Farmer) URL(i int) string {
 	return "http://" + util.EnsureHostPort(f.Nodes()[i])
+}
+
+func (f *Farmer) logf(format string, args ...interface{}) {
+	if f.Output != nil {
+		fmt.Fprintf(f.Output, format, args...)
+	}
 }
