@@ -36,30 +36,30 @@ import (
 // for passing event feed data to these subset structures for accumulation.
 type NodeStatusMonitor struct {
 	latency     metric.Histograms
-	rateSuccess metric.EWMAS
-	rateError   metric.EWMAS
+	rateSuccess metric.Rates
+	rateError   metric.Rates
 	numSuccess  *metric.Counter
 	numError    *metric.Counter
 
 	closer <-chan struct{}
 
 	sync.RWMutex // Mutex to guard the following fields
-	registry     metric.Registry
-	metaRegistry metric.Registry
+	registry     *metric.Registry
+	metaRegistry *metric.Registry
 	stores       map[roachpb.StoreID]*StoreStatusMonitor
 	desc         roachpb.NodeDescriptor
 	startedAt    int64
 }
 
 // NewNodeStatusMonitor initializes a new NodeStatusMonitor instance.
-func NewNodeStatusMonitor(metaRegistry metric.Registry, closer <-chan struct{}) *NodeStatusMonitor {
+func NewNodeStatusMonitor(metaRegistry *metric.Registry, closer <-chan struct{}) *NodeStatusMonitor {
 	registry := metric.NewRegistry(closer)
 	return &NodeStatusMonitor{
-		latency:     metric.RegisterLatency("latency%s", registry),
-		rateSuccess: metric.RegisterEWMAS("exec.rate.success%s", registry),
-		rateError:   metric.RegisterEWMAS("exec.rate.error%s", registry),
-		numSuccess:  metric.RegisterCounter("exec.num.success", registry),
-		numError:    metric.RegisterCounter("exec.num.error", registry),
+		latency:     registry.Latency("latency%s"),
+		rateSuccess: registry.Rates("exec.rate.success%s"),
+		rateError:   registry.Rates("exec.rate.error%s"),
+		numSuccess:  registry.Counter("exec.num.success"),
+		numError:    registry.Counter("exec.num.error"),
 
 		registry:     registry,
 		metaRegistry: metaRegistry,
@@ -260,7 +260,7 @@ type StoreStatusMonitor struct {
 	available       *metric.Gauge
 
 	sync.Mutex // Mutex to guard the following fields
-	registry   metric.Registry
+	registry   *metric.Registry
 	stats      engine.MVCCStats
 	ID         roachpb.StoreID
 	desc       *roachpb.StoreDescriptor
@@ -268,7 +268,7 @@ type StoreStatusMonitor struct {
 }
 
 // NewStoreStatusMonitor constructs a StoreStatusMonitor with the given ID.
-func NewStoreStatusMonitor(id roachpb.StoreID, metaRegistry metric.Registry, closer <-chan struct{}) *StoreStatusMonitor {
+func NewStoreStatusMonitor(id roachpb.StoreID, metaRegistry *metric.Registry, closer <-chan struct{}) *StoreStatusMonitor {
 	registry := metric.NewRegistry(closer)
 	// Format as `cr.store.<metric>.<id>` in output, in analogy to the time
 	// series data written.
@@ -276,23 +276,23 @@ func NewStoreStatusMonitor(id roachpb.StoreID, metaRegistry metric.Registry, clo
 	return &StoreStatusMonitor{
 		ID:                   id,
 		registry:             registry,
-		rangeCount:           metric.RegisterCounter("ranges", registry),
-		leaderRangeCount:     metric.RegisterGauge("ranges.leader", registry),
-		replicatedRangeCount: metric.RegisterGauge("ranges.replicated", registry),
-		availableRangeCount:  metric.RegisterGauge("ranges.available", registry),
-		liveBytes:            metric.RegisterGauge("livebytes", registry),
-		keyBytes:             metric.RegisterGauge("keybytes", registry),
-		valBytes:             metric.RegisterGauge("valbytes", registry),
-		intentBytes:          metric.RegisterGauge("intentbytes", registry),
-		liveCount:            metric.RegisterGauge("livecount", registry),
-		keyCount:             metric.RegisterGauge("keycount", registry),
-		valCount:             metric.RegisterGauge("valcount", registry),
-		intentCount:          metric.RegisterGauge("intentcount", registry),
-		intentAge:            metric.RegisterGauge("intentage", registry),
-		gcBytesAge:           metric.RegisterGauge("gcbytesage", registry),
-		lastUpdateNanos:      metric.RegisterGauge("lastupdatenanos", registry),
-		capacity:             metric.RegisterGauge("capacity", registry),
-		available:            metric.RegisterGauge("capacity.available", registry),
+		rangeCount:           registry.Counter("ranges"),
+		leaderRangeCount:     registry.Gauge("ranges.leader"),
+		replicatedRangeCount: registry.Gauge("ranges.replicated"),
+		availableRangeCount:  registry.Gauge("ranges.available"),
+		liveBytes:            registry.Gauge("livebytes"),
+		keyBytes:             registry.Gauge("keybytes"),
+		valBytes:             registry.Gauge("valbytes"),
+		intentBytes:          registry.Gauge("intentbytes"),
+		liveCount:            registry.Gauge("livecount"),
+		keyCount:             registry.Gauge("keycount"),
+		valCount:             registry.Gauge("valcount"),
+		intentCount:          registry.Gauge("intentcount"),
+		intentAge:            registry.Gauge("intentage"),
+		gcBytesAge:           registry.Gauge("gcbytesage"),
+		lastUpdateNanos:      registry.Gauge("lastupdatenanos"),
+		capacity:             registry.Gauge("capacity"),
+		available:            registry.Gauge("capacity.available"),
 	}
 }
 
