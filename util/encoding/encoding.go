@@ -87,8 +87,10 @@ type Reader interface {
 
 // !!!
 type RReader struct {
-	s []byte
-	i int
+	s     []byte
+	i     int
+	dir   Direction // !!! this needs to be an array and we need an advance function
+	slice []byte
 }
 
 func NewRReader(s []byte) *RReader {
@@ -104,50 +106,62 @@ func (r *RReader) EOF() bool {
 }
 
 type UnsafeArray [0x7fffffff]byte
+type UnsafeWordArray [0x7fffffff]byte
+
+func onesComplementXXX(b *UnsafeArray, n int) {
+	w := n / wordSize
+	if w > 0 {
+		bw := (*UnsafeWordArray)(unsafe.Pointer(b))
+		for i := 0; i < w; i++ {
+			bw[i] = ^bw[i]
+		}
+	}
+
+	for i := w * wordSize; i < n; i++ {
+		b[i] = ^b[i]
+	}
+}
 
 func (r *RReader) Read(n int) (*UnsafeArray, error) {
 	if n > len(r.s) {
 		return nil, io.EOF
 	}
-	ptr := (*UnsafeArray)(unsafe.Pointer(&r.s[r.i]))
+	var ptr *UnsafeArray
+	ptr = (*UnsafeArray)(unsafe.Pointer(&r.s[r.i]))
+	if r.dir == Descending {
+		onesComplementXXX(ptr, n)
+		//r.slice = r.slice[:0]
+		//r.slice = append(r.slice, ptr[:n]...)
+		//onesComplement(r.slice)
+		//ptr = (*UnsafeArray)(unsafe.Pointer(&r.slice[0]))
+	}
 	r.i += n
 	return ptr, nil
-}
-
-func (r *RReader) ReadInto(n int, buf *[]byte) ([]byte, error) {
-	var err error
-	if n > len(r.s) {
-		err = io.EOF
-		n = len(r.s)
-		if n <= 0 {
-			return []byte{}, io.EOF
-		}
-	}
-	var slice []byte
-	if buf == nil {
-		slice = r.s[:n]
-	} else {
-		slice = append(*buf, r.s[:n]...)
-		*buf = slice
-	}
-	r.s = r.s[n:]
-	return slice, err
 }
 
 func (r *RReader) ReadByte() (byte, error) {
 	if r.EOF() {
 		return 0, io.EOF
 	}
-	b := r.s[0]
+	b := r.s[r.i]
 	r.i++
-	return b, nil
+	if r.dir != Descending {
+		return b, nil
+	} else {
+		return ^b, nil
+	}
 }
 
 func (r *RReader) PeekByte() (byte, error) {
 	if r.EOF() {
 		return 0, io.EOF
 	}
-	return r.s[0], nil
+	b := r.s[r.i]
+	if r.dir != Descending {
+		return b, nil
+	} else {
+		return ^b, nil
+	}
 }
 
 // BufferReader is a reader that consumes a []byte.
