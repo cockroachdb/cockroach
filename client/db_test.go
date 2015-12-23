@@ -156,8 +156,8 @@ func ExampleBatch() {
 	}
 
 	// Output:
-	// aa=
-	// bb=2
+	// "aa"=
+	// "bb"=2
 }
 
 func ExampleDB_Scan() {
@@ -180,8 +180,8 @@ func ExampleDB_Scan() {
 	}
 
 	// Output:
-	// 0: aa=1
-	// 1: ab=2
+	// 0: "aa"=1
+	// 1: "ab"=2
 }
 
 func ExampleDB_ReverseScan() {
@@ -204,8 +204,8 @@ func ExampleDB_ReverseScan() {
 	}
 
 	// Output:
-	// 0: bb=3
-	// 1: ab=2
+	// 0: "bb"=3
+	// 1: "ab"=2
 }
 
 func ExampleDB_Del() {
@@ -231,8 +231,8 @@ func ExampleDB_Del() {
 	}
 
 	// Output:
-	// 0: aa=1
-	// 1: ac=3
+	// 0: "aa"=1
+	// 1: "ac"=3
 }
 
 func ExampleTxn_Commit() {
@@ -262,8 +262,8 @@ func ExampleTxn_Commit() {
 	}
 
 	// Output:
-	// 0/0: aa=1
-	// 1/0: ab=2
+	// 0/0: "aa"=1
+	// 1/0: "ab"=2
 }
 
 func ExampleDB_Put_insecure() {

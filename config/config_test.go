@@ -271,7 +271,7 @@ func TestComputeSplits(t *testing.T) {
 		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
 			keys.MakeTablePrefix(start + 5), allUserSplits[1:5]},
 		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			keys.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("bar")), allUserSplits[1:]},
+			keys.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("bar")), allUserSplits[1:5]},
 		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
 			keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("morefoo")), nil},
 
@@ -293,7 +293,7 @@ func TestComputeSplits(t *testing.T) {
 		{allSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(start + 10), allSplits[1:]},
 		{allSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 2), allSplits[:5]},
 		{allSql, keys.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
-			keys.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("foo")), allSplits[1:9]},
+			keys.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("foo")), allSplits[1:8]},
 	}
 
 	cfg := config.SystemConfig{}
@@ -307,7 +307,7 @@ func TestComputeSplits(t *testing.T) {
 		// Convert ints to actual keys.
 		expected := []roachpb.RKey{}
 		for _, s := range tc.splits {
-			expected = append(expected, keys.MakeTablePrefix(s))
+			expected = append(expected, keys.EncodeSentinelKey(keys.MakeTablePrefix(s)))
 		}
 		if !reflect.DeepEqual(splits, expected) {
 			t.Errorf("#%d: bad splits:\ngot: %v\nexpected: %v", tcNum, splits, expected)
