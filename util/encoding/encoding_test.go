@@ -1033,10 +1033,24 @@ func BenchmarkDecodeVarintXXX(b *testing.B) {
 	}
 }
 
+func BenchmarkDecodeVarintDecreasing(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeVarintDecreasing(nil, rng.Int63())
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _, _ = DecodeVarintDecreasing(vals[i%len(vals)])
+	}
+}
+
+<<<<<<< HEAD
 // !!!
 //func BenchmarkEncodeUvarint(b *testing.B) {
 //  rng, _ := randutil.NewPseudoRand()
-
 //  vals := make([]uint64, 10000)
 //  for i := range vals {
 //    vals[i] = uint64(rng.Int63())
@@ -1063,6 +1077,20 @@ func BenchmarkDecodeUvarint(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		r := NewKeyReader(vals[i%len(vals)], dirs)
 		_, _ = DecodeUvarint(r)
+	}
+}
+
+func BenchmarkDecodeUvarintDecreasing(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeUvarintDecreasing(nil, uint64(rng.Int63()))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _, _ = DecodeUvarintDecreasing(vals[i%len(vals)])
 	}
 }
 
