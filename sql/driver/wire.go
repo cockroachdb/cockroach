@@ -136,8 +136,3 @@ func (r Request) GetUser() string {
 func (Request) Method() Method {
 	return Execute
 }
-
-// CreateReply creates an empty response for the request.
-func (Request) CreateReply() Response {
-	return Response{}
-}
