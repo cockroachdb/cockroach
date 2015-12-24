@@ -19,6 +19,7 @@
 package acceptance
 
 import (
+	"errors"
 	"math/rand"
 	"strings"
 	"testing"
@@ -54,7 +55,10 @@ func checkGossip(t *testing.T, c cluster.Cluster, d time.Duration,
 			if err := getJSON(c.URL(i), "/_status/gossip/local", &m); err != nil {
 				return err
 			}
-			infos := m["infos"].(map[string]interface{})
+			infos, ok := m["infos"].(map[string]interface{})
+			if !ok {
+				return errors.New("no infos yet")
+			}
 			if err := f(infos); err != nil {
 				return util.Errorf("node %d: %s", i, err)
 			}

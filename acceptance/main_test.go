@@ -161,10 +161,5 @@ func getJSON(url, rel string, v interface{}) error {
 		}
 		return err
 	}
-	if err := json.Unmarshal(b, v); err != nil {
-		if log.V(1) {
-			log.Info(err)
-		}
-	}
-	return nil
+	return json.Unmarshal(b, v)
 }
