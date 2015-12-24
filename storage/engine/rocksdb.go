@@ -51,14 +51,14 @@ type RocksDB struct {
 	rdb            *C.DBEngine
 	attrs          roachpb.Attributes // Attributes for this engine
 	dir            string             // The data directory
-	cacheSize      int64              // Memory to use to cache values.
-	memtableBudget int64              // Memory to use for the memory table.
+	cacheSize      uint64             // Memory to use to cache values.
+	memtableBudget uint64             // Memory to use for the memory table.
 	stopper        *stop.Stopper
 	deallocated    chan struct{} // Closed when the underlying handle is deallocated.
 }
 
 // NewRocksDB allocates and returns a new RocksDB object.
-func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize, memtableBudget int64,
+func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize, memtableBudget uint64,
 	stopper *stop.Stopper) *RocksDB {
 	if dir == "" {
 		panic(util.Errorf("dir must be non-empty"))
@@ -73,7 +73,7 @@ func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize, memtableBudget 
 	}
 }
 
-func newMemRocksDB(attrs roachpb.Attributes, cacheSize, memtableBudget int64,
+func newMemRocksDB(attrs roachpb.Attributes, cacheSize, memtableBudget uint64,
 	stopper *stop.Stopper) *RocksDB {
 	return &RocksDB{
 		attrs: attrs,
@@ -107,8 +107,8 @@ func (r *RocksDB) Open() error {
 	}
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)),
 		C.DBOptions{
-			cache_size:      C.int64_t(r.cacheSize),
-			memtable_budget: C.int64_t(r.memtableBudget),
+			cache_size:      C.uint64_t(r.cacheSize),
+			memtable_budget: C.uint64_t(r.memtableBudget),
 			allow_os_buffer: C.bool(true),
 			logging_enabled: C.bool(log.V(3)),
 		})

@@ -218,8 +218,8 @@ func initFlags(ctx *Context) {
 		f.BoolVar(&ctx.Linearizable, "linearizable", ctx.Linearizable, usage("linearizable"))
 
 		// Engine flags.
-		f.Int64Var(&ctx.CacheSize, "cache-size", ctx.CacheSize, usage("cache-size"))
-		f.Int64Var(&ctx.MemtableBudget, "memtable-budget", ctx.MemtableBudget, usage("memtable-budget"))
+		f.Uint64Var(&ctx.CacheSize, "cache-size", ctx.CacheSize, usage("cache-size"))
+		f.Uint64Var(&ctx.MemtableBudget, "memtable-budget", ctx.MemtableBudget, usage("memtable-budget"))
 		f.DurationVar(&ctx.ScanInterval, "scan-interval", ctx.ScanInterval, usage("scan-interval"))
 		f.DurationVar(&ctx.ScanMaxIdleTime, "scan-max-idle-time", ctx.ScanMaxIdleTime, usage("scan-max-idle-time"))
 		f.DurationVar(&ctx.TimeUntilStoreDead, "time-until-store-dead", ctx.TimeUntilStoreDead, usage("time-until-store-dead"))

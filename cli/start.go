@@ -110,7 +110,7 @@ func runStart(_ *cobra.Command, _ []string) error {
 		// TODO(marc): set this in the zones table when we have an entry
 		// for the default cluster-wide zone config.
 		config.DefaultZoneConfig.ReplicaAttrs = []roachpb.Attributes{{}}
-		context.Stores = "mem=1073741824"
+		context.Stores = "mem=1073741824" // 1024MB
 	}
 
 	stopper := stop.NewStopper()

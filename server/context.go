@@ -19,10 +19,14 @@ package server
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/cloudfoundry/gosigar"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -36,6 +40,7 @@ import (
 
 // Context defaults.
 const (
+	defaultCGroupMemPath      = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
 	defaultAddr               = ":26257"
 	defaultPGAddr             = ":15432"
 	defaultMaxOffset          = 250 * time.Millisecond
@@ -96,11 +101,11 @@ type Context struct {
 
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.
-	CacheSize int64
+	CacheSize uint64
 
 	// MemtableBudget is the amount of memory in bytes to use for the memory
 	// table. The value is split evenly between the stores if there are more than one.
-	MemtableBudget int64
+	MemtableBudget uint64
 
 	// BalanceMode determines how this node makes balancing decisions.
 	BalanceMode storage.BalanceMode
@@ -135,6 +140,33 @@ type Context struct {
 	TimeUntilStoreDead time.Duration
 }
 
+func getDefaultCacheSize() uint64 {
+	mem := sigar.Mem{}
+	if err := mem.Get(); err != nil {
+		log.Infof("can't retrieve system memory information (%s), setting default rocksdb cache size to %dMB", err, defaultCacheSize>>20)
+		return defaultCacheSize
+	}
+
+	halfSysMem := mem.Total / 2
+	if runtime.GOOS == "linux" {
+		buf, err := ioutil.ReadFile(defaultCGroupMemPath)
+		if err != nil {
+			log.Infof("can't read available memory from cgroups (%s), setting default rocksdb cache size to %dMB (half of system memory)", err, halfSysMem>>20)
+			return halfSysMem
+		}
+
+		cgAvlMem, err := strconv.ParseUint(string(buf), 10, 64)
+		if err != nil {
+			log.Infof("can't parse available memory from cgroups (%s), setting default rocksdb cache size to %dMB (half of system memory)", err, halfSysMem>>20)
+			return halfSysMem
+		}
+		if cgAvlMem < mem.Total {
+			return cgAvlMem / 2
+		}
+	}
+	return halfSysMem
+}
+
 // NewContext returns a Context with default values.
 func NewContext() *Context {
 	ctx := &Context{}
@@ -148,7 +180,7 @@ func (ctx *Context) InitDefaults() {
 	ctx.Addr = defaultAddr
 	ctx.PGAddr = defaultPGAddr
 	ctx.MaxOffset = defaultMaxOffset
-	ctx.CacheSize = defaultCacheSize
+	ctx.CacheSize = getDefaultCacheSize()
 	ctx.MemtableBudget = defaultMemtableBudget
 	ctx.ScanInterval = defaultScanInterval
 	ctx.ScanMaxIdleTime = defaultScanMaxIdleTime
@@ -222,7 +254,7 @@ func (ctx *Context) initEngine(attrsStr, path string, stopper *stop.Stopper) (en
 		if size == 0 {
 			return nil, errUnsizedInMemStore
 		}
-		return engine.NewInMem(attrs, int64(size), stopper), nil
+		return engine.NewInMem(attrs, size, stopper), nil
 	}
 	// TODO(peter): The comments and docs say that CacheSize and MemtableBudget
 	// are split evenly if there are multiple stores, but we aren't doing that
