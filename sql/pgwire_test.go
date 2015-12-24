@@ -17,12 +17,15 @@
 package sql_test
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"net"
 	"net/url"
 	"os"
+	"os/exec"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/lib/pq"
@@ -291,3 +294,58 @@ func TestPGPrepared(t *testing.T) {
 		}
 	}
 }
+
+func startInsecureServer(t *testing.T) (addr url.URL, done func()) {
+	ctx := server.NewTestContext()
+	ctx.Insecure = true
+	s := setupTestServerWithContext(t, ctx)
+
+	pgUrl := url.URL{
+		Scheme:   "postgres",
+		Host:     s.PGAddr(),
+		RawQuery: "sslmode=disable",
+	}
+
+	return pgUrl, func() {
+		cleanupTestServer(s)
+	}
+}
+
+func TestPGPython(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	pgUrl, cleanupFn := startInsecureServer(t)
+	defer cleanupFn()
+
+	host, port, err := net.SplitHostPort(pgUrl.Host)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := exec.Command("docker",
+		"run",
+		"--rm",
+		"-i",
+		"--net=host",
+		"-e", "PGHOST="+host,
+		"-e", "PGPORT="+port,
+		"cockroachdb/postgres-test:python")
+	c.Stdin = strings.NewReader(python)
+	var buf bytes.Buffer
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	if err := c.Run(); err != nil {
+		t.Log(buf.String())
+		t.Fatal(err)
+	}
+}
+
+const python = `
+import psycopg2
+import os
+conn = psycopg2.connect(host=os.environ['PGHOST'], port=os.environ['PGPORT'], sslmode='disable')
+cur = conn.cursor()
+cur.execute("SELECT 1, 2+3")
+v = cur.fetchall()
+assert v == [(1, 5)]
+`

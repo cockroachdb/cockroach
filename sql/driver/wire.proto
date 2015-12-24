@@ -71,6 +71,11 @@ message Response {
     // presence indicates that the operation was a DDL statement.
     message DDL {}
 
+    // Ack is a message containing the tag of a result without a meaningful return.
+    message Ack {
+      required string tag = 1 [(gogoproto.nullable) = false];
+    }
+
     // Rows encapsulates the result of an operation that returns rows.
     message Rows {
       // A Row is a collection of values representing a row in a result.
@@ -99,6 +104,7 @@ message Response {
       DDL ddl = 2 [(gogoproto.customname) = "DDL"];
       uint32 rows_affected = 3;
       Rows rows = 4;
+      Ack ack = 5;
     }
   }
 
