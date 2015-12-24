@@ -19,11 +19,14 @@ package server
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cloudfoundry/gosigar"
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -36,9 +39,9 @@ import (
 
 // Context defaults.
 const (
+	defaultCGroupMemPath      = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
 	defaultAddr               = ":26257"
 	defaultMaxOffset          = 250 * time.Millisecond
-	defaultCacheSize          = 512 << 20 // 512 MB
 	defaultMemtableBudget     = 512 << 20 // 512 MB
 	defaultScanInterval       = 10 * time.Minute
 	defaultScanMaxIdleTime    = 5 * time.Second
@@ -131,6 +134,37 @@ type Context struct {
 	TimeUntilStoreDead time.Duration
 }
 
+func getDefaultCacheSize() int64 {
+	mem := sigar.Mem{}
+	err := mem.Get()
+	if err != nil {
+		log.Infof("system available memory info is invalid, setting rocksdb cache size to 512MB")
+		return 512 << 20
+	}
+	sysAvlMem := int64(mem.Total)
+	if sysAvlMem < 0 {
+		log.Infof("system available memory info is weird, setting rocksdb cache size to 512MB")
+		return 512 << 20
+	}
+	if runtime.GOOS == "linux" {
+		buf, err := ioutil.ReadFile(defaultCGroupMemPath)
+		if err != nil {
+			log.Infof("can't read available memory from cgroups, setting rocksdb cache size to half of system memory")
+			return sysAvlMem / 2
+		}
+
+		cgAvlMem, err := strconv.ParseInt(string(buf), 10, 64)
+		if err != nil {
+			log.Infof("can't undestand format of %s, setting rocksdb cache size to half of system memory", defaultCGroupMemPath)
+			return sysAvlMem / 2
+		}
+		if cgAvlMem < sysAvlMem {
+			return cgAvlMem / 2
+		}
+	}
+	return sysAvlMem / 2
+}
+
 // NewContext returns a Context with default values.
 func NewContext() *Context {
 	ctx := &Context{}
@@ -143,7 +177,7 @@ func (ctx *Context) InitDefaults() {
 	ctx.Context.InitDefaults()
 	ctx.Addr = defaultAddr
 	ctx.MaxOffset = defaultMaxOffset
-	ctx.CacheSize = defaultCacheSize
+	ctx.CacheSize = getDefaultCacheSize()
 	ctx.MemtableBudget = defaultMemtableBudget
 	ctx.ScanInterval = defaultScanInterval
 	ctx.ScanMaxIdleTime = defaultScanMaxIdleTime
