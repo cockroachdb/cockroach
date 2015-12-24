@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
@@ -332,5 +333,54 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 			return nil
 		}
 		return util.Errorf("incorrect number of incoming (%d) or outgoing (%d) connections", incoming, outgoing)
+	})
+}
+
+// TestClientRegisterInitNodeID verifies two client's gossip request with NodeID 0.
+func TestClientRegisterWithInitNodeID(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	// Create three gossip nodes, and connect to the first with NodeID 0.
+	var g []*Gossip
+	var gossipAddr string
+	for i := 0; i < 3; i++ {
+		clock := hlc.NewClock(hlc.UnixNano)
+		RPCContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
+
+		addr := util.CreateTestAddr("tcp")
+		server := rpc.NewServer(RPCContext)
+		TLSConfig, err := RPCContext.GetServerTLSConfig()
+		if err != nil {
+			t.Fatal(err)
+		}
+		ln, err := util.ListenAndServe(stopper, server, addr, TLSConfig)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Connect to the first gossip node.
+		if gossipAddr == "" {
+			gossipAddr = ln.Addr().String()
+		}
+
+		var resolvers []resolver.Resolver
+		resolver, _ := resolver.NewResolver(&RPCContext.Context, gossipAddr)
+		resolvers = append(resolvers, resolver)
+		gnode := New(RPCContext, resolvers)
+		g = append(g, gnode)
+		gnode.Start(server, ln.Addr(), stopper)
+	}
+
+	util.SucceedsWithin(t, 5*time.Second, func() error {
+		// The first gossip node should have two gossip client address
+		// in lAddrMap if these three gossip nodes registered success.
+		g[0].mu.Lock()
+		defer g[0].mu.Unlock()
+		if len(g[0].lAddrMap) == 2 {
+			return nil
+		}
+		return util.Errorf("gossip client register fail.")
 	})
 }
