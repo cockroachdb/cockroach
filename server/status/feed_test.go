@@ -26,8 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/server/status"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -194,7 +196,6 @@ func (ner *nodeEventReader) eventFeedString() string {
 // events.
 func TestServerNodeEventFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(tschottdorf): needs update for batches; see comment on CallComplete")
 	s := server.StartTestServer(t)
 
 	feed := s.EventFeed()
@@ -211,14 +212,19 @@ func TestServerNodeEventFeed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Add some data in a transaction
-	err = db.Txn(func(txn *client.Txn) error {
+	// Add some data in a transaction. It could restart, but we return nil
+	// intentionally (i.e. we're giving up if we don't succeed immediately,
+	// this is all about generating events and we don't check success).
+	if err = db.Txn(func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.Put("a", "asdf")
 		b.Put("c", "jkl;")
-		return txn.CommitInBatch(b)
-	})
-	if err != nil {
+		err := txn.CommitInBatch(b)
+		if err != nil {
+			log.Warning(err)
+		}
+		return nil
+	}); err != nil {
 		t.Fatalf("error putting data to db: %s", err)
 	}
 
@@ -227,9 +233,14 @@ func TestServerNodeEventFeed(t *testing.T) {
 		t.Fatalf("error getting data from db: %s", err)
 	}
 
-	// Scan, which should fail.
-	if _, err = db.Scan("b", "a", 0); err == nil {
-		t.Fatal("expected scan to fail")
+	// Scan, which should fail (before it makes it to server, so this won't
+	// be tracked)
+	if _, err := db.Scan("b", "a", 0); !testutils.IsError(err, "empty batch") {
+		t.Fatal("unexpected Scan error: %v", err)
+	}
+
+	if err := db.CPut("test", "will", "fail"); !testutils.IsError(err, "unexpected value") {
+		t.Fatal("unexpected CPut error: %v", err)
 	}
 
 	// Close feed and wait for reader to receive all events.
@@ -238,11 +249,12 @@ func TestServerNodeEventFeed(t *testing.T) {
 
 	expectedNodeEvents := map[roachpb.NodeID][]string{
 		roachpb.NodeID(1): {
+			"BeginTransaction",
 			"Put",
 			"Put",
 			"EndTransaction",
 			"Get",
-			"failed Scan",
+			"failed ConditionalPut",
 		},
 	}
 
