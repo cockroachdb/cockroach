@@ -93,13 +93,12 @@ func (r *Registry) Histogram(name string, duration time.Duration, unit Unit, max
 
 // Latency is a convenience function which registers histograms with
 // suitable defaults for latency tracking on millisecond to minute time scales.
-// The generated names of the metric can be controlled via the given format
-// string.
-func (r *Registry) Latency(format string) Histograms {
+// The generated names of the metric will begin with the given prefix.
+func (r *Registry) Latency(prefix string) Histograms {
 	windows := []timeScale{scale1M, scale10M, scale1H}
 	hs := make([]*Histogram, 0, 3)
 	for _, w := range windows {
-		h := r.Histogram(fmt.Sprintf(format, w.name), w.d, UnitMs, MaxMinute, 2)
+		h := r.Histogram(prefix+w.name, w.d, UnitMs, MaxMinute, 2)
 		hs = append(hs, h)
 	}
 	return hs
@@ -137,14 +136,13 @@ func (r *Registry) Rate(name string, timescale time.Duration) *Rate {
 	return e
 }
 
-// Rates returns a slice of EWMAs with the given format string and
+// Rates returns a slice of EWMAs prefixed with the given name and
 // various "standard" timescales.
-func (r *Registry) Rates(format string) Rates {
+func (r *Registry) Rates(prefix string) Rates {
 	scales := []timeScale{scale1M, scale10M, scale1H}
 	es := make([]*Rate, 0, len(scales))
 	for _, scale := range scales {
-		es = append(es, r.Rate(fmt.Sprintf(format, scale.name),
-			scale.d))
+		es = append(es, r.Rate(prefix+scale.name, scale.d))
 	}
 	return es
 }

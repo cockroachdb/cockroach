@@ -86,7 +86,7 @@ func newExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, me
 		reCache:  parser.NewRegexpCache(512),
 		leaseMgr: leaseMgr,
 
-		latency: metaRegistry.Latency("sql.latency%s"),
+		latency: metaRegistry.Latency("sql.latency"),
 	}
 	exec.systemConfigCond = sync.NewCond(&exec.systemConfigMu)
 
