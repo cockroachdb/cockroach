@@ -204,12 +204,9 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 	done := make(chan *netrpc.Call, 10)
 	c.getGossip(g, addr, lAddr, done)
 
-	// Register a callback for gossip updates.
-	updateCallback := func(_ string, _ roachpb.Value) {
-		c.sendGossip(g, addr, lAddr, done)
-	}
 	// Defer calling "undoer" callback returned from registration.
-	defer g.RegisterCallback(".*", updateCallback)()
+	gossipC, unregister := g.is.registerUpdateChannel(".*")
+	defer unregister()
 
 	// Loop until stopper is signalled, or until either the gossip or
 	// RPC clients are closed. getGossip is a hanging get, returning
@@ -242,6 +239,9 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 				g.mu.Unlock()
 				c.sendGossip(g, addr, lAddr, done)
 			}
+		case n := <-gossipC:
+			c.sendGossip(g, addr, lAddr, done)
+			gossipC <- n
 		case <-c.rpcClient.Closed:
 			return util.Errorf("client closed")
 		case <-c.closer:

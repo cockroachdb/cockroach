@@ -28,13 +28,16 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
 func TestGossipInfoStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), nil)
-	g := New(rpcContext, TestBootstrap)
+	g := New(rpcContext, TestBootstrap, stopper)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	slice := []byte("b")
@@ -51,6 +54,8 @@ func TestGossipInfoStore(t *testing.T) {
 
 func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
 	resolverSpecs := []string{
 		"127.0.0.1:9000",
 		"tcp=127.0.0.1:9001",
@@ -72,7 +77,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	if len(resolvers) != 6 {
 		t.Errorf("expected 6 resolvers; got %d", len(resolvers))
 	}
-	g := New(nil, resolvers)
+	g := New(nil, resolvers, stopper)
 
 	// Using specified resolvers, fetch bootstrap addresses 10 times
 	// and verify the results match expected addresses.

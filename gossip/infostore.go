@@ -27,13 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
-
-// callback holds regexp pattern match and GossipCallback method.
-type callback struct {
-	pattern *regexp.Regexp
-	method  Callback
-}
 
 // infoStore objects manage maps of Info objects. They maintain a
 // sequence number generator which they use to allocate new info
@@ -50,7 +45,14 @@ type infoStore struct {
 	NodeID          roachpb.NodeID      `json:"-"`               // Owning node's ID
 	NodeAddr        util.UnresolvedAddr `json:"-"`               // Address of node owning this info store: "host:port"
 	highWaterStamps map[int32]int64     // High water timestamps for known gossip peers
-	callbacks       []*callback
+	registrations   []*registration
+	requestC        chan notificationRequest
+	stopper         *stop.Stopper
+}
+
+type registration struct {
+	pattern *regexp.Regexp
+	out     chan Notification
 }
 
 var monoTime struct {
@@ -98,13 +100,17 @@ func (is *infoStore) String() string {
 }
 
 // newInfoStore allocates and returns a new infoStore.
-func newInfoStore(nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr) infoStore {
-	return infoStore{
+func newInfoStore(nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr, stopper *stop.Stopper) infoStore {
+	is := infoStore{
 		Infos:           make(infoMap),
 		NodeID:          nodeID,
 		NodeAddr:        nodeAddr,
 		highWaterStamps: map[int32]int64{},
+		requestC:        make(chan notificationRequest),
+		stopper:         stopper,
 	}
+	startBufferedNotifier(is.requestC, is.stopper)
+	return is
 }
 
 // newInfo allocates and returns a new info object using specified key,
@@ -171,7 +177,7 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 			is.highWaterStamps[int32(i.NodeID)] = i.OrigStamp
 		}
 	}
-	is.processCallbacks(key, i.Value)
+	is.processNotifications(key, i.Value)
 	return nil
 }
 
@@ -201,52 +207,56 @@ func (is *infoStore) getHighWaterStamps() map[int32]int64 {
 	return copy
 }
 
-// registerCallback registers a callback for a key pattern to be
-// invoked whenever new info for a gossip key matching pattern is
-// received. The callback method is invoked with the info key which
-// matched pattern. Returns a function to unregister the callback.
-func (is *infoStore) registerCallback(pattern string, method Callback) func() {
+// registerUpdateChannel registers and returns a channel for a key pattern
+// to be notified whenever new info for a gossip key matching pattern is
+// received. The channel is passed the info key which matched the pattern
+// and the new content, and is expected to be passed back to the channel when
+// it has been consumed. Also returns a function to unregister the channel.
+func (is *infoStore) registerUpdateChannel(pattern string) (chan Notification, func()) {
 	re := regexp.MustCompile(pattern)
-	cb := &callback{pattern: re, method: method}
-	is.callbacks = append(is.callbacks, cb)
+	reg := &registration{re, make(chan Notification)}
+	is.registrations = append(is.registrations, reg)
+
 	if err := is.visitInfos(func(key string, i *Info) error {
 		if re.MatchString(key) {
-			// Run callbacks in a goroutine to avoid mutex reentry.
-			go method(key, i.Value)
+			req := notificationRequest{reg.out, Notification{key, i.Value}}
+			select {
+			case is.requestC <- req:
+			case <-is.stopper.ShouldStop():
+			}
 		}
 		return nil
 	}); err != nil {
 		panic(err)
 	}
-	return func() {
-		for i, targetCB := range is.callbacks {
-			if targetCB == cb {
-				numCBs := len(is.callbacks)
-				is.callbacks[i] = is.callbacks[numCBs-1]
-				is.callbacks = is.callbacks[:numCBs-1]
+
+	return reg.out, func() {
+		for i, targetReg := range is.registrations {
+			if targetReg == reg {
+				numRegs := len(is.registrations)
+				is.registrations[i] = is.registrations[numRegs-1]
+				is.registrations = is.registrations[:numRegs-1]
 				break
 			}
 		}
 	}
 }
 
-// processCallbacks processes callbacks for the specified key by
-// matching callback regular expression against the key and invoking
-// the corresponding callback method on a match.
-func (is *infoStore) processCallbacks(key string, content roachpb.Value) {
-	var matches []Callback
-	for _, cb := range is.callbacks {
-		if cb.pattern.MatchString(key) {
-			matches = append(matches, cb.method)
+// processNotifications notified channels for the specified key by
+// matching callback regular expression against the key and sending
+// notification requests to the notifier for that channel.
+func (is *infoStore) processNotifications(key string, content roachpb.Value) {
+	n := Notification{key, content}
+	for _, reg := range is.registrations {
+		if reg.pattern.MatchString(n.Key) {
+			req := notificationRequest{reg.out, n}
+			select {
+			case is.requestC <- req:
+			case <-is.stopper.ShouldStop():
+				return
+			}
 		}
 	}
-
-	// Run callbacks in a goroutine to avoid mutex reentry.
-	go func() {
-		for _, method := range matches {
-			method(key, content)
-		}
-	}()
 }
 
 // visitInfos implements a visitor pattern to run the visitInfo
@@ -353,4 +363,48 @@ func (is *infoStore) leastUseful(nodes nodeSet) roachpb.NodeID {
 		}
 	}
 	return leastNode
+}
+
+type notificationRequest struct {
+	c chan Notification
+	n Notification
+}
+
+// startBufferedNotifier runs a new worker that reads notification
+// requests from a provided input channel into a queue, and sends notifications
+// in order to the specified channels in the notification requests. The
+// notifier avoids blocking on its input channel at all cost. Additionally,
+// it will wait for a response on each notification channel before proceeding.
+func startBufferedNotifier(input chan notificationRequest, stopper *stop.Stopper) {
+	stopper.RunWorker(func() {
+		var requestQueue []notificationRequest
+		for {
+			// toReq.c channel will be nil if queue is empty, so
+			// it will be ignored in the select statement.
+			var topReq notificationRequest
+			if len(requestQueue) > 0 {
+				topReq = requestQueue[0]
+			}
+
+			select {
+			case topReq.c <- topReq.n:
+				requestQueue = requestQueue[1:]
+				responded := false
+				for !responded {
+					select {
+					case <-topReq.c:
+						responded = true
+					case re := <-input:
+						// Continue adding to request queue, even
+						// while waiting for current response.
+						requestQueue = append(requestQueue, re)
+					}
+				}
+			case re := <-input:
+				requestQueue = append(requestQueue, re)
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
 }

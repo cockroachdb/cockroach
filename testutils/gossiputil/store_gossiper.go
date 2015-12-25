@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // StoreGossiper allows tests to push storeDescriptors into gossip and
@@ -37,16 +38,26 @@ type StoreGossiper struct {
 
 // NewStoreGossiper creates a store gossiper for use by tests. It adds the
 // callback to gossip.
-func NewStoreGossiper(g *gossip.Gossip) *StoreGossiper {
+func NewStoreGossiper(g *gossip.Gossip, stopper *stop.Stopper) *StoreGossiper {
 	sg := &StoreGossiper{
 		g:           g,
 		storeKeyMap: make(map[string]struct{}),
 	}
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(key string, _ roachpb.Value) {
-		sg.mu.Lock()
-		defer sg.mu.Unlock()
-		if _, ok := sg.storeKeyMap[key]; ok {
-			sg.wg.Done()
+	gossipC, unregister := g.RegisterUpdateChannel(gossip.MakePrefixPattern(gossip.KeyStorePrefix))
+	stopper.RunWorker(func() {
+		for {
+			select {
+			case n := <-gossipC:
+				sg.mu.Lock()
+				if _, ok := sg.storeKeyMap[n.Key]; ok {
+					sg.wg.Done()
+				}
+				sg.mu.Unlock()
+				gossipC <- n
+			case <-stopper.ShouldStop():
+				unregister()
+				return
+			}
 		}
 	})
 	return sg

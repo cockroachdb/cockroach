@@ -85,11 +85,11 @@ func newExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, st
 	}
 	exec.systemConfigCond = sync.NewCond(&exec.systemConfigMu)
 
-	gossipUpdateC := gossip.RegisterSystemConfigChannel()
+	configUpdateC := gossip.RegisterSystemConfigChannel()
 	stopper.RunWorker(func() {
 		for {
 			select {
-			case <-gossipUpdateC:
+			case <-configUpdateC:
 				cfg := gossip.GetSystemConfig()
 				exec.updateSystemConfig(cfg)
 			case <-stopper.ShouldStop():

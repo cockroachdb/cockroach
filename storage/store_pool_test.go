@@ -57,7 +57,7 @@ func createTestStorePool(timeUntilStoreDead time.Duration) (*stop.Stopper, *goss
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
 	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
-	g := gossip.New(rpcContext, gossip.TestBootstrap)
+	g := gossip.New(rpcContext, gossip.TestBootstrap, stopper)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	storePool := NewStorePool(g, clock, timeUntilStoreDead, stopper)
@@ -70,7 +70,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, _, sp := createTestStorePool(TestTimeUntilStoreDead)
 	defer stopper.Stop()
-	sg := gossiputil.NewStoreGossiper(g)
+	sg := gossiputil.NewStoreGossiper(g, stopper)
 
 	sp.mu.RLock()
 	if _, ok := sp.stores[2]; ok {
@@ -113,13 +113,13 @@ func waitUntilDead(t *testing.T, mc *hlc.ManualClock, sp *StorePool, storeID roa
 	})
 }
 
-// TestStorePoolGossipUpdate ensures that a store is marked as dead after it
+// TestStorePoolDies ensures that a store is marked as dead after it
 // times out and that it will be revived after a new update is received.
 func TestStorePoolDies(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, mc, sp := createTestStorePool(TestTimeUntilStoreDead)
 	defer stopper.Stop()
-	sg := gossiputil.NewStoreGossiper(g)
+	sg := gossiputil.NewStoreGossiper(g, stopper)
 	sg.GossipStores(uniqueStore, t)
 
 	{
@@ -220,7 +220,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	// We're going to manually mark stores dead in this test.
 	stopper, g, _, sp := createTestStorePool(TestTimeUntilStoreDeadOff)
 	defer stopper.Stop()
-	sg := gossiputil.NewStoreGossiper(g)
+	sg := gossiputil.NewStoreGossiper(g, stopper)
 	required := []string{"ssd", "dc"}
 	// Nothing yet.
 	if sl := sp.getStoreList(roachpb.Attributes{Attrs: required}, false); len(sl.stores) != 0 {
@@ -287,7 +287,7 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, _, sp := createTestStorePool(TestTimeUntilStoreDeadOff)
 	defer stopper.Stop()
-	sg := gossiputil.NewStoreGossiper(g)
+	sg := gossiputil.NewStoreGossiper(g, stopper)
 	sg.GossipStores(uniqueStore, t)
 
 	if detail := sp.getStoreDetail(roachpb.StoreID(1)); detail.dead {
@@ -303,7 +303,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, mc, sp := createTestStorePool(TestTimeUntilStoreDead)
 	defer stopper.Stop()
-	sg := gossiputil.NewStoreGossiper(g)
+	sg := gossiputil.NewStoreGossiper(g, stopper)
 
 	stores := []*roachpb.StoreDescriptor{
 		{
