@@ -97,7 +97,7 @@ func (rsr *RuntimeStatRecorder) record(timestampNanos int64, name string,
 // separated into a monitor and a recorder.
 //
 // TODO(tschottdorf): turn various things here into gauges and register them
-// with the transient stats registry.
+// with the metrics registry.
 func (rsr *RuntimeStatRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
 	data := make([]ts.TimeSeriesData, 0, rsr.lastDataCount)
 

@@ -163,7 +163,7 @@ func NewNode(ctx storage.StoreContext, metaRegistry *metric.Registry, stopper *s
 	return &Node{
 		ctx:     ctx,
 		stopper: stopper,
-		status:  status.NewNodeStatusMonitor(metaRegistry, stopper.ShouldStop()),
+		status:  status.NewNodeStatusMonitor(metaRegistry),
 		stores:  storage.NewStores(),
 	}
 }

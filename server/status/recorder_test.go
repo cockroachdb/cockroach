@@ -123,7 +123,7 @@ func TestNodeStatusRecorder(t *testing.T) {
 	// Create a monitor and a recorder which uses the monitor.
 	closer := make(chan struct{})
 	close(closer) // shut down all moving parts right away.
-	monitor := NewNodeStatusMonitor(metric.NewRegistry(closer), closer)
+	monitor := NewNodeStatusMonitor(metric.NewRegistry())
 	manual := hlc.NewManualClock(100)
 	recorder := NewNodeStatusRecorder(monitor, hlc.NewClock(manual.UnixNano))
 
