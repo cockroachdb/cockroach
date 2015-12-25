@@ -359,7 +359,7 @@ type Notification struct {
 // A function to unregister the notification channel is also returned.
 func (g *Gossip) RegisterUpdateChannel(pattern string) (chan Notification, func()) {
 	if pattern == KeySystemConfig {
-		log.Warningf("raw gossip callback registered on %s, consider using RegisterSystemConfigCallback",
+		log.Warningf("raw gossip callback registered on %s, consider using RegisterSystemConfigChannel",
 			KeySystemConfig)
 	}
 
@@ -380,8 +380,6 @@ func (g *Gossip) GetSystemConfig() *config.SystemConfig {
 	defer g.systemConfigMu.RUnlock()
 	return g.systemConfig
 }
-
-type systemConfigCallback func(*config.SystemConfig)
 
 // RegisterSystemConfigChannel registers a channel to signify updates for the
 // system config. It is notified after registration, and whenever a new
