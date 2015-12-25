@@ -33,8 +33,8 @@ var _ Iterable = &Histogram{}
 var _ Iterable = &Rate{}
 
 type periodic interface {
-	tickInterval() time.Duration
-	tickFn()
+	nextTick() time.Time
+	tick()
 }
 
 var _ periodic = &Histogram{}
@@ -58,23 +58,6 @@ func NewRegistry(closer <-chan struct{}) *Registry {
 	}
 }
 
-func periodicAction(pi periodic, closer <-chan struct{}) {
-	d := pi.tickInterval()
-	if d <= 0 {
-		return
-	}
-	t := time.NewTicker(d)
-	defer t.Stop()
-	for {
-		select {
-		case <-closer:
-			return
-		case <-t.C:
-			pi.tickFn()
-		}
-	}
-}
-
 // Add links the given Iterable into this registry using the given format
 // string. The individual items in the registry will be formatted via
 // fmt.Sprintf(format, <name>). As a special case, metrics itself also implement
@@ -82,11 +65,6 @@ func periodicAction(pi periodic, closer <-chan struct{}) {
 func (r *Registry) Add(format string, item Iterable) {
 	r.Lock()
 	r.tracked[format] = item
-	if pi, ok := item.(periodic); ok {
-		// TODO(tschottdorf): lots of goroutines to be saved here in exchange
-		// for a little complexity.
-		go periodicAction(pi, r.closer)
-	}
 	r.Unlock()
 }
 
@@ -126,24 +104,30 @@ type MaxVal int64
 // MaxMinute truncates histogram values larger than one minute.
 const MaxMinute = MaxVal(time.Minute)
 
+func maybeTick(m periodic) {
+	for m.nextTick().Before(time.Now()) {
+		m.tick()
+	}
+}
+
 // A Histogram is a wrapper around an hdrhistogram.WindowedHistogram.
 type Histogram struct {
-	unit     int64
-	interval time.Duration
-	maxVal   int64
+	unit   int64
+	maxVal int64
 
 	mu       sync.Mutex
 	windowed *hdrhistogram.WindowedHistogram
+	interval time.Duration
+	nextT    time.Time
 }
 
-func (h *Histogram) tickInterval() time.Duration {
-	return h.interval
-}
-
-func (h *Histogram) tickFn() {
-	h.mu.Lock()
+func (h *Histogram) tick() {
+	h.nextT = h.nextT.Add(h.interval)
 	h.windowed.Rotate()
-	h.mu.Unlock()
+}
+
+func (h *Histogram) nextTick() time.Time {
+	return h.nextT
 }
 
 // Histogram registers a new windowed HDRHistogram with the given
@@ -155,6 +139,7 @@ func (r *Registry) Histogram(name string, duration time.Duration, unit Unit, max
 	h.maxVal = int64(maxVal)
 	h.unit = int64(unit)
 	h.interval = duration / n
+	h.nextT = time.Now()
 
 	h.windowed = hdrhistogram.NewWindowed(n, 0, h.maxVal/h.unit, sigFigs)
 	r.Add(name, h)
@@ -179,6 +164,7 @@ func (r *Registry) Latency(format string) Histograms {
 func (h *Histogram) MarshalJSON() ([]byte, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	maybeTick(h)
 	return json.Marshal(h.windowed.Merge().CumulativeDistribution())
 }
 
@@ -186,6 +172,7 @@ func (h *Histogram) MarshalJSON() ([]byte, error) {
 func (h *Histogram) RecordValue(v int64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	maybeTick(h)
 	v /= h.unit
 	for h.windowed.Current.RecordValue(v) != nil {
 		v = h.maxVal / h.unit
@@ -196,6 +183,7 @@ func (h *Histogram) RecordValue(v int64) {
 func (h *Histogram) Each(f func(string, interface{})) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	maybeTick(h)
 	f("", h)
 }
 
@@ -251,11 +239,11 @@ func (r *Registry) Gauge(name string) *Gauge {
 
 // A Rate is a exponential weighted moving average.
 type Rate struct {
+	mu       sync.Mutex // protects fields below
+	curSum   float64
+	wrapped  ewma.MovingAverage
 	interval time.Duration
-
-	mu      sync.Mutex // protects fields below
-	curSum  float64
-	wrapped ewma.MovingAverage
+	nextT    time.Time
 }
 
 // Rate registers an EWMA rate over the given timescale. Timescales at
@@ -269,26 +257,27 @@ func (r *Registry) Rate(name string, timescale time.Duration) *Rate {
 
 	e := &Rate{
 		interval: tickInterval,
+		nextT:    time.Now(),
 		wrapped:  ewma.NewMovingAverage(avgAge),
 	}
 	r.Add(name, e)
 	return e
 }
 
-func (e *Rate) tickInterval() time.Duration {
-	return e.interval
+func (e *Rate) nextTick() time.Time {
+	return e.nextT
 }
 
-func (e *Rate) tickFn() {
-	e.mu.Lock()
+func (e *Rate) tick() {
+	e.nextT = e.nextT.Add(e.interval)
 	e.wrapped.Add(e.curSum)
 	e.curSum = 0
-	e.mu.Unlock()
 }
 
 // Add adds the given measurement to the Rate.
 func (e *Rate) Add(v float64) {
 	e.mu.Lock()
+	maybeTick(e)
 	e.curSum += v
 	e.mu.Unlock()
 }
@@ -297,6 +286,7 @@ func (e *Rate) Add(v float64) {
 func (e *Rate) Each(f func(string, interface{})) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	maybeTick(e)
 	f("", e.wrapped.Value())
 }
 
@@ -304,6 +294,7 @@ func (e *Rate) Each(f func(string, interface{})) {
 func (e *Rate) MarshalJSON() ([]byte, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	maybeTick(e)
 	return json.Marshal(e.wrapped.Value())
 }
 

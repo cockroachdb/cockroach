@@ -41,8 +41,6 @@ type NodeStatusMonitor struct {
 	numSuccess  *metric.Counter
 	numError    *metric.Counter
 
-	closer <-chan struct{}
-
 	sync.RWMutex // Mutex to guard the following fields
 	registry     *metric.Registry
 	metaRegistry *metric.Registry
@@ -52,8 +50,8 @@ type NodeStatusMonitor struct {
 }
 
 // NewNodeStatusMonitor initializes a new NodeStatusMonitor instance.
-func NewNodeStatusMonitor(metaRegistry *metric.Registry, closer <-chan struct{}) *NodeStatusMonitor {
-	registry := metric.NewRegistry(closer)
+func NewNodeStatusMonitor(metaRegistry *metric.Registry) *NodeStatusMonitor {
+	registry := metric.NewRegistry()
 	return &NodeStatusMonitor{
 		latency:     registry.Latency("latency%s"),
 		rateSuccess: registry.Rates("exec.rate.success%s"),
@@ -63,7 +61,6 @@ func NewNodeStatusMonitor(metaRegistry *metric.Registry, closer <-chan struct{})
 
 		registry:     registry,
 		metaRegistry: metaRegistry,
-		closer:       closer,
 		stores:       make(map[roachpb.StoreID]*StoreStatusMonitor),
 	}
 }
@@ -85,7 +82,7 @@ func (nsm *NodeStatusMonitor) GetStoreMonitor(id roachpb.StoreID) *StoreStatusMo
 	if s, ok = nsm.stores[id]; ok {
 		return s
 	}
-	s = NewStoreStatusMonitor(id, nsm.metaRegistry, nsm.closer)
+	s = NewStoreStatusMonitor(id, nsm.metaRegistry)
 	nsm.stores[id] = s
 	return s
 }
@@ -268,8 +265,8 @@ type StoreStatusMonitor struct {
 }
 
 // NewStoreStatusMonitor constructs a StoreStatusMonitor with the given ID.
-func NewStoreStatusMonitor(id roachpb.StoreID, metaRegistry *metric.Registry, closer <-chan struct{}) *StoreStatusMonitor {
-	registry := metric.NewRegistry(closer)
+func NewStoreStatusMonitor(id roachpb.StoreID, metaRegistry *metric.Registry) *StoreStatusMonitor {
+	registry := metric.NewRegistry()
 	// Format as `cr.store.<metric>.<id>` in output, in analogy to the time
 	// series data written.
 	metaRegistry.Add(storeTimeSeriesPrefix+"%s."+id.String(), registry)
