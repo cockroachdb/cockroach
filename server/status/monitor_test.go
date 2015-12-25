@@ -59,7 +59,7 @@ func TestNodeStatusMonitor(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	feed := util.NewFeed(stopper)
-	monitor := NewNodeStatusMonitor(metric.NewRegistry(stopper.ShouldStop()), stopper.ShouldStop())
+	monitor := NewNodeStatusMonitor(metric.NewRegistry())
 	monitor.StartMonitorFeed(feed)
 
 	for i := 0; i < 3; i++ {

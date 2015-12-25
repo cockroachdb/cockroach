@@ -81,7 +81,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	// (or attach LocalRPCTransport.Close to the stopper)
 	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
 	ctx.EventFeed = util.NewFeed(stopper)
-	node := NewNode(ctx, metric.NewRegistry(stopper.ShouldStop()), stopper)
+	node := NewNode(ctx, metric.NewRegistry(), stopper)
 	return rpcServer, ln.Addr(), ctx.Clock, node, stopper
 }
 

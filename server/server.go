@@ -111,7 +111,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		ctx:          ctx,
 		mux:          http.NewServeMux(),
 		clock:        hlc.NewClock(hlc.UnixNano),
-		metaRegistry: metric.NewRegistry(stopper.ShouldStop()),
+		metaRegistry: metric.NewRegistry(),
 		stopper:      stopper,
 	}
 	s.clock.SetMaxOffset(ctx.MaxOffset)
