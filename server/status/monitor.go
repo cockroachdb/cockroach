@@ -53,9 +53,9 @@ type NodeStatusMonitor struct {
 func NewNodeStatusMonitor(metaRegistry *metric.Registry) *NodeStatusMonitor {
 	registry := metric.NewRegistry()
 	return &NodeStatusMonitor{
-		latency:     registry.Latency("latency%s"),
-		rateSuccess: registry.Rates("exec.rate.success%s"),
-		rateError:   registry.Rates("exec.rate.error%s"),
+		latency:     registry.Latency("latency"),
+		rateSuccess: registry.Rates("exec.rate.success"),
+		rateError:   registry.Rates("exec.rate.error"),
 		numSuccess:  registry.Counter("exec.num.success"),
 		numError:    registry.Counter("exec.num.error"),
 
