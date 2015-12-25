@@ -150,11 +150,8 @@ func TestKVDBCoverage(t *testing.T) {
 	}
 }
 
-// TestKVDBInternalMethods verifies no internal methods are available
-// HTTP DB interface.
 func TestKVDBInternalMethods(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("test broken & disabled; obsolete after after #2271")
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
@@ -185,8 +182,8 @@ func TestKVDBInternalMethods(t *testing.T) {
 		err := db.Run(b)
 		if err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, args.Method())
-		} else if !testutils.IsError(err, "(couldn't find method|contains commit trigger)") {
-			t.Errorf("%d: expected missing method %s; got %s", i, args.Method(), err)
+		} else if !testutils.IsError(err, "contains an internal request|contains commit trigger") {
+			t.Errorf("%d: unexpected error for %s: %s", i, args.Method(), err)
 		}
 	}
 }
