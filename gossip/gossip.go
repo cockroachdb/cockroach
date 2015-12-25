@@ -117,7 +117,6 @@ type Gossip struct {
 	clients       []*client           // Slice of clients
 	disconnected  chan *client        // Channel of disconnected clients
 	stalled       chan struct{}       // Channel to wakeup stalled bootstrap
-	stopper       *stop.Stopper       // Stopper to stop gossip notifications
 
 	// The system config is treated unlike other info objects.
 	// It is used so often that we keep an unmarshalled version of it
@@ -147,7 +146,6 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.S
 		stalled:       make(chan struct{}, 1),
 		resolverIdx:   len(resolvers) - 1,
 		resolvers:     resolvers,
-		stopper:       stopper,
 	}
 	// The gossip RPC context doesn't measure clock offsets, isn't
 	// shared with the other RPC clients which the node may be using,
@@ -161,14 +159,14 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.S
 	}
 
 	// Add ourselves as a SystemConfig watcher.
-	updateC, _ := g.is.registerUpdateChannel(KeySystemConfig)
-	stopper.RunWorker(func() {
+	updateC, _ := g.RegisterUpdateChannel(KeySystemConfig)
+	g.stopper.RunWorker(func() {
 		for {
 			select {
 			case n := <-updateC:
 				g.updateSystemConfig(n)
 				updateC <- n
-			case <-stopper.ShouldStop():
+			case <-g.stopper.ShouldStop():
 				return
 			}
 		}

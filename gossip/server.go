@@ -230,8 +230,9 @@ func (s *server) start(rpcServer *rpc.Server, addr net.Addr) {
 	rpcServer.AddOpenCallback(s.onOpen)
 	rpcServer.AddCloseCallback(s.onClose)
 
-	// Defer calling "undoer" callback returned from registration.
+	s.mu.Lock()
 	gossipC, unregister := s.is.registerUpdateChannel(".*")
+	s.mu.Unlock()
 	s.stopper.RunWorker(func() {
 		for {
 			select {

@@ -205,7 +205,7 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 	c.getGossip(g, addr, lAddr, done)
 
 	// Defer calling "undoer" callback returned from registration.
-	gossipC, unregister := g.is.registerUpdateChannel(".*")
+	gossipC, unregister := g.RegisterUpdateChannel(".*")
 	defer unregister()
 
 	// Loop until stopper is signalled, or until either the gossip or
