@@ -238,23 +238,26 @@ func TestScannerTiming(t *testing.T) {
 		25 * time.Millisecond,
 	}
 	for i, duration := range durations {
-		ranges := newTestRangeSet(count, t)
-		q := &testQueue{}
-		s := newReplicaScanner(duration, 0, ranges)
-		s.AddQueues(q)
-		mc := hlc.NewManualClock(0)
-		clock := hlc.NewClock(mc.UnixNano)
-		stopper := stop.NewStopper()
-		s.Start(clock, stopper)
-		time.Sleep(runTime)
-		stopper.Stop()
+		util.SucceedsWithin(t, 10*time.Second, func() error {
+			ranges := newTestRangeSet(count, t)
+			q := &testQueue{}
+			s := newReplicaScanner(duration, 0, ranges)
+			s.AddQueues(q)
+			mc := hlc.NewManualClock(0)
+			clock := hlc.NewClock(mc.UnixNano)
+			stopper := stop.NewStopper()
+			s.Start(clock, stopper)
+			time.Sleep(runTime)
+			stopper.Stop()
 
-		avg := s.avgScan()
-		log.Infof("%d: average scan: %s", i, avg)
-		if avg.Nanoseconds()-duration.Nanoseconds() > maxError.Nanoseconds() ||
-			duration.Nanoseconds()-avg.Nanoseconds() > maxError.Nanoseconds() {
-			t.Errorf("expected %s, got %s: exceeds max error of %s", duration, avg, maxError)
-		}
+			avg := s.avgScan()
+			log.Infof("%d: average scan: %s", i, avg)
+			if avg.Nanoseconds()-duration.Nanoseconds() > maxError.Nanoseconds() ||
+				duration.Nanoseconds()-avg.Nanoseconds() > maxError.Nanoseconds() {
+				return util.Errorf("expected %s, got %s: exceeds max error of %s", duration, avg, maxError)
+			}
+			return nil
+		})
 	}
 }
 

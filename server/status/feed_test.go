@@ -236,11 +236,11 @@ func TestServerNodeEventFeed(t *testing.T) {
 	// Scan, which should fail (before it makes it to server, so this won't
 	// be tracked)
 	if _, err := db.Scan("b", "a", 0); !testutils.IsError(err, "empty batch") {
-		t.Fatal("unexpected Scan error: %v", err)
+		t.Fatalf("unexpected Scan error: %v", err)
 	}
 
 	if err := db.CPut("test", "will", "fail"); !testutils.IsError(err, "unexpected value") {
-		t.Fatal("unexpected CPut error: %v", err)
+		t.Fatalf("unexpected CPut error: %v", err)
 	}
 
 	// Close feed and wait for reader to receive all events.
