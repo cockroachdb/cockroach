@@ -18,6 +18,7 @@ package metric
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -43,12 +44,23 @@ func NewRegistry() *Registry {
 
 // Add links the given Iterable into this registry using the given format
 // string. The individual items in the registry will be formatted via
-// fmt.Sprintf(format, <name>). As a special case, metrics itself also implement
-// Iterable and can thus be added to a registry.
-func (r *Registry) Add(format string, item Iterable) {
+// fmt.Sprintf(format, <name>). As a special case, *Registry implements
+// Iterable and can thus be added.
+func (r *Registry) Add(format string, item Iterable) error {
 	r.Lock()
+	defer r.Unlock()
+	if _, ok := r.tracked[format]; ok {
+		return errors.New("format string already in use")
+	}
 	r.tracked[format] = item
-	r.Unlock()
+	return nil
+}
+
+// MustAdd calls Add and panics on error.
+func (r *Registry) MustAdd(format string, item Iterable) {
+	if err := r.Add(format, item); err != nil {
+		panic(err)
+	}
 }
 
 // Each calls the given closure for all metrics.
@@ -87,7 +99,7 @@ func (r *Registry) Histogram(name string, duration time.Duration, unit Unit, max
 	h.nextT = time.Now()
 
 	h.windowed = hdrhistogram.NewWindowed(n, 0, h.maxVal/h.unit, sigFigs)
-	r.Add(name, h)
+	r.MustAdd(name, h)
 	return h
 }
 
@@ -107,14 +119,14 @@ func (r *Registry) Latency(prefix string) Histograms {
 // Counter registers a new counter under the given name.
 func (r *Registry) Counter(name string) *Counter {
 	c := &Counter{metrics.NewCounter()}
-	r.Add(name, c)
+	r.MustAdd(name, c)
 	return c
 }
 
 // Gauge registers a new Gauge with the given name.
 func (r *Registry) Gauge(name string) *Gauge {
 	g := &Gauge{metrics.NewGauge()}
-	r.Add(name, g)
+	r.MustAdd(name, g)
 	return g
 }
 
@@ -132,7 +144,7 @@ func (r *Registry) Rate(name string, timescale time.Duration) *Rate {
 		nextT:    time.Now(),
 		wrapped:  ewma.NewMovingAverage(avgAge),
 	}
-	r.Add(name, e)
+	r.MustAdd(name, e)
 	return e
 }
 
