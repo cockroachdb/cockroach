@@ -230,10 +230,9 @@ func (e *Executor) ExecuteStatements(user string, session Session, stmts string,
 // Execute the statement(s) in the given request and returns a response.
 // On error, the returned integer is an HTTP error code.
 func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
-	{
-		tStart := time.Now()
-		defer func() { e.latency.RecordValue(time.Now().Sub(tStart).Nanoseconds()) }()
-	}
+	defer func(start time.Time) {
+		e.latency.RecordValue(time.Now().Sub(start).Nanoseconds())
+	}(time.Now())
 	var session Session
 	if err := proto.Unmarshal(args.Session, &session); err != nil {
 		return driver.Response{}, http.StatusBadRequest, err

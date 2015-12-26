@@ -47,6 +47,12 @@ var _ Iterable = &Counter{}
 var _ Iterable = &Histogram{}
 var _ Iterable = &Rate{}
 
+var _ json.Marshaler = &Gauge{}
+var _ json.Marshaler = &Counter{}
+var _ json.Marshaler = &Histogram{}
+var _ json.Marshaler = &Rate{}
+var _ json.Marshaler = &Registry{}
+
 type periodic interface {
 	nextTick() time.Time
 	tick()
