@@ -92,7 +92,7 @@ func verifyRequest(ba *roachpb.BatchRequest) error {
 
 		method := req.Method()
 
-		if int(method) > len(allExternalMethods) || allExternalMethods[method] == nil {
+		if int(method) >= len(allExternalMethods) || allExternalMethods[method] == nil {
 			return util.Errorf("Batch contains an internal request %s", method)
 		}
 	}

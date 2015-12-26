@@ -480,44 +480,91 @@ func TestTxnCoordSenderGC(t *testing.T) {
 // response transaction's timestamp and priority as appropriate.
 func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(tschottdorf): fix up and re-enable. It depends on each logical clock tick, so not fun.")
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
-	clock.SetMaxOffset(20)
-
+	origTS := makeTS(123, 0)
 	testCases := []struct {
-		err       error
-		expEpoch  uint32
-		expPri    int32
-		expTS     roachpb.Timestamp
-		expOrigTS roachpb.Timestamp
-		nodeSeen  bool
+		err              error
+		expEpoch         uint32
+		expPri           int32
+		expTS, expOrigTS roachpb.Timestamp
+		nodeSeen         bool
 	}{
-		{nil, 0, 1, makeTS(0, 1), makeTS(0, 1), false},
-		{&roachpb.ReadWithinUncertaintyIntervalError{
-			ExistingTimestamp: makeTS(10, 10)}, 1, 1, makeTS(10, 11),
-			makeTS(10, 11), true},
-		{&roachpb.TransactionAbortedError{Txn: roachpb.Transaction{
-			Timestamp: makeTS(20, 10), Priority: 10}}, 0, 10, makeTS(20, 10),
-			makeTS(0, 1), false},
-		{&roachpb.TransactionPushError{PusheeTxn: roachpb.Transaction{
-			Timestamp: makeTS(10, 10), Priority: int32(10)}}, 1, 9,
-			makeTS(10, 11), makeTS(10, 11), false},
-		{&roachpb.TransactionRetryError{Txn: roachpb.Transaction{
-			Timestamp: makeTS(10, 10), Priority: int32(10)}}, 1, 10,
-			makeTS(10, 10), makeTS(10, 10), false},
+		{
+			// No error, so nothing interesting either.
+			err:       nil,
+			expEpoch:  0,
+			expPri:    1,
+			expTS:     origTS,
+			expOrigTS: origTS,
+		},
+		{
+			// On uncertainty error, new epoch begins and node is seen.
+			// Timestamp moves ahead of the existing write.
+			err: &roachpb.ReadWithinUncertaintyIntervalError{
+				NodeID:            1,
+				ExistingTimestamp: origTS.Add(10, 10),
+			},
+			expEpoch:  1,
+			expPri:    1,
+			expTS:     origTS.Add(10, 11),
+			expOrigTS: origTS.Add(10, 11),
+			nodeSeen:  true,
+		},
+		{
+			// On abort, nothing changes but we get a new priority to use for
+			// the next attempt.
+			err: &roachpb.TransactionAbortedError{
+				Txn: roachpb.Transaction{
+					Timestamp: origTS.Add(20, 10), Priority: 10,
+				},
+			},
+			expPri: 10,
+		},
+		{
+			// On failed push, new epoch begins just past the pushed timestamp.
+			// Additionally, priority ratchets up to just below the pusher's.
+			err: &roachpb.TransactionPushError{
+				PusheeTxn: roachpb.Transaction{
+					Timestamp: origTS.Add(10, 10),
+					Priority:  int32(10)},
+			},
+			expEpoch:  1,
+			expPri:    9,
+			expTS:     origTS.Add(10, 11),
+			expOrigTS: origTS.Add(10, 11),
+		},
+		{
+			// On retry, restart with new epoch, timestamp and priority.
+			err: &roachpb.TransactionRetryError{
+				Txn: roachpb.Transaction{
+					Timestamp: origTS.Add(10, 10), Priority: int32(10)},
+			},
+			expEpoch:  1,
+			expPri:    10,
+			expTS:     origTS.Add(10, 10),
+			expOrigTS: origTS.Add(10, 10),
+		},
 	}
 
 	for i, test := range testCases {
 		stopper := stop.NewStopper()
-		ts := NewTxnCoordSender(senderFn(func(_ context.Context, _ roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			return nil, roachpb.NewError(test.err)
+
+		manual := hlc.NewManualClock(origTS.WallTime)
+		clock := hlc.NewClock(manual.UnixNano)
+		clock.SetMaxOffset(20)
+
+		ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			var reply *roachpb.BatchResponse
+			if test.err == nil {
+				reply = ba.CreateReply()
+			}
+			return reply, roachpb.NewError(test.err)
 		}), clock, false, nil, stopper)
 		db := client.NewDB(ts)
 		txn := client.NewTxn(*db)
 		txn.InternalSetPriority(1)
 		txn.Proto.Name = "test txn"
-		err := txn.Put(roachpb.Key("test-key"), []byte("value"))
+		key := roachpb.Key("test-key")
+		_, err := txn.Get(key)
 		teardownHeartbeats(ts)
 		stopper.Stop()
 
