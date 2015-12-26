@@ -159,7 +159,7 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.S
 	}
 
 	// Add ourselves as a SystemConfig watcher.
-	updateC, _ := g.RegisterUpdateChannel(KeySystemConfig)
+	updateC, unregister := g.RegisterUpdateChannel(KeySystemConfig)
 	g.stopper.RunWorker(func() {
 		for {
 			select {
@@ -167,6 +167,7 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.S
 				g.updateSystemConfig(n)
 				updateC <- n
 			case <-g.stopper.ShouldStop():
+				unregister()
 				return
 			}
 		}
