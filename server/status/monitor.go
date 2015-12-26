@@ -203,7 +203,7 @@ func (nsm *NodeStatusMonitor) OnStartNode(event *StartNodeEvent) {
 	nsm.startedAt = event.StartedAt
 	nsm.desc = event.Desc
 	// Outputs using format `<prefix>.<metric>.<id>`.
-	nsm.metaRegistry.Add(nodeTimeSeriesPrefix+"%s."+event.Desc.NodeID.String(),
+	nsm.metaRegistry.MustAdd(nodeTimeSeriesPrefix+"%s."+event.Desc.NodeID.String(),
 		nsm.registry)
 }
 
@@ -269,7 +269,7 @@ func NewStoreStatusMonitor(id roachpb.StoreID, metaRegistry *metric.Registry) *S
 	registry := metric.NewRegistry()
 	// Format as `cr.store.<metric>.<id>` in output, in analogy to the time
 	// series data written.
-	metaRegistry.Add(storeTimeSeriesPrefix+"%s."+id.String(), registry)
+	metaRegistry.MustAdd(storeTimeSeriesPrefix+"%s."+id.String(), registry)
 	return &StoreStatusMonitor{
 		ID:                   id,
 		registry:             registry,
