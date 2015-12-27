@@ -115,7 +115,7 @@ var builtins = map[string][]builtin{
 					}
 					dStr, err := datumToString(d)
 					if err != nil {
-						return DNull, err
+						return nil, err
 					}
 					buffer.WriteString(dStr)
 				}
@@ -140,7 +140,7 @@ var builtins = map[string][]builtin{
 					}
 					ds, err := datumToString(d)
 					if err != nil {
-						return DNull, err
+						return nil, err
 					}
 					ss = append(ss, ds)
 				}
@@ -1298,7 +1298,7 @@ func pickFromTuple(ctx EvalContext, greatest bool, args DTuple) (Datum, error) {
 			eval, err = evalComparison(ctx, LT, d, g)
 		}
 		if err != nil {
-			return DNull, err
+			return nil, err
 		}
 		if eval == DBool(true) ||
 			(eval == DNull && g == DNull) {
