@@ -18,6 +18,7 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -31,10 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -52,6 +53,16 @@ const (
 	defaultRaftElectionTimeoutTicks = 15
 	// ttlStoreGossip is time-to-live for store-related info.
 	ttlStoreGossip = 2 * time.Minute
+
+	// TODO(bdarnell): Determine the right size for this cache. Should
+	// the cache be partitioned so that replica descriptors from the
+	// range descriptors (which are the bulk of the data and can be
+	// reloaded from disk as needed) don't crowd out the
+	// message/snapshot descriptors (whose necessity is short-lived but
+	// cannot be recovered through other means if evicted)?
+	maxReplicaDescCacheSize = 1000
+
+	raftReqBufferSize = 100
 )
 
 var (
@@ -77,6 +88,10 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 	roachpb.ADD_REPLICA:    raftpb.ConfChangeAddNode,
 	roachpb.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
 }
+
+// errRaftGroupDeleted is returned for commands which are pending
+// while their group is deleted.
+var errRaftGroupDeleted = errors.New("raft group deleted")
 
 // verifyKeys verifies keys. If checkEndKey is true, then the end key
 // is verified to be non-nil and greater than start key. If
@@ -224,6 +239,11 @@ func (rs *storeRangeSet) EstimatedCount() int {
 	return len(rs.rangeIDs) - rs.visited
 }
 
+type replicaDescCacheKey struct {
+	groupID   roachpb.RangeID
+	replicaID roachpb.ReplicaID
+}
+
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
@@ -242,26 +262,32 @@ type Store struct {
 	scanner           *replicaScanner // Replica scanner
 	feed              StoreEventFeed  // Event Feed
 	removeReplicaChan chan removeReplicaOp
-	proposeChan       chan proposeOp
-	multiraft         *multiraft.MultiRaft
+	wakeRaftLoop      chan struct{}
 	started           int32
 	stopper           *stop.Stopper
 	startedAt         int64
 	nodeDesc          *roachpb.NodeDescriptor
 	initComplete      sync.WaitGroup // Signaled by async init tasks
 
-	// Lock ordering notes: The processRaft goroutine and the multiraft goroutine
-	// act as a kind of mutex. To avoid deadlocks, the following lock order
-	// must be obeyed: processRaft goroutine < multiraft goroutine < Store.mu.
-	// (i.e. multiraft methods must not be called while holding Store.mu).
+	// Lock ordering notes: The processRaft goroutine acts as a kind of
+	// mutex. To avoid deadlocks, the following lock order must be
+	// obeyed: processRaft goroutine < Store.mu < Replica.mu. (i.e.
+	// methods like removeReplica which depend on the processRaft
+	// goroutine must not be called while holding Store.mu).
 	mu             sync.RWMutex                 // Protects variables below...
 	replicas       map[roachpb.RangeID]*Replica // Map of replicas by Range ID
 	replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
 	uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
+
+	replicaDescCache *cache.UnorderedCache
+	// pendingRaftGroups contains the ranges that should be checked for
+	// updates. After updating this map, write to wakeRaftLoop to
+	// trigger the check.
+	pendingRaftGroups map[roachpb.RangeID]struct{}
+	raftRequestChan   chan *RaftMessageRequest
 }
 
 var _ client.Sender = &Store{}
-var _ multiraft.Storage = &Store{}
 
 // A StoreContext encompasses the auxiliary objects and configuration
 // required to create a store.
@@ -272,7 +298,7 @@ type StoreContext struct {
 	DB        *client.DB
 	Gossip    *gossip.Gossip
 	StorePool *StorePool
-	Transport multiraft.Transport
+	Transport RaftTransport
 
 	// RangeRetryOptions are the retry options when retryable errors are
 	// encountered sending commands to ranges.
@@ -363,7 +389,15 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 		uninitReplicas:    map[roachpb.RangeID]*Replica{},
 		nodeDesc:          nodeDesc,
 		removeReplicaChan: make(chan removeReplicaOp),
-		proposeChan:       make(chan proposeOp),
+		replicaDescCache: cache.NewUnorderedCache(cache.Config{
+			Policy: cache.CacheLRU,
+			ShouldEvict: func(size int, key, value interface{}) bool {
+				return size > maxReplicaDescCacheSize
+			},
+		}),
+		wakeRaftLoop:      make(chan struct{}, 1),
+		pendingRaftGroups: map[roachpb.RangeID]struct{}{},
+		raftRequestChan:   make(chan *RaftMessageRequest, raftReqBufferSize),
 	}
 
 	// Add range scanner and configure with queues.
@@ -372,7 +406,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	s.splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.ctx.Gossip, s.ReplicaCount)
 	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions)
-	s.replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip, s.RaftLocker())
+	s.replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip, &s.mu)
 	s.raftLogQueue = newRaftLogQueue(s.db, s.ctx.Gossip)
 	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
 
@@ -453,17 +487,6 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
 	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
 
-	if s.multiraft, err = multiraft.NewMultiRaft(s.Ident.NodeID, s.Ident.StoreID, &multiraft.Config{
-		Transport:              s.ctx.Transport,
-		Storage:                s,
-		TickInterval:           s.ctx.RaftTickInterval,
-		ElectionTimeoutTicks:   s.ctx.RaftElectionTimeoutTicks,
-		HeartbeatIntervalTicks: s.ctx.RaftHeartbeatIntervalTicks,
-		EntryFormatter:         raftEntryFormatter,
-	}, s.stopper); err != nil {
-		return err
-	}
-
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
 	// due to a split crashing halfway will simply be resolved on the
@@ -509,7 +532,9 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	s.mu.Unlock()
 
 	// Start Raft processing goroutines.
-	s.multiraft.Start()
+	if err := s.ctx.Transport.Listen(s.StoreID(), s.enqueueRaftMessage); err != nil {
+		return err
+	}
 	s.processRaft()
 
 	// Gossip is only ever nil while bootstrapping a cluster and
@@ -736,11 +761,11 @@ func (s *Store) DisableRaftLogQueue(disabled bool) {
 // Exposed only for testing.
 func (s *Store) ForceRaftLogScanAndProcess(t util.Tester) {
 	// Add each range to the queue.
-	s.mu.Lock()
+	s.mu.RLock()
 	for _, r := range s.replicas {
 		s.raftLogQueue.MaybeAdd(r, s.ctx.Clock.Now())
 	}
-	s.mu.Unlock()
+	s.mu.RUnlock()
 
 	s.raftLogQueue.DrainQueue(s.ctx.Clock)
 }
@@ -832,7 +857,14 @@ func (s *Store) hasOverlappingReplicaLocked(rngDesc *roachpb.RangeDescriptor) bo
 
 // RaftStatus returns the current raft status of the given range.
 func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
-	return s.multiraft.Status(rangeID)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if r, ok := s.replicas[rangeID]; ok {
+		r.Lock()
+		defer r.Unlock()
+		return r.raftGroup.Status()
+	}
+	return nil
 }
 
 // BootstrapRange creates the first range in the cluster and manually
@@ -974,41 +1006,18 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		return util.Errorf("orig range is not splittable by new range: %+v, %+v", origDesc, newDesc)
 	}
 
-	// Here be concurrency dragons: we must release the lock in order to
-	// call multiraft.RemoveGroup (see lock order comments at the
-	// declaration of store.mu). The range may be recreated by an
-	// incoming raft message while the lock is released, so we must
-	// retry until it stays gone after we reacquire the lock. Replicas
-	// are only created in two places (after startup): this method
-	// creates initialized replicas (and this method cannot race with
-	// itself because it is only called on the processRaft goroutine),
-	// and GroupStorage creates uninitialized replicas. Uninitialized
-	// replicas can only become initialized by the application of an
-	// initial snapshot, which will be blocked as long as we have not
-	// yet updated replicasByKey. Therefore we do not need to worry
-	// about initialized replicas being created concurrently, only
-	// uninitialized ones.
 	s.mu.Lock()
-	for {
-		if _, ok := s.uninitReplicas[newDesc.RangeID]; !ok {
-			break
-		}
+	defer s.mu.Unlock()
+	if _, ok := s.uninitReplicas[newDesc.RangeID]; ok {
 		// If we have an uninitialized replica of the new range, delete it
 		// to make way for the complete one created by the split. A live
-		// uninitialized multiraft group cannot be converted to an
+		// uninitialized raft group cannot be converted to an
 		// initialized one (because of the tricks we do to change
 		// FirstIndex from 0 to raftInitialLogIndex), so the group must be
 		// removed before we install the new range into s.replicas.
 		delete(s.uninitReplicas, newDesc.RangeID)
 		delete(s.replicas, newDesc.RangeID)
-		s.mu.Unlock()
-		if err := s.multiraft.RemoveGroup(newDesc.RangeID, 0); err != nil {
-			return util.Errorf("couldn't remove uninitialized range's group %d: %s", newDesc.RangeID, err)
-		}
-		s.mu.Lock()
 	}
-	// The lock is held without interruption for the remainder of this method.
-	defer s.mu.Unlock()
 
 	// Replace the end key of the original range with the start key of
 	// the new range. Reinsert the range since the btree is keyed by range end keys.
@@ -1151,21 +1160,6 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	if rd != nil && rd.ReplicaID >= origDesc.NextReplicaID {
 		return util.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
 			rep, rd.ReplicaID, origDesc.NextReplicaID)
-	}
-	var replicaID roachpb.ReplicaID
-	if rd != nil {
-		replicaID = rd.ReplicaID
-	} else {
-		replicaID = 0
-	}
-
-	// RemoveGroup needs to access the storage, which in turn needs the
-	// lock. Some care is needed to avoid deadlocks. We remove the group
-	// from multiraft outside the scope of s.mu; this is effectively
-	// synchronized by the fact that this method runs on the processRaft
-	// goroutine.
-	if err := s.multiraft.RemoveGroup(rangeID, replicaID); err != nil {
-		return err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1508,60 +1502,79 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	return resolveIntents, wiErr
 }
 
-type proposeOp struct {
-	idKey cmdIDKey
-	cmd   roachpb.RaftCommand
-	ch    chan<- <-chan error
+// TODO(bdarnell): is this buffering necessary? sufficient?
+func (s *Store) enqueueRaftMessage(req *RaftMessageRequest) error {
+	s.raftRequestChan <- req
+	return nil
 }
 
-// ProposeRaftCommand submits a command to raft. The command is processed
-// asynchronously and an error or nil will be written to the returned
-// channel when it is committed or aborted (but note that committed does
-// mean that it has been applied to the range yet).
-func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd roachpb.RaftCommand) <-chan error {
-	ch := make(chan (<-chan error))
-	s.proposeChan <- proposeOp{idKey, cmd, ch}
-	return <-ch
-}
+func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
+	switch req.Message.Type {
+	case raftpb.MsgSnap:
+		s.mu.Lock()
+		canApply := s.canApplySnapshot(req.GroupID, req.Message.Snapshot)
+		s.mu.Unlock()
+		if !canApply {
+			// If the storage cannot accept the snapshot, drop it before
+			// passing it to RawNode.Step, since our error handling
+			// options past that point are limited.
+			return nil
+		}
 
-// proposeRaftCommandImpl runs on the processRaft goroutine.
-func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd roachpb.RaftCommand) <-chan error {
-	// If the range has been removed since the proposal started, drop it now.
-	s.mu.RLock()
-	_, ok := s.replicas[cmd.RangeID]
-	s.mu.RUnlock()
-	if !ok {
-		ch := make(chan error, 1)
-		ch <- roachpb.NewRangeNotFoundError(cmd.RangeID)
-		return ch
-	}
-	// Lazily create group.
-	if err := s.multiraft.CreateGroup(cmd.RangeID); err != nil {
-		ch := make(chan error, 1)
-		ch <- err
-		return ch
-	}
-
-	data, err := proto.Marshal(&cmd)
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, union := range cmd.Cmd.Requests {
-		args := union.GetInner()
-		etr, ok := args.(*roachpb.EndTransactionRequest)
+	// TODO(bdarnell): handle coalesced heartbeats
+	case raftpb.MsgHeartbeat:
+		// A subset of coalesced heartbeats: drop heartbeats (but not
+		// other messages!) that come from a node that we don't believe to
+		// be a current member of the group.
+		s.mu.Lock()
+		r, ok := s.replicas[req.GroupID]
+		s.mu.Unlock()
 		if ok {
-			if crt := etr.InternalCommitTrigger.GetChangeReplicasTrigger(); crt != nil {
-				// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
-				// needs to understand it; it cannot simply be an opaque command.
-				log.Infof("raft: %s %v for range %d", crt.ChangeType, crt.Replica, cmd.RangeID)
-				return s.multiraft.ChangeGroupMembership(cmd.RangeID, string(idKey),
-					changeTypeInternalToRaft[crt.ChangeType],
-					crt.Replica,
-					data)
+			found := false
+			for _, rep := range r.Desc().Replicas {
+				if rep.ReplicaID == req.FromReplica.ReplicaID {
+					found = true
+					break
+				}
+			}
+			if !found && req.FromReplica.ReplicaID < r.Desc().NextReplicaID {
+				return nil
 			}
 		}
 	}
-	return s.multiraft.SubmitCommand(cmd.RangeID, string(idKey), data)
+
+	s.mu.Lock()
+	s.cacheReplicaDescriptor(req.GroupID, req.FromReplica)
+	s.cacheReplicaDescriptor(req.GroupID, req.ToReplica)
+	// Lazily create the group.
+	r, err := s.getOrCreateReplica(req.GroupID, req.ToReplica.ReplicaID)
+	s.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	r.Lock()
+	err = r.raftGroup.Step(req.Message)
+	r.Unlock()
+	if err != nil {
+		return err
+	}
+	s.checkRaftGroup(req.GroupID)
+	return nil
+}
+
+// checkRaftGroup asynchronously registers the given range ID to be
+// checked for raft updates when the processRaft goroutine is idle.
+// TODO(bdarnell): reconsider the goroutine relationships here.
+func (s *Store) checkRaftGroup(rangeID roachpb.RangeID) {
+	go func() {
+		s.mu.Lock()
+		s.pendingRaftGroups[rangeID] = struct{}{}
+		s.mu.Unlock()
+		select {
+		case s.wakeRaftLoop <- struct{}{}:
+		case <-s.stopper.ShouldStop():
+		}
+	}()
 }
 
 // processRaft processes write commands that have been committed
@@ -1570,71 +1583,50 @@ func (s *Store) proposeRaftCommandImpl(idKey cmdIDKey, cmd roachpb.RaftCommand) 
 // commands indefinitely or until the stopper signals.
 func (s *Store) processRaft() {
 	s.stopper.RunWorker(func() {
+		defer s.ctx.Transport.Stop(s.StoreID())
+		ticker := time.NewTicker(s.ctx.RaftTickInterval)
 		for {
-			select {
-			case events := <-s.multiraft.Events:
-				for _, e := range events {
-					var cmd roachpb.RaftCommand
-					var groupID roachpb.RangeID
-					var commandID string
-					var index uint64
-					var callback func(error)
-
-					switch e := e.(type) {
-					case *multiraft.EventCommandCommitted:
-						groupID = e.GroupID
-						commandID = e.CommandID
-						index = e.Index
-						err := proto.Unmarshal(e.Command, &cmd)
-						if err != nil {
-							log.Fatal(err)
-						}
-						if log.V(6) {
-							log.Infof("store %s: new committed command at index %d", s, e.Index)
-						}
-
-					case *multiraft.EventMembershipChangeCommitted:
-						groupID = e.GroupID
-						commandID = e.CommandID
-						index = e.Index
-						callback = e.Callback
-						err := proto.Unmarshal(e.Payload, &cmd)
-						if err != nil {
-							log.Fatal(err)
-						}
-						if log.V(6) {
-							log.Infof("store %s: new committed membership change at index %d", s, e.Index)
-						}
-
-					default:
-						continue
-					}
-
-					if groupID != cmd.RangeID {
-						log.Fatalf("e.GroupID (%d) should == cmd.RangeID (%d)", groupID, cmd.RangeID)
-					}
-
-					s.mu.RLock()
-					r, ok := s.replicas[groupID]
-					s.mu.RUnlock()
-					var err error
-					if !ok {
-						err = util.Errorf("got committed raft command for %d but have no range with that ID: %+v",
-							groupID, cmd)
-						log.Error(err)
-					} else {
-						err = r.processRaftCommand(cmdIDKey(commandID), index, cmd)
-					}
-					if callback != nil {
-						callback(err)
-					}
+			var replicas []*Replica
+			s.mu.RLock()
+			for rangeID := range s.pendingRaftGroups {
+				r, ok := s.replicas[rangeID]
+				if !ok {
+					continue
 				}
+				replicas = append(replicas, r)
+
+			}
+			if len(s.pendingRaftGroups) > 0 {
+				s.pendingRaftGroups = map[roachpb.RangeID]struct{}{}
+			}
+			s.mu.RUnlock()
+			for _, r := range replicas {
+				if err := r.handleRaftReady(); err != nil {
+					panic(err) // TODO(bdarnell)
+				}
+			}
+
+			select {
+			case <-s.wakeRaftLoop:
 
 			case op := <-s.removeReplicaChan:
 				op.ch <- s.removeReplicaImpl(op.rep, op.origDesc)
 
-			case op := <-s.proposeChan:
-				op.ch <- s.proposeRaftCommandImpl(op.idKey, op.cmd)
+			case req := <-s.raftRequestChan:
+				if err := s.handleRaftMessage(req); err != nil {
+					log.Errorf("error handling raft message: %s", err)
+				}
+
+			case <-ticker.C:
+				// TODO(bdarnell): rework raft ticker.
+				s.mu.Lock()
+				for rangeID, r := range s.replicas {
+					r.Lock()
+					r.raftGroup.Tick()
+					r.Unlock()
+					s.pendingRaftGroups[rangeID] = struct{}{}
+				}
+				s.mu.Unlock()
 
 			case <-s.stopper.ShouldStop():
 				return
@@ -1643,9 +1635,10 @@ func (s *Store) processRaft() {
 	})
 }
 
-// GroupStorage implements the multiraft.Storage interface.
-// The caller must hold the store's lock.
-func (s *Store) GroupStorage(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (multiraft.WriteableGroupStorage, error) {
+// getOrCreateReplica returns a replica for the given RangeID,
+// creating an uninitialized replica if necessary. The caller must
+// hold the store's lock.
+func (s *Store) getOrCreateReplica(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (*Replica, error) {
 	r, ok := s.replicas[groupID]
 	if !ok {
 		// Before creating the group, see if there is a tombstone which
@@ -1656,7 +1649,7 @@ func (s *Store) GroupStorage(groupID roachpb.RangeID, replicaID roachpb.ReplicaI
 			return nil, err
 		} else if ok {
 			if replicaID != 0 && replicaID < tombstone.NextReplicaID {
-				return nil, multiraft.ErrGroupDeleted
+				return nil, errRaftGroupDeleted
 			}
 		}
 
@@ -1669,6 +1662,9 @@ func (s *Store) GroupStorage(groupID roachpb.RangeID, replicaID roachpb.ReplicaI
 		if err != nil {
 			return nil, err
 		}
+		if err := r.setReplicaID(replicaID); err != nil {
+			return nil, err
+		}
 		// Add the range to range map, but not rangesByKey since
 		// the range's start key is unknown. The range will be
 		// added to rangesByKey later when a snapshot is applied.
@@ -1676,53 +1672,43 @@ func (s *Store) GroupStorage(groupID roachpb.RangeID, replicaID roachpb.ReplicaI
 			return nil, err
 		}
 		s.uninitReplicas[r.Desc().RangeID] = r
+	} else {
+		if err := r.setReplicaID(replicaID); err != nil {
+			return nil, err
+		}
 	}
 	return r, nil
 }
 
-// ReplicaDescriptor implements the multiraft.Storage interface.
-// The caller must hold the store's lock.
-func (s *Store) ReplicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
+// replicaDescriptor returns the replica descriptor for the given
+// range and replica, if known. The caller must hold the store's lock.
+func (s *Store) replicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
+	if rep, ok := s.replicaDescCache.Get(replicaDescCacheKey{groupID, replicaID}); ok {
+		return rep.(roachpb.ReplicaDescriptor), nil
+	}
 	rep, err := s.getReplicaLocked(groupID)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	return rep.ReplicaDescriptor(replicaID)
-}
-
-// ReplicaIDForStore implements the multiraft.Storage interface.
-// The caller must hold the store's lock.
-func (s *Store) ReplicaIDForStore(groupID roachpb.RangeID, storeID roachpb.StoreID) (roachpb.ReplicaID, error) {
-	r, err := s.getReplicaLocked(groupID)
+	rd, err := rep.ReplicaDescriptor(replicaID)
 	if err != nil {
-		return 0, err
+		return roachpb.ReplicaDescriptor{}, err
 	}
-	for _, rep := range r.Desc().Replicas {
-		if rep.StoreID == storeID {
-			return rep.ReplicaID, nil
-		}
-	}
-	return 0, util.Errorf("store %s not found as replica of range %d", storeID, groupID)
+	s.cacheReplicaDescriptor(groupID, rd)
+
+	return rd, nil
 }
 
-// ReplicasFromSnapshot implements the multiraft.Storage interface.
-func (s *Store) ReplicasFromSnapshot(snap raftpb.Snapshot) ([]roachpb.ReplicaDescriptor, error) {
-	// TODO(bdarnell): can we avoid parsing this twice?
-	var parsedSnap roachpb.RaftSnapshotData
-	if err := parsedSnap.Unmarshal(snap.Data); err != nil {
-		return nil, err
-	}
-	return parsedSnap.RangeDescriptor.Replicas, nil
+// cacheReplicaDescriptor adds the given replica descriptor to a cache
+// to be used by ReplicaDescriptor.
+func (s *Store) cacheReplicaDescriptor(groupID roachpb.RangeID, replica roachpb.ReplicaDescriptor) {
+	s.replicaDescCache.Add(replicaDescCacheKey{groupID, replica.ReplicaID}, replica)
 }
 
-// RaftLocker implements the multiraft.Storage interface.
-func (s *Store) RaftLocker() sync.Locker {
-	return &s.mu
-}
-
-// CanApplySnapshot implements the multiraft.Storage interface.
-// The caller must hold the store's lock.
-func (s *Store) CanApplySnapshot(rangeID roachpb.RangeID, snap raftpb.Snapshot) bool {
+// canApplySnapshot returns true if the snapshot can be applied to
+// this store's replica (i.e. it is not from an older incarnation of
+// the replica). The caller must hold the store's lock.
+func (s *Store) canApplySnapshot(rangeID roachpb.RangeID, snap raftpb.Snapshot) bool {
 	if r, ok := s.replicas[rangeID]; ok && r.isInitialized() {
 		// We have the range and it's initialized, so let the snapshot
 		// through.
@@ -1747,25 +1733,16 @@ func (s *Store) CanApplySnapshot(rangeID roachpb.RangeID, snap raftpb.Snapshot) 
 	return true
 }
 
-// AppliedIndex implements the multiraft.Storage interface.
-// The caller must hold the store's lock.
-func (s *Store) AppliedIndex(groupID roachpb.RangeID) (uint64, error) {
-	r, err := s.getReplicaLocked(groupID)
-	if err != nil {
-		return 0, err
-	}
-	return atomic.LoadUint64(&r.appliedIndex), nil
-}
-
 func raftEntryFormatter(data []byte) string {
 	if len(data) == 0 {
 		return "[empty]"
 	}
+	_, encodedCmd := decodeRaftCommand(data)
 	var cmd roachpb.RaftCommand
-	if err := proto.Unmarshal(data, &cmd); err != nil {
+	if err := proto.Unmarshal(encodedCmd, &cmd); err != nil {
 		return fmt.Sprintf("[error parsing entry: %s]", err)
 	}
-	s := cmd.String()
+	s := cmd.Cmd.String()
 	maxLen := 300
 	if len(s) > maxLen {
 		s = s[:maxLen]
@@ -1810,6 +1787,7 @@ func (s *Store) computeReplicationStatus(now int64) (
 	// 1. hold s.mu, then call s.RaftStatus, it will call s.multiraft.Status
 	// 2. at the same time MultiRaft.state.run call s.createGroup, it will try
 	// to hold s.mu
+	// TODO(bdarnell): reevaluate this locking strategy.
 	raftStatusMap := make(map[roachpb.RangeID]*raft.Status)
 	s.mu.Lock()
 	for rangeID := range s.replicas {

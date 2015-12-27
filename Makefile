@@ -24,7 +24,7 @@ GOFLAGS :=
 STATIC :=
 
 # Variables to be overridden on the command line, e.g.
-#   make test PKG=./storage TESTFLAGS=--vmodule=multiraft=1
+#   make test PKG=./storage TESTFLAGS=--vmodule=raft=1
 PKG          := ./...
 TAGS         :=
 TESTS        := .

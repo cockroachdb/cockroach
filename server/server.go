@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
-	"github.com/cockroachdb/cockroach/multiraft"
 	crpc "github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
@@ -80,7 +79,7 @@ type Server struct {
 	status        *statusServer
 	tsDB          *ts.DB
 	tsServer      *ts.Server
-	raftTransport multiraft.Transport
+	raftTransport storage.RaftTransport
 	stopper       *stop.Stopper
 }
 

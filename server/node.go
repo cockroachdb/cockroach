@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
-	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
@@ -105,7 +104,7 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 	stores := storage.NewStores()
 	sender := kv.NewTxnCoordSender(stores, ctx.Clock, false, nil, stopper)
 	ctx.DB = client.NewDB(sender)
-	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
+	ctx.Transport = storage.NewLocalRPCTransport(stopper)
 	for i, eng := range engines {
 		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,

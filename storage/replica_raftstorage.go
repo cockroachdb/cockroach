@@ -21,7 +21,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -31,9 +30,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-var _ multiraft.WriteableGroupStorage = &Replica{}
-
-// InitialState implements the raft.Storage interface.
+// initialState implements the raft.Storage interface.
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var hs raftpb.HardState
 	desc := r.Desc()
@@ -372,8 +369,8 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	}, nil
 }
 
-// Append implements the multiraft.WriteableGroupStorage interface.
-func (r *Replica) Append(entries []raftpb.Entry) error {
+// append the given entries to the raft log.
+func (r *Replica) append(entries []raftpb.Entry) error {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -443,8 +440,8 @@ func (r *Replica) updateRangeInfo() error {
 	return nil
 }
 
-// ApplySnapshot implements the multiraft.WriteableGroupStorage interface.
-func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
+// applySnapshot updates the replica based on the given snapshot.
+func (r *Replica) applySnapshot(snap raftpb.Snapshot) error {
 	snapData := roachpb.RaftSnapshotData{}
 	err := proto.Unmarshal(snap.Data, &snapData)
 	if err != nil {
@@ -554,8 +551,35 @@ func (r *Replica) ApplySnapshot(snap raftpb.Snapshot) error {
 	return nil
 }
 
-// SetHardState implements the multiraft.WriteableGroupStorage interface.
-func (r *Replica) SetHardState(st raftpb.HardState) error {
+// setHardState persists the raft HardState.
+func (r *Replica) setHardState(st raftpb.HardState) error {
 	return engine.MVCCPutProto(r.store.Engine(), nil, keys.RaftHardStateKey(r.Desc().RangeID),
 		roachpb.ZeroTimestamp, nil, &st)
+}
+
+// Raft commands are encoded with a 1-byte version (currently 0), a 16-byte ID,
+// followed by the payload. This inflexible encoding is used so we can efficiently
+// parse the command id while processing the logs.
+const (
+	// The prescribed length for each command ID.
+	raftCommandIDLen                = 8
+	raftCommandEncodingVersion byte = 0
+)
+
+func encodeRaftCommand(commandID string, command []byte) []byte {
+	if len(commandID) != raftCommandIDLen {
+		log.Fatalf("invalid command ID length; %d != %d", len(commandID), raftCommandIDLen)
+	}
+	x := make([]byte, 1, 1+raftCommandIDLen+len(command))
+	x[0] = raftCommandEncodingVersion
+	x = append(x, []byte(commandID)...)
+	x = append(x, command...)
+	return x
+}
+
+func decodeRaftCommand(data []byte) (commandID string, command []byte) {
+	if data[0] != raftCommandEncodingVersion {
+		log.Fatalf("unknown command encoding version %v", data[0])
+	}
+	return string(data[1 : 1+raftCommandIDLen]), data[1+raftCommandIDLen:]
 }

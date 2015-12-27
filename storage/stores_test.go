@@ -21,7 +21,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -143,7 +142,7 @@ func TestStoresLookupReplica(t *testing.T) {
 	}
 	for i, rng := range ranges {
 		e[i] = engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
-		ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
+		ctx.Transport = NewLocalRPCTransport(stopper)
 		defer ctx.Transport.Close()
 		s[i] = NewStore(ctx, e[i], &roachpb.NodeDescriptor{NodeID: 1})
 		s[i].Ident.StoreID = rng.storeID
