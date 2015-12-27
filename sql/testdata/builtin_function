@@ -53,7 +53,7 @@ SELECT CONCAT('RoacH', NULL)
 ----
 RoacH
 
-statement error CONCAT: argument type unsupported: bool
+statement error unknown signature for CONCAT: CONCAT\(string, bool, float, bool\)
 SELECT CONCAT('RoacH', false, 64.532, TRUE)
 ----
 
@@ -156,7 +156,7 @@ SELECT CONCAT_WS(',', 'abcde', '2')
 ----
 abcde,2
 
-statement error CONCAT_WS: argument type unsupported: int
+statement error unknown signature for CONCAT_WS: CONCAT_WS\(string, string, int, NULL, int\)
 SELECT CONCAT_WS(',', 'abcde', 2, NULL, 22)
 ----
 

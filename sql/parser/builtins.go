@@ -48,9 +48,15 @@ var errRoundNumberDigits = errors.New("number of digits must be greater than 0")
 type typeList []reflect.Type
 
 type builtin struct {
-	// Set to typeList{} for nullary functions and to nil for varidic
-	// functions.
+	// Variadic functions have a tricky representation:
+	// - If all arguments must be of a specific type, `types` must be
+	// `typeList{<theType>}`, and `variadic` must be true. This will
+	// generate the correct type-checking error.
+	// - If all arguments must be of the same (variable) type, `types`
+	// must be `nil`, and `returnType` must be `typeTuple`.
+	// This representation is not quite "normal", sorry about that.
 	types      typeList
+	variadic   bool
 	returnType func(MapArgs, DTuple) (Datum, error)
 	// Set to true when a function potentially returns a different value
 	// when called in the same statement with the same parameters.
@@ -65,14 +71,27 @@ func (b builtin) match(types typeList) bool {
 	if b.types == nil {
 		return true
 	}
-	if len(types) != len(b.types) {
-		return false
-	}
-	for i := range types {
-		if types[i] != b.types[i] {
+	if b.variadic {
+		if len(b.types) != 1 {
 			return false
 		}
+		theType := b.types[0]
+		for _, aType := range types {
+			if !(aType == reflect.TypeOf(DNull) || aType == theType) {
+				return false
+			}
+		}
+	} else {
+		if len(types) != len(b.types) {
+			return false
+		}
+		for i := range types {
+			if types[i] != b.types[i] {
+				return false
+			}
+		}
 	}
+
 	return true
 }
 
@@ -106,6 +125,8 @@ var builtins = map[string][]builtin{
 	// NULL arguments are ignored.
 	"concat": {
 		builtin{
+			types:      typeList{stringType},
+			variadic:   true,
 			returnType: typeString,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				var buffer bytes.Buffer
@@ -113,11 +134,7 @@ var builtins = map[string][]builtin{
 					if d == DNull {
 						continue
 					}
-					dStr, err := datumToString(d)
-					if err != nil {
-						return nil, err
-					}
-					buffer.WriteString(dStr)
+					buffer.WriteString(string(d.(DString)))
 				}
 				return DString(buffer.String()), nil
 			},
@@ -126,6 +143,8 @@ var builtins = map[string][]builtin{
 
 	"concat_ws": {
 		builtin{
+			types:      typeList{stringType},
+			variadic:   true,
 			returnType: typeString,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				dstr, ok := args[0].(DString)
@@ -138,11 +157,7 @@ var builtins = map[string][]builtin{
 					if d == DNull {
 						continue
 					}
-					ds, err := datumToString(d)
-					if err != nil {
-						return nil, err
-					}
-					ss = append(ss, ds)
+					ss = append(ss, string(d.(DString)))
 				}
 				return DString(strings.Join(ss, sep)), nil
 			},
@@ -1028,14 +1043,6 @@ func bytesBuiltin1(f func(string) (Datum, error), returnType func(MapArgs, DTupl
 			return f(string(args[0].(DBytes)))
 		},
 	}
-}
-
-func datumToString(datum Datum) (string, error) {
-	if dString, ok := datum.(DString); ok {
-		return string(dString), nil
-	}
-
-	return "", fmt.Errorf("argument type unsupported: %s", datum.Type())
 }
 
 type regexpEscapeKey struct {
