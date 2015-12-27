@@ -1454,7 +1454,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 				time.Sleep(10 * time.Millisecond)
 				// TODO(bdarnell): make sure newRng hasn't been removed
 				newRng.Lock()
-				newRng.raftGroup.Campaign()
+				_ = newRng.raftGroup.Campaign()
 				newRng.Unlock()
 			})
 		}

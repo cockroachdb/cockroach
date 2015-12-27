@@ -30,7 +30,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-// initialState implements the raft.Storage interface.
+// InitialState implements the raft.Storage interface.
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var hs raftpb.HardState
 	desc := r.Desc()
