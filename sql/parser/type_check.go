@@ -226,7 +226,7 @@ func (expr *ExistsExpr) TypeCheck(args MapArgs) (Datum, error) {
 // TypeCheck implements the Expr interface.
 func (expr *FuncExpr) TypeCheck(args MapArgs) (Datum, error) {
 	dummyArgs := make(DTuple, 0, len(expr.Exprs))
-	types := make(typeList, 0, len(expr.Exprs))
+	types := make(argTypes, 0, len(expr.Exprs))
 	for _, e := range expr.Exprs {
 		dummyArg, err := e.TypeCheck(args)
 		if err != nil {
@@ -259,7 +259,7 @@ func (expr *FuncExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 		for _, candidate := range candidates {
-			if candidate.match(types) {
+			if candidate.types.match(types) {
 				expr.fn = candidate
 				break
 			}

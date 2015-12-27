@@ -882,7 +882,7 @@ func (t *ExistsExpr) Eval(ctx EvalContext) (Datum, error) {
 // Eval implements the Expr interface.
 func (expr *FuncExpr) Eval(ctx EvalContext) (Datum, error) {
 	args := make(DTuple, 0, len(expr.Exprs))
-	types := make(typeList, 0, len(expr.Exprs))
+	types := make(argTypes, 0, len(expr.Exprs))
 	for _, e := range expr.Exprs {
 		arg, err := e.Eval(ctx)
 		if err != nil {
@@ -898,7 +898,7 @@ func (expr *FuncExpr) Eval(ctx EvalContext) (Datum, error) {
 		}
 	}
 
-	if !expr.fn.match(types) {
+	if !expr.fn.types.match(types) {
 		// The argument types no longer match the memoized function. This happens
 		// when a non-NULL argument becomes NULL and the function does not support
 		// NULL arguments. For example, "SELECT LOWER(col) FROM TABLE" where col is
