@@ -36,13 +36,14 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -132,8 +133,9 @@ func usesTimestampCache(r roachpb.Request) bool {
 // committed to the Raft log, the command is executed and the result returned
 // via the done channel.
 type pendingCmd struct {
-	ctx  context.Context
-	done chan roachpb.ResponseWithError // Used to signal waiting RPC handler
+	ctx     context.Context
+	raftCmd roachpb.RaftCommand
+	done    chan roachpb.ResponseWithError // Used to signal waiting RPC handler
 }
 
 type cmdIDKey string
@@ -160,7 +162,7 @@ type Replica struct {
 	sequence     *SequenceCache // Provides txn replay protection
 
 	// proposeRaftCommandFn can be set to mock out the propose operation.
-	proposeRaftCommandFn func(cmdIDKey, roachpb.RaftCommand) <-chan error
+	proposeRaftCommandFn func(cmdIDKey, roachpb.RaftCommand) error
 
 	// Held in read mode during read-only commands. Held in exclusive mode to
 	// prevent read-only commands from executing. Acquired before the embedded
@@ -185,6 +187,9 @@ type Replica struct {
 		value roachpb.ReplicaDescriptor
 	}
 	truncatedState unsafe.Pointer // *roachpb.RaftTruncatedState
+
+	replicaID roachpb.ReplicaID
+	raftGroup *raft.RawNode
 }
 
 var _ client.Sender = &Replica{}
@@ -218,6 +223,13 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store) (*Replica, error) {
 		return nil, err
 	}
 	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
+
+	_, repDesc := desc.FindReplica(store.StoreID())
+	if repDesc != nil {
+		if err := r.setReplicaID(repDesc.ReplicaID); err != nil {
+			return nil, err
+		}
+	}
 
 	if r.ContainsKey(keys.SystemDBSpan.Key) {
 		r.maybeGossipSystemConfig()
@@ -262,6 +274,62 @@ func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor) error {
 	}
 
 	return batch.Commit()
+}
+
+func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
+	r.Lock()
+	defer r.Unlock()
+	if r.replicaID == replicaID {
+		return nil
+	} else if r.replicaID > replicaID {
+		return util.Errorf("replicaID cannot move backwards")
+	} else if r.replicaID != 0 {
+		// TODO(bdarnell): clean up previous raftGroup (cancel pending commands,
+		// update peers)
+	}
+
+	desc := r.Desc()
+	raftCfg := &raft.Config{
+		ID:            uint64(replicaID),
+		Applied:       atomic.LoadUint64(&r.appliedIndex),
+		ElectionTick:  r.store.ctx.RaftElectionTimeoutTicks,
+		HeartbeatTick: r.store.ctx.RaftHeartbeatIntervalTicks,
+		Storage:       r,
+		// TODO(bdarnell): make these configurable; evaluate defaults.
+		MaxSizePerMsg:   1024 * 1024,
+		MaxInflightMsgs: 256,
+		Logger:          &raftLogger{group: uint64(desc.RangeID)},
+	}
+	raftGroup, err := raft.NewRawNode(raftCfg, nil)
+	if err != nil {
+		return err
+	}
+	r.replicaID = replicaID
+	r.raftGroup = raftGroup
+
+	// Automatically campaign and elect a leader for this group if there's
+	// exactly one known node for this group.
+	//
+	// A grey area for this being correct happens in the case when we're
+	// currently in the progress of adding a second node to the group,
+	// with the change committed but not applied.
+	// Upon restarting, the node would immediately elect itself and only
+	// then apply the config change, where really it should be applying
+	// first and then waiting for the majority (which would now require
+	// two votes, not only its own).
+	// However, in that special case, the second node has no chance to
+	// be elected leader while this node restarts (as it's aware of the
+	// configuration and knows it needs two votes), so the worst that
+	// could happen is both nodes ending up in candidate state, timing
+	// out and then voting again. This is expected to be an extremely
+	// rare event.
+	if len(desc.Replicas) == 1 && desc.Replicas[0].StoreID == r.store.StoreID() {
+		if err := raftGroup.Campaign(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // context returns a context which is initialized with information about
@@ -356,23 +424,18 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	// checks from normal request machinery, (e.g. the command queue).
 	// Note that the command itself isn't traced, but usually the caller
 	// waiting for the result has an active Trace.
-	errChan, pendingCmd := r.proposeRaftCommand(ctx, ba)
-
-	select {
-	case err := <-errChan:
-		if err != nil {
-			return err
-		}
-	case <-ctx.Done():
-		// If the context expired we don't know who got the lease but we
-		// know we didn't.
-		return r.newNotLeaderError(nil, r.store.StoreID())
+	pendingCmd, err := r.proposeRaftCommand(ctx, ba)
+	if err != nil {
+		return err
 	}
+
 	// Next if the command was committed, wait for the range to apply it.
 	select {
 	case c := <-pendingCmd.done:
 		return c.Err
 	case <-ctx.Done():
+		// If the context expired we don't know who got the lease but we
+		// know we didn't.
 		return r.newNotLeaderError(nil, r.store.StoreID())
 	}
 }
@@ -553,6 +616,13 @@ func (r *Replica) SetLastVerificationTimestamp(timestamp roachpb.Timestamp) erro
 	return engine.MVCCPutProto(r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
 }
 
+// RaftStatus returns the current raft status of the replica.
+func (r *Replica) RaftStatus() *raft.Status {
+	r.Lock()
+	defer r.Unlock()
+	return r.raftGroup.Status()
+}
+
 // Send adds a command for execution on this range. The command's
 // affected keys are verified to be contained within the range and the
 // range's leadership is confirmed. The command is then dispatched
@@ -588,7 +658,7 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	} else {
 		panic(fmt.Sprintf("don't know how to handle command %s", ba))
 	}
-	if err == multiraft.ErrGroupDeleted {
+	if err == errRaftGroupDeleted {
 		// This error needs to be converted appropriately so that
 		// clients will retry.
 		err = roachpb.NewRangeNotFoundError(r.Desc().RangeID)
@@ -870,15 +940,13 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 
 	defer trace.Epoch("raft")()
 
-	errChan, pendingCmd := r.proposeRaftCommand(ctx, ba)
+	pendingCmd, err := r.proposeRaftCommand(ctx, ba)
 
 	signal()
 
-	// First wait for raft to commit or abort the command.
 	var br *roachpb.BatchResponse
-	var err error
-	if err = <-errChan; err == nil {
-		// Next if the command was committed, wait for the range to apply it.
+	if err == nil {
+		// If the command was accepted by raft, wait for the range to apply it.
 		respWithErr := <-pendingCmd.done
 		br, err = respWithErr.Reply, respWithErr.Err
 	}
@@ -891,42 +959,234 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 // initializes a client command ID if one hasn't been. It then
 // proposes the command to Raft and returns the error channel and
 // pending command struct for receiving.
-func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchRequest) (<-chan error, *pendingCmd) {
-	pendingCmd := &pendingCmd{
-		ctx:  ctx,
-		done: make(chan roachpb.ResponseWithError, 1),
-	}
+func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchRequest) (*pendingCmd, error) {
 	desc := r.Desc()
 	_, replica := desc.FindReplica(r.store.StoreID())
 	if replica == nil {
-		errChan := make(chan error, 1)
-		errChan <- roachpb.NewRangeNotFoundError(desc.RangeID)
-		return errChan, pendingCmd
+		return nil, roachpb.NewRangeNotFoundError(desc.RangeID)
 	}
-	raftCmd := roachpb.RaftCommand{
-		RangeID:       desc.RangeID,
-		OriginReplica: *replica,
-		Cmd:           ba,
+	idKeyBuf := make([]byte, 0, raftCommandIDLen)
+	idKeyBuf = encoding.EncodeUint64(idKeyBuf, uint64(rand.Int63()))
+	idKey := cmdIDKey(idKeyBuf)
+	pendingCmd := &pendingCmd{
+		ctx:  ctx,
+		done: make(chan roachpb.ResponseWithError, 1),
+		raftCmd: roachpb.RaftCommand{
+			RangeID:       desc.RangeID,
+			OriginReplica: *replica,
+			Cmd:           ba,
+		},
 	}
-
-	buf := make([]byte, 0, multiraft.CommandIDLen)
-	{
-		buf = encoding.EncodeUint64(buf, uint64(rand.Int63()))[:multiraft.CommandIDLen]
-	}
-	idKey := cmdIDKey(buf)
 
 	r.Lock()
+	if _, ok := r.pendingCmds[idKey]; ok {
+		log.Fatalf("pending command already exists for %s", idKey)
+	}
 	r.pendingCmds[idKey] = pendingCmd
-	r.Unlock()
+	defer r.Unlock()
 
-	var errChan <-chan error
+	if err := r.proposePendingCmdLocked(idKey, pendingCmd); err != nil {
+		delete(r.pendingCmds, idKey)
+		return nil, err
+	}
+	return pendingCmd, nil
+}
+
+// proposePendingCmdLocked proposes or re-proposes a command in r.pendingCmds.
+func (r *Replica) proposePendingCmdLocked(idKey cmdIDKey, p *pendingCmd) error {
+	desc := r.Desc()
 	if r.proposeRaftCommandFn != nil {
-		errChan = r.proposeRaftCommandFn(idKey, raftCmd)
-	} else {
-		errChan = r.store.ProposeRaftCommand(idKey, raftCmd)
+		return r.proposeRaftCommandFn(idKey, p.raftCmd)
 	}
 
-	return errChan, pendingCmd
+	data, err := proto.Marshal(&p.raftCmd)
+	if err != nil {
+		return err
+	}
+	defer r.store.enqueueRaftUpdateCheck(desc.RangeID)
+	for _, union := range p.raftCmd.Cmd.Requests {
+		args := union.GetInner()
+		etr, ok := args.(*roachpb.EndTransactionRequest)
+		if !ok {
+			continue
+		}
+		if crt := etr.InternalCommitTrigger.GetChangeReplicasTrigger(); crt != nil {
+			// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
+			// needs to understand it; it cannot simply be an opaque command.
+			log.Infof("raft: proposing %s %v for range %d", crt.ChangeType, crt.Replica, p.raftCmd.RangeID)
+
+			ctx := ConfChangeContext{
+				CommandID: string(idKey),
+				Payload:   data,
+				Replica:   crt.Replica,
+			}
+			encodedCtx, err := ctx.Marshal()
+			if err != nil {
+				return err
+			}
+
+			return r.raftGroup.ProposeConfChange(
+				raftpb.ConfChange{
+					Type:    changeTypeInternalToRaft[crt.ChangeType],
+					NodeID:  uint64(crt.Replica.ReplicaID),
+					Context: encodedCtx,
+				})
+		}
+	}
+	return r.raftGroup.Propose(encodeRaftCommand(string(idKey), data))
+}
+
+func (r *Replica) handleRaftReady() error {
+	r.Lock()
+	if !r.raftGroup.HasReady() {
+		r.Unlock()
+		return nil
+	}
+	rd := r.raftGroup.Ready()
+	r.Unlock()
+	desc := r.Desc()
+	logRaftReady(r.store.StoreID(), desc.RangeID, rd)
+
+	if !raft.IsEmptySnap(rd.Snapshot) {
+		if err := r.applySnapshot(rd.Snapshot); err != nil {
+			return err
+		}
+		// TODO(bdarnell): update coalesced heartbeat mapping with snapshot info.
+	}
+	if len(rd.Entries) > 0 {
+		if err := r.append(rd.Entries); err != nil {
+			return err
+		}
+	}
+	if !raft.IsEmptyHardState(rd.HardState) {
+		if err := r.setHardState(rd.HardState); err != nil {
+			return err
+		}
+	}
+
+	for _, msg := range rd.Messages {
+		r.sendRaftMessage(msg)
+	}
+
+	// Process committed entries. etcd raft occasionally adds a nil
+	// entry (our own commands are never empty). This happens in two
+	// situations: When a new leader is elected, and when a config
+	// change is dropped due to the "one at a time" rule. In both
+	// cases we may need to resubmit our pending proposals (In the
+	// former case we resubmit everything because we proposed them to
+	// a former leader that is no longer able to commit them. In the
+	// latter case we only need to resubmit pending config changes,
+	// but it's hard to distinguish so we resubmit everything
+	// anyway). We delay resubmission until after we have processed
+	// the entire batch of entries.
+	hasEmptyEntry := false
+	for _, e := range rd.CommittedEntries {
+		switch e.Type {
+		case raftpb.EntryNormal:
+			if len(e.Data) == 0 {
+				hasEmptyEntry = true
+				continue
+			}
+			commandID, encodedCommand := decodeRaftCommand(e.Data)
+			var command roachpb.RaftCommand
+			if err := command.Unmarshal(encodedCommand); err != nil {
+				return err
+			}
+
+			// Discard errors from processRaftCommand. The error has been sent
+			// to the client that originated it, where it will be handled.
+			_ = r.processRaftCommand(cmdIDKey(commandID), e.Index, command)
+
+		case raftpb.EntryConfChange:
+			var cc raftpb.ConfChange
+			if err := cc.Unmarshal(e.Data); err != nil {
+				return err
+			}
+			ctx := ConfChangeContext{}
+			if err := ctx.Unmarshal(cc.Context); err != nil {
+				return err
+			}
+			var command roachpb.RaftCommand
+			if err := command.Unmarshal(ctx.Payload); err != nil {
+				return err
+			}
+			r.store.cacheReplicaDescriptor(desc.RangeID, ctx.Replica)
+			if err := r.processRaftCommand(cmdIDKey(ctx.CommandID), e.Index, command); err == nil {
+				// TODO(bdarnell): update coalesced heartbeat mapping
+				r.Lock()
+				r.raftGroup.ApplyConfChange(cc)
+				r.Unlock()
+			} else {
+				// If processRaftCommand failed, tell raft that the config change was aborted.
+				r.Lock()
+				r.raftGroup.ApplyConfChange(raftpb.ConfChange{})
+				r.Unlock()
+			}
+
+		}
+
+	}
+	if hasEmptyEntry {
+		r.Lock()
+		if len(r.pendingCmds) > 0 {
+			if log.V(1) {
+				log.Infof("reproposing %d commands after empty entry", len(r.pendingCmds))
+			}
+			for idKey, p := range r.pendingCmds {
+				if err := r.proposePendingCmdLocked(idKey, p); err != nil {
+					return err
+				}
+			}
+		}
+		r.Unlock()
+	}
+	// TODO(bdarnell): need to check replica id and not Advance if it
+	// has changed. Or do we need more locking to guarantee that replica
+	// ID cannot change during handleRaftReady?
+	r.Lock()
+	r.raftGroup.Advance(rd)
+	r.Unlock()
+	return nil
+}
+
+func (r *Replica) sendRaftMessage(msg raftpb.Message) {
+	groupID := r.Desc().RangeID
+	r.store.mu.RLock()
+	toReplica, err := r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.To))
+	if err != nil {
+		log.Warningf("failed to lookup recipient replica %d in group %s: %s", msg.To, groupID, err)
+		r.store.mu.RUnlock()
+		return
+	}
+	fromReplica, err := r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.From))
+	if err != nil {
+		log.Warningf("failed to lookup sender replica %d in group %s: %s", msg.From, groupID, err)
+		r.store.mu.RUnlock()
+		return
+	}
+	r.store.mu.RUnlock()
+	err = r.store.ctx.Transport.Send(&RaftMessageRequest{
+		GroupID:     groupID,
+		ToReplica:   toReplica,
+		FromReplica: fromReplica,
+		Message:     msg,
+	})
+	snapStatus := raft.SnapshotFinish
+	if err != nil {
+		log.Warningf("group %s on store %s failed to send message to %s: %s", groupID,
+			r.store.StoreID(), toReplica.StoreID, err)
+		r.Lock()
+		r.raftGroup.ReportUnreachable(msg.To)
+		r.Unlock()
+		snapStatus = raft.SnapshotFailure
+	}
+	if msg.Type == raftpb.MsgSnap {
+		// TODO(bdarnell): add an ack for snapshots and don't report status until
+		// ack, error, or timeout.
+		r.Lock()
+		r.raftGroup.ReportSnapshot(msg.To, snapStatus)
+		r.Unlock()
+	}
 }
 
 // processRaftCommand processes a raft command by unpacking the command

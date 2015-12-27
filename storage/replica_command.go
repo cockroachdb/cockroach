@@ -1457,7 +1457,10 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 			// flaky without a bit of a delay.
 			r.store.stopper.RunAsyncTask(func() {
 				time.Sleep(10 * time.Millisecond)
-				r.store.multiraft.Campaign(split.NewDesc.RangeID)
+				// TODO(bdarnell): make sure newRng hasn't been removed
+				newRng.Lock()
+				_ = newRng.raftGroup.Campaign()
+				newRng.Unlock()
 			})
 		}
 	})

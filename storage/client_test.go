@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
-	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/sql"
@@ -117,7 +116,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	sender := kv.NewTxnCoordSender(distSender, clock, false, nil, stopper)
 	sCtx.Clock = clock
 	sCtx.DB = client.NewDB(sender)
-	sCtx.Transport = multiraft.NewLocalRPCTransport(stopper)
+	sCtx.Transport = storage.NewLocalRPCTransport(stopper)
 	// TODO(bdarnell): arrange to have the transport closed.
 	store := storage.NewStore(*sCtx, eng, nodeDesc)
 	if bootstrap {
@@ -148,7 +147,7 @@ type multiTestContext struct {
 	clock        *hlc.Clock
 	gossip       *gossip.Gossip
 	storePool    *storage.StorePool
-	transport    multiraft.Transport
+	transport    storage.RaftTransport
 	distSender   *kv.DistSender
 	db           *client.DB
 	feed         *util.Feed
@@ -210,7 +209,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		m.clientStopper = stop.NewStopper()
 	}
 	if m.transport == nil {
-		m.transport = multiraft.NewLocalRPCTransport(m.clientStopper)
+		m.transport = storage.NewLocalRPCTransport(m.clientStopper)
 	}
 	if m.storePool == nil {
 		if m.timeUntilStoreDead == 0 {

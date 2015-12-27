@@ -66,7 +66,7 @@ func (rs *rangeStats) Replace(other *rangeStats) {
 }
 
 // GetMVCC returns a copy of the underlying MVCCStats. Use this for
-// thread-safe access from goroutines other than the store multiraft
+// thread-safe access from goroutines other than the store raft
 // processing goroutine.
 func (rs *rangeStats) GetMVCC() engine.MVCCStats {
 	rs.Lock()

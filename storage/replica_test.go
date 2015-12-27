@@ -33,8 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/multiraft"
-	"github.com/cockroachdb/cockroach/multiraft/storagetest"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -86,7 +84,7 @@ const (
 // testContext{}. Any fields which are initialized to non-nil values
 // will be used as-is.
 type testContext struct {
-	transport     multiraft.Transport
+	transport     RaftTransport
 	store         *Store
 	rng           *Replica
 	rangeID       roachpb.RangeID
@@ -122,7 +120,7 @@ func (tc *testContext) Start(t testing.TB) {
 		tc.engine = engine.NewInMem(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, tc.stopper)
 	}
 	if tc.transport == nil {
-		tc.transport = multiraft.NewLocalRPCTransport(tc.stopper)
+		tc.transport = NewLocalRPCTransport(tc.stopper)
 	}
 	tc.stopper.AddCloser(tc.transport)
 
@@ -258,7 +256,7 @@ func TestRangeContains(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano)
 	ctx := TestStoreContext
 	ctx.Clock = clock
-	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
+	ctx.Transport = NewLocalRPCTransport(stopper)
 	defer ctx.Transport.Close()
 	store := NewStore(ctx, e, &roachpb.NodeDescriptor{NodeID: 1})
 	r, err := NewReplica(desc, store)
@@ -283,10 +281,10 @@ func TestRangeContains(t *testing.T) {
 func setLeaderLease(t *testing.T, r *Replica, l *roachpb.Lease) {
 	ba := roachpb.BatchRequest{}
 	ba.Add(&roachpb.LeaderLeaseRequest{Lease: *l})
-	errChan, pendingCmd := r.proposeRaftCommand(r.context(), ba)
-	var err error
-	if err = <-errChan; err == nil {
+	pendingCmd, err := r.proposeRaftCommand(r.context(), ba)
+	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
+		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
 		err = (<-pendingCmd.done).Err
 	}
 	if err != nil {
@@ -491,12 +489,10 @@ func TestRangeLeaderLease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rng.proposeRaftCommandFn = func(id cmdIDKey, cmd roachpb.RaftCommand) <-chan error {
-		errChan := make(chan error, 1)
-		errChan <- &roachpb.LeaseRejectedError{
+	rng.proposeRaftCommandFn = func(id cmdIDKey, cmd roachpb.RaftCommand) error {
+		return &roachpb.LeaseRejectedError{
 			Message: "replica not found",
 		}
-		return errChan
 	}
 
 	if _, ok := rng.redirectOnOrAcquireLeaderLease(nil, tc.clock.Now()).(*roachpb.NotLeaderError); !ok {
@@ -731,10 +727,11 @@ func TestRangeLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	}
 	ba := roachpb.BatchRequest{}
 	ba.Add(&roachpb.LeaderLeaseRequest{Lease: *lease})
-	errChan, pendingCmd := tc.rng.proposeRaftCommand(tc.rng.context(), ba)
-	var err error
-	if err = <-errChan; err == nil {
+	pendingCmd, err := tc.rng.proposeRaftCommand(tc.rng.context(), ba)
+	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
+		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
+		// Remove ambiguity about where the "replica not found" error comes from.
 		err = (<-pendingCmd.done).Err
 	}
 	if !testutils.IsError(err, "replica not found") {
@@ -2835,36 +2832,6 @@ func TestTruncateLog(t *testing.T) {
 	}
 }
 
-func TestRaftStorage(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	var eng engine.Engine
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	storagetest.RunTests(t,
-		func(t *testing.T) storagetest.WriteableStorage {
-			eng = engine.NewInMem(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, stopper)
-			// Fake store to house the engine.
-			store := &Store{
-				ctx: StoreContext{
-					Clock: hlc.NewClock(hlc.UnixNano),
-				},
-				engine: eng,
-			}
-			rng, err := NewReplica(&roachpb.RangeDescriptor{
-				RangeID:  1,
-				StartKey: roachpb.RKeyMin,
-				EndKey:   roachpb.RKeyMax,
-			}, store)
-			if err != nil {
-				t.Fatal(err)
-			}
-			return rng
-		},
-		func(t *testing.T, r storagetest.WriteableStorage) {
-			// Do nothing
-		})
-}
-
 // TestConditionFailedError tests that a ConditionFailedError correctly
 // bubbles up from MVCC to Range.
 func TestConditionFailedError(t *testing.T) {
@@ -3362,21 +3329,8 @@ func BenchmarkWriteCmdWithEventsAndConsumer(b *testing.B) {
 	benchmarkEvents(b, true, true)
 }
 
-type mockRangeManager struct {
-	*Store
-	mockProposeRaftCommand func(cmdIDKey, roachpb.RaftCommand) <-chan error
-}
-
-// ProposeRaftCommand mocks out the corresponding method on the Store.
-func (mrm *mockRangeManager) ProposeRaftCommand(idKey cmdIDKey, cmd roachpb.RaftCommand) <-chan error {
-	if mrm.mockProposeRaftCommand == nil {
-		return mrm.Store.ProposeRaftCommand(idKey, cmd)
-	}
-	return mrm.mockProposeRaftCommand(idKey, cmd)
-}
-
 // TestRequestLeaderEncounterGroupDeleteError verifies that a request leader proposal which fails with
-// multiraft.ErrGroupDeleted is converted to a RangeNotFoundError in the Store.
+// errRaftGroupDeleted is converted to a RangeNotFoundError in the Store.
 func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{
@@ -3385,11 +3339,9 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Mock proposeRaftCommand to return an ErrGroupDeleted error.
-	proposeRaftCommandFn := func(cmdIDKey, roachpb.RaftCommand) <-chan error {
-		ch := make(chan error, 1)
-		ch <- multiraft.ErrGroupDeleted
-		return ch
+	// Mock proposeRaftCommand to return an errRaftGroupDeleted error.
+	proposeRaftCommandFn := func(cmdIDKey, roachpb.RaftCommand) error {
+		return errRaftGroupDeleted
 	}
 	rng, err := NewReplica(testRangeDescriptor(), tc.store)
 	rng.proposeRaftCommandFn = proposeRaftCommandFn

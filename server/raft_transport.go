@@ -22,9 +22,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/gogo/protobuf/proto"
@@ -33,6 +33,7 @@ import (
 )
 
 const (
+	// TODO(bdarnell): consider changing raftServiceName/raftMessageName
 	raftServiceName = "MultiRaft"
 	raftMessageName = raftServiceName + ".RaftMessage"
 	// Outgoing messages are queued on a per-node basis on a channel of
@@ -43,30 +44,30 @@ const (
 	raftIdleTimeout = time.Minute
 )
 
-// rpcTransport handles the rpc messages for multiraft.
+// rpcTransport handles the rpc messages for raft.
 type rpcTransport struct {
 	gossip     *gossip.Gossip
 	rpcServer  *rpc.Server
 	rpcContext *rpc.Context
 	mu         sync.Mutex
-	servers    map[roachpb.StoreID]multiraft.ServerInterface
-	queues     map[roachpb.StoreID]chan *multiraft.RaftMessageRequest
+	handlers   map[roachpb.StoreID]storage.RaftMessageHandler
+	queues     map[roachpb.StoreID]chan *storage.RaftMessageRequest
 }
 
 // newRPCTransport creates a new rpcTransport with specified gossip and rpc server.
 func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *rpc.Context) (
-	multiraft.Transport, error) {
+	storage.RaftTransport, error) {
 	t := &rpcTransport{
 		gossip:     gossip,
 		rpcServer:  rpcServer,
 		rpcContext: rpcContext,
-		servers:    make(map[roachpb.StoreID]multiraft.ServerInterface),
-		queues:     make(map[roachpb.StoreID]chan *multiraft.RaftMessageRequest),
+		handlers:   make(map[roachpb.StoreID]storage.RaftMessageHandler),
+		queues:     make(map[roachpb.StoreID]chan *storage.RaftMessageRequest),
 	}
 
 	if t.rpcServer != nil {
 		if err := t.rpcServer.RegisterAsync(raftMessageName, false, /*not public*/
-			t.RaftMessage, &multiraft.RaftMessageRequest{}); err != nil {
+			t.RaftMessage, &storage.RaftMessageRequest{}); err != nil {
 			return nil, err
 		}
 	}
@@ -76,10 +77,10 @@ func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *r
 
 // RaftMessage proxies the incoming request to the listening server interface.
 func (t *rpcTransport) RaftMessage(args proto.Message, callback func(proto.Message, error)) {
-	req := args.(*multiraft.RaftMessageRequest)
+	req := args.(*storage.RaftMessageRequest)
 
 	t.mu.Lock()
-	server, ok := t.servers[req.ToReplica.StoreID]
+	handler, ok := t.handlers[req.ToReplica.StoreID]
 	t.mu.Unlock()
 
 	if !ok {
@@ -87,38 +88,37 @@ func (t *rpcTransport) RaftMessage(args proto.Message, callback func(proto.Messa
 		return
 	}
 
-	// Raft responses are empty so we don't actually need to convert
-	// between multiraft's internal struct and the external proto
-	// representation. In fact, we don't even need to wait for the
-	// message to be processed to invoke the callback. We are just
-	// (ab)using the async handler mechanism to get this (synchronous)
-	// handler called in the RPC server's goroutine so we can preserve
-	// order of incoming messages.
-	resp, err := server.RaftMessage(req)
-	callback(resp, err)
+	// Raft responses are empty so we don't actually need to get a
+	// response from the handler. In fact, we don't even need to wait
+	// for the message to be processed to invoke the callback. We are
+	// just (ab)using the async handler mechanism to get this
+	// (synchronous) handler called in the RPC server's goroutine so we
+	// can preserve order of incoming messages.
+	err := handler(req)
+	callback(&storage.RaftMessageResponse{}, err)
 }
 
-// Listen implements the multiraft.Transport interface by registering a ServerInterface
-// to receive proxied messages.
-func (t *rpcTransport) Listen(id roachpb.StoreID, server multiraft.ServerInterface) error {
+// Listen implements the storage.RaftTransport interface by
+// registering a RaftMessageHandler to receive proxied messages.
+func (t *rpcTransport) Listen(id roachpb.StoreID, handler storage.RaftMessageHandler) error {
 	t.mu.Lock()
-	t.servers[id] = server
+	t.handlers[id] = handler
 	t.mu.Unlock()
 	return nil
 }
 
-// Stop implements the multiraft.Transport interface by unregistering the server id.
+// Stop implements the storage.RaftTransport interface by unregistering the server id.
 func (t *rpcTransport) Stop(id roachpb.StoreID) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	delete(t.servers, id)
+	delete(t.handlers, id)
 }
 
 // processQueue creates a client and sends messages from its designated queue
 // via that client, exiting when the client fails or when it idles out. All
 // messages remaining in the queue at that point are lost and a new instance of
 // processQueue should be started by the next message to be sent.
-// TODO(tschottdorf) should let MultiRaft know if the node is down;
+// TODO(tschottdorf) should let raft know if the node is down;
 // need a feedback mechanism for that. Potentially easiest is to arrange for
 // the next call to Send() to fail appropriately.
 func (t *rpcTransport) processQueue(nodeID roachpb.NodeID, storeID roachpb.StoreID) {
@@ -157,8 +157,8 @@ func (t *rpcTransport) processQueue(nodeID roachpb.NodeID, storeID roachpb.Store
 	}
 
 	done := make(chan *gorpc.Call, cap(ch))
-	var req *multiraft.RaftMessageRequest
-	protoResp := &multiraft.RaftMessageResponse{}
+	var req *storage.RaftMessageRequest
+	protoResp := &storage.RaftMessageResponse{}
 	for {
 		select {
 		case <-t.rpcContext.Stopper.ShouldStop():
@@ -187,11 +187,11 @@ func (t *rpcTransport) processQueue(nodeID roachpb.NodeID, storeID roachpb.Store
 }
 
 // Send a message to the recipient specified in the request.
-func (t *rpcTransport) Send(req *multiraft.RaftMessageRequest) error {
+func (t *rpcTransport) Send(req *storage.RaftMessageRequest) error {
 	t.mu.Lock()
 	ch, ok := t.queues[req.ToReplica.StoreID]
 	if !ok {
-		ch = make(chan *multiraft.RaftMessageRequest, raftSendBufferSize)
+		ch = make(chan *storage.RaftMessageRequest, raftSendBufferSize)
 		t.queues[req.ToReplica.StoreID] = ch
 		go t.processQueue(req.ToReplica.NodeID, req.ToReplica.StoreID)
 	}
