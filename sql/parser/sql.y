@@ -861,14 +861,14 @@ iso_level:
     // Mapped to the closest supported isolation level.
     $$ = SnapshotIsolation
   }
-| REPEATABLE READ
-  {
-    // Mapped to the closest supported isolation level.
-    $$ = SnapshotIsolation
-  }
 | SNAPSHOT
   {
     $$ = SnapshotIsolation
+  }
+| REPEATABLE READ
+  {
+    // Mapped to the closest supported isolation level.
+    $$ = SerializableIsolation
   }
 | SERIALIZABLE
   {
