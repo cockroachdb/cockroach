@@ -27,6 +27,8 @@ import (
 	"github.com/rcrowley/go-metrics"
 )
 
+const histWrapNum = 4 // number of histograms to keep in rolling window
+
 type timeScale struct {
 	name string
 	d    time.Duration
@@ -62,8 +64,10 @@ type periodic interface {
 var _ periodic = &Histogram{}
 var _ periodic = &Rate{}
 
+var now = time.Now
+
 func maybeTick(m periodic) {
-	for m.nextTick().Before(time.Now()) {
+	for m.nextTick().Before(now()) {
 		m.tick()
 	}
 }
@@ -82,13 +86,12 @@ type Histogram struct {
 // Data is kept in the active window for approximately the given duration.
 // See the the documentation for hdrhistogram.WindowedHistogram for details.
 func NewHistogram(duration time.Duration, maxVal int64, sigFigs int) *Histogram {
-	const n = 4
 	h := &Histogram{}
 	h.maxVal = int64(maxVal)
-	h.interval = duration / n
-	h.nextT = time.Now()
+	h.interval = duration / histWrapNum
+	h.nextT = now()
 
-	h.windowed = hdrhistogram.NewWindowed(n, 0, h.maxVal, sigFigs)
+	h.windowed = hdrhistogram.NewWindowed(histWrapNum, 0, h.maxVal, sigFigs)
 	return h
 }
 
@@ -117,6 +120,14 @@ func (h *Histogram) RecordValue(v int64) {
 	for h.windowed.Current.RecordValue(v) != nil {
 		v = h.maxVal
 	}
+}
+
+// Current returns a copy of the data currently in the window.
+func (h *Histogram) Current() *hdrhistogram.Histogram {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	maybeTick(h)
+	return hdrhistogram.Import(h.windowed.Merge().Export())
 }
 
 // Each calls the closure with the empty string and the (locked) receiver.
@@ -194,9 +205,17 @@ func NewRate(timescale time.Duration) *Rate {
 
 	return &Rate{
 		interval: tickInterval,
-		nextT:    time.Now(),
+		nextT:    now(),
 		wrapped:  ewma.NewMovingAverage(avgAge),
 	}
+}
+
+// Value returns the current value of the Rate.
+func (e *Rate) Value() float64 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	maybeTick(e)
+	return e.wrapped.Value()
 }
 
 func (e *Rate) nextTick() time.Time {
