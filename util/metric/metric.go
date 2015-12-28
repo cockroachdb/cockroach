@@ -61,18 +61,6 @@ type periodic interface {
 var _ periodic = &Histogram{}
 var _ periodic = &Rate{}
 
-// Unit is a base unit for a histogram.
-type Unit int64
-
-// UnitMs is the number of milliseconds in a nanosecond.
-const UnitMs = Unit(time.Millisecond)
-
-// MaxVal is a maximum value for a histogram.
-type MaxVal int64
-
-// MaxMinute truncates histogram values larger than one minute.
-const MaxMinute = MaxVal(time.Minute)
-
 func maybeTick(m periodic) {
 	for m.nextTick().Before(time.Now()) {
 		m.tick()
@@ -81,7 +69,6 @@ func maybeTick(m periodic) {
 
 // A Histogram is a wrapper around an hdrhistogram.WindowedHistogram.
 type Histogram struct {
-	unit   int64
 	maxVal int64
 
 	mu       sync.Mutex
@@ -112,9 +99,8 @@ func (h *Histogram) RecordValue(v int64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	maybeTick(h)
-	v /= h.unit
 	for h.windowed.Current.RecordValue(v) != nil {
-		v = h.maxVal / h.unit
+		v = h.maxVal
 	}
 }
 
