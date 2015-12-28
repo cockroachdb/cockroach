@@ -416,6 +416,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		key := append([]byte(nil), keyPrefix...)
 		key = append(key, randutil.RandBytes(src, int(src.Int31n(1<<7)))...)
+		key = keys.EncodeSentinelKey(key)
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs := putArgs(key, val)
 		if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
@@ -433,6 +434,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	// Split the range at approximate halfway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
 	midKey := append([]byte(nil), keyPrefix...)
 	midKey = append(midKey, []byte("Z")...)
+	midKey = keys.EncodeSentinelKey(midKey)
 	args = adminSplitArgs(keyPrefix, midKey)
 	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: rng.Desc().RangeID,
@@ -480,6 +482,7 @@ func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key
 			return
 		}
 		key := append(append([]byte(nil), prefix...), randutil.RandBytes(src, 100)...)
+		key = keys.EncodeSentinelKey(key)
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs := putArgs(key, val)
 		_, err := client.SendWrappedWith(store, nil, roachpb.Header{
