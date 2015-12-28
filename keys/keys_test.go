@@ -353,9 +353,9 @@ func TestBatchRange(t *testing.T) {
 	}
 }
 
-func TestEncodeColumnKey(t *testing.T) {
+func TestMakeColumnKey(t *testing.T) {
 	const maxColID = math.MaxUint32
-	key := EncodeColumnKey(nil, maxColID)
+	key := MakeColumnKey(nil, maxColID)
 	if expected, n := 6, len(key); expected != n {
 		t.Fatalf("expected %d bytes, but got %d: [% x]", expected, n, []byte(key))
 	}

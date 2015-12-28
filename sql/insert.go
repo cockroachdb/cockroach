@@ -219,7 +219,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
 
-				key := keys.EncodeColumnKey(primaryIndexKey, uint32(col.ID))
+				key := keys.MakeColumnKey(primaryIndexKey, uint32(col.ID))
 				if log.V(2) {
 					log.Infof("CPut %s -> %v", key, val)
 				}

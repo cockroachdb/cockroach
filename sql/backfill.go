@@ -121,7 +121,7 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *Tab
 					sentinelKey = stripColumnIDLength(kv.Key)
 					for _, columnDesc := range droppedColumnDescs {
 						// Delete the dropped column.
-						colKey := keys.EncodeColumnKey(sentinelKey, uint32(columnDesc.ID))
+						colKey := keys.MakeColumnKey(sentinelKey, uint32(columnDesc.ID))
 						if log.V(2) {
 							log.Infof("Del %s", colKey)
 						}

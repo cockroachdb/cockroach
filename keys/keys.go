@@ -349,9 +349,8 @@ func DecodeTablePrefix(key roachpb.Key) ([]byte, uint64, error) {
 	return encoding.DecodeUvarint(key)
 }
 
-// EncodeColumnKey appends the encoded column ID and column ID suffix size to
-// rowKey.
-func EncodeColumnKey(rowKey []byte, colID uint32) []byte {
+// MakeColumnKey returns the key for the column in the given row.
+func MakeColumnKey(rowKey []byte, colID uint32) []byte {
 	var key []byte
 	key = append(key, rowKey...)
 	size := len(key)
