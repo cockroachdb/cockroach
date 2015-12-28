@@ -310,8 +310,6 @@ func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.
 	appendSplitKeys := func(startID, endID uint32) {
 		// endID could be smaller than startID if we don't have user tables.
 		for id := startID; id <= endID; id++ {
-			// TODO(peter): Uncommenting this line causes various storage split tests
-			// (e.g. TestStoreZoneUpdateAndRangeSplit) to fail. Figure out why.
 			key = keys.EncodeSentinelKey(keys.MakeTablePrefix(id))
 			// Skip if this ID matches the startKey passed to ComputeSplitKeys.
 			if !startKey.Less(key) {

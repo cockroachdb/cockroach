@@ -351,8 +351,7 @@ func DecodeTablePrefix(key roachpb.Key) ([]byte, uint64, error) {
 
 // MakeColumnKey returns the key for the column in the given row.
 func MakeColumnKey(rowKey []byte, colID uint32) []byte {
-	var key []byte
-	key = append(key, rowKey...)
+	key := append([]byte(nil), rowKey...)
 	size := len(key)
 	key = encoding.EncodeUvarint(key, uint64(colID))
 	// Note that we assume that `len(key)-size` will always be encoded to a
@@ -382,7 +381,7 @@ func MakeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 	buf := key[n-1:]
 	if encoding.PeekType(buf) != encoding.Int {
 		// The last byte is not a valid column ID suffix.
-		return key, nil
+		return nil, util.Errorf("%s: not a valid table key", key)
 	}
 
 	// Strip off the column ID suffix from the buf. The last byte of the buf
