@@ -85,6 +85,71 @@ type Reader interface {
 	EOF() bool
 }
 
+type CachingReader struct {
+	s        []byte
+	i        int
+	dir      Direction // !!! this needs to be an array and we need an advance function
+	inverted []byte
+}
+
+func NewCachingReader(s []byte) *CachingReader {
+	reader := CachingReader{s: s, i: 0, dir: Ascending}
+	reader.inverted = append([]byte(nil), s...)
+	onesComplement(reader.inverted)
+	return &reader
+}
+
+func (r *CachingReader) EOF() bool {
+	return r.i >= len(r.s)
+}
+
+func (r *CachingReader) Read(n int) ([]byte, error) {
+	if n > len(r.s) {
+		return nil, io.EOF
+	}
+	var res []byte
+	if r.dir != Ascending {
+		res = r.inverted[r.i : r.i+n]
+	} else {
+		res = r.s[r.i : r.i+n]
+	}
+	r.i += n
+	return res, nil
+}
+
+func (r *CachingReader) ReadByte() (byte, error) {
+	if r.EOF() {
+		return 0, io.EOF
+	}
+	b := r.s[r.i]
+	r.i++
+	if r.dir != Descending {
+		return b, nil
+	} else {
+		return ^b, nil
+	}
+}
+
+func (r *CachingReader) PeekByte() (byte, error) {
+	if r.EOF() {
+		return 0, io.EOF
+	}
+	b := r.s[r.i]
+	if r.dir != Descending {
+		return b, nil
+	} else {
+		return ^b, nil
+	}
+}
+
+func (r *CachingReader) Reset(s []byte) {
+	r.s = s
+	r.i = 0
+	r.dir = Ascending
+	//r.inverted = append([]byte(nil), s...)
+	//onesComplement(r.inverted)
+}
+
 // !!!
 type RReader struct {
 	s     []byte
@@ -164,17 +229,31 @@ func (r *RReader) Read(n int) (*UnsafeArray, error) {
 }
 
 func (r *RReader) ReadByte() (byte, error) {
-	if r.EOF() {
-		return 0, io.EOF
-	}
+	//if r.EOF() {
+	//  return 0, io.EOF
+	//}
 	b := r.s[r.i]
 	r.i++
-	if r.dir != Descending {
-		return b, nil
-	} else {
-		return ^b, nil
-	}
+	return b, nil
+	//if r.dir != Descending {
+	//  return b, nil
+	//} else {
+	//  return ^b, nil
+	//}
 }
+
+//func (r *RReader) ReadByte() (byte, error) {
+//  if r.EOF() {
+//    return 0, io.EOF
+//  }
+//  b := r.s[r.i]
+//  r.i++
+//  if r.dir != Descending {
+//    return b, nil
+//  } else {
+//    return ^b, nil
+//  }
+//}
 
 func (r *RReader) PeekByte() (byte, error) {
 	if r.EOF() {
