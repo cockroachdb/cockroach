@@ -6,7 +6,7 @@ BEGIN {
     print "var keywords = map[string]int{"
 
     # This variable will be associated with a pipe for intermediate output.
-    sort = "sort"
+    sort = "sort -t \"\\\"\" -k 2,2"
 }
 
 /^.*_keyword:/ {
