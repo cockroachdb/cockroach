@@ -94,7 +94,13 @@ type RReader struct {
 }
 
 func NewRReader(s []byte) *RReader {
-	return &RReader{s: s, i: 0}
+	return &RReader{s: s, i: 0, dir: Ascending, slice: nil}
+}
+
+func (r *RReader) Reset(s []byte) {
+	r.s = s
+	r.i = 0
+	r.slice = nil
 }
 
 func (r *RReader) RawBytesRemaining() []byte {
@@ -106,7 +112,7 @@ func (r *RReader) EOF() bool {
 }
 
 type UnsafeArray [0x7fffffff]byte
-type UnsafeWordArray [0x7fffffff]byte
+type UnsafeWordArray [0x7fffffff]uintptr
 
 func onesComplementXXX(b *UnsafeArray, n int) {
 	w := n / wordSize
@@ -120,6 +126,24 @@ func onesComplementXXX(b *UnsafeArray, n int) {
 	for i := w * wordSize; i < n; i++ {
 		b[i] = ^b[i]
 	}
+}
+
+func (r *RReader) ReadAtMost(n int) (*UnsafeArray, int) {
+	if n > len(r.s) {
+		n = len(r.s)
+	}
+	var ptr *UnsafeArray
+	ptr = (*UnsafeArray)(unsafe.Pointer(&r.s[r.i]))
+	if r.dir == Descending {
+		onesComplementXXX(ptr, n)
+		// !!! try an unsafe copy here by casting to uintptr, or just a for loop
+		//r.slice = r.slice[:0]
+		//r.slice = append(r.slice, ptr[:n]...)
+		//onesComplement(r.slice)
+		//ptr = (*UnsafeArray)(unsafe.Pointer(&r.slice[0]))
+	}
+	r.i += n
+	return ptr, n
 }
 
 func (r *RReader) Read(n int) (*UnsafeArray, error) {

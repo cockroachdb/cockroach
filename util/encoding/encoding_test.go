@@ -862,22 +862,51 @@ func TestPeekType(t *testing.T) {
 //  }
 //}
 
+func TestDecodeUint32XXX(t *testing.T) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([][]byte, 10)
+	nums := make([]uint32, 10)
+	for i := range vals {
+		nums[i] = uint32(rng.Int31())
+		vals[i] = EncodeUint32(nil, nums[i])
+	}
+
+	r := NewRReader([]byte{})
+	for i := 0; i < len(vals); i++ {
+		//r := NewRReader(vals[i%len(vals)])
+		r.i = 0
+		r.s = vals[i]
+		v, _ := DecodeUint32XXX(r)
+		fmt.Printf("decoded: %d vs value: %d\n", v, nums[i])
+	}
+}
+
+var result uint32
+
 func BenchmarkDecodeUint32XXX(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
 	vals := make([][]byte, 10000)
+	nums := make([]uint32, 10000)
 	for i := range vals {
-		vals[i] = EncodeUint32(nil, uint32(rng.Int31()))
+		nums[i] = uint32(rng.Int31())
+		vals[i] = EncodeUint32(nil, nums[i])
 	}
 
-	//dirs := []Direction{Ascending}
 	r := NewRReader([]byte{})
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
+		r.Reset(vals[i%len(vals)])
+		//NewRReader(vals[i%len(vals)])
 		//r := NewRReader(vals[i%len(vals)])
-		r.i = 0
-		r.s = vals[i%len(vals)]
-		_, _ = DecodeUint32XXX(r)
+		//r.i = 0
+		//r.s = vals[i%len(vals)]
+		//r.dir = Ascending
+		result, _ = DecodeUint32XXX(r)
+		//if result != nums[i%len(vals)] {
+		//  panic("not equal!!!")
+		//}
 	}
 }
 
@@ -915,7 +944,8 @@ func DecodeVarintXXX(r *RReader) (int64, error) {
 		return ^v, nil
 	}
 
-	v, err := BDecodeUvarint(r)
+	//r.i-- // !!!
+	v, err := DecodeUvarintXXX(r)
 	if err != nil {
 		return 0, err
 	}
@@ -925,7 +955,43 @@ func DecodeVarintXXX(r *RReader) (int64, error) {
 	return int64(v), nil
 }
 
-func BDecodeUvarint(r *RReader) (uint64, error) {
+// !!!
+func DecodeUvarintYYY(r *RReader) (uint64, error) {
+	//buf, _ := r.ReadAtMost(9) // we purposefully ignore the possible EOF here !!!
+	_, v, err := DecodeUvarintClassic(r.RawBytesRemaining())
+	// !!! here need to rewind - put the remainder back. Careful that it might need to be inverted again.
+	return v, err
+}
+
+// !!! the old version of DecodeUvarint before the Reader
+// DecodeUvarint decodes a varint encoded uint64 from the input
+// buffer. The remainder of the input buffer and the decoded uint64
+// are returned.
+func DecodeUvarintClassic(b []byte) ([]byte, uint64, error) {
+	if len(b) == 0 {
+		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value")
+	}
+	length := int(b[0]) - intZero
+	b = b[1:] // skip length byte
+	if length <= intSmall {
+		return b, uint64(length), nil
+	}
+	length -= intSmall
+	if length < 0 || length > 8 {
+		return nil, 0, util.Errorf("invalid uvarint length of %d", length)
+	} else if len(b) < length {
+		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value: %v", b)
+	}
+	var v uint64
+	// It is faster to range over the elements in a slice than to index
+	// into the slice on each loop iteration.
+	for _, t := range b[:length] {
+		v = (v << 8) | uint64(t)
+	}
+	return b, v, nil
+}
+
+func DecodeUvarintXXX(r *RReader) (uint64, error) {
 	var b byte
 	var length int
 	var err error
@@ -947,12 +1013,23 @@ func BDecodeUvarint(r *RReader) (uint64, error) {
 		}
 	}
 	var v uint64
+	//fmt.Printf("!!! read len: %d bytes: %v\n", length, buf[:length])
+	//if length >= 4 {
+	//  bw := (*[1000]int32)(unsafe.Pointer(buf))
+	//  fmt.Printf("!!! first bytes: %v %v\n", bw[0], bw[1])
+	//  v = v<<32 | uint64(bw[0])
+	//  buf = (*UnsafeArray)(unsafe.Pointer(&buf[4]))
+	//  length -= 4
+	//}
 	// It is faster to range over the elements in a slice than to index
 	// into the slice on each loop iteration.
-	for i := 0; i < length; i++ {
-		t := buf[i]
+	for _, t := range buf[:length] {
 		v = (v << 8) | uint64(t)
 	}
+	//for i := 0; i < length; i++ {
+	//  t := buf[i]
+	//  v = (v << 8) | uint64(t)
+	//}
 	return v, nil
 }
 
@@ -1042,11 +1119,14 @@ func BenchmarkDecodeVarintXXX(b *testing.B) {
 		vals[i] = EncodeVarint(nil, rng.Int63())
 	}
 
-	//dirs := []Direction{Ascending}
+	r := NewRReader([]byte{})
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		//r := NewKeyReader(vals[i%len(vals)], dirs)
-		r := NewRReader(vals[i%len(vals)])
+		r.Reset(vals[i%len(vals)])
+		//r := NewRReader(vals[i%len(vals)])
+		//r.i = 0
+		//r.s = vals[i%len(vals)]
+		//r.slice = r.slice[:0]
 		_, _ = DecodeVarintXXX(r)
 	}
 }
@@ -1101,6 +1181,23 @@ func BenchmarkDecodeUvarint(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		r := NewKeyReader(vals[i%len(vals)], dirs)
 		_, _ = DecodeUvarint(r)
+	}
+}
+
+func BenchmarkDecodeUvarintXXX(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeUvarint(nil, uint64(rng.Int63()))
+	}
+
+	//r := NewRReader([]byte{})
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		r := NewRReader(vals[i%len(vals)])
+		//r.Reset(vals[i%len(vals)])
+		_, _ = DecodeUvarintXXX(r)
 	}
 }
 
