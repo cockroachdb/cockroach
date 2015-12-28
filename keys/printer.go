@@ -19,6 +19,8 @@ package keys
 import (
 	"bytes"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -98,7 +100,7 @@ func localStoreKeyPrint(key roachpb.Key) string {
 func raftLogKeyPrint(key roachpb.Key) string {
 	var logIndex uint64
 	var err error
-	key, logIndex, err = encoding.DecodeUint64(key)
+	key, logIndex, err = encoding.DecodeUint64Ascending(key)
 	if err != nil {
 		return fmt.Sprintf("/err<%v:%q>", err, []byte(key))
 	}
@@ -113,7 +115,7 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 	}
 
 	// get range id
-	key, i, err := encoding.DecodeVarint(key)
+	key, i, err := encoding.DecodeVarintAscending(key)
 	if err != nil {
 		return fmt.Sprintf("/err<%v:%q>", err, []byte(key))
 	}
@@ -172,7 +174,7 @@ func localRangeKeyPrint(key roachpb.Key) string {
 }
 
 func sequenceCacheKeyPrint(key roachpb.Key) string {
-	b, id, err := encoding.DecodeBytes([]byte(key), nil)
+	b, id, err := encoding.DecodeBytesAscending([]byte(key), nil)
 	if err != nil {
 		return fmt.Sprintf("/%q/err:%v", key, err)
 	}
@@ -181,12 +183,12 @@ func sequenceCacheKeyPrint(key roachpb.Key) string {
 		return fmt.Sprintf("/%q", id)
 	}
 
-	b, epoch, err := encoding.DecodeUint32Decreasing(b)
+	b, epoch, err := encoding.DecodeUint32Descending(b)
 	if err != nil {
 		return fmt.Sprintf("/%q/err:%v", id, err)
 	}
 
-	_, seq, err := encoding.DecodeUint32Decreasing(b)
+	_, seq, err := encoding.DecodeUint32Descending(b)
 	if err != nil {
 		return fmt.Sprintf("/%q/epoch:%d/err:%v", id, epoch, err)
 	}
@@ -211,25 +213,37 @@ func decodeKeyPrint(key roachpb.Key) string {
 			fmt.Fprintf(&buf, "/#")
 		case encoding.Int:
 			var i int64
-			key, i, err = encoding.DecodeVarint(key)
+			key, i, err = encoding.DecodeVarintAscending(key)
 			if err == nil {
 				fmt.Fprintf(&buf, "/%d", i)
 			}
 		case encoding.Float:
 			var f float64
-			key, f, err = encoding.DecodeFloat(key, nil)
+			key, f, err = encoding.DecodeFloatAscending(key, nil)
 			if err == nil {
 				fmt.Fprintf(&buf, "/%f", f)
 			}
 		case encoding.Bytes:
 			var s string
-			key, s, err = encoding.DecodeString(key, nil)
+			key, s, err = encoding.DecodeStringAscending(key, nil)
+			if err == nil {
+				fmt.Fprintf(&buf, "/%q", s)
+			}
+		case encoding.BytesDesc:
+			var s string
+			key, s, err = encoding.DecodeStringDescending(key, nil)
 			if err == nil {
 				fmt.Fprintf(&buf, "/%q", s)
 			}
 		case encoding.Time:
 			var t time.Time
-			key, t, err = encoding.DecodeTime(key)
+			key, t, err = encoding.DecodeTimeAscending(key)
+			if err == nil {
+				fmt.Fprintf(&buf, "/%s", t.UTC().Format(time.UnixDate))
+			}
+		case encoding.TimeDesc:
+			var t time.Time
+			key, t, err = encoding.DecodeTimeDescending(key)
 			if err == nil {
 				fmt.Fprintf(&buf, "/%s", t.UTC().Format(time.UnixDate))
 			}
@@ -320,4 +334,54 @@ func PrettyPrint(key roachpb.Key) string {
 
 func init() {
 	roachpb.PrettyPrintKey = PrettyPrint
+}
+
+// Does some transformations on pretty-printed spans and keys:
+// - if dirs is not nil, replace all ints with their ones' complement for
+// descendingly-encoded columns.
+// - strips line numbers from error messages.
+func MassagePrettyPrintedSpanForTest(span string, dirs []encoding.Direction) string {
+	var r string
+	colIdx := -1
+	for i := 0; i < len(span); i++ {
+		var d int = -789
+		fmt.Sscanf(span[i:], "%d", &d)
+		if (dirs != nil) && (d != -789) {
+			// We've managed to consume an int.
+			dir := dirs[colIdx]
+			i += len(strconv.Itoa(d)) - 1
+			x := d
+			if dir == encoding.Descending {
+				x = ^x
+			}
+			r += strconv.Itoa(x)
+		} else {
+			r += string(span[i])
+			switch span[i] {
+			case '/':
+				colIdx++
+			case '-', ' ':
+				// We're switching from the start constraints to the end constraints,
+				// or starting another span.
+				colIdx = -1
+			case '<':
+				// This is an error message, like <util/encoding/encoding.go:256: ....>.
+				end := strings.Index(span[i:], ">")
+				if end == -1 {
+					panic("parse error")
+				}
+				errMsg := span[i+1 : i+end+1]
+				lineIdx := strings.Index(errMsg, ":")
+				if lineIdx != -1 {
+					var lineEnd int
+					for lineEnd = lineIdx + 1; errMsg[lineEnd] >= '0' && errMsg[lineEnd] <= '9'; lineEnd++ {
+					}
+					errMsg = errMsg[:lineIdx] + errMsg[lineIdx+(lineEnd-lineIdx):]
+				}
+				r += errMsg
+				i += end
+			}
+		}
+	}
+	return r
 }

@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -601,7 +602,7 @@ func encodeDatum(b []byte, d parser.Datum) ([]byte, error) {
 	if values, ok := d.(parser.DTuple); ok {
 		return encodeDTuple(b, values)
 	}
-	return encodeTableKey(b, d)
+	return encodeTableKey(b, d, encoding.Ascending)
 }
 
 func encodeDTuple(b []byte, d parser.DTuple) ([]byte, error) {
