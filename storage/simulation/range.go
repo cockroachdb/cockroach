@@ -30,14 +30,14 @@ import (
 // should do if it was part of the replicate queue and the store to which the
 // replica is attached.
 type replica struct {
-	store     *Store
+	store     *simStore
 	action    storage.AllocatorAction
 	priority  float64
 	rebalance bool
 }
 
-// Range is a simulated cockroach range.
-type Range struct {
+// simRange is a simulated cockroach range.
+type simRange struct {
 	zone      config.ZoneConfig
 	desc      roachpb.RangeDescriptor
 	replicas  map[roachpb.StoreID]replica
@@ -45,8 +45,8 @@ type Range struct {
 }
 
 // newRange returns a new range with the given rangeID.
-func newRange(rangeID roachpb.RangeID, allocator storage.Allocator) *Range {
-	return &Range{
+func newRange(rangeID roachpb.RangeID, allocator storage.Allocator) *simRange {
+	return &simRange{
 		desc: roachpb.RangeDescriptor{
 			RangeID: rangeID,
 		},
@@ -58,7 +58,7 @@ func newRange(rangeID roachpb.RangeID, allocator storage.Allocator) *Range {
 
 // addReplica adds a new replica on the passed in store. It adds it to
 // both the range descriptor and the store map.
-func (r *Range) addReplica(s *Store) {
+func (r *simRange) addReplica(s *simStore) {
 	r.desc.Replicas = append(r.desc.Replicas, roachpb.ReplicaDescriptor{
 		NodeID:  s.desc.Node.NodeID,
 		StoreID: s.desc.StoreID,
@@ -70,7 +70,7 @@ func (r *Range) addReplica(s *Store) {
 
 // removeReplica removes an existing replica from the passed in store. It
 // removes it from both the range descriptor and the store map.
-func (r *Range) removeReplica(s *Store) {
+func (r *simRange) removeReplica(s *simStore) {
 	for i, replica := range r.desc.Replicas {
 		if replica.StoreID == s.desc.StoreID {
 			r.desc.Replicas = append(r.desc.Replicas[:i], r.desc.Replicas[i+1:]...)
@@ -81,7 +81,7 @@ func (r *Range) removeReplica(s *Store) {
 }
 
 // getStoreIDs returns the list of all stores where this range has replicas.
-func (r *Range) getStoreIDs() []roachpb.StoreID {
+func (r *simRange) getStoreIDs() []roachpb.StoreID {
 	var storeIDs []roachpb.StoreID
 	for storeID := range r.replicas {
 		storeIDs = append(storeIDs, storeID)
@@ -90,8 +90,8 @@ func (r *Range) getStoreIDs() []roachpb.StoreID {
 }
 
 // getStores returns a shallow copy of the internal stores map.
-func (r *Range) getStores() map[roachpb.StoreID]*Store {
-	stores := make(map[roachpb.StoreID]*Store)
+func (r *simRange) getStores() map[roachpb.StoreID]*simStore {
+	stores := make(map[roachpb.StoreID]*simStore)
 	for storeID, replica := range r.replicas {
 		stores[storeID] = replica.store
 	}
@@ -101,7 +101,7 @@ func (r *Range) getStores() map[roachpb.StoreID]*Store {
 // split range adds a replica to all the stores from the passed in range. This
 // function should only be called on new ranges as it will overwrite all of the
 // replicas in the range.
-func (r *Range) splitRange(originalRange *Range) {
+func (r *simRange) splitRange(originalRange *simRange) {
 	stores := originalRange.getStores()
 	r.desc.Replicas = append([]roachpb.ReplicaDescriptor(nil), originalRange.desc.Replicas...)
 	for storeID, store := range stores {
@@ -113,7 +113,7 @@ func (r *Range) splitRange(originalRange *Range) {
 
 // getAllocateTarget queries the allocator for the store that would be the best
 // candidate to take on a new replica.
-func (r *Range) getAllocateTarget() (roachpb.StoreID, error) {
+func (r *simRange) getAllocateTarget() (roachpb.StoreID, error) {
 	newStore, err := r.allocator.AllocateTarget(r.zone.ReplicaAttrs[0], r.desc.Replicas, true, nil)
 	if err != nil {
 		return 0, err
@@ -123,7 +123,7 @@ func (r *Range) getAllocateTarget() (roachpb.StoreID, error) {
 
 // getRemoveTarget queries the allocator for the store that contains a replica
 // that can be removed.
-func (r *Range) getRemoveTarget() (roachpb.StoreID, error) {
+func (r *simRange) getRemoveTarget() (roachpb.StoreID, error) {
 	removeStore, err := r.allocator.RemoveTarget(r.desc.Replicas)
 	if err != nil {
 		return 0, err
@@ -134,7 +134,7 @@ func (r *Range) getRemoveTarget() (roachpb.StoreID, error) {
 // getRebalanceTarget queries the allocator for the store that would be the best
 // candidate to add a replica for rebalancing. Returns true only if a target is
 // found.
-func (r *Range) getRebalanceTarget(storeID roachpb.StoreID) (roachpb.StoreID, bool) {
+func (r *simRange) getRebalanceTarget(storeID roachpb.StoreID) (roachpb.StoreID, bool) {
 	rebalanceTarget := r.allocator.RebalanceTarget(storeID, r.zone.ReplicaAttrs[0], r.desc.Replicas)
 	if rebalanceTarget == nil {
 		return 0, false
@@ -143,7 +143,7 @@ func (r *Range) getRebalanceTarget(storeID roachpb.StoreID) (roachpb.StoreID, bo
 }
 
 // String returns a human readable string with details about the range.
-func (r *Range) String() string {
+func (r *simRange) String() string {
 	var storeIDs roachpb.StoreIDSlice
 	for storeID := range r.replicas {
 		storeIDs = append(storeIDs, storeID)
@@ -151,7 +151,7 @@ func (r *Range) String() string {
 	sort.Sort(storeIDs)
 
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Range:%d, Factor:%d, Stores:[", r.desc.RangeID, len(r.zone.ReplicaAttrs))
+	fmt.Fprintf(&buf, "simRange:%d, Factor:%d, Stores:[", r.desc.RangeID, len(r.zone.ReplicaAttrs))
 
 	first := true
 	for _, storeID := range storeIDs {

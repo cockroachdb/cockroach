@@ -120,9 +120,9 @@ func (n *Network) StartNode(node *Node) error {
 	return nil
 }
 
-// GetNodeFromAddr returns the simulation node associated with
+// getNodeFromAddr returns the simulation node associated with
 // provided network address, or nil if there is no such node.
-func (n *Network) GetNodeFromAddr(addr string) (*Node, bool) {
+func (n *Network) getNodeFromAddr(addr string) (*Node, bool) {
 	for _, node := range n.Nodes {
 		if node.Addr.String() == addr {
 			return node, true
@@ -131,9 +131,9 @@ func (n *Network) GetNodeFromAddr(addr string) (*Node, bool) {
 	return nil, false
 }
 
-// GetNodeFromID returns the simulation node associated with
+// getNodeFromID returns the simulation node associated with
 // provided node ID, or nil if there is no such node.
-func (n *Network) GetNodeFromID(nodeID roachpb.NodeID) (*Node, bool) {
+func (n *Network) getNodeFromID(nodeID roachpb.NodeID) (*Node, bool) {
 	for _, node := range n.Nodes {
 		if node.Gossip.GetNodeID() == nodeID {
 			return node, true
@@ -178,10 +178,10 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	log.Infof("gossip network simulation: total infos sent=%d, received=%d", n.InfosSent(), n.InfosReceived())
+	log.Infof("gossip network simulation: total infos sent=%d, received=%d", n.infosSent(), n.infosReceived())
 }
 
-// Stop all servers and gossip nodes.
+// Stop stops all servers and gossip nodes.
 func (n *Network) Stop() {
 	for _, node := range n.Nodes {
 		node.Gossip.EnableSimulationCycler(false)
@@ -195,7 +195,7 @@ func (n *Network) Stop() {
 func (n *Network) RunUntilFullyConnected() int {
 	var connectedAtCycle int
 	n.SimulateNetwork(func(cycle int, network *Network) bool {
-		if network.IsNetworkConnected() {
+		if network.isNetworkConnected() {
 			connectedAtCycle = cycle
 			return false
 		}
@@ -204,10 +204,10 @@ func (n *Network) RunUntilFullyConnected() int {
 	return connectedAtCycle
 }
 
-// IsNetworkConnected returns true if the network is fully connected
+// isNetworkConnected returns true if the network is fully connected
 // with no partitions (i.e. every node knows every other node's
 // network address).
-func (n *Network) IsNetworkConnected() bool {
+func (n *Network) isNetworkConnected() bool {
 	for _, leftNode := range n.Nodes {
 		for _, rightNode := range n.Nodes {
 			if _, err := leftNode.Gossip.GetInfo(rightNode.Addr.String()); err != nil {
@@ -218,9 +218,9 @@ func (n *Network) IsNetworkConnected() bool {
 	return true
 }
 
-// InfosSent returns the total count of infos sent from all nodes in
+// infosSent returns the total count of infos sent from all nodes in
 // the network.
-func (n *Network) InfosSent() int {
+func (n *Network) infosSent() int {
 	var count int
 	for _, node := range n.Nodes {
 		count += node.Gossip.InfosSent()
@@ -228,9 +228,9 @@ func (n *Network) InfosSent() int {
 	return count
 }
 
-// InfosReceived returns the total count of infos received from all
+// infosReceived returns the total count of infos received from all
 // nodes in the network.
-func (n *Network) InfosReceived() int {
+func (n *Network) infosReceived() int {
 	var count int
 	for _, node := range n.Nodes {
 		count += node.Gossip.InfosReceived()

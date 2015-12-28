@@ -29,46 +29,46 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// Operation enumerates the possible scripted operations that can occur to a
+// operation enumerates the possible scripted operations that can occur to a
 // cluster.
-type Operation string
+type operation string
 
 // These are the possible scripted operations.
 const (
-	OpSplitRange Operation = "splitrange"
-	OpAddNode    Operation = "addnode"
-	OpExit       Operation = "exit"
+	opSplitRange operation = "splitrange"
+	opAddNode    operation = "addnode"
+	opExit       operation = "exit"
 	// TODO(bram): add optional value to addnode to indicate size
 	// TODO(bram): consider many other operations here.
-	//	OpMergeRangeRandom
-	//	OpMergeRangeFirst
-	//  OpKillNodeRandom
-	//  OpKillNodeFirst
-	//  OpAddStoreRandom
-	//  OpAddStore
-	//	OpKillStoreRandom
-	//	OpKillStoreFirst
+	//	opMergeRangeRandom
+	//	opMergeRangeFirst
+	//	opKillNodeRandom
+	//	opKillNodeFirst
+	//	opAddStoreRandom
+	//	opAddStore
+	//	opKillStoreRandom
+	//	opKillStoreFirst
 )
 
 // isValidOperation returns true if the passed in string corresponds to a known
 // operation.
 func isValidOperation(s string) bool {
-	switch Operation(s) {
-	case OpSplitRange, OpAddNode, OpExit:
+	switch operation(s) {
+	case opSplitRange, opAddNode, opExit:
 		return true
 	}
 	return false
 }
 
-// OperationVariant enumerates the possible options for a scripted operation.
-type OperationVariant string
+// operationVariant enumerates the possible options for a scripted operation.
+type operationVariant string
 
 // These are the possible operations options.
 const (
-	OpVarValue  OperationVariant = ""
-	OpVarRandom OperationVariant = "random"
-	OpVarFirst  OperationVariant = "first"
-	OpVarLast   OperationVariant = "last"
+	opVarValue  operationVariant = ""
+	opVarRandom operationVariant = "random"
+	opVarFirst  operationVariant = "first"
+	opVarLast   operationVariant = "last"
 )
 
 // isValidOperationVariant returns true if the passed in string corresponds to
@@ -76,26 +76,26 @@ const (
 // operation variant, an attempt is made to parse the string into the returned
 // integer.
 func isValidOperationVariant(s string) (bool, int, error) {
-	switch OperationVariant(s) {
-	case OpVarRandom, OpVarFirst, OpVarLast:
+	switch operationVariant(s) {
+	case opVarRandom, opVarFirst, opVarLast:
 		return true, 0, nil
 	}
 	value, err := strconv.Atoi(s)
 	return false, value, err
 }
 
-// Action is a single scripted action. Operation contains the overall operation
+// action is a single scripted action. operation contains the overall operation
 // this action will take. Variant contains which version of the operation will
-// be executed, such as "random" (OpVarRandom) or "first" (OpVarFirst). There
+// be executed, such as "random" (opVarRandom) or "first" (opVarFirst). There
 // are times when an actual number is required and for those cases variant is
-// set to OpVarValue to indicate that passed in number is stored in value.
-type Action struct {
-	operation Operation
-	variant   OperationVariant
+// set to opVarValue to indicate that passed in number is stored in value.
+type action struct {
+	operation operation
+	variant   operationVariant
 	value     int
 }
 
-// ActionDetails contains an action and all of the metadata surrounding that
+// actionDetails contains an action and all of the metadata surrounding that
 // action.
 // First is the first epoch in which the action occurs.
 // Every is the interval for how often the action re-occurs.
@@ -104,8 +104,8 @@ type Action struct {
 // fires.
 // Percent is the percentage chance that the action will occur at every epoch
 // at which it could occur, a value form 0 to 100.
-type ActionDetails struct {
-	Action
+type actionDetails struct {
+	action
 	first   int
 	every   int
 	last    int
@@ -113,18 +113,18 @@ type ActionDetails struct {
 	percent int
 }
 
-func (ad ActionDetails) String() string {
+func (ad actionDetails) String() string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s", ad.Action.operation)
+	fmt.Fprintf(&buf, "%s", ad.action.operation)
 
-	if ad.Action.variant == OpVarValue {
-		if ad.Action.value > 0 {
-			fmt.Fprintf(&buf, "\tValue:%d", ad.Action.value)
+	if ad.action.variant == opVarValue {
+		if ad.action.value > 0 {
+			fmt.Fprintf(&buf, "\tValue:%d", ad.action.value)
 		} else {
 			fmt.Fprintf(&buf, "\t ")
 		}
 	} else {
-		fmt.Fprintf(&buf, "\tVariant:%s", ad.Action.variant)
+		fmt.Fprintf(&buf, "\tVariant:%s", ad.action.variant)
 	}
 
 	fmt.Fprintf(&buf, "\tFirst:%d", ad.first)
@@ -147,18 +147,18 @@ func (ad ActionDetails) String() string {
 	return buf.String()
 }
 
-// Script contains a list of all the scripted actions for cluster simulation.
-type Script struct {
+// script contains a list of all the scripted actions for cluster simulation.
+type script struct {
 	maxEpoch int
-	actions  map[int][]Action
+	actions  map[int][]action
 	rand     *rand.Rand
 }
 
-// createScript creates a new Script.
-func createScript(maxEpoch int, scriptFile string, rand *rand.Rand) (Script, error) {
-	s := Script{
+// createScript creates a new script.
+func createScript(maxEpoch int, scriptFile string, rand *rand.Rand) (script, error) {
+	s := script{
 		maxEpoch: maxEpoch,
-		actions:  make(map[int][]Action),
+		actions:  make(map[int][]action),
 		rand:     rand,
 	}
 
@@ -166,7 +166,7 @@ func createScript(maxEpoch int, scriptFile string, rand *rand.Rand) (Script, err
 }
 
 // addActionAtEpoch adds an action at a specific epoch to the s.actions map.
-func (s *Script) addActionAtEpoch(action Action, repeat, epoch, percent int) {
+func (s *script) addActionAtEpoch(action action, repeat, epoch, percent int) {
 	for i := 0; i < repeat; i++ {
 		if s.rand.Intn(100) < percent {
 			s.actions[epoch] = append(s.actions[epoch], action)
@@ -175,7 +175,7 @@ func (s *Script) addActionAtEpoch(action Action, repeat, epoch, percent int) {
 }
 
 // addAction adds an action to the script.
-func (s *Script) addAction(details ActionDetails) {
+func (s *script) addAction(details actionDetails) {
 	// Always add the action at the first epoch. This way, single actions can
 	// just set last and every to 0.
 	last := details.last
@@ -198,21 +198,21 @@ func (s *Script) addAction(details ActionDetails) {
 
 	// Save all the times this action should occur in s.actions.
 	for currentEpoch := details.first; currentEpoch <= last && currentEpoch <= s.maxEpoch; currentEpoch += every {
-		s.addActionAtEpoch(details.Action, repeat, currentEpoch, details.percent)
+		s.addActionAtEpoch(details.action, repeat, currentEpoch, details.percent)
 	}
 }
 
 // getActions returns the list of actions for a specific epoch.
-func (s *Script) getActions(epoch int) []Action {
+func (s *script) getActions(epoch int) []action {
 	if epoch > s.maxEpoch {
-		return []Action{{operation: OpExit}}
+		return []action{{operation: opExit}}
 	}
 	return s.actions[epoch]
 }
 
 // parse loads all the operations from a script file into the actions map. The
 // format is described in the default.script file.
-func (s *Script) parse(scriptFile string) error {
+func (s *script) parse(scriptFile string) error {
 	file, err := os.Open(scriptFile)
 	if err != nil {
 		return err
@@ -252,7 +252,7 @@ func (s *Script) parse(scriptFile string) error {
 			return util.Errorf("line %d operation could not be found: %s", lineNumber, subElements[0])
 		}
 
-		details := ActionDetails{Action: Action{operation: Operation(subElements[0])}}
+		details := actionDetails{action: action{operation: operation(subElements[0])}}
 		// Do we have a variant or a value?
 		if len(subElements) == 2 {
 			isValid, value, err := isValidOperationVariant(subElements[1])
@@ -261,9 +261,9 @@ func (s *Script) parse(scriptFile string) error {
 					lineNumber, subElements[1])
 			}
 			if isValid {
-				details.Action.variant = OperationVariant(subElements[1])
+				details.action.variant = operationVariant(subElements[1])
 			} else {
-				details.Action.variant, details.Action.value = OpVarValue, value
+				details.action.variant, details.action.value = opVarValue, value
 			}
 		}
 

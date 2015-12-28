@@ -34,9 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-// Cluster maintains a list of all nodes, stores and ranges as well as any
+// simCluster maintains a list of all nodes, stores and ranges as well as any
 // shared resources.
-type Cluster struct {
+type simCluster struct {
 	stopper         *stop.Stopper
 	clock           *hlc.Clock
 	rpc             *rpc.Context
@@ -44,27 +44,27 @@ type Cluster struct {
 	storePool       *storage.StorePool
 	allocator       storage.Allocator
 	storeGossiper   *gossiputil.StoreGossiper
-	nodes           map[roachpb.NodeID]*Node
-	stores          map[roachpb.StoreID]*Store
+	nodes           map[roachpb.NodeID]*simNode
+	stores          map[roachpb.StoreID]*simStore
 	storeIDs        roachpb.StoreIDSlice // sorted
-	ranges          map[roachpb.RangeID]*Range
+	ranges          map[roachpb.RangeID]*simRange
 	rangeIDs        roachpb.RangeIDSlice // sorted
 	rangeIDsByStore map[roachpb.StoreID]roachpb.RangeIDSlice
 	rand            *rand.Rand
 	epoch           int
 	epochWriter     *tabwriter.Writer
 	actionWriter    *tabwriter.Writer
-	script          Script
+	script          script
 }
 
 // createCluster generates a new cluster using the provided stopper and the
 // number of nodes supplied. Each node will have one store to start.
-func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWriter io.Writer, script Script, rand *rand.Rand) *Cluster {
+func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWriter io.Writer, script script, rand *rand.Rand) *simCluster {
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
 	g := gossip.New(rpcContext, gossip.TestBootstrap, stopper)
 	storePool := storage.NewStorePool(g, clock, storage.TestTimeUntilStoreDeadOff, stopper)
-	c := &Cluster{
+	c := &simCluster{
 		stopper:   stopper,
 		clock:     clock,
 		rpc:       rpcContext,
@@ -75,9 +75,9 @@ func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWrit
 			Deterministic:  true,
 		}),
 		storeGossiper:   gossiputil.NewStoreGossiper(g),
-		nodes:           make(map[roachpb.NodeID]*Node),
-		stores:          make(map[roachpb.StoreID]*Store),
-		ranges:          make(map[roachpb.RangeID]*Range),
+		nodes:           make(map[roachpb.NodeID]*simNode),
+		stores:          make(map[roachpb.StoreID]*simStore),
+		ranges:          make(map[roachpb.RangeID]*simRange),
 		rangeIDsByStore: make(map[roachpb.StoreID]roachpb.RangeIDSlice),
 		rand:            rand,
 		epochWriter:     tabwriter.NewWriter(epochWriter, 8, 1, 2, ' ', 0),
@@ -99,15 +99,15 @@ func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWrit
 
 	// Output the first epoch header.
 	c.epoch = 0
-	c.OutputEpochHeader()
-	c.OutputEpoch()
+	c.outputEpochHeader()
+	c.outputEpoch()
 	c.flush()
 
 	return c
 }
 
 // addNewNodeWithStore adds new node with a single store.
-func (c *Cluster) addNewNodeWithStore() {
+func (c *simCluster) addNewNodeWithStore() {
 	nodeID := roachpb.NodeID(len(c.nodes))
 	c.nodes[nodeID] = newNode(nodeID, c.gossip)
 	// Only output if we're running the simulation.
@@ -118,7 +118,7 @@ func (c *Cluster) addNewNodeWithStore() {
 }
 
 // addStore adds a new store to the node with the provided nodeID.
-func (c *Cluster) addStore(nodeID roachpb.NodeID) *Store {
+func (c *simCluster) addStore(nodeID roachpb.NodeID) *simStore {
 	n := c.nodes[nodeID]
 	s := n.addNewStore()
 	c.stores[s.desc.StoreID] = s
@@ -131,14 +131,14 @@ func (c *Cluster) addStore(nodeID roachpb.NodeID) *Store {
 	// Only output if we're running the simulation.
 	if c.epoch >= 0 {
 		fmt.Fprintf(c.actionWriter, "%d:\tStore %d added on Node %d\n", c.epoch, s.desc.StoreID, nodeID)
-		c.OutputEpochHeader()
+		c.outputEpochHeader()
 	}
 	return s
 }
 
 // addRange adds a new range to the cluster but does not attach it to any
 // store.
-func (c *Cluster) addRange() *Range {
+func (c *simCluster) addRange() *simRange {
 	rangeID := roachpb.RangeID(len(c.ranges))
 	newRng := newRange(rangeID, c.allocator)
 	c.ranges[rangeID] = newRng
@@ -152,7 +152,7 @@ func (c *Cluster) addRange() *Range {
 }
 
 // splitRangeRandom splits a random range from within the cluster.
-func (c *Cluster) splitRangeRandom() {
+func (c *simCluster) splitRangeRandom() {
 	rangeID := roachpb.RangeID(c.rand.Int63n(int64(len(c.ranges))))
 	c.splitRange(rangeID)
 }
@@ -160,7 +160,7 @@ func (c *Cluster) splitRangeRandom() {
 // splitRange "splits" a range. This split creates a new range with new
 // replicas on the same stores as the passed in range. The new range has the
 // same zone config as the original range.
-func (c *Cluster) splitRange(rangeID roachpb.RangeID) {
+func (c *simCluster) splitRange(rangeID roachpb.RangeID) {
 	fmt.Fprintf(c.actionWriter, "%d:\tRange %d split\n", c.epoch, rangeID)
 	newRange := c.addRange()
 	originalRange := c.ranges[rangeID]
@@ -178,7 +178,7 @@ func (c *Cluster) splitRange(rangeID roachpb.RangeID) {
 // 5) The rangesByStore map is recalculated.
 // 6) The current status of the cluster is output.
 // 7) The outputs are flushed.
-func (c *Cluster) runEpoch() bool {
+func (c *simCluster) runEpoch() bool {
 	c.epoch++
 
 	// Perform all the requested scripted actions.
@@ -200,7 +200,7 @@ func (c *Cluster) runEpoch() bool {
 	c.calculateRangeIDsByStore()
 
 	// Output the update.
-	c.OutputEpoch()
+	c.outputEpoch()
 
 	// Flush the output.
 	c.flush()
@@ -210,34 +210,34 @@ func (c *Cluster) runEpoch() bool {
 
 // executeScriptedActions performs all scripted actions to the cluster and
 // return true if the exit action is encountered.
-func (c *Cluster) executeScriptedActions() bool {
+func (c *simCluster) executeScriptedActions() bool {
 	var lastEpoch bool
 	actions := c.script.getActions(c.epoch)
 	for _, action := range actions {
 		switch action.operation {
-		case OpExit:
+		case opExit:
 			{
 				fmt.Fprintf(c.actionWriter, "%d:\tAction:Exit - this will be the last epoch.\n", c.epoch)
 				lastEpoch = true
 			}
-		case OpSplitRange:
+		case opSplitRange:
 			{
 				switch action.variant {
-				case OpVarValue:
+				case opVarValue:
 					fmt.Fprintf(c.actionWriter, "%d:\tAction:SplitRange - splitting the range %d.\n", c.epoch, action.value)
 					c.splitRange(roachpb.RangeID(action.value))
-				case OpVarRandom:
+				case opVarRandom:
 					fmt.Fprintf(c.actionWriter, "%d:\tAction:SplitRange - splitting a random range.\n", c.epoch)
 					c.splitRangeRandom()
-				case OpVarFirst:
+				case opVarFirst:
 					fmt.Fprintf(c.actionWriter, "%d:\tAction:SplitRange - splitting the first range.\n", c.epoch)
 					c.splitRange(c.rangeIDs[0])
-				case OpVarLast:
+				case opVarLast:
 					fmt.Fprintf(c.actionWriter, "%d:\tAction:SplitRange - splitting the last range.\n", c.epoch)
 					c.splitRange(c.rangeIDs[len(c.rangeIDs)-1])
 				}
 			}
-		case OpAddNode:
+		case opAddNode:
 			{
 				fmt.Fprintf(c.actionWriter, "%d:\tAction:AddNode - Adding a new node with a new store.\n", c.epoch)
 				c.addNewNodeWithStore()
@@ -248,7 +248,7 @@ func (c *Cluster) executeScriptedActions() bool {
 }
 
 // gossipStores gossips all the most recent status for all stores.
-func (c *Cluster) gossipStores() {
+func (c *simCluster) gossipStores() {
 	c.storeGossiper.GossipWithFunction(c.storeIDs, func() {
 		for storeID, store := range c.stores {
 			if err := store.gossipStore(len(c.rangeIDsByStore[storeID])); err != nil {
@@ -260,7 +260,7 @@ func (c *Cluster) gossipStores() {
 
 // prepareActions walks through each replica and determines if any action is
 // required using the allocator.
-func (c *Cluster) prepareActions() {
+func (c *simCluster) prepareActions() {
 	for _, r := range c.ranges {
 		for storeID, rep := range r.replicas {
 			rep.action, rep.priority = r.allocator.ComputeAction(r.zone, &r.desc)
@@ -279,7 +279,7 @@ func (c *Cluster) prepareActions() {
 
 // performActions performs a single action, if required, for each range. Returns
 // true if no actions were performed.
-func (c *Cluster) performActions() bool {
+func (c *simCluster) performActions() bool {
 	// Once a store has started performing an action on a range, it "locks" the
 	// range and any subsequent store that tries to perform another action
 	// on the range will encounter a conflict and forfeit its action for the
@@ -372,7 +372,7 @@ func (c *Cluster) performActions() bool {
 // calculateRangeIDsByStore fills in the list of range ids mapped to each
 // store. This map is used for determining which operation to run for each store
 // and outputs.  It should only be run once at the end of each epoch.
-func (c *Cluster) calculateRangeIDsByStore() {
+func (c *simCluster) calculateRangeIDsByStore() {
 	c.rangeIDsByStore = make(map[roachpb.StoreID]roachpb.RangeIDSlice)
 	for rangeID, r := range c.ranges {
 		for _, storeID := range r.getStoreIDs() {
@@ -384,10 +384,12 @@ func (c *Cluster) calculateRangeIDsByStore() {
 	}
 }
 
+var _ fmt.Stringer = &simCluster{}
+
 // String prints out the current status of the cluster.
-func (c *Cluster) String() string {
+func (c *simCluster) String() string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Cluster Info:\tEpoch - %d\n", c.epoch)
+	fmt.Fprintf(&buf, "simCluster Info:\tEpoch - %d\n", c.epoch)
 
 	var nodeIDs roachpb.NodeIDSlice
 	for nodeID := range c.nodes {
@@ -424,9 +426,9 @@ func (c *Cluster) String() string {
 	return buf.String()
 }
 
-// OutputEpochHeader outputs to the epoch writer the header for epoch outputs
+// outputEpochHeader outputs to the epoch writer the header for epoch outputs
 // based on all of the current stores.
-func (c *Cluster) OutputEpochHeader() {
+func (c *simCluster) outputEpochHeader() {
 	fmt.Fprintf(c.epochWriter, "Store:\t")
 	for _, storeID := range c.storeIDs {
 		fmt.Fprintf(c.epochWriter, "%d\t", storeID)
@@ -434,9 +436,9 @@ func (c *Cluster) OutputEpochHeader() {
 	fmt.Fprintf(c.epochWriter, "\n")
 }
 
-// OutputEpoch writes to the epochWRiter the current free capacity for all
+// outputEpoch writes to the epochWRiter the current free capacity for all
 // stores.
-func (c *Cluster) OutputEpoch() {
+func (c *simCluster) outputEpoch() {
 	fmt.Fprintf(c.epochWriter, "%d:\t", c.epoch)
 
 	for _, storeID := range c.storeIDs {
@@ -447,7 +449,7 @@ func (c *Cluster) OutputEpoch() {
 	fmt.Fprintf(c.epochWriter, "\n")
 }
 
-func (c *Cluster) flush() {
+func (c *simCluster) flush() {
 	_ = c.actionWriter.Flush()
 	_ = c.epochWriter.Flush()
 }

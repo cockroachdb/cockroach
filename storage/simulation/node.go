@@ -24,20 +24,20 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 )
 
-// Node is a simulated cockroach node.
-type Node struct {
+// simNode is a simulated cockroach node.
+type simNode struct {
 	desc   roachpb.NodeDescriptor
-	stores map[roachpb.StoreID]*Store
+	stores map[roachpb.StoreID]*simStore
 	gossip *gossip.Gossip
 }
 
 // newNode creates a new node with no stores.
-func newNode(nodeID roachpb.NodeID, gossip *gossip.Gossip) *Node {
-	node := &Node{
+func newNode(nodeID roachpb.NodeID, gossip *gossip.Gossip) *simNode {
+	node := &simNode{
 		desc: roachpb.NodeDescriptor{
 			NodeID: nodeID,
 		},
-		stores: make(map[roachpb.StoreID]*Store),
+		stores: make(map[roachpb.StoreID]*simStore),
 		gossip: gossip,
 	}
 	return node
@@ -45,7 +45,7 @@ func newNode(nodeID roachpb.NodeID, gossip *gossip.Gossip) *Node {
 
 // getStoreIDs returns the list of storeIDs from the stores contained on the
 // node.
-func (n *Node) getStoreIDs() []roachpb.StoreID {
+func (n *simNode) getStoreIDs() []roachpb.StoreID {
 	var storeIDs []roachpb.StoreID
 	for storeID := range n.stores {
 		storeIDs = append(storeIDs, storeID)
@@ -55,12 +55,12 @@ func (n *Node) getStoreIDs() []roachpb.StoreID {
 
 // getNextStoreID gets the store ID that should be used when adding a new store
 // to the node.
-func (n *Node) getNextStoreID() roachpb.StoreID {
+func (n *simNode) getNextStoreID() roachpb.StoreID {
 	return roachpb.StoreID((int(n.desc.NodeID) * 1000) + len(n.stores))
 }
 
 // addNewStore creates a new store and adds it to the node.
-func (n *Node) addNewStore() *Store {
+func (n *simNode) addNewStore() *simStore {
 	newStoreID := n.getNextStoreID()
 	newStore := newStore(newStoreID, n.desc, n.gossip)
 	n.stores[newStoreID] = newStore
@@ -68,9 +68,9 @@ func (n *Node) addNewStore() *Store {
 }
 
 // String returns the current status of the node for human readable printing.
-func (n *Node) String() string {
+func (n *simNode) String() string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Node %d - Stores:[", n.desc.NodeID)
+	fmt.Fprintf(&buf, "simNode %d - Stores:[", n.desc.NodeID)
 	first := true
 	for storeID := range n.stores {
 		if first {

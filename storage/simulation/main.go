@@ -116,7 +116,7 @@ func main() {
 
 	// Run until stable or at the 100th epoch.
 	fmt.Printf("\nRunning Simulation:\n")
-	c.OutputEpochHeader()
+	c.outputEpochHeader()
 	c.flush()
 	for c.runEpoch() != true {
 	}

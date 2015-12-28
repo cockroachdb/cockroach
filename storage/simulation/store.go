@@ -30,17 +30,17 @@ const (
 	capacityPerStore = bytesPerRange * 100 // 100 ranges
 )
 
-// Store is a simulated cockroach store. To access the replicas in a store, use
+// simStore is a simulated cockroach store. To access the replicas in a store, use
 // the ranges directly instead.
-type Store struct {
+type simStore struct {
 	desc   roachpb.StoreDescriptor
 	gossip *gossip.Gossip
 }
 
 // newStore returns a new store with using the passed in ID and node
 // descriptor.
-func newStore(storeID roachpb.StoreID, nodeDesc roachpb.NodeDescriptor, gossip *gossip.Gossip) *Store {
-	return &Store{
+func newStore(storeID roachpb.StoreID, nodeDesc roachpb.NodeDescriptor, gossip *gossip.Gossip) *simStore {
+	return &simStore{
 		desc: roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    nodeDesc,
@@ -51,7 +51,7 @@ func newStore(storeID roachpb.StoreID, nodeDesc roachpb.NodeDescriptor, gossip *
 
 // getDesc returns the store descriptor. The rangeCount is required to
 // determine the current capacity.
-func (s *Store) getDesc(rangeCount int) roachpb.StoreDescriptor {
+func (s *simStore) getDesc(rangeCount int) roachpb.StoreDescriptor {
 	desc := s.desc
 	desc.Capacity = s.getCapacity(rangeCount)
 	return desc
@@ -60,7 +60,7 @@ func (s *Store) getDesc(rangeCount int) roachpb.StoreDescriptor {
 // getCapacity returns the store capacity based on the numbers of ranges
 // located in the store.
 // TODO(bram): Change this to take the actual ranges for real counts.
-func (s *Store) getCapacity(rangeCount int) roachpb.StoreCapacity {
+func (s *simStore) getCapacity(rangeCount int) roachpb.StoreCapacity {
 	return roachpb.StoreCapacity{
 		Capacity:   capacityPerStore,
 		Available:  capacityPerStore - int64(rangeCount)*bytesPerRange,
@@ -71,15 +71,15 @@ func (s *Store) getCapacity(rangeCount int) roachpb.StoreCapacity {
 // String returns the current status of the store in human readable format.
 // Like the getDesc and getCapacity, it requires the number of ranges currently
 // housed in the store.
-func (s *Store) String(rangeCount int) string {
+func (s *simStore) String(rangeCount int) string {
 	desc := s.getDesc(rangeCount)
-	return fmt.Sprintf("Store %d - Node:%d, Replicas:%d, AvailableReplicas:%d, Capacity:%d, Available:%d",
+	return fmt.Sprintf("simStore %d - Node:%d, Replicas:%d, AvailableReplicas:%d, Capacity:%d, Available:%d",
 		desc.StoreID, desc.Node.NodeID, desc.Capacity.RangeCount, desc.Capacity.Available/bytesPerRange,
 		desc.Capacity.Capacity, desc.Capacity.Available)
 }
 
 // GossipStore broadcasts the store on the gossip network.
-func (s *Store) gossipStore(rangeCount int) error {
+func (s *simStore) gossipStore(rangeCount int) error {
 	desc := s.getDesc(rangeCount)
 	// Unique gossip key per store.
 	gossipKey := gossip.MakeStoreKey(desc.StoreID)
