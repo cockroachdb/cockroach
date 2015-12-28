@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -132,6 +133,52 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Errorf("expected a schema gossip containing %q, but did not see one", descBytes)
 	case <-successChan:
+	}
+}
+
+// TestStoreRangeSplitInsideRow verifies an attempt to split a range inside of
+// a table row will cause a split at a boundary between rows.
+func TestStoreRangeSplitInsideRow(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	tableKey := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
+	rowKey := roachpb.Key(encoding.EncodeVarint(append([]byte(nil), tableKey...), 1))
+	rowKey = encoding.EncodeString(encoding.EncodeVarint(rowKey, 1), "a")
+	col1Key := keys.EncodeColumnKey(append([]byte(nil), rowKey...), 1)
+	col2Key := keys.EncodeColumnKey(append([]byte(nil), rowKey...), 2)
+
+	if err := store.DB().Put(col1Key, "column 1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB().Put(col2Key, "column 2"); err != nil {
+		t.Fatal(err)
+	}
+
+	args := adminSplitArgs(col1Key, col1Key)
+	_, err := client.SendWrapped(rg1(store), nil, &args)
+	if err != nil {
+		t.Fatalf("%s: split unexpected error: %s", col1Key, err)
+	}
+
+	rng1 := store.LookupReplica(col1Key, nil)
+	rng2 := store.LookupReplica(col2Key, nil)
+	// Verify the two columns are still on the same range.
+	if !reflect.DeepEqual(rng1, rng2) {
+		t.Fatalf("%s: ranges differ: %+v vs %+v", roachpb.Key(col1Key), rng1, rng2)
+	}
+	// Verify we split on a row key.
+	if startKey := rng1.Desc().StartKey; !startKey.Equal(rowKey) {
+		t.Fatalf("%s: expected split on %s, but found %s",
+			roachpb.Key(col1Key), roachpb.Key(rowKey), startKey)
+	}
+
+	// Verify the previous range was split on a row key.
+	rng3 := store.LookupReplica(tableKey, nil)
+	if endKey := rng3.Desc().EndKey; !endKey.Equal(rowKey) {
+		t.Fatalf("%s: expected split on %s, but found %s",
+			roachpb.Key(col1Key), roachpb.Key(rowKey), endKey)
 	}
 }
 
