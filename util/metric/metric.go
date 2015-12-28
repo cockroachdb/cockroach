@@ -18,6 +18,7 @@ package metric
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -77,6 +78,20 @@ type Histogram struct {
 	nextT    time.Time
 }
 
+// NewHistogram creates a new windowed HDRHistogram with the given parameters.
+// Data is kept in the active window for approximately the given duration.
+// See the the documentation for hdrhistogram.WindowedHistogram for details.
+func NewHistogram(duration time.Duration, maxVal int64, sigFigs int) *Histogram {
+	const n = 4
+	h := &Histogram{}
+	h.maxVal = int64(maxVal)
+	h.interval = duration / n
+	h.nextT = time.Now()
+
+	h.windowed = hdrhistogram.NewWindowed(n, 0, h.maxVal, sigFigs)
+	return h
+}
+
 func (h *Histogram) tick() {
 	h.nextT = h.nextT.Add(h.interval)
 	h.windowed.Rotate()
@@ -127,6 +142,11 @@ type Counter struct {
 	metrics.Counter
 }
 
+// NewCounter creates a counter.
+func NewCounter() *Counter {
+	return &Counter{metrics.NewCounter()}
+}
+
 // Each calls the given closure with the empty string and itself.
 func (c *Counter) Each(f func(string, interface{})) { f("", c) }
 
@@ -138,6 +158,12 @@ func (c *Counter) MarshalJSON() ([]byte, error) {
 // A Gauge atomically stores a single value.
 type Gauge struct {
 	metrics.Gauge
+}
+
+// NewGauge creates a Gauge.
+func NewGauge() *Gauge {
+	g := &Gauge{metrics.NewGauge()}
+	return g
 }
 
 // Each calls the given closure with the empty string and itself.
@@ -155,6 +181,22 @@ type Rate struct {
 	wrapped  ewma.MovingAverage
 	interval time.Duration
 	nextT    time.Time
+}
+
+// NewRate creates an EWMA rate on the given timescale. Timescales at
+// or below 2s are illegal and will cause a panic.
+func NewRate(timescale time.Duration) *Rate {
+	const tickInterval = time.Second
+	if timescale <= 2*time.Second {
+		panic(fmt.Sprintf("EWMA with per-second ticks makes no sense on timescale %s", timescale))
+	}
+	avgAge := float64(timescale) / float64(2*tickInterval)
+
+	return &Rate{
+		interval: tickInterval,
+		nextT:    time.Now(),
+		wrapped:  ewma.NewMovingAverage(avgAge),
+	}
 }
 
 func (e *Rate) nextTick() time.Time {

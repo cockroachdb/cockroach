@@ -22,10 +22,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-
-	"github.com/VividCortex/ewma"
-	"github.com/codahale/hdrhistogram"
-	"github.com/rcrowley/go-metrics"
 )
 
 // A Registry bundles up various iterables (i.e. typically metrics or other
@@ -46,6 +42,9 @@ func NewRegistry() *Registry {
 // string. The individual items in the registry will be formatted via
 // fmt.Sprintf(format, <name>). As a special case, *Registry implements
 // Iterable and can thus be added.
+// Metric types in this package have helpers that allow them to be created
+// and registered in a single step. Add is called manually only when adding
+// a registry to another, or when integrating metrics defined elsewhere.
 func (r *Registry) Add(format string, item Iterable) error {
 	r.Lock()
 	defer r.Unlock()
@@ -87,17 +86,11 @@ func (r *Registry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-// Histogram registers a new windowed HDRHistogram with the given
-// parameters. Data is kept in the active window for approximately the given
-// duration.
-func (r *Registry) Histogram(name string, duration time.Duration, maxVal int64, sigFigs int) *Histogram {
-	const n = 4
-	h := &Histogram{}
-	h.maxVal = int64(maxVal)
-	h.interval = duration / n
-	h.nextT = time.Now()
-
-	h.windowed = hdrhistogram.NewWindowed(n, 0, h.maxVal, sigFigs)
+// Histogram registers a new windowed HDRHistogram with the given parameters.
+// Data is kept in the active window for approximately the given duration.
+func (r *Registry) Histogram(name string, duration time.Duration, maxVal int64,
+	sigFigs int) *Histogram {
+	h := NewHistogram(duration, maxVal, sigFigs)
 	r.MustAdd(name, h)
 	return h
 }
@@ -117,34 +110,24 @@ func (r *Registry) Latency(prefix string) Histograms {
 	return hs
 }
 
-// Counter registers a new counter under the given name.
+// Counter registers new counter to the registry.
 func (r *Registry) Counter(name string) *Counter {
-	c := &Counter{metrics.NewCounter()}
+	c := NewCounter()
 	r.MustAdd(name, c)
 	return c
 }
 
 // Gauge registers a new Gauge with the given name.
 func (r *Registry) Gauge(name string) *Gauge {
-	g := &Gauge{metrics.NewGauge()}
+	g := NewGauge()
 	r.MustAdd(name, g)
 	return g
 }
 
-// Rate registers an EWMA rate over the given timescale. Timescales at
-// or below 2s are illegal and will cause a panic.
+// Rate creates an EWMA rate over the given timescale. The comments on NewRate
+// apply.
 func (r *Registry) Rate(name string, timescale time.Duration) *Rate {
-	const tickInterval = time.Second
-	if timescale <= 2*time.Second {
-		panic(fmt.Sprintf("EWMA with per-second ticks makes no sense on timescale %s", timescale))
-	}
-	avgAge := float64(timescale) / float64(2*tickInterval)
-
-	e := &Rate{
-		interval: tickInterval,
-		nextT:    time.Now(),
-		wrapped:  ewma.NewMovingAverage(avgAge),
-	}
+	e := NewRate(timescale)
 	r.MustAdd(name, e)
 	return e
 }
