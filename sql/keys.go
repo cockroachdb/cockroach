@@ -71,10 +71,10 @@ func equalName(a, b string) bool {
 func MakeNameMetadataKey(parentID ID, name string) roachpb.Key {
 	name = normalizeName(name)
 	k := keys.MakeTablePrefix(uint32(NamespaceTable.ID))
-	k = encoding.EncodeUvarint(k, uint64(NamespaceTable.PrimaryIndex.ID))
-	k = encoding.EncodeUvarint(k, uint64(parentID))
+	k = encoding.EncodeUvarint(k, uint64(NamespaceTable.PrimaryIndex.ID), encoding.Ascending)
+	k = encoding.EncodeUvarint(k, uint64(parentID), encoding.Ascending)
 	if name != "" {
-		k = encoding.EncodeBytes(k, []byte(name))
+		k = encoding.EncodeBytes(k, []byte(name), encoding.Ascending)
 		k = keys.MakeColumnKey(k, uint32(NamespaceTable.Columns[2].ID))
 	}
 	return k
@@ -83,23 +83,24 @@ func MakeNameMetadataKey(parentID ID, name string) roachpb.Key {
 // MakeDescMetadataKey returns the key for the descriptor.
 func MakeDescMetadataKey(descID ID) roachpb.Key {
 	k := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
-	k = encoding.EncodeUvarint(k, uint64(DescriptorTable.PrimaryIndex.ID))
-	k = encoding.EncodeUvarint(k, uint64(descID))
+	k = encoding.EncodeUvarint(k, uint64(DescriptorTable.PrimaryIndex.ID), encoding.Ascending)
+	k = encoding.EncodeUvarint(k, uint64(descID), encoding.Ascending)
 	return keys.MakeColumnKey(k, uint32(DescriptorTable.Columns[1].ID))
 }
 
 // MakeZoneKey returns the key for 'id's entry in the system.zones table.
 func MakeZoneKey(id ID) roachpb.Key {
 	k := keys.MakeTablePrefix(uint32(ZonesTable.ID))
-	k = encoding.EncodeUvarint(k, uint64(ZonesTable.PrimaryIndex.ID))
-	k = encoding.EncodeUvarint(k, uint64(id))
+	k = encoding.EncodeUvarint(k, uint64(ZonesTable.PrimaryIndex.ID), encoding.Ascending)
+	k = encoding.EncodeUvarint(k, uint64(id), encoding.Ascending)
+	k = encoding.EncodeUvarint(k, uint64(ZonesTable.Columns[1].ID), encoding.Ascending)
 	return keys.MakeColumnKey(k, uint32(ZonesTable.Columns[1].ID))
 }
 
 // MakeIndexKeyPrefix returns the key prefix used for the index's data.
 func MakeIndexKeyPrefix(tableID ID, indexID IndexID) []byte {
 	key := keys.MakeTablePrefix(uint32(tableID))
-	key = encoding.EncodeUvarint(key, uint64(indexID))
+	key = encoding.EncodeUvarint(key, uint64(indexID), encoding.Ascending)
 	return key
 }
 

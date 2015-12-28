@@ -69,9 +69,9 @@ func MakeDataKey(name string, source string, r Resolution, timestamp int64) roac
 	timeslot := timestamp / r.KeyDuration()
 
 	k := append(roachpb.Key(nil), keyDataPrefix...)
-	k = encoding.EncodeBytes(k, []byte(name))
-	k = encoding.EncodeVarint(k, int64(r))
-	k = encoding.EncodeVarint(k, timeslot)
+	k = encoding.EncodeBytes(k, []byte(name), encoding.Ascending)
+	k = encoding.EncodeVarint(k, int64(r), encoding.Ascending)
+	k = encoding.EncodeVarint(k, timeslot, encoding.Ascending)
 	k = append(k, source...)
 	return k
 }
@@ -86,18 +86,18 @@ func DecodeDataKey(key roachpb.Key) (string, string, Resolution, int64, error) {
 	remainder = remainder[len(keyDataPrefix):]
 
 	// Decode series name.
-	remainder, name, err := encoding.DecodeBytes(remainder, nil)
+	remainder, name, err := encoding.DecodeBytes(remainder, nil, encoding.Ascending)
 	if err != nil {
 		return "", "", 0, 0, err
 	}
 	// Decode resolution.
-	remainder, resolutionInt, err := encoding.DecodeVarint(remainder)
+	remainder, resolutionInt, err := encoding.DecodeVarint(remainder, encoding.Ascending)
 	if err != nil {
 		return "", "", 0, 0, err
 	}
 	resolution := Resolution(resolutionInt)
 	// Decode timestamp.
-	remainder, timeslot, err := encoding.DecodeVarint(remainder)
+	remainder, timeslot, err := encoding.DecodeVarint(remainder, encoding.Ascending)
 	if err != nil {
 		return "", "", 0, 0, err
 	}

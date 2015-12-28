@@ -101,7 +101,8 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 	}
 	v := &valuesNode{columns: []column{{name: "Database", typ: parser.DummyString}}}
 	for _, row := range sr {
-		_, name, err := encoding.DecodeString(bytes.TrimPrefix(row.Key, prefix), nil)
+		_, name, err := encoding.DecodeString(
+			bytes.TrimPrefix(row.Key, prefix), nil, encoding.Ascending)
 		if err != nil {
 			return nil, err
 		}

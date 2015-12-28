@@ -376,7 +376,7 @@ func (lr *EntryDecoder) Decode(entry *LogEntry) error {
 	if err != nil {
 		return err
 	}
-	_, sz, err := encoding.DecodeUint32(szBuf)
+	_, sz, err := encoding.DecodeUint32(szBuf, encoding.Ascending)
 	if err != nil {
 		return err
 	}
@@ -808,7 +808,7 @@ func encodeLogEntry(entry *LogEntry) []byte {
 		panic(fmt.Sprintf("unable to marshal log entry: %s", err))
 	}
 	// Encode the length of the data first, followed by the encoded data.
-	data := encoding.EncodeUint32([]byte(nil), uint32(len(entryData)))
+	data := encoding.EncodeUint32([]byte(nil), uint32(len(entryData)), encoding.Ascending)
 	return append(data, entryData...)
 }
 

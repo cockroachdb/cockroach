@@ -39,9 +39,9 @@ func plainKV(k, v string) roachpb.KeyValue {
 
 func sqlKV(tableID uint32, indexID, descriptorID uint64) roachpb.KeyValue {
 	k := keys.MakeTablePrefix(tableID)
-	k = encoding.EncodeUvarint(k, indexID)
-	k = encoding.EncodeUvarint(k, descriptorID)
-	k = encoding.EncodeUvarint(k, 12345) // Column ID, but could be anything.
+	k = encoding.EncodeUvarint(k, indexID, encoding.Ascending)
+	k = encoding.EncodeUvarint(k, descriptorID, encoding.Ascending)
+	k = encoding.EncodeUvarint(k, 12345, encoding.Ascending) // Column ID, but could be anything.
 	return kv(k, nil)
 }
 
