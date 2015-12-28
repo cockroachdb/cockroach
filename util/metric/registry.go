@@ -90,27 +90,28 @@ func (r *Registry) MarshalJSON() ([]byte, error) {
 // Histogram registers a new windowed HDRHistogram with the given
 // parameters. Data is kept in the active window for approximately the given
 // duration.
-func (r *Registry) Histogram(name string, duration time.Duration, unit Unit, maxVal MaxVal, sigFigs int) *Histogram {
+func (r *Registry) Histogram(name string, duration time.Duration, maxVal int64, sigFigs int) *Histogram {
 	const n = 4
 	h := &Histogram{}
 	h.maxVal = int64(maxVal)
-	h.unit = int64(unit)
 	h.interval = duration / n
 	h.nextT = time.Now()
 
-	h.windowed = hdrhistogram.NewWindowed(n, 0, h.maxVal/h.unit, sigFigs)
+	h.windowed = hdrhistogram.NewWindowed(n, 0, h.maxVal, sigFigs)
 	r.MustAdd(name, h)
 	return h
 }
 
 // Latency is a convenience function which registers histograms with
-// suitable defaults for latency tracking on millisecond to minute time scales.
+// suitable defaults for latency tracking. Values are expressed in ns,
+// are truncated into the interval [0, time.Minute] and are recorded
+// with two digits of precision (i.e. errors of <1ms at 100ms, <.6s at 1m).
 // The generated names of the metric will begin with the given prefix.
 func (r *Registry) Latency(prefix string) Histograms {
 	windows := []timeScale{scale1M, scale10M, scale1H}
 	hs := make([]*Histogram, 0, 3)
 	for _, w := range windows {
-		h := r.Histogram(prefix+w.name, w.d, UnitMs, MaxMinute, 2)
+		h := r.Histogram(prefix+w.name, w.d, int64(time.Minute), 2)
 		hs = append(hs, h)
 	}
 	return hs
