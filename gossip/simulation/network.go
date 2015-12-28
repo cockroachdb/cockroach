@@ -89,7 +89,8 @@ func NewNetwork(nodeCount int, networkType string) *Network {
 		}); err != nil {
 			log.Fatal(err)
 		}
-		if err := gossipNode.AddInfo(addr.String(), encoding.EncodeUint64(nil, 0), time.Hour); err != nil {
+		if err := gossipNode.AddInfo(
+			addr.String(), encoding.EncodeUint64(nil, 0, encoding.Ascending), time.Hour); err != nil {
 			log.Fatal(err)
 		}
 		gossipNode.Start(leftNode.Server, addr, stopper)
@@ -141,12 +142,18 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 	nodes := n.Nodes
 	for cycle := 1; simCallback(cycle, n); cycle++ {
 		// Node 0 gossips sentinel every cycle.
-		if err := nodes[0].Gossip.AddInfo(gossip.KeySentinel, encoding.EncodeUint64(nil, uint64(cycle)), time.Hour); err != nil {
+		if err := nodes[0].Gossip.AddInfo(
+			gossip.KeySentinel,
+			encoding.EncodeUint64(nil, uint64(cycle), encoding.Ascending),
+			time.Hour); err != nil {
 			log.Fatal(err)
 		}
 		// Every node gossips cycle.
 		for _, node := range nodes {
-			if err := node.Gossip.AddInfo(node.Addr.String(), encoding.EncodeUint64(nil, uint64(cycle)), time.Hour); err != nil {
+			if err := node.Gossip.AddInfo(
+				node.Addr.String(),
+				encoding.EncodeUint64(nil, uint64(cycle), encoding.Ascending),
+				time.Hour); err != nil {
 				log.Fatal(err)
 			}
 			node.Gossip.SimulationCycle()

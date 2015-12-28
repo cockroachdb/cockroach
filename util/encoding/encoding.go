@@ -27,7 +27,10 @@ import (
 )
 
 const (
-	encodedNull    = 0x00
+	encodedNull = 0x00
+	// A marker greater than NULL but lower than any other value.
+	// This value is not actually ever present in a stored key, but
+	// it's used in keys used as span boundaries for index scans.
 	encodedNotNull = 0x01
 
 	floatNaN              = encodedNotNull + 1
@@ -40,37 +43,67 @@ const (
 	floatPosMedium        = floatPosSmall + 1
 	floatPosLarge         = floatPosMedium + 11
 	floatInfinity         = floatPosLarge + 1
+	floatNaNDesc          = floatInfinity + 1 // NaN encoded descendingly
 	floatTerminator       = 0x00
 
-	bytesMarker byte = floatInfinity + 1
-	timeMarker  byte = bytesMarker + 1
+	bytesMarker     byte = floatNaNDesc + 1
+	timeMarker      byte = bytesMarker + 1
+	bytesDescMarker byte = timeMarker + 1
+	timeDescMarker  byte = bytesDescMarker + 1
 
 	// IntMin is chosen such that the range of int tags does not overlap the
 	// ascii character set that is frequently used in testing.
 	IntMin   = 0x80
 	intZero  = IntMin + 8
-	intSmall = IntMax - intZero - 8 // 111
+	intSmall = IntMax - intZero - 8 // 109
 	// IntMax is the maximum int tag value.
-	IntMax = 0xff
+	IntMax = 0xfd
+
+	// Nulls come last when encoded descendingly.
+	encodedNotNullDesc = 0xfe
+	encodedNullDesc    = 0xff
+)
+
+// Direction for ordering results.
+type Direction int
+
+// Direction values.
+const (
+	Ascending = iota
+	Descending
 )
 
 // EncodeUint32 encodes the uint32 value using a big-endian 8 byte
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.
-func EncodeUint32(b []byte, v uint32) []byte {
+func EncodeUint32(b []byte, v uint32, dir Direction) []byte {
+	if dir == Ascending {
+		return encodeUint32(b, v)
+	}
+	return encodeUint32Decreasing(b, v)
+}
+
+func encodeUint32(b []byte, v uint32) []byte {
 	return append(b, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 }
 
 // EncodeUint32Decreasing encodes the uint32 value so that it sorts in
 // reverse order, from largest to smallest.
-func EncodeUint32Decreasing(b []byte, v uint32) []byte {
-	return EncodeUint32(b, ^v)
+func encodeUint32Decreasing(b []byte, v uint32) []byte {
+	return encodeUint32(b, ^v)
 }
 
 // DecodeUint32 decodes a uint32 from the input buffer, treating
 // the input as a big-endian 4 byte uint32 representation. The remainder
 // of the input buffer and the decoded uint32 are returned.
-func DecodeUint32(b []byte) ([]byte, uint32, error) {
+func DecodeUint32(b []byte, dir Direction) ([]byte, uint32, error) {
+	if dir == Ascending {
+		return decodeUint32(b)
+	}
+	return decodeUint32Decreasing(b)
+}
+
+func decodeUint32(b []byte) ([]byte, uint32, error) {
 	if len(b) < 4 {
 		return nil, 0, util.Errorf("insufficient bytes to decode uint32 int value")
 	}
@@ -81,15 +114,22 @@ func DecodeUint32(b []byte) ([]byte, uint32, error) {
 
 // DecodeUint32Decreasing decodes a uint32 value which was encoded
 // using EncodeUint32Decreasing.
-func DecodeUint32Decreasing(b []byte) ([]byte, uint32, error) {
-	leftover, v, err := DecodeUint32(b)
+func decodeUint32Decreasing(b []byte) ([]byte, uint32, error) {
+	leftover, v, err := decodeUint32(b)
 	return leftover, ^v, err
 }
 
 // EncodeUint64 encodes the uint64 value using a big-endian 8 byte
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.
-func EncodeUint64(b []byte, v uint64) []byte {
+func EncodeUint64(b []byte, v uint64, dir Direction) []byte {
+	if dir == Ascending {
+		return encodeUint64(b, v)
+	}
+	return encodeUint64Decreasing(b, v)
+}
+
+func encodeUint64(b []byte, v uint64) []byte {
 	return append(b,
 		byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
 		byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
@@ -97,14 +137,21 @@ func EncodeUint64(b []byte, v uint64) []byte {
 
 // EncodeUint64Decreasing encodes the uint64 value so that it sorts in
 // reverse order, from largest to smallest.
-func EncodeUint64Decreasing(b []byte, v uint64) []byte {
-	return EncodeUint64(b, ^v)
+func encodeUint64Decreasing(b []byte, v uint64) []byte {
+	return encodeUint64(b, ^v)
 }
 
 // DecodeUint64 decodes a uint64 from the input buffer, treating
 // the input as a big-endian 8 byte uint64 representation. The remainder
 // of the input buffer and the decoded uint64 are returned.
-func DecodeUint64(b []byte) ([]byte, uint64, error) {
+func DecodeUint64(b []byte, dir Direction) ([]byte, uint64, error) {
+	if dir == Ascending {
+		return decodeUint64(b)
+	}
+	return decodeUint64Decreasing(b)
+}
+
+func decodeUint64(b []byte) ([]byte, uint64, error) {
 	if len(b) < 8 {
 		return nil, 0, util.Errorf("insufficient bytes to decode uint64 int value")
 	}
@@ -117,8 +164,8 @@ func DecodeUint64(b []byte) ([]byte, uint64, error) {
 
 // DecodeUint64Decreasing decodes a uint64 value which was encoded
 // using EncodeUint64Decreasing.
-func DecodeUint64Decreasing(b []byte) ([]byte, uint64, error) {
-	leftover, v, err := DecodeUint64(b)
+func decodeUint64Decreasing(b []byte) ([]byte, uint64, error) {
+	leftover, v, err := decodeUint64(b)
 	return leftover, ^v, err
 }
 
@@ -128,7 +175,14 @@ func DecodeUint64Decreasing(b []byte) ([]byte, uint64, error) {
 // as 8-numBytes. If the value is positive it is encoded as
 // 8+numBytes. The encoded bytes are appended to the supplied buffer
 // and the final buffer is returned.
-func EncodeVarint(b []byte, v int64) []byte {
+func EncodeVarint(b []byte, v int64, dir Direction) []byte {
+	if dir == Ascending {
+		return encodeVarint(b, v)
+	}
+	return encodeVarintDecreasing(b, v)
+}
+
+func encodeVarint(b []byte, v int64) []byte {
 	if v < 0 {
 		switch {
 		case v >= -0xff:
@@ -154,19 +208,26 @@ func EncodeVarint(b []byte, v int64) []byte {
 		}
 	}
 
-	return EncodeUvarint(b, uint64(v))
+	return encodeUvarint(b, uint64(v))
 }
 
 // EncodeVarintDecreasing encodes the int64 value so that it sorts in reverse
 // order, from largest to smallest.
-func EncodeVarintDecreasing(b []byte, v int64) []byte {
-	return EncodeVarint(b, ^v)
+func encodeVarintDecreasing(b []byte, v int64) []byte {
+	return encodeVarint(b, ^v)
 }
 
 // DecodeVarint decodes a varint encoded int64 from the input
 // buffer. The remainder of the input buffer and the decoded int64
 // are returned.
-func DecodeVarint(b []byte) ([]byte, int64, error) {
+func DecodeVarint(b []byte, dir Direction) ([]byte, int64, error) {
+	if dir == Ascending {
+		return decodeVarint(b)
+	}
+	return decodeVarintDecreasing(b)
+}
+
+func decodeVarint(b []byte) ([]byte, int64, error) {
 	if len(b) == 0 {
 		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value")
 	}
@@ -187,7 +248,7 @@ func DecodeVarint(b []byte) ([]byte, int64, error) {
 		return remB[length:], ^v, nil
 	}
 
-	remB, v, err := DecodeUvarint(b)
+	remB, v, err := decodeUvarint(b)
 	if err != nil {
 		return remB, 0, err
 	}
@@ -199,8 +260,8 @@ func DecodeVarint(b []byte) ([]byte, int64, error) {
 
 // DecodeVarintDecreasing decodes a uint64 value which was encoded
 // using EncodeVarintDecreasing.
-func DecodeVarintDecreasing(b []byte) ([]byte, int64, error) {
-	leftover, v, err := DecodeVarint(b)
+func decodeVarintDecreasing(b []byte) ([]byte, int64, error) {
+	leftover, v, err := decodeVarint(b)
 	return leftover, ^v, err
 }
 
@@ -209,7 +270,14 @@ func DecodeVarintDecreasing(b []byte) ([]byte, int64, error) {
 // byte indicating the number of encoded bytes (-8) to follow. See
 // EncodeVarint for rationale. The encoded bytes are appended to the
 // supplied buffer and the final buffer is returned.
-func EncodeUvarint(b []byte, v uint64) []byte {
+func EncodeUvarint(b []byte, v uint64, dir Direction) []byte {
+	if dir == Ascending {
+		return encodeUvarint(b, v)
+	}
+	return encodeUvarintDecreasing(b, v)
+}
+
+func encodeUvarint(b []byte, v uint64) []byte {
 	switch {
 	case v <= intSmall:
 		return append(b, intZero+byte(v))
@@ -238,7 +306,7 @@ func EncodeUvarint(b []byte, v uint64) []byte {
 
 // EncodeUvarintDecreasing encodes the uint64 value so that it sorts in
 // reverse order, from largest to smallest.
-func EncodeUvarintDecreasing(b []byte, v uint64) []byte {
+func encodeUvarintDecreasing(b []byte, v uint64) []byte {
 	switch {
 	case v == 0:
 		return append(b, IntMin+8)
@@ -276,7 +344,14 @@ func EncodeUvarintDecreasing(b []byte, v uint64) []byte {
 // DecodeUvarint decodes a varint encoded uint64 from the input
 // buffer. The remainder of the input buffer and the decoded uint64
 // are returned.
-func DecodeUvarint(b []byte) ([]byte, uint64, error) {
+func DecodeUvarint(b []byte, dir Direction) ([]byte, uint64, error) {
+	if dir == Ascending {
+		return decodeUvarint(b)
+	}
+	return decodeUvarintDecreasing(b)
+}
+
+func decodeUvarint(b []byte) ([]byte, uint64, error) {
 	if len(b) == 0 {
 		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value")
 	}
@@ -300,9 +375,9 @@ func DecodeUvarint(b []byte) ([]byte, uint64, error) {
 	return b[length:], v, nil
 }
 
-// DecodeUvarintDecreasing decodes a uint64 value which was encoded
+// decodeUvarintDecreasing decodes a uint64 value which was encoded
 // using EncodeUvarintDecreasing.
-func DecodeUvarintDecreasing(b []byte) ([]byte, uint64, error) {
+func decodeUvarintDecreasing(b []byte) ([]byte, uint64, error) {
 	if len(b) == 0 {
 		return nil, 0, util.Errorf("insufficient bytes to decode var uint64 int value")
 	}
@@ -342,12 +417,21 @@ var (
 	descendingEscapes = escapes{^escape, ^escapedTerm, ^escaped00, ^escapedFF, bytesMarker}
 )
 
+// EncodeBytes encodes the []byte value using an escape-based encoding with a
+// terminal marker.
+func EncodeBytes(b []byte, data []byte, dir Direction) []byte {
+	if dir == Ascending {
+		return encodeBytes(b, data)
+	}
+	return encodeBytesDecreasing(b, data)
+}
+
 // EncodeBytes encodes the []byte value using an escape-based
 // encoding. The encoded value is terminated with the sequence
 // "\x00\x01" which is guaranteed to not occur elsewhere in the
 // encoded value. The encoded bytes are append to the supplied buffer
 // and the resulting buffer is returned.
-func EncodeBytes(b []byte, data []byte) []byte {
+func encodeBytes(b []byte, data []byte) []byte {
 	b = append(b, bytesMarker)
 	for {
 		// IndexByte is implemented by the go runtime in assembly and is
@@ -368,14 +452,41 @@ func EncodeBytes(b []byte, data []byte) []byte {
 // escape-based encoding and then inverts (ones complement) the result
 // so that it sorts in reverse order, from larger to smaller
 // lexicographically.
-func EncodeBytesDecreasing(b []byte, data []byte) []byte {
+func encodeBytesDecreasing(b []byte, data []byte) []byte {
 	n := len(b)
-	b = EncodeBytes(b, data)
+	b = encodeBytes(b, data)
 	onesComplement(b[n+1:])
 	return b
 }
 
-func decodeBytes(b []byte, r []byte, e escapes) ([]byte, []byte, error) {
+// DecodeBytes decodes a []byte value from the input buffer which was
+// encoded using EncodeBytes. The decoded bytes are appended to r. The
+// remainder of the input buffer and the decoded []byte are returned.
+func DecodeBytes(b []byte, r []byte, dir Direction) ([]byte, []byte, error) {
+	if dir == Ascending {
+		return decodeBytes(b, r)
+	}
+	return decodeBytesDecreasing(b, r)
+}
+
+func decodeBytes(b []byte, r []byte) ([]byte, []byte, error) {
+	return decodeBytesInternal(b, r, ascendingEscapes)
+}
+
+// DecodeBytesDecreasing decodes a []byte value from the input buffer
+// which was encoded using EncodeBytesDecreasing. The decoded bytes
+// are appended to r. The remainder of the input buffer and the
+// decoded []byte are returned.
+func decodeBytesDecreasing(b []byte, r []byte) ([]byte, []byte, error) {
+	if r == nil {
+		r = []byte{}
+	}
+	b, r, err := decodeBytesInternal(b, r, descendingEscapes)
+	onesComplement(r)
+	return b, r, err
+}
+
+func decodeBytesInternal(b []byte, r []byte, e escapes) ([]byte, []byte, error) {
 	if len(b) == 0 || b[0] != e.marker {
 		return nil, nil, util.Errorf("did not find marker")
 	}
@@ -411,32 +522,12 @@ func decodeBytes(b []byte, r []byte, e escapes) ([]byte, []byte, error) {
 	}
 }
 
-// DecodeBytes decodes a []byte value from the input buffer which was
-// encoded using EncodeBytes. The decoded bytes are appended to r. The
-// remainder of the input buffer and the decoded []byte are returned.
-func DecodeBytes(b []byte, r []byte) ([]byte, []byte, error) {
-	return decodeBytes(b, r, ascendingEscapes)
-}
-
-// DecodeBytesDecreasing decodes a []byte value from the input buffer
-// which was encoded using EncodeBytesDecreasing. The decoded bytes
-// are appended to r. The remainder of the input buffer and the
-// decoded []byte are returned.
-func DecodeBytesDecreasing(b []byte, r []byte) ([]byte, []byte, error) {
-	if r == nil {
-		r = []byte{}
-	}
-	b, r, err := decodeBytes(b, r, descendingEscapes)
-	onesComplement(r)
-	return b, r, err
-}
-
 // EncodeString encodes the string value using an escape-based encoding. See
 // EncodeBytes for details. The encoded bytes are append to the supplied buffer
 // and the resulting buffer is returned.
-func EncodeString(b []byte, s string) []byte {
+func EncodeString(b []byte, s string, dir Direction) []byte {
 	if len(s) == 0 {
-		return EncodeBytes(b, nil)
+		return EncodeBytes(b, nil, dir)
 	}
 	// We unsafely convert the string to a []byte to avoid the
 	// usual allocation when converting to a []byte. This is
@@ -447,34 +538,22 @@ func EncodeString(b []byte, s string) []byte {
 	// Next we treat the string data as a maximally sized array which we
 	// slice. This usage is safe because the pointer value remains in the string.
 	arg := (*[0x7fffffff]byte)(unsafe.Pointer(hdr.Data))[:len(s):len(s)]
-	return EncodeBytes(b, arg)
-}
-
-// EncodeStringDecreasing encodes the string value using an escape-based
-// encoding. See EncodeBytesDecreasing for details. The encoded bytes are
-// append to the supplied buffer and the resulting buffer is returned.
-func EncodeStringDecreasing(b []byte, s string) []byte {
-	if len(s) == 0 {
-		return EncodeBytesDecreasing(b, nil)
-	}
-	// We unsafely convert the string to a []byte to avoid the
-	// usual allocation when converting to a []byte. This is
-	// kosher because we know that EncodeBytes{,Decreasing} does
-	// not keep a reference to the value it encodes. The first
-	// step is getting access to the string internals.
-	hdr := (*reflect.StringHeader)(unsafe.Pointer(&s))
-	// Next we treat the string data as a maximally sized array which we
-	// slice. This usage is safe because the pointer value remains in the string.
-	arg := (*[0x7fffffff]byte)(unsafe.Pointer(hdr.Data))[:len(s):len(s)]
-	return EncodeBytesDecreasing(b, arg)
+	return EncodeBytes(b, arg, dir)
 }
 
 // DecodeString decodes a string value from the input buffer which was encoded
 // using EncodeString or EncodeBytes. The r []byte is used as a temporary
 // buffer in order to avoid memory allocations. The remainder of the input
 // buffer and the decoded string are returned.
-func DecodeString(b []byte, r []byte) ([]byte, string, error) {
-	b, r, err := decodeBytes(b, r, ascendingEscapes)
+func DecodeString(b []byte, r []byte, dir Direction) ([]byte, string, error) {
+	if dir == Ascending {
+		return decodeString(b, r)
+	}
+	return decodeStringDecreasing(b, r)
+}
+
+func decodeString(b []byte, r []byte) ([]byte, string, error) {
+	b, r, err := DecodeBytes(b, r, Ascending)
 	return b, string(r), err
 }
 
@@ -483,15 +562,8 @@ func DecodeString(b []byte, r []byte) ([]byte, string, error) {
 // []byte is used as a temporary buffer in order to avoid memory
 // allocations. The remainder of the input buffer and the decoded string are
 // returned.
-func DecodeStringDecreasing(b []byte, r []byte) ([]byte, string, error) {
-	// We need to pass in a non-nil "r" parameter here so that the output is
-	// always copied to a new string instead of just returning the input when
-	// when there are no embedded escapes.
-	if r == nil {
-		r = []byte{}
-	}
-	b, r, err := decodeBytes(b, r, descendingEscapes)
-	onesComplement(r)
+func decodeStringDecreasing(b []byte, r []byte) ([]byte, string, error) {
+	b, r, err := DecodeBytes(b, r, Descending)
 	return b, string(r), err
 }
 
@@ -499,15 +571,37 @@ func DecodeStringDecreasing(b []byte, r []byte) ([]byte, string, error) {
 // supplied buffer and the final buffer is returned. The encoded value for a
 // NULL is guaranteed to not be a prefix for the EncodeVarint, EncodeFloat,
 // EncodeBytes and EncodeString encodings.
-func EncodeNull(b []byte) []byte {
+func EncodeNull(b []byte, dir Direction) []byte {
+	if dir == Ascending {
+		return encodeNull(b)
+	}
+	return encodeNullDecreasing(b)
+}
+
+func encodeNull(b []byte) []byte {
 	return append(b, encodedNull)
+}
+
+func encodeNullDecreasing(b []byte) []byte {
+	return append(b, encodedNullDesc)
 }
 
 // EncodeNotNull encodes a value that is larger than the NULL marker encoded by
 // EncodeNull but less than any encoded value returned by EncodeVarint,
 // EncodeFloat, EncodeBytes or EncodeString.
-func EncodeNotNull(b []byte) []byte {
+func EncodeNotNull(b []byte, dir Direction) []byte {
+	if dir == Ascending {
+		return encodeNotNull(b)
+	}
+	return encodeNotNullDecreasing(b)
+}
+
+func encodeNotNull(b []byte) []byte {
 	return append(b, encodedNotNull)
+}
+
+func encodeNotNullDecreasing(b []byte) []byte {
+	return append(b, encodedNotNullDesc)
 }
 
 // DecodeIfNull decodes a NULL value from the input buffer. If the input buffer
@@ -517,6 +611,7 @@ func EncodeNotNull(b []byte) []byte {
 // NULL value encoding is guaranteed to never occur as the prefix for the
 // EncodeVarint, EncodeFloat, EncodeBytes and EncodeString encodings, it is
 // safe to call DecodeIfNull on their encoded values.
+// This function handles both ascendingly and descendingly encoded NULLs.
 func DecodeIfNull(b []byte) ([]byte, bool) {
 	if PeekType(b) == Null {
 		return b[1:], true
@@ -531,6 +626,7 @@ func DecodeIfNull(b []byte) ([]byte, bool) {
 // for the second result. Note that the not-NULL marker is identical to the
 // empty string encoding, so do not use this routine where it is necessary to
 // distinguish not-NULL from the empty string.
+// This function handles both ascendingly and descendingly encoded NULLs.
 func DecodeIfNotNull(b []byte) ([]byte, bool) {
 	if PeekType(b) == NotNull {
 		return b[1:], true
@@ -543,28 +639,67 @@ func DecodeIfNotNull(b []byte) ([]byte, bool) {
 // Such that if t1.Before(t2) then after EncodeTime(b1, t1), and
 // EncodeTime(b2, t1), Compare(b1, b2) < 0. The time zone offset not
 // included in the encoding.
-func EncodeTime(b []byte, t time.Time) []byte {
+func EncodeTime(b []byte, t time.Time, dir Direction) []byte {
+	if dir == Ascending {
+		return encodeTime(b, t)
+	}
+	return encodeTimeDecreasing(b, t)
+}
+
+func encodeTime(b []byte, t time.Time) []byte {
 	// Read the unix absolute time. This is the absolute time and is
 	// not time zone offset dependent.
 	b = append(b, timeMarker)
-	b = EncodeVarint(b, t.Unix())
-	b = EncodeVarint(b, int64(t.Nanosecond()))
+	b = EncodeVarint(b, t.Unix(), Ascending)
+	b = EncodeVarint(b, int64(t.Nanosecond()), Ascending)
+	return b
+}
+
+func encodeTimeDecreasing(b []byte, t time.Time) []byte {
+	// Read the unix absolute time. This is the absolute time and is
+	// not time zone offset dependent.
+	b = append(b, timeDescMarker)
+	b = EncodeVarint(b, t.Unix(), Descending)
+	b = EncodeVarint(b, int64(t.Nanosecond()), Descending)
 	return b
 }
 
 // DecodeTime decodes a time.Time value which was encoded using
 // EncodeTime. The remainder of the input buffer and the decoded
 // time.Time are returned.
-func DecodeTime(b []byte) ([]byte, time.Time, error) {
+func DecodeTime(b []byte, dir Direction) ([]byte, time.Time, error) {
+	if dir == Ascending {
+		return decodeTime(b)
+	}
+	return decodeTimeDecreasing(b)
+}
+
+func decodeTime(b []byte) ([]byte, time.Time, error) {
 	if PeekType(b) != Time {
 		return nil, time.Time{}, util.Errorf("did not find marker")
 	}
 	b = b[1:]
-	b, sec, err := DecodeVarint(b)
+	b, sec, err := DecodeVarint(b, Ascending)
 	if err != nil {
 		return b, time.Time{}, err
 	}
-	b, nsec, err := DecodeVarint(b)
+	b, nsec, err := DecodeVarint(b, Ascending)
+	if err != nil {
+		return b, time.Time{}, err
+	}
+	return b, time.Unix(sec, nsec), nil
+}
+
+func decodeTimeDecreasing(b []byte) ([]byte, time.Time, error) {
+	if PeekType(b) != TimeDesc {
+		return nil, time.Time{}, util.Errorf("did not find marker")
+	}
+	b = b[1:]
+	b, sec, err := DecodeVarint(b, Descending)
+	if err != nil {
+		return b, time.Time{}, err
+	}
+	b, nsec, err := DecodeVarint(b, Descending)
 	if err != nil {
 		return b, time.Time{}, err
 	}
@@ -583,7 +718,9 @@ const (
 	Int
 	Float
 	Bytes
+	BytesDesc // Bytes encoded descendingly
 	Time
+	TimeDesc // Time encoded descendingly
 )
 
 // PeekType peeks at the type of the value encoded at the start of b.
@@ -591,17 +728,21 @@ func PeekType(b []byte) Type {
 	if len(b) >= 1 {
 		m := b[0]
 		switch {
-		case m == encodedNull:
+		case m == encodedNull || m == encodedNullDesc:
 			return Null
-		case m == encodedNotNull:
+		case m == encodedNotNull || m == encodedNotNullDesc:
 			return NotNull
 		case m == bytesMarker:
 			return Bytes
+		case m == bytesDescMarker:
+			return BytesDesc
 		case m == timeMarker:
 			return Time
+		case m == timeDescMarker:
+			return TimeDesc
 		case m >= IntMin && m <= IntMax:
 			return Int
-		case m >= floatNaN && m <= floatInfinity:
+		case m >= floatNaN && m <= floatNaNDesc:
 			return Float
 		}
 	}

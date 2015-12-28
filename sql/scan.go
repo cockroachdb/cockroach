@@ -130,6 +130,8 @@ type scanNode struct {
 	reverse          bool
 	columns          []column
 	columnIDs        []ColumnID
+	// The direction with which the corresponding column was encoded.
+	columnDirs       []encoding.Direction
 	ordering         []int
 	exactPrefix      int
 	err              error
@@ -340,6 +342,8 @@ func (n *scanNode) initScan() bool {
 		if n.isSecondaryIndex && n.index.Unique {
 			// Unique secondary indexes have a value that is the primary index
 			// key. Prepare implicitVals for use in decoding this value.
+			// Primary indexes only contain ascendingly-encoded values. If this
+			// even changes, we'll probably have to figure out the directions here too.
 			if n.implicitValTypes, n.err = makeKeyVals(n.desc, n.index.ImplicitColumnIDs); n.err != nil {
 				return false
 			}
@@ -399,7 +403,7 @@ func (n *scanNode) initOrdering(exactPrefix int) {
 		return
 	}
 	n.exactPrefix = exactPrefix
-	n.columnIDs = n.index.fullColumnIDs()
+	n.columnIDs, n.columnDirs = n.index.fullColumnIDs()
 	n.ordering = n.computeOrdering(n.columnIDs)
 	if n.reverse {
 		for i := range n.ordering {
@@ -526,7 +530,7 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 	}
 
 	var remaining []byte
-	remaining, n.err = decodeIndexKey(n.desc, *n.index, n.valTypes, n.vals, kv.Key)
+	remaining, n.err = decodeIndexKey(n.desc, n.index.ID, n.valTypes, n.vals, n.columnDirs, kv.Key)
 	if n.err != nil {
 		return false
 	}
@@ -548,7 +552,7 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 
 	if !n.isSecondaryIndex && len(remaining) > 0 {
 		var v uint64
-		_, v, n.err = encoding.DecodeUvarint(remaining)
+		_, v, n.err = encoding.DecodeUvarint(remaining, encoding.Ascending)
 		if n.err != nil {
 			return false
 		}
@@ -572,7 +576,12 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 		}
 	} else {
 		if n.implicitVals != nil {
-			if _, n.err = decodeKeyVals(n.implicitValTypes, n.implicitVals, kv.ValueBytes()); n.err != nil {
+			implicitDirs := make([]encoding.Direction, 0, len(n.index.ImplicitColumnIDs))
+			for range n.index.ImplicitColumnIDs {
+				implicitDirs = append(implicitDirs, encoding.Ascending)
+			}
+			if _, n.err = decodeKeyVals(
+				n.implicitValTypes, n.implicitVals, implicitDirs, kv.ValueBytes()); n.err != nil {
 				return false
 			}
 			for i, id := range n.index.ImplicitColumnIDs {

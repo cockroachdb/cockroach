@@ -291,7 +291,8 @@ func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNam
 
 	var qualifiedNames parser.QualifiedNames
 	for _, row := range sr {
-		_, tableName, err := encoding.DecodeString(bytes.TrimPrefix(row.Key, prefix), nil)
+		_, tableName, err := encoding.DecodeString(
+			bytes.TrimPrefix(row.Key, prefix), nil, encoding.Ascending)
 		if err != nil {
 			return nil, err
 		}
@@ -307,13 +308,29 @@ func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNam
 	return qualifiedNames, nil
 }
 
-func encodeIndexKey(columnIDs []ColumnID, colMap map[ColumnID]int,
+// encodeIndexKey doesn't deal with ImplicitColumnIDs, so it doesn't always produce
+// a full index key.
+func encodeIndexKey(index *IndexDescriptor, colMap map[ColumnID]int,
+	values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
+	dirs := make([]encoding.Direction, 0, len(index.ColumnIDs))
+	for _, dir := range index.ColumnDirections {
+		convertedDir, err := dir.ToEncodingDirection()
+		if err != nil {
+			return nil, false, err
+		}
+		dirs = append(dirs, convertedDir)
+	}
+	return encodeColumns(index.ColumnIDs, dirs, colMap, values, indexKey)
+}
+
+// Version of encodeIndexKey that takes ColumnIDs and directions explicitly.
+func encodeColumns(columnIDs []ColumnID, directions []encoding.Direction, colMap map[ColumnID]int,
 	values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
 	var key []byte
 	var containsNull bool
 	key = append(key, indexKey...)
 
-	for _, id := range columnIDs {
+	for colIdx, id := range columnIDs {
 		var val parser.Datum
 		if i, ok := colMap[id]; ok {
 			// TODO(pmattis): Need to convert the values[i] value to the type
@@ -328,38 +345,39 @@ func encodeIndexKey(columnIDs []ColumnID, colMap map[ColumnID]int,
 		}
 
 		var err error
-		if key, err = encodeTableKey(key, val); err != nil {
+		if key, err = encodeTableKey(key, val, directions[colIdx]); err != nil {
 			return nil, containsNull, err
 		}
 	}
 	return key, containsNull, nil
 }
 
-func encodeTableKey(b []byte, val parser.Datum) ([]byte, error) {
+// Encodes `val` into `b` and returns the new buffer.
+func encodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte, error) {
 	if val == parser.DNull {
-		return encoding.EncodeNull(b), nil
+		return encoding.EncodeNull(b, dir), nil
 	}
 
 	switch t := val.(type) {
 	case parser.DBool:
 		if t {
-			return encoding.EncodeVarint(b, 1), nil
+			return encoding.EncodeVarint(b, 1, dir), nil
 		}
-		return encoding.EncodeVarint(b, 0), nil
+		return encoding.EncodeVarint(b, 0, dir), nil
 	case parser.DInt:
-		return encoding.EncodeVarint(b, int64(t)), nil
+		return encoding.EncodeVarint(b, int64(t), dir), nil
 	case parser.DFloat:
-		return encoding.EncodeFloat(b, float64(t)), nil
+		return encoding.EncodeFloat(b, float64(t), dir), nil
 	case parser.DString:
-		return encoding.EncodeString(b, string(t)), nil
+		return encoding.EncodeString(b, string(t), dir), nil
 	case parser.DBytes:
-		return encoding.EncodeString(b, string(t)), nil
+		return encoding.EncodeString(b, string(t), dir), nil
 	case parser.DDate:
-		return encoding.EncodeVarint(b, int64(t)), nil
+		return encoding.EncodeVarint(b, int64(t), dir), nil
 	case parser.DTimestamp:
-		return encoding.EncodeTime(b, t.Time), nil
+		return encoding.EncodeTime(b, t.Time, dir), nil
 	case parser.DInterval:
-		return encoding.EncodeVarint(b, int64(t.Duration)), nil
+		return encoding.EncodeVarint(b, int64(t.Duration), dir), nil
 	}
 	return nil, fmt.Errorf("unable to encode table key: %T", val)
 }
@@ -400,11 +418,11 @@ func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, e
 		return 0, nil, util.Errorf("%s: invalid key prefix: %q", desc.Name, key)
 	}
 
-	key, tableID, err := encoding.DecodeUvarint(key)
+	key, tableID, err := encoding.DecodeUvarint(key, encoding.Ascending)
 	if err != nil {
 		return 0, nil, err
 	}
-	key, indexID, err := encoding.DecodeUvarint(key)
+	key, indexID, err := encoding.DecodeUvarint(key, encoding.Ascending)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -421,17 +439,17 @@ func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, e
 // index key are returned which will either be an encoded column ID for the
 // primary key index, the primary key suffix for non-unique secondary indexes
 // or unique secondary indexes containing NULL or empty.
-func decodeIndexKey(desc *TableDescriptor, index IndexDescriptor, valTypes, vals []parser.Datum, key []byte) ([]byte, error) {
-	indexID, remaining, err := decodeIndexKeyPrefix(desc, key)
+func decodeIndexKey(desc *TableDescriptor, indexID IndexID,
+	valTypes, vals []parser.Datum, colDirs []encoding.Direction, key []byte) ([]byte, error) {
+	decodedIndexID, remaining, err := decodeIndexKeyPrefix(desc, key)
 	if err != nil {
 		return nil, err
 	}
 
-	if indexID != index.ID {
-		return nil, util.Errorf("%s: unexpected index ID: %d != %d", desc.Name, index.ID, indexID)
+	if decodedIndexID != indexID {
+		return nil, util.Errorf("%s: unexpected index ID: %d != %d", desc.Name, indexID, decodedIndexID)
 	}
-
-	return decodeKeyVals(valTypes, vals, remaining)
+	return decodeKeyVals(valTypes, vals, colDirs, remaining)
 }
 
 // decodeKeyVals decodes the values that are part of the key. ValTypes is a
@@ -441,10 +459,15 @@ func decodeIndexKey(desc *TableDescriptor, index IndexDescriptor, valTypes, vals
 // entry in the valTypes parameter with the exception that a value might also
 // be parser.DNull. The remaining bytes in the key after decoding the values
 // are returned.
-func decodeKeyVals(valTypes, vals []parser.Datum, key []byte) ([]byte, error) {
+func decodeKeyVals(valTypes, vals []parser.Datum, directions []encoding.Direction,
+	key []byte) ([]byte, error) {
+	if len(directions) != len(valTypes) {
+		return nil, util.Errorf("encoding directions doesn't parallel valTypes: %d vs %d.",
+			len(directions), len(valTypes))
+	}
 	for j := range valTypes {
 		var err error
-		vals[j], key, err = decodeTableKey(valTypes[j], key)
+		vals[j], key, err = decodeTableKey(valTypes[j], key, directions[j])
 		if err != nil {
 			return nil, err
 		}
@@ -452,35 +475,36 @@ func decodeKeyVals(valTypes, vals []parser.Datum, key []byte) ([]byte, error) {
 	return key, nil
 }
 
-func decodeTableKey(valType parser.Datum, key []byte) (parser.Datum, []byte, error) {
+func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
+	parser.Datum, []byte, error) {
 	var isNull bool
 	if key, isNull = encoding.DecodeIfNull(key); isNull {
 		return parser.DNull, key, nil
 	}
 	switch valType.(type) {
 	case parser.DBool:
-		rkey, i, err := encoding.DecodeVarint(key)
+		rkey, i, err := encoding.DecodeVarint(key, dir)
 		return parser.DBool(i != 0), rkey, err
 	case parser.DInt:
-		rkey, i, err := encoding.DecodeVarint(key)
+		rkey, i, err := encoding.DecodeVarint(key, dir)
 		return parser.DInt(i), rkey, err
 	case parser.DFloat:
-		rkey, f, err := encoding.DecodeFloat(key, nil)
+		rkey, f, err := encoding.DecodeFloat(key, nil, dir)
 		return parser.DFloat(f), rkey, err
 	case parser.DString:
-		rkey, r, err := encoding.DecodeString(key, nil)
+		rkey, r, err := encoding.DecodeString(key, nil, dir)
 		return parser.DString(r), rkey, err
 	case parser.DBytes:
-		rkey, r, err := encoding.DecodeString(key, nil)
+		rkey, r, err := encoding.DecodeString(key, nil, dir)
 		return parser.DBytes(r), rkey, err
 	case parser.DDate:
-		rkey, t, err := encoding.DecodeVarint(key)
+		rkey, t, err := encoding.DecodeVarint(key, dir)
 		return parser.DDate(t), rkey, err
 	case parser.DTimestamp:
-		rkey, t, err := encoding.DecodeTime(key)
+		rkey, t, err := encoding.DecodeTime(key, dir)
 		return parser.DTimestamp{Time: t}, rkey, err
 	case parser.DInterval:
-		rkey, d, err := encoding.DecodeVarint(key)
+		rkey, d, err := encoding.DecodeVarint(key, dir)
 		return parser.DInterval{Duration: time.Duration(d)}, rkey, err
 	default:
 		return nil, nil, util.Errorf("TODO(pmattis): decoded index key: %s", valType.Type())
@@ -492,18 +516,25 @@ type indexEntry struct {
 	value []byte
 }
 
+// colMap maps ColumnIds to indexes in `values`.
 func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
 	colMap map[ColumnID]int, values []parser.Datum) ([]indexEntry, error) {
 	var secondaryIndexEntries []indexEntry
 	for _, secondaryIndex := range indexes {
 		secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
 		secondaryIndexKey, containsNull, err := encodeIndexKey(
-			secondaryIndex.ColumnIDs, colMap, values, secondaryIndexKeyPrefix)
+			&secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}
 
-		extraKey, _, err := encodeIndexKey(secondaryIndex.ImplicitColumnIDs, colMap, values, nil)
+		// Add the implicit columns - they are encoded ascendingly.
+		implicitDirs := make([]encoding.Direction, 0, len(secondaryIndex.ImplicitColumnIDs))
+		for range secondaryIndex.ImplicitColumnIDs {
+			implicitDirs = append(implicitDirs, encoding.Ascending)
+		}
+		extraKey, _, err := encodeColumns(secondaryIndex.ImplicitColumnIDs, implicitDirs,
+			colMap, values, nil)
 		if err != nil {
 			return nil, err
 		}

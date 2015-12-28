@@ -286,7 +286,7 @@ func (v Value) checksum() uint32 {
 	if len(v.RawBytes) < checksumSize {
 		return 0
 	}
-	_, u, err := encoding.DecodeUint32(v.RawBytes[:checksumSize])
+	_, u, err := encoding.DecodeUint32(v.RawBytes[:checksumSize], encoding.Ascending)
 	if err != nil {
 		panic(err)
 	}
@@ -295,7 +295,7 @@ func (v Value) checksum() uint32 {
 
 func (v *Value) setChecksum(cksum uint32) {
 	if len(v.RawBytes) >= checksumSize {
-		encoding.EncodeUint32(v.RawBytes[:0], cksum)
+		encoding.EncodeUint32(v.RawBytes[:0], cksum, encoding.Ascending)
 	}
 }
 
@@ -386,7 +386,7 @@ func (v *Value) SetBytes(b []byte) {
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetFloat(f float64) {
 	v.RawBytes = make([]byte, headerSize+8)
-	encoding.EncodeUint64(v.RawBytes[headerSize:headerSize], math.Float64bits(f))
+	encoding.EncodeUint64(v.RawBytes[headerSize:headerSize], math.Float64bits(f), encoding.Ascending)
 	v.setTag(ValueType_FLOAT)
 }
 
@@ -419,7 +419,7 @@ func (v *Value) SetProto(msg proto.Message) error {
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetTime(t time.Time) {
 	v.RawBytes = make([]byte, headerSize, 16)
-	v.RawBytes = encoding.EncodeTime(v.RawBytes[:headerSize], t)
+	v.RawBytes = encoding.EncodeTime(v.RawBytes[:headerSize], t, encoding.Ascending)
 	v.setTag(ValueType_TIME)
 }
 
@@ -443,7 +443,7 @@ func (v Value) GetFloat() (float64, error) {
 	if len(dataBytes) != 8 {
 		return 0, fmt.Errorf("float64 value should be exactly 8 bytes: %d", len(dataBytes))
 	}
-	_, u, err := encoding.DecodeUint64(dataBytes)
+	_, u, err := encoding.DecodeUint64(dataBytes, encoding.Ascending)
 	if err != nil {
 		return 0, err
 	}
@@ -486,7 +486,7 @@ func (v Value) GetTime() (time.Time, error) {
 	if tag := v.GetTag(); tag != ValueType_TIME {
 		return time.Time{}, fmt.Errorf("value type is not %s: %s", ValueType_TIME, tag)
 	}
-	_, t, err := encoding.DecodeTime(v.dataBytes())
+	_, t, err := encoding.DecodeTime(v.dataBytes(), encoding.Ascending)
 	if err != nil {
 		return t, err
 	}

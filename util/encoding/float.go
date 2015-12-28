@@ -48,7 +48,21 @@ import (
 // as a byte 0x13-E followed by the ones-complement of M. Large negative values
 // consist of the single byte 0x08 followed by the ones-complement of the
 // varint encoding of E followed by the ones-complement of M.
-func EncodeFloat(b []byte, f float64) []byte {
+func EncodeFloat(b []byte, f float64, dir Direction) []byte {
+	if dir == Ascending {
+		return encodeFloat(b, f)
+	}
+	return encodeFloatDecreasing(b, f)
+}
+
+func encodeFloatDecreasing(b []byte, f float64) []byte {
+	if math.IsNaN(f) {
+		return append(b, floatNaNDesc)
+	}
+	return encodeFloat(b, -f)
+}
+
+func encodeFloat(b []byte, f float64) []byte {
 	// Handle the simplistic cases first.
 	switch {
 	case math.IsNaN(f):
@@ -81,7 +95,19 @@ func EncodeFloat(b []byte, f float64) []byte {
 
 // DecodeFloat returns the remaining byte slice after decoding and the decoded
 // float64 from buf.
-func DecodeFloat(buf []byte, tmp []byte) ([]byte, float64, error) {
+func DecodeFloat(buf []byte, tmp []byte, dir Direction) ([]byte, float64, error) {
+	if dir == Ascending {
+		return decodeFloat(buf, tmp)
+	}
+	return decodeFloatDecreasing(buf, tmp)
+}
+
+func decodeFloatDecreasing(buf []byte, tmp []byte) ([]byte, float64, error) {
+	b, r, err := decodeFloat(buf, tmp)
+	return b, -r, err
+}
+
+func decodeFloat(buf []byte, tmp []byte) ([]byte, float64, error) {
 	if buf[0] == floatZero {
 		return buf[1:], 0, nil
 	}
@@ -89,6 +115,8 @@ func DecodeFloat(buf []byte, tmp []byte) ([]byte, float64, error) {
 	idx := bytes.Index(buf, []byte{floatTerminator})
 	switch {
 	case buf[0] == floatNaN:
+		return buf[1:], math.NaN(), nil
+	case buf[0] == floatNaNDesc:
 		return buf[1:], math.NaN(), nil
 	case buf[0] == floatInfinity:
 		return buf[1:], math.Inf(1), nil

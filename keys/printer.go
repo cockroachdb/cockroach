@@ -99,7 +99,7 @@ func localStoreKeyPrint(key roachpb.Key) string {
 func raftLogKeyPrint(key roachpb.Key) string {
 	var logIndex uint64
 	var err error
-	key, logIndex, err = encoding.DecodeUint64(key)
+	key, logIndex, err = encoding.DecodeUint64(key, encoding.Ascending)
 	if err != nil {
 		return fmt.Sprintf("/err<%v:%q>", err, []byte(key))
 	}
@@ -114,7 +114,7 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 	}
 
 	// get range id
-	key, i, err := encoding.DecodeVarint(key)
+	key, i, err := encoding.DecodeVarint(key, encoding.Ascending)
 	if err != nil {
 		return fmt.Sprintf("/err<%v:%q>", err, []byte(key))
 	}
@@ -173,7 +173,7 @@ func localRangeKeyPrint(key roachpb.Key) string {
 }
 
 func sequenceCacheKeyPrint(key roachpb.Key) string {
-	b, id, err := encoding.DecodeBytes([]byte(key), nil)
+	b, id, err := encoding.DecodeBytes([]byte(key), nil, encoding.Ascending)
 	if err != nil {
 		return fmt.Sprintf("/%q/err:%v", key, err)
 	}
@@ -182,12 +182,12 @@ func sequenceCacheKeyPrint(key roachpb.Key) string {
 		return fmt.Sprintf("/%q", id)
 	}
 
-	b, epoch, err := encoding.DecodeUint32Decreasing(b)
+	b, epoch, err := encoding.DecodeUint32(b, encoding.Descending)
 	if err != nil {
 		return fmt.Sprintf("/%q/err:%v", id, err)
 	}
 
-	_, seq, err := encoding.DecodeUint32Decreasing(b)
+	_, seq, err := encoding.DecodeUint32(b, encoding.Descending)
 	if err != nil {
 		return fmt.Sprintf("/%q/epoch:%d/err:%v", id, epoch, err)
 	}
@@ -212,25 +212,37 @@ func decodeKeyPrint(key roachpb.Key) string {
 			fmt.Fprintf(&buf, "/#")
 		case encoding.Int:
 			var i int64
-			key, i, err = encoding.DecodeVarint(key)
+			key, i, err = encoding.DecodeVarint(key, encoding.Ascending)
 			if err == nil {
 				fmt.Fprintf(&buf, "/%d", i)
 			}
 		case encoding.Float:
 			var f float64
-			key, f, err = encoding.DecodeFloat(key, nil)
+			key, f, err = encoding.DecodeFloat(key, nil, encoding.Ascending)
 			if err == nil {
 				fmt.Fprintf(&buf, "/%f", f)
 			}
 		case encoding.Bytes:
 			var s string
-			key, s, err = encoding.DecodeString(key, nil)
+			key, s, err = encoding.DecodeString(key, nil, encoding.Ascending)
+			if err == nil {
+				fmt.Fprintf(&buf, "/%q", s)
+			}
+		case encoding.BytesDesc:
+			var s string
+			key, s, err = encoding.DecodeString(key, nil, encoding.Descending)
 			if err == nil {
 				fmt.Fprintf(&buf, "/%q", s)
 			}
 		case encoding.Time:
 			var t time.Time
-			key, t, err = encoding.DecodeTime(key)
+			key, t, err = encoding.DecodeTime(key, encoding.Ascending)
+			if err == nil {
+				fmt.Fprintf(&buf, "/%s", t.UTC().Format(time.UnixDate))
+			}
+		case encoding.TimeDesc:
+			var t time.Time
+			key, t, err = encoding.DecodeTime(key, encoding.Descending)
 			if err == nil {
 				fmt.Fprintf(&buf, "/%s", t.UTC().Format(time.UnixDate))
 			}

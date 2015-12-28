@@ -911,7 +911,8 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 
 	buf := make([]byte, 0, multiraft.CommandIDLen)
 	{
-		buf = encoding.EncodeUint64(buf, uint64(rand.Int63()))[:multiraft.CommandIDLen]
+		buf = encoding.EncodeUint64(
+			buf, uint64(rand.Int63()), encoding.Ascending)[:multiraft.CommandIDLen]
 	}
 	idKey := cmdIDKey(buf)
 

@@ -47,19 +47,21 @@ func StoreIdentKey() roachpb.Key {
 // StoreStatusKey returns the key for accessing the store status for the
 // specified store ID.
 func StoreStatusKey(storeID int32) roachpb.Key {
-	return roachpb.Key(MakeKey(StatusStorePrefix, encoding.EncodeUvarint(nil, uint64(storeID))))
+	return roachpb.Key(MakeKey(StatusStorePrefix, encoding.EncodeUvarint(nil, uint64(storeID),
+		encoding.Ascending)))
 }
 
 // NodeStatusKey returns the key for accessing the node status for the
 // specified node ID.
 func NodeStatusKey(nodeID int32) roachpb.Key {
-	return MakeKey(StatusNodePrefix, encoding.EncodeUvarint(nil, uint64(nodeID)))
+	return MakeKey(StatusNodePrefix, encoding.EncodeUvarint(nil, uint64(nodeID), encoding.Ascending))
 }
 
 // MakeRangeIDPrefix creates a range-local key prefix from
 // rangeID.
 func MakeRangeIDPrefix(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeKey(LocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(rangeID)))
+	return MakeKey(LocalRangeIDPrefix, encoding.EncodeUvarint(nil, uint64(rangeID),
+		encoding.Ascending))
 }
 
 // MakeRangeIDKey creates a range-local key based on the range's
@@ -74,7 +76,7 @@ func MakeRangeIDKey(rangeID roachpb.RangeID, suffix, detail roachpb.RKey) roachp
 // RaftLogKey returns a system-local key for a Raft log entry.
 func RaftLogKey(rangeID roachpb.RangeID, logIndex uint64) roachpb.Key {
 	return MakeRangeIDKey(rangeID, localRaftLogSuffix,
-		encoding.EncodeUint64(nil, logIndex))
+		encoding.EncodeUint64(nil, logIndex, encoding.Ascending))
 }
 
 // RaftLogPrefix returns the system-local prefix shared by all entries in a Raft log.
@@ -123,15 +125,18 @@ func RangeStatsKey(rangeID roachpb.RangeID) roachpb.Key {
 // supplied transaction ID, epoch and sequence number.
 func SequenceCacheKey(rangeID roachpb.RangeID, id []byte, epoch uint32, seq uint32) roachpb.Key {
 	return MakeRangeIDKey(rangeID, LocalSequenceCacheSuffix,
-		encoding.EncodeUint32Decreasing(
-			encoding.EncodeUint32Decreasing(
-				encoding.EncodeBytes(nil, id), epoch), seq))
+		encoding.EncodeUint32(
+			encoding.EncodeUint32(
+				encoding.EncodeBytes(nil, id, encoding.Ascending),
+				epoch, encoding.Descending),
+			seq, encoding.Descending))
 }
 
 // SequenceCacheKeyPrefix returns the prefix common to all sequence cache keys
 // for the given ID.
 func SequenceCacheKeyPrefix(rangeID roachpb.RangeID, id []byte) roachpb.Key {
-	return MakeRangeIDKey(rangeID, LocalSequenceCacheSuffix, encoding.EncodeBytes(nil, id))
+	return MakeRangeIDKey(rangeID, LocalSequenceCacheSuffix,
+		encoding.EncodeBytes(nil, id, encoding.Ascending))
 }
 
 // MakeRangeKey creates a range-local key based on the range
@@ -147,7 +152,7 @@ func MakeRangeKey(key, suffix, detail roachpb.RKey) roachpb.Key {
 // MakeRangeKeyPrefix creates a key prefix under which all range-local keys
 // can be found.
 func MakeRangeKeyPrefix(key roachpb.RKey) roachpb.Key {
-	return MakeKey(LocalRangePrefix, encoding.EncodeBytes(nil, key))
+	return MakeKey(LocalRangePrefix, encoding.EncodeBytes(nil, key, encoding.Ascending))
 }
 
 // DecodeRangeKey decodes the range key into range start key,
@@ -159,7 +164,7 @@ func DecodeRangeKey(key roachpb.Key) (startKey, suffix, detail roachpb.Key, err 
 	}
 	// Cut the prefix and the Range ID.
 	b := key[len(LocalRangePrefix):]
-	b, startKey, err = encoding.DecodeBytes(b, nil)
+	b, startKey, err = encoding.DecodeBytes(b, nil, encoding.Ascending)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -229,7 +234,7 @@ func Addr(k roachpb.Key) roachpb.RKey {
 	}
 	if bytes.HasPrefix(k, LocalRangePrefix) {
 		k = k[len(LocalRangePrefix):]
-		_, k, err := encoding.DecodeBytes(k, nil)
+		_, k, err := encoding.DecodeBytes(k, nil, encoding.Ascending)
 		if err != nil {
 			panic(err)
 		}
@@ -336,7 +341,7 @@ func MetaReverseScanBounds(key roachpb.RKey) (roachpb.Key, roachpb.Key, error) {
 
 // MakeTablePrefix returns the key prefix used for the table's data.
 func MakeTablePrefix(tableID uint32) []byte {
-	return encoding.EncodeUvarint(nil, uint64(tableID))
+	return encoding.EncodeUvarint(nil, uint64(tableID), encoding.Ascending)
 }
 
 // DecodeTablePrefix validates that the given key has a table prefix, returning
@@ -346,7 +351,7 @@ func DecodeTablePrefix(key roachpb.Key) ([]byte, uint64, error) {
 	if encoding.PeekType(key) != encoding.Int {
 		return key, 0, util.Errorf("invalid key prefix: %q", key)
 	}
-	return encoding.DecodeUvarint(key)
+	return encoding.DecodeUvarint(key, encoding.Ascending)
 }
 
 // Range returns a key range encompassing all the keys in the Batch.

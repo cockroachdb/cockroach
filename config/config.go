@@ -105,7 +105,7 @@ func ObjectIDForKey(key roachpb.RKey) (uint32, bool) {
 		return 0, false
 	}
 	// Consume first encoded int.
-	_, id64, err := encoding.DecodeUvarint(key)
+	_, id64, err := encoding.DecodeUvarint(key, encoding.Ascending)
 	return uint32(id64), err == nil
 }
 
@@ -153,12 +153,12 @@ func decodeDescMetadataID(key roachpb.Key) (uint64, error) {
 		return 0, util.Errorf("key is not a descriptor table entry: %v", key)
 	}
 	// DescriptorTable.PrimaryIndex.ID
-	remaining, _, err = encoding.DecodeUvarint(remaining)
+	remaining, _, err = encoding.DecodeUvarint(remaining, encoding.Ascending)
 	if err != nil {
 		return 0, err
 	}
 	// descID
-	_, id, err := encoding.DecodeUvarint(remaining)
+	_, id, err := encoding.DecodeUvarint(remaining, encoding.Ascending)
 	if err != nil {
 		return 0, err
 	}
