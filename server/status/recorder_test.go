@@ -279,14 +279,14 @@ func TestNodeStatusRecorder(t *testing.T) {
 		generateStoreData(2, "capacity.available", 100, 75),
 
 		// Node stats.
-		generateNodeData(1, "exec.num.success", 100, 2),
-		generateNodeData(1, "exec.num.error", 100, 1),
-		generateNodeData(1, "exec.rate.success1h", 100, 0),
-		generateNodeData(1, "exec.rate.error1h", 100, 0),
-		generateNodeData(1, "exec.rate.success10m", 100, 0),
-		generateNodeData(1, "exec.rate.error10m", 100, 0),
-		generateNodeData(1, "exec.rate.success1m", 100, 0),
-		generateNodeData(1, "exec.rate.error1m", 100, 0),
+		generateNodeData(1, "exec.success.count", 100, 2),
+		generateNodeData(1, "exec.error.count", 100, 1),
+		generateNodeData(1, "exec.success.1h", 100, 0),
+		generateNodeData(1, "exec.error.1h", 100, 0),
+		generateNodeData(1, "exec.success.10m", 100, 0),
+		generateNodeData(1, "exec.error.10m", 100, 0),
+		generateNodeData(1, "exec.success.1m", 100, 0),
+		generateNodeData(1, "exec.error.1m", 100, 0),
 	}
 
 	actual := recorder.GetTimeSeriesData()

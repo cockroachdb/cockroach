@@ -205,12 +205,16 @@ func (e *Rate) MarshalJSON() ([]byte, error) {
 	return json.Marshal(e.wrapped.Value())
 }
 
-// Rates is a slice of EWMA backed rates.
-type Rates []*Rate
+// Rates is a counter and associated EWMA backed rates at different time scales.
+type Rates struct {
+	*Counter
+	Rates []*Rate
+}
 
-// Add adds the given value to all underlying Rates.
-func (es Rates) Add(v float64) {
-	for _, e := range es {
-		e.Add(v)
+// Add adds the given value to all contained objects.
+func (es Rates) Add(v int64) {
+	es.Counter.Inc(v)
+	for _, e := range es.Rates {
+		e.Add(float64(v))
 	}
 }
