@@ -6,7 +6,7 @@ BEGIN {
     print "var keywords = map[string]int{"
 
     # This variable will be associated with a pipe for intermediate output.
-    sort = "sort"
+    sort = "env LC_ALL=C sort | xargs -i printf '\"%s\": %s,\n' {} {}"
 }
 
 /^.*_keyword:/ {
@@ -20,7 +20,7 @@ BEGIN {
 
 {
   if (keyword && $NF != "") {
-    printf("\"%s\": %s,\n", $NF, $NF) | sort
+    print($NF) | sort
   }
 }
 
