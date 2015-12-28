@@ -35,11 +35,9 @@ import (
 // interesting subsets of data on the node. NodeStatusMonitor is responsible
 // for passing event feed data to these subset structures for accumulation.
 type NodeStatusMonitor struct {
-	latency     metric.Histograms
-	rateSuccess metric.Rates
-	rateError   metric.Rates
-	numSuccess  *metric.Counter
-	numError    *metric.Counter
+	mLatency metric.Histograms
+	mSuccess metric.Rates
+	mError   metric.Rates
 
 	sync.RWMutex // Mutex to guard the following fields
 	registry     *metric.Registry
@@ -53,15 +51,13 @@ type NodeStatusMonitor struct {
 func NewNodeStatusMonitor(metaRegistry *metric.Registry) *NodeStatusMonitor {
 	registry := metric.NewRegistry()
 	return &NodeStatusMonitor{
-		latency:     registry.Latency("latency"),
-		rateSuccess: registry.Rates("exec.rate.success"),
-		rateError:   registry.Rates("exec.rate.error"),
-		numSuccess:  registry.Counter("exec.num.success"),
-		numError:    registry.Counter("exec.num.error"),
-
-		registry:     registry,
-		metaRegistry: metaRegistry,
 		stores:       make(map[roachpb.StoreID]*StoreStatusMonitor),
+		metaRegistry: metaRegistry,
+		registry:     registry,
+
+		mLatency: registry.Latency("exec.latency."),
+		mSuccess: registry.Rates("exec.success."),
+		mError:   registry.Rates("exec.error."),
 	}
 }
 
@@ -210,17 +206,15 @@ func (nsm *NodeStatusMonitor) OnStartNode(event *StartNodeEvent) {
 // OnCallSuccess receives CallSuccessEvents from a node event subscription. This
 // method is part of the implementation of NodeEventListener.
 func (nsm *NodeStatusMonitor) OnCallSuccess(event *CallSuccessEvent) {
-	nsm.rateSuccess.Add(1.0)
-	nsm.numSuccess.Inc(1)
-	nsm.latency.RecordValue(event.Duration.Nanoseconds())
+	nsm.mSuccess.Add(1.0)
+	nsm.mLatency.RecordValue(event.Duration.Nanoseconds())
 }
 
 // OnCallError receives CallErrorEvents from a node event subscription. This
 // method is part of the implementation of NodeEventListener.
 func (nsm *NodeStatusMonitor) OnCallError(event *CallErrorEvent) {
-	nsm.rateError.Add(1.0)
-	nsm.numError.Inc(1)
-	nsm.latency.RecordValue(event.Duration.Nanoseconds())
+	nsm.mError.Add(1.0)
+	nsm.mLatency.RecordValue(event.Duration.Nanoseconds())
 }
 
 // OnTrace receives Trace objects from a node event subscription. This method

@@ -156,5 +156,6 @@ func (r *Registry) Rates(prefix string) Rates {
 	for _, scale := range scales {
 		es = append(es, r.Rate(prefix+scale.name, scale.d))
 	}
-	return es
+	c := r.Counter(prefix + "count")
+	return Rates{Counter: c, Rates: es}
 }

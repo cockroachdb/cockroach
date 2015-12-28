@@ -164,10 +164,10 @@ func TestNodeStatusMonitor(t *testing.T) {
 		}
 	}
 
-	if a, e := monitor.numSuccess.Count(), int64(6); a != e {
+	if a, e := monitor.mSuccess.Count(), int64(6); a != e {
 		t.Errorf("monitored stats for node recorded wrong number of ops %d, expected %d", a, e)
 	}
-	if a, e := monitor.numError.Count(), int64(3); a != e {
+	if a, e := monitor.mError.Count(), int64(3); a != e {
 		t.Errorf("monitored stats for node recorded wrong number of errors %d, expected %d", a, e)
 	}
 }

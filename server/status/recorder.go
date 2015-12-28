@@ -182,9 +182,12 @@ func (rr registryRecorder) record(dest *[]ts.TimeSeriesData) {
 			},
 		}
 		// The method for extracting data differs based on the type of metric.
+		// TODO(tschottdorf): should make this based on interfaces.
 		switch mtr := m.(type) {
 		case float64:
 			data.Datapoints[0].Value = mtr
+		case *metric.Rates:
+			data.Datapoints[0].Value = float64(mtr.Count())
 		case *metric.Counter:
 			data.Datapoints[0].Value = float64(mtr.Count())
 		case *metric.Gauge:
