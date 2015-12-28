@@ -92,7 +92,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	key := keys.UserTableDataMin
+	key := keys.EncodeSentinelKey(append([]byte(nil), keys.UserTableDataMin...))
 	args := adminSplitArgs(key, key)
 	_, err := client.SendWrapped(rg1(store), nil, &args)
 	if err != nil {
@@ -399,6 +399,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 	// Split the range after the last table data key.
 	keyPrefix := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
+	keyPrefix = keys.EncodeSentinelKey(keyPrefix)
 	args := adminSplitArgs(roachpb.KeyMin, keyPrefix)
 	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
 		t.Fatal(err)

@@ -374,8 +374,6 @@ func TestMakeSplitKey(t *testing.T) {
 		in       roachpb.Key
 		expected roachpb.Key
 	}{
-		{e(1), e(1)},                   // /Table/1 -> /Table/1
-		{e(1, 2), e(1, 2)},             // /Table/1/2 -> /Table/1/2
 		{e(1, 2, 0), e(1, 2)},          // /Table/1/2/0 -> /Table/1/2
 		{e(1, 2, 1), e(1)},             // /Table/1/2/1 -> /Table/1
 		{e(1, 2, 2), e()},              // /Table/1/2/2 -> /Table
@@ -398,6 +396,9 @@ func TestMakeSplitKey(t *testing.T) {
 		in  roachpb.Key
 		err string
 	}{
+		// Column ID suffix size is too large.
+		{e(1), "malformed table key"},
+		{e(1, 2), "malformed table key"},
 		// The table ID is invalid.
 		{e(200)[:1], "insufficient bytes to decode uvarint value"},
 		// The index ID is invalid.

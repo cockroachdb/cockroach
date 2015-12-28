@@ -399,7 +399,7 @@ func MakeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 		// don't consider this an error because MakeSplitKey can be called on keys
 		// that look like table keys but which do not have a column ID length
 		// suffix (e.g SystemConfig.ComputeSplitKeys).
-		return key, nil
+		return nil, util.Errorf("%s: malformed table key", key)
 	}
 	return key[:len(key)-int(colIDLen)-1], nil
 }
