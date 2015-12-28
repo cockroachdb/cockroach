@@ -107,9 +107,10 @@ func (h *Histogram) nextTick() time.Time {
 // MarshalJSON outputs to JSON.
 func (h *Histogram) MarshalJSON() ([]byte, error) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	maybeTick(h)
-	return json.Marshal(h.windowed.Merge().CumulativeDistribution())
+	m := h.windowed.Merge().CumulativeDistribution()
+	h.mu.Unlock()
+	return json.Marshal(m)
 }
 
 // RecordValue adds the given value to the histogram, truncating if necessary.
@@ -125,9 +126,10 @@ func (h *Histogram) RecordValue(v int64) {
 // Current returns a copy of the data currently in the window.
 func (h *Histogram) Current() *hdrhistogram.Histogram {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	maybeTick(h)
-	return hdrhistogram.Import(h.windowed.Merge().Export())
+	export := h.windowed.Merge().Export()
+	h.mu.Unlock()
+	return hdrhistogram.Import(export)
 }
 
 // Each calls the closure with the empty string and the (locked) receiver.
