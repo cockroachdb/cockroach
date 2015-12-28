@@ -83,7 +83,7 @@ func TestSucceedsWithin(t *testing.T) {
 	// Try a method which succeeds after a known duration.
 	start := time.Now()
 	duration := time.Millisecond
-	SucceedsWithin(t, 10*duration, func() error {
+	SucceedsWithin(t, 100*duration, func() error {
 		elapsed := time.Since(start)
 		if elapsed > duration {
 			return nil
