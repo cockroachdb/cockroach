@@ -213,7 +213,7 @@ func decodeSequenceCacheKey(key roachpb.Key, dest []byte) ([]byte, uint32, uint3
 	}
 	// Cut the prefix and the Range ID.
 	b := key[len(keys.LocalRangeIDPrefix):]
-	b, _, err := encoding.DecodeUvarint(b)
+	b, _, err := encoding.DecodeUvarintAscending(b)
 	if err != nil {
 		return nil, 0, 0, err
 	}
@@ -224,17 +224,17 @@ func decodeSequenceCacheKey(key roachpb.Key, dest []byte) ([]byte, uint32, uint3
 	// Cut the sequence cache suffix.
 	b = b[len(keys.LocalSequenceCacheSuffix):]
 	// Decode the id.
-	b, id, err := encoding.DecodeBytes(b, dest)
+	b, id, err := encoding.DecodeBytesAscending(b, dest)
 	if err != nil {
 		return nil, 0, 0, err
 	}
 	// Decode the epoch.
-	b, epoch, err := encoding.DecodeUint32Decreasing(b)
+	b, epoch, err := encoding.DecodeUint32Descending(b)
 	if err != nil {
 		return nil, 0, 0, err
 	}
 	// Decode the sequence number.
-	b, seq, err := encoding.DecodeUint32Decreasing(b)
+	b, seq, err := encoding.DecodeUint32Descending(b)
 	if err != nil {
 		return nil, 0, 0, err
 	}

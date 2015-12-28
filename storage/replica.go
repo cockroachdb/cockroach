@@ -980,7 +980,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 		return nil, roachpb.NewRangeNotFoundError(r.RangeID)
 	}
 	idKeyBuf := make([]byte, 0, raftCommandIDLen)
-	idKeyBuf = encoding.EncodeUint64(idKeyBuf, uint64(rand.Int63()))
+	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
 	idKey := cmdIDKey(idKeyBuf)
 	pendingCmd := &pendingCmd{
 		ctx:  ctx,
