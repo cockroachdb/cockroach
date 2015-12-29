@@ -84,7 +84,7 @@ type Datum interface {
 // DBool is the boolean Datum.
 type DBool bool
 
-func getBool(d Datum) (DBool, error) {
+func GetBool(d Datum) (DBool, error) {
 	if v, ok := d.(DBool); ok {
 		return v, nil
 	}
