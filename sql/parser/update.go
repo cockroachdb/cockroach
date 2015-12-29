@@ -25,6 +25,7 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
 
 // Update represents an UPDATE statement.
@@ -35,21 +36,24 @@ type Update struct {
 }
 
 func (node *Update) String() string {
-	return fmt.Sprintf("UPDATE %s SET %s%s",
-		node.Table, node.Exprs, node.Where)
+	var buf bytes.Buffer
+	buf.WriteString("UPDATE " + node.Table.String() + " SET " + node.Exprs.String())
+	if node.Where != nil {
+		buf.WriteString(" " + node.Where.String())
+	}
+	return buf.String()
 }
 
 // UpdateExprs represents a list of update expressions.
 type UpdateExprs []*UpdateExpr
 
 func (node UpdateExprs) String() string {
-	var prefix string
-	var buf bytes.Buffer
-	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%s", prefix, n)
-		prefix = ", "
+	strs := make([]string, len(node))
+	for i := range node {
+		strs[i] = node[i].String()
 	}
-	return buf.String()
+
+	return strings.Join(strs, ", ")
 }
 
 // UpdateExpr represents an update expression.

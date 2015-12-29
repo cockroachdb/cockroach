@@ -22,7 +22,7 @@
 
 package parser
 
-import "fmt"
+import "bytes"
 
 // Delete represents a DELETE statement.
 type Delete struct {
@@ -31,6 +31,10 @@ type Delete struct {
 }
 
 func (node *Delete) String() string {
-	return fmt.Sprintf("DELETE FROM %s%s",
-		node.Table, node.Where)
+	var buf bytes.Buffer
+	buf.WriteString("DELETE FROM " + node.Table.String())
+	if node.Where != nil {
+		buf.WriteString(" " + node.Where.String())
+	}
+	return buf.String()
 }

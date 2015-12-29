@@ -25,6 +25,7 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
 
 // SelectStatement any SELECT statement.
@@ -65,28 +66,50 @@ func (node *Select) String() string {
 	if node.tableSelect && len(node.From) == 1 {
 		return fmt.Sprintf("TABLE %s", node.From[0])
 	}
-	var distinct string
+	var buf bytes.Buffer
+	buf.WriteString("SELECT")
 	if node.Distinct {
-		distinct = " DISTINCT"
+		buf.WriteString(" DISTINCT")
 	}
-	return fmt.Sprintf("SELECT%s%s%s%s%s%s%s%s%s",
-		distinct, node.Exprs,
-		node.From, node.Where,
-		node.GroupBy, node.Having, node.OrderBy,
-		node.Limit, node.Lock)
+	if len(node.Exprs) > 0 {
+		buf.WriteString(" " + node.Exprs.String())
+	}
+	if len(node.From) > 0 {
+		// log.Infof("writing: %s", node.From.String())
+		buf.WriteString(" " + node.From.String())
+	}
+	if node.Where != nil {
+		// log.Infof("writing: %s", node.Where.String())
+		buf.WriteString(" " + node.Where.String())
+	}
+	if len(node.GroupBy) > 0 {
+		buf.WriteString(" " + node.GroupBy.String())
+	}
+	if node.Having != nil {
+		buf.WriteString(" " + node.Having.String())
+	}
+	if len(node.OrderBy) > 0 {
+		buf.WriteString(" " + node.OrderBy.String())
+	}
+	if node.Limit != nil {
+		buf.WriteString(" " + node.Limit.String())
+	}
+	if len(node.Lock) > 0 {
+		buf.WriteString(" " + node.Lock)
+	}
+	return buf.String()
 }
 
 // SelectExprs represents SELECT expressions.
 type SelectExprs []SelectExpr
 
 func (node SelectExprs) String() string {
-	prefix := " "
-	var buf bytes.Buffer
-	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%s", prefix, n)
-		prefix = ", "
+	strs := make([]string, len(node))
+	for i := range node {
+		strs[i] = node[i].String()
 	}
-	return buf.String()
+
+	return strings.Join(strs, ", ")
 }
 
 // SelectExpr represents a SELECT expression.
@@ -114,22 +137,17 @@ func (node SelectExpr) String() string {
 type TableExprs []TableExpr
 
 func (node TableExprs) String() string {
-	if len(node) == 0 {
-		return ""
+	strs := make([]string, len(node))
+	for i := range node {
+		strs[i] = node[i].String()
 	}
 
-	var prefix string
-	var buf bytes.Buffer
-	buf.WriteString(" FROM ")
-	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%s", prefix, n)
-		prefix = ", "
-	}
-	return buf.String()
+	return "FROM " + strings.Join(strs, ", ")
 }
 
 // TableExpr represents a table expression.
 type TableExpr interface {
+	fmt.Stringer
 	tableExpr()
 }
 
@@ -193,7 +211,7 @@ func (node *JoinTableExpr) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s %s %s", node.Left, node.Join, node.Right)
 	if node.Cond != nil {
-		fmt.Fprintf(&buf, "%s", node.Cond)
+		fmt.Fprintf(&buf, " %s", node.Cond)
 	}
 	return buf.String()
 }
@@ -212,7 +230,7 @@ type OnJoinCond struct {
 }
 
 func (node *OnJoinCond) String() string {
-	return fmt.Sprintf(" ON %s", node.Expr)
+	return fmt.Sprintf("ON %s", node.Expr)
 }
 
 // UsingJoinCond represents a USING join condition.
@@ -221,7 +239,7 @@ type UsingJoinCond struct {
 }
 
 func (node *UsingJoinCond) String() string {
-	return fmt.Sprintf(" USING (%s)", node.Cols)
+	return fmt.Sprintf("USING (%s)", node.Cols)
 }
 
 // Where represents a WHERE or HAVING clause.
@@ -246,36 +264,31 @@ func newWhere(typ string, expr Expr) *Where {
 }
 
 func (node *Where) String() string {
-	if node == nil {
-		return ""
-	}
-	return fmt.Sprintf(" %s %s", node.Type, node.Expr)
+	return fmt.Sprintf("%s %s", node.Type, node.Expr)
 }
 
 // GroupBy represents a GROUP BY clause.
 type GroupBy []Expr
 
 func (node GroupBy) String() string {
-	prefix := " GROUP BY "
-	var buf bytes.Buffer
-	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%s", prefix, n)
-		prefix = ", "
+	strs := make([]string, len(node))
+	for i := range node {
+		strs[i] = node[i].String()
 	}
-	return buf.String()
+
+	return "GROUP BY " + strings.Join(strs, ", ")
 }
 
 // OrderBy represents an ORDER By clause.
 type OrderBy []*Order
 
 func (node OrderBy) String() string {
-	prefix := " ORDER BY "
-	var buf bytes.Buffer
-	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%s", prefix, n)
-		prefix = ", "
+	strs := make([]string, len(node))
+	for i := range node {
+		strs[i] = node[i].String()
 	}
-	return buf.String()
+
+	return "ORDER BY " + strings.Join(strs, ", ")
 }
 
 // Direction for ordering results.
@@ -320,15 +333,12 @@ type Limit struct {
 }
 
 func (node *Limit) String() string {
-	if node == nil {
-		return ""
-	}
-	var buf bytes.Buffer
+	strs := make([]string, 0, 2)
 	if node.Count != nil {
-		fmt.Fprintf(&buf, " LIMIT %s", node.Count)
+		strs = append(strs, "LIMIT "+node.Count.String())
 	}
 	if node.Offset != nil {
-		fmt.Fprintf(&buf, " OFFSET %s", node.Offset)
+		strs = append(strs, "OFFSET "+node.Offset.String())
 	}
-	return buf.String()
+	return strings.Join(strs, " ")
 }
