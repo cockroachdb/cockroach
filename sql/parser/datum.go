@@ -88,6 +88,9 @@ func getBool(d Datum) (DBool, error) {
 	if v, ok := d.(DBool); ok {
 		return v, nil
 	}
+	if _, ok := d.(dNull); ok {
+		return DBool(false), nil
+	}
 	return false, fmt.Errorf("cannot convert %s to bool", d.Type())
 }
 
