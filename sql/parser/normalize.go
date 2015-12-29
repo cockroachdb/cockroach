@@ -34,7 +34,7 @@ func (expr *AndExpr) normalize(v *normalizeVisitor) Expr {
 			return expr
 		}
 		if expr.Left != DNull {
-			if d, err := getBool(expr.Left.(Datum)); err != nil {
+			if d, err := GetBool(expr.Left.(Datum)); err != nil {
 				return DNull
 			} else if !d {
 				return expr.Left
@@ -49,7 +49,7 @@ func (expr *AndExpr) normalize(v *normalizeVisitor) Expr {
 			return expr
 		}
 		if expr.Right != DNull {
-			if d, err := getBool(expr.Right.(Datum)); err != nil {
+			if d, err := GetBool(expr.Right.(Datum)); err != nil {
 				return DNull
 			} else if d {
 				return expr.Left
@@ -208,7 +208,7 @@ func (expr *OrExpr) normalize(v *normalizeVisitor) Expr {
 			return expr
 		}
 		if expr.Left != DNull {
-			if d, err := getBool(expr.Left.(Datum)); err != nil {
+			if d, err := GetBool(expr.Left.(Datum)); err != nil {
 				return DNull
 			} else if d {
 				return expr.Left
@@ -222,7 +222,7 @@ func (expr *OrExpr) normalize(v *normalizeVisitor) Expr {
 			return expr
 		}
 		if expr.Right != DNull {
-			if d, err := getBool(expr.Right.(Datum)); err != nil {
+			if d, err := GetBool(expr.Right.(Datum)); err != nil {
 				return DNull
 			} else if d {
 				return expr.Right

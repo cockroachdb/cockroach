@@ -509,7 +509,7 @@ var evalTupleEQ = cmpOp{
 			if err != nil {
 				return DBool(false), err
 			}
-			if v, err := getBool(d); err != nil {
+			if v, err := GetBool(d); err != nil {
 				return DBool(false), err
 			} else if !v {
 				return v, nil
@@ -584,7 +584,7 @@ func (expr *AndExpr) Eval(ctx EvalContext) (Datum, error) {
 		return DNull, err
 	}
 	if left != DNull {
-		if v, err := getBool(left); err != nil {
+		if v, err := GetBool(left); err != nil {
 			return DNull, err
 		} else if !v {
 			return v, nil
@@ -597,7 +597,7 @@ func (expr *AndExpr) Eval(ctx EvalContext) (Datum, error) {
 	if right == DNull {
 		return DNull, nil
 	}
-	if v, err := getBool(right); err != nil {
+	if v, err := GetBool(right); err != nil {
 		return DNull, err
 	} else if !v {
 		return v, nil
@@ -650,7 +650,7 @@ func (expr *CaseExpr) Eval(ctx EvalContext) (Datum, error) {
 			if err != nil {
 				return DNull, err
 			}
-			if v, err := getBool(d); err != nil {
+			if v, err := GetBool(d); err != nil {
 				return DNull, err
 			} else if v {
 				return when.Val.Eval(ctx)
@@ -663,7 +663,7 @@ func (expr *CaseExpr) Eval(ctx EvalContext) (Datum, error) {
 			if err != nil {
 				return DNull, err
 			}
-			if v, err := getBool(d); err != nil {
+			if v, err := GetBool(d); err != nil {
 				return DNull, err
 			} else if v {
 				return when.Val.Eval(ctx)
@@ -1013,7 +1013,7 @@ func (expr *NotExpr) Eval(ctx EvalContext) (Datum, error) {
 	if d == DNull {
 		return DNull, nil
 	}
-	v, err := getBool(d)
+	v, err := GetBool(d)
 	if err != nil {
 		return DNull, err
 	}
@@ -1047,7 +1047,7 @@ func (expr *OrExpr) Eval(ctx EvalContext) (Datum, error) {
 		return DNull, err
 	}
 	if left != DNull {
-		if v, err := getBool(left); err != nil {
+		if v, err := GetBool(left); err != nil {
 			return DNull, err
 		} else if v {
 			return v, nil
@@ -1060,7 +1060,7 @@ func (expr *OrExpr) Eval(ctx EvalContext) (Datum, error) {
 	if right == DNull {
 		return DNull, nil
 	}
-	if v, err := getBool(right); err != nil {
+	if v, err := GetBool(right); err != nil {
 		return DNull, err
 	} else if v {
 		return v, nil
