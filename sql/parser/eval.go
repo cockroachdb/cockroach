@@ -681,7 +681,12 @@ func (expr *CaseExpr) Eval(ctx EvalContext) (Datum, error) {
 func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 	d, err := expr.Expr.Eval(ctx)
 	if err != nil {
-		return DNull, err
+		return nil, err
+	}
+
+	// NULL cast to anything is NULL.
+	if d == DNull {
+		return d, nil
 	}
 
 	switch expr.Type.(type) {
