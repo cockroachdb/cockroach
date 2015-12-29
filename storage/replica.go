@@ -319,7 +319,7 @@ func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
 	// first and then waiting for the majority (which would now require
 	// two votes, not only its own).
 	// However, in that special case, the second node has no chance to
-	// be elected master while this node restarts (as it's aware of the
+	// be elected leader while this node restarts (as it's aware of the
 	// configuration and knows it needs two votes), so the worst that
 	// could happen is both nodes ending up in candidate state, timing
 	// out and then voting again. This is expected to be an extremely
@@ -615,6 +615,13 @@ func (r *Replica) GetLastVerificationTimestamp() (roachpb.Timestamp, error) {
 func (r *Replica) SetLastVerificationTimestamp(timestamp roachpb.Timestamp) error {
 	key := keys.RangeLastVerificationTimestampKey(r.Desc().RangeID)
 	return engine.MVCCPutProto(r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
+}
+
+// RaftStatus returns the current raft status of the replica.
+func (r *Replica) RaftStatus() *raft.Status {
+	r.Lock()
+	defer r.Unlock()
+	return r.raftGroup.Status()
 }
 
 // Send adds a command for execution on this range. The command's
@@ -960,7 +967,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 		return nil, roachpb.NewRangeNotFoundError(desc.RangeID)
 	}
 	idKeyBuf := make([]byte, 0, raftCommandIDLen)
-	idKeyBuf = encoding.EncodeUint64(idKeyBuf, uint64(rand.Int63()))[:raftCommandIDLen]
+	idKeyBuf = encoding.EncodeUint64(idKeyBuf, uint64(rand.Int63()))
 	idKey := cmdIDKey(idKeyBuf)
 	pendingCmd := &pendingCmd{
 		ctx:   ctx,
@@ -980,15 +987,18 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 	r.pendingCmds[idKey] = pendingCmd
 	defer r.Unlock()
 
-	return pendingCmd, r.proposePendingCmdLocked(pendingCmd)
+	if err := r.proposePendingCmdLocked(pendingCmd); err != nil {
+		delete(r.pendingCmds, idKey)
+		return nil, err
+	}
+	return pendingCmd, nil
 }
 
 // proposePendingCmdLocked proposes or re-proposes a command in r.pendingCmds.
 func (r *Replica) proposePendingCmdLocked(p *pendingCmd) error {
 	desc := r.Desc()
 	if r.proposeRaftCommandFn != nil {
-		err := r.proposeRaftCommandFn(p.idKey, p.raftCmd)
-		return err
+		return r.proposeRaftCommandFn(p.idKey, p.raftCmd)
 	}
 
 	data, err := proto.Marshal(&p.raftCmd)
@@ -999,29 +1009,30 @@ func (r *Replica) proposePendingCmdLocked(p *pendingCmd) error {
 	for _, union := range p.raftCmd.Cmd.Requests {
 		args := union.GetInner()
 		etr, ok := args.(*roachpb.EndTransactionRequest)
-		if ok {
-			if crt := etr.InternalCommitTrigger.GetChangeReplicasTrigger(); crt != nil {
-				// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
-				// needs to understand it; it cannot simply be an opaque command.
-				log.Infof("raft: proposing %s %v for range %d", crt.ChangeType, crt.Replica, p.raftCmd.RangeID)
+		if !ok {
+			continue
+		}
+		if crt := etr.InternalCommitTrigger.GetChangeReplicasTrigger(); crt != nil {
+			// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
+			// needs to understand it; it cannot simply be an opaque command.
+			log.Infof("raft: proposing %s %v for range %d", crt.ChangeType, crt.Replica, p.raftCmd.RangeID)
 
-				ctx := ConfChangeContext{
-					CommandID: string(p.idKey),
-					Payload:   data,
-					Replica:   crt.Replica,
-				}
-				encodedCtx, err := ctx.Marshal()
-				if err != nil {
-					return err
-				}
-
-				return r.raftGroup.ProposeConfChange(
-					raftpb.ConfChange{
-						Type:    changeTypeInternalToRaft[crt.ChangeType],
-						NodeID:  uint64(crt.Replica.ReplicaID),
-						Context: encodedCtx,
-					})
+			ctx := ConfChangeContext{
+				CommandID: string(p.idKey),
+				Payload:   data,
+				Replica:   crt.Replica,
 			}
+			encodedCtx, err := ctx.Marshal()
+			if err != nil {
+				return err
+			}
+
+			return r.raftGroup.ProposeConfChange(
+				raftpb.ConfChange{
+					Type:    changeTypeInternalToRaft[crt.ChangeType],
+					NodeID:  uint64(crt.Replica.ReplicaID),
+					Context: encodedCtx,
+				})
 		}
 	}
 	return r.raftGroup.Propose(encodeRaftCommand(string(p.idKey), data))
@@ -1101,15 +1112,14 @@ func (r *Replica) handleRaftReady() error {
 			if err := command.Unmarshal(ctx.Payload); err != nil {
 				return err
 			}
-			r.store.mu.Lock()
 			r.store.cacheReplicaDescriptor(desc.RangeID, ctx.Replica)
-			r.store.mu.Unlock()
 			if err := r.processRaftCommand(cmdIDKey(ctx.CommandID), e.Index, command); err == nil {
 				// TODO(bdarnell): update coalesced heartbeat mapping
 				r.Lock()
 				r.raftGroup.ApplyConfChange(cc)
 				r.Unlock()
 			} else {
+				// If processRaftCommand failed, tell raft that the config change was aborted.
 				r.Lock()
 				r.raftGroup.ApplyConfChange(raftpb.ConfChange{})
 				r.Unlock()
@@ -1144,13 +1154,13 @@ func (r *Replica) handleRaftReady() error {
 func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	groupID := r.Desc().RangeID
 	r.store.mu.RLock()
-	toReplica, err := r.store.replicaDescriptor(groupID, roachpb.ReplicaID(msg.To))
+	toReplica, err := r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.To))
 	if err != nil {
 		log.Warningf("failed to lookup recipient replica %d in group %s: %s", msg.To, groupID, err)
 		r.store.mu.RUnlock()
 		return
 	}
-	fromReplica, err := r.store.replicaDescriptor(groupID, roachpb.ReplicaID(msg.From))
+	fromReplica, err := r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.From))
 	if err != nil {
 		log.Warningf("failed to lookup sender replica %d in group %s: %s", msg.From, groupID, err)
 		r.store.mu.RUnlock()

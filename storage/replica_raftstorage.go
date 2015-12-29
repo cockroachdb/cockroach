@@ -557,9 +557,10 @@ func (r *Replica) setHardState(st raftpb.HardState) error {
 		roachpb.ZeroTimestamp, nil, &st)
 }
 
-// Raft commands are encoded with a 1-byte version (currently 0), a 16-byte ID,
+// Raft commands are encoded with a 1-byte version (currently 0), an 8-byte ID,
 // followed by the payload. This inflexible encoding is used so we can efficiently
 // parse the command id while processing the logs.
+// TODO(bdarnell): Is this commandID still appropriate for our needs?
 const (
 	// The prescribed length for each command ID.
 	raftCommandIDLen                = 8

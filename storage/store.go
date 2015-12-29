@@ -855,14 +855,13 @@ func (s *Store) hasOverlappingReplicaLocked(rngDesc *roachpb.RangeDescriptor) bo
 	return false
 }
 
-// RaftStatus returns the current raft status of the given range.
+// RaftStatus returns the current raft status of the local replica of
+// the given range.
 func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if r, ok := s.replicas[rangeID]; ok {
-		r.Lock()
-		defer r.Unlock()
-		return r.raftGroup.Status()
+		return r.RaftStatus()
 	}
 	return nil
 }
@@ -1544,10 +1543,12 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	}
 
 	s.mu.Lock()
-	s.cacheReplicaDescriptor(req.GroupID, req.FromReplica)
-	s.cacheReplicaDescriptor(req.GroupID, req.ToReplica)
+	s.cacheReplicaDescriptorLocked(req.GroupID, req.FromReplica)
+	s.cacheReplicaDescriptorLocked(req.GroupID, req.ToReplica)
 	// Lazily create the group.
-	r, err := s.getOrCreateReplica(req.GroupID, req.ToReplica.ReplicaID)
+	r, err := s.getOrCreateReplicaLocked(req.GroupID, req.ToReplica.ReplicaID)
+	// TODO(bdarnell): is it safe to release the store lock here?
+	// It deadlocks to hold s.mu while calling raftGroup.Step.
 	s.mu.Unlock()
 	if err != nil {
 		return err
@@ -1566,13 +1567,16 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 // checked for raft updates when the processRaft goroutine is idle.
 // TODO(bdarnell): reconsider the goroutine relationships here.
 func (s *Store) checkRaftGroup(rangeID roachpb.RangeID) {
+	// checkRaftGroup may be called with Replica.RWMutex held. We cannot
+	// simply acquire s.mu; this violates lock ordering and may
+	// deadlock.
 	go func() {
 		s.mu.Lock()
 		s.pendingRaftGroups[rangeID] = struct{}{}
 		s.mu.Unlock()
 		select {
 		case s.wakeRaftLoop <- struct{}{}:
-		case <-s.stopper.ShouldStop():
+		default:
 		}
 	}()
 }
@@ -1585,9 +1589,10 @@ func (s *Store) processRaft() {
 	s.stopper.RunWorker(func() {
 		defer s.ctx.Transport.Stop(s.StoreID())
 		ticker := time.NewTicker(s.ctx.RaftTickInterval)
+		defer ticker.Stop()
 		for {
 			var replicas []*Replica
-			s.mu.RLock()
+			s.mu.Lock()
 			for rangeID := range s.pendingRaftGroups {
 				r, ok := s.replicas[rangeID]
 				if !ok {
@@ -1599,7 +1604,7 @@ func (s *Store) processRaft() {
 			if len(s.pendingRaftGroups) > 0 {
 				s.pendingRaftGroups = map[roachpb.RangeID]struct{}{}
 			}
-			s.mu.RUnlock()
+			s.mu.Unlock()
 			for _, r := range replicas {
 				if err := r.handleRaftReady(); err != nil {
 					panic(err) // TODO(bdarnell)
@@ -1635,54 +1640,56 @@ func (s *Store) processRaft() {
 	})
 }
 
-// getOrCreateReplica returns a replica for the given RangeID,
+// getOrCreateReplicaLocked returns a replica for the given RangeID,
 // creating an uninitialized replica if necessary. The caller must
 // hold the store's lock.
-func (s *Store) getOrCreateReplica(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (*Replica, error) {
+func (s *Store) getOrCreateReplicaLocked(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (*Replica, error) {
 	r, ok := s.replicas[groupID]
-	if !ok {
-		// Before creating the group, see if there is a tombstone which
-		// would indicate that this is a stale message.
-		tombstoneKey := keys.RaftTombstoneKey(groupID)
-		var tombstone roachpb.RaftTombstone
-		if ok, err := engine.MVCCGetProto(s.Engine(), tombstoneKey, roachpb.ZeroTimestamp, true, nil, &tombstone); err != nil {
+	if ok {
+		if err := r.setReplicaID(replicaID); err != nil {
 			return nil, err
-		} else if ok {
-			if replicaID != 0 && replicaID < tombstone.NextReplicaID {
-				return nil, errRaftGroupDeleted
-			}
 		}
+		return r, nil
+	}
 
-		var err error
-		r, err = NewReplica(&roachpb.RangeDescriptor{
-			RangeID: groupID,
-			// TODO(bdarnell): other fields are unknown; need to populate them from
-			// snapshot.
-		}, s)
-		if err != nil {
-			return nil, err
-		}
-		if err := r.setReplicaID(replicaID); err != nil {
-			return nil, err
-		}
-		// Add the range to range map, but not rangesByKey since
-		// the range's start key is unknown. The range will be
-		// added to rangesByKey later when a snapshot is applied.
-		if err = s.addReplicaToRangeMap(r); err != nil {
-			return nil, err
-		}
-		s.uninitReplicas[r.Desc().RangeID] = r
-	} else {
-		if err := r.setReplicaID(replicaID); err != nil {
-			return nil, err
+	// Before creating the group, see if there is a tombstone which
+	// would indicate that this is a stale message.
+	tombstoneKey := keys.RaftTombstoneKey(groupID)
+	var tombstone roachpb.RaftTombstone
+	if ok, err := engine.MVCCGetProto(s.Engine(), tombstoneKey, roachpb.ZeroTimestamp, true, nil, &tombstone); err != nil {
+		return nil, err
+	} else if ok {
+		if replicaID != 0 && replicaID < tombstone.NextReplicaID {
+			return nil, errRaftGroupDeleted
 		}
 	}
+
+	var err error
+	r, err = NewReplica(&roachpb.RangeDescriptor{
+		RangeID: groupID,
+		// TODO(bdarnell): other fields are unknown; need to populate them from
+		// snapshot.
+	}, s)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.setReplicaID(replicaID); err != nil {
+		return nil, err
+	}
+	// Add the range to range map, but not rangesByKey since
+	// the range's start key is unknown. The range will be
+	// added to rangesByKey later when a snapshot is applied.
+	if err = s.addReplicaToRangeMap(r); err != nil {
+		return nil, err
+	}
+	s.uninitReplicas[r.Desc().RangeID] = r
+
 	return r, nil
 }
 
-// replicaDescriptor returns the replica descriptor for the given
-// range and replica, if known. The caller must hold the store's lock.
-func (s *Store) replicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
+// replicaDescriptorLocked returns the replica descriptor for the given
+// range and replica, if known.
+func (s *Store) replicaDescriptorLocked(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
 	if rep, ok := s.replicaDescCache.Get(replicaDescCacheKey{groupID, replicaID}); ok {
 		return rep.(roachpb.ReplicaDescriptor), nil
 	}
@@ -1694,14 +1701,22 @@ func (s *Store) replicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.Rep
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	s.cacheReplicaDescriptor(groupID, rd)
+	s.cacheReplicaDescriptorLocked(groupID, rd)
 
 	return rd, nil
 }
 
 // cacheReplicaDescriptor adds the given replica descriptor to a cache
-// to be used by ReplicaDescriptor.
+// to be used by replicaDescriptorLocked.
 func (s *Store) cacheReplicaDescriptor(groupID roachpb.RangeID, replica roachpb.ReplicaDescriptor) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cacheReplicaDescriptorLocked(groupID, replica)
+}
+
+// cacheReplicaDescriptorLocked adds the given replica descriptor to a cache
+// to be used by replicaDescriptorLocked.
+func (s *Store) cacheReplicaDescriptorLocked(groupID roachpb.RangeID, replica roachpb.ReplicaDescriptor) {
 	s.replicaDescCache.Add(replicaDescCacheKey{groupID, replica.ReplicaID}, replica)
 }
 
@@ -1781,39 +1796,15 @@ func (s *Store) computeReplicationStatus(now int64) (
 	}
 
 	timestamp := roachpb.Timestamp{WallTime: now}
-	// s.RaftStatus will call s.multiraft.Status, so we should not hold the s.mu
-	// before call it, otherwise this may cause deadlock. Consider the following
-	// deadlock scenario:
-	// 1. hold s.mu, then call s.RaftStatus, it will call s.multiraft.Status
-	// 2. at the same time MultiRaft.state.run call s.createGroup, it will try
-	// to hold s.mu
-	// TODO(bdarnell): reevaluate this locking strategy.
-	raftStatusMap := make(map[roachpb.RangeID]*raft.Status)
-	s.mu.Lock()
-	for rangeID := range s.replicas {
-		raftStatusMap[rangeID] = nil
-	}
-	s.mu.Unlock()
-	for rangeID := range raftStatusMap {
-		raftStatus := s.RaftStatus(rangeID)
-		if raftStatus == nil {
-			delete(raftStatusMap, rangeID)
-			continue
-		}
-		raftStatusMap[rangeID] = raftStatus
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for rangeID, rng := range s.replicas {
+	for _, rng := range s.replicas {
 		zoneConfig, err := cfg.GetZoneConfigForKey(rng.Desc().StartKey)
 		if err != nil {
 			log.Error(err)
 			continue
 		}
-		raftStatus, ok := raftStatusMap[rangeID]
-		if !ok {
-			continue
-		}
+		raftStatus := rng.RaftStatus()
 		if raftStatus.SoftState.RaftState == raft.StateLeader {
 			leaderRangeCount++
 			// TODO(bram): Compare attributes of the stores so we can track
