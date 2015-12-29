@@ -219,6 +219,7 @@ func TestParse(t *testing.T) {
 		{`SELECT FROM s.t`},
 
 		{`SELECT COUNT(DISTINCT a) FROM t`},
+		{`SELECT COUNT(ALL a) FROM t`},
 
 		{`SELECT FROM t WHERE b = - 2`},
 		{`SELECT FROM t WHERE a = b`},

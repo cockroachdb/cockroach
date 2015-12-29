@@ -324,7 +324,7 @@ func (v *extractAggregatesVisitor) Visit(expr parser.Expr, pre bool) (parser.Vis
 				group:   v.n,
 				buckets: make(map[string]aggregateImpl),
 			}
-			if t.Distinct {
+			if t.Type == parser.Distinct {
 				f.seen = make(map[string]struct{})
 			}
 			v.n.funcs = append(v.n.funcs, f)
