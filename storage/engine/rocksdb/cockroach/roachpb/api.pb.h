@@ -42,58 +42,58 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
 void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
 void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
 
-class ResponseHeader;
-class GetRequest;
-class GetResponse;
-class PutRequest;
-class PutResponse;
-class ConditionalPutRequest;
-class ConditionalPutResponse;
-class IncrementRequest;
-class IncrementResponse;
-class DeleteRequest;
-class DeleteResponse;
-class DeleteRangeRequest;
-class DeleteRangeResponse;
-class ScanRequest;
-class ScanResponse;
-class ReverseScanRequest;
-class ReverseScanResponse;
-class BeginTransactionRequest;
-class BeginTransactionResponse;
-class EndTransactionRequest;
-class EndTransactionResponse;
-class AdminSplitRequest;
-class AdminSplitResponse;
 class AdminMergeRequest;
 class AdminMergeResponse;
-class RangeLookupRequest;
-class RangeLookupResponse;
-class HeartbeatTxnRequest;
-class HeartbeatTxnResponse;
-class GCRequest;
-class GCRequest_GCKey;
-class GCResponse;
-class PushTxnRequest;
-class PushTxnResponse;
-class ResolveIntentRequest;
-class ResolveIntentResponse;
-class ResolveIntentRangeRequest;
-class NoopResponse;
-class NoopRequest;
-class ResolveIntentRangeResponse;
-class MergeRequest;
-class MergeResponse;
-class TruncateLogRequest;
-class TruncateLogResponse;
-class LeaderLeaseRequest;
-class LeaderLeaseResponse;
-class RequestUnion;
-class ResponseUnion;
-class Header;
+class AdminSplitRequest;
+class AdminSplitResponse;
 class BatchRequest;
 class BatchResponse;
 class BatchResponse_Header;
+class BeginTransactionRequest;
+class BeginTransactionResponse;
+class ConditionalPutRequest;
+class ConditionalPutResponse;
+class DeleteRangeRequest;
+class DeleteRangeResponse;
+class DeleteRequest;
+class DeleteResponse;
+class EndTransactionRequest;
+class EndTransactionResponse;
+class GCRequest;
+class GCRequest_GCKey;
+class GCResponse;
+class GetRequest;
+class GetResponse;
+class Header;
+class HeartbeatTxnRequest;
+class HeartbeatTxnResponse;
+class IncrementRequest;
+class IncrementResponse;
+class LeaderLeaseRequest;
+class LeaderLeaseResponse;
+class MergeRequest;
+class MergeResponse;
+class NoopRequest;
+class NoopResponse;
+class PushTxnRequest;
+class PushTxnResponse;
+class PutRequest;
+class PutResponse;
+class RangeLookupRequest;
+class RangeLookupResponse;
+class RequestUnion;
+class ResolveIntentRangeRequest;
+class ResolveIntentRangeResponse;
+class ResolveIntentRequest;
+class ResolveIntentResponse;
+class ResponseHeader;
+class ResponseUnion;
+class ReverseScanRequest;
+class ReverseScanResponse;
+class ScanRequest;
+class ScanResponse;
+class TruncateLogRequest;
+class TruncateLogResponse;
 
 enum ReadConsistencyType {
   CONSISTENT = 0,
@@ -1601,10 +1601,10 @@ class ScanResponse : public ::google::protobuf::Message {
   const ::cockroach::roachpb::KeyValue& rows(int index) const;
   ::cockroach::roachpb::KeyValue* mutable_rows(int index);
   ::cockroach::roachpb::KeyValue* add_rows();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >&
-      rows() const;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >*
       mutable_rows();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >&
+      rows() const;
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ScanResponse)
  private:
@@ -1806,10 +1806,10 @@ class ReverseScanResponse : public ::google::protobuf::Message {
   const ::cockroach::roachpb::KeyValue& rows(int index) const;
   ::cockroach::roachpb::KeyValue* mutable_rows(int index);
   ::cockroach::roachpb::KeyValue* add_rows();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >&
-      rows() const;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >*
       mutable_rows();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >&
+      rows() const;
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ReverseScanResponse)
  private:
@@ -2117,10 +2117,10 @@ class EndTransactionRequest : public ::google::protobuf::Message {
   const ::cockroach::roachpb::Span& intent_spans(int index) const;
   ::cockroach::roachpb::Span* mutable_intent_spans(int index);
   ::cockroach::roachpb::Span* add_intent_spans();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-      intent_spans() const;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
       mutable_intent_spans();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+      intent_spans() const;
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.EndTransactionRequest)
  private:
@@ -2848,10 +2848,10 @@ class RangeLookupResponse : public ::google::protobuf::Message {
   const ::cockroach::roachpb::RangeDescriptor& ranges(int index) const;
   ::cockroach::roachpb::RangeDescriptor* mutable_ranges(int index);
   ::cockroach::roachpb::RangeDescriptor* add_ranges();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >&
-      ranges() const;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >*
       mutable_ranges();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >&
+      ranges() const;
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RangeLookupResponse)
  private:
@@ -3251,10 +3251,10 @@ class GCRequest : public ::google::protobuf::Message {
   const ::cockroach::roachpb::GCRequest_GCKey& keys(int index) const;
   ::cockroach::roachpb::GCRequest_GCKey* mutable_keys(int index);
   ::cockroach::roachpb::GCRequest_GCKey* add_keys();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::GCRequest_GCKey >&
-      keys() const;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::GCRequest_GCKey >*
       mutable_keys();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::GCRequest_GCKey >&
+      keys() const;
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.GCRequest)
  private:
@@ -5712,10 +5712,10 @@ class BatchRequest : public ::google::protobuf::Message {
   const ::cockroach::roachpb::RequestUnion& requests(int index) const;
   ::cockroach::roachpb::RequestUnion* mutable_requests(int index);
   ::cockroach::roachpb::RequestUnion* add_requests();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RequestUnion >&
-      requests() const;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RequestUnion >*
       mutable_requests();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RequestUnion >&
+      requests() const;
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.BatchRequest)
  private:
@@ -5933,10 +5933,10 @@ class BatchResponse : public ::google::protobuf::Message {
   const ::cockroach::roachpb::ResponseUnion& responses(int index) const;
   ::cockroach::roachpb::ResponseUnion* mutable_responses(int index);
   ::cockroach::roachpb::ResponseUnion* add_responses();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ResponseUnion >&
-      responses() const;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ResponseUnion >*
       mutable_responses();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ResponseUnion >&
+      responses() const;
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.BatchResponse)
  private:
@@ -7018,15 +7018,15 @@ inline ::cockroach::roachpb::KeyValue* ScanResponse::add_rows() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.ScanResponse.rows)
   return rows_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >&
-ScanResponse::rows() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.ScanResponse.rows)
-  return rows_;
-}
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >*
 ScanResponse::mutable_rows() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ScanResponse.rows)
   return &rows_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >&
+ScanResponse::rows() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.ScanResponse.rows)
+  return rows_;
 }
 
 // -------------------------------------------------------------------
@@ -7166,15 +7166,15 @@ inline ::cockroach::roachpb::KeyValue* ReverseScanResponse::add_rows() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.ReverseScanResponse.rows)
   return rows_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >&
-ReverseScanResponse::rows() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.ReverseScanResponse.rows)
-  return rows_;
-}
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >*
 ReverseScanResponse::mutable_rows() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ReverseScanResponse.rows)
   return &rows_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >&
+ReverseScanResponse::rows() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.ReverseScanResponse.rows)
+  return rows_;
 }
 
 // -------------------------------------------------------------------
@@ -7447,15 +7447,15 @@ inline ::cockroach::roachpb::Span* EndTransactionRequest::add_intent_spans() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.EndTransactionRequest.intent_spans)
   return intent_spans_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-EndTransactionRequest::intent_spans() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.EndTransactionRequest.intent_spans)
-  return intent_spans_;
-}
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
 EndTransactionRequest::mutable_intent_spans() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.EndTransactionRequest.intent_spans)
   return &intent_spans_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+EndTransactionRequest::intent_spans() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.EndTransactionRequest.intent_spans)
+  return intent_spans_;
 }
 
 // -------------------------------------------------------------------
@@ -8009,15 +8009,15 @@ inline ::cockroach::roachpb::RangeDescriptor* RangeLookupResponse::add_ranges() 
   // @@protoc_insertion_point(field_add:cockroach.roachpb.RangeLookupResponse.ranges)
   return ranges_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >&
-RangeLookupResponse::ranges() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.RangeLookupResponse.ranges)
-  return ranges_;
-}
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >*
 RangeLookupResponse::mutable_ranges() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.RangeLookupResponse.ranges)
   return &ranges_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >&
+RangeLookupResponse::ranges() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.RangeLookupResponse.ranges)
+  return ranges_;
 }
 
 // -------------------------------------------------------------------
@@ -8323,15 +8323,15 @@ inline ::cockroach::roachpb::GCRequest_GCKey* GCRequest::add_keys() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.GCRequest.keys)
   return keys_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::GCRequest_GCKey >&
-GCRequest::keys() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.GCRequest.keys)
-  return keys_;
-}
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::GCRequest_GCKey >*
 GCRequest::mutable_keys() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.GCRequest.keys)
   return &keys_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::GCRequest_GCKey >&
+GCRequest::keys() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.GCRequest.keys)
+  return keys_;
 }
 
 // -------------------------------------------------------------------
@@ -11719,15 +11719,15 @@ inline ::cockroach::roachpb::RequestUnion* BatchRequest::add_requests() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.BatchRequest.requests)
   return requests_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RequestUnion >&
-BatchRequest::requests() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.BatchRequest.requests)
-  return requests_;
-}
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RequestUnion >*
 BatchRequest::mutable_requests() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.BatchRequest.requests)
   return &requests_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RequestUnion >&
+BatchRequest::requests() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.BatchRequest.requests)
+  return requests_;
 }
 
 // -------------------------------------------------------------------
@@ -11929,15 +11929,15 @@ inline ::cockroach::roachpb::ResponseUnion* BatchResponse::add_responses() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.BatchResponse.responses)
   return responses_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ResponseUnion >&
-BatchResponse::responses() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.BatchResponse.responses)
-  return responses_;
-}
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ResponseUnion >*
 BatchResponse::mutable_responses() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.BatchResponse.responses)
   return &responses_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ResponseUnion >&
+BatchResponse::responses() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.BatchResponse.responses)
+  return responses_;
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS

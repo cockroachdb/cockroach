@@ -1872,7 +1872,7 @@ void ResponseHeader::SerializeWithCachedSizes(
 int ResponseHeader::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.Timestamp timestamp = 2;
     if (has_timestamp()) {
       total_size += 1 +
@@ -1980,11 +1980,11 @@ void ResponseHeader::clear_timestamp() {
   if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_timestamp();
 }
- const ::cockroach::roachpb::Timestamp& ResponseHeader::timestamp() const {
+const ::cockroach::roachpb::Timestamp& ResponseHeader::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseHeader.timestamp)
   return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
 }
- ::cockroach::roachpb::Timestamp* ResponseHeader::mutable_timestamp() {
+::cockroach::roachpb::Timestamp* ResponseHeader::mutable_timestamp() {
   set_has_timestamp();
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::roachpb::Timestamp;
@@ -1992,13 +1992,13 @@ void ResponseHeader::clear_timestamp() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseHeader.timestamp)
   return timestamp_;
 }
- ::cockroach::roachpb::Timestamp* ResponseHeader::release_timestamp() {
+::cockroach::roachpb::Timestamp* ResponseHeader::release_timestamp() {
   clear_has_timestamp();
   ::cockroach::roachpb::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
 }
- void ResponseHeader::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
+void ResponseHeader::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
@@ -2023,11 +2023,11 @@ void ResponseHeader::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
   clear_has_txn();
 }
- const ::cockroach::roachpb::Transaction& ResponseHeader::txn() const {
+const ::cockroach::roachpb::Transaction& ResponseHeader::txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseHeader.txn)
   return txn_ != NULL ? *txn_ : *default_instance_->txn_;
 }
- ::cockroach::roachpb::Transaction* ResponseHeader::mutable_txn() {
+::cockroach::roachpb::Transaction* ResponseHeader::mutable_txn() {
   set_has_txn();
   if (txn_ == NULL) {
     txn_ = new ::cockroach::roachpb::Transaction;
@@ -2035,13 +2035,13 @@ void ResponseHeader::clear_txn() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseHeader.txn)
   return txn_;
 }
- ::cockroach::roachpb::Transaction* ResponseHeader::release_txn() {
+::cockroach::roachpb::Transaction* ResponseHeader::release_txn() {
   clear_has_txn();
   ::cockroach::roachpb::Transaction* temp = txn_;
   txn_ = NULL;
   return temp;
 }
- void ResponseHeader::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
+void ResponseHeader::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
   delete txn_;
   txn_ = txn;
   if (txn) {
@@ -2306,11 +2306,11 @@ void GetRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& GetRequest::header() const {
+const ::cockroach::roachpb::Span& GetRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.GetRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* GetRequest::mutable_header() {
+::cockroach::roachpb::Span* GetRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -2318,13 +2318,13 @@ void GetRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.GetRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* GetRequest::release_header() {
+::cockroach::roachpb::Span* GetRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void GetRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void GetRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -2529,7 +2529,7 @@ void GetResponse::SerializeWithCachedSizes(
 int GetResponse::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.ResponseHeader header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -2637,11 +2637,11 @@ void GetResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& GetResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& GetResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.GetResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* GetResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* GetResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -2649,13 +2649,13 @@ void GetResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.GetResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* GetResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* GetResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void GetResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void GetResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -2680,11 +2680,11 @@ void GetResponse::clear_value() {
   if (value_ != NULL) value_->::cockroach::roachpb::Value::Clear();
   clear_has_value();
 }
- const ::cockroach::roachpb::Value& GetResponse::value() const {
+const ::cockroach::roachpb::Value& GetResponse::value() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.GetResponse.value)
   return value_ != NULL ? *value_ : *default_instance_->value_;
 }
- ::cockroach::roachpb::Value* GetResponse::mutable_value() {
+::cockroach::roachpb::Value* GetResponse::mutable_value() {
   set_has_value();
   if (value_ == NULL) {
     value_ = new ::cockroach::roachpb::Value;
@@ -2692,13 +2692,13 @@ void GetResponse::clear_value() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.GetResponse.value)
   return value_;
 }
- ::cockroach::roachpb::Value* GetResponse::release_value() {
+::cockroach::roachpb::Value* GetResponse::release_value() {
   clear_has_value();
   ::cockroach::roachpb::Value* temp = value_;
   value_ = NULL;
   return temp;
 }
- void GetResponse::set_allocated_value(::cockroach::roachpb::Value* value) {
+void GetResponse::set_allocated_value(::cockroach::roachpb::Value* value) {
   delete value_;
   value_ = value;
   if (value) {
@@ -2903,7 +2903,7 @@ void PutRequest::SerializeWithCachedSizes(
 int PutRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -3011,11 +3011,11 @@ void PutRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& PutRequest::header() const {
+const ::cockroach::roachpb::Span& PutRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.PutRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* PutRequest::mutable_header() {
+::cockroach::roachpb::Span* PutRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -3023,13 +3023,13 @@ void PutRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.PutRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* PutRequest::release_header() {
+::cockroach::roachpb::Span* PutRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void PutRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void PutRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -3054,11 +3054,11 @@ void PutRequest::clear_value() {
   if (value_ != NULL) value_->::cockroach::roachpb::Value::Clear();
   clear_has_value();
 }
- const ::cockroach::roachpb::Value& PutRequest::value() const {
+const ::cockroach::roachpb::Value& PutRequest::value() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.PutRequest.value)
   return value_ != NULL ? *value_ : *default_instance_->value_;
 }
- ::cockroach::roachpb::Value* PutRequest::mutable_value() {
+::cockroach::roachpb::Value* PutRequest::mutable_value() {
   set_has_value();
   if (value_ == NULL) {
     value_ = new ::cockroach::roachpb::Value;
@@ -3066,13 +3066,13 @@ void PutRequest::clear_value() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.PutRequest.value)
   return value_;
 }
- ::cockroach::roachpb::Value* PutRequest::release_value() {
+::cockroach::roachpb::Value* PutRequest::release_value() {
   clear_has_value();
   ::cockroach::roachpb::Value* temp = value_;
   value_ = NULL;
   return temp;
 }
- void PutRequest::set_allocated_value(::cockroach::roachpb::Value* value) {
+void PutRequest::set_allocated_value(::cockroach::roachpb::Value* value) {
   delete value_;
   value_ = value;
   if (value) {
@@ -3337,11 +3337,11 @@ void PutResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& PutResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& PutResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.PutResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* PutResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* PutResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -3349,13 +3349,13 @@ void PutResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.PutResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* PutResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* PutResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void PutResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void PutResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -3593,7 +3593,7 @@ void ConditionalPutRequest::SerializeWithCachedSizes(
 int ConditionalPutRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7) {
+  if (_has_bits_[0 / 32] & 7u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -3712,11 +3712,11 @@ void ConditionalPutRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& ConditionalPutRequest::header() const {
+const ::cockroach::roachpb::Span& ConditionalPutRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ConditionalPutRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* ConditionalPutRequest::mutable_header() {
+::cockroach::roachpb::Span* ConditionalPutRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -3724,13 +3724,13 @@ void ConditionalPutRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ConditionalPutRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* ConditionalPutRequest::release_header() {
+::cockroach::roachpb::Span* ConditionalPutRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void ConditionalPutRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void ConditionalPutRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -3755,11 +3755,11 @@ void ConditionalPutRequest::clear_value() {
   if (value_ != NULL) value_->::cockroach::roachpb::Value::Clear();
   clear_has_value();
 }
- const ::cockroach::roachpb::Value& ConditionalPutRequest::value() const {
+const ::cockroach::roachpb::Value& ConditionalPutRequest::value() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ConditionalPutRequest.value)
   return value_ != NULL ? *value_ : *default_instance_->value_;
 }
- ::cockroach::roachpb::Value* ConditionalPutRequest::mutable_value() {
+::cockroach::roachpb::Value* ConditionalPutRequest::mutable_value() {
   set_has_value();
   if (value_ == NULL) {
     value_ = new ::cockroach::roachpb::Value;
@@ -3767,13 +3767,13 @@ void ConditionalPutRequest::clear_value() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ConditionalPutRequest.value)
   return value_;
 }
- ::cockroach::roachpb::Value* ConditionalPutRequest::release_value() {
+::cockroach::roachpb::Value* ConditionalPutRequest::release_value() {
   clear_has_value();
   ::cockroach::roachpb::Value* temp = value_;
   value_ = NULL;
   return temp;
 }
- void ConditionalPutRequest::set_allocated_value(::cockroach::roachpb::Value* value) {
+void ConditionalPutRequest::set_allocated_value(::cockroach::roachpb::Value* value) {
   delete value_;
   value_ = value;
   if (value) {
@@ -3798,11 +3798,11 @@ void ConditionalPutRequest::clear_exp_value() {
   if (exp_value_ != NULL) exp_value_->::cockroach::roachpb::Value::Clear();
   clear_has_exp_value();
 }
- const ::cockroach::roachpb::Value& ConditionalPutRequest::exp_value() const {
+const ::cockroach::roachpb::Value& ConditionalPutRequest::exp_value() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ConditionalPutRequest.exp_value)
   return exp_value_ != NULL ? *exp_value_ : *default_instance_->exp_value_;
 }
- ::cockroach::roachpb::Value* ConditionalPutRequest::mutable_exp_value() {
+::cockroach::roachpb::Value* ConditionalPutRequest::mutable_exp_value() {
   set_has_exp_value();
   if (exp_value_ == NULL) {
     exp_value_ = new ::cockroach::roachpb::Value;
@@ -3810,13 +3810,13 @@ void ConditionalPutRequest::clear_exp_value() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ConditionalPutRequest.exp_value)
   return exp_value_;
 }
- ::cockroach::roachpb::Value* ConditionalPutRequest::release_exp_value() {
+::cockroach::roachpb::Value* ConditionalPutRequest::release_exp_value() {
   clear_has_exp_value();
   ::cockroach::roachpb::Value* temp = exp_value_;
   exp_value_ = NULL;
   return temp;
 }
- void ConditionalPutRequest::set_allocated_exp_value(::cockroach::roachpb::Value* exp_value) {
+void ConditionalPutRequest::set_allocated_exp_value(::cockroach::roachpb::Value* exp_value) {
   delete exp_value_;
   exp_value_ = exp_value;
   if (exp_value) {
@@ -4081,11 +4081,11 @@ void ConditionalPutResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& ConditionalPutResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& ConditionalPutResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ConditionalPutResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* ConditionalPutResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* ConditionalPutResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -4093,13 +4093,13 @@ void ConditionalPutResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ConditionalPutResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* ConditionalPutResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* ConditionalPutResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void ConditionalPutResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void ConditionalPutResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -4299,7 +4299,7 @@ void IncrementRequest::SerializeWithCachedSizes(
 int IncrementRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -4407,11 +4407,11 @@ void IncrementRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& IncrementRequest::header() const {
+const ::cockroach::roachpb::Span& IncrementRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.IncrementRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* IncrementRequest::mutable_header() {
+::cockroach::roachpb::Span* IncrementRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -4419,13 +4419,13 @@ void IncrementRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.IncrementRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* IncrementRequest::release_header() {
+::cockroach::roachpb::Span* IncrementRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void IncrementRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void IncrementRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -4649,7 +4649,7 @@ void IncrementResponse::SerializeWithCachedSizes(
 int IncrementResponse::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.ResponseHeader header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -4757,11 +4757,11 @@ void IncrementResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& IncrementResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& IncrementResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.IncrementResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* IncrementResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* IncrementResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -4769,13 +4769,13 @@ void IncrementResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.IncrementResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* IncrementResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* IncrementResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void IncrementResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void IncrementResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -5064,11 +5064,11 @@ void DeleteRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& DeleteRequest::header() const {
+const ::cockroach::roachpb::Span& DeleteRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.DeleteRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* DeleteRequest::mutable_header() {
+::cockroach::roachpb::Span* DeleteRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -5076,13 +5076,13 @@ void DeleteRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.DeleteRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* DeleteRequest::release_header() {
+::cockroach::roachpb::Span* DeleteRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void DeleteRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void DeleteRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -5347,11 +5347,11 @@ void DeleteResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& DeleteResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& DeleteResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.DeleteResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* DeleteResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* DeleteResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -5359,13 +5359,13 @@ void DeleteResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.DeleteResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* DeleteResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* DeleteResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void DeleteResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void DeleteResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -5565,7 +5565,7 @@ void DeleteRangeRequest::SerializeWithCachedSizes(
 int DeleteRangeRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -5673,11 +5673,11 @@ void DeleteRangeRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& DeleteRangeRequest::header() const {
+const ::cockroach::roachpb::Span& DeleteRangeRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.DeleteRangeRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* DeleteRangeRequest::mutable_header() {
+::cockroach::roachpb::Span* DeleteRangeRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -5685,13 +5685,13 @@ void DeleteRangeRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.DeleteRangeRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* DeleteRangeRequest::release_header() {
+::cockroach::roachpb::Span* DeleteRangeRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void DeleteRangeRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void DeleteRangeRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -5915,7 +5915,7 @@ void DeleteRangeResponse::SerializeWithCachedSizes(
 int DeleteRangeResponse::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.ResponseHeader header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -6023,11 +6023,11 @@ void DeleteRangeResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& DeleteRangeResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& DeleteRangeResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.DeleteRangeResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* DeleteRangeResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* DeleteRangeResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -6035,13 +6035,13 @@ void DeleteRangeResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.DeleteRangeResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* DeleteRangeResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* DeleteRangeResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void DeleteRangeResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void DeleteRangeResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -6265,7 +6265,7 @@ void ScanRequest::SerializeWithCachedSizes(
 int ScanRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -6373,11 +6373,11 @@ void ScanRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& ScanRequest::header() const {
+const ::cockroach::roachpb::Span& ScanRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ScanRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* ScanRequest::mutable_header() {
+::cockroach::roachpb::Span* ScanRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -6385,13 +6385,13 @@ void ScanRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ScanRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* ScanRequest::release_header() {
+::cockroach::roachpb::Span* ScanRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void ScanRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void ScanRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -6722,11 +6722,11 @@ void ScanResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& ScanResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& ScanResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ScanResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* ScanResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* ScanResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -6734,13 +6734,13 @@ void ScanResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ScanResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* ScanResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* ScanResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void ScanResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void ScanResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -6758,27 +6758,27 @@ int ScanResponse::rows_size() const {
 void ScanResponse::clear_rows() {
   rows_.Clear();
 }
- const ::cockroach::roachpb::KeyValue& ScanResponse::rows(int index) const {
+const ::cockroach::roachpb::KeyValue& ScanResponse::rows(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ScanResponse.rows)
   return rows_.Get(index);
 }
- ::cockroach::roachpb::KeyValue* ScanResponse::mutable_rows(int index) {
+::cockroach::roachpb::KeyValue* ScanResponse::mutable_rows(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ScanResponse.rows)
   return rows_.Mutable(index);
 }
- ::cockroach::roachpb::KeyValue* ScanResponse::add_rows() {
+::cockroach::roachpb::KeyValue* ScanResponse::add_rows() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.ScanResponse.rows)
   return rows_.Add();
 }
- const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >&
-ScanResponse::rows() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.ScanResponse.rows)
-  return rows_;
-}
- ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >*
+::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >*
 ScanResponse::mutable_rows() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ScanResponse.rows)
   return &rows_;
+}
+const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >&
+ScanResponse::rows() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.ScanResponse.rows)
+  return rows_;
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
@@ -6970,7 +6970,7 @@ void ReverseScanRequest::SerializeWithCachedSizes(
 int ReverseScanRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -7078,11 +7078,11 @@ void ReverseScanRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& ReverseScanRequest::header() const {
+const ::cockroach::roachpb::Span& ReverseScanRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ReverseScanRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* ReverseScanRequest::mutable_header() {
+::cockroach::roachpb::Span* ReverseScanRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -7090,13 +7090,13 @@ void ReverseScanRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ReverseScanRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* ReverseScanRequest::release_header() {
+::cockroach::roachpb::Span* ReverseScanRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void ReverseScanRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void ReverseScanRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -7427,11 +7427,11 @@ void ReverseScanResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& ReverseScanResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& ReverseScanResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ReverseScanResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* ReverseScanResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* ReverseScanResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -7439,13 +7439,13 @@ void ReverseScanResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ReverseScanResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* ReverseScanResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* ReverseScanResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void ReverseScanResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void ReverseScanResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -7463,27 +7463,27 @@ int ReverseScanResponse::rows_size() const {
 void ReverseScanResponse::clear_rows() {
   rows_.Clear();
 }
- const ::cockroach::roachpb::KeyValue& ReverseScanResponse::rows(int index) const {
+const ::cockroach::roachpb::KeyValue& ReverseScanResponse::rows(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ReverseScanResponse.rows)
   return rows_.Get(index);
 }
- ::cockroach::roachpb::KeyValue* ReverseScanResponse::mutable_rows(int index) {
+::cockroach::roachpb::KeyValue* ReverseScanResponse::mutable_rows(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ReverseScanResponse.rows)
   return rows_.Mutable(index);
 }
- ::cockroach::roachpb::KeyValue* ReverseScanResponse::add_rows() {
+::cockroach::roachpb::KeyValue* ReverseScanResponse::add_rows() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.ReverseScanResponse.rows)
   return rows_.Add();
 }
- const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >&
-ReverseScanResponse::rows() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.ReverseScanResponse.rows)
-  return rows_;
-}
- ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >*
+::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >*
 ReverseScanResponse::mutable_rows() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ReverseScanResponse.rows)
   return &rows_;
+}
+const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >&
+ReverseScanResponse::rows() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.ReverseScanResponse.rows)
+  return rows_;
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
@@ -7740,11 +7740,11 @@ void BeginTransactionRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& BeginTransactionRequest::header() const {
+const ::cockroach::roachpb::Span& BeginTransactionRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.BeginTransactionRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* BeginTransactionRequest::mutable_header() {
+::cockroach::roachpb::Span* BeginTransactionRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -7752,13 +7752,13 @@ void BeginTransactionRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.BeginTransactionRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* BeginTransactionRequest::release_header() {
+::cockroach::roachpb::Span* BeginTransactionRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void BeginTransactionRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void BeginTransactionRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -8023,11 +8023,11 @@ void BeginTransactionResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& BeginTransactionResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& BeginTransactionResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.BeginTransactionResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* BeginTransactionResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* BeginTransactionResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -8035,13 +8035,13 @@ void BeginTransactionResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.BeginTransactionResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* BeginTransactionResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* BeginTransactionResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void BeginTransactionResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void BeginTransactionResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -8339,7 +8339,7 @@ void EndTransactionRequest::SerializeWithCachedSizes(
 int EndTransactionRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 15) {
+  if (_has_bits_[0 / 32] & 15u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -8477,11 +8477,11 @@ void EndTransactionRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& EndTransactionRequest::header() const {
+const ::cockroach::roachpb::Span& EndTransactionRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.EndTransactionRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* EndTransactionRequest::mutable_header() {
+::cockroach::roachpb::Span* EndTransactionRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -8489,13 +8489,13 @@ void EndTransactionRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.EndTransactionRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* EndTransactionRequest::release_header() {
+::cockroach::roachpb::Span* EndTransactionRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void EndTransactionRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void EndTransactionRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -8544,11 +8544,11 @@ void EndTransactionRequest::clear_deadline() {
   if (deadline_ != NULL) deadline_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_deadline();
 }
- const ::cockroach::roachpb::Timestamp& EndTransactionRequest::deadline() const {
+const ::cockroach::roachpb::Timestamp& EndTransactionRequest::deadline() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.EndTransactionRequest.deadline)
   return deadline_ != NULL ? *deadline_ : *default_instance_->deadline_;
 }
- ::cockroach::roachpb::Timestamp* EndTransactionRequest::mutable_deadline() {
+::cockroach::roachpb::Timestamp* EndTransactionRequest::mutable_deadline() {
   set_has_deadline();
   if (deadline_ == NULL) {
     deadline_ = new ::cockroach::roachpb::Timestamp;
@@ -8556,13 +8556,13 @@ void EndTransactionRequest::clear_deadline() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.EndTransactionRequest.deadline)
   return deadline_;
 }
- ::cockroach::roachpb::Timestamp* EndTransactionRequest::release_deadline() {
+::cockroach::roachpb::Timestamp* EndTransactionRequest::release_deadline() {
   clear_has_deadline();
   ::cockroach::roachpb::Timestamp* temp = deadline_;
   deadline_ = NULL;
   return temp;
 }
- void EndTransactionRequest::set_allocated_deadline(::cockroach::roachpb::Timestamp* deadline) {
+void EndTransactionRequest::set_allocated_deadline(::cockroach::roachpb::Timestamp* deadline) {
   delete deadline_;
   deadline_ = deadline;
   if (deadline) {
@@ -8587,11 +8587,11 @@ void EndTransactionRequest::clear_internal_commit_trigger() {
   if (internal_commit_trigger_ != NULL) internal_commit_trigger_->::cockroach::roachpb::InternalCommitTrigger::Clear();
   clear_has_internal_commit_trigger();
 }
- const ::cockroach::roachpb::InternalCommitTrigger& EndTransactionRequest::internal_commit_trigger() const {
+const ::cockroach::roachpb::InternalCommitTrigger& EndTransactionRequest::internal_commit_trigger() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.EndTransactionRequest.internal_commit_trigger)
   return internal_commit_trigger_ != NULL ? *internal_commit_trigger_ : *default_instance_->internal_commit_trigger_;
 }
- ::cockroach::roachpb::InternalCommitTrigger* EndTransactionRequest::mutable_internal_commit_trigger() {
+::cockroach::roachpb::InternalCommitTrigger* EndTransactionRequest::mutable_internal_commit_trigger() {
   set_has_internal_commit_trigger();
   if (internal_commit_trigger_ == NULL) {
     internal_commit_trigger_ = new ::cockroach::roachpb::InternalCommitTrigger;
@@ -8599,13 +8599,13 @@ void EndTransactionRequest::clear_internal_commit_trigger() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.EndTransactionRequest.internal_commit_trigger)
   return internal_commit_trigger_;
 }
- ::cockroach::roachpb::InternalCommitTrigger* EndTransactionRequest::release_internal_commit_trigger() {
+::cockroach::roachpb::InternalCommitTrigger* EndTransactionRequest::release_internal_commit_trigger() {
   clear_has_internal_commit_trigger();
   ::cockroach::roachpb::InternalCommitTrigger* temp = internal_commit_trigger_;
   internal_commit_trigger_ = NULL;
   return temp;
 }
- void EndTransactionRequest::set_allocated_internal_commit_trigger(::cockroach::roachpb::InternalCommitTrigger* internal_commit_trigger) {
+void EndTransactionRequest::set_allocated_internal_commit_trigger(::cockroach::roachpb::InternalCommitTrigger* internal_commit_trigger) {
   delete internal_commit_trigger_;
   internal_commit_trigger_ = internal_commit_trigger;
   if (internal_commit_trigger) {
@@ -8623,27 +8623,27 @@ int EndTransactionRequest::intent_spans_size() const {
 void EndTransactionRequest::clear_intent_spans() {
   intent_spans_.Clear();
 }
- const ::cockroach::roachpb::Span& EndTransactionRequest::intent_spans(int index) const {
+const ::cockroach::roachpb::Span& EndTransactionRequest::intent_spans(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.EndTransactionRequest.intent_spans)
   return intent_spans_.Get(index);
 }
- ::cockroach::roachpb::Span* EndTransactionRequest::mutable_intent_spans(int index) {
+::cockroach::roachpb::Span* EndTransactionRequest::mutable_intent_spans(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.EndTransactionRequest.intent_spans)
   return intent_spans_.Mutable(index);
 }
- ::cockroach::roachpb::Span* EndTransactionRequest::add_intent_spans() {
+::cockroach::roachpb::Span* EndTransactionRequest::add_intent_spans() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.EndTransactionRequest.intent_spans)
   return intent_spans_.Add();
 }
- const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-EndTransactionRequest::intent_spans() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.EndTransactionRequest.intent_spans)
-  return intent_spans_;
-}
- ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
+::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
 EndTransactionRequest::mutable_intent_spans() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.EndTransactionRequest.intent_spans)
   return &intent_spans_;
+}
+const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+EndTransactionRequest::intent_spans() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.EndTransactionRequest.intent_spans)
+  return intent_spans_;
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
@@ -8864,7 +8864,7 @@ void EndTransactionResponse::SerializeWithCachedSizes(
 int EndTransactionResponse::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.ResponseHeader header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -8981,11 +8981,11 @@ void EndTransactionResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& EndTransactionResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& EndTransactionResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.EndTransactionResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* EndTransactionResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* EndTransactionResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -8993,13 +8993,13 @@ void EndTransactionResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.EndTransactionResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* EndTransactionResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* EndTransactionResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void EndTransactionResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void EndTransactionResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -9282,7 +9282,7 @@ void AdminSplitRequest::SerializeWithCachedSizes(
 int AdminSplitRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -9391,11 +9391,11 @@ void AdminSplitRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& AdminSplitRequest::header() const {
+const ::cockroach::roachpb::Span& AdminSplitRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.AdminSplitRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* AdminSplitRequest::mutable_header() {
+::cockroach::roachpb::Span* AdminSplitRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -9403,13 +9403,13 @@ void AdminSplitRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AdminSplitRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* AdminSplitRequest::release_header() {
+::cockroach::roachpb::Span* AdminSplitRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void AdminSplitRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void AdminSplitRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -9727,11 +9727,11 @@ void AdminSplitResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& AdminSplitResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& AdminSplitResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.AdminSplitResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* AdminSplitResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* AdminSplitResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -9739,13 +9739,13 @@ void AdminSplitResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AdminSplitResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* AdminSplitResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* AdminSplitResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void AdminSplitResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void AdminSplitResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -10010,11 +10010,11 @@ void AdminMergeRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& AdminMergeRequest::header() const {
+const ::cockroach::roachpb::Span& AdminMergeRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.AdminMergeRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* AdminMergeRequest::mutable_header() {
+::cockroach::roachpb::Span* AdminMergeRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -10022,13 +10022,13 @@ void AdminMergeRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AdminMergeRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* AdminMergeRequest::release_header() {
+::cockroach::roachpb::Span* AdminMergeRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void AdminMergeRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void AdminMergeRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -10293,11 +10293,11 @@ void AdminMergeResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& AdminMergeResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& AdminMergeResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.AdminMergeResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* AdminMergeResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* AdminMergeResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -10305,13 +10305,13 @@ void AdminMergeResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AdminMergeResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* AdminMergeResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* AdminMergeResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void AdminMergeResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void AdminMergeResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -10577,7 +10577,7 @@ void RangeLookupRequest::SerializeWithCachedSizes(
 int RangeLookupRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 15) {
+  if (_has_bits_[0 / 32] & 15u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -10703,11 +10703,11 @@ void RangeLookupRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& RangeLookupRequest::header() const {
+const ::cockroach::roachpb::Span& RangeLookupRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeLookupRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* RangeLookupRequest::mutable_header() {
+::cockroach::roachpb::Span* RangeLookupRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -10715,13 +10715,13 @@ void RangeLookupRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeLookupRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* RangeLookupRequest::release_header() {
+::cockroach::roachpb::Span* RangeLookupRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void RangeLookupRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void RangeLookupRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -11100,11 +11100,11 @@ void RangeLookupResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& RangeLookupResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& RangeLookupResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeLookupResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* RangeLookupResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* RangeLookupResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -11112,13 +11112,13 @@ void RangeLookupResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeLookupResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* RangeLookupResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* RangeLookupResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void RangeLookupResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void RangeLookupResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -11136,27 +11136,27 @@ int RangeLookupResponse::ranges_size() const {
 void RangeLookupResponse::clear_ranges() {
   ranges_.Clear();
 }
- const ::cockroach::roachpb::RangeDescriptor& RangeLookupResponse::ranges(int index) const {
+const ::cockroach::roachpb::RangeDescriptor& RangeLookupResponse::ranges(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeLookupResponse.ranges)
   return ranges_.Get(index);
 }
- ::cockroach::roachpb::RangeDescriptor* RangeLookupResponse::mutable_ranges(int index) {
+::cockroach::roachpb::RangeDescriptor* RangeLookupResponse::mutable_ranges(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeLookupResponse.ranges)
   return ranges_.Mutable(index);
 }
- ::cockroach::roachpb::RangeDescriptor* RangeLookupResponse::add_ranges() {
+::cockroach::roachpb::RangeDescriptor* RangeLookupResponse::add_ranges() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.RangeLookupResponse.ranges)
   return ranges_.Add();
 }
- const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >&
-RangeLookupResponse::ranges() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.RangeLookupResponse.ranges)
-  return ranges_;
-}
- ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >*
+::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >*
 RangeLookupResponse::mutable_ranges() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.RangeLookupResponse.ranges)
   return &ranges_;
+}
+const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >&
+RangeLookupResponse::ranges() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.RangeLookupResponse.ranges)
+  return ranges_;
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
@@ -11413,11 +11413,11 @@ void HeartbeatTxnRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& HeartbeatTxnRequest::header() const {
+const ::cockroach::roachpb::Span& HeartbeatTxnRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.HeartbeatTxnRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* HeartbeatTxnRequest::mutable_header() {
+::cockroach::roachpb::Span* HeartbeatTxnRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -11425,13 +11425,13 @@ void HeartbeatTxnRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.HeartbeatTxnRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* HeartbeatTxnRequest::release_header() {
+::cockroach::roachpb::Span* HeartbeatTxnRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void HeartbeatTxnRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void HeartbeatTxnRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -11696,11 +11696,11 @@ void HeartbeatTxnResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& HeartbeatTxnResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& HeartbeatTxnResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.HeartbeatTxnResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* HeartbeatTxnResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* HeartbeatTxnResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -11708,13 +11708,13 @@ void HeartbeatTxnResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.HeartbeatTxnResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* HeartbeatTxnResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* HeartbeatTxnResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void HeartbeatTxnResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void HeartbeatTxnResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -11919,7 +11919,7 @@ void GCRequest_GCKey::SerializeWithCachedSizes(
 int GCRequest_GCKey::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional bytes key = 1;
     if (has_key()) {
       total_size += 1 +
@@ -12236,7 +12236,7 @@ void GCRequest::SerializeWithCachedSizes(
 int GCRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -12407,11 +12407,11 @@ void GCRequest_GCKey::clear_timestamp() {
   if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_timestamp();
 }
- const ::cockroach::roachpb::Timestamp& GCRequest_GCKey::timestamp() const {
+const ::cockroach::roachpb::Timestamp& GCRequest_GCKey::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.GCRequest.GCKey.timestamp)
   return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
 }
- ::cockroach::roachpb::Timestamp* GCRequest_GCKey::mutable_timestamp() {
+::cockroach::roachpb::Timestamp* GCRequest_GCKey::mutable_timestamp() {
   set_has_timestamp();
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::roachpb::Timestamp;
@@ -12419,13 +12419,13 @@ void GCRequest_GCKey::clear_timestamp() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.GCRequest.GCKey.timestamp)
   return timestamp_;
 }
- ::cockroach::roachpb::Timestamp* GCRequest_GCKey::release_timestamp() {
+::cockroach::roachpb::Timestamp* GCRequest_GCKey::release_timestamp() {
   clear_has_timestamp();
   ::cockroach::roachpb::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
 }
- void GCRequest_GCKey::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
+void GCRequest_GCKey::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
@@ -12454,11 +12454,11 @@ void GCRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& GCRequest::header() const {
+const ::cockroach::roachpb::Span& GCRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.GCRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* GCRequest::mutable_header() {
+::cockroach::roachpb::Span* GCRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -12466,13 +12466,13 @@ void GCRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.GCRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* GCRequest::release_header() {
+::cockroach::roachpb::Span* GCRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void GCRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void GCRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -12497,11 +12497,11 @@ void GCRequest::clear_gc_meta() {
   if (gc_meta_ != NULL) gc_meta_->::cockroach::roachpb::GCMetadata::Clear();
   clear_has_gc_meta();
 }
- const ::cockroach::roachpb::GCMetadata& GCRequest::gc_meta() const {
+const ::cockroach::roachpb::GCMetadata& GCRequest::gc_meta() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.GCRequest.gc_meta)
   return gc_meta_ != NULL ? *gc_meta_ : *default_instance_->gc_meta_;
 }
- ::cockroach::roachpb::GCMetadata* GCRequest::mutable_gc_meta() {
+::cockroach::roachpb::GCMetadata* GCRequest::mutable_gc_meta() {
   set_has_gc_meta();
   if (gc_meta_ == NULL) {
     gc_meta_ = new ::cockroach::roachpb::GCMetadata;
@@ -12509,13 +12509,13 @@ void GCRequest::clear_gc_meta() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.GCRequest.gc_meta)
   return gc_meta_;
 }
- ::cockroach::roachpb::GCMetadata* GCRequest::release_gc_meta() {
+::cockroach::roachpb::GCMetadata* GCRequest::release_gc_meta() {
   clear_has_gc_meta();
   ::cockroach::roachpb::GCMetadata* temp = gc_meta_;
   gc_meta_ = NULL;
   return temp;
 }
- void GCRequest::set_allocated_gc_meta(::cockroach::roachpb::GCMetadata* gc_meta) {
+void GCRequest::set_allocated_gc_meta(::cockroach::roachpb::GCMetadata* gc_meta) {
   delete gc_meta_;
   gc_meta_ = gc_meta;
   if (gc_meta) {
@@ -12533,27 +12533,27 @@ int GCRequest::keys_size() const {
 void GCRequest::clear_keys() {
   keys_.Clear();
 }
- const ::cockroach::roachpb::GCRequest_GCKey& GCRequest::keys(int index) const {
+const ::cockroach::roachpb::GCRequest_GCKey& GCRequest::keys(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.GCRequest.keys)
   return keys_.Get(index);
 }
- ::cockroach::roachpb::GCRequest_GCKey* GCRequest::mutable_keys(int index) {
+::cockroach::roachpb::GCRequest_GCKey* GCRequest::mutable_keys(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.GCRequest.keys)
   return keys_.Mutable(index);
 }
- ::cockroach::roachpb::GCRequest_GCKey* GCRequest::add_keys() {
+::cockroach::roachpb::GCRequest_GCKey* GCRequest::add_keys() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.GCRequest.keys)
   return keys_.Add();
 }
- const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::GCRequest_GCKey >&
-GCRequest::keys() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.GCRequest.keys)
-  return keys_;
-}
- ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::GCRequest_GCKey >*
+::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::GCRequest_GCKey >*
 GCRequest::mutable_keys() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.GCRequest.keys)
   return &keys_;
+}
+const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::GCRequest_GCKey >&
+GCRequest::keys() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.GCRequest.keys)
+  return keys_;
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
@@ -12810,11 +12810,11 @@ void GCResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& GCResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& GCResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.GCResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* GCResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* GCResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -12822,13 +12822,13 @@ void GCResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.GCResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* GCResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* GCResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void GCResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void GCResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -13167,7 +13167,7 @@ void PushTxnRequest::SerializeWithCachedSizes(
 int PushTxnRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 63) {
+  if (_has_bits_[0 / 32] & 63u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -13318,11 +13318,11 @@ void PushTxnRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& PushTxnRequest::header() const {
+const ::cockroach::roachpb::Span& PushTxnRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.PushTxnRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* PushTxnRequest::mutable_header() {
+::cockroach::roachpb::Span* PushTxnRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -13330,13 +13330,13 @@ void PushTxnRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.PushTxnRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* PushTxnRequest::release_header() {
+::cockroach::roachpb::Span* PushTxnRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void PushTxnRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void PushTxnRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -13361,11 +13361,11 @@ void PushTxnRequest::clear_pusher_txn() {
   if (pusher_txn_ != NULL) pusher_txn_->::cockroach::roachpb::Transaction::Clear();
   clear_has_pusher_txn();
 }
- const ::cockroach::roachpb::Transaction& PushTxnRequest::pusher_txn() const {
+const ::cockroach::roachpb::Transaction& PushTxnRequest::pusher_txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.PushTxnRequest.pusher_txn)
   return pusher_txn_ != NULL ? *pusher_txn_ : *default_instance_->pusher_txn_;
 }
- ::cockroach::roachpb::Transaction* PushTxnRequest::mutable_pusher_txn() {
+::cockroach::roachpb::Transaction* PushTxnRequest::mutable_pusher_txn() {
   set_has_pusher_txn();
   if (pusher_txn_ == NULL) {
     pusher_txn_ = new ::cockroach::roachpb::Transaction;
@@ -13373,13 +13373,13 @@ void PushTxnRequest::clear_pusher_txn() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.PushTxnRequest.pusher_txn)
   return pusher_txn_;
 }
- ::cockroach::roachpb::Transaction* PushTxnRequest::release_pusher_txn() {
+::cockroach::roachpb::Transaction* PushTxnRequest::release_pusher_txn() {
   clear_has_pusher_txn();
   ::cockroach::roachpb::Transaction* temp = pusher_txn_;
   pusher_txn_ = NULL;
   return temp;
 }
- void PushTxnRequest::set_allocated_pusher_txn(::cockroach::roachpb::Transaction* pusher_txn) {
+void PushTxnRequest::set_allocated_pusher_txn(::cockroach::roachpb::Transaction* pusher_txn) {
   delete pusher_txn_;
   pusher_txn_ = pusher_txn;
   if (pusher_txn) {
@@ -13404,11 +13404,11 @@ void PushTxnRequest::clear_pushee_txn() {
   if (pushee_txn_ != NULL) pushee_txn_->::cockroach::roachpb::Transaction::Clear();
   clear_has_pushee_txn();
 }
- const ::cockroach::roachpb::Transaction& PushTxnRequest::pushee_txn() const {
+const ::cockroach::roachpb::Transaction& PushTxnRequest::pushee_txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.PushTxnRequest.pushee_txn)
   return pushee_txn_ != NULL ? *pushee_txn_ : *default_instance_->pushee_txn_;
 }
- ::cockroach::roachpb::Transaction* PushTxnRequest::mutable_pushee_txn() {
+::cockroach::roachpb::Transaction* PushTxnRequest::mutable_pushee_txn() {
   set_has_pushee_txn();
   if (pushee_txn_ == NULL) {
     pushee_txn_ = new ::cockroach::roachpb::Transaction;
@@ -13416,13 +13416,13 @@ void PushTxnRequest::clear_pushee_txn() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.PushTxnRequest.pushee_txn)
   return pushee_txn_;
 }
- ::cockroach::roachpb::Transaction* PushTxnRequest::release_pushee_txn() {
+::cockroach::roachpb::Transaction* PushTxnRequest::release_pushee_txn() {
   clear_has_pushee_txn();
   ::cockroach::roachpb::Transaction* temp = pushee_txn_;
   pushee_txn_ = NULL;
   return temp;
 }
- void PushTxnRequest::set_allocated_pushee_txn(::cockroach::roachpb::Transaction* pushee_txn) {
+void PushTxnRequest::set_allocated_pushee_txn(::cockroach::roachpb::Transaction* pushee_txn) {
   delete pushee_txn_;
   pushee_txn_ = pushee_txn;
   if (pushee_txn) {
@@ -13447,11 +13447,11 @@ void PushTxnRequest::clear_push_to() {
   if (push_to_ != NULL) push_to_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_push_to();
 }
- const ::cockroach::roachpb::Timestamp& PushTxnRequest::push_to() const {
+const ::cockroach::roachpb::Timestamp& PushTxnRequest::push_to() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.PushTxnRequest.push_to)
   return push_to_ != NULL ? *push_to_ : *default_instance_->push_to_;
 }
- ::cockroach::roachpb::Timestamp* PushTxnRequest::mutable_push_to() {
+::cockroach::roachpb::Timestamp* PushTxnRequest::mutable_push_to() {
   set_has_push_to();
   if (push_to_ == NULL) {
     push_to_ = new ::cockroach::roachpb::Timestamp;
@@ -13459,13 +13459,13 @@ void PushTxnRequest::clear_push_to() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.PushTxnRequest.push_to)
   return push_to_;
 }
- ::cockroach::roachpb::Timestamp* PushTxnRequest::release_push_to() {
+::cockroach::roachpb::Timestamp* PushTxnRequest::release_push_to() {
   clear_has_push_to();
   ::cockroach::roachpb::Timestamp* temp = push_to_;
   push_to_ = NULL;
   return temp;
 }
- void PushTxnRequest::set_allocated_push_to(::cockroach::roachpb::Timestamp* push_to) {
+void PushTxnRequest::set_allocated_push_to(::cockroach::roachpb::Timestamp* push_to) {
   delete push_to_;
   push_to_ = push_to;
   if (push_to) {
@@ -13490,11 +13490,11 @@ void PushTxnRequest::clear_now() {
   if (now_ != NULL) now_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_now();
 }
- const ::cockroach::roachpb::Timestamp& PushTxnRequest::now() const {
+const ::cockroach::roachpb::Timestamp& PushTxnRequest::now() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.PushTxnRequest.now)
   return now_ != NULL ? *now_ : *default_instance_->now_;
 }
- ::cockroach::roachpb::Timestamp* PushTxnRequest::mutable_now() {
+::cockroach::roachpb::Timestamp* PushTxnRequest::mutable_now() {
   set_has_now();
   if (now_ == NULL) {
     now_ = new ::cockroach::roachpb::Timestamp;
@@ -13502,13 +13502,13 @@ void PushTxnRequest::clear_now() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.PushTxnRequest.now)
   return now_;
 }
- ::cockroach::roachpb::Timestamp* PushTxnRequest::release_now() {
+::cockroach::roachpb::Timestamp* PushTxnRequest::release_now() {
   clear_has_now();
   ::cockroach::roachpb::Timestamp* temp = now_;
   now_ = NULL;
   return temp;
 }
- void PushTxnRequest::set_allocated_now(::cockroach::roachpb::Timestamp* now) {
+void PushTxnRequest::set_allocated_now(::cockroach::roachpb::Timestamp* now) {
   delete now_;
   now_ = now;
   if (now) {
@@ -13738,7 +13738,7 @@ void PushTxnResponse::SerializeWithCachedSizes(
 int PushTxnResponse::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.ResponseHeader header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -13846,11 +13846,11 @@ void PushTxnResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& PushTxnResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& PushTxnResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.PushTxnResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* PushTxnResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* PushTxnResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -13858,13 +13858,13 @@ void PushTxnResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.PushTxnResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* PushTxnResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* PushTxnResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void PushTxnResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void PushTxnResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -13889,11 +13889,11 @@ void PushTxnResponse::clear_pushee_txn() {
   if (pushee_txn_ != NULL) pushee_txn_->::cockroach::roachpb::Transaction::Clear();
   clear_has_pushee_txn();
 }
- const ::cockroach::roachpb::Transaction& PushTxnResponse::pushee_txn() const {
+const ::cockroach::roachpb::Transaction& PushTxnResponse::pushee_txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.PushTxnResponse.pushee_txn)
   return pushee_txn_ != NULL ? *pushee_txn_ : *default_instance_->pushee_txn_;
 }
- ::cockroach::roachpb::Transaction* PushTxnResponse::mutable_pushee_txn() {
+::cockroach::roachpb::Transaction* PushTxnResponse::mutable_pushee_txn() {
   set_has_pushee_txn();
   if (pushee_txn_ == NULL) {
     pushee_txn_ = new ::cockroach::roachpb::Transaction;
@@ -13901,13 +13901,13 @@ void PushTxnResponse::clear_pushee_txn() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.PushTxnResponse.pushee_txn)
   return pushee_txn_;
 }
- ::cockroach::roachpb::Transaction* PushTxnResponse::release_pushee_txn() {
+::cockroach::roachpb::Transaction* PushTxnResponse::release_pushee_txn() {
   clear_has_pushee_txn();
   ::cockroach::roachpb::Transaction* temp = pushee_txn_;
   pushee_txn_ = NULL;
   return temp;
 }
- void PushTxnResponse::set_allocated_pushee_txn(::cockroach::roachpb::Transaction* pushee_txn) {
+void PushTxnResponse::set_allocated_pushee_txn(::cockroach::roachpb::Transaction* pushee_txn) {
   delete pushee_txn_;
   pushee_txn_ = pushee_txn;
   if (pushee_txn) {
@@ -14140,7 +14140,7 @@ void ResolveIntentRequest::SerializeWithCachedSizes(
 int ResolveIntentRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7) {
+  if (_has_bits_[0 / 32] & 7u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -14257,11 +14257,11 @@ void ResolveIntentRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& ResolveIntentRequest::header() const {
+const ::cockroach::roachpb::Span& ResolveIntentRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResolveIntentRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* ResolveIntentRequest::mutable_header() {
+::cockroach::roachpb::Span* ResolveIntentRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -14269,13 +14269,13 @@ void ResolveIntentRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResolveIntentRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* ResolveIntentRequest::release_header() {
+::cockroach::roachpb::Span* ResolveIntentRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void ResolveIntentRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void ResolveIntentRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -14300,11 +14300,11 @@ void ResolveIntentRequest::clear_intent_txn() {
   if (intent_txn_ != NULL) intent_txn_->::cockroach::roachpb::Transaction::Clear();
   clear_has_intent_txn();
 }
- const ::cockroach::roachpb::Transaction& ResolveIntentRequest::intent_txn() const {
+const ::cockroach::roachpb::Transaction& ResolveIntentRequest::intent_txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResolveIntentRequest.intent_txn)
   return intent_txn_ != NULL ? *intent_txn_ : *default_instance_->intent_txn_;
 }
- ::cockroach::roachpb::Transaction* ResolveIntentRequest::mutable_intent_txn() {
+::cockroach::roachpb::Transaction* ResolveIntentRequest::mutable_intent_txn() {
   set_has_intent_txn();
   if (intent_txn_ == NULL) {
     intent_txn_ = new ::cockroach::roachpb::Transaction;
@@ -14312,13 +14312,13 @@ void ResolveIntentRequest::clear_intent_txn() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResolveIntentRequest.intent_txn)
   return intent_txn_;
 }
- ::cockroach::roachpb::Transaction* ResolveIntentRequest::release_intent_txn() {
+::cockroach::roachpb::Transaction* ResolveIntentRequest::release_intent_txn() {
   clear_has_intent_txn();
   ::cockroach::roachpb::Transaction* temp = intent_txn_;
   intent_txn_ = NULL;
   return temp;
 }
- void ResolveIntentRequest::set_allocated_intent_txn(::cockroach::roachpb::Transaction* intent_txn) {
+void ResolveIntentRequest::set_allocated_intent_txn(::cockroach::roachpb::Transaction* intent_txn) {
   delete intent_txn_;
   intent_txn_ = intent_txn;
   if (intent_txn) {
@@ -14607,11 +14607,11 @@ void ResolveIntentResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& ResolveIntentResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& ResolveIntentResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResolveIntentResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* ResolveIntentResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* ResolveIntentResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -14619,13 +14619,13 @@ void ResolveIntentResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResolveIntentResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* ResolveIntentResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* ResolveIntentResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void ResolveIntentResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void ResolveIntentResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -14858,7 +14858,7 @@ void ResolveIntentRangeRequest::SerializeWithCachedSizes(
 int ResolveIntentRangeRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7) {
+  if (_has_bits_[0 / 32] & 7u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -14975,11 +14975,11 @@ void ResolveIntentRangeRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& ResolveIntentRangeRequest::header() const {
+const ::cockroach::roachpb::Span& ResolveIntentRangeRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResolveIntentRangeRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* ResolveIntentRangeRequest::mutable_header() {
+::cockroach::roachpb::Span* ResolveIntentRangeRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -14987,13 +14987,13 @@ void ResolveIntentRangeRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResolveIntentRangeRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* ResolveIntentRangeRequest::release_header() {
+::cockroach::roachpb::Span* ResolveIntentRangeRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void ResolveIntentRangeRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void ResolveIntentRangeRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -15018,11 +15018,11 @@ void ResolveIntentRangeRequest::clear_intent_txn() {
   if (intent_txn_ != NULL) intent_txn_->::cockroach::roachpb::Transaction::Clear();
   clear_has_intent_txn();
 }
- const ::cockroach::roachpb::Transaction& ResolveIntentRangeRequest::intent_txn() const {
+const ::cockroach::roachpb::Transaction& ResolveIntentRangeRequest::intent_txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResolveIntentRangeRequest.intent_txn)
   return intent_txn_ != NULL ? *intent_txn_ : *default_instance_->intent_txn_;
 }
- ::cockroach::roachpb::Transaction* ResolveIntentRangeRequest::mutable_intent_txn() {
+::cockroach::roachpb::Transaction* ResolveIntentRangeRequest::mutable_intent_txn() {
   set_has_intent_txn();
   if (intent_txn_ == NULL) {
     intent_txn_ = new ::cockroach::roachpb::Transaction;
@@ -15030,13 +15030,13 @@ void ResolveIntentRangeRequest::clear_intent_txn() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResolveIntentRangeRequest.intent_txn)
   return intent_txn_;
 }
- ::cockroach::roachpb::Transaction* ResolveIntentRangeRequest::release_intent_txn() {
+::cockroach::roachpb::Transaction* ResolveIntentRangeRequest::release_intent_txn() {
   clear_has_intent_txn();
   ::cockroach::roachpb::Transaction* temp = intent_txn_;
   intent_txn_ = NULL;
   return temp;
 }
- void ResolveIntentRangeRequest::set_allocated_intent_txn(::cockroach::roachpb::Transaction* intent_txn) {
+void ResolveIntentRangeRequest::set_allocated_intent_txn(::cockroach::roachpb::Transaction* intent_txn) {
   delete intent_txn_;
   intent_txn_ = intent_txn;
   if (intent_txn) {
@@ -15325,11 +15325,11 @@ void NoopResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& NoopResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& NoopResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.NoopResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* NoopResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* NoopResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -15337,13 +15337,13 @@ void NoopResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NoopResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* NoopResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* NoopResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void NoopResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void NoopResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -15608,11 +15608,11 @@ void NoopRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& NoopRequest::header() const {
+const ::cockroach::roachpb::Span& NoopRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.NoopRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* NoopRequest::mutable_header() {
+::cockroach::roachpb::Span* NoopRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -15620,13 +15620,13 @@ void NoopRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NoopRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* NoopRequest::release_header() {
+::cockroach::roachpb::Span* NoopRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void NoopRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void NoopRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -15891,11 +15891,11 @@ void ResolveIntentRangeResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& ResolveIntentRangeResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& ResolveIntentRangeResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResolveIntentRangeResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* ResolveIntentRangeResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* ResolveIntentRangeResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -15903,13 +15903,13 @@ void ResolveIntentRangeResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResolveIntentRangeResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* ResolveIntentRangeResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* ResolveIntentRangeResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void ResolveIntentRangeResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void ResolveIntentRangeResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -16114,7 +16114,7 @@ void MergeRequest::SerializeWithCachedSizes(
 int MergeRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -16222,11 +16222,11 @@ void MergeRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& MergeRequest::header() const {
+const ::cockroach::roachpb::Span& MergeRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.MergeRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* MergeRequest::mutable_header() {
+::cockroach::roachpb::Span* MergeRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -16234,13 +16234,13 @@ void MergeRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MergeRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* MergeRequest::release_header() {
+::cockroach::roachpb::Span* MergeRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void MergeRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void MergeRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -16265,11 +16265,11 @@ void MergeRequest::clear_value() {
   if (value_ != NULL) value_->::cockroach::roachpb::Value::Clear();
   clear_has_value();
 }
- const ::cockroach::roachpb::Value& MergeRequest::value() const {
+const ::cockroach::roachpb::Value& MergeRequest::value() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.MergeRequest.value)
   return value_ != NULL ? *value_ : *default_instance_->value_;
 }
- ::cockroach::roachpb::Value* MergeRequest::mutable_value() {
+::cockroach::roachpb::Value* MergeRequest::mutable_value() {
   set_has_value();
   if (value_ == NULL) {
     value_ = new ::cockroach::roachpb::Value;
@@ -16277,13 +16277,13 @@ void MergeRequest::clear_value() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MergeRequest.value)
   return value_;
 }
- ::cockroach::roachpb::Value* MergeRequest::release_value() {
+::cockroach::roachpb::Value* MergeRequest::release_value() {
   clear_has_value();
   ::cockroach::roachpb::Value* temp = value_;
   value_ = NULL;
   return temp;
 }
- void MergeRequest::set_allocated_value(::cockroach::roachpb::Value* value) {
+void MergeRequest::set_allocated_value(::cockroach::roachpb::Value* value) {
   delete value_;
   value_ = value;
   if (value) {
@@ -16548,11 +16548,11 @@ void MergeResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& MergeResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& MergeResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.MergeResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* MergeResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* MergeResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -16560,13 +16560,13 @@ void MergeResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MergeResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* MergeResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* MergeResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void MergeResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void MergeResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -16805,7 +16805,7 @@ void TruncateLogRequest::SerializeWithCachedSizes(
 int TruncateLogRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7) {
+  if (_has_bits_[0 / 32] & 7u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -16924,11 +16924,11 @@ void TruncateLogRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& TruncateLogRequest::header() const {
+const ::cockroach::roachpb::Span& TruncateLogRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.TruncateLogRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* TruncateLogRequest::mutable_header() {
+::cockroach::roachpb::Span* TruncateLogRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -16936,13 +16936,13 @@ void TruncateLogRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TruncateLogRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* TruncateLogRequest::release_header() {
+::cockroach::roachpb::Span* TruncateLogRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void TruncateLogRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void TruncateLogRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -17255,11 +17255,11 @@ void TruncateLogResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& TruncateLogResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& TruncateLogResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.TruncateLogResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* TruncateLogResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* TruncateLogResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -17267,13 +17267,13 @@ void TruncateLogResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TruncateLogResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* TruncateLogResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* TruncateLogResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void TruncateLogResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void TruncateLogResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -17478,7 +17478,7 @@ void LeaderLeaseRequest::SerializeWithCachedSizes(
 int LeaderLeaseRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -17586,11 +17586,11 @@ void LeaderLeaseRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Span& LeaderLeaseRequest::header() const {
+const ::cockroach::roachpb::Span& LeaderLeaseRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.LeaderLeaseRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Span* LeaderLeaseRequest::mutable_header() {
+::cockroach::roachpb::Span* LeaderLeaseRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Span;
@@ -17598,13 +17598,13 @@ void LeaderLeaseRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LeaderLeaseRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Span* LeaderLeaseRequest::release_header() {
+::cockroach::roachpb::Span* LeaderLeaseRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Span* temp = header_;
   header_ = NULL;
   return temp;
 }
- void LeaderLeaseRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+void LeaderLeaseRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -17629,11 +17629,11 @@ void LeaderLeaseRequest::clear_lease() {
   if (lease_ != NULL) lease_->::cockroach::roachpb::Lease::Clear();
   clear_has_lease();
 }
- const ::cockroach::roachpb::Lease& LeaderLeaseRequest::lease() const {
+const ::cockroach::roachpb::Lease& LeaderLeaseRequest::lease() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.LeaderLeaseRequest.lease)
   return lease_ != NULL ? *lease_ : *default_instance_->lease_;
 }
- ::cockroach::roachpb::Lease* LeaderLeaseRequest::mutable_lease() {
+::cockroach::roachpb::Lease* LeaderLeaseRequest::mutable_lease() {
   set_has_lease();
   if (lease_ == NULL) {
     lease_ = new ::cockroach::roachpb::Lease;
@@ -17641,13 +17641,13 @@ void LeaderLeaseRequest::clear_lease() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LeaderLeaseRequest.lease)
   return lease_;
 }
- ::cockroach::roachpb::Lease* LeaderLeaseRequest::release_lease() {
+::cockroach::roachpb::Lease* LeaderLeaseRequest::release_lease() {
   clear_has_lease();
   ::cockroach::roachpb::Lease* temp = lease_;
   lease_ = NULL;
   return temp;
 }
- void LeaderLeaseRequest::set_allocated_lease(::cockroach::roachpb::Lease* lease) {
+void LeaderLeaseRequest::set_allocated_lease(::cockroach::roachpb::Lease* lease) {
   delete lease_;
   lease_ = lease;
   if (lease) {
@@ -17912,11 +17912,11 @@ void LeaderLeaseResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::ResponseHeader& LeaderLeaseResponse::header() const {
+const ::cockroach::roachpb::ResponseHeader& LeaderLeaseResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.LeaderLeaseResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::ResponseHeader* LeaderLeaseResponse::mutable_header() {
+::cockroach::roachpb::ResponseHeader* LeaderLeaseResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::ResponseHeader;
@@ -17924,13 +17924,13 @@ void LeaderLeaseResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LeaderLeaseResponse.header)
   return header_;
 }
- ::cockroach::roachpb::ResponseHeader* LeaderLeaseResponse::release_header() {
+::cockroach::roachpb::ResponseHeader* LeaderLeaseResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::ResponseHeader* temp = header_;
   header_ = NULL;
   return temp;
 }
- void LeaderLeaseResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+void LeaderLeaseResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -18799,7 +18799,7 @@ void RequestUnion::SerializeWithCachedSizes(
 int RequestUnion::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 255) {
+  if (_has_bits_[0 / 32] & 255u) {
     // optional .cockroach.roachpb.GetRequest get = 1;
     if (has_get()) {
       total_size += 1 +
@@ -18857,7 +18857,7 @@ int RequestUnion::ByteSize() const {
     }
 
   }
-  if (_has_bits_[8 / 32] & 65280) {
+  if (_has_bits_[8 / 32] & 65280u) {
     // optional .cockroach.roachpb.EndTransactionRequest end_transaction = 9;
     if (has_end_transaction()) {
       total_size += 1 +
@@ -18915,7 +18915,7 @@ int RequestUnion::ByteSize() const {
     }
 
   }
-  if (_has_bits_[16 / 32] & 4128768) {
+  if (_has_bits_[16 / 32] & 4128768u) {
     // optional .cockroach.roachpb.ResolveIntentRangeRequest resolve_intent_range = 17;
     if (has_resolve_intent_range()) {
       total_size += 2 +
@@ -19135,11 +19135,11 @@ void RequestUnion::clear_get() {
   if (get_ != NULL) get_->::cockroach::roachpb::GetRequest::Clear();
   clear_has_get();
 }
- const ::cockroach::roachpb::GetRequest& RequestUnion::get() const {
+const ::cockroach::roachpb::GetRequest& RequestUnion::get() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.get)
   return get_ != NULL ? *get_ : *default_instance_->get_;
 }
- ::cockroach::roachpb::GetRequest* RequestUnion::mutable_get() {
+::cockroach::roachpb::GetRequest* RequestUnion::mutable_get() {
   set_has_get();
   if (get_ == NULL) {
     get_ = new ::cockroach::roachpb::GetRequest;
@@ -19147,13 +19147,13 @@ void RequestUnion::clear_get() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.get)
   return get_;
 }
- ::cockroach::roachpb::GetRequest* RequestUnion::release_get() {
+::cockroach::roachpb::GetRequest* RequestUnion::release_get() {
   clear_has_get();
   ::cockroach::roachpb::GetRequest* temp = get_;
   get_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_get(::cockroach::roachpb::GetRequest* get) {
+void RequestUnion::set_allocated_get(::cockroach::roachpb::GetRequest* get) {
   delete get_;
   get_ = get;
   if (get) {
@@ -19178,11 +19178,11 @@ void RequestUnion::clear_put() {
   if (put_ != NULL) put_->::cockroach::roachpb::PutRequest::Clear();
   clear_has_put();
 }
- const ::cockroach::roachpb::PutRequest& RequestUnion::put() const {
+const ::cockroach::roachpb::PutRequest& RequestUnion::put() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.put)
   return put_ != NULL ? *put_ : *default_instance_->put_;
 }
- ::cockroach::roachpb::PutRequest* RequestUnion::mutable_put() {
+::cockroach::roachpb::PutRequest* RequestUnion::mutable_put() {
   set_has_put();
   if (put_ == NULL) {
     put_ = new ::cockroach::roachpb::PutRequest;
@@ -19190,13 +19190,13 @@ void RequestUnion::clear_put() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.put)
   return put_;
 }
- ::cockroach::roachpb::PutRequest* RequestUnion::release_put() {
+::cockroach::roachpb::PutRequest* RequestUnion::release_put() {
   clear_has_put();
   ::cockroach::roachpb::PutRequest* temp = put_;
   put_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_put(::cockroach::roachpb::PutRequest* put) {
+void RequestUnion::set_allocated_put(::cockroach::roachpb::PutRequest* put) {
   delete put_;
   put_ = put;
   if (put) {
@@ -19221,11 +19221,11 @@ void RequestUnion::clear_conditional_put() {
   if (conditional_put_ != NULL) conditional_put_->::cockroach::roachpb::ConditionalPutRequest::Clear();
   clear_has_conditional_put();
 }
- const ::cockroach::roachpb::ConditionalPutRequest& RequestUnion::conditional_put() const {
+const ::cockroach::roachpb::ConditionalPutRequest& RequestUnion::conditional_put() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.conditional_put)
   return conditional_put_ != NULL ? *conditional_put_ : *default_instance_->conditional_put_;
 }
- ::cockroach::roachpb::ConditionalPutRequest* RequestUnion::mutable_conditional_put() {
+::cockroach::roachpb::ConditionalPutRequest* RequestUnion::mutable_conditional_put() {
   set_has_conditional_put();
   if (conditional_put_ == NULL) {
     conditional_put_ = new ::cockroach::roachpb::ConditionalPutRequest;
@@ -19233,13 +19233,13 @@ void RequestUnion::clear_conditional_put() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.conditional_put)
   return conditional_put_;
 }
- ::cockroach::roachpb::ConditionalPutRequest* RequestUnion::release_conditional_put() {
+::cockroach::roachpb::ConditionalPutRequest* RequestUnion::release_conditional_put() {
   clear_has_conditional_put();
   ::cockroach::roachpb::ConditionalPutRequest* temp = conditional_put_;
   conditional_put_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_conditional_put(::cockroach::roachpb::ConditionalPutRequest* conditional_put) {
+void RequestUnion::set_allocated_conditional_put(::cockroach::roachpb::ConditionalPutRequest* conditional_put) {
   delete conditional_put_;
   conditional_put_ = conditional_put;
   if (conditional_put) {
@@ -19264,11 +19264,11 @@ void RequestUnion::clear_increment() {
   if (increment_ != NULL) increment_->::cockroach::roachpb::IncrementRequest::Clear();
   clear_has_increment();
 }
- const ::cockroach::roachpb::IncrementRequest& RequestUnion::increment() const {
+const ::cockroach::roachpb::IncrementRequest& RequestUnion::increment() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.increment)
   return increment_ != NULL ? *increment_ : *default_instance_->increment_;
 }
- ::cockroach::roachpb::IncrementRequest* RequestUnion::mutable_increment() {
+::cockroach::roachpb::IncrementRequest* RequestUnion::mutable_increment() {
   set_has_increment();
   if (increment_ == NULL) {
     increment_ = new ::cockroach::roachpb::IncrementRequest;
@@ -19276,13 +19276,13 @@ void RequestUnion::clear_increment() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.increment)
   return increment_;
 }
- ::cockroach::roachpb::IncrementRequest* RequestUnion::release_increment() {
+::cockroach::roachpb::IncrementRequest* RequestUnion::release_increment() {
   clear_has_increment();
   ::cockroach::roachpb::IncrementRequest* temp = increment_;
   increment_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_increment(::cockroach::roachpb::IncrementRequest* increment) {
+void RequestUnion::set_allocated_increment(::cockroach::roachpb::IncrementRequest* increment) {
   delete increment_;
   increment_ = increment;
   if (increment) {
@@ -19307,11 +19307,11 @@ void RequestUnion::clear_delete_() {
   if (delete__ != NULL) delete__->::cockroach::roachpb::DeleteRequest::Clear();
   clear_has_delete_();
 }
- const ::cockroach::roachpb::DeleteRequest& RequestUnion::delete_() const {
+const ::cockroach::roachpb::DeleteRequest& RequestUnion::delete_() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.delete)
   return delete__ != NULL ? *delete__ : *default_instance_->delete__;
 }
- ::cockroach::roachpb::DeleteRequest* RequestUnion::mutable_delete_() {
+::cockroach::roachpb::DeleteRequest* RequestUnion::mutable_delete_() {
   set_has_delete_();
   if (delete__ == NULL) {
     delete__ = new ::cockroach::roachpb::DeleteRequest;
@@ -19319,13 +19319,13 @@ void RequestUnion::clear_delete_() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.delete)
   return delete__;
 }
- ::cockroach::roachpb::DeleteRequest* RequestUnion::release_delete_() {
+::cockroach::roachpb::DeleteRequest* RequestUnion::release_delete_() {
   clear_has_delete_();
   ::cockroach::roachpb::DeleteRequest* temp = delete__;
   delete__ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_delete_(::cockroach::roachpb::DeleteRequest* delete_) {
+void RequestUnion::set_allocated_delete_(::cockroach::roachpb::DeleteRequest* delete_) {
   delete delete__;
   delete__ = delete_;
   if (delete_) {
@@ -19350,11 +19350,11 @@ void RequestUnion::clear_delete_range() {
   if (delete_range_ != NULL) delete_range_->::cockroach::roachpb::DeleteRangeRequest::Clear();
   clear_has_delete_range();
 }
- const ::cockroach::roachpb::DeleteRangeRequest& RequestUnion::delete_range() const {
+const ::cockroach::roachpb::DeleteRangeRequest& RequestUnion::delete_range() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.delete_range)
   return delete_range_ != NULL ? *delete_range_ : *default_instance_->delete_range_;
 }
- ::cockroach::roachpb::DeleteRangeRequest* RequestUnion::mutable_delete_range() {
+::cockroach::roachpb::DeleteRangeRequest* RequestUnion::mutable_delete_range() {
   set_has_delete_range();
   if (delete_range_ == NULL) {
     delete_range_ = new ::cockroach::roachpb::DeleteRangeRequest;
@@ -19362,13 +19362,13 @@ void RequestUnion::clear_delete_range() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.delete_range)
   return delete_range_;
 }
- ::cockroach::roachpb::DeleteRangeRequest* RequestUnion::release_delete_range() {
+::cockroach::roachpb::DeleteRangeRequest* RequestUnion::release_delete_range() {
   clear_has_delete_range();
   ::cockroach::roachpb::DeleteRangeRequest* temp = delete_range_;
   delete_range_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_delete_range(::cockroach::roachpb::DeleteRangeRequest* delete_range) {
+void RequestUnion::set_allocated_delete_range(::cockroach::roachpb::DeleteRangeRequest* delete_range) {
   delete delete_range_;
   delete_range_ = delete_range;
   if (delete_range) {
@@ -19393,11 +19393,11 @@ void RequestUnion::clear_scan() {
   if (scan_ != NULL) scan_->::cockroach::roachpb::ScanRequest::Clear();
   clear_has_scan();
 }
- const ::cockroach::roachpb::ScanRequest& RequestUnion::scan() const {
+const ::cockroach::roachpb::ScanRequest& RequestUnion::scan() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.scan)
   return scan_ != NULL ? *scan_ : *default_instance_->scan_;
 }
- ::cockroach::roachpb::ScanRequest* RequestUnion::mutable_scan() {
+::cockroach::roachpb::ScanRequest* RequestUnion::mutable_scan() {
   set_has_scan();
   if (scan_ == NULL) {
     scan_ = new ::cockroach::roachpb::ScanRequest;
@@ -19405,13 +19405,13 @@ void RequestUnion::clear_scan() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.scan)
   return scan_;
 }
- ::cockroach::roachpb::ScanRequest* RequestUnion::release_scan() {
+::cockroach::roachpb::ScanRequest* RequestUnion::release_scan() {
   clear_has_scan();
   ::cockroach::roachpb::ScanRequest* temp = scan_;
   scan_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_scan(::cockroach::roachpb::ScanRequest* scan) {
+void RequestUnion::set_allocated_scan(::cockroach::roachpb::ScanRequest* scan) {
   delete scan_;
   scan_ = scan;
   if (scan) {
@@ -19436,11 +19436,11 @@ void RequestUnion::clear_begin_transaction() {
   if (begin_transaction_ != NULL) begin_transaction_->::cockroach::roachpb::BeginTransactionRequest::Clear();
   clear_has_begin_transaction();
 }
- const ::cockroach::roachpb::BeginTransactionRequest& RequestUnion::begin_transaction() const {
+const ::cockroach::roachpb::BeginTransactionRequest& RequestUnion::begin_transaction() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.begin_transaction)
   return begin_transaction_ != NULL ? *begin_transaction_ : *default_instance_->begin_transaction_;
 }
- ::cockroach::roachpb::BeginTransactionRequest* RequestUnion::mutable_begin_transaction() {
+::cockroach::roachpb::BeginTransactionRequest* RequestUnion::mutable_begin_transaction() {
   set_has_begin_transaction();
   if (begin_transaction_ == NULL) {
     begin_transaction_ = new ::cockroach::roachpb::BeginTransactionRequest;
@@ -19448,13 +19448,13 @@ void RequestUnion::clear_begin_transaction() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.begin_transaction)
   return begin_transaction_;
 }
- ::cockroach::roachpb::BeginTransactionRequest* RequestUnion::release_begin_transaction() {
+::cockroach::roachpb::BeginTransactionRequest* RequestUnion::release_begin_transaction() {
   clear_has_begin_transaction();
   ::cockroach::roachpb::BeginTransactionRequest* temp = begin_transaction_;
   begin_transaction_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_begin_transaction(::cockroach::roachpb::BeginTransactionRequest* begin_transaction) {
+void RequestUnion::set_allocated_begin_transaction(::cockroach::roachpb::BeginTransactionRequest* begin_transaction) {
   delete begin_transaction_;
   begin_transaction_ = begin_transaction;
   if (begin_transaction) {
@@ -19479,11 +19479,11 @@ void RequestUnion::clear_end_transaction() {
   if (end_transaction_ != NULL) end_transaction_->::cockroach::roachpb::EndTransactionRequest::Clear();
   clear_has_end_transaction();
 }
- const ::cockroach::roachpb::EndTransactionRequest& RequestUnion::end_transaction() const {
+const ::cockroach::roachpb::EndTransactionRequest& RequestUnion::end_transaction() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.end_transaction)
   return end_transaction_ != NULL ? *end_transaction_ : *default_instance_->end_transaction_;
 }
- ::cockroach::roachpb::EndTransactionRequest* RequestUnion::mutable_end_transaction() {
+::cockroach::roachpb::EndTransactionRequest* RequestUnion::mutable_end_transaction() {
   set_has_end_transaction();
   if (end_transaction_ == NULL) {
     end_transaction_ = new ::cockroach::roachpb::EndTransactionRequest;
@@ -19491,13 +19491,13 @@ void RequestUnion::clear_end_transaction() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.end_transaction)
   return end_transaction_;
 }
- ::cockroach::roachpb::EndTransactionRequest* RequestUnion::release_end_transaction() {
+::cockroach::roachpb::EndTransactionRequest* RequestUnion::release_end_transaction() {
   clear_has_end_transaction();
   ::cockroach::roachpb::EndTransactionRequest* temp = end_transaction_;
   end_transaction_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_end_transaction(::cockroach::roachpb::EndTransactionRequest* end_transaction) {
+void RequestUnion::set_allocated_end_transaction(::cockroach::roachpb::EndTransactionRequest* end_transaction) {
   delete end_transaction_;
   end_transaction_ = end_transaction;
   if (end_transaction) {
@@ -19522,11 +19522,11 @@ void RequestUnion::clear_admin_split() {
   if (admin_split_ != NULL) admin_split_->::cockroach::roachpb::AdminSplitRequest::Clear();
   clear_has_admin_split();
 }
- const ::cockroach::roachpb::AdminSplitRequest& RequestUnion::admin_split() const {
+const ::cockroach::roachpb::AdminSplitRequest& RequestUnion::admin_split() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.admin_split)
   return admin_split_ != NULL ? *admin_split_ : *default_instance_->admin_split_;
 }
- ::cockroach::roachpb::AdminSplitRequest* RequestUnion::mutable_admin_split() {
+::cockroach::roachpb::AdminSplitRequest* RequestUnion::mutable_admin_split() {
   set_has_admin_split();
   if (admin_split_ == NULL) {
     admin_split_ = new ::cockroach::roachpb::AdminSplitRequest;
@@ -19534,13 +19534,13 @@ void RequestUnion::clear_admin_split() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.admin_split)
   return admin_split_;
 }
- ::cockroach::roachpb::AdminSplitRequest* RequestUnion::release_admin_split() {
+::cockroach::roachpb::AdminSplitRequest* RequestUnion::release_admin_split() {
   clear_has_admin_split();
   ::cockroach::roachpb::AdminSplitRequest* temp = admin_split_;
   admin_split_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_admin_split(::cockroach::roachpb::AdminSplitRequest* admin_split) {
+void RequestUnion::set_allocated_admin_split(::cockroach::roachpb::AdminSplitRequest* admin_split) {
   delete admin_split_;
   admin_split_ = admin_split;
   if (admin_split) {
@@ -19565,11 +19565,11 @@ void RequestUnion::clear_admin_merge() {
   if (admin_merge_ != NULL) admin_merge_->::cockroach::roachpb::AdminMergeRequest::Clear();
   clear_has_admin_merge();
 }
- const ::cockroach::roachpb::AdminMergeRequest& RequestUnion::admin_merge() const {
+const ::cockroach::roachpb::AdminMergeRequest& RequestUnion::admin_merge() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.admin_merge)
   return admin_merge_ != NULL ? *admin_merge_ : *default_instance_->admin_merge_;
 }
- ::cockroach::roachpb::AdminMergeRequest* RequestUnion::mutable_admin_merge() {
+::cockroach::roachpb::AdminMergeRequest* RequestUnion::mutable_admin_merge() {
   set_has_admin_merge();
   if (admin_merge_ == NULL) {
     admin_merge_ = new ::cockroach::roachpb::AdminMergeRequest;
@@ -19577,13 +19577,13 @@ void RequestUnion::clear_admin_merge() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.admin_merge)
   return admin_merge_;
 }
- ::cockroach::roachpb::AdminMergeRequest* RequestUnion::release_admin_merge() {
+::cockroach::roachpb::AdminMergeRequest* RequestUnion::release_admin_merge() {
   clear_has_admin_merge();
   ::cockroach::roachpb::AdminMergeRequest* temp = admin_merge_;
   admin_merge_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_admin_merge(::cockroach::roachpb::AdminMergeRequest* admin_merge) {
+void RequestUnion::set_allocated_admin_merge(::cockroach::roachpb::AdminMergeRequest* admin_merge) {
   delete admin_merge_;
   admin_merge_ = admin_merge;
   if (admin_merge) {
@@ -19608,11 +19608,11 @@ void RequestUnion::clear_heartbeat_txn() {
   if (heartbeat_txn_ != NULL) heartbeat_txn_->::cockroach::roachpb::HeartbeatTxnRequest::Clear();
   clear_has_heartbeat_txn();
 }
- const ::cockroach::roachpb::HeartbeatTxnRequest& RequestUnion::heartbeat_txn() const {
+const ::cockroach::roachpb::HeartbeatTxnRequest& RequestUnion::heartbeat_txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.heartbeat_txn)
   return heartbeat_txn_ != NULL ? *heartbeat_txn_ : *default_instance_->heartbeat_txn_;
 }
- ::cockroach::roachpb::HeartbeatTxnRequest* RequestUnion::mutable_heartbeat_txn() {
+::cockroach::roachpb::HeartbeatTxnRequest* RequestUnion::mutable_heartbeat_txn() {
   set_has_heartbeat_txn();
   if (heartbeat_txn_ == NULL) {
     heartbeat_txn_ = new ::cockroach::roachpb::HeartbeatTxnRequest;
@@ -19620,13 +19620,13 @@ void RequestUnion::clear_heartbeat_txn() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.heartbeat_txn)
   return heartbeat_txn_;
 }
- ::cockroach::roachpb::HeartbeatTxnRequest* RequestUnion::release_heartbeat_txn() {
+::cockroach::roachpb::HeartbeatTxnRequest* RequestUnion::release_heartbeat_txn() {
   clear_has_heartbeat_txn();
   ::cockroach::roachpb::HeartbeatTxnRequest* temp = heartbeat_txn_;
   heartbeat_txn_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_heartbeat_txn(::cockroach::roachpb::HeartbeatTxnRequest* heartbeat_txn) {
+void RequestUnion::set_allocated_heartbeat_txn(::cockroach::roachpb::HeartbeatTxnRequest* heartbeat_txn) {
   delete heartbeat_txn_;
   heartbeat_txn_ = heartbeat_txn;
   if (heartbeat_txn) {
@@ -19651,11 +19651,11 @@ void RequestUnion::clear_gc() {
   if (gc_ != NULL) gc_->::cockroach::roachpb::GCRequest::Clear();
   clear_has_gc();
 }
- const ::cockroach::roachpb::GCRequest& RequestUnion::gc() const {
+const ::cockroach::roachpb::GCRequest& RequestUnion::gc() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.gc)
   return gc_ != NULL ? *gc_ : *default_instance_->gc_;
 }
- ::cockroach::roachpb::GCRequest* RequestUnion::mutable_gc() {
+::cockroach::roachpb::GCRequest* RequestUnion::mutable_gc() {
   set_has_gc();
   if (gc_ == NULL) {
     gc_ = new ::cockroach::roachpb::GCRequest;
@@ -19663,13 +19663,13 @@ void RequestUnion::clear_gc() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.gc)
   return gc_;
 }
- ::cockroach::roachpb::GCRequest* RequestUnion::release_gc() {
+::cockroach::roachpb::GCRequest* RequestUnion::release_gc() {
   clear_has_gc();
   ::cockroach::roachpb::GCRequest* temp = gc_;
   gc_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_gc(::cockroach::roachpb::GCRequest* gc) {
+void RequestUnion::set_allocated_gc(::cockroach::roachpb::GCRequest* gc) {
   delete gc_;
   gc_ = gc;
   if (gc) {
@@ -19694,11 +19694,11 @@ void RequestUnion::clear_push_txn() {
   if (push_txn_ != NULL) push_txn_->::cockroach::roachpb::PushTxnRequest::Clear();
   clear_has_push_txn();
 }
- const ::cockroach::roachpb::PushTxnRequest& RequestUnion::push_txn() const {
+const ::cockroach::roachpb::PushTxnRequest& RequestUnion::push_txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.push_txn)
   return push_txn_ != NULL ? *push_txn_ : *default_instance_->push_txn_;
 }
- ::cockroach::roachpb::PushTxnRequest* RequestUnion::mutable_push_txn() {
+::cockroach::roachpb::PushTxnRequest* RequestUnion::mutable_push_txn() {
   set_has_push_txn();
   if (push_txn_ == NULL) {
     push_txn_ = new ::cockroach::roachpb::PushTxnRequest;
@@ -19706,13 +19706,13 @@ void RequestUnion::clear_push_txn() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.push_txn)
   return push_txn_;
 }
- ::cockroach::roachpb::PushTxnRequest* RequestUnion::release_push_txn() {
+::cockroach::roachpb::PushTxnRequest* RequestUnion::release_push_txn() {
   clear_has_push_txn();
   ::cockroach::roachpb::PushTxnRequest* temp = push_txn_;
   push_txn_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_push_txn(::cockroach::roachpb::PushTxnRequest* push_txn) {
+void RequestUnion::set_allocated_push_txn(::cockroach::roachpb::PushTxnRequest* push_txn) {
   delete push_txn_;
   push_txn_ = push_txn;
   if (push_txn) {
@@ -19737,11 +19737,11 @@ void RequestUnion::clear_range_lookup() {
   if (range_lookup_ != NULL) range_lookup_->::cockroach::roachpb::RangeLookupRequest::Clear();
   clear_has_range_lookup();
 }
- const ::cockroach::roachpb::RangeLookupRequest& RequestUnion::range_lookup() const {
+const ::cockroach::roachpb::RangeLookupRequest& RequestUnion::range_lookup() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.range_lookup)
   return range_lookup_ != NULL ? *range_lookup_ : *default_instance_->range_lookup_;
 }
- ::cockroach::roachpb::RangeLookupRequest* RequestUnion::mutable_range_lookup() {
+::cockroach::roachpb::RangeLookupRequest* RequestUnion::mutable_range_lookup() {
   set_has_range_lookup();
   if (range_lookup_ == NULL) {
     range_lookup_ = new ::cockroach::roachpb::RangeLookupRequest;
@@ -19749,13 +19749,13 @@ void RequestUnion::clear_range_lookup() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.range_lookup)
   return range_lookup_;
 }
- ::cockroach::roachpb::RangeLookupRequest* RequestUnion::release_range_lookup() {
+::cockroach::roachpb::RangeLookupRequest* RequestUnion::release_range_lookup() {
   clear_has_range_lookup();
   ::cockroach::roachpb::RangeLookupRequest* temp = range_lookup_;
   range_lookup_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_range_lookup(::cockroach::roachpb::RangeLookupRequest* range_lookup) {
+void RequestUnion::set_allocated_range_lookup(::cockroach::roachpb::RangeLookupRequest* range_lookup) {
   delete range_lookup_;
   range_lookup_ = range_lookup;
   if (range_lookup) {
@@ -19780,11 +19780,11 @@ void RequestUnion::clear_resolve_intent() {
   if (resolve_intent_ != NULL) resolve_intent_->::cockroach::roachpb::ResolveIntentRequest::Clear();
   clear_has_resolve_intent();
 }
- const ::cockroach::roachpb::ResolveIntentRequest& RequestUnion::resolve_intent() const {
+const ::cockroach::roachpb::ResolveIntentRequest& RequestUnion::resolve_intent() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.resolve_intent)
   return resolve_intent_ != NULL ? *resolve_intent_ : *default_instance_->resolve_intent_;
 }
- ::cockroach::roachpb::ResolveIntentRequest* RequestUnion::mutable_resolve_intent() {
+::cockroach::roachpb::ResolveIntentRequest* RequestUnion::mutable_resolve_intent() {
   set_has_resolve_intent();
   if (resolve_intent_ == NULL) {
     resolve_intent_ = new ::cockroach::roachpb::ResolveIntentRequest;
@@ -19792,13 +19792,13 @@ void RequestUnion::clear_resolve_intent() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.resolve_intent)
   return resolve_intent_;
 }
- ::cockroach::roachpb::ResolveIntentRequest* RequestUnion::release_resolve_intent() {
+::cockroach::roachpb::ResolveIntentRequest* RequestUnion::release_resolve_intent() {
   clear_has_resolve_intent();
   ::cockroach::roachpb::ResolveIntentRequest* temp = resolve_intent_;
   resolve_intent_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_resolve_intent(::cockroach::roachpb::ResolveIntentRequest* resolve_intent) {
+void RequestUnion::set_allocated_resolve_intent(::cockroach::roachpb::ResolveIntentRequest* resolve_intent) {
   delete resolve_intent_;
   resolve_intent_ = resolve_intent;
   if (resolve_intent) {
@@ -19823,11 +19823,11 @@ void RequestUnion::clear_resolve_intent_range() {
   if (resolve_intent_range_ != NULL) resolve_intent_range_->::cockroach::roachpb::ResolveIntentRangeRequest::Clear();
   clear_has_resolve_intent_range();
 }
- const ::cockroach::roachpb::ResolveIntentRangeRequest& RequestUnion::resolve_intent_range() const {
+const ::cockroach::roachpb::ResolveIntentRangeRequest& RequestUnion::resolve_intent_range() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.resolve_intent_range)
   return resolve_intent_range_ != NULL ? *resolve_intent_range_ : *default_instance_->resolve_intent_range_;
 }
- ::cockroach::roachpb::ResolveIntentRangeRequest* RequestUnion::mutable_resolve_intent_range() {
+::cockroach::roachpb::ResolveIntentRangeRequest* RequestUnion::mutable_resolve_intent_range() {
   set_has_resolve_intent_range();
   if (resolve_intent_range_ == NULL) {
     resolve_intent_range_ = new ::cockroach::roachpb::ResolveIntentRangeRequest;
@@ -19835,13 +19835,13 @@ void RequestUnion::clear_resolve_intent_range() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.resolve_intent_range)
   return resolve_intent_range_;
 }
- ::cockroach::roachpb::ResolveIntentRangeRequest* RequestUnion::release_resolve_intent_range() {
+::cockroach::roachpb::ResolveIntentRangeRequest* RequestUnion::release_resolve_intent_range() {
   clear_has_resolve_intent_range();
   ::cockroach::roachpb::ResolveIntentRangeRequest* temp = resolve_intent_range_;
   resolve_intent_range_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_resolve_intent_range(::cockroach::roachpb::ResolveIntentRangeRequest* resolve_intent_range) {
+void RequestUnion::set_allocated_resolve_intent_range(::cockroach::roachpb::ResolveIntentRangeRequest* resolve_intent_range) {
   delete resolve_intent_range_;
   resolve_intent_range_ = resolve_intent_range;
   if (resolve_intent_range) {
@@ -19866,11 +19866,11 @@ void RequestUnion::clear_merge() {
   if (merge_ != NULL) merge_->::cockroach::roachpb::MergeRequest::Clear();
   clear_has_merge();
 }
- const ::cockroach::roachpb::MergeRequest& RequestUnion::merge() const {
+const ::cockroach::roachpb::MergeRequest& RequestUnion::merge() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.merge)
   return merge_ != NULL ? *merge_ : *default_instance_->merge_;
 }
- ::cockroach::roachpb::MergeRequest* RequestUnion::mutable_merge() {
+::cockroach::roachpb::MergeRequest* RequestUnion::mutable_merge() {
   set_has_merge();
   if (merge_ == NULL) {
     merge_ = new ::cockroach::roachpb::MergeRequest;
@@ -19878,13 +19878,13 @@ void RequestUnion::clear_merge() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.merge)
   return merge_;
 }
- ::cockroach::roachpb::MergeRequest* RequestUnion::release_merge() {
+::cockroach::roachpb::MergeRequest* RequestUnion::release_merge() {
   clear_has_merge();
   ::cockroach::roachpb::MergeRequest* temp = merge_;
   merge_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_merge(::cockroach::roachpb::MergeRequest* merge) {
+void RequestUnion::set_allocated_merge(::cockroach::roachpb::MergeRequest* merge) {
   delete merge_;
   merge_ = merge;
   if (merge) {
@@ -19909,11 +19909,11 @@ void RequestUnion::clear_truncate_log() {
   if (truncate_log_ != NULL) truncate_log_->::cockroach::roachpb::TruncateLogRequest::Clear();
   clear_has_truncate_log();
 }
- const ::cockroach::roachpb::TruncateLogRequest& RequestUnion::truncate_log() const {
+const ::cockroach::roachpb::TruncateLogRequest& RequestUnion::truncate_log() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.truncate_log)
   return truncate_log_ != NULL ? *truncate_log_ : *default_instance_->truncate_log_;
 }
- ::cockroach::roachpb::TruncateLogRequest* RequestUnion::mutable_truncate_log() {
+::cockroach::roachpb::TruncateLogRequest* RequestUnion::mutable_truncate_log() {
   set_has_truncate_log();
   if (truncate_log_ == NULL) {
     truncate_log_ = new ::cockroach::roachpb::TruncateLogRequest;
@@ -19921,13 +19921,13 @@ void RequestUnion::clear_truncate_log() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.truncate_log)
   return truncate_log_;
 }
- ::cockroach::roachpb::TruncateLogRequest* RequestUnion::release_truncate_log() {
+::cockroach::roachpb::TruncateLogRequest* RequestUnion::release_truncate_log() {
   clear_has_truncate_log();
   ::cockroach::roachpb::TruncateLogRequest* temp = truncate_log_;
   truncate_log_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_truncate_log(::cockroach::roachpb::TruncateLogRequest* truncate_log) {
+void RequestUnion::set_allocated_truncate_log(::cockroach::roachpb::TruncateLogRequest* truncate_log) {
   delete truncate_log_;
   truncate_log_ = truncate_log;
   if (truncate_log) {
@@ -19952,11 +19952,11 @@ void RequestUnion::clear_leader_lease() {
   if (leader_lease_ != NULL) leader_lease_->::cockroach::roachpb::LeaderLeaseRequest::Clear();
   clear_has_leader_lease();
 }
- const ::cockroach::roachpb::LeaderLeaseRequest& RequestUnion::leader_lease() const {
+const ::cockroach::roachpb::LeaderLeaseRequest& RequestUnion::leader_lease() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.leader_lease)
   return leader_lease_ != NULL ? *leader_lease_ : *default_instance_->leader_lease_;
 }
- ::cockroach::roachpb::LeaderLeaseRequest* RequestUnion::mutable_leader_lease() {
+::cockroach::roachpb::LeaderLeaseRequest* RequestUnion::mutable_leader_lease() {
   set_has_leader_lease();
   if (leader_lease_ == NULL) {
     leader_lease_ = new ::cockroach::roachpb::LeaderLeaseRequest;
@@ -19964,13 +19964,13 @@ void RequestUnion::clear_leader_lease() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.leader_lease)
   return leader_lease_;
 }
- ::cockroach::roachpb::LeaderLeaseRequest* RequestUnion::release_leader_lease() {
+::cockroach::roachpb::LeaderLeaseRequest* RequestUnion::release_leader_lease() {
   clear_has_leader_lease();
   ::cockroach::roachpb::LeaderLeaseRequest* temp = leader_lease_;
   leader_lease_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_leader_lease(::cockroach::roachpb::LeaderLeaseRequest* leader_lease) {
+void RequestUnion::set_allocated_leader_lease(::cockroach::roachpb::LeaderLeaseRequest* leader_lease) {
   delete leader_lease_;
   leader_lease_ = leader_lease;
   if (leader_lease) {
@@ -19995,11 +19995,11 @@ void RequestUnion::clear_reverse_scan() {
   if (reverse_scan_ != NULL) reverse_scan_->::cockroach::roachpb::ReverseScanRequest::Clear();
   clear_has_reverse_scan();
 }
- const ::cockroach::roachpb::ReverseScanRequest& RequestUnion::reverse_scan() const {
+const ::cockroach::roachpb::ReverseScanRequest& RequestUnion::reverse_scan() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.reverse_scan)
   return reverse_scan_ != NULL ? *reverse_scan_ : *default_instance_->reverse_scan_;
 }
- ::cockroach::roachpb::ReverseScanRequest* RequestUnion::mutable_reverse_scan() {
+::cockroach::roachpb::ReverseScanRequest* RequestUnion::mutable_reverse_scan() {
   set_has_reverse_scan();
   if (reverse_scan_ == NULL) {
     reverse_scan_ = new ::cockroach::roachpb::ReverseScanRequest;
@@ -20007,13 +20007,13 @@ void RequestUnion::clear_reverse_scan() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.reverse_scan)
   return reverse_scan_;
 }
- ::cockroach::roachpb::ReverseScanRequest* RequestUnion::release_reverse_scan() {
+::cockroach::roachpb::ReverseScanRequest* RequestUnion::release_reverse_scan() {
   clear_has_reverse_scan();
   ::cockroach::roachpb::ReverseScanRequest* temp = reverse_scan_;
   reverse_scan_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_reverse_scan(::cockroach::roachpb::ReverseScanRequest* reverse_scan) {
+void RequestUnion::set_allocated_reverse_scan(::cockroach::roachpb::ReverseScanRequest* reverse_scan) {
   delete reverse_scan_;
   reverse_scan_ = reverse_scan;
   if (reverse_scan) {
@@ -20038,11 +20038,11 @@ void RequestUnion::clear_noop() {
   if (noop_ != NULL) noop_->::cockroach::roachpb::NoopRequest::Clear();
   clear_has_noop();
 }
- const ::cockroach::roachpb::NoopRequest& RequestUnion::noop() const {
+const ::cockroach::roachpb::NoopRequest& RequestUnion::noop() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.noop)
   return noop_ != NULL ? *noop_ : *default_instance_->noop_;
 }
- ::cockroach::roachpb::NoopRequest* RequestUnion::mutable_noop() {
+::cockroach::roachpb::NoopRequest* RequestUnion::mutable_noop() {
   set_has_noop();
   if (noop_ == NULL) {
     noop_ = new ::cockroach::roachpb::NoopRequest;
@@ -20050,13 +20050,13 @@ void RequestUnion::clear_noop() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.noop)
   return noop_;
 }
- ::cockroach::roachpb::NoopRequest* RequestUnion::release_noop() {
+::cockroach::roachpb::NoopRequest* RequestUnion::release_noop() {
   clear_has_noop();
   ::cockroach::roachpb::NoopRequest* temp = noop_;
   noop_ = NULL;
   return temp;
 }
- void RequestUnion::set_allocated_noop(::cockroach::roachpb::NoopRequest* noop) {
+void RequestUnion::set_allocated_noop(::cockroach::roachpb::NoopRequest* noop) {
   delete noop_;
   noop_ = noop;
   if (noop) {
@@ -20925,7 +20925,7 @@ void ResponseUnion::SerializeWithCachedSizes(
 int ResponseUnion::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 255) {
+  if (_has_bits_[0 / 32] & 255u) {
     // optional .cockroach.roachpb.GetResponse get = 1;
     if (has_get()) {
       total_size += 1 +
@@ -20983,7 +20983,7 @@ int ResponseUnion::ByteSize() const {
     }
 
   }
-  if (_has_bits_[8 / 32] & 65280) {
+  if (_has_bits_[8 / 32] & 65280u) {
     // optional .cockroach.roachpb.EndTransactionResponse end_transaction = 9;
     if (has_end_transaction()) {
       total_size += 1 +
@@ -21041,7 +21041,7 @@ int ResponseUnion::ByteSize() const {
     }
 
   }
-  if (_has_bits_[16 / 32] & 4128768) {
+  if (_has_bits_[16 / 32] & 4128768u) {
     // optional .cockroach.roachpb.ResolveIntentRangeResponse resolve_intent_range = 17;
     if (has_resolve_intent_range()) {
       total_size += 2 +
@@ -21261,11 +21261,11 @@ void ResponseUnion::clear_get() {
   if (get_ != NULL) get_->::cockroach::roachpb::GetResponse::Clear();
   clear_has_get();
 }
- const ::cockroach::roachpb::GetResponse& ResponseUnion::get() const {
+const ::cockroach::roachpb::GetResponse& ResponseUnion::get() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.get)
   return get_ != NULL ? *get_ : *default_instance_->get_;
 }
- ::cockroach::roachpb::GetResponse* ResponseUnion::mutable_get() {
+::cockroach::roachpb::GetResponse* ResponseUnion::mutable_get() {
   set_has_get();
   if (get_ == NULL) {
     get_ = new ::cockroach::roachpb::GetResponse;
@@ -21273,13 +21273,13 @@ void ResponseUnion::clear_get() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.get)
   return get_;
 }
- ::cockroach::roachpb::GetResponse* ResponseUnion::release_get() {
+::cockroach::roachpb::GetResponse* ResponseUnion::release_get() {
   clear_has_get();
   ::cockroach::roachpb::GetResponse* temp = get_;
   get_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_get(::cockroach::roachpb::GetResponse* get) {
+void ResponseUnion::set_allocated_get(::cockroach::roachpb::GetResponse* get) {
   delete get_;
   get_ = get;
   if (get) {
@@ -21304,11 +21304,11 @@ void ResponseUnion::clear_put() {
   if (put_ != NULL) put_->::cockroach::roachpb::PutResponse::Clear();
   clear_has_put();
 }
- const ::cockroach::roachpb::PutResponse& ResponseUnion::put() const {
+const ::cockroach::roachpb::PutResponse& ResponseUnion::put() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.put)
   return put_ != NULL ? *put_ : *default_instance_->put_;
 }
- ::cockroach::roachpb::PutResponse* ResponseUnion::mutable_put() {
+::cockroach::roachpb::PutResponse* ResponseUnion::mutable_put() {
   set_has_put();
   if (put_ == NULL) {
     put_ = new ::cockroach::roachpb::PutResponse;
@@ -21316,13 +21316,13 @@ void ResponseUnion::clear_put() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.put)
   return put_;
 }
- ::cockroach::roachpb::PutResponse* ResponseUnion::release_put() {
+::cockroach::roachpb::PutResponse* ResponseUnion::release_put() {
   clear_has_put();
   ::cockroach::roachpb::PutResponse* temp = put_;
   put_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_put(::cockroach::roachpb::PutResponse* put) {
+void ResponseUnion::set_allocated_put(::cockroach::roachpb::PutResponse* put) {
   delete put_;
   put_ = put;
   if (put) {
@@ -21347,11 +21347,11 @@ void ResponseUnion::clear_conditional_put() {
   if (conditional_put_ != NULL) conditional_put_->::cockroach::roachpb::ConditionalPutResponse::Clear();
   clear_has_conditional_put();
 }
- const ::cockroach::roachpb::ConditionalPutResponse& ResponseUnion::conditional_put() const {
+const ::cockroach::roachpb::ConditionalPutResponse& ResponseUnion::conditional_put() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.conditional_put)
   return conditional_put_ != NULL ? *conditional_put_ : *default_instance_->conditional_put_;
 }
- ::cockroach::roachpb::ConditionalPutResponse* ResponseUnion::mutable_conditional_put() {
+::cockroach::roachpb::ConditionalPutResponse* ResponseUnion::mutable_conditional_put() {
   set_has_conditional_put();
   if (conditional_put_ == NULL) {
     conditional_put_ = new ::cockroach::roachpb::ConditionalPutResponse;
@@ -21359,13 +21359,13 @@ void ResponseUnion::clear_conditional_put() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.conditional_put)
   return conditional_put_;
 }
- ::cockroach::roachpb::ConditionalPutResponse* ResponseUnion::release_conditional_put() {
+::cockroach::roachpb::ConditionalPutResponse* ResponseUnion::release_conditional_put() {
   clear_has_conditional_put();
   ::cockroach::roachpb::ConditionalPutResponse* temp = conditional_put_;
   conditional_put_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_conditional_put(::cockroach::roachpb::ConditionalPutResponse* conditional_put) {
+void ResponseUnion::set_allocated_conditional_put(::cockroach::roachpb::ConditionalPutResponse* conditional_put) {
   delete conditional_put_;
   conditional_put_ = conditional_put;
   if (conditional_put) {
@@ -21390,11 +21390,11 @@ void ResponseUnion::clear_increment() {
   if (increment_ != NULL) increment_->::cockroach::roachpb::IncrementResponse::Clear();
   clear_has_increment();
 }
- const ::cockroach::roachpb::IncrementResponse& ResponseUnion::increment() const {
+const ::cockroach::roachpb::IncrementResponse& ResponseUnion::increment() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.increment)
   return increment_ != NULL ? *increment_ : *default_instance_->increment_;
 }
- ::cockroach::roachpb::IncrementResponse* ResponseUnion::mutable_increment() {
+::cockroach::roachpb::IncrementResponse* ResponseUnion::mutable_increment() {
   set_has_increment();
   if (increment_ == NULL) {
     increment_ = new ::cockroach::roachpb::IncrementResponse;
@@ -21402,13 +21402,13 @@ void ResponseUnion::clear_increment() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.increment)
   return increment_;
 }
- ::cockroach::roachpb::IncrementResponse* ResponseUnion::release_increment() {
+::cockroach::roachpb::IncrementResponse* ResponseUnion::release_increment() {
   clear_has_increment();
   ::cockroach::roachpb::IncrementResponse* temp = increment_;
   increment_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_increment(::cockroach::roachpb::IncrementResponse* increment) {
+void ResponseUnion::set_allocated_increment(::cockroach::roachpb::IncrementResponse* increment) {
   delete increment_;
   increment_ = increment;
   if (increment) {
@@ -21433,11 +21433,11 @@ void ResponseUnion::clear_delete_() {
   if (delete__ != NULL) delete__->::cockroach::roachpb::DeleteResponse::Clear();
   clear_has_delete_();
 }
- const ::cockroach::roachpb::DeleteResponse& ResponseUnion::delete_() const {
+const ::cockroach::roachpb::DeleteResponse& ResponseUnion::delete_() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.delete)
   return delete__ != NULL ? *delete__ : *default_instance_->delete__;
 }
- ::cockroach::roachpb::DeleteResponse* ResponseUnion::mutable_delete_() {
+::cockroach::roachpb::DeleteResponse* ResponseUnion::mutable_delete_() {
   set_has_delete_();
   if (delete__ == NULL) {
     delete__ = new ::cockroach::roachpb::DeleteResponse;
@@ -21445,13 +21445,13 @@ void ResponseUnion::clear_delete_() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.delete)
   return delete__;
 }
- ::cockroach::roachpb::DeleteResponse* ResponseUnion::release_delete_() {
+::cockroach::roachpb::DeleteResponse* ResponseUnion::release_delete_() {
   clear_has_delete_();
   ::cockroach::roachpb::DeleteResponse* temp = delete__;
   delete__ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_delete_(::cockroach::roachpb::DeleteResponse* delete_) {
+void ResponseUnion::set_allocated_delete_(::cockroach::roachpb::DeleteResponse* delete_) {
   delete delete__;
   delete__ = delete_;
   if (delete_) {
@@ -21476,11 +21476,11 @@ void ResponseUnion::clear_delete_range() {
   if (delete_range_ != NULL) delete_range_->::cockroach::roachpb::DeleteRangeResponse::Clear();
   clear_has_delete_range();
 }
- const ::cockroach::roachpb::DeleteRangeResponse& ResponseUnion::delete_range() const {
+const ::cockroach::roachpb::DeleteRangeResponse& ResponseUnion::delete_range() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.delete_range)
   return delete_range_ != NULL ? *delete_range_ : *default_instance_->delete_range_;
 }
- ::cockroach::roachpb::DeleteRangeResponse* ResponseUnion::mutable_delete_range() {
+::cockroach::roachpb::DeleteRangeResponse* ResponseUnion::mutable_delete_range() {
   set_has_delete_range();
   if (delete_range_ == NULL) {
     delete_range_ = new ::cockroach::roachpb::DeleteRangeResponse;
@@ -21488,13 +21488,13 @@ void ResponseUnion::clear_delete_range() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.delete_range)
   return delete_range_;
 }
- ::cockroach::roachpb::DeleteRangeResponse* ResponseUnion::release_delete_range() {
+::cockroach::roachpb::DeleteRangeResponse* ResponseUnion::release_delete_range() {
   clear_has_delete_range();
   ::cockroach::roachpb::DeleteRangeResponse* temp = delete_range_;
   delete_range_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_delete_range(::cockroach::roachpb::DeleteRangeResponse* delete_range) {
+void ResponseUnion::set_allocated_delete_range(::cockroach::roachpb::DeleteRangeResponse* delete_range) {
   delete delete_range_;
   delete_range_ = delete_range;
   if (delete_range) {
@@ -21519,11 +21519,11 @@ void ResponseUnion::clear_scan() {
   if (scan_ != NULL) scan_->::cockroach::roachpb::ScanResponse::Clear();
   clear_has_scan();
 }
- const ::cockroach::roachpb::ScanResponse& ResponseUnion::scan() const {
+const ::cockroach::roachpb::ScanResponse& ResponseUnion::scan() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.scan)
   return scan_ != NULL ? *scan_ : *default_instance_->scan_;
 }
- ::cockroach::roachpb::ScanResponse* ResponseUnion::mutable_scan() {
+::cockroach::roachpb::ScanResponse* ResponseUnion::mutable_scan() {
   set_has_scan();
   if (scan_ == NULL) {
     scan_ = new ::cockroach::roachpb::ScanResponse;
@@ -21531,13 +21531,13 @@ void ResponseUnion::clear_scan() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.scan)
   return scan_;
 }
- ::cockroach::roachpb::ScanResponse* ResponseUnion::release_scan() {
+::cockroach::roachpb::ScanResponse* ResponseUnion::release_scan() {
   clear_has_scan();
   ::cockroach::roachpb::ScanResponse* temp = scan_;
   scan_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_scan(::cockroach::roachpb::ScanResponse* scan) {
+void ResponseUnion::set_allocated_scan(::cockroach::roachpb::ScanResponse* scan) {
   delete scan_;
   scan_ = scan;
   if (scan) {
@@ -21562,11 +21562,11 @@ void ResponseUnion::clear_begin_transaction() {
   if (begin_transaction_ != NULL) begin_transaction_->::cockroach::roachpb::BeginTransactionResponse::Clear();
   clear_has_begin_transaction();
 }
- const ::cockroach::roachpb::BeginTransactionResponse& ResponseUnion::begin_transaction() const {
+const ::cockroach::roachpb::BeginTransactionResponse& ResponseUnion::begin_transaction() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.begin_transaction)
   return begin_transaction_ != NULL ? *begin_transaction_ : *default_instance_->begin_transaction_;
 }
- ::cockroach::roachpb::BeginTransactionResponse* ResponseUnion::mutable_begin_transaction() {
+::cockroach::roachpb::BeginTransactionResponse* ResponseUnion::mutable_begin_transaction() {
   set_has_begin_transaction();
   if (begin_transaction_ == NULL) {
     begin_transaction_ = new ::cockroach::roachpb::BeginTransactionResponse;
@@ -21574,13 +21574,13 @@ void ResponseUnion::clear_begin_transaction() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.begin_transaction)
   return begin_transaction_;
 }
- ::cockroach::roachpb::BeginTransactionResponse* ResponseUnion::release_begin_transaction() {
+::cockroach::roachpb::BeginTransactionResponse* ResponseUnion::release_begin_transaction() {
   clear_has_begin_transaction();
   ::cockroach::roachpb::BeginTransactionResponse* temp = begin_transaction_;
   begin_transaction_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_begin_transaction(::cockroach::roachpb::BeginTransactionResponse* begin_transaction) {
+void ResponseUnion::set_allocated_begin_transaction(::cockroach::roachpb::BeginTransactionResponse* begin_transaction) {
   delete begin_transaction_;
   begin_transaction_ = begin_transaction;
   if (begin_transaction) {
@@ -21605,11 +21605,11 @@ void ResponseUnion::clear_end_transaction() {
   if (end_transaction_ != NULL) end_transaction_->::cockroach::roachpb::EndTransactionResponse::Clear();
   clear_has_end_transaction();
 }
- const ::cockroach::roachpb::EndTransactionResponse& ResponseUnion::end_transaction() const {
+const ::cockroach::roachpb::EndTransactionResponse& ResponseUnion::end_transaction() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.end_transaction)
   return end_transaction_ != NULL ? *end_transaction_ : *default_instance_->end_transaction_;
 }
- ::cockroach::roachpb::EndTransactionResponse* ResponseUnion::mutable_end_transaction() {
+::cockroach::roachpb::EndTransactionResponse* ResponseUnion::mutable_end_transaction() {
   set_has_end_transaction();
   if (end_transaction_ == NULL) {
     end_transaction_ = new ::cockroach::roachpb::EndTransactionResponse;
@@ -21617,13 +21617,13 @@ void ResponseUnion::clear_end_transaction() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.end_transaction)
   return end_transaction_;
 }
- ::cockroach::roachpb::EndTransactionResponse* ResponseUnion::release_end_transaction() {
+::cockroach::roachpb::EndTransactionResponse* ResponseUnion::release_end_transaction() {
   clear_has_end_transaction();
   ::cockroach::roachpb::EndTransactionResponse* temp = end_transaction_;
   end_transaction_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_end_transaction(::cockroach::roachpb::EndTransactionResponse* end_transaction) {
+void ResponseUnion::set_allocated_end_transaction(::cockroach::roachpb::EndTransactionResponse* end_transaction) {
   delete end_transaction_;
   end_transaction_ = end_transaction;
   if (end_transaction) {
@@ -21648,11 +21648,11 @@ void ResponseUnion::clear_admin_split() {
   if (admin_split_ != NULL) admin_split_->::cockroach::roachpb::AdminSplitResponse::Clear();
   clear_has_admin_split();
 }
- const ::cockroach::roachpb::AdminSplitResponse& ResponseUnion::admin_split() const {
+const ::cockroach::roachpb::AdminSplitResponse& ResponseUnion::admin_split() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.admin_split)
   return admin_split_ != NULL ? *admin_split_ : *default_instance_->admin_split_;
 }
- ::cockroach::roachpb::AdminSplitResponse* ResponseUnion::mutable_admin_split() {
+::cockroach::roachpb::AdminSplitResponse* ResponseUnion::mutable_admin_split() {
   set_has_admin_split();
   if (admin_split_ == NULL) {
     admin_split_ = new ::cockroach::roachpb::AdminSplitResponse;
@@ -21660,13 +21660,13 @@ void ResponseUnion::clear_admin_split() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.admin_split)
   return admin_split_;
 }
- ::cockroach::roachpb::AdminSplitResponse* ResponseUnion::release_admin_split() {
+::cockroach::roachpb::AdminSplitResponse* ResponseUnion::release_admin_split() {
   clear_has_admin_split();
   ::cockroach::roachpb::AdminSplitResponse* temp = admin_split_;
   admin_split_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_admin_split(::cockroach::roachpb::AdminSplitResponse* admin_split) {
+void ResponseUnion::set_allocated_admin_split(::cockroach::roachpb::AdminSplitResponse* admin_split) {
   delete admin_split_;
   admin_split_ = admin_split;
   if (admin_split) {
@@ -21691,11 +21691,11 @@ void ResponseUnion::clear_admin_merge() {
   if (admin_merge_ != NULL) admin_merge_->::cockroach::roachpb::AdminMergeResponse::Clear();
   clear_has_admin_merge();
 }
- const ::cockroach::roachpb::AdminMergeResponse& ResponseUnion::admin_merge() const {
+const ::cockroach::roachpb::AdminMergeResponse& ResponseUnion::admin_merge() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.admin_merge)
   return admin_merge_ != NULL ? *admin_merge_ : *default_instance_->admin_merge_;
 }
- ::cockroach::roachpb::AdminMergeResponse* ResponseUnion::mutable_admin_merge() {
+::cockroach::roachpb::AdminMergeResponse* ResponseUnion::mutable_admin_merge() {
   set_has_admin_merge();
   if (admin_merge_ == NULL) {
     admin_merge_ = new ::cockroach::roachpb::AdminMergeResponse;
@@ -21703,13 +21703,13 @@ void ResponseUnion::clear_admin_merge() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.admin_merge)
   return admin_merge_;
 }
- ::cockroach::roachpb::AdminMergeResponse* ResponseUnion::release_admin_merge() {
+::cockroach::roachpb::AdminMergeResponse* ResponseUnion::release_admin_merge() {
   clear_has_admin_merge();
   ::cockroach::roachpb::AdminMergeResponse* temp = admin_merge_;
   admin_merge_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_admin_merge(::cockroach::roachpb::AdminMergeResponse* admin_merge) {
+void ResponseUnion::set_allocated_admin_merge(::cockroach::roachpb::AdminMergeResponse* admin_merge) {
   delete admin_merge_;
   admin_merge_ = admin_merge;
   if (admin_merge) {
@@ -21734,11 +21734,11 @@ void ResponseUnion::clear_heartbeat_txn() {
   if (heartbeat_txn_ != NULL) heartbeat_txn_->::cockroach::roachpb::HeartbeatTxnResponse::Clear();
   clear_has_heartbeat_txn();
 }
- const ::cockroach::roachpb::HeartbeatTxnResponse& ResponseUnion::heartbeat_txn() const {
+const ::cockroach::roachpb::HeartbeatTxnResponse& ResponseUnion::heartbeat_txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.heartbeat_txn)
   return heartbeat_txn_ != NULL ? *heartbeat_txn_ : *default_instance_->heartbeat_txn_;
 }
- ::cockroach::roachpb::HeartbeatTxnResponse* ResponseUnion::mutable_heartbeat_txn() {
+::cockroach::roachpb::HeartbeatTxnResponse* ResponseUnion::mutable_heartbeat_txn() {
   set_has_heartbeat_txn();
   if (heartbeat_txn_ == NULL) {
     heartbeat_txn_ = new ::cockroach::roachpb::HeartbeatTxnResponse;
@@ -21746,13 +21746,13 @@ void ResponseUnion::clear_heartbeat_txn() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.heartbeat_txn)
   return heartbeat_txn_;
 }
- ::cockroach::roachpb::HeartbeatTxnResponse* ResponseUnion::release_heartbeat_txn() {
+::cockroach::roachpb::HeartbeatTxnResponse* ResponseUnion::release_heartbeat_txn() {
   clear_has_heartbeat_txn();
   ::cockroach::roachpb::HeartbeatTxnResponse* temp = heartbeat_txn_;
   heartbeat_txn_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_heartbeat_txn(::cockroach::roachpb::HeartbeatTxnResponse* heartbeat_txn) {
+void ResponseUnion::set_allocated_heartbeat_txn(::cockroach::roachpb::HeartbeatTxnResponse* heartbeat_txn) {
   delete heartbeat_txn_;
   heartbeat_txn_ = heartbeat_txn;
   if (heartbeat_txn) {
@@ -21777,11 +21777,11 @@ void ResponseUnion::clear_gc() {
   if (gc_ != NULL) gc_->::cockroach::roachpb::GCResponse::Clear();
   clear_has_gc();
 }
- const ::cockroach::roachpb::GCResponse& ResponseUnion::gc() const {
+const ::cockroach::roachpb::GCResponse& ResponseUnion::gc() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.gc)
   return gc_ != NULL ? *gc_ : *default_instance_->gc_;
 }
- ::cockroach::roachpb::GCResponse* ResponseUnion::mutable_gc() {
+::cockroach::roachpb::GCResponse* ResponseUnion::mutable_gc() {
   set_has_gc();
   if (gc_ == NULL) {
     gc_ = new ::cockroach::roachpb::GCResponse;
@@ -21789,13 +21789,13 @@ void ResponseUnion::clear_gc() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.gc)
   return gc_;
 }
- ::cockroach::roachpb::GCResponse* ResponseUnion::release_gc() {
+::cockroach::roachpb::GCResponse* ResponseUnion::release_gc() {
   clear_has_gc();
   ::cockroach::roachpb::GCResponse* temp = gc_;
   gc_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_gc(::cockroach::roachpb::GCResponse* gc) {
+void ResponseUnion::set_allocated_gc(::cockroach::roachpb::GCResponse* gc) {
   delete gc_;
   gc_ = gc;
   if (gc) {
@@ -21820,11 +21820,11 @@ void ResponseUnion::clear_push_txn() {
   if (push_txn_ != NULL) push_txn_->::cockroach::roachpb::PushTxnResponse::Clear();
   clear_has_push_txn();
 }
- const ::cockroach::roachpb::PushTxnResponse& ResponseUnion::push_txn() const {
+const ::cockroach::roachpb::PushTxnResponse& ResponseUnion::push_txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.push_txn)
   return push_txn_ != NULL ? *push_txn_ : *default_instance_->push_txn_;
 }
- ::cockroach::roachpb::PushTxnResponse* ResponseUnion::mutable_push_txn() {
+::cockroach::roachpb::PushTxnResponse* ResponseUnion::mutable_push_txn() {
   set_has_push_txn();
   if (push_txn_ == NULL) {
     push_txn_ = new ::cockroach::roachpb::PushTxnResponse;
@@ -21832,13 +21832,13 @@ void ResponseUnion::clear_push_txn() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.push_txn)
   return push_txn_;
 }
- ::cockroach::roachpb::PushTxnResponse* ResponseUnion::release_push_txn() {
+::cockroach::roachpb::PushTxnResponse* ResponseUnion::release_push_txn() {
   clear_has_push_txn();
   ::cockroach::roachpb::PushTxnResponse* temp = push_txn_;
   push_txn_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_push_txn(::cockroach::roachpb::PushTxnResponse* push_txn) {
+void ResponseUnion::set_allocated_push_txn(::cockroach::roachpb::PushTxnResponse* push_txn) {
   delete push_txn_;
   push_txn_ = push_txn;
   if (push_txn) {
@@ -21863,11 +21863,11 @@ void ResponseUnion::clear_range_lookup() {
   if (range_lookup_ != NULL) range_lookup_->::cockroach::roachpb::RangeLookupResponse::Clear();
   clear_has_range_lookup();
 }
- const ::cockroach::roachpb::RangeLookupResponse& ResponseUnion::range_lookup() const {
+const ::cockroach::roachpb::RangeLookupResponse& ResponseUnion::range_lookup() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.range_lookup)
   return range_lookup_ != NULL ? *range_lookup_ : *default_instance_->range_lookup_;
 }
- ::cockroach::roachpb::RangeLookupResponse* ResponseUnion::mutable_range_lookup() {
+::cockroach::roachpb::RangeLookupResponse* ResponseUnion::mutable_range_lookup() {
   set_has_range_lookup();
   if (range_lookup_ == NULL) {
     range_lookup_ = new ::cockroach::roachpb::RangeLookupResponse;
@@ -21875,13 +21875,13 @@ void ResponseUnion::clear_range_lookup() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.range_lookup)
   return range_lookup_;
 }
- ::cockroach::roachpb::RangeLookupResponse* ResponseUnion::release_range_lookup() {
+::cockroach::roachpb::RangeLookupResponse* ResponseUnion::release_range_lookup() {
   clear_has_range_lookup();
   ::cockroach::roachpb::RangeLookupResponse* temp = range_lookup_;
   range_lookup_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_range_lookup(::cockroach::roachpb::RangeLookupResponse* range_lookup) {
+void ResponseUnion::set_allocated_range_lookup(::cockroach::roachpb::RangeLookupResponse* range_lookup) {
   delete range_lookup_;
   range_lookup_ = range_lookup;
   if (range_lookup) {
@@ -21906,11 +21906,11 @@ void ResponseUnion::clear_resolve_intent() {
   if (resolve_intent_ != NULL) resolve_intent_->::cockroach::roachpb::ResolveIntentResponse::Clear();
   clear_has_resolve_intent();
 }
- const ::cockroach::roachpb::ResolveIntentResponse& ResponseUnion::resolve_intent() const {
+const ::cockroach::roachpb::ResolveIntentResponse& ResponseUnion::resolve_intent() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.resolve_intent)
   return resolve_intent_ != NULL ? *resolve_intent_ : *default_instance_->resolve_intent_;
 }
- ::cockroach::roachpb::ResolveIntentResponse* ResponseUnion::mutable_resolve_intent() {
+::cockroach::roachpb::ResolveIntentResponse* ResponseUnion::mutable_resolve_intent() {
   set_has_resolve_intent();
   if (resolve_intent_ == NULL) {
     resolve_intent_ = new ::cockroach::roachpb::ResolveIntentResponse;
@@ -21918,13 +21918,13 @@ void ResponseUnion::clear_resolve_intent() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.resolve_intent)
   return resolve_intent_;
 }
- ::cockroach::roachpb::ResolveIntentResponse* ResponseUnion::release_resolve_intent() {
+::cockroach::roachpb::ResolveIntentResponse* ResponseUnion::release_resolve_intent() {
   clear_has_resolve_intent();
   ::cockroach::roachpb::ResolveIntentResponse* temp = resolve_intent_;
   resolve_intent_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_resolve_intent(::cockroach::roachpb::ResolveIntentResponse* resolve_intent) {
+void ResponseUnion::set_allocated_resolve_intent(::cockroach::roachpb::ResolveIntentResponse* resolve_intent) {
   delete resolve_intent_;
   resolve_intent_ = resolve_intent;
   if (resolve_intent) {
@@ -21949,11 +21949,11 @@ void ResponseUnion::clear_resolve_intent_range() {
   if (resolve_intent_range_ != NULL) resolve_intent_range_->::cockroach::roachpb::ResolveIntentRangeResponse::Clear();
   clear_has_resolve_intent_range();
 }
- const ::cockroach::roachpb::ResolveIntentRangeResponse& ResponseUnion::resolve_intent_range() const {
+const ::cockroach::roachpb::ResolveIntentRangeResponse& ResponseUnion::resolve_intent_range() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.resolve_intent_range)
   return resolve_intent_range_ != NULL ? *resolve_intent_range_ : *default_instance_->resolve_intent_range_;
 }
- ::cockroach::roachpb::ResolveIntentRangeResponse* ResponseUnion::mutable_resolve_intent_range() {
+::cockroach::roachpb::ResolveIntentRangeResponse* ResponseUnion::mutable_resolve_intent_range() {
   set_has_resolve_intent_range();
   if (resolve_intent_range_ == NULL) {
     resolve_intent_range_ = new ::cockroach::roachpb::ResolveIntentRangeResponse;
@@ -21961,13 +21961,13 @@ void ResponseUnion::clear_resolve_intent_range() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.resolve_intent_range)
   return resolve_intent_range_;
 }
- ::cockroach::roachpb::ResolveIntentRangeResponse* ResponseUnion::release_resolve_intent_range() {
+::cockroach::roachpb::ResolveIntentRangeResponse* ResponseUnion::release_resolve_intent_range() {
   clear_has_resolve_intent_range();
   ::cockroach::roachpb::ResolveIntentRangeResponse* temp = resolve_intent_range_;
   resolve_intent_range_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_resolve_intent_range(::cockroach::roachpb::ResolveIntentRangeResponse* resolve_intent_range) {
+void ResponseUnion::set_allocated_resolve_intent_range(::cockroach::roachpb::ResolveIntentRangeResponse* resolve_intent_range) {
   delete resolve_intent_range_;
   resolve_intent_range_ = resolve_intent_range;
   if (resolve_intent_range) {
@@ -21992,11 +21992,11 @@ void ResponseUnion::clear_merge() {
   if (merge_ != NULL) merge_->::cockroach::roachpb::MergeResponse::Clear();
   clear_has_merge();
 }
- const ::cockroach::roachpb::MergeResponse& ResponseUnion::merge() const {
+const ::cockroach::roachpb::MergeResponse& ResponseUnion::merge() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.merge)
   return merge_ != NULL ? *merge_ : *default_instance_->merge_;
 }
- ::cockroach::roachpb::MergeResponse* ResponseUnion::mutable_merge() {
+::cockroach::roachpb::MergeResponse* ResponseUnion::mutable_merge() {
   set_has_merge();
   if (merge_ == NULL) {
     merge_ = new ::cockroach::roachpb::MergeResponse;
@@ -22004,13 +22004,13 @@ void ResponseUnion::clear_merge() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.merge)
   return merge_;
 }
- ::cockroach::roachpb::MergeResponse* ResponseUnion::release_merge() {
+::cockroach::roachpb::MergeResponse* ResponseUnion::release_merge() {
   clear_has_merge();
   ::cockroach::roachpb::MergeResponse* temp = merge_;
   merge_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_merge(::cockroach::roachpb::MergeResponse* merge) {
+void ResponseUnion::set_allocated_merge(::cockroach::roachpb::MergeResponse* merge) {
   delete merge_;
   merge_ = merge;
   if (merge) {
@@ -22035,11 +22035,11 @@ void ResponseUnion::clear_truncate_log() {
   if (truncate_log_ != NULL) truncate_log_->::cockroach::roachpb::TruncateLogResponse::Clear();
   clear_has_truncate_log();
 }
- const ::cockroach::roachpb::TruncateLogResponse& ResponseUnion::truncate_log() const {
+const ::cockroach::roachpb::TruncateLogResponse& ResponseUnion::truncate_log() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.truncate_log)
   return truncate_log_ != NULL ? *truncate_log_ : *default_instance_->truncate_log_;
 }
- ::cockroach::roachpb::TruncateLogResponse* ResponseUnion::mutable_truncate_log() {
+::cockroach::roachpb::TruncateLogResponse* ResponseUnion::mutable_truncate_log() {
   set_has_truncate_log();
   if (truncate_log_ == NULL) {
     truncate_log_ = new ::cockroach::roachpb::TruncateLogResponse;
@@ -22047,13 +22047,13 @@ void ResponseUnion::clear_truncate_log() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.truncate_log)
   return truncate_log_;
 }
- ::cockroach::roachpb::TruncateLogResponse* ResponseUnion::release_truncate_log() {
+::cockroach::roachpb::TruncateLogResponse* ResponseUnion::release_truncate_log() {
   clear_has_truncate_log();
   ::cockroach::roachpb::TruncateLogResponse* temp = truncate_log_;
   truncate_log_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_truncate_log(::cockroach::roachpb::TruncateLogResponse* truncate_log) {
+void ResponseUnion::set_allocated_truncate_log(::cockroach::roachpb::TruncateLogResponse* truncate_log) {
   delete truncate_log_;
   truncate_log_ = truncate_log;
   if (truncate_log) {
@@ -22078,11 +22078,11 @@ void ResponseUnion::clear_leader_lease() {
   if (leader_lease_ != NULL) leader_lease_->::cockroach::roachpb::LeaderLeaseResponse::Clear();
   clear_has_leader_lease();
 }
- const ::cockroach::roachpb::LeaderLeaseResponse& ResponseUnion::leader_lease() const {
+const ::cockroach::roachpb::LeaderLeaseResponse& ResponseUnion::leader_lease() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.leader_lease)
   return leader_lease_ != NULL ? *leader_lease_ : *default_instance_->leader_lease_;
 }
- ::cockroach::roachpb::LeaderLeaseResponse* ResponseUnion::mutable_leader_lease() {
+::cockroach::roachpb::LeaderLeaseResponse* ResponseUnion::mutable_leader_lease() {
   set_has_leader_lease();
   if (leader_lease_ == NULL) {
     leader_lease_ = new ::cockroach::roachpb::LeaderLeaseResponse;
@@ -22090,13 +22090,13 @@ void ResponseUnion::clear_leader_lease() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.leader_lease)
   return leader_lease_;
 }
- ::cockroach::roachpb::LeaderLeaseResponse* ResponseUnion::release_leader_lease() {
+::cockroach::roachpb::LeaderLeaseResponse* ResponseUnion::release_leader_lease() {
   clear_has_leader_lease();
   ::cockroach::roachpb::LeaderLeaseResponse* temp = leader_lease_;
   leader_lease_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_leader_lease(::cockroach::roachpb::LeaderLeaseResponse* leader_lease) {
+void ResponseUnion::set_allocated_leader_lease(::cockroach::roachpb::LeaderLeaseResponse* leader_lease) {
   delete leader_lease_;
   leader_lease_ = leader_lease;
   if (leader_lease) {
@@ -22121,11 +22121,11 @@ void ResponseUnion::clear_reverse_scan() {
   if (reverse_scan_ != NULL) reverse_scan_->::cockroach::roachpb::ReverseScanResponse::Clear();
   clear_has_reverse_scan();
 }
- const ::cockroach::roachpb::ReverseScanResponse& ResponseUnion::reverse_scan() const {
+const ::cockroach::roachpb::ReverseScanResponse& ResponseUnion::reverse_scan() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.reverse_scan)
   return reverse_scan_ != NULL ? *reverse_scan_ : *default_instance_->reverse_scan_;
 }
- ::cockroach::roachpb::ReverseScanResponse* ResponseUnion::mutable_reverse_scan() {
+::cockroach::roachpb::ReverseScanResponse* ResponseUnion::mutable_reverse_scan() {
   set_has_reverse_scan();
   if (reverse_scan_ == NULL) {
     reverse_scan_ = new ::cockroach::roachpb::ReverseScanResponse;
@@ -22133,13 +22133,13 @@ void ResponseUnion::clear_reverse_scan() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.reverse_scan)
   return reverse_scan_;
 }
- ::cockroach::roachpb::ReverseScanResponse* ResponseUnion::release_reverse_scan() {
+::cockroach::roachpb::ReverseScanResponse* ResponseUnion::release_reverse_scan() {
   clear_has_reverse_scan();
   ::cockroach::roachpb::ReverseScanResponse* temp = reverse_scan_;
   reverse_scan_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_reverse_scan(::cockroach::roachpb::ReverseScanResponse* reverse_scan) {
+void ResponseUnion::set_allocated_reverse_scan(::cockroach::roachpb::ReverseScanResponse* reverse_scan) {
   delete reverse_scan_;
   reverse_scan_ = reverse_scan;
   if (reverse_scan) {
@@ -22164,11 +22164,11 @@ void ResponseUnion::clear_noop() {
   if (noop_ != NULL) noop_->::cockroach::roachpb::NoopResponse::Clear();
   clear_has_noop();
 }
- const ::cockroach::roachpb::NoopResponse& ResponseUnion::noop() const {
+const ::cockroach::roachpb::NoopResponse& ResponseUnion::noop() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.noop)
   return noop_ != NULL ? *noop_ : *default_instance_->noop_;
 }
- ::cockroach::roachpb::NoopResponse* ResponseUnion::mutable_noop() {
+::cockroach::roachpb::NoopResponse* ResponseUnion::mutable_noop() {
   set_has_noop();
   if (noop_ == NULL) {
     noop_ = new ::cockroach::roachpb::NoopResponse;
@@ -22176,13 +22176,13 @@ void ResponseUnion::clear_noop() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.noop)
   return noop_;
 }
- ::cockroach::roachpb::NoopResponse* ResponseUnion::release_noop() {
+::cockroach::roachpb::NoopResponse* ResponseUnion::release_noop() {
   clear_has_noop();
   ::cockroach::roachpb::NoopResponse* temp = noop_;
   noop_ = NULL;
   return temp;
 }
- void ResponseUnion::set_allocated_noop(::cockroach::roachpb::NoopResponse* noop) {
+void ResponseUnion::set_allocated_noop(::cockroach::roachpb::NoopResponse* noop) {
   delete noop_;
   noop_ = noop;
   if (noop) {
@@ -22511,7 +22511,7 @@ void Header::SerializeWithCachedSizes(
 int Header::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 63) {
+  if (_has_bits_[0 / 32] & 63u) {
     // optional .cockroach.roachpb.Timestamp timestamp = 1;
     if (has_timestamp()) {
       total_size += 1 +
@@ -22662,11 +22662,11 @@ void Header::clear_timestamp() {
   if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_timestamp();
 }
- const ::cockroach::roachpb::Timestamp& Header::timestamp() const {
+const ::cockroach::roachpb::Timestamp& Header::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Header.timestamp)
   return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
 }
- ::cockroach::roachpb::Timestamp* Header::mutable_timestamp() {
+::cockroach::roachpb::Timestamp* Header::mutable_timestamp() {
   set_has_timestamp();
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::roachpb::Timestamp;
@@ -22674,13 +22674,13 @@ void Header::clear_timestamp() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Header.timestamp)
   return timestamp_;
 }
- ::cockroach::roachpb::Timestamp* Header::release_timestamp() {
+::cockroach::roachpb::Timestamp* Header::release_timestamp() {
   clear_has_timestamp();
   ::cockroach::roachpb::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
 }
- void Header::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
+void Header::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
@@ -22705,11 +22705,11 @@ void Header::clear_replica() {
   if (replica_ != NULL) replica_->::cockroach::roachpb::ReplicaDescriptor::Clear();
   clear_has_replica();
 }
- const ::cockroach::roachpb::ReplicaDescriptor& Header::replica() const {
+const ::cockroach::roachpb::ReplicaDescriptor& Header::replica() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Header.replica)
   return replica_ != NULL ? *replica_ : *default_instance_->replica_;
 }
- ::cockroach::roachpb::ReplicaDescriptor* Header::mutable_replica() {
+::cockroach::roachpb::ReplicaDescriptor* Header::mutable_replica() {
   set_has_replica();
   if (replica_ == NULL) {
     replica_ = new ::cockroach::roachpb::ReplicaDescriptor;
@@ -22717,13 +22717,13 @@ void Header::clear_replica() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Header.replica)
   return replica_;
 }
- ::cockroach::roachpb::ReplicaDescriptor* Header::release_replica() {
+::cockroach::roachpb::ReplicaDescriptor* Header::release_replica() {
   clear_has_replica();
   ::cockroach::roachpb::ReplicaDescriptor* temp = replica_;
   replica_ = NULL;
   return temp;
 }
- void Header::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica) {
+void Header::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica) {
   delete replica_;
   replica_ = replica;
   if (replica) {
@@ -22796,11 +22796,11 @@ void Header::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
   clear_has_txn();
 }
- const ::cockroach::roachpb::Transaction& Header::txn() const {
+const ::cockroach::roachpb::Transaction& Header::txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Header.txn)
   return txn_ != NULL ? *txn_ : *default_instance_->txn_;
 }
- ::cockroach::roachpb::Transaction* Header::mutable_txn() {
+::cockroach::roachpb::Transaction* Header::mutable_txn() {
   set_has_txn();
   if (txn_ == NULL) {
     txn_ = new ::cockroach::roachpb::Transaction;
@@ -22808,13 +22808,13 @@ void Header::clear_txn() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Header.txn)
   return txn_;
 }
- ::cockroach::roachpb::Transaction* Header::release_txn() {
+::cockroach::roachpb::Transaction* Header::release_txn() {
   clear_has_txn();
   ::cockroach::roachpb::Transaction* temp = txn_;
   txn_ = NULL;
   return temp;
 }
- void Header::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
+void Header::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
   delete txn_;
   txn_ = txn;
   if (txn) {
@@ -23146,11 +23146,11 @@ void BatchRequest::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::Header::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::Header& BatchRequest::header() const {
+const ::cockroach::roachpb::Header& BatchRequest::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.BatchRequest.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::Header* BatchRequest::mutable_header() {
+::cockroach::roachpb::Header* BatchRequest::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::Header;
@@ -23158,13 +23158,13 @@ void BatchRequest::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.BatchRequest.header)
   return header_;
 }
- ::cockroach::roachpb::Header* BatchRequest::release_header() {
+::cockroach::roachpb::Header* BatchRequest::release_header() {
   clear_has_header();
   ::cockroach::roachpb::Header* temp = header_;
   header_ = NULL;
   return temp;
 }
- void BatchRequest::set_allocated_header(::cockroach::roachpb::Header* header) {
+void BatchRequest::set_allocated_header(::cockroach::roachpb::Header* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -23182,27 +23182,27 @@ int BatchRequest::requests_size() const {
 void BatchRequest::clear_requests() {
   requests_.Clear();
 }
- const ::cockroach::roachpb::RequestUnion& BatchRequest::requests(int index) const {
+const ::cockroach::roachpb::RequestUnion& BatchRequest::requests(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.BatchRequest.requests)
   return requests_.Get(index);
 }
- ::cockroach::roachpb::RequestUnion* BatchRequest::mutable_requests(int index) {
+::cockroach::roachpb::RequestUnion* BatchRequest::mutable_requests(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.BatchRequest.requests)
   return requests_.Mutable(index);
 }
- ::cockroach::roachpb::RequestUnion* BatchRequest::add_requests() {
+::cockroach::roachpb::RequestUnion* BatchRequest::add_requests() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.BatchRequest.requests)
   return requests_.Add();
 }
- const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RequestUnion >&
-BatchRequest::requests() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.BatchRequest.requests)
-  return requests_;
-}
- ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RequestUnion >*
+::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RequestUnion >*
 BatchRequest::mutable_requests() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.BatchRequest.requests)
   return &requests_;
+}
+const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RequestUnion >&
+BatchRequest::requests() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.BatchRequest.requests)
+  return requests_;
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
@@ -23432,7 +23432,7 @@ void BatchResponse_Header::SerializeWithCachedSizes(
 int BatchResponse_Header::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7) {
+  if (_has_bits_[0 / 32] & 7u) {
     // optional .cockroach.roachpb.Error error = 1;
     if (has_error()) {
       total_size += 1 +
@@ -23829,11 +23829,11 @@ void BatchResponse_Header::clear_error() {
   if (error_ != NULL) error_->::cockroach::roachpb::Error::Clear();
   clear_has_error();
 }
- const ::cockroach::roachpb::Error& BatchResponse_Header::error() const {
+const ::cockroach::roachpb::Error& BatchResponse_Header::error() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.BatchResponse.Header.error)
   return error_ != NULL ? *error_ : *default_instance_->error_;
 }
- ::cockroach::roachpb::Error* BatchResponse_Header::mutable_error() {
+::cockroach::roachpb::Error* BatchResponse_Header::mutable_error() {
   set_has_error();
   if (error_ == NULL) {
     error_ = new ::cockroach::roachpb::Error;
@@ -23841,13 +23841,13 @@ void BatchResponse_Header::clear_error() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.BatchResponse.Header.error)
   return error_;
 }
- ::cockroach::roachpb::Error* BatchResponse_Header::release_error() {
+::cockroach::roachpb::Error* BatchResponse_Header::release_error() {
   clear_has_error();
   ::cockroach::roachpb::Error* temp = error_;
   error_ = NULL;
   return temp;
 }
- void BatchResponse_Header::set_allocated_error(::cockroach::roachpb::Error* error) {
+void BatchResponse_Header::set_allocated_error(::cockroach::roachpb::Error* error) {
   delete error_;
   error_ = error;
   if (error) {
@@ -23872,11 +23872,11 @@ void BatchResponse_Header::clear_timestamp() {
   if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_timestamp();
 }
- const ::cockroach::roachpb::Timestamp& BatchResponse_Header::timestamp() const {
+const ::cockroach::roachpb::Timestamp& BatchResponse_Header::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.BatchResponse.Header.timestamp)
   return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
 }
- ::cockroach::roachpb::Timestamp* BatchResponse_Header::mutable_timestamp() {
+::cockroach::roachpb::Timestamp* BatchResponse_Header::mutable_timestamp() {
   set_has_timestamp();
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::roachpb::Timestamp;
@@ -23884,13 +23884,13 @@ void BatchResponse_Header::clear_timestamp() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.BatchResponse.Header.timestamp)
   return timestamp_;
 }
- ::cockroach::roachpb::Timestamp* BatchResponse_Header::release_timestamp() {
+::cockroach::roachpb::Timestamp* BatchResponse_Header::release_timestamp() {
   clear_has_timestamp();
   ::cockroach::roachpb::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
 }
- void BatchResponse_Header::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
+void BatchResponse_Header::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
@@ -23915,11 +23915,11 @@ void BatchResponse_Header::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
   clear_has_txn();
 }
- const ::cockroach::roachpb::Transaction& BatchResponse_Header::txn() const {
+const ::cockroach::roachpb::Transaction& BatchResponse_Header::txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.BatchResponse.Header.txn)
   return txn_ != NULL ? *txn_ : *default_instance_->txn_;
 }
- ::cockroach::roachpb::Transaction* BatchResponse_Header::mutable_txn() {
+::cockroach::roachpb::Transaction* BatchResponse_Header::mutable_txn() {
   set_has_txn();
   if (txn_ == NULL) {
     txn_ = new ::cockroach::roachpb::Transaction;
@@ -23927,13 +23927,13 @@ void BatchResponse_Header::clear_txn() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.BatchResponse.Header.txn)
   return txn_;
 }
- ::cockroach::roachpb::Transaction* BatchResponse_Header::release_txn() {
+::cockroach::roachpb::Transaction* BatchResponse_Header::release_txn() {
   clear_has_txn();
   ::cockroach::roachpb::Transaction* temp = txn_;
   txn_ = NULL;
   return temp;
 }
- void BatchResponse_Header::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
+void BatchResponse_Header::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
   delete txn_;
   txn_ = txn;
   if (txn) {
@@ -23962,11 +23962,11 @@ void BatchResponse::clear_header() {
   if (header_ != NULL) header_->::cockroach::roachpb::BatchResponse_Header::Clear();
   clear_has_header();
 }
- const ::cockroach::roachpb::BatchResponse_Header& BatchResponse::header() const {
+const ::cockroach::roachpb::BatchResponse_Header& BatchResponse::header() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.BatchResponse.header)
   return header_ != NULL ? *header_ : *default_instance_->header_;
 }
- ::cockroach::roachpb::BatchResponse_Header* BatchResponse::mutable_header() {
+::cockroach::roachpb::BatchResponse_Header* BatchResponse::mutable_header() {
   set_has_header();
   if (header_ == NULL) {
     header_ = new ::cockroach::roachpb::BatchResponse_Header;
@@ -23974,13 +23974,13 @@ void BatchResponse::clear_header() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.BatchResponse.header)
   return header_;
 }
- ::cockroach::roachpb::BatchResponse_Header* BatchResponse::release_header() {
+::cockroach::roachpb::BatchResponse_Header* BatchResponse::release_header() {
   clear_has_header();
   ::cockroach::roachpb::BatchResponse_Header* temp = header_;
   header_ = NULL;
   return temp;
 }
- void BatchResponse::set_allocated_header(::cockroach::roachpb::BatchResponse_Header* header) {
+void BatchResponse::set_allocated_header(::cockroach::roachpb::BatchResponse_Header* header) {
   delete header_;
   header_ = header;
   if (header) {
@@ -23998,27 +23998,27 @@ int BatchResponse::responses_size() const {
 void BatchResponse::clear_responses() {
   responses_.Clear();
 }
- const ::cockroach::roachpb::ResponseUnion& BatchResponse::responses(int index) const {
+const ::cockroach::roachpb::ResponseUnion& BatchResponse::responses(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.BatchResponse.responses)
   return responses_.Get(index);
 }
- ::cockroach::roachpb::ResponseUnion* BatchResponse::mutable_responses(int index) {
+::cockroach::roachpb::ResponseUnion* BatchResponse::mutable_responses(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.BatchResponse.responses)
   return responses_.Mutable(index);
 }
- ::cockroach::roachpb::ResponseUnion* BatchResponse::add_responses() {
+::cockroach::roachpb::ResponseUnion* BatchResponse::add_responses() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.BatchResponse.responses)
   return responses_.Add();
 }
- const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ResponseUnion >&
-BatchResponse::responses() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.BatchResponse.responses)
-  return responses_;
-}
- ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ResponseUnion >*
+::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ResponseUnion >*
 BatchResponse::mutable_responses() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.BatchResponse.responses)
   return &responses_;
+}
+const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ResponseUnion >&
+BatchResponse::responses() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.BatchResponse.responses)
+  return responses_;
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

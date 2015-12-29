@@ -41,13 +41,13 @@ void protobuf_AddDesc_cockroach_2froachpb_2finternal_2eproto();
 void protobuf_AssignDesc_cockroach_2froachpb_2finternal_2eproto();
 void protobuf_ShutdownFile_cockroach_2froachpb_2finternal_2eproto();
 
-class RaftCommand;
 class InternalTimeSeriesData;
 class InternalTimeSeriesSample;
-class RaftTruncatedState;
-class RaftTombstone;
+class RaftCommand;
 class RaftSnapshotData;
 class RaftSnapshotData_KeyValue;
+class RaftTombstone;
+class RaftTruncatedState;
 
 // ===================================================================
 
@@ -249,10 +249,10 @@ class InternalTimeSeriesData : public ::google::protobuf::Message {
   const ::cockroach::roachpb::InternalTimeSeriesSample& samples(int index) const;
   ::cockroach::roachpb::InternalTimeSeriesSample* mutable_samples(int index);
   ::cockroach::roachpb::InternalTimeSeriesSample* add_samples();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::InternalTimeSeriesSample >&
-      samples() const;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::InternalTimeSeriesSample >*
       mutable_samples();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::InternalTimeSeriesSample >&
+      samples() const;
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.InternalTimeSeriesData)
  private:
@@ -796,10 +796,10 @@ class RaftSnapshotData : public ::google::protobuf::Message {
   const ::cockroach::roachpb::RaftSnapshotData_KeyValue& kv(int index) const;
   ::cockroach::roachpb::RaftSnapshotData_KeyValue* mutable_kv(int index);
   ::cockroach::roachpb::RaftSnapshotData_KeyValue* add_kv();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RaftSnapshotData_KeyValue >&
-      kv() const;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RaftSnapshotData_KeyValue >*
       mutable_kv();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RaftSnapshotData_KeyValue >&
+      kv() const;
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RaftSnapshotData)
  private:
@@ -1007,15 +1007,15 @@ inline ::cockroach::roachpb::InternalTimeSeriesSample* InternalTimeSeriesData::a
   // @@protoc_insertion_point(field_add:cockroach.roachpb.InternalTimeSeriesData.samples)
   return samples_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::InternalTimeSeriesSample >&
-InternalTimeSeriesData::samples() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.InternalTimeSeriesData.samples)
-  return samples_;
-}
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::InternalTimeSeriesSample >*
 InternalTimeSeriesData::mutable_samples() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.InternalTimeSeriesData.samples)
   return &samples_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::InternalTimeSeriesSample >&
+InternalTimeSeriesData::samples() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.InternalTimeSeriesData.samples)
+  return samples_;
 }
 
 // -------------------------------------------------------------------
@@ -1441,15 +1441,15 @@ inline ::cockroach::roachpb::RaftSnapshotData_KeyValue* RaftSnapshotData::add_kv
   // @@protoc_insertion_point(field_add:cockroach.roachpb.RaftSnapshotData.KV)
   return kv_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RaftSnapshotData_KeyValue >&
-RaftSnapshotData::kv() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.RaftSnapshotData.KV)
-  return kv_;
-}
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RaftSnapshotData_KeyValue >*
 RaftSnapshotData::mutable_kv() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.RaftSnapshotData.KV)
   return &kv_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RaftSnapshotData_KeyValue >&
+RaftSnapshotData::kv() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.RaftSnapshotData.KV)
+  return kv_;
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
