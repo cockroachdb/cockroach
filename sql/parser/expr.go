@@ -630,18 +630,26 @@ func (node *UnaryExpr) String() string {
 
 // FuncExpr represents a function call.
 type FuncExpr struct {
-	Name     *QualifiedName
-	Distinct bool
-	Exprs    Exprs
-	fn       builtin
+	Name  *QualifiedName
+	Type  funcType
+	Exprs Exprs
+	fn    builtin
 }
 
+type funcType string
+
+// FuncExpr.Type
+const (
+	AstDistinct funcType = "DISTINCT"
+	AstALL      funcType = "ALL"
+)
+
 func (node *FuncExpr) String() string {
-	var distinct string
-	if node.Distinct {
-		distinct = "DISTINCT "
+	typ := node.Type
+	if typ != "" {
+		typ += " "
 	}
-	return fmt.Sprintf("%s(%s%s)", node.Name, distinct, node.Exprs)
+	return fmt.Sprintf("%s(%s%s)", node.Name, typ, node.Exprs)
 }
 
 // OverlayExpr represents an overlay function call.
