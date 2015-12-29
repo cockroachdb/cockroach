@@ -221,6 +221,18 @@ var binOps = map[binArgs]binOp{
 			return left.(DFloat) * right.(DFloat), nil
 		},
 	},
+	binArgs{Mult, floatType, intType}: {
+		returnType: DummyFloat,
+		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			return left.(DFloat) * DFloat(right.(DInt)), nil
+		},
+	},
+	binArgs{Mult, intType, floatType}: {
+		returnType: DummyFloat,
+		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			return DFloat(left.(DInt)) * right.(DFloat), nil
+		},
+	},
 	binArgs{Mult, intType, intervalType}: {
 		returnType: DummyInterval,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
