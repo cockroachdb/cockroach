@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
 	"github.com/gogo/protobuf/proto"
@@ -61,6 +62,7 @@ const (
 // IDs for bootstrapping the node itself or new stores as they're added
 // on subsequent instantiations.
 type Node struct {
+	stopper    *stop.Stopper
 	ClusterID  string                 // UUID for Cockroach cluster
 	Descriptor roachpb.NodeDescriptor // Node ID, network/physical topology
 	ctx        storage.StoreContext   // Context to use and pass to stores
@@ -157,11 +159,12 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 }
 
 // NewNode returns a new instance of Node.
-func NewNode(ctx storage.StoreContext) *Node {
+func NewNode(ctx storage.StoreContext, metaRegistry *metric.Registry, stopper *stop.Stopper) *Node {
 	return &Node{
-		ctx:    ctx,
-		status: status.NewNodeStatusMonitor(),
-		stores: storage.NewStores(),
+		ctx:     ctx,
+		stopper: stopper,
+		status:  status.NewNodeStatusMonitor(metaRegistry),
+		stores:  storage.NewStores(),
 	}
 }
 
@@ -220,7 +223,7 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 // RPC service "Node" and initializing stores for each specified
 // engine. Launches periodic store gossiping in a goroutine.
 func (n *Node) start(rpcServer *rpc.Server, addr net.Addr, engines []engine.Engine,
-	attrs roachpb.Attributes, stopper *stop.Stopper) error {
+	attrs roachpb.Attributes) error {
 	n.initDescriptor(addr, attrs)
 	const method = "Node.Batch"
 	if err := rpcServer.Register(method, n.executeCmd, &roachpb.BatchRequest{}); err != nil {
@@ -231,7 +234,7 @@ func (n *Node) start(rpcServer *rpc.Server, addr net.Addr, engines []engine.Engi
 	n.status.StartMonitorFeed(n.ctx.EventFeed)
 
 	// Initialize stores, including bootstrapping new ones.
-	if err := n.initStores(engines, stopper); err != nil {
+	if err := n.initStores(engines, n.stopper); err != nil {
 		return err
 	}
 
@@ -243,8 +246,8 @@ func (n *Node) start(rpcServer *rpc.Server, addr net.Addr, engines []engine.Engi
 	n.feed = status.NewNodeEventFeed(n.Descriptor.NodeID, n.ctx.EventFeed)
 	n.feed.StartNode(n.Descriptor, n.startedAt)
 
-	n.startPublishStatuses(stopper)
-	n.startGossip(stopper)
+	n.startPublishStatuses(n.stopper)
+	n.startGossip(n.stopper)
 	log.Infoc(n.context(), "Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil
 }
@@ -457,6 +460,7 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 	defer trace.Epoch("node")()
 	ctx := tracer.ToCtx((*Node)(n).context(), trace)
 
+	tStart := time.Now()
 	br, pErr := n.stores.Send(ctx, *ba)
 	if pErr != nil {
 		br = &roachpb.BatchResponse{}
@@ -465,7 +469,7 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 	if br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
 	}
-	n.feed.CallComplete(*ba, pErr)
+	n.feed.CallComplete(*ba, time.Now().Sub(tStart), pErr)
 	br.Error = pErr
 	return br, nil
 }

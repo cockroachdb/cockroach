@@ -45,13 +45,13 @@ module AdminViews {
         };
 
         // Define selectors.
-        private successCount: Metrics.Select.Selector = Metrics.Select.Avg("cr.node.calls.success.1")
+        private successCount: Metrics.Select.Selector = Metrics.Select.Avg("cr.node.exec.success.count.1")
           .title("Successful calls");
-        private errorCount: Metrics.Select.Selector = Metrics.Select.Avg("cr.node.calls.error.1")
+        private errorCount: Metrics.Select.Selector = Metrics.Select.Avg("cr.node.exec.error.count.1")
           .title("Error calls");
-        private successRate: Metrics.Select.Selector = Metrics.Select.AvgRate("cr.node.calls.success.1")
+        private successRate: Metrics.Select.Selector = Metrics.Select.AvgRate("cr.node.exec.success.count.1")
           .title("Successful call rate");
-        private errorRate: Metrics.Select.Selector = Metrics.Select.AvgRate("cr.node.calls.error.1")
+        private errorRate: Metrics.Select.Selector = Metrics.Select.AvgRate("cr.node.exec.error.count.1")
           .title("Error call rate");
 
         // Define query.

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -58,7 +59,7 @@ func TestNodeStatusMonitor(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	feed := util.NewFeed(stopper)
-	monitor := NewNodeStatusMonitor()
+	monitor := NewNodeStatusMonitor(metric.NewRegistry())
 	monitor.StartMonitorFeed(feed)
 
 	for i := 0; i < 3; i++ {
@@ -163,10 +164,10 @@ func TestNodeStatusMonitor(t *testing.T) {
 		}
 	}
 
-	if a, e := monitor.callCount.Count(), int64(6); a != e {
+	if a, e := monitor.mSuccess.Count(), int64(6); a != e {
 		t.Errorf("monitored stats for node recorded wrong number of ops %d, expected %d", a, e)
 	}
-	if a, e := monitor.callErrors.Count(), int64(3); a != e {
+	if a, e := monitor.mError.Count(), int64(3); a != e {
 		t.Errorf("monitored stats for node recorded wrong number of errors %d, expected %d", a, e)
 	}
 }

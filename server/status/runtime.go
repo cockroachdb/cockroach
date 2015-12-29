@@ -29,6 +29,19 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+const (
+	nameCgoCalls       = "cgocalls"
+	nameGoroutines     = "goroutines"
+	nameAllocBytes     = "allocbytes"
+	nameGCCount        = "gc.count"
+	nameGCPauseNS      = "gc.pause.ns"
+	nameGCPausePercent = "gc.pause.percent"
+	nameCPUUserNS      = "cpu.user.ns"
+	nameCPUUserPercent = "cpu.user.percent"
+	nameCPUSysNS       = "cpu.sys.ns"
+	nameCPUSysPercent  = "cpu.sys.percent"
+)
+
 // RuntimeStatRecorder is used to periodically persist useful runtime statistics
 // as time series data. "Runtime statistics" include OS-level statistics (such as
 // memory and CPU usage) and Go runtime statistics (e.g. count of Goroutines).
@@ -82,6 +95,9 @@ func (rsr *RuntimeStatRecorder) record(timestampNanos int64, name string,
 // one method because it is convenient; however, in the future querying and
 // recording can be easily separated, similar to the way that NodeStatus is
 // separated into a monitor and a recorder.
+//
+// TODO(tschottdorf): turn various things here into gauges and register them
+// with the metrics registry.
 func (rsr *RuntimeStatRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
 	data := make([]ts.TimeSeriesData, 0, rsr.lastDataCount)
 
@@ -122,16 +138,16 @@ func (rsr *RuntimeStatRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
 	rsr.lastCgoCall = numCgoCall
 	rsr.lastNumGC = ms.NumGC
 
-	data = append(data, rsr.record(now, "cgocalls", float64(numCgoCall)))
-	data = append(data, rsr.record(now, "goroutines", float64(numGoroutine)))
-	data = append(data, rsr.record(now, "allocbytes", float64(ms.Alloc)))
-	data = append(data, rsr.record(now, "gc.count", float64(ms.NumGC)))
-	data = append(data, rsr.record(now, "gc.pause.ns", float64(ms.PauseTotalNs)))
-	data = append(data, rsr.record(now, "gc.pause.percent", pausePerc))
-	data = append(data, rsr.record(now, "cpu.user.ns", float64(newUtime)))
-	data = append(data, rsr.record(now, "cpu.user.percent", uPerc))
-	data = append(data, rsr.record(now, "cpu.sys.ns", float64(newStime)))
-	data = append(data, rsr.record(now, "cpu.sys.percent", sPerc))
+	data = append(data, rsr.record(now, nameCgoCalls, float64(numCgoCall)))
+	data = append(data, rsr.record(now, nameGoroutines, float64(numGoroutine)))
+	data = append(data, rsr.record(now, nameAllocBytes, float64(ms.Alloc)))
+	data = append(data, rsr.record(now, nameGCCount, float64(ms.NumGC)))
+	data = append(data, rsr.record(now, nameGCPauseNS, float64(ms.PauseTotalNs)))
+	data = append(data, rsr.record(now, nameGCPausePercent, pausePerc))
+	data = append(data, rsr.record(now, nameCPUUserNS, float64(newUtime)))
+	data = append(data, rsr.record(now, nameCPUUserPercent, uPerc))
+	data = append(data, rsr.record(now, nameCPUSysNS, float64(newStime)))
+	data = append(data, rsr.record(now, nameCPUSysPercent, sPerc))
 	rsr.lastDataCount = len(data)
 	return data
 }
