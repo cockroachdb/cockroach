@@ -30,6 +30,7 @@ func TestTypeCheck(t *testing.T) {
 		`NULL + '2006-09-23'::date`,
 		`NULL + '1h'::interval`,
 		`NULL + 'hello'`,
+		`NULL::int`,
 		`NULL + 'hello'::bytes`,
 		`NULL = 1`,
 		`1 = NULL`,
