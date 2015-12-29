@@ -18,6 +18,7 @@ package status
 
 import (
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"testing"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/metric"
 )
 
 // byTimeAndName is a slice of ts.TimeSeriesData.
@@ -120,7 +122,9 @@ func TestNodeStatusRecorder(t *testing.T) {
 	}
 
 	// Create a monitor and a recorder which uses the monitor.
-	monitor := NewNodeStatusMonitor()
+	closer := make(chan struct{})
+	close(closer) // shut down all moving parts right away.
+	monitor := NewNodeStatusMonitor(metric.NewRegistry())
 	manual := hlc.NewManualClock(100)
 	recorder := NewNodeStatusRecorder(monitor, hlc.NewClock(manual.UnixNano))
 
@@ -276,11 +280,32 @@ func TestNodeStatusRecorder(t *testing.T) {
 		generateStoreData(2, "capacity.available", 100, 75),
 
 		// Node stats.
-		generateNodeData(1, "calls.success", 100, 2),
-		generateNodeData(1, "calls.error", 100, 1),
+		generateNodeData(1, "exec.success-count", 100, 2),
+		generateNodeData(1, "exec.error-count", 100, 1),
+		generateNodeData(1, "exec.success-1h", 100, 0),
+		generateNodeData(1, "exec.error-1h", 100, 0),
+		generateNodeData(1, "exec.success-10m", 100, 0),
+		generateNodeData(1, "exec.error-10m", 100, 0),
+		generateNodeData(1, "exec.success-1m", 100, 0),
+		generateNodeData(1, "exec.error-1m", 100, 0),
 	}
 
 	actual := recorder.GetTimeSeriesData()
+
+	var actNumLatencyMetrics int
+	expNumLatencyMetrics := len(recordHistogramQuantiles) * len(metric.DefaultTimeScales)
+	for _, item := range actual {
+		if ok, _ := regexp.MatchString(`cr.node.exec.latency.*`, item.Name); ok {
+			actNumLatencyMetrics++
+			expected = append(expected, item)
+		}
+	}
+
+	if expNumLatencyMetrics != actNumLatencyMetrics {
+		t.Fatalf("unexpected number of latency metrics %d, expected %d",
+			actNumLatencyMetrics, expNumLatencyMetrics)
+	}
+
 	sort.Sort(byTimeAndName(actual))
 	sort.Sort(byTimeAndName(expected))
 	if a, e := actual, expected; !reflect.DeepEqual(a, e) {

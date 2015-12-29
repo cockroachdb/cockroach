@@ -19,13 +19,13 @@ package status
 import (
 	"strconv"
 
-	"github.com/rcrowley/go-metrics"
-
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -39,6 +39,22 @@ const (
 	// record runtime system stats on a node.
 	runtimeStatTimeSeriesNameFmt = "cr.node.sys.%s"
 )
+
+type quantile struct {
+	suffix   string
+	quantile float64
+}
+
+var recordHistogramQuantiles = []quantile{
+	{"-max", 100},
+	{"-p99.999", 99.999},
+	{"-p99.99", 99.99},
+	{"-p99.9", 99.9},
+	{"-p99", 99},
+	{"-p90", 90},
+	{"-p75", 75},
+	{"-p50", 50},
+}
 
 // NodeStatusRecorder is used to periodically persist the status of a node as a
 // set of time series data.
@@ -165,14 +181,14 @@ func (nsr *NodeStatusRecorder) GetStatusSummaries() (*NodeStatus, []storage.Stor
 // registryRecorder is a helper class for recording time series datapoints
 // from a metrics Registry.
 type registryRecorder struct {
-	registry       metrics.Registry
+	registry       *metric.Registry
 	prefix         string
 	source         string
 	timestampNanos int64
 }
 
 func (rr registryRecorder) record(dest *[]ts.TimeSeriesData) {
-	rr.registry.Each(func(name string, metric interface{}) {
+	rr.registry.Each(func(name string, m interface{}) {
 		data := ts.TimeSeriesData{
 			Name:   rr.prefix + name,
 			Source: rr.source,
@@ -183,11 +199,28 @@ func (rr registryRecorder) record(dest *[]ts.TimeSeriesData) {
 			},
 		}
 		// The method for extracting data differs based on the type of metric.
-		switch metric := metric.(type) {
-		case metrics.Counter:
-			data.Datapoints[0].Value = float64(metric.Count())
-		case metrics.Gauge:
-			data.Datapoints[0].Value = float64(metric.Value())
+		// TODO(tschottdorf): should make this based on interfaces.
+		switch mtr := m.(type) {
+		case float64:
+			data.Datapoints[0].Value = mtr
+		case *metric.Rates:
+			data.Datapoints[0].Value = float64(mtr.Count())
+		case *metric.Counter:
+			data.Datapoints[0].Value = float64(mtr.Count())
+		case *metric.Gauge:
+			data.Datapoints[0].Value = float64(mtr.Value())
+		case *metric.Histogram:
+			h := mtr.Current()
+			for _, pt := range recordHistogramQuantiles {
+				d := *proto.Clone(&data).(*ts.TimeSeriesData)
+				d.Name += pt.suffix
+				d.Datapoints[0].Value = float64(h.ValueAtQuantile(pt.quantile))
+				*dest = append(*dest, d)
+			}
+			return
+		default:
+			log.Warningf("cannot serialize for time series: %T", mtr)
+			return
 		}
 		*dest = append(*dest, data)
 	})
