@@ -50,11 +50,11 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 		n.GroupBy[i] = norm
 	}
 
-	// Determine if aggregation is being performed and, if so, if it is valid.
-	if aggregation, invalidAggErr := checkAggregateExprs(n.GroupBy, s.render); !aggregation {
+	if isAggregate := isAggregateExprs(n); !isAggregate {
 		return nil, nil
-	} else if invalidAggErr != nil {
-		return nil, invalidAggErr
+	}
+	if err := checkAggregateExprs(n.GroupBy, s.render); err != nil {
+		return nil, err
 	}
 
 	group := &groupNode{
@@ -354,16 +354,14 @@ func (p *planner) extractAggregateFuncs(n *groupNode, expr parser.Expr) (parser.
 	return p.extractAggregatesVisitor.run(n, expr)
 }
 
-type checkAggregateVisitor struct {
-	groupStrs  map[string]struct{}
+var _ parser.Visitor = &isAggregateVisitor{}
+
+type isAggregateVisitor struct {
 	aggregated bool
-	aggrErr    error
 }
 
-var _ parser.Visitor = &checkAggregateVisitor{}
-
-func (v *checkAggregateVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
-	if !pre || v.aggrErr != nil {
+func (v *isAggregateVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
+	if !pre {
 		return nil, expr
 	}
 
@@ -374,7 +372,43 @@ func (v *checkAggregateVisitor) Visit(expr parser.Expr, pre bool) (parser.Visito
 		}
 	}
 
-	if t, ok := expr.(*qvalue); ok {
+	return v, expr
+}
+
+func isAggregateExprs(n *parser.Select) bool {
+	if len(n.GroupBy) > 0 {
+		return true
+	}
+
+	v := isAggregateVisitor{}
+
+	for _, target := range n.Exprs {
+		_ = parser.WalkExpr(&v, target.Expr)
+		if v.aggregated {
+			return true
+		}
+	}
+	return false
+}
+
+var _ parser.Visitor = &checkAggregateVisitor{}
+
+type checkAggregateVisitor struct {
+	groupStrs map[string]struct{}
+	aggrErr   error
+}
+
+func (v *checkAggregateVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
+	if !pre || v.aggrErr != nil {
+		return nil, expr
+	}
+
+	switch t := expr.(type) {
+	case *parser.FuncExpr:
+		if _, ok := aggregates[strings.ToLower(string(t.Name.Base))]; ok {
+			return nil, expr
+		}
+	case *qvalue:
 		if _, ok := v.groupStrs[t.String()]; ok {
 			return nil, expr
 		}
@@ -407,9 +441,7 @@ func (v *checkAggregateVisitor) Visit(expr parser.Expr, pre bool) (parser.Visito
 // - `k` appears in GROUP BY, so `UPPER(k)` is OK, but...
 // Invalid:    `SELECT k, SUM(v) FROM kv GROUP BY UPPER(k)`
 // - `k` does not appear in GROUP BY; UPPER(k) does nothing to help here.
-func checkAggregateExprs(groupBy parser.GroupBy, exprs []parser.Expr) (bool, error) {
-	aggregated := len(groupBy) > 0
-
+func checkAggregateExprs(groupBy parser.GroupBy, exprs []parser.Expr) error {
 	v := checkAggregateVisitor{}
 
 	// TODO(dt): consider other ways of comparing expression trees.
@@ -420,14 +452,11 @@ func checkAggregateExprs(groupBy parser.GroupBy, exprs []parser.Expr) (bool, err
 
 	for _, expr := range exprs {
 		_ = parser.WalkExpr(&v, expr)
-		if v.aggregated {
-			aggregated = true
-		}
-		if v.aggrErr != nil && aggregated {
-			return aggregated, v.aggrErr
+		if v.aggrErr != nil {
+			return v.aggrErr
 		}
 	}
-	return aggregated, nil
+	return nil
 }
 
 var _ parser.VariableExpr = &aggregateFunc{}
