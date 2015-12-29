@@ -473,6 +473,13 @@ func (t *logicTest) execQuery(query logicQuery) {
 						t.Fatalf("%s: expected text value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				case 'I':
+					if valT == reflect.Float64 {
+						// The sqllogic tests expect integer division to return
+						// an integer, but we have decided to return a float (see
+						// https://github.com/cockroachdb/cockroach/pull/3308).
+						// In order to not modify the tests, accept floats in place of ints.
+						break
+					}
 					if valT != reflect.Int64 {
 						t.Fatalf("%s: expected int value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
