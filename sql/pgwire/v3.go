@@ -83,12 +83,12 @@ type preparedStatement struct {
 	portalNames map[string]struct{}
 }
 
-// preparedPortal is a preparedStatement that has been bound with parameters.
+// preparedPortal is a preparedStatement that has been bound with placeholders.
 type preparedPortal struct {
-	stmt       preparedStatement
-	stmtName   string
-	params     []driver.Datum
-	outFormats []formatCode
+	stmt         preparedStatement
+	stmtName     string
+	placeholders []driver.Datum
+	outFormats   []formatCode
 }
 
 type v3Conn struct {
@@ -288,7 +288,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	if err != nil {
 		return c.sendError(err.Error())
 	}
-	args := make(parser.MapArgs)
+	args := make(parser.Placeholders)
 	for i, t := range inTypeHints {
 		v, ok := oidToDatum[t]
 		if !ok {
@@ -487,10 +487,10 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 
 	stmt.portalNames[portalName] = struct{}{}
 	c.preparedPortals[portalName] = preparedPortal{
-		stmt:       stmt,
-		stmtName:   statementName,
-		params:     params,
-		outFormats: columnFormatCodes,
+		stmt:         stmt,
+		stmtName:     statementName,
+		placeholders: params,
+		outFormats:   columnFormatCodes,
 	}
 	c.writeBuf.initMsg(serverMsgBindComplete)
 	return c.writeBuf.finishMsg(c.wr)
@@ -513,7 +513,7 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 		return c.sendError("execute row count limits not supported")
 	}
 
-	return c.executeStatements(portal.stmt.query, portal.params, portal.outFormats, false)
+	return c.executeStatements(portal.stmt.query, portal.placeholders, portal.outFormats, false)
 }
 
 func (c *v3Conn) executeStatements(stmts string, params []driver.Datum, formatCodes []formatCode, sendDescription bool) error {

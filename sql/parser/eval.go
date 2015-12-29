@@ -557,7 +557,7 @@ type EvalContext struct {
 	TxnTimestamp  DTimestamp
 	ReCache       *RegexpCache
 	GetLocation   func() (*time.Location, error)
-	Args          MapArgs
+	Args          Placeholders
 }
 
 var defaultContext = EvalContext{
@@ -1149,7 +1149,7 @@ func (t Tuple) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (t ValArg) Eval(_ EvalContext) (Datum, error) {
+func (t Placeholder) Eval(_ EvalContext) (Datum, error) {
 	return nil, util.Errorf("unhandled type %T", t)
 }
 
@@ -1204,7 +1204,7 @@ func (t DTuple) Eval(_ EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (t DValArg) Eval(_ EvalContext) (Datum, error) {
+func (t DPlaceholder) Eval(_ EvalContext) (Datum, error) {
 	return t, nil
 }
 

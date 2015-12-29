@@ -296,8 +296,8 @@ type Request struct {
 	// SQL statement(s) to be serially executed by the server. Multiple
 	// statements are passed as a single string separated by semicolons.
 	Sql string `protobuf:"bytes,3,opt,name=sql" json:"sql"`
-	// Parameters referred to in the above SQL statement(s) using "?".
-	Params []Datum `protobuf:"bytes,4,rep,name=params" json:"params"`
+	// Placeholders referred to in the above SQL statement(s) using "?".
+	Placeholders []Datum `protobuf:"bytes,4,rep,name=placeholders" json:"placeholders"`
 }
 
 func (m *Request) Reset()         { *m = Request{} }
@@ -647,8 +647,8 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 	i++
 	i = encodeVarintWire(data, i, uint64(len(m.Sql)))
 	i += copy(data[i:], m.Sql)
-	if len(m.Params) > 0 {
-		for _, msg := range m.Params {
+	if len(m.Placeholders) > 0 {
+		for _, msg := range m.Placeholders {
 			data[i] = 0x22
 			i++
 			i = encodeVarintWire(data, i, uint64(msg.Size()))
@@ -994,8 +994,8 @@ func (m *Request) Size() (n int) {
 	}
 	l = len(m.Sql)
 	n += 1 + l + sovWire(uint64(l))
-	if len(m.Params) > 0 {
-		for _, e := range m.Params {
+	if len(m.Placeholders) > 0 {
+		for _, e := range m.Placeholders {
 			l = e.Size()
 			n += 1 + l + sovWire(uint64(l))
 		}
@@ -1560,7 +1560,7 @@ func (m *Request) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Params", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Placeholders", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1584,8 +1584,8 @@ func (m *Request) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Params = append(m.Params, Datum{})
-			if err := m.Params[len(m.Params)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			m.Placeholders = append(m.Placeholders, Datum{})
+			if err := m.Placeholders[len(m.Placeholders)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

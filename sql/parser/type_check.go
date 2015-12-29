@@ -25,22 +25,22 @@ import (
 )
 
 var (
-	typeBytes     = func(MapArgs, DTuple) (Datum, error) { return DummyBytes, nil }
-	typeDate      = func(MapArgs, DTuple) (Datum, error) { return DummyDate, nil }
-	typeFloat     = func(MapArgs, DTuple) (Datum, error) { return DummyFloat, nil }
-	typeInt       = func(MapArgs, DTuple) (Datum, error) { return DummyInt, nil }
-	typeInterval  = func(MapArgs, DTuple) (Datum, error) { return DummyInterval, nil }
-	typeString    = func(MapArgs, DTuple) (Datum, error) { return DummyString, nil }
-	typeTimestamp = func(MapArgs, DTuple) (Datum, error) { return DummyTimestamp, nil }
+	typeBytes     = func(Placeholders, DTuple) (Datum, error) { return DummyBytes, nil }
+	typeDate      = func(Placeholders, DTuple) (Datum, error) { return DummyDate, nil }
+	typeFloat     = func(Placeholders, DTuple) (Datum, error) { return DummyFloat, nil }
+	typeInt       = func(Placeholders, DTuple) (Datum, error) { return DummyInt, nil }
+	typeInterval  = func(Placeholders, DTuple) (Datum, error) { return DummyInterval, nil }
+	typeString    = func(Placeholders, DTuple) (Datum, error) { return DummyString, nil }
+	typeTimestamp = func(Placeholders, DTuple) (Datum, error) { return DummyTimestamp, nil }
 )
 
 // TypeCheck implements the Expr interface.
-func (expr *AndExpr) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *AndExpr) TypeCheck(args Placeholders) (Datum, error) {
 	return typeCheckBooleanExprs(args, "AND", expr.Left, expr.Right)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *BinaryExpr) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *BinaryExpr) TypeCheck(args Placeholders) (Datum, error) {
 	dummyLeft, err := expr.Left.TypeCheck(args)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func (expr *BinaryExpr) TypeCheck(args MapArgs) (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *CaseExpr) TypeCheck(args Placeholders) (Datum, error) {
 	var dummyCond, dummyVal Datum
 
 	if expr.Expr != nil {
@@ -114,7 +114,7 @@ func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *CastExpr) TypeCheck(args Placeholders) (Datum, error) {
 	dummyExpr, err := expr.Expr.TypeCheck(args)
 	if err != nil {
 		return nil, err
@@ -183,7 +183,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *CoalesceExpr) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *CoalesceExpr) TypeCheck(args Placeholders) (Datum, error) {
 	var dummyArg Datum
 	for _, e := range expr.Exprs {
 		arg, err := e.TypeCheck(args)
@@ -200,7 +200,7 @@ func (expr *CoalesceExpr) TypeCheck(args MapArgs) (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *ComparisonExpr) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *ComparisonExpr) TypeCheck(args Placeholders) (Datum, error) {
 	leftType, err := expr.Left.TypeCheck(args)
 	if err != nil {
 		return nil, err
@@ -215,7 +215,7 @@ func (expr *ComparisonExpr) TypeCheck(args MapArgs) (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *ExistsExpr) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *ExistsExpr) TypeCheck(args Placeholders) (Datum, error) {
 	_, err := expr.Subquery.TypeCheck(args)
 	if err != nil {
 		return nil, err
@@ -224,7 +224,7 @@ func (expr *ExistsExpr) TypeCheck(args MapArgs) (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *FuncExpr) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *FuncExpr) TypeCheck(args Placeholders) (Datum, error) {
 	dummyArgs := make(DTuple, 0, len(expr.Exprs))
 	types := make(argTypes, 0, len(expr.Exprs))
 	for _, e := range expr.Exprs {
@@ -295,7 +295,7 @@ func (expr *FuncExpr) TypeCheck(args MapArgs) (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *IfExpr) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *IfExpr) TypeCheck(args Placeholders) (Datum, error) {
 	cond, err := expr.Cond.TypeCheck(args)
 	if err != nil {
 		return nil, err
@@ -324,7 +324,7 @@ func (expr *IfExpr) TypeCheck(args MapArgs) (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *IsOfTypeExpr) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *IsOfTypeExpr) TypeCheck(args Placeholders) (Datum, error) {
 	if _, err := expr.Expr.TypeCheck(args); err != nil {
 		return nil, err
 	}
@@ -332,12 +332,12 @@ func (expr *IsOfTypeExpr) TypeCheck(args MapArgs) (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *NotExpr) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *NotExpr) TypeCheck(args Placeholders) (Datum, error) {
 	return typeCheckBooleanExprs(args, "NOT", expr.Expr)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *NullIfExpr) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *NullIfExpr) TypeCheck(args Placeholders) (Datum, error) {
 	expr1, err := expr.Expr1.TypeCheck(args)
 	if err != nil {
 		return nil, err
@@ -356,17 +356,17 @@ func (expr *NullIfExpr) TypeCheck(args MapArgs) (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *OrExpr) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *OrExpr) TypeCheck(args Placeholders) (Datum, error) {
 	return typeCheckBooleanExprs(args, "OR", expr.Left, expr.Right)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *QualifiedName) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *QualifiedName) TypeCheck(args Placeholders) (Datum, error) {
 	return nil, fmt.Errorf("qualified name \"%s\" not found", expr)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *RangeCond) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *RangeCond) TypeCheck(args Placeholders) (Datum, error) {
 	leftType, err := expr.Left.TypeCheck(args)
 	if err != nil {
 		return nil, err
@@ -391,14 +391,14 @@ func (expr *RangeCond) TypeCheck(args MapArgs) (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *Subquery) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *Subquery) TypeCheck(args Placeholders) (Datum, error) {
 	// Avoid type checking subqueries. We need the subquery to be expanded in
 	// order to do so properly.
 	return DNull, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *UnaryExpr) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *UnaryExpr) TypeCheck(args Placeholders) (Datum, error) {
 	dummyExpr, err := expr.Expr.TypeCheck(args)
 	if err != nil {
 		return nil, err
@@ -416,32 +416,32 @@ func (expr *UnaryExpr) TypeCheck(args MapArgs) (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr Array) TypeCheck(args MapArgs) (Datum, error) {
+func (expr Array) TypeCheck(args Placeholders) (Datum, error) {
 	return nil, util.Errorf("unhandled type %T", expr)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DefaultVal) TypeCheck(args MapArgs) (Datum, error) {
+func (expr DefaultVal) TypeCheck(args Placeholders) (Datum, error) {
 	return nil, util.Errorf("unhandled type %T", expr)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr IntVal) TypeCheck(args MapArgs) (Datum, error) {
+func (expr IntVal) TypeCheck(args Placeholders) (Datum, error) {
 	return DummyInt, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr NumVal) TypeCheck(args MapArgs) (Datum, error) {
+func (expr NumVal) TypeCheck(args Placeholders) (Datum, error) {
 	return DummyFloat, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr Row) TypeCheck(args MapArgs) (Datum, error) {
+func (expr Row) TypeCheck(args Placeholders) (Datum, error) {
 	return Tuple(expr).TypeCheck(args)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr Tuple) TypeCheck(args MapArgs) (Datum, error) {
+func (expr Tuple) TypeCheck(args Placeholders) (Datum, error) {
 	tuple := make(DTuple, 0, len(expr))
 	for _, v := range expr {
 		d, err := v.TypeCheck(args)
@@ -454,65 +454,65 @@ func (expr Tuple) TypeCheck(args MapArgs) (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr ValArg) TypeCheck(args MapArgs) (Datum, error) {
+func (expr Placeholder) TypeCheck(args Placeholders) (Datum, error) {
 	if v, ok := args[expr.name]; ok {
 		return v, nil
 	}
-	return DValArg{name: expr.name}, nil
+	return DPlaceholder{name: expr.name}, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DValArg) TypeCheck(args MapArgs) (Datum, error) {
+func (expr DPlaceholder) TypeCheck(args Placeholders) (Datum, error) {
 	return nil, util.Errorf("unhandled type %T", expr)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DBool) TypeCheck(args MapArgs) (Datum, error) {
+func (expr DBool) TypeCheck(args Placeholders) (Datum, error) {
 	return DummyBool, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DBytes) TypeCheck(args MapArgs) (Datum, error) {
+func (expr DBytes) TypeCheck(args Placeholders) (Datum, error) {
 	return DummyBytes, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DDate) TypeCheck(args MapArgs) (Datum, error) {
+func (expr DDate) TypeCheck(args Placeholders) (Datum, error) {
 	return DummyDate, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DFloat) TypeCheck(args MapArgs) (Datum, error) {
+func (expr DFloat) TypeCheck(args Placeholders) (Datum, error) {
 	return DummyFloat, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DInt) TypeCheck(args MapArgs) (Datum, error) {
+func (expr DInt) TypeCheck(args Placeholders) (Datum, error) {
 	return DummyInt, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DInterval) TypeCheck(args MapArgs) (Datum, error) {
+func (expr DInterval) TypeCheck(args Placeholders) (Datum, error) {
 	return DummyInterval, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr dNull) TypeCheck(args MapArgs) (Datum, error) {
+func (expr dNull) TypeCheck(args Placeholders) (Datum, error) {
 	return DNull, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DString) TypeCheck(args MapArgs) (Datum, error) {
+func (expr DString) TypeCheck(args Placeholders) (Datum, error) {
 	return DummyString, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DTimestamp) TypeCheck(args MapArgs) (Datum, error) {
+func (expr DTimestamp) TypeCheck(args Placeholders) (Datum, error) {
 	return DummyTimestamp, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DTuple) TypeCheck(args MapArgs) (Datum, error) {
+func (expr DTuple) TypeCheck(args Placeholders) (Datum, error) {
 	tuple := make(DTuple, 0, len(expr))
 	for _, v := range expr {
 		d, err := v.TypeCheck(args)
@@ -524,7 +524,7 @@ func (expr DTuple) TypeCheck(args MapArgs) (Datum, error) {
 	return tuple, nil
 }
 
-func typeCheckBooleanExprs(args MapArgs, op string, exprs ...Expr) (Datum, error) {
+func typeCheckBooleanExprs(args Placeholders, op string, exprs ...Expr) (Datum, error) {
 	for _, expr := range exprs {
 		dummyExpr, err := expr.TypeCheck(args)
 		if err != nil {
@@ -545,7 +545,7 @@ func typeCheckBooleanExprs(args MapArgs, op string, exprs ...Expr) (Datum, error
 	return DummyBool, nil
 }
 
-func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight Datum) (Datum, cmpOp, error) {
+func typeCheckComparisonOp(args Placeholders, op ComparisonOp, dummyLeft, dummyRight Datum) (Datum, cmpOp, error) {
 	if set, err := args.setInferredType(dummyLeft, dummyRight); err != nil {
 		return nil, cmpOp{}, err
 	} else if set != nil {
@@ -589,7 +589,7 @@ func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight 
 		dummyLeft.Type(), op, dummyRight.Type())
 }
 
-func typeCheckTupleEQ(args MapArgs, lDummy, rDummy Datum) error {
+func typeCheckTupleEQ(args Placeholders, lDummy, rDummy Datum) error {
 	lTuple := lDummy.(DTuple)
 	rTuple := rDummy.(DTuple)
 	if len(lTuple) != len(rTuple) {
@@ -605,7 +605,7 @@ func typeCheckTupleEQ(args MapArgs, lDummy, rDummy Datum) error {
 	return nil
 }
 
-func typeCheckTupleIN(args MapArgs, arg, values Datum) error {
+func typeCheckTupleIN(args Placeholders, arg, values Datum) error {
 	if arg == DNull {
 		return nil
 	}

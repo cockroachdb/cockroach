@@ -123,9 +123,9 @@ func (c *conn) internalQuery(stmt string, args []driver.Value) (*Response_Result
 // send sends the statement to the server.
 func (c *conn) send(stmt string, dArgs []Datum) (*Response_Result, error) {
 	args := Request{
-		Session: c.session,
-		Sql:     stmt,
-		Params:  dArgs,
+		Session:      c.session,
+		Sql:          stmt,
+		Placeholders: dArgs,
 	}
 	// Forget the session state, and use the one provided in the server
 	// response for the next request.

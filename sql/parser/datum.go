@@ -616,41 +616,41 @@ func (d dNull) String() string {
 	return "NULL"
 }
 
-var _ VariableExpr = DValArg{}
+var _ VariableExpr = DPlaceholder{}
 
-// DValArg is the named bind var argument Datum.
-type DValArg struct {
+// DPlaceholder is the named placeholder Datum.
+type DPlaceholder struct {
 	name string
 }
 
 // Variable implements the VariableExpr interface.
-func (DValArg) Variable() {}
+func (DPlaceholder) Variable() {}
 
 // Type implements the Datum interface.
-func (DValArg) Type() string {
-	return "valarg"
+func (DPlaceholder) Type() string {
+	return "placeholder"
 }
 
 // Compare implements the Datum interface.
-func (d DValArg) Compare(other Datum) int {
+func (d DPlaceholder) Compare(other Datum) int {
 	panic(d.Type() + ".Compare not supported")
 }
 
 // Next implements the Datum interface.
-func (d DValArg) Next() Datum {
+func (d DPlaceholder) Next() Datum {
 	panic(d.Type() + ".Next not supported")
 }
 
 // IsMax implements the Datum interface.
-func (DValArg) IsMax() bool {
+func (DPlaceholder) IsMax() bool {
 	return true
 }
 
 // IsMin implements the Datum interface.
-func (DValArg) IsMin() bool {
+func (DPlaceholder) IsMin() bool {
 	return true
 }
 
-func (d DValArg) String() string {
+func (d DPlaceholder) String() string {
 	return "$" + d.name
 }

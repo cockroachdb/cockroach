@@ -329,7 +329,7 @@ func (av *aggregateValue) Walk(v parser.Visitor) {
 	// But it seems `av.datum` is sometimes nil.
 }
 
-func (av *aggregateValue) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
+func (av *aggregateValue) TypeCheck(args parser.Placeholders) (parser.Datum, error) {
 	return av.expr.TypeCheck(args)
 }
 

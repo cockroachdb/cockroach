@@ -86,7 +86,7 @@ func (v variadicType) match(types argTypes) bool {
 
 type builtin struct {
 	types      typeList
-	returnType func(MapArgs, DTuple) (Datum, error)
+	returnType func(Placeholders, DTuple) (Datum, error)
 	// Set to true when a function potentially returns a different value
 	// when called in the same statement with the same parameters.
 	// e.g.: random(), clock_timestamp(). Some functions like now()
@@ -994,7 +994,7 @@ func floatBuiltin2(f func(float64, float64) (Datum, error)) builtin {
 	}
 }
 
-func stringBuiltin1(f func(string) (Datum, error), returnType func(MapArgs, DTuple) (Datum, error)) builtin {
+func stringBuiltin1(f func(string) (Datum, error), returnType func(Placeholders, DTuple) (Datum, error)) builtin {
 	return builtin{
 		types:      argTypes{stringType},
 		returnType: returnType,
@@ -1004,7 +1004,7 @@ func stringBuiltin1(f func(string) (Datum, error), returnType func(MapArgs, DTup
 	}
 }
 
-func stringBuiltin2(f func(string, string) (Datum, error), returnType func(MapArgs, DTuple) (Datum, error)) builtin {
+func stringBuiltin2(f func(string, string) (Datum, error), returnType func(Placeholders, DTuple) (Datum, error)) builtin {
 	return builtin{
 		types:      argTypes{stringType, stringType},
 		returnType: returnType,
@@ -1014,7 +1014,7 @@ func stringBuiltin2(f func(string, string) (Datum, error), returnType func(MapAr
 	}
 }
 
-func stringBuiltin3(f func(string, string, string) (Datum, error), returnType func(MapArgs, DTuple) (Datum, error)) builtin {
+func stringBuiltin3(f func(string, string, string) (Datum, error), returnType func(Placeholders, DTuple) (Datum, error)) builtin {
 	return builtin{
 		types:      argTypes{stringType, stringType, stringType},
 		returnType: returnType,
@@ -1024,7 +1024,7 @@ func stringBuiltin3(f func(string, string, string) (Datum, error), returnType fu
 	}
 }
 
-func stringBuiltin4(f func(string, string, string, string) (Datum, error), returnType func(MapArgs, DTuple) (Datum, error)) builtin {
+func stringBuiltin4(f func(string, string, string, string) (Datum, error), returnType func(Placeholders, DTuple) (Datum, error)) builtin {
 	return builtin{
 		types:      argTypes{stringType, stringType, stringType, stringType},
 		returnType: returnType,
@@ -1034,7 +1034,7 @@ func stringBuiltin4(f func(string, string, string, string) (Datum, error), retur
 	}
 }
 
-func bytesBuiltin1(f func(string) (Datum, error), returnType func(MapArgs, DTuple) (Datum, error)) builtin {
+func bytesBuiltin1(f func(string) (Datum, error), returnType func(Placeholders, DTuple) (Datum, error)) builtin {
 	return builtin{
 		types:      argTypes{bytesType},
 		returnType: returnType,
@@ -1260,15 +1260,15 @@ func round(x float64, n int64) (Datum, error) {
 
 // typeTuple returns the Datum type that all arguments share, or an error
 // if they do not share types.
-func typeTuple(params MapArgs, args DTuple) (Datum, error) {
+func typeTuple(params Placeholders, args DTuple) (Datum, error) {
 	datum := DNull
-	hasValArgs := false
+	hasPlaceholders := false
 	for _, arg := range args {
 		if arg == DNull {
 			continue
 		}
-		if _, ok := arg.(DValArg); ok {
-			hasValArgs = true
+		if _, ok := arg.(DPlaceholder); ok {
+			hasPlaceholders = true
 			continue
 		}
 		// Find the first non-null argument.
@@ -1280,7 +1280,7 @@ func typeTuple(params MapArgs, args DTuple) (Datum, error) {
 			return nil, fmt.Errorf("incompatible argument types %s, %s", datum.Type(), arg.Type())
 		}
 	}
-	if hasValArgs {
+	if hasPlaceholders {
 		for _, arg := range args {
 			_, err := params.setInferredType(arg, datum)
 			if err != nil {

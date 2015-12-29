@@ -51,7 +51,7 @@ func (q *qvalue) Walk(v parser.Visitor) {
 	q.datum = parser.WalkExpr(v, q.datum).(parser.Datum)
 }
 
-func (q *qvalue) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
+func (q *qvalue) TypeCheck(args parser.Placeholders) (parser.Datum, error) {
 	return q.datum.TypeCheck(args)
 }
 

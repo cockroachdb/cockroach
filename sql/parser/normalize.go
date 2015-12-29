@@ -88,7 +88,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 		for {
 			if v.isConst(expr.Left) {
 				switch expr.Right.(type) {
-				case *BinaryExpr, VariableExpr, *QualifiedName, ValArg:
+				case *BinaryExpr, VariableExpr, *QualifiedName, Placeholder:
 					break
 				default:
 					return expr

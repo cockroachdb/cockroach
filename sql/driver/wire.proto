@@ -60,8 +60,8 @@ message Request {
   // SQL statement(s) to be serially executed by the server. Multiple
   // statements are passed as a single string separated by semicolons.
   optional string sql = 3 [(gogoproto.nullable) = false];
-  // Parameters referred to in the above SQL statement(s) using "?".
-  repeated Datum params = 4 [(gogoproto.nullable) = false];
+  // Placeholders referred to in the above SQL statement(s) using "?".
+  repeated Datum placeholders = 4 [(gogoproto.nullable) = false];
 }
 
 message Response {

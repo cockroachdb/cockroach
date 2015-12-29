@@ -126,7 +126,7 @@ func (e *Executor) getSystemConfig() config.SystemConfig {
 }
 
 // StatementResult returns the result types of the given statement(s).
-func (e *Executor) StatementResult(user string, stmt parser.Statement, args parser.MapArgs) ([]*driver.Response_Result_Rows_Column, error) {
+func (e *Executor) StatementResult(user string, stmt parser.Statement, args parser.Placeholders) ([]*driver.Response_Result_Rows_Column, error) {
 	planMaker := plannerPool.Get().(*planner)
 	defer plannerPool.Put(planMaker)
 
@@ -165,7 +165,7 @@ func (e *Executor) StatementResult(user string, stmt parser.Statement, args pars
 
 // ExecuteStatements executes the given statement(s) and returns a response.
 // On error, the returned integer is an HTTP error code.
-func (e *Executor) ExecuteStatements(user string, session Session, stmts string, params []driver.Datum) (driver.Response, int, error) {
+func (e *Executor) ExecuteStatements(user string, session Session, stmts string, placeholders []driver.Datum) (driver.Response, int, error) {
 	planMaker := plannerPool.Get().(*planner)
 	defer plannerPool.Put(planMaker)
 
@@ -195,7 +195,7 @@ func (e *Executor) ExecuteStatements(user string, session Session, stmts string,
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	planMaker.params = parameters(params)
+	planMaker.params = parameters(placeholders)
 	reply := e.execStmts(stmts, planMaker)
 
 	// Send back the session state even if there were application-level errors.
@@ -229,7 +229,7 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 	if err := proto.Unmarshal(args.Session, &session); err != nil {
 		return driver.Response{}, http.StatusBadRequest, err
 	}
-	return e.ExecuteStatements(args.GetUser(), session, args.Sql, args.Params)
+	return e.ExecuteStatements(args.GetUser(), session, args.Sql, args.Placeholders)
 }
 
 // exec executes the request. Any error encountered is returned; it is

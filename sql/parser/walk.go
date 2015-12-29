@@ -167,7 +167,7 @@ func (expr Tuple) Walk(v Visitor) {
 }
 
 // Walk implements the Expr interface.
-func (ValArg) Walk(_ Visitor) {}
+func (Placeholder) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
 func (DBool) Walk(_ Visitor) {}
@@ -200,7 +200,7 @@ func (DTimestamp) Walk(_ Visitor) {}
 func (DTuple) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
-func (DValArg) Walk(_ Visitor) {}
+func (DPlaceholder) Walk(_ Visitor) {}
 
 // WalkExpr traverses the nodes in an expression.
 func WalkExpr(v Visitor, expr Expr) Expr {
@@ -221,28 +221,27 @@ type Args interface {
 	Arg(name string) (Datum, bool)
 }
 
-var _ Args = MapArgs{}
+var _ Args = Placeholders{}
 
-// MapArgs is an Args implementation which is used for the type
-// inference necessary to support the postgres wire protocol.
-// See various TypeCheck() implementations for details.
-type MapArgs map[string]Datum
+// Placeholders is an Args implementation that maps placeholder names to
+// arguments. See various TypeCheck() implementations for details.
+type Placeholders map[string]Datum
 
 // Arg implements the Args interface.
-func (m MapArgs) Arg(name string) (Datum, bool) {
+func (m Placeholders) Arg(name string) (Datum, bool) {
 	d, ok := m[name]
 	return d, ok
 }
 
-// setValArg sets the bind var argument d to the type typ in m. If m is nil
-// or d is not a DValArg, nil is returned. If the bind var argument is set,
-// typ is returned. An error is returned if typ cannot be set because a
-// different type is already present.
-func (m MapArgs) setInferredType(d, typ Datum) (set Datum, err error) {
+// setInferredType sets the placeholder d to the type typ in m. If m is nil
+// or d is not a DPlaceholder, nil is returned. If the placeholder argument is
+// set, typ is returned. An error is returned if typ cannot be set because
+// a different type is already present.
+func (m Placeholders) setInferredType(d, typ Datum) (set Datum, err error) {
 	if m == nil {
 		return nil, nil
 	}
-	v, ok := d.(DValArg)
+	v, ok := d.(DPlaceholder)
 	if !ok {
 		return nil, nil
 	}
@@ -264,7 +263,7 @@ func (v *argVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 	if !pre || v.err != nil {
 		return nil, expr
 	}
-	placeholder, ok := expr.(ValArg)
+	placeholder, ok := expr.(Placeholder)
 	if !ok {
 		return v, expr
 	}
@@ -366,7 +365,7 @@ func containsSubquery(expr Expr) bool {
 }
 
 type checkVisitor struct {
-	args MapArgs
+	args Placeholders
 	err  error
 }
 
@@ -380,7 +379,7 @@ func (v *checkVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
 }
 
 // InferArgs populates args with the inferred types of stmt's placeholders.
-func InferArgs(stmt Statement, args MapArgs) error {
+func InferArgs(stmt Statement, args Placeholders) error {
 	v := checkVisitor{args: args}
 	WalkStmt(&v, stmt)
 	return v.err

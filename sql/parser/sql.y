@@ -847,7 +847,7 @@ var_value:
 | numeric_only
 | PARAM
   {
-    $$ = ValArg{name: $1}
+    $$ = Placeholder{name: $1}
   }
 
 iso_level:
@@ -2717,7 +2717,7 @@ c_expr:
 | a_expr_const
 | PARAM
   {
-    $$ = ValArg{name: $1}
+    $$ = Placeholder{name: $1}
   }
 | '(' a_expr ')'
   {
