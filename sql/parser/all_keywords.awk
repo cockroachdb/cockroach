@@ -6,7 +6,7 @@ BEGIN {
     print "var keywords = map[string]int{"
 
     # This variable will be associated with a pipe for intermediate output.
-    sort = "sort"
+    sort = "env LC_ALL=C sort"
 }
 
 /^.*_keyword:/ {
