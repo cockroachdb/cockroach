@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/codahale/hdrhistogram"
+	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -193,7 +195,30 @@ func (rr registryRecorder) record(dest *[]ts.TimeSeriesData) {
 		case *metric.Gauge:
 			data.Datapoints[0].Value = float64(mtr.Value())
 		case *metric.Histogram:
-			// TODO(tschottdorf,mrtracy): What to store here? Count?
+			// `Each` calls the given closure under the lock, so we prefer it
+			// over calling Current() which would take a copy of the state.
+			// What we're doing here doesn't take too long.
+			mtr.Each(func(_ string, v interface{}) {
+				h := v.(*hdrhistogram.Histogram)
+				for _, pt := range []struct {
+					suffix   string
+					quantile float64
+				}{
+					{"-max", 100},
+					{"-p99.999", 99.999},
+					{"-p99.99", 99.99},
+					{"-p99.9", 99.9},
+					{"-p99", 99},
+					{"-p90", 90},
+					{"-p75", 75},
+					{"-p50", 50},
+				} {
+					d := *proto.Clone(data).(*ts.TimeSeriesData)
+					d.Name += pt.suffix
+					d.Datapoints[0].Value = h.ValueAtQuantile(pt.quantile)
+					*dest = append(*dest, d)
+				}
+			})
 			return
 		default:
 			log.Warningf("cannot serialize for time series: %T", mtr)
