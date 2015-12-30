@@ -832,7 +832,7 @@ void Span::SerializeWithCachedSizes(
 int Span::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional bytes key = 3;
     if (has_key()) {
       total_size += 1 +
@@ -1227,7 +1227,7 @@ void Timestamp::SerializeWithCachedSizes(
 int Timestamp::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional int64 wall_time = 1;
     if (has_wall_time()) {
       total_size += 1 +
@@ -1563,7 +1563,7 @@ void Value::SerializeWithCachedSizes(
 int Value::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional bytes raw_bytes = 1;
     if (has_raw_bytes()) {
       total_size += 1 +
@@ -1725,11 +1725,11 @@ void Value::clear_timestamp() {
   if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_timestamp();
 }
- const ::cockroach::roachpb::Timestamp& Value::timestamp() const {
+const ::cockroach::roachpb::Timestamp& Value::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Value.timestamp)
   return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
 }
- ::cockroach::roachpb::Timestamp* Value::mutable_timestamp() {
+::cockroach::roachpb::Timestamp* Value::mutable_timestamp() {
   set_has_timestamp();
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::roachpb::Timestamp;
@@ -1737,13 +1737,13 @@ void Value::clear_timestamp() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Value.timestamp)
   return timestamp_;
 }
- ::cockroach::roachpb::Timestamp* Value::release_timestamp() {
+::cockroach::roachpb::Timestamp* Value::release_timestamp() {
   clear_has_timestamp();
   ::cockroach::roachpb::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
 }
- void Value::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
+void Value::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
@@ -1948,7 +1948,7 @@ void KeyValue::SerializeWithCachedSizes(
 int KeyValue::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional bytes key = 1;
     if (has_key()) {
       total_size += 1 +
@@ -2110,11 +2110,11 @@ void KeyValue::clear_value() {
   if (value_ != NULL) value_->::cockroach::roachpb::Value::Clear();
   clear_has_value();
 }
- const ::cockroach::roachpb::Value& KeyValue::value() const {
+const ::cockroach::roachpb::Value& KeyValue::value() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.KeyValue.value)
   return value_ != NULL ? *value_ : *default_instance_->value_;
 }
- ::cockroach::roachpb::Value* KeyValue::mutable_value() {
+::cockroach::roachpb::Value* KeyValue::mutable_value() {
   set_has_value();
   if (value_ == NULL) {
     value_ = new ::cockroach::roachpb::Value;
@@ -2122,13 +2122,13 @@ void KeyValue::clear_value() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.KeyValue.value)
   return value_;
 }
- ::cockroach::roachpb::Value* KeyValue::release_value() {
+::cockroach::roachpb::Value* KeyValue::release_value() {
   clear_has_value();
   ::cockroach::roachpb::Value* temp = value_;
   value_ = NULL;
   return temp;
 }
- void KeyValue::set_allocated_value(::cockroach::roachpb::Value* value) {
+void KeyValue::set_allocated_value(::cockroach::roachpb::Value* value) {
   delete value_;
   value_ = value;
   if (value) {
@@ -2379,7 +2379,7 @@ void StoreIdent::SerializeWithCachedSizes(
 int StoreIdent::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7) {
+  if (_has_bits_[0 / 32] & 7u) {
     // optional string cluster_id = 1;
     if (has_cluster_id()) {
       total_size += 1 +
@@ -2808,7 +2808,7 @@ void SplitTrigger::SerializeWithCachedSizes(
 int SplitTrigger::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7) {
+  if (_has_bits_[0 / 32] & 7u) {
     // optional .cockroach.roachpb.RangeDescriptor updated_desc = 1;
     if (has_updated_desc()) {
       total_size += 1 +
@@ -2927,11 +2927,11 @@ void SplitTrigger::clear_updated_desc() {
   if (updated_desc_ != NULL) updated_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
   clear_has_updated_desc();
 }
- const ::cockroach::roachpb::RangeDescriptor& SplitTrigger::updated_desc() const {
+const ::cockroach::roachpb::RangeDescriptor& SplitTrigger::updated_desc() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.SplitTrigger.updated_desc)
   return updated_desc_ != NULL ? *updated_desc_ : *default_instance_->updated_desc_;
 }
- ::cockroach::roachpb::RangeDescriptor* SplitTrigger::mutable_updated_desc() {
+::cockroach::roachpb::RangeDescriptor* SplitTrigger::mutable_updated_desc() {
   set_has_updated_desc();
   if (updated_desc_ == NULL) {
     updated_desc_ = new ::cockroach::roachpb::RangeDescriptor;
@@ -2939,13 +2939,13 @@ void SplitTrigger::clear_updated_desc() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.SplitTrigger.updated_desc)
   return updated_desc_;
 }
- ::cockroach::roachpb::RangeDescriptor* SplitTrigger::release_updated_desc() {
+::cockroach::roachpb::RangeDescriptor* SplitTrigger::release_updated_desc() {
   clear_has_updated_desc();
   ::cockroach::roachpb::RangeDescriptor* temp = updated_desc_;
   updated_desc_ = NULL;
   return temp;
 }
- void SplitTrigger::set_allocated_updated_desc(::cockroach::roachpb::RangeDescriptor* updated_desc) {
+void SplitTrigger::set_allocated_updated_desc(::cockroach::roachpb::RangeDescriptor* updated_desc) {
   delete updated_desc_;
   updated_desc_ = updated_desc;
   if (updated_desc) {
@@ -2970,11 +2970,11 @@ void SplitTrigger::clear_new_desc() {
   if (new_desc_ != NULL) new_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
   clear_has_new_desc();
 }
- const ::cockroach::roachpb::RangeDescriptor& SplitTrigger::new_desc() const {
+const ::cockroach::roachpb::RangeDescriptor& SplitTrigger::new_desc() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.SplitTrigger.new_desc)
   return new_desc_ != NULL ? *new_desc_ : *default_instance_->new_desc_;
 }
- ::cockroach::roachpb::RangeDescriptor* SplitTrigger::mutable_new_desc() {
+::cockroach::roachpb::RangeDescriptor* SplitTrigger::mutable_new_desc() {
   set_has_new_desc();
   if (new_desc_ == NULL) {
     new_desc_ = new ::cockroach::roachpb::RangeDescriptor;
@@ -2982,13 +2982,13 @@ void SplitTrigger::clear_new_desc() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.SplitTrigger.new_desc)
   return new_desc_;
 }
- ::cockroach::roachpb::RangeDescriptor* SplitTrigger::release_new_desc() {
+::cockroach::roachpb::RangeDescriptor* SplitTrigger::release_new_desc() {
   clear_has_new_desc();
   ::cockroach::roachpb::RangeDescriptor* temp = new_desc_;
   new_desc_ = NULL;
   return temp;
 }
- void SplitTrigger::set_allocated_new_desc(::cockroach::roachpb::RangeDescriptor* new_desc) {
+void SplitTrigger::set_allocated_new_desc(::cockroach::roachpb::RangeDescriptor* new_desc) {
   delete new_desc_;
   new_desc_ = new_desc;
   if (new_desc) {
@@ -3212,7 +3212,7 @@ void MergeTrigger::SerializeWithCachedSizes(
 int MergeTrigger::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.RangeDescriptor updated_desc = 1;
     if (has_updated_desc()) {
       total_size += 1 +
@@ -3320,11 +3320,11 @@ void MergeTrigger::clear_updated_desc() {
   if (updated_desc_ != NULL) updated_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
   clear_has_updated_desc();
 }
- const ::cockroach::roachpb::RangeDescriptor& MergeTrigger::updated_desc() const {
+const ::cockroach::roachpb::RangeDescriptor& MergeTrigger::updated_desc() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.MergeTrigger.updated_desc)
   return updated_desc_ != NULL ? *updated_desc_ : *default_instance_->updated_desc_;
 }
- ::cockroach::roachpb::RangeDescriptor* MergeTrigger::mutable_updated_desc() {
+::cockroach::roachpb::RangeDescriptor* MergeTrigger::mutable_updated_desc() {
   set_has_updated_desc();
   if (updated_desc_ == NULL) {
     updated_desc_ = new ::cockroach::roachpb::RangeDescriptor;
@@ -3332,13 +3332,13 @@ void MergeTrigger::clear_updated_desc() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MergeTrigger.updated_desc)
   return updated_desc_;
 }
- ::cockroach::roachpb::RangeDescriptor* MergeTrigger::release_updated_desc() {
+::cockroach::roachpb::RangeDescriptor* MergeTrigger::release_updated_desc() {
   clear_has_updated_desc();
   ::cockroach::roachpb::RangeDescriptor* temp = updated_desc_;
   updated_desc_ = NULL;
   return temp;
 }
- void MergeTrigger::set_allocated_updated_desc(::cockroach::roachpb::RangeDescriptor* updated_desc) {
+void MergeTrigger::set_allocated_updated_desc(::cockroach::roachpb::RangeDescriptor* updated_desc) {
   delete updated_desc_;
   updated_desc_ = updated_desc;
   if (updated_desc) {
@@ -3640,7 +3640,7 @@ void ChangeReplicasTrigger::SerializeWithCachedSizes(
 int ChangeReplicasTrigger::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 11) {
+  if (_has_bits_[0 / 32] & 11u) {
     // optional .cockroach.roachpb.ReplicaChangeType change_type = 1;
     if (has_change_type()) {
       total_size += 1 +
@@ -3793,11 +3793,11 @@ void ChangeReplicasTrigger::clear_replica() {
   if (replica_ != NULL) replica_->::cockroach::roachpb::ReplicaDescriptor::Clear();
   clear_has_replica();
 }
- const ::cockroach::roachpb::ReplicaDescriptor& ChangeReplicasTrigger::replica() const {
+const ::cockroach::roachpb::ReplicaDescriptor& ChangeReplicasTrigger::replica() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ChangeReplicasTrigger.replica)
   return replica_ != NULL ? *replica_ : *default_instance_->replica_;
 }
- ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::mutable_replica() {
+::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::mutable_replica() {
   set_has_replica();
   if (replica_ == NULL) {
     replica_ = new ::cockroach::roachpb::ReplicaDescriptor;
@@ -3805,13 +3805,13 @@ void ChangeReplicasTrigger::clear_replica() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ChangeReplicasTrigger.replica)
   return replica_;
 }
- ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::release_replica() {
+::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::release_replica() {
   clear_has_replica();
   ::cockroach::roachpb::ReplicaDescriptor* temp = replica_;
   replica_ = NULL;
   return temp;
 }
- void ChangeReplicasTrigger::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica) {
+void ChangeReplicasTrigger::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica) {
   delete replica_;
   replica_ = replica;
   if (replica) {
@@ -3829,27 +3829,27 @@ int ChangeReplicasTrigger::updated_replicas_size() const {
 void ChangeReplicasTrigger::clear_updated_replicas() {
   updated_replicas_.Clear();
 }
- const ::cockroach::roachpb::ReplicaDescriptor& ChangeReplicasTrigger::updated_replicas(int index) const {
+const ::cockroach::roachpb::ReplicaDescriptor& ChangeReplicasTrigger::updated_replicas(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ChangeReplicasTrigger.updated_replicas)
   return updated_replicas_.Get(index);
 }
- ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::mutable_updated_replicas(int index) {
+::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::mutable_updated_replicas(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ChangeReplicasTrigger.updated_replicas)
   return updated_replicas_.Mutable(index);
 }
- ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::add_updated_replicas() {
+::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::add_updated_replicas() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.ChangeReplicasTrigger.updated_replicas)
   return updated_replicas_.Add();
 }
- const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
-ChangeReplicasTrigger::updated_replicas() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.ChangeReplicasTrigger.updated_replicas)
-  return updated_replicas_;
-}
- ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
+::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
 ChangeReplicasTrigger::mutable_updated_replicas() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ChangeReplicasTrigger.updated_replicas)
   return &updated_replicas_;
+}
+const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
+ChangeReplicasTrigger::updated_replicas() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.ChangeReplicasTrigger.updated_replicas)
+  return updated_replicas_;
 }
 
 // optional int32 next_replica_id = 4;
@@ -4393,7 +4393,7 @@ void InternalCommitTrigger::SerializeWithCachedSizes(
 int InternalCommitTrigger::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 15) {
+  if (_has_bits_[0 / 32] & 15u) {
     // optional .cockroach.roachpb.SplitTrigger split_trigger = 1;
     if (has_split_trigger()) {
       total_size += 1 +
@@ -4523,11 +4523,11 @@ void InternalCommitTrigger::clear_split_trigger() {
   if (split_trigger_ != NULL) split_trigger_->::cockroach::roachpb::SplitTrigger::Clear();
   clear_has_split_trigger();
 }
- const ::cockroach::roachpb::SplitTrigger& InternalCommitTrigger::split_trigger() const {
+const ::cockroach::roachpb::SplitTrigger& InternalCommitTrigger::split_trigger() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalCommitTrigger.split_trigger)
   return split_trigger_ != NULL ? *split_trigger_ : *default_instance_->split_trigger_;
 }
- ::cockroach::roachpb::SplitTrigger* InternalCommitTrigger::mutable_split_trigger() {
+::cockroach::roachpb::SplitTrigger* InternalCommitTrigger::mutable_split_trigger() {
   set_has_split_trigger();
   if (split_trigger_ == NULL) {
     split_trigger_ = new ::cockroach::roachpb::SplitTrigger;
@@ -4535,13 +4535,13 @@ void InternalCommitTrigger::clear_split_trigger() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.InternalCommitTrigger.split_trigger)
   return split_trigger_;
 }
- ::cockroach::roachpb::SplitTrigger* InternalCommitTrigger::release_split_trigger() {
+::cockroach::roachpb::SplitTrigger* InternalCommitTrigger::release_split_trigger() {
   clear_has_split_trigger();
   ::cockroach::roachpb::SplitTrigger* temp = split_trigger_;
   split_trigger_ = NULL;
   return temp;
 }
- void InternalCommitTrigger::set_allocated_split_trigger(::cockroach::roachpb::SplitTrigger* split_trigger) {
+void InternalCommitTrigger::set_allocated_split_trigger(::cockroach::roachpb::SplitTrigger* split_trigger) {
   delete split_trigger_;
   split_trigger_ = split_trigger;
   if (split_trigger) {
@@ -4566,11 +4566,11 @@ void InternalCommitTrigger::clear_merge_trigger() {
   if (merge_trigger_ != NULL) merge_trigger_->::cockroach::roachpb::MergeTrigger::Clear();
   clear_has_merge_trigger();
 }
- const ::cockroach::roachpb::MergeTrigger& InternalCommitTrigger::merge_trigger() const {
+const ::cockroach::roachpb::MergeTrigger& InternalCommitTrigger::merge_trigger() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalCommitTrigger.merge_trigger)
   return merge_trigger_ != NULL ? *merge_trigger_ : *default_instance_->merge_trigger_;
 }
- ::cockroach::roachpb::MergeTrigger* InternalCommitTrigger::mutable_merge_trigger() {
+::cockroach::roachpb::MergeTrigger* InternalCommitTrigger::mutable_merge_trigger() {
   set_has_merge_trigger();
   if (merge_trigger_ == NULL) {
     merge_trigger_ = new ::cockroach::roachpb::MergeTrigger;
@@ -4578,13 +4578,13 @@ void InternalCommitTrigger::clear_merge_trigger() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.InternalCommitTrigger.merge_trigger)
   return merge_trigger_;
 }
- ::cockroach::roachpb::MergeTrigger* InternalCommitTrigger::release_merge_trigger() {
+::cockroach::roachpb::MergeTrigger* InternalCommitTrigger::release_merge_trigger() {
   clear_has_merge_trigger();
   ::cockroach::roachpb::MergeTrigger* temp = merge_trigger_;
   merge_trigger_ = NULL;
   return temp;
 }
- void InternalCommitTrigger::set_allocated_merge_trigger(::cockroach::roachpb::MergeTrigger* merge_trigger) {
+void InternalCommitTrigger::set_allocated_merge_trigger(::cockroach::roachpb::MergeTrigger* merge_trigger) {
   delete merge_trigger_;
   merge_trigger_ = merge_trigger;
   if (merge_trigger) {
@@ -4609,11 +4609,11 @@ void InternalCommitTrigger::clear_change_replicas_trigger() {
   if (change_replicas_trigger_ != NULL) change_replicas_trigger_->::cockroach::roachpb::ChangeReplicasTrigger::Clear();
   clear_has_change_replicas_trigger();
 }
- const ::cockroach::roachpb::ChangeReplicasTrigger& InternalCommitTrigger::change_replicas_trigger() const {
+const ::cockroach::roachpb::ChangeReplicasTrigger& InternalCommitTrigger::change_replicas_trigger() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalCommitTrigger.change_replicas_trigger)
   return change_replicas_trigger_ != NULL ? *change_replicas_trigger_ : *default_instance_->change_replicas_trigger_;
 }
- ::cockroach::roachpb::ChangeReplicasTrigger* InternalCommitTrigger::mutable_change_replicas_trigger() {
+::cockroach::roachpb::ChangeReplicasTrigger* InternalCommitTrigger::mutable_change_replicas_trigger() {
   set_has_change_replicas_trigger();
   if (change_replicas_trigger_ == NULL) {
     change_replicas_trigger_ = new ::cockroach::roachpb::ChangeReplicasTrigger;
@@ -4621,13 +4621,13 @@ void InternalCommitTrigger::clear_change_replicas_trigger() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.InternalCommitTrigger.change_replicas_trigger)
   return change_replicas_trigger_;
 }
- ::cockroach::roachpb::ChangeReplicasTrigger* InternalCommitTrigger::release_change_replicas_trigger() {
+::cockroach::roachpb::ChangeReplicasTrigger* InternalCommitTrigger::release_change_replicas_trigger() {
   clear_has_change_replicas_trigger();
   ::cockroach::roachpb::ChangeReplicasTrigger* temp = change_replicas_trigger_;
   change_replicas_trigger_ = NULL;
   return temp;
 }
- void InternalCommitTrigger::set_allocated_change_replicas_trigger(::cockroach::roachpb::ChangeReplicasTrigger* change_replicas_trigger) {
+void InternalCommitTrigger::set_allocated_change_replicas_trigger(::cockroach::roachpb::ChangeReplicasTrigger* change_replicas_trigger) {
   delete change_replicas_trigger_;
   change_replicas_trigger_ = change_replicas_trigger;
   if (change_replicas_trigger) {
@@ -4652,11 +4652,11 @@ void InternalCommitTrigger::clear_modified_span_trigger() {
   if (modified_span_trigger_ != NULL) modified_span_trigger_->::cockroach::roachpb::ModifiedSpanTrigger::Clear();
   clear_has_modified_span_trigger();
 }
- const ::cockroach::roachpb::ModifiedSpanTrigger& InternalCommitTrigger::modified_span_trigger() const {
+const ::cockroach::roachpb::ModifiedSpanTrigger& InternalCommitTrigger::modified_span_trigger() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalCommitTrigger.modified_span_trigger)
   return modified_span_trigger_ != NULL ? *modified_span_trigger_ : *default_instance_->modified_span_trigger_;
 }
- ::cockroach::roachpb::ModifiedSpanTrigger* InternalCommitTrigger::mutable_modified_span_trigger() {
+::cockroach::roachpb::ModifiedSpanTrigger* InternalCommitTrigger::mutable_modified_span_trigger() {
   set_has_modified_span_trigger();
   if (modified_span_trigger_ == NULL) {
     modified_span_trigger_ = new ::cockroach::roachpb::ModifiedSpanTrigger;
@@ -4664,13 +4664,13 @@ void InternalCommitTrigger::clear_modified_span_trigger() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.InternalCommitTrigger.modified_span_trigger)
   return modified_span_trigger_;
 }
- ::cockroach::roachpb::ModifiedSpanTrigger* InternalCommitTrigger::release_modified_span_trigger() {
+::cockroach::roachpb::ModifiedSpanTrigger* InternalCommitTrigger::release_modified_span_trigger() {
   clear_has_modified_span_trigger();
   ::cockroach::roachpb::ModifiedSpanTrigger* temp = modified_span_trigger_;
   modified_span_trigger_ = NULL;
   return temp;
 }
- void InternalCommitTrigger::set_allocated_modified_span_trigger(::cockroach::roachpb::ModifiedSpanTrigger* modified_span_trigger) {
+void InternalCommitTrigger::set_allocated_modified_span_trigger(::cockroach::roachpb::ModifiedSpanTrigger* modified_span_trigger) {
   delete modified_span_trigger_;
   modified_span_trigger_ = modified_span_trigger;
   if (modified_span_trigger) {
@@ -5594,7 +5594,7 @@ void Transaction::SerializeWithCachedSizes(
 int Transaction::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 255) {
+  if (_has_bits_[0 / 32] & 255u) {
     // optional string name = 1;
     if (has_name()) {
       total_size += 1 +
@@ -5650,7 +5650,7 @@ int Transaction::ByteSize() const {
     }
 
   }
-  if (_has_bits_[8 / 32] & 16128) {
+  if (_has_bits_[8 / 32] & 16128u) {
     // optional .cockroach.roachpb.Timestamp timestamp = 9;
     if (has_timestamp()) {
       total_size += 1 +
@@ -6104,11 +6104,11 @@ void Transaction::clear_last_heartbeat() {
   if (last_heartbeat_ != NULL) last_heartbeat_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_last_heartbeat();
 }
- const ::cockroach::roachpb::Timestamp& Transaction::last_heartbeat() const {
+const ::cockroach::roachpb::Timestamp& Transaction::last_heartbeat() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.last_heartbeat)
   return last_heartbeat_ != NULL ? *last_heartbeat_ : *default_instance_->last_heartbeat_;
 }
- ::cockroach::roachpb::Timestamp* Transaction::mutable_last_heartbeat() {
+::cockroach::roachpb::Timestamp* Transaction::mutable_last_heartbeat() {
   set_has_last_heartbeat();
   if (last_heartbeat_ == NULL) {
     last_heartbeat_ = new ::cockroach::roachpb::Timestamp;
@@ -6116,13 +6116,13 @@ void Transaction::clear_last_heartbeat() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.last_heartbeat)
   return last_heartbeat_;
 }
- ::cockroach::roachpb::Timestamp* Transaction::release_last_heartbeat() {
+::cockroach::roachpb::Timestamp* Transaction::release_last_heartbeat() {
   clear_has_last_heartbeat();
   ::cockroach::roachpb::Timestamp* temp = last_heartbeat_;
   last_heartbeat_ = NULL;
   return temp;
 }
- void Transaction::set_allocated_last_heartbeat(::cockroach::roachpb::Timestamp* last_heartbeat) {
+void Transaction::set_allocated_last_heartbeat(::cockroach::roachpb::Timestamp* last_heartbeat) {
   delete last_heartbeat_;
   last_heartbeat_ = last_heartbeat;
   if (last_heartbeat) {
@@ -6147,11 +6147,11 @@ void Transaction::clear_timestamp() {
   if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_timestamp();
 }
- const ::cockroach::roachpb::Timestamp& Transaction::timestamp() const {
+const ::cockroach::roachpb::Timestamp& Transaction::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.timestamp)
   return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
 }
- ::cockroach::roachpb::Timestamp* Transaction::mutable_timestamp() {
+::cockroach::roachpb::Timestamp* Transaction::mutable_timestamp() {
   set_has_timestamp();
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::roachpb::Timestamp;
@@ -6159,13 +6159,13 @@ void Transaction::clear_timestamp() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.timestamp)
   return timestamp_;
 }
- ::cockroach::roachpb::Timestamp* Transaction::release_timestamp() {
+::cockroach::roachpb::Timestamp* Transaction::release_timestamp() {
   clear_has_timestamp();
   ::cockroach::roachpb::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
 }
- void Transaction::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
+void Transaction::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
@@ -6190,11 +6190,11 @@ void Transaction::clear_orig_timestamp() {
   if (orig_timestamp_ != NULL) orig_timestamp_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_orig_timestamp();
 }
- const ::cockroach::roachpb::Timestamp& Transaction::orig_timestamp() const {
+const ::cockroach::roachpb::Timestamp& Transaction::orig_timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.orig_timestamp)
   return orig_timestamp_ != NULL ? *orig_timestamp_ : *default_instance_->orig_timestamp_;
 }
- ::cockroach::roachpb::Timestamp* Transaction::mutable_orig_timestamp() {
+::cockroach::roachpb::Timestamp* Transaction::mutable_orig_timestamp() {
   set_has_orig_timestamp();
   if (orig_timestamp_ == NULL) {
     orig_timestamp_ = new ::cockroach::roachpb::Timestamp;
@@ -6202,13 +6202,13 @@ void Transaction::clear_orig_timestamp() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.orig_timestamp)
   return orig_timestamp_;
 }
- ::cockroach::roachpb::Timestamp* Transaction::release_orig_timestamp() {
+::cockroach::roachpb::Timestamp* Transaction::release_orig_timestamp() {
   clear_has_orig_timestamp();
   ::cockroach::roachpb::Timestamp* temp = orig_timestamp_;
   orig_timestamp_ = NULL;
   return temp;
 }
- void Transaction::set_allocated_orig_timestamp(::cockroach::roachpb::Timestamp* orig_timestamp) {
+void Transaction::set_allocated_orig_timestamp(::cockroach::roachpb::Timestamp* orig_timestamp) {
   delete orig_timestamp_;
   orig_timestamp_ = orig_timestamp;
   if (orig_timestamp) {
@@ -6233,11 +6233,11 @@ void Transaction::clear_max_timestamp() {
   if (max_timestamp_ != NULL) max_timestamp_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_max_timestamp();
 }
- const ::cockroach::roachpb::Timestamp& Transaction::max_timestamp() const {
+const ::cockroach::roachpb::Timestamp& Transaction::max_timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.max_timestamp)
   return max_timestamp_ != NULL ? *max_timestamp_ : *default_instance_->max_timestamp_;
 }
- ::cockroach::roachpb::Timestamp* Transaction::mutable_max_timestamp() {
+::cockroach::roachpb::Timestamp* Transaction::mutable_max_timestamp() {
   set_has_max_timestamp();
   if (max_timestamp_ == NULL) {
     max_timestamp_ = new ::cockroach::roachpb::Timestamp;
@@ -6245,13 +6245,13 @@ void Transaction::clear_max_timestamp() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.max_timestamp)
   return max_timestamp_;
 }
- ::cockroach::roachpb::Timestamp* Transaction::release_max_timestamp() {
+::cockroach::roachpb::Timestamp* Transaction::release_max_timestamp() {
   clear_has_max_timestamp();
   ::cockroach::roachpb::Timestamp* temp = max_timestamp_;
   max_timestamp_ = NULL;
   return temp;
 }
- void Transaction::set_allocated_max_timestamp(::cockroach::roachpb::Timestamp* max_timestamp) {
+void Transaction::set_allocated_max_timestamp(::cockroach::roachpb::Timestamp* max_timestamp) {
   delete max_timestamp_;
   max_timestamp_ = max_timestamp;
   if (max_timestamp) {
@@ -6276,11 +6276,11 @@ void Transaction::clear_certain_nodes() {
   if (certain_nodes_ != NULL) certain_nodes_->::cockroach::roachpb::NodeList::Clear();
   clear_has_certain_nodes();
 }
- const ::cockroach::roachpb::NodeList& Transaction::certain_nodes() const {
+const ::cockroach::roachpb::NodeList& Transaction::certain_nodes() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.certain_nodes)
   return certain_nodes_ != NULL ? *certain_nodes_ : *default_instance_->certain_nodes_;
 }
- ::cockroach::roachpb::NodeList* Transaction::mutable_certain_nodes() {
+::cockroach::roachpb::NodeList* Transaction::mutable_certain_nodes() {
   set_has_certain_nodes();
   if (certain_nodes_ == NULL) {
     certain_nodes_ = new ::cockroach::roachpb::NodeList;
@@ -6288,13 +6288,13 @@ void Transaction::clear_certain_nodes() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.certain_nodes)
   return certain_nodes_;
 }
- ::cockroach::roachpb::NodeList* Transaction::release_certain_nodes() {
+::cockroach::roachpb::NodeList* Transaction::release_certain_nodes() {
   clear_has_certain_nodes();
   ::cockroach::roachpb::NodeList* temp = certain_nodes_;
   certain_nodes_ = NULL;
   return temp;
 }
- void Transaction::set_allocated_certain_nodes(::cockroach::roachpb::NodeList* certain_nodes) {
+void Transaction::set_allocated_certain_nodes(::cockroach::roachpb::NodeList* certain_nodes) {
   delete certain_nodes_;
   certain_nodes_ = certain_nodes;
   if (certain_nodes) {
@@ -6360,27 +6360,27 @@ int Transaction::intents_size() const {
 void Transaction::clear_intents() {
   intents_.Clear();
 }
- const ::cockroach::roachpb::Span& Transaction::intents(int index) const {
+const ::cockroach::roachpb::Span& Transaction::intents(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.Intents)
   return intents_.Get(index);
 }
- ::cockroach::roachpb::Span* Transaction::mutable_intents(int index) {
+::cockroach::roachpb::Span* Transaction::mutable_intents(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.Intents)
   return intents_.Mutable(index);
 }
- ::cockroach::roachpb::Span* Transaction::add_intents() {
+::cockroach::roachpb::Span* Transaction::add_intents() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.Transaction.Intents)
   return intents_.Add();
 }
- const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-Transaction::intents() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.Intents)
-  return intents_;
-}
- ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
+::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
 Transaction::mutable_intents() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.Transaction.Intents)
   return &intents_;
+}
+const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+Transaction::intents() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.Intents)
+  return intents_;
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
@@ -6577,7 +6577,7 @@ void Intent::SerializeWithCachedSizes(
 int Intent::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.Span span = 1;
     if (has_span()) {
       total_size += 1 +
@@ -6685,11 +6685,11 @@ void Intent::clear_span() {
   if (span_ != NULL) span_->::cockroach::roachpb::Span::Clear();
   clear_has_span();
 }
- const ::cockroach::roachpb::Span& Intent::span() const {
+const ::cockroach::roachpb::Span& Intent::span() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.span)
   return span_ != NULL ? *span_ : *default_instance_->span_;
 }
- ::cockroach::roachpb::Span* Intent::mutable_span() {
+::cockroach::roachpb::Span* Intent::mutable_span() {
   set_has_span();
   if (span_ == NULL) {
     span_ = new ::cockroach::roachpb::Span;
@@ -6697,13 +6697,13 @@ void Intent::clear_span() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Intent.span)
   return span_;
 }
- ::cockroach::roachpb::Span* Intent::release_span() {
+::cockroach::roachpb::Span* Intent::release_span() {
   clear_has_span();
   ::cockroach::roachpb::Span* temp = span_;
   span_ = NULL;
   return temp;
 }
- void Intent::set_allocated_span(::cockroach::roachpb::Span* span) {
+void Intent::set_allocated_span(::cockroach::roachpb::Span* span) {
   delete span_;
   span_ = span;
   if (span) {
@@ -6728,11 +6728,11 @@ void Intent::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
   clear_has_txn();
 }
- const ::cockroach::roachpb::Transaction& Intent::txn() const {
+const ::cockroach::roachpb::Transaction& Intent::txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.txn)
   return txn_ != NULL ? *txn_ : *default_instance_->txn_;
 }
- ::cockroach::roachpb::Transaction* Intent::mutable_txn() {
+::cockroach::roachpb::Transaction* Intent::mutable_txn() {
   set_has_txn();
   if (txn_ == NULL) {
     txn_ = new ::cockroach::roachpb::Transaction;
@@ -6740,13 +6740,13 @@ void Intent::clear_txn() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Intent.txn)
   return txn_;
 }
- ::cockroach::roachpb::Transaction* Intent::release_txn() {
+::cockroach::roachpb::Transaction* Intent::release_txn() {
   clear_has_txn();
   ::cockroach::roachpb::Transaction* temp = txn_;
   txn_ = NULL;
   return temp;
 }
- void Intent::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
+void Intent::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
   delete txn_;
   txn_ = txn;
   if (txn) {
@@ -6984,7 +6984,7 @@ void Lease::SerializeWithCachedSizes(
 int Lease::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7) {
+  if (_has_bits_[0 / 32] & 7u) {
     // optional .cockroach.roachpb.Timestamp start = 1;
     if (has_start()) {
       total_size += 1 +
@@ -7103,11 +7103,11 @@ void Lease::clear_start() {
   if (start_ != NULL) start_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_start();
 }
- const ::cockroach::roachpb::Timestamp& Lease::start() const {
+const ::cockroach::roachpb::Timestamp& Lease::start() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.start)
   return start_ != NULL ? *start_ : *default_instance_->start_;
 }
- ::cockroach::roachpb::Timestamp* Lease::mutable_start() {
+::cockroach::roachpb::Timestamp* Lease::mutable_start() {
   set_has_start();
   if (start_ == NULL) {
     start_ = new ::cockroach::roachpb::Timestamp;
@@ -7115,13 +7115,13 @@ void Lease::clear_start() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Lease.start)
   return start_;
 }
- ::cockroach::roachpb::Timestamp* Lease::release_start() {
+::cockroach::roachpb::Timestamp* Lease::release_start() {
   clear_has_start();
   ::cockroach::roachpb::Timestamp* temp = start_;
   start_ = NULL;
   return temp;
 }
- void Lease::set_allocated_start(::cockroach::roachpb::Timestamp* start) {
+void Lease::set_allocated_start(::cockroach::roachpb::Timestamp* start) {
   delete start_;
   start_ = start;
   if (start) {
@@ -7146,11 +7146,11 @@ void Lease::clear_expiration() {
   if (expiration_ != NULL) expiration_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_expiration();
 }
- const ::cockroach::roachpb::Timestamp& Lease::expiration() const {
+const ::cockroach::roachpb::Timestamp& Lease::expiration() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.expiration)
   return expiration_ != NULL ? *expiration_ : *default_instance_->expiration_;
 }
- ::cockroach::roachpb::Timestamp* Lease::mutable_expiration() {
+::cockroach::roachpb::Timestamp* Lease::mutable_expiration() {
   set_has_expiration();
   if (expiration_ == NULL) {
     expiration_ = new ::cockroach::roachpb::Timestamp;
@@ -7158,13 +7158,13 @@ void Lease::clear_expiration() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Lease.expiration)
   return expiration_;
 }
- ::cockroach::roachpb::Timestamp* Lease::release_expiration() {
+::cockroach::roachpb::Timestamp* Lease::release_expiration() {
   clear_has_expiration();
   ::cockroach::roachpb::Timestamp* temp = expiration_;
   expiration_ = NULL;
   return temp;
 }
- void Lease::set_allocated_expiration(::cockroach::roachpb::Timestamp* expiration) {
+void Lease::set_allocated_expiration(::cockroach::roachpb::Timestamp* expiration) {
   delete expiration_;
   expiration_ = expiration;
   if (expiration) {
@@ -7189,11 +7189,11 @@ void Lease::clear_replica() {
   if (replica_ != NULL) replica_->::cockroach::roachpb::ReplicaDescriptor::Clear();
   clear_has_replica();
 }
- const ::cockroach::roachpb::ReplicaDescriptor& Lease::replica() const {
+const ::cockroach::roachpb::ReplicaDescriptor& Lease::replica() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.replica)
   return replica_ != NULL ? *replica_ : *default_instance_->replica_;
 }
- ::cockroach::roachpb::ReplicaDescriptor* Lease::mutable_replica() {
+::cockroach::roachpb::ReplicaDescriptor* Lease::mutable_replica() {
   set_has_replica();
   if (replica_ == NULL) {
     replica_ = new ::cockroach::roachpb::ReplicaDescriptor;
@@ -7201,13 +7201,13 @@ void Lease::clear_replica() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Lease.replica)
   return replica_;
 }
- ::cockroach::roachpb::ReplicaDescriptor* Lease::release_replica() {
+::cockroach::roachpb::ReplicaDescriptor* Lease::release_replica() {
   clear_has_replica();
   ::cockroach::roachpb::ReplicaDescriptor* temp = replica_;
   replica_ = NULL;
   return temp;
 }
- void Lease::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica) {
+void Lease::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica) {
   delete replica_;
   replica_ = replica;
   if (replica) {
@@ -7671,7 +7671,7 @@ void SequenceCacheEntry::SerializeWithCachedSizes(
 int SequenceCacheEntry::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional bytes key = 1;
     if (has_key()) {
       total_size += 1 +
@@ -7833,11 +7833,11 @@ void SequenceCacheEntry::clear_timestamp() {
   if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_timestamp();
 }
- const ::cockroach::roachpb::Timestamp& SequenceCacheEntry::timestamp() const {
+const ::cockroach::roachpb::Timestamp& SequenceCacheEntry::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.SequenceCacheEntry.timestamp)
   return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
 }
- ::cockroach::roachpb::Timestamp* SequenceCacheEntry::mutable_timestamp() {
+::cockroach::roachpb::Timestamp* SequenceCacheEntry::mutable_timestamp() {
   set_has_timestamp();
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::roachpb::Timestamp;
@@ -7845,13 +7845,13 @@ void SequenceCacheEntry::clear_timestamp() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.SequenceCacheEntry.timestamp)
   return timestamp_;
 }
- ::cockroach::roachpb::Timestamp* SequenceCacheEntry::release_timestamp() {
+::cockroach::roachpb::Timestamp* SequenceCacheEntry::release_timestamp() {
   clear_has_timestamp();
   ::cockroach::roachpb::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
 }
- void SequenceCacheEntry::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
+void SequenceCacheEntry::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {

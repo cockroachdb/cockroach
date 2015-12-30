@@ -509,7 +509,7 @@ void RaftCommand::SerializeWithCachedSizes(
 int RaftCommand::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7) {
+  if (_has_bits_[0 / 32] & 7u) {
     // optional int64 range_id = 1;
     if (has_range_id()) {
       total_size += 1 +
@@ -652,11 +652,11 @@ void RaftCommand::clear_origin_replica() {
   if (origin_replica_ != NULL) origin_replica_->::cockroach::roachpb::ReplicaDescriptor::Clear();
   clear_has_origin_replica();
 }
- const ::cockroach::roachpb::ReplicaDescriptor& RaftCommand::origin_replica() const {
+const ::cockroach::roachpb::ReplicaDescriptor& RaftCommand::origin_replica() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RaftCommand.origin_replica)
   return origin_replica_ != NULL ? *origin_replica_ : *default_instance_->origin_replica_;
 }
- ::cockroach::roachpb::ReplicaDescriptor* RaftCommand::mutable_origin_replica() {
+::cockroach::roachpb::ReplicaDescriptor* RaftCommand::mutable_origin_replica() {
   set_has_origin_replica();
   if (origin_replica_ == NULL) {
     origin_replica_ = new ::cockroach::roachpb::ReplicaDescriptor;
@@ -664,13 +664,13 @@ void RaftCommand::clear_origin_replica() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RaftCommand.origin_replica)
   return origin_replica_;
 }
- ::cockroach::roachpb::ReplicaDescriptor* RaftCommand::release_origin_replica() {
+::cockroach::roachpb::ReplicaDescriptor* RaftCommand::release_origin_replica() {
   clear_has_origin_replica();
   ::cockroach::roachpb::ReplicaDescriptor* temp = origin_replica_;
   origin_replica_ = NULL;
   return temp;
 }
- void RaftCommand::set_allocated_origin_replica(::cockroach::roachpb::ReplicaDescriptor* origin_replica) {
+void RaftCommand::set_allocated_origin_replica(::cockroach::roachpb::ReplicaDescriptor* origin_replica) {
   delete origin_replica_;
   origin_replica_ = origin_replica;
   if (origin_replica) {
@@ -695,11 +695,11 @@ void RaftCommand::clear_cmd() {
   if (cmd_ != NULL) cmd_->::cockroach::roachpb::BatchRequest::Clear();
   clear_has_cmd();
 }
- const ::cockroach::roachpb::BatchRequest& RaftCommand::cmd() const {
+const ::cockroach::roachpb::BatchRequest& RaftCommand::cmd() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RaftCommand.cmd)
   return cmd_ != NULL ? *cmd_ : *default_instance_->cmd_;
 }
- ::cockroach::roachpb::BatchRequest* RaftCommand::mutable_cmd() {
+::cockroach::roachpb::BatchRequest* RaftCommand::mutable_cmd() {
   set_has_cmd();
   if (cmd_ == NULL) {
     cmd_ = new ::cockroach::roachpb::BatchRequest;
@@ -707,13 +707,13 @@ void RaftCommand::clear_cmd() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RaftCommand.cmd)
   return cmd_;
 }
- ::cockroach::roachpb::BatchRequest* RaftCommand::release_cmd() {
+::cockroach::roachpb::BatchRequest* RaftCommand::release_cmd() {
   clear_has_cmd();
   ::cockroach::roachpb::BatchRequest* temp = cmd_;
   cmd_ = NULL;
   return temp;
 }
- void RaftCommand::set_allocated_cmd(::cockroach::roachpb::BatchRequest* cmd) {
+void RaftCommand::set_allocated_cmd(::cockroach::roachpb::BatchRequest* cmd) {
   delete cmd_;
   cmd_ = cmd;
   if (cmd) {
@@ -949,7 +949,7 @@ void InternalTimeSeriesData::SerializeWithCachedSizes(
 int InternalTimeSeriesData::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional int64 start_timestamp_nanos = 1;
     if (has_start_timestamp_nanos()) {
       total_size += 1 +
@@ -1108,27 +1108,27 @@ int InternalTimeSeriesData::samples_size() const {
 void InternalTimeSeriesData::clear_samples() {
   samples_.Clear();
 }
- const ::cockroach::roachpb::InternalTimeSeriesSample& InternalTimeSeriesData::samples(int index) const {
+const ::cockroach::roachpb::InternalTimeSeriesSample& InternalTimeSeriesData::samples(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesData.samples)
   return samples_.Get(index);
 }
- ::cockroach::roachpb::InternalTimeSeriesSample* InternalTimeSeriesData::mutable_samples(int index) {
+::cockroach::roachpb::InternalTimeSeriesSample* InternalTimeSeriesData::mutable_samples(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.InternalTimeSeriesData.samples)
   return samples_.Mutable(index);
 }
- ::cockroach::roachpb::InternalTimeSeriesSample* InternalTimeSeriesData::add_samples() {
+::cockroach::roachpb::InternalTimeSeriesSample* InternalTimeSeriesData::add_samples() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.InternalTimeSeriesData.samples)
   return samples_.Add();
 }
- const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::InternalTimeSeriesSample >&
-InternalTimeSeriesData::samples() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.InternalTimeSeriesData.samples)
-  return samples_;
-}
- ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::InternalTimeSeriesSample >*
+::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::InternalTimeSeriesSample >*
 InternalTimeSeriesData::mutable_samples() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.InternalTimeSeriesData.samples)
   return &samples_;
+}
+const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::InternalTimeSeriesSample >&
+InternalTimeSeriesData::samples() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.InternalTimeSeriesData.samples)
+  return samples_;
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
@@ -1407,7 +1407,7 @@ void InternalTimeSeriesSample::SerializeWithCachedSizes(
 int InternalTimeSeriesSample::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 31) {
+  if (_has_bits_[0 / 32] & 31u) {
     // optional int32 offset = 1;
     if (has_offset()) {
       total_size += 1 +
@@ -1841,7 +1841,7 @@ void RaftTruncatedState::SerializeWithCachedSizes(
 int RaftTruncatedState::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional uint64 index = 1;
     if (has_index()) {
       total_size += 1 +
@@ -2468,7 +2468,7 @@ void RaftSnapshotData_KeyValue::SerializeWithCachedSizes(
 int RaftSnapshotData_KeyValue::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7) {
+  if (_has_bits_[0 / 32] & 7u) {
     // optional bytes key = 1;
     if (has_key()) {
       total_size += 1 +
@@ -2973,11 +2973,11 @@ void RaftSnapshotData_KeyValue::clear_timestamp() {
   if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_timestamp();
 }
- const ::cockroach::roachpb::Timestamp& RaftSnapshotData_KeyValue::timestamp() const {
+const ::cockroach::roachpb::Timestamp& RaftSnapshotData_KeyValue::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RaftSnapshotData.KeyValue.timestamp)
   return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
 }
- ::cockroach::roachpb::Timestamp* RaftSnapshotData_KeyValue::mutable_timestamp() {
+::cockroach::roachpb::Timestamp* RaftSnapshotData_KeyValue::mutable_timestamp() {
   set_has_timestamp();
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::roachpb::Timestamp;
@@ -2985,13 +2985,13 @@ void RaftSnapshotData_KeyValue::clear_timestamp() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RaftSnapshotData.KeyValue.timestamp)
   return timestamp_;
 }
- ::cockroach::roachpb::Timestamp* RaftSnapshotData_KeyValue::release_timestamp() {
+::cockroach::roachpb::Timestamp* RaftSnapshotData_KeyValue::release_timestamp() {
   clear_has_timestamp();
   ::cockroach::roachpb::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
 }
- void RaftSnapshotData_KeyValue::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
+void RaftSnapshotData_KeyValue::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
@@ -3020,11 +3020,11 @@ void RaftSnapshotData::clear_range_descriptor() {
   if (range_descriptor_ != NULL) range_descriptor_->::cockroach::roachpb::RangeDescriptor::Clear();
   clear_has_range_descriptor();
 }
- const ::cockroach::roachpb::RangeDescriptor& RaftSnapshotData::range_descriptor() const {
+const ::cockroach::roachpb::RangeDescriptor& RaftSnapshotData::range_descriptor() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RaftSnapshotData.range_descriptor)
   return range_descriptor_ != NULL ? *range_descriptor_ : *default_instance_->range_descriptor_;
 }
- ::cockroach::roachpb::RangeDescriptor* RaftSnapshotData::mutable_range_descriptor() {
+::cockroach::roachpb::RangeDescriptor* RaftSnapshotData::mutable_range_descriptor() {
   set_has_range_descriptor();
   if (range_descriptor_ == NULL) {
     range_descriptor_ = new ::cockroach::roachpb::RangeDescriptor;
@@ -3032,13 +3032,13 @@ void RaftSnapshotData::clear_range_descriptor() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RaftSnapshotData.range_descriptor)
   return range_descriptor_;
 }
- ::cockroach::roachpb::RangeDescriptor* RaftSnapshotData::release_range_descriptor() {
+::cockroach::roachpb::RangeDescriptor* RaftSnapshotData::release_range_descriptor() {
   clear_has_range_descriptor();
   ::cockroach::roachpb::RangeDescriptor* temp = range_descriptor_;
   range_descriptor_ = NULL;
   return temp;
 }
- void RaftSnapshotData::set_allocated_range_descriptor(::cockroach::roachpb::RangeDescriptor* range_descriptor) {
+void RaftSnapshotData::set_allocated_range_descriptor(::cockroach::roachpb::RangeDescriptor* range_descriptor) {
   delete range_descriptor_;
   range_descriptor_ = range_descriptor;
   if (range_descriptor) {
@@ -3056,27 +3056,27 @@ int RaftSnapshotData::kv_size() const {
 void RaftSnapshotData::clear_kv() {
   kv_.Clear();
 }
- const ::cockroach::roachpb::RaftSnapshotData_KeyValue& RaftSnapshotData::kv(int index) const {
+const ::cockroach::roachpb::RaftSnapshotData_KeyValue& RaftSnapshotData::kv(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RaftSnapshotData.KV)
   return kv_.Get(index);
 }
- ::cockroach::roachpb::RaftSnapshotData_KeyValue* RaftSnapshotData::mutable_kv(int index) {
+::cockroach::roachpb::RaftSnapshotData_KeyValue* RaftSnapshotData::mutable_kv(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RaftSnapshotData.KV)
   return kv_.Mutable(index);
 }
- ::cockroach::roachpb::RaftSnapshotData_KeyValue* RaftSnapshotData::add_kv() {
+::cockroach::roachpb::RaftSnapshotData_KeyValue* RaftSnapshotData::add_kv() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.RaftSnapshotData.KV)
   return kv_.Add();
 }
- const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RaftSnapshotData_KeyValue >&
-RaftSnapshotData::kv() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.RaftSnapshotData.KV)
-  return kv_;
-}
- ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RaftSnapshotData_KeyValue >*
+::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RaftSnapshotData_KeyValue >*
 RaftSnapshotData::mutable_kv() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.RaftSnapshotData.KV)
   return &kv_;
+}
+const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RaftSnapshotData_KeyValue >&
+RaftSnapshotData::kv() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.RaftSnapshotData.KV)
+  return kv_;
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

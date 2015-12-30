@@ -40,12 +40,12 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fmetadata_2eproto();
 void protobuf_ShutdownFile_cockroach_2froachpb_2fmetadata_2eproto();
 
 class Attributes;
-class ReplicaDescriptor;
+class NodeDescriptor;
 class RangeDescriptor;
 class RangeTree;
 class RangeTreeNode;
+class ReplicaDescriptor;
 class StoreCapacity;
-class NodeDescriptor;
 class StoreDescriptor;
 
 // ===================================================================
@@ -357,10 +357,10 @@ class RangeDescriptor : public ::google::protobuf::Message {
   const ::cockroach::roachpb::ReplicaDescriptor& replicas(int index) const;
   ::cockroach::roachpb::ReplicaDescriptor* mutable_replicas(int index);
   ::cockroach::roachpb::ReplicaDescriptor* add_replicas();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
-      replicas() const;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
       mutable_replicas();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
+      replicas() const;
 
   // optional int32 next_replica_id = 5;
   bool has_next_replica_id() const;
@@ -1276,15 +1276,15 @@ inline ::cockroach::roachpb::ReplicaDescriptor* RangeDescriptor::add_replicas() 
   // @@protoc_insertion_point(field_add:cockroach.roachpb.RangeDescriptor.replicas)
   return replicas_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
-RangeDescriptor::replicas() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.RangeDescriptor.replicas)
-  return replicas_;
-}
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
 RangeDescriptor::mutable_replicas() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.RangeDescriptor.replicas)
   return &replicas_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
+RangeDescriptor::replicas() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.RangeDescriptor.replicas)
+  return replicas_;
 }
 
 // optional int32 next_replica_id = 5;
