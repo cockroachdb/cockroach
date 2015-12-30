@@ -19,8 +19,8 @@ package randutil_test
 import (
 	"testing"
 
-	_ "github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/randutil" // for flags
+	_ "github.com/cockroachdb/cockroach/util/log" // for flags
+	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
 func TestPseudoRand(t *testing.T) {
