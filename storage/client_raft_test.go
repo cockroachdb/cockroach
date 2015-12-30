@@ -763,6 +763,15 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		t.Fatal("Expected error calling ChangeReplicas with stale RangeDescriptor")
 	}
 
+	// Both addReplica calls attempted to use origDesc.NextReplicaID.
+	// The failed second call should not have overwritten the cached
+	// replica descriptor from the successful first call.
+	if rd, err := mtc.stores[0].ReplicaDescriptor(origDesc.RangeID, origDesc.NextReplicaID); err != nil {
+		t.Fatalf("failed to look up replica %s", origDesc.NextReplicaID)
+	} else if a, e := rd.StoreID, mtc.stores[1].Ident.StoreID; a != e {
+		log.Infof("expected replica %s to point to store %s, but got %s", origDesc.NextReplicaID, a, e)
+	}
+
 	// Add to third store with fresh descriptor.
 	if err := addReplica(2, repl.Desc()); err != nil {
 		t.Fatal(err)

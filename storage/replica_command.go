@@ -1631,7 +1631,6 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger)
 }
 
 func (r *Replica) changeReplicasTrigger(batch engine.Engine, change *roachpb.ChangeReplicasTrigger) error {
-	defer r.clearPendingChangeReplicas()
 	cpy := *r.Desc()
 	cpy.Replicas = change.UpdatedReplicas
 	cpy.NextReplicaID = change.NextReplicaID
@@ -1663,9 +1662,6 @@ func (r *Replica) changeReplicasTrigger(batch engine.Engine, change *roachpb.Cha
 // comment of "AdminSplit" for more information on this pattern.
 func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica roachpb.ReplicaDescriptor, desc *roachpb.RangeDescriptor) error {
 	r.Lock()
-	for r.pendingReplica.value.ReplicaID != 0 {
-		r.pendingReplica.Wait()
-	}
 
 	// Validate the request and prepare the new descriptor.
 	updatedDesc := *desc
@@ -1691,10 +1687,6 @@ func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica r
 		replica.ReplicaID = updatedDesc.NextReplicaID
 		updatedDesc.NextReplicaID++
 		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
-
-		// We need to be able to look up replica information before the change
-		// is official.
-		r.pendingReplica.value = replica
 	} else if changeType == roachpb.REMOVE_REPLICA {
 		// If that exact node-store combination does not have the replica,
 		// abort the removal.
@@ -1739,17 +1731,9 @@ func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica r
 		return txn.Run(b)
 	})
 	if err != nil {
-		r.clearPendingChangeReplicas()
 		return util.Errorf("change replicas of %d failed: %s", desc.RangeID, err)
 	}
 	return nil
-}
-
-func (r *Replica) clearPendingChangeReplicas() {
-	r.Lock()
-	r.pendingReplica.value = roachpb.ReplicaDescriptor{}
-	r.pendingReplica.Broadcast()
-	r.Unlock()
 }
 
 // replicaSetsEqual is used in AdminMerge to ensure that the ranges are
