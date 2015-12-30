@@ -6,6 +6,11 @@ variable "cockroach_port" {
   default = "26257"
 }
 
+# Comma-separated list of directories added as auxiliary stores.
+variable "aux_data_dirs" {
+  default = ""
+}
+
 # Port used by supervisord.
 variable "supervisor_port" {
   default = "9001"

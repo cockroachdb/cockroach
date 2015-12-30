@@ -18,6 +18,7 @@ resource "template_file" "supervisor" {
   template = "${file("supervisor.conf.tpl")}"
   vars {
     elb_address = "${aws_elb.elb.dns_name}:${var.cockroach_port}"
+    stores = "${join(",", formatlist("ssd=%s", compact(split(",", "data,${var.aux_data_dirs}"))))}"
   }
 }
 
