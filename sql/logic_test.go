@@ -56,6 +56,7 @@ var (
 type lineScanner struct {
 	*bufio.Scanner
 	line int
+	skip bool
 }
 
 func newLineScanner(r io.Reader) *lineScanner {
@@ -276,7 +277,11 @@ SET DATABASE = test;
 				fmt.Fprintln(&buf, line)
 			}
 			stmt.sql = strings.TrimSpace(buf.String())
-			t.execStatement(stmt)
+			if !s.skip {
+				t.execStatement(stmt)
+			} else {
+				s.skip = false
+			}
 			t.success(path)
 
 		case "query":
@@ -376,14 +381,18 @@ SET DATABASE = test;
 				}
 			}
 
-			t.execQuery(query)
+			if !s.skip {
+				t.execQuery(query)
+			} else {
+				s.skip = false
+			}
 			t.success(path)
 
 		case "halt", "hash-threshold":
 			break
 
 		case "user":
-			if len(fields) != 2 {
+			if len(fields) < 2 {
 				t.Fatalf("user command requires one argument, found: %v", fields)
 			}
 			if len(fields[1]) == 0 {
@@ -391,8 +400,34 @@ SET DATABASE = test;
 			}
 			t.setUser(tempDir, fields[1])
 
-		case "skipif", "onlyif":
-			t.Fatalf("unimplemented test statement: %s", s.Text())
+		case "skipif":
+			if len(fields) < 2 {
+				t.Fatalf("skipif command requires one argument, found: %v", fields)
+			}
+			switch fields[1] {
+			case "":
+				t.Fatal("skipif command requires a non-blank argument")
+			case "mysql":
+			case "postgresql":
+				s.skip = true
+				continue
+			default:
+				t.Fatalf("unimplemented test statement: %s", s.Text())
+			}
+
+		case "onlyif":
+			if len(fields) < 2 {
+				t.Fatalf("onlyif command requires one argument, found: %v", fields)
+			}
+			switch fields[1] {
+			case "":
+				t.Fatal("onlyif command requires a non-blank argument")
+			case "mysql":
+				s.skip = true
+				continue
+			default:
+				t.Fatalf("unimplemented test statement: %s", s.Text())
+			}
 
 		default:
 			t.Fatalf("%s:%d: unknown command: %s", path, s.line, cmd)

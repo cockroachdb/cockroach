@@ -28,6 +28,16 @@ SELECT COUNT(*), k FROM kv GROUP BY k
 1 7
 1 8
 
+query I rowsort
+SELECT 1 GROUP BY 'a';
+----
+1
+
+query I rowsort
+SELECT MIN(1) FROM kv;
+----
+1
+
 query II rowsort
 SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 ----
