@@ -14,6 +14,7 @@ builder=$(dirname $0)/builder.sh
 match='^F\d+|^panic|^[Gg]oroutine \d+|(read|write) by.*goroutine|DATA RACE|Too many goroutines running after tests'
 
 prepare_artifacts() {
+  set +e
   ret=$?
 
   # Translate the log output to xml to integrate with CircleCI
@@ -70,8 +71,8 @@ prepare_artifacts() {
   fi
 
   if [ "${ret}" -ne 0 ] &&
-     [ -n "${GITHUB_API_TOKEN}" ] &&
-     [ "${CIRCLE_BRANCH-}" = "master" -o -n "${NIGHTLY}" ]
+     [ -n "${GITHUB_API_TOKEN-}" ] &&
+     [ "${CIRCLE_BRANCH-}" = "master" -o -n "${NIGHTLY-}" ]
   then
       function post() {
         curl -v -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
