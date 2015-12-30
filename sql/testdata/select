@@ -231,3 +231,8 @@ query I
 SELECT value FROM boolean_table
 ----
 NULL
+
+query I
+SELECT CASE WHEN NULL THEN 1 ELSE 2 END
+----
+2
