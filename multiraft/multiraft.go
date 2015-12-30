@@ -422,12 +422,12 @@ func (m *MultiRaft) ChangeGroupMembership(groupID roachpb.RangeID, commandID str
 
 // Status returns the current status of the given group.
 func (m *MultiRaft) Status(groupID roachpb.RangeID) *raft.Status {
-	statusOp := statusOp{
+	ch := make(chan *raft.Status)
+	m.statusChan <- statusOp{
 		groupID: groupID,
-		ch:      make(chan *raft.Status),
+		ch:      ch,
 	}
-	m.statusChan <- statusOp
-	return <-statusOp.ch
+	return <-ch
 }
 
 // Campaign causes this node to start an election. Use with caution as

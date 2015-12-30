@@ -813,12 +813,10 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	value1 := roachpb.MakeValueFromString("value1")
 	bytes1, err := value1.Marshal()
 	if err != nil {
 		t.Fatal(err)
 	}
-	value2 := roachpb.MakeValueFromString("value2")
 	bytes2, err := value2.Marshal()
 	if err != nil {
 		t.Fatal(err)
@@ -861,7 +859,7 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(valBytes, []byte("value1")) {
+		if !bytes.Equal(valBytes, []byte("testValue1")) {
 			t.Errorf("@%s expected %q; got %q", ts, []byte("value1"), valBytes)
 		}
 	}

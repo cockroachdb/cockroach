@@ -481,13 +481,13 @@ Available Commands:
   version     output version information
 
 Flags:
-      --alsologtostderr=false: log to standard error as well as files
-      --color="auto": colorize standard error output according to severity
-      --log-backtrace-at=:0: when logging hits line file:N, emit a stack trace
-      --log-dir="": if non-empty, write log files in this directory
-      --logtostderr=true: log to standard error instead of files
-      --verbosity=0: log level for V logs
-      --vmodule=: comma-separated list of file=N settings for file-filtered logging
+      --alsologtostderr         log to standard error as well as files
+      --color                   colorize standard error output according to severity (default "auto")
+      --log-backtrace-at        when logging hits line file:N, emit a stack trace (default :0)
+      --log-dir                 if non-empty, write log files in this directory
+      --logtostderr             log to standard error instead of files (default true)
+      --verbosity               log level for V logs
+      --vmodule                 comma-separated list of file=N settings for file-filtered logging
 
 Use "cockroach [command] --help" for more information about a command.
 `

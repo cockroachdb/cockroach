@@ -248,7 +248,7 @@ func (s *Server) initHTTP() {
 	s.mux.Handle(rpc.DefaultRPCPath, s.rpc)
 
 	s.mux.Handle("/", http.FileServer(
-		&assetfs.AssetFS{Asset: ui.Asset, AssetDir: ui.AssetDir}))
+		&assetfs.AssetFS{Asset: ui.Asset, AssetDir: ui.AssetDir, AssetInfo: ui.AssetInfo}))
 
 	// The admin server handles both /debug/ and /_admin/
 	// TODO(marc): when cookie-based authentication exists,
