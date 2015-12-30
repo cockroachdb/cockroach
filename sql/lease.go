@@ -632,22 +632,23 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 					// Attempt to unmarshal config into a table/database descriptor.
 					var descriptor Descriptor
 					if err := kv.Value.GetProto(&descriptor); err != nil {
-						log.Warningf("unable to unmarshal descriptor %v", kv.Value)
+						log.Warningf("%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
 						continue
 					}
 					switch union := descriptor.Union.(type) {
 					case *Descriptor_Table:
 						table := union.Table
 						if err := table.Validate(); err != nil {
-							log.Errorf("received invalid table descriptor: %v", table)
+							log.Errorf("%s: received invalid table descriptor: %v", kv.Key, table)
 							continue
 						}
 						if log.V(2) {
-							log.Infof("refreshing lease table: %d, version: %d", table.ID, table.Version)
+							log.Infof("%s: refreshing lease table: %d, version: %d",
+								kv.Key, table.ID, table.Version)
 						}
 						// Try to refresh the table lease to one >= this version.
 						if err := m.refreshLease(db, table.ID, table.Version); err != nil {
-							log.Warning(err)
+							log.Warningf("%s: %v", kv.Key, err)
 						}
 
 					case *Descriptor_Database:

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
@@ -488,7 +489,7 @@ func decodeTableKey(valType parser.Datum, key []byte) (parser.Datum, []byte, err
 }
 
 type indexEntry struct {
-	key   []byte
+	key   roachpb.Key
 	value []byte
 }
 
@@ -515,6 +516,11 @@ func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
 			// extraKey to the key in order to make it unique.
 			entry.key = append(entry.key, extraKey...)
 		}
+
+		// Index keys are considered "sentinel" keys in that they do not have a
+		// column ID suffix.
+		entry.key = keys.MakeNonColumnKey(entry.key)
+
 		if secondaryIndex.Unique {
 			// Note that a unique secondary index that contains a NULL column value
 			// will have extraKey appended to the key and stored in the value. We

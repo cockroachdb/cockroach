@@ -310,7 +310,7 @@ func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.
 	appendSplitKeys := func(startID, endID uint32) {
 		// endID could be smaller than startID if we don't have user tables.
 		for id := startID; id <= endID; id++ {
-			key = keys.MakeTablePrefix(id)
+			key = keys.MakeNonColumnKey(keys.MakeTablePrefix(id))
 			// Skip if this ID matches the startKey passed to ComputeSplitKeys.
 			if !startKey.Less(key) {
 				continue
@@ -323,8 +323,8 @@ func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.
 		}
 	}
 
-	// If they startKey falls within the non-system reserved range, compute
-	// those keys first.
+	// If the startKey falls within the non-system reserved range, compute those
+	// keys first.
 	if startID <= keys.MaxReservedDescID {
 		endID, err := s.GetLargestObjectID(keys.MaxReservedDescID)
 		if err != nil {
