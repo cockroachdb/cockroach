@@ -69,8 +69,8 @@ prepare_artifacts() {
     head -n 100 "${outdir}/excerpt.txt"
   fi
 
-  if [ $ret -ne 0 ]; then
-    if [ "${CIRCLE_BRANCH-}" = "master" ] && [ -n "${GITHUB_API_TOKEN-}" ]; then
+  if [ $ret -ne 0 ] && [ -n "${GITHUB_API_TOKEN}" ]; then
+    if [ "${CIRCLE_BRANCH-}" = "master" ] || [ -n "${NIGHTLY}" ]; then
       function post() {
         curl -v -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
         "https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/$1" \
