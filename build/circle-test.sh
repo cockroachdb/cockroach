@@ -69,8 +69,10 @@ prepare_artifacts() {
     head -n 100 "${outdir}/excerpt.txt"
   fi
 
-  if [ $ret -ne 0 ]; then
-    if [ "${CIRCLE_BRANCH-}" = "master" ] && [ -n "${GITHUB_API_TOKEN-}" ]; then
+  if [ "${ret}" -ne 0 ] &&
+     [ -n "${GITHUB_API_TOKEN}" ] &&
+     [ "${CIRCLE_BRANCH-}" = "master" -o -n "${NIGHTLY}" ]
+  then
       function post() {
         curl -v -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
         "https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/$1" \
@@ -101,10 +103,9 @@ prepare_artifacts() {
       # JSON monster to post the issue.
       post issues "{ \"title\": \"Failed tests (${CIRCLE_BUILD_NUM}): ${FAILEDTESTS}\", \"body\": \"The following test appears to have failed:\n\n[#${CIRCLE_BUILD_NUM}](https://circleci.com/gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/${CIRCLE_BUILD_NUM}):\n\n\`\`\`\n$(python -c 'import json,sys; print json.dumps(sys.stdin.read()).strip("\"")' < ${outdir}/excerpt.txt)\n\`\`\`\nPlease assign, take a look and update the issue accordingly.\", \"labels\": [${LABELSTR}] }" > /dev/null
       echo "Found test/race failures in test logs, see excerpt.log and the newly created issue on our issue tracker"
-    fi
-
-    exit $ret
   fi
+
+  exit $ret
 }
 
 trap prepare_artifacts EXIT
