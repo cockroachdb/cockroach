@@ -176,17 +176,6 @@ type Replica struct {
 	pendingSeq   uint64          // atomic sequence counter for cmdIDKey generation
 	pendingCmds  map[cmdIDKey]*pendingCmd
 
-	// pendingReplica houses a replica that is not yet in the range
-	// descriptor, since we must be able to look up a replica's
-	// descriptor in order to add it to the range. It is protected by
-	// the RWMutex and once it has taken on a non-zero value it must not
-	// be changed until that operation has completed and it has been
-	// reset to a zero value. The sync.Cond is signaled whenever
-	// pendingReplica.value changes to zero.
-	pendingReplica struct {
-		*sync.Cond
-		value roachpb.ReplicaDescriptor
-	}
 	truncatedState unsafe.Pointer // *roachpb.RaftTruncatedState
 
 	replicaID roachpb.ReplicaID
@@ -204,7 +193,6 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store) (*Replica, error) {
 		sequence:    NewSequenceCache(desc.RangeID),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
-	r.pendingReplica.Cond = sync.NewCond(r)
 	r.setDescWithoutProcessUpdate(desc)
 
 	lastIndex, err := r.loadLastIndex()
@@ -546,23 +534,18 @@ func (r *Replica) GetReplica() *roachpb.ReplicaDescriptor {
 }
 
 // ReplicaDescriptor returns information about the given member of
-// this replica's range. The returned bool indicates whether the
-// returned ReplicaDescriptor may be cached and reused or if it may be
-// temporary (due to a not-yet-committed replica change).
-func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, bool, error) {
+// this replica's range.
+func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
 	r.RLock()
 	defer r.RUnlock()
 
 	desc := r.Desc()
 	for _, repAddress := range desc.Replicas {
 		if repAddress.ReplicaID == replicaID {
-			return repAddress, true, nil
+			return repAddress, nil
 		}
 	}
-	if r.pendingReplica.value.ReplicaID == replicaID {
-		return r.pendingReplica.value, false, nil
-	}
-	return roachpb.ReplicaDescriptor{}, false, util.Errorf("replica %d not found in range %d",
+	return roachpb.ReplicaDescriptor{}, util.Errorf("replica %d not found in range %d",
 		replicaID, desc.RangeID)
 }
 

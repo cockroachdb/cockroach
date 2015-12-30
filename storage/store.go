@@ -1705,13 +1705,11 @@ func (s *Store) replicaDescriptorLocked(groupID roachpb.RangeID, replicaID roach
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	rd, cacheable, err := rep.ReplicaDescriptor(replicaID)
+	rd, err := rep.ReplicaDescriptor(replicaID)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	if cacheable {
-		s.cacheReplicaDescriptorLocked(groupID, rd)
-	}
+	s.cacheReplicaDescriptorLocked(groupID, rd)
 
 	return rd, nil
 }
