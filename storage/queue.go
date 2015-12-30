@@ -370,7 +370,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) {
 		}
 	}
 	if err := bq.impl.process(now, repl, cfg); err != nil {
-		log.Errorf("failure processing replica %s from %s queue: %s", repl, bq.name, err)
+		log.Errorf("while processing replica %s from %s queue: %s", repl, bq.name, err)
 	} else if log.V(2) {
 		log.Infof("processed replica %s from %s queue in %s", repl, bq.name, time.Now().Sub(start))
 	}
