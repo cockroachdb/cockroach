@@ -24,6 +24,12 @@ import (
 	"time"
 )
 
+const sep = "-"
+
+// DefaultTimeScales are the durations used for helpers which create windowed
+// metrics in bulk (such as Latency or Rates).
+var DefaultTimeScales = []TimeScale{scale1M, scale10M, scale1H}
+
 // A Registry bundles up various iterables (i.e. typically metrics or other
 // registries) to provide a single point of access to them.
 type Registry struct {
@@ -101,10 +107,10 @@ func (r *Registry) Histogram(name string, duration time.Duration, maxVal int64,
 // with two digits of precision (i.e. errors of <1ms at 100ms, <.6s at 1m).
 // The generated names of the metric will begin with the given prefix.
 func (r *Registry) Latency(prefix string) Histograms {
-	windows := []timeScale{scale1M, scale10M, scale1H}
+	windows := DefaultTimeScales
 	hs := make([]*Histogram, 0, 3)
 	for _, w := range windows {
-		h := r.Histogram(prefix+w.name, w.d, int64(time.Minute), 2)
+		h := r.Histogram(prefix+sep+w.name, w.d, int64(time.Minute), 2)
 		hs = append(hs, h)
 	}
 	return hs
@@ -135,11 +141,11 @@ func (r *Registry) Rate(name string, timescale time.Duration) *Rate {
 // Rates returns a slice of EWMAs prefixed with the given name and
 // various "standard" timescales.
 func (r *Registry) Rates(prefix string) Rates {
-	scales := []timeScale{scale1M, scale10M, scale1H}
+	scales := DefaultTimeScales
 	es := make([]*Rate, 0, len(scales))
 	for _, scale := range scales {
-		es = append(es, r.Rate(prefix+scale.name, scale.d))
+		es = append(es, r.Rate(prefix+sep+scale.name, scale.d))
 	}
-	c := r.Counter(prefix + "count")
+	c := r.Counter(prefix + sep + "count")
 	return Rates{Counter: c, Rates: es}
 }

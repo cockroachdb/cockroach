@@ -27,33 +27,33 @@ func TestRegistry(t *testing.T) {
 
 	_ = r.Gauge("top.gauge")
 	_ = r.Rate("top.rate", time.Minute)
-	_ = r.Rates("top.rates.")
+	_ = r.Rates("top.rates")
 	_ = r.Histogram("top.hist", time.Minute, 1000, 3)
-	_ = r.Latency("top.latency.")
+	_ = r.Latency("top.latency")
 
 	_ = sub.Gauge("gauge")
 	r.MustAdd("bottom.%s#1", sub)
 	if err := r.Add("bottom.%s#1", sub); err == nil {
 		t.Fatalf("expected failure on double-add")
 	}
-	_ = sub.Rates("rates.")
+	_ = sub.Rates("rates")
 
 	expNames := map[string]struct{}{
 		"top.rate":             {},
-		"top.rates.count":      {},
-		"top.rates.1m":         {},
-		"top.rates.10m":        {},
-		"top.rates.1h":         {},
+		"top.rates-count":      {},
+		"top.rates-1m":         {},
+		"top.rates-10m":        {},
+		"top.rates-1h":         {},
 		"top.hist":             {},
-		"top.latency.1m":       {},
-		"top.latency.10m":      {},
-		"top.latency.1h":       {},
+		"top.latency-1m":       {},
+		"top.latency-10m":      {},
+		"top.latency-1h":       {},
 		"top.gauge":            {},
 		"bottom.gauge#1":       {},
-		"bottom.rates.count#1": {},
-		"bottom.rates.1m#1":    {},
-		"bottom.rates.10m#1":   {},
-		"bottom.rates.1h#1":    {},
+		"bottom.rates-count#1": {},
+		"bottom.rates-1m#1":    {},
+		"bottom.rates-10m#1":   {},
+		"bottom.rates-1h#1":    {},
 	}
 
 	r.Each(func(name string, _ interface{}) {

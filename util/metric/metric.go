@@ -29,19 +29,19 @@ import (
 
 const histWrapNum = 4 // number of histograms to keep in rolling window
 
-type timeScale struct {
+// A TimeScale is a named duration.
+type TimeScale struct {
 	name string
 	d    time.Duration
 }
 
-var scale1M = timeScale{"1m", 1 * time.Minute}
-var scale10M = timeScale{"10m", 10 * time.Minute}
-var scale1H = timeScale{"1h", time.Hour}
+var scale1M = TimeScale{"1m", 1 * time.Minute}
+var scale10M = TimeScale{"10m", 10 * time.Minute}
+var scale1H = TimeScale{"1h", time.Hour}
 
 // Iterable provides a method for synchronized access to interior objects.
 type Iterable interface {
-	// Each calls the given closure with each contained item. The closure must
-	// copy values it plans to use after returning.
+	// Each calls the given closure with each contained item.
 	Each(func(string, interface{}))
 }
 
@@ -132,11 +132,11 @@ func (h *Histogram) Current() *hdrhistogram.Histogram {
 	return hdrhistogram.Import(export)
 }
 
-// Each calls the closure with the empty string and the (locked) receiver.
+// Each calls the closure with the empty string and the receiver.
 func (h *Histogram) Each(f func(string, interface{})) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	maybeTick(h)
+	h.mu.Unlock()
 	f("", h)
 }
 
@@ -238,12 +238,13 @@ func (e *Rate) Add(v float64) {
 	e.mu.Unlock()
 }
 
-// Each calls the given closure with the empty string and the Rate.
+// Each calls the given closure with the empty string and the Rate's current value.
 func (e *Rate) Each(f func(string, interface{})) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	maybeTick(e)
-	f("", e.wrapped.Value())
+	v := e.wrapped.Value()
+	e.mu.Unlock()
+	f("", v)
 }
 
 // MarshalJSON marshals to JSON.

@@ -18,6 +18,7 @@ package status
 
 import (
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"testing"
@@ -279,17 +280,32 @@ func TestNodeStatusRecorder(t *testing.T) {
 		generateStoreData(2, "capacity.available", 100, 75),
 
 		// Node stats.
-		generateNodeData(1, "exec.successcount", 100, 2),
-		generateNodeData(1, "exec.errorcount", 100, 1),
-		generateNodeData(1, "exec.success1h", 100, 0),
-		generateNodeData(1, "exec.error1h", 100, 0),
-		generateNodeData(1, "exec.success10m", 100, 0),
-		generateNodeData(1, "exec.error10m", 100, 0),
-		generateNodeData(1, "exec.success1m", 100, 0),
-		generateNodeData(1, "exec.error1m", 100, 0),
+		generateNodeData(1, "exec.success-count", 100, 2),
+		generateNodeData(1, "exec.error-count", 100, 1),
+		generateNodeData(1, "exec.success-1h", 100, 0),
+		generateNodeData(1, "exec.error-1h", 100, 0),
+		generateNodeData(1, "exec.success-10m", 100, 0),
+		generateNodeData(1, "exec.error-10m", 100, 0),
+		generateNodeData(1, "exec.success-1m", 100, 0),
+		generateNodeData(1, "exec.error-1m", 100, 0),
 	}
 
 	actual := recorder.GetTimeSeriesData()
+
+	var actNumLatencyMetrics int
+	expNumLatencyMetrics := len(recordHistogramQuantiles) * len(metric.DefaultTimeScales)
+	for _, item := range actual {
+		if ok, _ := regexp.MatchString(`cr.node.exec.latency.*`, item.Name); ok {
+			actNumLatencyMetrics++
+			expected = append(expected, item)
+		}
+	}
+
+	if expNumLatencyMetrics != actNumLatencyMetrics {
+		t.Fatalf("unexpected number of latency metrics %d, expected %d",
+			actNumLatencyMetrics, expNumLatencyMetrics)
+	}
+
 	sort.Sort(byTimeAndName(actual))
 	sort.Sort(byTimeAndName(expected))
 	if a, e := actual, expected; !reflect.DeepEqual(a, e) {
