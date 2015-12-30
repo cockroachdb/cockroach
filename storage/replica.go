@@ -545,21 +545,24 @@ func (r *Replica) GetReplica() *roachpb.ReplicaDescriptor {
 	return replica
 }
 
-// ReplicaDescriptor returns information about the given member of this replica's range.
-func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
+// ReplicaDescriptor returns information about the given member of
+// this replica's range. The returned bool indicates whether the
+// returned ReplicaDescriptor may be cached and reused or if it may be
+// temporary (due to a not-yet-committed replica change).
+func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, bool, error) {
 	r.RLock()
 	defer r.RUnlock()
 
 	desc := r.Desc()
 	for _, repAddress := range desc.Replicas {
 		if repAddress.ReplicaID == replicaID {
-			return repAddress, nil
+			return repAddress, true, nil
 		}
 	}
 	if r.pendingReplica.value.ReplicaID == replicaID {
-		return r.pendingReplica.value, nil
+		return r.pendingReplica.value, false, nil
 	}
-	return roachpb.ReplicaDescriptor{}, util.Errorf("replica %d not found in range %d",
+	return roachpb.ReplicaDescriptor{}, false, util.Errorf("replica %d not found in range %d",
 		replicaID, desc.RangeID)
 }
 
@@ -1112,7 +1115,6 @@ func (r *Replica) handleRaftReady() error {
 			if err := command.Unmarshal(ctx.Payload); err != nil {
 				return err
 			}
-			r.store.cacheReplicaDescriptor(desc.RangeID, ctx.Replica)
 			if err := r.processRaftCommand(cmdIDKey(ctx.CommandID), e.Index, command); err == nil {
 				// TODO(bdarnell): update coalesced heartbeat mapping
 				r.Lock()

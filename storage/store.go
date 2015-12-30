@@ -1687,6 +1687,14 @@ func (s *Store) getOrCreateReplicaLocked(groupID roachpb.RangeID, replicaID roac
 	return r, nil
 }
 
+// ReplicaDescriptor returns the replica descriptor for the given
+// range and replica, if known.
+func (s *Store) ReplicaDescriptor(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.replicaDescriptorLocked(groupID, replicaID)
+}
+
 // replicaDescriptorLocked returns the replica descriptor for the given
 // range and replica, if known.
 func (s *Store) replicaDescriptorLocked(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
@@ -1697,26 +1705,26 @@ func (s *Store) replicaDescriptorLocked(groupID roachpb.RangeID, replicaID roach
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	rd, err := rep.ReplicaDescriptor(replicaID)
+	rd, cacheable, err := rep.ReplicaDescriptor(replicaID)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	s.cacheReplicaDescriptorLocked(groupID, rd)
+	if cacheable {
+		s.cacheReplicaDescriptorLocked(groupID, rd)
+	}
 
 	return rd, nil
-}
-
-// cacheReplicaDescriptor adds the given replica descriptor to a cache
-// to be used by replicaDescriptorLocked.
-func (s *Store) cacheReplicaDescriptor(groupID roachpb.RangeID, replica roachpb.ReplicaDescriptor) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.cacheReplicaDescriptorLocked(groupID, replica)
 }
 
 // cacheReplicaDescriptorLocked adds the given replica descriptor to a cache
 // to be used by replicaDescriptorLocked.
 func (s *Store) cacheReplicaDescriptorLocked(groupID roachpb.RangeID, replica roachpb.ReplicaDescriptor) {
+	if old, ok := s.replicaDescCache.Get(replicaDescCacheKey{groupID, replica.ReplicaID}); ok {
+		if old != replica {
+			log.Fatalf("%s replicaDescCache: clobbering %s with %s", s, old, replica)
+		}
+		return
+	}
 	s.replicaDescCache.Add(replicaDescCacheKey{groupID, replica.ReplicaID}, replica)
 }
 
