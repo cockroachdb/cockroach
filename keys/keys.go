@@ -349,6 +349,61 @@ func DecodeTablePrefix(key roachpb.Key) ([]byte, uint64, error) {
 	return encoding.DecodeUvarint(key)
 }
 
+// MakeColumnKey returns the key for the column in the given row.
+func MakeColumnKey(rowKey []byte, colID uint32) []byte {
+	key := append([]byte(nil), rowKey...)
+	size := len(key)
+	key = encoding.EncodeUvarint(key, uint64(colID))
+	// Note that we assume that `len(key)-size` will always be encoded to a
+	// single byte by EncodeUvarint. This is currently always true because the
+	// varint encoding will encode 1-9 bytes.
+	return encoding.EncodeUvarint(key, uint64(len(key)-size))
+}
+
+// MakeNonColumnKey creates a non-column key for a row by appending a 0 column
+// ID suffix size to rowKey.
+func MakeNonColumnKey(rowKey []byte) []byte {
+	return encoding.EncodeUvarint(rowKey, 0)
+}
+
+// MakeSplitKey transforms an SQL table key such that it is a valid split key
+// (i.e. does not occur in the middle of a row).
+func MakeSplitKey(key roachpb.Key) (roachpb.Key, error) {
+	if encoding.PeekType(key) != encoding.Int {
+		// Not a table key, so already a split key.
+		return key, nil
+	}
+
+	n := len(key)
+	// The column ID length is encoded as a varint and we take advantage of the
+	// fact that the column ID itself will be encoded in 0-9 bytes and thus the
+	// length of the column ID data will fit in a single byte.
+	buf := key[n-1:]
+	if encoding.PeekType(buf) != encoding.Int {
+		// The last byte is not a valid column ID suffix.
+		return nil, util.Errorf("%s: not a valid table key", key)
+	}
+
+	// Strip off the column ID suffix from the buf. The last byte of the buf
+	// contains the length of the column ID suffix (which might be 0 if the buf
+	// does not contain a column ID suffix).
+	_, colIDLen, err := encoding.DecodeUvarint(buf)
+	if err != nil {
+		return nil, err
+	}
+	if int(colIDLen)+1 > n {
+		// The column ID length was impossible. colIDLen is the length of the
+		// encoded column ID suffix. We add 1 to account for the byte holding the
+		// length of the encoded column ID and if that total (colIDLen+1) is
+		// greater than the key suffix (n == len(buf)) then we bail. Note that we
+		// don't consider this an error because MakeSplitKey can be called on keys
+		// that look like table keys but which do not have a column ID length
+		// suffix (e.g SystemConfig.ComputeSplitKeys).
+		return nil, util.Errorf("%s: malformed table key", key)
+	}
+	return key[:len(key)-int(colIDLen)-1], nil
+}
+
 // Range returns a key range encompassing all the keys in the Batch.
 // TODO(tschottdorf): there is no protection for doubly-local keys here;
 // maybe Range should return an error.

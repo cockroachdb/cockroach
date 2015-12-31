@@ -24,69 +24,121 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-var aggregates = map[string]aggregateImpl{
-	"avg":   &avgAggregate{},
-	"count": &countAggregate{},
-	"max":   &maxAggregate{},
-	"min":   &minAggregate{},
-	"sum":   &sumAggregate{},
+var aggregates = map[string]func() aggregateImpl{
+	"avg":   newAvgAggregate,
+	"count": newCountAggregate,
+	"max":   newMaxAggregate,
+	"min":   newMinAggregate,
+	"sum":   newSumAggregate,
 }
 
 func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
-	// TODO(pmattis): This only handles aggregate functions, not GROUP BY.
-
-	// Loop over the render expressions and extract any aggregate functions.
-	var funcs []*aggregateFunc
-	for i, r := range s.render {
-		r, f, err := p.extractAggregateFuncs(r)
-		if err != nil {
-			return nil, err
-		}
-		s.render[i] = r
-		funcs = append(funcs, f...)
-	}
-	if len(funcs) == 0 {
+	// Determine if aggregation is being performed. This check is done on the raw
+	// Select expressions as simplification might have removed aggregation
+	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
+	if isAggregate := isAggregateExprs(n); !isAggregate {
 		return nil, nil
 	}
 
-	// Aggregation is being performed. Loop over the render expressions again and
-	// verify that the only qvalues mentioned by GROUP BY expressions are allowed
-	// outside of the aggregate function arguments. For example, the following is
-	// illegal because k is used outside of the aggregate function and not part
-	// of a GROUP BY expression.
-	//
-	//   SELECT COUNT(k), k FROM kv GROUP BY v
-	for _, r := range s.render {
-		if err := checkAggregateExpr(r); err != nil {
+	// Start by normalizing the GROUP BY expressions (to match what has been done to
+	// the SELECT expressions in addRender) so that we can compare to them later.
+	// This is done before determining if aggregation is being performed, because
+	// that determination is made during validation, which will require matching
+	// expressions.
+	for i := range n.GroupBy {
+		norm, err := s.resolveQNames(n.GroupBy[i])
+		if err != nil {
 			return nil, err
 		}
+		norm, err = p.parser.NormalizeExpr(p.evalCtx, norm)
+		if err != nil {
+			return nil, err
+		}
+		n.GroupBy[i] = norm
 	}
 
-	if log.V(2) {
-		strs := make([]string, 0, len(funcs))
-		for _, f := range funcs {
-			strs = append(strs, f.val.String())
+	if err := checkAggregateExprs(n.GroupBy, s.render); err != nil {
+		return nil, err
+	}
+
+	// Normalize and check the HAVING expression too if it exists.
+	if n.Having != nil {
+		having, err := s.resolveQNames(n.Having.Expr)
+		if err != nil {
+			return nil, err
 		}
-		log.Infof("Group: %s", strings.Join(strs, ", "))
+
+		having, err = p.parser.NormalizeExpr(p.evalCtx, having)
+		if err != nil {
+			return nil, err
+		}
+
+		havingType, err := having.TypeCheck(p.evalCtx.Args)
+		if err != nil {
+			return nil, err
+		}
+		if !(havingType == parser.DummyBool || havingType == parser.DNull) {
+			return nil, fmt.Errorf("argument of HAVING must be type %s, not type %s", parser.DummyBool.Type(), havingType.Type())
+		}
+		n.Having.Expr = having
+
+		if err := checkAggregateExprs(n.GroupBy, []parser.Expr{n.Having.Expr}); err != nil {
+			return nil, err
+		}
 	}
 
 	group := &groupNode{
 		planner: p,
-		columns: s.columns,
+		values:  valuesNode{columns: s.columns},
 		render:  s.render,
-		funcs:   funcs,
+	}
+
+	// Loop over the render expressions and extract any aggregate functions --
+	// qvalues are also replaced (with identAggregates, which just return the last
+	// value added to them for a bucket) to provide grouped-by values for each bucket.
+	// After extraction, group.render will be entirely rendered from aggregateFuncs,
+	// and group.funcs will contain all the functions which need to be fed values.
+	for i := range group.render {
+		expr, err := p.extractAggregateFuncs(group, group.render[i])
+		if err != nil {
+			return nil, err
+		}
+		group.render[i] = expr
+	}
+
+	if n.Having != nil {
+		having, err := p.extractAggregateFuncs(group, n.Having.Expr)
+		if err != nil {
+			return nil, err
+		}
+		group.having = having
+	}
+
+	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was aggregated.
+	group.addNullBucketIfEmpty = len(n.GroupBy) == 0
+
+	group.buckets = make(map[string]struct{})
+
+	if log.V(2) {
+		strs := make([]string, 0, len(group.funcs))
+		for _, f := range group.funcs {
+			strs = append(strs, f.String())
+		}
+		log.Infof("Group: %s", strings.Join(strs, ", "))
 	}
 
 	// Replace the render expressions in the scanNode with expressions that
 	// compute only the arguments to the aggregate expressions.
-	s.columns = make([]column, 0, len(funcs))
-	s.render = make([]parser.Expr, 0, len(funcs))
-	for _, f := range funcs {
-		if len(f.val.expr.Exprs) != 1 {
-			panic(fmt.Sprintf("%s has %d arguments (expected 1)", f.val.expr.Name, len(f.val.expr.Exprs)))
+	s.render = make([]parser.Expr, len(group.funcs))
+	for i, f := range group.funcs {
+		s.render[i] = f.arg
+	}
+
+	// Add the group-by expressions so they are available for bucketing.
+	for _, g := range n.GroupBy {
+		if err := s.addRender(parser.SelectExpr{Expr: g}); err != nil {
+			return nil, err
 		}
-		s.columns = append(s.columns, column{name: f.val.String(), typ: f.val.datum})
-		s.render = append(s.render, f.val.expr.Exprs[0])
 	}
 
 	group.desiredOrdering = desiredAggregateOrdering(group.funcs)
@@ -94,68 +146,120 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 }
 
 type groupNode struct {
-	planner         *planner
-	plan            planNode
-	columns         []column
-	row             parser.DTuple
-	render          []parser.Expr
-	funcs           []*aggregateFunc
+	planner *planner
+	plan    planNode
+
+	render []parser.Expr
+	having parser.Expr
+
+	funcs []*aggregateFunc
+	// The set of bucket keys.
+	buckets map[string]struct{}
+
+	addNullBucketIfEmpty bool
+
+	values     valuesNode
+	intialized bool
+
+	// During rendering, aggregateFuncs compute their result for group.currentBucket.
+	currentBucket string
+
 	desiredOrdering []int
-	needGroup       bool
 	err             error
 }
 
 func (n *groupNode) Columns() []column {
-	return n.columns
+	return n.values.Columns()
 }
 
 func (n *groupNode) Ordering() ([]int, int) {
-	return n.plan.Ordering()
+	// TODO(dt): aggregate buckets are returned un-ordered for now.
+	return nil, 0
 }
 
 func (n *groupNode) Values() parser.DTuple {
-	return n.row
+	return n.values.Values()
 }
 
 func (n *groupNode) Next() bool {
-	if !n.needGroup || n.err != nil {
+	if !n.intialized && n.err == nil {
+		n.computeAggregates()
+	}
+	if n.err != nil {
 		return false
 	}
-	n.needGroup = false
+	return n.values.Next()
+}
+
+func (n *groupNode) computeAggregates() {
+	n.intialized = true
+	var scratch []byte
 
 	// Loop over the rows passing the values into the corresponding aggregation
 	// functions.
 	for n.plan.Next() {
 		values := n.plan.Values()
-		for i, f := range n.funcs {
-			if n.err = f.Add(values[i]); n.err != nil {
-				return false
+		aggregatedValues, groupedValues := values[:len(n.funcs)], values[len(n.funcs):]
+
+		// TODO(dt): optimization: skip buckets when underlying plan is ordered by grouped values.
+
+		var encoded []byte
+		encoded, n.err = encodeDTuple(scratch, groupedValues)
+		if n.err != nil {
+			return
+		}
+
+		n.buckets[string(encoded)] = struct{}{}
+
+		// Feed the aggregateFuncs for this bucket the non-grouped values.
+		for i, value := range aggregatedValues {
+			if n.err = n.funcs[i].add(encoded, value); n.err != nil {
+				return
 			}
 		}
+		scratch = encoded[:0]
 	}
 
 	n.err = n.plan.Err()
 	if n.err != nil {
-		return false
+		return
 	}
 
-	// Fill in the aggregate function result value.
-	for _, f := range n.funcs {
-		if f.val.datum, n.err = f.impl.Result(); n.err != nil {
-			return false
-		}
+	if len(n.buckets) < 1 && n.addNullBucketIfEmpty {
+		n.buckets[""] = struct{}{}
 	}
 
 	// Render the results.
-	n.row = make([]parser.Datum, len(n.render))
-	for i, r := range n.render {
-		n.row[i], n.err = r.Eval(n.planner.evalCtx)
-		if n.err != nil {
-			return false
-		}
-	}
+	n.values.rows = make([]parser.DTuple, 0, len(n.buckets))
+	for k := range n.buckets {
+		n.currentBucket = k
 
-	return n.err == nil
+		if n.having != nil {
+			res, err := n.having.Eval(n.planner.evalCtx)
+			if err != nil {
+				n.err = err
+				return
+			}
+			if res, err := parser.GetBool(res); err != nil {
+				n.err = err
+				return
+			} else if !res {
+				continue
+			}
+		}
+
+		row := make(parser.DTuple, 0, len(n.render))
+		for _, r := range n.render {
+			res, err := r.Eval(n.planner.evalCtx)
+			if err != nil {
+				n.err = err
+				return
+			}
+			row = append(row, res)
+		}
+
+		n.values.rows = append(n.values.rows, row)
+	}
 }
 
 func (n *groupNode) Err() error {
@@ -166,7 +270,7 @@ func (n *groupNode) ExplainPlan() (name, description string, children []planNode
 	name = "group"
 	strs := make([]string, 0, len(n.funcs))
 	for _, f := range n.funcs {
-		strs = append(strs, f.val.String())
+		strs = append(strs, f.String())
 	}
 	description = strings.Join(strs, ", ")
 	return name, description, []planNode{n.plan}
@@ -178,7 +282,6 @@ func (n *groupNode) wrap(plan planNode) planNode {
 		return plan
 	}
 	n.plan = plan
-	n.needGroup = true
 	return n
 }
 
@@ -197,7 +300,7 @@ func (n *groupNode) isNotNullFilter(expr parser.Expr) parser.Expr {
 	f := n.funcs[i-1]
 	isNotNull := &parser.ComparisonExpr{
 		Operator: parser.IsNot,
-		Left:     f.val.expr.Exprs[0],
+		Left:     f.arg,
 		Right:    parser.DNull,
 	}
 	if expr == nil {
@@ -217,15 +320,16 @@ func (n *groupNode) isNotNullFilter(expr parser.Expr) parser.Expr {
 func desiredAggregateOrdering(funcs []*aggregateFunc) []int {
 	var limit int
 	for i, f := range funcs {
-		switch f.impl.(type) {
+		impl := f.create()
+		switch impl.(type) {
 		case *maxAggregate, *minAggregate:
-			if limit != 0 || len(f.val.expr.Exprs) != 1 {
+			if limit != 0 || f.arg == nil {
 				return nil
 			}
-			switch f.val.expr.Exprs[0].(type) {
+			switch f.arg.(type) {
 			case *qvalue:
 				limit = i + 1
-				if _, ok := f.impl.(*maxAggregate); ok {
+				if _, ok := impl.(*maxAggregate); ok {
 					limit = -limit
 				}
 			default:
@@ -243,8 +347,8 @@ func desiredAggregateOrdering(funcs []*aggregateFunc) []int {
 }
 
 type extractAggregatesVisitor struct {
-	funcs []*aggregateFunc
-	err   error
+	n   *groupNode
+	err error
 }
 
 var _ parser.Visitor = &extractAggregatesVisitor{}
@@ -259,124 +363,240 @@ func (v *extractAggregatesVisitor) Visit(expr parser.Expr, pre bool) (parser.Vis
 			break
 		}
 		if impl, ok := aggregates[strings.ToLower(string(t.Name.Base))]; ok {
-			f := &aggregateFunc{
-				val: aggregateValue{
-					expr: t,
-				},
-				impl: impl.New(),
+			if len(t.Exprs) != 1 {
+				// Type checking has already run on these expressions thus
+				// if an aggregate function of the wrong arity gets here,
+				// something has gone really wrong.
+				panic(fmt.Sprintf("%s has %d arguments (expected 1)", t.Name.Base, len(t.Exprs)))
 			}
-			if t.Distinct {
+
+			f := &aggregateFunc{
+				expr:    t,
+				arg:     t.Exprs[0],
+				create:  impl,
+				group:   v.n,
+				buckets: make(map[string]aggregateImpl),
+			}
+			if t.Type == parser.Distinct {
 				f.seen = make(map[string]struct{})
 			}
-			v.funcs = append(v.funcs, f)
-			return nil, &f.val
+			v.n.funcs = append(v.n.funcs, f)
+			return nil, f
 		}
+	case *qvalue:
+		f := &aggregateFunc{
+			expr:    t,
+			arg:     t,
+			create:  newIdentAggregate,
+			group:   v.n,
+			buckets: make(map[string]aggregateImpl),
+		}
+		v.n.funcs = append(v.n.funcs, f)
+		return nil, f
 	}
 	return v, expr
 }
 
-func (v *extractAggregatesVisitor) run(expr parser.Expr) (parser.Expr, []*aggregateFunc, error) {
-	*v = extractAggregatesVisitor{}
+func (v *extractAggregatesVisitor) run(n *groupNode, expr parser.Expr) (parser.Expr, error) {
+	*v = extractAggregatesVisitor{n: n}
 	expr = parser.WalkExpr(v, expr)
-	return expr, v.funcs, v.err
+	return expr, v.err
 }
 
-func (p *planner) extractAggregateFuncs(expr parser.Expr) (parser.Expr, []*aggregateFunc, error) {
-	return p.extractAggregatesVisitor.run(expr)
+func (p *planner) extractAggregateFuncs(n *groupNode, expr parser.Expr) (parser.Expr, error) {
+	return p.extractAggregatesVisitor.run(n, expr)
 }
 
-type checkAggregateVisitor struct {
-	err error
+var _ parser.Visitor = &isAggregateVisitor{}
+
+type isAggregateVisitor struct {
+	aggregated bool
+}
+
+func (v *isAggregateVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
+	if !pre {
+		return nil, expr
+	}
+
+	if t, ok := expr.(*parser.FuncExpr); ok {
+		if _, ok := aggregates[strings.ToLower(string(t.Name.Base))]; ok {
+			v.aggregated = true
+			return nil, expr
+		}
+	}
+
+	return v, expr
+}
+
+func isAggregateExprs(n *parser.Select) bool {
+	if n.Having != nil || len(n.GroupBy) > 0 {
+		return true
+	}
+
+	v := isAggregateVisitor{}
+
+	for _, target := range n.Exprs {
+		_ = parser.WalkExpr(&v, target.Expr)
+		if v.aggregated {
+			return true
+		}
+	}
+	return false
 }
 
 var _ parser.Visitor = &checkAggregateVisitor{}
 
+type checkAggregateVisitor struct {
+	groupStrs map[string]struct{}
+	aggrErr   error
+}
+
 func (v *checkAggregateVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
-	if !pre || v.err != nil {
+	if !pre || v.aggrErr != nil {
 		return nil, expr
 	}
+
 	switch t := expr.(type) {
+	case *parser.FuncExpr:
+		if _, ok := aggregates[strings.ToLower(string(t.Name.Base))]; ok {
+			return nil, expr
+		}
 	case *qvalue:
-		// TODO(pmattis): Check that the qvalue is part of a GROUP BY expression.
-		v.err = fmt.Errorf("column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function", t.col.Name)
+		if _, ok := v.groupStrs[t.String()]; ok {
+			return nil, expr
+		}
+		v.aggrErr = fmt.Errorf("column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function", t.col.Name)
+		return v, expr
+	}
+
+	if _, ok := v.groupStrs[expr.String()]; ok {
 		return nil, expr
 	}
 	return v, expr
 }
 
-func checkAggregateExpr(expr parser.Expr) error {
+// Check if exprs use aggregation and if they are valid.
+// An expression is valid if:
+// - it is an aggregate expression, or
+// - it appears verbatim in groupBy, or
+// - it is not a qvalue, and all of its subexpressions (as defined by
+// its Walk implementation) are valid
+// NB: "verbatim" above is defined using a string-equality comparison
+// as an approximation of a recursive tree-equality comparison.
+//
+// For example:
+// Invalid: `SELECT k, SUM(v) FROM kv`
+// - `k` is unaggregated and does not appear in the (missing) GROUP BY.
+// Valid:      `SELECT k, SUM(v) FROM kv GROUP BY k`
+// Also valid: `SELECT UPPER(k), SUM(v) FROM kv GROUP BY UPPER(k)`
+// - `UPPER(k)` appears in GROUP BY.
+// Also valid: `SELECT UPPER(k), SUM(v) FROM kv GROUP BY k`
+// - `k` appears in GROUP BY, so `UPPER(k)` is OK, but...
+// Invalid:    `SELECT k, SUM(v) FROM kv GROUP BY UPPER(k)`
+// - `k` does not appear in GROUP BY; UPPER(k) does nothing to help here.
+func checkAggregateExprs(groupBy parser.GroupBy, exprs []parser.Expr) error {
 	v := checkAggregateVisitor{}
-	_ = parser.WalkExpr(&v, expr)
-	return v.err
+
+	// TODO(dt): consider other ways of comparing expression trees.
+	v.groupStrs = make(map[string]struct{}, len(groupBy))
+	for i := range groupBy {
+		v.groupStrs[groupBy[i].String()] = struct{}{}
+	}
+
+	for _, expr := range exprs {
+		_ = parser.WalkExpr(&v, expr)
+		if v.aggrErr != nil {
+			return v.aggrErr
+		}
+	}
+	return nil
 }
 
-type aggregateValue struct {
-	datum parser.Datum
-	expr  *parser.FuncExpr
-}
-
-var _ parser.VariableExpr = &aggregateValue{}
-
-func (*aggregateValue) Variable() {}
-
-func (av *aggregateValue) String() string {
-	return av.expr.String()
-}
-
-func (av *aggregateValue) Walk(v parser.Visitor) {
-	// I expected to implement:
-	// av.datum = parser.WalkExpr(v, av.datum).(parser.Datum)
-	// But it seems `av.datum` is sometimes nil.
-}
-
-func (av *aggregateValue) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
-	return av.expr.TypeCheck(args)
-}
-
-func (av *aggregateValue) Eval(ctx parser.EvalContext) (parser.Datum, error) {
-	return av.datum.Eval(ctx)
-}
+var _ parser.VariableExpr = &aggregateFunc{}
 
 type aggregateFunc struct {
-	val  aggregateValue
-	impl aggregateImpl
-	seen map[string]struct{}
+	expr    parser.Expr
+	arg     parser.Expr
+	create  func() aggregateImpl
+	group   *groupNode
+	buckets map[string]aggregateImpl
+	seen    map[string]struct{}
 }
 
-func (a *aggregateFunc) Add(d parser.Datum) error {
+func (a *aggregateFunc) add(bucket []byte, d parser.Datum) error {
+	// NB: the compiler *should* optimize `myMap[string(myBytes)]`. See:
+	// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf
+
 	if a.seen != nil {
-		encoded, err := encodeDatum(nil, d)
+		encoded, err := encodeDatum(bucket, d)
 		if err != nil {
 			return err
 		}
-		e := string(encoded)
-		if _, ok := a.seen[e]; ok {
+		if _, ok := a.seen[string(encoded)]; ok {
 			// skip
 			return nil
 		}
-		a.seen[e] = struct{}{}
+		a.seen[string(encoded)] = struct{}{}
 	}
-	return a.impl.Add(d)
+
+	impl, ok := a.buckets[string(bucket)]
+	if !ok {
+		impl = a.create()
+		a.buckets[string(bucket)] = impl
+	}
+
+	return impl.add(d)
+}
+
+func (*aggregateFunc) Variable() {}
+
+func (a *aggregateFunc) String() string {
+	return a.expr.String()
+}
+
+func (a *aggregateFunc) Walk(v parser.Visitor) {
+}
+
+func (a *aggregateFunc) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
+	return a.expr.TypeCheck(args)
+}
+
+func (a *aggregateFunc) Eval(ctx parser.EvalContext) (parser.Datum, error) {
+	found, ok := a.buckets[a.group.currentBucket]
+	if !ok {
+		found = a.create()
+	}
+
+	datum, err := found.result()
+	if err != nil {
+		return nil, err
+	}
+
+	// This is almost certainly the identity. Oh well.
+	return datum.Eval(ctx)
 }
 
 func encodeDatum(b []byte, d parser.Datum) ([]byte, error) {
 	if values, ok := d.(parser.DTuple); ok {
-		for _, val := range values {
-			var err error
-			b, err = encodeDatum(b, val)
-			if err != nil {
-				return nil, err
-			}
-		}
-		return b, nil
+		return encodeDTuple(b, values)
 	}
 	return encodeTableKey(b, d)
 }
 
+func encodeDTuple(b []byte, d parser.DTuple) ([]byte, error) {
+	for _, val := range d {
+		var err error
+		b, err = encodeDatum(b, val)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return b, nil
+}
+
 type aggregateImpl interface {
-	New() aggregateImpl
-	Add(parser.Datum) error
-	Result() (parser.Datum, error)
+	add(parser.Datum) error
+	result() (parser.Datum, error)
 }
 
 var _ aggregateImpl = &avgAggregate{}
@@ -384,29 +604,53 @@ var _ aggregateImpl = &countAggregate{}
 var _ aggregateImpl = &maxAggregate{}
 var _ aggregateImpl = &minAggregate{}
 var _ aggregateImpl = &sumAggregate{}
+var _ aggregateImpl = &identAggregate{}
+
+// In order to render the unaggregated (i.e. grouped) fields, during aggregation,
+// the values for those fields have to be stored for each bucket.
+// The `identAggregate` provides an "aggregate" function that actually
+// just returns the last value passed to `add`, unchanged. For accumulating
+// and rendering though it behaves like the other aggregate functions,
+// allowing both those steps to avoid special-casing grouped vs aggregated fields.
+type identAggregate struct {
+	val parser.Datum
+}
+
+func newIdentAggregate() aggregateImpl {
+	return &identAggregate{}
+}
+
+func (a *identAggregate) add(datum parser.Datum) error {
+	a.val = datum
+	return nil
+}
+
+func (a *identAggregate) result() (parser.Datum, error) {
+	return a.val, nil
+}
 
 type avgAggregate struct {
 	sumAggregate
 	count int
 }
 
-func (a *avgAggregate) New() aggregateImpl {
+func newAvgAggregate() aggregateImpl {
 	return &avgAggregate{}
 }
 
-func (a *avgAggregate) Add(datum parser.Datum) error {
+func (a *avgAggregate) add(datum parser.Datum) error {
 	if datum == parser.DNull {
 		return nil
 	}
-	if err := a.sumAggregate.Add(datum); err != nil {
+	if err := a.sumAggregate.add(datum); err != nil {
 		return err
 	}
 	a.count++
 	return nil
 }
 
-func (a *avgAggregate) Result() (parser.Datum, error) {
-	sum, err := a.sumAggregate.Result()
+func (a *avgAggregate) result() (parser.Datum, error) {
+	sum, err := a.sumAggregate.result()
 	if err != nil {
 		return parser.DNull, err
 	}
@@ -427,11 +671,11 @@ type countAggregate struct {
 	count int
 }
 
-func (a *countAggregate) New() aggregateImpl {
+func newCountAggregate() aggregateImpl {
 	return &countAggregate{}
 }
 
-func (a *countAggregate) Add(datum parser.Datum) error {
+func (a *countAggregate) add(datum parser.Datum) error {
 	if datum == parser.DNull {
 		return nil
 	}
@@ -449,7 +693,7 @@ func (a *countAggregate) Add(datum parser.Datum) error {
 	return nil
 }
 
-func (a *countAggregate) Result() (parser.Datum, error) {
+func (a *countAggregate) result() (parser.Datum, error) {
 	return parser.DInt(a.count), nil
 }
 
@@ -457,11 +701,11 @@ type maxAggregate struct {
 	max parser.Datum
 }
 
-func (a *maxAggregate) New() aggregateImpl {
+func newMaxAggregate() aggregateImpl {
 	return &maxAggregate{}
 }
 
-func (a *maxAggregate) Add(datum parser.Datum) error {
+func (a *maxAggregate) add(datum parser.Datum) error {
 	if datum == parser.DNull {
 		return nil
 	}
@@ -476,7 +720,7 @@ func (a *maxAggregate) Add(datum parser.Datum) error {
 	return nil
 }
 
-func (a *maxAggregate) Result() (parser.Datum, error) {
+func (a *maxAggregate) result() (parser.Datum, error) {
 	if a.max == nil {
 		return parser.DNull, nil
 	}
@@ -487,11 +731,11 @@ type minAggregate struct {
 	min parser.Datum
 }
 
-func (a *minAggregate) New() aggregateImpl {
+func newMinAggregate() aggregateImpl {
 	return &minAggregate{}
 }
 
-func (a *minAggregate) Add(datum parser.Datum) error {
+func (a *minAggregate) add(datum parser.Datum) error {
 	if datum == parser.DNull {
 		return nil
 	}
@@ -506,7 +750,7 @@ func (a *minAggregate) Add(datum parser.Datum) error {
 	return nil
 }
 
-func (a *minAggregate) Result() (parser.Datum, error) {
+func (a *minAggregate) result() (parser.Datum, error) {
 	if a.min == nil {
 		return parser.DNull, nil
 	}
@@ -517,11 +761,11 @@ type sumAggregate struct {
 	sum parser.Datum
 }
 
-func (a *sumAggregate) New() aggregateImpl {
+func newSumAggregate() aggregateImpl {
 	return &sumAggregate{}
 }
 
-func (a *sumAggregate) Add(datum parser.Datum) error {
+func (a *sumAggregate) add(datum parser.Datum) error {
 	if datum == parser.DNull {
 		return nil
 	}
@@ -547,7 +791,7 @@ func (a *sumAggregate) Add(datum parser.Datum) error {
 	return fmt.Errorf("unexpected SUM argument type: %s", datum.Type())
 }
 
-func (a *sumAggregate) Result() (parser.Datum, error) {
+func (a *sumAggregate) result() (parser.Datum, error) {
 	if a.sum == nil {
 		return parser.DNull, nil
 	}

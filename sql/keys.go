@@ -75,7 +75,7 @@ func MakeNameMetadataKey(parentID ID, name string) roachpb.Key {
 	k = encoding.EncodeUvarint(k, uint64(parentID))
 	if name != "" {
 		k = encoding.EncodeBytes(k, []byte(name))
-		k = encoding.EncodeUvarint(k, uint64(NamespaceTable.Columns[2].ID))
+		k = keys.MakeColumnKey(k, uint32(NamespaceTable.Columns[2].ID))
 	}
 	return k
 }
@@ -85,8 +85,7 @@ func MakeDescMetadataKey(descID ID) roachpb.Key {
 	k := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
 	k = encoding.EncodeUvarint(k, uint64(DescriptorTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarint(k, uint64(descID))
-	k = encoding.EncodeUvarint(k, uint64(DescriptorTable.Columns[1].ID))
-	return k
+	return keys.MakeColumnKey(k, uint32(DescriptorTable.Columns[1].ID))
 }
 
 // MakeZoneKey returns the key for 'id's entry in the system.zones table.
@@ -94,20 +93,19 @@ func MakeZoneKey(id ID) roachpb.Key {
 	k := keys.MakeTablePrefix(uint32(ZonesTable.ID))
 	k = encoding.EncodeUvarint(k, uint64(ZonesTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarint(k, uint64(id))
-	k = encoding.EncodeUvarint(k, uint64(ZonesTable.Columns[1].ID))
-	return k
-}
-
-// MakeColumnKey returns the key for the column in the given row.
-func MakeColumnKey(colID ColumnID, primaryKey []byte) roachpb.Key {
-	var key []byte
-	key = append(key, primaryKey...)
-	return encoding.EncodeUvarint(key, uint64(colID))
+	return keys.MakeColumnKey(k, uint32(ZonesTable.Columns[1].ID))
 }
 
 // MakeIndexKeyPrefix returns the key prefix used for the index's data.
 func MakeIndexKeyPrefix(tableID ID, indexID IndexID) []byte {
 	key := keys.MakeTablePrefix(uint32(tableID))
 	key = encoding.EncodeUvarint(key, uint64(indexID))
+	return key
+}
+
+func stripColumnIDLength(key roachpb.Key) roachpb.Key {
+	if n := len(key); n > 0 {
+		return key[:n-1]
+	}
 	return key
 }

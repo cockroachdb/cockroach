@@ -1812,8 +1812,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 			// Trace this under the ID of the intent owner.
 			trace := r.store.Tracer().NewTrace(tracer.Node, baLocal)
 			defer trace.Finalize()
-			ctx := tracer.ToCtx(ctx, trace)
-			_, err := r.addWriteCmd(ctx, baLocal, &wg)
+			_, err := r.addWriteCmd(tracer.ToCtx(ctx, trace), baLocal, &wg)
 			return err
 		}
 		wg.Add(1)

@@ -1,18 +1,168 @@
 statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,
-  v INT
+  v INT,
+  w INT,
+  s STRING
 )
 
 statement OK
-INSERT INTO kv VALUES (1, 2), (3, 4), (5, NULL), (6, 2), (7, 2), (8, 4)
+INSERT INTO kv VALUES
+(1, 2, 3, 'a'),
+(3, 4, 5, 'a'),
+(5, NULL, NULL, NULL),
+(6, 2, 3, 'b'),
+(7, 2, 2, 'b'),
+(8, 4, 2, 'A')
 
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT COUNT(*), k FROM kv
 
-# TODO(pmattis): fix
-query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
+query II rowsort
 SELECT COUNT(*), k FROM kv GROUP BY k
+----
+1 1
+1 3
+1 5
+1 6
+1 7
+1 8
+
+query I rowsort
+SELECT 1 GROUP BY 'a';
+----
+1
+
+query I rowsort
+SELECT MIN(1) FROM kv;
+----
+1
+
+query II rowsort
+SELECT COUNT(*), k+v FROM kv GROUP BY k+v
+----
+1 12
+1 3
+1 7
+1 8
+1 9
+1 NULL
+
+
+query IT rowsort
+SELECT COUNT(*), UPPER(s) FROM kv GROUP BY UPPER(s)
+----
+1 NULL
+2 B
+3 A
+
+query IT rowsort
+SELECT COUNT(*), UPPER(s) FROM kv GROUP BY s
+----
+1 A
+1 NULL
+2 A
+2 B
+
+query IT rowsort
+SELECT COUNT(*), UPPER(kv.s) FROM kv GROUP BY s
+----
+1 A
+1 NULL
+2 A
+2 B
+
+query IT rowsort
+SELECT COUNT(*), UPPER(s) FROM kv GROUP BY kv.s
+----
+1 A
+1 NULL
+2 A
+2 B
+
+
+query error column "s" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT COUNT(*), s FROM kv GROUP BY UPPER(s)
+
+query error column "v" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT COUNT(*), k+v FROM kv GROUP BY k
+
+query error column "v" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT COUNT(*), v/(k+v) FROM kv GROUP BY k+v
+
+query IIR rowsort
+SELECT COUNT(*), k+v, floor(v/(k+v)) FROM kv WHERE k+v > 8 GROUP BY v, k+v
+----
+1 12 0
+1 9 0
+
+query TIIIR rowsort
+SELECT UPPER(s), COUNT(*), SUM(v), SUM(w), AVG(v+w) as avg FROM kv GROUP BY UPPER(s)
+----
+A     3  10    10    6.666666666666667
+B     2  4     5     4.5
+NULL  1  NULL  NULL  NULL
+
+query II rowsort
+SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM kv GROUP BY kv.v + kv.w
+----
+1  4
+1  6
+1  9
+1  NULL
+2  5
+
+query TI rowsort
+SELECT s, COUNT(*) FROM kv GROUP BY s HAVING COUNT(*) > 1
+----
+a 2
+b 2
+
+query TII rowsort
+SELECT UPPER(s), COUNT(DISTINCT s), COUNT(DISTINCT UPPER(s)) FROM kv GROUP BY UPPER(s) HAVING COUNT(DISTINCT s) > 1
+----
+A 2 1
+
+query II rowsort
+SELECT MAX(k), MIN(v) FROM kv HAVING MIN(v) > 2;
+----
+
+query II rowsort
+SELECT MAX(k), MIN(v) FROM kv HAVING MAX(v) > 2;
+----
+8 2
+
+query error argument of HAVING must be type bool, not type int
+SELECT MAX(k), MIN(v) FROM kv HAVING k;
+
+query III rowsort
+SELECT k, 3, MAX(v) FROM kv GROUP BY k HAVING k > 5;
+----
+6 3 2
+7 3 2
+8 3 4
+
+# The presence of a HAVING triggers aggregation, reducing the un-grouped query to single bucket.
+query I rowsort
+SELECT 3 FROM kv WHERE k > 5 HAVING TRUE;
+----
+3
+
+query I rowsort
+SELECT 3 FROM kv WHERE k > 5;
+----
+3
+3
+3
+
+query error column "v" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT 3 FROM kv GROUP BY k HAVING v > 2
+
+query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT 3 FROM kv GROUP BY v HAVING k > 5;
+
+query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT k FROM kv HAVING k > 7;
 
 query error syntax error at or near ","
 SELECT COUNT(*, 1) FROM kv
@@ -20,8 +170,47 @@ SELECT COUNT(*, 1) FROM kv
 query error unknown signature for COUNT: COUNT\(int, int\)
 SELECT COUNT(k, v) FROM kv
 
-query error unimplemented ORDER BY with GROUP BY/aggregation
-SELECT COUNT(k) FROM kv ORDER BY v
+query II
+SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v
+----
+NULL 1
+2 3
+4 2
+
+query II
+SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v DESC
+----
+4 2
+2 3
+NULL 1
+
+query II
+SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
+----
+NULL 1
+4 2
+2 3
+
+query II
+SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k) DESC
+----
+2 3
+4 2
+NULL 1
+
+query II
+SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v-COUNT(k)
+----
+NULL 1
+2 3
+4 2
+
+query II
+SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY 1 DESC
+----
+4 2
+2 3
+NULL 1
 
 query IIII colnames
 SELECT COUNT(*), COUNT(kv.*), COUNT(k), COUNT(kv.v) FROM kv
@@ -33,6 +222,14 @@ query III
 SELECT COUNT(DISTINCT k), COUNT(DISTINCT v), COUNT(DISTINCT (v)) FROM kv
 ----
 6 2 2
+
+query TIII rowsort
+SELECT UPPER(s), COUNT(DISTINCT k), COUNT(DISTINCT v), COUNT(DISTINCT (v)) FROM kv GROUP BY UPPER(s)
+----
+A    3 2 2
+B    2 1 1
+NULL 1 0 0
+
 
 query I
 SELECT COUNT((k, v)) FROM kv

@@ -400,7 +400,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			br, pErr = tc.resendWithTxn(ba)
 		}
 
-		if pErr := tc.updateState(ctx, ba, br, pErr); pErr != nil {
+		if pErr = tc.updateState(ctx, ba, br, pErr); pErr != nil {
 			trace.Event(fmt.Sprintf("error: %s", pErr))
 			return nil, pErr
 		}

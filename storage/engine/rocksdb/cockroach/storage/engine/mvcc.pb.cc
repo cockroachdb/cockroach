@@ -485,7 +485,7 @@ void MVCCMetadata::SerializeWithCachedSizes(
 int MVCCMetadata::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 63) {
+  if (_has_bits_[0 / 32] & 63u) {
     // optional .cockroach.roachpb.Transaction txn = 1;
     if (has_txn()) {
       total_size += 1 +
@@ -636,11 +636,11 @@ void MVCCMetadata::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
   clear_has_txn();
 }
- const ::cockroach::roachpb::Transaction& MVCCMetadata::txn() const {
+const ::cockroach::roachpb::Transaction& MVCCMetadata::txn() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.MVCCMetadata.txn)
   return txn_ != NULL ? *txn_ : *default_instance_->txn_;
 }
- ::cockroach::roachpb::Transaction* MVCCMetadata::mutable_txn() {
+::cockroach::roachpb::Transaction* MVCCMetadata::mutable_txn() {
   set_has_txn();
   if (txn_ == NULL) {
     txn_ = new ::cockroach::roachpb::Transaction;
@@ -648,13 +648,13 @@ void MVCCMetadata::clear_txn() {
   // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.MVCCMetadata.txn)
   return txn_;
 }
- ::cockroach::roachpb::Transaction* MVCCMetadata::release_txn() {
+::cockroach::roachpb::Transaction* MVCCMetadata::release_txn() {
   clear_has_txn();
   ::cockroach::roachpb::Transaction* temp = txn_;
   txn_ = NULL;
   return temp;
 }
- void MVCCMetadata::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
+void MVCCMetadata::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
   delete txn_;
   txn_ = txn;
   if (txn) {
@@ -679,11 +679,11 @@ void MVCCMetadata::clear_timestamp() {
   if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
   clear_has_timestamp();
 }
- const ::cockroach::roachpb::Timestamp& MVCCMetadata::timestamp() const {
+const ::cockroach::roachpb::Timestamp& MVCCMetadata::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.MVCCMetadata.timestamp)
   return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
 }
- ::cockroach::roachpb::Timestamp* MVCCMetadata::mutable_timestamp() {
+::cockroach::roachpb::Timestamp* MVCCMetadata::mutable_timestamp() {
   set_has_timestamp();
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::roachpb::Timestamp;
@@ -691,13 +691,13 @@ void MVCCMetadata::clear_timestamp() {
   // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.MVCCMetadata.timestamp)
   return timestamp_;
 }
- ::cockroach::roachpb::Timestamp* MVCCMetadata::release_timestamp() {
+::cockroach::roachpb::Timestamp* MVCCMetadata::release_timestamp() {
   clear_has_timestamp();
   ::cockroach::roachpb::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
 }
- void MVCCMetadata::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
+void MVCCMetadata::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
@@ -1328,7 +1328,7 @@ void MVCCStats::SerializeWithCachedSizes(
 int MVCCStats::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 255) {
+  if (_has_bits_[0 / 32] & 255u) {
     // optional int64 live_bytes = 1;
     if (has_live_bytes()) {
       total_size += 1 +
@@ -1386,7 +1386,7 @@ int MVCCStats::ByteSize() const {
     }
 
   }
-  if (_has_bits_[8 / 32] & 7936) {
+  if (_has_bits_[8 / 32] & 7936u) {
     // optional int64 intent_age = 9;
     if (has_intent_age()) {
       total_size += 1 +

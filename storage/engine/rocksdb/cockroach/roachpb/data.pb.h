@@ -40,22 +40,22 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
 void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto();
 void protobuf_ShutdownFile_cockroach_2froachpb_2fdata_2eproto();
 
-class Span;
-class Timestamp;
-class Value;
-class KeyValue;
-class StoreIdent;
-class SplitTrigger;
-class MergeTrigger;
 class ChangeReplicasTrigger;
-class ModifiedSpanTrigger;
-class InternalCommitTrigger;
-class NodeList;
-class Transaction;
-class Intent;
-class Lease;
 class GCMetadata;
+class Intent;
+class InternalCommitTrigger;
+class KeyValue;
+class Lease;
+class MergeTrigger;
+class ModifiedSpanTrigger;
+class NodeList;
 class SequenceCacheEntry;
+class Span;
+class SplitTrigger;
+class StoreIdent;
+class Timestamp;
+class Transaction;
+class Value;
 
 enum ValueType {
   UNKNOWN = 0,
@@ -975,10 +975,10 @@ class ChangeReplicasTrigger : public ::google::protobuf::Message {
   const ::cockroach::roachpb::ReplicaDescriptor& updated_replicas(int index) const;
   ::cockroach::roachpb::ReplicaDescriptor* mutable_updated_replicas(int index);
   ::cockroach::roachpb::ReplicaDescriptor* add_updated_replicas();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
-      updated_replicas() const;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
       mutable_updated_replicas();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
+      updated_replicas() const;
 
   // optional int32 next_replica_id = 4;
   bool has_next_replica_id() const;
@@ -1515,10 +1515,10 @@ class Transaction : public ::google::protobuf::Message {
   const ::cockroach::roachpb::Span& intents(int index) const;
   ::cockroach::roachpb::Span* mutable_intents(int index);
   ::cockroach::roachpb::Span* add_intents();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-      intents() const;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
       mutable_intents();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+      intents() const;
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Transaction)
  private:
@@ -2736,15 +2736,15 @@ inline ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::add_updat
   // @@protoc_insertion_point(field_add:cockroach.roachpb.ChangeReplicasTrigger.updated_replicas)
   return updated_replicas_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
-ChangeReplicasTrigger::updated_replicas() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.ChangeReplicasTrigger.updated_replicas)
-  return updated_replicas_;
-}
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
 ChangeReplicasTrigger::mutable_updated_replicas() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ChangeReplicasTrigger.updated_replicas)
   return &updated_replicas_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
+ChangeReplicasTrigger::updated_replicas() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.ChangeReplicasTrigger.updated_replicas)
+  return updated_replicas_;
 }
 
 // optional int32 next_replica_id = 4;
@@ -3552,15 +3552,15 @@ inline ::cockroach::roachpb::Span* Transaction::add_intents() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.Transaction.Intents)
   return intents_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-Transaction::intents() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.Intents)
-  return intents_;
-}
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
 Transaction::mutable_intents() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.Transaction.Intents)
   return &intents_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+Transaction::intents() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.Intents)
+  return intents_;
 }
 
 // -------------------------------------------------------------------

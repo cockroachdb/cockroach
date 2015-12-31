@@ -280,7 +280,7 @@ var (
 // the isolation type for each transaction. The outer slice contains
 // each possible combination of such transaction isolations.
 func enumerateIsolations(numTxns int, isolations []roachpb.IsolationType) [][]roachpb.IsolationType {
-	// Use a count from 0 to pow(# isolations, numTxns) and examine
+	// Use a count from 0 to pow(# isolations, numTxns)-1 and examine
 	// n-ary digits to get all possible combinations of txn isolations.
 	n := len(isolations)
 	result := [][]roachpb.IsolationType{}
@@ -310,15 +310,15 @@ func TestEnumerateIsolations(t *testing.T) {
 		{SSI, SI, SI},
 		{SI, SI, SI},
 	}
-	if !reflect.DeepEqual(enumerateIsolations(3, bothIsolations), expIsolations) {
-		t.Errorf("expected enumeration to match %s; got %s", expIsolations, enumerateIsolations(3, bothIsolations))
+	if enum := enumerateIsolations(3, bothIsolations); !reflect.DeepEqual(enum, expIsolations) {
+		t.Errorf("expected enumeration to match %s; got %s", expIsolations, enum)
 	}
 
 	expDegenerate := [][]roachpb.IsolationType{
 		{SSI, SSI, SSI},
 	}
-	if !reflect.DeepEqual(enumerateIsolations(3, onlySerializable), expDegenerate) {
-		t.Errorf("expected enumeration to match %s; got %s", expDegenerate, enumerateIsolations(3, onlySerializable))
+	if enum := enumerateIsolations(3, onlySerializable); !reflect.DeepEqual(enum, expDegenerate) {
+		t.Errorf("expected enumeration to match %s; got %s", expDegenerate, enum)
 	}
 }
 

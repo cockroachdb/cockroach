@@ -450,10 +450,10 @@ void Attributes::SerializeWithCachedSizes(
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.Attributes)
   // repeated string attrs = 1;
   for (int i = 0; i < this->attrs_size(); i++) {
-  ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
-    this->attrs(i).data(), this->attrs(i).length(),
-    ::google::protobuf::internal::WireFormat::SERIALIZE,
-    "cockroach.roachpb.Attributes.attrs");
+    ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+      this->attrs(i).data(), this->attrs(i).length(),
+      ::google::protobuf::internal::WireFormat::SERIALIZE,
+      "cockroach.roachpb.Attributes.attrs");
     ::google::protobuf::internal::WireFormatLite::WriteString(
       1, this->attrs(i), output);
   }
@@ -840,7 +840,7 @@ void ReplicaDescriptor::SerializeWithCachedSizes(
 int ReplicaDescriptor::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7) {
+  if (_has_bits_[0 / 32] & 7u) {
     // optional int32 node_id = 1;
     if (has_node_id()) {
       total_size += 1 +
@@ -1298,7 +1298,7 @@ void RangeDescriptor::SerializeWithCachedSizes(
 int RangeDescriptor::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 23) {
+  if (_has_bits_[0 / 32] & 23u) {
     // optional int64 range_id = 1;
     if (has_range_id()) {
       total_size += 1 +
@@ -1563,27 +1563,27 @@ int RangeDescriptor::replicas_size() const {
 void RangeDescriptor::clear_replicas() {
   replicas_.Clear();
 }
- const ::cockroach::roachpb::ReplicaDescriptor& RangeDescriptor::replicas(int index) const {
+const ::cockroach::roachpb::ReplicaDescriptor& RangeDescriptor::replicas(int index) const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeDescriptor.replicas)
   return replicas_.Get(index);
 }
- ::cockroach::roachpb::ReplicaDescriptor* RangeDescriptor::mutable_replicas(int index) {
+::cockroach::roachpb::ReplicaDescriptor* RangeDescriptor::mutable_replicas(int index) {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeDescriptor.replicas)
   return replicas_.Mutable(index);
 }
- ::cockroach::roachpb::ReplicaDescriptor* RangeDescriptor::add_replicas() {
+::cockroach::roachpb::ReplicaDescriptor* RangeDescriptor::add_replicas() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.RangeDescriptor.replicas)
   return replicas_.Add();
 }
- const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
-RangeDescriptor::replicas() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.RangeDescriptor.replicas)
-  return replicas_;
-}
- ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
+::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
 RangeDescriptor::mutable_replicas() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.RangeDescriptor.replicas)
   return &replicas_;
+}
+const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
+RangeDescriptor::replicas() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.RangeDescriptor.replicas)
+  return replicas_;
 }
 
 // optional int32 next_replica_id = 5;
@@ -2189,7 +2189,7 @@ void RangeTreeNode::SerializeWithCachedSizes(
 int RangeTreeNode::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 31) {
+  if (_has_bits_[0 / 32] & 31u) {
     // optional bytes key = 1;
     if (has_key()) {
       total_size += 1 +
@@ -2774,7 +2774,7 @@ void StoreCapacity::SerializeWithCachedSizes(
 int StoreCapacity::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7) {
+  if (_has_bits_[0 / 32] & 7u) {
     // optional int64 Capacity = 1;
     if (has_capacity()) {
       total_size += 1 +
@@ -3173,7 +3173,7 @@ void NodeDescriptor::SerializeWithCachedSizes(
 int NodeDescriptor::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7) {
+  if (_has_bits_[0 / 32] & 7u) {
     // optional int32 node_id = 1;
     if (has_node_id()) {
       total_size += 1 +
@@ -3316,11 +3316,11 @@ void NodeDescriptor::clear_address() {
   if (address_ != NULL) address_->::cockroach::util::UnresolvedAddr::Clear();
   clear_has_address();
 }
- const ::cockroach::util::UnresolvedAddr& NodeDescriptor::address() const {
+const ::cockroach::util::UnresolvedAddr& NodeDescriptor::address() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.NodeDescriptor.address)
   return address_ != NULL ? *address_ : *default_instance_->address_;
 }
- ::cockroach::util::UnresolvedAddr* NodeDescriptor::mutable_address() {
+::cockroach::util::UnresolvedAddr* NodeDescriptor::mutable_address() {
   set_has_address();
   if (address_ == NULL) {
     address_ = new ::cockroach::util::UnresolvedAddr;
@@ -3328,13 +3328,13 @@ void NodeDescriptor::clear_address() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NodeDescriptor.address)
   return address_;
 }
- ::cockroach::util::UnresolvedAddr* NodeDescriptor::release_address() {
+::cockroach::util::UnresolvedAddr* NodeDescriptor::release_address() {
   clear_has_address();
   ::cockroach::util::UnresolvedAddr* temp = address_;
   address_ = NULL;
   return temp;
 }
- void NodeDescriptor::set_allocated_address(::cockroach::util::UnresolvedAddr* address) {
+void NodeDescriptor::set_allocated_address(::cockroach::util::UnresolvedAddr* address) {
   delete address_;
   address_ = address;
   if (address) {
@@ -3359,11 +3359,11 @@ void NodeDescriptor::clear_attrs() {
   if (attrs_ != NULL) attrs_->::cockroach::roachpb::Attributes::Clear();
   clear_has_attrs();
 }
- const ::cockroach::roachpb::Attributes& NodeDescriptor::attrs() const {
+const ::cockroach::roachpb::Attributes& NodeDescriptor::attrs() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.NodeDescriptor.attrs)
   return attrs_ != NULL ? *attrs_ : *default_instance_->attrs_;
 }
- ::cockroach::roachpb::Attributes* NodeDescriptor::mutable_attrs() {
+::cockroach::roachpb::Attributes* NodeDescriptor::mutable_attrs() {
   set_has_attrs();
   if (attrs_ == NULL) {
     attrs_ = new ::cockroach::roachpb::Attributes;
@@ -3371,13 +3371,13 @@ void NodeDescriptor::clear_attrs() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NodeDescriptor.attrs)
   return attrs_;
 }
- ::cockroach::roachpb::Attributes* NodeDescriptor::release_attrs() {
+::cockroach::roachpb::Attributes* NodeDescriptor::release_attrs() {
   clear_has_attrs();
   ::cockroach::roachpb::Attributes* temp = attrs_;
   attrs_ = NULL;
   return temp;
 }
- void NodeDescriptor::set_allocated_attrs(::cockroach::roachpb::Attributes* attrs) {
+void NodeDescriptor::set_allocated_attrs(::cockroach::roachpb::Attributes* attrs) {
   delete attrs_;
   attrs_ = attrs;
   if (attrs) {
@@ -3643,7 +3643,7 @@ void StoreDescriptor::SerializeWithCachedSizes(
 int StoreDescriptor::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 15) {
+  if (_has_bits_[0 / 32] & 15u) {
     // optional int32 store_id = 1;
     if (has_store_id()) {
       total_size += 1 +
@@ -3797,11 +3797,11 @@ void StoreDescriptor::clear_attrs() {
   if (attrs_ != NULL) attrs_->::cockroach::roachpb::Attributes::Clear();
   clear_has_attrs();
 }
- const ::cockroach::roachpb::Attributes& StoreDescriptor::attrs() const {
+const ::cockroach::roachpb::Attributes& StoreDescriptor::attrs() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreDescriptor.attrs)
   return attrs_ != NULL ? *attrs_ : *default_instance_->attrs_;
 }
- ::cockroach::roachpb::Attributes* StoreDescriptor::mutable_attrs() {
+::cockroach::roachpb::Attributes* StoreDescriptor::mutable_attrs() {
   set_has_attrs();
   if (attrs_ == NULL) {
     attrs_ = new ::cockroach::roachpb::Attributes;
@@ -3809,13 +3809,13 @@ void StoreDescriptor::clear_attrs() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.StoreDescriptor.attrs)
   return attrs_;
 }
- ::cockroach::roachpb::Attributes* StoreDescriptor::release_attrs() {
+::cockroach::roachpb::Attributes* StoreDescriptor::release_attrs() {
   clear_has_attrs();
   ::cockroach::roachpb::Attributes* temp = attrs_;
   attrs_ = NULL;
   return temp;
 }
- void StoreDescriptor::set_allocated_attrs(::cockroach::roachpb::Attributes* attrs) {
+void StoreDescriptor::set_allocated_attrs(::cockroach::roachpb::Attributes* attrs) {
   delete attrs_;
   attrs_ = attrs;
   if (attrs) {
@@ -3840,11 +3840,11 @@ void StoreDescriptor::clear_node() {
   if (node_ != NULL) node_->::cockroach::roachpb::NodeDescriptor::Clear();
   clear_has_node();
 }
- const ::cockroach::roachpb::NodeDescriptor& StoreDescriptor::node() const {
+const ::cockroach::roachpb::NodeDescriptor& StoreDescriptor::node() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreDescriptor.node)
   return node_ != NULL ? *node_ : *default_instance_->node_;
 }
- ::cockroach::roachpb::NodeDescriptor* StoreDescriptor::mutable_node() {
+::cockroach::roachpb::NodeDescriptor* StoreDescriptor::mutable_node() {
   set_has_node();
   if (node_ == NULL) {
     node_ = new ::cockroach::roachpb::NodeDescriptor;
@@ -3852,13 +3852,13 @@ void StoreDescriptor::clear_node() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.StoreDescriptor.node)
   return node_;
 }
- ::cockroach::roachpb::NodeDescriptor* StoreDescriptor::release_node() {
+::cockroach::roachpb::NodeDescriptor* StoreDescriptor::release_node() {
   clear_has_node();
   ::cockroach::roachpb::NodeDescriptor* temp = node_;
   node_ = NULL;
   return temp;
 }
- void StoreDescriptor::set_allocated_node(::cockroach::roachpb::NodeDescriptor* node) {
+void StoreDescriptor::set_allocated_node(::cockroach::roachpb::NodeDescriptor* node) {
   delete node_;
   node_ = node;
   if (node) {
@@ -3883,11 +3883,11 @@ void StoreDescriptor::clear_capacity() {
   if (capacity_ != NULL) capacity_->::cockroach::roachpb::StoreCapacity::Clear();
   clear_has_capacity();
 }
- const ::cockroach::roachpb::StoreCapacity& StoreDescriptor::capacity() const {
+const ::cockroach::roachpb::StoreCapacity& StoreDescriptor::capacity() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreDescriptor.capacity)
   return capacity_ != NULL ? *capacity_ : *default_instance_->capacity_;
 }
- ::cockroach::roachpb::StoreCapacity* StoreDescriptor::mutable_capacity() {
+::cockroach::roachpb::StoreCapacity* StoreDescriptor::mutable_capacity() {
   set_has_capacity();
   if (capacity_ == NULL) {
     capacity_ = new ::cockroach::roachpb::StoreCapacity;
@@ -3895,13 +3895,13 @@ void StoreDescriptor::clear_capacity() {
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.StoreDescriptor.capacity)
   return capacity_;
 }
- ::cockroach::roachpb::StoreCapacity* StoreDescriptor::release_capacity() {
+::cockroach::roachpb::StoreCapacity* StoreDescriptor::release_capacity() {
   clear_has_capacity();
   ::cockroach::roachpb::StoreCapacity* temp = capacity_;
   capacity_ = NULL;
   return temp;
 }
- void StoreDescriptor::set_allocated_capacity(::cockroach::roachpb::StoreCapacity* capacity) {
+void StoreDescriptor::set_allocated_capacity(::cockroach::roachpb::StoreCapacity* capacity) {
   delete capacity_;
   capacity_ = capacity;
   if (capacity) {

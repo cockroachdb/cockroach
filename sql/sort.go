@@ -219,16 +219,22 @@ func (n *sortNode) wrap(plan planNode) planNode {
 func (n *sortNode) initValues() bool {
 	// TODO(pmattis): If the result set is large, we might need to perform the
 	// sort on disk.
-	v := &valuesNode{ordering: n.ordering}
-	for n.plan.Next() {
-		values := n.plan.Values()
-		valuesCopy := make(parser.DTuple, len(values))
-		copy(valuesCopy, values)
-		v.rows = append(v.rows, valuesCopy)
-	}
-	n.err = n.plan.Err()
-	if n.err != nil {
-		return false
+	var v *valuesNode
+	if x, ok := n.plan.(*valuesNode); ok {
+		v = x
+		v.ordering = n.ordering
+	} else {
+		v = &valuesNode{ordering: n.ordering}
+		for n.plan.Next() {
+			values := n.plan.Values()
+			valuesCopy := make(parser.DTuple, len(values))
+			copy(valuesCopy, values)
+			v.rows = append(v.rows, valuesCopy)
+		}
+		n.err = n.plan.Err()
+		if n.err != nil {
+			return false
+		}
 	}
 	sort.Sort(v)
 	n.plan = v

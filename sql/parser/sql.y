@@ -861,14 +861,14 @@ iso_level:
     // Mapped to the closest supported isolation level.
     $$ = SnapshotIsolation
   }
-| REPEATABLE READ
-  {
-    // Mapped to the closest supported isolation level.
-    $$ = SnapshotIsolation
-  }
 | SNAPSHOT
   {
     $$ = SnapshotIsolation
+  }
+| REPEATABLE READ
+  {
+    // Mapped to the closest supported isolation level.
+    $$ = SerializableIsolation
   }
 | SERIALIZABLE
   {
@@ -2766,11 +2766,15 @@ func_application:
   }
 | func_name '(' VARIADIC a_expr opt_sort_clause ')' { unimplemented() }
 | func_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause ')' { unimplemented() }
-| func_name '(' ALL expr_list opt_sort_clause ')' { unimplemented() }
+| func_name '(' ALL expr_list opt_sort_clause ')'
+  {
+    // TODO(pmattis): Support opt_sort_clause or remove it?
+    $$ = &FuncExpr{Name: $1, Type: All, Exprs: $4}
+  }
 | func_name '(' DISTINCT expr_list opt_sort_clause ')'
   {
     // TODO(pmattis): Support opt_sort_clause or remove it?
-    $$ = &FuncExpr{Name: $1, Distinct: true, Exprs: $4}
+    $$ = &FuncExpr{Name: $1, Type: Distinct, Exprs: $4}
   }
 | func_name '(' '*' ')'
   {
@@ -2836,16 +2840,16 @@ func_expr_common_subexpr:
     $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
   }
 | OVERLAY '(' overlay_list ')'
-  { 
-    $$ = &OverlayExpr{FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}} 
+  {
+    $$ = &OverlayExpr{FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}}
   }
 | POSITION '(' position_list ')'
   {
     $$ = &FuncExpr{Name: &QualifiedName{Base: "STRPOS"}, Exprs: $3}
   }
-| SUBSTRING '(' substr_list ')' 
-  { 
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3} 
+| SUBSTRING '(' substr_list ')'
+  {
+    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
   }
 | TREAT '(' a_expr AS typename ')' { unimplemented() }
 | TRIM '(' BOTH trim_list ')'
@@ -2856,7 +2860,7 @@ func_expr_common_subexpr:
   {
      $$ = &FuncExpr{Name: &QualifiedName{Base: "LTRIM"}, Exprs: $4}
   }
-| TRIM '(' TRAILING trim_list ')' 
+| TRIM '(' TRAILING trim_list ')'
   {
      $$ = &FuncExpr{Name: &QualifiedName{Base: "RTRIM"}, Exprs: $4}
   }
@@ -3119,7 +3123,7 @@ position_list:
   {
     $$ = Exprs{$3, $1}
   }
-| /* EMPTY */ 
+| /* EMPTY */
   {
     $$ = nil
   }
@@ -3136,33 +3140,33 @@ position_list:
 // here, and convert the SQL9x style to the generic list for further
 // processing. - thomas 2000-11-28
 substr_list:
-  a_expr substr_from substr_for 
-  { 
+  a_expr substr_from substr_for
+  {
     $$ = Exprs{$1, $2, $3}
   }
 | a_expr substr_for substr_from
-  { 
+  {
     $$ = Exprs{$1, $3, $2}
   }
 | a_expr substr_from
-  { 
+  {
     $$ = Exprs{$1, $2}
   }
 | a_expr substr_for
-  { 
+  {
     $$ = Exprs{$1, DInt(1), $2}
   }
-| expr_list 
-  { 
+| expr_list
+  {
     $$ = $1
   }
-| /* EMPTY */ 
+| /* EMPTY */
   {
     $$ = nil
   }
 
 substr_from:
-  FROM a_expr 
+  FROM a_expr
   {
     $$ = $2
   }

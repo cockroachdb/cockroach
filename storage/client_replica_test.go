@@ -66,7 +66,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	}
 
 	// Wait for that command to execute on all the followers.
-	util.SucceedsWithin(t, 50*time.Millisecond, func() error {
+	util.SucceedsWithin(t, 5*time.Second, func() error {
 		values := []int64{}
 		for _, eng := range mtc.engines {
 			val, _, err := engine.MVCCGet(eng, roachpb.Key("a"), clocks[0].Now(), true, nil)

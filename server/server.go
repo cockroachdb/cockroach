@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
 	assetfs "github.com/elazarl/go-bindata-assetfs"
@@ -80,6 +81,7 @@ type Server struct {
 	tsDB          *ts.DB
 	tsServer      *ts.Server
 	raftTransport storage.RaftTransport
+	metaRegistry  *metric.Registry
 	stopper       *stop.Stopper
 }
 
@@ -105,10 +107,11 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	s := &Server{
-		ctx:     ctx,
-		mux:     http.NewServeMux(),
-		clock:   hlc.NewClock(hlc.UnixNano),
-		stopper: stopper,
+		ctx:          ctx,
+		mux:          http.NewServeMux(),
+		clock:        hlc.NewClock(hlc.UnixNano),
+		metaRegistry: metric.NewRegistry(),
+		stopper:      stopper,
 	}
 	s.clock.SetMaxOffset(ctx.MaxOffset)
 
@@ -143,7 +146,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	leaseMgr := sql.NewLeaseManager(0, *s.db, s.clock)
 	leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
-	s.sqlServer = sql.MakeServer(&s.ctx.Context, *s.db, s.gossip, leaseMgr, s.stopper)
+	s.sqlServer = sql.MakeServer(&s.ctx.Context, *s.db, s.gossip, leaseMgr, s.metaRegistry, s.stopper)
 	if err := s.sqlServer.RegisterRPC(s.rpc); err != nil {
 		return nil, err
 	}
@@ -170,9 +173,8 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 			Mode:           s.ctx.BalanceMode,
 		},
 	}
-	s.node = NewNode(nCtx)
+	s.node = NewNode(nCtx, s.metaRegistry, s.stopper)
 	s.admin = newAdminServer(s.db, s.stopper)
-	s.status = newStatusServer(s.db, s.gossip, ctx)
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
 
@@ -209,7 +211,7 @@ func (s *Server) Start(selfBootstrap bool) error {
 	}
 	s.gossip.Start(s.rpc, addr, s.stopper)
 
-	if err := s.node.start(s.rpc, addr, s.ctx.Engines, s.ctx.NodeAttributes, s.stopper); err != nil {
+	if err := s.node.start(s.rpc, addr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
 		return err
 	}
 
@@ -225,6 +227,8 @@ func (s *Server) Start(selfBootstrap bool) error {
 	s.startWriteSummaries()
 
 	s.sqlServer.SetNodeID(s.node.Descriptor.NodeID)
+
+	s.status = newStatusServer(s.db, s.gossip, s.metaRegistry, s.ctx)
 
 	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), addr)
 	s.initHTTP()
@@ -243,7 +247,7 @@ func (s *Server) initHTTP() {
 	s.mux.Handle(rpc.DefaultRPCPath, s.rpc)
 
 	s.mux.Handle("/", http.FileServer(
-		&assetfs.AssetFS{Asset: ui.Asset, AssetDir: ui.AssetDir}))
+		&assetfs.AssetFS{Asset: ui.Asset, AssetDir: ui.AssetDir, AssetInfo: ui.AssetInfo}))
 
 	// The admin server handles both /debug/ and /_admin/
 	// TODO(marc): when cookie-based authentication exists,

@@ -18,6 +18,7 @@ package status
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
@@ -37,8 +38,9 @@ func (e StartNodeEvent) String() string {
 
 // CallSuccessEvent is published when a call to a node completes without error.
 type CallSuccessEvent struct {
-	NodeID roachpb.NodeID
-	Method roachpb.Method
+	NodeID   roachpb.NodeID
+	Method   roachpb.Method
+	Duration time.Duration
 }
 
 // String implements fmt.Stringer.
@@ -48,8 +50,9 @@ func (e CallSuccessEvent) String() string {
 
 // CallErrorEvent is published when a call to a node returns an error.
 type CallErrorEvent struct {
-	NodeID roachpb.NodeID
-	Method roachpb.Method
+	NodeID   roachpb.NodeID
+	Method   roachpb.Method
+	Duration time.Duration
 }
 
 // String implements fmt.Stringer.
@@ -86,7 +89,7 @@ func (nef NodeEventFeed) StartNode(desc roachpb.NodeDescriptor, startedAt int64)
 // - For a successful request, a corresponding event for each request in the batch,
 // - on error without index information, a failure of the Batch, and
 // - on an indexed error a failure of the individual request.
-func (nef NodeEventFeed) CallComplete(ba roachpb.BatchRequest, pErr *roachpb.Error) {
+func (nef NodeEventFeed) CallComplete(ba roachpb.BatchRequest, d time.Duration, pErr *roachpb.Error) {
 	if pErr != nil && pErr.TransactionRestart == roachpb.TransactionRestart_ABORT {
 		method := roachpb.Batch
 		if iErr, ok := pErr.GoError().(roachpb.IndexedError); ok {
@@ -95,15 +98,17 @@ func (nef NodeEventFeed) CallComplete(ba roachpb.BatchRequest, pErr *roachpb.Err
 			}
 		}
 		nef.f.Publish(&CallErrorEvent{
-			NodeID: nef.id,
-			Method: method,
+			NodeID:   nef.id,
+			Method:   method,
+			Duration: d,
 		})
 		return
 	}
 	for _, union := range ba.Requests {
 		nef.f.Publish(&CallSuccessEvent{
-			NodeID: nef.id,
-			Method: union.GetInner().Method(),
+			NodeID:   nef.id,
+			Method:   union.GetInner().Method(),
+			Duration: d,
 		})
 	}
 }

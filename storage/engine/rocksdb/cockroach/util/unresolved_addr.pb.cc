@@ -325,7 +325,7 @@ void UnresolvedAddr::SerializeWithCachedSizes(
 int UnresolvedAddr::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional string network_field = 1;
     if (has_network_field()) {
       total_size += 1 +

@@ -526,7 +526,7 @@ func (c *v3Conn) executeStatements(stmts string, params []driver.Datum, formatCo
 
 	c.session.Reset()
 	if err := c.session.Unmarshal(resp.Session); err != nil {
-		return c.sendError(err.Error())
+		return err
 	}
 
 	c.opts.database = c.session.Database

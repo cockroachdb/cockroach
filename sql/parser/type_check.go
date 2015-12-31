@@ -129,49 +129,49 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 	switch expr.Type.(type) {
 	case *BoolType:
 		switch dummyExpr {
-		case DummyBool, DummyInt, DummyFloat, DummyString:
+		case DNull, DummyBool, DummyInt, DummyFloat, DummyString:
 			return DummyBool, nil
 		}
 
 	case *IntType:
 		switch dummyExpr {
-		case DummyBool, DummyInt, DummyFloat, DummyString:
+		case DNull, DummyBool, DummyInt, DummyFloat, DummyString:
 			return DummyInt, nil
 		}
 
 	case *FloatType:
 		switch dummyExpr {
-		case DummyBool, DummyInt, DummyFloat, DummyString:
+		case DNull, DummyBool, DummyInt, DummyFloat, DummyString:
 			return DummyFloat, nil
 		}
 
 	case *StringType:
 		switch dummyExpr {
-		case DummyBool, DummyInt, DummyFloat, DNull, DummyString, DummyBytes:
+		case DNull, DummyBool, DummyInt, DummyFloat, DummyString, DummyBytes:
 			return DummyString, nil
 		}
 
 	case *BytesType:
 		switch dummyExpr {
-		case DummyBytes, DummyString:
+		case DNull, DummyBytes, DummyString:
 			return DummyBytes, nil
 		}
 
 	case *DateType:
 		switch dummyExpr {
-		case DummyString, DummyTimestamp:
+		case DNull, DummyString, DummyTimestamp:
 			return DummyDate, nil
 		}
 
 	case *TimestampType:
 		switch dummyExpr {
-		case DummyString, DummyDate:
+		case DNull, DummyString, DummyDate:
 			return DummyTimestamp, nil
 		}
 
 	case *IntervalType:
 		switch dummyExpr {
-		case DummyString, DummyInt:
+		case DNull, DummyString, DummyInt:
 			return DummyInterval, nil
 		}
 
@@ -226,7 +226,7 @@ func (expr *ExistsExpr) TypeCheck(args MapArgs) (Datum, error) {
 // TypeCheck implements the Expr interface.
 func (expr *FuncExpr) TypeCheck(args MapArgs) (Datum, error) {
 	dummyArgs := make(DTuple, 0, len(expr.Exprs))
-	types := make(typeList, 0, len(expr.Exprs))
+	types := make(argTypes, 0, len(expr.Exprs))
 	for _, e := range expr.Exprs {
 		dummyArg, err := e.TypeCheck(args)
 		if err != nil {
@@ -259,7 +259,7 @@ func (expr *FuncExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 		for _, candidate := range candidates {
-			if candidate.match(types) {
+			if candidate.types.match(types) {
 				expr.fn = candidate
 				break
 			}

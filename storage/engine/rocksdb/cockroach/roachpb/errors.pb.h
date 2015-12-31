@@ -41,24 +41,24 @@ void protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
 void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
 void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
 
-class NotLeaderError;
+class ConditionFailedError;
+class ErrPosition;
+class Error;
+class ErrorDetail;
+class LeaseRejectedError;
 class NodeUnavailableError;
-class RangeNotFoundError;
+class NotLeaderError;
+class OpRequiresTxnError;
 class RangeKeyMismatchError;
+class RangeNotFoundError;
 class ReadWithinUncertaintyIntervalError;
+class SendError;
 class TransactionAbortedError;
 class TransactionPushError;
 class TransactionRetryError;
 class TransactionStatusError;
 class WriteIntentError;
 class WriteTooOldError;
-class OpRequiresTxnError;
-class ConditionFailedError;
-class LeaseRejectedError;
-class SendError;
-class ErrorDetail;
-class ErrPosition;
-class Error;
 
 enum TransactionRestart {
   ABORT = 0,
@@ -1071,10 +1071,10 @@ class WriteIntentError : public ::google::protobuf::Message {
   const ::cockroach::roachpb::Intent& intents(int index) const;
   ::cockroach::roachpb::Intent* mutable_intents(int index);
   ::cockroach::roachpb::Intent* add_intents();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent >&
-      intents() const;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent >*
       mutable_intents();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent >&
+      intents() const;
 
   // optional bool resolved = 2;
   bool has_resolved() const;
@@ -2860,15 +2860,15 @@ inline ::cockroach::roachpb::Intent* WriteIntentError::add_intents() {
   // @@protoc_insertion_point(field_add:cockroach.roachpb.WriteIntentError.intents)
   return intents_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent >&
-WriteIntentError::intents() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.WriteIntentError.intents)
-  return intents_;
-}
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent >*
 WriteIntentError::mutable_intents() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.WriteIntentError.intents)
   return &intents_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent >&
+WriteIntentError::intents() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.WriteIntentError.intents)
+  return intents_;
 }
 
 // optional bool resolved = 2;

@@ -251,9 +251,9 @@ func (a *Allocator) AllocateTarget(required roachpb.Attributes, existing []roach
 			return target, nil
 		}
 		if len(attrs) == 0 {
-			return nil, util.Errorf("unable to allocate a target store; no candidates available")
+			return nil, util.Errorf("no suitable replication target store found, are you running enough nodes?")
 		} else if !relaxConstraints {
-			return nil, util.Errorf("unable to allocate a target store; no candidates available with attributes %s", required)
+			return nil, util.Errorf("no target store with attributes %s available", required)
 		}
 	}
 }

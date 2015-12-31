@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -85,13 +86,13 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 }
 
 // TestStoreRangeSplitAtTablePrefix verifies a range can be split at
-// TableDataMin and still gossip the SystemConfig properly.
+// UserTableDataMin and still gossip the SystemConfig properly.
 func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	key := keys.TableDataMin
+	key := keys.MakeNonColumnKey(append([]byte(nil), keys.UserTableDataMin...))
 	args := adminSplitArgs(key, key)
 	_, err := client.SendWrapped(rg1(store), nil, &args)
 	if err != nil {
@@ -132,6 +133,57 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Errorf("expected a schema gossip containing %q, but did not see one", descBytes)
 	case <-successChan:
+	}
+}
+
+// TestStoreRangeSplitInsideRow verifies an attempt to split a range inside of
+// a table row will cause a split at a boundary between rows.
+func TestStoreRangeSplitInsideRow(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	// Manually create some the column keys corresponding to the table:
+	//
+	//   CREATE TABLE t (id STRING PRIMARY KEY, col1 INT, col2 INT)
+	tableKey := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
+	rowKey := roachpb.Key(encoding.EncodeVarint(append([]byte(nil), tableKey...), 1))
+	rowKey = encoding.EncodeString(encoding.EncodeVarint(rowKey, 1), "a")
+	col1Key := keys.MakeColumnKey(append([]byte(nil), rowKey...), 1)
+	col2Key := keys.MakeColumnKey(append([]byte(nil), rowKey...), 2)
+
+	// We don't care about the value, so just store any old thing.
+	if err := store.DB().Put(col1Key, "column 1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB().Put(col2Key, "column 2"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Split between col1Key and col2Key by splitting before col2Key.
+	args := adminSplitArgs(col2Key, col2Key)
+	_, err := client.SendWrapped(rg1(store), nil, &args)
+	if err != nil {
+		t.Fatalf("%s: split unexpected error: %s", col1Key, err)
+	}
+
+	rng1 := store.LookupReplica(col1Key, nil)
+	rng2 := store.LookupReplica(col2Key, nil)
+	// Verify the two columns are still on the same range.
+	if !reflect.DeepEqual(rng1, rng2) {
+		t.Fatalf("%s: ranges differ: %+v vs %+v", roachpb.Key(col1Key), rng1, rng2)
+	}
+	// Verify we split on a row key.
+	if startKey := rng1.Desc().StartKey; !startKey.Equal(rowKey) {
+		t.Fatalf("%s: expected split on %s, but found %s",
+			roachpb.Key(col1Key), roachpb.Key(rowKey), startKey)
+	}
+
+	// Verify the previous range was split on a row key.
+	rng3 := store.LookupReplica(tableKey, nil)
+	if endKey := rng3.Desc().EndKey; !endKey.Equal(rowKey) {
+		t.Fatalf("%s: expected split on %s, but found %s",
+			roachpb.Key(col1Key), roachpb.Key(rowKey), endKey)
 	}
 }
 
@@ -348,6 +400,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 	// Split the range after the last table data key.
 	keyPrefix := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
+	keyPrefix = keys.MakeNonColumnKey(keyPrefix)
 	args := adminSplitArgs(roachpb.KeyMin, keyPrefix)
 	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
 		t.Fatal(err)
@@ -365,6 +418,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		key := append([]byte(nil), keyPrefix...)
 		key = append(key, randutil.RandBytes(src, int(src.Int31n(1<<7)))...)
+		key = keys.MakeNonColumnKey(key)
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs := putArgs(key, val)
 		if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
@@ -382,6 +436,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	// Split the range at approximate halfway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
 	midKey := append([]byte(nil), keyPrefix...)
 	midKey = append(midKey, []byte("Z")...)
+	midKey = keys.MakeNonColumnKey(midKey)
 	args = adminSplitArgs(keyPrefix, midKey)
 	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: rng.Desc().RangeID,
@@ -429,6 +484,7 @@ func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key
 			return
 		}
 		key := append(append([]byte(nil), prefix...), randutil.RandBytes(src, 100)...)
+		key = keys.MakeNonColumnKey(key)
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs := putArgs(key, val)
 		_, err := client.SendWrappedWith(store, nil, roachpb.Header{
