@@ -241,6 +241,9 @@ func TestMakeSpans(t *testing.T) {
 		{`a IN (1) AND b <= 1`, []string{"a", "b"}, `/1/#-/1/2`},
 		{`a IN (1) AND b IS NULL`, []string{"a", "b"}, `/1-/1/#`},
 		{`a IN (1) AND b IS NOT NULL`, []string{"a", "b"}, `/1/#-/2`},
+
+		{`(a, b) = (1, 2)`, []string{"a"}, `/1-/2`},
+		{`(a, b) = (1, 2)`, []string{"a", "b"}, `/1/2-/1/3`},
 	}
 	for _, d := range testData {
 		desc, index := makeTestIndex(t, d.columns)
@@ -308,6 +311,7 @@ func TestApplyConstraints(t *testing.T) {
 		{`a IN (1, 2) AND b = 3`, []string{"a", "b"}, `b = 3`},
 		{`a <= 5 AND b >= 6 AND (a, b) IN ((1, 2))`, []string{"a", "b"}, `a <= 5 AND b >= 6`},
 		{`a IN (1) AND a = 1`, []string{"a"}, `<nil>`},
+		{`(a, b) = (1, 2)`, []string{"a"}, `(a, b) IN ((1, 2))`},
 		// Filters that are not trimmed as of Dec 2015, although they could be.
 		// Issue #3473.
 		// {`a > 1`, []string{"a"}, `<nil>`},

@@ -829,6 +829,17 @@ func (v *applyConstraintsVisitor) Visit(expr parser.Expr, pre bool) (parser.Visi
 			if !isDatum(t.Right) || !isDatum(c.Right) {
 				return v, expr
 			}
+			if tuple, ok := c.Left.(parser.Tuple); ok {
+				// Do not apply a constraint on a tuple which does not use the entire
+				// tuple.
+				//
+				// TODO(peter): The current code is conservative. We could trim the
+				// tuple instead.
+				if len(tuple) != len(v.constraint.tupleMap) {
+					return v, expr
+				}
+			}
+
 			datum := t.Right.(parser.Datum)
 			cdatum := c.Right.(parser.Datum)
 
