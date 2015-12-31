@@ -1559,14 +1559,14 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	if err != nil {
 		return err
 	}
-	s.checkRaftGroup(req.GroupID)
+	s.enqueueRaftUpdateCheck(req.GroupID)
 	return nil
 }
 
-// checkRaftGroup asynchronously registers the given range ID to be
+// enqueueRaftUpdateCheck asynchronously registers the given range ID to be
 // checked for raft updates when the processRaft goroutine is idle.
 // TODO(bdarnell): reconsider the goroutine relationships here.
-func (s *Store) checkRaftGroup(rangeID roachpb.RangeID) {
+func (s *Store) enqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 	// checkRaftGroup may be called with Replica.RWMutex held. We cannot
 	// simply acquire s.mu; this violates lock ordering and may
 	// deadlock.

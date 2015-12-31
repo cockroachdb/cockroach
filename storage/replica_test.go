@@ -284,6 +284,7 @@ func setLeaderLease(t *testing.T, r *Replica, l *roachpb.Lease) {
 	pendingCmd, err := r.proposeRaftCommand(r.context(), ba)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
+		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
 		err = (<-pendingCmd.done).Err
 	}
 	if err != nil {
@@ -729,6 +730,8 @@ func TestRangeLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	pendingCmd, err := tc.rng.proposeRaftCommand(tc.rng.context(), ba)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
+		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
+		// Remove ambiguity about where the "replica not found" error comes from.
 		err = (<-pendingCmd.done).Err
 	}
 	if !testutils.IsError(err, "replica not found") {

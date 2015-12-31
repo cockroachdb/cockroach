@@ -134,7 +134,6 @@ func usesTimestampCache(r roachpb.Request) bool {
 // via the done channel.
 type pendingCmd struct {
 	ctx     context.Context
-	idKey   cmdIDKey
 	raftCmd roachpb.RaftCommand
 	done    chan roachpb.ResponseWithError // Used to signal waiting RPC handler
 }
@@ -956,9 +955,8 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 	idKeyBuf = encoding.EncodeUint64(idKeyBuf, uint64(rand.Int63()))
 	idKey := cmdIDKey(idKeyBuf)
 	pendingCmd := &pendingCmd{
-		ctx:   ctx,
-		done:  make(chan roachpb.ResponseWithError, 1),
-		idKey: idKey,
+		ctx:  ctx,
+		done: make(chan roachpb.ResponseWithError, 1),
 		raftCmd: roachpb.RaftCommand{
 			RangeID:       desc.RangeID,
 			OriginReplica: *replica,
@@ -973,7 +971,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 	r.pendingCmds[idKey] = pendingCmd
 	defer r.Unlock()
 
-	if err := r.proposePendingCmdLocked(pendingCmd); err != nil {
+	if err := r.proposePendingCmdLocked(idKey, pendingCmd); err != nil {
 		delete(r.pendingCmds, idKey)
 		return nil, err
 	}
@@ -981,17 +979,17 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 }
 
 // proposePendingCmdLocked proposes or re-proposes a command in r.pendingCmds.
-func (r *Replica) proposePendingCmdLocked(p *pendingCmd) error {
+func (r *Replica) proposePendingCmdLocked(idKey cmdIDKey, p *pendingCmd) error {
 	desc := r.Desc()
 	if r.proposeRaftCommandFn != nil {
-		return r.proposeRaftCommandFn(p.idKey, p.raftCmd)
+		return r.proposeRaftCommandFn(idKey, p.raftCmd)
 	}
 
 	data, err := proto.Marshal(&p.raftCmd)
 	if err != nil {
 		return err
 	}
-	defer r.store.checkRaftGroup(desc.RangeID)
+	defer r.store.enqueueRaftUpdateCheck(desc.RangeID)
 	for _, union := range p.raftCmd.Cmd.Requests {
 		args := union.GetInner()
 		etr, ok := args.(*roachpb.EndTransactionRequest)
@@ -1004,7 +1002,7 @@ func (r *Replica) proposePendingCmdLocked(p *pendingCmd) error {
 			log.Infof("raft: proposing %s %v for range %d", crt.ChangeType, crt.Replica, p.raftCmd.RangeID)
 
 			ctx := ConfChangeContext{
-				CommandID: string(p.idKey),
+				CommandID: string(idKey),
 				Payload:   data,
 				Replica:   crt.Replica,
 			}
@@ -1021,7 +1019,7 @@ func (r *Replica) proposePendingCmdLocked(p *pendingCmd) error {
 				})
 		}
 	}
-	return r.raftGroup.Propose(encodeRaftCommand(string(p.idKey), data))
+	return r.raftGroup.Propose(encodeRaftCommand(string(idKey), data))
 }
 
 func (r *Replica) handleRaftReady() error {
@@ -1119,8 +1117,8 @@ func (r *Replica) handleRaftReady() error {
 			if log.V(1) {
 				log.Infof("reproposing %d commands after empty entry", len(r.pendingCmds))
 			}
-			for _, p := range r.pendingCmds {
-				if err := r.proposePendingCmdLocked(p); err != nil {
+			for idKey, p := range r.pendingCmds {
+				if err := r.proposePendingCmdLocked(idKey, p); err != nil {
 					return err
 				}
 			}
