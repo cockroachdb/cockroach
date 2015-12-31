@@ -405,6 +405,17 @@ func (s *Store) StartedAt() int64 {
 func (s *Store) Start(stopper *stop.Stopper) error {
 	s.stopper = stopper
 
+	// Add a closer for the various scanner queues, needed to properly clean up
+	// the event logs.
+	s.stopper.AddCloser(stop.CloserFn(func() {
+		s.gcQueue.Close()
+		s.splitQueue.Close()
+		s.verifyQueue.Close()
+		s.replicateQueue.Close()
+		s.replicaGCQueue.Close()
+		s.raftLogQueue.Close()
+	}))
+
 	if s.Ident.NodeID == 0 {
 		// Open engine (i.e. initialize RocksDB database). "NodeID != 0"
 		// implies the engine has already been opened.

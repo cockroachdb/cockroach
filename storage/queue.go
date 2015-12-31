@@ -23,6 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/net/trace"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -126,6 +128,8 @@ type baseQueue struct {
 	replicas    map[roachpb.RangeID]*replicaItem // Map from RangeID to replicaItem (for updating priority)
 	// Some tests in this package disable queues.
 	disabled int32 // updated atomically
+
+	eventLog trace.EventLog
 }
 
 // makeBaseQueue returns a new instance of baseQueue with the
@@ -143,6 +147,7 @@ func makeBaseQueue(name string, impl queueImpl, gossip *gossip.Gossip, maxSize i
 		incoming: make(chan struct{}, 1),
 		Locker:   new(sync.Mutex),
 		replicas: map[roachpb.RangeID]*replicaItem{},
+		eventLog: trace.NewEventLog("queue", name),
 	}
 }
 
@@ -160,6 +165,10 @@ func (bq *baseQueue) SetDisabled(disabled bool) {
 	} else {
 		atomic.StoreInt32(&bq.disabled, 0)
 	}
+}
+
+func (bq *baseQueue) Close() {
+	bq.eventLog.Finish()
 }
 
 // Start launches a goroutine to process entries in the queue. The
@@ -189,8 +198,9 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
 	cfg := bq.gossip.GetSystemConfig()
 	if cfg == nil {
 		if log.V(1) {
-			log.Infof("no system config available. skipping...")
+			log.Infof("no system config available. skipping")
 		}
+		bq.eventLog.Printf("no system config available. skipping")
 		return
 	}
 
@@ -199,16 +209,19 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		if log.V(3) {
-			log.Infof("range %s needs to be split; not adding", repl)
+			log.Infof("%s needs to be split; not adding", repl)
 		}
+		bq.eventLog.Printf("%s: split needed; not adding", repl)
 		return
 	}
 
 	bq.Lock()
 	defer bq.Unlock()
 	should, priority := bq.impl.shouldQueue(now, repl, cfg)
-	if err := bq.addInternal(repl, should, priority); err != nil && log.V(3) {
-		log.Infof("couldn't add %s to queue %s: %s", repl, bq.name, err)
+	if err := bq.addInternal(repl, should, priority); err != nil {
+		if log.V(3) {
+			log.Infof("unable to add %s to queue %s: %s", repl, bq.name, err)
+		}
 	}
 }
 
@@ -218,6 +231,7 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
 // added.
 func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) error {
 	if atomic.LoadInt32(&bq.disabled) == 1 {
+		bq.eventLog.Printf("queue disabled")
 		return errQueueDisabled
 	}
 
@@ -226,18 +240,23 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) e
 	item, ok := bq.replicas[rangeID]
 	if !should {
 		if ok {
+			bq.eventLog.Printf("%s: removing", item.value)
 			bq.remove(item.index)
 		}
 		return errReplicaNotAddable
 	} else if ok {
+		if item.priority != priority {
+			bq.eventLog.Printf("%s: updating priority: %0.3f -> %0.3f", repl, item.priority, priority)
+		}
 		// Replica has already been added; update priority.
 		bq.priorityQ.update(item, priority)
 		return nil
 	}
 
 	if log.V(3) {
-		log.Infof("adding replica %s to %s queue", repl, bq.name)
+		log.Infof("adding %s to %s queue", repl, bq.name)
 	}
+	bq.eventLog.Printf("%s: adding: priority=%0.3f", repl, priority)
 	item = &replicaItem{value: repl, priority: priority}
 	heap.Push(&bq.priorityQ, item)
 	bq.replicas[rangeID] = item
@@ -262,8 +281,9 @@ func (bq *baseQueue) MaybeRemove(repl *Replica) {
 	defer bq.Unlock()
 	if item, ok := bq.replicas[repl.Desc().RangeID]; ok {
 		if log.V(3) {
-			log.Infof("removing replica %s from %s queue", item.value, bq.name)
+			log.Infof("removing %s from %s queue", item.value, bq.name)
 		}
+		bq.eventLog.Printf("%s: removing", item.value)
 		bq.remove(item.index)
 	}
 }
@@ -273,7 +293,6 @@ func (bq *baseQueue) MaybeRemove(repl *Replica) {
 //
 // TODO(spencer): current load should factor into replica processing timer.
 func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
-
 	stopper.RunWorker(func() {
 		// nextTime is initially nil; we don't start any timers until the queue
 		// becomes non-empty.
@@ -340,7 +359,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) {
 	// Load the system config.
 	cfg := bq.gossip.GetSystemConfig()
 	if cfg == nil {
-		log.Infof("no system config available. skipping...")
+		log.Infof("no system config available. skipping")
 		return
 	}
 
@@ -349,12 +368,10 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		if log.V(3) {
-			log.Infof("range %s needs to be split; skipping processing", repl)
+			log.Infof("%s needs to be split; skipping", repl)
 		}
+		bq.eventLog.Printf("%s: split needed; skipping", repl)
 		return
-	}
-	if log.V(3) {
-		log.Infof("processing replica %s from %s queue...", repl, bq.name)
 	}
 
 	// If the queue requires a replica to have the range leader lease in
@@ -364,15 +381,26 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) {
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
 		if err := repl.redirectOnOrAcquireLeaderLease(nil /* Trace */, now); err != nil {
 			if log.V(3) {
-				log.Infof("this replica of %s could not acquire leader lease; skipping...", repl)
+				log.Infof("this replica of %s could not acquire leader lease; skipping", repl)
 			}
+			bq.eventLog.Printf("%s: could not acquire leader lease; skipping", repl)
 			return
 		}
 	}
+
+	if log.V(3) {
+		log.Infof("processing replica %s from %s queue...", repl, bq.name)
+	}
+	bq.eventLog.Printf("%s: processing", repl)
+
 	if err := bq.impl.process(now, repl, cfg); err != nil {
-		log.Errorf("while processing replica %s from %s queue: %s", repl, bq.name, err)
-	} else if log.V(2) {
-		log.Infof("processed replica %s from %s queue in %s", repl, bq.name, time.Now().Sub(start))
+		log.Errorf("while processing %s from %s queue: %s", repl, bq.name, err)
+		bq.eventLog.Printf("%s: error: %v", repl, err)
+	} else {
+		if log.V(2) {
+			log.Infof("processed %s from %s queue in %s", repl, bq.name, time.Now().Sub(start))
+		}
+		bq.eventLog.Printf("%s: done", repl)
 	}
 }
 
