@@ -18,6 +18,7 @@ resource "template_file" "supervisor" {
   template = "${file("supervisor.conf.tpl")}"
   vars {
     elb_address = "${aws_elb.elb.dns_name}:${var.cockroach_port}"
+    stores = "${var.stores}"
   }
 }
 
@@ -83,7 +84,7 @@ resource "null_resource" "cockroach-initializer" {
     inline = [
       "bash download_binary.sh cockroach/cockroach ${var.cockroach_sha}",
       "mkdir -p logs",
-      "./cockroach init --logtostderr=true --stores=sdd=data",
+      "./cockroach init --logtostderr=true --stores=${element(split(",", "${var.stores}"), 0)}",
     ]
   }
 }
