@@ -332,18 +332,24 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Disable caching of responses.
 		w.Header().Set("Cache-control", "no-cache")
 
-		ae := r.Header.Get(util.AcceptEncodingHeader)
-		switch {
-		case strings.Contains(ae, util.SnappyEncoding):
-			w.Header().Set(util.ContentEncodingHeader, util.SnappyEncoding)
-			s := newSnappyResponseWriter(w)
-			defer s.Close()
-			w = s
-		case strings.Contains(ae, util.GzipEncoding):
-			w.Header().Set(util.ContentEncodingHeader, util.GzipEncoding)
-			gzw := newGzipResponseWriter(w)
-			defer gzw.Close()
-			w = gzw
+		// Don't try to compress responses to the /debug/{events,requests,etc}
+		// paths. Doing so fouls up the content-type detection resulting in a
+		// content-type of "application/gzip" and causes browsers to download the
+		// pages instead of rendering them.
+		if !strings.HasPrefix(r.URL.Path, "/debug/") {
+			ae := r.Header.Get(util.AcceptEncodingHeader)
+			switch {
+			case strings.Contains(ae, util.SnappyEncoding):
+				w.Header().Set(util.ContentEncodingHeader, util.SnappyEncoding)
+				s := newSnappyResponseWriter(w)
+				defer s.Close()
+				w = s
+			case strings.Contains(ae, util.GzipEncoding):
+				w.Header().Set(util.ContentEncodingHeader, util.GzipEncoding)
+				gzw := newGzipResponseWriter(w)
+				defer gzw.Close()
+				w = gzw
+			}
 		}
 		s.mux.ServeHTTP(w, r)
 	}) {
