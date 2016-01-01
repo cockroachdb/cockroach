@@ -341,6 +341,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 		},
 	}
 	ba := roachpb.BatchRequest{}
+	ba.Timestamp = r.store.Clock().Now()
 	ba.RangeID = desc.RangeID
 	ba.Add(args)
 
