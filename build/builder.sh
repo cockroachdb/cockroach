@@ -44,6 +44,9 @@ fi
 buildcache_dir="buildcache"
 uicache_dir="uicache"
 
+# Absolute path to the toplevel cockroach directory.
+cockroach_toplevel="$(dirname $(cd $(dirname $0); pwd))"
+
 # Run our build container with a set of volumes mounted that will
 # allow the container to store persistent build data on the host
 # computer.
@@ -69,7 +72,7 @@ docker run -i ${tty-} ${rm} \
   --volume="${gopath0}/bin/linux_amd64:/go/bin" \
   --volume="${HOME}/${buildcache_dir}:/${buildcache_dir}" \
   --volume="${HOME}/${uicache_dir}:/${uicache_dir}" \
-  --volume="${PWD}:/go/src/github.com/cockroachdb/cockroach" \
+  --volume="${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach" \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
   --env="CACHE=/${buildcache_dir}" \
   --env="PAGER=cat" \
