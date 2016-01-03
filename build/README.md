@@ -26,7 +26,8 @@ There are development and deploy images available.
 ### Development
 The development image is bulky, dynamically linked and contains a complete build toolchain.
 It is well suited to hacking around and running the tests (including acceptance
-tests and such). To build this image, run `./builder.sh init`.
+tests and such). To build this image, run `./builder.sh init`. The resulting image
+`cockroachdb/builder` can be run conveniently via `./builder.sh`.
 
 ### Deployment
 The deploy image is a downsized image containing a minimal environment for
@@ -35,8 +36,8 @@ Cockroach binary as well as the resources required for starting the server
 (certs, etc.). To build the image yourself, use `./build-docker-deploy.sh`. The
 script will build and run a development container. Inside of that container,
 the binary will be built along with the individual tests. These created files
-will be extracted from the image and saved in ./deploy/build. From those files,
+will be extracted from the image and saved in `./build/deploy`. From those files,
 we build our minimal container.
 After the build is complete, the script will fire up the container, supplying
-the test files via mounting `./deploy/build`, running them one by one and
+the test files via mounting `./build/deploy`, running them one by one and
 propagating failure.
