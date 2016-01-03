@@ -8,6 +8,11 @@ function init() {
   docker build --tag="${image}" "$(dirname $0)"
 }
 
+function cockroach_dir() {
+  local dir=$(cd $(dirname $0); pwd)
+  echo $(dirname $dir)
+}
+
 if [ "${1-}" = "pull" ]; then
   docker pull "${image}"
   exit 0
@@ -69,7 +74,7 @@ docker run -i ${tty-} ${rm} \
   --volume="${gopath0}/bin/linux_amd64:/go/bin" \
   --volume="${HOME}/${buildcache_dir}:/${buildcache_dir}" \
   --volume="${HOME}/${uicache_dir}:/${uicache_dir}" \
-  --volume="${PWD}:/go/src/github.com/cockroachdb/cockroach" \
+  --volume="$(cockroach_dir):/go/src/github.com/cockroachdb/cockroach" \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
   --env="CACHE=/${buildcache_dir}" \
   --env="PAGER=cat" \

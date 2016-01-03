@@ -7,6 +7,12 @@ set -euo pipefail
 
 source $(dirname $0)/build-common.sh
 
+function path_for_docker() {
+  local dir=$(basename $(cd $(dirname $0); pwd))
+  local name=$(basename $0) 
+  echo "$dir/$name"
+}
+
 # This is mildly tricky: This script runs itself recursively. The
 # first time it is run it does not take the if-branch below and
 # executes on the host computer. It uses the builder.sh script to run
@@ -24,7 +30,7 @@ if [ "${1-}" = "docker" ]; then
 fi
 
 # Build the cockroach and test binaries.
-$(dirname $0)/builder.sh $0 docker
+$(dirname $0)/builder.sh $(path_for_docker) docker
 
 # Build the image.
 docker build --tag=cockroachdb/cockroach "$(dirname $0)/deploy"
