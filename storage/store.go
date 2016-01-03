@@ -338,10 +338,6 @@ type StoreContext struct {
 
 	// Tracer is a request tracer.
 	Tracer *tracer.Tracer
-
-	// ScannerStopper is used to shut down the background scanner (for tests).
-	// If nil, defaults to the store's own stopper.
-	ScannerStopper *stop.Stopper
 }
 
 // Valid returns true if the StoreContext is populated correctly.
@@ -565,15 +561,11 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		// Start the scanner. The construction here makes sure that the scanner
 		// only starts after Gossip has connected, and that it does not block Start
 		// from returning (as doing so might prevent Gossip from ever connecting).
-		scannerStopper := s.ctx.ScannerStopper
-		if scannerStopper == nil {
-			scannerStopper = s.stopper
-		}
-		scannerStopper.RunWorker(func() {
+		s.stopper.RunWorker(func() {
 			select {
 			case <-s.ctx.Gossip.Connected:
-				s.scanner.Start(s.ctx.Clock, scannerStopper)
-			case <-scannerStopper.ShouldStop():
+				s.scanner.Start(s.ctx.Clock, s.stopper)
+			case <-s.stopper.ShouldStop():
 				return
 			}
 		})
