@@ -77,8 +77,8 @@ func nodeStr(i int) string {
 	return fmt.Sprintf("roach%d.%s", i, domain)
 }
 
-func dataStr(i int) string {
-	return fmt.Sprintf("/data%d", i)
+func dataStr(node, store int) string {
+	return fmt.Sprintf("/data%d.%d", node, store)
 }
 
 // The various event types.
@@ -97,25 +97,25 @@ type Event struct {
 // entries for the cockroach nodes, a "volumes" container which manages the
 // persistent volumes used for certs and node data and N cockroach nodes.
 type LocalCluster struct {
-	client         dockerclient.Client
-	stopper        chan struct{}
-	mu             sync.Mutex // Protects the fields below
-	dns            *Container
-	vols           *Container
-	numLocal       int
-	Nodes          []*Container
-	events         chan Event
-	expectedEvents chan Event
-	CertsDir       string
-	monitorStopper chan struct{}
-	logDir         string
-	ForceLogging   bool // Forces logging to disk on a per test basis
+	client              dockerclient.Client
+	stopper             chan struct{}
+	mu                  sync.Mutex // Protects the fields below
+	dns                 *Container
+	vols                *Container
+	numLocal, numStores int
+	Nodes               []*Container
+	events              chan Event
+	expectedEvents      chan Event
+	CertsDir            string
+	monitorStopper      chan struct{}
+	logDir              string
+	ForceLogging        bool // Forces logging to disk on a per test basis
 }
 
 // CreateLocal creates a new local cockroach cluster. The stopper is used to
 // gracefully shutdown the channel (e.g. when a signal arrives). The cluster
 // must be started before being used.
-func CreateLocal(numLocal int, logDir string, stopper chan struct{}) *LocalCluster {
+func CreateLocal(numLocal, numStores int, logDir string, stopper chan struct{}) *LocalCluster {
 	select {
 	case <-stopper:
 		// The stopper was already closed, exit early.
@@ -128,9 +128,10 @@ func CreateLocal(numLocal int, logDir string, stopper chan struct{}) *LocalClust
 	}
 
 	return &LocalCluster{
-		client:   newDockerClient(),
-		stopper:  stopper,
-		numLocal: numLocal,
+		client:    newDockerClient(),
+		stopper:   stopper,
+		numLocal:  numLocal,
+		numStores: numStores,
 		// TODO(tschottdorf): deadlocks will occur if these channels fill up.
 		events:         make(chan Event, 1000),
 		expectedEvents: make(chan Event, 1000),
@@ -219,7 +220,9 @@ func (l *LocalCluster) initCluster() {
 
 	vols := map[string]struct{}{}
 	for i := 0; i < l.numLocal; i++ {
-		vols[dataStr(i)] = struct{}{}
+		for j := 0; j < l.numStores; j++ {
+			vols[dataStr(i, j)] = struct{}{}
+		}
 	}
 	create := func() (*Container, error) {
 		var entrypoint []string
@@ -232,7 +235,7 @@ func (l *LocalCluster) initCluster() {
 			Image:      *cockroachImage,
 			Volumes:    vols,
 			Entrypoint: entrypoint,
-			Cmd:        []string{"init", "--stores=ssd=" + dataStr(0)},
+			Cmd:        []string{"init", "--stores=ssd=" + dataStr(0, 0)},
 		})
 	}
 	c, err := create()
@@ -341,9 +344,14 @@ func (l *LocalCluster) startNode(i int) *Container {
 		gossipNodes = append(gossipNodes, fmt.Sprintf("%s:%d", nodeStr(j), cockroachPort))
 	}
 
+	var stores = "ssd=" + dataStr(i, 0)
+	for j := 1; j < l.numStores; j++ {
+		stores += ",ssd=" + dataStr(i, j)
+	}
+
 	cmd := []string{
 		"start",
-		"--stores=ssd=" + dataStr(i),
+		"--stores=" + stores,
 		"--certs=/certs",
 		"--addr=" + fmt.Sprintf("%s:%d", nodeStr(i), cockroachPort),
 		"--gossip=" + strings.Join(gossipNodes, ","),

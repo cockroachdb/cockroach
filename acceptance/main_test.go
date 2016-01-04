@@ -27,6 +27,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -43,6 +44,7 @@ import (
 var duration = flag.Duration("d", 5*time.Second, "duration to run the test")
 var numLocal = flag.Int("num-local", 0, "start a local cluster of the given size")
 var numRemote = flag.Int("num-remote", 0, "start a remote cluster of the given size")
+var numStores = flag.Int("num-stores", 2, "number of stores to use for each node")
 var cwd = flag.String("cwd", "../cloud/aws", "directory to run terraform from")
 var stall = flag.Duration("stall", 2*time.Minute, "duration after which if no forward progress is made, consider the test stalled")
 var keyName = flag.String("key-name", "", "name of key for remote cluster")
@@ -67,11 +69,16 @@ func farmer(t *testing.T) *terrafarm.Farmer {
 	if !filepath.IsAbs(logDir) {
 		logDir = filepath.Join(filepath.Clean(os.ExpandEnv("${PWD}")), logDir)
 	}
+	stores := "ssd=data0"
+	for j := 1; j < *numStores; j++ {
+		stores += ",ssd=data" + strconv.Itoa(j)
+	}
 	f := &terrafarm.Farmer{
 		Output:  os.Stderr,
 		Cwd:     *cwd,
 		LogDir:  logDir,
 		KeyName: *keyName,
+		Stores:  stores,
 	}
 	log.Infof("logging to %s", logDir)
 	return f
@@ -83,7 +90,7 @@ func StartCluster(t *testing.T) cluster.Cluster {
 		if *numRemote > 0 {
 			t.Fatal("cannot both specify -num-local and -num-remote")
 		}
-		l := cluster.CreateLocal(*numLocal, *logDir, stopper)
+		l := cluster.CreateLocal(*numLocal, *numStores, *logDir, stopper)
 		l.Start()
 		checkRangeReplication(t, l, 20*time.Second)
 		return l
