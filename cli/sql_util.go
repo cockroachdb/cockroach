@@ -36,8 +36,7 @@ func makeSQLClient() *sql.DB {
 			context.Addr,
 			context.Certs))
 	if err != nil {
-		fmt.Fprintf(osStderr, "failed to initialize SQL client: %s\n", err)
-		osExit(1)
+		panicf("failed to initialize SQL client: %s", err)
 	}
 	return db
 }

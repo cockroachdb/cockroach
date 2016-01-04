@@ -194,7 +194,9 @@ func (s *Stopper) runningTasksLocked() TaskMap {
 // confirm it has stopped.
 func (s *Stopper) Stop() {
 	// Don't bother doing stuff cleanly if we're panicking, that would likely
-	// block. Instead, best effort only.
+	// block. Instead, best effort only. This cleans up the stack traces,
+	// avoids stalls and helps some tests in `./cli` finish cleanly (where
+	// panics happen on purpose).
 	if r := recover(); r != nil {
 		go s.Quiesce()
 		close(s.stopper)

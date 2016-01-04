@@ -63,7 +63,8 @@ var getZoneCmd = &cobra.Command{
 	Long: `
 Fetches and displays the zone configuration for <object-id>.
 `,
-	Run: runGetZone,
+	SilenceUsage: true,
+	RunE:         panicGuard(runGetZone),
 }
 
 // runGetZone retrieves the zone config for a given object id,
@@ -103,7 +104,8 @@ var lsZonesCmd = &cobra.Command{
 	Long: `
 List zone configs.
 `,
-	Run: runLsZones,
+	SilenceUsage: true,
+	RunE:         panicGuard(runLsZones),
 }
 
 // TODO(marc): return db/table names rather than IDs.
@@ -137,7 +139,8 @@ var rmZoneCmd = &cobra.Command{
 Remove an existing zone config by object ID. No action is taken if no
 zone configuration exists for the specified object ID.
 `,
-	Run: runRmZone,
+	SilenceUsage: true,
+	RunE:         panicGuard(runRmZone),
 }
 
 // TODO(marc): accept db/table names rather than IDs.
@@ -185,7 +188,8 @@ cockroach zone set 100 "replicas:
 range_min_bytes: 8388608
 range_max_bytes: 67108864"
 `,
-	Run: runSetZone,
+	SilenceUsage: true,
+	RunE:         panicGuard(runSetZone),
 }
 
 // runSetZone parses the yaml input file, converts it to proto,

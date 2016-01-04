@@ -36,7 +36,8 @@ log command parses the specified log files and outputs the result to
 standard out. If the terminal supports colors, the output is colorized
 unless --color=off is specified.
 `,
-	Run: runLog,
+	SilenceUsage: true,
+	RunE:         panicGuard(runLog),
 }
 
 // runLog accesses creates a term log entry reader for each

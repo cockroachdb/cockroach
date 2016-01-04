@@ -27,8 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// Proxies to allow overrides in tests.
-var osExit = os.Exit
+// Proxy to allow overrides in tests.
 var osStderr = os.Stderr
 
 var versionCmd = &cobra.Command{

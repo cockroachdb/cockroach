@@ -43,8 +43,8 @@ func makeDBClient() (*client.DB, *stop.Stopper) {
 		context.Addr,
 		context.Certs))
 	if err != nil {
-		fmt.Fprintf(osStderr, "failed to initialize KV client: %s\n", err)
-		osExit(1)
+		stopper.Stop()
+		panicf("failed to initialize KV client: %s", err)
 	}
 	return db, stopper
 }
@@ -54,12 +54,10 @@ func makeDBClient() (*client.DB, *stop.Stopper) {
 func unquoteArg(arg string, disallowSystem bool) string {
 	s, err := strconv.Unquote(`"` + arg + `"`)
 	if err != nil {
-		fmt.Fprintf(osStderr, "invalid argument %q: %s\n", arg, err)
-		osExit(1)
+		panicf("invalid argument %q: %s", arg, err)
 	}
 	if disallowSystem && strings.HasPrefix(s, "\x00") {
-		fmt.Fprintf(osStderr, "cannot specify system key %q\n", s)
-		osExit(1)
+		panicf("cannot specify system key %q", s)
 	}
 	return s
 }
@@ -71,7 +69,8 @@ var getCmd = &cobra.Command{
 	Long: `
 Fetches and displays the value for <key>.
 `,
-	Run: runGet,
+	SilenceUsage: true,
+	RunE:         panicGuard(runGet),
 }
 
 func runGet(cmd *cobra.Command, args []string) {
@@ -85,14 +84,10 @@ func runGet(cmd *cobra.Command, args []string) {
 	key := roachpb.Key(unquoteArg(args[0], false))
 	r, err := kvDB.Get(key)
 	if err != nil {
-		fmt.Fprintf(osStderr, "get failed: %s\n", err)
-		osExit(1)
-		return
+		panicf("get failed: %s", err)
 	}
 	if !r.Exists() {
-		fmt.Fprintf(osStderr, "%s not found\n", key)
-		osExit(1)
-		return
+		panicf("%s not found", key)
 	}
 	fmt.Printf("%s\n", r.PrettyValue())
 }
@@ -105,7 +100,8 @@ var putCmd = &cobra.Command{
 Sets the value for one or more keys. Keys and values must be provided
 in pairs on the command line.
 `,
-	Run: runPut,
+	SilenceUsage: true,
+	RunE:         panicGuard(runPut),
 }
 
 func runPut(cmd *cobra.Command, args []string) {
@@ -126,9 +122,7 @@ func runPut(cmd *cobra.Command, args []string) {
 	defer stopper.Stop()
 
 	if err := kvDB.Run(&b); err != nil {
-		fmt.Fprintf(osStderr, "put failed: %s\n", err)
-		osExit(1)
-		return
+		panicf("put failed: %s", err)
 	}
 }
 
@@ -141,7 +135,8 @@ Conditionally sets a value for a key if the existing value is equal
 to expValue. To conditionally set a value only if there is no existing entry
 pass nil for expValue. The expValue defaults to 1 if not specified.
 `,
-	Run: runCPut,
+	SilenceUsage: true,
+	RunE:         panicGuard(runCPut),
 }
 
 func runCPut(cmd *cobra.Command, args []string) {
@@ -163,8 +158,7 @@ func runCPut(cmd *cobra.Command, args []string) {
 	}
 
 	if err != nil {
-		fmt.Fprintf(osStderr, "conditionally put failed: %s\n", err)
-		osExit(1)
+		panicf("conditional put failed: %s", err)
 	}
 }
 
@@ -178,7 +172,8 @@ not specified. Displays the incremented value upon success.
 Negative values need to be prefixed with -- to not get interpreted as
 flags.
 `,
-	Run: runInc,
+	SilenceUsage: true,
+	RunE:         panicGuard(runInc),
 }
 
 func runInc(cmd *cobra.Command, args []string) {
@@ -194,16 +189,13 @@ func runInc(cmd *cobra.Command, args []string) {
 	if len(args) >= 2 {
 		var err error
 		if amount, err = strconv.Atoi(args[1]); err != nil {
-			fmt.Fprintf(osStderr, "invalid increment: %s: %s\n", args[1], err)
-			osExit(1)
-			return
+			panicf("invalid increment: %s: %s", args[1], err)
 		}
 	}
 
 	key := roachpb.Key(unquoteArg(args[0], true /* disallow system keys */))
 	if r, err := kvDB.Inc(key, int64(amount)); err != nil {
-		fmt.Fprintf(osStderr, "increment failed: %s\n", err)
-		osExit(1)
+		panicf("increment failed: %s", err)
 	} else {
 		fmt.Printf("%d\n", r.ValueInt())
 	}
@@ -216,7 +208,8 @@ var delCmd = &cobra.Command{
 	Long: `
 Deletes the values of one or more keys.
 `,
-	Run: runDel,
+	SilenceUsage: true,
+	RunE:         panicGuard(runDel),
 }
 
 func runDel(cmd *cobra.Command, args []string) {
@@ -234,9 +227,7 @@ func runDel(cmd *cobra.Command, args []string) {
 	defer stopper.Stop()
 
 	if err := kvDB.Run(&b); err != nil {
-		fmt.Fprintf(osStderr, "delete failed: %s\n", err)
-		osExit(1)
-		return
+		panicf("delete failed: %s", err)
 	}
 }
 
@@ -248,7 +239,8 @@ var delRangeCmd = &cobra.Command{
 	Long: `
 Deletes the values for the range of keys [startKey, endKey).
 `,
-	Run: runDelRange,
+	SilenceUsage: true,
+	RunE:         panicGuard(runDelRange),
 }
 
 func runDelRange(cmd *cobra.Command, args []string) {
@@ -264,8 +256,7 @@ func runDelRange(cmd *cobra.Command, args []string) {
 		unquoteArg(args[0], true /* disallow system keys */),
 		unquoteArg(args[1], true /* disallow system keys */),
 	); err != nil {
-		fmt.Fprintf(osStderr, "delrange failed: %s\n", err)
-		osExit(1)
+		panicf("delrange failed: %s", err)
 	}
 }
 
@@ -280,7 +271,8 @@ is specified then all (non-system) key/value pairs are retrieved. If no
 <end-key> is specified then all keys greater than or equal to <start-key>
 are retrieved.
 `,
-	Run: runScan,
+	SilenceUsage: true,
+	RunE:         panicGuard(runScan),
 }
 
 func runScan(cmd *cobra.Command, args []string) {
@@ -295,9 +287,7 @@ func runScan(cmd *cobra.Command, args []string) {
 
 	rows, err := kvDB.Scan(startKey, endKey, maxResults)
 	if err != nil {
-		fmt.Fprintf(osStderr, "scan failed: %s\n", err)
-		osExit(1)
-		return
+		panicf("scan failed: %s", err)
 	}
 	showResult(rows)
 }
@@ -313,7 +303,8 @@ is specified then all (non-system) key/value pairs are retrieved. If no
 <end-key> is specified then all keys greater than or equal to <start-key>
 are retrieved.
 `,
-	Run: runReverseScan,
+	SilenceUsage: true,
+	RunE:         panicGuard(runReverseScan),
 }
 
 func runReverseScan(cmd *cobra.Command, args []string) {
@@ -327,9 +318,7 @@ func runReverseScan(cmd *cobra.Command, args []string) {
 
 	rows, err := kvDB.ReverseScan(startKey, endKey, maxResults)
 	if err != nil {
-		fmt.Fprintf(osStderr, "reverse scan failed: %s\n", err)
-		osExit(1)
-		return
+		panicf("reverse scan failed: %s", err)
 	}
 	showResult(rows)
 }
