@@ -86,7 +86,7 @@ func TestRaftLogQueue(t *testing.T) {
 			t.Fatal(err)
 		}
 		if afterTruncationIndex <= originalIndex {
-			t.Fatalf("raft log has not been truncated yet, afterTruncationIndex:%d originalIndex:%d",
+			return util.Errorf("raft log has not been truncated yet, afterTruncationIndex:%d originalIndex:%d",
 				afterTruncationIndex, originalIndex)
 		}
 		return nil
