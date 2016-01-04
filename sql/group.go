@@ -46,6 +46,13 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 	// that determination is made during validation, which will require matching
 	// expressions.
 	for i := range n.GroupBy {
+		// If a col offset is specified, replace it with that expression first.
+		if col, err := s.colOffset(n.GroupBy[i], false); err != nil {
+			return nil, err
+		} else if col >= 0 {
+			n.GroupBy[i] = s.render[col]
+		}
+
 		norm, err := s.resolveQNames(n.GroupBy[i])
 		if err != nil {
 			return nil, err
@@ -192,7 +199,6 @@ func (n *groupNode) Next() bool {
 }
 
 func (n *groupNode) computeAggregates() {
-	n.intialized = true
 	var scratch []byte
 
 	// Loop over the rows passing the values into the corresponding aggregation
@@ -228,6 +234,8 @@ func (n *groupNode) computeAggregates() {
 	if len(n.buckets) < 1 && n.addNullBucketIfEmpty {
 		n.buckets[""] = struct{}{}
 	}
+
+	n.intialized = true
 
 	// Render the results.
 	n.values.rows = make([]parser.DTuple, 0, len(n.buckets))
@@ -562,6 +570,13 @@ func (a *aggregateFunc) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
 }
 
 func (a *aggregateFunc) Eval(ctx parser.EvalContext) (parser.Datum, error) {
+	// During init of the group (ie bucket filling), grouped expressions (ie wrapped
+	// qvalues) are Eval()'ed to determine the bucket for a row, so pass these
+	// calls through to the underlying `arg` expr eval until the group is init'ed.
+	if !a.group.intialized {
+		return a.arg.Eval(ctx)
+	}
+
 	found, ok := a.buckets[a.group.currentBucket]
 	if !ok {
 		found = a.create()
