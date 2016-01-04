@@ -155,3 +155,5 @@ if [ "$(uname)" = "Linux" ]; then
 else
   echo "skipping acceptance tests on $(uname): use 'make acceptance' instead"
 fi
+
+find $CIRCLE_ARTIFACTS
