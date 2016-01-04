@@ -32,7 +32,8 @@ var getUserCmd = &cobra.Command{
 	Long: `
 Fetches and displays the user configuration for <username>.
 `,
-	Run: runGetUser,
+	SilenceUsage: true,
+	RunE:         panicGuard(runGetUser),
 }
 
 func runGetUser(cmd *cobra.Command, args []string) {
@@ -56,7 +57,8 @@ var lsUsersCmd = &cobra.Command{
 	Long: `
 List all user configs.
 `,
-	Run: runLsUsers,
+	SilenceUsage: true,
+	RunE:         panicGuard(runLsUsers),
 }
 
 func runLsUsers(cmd *cobra.Command, args []string) {
@@ -80,7 +82,8 @@ var rmUserCmd = &cobra.Command{
 	Long: `
 Remove an existing user config by username.
 `,
-	Run: runRmUser,
+	SilenceUsage: true,
+	RunE:         panicGuard(runRmUser),
 }
 
 func runRmUser(cmd *cobra.Command, args []string) {
@@ -105,7 +108,8 @@ var setUserCmd = &cobra.Command{
 Create or update a user config for the specified username, prompting
 for the password.
 `,
-	Run: runSetUser,
+	SilenceUsage: true,
+	RunE:         panicGuard(runSetUser),
 }
 
 // runSetUser prompts for a password, then inserts the user and hash

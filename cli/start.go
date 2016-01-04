@@ -18,6 +18,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -41,6 +42,27 @@ import (
 // Context is the CLI Context used for the server.
 var context = server.NewContext()
 
+var errMissingParams = errors.New("missing or invalid parameters")
+
+// panicGuard wraps an errorless command into one wrapping panics into errors.
+func panicGuard(cmdFn func(*cobra.Command, []string)) func(*cobra.Command, []string) error {
+	return func(c *cobra.Command, args []string) (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				err = fmt.Errorf("%v", r)
+			}
+		}()
+		cmdFn(c, args)
+		return nil
+	}
+}
+
+// panicf is only to be used when wrapped through panicGuard, since the
+// stack trace doesn't matter then.
+func panicf(format string, args ...interface{}) {
+	panic(fmt.Sprintf(format, args...))
+}
+
 // initCmd command initializes a new Cockroach cluster.
 var initCmd = &cobra.Command{
 	Use:   "init --stores=...",
@@ -51,36 +73,39 @@ more storage locations. The first of these storage locations is used to
 bootstrap the first replica of the first range. If any of the storage locations
 are already part of a pre-existing cluster, the bootstrap will fail.
 `,
-	Example: `  cockroach init --stores=ssd=/mnt/ssd1,ssd=/mnt/ssd2`,
-	Run:     runInit,
+	Example:      `  cockroach init --stores=ssd=/mnt/ssd1,ssd=/mnt/ssd2`,
+	SilenceUsage: true,
+	RunE:         runInit,
 }
 
 // runInit initializes the engine based on the first
 // store. The bootstrap engine may not be an in-memory type.
-func runInit(_ *cobra.Command, _ []string) {
+func runInit(_ *cobra.Command, _ []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	initCluster(stopper)
+	return initCluster(stopper)
 }
 
-func initCluster(stopper *stop.Stopper) {
+func initCluster(stopper *stop.Stopper) error {
 	// Default user for servers.
 	context.User = security.NodeUser
 
 	if err := context.InitStores(stopper); err != nil {
-		log.Errorf("failed to initialize stores: %s", err)
-		return
+		return util.Errorf("failed to initialize stores: %s", err)
+	}
+	if len(context.Engines) > 1 {
+		return util.Errorf("cannot bootstrap to more than one store")
 	}
 
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
 	clusterID := uuid.NewUUID4().String()
 	if _, err := server.BootstrapCluster(clusterID, context.Engines, stopper); err != nil {
-		log.Errorf("unable to bootstrap cluster: %s", err)
-		return
+		return util.Errorf("unable to bootstrap cluster: %s", err)
 	}
 
 	log.Infof("cockroach cluster %s has been initialized", clusterID)
+	return nil
 }
 
 // startCmd command starts nodes by joining the gossip network.
@@ -100,15 +125,16 @@ storage directories or for in-memory stores, the number of bytes. Although the
 paths should be specified to correspond uniquely to physical devices, this
 requirement isn't strictly enforced. See the --stores flag help description for
 additional details.`,
-	Example: `  cockroach start --certs=<dir> --gossip=host1:port1[,...] --stores=ssd=/mnt/ssd1,...`,
-	Run:     runStart,
+	Example:      `  cockroach start --certs=<dir> --gossip=host1:port1[,...] --stores=ssd=/mnt/ssd1,...`,
+	SilenceUsage: true,
+	RunE:         runStart,
 }
 
 // runStart starts the cockroach node using --stores as the list of
 // storage devices ("stores") on this machine and --gossip as the list
 // of "well-known" hosts used to join this node to the cockroach
 // cluster via the gossip network.
-func runStart(_ *cobra.Command, _ []string) {
+func runStart(_ *cobra.Command, _ []string) error {
 	info := util.GetBuildInfo()
 	log.Infof("build Vers: %s", info.Vers)
 	log.Infof("build Tag:  %s", info.Tag)
@@ -129,29 +155,27 @@ func runStart(_ *cobra.Command, _ []string) {
 		context.Stores = "mem=1073741824"
 		context.GossipBootstrap = server.SelfGossipAddr
 
-		initCluster(stopper)
+		if err := initCluster(stopper); err != nil {
+			return err
+		}
 	} else {
 		if err := context.InitStores(stopper); err != nil {
-			log.Errorf("failed to initialize stores: %s", err)
-			return
+			return util.Errorf("failed to initialize stores: %s", err)
 		}
 	}
 
 	if err := context.InitNode(); err != nil {
-		log.Errorf("failed to initialize node: %s", err)
-		return
+		return util.Errorf("failed to initialize node: %s", err)
 	}
 
 	log.Info("starting cockroach cluster")
 	s, err := server.NewServer(context, stopper)
 	if err != nil {
-		log.Errorf("failed to start Cockroach server: %s", err)
-		return
+		return util.Errorf("failed to start Cockroach server: %s", err)
 	}
 
 	if err := s.Start(false); err != nil {
-		log.Errorf("cockroach server exited with error: %s", err)
-		return
+		return util.Errorf("cockroach server exited with error: %s", err)
 	}
 
 	signalCh := make(chan os.Signal, 1)
@@ -194,6 +218,7 @@ func runStart(_ *cobra.Command, _ []string) {
 		log.Infof("server drained and shutdown completed")
 	}
 	log.Flush()
+	return nil
 }
 
 // exterminateCmd command shuts down the node server and
@@ -205,7 +230,8 @@ var exterminateCmd = &cobra.Command{
 First shuts down the system and then destroys all data held by the
 node, cycling through each store specified by the --stores flag.
 `,
-	Run: runExterminate,
+	SilenceUsage: true,
+	RunE:         panicGuard(runExterminate),
 }
 
 // runExterminate destroys the data held in the specified stores.
@@ -213,27 +239,17 @@ func runExterminate(_ *cobra.Command, _ []string) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	if err := context.InitStores(stopper); err != nil {
-		log.Errorf("failed to initialize context: %s", err)
-		return
+		panicf("failed to initialize context: %s", err)
 	}
 
-	// First attempt to shutdown the server. Note that an error of EOF just
-	// means the HTTP server shutdown before the request to quit returned.
-	admin := client.NewAdminClient(&context.Context, context.Addr, client.Quit)
-	body, err := admin.Get()
-	if err != nil {
-		log.Infof("shutdown node %s: %s", context.Addr, err)
-	} else {
-		log.Infof("shutdown node in anticipation of data extermination: %s", body)
-	}
+	runQuit(nil, nil)
 
 	// Exterminate all data held in specified stores.
 	for _, e := range context.Engines {
 		if rocksdb, ok := e.(*engine.RocksDB); ok {
 			log.Infof("exterminating data from store %s", e)
 			if err := rocksdb.Destroy(); err != nil {
-				log.Errorf("unable to destroy store %s: %s", e, err)
-				osExit(1)
+				panicf("unable to destroy store %s: %s", e, err)
 			}
 		}
 	}
@@ -249,17 +265,18 @@ Shutdown the server. The first stage is drain, where any new requests
 will be ignored by the server. When all extant requests have been
 completed, the server exits.
 `,
-	Run: runQuit,
+	SilenceUsage: true,
+	RunE:         panicGuard(runQuit),
 }
 
 // runQuit accesses the quit shutdown path.
 func runQuit(_ *cobra.Command, _ []string) {
 	admin := client.NewAdminClient(&context.Context, context.Addr, client.Quit)
 	body, err := admin.Get()
+	// TODO(tschottdorf): needs cleanup. An error here can happen if the shutdown
+	// happened faster than the HTTP request made it back.
 	if err != nil {
-		fmt.Printf("shutdown node error: %s\n", err)
-		osExit(1)
-		return
+		panicf("shutdown node error: %s", err)
 	}
 	fmt.Printf("node drained and shutdown: %s\n", body)
 }

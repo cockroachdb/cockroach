@@ -41,7 +41,6 @@ func newCLITest() cliTest {
 	// overwrite the existing struct's values.
 	context.InitDefaults()
 
-	osExit = func(int) {}
 	osStderr = os.Stdout
 
 	s := &server.TestServer{}
