@@ -279,6 +279,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf1 := is.newInfo(nil, time.Second)
+	inf1.NodeID = 1
 	inf1.PeerID = 1
 	if err := is.addInfo("a1", inf1); err != nil {
 		t.Fatal(err)
@@ -293,6 +294,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf2 := is.newInfo(nil, time.Second)
+	inf2.NodeID = 2
 	inf2.PeerID = 1
 	if err := is.addInfo("a2", inf2); err != nil {
 		t.Fatal(err)
@@ -307,6 +309,7 @@ func TestLeastUseful(t *testing.T) {
 	}
 
 	inf3 := is.newInfo(nil, time.Second)
+	inf3.NodeID = 2
 	inf3.PeerID = 2
 	if err := is.addInfo("a3", inf3); err != nil {
 		t.Fatal(err)

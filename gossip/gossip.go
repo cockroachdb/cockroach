@@ -25,11 +25,14 @@ the system with minimal total hops. The algorithm is as follows:
    address for its first outgoing connection. Node starts client and
    continues to step #2.
 
- 2 Node requests gossip from peer. Gossip requests contain
-   HighWaterStamps, a map from node ID to most recent timestamp of any
-   Info originating at that node. Requesting node times out at
-   checkInterval. On timeout, client is closed and GC'd. If node
-   has no outgoing connections, goto #1.
+ 2 Node requests gossip from peer. Gossip requests (and responses)
+   contain a map from node ID to info about other nodes in the
+   network. Each node maintains its own map as well as the maps of
+   each of its peers. The info for each node includes the most recent
+   timestamp of any Info originating at that node, as well as the min
+   number of hops to reach that node. Requesting node times out at
+   checkInterval. On timeout, client is closed and GC'd. If node has
+   no outgoing connections, goto #1.
 
    a. When gossip is received, infostore is augmented. If new Info was
       received, the client in question is credited. If node has no
@@ -82,11 +85,6 @@ const (
 	// ttlNodeDescriptorGossip is time-to-live for node ID -> address.
 	ttlNodeDescriptorGossip = 0 * time.Second
 
-	// cullInterval is the default interval for culling the least
-	// "useful" outgoing gossip connection to free up space for a
-	// more efficiently targeted connection to the most distant node.
-	cullInterval = 60 * time.Second
-
 	// stallInterval is the default interval for checking whether the
 	// incoming and outgoing connections to the gossip network are
 	// insufficient to keep the network connected.
@@ -99,6 +97,13 @@ const (
 )
 
 var (
+	// cullInterval is the default interval for culling the least
+	// "useful" outgoing gossip connection to free up space for a
+	// more efficiently targeted connection to the most distant node.
+	//
+	// Note: this value is a var instead of const for testing.
+	cullInterval = 60 * time.Second
+
 	// TestBootstrap is the default gossip bootstrap used for running tests.
 	TestBootstrap = []resolver.Resolver{}
 )
@@ -570,6 +575,8 @@ func (g *Gossip) bootstrap(stopper *stop.Stopper) {
 // is notified via the stalled conditional variable.
 func (g *Gossip) manage(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
+		cullTicker := time.NewTicker(g.jitteredInterval(cullInterval))
+		stallTicker := time.NewTicker(g.jitteredInterval(stallInterval))
 		for {
 			select {
 			case <-stopper.ShouldStop():
@@ -578,9 +585,9 @@ func (g *Gossip) manage(stopper *stop.Stopper) {
 				g.doDisconnected(stopper, c)
 			case nodeID := <-g.tighten:
 				g.tightenNetwork(stopper, nodeID)
-			case <-time.After(g.jitteredInterval(cullInterval)):
+			case <-cullTicker.C:
 				g.cullNetwork()
-			case <-time.After(g.jitteredInterval(stallInterval)):
+			case <-stallTicker.C:
 				g.mu.Lock()
 				g.maybeSignalStalledLocked()
 				g.mu.Unlock()
@@ -613,7 +620,7 @@ func (g *Gossip) tightenNetwork(stopper *stop.Stopper, distantNodeID roachpb.Nod
 }
 
 // cullNetwork is called periodically to remove the least "useful"
-// outoing node to free up an outgoing spot for a more targeting
+// outgoing node to free up an outgoing spot for a more targeted
 // tightening (via tightenNetwork).
 func (g *Gossip) cullNetwork() {
 	// If there's no space, find and remove least useful peer, if possible.

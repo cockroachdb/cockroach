@@ -130,7 +130,10 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 		// "push" from the incoming client.
 		if args.Delta != nil {
 			s.received += len(args.Delta)
-			freshCount := s.is.combine(args.Delta, args.NodeID)
+			freshCount, err := s.is.combine(args.Delta, args.NodeID)
+			if err != nil {
+				log.Warningf("node %d failed to fully combine gossip delta from node %d: %s", s.is.NodeID, args.NodeID, err)
+			}
 			if log.V(1) {
 				log.Infof("received %s from node %d (%d fresh)", args.Delta, args.NodeID, freshCount)
 			} else {
@@ -234,6 +237,9 @@ func (s *server) maxPeers() int {
 		panic(err)
 	}
 
+	// This formula uses MaxHops-1, instead of MaxHops, to provide a
+	// "fudge" factor for max connected peers, to account for the
+	// arbitrary, decentralized way in which gossip networks are created.
 	peers := int(math.Ceil(math.Exp(math.Log(float64(nodeCount)) / float64(MaxHops-1))))
 	if peers < minPeers {
 		return minPeers

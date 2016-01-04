@@ -18,6 +18,7 @@ package gossip
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 	"time"
 
@@ -25,9 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
@@ -97,4 +100,43 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 			t.Errorf("%d: expected addr %s; got %s", i, expAddresses[i], addr.String())
 		}
 	}
+}
+
+// TestGossipCullNetwork verifies that a client will be culled from
+// the network periodically (at cullIntervval duration intervals).
+func TestGossipCullNetwork(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	// Set the cullInterval to a low value to guarantee it kicks in quickly.
+	origCullInterval := cullInterval
+	cullInterval = 5 * time.Millisecond
+	defer func() {
+		cullInterval = origCullInterval
+	}()
+
+	// Create the local gossip and minPeers peers.
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	local := startGossip(1, stopper, t)
+	peers := []*Gossip{}
+	for i := 0; i < minPeers; i++ {
+		peers = append(peers, startGossip(roachpb.NodeID(i+2), stopper, t))
+	}
+
+	// Start clients to all peers and start the local gossip's manage routine.
+	local.mu.Lock()
+	for _, p := range peers {
+		pAddr := p.is.NodeAddr
+		local.startClient(pAddr, stopper)
+	}
+	local.mu.Unlock()
+	local.manage(stopper)
+
+	util.SucceedsWithin(t, 10*time.Second, func() error {
+		// Verify that a client is closed within the cull interval.
+		if len(local.Outgoing()) == minPeers-1 {
+			return nil
+		}
+		return errors.New("no network culling occurred")
+	})
 }
