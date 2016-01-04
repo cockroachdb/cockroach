@@ -986,6 +986,10 @@ func (r *Replica) proposePendingCmdLocked(idKey cmdIDKey, p *pendingCmd) error {
 		return r.proposeRaftCommandFn(idKey, p.raftCmd)
 	}
 
+	if p.raftCmd.Cmd.Timestamp == roachpb.ZeroTimestamp {
+		return util.Errorf("can't propose Raft command with zero timestamp")
+	}
+
 	data, err := proto.Marshal(&p.raftCmd)
 	if err != nil {
 		return err
