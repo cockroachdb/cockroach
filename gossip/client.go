@@ -145,7 +145,10 @@ func (c *client) handleGossip(g *Gossip, call *netrpc.Call) error {
 
 	// Combine remote node's infostore delta with ours.
 	if reply.Delta != nil {
-		freshCount := g.is.combine(reply.Delta, reply.NodeID)
+		freshCount, err := g.is.combine(reply.Delta, reply.NodeID)
+		if err != nil {
+			log.Warningf("node %d failed to fully combine delta from node %d: %s", g.is.NodeID, reply.NodeID, err)
+		}
 		if infoCount := len(reply.Delta); infoCount > 0 {
 			if log.V(1) {
 				log.Infof("received %s from node %d (%d fresh)", reply.Delta, reply.NodeID, freshCount)

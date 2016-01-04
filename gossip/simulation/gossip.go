@@ -205,6 +205,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 				continue // skip the node's own info
 			}
 			infoKey := otherNode.Addr.String()
+			// GetInfo returns an error if the info is missing.
 			if info, err := node.GetInfo(infoKey); err != nil {
 				missing = append(missing, otherNode.Gossip.GetNodeID())
 				quiescent = false
@@ -219,6 +220,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 		log.Infof("node %d: missing infos for nodes %s", node.GetNodeID(), missing)
 
 		var sentinelAge int64
+		// GetInfo returns an error if the info is missing.
 		if info, err := node.GetInfo(gossip.KeySentinel); err != nil {
 			log.Infof("error getting info for sentinel gossip key %q: %s", gossip.KeySentinel, err)
 		} else {

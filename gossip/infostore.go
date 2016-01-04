@@ -18,6 +18,7 @@ package gossip
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
 	"regexp"
@@ -57,6 +58,8 @@ var monoTime struct {
 	sync.Mutex
 	last int64
 }
+
+var errNotFresh = errors.New("info not fresh")
 
 // monotonicUnixNano returns a monotonically increasing value for
 // nanoseconds in Unix time. Since equal times are ignored with
@@ -153,7 +156,7 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 		iNanos := i.Value.Timestamp.WallTime
 		existingNanos := existingInfo.Value.Timestamp.WallTime
 		if iNanos < existingNanos || (iNanos == existingNanos && i.Hops >= existingInfo.Hops) {
-			return util.Errorf("info %+v older than current info %+v", i, existingInfo)
+			return errNotFresh
 		}
 	}
 	if i.OrigStamp == 0 {
@@ -267,8 +270,7 @@ func (is *infoStore) visitInfos(visitInfo func(string, *Info) error) error {
 // All hop distances on infos are incremented to indicate they've
 // arrived from an external source. Returns the count of "fresh"
 // infos in the provided delta.
-func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) int {
-	var freshCount int
+func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) (freshCount int, err error) {
 	for key, i := range infos {
 		copy := *i
 		copy.Hops++
@@ -278,11 +280,13 @@ func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) int 
 		if copy.OrigStamp == 0 {
 			panic(util.Errorf("combining info from node %d with 0 original timestamp", nodeID))
 		}
-		if err := is.addInfo(key, &copy); err == nil {
+		if addErr := is.addInfo(key, &copy); addErr == nil {
 			freshCount++
+		} else if addErr != errNotFresh {
+			err = addErr
 		}
 	}
-	return freshCount
+	return
 }
 
 // delta returns a map of infos which are newer or have fewer hops
@@ -324,14 +328,18 @@ func (is *infoStore) mostDistant() (roachpb.NodeID, uint32) {
 }
 
 // leastUseful determines which node ID from amongst the set is
-// currently contributing the least. Returns 0 if nodes is empty.
+// currently contributing the least. Returns the node ID. If nodes is
+// empty, returns 0.
 func (is *infoStore) leastUseful(nodes nodeSet) roachpb.NodeID {
-	contrib := make(map[roachpb.NodeID]int, nodes.len())
+	contrib := make(map[roachpb.NodeID]map[roachpb.NodeID]struct{}, nodes.len())
 	for node := range nodes.nodes {
-		contrib[node] = 0
+		contrib[node] = map[roachpb.NodeID]struct{}{}
 	}
 	if err := is.visitInfos(func(key string, i *Info) error {
-		contrib[i.PeerID]++
+		if _, ok := contrib[i.PeerID]; !ok {
+			contrib[i.PeerID] = map[roachpb.NodeID]struct{}{}
+		}
+		contrib[i.PeerID][i.NodeID] = struct{}{}
 		return nil
 	}); err != nil {
 		panic(err)
@@ -339,7 +347,8 @@ func (is *infoStore) leastUseful(nodes nodeSet) roachpb.NodeID {
 
 	least := math.MaxInt32
 	var leastNode roachpb.NodeID
-	for id, count := range contrib {
+	for id, m := range contrib {
+		count := len(m)
 		if nodes.hasNode(id) {
 			if count < least {
 				least = count
