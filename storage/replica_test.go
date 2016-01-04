@@ -280,6 +280,7 @@ func TestRangeContains(t *testing.T) {
 
 func setLeaderLease(t *testing.T, r *Replica, l *roachpb.Lease) {
 	ba := roachpb.BatchRequest{}
+	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.LeaderLeaseRequest{Lease: *l})
 	pendingCmd, err := r.proposeRaftCommand(r.context(), ba)
 	if err == nil {
@@ -726,6 +727,7 @@ func TestRangeLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 		},
 	}
 	ba := roachpb.BatchRequest{}
+	ba.Timestamp = tc.rng.store.Clock().Now()
 	ba.Add(&roachpb.LeaderLeaseRequest{Lease: *lease})
 	pendingCmd, err := tc.rng.proposeRaftCommand(tc.rng.context(), ba)
 	if err == nil {
@@ -2415,6 +2417,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 			pushee.LastHeartbeat = &test.heartbeat
 		}
 		bt, btH := beginTxnArgs(key, pushee)
+		btH.Timestamp = tc.rng.store.Clock().Now()
 		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), btH, &bt); err != nil {
 			t.Fatal(err)
 		}
