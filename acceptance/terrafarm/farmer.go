@@ -36,6 +36,7 @@ type Farmer struct {
 	Cwd, LogDir    string
 	Args           []string
 	KeyName        string
+	Stores         string
 	nodes, writers []string
 	elb            string
 }
@@ -87,6 +88,7 @@ func (f *Farmer) Add(nodes, writers int) error {
 	nodes += f.NumNodes()
 	writers += f.NumWriters()
 	args := []string{fmt.Sprintf("--var=num_instances=%d", nodes),
+		fmt.Sprintf("--var=stores=%s", f.Stores),
 		fmt.Sprintf("--var=example_block_writer_instances=%d", writers)}
 
 	if nodes == 0 && writers == 0 {
