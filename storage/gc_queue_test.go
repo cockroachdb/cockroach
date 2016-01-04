@@ -52,12 +52,6 @@ func TestGCQueueShouldQueue(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Put an empty GC metadata; all that's read from it is last scan nanos.
-	key := keys.RangeGCMetadataKey(tc.rng.Desc().RangeID)
-	if err := engine.MVCCPutProto(tc.rng.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &roachpb.GCMetadata{}); err != nil {
-		t.Fatal(err)
-	}
-
 	iaN := intentAgeNormalization.Nanoseconds()
 	ia := iaN / 1E9
 	bc := int64(gcByteCountNormalization)
@@ -273,22 +267,9 @@ func TestGCQueueProcess(t *testing.T) {
 		}
 	}
 
-	// Verify the oldest extant intent age.
-	gcMeta, err := tc.rng.GetGCMetadata()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gcMeta.LastScanNanos != now {
-		t.Errorf("expected last scan nanos=%d; got %d", now, gcMeta.LastScanNanos)
-	}
-
 	// Verify that the last verification timestamp was updated as whole range was scanned.
-	ts, err := tc.rng.GetLastVerificationTimestamp()
-	if err != nil {
+	if _, err := tc.rng.GetLastVerificationTimestamp(); err != nil {
 		t.Fatal(err)
-	}
-	if gcMeta.LastScanNanos != ts.WallTime {
-		t.Errorf("expected walltime nanos %d; got %d", gcMeta.LastScanNanos, ts.WallTime)
 	}
 }
 

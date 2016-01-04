@@ -467,19 +467,6 @@ type Lease struct {
 func (m *Lease) Reset()      { *m = Lease{} }
 func (*Lease) ProtoMessage() {}
 
-// GCMetadata holds information about the last complete key/value
-// garbage collection scan of a range.
-// TODO(tschottdorf): can avoid an extra message unless we're planning
-// to add more content.
-type GCMetadata struct {
-	// The last GC scan timestamp in nanoseconds since the Unix epoch.
-	LastScanNanos int64 `protobuf:"varint,1,opt,name=last_scan_nanos" json:"last_scan_nanos"`
-}
-
-func (m *GCMetadata) Reset()         { *m = GCMetadata{} }
-func (m *GCMetadata) String() string { return proto.CompactTextString(m) }
-func (*GCMetadata) ProtoMessage()    {}
-
 // SequenceCacheEntry holds information which together with the key at which
 // it is stored suffices to reconstruct the location of the original transaction
 // record along with its approximate age.
@@ -509,7 +496,6 @@ func init() {
 	proto.RegisterType((*Transaction)(nil), "cockroach.roachpb.Transaction")
 	proto.RegisterType((*Intent)(nil), "cockroach.roachpb.Intent")
 	proto.RegisterType((*Lease)(nil), "cockroach.roachpb.Lease")
-	proto.RegisterType((*GCMetadata)(nil), "cockroach.roachpb.GCMetadata")
 	proto.RegisterType((*SequenceCacheEntry)(nil), "cockroach.roachpb.SequenceCacheEntry")
 	proto.RegisterEnum("cockroach.roachpb.ValueType", ValueType_name, ValueType_value)
 	proto.RegisterEnum("cockroach.roachpb.ReplicaChangeType", ReplicaChangeType_name, ReplicaChangeType_value)
@@ -1079,27 +1065,6 @@ func (m *Lease) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *GCMetadata) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *GCMetadata) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0x8
-	i++
-	i = encodeVarintData(data, i, uint64(m.LastScanNanos))
-	return i, nil
-}
-
 func (m *SequenceCacheEntry) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -1352,13 +1317,6 @@ func (m *Lease) Size() (n int) {
 	n += 1 + l + sovData(uint64(l))
 	l = m.Replica.Size()
 	n += 1 + l + sovData(uint64(l))
-	return n
-}
-
-func (m *GCMetadata) Size() (n int) {
-	var l int
-	_ = l
-	n += 1 + sovData(uint64(m.LastScanNanos))
 	return n
 }
 
@@ -3318,75 +3276,6 @@ func (m *Lease) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipData(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthData
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *GCMetadata) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowData
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: GCMetadata: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: GCMetadata: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LastScanNanos", wireType)
-			}
-			m.LastScanNanos = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowData
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.LastScanNanos |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])

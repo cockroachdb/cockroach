@@ -330,7 +330,6 @@ message HeartbeatTxnResponse {
 // leaders after scanning range data to find expired MVCC values.
 message GCRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional GCMetadata gc_meta = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCMeta"];
 
   message GCKey {
     optional bytes key = 1 [(gogoproto.casttype) = "Key"];

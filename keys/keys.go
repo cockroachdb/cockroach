@@ -173,12 +173,6 @@ func DecodeRangeKey(key roachpb.Key) (startKey, suffix, detail roachpb.Key, err 
 	return
 }
 
-// RangeGCMetadataKey returns a range-local key for range garbage
-// collection metadata.
-func RangeGCMetadataKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRangeGCMetadataSuffix, roachpb.RKey{})
-}
-
 // RangeLastVerificationTimestampKey returns a range-local key for
 // the range's last verification timestamp.
 func RangeLastVerificationTimestampKey(rangeID roachpb.RangeID) roachpb.Key {

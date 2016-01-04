@@ -159,7 +159,6 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	}
 	policy := zone.GC
 
-	gcMeta := roachpb.NewGCMetadata(now.WallTime)
 	gc := engine.NewGarbageCollector(now, *policy)
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
@@ -288,9 +287,6 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	// Deal with any leftover sequence cache keys. There shouldn't be many of
 	// them.
 	gcArgs.Keys = append(gcArgs.Keys, processSequenceCache(repl, now, txnExp, txnMap)...)
-
-	// Send GC request through range.
-	gcArgs.GCMeta = *gcMeta
 
 	var ba roachpb.BatchRequest
 	// Technically not needed since we're talking directly to the Range.

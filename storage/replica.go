@@ -573,17 +573,6 @@ func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool
 	return desc.ContainsKeyRange(keys.Addr(start), keys.Addr(end))
 }
 
-// GetGCMetadata reads the latest GC metadata for this range.
-func (r *Replica) GetGCMetadata() (*roachpb.GCMetadata, error) {
-	key := keys.RangeGCMetadataKey(r.Desc().RangeID)
-	gcMeta := &roachpb.GCMetadata{}
-	_, err := engine.MVCCGetProto(r.store.Engine(), key, roachpb.ZeroTimestamp, true, nil, gcMeta)
-	if err != nil {
-		return nil, err
-	}
-	return gcMeta, nil
-}
-
 // GetLastVerificationTimestamp reads the timestamp at which the range's
 // data was last verified.
 func (r *Replica) GetLastVerificationTimestamp() (roachpb.Timestamp, error) {

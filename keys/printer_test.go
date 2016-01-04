@@ -45,7 +45,6 @@ func TestPrettyPrint(t *testing.T) {
 		{RaftLogKey(roachpb.RangeID(1000001), uint64(200001)), "/Local/RangeID/1000001/RaftLog/logIndex:200001"},
 		{RaftTruncatedStateKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftTruncatedState"},
 		{RaftLastIndexKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftLastIndex"},
-		{RangeGCMetadataKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeGCMetadata"},
 		{RangeLastVerificationTimestampKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeLastVerificationTimestamp"},
 		{RangeStatsKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeStats"},
 
