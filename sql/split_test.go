@@ -79,9 +79,6 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	s, sqlDB, kvDB := setupWithContext(t, getFastScanContext())
 	defer cleanup(s, sqlDB)
 
-	// The initial splits are happening on another thread, so it should succeed within a few
-	// milliseconds.
-	s.WaitForInitialSplits(t, time.Second)
 	expectedInitialRanges := server.ExpectedInitialRangeCount()
 
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {

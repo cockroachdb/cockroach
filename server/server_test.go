@@ -148,10 +148,6 @@ func TestSelfBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	defer s.Stop()
-	// Wait for initial splits to finish before stopping; stopping so quickly
-	// can cause the server to momentarily hang, resulting in the test taking five
-	// seconds to complete.
-	s.WaitForInitialSplits(t, time.Second)
 }
 
 // TestHealth verifies that health endpoint return "ok".
@@ -302,7 +298,6 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	defer s.Stop()
-	s.WaitForInitialSplits(t, time.Second)
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock(), RPCContext: s.RPCContext()}, s.Gossip())
 	tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, nil, s.stopper)
 
@@ -395,7 +390,6 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 	for i, tc := range testCases {
 		s := StartTestServer(t)
 		defer s.Stop()
-		s.WaitForInitialSplits(t, time.Second)
 		ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock(), RPCContext: s.RPCContext()}, s.Gossip())
 		tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, nil, s.stopper)
 

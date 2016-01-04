@@ -80,9 +80,6 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 func setupMultipleRanges(t *testing.T, ts *server.TestServer, splitAt ...string) *client.DB {
 	db := createTestClient(t, ts.Stopper(), ts.ServingAddr())
 
-	// Wait for initial splits to finish.
-	ts.WaitForInitialSplits(t, time.Second)
-
 	// Split the keyspace at the given keys.
 	for _, key := range splitAt {
 		if err := db.AdminSplit(key); err != nil {
@@ -289,7 +286,6 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 
 func initReverseScanTestEnv(s *server.TestServer, t *testing.T) *client.DB {
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
-	s.WaitForInitialSplits(t, time.Second)
 
 	// Set up multiple ranges:
 	// ["", "b"),["b", "e") ,["e", "g") and ["g", "\xff\xff").

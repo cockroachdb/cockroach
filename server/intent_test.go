@@ -97,7 +97,6 @@ func TestIntentResolution(t *testing.T) {
 		func() {
 			s := StartTestServer(t)
 			defer s.Stop()
-			s.WaitForInitialSplits(t, time.Second)
 
 			go func() {
 				// Sets a timeout, cut short by the stopper having drained.

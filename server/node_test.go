@@ -426,7 +426,6 @@ func TestStatusSummaries(t *testing.T) {
 	}
 
 	s.WaitForInit()
-	ts.WaitForInitialSplits(t, time.Second)
 
 	content := "junk"
 	leftKey := "a"

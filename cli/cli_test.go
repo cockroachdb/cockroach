@@ -24,7 +24,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
@@ -194,7 +193,6 @@ func Example_insecure() {
 
 func Example_ranges() {
 	c := newCLITest()
-	c.TestServer.WaitForInitialSplits(nil, time.Second)
 
 	c.Run("kv put a 1 b 2 c 3 d 4")
 	c.Run("kv scan")

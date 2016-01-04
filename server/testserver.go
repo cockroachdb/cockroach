@@ -42,6 +42,9 @@ const (
 	// TestUser is a fixed user used in unittests.
 	// It has valid embedded client certs.
 	TestUser = "testuser"
+	// initialSplitsTimeout is the amount of time to wait for initial splits to
+	// occur on a freshly started server.
+	initialSplitsTimeout = time.Second
 )
 
 // StartTestServer starts a in-memory test server.
@@ -54,7 +57,6 @@ func StartTestServer(t util.Tester) *TestServer {
 			log.Fatalf("Could not start server: %v", err)
 		}
 	}
-
 	return s
 }
 
@@ -204,6 +206,17 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 		return err
 	}
 
+	// If enabled, wait for initial splits to complete before returning control.
+	// If initial splits do not complete, the server is stopped before
+	// returning.
+	if config.TestingTableSplitsDisabled() {
+		return nil
+	}
+	if err := ts.WaitForInitialSplits(); err != nil {
+		ts.Stop()
+		return err
+	}
+
 	return nil
 }
 
@@ -216,17 +229,17 @@ func ExpectedInitialRangeCount() int {
 }
 
 // WaitForInitialSplits waits for the server to complete its expected initial
-// splits at startup. If the expected range count is not reached within the
-// supplied timeout, the current test will be aborted.
-func (ts *TestServer) WaitForInitialSplits(t util.Tester, timeout time.Duration) {
+// splits at startup. If the expected range count is not reached within a
+// configured timeout, an error is returned.
+func (ts *TestServer) WaitForInitialSplits() error {
 	kvDB, err := client.Open(ts.Stopper(), fmt.Sprintf("%s://%s@%s?certs=%s",
-		ts.Ctx.RPCRequestScheme(), security.NodeUser, ts.ServingAddr(), security.EmbeddedCertsDir))
+		ts.Ctx.RPCRequestScheme(), security.NodeUser, ts.ServingAddr(), ts.Ctx.Certs))
 	if err != nil {
-		t.Fatalf("Unable to open connection to test server: %s", err)
+		return err
 	}
 
 	expectedRanges := ExpectedInitialRangeCount()
-	util.SucceedsWithin(t, timeout, func() error {
+	return util.RetryForDuration(initialSplitsTimeout, func() error {
 		// Scan all keys in the Meta2Prefix; we only need a count.
 		rows, err := kvDB.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {
