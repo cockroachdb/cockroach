@@ -129,6 +129,7 @@ type scanNode struct {
 	isSecondaryIndex bool
 	reverse          bool
 	columns          []column
+	originalCols     []column // copy of `columns` before additions (e.g. by sort or group)
 	columnIDs        []ColumnID
 	ordering         []int
 	exactPrefix      int
@@ -389,6 +390,9 @@ func (n *scanNode) initTargets(targets parser.SelectExprs) error {
 			return n.err
 		}
 	}
+	// `groupBy` or `orderBy` may internally add additional columns which we
+	// do not want to include in validation of e.g. `GROUP BY 2`.
+	n.originalCols = n.columns
 	return nil
 }
 
@@ -514,6 +518,24 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 	}
 	n.columns = append(n.columns, column{name: outputName, typ: typ})
 	return nil
+}
+
+func (n *scanNode) colIndex(expr parser.Expr) (int, error) {
+	switch i := expr.(type) {
+	case parser.DInt:
+		index := int(i)
+		if numCols := len(n.originalCols); index < 1 || index > numCols {
+			return -1, fmt.Errorf("invalid column index: %d not in range [1, %d]", index, numCols)
+		}
+		return index - 1, nil
+
+	case parser.Datum:
+		return -1, fmt.Errorf("non-integer constant column index: %s", expr)
+
+	default:
+		// expr doesn't look like a col index (i.e. not a constant).
+		return -1, nil
+	}
 }
 
 func (n *scanNode) processKV(kv client.KeyValue) bool {

@@ -136,10 +136,10 @@ SELECT a FROM t ORDER BY (((a)))
 query error incompatible value types bool, int
 SELECT CASE a WHEN 1 THEN b ELSE c END as val FROM t ORDER BY val
 
-query error invalid ORDER BY index: 0 not in range \[1, 3\]
+query error invalid column index: 0 not in range \[1, 3\]
 SELECT * FROM t ORDER BY 0
 
-query error invalid ORDER BY: true
+query error non-integer constant column index: true
 SELECT * FROM t ORDER BY true
 
 query error qualified name "t.foo" not found

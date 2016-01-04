@@ -87,20 +87,10 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, error) {
 		if index == 0 {
 			// The order by expression matched neither an output column nor an
 			// existing render target.
-			if datum, ok := expr.(parser.Datum); ok {
-				// If we evaluated to an int, use that as an index to order by. This
-				// handles cases like:
-				//
-				//   SELECT * FROM t ORDER BY 1
-				i, ok := datum.(parser.DInt)
-				if !ok {
-					return nil, fmt.Errorf("invalid ORDER BY: %s", expr)
-				}
-				index = int(i)
-				if index < 1 || index > len(columns) {
-					return nil, fmt.Errorf("invalid ORDER BY index: %d not in range [1, %d]",
-						index, len(columns))
-				}
+			if col, err := s.colIndex(expr); err != nil {
+				return nil, err
+			} else if col >= 0 {
+				index = col + 1
 			} else {
 				// Add a new render expression to use for ordering. This handles cases
 				// were the expression is either not a qualified name or is a qualified
