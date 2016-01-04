@@ -38,11 +38,9 @@ var _ = math.Inf
 
 // Node contains information about a gossip node.
 type Node struct {
-	// High_water_stamp is the most recent timestamp of any info which
-	// originated at this node.
+	// The most recent timestamp of any info which originated at this node.
 	HighWaterStamp int64 `protobuf:"varint,1,opt,name=high_water_stamp,proto3" json:"high_water_stamp,omitempty"`
-	// Min_hops is the minimum number of hops seen for any info which
-	// originated at this node.
+	// The minimum number of hops seen for any info which originated at this node.
 	MinHops uint32 `protobuf:"varint,2,opt,name=min_hops,proto3" json:"min_hops,omitempty"`
 }
 
@@ -83,7 +81,7 @@ type Response struct {
 	// Delta of Infos which are fresh according to the map of Node info messages
 	// passed with the request.
 	Delta map[string]*Info `protobuf:"bytes,5,rep,name=delta" json:"delta,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
-	// Map of all high water timestamps, by node, seen by the responder.
+	// Map of information about other nodes, as seen by the responder.
 	Nodes map[int32]*Node `protobuf:"bytes,6,rep,name=nodes" json:"nodes,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 }
 

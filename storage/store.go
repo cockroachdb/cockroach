@@ -903,11 +903,6 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	if err := engine.MVCCPutProto(batch, ms, keys.RangeDescriptorKey(desc.StartKey), now, nil, desc); err != nil {
 		return err
 	}
-	// GC Metadata.
-	gcMeta := roachpb.NewGCMetadata(now.WallTime)
-	if err := engine.MVCCPutProto(batch, ms, keys.RangeGCMetadataKey(desc.RangeID), roachpb.ZeroTimestamp, nil, gcMeta); err != nil {
-		return err
-	}
 	// Verification timestamp.
 	if err := engine.MVCCPutProto(batch, ms, keys.RangeLastVerificationTimestampKey(desc.RangeID), roachpb.ZeroTimestamp, nil, &now); err != nil {
 		return err

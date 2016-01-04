@@ -821,18 +821,9 @@ func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, h roac
 // specified in the args is persisted after GC.
 func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.GCRequest) (roachpb.GCResponse, error) {
 	var reply roachpb.GCResponse
-
 	// Garbage collect the specified keys by expiration timestamps.
-	if err := engine.MVCCGarbageCollect(batch, ms, args.Keys, h.Timestamp); err != nil {
-		return reply, err
-	}
-
-	// Store the GC metadata for this range.
-	key := keys.RangeGCMetadataKey(r.Desc().RangeID)
-	if err := engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, &args.GCMeta); err != nil {
-		return reply, err
-	}
-	return reply, nil
+	err := engine.MVCCGarbageCollect(batch, ms, args.Keys, h.Timestamp)
+	return reply, err
 }
 
 // PushTxn resolves conflicts between concurrent txns (or
@@ -1359,15 +1350,6 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 		return util.Errorf("range does not match splits: (%s-%s) + (%s-%s) != %s",
 			split.UpdatedDesc.StartKey, split.UpdatedDesc.EndKey,
 			split.NewDesc.StartKey, split.NewDesc.EndKey, r)
-	}
-
-	// Copy the GC metadata.
-	gcMeta, err := r.GetGCMetadata()
-	if err != nil {
-		return util.Errorf("unable to fetch GC metadata: %s", err)
-	}
-	if err := engine.MVCCPutProto(batch, nil, keys.RangeGCMetadataKey(split.NewDesc.RangeID), roachpb.ZeroTimestamp, nil, gcMeta); err != nil {
-		return util.Errorf("unable to copy GC metadata: %s", err)
 	}
 
 	// Copy the last verification timestamp.

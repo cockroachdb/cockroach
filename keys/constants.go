@@ -90,8 +90,6 @@ var (
 	localRaftTruncatedStateSuffix = []byte("rftt")
 	// localRaftLastIndexSuffix is the suffix for raft's last index.
 	localRaftLastIndexSuffix = []byte("rfti")
-	// localRangeGCMetadataSuffix is the suffix for a range's GC metadata.
-	localRangeGCMetadataSuffix = []byte("rgcm")
 	// localRangeLastVerificationTimestampSuffix is the suffix for a range's
 	// last verification timestamp (for checking integrity of on-disk data).
 	localRangeLastVerificationTimestampSuffix = []byte("rlvt")

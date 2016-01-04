@@ -293,15 +293,6 @@ message Lease {
   optional ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
 }
 
-// GCMetadata holds information about the last complete key/value
-// garbage collection scan of a range.
-// TODO(tschottdorf): can avoid an extra message unless we're planning
-// to add more content.
-message GCMetadata {
-  // The last GC scan timestamp in nanoseconds since the Unix epoch.
-  optional int64 last_scan_nanos = 1 [(gogoproto.nullable) = false];
-}
-
 // SequenceCacheEntry holds information which together with the key at which
 // it is stored suffices to reconstruct the location of the original transaction
 // record along with its approximate age.

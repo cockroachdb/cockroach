@@ -723,15 +723,6 @@ func (t Transaction) Short() string {
 	return uuid.UUID(t.ID).Short()
 }
 
-// NewGCMetadata returns a GCMetadata initialized to have a ByteCounts
-// slice with ten byte count values set to zero.  Now is specified as
-// nanoseconds since the Unix epoch.
-func NewGCMetadata(nowNanos int64) *GCMetadata {
-	return &GCMetadata{
-		LastScanNanos: nowNanos,
-	}
-}
-
 // Add adds the given NodeID to the interface (unless already present)
 // and restores ordering.
 func (s *NodeList) Add(nodeID NodeID) {

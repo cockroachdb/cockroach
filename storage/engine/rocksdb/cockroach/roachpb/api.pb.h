@@ -3235,15 +3235,6 @@ class GCRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::Span* release_header();
   void set_allocated_header(::cockroach::roachpb::Span* header);
 
-  // optional .cockroach.roachpb.GCMetadata gc_meta = 2;
-  bool has_gc_meta() const;
-  void clear_gc_meta();
-  static const int kGcMetaFieldNumber = 2;
-  const ::cockroach::roachpb::GCMetadata& gc_meta() const;
-  ::cockroach::roachpb::GCMetadata* mutable_gc_meta();
-  ::cockroach::roachpb::GCMetadata* release_gc_meta();
-  void set_allocated_gc_meta(::cockroach::roachpb::GCMetadata* gc_meta);
-
   // repeated .cockroach.roachpb.GCRequest.GCKey keys = 3;
   int keys_size() const;
   void clear_keys();
@@ -3260,14 +3251,11 @@ class GCRequest : public ::google::protobuf::Message {
  private:
   inline void set_has_header();
   inline void clear_has_header();
-  inline void set_has_gc_meta();
-  inline void clear_has_gc_meta();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::Span* header_;
-  ::cockroach::roachpb::GCMetadata* gc_meta_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::GCRequest_GCKey > keys_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
@@ -8259,49 +8247,6 @@ inline void GCRequest::set_allocated_header(::cockroach::roachpb::Span* header) 
     clear_has_header();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.GCRequest.header)
-}
-
-// optional .cockroach.roachpb.GCMetadata gc_meta = 2;
-inline bool GCRequest::has_gc_meta() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void GCRequest::set_has_gc_meta() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void GCRequest::clear_has_gc_meta() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void GCRequest::clear_gc_meta() {
-  if (gc_meta_ != NULL) gc_meta_->::cockroach::roachpb::GCMetadata::Clear();
-  clear_has_gc_meta();
-}
-inline const ::cockroach::roachpb::GCMetadata& GCRequest::gc_meta() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.GCRequest.gc_meta)
-  return gc_meta_ != NULL ? *gc_meta_ : *default_instance_->gc_meta_;
-}
-inline ::cockroach::roachpb::GCMetadata* GCRequest::mutable_gc_meta() {
-  set_has_gc_meta();
-  if (gc_meta_ == NULL) {
-    gc_meta_ = new ::cockroach::roachpb::GCMetadata;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.GCRequest.gc_meta)
-  return gc_meta_;
-}
-inline ::cockroach::roachpb::GCMetadata* GCRequest::release_gc_meta() {
-  clear_has_gc_meta();
-  ::cockroach::roachpb::GCMetadata* temp = gc_meta_;
-  gc_meta_ = NULL;
-  return temp;
-}
-inline void GCRequest::set_allocated_gc_meta(::cockroach::roachpb::GCMetadata* gc_meta) {
-  delete gc_meta_;
-  gc_meta_ = gc_meta;
-  if (gc_meta) {
-    set_has_gc_meta();
-  } else {
-    clear_has_gc_meta();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.GCRequest.gc_meta)
 }
 
 // repeated .cockroach.roachpb.GCRequest.GCKey keys = 3;
