@@ -193,8 +193,15 @@ func (s *Stopper) runningTasksLocked() TaskMap {
 // Stop signals all live workers to stop and then waits for each to
 // confirm it has stopped.
 func (s *Stopper) Stop() {
-	// Don't bother doing stuff if we're panicking, just die.
+	// Don't bother doing stuff cleanly if we're panicking, that would likely
+	// block. Instead, best effort only.
 	if r := recover(); r != nil {
+		go s.Quiesce()
+		close(s.stopper)
+		close(s.stopped)
+		for _, c := range s.closers {
+			go c.Close()
+		}
 		panic(r)
 	}
 
