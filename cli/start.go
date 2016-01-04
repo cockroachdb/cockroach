@@ -86,10 +86,6 @@ func runInit(_ *cobra.Command, _ []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	return initCluster(stopper)
-}
-
-func initCluster(stopper *stop.Stopper) error {
 	// Default user for servers.
 	context.User = security.NodeUser
 
@@ -100,6 +96,10 @@ func initCluster(stopper *stop.Stopper) error {
 		return util.Errorf("cannot bootstrap to more than one store")
 	}
 
+	return initCluster(stopper)
+}
+
+func initCluster(stopper *stop.Stopper) error {
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
 	clusterID := uuid.NewUUID4().String()
 	if _, err := server.BootstrapCluster(clusterID, context.Engines, stopper); err != nil {
@@ -150,20 +150,23 @@ func runStart(_ *cobra.Command, _ []string) error {
 		// TODO(marc): set this in the zones table when we have an entry
 		// for the default cluster-wide zone config.
 		config.DefaultZoneConfig.ReplicaAttrs = []roachpb.Attributes{{}}
+		context.Stores = "mem=1073741824"
+		context.GossipBootstrap = server.SelfGossipAddr
 	}
 
 	stopper := stop.NewStopper()
-	if context.EphemeralSingleNode {
-		context.Stores = "mem=1073741824"
-		context.GossipBootstrap = server.SelfGossipAddr
+	if err := context.InitStores(stopper); err != nil {
+		return util.Errorf("failed to initialize stores: %s", err)
+	}
 
-		if err := initCluster(stopper); err != nil {
+	if context.EphemeralSingleNode {
+		// A separate stopper for bootstrapping so that we can properly shutdown
+		// all of the stores.
+		initStopper := stop.NewStopper()
+		if err := initCluster(initStopper); err != nil {
 			return err
 		}
-	} else {
-		if err := context.InitStores(stopper); err != nil {
-			return util.Errorf("failed to initialize stores: %s", err)
-		}
+		initStopper.Stop()
 	}
 
 	if err := context.InitNode(); err != nil {
