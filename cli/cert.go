@@ -17,9 +17,8 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/util"
 
 	"github.com/spf13/cobra"
 )
@@ -37,18 +36,17 @@ var createCACertCmd = &cobra.Command{
 Generates a new key pair and CA certificate, writing them to
 individual files in the directory specified by --certs (required).
 `,
-	Run: runCreateCACert,
+	SilenceUsage: true,
+	RunE:         runCreateCACert,
 }
 
 // runCreateCACert generates key pair and CA certificate and writes them
 // to their corresponding files.
-func runCreateCACert(cmd *cobra.Command, args []string) {
-	err := security.RunCreateCACert(context.Certs, keySize)
-	if err != nil {
-		fmt.Fprintf(osStderr, "failed to generate CA certificate: %s\n", err)
-		osExit(1)
-		return
+func runCreateCACert(cmd *cobra.Command, args []string) error {
+	if err := security.RunCreateCACert(context.Certs, keySize); err != nil {
+		return util.Errorf("failed to generate CA certificate: %s", err)
 	}
+	return nil
 }
 
 // A createNodeCert command generates a node certificate and stores it
@@ -62,18 +60,17 @@ individual files in the directory specified by --certs (required).
 The certs directory should contain a CA cert and key.
 At least one host should be passed in (either IP address of dns name).
 `,
-	Run: runCreateNodeCert,
+	SilenceUsage: true,
+	RunE:         runCreateNodeCert,
 }
 
 // runCreateNodeCert generates key pair and CA certificate and writes them
 // to their corresponding files.
-func runCreateNodeCert(cmd *cobra.Command, args []string) {
-	err := security.RunCreateNodeCert(context.Certs, keySize, args)
-	if err != nil {
-		fmt.Fprintf(osStderr, "failed to generate node certificate: %s\n", err)
-		osExit(1)
-		return
+func runCreateNodeCert(cmd *cobra.Command, args []string) error {
+	if err := security.RunCreateNodeCert(context.Certs, keySize, args); err != nil {
+		return util.Errorf("failed to generate node certificate: %s", err)
 	}
+	return nil
 }
 
 // A createClientCert command generates a client certificate and stores it
@@ -86,22 +83,21 @@ Generates a new key pair and client certificate, writing them to
 individual files in the directory specified by --certs (required).
 The certs directory should contain a CA cert and key.
 `,
-	Run: runCreateClientCert,
+	SilenceUsage: true,
+	RunE:         runCreateClientCert,
 }
 
 // runCreateClientCert generates key pair and CA certificate and writes them
 // to their corresponding files.
-func runCreateClientCert(cmd *cobra.Command, args []string) {
+func runCreateClientCert(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		mustUsage(cmd)
-		return
+		return errMissingParams
 	}
-	err := security.RunCreateClientCert(context.Certs, keySize, args[0])
-	if err != nil {
-		fmt.Fprintf(osStderr, "failed to generate clent certificate: %s\n", err)
-		osExit(1)
-		return
+	if err := security.RunCreateClientCert(context.Certs, keySize, args[0]); err != nil {
+		return util.Errorf("failed to generate clent certificate: %s", err)
 	}
+	return nil
 }
 
 var certCmds = []*cobra.Command{
