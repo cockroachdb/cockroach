@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -37,7 +38,9 @@ var emptyAddr = util.MakeUnresolvedAddr("test", "<test-addr>")
 // TTLStamp to max int64.
 func TestZeroDuration(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	is := newInfoStore(1, emptyAddr)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	is := newInfoStore(1, emptyAddr, stopper)
 	info := is.newInfo(nil, 0)
 	if info.TTLStamp != math.MaxInt64 {
 		t.Errorf("expected zero duration to get max TTLStamp: %d", info.TTLStamp)
@@ -47,7 +50,9 @@ func TestZeroDuration(t *testing.T) {
 // TestNewInfo creates new info objects. Verify sequence increments.
 func TestNewInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	is := newInfoStore(1, emptyAddr)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	is := newInfoStore(1, emptyAddr, stopper)
 	info1 := is.newInfo(nil, time.Second)
 	info2 := is.newInfo(nil, time.Second)
 	if err := is.addInfo("a", info1); err != nil {
@@ -65,7 +70,9 @@ func TestNewInfo(t *testing.T) {
 // via getInfo. Also, verifies a non-existent info can't be fetched.
 func TestInfoStoreGetInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	is := newInfoStore(1, emptyAddr)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	is := newInfoStore(1, emptyAddr, stopper)
 	i := is.newInfo(nil, time.Second)
 	i.NodeID = 1
 	if err := is.addInfo("a", i); err != nil {
@@ -88,7 +95,9 @@ func TestInfoStoreGetInfo(t *testing.T) {
 // Verify TTL is respected on info fetched by key.
 func TestInfoStoreGetInfoTTL(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	is := newInfoStore(1, emptyAddr)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	is := newInfoStore(1, emptyAddr, stopper)
 	i := is.newInfo(nil, time.Nanosecond)
 	if err := is.addInfo("a", i); err != nil {
 		t.Error(err)
@@ -103,7 +112,9 @@ func TestInfoStoreGetInfoTTL(t *testing.T) {
 // replacement.
 func TestAddInfoSameKeyLessThanEqualTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	is := newInfoStore(1, emptyAddr)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	is := newInfoStore(1, emptyAddr, stopper)
 	info1 := is.newInfo(nil, time.Second)
 	if err := is.addInfo("a", info1); err != nil {
 		t.Error(err)
@@ -126,7 +137,9 @@ func TestAddInfoSameKeyLessThanEqualTimestamp(t *testing.T) {
 // Add infos using same key, same timestamp; verify no replacement.
 func TestAddInfoSameKeyGreaterTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	is := newInfoStore(1, emptyAddr)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	is := newInfoStore(1, emptyAddr, stopper)
 	info1 := is.newInfo(nil, time.Second)
 	info2 := is.newInfo(nil, time.Second)
 	if err1, err2 := is.addInfo("a", info1), is.addInfo("a", info2); err1 != nil || err2 != nil {
@@ -138,7 +151,9 @@ func TestAddInfoSameKeyGreaterTimestamp(t *testing.T) {
 // always chooses the minimum hops.
 func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	is := newInfoStore(1, emptyAddr)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	is := newInfoStore(1, emptyAddr, stopper)
 	info1 := is.newInfo(nil, time.Second)
 	info1.Hops = 1
 	info2 := is.newInfo(nil, time.Second)
@@ -168,8 +183,8 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 }
 
 // Helper method creates an infostore with 10 infos.
-func createTestInfoStore(t *testing.T) infoStore {
-	is := newInfoStore(1, emptyAddr)
+func createTestInfoStore(t *testing.T, stopper *stop.Stopper) infoStore {
+	is := newInfoStore(1, emptyAddr, stopper)
 
 	for i := 0; i < 10; i++ {
 		infoA := is.newInfo(nil, time.Second)
@@ -197,7 +212,9 @@ func createTestInfoStore(t *testing.T) infoStore {
 // Check infostore delta based on info high water timestamps.
 func TestInfoStoreDelta(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	is := createTestInfoStore(t)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	is := createTestInfoStore(t, stopper)
 
 	// Verify deltas with successive timestamps.
 	infos := is.delta(4, map[int32]int64{})
@@ -236,12 +253,14 @@ func TestInfoStoreDelta(t *testing.T) {
 // Hops > maxHops.
 func TestInfoStoreDistant(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
 	nodes := []roachpb.NodeID{
 		roachpb.NodeID(1),
 		roachpb.NodeID(2),
 		roachpb.NodeID(3),
 	}
-	is := newInfoStore(1, emptyAddr)
+	is := newInfoStore(1, emptyAddr, stopper)
 	// Add info from each address, with hop count equal to index+1.
 	for i := 0; i < len(nodes); i++ {
 		inf := is.newInfo(nil, time.Second)
@@ -264,11 +283,13 @@ func TestInfoStoreDistant(t *testing.T) {
 // can be determined.
 func TestLeastUseful(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
 	nodes := []roachpb.NodeID{
 		roachpb.NodeID(1),
 		roachpb.NodeID(2),
 	}
-	is := newInfoStore(1, emptyAddr)
+	is := newInfoStore(1, emptyAddr, stopper)
 
 	set := makeNodeSet(3)
 	if is.leastUseful(set) != 0 {
@@ -313,42 +334,61 @@ func TestLeastUseful(t *testing.T) {
 	}
 }
 
-type callbackRecord struct {
+type synchonizedRecord struct {
 	keys []string
 	wg   *sync.WaitGroup
 	sync.Mutex
 }
 
-func (cr *callbackRecord) Add(key string, _ roachpb.Value) {
+func (cr *synchonizedRecord) Add(key string) {
 	cr.Lock()
 	defer cr.Unlock()
 	cr.keys = append(cr.keys, key)
 	cr.wg.Done()
 }
 
-func (cr *callbackRecord) Keys() []string {
+func (cr *synchonizedRecord) Keys() []string {
 	cr.Lock()
 	defer cr.Unlock()
 	return append([]string(nil), cr.keys...)
 }
 
-func TestCallbacks(t *testing.T) {
+func TestUpdateChannels(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	is := newInfoStore(1, emptyAddr)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	is := newInfoStore(1, emptyAddr, stopper)
 	wg := &sync.WaitGroup{}
-	cb1 := callbackRecord{wg: wg}
-	cb2 := callbackRecord{wg: wg}
-	cbAll := callbackRecord{wg: wg}
+	sr1 := synchonizedRecord{wg: wg}
+	sr2 := synchonizedRecord{wg: wg}
+	srAll := synchonizedRecord{wg: wg}
 
-	unregisterCB1 := is.registerCallback("key1", cb1.Add)
-	is.registerCallback("key2", cb2.Add)
-	is.registerCallback("key.*", cbAll.Add)
+	ch1, unregister1 := is.registerUpdateChannel("key1")
+	ch2, _ := is.registerUpdateChannel("key2")
+	chAll, _ := is.registerUpdateChannel("key.*")
+	stopper.RunWorker(func() {
+		for {
+			select {
+			case n := <-ch1:
+				sr1.Add(n.Key)
+				ch1 <- n
+			case n := <-ch2:
+				sr2.Add(n.Key)
+				ch2 <- n
+			case n := <-chAll:
+				srAll.Add(n.Key)
+				chAll <- n
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
 
 	i1 := is.newInfo(nil, time.Second)
 	i2 := is.newInfo(nil, time.Second)
 	i3 := is.newInfo(nil, time.Second)
 
-	// Add infos twice and verify callbacks aren't called for same timestamps.
+	// Add infos twice and verify channels aren't notified for same timestamps.
 	for i := 0; i < 2; i++ {
 		for _, test := range []struct {
 			key   string
@@ -372,13 +412,13 @@ func TestCallbacks(t *testing.T) {
 			wg.Wait()
 		}
 
-		if expKeys := []string{"key1"}; !reflect.DeepEqual(cb1.Keys(), expKeys) {
-			t.Errorf("expected %v, got %v", expKeys, cb1.Keys())
+		if expKeys := []string{"key1"}; !reflect.DeepEqual(sr1.Keys(), expKeys) {
+			t.Errorf("expected %v, got %v", expKeys, sr1.Keys())
 		}
-		if expKeys := []string{"key2"}; !reflect.DeepEqual(cb2.Keys(), expKeys) {
-			t.Errorf("expected %v, got %v", expKeys, cb2.Keys())
+		if expKeys := []string{"key2"}; !reflect.DeepEqual(sr2.Keys(), expKeys) {
+			t.Errorf("expected %v, got %v", expKeys, sr2.Keys())
 		}
-		keys := cbAll.Keys()
+		keys := srAll.Keys()
 		if expKeys := []string{"key1", "key2", "key3"}; !reflect.DeepEqual(keys, expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, keys)
 		}
@@ -393,13 +433,13 @@ func TestCallbacks(t *testing.T) {
 		}
 		wg.Wait()
 
-		if expKeys := []string{"key1", "key1"}; !reflect.DeepEqual(cb1.Keys(), expKeys) {
-			t.Errorf("expected %v, got %v", expKeys, cb1.Keys())
+		if expKeys := []string{"key1", "key1"}; !reflect.DeepEqual(sr1.Keys(), expKeys) {
+			t.Errorf("expected %v, got %v", expKeys, sr1.Keys())
 		}
-		if expKeys := []string{"key2"}; !reflect.DeepEqual(cb2.Keys(), expKeys) {
-			t.Errorf("expected %v, got %v", expKeys, cb2.Keys())
+		if expKeys := []string{"key2"}; !reflect.DeepEqual(sr2.Keys(), expKeys) {
+			t.Errorf("expected %v, got %v", expKeys, sr2.Keys())
 		}
-		keys := cbAll.Keys()
+		keys := srAll.Keys()
 		if expKeys := []string{"key1", "key2", "key3", "key1"}; !reflect.DeepEqual(keys, expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, keys)
 		}
@@ -407,41 +447,54 @@ func TestCallbacks(t *testing.T) {
 
 	const numInfos = 3
 
-	// Register another callback with same pattern and verify it is
-	// invoked for all three keys.
+	// Register another channel with same pattern and verify it is
+	// notified for all three keys.
 	wg.Add(numInfos)
-	is.registerCallback("key.*", cbAll.Add)
+	chAll2, _ := is.registerUpdateChannel("key.*")
+	stopper.RunWorker(func() {
+		for {
+			select {
+			case n := <-chAll2:
+				srAll.Add(n.Key)
+				chAll2 <- n
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
 	wg.Wait()
 
 	expKeys := []string{"key1", "key2", "key3"}
-	keys := cbAll.Keys()
+	keys := srAll.Keys()
 	keys = keys[len(keys)-numInfos:]
 	sort.Strings(keys)
 	if !reflect.DeepEqual(keys, expKeys) {
 		t.Errorf("expected %v, got %v", expKeys, keys)
 	}
 
-	// Unregister a callback and verify nothing is invoked on it.
-	unregisterCB1()
+	// Unregister a channel and verify nothing is passed to it.
+	unregister1()
 	iNew := is.newInfo([]byte("a"), time.Second)
-	wg.Add(2) // for the two cbAll callbacks
+	wg.Add(2) // for the two srAll channels
 	if err := is.addInfo("key1", iNew); err != nil {
 		t.Error(err)
 	}
 	wg.Wait()
-	if len(cb1.Keys()) != 2 {
-		t.Errorf("expected no new cb1 keys, got %v", cb1.Keys())
+	if len(sr1.Keys()) != 2 {
+		t.Errorf("expected no new sr1 keys, got %v", sr1.Keys())
 	}
 }
 
-// TestRegisterCallback verifies that a callback is invoked when
+// TestRegisterChannel verifies that a channel is notified when
 // registered if there are items which match its regexp in the
 // infostore.
-func TestRegisterCallback(t *testing.T) {
+func TestRegisterChannel(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	is := newInfoStore(1, emptyAddr)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	is := newInfoStore(1, emptyAddr, stopper)
 	wg := &sync.WaitGroup{}
-	cb := callbackRecord{wg: wg}
+	sr := synchonizedRecord{wg: wg}
 
 	i1 := is.newInfo(nil, time.Second)
 	i2 := is.newInfo(nil, time.Second)
@@ -453,11 +506,22 @@ func TestRegisterCallback(t *testing.T) {
 	}
 
 	wg.Add(2)
-	is.registerCallback("key.*", cb.Add)
+	ch, _ := is.registerUpdateChannel("key.*")
+	stopper.RunWorker(func() {
+		for {
+			select {
+			case n := <-ch:
+				sr.Add(n.Key)
+				ch <- n
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
 	wg.Wait()
-	actKeys := cb.Keys()
+	actKeys := sr.Keys()
 	sort.Strings(actKeys)
 	if expKeys := []string{"key1", "key2"}; !reflect.DeepEqual(actKeys, expKeys) {
-		t.Errorf("expected %v, got %v", expKeys, cb.Keys())
+		t.Errorf("expected %v, got %v", expKeys, sr.Keys())
 	}
 }

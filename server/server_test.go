@@ -498,16 +498,25 @@ func TestSystemDBGossip(t *testing.T) {
 		return &sql.DatabaseDescriptor{Name: "foo", ID: sql.ID(i)}
 	}
 
-	// Register a callback for gossip updates.
-	s.Gossip().RegisterCallback(gossip.KeySystemConfig, func(_ string, content roachpb.Value) {
-		newCount := atomic.AddInt32(&count, 1)
-		if newCount != 2 {
-			// RegisterCallback calls us right away with the contents,
-			// so ignore the very first call.
-			// We also only want the first value of all our writes.
-			return
+	// Register a channel for gossip updates.
+	gossipC, unregister := s.Gossip().RegisterUpdateChannel(gossip.KeySystemConfig)
+	s.Stopper().RunWorker(func() {
+		for {
+			select {
+			case n := <-gossipC:
+				// RegisterUpdateChannel calls us right away with the contents,
+				// so ignore the very first call.
+				// We also only want the first value of all our writes.
+				newCount := atomic.AddInt32(&count, 1)
+				if newCount == 2 {
+					resultChan <- n.Content
+				}
+				gossipC <- n
+			case <-s.Stopper().ShouldStop():
+				unregister()
+				return
+			}
 		}
-		resultChan <- content
 	})
 
 	// The span only gets gossiped when it first shows up, or when

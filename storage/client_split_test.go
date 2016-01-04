@@ -116,15 +116,25 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	}
 
 	successChan := make(chan struct{}, 1)
-	store.Gossip().RegisterCallback(gossip.KeySystemConfig, func(_ string, content roachpb.Value) {
-		contentBytes, err := content.GetBytes()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if bytes.Contains(contentBytes, descBytes) {
+	gossipC, unregister := store.Gossip().RegisterUpdateChannel(gossip.KeySystemConfig)
+	stopper.RunWorker(func() {
+		for {
 			select {
-			case successChan <- struct{}{}:
-			default:
+			case n := <-gossipC:
+				contentBytes, err := n.Content.GetBytes()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if bytes.Contains(contentBytes, descBytes) {
+					select {
+					case successChan <- struct{}{}:
+					default:
+					}
+				}
+				gossipC <- n
+			case <-stopper.ShouldStop():
+				unregister()
+				return
 			}
 		}
 	})

@@ -135,10 +135,10 @@ type Gossip struct {
 }
 
 // New creates an instance of a gossip node.
-func New(rpcContext *rpc.Context, resolvers []resolver.Resolver) *Gossip {
+func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.Stopper) *Gossip {
 	g := &Gossip{
 		Connected:     make(chan struct{}),
-		server:        newServer(),
+		server:        newServer(stopper),
 		outgoing:      makeNodeSet(1),
 		bootstrapping: map[string]struct{}{},
 		clients:       []*client{},
@@ -159,7 +159,20 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver) *Gossip {
 	}
 
 	// Add ourselves as a SystemConfig watcher.
-	g.is.registerCallback(KeySystemConfig, g.updateSystemConfig)
+	updateC, unregister := g.RegisterUpdateChannel(KeySystemConfig)
+	g.stopper.RunWorker(func() {
+		for {
+			select {
+			case n := <-updateC:
+				g.updateSystemConfig(n)
+				updateC <- n
+			case <-g.stopper.ShouldStop():
+				unregister()
+				return
+			}
+		}
+	})
+
 	return g
 }
 
@@ -332,24 +345,29 @@ func (g *Gossip) GetInfosAsJSON() ([]byte, error) {
 	return json.MarshalIndent(g.is, "", "  ")
 }
 
-// Callback is a callback method to be invoked on gossip update
-// of info denoted by key.
-type Callback func(string, roachpb.Value)
+// Notification contains gossip update information for the specified
+// key.
+type Notification struct {
+	Key     string
+	Content roachpb.Value
+}
 
-// RegisterCallback registers a callback for a key pattern to be
-// invoked whenever new info for a gossip key matching pattern is
-// received. The callback method is invoked with the info key which
-// matched pattern. Returns a function to unregister the callback.
-func (g *Gossip) RegisterCallback(pattern string, method Callback) func() {
+// RegisterUpdateChannel registers a key pattern and returns a channel
+// that will be sent a gossip notification whenever new info for a
+// gossip key matching the pattern is received. The notification contains
+// the info key which matched the pattern along with the updated content,
+// and should be returned on the channel when its use is complete.
+// A function to unregister the notification channel is also returned.
+func (g *Gossip) RegisterUpdateChannel(pattern string) (chan Notification, func()) {
 	if pattern == KeySystemConfig {
-		log.Warning("raw gossip callback registered on %s, consider using RegisterSystemConfigCallback",
+		log.Warningf("raw gossip callback registered on %s, consider using RegisterSystemConfigChannel",
 			KeySystemConfig)
 	}
 
 	g.mu.Lock()
-	unregister := g.is.registerCallback(pattern, method)
+	c, unregister := g.is.registerUpdateChannel(pattern)
 	g.mu.Unlock()
-	return func() {
+	return c, func() {
 		g.mu.Lock()
 		unregister()
 		g.mu.Unlock()
@@ -363,8 +381,6 @@ func (g *Gossip) GetSystemConfig() *config.SystemConfig {
 	defer g.systemConfigMu.RUnlock()
 	return g.systemConfig
 }
-
-type systemConfigCallback func(*config.SystemConfig)
 
 // RegisterSystemConfigChannel registers a channel to signify updates for the
 // system config. It is notified after registration, and whenever a new
@@ -386,17 +402,16 @@ func (g *Gossip) RegisterSystemConfigChannel() <-chan struct{} {
 	return c
 }
 
-// updateSystemConfig is the raw gossip info callback.
-// Unmarshal the system config, and if successfully, update out
-// copy and run the callbacks.
-func (g *Gossip) updateSystemConfig(key string, content roachpb.Value) {
-	if key != KeySystemConfig {
-		log.Fatalf("wrong key received on SystemConfig callback: %s", key)
+// updateSystemConfig unmarshals the system config from a gossip notification,
+// and if successful, updates our copy and notifies listeners.
+func (g *Gossip) updateSystemConfig(n Notification) {
+	if n.Key != KeySystemConfig {
+		log.Fatalf("wrong key received on SystemConfig channel: %s", n.Key)
 		return
 	}
 	cfg := &config.SystemConfig{}
-	if err := content.GetProto(cfg); err != nil {
-		log.Errorf("could not unmarshal system config on callback: %s", err)
+	if err := n.Content.GetProto(cfg); err != nil {
+		log.Errorf("could not unmarshal system config from channel: %s", err)
 		return
 	}
 
@@ -440,11 +455,11 @@ func (g *Gossip) Outgoing() []roachpb.NodeID {
 //
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
-func (g *Gossip) Start(rpcServer *rpc.Server, addr net.Addr, stopper *stop.Stopper) {
-	g.server.start(rpcServer, addr, stopper) // serve gossip protocol
-	g.bootstrap(stopper)                     // bootstrap gossip client
-	g.manage(stopper)                        // manage gossip clients
-	g.maybeWarnAboutInit(stopper)
+func (g *Gossip) Start(rpcServer *rpc.Server, addr net.Addr) {
+	g.server.start(rpcServer, addr) // serve gossip protocol
+	g.bootstrap(g.stopper)          // bootstrap gossip client
+	g.manage(g.stopper)             // manage gossip clients
+	g.maybeWarnAboutInit(g.stopper)
 }
 
 // hasIncoming returns whether the server has an incoming gossip

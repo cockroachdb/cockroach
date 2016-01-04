@@ -80,7 +80,7 @@ func NewNetwork(nodeCount int, networkType string) *Network {
 		// Build new resolvers for each instance or we'll get data races.
 		resolvers := []resolver.Resolver{resolver.NewResolverFromAddress(nodes[0].Addr)}
 
-		gossipNode := gossip.New(rpcContext, resolvers)
+		gossipNode := gossip.New(rpcContext, resolvers, stopper)
 		addr := leftNode.Addr
 		gossipNode.SetNodeID(roachpb.NodeID(i + 1))
 		if err := gossipNode.SetNodeDescriptor(&roachpb.NodeDescriptor{
@@ -92,7 +92,7 @@ func NewNetwork(nodeCount int, networkType string) *Network {
 		if err := gossipNode.AddInfo(addr.String(), encoding.EncodeUint64(nil, 0), time.Hour); err != nil {
 			log.Fatal(err)
 		}
-		gossipNode.Start(leftNode.Server, addr, stopper)
+		gossipNode.Start(leftNode.Server, addr)
 		gossipNode.EnableSimulationCycler(true)
 
 		leftNode.Gossip = gossipNode

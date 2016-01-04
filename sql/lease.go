@@ -612,10 +612,10 @@ func (m *LeaseManager) getSystemConfig() config.SystemConfig {
 func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gossip.Gossip) {
 	s.RunWorker(func() {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
-		gossipUpdateC := gossip.RegisterSystemConfigChannel()
+		configUpdateC := gossip.RegisterSystemConfigChannel()
 		for {
 			select {
-			case <-gossipUpdateC:
+			case <-configUpdateC:
 				cfg := *gossip.GetSystemConfig()
 				m.updateSystemConfig(cfg)
 

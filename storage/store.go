@@ -543,11 +543,11 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		// Register update channel for any changes to the system config.
 		// This may trigger splits along structured boundaries,
 		// and update max range bytes.
-		gossipUpdateC := s.ctx.Gossip.RegisterSystemConfigChannel()
+		configUpdateC := s.ctx.Gossip.RegisterSystemConfigChannel()
 		s.stopper.RunWorker(func() {
 			for {
 				select {
-				case <-gossipUpdateC:
+				case <-configUpdateC:
 					cfg := s.ctx.Gossip.GetSystemConfig()
 					s.systemGossipUpdate(cfg)
 				case <-s.stopper.ShouldStop():

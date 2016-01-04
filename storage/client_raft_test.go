@@ -542,7 +542,19 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(len(mtc.stores))
 	key := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
-	mtc.stores[0].Gossip().RegisterCallback(key, func(_ string, _ roachpb.Value) { wg.Done() })
+	gossipC, unregister := mtc.stores[0].Gossip().RegisterUpdateChannel(key)
+	mtc.clientStopper.RunWorker(func() {
+		for {
+			select {
+			case n := <-gossipC:
+				wg.Done()
+				gossipC <- n
+			case <-mtc.clientStopper.ShouldStop():
+				unregister()
+				return
+			}
+		}
+	})
 	for _, s := range mtc.stores {
 		s.GossipStore()
 	}
@@ -622,7 +634,19 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(len(mtc.stores))
 	key := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
-	mtc.stores[0].Gossip().RegisterCallback(key, func(_ string, _ roachpb.Value) { wg.Done() })
+	gossipC, unregister := mtc.stores[0].Gossip().RegisterUpdateChannel(key)
+	mtc.clientStopper.RunWorker(func() {
+		for {
+			select {
+			case n := <-gossipC:
+				wg.Done()
+				gossipC <- n
+			case <-mtc.clientStopper.ShouldStop():
+				unregister()
+				return
+			}
+		}
+	})
 	for _, s := range mtc.stores {
 		s.GossipStore()
 	}
@@ -1157,7 +1181,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	mtc.Start(t, 3)
 	defer mtc.Stop()
 
-	sg := gossiputil.NewStoreGossiper(mtc.gossip)
+	sg := gossiputil.NewStoreGossiper(mtc.gossip, mtc.clientStopper)
 
 	// Replicate the range to all stores.
 	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
@@ -1255,7 +1279,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 		}
 		storeDescs = append(storeDescs, desc)
 	}
-	sg := gossiputil.NewStoreGossiper(mtc.gossip)
+	sg := gossiputil.NewStoreGossiper(mtc.gossip, mtc.clientStopper)
 	sg.GossipStores(storeDescs, t)
 
 	// This can't use SucceedsWithin as using the exponential backoff mechanic

@@ -50,7 +50,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	local = New(lRPCContext, TestBootstrap)
+	local = New(lRPCContext, TestBootstrap, stopper)
 	local.SetNodeID(1)
 	if err := local.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  1,
@@ -72,7 +72,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	remote = New(rRPCContext, TestBootstrap)
+	remote = New(rRPCContext, TestBootstrap, stopper)
 	remote.SetNodeID(2)
 	if err := remote.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  2,
@@ -80,8 +80,8 @@ func startGossip(t *testing.T) (local, remote *Gossip, stopper *stop.Stopper) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	local.start(lserver, lln.Addr(), stopper)
-	remote.start(rserver, rln.Addr(), stopper)
+	local.start(lserver, lln.Addr())
+	remote.start(rserver, rln.Addr())
 	time.Sleep(time.Millisecond)
 	return
 }
@@ -133,8 +133,8 @@ func startFakeServerGossip(t *testing.T) (local *Gossip, remote *fakeGossipServe
 	if err != nil {
 		t.Fatal(err)
 	}
-	local = New(lRPCContext, TestBootstrap)
-	local.start(lserver, lln.Addr(), stopper)
+	local = New(lRPCContext, TestBootstrap, stopper)
+	local.start(lserver, lln.Addr())
 
 	rclock := hlc.NewClock(hlc.UnixNano)
 	rRPCContext := rpc.NewContext(&base.Context{Insecure: true}, rclock, stopper)

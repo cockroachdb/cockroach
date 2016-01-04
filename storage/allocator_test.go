@@ -166,7 +166,7 @@ func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator
 	stopper := stop.NewStopper()
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
-	g := gossip.New(rpcContext, gossip.TestBootstrap)
+	g := gossip.New(rpcContext, gossip.TestBootstrap, stopper)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	storePool := NewStorePool(g, clock, TestTimeUntilStoreDeadOff, stopper)
@@ -199,7 +199,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
-	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
+	gossiputil.NewStoreGossiper(g, stopper).GossipStores(singleStore, t)
 	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
@@ -226,7 +226,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
-	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
+	gossiputil.NewStoreGossiper(g, stopper).GossipStores(sameDCStores, t)
 	result1, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
@@ -263,7 +263,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
-	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
+	gossiputil.NewStoreGossiper(g, stopper).GossipStores(multiDCStores, t)
 	result1, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
@@ -291,7 +291,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
-	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
+	gossiputil.NewStoreGossiper(g, stopper).GossipStores(sameDCStores, t)
 	result, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[1], []roachpb.ReplicaDescriptor{
 		{
 			NodeID:  2,
@@ -313,7 +313,7 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
-	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
+	gossiputil.NewStoreGossiper(g, stopper).GossipStores(multiDCStores, t)
 
 	testCases := []struct {
 		required         []string // attribute strings
@@ -384,7 +384,7 @@ func TestAllocatorRandomAllocation(t *testing.T) {
 			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 0},
 		},
 	}
-	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
+	gossiputil.NewStoreGossiper(g, stopper).GossipStores(stores, t)
 
 	// Every allocation will randomly choose 3 of the 4, meaning either
 	// store 1 or store 2 will be chosen, as the least loaded of the
@@ -429,7 +429,7 @@ func TestAllocatorRebalance(t *testing.T) {
 			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: (100 - int64(100*maxFractionUsedThreshold)) / 2},
 		},
 	}
-	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
+	gossiputil.NewStoreGossiper(g, stopper).GossipStores(stores, t)
 
 	// Every rebalance target must be either stores 1 or 2.
 	for i := 0; i < 10; i++ {
@@ -481,7 +481,7 @@ func TestAllocatorRebalanceByCapacity(t *testing.T) {
 			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 80},
 		},
 	}
-	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
+	gossiputil.NewStoreGossiper(g, stopper).GossipStores(stores, t)
 
 	// Every rebalance target must be store 4 (if not nil).
 	for i := 0; i < 10; i++ {
@@ -532,7 +532,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 98, RangeCount: 5},
 		},
 	}
-	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
+	gossiputil.NewStoreGossiper(g, stopper).GossipStores(stores, t)
 
 	// Every rebalance target must be store 4 (or nil for case of missing the only option).
 	for i := 0; i < 10; i++ {
@@ -606,7 +606,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 65, RangeCount: 5},
 		},
 	}
-	sg := gossiputil.NewStoreGossiper(g)
+	sg := gossiputil.NewStoreGossiper(g, stopper)
 	sg.GossipStores(stores, t)
 
 	targetRepl, err := a.RemoveTarget(replicas)
@@ -1076,18 +1076,30 @@ func (ts *testStore) rebalance(ots *testStore, bytes int64) {
 }
 
 func Example_rebalancing() {
-	// Model a set of stores in a cluster,
-	// randomly adding / removing stores and adding bytes.
-	g := gossip.New(nil, nil)
-	// Have to call g.SetNodeID before call g.AddInfo
-	g.SetNodeID(roachpb.NodeID(1))
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	// Model a set of stores in a cluster,
+	// randomly adding / removing stores and adding bytes.
+	g := gossip.New(nil, nil, stopper)
+	// Have to call g.SetNodeID before call g.AddInfo
+	g.SetNodeID(roachpb.NodeID(1))
 	sp := NewStorePool(g, hlc.NewClock(hlc.UnixNano), TestTimeUntilStoreDeadOff, stopper)
 	alloc := MakeAllocator(sp, AllocatorOptions{AllowRebalance: true, Deterministic: true})
 
 	var wg sync.WaitGroup
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ roachpb.Value) { wg.Done() })
+	gossipC, unregister := g.RegisterUpdateChannel(gossip.MakePrefixPattern(gossip.KeyStorePrefix))
+	stopper.RunWorker(func() {
+		for {
+			select {
+			case n := <-gossipC:
+				wg.Done()
+				gossipC <- n
+			case <-stopper.ShouldStop():
+				unregister()
+				return
+			}
+		}
+	})
 
 	const generations = 100
 	const nodes = 20

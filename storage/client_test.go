@@ -89,7 +89,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 		sCtx = &ctx
 	}
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
-	sCtx.Gossip = gossip.New(rpcContext, gossip.TestBootstrap)
+	sCtx.Gossip = gossip.New(rpcContext, gossip.TestBootstrap, stopper)
 	sCtx.Gossip.SetNodeID(nodeDesc.NodeID)
 	localSender := storage.NewStores()
 	rpcSend := func(_ rpc.Options, _ string, _ []net.Addr,
@@ -197,16 +197,16 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.clock == nil {
 		m.clock = hlc.NewClock(m.manualClock.UnixNano)
 	}
-	if m.gossip == nil {
-		rpcContext := rpc.NewContext(&base.Context{}, m.clock, nil)
-		m.gossip = gossip.New(rpcContext, gossip.TestBootstrap)
-		m.gossip.SetNodeID(math.MaxInt32)
-	}
 	if m.scannerStopper == nil {
 		m.scannerStopper = stop.NewStopper()
 	}
 	if m.clientStopper == nil {
 		m.clientStopper = stop.NewStopper()
+	}
+	if m.gossip == nil {
+		rpcContext := rpc.NewContext(&base.Context{}, m.clock, nil)
+		m.gossip = gossip.New(rpcContext, gossip.TestBootstrap, m.clientStopper)
+		m.gossip.SetNodeID(math.MaxInt32)
 	}
 	if m.transport == nil {
 		m.transport = storage.NewLocalRPCTransport(m.clientStopper)

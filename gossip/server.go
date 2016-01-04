@@ -52,17 +52,19 @@ type server struct {
 	sent     int                       // Count of infos sent from this server to clients
 	received int                       // Count of infos received from clients
 	ready    *sync.Cond                // Broadcasts wakeup to waiting gossip requests
+	stopper  *stop.Stopper             // Stopper to stop gossip notifications
 
 	simulationCycler *sync.Cond // Used when simulating the network to signal next cycle
 }
 
 // newServer creates and returns a server struct.
-func newServer() *server {
+func newServer(stopper *stop.Stopper) *server {
 	s := &server{
-		is:       newInfoStore(0, util.UnresolvedAddr{}),
+		is:       newInfoStore(0, util.UnresolvedAddr{}, stopper),
 		incoming: makeNodeSet(1),
 		lAddrMap: map[string]clientInfo{},
 		nodeMap:  map[roachpb.NodeID]string{},
+		stopper:  stopper,
 	}
 	s.ready = sync.NewCond(&s.mu)
 	return s
@@ -222,7 +224,7 @@ func (s *server) maxPeers() int {
 // then begins processing connecting clients in an infinite select
 // loop via goroutine. Periodically, clients connected and awaiting
 // the next round of gossip are awoken via the conditional variable.
-func (s *server) start(rpcServer *rpc.Server, addr net.Addr, stopper *stop.Stopper) {
+func (s *server) start(rpcServer *rpc.Server, addr net.Addr) {
 	s.is.NodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 	if err := rpcServer.Register("Gossip.Gossip", s.Gossip, &Request{}); err != nil {
 		log.Fatalf("unable to register gossip service with RPC server: %s", err)
@@ -230,17 +232,20 @@ func (s *server) start(rpcServer *rpc.Server, addr net.Addr, stopper *stop.Stopp
 	rpcServer.AddOpenCallback(s.onOpen)
 	rpcServer.AddCloseCallback(s.onClose)
 
-	updateCallback := func(_ string, _ roachpb.Value) {
-		// Wakeup all pending clients.
-		s.ready.Broadcast()
-	}
-	unregister := s.is.registerCallback(".*", updateCallback)
-
-	stopper.RunWorker(func() {
-		select {
-		case <-stopper.ShouldStop():
-			s.stop(unregister)
-			return
+	s.mu.Lock()
+	gossipC, unregister := s.is.registerUpdateChannel(".*")
+	s.mu.Unlock()
+	s.stopper.RunWorker(func() {
+		for {
+			select {
+			case n := <-gossipC:
+				// Wakeup all pending clients.
+				s.ready.Broadcast()
+				gossipC <- n
+			case <-s.stopper.ShouldStop():
+				s.stop(unregister)
+				return
+			}
 		}
 	})
 }

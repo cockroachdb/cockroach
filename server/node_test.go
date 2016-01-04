@@ -64,14 +64,14 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := gossip.New(nodeRPCContext, testContext.GossipBootstrapResolvers)
+	g := gossip.New(nodeRPCContext, testContext.GossipBootstrapResolvers, stopper)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
 		if gossipBS == addr {
 			gossipBS = ln.Addr()
 		}
 		g.SetResolvers([]resolver.Resolver{resolver.NewResolverFromAddress(gossipBS)})
-		g.Start(rpcServer, ln.Addr(), stopper)
+		g.Start(rpcServer, ln.Addr())
 	}
 	ctx.Gossip = g
 	sender := kv.NewDistSender(&kv.DistSenderContext{Clock: ctx.Clock, RPCContext: nodeRPCContext}, g)

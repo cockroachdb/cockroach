@@ -154,7 +154,19 @@ func NewStorePool(g *gossip.Gossip, clock *hlc.Clock, timeUntilStoreDead time.Du
 	heap.Init(&sp.queue)
 
 	storeRegex := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
-	g.RegisterCallback(storeRegex, sp.storeGossipUpdate)
+	gossipC, unregister := g.RegisterUpdateChannel(storeRegex)
+	stopper.RunWorker(func() {
+		for {
+			select {
+			case n := <-gossipC:
+				sp.storeGossipUpdate(n)
+				gossipC <- n
+			case <-stopper.ShouldStop():
+				unregister()
+				return
+			}
+		}
+	})
 
 	sp.start(stopper)
 
@@ -162,9 +174,9 @@ func NewStorePool(g *gossip.Gossip, clock *hlc.Clock, timeUntilStoreDead time.Du
 }
 
 // storeGossipUpdate The gossip callback used to keep the StorePool up to date.
-func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
+func (sp *StorePool) storeGossipUpdate(n gossip.Notification) {
 	var storeDesc roachpb.StoreDescriptor
-	if err := content.GetProto(&storeDesc); err != nil {
+	if err := n.Content.GetProto(&storeDesc); err != nil {
 		log.Error(err)
 		return
 	}
