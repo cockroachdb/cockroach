@@ -29,8 +29,8 @@ Gossip
 Gossip creates a gossip network of up to 250 nodes and outputs
 successive visualization of the gossip network graph via dot.
 
-Uses unix domain or tcp sockets for connecting 3, 10, 25, 50, 100 or
-250 nodes. Generates .dot graph output files for each cycle of the
+Uses tcp sockets for connecting 3, 10, 25, 50, 100 or 250
+nodes. Generates .dot graph output files for each cycle of the
 simulation.
 
 To run:
@@ -90,8 +90,7 @@ const (
 )
 
 var (
-	size        = flag.String("size", "medium", "size of network (tiny|small|medium|large|huge|ginormous)")
-	networkType = flag.String("network", "unix", "test with network type (unix|tcp)")
+	size = flag.String("size", "medium", "size of network (tiny|small|medium|large|huge|ginormous)")
 )
 
 // edge is a helper struct which describes an edge in the dot output graph.
@@ -199,16 +198,16 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 	f.WriteString("node [shape=record];\n")
 	for _, simNode := range network.Nodes {
 		node := simNode.Gossip
-		var incomplete int
+		var missing []roachpb.NodeID
 		var totalAge int64
 		for _, otherNode := range network.Nodes {
 			if otherNode == simNode {
 				continue // skip the node's own info
 			}
 			infoKey := otherNode.Addr.String()
+			// GetInfo returns an error if the info is missing.
 			if info, err := node.GetInfo(infoKey); err != nil {
-				log.Infof("error getting info for key %q: %s", infoKey, err)
-				incomplete++
+				missing = append(missing, otherNode.Gossip.GetNodeID())
 				quiescent = false
 			} else {
 				_, val, err := encoding.DecodeUint64(info)
@@ -218,8 +217,10 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 				totalAge += int64(cycle) - int64(val)
 			}
 		}
+		log.Infof("node %d: missing infos for nodes %s", node.GetNodeID(), missing)
 
 		var sentinelAge int64
+		// GetInfo returns an error if the info is missing.
 		if info, err := node.GetInfo(gossip.KeySentinel); err != nil {
 			log.Infof("error getting info for sentinel gossip key %q: %s", gossip.KeySentinel, err)
 		} else {
@@ -231,19 +232,19 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 		}
 
 		var age, nodeColor string
-		if incomplete > 0 {
+		if len(missing) > 0 {
 			nodeColor = "color=red,"
-			age = fmt.Sprintf("missing %d", incomplete)
+			age = fmt.Sprintf("missing %d", len(missing))
 		} else {
-			age = strconv.FormatFloat(float64(totalAge)/float64(len(network.Nodes)-1), 'f', 4, 64)
+			age = strconv.FormatFloat(float64(totalAge)/float64(len(network.Nodes)-1-len(missing)), 'f', 4, 64)
 		}
 		fontSize := minDotFontSize
 		if maxIncoming > 0 {
 			fontSize = minDotFontSize + int(math.Floor(float64(len(node.Incoming())*
 				(maxDotFontSize-minDotFontSize))/float64(maxIncoming)))
 		}
-		f.WriteString(fmt.Sprintf("\t%s [%sfontsize=%d,label=\"{%s|AA=%s, SA=%d}\"]\n",
-			node.GetNodeID(), nodeColor, fontSize, node.GetNodeID(), age, sentinelAge))
+		f.WriteString(fmt.Sprintf("\t%s [%sfontsize=%d,label=\"{%s|AA=%s, MH=%d, SA=%d}\"]\n",
+			node.GetNodeID(), nodeColor, fontSize, node.GetNodeID(), age, node.MaxHops(), sentinelAge))
 		outgoing := outgoingMap[node.GetNodeID()]
 		for _, e := range outgoing {
 			destSimNode, ok := network.GetNodeFromID(e.dest)
@@ -305,7 +306,7 @@ func main() {
 
 	edgeSet := make(map[string]edge)
 
-	n := simulation.NewNetwork(nodeCount, *networkType)
+	n := simulation.NewNetwork(nodeCount)
 	n.SimulateNetwork(
 		func(cycle int, network *simulation.Network) bool {
 			// Output dot graph.

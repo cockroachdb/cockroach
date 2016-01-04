@@ -18,6 +18,7 @@ package gossip
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
 	"regexp"
@@ -46,17 +47,19 @@ type callback struct {
 //
 // infoStores are not thread safe.
 type infoStore struct {
-	Infos           infoMap             `json:"infos,omitempty"` // Map from key to info
-	NodeID          roachpb.NodeID      `json:"-"`               // Owning node's ID
-	NodeAddr        util.UnresolvedAddr `json:"-"`               // Address of node owning this info store: "host:port"
-	highWaterStamps map[int32]int64     // High water timestamps for known gossip peers
-	callbacks       []*callback
+	Infos     infoMap             `json:"infos,omitempty"` // Map from key to info
+	NodeID    roachpb.NodeID      `json:"-"`               // Owning node's ID
+	NodeAddr  util.UnresolvedAddr `json:"-"`               // Address of node owning this info store: "host:port"
+	nodes     map[int32]*Node     // Per-node information for gossip peers
+	callbacks []*callback
 }
 
 var monoTime struct {
 	sync.Mutex
 	last int64
 }
+
+var errNotFresh = errors.New("info not fresh")
 
 // monotonicUnixNano returns a monotonically increasing value for
 // nanoseconds in Unix time. Since equal times are ignored with
@@ -100,10 +103,10 @@ func (is *infoStore) String() string {
 // newInfoStore allocates and returns a new infoStore.
 func newInfoStore(nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr) infoStore {
 	return infoStore{
-		Infos:           make(infoMap),
-		NodeID:          nodeID,
-		NodeAddr:        nodeAddr,
-		highWaterStamps: map[int32]int64{},
+		Infos:    make(infoMap),
+		NodeID:   nodeID,
+		NodeAddr: nodeAddr,
+		nodes:    map[int32]*Node{},
 	}
 }
 
@@ -153,50 +156,43 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 		iNanos := i.Value.Timestamp.WallTime
 		existingNanos := existingInfo.Value.Timestamp.WallTime
 		if iNanos < existingNanos || (iNanos == existingNanos && i.Hops >= existingInfo.Hops) {
-			return util.Errorf("info %+v older than current info %+v", i, existingInfo)
+			return errNotFresh
 		}
 	}
 	if i.OrigStamp == 0 {
 		i.Value.InitChecksum([]byte(key))
 		i.OrigStamp = monotonicUnixNano()
-		if hws := is.highWaterStamps[int32(i.NodeID)]; hws >= i.OrigStamp {
-			panic(util.Errorf("high water stamp %d >= %d", hws, i.OrigStamp))
+		if n, ok := is.nodes[int32(i.NodeID)]; ok && n.HighWaterStamp >= i.OrigStamp {
+			panic(util.Errorf("high water stamp %d >= %d", n.HighWaterStamp, i.OrigStamp))
 		}
 	}
 	// Update info map.
 	is.Infos[key] = i
-	// Update the high water timestamps.
-	if i.NodeID != 0 {
-		if is.highWaterStamps[int32(i.NodeID)] < i.OrigStamp {
-			is.highWaterStamps[int32(i.NodeID)] = i.OrigStamp
+	// Update the high water timestamp & min hops for the originating node.
+	if nID := int32(i.NodeID); nID != 0 {
+		n, ok := is.nodes[nID]
+		if !ok {
+			is.nodes[nID] = &Node{i.OrigStamp, i.Hops}
+		} else {
+			if n.HighWaterStamp < i.OrigStamp {
+				n.HighWaterStamp = i.OrigStamp
+			}
+			if n.MinHops > i.Hops {
+				n.MinHops = i.Hops
+			}
 		}
 	}
 	is.processCallbacks(key, i.Value)
 	return nil
 }
 
-// maxHops returns the maximum hops across all infos in the store.
-// This is the maximum number of gossip exchanges between any
-// originator and this node.
-func (is *infoStore) maxHops() uint32 {
-	var maxHops uint32
-	if err := is.visitInfos(func(key string, i *Info) error {
-		if i.Hops > maxHops {
-			maxHops = i.Hops
-		}
-		return nil
-	}); err != nil {
-		panic(err)
-	}
-	return maxHops
-}
-
-// getHighWaterStamps returns a copy of the high water timestamps map
+// getNodes returns a copy of the nodes map of gossip peer info
 // maintained by this infostore.
-func (is *infoStore) getHighWaterStamps() map[int32]int64 {
-	copy := make(map[int32]int64, len(is.highWaterStamps))
-	for k, v := range is.highWaterStamps {
-		copy[k] = v
+func (is *infoStore) getNodes() map[int32]*Node {
+	copy := make(map[int32]*Node, len(is.nodes))
+	for k, v := range is.nodes {
+		nodeCopy := *v
+		copy[k] = &nodeCopy
 	}
 	return copy
 }
@@ -272,10 +268,9 @@ func (is *infoStore) visitInfos(visitInfo func(string, *Info) error) error {
 
 // combine combines an incremental delta with the current infoStore.
 // All hop distances on infos are incremented to indicate they've
-// arrived from an external source.  Returns the count of "fresh"
+// arrived from an external source. Returns the count of "fresh"
 // infos in the provided delta.
-func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) int {
-	var freshCount int
+func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) (freshCount int, err error) {
 	for key, i := range infos {
 		copy := *i
 		copy.Hops++
@@ -285,24 +280,26 @@ func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) int 
 		if copy.OrigStamp == 0 {
 			panic(util.Errorf("combining info from node %d with 0 original timestamp", nodeID))
 		}
-		if err := is.addInfo(key, &copy); err == nil {
+		if addErr := is.addInfo(key, &copy); addErr == nil {
 			freshCount++
+		} else if addErr != errNotFresh {
+			err = addErr
 		}
 	}
-	return freshCount
+	return
 }
 
-// delta returns an incremental delta of infos added to the info store
-// since (not including) the high water timestamps specified. These
-// deltas are intended for efficiently updating peer nodes. Any infos
-// passed from node requesting delta are ignored.
-//
-// Returns nil if there are no deltas.
-func (is *infoStore) delta(nodeID roachpb.NodeID, highWaterStamps map[int32]int64) map[string]*Info {
+// delta returns a map of infos which are newer or have fewer hops
+// than the values indicated by the supplied nodes map. The
+// supplied nodes map contains gossip node information from the
+// perspective of the peer asking for the delta. That is, the map
+// contains a record of the most recent info timestamp and min hops
+// which the requester has seen from each node in the network.
+func (is *infoStore) delta(nodeID roachpb.NodeID, nodes map[int32]*Node) map[string]*Info {
 	infos := make(map[string]*Info)
 	// Compute delta of infos.
 	if err := is.visitInfos(func(key string, i *Info) error {
-		if i.isFresh(nodeID, highWaterStamps[int32(i.NodeID)]) {
+		if i.isFresh(nodeID, nodes[int32(i.NodeID)]) {
 			infos[key] = i
 		}
 		return nil
@@ -313,30 +310,36 @@ func (is *infoStore) delta(nodeID roachpb.NodeID, highWaterStamps map[int32]int6
 	return infos
 }
 
-// distant returns a nodeSet for gossip peers which originated Infos
-// with info.Hops > maxHops.
-func (is *infoStore) distant(maxHops uint32) nodeSet {
-	ns := makeNodeSet(0)
+// mostDistant returns the most distant gossip node known to the
+// store as well as the number of hops to reach it.
+func (is *infoStore) mostDistant() (roachpb.NodeID, uint32) {
+	var nodeID roachpb.NodeID
+	var maxHops uint32
 	if err := is.visitInfos(func(key string, i *Info) error {
 		if i.Hops > maxHops {
-			ns.addNode(i.NodeID)
+			maxHops = i.Hops
+			nodeID = i.NodeID
 		}
 		return nil
 	}); err != nil {
 		panic(err)
 	}
-	return ns
+	return nodeID, maxHops
 }
 
 // leastUseful determines which node ID from amongst the set is
-// currently contributing the least. Returns 0 if nodes is empty.
+// currently contributing the least. Returns the node ID. If nodes is
+// empty, returns 0.
 func (is *infoStore) leastUseful(nodes nodeSet) roachpb.NodeID {
-	contrib := make(map[roachpb.NodeID]int, nodes.len())
+	contrib := make(map[roachpb.NodeID]map[roachpb.NodeID]struct{}, nodes.len())
 	for node := range nodes.nodes {
-		contrib[node] = 0
+		contrib[node] = map[roachpb.NodeID]struct{}{}
 	}
 	if err := is.visitInfos(func(key string, i *Info) error {
-		contrib[i.PeerID]++
+		if _, ok := contrib[i.PeerID]; !ok {
+			contrib[i.PeerID] = map[roachpb.NodeID]struct{}{}
+		}
+		contrib[i.PeerID][i.NodeID] = struct{}{}
 		return nil
 	}); err != nil {
 		panic(err)
@@ -344,7 +347,8 @@ func (is *infoStore) leastUseful(nodes nodeSet) roachpb.NodeID {
 
 	least := math.MaxInt32
 	var leastNode roachpb.NodeID
-	for id, count := range contrib {
+	for id, m := range contrib {
+		count := len(m)
 		if nodes.hasNode(id) {
 			if count < least {
 				least = count

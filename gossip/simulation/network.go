@@ -43,14 +43,12 @@ type Node struct {
 
 // Network provides access to a test gossip network of nodes.
 type Network struct {
-	Nodes       []*Node
-	NetworkType string // "tcp" or "unix"
-	Stopper     *stop.Stopper
+	Nodes   []*Node
+	Stopper *stop.Stopper
 }
 
-// NewNetwork creates nodeCount gossip nodes. The networkType should
-// be set to either "tcp" or "unix".
-func NewNetwork(nodeCount int, networkType string) *Network {
+// NewNetwork creates nodeCount gossip nodes.
+func NewNetwork(nodeCount int) *Network {
 	clock := hlc.NewClock(hlc.UnixNano)
 
 	log.Infof("simulating gossip network with %d nodes", nodeCount)
@@ -67,7 +65,7 @@ func NewNetwork(nodeCount int, networkType string) *Network {
 	for i := range nodes {
 		server := rpc.NewServer(rpcContext)
 
-		testAddr := util.CreateTestAddr(networkType)
+		testAddr := util.CreateTestAddr("tcp")
 		ln, err := util.ListenAndServe(stopper, server, testAddr, tlsConfig)
 		if err != nil {
 			log.Fatal(err)
@@ -99,9 +97,8 @@ func NewNetwork(nodeCount int, networkType string) *Network {
 	}
 
 	return &Network{
-		Nodes:       nodes,
-		NetworkType: networkType,
-		Stopper:     stopper,
+		Nodes:   nodes,
+		Stopper: stopper,
 	}
 }
 

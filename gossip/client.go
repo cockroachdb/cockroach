@@ -29,21 +29,21 @@ import (
 
 // client is a client-side RPC connection to a gossip peer node.
 type client struct {
-	peerID                roachpb.NodeID  // Peer node ID; 0 until first gossip response
-	addr                  net.Addr        // Peer node network address
-	rpcClient             *rpc.Client     // RPC client
-	forwardAddr           net.Addr        // Set if disconnected with an alternate addr
-	sendingGossip         bool            // True if there's an outstanding RPC to send gossip
-	remoteHighWaterStamps map[int32]int64 // High water timestamps for remote server; matches rpc Request/Response
-	closer                chan struct{}   // Client shutdown channel
+	peerID        roachpb.NodeID  // Peer node ID; 0 until first gossip response
+	addr          net.Addr        // Peer node network address
+	rpcClient     *rpc.Client     // RPC client
+	forwardAddr   net.Addr        // Set if disconnected with an alternate addr
+	sendingGossip bool            // True if there's an outstanding RPC to send gossip
+	remoteNodes   map[int32]*Node // Remote server's high water timestamps and min hops
+	closer        chan struct{}   // Client shutdown channel
 }
 
 // newClient creates and returns a client struct.
 func newClient(addr net.Addr) *client {
 	return &client{
-		addr: addr,
-		remoteHighWaterStamps: map[int32]int64{},
-		closer:                make(chan struct{}),
+		addr:        addr,
+		remoteNodes: map[int32]*Node{},
+		closer:      make(chan struct{}),
 	}
 }
 
@@ -87,24 +87,25 @@ func (c *client) close() {
 
 // getGossip requests the latest gossip from the remote server by
 // supplying a map of this node's knowledge of other nodes' high water
-// timestamps.
+// timestamps and min hops.
 func (c *client) getGossip(g *Gossip, addr, lAddr util.UnresolvedAddr, done chan *netrpc.Call) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	nodeID := g.is.NodeID
 	args := Request{
-		NodeID:          nodeID,
-		Addr:            addr,
-		LAddr:           lAddr,
-		HighWaterStamps: g.is.getHighWaterStamps(),
+		NodeID: nodeID,
+		Addr:   addr,
+		LAddr:  lAddr,
+		Nodes:  g.is.getNodes(),
 	}
 	reply := Response{}
 	c.rpcClient.Go("Gossip.Gossip", &args, &reply, done)
 }
 
 // sendGossip sends the latest gossip to the remote server, based on
-// the remote server's high water timestamps map.
+// the remote server's notion of other nodes' high water timestamps
+// and min hops.
 func (c *client) sendGossip(g *Gossip, addr, lAddr util.UnresolvedAddr, done chan *netrpc.Call) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -113,17 +114,17 @@ func (c *client) sendGossip(g *Gossip, addr, lAddr util.UnresolvedAddr, done cha
 		return
 	}
 	nodeID := g.is.NodeID
-	delta := g.is.delta(c.peerID, c.remoteHighWaterStamps)
+	delta := g.is.delta(c.peerID, c.remoteNodes)
 	if len(delta) == 0 {
 		return
 	}
 
 	args := Request{
-		NodeID:          nodeID,
-		Addr:            addr,
-		LAddr:           lAddr,
-		Delta:           delta,
-		HighWaterStamps: g.is.getHighWaterStamps(),
+		NodeID: nodeID,
+		Addr:   addr,
+		LAddr:  lAddr,
+		Delta:  delta,
+		Nodes:  g.is.getNodes(),
 	}
 	reply := Response{}
 	c.rpcClient.Go("Gossip.Gossip", &args, &reply, done)
@@ -144,20 +145,24 @@ func (c *client) handleGossip(g *Gossip, call *netrpc.Call) error {
 
 	// Combine remote node's infostore delta with ours.
 	if reply.Delta != nil {
-		freshCount := g.is.combine(reply.Delta, reply.NodeID)
+		freshCount, err := g.is.combine(reply.Delta, reply.NodeID)
+		if err != nil {
+			log.Warningf("node %d failed to fully combine delta from node %d: %s", g.is.NodeID, reply.NodeID, err)
+		}
 		if infoCount := len(reply.Delta); infoCount > 0 {
 			if log.V(1) {
 				log.Infof("received %s from node %d (%d fresh)", reply.Delta, reply.NodeID, freshCount)
 			} else {
-				log.Infof("received %d (%d fresh) info(s) from node %d", infoCount, freshCount, reply.NodeID)
+				log.Infof("node %d received %d (%d fresh) info(s) from node %d", g.is.NodeID, infoCount, freshCount, reply.NodeID)
 			}
 		}
+		g.maybeTighten()
 	} else if len(args.Delta) > 0 {
 		log.Infof("sent %d info(s) to node %d", len(args.Delta), reply.NodeID)
 	}
 	c.peerID = reply.NodeID
 	g.outgoing.addNode(c.peerID)
-	c.remoteHighWaterStamps = reply.HighWaterStamps
+	c.remoteNodes = reply.Nodes
 
 	// Handle remote forwarding.
 	if reply.AlternateAddr != nil {
