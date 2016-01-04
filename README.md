@@ -100,10 +100,10 @@ OK
 Check out `./cockroach help` to see all available commands.
 
 
-## Deploying CockroachDB in production
+## Deploying CockroachDB in the cloud
 
-To run a CockroachDB cluster on various cloud platforms using [docker machine](http://docs.docker.com/machine/),
-see [cockroach-prod](https://github.com/cockroachdb/cockroach-prod).
+For a sample configuration to run an insecure CockroachDB cluster on AWS using [Terraform](https://terraform.io/),
+see [cloud deployment](https://github.com/cockroachdb/cockroach/tree/master/cloud/aws).
 
 ## Running a multi-node cluster
 
