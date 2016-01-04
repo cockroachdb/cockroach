@@ -72,6 +72,8 @@ const (
 	// need a periodic gossip to safeguard against failure of a leader
 	// to gossip after performing an update to the map.
 	configGossipInterval = 1 * time.Minute
+	// The default size of the raft entries cache.
+	defaultRaftEntryCacheSize = 30
 )
 
 // TestingCommandFilter may be set in tests to intercept the handling
@@ -184,7 +186,8 @@ type Replica struct {
 		*sync.Cond
 		value roachpb.ReplicaDescriptor
 	}
-	truncatedState unsafe.Pointer // *roachpb.RaftTruncatedState
+	truncatedState unsafe.Pointer  // *roachpb.RaftTruncatedState
+	raftEntryCache *raftEntryCache // Most recent entries
 }
 
 var _ client.Sender = &Replica{}
@@ -192,11 +195,12 @@ var _ client.Sender = &Replica{}
 // NewReplica initializes the replica using the given metadata.
 func NewReplica(desc *roachpb.RangeDescriptor, store *Store) (*Replica, error) {
 	r := &Replica{
-		store:       store,
-		cmdQ:        NewCommandQueue(),
-		tsCache:     NewTimestampCache(store.Clock()),
-		sequence:    NewSequenceCache(desc.RangeID),
-		pendingCmds: map[cmdIDKey]*pendingCmd{},
+		store:          store,
+		cmdQ:           NewCommandQueue(),
+		tsCache:        NewTimestampCache(store.Clock()),
+		sequence:       NewSequenceCache(desc.RangeID),
+		pendingCmds:    map[cmdIDKey]*pendingCmd{},
+		raftEntryCache: newRaftEntryCache(defaultRaftEntryCacheSize),
 	}
 	r.pendingReplica.Cond = sync.NewCond(r)
 	r.setDescWithoutProcessUpdate(desc)
@@ -1006,6 +1010,16 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 		// time it's required.
 		if _, ok := ba.GetArg(roachpb.TruncateLog); ok {
 			r.setCachedTruncatedState(nil)
+
+			// truncate entry cache
+			ts := roachpb.RaftTruncatedState{}
+			ok, err := engine.MVCCGetProto(r.store.Engine(), keys.RaftTruncatedStateKey(r.Desc().RangeID),
+				roachpb.ZeroTimestamp, true, nil, &ts)
+			if ok && err == nil && ts.Index != 0 {
+				r.raftEntryCache.delEntry(r.raftEntryCache.firstIndex, ts.Index)
+			} else {
+				r.raftEntryCache.clearAll()
+			}
 		}
 	}
 
