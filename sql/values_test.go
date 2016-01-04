@@ -20,7 +20,9 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -105,6 +107,74 @@ func TestValues(t *testing.T) {
 			if !reflect.DeepEqual(rows, tc.rows) {
 				t.Errorf("%d: expected rows:\n%+v\nactual rows:\n%+v", i, tc.rows, rows)
 			}
+		}
+	}
+}
+
+type floatAlias float32
+type boolAlias bool
+type stringAlias string
+
+func TestGolangParams(t *testing.T) {
+	// Each test case pairs an arbitrary value and parser.Datum which has the same
+	// type
+	testCases := []struct {
+		value        interface{}
+		expectedType reflect.Type
+	}{
+		// Null type.
+		{nil, reflect.TypeOf(parser.DNull)},
+
+		// Bool type.
+		{true, reflect.TypeOf(parser.DummyBool)},
+
+		// Primitive Integer types.
+		{int(1), reflect.TypeOf(parser.DummyInt)},
+		{int8(1), reflect.TypeOf(parser.DummyInt)},
+		{int16(1), reflect.TypeOf(parser.DummyInt)},
+		{int32(1), reflect.TypeOf(parser.DummyInt)},
+		{int64(1), reflect.TypeOf(parser.DummyInt)},
+		{uint(1), reflect.TypeOf(parser.DummyInt)},
+		{uint8(1), reflect.TypeOf(parser.DummyInt)},
+		{uint16(1), reflect.TypeOf(parser.DummyInt)},
+		{uint32(1), reflect.TypeOf(parser.DummyInt)},
+		{uint64(1), reflect.TypeOf(parser.DummyInt)},
+
+		// Primitive Float types.
+		{float32(1.0), reflect.TypeOf(parser.DummyFloat)},
+		{float64(1.0), reflect.TypeOf(parser.DummyFloat)},
+
+		// String type.
+		{"test", reflect.TypeOf(parser.DummyString)},
+
+		// Bytes type.
+		{[]byte("abc"), reflect.TypeOf(parser.DummyBytes)},
+
+		// Interval and timestamp.
+		{time.Duration(1), reflect.TypeOf(parser.DummyInterval)},
+		{time.Now(), reflect.TypeOf(parser.DummyTimestamp)},
+
+		// Primitive type aliases.
+		{roachpb.NodeID(1), reflect.TypeOf(parser.DummyInt)},
+		{ID(1), reflect.TypeOf(parser.DummyInt)},
+		{floatAlias(1), reflect.TypeOf(parser.DummyFloat)},
+		{boolAlias(true), reflect.TypeOf(parser.DummyBool)},
+		{stringAlias("string"), reflect.TypeOf(parser.DummyString)},
+
+		// Byte slice aliases.
+		{roachpb.Key("key"), reflect.TypeOf(parser.DummyBytes)},
+		{roachpb.RKey("key"), reflect.TypeOf(parser.DummyBytes)},
+	}
+
+	for i, tcase := range testCases {
+		params := golangParameters([]interface{}{tcase.value})
+		output, valid := params.Arg("1")
+		if !valid {
+			t.Errorf("case %d failed: argument was invalid", i)
+			continue
+		}
+		if a, e := reflect.TypeOf(output), tcase.expectedType; a != e {
+			t.Errorf("case %d failed: expected type %s, got %s", i, e.String(), a.String())
 		}
 	}
 }
