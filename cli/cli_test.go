@@ -227,9 +227,13 @@ func Example_ranges() {
 	// range ls
 	// /Min-"c" [1]
 	// 	0: node-id=1 store-id=1
-	// "c"-/Max [2]
+	// "c"-/Table/501 [4]
 	// 	0: node-id=1 store-id=1
-	// 2 result(s)
+	// /Table/501-/Table/502 [2]
+	// 	0: node-id=1 store-id=1
+	// /Table/502-/Max [3]
+	// 	0: node-id=1 store-id=1
+	// 4 result(s)
 	// kv scan
 	// "a"	"1"
 	// "b"	"2"
@@ -244,9 +248,13 @@ func Example_ranges() {
 	// 4 result(s)
 	// range merge b
 	// range ls
-	// /Min-/Max [1]
+	// /Min-/Table/501 [1]
 	// 	0: node-id=1 store-id=1
-	// 1 result(s)
+	// /Table/501-/Table/502 [2]
+	// 	0: node-id=1 store-id=1
+	// /Table/502-/Max [3]
+	// 	0: node-id=1 store-id=1
+	// 3 result(s)
 	// kv scan
 	// "a"	"1"
 	// "b"	"2"

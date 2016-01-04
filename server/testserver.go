@@ -17,14 +17,17 @@
 package server
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
@@ -39,6 +42,9 @@ const (
 	// TestUser is a fixed user used in unittests.
 	// It has valid embedded client certs.
 	TestUser = "testuser"
+	// initialSplitsTimeout is the amount of time to wait for initial splits to
+	// occur on a freshly started server.
+	initialSplitsTimeout = time.Second
 )
 
 // StartTestServer starts a in-memory test server.
@@ -51,7 +57,6 @@ func StartTestServer(t util.Tester) *TestServer {
 			log.Fatalf("Could not start server: %v", err)
 		}
 	}
-
 	return s
 }
 
@@ -201,7 +206,50 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 		return err
 	}
 
+	// If enabled, wait for initial splits to complete before returning control.
+	// If initial splits do not complete, the server is stopped before
+	// returning.
+	if config.TestingTableSplitsDisabled() {
+		return nil
+	}
+	if err := ts.WaitForInitialSplits(); err != nil {
+		ts.Stop()
+		return err
+	}
+
 	return nil
+}
+
+// ExpectedInitialRangeCount returns the expected number of ranges that should
+// be on the server after initial (asynchronous) splits have been completed,
+// assuming no additional information is added outside of the normal bootstrap
+// process.
+func ExpectedInitialRangeCount() int {
+	return GetBootstrapSchema().DescriptorCount() - sql.NumSystemDescriptors + 1
+}
+
+// WaitForInitialSplits waits for the server to complete its expected initial
+// splits at startup. If the expected range count is not reached within a
+// configured timeout, an error is returned.
+func (ts *TestServer) WaitForInitialSplits() error {
+	kvDB, err := client.Open(ts.Stopper(), fmt.Sprintf("%s://%s@%s?certs=%s",
+		ts.Ctx.RPCRequestScheme(), security.NodeUser, ts.ServingAddr(), ts.Ctx.Certs))
+	if err != nil {
+		return err
+	}
+
+	expectedRanges := ExpectedInitialRangeCount()
+	return util.RetryForDuration(initialSplitsTimeout, func() error {
+		// Scan all keys in the Meta2Prefix; we only need a count.
+		rows, err := kvDB.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+		if err != nil {
+			return err
+		}
+		if a, e := len(rows), expectedRanges; a != e {
+			return util.Errorf("had %d ranges at startup, expected %d", a, e)
+		}
+		return nil
+	})
 }
 
 // ServingAddr returns the rpc server's address. Should be used by clients.

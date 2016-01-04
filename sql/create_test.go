@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -70,7 +71,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	if kvs, err := kvDB.Scan(start, start.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else {
-		if a, e := len(kvs), sql.NumSystemDescriptors; a != e {
+		if a, e := len(kvs), server.GetBootstrapSchema().DescriptorCount(); a != e {
 			t.Fatalf("expected %d keys to have been written, found %d keys", e, a)
 		}
 	}

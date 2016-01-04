@@ -92,6 +92,14 @@ func allocateStoreIDs(nodeID roachpb.NodeID, inc int64, db *client.DB) (roachpb.
 	return roachpb.StoreID(r.ValueInt() - inc + 1), nil
 }
 
+// GetBootstrapSchema returns the schema which will be used to bootstrap a new
+// server.
+func GetBootstrapSchema() sql.MetadataSchema {
+	schema := sql.MakeMetadataSchema()
+	storage.AddEventLogToMetadataSchema(&schema)
+	return schema
+}
+
 // BootstrapCluster bootstraps a multiple stores using the provided engines and
 // cluster ID. The first bootstrapped store contains a single range spanning
 // all keys. Initial range lookup metadata is populated for the range.
@@ -131,7 +139,7 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 		// not create the range, just its data.  Only do this if this is the
 		// first store.
 		if i == 0 {
-			initialValues := sql.MakeMetadataSchema().GetInitialValues()
+			initialValues := GetBootstrapSchema().GetInitialValues()
 			if err := s.BootstrapRange(initialValues); err != nil {
 				return nil, err
 			}

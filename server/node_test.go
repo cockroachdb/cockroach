@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
-	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -138,7 +137,7 @@ func TestBootstrapCluster(t *testing.T) {
 		roachpb.Key("\x04store-idgen"),
 	}
 	// Add the initial keys for sql.
-	for _, kv := range sql.MakeMetadataSchema().GetInitialValues() {
+	for _, kv := range GetBootstrapSchema().GetInitialValues() {
 		expectedKeys = append(expectedKeys, kv.Key)
 	}
 	// Resort the list. The sql values are not sorted.
@@ -430,8 +429,8 @@ func TestStatusSummaries(t *testing.T) {
 	content := "junk"
 	leftKey := "a"
 
-	// Write to the range to ensure that the raft machinery is running.
-	if err := ts.db.Put(leftKey, content); err != nil {
+	// Scan over all keys to "wake up" all replicas (force a leader election).
+	if _, err := ts.db.Scan(keys.MetaMax, keys.MaxKey, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -440,15 +439,26 @@ func TestStatusSummaries(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Wait for full replication of initial ranges.
+	initialRanges := int32(ExpectedInitialRangeCount())
+	util.SucceedsWithin(t, time.Second, func() error {
+		for i := 1; i <= int(initialRanges); i++ {
+			if s.RaftStatus(roachpb.RangeID(i)) == nil {
+				return util.Errorf("Store %d replica %d is not present in raft", s.StoreID(), i)
+			}
+		}
+		return nil
+	})
+
 	expectedNodeStatus := &status.NodeStatus{
-		RangeCount:           1,
+		RangeCount:           initialRanges,
 		StoreIDs:             []roachpb.StoreID{1, 2, 3},
 		StartedAt:            0,
 		UpdatedAt:            0,
 		Desc:                 ts.node.Descriptor,
-		LeaderRangeCount:     1,
-		AvailableRangeCount:  1,
-		ReplicatedRangeCount: 1,
+		LeaderRangeCount:     initialRanges,
+		AvailableRangeCount:  initialRanges,
+		ReplicatedRangeCount: initialRanges,
 		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -461,10 +471,10 @@ func TestStatusSummaries(t *testing.T) {
 	expectedStoreStatus := &storage.StoreStatus{
 		Desc:                 *storeDesc,
 		NodeID:               1,
-		RangeCount:           1,
-		LeaderRangeCount:     1,
-		AvailableRangeCount:  1,
-		ReplicatedRangeCount: 1,
+		RangeCount:           initialRanges,
+		LeaderRangeCount:     initialRanges,
+		AvailableRangeCount:  initialRanges,
+		ReplicatedRangeCount: initialRanges,
 		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -510,14 +520,14 @@ func TestStatusSummaries(t *testing.T) {
 	}
 
 	expectedNodeStatus = &status.NodeStatus{
-		RangeCount:           1,
+		RangeCount:           initialRanges,
 		StoreIDs:             []roachpb.StoreID{1, 2, 3},
 		StartedAt:            oldNodeStats.StartedAt,
 		UpdatedAt:            oldNodeStats.UpdatedAt,
 		Desc:                 ts.node.Descriptor,
-		LeaderRangeCount:     1,
-		AvailableRangeCount:  1,
-		ReplicatedRangeCount: 1,
+		LeaderRangeCount:     initialRanges,
+		AvailableRangeCount:  initialRanges,
+		ReplicatedRangeCount: initialRanges,
 		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -530,10 +540,10 @@ func TestStatusSummaries(t *testing.T) {
 	expectedStoreStatus = &storage.StoreStatus{
 		Desc:                 oldStoreStats.Desc,
 		NodeID:               1,
-		RangeCount:           1,
-		LeaderRangeCount:     1,
-		AvailableRangeCount:  1,
-		ReplicatedRangeCount: 1,
+		RangeCount:           initialRanges,
+		LeaderRangeCount:     initialRanges,
+		AvailableRangeCount:  initialRanges,
+		ReplicatedRangeCount: initialRanges,
 		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -563,14 +573,14 @@ func TestStatusSummaries(t *testing.T) {
 	}
 
 	expectedNodeStatus = &status.NodeStatus{
-		RangeCount:           2,
+		RangeCount:           initialRanges + 1,
 		StoreIDs:             []roachpb.StoreID{1, 2, 3},
 		StartedAt:            oldNodeStats.StartedAt,
 		UpdatedAt:            oldNodeStats.UpdatedAt,
 		Desc:                 ts.node.Descriptor,
-		LeaderRangeCount:     2,
-		AvailableRangeCount:  2,
-		ReplicatedRangeCount: 2,
+		LeaderRangeCount:     initialRanges + 1,
+		AvailableRangeCount:  initialRanges + 1,
+		ReplicatedRangeCount: initialRanges + 1,
 		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,
@@ -583,10 +593,10 @@ func TestStatusSummaries(t *testing.T) {
 	expectedStoreStatus = &storage.StoreStatus{
 		Desc:                 oldStoreStats.Desc,
 		NodeID:               1,
-		RangeCount:           2,
-		LeaderRangeCount:     2,
-		AvailableRangeCount:  2,
-		ReplicatedRangeCount: 2,
+		RangeCount:           initialRanges + 1,
+		LeaderRangeCount:     initialRanges + 1,
+		AvailableRangeCount:  initialRanges + 1,
+		ReplicatedRangeCount: initialRanges + 1,
 		Stats: engine.MVCCStats{
 			LiveBytes: 1,
 			KeyBytes:  1,

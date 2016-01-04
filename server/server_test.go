@@ -147,7 +147,7 @@ func TestInitEngines(t *testing.T) {
 func TestSelfBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
-	s.Stop()
+	defer s.Stop()
 }
 
 // TestHealth verifies that health endpoint return "ok".
@@ -389,6 +389,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 
 	for i, tc := range testCases {
 		s := StartTestServer(t)
+		defer s.Stop()
 		ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock(), RPCContext: s.RPCContext()}, s.Gossip())
 		tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, nil, s.stopper)
 
@@ -423,7 +424,6 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 				}
 			}
 		}
-		defer s.Stop()
 	}
 }
 

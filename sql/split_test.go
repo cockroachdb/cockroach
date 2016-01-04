@@ -79,13 +79,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	s, sqlDB, kvDB := setupWithContext(t, getFastScanContext())
 	defer cleanup(s, sqlDB)
 
-	num, err := getNumRanges(kvDB)
-	if err != nil {
-		t.Fatalf("failed to retrieve range list: %s", err)
-	}
-	if num != 1 {
-		t.Fatalf("expected no splits, but found %d ranges", num)
-	}
+	expectedInitialRanges := server.ExpectedInitialRangeCount()
 
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
@@ -98,7 +92,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if e := 2; num != e {
+		if e := expectedInitialRanges + 1; num != e {
 			return util.Errorf("expected %d splits, found %d", e, num)
 		}
 		return nil
@@ -111,8 +105,8 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !rangesMatchSplits(ranges, splits) {
-		t.Fatalf("Found ranges: %v\nexpected: %v", ranges, splits)
+	if a, e := ranges[expectedInitialRanges-1:], splits; !rangesMatchSplits(a, e) {
+		t.Fatalf("Found ranges: %v\nexpected: %v", a, e)
 	}
 
 	// Let's create a table.
@@ -125,7 +119,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if e := 3; num != e {
+		if e := expectedInitialRanges + 2; num != e {
 			return util.Errorf("expected %d splits, found %d", e, num)
 		}
 		return nil
@@ -137,7 +131,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !rangesMatchSplits(ranges, splits) {
-		t.Fatalf("Found ranges: %v\nexpected: %v", ranges, splits)
+	if a, e := ranges[expectedInitialRanges-1:], splits; !rangesMatchSplits(a, e) {
+		t.Fatalf("Found ranges: %v\nexpected: %v", a, e)
 	}
 }

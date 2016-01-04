@@ -78,6 +78,14 @@ func TestingDisableTableSplits() func() {
 	}
 }
 
+// TestingTableSplitsDisabled is a testing-only function that returns true if table
+// splits are currently disabled.
+func TestingTableSplitsDisabled() bool {
+	testingLock.Lock()
+	defer testingLock.Unlock()
+	return testingDisableTableSplits
+}
+
 // Validate verifies some ZoneConfig fields.
 // This should be used to validate user input when setting a new zone config.
 func (z ZoneConfig) Validate() error {
@@ -271,10 +279,7 @@ func (s SystemConfig) getZoneConfigForID(id uint32) (*ZoneConfig, error) {
 // at which to split the span [start, end).
 // The only required splits are at each user table prefix.
 func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.RKey {
-	testingLock.Lock()
-	tableSplitsDisabled := testingDisableTableSplits
-	testingLock.Unlock()
-	if tableSplitsDisabled {
+	if TestingTableSplitsDisabled() {
 		return nil
 	}
 

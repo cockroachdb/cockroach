@@ -62,6 +62,13 @@ var defaultRPCRetryOptions = retry.Options{
 	Multiplier:     2,
 }
 
+// GetDefaultDistSenderRetryOptions returns the default retry options for a
+// DistSender. This is helpful for users that want to overwrite a subset of the
+// default options when creating a custom DistSenderContext.
+func GetDefaultDistSenderRetryOptions() retry.Options {
+	return defaultRPCRetryOptions
+}
+
 // A firstRangeMissingError indicates that the first range has not yet
 // been gossiped. This will be the case for a node which hasn't yet
 // joined the gossip network.
