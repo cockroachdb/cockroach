@@ -110,6 +110,7 @@ type LocalCluster struct {
 	CertsDir       string
 	monitorStopper chan struct{}
 	logDir         string
+	keepLogs       bool
 	ForceLogging   bool // Forces logging to disk on a per test basis
 }
 
@@ -268,6 +269,7 @@ func (l *LocalCluster) initCluster() {
 	}
 
 	if l.logDir != "" {
+		l.keepLogs = true
 		if !filepath.IsAbs(l.logDir) {
 			l.logDir = filepath.Join(pwd, l.logDir)
 		}
@@ -575,11 +577,9 @@ func (l *LocalCluster) stop() {
 		maybePanic(n.Remove())
 	}
 	l.Nodes = nil
-	// Only delete the logging directory if ForceLogging was set and there was
-	// no passed in l.logDir flag. This must be after the killing of the
-	// nodes or there might be a panic when it tries to log that it is killing
-	// the node.
-	if l.ForceLogging && l.logDir != "" {
+	// Removing the log files must happen after shutting down the nodes or
+	// there might be a panic when it tries to log that it is killing the node.
+	if !l.keepLogs {
 		_ = os.RemoveAll(l.logDir)
 		l.logDir = ""
 	}
