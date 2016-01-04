@@ -54,7 +54,18 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		n.GroupBy[i] = norm
+		// If a col index is specified, replace it with that expression first.
+		// NB: This is not a deep copy, and thus when extractAggregateFuncs runs
+		// on s.render, the GroupBy expressions can contain wrapped qvalues.
+		// aggregateFunc's Eval() method handles being called during grouping.
+		if col, err := s.colIndex(norm); err != nil {
+			return nil, err
+		} else if col >= 0 {
+			n.GroupBy[i] = s.render[col]
+		} else {
+			n.GroupBy[i] = norm
+		}
+
 	}
 
 	if err := checkAggregateExprs(n.GroupBy, s.render); err != nil {
@@ -158,8 +169,8 @@ type groupNode struct {
 
 	addNullBucketIfEmpty bool
 
-	values     valuesNode
-	intialized bool
+	values      valuesNode
+	initialized bool
 
 	// During rendering, aggregateFuncs compute their result for group.currentBucket.
 	currentBucket string
@@ -182,7 +193,7 @@ func (n *groupNode) Values() parser.DTuple {
 }
 
 func (n *groupNode) Next() bool {
-	if !n.intialized && n.err == nil {
+	if !n.initialized && n.err == nil {
 		n.computeAggregates()
 	}
 	if n.err != nil {
@@ -192,7 +203,6 @@ func (n *groupNode) Next() bool {
 }
 
 func (n *groupNode) computeAggregates() {
-	n.intialized = true
 	var scratch []byte
 
 	// Loop over the rows passing the values into the corresponding aggregation
@@ -260,6 +270,9 @@ func (n *groupNode) computeAggregates() {
 
 		n.values.rows = append(n.values.rows, row)
 	}
+
+	// Since this controls Eval behavior of aggregateFunc, it is not set until init is complete.
+	n.initialized = true
 }
 
 func (n *groupNode) Err() error {
@@ -562,6 +575,13 @@ func (a *aggregateFunc) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
 }
 
 func (a *aggregateFunc) Eval(ctx parser.EvalContext) (parser.Datum, error) {
+	// During init of the group buckets, grouped expressions (i.e. wrapped
+	// qvalues) are Eval()'ed to determine the bucket for a row, so pass these
+	// calls through to the underlying `arg` expr Eval until init is done.
+	if !a.group.initialized {
+		return a.arg.Eval(ctx)
+	}
+
 	found, ok := a.buckets[a.group.currentBucket]
 	if !ok {
 		found = a.create()
