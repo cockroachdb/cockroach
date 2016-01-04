@@ -1457,7 +1457,10 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 			// flaky without a bit of a delay.
 			r.store.stopper.RunAsyncTask(func() {
 				time.Sleep(10 * time.Millisecond)
-				r.store.multiraft.Campaign(split.NewDesc.RangeID)
+				// TODO(bdarnell): make sure newRng hasn't been removed
+				newRng.Lock()
+				_ = newRng.raftGroup.Campaign()
+				newRng.Unlock()
 			})
 		}
 	})
@@ -1628,7 +1631,6 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger)
 }
 
 func (r *Replica) changeReplicasTrigger(batch engine.Engine, change *roachpb.ChangeReplicasTrigger) error {
-	defer r.clearPendingChangeReplicas()
 	cpy := *r.Desc()
 	cpy.Replicas = change.UpdatedReplicas
 	cpy.NextReplicaID = change.NextReplicaID
@@ -1659,53 +1661,52 @@ func (r *Replica) changeReplicasTrigger(batch engine.Engine, change *roachpb.Cha
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
 func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica roachpb.ReplicaDescriptor, desc *roachpb.RangeDescriptor) error {
-	r.Lock()
-	for r.pendingReplica.value.ReplicaID != 0 {
-		r.pendingReplica.Wait()
-	}
 
 	// Validate the request and prepare the new descriptor.
 	updatedDesc := *desc
 	updatedDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
-	found := -1       // tracks NodeID && StoreID
-	nodeUsed := false // tracks NodeID only
-	for i, existingRep := range desc.Replicas {
-		nodeUsed = nodeUsed || existingRep.NodeID == replica.NodeID
-		if existingRep.NodeID == replica.NodeID &&
-			existingRep.StoreID == replica.StoreID {
-			found = i
-			replica.ReplicaID = existingRep.ReplicaID
-			break
+	err := func() error {
+		r.Lock()
+		defer r.Unlock()
+
+		found := -1       // tracks NodeID && StoreID
+		nodeUsed := false // tracks NodeID only
+		for i, existingRep := range desc.Replicas {
+			nodeUsed = nodeUsed || existingRep.NodeID == replica.NodeID
+			if existingRep.NodeID == replica.NodeID &&
+				existingRep.StoreID == replica.StoreID {
+				found = i
+				replica.ReplicaID = existingRep.ReplicaID
+				break
+			}
 		}
+		if changeType == roachpb.ADD_REPLICA {
+			// If the replica exists on the remote node, no matter in which store,
+			// abort the replica add.
+			if nodeUsed {
+				return util.Errorf("adding replica %v which is already present in range %d",
+					replica, desc.RangeID)
+			}
+			replica.ReplicaID = updatedDesc.NextReplicaID
+			updatedDesc.NextReplicaID++
+			updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
+		} else if changeType == roachpb.REMOVE_REPLICA {
+			// If that exact node-store combination does not have the replica,
+			// abort the removal.
+			if found == -1 {
+				return util.Errorf("removing replica %v which is not present in range %d",
+					replica, desc.RangeID)
+			}
+			updatedDesc.Replicas[found] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
+			updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
+		}
+		return nil
+	}()
+	if err != nil {
+		return err
 	}
-	if changeType == roachpb.ADD_REPLICA {
-		// If the replica exists on the remote node, no matter in which store,
-		// abort the replica add.
-		if nodeUsed {
-			return util.Errorf("adding replica %v which is already present in range %d",
-				replica, desc.RangeID)
-		}
-		replica.ReplicaID = updatedDesc.NextReplicaID
-		updatedDesc.NextReplicaID++
-		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
 
-		// We need to be able to look up replica information before the change
-		// is official.
-		r.pendingReplica.value = replica
-	} else if changeType == roachpb.REMOVE_REPLICA {
-		// If that exact node-store combination does not have the replica,
-		// abort the removal.
-		if found == -1 {
-			return util.Errorf("removing replica %v which is not present in range %d",
-				replica, desc.RangeID)
-		}
-		updatedDesc.Replicas[found] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
-		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
-	}
-
-	r.Unlock()
-
-	err := r.store.DB().Txn(func(txn *client.Txn) error {
+	err = r.store.DB().Txn(func(txn *client.Txn) error {
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.
 		b := &client.Batch{}
@@ -1736,17 +1737,9 @@ func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica r
 		return txn.Run(b)
 	})
 	if err != nil {
-		r.clearPendingChangeReplicas()
 		return util.Errorf("change replicas of %d failed: %s", desc.RangeID, err)
 	}
 	return nil
-}
-
-func (r *Replica) clearPendingChangeReplicas() {
-	r.Lock()
-	r.pendingReplica.value = roachpb.ReplicaDescriptor{}
-	r.pendingReplica.Broadcast()
-	r.Unlock()
 }
 
 // replicaSetsEqual is used in AdminMerge to ensure that the ranges are

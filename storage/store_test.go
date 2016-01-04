@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -137,7 +136,7 @@ func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *stop.
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
 	ctx.StorePool = NewStorePool(ctx.Gossip, ctx.Clock, TestTimeUntilStoreDeadOff, stopper)
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20, stopper)
-	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
+	ctx.Transport = NewLocalRPCTransport(stopper)
 	stopper.AddCloser(ctx.Transport)
 	sender := &testSender{}
 	ctx.DB = client.NewDB(sender)
@@ -181,7 +180,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
-	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
+	ctx.Transport = NewLocalRPCTransport(stopper)
 	stopper.AddCloser(ctx.Transport)
 	store := NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
@@ -231,7 +230,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	ctx := TestStoreContext
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
-	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
+	ctx.Transport = NewLocalRPCTransport(stopper)
 	stopper.AddCloser(ctx.Transport)
 	store := NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: 1})
 

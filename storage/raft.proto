@@ -15,8 +15,8 @@
 // Author: Tamir Duberstein (tamird@gmail.com)
 
 syntax = "proto2";
-package cockroach.multiraft;
-option go_package = "multiraft";
+package cockroach.storage;
+option go_package = "storage";
 
 import "cockroach/roachpb/metadata.proto";
 import "etcd/raft/raftpb/raft.proto";

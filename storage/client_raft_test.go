@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -300,10 +299,10 @@ func TestRestoreReplicas(t *testing.T) {
 	}
 
 	// TODO(bdarnell): use the stopper.Quiesce() method. The problem
-	//   right now is that raft / multiraft isn't creating a task for
-	//   high-level work it's creating while snapshotting and catching
-	//   up. Ideally we'll be able to capture that and then can just
-	//   invoke mtc.stopper.Quiesce() here.
+	// right now is that raft isn't creating a task for high-level work
+	// it's creating while snapshotting and catching up. Ideally we'll
+	// be able to capture that and then can just invoke
+	// mtc.stopper.Quiesce() here.
 
 	// TODO(bdarnell): initial creation and replication needs to be atomic;
 	// cutting off the process too soon currently results in a corrupted range.
@@ -764,6 +763,15 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		t.Fatal("Expected error calling ChangeReplicas with stale RangeDescriptor")
 	}
 
+	// Both addReplica calls attempted to use origDesc.NextReplicaID.
+	// The failed second call should not have overwritten the cached
+	// replica descriptor from the successful first call.
+	if rd, err := mtc.stores[0].ReplicaDescriptor(origDesc.RangeID, origDesc.NextReplicaID); err != nil {
+		t.Fatalf("failed to look up replica %s", origDesc.NextReplicaID)
+	} else if a, e := rd.StoreID, mtc.stores[1].Ident.StoreID; a != e {
+		log.Infof("expected replica %s to point to store %s, but got %s", origDesc.NextReplicaID, a, e)
+	}
+
 	// Add to third store with fresh descriptor.
 	if err := addReplica(2, repl.Desc()); err != nil {
 		t.Fatal(err)
@@ -1064,7 +1072,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 	}
 }
 
-// TestRaftAfterRemoveRange verifies that the MultiRaft state removes
+// TestRaftAfterRemoveRange verifies that the raft state removes
 // a remote node correctly after the Replica was removed from the Store.
 func TestRaftAfterRemoveRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
@@ -1104,7 +1112,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		NodeID:    roachpb.NodeID(mtc.stores[2].StoreID()),
 		StoreID:   mtc.stores[2].StoreID(),
 	}
-	if err := mtc.transport.Send(&multiraft.RaftMessageRequest{
+	if err := mtc.transport.Send(&storage.RaftMessageRequest{
 		GroupID:     0,
 		ToReplica:   replica1,
 		FromReplica: replica2,
@@ -1115,7 +1123,8 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		}}); err != nil {
 		t.Fatal(err)
 	}
-	// Execute another replica change to ensure that MultiRaft has processed the heartbeat just sent.
+	// Execute another replica change to ensure that raft has processed
+	// the heartbeat just sent.
 	mtc.replicateRange(roachpb.RangeID(1), 0, 1)
 }
 
@@ -1411,7 +1420,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 
 // TestLeaderRemoveSelf verifies that a leader can remove itself
 // without panicking and future access to the range returns a
-// RangeNotFoundError (not multiraft.ErrGroupDeleted, and even before
+// RangeNotFoundError (not errRaftGroupDeleted, and even before
 // the ReplicaGCQueue has run).
 func TestLeaderRemoveSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)

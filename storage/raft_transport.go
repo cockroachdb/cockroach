@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -10,11 +10,12 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// permissions and limitations under the License. See the AUTHORS file
+// for names of contributors.
 //
 // Author: Ben Darnell
 
-package multiraft
+package storage
 
 import (
 	"net"
@@ -31,13 +32,20 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-// The Transport interface is supplied by the application to manage communication with
+// TODO(bdarnell): remove/change raftMessageName
+const raftMessageName = "MultiRaft.RaftMessage"
+
+// RaftMessageHandler is the callback type used by RaftTransport.
+type RaftMessageHandler func(*RaftMessageRequest) error
+
+// The RaftTransport interface is supplied by the application to manage communication with
 // other nodes. It is responsible for mapping from IDs to some communication channel.
-type Transport interface {
-	// Listen informs the Transport of a local store's ID and callback interface.
-	// The Transport should associate the given id with the server object so other Transport's
+// TODO(bdarnell): this interface needs to be updated and may just go away.
+type RaftTransport interface {
+	// Listen informs the RaftTransport of a local store's ID and callback interface.
+	// The RaftTransport should associate the given id with the server object so other RaftTransport's
 	// Connect methods can find it.
-	Listen(id roachpb.StoreID, server ServerInterface) error
+	Listen(id roachpb.StoreID, server RaftMessageHandler) error
 
 	// Stop undoes a previous Listen.
 	Stop(id roachpb.StoreID)
@@ -48,15 +56,6 @@ type Transport interface {
 	// Close all associated connections.
 	Close()
 }
-
-// ServerInterface is the methods we expose for use by net/rpc.
-type ServerInterface interface {
-	RaftMessage(req *RaftMessageRequest) (*RaftMessageResponse, error)
-}
-
-var (
-	raftMessageName = "MultiRaft.RaftMessage"
-)
 
 type serverWithAddr struct {
 	server *crpc.Server
@@ -72,12 +71,13 @@ type localRPCTransport struct {
 	stopper *stop.Stopper
 }
 
-// NewLocalRPCTransport creates a Transport for local testing use. MultiRaft instances
+// NewLocalRPCTransport creates a RaftTransport for local testing use. Stores
 // sharing the same local Transport can find and communicate with each other by ID (which
 // can be an arbitrary string). Each instance binds to a different unused port on
 // localhost.
 // Because this is just for local testing, it doesn't use TLS.
-func NewLocalRPCTransport(stopper *stop.Stopper) Transport {
+// TODO(bdarnell): can we get rid of LocalRPCTransport?
+func NewLocalRPCTransport(stopper *stop.Stopper) RaftTransport {
 	return &localRPCTransport{
 		servers: make(map[roachpb.StoreID]serverWithAddr),
 		clients: make(map[roachpb.StoreID]*netrpc.Client),
@@ -87,7 +87,7 @@ func NewLocalRPCTransport(stopper *stop.Stopper) Transport {
 	}
 }
 
-func (lt *localRPCTransport) Listen(id roachpb.StoreID, server ServerInterface) error {
+func (lt *localRPCTransport) Listen(id roachpb.StoreID, handler RaftMessageHandler) error {
 	ctx := crpc.Context{
 		Context: base.Context{
 			Insecure: true,
@@ -98,9 +98,15 @@ func (lt *localRPCTransport) Listen(id roachpb.StoreID, server ServerInterface) 
 	rpcServer := crpc.NewServer(&ctx)
 	err := rpcServer.RegisterAsync(raftMessageName, false, /*not public*/
 		func(argsI proto.Message, callback func(proto.Message, error)) {
+			defer func() {
+				// TODO(bdarnell): the http/rpc code is swallowing panics somewhere.
+				if p := recover(); p != nil {
+					log.Fatalf("caught panic: %s", p)
+				}
+			}()
 			args := argsI.(*RaftMessageRequest)
-			resp, err := server.RaftMessage(args)
-			callback(resp, err)
+			err := handler(args)
+			callback(&RaftMessageResponse{}, err)
 		}, &RaftMessageRequest{})
 	if err != nil {
 		return err
@@ -187,7 +193,8 @@ func (lt *localRPCTransport) Send(req *RaftMessageRequest) error {
 				return
 			}
 			if call.Error != nil {
-				log.Errorf("sending rpc failed: %s", call.Error)
+				log.Errorf("sending %s rpc from %s to %s failed: %s", req.Message.Type,
+					req.FromReplica, req.ToReplica, call.Error)
 			}
 		}()
 		return nil

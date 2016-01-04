@@ -2,15 +2,6 @@
 // source: cockroach/storage/status.proto
 // DO NOT EDIT!
 
-/*
-	Package storage is a generated protocol buffer package.
-
-	It is generated from these files:
-		cockroach/storage/status.proto
-
-	It has these top-level messages:
-		StoreStatus
-*/
 package storage
 
 import proto "github.com/gogo/protobuf/proto"

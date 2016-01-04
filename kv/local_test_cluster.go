@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
@@ -110,7 +109,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Sender = NewTxnCoordSender(ltc.distSender, ltc.Clock, false /* !linearizable */, nil /* tracer */, ltc.Stopper)
 	ltc.DB = client.NewDB(ltc.Sender)
 
-	transport := multiraft.NewLocalRPCTransport(ltc.Stopper)
+	transport := storage.NewLocalRPCTransport(ltc.Stopper)
 	ltc.Stopper.AddCloser(transport)
 	ctx := storage.TestStoreContext
 	ctx.Clock = ltc.Clock

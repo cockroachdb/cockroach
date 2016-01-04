@@ -10,15 +10,19 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
-// permissions and limitations under the License.
+// permissions and limitations under the License. See the AUTHORS file
+// for names of contributors.
 //
 // Author: Ben Darnell
 
-package multiraft
+package storage
 
 import (
 	"fmt"
+	"sync"
 
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
 )
@@ -118,4 +122,41 @@ func (r *raftLogger) Panicf(format string, v ...interface{}) {
 	s := r.prependContext(format, v)
 	log.ErrorDepth(1, s)
 	panic(s)
+}
+
+var logRaftReadyMu sync.Mutex
+
+func logRaftReady(storeID roachpb.StoreID, groupID roachpb.RangeID, ready raft.Ready) {
+	if log.V(5) {
+		// Globally synchronize to avoid interleaving different sets of logs in tests.
+		logRaftReadyMu.Lock()
+		defer logRaftReadyMu.Unlock()
+		log.Infof("store %s: group %s raft ready", storeID, groupID)
+		if ready.SoftState != nil {
+			log.Infof("SoftState updated: %+v", *ready.SoftState)
+		}
+		if !raft.IsEmptyHardState(ready.HardState) {
+			log.Infof("HardState updated: %+v", ready.HardState)
+		}
+		for i, e := range ready.Entries {
+			log.Infof("New Entry[%d]: %.200s", i, raft.DescribeEntry(e, raftEntryFormatter))
+		}
+		for i, e := range ready.CommittedEntries {
+			log.Infof("Committed Entry[%d]: %.200s", i, raft.DescribeEntry(e, raftEntryFormatter))
+		}
+		if !raft.IsEmptySnap(ready.Snapshot) {
+			log.Infof("Snapshot updated: %.200s", ready.Snapshot.String())
+		}
+		for i, m := range ready.Messages {
+			log.Infof("Outgoing Message[%d]: %.200s", i, raft.DescribeMessage(m, raftEntryFormatter))
+		}
+	}
+}
+
+var _ security.RequestWithUser = &RaftMessageRequest{}
+
+// GetUser implements security.RequestWithUser.
+// Raft messages are always sent by the node user.
+func (*RaftMessageRequest) GetUser() string {
+	return security.NodeUser
 }

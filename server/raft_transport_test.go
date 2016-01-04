@@ -23,9 +23,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -34,18 +34,18 @@ import (
 )
 
 type channelServer struct {
-	ch       chan *multiraft.RaftMessageRequest
+	ch       chan *storage.RaftMessageRequest
 	maxSleep time.Duration
 }
 
 func newChannelServer(bufSize int, maxSleep time.Duration) channelServer {
 	return channelServer{
-		ch:       make(chan *multiraft.RaftMessageRequest, bufSize),
+		ch:       make(chan *storage.RaftMessageRequest, bufSize),
 		maxSleep: maxSleep,
 	}
 }
 
-func (s channelServer) RaftMessage(req *multiraft.RaftMessageRequest) (*multiraft.RaftMessageResponse, error) {
+func (s channelServer) RaftMessage(req *storage.RaftMessageRequest) error {
 	if s.maxSleep != 0 {
 		// maxSleep simulates goroutine scheduling delays that could
 		// result in messages being processed out of order (in previous
@@ -53,7 +53,7 @@ func (s channelServer) RaftMessage(req *multiraft.RaftMessageRequest) (*multiraf
 		time.Sleep(time.Duration(rand.Int63n(int64(s.maxSleep))))
 	}
 	s.ch <- req
-	return nil, nil
+	return nil
 }
 
 func TestSendAndReceive(t *testing.T) {
@@ -64,7 +64,7 @@ func TestSendAndReceive(t *testing.T) {
 	g := gossip.New(nodeRPCContext, gossip.TestBootstrap)
 	g.SetNodeID(roachpb.NodeID(1))
 
-	// Create several servers, each of which has two stores (A multiraft
+	// Create several servers, each of which has two stores (A raft
 	// node ID addresses a store). Node 1 has stores 1 and 2, node 2 has
 	// stores 3 and 4, etc.
 	//
@@ -79,7 +79,7 @@ func TestSendAndReceive(t *testing.T) {
 	nextStoreID := roachpb.StoreID(2)
 
 	// Per-node state.
-	transports := map[roachpb.NodeID]multiraft.Transport{}
+	transports := map[roachpb.NodeID]storage.RaftTransport{}
 
 	// Per-store state.
 	storeNodes := map[roachpb.StoreID]roachpb.NodeID{}
@@ -128,7 +128,7 @@ func TestSendAndReceive(t *testing.T) {
 			storeNodes[storeID] = nodeID
 
 			channel := newChannelServer(10, 0)
-			if err := transport.Listen(storeID, channel); err != nil {
+			if err := transport.Listen(storeID, channel.RaftMessage); err != nil {
 				t.Fatal(err)
 			}
 			channels[storeID] = channel
@@ -138,7 +138,7 @@ func TestSendAndReceive(t *testing.T) {
 	// Heartbeat messages: Each store sends one message to each store.
 	for fromStoreID, fromNodeID := range storeNodes {
 		for toStoreID, toNodeID := range storeNodes {
-			req := &multiraft.RaftMessageRequest{
+			req := &storage.RaftMessageRequest{
 				GroupID: 0,
 				Message: raftpb.Message{
 					Type: raftpb.MsgHeartbeat,
@@ -191,7 +191,7 @@ func TestSendAndReceive(t *testing.T) {
 	// Send a message from replica 2 (on store 3, node 2) to replica 1 (on store 5, node 3)
 	fromStoreID := roachpb.StoreID(3)
 	toStoreID := roachpb.StoreID(5)
-	req := &multiraft.RaftMessageRequest{
+	req := &storage.RaftMessageRequest{
 		GroupID: 1,
 		Message: raftpb.Message{
 			Type: raftpb.MsgApp,
@@ -257,7 +257,7 @@ func TestInOrderDelivery(t *testing.T) {
 	}
 	defer serverTransport.Close()
 	serverChannel := newChannelServer(numMessages, 10*time.Millisecond)
-	if err := serverTransport.Listen(roachpb.StoreID(nodeID), serverChannel); err != nil {
+	if err := serverTransport.Listen(roachpb.StoreID(nodeID), serverChannel.RaftMessage); err != nil {
 		t.Fatal(err)
 	}
 	addr := ln.Addr()
@@ -279,7 +279,7 @@ func TestInOrderDelivery(t *testing.T) {
 	defer clientTransport.Close()
 
 	for i := 0; i < numMessages; i++ {
-		req := &multiraft.RaftMessageRequest{
+		req := &storage.RaftMessageRequest{
 			GroupID: 1,
 			Message: raftpb.Message{
 				To:     uint64(nodeID),

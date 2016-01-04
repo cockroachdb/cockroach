@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
-	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
@@ -79,7 +78,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	ctx.DB = client.NewDB(sender)
 	// TODO(bdarnell): arrange to have the transport closed.
 	// (or attach LocalRPCTransport.Close to the stopper)
-	ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
+	ctx.Transport = storage.NewLocalRPCTransport(stopper)
 	ctx.EventFeed = util.NewFeed(stopper)
 	node := NewNode(ctx, metric.NewRegistry(), stopper)
 	return rpcServer, ln.Addr(), ctx.Clock, node, stopper
