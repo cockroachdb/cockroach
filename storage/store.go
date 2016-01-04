@@ -739,15 +739,17 @@ func (s *Store) ForceReplicationScan(t util.Tester) {
 	}
 }
 
-// ForceReplicaGCScan iterates over all ranges and enqueues any that
+// ForceReplicaGCScanAndProcess iterates over all ranges and enqueues any that
 // may need to be GC'd. Exposed only for testing.
-func (s *Store) ForceReplicaGCScan(t util.Tester) {
+func (s *Store) ForceReplicaGCScanAndProcess(t util.Tester) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	for _, r := range s.replicas {
 		s.replicaGCQueue.MaybeAdd(r, s.ctx.Clock.Now())
 	}
+	s.mu.Unlock()
+
+	s.replicaGCQueue.DrainQueue(s.ctx.Clock)
 }
 
 // DisableRaftLogQueue disables or enables the raft log queue.

@@ -333,6 +333,7 @@ func (bq *baseQueue) processOne(clock *hlc.Clock) {
 
 // processReplica processes a single replica.
 // This should not be called externally to the queue.
+// bq.Lock should not be held while calling this method.
 func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) {
 	start := time.Now()
 	now := clock.Now()
@@ -400,8 +401,12 @@ func (bq *baseQueue) remove(index int) {
 // Exposed for testing only.
 func (bq *baseQueue) DrainQueue(clock *hlc.Clock) {
 	bq.Lock()
-	defer bq.Unlock()
-	for repl := bq.pop(); repl != nil; repl = bq.pop() {
+	repl := bq.pop()
+	bq.Unlock()
+	for repl != nil {
 		bq.processReplica(repl, clock)
+		bq.Lock()
+		repl = bq.pop()
+		bq.Unlock()
 	}
 }
