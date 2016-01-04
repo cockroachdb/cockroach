@@ -40,7 +40,7 @@ var sqlShellCmd = &cobra.Command{
 	Long: `
 Open a sql shell running against the cockroach database at --addr.
 `,
-	Run: runTerm,
+	Run: runTerm, // TODO(tschottdorf): should be able to return err code when reading from stdin
 }
 
 func runTerm(cmd *cobra.Command, args []string) {

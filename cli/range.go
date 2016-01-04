@@ -18,7 +18,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -33,7 +32,8 @@ var lsRangesCmd = &cobra.Command{
 	Long: `
 Lists the ranges in a cluster.
 `,
-	Run: runLsRanges,
+	SilenceUsage: true,
+	RunE:         panicGuard(runLsRanges),
 }
 
 func runLsRanges(cmd *cobra.Command, args []string) {
@@ -56,15 +56,13 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 	defer stopper.Stop()
 	rows, err := kvDB.Scan(startKey, endKey, maxResults)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
-		osExit(1)
-		return
+		panicf("scan failed: %s\n", err)
 	}
 
 	for _, row := range rows {
 		desc := &roachpb.RangeDescriptor{}
 		if err := row.ValueProto(desc); err != nil {
-			fmt.Fprintf(os.Stderr, "%s: unable to unmarshal range descriptor\n", row.Key)
+			panicf("%s: unable to unmarshal range descriptor\n", row.Key)
 			continue
 		}
 		fmt.Printf("%s-%s [%d]\n", desc.StartKey, desc.EndKey, desc.RangeID)
@@ -83,7 +81,8 @@ var splitRangeCmd = &cobra.Command{
 	Long: `
 Splits the range containing <key> at <key>.
 `,
-	Run: runSplitRange,
+	SilenceUsage: true,
+	RunE:         panicGuard(runSplitRange),
 }
 
 func runSplitRange(cmd *cobra.Command, args []string) {
@@ -96,8 +95,7 @@ func runSplitRange(cmd *cobra.Command, args []string) {
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
 	if err := kvDB.AdminSplit(key); err != nil {
-		fmt.Fprintf(os.Stderr, "split failed: %s\n", err)
-		osExit(1)
+		panicf("split failed: %s\n", err)
 	}
 }
 
@@ -108,7 +106,8 @@ var mergeRangeCmd = &cobra.Command{
 	Long: `
 Merges the range containing <key> with the immediate successor range.
 `,
-	Run: runMergeRange,
+	SilenceUsage: true,
+	RunE:         panicGuard(runMergeRange),
 }
 
 func runMergeRange(cmd *cobra.Command, args []string) {
@@ -120,8 +119,7 @@ func runMergeRange(cmd *cobra.Command, args []string) {
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
 	if err := kvDB.AdminMerge(args[0]); err != nil {
-		fmt.Fprintf(os.Stderr, "merge failed: %s\n", err)
-		osExit(1)
+		panicf("merge failed: %s\n", err)
 	}
 }
 
