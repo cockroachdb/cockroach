@@ -70,7 +70,10 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 	rangeID := r.Desc().RangeID
 	raftStatus := r.store.RaftStatus(rangeID)
 	if raftStatus == nil {
-		return 0, 0, util.Errorf("the raft group doesn't exist for range %d", rangeID)
+		if log.V(1) {
+			log.Infof("the raft group doesn't exist for range %d", rangeID)
+		}
+		return 0, 0, nil
 	}
 
 	// Is this the raft leader?
