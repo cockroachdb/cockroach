@@ -129,6 +129,7 @@ type scanNode struct {
 	isSecondaryIndex bool
 	reverse          bool
 	columns          []column
+	originalCols     []column // copy of `columns` before additions (e.g. by sort or group)
 	columnIDs        []ColumnID
 	ordering         []int
 	exactPrefix      int
@@ -147,6 +148,7 @@ type scanNode struct {
 	row              parser.DTuple     // the rendered row
 	filter           parser.Expr       // filtering expression for rows
 	render           []parser.Expr     // rendering expressions for rows
+	originalRender   []parser.Expr     // copy of `render` before additions (e.g. by sort or group)
 	explain          explainMode
 	explainValue     parser.Datum
 }
@@ -389,6 +391,9 @@ func (n *scanNode) initTargets(targets parser.SelectExprs) error {
 			return n.err
 		}
 	}
+	// Snapshot columns now, since more may be added later (e.g. in group or sort).
+	n.originalCols = n.columns
+	n.originalRender = n.render
 	return nil
 }
 
@@ -514,6 +519,31 @@ func (n *scanNode) addRender(target parser.SelectExpr) error {
 	}
 	n.columns = append(n.columns, column{name: outputName, typ: typ})
 	return nil
+}
+
+func (n *scanNode) colOffset(expr parser.Expr, forOrderBy bool) (int, error) {
+	index := 0
+
+	switch i := expr.(type) {
+	case parser.DInt:
+		index = int(i)
+	case *parser.IntVal:
+		index = int(i.Val)
+	case parser.Datum:
+		if forOrderBy {
+			return -1, fmt.Errorf("non-integer constant in ORDER BY: %s", expr)
+		}
+		return -1, nil
+	default:
+		return -1, nil
+	}
+
+	if index < 1 || index > len(n.originalCols) {
+		return -1, fmt.Errorf("invalid column index: %d not in range [1, %d]",
+			index, len(n.originalCols))
+	}
+
+	return index - 1, nil
 }
 
 func (n *scanNode) processKV(kv client.KeyValue) bool {
