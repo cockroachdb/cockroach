@@ -148,7 +148,6 @@ type scanNode struct {
 	row              parser.DTuple     // the rendered row
 	filter           parser.Expr       // filtering expression for rows
 	render           []parser.Expr     // rendering expressions for rows
-	originalRender   []parser.Expr     // copy of `render` before additions (e.g. by sort or group)
 	explain          explainMode
 	explainValue     parser.Datum
 }
@@ -391,9 +390,10 @@ func (n *scanNode) initTargets(targets parser.SelectExprs) error {
 			return n.err
 		}
 	}
-	// Snapshot columns now, since more may be added later (e.g. in group or sort).
+	// Snapshot columns now before group or sort modify them.
+	// Things like validation of a column offset (e.g. `GROUP BY 1`) should only
+	// allow referencing one of the selected cols, not an internally added one.
 	n.originalCols = n.columns
-	n.originalRender = n.render
 	return nil
 }
 
