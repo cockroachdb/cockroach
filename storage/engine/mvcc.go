@@ -423,7 +423,7 @@ func updateStatsOnGC(ms *MVCCStats, key roachpb.Key, keySize, valSize int64, met
 	}
 }
 
-// MVCCComputeGCBytesAge comptues the value to assign to the specified
+// MVCCComputeGCBytesAge computes the value to assign to the specified
 // number of bytes, at the given age (in seconds).
 func MVCCComputeGCBytesAge(bytes, ageSeconds int64) int64 {
 	return bytes * ageSeconds
