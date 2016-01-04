@@ -88,6 +88,7 @@ func TestRangeStatsMerge(t *testing.T) {
 		GCBytesAge:      1,
 		LastUpdateNanos: 1 * 1E9,
 	}
+	// Merge 9 seconds later.
 	if err := tc.rng.stats.MergeMVCCStats(tc.engine, &ms, 10*1E9); err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +112,7 @@ func TestRangeStatsMerge(t *testing.T) {
 		t.Errorf("expected %+v; got %+v", expMS, ms)
 	}
 
-	// Merge again, but with 10 more ns.
+	// Merge again, ten seconds after the last one.
 	if err := tc.rng.stats.MergeMVCCStats(tc.engine, &ms, 20*1E9); err != nil {
 		t.Fatal(err)
 	}
@@ -136,5 +137,29 @@ func TestRangeStatsMerge(t *testing.T) {
 	}
 	if !reflect.DeepEqual(tc.rng.stats.MVCCStats, expMS) {
 		t.Errorf("expected %+v; got %+v", expMS, tc.rng.stats.MVCCStats)
+	}
+
+	// Finally, test the issue described in #3234: Updates happening with non-
+	// or slowly-increasing timestamp. In that case, we do the usual counting
+	// but don't update age and last updated timestamp. Not updating the latter
+	// makes sense in those cases since age increases only each second, and
+	// recomputing in a close loop could leave the age constant otherwise.
+	for i, newNow := range []int64{10 * 1E9, 20 * 1E9, 20*1E9 + (1E9 - 1)} {
+		ms = engine.MVCCStats{
+			KeyBytes:    1000,
+			IntentCount: 1000,
+		}
+		expMS.KeyBytes += 1000
+		expMS.IntentCount += 1000
+		origMS := ms
+		if err := tc.rng.stats.MergeMVCCStats(tc.engine, &ms, newNow); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(ms, origMS) {
+			t.Errorf("%d: expected no age update after <1s, but %+v changed to %+v", i, origMS, ms)
+		}
+		if !reflect.DeepEqual(tc.rng.stats.MVCCStats, expMS) {
+			t.Errorf("%d: expected %+v, got %+v", i, expMS, tc.rng.stats.MVCCStats)
+		}
 	}
 }
