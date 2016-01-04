@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strconv"
 	"sync"
 	"time"
@@ -528,39 +529,44 @@ func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
 	if arg == nil {
 		return parser.DNull, true
 	}
-	// TODO: This type switch has been created primarily for convenience, but
-	// the fact that multiple integer types are part of the switch is inelegant
-	// and prone to errors (it has been described as "whack-a-mole"). There is
-	// likely a better way to capture all of the various integer types using
-	// reflection.
+
+	// A type switch to handle a few explicit types with special semantics.
 	switch t := arg.(type) {
-	case bool:
-		return parser.DBool(t), true
-	case int:
-		return parser.DInt(t), true
-	case int32:
-		return parser.DInt(t), true
-	case uint32:
-		return parser.DInt(t), true
-	case int64:
-		return parser.DInt(t), true
-	case uint64:
-		return parser.DInt(t), true
-	case ID:
-		return parser.DInt(t), true
-	case []byte:
-		return parser.DBytes(t), true
-	case string:
-		return parser.DString(t), true
+	// Datums are passed along as is.
+	case parser.Datum:
+		return t, true
+	// Time datatypes get special representation in the database.
 	case time.Time:
 		return parser.DTimestamp{Time: t}, true
 	case time.Duration:
 		return parser.DInterval{Duration: t}, true
-	case parser.Datum:
-		return t, true
-	default:
-		panic(fmt.Sprintf("unexpected type %T", t))
 	}
+
+	// Handle all types which have an underlying type that can be stored in the
+	// database.
+	// Note: if this reflection becomes a performance concern in the future,
+	// commonly used types could be added explicitly into the type switch above
+	// for a performance gain.
+	val := reflect.ValueOf(arg)
+	switch val.Kind() {
+	case reflect.Bool:
+		return parser.DBool(val.Bool()), true
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return parser.DInt(val.Int()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return parser.DInt(val.Uint()), true
+	case reflect.Float32, reflect.Float64:
+		return parser.DFloat(val.Float()), true
+	case reflect.String:
+		return parser.DString(val.String()), true
+	case reflect.Slice:
+		// Handle byte slices.
+		if val.Type().Elem().Kind() == reflect.Uint8 {
+			return parser.DBytes(val.Bytes()), true
+		}
+	}
+
+	panic(fmt.Sprintf("unexpected type %T", arg))
 }
 
 func makeDriverDatum(datum parser.Datum) (driver.Datum, error) {
