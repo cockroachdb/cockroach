@@ -40,13 +40,14 @@ var sqlShellCmd = &cobra.Command{
 	Long: `
 Open a sql shell running against the cockroach database at --addr.
 `,
-	Run: runTerm, // TODO(tschottdorf): should be able to return err code when reading from stdin
+	SilenceUsage: true,
+	RunE:         runTerm,
 }
 
-func runTerm(cmd *cobra.Command, args []string) {
+func runTerm(cmd *cobra.Command, args []string) error {
 	if len(args) != 0 {
 		mustUsage(cmd)
-		return
+		return errMissingParams
 	}
 
 	db := makeSQLClient()
@@ -78,7 +79,7 @@ func runTerm(cmd *cobra.Command, args []string) {
 	// TODO(marc): add test.
 	var stmt []string
 	var l string
-	var err error
+	var err, execErr error
 	for {
 		if len(stmt) == 0 {
 			l, err = liner.Prompt(fullPrompt)
@@ -88,6 +89,8 @@ func runTerm(cmd *cobra.Command, args []string) {
 		if err != nil {
 			if err != io.EOF {
 				fmt.Fprintf(osStderr, "Input error: %s\n", err)
+			} else {
+				err = nil
 			}
 			break
 		}
@@ -112,11 +115,15 @@ func runTerm(cmd *cobra.Command, args []string) {
 		fullStmt := strings.Join(stmt, "\n")
 		liner.AppendHistory(fullStmt)
 
-		if err := runPrettyQuery(db, os.Stdout, fullStmt); err != nil {
-			fmt.Println(err)
+		if execErr = runPrettyQuery(db, os.Stdout, fullStmt); execErr != nil {
+			fmt.Println(execErr)
 		}
 
 		// Clear the saved statement.
 		stmt = stmt[:0]
 	}
+	if err != nil {
+		return err
+	}
+	return execErr
 }
