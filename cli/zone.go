@@ -121,7 +121,7 @@ func runLsZones(cmd *cobra.Command, args []string) {
 	}
 
 	if len(rows) == 0 {
-		log.Error("No zone configs founds")
+		log.Error("No zone configs found")
 		return
 	}
 	for _, r := range rows {
