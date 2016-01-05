@@ -290,6 +290,9 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	}
 	args := make(parser.MapArgs)
 	for i, t := range inTypeHints {
+		if t == 0 {
+			continue
+		}
 		v, ok := oidToDatum[t]
 		if !ok {
 			return c.sendError(fmt.Sprintf("unknown oid type: %v", t))
