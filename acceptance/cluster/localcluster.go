@@ -274,6 +274,12 @@ func (l *LocalCluster) initCluster() {
 			l.logDir = filepath.Join(pwd, l.logDir)
 		}
 		binds = append(binds, l.logDir+":/logs")
+		// If we don't make sure the directory exists, Docker will and then we
+		// may run into ownership issues (think Docker running as root, but us
+		// running as a regular Joe as it happens on CircleCI).
+		if err := os.MkdirAll(l.logDir, 0777); err != nil {
+			log.Fatal(err)
+		}
 	} else if l.ForceLogging {
 		l.logDir, err = ioutil.TempDir(pwd, ".localcluster.logs.")
 		if err != nil {
