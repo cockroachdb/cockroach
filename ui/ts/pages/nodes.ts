@@ -1,5 +1,6 @@
 // source: pages/nodes.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
+/// <reference path="../../typings/lodash/lodash.d.ts"/>
 /// <reference path="../models/status.ts" />
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/table.ts" />
@@ -53,6 +54,22 @@ module AdminViews {
       import sumReducer = Models.Status.sumReducer;
       import BytesAndCount = Models.Status.BytesAndCount;
 
+      function ByteCountColumn(key: string, section: string, title?: string): Table.TableColumn<NodeStatus> {
+        let byteKey: string = key + "_bytes";
+        let countKey: string = key + "_count";
+        return {
+          title: title || Utils.Format.Titlecase(_.last(byteKey.split("."))),
+          view: (status: NodeStatus): MithrilVirtualElement => Table.FormatBytesAndCount(parseFloat(_.get<string>(status, byteKey)), parseFloat(_.get<string>(status, countKey))),
+          sortable: true,
+          sortValue: (status: NodeStatus): number => parseFloat(_.get<string>(status, byteKey)),
+          rollup: function(rows: NodeStatus[]): MithrilVirtualElement {
+            let total: BytesAndCount = bytesAndCountReducer(byteKey, countKey, rows);
+            return Table.FormatBytesAndCount(total.bytes, total.count);
+          },
+          section: section,
+        };
+      }
+
       class Controller {
         private static _queryEveryMS: number = 10000;
 
@@ -102,66 +119,11 @@ module AdminViews {
             },
             sortable: true,
           },
-          {
-            title: "Live Bytes",
-            view: (status: NodeStatus): string =>
-              status.stats.live_count + " (" + Utils.Format.Bytes(status.stats.live_bytes) + ")",
-            sortable: true,
-            sortValue: (status: NodeStatus): number => status.stats.live_bytes,
-            rollup: function(rows: NodeStatus[]): string {
-              let total: BytesAndCount = bytesAndCountReducer("stats.live_bytes", "stats.live_count", rows);
-              return Utils.Format.Bytes(total.bytes) + " (" + total.count + ")";
-            },
-            section: "storage",
-          },
-          {
-            title: "Key Bytes",
-            view: (status: NodeStatus): string =>
-              status.stats.key_count + " (" + Utils.Format.Bytes(status.stats.key_bytes) + ")",
-            sortable: true,
-            sortValue: (status: NodeStatus): number => status.stats.key_bytes,
-            rollup: function(rows: NodeStatus[]): string {
-              let total: BytesAndCount = bytesAndCountReducer("stats.key_bytes", "stats.key_count", rows);
-              return Utils.Format.Bytes(total.bytes) + " (" + total.count + ")";
-            },
-            section: "storage",
-          },
-          {
-            title: "Value Bytes",
-            view: (status: NodeStatus): string =>
-              status.stats.val_count + " (" + Utils.Format.Bytes(status.stats.val_bytes) + ")",
-            sortable: true,
-            sortValue: (status: NodeStatus): number => status.stats.val_bytes,
-            rollup: function(rows: NodeStatus[]): string {
-              let total: BytesAndCount = bytesAndCountReducer("stats.val_bytes", "stats.val_count", rows);
-              return Utils.Format.Bytes(total.bytes) + " (" + total.count + ")";
-            },
-            section: "storage",
-          },
-          {
-            title: "Intent Bytes",
-            view: (status: NodeStatus): string =>
-              status.stats.intent_count + " (" + Utils.Format.Bytes(status.stats.intent_bytes) + ")",
-            sortable: true,
-            sortValue: (status: NodeStatus): number => status.stats.intent_bytes,
-            rollup: function(rows: NodeStatus[]): string {
-              let total: BytesAndCount = bytesAndCountReducer("stats.intent_bytes", "stats.intent_count", rows);
-              return Utils.Format.Bytes(total.bytes) + " (" + total.count + ")";
-            },
-            section: "storage",
-          },
-          {
-            title: "System Bytes",
-            view: (status: NodeStatus): string =>
-              status.stats.sys_count + " (" + Utils.Format.Bytes(status.stats.sys_bytes) + ")",
-            sortable: true,
-            sortValue: (status: NodeStatus): number => status.stats.sys_bytes,
-            rollup: function(rows: NodeStatus[]): string {
-              let total: BytesAndCount = bytesAndCountReducer("stats.sys_bytes", "stats.sys_count", rows);
-              return Utils.Format.Bytes(total.bytes) + " (" + total.count + ")";
-            },
-            section: "storage",
-          },
+          ByteCountColumn("stats.live", "storage"),
+          ByteCountColumn("stats.key", "storage"),
+          ByteCountColumn("stats.val", "storage", "Value Bytes"),
+          ByteCountColumn("stats.intent", "storage"),
+          ByteCountColumn("stats.sys", "storage", "System Bytes"),
           {
             title: "Leader Ranges",
             view: (status: NodeStatus): string => status.leader_range_count.toString(),
@@ -212,8 +174,8 @@ module AdminViews {
             Metrics.NewAxis(
               Metrics.Select.Avg(_storeMetric("ranges.available"))
                 .sources(this.sources)
-                .title("% Available Ranges")
-              ));
+                .title("Available Ranges")
+              ).format(d3.format("0")));
 
           this._addChart(
             Metrics.NewAxis(
@@ -227,14 +189,14 @@ module AdminViews {
               Metrics.Select.Avg(_storeMetric("livebytes"))
                 .sources(this.sources) // TODO: store sources vs node sources
                 .title("Live Bytes")
-              ));
+              ).format(Utils.Format.Bytes));
 
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_sysMetric("cpu.user.percent"))
                 .sources(this.sources) // TODO: store sources vs node sources
                 .title("CPU User %")
-              ));
+              ).format(d3.format("%")));
 
           this.exec = new Metrics.Executor(this._query);
           this._refresh();
