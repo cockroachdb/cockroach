@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -90,7 +91,13 @@ func StartCluster(t *testing.T) cluster.Cluster {
 		if *numRemote > 0 {
 			t.Fatal("cannot both specify -num-local and -num-remote")
 		}
-		l := cluster.CreateLocal(*numLocal, *numStores, *logDir, stopper)
+		logDir := *logDir
+		if logDir != "" {
+			if _, _, fun := caller.Lookup(1); fun != "" {
+				logDir = filepath.Join(logDir, fun)
+			}
+		}
+		l := cluster.CreateLocal(*numLocal, *numStores, logDir, stopper)
 		l.Start()
 		checkRangeReplication(t, l, 20*time.Second)
 		return l
