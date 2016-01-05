@@ -150,7 +150,7 @@ func (e *Executor) StatementResult(user string, stmt parser.Statement, args pars
 	}
 
 	planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: time.Now()}
-	plan, err := planMaker.makePlan(stmt)
+	plan, err := planMaker.makePlan(stmt, false)
 	if err != nil {
 		return nil, err
 	}
@@ -313,9 +313,9 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 	// TODO(pmattis): Should this be a separate function? Perhaps we should move
 	// some of the common code back out into execStmts and have execStmt contain
 	// only the body of this closure.
-	f := func(timestamp time.Time) error {
+	f := func(timestamp time.Time, autoCommit bool) error {
 		planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: timestamp}
-		plan, err := planMaker.makePlan(stmt)
+		plan, err := planMaker.makePlan(stmt, autoCommit)
 		if err != nil {
 			return err
 		}
@@ -366,7 +366,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 
 	// If there is a pending transaction.
 	if planMaker.txn != nil {
-		err := f(time.Now())
+		err := f(time.Now(), false)
 		return result, err
 	}
 
@@ -391,7 +391,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 	err := e.db.Txn(func(txn *client.Txn) error {
 		timestamp := time.Now()
 		planMaker.setTxn(txn, timestamp)
-		err := f(timestamp)
+		err := f(timestamp, true)
 		planMaker.resetTxn()
 		return err
 	})

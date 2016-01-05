@@ -64,7 +64,7 @@ func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, par
 	// copy of the planner in order for there to have a separate subqueryVisitor.
 	planMaker := *v.planner
 	var plan planNode
-	if plan, v.err = planMaker.makePlan(subquery.Select); v.err != nil {
+	if plan, v.err = planMaker.makePlan(subquery.Select, false); v.err != nil {
 		return nil, expr
 	}
 

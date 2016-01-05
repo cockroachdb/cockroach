@@ -47,7 +47,7 @@ func (p *planner) Explain(n *parser.Explain) (planNode, error) {
 		return nil, fmt.Errorf("unsupported EXPLAIN options: %s", n)
 	}
 
-	plan, err := p.makePlan(n.Statement)
+	plan, err := p.makePlan(n.Statement, false)
 	if err != nil {
 		return nil, err
 	}
