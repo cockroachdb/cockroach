@@ -78,6 +78,7 @@ func (pq *priorityQueue) update(item *replicaItem, priority float64) {
 
 var (
 	errQueueDisabled     = errors.New("queue disabled")
+	errQueueDraining     = errors.New("queue draining")
 	errReplicaNotAddable = errors.New("replica shouldn't be added to queue")
 )
 
@@ -117,15 +118,18 @@ type baseQueue struct {
 	// from the constructor function will return a queueImpl containing
 	// a pointer to a structure which is a copy of the one within which
 	// it is contained. DANGER.
-	impl        queueImpl
-	gossip      *gossip.Gossip
-	maxSize     int                              // Maximum number of replicas to queue
-	incoming    chan struct{}                    // Channel signaled when a new replica is added to the queue.
-	sync.Locker                                  // Protects priorityQ and replicas
-	priorityQ   priorityQueue                    // The priority queue
-	replicas    map[roachpb.RangeID]*replicaItem // Map from RangeID to replicaItem (for updating priority)
+	impl     queueImpl
+	gossip   *gossip.Gossip
+	maxSize  int           // Maximum number of replicas to queue
+	incoming chan struct{} // Channel signaled when a new replica is added to the queue.
+
 	// Some tests in this package disable queues.
 	disabled int32 // updated atomically
+
+	sync.Locker // Protects the fields below
+	draining    bool
+	priorityQ   priorityQueue                    // The priority queue
+	replicas    map[roachpb.RangeID]*replicaItem // Map from RangeID to replicaItem (for updating priority)
 }
 
 // makeBaseQueue returns a new instance of baseQueue with the
@@ -219,6 +223,9 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
 func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) error {
 	if atomic.LoadInt32(&bq.disabled) == 1 {
 		return errQueueDisabled
+	}
+	if bq.draining {
+		return errQueueDraining
 	}
 
 	rangeID := repl.Desc().RangeID
@@ -401,6 +408,7 @@ func (bq *baseQueue) remove(index int) {
 // Exposed for testing only.
 func (bq *baseQueue) DrainQueue(clock *hlc.Clock) {
 	bq.Lock()
+	bq.draining = true
 	repl := bq.pop()
 	bq.Unlock()
 	for repl != nil {
