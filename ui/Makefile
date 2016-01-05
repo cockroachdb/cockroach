@@ -57,7 +57,8 @@ GOBINDATA_SOURCES       := $(BOWER_COMPONENTS)/d3/d3.min.js \
                            $(BOWER_COMPONENTS)/nvd3/build/nv.d3.min.js \
                            $(BOWER_COMPONENTS)/moment/min/moment.min.js \
                            $(BOWER_COMPONENTS)/moment-timezone/builds/moment-timezone-with-data.min.js \
-                           $(GOBINDATA_FONTS)
+                           $(GOBINDATA_FONTS) \
+                           favicon.ico
 GOBINDATA_DEBUG_SOURCES := $(BOWER_COMPONENTS)/d3/d3.js \
                            $(BOWER_COMPONENTS)/lodash/lodash.js \
                            $(BOWER_COMPONENTS)/mithriljs/mithril.js \
@@ -65,7 +66,8 @@ GOBINDATA_DEBUG_SOURCES := $(BOWER_COMPONENTS)/d3/d3.js \
                            $(BOWER_COMPONENTS)/nvd3/build/nv.d3.js \
                            $(BOWER_COMPONENTS)/moment/moment.js \
                            $(BOWER_COMPONENTS)/moment-timezone/builds/moment-timezone-with-data.js \
-                           $(GOBINDATA_FONTS)
+                           $(GOBINDATA_FONTS) \
+                           favicon.ico
 GOBINDATA_TARGET        := ./embedded.go
 GOBINDATA_DEBUG_TARGET  := ./embedded_debug.go
 

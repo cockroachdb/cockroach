@@ -16,28 +16,6 @@ permissions and limitations under the License.
 Author: Matt Tracy (matt@cockroachlabs.com)
 */
 
-// -tone-range generates a set of tones based on a lightest and darkest color.
-// 'x-light' will be the lightest color, 'x-dark' the darkest,
-// with 'base' a 50% mix.
--tone-range($lightest, $darkest)
-  return $ret = { //stylint complains about brackets if we don't use this format
-    'x-light': $lightest,
-    'light': mix($lightest, $darkest, 75%),
-    'base': mix($lightest, $darkest),
-    'dark': mix($lightest, $darkest, 25%),
-    'x-dark': $darkest,
-  }
-
-$palette = {
-  'light': -tone-range(#ffffff, #E3E3E3),
-  'neutral': -tone-range(#CCCCCC, #A3A3A3),
-  'dark': -tone-range(#666666, #3D3D3D),
-}
-
-// color selects a color/tone pair from the palette.
--color($color, val='base')
-  return $palette[$color][val]
-
 // These colors are specified by the Cockroach UI-Kit designs.
 
 // Main colors
