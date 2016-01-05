@@ -44,7 +44,8 @@ const (
 	TestUser = "testuser"
 	// initialSplitsTimeout is the amount of time to wait for initial splits to
 	// occur on a freshly started server.
-	initialSplitsTimeout = time.Second
+	// Note: this needs to be fairly high or tests become flaky.
+	initialSplitsTimeout = 10 * time.Second
 )
 
 // StartTestServer starts a in-memory test server.
