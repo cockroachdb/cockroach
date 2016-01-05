@@ -421,6 +421,43 @@ range_max_bytes: 67108864
 	// node drained and shutdown: ok
 }
 
+func Example_user() {
+	c := newCLITest()
+
+	c.Run("user ls")
+	c.Run("user set foo --password=bar")
+	// Don't use get, since the output of hashedPassword is random.
+	// c.Run("user get foo")
+	c.Run("user ls")
+	c.Run("user rm foo")
+	c.Run("user ls")
+	c.Run("quit")
+
+	// Output:
+	// user ls
+	// +----------+
+	// | username |
+	// +----------+
+	// +----------+
+	// user set foo --password=bar
+	// OK
+	// user ls
+	// +----------+
+	// | username |
+	// +----------+
+	// | foo      |
+	// +----------+
+	// user rm foo
+	// OK
+	// user ls
+	// +----------+
+	// | username |
+	// +----------+
+	// +----------+
+	// quit
+	// node drained and shutdown: ok
+}
+
 // TestFlagUsage is a basic test to make sure the fragile
 // help template does not break.
 func TestFlagUsage(t *testing.T) {
