@@ -281,6 +281,11 @@ type DescriptorMutation struct {
 	Descriptor_ isDescriptorMutation_Descriptor_ `protobuf_oneof:"descriptor"`
 	State       DescriptorMutation_State         `protobuf:"varint,3,opt,name=state,enum=cockroach.sql.DescriptorMutation_State" json:"state"`
 	Direction   DescriptorMutation_Direction     `protobuf:"varint,4,opt,name=direction,enum=cockroach.sql.DescriptorMutation_Direction" json:"direction"`
+	// The mutation id used to group mutations that should be applied together.
+	// This is used for situations like creating a unique column, which
+	// involve adding two mutations: one for the column, and another for the
+	// unique constraint index.
+	MutationID MutationID `protobuf:"varint,5,opt,name=mutation_id,casttype=MutationID" json:"mutation_id"`
 }
 
 func (m *DescriptorMutation) Reset()         { *m = DescriptorMutation{} }
@@ -453,6 +458,8 @@ type TableDescriptor struct {
 	// Columns or indexes being added or deleted in a FIFO order.
 	Mutations []DescriptorMutation               `protobuf:"bytes,14,rep,name=mutations" json:"mutations"`
 	Lease     *TableDescriptor_SchemaChangeLease `protobuf:"bytes,15,opt,name=lease" json:"lease,omitempty"`
+	// An id for the next group of mutations to be applied together.
+	NextMutationID MutationID `protobuf:"varint,16,opt,name=next_mutation_id,casttype=MutationID" json:"next_mutation_id"`
 }
 
 func (m *TableDescriptor) Reset()         { *m = TableDescriptor{} }
@@ -562,6 +569,13 @@ func (m *TableDescriptor) GetLease() *TableDescriptor_SchemaChangeLease {
 		return m.Lease
 	}
 	return nil
+}
+
+func (m *TableDescriptor) GetNextMutationID() MutationID {
+	if m != nil {
+		return m.NextMutationID
+	}
+	return 0
 }
 
 // The schema update lease. A single goroutine across a cockroach cluster
@@ -924,6 +938,9 @@ func (m *DescriptorMutation) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x20
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.Direction))
+	data[i] = 0x28
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.MutationID))
 	return i, nil
 }
 
@@ -1073,6 +1090,11 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 		}
 		i += n8
 	}
+	data[i] = 0x80
+	i++
+	data[i] = 0x1
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.NextMutationID))
 	return i, nil
 }
 
@@ -1286,6 +1308,7 @@ func (m *DescriptorMutation) Size() (n int) {
 	}
 	n += 1 + sovStructured(uint64(m.State))
 	n += 1 + sovStructured(uint64(m.Direction))
+	n += 1 + sovStructured(uint64(m.MutationID))
 	return n
 }
 
@@ -1350,6 +1373,7 @@ func (m *TableDescriptor) Size() (n int) {
 		l = m.Lease.Size()
 		n += 1 + l + sovStructured(uint64(l))
 	}
+	n += 2 + sovStructured(uint64(m.NextMutationID))
 	return n
 }
 
@@ -2087,6 +2111,25 @@ func (m *DescriptorMutation) Unmarshal(data []byte) error {
 					break
 				}
 			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MutationID", wireType)
+			}
+			m.MutationID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.MutationID |= (MutationID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipStructured(data[iNdEx:])
@@ -2529,6 +2572,25 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 16:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NextMutationID", wireType)
+			}
+			m.NextMutationID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.NextMutationID |= (MutationID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipStructured(data[iNdEx:])

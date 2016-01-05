@@ -79,9 +79,9 @@ type Executor struct {
 	systemConfigCond *sync.Cond
 }
 
-// newExecutor creates an Executor and registers a callback on the
+// NewExecutor creates an Executor and registers a callback on the
 // system config.
-func newExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, metaRegistry *metric.Registry, stopper *stop.Stopper) *Executor {
+func NewExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, metaRegistry *metric.Registry, stopper *stop.Stopper) *Executor {
 	exec := &Executor{
 		db:       db,
 		reCache:  parser.NewRegexpCache(512),
@@ -257,19 +257,39 @@ func (e *Executor) execStmts(sql string, planMaker *planner) driver.Response {
 		if err != nil {
 			result = makeResultFromError(planMaker, err)
 		}
-		resp.Results = append(resp.Results, result)
 		// Release the leases once a transaction is complete.
 		if planMaker.txn == nil {
 			planMaker.releaseLeases(e.db)
-
-			// The previous transaction finished executing some schema changes. Wait for
-			// the schema changes to propagate to all nodes, so that once the executor
-			// returns the new schema are live everywhere. This is not needed for
-			// correctness but is done to make the UI experience/tests predictable.
-			if err := e.waitForCompletedSchemaChangesToPropagate(planMaker); err != nil {
-				log.Warning(err)
+			// Execute any schema changes that were scheduled.
+			if !disableSyncSchemaChangeExec {
+				for _, sc := range planMaker.schemaChangers {
+					sc.db = e.db
+					retryOpts := retry.Options{
+						InitialBackoff: 20 * time.Millisecond,
+						MaxBackoff:     200 * time.Millisecond,
+						Multiplier:     2,
+					}
+					for r := retry.Start(retryOpts); r.Next(); {
+						if done, err := sc.isDone(); err != nil {
+							log.Warning(err)
+							break
+						} else if done {
+							break
+						}
+						if err := sc.exec(); err != nil {
+							if err == errExistingSchemaChangeLease {
+								// Try again.
+								continue
+							}
+							// All other errors can be reported.
+							result = makeResultFromError(planMaker, err)
+						}
+						break
+					}
+				}
 			}
 		}
+		resp.Results = append(resp.Results, result)
 	}
 	return resp
 }
@@ -389,15 +409,17 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 
 	// No transaction. Run the command as a retryable block in an
 	// auto-transaction.
-	err := e.db.Txn(func(txn *client.Txn) error {
+	if err := e.db.Txn(func(txn *client.Txn) error {
 		timestamp := time.Now()
 		planMaker.setTxn(txn, timestamp)
 		err := f(timestamp, true)
 		planMaker.resetTxn()
 		return err
-	})
+	}); err != nil {
+		return result, err
+	}
 
-	if testingWaitForMetadata && err == nil {
+	if testingWaitForMetadata {
 		if verify := planMaker.testingVerifyMetadata; verify != nil {
 			// In the case of a multi-statement request, avoid reusing this
 			// callback.
@@ -407,7 +429,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 					e.systemConfigCond.Wait()
 				} else {
 					if i == 0 {
-						err = util.Errorf("expected %q to require a gossip update, but it did not", stmt)
+						return result, util.Errorf("expected %q to require a gossip update, but it did not", stmt)
 					} else if i > 1 {
 						log.Infof("%q unexpectedly required %d gossip updates", stmt, i)
 					}
@@ -417,24 +439,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 		}
 	}
 
-	return result, err
-}
-
-func (e *Executor) waitForCompletedSchemaChangesToPropagate(planMaker *planner) error {
-	for _, id := range planMaker.completedSchemaChange {
-		retryOpts := retry.Options{
-			InitialBackoff: 20 * time.Millisecond,
-			MaxBackoff:     200 * time.Millisecond,
-			Multiplier:     2,
-		}
-		// Wait until there are no unexpired leases on the previous version
-		// of the table.
-		if _, err := e.leaseMgr.waitForOneVersion(id, retryOpts); err != nil {
-			return err
-		}
-	}
-	planMaker.completedSchemaChange = nil
-	return nil
+	return result, nil
 }
 
 // If we hit an error and there is a pending transaction, rollback

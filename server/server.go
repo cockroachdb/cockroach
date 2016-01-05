@@ -64,25 +64,28 @@ type Server struct {
 
 	listener net.Listener // Only used in tests.
 
-	mux           *http.ServeMux
-	clock         *hlc.Clock
-	rpcContext    *crpc.Context
-	rpc           *crpc.Server
-	gossip        *gossip.Gossip
-	storePool     *storage.StorePool
-	db            *client.DB
-	kvDB          *kv.DBServer
-	sqlServer     sql.Server
-	pgServer      *pgwire.Server
-	node          *Node
-	recorder      *status.NodeStatusRecorder
-	admin         *adminServer
-	status        *statusServer
-	tsDB          *ts.DB
-	tsServer      *ts.Server
-	raftTransport storage.RaftTransport
-	metaRegistry  *metric.Registry
-	stopper       *stop.Stopper
+	mux                 *http.ServeMux
+	clock               *hlc.Clock
+	rpcContext          *crpc.Context
+	rpc                 *crpc.Server
+	gossip              *gossip.Gossip
+	storePool           *storage.StorePool
+	db                  *client.DB
+	kvDB                *kv.DBServer
+	sqlServer           sql.Server
+	pgServer            *pgwire.Server
+	node                *Node
+	recorder            *status.NodeStatusRecorder
+	admin               *adminServer
+	status              *statusServer
+	tsDB                *ts.DB
+	tsServer            *ts.Server
+	raftTransport       storage.RaftTransport
+	metaRegistry        *metric.Registry
+	stopper             *stop.Stopper
+	sqlExecutor         *sql.Executor
+	leaseMgr            *sql.LeaseManager
+	schemaChangeManager *sql.SchemaChangeManager
 }
 
 // NewServer creates a Server from a server.Context.
@@ -161,9 +164,10 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		return nil, err
 	}
 
-	leaseMgr := sql.NewLeaseManager(0, *s.db, s.clock)
-	leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
-	s.sqlServer = sql.MakeServer(&s.ctx.Context, *s.db, s.gossip, leaseMgr, s.metaRegistry, s.stopper)
+	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock)
+	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
+	s.sqlExecutor = sql.NewExecutor(*s.db, s.gossip, s.leaseMgr, s.metaRegistry, s.stopper)
+	s.sqlServer = sql.MakeServer(&s.ctx.Context, s.sqlExecutor)
 	if err := s.sqlServer.RegisterRPC(s.rpc); err != nil {
 		return nil, err
 	}
@@ -244,6 +248,10 @@ func (s *Server) Start(selfBootstrap bool) error {
 	s.startWriteSummaries()
 
 	s.sqlServer.SetNodeID(s.node.Descriptor.NodeID)
+	// Create and start the schema change manager only after a NodeID
+	// has been assigned.
+	s.schemaChangeManager = sql.NewSchemaChangeManager(*s.db, s.gossip, s.leaseMgr)
+	s.schemaChangeManager.Start(s.stopper)
 
 	s.status = newStatusServer(s.db, s.gossip, s.metaRegistry, s.ctx)
 
