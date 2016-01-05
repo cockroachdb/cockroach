@@ -30,7 +30,7 @@ import (
 
 func TestStoresAddStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewStores()
+	ls := NewStores(hlc.NewClock(hlc.UnixNano))
 	store := Store{}
 	ls.AddStore(&store)
 	if !ls.HasStore(store.Ident.StoreID) {
@@ -43,7 +43,7 @@ func TestStoresAddStore(t *testing.T) {
 
 func TestStoresRemoveStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewStores()
+	ls := NewStores(hlc.NewClock(hlc.UnixNano))
 
 	storeID := roachpb.StoreID(89)
 
@@ -58,7 +58,7 @@ func TestStoresRemoveStore(t *testing.T) {
 
 func TestStoresGetStoreCount(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewStores()
+	ls := NewStores(hlc.NewClock(hlc.UnixNano))
 	if ls.GetStoreCount() != 0 {
 		t.Errorf("expected 0 stores in new local sender")
 	}
@@ -74,7 +74,7 @@ func TestStoresGetStoreCount(t *testing.T) {
 
 func TestStoresVisitStores(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewStores()
+	ls := NewStores(hlc.NewClock(hlc.UnixNano))
 	numStores := 10
 	for i := 0; i < numStores; i++ {
 		ls.AddStore(&Store{Ident: roachpb.StoreIdent{StoreID: roachpb.StoreID(i)}})
@@ -100,7 +100,7 @@ func TestStoresVisitStores(t *testing.T) {
 
 func TestStoresGetStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewStores()
+	ls := NewStores(hlc.NewClock(hlc.UnixNano))
 	store := Store{}
 	replica := roachpb.ReplicaDescriptor{StoreID: store.Ident.StoreID}
 	s, err := ls.GetStore(replica.StoreID)
@@ -127,7 +127,7 @@ func TestStoresLookupReplica(t *testing.T) {
 	ctx := TestStoreContext
 	manualClock := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manualClock.UnixNano)
-	ls := NewStores()
+	ls := NewStores(hlc.NewClock(hlc.UnixNano))
 
 	// Create two new stores with ranges we care about.
 	var e [2]engine.Engine

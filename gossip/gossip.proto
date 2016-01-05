@@ -23,6 +23,13 @@ import "cockroach/roachpb/metadata.proto";
 import "cockroach/util/unresolved_addr.proto";
 import weak "gogoproto/gogo.proto";
 
+// BootstrapInfo contains information necessary to bootstrapping the
+// gossip network from a cold start.
+message BootstrapInfo {
+  // A map from node ID to address.
+  repeated util.UnresolvedAddr addresses = 1 [(gogoproto.nullable) = false];
+}
+
 // Node contains information about a gossip node.
 message Node {
   // The most recent timestamp of any info which originated at this node.

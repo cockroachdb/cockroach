@@ -135,9 +135,7 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 				log.Warningf("node %d failed to fully combine gossip delta from node %d: %s", s.is.NodeID, args.NodeID, err)
 			}
 			if log.V(1) {
-				log.Infof("received %s from node %d (%d fresh)", args.Delta, args.NodeID, freshCount)
-			} else {
-				log.Infof("node %d received %d (%d fresh) info(s) from node %d", s.is.NodeID, len(args.Delta), freshCount, args.NodeID)
+				log.Infof("node %d received %s from node %d (%d fresh)", s.is.NodeID, extractKeys(args.Delta), args.NodeID, freshCount)
 			}
 			if s.closed {
 				return nil, util.Errorf("gossip server shutdown")
@@ -157,7 +155,9 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 		if canAccept {
 			reply.Delta = s.is.delta(args.NodeID, s.lAddrMap[lAddr.String()].nodes)
 			if len(reply.Delta) > 0 {
-				log.Infof("node %d returned %d info(s) to node %d", s.is.NodeID, len(reply.Delta), args.NodeID)
+				if log.V(1) {
+					log.Infof("node %d returned %d info(s) to node %d", s.is.NodeID, len(reply.Delta), args.NodeID)
+				}
 				reply.Nodes = s.is.getNodes()
 				s.sent += len(reply.Delta)
 				return reply, nil
@@ -208,12 +208,15 @@ func (s *server) InfosReceived() int {
 // to start a new client connection.
 func (s *server) maybeTighten() {
 	distantNodeID, distantHops := s.is.mostDistant()
-	log.Infof("@%d: distantHops: %d from %d", s.is.NodeID, distantHops, distantNodeID)
+	if log.V(1) {
+		log.Infof("@%d: distantHops: %d from %d", s.is.NodeID, distantHops, distantNodeID)
+	}
 	if distantHops > MaxHops {
 		select {
 		case s.tighten <- distantNodeID:
-			log.Infof("if possible, tightening network to node %d (%d > %d)",
-				distantNodeID, distantHops, MaxHops)
+			if log.V(1) {
+				log.Infof("if possible, tightening network to node %d (%d > %d)", distantNodeID, distantHops, MaxHops)
+			}
 		default:
 			// Do nothing.
 		}

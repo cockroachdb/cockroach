@@ -16,22 +16,16 @@
 
 package gossip
 
-import "github.com/cockroachdb/cockroach/roachpb"
-
 // expired returns true if the node's time to live (TTL) has expired.
 func (i *Info) expired(now int64) bool {
 	return i.TTLStamp <= now
 }
 
-// isFresh returns false if the info originated at this node, or if
-// the info has an originating timestamp earlier than the latest seen
-// by this node, or if the timestamps are equal but the hops the info
-// has taken to arrive at this node is greater than the minimum seen
-// from the originating node.
-func (i *Info) isFresh(thisNodeID roachpb.NodeID, n *Node) bool {
-	if thisNodeID != 0 && thisNodeID == i.NodeID {
-		return false
-	}
+// isFresh returns false if the info has an originating timestamp
+// earlier than the latest seen by this node, or if the timestamps are
+// equal but the hops the info has taken to arrive at this node is
+// greater than the minimum seen from the originating node.
+func (i *Info) isFresh(n *Node) bool {
 	if n == nil || (i.OrigStamp > n.HighWaterStamp ||
 		(i.OrigStamp == n.HighWaterStamp && i.Hops+1 < n.MinHops)) {
 		return true

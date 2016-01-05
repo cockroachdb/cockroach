@@ -90,6 +90,8 @@ var (
 func localStoreKeyPrint(key roachpb.Key) string {
 	if bytes.HasPrefix(key, localStoreIdentSuffix) {
 		return "/storeIdent"
+	} else if bytes.HasPrefix(key, localStoreGossipSuffix) {
+		return "/gossipBootstrap"
 	}
 
 	return fmt.Sprintf("%q", []byte(key))

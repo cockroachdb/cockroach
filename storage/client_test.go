@@ -93,7 +93,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	sCtx.Gossip = gossip.New(rpcContext, gossip.TestBootstrap)
 	sCtx.Gossip.SetNodeID(nodeDesc.NodeID)
 	sCtx.Tracer = tracer.NewTracer(nil, "testing")
-	localSender := storage.NewStores()
+	localSender := storage.NewStores(clock)
 	rpcSend := func(_ rpc.Options, _ string, _ []net.Addr,
 		getArgs func(addr net.Addr) proto.Message, _ func() proto.Message,
 		_ *rpc.Context) ([]proto.Message, error) {
@@ -215,7 +215,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	}
 
 	// Always create the first sender.
-	m.senders = append(m.senders, storage.NewStores())
+	m.senders = append(m.senders, storage.NewStores(m.clock))
 
 	if m.db == nil {
 		m.distSender = kv.NewDistSender(&kv.DistSenderContext{
@@ -417,7 +417,7 @@ func (m *multiTestContext) addStore() {
 	store.WaitForInit()
 	m.stores = append(m.stores, store)
 	if len(m.senders) == idx {
-		m.senders = append(m.senders, storage.NewStores())
+		m.senders = append(m.senders, storage.NewStores(clock))
 	}
 	m.senders[idx].AddStore(store)
 	if err := gossipNodeDesc(m.gossip, nodeID); err != nil {

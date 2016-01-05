@@ -111,7 +111,7 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 	ctx.ScanInterval = 10 * time.Minute
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
 	// Create a KV DB with a local sender.
-	stores := storage.NewStores()
+	stores := storage.NewStores(ctx.Clock)
 	sender := kv.NewTxnCoordSender(stores, ctx.Clock, false, nil, stopper)
 	ctx.DB = client.NewDB(sender)
 	ctx.Transport = storage.NewLocalRPCTransport(stopper)
@@ -171,7 +171,7 @@ func NewNode(ctx storage.StoreContext, metaRegistry *metric.Registry, stopper *s
 		ctx:     ctx,
 		stopper: stopper,
 		status:  status.NewNodeStatusMonitor(metaRegistry),
-		stores:  storage.NewStores(),
+		stores:  storage.NewStores(ctx.Clock),
 	}
 }
 
@@ -259,7 +259,7 @@ func (n *Node) start(rpcServer *rpc.Server, addr net.Addr, engines []engine.Engi
 	return nil
 }
 
-// initStores initializes the Stores map from id to Store. Stores are
+// initStores initializes the Stores map from ID to Store. Stores are
 // added to the local sender if already bootstrapped. A bootstrapped
 // Store has a valid ident with cluster, node and Store IDs set. If
 // the Store doesn't yet have a valid ident, it's added to the
@@ -297,6 +297,12 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 	// Verify all initialized stores agree on cluster and node IDs.
 	if err := n.validateStores(); err != nil {
 		return err
+	}
+
+	// Set the stores map as the gossip persistence, so that gossip can
+	// bootstrap using the most recently persisted set of node addresses.
+	if err := n.ctx.Gossip.SetPersistence(n.stores); err != nil {
+		log.Warningf("failed to set gossip persistence: %s; relying on --gossip bootstrap flag", err)
 	}
 
 	// Connect gossip before starting bootstrap. For new nodes, connecting
@@ -341,7 +347,6 @@ func (n *Node) validateStores() error {
 // allocated via a sequence id generator stored at a system key per
 // node.
 func (n *Node) bootstrapStores(bootstraps *list.List, stopper *stop.Stopper) {
-	log.Infof("bootstrapping %d store(s)", bootstraps.Len())
 	if n.ClusterID == "" {
 		panic("ClusterID missing during store bootstrap of auxiliary store")
 	}
@@ -360,6 +365,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List, stopper *stop.Stopper) {
 	}
 	for e := bootstraps.Front(); e != nil; e = e.Next() {
 		s := e.Value.(*storage.Store)
+		log.Infof("bootstrapping new store at %s...", s.Engine())
 		if err := s.Bootstrap(sIdent, stopper); err != nil {
 			log.Fatal(err)
 		}

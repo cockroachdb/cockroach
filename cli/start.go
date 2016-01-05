@@ -173,7 +173,7 @@ func runStart(_ *cobra.Command, _ []string) error {
 		return util.Errorf("failed to initialize node: %s", err)
 	}
 
-	log.Info("starting cockroach cluster")
+	log.Info("starting cockroach node")
 	s, err := server.NewServer(context, stopper)
 	if err != nil {
 		return util.Errorf("failed to start Cockroach server: %s", err)

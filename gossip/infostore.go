@@ -299,7 +299,7 @@ func (is *infoStore) delta(nodeID roachpb.NodeID, nodes map[int32]*Node) map[str
 	infos := make(map[string]*Info)
 	// Compute delta of infos.
 	if err := is.visitInfos(func(key string, i *Info) error {
-		if i.isFresh(nodeID, nodes[int32(i.NodeID)]) {
+		if i.isFresh(nodes[int32(i.NodeID)]) {
 			infos[key] = i
 		}
 		return nil

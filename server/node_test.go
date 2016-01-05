@@ -70,7 +70,11 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		if gossipBS == addr {
 			gossipBS = ln.Addr()
 		}
-		g.SetResolvers([]resolver.Resolver{resolver.NewResolverFromAddress(gossipBS)})
+		r, err := resolver.NewResolverFromAddress(gossipBS)
+		if err != nil {
+			t.Fatalf("bad gossip address %s: %s", gossipBS, err)
+		}
+		g.SetResolvers([]resolver.Resolver{r})
 		g.Start(rpcServer, ln.Addr(), stopper)
 	}
 	ctx.Gossip = g
@@ -171,7 +175,7 @@ func TestBootstrapNewStore(t *testing.T) {
 		engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper),
 		engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper),
 	}
-	_, _, node, stopper := createAndStartTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
+	_, _, node, stopper := createAndStartTestNode(util.CreateTestAddr("tcp"), engines, util.CreateTestAddr("tcp"), t)
 	defer stopper.Stop()
 
 	// Non-initialized stores (in this case the new in-memory-based
