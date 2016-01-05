@@ -67,11 +67,17 @@ func (ids indexesByID) Swap(i, j int) {
 	ids[i], ids[j] = ids[j], ids[i]
 }
 
-func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *TableDescriptor) error {
+func (p *planner) backfillBatch(b *client.Batch, oldTableDesc *TableDescriptor, mutationID MutationID) error {
 	var droppedColumnDescs []ColumnDescriptor
 	var droppedIndexDescs []IndexDescriptor
 	var newIndexDescs []IndexDescriptor
+	// Collect the elements that are part of the mutation.
 	for _, m := range oldTableDesc.Mutations {
+		if m.MutationID != mutationID {
+			// Mutations are applied in a FIFO order. Only apply the first set of
+			// mutations if they have the mutation ID we're looking for.
+			break
+		}
 		switch m.Direction {
 		case DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
@@ -95,7 +101,7 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *Tab
 	}
 
 	// TODO(vivek): Break these backfill operations into chunks. All of them
-	// will fail on big tables.
+	// will fail on big tables (see #3274).
 
 	// Delete the entire dropped columns.
 	// This used to use SQL UPDATE in the past to update the dropped
@@ -104,7 +110,7 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *Tab
 	// a SQL UPDATE of a column in mutations will fail.
 	if len(droppedColumnDescs) > 0 {
 		// Run a scan across the table using the primary key.
-		start := roachpb.Key(MakeIndexKeyPrefix(newTableDesc.ID, newTableDesc.PrimaryIndex.ID))
+		start := roachpb.Key(MakeIndexKeyPrefix(oldTableDesc.ID, oldTableDesc.PrimaryIndex.ID))
 		// Use a different batch to perform the scan.
 		batch := &client.Batch{}
 		batch.Scan(start, start.PrefixEnd(), 0)
@@ -133,7 +139,7 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *Tab
 	}
 
 	for _, indexDescriptor := range droppedIndexDescs {
-		indexPrefix := MakeIndexKeyPrefix(newTableDesc.ID, indexDescriptor.ID)
+		indexPrefix := MakeIndexKeyPrefix(oldTableDesc.ID, indexDescriptor.ID)
 
 		// Delete the index.
 		indexStartKey := roachpb.Key(indexPrefix)
@@ -169,17 +175,6 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *Tab
 		if err != nil {
 			return err
 		}
-
-		// TODO(tamird): This will fall down in production use. We need to do
-		// something better (see #2036). In particular, this implementation
-		// has the following problems:
-		// - Very large tables will generate an enormous batch here. This
-		// isn't really a problem in itself except that it will exacerbate
-		// the other issue:
-		// - Any non-quiescent table that this runs against will end up with
-		// an inconsistent index. This is because as inserts/updates continue
-		// to roll in behind this operation's read front, the written index
-		// will become incomplete/stale before it's written.
 
 		for rows.Next() {
 			rowVals := rows.Values()
