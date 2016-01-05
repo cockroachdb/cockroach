@@ -51,6 +51,7 @@ var (
 	// acquisition. Exported for testing purposes only.
 	MinLeaseDuration       = time.Minute
 	errLeaseVersionChanged = errors.New("lease version changed")
+	errDontUpdateVersion   = errors.New("don't update version")
 )
 
 // LeaseState holds the state for a lease. Exported only for testing.
@@ -257,12 +258,15 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) err
 			}
 
 			// Bump the version and modification time.
-			tableDesc.Version = tableDesc.Version + 1
+			tableDesc.Version++
 			now := s.clock.Now()
 			tableDesc.ModificationTime = now
 			if log.V(3) {
 				log.Infof("publish: descID=%d version=%d mtime=%s",
 					tableDesc.ID, tableDesc.Version, now.GoTime())
+			}
+			if err := tableDesc.Validate(); err != nil {
+				return err
 			}
 
 			// Write the updated descriptor.
@@ -273,6 +277,9 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) err
 		})
 
 		if err != errLeaseVersionChanged {
+			if err == errDontUpdateVersion {
+				return nil
+			}
 			return err
 		}
 	}

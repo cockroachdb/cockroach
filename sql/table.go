@@ -62,6 +62,8 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 	}
 	desc.Name = p.Table.Table()
 	desc.ParentID = parentID
+	// We don't use version 0.
+	desc.Version = 1
 
 	for _, def := range p.Defs {
 		switch d := def.(type) {
