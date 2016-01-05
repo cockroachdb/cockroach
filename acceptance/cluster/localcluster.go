@@ -365,7 +365,7 @@ func (l *LocalCluster) startNode(i int) *Container {
 		dockerlogDir := "/logs/" + nodeStr(i)
 		locallogDir = filepath.Join(l.logDir, nodeStr(i))
 		if !exists(locallogDir) {
-			if err := os.Mkdir(locallogDir, 0777); err != nil {
+			if err := os.MkdirAll(locallogDir, 0777); err != nil {
 				log.Fatal(err)
 			}
 		}
