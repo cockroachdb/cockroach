@@ -111,6 +111,9 @@ var flagUsage = map[string]string{
 	"metrics-frequency": `
         Adjust the frequency at which the server records its own internal metrics.
 `,
+	"pgaddr": `
+        The host:port to bind for Postgres traffic.
+`,
 	"scan-interval": `
         Adjusts the target for the duration of a single scan through a store's
         ranges. The scan is slowed as necessary to approximately achieve this
@@ -174,6 +177,7 @@ func initFlags(ctx *server.Context) {
 
 		// Server flags.
 		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
+		f.StringVar(&ctx.PGAddr, "pgaddr", ctx.PGAddr, flagUsage["pgaddr"])
 		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, flagUsage["attrs"])
 		f.StringVar(&ctx.Stores, "stores", ctx.Stores, flagUsage["stores"])
 		f.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, flagUsage["max-offset"])

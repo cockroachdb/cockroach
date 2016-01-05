@@ -126,6 +126,16 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// MustStartLocal skips tests not running against a local cluster.
+func MustStartLocal(t *testing.T) *cluster.LocalCluster {
+	if *numLocal == 0 {
+		t.Skip("skipping since not run against local cluster")
+	}
+	l := cluster.CreateLocal(*numLocal, *numStores, *logDir, stopper)
+	l.Start()
+	return l
+}
+
 func makeClient(t util.Tester, str string) (*client.DB, *stop.Stopper) {
 	stopper := stop.NewStopper()
 
