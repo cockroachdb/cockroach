@@ -14,6 +14,7 @@ builder=$(dirname $0)/builder.sh
 match='^F[0-9]+|^panic|^[Gg]oroutine [0-9]+|(read|write) by.*goroutine|DATA RACE|Too many goroutines running after tests'
 
 prepare_artifacts() {
+  # Friendly but stern reminder: Never ever move this or put anything above it.
   ret=$?
   # Show each action taken so we can trace if things go awry here.
   set -x
