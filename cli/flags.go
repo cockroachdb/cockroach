@@ -144,7 +144,7 @@ var flagUsage = map[string]string{
 		decisions.  Valid options are "usage" (default) or "rangecount".
 `,
 	"password": `
-        Set password. It will disable prompting for the password.
+        Set password. It will disable prompting for the password. It reads from stdin if password=-
 `,
 }
 
