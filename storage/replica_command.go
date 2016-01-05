@@ -502,7 +502,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 			r.readOnlyCmdMu.Unlock() // since the batch.Defer above won't run
 			// TODO(tschottdorf): should an error here always amount to a
 			// ReplicaCorruptionError?
-			log.Errorf("Range %d transaction commit trigger fail: %s", r.Desc().RangeID, err)
+			log.Errorf("Range %d transaction commit trigger fail: %s", r.RangeID, err)
 			return reply, nil, err
 		}
 	}
@@ -1061,16 +1061,16 @@ func (r *Replica) Merge(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Hea
 // has already been truncated has no effect. If this range is not the one
 // specified within the request body, the request will also be ignored.
 func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.TruncateLogRequest) (roachpb.TruncateLogResponse, error) {
+	r.Lock()
+	defer r.Unlock()
 	var reply roachpb.TruncateLogResponse
-
-	rangeID := r.Desc().RangeID
 
 	// After a merge, it's possible that this request was sent to the wrong
 	// range based on the start key. This will cancel the request if this is not
 	// the range specified in the request body.
-	if rangeID != args.RangeID {
+	if r.RangeID != args.RangeID {
 		log.Infof("range %d: attempting to truncate raft logs for another range %d. Normally this is due to a merge and can be ignored.",
-			rangeID, args.RangeID)
+			r.RangeID, args.RangeID)
 		return reply, nil
 	}
 
@@ -1083,7 +1083,7 @@ func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roach
 	if firstIndex >= args.Index {
 		if log.V(3) {
 			log.Infof("range %d: attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
-				rangeID, firstIndex, args.Index)
+				r.RangeID, firstIndex, args.Index)
 		}
 		return reply, nil
 	}
@@ -1093,8 +1093,8 @@ func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roach
 	if err != nil {
 		return reply, err
 	}
-	start := keys.RaftLogKey(rangeID, 0)
-	end := keys.RaftLogKey(rangeID, args.Index)
+	start := keys.RaftLogKey(r.RangeID, 0)
+	end := keys.RaftLogKey(r.RangeID, args.Index)
 	if err = batch.Iterate(engine.MakeMVCCMetadataKey(start), engine.MakeMVCCMetadataKey(end),
 		func(kv engine.MVCCKeyValue) (bool, error) {
 			return false, batch.Clear(kv.Key)
@@ -1105,7 +1105,7 @@ func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roach
 		Index: args.Index - 1,
 		Term:  term,
 	}
-	return reply, engine.MVCCPutProto(batch, ms, keys.RaftTruncatedStateKey(rangeID), roachpb.ZeroTimestamp, nil, &tState)
+	return reply, engine.MVCCPutProto(batch, ms, keys.RaftTruncatedStateKey(r.RangeID), roachpb.ZeroTimestamp, nil, &tState)
 }
 
 // LeaderLease sets the leader lease for this range. The command fails
@@ -1117,9 +1117,6 @@ func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roach
 // clearing the command queue and timestamp cache.
 func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.LeaderLeaseRequest) (roachpb.LeaderLeaseResponse, error) {
 	var reply roachpb.LeaderLeaseResponse
-
-	r.Lock()
-	defer r.Unlock()
 
 	prevLease := r.getLease()
 	isExtension := prevLease.Replica.StoreID == args.Lease.Replica.StoreID
@@ -1138,8 +1135,7 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 	}
 
 	// Verify that requestion replica is part of the current replica set.
-	desc := r.Desc()
-	if idx, _ := desc.FindReplica(args.Lease.Replica.StoreID); idx == -1 {
+	if idx, _ := r.Desc().FindReplica(args.Lease.Replica.StoreID); idx == -1 {
 		rErr.Message = "replica not found"
 		return reply, rErr
 	}
@@ -1179,10 +1175,8 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 
 	args.Lease.Start = effectiveStart
 
-	rangeID := desc.RangeID
-
 	// Store the lease to disk & in-memory.
-	if err := engine.MVCCPutProto(batch, ms, keys.RaftLeaderLeaseKey(rangeID), roachpb.ZeroTimestamp, nil, &args.Lease); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, keys.RaftLeaderLeaseKey(r.RangeID), roachpb.ZeroTimestamp, nil, &args.Lease); err != nil {
 		return reply, err
 	}
 	atomic.StorePointer(&r.lease, unsafe.Pointer(&args.Lease))
@@ -1195,12 +1189,12 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 	if r.getLease().Replica.StoreID == r.store.StoreID() &&
 		prevLease.Replica.StoreID != r.getLease().Replica.StoreID {
 		r.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.store.Clock().MaxOffset()), 0))
-		log.Infof("range %d: new leader lease %s", rangeID, args.Lease)
+		log.Infof("range %d: new leader lease %s", r.RangeID, args.Lease)
 	}
 
 	// Gossip system config if this range includes the system span.
 	if r.ContainsKey(keys.SystemDBSpan.Key) {
-		r.maybeGossipSystemConfigLocked()
+		r.maybeGossipSystemConfig()
 	}
 	return reply, nil
 }

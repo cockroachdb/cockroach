@@ -30,16 +30,21 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+// All calls to raft.RawNode require that an exclusive lock is held. All of the
+// functions exposed via the raft.Storage interface will in turn be called from
+// RawNode. So the lock that guards raftGroup must be the same as the lock that
+// guards all the inner fields.
+
 // InitialState implements the raft.Storage interface.
+// InitialState requires that the replica read lock be held.
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var hs raftpb.HardState
-	desc := r.Desc()
-	found, err := engine.MVCCGetProto(r.store.Engine(), keys.RaftHardStateKey(desc.RangeID),
+	found, err := engine.MVCCGetProto(r.store.Engine(), keys.RaftHardStateKey(r.RangeID),
 		roachpb.ZeroTimestamp, true, nil, &hs)
 	if err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
-	initialized := r.isInitialized()
+	initialized := r.isInitializedLocked()
 	if !found {
 		// We don't have a saved HardState, so set up the defaults.
 		if initialized {
@@ -65,7 +70,7 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var cs raftpb.ConfState
 	// For uninitalized ranges, membership is unknown at this point.
 	if found || initialized {
-		for _, rep := range desc.Replicas {
+		for _, rep := range r.desc.Replicas {
 			cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 		}
 	}
@@ -78,6 +83,7 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // maxBytes. Passing maxBytes equal to zero disables size checking.
 // TODO(bdarnell): consider caching for recent entries, if rocksdb's builtin caching
 // is insufficient.
+// Entries requires that the replica read lock is held.
 func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	if lo > hi {
 		return nil, util.Errorf("lo:%d is greater than hi:%d", lo, hi)
@@ -104,7 +110,7 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 		return exceededMaxBytes, nil
 	}
 
-	rangeID := r.Desc().RangeID
+	rangeID := r.RangeID
 	_, err := engine.MVCCIterate(r.store.Engine(),
 		keys.RaftLogKey(rangeID, lo),
 		keys.RaftLogKey(rangeID, hi),
@@ -146,7 +152,7 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	}
 
 	// No results, was it due to unavailability or truncation?
-	ts, err := r.raftTruncatedState()
+	ts, err := r.raftTruncatedStateLocked()
 	if err != nil {
 		return nil, err
 	}
@@ -159,10 +165,11 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 }
 
 // Term implements the raft.Storage interface.
+// Term requires that the replica read lock is held.
 func (r *Replica) Term(i uint64) (uint64, error) {
 	ents, err := r.Entries(i, i+1, 0)
 	if err == raft.ErrCompacted {
-		ts, err := r.raftTruncatedState()
+		ts, err := r.raftTruncatedStateLocked()
 		if err != nil {
 			return 0, err
 		}
@@ -188,17 +195,24 @@ func (r *Replica) LastIndex() (uint64, error) {
 // current entry. This includes both entries that have been compacted away
 // and the dummy entries that make up the starting point of an empty log.
 func (r *Replica) raftTruncatedState() (roachpb.RaftTruncatedState, error) {
+	r.RLock()
+	defer r.RUnlock()
+	return r.raftTruncatedStateLocked()
+}
+
+// raftTruncatedState requires that the replica read lock be held.
+func (r *Replica) raftTruncatedStateLocked() (roachpb.RaftTruncatedState, error) {
 	if ts := r.getCachedTruncatedState(); ts != nil {
 		return *ts, nil
 	}
 	ts := roachpb.RaftTruncatedState{}
-	ok, err := engine.MVCCGetProto(r.store.Engine(), keys.RaftTruncatedStateKey(r.Desc().RangeID),
+	ok, err := engine.MVCCGetProto(r.store.Engine(), keys.RaftTruncatedStateKey(r.RangeID),
 		roachpb.ZeroTimestamp, true, nil, &ts)
 	if err != nil {
 		return ts, err
 	}
 	if !ok {
-		if r.isInitialized() {
+		if r.isInitializedLocked() {
 			// If we created this range, set the initial log index/term.
 			ts.Index = raftInitialLogIndex
 			ts.Term = raftInitialLogTerm
@@ -217,23 +231,25 @@ func (r *Replica) raftTruncatedState() (roachpb.RaftTruncatedState, error) {
 }
 
 // FirstIndex implements the raft.Storage interface.
+// FirstIndex requires that the replica read lock is held.
 func (r *Replica) FirstIndex() (uint64, error) {
-	ts, err := r.raftTruncatedState()
+	ts, err := r.raftTruncatedStateLocked()
 	if err != nil {
 		return 0, err
 	}
 	return ts.Index + 1, nil
 }
 
-// loadAppliedIndex retrieves the applied index from the supplied engine.
-func (r *Replica) loadAppliedIndex(eng engine.Engine) (uint64, error) {
+// loadAppliedIndexLocked retrieves the applied index from the supplied engine.
+// loadAppliedIndexLocked requires that the replica read lock is held.
+func (r *Replica) loadAppliedIndexLocked(eng engine.Engine) (uint64, error) {
 	var appliedIndex uint64
-	if r.isInitialized() {
+	if r.isInitializedLocked() {
 		appliedIndex = raftInitialLogIndex
 	} else {
 		appliedIndex = 0
 	}
-	v, _, err := engine.MVCCGet(eng, keys.RaftAppliedIndexKey(r.Desc().RangeID),
+	v, _, err := engine.MVCCGet(eng, keys.RaftAppliedIndexKey(r.RangeID),
 		roachpb.ZeroTimestamp, true, nil)
 	if err != nil {
 		return 0, err
@@ -262,9 +278,17 @@ func setAppliedIndex(eng engine.Engine, rangeID roachpb.RangeID, appliedIndex ui
 
 // loadLastIndex retrieves the last index from storage.
 func (r *Replica) loadLastIndex() (uint64, error) {
+	r.RLock()
+	defer r.RUnlock()
+	return r.loadLastIndexLocked()
+}
+
+// loadLastIndexLocked retrieves the last index from storage.
+// loadLastIndexLocked requires that the replica read lock is held.
+func (r *Replica) loadLastIndexLocked() (uint64, error) {
 	lastIndex := uint64(0)
 	v, _, err := engine.MVCCGet(r.store.Engine(),
-		keys.RaftLastIndexKey(r.Desc().RangeID),
+		keys.RaftLastIndexKey(r.RangeID),
 		roachpb.ZeroTimestamp, true /* consistent */, nil)
 	if err != nil {
 		return 0, err
@@ -279,7 +303,7 @@ func (r *Replica) loadLastIndex() (uint64, error) {
 		// The log is empty, which means we are either starting from scratch
 		// or the entire log has been truncated away. raftTruncatedState
 		// handles both cases.
-		lastEnt, err := r.raftTruncatedState()
+		lastEnt, err := r.raftTruncatedStateLocked()
 		if err != nil {
 			return 0, err
 		}
@@ -300,6 +324,7 @@ func setLastIndex(eng engine.Engine, rangeID roachpb.RangeID, lastIndex uint64) 
 }
 
 // Snapshot implements the raft.Storage interface.
+// Snapshot requires that the replica read lock is held.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	// Copy all the data from a consistent RocksDB snapshot into a RaftSnapshotData.
 	snap := r.store.NewSnapshot()
@@ -308,7 +333,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 
 	// Read the range metadata from the snapshot instead of the members
 	// of the Range struct because they might be changed concurrently.
-	appliedIndex, err := r.loadAppliedIndex(snap)
+	appliedIndex, err := r.loadAppliedIndexLocked(snap)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
@@ -317,7 +342,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	// We ignore intents on the range descriptor (consistent=false) because we
 	// know they cannot be committed yet; operations that modify range
 	// descriptors resolve their own intents when they commit.
-	ok, err := engine.MVCCGetProto(snap, keys.RangeDescriptorKey(r.Desc().StartKey),
+	ok, err := engine.MVCCGetProto(snap, keys.RangeDescriptorKey(r.desc.StartKey),
 		r.store.Clock().Now(), false /* !consistent */, nil, &desc)
 	if err != nil {
 		return raftpb.Snapshot{}, util.Errorf("failed to get desc: %s", err)
@@ -377,10 +402,8 @@ func (r *Replica) append(entries []raftpb.Entry) error {
 	batch := r.store.Engine().NewBatch()
 	defer batch.Close()
 
-	rangeID := r.Desc().RangeID
-
 	for _, ent := range entries {
-		err := engine.MVCCPutProto(batch, nil, keys.RaftLogKey(rangeID, ent.Index),
+		err := engine.MVCCPutProto(batch, nil, keys.RaftLogKey(r.RangeID, ent.Index),
 			roachpb.ZeroTimestamp, nil, &ent)
 		if err != nil {
 			return err
@@ -391,14 +414,14 @@ func (r *Replica) append(entries []raftpb.Entry) error {
 	// Delete any previously appended log entries which never committed.
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
 		err := engine.MVCCDelete(batch, nil,
-			keys.RaftLogKey(rangeID, i), roachpb.ZeroTimestamp, nil)
+			keys.RaftLogKey(r.RangeID, i), roachpb.ZeroTimestamp, nil)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Commit the batch and update the last index.
-	if err := setLastIndex(batch, rangeID, lastIndex); err != nil {
+	if err := setLastIndex(batch, r.RangeID, lastIndex); err != nil {
 		return err
 	}
 	if err := batch.Commit(); err != nil {
@@ -448,7 +471,7 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot) error {
 		return err
 	}
 
-	rangeID := r.Desc().RangeID
+	rangeID := r.RangeID
 
 	// First, save the HardState.  The HardState must not be changed
 	// because it may record a previous vote cast by this node.
@@ -553,7 +576,7 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot) error {
 
 // setHardState persists the raft HardState.
 func (r *Replica) setHardState(st raftpb.HardState) error {
-	return engine.MVCCPutProto(r.store.Engine(), nil, keys.RaftHardStateKey(r.Desc().RangeID),
+	return engine.MVCCPutProto(r.store.Engine(), nil, keys.RaftHardStateKey(r.RangeID),
 		roachpb.ZeroTimestamp, nil, &st)
 }
 
