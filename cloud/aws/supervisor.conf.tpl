@@ -21,7 +21,7 @@ serverurl=http://127.0.0.1:9001 ; use an http:// url to specify an inet socket
 
 [program:cockroach]
 directory=%(here)s
-command=%(here)s/cockroach start --logtostderr=true --stores=${stores} --insecure --gossip=lb=${elb_address}
+command=%(here)s/cockroach start --logtostderr=true --stores=${stores} --insecure --gossip=http-lb=${elb_address}
 process_name=%(program_name)s
 numprocs=1
 autostart=false
