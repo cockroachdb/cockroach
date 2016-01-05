@@ -82,19 +82,21 @@ func (rs *rangeStats) GetSize() int64 {
 	return rs.KeyBytes + rs.ValBytes
 }
 
-// MergeMVCCStats merges the results of an MVCC operation or series of
-// MVCC operations into the range's stats. The intent age is augmented
-// by multiplying the previous intent count by the elapsed nanos since
-// the last update to range stats. Stats are stored to the underlying
-// engine and the rangeStats MVCCStats updated to reflect merged totals.
+// MergeMVCCStats merges the results of an MVCC operation or series of MVCC
+// operations into the range's stats. The intent age is augmented by
+// multiplying the previous intent count by the elapsed nanos since the last
+// update (and similarly for the gc age). The supplied MVCCStats are modified
+// in-place and stored to the underlying engine while the rangeStats MVCCStats
+// are updated to reflect merged totals.
 func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms *engine.MVCCStats, nowNanos int64) error {
 	rs.Lock()
 	defer rs.Unlock()
 	// Augment the current intent age.
-	diffSeconds := nowNanos/1E9 - rs.LastUpdateNanos/1E9
-	ms.LastUpdateNanos = nowNanos
-	ms.IntentAge += rs.IntentCount * diffSeconds
-	ms.GCBytesAge += engine.MVCCComputeGCBytesAge(rs.KeyBytes+rs.ValBytes-rs.LiveBytes, diffSeconds)
+	if diffSeconds := nowNanos/1E9 - rs.LastUpdateNanos/1E9; diffSeconds > 0 {
+		ms.LastUpdateNanos = nowNanos
+		ms.IntentAge += rs.IntentCount * diffSeconds
+		ms.GCBytesAge += engine.MVCCComputeGCBytesAge(rs.KeyBytes+rs.ValBytes-rs.LiveBytes, diffSeconds)
+	}
 	rs.MVCCStats.Add(ms)
 	return engine.MVCCSetRangeStats(e, rs.rangeID, &rs.MVCCStats)
 }
