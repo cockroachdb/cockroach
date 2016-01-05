@@ -2,6 +2,7 @@
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../../typings/lodash/lodash.d.ts" />
 /// <reference path="../util/property.ts" />
+/// <reference path="../util/format.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
 module Components {
@@ -13,6 +14,7 @@ module Components {
    */
   export module Table {
     import MithrilElement = _mithril.MithrilVirtualElement;
+    import UnitValue = Utils.Format.UnitValue;
 
     /**
      * TableColumn describes a single column of a data table.
@@ -48,12 +50,17 @@ module Components {
        * rollup is a function that takes the table values and reduces them to
        * a single value - typically average or sum.
        */
-       rollup?: (rows: T[]) => string|MithrilElement;
-       /**
-        * section is a string that indicates the column section this column
-        * is part of
-        */
-       section?: string;
+      rollup?: (rows: T[]) => string|MithrilElement;
+      /**
+       * section is a string that indicates the column section this column
+       * is part of
+       */
+      section?: string;
+    }
+
+    export function FormatBytesAndCount(bytes: number, count: number): MithrilElement {
+      let b: UnitValue = Utils.Format.BytesToUnitValue(bytes);
+      return m("div", [b.value.toFixed(1), " ", m("span.units", b.units), " (", count , ")"]);
     }
 
     /**

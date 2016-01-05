@@ -1,5 +1,6 @@
 // source: pages/stores.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
+/// <reference path="../../typings/lodash/lodash.d.ts"/>
 /// <reference path="../models/status.ts" />
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/table.ts" />
@@ -43,6 +44,22 @@ module AdminViews {
       import MithrilComponent = _mithril.MithrilComponent;
       import bytesAndCountReducer = Models.Status.bytesAndCountReducer;
       import BytesAndCount = Models.Status.BytesAndCount;
+
+      function ByteCountColumn(key: string, section: string, title?: string): Table.TableColumn<StoreStatus> {
+        let byteKey: string = key + "_bytes";
+        let countKey: string = key + "_count";
+        return {
+          title: title || Utils.Format.Titlecase(_.last(byteKey.split("."))),
+          view: (status: StoreStatus): MithrilVirtualElement => Table.FormatBytesAndCount(parseFloat(_.get<string>(status, byteKey)), parseFloat(_.get<string>(status, countKey))),
+          sortable: true,
+          sortValue: (status: StoreStatus): number => parseFloat(_.get<string>(status, byteKey)),
+          rollup: function(rows: StoreStatus[]): MithrilVirtualElement {
+            let total: BytesAndCount = bytesAndCountReducer(byteKey, countKey, rows);
+            return Table.FormatBytesAndCount(total.bytes, total.count);
+          },
+          section: section,
+        };
+      }
 
       class Controller {
         private static _queryEveryMS: number = 10000;
@@ -101,66 +118,11 @@ module AdminViews {
             },
             sortable: true,
           },
-          {
-            title: "Live Count (Bytes)",
-            view: (status: StoreStatus): string =>
-              status.stats.live_count + " (" + Utils.Format.Bytes(status.stats.live_bytes) + ")",
-            sortable: true,
-            sortValue: (status: StoreStatus): number => status.stats.live_bytes,
-            rollup: function(rows: StoreStatus[]): string {
-              let total: BytesAndCount = bytesAndCountReducer("stats.live_bytes", "stats.live_count", rows);
-              return Utils.Format.Bytes(total.bytes) + " (" + total.count + ")";
-            },
-            section: "storage",
-          },
-          {
-            title: "Key Count (Bytes)",
-            view: (status: StoreStatus): string =>
-              status.stats.key_count + " (" + Utils.Format.Bytes(status.stats.key_bytes) + ")",
-            sortable: true,
-            sortValue: (status: StoreStatus): number => status.stats.key_bytes,
-            rollup: function(rows: StoreStatus[]): string {
-              let total: BytesAndCount = bytesAndCountReducer("stats.key_bytes", "stats.key_count", rows);
-              return Utils.Format.Bytes(total.bytes) + " (" + total.count + ")";
-            },
-            section: "storage",
-          },
-          {
-            title: "Value Count (Bytes)",
-            view: (status: StoreStatus): string =>
-              status.stats.val_count + " (" + Utils.Format.Bytes(status.stats.val_bytes) + ")",
-            sortable: true,
-            sortValue: (status: StoreStatus): number => status.stats.val_bytes,
-            rollup: function(rows: StoreStatus[]): string {
-              let total: BytesAndCount = bytesAndCountReducer("stats.val_bytes", "stats.val_count", rows);
-              return Utils.Format.Bytes(total.bytes) + " (" + total.count + ")";
-            },
-            section: "storage",
-          },
-          {
-            title: "Intent Count (Bytes)",
-            view: (status: StoreStatus): string =>
-              status.stats.intent_count + " (" + Utils.Format.Bytes(status.stats.intent_bytes) + ")",
-            sortable: true,
-            sortValue: (status: StoreStatus): number => status.stats.intent_bytes,
-            rollup: function(rows: StoreStatus[]): string {
-              let total: BytesAndCount = bytesAndCountReducer("stats.intent_bytes", "stats.intent_count", rows);
-              return Utils.Format.Bytes(total.bytes) + " (" + total.count + ")";
-            },
-            section: "storage",
-          },
-          {
-            title: "System Count (Bytes)",
-            view: (status: StoreStatus): string =>
-              status.stats.sys_count + " (" + Utils.Format.Bytes(status.stats.sys_bytes) + ")",
-            sortable: true,
-            sortValue: (status: StoreStatus): number => status.stats.sys_bytes,
-            rollup: function(rows: StoreStatus[]): string {
-              let total: BytesAndCount = bytesAndCountReducer("stats.sys_bytes", "stats.sys_count", rows);
-              return Utils.Format.Bytes(total.bytes) + " (" + total.count + ")";
-            },
-            section: "storage",
-          },
+          ByteCountColumn("stats.live", "storage"),
+          ByteCountColumn("stats.key", "storage"),
+          ByteCountColumn("stats.val", "storage", "Value Bytes"),
+          ByteCountColumn("stats.intent", "storage"),
+          ByteCountColumn("stats.sys", "storage", "System Bytes"),
         ];
 
         public sources: string[] = [];

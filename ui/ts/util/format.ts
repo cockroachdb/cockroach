@@ -66,16 +66,29 @@ module Utils {
      */
     const kibi: number = 1024;
     const units: string[] = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
-    export function Bytes(bytes: number): string {
+    export interface UnitValue {
+      value: number;
+      units: string;
+    }
+
+    export function BytesToUnitValue(bytes: number): UnitValue {
       if (Math.abs(bytes) < kibi) {
-        return bytes + " B";
+        return {value: bytes, units: "B"};
       }
       let u: number = -1;
       do {
         bytes /= kibi;
         ++u;
       } while (Math.abs(bytes) >= kibi && u < units.length - 1);
-      return bytes.toFixed(1) + " " + units[u];
+      return {
+        value: bytes,
+        units: units[u],
+      };
+    }
+
+    export function Bytes(bytes: number): string {
+      let unitVal: UnitValue = BytesToUnitValue(bytes);
+      return unitVal.value.toFixed(1) + " " + unitVal.units;
     }
 
     /**
@@ -86,6 +99,10 @@ module Utils {
         return "100%";
       }
       return Math.floor(numerator / denominator * 100).toString() + "%";
+    }
+
+    export function Titlecase(s: string): string {
+      return s.replace(/_/g, " ").replace(/\b\w/g, (c: string): string => c.toUpperCase());
     }
   }
 }
