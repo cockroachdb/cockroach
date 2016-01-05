@@ -551,9 +551,9 @@ func mvccGetMetadata(iter Iterator, metaKey MVCCKey,
 	}
 
 	meta.Reset()
-	// For values, the size of keys is always account for as
-	// mvccVersionTimestampSize. The size of the metadata key is accounted for
-	// separately.
+	// For values, the size of keys is always accounted for as
+	// mvccVersionTimestampSize. The size of the metadata key is
+	// accounted for separately.
 	meta.KeyBytes = mvccVersionTimestampSize
 	meta.ValBytes = int64(len(iter.unsafeValue()))
 	meta.Deleted = len(iter.unsafeValue()) == 0

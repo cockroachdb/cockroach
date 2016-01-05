@@ -59,7 +59,7 @@ var flagUsage = map[string]string{
         attributes should be specified first and in the same order for all
         nodes. For example:
 
-          --attrs=us-west-1b,gpu.
+          --attrs=us-west-1b,gpu
 `,
 	"cache-size": `
         Total size in bytes for caches, shared evenly if there are multiple
@@ -137,7 +137,7 @@ var flagUsage = map[string]string{
         attributes might also include speeds and other specs (7200rpm,
         200kiops, etc.). For example:
 
-          --stores=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824.
+          --stores=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824
 `,
 	"max-results": `
         Define the maximum number of results that will be retrieved.

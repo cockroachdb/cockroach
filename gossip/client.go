@@ -17,6 +17,7 @@
 package gossip
 
 import (
+	"fmt"
 	"net"
 	netrpc "net/rpc"
 
@@ -36,6 +37,15 @@ type client struct {
 	sendingGossip bool            // True if there's an outstanding RPC to send gossip
 	remoteNodes   map[int32]*Node // Remote server's high water timestamps and min hops
 	closer        chan struct{}   // Client shutdown channel
+}
+
+// extractKeys returns a string representation of a gossip delta's keys.
+func extractKeys(delta map[string]*Info) string {
+	keys := []string{}
+	for key := range delta {
+		keys = append(keys, key)
+	}
+	return fmt.Sprintf("%s", keys)
 }
 
 // newClient creates and returns a client struct.
@@ -151,14 +161,14 @@ func (c *client) handleGossip(g *Gossip, call *netrpc.Call) error {
 		}
 		if infoCount := len(reply.Delta); infoCount > 0 {
 			if log.V(1) {
-				log.Infof("received %s from node %d (%d fresh)", reply.Delta, reply.NodeID, freshCount)
-			} else {
-				log.Infof("node %d received %d (%d fresh) info(s) from node %d", g.is.NodeID, infoCount, freshCount, reply.NodeID)
+				log.Infof("node %d received %s from node %d (%d fresh)", g.is.NodeID, extractKeys(reply.Delta), reply.NodeID, freshCount)
 			}
 		}
 		g.maybeTighten()
 	} else if len(args.Delta) > 0 {
-		log.Infof("sent %d info(s) to node %d", len(args.Delta), reply.NodeID)
+		if log.V(1) {
+			log.Infof("node %d sent %d info(s) to node %d", g.is.NodeID, len(args.Delta), reply.NodeID)
+		}
 	}
 	c.peerID = reply.NodeID
 	g.outgoing.addNode(c.peerID)

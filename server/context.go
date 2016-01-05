@@ -183,11 +183,9 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 		}
 		ctx.Engines = append(ctx.Engines, engine)
 	}
-	log.Infof("initialized %d storage engine(s)", len(ctx.Engines))
+	log.Infof("%d storage engine(s) specified", len(ctx.Engines))
 	return nil
 }
-
-var errNoGossipAddresses = errors.New("no gossip addresses found, did you specify --gossip?")
 
 // InitNode parses node attributes and initializes the gossip bootstrap
 // resolvers.
@@ -200,10 +198,9 @@ func (ctx *Context) InitNode() error {
 	if err != nil {
 		return err
 	}
-	if len(resolvers) == 0 {
-		return errNoGossipAddresses
+	if len(resolvers) > 0 {
+		ctx.GossipBootstrapResolvers = resolvers
 	}
-	ctx.GossipBootstrapResolvers = resolvers
 
 	return nil
 }

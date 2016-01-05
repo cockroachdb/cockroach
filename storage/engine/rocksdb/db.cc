@@ -485,7 +485,7 @@ class DBPrefixExtractor : public rocksdb::SliceTransform {
   // MVCC keys are encoded as <user-key>/<timestamp>. Extract the <user-key>
   // prefix which will allow for more efficient iteration over the keys
   // matching a particular <user-key>. Specifically, the <user-key> will be
-  // added to the per table bloom filters and will this be able to skip tables
+  // added to the per table bloom filters and will be used to skip tables
   // which do not contain the <user-key>.
   virtual rocksdb::Slice Transform(const rocksdb::Slice& src) const {
     rocksdb::Slice key;

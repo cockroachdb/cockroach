@@ -490,7 +490,7 @@ Flags:
       --log-dir                 if non-empty, write log files in this directory
       --logtostderr             log to standard error instead of files (default true)
       --verbosity               log level for V logs
-      --vmodule                 comma-separated list of file=N settings for file-filtered logging
+      --vmodule                 comma-separated list of pattern=N settings for file-filtered logging
 
 Use "cockroach [command] --help" for more information about a command.
 `
