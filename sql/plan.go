@@ -68,8 +68,13 @@ func (p *planner) resetTxn() {
 
 // makePlan creates the query plan for a single SQL statement. The returned
 // plan needs to be iterated over using planNode.Next() and planNode.Values()
-// in order to retrieve matching rows.
-func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
+// in order to retrieve matching rows. If autoCommit is true, the plan is
+// allowed (but not required) to commit the transaction along with other KV
+// operations.
+//
+// Note: The autoCommit parameter enables operations to enable the 1PC
+// optimization. This is a bit hackish/preliminary at present.
+func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, error) {
 	// This will set the system DB trigger for transactions containing
 	// DDL statements that have no effect, such as
 	// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
@@ -105,9 +110,9 @@ func (p *planner) makePlan(stmt parser.Statement) (planNode, error) {
 	case *parser.Grant:
 		return p.Grant(n)
 	case *parser.Insert:
-		return p.Insert(n)
+		return p.Insert(n, autoCommit)
 	case *parser.ParenSelect:
-		return p.makePlan(n.Select)
+		return p.makePlan(n.Select, autoCommit)
 	case *parser.RenameColumn:
 		return p.RenameColumn(n)
 	case *parser.RenameDatabase:
@@ -159,7 +164,7 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 	if err := parser.FillArgs(stmt, golangParameters(args)); err != nil {
 		return nil, err
 	}
-	return p.makePlan(stmt)
+	return p.makePlan(stmt, false)
 }
 
 func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, error) {
