@@ -15,8 +15,8 @@ match='^F\d+|^panic|^[Gg]oroutine \d+|(read|write) by.*goroutine|DATA RACE|Too m
 
 prepare_artifacts() {
   ret=$?
-
-  set +e
+  # Show each action taken so we can trace if things go awry here.
+  set -x
 
   # Translate the log output to xml to integrate with CircleCI
   # better.
