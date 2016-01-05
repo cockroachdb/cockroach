@@ -140,7 +140,7 @@ type rangeAlreadyExists struct {
 
 // Error implements the error interface.
 func (e rangeAlreadyExists) Error() string {
-	return fmt.Sprintf("range for Range ID %d already exists on store", e.rng.Desc().RangeID)
+	return fmt.Sprintf("range for Range ID %d already exists on store", e.rng.RangeID)
 }
 
 // rangeKeyItem is a common interface for roachpb.Key and Range.
@@ -209,7 +209,7 @@ func (rs *storeRangeSet) Visit(visitor func(*Replica) bool) {
 	rs.rangeIDs = make([]roachpb.RangeID, rs.store.replicasByKey.Len())
 	i := 0
 	rs.store.replicasByKey.Ascend(func(item btree.Item) bool {
-		rs.rangeIDs[i] = item.(*Replica).Desc().RangeID
+		rs.rangeIDs[i] = item.(*Replica).RangeID
 		i++
 		return true
 	})
@@ -1125,7 +1125,7 @@ func (s *Store) addReplicaInternal(rng *Replica) error {
 
 // addReplicaToRangeMap adds the replica to the replicas map.
 func (s *Store) addReplicaToRangeMap(rng *Replica) error {
-	rangeID := rng.Desc().RangeID
+	rangeID := rng.RangeID
 
 	if exRng, ok := s.replicas[rangeID]; ok {
 		return rangeAlreadyExists{exRng}
@@ -1154,7 +1154,6 @@ func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor) er
 // removeReplicaImpl runs on the processRaft goroutine.
 func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor) error {
 	desc := rep.Desc()
-	rangeID := desc.RangeID
 	_, rd := desc.FindReplica(s.StoreID())
 	if rd != nil && rd.ReplicaID >= origDesc.NextReplicaID {
 		return util.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
@@ -1163,7 +1162,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	delete(s.replicas, rangeID)
+	delete(s.replicas, rep.RangeID)
 	if s.replicasByKey.Delete(rep) == nil {
 		return util.Errorf("couldn't find range in replicasByKey btree")
 	}
@@ -1184,7 +1183,7 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 		return util.Errorf("attempted to process uninitialized range %s", rng)
 	}
 
-	rangeID := rng.Desc().RangeID
+	rangeID := rng.RangeID
 
 	if _, ok := s.uninitReplicas[rangeID]; !ok {
 		// Do nothing if the range has already been initialized.
@@ -1682,7 +1681,7 @@ func (s *Store) getOrCreateReplicaLocked(groupID roachpb.RangeID, replicaID roac
 	if err = s.addReplicaToRangeMap(r); err != nil {
 		return nil, err
 	}
-	s.uninitReplicas[r.Desc().RangeID] = r
+	s.uninitReplicas[r.RangeID] = r
 
 	return r, nil
 }

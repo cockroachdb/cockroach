@@ -176,7 +176,7 @@ func (tc *testContext) Start(t testing.TB) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tc.rangeID = tc.rng.Desc().RangeID
+		tc.rangeID = tc.rng.RangeID
 	}
 
 	if err := tc.initConfigs(realRange); err != nil {
@@ -1477,7 +1477,7 @@ func TestRangeSequenceCacheReadError(t *testing.T) {
 	}
 
 	// Overwrite sequence cache entry with garbage for the last op.
-	key := keys.SequenceCacheKey(tc.rng.Desc().RangeID, txn.ID, uint32(txn.Epoch), txn.Sequence)
+	key := keys.SequenceCacheKey(tc.rng.RangeID, txn.ID, uint32(txn.Epoch), txn.Sequence)
 	// Make garbageKey sort before key (we've chosen Sequence=1 above,
 	// the last byte of which isn't \x00); add an extra byte of garbage.
 	garbageKey := append(roachpb.Key(nil), key[:len(key)-1]...)
@@ -2661,7 +2661,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		t.Fatal(err)
 	}
 	expMS := engine.MVCCStats{LiveBytes: 25, KeyBytes: 14, ValBytes: 11, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 51, SysCount: 1, LastUpdateNanos: 0}
-	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
+	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Put a 2nd value transactionally.
 	pArgs = putArgs([]byte("b"), []byte("value2"))
@@ -2671,7 +2671,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{LiveBytes: 116, KeyBytes: 28, ValBytes: 88, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 51, SysCount: 1, LastUpdateNanos: 0}
-	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
+	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Resolve the 2nd value.
 	rArgs := &roachpb.ResolveIntentRequest{
@@ -2686,7 +2686,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{LiveBytes: 50, KeyBytes: 28, ValBytes: 22, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 51, SysCount: 1, LastUpdateNanos: 0}
-	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
+	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Delete the 1st value.
 	dArgs := deleteArgs([]byte("a"))
@@ -2695,7 +2695,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{LiveBytes: 25, KeyBytes: 40, ValBytes: 22, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 51, SysCount: 1, LastUpdateNanos: 0}
-	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
+	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 }
 
 // TestMerge verifies that the Merge command is behaving as
@@ -2765,7 +2765,7 @@ func TestTruncateLog(t *testing.T) {
 		indexes = append(indexes, idx)
 	}
 
-	rangeID := tc.rng.Desc().RangeID
+	rangeID := tc.rng.RangeID
 
 	// Discard the first half of the log.
 	truncateArgs := truncateLogArgs(indexes[5], rangeID)
@@ -2949,7 +2949,7 @@ func TestReplicaCorruption(t *testing.T) {
 	newIndex := 2*atomic.LoadUint64(&tc.rng.appliedIndex) + 1
 	atomic.StoreUint64(&tc.rng.appliedIndex, newIndex)
 	// Not really needed, but let's be thorough.
-	err = setAppliedIndex(tc.rng.store.Engine(), tc.rng.Desc().RangeID, newIndex)
+	err = setAppliedIndex(tc.rng.store.Engine(), tc.rng.RangeID, newIndex)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3567,7 +3567,7 @@ func TestEntries(t *testing.T) {
 	}
 
 	rng := tc.rng
-	rangeID := rng.Desc().RangeID
+	rangeID := rng.RangeID
 
 	// Discard the first half of the log.
 	truncateArgs := truncateLogArgs(indexes[5], rangeID)
@@ -3666,7 +3666,7 @@ func TestTerm(t *testing.T) {
 	tc.rng.store.DisableRaftLogQueue(true)
 
 	rng := tc.rng
-	rangeID := rng.Desc().RangeID
+	rangeID := rng.RangeID
 
 	// Populate the log with 10 entries. Save the LastIndex after each write.
 	var indexes []uint64

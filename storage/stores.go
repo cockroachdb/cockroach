@@ -172,7 +172,7 @@ func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeI
 			continue
 		}
 		if replica == nil {
-			rangeID = rng.Desc().RangeID
+			rangeID = rng.RangeID
 			replica = rng.GetReplica()
 			continue
 		}

@@ -36,7 +36,7 @@ func TestVerifyQueueShouldQueue(t *testing.T) {
 	defer tc.Stop()
 
 	// Put empty verification timestamp
-	key := keys.RangeLastVerificationTimestampKey(tc.rng.Desc().RangeID)
+	key := keys.RangeLastVerificationTimestampKey(tc.rng.RangeID)
 	if err := engine.MVCCPutProto(tc.rng.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &roachpb.Timestamp{}); err != nil {
 		t.Fatal(err)
 	}

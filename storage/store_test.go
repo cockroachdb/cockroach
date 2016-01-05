@@ -104,7 +104,7 @@ func (db *testSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 	if rng == nil {
 		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), nil))
 	}
-	ba.RangeID = rng.Desc().RangeID
+	ba.RangeID = rng.RangeID
 	replica := rng.GetReplica()
 	if replica == nil {
 		return nil, roachpb.NewError(util.Errorf("own replica missing in range"))
@@ -384,7 +384,7 @@ func TestStoreRangeSet(t *testing.T) {
 		}
 		i := 1
 		ranges.Visit(func(rng *Replica) bool {
-			if rng.Desc().RangeID != roachpb.RangeID(i) {
+			if rng.RangeID != roachpb.RangeID(i) {
 				t.Errorf("expected range with Range ID %d; got %v", i, rng)
 			}
 			if ec := ranges.EstimatedCount(); ec != 10-i {
@@ -406,14 +406,14 @@ func TestStoreRangeSet(t *testing.T) {
 		i := 1
 		ranges.Visit(func(rng *Replica) bool {
 			if i == 1 {
-				if rng.Desc().RangeID != roachpb.RangeID(i) {
+				if rng.RangeID != roachpb.RangeID(i) {
 					t.Errorf("expected range with Range ID %d; got %v", i, rng)
 				}
 				close(visited)
 				<-updated
 			} else {
 				// The second range will be removed and skipped.
-				if rng.Desc().RangeID != roachpb.RangeID(i+1) {
+				if rng.RangeID != roachpb.RangeID(i+1) {
 					t.Errorf("expected range with Range ID %d; got %v", i+1, rng)
 				}
 			}
@@ -444,8 +444,8 @@ func TestStoreRangeSet(t *testing.T) {
 
 	// Now, remove the next range in the iteration and verify we skip the removed range.
 	rng = store.LookupReplica(roachpb.RKey("a01"), nil)
-	if rng.Desc().RangeID != 2 {
-		t.Errorf("expected fetch of rangeID=2; got %d", rng.Desc().RangeID)
+	if rng.RangeID != 2 {
+		t.Errorf("expected fetch of rangeID=2; got %d", rng.RangeID)
 	}
 	if err := store.RemoveReplica(rng, *rng.Desc()); err != nil {
 		t.Error(err)
@@ -731,7 +731,7 @@ func TestStoreSendOutOfRange(t *testing.T) {
 	// fail because it's before the start of the range.
 	args = getArgs([]byte("a"))
 	if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
-		RangeID: rng2.Desc().RangeID,
+		RangeID: rng2.RangeID,
 	}, &args); err == nil {
 		t.Error("expected key to be out of range")
 	}
