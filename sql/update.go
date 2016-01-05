@@ -105,10 +105,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 			switch t := expr.Expr.(type) {
 			case parser.Tuple:
 				for i, e := range t {
-					e, err := fillDefault(e, i, defaultExprs)
-					if err != nil {
-						return nil, err
-					}
+					e = fillDefault(e, i, defaultExprs)
 					targets = append(targets, parser.SelectExpr{Expr: e})
 				}
 			case parser.DTuple:
@@ -117,10 +114,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 				}
 			}
 		} else {
-			e, err := fillDefault(expr.Expr, 0, defaultExprs)
-			if err != nil {
-				return nil, err
-			}
+			e := fillDefault(expr.Expr, 0, defaultExprs)
 			targets = append(targets, parser.SelectExpr{Expr: e})
 		}
 	}
@@ -286,10 +280,10 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	return result, nil
 }
 
-func fillDefault(expr parser.Expr, index int, defaultExprs []parser.Expr) (parser.Expr, error) {
+func fillDefault(expr parser.Expr, index int, defaultExprs []parser.Expr) parser.Expr {
 	switch expr.(type) {
 	case parser.DefaultVal:
-		return defaultExprs[index], nil
+		return defaultExprs[index]
 	}
-	return expr, nil
+	return expr
 }
