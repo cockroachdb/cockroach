@@ -63,8 +63,8 @@ func promptForPassword() ([]byte, error) {
 	return []byte(one), nil
 }
 
-// hashPassword takes a raw password and returns a bcrypt hashed password.
-func hashPassword(raw []byte) ([]byte, error) {
+// HashPassword takes a raw password and returns a bcrypt hashed password.
+func HashPassword(raw []byte) ([]byte, error) {
 	return bcrypt.GenerateFromPassword(raw, bcryptCost)
 }
 
@@ -79,5 +79,5 @@ func PromptForPasswordAndHash() ([]byte, error) {
 	if len(password) == 0 {
 		return nil, util.Errorf("password cannot be empty")
 	}
-	return hashPassword(password)
+	return HashPassword(password)
 }

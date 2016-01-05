@@ -17,13 +17,16 @@
 package cli
 
 import (
+	"bufio"
 	"os"
 
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util"
 
 	"github.com/spf13/cobra"
 )
+
+var password string
 
 // A getUserCmd command displays the config for the specified username.
 var getUserCmd = &cobra.Command{
@@ -45,8 +48,7 @@ func runGetUser(cmd *cobra.Command, args []string) {
 	defer func() { _ = db.Close() }()
 	err := runPrettyQuery(db, os.Stdout, `SELECT * FROM system.users WHERE username=$1`, args[0])
 	if err != nil {
-		log.Error(err)
-		return
+		panic(err)
 	}
 }
 
@@ -70,8 +72,7 @@ func runLsUsers(cmd *cobra.Command, args []string) {
 	defer func() { _ = db.Close() }()
 	err := runPrettyQuery(db, os.Stdout, `SELECT username FROM system.users`)
 	if err != nil {
-		log.Error(err)
-		return
+		panic(err)
 	}
 }
 
@@ -95,8 +96,7 @@ func runRmUser(cmd *cobra.Command, args []string) {
 	defer func() { _ = db.Close() }()
 	err := runPrettyQuery(db, os.Stdout, `DELETE FROM system.users WHERE username=$1`, args[0])
 	if err != nil {
-		log.Error(err)
-		return
+		panic(err)
 	}
 }
 
@@ -121,18 +121,48 @@ func runSetUser(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)
 		return
 	}
-	hashed, err := security.PromptForPasswordAndHash()
-	if err != nil {
-		log.Error(err)
-		return
+	var err error
+	var hashed []byte
+	switch password {
+	case "":
+		hashed, err = security.PromptForPasswordAndHash()
+		if err != nil {
+			panic(err)
+		}
+	case "-":
+		scanner := bufio.NewScanner(os.Stdin)
+		if scanner.Scan() == true {
+			if err := scanner.Err(); err != nil {
+				panic(err)
+			}
+			// Don't allow empty stdin only with line break.
+			if scanner.Text() == "" {
+				panic(util.Errorf("password cannot be empty"))
+			}
+			hashed, err = security.HashPassword(scanner.Bytes())
+			if err != nil {
+				panic(err)
+			}
+			// Don't allow multiple line for the password.
+			if scanner.Scan() == true {
+				panic(util.Errorf("extra bytes read after newline"))
+			}
+		} else {
+			// Don't allow empty stdin.
+			panic(util.Errorf("password cannot be empty"))
+		}
+	default:
+		hashed, err = security.HashPassword([]byte(password))
+		if err != nil {
+			panic(err)
+		}
 	}
 	db := makeSQLClient()
 	defer func() { _ = db.Close() }()
 	// TODO(marc): switch to UPSERT.
 	err = runPrettyQuery(db, os.Stdout, `INSERT INTO system.users VALUES ($1, $2)`, args[0], hashed)
 	if err != nil {
-		log.Error(err)
-		return
+		panic(err)
 	}
 }
 
