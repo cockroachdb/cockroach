@@ -76,7 +76,7 @@ prepare_artifacts() {
      [ "${CIRCLE_BRANCH-}" = "master" -o -n "${NIGHTLY-}" ]
   then
       function post() {
-        curl -v -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
+        curl -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
         "https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/$1" \
         -d "${2}"
       }
