@@ -345,14 +345,15 @@ func (c *Client) heartbeat(closer <-chan struct{}) error {
 	response := &PingResponse{}
 	sendTime := c.clock.PhysicalNow()
 
-	call := c.Go("Heartbeat.Ping", request, response, nil)
+	done := make(chan *rpc.Call, 1)
+	go c.Go("Heartbeat.Ping", request, response, done)
 
 	select {
 	case <-closer:
 		return errClosed
 	case <-c.closer:
 		return errClosed
-	case <-call.Done:
+	case call := <-done:
 		if err := call.Error; err != nil {
 			return err
 		}
