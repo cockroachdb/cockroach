@@ -73,11 +73,7 @@ func checkRangeReplication(t util.Tester, c *cluster.LocalCluster, d time.Durati
 }
 
 func TestRangeReplication(t *testing.T) {
-	if *numLocal == 0 {
-		t.Skip("skipping since not run against local cluster")
-	}
-	l := cluster.CreateLocal(*numLocal, *numStores, *logDir, stopper) // intentionally using local cluster
-	l.Start()
+	l := MustStartLocal(t)
 	defer l.AssertAndStop(t)
 
 	checkRangeReplication(t, l, 20*time.Second)

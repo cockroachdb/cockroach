@@ -66,7 +66,7 @@ func getTLSConfig() *tls.Config {
 // method. If DOCKER_HOST is set, initialize the client using DOCKER_TLS_VERIFY
 // and DOCKER_CERT_PATH. If DOCKER_HOST is not set, look for the unix domain
 // socket in /run/docker.sock and /var/run/docker.sock.
-func newDockerClient() dockerclient.Client {
+func NewDockerClient() dockerclient.Client {
 	if host := os.Getenv("DOCKER_HOST"); host != "" {
 		if os.Getenv("DOCKER_TLS_VERIFY") == "" {
 			c, err := dockerclient.NewDockerClient(host, nil)
@@ -296,12 +296,7 @@ func (c *Container) Addr(name string) *net.TCPAddr {
 		return nil
 	}
 	if name == "" {
-		// No port specified, pick a random one (random because iteration
-		// over maps is randomized).
-		for port := range containerInfo.NetworkSettings.Ports {
-			name = port
-			break
-		}
+		name = cockroachTCP
 	}
 	bindings, ok := containerInfo.NetworkSettings.Ports[name]
 	if !ok || len(bindings) == 0 {
@@ -312,6 +307,11 @@ func (c *Container) Addr(name string) *net.TCPAddr {
 		IP:   dockerIP(),
 		Port: port,
 	}
+}
+
+// PGAddr returns the address to connect to the Postgres port.
+func (c *Container) PGAddr() *net.TCPAddr {
+	return c.Addr(pgTCP)
 }
 
 // GetJSON retrieves the URL specified by https://Addr(<port>)<path>
