@@ -145,6 +145,13 @@ message DescriptorMutation {
     DROP = 2;
   }
   optional Direction direction = 4 [(gogoproto.nullable) = false];
+
+  // The mutation id used to group mutations that should be applied together.
+  // This is used for situations like creating a unique column, which
+  // involve adding two mutations: one for the column, and another for the
+  // unique constraint index.
+  optional uint32 mutation_id = 5 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "MutationID", (gogoproto.casttype) = "MutationID"];
 }
 
 // A TableDescriptor represents a table and is stored in a structured metadata
@@ -230,7 +237,7 @@ message TableDescriptor {
   // Columns or indexes being added or deleted in a FIFO order.
   repeated DescriptorMutation mutations = 14 [(gogoproto.nullable) = false];
   // The schema update lease. A single goroutine across a cockroach cluster
-  // can own it, and will execute pending schema changes for this table. 
+  // can own it, and will execute pending schema changes for this table.
   // Since the execution of a pending schema change is through transactions,
   // it is legal for more than one goroutine to attempt to execute it. This
   // lease reduces write contention on the schema change.
@@ -242,6 +249,9 @@ message TableDescriptor {
     optional int64 expiration_time = 2 [(gogoproto.nullable) = false];
   }
   optional SchemaChangeLease lease = 15;
+  // An id for the next group of mutations to be applied together.
+  optional uint32 next_mutation_id = 16 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NextMutationID", (gogoproto.casttype) = "MutationID"];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
