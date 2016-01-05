@@ -74,10 +74,7 @@ func TestPrivilege(t *testing.T) {
 				descriptor.Revoke(tc.grantee, tc.revoke)
 			}
 		}
-		show, err := descriptor.Show()
-		if err != nil {
-			t.Fatal(err)
-		}
+		show := descriptor.Show()
 		if len(show) != len(tc.show) {
 			t.Fatalf("#%d: show output for descriptor %+v differs, got: %+v, expected %+v",
 				tcNum, descriptor, show, tc.show)

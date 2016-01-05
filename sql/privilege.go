@@ -227,7 +227,7 @@ type UserPrivilegeString struct {
 
 // Show returns the list of {username, privileges} sorted by username.
 // 'privileges' is a string of comma-separated sorted privilege names.
-func (p *PrivilegeDescriptor) Show() ([]UserPrivilegeString, error) {
+func (p *PrivilegeDescriptor) Show() []UserPrivilegeString {
 	ret := []UserPrivilegeString{}
 	for _, userPriv := range p.Users {
 		ret = append(ret, UserPrivilegeString{
@@ -235,7 +235,7 @@ func (p *PrivilegeDescriptor) Show() ([]UserPrivilegeString, error) {
 			Privileges: privilege.ListFromBitField(userPriv.Privileges).SortedString(),
 		})
 	}
-	return ret, nil
+	return ret
 }
 
 // CheckPrivilege returns true if 'user' has 'privilege' on this descriptor.

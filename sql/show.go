@@ -144,10 +144,7 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 		wantedUsers[u] = struct{}{}
 	}
 
-	userPrivileges, err := descriptor.GetPrivileges().Show()
-	if err != nil {
-		return nil, err
-	}
+	userPrivileges := descriptor.GetPrivileges().Show()
 	for _, userPriv := range userPrivileges {
 		if wantedUsers != nil {
 			if _, ok := wantedUsers[userPriv.User]; !ok {
