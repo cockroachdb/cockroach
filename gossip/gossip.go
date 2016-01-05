@@ -625,6 +625,8 @@ func (g *Gossip) tightenNetwork(stopper *stop.Stopper, distantNodeID roachpb.Nod
 // outgoing node to free up an outgoing spot for a more targeted
 // tightening (via tightenNetwork).
 func (g *Gossip) cullNetwork() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	// If there's no space, find and remove least useful peer, if possible.
 	if g.outgoing.hasSpace() {
 		return
