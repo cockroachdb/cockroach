@@ -182,6 +182,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		return &valuesNode{}, nil
 	}
 	tableDesc.UpVersion = true
+	tableDesc.NextMutationID++
 
 	if err := tableDesc.AllocateIDs(); err != nil {
 		return nil, err
@@ -190,11 +191,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 	if err := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); err != nil {
 		return nil, err
 	}
-
-	// Process mutations synchronously.
-	if err := p.applyMutations(tableDesc); err != nil {
-		return nil, err
-	}
+	p.notifySchemaChange(tableDesc.ID, tableDesc.NextMutationID-1)
 
 	return &valuesNode{}, nil
 }

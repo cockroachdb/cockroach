@@ -179,6 +179,8 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
 	defer csql.TestDisableTableLeases()()
+	// Disable external processing of mutations.
+	defer csql.TestDisableAsyncSchemaChangeExec()()
 	server, sqlDB, kvDB := setup(t)
 	defer cleanup(server, sqlDB)
 
@@ -357,6 +359,9 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// The descriptor changes made must have an immediate effect.
 	defer csql.TestDisableTableLeases()()
+	// Disable external processing of mutations.
+	defer csql.TestDisableAsyncSchemaChangeExec()()
+
 	server, sqlDB, kvDB := setup(t)
 	defer cleanup(server, sqlDB)
 
@@ -486,6 +491,9 @@ func TestCommandsWithPendingMutations(t *testing.T) {
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
 	defer csql.TestDisableTableLeases()()
+	// Disable external processing of mutations.
+	defer csql.TestDisableAsyncSchemaChangeExec()()
+
 	server, sqlDB, kvDB := setup(t)
 	defer cleanup(server, sqlDB)
 
