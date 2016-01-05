@@ -25,6 +25,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var password string
+
 // A getUserCmd command displays the config for the specified username.
 var getUserCmd = &cobra.Command{
 	Use:   "get [options] <username>",
@@ -121,10 +123,20 @@ func runSetUser(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)
 		return
 	}
-	hashed, err := security.PromptForPasswordAndHash()
-	if err != nil {
-		log.Error(err)
-		return
+	var err error
+	var hashed []byte
+	if password == "" {
+		hashed, err = security.PromptForPasswordAndHash()
+		if err != nil {
+			log.Error(err)
+			return
+		}
+	} else {
+		hashed, err = security.HashPassword([]byte(password))
+		if err != nil {
+			log.Error(err)
+			return
+		}
 	}
 	db := makeSQLClient()
 	defer func() { _ = db.Close() }()
