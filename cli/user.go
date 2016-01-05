@@ -17,6 +17,7 @@
 package cli
 
 import (
+	"bufio"
 	"os"
 
 	"github.com/cockroachdb/cockroach/security"
@@ -121,12 +122,23 @@ func runSetUser(cmd *cobra.Command, args []string) {
 	}
 	var err error
 	var hashed []byte
-	if password == "" {
+	switch password {
+	case "":
 		hashed, err = security.PromptForPasswordAndHash()
 		if err != nil {
 			panic(err)
 		}
-	} else {
+	case "-":
+		scanner := bufio.NewScanner(os.Stdin)
+		scanner.Scan()
+		if err := scanner.Err(); err != nil {
+			panic(err)
+		}
+		hashed, err = security.HashPassword(scanner.Bytes())
+		if err != nil {
+			panic(err)
+		}
+	default:
 		hashed, err = security.HashPassword([]byte(password))
 		if err != nil {
 			panic(err)
