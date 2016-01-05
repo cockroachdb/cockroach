@@ -386,7 +386,6 @@ func TestConnectionSettings(t *testing.T) {
 
 func TestProtocols(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(tschottdorf): #3610")
 
 	// Test that all of the network protocols work.
 	for _, scheme := range []string{"http", "https", "rpc", "rpcs"} {
