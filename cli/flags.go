@@ -143,6 +143,9 @@ var flagUsage = map[string]string{
 		Determines the criteria used by nodes to make balanced allocation
 		decisions.  Valid options are "usage" (default) or "rangecount".
 `,
+	"password": `
+        Set password. It will disable prompting for the password.
+`,
 }
 
 func normalizeStdFlagName(s string) string {
@@ -224,6 +227,8 @@ func initFlags(ctx *server.Context) {
 			panic(err)
 		}
 	}
+
+	setUserCmd.Flags().StringVar(&password, "password", "", flagUsage["password"])
 
 	clientCmds := []*cobra.Command{
 		sqlShellCmd, kvCmd, rangeCmd,
