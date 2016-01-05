@@ -250,13 +250,12 @@ func (s *Server) Start(selfBootstrap bool) error {
 	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), addr)
 	s.initHTTP()
 
-	// TODO(tamird): pick a port here
 	host, _, err := net.SplitHostPort(addrStr)
 	if err != nil {
 		return err
 	}
 
-	return s.pgServer.Start(util.MakeUnresolvedAddr("tcp", net.JoinHostPort(host, "0")))
+	return s.pgServer.Start(util.MakeUnresolvedAddr("tcp", net.JoinHostPort(host, s.ctx.PGPort)))
 }
 
 // initHTTP registers http prefixes.

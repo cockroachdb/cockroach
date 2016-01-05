@@ -296,12 +296,7 @@ func (c *Container) Addr(name string) *net.TCPAddr {
 		return nil
 	}
 	if name == "" {
-		// No port specified, pick a random one (random because iteration
-		// over maps is randomized).
-		for port := range containerInfo.NetworkSettings.Ports {
-			name = port
-			break
-		}
+		name = cockroachTCP
 	}
 	bindings, ok := containerInfo.NetworkSettings.Ports[name]
 	if !ok || len(bindings) == 0 {
@@ -312,6 +307,11 @@ func (c *Container) Addr(name string) *net.TCPAddr {
 		IP:   dockerIP(),
 		Port: port,
 	}
+}
+
+// PGAddr returns the address to connect to the Postgres port.
+func (c *Container) PGAddr() *net.TCPAddr {
+	return c.Addr(pgTCP)
 }
 
 // GetJSON retrieves the URL specified by https://Addr(<port>)<path>
