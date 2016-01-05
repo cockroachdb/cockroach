@@ -11,12 +11,13 @@ else
 fi
 
 builder=$(dirname $0)/builder.sh
-match='^F\d+|^panic|^[Gg]oroutine \d+|(read|write) by.*goroutine|DATA RACE|Too many goroutines running after tests'
+match='^F[0-9]+|^panic|^[Gg]oroutine [0-9]+|(read|write) by.*goroutine|DATA RACE|Too many goroutines running after tests'
 
 prepare_artifacts() {
+  # Friendly but stern reminder: Never ever move this or put anything above it.
   ret=$?
-
-  set +e
+  # Show each action taken so we can trace if things go awry here.
+  set -x
 
   # Translate the log output to xml to integrate with CircleCI
   # better.
@@ -76,7 +77,7 @@ prepare_artifacts() {
      [ "${CIRCLE_BRANCH-}" = "master" -o -n "${NIGHTLY-}" ]
   then
       function post() {
-        curl -v -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
+        curl -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
         "https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/$1" \
         -d "${2}"
       }
@@ -132,15 +133,7 @@ time ${builder} make test \
   grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
   awk '{print "test:", $0}'
 
-# 4. Run "make testrace".
-echo "make testrace"
-time ${builder} make testrace \
-  TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' | \
-  tr -d '\r' | tee "${outdir}/testrace.log" | \
-  grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
-  awk '{print "race:", $0}'
-
-# 5. Run the acceptance tests (only on Linux). We can run the
+# 4. Run the acceptance tests (only on Linux). We can run the
 # acceptance tests on the Mac's, but circle-deps.sh only built the
 # acceptance tests for Linux.
 if [ "$(uname)" = "Linux" ]; then
@@ -157,3 +150,12 @@ if [ "$(uname)" = "Linux" ]; then
 else
   echo "skipping acceptance tests on $(uname): use 'make acceptance' instead"
 fi
+
+# 5. Run "make testrace". This takes a long time and fails mostly for flaky
+# tests, so it's last to give the "real" failures a chance first.
+echo "make testrace"
+time ${builder} make testrace \
+  TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' | \
+  tr -d '\r' | tee "${outdir}/testrace.log" | \
+  grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
+  awk '{print "race:", $0}'
