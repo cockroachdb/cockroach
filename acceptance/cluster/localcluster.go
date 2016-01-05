@@ -370,10 +370,8 @@ func (l *LocalCluster) startNode(i int) *Container {
 	if len(l.logDir) > 0 {
 		dockerlogDir := "/logs/" + nodeStr(i)
 		locallogDir = filepath.Join(l.logDir, nodeStr(i))
-		if !exists(locallogDir) {
-			if err := os.MkdirAll(locallogDir, 0777); err != nil {
-				log.Fatal(err)
-			}
+		if err := os.MkdirAll(locallogDir, 0777); err != nil {
+			log.Fatal(err)
 		}
 		cmd = append(
 			cmd,
