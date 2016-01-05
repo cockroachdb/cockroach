@@ -59,28 +59,29 @@ func fakePrevKey(k []byte) roachpb.Key {
 func createRangeData(r *Replica, t *testing.T) []engine.MVCCKey {
 	ts0 := roachpb.ZeroTimestamp
 	ts := roachpb.Timestamp{WallTime: 1}
+	desc := r.Desc()
 	keyTSs := []struct {
 		key roachpb.Key
 		ts  roachpb.Timestamp
 	}{
-		{keys.SequenceCacheKey(r.Desc().RangeID, testTxnID, testTxnEpoch, 2), ts0},
-		{keys.SequenceCacheKey(r.Desc().RangeID, testTxnID, testTxnEpoch, 1), ts0},
-		{keys.RaftHardStateKey(r.Desc().RangeID), ts0},
-		{keys.RaftLogKey(r.Desc().RangeID, 1), ts0},
-		{keys.RaftLogKey(r.Desc().RangeID, 2), ts0},
-		{keys.RangeLastVerificationTimestampKey(r.Desc().RangeID), ts0},
-		{keys.RangeStatsKey(r.Desc().RangeID), ts0},
-		{keys.RangeDescriptorKey(r.Desc().StartKey), ts},
-		{keys.TransactionKey(roachpb.Key(r.Desc().StartKey), []byte("1234")), ts0},
-		{keys.TransactionKey(roachpb.Key(r.Desc().StartKey.Next()), []byte("5678")), ts0},
-		{keys.TransactionKey(fakePrevKey(r.Desc().EndKey), []byte("2468")), ts0},
+		{keys.SequenceCacheKey(r.RangeID, testTxnID, testTxnEpoch, 2), ts0},
+		{keys.SequenceCacheKey(r.RangeID, testTxnID, testTxnEpoch, 1), ts0},
+		{keys.RaftHardStateKey(r.RangeID), ts0},
+		{keys.RaftLogKey(r.RangeID, 1), ts0},
+		{keys.RaftLogKey(r.RangeID, 2), ts0},
+		{keys.RangeLastVerificationTimestampKey(r.RangeID), ts0},
+		{keys.RangeStatsKey(r.RangeID), ts0},
+		{keys.RangeDescriptorKey(desc.StartKey), ts},
+		{keys.TransactionKey(roachpb.Key(desc.StartKey), []byte("1234")), ts0},
+		{keys.TransactionKey(roachpb.Key(desc.StartKey.Next()), []byte("5678")), ts0},
+		{keys.TransactionKey(fakePrevKey(desc.EndKey), []byte("2468")), ts0},
 		// TODO(bdarnell): KeyMin.Next() results in a key in the reserved system-local space.
 		// Once we have resolved https://github.com/cockroachdb/cockroach/issues/437,
 		// replace this with something that reliably generates the first valid key in the range.
 		//{r.Desc().StartKey.Next(), ts},
 		// The following line is similar to StartKey.Next() but adds more to the key to
 		// avoid falling into the system-local space.
-		{append(append([]byte{}, r.Desc().StartKey...), '\x02'), ts},
+		{append(append([]byte{}, desc.StartKey...), '\x02'), ts},
 		{fakePrevKey(r.Desc().EndKey), ts},
 	}
 
@@ -185,7 +186,7 @@ func TestReplicaDataIterator(t *testing.T) {
 	if iter.Valid() {
 		// If the range is destroyed, only a tombstone key should be there.
 		k1 := iter.Key().Key
-		if tombstoneKey := keys.RaftTombstoneKey(tc.rng.Desc().RangeID); !bytes.Equal(k1, tombstoneKey) {
+		if tombstoneKey := keys.RaftTombstoneKey(tc.rng.RangeID); !bytes.Equal(k1, tombstoneKey) {
 			t.Errorf("expected a tombstone key %q, but found %q", tombstoneKey, k1)
 		}
 

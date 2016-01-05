@@ -67,7 +67,7 @@ func (*raftLogQueue) acceptsUnsplitRanges() bool {
 // getTruncatableIndexes returns the total number of stale raft log entries that
 // can be truncated and the oldest index that cannot be pruned.
 func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
-	rangeID := r.Desc().RangeID
+	rangeID := r.RangeID
 	raftStatus := r.store.RaftStatus(rangeID)
 	if raftStatus == nil {
 		if log.V(1) {
@@ -130,13 +130,13 @@ func (rlq *raftLogQueue) process(now roachpb.Timestamp, r *Replica, _ *config.Sy
 	// Can and should the raft logs be truncated?
 	if truncatableIndexes > RaftLogQueueStaleThreshold {
 		if log.V(1) {
-			log.Infof("truncating the raft log of range %d to %d", r.Desc().RangeID, oldestIndex)
+			log.Infof("truncating the raft log of range %d to %d", r.RangeID, oldestIndex)
 		}
 		b := &client.Batch{}
 		b.InternalAddRequest(&roachpb.TruncateLogRequest{
 			Span:    roachpb.Span{Key: r.Desc().StartKey.AsRawKey()},
 			Index:   oldestIndex,
-			RangeID: r.Desc().RangeID,
+			RangeID: r.RangeID,
 		})
 		return rlq.db.Run(b)
 	}
