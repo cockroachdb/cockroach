@@ -14,8 +14,9 @@ builder=$(dirname $0)/builder.sh
 match='^F\d+|^panic|^[Gg]oroutine \d+|(read|write) by.*goroutine|DATA RACE|Too many goroutines running after tests'
 
 prepare_artifacts() {
-  set +e
   ret=$?
+
+  set +e
 
   # Translate the log output to xml to integrate with CircleCI
   # better.
