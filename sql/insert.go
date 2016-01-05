@@ -19,8 +19,8 @@ package sql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
@@ -31,7 +31,7 @@ import (
 // Privileges: INSERT on table
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
-func (p *planner) Insert(n *parser.Insert) (planNode, error) {
+func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, error) {
 	// TODO(marcb): We can't use the cached descriptor here because a recent
 	// update of the schema (e.g. the addition of an index) might not be
 	// reflected in the cached version (yet). Perhaps schema modification
@@ -110,7 +110,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 	// Transform the values into a rows object. This expands SELECT statements or
 	// generates rows from the values contained within the query.
-	rows, err := p.makePlan(n.Rows)
+	rows, err := p.makePlan(n.Rows, false)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +124,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 	marshalled := make([]interface{}, len(cols))
 
-	b := client.Batch{}
+	b := p.txn.NewBatch()
 	result := &valuesNode{}
 	for rows.Next() {
 		rowVals := rows.Values()
@@ -198,7 +198,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		// Write the row sentinel.
 		sentinelKey := keys.MakeNonColumnKey(primaryIndexKey)
 		if log.V(2) {
-			log.Infof("CPut %s -> NULL", sentinelKey)
+			log.Infof("CPut %s -> NULL", roachpb.Key(sentinelKey))
 		}
 		// This is subtle: An interface{}(nil) deletes the value, so we pass in
 		// []byte{} as a non-nil value.
@@ -221,7 +221,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 				key := keys.MakeColumnKey(primaryIndexKey, uint32(col.ID))
 				if log.V(2) {
-					log.Infof("CPut %s -> %v", key, val)
+					log.Infof("CPut %s -> %v", roachpb.Key(key), val)
 				}
 
 				b.CPut(key, marshalled[i], nil)
@@ -236,10 +236,18 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		// Mark transaction as operating on the system DB.
 		p.txn.SetSystemDBTrigger()
 	}
-	if err := p.txn.Run(&b); err != nil {
-		return nil, convertBatchError(tableDesc, b, err)
-	}
 
+	if autoCommit {
+		// An auto-txn can commit the transaction with the batch. This is an
+		// optimization to avoid an extra round-trip to the transaction
+		// coordinator.
+		err = p.txn.CommitInBatch(b)
+	} else {
+		err = p.txn.Run(b)
+	}
+	if err != nil {
+		return nil, convertBatchError(tableDesc, *b, err)
+	}
 	return result, nil
 }
 
