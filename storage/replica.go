@@ -147,7 +147,7 @@ type cmdIDKey string
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Replica struct {
-	desc     unsafe.Pointer // Atomic pointer for *roachpb.RangeDescriptor
+	RangeID  roachpb.RangeID // Should only be set by the constructor.
 	store    *Store
 	stats    *rangeStats // Range statistics
 	maxBytes int64       // Max bytes before split.
@@ -174,6 +174,7 @@ type Replica struct {
 	tsCache      *TimestampCache // Most recent timestamps for keys / key ranges
 	pendingSeq   uint64          // atomic sequence counter for cmdIDKey generation
 	pendingCmds  map[cmdIDKey]*pendingCmd
+	desc         *roachpb.RangeDescriptor
 
 	truncatedState unsafe.Pointer // *roachpb.RaftTruncatedState
 
@@ -191,43 +192,56 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store) (*Replica, error) {
 		tsCache:     NewTimestampCache(store.Clock()),
 		sequence:    NewSequenceCache(desc.RangeID),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
+		RangeID:     desc.RangeID,
 	}
-	r.setDescWithoutProcessUpdate(desc)
 
-	lastIndex, err := r.loadLastIndex()
-	if err != nil {
+	if err := r.newReplicaInner(desc); err != nil {
 		return nil, err
-	}
-	atomic.StoreUint64(&r.lastIndex, lastIndex)
-
-	appliedIndex, err := r.loadAppliedIndex(r.store.Engine())
-	if err != nil {
-		return nil, err
-	}
-	atomic.StoreUint64(&r.appliedIndex, appliedIndex)
-
-	lease, err := loadLeaderLease(r.store.Engine(), desc.RangeID)
-	if err != nil {
-		return nil, err
-	}
-	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
-
-	_, repDesc := desc.FindReplica(store.StoreID())
-	if repDesc != nil {
-		if err := r.setReplicaID(repDesc.ReplicaID); err != nil {
-			return nil, err
-		}
 	}
 
 	if r.ContainsKey(keys.SystemDBSpan.Key) {
 		r.maybeGossipSystemConfig()
 	}
 
+	var err error
 	if r.stats, err = newRangeStats(desc.RangeID, store.Engine()); err != nil {
 		return nil, err
 	}
 
 	return r, nil
+}
+
+func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor) error {
+	r.Lock()
+	defer r.Unlock()
+	r.setDescWithoutProcessUpdateLocked(desc)
+
+	lastIndex, err := r.loadLastIndexLocked()
+	if err != nil {
+		return err
+	}
+	atomic.StoreUint64(&r.lastIndex, lastIndex)
+
+	appliedIndex, err := r.loadAppliedIndexLocked(r.store.Engine())
+	if err != nil {
+		return err
+	}
+	atomic.StoreUint64(&r.appliedIndex, appliedIndex)
+
+	lease, err := loadLeaderLease(r.store.Engine(), desc.RangeID)
+	if err != nil {
+		return err
+	}
+	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
+
+	_, repDesc := desc.FindReplica(r.store.StoreID())
+	if repDesc != nil {
+		if err := r.setReplicaIDLocked(repDesc.ReplicaID); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // String returns a string representation of the range.
@@ -267,6 +281,11 @@ func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor) error {
 func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
 	r.Lock()
 	defer r.Unlock()
+	return r.setReplicaIDLocked(replicaID)
+}
+
+// setReplicaIDLocked requires that the replica lock is held.
+func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	if r.replicaID == replicaID {
 		return nil
 	} else if r.replicaID > replicaID {
@@ -276,7 +295,6 @@ func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
 		// update peers)
 	}
 
-	desc := r.Desc()
 	raftCfg := &raft.Config{
 		ID:            uint64(replicaID),
 		Applied:       atomic.LoadUint64(&r.appliedIndex),
@@ -286,7 +304,7 @@ func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
 		// TODO(bdarnell): make these configurable; evaluate defaults.
 		MaxSizePerMsg:   1024 * 1024,
 		MaxInflightMsgs: 256,
-		Logger:          &raftLogger{group: uint64(desc.RangeID)},
+		Logger:          &raftLogger{group: uint64(r.RangeID)},
 	}
 	raftGroup, err := raft.NewRawNode(raftCfg, nil)
 	if err != nil {
@@ -311,7 +329,7 @@ func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
 	// could happen is both nodes ending up in candidate state, timing
 	// out and then voting again. This is expected to be an extremely
 	// rare event.
-	if len(desc.Replicas) == 1 && desc.Replicas[0].StoreID == r.store.StoreID() {
+	if len(r.desc.Replicas) == 1 && r.desc.Replicas[0].StoreID == r.store.StoreID() {
 		if err := raftGroup.Campaign(); err != nil {
 			return err
 		}
@@ -325,7 +343,7 @@ func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
 // on this range in the absence of a pre-existing context, such as
 // during range scanner operations.
 func (r *Replica) context() context.Context {
-	return context.WithValue(r.store.Context(nil), log.RangeID, r.Desc().RangeID)
+	return context.WithValue(r.store.Context(nil), log.RangeID, r.RangeID)
 }
 
 // GetMaxBytes atomically gets the range maximum byte limit.
@@ -364,7 +382,7 @@ func (r *Replica) newNotLeaderError(l *roachpb.Lease, originStoreID roachpb.Stor
 	if l != nil && l.Replica.ReplicaID != 0 {
 		desc := r.Desc()
 
-		err.RangeID = desc.RangeID
+		err.RangeID = r.RangeID
 		_, err.Replica = desc.FindReplica(originStoreID)
 		_, err.Leader = desc.FindReplica(l.Replica.StoreID)
 	}
@@ -384,7 +402,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	desc := r.Desc()
 	_, replica := desc.FindReplica(r.store.StoreID())
 	if replica == nil {
-		return roachpb.NewRangeNotFoundError(desc.RangeID)
+		return roachpb.NewRangeNotFoundError(r.RangeID)
 	}
 	args := &roachpb.LeaderLeaseRequest{
 		Span: roachpb.Span{
@@ -398,7 +416,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	}
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
-	ba.RangeID = desc.RangeID
+	ba.RangeID = r.RangeID
 	ba.Add(args)
 
 	// The raft command becomes moot after its expiration, so give it a
@@ -489,12 +507,25 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp 
 // another node. It is false when a range has been created in response
 // to an incoming message but we are waiting for our initial snapshot.
 func (r *Replica) isInitialized() bool {
-	return len(r.Desc().EndKey) > 0
+	r.RLock()
+	defer r.RUnlock()
+	return r.isInitializedLocked()
 }
 
-// Desc atomically returns the range's descriptor.
+// isInitializedLocked is true if we know the metadata of this range, either
+// because we created it or we have received an initial snapshot from
+// another node. It is false when a range has been created in response
+// to an incoming message but we are waiting for our initial snapshot.
+// isInitializedLocked requires that the replica read lock is held.
+func (r *Replica) isInitializedLocked() bool {
+	return len(r.desc.EndKey) > 0
+}
+
+// Desc returns the range's descriptor.
 func (r *Replica) Desc() *roachpb.RangeDescriptor {
-	return (*roachpb.RangeDescriptor)(atomic.LoadPointer(&r.desc))
+	r.RLock()
+	defer r.RUnlock()
+	return r.desc
 }
 
 // setDesc atomically sets the range's descriptor. This method calls
@@ -512,7 +543,20 @@ func (r *Replica) setDesc(desc *roachpb.RangeDescriptor) error {
 // setDescWithoutProcessUpdate updates the range descriptor without calling
 // processRangeDescriptorUpdate.
 func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
-	atomic.StorePointer(&r.desc, unsafe.Pointer(desc))
+	r.Lock()
+	defer r.Unlock()
+	r.setDescWithoutProcessUpdateLocked(desc)
+}
+
+// setDescWithoutProcessUpdateLocked updates the range descriptor without
+// calling processRangeDescriptorUpdate.
+// setDescWithoutProcessUpdateLocked requires that the replica lock is held.
+func (r *Replica) setDescWithoutProcessUpdateLocked(desc *roachpb.RangeDescriptor) {
+	if desc.RangeID != r.RangeID {
+		panic(fmt.Sprintf("range descriptor ID (%d) does not match replica's range ID (%d)",
+			desc.RangeID, r.RangeID))
+	}
+	r.desc = desc
 }
 
 // getCachedTruncatedState atomically returns the range's cached truncated
@@ -539,7 +583,7 @@ func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.Replic
 	r.RLock()
 	defer r.RUnlock()
 
-	desc := r.Desc()
+	desc := r.desc
 	for _, repAddress := range desc.Replicas {
 		if repAddress.ReplicaID == replicaID {
 			return repAddress, nil
@@ -576,7 +620,7 @@ func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool
 // GetLastVerificationTimestamp reads the timestamp at which the range's
 // data was last verified.
 func (r *Replica) GetLastVerificationTimestamp() (roachpb.Timestamp, error) {
-	key := keys.RangeLastVerificationTimestampKey(r.Desc().RangeID)
+	key := keys.RangeLastVerificationTimestampKey(r.RangeID)
 	timestamp := roachpb.Timestamp{}
 	_, err := engine.MVCCGetProto(r.store.Engine(), key, roachpb.ZeroTimestamp, true, nil, &timestamp)
 	if err != nil {
@@ -588,7 +632,7 @@ func (r *Replica) GetLastVerificationTimestamp() (roachpb.Timestamp, error) {
 // SetLastVerificationTimestamp writes the timestamp at which the range's
 // data was last verified.
 func (r *Replica) SetLastVerificationTimestamp(timestamp roachpb.Timestamp) error {
-	key := keys.RangeLastVerificationTimestampKey(r.Desc().RangeID)
+	key := keys.RangeLastVerificationTimestampKey(r.RangeID)
 	return engine.MVCCPutProto(r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
 }
 
@@ -637,7 +681,7 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	if err == errRaftGroupDeleted {
 		// This error needs to be converted appropriately so that
 		// clients will retry.
-		err = roachpb.NewRangeNotFoundError(r.Desc().RangeID)
+		err = roachpb.NewRangeNotFoundError(r.RangeID)
 	}
 	// TODO(tschottdorf): assert nil reply on error.
 	if err != nil {
@@ -936,10 +980,11 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 // proposes the command to Raft and returns the error channel and
 // pending command struct for receiving.
 func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchRequest) (*pendingCmd, error) {
-	desc := r.Desc()
-	_, replica := desc.FindReplica(r.store.StoreID())
+	r.Lock()
+	defer r.Unlock()
+	_, replica := r.desc.FindReplica(r.store.StoreID())
 	if replica == nil {
-		return nil, roachpb.NewRangeNotFoundError(desc.RangeID)
+		return nil, roachpb.NewRangeNotFoundError(r.RangeID)
 	}
 	idKeyBuf := make([]byte, 0, raftCommandIDLen)
 	idKeyBuf = encoding.EncodeUint64(idKeyBuf, uint64(rand.Int63()))
@@ -948,18 +993,16 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 		ctx:  ctx,
 		done: make(chan roachpb.ResponseWithError, 1),
 		raftCmd: roachpb.RaftCommand{
-			RangeID:       desc.RangeID,
+			RangeID:       r.RangeID,
 			OriginReplica: *replica,
 			Cmd:           ba,
 		},
 	}
 
-	r.Lock()
 	if _, ok := r.pendingCmds[idKey]; ok {
 		log.Fatalf("pending command already exists for %s", idKey)
 	}
 	r.pendingCmds[idKey] = pendingCmd
-	defer r.Unlock()
 
 	if err := r.proposePendingCmdLocked(idKey, pendingCmd); err != nil {
 		delete(r.pendingCmds, idKey)
@@ -969,8 +1012,8 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 }
 
 // proposePendingCmdLocked proposes or re-proposes a command in r.pendingCmds.
+// The replica lock must be held.
 func (r *Replica) proposePendingCmdLocked(idKey cmdIDKey, p *pendingCmd) error {
-	desc := r.Desc()
 	if r.proposeRaftCommandFn != nil {
 		return r.proposeRaftCommandFn(idKey, p.raftCmd)
 	}
@@ -983,7 +1026,7 @@ func (r *Replica) proposePendingCmdLocked(idKey cmdIDKey, p *pendingCmd) error {
 	if err != nil {
 		return err
 	}
-	defer r.store.enqueueRaftUpdateCheck(desc.RangeID)
+	defer r.store.enqueueRaftUpdateCheck(r.RangeID)
 	for _, union := range p.raftCmd.Cmd.Requests {
 		args := union.GetInner()
 		etr, ok := args.(*roachpb.EndTransactionRequest)
@@ -1024,8 +1067,7 @@ func (r *Replica) handleRaftReady() error {
 	}
 	rd := r.raftGroup.Ready()
 	r.Unlock()
-	desc := r.Desc()
-	logRaftReady(r.store.StoreID(), desc.RangeID, rd)
+	logRaftReady(r.store.StoreID(), r.RangeID, rd)
 
 	if !raft.IsEmptySnap(rd.Snapshot) {
 		if err := r.applySnapshot(rd.Snapshot); err != nil {
@@ -1130,7 +1172,7 @@ func (r *Replica) handleRaftReady() error {
 }
 
 func (r *Replica) sendRaftMessage(msg raftpb.Message) {
-	groupID := r.Desc().RangeID
+	groupID := r.RangeID
 	r.store.mu.RLock()
 	toReplica, err := r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.To))
 	if err != nil {
@@ -1233,7 +1275,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 	defer batch.Close()
 
 	// Advance the last applied index and commit the batch.
-	if err := setAppliedIndex(batch, r.Desc().RangeID, index); err != nil {
+	if err := setAppliedIndex(batch, r.RangeID, index); err != nil {
 		log.Fatalc(ctx, "setting applied index in a batch should never fail: %s", err)
 	}
 	if err := batch.Commit(); err != nil {
@@ -1539,7 +1581,6 @@ func (r *Replica) maybeGossipFirstRange() error {
 	}
 
 	ctx := r.context()
-	desc := r.Desc()
 
 	// When multiple nodes are initialized with overlapping Gossip addresses, they all
 	// will attempt to gossip their cluster ID. This is a fairly obvious misconfiguration,
@@ -1556,7 +1597,7 @@ func (r *Replica) maybeGossipFirstRange() error {
 	// Gossip the cluster ID from all replicas of the first range.
 	if log.V(1) {
 		log.Infoc(ctx, "gossiping cluster id %s from store %d, range %d", r.store.ClusterID(),
-			r.store.StoreID(), r.Desc().RangeID)
+			r.store.StoreID(), r.RangeID)
 	}
 	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, []byte(r.store.ClusterID()), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
@@ -1565,15 +1606,15 @@ func (r *Replica) maybeGossipFirstRange() error {
 		return err
 	}
 	if log.V(1) {
-		log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.store.StoreID(), desc.RangeID)
+		log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.store.StoreID(), r.RangeID)
 	}
 	if err := r.store.Gossip().AddInfo(gossip.KeySentinel, []byte(r.store.ClusterID()), clusterIDGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip sentinel: %s", err)
 	}
 	if log.V(1) {
-		log.Infoc(ctx, "gossiping first range from store %d, range %d", r.store.StoreID(), desc.RangeID)
+		log.Infoc(ctx, "gossiping first range from store %d, range %d", r.store.StoreID(), r.RangeID)
 	}
-	if err := r.store.Gossip().AddInfoProto(gossip.KeyFirstRangeDescriptor, desc, configGossipTTL); err != nil {
+	if err := r.store.Gossip().AddInfoProto(gossip.KeyFirstRangeDescriptor, r.Desc(), configGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip first range metadata: %s", err)
 	}
 	return nil
@@ -1589,12 +1630,6 @@ func (r *Replica) maybeGossipFirstRange() error {
 // need to avoid deadlocking in redirectOnOrAcquireLeaderLease.
 // TODO(tschottdorf): Can possibly simplify.
 func (r *Replica) maybeGossipSystemConfig() {
-	r.Lock()
-	defer r.Unlock()
-	r.maybeGossipSystemConfigLocked()
-}
-
-func (r *Replica) maybeGossipSystemConfigLocked() {
 	if r.store.Gossip() == nil || !r.isInitialized() {
 		return
 	}
@@ -1616,7 +1651,7 @@ func (r *Replica) maybeGossipSystemConfigLocked() {
 	}
 
 	if log.V(1) {
-		log.Infoc(ctx, "gossiping system config from store %d, range %d", r.store.StoreID(), r.Desc().RangeID)
+		log.Infoc(ctx, "gossiping system config from store %d, range %d", r.store.StoreID(), r.RangeID)
 	}
 
 	cfg := &config.SystemConfig{Values: kvs}

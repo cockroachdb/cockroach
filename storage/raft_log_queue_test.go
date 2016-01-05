@@ -57,7 +57,9 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		t.Error(err)
 	}
 
+	r.RLock()
 	firstIndex, err := r.FirstIndex()
+	r.RUnlock()
 	if err != nil {
 		t.Error(err)
 	}
@@ -87,10 +89,13 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	store.DisableRaftLogQueue(false)
 	store.ForceRaftLogScanAndProcess(t)
 
+	r.RLock()
 	newFirstIndex, err := r.FirstIndex()
+	r.RUnlock()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if newFirstIndex <= firstIndex {
 		t.Errorf("log was not correctly truncated, older first index:%d, current first index:%d", firstIndex,
 			newFirstIndex)

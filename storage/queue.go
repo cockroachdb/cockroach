@@ -254,9 +254,7 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) e
 		return errQueueDisabled
 	}
 
-	rangeID := repl.Desc().RangeID
-
-	item, ok := bq.replicas[rangeID]
+	item, ok := bq.replicas[repl.RangeID]
 	if !should {
 		if ok {
 			bq.eventLog.Infof(false, "%s: removing", item.value)
@@ -276,7 +274,7 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) e
 	bq.eventLog.Infof(log.V(3), "%s: adding: priority=%0.3f", repl, priority)
 	item = &replicaItem{value: repl, priority: priority}
 	heap.Push(&bq.priorityQ, item)
-	bq.replicas[rangeID] = item
+	bq.replicas[repl.RangeID] = item
 
 	// If adding this replica has pushed the queue past its maximum size,
 	// remove the lowest priority element.
@@ -296,7 +294,7 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) e
 func (bq *baseQueue) MaybeRemove(repl *Replica) {
 	bq.Lock()
 	defer bq.Unlock()
-	if item, ok := bq.replicas[repl.Desc().RangeID]; ok {
+	if item, ok := bq.replicas[repl.RangeID]; ok {
 		bq.eventLog.Infof(log.V(3), "%s: removing", item.value)
 		bq.remove(item.index)
 	}
@@ -415,7 +413,7 @@ func (bq *baseQueue) pop() *Replica {
 		return nil
 	}
 	item := heap.Pop(&bq.priorityQ).(*replicaItem)
-	delete(bq.replicas, item.value.Desc().RangeID)
+	delete(bq.replicas, item.value.RangeID)
 	return item.value
 }
 
@@ -423,7 +421,7 @@ func (bq *baseQueue) pop() *Replica {
 // mutex to be locked.
 func (bq *baseQueue) remove(index int) {
 	item := heap.Remove(&bq.priorityQ, index).(*replicaItem)
-	delete(bq.replicas, item.value.Desc().RangeID)
+	delete(bq.replicas, item.value.RangeID)
 }
 
 // DrainQueue locks the queue and processes the remaining queued replicas. It

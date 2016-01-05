@@ -138,11 +138,11 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	g, stopper := gossipForTest(t)
 	defer stopper.Stop()
 
-	r1 := &Replica{}
+	r1 := &Replica{RangeID: 1}
 	if err := r1.setDesc(&roachpb.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
 	}
-	r2 := &Replica{}
+	r2 := &Replica{RangeID: 2}
 	if err := r2.setDesc(&roachpb.RangeDescriptor{RangeID: 2}); err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestBaseQueueAdd(t *testing.T) {
 	g, stopper := gossipForTest(t)
 	defer stopper.Stop()
 
-	r := &Replica{}
+	r := &Replica{RangeID: 1}
 	if err := r.setDesc(&roachpb.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -256,11 +256,11 @@ func TestBaseQueueProcess(t *testing.T) {
 	g, stopper := gossipForTest(t)
 	defer stopper.Stop()
 
-	r1 := &Replica{}
+	r1 := &Replica{RangeID: 1}
 	if err := r1.setDesc(&roachpb.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
 	}
-	r2 := &Replica{}
+	r2 := &Replica{RangeID: 2}
 	if err := r2.setDesc(&roachpb.RangeDescriptor{RangeID: 2}); err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +268,7 @@ func TestBaseQueueProcess(t *testing.T) {
 		blocker: make(chan struct{}, 1),
 		shouldQueueFn: func(now roachpb.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			shouldQueue = true
-			priority = float64(r.Desc().RangeID)
+			priority = float64(r.RangeID)
 			return
 		},
 	}
@@ -305,7 +305,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	g, stopper := gossipForTest(t)
 	defer stopper.Stop()
 
-	r := &Replica{}
+	r := &Replica{RangeID: 1}
 	if err := r.setDesc(&roachpb.RangeDescriptor{RangeID: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +347,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	defer stopper.Stop()
 
 	// This range can never be split due to zone configs boundaries.
-	neverSplits := &Replica{}
+	neverSplits := &Replica{RangeID: 1}
 	if err := neverSplits.setDesc(&roachpb.RangeDescriptor{
 		RangeID:  1,
 		StartKey: roachpb.RKeyMin,
@@ -357,7 +357,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	}
 
 	// This range will need to be split after user db/table entries are created.
-	willSplit := &Replica{}
+	willSplit := &Replica{RangeID: 2}
 	if err := willSplit.setDesc(&roachpb.RangeDescriptor{
 		RangeID:  2,
 		StartKey: keys.Addr(keys.ReservedTableDataMin),
@@ -371,7 +371,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		shouldQueueFn: func(now roachpb.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			// Always queue ranges if they make it past the base queue's logic.
 			atomic.AddInt32(&queued, 1)
-			return true, float64(r.Desc().RangeID)
+			return true, float64(r.RangeID)
 		},
 		acceptUnsplit: false,
 	}
@@ -386,10 +386,12 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	if sysCfg == nil {
 		t.Fatal("nil config")
 	}
-	if sysCfg.NeedsSplit(neverSplits.Desc().StartKey, neverSplits.Desc().EndKey) {
+	neverSplitsDesc := neverSplits.Desc()
+	if sysCfg.NeedsSplit(neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
 		t.Fatal("System config says range needs to be split")
 	}
-	if sysCfg.NeedsSplit(willSplit.Desc().StartKey, willSplit.Desc().EndKey) {
+	willSplitDesc := willSplit.Desc()
+	if sysCfg.NeedsSplit(willSplitDesc.StartKey, willSplitDesc.EndKey) {
 		t.Fatal("System config says range needs to be split")
 	}
 
@@ -414,10 +416,12 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	config.TestingSetZoneConfig(keys.MaxReservedDescID+2, &config.ZoneConfig{RangeMaxBytes: 1 << 20})
 
 	// Check our config.
-	if sysCfg.NeedsSplit(neverSplits.Desc().StartKey, neverSplits.Desc().EndKey) {
+	neverSplitsDesc = neverSplits.Desc()
+	if sysCfg.NeedsSplit(neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
 		t.Fatal("System config says range needs to be split")
 	}
-	if !sysCfg.NeedsSplit(willSplit.Desc().StartKey, willSplit.Desc().EndKey) {
+	willSplitDesc = willSplit.Desc()
+	if !sysCfg.NeedsSplit(willSplitDesc.StartKey, willSplitDesc.EndKey) {
 		t.Fatal("System config says range does not need to be split")
 	}
 
