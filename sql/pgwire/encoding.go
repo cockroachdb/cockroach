@@ -38,28 +38,9 @@ type bufferedReader interface {
 }
 
 type readBuffer struct {
-	msg []byte
-	tmp [4]byte
-}
-
-// reset sets b.msg to exactly size, attempting to use spare capacity
-// at the end of the existing slice when possible and allocating a new
-// slice when necessary.
-func (b *readBuffer) reset(size int) {
-	if b.msg != nil {
-		b.msg = b.msg[len(b.msg):]
-	}
-
-	if cap(b.msg) >= size {
-		b.msg = b.msg[:size]
-		return
-	}
-
-	allocSize := size
-	if allocSize < 4096 {
-		allocSize = 4096
-	}
-	b.msg = make([]byte, size, allocSize)
+	msg    []byte
+	msgBuf []byte
+	tmp    [4]byte
 }
 
 // readMsg reads a length-prefixed message. It is only used directly
@@ -77,7 +58,11 @@ func (b *readBuffer) readUntypedMsg(rd io.Reader) error {
 			size, maxMessageSize)
 	}
 
-	b.reset(size)
+	if len(b.msgBuf) < size {
+		b.msgBuf = make([]byte, size)
+	}
+
+	b.msg = b.msgBuf[:size]
 	_, err := io.ReadFull(rd, b.msg)
 	return err
 }
