@@ -194,6 +194,16 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		t.Errorf("error bootstrapping store: %s", err)
 	}
 
+	// Verify we can read the store ident after a flush.
+	if err := eng.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if value, _, err := engine.MVCCGet(eng, keys.StoreIdentKey(), roachpb.ZeroTimestamp, true, nil); err != nil {
+		t.Fatal(err)
+	} else if value == nil {
+		t.Fatalf("unable to read store ident")
+	}
+
 	// Try to get 1st range--non-existent.
 	if _, err := store.GetReplica(1); err == nil {
 		t.Error("expected error fetching non-existent range")
