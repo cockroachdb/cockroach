@@ -1026,7 +1026,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 		// the start of a lease as far as possible, and since there is an auto-
 		// matic lease for us at the beginning, we'll basically create a lease from
 		// then on.
-		expStart := tc.rng.getLease().Expiration
+		expStart := tc.rng.getLease().Start
 		tc.manualClock.Set(int64(DefaultLeaderLeaseDuration + 1000))
 
 		ts := tc.clock.Now()
