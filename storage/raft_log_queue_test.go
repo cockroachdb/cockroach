@@ -57,7 +57,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		t.Error(err)
 	}
 
-	firstIndex, err := r.FirstIndex()
+	firstIndex, err := r.FirstIndexUnlocked()
 	if err != nil {
 		t.Error(err)
 	}
@@ -87,7 +87,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	store.DisableRaftLogQueue(false)
 	store.ForceRaftLogScanAndProcess(t)
 
-	newFirstIndex, err := r.FirstIndex()
+	newFirstIndex, err := r.FirstIndexUnlocked()
 	if err != nil {
 		t.Fatal(err)
 	}

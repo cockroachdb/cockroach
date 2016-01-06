@@ -51,6 +51,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 		}
 		// Initialize the range stat so the scanner can use it.
 		rng := &Replica{
+			RangeID: desc.RangeID,
 			stats: &rangeStats{
 				rangeID: desc.RangeID,
 				MVCCStats: engine.MVCCStats{

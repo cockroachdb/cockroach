@@ -1073,7 +1073,7 @@ func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roach
 	}
 
 	// Have we already truncated this log? If so, just return without an error.
-	firstIndex, err := r.FirstIndex()
+	firstIndex, err := r.FirstIndexUnlocked()
 	if err != nil {
 		return reply, err
 	}
@@ -1087,7 +1087,7 @@ func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roach
 	}
 
 	// args.Index is the first index to keep.
-	term, err := r.Term(args.Index - 1)
+	term, err := r.termUnlocked(args.Index - 1)
 	if err != nil {
 		return reply, err
 	}

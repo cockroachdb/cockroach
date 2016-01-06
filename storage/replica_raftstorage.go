@@ -30,8 +30,16 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+// Most calls to raft.RawNode require that the replica read lock is held.
+// Specifically:
+// - InitialSate
+// - Entries
+// - Term
+// - FirstIndex
+// - Snapshot
+
 // InitialState implements the raft.Storage interface.
-// InitialState requires that the replica lock be held.
+// InitialState requires that the replica read lock be held.
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var hs raftpb.HardState
 	found, err := engine.MVCCGetProto(r.store.Engine(), keys.RaftHardStateKey(r.RangeID),
@@ -78,6 +86,7 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // maxBytes. Passing maxBytes equal to zero disables size checking.
 // TODO(bdarnell): consider caching for recent entries, if rocksdb's builtin caching
 // is insufficient.
+// Entries requires that the replica read lock is held.
 func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	if lo > hi {
 		return nil, util.Errorf("lo:%d is greater than hi:%d", lo, hi)
@@ -146,7 +155,7 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	}
 
 	// No results, was it due to unavailability or truncation?
-	ts, err := r.raftTruncatedState()
+	ts, err := r.raftTruncatedStateLocked()
 	if err != nil {
 		return nil, err
 	}
@@ -158,11 +167,21 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	return nil, raft.ErrUnavailable
 }
 
+// entriesUnlocked is the same function as Entries, which implements the
+// raft.Storage interface and also requires that the replica lock is held.
+// entriesUnlocked is a convince function which handles the locking.
+func (r *Replica) entriesUnlocked(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
+	r.RLock()
+	defer r.RUnlock()
+	return r.Entries(lo, hi, maxBytes)
+}
+
 // Term implements the raft.Storage interface.
+// Term requires that the replica read lock is held.
 func (r *Replica) Term(i uint64) (uint64, error) {
 	ents, err := r.Entries(i, i+1, 0)
 	if err == raft.ErrCompacted {
-		ts, err := r.raftTruncatedState()
+		ts, err := r.raftTruncatedStateLocked()
 		if err != nil {
 			return 0, err
 		}
@@ -179,6 +198,15 @@ func (r *Replica) Term(i uint64) (uint64, error) {
 	return ents[0].Term, nil
 }
 
+// entriesUnlocked is the same function as Entries, which implements the
+// raft.Storage interface and also requires that the replica lock is held.
+// entriesUnlocked is a convince function which handles the locking.
+func (r *Replica) termUnlocked(i uint64) (uint64, error) {
+	r.RLock()
+	defer r.RUnlock()
+	return r.Term(i)
+}
+
 // LastIndex implements the raft.Storage interface.
 func (r *Replica) LastIndex() (uint64, error) {
 	return atomic.LoadUint64(&r.lastIndex), nil
@@ -187,8 +215,14 @@ func (r *Replica) LastIndex() (uint64, error) {
 // raftTruncatedState returns metadata about the log that preceded the first
 // current entry. This includes both entries that have been compacted away
 // and the dummy entries that make up the starting point of an empty log.
-// raftTruncatedState requires that the replica lock be held.
 func (r *Replica) raftTruncatedState() (roachpb.RaftTruncatedState, error) {
+	r.RLock()
+	defer r.RUnlock()
+	return r.raftTruncatedStateLocked()
+}
+
+// raftTruncatedState requires that the replica read lock be held.
+func (r *Replica) raftTruncatedStateLocked() (roachpb.RaftTruncatedState, error) {
 	if ts := r.getCachedTruncatedState(); ts != nil {
 		return *ts, nil
 	}
@@ -218,17 +252,28 @@ func (r *Replica) raftTruncatedState() (roachpb.RaftTruncatedState, error) {
 }
 
 // FirstIndex implements the raft.Storage interface.
+// FirstIndex requires that the replica read lock is held.
 func (r *Replica) FirstIndex() (uint64, error) {
-	ts, err := r.raftTruncatedState()
+	ts, err := r.raftTruncatedStateLocked()
 	if err != nil {
 		return 0, err
 	}
 	return ts.Index + 1, nil
 }
 
-// loadAppliedIndex retrieves the applied index from the supplied engine.
-// loadAppliedIndex requires that the replica lock is held.
-func (r *Replica) loadAppliedIndex(eng engine.Engine) (uint64, error) {
+// FirstIndexUnlocked is the same function as FirstIndex which implements the
+// raft.Storage interface, but since FirstIndex requires a lock,
+// firstIndexUnlocked is a convenience function which performs the locking
+// internally.
+func (r *Replica) FirstIndexUnlocked() (uint64, error) {
+	r.RLock()
+	defer r.RUnlock()
+	return r.FirstIndex()
+}
+
+// loadAppliedIndexLocked retrieves the applied index from the supplied engine.
+// loadAppliedIndexLocked requires that the replica read lock is held.
+func (r *Replica) loadAppliedIndexLocked(eng engine.Engine) (uint64, error) {
 	var appliedIndex uint64
 	if r.isInitializedLocked() {
 		appliedIndex = raftInitialLogIndex
@@ -264,6 +309,14 @@ func setAppliedIndex(eng engine.Engine, rangeID roachpb.RangeID, appliedIndex ui
 
 // loadLastIndex retrieves the last index from storage.
 func (r *Replica) loadLastIndex() (uint64, error) {
+	r.RLock()
+	defer r.RUnlock()
+	return r.loadLastIndexLocked()
+}
+
+// loadLastIndexLocked retrieves the last index from storage.
+// loadLastIndexLocked requires that the replica read lock is held.
+func (r *Replica) loadLastIndexLocked() (uint64, error) {
 	lastIndex := uint64(0)
 	v, _, err := engine.MVCCGet(r.store.Engine(),
 		keys.RaftLastIndexKey(r.RangeID),
@@ -281,7 +334,7 @@ func (r *Replica) loadLastIndex() (uint64, error) {
 		// The log is empty, which means we are either starting from scratch
 		// or the entire log has been truncated away. raftTruncatedState
 		// handles both cases.
-		lastEnt, err := r.raftTruncatedState()
+		lastEnt, err := r.raftTruncatedStateLocked()
 		if err != nil {
 			return 0, err
 		}
@@ -302,7 +355,7 @@ func setLastIndex(eng engine.Engine, rangeID roachpb.RangeID, lastIndex uint64) 
 }
 
 // Snapshot implements the raft.Storage interface.
-// Snapshot requires that the replica lock is held.
+// Snapshot requires that the replica read lock is held.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	// Copy all the data from a consistent RocksDB snapshot into a RaftSnapshotData.
 	snap := r.store.NewSnapshot()
@@ -311,7 +364,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 
 	// Read the range metadata from the snapshot instead of the members
 	// of the Range struct because they might be changed concurrently.
-	appliedIndex, err := r.loadAppliedIndex(snap)
+	appliedIndex, err := r.loadAppliedIndexLocked(snap)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
@@ -370,6 +423,16 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 			ConfState: cs,
 		},
 	}, nil
+}
+
+// SnapshotUnlocked is the same function as Snapshot which implements the
+// raft.Storage interface, but since Snapshot requires a lock,
+// SnapshotUnlocked is a convenience function which performs the required
+// locking.
+func (r *Replica) SnapshotUnlocked() (raftpb.Snapshot, error) {
+	r.RLock()
+	defer r.RUnlock()
+	return r.Snapshot()
 }
 
 // append the given entries to the raft log.

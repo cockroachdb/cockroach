@@ -147,6 +147,7 @@ type cmdIDKey string
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Replica struct {
+	RangeID  roachpb.RangeID // Should only be set by the constructor.
 	store    *Store
 	stats    *rangeStats // Range statistics
 	maxBytes int64       // Max bytes before split.
@@ -178,7 +179,6 @@ type Replica struct {
 	truncatedState unsafe.Pointer // *roachpb.RaftTruncatedState
 
 	replicaID roachpb.ReplicaID
-	RangeID   roachpb.RangeID // Should only be set by the constructor.
 	raftGroup *raft.RawNode
 }
 
@@ -194,15 +194,18 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store) (*Replica, error) {
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 		RangeID:     desc.RangeID,
 	}
-	r.setDescWithoutProcessUpdate(desc)
+	r.Lock()
+	if err := r.setDescWithoutProcessUpdateLocked(desc); err != nil {
+		return nil, err
+	}
 
-	lastIndex, err := r.loadLastIndex()
+	lastIndex, err := r.loadLastIndexLocked()
 	if err != nil {
 		return nil, err
 	}
 	atomic.StoreUint64(&r.lastIndex, lastIndex)
 
-	appliedIndex, err := r.loadAppliedIndex(r.store.Engine())
+	appliedIndex, err := r.loadAppliedIndexLocked(r.store.Engine())
 	if err != nil {
 		return nil, err
 	}
@@ -216,10 +219,11 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store) (*Replica, error) {
 
 	_, repDesc := desc.FindReplica(store.StoreID())
 	if repDesc != nil {
-		if err := r.setReplicaID(repDesc.ReplicaID); err != nil {
+		if err := r.setReplicaIDLocked(repDesc.ReplicaID); err != nil {
 			return nil, err
 		}
 	}
+	r.Unlock()
 
 	if r.ContainsKey(keys.SystemDBSpan.Key) {
 		r.maybeGossipSystemConfig()
@@ -269,6 +273,11 @@ func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor) error {
 func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
 	r.Lock()
 	defer r.Unlock()
+	return r.setReplicaIDLocked(replicaID)
+}
+
+// setReplicaIDLocked requires that the replica lock is held.
+func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	if r.replicaID == replicaID {
 		return nil
 	} else if r.replicaID > replicaID {
@@ -499,7 +508,7 @@ func (r *Replica) isInitialized() bool {
 // because we created it or we have received an initial snapshot from
 // another node. It is false when a range has been created in response
 // to an incoming message but we are waiting for our initial snapshot.
-// The replica lock must be held.
+// isInitializedLocked requires that the replica read lock is held.
 func (r *Replica) isInitializedLocked() bool {
 	return len(r.desc.EndKey) > 0
 }
@@ -515,7 +524,9 @@ func (r *Replica) Desc() *roachpb.RangeDescriptor {
 // processRangeDescriptorUpdate() to make the range manager handle the
 // descriptor update.
 func (r *Replica) setDesc(desc *roachpb.RangeDescriptor) error {
-	r.setDescWithoutProcessUpdate(desc)
+	if err := r.setDescWithoutProcessUpdate(desc); err != nil {
+		return err
+	}
 	if r.store == nil {
 		// r.rm is null in some tests.
 		return nil
@@ -525,8 +536,22 @@ func (r *Replica) setDesc(desc *roachpb.RangeDescriptor) error {
 
 // setDescWithoutProcessUpdate updates the range descriptor without calling
 // processRangeDescriptorUpdate.
-func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
+func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) error {
+	r.Lock()
+	defer r.Unlock()
+	return r.setDescWithoutProcessUpdateLocked(desc)
+}
+
+// setDescWithoutProcessUpdateLocked updates the range descriptor without
+// calling processRangeDescriptorUpdate.
+// setDescWithoutProcessUpdateLocked requires that the replica lock is held.
+func (r *Replica) setDescWithoutProcessUpdateLocked(desc *roachpb.RangeDescriptor) error {
+	if desc.RangeID != r.RangeID {
+		return util.Errorf("range descriptor ID (%d) does not match replica's range ID (%d)",
+			desc.RangeID, r.RangeID)
+	}
 	r.desc = desc
+	return nil
 }
 
 // getCachedTruncatedState atomically returns the range's cached truncated

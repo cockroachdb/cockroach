@@ -1025,7 +1025,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 				if rng == nil {
 					t.Fatal("failed to look up min range")
 				}
-				_, err := rng.Snapshot()
+				_, err := rng.SnapshotUnlocked()
 				if err != nil {
 					t.Fatalf("failed to snapshot min range: %s", err)
 				}
@@ -1034,7 +1034,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 				if rng == nil {
 					t.Fatal("failed to look up max range")
 				}
-				_, err = rng.Snapshot()
+				_, err = rng.SnapshotUnlocked()
 				if err != nil {
 					t.Fatalf("failed to snapshot max range: %s", err)
 				}

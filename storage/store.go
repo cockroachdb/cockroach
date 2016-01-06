@@ -1026,7 +1026,9 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 
 	copyDesc := *origDesc
 	copyDesc.EndKey = append([]byte(nil), newDesc.StartKey...)
-	origRng.setDescWithoutProcessUpdate(&copyDesc)
+	if err := origRng.setDescWithoutProcessUpdate(&copyDesc); err != nil {
+		return util.Errorf("couldn't update range descriptor: %s", err)
+	}
 
 	if s.replicasByKey.ReplaceOrInsert(origRng) != nil {
 		return util.Errorf("couldn't insert range %v in rangesByKey btree", origRng)
