@@ -334,9 +334,6 @@ func Example_cput() {
 	// node drained and shutdown: ok
 }
 
-// TODO(tamird): reenable this? it sometimes leakes goroutines.
-// https://github.com/cockroachdb/cockroach/issues/3120
-/*
 func Example_max_results() {
 	c := newCLITest()
 
@@ -362,15 +359,14 @@ func Example_max_results() {
 	// range split c
 	// range split d
 	// range ls --max-results=2
-	// ""-"c" [1]
+	// /Min-"c" [1]
 	// 	0: node-id=1 store-id=1
-	// "c"-"d" [2]
+	// "c"-"d" [4]
 	// 	0: node-id=1 store-id=1
 	// 2 result(s)
 	// quit
 	// node drained and shutdown: ok
 }
-*/
 
 func Example_zone() {
 	c := newCLITest()
