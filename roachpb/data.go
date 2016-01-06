@@ -602,32 +602,21 @@ func (t *Transaction) IsInitialized() bool {
 	return len(t.ID) > 0
 }
 
-// MakePriority generates a random priority value, biased by the
-// specified userPriority. If userPriority=100, the resulting
-// priority is 100x more likely to be probabilistically greater
-// than a similar invocation with userPriority=1.
+// MakePriority returns the transaction priority based on the
+// specified user priority. If 0, the user priority is set to
+// a random value between 0 and max int32.
 func MakePriority(userPriority int32) int32 {
-	// A currently undocumented feature allows an explicit priority to
-	// be set by specifying priority < 1. The explicit priority is
-	// simply -userPriority in this case. This is hacky, but currently
-	// used for unittesting. Perhaps this should be documented and allowed.
+	// A former undocumented feature allowed an explicit priority to be
+	// set by specifying priority < 1. The explicit priority is simply
+	// -userPriority in this case. This is used for unittesting, before
+	// the specified priority was taken at face value, so we maintain
+	// the old behavior.
 	if userPriority < 0 {
 		return -userPriority
+	} else if userPriority == 0 {
+		return rand.Int31()
 	}
-	if userPriority == 0 {
-		userPriority = 1
-	}
-	// The idea here is to bias selection of a random priority from the
-	// range [1, 2^31-1) such that if userPriority=100, it's 100x more
-	// likely to be a higher int32 than if userPriority=1. The formula
-	// below chooses random values according to the following table:
-	//   userPriority  |  range
-	//   1             |  all positive int32s
-	//   10            |  top 9/10ths of positive int32s
-	//   100           |  top 99/100ths of positive int32s
-	//   1000          |  top 999/1000ths of positive int32s
-	//   ...etc
-	return math.MaxInt32 - rand.Int31n(math.MaxInt32/userPriority)
+	return userPriority
 }
 
 // TxnIDEqual returns whether the transaction IDs are equal.

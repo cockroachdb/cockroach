@@ -924,16 +924,15 @@ type Header struct {
 	// range belongs to. This is used by the receiving node to route the
 	// request to the correct range.
 	RangeID RangeID `protobuf:"varint,3,opt,name=range_id,casttype=RangeID" json:"range_id"`
-	// user_priority specifies priority multiple for non-transactional
-	// commands. This value should be a positive integer [1, 2^31-1).
-	// It's properly viewed as a multiple for how likely this
-	// transaction will be to prevail if a write conflict occurs.
-	// Commands with user_priority=100 will be 100x less likely to be
-	// aborted as conflicting transactions or non-transactional commands
-	// with user_priority=1. This value is ignored if Txn is
+	// user_priority allows an explicit priority to be specified for
+	// commands. This value should be a positive integer [1, 2^31-1].
+	// If set to 0 or not set, a random value in the interval is
+	// chosen. To set a lower than average priority, use the interval
+	// [1, 2^30). To set a higher than average priority, use the
+	// interval [2^30, 2^31-1]. This value is ignored if Txn is
 	// specified. If neither this value nor txn is specified, the value
-	// defaults to 1.
-	UserPriority *int32 `protobuf:"varint,4,opt,name=user_priority,def=1" json:"user_priority,omitempty"`
+	// defaults to 0, and a random priority is chosen.
+	UserPriority *int32 `protobuf:"varint,4,opt,name=user_priority" json:"user_priority,omitempty"`
 	// txn is set non-nil if a transaction is underway. To start a txn,
 	// the first request should set this field to non-nil with name and
 	// isolation level set as desired. The response will contain the
@@ -949,8 +948,6 @@ type Header struct {
 func (m *Header) Reset()         { *m = Header{} }
 func (m *Header) String() string { return proto.CompactTextString(m) }
 func (*Header) ProtoMessage()    {}
-
-const Default_Header_UserPriority int32 = 1
 
 func (m *Header) GetTimestamp() Timestamp {
 	if m != nil {
@@ -977,7 +974,7 @@ func (m *Header) GetUserPriority() int32 {
 	if m != nil && m.UserPriority != nil {
 		return *m.UserPriority
 	}
-	return Default_Header_UserPriority
+	return 0
 }
 
 func (m *Header) GetTxn() *Transaction {

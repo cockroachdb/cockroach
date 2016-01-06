@@ -1396,9 +1396,9 @@ func TestStoreScanIntents(t *testing.T) {
 			key := roachpb.Key(fmt.Sprintf("key%d-%02d", i, j))
 			keys = append(keys, key)
 			if txn == nil {
-				priority := int32(-1)
+				priority := int32(1)
 				if !test.canPush {
-					priority = -roachpb.MaxPriority
+					priority = roachpb.MaxPriority
 				}
 				txn = newTransaction(fmt.Sprintf("test-%d", i), key, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
 				bt, btH := beginTxnArgs(txn.Key, txn)

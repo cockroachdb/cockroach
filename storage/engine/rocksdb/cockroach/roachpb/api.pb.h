@@ -5564,7 +5564,7 @@ class Header : public ::google::protobuf::Message {
   ::google::protobuf::int64 range_id() const;
   void set_range_id(::google::protobuf::int64 value);
 
-  // optional int32 user_priority = 4 [default = 1];
+  // optional int32 user_priority = 4;
   bool has_user_priority() const;
   void clear_user_priority();
   static const int kUserPriorityFieldNumber = 4;
@@ -11506,7 +11506,7 @@ inline void Header::set_range_id(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.range_id)
 }
 
-// optional int32 user_priority = 4 [default = 1];
+// optional int32 user_priority = 4;
 inline bool Header::has_user_priority() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
@@ -11517,7 +11517,7 @@ inline void Header::clear_has_user_priority() {
   _has_bits_[0] &= ~0x00000008u;
 }
 inline void Header::clear_user_priority() {
-  user_priority_ = 1;
+  user_priority_ = 0;
   clear_has_user_priority();
 }
 inline ::google::protobuf::int32 Header::user_priority() const {

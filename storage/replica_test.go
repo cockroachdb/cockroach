@@ -223,8 +223,7 @@ func newTransaction(name string, baseKey roachpb.Key, userPriority int32,
 		offset = clock.MaxOffset().Nanoseconds()
 		now = clock.Now()
 	}
-	return roachpb.NewTransaction(name, baseKey, userPriority,
-		isolation, now, offset)
+	return roachpb.NewTransaction(name, baseKey, userPriority, isolation, now, offset)
 }
 
 // CreateReplicaSets creates new roachpb.ReplicaDescriptor protos based on an array of
@@ -791,7 +790,7 @@ func TestRangeNoGossipConfig(t *testing.T) {
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
 	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
 
-	txn := newTransaction("test", key, 1 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 0 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
 	h := roachpb.Header{Txn: txn}
 	bt, _ := beginTxnArgs(key, txn)
 	req1 := putArgs(key, []byte("foo"))
@@ -837,7 +836,7 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
 	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
 
-	txn := newTransaction("test", key, 1 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 0 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
 	bt, h := beginTxnArgs(key, txn)
 	if _, err := client.SendWrappedWith(tc.Sender(), nil, h, &bt); err != nil {
 		t.Fatal(err)

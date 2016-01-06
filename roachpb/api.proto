@@ -584,16 +584,15 @@ message Header {
   // request to the correct range.
   optional int64 range_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
-  // user_priority specifies priority multiple for non-transactional
-  // commands. This value should be a positive integer [1, 2^31-1).
-  // It's properly viewed as a multiple for how likely this
-  // transaction will be to prevail if a write conflict occurs.
-  // Commands with user_priority=100 will be 100x less likely to be
-  // aborted as conflicting transactions or non-transactional commands
-  // with user_priority=1. This value is ignored if Txn is
+  // user_priority allows an explicit priority to be specified for
+  // commands. This value should be a positive integer [1, 2^31-1].
+  // If set to 0 or not set, a random value in the interval is
+  // chosen. To set a lower than average priority, use the interval
+  // [1, 2^30). To set a higher than average priority, use the
+  // interval [2^30, 2^31-1]. This value is ignored if Txn is
   // specified. If neither this value nor txn is specified, the value
-  // defaults to 1.
-  optional int32 user_priority = 4 [default = 1];
+  // defaults to 0, and a random priority is chosen.
+  optional int32 user_priority = 4;
   // txn is set non-nil if a transaction is underway. To start a txn,
   // the first request should set this field to non-nil with name and
   // isolation level set as desired. The response will contain the

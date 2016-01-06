@@ -158,6 +158,24 @@ func TestNextKey(t *testing.T) {
 	}
 }
 
+func TestIsPrev(t *testing.T) {
+	for i, tc := range []struct {
+		k, m Key
+		ok   bool
+	}{
+		{k: Key(""), m: Key{0}, ok: true},
+		{k: nil, m: nil, ok: false},
+		{k: Key("a"), m: Key{'a', 0, 0}, ok: false},
+		{k: Key{'z', 'a', 0}, m: Key{'z', 'a'}, ok: false},
+		{k: Key("bro"), m: Key{'b', 'r', 'o', 0}, ok: true},
+		{k: Key("foo"), m: Key{'b', 'a', 'r', 0}, ok: false},
+	} {
+		if tc.ok != tc.k.IsPrev(tc.m) {
+			t.Errorf("%d: wanted %t", i, tc.ok)
+		}
+	}
+}
+
 func TestKeyString(t *testing.T) {
 	if Key("hello").String() != `"hello"` {
 		t.Errorf("expected key to display pretty version: %s", Key("hello"))
@@ -457,20 +475,21 @@ func TestTransactionUpdate(t *testing.T) {
 
 }
 
-func TestIsPrev(t *testing.T) {
-	for i, tc := range []struct {
-		k, m Key
-		ok   bool
+// TestMakePriority verifies that setting user priority of P results
+// in MakePriority returning priorities that are P times more likely
+// to be higher than a priority with user priority = 1.
+func TestMakePriority(t *testing.T) {
+	userPs := []struct {
+		userPriority int32
+		expPriority  int32
 	}{
-		{k: Key(""), m: Key{0}, ok: true},
-		{k: nil, m: nil, ok: false},
-		{k: Key("a"), m: Key{'a', 0, 0}, ok: false},
-		{k: Key{'z', 'a', 0}, m: Key{'z', 'a'}, ok: false},
-		{k: Key("bro"), m: Key{'b', 'r', 'o', 0}, ok: true},
-		{k: Key("foo"), m: Key{'b', 'a', 'r', 0}, ok: false},
-	} {
-		if tc.ok != tc.k.IsPrev(tc.m) {
-			t.Errorf("%d: wanted %t", i, tc.ok)
+		{-1, 1},
+		{-2, 2},
+		{-100000, 100000},
+	}
+	for i, p := range userPs {
+		if p.expPriority != MakePriority(p.userPriority) {
+			t.Errorf("%d: expected priority %d != priority %d", i, p.expPriority, p.userPriority)
 		}
 	}
 }
