@@ -135,9 +135,6 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 
 // Stop stops the cluster.
 func (ltc *LocalTestCluster) Stop() {
-	if ltc.tester.Failed() {
-		return
-	}
 	if r := recover(); r != nil {
 		panic(r)
 	}
