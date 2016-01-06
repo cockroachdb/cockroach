@@ -10,10 +10,31 @@ statement OK
 INSERT INTO kv VALUES
 (1, 2, 3, 'a'),
 (3, 4, 5, 'a'),
-(5, NULL, NULL, NULL),
+(5, NULL, 5, NULL),
 (6, 2, 3, 'b'),
 (7, 2, 2, 'b'),
 (8, 4, 2, 'A')
+
+
+# Aggregate expression triggers aggregation (thus 1 row) even if it simplifies to a constant.
+query I rowsort
+SELECT MIN(1) FROM kv
+----
+1
+
+# Even with no aggregate functions, grouping occurs in the presence of GROUP BY.
+query I rowsort
+SELECT 1 FROM kv GROUP BY v
+----
+1
+1
+1
+
+# Presence of HAVING triggers aggregation, reducing results to one row (even without GROUP BY).
+query I rowsort
+SELECT 3 FROM kv HAVING TRUE;
+----
+3
 
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT COUNT(*), k FROM kv
@@ -28,6 +49,7 @@ SELECT COUNT(*), k FROM kv GROUP BY k
 1 7
 1 8
 
+# GROUP BY specified using column number is same as repeated expression.
 query II rowsort
 SELECT COUNT(*), k FROM kv GROUP BY 2
 ----
@@ -50,18 +72,81 @@ SELECT COUNT(*), k FROM kv GROUP BY -4
 query error non-integer constant column index
 SELECT 1 GROUP BY 'a'
 
-query I rowsort
-SELECT 1 FROM kv GROUP BY v
+# Qualifying a name in the SELECT, the GROUP BY, both or neither should not affect validation.
+query IT rowsort
+SELECT COUNT(*), kv.s FROM kv GROUP BY s
 ----
-1
-1
-1
+1 A
+1 NULL
+2 a
+2 b
 
-query I rowsort
-SELECT MIN(1) FROM kv;
+query IT rowsort
+SELECT COUNT(*), s FROM kv GROUP BY kv.s
 ----
-1
+1 A
+1 NULL
+2 a
+2 b
 
+query IT rowsort
+SELECT COUNT(*), kv.s FROM kv GROUP BY kv.s
+----
+1 A
+1 NULL
+2 a
+2 b
+
+query IT rowsort
+SELECT COUNT(*), s FROM kv GROUP BY s
+----
+1 A
+1 NULL
+2 a
+2 b
+
+# Grouping by more than one column works.
+query III rowsort
+SELECT v, COUNT(*), w FROM kv GROUP BY v, w
+----
+2    1 2
+2    2 3
+4    1 2
+4    1 5
+NULL 1 5
+
+# Grouping by more than one column using column numbers works.
+query III rowsort
+SELECT v, COUNT(*), w FROM kv GROUP BY 1, 3
+----
+2    1 2
+2    2 3
+4    1 2
+4    1 5
+NULL 1 5
+
+# Selecting and grouping on a function expression works.
+query IT rowsort
+SELECT COUNT(*), UPPER(s) FROM kv GROUP BY UPPER(s)
+----
+1 NULL
+2 B
+3 A
+
+# Selecting a function of something which is grouped works.
+query IT rowsort
+SELECT COUNT(*), UPPER(s) FROM kv GROUP BY s
+----
+1 A
+1 NULL
+2 A
+2 B
+
+# Selecting a value that is not grouped, even if a function of it it, does not work.
+query error column "s" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT COUNT(*), s FROM kv GROUP BY UPPER(s)
+
+# Selecting and grouping on a more complex expression works.
 query II rowsort
 SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 ----
@@ -72,67 +157,28 @@ SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 1 9
 1 NULL
 
-query IT rowsort
-SELECT COUNT(*), UPPER(s) FROM kv GROUP BY UPPER(s)
+
+# Selecting a more complex expression, made up of things which are each grouped, works.
+query II rowsort
+SELECT COUNT(*), k+v FROM kv GROUP BY k, v
 ----
+1 12
+1 3
+1 7
+1 8
+1 9
 1 NULL
-2 B
-3 A
-
-query IT rowsort
-SELECT COUNT(*), UPPER(s) FROM kv GROUP BY 2
-----
-1 NULL
-2 B
-3 A
-
-query IT rowsort
-SELECT COUNT(*), UPPER(s) FROM kv GROUP BY s
-----
-1 A
-1 NULL
-2 A
-2 B
-
-query IT rowsort
-SELECT COUNT(*), UPPER(kv.s) FROM kv GROUP BY s
-----
-1 A
-1 NULL
-2 A
-2 B
-
-query IT rowsort
-SELECT COUNT(*), UPPER(s) FROM kv GROUP BY kv.s
-----
-1 A
-1 NULL
-2 A
-2 B
-
-
-query error column "s" must appear in the GROUP BY clause or be used in an aggregate function
-SELECT COUNT(*), s FROM kv GROUP BY UPPER(s)
 
 query error column "v" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT COUNT(*), k+v FROM kv GROUP BY k
 
+query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT COUNT(*), k+v FROM kv GROUP BY v
+
 query error column "v" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT COUNT(*), v/(k+v) FROM kv GROUP BY k+v
 
-query IIR rowsort
-SELECT COUNT(*), k+v, floor(v/(k+v)) FROM kv WHERE k+v > 8 GROUP BY v, k+v
-----
-1 12 0
-1 9 0
-
-query TIIIR rowsort
-SELECT UPPER(s), COUNT(*), SUM(v), SUM(w), AVG(v+w) as avg FROM kv GROUP BY UPPER(s)
-----
-A     3  10    10    6.666666666666667
-B     2  4     5     4.5
-NULL  1  NULL  NULL  NULL
-
+# Test case from #2761.
 query II rowsort
 SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM kv GROUP BY kv.v + kv.w
 ----
@@ -165,31 +211,14 @@ SELECT MAX(k), MIN(v) FROM kv HAVING MAX(v) > 2;
 query error argument of HAVING must be type bool, not type int
 SELECT MAX(k), MIN(v) FROM kv HAVING k;
 
-query III rowsort
-SELECT k, 3, MAX(v) FROM kv GROUP BY k HAVING k > 5;
-----
-6 3 2
-7 3 2
-8 3 4
-
-# The presence of a HAVING triggers aggregation, reducing the un-grouped query to single bucket.
-query I rowsort
-SELECT 3 FROM kv WHERE k > 5 HAVING TRUE;
-----
-3
-
-query I rowsort
-SELECT 3 FROM kv WHERE k > 5;
-----
-3
-3
-3
-
-query error column "v" must appear in the GROUP BY clause or be used in an aggregate function
-SELECT 3 FROM kv GROUP BY k HAVING v > 2
-
+# Expressions listed in HAVING clause must conform to same validation as SELECT SELECT (grouped or aggregated).
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT 3 FROM kv GROUP BY v HAVING k > 5;
+
+# pg has a special case for grouping on primary key, which would allow this, but we do not.
+# See http://www.postgresql.org/docs/current/static/sql-select.html#SQL-GROUPBY
+query error column "v" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT 3 FROM kv GROUP BY k HAVING v > 2
 
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT k FROM kv HAVING k > 7;
@@ -295,6 +324,7 @@ SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv
 ----
 1 8 2 4
 
+# Even if no input rows match, we expect a row (of nulls).
 query IIII
 SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv WHERE k > 8
 ----
