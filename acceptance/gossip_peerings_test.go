@@ -102,6 +102,7 @@ func hasClusterID(infos map[string]interface{}) error {
 }
 
 func TestGossipPeerings(t *testing.T) {
+	t.Skip("#3611")
 	c := StartCluster(t)
 	defer c.AssertAndStop(t)
 	num := c.NumNodes()
@@ -140,6 +141,7 @@ func TestGossipPeerings(t *testing.T) {
 // re-bootstrapped after a time when all nodes were down
 // simultaneously.
 func TestGossipRestart(t *testing.T) {
+	t.Skip("#3611")
 	// This already replicates the first range (in the local setup).
 	// The replication of the first range is important: as long as the
 	// first range only exists on one node, that node can trivially
