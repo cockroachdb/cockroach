@@ -132,7 +132,7 @@ func TestMultiRangeBatchBounded(t *testing.T) {
 }
 
 // TestMultiRangeEmptyAfterTruncate exercises a code path in which a
-// multi-range requests deals with a range without any active requests after
+// multi-range request deals with a range without any active requests after
 // truncation. In that case, the request is skipped.
 func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)
@@ -140,13 +140,12 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	defer s.Stop()
 	db := setupMultipleRanges(t, s, "c", "d")
 
-	// Delete the keys within a transaction. Implicitly, the intents are
-	// resolved via ResolveIntentRange upon completion.
+	// Delete the keys within a transaction. The range [c,d) doesn't have
+	// any active requests.
 	if err := db.Txn(func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.DelRange("a", "b")
 		b.DelRange("e", "f")
-		b.DelRange(keys.LocalMax, roachpb.KeyMax)
 		return txn.CommitInBatch(b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
