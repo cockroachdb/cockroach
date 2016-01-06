@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -250,7 +251,6 @@ func TestNodeJoin(t *testing.T) {
 // store's cluster ID is empty.
 func TestCorruptedClusterID(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("#3626")
 	engineStopper := stop.NewStopper()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
 	defer engineStopper.Stop()
@@ -273,10 +273,10 @@ func TestCorruptedClusterID(t *testing.T) {
 
 	engines := []engine.Engine{e}
 	server, serverAddr, _, node, stopper := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
-	if err := node.start(server, serverAddr, engines, roachpb.Attributes{}); err == nil {
-		t.Errorf("unexpected success")
-	}
 	stopper.Stop()
+	if err := node.start(server, serverAddr, engines, roachpb.Attributes{}); !testutils.IsError(err, "unidentified store") {
+		t.Errorf("unexpected error %v", err)
+	}
 }
 
 // compareNodeStatus ensures that the actual node status for the passed in
