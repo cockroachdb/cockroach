@@ -1144,9 +1144,9 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 		return reply, rErr
 	}
 
-	// Wind the start timestamp back as far to the previous lease's expiration
-	// as we can. That'll make sure that when multiple leases are requested out
-	// of order at the same replica (after all, they use the request timestamp,
+	// Wind the start timestamp back as far towards the previous lease as we
+	// can. That'll make sure that when multiple leases are requested out of
+	// order at the same replica (after all, they use the request timestamp,
 	// which isn't straight out of our local clock), they all succeed unless
 	// they have a "real" issue with a previous lease. Example: Assuming no
 	// previous lease, one request for [5, 15) followed by one for [0, 15)
@@ -1154,14 +1154,13 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 	// effectively gets the lease for [0, 15), which the second one can commit
 	// again (even extending your own lease is possible; see below).
 	//
-	// If no old lease exists or this is our lease, we don't need to add an
-	// extra tick. This allows multiple requests from the same replica to
-	// merge without ticking away from the minimal common start timestamp.
+	// If this is our lease (or no prior lease exists), we effectively absorb
+	// the old lease. This allows multiple requests from the same replica to
+	// merge without ticking away from the minimal common start timestamp. It
+	// also has the positive side-effect of fixing #3561, which was caused by
+	// the absence of replay protection.
 	if prevLease.Replica.StoreID == 0 || isExtension {
-		// TODO(tschottdorf) Think about whether it'd be better to go all the
-		// way back to prevLease.Start(), so that whenever the last lease is
-		// the own one, the original start is preserved.
-		effectiveStart.Backward(prevLease.Expiration)
+		effectiveStart.Backward(prevLease.Start)
 	} else {
 		effectiveStart.Backward(prevLease.Expiration.Next())
 	}
