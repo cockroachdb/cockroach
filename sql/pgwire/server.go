@@ -73,6 +73,7 @@ func (s *Server) Start(addr net.Addr) error {
 		<-s.context.Stopper.ShouldStop()
 		s.close()
 	})
+	log.Infof("starting postgres server at %s", ln.Addr())
 	return nil
 }
 
