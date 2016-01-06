@@ -26,8 +26,6 @@ import (
 func TestDesiredAggregateOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	p := planner{}
-
 	testData := []struct {
 		expr     string
 		ordering []int
@@ -49,7 +47,8 @@ func TestDesiredAggregateOrder(t *testing.T) {
 	for _, d := range testData {
 		expr, _ := parseAndNormalizeExpr(t, d.expr)
 		group := &groupNode{}
-		_, err := p.extractAggregateFuncs(group, expr)
+		visitor := &extractAggregatesVisitor{n: group}
+		_, err := visitor.extract(expr)
 		if err != nil {
 			t.Fatal(err)
 		}
