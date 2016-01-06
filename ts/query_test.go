@@ -311,6 +311,7 @@ func (tm *testModel) assertQuery(name string, sources []string, agg *TimeSeriesQ
 // model.
 func TestQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("#3637")
 	tm := newTestModel(t)
 	tm.Start()
 	defer tm.Stop()
