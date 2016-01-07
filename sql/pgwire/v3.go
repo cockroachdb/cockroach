@@ -322,10 +322,16 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		inTypes:     make([]oid.Oid, len(args)),
 		portalNames: make(map[string]struct{}),
 	}
+	// OID to Datum is not a 1-1 mapping (for example, int4 and int8 both map
+	// to DummyInt), so we need to maintain the types sent by the client.
+	copy(pq.inTypes, inTypeHints)
 	for k, v := range args {
 		i, err := strconv.Atoi(k)
 		if err != nil {
 			return c.sendError(fmt.Sprintf("non-integer parameter name: %s", k))
+		}
+		if pq.inTypes[i-1] != 0 {
+			continue
 		}
 		id, ok := datumToOid[v]
 		if !ok {
