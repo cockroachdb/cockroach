@@ -285,7 +285,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	// priority to trigger the txn restart.
 	manualClock.Increment(100)
 
-	priority := int32(math.MaxInt32)
+	priority := float64(math.MaxInt32)
 	requestHeader := roachpb.Span{
 		Key: roachpb.Key(key),
 	}

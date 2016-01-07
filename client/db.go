@@ -33,6 +33,11 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+// defaultUserPriority is set to 1, meaning ops run through the database
+// are all given equal weight when a random priority is chosen. This can
+// be set specifically via NewDBWithPriority().
+const defaultUserPriority = 1
+
 // KeyValue represents a single key/value pair and corresponding
 // timestamp. This is similar to roachpb.KeyValue except that the value may be
 // nil.
@@ -167,9 +172,9 @@ type DB struct {
 	sender Sender
 
 	// userPriority is the default user priority to set on API calls. If
-	// userPriority is set non-zero in call arguments, this value is
-	// ignored.
-	userPriority    int32
+	// userPriority is set to any value except 1 in call arguments, this
+	// value is ignored.
+	userPriority    float64
 	txnRetryOptions retry.Options
 }
 
@@ -182,12 +187,13 @@ func (db *DB) GetSender() Sender {
 func NewDB(sender Sender) *DB {
 	return &DB{
 		sender:          sender,
+		userPriority:    defaultUserPriority,
 		txnRetryOptions: DefaultTxnRetryOptions,
 	}
 }
 
 // NewDBWithPriority returns a new DB.
-func NewDBWithPriority(sender Sender, userPriority int32) *DB {
+func NewDBWithPriority(sender Sender, userPriority float64) *DB {
 	db := NewDB(sender)
 	db.userPriority = userPriority
 	return db
@@ -243,15 +249,16 @@ func Open(stopper *stop.Stopper, addr string) (*DB, error) {
 
 	db := &DB{
 		sender:          sender,
+		userPriority:    defaultUserPriority,
 		txnRetryOptions: DefaultTxnRetryOptions,
 	}
 
 	if priority := q["priority"]; len(priority) > 0 {
-		p, err := strconv.Atoi(priority[0])
+		p, err := strconv.ParseFloat(priority[0], 64)
 		if err != nil {
 			return nil, err
 		}
-		db.userPriority = int32(p)
+		db.userPriority = p
 	}
 
 	return db, nil
@@ -469,8 +476,8 @@ func (db *DB) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Er
 	ba := roachpb.BatchRequest{}
 	ba.Add(reqs...)
 
-	if ba.UserPriority == nil && db.userPriority != 0 {
-		ba.UserPriority = proto.Int32(db.userPriority)
+	if ba.UserPriority == nil && db.userPriority != 1 {
+		ba.UserPriority = proto.Float64(db.userPriority)
 	}
 	br, pErr := db.sender.Send(context.TODO(), ba)
 	if pErr != nil {
