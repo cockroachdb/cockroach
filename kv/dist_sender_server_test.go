@@ -323,10 +323,9 @@ func TestSingleRangeReverseScan(t *testing.T) {
 	} else if l := len(rows); l != 2 {
 		t.Errorf("expected 2 rows; got %d", l)
 	}
-	// Case 3: Test roachpb.KeyMax
-	// This span covers the system DB keys.
-	wanted := 1 + len(server.GetBootstrapSchema().GetInitialValues())
-	if rows, err := db.ReverseScan("g", roachpb.KeyMax, 0); err != nil {
+	// Case 3: Test roachpb.TableDataMin. Expected to return "g" and "h".
+	wanted := 2
+	if rows, err := db.ReverseScan("g", keys.TableDataMin, 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != wanted {
 		t.Errorf("expected %d rows; got %d", wanted, l)
