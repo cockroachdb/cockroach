@@ -28,9 +28,12 @@ import (
 	"github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql/pgwire"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -47,6 +50,15 @@ func trivialQuery(pgUrl url.URL) error {
 	}
 }
 
+func tempRestrictedAsset(t util.Tester, path, tempdir, prefix string) (string, func()) {
+	contents, err := securitytest.Asset(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return util.CreateTempRestrictedFile(t, contents, tempdir, prefix)
+}
+
 func TestPGWire(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
@@ -56,9 +68,9 @@ func TestPGWire(t *testing.T) {
 
 	// Copy these assets to disk from embedded strings, so this test can
 	// run from a standalone binary.
-	tempCertPath, tempCertCleanup := tempRestrictedCopy(t, os.TempDir(), certPath, "TestPGWire_cert")
+	tempCertPath, tempCertCleanup := securitytest.TempRestrictedCopy(t, certPath, os.TempDir(), "TestPGWire_cert")
 	defer tempCertCleanup()
-	tempKeyPath, tempKeyCleanup := tempRestrictedCopy(t, os.TempDir(), keyPath, "TestPGWire_key")
+	tempKeyPath, tempKeyCleanup := securitytest.TempRestrictedCopy(t, keyPath, os.TempDir(), "TestPGWire_key")
 	defer tempKeyCleanup()
 
 	for _, insecure := range [...]bool{true, false} {
@@ -224,7 +236,7 @@ func TestPGPrepared(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := pgURL(t, s, security.RootUser, os.TempDir(), "TestPGPrepared")
+	pgUrl, cleanupFn := sqlutils.PGUrl(s, t, security.RootUser, os.TempDir(), "TestPGPrepared")
 	defer cleanupFn()
 
 	db, err := sql.Open("postgres", pgUrl.String())
