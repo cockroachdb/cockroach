@@ -285,14 +285,14 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	// priority to trigger the txn restart.
 	manualClock.Increment(100)
 
-	priority := int32(math.MaxInt32)
+	priority := float64(-math.MaxInt32)
 	requestHeader := roachpb.Span{
 		Key: roachpb.Key(key),
 	}
 	ts := clock.Now()
 	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		Timestamp:    ts,
-		UserPriority: &priority,
+		UserPriority: priority,
 	}, &roachpb.GetRequest{Span: requestHeader}); err != nil {
 		t.Fatalf("failed to get: %s", err)
 	}
@@ -310,7 +310,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	ts = clock.Now()
 	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		Timestamp:    ts,
-		UserPriority: &priority,
+		UserPriority: priority,
 	}, &roachpb.GetRequest{Span: requestHeader}); err == nil {
 		t.Fatal("unexpected success of get")
 	}

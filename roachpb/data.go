@@ -37,8 +37,10 @@ import (
 )
 
 const (
-	// MaxPriority is the maximum allowed priority.
-	MaxPriority = math.MaxInt32
+	// MinUserPriority is the minimum allowed user priority.
+	MinUserPriority = 0.0001
+	// MaxUserPriority is the maximum allowed user priority.
+	MaxUserPriority = 10000
 	// TransactionIDLen is the length (in bytes) of the transaction IDs used.
 	TransactionIDLen = 16
 	// SequencePoisonAbort is a special value for the sequence cache which
@@ -539,7 +541,7 @@ func (v Value) computeChecksum(key []byte) uint32 {
 // randomly chosen value to yield a final priority, used to settle
 // write conflicts in a way that avoids starvation of long-running
 // transactions (see Replica.PushTxn).
-func NewTransaction(name string, baseKey Key, userPriority int32,
+func NewTransaction(name string, baseKey Key, userPriority float64,
 	isolation IsolationType, now Timestamp, maxOffset int64) *Transaction {
 	// Compute priority by adjusting based on userPriority factor.
 	priority := MakePriority(userPriority)
@@ -603,31 +605,73 @@ func (t *Transaction) IsInitialized() bool {
 }
 
 // MakePriority generates a random priority value, biased by the
-// specified userPriority. If userPriority=100, the resulting
-// priority is 100x more likely to be probabilistically greater
-// than a similar invocation with userPriority=1.
-func MakePriority(userPriority int32) int32 {
+// specified userPriority. If userPriority=100, the random priority
+// will be 100x more likely to be greater than if userPriority=1. If
+// userPriority = 0.1, the random priority will be 1/10th as likely to
+// be greater than if userPriority=1. Balance is achieved when
+// userPriority=1, in which case the priority chosen is unbiased.
+func MakePriority(userPriority float64) int32 {
 	// A currently undocumented feature allows an explicit priority to
 	// be set by specifying priority < 1. The explicit priority is
 	// simply -userPriority in this case. This is hacky, but currently
 	// used for unittesting. Perhaps this should be documented and allowed.
 	if userPriority < 0 {
-		return -userPriority
-	}
-	if userPriority == 0 {
+		if -userPriority > float64(math.MaxInt32) {
+			panic(fmt.Sprintf("cannot set explicit priority to a value less than -%d", math.MaxInt32))
+		}
+		return int32(-userPriority)
+	} else if userPriority == 0 {
 		userPriority = 1
+	} else if userPriority > MaxUserPriority {
+		userPriority = MaxUserPriority
+	} else if userPriority < MinUserPriority {
+		userPriority = MinUserPriority
 	}
 	// The idea here is to bias selection of a random priority from the
-	// range [1, 2^31-1) such that if userPriority=100, it's 100x more
-	// likely to be a higher int32 than if userPriority=1. The formula
-	// below chooses random values according to the following table:
-	//   userPriority  |  range
-	//   1             |  all positive int32s
-	//   10            |  top 9/10ths of positive int32s
-	//   100           |  top 99/100ths of positive int32s
-	//   1000          |  top 999/1000ths of positive int32s
-	//   ...etc
-	return math.MaxInt32 - rand.Int31n(math.MaxInt32/userPriority)
+	// range [1, 2^31) such that the resulting priority is
+	// "userPriority" times more likely to be a higher int32 than a
+	// random priority chosen in range [1, 2^31). For purposes of this
+	// discussion, assume:
+	//
+	//   pri = user priority
+	//   max = MaxInt32
+	//
+	// The normal probability of a win (probW) with pri=1 is probW = 1/2.
+	//
+	// The user priority is a multiple and is defined as the probability
+	// of winning divided by the probability of losing:
+	// pri = probW / (1-probW) ==> probW = pri / (1 + pri).
+	//
+	// If pri > 1, let:
+	//   x = fraction of max such that choosing rand in [max*x, max)
+	//       is pri times more likely to be greater than random [0, max).
+	//
+	// For every random trial, if the normal priority is chosen < max*x,
+	// the user priority wins 100% of the time; otherwise, wins 50% of
+	// the time. Therefore, x fraction of the time, win is user(100%)
+	// and (1-x) fraction of the time win is user(50%).
+	//
+	//   x + (1-x) * 1/2 = pri / (1 + pri)
+	//   x/2 = pri / (1 + pri) - 1/2
+	//   x = 2*pri / (1 + pri) - 1
+	//
+	// Otherwise, if pri < 1, let:
+	//   x = fraction of max such that choosing rand in [0, max*x)
+	//       is pri times more likely to be greater than random [0, max).
+	//
+	// For every random trial, if the normal priority is chosen >= max*x,
+	// the user priority loses 100% of the time; otherwise, wins 50% of
+	// the time. Therefore, x fraction of the time, loss is user(100%)
+	// and (1-x) fraction of the time win is user(50%).
+	//
+	//   (1-x) * 1/2 = pri / (1 + pri)
+	//   -x/2 = pri / (1 + pri) - 1/2
+	//   x = 1 - 2*pri / (1 + pri)
+	x := 2*float64(userPriority)/(1+float64(userPriority)) - 1
+	if userPriority >= 1 {
+		return math.MaxInt32 - rand.Int31n(int32(float64(math.MaxInt32)*(1-x)))
+	}
+	return rand.Int31n(int32(float64(math.MaxInt32) * (1 + x)))
 }
 
 // TxnIDEqual returns whether the transaction IDs are equal.
@@ -639,7 +683,7 @@ func TxnIDEqual(a, b []byte) bool {
 // incremented for an in-place restart. The timestamp of the
 // transaction on restart is set to the maximum of the transaction's
 // timestamp and the specified timestamp.
-func (t *Transaction) Restart(userPriority, upgradePriority int32, timestamp Timestamp) {
+func (t *Transaction) Restart(userPriority float64, upgradePriority int32, timestamp Timestamp) {
 	t.Epoch++
 	if t.Timestamp.Less(timestamp) {
 		t.Timestamp = timestamp
@@ -647,7 +691,8 @@ func (t *Transaction) Restart(userPriority, upgradePriority int32, timestamp Tim
 	// Set original timestamp to current timestamp on restart.
 	t.OrigTimestamp = t.Timestamp
 	// Potentially upgrade priority both by creating a new random
-	// priority using userPriority and considering upgradePriority.
+	// priority using priority and taking the greater of the current
+	// transaction priority and the conflicting txn's upgradePriority.
 	t.UpgradePriority(MakePriority(userPriority))
 	t.UpgradePriority(upgradePriority)
 }

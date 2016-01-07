@@ -924,16 +924,16 @@ type Header struct {
 	// range belongs to. This is used by the receiving node to route the
 	// request to the correct range.
 	RangeID RangeID `protobuf:"varint,3,opt,name=range_id,casttype=RangeID" json:"range_id"`
-	// user_priority specifies priority multiple for non-transactional
-	// commands. This value should be a positive integer [1, 2^31-1).
-	// It's properly viewed as a multiple for how likely this
-	// transaction will be to prevail if a write conflict occurs.
-	// Commands with user_priority=100 will be 100x less likely to be
-	// aborted as conflicting transactions or non-transactional commands
-	// with user_priority=1. This value is ignored if Txn is
-	// specified. If neither this value nor txn is specified, the value
-	// defaults to 1.
-	UserPriority *int32 `protobuf:"varint,4,opt,name=user_priority,def=1" json:"user_priority,omitempty"`
+	// user_priority allows any command's priority to be biased from the
+	// default random priority. It specifies a multiple. If set to 0.5,
+	// the chosen priority will be 1/2x as likely to beat any default
+	// random priority. If set to 1, a default random priority is
+	// chosen. If set to 2, the chosen priority will be 2x as likely to
+	// beat any default random priority, and so on. As a special case, 0
+	// priority is treated the same as 1. This value is ignored if txn
+	// is specified. The min and max user priorities are set via
+	// MinUserPriority and MaxUserPriority in data.go.
+	UserPriority float64 `protobuf:"fixed64,4,opt,name=user_priority" json:"user_priority"`
 	// txn is set non-nil if a transaction is underway. To start a txn,
 	// the first request should set this field to non-nil with name and
 	// isolation level set as desired. The response will contain the
@@ -949,50 +949,6 @@ type Header struct {
 func (m *Header) Reset()         { *m = Header{} }
 func (m *Header) String() string { return proto.CompactTextString(m) }
 func (*Header) ProtoMessage()    {}
-
-const Default_Header_UserPriority int32 = 1
-
-func (m *Header) GetTimestamp() Timestamp {
-	if m != nil {
-		return m.Timestamp
-	}
-	return Timestamp{}
-}
-
-func (m *Header) GetReplica() ReplicaDescriptor {
-	if m != nil {
-		return m.Replica
-	}
-	return ReplicaDescriptor{}
-}
-
-func (m *Header) GetRangeID() RangeID {
-	if m != nil {
-		return m.RangeID
-	}
-	return 0
-}
-
-func (m *Header) GetUserPriority() int32 {
-	if m != nil && m.UserPriority != nil {
-		return *m.UserPriority
-	}
-	return Default_Header_UserPriority
-}
-
-func (m *Header) GetTxn() *Transaction {
-	if m != nil {
-		return m.Txn
-	}
-	return nil
-}
-
-func (m *Header) GetReadConsistency() ReadConsistencyType {
-	if m != nil {
-		return m.ReadConsistency
-	}
-	return CONSISTENT
-}
 
 // A BatchRequest contains one or more requests to be executed in
 // parallel, or if applicable (based on write-only commands and
@@ -3124,11 +3080,9 @@ func (m *Header) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x18
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RangeID))
-	if m.UserPriority != nil {
-		data[i] = 0x20
-		i++
-		i = encodeVarintApi(data, i, uint64(*m.UserPriority))
-	}
+	data[i] = 0x21
+	i++
+	i = encodeFixed64Api(data, i, uint64(math.Float64bits(m.UserPriority)))
 	if m.Txn != nil {
 		data[i] = 0x2a
 		i++
@@ -3960,9 +3914,7 @@ func (m *Header) Size() (n int) {
 	l = m.Replica.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.RangeID))
-	if m.UserPriority != nil {
-		n += 1 + sovApi(uint64(*m.UserPriority))
-	}
+	n += 9
 	if m.Txn != nil {
 		l = m.Txn.Size()
 		n += 1 + l + sovApi(uint64(l))
@@ -10655,25 +10607,23 @@ func (m *Header) Unmarshal(data []byte) error {
 				}
 			}
 		case 4:
-			if wireType != 0 {
+			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field UserPriority", wireType)
 			}
-			var v int32
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowApi
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				v |= (int32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			var v uint64
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
 			}
-			m.UserPriority = &v
+			iNdEx += 8
+			v = uint64(data[iNdEx-8])
+			v |= uint64(data[iNdEx-7]) << 8
+			v |= uint64(data[iNdEx-6]) << 16
+			v |= uint64(data[iNdEx-5]) << 24
+			v |= uint64(data[iNdEx-4]) << 32
+			v |= uint64(data[iNdEx-3]) << 40
+			v |= uint64(data[iNdEx-2]) << 48
+			v |= uint64(data[iNdEx-1]) << 56
+			m.UserPriority = float64(math.Float64frombits(v))
 		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)

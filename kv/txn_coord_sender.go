@@ -458,7 +458,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 	if len(ba.Txn.ID) == 0 {
 		// Create transaction without a key. The key is set when a begin
 		// transaction request is received.
-		newTxn := roachpb.NewTransaction(ba.Txn.Name, nil, ba.GetUserPriority(),
+		newTxn := roachpb.NewTransaction(ba.Txn.Name, nil, ba.UserPriority,
 			ba.Txn.Isolation, tc.clock.Now(), tc.clock.MaxOffset().Nanoseconds())
 		// Use existing priority as a minimum. This is used on transaction
 		// aborts to ratchet priority when creating successor transaction.
@@ -639,7 +639,7 @@ func (tc *TxnCoordSender) heartbeat(id string, trace *tracer.Trace, ctx context.
 func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
 	trace := tracer.FromCtx(ctx)
 	newTxn := &roachpb.Transaction{}
-	newTxn.Update(ba.GetTxn())
+	newTxn.Update(ba.Txn)
 	// TODO(tamird): remove this clone. It's currently needed to avoid race conditions.
 	pErr = proto.Clone(pErr).(*roachpb.Error)
 	err := pErr.GoError()
@@ -673,7 +673,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		candidateTS := newTxn.MaxTimestamp
 		candidateTS.Backward(t.ExistingTimestamp.Add(0, 1))
 		newTxn.Timestamp.Forward(candidateTS)
-		newTxn.Restart(ba.GetUserPriority(), newTxn.Priority, newTxn.Timestamp)
+		newTxn.Restart(ba.UserPriority, newTxn.Priority, newTxn.Timestamp)
 		t.Txn = *newTxn
 	case *roachpb.TransactionAbortedError:
 		trace.SetError()
@@ -690,11 +690,11 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		// Increase timestamp if applicable, ensuring that we're
 		// just ahead of the pushee.
 		newTxn.Timestamp.Forward(t.PusheeTxn.Timestamp.Add(0, 1))
-		newTxn.Restart(ba.GetUserPriority(), t.PusheeTxn.Priority-1, newTxn.Timestamp)
+		newTxn.Restart(ba.UserPriority, t.PusheeTxn.Priority-1, newTxn.Timestamp)
 		t.Txn = newTxn
 	case *roachpb.TransactionRetryError:
 		newTxn.Update(&t.Txn)
-		newTxn.Restart(ba.GetUserPriority(), t.Txn.Priority, newTxn.Timestamp)
+		newTxn.Restart(ba.UserPriority, t.Txn.Priority, newTxn.Timestamp)
 		t.Txn = *newTxn
 	case roachpb.TransactionRestartError:
 		// Assertion: The above cases should exhaust all ErrorDetails which
@@ -794,7 +794,7 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 	if log.V(1) {
 		log.Infof("%s: auto-wrapping in txn and re-executing: ", ba)
 	}
-	tmpDB := client.NewDBWithPriority(tc, ba.GetUserPriority())
+	tmpDB := client.NewDBWithPriority(tc, ba.UserPriority)
 	var br *roachpb.BatchResponse
 	err := tmpDB.Txn(func(txn *client.Txn) error {
 		txn.SetDebugName("auto-wrap", 0)

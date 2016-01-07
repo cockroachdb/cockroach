@@ -215,7 +215,7 @@ func (tc *testContext) initConfigs(realRange bool) error {
 	return nil
 }
 
-func newTransaction(name string, baseKey roachpb.Key, userPriority int32,
+func newTransaction(name string, baseKey roachpb.Key, userPriority float64,
 	isolation roachpb.IsolationType, clock *hlc.Clock) *roachpb.Transaction {
 	var offset int64
 	var now roachpb.Timestamp
@@ -223,8 +223,7 @@ func newTransaction(name string, baseKey roachpb.Key, userPriority int32,
 		offset = clock.MaxOffset().Nanoseconds()
 		now = clock.Now()
 	}
-	return roachpb.NewTransaction(name, baseKey, userPriority,
-		isolation, now, offset)
+	return roachpb.NewTransaction(name, baseKey, userPriority, isolation, now, offset)
 }
 
 // CreateReplicaSets creates new roachpb.ReplicaDescriptor protos based on an array of
@@ -1104,7 +1103,7 @@ func TestRangeCommandQueue(t *testing.T) {
 	blockingDone := make(chan struct{})
 	defer func() { TestingCommandFilter = nil }()
 	TestingCommandFilter = func(_ roachpb.StoreID, _ roachpb.Request, h roachpb.Header) error {
-		if h.GetUserPriority() == 42 {
+		if h.UserPriority == 42 {
 			blockingStart <- struct{}{}
 			<-blockingDone
 		}
@@ -1140,7 +1139,7 @@ func TestRangeCommandQueue(t *testing.T) {
 			args := readOrWriteArgs(key1, test.cmd1Read)
 
 			_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
-				UserPriority: proto.Int32(42),
+				UserPriority: 42,
 			}, args)
 
 			if err != nil {
