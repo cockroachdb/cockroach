@@ -110,6 +110,7 @@ func validExpirationTime(expirationTime int64) bool {
 
 func TestAsyncSchemaChanger(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("fix this test")
 	// Disable synchronous schema change execution so
 	// the asynchronous schema changer executes all
 	// schema changes.

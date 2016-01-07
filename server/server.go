@@ -250,8 +250,8 @@ func (s *Server) Start(selfBootstrap bool) error {
 	s.sqlServer.SetNodeID(s.node.Descriptor.NodeID)
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
-	s.schemaChangeManager = sql.NewSchemaChangeManager(*s.db, s.gossip, s.leaseMgr)
-	s.schemaChangeManager.Start(s.stopper)
+	//s.schemaChangeManager = sql.NewSchemaChangeManager(*s.db, s.gossip, s.leaseMgr)
+	//s.schemaChangeManager.Start(s.stopper)
 
 	s.status = newStatusServer(s.db, s.gossip, s.metaRegistry, s.ctx)
 
