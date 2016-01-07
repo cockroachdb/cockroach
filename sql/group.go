@@ -46,14 +46,22 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 	// that determination is made during validation, which will require matching
 	// expressions.
 	for i := range n.GroupBy {
-		norm, err := s.resolveQNames(n.GroupBy[i])
+		resolved, err := s.resolveQNames(n.GroupBy[i])
 		if err != nil {
 			return nil, err
 		}
-		norm, err = p.parser.NormalizeExpr(p.evalCtx, norm)
+
+		// We could potentially skip this, since it will be checked in addRender,
+		// but checking now allows early err return.
+		if _, err := resolved.TypeCheck(p.evalCtx.Args); err != nil {
+			return nil, err
+		}
+
+		norm, err := p.parser.NormalizeExpr(p.evalCtx, resolved)
 		if err != nil {
 			return nil, err
 		}
+
 		// If a col index is specified, replace it with that expression first.
 		// NB: This is not a deep copy, and thus when extractAggregateFuncs runs
 		// on s.render, the GroupBy expressions can contain wrapped qvalues.
