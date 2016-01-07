@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/cache"
@@ -297,6 +298,10 @@ type StoreContext struct {
 	StorePool *StorePool
 	Transport RaftTransport
 
+	// SQLExecutor is used by the store to execute SQL statements in a way that
+	// is more direct than using a sql.Executor.
+	SQLExecutor sql.InternalExecutor
+
 	// RangeRetryOptions are the retry options when retryable errors are
 	// encountered sending commands to ranges.
 	RangeRetryOptions retry.Options
@@ -335,6 +340,10 @@ type StoreContext struct {
 
 	// Tracer is a request tracer.
 	Tracer *tracer.Tracer
+
+	// If LogRangeEvents is true, major changes to ranges will be logged into
+	// the range event log.
+	LogRangeEvents bool
 }
 
 // Valid returns true if the StoreContext is populated correctly.
