@@ -20,11 +20,6 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"io/ioutil"
-	"net"
-	"net/url"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -123,66 +118,4 @@ func cleanupTestServer(s *server.TestServer) {
 func cleanup(s *server.TestServer, db *sql.DB) {
 	_ = db.Close()
 	cleanupTestServer(s)
-}
-
-func tempRestrictedCopy(tb testing.TB, tempdir, path, prefix string) (string, func()) {
-	contents, err := securitytest.Asset(path)
-	if err != nil {
-		tb.Fatal(err)
-	}
-
-	tempFile, err := ioutil.TempFile(tempdir, prefix)
-	if err != nil {
-		tb.Fatal(err)
-	}
-	if err := tempFile.Close(); err != nil {
-		tb.Fatal(err)
-	}
-	tempPath := tempFile.Name()
-	if err := os.Remove(tempPath); err != nil {
-		tb.Fatal(err)
-	}
-	// `github.com/lib/pq` requires that private key file permissions are
-	// "u=rw (0600) or less".
-	if err := ioutil.WriteFile(tempPath, contents, 0600); err != nil {
-		tb.Fatal(err)
-	}
-	return tempPath, func() {
-		if err := os.Remove(tempPath); err != nil {
-			// Not Fatal() because we might already be panicking.
-			tb.Error(err)
-		}
-	}
-}
-
-func pgURL(tb testing.TB, s *server.TestServer, user, tempDir, prefix string) (url.URL, func()) {
-	host, port, err := net.SplitHostPort(s.PGAddr())
-	if err != nil {
-		tb.Fatal(err)
-	}
-
-	caPath := filepath.Join(security.EmbeddedCertsDir, "ca.crt")
-	certPath := security.ClientCertPath(security.EmbeddedCertsDir, user)
-	keyPath := security.ClientKeyPath(security.EmbeddedCertsDir, user)
-
-	// Copy these assets to disk from embedded strings, so this test can
-	// run from a standalone binary.
-	tempCAPath, tempCACleanup := tempRestrictedCopy(tb, tempDir, caPath, "TestLogic_ca")
-	tempCertPath, tempCertCleanup := tempRestrictedCopy(tb, tempDir, certPath, "TestLogic_cert")
-	tempKeyPath, tempKeyCleanup := tempRestrictedCopy(tb, tempDir, keyPath, "TestLogic_key")
-
-	return url.URL{
-			Scheme: "postgres",
-			User:   url.User(user),
-			Host:   net.JoinHostPort(host, port),
-			RawQuery: fmt.Sprintf("sslmode=verify-full&sslrootcert=%s&sslcert=%s&sslkey=%s",
-				url.QueryEscape(tempCAPath),
-				url.QueryEscape(tempCertPath),
-				url.QueryEscape(tempKeyPath),
-			),
-		}, func() {
-			tempCACleanup()
-			tempCertCleanup()
-			tempKeyCleanup()
-		}
 }

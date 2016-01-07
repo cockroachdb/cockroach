@@ -27,6 +27,7 @@ import (
 // Tester is a proxy for e.g. testing.T which does not introduce a dependency
 // on "testing".
 type Tester interface {
+	Error(args ...interface{})
 	Failed() bool
 	Fatal(args ...interface{})
 	Fatalf(format string, args ...interface{})
@@ -60,6 +61,37 @@ func CreateTempDir(t Tester, prefix string) string {
 		t.Fatal(err)
 	}
 	return dir
+}
+
+// CreateTempRestrictedFile creates a temporary file on disk which contains the
+// supplied byte string as its content. The resulting file will have restrictive
+// permissions; specifically, u=rw (0600). Returns the path of the created file
+// along with afunction that will delete the created file.
+//
+// This is needed for some Go libraries (e.g. postgres SQL driver) which will
+// refuse to open certificate files that have overly permissive security
+// settings.
+func CreateTempRestrictedFile(t Tester, contents []byte, tempdir, prefix string) (string, func()) {
+	tempFile, err := ioutil.TempFile(tempdir, prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tempFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+	tempPath := tempFile.Name()
+	if err := os.Remove(tempPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := ioutil.WriteFile(tempPath, contents, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return tempPath, func() {
+		if err := os.Remove(tempPath); err != nil {
+			// Not Fatal() because we might already be panicking.
+			t.Error(err)
+		}
+	}
 }
 
 // CreateNTempDirs creates N temporary directories and returns a slice
