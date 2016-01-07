@@ -39,6 +39,9 @@ SELECT 3 FROM kv HAVING TRUE;
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT COUNT(*), k FROM kv
 
+query error unsupported comparison operator: <int> < <string>
+SELECT COUNT(*) FROM kv GROUP BY s > 5
+
 query II rowsort
 SELECT COUNT(*), k FROM kv GROUP BY k
 ----
