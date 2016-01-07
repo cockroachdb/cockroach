@@ -156,7 +156,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.stopper.AddCloser(s.raftTransport)
 
-	s.kvDB = kv.NewDBServer(&s.ctx.Context, sender)
+	s.kvDB = kv.NewDBServer(&s.ctx.Context, sender, stopper)
 	if err := s.kvDB.RegisterRPC(s.rpc); err != nil {
 		return nil, err
 	}

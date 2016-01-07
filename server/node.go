@@ -460,23 +460,32 @@ func (n *Node) publishStoreStatuses() error {
 // via the local sender.
 func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 	ba := argsI.(*roachpb.BatchRequest)
-	// TODO(tschottdorf) get a hold of the client's ID, add it to the
-	// context before dispatching, and create an ID for tracing the request.
-	trace := n.ctx.Tracer.NewTrace(tracer.Node, ba)
-	defer trace.Finalize()
-	defer trace.Epoch("node")()
-	ctx := tracer.ToCtx((*Node)(n).context(), trace)
+	var br *roachpb.BatchResponse
 
-	tStart := time.Now()
-	br, pErr := n.stores.Send(ctx, *ba)
-	if pErr != nil {
-		br = &roachpb.BatchResponse{}
-		trace.Event(fmt.Sprintf("error: %T", pErr.GoError()))
+	f := func() {
+		// TODO(tschottdorf) get a hold of the client's ID, add it to the
+		// context before dispatching, and create an ID for tracing the request.
+		trace := n.ctx.Tracer.NewTrace(tracer.Node, ba)
+		defer trace.Finalize()
+		defer trace.Epoch("node")()
+		ctx := tracer.ToCtx((*Node)(n).context(), trace)
+
+		tStart := time.Now()
+		var pErr *roachpb.Error
+		br, pErr = n.stores.Send(ctx, *ba)
+		if pErr != nil {
+			br = &roachpb.BatchResponse{}
+			trace.Event(fmt.Sprintf("error: %T", pErr.GoError()))
+		}
+		if br.Error != nil {
+			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
+		}
+		n.feed.CallComplete(*ba, time.Now().Sub(tStart), pErr)
+		br.Error = pErr
 	}
-	if br.Error != nil {
-		panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
+
+	if !n.stopper.RunTask(f) {
+		return nil, util.Errorf("node %d stopped", n.Descriptor.NodeID)
 	}
-	n.feed.CallComplete(*ba, time.Now().Sub(tStart), pErr)
-	br.Error = pErr
 	return br, nil
 }
