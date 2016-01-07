@@ -93,7 +93,6 @@ func MakeZoneKey(id ID) roachpb.Key {
 	k := keys.MakeTablePrefix(uint32(ZonesTable.ID))
 	k = encoding.EncodeUvarint(k, uint64(ZonesTable.PrimaryIndex.ID), encoding.Ascending)
 	k = encoding.EncodeUvarint(k, uint64(id), encoding.Ascending)
-	k = encoding.EncodeUvarint(k, uint64(ZonesTable.Columns[1].ID), encoding.Ascending)
 	return keys.MakeColumnKey(k, uint32(ZonesTable.Columns[1].ID))
 }
 

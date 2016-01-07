@@ -362,7 +362,7 @@ func MakeColumnKey(rowKey []byte, colID uint32) []byte {
 // MakeNonColumnKey creates a non-column key for a row by appending a 0 column
 // ID suffix size to rowKey.
 func MakeNonColumnKey(rowKey []byte) []byte {
-	return encoding.EncodeUvarint(rowKey, 0)
+	return encoding.EncodeUvarint(rowKey, 0, encoding.Ascending)
 }
 
 // MakeSplitKey transforms an SQL table key such that it is a valid split key
@@ -386,7 +386,7 @@ func MakeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 	// Strip off the column ID suffix from the buf. The last byte of the buf
 	// contains the length of the column ID suffix (which might be 0 if the buf
 	// does not contain a column ID suffix).
-	_, colIDLen, err := encoding.DecodeUvarint(buf)
+	_, colIDLen, err := encoding.DecodeUvarint(buf, encoding.Ascending)
 	if err != nil {
 		return nil, err
 	}
