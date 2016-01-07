@@ -62,7 +62,7 @@ func getTLSConfig() *tls.Config {
 	}
 }
 
-// newDockerClient constructs a new docker client using the best available
+// NewDockerClient constructs a new docker client using the best available
 // method. If DOCKER_HOST is set, initialize the client using DOCKER_TLS_VERIFY
 // and DOCKER_CERT_PATH. If DOCKER_HOST is not set, look for the unix domain
 // socket in /run/docker.sock and /var/run/docker.sock.
