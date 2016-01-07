@@ -327,6 +327,12 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		if err != nil {
 			return c.sendError(fmt.Sprintf("non-integer parameter name: %s", k))
 		}
+		if i <= len(inTypeHints) {
+			// OID to Datum is not a 1-1 mapping (for example, int4 and int8 both map
+			// to DummyInt), so we need to maintain the types sent by the client.
+			pq.inTypes[i-1] = inTypeHints[i-1]
+			continue
+		}
 		id, ok := datumToOid[v]
 		if !ok {
 			return c.sendError(fmt.Sprintf("unknown datum type: %s", v.Type()))
@@ -477,7 +483,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		d, err := decodeOidDatum(t, paramFormatCodes[i], b)
 		if err != nil {
 			// TODO(mjibson): format b correctly on a binary format code.
-			return c.sendError(fmt.Sprintf("param $%d (%q): %s", i+1, string(b), err))
+			return c.sendError(fmt.Sprintf("param $%d: %s", i+1, err))
 		}
 		params[i] = d
 	}

@@ -176,15 +176,15 @@ func TestPGPrepared(t *testing.T) {
 		"SELECT $1 > 0": {
 			base.Params(1).Results(true),
 			base.Params("1").Results(true),
-			base.Params(1.1).Error(`pq: param $1 ("1.1"): unknown int value`).Results(true),
-			base.Params("1.0").Error(`pq: param $1 ("1.0"): unknown int value`),
-			base.Params(true).Error(`pq: param $1 ("true"): unknown int value`),
+			base.Params(1.1).Error(`pq: param $1: strconv.ParseInt: parsing "1.1": invalid syntax`).Results(true),
+			base.Params("1.0").Error(`pq: param $1: strconv.ParseInt: parsing "1.0": invalid syntax`),
+			base.Params(true).Error(`pq: param $1: strconv.ParseInt: parsing "true": invalid syntax`),
 		},
 		"SELECT TRUE AND $1": {
 			base.Params(true).Results(true),
 			base.Params(false).Results(false),
 			base.Params(1).Results(true),
-			base.Params("").Error(`pq: param $1 (""): unknown bool value`),
+			base.Params("").Error(`pq: param $1: strconv.ParseBool: parsing "": invalid syntax`),
 			// Make sure we can run another after a failure.
 			base.Params(true).Results(true),
 		},
@@ -208,7 +208,7 @@ func TestPGPrepared(t *testing.T) {
 			base.Params(1, -1).Results(1, -1),
 			base.Params(-1, 10).Results(10, 10),
 			base.Params("-2", "-1").Results(0, -1),
-			base.Params(1, 2.1).Error(`pq: param $2 ("2.1"): unknown int value`),
+			base.Params(1, 2.1).Error(`pq: param $2: strconv.ParseInt: parsing "2.1": invalid syntax`),
 		},
 		"SELECT $1::int, $1::float": {
 			base.Params("1").Results(1, 1.0),
