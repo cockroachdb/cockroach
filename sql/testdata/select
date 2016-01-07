@@ -236,3 +236,16 @@ query I
 SELECT CASE WHEN NULL THEN 1 ELSE 2 END
 ----
 2
+
+# Doing an index lookup by MaxInt used to not work.
+# https://github.com/cockroachdb/cockroach/issues/3587
+statement ok
+CREATE TABLE MaxIntTest (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO MaxIntTest VALUES (9223372036854775807)
+
+query I
+SELECT a FROM MaxIntTest WHERE a = 9223372036854775807
+----
+9223372036854775807

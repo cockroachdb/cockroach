@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -369,27 +370,10 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
 
 // makeConstraints populates the indexInfo.constraints field based on the
 // analyzed expressions. The constraints are a start and end expressions for a
-// prefix of the columns that make up the index. For example, consider an index
-// on the columns (a, b, c). For the expressions "a > 1 AND b > 2" we would
-// have the constraints:
+// prefix of the columns that make up the index. For example, consider
+// the expression "a >= 1 AND b >= 2":
 //
-//   {a: {start: > 1}}
-//   !!! this is not true, and there's even a test about showing constraints for
-//   both a and b. Probably because this function never gets ">". Simplification
-//   turns it into ">=". The function could assert that?
-//
-// Why is there no constraint on "b"? Because the start constraint was > and
-// such a constraint does not allow us to consider further columns in the
-// index. What about the expression "a >= 1 AND b > 2":
-//
-//   {a: {start: >= 1}, b: {start: > 2}}
-//
-// Start constraints look for comparison expressions with the operators >, >=,
-// = or IN. End constraints look for comparison expressions with the operators
-// <, <=, = or IN.
-//
-// Attention: The generated constraints do not take into consideration the
-// ordering of the encoding of the columns in the index.
+//   {a: {start: >= 1}, b: {start: >= 2}}
 //
 // This method generates one indexConstraint for a prefix of the columns in
 // the index (except for tuple constraints which can account for more than
@@ -397,6 +381,31 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
 // similarly a prefix of the contraints has a .end); in other words,
 // once a constraint doesn't have a .start, no further constraints will
 // have one. This is because they wouldn't be useful when generating spans.
+//
+// makeConstraints ignores the direction of the columns in the index, assuming
+// all of them to be Ascending. makeSpans will do the right thing about
+// inverting start and end constraints when needed.
+// Start constraints look for comparison expressions with the operators >=,
+// = or IN. End constraints look for comparison expressions with the operators
+//
+// <, <=, = or IN.
+// Whenever possible, < and > are converted to <= and >=, respectively.
+// This is because we can use inclusive constraints better than exclusive ones;
+// with inclusive constraints we can continue accumulate constraints for
+// next columns. Not so with exclusive ones: Consider "a < 1 AND b < 2".
+// "a < 1" will be encoded as an exclusive span end; if we were to append
+// anything about "b" to it, that would be incorrect.
+// Note that it's not always possible to transform "<" to "<=", because some
+// types do not support the Prev() operation.
+// So, the resulting constraints will never contain ">". They might contain
+// "<", in which case that will be the last constraint with `.end` filled.
+//
+// TODO(pmattis): It would be more obvious to perform this transform in
+// simplifyComparisonExpr, but doing so there eliminates some of the other
+// simplifications. For example, "a < 1 OR a > 1" currently simplifies to "a !=
+// 1", but if we performed this transform in simpilfyComparisonExpr it would
+// simplify to "a < 1 OR a >= 2" which is also the same as "a != 1", but not so
+// obvious based on comparisons of the constants.
 func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 	if len(exprs) != 1 {
 		return
@@ -440,6 +449,7 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 						// This tuple does not contain the column we're looking for.
 						continue
 					}
+					// Skip all the next columns covered by this tuple.
 					i += (len(tupleMap) - 1)
 				}
 
@@ -453,6 +463,8 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 
 				switch c.Operator {
 				case parser.EQ:
+					// An equality constraint will overwrite any other type
+					// of constraint.
 					if !startDone {
 						constraint.start = c
 					}
@@ -460,11 +472,17 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 						constraint.end = c
 					}
 				case parser.NE:
-					// Note that makeSpans treats "a != x" the same as "a IS NOT
-					// NULL". We don't simplify "a != x" to "a IS NOT NULL" in
+					// We rewrite "a != x" to "a IS NOT NULL", since this is all that
+					// makeSpans() cares about.
+					// We don't simplify "a != x" to "a IS NOT NULL" in
 					// simplifyExpr because doing so affects other simplifications.
-					if !startDone {
-						constraint.start = c
+					if startDone || constraint.start != nil {
+						continue
+					}
+					constraint.start = &parser.ComparisonExpr{
+						Operator: parser.IsNot,
+						Left:     c.Left,
+						Right:    parser.DNull,
 					}
 				case parser.In:
 					// Only allow the IN constraint if the previous constraints are all
@@ -473,10 +491,7 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 					// 2)]. This would turn into the spans /1/1-/3/2 and /1/2-/3/3.
 					ok := true
 					for _, c := range v.constraints {
-						ok = c.start == c.end && c.start.Operator == parser.EQ
-						if !ok {
-							break
-						}
+						ok = ok && (c.start == c.end) && (c.start.Operator == parser.EQ)
 					}
 					if !ok {
 						continue
@@ -490,11 +505,49 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 						constraint.end = c
 						constraint.tupleMap = tupleMap
 					}
-				case parser.GT, parser.GE:
+				case parser.GE:
 					if !startDone && constraint.start == nil {
 						constraint.start = c
 					}
-				case parser.LT, parser.LE:
+				case parser.GT:
+					// Transform ">" into ">=".
+					if startDone || (constraint.start != nil) {
+						continue
+					}
+					if c.Right.(parser.Datum).IsMax() {
+						constraint.start = &parser.ComparisonExpr{
+							Operator: parser.EQ,
+							Left:     c.Left,
+							Right:    c.Right,
+						}
+					} else {
+						constraint.start = &parser.ComparisonExpr{
+							Operator: parser.GE,
+							Left:     c.Left,
+							Right:    c.Right.(parser.Datum).Next(),
+						}
+					}
+				case parser.LT:
+					if endDone || (constraint.end != nil) {
+						continue
+					}
+					// Transform "<" into "<=".
+					if c.Right.(parser.Datum).IsMin() {
+						constraint.end = &parser.ComparisonExpr{
+							Operator: parser.EQ,
+							Left:     c.Left,
+							Right:    c.Right,
+						}
+					} else if c.Right.(parser.Datum).HasPrev() {
+						constraint.end = &parser.ComparisonExpr{
+							Operator: parser.LE,
+							Left:     c.Left,
+							Right:    c.Right.(parser.Datum).Prev(),
+						}
+					} else {
+						constraint.end = c
+					}
+				case parser.LE:
 					if !endDone && constraint.end == nil {
 						constraint.end = c
 					}
@@ -503,46 +556,43 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 						constraint.end = c
 					}
 				case parser.IsNot:
-					if c.Right == parser.DNull && !startDone {
+					if c.Right == parser.DNull && !startDone && (constraint.start == nil) {
 						constraint.start = c
 					}
 				}
 			}
 		}
 
-		if constraint.start != nil && constraint.start.Operator == parser.GT {
-			// Transform a > constraint into a >= constraint so that we play
-			// nicer with the inclusive nature of the scan start key.
-			//
-			// TODO(pmattis): It would be more obvious to perform this
-			// transform in simplifyComparisonExpr, but doing so there
-			// eliminates some of the other simplifications. For example, "a <
-			// 1 OR a > 1" currently simplifies to "a != 1", but if we
-			// performed this transform in simpilfyComparisonExpr it would
-			// simplify to "a < 1 OR a >= 2" which is also the same as "a !=
-			// 1", but not so obvious based on comparisons of the constants.
-			constraint.start = &parser.ComparisonExpr{
-				Operator: parser.GE,
-				Left:     constraint.start.Left,
-				Right:    constraint.start.Right.(parser.Datum).Next(),
-			}
-		}
 		if constraint.end != nil && constraint.end.Operator == parser.LT {
 			endDone = true
+		}
+
+		if !startDone && constraint.start == nil {
+			// Add an IS NOT NULL constraint if there's an end constraint.
+			if (constraint.end != nil) &&
+				!(constraint.end.Operator == parser.Is && constraint.end.Right == parser.DNull) {
+				constraint.start = &parser.ComparisonExpr{
+					Operator: parser.IsNot,
+					Left:     constraint.end.Left,
+					Right:    parser.DNull,
+				}
+			}
+			// Even if we just manufactures a start constraint above, there's no
+			// point in allowing future start constraints after an IS NOT NULL one;
+			// since NOT NULL is not actually a value present in an index, values
+			// encoded after an NOT NULL don't matter.
+			startDone = true
 		}
 
 		if constraint.start != nil || constraint.end != nil {
 			v.constraints = append(v.constraints, constraint)
 		}
 
-		if constraint.start == nil {
-			startDone = true
-		}
 		if constraint.end == nil {
 			endDone = true
 		}
 		if startDone && endDone {
-			// The rest of the expressions don't matter; when we'll construct index spans
+			// The rest of the expressions don't matter; when we construct index spans
 			// based on these constraints we won't be able to accumulate more in either
 			// the start key prefix nor the end key prefix.
 			break
@@ -586,205 +636,309 @@ func (v indexInfoByCost) Sort() {
 	sort.Sort(v)
 }
 
-// makeSpans constructs the spans for an index given a set of constraints.
+func encodeStartConstraintAscending(spans []span, c *parser.ComparisonExpr) {
+	util.Assertf(c.Operator != parser.GT,
+		"'>' operators should have been transformed to '>='.")
+	util.Assertf(c.Operator != parser.NE,
+		"'!=' operators should have been transformed to 'IS NOT NULL'")
+	switch c.Operator {
+	case parser.IsNot:
+		// A IS NOT NULL expression allows us to constrain the start of
+		// the range to not include NULL.
+		for i := range spans {
+			spans[i].start = encoding.EncodeNotNull(
+				spans[i].start, encoding.Ascending)
+		}
+	default:
+		if datum, ok := c.Right.(parser.Datum); ok {
+			key, err := encodeTableKey(nil, datum, encoding.Ascending)
+			if err != nil {
+				panic(err)
+			}
+			// Append the constraint to all of the existing spans.
+			for i := range spans {
+				spans[i].start = append(spans[i].start, key...)
+			}
+		}
+	}
+}
+
+func encodeEndConstraintAscending(spans []span, c *parser.ComparisonExpr,
+	isLastEndConstraint bool) {
+	switch c.Operator {
+	case parser.Is:
+		// An IS NULL expressions allows us to constrain the end of the range
+		// to stop at NULL.
+		util.Assertf(c.Right == parser.DNull, "Expected NULL operand for IS operator.")
+		for i := range spans {
+			spans[i].end = encoding.EncodeNotNull(spans[i].end, encoding.Ascending)
+		}
+	default:
+		if datum, ok := c.Right.(parser.Datum); ok {
+			if c.Operator != parser.LT {
+				for i := range spans {
+					spans[i].end = encodeInclusiveEndValue(
+						spans[i].end, datum, encoding.Ascending, isLastEndConstraint)
+				}
+				break
+			}
+			util.Assertf(isLastEndConstraint, "Can't have other end constraints "+
+				" after a '<' constraint.")
+			key, err := encodeTableKey(nil, datum, encoding.Ascending)
+			if err != nil {
+				panic(err)
+			}
+			// Append the constraint to all of the existing spans.
+			for i := range spans {
+				spans[i].end = append(spans[i].end, key...)
+			}
+		}
+	}
+}
+
+func encodeStartConstraintDescending(
+	spans []span, c *parser.ComparisonExpr) {
+	switch c.Operator {
+	case parser.Is:
+		// An IS NULL expressions allows us to constrain the end of the range
+		// to stop at NULL.
+		util.Assertf(c.Right == parser.DNull, "Expected NULL operand for IS operator.")
+		for i := range spans {
+			spans[i].start = encoding.EncodeNotNull(spans[i].start, encoding.Descending)
+		}
+	case parser.LE, parser.EQ:
+		if datum, ok := c.Right.(parser.Datum); ok {
+			key, err := encodeTableKey(nil, datum, encoding.Descending)
+			if err != nil {
+				panic(err)
+			}
+			// Append the constraint to all of the existing spans.
+			for i := range spans {
+				spans[i].start = append(spans[i].start, key...)
+			}
+		}
+	case parser.LT:
+		// A "<" constraint is the last start constraint. Since the constraint
+		// is exclusive and the start key is inclusive, we're going to apply
+		// a .PrefixEnd().
+		if datum, ok := c.Right.(parser.Datum); ok {
+			key, err := encodeTableKey(nil, datum, encoding.Descending)
+			if err != nil {
+				panic(err)
+			}
+			// Append the constraint to all of the existing spans.
+			for i := range spans {
+				spans[i].start = append(spans[i].start, key...)
+				spans[i].start = spans[i].start.PrefixEnd()
+			}
+		}
+	default:
+		panic(util.Errorf("Unexpected operator: %s", c.String()))
+	}
+}
+
+func encodeEndConstraintDescending(spans []span, c *parser.ComparisonExpr,
+	isLastEndConstraint bool) {
+	util.Assertf(c.Operator != parser.GT,
+		"'>' operators should have been transformed to '>='.")
+	switch c.Operator {
+	case parser.IsNot:
+		// An IS NULL expressions allows us to constrain the end of the range
+		// to stop at NULL.
+		util.Assertf(c.Right == parser.DNull,
+			"Expected NULL operand for IS NOT operator.")
+		for i := range spans {
+			spans[i].end = encoding.EncodeNotNull(spans[i].end, encoding.Descending)
+		}
+	case parser.GE, parser.EQ:
+		if datum, ok := c.Right.(parser.Datum); ok {
+			for i := range spans {
+				spans[i].end = encodeInclusiveEndValue(
+					spans[i].end, datum, encoding.Descending, isLastEndConstraint)
+			}
+		}
+		// TODO(andrei): panic if not ok?
+	default:
+		panic(util.Errorf("Unexpected operator: %s", c.String()))
+	}
+}
+
+// Encodes datum at the end of key, using direction `dir` for the encoding.
+// The key is a span end key, which is exclusive, but `val` needs to
+// be inclusive. So if datum is the last end constraint, we transform it accordingly.
+func encodeInclusiveEndValue(
+	key roachpb.Key, datum parser.Datum, dir encoding.Direction,
+	isLastEndConstraint bool) roachpb.Key {
+	// Since the end of a span is exclusive, if the last constraint is an
+	// inclusive one, we might need to make the key exclusive by applying a
+	// PrefixEnd().  We normally avoid doing this by transforming "a = x" to
+	// "a = x±1" for the last end constraint, depending on the encoding direction
+	// (since this keeps the key nice and pretty-printable).
+	// However, we might not be able to do the ±1.
+	needExclusiveKey := false
+	if isLastEndConstraint {
+		if dir == encoding.Ascending {
+			if datum.IsMax() {
+				needExclusiveKey = true
+			} else {
+				datum = datum.Next()
+			}
+		} else {
+			if datum.IsMin() || !datum.HasPrev() {
+				needExclusiveKey = true
+			} else {
+				datum = datum.Prev()
+			}
+		}
+	}
+	key, err := encodeTableKey(key, datum, dir)
+	if err != nil {
+		panic(err)
+	}
+	if needExclusiveKey {
+		key = key.PrefixEnd()
+	}
+	return key
+}
+
+// Splits spans according to a constraint like (...) in <tuple>.
+// If the constraint is (a,b) IN ((1,2),(3,4)), each input span
+// will be split into two: the first one will have "1/2" appended to
+// the start and/or end, the second one will have "3/4" appended to
+// the start and/or end.
 //
-// The spans will be constructed by iterating over the constraints (and implicitly
-// over the index columns) - each constraint contributes to a value to the column's
-// slot in each span.
-func makeSpans(constraints indexConstraints, tableID ID, index *IndexDescriptor) []span {
+// Returns the exploded spans and the number of index columns covered
+// by this constraint (i.e. 1, if the left side is a qvalue or
+// len(tupleMap) if it's a tuple).
+func applyInConstraint(spans []span, c indexConstraint, firstCol int,
+	index *IndexDescriptor, isLastEndConstraint bool) ([]span, int) {
+	var e *parser.ComparisonExpr
+	var coveredColumns int
+	// It might be that the IN constraint is a start constraint, an
+	// end constraint, or both, depending on how whether we had
+	// start and end constraints for all the previous index cols.
+	if c.start != nil && c.start.Operator == parser.In {
+		e = c.start
+	} else {
+		e = c.end
+	}
+	tuple := e.Right.(parser.DTuple)
+	// !!! TODO(andrei): this assertion used to not panic on failure, but I think
+	// the behavior is incorrect. Can it happen? Test what we get with "a in 1".
+	existingSpans := spans
+	spans = make([]span, 0, len(existingSpans)*len(tuple))
+	for _, datum := range tuple {
+		// start and end will accumulate the end constraint for
+		// the current element of the tuple.
+		var start, end []byte
+
+		switch t := datum.(type) {
+		case parser.DTuple:
+			// The constraint is a tuple of tuples, meaning something like
+			// (...) IN ((1,2),(3,4)).
+			coveredColumns = len(c.tupleMap)
+			for j, tupleIdx := range c.tupleMap {
+				var err error
+				var colDir encoding.Direction
+				if colDir, err = index.ColumnDirections[firstCol+j].ToEncodingDirection(); err != nil {
+					panic(err)
+				}
+
+				if start, err = encodeTableKey(start, t[tupleIdx], colDir); err != nil {
+					panic(err)
+				}
+				end = encodeInclusiveEndValue(
+					end, t[tupleIdx], colDir, isLastEndConstraint && (j == len(c.tupleMap)-1))
+			}
+		default:
+			// The constraint is a tuple of values, meaning something like
+			// a IN (1,2).
+			var colDir encoding.Direction
+			var err error
+			if colDir, err = index.ColumnDirections[firstCol].ToEncodingDirection(); err != nil {
+				panic(err)
+			}
+			coveredColumns = 1
+			if start, err = encodeTableKey(nil, datum, colDir); err != nil {
+				panic(err)
+			}
+
+			end = encodeInclusiveEndValue(nil, datum, colDir, isLastEndConstraint)
+			// TODO(andrei): assert here that we end is not \xff\xff...
+			// encodeInclusiveEndValue sometimes calls key.PrefixEnd(),
+			// which doesn't work if the input is \xff\xff... However,
+			// that shouldn't happen: datum should not have that encoding.
+		}
+		for _, s := range existingSpans {
+			if c.start != nil {
+				s.start = append(append(roachpb.Key(nil), s.start...), start...)
+			}
+			if c.end != nil {
+				s.end = append(append(roachpb.Key(nil), s.end...), end...)
+			}
+			spans = append(spans, s)
+		}
+	}
+	return spans, coveredColumns
+}
+
+// makeSpans constructs the spans for an index given a set of constraints.
+func makeSpans(constraints indexConstraints,
+	tableID ID, index *IndexDescriptor) []span {
 	prefix := roachpb.Key(MakeIndexKeyPrefix(tableID, index.ID))
+	// We have one constraint per column, so each contributes something
+	// to the start and/or the end key of the span.
+	// But we also have (...) IN <tuple> constraints that span multiple columns.
+	// These constraints split each span, and that's how we can end up with
+	// multiple spans.
 	spans := []span{{
 		start: append(roachpb.Key(nil), prefix...),
 		end:   append(roachpb.Key(nil), prefix...),
 	}}
-	var buf [100]byte
 
-	colIdx := -1 // The column that the current constraint refers to.
+	colIdx := -1
 	for i, c := range constraints {
 		colIdx++
+		var err error
+		var colDir encoding.Direction
+		if colDir, err = index.ColumnDirections[i].ToEncodingDirection(); err != nil {
+			panic(err)
+		}
 		// Is this the last end constraint? We perform special processing on the
 		// last end constraint to account for the exclusive nature of the scan end
 		// key.
-		lastEnd := c.end != nil &&
+		lastEnd := (c.end != nil) &&
 			(i+1 == len(constraints) || constraints[i+1].end == nil)
 
-		// Special handling of IN exprssions. Such expressions apply to both the
-		// start and end key, but also cause an explosion in the number of spans
-		// searched within an index.
-		if (c.start != nil && c.start.Operator == parser.In) ||
-			(c.end != nil && c.end.Operator == parser.In) {
-			var e *parser.ComparisonExpr
-			if c.start != nil && c.start.Operator == parser.In {
-				e = c.start
-			} else {
-				e = c.end
-			}
-
-			tuple, ok := e.Right.(parser.DTuple)
-			if !ok {
-				break
-			}
-
-			// For each of the existing spans and for each value in the tuple, create
-			// a new span.
-			existingSpans := spans
-			spans = make([]span, 0, len(existingSpans)*len(tuple))
-			for _, datum := range tuple {
-				var start, end []byte
-
-				switch t := datum.(type) {
-				case parser.DTuple:
-					start = buf[:0]
-					for i, tupleIdx := range c.tupleMap {
-						var err error
-						var dir encoding.Direction
-						if dir, err = index.ColumnDirections[colIdx+i].ToEncodingDirection(); err != nil {
-							panic(err)
-						}
-						if start, err = encodeTableKey(start, t[tupleIdx], dir); err != nil {
-							panic(err)
-						}
-					}
-
-					// Even though the end key is exclusive, we can use start as part of
-					// the end key. We'll take care later to append something to make the
-					// exclusion work.
-					end = start
-					if lastEnd {
-						end = nil
-						for i, tupleIdx := range c.tupleMap {
-							d := t[tupleIdx]
-							if i+1 == len(c.tupleMap) {
-								d = d.Next()
-							}
-							var err error
-							var dir encoding.Direction
-							if dir, err = index.ColumnDirections[colIdx+i].ToEncodingDirection(); err != nil {
-								panic(err)
-							}
-							if end, err = encodeTableKey(end, d, dir); err != nil {
-								panic(err)
-							}
-						}
-					}
-
-				default:
-					var err error
-					var dir encoding.Direction
-					if dir, err = index.ColumnDirections[colIdx].ToEncodingDirection(); err != nil {
-						panic(err)
-					}
-					if start, err = encodeTableKey(buf[:0], datum, dir); err != nil {
-						panic(err)
-					}
-
-					end = start
-					if lastEnd {
-						var err error
-						if end, err = encodeTableKey(nil, datum.Next(), dir); err != nil {
-							panic(err)
-						}
-					}
-				}
-
-				for _, s := range existingSpans {
-					if c.start != nil {
-						!!!s.start = append(append(roachpb.Key(nil), s.start...), start...)
-					}
-					if c.end != nil {
-						!!!s.end = append(append(roachpb.Key(nil), s.end...), end...)
-					}
-					spans = append(spans, s)
-				}
-			}
-
-			// Skip over the columns covered by the tuple.
-			colIdx += len(c.tupleMap) - 1
+		// IN is handled separately, since it can affect multiple columns.
+		if ((c.start != nil) && (c.start.Operator == parser.In)) ||
+			((c.end != nil) && (c.end.Operator == parser.IN)) {
+			var coveredCols int
+			spans, coveredCols = applyInConstraint(spans, c, colIdx, index, lastEnd)
+			// Skip over all the columns contained in the tuple.
+			colIdx += coveredCols - 1
 			continue
 		}
-
-		var dir encoding.Direction
-		var err error
-		if dir, err = index.ColumnDirections[colIdx].ToEncodingDirection(); err != nil {
-			panic(err)
-		}
-
-		// If the column direction in the index is Descending, we need to invert
-		// the start and end constraints. But rather than switching the
-		// constraints, it's easier code-wise to just switch the start and end
-		// keys.
-		var startKey, endKey *roachpb.key
-		if dir == encoding.Ascending {
-			startKey = spans[i].start
-			endKey = spans[i].end
-		} else {
-			startKey = spans[i].end
-			endKey = spans[i].start
-		}
-
-		if c.start != nil {
-			// We have a start constraint.
-			switch c.start.Operator {
-			case parser.NE, parser.IsNot:
-				// A != or IS NOT NULL expression allows us to constrain the start of
-				// the range to not include NULL.
-				for i := range spans {
-					*startKey = encoding.EncodeNotNull(*startKey, dir)
-				}
-			default:
-				if datum, ok := c.start.Right.(parser.Datum); ok {
-					key, err := encodeTableKey(buf[:0], datum, dir)
-					if err != nil {
-						panic(err)
-					}
-					// Append the constraint to all of the existing spans.
-					for i := range spans {
-						*startKey = append(*startKey, key...)
-					}
-				}
+		if colDir == encoding.Ascending {
+			if c.start != nil {
+				encodeStartConstraintAscending(spans, c.start)
 			}
-		}
-
-		if c.end != nil {
-			// We have an end constraint.
-			switch c.end.Operator {
-			case parser.Is:
-				// makeConstraints() only passes along IS NULL expressions as end expressions.
-				// These allow us to constrain the end of the range to stop at NULL.
-				for i := range spans {
-					*endKey = encoding.EncodeNotNull(*endKey, dir)
-				}
-			default:
-				if datum, ok := c.end.Right.(parser.Datum); ok {
-					if lastEnd && c.end.Operator != parser.LT {
-						datum = datum.Next()
-					}
-					key, err := encodeTableKey(buf[:0], datum, dir)
-					if err != nil {
-						panic(err)
-					}
-					// Append the constraint to all of the existing spans.
-					for i := range spans {
-						*endKey = append(*endKey, key...)
-					}
-				}
-
-				if c.start == nil && (i == 0 || constraints[i-1].start != nil) {
-					// This is the first constraint for which we don't have a start
-					// constraint. Add a not-NULL start-point.
-					// TODO(andrei): add this start-point to all the subsequent columns
-					// with an end constraint.
-					for i := range spans {
-						*startKey = encoding.EncodeNotNull(*startKey, dir)
-					}
-				}
+			if c.end != nil {
+				encodeEndConstraintAscending(spans, c.end, lastEnd)
+			}
+		} else {
+			// For descending index cols, c.start is an end constraint
+			// and c.end is a start constraint.
+			if c.start != nil {
+				encodeStartConstraintDescending(spans, c.end)
+			}
+			if c.end != nil {
+				encodeEndConstraintDescending(spans, c.start, lastEnd)
 			}
 		}
 	}
 
-	!!! this is no longer valid since it just looks at .end. Maybe go through all
-	spans and compare the end with what we initialized the span to (i.e. the
-	table prefix)?
+	// If we had no end constraints, make it so that we scan the whole index.
 	if len(constraints) == 0 || constraints[0].end == nil {
 		for i := range spans {
 			spans[i].end = spans[i].end.PrefixEnd()
@@ -802,7 +956,6 @@ func makeSpans(constraints indexConstraints, tableID ID, index *IndexDescriptor)
 		}
 	}
 	spans = spans[:n]
-
 	return spans
 }
 
