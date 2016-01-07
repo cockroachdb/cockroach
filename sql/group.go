@@ -50,10 +50,17 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		// We could potentially skip this, since it will be checked in addRender.
+		if _, err = norm.TypeCheck(p.evalCtx.Args); err != nil {
+			return nil, err
+		}
+
 		norm, err = p.parser.NormalizeExpr(p.evalCtx, norm)
 		if err != nil {
 			return nil, err
 		}
+
 		// If a col index is specified, replace it with that expression first.
 		// NB: This is not a deep copy, and thus when extractAggregateFuncs runs
 		// on s.render, the GroupBy expressions can contain wrapped qvalues.
