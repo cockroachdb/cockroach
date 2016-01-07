@@ -18,17 +18,23 @@
 
 package acceptance
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
-// TestRuby connects to a cluster with ruby.
-func TestRuby(t *testing.T) {
-	testDocker(t, "ruby", []string{"ruby", "-e", ruby})
+// TestPython connects to a cluster with python.
+func TestPython(t *testing.T) {
+	testDockerSuccess(t, "python", []string{"-c", fmt.Sprintf(python, 3)})
+	testDockerFail(t, "python", []string{"-c", fmt.Sprintf(python, `a`)})
 }
 
-const ruby = `
-require 'pg'
-
-conn = PG.connect()
-res = conn.exec_params('SELECT 1, 2 > $1, $1', [3])
-raise 'Unexpected: ' + res.values.to_s unless res.values == [["1", "f", "3"]]
+const python = `
+import psycopg2
+import os
+conn = psycopg2.connect('')
+cur = conn.cursor()
+cur.execute("SELECT 1, 2+%v")
+v = cur.fetchall()
+assert v == [(1, 5)]
 `

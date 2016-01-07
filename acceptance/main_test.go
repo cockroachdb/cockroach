@@ -22,6 +22,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -30,6 +31,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/samalba/dockerclient"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
@@ -186,4 +189,78 @@ func getJSON(url, rel string, v interface{}) error {
 		return err
 	}
 	return json.Unmarshal(b, v)
+}
+
+// testDockerFail ensures the specified docker cmd fails.
+func testDockerFail(t *testing.T, tag string, cmd []string) {
+	wr, _ := testDocker(t, tag, cmd)
+	if wr.Error == nil && wr.ExitCode == 0 {
+		t.Errorf("expected failure")
+	}
+}
+
+// testDockerSuccess ensures the specified docker cmd succeeds.
+func testDockerSuccess(t *testing.T, tag string, cmd []string) {
+	wr, logs := testDocker(t, tag, cmd)
+	if wr.Error != nil {
+		t.Log(logs)
+		t.Errorf("unexpected error: %s", wr.Error)
+	} else if wr.ExitCode != 0 {
+		t.Log(logs)
+		t.Errorf("unexpected exit code: %v", wr.ExitCode)
+	}
+}
+
+func testDocker(t *testing.T, tag string, cmd []string) (result dockerclient.WaitResult, logs string) {
+	t.Skip("skip until docker issues fixed")
+
+	l := MustStartLocal(t)
+	defer l.AssertAndStop(t)
+
+	addr := l.Nodes[0].PGAddr()
+
+	client := cluster.NewDockerClient()
+	containerConfig := dockerclient.ContainerConfig{
+		Image: "cockroachdb/postgres-test:" + tag,
+		Env: []string{
+			fmt.Sprintf("PGHOST=%s", addr.IP),
+			fmt.Sprintf("PGPORT=%d", addr.Port),
+			"PGSSLCERT=/certs/node.client.crt",
+			"PGSSLKEY=/certs/node.client.key",
+		},
+		Cmd: cmd,
+	}
+	if err := client.PullImage(containerConfig.Image, nil); err != nil {
+		t.Fatal(err)
+	}
+	id, err := client.CreateContainer(&containerConfig, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.RemoveContainer(id, false, false)
+
+	hostConfig := dockerclient.HostConfig{
+		Binds:       []string{fmt.Sprintf("%s:%s", l.CertsDir, "/certs")},
+		NetworkMode: "host",
+	}
+	if err := client.StartContainer(id, &hostConfig); err != nil {
+		t.Fatal(err)
+	}
+	wr := <-client.Wait(id)
+	if wr.ExitCode != 0 {
+		rc, err := client.ContainerLogs(id, &dockerclient.LogOptions{
+			Stdout: true,
+			Stderr: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := ioutil.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Error(err)
+		}
+		logs = string(b)
+	}
+	return wr, logs
 }
