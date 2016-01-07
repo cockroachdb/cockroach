@@ -60,6 +60,7 @@ const (
 	serverMsgEmptyQuery           serverMessageType = 'I'
 	serverMsgParameterDescription serverMessageType = 't'
 	serverMsgBindComplete         serverMessageType = '2'
+	serverMsgParameterStatus      serverMessageType = 'S'
 )
 
 //go:generate stringer -type=prepareType
@@ -157,6 +158,21 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	}
 	c.writeBuf.initMsg(serverMsgAuth)
 	c.writeBuf.putInt32(authOK)
+	if err := c.writeBuf.finishMsg(c.wr); err != nil {
+		return err
+	}
+	if err := c.wr.Flush(); err != nil {
+		return err
+	}
+	c.writeBuf.initMsg(serverMsgParameterStatus)
+	c.writeBuf.writeString("client_encoding")
+	c.writeBuf.writeString("UTF8")
+	if err := c.writeBuf.finishMsg(c.wr); err != nil {
+		return err
+	}
+	c.writeBuf.initMsg(serverMsgParameterStatus)
+	c.writeBuf.writeString("DateStyle")
+	c.writeBuf.writeString("ISO")
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
 		return err
 	}
@@ -648,6 +664,10 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, se
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
+
+		case *driver.Response_Result_Ack_:
+			tag := append([]byte(result.Ack.Tag), byte(0))
+			return c.sendCommandComplete(tag)
 		}
 	}
 

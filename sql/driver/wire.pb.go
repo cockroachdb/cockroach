@@ -23,6 +23,8 @@ import math "math"
 
 import io "io"
 
+import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
+
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
 var _ = fmt.Errorf
@@ -325,6 +327,7 @@ type Response_Result struct {
 	//	*Response_Result_DDL_
 	//	*Response_Result_RowsAffected
 	//	*Response_Result_Rows_
+	//	*Response_Result_Ack_
 	Union isResponse_Result_Union `protobuf_oneof:"union"`
 }
 
@@ -347,10 +350,14 @@ type Response_Result_RowsAffected struct {
 type Response_Result_Rows_ struct {
 	Rows *Response_Result_Rows `protobuf:"bytes,4,opt,name=rows,oneof"`
 }
+type Response_Result_Ack_ struct {
+	Ack *Response_Result_Ack `protobuf:"bytes,5,opt,name=ack,oneof"`
+}
 
 func (*Response_Result_DDL_) isResponse_Result_Union()         {}
 func (*Response_Result_RowsAffected) isResponse_Result_Union() {}
 func (*Response_Result_Rows_) isResponse_Result_Union()        {}
+func (*Response_Result_Ack_) isResponse_Result_Union()         {}
 
 func (m *Response_Result) GetUnion() isResponse_Result_Union {
 	if m != nil {
@@ -380,12 +387,20 @@ func (m *Response_Result) GetRows() *Response_Result_Rows {
 	return nil
 }
 
+func (m *Response_Result) GetAck() *Response_Result_Ack {
+	if x, ok := m.GetUnion().(*Response_Result_Ack_); ok {
+		return x.Ack
+	}
+	return nil
+}
+
 // XXX_OneofFuncs is for the internal use of the proto package.
 func (*Response_Result) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), []interface{}) {
 	return _Response_Result_OneofMarshaler, _Response_Result_OneofUnmarshaler, []interface{}{
 		(*Response_Result_DDL_)(nil),
 		(*Response_Result_RowsAffected)(nil),
 		(*Response_Result_Rows_)(nil),
+		(*Response_Result_Ack_)(nil),
 	}
 }
 
@@ -404,6 +419,11 @@ func _Response_Result_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 	case *Response_Result_Rows_:
 		_ = b.EncodeVarint(4<<3 | proto.WireBytes)
 		if err := b.EncodeMessage(x.Rows); err != nil {
+			return err
+		}
+	case *Response_Result_Ack_:
+		_ = b.EncodeVarint(5<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Ack); err != nil {
 			return err
 		}
 	case nil:
@@ -439,6 +459,14 @@ func _Response_Result_OneofUnmarshaler(msg proto.Message, tag, wire int, b *prot
 		err := b.DecodeMessage(msg)
 		m.Union = &Response_Result_Rows_{msg}
 		return true, err
+	case 5: // union.ack
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(Response_Result_Ack)
+		err := b.DecodeMessage(msg)
+		m.Union = &Response_Result_Ack_{msg}
+		return true, err
 	default:
 		return false, nil
 	}
@@ -452,6 +480,15 @@ type Response_Result_DDL struct {
 func (m *Response_Result_DDL) Reset()         { *m = Response_Result_DDL{} }
 func (m *Response_Result_DDL) String() string { return proto.CompactTextString(m) }
 func (*Response_Result_DDL) ProtoMessage()    {}
+
+// Ack is a message containing the tag of a result without a meaningful return.
+type Response_Result_Ack struct {
+	Tag string `protobuf:"bytes,1,req,name=tag" json:"tag"`
+}
+
+func (m *Response_Result_Ack) Reset()         { *m = Response_Result_Ack{} }
+func (m *Response_Result_Ack) String() string { return proto.CompactTextString(m) }
+func (*Response_Result_Ack) ProtoMessage()    {}
 
 // Rows encapsulates the result of an operation that returns rows.
 type Response_Result_Rows struct {
@@ -493,6 +530,7 @@ func init() {
 	proto.RegisterType((*Response)(nil), "cockroach.sql.driver.Response")
 	proto.RegisterType((*Response_Result)(nil), "cockroach.sql.driver.Response.Result")
 	proto.RegisterType((*Response_Result_DDL)(nil), "cockroach.sql.driver.Response.Result.DDL")
+	proto.RegisterType((*Response_Result_Ack)(nil), "cockroach.sql.driver.Response.Result.Ack")
 	proto.RegisterType((*Response_Result_Rows)(nil), "cockroach.sql.driver.Response.Result.Rows")
 	proto.RegisterType((*Response_Result_Rows_Row)(nil), "cockroach.sql.driver.Response.Result.Rows.Row")
 	proto.RegisterType((*Response_Result_Rows_Column)(nil), "cockroach.sql.driver.Response.Result.Rows.Column")
@@ -764,6 +802,20 @@ func (m *Response_Result_Rows_) MarshalTo(data []byte) (int, error) {
 	}
 	return i, nil
 }
+func (m *Response_Result_Ack_) MarshalTo(data []byte) (int, error) {
+	i := 0
+	if m.Ack != nil {
+		data[i] = 0x2a
+		i++
+		i = encodeVarintWire(data, i, uint64(m.Ack.Size()))
+		n6, err := m.Ack.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n6
+	}
+	return i, nil
+}
 func (m *Response_Result_DDL) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -779,6 +831,28 @@ func (m *Response_Result_DDL) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	return i, nil
+}
+
+func (m *Response_Result_Ack) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Response_Result_Ack) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintWire(data, i, uint64(len(m.Tag)))
+	i += copy(data[i:], m.Tag)
 	return i, nil
 }
 
@@ -876,11 +950,11 @@ func (m *Response_Result_Rows_Column) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintWire(data, i, uint64(m.Typ.Size()))
-	n6, err := m.Typ.MarshalTo(data[i:])
+	n7, err := m.Typ.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n6
+	i += n7
 	return i, nil
 }
 
@@ -1056,9 +1130,26 @@ func (m *Response_Result_Rows_) Size() (n int) {
 	}
 	return n
 }
+func (m *Response_Result_Ack_) Size() (n int) {
+	var l int
+	_ = l
+	if m.Ack != nil {
+		l = m.Ack.Size()
+		n += 1 + l + sovWire(uint64(l))
+	}
+	return n
+}
 func (m *Response_Result_DDL) Size() (n int) {
 	var l int
 	_ = l
+	return n
+}
+
+func (m *Response_Result_Ack) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Tag)
+	n += 1 + l + sovWire(uint64(l))
 	return n
 }
 
@@ -1862,6 +1953,38 @@ func (m *Response_Result) Unmarshal(data []byte) error {
 			}
 			m.Union = &Response_Result_Rows_{v}
 			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Ack", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &Response_Result_Ack{}
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Union = &Response_Result_Ack_{v}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipWire(data[iNdEx:])
@@ -1926,6 +2049,90 @@ func (m *Response_Result_DDL) Unmarshal(data []byte) error {
 			}
 			iNdEx += skippy
 		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Response_Result_Ack) Unmarshal(data []byte) error {
+	var hasFields [1]uint64
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowWire
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Ack: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Ack: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Tag", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Tag = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipWire(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWire
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("tag")
 	}
 
 	if iNdEx > l {

@@ -360,6 +360,12 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 				}
 				resultRows.Rows = append(resultRows.Rows, row)
 			}
+
+		case parser.Ack:
+			switch stmt.(type) {
+			case *parser.BeginTransaction:
+				result.Union = &driver.Response_Result_Ack_{Ack: &driver.Response_Result_Ack{"BEGIN"}}
+			}
 		}
 
 		return plan.Err()
