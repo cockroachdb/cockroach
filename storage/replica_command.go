@@ -1314,6 +1314,10 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 		if err := InsertRange(txn, b, newDesc.StartKey); err != nil {
 			return roachpb.NewError(err)
 		}
+		// Log the split into the range event log.
+		if err := r.store.logSplit(txn, updatedDesc, *newDesc); err != nil {
+			return err
+		}
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
 		b.InternalAddRequest(&roachpb.EndTransactionRequest{
