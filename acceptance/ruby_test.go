@@ -29,6 +29,8 @@ import (
 
 // TestRuby connects to a cluster with ruby.
 func TestRuby(t *testing.T) {
+	t.Skip("skip until docker issues fixed")
+
 	l := MustStartLocal(t)
 	defer l.AssertAndStop(t)
 
