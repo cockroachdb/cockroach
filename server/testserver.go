@@ -229,12 +229,19 @@ func ExpectedInitialRangeCount() int {
 	return GetBootstrapSchema().DescriptorCount() - sql.NumSystemDescriptors + 1
 }
 
+// OpenDBClient opens a KVDB Client connecting to the server with the supplied
+// user.
+func (ts *TestServer) OpenDBClient(user string) (*client.DB, error) {
+	connString := fmt.Sprintf("%s://%s@%s?certs=%s",
+		ts.Ctx.RPCRequestScheme(), user, ts.ServingAddr(), ts.Ctx.Certs)
+	return client.Open(ts.Stopper(), connString)
+}
+
 // WaitForInitialSplits waits for the server to complete its expected initial
 // splits at startup. If the expected range count is not reached within a
 // configured timeout, an error is returned.
 func (ts *TestServer) WaitForInitialSplits() error {
-	kvDB, err := client.Open(ts.Stopper(), fmt.Sprintf("%s://%s@%s?certs=%s",
-		ts.Ctx.RPCRequestScheme(), security.NodeUser, ts.ServingAddr(), ts.Ctx.Certs))
+	kvDB, err := ts.OpenDBClient(security.NodeUser)
 	if err != nil {
 		return err
 	}
