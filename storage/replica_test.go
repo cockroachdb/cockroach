@@ -1217,7 +1217,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	defer func() { TestingCommandFilter = nil }()
 	key := roachpb.Key("key1")
-	blockingStart := make(chan struct{})
+	blockingStart := make(chan struct{}, 1)
 	blockingDone := make(chan struct{})
 	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		if put, ok := args.(*roachpb.PutRequest); ok {
@@ -1226,7 +1226,12 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 				return err
 			}
 			if bytes.Equal(put.Key, key) && bytes.Equal(putBytes, []byte{1}) {
-				blockingStart <- struct{}{}
+				// Absence of replay protection can mean that we end up here
+				// more often than we expect, hence the select (#3669).
+				select {
+				case blockingStart <- struct{}{}:
+				default:
+				}
 				<-blockingDone
 			}
 		}
@@ -1271,17 +1276,11 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 		// success.
 	case <-cmd1Done:
 		t.Fatalf("cmd1 should have been blocked")
-	case <-time.After(500 * time.Millisecond):
-		t.Fatalf("waited 500ms for cmd2 of key")
 	}
 
-	blockingDone <- struct{}{}
-	select {
-	case <-cmd1Done:
-		// success.
-	case <-time.After(500 * time.Millisecond):
-		t.Fatalf("waited 500ms for cmd2 of key")
-	}
+	close(blockingDone)
+	<-cmd1Done
+	// Success.
 }
 
 // TestRangeUseTSCache verifies that write timestamps are upgraded
