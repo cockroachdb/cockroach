@@ -333,6 +333,11 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		}
 		pq.inTypes[i-1] = id
 	}
+	// OID to Datum is not a 1-1 mapping (for example, int4 and int8 both map
+	// to DummyInt), so make sure the hint types are maintained.
+	for i, t := range inTypeHints {
+		pq.inTypes[i] = t
+	}
 	cols, err := c.executor.StatementResult(c.opts.user, stmt, args)
 	if err != nil {
 		return c.sendError(err.Error())

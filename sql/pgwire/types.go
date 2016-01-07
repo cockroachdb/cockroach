@@ -17,6 +17,8 @@
 package pgwire
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"strconv"
 	"time"
@@ -211,22 +213,25 @@ func formatTs(t time.Time) (b []byte) {
 var (
 	oidToDatum = map[oid.Oid]parser.Datum{
 		oid.T_bool:      parser.DummyBool,
-		oid.T_int8:      parser.DummyInt,
-		oid.T_float8:    parser.DummyFloat,
-		oid.T_text:      parser.DummyString,
 		oid.T_date:      parser.DummyDate,
-		oid.T_timestamp: parser.DummyTimestamp,
+		oid.T_float4:    parser.DummyFloat,
+		oid.T_float8:    parser.DummyFloat,
+		oid.T_int2:      parser.DummyInt,
+		oid.T_int4:      parser.DummyInt,
+		oid.T_int8:      parser.DummyInt,
 		oid.T_interval:  parser.DummyInterval,
+		oid.T_text:      parser.DummyString,
+		oid.T_timestamp: parser.DummyTimestamp,
 	}
 	datumToOid = map[parser.Datum]oid.Oid{
-		parser.DummyBytes:     oid.T_text,
 		parser.DummyBool:      oid.T_bool,
-		parser.DummyInt:       oid.T_int8,
-		parser.DummyFloat:     oid.T_float8,
-		parser.DummyString:    oid.T_text,
+		parser.DummyBytes:     oid.T_text,
 		parser.DummyDate:      oid.T_date,
-		parser.DummyTimestamp: oid.T_timestamp,
+		parser.DummyFloat:     oid.T_float8,
+		parser.DummyInt:       oid.T_int8,
 		parser.DummyInterval:  oid.T_interval,
+		parser.DummyString:    oid.T_text,
+		parser.DummyTimestamp: oid.T_timestamp,
 	}
 )
 
@@ -244,7 +249,43 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error)
 			}
 			d.Payload = &driver.Datum_BoolVal{BoolVal: v}
 		default:
-			return d, fmt.Errorf("unsupported: binary bool parameter")
+			return d, fmt.Errorf("unsupported: unknown bool parameter")
+		}
+	case oid.T_int2:
+		switch code {
+		case formatText:
+			i, err := strconv.ParseInt(string(b), 10, 64)
+			if err != nil {
+				return d, fmt.Errorf("unknown int value")
+			}
+			d.Payload = &driver.Datum_IntVal{IntVal: i}
+		case formatBinary:
+			var i int16
+			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &i)
+			if err != nil {
+				return d, err
+			}
+			d.Payload = &driver.Datum_IntVal{IntVal: int64(i)}
+		default:
+			return d, fmt.Errorf("unsupported: unknown int2 parameter")
+		}
+	case oid.T_int4:
+		switch code {
+		case formatText:
+			i, err := strconv.ParseInt(string(b), 10, 64)
+			if err != nil {
+				return d, fmt.Errorf("unknown int value")
+			}
+			d.Payload = &driver.Datum_IntVal{IntVal: i}
+		case formatBinary:
+			var i int32
+			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &i)
+			if err != nil {
+				return d, err
+			}
+			d.Payload = &driver.Datum_IntVal{IntVal: int64(i)}
+		default:
+			return d, fmt.Errorf("unsupported: unknown int4 parameter")
 		}
 	case oid.T_int8:
 		switch code {
@@ -254,8 +295,33 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error)
 				return d, fmt.Errorf("unknown int value")
 			}
 			d.Payload = &driver.Datum_IntVal{IntVal: i}
+		case formatBinary:
+			var i int64
+			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &i)
+			if err != nil {
+				return d, err
+			}
+			d.Payload = &driver.Datum_IntVal{IntVal: i}
 		default:
-			return d, fmt.Errorf("unsupported: binary int parameter")
+			return d, fmt.Errorf("unsupported: unknown int8 parameter")
+		}
+	case oid.T_float4:
+		switch code {
+		case formatText:
+			f, err := strconv.ParseFloat(string(b), 64)
+			if err != nil {
+				return d, fmt.Errorf("unknown float value")
+			}
+			d.Payload = &driver.Datum_FloatVal{FloatVal: f}
+		case formatBinary:
+			var f float32
+			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &f)
+			if err != nil {
+				return d, err
+			}
+			d.Payload = &driver.Datum_FloatVal{FloatVal: float64(f)}
+		default:
+			return d, fmt.Errorf("unsupported: unknown float4 parameter")
 		}
 	case oid.T_float8:
 		switch code {
@@ -265,8 +331,15 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error)
 				return d, fmt.Errorf("unknown float value")
 			}
 			d.Payload = &driver.Datum_FloatVal{FloatVal: f}
+		case formatBinary:
+			var f float64
+			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &f)
+			if err != nil {
+				return d, err
+			}
+			d.Payload = &driver.Datum_FloatVal{FloatVal: f}
 		default:
-			return d, fmt.Errorf("unsupported: binary float parameter")
+			return d, fmt.Errorf("unsupported: unknown float8 parameter")
 		}
 	case oid.T_text:
 		switch code {
