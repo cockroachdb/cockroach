@@ -185,6 +185,10 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		EventFeed:       feed,
 		Tracer:          tracer,
 		StorePool:       s.storePool,
+		SQLExecutor: sql.InternalExecutor{
+			LeaseManager: leaseMgr,
+		},
+		LogRangeEvents: true,
 		AllocatorOptions: storage.AllocatorOptions{
 			AllowRebalance: true,
 			Mode:           s.ctx.BalanceMode,
