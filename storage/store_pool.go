@@ -161,7 +161,7 @@ func NewStorePool(g *gossip.Gossip, clock *hlc.Clock, timeUntilStoreDead time.Du
 	return sp
 }
 
-// storeGossipUpdate The gossip callback used to keep the StorePool up to date.
+// storeGossipUpdate is the gossip callback used to keep the StorePool up to date.
 func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	var storeDesc roachpb.StoreDescriptor
 	if err := content.GetProto(&storeDesc); err != nil {
