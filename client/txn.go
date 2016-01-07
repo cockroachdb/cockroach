@@ -136,7 +136,7 @@ func (txn *Txn) SetIsolation(isolation roachpb.IsolationType) error {
 func (txn *Txn) InternalSetPriority(priority int32) {
 	// The negative user priority is translated on the server into a positive,
 	// non-randomized, priority for the transaction.
-	txn.db.userPriority = -priority
+	txn.db.userPriority = float64(-priority)
 }
 
 // SetSystemDBTrigger sets the system db trigger to true on this transaction.

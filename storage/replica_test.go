@@ -215,7 +215,7 @@ func (tc *testContext) initConfigs(realRange bool) error {
 	return nil
 }
 
-func newTransaction(name string, baseKey roachpb.Key, userPriority int32,
+func newTransaction(name string, baseKey roachpb.Key, userPriority float64,
 	isolation roachpb.IsolationType, clock *hlc.Clock) *roachpb.Transaction {
 	var offset int64
 	var now roachpb.Timestamp
@@ -790,7 +790,7 @@ func TestRangeNoGossipConfig(t *testing.T) {
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
 	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
 
-	txn := newTransaction("test", key, 0 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
 	h := roachpb.Header{Txn: txn}
 	bt, _ := beginTxnArgs(key, txn)
 	req1 := putArgs(key, []byte("foo"))
@@ -836,7 +836,7 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
 	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
 
-	txn := newTransaction("test", key, 0 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
+	txn := newTransaction("test", key, 1 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
 	bt, h := beginTxnArgs(key, txn)
 	if _, err := client.SendWrappedWith(tc.Sender(), nil, h, &bt); err != nil {
 		t.Fatal(err)
@@ -1139,7 +1139,7 @@ func TestRangeCommandQueue(t *testing.T) {
 			args := readOrWriteArgs(key1, test.cmd1Read)
 
 			_, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
-				UserPriority: proto.Int32(42),
+				UserPriority: proto.Float64(42),
 			}, args)
 
 			if err != nil {

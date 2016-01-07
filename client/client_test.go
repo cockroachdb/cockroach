@@ -94,7 +94,7 @@ func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user str
 
 // createTestNotifyClient creates a new client which connects using an HTTP
 // sender to the server at addr. It contains a waitgroup to allow waiting.
-func createTestNotifyClient(stopper *stop.Stopper, addr string, priority int32) (*client.DB, *notifyingSender) {
+func createTestNotifyClient(stopper *stop.Stopper, addr string, priority float64) (*client.DB, *notifyingSender) {
 	db, err := client.Open(stopper, fmt.Sprintf("rpcs://%s@%s?certs=%s",
 		security.NodeUser,
 		addr,
@@ -152,7 +152,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 			txnPri = 2
 		}
 
-		db, sender := createTestNotifyClient(s.Stopper(), s.ServingAddr(), -clientPri)
+		db, sender := createTestNotifyClient(s.Stopper(), s.ServingAddr(), float64(-clientPri))
 
 		// doneCall signals when the non-txn read or write has completed.
 		doneCall := make(chan struct{})

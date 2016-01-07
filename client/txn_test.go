@@ -51,7 +51,7 @@ func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse,
 	txnID := []byte(uuid.NewUUID4())
 
 	return func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		ba.UserPriority = proto.Int32(1)
+		ba.UserPriority = proto.Float64(1)
 		if ba.Txn != nil && len(ba.Txn.ID) == 0 {
 			ba.Txn.Key = txnKey
 			ba.Txn.ID = txnID

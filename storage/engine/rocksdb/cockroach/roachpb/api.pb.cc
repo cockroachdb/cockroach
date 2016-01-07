@@ -1498,30 +1498,30 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
     "LeaseResponse\022<\n\014reverse_scan\030\025 \001(\0132&.co"
     "ckroach.roachpb.ReverseScanResponse\022-\n\004n"
     "oop\030\026 \001(\0132\037.cockroach.roachpb.NoopRespon"
-    "se:\004\310\240\037\001\"\274\002\n\006Header\0225\n\ttimestamp\030\001 \001(\0132\034"
+    "se:\004\310\240\037\001\"\277\002\n\006Header\0225\n\ttimestamp\030\001 \001(\0132\034"
     ".cockroach.roachpb.TimestampB\004\310\336\037\000\022;\n\007re"
     "plica\030\002 \001(\0132$.cockroach.roachpb.ReplicaD"
     "escriptorB\004\310\336\037\000\022,\n\010range_id\030\003 \001(\003B\032\310\336\037\000\342"
-    "\336\037\007RangeID\372\336\037\007RangeID\022\025\n\ruser_priority\030\004"
-    " \001(\005\022+\n\003txn\030\005 \001(\0132\036.cockroach.roachpb.Tr"
-    "ansaction\022F\n\020read_consistency\030\006 \001(\0162&.co"
-    "ckroach.roachpb.ReadConsistencyTypeB\004\310\336\037"
-    "\000:\004\210\240\037\001\"\202\001\n\014BatchRequest\0223\n\006header\030\001 \001(\013"
-    "2\031.cockroach.roachpb.HeaderB\010\310\336\037\000\320\336\037\001\0227\n"
-    "\010requests\030\002 \003(\0132\037.cockroach.roachpb.Requ"
-    "estUnionB\004\310\336\037\000:\004\230\240\037\000\"\253\002\n\rBatchResponse\022A"
-    "\n\006header\030\001 \001(\0132\'.cockroach.roachpb.Batch"
-    "Response.HeaderB\010\310\336\037\000\320\336\037\001\0229\n\tresponses\030\002"
-    " \003(\0132 .cockroach.roachpb.ResponseUnionB\004"
-    "\310\336\037\000\032\225\001\n\006Header\022\'\n\005error\030\001 \001(\0132\030.cockroa"
-    "ch.roachpb.Error\0225\n\ttimestamp\030\002 \001(\0132\034.co"
-    "ckroach.roachpb.TimestampB\004\310\336\037\000\022+\n\003txn\030\003"
-    " \001(\0132\036.cockroach.roachpb.Transaction:\004\230\240"
-    "\037\000*L\n\023ReadConsistencyType\022\016\n\nCONSISTENT\020"
-    "\000\022\r\n\tCONSENSUS\020\001\022\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000"
-    "*G\n\013PushTxnType\022\022\n\016PUSH_TIMESTAMP\020\000\022\016\n\nP"
-    "USH_ABORT\020\001\022\016\n\nPUSH_TOUCH\020\002\032\004\210\243\036\000B\tZ\007roa"
-    "chpbX\003", 8846);
+    "\336\037\007RangeID\372\336\037\007RangeID\022\030\n\ruser_priority\030\004"
+    " \001(\001:\0011\022+\n\003txn\030\005 \001(\0132\036.cockroach.roachpb"
+    ".Transaction\022F\n\020read_consistency\030\006 \001(\0162&"
+    ".cockroach.roachpb.ReadConsistencyTypeB\004"
+    "\310\336\037\000:\004\210\240\037\001\"\202\001\n\014BatchRequest\0223\n\006header\030\001 "
+    "\001(\0132\031.cockroach.roachpb.HeaderB\010\310\336\037\000\320\336\037\001"
+    "\0227\n\010requests\030\002 \003(\0132\037.cockroach.roachpb.R"
+    "equestUnionB\004\310\336\037\000:\004\230\240\037\000\"\253\002\n\rBatchRespons"
+    "e\022A\n\006header\030\001 \001(\0132\'.cockroach.roachpb.Ba"
+    "tchResponse.HeaderB\010\310\336\037\000\320\336\037\001\0229\n\tresponse"
+    "s\030\002 \003(\0132 .cockroach.roachpb.ResponseUnio"
+    "nB\004\310\336\037\000\032\225\001\n\006Header\022\'\n\005error\030\001 \001(\0132\030.cock"
+    "roach.roachpb.Error\0225\n\ttimestamp\030\002 \001(\0132\034"
+    ".cockroach.roachpb.TimestampB\004\310\336\037\000\022+\n\003tx"
+    "n\030\003 \001(\0132\036.cockroach.roachpb.Transaction:"
+    "\004\230\240\037\000*L\n\023ReadConsistencyType\022\016\n\nCONSISTE"
+    "NT\020\000\022\r\n\tCONSENSUS\020\001\022\020\n\014INCONSISTENT\020\002\032\004\210"
+    "\243\036\000*G\n\013PushTxnType\022\022\n\016PUSH_TIMESTAMP\020\000\022\016"
+    "\n\nPUSH_ABORT\020\001\022\016\n\nPUSH_TOUCH\020\002\032\004\210\243\036\000B\tZ\007"
+    "roachpbX\003", 8849);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/api.proto", &protobuf_RegisterTypes);
   ResponseHeader::default_instance_ = new ResponseHeader();
@@ -22138,7 +22138,7 @@ void Header::SharedCtor() {
   timestamp_ = NULL;
   replica_ = NULL;
   range_id_ = GOOGLE_LONGLONG(0);
-  user_priority_ = 0;
+  user_priority_ = 1;
   txn_ = NULL;
   read_consistency_ = 0;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -22183,16 +22183,7 @@ Header* Header::New(::google::protobuf::Arena* arena) const {
 }
 
 void Header::Clear() {
-#define ZR_HELPER_(f) reinterpret_cast<char*>(\
-  &reinterpret_cast<Header*>(16)->f)
-
-#define ZR_(first, last) do {\
-  ::memset(&first, 0,\
-           ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
-} while (0)
-
   if (_has_bits_[0 / 32] & 63u) {
-    ZR_(user_priority_, read_consistency_);
     if (has_timestamp()) {
       if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
     }
@@ -22200,14 +22191,12 @@ void Header::Clear() {
       if (replica_ != NULL) replica_->::cockroach::roachpb::ReplicaDescriptor::Clear();
     }
     range_id_ = GOOGLE_LONGLONG(0);
+    user_priority_ = 1;
     if (has_txn()) {
       if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
     }
+    read_consistency_ = 0;
   }
-
-#undef ZR_HELPER_
-#undef ZR_
-
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->Clear();
@@ -22260,16 +22249,16 @@ bool Header::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(32)) goto parse_user_priority;
+        if (input->ExpectTag(33)) goto parse_user_priority;
         break;
       }
 
-      // optional int32 user_priority = 4;
+      // optional double user_priority = 4 [default = 1];
       case 4: {
-        if (tag == 32) {
+        if (tag == 33) {
          parse_user_priority:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                   double, ::google::protobuf::internal::WireFormatLite::TYPE_DOUBLE>(
                  input, &user_priority_)));
           set_has_user_priority();
         } else {
@@ -22354,9 +22343,9 @@ void Header::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(3, this->range_id(), output);
   }
 
-  // optional int32 user_priority = 4;
+  // optional double user_priority = 4 [default = 1];
   if (has_user_priority()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt32(4, this->user_priority(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteDouble(4, this->user_priority(), output);
   }
 
   // optional .cockroach.roachpb.Transaction txn = 5;
@@ -22400,9 +22389,9 @@ void Header::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(3, this->range_id(), target);
   }
 
-  // optional int32 user_priority = 4;
+  // optional double user_priority = 4 [default = 1];
   if (has_user_priority()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(4, this->user_priority(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteDoubleToArray(4, this->user_priority(), target);
   }
 
   // optional .cockroach.roachpb.Transaction txn = 5;
@@ -22451,11 +22440,9 @@ int Header::ByteSize() const {
           this->range_id());
     }
 
-    // optional int32 user_priority = 4;
+    // optional double user_priority = 4 [default = 1];
     if (has_user_priority()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int32Size(
-          this->user_priority());
+      total_size += 1 + 8;
     }
 
     // optional .cockroach.roachpb.Transaction txn = 5;
@@ -22676,7 +22663,7 @@ void Header::clear_range_id() {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.range_id)
 }
 
-// optional int32 user_priority = 4;
+// optional double user_priority = 4 [default = 1];
 bool Header::has_user_priority() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
@@ -22687,14 +22674,14 @@ void Header::clear_has_user_priority() {
   _has_bits_[0] &= ~0x00000008u;
 }
 void Header::clear_user_priority() {
-  user_priority_ = 0;
+  user_priority_ = 1;
   clear_has_user_priority();
 }
- ::google::protobuf::int32 Header::user_priority() const {
+ double Header::user_priority() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Header.user_priority)
   return user_priority_;
 }
- void Header::set_user_priority(::google::protobuf::int32 value) {
+ void Header::set_user_priority(double value) {
   set_has_user_priority();
   user_priority_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.user_priority)

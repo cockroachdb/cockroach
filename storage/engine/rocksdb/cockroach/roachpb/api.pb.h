@@ -5564,12 +5564,12 @@ class Header : public ::google::protobuf::Message {
   ::google::protobuf::int64 range_id() const;
   void set_range_id(::google::protobuf::int64 value);
 
-  // optional int32 user_priority = 4;
+  // optional double user_priority = 4 [default = 1];
   bool has_user_priority() const;
   void clear_user_priority();
   static const int kUserPriorityFieldNumber = 4;
-  ::google::protobuf::int32 user_priority() const;
-  void set_user_priority(::google::protobuf::int32 value);
+  double user_priority() const;
+  void set_user_priority(double value);
 
   // optional .cockroach.roachpb.Transaction txn = 5;
   bool has_txn() const;
@@ -5608,8 +5608,8 @@ class Header : public ::google::protobuf::Message {
   ::cockroach::roachpb::Timestamp* timestamp_;
   ::cockroach::roachpb::ReplicaDescriptor* replica_;
   ::google::protobuf::int64 range_id_;
+  double user_priority_;
   ::cockroach::roachpb::Transaction* txn_;
-  ::google::protobuf::int32 user_priority_;
   int read_consistency_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
@@ -11506,7 +11506,7 @@ inline void Header::set_range_id(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.range_id)
 }
 
-// optional int32 user_priority = 4;
+// optional double user_priority = 4 [default = 1];
 inline bool Header::has_user_priority() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
@@ -11517,14 +11517,14 @@ inline void Header::clear_has_user_priority() {
   _has_bits_[0] &= ~0x00000008u;
 }
 inline void Header::clear_user_priority() {
-  user_priority_ = 0;
+  user_priority_ = 1;
   clear_has_user_priority();
 }
-inline ::google::protobuf::int32 Header::user_priority() const {
+inline double Header::user_priority() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Header.user_priority)
   return user_priority_;
 }
-inline void Header::set_user_priority(::google::protobuf::int32 value) {
+inline void Header::set_user_priority(double value) {
   set_has_user_priority();
   user_priority_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.user_priority)

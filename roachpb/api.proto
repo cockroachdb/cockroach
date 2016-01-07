@@ -584,15 +584,17 @@ message Header {
   // request to the correct range.
   optional int64 range_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
-  // user_priority allows an explicit priority to be specified for
-  // commands. This value should be a positive integer [1, 2^31-1].
-  // If set to 0 or not set, a random value in the interval is
-  // chosen. To set a lower than average priority, use the interval
-  // [1, 2^30). To set a higher than average priority, use the
-  // interval [2^30, 2^31-1]. This value is ignored if Txn is
-  // specified. If neither this value nor txn is specified, the value
-  // defaults to 0, and a random priority is chosen.
-  optional int32 user_priority = 4;
+  // user_priority allows any command's priority to be biased from the
+  // default random priority. It specifies a multiple. If set to 0.5,
+  // the chosen priority will be 1/2x as likely to beat any default
+  // random priority. If set to 1, a default random priority is
+  // chosen. If set to 2, the chosen priority will be 2x as likely to
+  // beat any default random priority, and so on.  This value is
+  // ignored if Txn is specified. If neither this value nor txn is
+  // specified, the value defaults to 1, and a random priority is
+  // chosen. The min and max user priorities are set via
+  // MinUserPriority and MaxUserPriority in data.go.
+  optional double user_priority = 4 [default = 1];
   // txn is set non-nil if a transaction is underway. To start a txn,
   // the first request should set this field to non-nil with name and
   // isolation level set as desired. The response will contain the
