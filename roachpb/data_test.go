@@ -158,6 +158,24 @@ func TestNextKey(t *testing.T) {
 	}
 }
 
+func TestIsPrev(t *testing.T) {
+	for i, tc := range []struct {
+		k, m Key
+		ok   bool
+	}{
+		{k: Key(""), m: Key{0}, ok: true},
+		{k: nil, m: nil, ok: false},
+		{k: Key("a"), m: Key{'a', 0, 0}, ok: false},
+		{k: Key{'z', 'a', 0}, m: Key{'z', 'a'}, ok: false},
+		{k: Key("bro"), m: Key{'b', 'r', 'o', 0}, ok: true},
+		{k: Key("foo"), m: Key{'b', 'a', 'r', 0}, ok: false},
+	} {
+		if tc.ok != tc.k.IsPrev(tc.m) {
+			t.Errorf("%d: wanted %t", i, tc.ok)
+		}
+	}
+}
+
 func TestKeyString(t *testing.T) {
 	if Key("hello").String() != `"hello"` {
 		t.Errorf("expected key to display pretty version: %s", Key("hello"))
@@ -457,20 +475,86 @@ func TestTransactionUpdate(t *testing.T) {
 
 }
 
-func TestIsPrev(t *testing.T) {
-	for i, tc := range []struct {
-		k, m Key
-		ok   bool
+// TestMakePriority verifies that setting user priority of P results
+// in MakePriority returning priorities that are P times more likely
+// to be higher than a priority with user priority = 1.
+func TestMakePriority(t *testing.T) {
+	userPs := []float64{
+		0.0001,
+		0.001,
+		0.01,
+		0.1,
+		0.5,
+		0, // Same as 1.0 (special cased below)
+		1.0,
+		2.0,
+		10.0,
+		100.0,
+		1000.0,
+		10000.0,
+	}
+	const trials = 10000
+	normalPris := make([]int32, 0, trials)
+	for i, userPri := range userPs {
+		priWins := 0
+		for j := 0; j < trials; j++ {
+			if i == 0 {
+				normalPris = append(normalPris, MakePriority(1))
+			}
+			if MakePriority(userPri) >= normalPris[j] {
+				priWins++
+			}
+		}
+		// Special case to verify that specifying 0 has same effect as specifying 1.
+		if userPri == 0 {
+			userPri = 1
+		}
+		diff := math.Abs(float64(priWins)/float64(trials-priWins) - float64(userPri))
+		//t.Errorf("%d: multiple=%f, diff=%f, wins: %d", i, float64(priWins)/float64(trials-priWins), diff, priWins)
+		if d := diff / float64(userPri); d > 1 {
+			t.Errorf("%d: measured difference from expected exceeded limit %.2f > 1", i, d)
+		}
+	}
+}
+
+// TestMakePriorityExplicit verifies that setting priority to a negative
+// value sets it exactly.
+func TestMakePriorityExplicit(t *testing.T) {
+	explicitPs := []struct {
+		userPri float64
+		expPri  int32
 	}{
-		{k: Key(""), m: Key{0}, ok: true},
-		{k: nil, m: nil, ok: false},
-		{k: Key("a"), m: Key{'a', 0, 0}, ok: false},
-		{k: Key{'z', 'a', 0}, m: Key{'z', 'a'}, ok: false},
-		{k: Key("bro"), m: Key{'b', 'r', 'o', 0}, ok: true},
-		{k: Key("foo"), m: Key{'b', 'a', 'r', 0}, ok: false},
-	} {
-		if tc.ok != tc.k.IsPrev(tc.m) {
-			t.Errorf("%d: wanted %t", i, tc.ok)
+		{-math.MaxInt32, math.MaxInt32},
+		{-math.MaxInt32 + 1, math.MaxInt32 - 1},
+		{-2, 2},
+		{-1, 1},
+	}
+	for i, p := range explicitPs {
+		if pri := MakePriority(p.userPri); pri != p.expPri {
+			t.Errorf("%d: explicit priority %d doesn't match expected %d", i, pri, p.expPri)
+		}
+	}
+}
+
+// TestMakePriorityLimits verifies that min & max priorities are
+// enforced and still yield randomized values.
+func TestMakePriorityLimits(t *testing.T) {
+	userPs := []float64{
+		0.000000001,
+		0.00001,
+		0.00009,
+		10001,
+		100000,
+		math.MaxFloat64,
+	}
+	const trials = 100
+	for i, userPri := range userPs {
+		seen := map[int32]struct{}{} // set of priorities
+		for j := 0; j < trials; j++ {
+			seen[MakePriority(userPri)] = struct{}{}
+		}
+		if len(seen) < 90 {
+			t.Errorf("%d: expected randomized values, got %v", i, seen)
 		}
 	}
 }

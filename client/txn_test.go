@@ -51,7 +51,7 @@ func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse,
 	txnID := []byte(uuid.NewUUID4())
 
 	return func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		ba.UserPriority = proto.Int32(-1)
+		ba.UserPriority = 1
 		if ba.Txn != nil && len(ba.Txn.ID) == 0 {
 			ba.Txn.Key = txnKey
 			ba.Txn.ID = txnID
@@ -184,7 +184,7 @@ func TestTransactionConfig(t *testing.T) {
 	db.userPriority = 101
 	if err := db.Txn(func(txn *Txn) error {
 		if txn.db.userPriority != db.userPriority {
-			t.Errorf("expected txn user priority %d; got %d", db.userPriority, txn.db.userPriority)
+			t.Errorf("expected txn user priority %f; got %f", db.userPriority, txn.db.userPriority)
 		}
 		return nil
 	}); err != nil {

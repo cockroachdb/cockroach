@@ -570,9 +570,6 @@ message ResponseUnion {
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
 // information required for executing it.
 message Header {
-  // Getters are required for default values.
-  option (gogoproto.goproto_getters) = true;
-
   // timestamp specifies time at which read or writes should be
   // performed. If the timestamp is set to zero value, its value
   // is initialized to the wall time of the receiving node.
@@ -584,16 +581,16 @@ message Header {
   // request to the correct range.
   optional int64 range_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
-  // user_priority specifies priority multiple for non-transactional
-  // commands. This value should be a positive integer [1, 2^31-1).
-  // It's properly viewed as a multiple for how likely this
-  // transaction will be to prevail if a write conflict occurs.
-  // Commands with user_priority=100 will be 100x less likely to be
-  // aborted as conflicting transactions or non-transactional commands
-  // with user_priority=1. This value is ignored if Txn is
-  // specified. If neither this value nor txn is specified, the value
-  // defaults to 1.
-  optional int32 user_priority = 4 [default = 1];
+  // user_priority allows any command's priority to be biased from the
+  // default random priority. It specifies a multiple. If set to 0.5,
+  // the chosen priority will be 1/2x as likely to beat any default
+  // random priority. If set to 1, a default random priority is
+  // chosen. If set to 2, the chosen priority will be 2x as likely to
+  // beat any default random priority, and so on. As a special case, 0
+  // priority is treated the same as 1. This value is ignored if txn
+  // is specified. The min and max user priorities are set via
+  // MinUserPriority and MaxUserPriority in data.go.
+  optional double user_priority = 4 [(gogoproto.nullable) = false];
   // txn is set non-nil if a transaction is underway. To start a txn,
   // the first request should set this field to non-nil with name and
   // isolation level set as desired. The response will contain the

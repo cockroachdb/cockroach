@@ -1168,7 +1168,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 		gArgs := getArgs(key)
 		if reply, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 			Timestamp:    getTS,
-			UserPriority: proto.Int32(math.MaxInt32),
+			UserPriority: -math.MaxInt32,
 		}, &gArgs); err != nil {
 			t.Errorf("expected read to succeed: %s", err)
 		} else if gReply := reply.(*roachpb.GetResponse); gReply.Value != nil {
@@ -1182,7 +1182,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 		args.Value.SetBytes([]byte("value2"))
 		if _, err := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 			Timestamp:    putTS,
-			UserPriority: proto.Int32(math.MaxInt32),
+			UserPriority: -math.MaxInt32,
 		}, &args); err != nil {
 			t.Errorf("expected success aborting pushee's txn; got %s", err)
 		}
@@ -1258,7 +1258,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		// Next, write intents for keyA and keyB. Note that the
 		// transactions have unpushable priorities if canPush is true and
 		// very pushable ones otherwise.
-		priority := int32(-roachpb.MaxPriority)
+		priority := float64(-math.MaxInt32)
 		if canPush {
 			priority = -1
 		}
@@ -1396,9 +1396,9 @@ func TestStoreScanIntents(t *testing.T) {
 			key := roachpb.Key(fmt.Sprintf("key%d-%02d", i, j))
 			keys = append(keys, key)
 			if txn == nil {
-				priority := int32(-1)
+				priority := float64(-1)
 				if !test.canPush {
-					priority = -roachpb.MaxPriority
+					priority = -math.MaxInt32
 				}
 				txn = newTransaction(fmt.Sprintf("test-%d", i), key, priority, roachpb.SERIALIZABLE, store.ctx.Clock)
 				bt, btH := beginTxnArgs(txn.Key, txn)

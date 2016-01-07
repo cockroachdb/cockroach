@@ -1451,7 +1451,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	// txn with only the priority set.
 	if pusherTxn == nil {
 		pusherTxn = &roachpb.Transaction{
-			Priority: roachpb.MakePriority(h.GetUserPriority()),
+			Priority: roachpb.MakePriority(h.UserPriority),
 		}
 	}
 	var pushReqs []roachpb.Request
