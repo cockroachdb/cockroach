@@ -60,6 +60,7 @@ const (
 	serverMsgEmptyQuery           serverMessageType = 'I'
 	serverMsgParameterDescription serverMessageType = 't'
 	serverMsgBindComplete         serverMessageType = '2'
+	serverMsgParameterStatus      serverMessageType = 'S'
 )
 
 //go:generate stringer -type=prepareType
@@ -159,6 +160,20 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	c.writeBuf.putInt32(authOK)
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
 		return err
+	}
+	for key, value := range map[string]string{
+		"client_encoding": "UTF8",
+		"DateStyle":       "ISO",
+	} {
+		c.writeBuf.initMsg(serverMsgParameterStatus)
+		for _, str := range [...]string{key, value} {
+			if err := c.writeBuf.writeString(str); err != nil {
+				return err
+			}
+		}
+		if err := c.writeBuf.finishMsg(c.wr); err != nil {
+			return err
+		}
 	}
 	if err := c.wr.Flush(); err != nil {
 		return err
@@ -538,7 +553,13 @@ func (c *v3Conn) executeStatements(stmts string, params []driver.Datum, formatCo
 
 func (c *v3Conn) sendCommandComplete(tag []byte) error {
 	c.writeBuf.initMsg(serverMsgCommandComplete)
-	c.writeBuf.Write(tag)
+	// Callers are required to provide the null terminator, except for the nil
+	// case where it is done for them.
+	if tag == nil {
+		c.writeBuf.WriteByte(0)
+	} else {
+		c.writeBuf.Write(tag)
+	}
 	return c.writeBuf.finishMsg(c.wr)
 }
 
@@ -648,6 +669,13 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, se
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
+
+		// Ack messages do not have a corresponding protobuf field, so handle those
+		// with a default.
+		default:
+			// A real Postgres will send a tag back, but testing so far shows that
+			// clients will accept an empty tag also.
+			return c.sendCommandComplete(nil)
 		}
 	}
 
