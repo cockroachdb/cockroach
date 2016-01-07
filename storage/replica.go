@@ -1113,6 +1113,7 @@ func (r *Replica) handleRaftReady() error {
 			}
 			for idKey, p := range r.pendingCmds {
 				if err := r.proposePendingCmdLocked(idKey, p); err != nil {
+					r.Unlock()
 					return err
 				}
 			}
