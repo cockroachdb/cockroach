@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,6 +40,12 @@ const (
 	dockerspyImage = "cockroachdb/docker-spy"
 	domain         = "local"
 	cockroachPort  = 26257
+	pgPort         = 15432
+)
+
+var (
+	cockroachTCP = fmt.Sprintf("%d/tcp", cockroachPort)
+	pgTCP        = fmt.Sprintf("%d/tcp", pgPort)
 )
 
 var cockroachImage = flag.String("i", builderImage, "the docker image to run")
@@ -130,7 +137,7 @@ func CreateLocal(numLocal, numStores int, logDir string, stopper chan struct{}) 
 	}
 
 	return &LocalCluster{
-		client:    newDockerClient(),
+		client:    NewDockerClient(),
 		stopper:   stopper,
 		numLocal:  numLocal,
 		numStores: numStores,
@@ -315,12 +322,15 @@ func (l *LocalCluster) createRoach(i int, cmd ...string) *Container {
 		entrypoint = append(entrypoint, *cockroachEntry)
 	}
 	c, err := createContainer(l, dockerclient.ContainerConfig{
-		Hostname:     hostname,
-		Domainname:   domain,
-		Image:        *cockroachImage,
-		ExposedPorts: map[string]struct{}{fmt.Sprintf("%d/tcp", cockroachPort): {}},
-		Entrypoint:   entrypoint,
-		Cmd:          cmd,
+		Hostname:   hostname,
+		Domainname: domain,
+		Image:      *cockroachImage,
+		ExposedPorts: map[string]struct{}{
+			cockroachTCP: {},
+			pgTCP:        {},
+		},
+		Entrypoint: entrypoint,
+		Cmd:        cmd,
 		Labels: map[string]string{
 			// Allow for `docker ps --filter label=Hostname=roach0` or `--filter label=Roach`.
 			"Hostname": hostname,
@@ -594,6 +604,11 @@ func (l *LocalCluster) ConnString(i int) string {
 	return "rpcs://" + security.NodeUser + "@" +
 		l.Nodes[i].Addr("").String() +
 		"?certs=" + l.CertsDir
+}
+
+// PGAddr returns the Postgres address for the given node.
+func (l *LocalCluster) PGAddr(i int) *net.TCPAddr {
+	return l.Nodes[i].PGAddr()
 }
 
 // NumNodes returns the number of nodes in the cluster.

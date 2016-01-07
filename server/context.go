@@ -37,6 +37,7 @@ import (
 // Context defaults.
 const (
 	defaultAddr               = ":26257"
+	defaultPGAddr             = ":15432"
 	defaultMaxOffset          = 250 * time.Millisecond
 	defaultCacheSize          = 512 << 20 // 512 MB
 	defaultMemtableBudget     = 512 << 20 // 512 MB
@@ -56,6 +57,9 @@ type Context struct {
 
 	// Addr is the host:port to bind for HTTP/RPC traffic.
 	Addr string
+
+	// PGAddr is the host:port to bind for Postgres traffic.
+	PGAddr string
 
 	// Stores is specified to enable durable key-value storage.
 	// Memory-backed key value stores may be optionally specified
@@ -142,6 +146,7 @@ func NewContext() *Context {
 func (ctx *Context) InitDefaults() {
 	ctx.Context.InitDefaults()
 	ctx.Addr = defaultAddr
+	ctx.PGAddr = defaultPGAddr
 	ctx.MaxOffset = defaultMaxOffset
 	ctx.CacheSize = defaultCacheSize
 	ctx.MemtableBudget = defaultMemtableBudget

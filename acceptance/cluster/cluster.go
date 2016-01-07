@@ -16,7 +16,11 @@
 
 package cluster
 
-import "github.com/cockroachdb/cockroach/util"
+import (
+	"net"
+
+	"github.com/cockroachdb/cockroach/util"
+)
 
 // A Cluster is an abstraction away from a concrete cluster deployment (i.e.
 // a local docker cluster, or an AWS-provisioned one). It exposes a shared
@@ -26,6 +30,8 @@ type Cluster interface {
 	NumNodes() int
 	// ConnString returns a connection string for the given node.
 	ConnString(int) string
+	// PGAddr returns the Postgres address for the given node.
+	PGAddr(i int) *net.TCPAddr
 	// Assert verifies that the cluster state is as expected (i.e. no unexpected
 	// restarts or node deaths occurred). Tests can call this periodically to
 	// ascertain cluster health.

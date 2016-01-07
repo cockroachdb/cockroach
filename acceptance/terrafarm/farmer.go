@@ -173,6 +173,11 @@ func (f *Farmer) ConnString(i int) string {
 		"?certs=" + "certswhocares"
 }
 
+// PGAddr returns the Postgres address for the given node.
+func (f *Farmer) PGAddr(i int) *net.TCPAddr {
+	panic("unimplemented")
+}
+
 // WaitReady waits until the infrastructure is in a state that *should* allow
 // for a healthy cluster. Currently, this means waiting for the load balancer
 // to resolve from all nodes.
