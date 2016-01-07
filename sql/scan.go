@@ -332,7 +332,7 @@ func (n *scanNode) initScan() bool {
 			// Unique secondary indexes have a value that is the primary index
 			// key. Prepare implicitVals for use in decoding this value.
 			// Primary indexes only contain ascendingly-encoded values. If this
-			// even changes, we'll probably have to figure out the directions here too.
+			// ever changes, we'll probably have to figure out the directions here too.
 			if n.implicitValTypes, n.pErr = makeKeyVals(n.desc, n.index.ImplicitColumnIDs); n.pErr != nil {
 				return false
 			}

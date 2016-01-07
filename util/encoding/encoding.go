@@ -450,7 +450,7 @@ func decodeBytesInternal(b []byte, r []byte, e escapes) ([]byte, []byte, error) 
 			r = append(r, b[:i]...)
 			r = append(r, e.escapedFF)
 		} else {
-			return nil, nil, util.Errorf("unknown escape")
+			return nil, nil, util.Errorf("unknown escape sequence: %#x %#x", e.escape, v)
 		}
 
 		b = b[i+2:]
