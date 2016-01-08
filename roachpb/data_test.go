@@ -510,7 +510,7 @@ func TestMakePriority(t *testing.T) {
 			userPri = 1
 		}
 		diff := math.Abs(float64(priWins)/float64(trials-priWins) - float64(userPri))
-		//t.Errorf("%d: multiple=%f, diff=%f, wins: %d", i, float64(priWins)/float64(trials-priWins), diff, priWins)
+		t.Logf("%d: multiple=%f, diff=%f, wins: %d", i, float64(priWins)/float64(trials-priWins), diff, priWins)
 		if d := diff / float64(userPri); d > 1 {
 			t.Errorf("%d: measured difference from expected exceeded limit %.2f > 1", i, d)
 		}
