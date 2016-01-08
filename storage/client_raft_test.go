@@ -548,7 +548,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	wg.Wait()
 
 	// Once we know our peers, trigger a scan.
-	mtc.stores[0].ForceReplicationScan(t)
+	mtc.stores[0].ForceReplicationScan()
 
 	// The range should become available on every node.
 	if err := util.IsTrueWithin(func() bool {
@@ -704,9 +704,9 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 			kickedOffReplicationQueue := false
 			for _, store := range mtc.stores {
 				if _, ok := idSet[store.StoreID()]; !ok {
-					store.ForceReplicaGCScanAndProcess(t)
+					store.ForceReplicaGCScanAndProcess()
 				} else if !kickedOffReplicationQueue {
-					store.ForceReplicationScan(t)
+					store.ForceReplicationScan()
 					kickedOffReplicationQueue = true
 				}
 			}
@@ -904,7 +904,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 
 		// Wait out the leader lease and the unleased duration to make the replica GC'able.
 		mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold+storage.DefaultLeaderLeaseDuration) + 1)
-		mtc.stores[1].ForceReplicaGCScanAndProcess(t)
+		mtc.stores[1].ForceReplicaGCScanAndProcess()
 
 		// The removed store no longer has any of the data from the range.
 		verify([]int64{39, 0, 39, 39})
@@ -1210,8 +1210,8 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 				mtc.stores[1].GossipStore()
 			})
 			// Force the repair queues on all alive stores to run.
-			mtc.stores[0].ForceReplicationScan(t)
-			mtc.stores[1].ForceReplicationScan(t)
+			mtc.stores[0].ForceReplicationScan()
+			mtc.stores[1].ForceReplicationScan()
 		}
 	}
 	ticker.Stop()
@@ -1285,7 +1285,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 			}
 
 			mtc.expireLeaderLeases()
-			mtc.stores[1].ForceReplicationScan(t)
+			mtc.stores[1].ForceReplicationScan()
 		}
 	}
 }
@@ -1334,7 +1334,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	util.SucceedsWithin(t, time.Second, func() error {
 		mtc.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration+
 			storage.ReplicaGCQueueInactivityThreshold) + 1)
-		mtc.stores[1].ForceReplicaGCScanAndProcess(t)
+		mtc.stores[1].ForceReplicaGCScanAndProcess()
 
 		actual := mtc.readIntFromEngines(roachpb.Key("a"))
 		expected := []int64{16, 0, 5}
@@ -1380,7 +1380,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// lease will cause GC to do a consistent range lookup, where it
 	// will see that the range has been moved and delete the old
 	// replica.
-	mtc.stores[2].ForceReplicaGCScanAndProcess(t)
+	mtc.stores[2].ForceReplicaGCScanAndProcess()
 	mtc.waitForValues(roachpb.Key("a"), 3*time.Second, []int64{16, 0, 0})
 
 	// Now that the group has been GC'd, the goroutine that was

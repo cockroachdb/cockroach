@@ -77,7 +77,7 @@ func TestRaftLogQueue(t *testing.T) {
 	util.SucceedsWithin(t, time.Second, func() error {
 		// Force a truncation check.
 		for _, store := range mtc.stores {
-			store.ForceRaftLogScanAndProcess(t)
+			store.ForceRaftLogScanAndProcess()
 		}
 
 		// Ensure that firstIndex has increased indicating that the log
@@ -99,7 +99,7 @@ func TestRaftLogQueue(t *testing.T) {
 	// Force a truncation check again to ensure that attempting to truncate an
 	// already truncated log has no effect.
 	for _, store := range mtc.stores {
-		store.ForceRaftLogScanAndProcess(t)
+		store.ForceRaftLogScanAndProcess()
 	}
 
 	raftLeaderRepl.RLock()

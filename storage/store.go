@@ -593,14 +593,6 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	return nil
 }
 
-// WaitForInit waits for any asynchronous processes begun in Start()
-// to complete their initialization. In particular, this includes
-// gossiping. In some cases this may block until the range GC queue
-// has completed its scan. Only for testing.
-func (s *Store) WaitForInit() {
-	s.initComplete.Wait()
-}
-
 // startGossip runs an infinite loop in a goroutine which regularly checks
 // whether the store has a first range or config replica and asks those ranges
 // to gossip accordingly.
@@ -723,79 +715,6 @@ func (s *Store) GossipStore() {
 	if err := s.ctx.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip); err != nil {
 		log.Warningc(ctx, "%s", err)
 	}
-}
-
-// DisableReplicaGCQueue disables or enables the replica GC queue.
-// Exposed only for testing.
-func (s *Store) DisableReplicaGCQueue(disabled bool) {
-	s.replicaGCQueue.SetDisabled(disabled)
-}
-
-// ForceReplicationScan iterates over all ranges and enqueues any that
-// need to be replicated. Exposed only for testing.
-func (s *Store) ForceReplicationScan(t util.Tester) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, r := range s.replicas {
-		s.replicateQueue.MaybeAdd(r, s.ctx.Clock.Now())
-	}
-}
-
-// ForceReplicaGCScanAndProcess iterates over all ranges and enqueues any that
-// may need to be GC'd. Exposed only for testing.
-func (s *Store) ForceReplicaGCScanAndProcess(t util.Tester) {
-	s.mu.Lock()
-
-	for _, r := range s.replicas {
-		s.replicaGCQueue.MaybeAdd(r, s.ctx.Clock.Now())
-	}
-	s.mu.Unlock()
-
-	s.replicaGCQueue.DrainQueue(s.ctx.Clock)
-}
-
-// DisableRaftLogQueue disables or enables the raft log queue.
-// Exposed only for testing.
-func (s *Store) DisableRaftLogQueue(disabled bool) {
-	s.raftLogQueue.SetDisabled(disabled)
-}
-
-// ForceRaftLogScanAndProcess iterates over all ranges and enqueues any that
-// need their raft logs truncated and then process each of them.
-// Exposed only for testing.
-func (s *Store) ForceRaftLogScanAndProcess(t util.Tester) {
-	// NB: This copy allows calling s.mu.RUnlock() before calling MaybeAdd, which
-	// is necessary to avoid deadlocks. Without it, a concurrent call to
-	// (*Store).mu.Lock() will deadlock the system:
-	//
-	// (*Store).mu.RLock()
-	//
-	// Start of (*Store).mu.Lock() danger zone
-	//
-	// raftLogQueue.MaybeAdd
-	// raftLogQueue.shouldQueue
-	// getTruncatableIndexes
-	// (*Store).RaftStatus
-	//
-	// End of (*Store).mu.Lock() danger zone
-	//
-	// (*Store).mu.RLock()
-	//
-	// See http://play.golang.org/p/xTJiAiRfYf
-	replicas := make([]*Replica, 0, len(s.replicas))
-	s.mu.RLock()
-	for _, r := range s.replicas {
-		replicas = append(replicas, r)
-	}
-	s.mu.RUnlock()
-
-	// Add each range to the queue.
-	for _, r := range replicas {
-		s.raftLogQueue.MaybeAdd(r, s.ctx.Clock.Now())
-	}
-
-	s.raftLogQueue.DrainQueue(s.ctx.Clock)
 }
 
 // Bootstrap writes a new store ident to the underlying engine. To
