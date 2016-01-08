@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include <google/protobuf/stubs/common.h>
+#include <google/protobuf/stubs/port.h>
 #include <google/protobuf/stubs/once.h>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/wire_format_lite_inl.h>
@@ -167,14 +168,14 @@ static void MergeFromFail(int line) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int MVCCMetadata::kTxnFieldNumber;
 const int MVCCMetadata::kTimestampFieldNumber;
 const int MVCCMetadata::kDeletedFieldNumber;
 const int MVCCMetadata::kKeyBytesFieldNumber;
 const int MVCCMetadata::kValBytesFieldNumber;
 const int MVCCMetadata::kRawBytesFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MVCCMetadata::MVCCMetadata()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -837,7 +838,7 @@ void MVCCMetadata::clear_raw_bytes() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int MVCCStats::kLiveBytesFieldNumber;
 const int MVCCStats::kKeyBytesFieldNumber;
 const int MVCCStats::kValBytesFieldNumber;
@@ -851,7 +852,7 @@ const int MVCCStats::kGcBytesAgeFieldNumber;
 const int MVCCStats::kSysBytesFieldNumber;
 const int MVCCStats::kSysCountFieldNumber;
 const int MVCCStats::kLastUpdateNanosFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MVCCStats::MVCCStats()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {

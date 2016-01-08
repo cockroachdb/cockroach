@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include <google/protobuf/stubs/common.h>
+#include <google/protobuf/stubs/port.h>
 #include <google/protobuf/stubs/once.h>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/wire_format_lite_inl.h>
@@ -618,10 +619,10 @@ static void MergeFromFail(int line) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Span::kKeyFieldNumber;
 const int Span::kEndKeyFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Span::Span()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -1013,10 +1014,10 @@ void Span::clear_end_key() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Timestamp::kWallTimeFieldNumber;
 const int Timestamp::kLogicalFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Timestamp::Timestamp()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -1348,10 +1349,10 @@ void Timestamp::clear_logical() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Value::kRawBytesFieldNumber;
 const int Value::kTimestampFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Value::Value()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -1733,10 +1734,10 @@ void Value::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) 
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int KeyValue::kKeyFieldNumber;
 const int KeyValue::kValueFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 KeyValue::KeyValue()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -2118,11 +2119,11 @@ void KeyValue::set_allocated_value(::cockroach::roachpb::Value* value) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int StoreIdent::kClusterIdFieldNumber;
 const int StoreIdent::kNodeIdFieldNumber;
 const int StoreIdent::kStoreIdFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 StoreIdent::StoreIdent()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -2565,11 +2566,11 @@ void StoreIdent::clear_store_id() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int SplitTrigger::kUpdatedDescFieldNumber;
 const int SplitTrigger::kNewDescFieldNumber;
 const int SplitTrigger::kInitialLeaderStoreIdFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 SplitTrigger::SplitTrigger()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -3002,10 +3003,10 @@ void SplitTrigger::clear_initial_leader_store_id() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int MergeTrigger::kUpdatedDescFieldNumber;
 const int MergeTrigger::kSubsumedRangeIdFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MergeTrigger::MergeTrigger()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -3352,12 +3353,12 @@ void MergeTrigger::clear_subsumed_range_id() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ChangeReplicasTrigger::kChangeTypeFieldNumber;
 const int ChangeReplicasTrigger::kReplicaFieldNumber;
 const int ChangeReplicasTrigger::kUpdatedReplicasFieldNumber;
 const int ChangeReplicasTrigger::kNextReplicaIdFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ChangeReplicasTrigger::ChangeReplicasTrigger()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -3855,9 +3856,9 @@ void ChangeReplicasTrigger::clear_next_replica_id() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ModifiedSpanTrigger::kSystemDbSpanFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ModifiedSpanTrigger::ModifiedSpanTrigger()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -4112,12 +4113,12 @@ void ModifiedSpanTrigger::clear_system_db_span() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int InternalCommitTrigger::kSplitTriggerFieldNumber;
 const int InternalCommitTrigger::kMergeTriggerFieldNumber;
 const int InternalCommitTrigger::kChangeReplicasTriggerFieldNumber;
 const int InternalCommitTrigger::kModifiedSpanTriggerFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 InternalCommitTrigger::InternalCommitTrigger()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -4660,9 +4661,9 @@ void InternalCommitTrigger::set_allocated_modified_span_trigger(::cockroach::roa
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int NodeList::kNodesFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 NodeList::NodeList()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -4947,7 +4948,7 @@ NodeList::mutable_nodes() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Transaction::kNameFieldNumber;
 const int Transaction::kKeyFieldNumber;
 const int Transaction::kIdFieldNumber;
@@ -4963,7 +4964,7 @@ const int Transaction::kCertainNodesFieldNumber;
 const int Transaction::kWritingFieldNumber;
 const int Transaction::kSequenceFieldNumber;
 const int Transaction::kIntentsFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Transaction::Transaction()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -6362,10 +6363,10 @@ Transaction::intents() const {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Intent::kSpanFieldNumber;
 const int Intent::kTxnFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Intent::Intent()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -6736,11 +6737,11 @@ void Intent::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Lease::kStartFieldNumber;
 const int Lease::kExpirationFieldNumber;
 const int Lease::kReplicaFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Lease::Lease()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -7197,10 +7198,10 @@ void Lease::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* repli
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int SequenceCacheEntry::kKeyFieldNumber;
 const int SequenceCacheEntry::kTimestampFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 SequenceCacheEntry::SequenceCacheEntry()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {

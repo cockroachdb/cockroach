@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include <google/protobuf/stubs/common.h>
+#include <google/protobuf/stubs/port.h>
 #include <google/protobuf/stubs/once.h>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/wire_format_lite_inl.h>
@@ -324,9 +325,9 @@ static void MergeFromFail(int line) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Attributes::kAttrsFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Attributes::Attributes()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -624,11 +625,11 @@ Attributes::mutable_attrs() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ReplicaDescriptor::kNodeIdFieldNumber;
 const int ReplicaDescriptor::kStoreIdFieldNumber;
 const int ReplicaDescriptor::kReplicaIdFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ReplicaDescriptor::ReplicaDescriptor()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -1021,13 +1022,13 @@ void ReplicaDescriptor::clear_replica_id() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RangeDescriptor::kRangeIdFieldNumber;
 const int RangeDescriptor::kStartKeyFieldNumber;
 const int RangeDescriptor::kEndKeyFieldNumber;
 const int RangeDescriptor::kReplicasFieldNumber;
 const int RangeDescriptor::kNextReplicaIdFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RangeDescriptor::RangeDescriptor()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -1614,9 +1615,9 @@ void RangeDescriptor::clear_next_replica_id() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RangeTree::kRootKeyFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RangeTree::RangeTree()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -1908,13 +1909,13 @@ void RangeTree::clear_root_key() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RangeTreeNode::kKeyFieldNumber;
 const int RangeTreeNode::kBlackFieldNumber;
 const int RangeTreeNode::kParentKeyFieldNumber;
 const int RangeTreeNode::kLeftKeyFieldNumber;
 const int RangeTreeNode::kRightKeyFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RangeTreeNode::RangeTreeNode()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -2558,11 +2559,11 @@ void RangeTreeNode::clear_right_key() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int StoreCapacity::kCapacityFieldNumber;
 const int StoreCapacity::kAvailableFieldNumber;
 const int StoreCapacity::kRangeCountFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 StoreCapacity::StoreCapacity()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -2955,11 +2956,11 @@ void StoreCapacity::clear_rangecount() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int NodeDescriptor::kNodeIdFieldNumber;
 const int NodeDescriptor::kAddressFieldNumber;
 const int NodeDescriptor::kAttrsFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 NodeDescriptor::NodeDescriptor()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -3392,12 +3393,12 @@ void NodeDescriptor::set_allocated_attrs(::cockroach::roachpb::Attributes* attrs
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int StoreDescriptor::kStoreIdFieldNumber;
 const int StoreDescriptor::kAttrsFieldNumber;
 const int StoreDescriptor::kNodeFieldNumber;
 const int StoreDescriptor::kCapacityFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 StoreDescriptor::StoreDescriptor()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
