@@ -44,33 +44,33 @@ func (p *planner) Select(n *parser.Select) (planNode, *roachpb.Error) {
 
 // Run select using the scan node. n.desc might have already been populated.
 func (p *planner) selectWithScan(scan *scanNode, n *parser.Select) (planNode, *roachpb.Error) {
-	if err := scan.initFrom(p, n.From); err != nil {
-		return nil, err
+	if pErr := scan.initFrom(p, n.From); pErr != nil {
+		return nil, pErr
 	}
-	if err := scan.initWhere(n.Where); err != nil {
-		return nil, err
+	if pErr := scan.initWhere(n.Where); pErr != nil {
+		return nil, pErr
 	}
-	if err := scan.initTargets(n.Exprs); err != nil {
-		return nil, err
+	if pErr := scan.initTargets(n.Exprs); pErr != nil {
+		return nil, pErr
 	}
 	// NB: both orderBy and groupBy are passed and can modify `scan` but orderBy must do so first.
-	sort, err := p.orderBy(n, scan)
-	if err != nil {
-		return nil, err
+	sort, pErr := p.orderBy(n, scan)
+	if pErr != nil {
+		return nil, pErr
 	}
-	group, err := p.groupBy(n, scan)
-	if err != nil {
-		return nil, err
-	}
-
-	plan, err := p.selectIndex(scan, group, sort)
-	if err != nil {
-		return nil, err
+	group, pErr := p.groupBy(n, scan)
+	if pErr != nil {
+		return nil, pErr
 	}
 
-	limit, err := p.limit(n, p.distinct(n, sort.wrap(group.wrap(plan))))
-	if err != nil {
-		return nil, err
+	plan, pErr := p.selectIndex(scan, group, sort)
+	if pErr != nil {
+		return nil, pErr
+	}
+
+	limit, pErr := p.limit(n, p.distinct(n, sort.wrap(group.wrap(plan))))
+	if pErr != nil {
+		return nil, pErr
 	}
 	return limit, nil
 }
@@ -210,10 +210,10 @@ func (p *planner) selectIndex(s *scanNode, group *groupNode, sort *sortNode) (pl
 		s.initOrdering(c.exactPrefix)
 		plan = s
 	} else {
-		var err *roachpb.Error
-		plan, err = makeIndexJoin(s, c.exactPrefix)
-		if err != nil {
-			return nil, err
+		var pErr *roachpb.Error
+		plan, pErr = makeIndexJoin(s, c.exactPrefix)
+		if pErr != nil {
+			return nil, pErr
 		}
 	}
 
@@ -609,9 +609,9 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 				case parser.DTuple:
 					start = buf[:0]
 					for _, i := range c.tupleMap {
-						var err *roachpb.Error
-						if start, err = encodeTableKey(start, t[i]); err != nil {
-							panic(err)
+						var pErr *roachpb.Error
+						if start, pErr = encodeTableKey(start, t[i]); pErr != nil {
+							panic(pErr)
 						}
 					}
 
@@ -623,24 +623,24 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 							if i+1 == len(c.tupleMap) {
 								d = d.Next()
 							}
-							var err *roachpb.Error
-							if end, err = encodeTableKey(end, d); err != nil {
-								panic(err)
+							var pErr *roachpb.Error
+							if end, pErr = encodeTableKey(end, d); pErr != nil {
+								panic(pErr)
 							}
 						}
 					}
 
 				default:
-					var err *roachpb.Error
-					if start, err = encodeTableKey(buf[:0], datum); err != nil {
-						panic(err)
+					var pErr *roachpb.Error
+					if start, pErr = encodeTableKey(buf[:0], datum); pErr != nil {
+						panic(pErr)
 					}
 
 					end = start
 					if lastEnd {
-						var err *roachpb.Error
-						if end, err = encodeTableKey(nil, datum.Next()); err != nil {
-							panic(err)
+						var pErr *roachpb.Error
+						if end, pErr = encodeTableKey(nil, datum.Next()); pErr != nil {
+							panic(pErr)
 						}
 					}
 				}
@@ -670,9 +670,9 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 				}
 			default:
 				if datum, ok := c.start.Right.(parser.Datum); ok {
-					key, err := encodeTableKey(buf[:0], datum)
-					if err != nil {
-						panic(err)
+					key, pErr := encodeTableKey(buf[:0], datum)
+					if pErr != nil {
+						panic(pErr)
 					}
 					// Append the constraint to all of the existing spans.
 					for i := range spans {
@@ -696,9 +696,9 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 					if lastEnd && c.end.Operator != parser.LT {
 						datum = datum.Next()
 					}
-					key, err := encodeTableKey(buf[:0], datum)
-					if err != nil {
-						panic(err)
+					key, pErr := encodeTableKey(buf[:0], datum)
+					if pErr != nil {
+						panic(pErr)
 					}
 					// Append the constraint to all of the existing spans.
 					for i := range spans {

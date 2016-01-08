@@ -34,19 +34,19 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	// reflected in the cached version (yet). Perhaps schema modification
 	// routines such as CREATE INDEX should not return until the schema change
 	// has been pushed everywhere.
-	tableDesc, err := p.getTableLease(n.Table)
-	if err != nil {
-		return nil, err
+	tableDesc, pErr := p.getTableLease(n.Table)
+	if pErr != nil {
+		return nil, pErr
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.INSERT); err != nil {
-		return nil, err
+	if pErr := p.checkPrivilege(tableDesc, privilege.INSERT); pErr != nil {
+		return nil, pErr
 	}
 
 	// Determine which columns we're inserting into.
-	cols, err := p.processColumns(tableDesc, n.Columns)
-	if err != nil {
-		return nil, err
+	cols, pErr := p.processColumns(tableDesc, n.Columns)
+	if pErr != nil {
+		return nil, pErr
 	}
 	// Number of columns expecting an input. This doesn't include the
 	// columns receiving a default value.
@@ -95,21 +95,21 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 
 	// Construct the default expressions. The returned slice will be nil if no
 	// column in the table has a default expression.
-	defaultExprs, err := p.makeDefaultExprs(cols)
-	if err != nil {
-		return nil, err
+	defaultExprs, pErr := p.makeDefaultExprs(cols)
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	// Replace any DEFAULT markers with the corresponding default expressions.
-	if n.Rows, err = p.fillDefaults(defaultExprs, cols, n.Rows); err != nil {
-		return nil, err
+	if n.Rows, pErr = p.fillDefaults(defaultExprs, cols, n.Rows); pErr != nil {
+		return nil, pErr
 	}
 
 	// Transform the values into a rows object. This expands SELECT statements or
 	// generates rows from the values contained within the query.
-	rows, err := p.makePlan(n.Rows, false)
-	if err != nil {
-		return nil, err
+	rows, pErr := p.makePlan(n.Rows, false)
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	if expressions := len(rows.Columns()); expressions > numInputColumns {
@@ -156,16 +156,16 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		// cannot be used as index values.
 		for i, val := range rowVals {
 			// Make sure the value can be written to the column before proceeding.
-			var err *roachpb.Error
-			if marshalled[i], err = marshalColumnValue(cols[i], val); err != nil {
-				return nil, err
+			var mpErr *roachpb.Error
+			if marshalled[i], mpErr = marshalColumnValue(cols[i], val); mpErr != nil {
+				return nil, mpErr
 			}
 		}
 
-		primaryIndexKey, _, err := encodeIndexKey(
+		primaryIndexKey, _, epErr := encodeIndexKey(
 			primaryIndex.ColumnIDs, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
-		if err != nil {
-			return nil, err
+		if epErr != nil {
+			return nil, epErr
 		}
 
 		// Write the secondary indexes.
@@ -178,10 +178,10 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 				}
 			}
 		}
-		secondaryIndexEntries, err := encodeSecondaryIndexes(
+		secondaryIndexEntries, epErr := encodeSecondaryIndexes(
 			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
-		if err != nil {
-			return nil, err
+		if epErr != nil {
+			return nil, epErr
 		}
 
 		for _, secondaryIndexEntry := range secondaryIndexEntries {
@@ -225,8 +225,8 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 			}
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+	if pErr := rows.PErr(); pErr != nil {
+		return nil, pErr
 	}
 
 	if IsSystemID(tableDesc.GetID()) {
@@ -238,12 +238,12 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
-		err = p.txn.CommitInBatch(b)
+		pErr = p.txn.CommitInBatch(b)
 	} else {
-		err = p.txn.Run(b)
+		pErr = p.txn.Run(b)
 	}
-	if err != nil {
-		return nil, convertBatchError(tableDesc, *b, err)
+	if pErr != nil {
+		return nil, convertBatchError(tableDesc, *b, pErr)
 	}
 	return result, nil
 }
@@ -262,9 +262,9 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 		if err := n.NormalizeColumnName(); err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		col, err := tableDesc.FindActiveColumnByName(n.Column())
-		if err != nil {
-			return nil, err
+		col, pErr := tableDesc.FindActiveColumnByName(n.Column())
+		if pErr != nil {
+			return nil, pErr
 		}
 		if _, ok := colIDSet[col.ID]; ok {
 			return nil, roachpb.NewUErrorf("multiple assignments to same column \"%s\"", n.Column())

@@ -156,18 +156,18 @@ func TestClientRetryNonTxn(t *testing.T) {
 		// doneCall signals when the non-txn read or write has completed.
 		doneCall := make(chan struct{})
 		count := 0 // keeps track of retries
-		err := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 			if test.isolation == roachpb.SNAPSHOT {
-				if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
-					return err
+				if pErr := txn.SetIsolation(roachpb.SNAPSHOT); pErr != nil {
+					return pErr
 				}
 			}
 			txn.InternalSetPriority(int32(txnPri))
 
 			count++
 			// Lay down the intent.
-			if err := txn.Put(key, "txn-value"); err != nil {
-				return err
+			if pErr := txn.Put(key, "txn-value"); pErr != nil {
+				return pErr
 			}
 			// The wait group lets us pause txn until after the non-txn method has run once.
 			wg := sync.WaitGroup{}
@@ -180,37 +180,37 @@ func TestClientRetryNonTxn(t *testing.T) {
 				// it might have to retry and will only succeed immediately in
 				// the event we can push.
 				go func() {
-					var err *roachpb.Error
+					var pErr *roachpb.Error
 					for i := 0; ; i++ {
 						if _, ok := test.args.(*roachpb.GetRequest); ok {
-							_, err = db.Get(key)
+							_, pErr = db.Get(key)
 						} else {
-							err = db.Put(key, "value")
+							pErr = db.Put(key, "value")
 						}
-						if _, ok := err.GoError().(*roachpb.WriteIntentError); !ok {
+						if _, ok := pErr.GoError().(*roachpb.WriteIntentError); !ok {
 							break
 						}
 					}
 					close(doneCall)
-					if err != nil {
-						t.Fatalf("%d: expected success on non-txn call to %s; got %s", i, test.args.Method(), err)
+					if pErr != nil {
+						t.Fatalf("%d: expected success on non-txn call to %s; got %s", i, test.args.Method(), pErr)
 					}
 				}()
 				sender.wait()
 			}
 			return nil
 		})
-		if err != nil {
-			t.Fatalf("%d: expected success writing transactionally; got %s", i, err)
+		if pErr != nil {
+			t.Fatalf("%d: expected success writing transactionally; got %s", i, pErr)
 		}
 
 		// Make sure non-txn put or get has finished.
 		<-doneCall
 
 		// Get the current value to verify whether the txn happened first.
-		gr, err := db.Get(key)
-		if err != nil {
-			t.Fatalf("%d: expected success getting %q: %s", i, key, err)
+		gr, pErr := db.Get(key)
+		if pErr != nil {
+			t.Fatalf("%d: expected success getting %q: %s", i, key, pErr)
 		}
 
 		if _, isGet := test.args.(*roachpb.GetRequest); isGet || test.canPush {
@@ -250,24 +250,24 @@ func TestClientRunTransaction(t *testing.T) {
 		key := []byte(fmt.Sprintf("%s/key-%t", testUser, commit))
 
 		// Use snapshot isolation so non-transactional read can always push.
-		err := db.Txn(func(txn *client.Txn) *roachpb.Error {
-			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
-				return err
+		pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+			if pErr := txn.SetIsolation(roachpb.SNAPSHOT); pErr != nil {
+				return pErr
 			}
 
 			// Put transactional value.
-			if err := txn.Put(key, value); err != nil {
-				return err
+			if pErr := txn.Put(key, value); pErr != nil {
+				return pErr
 			}
 			// Attempt to read outside of txn.
-			if gr, err := db.Get(key); err != nil {
-				return err
+			if gr, pErr := db.Get(key); pErr != nil {
+				return pErr
 			} else if gr.Value != nil {
 				return roachpb.NewErrorf("expected nil value; got %+v", gr.Value)
 			}
 			// Read within the transaction.
-			if gr, err := txn.Get(key); err != nil {
-				return err
+			if gr, pErr := txn.Get(key); pErr != nil {
+				return pErr
 			} else if gr.Value == nil || !bytes.Equal(gr.ValueBytes(), value) {
 				return roachpb.NewErrorf("expected value %q; got %q", value, gr.ValueBytes())
 			}
@@ -277,21 +277,21 @@ func TestClientRunTransaction(t *testing.T) {
 			return nil
 		})
 
-		if commit != (err == nil) {
-			t.Errorf("expected success? %t; got %s", commit, err)
-		} else if !commit && !testutils.IsError(err.GoError(), "purposefully failing transaction") {
-			t.Errorf("unexpected failure with !commit: %s", err)
+		if commit != (pErr == nil) {
+			t.Errorf("expected success? %t; got %s", commit, pErr)
+		} else if !commit && !testutils.IsError(pErr.GoError(), "purposefully failing transaction") {
+			t.Errorf("unexpected failure with !commit: %s", pErr)
 		}
 
 		// Verify the value is now visible on commit == true, and not visible otherwise.
-		gr, err := db.Get(key)
+		gr, pErr := db.Get(key)
 		if commit {
-			if err != nil || gr.Value == nil || !bytes.Equal(gr.ValueBytes(), value) {
-				t.Errorf("expected success reading value: %+v, %s", gr.Value, err)
+			if pErr != nil || gr.Value == nil || !bytes.Equal(gr.ValueBytes(), value) {
+				t.Errorf("expected success reading value: %+v, %s", gr.Value, pErr)
 			}
 		} else {
-			if err != nil || gr.Value != nil {
-				t.Errorf("expected success and nil value: %+v, %s", gr.Value, err)
+			if pErr != nil || gr.Value != nil {
+				t.Errorf("expected success and nil value: %+v, %s", gr.Value, pErr)
 			}
 		}
 	}
@@ -315,13 +315,13 @@ func TestClientGetAndPutProto(t *testing.T) {
 	}
 
 	key := roachpb.Key(testUser + "/zone-config")
-	if err := db.Put(key, zoneConfig); err != nil {
-		t.Fatalf("unable to put proto: %s", err)
+	if pErr := db.Put(key, zoneConfig); pErr != nil {
+		t.Fatalf("unable to put proto: %s", pErr)
 	}
 
 	readZoneConfig := &config.ZoneConfig{}
-	if err := db.GetProto(key, readZoneConfig); err != nil {
-		t.Fatalf("unable to get proto: %v", err)
+	if pErr := db.GetProto(key, readZoneConfig); pErr != nil {
+		t.Fatalf("unable to get proto: %v", pErr)
 	}
 	if !proto.Equal(zoneConfig, readZoneConfig) {
 		t.Errorf("expected %+v, but found %+v", zoneConfig, readZoneConfig)
@@ -337,12 +337,12 @@ func TestClientGetAndPut(t *testing.T) {
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	value := []byte("value")
-	if err := db.Put(testUser+"/key", value); err != nil {
-		t.Fatalf("unable to put value: %s", err)
+	if pErr := db.Put(testUser+"/key", value); pErr != nil {
+		t.Fatalf("unable to put value: %s", pErr)
 	}
-	gr, err := db.Get(testUser + "/key")
-	if err != nil {
-		t.Fatalf("unable to get value: %v", err)
+	gr, pErr := db.Get(testUser + "/key")
+	if pErr != nil {
+		t.Fatalf("unable to get value: %v", pErr)
 	}
 	if gr.Timestamp().IsZero() {
 		t.Error("expected non-zero timestamp")
@@ -363,20 +363,20 @@ func TestClientEmptyValues(t *testing.T) {
 	defer s.Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
-	if err := db.Put(testUser+"/a", []byte{}); err != nil {
-		t.Error(err)
+	if pErr := db.Put(testUser+"/a", []byte{}); pErr != nil {
+		t.Error(pErr)
 	}
-	if gr, err := db.Get(testUser + "/a"); err != nil {
-		t.Error(err)
+	if gr, pErr := db.Get(testUser + "/a"); pErr != nil {
+		t.Error(pErr)
 	} else if bytes := gr.ValueBytes(); bytes == nil || len(bytes) != 0 {
 		t.Errorf("expected non-nil empty byte slice; got %q", bytes)
 	}
 
-	if _, err := db.Inc(testUser+"/b", 0); err != nil {
-		t.Error(err)
+	if _, pErr := db.Inc(testUser+"/b", 0); pErr != nil {
+		t.Error(pErr)
 	}
-	if gr, err := db.Get(testUser + "/b"); err != nil {
-		t.Error(err)
+	if gr, pErr := db.Get(testUser + "/b"); pErr != nil {
+		t.Error(pErr)
 	} else if gr.Value == nil {
 		t.Errorf("expected non-nil integer")
 	} else if gr.ValueInt() != 0 {
@@ -404,8 +404,8 @@ func TestClientBatch(t *testing.T) {
 			b.Inc(key, int64(i))
 		}
 
-		if err := db.Run(b); err != nil {
-			t.Error(err)
+		if pErr := db.Run(b); pErr != nil {
+			t.Error(pErr)
 		}
 
 		for i, result := range b.Results {
@@ -420,8 +420,8 @@ func TestClientBatch(t *testing.T) {
 		b := &client.Batch{}
 		b.Scan(testUser+"/key 00", testUser+"/key 05", 0)
 		b.Scan(testUser+"/key 05", testUser+"/key 10", 0)
-		if err := db.Run(b); err != nil {
-			t.Error(err)
+		if pErr := db.Run(b); pErr != nil {
+			t.Error(pErr)
 		}
 
 		scan1 := b.Results[0].Rows
@@ -451,8 +451,8 @@ func TestClientBatch(t *testing.T) {
 		b := &client.Batch{}
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05", 0)
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10", 0)
-		if err := db.Run(b); err != nil {
-			t.Error(err)
+		if pErr := db.Run(b); pErr != nil {
+			t.Error(pErr)
 		}
 
 		revScan1 := b.Results[0].Rows
@@ -483,18 +483,18 @@ func TestClientBatch(t *testing.T) {
 	// Induce a non-transactional failure.
 	{
 		key := roachpb.Key("conditionalPut")
-		if err := db.Put(key, "hello"); err != nil {
-			t.Fatal(err)
+		if pErr := db.Put(key, "hello"); pErr != nil {
+			t.Fatal(pErr)
 		}
 
 		b := &client.Batch{}
 		b.CPut(key, "goodbyte", nil) // should fail
-		if err := db.Run(b); err == nil {
+		if pErr := db.Run(b); pErr == nil {
 			t.Error("unexpected success")
 		} else {
 			var foundError bool
 			for _, result := range b.Results {
-				if result.Err != nil {
+				if result.PErr != nil {
 					foundError = true
 					break
 				}
@@ -508,20 +508,20 @@ func TestClientBatch(t *testing.T) {
 	// Induce a transactional failure.
 	{
 		key := roachpb.Key("conditionalPut")
-		if err := db.Put(key, "hello"); err != nil {
-			t.Fatal(err)
+		if pErr := db.Put(key, "hello"); pErr != nil {
+			t.Fatal(pErr)
 		}
 
 		b := &client.Batch{}
 		b.CPut(key, "goodbyte", nil) // should fail
-		if err := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 			return txn.Run(b)
-		}); err == nil {
+		}); pErr == nil {
 			t.Error("unexpected success")
 		} else {
 			var foundError bool
 			for _, result := range b.Results {
-				if result.Err != nil {
+				if result.PErr != nil {
 					foundError = true
 					break
 				}
@@ -554,13 +554,13 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 			// Wait until the other goroutines are running.
 			wgStart.Wait()
 
-			if err := db.Txn(func(txn *client.Txn) *roachpb.Error {
+			if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 				txn.SetDebugName(fmt.Sprintf("test-%d", i), 0)
 
 				// Retrieve the other key.
-				gr, err := txn.Get(readKey)
-				if err != nil {
-					return err
+				gr, pErr := txn.Get(readKey)
+				if pErr != nil {
+					return pErr
 				}
 
 				otherValue := int64(0)
@@ -568,10 +568,10 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 					otherValue = gr.ValueInt()
 				}
 
-				_, err = txn.Inc(writeKey, 1+otherValue)
-				return err
-			}); err != nil {
-				t.Error(err)
+				_, pErr = txn.Inc(writeKey, 1+otherValue)
+				return pErr
+			}); pErr != nil {
+				t.Error(pErr)
 			}
 		}(i)
 	}
@@ -587,9 +587,9 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 	results := []int64(nil)
 	for i := 0; i < 2; i++ {
 		readKey := []byte(fmt.Sprintf(testUser+"/value-%d", i))
-		gr, err := db.Get(readKey)
-		if err != nil {
-			t.Fatal(err)
+		gr, pErr := db.Get(readKey)
+		if pErr != nil {
+			t.Fatal(pErr)
 		}
 		if gr.Value == nil {
 			t.Fatalf("unexpected empty key: %s=%v", readKey, gr.Value)
@@ -616,8 +616,8 @@ func TestConcurrentIncrements(t *testing.T) {
 	// Convenience loop: Crank up this number for testing this
 	// more often. It'll increase test duration though.
 	for k := 0; k < 5; k++ {
-		if err := db.DelRange(testUser+"/value-0", testUser+"/value-1x"); err != nil {
-			t.Fatalf("%d: unable to clean up: %v", k, err)
+		if pErr := db.DelRange(testUser+"/value-0", testUser+"/value-1x"); pErr != nil {
+			t.Fatalf("%d: unable to clean up: %v", k, pErr)
 		}
 		concurrentIncrements(db, t)
 	}
@@ -657,13 +657,13 @@ func TestClientPermissions(t *testing.T) {
 
 	value := []byte("value")
 	for tcNum, tc := range testCases {
-		err := tc.client.Put(tc.path, value)
-		if err == nil != tc.success {
-			t.Errorf("#%d: expected success=%t, got err=%s", tcNum, tc.success, err)
+		pErr := tc.client.Put(tc.path, value)
+		if pErr == nil != tc.success {
+			t.Errorf("#%d: expected success=%t, got err=%s", tcNum, tc.success, pErr)
 		}
-		_, err = tc.client.Get(tc.path)
-		if err == nil != tc.success {
-			t.Errorf("#%d: expected success=%t, got err=%s", tcNum, tc.success, err)
+		_, pErr = tc.client.Get(tc.path)
+		if pErr == nil != tc.success {
+			t.Errorf("#%d: expected success=%t, got err=%s", tcNum, tc.success, pErr)
 		}
 	}
 }
@@ -722,15 +722,15 @@ func setupClientBenchData(useSSL bool, numVersions, numKeys int, b *testing.B) (
 				batch.Put(roachpb.Key(keys[i]), randutil.RandBytes(rng, valueSize))
 			}
 			if (i+1)%1000 == 0 {
-				if err := db.Run(batch); err != nil {
-					b.Fatal(err)
+				if pErr := db.Run(batch); pErr != nil {
+					b.Fatal(pErr)
 				}
 				batch = &client.Batch{}
 			}
 		}
 		if len(batch.Results) != 0 {
-			if err := db.Run(batch); err != nil {
-				b.Fatal(err)
+			if pErr := db.Run(batch); pErr != nil {
+				b.Fatal(pErr)
 			}
 		}
 	}
@@ -763,9 +763,9 @@ func runClientScan(useSSL bool, numRows, numVersions int, b *testing.B) {
 			keyIdx := rand.Int31n(int32(numKeys - numRows))
 			startKey := roachpb.Key(encoding.EncodeUvarint(startKeyBuf, uint64(keyIdx)))
 			endKey := roachpb.Key(encoding.EncodeUvarint(endKeyBuf, uint64(keyIdx)+uint64(numRows)))
-			rows, err := db.Scan(startKey, endKey, int64(numRows))
-			if err != nil {
-				b.Fatalf("failed scan: %s", err)
+			rows, pErr := db.Scan(startKey, endKey, int64(numRows))
+			if pErr != nil {
+				b.Fatalf("failed scan: %s", pErr)
 			}
 			if len(rows) != numRows {
 				b.Fatalf("failed to scan: %d != %d", len(rows), numRows)

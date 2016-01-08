@@ -113,7 +113,7 @@ func TestIntentResolution(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
+			if pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
 				b := txn.NewBatch()
 				for _, key := range tc.keys {
 					b.Put(key, "test")
@@ -122,8 +122,8 @@ func TestIntentResolution(t *testing.T) {
 					b.DelRange(kr[0], kr[1])
 				}
 				return txn.CommitInBatch(b)
-			}); err != nil {
-				t.Fatalf("%d: %s", i, err)
+			}); pErr != nil {
+				t.Fatalf("%d: %s", i, pErr)
 			}
 			<-closer // wait for async intents
 		}()

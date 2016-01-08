@@ -42,36 +42,36 @@ func (e errUniquenessConstraintViolation) Error() string {
 		e.index.Name)
 }
 
-func convertBatchError(tableDesc *TableDescriptor, b client.Batch, err *roachpb.Error) *roachpb.Error {
-	if err.Index == nil {
-		return err
+func convertBatchError(tableDesc *TableDescriptor, b client.Batch, origPErr *roachpb.Error) *roachpb.Error {
+	if origPErr.Index == nil {
+		return origPErr
 	}
-	index := err.Index.Index
+	index := origPErr.Index.Index
 	if index >= int32(len(b.Results)) {
 		panic(fmt.Sprintf("index %d outside of results: %+v", index, b.Results))
 	}
 	result := b.Results[index]
-	if _, ok := err.GoError().(*roachpb.ConditionFailedError); ok {
+	if _, ok := origPErr.GoError().(*roachpb.ConditionFailedError); ok {
 		for _, row := range result.Rows {
-			indexID, key, err := decodeIndexKeyPrefix(tableDesc, row.Key)
-			if err != nil {
-				return err
+			indexID, key, pErr := decodeIndexKeyPrefix(tableDesc, row.Key)
+			if pErr != nil {
+				return pErr
 			}
-			index, err := tableDesc.FindIndexByID(indexID)
-			if err != nil {
-				return err
+			index, pErr := tableDesc.FindIndexByID(indexID)
+			if pErr != nil {
+				return pErr
 			}
-			valTypes, err := makeKeyVals(tableDesc, index.ColumnIDs)
-			if err != nil {
-				return err
+			valTypes, pErr := makeKeyVals(tableDesc, index.ColumnIDs)
+			if pErr != nil {
+				return pErr
 			}
 			vals := make([]parser.Datum, len(valTypes))
-			if _, err := decodeKeyVals(valTypes, vals, key); err != nil {
-				return err
+			if _, pErr := decodeKeyVals(valTypes, vals, key); pErr != nil {
+				return pErr
 			}
 
 			return roachpb.NewError(errUniquenessConstraintViolation{index: index, vals: vals})
 		}
 	}
-	return err
+	return origPErr
 }

@@ -320,22 +320,22 @@ func TestRestoreReplicas(t *testing.T) {
 	// should be forwarded to the leader.
 	incArgs = incrementArgs([]byte("a"), 11)
 	{
-		_, err := client.SendWrapped(rg1(mtc.stores[1]), nil, &incArgs)
-		if _, ok := err.GoError().(*roachpb.NotLeaderError); !ok {
-			t.Fatalf("expected not leader error; got %s", err)
+		_, pErr := client.SendWrapped(rg1(mtc.stores[1]), nil, &incArgs)
+		if _, ok := pErr.GoError().(*roachpb.NotLeaderError); !ok {
+			t.Fatalf("expected not leader error; got %s", pErr)
 		}
 	}
 	// Send again, this time to first store.
-	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
-		t.Fatal(err)
+	if _, pErr := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	if err := util.IsTrueWithin(func() bool {
 		getArgs := getArgs([]byte("a"))
-		reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
+		reply, pErr := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &getArgs)
-		if err != nil {
+		if pErr != nil {
 			return false
 		}
 		return mustGetInt(reply.(*roachpb.GetResponse).Value) == 39
@@ -1458,8 +1458,8 @@ func TestLeaderRemoveSelf(t *testing.T) {
 	header.Timestamp = clock.Update(clock.Now().Add(int64(storage.DefaultLeaderLeaseDuration), 0))
 
 	// Expect get a RangeNotFoundError.
-	_, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, header, &getArgs)
-	if _, ok := err.GoError().(*roachpb.RangeNotFoundError); !ok {
-		t.Fatalf("expect get RangeNotFoundError, actual get %v ", err)
+	_, pErr := client.SendWrappedWith(rg1(mtc.stores[0]), nil, header, &getArgs)
+	if _, ok := pErr.GoError().(*roachpb.RangeNotFoundError); !ok {
+		t.Fatalf("expect get RangeNotFoundError, actual get %v ", pErr)
 	}
 }

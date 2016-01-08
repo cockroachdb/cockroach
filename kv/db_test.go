@@ -57,42 +57,42 @@ func TestKVDBCoverage(t *testing.T) {
 	value3 := []byte("value3")
 
 	// Put first value at key.
-	if err := db.Put(key, value1); err != nil {
-		t.Fatal(err)
+	if pErr := db.Put(key, value1); pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Verify put.
-	if gr, err := db.Get(key); err != nil {
-		t.Fatal(err)
+	if gr, pErr := db.Get(key); pErr != nil {
+		t.Fatal(pErr)
 	} else if !gr.Exists() {
 		t.Error("expected key to exist")
 	}
 
 	// Conditional put should succeed, changing value1 to value2.
-	if err := db.CPut(key, value2, value1); err != nil {
-		t.Fatal(err)
+	if pErr := db.CPut(key, value2, value1); pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Verify get by looking up conditional put value.
-	if gr, err := db.Get(key); err != nil {
-		t.Fatal(err)
+	if gr, pErr := db.Get(key); pErr != nil {
+		t.Fatal(pErr)
 	} else if !bytes.Equal(gr.ValueBytes(), value2) {
 		t.Errorf("expected get to return %q; got %q", value2, gr.ValueBytes())
 	}
 
 	// Increment.
-	if ir, err := db.Inc("i", 10); err != nil {
-		t.Fatal(err)
+	if ir, pErr := db.Inc("i", 10); pErr != nil {
+		t.Fatal(pErr)
 	} else if ir.ValueInt() != 10 {
 		t.Errorf("expected increment new value of %d; got %d", 10, ir.ValueInt())
 	}
 
 	// Delete conditional put value.
-	if err := db.Del(key); err != nil {
-		t.Fatal(err)
+	if pErr := db.Del(key); pErr != nil {
+		t.Fatal(pErr)
 	}
-	if gr, err := db.Get(key); err != nil {
-		t.Fatal(err)
+	if gr, pErr := db.Get(key); pErr != nil {
+		t.Fatal(pErr)
 	} else if gr.Exists() {
 		t.Error("expected key to not exist after delete")
 	}
@@ -104,23 +104,23 @@ func TestKVDBCoverage(t *testing.T) {
 		{Key: roachpb.Key("c"), Value: roachpb.MakeValueFromBytes(value3)},
 	}
 	for _, kv := range keyValues {
-		valueBytes, err := kv.Value.GetBytes()
-		if err != nil {
-			t.Fatal(err)
+		valueBytes, pErr := kv.Value.GetBytes()
+		if pErr != nil {
+			t.Fatal(pErr)
 		}
-		if err := db.Put(kv.Key, valueBytes); err != nil {
-			t.Fatal(err)
+		if pErr := db.Put(kv.Key, valueBytes); pErr != nil {
+			t.Fatal(pErr)
 		}
 	}
-	if rows, err := db.Scan("a", "d", 0); err != nil {
-		t.Fatal(err)
+	if rows, pErr := db.Scan("a", "d", 0); pErr != nil {
+		t.Fatal(pErr)
 	} else if len(rows) != len(keyValues) {
 		t.Fatalf("expected %d rows in scan; got %d", len(keyValues), len(rows))
 	} else {
 		for i, kv := range keyValues {
-			valueBytes, err := kv.Value.GetBytes()
-			if err != nil {
-				t.Fatal(err)
+			valueBytes, pErr := kv.Value.GetBytes()
+			if pErr != nil {
+				t.Fatal(pErr)
 			}
 			if !bytes.Equal(rows[i].ValueBytes(), valueBytes) {
 				t.Errorf("%d: key %q, values %q != %q", i, kv.Key, rows[i].ValueBytes(), valueBytes)
@@ -129,15 +129,15 @@ func TestKVDBCoverage(t *testing.T) {
 	}
 
 	// Test reverse scan.
-	if rows, err := db.ReverseScan("a", "d", 0); err != nil {
-		t.Fatal(err)
+	if rows, pErr := db.ReverseScan("a", "d", 0); pErr != nil {
+		t.Fatal(pErr)
 	} else if len(rows) != len(keyValues) {
 		t.Fatalf("expected %d rows in scan; got %d", len(keyValues), len(rows))
 	} else {
 		for i, kv := range keyValues {
-			valueBytes, err := kv.Value.GetBytes()
-			if err != nil {
-				t.Fatal(err)
+			valueBytes, pErr := kv.Value.GetBytes()
+			if pErr != nil {
+				t.Fatal(pErr)
 			}
 			if !bytes.Equal(rows[len(keyValues)-1-i].ValueBytes(), valueBytes) {
 				t.Errorf("%d: key %q, values %q != %q", i, kv.Key, rows[len(keyValues)-i].ValueBytes(), valueBytes)
@@ -145,8 +145,8 @@ func TestKVDBCoverage(t *testing.T) {
 		}
 	}
 
-	if err := db.DelRange("a", "c"); err != nil {
-		t.Fatal(err)
+	if pErr := db.DelRange("a", "c"); pErr != nil {
+		t.Fatal(pErr)
 	}
 }
 
@@ -179,11 +179,11 @@ func TestKVDBInternalMethods(t *testing.T) {
 		}
 		b := &client.Batch{}
 		b.InternalAddRequest(args)
-		err := db.Run(b)
-		if err == nil {
+		pErr := db.Run(b)
+		if pErr == nil {
 			t.Errorf("%d: unexpected success calling %s", i, args.Method())
-		} else if !testutils.IsError(err.GoError(), "contains an internal request|contains commit trigger") {
-			t.Errorf("%d: unexpected error for %s: %s", i, args.Method(), err)
+		} else if !testutils.IsError(pErr.GoError(), "contains an internal request|contains commit trigger") {
+			t.Errorf("%d: unexpected error for %s: %s", i, args.Method(), pErr)
 		}
 	}
 }
@@ -199,38 +199,38 @@ func TestKVDBTransaction(t *testing.T) {
 
 	key := roachpb.Key("db-txn-test")
 	value := []byte("value")
-	err := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		// Use snapshot isolation so non-transactional read can always push.
-		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
-			return err
+		if pErr := txn.SetIsolation(roachpb.SNAPSHOT); pErr != nil {
+			return pErr
 		}
 
-		if err := txn.Put(key, value); err != nil {
-			t.Fatal(err)
+		if pErr := txn.Put(key, value); pErr != nil {
+			t.Fatal(pErr)
 		}
 
 		// Attempt to read outside of txn.
-		if gr, err := db.Get(key); err != nil {
-			t.Fatal(err)
+		if gr, pErr := db.Get(key); pErr != nil {
+			t.Fatal(pErr)
 		} else if gr.Exists() {
 			t.Errorf("expected nil value; got %+v", gr.Value)
 		}
 
 		// Read within the transaction.
-		if gr, err := txn.Get(key); err != nil {
-			t.Fatal(err)
+		if gr, pErr := txn.Get(key); pErr != nil {
+			t.Fatal(pErr)
 		} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value) {
 			t.Errorf("expected value %q; got %q", value, gr.ValueBytes())
 		}
 		return nil
 	})
-	if err != nil {
-		t.Errorf("expected success on commit; got %s", err)
+	if pErr != nil {
+		t.Errorf("expected success on commit; got %s", pErr)
 	}
 
 	// Verify the value is now visible after commit.
-	if gr, err := db.Get(key); err != nil {
-		t.Errorf("expected success reading value; got %s", err)
+	if gr, pErr := db.Get(key); pErr != nil {
+		t.Errorf("expected success reading value; got %s", pErr)
 	} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value) {
 		t.Errorf("expected value %q; got %q", value, gr.ValueBytes())
 	}
@@ -250,14 +250,14 @@ func TestAuthentication(t *testing.T) {
 	// Create a "node" client and call Run() on it which lets us build
 	// our own request, specifying the user.
 	db1 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.NodeUser)
-	if err := db1.Run(b); err != nil {
-		t.Fatal(err)
+	if pErr := db1.Run(b); pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Try again, but this time with certs for a non-node user (even the root
 	// user has no KV permissions).
 	db2 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.RootUser)
-	if err := db2.Run(b); err == nil {
+	if pErr := db2.Run(b); pErr == nil {
 		t.Fatal("Expected error!")
 	}
 }

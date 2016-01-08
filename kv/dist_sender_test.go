@@ -466,7 +466,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 		return []proto.Message{getArgs(nil).(*roachpb.BatchRequest).CreateReply()}, nil
 	}
 
-	errors := []*roachpb.Error{
+	pErrs := []*roachpb.Error{
 		roachpb.NewError(errors.New("fatal boom")),
 		roachpb.NewError(&roachpb.RangeKeyMismatchError{}), // retryable
 		nil,
@@ -477,26 +477,26 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 		RPCSend: testFn,
 		RangeDescriptorDB: mockRangeDescriptorDB(func(k roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, *roachpb.Error) {
 			// Return next error and truncate the prefix of the errors array.
-			var err *roachpb.Error
+			var pErr *roachpb.Error
 			if k != nil {
-				err = errors[0]
-				errors = errors[1:]
+				pErr = pErrs[0]
+				pErrs = pErrs[1:]
 			}
-			return []roachpb.RangeDescriptor{testRangeDescriptor}, err
+			return []roachpb.RangeDescriptor{testRangeDescriptor}, pErr
 		}),
 	}
 	ds := NewDistSender(ctx, g)
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
 	// Fatal error on descriptor lookup, propagated to reply.
-	if _, err := client.SendWrapped(ds, nil, put); err.GoError().Error() != "fatal boom" {
-		t.Errorf("unexpected error: %s", err)
+	if _, pErr := client.SendWrapped(ds, nil, put); pErr.GoError().Error() != "fatal boom" {
+		t.Errorf("unexpected error: %s", pErr)
 	}
 	// Retryable error on descriptor lookup, second attempt successful.
-	if _, err := client.SendWrapped(ds, nil, put); err != nil {
-		t.Errorf("unexpected error: %s", err)
+	if _, pErr := client.SendWrapped(ds, nil, put); pErr != nil {
+		t.Errorf("unexpected error: %s", pErr)
 	}
-	if len(errors) != 0 {
-		t.Fatalf("expected more descriptor lookups, leftover errors: %+v", errors)
+	if len(pErrs) != 0 {
+		t.Fatalf("expected more descriptor lookups, leftover pErrs: %+v", pErrs)
 	}
 }
 
@@ -550,8 +550,8 @@ func TestEvictCacheOnError(t *testing.T) {
 		ds.updateLeaderCache(1, leader)
 		put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value")).(*roachpb.PutRequest)
 
-		if _, err := client.SendWrapped(ds, nil, put); err != nil && !testutils.IsError(err.GoError(), "boom") {
-			t.Errorf("put encountered unexpected error: %s", err)
+		if _, pErr := client.SendWrapped(ds, nil, put); pErr != nil && !testutils.IsError(pErr.GoError(), "boom") {
+			t.Errorf("put encountered unexpected error: %s", pErr)
 		}
 		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &roachpb.ReplicaDescriptor{}) && !tc.shouldClearLeader {
 			t.Errorf("%d: leader cache eviction: shouldClearLeader=%t, but value is %v", i, tc.shouldClearLeader, cur)

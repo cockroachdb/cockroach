@@ -322,9 +322,9 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 	// only the body of this closure.
 	f := func(timestamp time.Time, autoCommit bool) *roachpb.Error {
 		planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: timestamp}
-		plan, err := planMaker.makePlan(stmt, autoCommit)
-		if err != nil {
-			return err
+		plan, pErr := planMaker.makePlan(stmt, autoCommit)
+		if pErr != nil {
+			return pErr
 		}
 
 		switch stmt.StatementType() {
@@ -340,9 +340,9 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 		case parser.Rows:
 			var resultRows driver.Response_Result_Rows
 			for _, column := range plan.Columns() {
-				datum, err := makeDriverDatum(column.typ)
-				if err != nil {
-					return err
+				datum, pErr := makeDriverDatum(column.typ)
+				if pErr != nil {
+					return pErr
 				}
 
 				resultRows.Columns = append(resultRows.Columns, &driver.Response_Result_Rows_Column{
@@ -358,9 +358,9 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 				values := plan.Values()
 				row := driver.Response_Result_Rows_Row{Values: make([]driver.Datum, 0, len(values))}
 				for _, val := range values {
-					datum, err := makeDriverDatum(val)
-					if err != nil {
-						return err
+					datum, pErr := makeDriverDatum(val)
+					if pErr != nil {
+						return pErr
 					}
 					row.Values = append(row.Values, datum)
 				}
@@ -368,13 +368,13 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 			}
 		}
 
-		return plan.Err()
+		return plan.PErr()
 	}
 
 	// If there is a pending transaction.
 	if planMaker.txn != nil {
-		err := f(time.Now(), false)
-		return result, err
+		pErr := f(time.Now(), false)
+		return result, pErr
 	}
 
 	if testingWaitForMetadata {
@@ -395,15 +395,15 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 
 	// No transaction. Run the command as a retryable block in an
 	// auto-transaction.
-	err := e.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := e.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		timestamp := time.Now()
 		planMaker.setTxn(txn, timestamp)
-		err := f(timestamp, true)
+		pErr := f(timestamp, true)
 		planMaker.resetTxn()
-		return err
+		return pErr
 	})
 
-	if testingWaitForMetadata && err == nil {
+	if testingWaitForMetadata && pErr == nil {
 		if verify := planMaker.testingVerifyMetadata; verify != nil {
 			// In the case of a multi-statement request, avoid reusing this
 			// callback.
@@ -413,7 +413,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 					e.systemConfigCond.Wait()
 				} else {
 					if i == 0 {
-						err = roachpb.NewErrorf("expected %q to require a gossip update, but it did not", stmt)
+						pErr = roachpb.NewErrorf("expected %q to require a gossip update, but it did not", stmt)
 					} else if i > 1 {
 						log.Infof("%q unexpectedly required %d gossip updates", stmt, i)
 					}
@@ -423,7 +423,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 		}
 	}
 
-	return result, err
+	return result, pErr
 }
 
 func (e *Executor) waitForCompletedSchemaChangesToPropagate(planMaker *planner) *roachpb.Error {
@@ -435,8 +435,8 @@ func (e *Executor) waitForCompletedSchemaChangesToPropagate(planMaker *planner) 
 		}
 		// Wait until there are no unexpired leases on the previous version
 		// of the table.
-		if _, err := e.leaseMgr.waitForOneVersion(id, retryOpts); err != nil {
-			return err
+		if _, pErr := e.leaseMgr.waitForOneVersion(id, retryOpts); pErr != nil {
+			return pErr
 		}
 	}
 	planMaker.completedSchemaChange = nil
@@ -446,13 +446,13 @@ func (e *Executor) waitForCompletedSchemaChangesToPropagate(planMaker *planner) 
 // If we hit an error and there is a pending transaction, rollback
 // the transaction before returning. The client does not have to
 // deal with cleaning up transaction state.
-func makeResultFromError(planMaker *planner, err *roachpb.Error) driver.Response_Result {
+func makeResultFromError(planMaker *planner, pErr *roachpb.Error) driver.Response_Result {
 	if planMaker.txn != nil {
-		if _, ok := err.GoError().(*errTransactionAborted); !ok {
-			planMaker.txn.Cleanup(err)
+		if _, ok := pErr.GoError().(*errTransactionAborted); !ok {
+			planMaker.txn.Cleanup(pErr)
 		}
 	}
-	errString := err.GoError().Error()
+	errString := pErr.GoError().Error()
 	return driver.Response_Result{Error: &errString}
 }
 

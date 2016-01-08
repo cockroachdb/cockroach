@@ -227,35 +227,35 @@ func TestMultiStoreEventFeed(t *testing.T) {
 	mtc.replicateRange(rangeID, 0, 1, 2)
 
 	// Add some data in a transaction
-	err := mtc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := mtc.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		b := txn.NewBatch()
 		b.Put("a", "asdf")
 		b.Put("c", "jkl;")
 		return txn.CommitInBatch(b)
 	})
-	if err != nil {
-		t.Fatalf("error putting data to db: %s", err)
+	if pErr != nil {
+		t.Fatalf("error putting data to db: %s", pErr)
 	}
 
 	// AdminSplit in between the two ranges.
-	if err := mtc.db.AdminSplit("b"); err != nil {
-		t.Fatalf("error splitting initial: %s", err)
+	if pErr := mtc.db.AdminSplit("b"); pErr != nil {
+		t.Fatalf("error splitting initial: %s", pErr)
 	}
 
 	// AdminSplit an empty range at the end of the second range.
-	if err := mtc.db.AdminSplit("z"); err != nil {
-		t.Fatalf("error splitting second range: %s", err)
+	if pErr := mtc.db.AdminSplit("z"); pErr != nil {
+		t.Fatalf("error splitting second range: %s", pErr)
 	}
 
 	// AdminMerge the empty range back into the second range.
-	if err := mtc.db.AdminMerge("c"); err != nil {
-		t.Fatalf("error merging final range: %s", err)
+	if pErr := mtc.db.AdminMerge("c"); pErr != nil {
+		t.Fatalf("error merging final range: %s", pErr)
 	}
 
 	// Add an additional put through the system and wait for all
 	// replicas to receive it.
-	if _, err := mtc.db.Inc("aa", 5); err != nil {
-		t.Fatalf("error putting data to db: %s", err)
+	if _, pErr := mtc.db.Inc("aa", 5); pErr != nil {
+		t.Fatalf("error putting data to db: %s", pErr)
 	}
 	util.SucceedsWithin(t, time.Second, func() error {
 		for _, eng := range mtc.engines {

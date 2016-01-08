@@ -44,7 +44,6 @@ type txnSender Txn
 
 func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Send call through wrapped sender.
-
 	ba.Txn = &ts.Proto
 	ba.SetNewRequest()
 	br, pErr := ts.wrapped.Send(ctx, ba)
@@ -169,9 +168,9 @@ func (txn *Txn) Get(key interface{}) (KeyValue, *roachpb.Error) {
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) GetProto(key interface{}, msg proto.Message) *roachpb.Error {
-	r, err := txn.Get(key)
-	if err != nil {
-		return err
+	r, pErr := txn.Get(key)
+	if pErr != nil {
+		return pErr
 	}
 	return roachpb.NewError(r.ValueProto(msg))
 }
@@ -183,8 +182,8 @@ func (txn *Txn) GetProto(key interface{}, msg proto.Message) *roachpb.Error {
 func (txn *Txn) Put(key, value interface{}) *roachpb.Error {
 	b := txn.NewBatch()
 	b.Put(key, value)
-	_, err := runOneResult(txn, b)
-	return err
+	_, pErr := runOneResult(txn, b)
+	return pErr
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal
@@ -197,8 +196,8 @@ func (txn *Txn) Put(key, value interface{}) *roachpb.Error {
 func (txn *Txn) CPut(key, value, expValue interface{}) *roachpb.Error {
 	b := txn.NewBatch()
 	b.CPut(key, value, expValue)
-	_, err := runOneResult(txn, b)
-	return err
+	_, pErr := runOneResult(txn, b)
+	return pErr
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -222,8 +221,8 @@ func (txn *Txn) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]K
 	} else {
 		b.ReverseScan(begin, end, maxRows)
 	}
-	r, err := runOneResult(txn, b)
-	return r.Rows, err
+	r, pErr := runOneResult(txn, b)
+	return r.Rows, pErr
 }
 
 // Scan retrieves the rows between begin (inclusive) and end (exclusive) in
@@ -252,8 +251,8 @@ func (txn *Txn) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, 
 func (txn *Txn) Del(keys ...interface{}) *roachpb.Error {
 	b := txn.NewBatch()
 	b.Del(keys...)
-	_, err := runOneResult(txn, b)
-	return err
+	_, pErr := runOneResult(txn, b)
+	return pErr
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -265,8 +264,8 @@ func (txn *Txn) Del(keys ...interface{}) *roachpb.Error {
 func (txn *Txn) DelRange(begin, end interface{}) *roachpb.Error {
 	b := txn.NewBatch()
 	b.DelRange(begin, end)
-	_, err := runOneResult(txn, b)
-	return err
+	_, pErr := runOneResult(txn, b)
+	return pErr
 }
 
 // Run executes the operations queued up within a batch. Before executing any
@@ -281,14 +280,14 @@ func (txn *Txn) DelRange(begin, end interface{}) *roachpb.Error {
 // operation. The order of the results matches the order the operations were
 // added to the batch.
 func (txn *Txn) Run(b *Batch) *roachpb.Error {
-	_, err := txn.RunWithResponse(b)
-	return err
+	_, pErr := txn.RunWithResponse(b)
+	return pErr
 }
 
 // RunWithResponse is a version of Run that returns the BatchResponse.
 func (txn *Txn) RunWithResponse(b *Batch) (*roachpb.BatchResponse, *roachpb.Error) {
-	if err := b.prepare(); err != nil {
-		return nil, err
+	if pErr := b.prepare(); pErr != nil {
+		return nil, pErr
 	}
 	return sendAndFill(txn.send, b)
 }
@@ -298,10 +297,10 @@ func (txn *Txn) commit(deadline *roachpb.Timestamp) *roachpb.Error {
 }
 
 // Cleanup cleans up the transaction as appropriate based on err.
-func (txn *Txn) Cleanup(err *roachpb.Error) {
-	if err != nil {
+func (txn *Txn) Cleanup(pErr *roachpb.Error) {
+	if pErr != nil {
 		if replyErr := txn.Rollback(); replyErr != nil {
-			log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, err)
+			log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, pErr)
 		}
 	}
 }
@@ -319,8 +318,8 @@ func (txn *Txn) CommitNoCleanup() *roachpb.Error {
 // performed when the transaction function returns without error.
 // The batch must be created by this transaction.
 func (txn *Txn) CommitInBatch(b *Batch) *roachpb.Error {
-	_, err := txn.CommitInBatchWithResponse(b)
-	return err
+	_, pErr := txn.CommitInBatchWithResponse(b)
+	return pErr
 }
 
 // CommitInBatchWithResponse is a version of CommitInBatch that returns the
@@ -336,17 +335,17 @@ func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, *ro
 
 // Commit sends an EndTransactionRequest with Commit=true.
 func (txn *Txn) Commit() *roachpb.Error {
-	err := txn.commit(nil)
-	txn.Cleanup(err)
-	return err
+	pErr := txn.commit(nil)
+	txn.Cleanup(pErr)
+	return pErr
 }
 
 // CommitBy sends an EndTransactionRequest with Commit=true and
 // Deadline=deadline.
 func (txn *Txn) CommitBy(deadline roachpb.Timestamp) *roachpb.Error {
-	err := txn.commit(&deadline)
-	txn.Cleanup(err)
-	return err
+	pErr := txn.commit(&deadline)
+	txn.Cleanup(pErr)
+	return pErr
 }
 
 // Rollback sends an EndTransactionRequest with Commit=false.
@@ -355,8 +354,8 @@ func (txn *Txn) Rollback() *roachpb.Error {
 }
 
 func (txn *Txn) sendEndTxnReq(commit bool, deadline *roachpb.Timestamp) *roachpb.Error {
-	_, err := txn.send(endTxnReq(commit, deadline, txn.SystemDBTrigger()))
-	return err
+	_, pErr := txn.send(endTxnReq(commit, deadline, txn.SystemDBTrigger()))
+	return pErr
 }
 
 func endTxnReq(commit bool, deadline *roachpb.Timestamp, hasTrigger bool) roachpb.Request {
@@ -377,25 +376,25 @@ func endTxnReq(commit bool, deadline *roachpb.Timestamp, hasTrigger bool) roachp
 func (txn *Txn) exec(retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
 	// Run retryable in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
-	var err *roachpb.Error
+	var pErr *roachpb.Error
 	for r := retry.Start(txn.db.txnRetryOptions); r.Next(); {
-		err = retryable(txn)
-		if err == nil && txn.Proto.Status == roachpb.PENDING {
+		pErr = retryable(txn)
+		if pErr == nil && txn.Proto.Status == roachpb.PENDING {
 			// retryable succeeded, but didn't commit.
-			err = txn.commit(nil)
+			pErr = txn.commit(nil)
 		}
 
-		if err != nil {
-			switch err.TransactionRestart {
+		if pErr != nil {
+			switch pErr.TransactionRestart {
 			case roachpb.TransactionRestart_IMMEDIATE:
 				if log.V(2) {
-					log.Warning(err)
+					log.Warning(pErr)
 				}
 				r.Reset()
 				continue
 			case roachpb.TransactionRestart_BACKOFF:
 				if log.V(2) {
-					log.Warning(err)
+					log.Warning(pErr)
 				}
 				continue
 			}
@@ -403,8 +402,8 @@ func (txn *Txn) exec(retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
 		}
 		break
 	}
-	txn.Cleanup(err)
-	return err
+	txn.Cleanup(pErr)
+	return pErr
 }
 
 // send runs the specified calls synchronously in a single batch and

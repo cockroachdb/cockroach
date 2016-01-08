@@ -793,19 +793,19 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 	}
 	tmpDB := client.NewDBWithPriority(tc, ba.UserPriority)
 	var br *roachpb.BatchResponse
-	err := tmpDB.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := tmpDB.Txn(func(txn *client.Txn) *roachpb.Error {
 		txn.SetDebugName("auto-wrap", 0)
 		b := txn.NewBatch()
 		for _, arg := range ba.Requests {
 			req := arg.GetInner()
 			b.InternalAddRequest(req)
 		}
-		var err *roachpb.Error
-		br, err = txn.CommitInBatchWithResponse(b)
-		return err
+		var pErr *roachpb.Error
+		br, pErr = txn.CommitInBatchWithResponse(b)
+		return pErr
 	})
-	if err != nil {
-		return nil, err
+	if pErr != nil {
+		return nil, pErr
 	}
 	br.Txn = nil // hide the evidence
 	return br, nil

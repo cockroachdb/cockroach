@@ -49,9 +49,9 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, *roachpb.E
 //   notes: postgres requires CREATE on the table.
 //          mysql requires INDEX on the table.
 func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, *roachpb.Error) {
-	tableDesc, err := p.getTableDesc(n.Table)
-	if err != nil {
-		return nil, err
+	tableDesc, pErr := p.getTableDesc(n.Table)
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	status, i, err := tableDesc.FindIndexByName(string(n.Name))
@@ -60,7 +60,7 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, *roachpb.Error) 
 			switch tableDesc.Mutations[i].Direction {
 			case DescriptorMutation_DROP:
 				return nil, roachpb.NewUErrorf("index %q being dropped, try again later", string(n.Name))
-				
+
 			case DescriptorMutation_ADD:
 				// Noop, will fail in AllocateIDs below.
 			}
@@ -71,8 +71,8 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, *roachpb.Error) 
 		}
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
-		return nil, err
+	if pErr := p.checkPrivilege(tableDesc, privilege.CREATE); pErr != nil {
+		return nil, pErr
 	}
 
 	indexDesc := IndexDescriptor{
@@ -80,15 +80,15 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, *roachpb.Error) 
 		Unique:           n.Unique,
 		StoreColumnNames: n.Storing,
 	}
-	if err := indexDesc.fillColumns(n.Columns); err != nil {
-		return nil, err
+	if pErr := indexDesc.fillColumns(n.Columns); pErr != nil {
+		return nil, pErr
 	}
 
 	tableDesc.addIndexMutation(indexDesc, DescriptorMutation_ADD)
 	tableDesc.UpVersion = true
 
-	if err := tableDesc.AllocateIDs(); err != nil {
-		return nil, err
+	if pErr := tableDesc.AllocateIDs(); pErr != nil {
+		return nil, pErr
 	}
 
 	if pErr := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); pErr != nil {
@@ -96,8 +96,8 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, *roachpb.Error) 
 	}
 
 	// Process mutation synchronously.
-	if err := p.applyMutations(tableDesc); err != nil {
-		return nil, err
+	if pErr := p.applyMutations(tableDesc); pErr != nil {
+		return nil, pErr
 	}
 
 	return &valuesNode{}, nil
@@ -111,18 +111,18 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, *roachpb.Error) 
 		return nil, roachpb.NewError(err)
 	}
 
-	dbDesc, err := p.getDatabaseDesc(n.Table.Database())
-	if err != nil {
-		return nil, err
+	dbDesc, pErr := p.getDatabaseDesc(n.Table.Database())
+	if pErr != nil {
+		return nil, pErr
 	}
 
-	if err := p.checkPrivilege(dbDesc, privilege.CREATE); err != nil {
-		return nil, err
+	if pErr := p.checkPrivilege(dbDesc, privilege.CREATE); pErr != nil {
+		return nil, pErr
 	}
 
-	desc, err := makeTableDesc(n, dbDesc.ID)
-	if err != nil {
-		return nil, err
+	desc, pErr := makeTableDesc(n, dbDesc.ID)
+	if pErr != nil {
+		return nil, pErr
 	}
 	// Inherit permissions from the database descriptor.
 	desc.Privileges = dbDesc.GetPrivileges()
@@ -144,17 +144,17 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, *roachpb.Error) 
 			ColumnNames:      []string{col.Name},
 			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 		}
-		if err := desc.AddIndex(idx, true); err != nil {
-			return nil, err
+		if pErr := desc.AddIndex(idx, true); pErr != nil {
+			return nil, pErr
 		}
 	}
 
-	if err := desc.AllocateIDs(); err != nil {
-		return nil, err
+	if pErr := desc.AllocateIDs(); pErr != nil {
+		return nil, pErr
 	}
 
-	if err := p.createDescriptor(tableKey{dbDesc.ID, n.Table.Table()}, &desc, n.IfNotExists); err != nil {
-		return nil, err
+	if pErr := p.createDescriptor(tableKey{dbDesc.ID, n.Table.Table()}, &desc, n.IfNotExists); pErr != nil {
+		return nil, pErr
 	}
 	return &valuesNode{}, nil
 }

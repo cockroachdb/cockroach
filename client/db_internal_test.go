@@ -37,15 +37,15 @@ func TestClientTxnSequenceNumber(t *testing.T) {
 		curSeq = ba.Txn.Sequence
 		return ba.CreateReply(), nil
 	}, nil))
-	if err := db.Txn(func(txn *Txn) *roachpb.Error {
+	if pErr := db.Txn(func(txn *Txn) *roachpb.Error {
 		for range []int{1, 2, 3} {
-			if err := txn.Put("a", "b"); err != nil {
-				return err
+			if pErr := txn.Put("a", "b"); pErr != nil {
+				return pErr
 			}
 		}
 		return nil
-	}); err != nil {
-		t.Fatal(err)
+	}); pErr != nil {
+		t.Fatal(pErr)
 	}
 	if count != 4 {
 		t.Errorf("expected test sender to be invoked four times; got %d", count)

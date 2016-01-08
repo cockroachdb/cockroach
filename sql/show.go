@@ -57,9 +57,9 @@ func (p *planner) Show(n *parser.Show) (planNode, *roachpb.Error) {
 //   Notes: postgres does not have a SHOW COLUMNS statement.
 //          mysql only returns columns you have privileges on.
 func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, *roachpb.Error) {
-	desc, err := p.getTableDesc(n.Table)
-	if err != nil {
-		return nil, err
+	desc, pErr := p.getTableDesc(n.Table)
+	if pErr != nil {
+		return nil, pErr
 	}
 	v := &valuesNode{
 		columns: []column{
@@ -94,9 +94,9 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, *roachpb.Err
 	//   SELECT id FROM system.namespace WHERE parentID = 0
 
 	prefix := MakeNameMetadataKey(keys.RootNamespaceID, "")
-	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
-	if err != nil {
-		return nil, err
+	sr, pErr := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
+	if pErr != nil {
+		return nil, pErr
 	}
 	v := &valuesNode{columns: []column{{name: "Database", typ: parser.DummyString}}}
 	for _, row := range sr {
@@ -118,9 +118,9 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, *roachpb.Error) {
 	if n.Targets == nil {
 		return nil, roachpb.NewErrorf("TODO(marc): implement SHOW GRANT with no targets")
 	}
-	descriptor, err := p.getDescriptorFromTargetList(*n.Targets)
-	if err != nil {
-		return nil, err
+	descriptor, pErr := p.getDescriptorFromTargetList(*n.Targets)
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	objectType := "Database"
@@ -164,9 +164,9 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, *roachpb.Error) {
 //   Notes: postgres does not have a SHOW INDEX statement.
 //          mysql requires some privilege for any column.
 func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, *roachpb.Error) {
-	desc, err := p.getTableDesc(n.Table)
-	if err != nil {
-		return nil, err
+	desc, pErr := p.getTableDesc(n.Table)
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	v := &valuesNode{
@@ -224,14 +224,14 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, *roachpb.Error) {
 		}
 		n.Name = &parser.QualifiedName{Base: parser.Name(p.session.Database)}
 	}
-	dbDesc, err := p.getDatabaseDesc(string(n.Name.Base))
-	if err != nil {
-		return nil, err
+	dbDesc, pErr := p.getDatabaseDesc(string(n.Name.Base))
+	if pErr != nil {
+		return nil, pErr
 	}
 
-	tableNames, err := p.getTableNames(dbDesc)
-	if err != nil {
-		return nil, err
+	tableNames, pErr := p.getTableNames(dbDesc)
+	if pErr != nil {
+		return nil, pErr
 	}
 	v := &valuesNode{columns: []column{{name: "Table", typ: parser.DummyString}}}
 	for _, name := range tableNames {

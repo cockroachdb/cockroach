@@ -127,7 +127,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey,
 	} else if log.V(1) {
 		log.Infof("lookup range descriptor: key=%s", key)
 	}
-	rs, err := func(key roachpb.RKey, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, *roachpb.Error) {
+	rs, pErr := func(key roachpb.RKey, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, *roachpb.Error) {
 		var (
 			// metadataKey is sent to rangeLookup to find the
 			// RangeDescriptor which contains key.
@@ -135,35 +135,35 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey,
 			// desc is the RangeDescriptor for the range which contains
 			// metadataKey.
 			desc *roachpb.RangeDescriptor
-			err  *roachpb.Error
+			pErr *roachpb.Error
 		)
 		if bytes.Equal(metadataKey, roachpb.RKeyMin) {
 			// In this case, the requested key is stored in the cluster's first
 			// range. Return the first range, which is always gossiped and not
 			// queried from the datastore.
-			rd, err := rdc.db.FirstRange()
-			if err != nil {
-				return nil, err
+			desc, pErr = rdc.db.FirstRange()
+			if pErr != nil {
+				return nil, pErr
 			}
-			return []roachpb.RangeDescriptor{*rd}, nil
+			return []roachpb.RangeDescriptor{*desc}, nil
 		}
 		if bytes.HasPrefix(metadataKey, keys.Meta1Prefix) {
 			// In this case, desc is the cluster's first range.
-			if desc, err = rdc.db.FirstRange(); err != nil {
-				return nil, err
+			if desc, pErr = rdc.db.FirstRange(); pErr != nil {
+				return nil, pErr
 			}
 		} else {
 			// Look up desc from the cache, which will recursively call into
 			// this function if it is not cached.
-			desc, err = rdc.LookupRangeDescriptor(metadataKey, considerIntents, useReverseScan)
-			if err != nil {
-				return nil, err
+			desc, pErr = rdc.LookupRangeDescriptor(metadataKey, considerIntents, useReverseScan)
+			if pErr != nil {
+				return nil, pErr
 			}
 		}
 		return rdc.db.RangeLookup(metadataKey, desc, considerIntents, useReverseScan)
 	}(key, considerIntents, useReverseScan)
-	if err != nil {
-		return nil, err
+	if pErr != nil {
+		return nil, pErr
 	}
 	if len(rs) == 0 {
 		panic(fmt.Sprintf("no range descriptors returned for %s", key))

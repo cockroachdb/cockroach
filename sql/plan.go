@@ -173,8 +173,8 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, *roa
 		return nil, err
 	}
 	if !plan.Next() {
-		if err := plan.Err(); err != nil {
-			return nil, err
+		if pErr := plan.PErr(); pErr != nil {
+			return nil, pErr
 		}
 		return nil, nil
 	}
@@ -182,22 +182,22 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, *roa
 	if plan.Next() {
 		return nil, roachpb.NewErrorf("%s: unexpected multiple results", sql)
 	}
-	if err := plan.Err(); err != nil {
-		return nil, err
+	if pErr := plan.PErr(); pErr != nil {
+		return nil, pErr
 	}
 	return values, nil
 }
 
 func (p *planner) exec(sql string, args ...interface{}) (int, *roachpb.Error) {
-	plan, err := p.query(sql, args...)
-	if err != nil {
-		return 0, err
+	plan, pErr := p.query(sql, args...)
+	if pErr != nil {
+		return 0, pErr
 	}
 	count := 0
 	for plan.Next() {
 		count++
 	}
-	return count, plan.Err()
+	return count, plan.PErr()
 }
 
 // getAliasedTableLease looks up the table descriptor for an alias table
@@ -211,9 +211,9 @@ func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, *r
 	if !ok {
 		return nil, roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
-	desc, err := p.getTableLease(table)
-	if err != nil {
-		return nil, err
+	desc, pErr := p.getTableLease(table)
+	if pErr != nil {
+		return nil, pErr
 	}
 	if ate.As != "" {
 		desc.Alias = string(ate.As)
@@ -231,8 +231,8 @@ func (p *planner) notifyCompletedSchemaChange(id ID) {
 func (p *planner) releaseLeases(db client.DB) {
 	if p.leases != nil {
 		for _, lease := range p.leases {
-			if err := p.leaseMgr.Release(lease); err != nil {
-				log.Warning(err)
+			if pErr := p.leaseMgr.Release(lease); pErr != nil {
+				log.Warning(pErr)
 			}
 		}
 		p.leases = nil
@@ -263,8 +263,8 @@ type planNode interface {
 	// Next advances to the next row, returning false if an error is encountered
 	// or if there is no next row.
 	Next() bool
-	// Err returns the error, if any, encountered during iteration.
-	Err() *roachpb.Error
+	// PErr returns the error, if any, encountered during iteration.
+	PErr() *roachpb.Error
 	// ExplainPlan returns a name and description and a list of child nodes.
 	ExplainPlan() (name, description string, children []planNode)
 }

@@ -33,22 +33,22 @@ func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 	name := strings.ToUpper(n.Name.String())
 	switch name {
 	case `DATABASE`:
-		dbName, err := p.getStringVal(name, n.Values)
-		if err != nil {
-			return nil, err
+		dbName, pErr := p.getStringVal(name, n.Values)
+		if pErr != nil {
+			return nil, pErr
 		}
 		if len(dbName) != 0 {
 			// Verify database descriptor exists.
-			if _, err := p.getDatabaseDesc(dbName); err != nil {
-				return nil, err
+			if _, pErr := p.getDatabaseDesc(dbName); pErr != nil {
+				return nil, pErr
 			}
 		}
 		p.session.Database = dbName
 
 	case `SYNTAX`:
-		s, err := p.getStringVal(name, n.Values)
-		if err != nil {
-			return nil, err
+		s, pErr := p.getStringVal(name, n.Values)
+		if pErr != nil {
+			return nil, pErr
 		}
 		switch normalizeName(string(s)) {
 		case normalizeName(parser.Modern.String()):

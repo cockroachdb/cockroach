@@ -141,13 +141,17 @@ func (e *Error) SetGoError(err error) {
 	if r, ok := err.(retry.Retryable); ok {
 		e.Retryable = r.CanRetry()
 	}
-	if tErr, ok := err.(transactionRestartError); ok {
-		e.TransactionRestart = tErr.CanRestartTransaction()
+	var isTxnError bool
+	if r, ok := err.(transactionRestartError); ok {
+		isTxnError = true
+		e.TransactionRestart = r.CanRestartTransaction()
 	}
 	// If the specific error type exists in the detail union, set it.
 	detail := &ErrorDetail{}
 	if detail.SetValue(err) {
 		e.Detail = detail
+	} else if _, isInternalError := err.(*internalError); !isInternalError && isTxnError {
+		panic(fmt.Sprintf("transactionRestartError %T must be an ErrorDetail", err))
 	}
 }
 
@@ -326,7 +330,6 @@ var _ transactionRestartError = &ReadWithinUncertaintyIntervalError{}
 func (*ReadWithinUncertaintyIntervalError) CanRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
 }
-
 
 // Error formats error.
 func (*OpRequiresTxnError) Error() string {

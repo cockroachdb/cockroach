@@ -26,32 +26,32 @@ func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, *roach
 	if p.txn == nil {
 		return nil, roachpb.NewErrorf("the server should have already created a transaction")
 	}
-	if err := p.setIsolationLevel(n.Isolation); err != nil {
-		return nil, err
+	if pErr := p.setIsolationLevel(n.Isolation); pErr != nil {
+		return nil, pErr
 	}
 	return &valuesNode{}, nil
 }
 
 // CommitTransaction commits a transaction.
 func (p *planner) CommitTransaction(n *parser.CommitTransaction) (planNode, *roachpb.Error) {
-	err := p.txn.Commit()
+	pErr := p.txn.Commit()
 	// Reset transaction.
 	p.resetTxn()
-	return &valuesNode{}, err
+	return &valuesNode{}, pErr
 }
 
 // RollbackTransaction rolls back a transaction.
 func (p *planner) RollbackTransaction(n *parser.RollbackTransaction) (planNode, *roachpb.Error) {
-	err := p.txn.Rollback()
+	pErr := p.txn.Rollback()
 	// Reset transaction.
 	p.resetTxn()
-	return &valuesNode{}, err
+	return &valuesNode{}, pErr
 }
 
 // SetTransaction sets a transaction's isolation level
 func (p *planner) SetTransaction(n *parser.SetTransaction) (planNode, *roachpb.Error) {
-	if err := p.setIsolationLevel(n.Isolation); err != nil {
-		return nil, err
+	if pErr := p.setIsolationLevel(n.Isolation); pErr != nil {
+		return nil, pErr
 	}
 	return &valuesNode{}, nil
 }

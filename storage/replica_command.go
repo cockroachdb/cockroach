@@ -49,9 +49,9 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 		return &roachpb.NoopResponse{}, nil, nil
 	}
 
-	if err := r.checkCmdHeader(args.Header()); err != nil {
-		err.Txn = h.Txn
-		return nil, nil, err
+	if pErr := r.checkCmdHeader(args.Header()); pErr != nil {
+		pErr.Txn = h.Txn
+		return nil, nil, pErr
 	}
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.

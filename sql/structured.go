@@ -317,9 +317,9 @@ func (desc *TableDescriptor) AllocateIDs() *roachpb.Error {
 	if desc.ID == 0 {
 		desc.ID = keys.MaxReservedDescID + 1
 	}
-	err := roachpb.NewError(desc.Validate())
+	pErr := roachpb.NewError(desc.Validate())
 	desc.ID = savedID
-	return err
+	return pErr
 }
 
 // Validate validates that the table descriptor is well formed. Checks include

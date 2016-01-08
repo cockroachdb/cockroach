@@ -654,9 +654,9 @@ func (s *Store) maybeGossipFirstRange() *roachpb.Error {
 	for loop := retry.Start(retryOptions); loop.Next(); {
 		rng := s.LookupReplica(roachpb.RKeyMin, nil)
 		if rng != nil {
-			err := rng.maybeGossipFirstRange()
-			if nlErr, ok := err.GoError().(*roachpb.NotLeaderError); !ok || nlErr.Leader != nil {
-				return err
+			pErr := rng.maybeGossipFirstRange()
+			if nlErr, ok := pErr.GoError().(*roachpb.NotLeaderError); !ok || nlErr.Leader != nil {
+				return pErr
 			}
 		} else {
 			return nil
@@ -677,8 +677,8 @@ func (s *Store) maybeGossipSystemConfig() *roachpb.Error {
 	// gossip. If an unexpected error occurs (i.e. nobody else seems to
 	// have an active lease but we still failed to obtain it), return
 	// that error.
-	_, err := rng.getLeaseForGossip(s.Context(nil))
-	return err
+	_, pErr := rng.getLeaseForGossip(s.Context(nil))
+	return pErr
 }
 
 // systemGossipUpdate is a callback for gossip updates to
@@ -1241,13 +1241,11 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 	// Add the command to the range for execution; exit retry loop on success.
 	for r := retry.Start(s.ctx.RangeRetryOptions); next(&r); {
 		// Get range and add command to the range for execution.
-		{
-			var err error
-			rng, err = s.GetReplica(ba.RangeID)
-			if err != nil {
-				pErr = roachpb.NewError(err)
-				return nil, pErr
-			}
+		var err error
+		rng, err = s.GetReplica(ba.RangeID)
+		if err != nil {
+			pErr = roachpb.NewError(err)
+			return nil, pErr
 		}
 
 		var br *roachpb.BatchResponse
@@ -1411,7 +1409,6 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 			PushType: pushType,
 		})
 	}
-
 	b := &client.Batch{}
 	b.InternalAddRequest(pushReqs...)
 	br, pushErr := s.db.RunWithResponse(b)
@@ -1539,6 +1536,7 @@ func (s *Store) processRaft() {
 					continue
 				}
 				replicas = append(replicas, r)
+
 			}
 			if len(s.pendingRaftGroups) > 0 {
 				s.pendingRaftGroups = map[roachpb.RangeID]struct{}{}

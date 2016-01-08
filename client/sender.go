@@ -88,9 +88,9 @@ func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.Header, args 
 	ba.Header = h
 	ba.Add(args)
 
-	br, err := sender.Send(ctx, ba)
-	if err != nil {
-		return nil, err
+	br, pErr := sender.Send(ctx, ba)
+	if pErr != nil {
+		return nil, pErr
 	}
 	unwrappedReply := br.Responses[0].GetInner()
 	unwrappedReply.Header().Txn = br.Txn

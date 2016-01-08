@@ -29,31 +29,31 @@ import (
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
 func (p *planner) Delete(n *parser.Delete) (planNode, *roachpb.Error) {
-	tableDesc, err := p.getAliasedTableLease(n.Table)
-	if err != nil {
-		return nil, err
+	tableDesc, pErr := p.getAliasedTableLease(n.Table)
+	if pErr != nil {
+		return nil, pErr
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.DELETE); err != nil {
-		return nil, err
+	if pErr := p.checkPrivilege(tableDesc, privilege.DELETE); pErr != nil {
+		return nil, pErr
 	}
 
 	// TODO(tamird,pmattis): avoid going through Select to avoid encoding
 	// and decoding keys.
-	rows, err := p.Select(&parser.Select{
+	rows, pErr := p.Select(&parser.Select{
 		Exprs: tableDesc.allColumnsSelector(),
 		From:  parser.TableExprs{n.Table},
 		Where: n.Where,
 	})
-	if err != nil {
-		return nil, err
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
-	colIDtoRowIndex, err := makeColIDtoRowIndex(rows, tableDesc)
-	if err != nil {
-		return nil, err
+	colIDtoRowIndex, pErr := makeColIDtoRowIndex(rows, tableDesc)
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	primaryIndex := tableDesc.PrimaryIndex
@@ -65,10 +65,10 @@ func (p *planner) Delete(n *parser.Delete) (planNode, *roachpb.Error) {
 		rowVals := rows.Values()
 		result.rows = append(result.rows, parser.DTuple(nil))
 
-		primaryIndexKey, _, err := encodeIndexKey(
+		primaryIndexKey, _, pErr := encodeIndexKey(
 			primaryIndex.ColumnIDs, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
-		if err != nil {
-			return nil, err
+		if pErr != nil {
+			return nil, pErr
 		}
 
 		// Delete the secondary indexes.
@@ -80,10 +80,10 @@ func (p *planner) Delete(n *parser.Delete) (planNode, *roachpb.Error) {
 				indexes = append(indexes, *index)
 			}
 		}
-		secondaryIndexEntries, err := encodeSecondaryIndexes(
+		secondaryIndexEntries, pErr := encodeSecondaryIndexes(
 			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
-		if err != nil {
-			return nil, err
+		if pErr != nil {
+			return nil, pErr
 		}
 
 		for _, secondaryIndexEntry := range secondaryIndexEntries {
@@ -102,16 +102,16 @@ func (p *planner) Delete(n *parser.Delete) (planNode, *roachpb.Error) {
 		b.DelRange(rowStartKey, rowEndKey)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
+	if pErr := rows.PErr(); pErr != nil {
+		return nil, pErr
 	}
 
 	if IsSystemID(tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
 		p.txn.SetSystemDBTrigger()
 	}
-	if err := p.txn.Run(&b); err != nil {
-		return nil, err
+	if pErr := p.txn.Run(&b); pErr != nil {
+		return nil, pErr
 	}
 
 	return result, nil

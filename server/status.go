@@ -513,19 +513,19 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
-	rows, err := s.db.Scan(startKey, endKey, 0)
-	if err != nil {
-		log.Error(err)
-		http.Error(w, err.GoError().Error(), http.StatusInternalServerError)
+	rows, pErr := s.db.Scan(startKey, endKey, 0)
+	if pErr != nil {
+		log.Error(pErr)
+		http.Error(w, pErr.GoError().Error(), http.StatusInternalServerError)
 		return
 	}
 
 	nodeStatuses := []status.NodeStatus{}
 	for _, row := range rows {
 		nodeStatus := &status.NodeStatus{}
-		if err := row.ValueProto(nodeStatus); err != nil {
-			log.Error(err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if pErr := row.ValueProto(nodeStatus); pErr != nil {
+			log.Error(pErr)
+			http.Error(w, pErr.Error(), http.StatusInternalServerError)
 			return
 		}
 		nodeStatuses = append(nodeStatuses, *nodeStatus)
@@ -543,9 +543,9 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 
 	key := keys.NodeStatusKey(int32(nodeID))
 	nodeStatus := &status.NodeStatus{}
-	if err := s.db.GetProto(key, nodeStatus); err != nil {
-		log.Error(err)
-		http.Error(w, err.GoError().Error(), http.StatusInternalServerError)
+	if pErr := s.db.GetProto(key, nodeStatus); pErr != nil {
+		log.Error(pErr)
+		http.Error(w, pErr.GoError().Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -557,10 +557,10 @@ func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request
 	startKey := keys.StatusStorePrefix
 	endKey := startKey.PrefixEnd()
 
-	rows, err := s.db.Scan(startKey, endKey, 0)
-	if err != nil {
-		log.Error(err)
-		http.Error(w, err.GoError().Error(), http.StatusInternalServerError)
+	rows, pErr := s.db.Scan(startKey, endKey, 0)
+	if pErr != nil {
+		log.Error(pErr)
+		http.Error(w, pErr.GoError().Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -590,9 +590,9 @@ func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request,
 
 	key := keys.StoreStatusKey(int32(id))
 	storeStatus := &storage.StoreStatus{}
-	if err := s.db.GetProto(key, storeStatus); err != nil {
-		log.Error(err)
-		http.Error(w, err.GoError().Error(), http.StatusInternalServerError)
+	if pErr := s.db.GetProto(key, storeStatus); pErr != nil {
+		log.Error(pErr)
+		http.Error(w, pErr.GoError().Error(), http.StatusInternalServerError)
 		return
 	}
 	respondAsJSON(w, r, storeStatus)

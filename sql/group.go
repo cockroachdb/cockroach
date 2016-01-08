@@ -177,7 +177,7 @@ type groupNode struct {
 	currentBucket string
 
 	desiredOrdering []int
-	err             *roachpb.Error
+	pErr            *roachpb.Error
 }
 
 func (n *groupNode) Columns() []column {
@@ -194,10 +194,10 @@ func (n *groupNode) Values() parser.DTuple {
 }
 
 func (n *groupNode) Next() bool {
-	if !n.populated && n.err == nil {
+	if !n.populated && n.pErr == nil {
 		n.computeAggregates()
 	}
-	if n.err != nil {
+	if n.pErr != nil {
 		return false
 	}
 	return n.values.Next()
@@ -217,8 +217,8 @@ func (n *groupNode) computeAggregates() {
 		var encoded []byte
 		var err error
 		encoded, err = encodeDTuple(scratch, groupedValues)
-		n.err = roachpb.NewError(err)
-		if n.err != nil {
+		n.pErr = roachpb.NewError(err)
+		if n.pErr != nil {
 			return
 		}
 
@@ -226,15 +226,15 @@ func (n *groupNode) computeAggregates() {
 
 		// Feed the aggregateFuncs for this bucket the non-grouped values.
 		for i, value := range aggregatedValues {
-			if n.err = n.funcs[i].add(encoded, value); n.err != nil {
+			if n.pErr = n.funcs[i].add(encoded, value); n.pErr != nil {
 				return
 			}
 		}
 		scratch = encoded[:0]
 	}
 
-	n.err = n.plan.Err()
-	if n.err != nil {
+	n.pErr = n.plan.PErr()
+	if n.pErr != nil {
 		return
 	}
 
@@ -253,11 +253,11 @@ func (n *groupNode) computeAggregates() {
 		if n.having != nil {
 			res, err := n.having.Eval(n.planner.evalCtx)
 			if err != nil {
-				n.err = roachpb.NewError(err)
+				n.pErr = roachpb.NewError(err)
 				return
 			}
 			if res, err := parser.GetBool(res); err != nil {
-				n.err = roachpb.NewError(err)
+				n.pErr = roachpb.NewError(err)
 				return
 			} else if !res {
 				continue
@@ -268,7 +268,7 @@ func (n *groupNode) computeAggregates() {
 		for _, r := range n.render {
 			res, err := r.Eval(n.planner.evalCtx)
 			if err != nil {
-				n.err = roachpb.NewError(err)
+				n.pErr = roachpb.NewError(err)
 				return
 			}
 			row = append(row, res)
@@ -279,8 +279,8 @@ func (n *groupNode) computeAggregates() {
 
 }
 
-func (n *groupNode) Err() *roachpb.Error {
-	return n.err
+func (n *groupNode) PErr() *roachpb.Error {
+	return n.pErr
 }
 
 func (n *groupNode) ExplainPlan() (name, description string, children []planNode) {

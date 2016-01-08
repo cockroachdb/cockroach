@@ -179,14 +179,14 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, *
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	dbDesc, err := p.getDatabaseDesc(qname.Database())
-	if err != nil {
-		return nil, err
+	dbDesc, pErr := p.getDatabaseDesc(qname.Database())
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	desc := TableDescriptor{}
-	if err := p.getDescriptor(tableKey{dbDesc.ID, qname.Table()}, &desc); err != nil {
-		return nil, err
+	if pErr := p.getDescriptor(tableKey{dbDesc.ID, qname.Table()}, &desc); pErr != nil {
+		return nil, pErr
 	}
 	return &desc, nil
 }
@@ -196,8 +196,8 @@ func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, *roachpb.Erro
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
 
-	if err := txn.GetProto(descKey, desc); err != nil {
-		return nil, err
+	if pErr := txn.GetProto(descKey, desc); pErr != nil {
+		return nil, pErr
 	}
 	tableDesc := desc.GetTable()
 	if tableDesc == nil {
@@ -221,9 +221,9 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*TableDescriptor, 
 		return p.getTableDesc(qname)
 	}
 
-	tableID, err := p.getTableID(qname)
-	if err != nil {
-		return nil, err
+	tableID, pErr := p.getTableID(qname)
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	if p.leases == nil {
@@ -232,10 +232,10 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*TableDescriptor, 
 
 	lease, ok := p.leases[tableID]
 	if !ok {
-		var err *roachpb.Error
-		lease, err = p.leaseMgr.Acquire(p.txn, tableID, 0)
-		if err != nil {
-			return nil, err
+		var pErr *roachpb.Error
+		lease, pErr = p.leaseMgr.Acquire(p.txn, tableID, 0)
+		if pErr != nil {
+			return nil, pErr
 		}
 		p.leases[tableID] = lease
 	}
@@ -254,11 +254,11 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, *roachpb.Error) {
 	// Lookup the database in the cache first, falling back to the KV store if it
 	// isn't present. The cache might cause the usage of a recently renamed
 	// database, but that's a race that could occur anyways.
-	dbDesc, err := p.getCachedDatabaseDesc(qname.Database())
-	if err != nil {
-		dbDesc, err = p.getDatabaseDesc(qname.Database())
-		if err != nil {
-			return 0, err
+	dbDesc, pErr := p.getCachedDatabaseDesc(qname.Database())
+	if pErr != nil {
+		dbDesc, pErr = p.getDatabaseDesc(qname.Database())
+		if pErr != nil {
+			return 0, pErr
 		}
 	}
 
@@ -284,9 +284,9 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, *roachpb.Error) {
 
 func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNames, *roachpb.Error) {
 	prefix := MakeNameMetadataKey(dbDesc.ID, "")
-	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
-	if err != nil {
-		return nil, err
+	sr, pErr := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	var qualifiedNames parser.QualifiedNames
@@ -327,9 +327,9 @@ func encodeIndexKey(columnIDs []ColumnID, colMap map[ColumnID]int,
 			containsNull = true
 		}
 
-		var err *roachpb.Error
-		if key, err = encodeTableKey(key, val); err != nil {
-			return nil, containsNull, err
+		var pErr *roachpb.Error
+		if key, pErr = encodeTableKey(key, val); pErr != nil {
+			return nil, containsNull, pErr
 		}
 	}
 	return key, containsNull, nil
@@ -367,9 +367,9 @@ func encodeTableKey(b []byte, val parser.Datum) ([]byte, *roachpb.Error) {
 func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, *roachpb.Error) {
 	vals := make([]parser.Datum, len(columnIDs))
 	for i, id := range columnIDs {
-		col, err := desc.FindColumnByID(id)
-		if err != nil {
-			return nil, err
+		col, pErr := desc.FindColumnByID(id)
+		if pErr != nil {
+			return nil, pErr
 		}
 		switch col.Type.Kind {
 		case ColumnType_BOOL:
@@ -422,9 +422,9 @@ func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, *
 // primary key index, the primary key suffix for non-unique secondary indexes
 // or unique secondary indexes containing NULL or empty.
 func decodeIndexKey(desc *TableDescriptor, index IndexDescriptor, valTypes, vals []parser.Datum, key []byte) ([]byte, *roachpb.Error) {
-	indexID, remaining, err := decodeIndexKeyPrefix(desc, key)
-	if err != nil {
-		return nil, err
+	indexID, remaining, pErr := decodeIndexKeyPrefix(desc, key)
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	if indexID != index.ID {
@@ -497,15 +497,15 @@ func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
 	var secondaryIndexEntries []indexEntry
 	for _, secondaryIndex := range indexes {
 		secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
-		secondaryIndexKey, containsNull, err := encodeIndexKey(
+		secondaryIndexKey, containsNull, pErr := encodeIndexKey(
 			secondaryIndex.ColumnIDs, colMap, values, secondaryIndexKeyPrefix)
-		if err != nil {
-			return nil, err
+		if pErr != nil {
+			return nil, pErr
 		}
 
-		extraKey, _, err := encodeIndexKey(secondaryIndex.ImplicitColumnIDs, colMap, values, nil)
-		if err != nil {
-			return nil, err
+		extraKey, _, pErr := encodeIndexKey(secondaryIndex.ImplicitColumnIDs, colMap, values, nil)
+		if pErr != nil {
+			return nil, pErr
 		}
 
 		entry := indexEntry{key: secondaryIndexKey}

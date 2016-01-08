@@ -520,18 +520,18 @@ func TestSystemDBGossip(t *testing.T) {
 	}
 
 	// Now do it as part of a transaction, but without the trigger set.
-	if err := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		return txn.Put(key, valAt(1))
-	}); err != nil {
-		t.Fatal(err)
+	}); pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// This time mark the transaction as having a SystemDB trigger.
-	if err := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		txn.SetSystemDBTrigger()
 		return txn.Put(key, valAt(2))
-	}); err != nil {
-		t.Fatal(err)
+	}); pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Wait for the callback.

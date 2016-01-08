@@ -101,7 +101,7 @@ func (n *valuesNode) Next() bool {
 	return true
 }
 
-func (*valuesNode) Err() *roachpb.Error {
+func (*valuesNode) PErr() *roachpb.Error {
 	return nil
 }
 

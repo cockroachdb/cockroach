@@ -296,8 +296,8 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 
 	// Merge last range.
 	args := adminMergeArgs(roachpb.KeyMin)
-	if _, err := client.SendWrapped(rg1(store), nil, &args); !testutils.IsError(err.GoError(), "cannot merge final range") {
-		t.Fatalf("expected 'cannot merge final range' error; got %s", err)
+	if _, pErr := client.SendWrapped(rg1(store), nil, &args); !testutils.IsError(pErr.GoError(), "cannot merge final range") {
+		t.Fatalf("expected 'cannot merge final range' error; got %s", pErr)
 	}
 }
 
@@ -312,12 +312,12 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 
 	// Split into 3 ranges
 	argsSplit := adminSplitArgs(roachpb.KeyMin, []byte("d"))
-	if _, err := client.SendWrapped(rg1(store), nil, &argsSplit); err != nil {
-		t.Fatalf("Can't split range %s", err)
+	if _, pErr := client.SendWrapped(rg1(store), nil, &argsSplit); pErr != nil {
+		t.Fatalf("Can't split range %s", pErr)
 	}
 	argsSplit = adminSplitArgs(roachpb.KeyMin, []byte("b"))
-	if _, err := client.SendWrapped(rg1(store), nil, &argsSplit); err != nil {
-		t.Fatalf("Can't split range %s", err)
+	if _, pErr := client.SendWrapped(rg1(store), nil, &argsSplit); pErr != nil {
+		t.Fatalf("Can't split range %s", pErr)
 	}
 
 	rangeA := store.LookupReplica([]byte("a"), nil)

@@ -120,7 +120,7 @@ type sortNode struct {
 	columns  []column
 	ordering []int
 	needSort bool
-	err      *roachpb.Error
+	pErr     *roachpb.Error
 }
 
 func (n *sortNode) Columns() []column {
@@ -151,8 +151,8 @@ func (n *sortNode) Next() bool {
 	return n.plan.Next()
 }
 
-func (n *sortNode) Err() *roachpb.Error {
-	return n.err
+func (n *sortNode) PErr() *roachpb.Error {
+	return n.pErr
 }
 
 func (n *sortNode) ExplainPlan() (name, description string, children []planNode) {
@@ -222,8 +222,8 @@ func (n *sortNode) initValues() bool {
 			copy(valuesCopy, values)
 			v.rows = append(v.rows, valuesCopy)
 		}
-		n.err = n.plan.Err()
-		if n.err != nil {
+		n.pErr = n.plan.PErr()
+		if n.pErr != nil {
 			return false
 		}
 	}

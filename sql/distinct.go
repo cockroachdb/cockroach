@@ -71,17 +71,17 @@ type distinctNode struct {
 	// encoding of the non-columnInOrder columns for rows sharing the same
 	// prefixSeen value.
 	suffixSeen map[string]struct{}
-	err        *roachpb.Error
+	pErr       *roachpb.Error
 }
 
 func (n *distinctNode) Next() bool {
-	if n.err != nil {
+	if n.pErr != nil {
 		return false
 	}
 	for n.planNode.Next() {
 		// Detect duplicates
 		prefix, suffix := n.encodeValues(n.Values())
-		if n.err != nil {
+		if n.pErr != nil {
 			return false
 		}
 		if bytes.Equal(prefix, n.prefixSeen) {
@@ -110,12 +110,12 @@ func (n *distinctNode) Next() bool {
 		}
 		return true
 	}
-	n.err = n.planNode.Err()
+	n.pErr = n.planNode.PErr()
 	return false
 }
 
-func (n *distinctNode) Err() *roachpb.Error {
-	return n.err
+func (n *distinctNode) PErr() *roachpb.Error {
+	return n.pErr
 }
 
 func (n *distinctNode) encodeValues(values parser.DTuple) ([]byte, []byte) {
@@ -125,14 +125,14 @@ func (n *distinctNode) encodeValues(values parser.DTuple) ([]byte, []byte) {
 			if prefix == nil {
 				prefix = make([]byte, 0, 100)
 			}
-			prefix, n.err = encodeDatum(prefix, val)
+			prefix, n.pErr = encodeDatum(prefix, val)
 		} else {
 			if suffix == nil {
 				suffix = make([]byte, 0, 100)
 			}
-			suffix, n.err = encodeDatum(suffix, val)
+			suffix, n.pErr = encodeDatum(suffix, val)
 		}
-		if n.err != nil {
+		if n.pErr != nil {
 			break
 		}
 	}

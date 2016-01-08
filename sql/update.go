@@ -32,22 +32,22 @@ import (
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
-	tableDesc, err := p.getAliasedTableLease(n.Table)
-	if err != nil {
-		return nil, err
+	tableDesc, pErr := p.getAliasedTableLease(n.Table)
+	if pErr != nil {
+		return nil, pErr
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.UPDATE); err != nil {
-		return nil, err
+	if pErr := p.checkPrivilege(tableDesc, privilege.UPDATE); pErr != nil {
+		return nil, pErr
 	}
 
 	// Determine which columns we're inserting into.
 	var names parser.QualifiedNames
 	for _, expr := range n.Exprs {
-		var err *roachpb.Error
-		expr.Expr, err = p.expandSubqueries(expr.Expr, len(expr.Names))
-		if err != nil {
-			return nil, err
+		var epErr *roachpb.Error
+		expr.Expr, epErr = p.expandSubqueries(expr.Expr, len(expr.Names))
+		if epErr != nil {
+			return nil, epErr
 		}
 
 		if expr.Tuple {
@@ -70,9 +70,9 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 		}
 		names = append(names, expr.Names...)
 	}
-	cols, err := p.processColumns(tableDesc, names)
-	if err != nil {
-		return nil, err
+	cols, pErr := p.processColumns(tableDesc, names)
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	// Set of columns being updated
@@ -87,9 +87,9 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 		}
 	}
 
-	defaultExprs, err := p.makeDefaultExprs(cols)
-	if err != nil {
-		return nil, err
+	defaultExprs, pErr := p.makeDefaultExprs(cols)
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	// Generate the list of select targets. We need to select all of the columns
@@ -119,13 +119,13 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 	}
 
 	// Query the rows that need updating.
-	rows, err := p.Select(&parser.Select{
+	rows, pErr := p.Select(&parser.Select{
 		Exprs: targets,
 		From:  parser.TableExprs{n.Table},
 		Where: n.Where,
 	})
-	if err != nil {
-		return nil, err
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	// Construct a map from column ID to the index the value appears at within a
@@ -183,16 +183,16 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 		rowVals := rows.Values()
 		result.rows = append(result.rows, parser.DTuple(nil))
 
-		primaryIndexKey, _, err := encodeIndexKey(
+		primaryIndexKey, _, pErr := encodeIndexKey(
 			primaryIndex.ColumnIDs, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
-		if err != nil {
-			return nil, err
+		if pErr != nil {
+			return nil, pErr
 		}
 		// Compute the current secondary index key:value pairs for this row.
-		secondaryIndexEntries, err := encodeSecondaryIndexes(
+		secondaryIndexEntries, pErr := encodeSecondaryIndexes(
 			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
-		if err != nil {
-			return nil, err
+		if pErr != nil {
+			return nil, pErr
 		}
 
 		// Our updated value expressions occur immediately after the plain
@@ -211,17 +211,17 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 		// happen before index encoding because certain datum types (i.e. tuple)
 		// cannot be used as index values.
 		for i, val := range newVals {
-			var err *roachpb.Error
-			if marshalled[i], err = marshalColumnValue(cols[i], val); err != nil {
-				return nil, err
+			var mpErr *roachpb.Error
+			if marshalled[i], mpErr = marshalColumnValue(cols[i], val); mpErr != nil {
+				return nil, mpErr
 			}
 		}
 
 		// Compute the new secondary index key:value pairs for this row.
-		newSecondaryIndexEntries, err := encodeSecondaryIndexes(
+		newSecondaryIndexEntries, epErr := encodeSecondaryIndexes(
 			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
-		if err != nil {
-			return nil, err
+		if epErr != nil {
+			return nil, epErr
 		}
 
 		// Update secondary indexes.
@@ -269,11 +269,11 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 		}
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
+	if pErr := rows.PErr(); pErr != nil {
+		return nil, pErr
 	}
-	if err := p.txn.Run(&b); err != nil {
-		return nil, convertBatchError(tableDesc, b, err)
+	if pErr := p.txn.Run(&b); pErr != nil {
+		return nil, convertBatchError(tableDesc, b, pErr)
 	}
 
 	return result, nil

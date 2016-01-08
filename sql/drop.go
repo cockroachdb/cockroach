@@ -53,8 +53,8 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 
 	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
 	desc := &Descriptor{}
-	if err := p.txn.GetProto(descKey, desc); err != nil {
-		return nil, err
+	if pErr := p.txn.GetProto(descKey, desc); pErr != nil {
+		return nil, pErr
 	}
 	dbDesc := desc.GetDatabase()
 	if dbDesc == nil {
@@ -64,17 +64,17 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 		return nil, roachpb.NewError(err)
 	}
 
-	if err := p.checkPrivilege(dbDesc, privilege.DROP); err != nil {
-		return nil, err
+	if pErr := p.checkPrivilege(dbDesc, privilege.DROP); pErr != nil {
+		return nil, pErr
 	}
 
-	tbNames, err := p.getTableNames(dbDesc)
-	if err != nil {
-		return nil, err
+	tbNames, pErr := p.getTableNames(dbDesc)
+	if pErr != nil {
+		return nil, pErr
 	}
 
-	if _, err := p.DropTable(&parser.DropTable{Names: tbNames}); err != nil {
-		return nil, err
+	if _, pErr := p.DropTable(&parser.DropTable{Names: tbNames}); pErr != nil {
+		return nil, pErr
 	}
 
 	zoneKey := MakeZoneKey(dbDesc.ID)
@@ -94,8 +94,8 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 		return nil
 	}
 
-	if err := p.txn.Run(b); err != nil {
-		return nil, err
+	if pErr := p.txn.Run(b); pErr != nil {
+		return nil, pErr
 	}
 	return &valuesNode{}, nil
 }
@@ -110,24 +110,24 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 			return nil, roachpb.NewError(err)
 		}
 
-		tableDesc, err := p.getTableDesc(indexQualifiedName)
-		if err != nil {
-			return nil, err
+		tableDesc, pErr := p.getTableDesc(indexQualifiedName)
+		if pErr != nil {
+			return nil, pErr
 		}
 
-		if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
-			return nil, err
+		if pErr := p.checkPrivilege(tableDesc, privilege.CREATE); pErr != nil {
+			return nil, pErr
 		}
 
 		idxName := indexQualifiedName.Index()
-		status, i, err := tableDesc.FindIndexByName(idxName)
-		if err != nil {
+		status, i, pErr := tableDesc.FindIndexByName(idxName)
+		if pErr != nil {
 			if n.IfExists {
 				// Noop.
 				return &valuesNode{}, nil
 			}
 			// Index does not exist, but we want it to: error out.
-			return nil, err
+			return nil, pErr
 		}
 		switch status {
 		case DescriptorActive:
@@ -148,12 +148,12 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 			return nil, roachpb.NewError(err)
 		}
 
-		if err := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); err != nil {
-			return nil, err
+		if pErr := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); pErr != nil {
+			return nil, pErr
 		}
 		// Process mutation synchronously.
-		if err := p.applyMutations(tableDesc); err != nil {
-			return nil, err
+		if pErr := p.applyMutations(tableDesc); pErr != nil {
+			return nil, pErr
 		}
 	}
 	return &valuesNode{}, nil
@@ -171,9 +171,9 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 			return nil, roachpb.NewError(err)
 		}
 
-		dbDesc, err := p.getDatabaseDesc(tableQualifiedName.Database())
-		if err != nil {
-			return nil, err
+		dbDesc, pErr := p.getDatabaseDesc(tableQualifiedName.Database())
+		if pErr != nil {
+			return nil, pErr
 		}
 
 		tbKey := tableKey{dbDesc.ID, tableQualifiedName.Table()}
@@ -194,8 +194,8 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 
 		desc := &Descriptor{}
 		descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
-		if err := p.txn.GetProto(descKey, desc); err != nil {
-			return nil, err
+		if pErr := p.txn.GetProto(descKey, desc); pErr != nil {
+			return nil, pErr
 		}
 		tableDesc := desc.GetTable()
 		if tableDesc == nil {
@@ -205,12 +205,12 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 			return nil, roachpb.NewError(err)
 		}
 
-		if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
-			return nil, err
+		if pErr := p.checkPrivilege(tableDesc, privilege.DROP); pErr != nil {
+			return nil, pErr
 		}
 
-		if _, err := p.Truncate(&parser.Truncate{Tables: n.Names[i : i+1]}); err != nil {
-			return nil, err
+		if _, pErr := p.Truncate(&parser.Truncate{Tables: n.Names[i : i+1]}); pErr != nil {
+			return nil, pErr
 		}
 
 		zoneKey := MakeZoneKey(tableDesc.ID)
@@ -231,8 +231,8 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 			return nil
 		}
 
-		if err := p.txn.Run(b); err != nil {
-			return nil, err
+		if pErr := p.txn.Run(b); pErr != nil {
+			return nil, pErr
 		}
 	}
 	return &valuesNode{}, nil

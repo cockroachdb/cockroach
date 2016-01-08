@@ -102,17 +102,17 @@ func (c *cmd) execute(txn *client.Txn, t *testing.T) (string, *roachpb.Error) {
 	if log.V(1) {
 		log.Infof("executing %s", c)
 	}
-	err := c.fn(c, txn, t)
+	pErr := c.fn(c, txn, t)
 	if c.ch != nil {
 		c.ch <- struct{}{}
 	}
 	if len(c.key) > 0 && len(c.endKey) > 0 {
-		return fmt.Sprintf("%s%%d.%%d(%s-%s)%s", c.name, c.key, c.endKey, c.debug), err
+		return fmt.Sprintf("%s%%d.%%d(%s-%s)%s", c.name, c.key, c.endKey, c.debug), pErr
 	}
 	if len(c.key) > 0 {
-		return fmt.Sprintf("%s%%d.%%d(%s)%s", c.name, c.key, c.debug), err
+		return fmt.Sprintf("%s%%d.%%d(%s)%s", c.name, c.key, c.debug), pErr
 	}
-	return fmt.Sprintf("%s%%d.%%d%s", c.name, c.debug), err
+	return fmt.Sprintf("%s%%d.%%d%s", c.name, c.debug), pErr
 }
 
 func (c *cmd) done() {
@@ -145,9 +145,9 @@ func (c *cmd) String() string {
 
 // readCmd reads a value from the db and stores it in the env.
 func readCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
-	r, err := txn.Get(c.getKey())
-	if err != nil {
-		return err
+	r, pErr := txn.Get(c.getKey())
+	if pErr != nil {
+		return pErr
 	}
 	if r.Value != nil {
 		c.env[c.key] = r.ValueInt()
@@ -163,9 +163,9 @@ func deleteRngCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 
 // scanCmd reads the values from the db from [key, endKey).
 func scanCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
-	rows, err := txn.Scan(c.getKey(), c.getEndKey(), 0)
-	if err != nil {
-		return err
+	rows, pErr := txn.Scan(c.getKey(), c.getEndKey(), 0)
+	if pErr != nil {
+		return pErr
 	}
 	var vals []string
 	keyPrefix := []byte(fmt.Sprintf("%d.", c.historyIdx))
@@ -181,9 +181,9 @@ func scanCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 // incCmd adds one to the value of c.key in the env and writes
 // it to the db. If c.key isn't in the db, writes 1.
 func incCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
-	r, err := txn.Inc(c.getKey(), 1)
-	if err != nil {
-		return err
+	r, pErr := txn.Inc(c.getKey(), 1)
+	if pErr != nil {
+		return pErr
 	}
 	c.env[c.key] = r.ValueInt()
 	c.debug = fmt.Sprintf("[%d]", r.ValueInt())
@@ -199,9 +199,9 @@ func sumCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 			sum += v
 		}
 	}
-	r, err := txn.Inc(c.getKey(), sum)
+	r, pErr := txn.Inc(c.getKey(), sum)
 	c.debug = fmt.Sprintf("[%d ts=%d]", sum, r.Timestamp())
-	return err
+	return pErr
 }
 
 // commitCmd commits the transaction.
@@ -534,18 +534,18 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 		c.historyIdx = historyIdx
 		c.env = verifyEnv
 		c.init(nil)
-		err := db.Txn(func(txn *client.Txn) *roachpb.Error {
-			fmtStr, err := c.execute(txn, t)
-			if err != nil {
-				return err
+		pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+			fmtStr, pErr := c.execute(txn, t)
+			if pErr != nil {
+				return pErr
 			}
 			cmdStr := fmt.Sprintf(fmtStr, 0, 0)
 			verifyStrs = append(verifyStrs, cmdStr)
 			return nil
 		})
-		if err != nil {
-			t.Errorf("failed on execution of verification cmd %s: %s", c, err)
-			return err.GoError()
+		if pErr != nil {
+			t.Errorf("failed on execution of verification cmd %s: %s", c, pErr)
+			return pErr.GoError()
 		}
 	}
 
@@ -567,11 +567,11 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 	isolation roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
 	var retry int
 	txnName := fmt.Sprintf("txn%d", txnIdx)
-	err := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		txn.SetDebugName(txnName, 0)
 		if isolation == roachpb.SNAPSHOT {
-			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
-				return err
+			if pErr := txn.SetIsolation(roachpb.SNAPSHOT); pErr != nil {
+				return pErr
 			}
 		}
 		txn.InternalSetPriority(priority)
@@ -594,20 +594,20 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 		}
 		for i := range cmds {
 			cmds[i].env = env
-			if err := hv.runCmd(txn, txnIdx, retry, i, cmds, t); err != nil {
-				return err
+			if pErr := hv.runCmd(txn, txnIdx, retry, i, cmds, t); pErr != nil {
+				return pErr
 			}
 		}
 		return nil
 	})
 	hv.wg.Done()
-	return err.GoError()
+	return pErr.GoError()
 }
 
 func (hv *historyVerifier) runCmd(txn *client.Txn, txnIdx, retry, cmdIdx int, cmds []*cmd, t *testing.T) *roachpb.Error {
-	fmtStr, err := cmds[cmdIdx].execute(txn, t)
-	if err != nil {
-		return err
+	fmtStr, pErr := cmds[cmdIdx].execute(txn, t)
+	if pErr != nil {
+		return pErr
 	}
 	hv.Lock()
 	cmdStr := fmt.Sprintf(fmtStr, txnIdx, retry)

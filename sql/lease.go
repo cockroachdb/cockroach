@@ -100,9 +100,9 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 	p := planner{txn: txn, user: security.RootUser}
 
 	const getDescriptor = `SELECT descriptor FROM system.descriptor WHERE id = $1`
-	values, err := p.queryRow(getDescriptor, int(tableID))
-	if err != nil {
-		return nil, err
+	values, pErr := p.queryRow(getDescriptor, int(tableID))
+	if pErr != nil {
+		return nil, pErr
 	}
 	if values == nil {
 		return nil, roachpb.NewErrorf("table ID %d not found", tableID)
@@ -137,13 +137,13 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 	// there is no harm in that as no other transaction will be attempting to
 	// modify the descriptor and even if the descriptor is never created we'll
 	// just have a dangling lease entry which will eventually get GC'd.
-	pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr = s.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		p := planner{txn: txn, user: security.RootUser}
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
-		count, err := p.exec(insertLease, lease.ID, int(lease.Version), s.nodeID, lease.expiration)
-		if err != nil {
-			return err
+		count, epErr := p.exec(insertLease, lease.ID, int(lease.Version), s.nodeID, lease.expiration)
+		if epErr != nil {
+			return epErr
 		}
 		if count != 1 {
 			return roachpb.NewErrorf("%s: expected 1 result, found %d", insertLease, count)
@@ -160,9 +160,9 @@ func (s LeaseStore) Release(lease *LeaseState) *roachpb.Error {
 
 		const deleteLease = `DELETE FROM system.lease ` +
 			`WHERE (descID, version, nodeID, expiration) = ($1, $2, $3, $4)`
-		count, err := p.exec(deleteLease, lease.ID, int(lease.Version), s.nodeID, lease.expiration)
-		if err != nil {
-			return err
+		count, pErr := p.exec(deleteLease, lease.ID, int(lease.Version), s.nodeID, lease.expiration)
+		if pErr != nil {
+			return pErr
 		}
 		if count != 1 {
 			return roachpb.NewErrorf("%s: expected 1 result, found %d", deleteLease, count)
@@ -185,8 +185,8 @@ func (s LeaseStore) waitForOneVersion(tableID ID, retryOpts retry.Options) (Desc
 		// Get the current version of the table descriptor non-transactionally.
 		//
 		// TODO(pmattis): Do an inconsistent read here?
-		if err := s.db.GetProto(descKey, desc); err != nil {
-			return 0, err
+		if pErr := s.db.GetProto(descKey, desc); pErr != nil {
+			return 0, pErr
 		}
 		tableDesc = desc.GetTable()
 		if tableDesc == nil {
@@ -195,9 +195,9 @@ func (s LeaseStore) waitForOneVersion(tableID ID, retryOpts retry.Options) (Desc
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
 		now := s.clock.Now()
-		count, err := s.countLeases(tableDesc.ID, tableDesc.Version-1, now.GoTime())
-		if err != nil {
-			return 0, err
+		count, pErr := s.countLeases(tableDesc.ID, tableDesc.Version-1, now.GoTime())
+		if pErr != nil {
+			return 0, pErr
 		}
 		if count == 0 {
 			break
@@ -221,14 +221,14 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) *ro
 	for r := retry.Start(retryOpts); r.Next(); {
 		// Wait until there are no unexpired leases on the previous version
 		// of the table.
-		expectedVersion, err := s.waitForOneVersion(tableID, retryOpts)
-		if err != nil {
-			return err
+		expectedVersion, pErr := s.waitForOneVersion(tableID, retryOpts)
+		if pErr != nil {
+			return pErr
 		}
 
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
-		err = s.db.Txn(func(txn *client.Txn) *roachpb.Error {
+		pErr = s.db.Txn(func(txn *client.Txn) *roachpb.Error {
 			desc := &Descriptor{}
 			descKey := MakeDescMetadataKey(tableID)
 
@@ -272,8 +272,8 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) *ro
 			return txn.CommitInBatch(b)
 		})
 
-		if err.GoError() != errLeaseVersionChanged {
-			return err
+		if pErr.GoError() != errLeaseVersionChanged {
+			return pErr
 		}
 	}
 
@@ -284,19 +284,19 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) *ro
 // of a descriptor.
 func (s LeaseStore) countLeases(descID ID, version DescriptorVersion, expiration time.Time) (int, *roachpb.Error) {
 	var count int
-	err := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		p := planner{txn: txn, user: security.RootUser}
 
 		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
 			`WHERE descID = $1 AND version = $2 AND expiration > $3`
-		values, err := p.queryRow(countLeases, descID, int(version), expiration)
-		if err != nil {
-			return err
+		values, pErr := p.queryRow(countLeases, descID, int(version), expiration)
+		if pErr != nil {
+			return pErr
 		}
 		count = int(values[0].(parser.DInt))
 		return nil
 	})
-	return count, err
+	return count, pErr
 }
 
 // leaseSet maintains an ordered set of LeaseState objects. It supports
@@ -473,8 +473,8 @@ func (t *tableState) releaseNonLatest(store LeaseStore) *roachpb.Error {
 		s := t.active.data[i]
 		if s.Refcount() == 0 {
 			t.active.remove(s)
-			if err := t.releaseNodeLease(s, store); err != nil {
-				return err
+			if pErr := t.releaseNodeLease(s, store); pErr != nil {
+				return pErr
 			}
 		} else {
 			i++
@@ -671,18 +671,18 @@ func (m *LeaseManager) refreshLease(db *client.DB, id ID, minVersion DescriptorV
 	}
 	// Acquire and release a lease on the table at a version >= minVersion.
 	var lease *LeaseState
-	if err := db.Txn(func(txn *client.Txn) *roachpb.Error {
-		var err *roachpb.Error
+	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		var pErr *roachpb.Error
 		// Acquire() can only acquire a lease at a version if it has
 		// already been acquired at that version, or that version
 		// is the latest version. If the latest version is > minVersion
 		// then the node acquires a lease at the latest version but
 		// Acquire() itself returns an error. This is okay, because
 		// we want to update the node lease.
-		lease, err = m.Acquire(txn, id, minVersion)
-		return err
-	}); err != nil {
-		return err
+		lease, pErr = m.Acquire(txn, id, minVersion)
+		return pErr
+	}); pErr != nil {
+		return pErr
 	}
 	return m.Release(lease)
 }

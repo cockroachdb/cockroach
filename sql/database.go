@@ -45,8 +45,8 @@ func makeDatabaseDesc(p *parser.CreateDatabase) DatabaseDescriptor {
 // getDatabaseDesc looks up the database descriptor given its name.
 func (p *planner) getDatabaseDesc(name string) (*DatabaseDescriptor, *roachpb.Error) {
 	desc := &DatabaseDescriptor{}
-	if err := p.getDescriptor(databaseKey{name}, desc); err != nil {
-		return nil, err
+	if pErr := p.getDescriptor(databaseKey{name}, desc); pErr != nil {
+		return nil, pErr
 	}
 	return desc, nil
 }

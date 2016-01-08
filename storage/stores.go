@@ -110,7 +110,7 @@ func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	trace := tracer.FromCtx(ctx)
 	var store *Store
-	var err *roachpb.Error
+	var pErr *roachpb.Error
 
 	// If we aren't given a Replica, then a little bending over
 	// backwards here. This case applies exclusively to unittests.
@@ -118,8 +118,8 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		var repl *roachpb.ReplicaDescriptor
 		var rangeID roachpb.RangeID
 		rs := keys.Range(ba)
-		rangeID, repl, err = ls.lookupReplica(rs.Key, rs.EndKey)
-		if err == nil {
+		rangeID, repl, pErr = ls.lookupReplica(rs.Key, rs.EndKey)
+		if pErr == nil {
 			ba.RangeID = rangeID
 			ba.Replica = *repl
 		}
@@ -128,13 +128,13 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	ctx = log.Add(ctx,
 		log.RangeID, ba.RangeID)
 
-	if err == nil {
-		store, err = ls.GetStore(ba.Replica.StoreID)
+	if pErr == nil {
+		store, pErr = ls.GetStore(ba.Replica.StoreID)
 	}
 
 	var br *roachpb.BatchResponse
-	if err != nil {
-		return nil, err
+	if pErr != nil {
+		return nil, pErr
 	}
 	// For calls that read data within a txn, we can avoid uncertainty
 	// related retries in certain situations. If the node is in
@@ -146,11 +146,11 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		trace.Event("read has no clock uncertainty")
 		ba.Txn.MaxTimestamp = ba.Txn.Timestamp
 	}
-	br, err = store.Send(ctx, ba)
+	br, pErr = store.Send(ctx, ba)
 	if br != nil && br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(store, br))
 	}
-	return br, err
+	return br, pErr
 }
 
 // lookupReplica looks up replica by key [range]. Lookups are done
@@ -188,13 +188,13 @@ func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeI
 // FirstRange implements the RangeDescriptorDB interface. It returns the
 // range descriptor which contains KeyMin.
 func (ls *Stores) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
-	_, replica, err := ls.lookupReplica(roachpb.RKeyMin, nil)
-	if err != nil {
-		return nil, err
+	_, replica, pErr := ls.lookupReplica(roachpb.RKeyMin, nil)
+	if pErr != nil {
+		return nil, pErr
 	}
-	store, err := ls.GetStore(replica.StoreID)
-	if err != nil {
-		return nil, err
+	store, pErr := ls.GetStore(replica.StoreID)
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	rpl := store.LookupReplica(roachpb.RKeyMin, nil)
