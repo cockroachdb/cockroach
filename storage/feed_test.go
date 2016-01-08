@@ -43,6 +43,7 @@ func TestStoreEventFeed(t *testing.T) {
 		EndKey:   roachpb.RKey("c"),
 	}
 	rng1 := &Replica{
+		RangeID: desc1.RangeID,
 		stats: &rangeStats{
 			rangeID: desc1.RangeID,
 			MVCCStats: engine.MVCCStats{
@@ -57,6 +58,7 @@ func TestStoreEventFeed(t *testing.T) {
 		t.Fatal(err)
 	}
 	rng2 := &Replica{
+		RangeID: desc2.RangeID,
 		stats: &rangeStats{
 			rangeID: desc2.RangeID,
 			MVCCStats: engine.MVCCStats{

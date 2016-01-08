@@ -176,7 +176,7 @@ func (tc *testContext) Start(t testing.TB) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tc.rangeID = tc.rng.Desc().RangeID
+		tc.rangeID = tc.rng.RangeID
 	}
 
 	if err := tc.initConfigs(realRange); err != nil {
@@ -1475,7 +1475,7 @@ func TestRangeSequenceCacheReadError(t *testing.T) {
 	}
 
 	// Overwrite sequence cache entry with garbage for the last op.
-	key := keys.SequenceCacheKey(tc.rng.Desc().RangeID, txn.ID, uint32(txn.Epoch), txn.Sequence)
+	key := keys.SequenceCacheKey(tc.rng.RangeID, txn.ID, uint32(txn.Epoch), txn.Sequence)
 	// Make garbageKey sort before key (we've chosen Sequence=1 above,
 	// the last byte of which isn't \x00); add an extra byte of garbage.
 	garbageKey := append(roachpb.Key(nil), key[:len(key)-1]...)
@@ -2659,7 +2659,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		t.Fatal(err)
 	}
 	expMS := engine.MVCCStats{LiveBytes: 25, KeyBytes: 14, ValBytes: 11, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 51, SysCount: 1, LastUpdateNanos: 0}
-	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
+	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Put a 2nd value transactionally.
 	pArgs = putArgs([]byte("b"), []byte("value2"))
@@ -2669,7 +2669,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{LiveBytes: 116, KeyBytes: 28, ValBytes: 88, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 51, SysCount: 1, LastUpdateNanos: 0}
-	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
+	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Resolve the 2nd value.
 	rArgs := &roachpb.ResolveIntentRequest{
@@ -2684,7 +2684,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{LiveBytes: 50, KeyBytes: 28, ValBytes: 22, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 51, SysCount: 1, LastUpdateNanos: 0}
-	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
+	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Delete the 1st value.
 	dArgs := deleteArgs([]byte("a"))
@@ -2693,7 +2693,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{LiveBytes: 25, KeyBytes: 40, ValBytes: 22, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 51, SysCount: 1, LastUpdateNanos: 0}
-	verifyRangeStats(tc.engine, tc.rng.Desc().RangeID, expMS, t)
+	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 }
 
 // TestMerge verifies that the Merge command is behaving as
@@ -2763,7 +2763,7 @@ func TestTruncateLog(t *testing.T) {
 		indexes = append(indexes, idx)
 	}
 
-	rangeID := tc.rng.Desc().RangeID
+	rangeID := tc.rng.RangeID
 
 	// Discard the first half of the log.
 	truncateArgs := truncateLogArgs(indexes[5], rangeID)
@@ -2772,7 +2772,9 @@ func TestTruncateLog(t *testing.T) {
 	}
 
 	// FirstIndex has changed.
+	tc.rng.RLock()
 	firstIndex, err := tc.rng.FirstIndex()
+	tc.rng.RUnlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2781,7 +2783,9 @@ func TestTruncateLog(t *testing.T) {
 	}
 
 	// We can still get what remains of the log.
+	tc.rng.RLock()
 	entries, err := tc.rng.Entries(indexes[5], indexes[9], math.MaxUint64)
+	tc.rng.RUnlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2790,13 +2794,17 @@ func TestTruncateLog(t *testing.T) {
 	}
 
 	// But any range that includes the truncated entries returns an error.
+	tc.rng.RLock()
 	_, err = tc.rng.Entries(indexes[4], indexes[9], math.MaxUint64)
+	tc.rng.RUnlock()
 	if err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
 	}
 
 	// The term of the last truncated entry is still available.
+	tc.rng.RLock()
 	term, err := tc.rng.Term(indexes[4])
+	tc.rng.RUnlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2805,7 +2813,9 @@ func TestTruncateLog(t *testing.T) {
 	}
 
 	// The terms of older entries are gone.
+	tc.rng.RLock()
 	_, err = tc.rng.Term(indexes[3])
+	tc.rng.RUnlock()
 	if err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
 	}
@@ -2824,8 +2834,10 @@ func TestTruncateLog(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	tc.rng.RLock()
 	// The term of the last truncated entry is still available.
 	term, err = tc.rng.Term(indexes[4])
+	tc.rng.RUnlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2947,7 +2959,7 @@ func TestReplicaCorruption(t *testing.T) {
 	newIndex := 2*atomic.LoadUint64(&tc.rng.appliedIndex) + 1
 	atomic.StoreUint64(&tc.rng.appliedIndex, newIndex)
 	// Not really needed, but let's be thorough.
-	err = setAppliedIndex(tc.rng.store.Engine(), tc.rng.Desc().RangeID, newIndex)
+	err = setAppliedIndex(tc.rng.store.Engine(), tc.rng.RangeID, newIndex)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3565,7 +3577,7 @@ func TestEntries(t *testing.T) {
 	}
 
 	rng := tc.rng
-	rangeID := rng.Desc().RangeID
+	rangeID := rng.RangeID
 
 	// Discard the first half of the log.
 	truncateArgs := truncateLogArgs(indexes[5], rangeID)
@@ -3614,7 +3626,9 @@ func TestEntries(t *testing.T) {
 		// Case 14: lo is available, hi is not, but it was cut off by maxBytes.
 		{lo: indexes[5], hi: indexes[9] + 1000, maxBytes: 1, expResultCount: 1},
 	} {
+		rng.RLock()
 		ents, err := rng.Entries(tc.lo, tc.hi, tc.maxBytes)
+		rng.RUnlock()
 		if tc.expError == nil && err != nil {
 			t.Errorf("%d: expected no error, got %s", i, err)
 			continue
@@ -3628,15 +3642,20 @@ func TestEntries(t *testing.T) {
 	}
 
 	// Case 15: Lo must be less than or equal to hi.
+	rng.RLock()
 	if _, err := rng.Entries(indexes[9], indexes[5], 0); err == nil {
 		t.Errorf("15: error expected, got none")
 	}
+	rng.RUnlock()
 
 	// Case 16: add a gap to the indexes.
 	if err := engine.MVCCDelete(tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), roachpb.ZeroTimestamp,
 		nil); err != nil {
 		t.Fatal(err)
 	}
+
+	rng.RLock()
+	defer rng.RUnlock()
 	if _, err := rng.Entries(indexes[5], indexes[9], 0); err == nil {
 		t.Errorf("16: error expected, got none")
 	}
@@ -3664,7 +3683,7 @@ func TestTerm(t *testing.T) {
 	tc.rng.store.DisableRaftLogQueue(true)
 
 	rng := tc.rng
-	rangeID := rng.Desc().RangeID
+	rangeID := rng.RangeID
 
 	// Populate the log with 10 entries. Save the LastIndex after each write.
 	var indexes []uint64
@@ -3686,6 +3705,9 @@ func TestTerm(t *testing.T) {
 	if _, err := client.SendWrapped(tc.Sender(), rng.context(), &truncateArgs); err != nil {
 		t.Fatal(err)
 	}
+
+	rng.RLock()
+	defer rng.RUnlock()
 
 	firstIndex, err := rng.FirstIndex()
 	if err != nil {

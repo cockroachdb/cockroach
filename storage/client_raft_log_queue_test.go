@@ -51,12 +51,14 @@ func TestRaftLogQueue(t *testing.T) {
 	}
 
 	// Get the raft leader (and ensure one exists).
-	desc := mtc.stores[0].LookupReplica([]byte("a"), nil).Desc()
-	raftLeaderRepl := mtc.getRaftLeader(desc.RangeID, time.Second)
+	rangeID := mtc.stores[0].LookupReplica([]byte("a"), nil).RangeID
+	raftLeaderRepl := mtc.getRaftLeader(rangeID, time.Second)
 	if raftLeaderRepl == nil {
-		t.Fatalf("could not find raft leader replica for range %d", desc.RangeID)
+		t.Fatalf("could not find raft leader replica for range %d", rangeID)
 	}
+	raftLeaderRepl.RLock()
 	originalIndex, err := raftLeaderRepl.FirstIndex()
+	raftLeaderRepl.RUnlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +83,9 @@ func TestRaftLogQueue(t *testing.T) {
 		// Ensure that firstIndex has increased indicating that the log
 		// truncation has occurred.
 		var err error
+		raftLeaderRepl.RLock()
 		afterTruncationIndex, err = raftLeaderRepl.FirstIndex()
+		raftLeaderRepl.RUnlock()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -98,7 +102,9 @@ func TestRaftLogQueue(t *testing.T) {
 		store.ForceRaftLogScanAndProcess(t)
 	}
 
+	raftLeaderRepl.RLock()
 	after2ndTruncationIndex, err := raftLeaderRepl.FirstIndex()
+	raftLeaderRepl.RUnlock()
 	if err != nil {
 		t.Fatal(err)
 	}
