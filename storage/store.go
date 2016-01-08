@@ -532,6 +532,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			// and initialize those groups.
 			return false, nil
 		}); err != nil {
+		s.mu.Unlock()
 		return err
 	}
 	s.feed.endScanRanges()
@@ -767,10 +768,12 @@ func (s *Store) DisableRaftLogQueue(disabled bool) {
 func (s *Store) ForceRaftLogScanAndProcess(t util.Tester) {
 	// Add each range to the queue.
 	s.mu.RLock()
-	for _, r := range s.replicas {
+	replicas := s.replicas
+	s.mu.RUnlock()
+
+	for _, r := range replicas {
 		s.raftLogQueue.MaybeAdd(r, s.ctx.Clock.Now())
 	}
-	s.mu.RUnlock()
 
 	s.raftLogQueue.DrainQueue(s.ctx.Clock)
 }
