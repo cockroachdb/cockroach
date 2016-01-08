@@ -52,8 +52,15 @@ func TestingWaitForMetadata() func() {
 
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errStaleMetadata = errors.New("metadata is still stale")
-var errTransactionAborted = errors.New("current transaction is aborted, commands ignored until end of transaction block")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
+
+// errTransactionAborted indicates that the current transaction is aborted.
+type errTransactionAborted struct {
+}
+
+func (*errTransactionAborted) Error() string {
+	return "current transaction is aborted, commands ignored until end of transaction block"
+}
 
 var plannerPool = sync.Pool{
 	New: func() interface{} {
@@ -298,7 +305,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 		}
 	default:
 		if planMaker.txn != nil && planMaker.txn.Proto.Status == roachpb.ABORTED {
-			return result, roachpb.NewError(errTransactionAborted)
+			return result, roachpb.NewError(&errTransactionAborted{})
 		}
 	}
 
@@ -441,8 +448,7 @@ func (e *Executor) waitForCompletedSchemaChangesToPropagate(planMaker *planner) 
 // deal with cleaning up transaction state.
 func makeResultFromError(planMaker *planner, err *roachpb.Error) driver.Response_Result {
 	if planMaker.txn != nil {
-		// TODO(kaneda): Use type check?
-		if err.GoError().Error() != errTransactionAborted.Error() {
+		if _, ok := err.GoError().(*errTransactionAborted); !ok {
 			planMaker.txn.Cleanup(err)
 		}
 	}

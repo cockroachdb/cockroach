@@ -232,8 +232,8 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	// TODO(kaneda): Use type check?
-	if pErr := desc.AllocateIDs(); pErr.GoError().Error() != errMissingPrimaryKey.Error() {
+	pErr = desc.AllocateIDs()
+	if _, ok := pErr.GoError().(*errMissingPrimaryKey); ok {
 		t.Fatal(pErr)
 	}
 }
