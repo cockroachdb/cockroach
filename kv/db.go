@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -47,11 +48,16 @@ var allExternalMethods = [...]roachpb.Request{
 type DBServer struct {
 	context *base.Context
 	sender  client.Sender
+	stopper *stop.Stopper
 }
 
 // NewDBServer allocates and returns a new DBServer.
-func NewDBServer(ctx *base.Context, sender client.Sender) *DBServer {
-	return &DBServer{context: ctx, sender: sender}
+func NewDBServer(ctx *base.Context, sender client.Sender, stopper *stop.Stopper) *DBServer {
+	return &DBServer{
+		context: ctx,
+		sender:  sender,
+		stopper: stopper,
+	}
 }
 
 // RegisterRPC registers the RPC endpoints.
@@ -63,19 +69,29 @@ func (s *DBServer) RegisterRPC(rpcServer *rpc.Server) error {
 // executeCmd interprets the given message as a *roachpb.BatchRequest and sends it
 // via the local sender.
 func (s *DBServer) executeCmd(argsI proto.Message) (proto.Message, error) {
-	ba := argsI.(*roachpb.BatchRequest)
-	if err := verifyRequest(ba); err != nil {
-		return nil, err
+	var br *roachpb.BatchResponse
+	var err error
+
+	f := func() {
+		ba := argsI.(*roachpb.BatchRequest)
+		if err = verifyRequest(ba); err != nil {
+			return
+		}
+		var pErr *roachpb.Error
+		br, pErr = s.sender.Send(context.TODO(), *ba)
+		if pErr != nil {
+			br = &roachpb.BatchResponse{}
+		}
+		if br.Error != nil {
+			panic(roachpb.ErrorUnexpectedlySet(s.sender, br))
+		}
+		br.Error = pErr
 	}
-	br, pErr := s.sender.Send(context.TODO(), *ba)
-	if pErr != nil {
-		br = &roachpb.BatchResponse{}
+
+	if !s.stopper.RunTask(f) {
+		err = util.Errorf("stopped")
 	}
-	if br.Error != nil {
-		panic(roachpb.ErrorUnexpectedlySet(s.sender, br))
-	}
-	br.Error = pErr
-	return br, nil
+	return br, err
 }
 
 // verifyRequest checks for illegal inputs in request proto and
