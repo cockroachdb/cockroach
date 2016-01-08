@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include <google/protobuf/stubs/common.h>
+#include <google/protobuf/stubs/port.h>
 #include <google/protobuf/stubs/once.h>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/wire_format_lite_inl.h>
@@ -291,11 +292,11 @@ static void MergeFromFail(int line) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RaftCommand::kRangeIdFieldNumber;
 const int RaftCommand::kOriginReplicaFieldNumber;
 const int RaftCommand::kCmdFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RaftCommand::RaftCommand()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -728,11 +729,11 @@ void RaftCommand::set_allocated_cmd(::cockroach::roachpb::BatchRequest* cmd) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int InternalTimeSeriesData::kStartTimestampNanosFieldNumber;
 const int InternalTimeSeriesData::kSampleDurationNanosFieldNumber;
 const int InternalTimeSeriesData::kSamplesFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 InternalTimeSeriesData::InternalTimeSeriesData()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -1135,13 +1136,13 @@ InternalTimeSeriesData::samples() const {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int InternalTimeSeriesSample::kOffsetFieldNumber;
 const int InternalTimeSeriesSample::kCountFieldNumber;
 const int InternalTimeSeriesSample::kSumFieldNumber;
 const int InternalTimeSeriesSample::kMaxFieldNumber;
 const int InternalTimeSeriesSample::kMinFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 InternalTimeSeriesSample::InternalTimeSeriesSample()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -1652,10 +1653,10 @@ void InternalTimeSeriesSample::clear_min() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RaftTruncatedState::kIndexFieldNumber;
 const int RaftTruncatedState::kTermFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RaftTruncatedState::RaftTruncatedState()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -1987,9 +1988,9 @@ void RaftTruncatedState::clear_term() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RaftTombstone::kNextReplicaIdFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RaftTombstone::RaftTombstone()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -2246,11 +2247,11 @@ void RaftTombstone::clear_next_replica_id() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RaftSnapshotData_KeyValue::kKeyFieldNumber;
 const int RaftSnapshotData_KeyValue::kValueFieldNumber;
 const int RaftSnapshotData_KeyValue::kTimestampFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RaftSnapshotData_KeyValue::RaftSnapshotData_KeyValue()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -2575,10 +2576,10 @@ void RaftSnapshotData_KeyValue::InternalSwap(RaftSnapshotData_KeyValue* other) {
 
 // -------------------------------------------------------------------
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RaftSnapshotData::kRangeDescriptorFieldNumber;
 const int RaftSnapshotData::kKVFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RaftSnapshotData::RaftSnapshotData()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {

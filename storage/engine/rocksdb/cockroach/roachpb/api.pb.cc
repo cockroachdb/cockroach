@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include <google/protobuf/stubs/common.h>
+#include <google/protobuf/stubs/port.h>
 #include <google/protobuf/stubs/once.h>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/wire_format_lite_inl.h>
@@ -1680,10 +1681,10 @@ static void MergeFromFail(int line) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ResponseHeader::kTimestampFieldNumber;
 const int ResponseHeader::kTxnFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ResponseHeader::ResponseHeader()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -2054,9 +2055,9 @@ void ResponseHeader::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int GetRequest::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 GetRequest::GetRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -2337,10 +2338,10 @@ void GetRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int GetResponse::kHeaderFieldNumber;
 const int GetResponse::kValueFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 GetResponse::GetResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -2711,10 +2712,10 @@ void GetResponse::set_allocated_value(::cockroach::roachpb::Value* value) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int PutRequest::kHeaderFieldNumber;
 const int PutRequest::kValueFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 PutRequest::PutRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -3085,9 +3086,9 @@ void PutRequest::set_allocated_value(::cockroach::roachpb::Value* value) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int PutResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 PutResponse::PutResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -3368,11 +3369,11 @@ void PutResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* hea
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ConditionalPutRequest::kHeaderFieldNumber;
 const int ConditionalPutRequest::kValueFieldNumber;
 const int ConditionalPutRequest::kExpValueFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ConditionalPutRequest::ConditionalPutRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -3829,9 +3830,9 @@ void ConditionalPutRequest::set_allocated_exp_value(::cockroach::roachpb::Value*
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ConditionalPutResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ConditionalPutResponse::ConditionalPutResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -4112,10 +4113,10 @@ void ConditionalPutResponse::set_allocated_header(::cockroach::roachpb::Response
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int IncrementRequest::kHeaderFieldNumber;
 const int IncrementRequest::kIncrementFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 IncrementRequest::IncrementRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -4462,10 +4463,10 @@ void IncrementRequest::clear_increment() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int IncrementResponse::kHeaderFieldNumber;
 const int IncrementResponse::kNewValueFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 IncrementResponse::IncrementResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -4812,9 +4813,9 @@ void IncrementResponse::clear_new_value() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int DeleteRequest::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 DeleteRequest::DeleteRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -5095,9 +5096,9 @@ void DeleteRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int DeleteResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 DeleteResponse::DeleteResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -5378,10 +5379,10 @@ void DeleteResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* 
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int DeleteRangeRequest::kHeaderFieldNumber;
 const int DeleteRangeRequest::kMaxEntriesToDeleteFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 DeleteRangeRequest::DeleteRangeRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -5728,10 +5729,10 @@ void DeleteRangeRequest::clear_max_entries_to_delete() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int DeleteRangeResponse::kHeaderFieldNumber;
 const int DeleteRangeResponse::kNumDeletedFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 DeleteRangeResponse::DeleteRangeResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -6078,10 +6079,10 @@ void DeleteRangeResponse::clear_num_deleted() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ScanRequest::kHeaderFieldNumber;
 const int ScanRequest::kMaxResultsFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ScanRequest::ScanRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -6428,10 +6429,10 @@ void ScanRequest::clear_max_results() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ScanResponse::kHeaderFieldNumber;
 const int ScanResponse::kRowsFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ScanResponse::ScanResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -6783,10 +6784,10 @@ ScanResponse::rows() const {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ReverseScanRequest::kHeaderFieldNumber;
 const int ReverseScanRequest::kMaxResultsFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ReverseScanRequest::ReverseScanRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -7133,10 +7134,10 @@ void ReverseScanRequest::clear_max_results() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ReverseScanResponse::kHeaderFieldNumber;
 const int ReverseScanResponse::kRowsFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ReverseScanResponse::ReverseScanResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -7488,9 +7489,9 @@ ReverseScanResponse::rows() const {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int BeginTransactionRequest::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 BeginTransactionRequest::BeginTransactionRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -7771,9 +7772,9 @@ void BeginTransactionRequest::set_allocated_header(::cockroach::roachpb::Span* h
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int BeginTransactionResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 BeginTransactionResponse::BeginTransactionResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -8054,13 +8055,13 @@ void BeginTransactionResponse::set_allocated_header(::cockroach::roachpb::Respon
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int EndTransactionRequest::kHeaderFieldNumber;
 const int EndTransactionRequest::kCommitFieldNumber;
 const int EndTransactionRequest::kDeadlineFieldNumber;
 const int EndTransactionRequest::kInternalCommitTriggerFieldNumber;
 const int EndTransactionRequest::kIntentSpansFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 EndTransactionRequest::EndTransactionRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -8648,11 +8649,11 @@ EndTransactionRequest::intent_spans() const {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int EndTransactionResponse::kHeaderFieldNumber;
 const int EndTransactionResponse::kCommitWaitFieldNumber;
 const int EndTransactionResponse::kResolvedFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 EndTransactionResponse::EndTransactionResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -9090,10 +9091,10 @@ EndTransactionResponse::mutable_resolved() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int AdminSplitRequest::kHeaderFieldNumber;
 const int AdminSplitRequest::kSplitKeyFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 AdminSplitRequest::AdminSplitRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -9475,9 +9476,9 @@ void AdminSplitRequest::clear_split_key() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int AdminSplitResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 AdminSplitResponse::AdminSplitResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -9758,9 +9759,9 @@ void AdminSplitResponse::set_allocated_header(::cockroach::roachpb::ResponseHead
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int AdminMergeRequest::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 AdminMergeRequest::AdminMergeRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -10041,9 +10042,9 @@ void AdminMergeRequest::set_allocated_header(::cockroach::roachpb::Span* header)
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int AdminMergeResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 AdminMergeResponse::AdminMergeResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -10324,12 +10325,12 @@ void AdminMergeResponse::set_allocated_header(::cockroach::roachpb::ResponseHead
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RangeLookupRequest::kHeaderFieldNumber;
 const int RangeLookupRequest::kMaxRangesFieldNumber;
 const int RangeLookupRequest::kConsiderIntentsFieldNumber;
 const int RangeLookupRequest::kReverseFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RangeLookupRequest::RangeLookupRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -10806,10 +10807,10 @@ void RangeLookupRequest::clear_reverse() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RangeLookupResponse::kHeaderFieldNumber;
 const int RangeLookupResponse::kRangesFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RangeLookupResponse::RangeLookupResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -11161,9 +11162,9 @@ RangeLookupResponse::ranges() const {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int HeartbeatTxnRequest::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 HeartbeatTxnRequest::HeartbeatTxnRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -11444,9 +11445,9 @@ void HeartbeatTxnRequest::set_allocated_header(::cockroach::roachpb::Span* heade
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int HeartbeatTxnResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 HeartbeatTxnResponse::HeartbeatTxnResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -11727,10 +11728,10 @@ void HeartbeatTxnResponse::set_allocated_header(::cockroach::roachpb::ResponseHe
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int GCRequest_GCKey::kKeyFieldNumber;
 const int GCRequest_GCKey::kTimestampFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 GCRequest_GCKey::GCRequest_GCKey()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -12012,10 +12013,10 @@ void GCRequest_GCKey::InternalSwap(GCRequest_GCKey* other) {
 
 // -------------------------------------------------------------------
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int GCRequest::kHeaderFieldNumber;
 const int GCRequest::kKeysFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 GCRequest::GCRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -12467,9 +12468,9 @@ GCRequest::keys() const {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int GCResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 GCResponse::GCResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -12750,14 +12751,14 @@ void GCResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* head
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int PushTxnRequest::kHeaderFieldNumber;
 const int PushTxnRequest::kPusherTxnFieldNumber;
 const int PushTxnRequest::kPusheeTxnFieldNumber;
 const int PushTxnRequest::kPushToFieldNumber;
 const int PushTxnRequest::kNowFieldNumber;
 const int PushTxnRequest::kPushTypeFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 PushTxnRequest::PushTxnRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -13455,10 +13456,10 @@ void PushTxnRequest::clear_push_type() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int PushTxnResponse::kHeaderFieldNumber;
 const int PushTxnResponse::kPusheeTxnFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 PushTxnResponse::PushTxnResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -13829,11 +13830,11 @@ void PushTxnResponse::set_allocated_pushee_txn(::cockroach::roachpb::Transaction
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ResolveIntentRequest::kHeaderFieldNumber;
 const int ResolveIntentRequest::kIntentTxnFieldNumber;
 const int ResolveIntentRequest::kPoisonFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ResolveIntentRequest::ResolveIntentRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -14264,9 +14265,9 @@ void ResolveIntentRequest::clear_poison() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ResolveIntentResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ResolveIntentResponse::ResolveIntentResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -14547,11 +14548,11 @@ void ResolveIntentResponse::set_allocated_header(::cockroach::roachpb::ResponseH
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ResolveIntentRangeRequest::kHeaderFieldNumber;
 const int ResolveIntentRangeRequest::kIntentTxnFieldNumber;
 const int ResolveIntentRangeRequest::kPoisonFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ResolveIntentRangeRequest::ResolveIntentRangeRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -14982,9 +14983,9 @@ void ResolveIntentRangeRequest::clear_poison() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int NoopResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 NoopResponse::NoopResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -15265,9 +15266,9 @@ void NoopResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* he
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int NoopRequest::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 NoopRequest::NoopRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -15548,9 +15549,9 @@ void NoopRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ResolveIntentRangeResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ResolveIntentRangeResponse::ResolveIntentRangeResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -15831,10 +15832,10 @@ void ResolveIntentRangeResponse::set_allocated_header(::cockroach::roachpb::Resp
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int MergeRequest::kHeaderFieldNumber;
 const int MergeRequest::kValueFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MergeRequest::MergeRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -16205,9 +16206,9 @@ void MergeRequest::set_allocated_value(::cockroach::roachpb::Value* value) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int MergeResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MergeResponse::MergeResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -16488,11 +16489,11 @@ void MergeResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* h
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int TruncateLogRequest::kHeaderFieldNumber;
 const int TruncateLogRequest::kIndexFieldNumber;
 const int TruncateLogRequest::kRangeIdFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 TruncateLogRequest::TruncateLogRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -16912,9 +16913,9 @@ void TruncateLogRequest::clear_range_id() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int TruncateLogResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 TruncateLogResponse::TruncateLogResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -17195,10 +17196,10 @@ void TruncateLogResponse::set_allocated_header(::cockroach::roachpb::ResponseHea
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int LeaderLeaseRequest::kHeaderFieldNumber;
 const int LeaderLeaseRequest::kLeaseFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 LeaderLeaseRequest::LeaderLeaseRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -17569,9 +17570,9 @@ void LeaderLeaseRequest::set_allocated_lease(::cockroach::roachpb::Lease* lease)
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int LeaderLeaseResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 LeaderLeaseResponse::LeaderLeaseResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -17852,7 +17853,7 @@ void LeaderLeaseResponse::set_allocated_header(::cockroach::roachpb::ResponseHea
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RequestUnion::kGetFieldNumber;
 const int RequestUnion::kPutFieldNumber;
 const int RequestUnion::kConditionalPutFieldNumber;
@@ -17875,7 +17876,7 @@ const int RequestUnion::kTruncateLogFieldNumber;
 const int RequestUnion::kLeaderLeaseFieldNumber;
 const int RequestUnion::kReverseScanFieldNumber;
 const int RequestUnion::kNoopFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RequestUnion::RequestUnion()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -19978,7 +19979,7 @@ void RequestUnion::set_allocated_noop(::cockroach::roachpb::NoopRequest* noop) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ResponseUnion::kGetFieldNumber;
 const int ResponseUnion::kPutFieldNumber;
 const int ResponseUnion::kConditionalPutFieldNumber;
@@ -20001,7 +20002,7 @@ const int ResponseUnion::kTruncateLogFieldNumber;
 const int ResponseUnion::kLeaderLeaseFieldNumber;
 const int ResponseUnion::kReverseScanFieldNumber;
 const int ResponseUnion::kNoopFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ResponseUnion::ResponseUnion()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -22104,14 +22105,14 @@ void ResponseUnion::set_allocated_noop(::cockroach::roachpb::NoopResponse* noop)
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Header::kTimestampFieldNumber;
 const int Header::kReplicaFieldNumber;
 const int Header::kRangeIdFieldNumber;
 const int Header::kUserPriorityFieldNumber;
 const int Header::kTxnFieldNumber;
 const int Header::kReadConsistencyFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Header::Header()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -22770,10 +22771,10 @@ void Header::clear_read_consistency() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int BatchRequest::kHeaderFieldNumber;
 const int BatchRequest::kRequestsFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 BatchRequest::BatchRequest()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -23125,11 +23126,11 @@ BatchRequest::requests() const {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int BatchResponse_Header::kErrorFieldNumber;
 const int BatchResponse_Header::kTimestampFieldNumber;
 const int BatchResponse_Header::kTxnFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 BatchResponse_Header::BatchResponse_Header()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -23453,10 +23454,10 @@ void BatchResponse_Header::InternalSwap(BatchResponse_Header* other) {
 
 // -------------------------------------------------------------------
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int BatchResponse::kHeaderFieldNumber;
 const int BatchResponse::kResponsesFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 BatchResponse::BatchResponse()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {

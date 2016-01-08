@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include <google/protobuf/stubs/common.h>
+#include <google/protobuf/stubs/port.h>
 #include <google/protobuf/stubs/once.h>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/wire_format_lite_inl.h>
@@ -642,11 +643,11 @@ static void MergeFromFail(int line) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int NotLeaderError::kReplicaFieldNumber;
 const int NotLeaderError::kLeaderFieldNumber;
 const int NotLeaderError::kRangeIdFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 NotLeaderError::NotLeaderError()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -1079,8 +1080,8 @@ void NotLeaderError::clear_range_id() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
-#endif  // !_MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 NodeUnavailableError::NodeUnavailableError()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -1268,9 +1269,9 @@ void NodeUnavailableError::InternalSwap(NodeUnavailableError* other) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RangeNotFoundError::kRangeIdFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RangeNotFoundError::RangeNotFoundError()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -1527,11 +1528,11 @@ void RangeNotFoundError::clear_range_id() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RangeKeyMismatchError::kRequestStartKeyFieldNumber;
 const int RangeKeyMismatchError::kRequestEndKeyFieldNumber;
 const int RangeKeyMismatchError::kRangeFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RangeKeyMismatchError::RangeKeyMismatchError()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -2009,12 +2010,12 @@ void RangeKeyMismatchError::set_allocated_range(::cockroach::roachpb::RangeDescr
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ReadWithinUncertaintyIntervalError::kTimestampFieldNumber;
 const int ReadWithinUncertaintyIntervalError::kExistingTimestampFieldNumber;
 const int ReadWithinUncertaintyIntervalError::kNodeIdFieldNumber;
 const int ReadWithinUncertaintyIntervalError::kTxnFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ReadWithinUncertaintyIntervalError::ReadWithinUncertaintyIntervalError()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -2533,9 +2534,9 @@ void ReadWithinUncertaintyIntervalError::set_allocated_txn(::cockroach::roachpb:
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int TransactionAbortedError::kTxnFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 TransactionAbortedError::TransactionAbortedError()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -2816,10 +2817,10 @@ void TransactionAbortedError::set_allocated_txn(::cockroach::roachpb::Transactio
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int TransactionPushError::kTxnFieldNumber;
 const int TransactionPushError::kPusheeTxnFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 TransactionPushError::TransactionPushError()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -3190,9 +3191,9 @@ void TransactionPushError::set_allocated_pushee_txn(::cockroach::roachpb::Transa
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int TransactionRetryError::kTxnFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 TransactionRetryError::TransactionRetryError()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -3473,10 +3474,10 @@ void TransactionRetryError::set_allocated_txn(::cockroach::roachpb::Transaction*
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int TransactionStatusError::kTxnFieldNumber;
 const int TransactionStatusError::kMsgFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 TransactionStatusError::TransactionStatusError()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -3870,11 +3871,11 @@ void TransactionStatusError::clear_msg() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int WriteIntentError::kIntentsFieldNumber;
 const int WriteIntentError::kResolvedFieldNumber;
 const int WriteIntentError::kIndexFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 WriteIntentError::WriteIntentError()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -4290,10 +4291,10 @@ void WriteIntentError::set_allocated_index(::cockroach::roachpb::ErrPosition* in
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int WriteTooOldError::kTimestampFieldNumber;
 const int WriteTooOldError::kExistingTimestampFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 WriteTooOldError::WriteTooOldError()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -4664,8 +4665,8 @@ void WriteTooOldError::set_allocated_existing_timestamp(::cockroach::roachpb::Ti
 
 // ===================================================================
 
-#ifndef _MSC_VER
-#endif  // !_MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 OpRequiresTxnError::OpRequiresTxnError()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -4853,10 +4854,10 @@ void OpRequiresTxnError::InternalSwap(OpRequiresTxnError* other) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ConditionFailedError::kActualValueFieldNumber;
 const int ConditionFailedError::kIndexFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ConditionFailedError::ConditionFailedError()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -5227,11 +5228,11 @@ void ConditionFailedError::set_allocated_index(::cockroach::roachpb::ErrPosition
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int LeaseRejectedError::kMessageFieldNumber;
 const int LeaseRejectedError::kRequestedFieldNumber;
 const int LeaseRejectedError::kExistingFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 LeaseRejectedError::LeaseRejectedError()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -5711,10 +5712,10 @@ void LeaseRejectedError::set_allocated_existing(::cockroach::roachpb::Lease* exi
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int SendError::kMessageFieldNumber;
 const int SendError::kRetryableFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 SendError::SendError()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -6082,7 +6083,7 @@ void SendError::clear_retryable() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ErrorDetail::kNotLeaderFieldNumber;
 const int ErrorDetail::kRangeNotFoundFieldNumber;
 const int ErrorDetail::kRangeKeyMismatchFieldNumber;
@@ -6098,7 +6099,7 @@ const int ErrorDetail::kConditionFailedFieldNumber;
 const int ErrorDetail::kLeaseRejectedFieldNumber;
 const int ErrorDetail::kNodeUnavailableFieldNumber;
 const int ErrorDetail::kSendFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ErrorDetail::ErrorDetail()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -7593,9 +7594,9 @@ void ErrorDetail::set_allocated_send(::cockroach::roachpb::SendError* send) {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ErrPosition::kIndexFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ErrPosition::ErrPosition()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
@@ -7852,12 +7853,12 @@ void ErrPosition::clear_index() {
 
 // ===================================================================
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Error::kMessageFieldNumber;
 const int Error::kRetryableFieldNumber;
 const int Error::kTransactionRestartFieldNumber;
 const int Error::kDetailFieldNumber;
-#endif  // !_MSC_VER
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Error::Error()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
