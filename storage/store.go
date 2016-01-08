@@ -1283,7 +1283,11 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 	}
 	s.ctx.Clock.Update(ba.Timestamp)
 
-	defer trace.Epoch(fmt.Sprintf("executing %d requests", len(ba.Requests)))()
+	if log.V(1) {
+		defer trace.Epoch(fmt.Sprintf("executing %s", ba))()
+	} else {
+		defer trace.Epoch(fmt.Sprintf("executing %d requests", len(ba.Requests)))()
+	}
 	// Backoff and retry loop for handling errors. Backoff times are measured
 	// in the Trace.
 	// Increase the sequence counter to avoid getting caught in replay
