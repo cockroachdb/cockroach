@@ -690,9 +690,10 @@ func (t *Transaction) Restart(userPriority float64, upgradePriority int32, times
 	}
 	// Set original timestamp to current timestamp on restart.
 	t.OrigTimestamp = t.Timestamp
-	// Potentially upgrade priority both by creating a new random
-	// priority using priority and taking the greater of the current
-	// transaction priority and the conflicting txn's upgradePriority.
+	// Upgrade priority to the maximum of:
+	// - the current transaction priority
+	// - a random priority created from userPriority
+	// - the conflicting transaction's upgradePriority
 	t.UpgradePriority(MakePriority(userPriority))
 	t.UpgradePriority(upgradePriority)
 }
