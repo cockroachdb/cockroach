@@ -765,9 +765,24 @@ func (s *Store) DisableRaftLogQueue(disabled bool) {
 // need their raft logs truncated and then process each of them.
 // Exposed only for testing.
 func (s *Store) ForceRaftLogScanAndProcess(t util.Tester) {
-	// MaybeAdd can transitively call back into Store (namely RaftStatus) and end up
-	// attempting to re-acquire mu.RLock, making a deadlock is possible (if Lock called in-between).
-	// Instead, make a copy and release lock before calling MaybeAdd.
+	// NB: This copy allows calling s.mu.RUnlock() before calling MaybeAdd, which
+	// is necessary to avoid deadlocks. Without it, a concurrent call to
+	// (*Store).mu.Lock() will deadlock the system:
+	//
+	// (*Store).mu.RLock()
+	//
+	// Start of (*Store).mu.Lock() danger zone
+	//
+	// raftLogQueue.MaybeAdd
+	// raftLogQueue.shouldQueue
+	// getTruncatableIndexes
+	// (*Store).RaftStatus
+	//
+	// End of (*Store).mu.Lock() danger zone
+	//
+	// (*Store).mu.RLock()
+	//
+	// See http://play.golang.org/p/xTJiAiRfYf
 	replicas := make([]*Replica, 0, len(s.replicas))
 	s.mu.RLock()
 	for _, r := range s.replicas {
