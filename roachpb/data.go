@@ -661,12 +661,11 @@ func MakePriority(userPriority float64) int32 {
 	//
 	// For every random trial, if the normal priority is chosen >= max*x,
 	// the user priority loses 100% of the time; otherwise, wins 50% of
-	// the time. Therefore, x fraction of the time, loss is user(100%)
-	// and (1-x) fraction of the time win is user(50%).
+	// the time. Therefore, (1-x) fraction of the time, loss is user(100%)
+	// and x fraction of the time win is user(50%).
 	//
-	//   (1-x) * 1/2 = pri / (1 + pri)
-	//   -x/2 = pri / (1 + pri) - 1/2
-	//   x = 1 - 2*pri / (1 + pri)
+	//   x * 1/2 = pri / (1 + pri)
+	//   x = 2*pri / (1 + pri)
 	x := 2*float64(userPriority)/(1+float64(userPriority)) - 1
 	if userPriority >= 1 {
 		return math.MaxInt32 - rand.Int31n(int32(float64(math.MaxInt32)*(1-x)))
