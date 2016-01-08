@@ -500,7 +500,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	// next split attempt. They can otherwise be ignored.
 	s.mu.Lock()
 	s.feed.beginScanRanges()
-	if _, err := engine.MVCCIterate(s.engine, start, end, now, false /* !consistent */, nil, /* txn */
+	_, err = engine.MVCCIterate(s.engine, start, end, now, false /* !consistent */, nil, /* txn */
 		false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
 			// Only consider range metadata entries; ignore others.
 			_, suffix, _, err := keys.DecodeRangeKey(kv.Key)
@@ -531,13 +531,12 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			// TODO(bdarnell): Scan all ranges at startup for unapplied log entries
 			// and initialize those groups.
 			return false, nil
-		}); err != nil {
-		s.mu.Unlock()
+		})
+	s.mu.Unlock()
+	s.feed.endScanRanges()
+	if err != nil {
 		return err
 	}
-	s.feed.endScanRanges()
-
-	s.mu.Unlock()
 
 	// Start Raft processing goroutines.
 	if err := s.ctx.Transport.Listen(s.StoreID(), s.enqueueRaftMessage); err != nil {
@@ -592,14 +591,6 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	atomic.StoreInt32(&s.started, 1)
 
 	return nil
-}
-
-// WaitForInit waits for any asynchronous processes begun in Start()
-// to complete their initialization. In particular, this includes
-// gossiping. In some cases this may block until the range GC queue
-// has completed its scan. Only for testing.
-func (s *Store) WaitForInit() {
-	s.initComplete.Wait()
 }
 
 // startGossip runs an infinite loop in a goroutine which regularly checks
@@ -724,64 +715,6 @@ func (s *Store) GossipStore() {
 	if err := s.ctx.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip); err != nil {
 		log.Warningc(ctx, "%s", err)
 	}
-}
-
-// DisableReplicaGCQueue disables or enables the replica GC queue.
-// Exposed only for testing.
-func (s *Store) DisableReplicaGCQueue(disabled bool) {
-	s.replicaGCQueue.SetDisabled(disabled)
-}
-
-// ForceReplicationScan iterates over all ranges and enqueues any that
-// need to be replicated. Exposed only for testing.
-func (s *Store) ForceReplicationScan(t util.Tester) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, r := range s.replicas {
-		s.replicateQueue.MaybeAdd(r, s.ctx.Clock.Now())
-	}
-}
-
-// ForceReplicaGCScanAndProcess iterates over all ranges and enqueues any that
-// may need to be GC'd. Exposed only for testing.
-func (s *Store) ForceReplicaGCScanAndProcess(t util.Tester) {
-	s.mu.Lock()
-
-	for _, r := range s.replicas {
-		s.replicaGCQueue.MaybeAdd(r, s.ctx.Clock.Now())
-	}
-	s.mu.Unlock()
-
-	s.replicaGCQueue.DrainQueue(s.ctx.Clock)
-}
-
-// DisableRaftLogQueue disables or enables the raft log queue.
-// Exposed only for testing.
-func (s *Store) DisableRaftLogQueue(disabled bool) {
-	s.raftLogQueue.SetDisabled(disabled)
-}
-
-// ForceRaftLogScanAndProcess iterates over all ranges and enqueues any that
-// need their raft logs truncated and then process each of them.
-// Exposed only for testing.
-func (s *Store) ForceRaftLogScanAndProcess(t util.Tester) {
-	// MaybeAdd can transitively call back into Store (namely RaftStatus) and end up
-	// attempting to re-acquire mu.RLock, making a deadlock is possible (if Lock called in-between).
-	// Instead, make a copy and release lock before calling MaybeAdd.
-	replicas := make([]*Replica, 0, len(s.replicas))
-	s.mu.RLock()
-	for _, r := range s.replicas {
-		replicas = append(replicas, r)
-	}
-	s.mu.RUnlock()
-
-	// Add each range to the queue.
-	for _, r := range replicas {
-		s.raftLogQueue.MaybeAdd(r, s.ctx.Clock.Now())
-	}
-
-	s.raftLogQueue.DrainQueue(s.ctx.Clock)
 }
 
 // Bootstrap writes a new store ident to the underlying engine. To

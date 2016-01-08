@@ -87,7 +87,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 
 	// Enable the raft log scanner and and force a truncation.
 	store.DisableRaftLogQueue(false)
-	store.ForceRaftLogScanAndProcess(t)
+	store.ForceRaftLogScanAndProcess()
 
 	r.RLock()
 	newFirstIndex, err := r.FirstIndex()
@@ -105,7 +105,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	// to be flaky, we can remove it as the same functionality is tested in
 	// client_raft_log_queue_test.
 	util.SucceedsWithin(t, time.Second, func() error {
-		store.ForceRaftLogScanAndProcess(t)
+		store.ForceRaftLogScanAndProcess()
 		truncatableIndexes, oldestIndex, err := getTruncatableIndexes(rngNew)
 		if err != nil {
 			return util.Errorf("expected no error, got %s", err)
