@@ -22,7 +22,6 @@ package storage
 import (
 	"bytes"
 	"crypto/sha1"
-	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -1506,6 +1505,8 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 
 		if err != nil {
 			// Initialize the error index.
+			// TODO(kaneda): Always set the index when the
+			// error stems from an individual command.
 			if _, ok := err.GoError().(*roachpb.WriteIntentError); ok {
 				err.SetErrorIndex(int32(index))
 			}
@@ -1735,45 +1736,19 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 	}
 }
 
-// TODO(spencerkimball): move to util.
-type chainedError struct {
-	error
-	cause *chainedError
-}
-
-// Error implements the error interface, printing the underlying chain of errors.
-func (ce *chainedError) Error() string {
-	if ce == nil {
-		ce = &chainedError{}
-	}
-	if ce.cause != nil {
-		return fmt.Sprintf("%s (caused by %s)", ce.error, ce.cause)
-	}
-	return ce.error.Error()
-}
-
-// newChainedError returns a chainedError made up from the given errors,
-// omitting nil values. It returns nil unless at least one of its arguments
-// is not nil.
-func newChainedError(errs ...error) *chainedError {
-	if len(errs) == 0 || (len(errs) == 1 && errs[0] == nil) {
-		return nil
-	}
-	ce := &chainedError{error: errs[0]}
-	for _, err := range errs[1:] {
-		if err == nil {
-			continue
-		}
-		ce.cause = &chainedError{error: err}
-		ce = ce.cause
-	}
-	return ce
-}
-
 // newReplicaCorruptionError creates a new error indicating a corrupt replica,
 // with the supplied list of errors given as history.
-func newReplicaCorruptionError(err ...error) *roachpb.ReplicaCorruptionError {
-	return &roachpb.ReplicaCorruptionError{ErrorMsg: newChainedError(err...).Error()}
+func newReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
+	var errMsg string
+	for i := range errs {
+		err := errs[len(errs)-i-1]
+		if len(errMsg) == 0 {
+			errMsg = err.Error()
+		} else {
+			errMsg = fmt.Sprintf("%s (caused by %s)", err, errMsg)
+		}
+	}
+	return &roachpb.ReplicaCorruptionError{ErrorMsg: errMsg}
 }
 
 // maybeSetCorrupt is a stand-in for proper handling of failing replicas. Such a
@@ -1895,7 +1870,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 	return nil
 }
 
-var errSystemDBIntent = roachpb.NewError(errors.New("must retry later due to intent on SystemDB"))
+var errSystemDBIntent = roachpb.NewErrorf("must retry later due to intent on SystemDB")
 
 // loadSystemDBSpan scans the entire SystemDB span and returns the full list of
 // key/value pairs along with the sha1 checksum of the contents (key and value).

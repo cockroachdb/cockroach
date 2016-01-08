@@ -699,10 +699,6 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		newTxn.Restart(ba.UserPriority, t.Txn.Priority, newTxn.Timestamp)
 		t.Txn = *newTxn
 		pErr.Txn = newTxn
-	case *roachpb.InternalError:
-		if pErr.Detail != nil {
-			panic(fmt.Sprintf("unhandled InternalError %T", pErr))
-		}
 	default:
 		trace.SetError()
 	}

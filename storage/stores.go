@@ -134,8 +134,6 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 
 	var br *roachpb.BatchResponse
 	if err != nil {
-		log.Infof("returning an err: %s", err)
-		err.Txn = ba.Txn
 		return nil, err
 	}
 	// For calls that read data within a txn, we can avoid uncertainty

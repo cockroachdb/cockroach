@@ -65,98 +65,79 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 
 	var reply roachpb.Response
 	var intents []roachpb.Intent
-	var respHeader *roachpb.ResponseHeader
 	var err error
 	switch tArgs := args.(type) {
 	case *roachpb.GetRequest:
 		var resp roachpb.GetResponse
 		resp, intents, err = r.Get(batch, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.PutRequest:
 		var resp roachpb.PutResponse
 		resp, err = r.Put(batch, ms, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.ConditionalPutRequest:
 		var resp roachpb.ConditionalPutResponse
 		resp, err = r.ConditionalPut(batch, ms, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.IncrementRequest:
 		var resp roachpb.IncrementResponse
 		resp, err = r.Increment(batch, ms, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.DeleteRequest:
 		var resp roachpb.DeleteResponse
 		resp, err = r.Delete(batch, ms, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.DeleteRangeRequest:
 		var resp roachpb.DeleteRangeResponse
 		resp, err = r.DeleteRange(batch, ms, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.ScanRequest:
 		var resp roachpb.ScanResponse
 		resp, intents, err = r.Scan(batch, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.ReverseScanRequest:
 		var resp roachpb.ReverseScanResponse
 		resp, intents, err = r.ReverseScan(batch, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.BeginTransactionRequest:
 		var resp roachpb.BeginTransactionResponse
 		resp, err = r.BeginTransaction(batch, ms, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.EndTransactionRequest:
 		var resp roachpb.EndTransactionResponse
 		resp, intents, err = r.EndTransaction(batch, ms, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.RangeLookupRequest:
 		var resp roachpb.RangeLookupResponse
 		resp, intents, err = r.RangeLookup(batch, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.HeartbeatTxnRequest:
 		var resp roachpb.HeartbeatTxnResponse
 		resp, err = r.HeartbeatTxn(batch, ms, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.GCRequest:
 		var resp roachpb.GCResponse
 		resp, err = r.GC(batch, ms, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.PushTxnRequest:
 		var resp roachpb.PushTxnResponse
 		resp, err = r.PushTxn(batch, ms, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.ResolveIntentRequest:
 		var resp roachpb.ResolveIntentResponse
 		resp, err = r.ResolveIntent(batch, ms, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.ResolveIntentRangeRequest:
 		var resp roachpb.ResolveIntentRangeResponse
 		resp, err = r.ResolveIntentRange(batch, ms, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.MergeRequest:
 		var resp roachpb.MergeResponse
 		resp, err = r.Merge(batch, ms, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.TruncateLogRequest:
 		var resp roachpb.TruncateLogResponse
 		resp, err = r.TruncateLog(batch, ms, h, *tArgs)
-		respHeader = resp.Header()
 		reply = &resp
 	case *roachpb.LeaderLeaseRequest:
 		var resp roachpb.LeaderLeaseResponse
@@ -200,8 +181,8 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 	var pErr *roachpb.Error
 	if err != nil {
 		pErr = roachpb.NewError(err)
-		if respHeader != nil {
-			pErr.Txn = respHeader.Txn
+		if reply.Header() != nil {
+			pErr.Txn = reply.Header().Txn
 		}
 		if pErr.Txn == nil {
 			pErr.Txn = h.Txn
@@ -896,7 +877,7 @@ func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header
 func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.PushTxnRequest) (roachpb.PushTxnResponse, error) {
 	var reply roachpb.PushTxnResponse
 
-	if !bytes.Equal(args.PusherTxn.ID, []byte("")) {
+	if len(args.PusherTxn.ID) != 0 {
 		reply.Txn = &args.PusherTxn
 	}
 

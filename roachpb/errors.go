@@ -38,6 +38,12 @@ func ErrorUnexpectedlySet(culprit, response interface{}) string {
 	return fmt.Sprintf("error is unexpectedly set, culprit is %T:\n%+v", culprit, response)
 }
 
+// transactionRestartError is an interface implemented by errors that cause
+// a transaction to be restarted.
+type transactionRestartError interface {
+	CanRestartTransaction() TransactionRestart
+}
+
 func (e Error) getDetail() error {
 	if e.Detail == nil {
 		return nil
@@ -51,7 +57,7 @@ func NewError(err error) *Error {
 		return nil
 	}
 	e := &Error{}
-	if intErr, ok := err.(*InternalError); ok {
+	if intErr, ok := err.(*internalError); ok {
 		*e = *(*Error)(intErr)
 	} else {
 		e.SetGoError(err)
@@ -70,7 +76,7 @@ func NewUErrorf(format string, a ...interface{}) *Error {
 // filename and line number.
 func NewErrorf(format string, a ...interface{}) *Error {
 	// Cannot use util.Errorf here due to cyclic dependency.
-	file, line, _ := caller.Lookup(2)
+	file, line, _ := caller.Lookup(1)
 	s := fmt.Sprintf("%s:%d: ", file, line)
 	return NewError(fmt.Errorf(s+format, a...))
 }
@@ -80,17 +86,21 @@ func (e *Error) String() string {
 	return e.Message
 }
 
-// InternalError is an error used for internal system errors.
-type InternalError Error
+type internalError Error
 
 // Error implements error.
-func (e *InternalError) Error() string {
+func (e *internalError) Error() string {
 	return (*Error)(e).String()
 }
 
 // CanRetry implements the retry.Retryable interface.
-func (e *InternalError) CanRetry() bool {
+func (e *internalError) CanRetry() bool {
 	return e.Retryable
+}
+
+// CanRestartTransaction implements the transactionRestartError interface.
+func (e *internalError) CanRestartTransaction() TransactionRestart {
+	return e.TransactionRestart
 }
 
 // CanRetry implements the retry.Retryable interface.
@@ -104,12 +114,12 @@ func (e *Error) GoError() error {
 		return nil
 	}
 	if e.Detail == nil {
-		return (*InternalError)(e)
+		return (*internalError)(e)
 	}
 	err := e.getDetail()
 	if err == nil {
 		// Unknown error detail; return the generic error.
-		return (*InternalError)(e)
+		return (*internalError)(e)
 	}
 	// Make sure that the flags in the generic portion of the error
 	// match the methods of the specific error type.
@@ -131,19 +141,13 @@ func (e *Error) SetGoError(err error) {
 	if r, ok := err.(retry.Retryable); ok {
 		e.Retryable = r.CanRetry()
 	}
-
+	if tErr, ok := err.(transactionRestartError); ok {
+		e.TransactionRestart = tErr.CanRestartTransaction()
+	}
 	// If the specific error type exists in the detail union, set it.
 	detail := &ErrorDetail{}
 	if detail.SetValue(err) {
 		e.Detail = detail
-	}
-
-	// TODO(kaneda): Find a better way to set TransactionRestart.
-	switch err.(type) {
-	case *TransactionAbortedError, *TransactionPushError:
-		e.TransactionRestart = TransactionRestart_BACKOFF
-	case *TransactionRetryError, *ReadWithinUncertaintyIntervalError:
-		e.TransactionRestart = TransactionRestart_IMMEDIATE
 	}
 }
 
@@ -221,15 +225,22 @@ func (*RangeKeyMismatchError) CanRetry() bool {
 	return true
 }
 
+// Error formats error.
+func (e *TransactionAbortedError) Error() string {
+	return fmt.Sprintf("txn aborted %s", e.Txn)
+}
+
+var _ transactionRestartError = &TransactionAbortedError{}
+
+// CanRestartTransaction implements the transactionRestartError interface.
+func (*TransactionAbortedError) CanRestartTransaction() TransactionRestart {
+	return TransactionRestart_BACKOFF
+}
+
 // NewTransactionAbortedError initializes a new TransactionAbortedError. It
 // creates a copy of the given Transaction.
 func NewTransactionAbortedError(txn *Transaction) *TransactionAbortedError {
 	return &TransactionAbortedError{Txn: *txn.Clone()}
-}
-
-// Error formats error.
-func (e *TransactionAbortedError) Error() string {
-	return fmt.Sprintf("txn aborted %s", e.Txn)
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.
@@ -254,6 +265,13 @@ func (e *TransactionPushError) Error() string {
 	return fmt.Sprintf("txn %s failed to push %s", e.Txn, e.PusheeTxn)
 }
 
+var _ transactionRestartError = &TransactionPushError{}
+
+// CanRestartTransaction implements the TransactionRestartError interface.
+func (*TransactionPushError) CanRestartTransaction() TransactionRestart {
+	return TransactionRestart_BACKOFF
+}
+
 // NewTransactionRetryError initializes a new TransactionRetryError.
 // Txn is the transaction which will be retried (a copy is taken).
 func NewTransactionRetryError(txn *Transaction) *TransactionRetryError {
@@ -263,6 +281,13 @@ func NewTransactionRetryError(txn *Transaction) *TransactionRetryError {
 // Error formats error.
 func (e *TransactionRetryError) Error() string {
 	return fmt.Sprintf("retry txn %s", e.Txn)
+}
+
+var _ transactionRestartError = &TransactionRetryError{}
+
+// CanRestartTransaction implements the TransactionRestartError interface.
+func (*TransactionRetryError) CanRestartTransaction() TransactionRestart {
+	return TransactionRestart_IMMEDIATE
 }
 
 // NewTransactionStatusError initializes a new TransactionStatusError from
@@ -294,6 +319,14 @@ func (e *WriteTooOldError) Error() string {
 func (e *ReadWithinUncertaintyIntervalError) Error() string {
 	return fmt.Sprintf("read at time %s encountered previous write with future timestamp %s within uncertainty interval", e.Timestamp, e.ExistingTimestamp)
 }
+
+var _ transactionRestartError = &ReadWithinUncertaintyIntervalError{}
+
+// CanRestartTransaction implements the TransactionRestartError interface.
+func (*ReadWithinUncertaintyIntervalError) CanRestartTransaction() TransactionRestart {
+	return TransactionRestart_IMMEDIATE
+}
+
 
 // Error formats error.
 func (*OpRequiresTxnError) Error() string {

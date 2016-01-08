@@ -1411,7 +1411,6 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 			PushType: pushType,
 		})
 	}
-	// TODO(kaneda): Setting up the txn??
 
 	b := &client.Batch{}
 	b.InternalAddRequest(pushReqs...)

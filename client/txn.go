@@ -120,7 +120,7 @@ func (txn *Txn) DebugName() string {
 func (txn *Txn) SetIsolation(isolation roachpb.IsolationType) *roachpb.Error {
 	if txn.Proto.Isolation != isolation {
 		if txn.Proto.IsInitialized() {
-			return roachpb.NewUErrorf("cannot change the isolation level of a running transaction")
+			return roachpb.NewErrorf("cannot change the isolation level of a running transaction")
 		}
 		txn.Proto.Isolation = isolation
 	}
@@ -400,7 +400,6 @@ func (txn *Txn) exec(retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
 				continue
 			}
 			// By default, fall through and break.
-
 		}
 		break
 	}
