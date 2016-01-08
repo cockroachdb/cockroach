@@ -1072,7 +1072,7 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, su
 
 	// Remove and destroy the subsumed range. Note that we are on the
 	// processRaft goroutine so we can call removeReplicaImpl directly.
-	if err := s.removeReplicaImpl(subsumedRng, *subsumedDesc); err != nil {
+	if err := s.removeReplicaImpl(subsumedRng, *subsumedDesc, false); err != nil {
 		return util.Errorf("cannot remove range %s", err)
 	}
 
@@ -1137,22 +1137,25 @@ func (s *Store) addReplicaToRangeMap(rng *Replica) error {
 type removeReplicaOp struct {
 	rep      *Replica
 	origDesc roachpb.RangeDescriptor
+	destroy  bool
 	ch       chan<- error
 }
 
-// RemoveReplica removes the replica from the store's replica map and from
-// the sorted replicasByKey btree. The version of the replica descriptor that
-// was used to make the removal decision is passed in, and the removal is
-// aborted if the replica ID has changed since then.
-func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor) error {
+// RemoveReplica removes the replica from the store's replica map and
+// from the sorted replicasByKey btree. The version of the replica
+// descriptor that was used to make the removal decision is passed in,
+// and the removal is aborted if the replica ID has changed since
+// then. If `destroy` is true, all data beloing to the replica will be
+// deleted. In either case a tombstone record will be written.
+func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool) error {
 
 	ch := make(chan error)
-	s.removeReplicaChan <- removeReplicaOp{rep, origDesc, ch}
+	s.removeReplicaChan <- removeReplicaOp{rep, origDesc, destroy, ch}
 	return <-ch
 }
 
 // removeReplicaImpl runs on the processRaft goroutine.
-func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor) error {
+func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool) error {
 	desc := rep.Desc()
 	_, rd := desc.FindReplica(s.StoreID())
 	if rd != nil && rd.ReplicaID >= origDesc.NextReplicaID {
@@ -1167,6 +1170,15 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 		return util.Errorf("couldn't find range in replicasByKey btree")
 	}
 	s.scanner.RemoveReplica(rep)
+
+	// TODO(bdarnell): This is fairly expensive to do under store.mu, but doing it outside
+	// the lock is tricky due to the risk that a replica gets recreated by an incoming
+	// raft message.
+	if destroy {
+		if err := rep.Destroy(origDesc); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -1618,7 +1630,7 @@ func (s *Store) processRaft() {
 			case <-s.wakeRaftLoop:
 
 			case op := <-s.removeReplicaChan:
-				op.ch <- s.removeReplicaImpl(op.rep, op.origDesc)
+				op.ch <- s.removeReplicaImpl(op.rep, op.origDesc, op.destroy)
 
 			case req := <-s.raftRequestChan:
 				if err := s.handleRaftMessage(req); err != nil {
