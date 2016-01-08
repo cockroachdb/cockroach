@@ -331,6 +331,10 @@ func TestParse(t *testing.T) {
 		{`SELECT OVERLAY('w333333rce' PLACING 'resou' FROM 3)`},
 		{`SELECT OVERLAY('w333333rce' PLACING 'resou' FROM 3 FOR 5)`},
 
+		{`SELECT * FROM (VALUES (1, 2)) AS foo`},
+		// TODO(pmattis): unimplemented. see sql.y:2003.
+		// {`SELECT * FROM (VALUES (1, 2)) AS foo (a, b)`},
+
 		// TODO(pmattis): Is this a postgres extension?
 		{`TABLE a`}, // Shorthand for: SELECT * FROM a
 
