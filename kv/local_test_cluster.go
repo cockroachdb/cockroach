@@ -135,6 +135,12 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 
 // Stop stops the cluster.
 func (ltc *LocalTestCluster) Stop() {
+	// If the test has failed, we don't attempt to clean up: This often hangs,
+	// and leaktest will disable itself for the remaining tests so that no
+	// unrelated errors occur from a dirty shutdown.
+	if ltc.tester.Failed() {
+		return
+	}
 	if r := recover(); r != nil {
 		panic(r)
 	}
