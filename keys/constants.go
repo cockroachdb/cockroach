@@ -62,9 +62,8 @@ var (
 	// localStoreIdentSuffix stores an immutable identifier for this
 	// store, created when the store is first bootstrapped.
 	localStoreIdentSuffix = []byte("iden")
-	// localStoreGossipSuffix stores gossip bootstrap metadata which
-	// for this store which is updated any time new gossip hosts are
-	// encountered.
+	// localStoreGossipSuffix stores gossip bootstrap metadata for this
+	// store, updated any time new gossip hosts are encountered.
 	localStoreGossipSuffix = []byte("goss")
 
 	// LocalRangeIDPrefix is the prefix identifying per-range data

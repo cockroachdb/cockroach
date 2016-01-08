@@ -54,6 +54,8 @@ package gossip
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
 	"math/rand"
 	"net"
 	"sync"
@@ -97,8 +99,6 @@ const (
 	// defaultCullInterval is the default interval for culling the least
 	// "useful" outgoing gossip connection to free up space for a more
 	// efficiently targeted connection to the most distant node.
-	//
-	// Note: this value is a var instead of const for testing.
 	defaultCullInterval = 60 * time.Second
 )
 
@@ -107,17 +107,17 @@ var (
 	TestBootstrap = []resolver.Resolver{}
 )
 
-// Persistence is an interface which allows the gossip instance
+// Storage is an interface which allows the gossip instance
 // to read and write bootstrapping data to persistent storage
 // between instantiations.
-type Persistence interface {
+type Storage interface {
 	// ReadBootstrapInfo fetches the bootstrap data from the persistent
 	// store into the provided bootstrap protobuf. Returns nil or an
 	// error on failure.
 	ReadBootstrapInfo(*BootstrapInfo) error
 	// WriteBootstrapInfo stores the provided bootstrap data to the
 	// persistent store. Returns nil or an error on failure.
-	WriteBootstrapInfo(BootstrapInfo) error
+	WriteBootstrapInfo(*BootstrapInfo) error
 }
 
 // Gossip is an instance of a gossip node. It embeds a gossip server.
@@ -129,7 +129,7 @@ type Gossip struct {
 	rpcContext    *rpc.Context        // The context required for RPC
 	*server                           // Embedded gossip RPC server
 	outgoing      nodeSet             // Set of outgoing client node IDs
-	persist       Persistence         // Persistent storage interface
+	storage       Storage             // Persistent storage interface
 	bootstrapInfo BootstrapInfo       // BootstrapInfo proto for persistent storage
 	bootstrapping map[string]struct{} // Set of active bootstrap clients
 	clientsMu     sync.Mutex          // Mutex protects the clients slice
@@ -155,7 +155,7 @@ type Gossip struct {
 	resolverIdx    int
 	resolvers      []resolver.Resolver
 	resolversTried map[int]struct{}            // Set of attempted resolver indexes
-	nodesSeen      map[roachpb.NodeID]struct{} // Set of nodes encountered via gossiping
+	nodesSeen      map[roachpb.NodeID]struct{} // Transitive set of all nodes we've seen gossip from
 }
 
 // New creates an instance of a gossip node.
@@ -163,7 +163,7 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver) *Gossip {
 	g := &Gossip{
 		Connected:         make(chan struct{}),
 		server:            newServer(),
-		outgoing:          makeNodeSet(1),
+		outgoing:          makeNodeSet(minPeers),
 		bootstrapping:     map[string]struct{}{},
 		clients:           []*client{},
 		disconnected:      make(chan *client, 10),
@@ -249,41 +249,47 @@ func (g *Gossip) SetCullInterval(interval time.Duration) {
 	g.cullInterval = interval
 }
 
-// SetPersistence provides an instance of the Persistence interface
+// SetStorage provides an instance of the Storage interface
 // for reading and writing gossip bootstrap data from persistent
 // storage. This should be invoked as early in the lifecycle of a
 // gossip instance as possible, but can be called at any time.
-func (g *Gossip) SetPersistence(persist Persistence) error {
-	// Read the bootstrap info from the persistent store.
-	var storedBI BootstrapInfo
-	err := persist.ReadBootstrapInfo(&storedBI)
-	if err != nil {
-		return err
-	}
-
+func (g *Gossip) SetStorage(storage Storage) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.persist = persist
+	g.storage = storage
 
-	// If the bootstrap info is empty, store any addresses we've become
-	// aware of through the --gossip bootstrap hosts we've managed to
-	// connect to.
-	if len(storedBI.Addresses) == 0 {
-		// And also no resolvers, fatal error.
-		if len(g.resolvers) == 0 {
-			log.Fatalf("no resolvers specified for gossip network")
-		}
-		// Otherwise, persist any addresses we've already accumulated through gossip.
-		if numAddrs := len(g.bootstrapInfo.Addresses); numAddrs > 0 {
-			if err := g.persist.WriteBootstrapInfo(g.bootstrapInfo); err != nil {
-				log.Error(err)
-			}
-			log.Infof("wrote %d initial gossip host(s) to persistent storage", numAddrs)
-		}
-		return nil
+	// Read the bootstrap info from the persistent store.
+	var storedBI BootstrapInfo
+	err := storage.ReadBootstrapInfo(&storedBI)
+	if err != nil {
+		log.Warningf("failed to read bootstrap info: %s", err)
 	}
 	log.Infof("read %d gossip host(s) for bootstrapping from persistent storage", len(storedBI.Addresses))
-	g.bootstrapInfo = storedBI
+
+	// Merge the stored bootstrap info addresses with any we've become
+	// aware of through the --gossip bootstrap hosts we've connected to.
+	if len(g.bootstrapInfo.Addresses) > 0 {
+		existing := map[string]struct{}{}
+		makeKey := func(a util.UnresolvedAddr) string { return fmt.Sprintf("%s,%s", a.Network(), a.String()) }
+		for _, addr := range g.bootstrapInfo.Addresses {
+			existing[makeKey(addr)] = struct{}{}
+		}
+		for _, addr := range storedBI.Addresses {
+			if _, ok := existing[makeKey(addr)]; !ok {
+				g.bootstrapInfo.Addresses = append(g.bootstrapInfo.Addresses, addr)
+			}
+		}
+		// Persist merged addresses.
+		if numAddrs := len(g.bootstrapInfo.Addresses); numAddrs > len(storedBI.Addresses) {
+			if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
+				log.Error(err)
+			} else {
+				log.Infof("wrote %d merged gossip host(s) to persistent storage", numAddrs)
+			}
+		}
+	} else {
+		g.bootstrapInfo = storedBI
+	}
 
 	// Cycle through all persisted bootstrap hosts and add resolvers for
 	// any which haven't already been added.
@@ -305,10 +311,14 @@ func (g *Gossip) SetPersistence(persist Persistence) error {
 		}
 		g.resolvers = append(g.resolvers, r)
 	}
+	// If there are no resolvers after persistent storage has been queried, fatal error.
+	if len(g.resolvers) == 0 {
+		log.Fatalf("no resolvers specified for gossip network")
+	}
 	// If a new resolver was found, immediately signal bootstrap.
 	if newResolverFound {
 		if log.V(1) {
-			log.Infof("found new resolvers from persistence; signalling bootstrap")
+			log.Infof("found new resolvers from storage; signalling bootstrap")
 		}
 		g.signalStalled()
 	}
@@ -363,6 +373,14 @@ func (g *Gossip) EnableSimulationCycler(enable bool) {
 	}
 }
 
+// SimulationCycle cycles this gossip node's server by allowing all
+// connected clients to proceed one step.
+func (g *Gossip) SimulationCycle() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.simulationCycler.Broadcast()
+}
+
 // haveResolver returns whether the specified resolver is already in
 // the gossip node's list of resolvers. The caller must hold the
 // gossip mutex.
@@ -375,15 +393,29 @@ func (g *Gossip) haveResolver(r resolver.Resolver) bool {
 	return false
 }
 
-// SimulationCycle cycles this gossip node's server by allowing all
-// connected clients to proceed one step.
-func (g *Gossip) SimulationCycle() {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.simulationCycler.Broadcast()
+// maxPeers returns the maximum number of peers each gossip node
+// may connect to. This is based on maxHops, which is a preset
+// maximum for number of hops allowed before the gossip network
+// will seek to "tighten" by creating new connections to distant
+// nodes.
+func (g *Gossip) maxPeers(nodeCount int) int {
+	// This formula uses MaxHops-1, instead of MaxHops, to provide a
+	// "fudge" factor for max connected peers, to account for the
+	// arbitrary, decentralized way in which gossip networks are created.
+	maxPeers := int(math.Ceil(math.Exp(math.Log(float64(nodeCount)) / float64(MaxHops-1))))
+	if maxPeers < minPeers {
+		return minPeers
+	}
+	return maxPeers
 }
 
-// updateNodeAddress The gossip callback used to keep the StorePool up to date.
+// updateNodeAddress is a gossip callback which fires with each
+// update to the node address. This allows us to compute the
+// total size of the gossip network (for determining max peers
+// each gossip node is allowed to have), as well as to create
+// new resolvers for each encountered host and to write the
+// set of gossip node addresses to persistent storage when it
+// changes.
 func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 	var desc roachpb.NodeDescriptor
 	if err := content.GetProto(&desc); err != nil {
@@ -393,29 +425,37 @@ func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	// Does this node exist yet in the bootstrap addresses list?
-	if _, ok := g.nodesSeen[desc.NodeID]; !ok {
-		g.nodesSeen[desc.NodeID] = struct{}{} // add it!
+	// If the node has already been seen, return immediately.
+	if _, ok := g.nodesSeen[desc.NodeID]; ok {
+		return
+	}
 
-		// Add this new node to our list of resolvers so we can keep
-		// connecting to gossip if the original resolvers go offline.
-		r, err := resolver.NewResolverFromUnresolvedAddr(desc.Address)
-		if err != nil {
-			log.Warningf("bad address from gossip node %s: %s", desc, err)
-			return
-		}
-		if g.haveResolver(r) {
-			return
-		}
-		g.resolvers = append(g.resolvers, r)
-		// Add new address to bootstrap info and persist if possible.
-		g.bootstrapInfo.Addresses = append(g.bootstrapInfo.Addresses, desc.Address)
-		if g.persist != nil {
-			// TODO(spencer): need to clean up ancient gossip nodes, which
-			//   will otherwise stick around in the bootstrap info forever.
-			if err := g.persist.WriteBootstrapInfo(g.bootstrapInfo); err != nil {
-				log.Error(err)
-			}
+	g.nodesSeen[desc.NodeID] = struct{}{} // add it!
+
+	// Recompute max peers based on size of network and set the max
+	// sizes for incoming and outgoing node sets.
+	maxPeers := g.maxPeers(len(g.nodesSeen))
+	g.incoming.setMaxSize(maxPeers)
+	g.outgoing.setMaxSize(maxPeers)
+
+	// Add this new node to our list of resolvers so we can keep
+	// connecting to gossip if the original resolvers go offline.
+	r, err := resolver.NewResolverFromUnresolvedAddr(desc.Address)
+	if err != nil {
+		log.Warningf("bad address from gossip node %s: %s", desc, err)
+		return
+	}
+	if g.haveResolver(r) {
+		return
+	}
+	g.resolvers = append(g.resolvers, r)
+	// Add new address to bootstrap info and persist if possible.
+	g.bootstrapInfo.Addresses = append(g.bootstrapInfo.Addresses, desc.Address)
+	if g.storage != nil {
+		// TODO(spencer): need to clean up ancient gossip nodes, which
+		//   will otherwise stick around in the bootstrap info forever.
+		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
+			log.Error(err)
 		}
 	}
 }
@@ -775,7 +815,6 @@ func (g *Gossip) jitteredInterval(interval time.Duration) time.Duration {
 func (g *Gossip) tightenNetwork(stopper *stop.Stopper, distantNodeID roachpb.NodeID) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.outgoing.setMaxSize(g.maxPeers())
 	if g.outgoing.hasSpace() {
 		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
 			log.Errorf("node %d: %s", distantNodeID, err)
@@ -854,7 +893,7 @@ func (g *Gossip) warnAboutStall() {
 	} else if len(g.resolversTried) == len(g.resolvers) {
 		log.Warningf("first range unavailable or cluster not initialized")
 	} else {
-		log.Warningf("partition in gossip network and attempting new connection")
+		log.Warningf("partition in gossip network; attempting new connection")
 	}
 }
 
@@ -886,24 +925,33 @@ func (g *Gossip) startClient(addr net.Addr, stopper *stop.Stopper) {
 
 // closeClient finds and removes a client from the clients slice.
 func (g *Gossip) closeClient(nodeID roachpb.NodeID) {
-	c := g.findClient(func(c *client) bool { return c.peerID == nodeID })
+	c := g.removeMatchingClient(func(c *client) bool { return c.peerID == nodeID })
 	if c != nil {
 		c.close()
 	}
 }
 
-// removeClient finds and removes the client by nodeID from the clients slice.
+// removeClient removes the specified client. Called when a client
+// disconnects.
 func (g *Gossip) removeClient(c *client) {
+	g.removeMatchingClient(func(match *client) bool { return c == match })
+}
+
+// removeMatchingClient finds and removes a client which matches the
+// provided match function from the clients slice. Returns the client
+// if found and removed.
+func (g *Gossip) removeMatchingClient(match func(*client) bool) *client {
 	g.clientsMu.Lock()
-	for i := 0; i < len(g.clients); i++ {
-		if g.clients[i] == c {
+	defer g.clientsMu.Unlock()
+	for i, c := range g.clients {
+		if match(c) {
 			g.clients = append(g.clients[:i], g.clients[i+1:]...)
-			break
+			delete(g.bootstrapping, c.addr.String())
+			g.outgoing.removeNode(c.peerID)
+			return c
 		}
 	}
-	delete(g.bootstrapping, c.addr.String())
-	g.outgoing.removeNode(c.peerID)
-	g.clientsMu.Unlock()
+	return nil
 }
 
 func (g *Gossip) findClient(match func(*client) bool) *client {

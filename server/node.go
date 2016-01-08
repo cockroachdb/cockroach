@@ -299,9 +299,10 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 		return err
 	}
 
-	// Set the stores map as the gossip persistence, so that gossip can
-	// bootstrap using the most recently persisted set of node addresses.
-	if err := n.ctx.Gossip.SetPersistence(n.stores); err != nil {
+	// Set the stores map as the gossip persistent storage, so that
+	// gossip can bootstrap using the most recently persisted set of
+	// node addresses.
+	if err := n.ctx.Gossip.SetStorage(n.stores); err != nil {
 		log.Warningf("failed to set gossip persistence: %s; relying on --gossip bootstrap flag", err)
 	}
 
@@ -365,7 +366,6 @@ func (n *Node) bootstrapStores(bootstraps *list.List, stopper *stop.Stopper) {
 	}
 	for e := bootstraps.Front(); e != nil; e = e.Next() {
 		s := e.Value.(*storage.Store)
-		log.Infof("bootstrapping new store at %s...", s.Engine())
 		if err := s.Bootstrap(sIdent, stopper); err != nil {
 			log.Fatal(err)
 		}

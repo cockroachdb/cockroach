@@ -210,8 +210,8 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 	return manualClock, stores, ls, stopper
 }
 
-// TestStoresPersistence verifies reading and writing of bootstrap info.
-func TestStoresPersistence(t *testing.T) {
+// TestStoresGossipStorage verifies reading and writing of bootstrap info.
+func TestStoresGossipStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	manual, stores, ls, stopper := createStores(2, t)
 	defer stopper.Stop()
@@ -231,7 +231,7 @@ func TestStoresPersistence(t *testing.T) {
 	// Add a fake address and write.
 	manual.Increment(1)
 	bi.Addresses = append(bi.Addresses, util.MakeUnresolvedAddr("tcp", "127.0.0.1:8001"))
-	if err := ls.WriteBootstrapInfo(bi); err != nil {
+	if err := ls.WriteBootstrapInfo(&bi); err != nil {
 		t.Fatal(err)
 	}
 
@@ -260,9 +260,9 @@ func TestStoresPersistence(t *testing.T) {
 	}
 }
 
-// TestStoresPersistenceReadLatest verifies that the latest bootstrap
-// info from multiple stores is returned on Read.
-func TestStoresBootstrapInfoReadLatest(t *testing.T) {
+// TestStoresGossipStorageReadLatest verifies that the latest
+// bootstrap info from multiple stores is returned on Read.
+func TestStoresGossipStorageReadLatest(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	manual, stores, ls, stopper := createStores(2, t)
 	defer stopper.Stop()
@@ -274,7 +274,7 @@ func TestStoresBootstrapInfoReadLatest(t *testing.T) {
 	// Add a fake address and write.
 	var bi gossip.BootstrapInfo
 	bi.Addresses = append(bi.Addresses, util.MakeUnresolvedAddr("tcp", "127.0.0.1:8001"))
-	if err := ls.WriteBootstrapInfo(bi); err != nil {
+	if err := ls.WriteBootstrapInfo(&bi); err != nil {
 		t.Fatal(err)
 	}
 
@@ -285,7 +285,7 @@ func TestStoresBootstrapInfoReadLatest(t *testing.T) {
 	// Increment clock, add another address and write.
 	manual.Increment(1)
 	bi.Addresses = append(bi.Addresses, util.MakeUnresolvedAddr("tcp", "127.0.0.1:8002"))
-	if err := ls.WriteBootstrapInfo(bi); err != nil {
+	if err := ls.WriteBootstrapInfo(&bi); err != nil {
 		t.Fatal(err)
 	}
 

@@ -46,7 +46,7 @@ type Node struct {
 type Network struct {
 	Nodes           []*Node
 	Stopper         *stop.Stopper
-	nodeIDAllocator roachpb.NodeID
+	nodeIDAllocator roachpb.NodeID // provides unique node IDs
 	rpcContext      *rpc.Context
 	tlsConfig       *tls.Config
 }

@@ -17,10 +17,8 @@
 package gossip
 
 import (
-	"math"
 	"math/rand"
 	"net"
-	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -61,7 +59,7 @@ type server struct {
 func newServer() *server {
 	s := &server{
 		is:       newInfoStore(0, util.UnresolvedAddr{}),
-		incoming: makeNodeSet(1),
+		incoming: makeNodeSet(minPeers),
 		lAddrMap: map[string]clientInfo{},
 		nodeMap:  map[roachpb.NodeID]string{},
 		tighten:  make(chan roachpb.NodeID, 1),
@@ -102,7 +100,6 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 	canAccept := true
 	if args.NodeID != 0 {
 		if !s.incoming.hasNode(args.NodeID) {
-			s.incoming.setMaxSize(s.maxPeers())
 			if !s.incoming.hasSpace() {
 				canAccept = false
 			} else {
@@ -221,33 +218,6 @@ func (s *server) maybeTighten() {
 			// Do nothing.
 		}
 	}
-}
-
-// maxPeers returns the maximum number of peers each gossip node
-// may connect to. This is based on maxHops, which is a preset
-// maximum for number of hops allowed before the gossip network
-// will seek to "tighten" by creating new connections to distant
-// nodes.
-func (s *server) maxPeers() int {
-	var nodeCount int
-
-	if err := s.is.visitInfos(func(key string, i *Info) error {
-		if strings.HasPrefix(key, KeyNodeIDPrefix) {
-			nodeCount++
-		}
-		return nil
-	}); err != nil {
-		panic(err)
-	}
-
-	// This formula uses MaxHops-1, instead of MaxHops, to provide a
-	// "fudge" factor for max connected peers, to account for the
-	// arbitrary, decentralized way in which gossip networks are created.
-	peers := int(math.Ceil(math.Exp(math.Log(float64(nodeCount)) / float64(MaxHops-1))))
-	if peers < minPeers {
-		return minPeers
-	}
-	return peers
 }
 
 // start initializes the infostore with the rpc server address and

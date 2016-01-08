@@ -28,6 +28,8 @@ import weak "gogoproto/gogo.proto";
 message BootstrapInfo {
   // A map from node ID to address.
   repeated util.UnresolvedAddr addresses = 1 [(gogoproto.nullable) = false];
+  // Timestamp at which the bootstrap info was written.
+  roachpb.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // Node contains information about a gossip node.

@@ -36,7 +36,7 @@ import (
 // A Stores provides methods to access a collection of stores. There's
 // a visitor pattern and also an implementation of the client.Sender
 // interface which directs a call to the appropriate store based on
-// the call's key range. Stores also implements the gossip.Persistence
+// the call's key range. Stores also implements the gossip.Storage
 // interface, which allows gossip bootstrap information to be
 // persisted consistently to every store and the most recent bootstrap
 // information to be read at node startup.
@@ -44,12 +44,11 @@ type Stores struct {
 	clock      *hlc.Clock
 	mu         sync.RWMutex               // Protects storeMap and addrs
 	storeMap   map[roachpb.StoreID]*Store // Map from StoreID to Store
-	gossipBI   gossip.BootstrapInfo       // The latest gossip bootstrap info
 	biLatestTS roachpb.Timestamp          // Timestamp of gossip bootstrap info
 }
 
-var _ client.Sender = &Stores{}      // Stores implements the client.Sender interface
-var _ gossip.Persistence = &Stores{} // Stores implements the gossip.Persistence interface
+var _ client.Sender = &Stores{}  // Stores implements the client.Sender interface
+var _ gossip.Storage = &Stores{} // Stores implements the gossip.Storage interface
 
 // NewStores returns a local-only sender which directly accesses
 // a collection of stores.
@@ -98,7 +97,8 @@ func (ls *Stores) AddStore(s *Store) {
 	// If we've already read the gossip bootstrap info, ensure that
 	// all stores have the most recent values.
 	if !ls.biLatestTS.Equal(roachpb.ZeroTimestamp) {
-		if err := ls.updateAllBootstrapInfos(); err != nil {
+		// ReadBootstrapInfo calls updateAllBootstrapInfos.
+		if err := ls.readBootstrapInfoLocked(&gossip.BootstrapInfo{}); err != nil {
 			log.Errorf("failed to update bootstrap info on stores: %s", err)
 		}
 	}
@@ -247,74 +247,65 @@ func (ls *Stores) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, cons
 	return br.Responses[0].GetInner().(*roachpb.RangeLookupResponse).Ranges, nil
 }
 
-// ReadBootstrapInfo implements the gossip.Persistence interface. Read
+// ReadBootstrapInfo implements the gossip.Storage interface. Read
 // attempts to read gossip bootstrap info from every known store and
 // finds the most recent from all stores to initialize the bootstrap
-// info argument. Returns nil if no stores contain gossip bootstrap
-// metadata or an error on any issues reading data from the stores.
+// info argument. Returns an error on any issues reading data for the
+// stores (but excluding the case in which no data has been persisted
+// yet).
 func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
-	ls.biLatestTS = roachpb.ZeroTimestamp
-	for _, s := range ls.storeMap {
-		value, _, err := engine.MVCCGet(s.engine, keys.StoreGossipKey(), ls.clock.Now(), true, nil)
+	ls.mu.RLock()
+	defer ls.mu.RUnlock()
+	return ls.readBootstrapInfoLocked(bi)
+}
+
+func (ls *Stores) readBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
+	latestTS := roachpb.ZeroTimestamp
+	timestamps := map[roachpb.StoreID]roachpb.Timestamp{}
+
+	// Find the most recent bootstrap info, collecting timestamps for
+	// each store along the way.
+	for id, s := range ls.storeMap {
+		var storeBI gossip.BootstrapInfo
+		ok, err := engine.MVCCGetProto(s.engine, keys.StoreGossipKey(), roachpb.ZeroTimestamp, true, nil, &storeBI)
 		if err != nil {
 			return err
 		}
-		if value != nil && ls.biLatestTS.Less(value.Timestamp) {
-			var storeBI gossip.BootstrapInfo
-			if err := value.GetProto(&storeBI); err != nil {
-				return err
-			}
-			ls.biLatestTS = value.Timestamp
-			ls.gossipBI = storeBI
+		timestamps[id] = storeBI.Timestamp
+		if ok && latestTS.Less(storeBI.Timestamp) {
+			latestTS = storeBI.Timestamp
+			*bi = storeBI
 		}
 	}
-	*bi = copyBootstrapInfo(ls.gossipBI)
-	return ls.updateAllBootstrapInfos()
+
+	// Update all stores with an earlier timestamp.
+	for id, s := range ls.storeMap {
+		if timestamps[id].Less(latestTS) {
+			if err := engine.MVCCPutProto(s.engine, nil, keys.StoreGossipKey(), roachpb.ZeroTimestamp, nil, bi); err != nil {
+				return err
+			}
+			log.Infof("updated gossip bootstrap info to %s", s)
+		}
+	}
+
+	ls.biLatestTS = latestTS
+	return nil
 }
 
-// WriteBootstrapInfo implements the gossip.Persistence
-// interface. Write persists the supplied bootstrap info to every
-// known store. Returns nil on success; otherwise returns first error
-// encountered writing to the stores.
-func (ls *Stores) WriteBootstrapInfo(bi gossip.BootstrapInfo) error {
+// WriteBootstrapInfo implements the gossip.Storage interface. Write
+// persists the supplied bootstrap info to every known store. Returns
+// nil on success; otherwise returns first error encountered writing
+// to the stores.
+func (ls *Stores) WriteBootstrapInfo(bi *gossip.BootstrapInfo) error {
+	ls.mu.RLock()
+	defer ls.mu.RUnlock()
 	ls.biLatestTS = ls.clock.Now()
-	ls.gossipBI = copyBootstrapInfo(bi)
+	bi.Timestamp = ls.biLatestTS
 	for _, s := range ls.storeMap {
-		if err := engine.MVCCPutProto(s.engine, nil, keys.StoreGossipKey(), ls.biLatestTS, nil, &ls.gossipBI); err != nil {
+		if err := engine.MVCCPutProto(s.engine, nil, keys.StoreGossipKey(), roachpb.ZeroTimestamp, nil, bi); err != nil {
 			return err
 		}
 		log.Infof("wrote gossip bootstrap info to %s", s)
 	}
 	return nil
-}
-
-// updateAllBootstrapInfos cycles through all stores and ensures that
-// the most recent gossip bootstrap information is written to each.
-func (ls *Stores) updateAllBootstrapInfos() error {
-	if ls.biLatestTS.Equal(roachpb.ZeroTimestamp) {
-		return nil
-	}
-	now := ls.clock.Now()
-	for _, s := range ls.storeMap {
-		value, _, err := engine.MVCCGet(s.engine, keys.StoreGossipKey(), now, true, nil)
-		if err != nil {
-			return err
-		}
-		if value == nil || value.Timestamp.Less(ls.biLatestTS) {
-			if err := engine.MVCCPutProto(s.engine, nil, keys.StoreGossipKey(), ls.biLatestTS, nil, &ls.gossipBI); err != nil {
-				return err
-			}
-			log.Infof("wrote gossip bootstrap info to %s", s)
-		}
-	}
-	return nil
-}
-
-// copyBootstrapInfo creates a new instance of bootstrap info, with a
-// duplicate slice for the addresses.
-func copyBootstrapInfo(bi gossip.BootstrapInfo) gossip.BootstrapInfo {
-	var copyBI gossip.BootstrapInfo
-	copyBI.Addresses = make([]util.UnresolvedAddr, len(bi.Addresses), len(bi.Addresses))
-	copy(copyBI.Addresses, bi.Addresses)
-	return copyBI
 }

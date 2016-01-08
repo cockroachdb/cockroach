@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2016 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,41 +24,41 @@ import (
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/gogo/protobuf/proto"
 )
 
-type testPersistence struct {
+type testStorage struct {
 	read, write bool
 	info        gossip.BootstrapInfo
 }
 
-// Read implements the gossip.Persistence interface.
-func (tp *testPersistence) ReadBootstrapInfo(info *gossip.BootstrapInfo) error {
+func (tp *testStorage) ReadBootstrapInfo(info *gossip.BootstrapInfo) error {
 	tp.read = true
-	*info = tp.info
+	*info = *proto.Clone(&tp.info).(*gossip.BootstrapInfo)
 	return nil
 }
 
-// Write implements the gossip.Persistence interface.
-func (tp *testPersistence) WriteBootstrapInfo(info gossip.BootstrapInfo) error {
+func (tp *testStorage) WriteBootstrapInfo(info *gossip.BootstrapInfo) error {
 	tp.write = true
-	tp.info = info
+	tp.info = *proto.Clone(info).(*gossip.BootstrapInfo)
 	return nil
 }
 
-// TestGossipPersistence
-func TestGossipPersistence(t *testing.T) {
+// TestGossipStorage verifies that a gossip node can join the cluster
+// using the bootstrap hosts in a gossip.Storage object.
+func TestGossipStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	const numNodes = 3
 	network := simulation.NewNetwork(3)
 	defer network.Stop()
 
-	// Set persistence for each of the nodes.
-	persists := []*testPersistence{}
+	// Set storage for each of the nodes.
+	stores := []*testStorage{}
 	for _, n := range network.Nodes {
-		tp := &testPersistence{}
-		persists = append(persists, tp)
-		if err := n.Gossip.SetPersistence(tp); err != nil {
+		tp := &testStorage{}
+		stores = append(stores, tp)
+		if err := n.Gossip.SetStorage(tp); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -66,12 +66,12 @@ func TestGossipPersistence(t *testing.T) {
 	// Wait for the gossip network to connect.
 	network.RunUntilFullyConnected()
 
-	for i, p := range persists {
+	for i, p := range stores {
 		if !p.read {
-			t.Errorf("%d: expected read from persistence", i)
+			t.Errorf("%d: expected read from storage", i)
 		}
 		if !p.write {
-			t.Errorf("%d: expected write from persistence", i)
+			t.Errorf("%d: expected write from storage", i)
 		}
 		// Verify all gossip addresses are written to each persistent store.
 		if len(p.info.Addresses) != 3 {
@@ -104,12 +104,12 @@ func TestGossipPersistence(t *testing.T) {
 		t.Fatal("unexpectedly connected to gossip")
 	}
 
-	// Give the new node persistence with info established from a node
+	// Give the new node storage with info established from a node
 	// in the established network.
-	tp := &testPersistence{
-		info: persists[0].info,
+	tp := &testStorage{
+		info: stores[0].info,
 	}
-	if err := node.Gossip.SetPersistence(tp); err != nil {
+	if err := node.Gossip.SetStorage(tp); err != nil {
 		t.Fatal(err)
 	}
 

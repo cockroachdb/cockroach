@@ -99,10 +99,5 @@ func NewResolverFromAddress(addr net.Addr) (Resolver, error) {
 
 // NewResolverFromUnresolvedAddr takes a util.UnresolvedAddr and constructs a resolver.
 func NewResolverFromUnresolvedAddr(addr util.UnresolvedAddr) (Resolver, error) {
-	switch addr.Network() {
-	case "tcp", "unix":
-		return &socketResolver{typ: addr.Network(), addr: addr.String()}, nil
-	default:
-		return nil, util.Errorf("unknown address network %q for %v", addr.Network(), addr)
-	}
+	return NewResolverFromAddress(&addr)
 }
