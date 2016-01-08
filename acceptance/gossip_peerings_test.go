@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -192,12 +193,12 @@ func TestGossipRestart(t *testing.T) {
 				}
 			}
 			var kv client.KeyValue
-			if err := db.Txn(func(txn *client.Txn) error {
-				var err error
-				kv, err = txn.Inc("count", 1)
-				return err
-			}); err != nil {
-				t.Fatal(err)
+			if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+				var pErr *roachpb.Error
+				kv, pErr = txn.Inc("count", 1)
+				return pErr
+			}); pErr != nil {
+				t.Fatal(pErr)
 			} else if v := kv.ValueInt(); v != int64(i+1) {
 				t.Fatalf("unexpected value %d for write #%d (expected %d)", v, i, i+1)
 			}

@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -63,17 +64,17 @@ func TestSingleKey(t *testing.T) {
 			var r result
 			for time.Now().Before(deadline) {
 				start := time.Now()
-				err := db.Txn(func(txn *client.Txn) error {
-					r, err := txn.Get(key)
-					if err != nil {
-						return err
+				pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+					r, pErr := txn.Get(key)
+					if pErr != nil {
+						return pErr
 					}
 					b := txn.NewBatch()
 					b.Put(key, r.ValueInt()+1)
 					return txn.CommitInBatch(b)
 				})
-				if err != nil {
-					resultCh <- result{err: err}
+				if pErr != nil {
+					resultCh <- result{err: pErr.GoError()}
 					return
 				}
 				atomic.AddInt64(&expected, 1)
