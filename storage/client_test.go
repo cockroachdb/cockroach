@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/tracer"
 	"github.com/coreos/etcd/raft"
 	"github.com/gogo/protobuf/proto"
 )
@@ -91,12 +92,16 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	sCtx.Gossip = gossip.New(rpcContext, gossip.TestBootstrap)
 	sCtx.Gossip.SetNodeID(nodeDesc.NodeID)
+	sCtx.Tracer = tracer.NewTracer(nil, "testing")
 	localSender := storage.NewStores()
 	rpcSend := func(_ rpc.Options, _ string, _ []net.Addr,
 		getArgs func(addr net.Addr) proto.Message, _ func() proto.Message,
 		_ *rpc.Context) ([]proto.Message, error) {
 		ba := getArgs(nil /* net.Addr */).(*roachpb.BatchRequest)
-		br, pErr := localSender.Send(context.Background(), *ba)
+		trace := sCtx.Tracer.NewTrace("store", ba)
+		defer trace.Finalize()
+		ctx := tracer.ToCtx(context.Background(), trace)
+		br, pErr := localSender.Send(ctx, *ba)
 		if br == nil {
 			br = &roachpb.BatchResponse{}
 		}

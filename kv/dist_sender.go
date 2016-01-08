@@ -635,6 +635,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			if log.V(1) {
 				log.Warningf("failed to invoke %s: %s", ba, pErr)
 			}
+			trace.Event(fmt.Sprintf("reply error: %T", pErr.GoError()))
 
 			// Error handling below.
 			// If retryable, allow retry. For range not found or range
@@ -656,7 +657,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					continue
 				}
 			case *roachpb.RangeNotFoundError, *roachpb.RangeKeyMismatchError:
-				trace.Event(fmt.Sprintf("reply error: %T", tErr))
 				// Range descriptor might be out of date - evict it.
 				evictDesc()
 				// On addressing errors, don't backoff; retry immediately.
@@ -675,7 +675,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				considerIntents = true
 				continue
 			case *roachpb.NotLeaderError:
-				trace.Event(fmt.Sprintf("reply error: %T", tErr))
 				newLeader := tErr.Leader
 				// Verify that leader is a known replica according to the
 				// descriptor. If not, we've got a stale replica; evict cache.
@@ -701,7 +700,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					if log.V(1) {
 						log.Warning(tErr)
 					}
-					trace.Event(fmt.Sprintf("reply error: %T", tErr))
 					continue
 				}
 			}
