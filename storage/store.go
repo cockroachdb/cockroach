@@ -500,7 +500,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	// next split attempt. They can otherwise be ignored.
 	s.mu.Lock()
 	s.feed.beginScanRanges()
-	if _, err := engine.MVCCIterate(s.engine, start, end, now, false /* !consistent */, nil, /* txn */
+	_, err = engine.MVCCIterate(s.engine, start, end, now, false /* !consistent */, nil, /* txn */
 		false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
 			// Only consider range metadata entries; ignore others.
 			_, suffix, _, err := keys.DecodeRangeKey(kv.Key)
@@ -531,13 +531,12 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			// TODO(bdarnell): Scan all ranges at startup for unapplied log entries
 			// and initialize those groups.
 			return false, nil
-		}); err != nil {
-		s.mu.Unlock()
+		})
+	s.mu.Unlock()
+	s.feed.endScanRanges()
+	if err != nil {
 		return err
 	}
-	s.feed.endScanRanges()
-
-	s.mu.Unlock()
 
 	// Start Raft processing goroutines.
 	if err := s.ctx.Transport.Listen(s.StoreID(), s.enqueueRaftMessage); err != nil {
