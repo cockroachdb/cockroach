@@ -106,7 +106,6 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 // the network periodically (at cullInterval duration intervals).
 func TestGossipCullNetwork(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("#3620")
 
 	// Create the local gossip and minPeers peers.
 	stopper := stop.NewStopper()

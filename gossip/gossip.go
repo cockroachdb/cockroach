@@ -54,6 +54,7 @@ package gossip
 
 import (
 	"encoding/json"
+	"math"
 	"math/rand"
 	"net"
 	"sync"
@@ -163,7 +164,7 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver) *Gossip {
 	g := &Gossip{
 		Connected:         make(chan struct{}),
 		server:            newServer(),
-		outgoing:          makeNodeSet(1),
+		outgoing:          makeNodeSet(minPeers),
 		bootstrapping:     map[string]struct{}{},
 		clients:           []*client{},
 		disconnected:      make(chan *client, 10),
@@ -363,6 +364,14 @@ func (g *Gossip) EnableSimulationCycler(enable bool) {
 	}
 }
 
+// SimulationCycle cycles this gossip node's server by allowing all
+// connected clients to proceed one step.
+func (g *Gossip) SimulationCycle() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.simulationCycler.Broadcast()
+}
+
 // haveResolver returns whether the specified resolver is already in
 // the gossip node's list of resolvers. The caller must hold the
 // gossip mutex.
@@ -375,12 +384,20 @@ func (g *Gossip) haveResolver(r resolver.Resolver) bool {
 	return false
 }
 
-// SimulationCycle cycles this gossip node's server by allowing all
-// connected clients to proceed one step.
-func (g *Gossip) SimulationCycle() {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.simulationCycler.Broadcast()
+// maxPeers returns the maximum number of peers each gossip node
+// may connect to. This is based on maxHops, which is a preset
+// maximum for number of hops allowed before the gossip network
+// will seek to "tighten" by creating new connections to distant
+// nodes.
+func (g *Gossip) maxPeers(nodeCount int) int {
+	// This formula uses MaxHops-1, instead of MaxHops, to provide a
+	// "fudge" factor for max connected peers, to account for the
+	// arbitrary, decentralized way in which gossip networks are created.
+	maxPeers := int(math.Ceil(math.Exp(math.Log(float64(nodeCount)) / float64(MaxHops-1))))
+	if maxPeers < minPeers {
+		return minPeers
+	}
+	return maxPeers
 }
 
 // updateNodeAddress The gossip callback used to keep the StorePool up to date.
@@ -396,6 +413,12 @@ func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 	// Does this node exist yet in the bootstrap addresses list?
 	if _, ok := g.nodesSeen[desc.NodeID]; !ok {
 		g.nodesSeen[desc.NodeID] = struct{}{} // add it!
+
+		// Recompute max peers based on size of network and set the max
+		// sizes for incoming and outgoing node sets.
+		maxPeers := g.maxPeers(len(g.nodesSeen))
+		g.incoming.setMaxSize(maxPeers)
+		g.outgoing.setMaxSize(maxPeers)
 
 		// Add this new node to our list of resolvers so we can keep
 		// connecting to gossip if the original resolvers go offline.
@@ -775,7 +798,6 @@ func (g *Gossip) jitteredInterval(interval time.Duration) time.Duration {
 func (g *Gossip) tightenNetwork(stopper *stop.Stopper, distantNodeID roachpb.NodeID) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.outgoing.setMaxSize(g.maxPeers())
 	if g.outgoing.hasSpace() {
 		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
 			log.Errorf("node %d: %s", distantNodeID, err)
@@ -886,24 +908,33 @@ func (g *Gossip) startClient(addr net.Addr, stopper *stop.Stopper) {
 
 // closeClient finds and removes a client from the clients slice.
 func (g *Gossip) closeClient(nodeID roachpb.NodeID) {
-	c := g.findClient(func(c *client) bool { return c.peerID == nodeID })
+	c := g.removeMatchingClient(func(c *client) bool { return c.peerID == nodeID })
 	if c != nil {
 		c.close()
 	}
 }
 
-// removeClient finds and removes the client by nodeID from the clients slice.
+// removeClient removes the specified client. Called when a client
+// disconnects.
 func (g *Gossip) removeClient(c *client) {
+	g.removeMatchingClient(func(match *client) bool { return c == match })
+}
+
+// removeMatchingClient finds and removes a client which matches the
+// provided match function from the clients slice. Returns the client
+// if found and removed.
+func (g *Gossip) removeMatchingClient(match func(*client) bool) *client {
 	g.clientsMu.Lock()
-	for i := 0; i < len(g.clients); i++ {
-		if g.clients[i] == c {
+	defer g.clientsMu.Unlock()
+	for i, c := range g.clients {
+		if match(c) {
 			g.clients = append(g.clients[:i], g.clients[i+1:]...)
-			break
+			delete(g.bootstrapping, c.addr.String())
+			g.outgoing.removeNode(c.peerID)
+			return c
 		}
 	}
-	delete(g.bootstrapping, c.addr.String())
-	g.outgoing.removeNode(c.peerID)
-	g.clientsMu.Unlock()
+	return nil
 }
 
 func (g *Gossip) findClient(match func(*client) bool) *client {
