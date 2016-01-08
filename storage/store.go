@@ -532,6 +532,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			// and initialize those groups.
 			return false, nil
 		}); err != nil {
+		s.mu.Unlock()
 		return err
 	}
 	s.feed.endScanRanges()
@@ -765,12 +766,20 @@ func (s *Store) DisableRaftLogQueue(disabled bool) {
 // need their raft logs truncated and then process each of them.
 // Exposed only for testing.
 func (s *Store) ForceRaftLogScanAndProcess(t util.Tester) {
-	// Add each range to the queue.
+	// MaybeAdd can transitively call back into Store (namely RaftStatus) and end up
+	// attempting to re-acquire mu.RLock, making a deadlock is possible (if Lock called in-between).
+	// Instead, make a copy and release lock before calling MaybeAdd.
+	replicas := make([]*Replica, 0, len(s.replicas))
 	s.mu.RLock()
 	for _, r := range s.replicas {
-		s.raftLogQueue.MaybeAdd(r, s.ctx.Clock.Now())
+		replicas = append(replicas, r)
 	}
 	s.mu.RUnlock()
+
+	// Add each range to the queue.
+	for _, r := range replicas {
+		s.raftLogQueue.MaybeAdd(r, s.ctx.Clock.Now())
+	}
 
 	s.raftLogQueue.DrainQueue(s.ctx.Clock)
 }
