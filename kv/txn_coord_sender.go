@@ -574,6 +574,9 @@ func (tc *TxnCoordSender) heartbeatLoop(id string) {
 		case <-closer:
 			// Transaction finished normally.
 			return
+
+		case <-tc.stopper.ShouldStop():
+			return
 		}
 	}
 }
@@ -749,8 +752,10 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 				// future.
 				if _, isEnding := ba.GetArg(roachpb.EndTransaction); err != nil || !isEnding {
 					trace.Event("coordinator spawns")
-					if !tc.stopper.RunAsyncTask(func() {
-						tc.heartbeatLoop(id)
+					if !tc.stopper.RunTask(func() {
+						tc.stopper.RunWorker(func() {
+							tc.heartbeatLoop(id)
+						})
 					}) {
 						// The system is already draining and we can't start the
 						// heartbeat. We refuse new transactions for now because
