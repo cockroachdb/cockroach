@@ -1286,7 +1286,13 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
     table_options.block_cache = rocksdb::NewLRUCache(
         block_cache_size, num_cache_shard_bits);
   }
-  table_options.filter_policy.reset(rocksdb::NewBloomFilterPolicy(10));
+  // Pass false for use_blocked_base_builder creates a per file
+  // (sstable) filter instead of a per-block filter. The per file
+  // filter can be consulted before going to the index which saves an
+  // index lookup. The cost is an 4-bytes per key in memory during
+  // compactions, which seems a small price to pay.
+  table_options.filter_policy.reset(
+      rocksdb::NewBloomFilterPolicy(10, false /* !block_based */));
   table_options.format_version = 2;
 
   rocksdb::ColumnFamilyOptions cf_options;
