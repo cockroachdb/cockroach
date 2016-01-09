@@ -14,15 +14,12 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package storage
+// This file includes test-only helper methods added to types in
+// package storage. These methods are only linked in to tests in this
+// directory (but may be used from tests in both package storage and
+// package storage_test).
 
-// WaitForInit waits for any asynchronous processes begun in Start()
-// to complete their initialization. In particular, this includes
-// gossiping. In some cases this may block until the range GC queue
-// has completed its scan. Only for testing.
-func (s *Store) WaitForInit() {
-	s.initComplete.Wait()
-}
+package storage
 
 // ForceReplicationScan iterates over all ranges and enqueues any that
 // need to be replicated. Exposed only for testing.

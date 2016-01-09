@@ -593,6 +593,14 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	return nil
 }
 
+// WaitForInit waits for any asynchronous processes begun in Start()
+// to complete their initialization. In particular, this includes
+// gossiping. In some cases this may block until the range GC queue
+// has completed its scan. Only for testing.
+func (s *Store) WaitForInit() {
+	s.initComplete.Wait()
+}
+
 // startGossip runs an infinite loop in a goroutine which regularly checks
 // whether the store has a first range or config replica and asks those ranges
 // to gossip accordingly.
