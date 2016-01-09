@@ -535,7 +535,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	if err := util.IsTrueWithin(func() bool {
 		rng = store.LookupReplica(keys.MakeTablePrefix(descID), nil)
 		return rng.RangeID != originalRange.RangeID
-	}, time.Second); err != nil {
+	}, 10*time.Second); err != nil {
 		t.Fatalf("failed to notice range max bytes update: %s", err)
 	}
 
