@@ -124,25 +124,7 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 		if log.V(1) {
 			log.Infof("destroying local data from range %d", desc.RangeID)
 		}
-		if err := rng.store.RemoveReplica(rng, replyDesc); err != nil {
-			return err
-		}
-
-		// Lock the store to prevent a new replica of the range from being
-		// added while we're deleting the previous one. We'd really like
-		// to do this before calling RemoveReplica, but this could
-		// deadlock with other work on the Store.processRaft goroutine.
-		// Instead, we check after acquiring the lock to make sure the
-		// range is still absent.
-		q.locker.Lock()
-		defer q.locker.Unlock()
-
-		if _, err := rng.store.getReplicaLocked(desc.RangeID); err == nil {
-			log.Infof("replica recreated during deletion; aborting deletion")
-			return nil
-		}
-
-		if err := rng.Destroy(replyDesc); err != nil {
+		if err := rng.store.RemoveReplica(rng, replyDesc, true); err != nil {
 			return err
 		}
 	} else if desc.RangeID != replyDesc.RangeID {
@@ -153,7 +135,7 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 		if log.V(1) {
 			log.Infof("removing merged range %d", desc.RangeID)
 		}
-		if err := rng.store.RemoveReplica(rng, replyDesc); err != nil {
+		if err := rng.store.RemoveReplica(rng, replyDesc, false); err != nil {
 			return err
 		}
 
