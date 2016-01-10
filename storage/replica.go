@@ -198,7 +198,7 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store) (*Replica, error) {
 		return nil, err
 	}
 
-	if r.ContainsKey(keys.SystemDBSpan.Key) {
+	if r.ContainsKey(keys.SystemConfigSpan.Key) {
 		r.maybeGossipSystemConfig()
 	}
 
@@ -1619,9 +1619,9 @@ func (r *Replica) maybeGossipFirstRange() error {
 	return nil
 }
 
-// maybeGossipSystemConfig scans the entire SystemDB span and gossips it.
-// The first call is on NewReplica. Further calls come from the trigger
-// on an EndTransactionRequest.
+// maybeGossipSystemConfig scans the entire SystemConfig span and gossips it.
+// The first call is on NewReplica. Further calls come from the trigger on an
+// EndTransactionRequest.
 //
 // Note that maybeGossipSystemConfig gossips information only when the
 // lease is actually held. The method does not request a leader lease
@@ -1639,10 +1639,10 @@ func (r *Replica) maybeGossipSystemConfig() {
 	}
 
 	ctx := r.context()
-	// TODO(marc): check for bad split in the middle of the SystemDB span.
-	kvs, hash, err := r.loadSystemDBSpan()
+	// TODO(marc): check for bad split in the middle of the SystemConfig span.
+	kvs, hash, err := r.loadSystemConfigSpan()
 	if err != nil {
-		log.Errorc(ctx, "could not load SystemDB span: %s", err)
+		log.Errorc(ctx, "could not load SystemConfig span: %s", err)
 		return
 	}
 	if bytes.Equal(r.systemDBHash, hash) {
@@ -1900,15 +1900,16 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 	return nil
 }
 
-var errSystemDBIntent = errors.New("must retry later due to intent on SystemDB")
+var errSystemConfigIntent = errors.New("must retry later due to intent on SystemConfigSpan")
 
-// loadSystemDBSpan scans the entire SystemDB span and returns the full list of
-// key/value pairs along with the sha1 checksum of the contents (key and value).
-func (r *Replica) loadSystemDBSpan() ([]roachpb.KeyValue, []byte, error) {
+// loadSystemConfigSpan scans the entire SystemConfig span and returns the full
+// list of key/value pairs along with the sha1 checksum of the contents (key
+// and value).
+func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Timestamp = r.store.Clock().Now()
-	ba.Add(&roachpb.ScanRequest{Span: keys.SystemDBSpan})
+	ba.Add(&roachpb.ScanRequest{Span: keys.SystemConfigSpan})
 	br, intents, err := r.executeBatch(r.store.Engine(), nil, ba)
 	if err != nil {
 		return nil, nil, err
@@ -1918,7 +1919,7 @@ func (r *Replica) loadSystemDBSpan() ([]roachpb.KeyValue, []byte, error) {
 		// to nudge the intents in case they're expired; next time around we'll
 		// hopefully have more luck.
 		r.handleSkippedIntents(intents)
-		return nil, nil, errSystemDBIntent
+		return nil, nil, errSystemConfigIntent
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
 	return kvs, config.SystemConfig{Values: kvs}.Hash(), err

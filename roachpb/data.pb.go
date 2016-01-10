@@ -315,7 +315,7 @@ func (*ChangeReplicasTrigger) ProtoMessage()    {}
 // ModifiedSpanTrigger indicates that a specific span has been modified.
 // This can be used to trigger scan-and-gossip for the given span.
 type ModifiedSpanTrigger struct {
-	SystemDBSpan bool `protobuf:"varint,1,opt,name=system_db_span" json:"system_db_span"`
+	SystemConfigSpan bool `protobuf:"varint,1,opt,name=system_config_span" json:"system_config_span"`
 }
 
 func (m *ModifiedSpanTrigger) Reset()         { *m = ModifiedSpanTrigger{} }
@@ -775,7 +775,7 @@ func (m *ModifiedSpanTrigger) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0x8
 	i++
-	if m.SystemDBSpan {
+	if m.SystemConfigSpan {
 		data[i] = 1
 	} else {
 		data[i] = 0
@@ -2280,7 +2280,7 @@ func (m *ModifiedSpanTrigger) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SystemDBSpan", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field SystemConfigSpan", wireType)
 			}
 			var v int
 			for shift := uint(0); ; shift += 7 {
@@ -2297,7 +2297,7 @@ func (m *ModifiedSpanTrigger) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			m.SystemDBSpan = bool(v != 0)
+			m.SystemConfigSpan = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])

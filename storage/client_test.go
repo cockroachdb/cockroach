@@ -38,6 +38,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -173,6 +174,8 @@ type multiTestContext struct {
 	engineStoppers     []*stop.Stopper
 	timeUntilStoreDead time.Duration
 
+	reenableTableSplits func()
+
 	// 'stores' and 'stoppers' may change at runtime so the pointers
 	// they contain are protected by 'mu'.
 	mu       sync.RWMutex
@@ -190,6 +193,7 @@ func startMultiTestContext(t *testing.T, numStores int) *multiTestContext {
 
 func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	m.t = t
+	m.reenableTableSplits = config.TestingDisableTableSplits()
 	if m.manualClock == nil {
 		m.manualClock = hlc.NewManualClock(0)
 	}
@@ -267,6 +271,7 @@ func (m *multiTestContext) Stop() {
 			s.Stop()
 		}
 		close(done)
+		m.reenableTableSplits()
 	}()
 
 	select {

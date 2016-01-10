@@ -1880,8 +1880,8 @@ func TestValidSplitKeys(t *testing.T) {
 		{roachpb.Key("a"), true},
 		{roachpb.Key("\xff"), true},
 		{roachpb.Key("\xff\x01"), true},
-		{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemDescID)), false},
-		{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemDescID + 1)), true},
+		{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID)), false},
+		{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID + 1)), true},
 	}
 
 	for i, test := range testCases {
@@ -1955,7 +1955,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 		{
 			keys: []roachpb.Key{
 				roachpb.Key(keys.MakeTablePrefix(1)),
-				roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemDescID)),
+				roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID)),
 			},
 			expSplit: nil,
 			expError: true,

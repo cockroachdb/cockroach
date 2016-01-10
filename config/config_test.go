@@ -173,7 +173,7 @@ func TestGetLargestID(t *testing.T) {
 		}, 12, 0, ""},
 
 		// Real SQL layout.
-		{sql.MakeMetadataSchema().GetInitialValues(), keys.ZonesTableID, 0, ""},
+		{sql.MakeMetadataSchema().GetInitialValues(), keys.MaxSystemConfigDescID + 1, 0, ""},
 
 		// Test non-zero max.
 		{[]roachpb.KeyValue{
@@ -216,7 +216,7 @@ func TestComputeSplits(t *testing.T) {
 
 	const (
 		start         = keys.MaxReservedDescID + 1
-		reservedStart = keys.MaxSystemDescID + 1
+		reservedStart = keys.MaxSystemConfigDescID + 1
 	)
 
 	schema := sql.MakeMetadataSchema()
@@ -227,10 +227,8 @@ func TestComputeSplits(t *testing.T) {
 		descriptor(start), descriptor(start+1), descriptor(start+5))
 	// Real SQL system with reserved non-system tables.
 	allPrivileges := sql.NewPrivilegeDescriptor(security.RootUser, privilege.List{privilege.ALL})
-	db := sql.MakeMetadataDatabase("testdb", allPrivileges)
-	db.AddTable("CREATE TABLE testdb.test (i INT PRIMARY KEY)", allPrivileges)
-	db.AddTable("CREATE TABLE testdb.test2 (i INT PRIMARY KEY)", allPrivileges)
-	schema.AddDatabase(db)
+	schema.AddTable("CREATE TABLE system.test1 (i INT PRIMARY KEY)", allPrivileges)
+	schema.AddTable("CREATE TABLE system.test2 (i INT PRIMARY KEY)", allPrivileges)
 	reservedSql := schema.GetInitialValues()
 	// Real SQL system with reserved non-system and user database.
 	allSql := append(schema.GetInitialValues(),
@@ -253,16 +251,16 @@ func TestComputeSplits(t *testing.T) {
 		{nil, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), nil},
 
 		// No user data.
-		{baseSql, roachpb.RKeyMin, roachpb.RKeyMax, nil},
+		{baseSql, roachpb.RKeyMin, roachpb.RKeyMax, allReservedSplits[:1]},
 		{baseSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, nil},
 		{baseSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), nil},
-		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), nil},
+		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), allReservedSplits[:1]},
 
 		// User descriptors.
-		{userSql, roachpb.RKeyMin, roachpb.RKeyMax, allUserSplits},
+		{userSql, keys.MakeTablePrefix(start - 1), roachpb.RKeyMax, allUserSplits},
 		{userSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, allUserSplits[1:]},
 		{userSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), allUserSplits[1:]},
-		{userSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), allUserSplits},
+		{userSql, keys.MakeTablePrefix(start - 1), keys.MakeTablePrefix(start + 10), allUserSplits},
 		{userSql, keys.MakeTablePrefix(start + 4), keys.MakeTablePrefix(start + 10), allUserSplits[5:]},
 		{userSql, keys.MakeTablePrefix(start + 5), keys.MakeTablePrefix(start + 10), nil},
 		{userSql, keys.MakeTablePrefix(start + 6), keys.MakeTablePrefix(start + 10), nil},

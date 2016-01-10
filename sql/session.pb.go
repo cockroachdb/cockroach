@@ -25,8 +25,8 @@ type Session struct {
 	// Open transaction.
 	Txn *Session_Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
 	// Indicates that the above transaction is mutating keys in the
-	// SystemDB span.
-	MutatesSystemDB bool `protobuf:"varint,4,opt,name=mutates_system_db" json:"mutates_system_db"`
+	// SystemConfig span.
+	MutatesSystemConfig bool `protobuf:"varint,4,opt,name=mutates_system_config" json:"mutates_system_config"`
 	// Types that are valid to be assigned to Timezone:
 	//	*Session_Location
 	//	*Session_Offset
@@ -170,7 +170,7 @@ func (m *Session) MarshalTo(data []byte) (int, error) {
 	}
 	data[i] = 0x20
 	i++
-	if m.MutatesSystemDB {
+	if m.MutatesSystemConfig {
 		data[i] = 1
 	} else {
 		data[i] = 0
@@ -427,7 +427,7 @@ func (m *Session) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 4:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MutatesSystemDB", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field MutatesSystemConfig", wireType)
 			}
 			var v int
 			for shift := uint(0); ; shift += 7 {
@@ -444,7 +444,7 @@ func (m *Session) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			m.MutatesSystemDB = bool(v != 0)
+			m.MutatesSystemConfig = bool(v != 0)
 		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Location", wireType)

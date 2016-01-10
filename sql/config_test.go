@@ -52,7 +52,7 @@ func forceNewConfig(t *testing.T, s *server.TestServer) (*config.SystemConfig, e
 
 	// This needs to be done in a transaction with the system trigger set.
 	if err := s.DB().Txn(func(txn *client.Txn) error {
-		txn.SetSystemDBTrigger()
+		txn.SetSystemConfigTrigger()
 		return txn.Put(configDescKey, configDesc)
 	}); err != nil {
 		t.Fatal(err)

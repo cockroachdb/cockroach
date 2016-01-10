@@ -15,7 +15,6 @@ SHOW DATABASES
 ----
 Database
 a
-rangelog
 system
 test
 
@@ -31,7 +30,6 @@ SHOW DATABASES
 a
 b
 c
-rangelog
 system
 test
 
@@ -69,7 +67,6 @@ SHOW DATABASES
 Database
 a
 c
-rangelog
 system
 test
 

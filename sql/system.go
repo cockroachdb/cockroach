@@ -79,9 +79,6 @@ var (
 	// DescriptorTable is the descriptor for the descriptor table.
 	DescriptorTable = createSystemTable(keys.DescriptorTableID, descriptorTableSchema)
 
-	// LeaseTable is the descriptor for the lease table.
-	LeaseTable = createSystemTable(keys.LeaseTableID, leaseTableSchema)
-
 	// UsersTable is the descriptor for the users table.
 	UsersTable = createSystemTable(keys.UsersTableID, usersTableSchema)
 
@@ -96,7 +93,6 @@ var (
 		keys.SystemDatabaseID:  privilege.ReadData,
 		keys.NamespaceTableID:  privilege.ReadData,
 		keys.DescriptorTableID: privilege.ReadData,
-		keys.LeaseTableID:      privilege.ReadWriteData,
 		keys.UsersTableID:      privilege.ReadWriteData,
 		keys.ZonesTableID:      privilege.ReadWriteData,
 	}
@@ -147,15 +143,18 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	// Add system database.
 	target.AddSystemDescriptor(keys.RootNamespaceID, &SystemDB)
 
-	// Add system tables.
+	// Add system config tables.
 	target.AddSystemDescriptor(keys.SystemDatabaseID, &NamespaceTable)
 	target.AddSystemDescriptor(keys.SystemDatabaseID, &DescriptorTable)
-	target.AddSystemDescriptor(keys.SystemDatabaseID, &LeaseTable)
 	target.AddSystemDescriptor(keys.SystemDatabaseID, &UsersTable)
 	target.AddSystemDescriptor(keys.SystemDatabaseID, &ZonesTable)
+
+	// Add other system tables.
+	target.AddTable(leaseTableSchema,
+		NewPrivilegeDescriptor(security.RootUser, privilege.List{privilege.ALL}))
 }
 
-// IsSystemID returns true if this ID is reserved for system objects.
-func IsSystemID(id ID) bool {
-	return id > 0 && id <= keys.MaxSystemDescID
+// isSystemConfigID returns true if this ID is reserved for system objects.
+func isSystemConfigID(id ID) bool {
+	return id > 0 && id <= keys.MaxSystemConfigDescID
 }
