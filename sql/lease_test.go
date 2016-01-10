@@ -278,10 +278,6 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 }
 
 func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
-	// This test takes ~10 seconds because of the unresolved write intents in the
-	// system DB span.
-	testingT.Skipf("TODO(tschottdorf): #2871")
-
 	defer leaktest.AfterTest(testingT)
 	t := newLeaseTest(testingT)
 	defer t.cleanup()
