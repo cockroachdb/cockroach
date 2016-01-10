@@ -232,9 +232,9 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, error) {
 		return nil, err
 	}
 
-	if IsSystemID(tableDesc.GetID()) {
+	if isSystemConfigID(tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
-		p.txn.SetSystemDBTrigger()
+		p.txn.SetSystemConfigTrigger()
 	}
 
 	if autoCommit {

@@ -106,9 +106,9 @@ func (p *planner) Delete(n *parser.Delete) (planNode, error) {
 		return nil, err
 	}
 
-	if IsSystemID(tableDesc.GetID()) {
+	if isSystemConfigID(tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
-		p.txn.SetSystemDBTrigger()
+		p.txn.SetSystemConfigTrigger()
 	}
 	if err := p.txn.Run(&b); err != nil {
 		return nil, err

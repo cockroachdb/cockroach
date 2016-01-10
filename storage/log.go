@@ -27,7 +27,7 @@ import (
 // schema.  Currently there is no useful information in this table; this is a
 // work in progress.
 const rangeEventTableSchema = `
-CREATE TABLE rangelog.event (
+CREATE TABLE system.rangelog (
   timestamp     TIMESTAMP  NOT NULL,
   rangeID       INT        NOT NULL,
   PRIMARY KEY (timestamp, rangeID)
@@ -37,7 +37,5 @@ CREATE TABLE rangelog.event (
 // MetadataSchema.
 func AddEventLogToMetadataSchema(schema *sql.MetadataSchema) {
 	allPrivileges := sql.NewPrivilegeDescriptor(security.RootUser, privilege.List{privilege.ALL})
-	db := sql.MakeMetadataDatabase("rangelog", allPrivileges)
-	db.AddTable(rangeEventTableSchema, allPrivileges)
-	schema.AddDatabase(db)
+	schema.AddTable(rangeEventTableSchema, allPrivileges)
 }

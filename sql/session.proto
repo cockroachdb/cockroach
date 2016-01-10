@@ -34,8 +34,8 @@ message Session {
   // Open transaction.
   optional Transaction txn = 3;
   // Indicates that the above transaction is mutating keys in the
-  // SystemDB span.
-  optional bool mutates_system_db = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "MutatesSystemDB"];
+  // SystemConfig span.
+  optional bool mutates_system_config = 4 [(gogoproto.nullable) = false];
   oneof timezone {
     // A time zone; LOCAL or DEFAULT imply UTC.
     string location = 5;
