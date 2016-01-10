@@ -21,7 +21,6 @@ package storage
 
 import (
 	"bytes"
-	"crypto/sha1"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -1651,7 +1650,8 @@ func (r *Replica) maybeGossipSystemConfig() {
 	}
 
 	if log.V(1) {
-		log.Infoc(ctx, "gossiping system config from store %d, range %d", r.store.StoreID(), r.RangeID)
+		log.Infoc(ctx, "gossiping system config from store %d, range %d, hash %x",
+			r.store.StoreID(), r.RangeID, hash)
 	}
 
 	cfg := &config.SystemConfig{Values: kvs}
@@ -1920,19 +1920,8 @@ func (r *Replica) loadSystemDBSpan() ([]roachpb.KeyValue, []byte, error) {
 		r.handleSkippedIntents(intents)
 		return nil, nil, errSystemDBIntent
 	}
-	sha := sha1.New()
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
-	for _, kv := range kvs {
-		if _, err := sha.Write(kv.Key); err != nil {
-			return nil, nil, err
-		}
-		// There are all kinds of different types here, so we can't use the
-		// typed getters.
-		if _, err := sha.Write(kv.Value.RawBytes); err != nil {
-			return nil, nil, err
-		}
-	}
-	return kvs, sha.Sum(nil), err
+	return kvs, config.SystemConfig{Values: kvs}.Hash(), err
 }
 
 // maybeAddToSplitQueue checks whether the current size of the range
