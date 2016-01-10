@@ -1423,7 +1423,6 @@ func verifyProperty5(t *testing.T, tc *treeContext, testName string, node *roach
 // tree. The tree is verified after each insert or delete.
 func TestTree(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(tschottdorf): flaky. See #2312")
 
 	keyRoot := roachpb.RKey("m")
 	tc := createTreeContext(keyRoot, []*roachpb.RangeTreeNode{
