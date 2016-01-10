@@ -1296,7 +1296,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 // cannot cause other removed nodes to recreate their ranges.
 func TestReplicateRogueRemovedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("#3667")
+	t.Skip("#3642")
 
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
