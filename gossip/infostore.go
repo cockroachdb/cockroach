@@ -52,6 +52,10 @@ type infoStore struct {
 	NodeAddr  util.UnresolvedAddr `json:"-"`               // Address of node owning this info store: "host:port"
 	nodes     map[int32]*Node     // Per-node information for gossip peers
 	callbacks []*callback
+
+	callbackSem  sync.Mutex // Serializes callbacks
+	callbackMu   sync.Mutex // Protects callbackWork
+	callbackWork []func()
 }
 
 var monoTime struct {
@@ -101,8 +105,8 @@ func (is *infoStore) String() string {
 }
 
 // newInfoStore allocates and returns a new infoStore.
-func newInfoStore(nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr) infoStore {
-	return infoStore{
+func newInfoStore(nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr) *infoStore {
+	return &infoStore{
 		Infos:    make(infoMap),
 		NodeID:   nodeID,
 		NodeAddr: nodeAddr,
@@ -237,10 +241,33 @@ func (is *infoStore) processCallbacks(key string, content roachpb.Value) {
 		}
 	}
 
-	// Run callbacks in a goroutine to avoid mutex reentry.
-	go func() {
+	// Add the matching callbacks to the callback work list.
+	f := func() {
 		for _, method := range matches {
 			method(key, content)
+		}
+	}
+	is.callbackMu.Lock()
+	is.callbackWork = append(is.callbackWork, f)
+	is.callbackMu.Unlock()
+
+	// Run callbacks in a goroutine to avoid mutex reentry. We also guarantee
+	// callbacks are run in order such that if a key is updated twice in
+	// succession, the second callback will never be run before the first.
+	go func() {
+		// Grab the callback semaphore to prevent another goroutine from invoking
+		// callbacks.
+		is.callbackSem.Lock()
+		defer is.callbackSem.Unlock()
+
+		// Grab and execute the list of work.
+		is.callbackMu.Lock()
+		work := is.callbackWork
+		is.callbackWork = nil
+		is.callbackMu.Unlock()
+
+		for _, w := range work {
+			w()
 		}
 	}()
 }

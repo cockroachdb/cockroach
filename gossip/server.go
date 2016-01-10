@@ -44,7 +44,7 @@ type clientInfo struct {
 // newly arrived information on a periodic basis.
 type server struct {
 	mu       sync.Mutex                // Protects the fields below
-	is       infoStore                 // The backing infostore
+	is       *infoStore                // The backing infostore
 	closed   bool                      // True if server was closed
 	incoming nodeSet                   // Incoming client node IDs
 	lAddrMap map[string]clientInfo     // Incoming client's local address -> client's node info

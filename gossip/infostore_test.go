@@ -168,7 +168,7 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 }
 
 // Helper method creates an infostore with 10 infos.
-func createTestInfoStore(t *testing.T) infoStore {
+func createTestInfoStore(t *testing.T) *infoStore {
 	is := newInfoStore(1, emptyAddr)
 
 	for i := 0; i < 10; i++ {
