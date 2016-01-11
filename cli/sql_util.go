@@ -21,20 +21,29 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/olekukonko/tablewriter"
+	_ "github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/olekukonko/tablewriter"
 )
 
 func makeSQLClient() *sql.DB {
 	// Use the sql administrator by default (root user).
 	// TODO(marc): allow passing on the commandline.
-	db, err := sql.Open("cockroach",
-		fmt.Sprintf("%s://%s@%s?certs=%s",
-			context.HTTPRequestScheme(),
-			security.RootUser,
-			context.Addr,
-			context.Certs))
+	if len(connURL) == 0 {
+		sslOptions := ""
+		if context.Insecure {
+			sslOptions = "sslmode=disable"
+		} else {
+			sslOptions = fmt.Sprintf("sslmode=verify-full&sslcert=%s&sslkey=%s&sslrootcert=%s",
+				security.ClientCertPath(context.Certs, connUser),
+				security.ClientKeyPath(context.Certs, connUser),
+				security.CACertPath(context.Certs))
+		}
+		connURL = fmt.Sprintf("postgresql://%s@%s:%d/%s?%s",
+			connUser, connHost, connPort, connDBName, sslOptions)
+	}
+	db, err := sql.Open("postgres", connURL)
 	if err != nil {
 		panicf("failed to initialize SQL client: %s", err)
 	}
