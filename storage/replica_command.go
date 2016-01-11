@@ -1061,8 +1061,8 @@ func (r *Replica) Merge(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Hea
 // has already been truncated has no effect. If this range is not the one
 // specified within the request body, the request will also be ignored.
 func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.TruncateLogRequest) (roachpb.TruncateLogResponse, error) {
-	r.Lock()
-	defer r.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	var reply roachpb.TruncateLogResponse
 
 	// After a merge, it's possible that this request was sent to the wrong
@@ -1188,7 +1188,9 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 	// node.
 	if r.getLease().Replica.StoreID == r.store.StoreID() &&
 		prevLease.Replica.StoreID != r.getLease().Replica.StoreID {
-		r.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.store.Clock().MaxOffset()), 0))
+		r.mu.Lock()
+		r.mu.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.store.Clock().MaxOffset()), 0))
+		r.mu.Unlock()
 		log.Infof("range %d: new leader lease %s", r.RangeID, args.Lease)
 	}
 
@@ -1392,9 +1394,11 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 	// never make it to the new Range (see #3148), so all we grab here is
 	// the actual lock (at time of writing, this isn't necessary but for
 	// convention).
-	r.Lock()
-	r.tsCache.MergeInto(newRng.tsCache, true /* clear */)
-	r.Unlock()
+	r.mu.Lock()
+	newRng.mu.Lock()
+	r.mu.tsCache.MergeInto(newRng.mu.tsCache, true /* clear */)
+	newRng.mu.Unlock()
+	r.mu.Unlock()
 
 	batch.Defer(func() {
 		if err := r.store.SplitRange(r, newRng); err != nil {
@@ -1433,9 +1437,9 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 			r.store.stopper.RunAsyncTask(func() {
 				time.Sleep(10 * time.Millisecond)
 				// TODO(bdarnell): make sure newRng hasn't been removed
-				newRng.Lock()
-				_ = newRng.raftGroup.Campaign()
-				newRng.Unlock()
+				newRng.mu.Lock()
+				_ = newRng.mu.raftGroup.Campaign()
+				newRng.mu.Unlock()
 			})
 		}
 	})
@@ -1592,9 +1596,9 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger)
 	// subsumed replica each held their respective leader leases, we
 	// could merge the timestamp caches for efficiency. But it's unlikely
 	// and not worth the extra logic and potential for error.
-	r.Lock()
-	r.tsCache.Clear(r.store.Clock())
-	r.Unlock()
+	r.mu.Lock()
+	r.mu.tsCache.Clear(r.store.Clock())
+	r.mu.Unlock()
 
 	batch.Defer(func() {
 		if err := r.store.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRangeID); err != nil {
@@ -1641,8 +1645,8 @@ func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica r
 	updatedDesc := *desc
 	updatedDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
 	err := func() error {
-		r.Lock()
-		defer r.Unlock()
+		r.mu.Lock()
+		defer r.mu.Unlock()
 
 		found := -1       // tracks NodeID && StoreID
 		nodeUsed := false // tracks NodeID only
