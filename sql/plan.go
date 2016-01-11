@@ -276,3 +276,4 @@ var _ planNode = &limitNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &valuesNode{}
+var _ planNode = &selectNode{}
