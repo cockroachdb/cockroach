@@ -41,6 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
+const splitTimeout = 10 * time.Second
+
 func adminSplitArgs(key, splitKey roachpb.Key) roachpb.AdminSplitRequest {
 	return roachpb.AdminSplitRequest{
 		Span: roachpb.Span{
@@ -535,7 +537,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	if err := util.IsTrueWithin(func() bool {
 		rng = store.LookupReplica(keys.MakeTablePrefix(descID), nil)
 		return rng.RangeID != originalRange.RangeID
-	}, 10*time.Second); err != nil {
+	}, splitTimeout); err != nil {
 		t.Fatalf("failed to notice range max bytes update: %s", err)
 	}
 
@@ -555,7 +557,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	// Verify that the range is in fact split (give it a few seconds for very
 	// slow test machines).
 	var newRng *storage.Replica
-	util.SucceedsWithin(t, 5*time.Second, func() error {
+	util.SucceedsWithin(t, splitTimeout, func() error {
 		newRng = store.LookupReplica(keys.MakeTablePrefix(descID+1), nil)
 		if newRng.RangeID == rng.RangeID {
 			return util.Errorf("range has not yet split")
@@ -591,7 +593,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	}
 
 	// Verify that the range is split and the new range has the correct max bytes.
-	util.SucceedsWithin(t, time.Second, func() error {
+	util.SucceedsWithin(t, splitTimeout, func() error {
 		newRng := store.LookupReplica(keys.MakeTablePrefix(descID), nil)
 		if newRng.RangeID == origRng.RangeID {
 			return util.Errorf("expected new range created by split")
@@ -657,7 +659,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		}
 		expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax))
 
-		util.SucceedsWithinDepth(1, t, 5*time.Second, func() error {
+		util.SucceedsWithinDepth(1, t, splitTimeout, func() error {
 			rows, err := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 			if err != nil {
 				return err
@@ -738,8 +740,8 @@ func setupSplitSnapshotRace(t *testing.T) (mtc *multiTestContext, leftKey roachp
 	mtc.unreplicateRange(leftRangeID, 0, 0)
 	mtc.expireLeaderLeases()
 
-	mtc.waitForValues(leftKey, 3*time.Second, []int64{0, 1, 1, 1, 0, 0})
-	mtc.waitForValues(rightKey, 3*time.Second, []int64{0, 2, 2, 2, 0, 0})
+	mtc.waitForValues(leftKey, splitTimeout, []int64{0, 1, 1, 1, 0, 0})
+	mtc.waitForValues(rightKey, splitTimeout, []int64{0, 2, 2, 2, 0, 0})
 
 	// Stop node 3 so it doesn't hear about the split.
 	mtc.stopStore(3)
@@ -760,7 +762,7 @@ func setupSplitSnapshotRace(t *testing.T) (mtc *multiTestContext, leftKey roachp
 	mtc.unreplicateRange(rightRangeID, 1, 2)
 	mtc.unreplicateRange(rightRangeID, 1, 1)
 
-	mtc.waitForValues(rightKey, 3*time.Second, []int64{0, 0, 0, 2, 2, 2})
+	mtc.waitForValues(rightKey, splitTimeout, []int64{0, 0, 0, 2, 2, 2})
 
 	// Stop the remaining data stores.
 	mtc.stopStore(1)
@@ -792,7 +794,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 	if _, err := client.SendWrapped(mtc.distSender, nil, &incArgs); err != nil {
 		t.Fatal(err)
 	}
-	mtc.waitForValues(leftKey, 3*time.Second, []int64{0, 11, 11, 11, 0, 0})
+	mtc.waitForValues(leftKey, splitTimeout, []int64{0, 11, 11, 11, 0, 0})
 
 	// Now wake the other stores up.
 	mtc.restartStore(4)
@@ -803,7 +805,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 	if _, err := client.SendWrapped(mtc.distSender, nil, &incArgs); err != nil {
 		t.Fatal(err)
 	}
-	mtc.waitForValues(rightKey, 3*time.Second, []int64{0, 0, 0, 22, 22, 22})
+	mtc.waitForValues(rightKey, splitTimeout, []int64{0, 0, 0, 22, 22, 22})
 }
 
 // TestSplitSnapshotRace_SplitWins exercises one outcome of the
@@ -836,7 +838,7 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	// for. There is a high probability that the message will have been
 	// received by the time that nodes 4 and 5 have processed their
 	// update.
-	mtc.waitForValues(rightKey, 3*time.Second, []int64{0, 0, 0, 2, 22, 22})
+	mtc.waitForValues(rightKey, splitTimeout, []int64{0, 0, 0, 2, 22, 22})
 
 	// Wake up the left-hand range. This will allow the left-hand
 	// range's split to complete and unblock the right-hand range.
@@ -850,13 +852,13 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	if _, err := client.SendWrapped(mtc.distSender, nil, &incArgs); err != nil {
 		t.Fatal(err)
 	}
-	mtc.waitForValues(leftKey, 3*time.Second, []int64{0, 11, 11, 11, 0, 0})
+	mtc.waitForValues(leftKey, splitTimeout, []int64{0, 11, 11, 11, 0, 0})
 
 	incArgs = incrementArgs(rightKey, 200)
 	if _, err := client.SendWrapped(mtc.distSender, nil, &incArgs); err != nil {
 		t.Fatal(err)
 	}
-	mtc.waitForValues(rightKey, 3*time.Second, []int64{0, 0, 0, 222, 222, 222})
+	mtc.waitForValues(rightKey, splitTimeout, []int64{0, 0, 0, 222, 222, 222})
 }
 
 // TestStoreSplitReadRace prevents regression of #3148. It begins a couple of
