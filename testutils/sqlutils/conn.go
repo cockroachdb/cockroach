@@ -37,7 +37,7 @@ import (
 // certificates will be created as temporary files in the provided directory,
 // and their filenames will have the provided prefix. The returned cleanup
 // function will delete these temporary files.
-func PGUrl(ts *server.TestServer, t util.Tester, user, tempDir, prefix string) (url.URL, func()) {
+func PGUrl(t util.Tester, ts *server.TestServer, user, tempDir, prefix string) (url.URL, func()) {
 	host, port, err := net.SplitHostPort(ts.PGAddr())
 	if err != nil {
 		t.Fatal(err)
