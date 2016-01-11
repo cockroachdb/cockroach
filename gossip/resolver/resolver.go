@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // Resolver is an interface which provides an abstract factory for
@@ -89,12 +88,16 @@ func NewResolver(context *base.Context, spec string) (Resolver, error) {
 }
 
 // NewResolverFromAddress takes a net.Addr and constructs a resolver.
-func NewResolverFromAddress(addr net.Addr) Resolver {
+func NewResolverFromAddress(addr net.Addr) (Resolver, error) {
 	switch addr.Network() {
 	case "tcp", "unix":
-		return &socketResolver{typ: addr.Network(), addr: addr.String()}
+		return &socketResolver{typ: addr.Network(), addr: addr.String()}, nil
 	default:
-		log.Fatalf("unknown address network %q for %v", addr.Network(), addr)
-		return nil
+		return nil, util.Errorf("unknown address network %q for %v", addr.Network(), addr)
 	}
+}
+
+// NewResolverFromUnresolvedAddr takes a util.UnresolvedAddr and constructs a resolver.
+func NewResolverFromUnresolvedAddr(addr util.UnresolvedAddr) (Resolver, error) {
+	return NewResolverFromAddress(&addr)
 }

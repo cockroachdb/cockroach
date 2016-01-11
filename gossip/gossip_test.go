@@ -106,19 +106,12 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 // the network periodically (at cullInterval duration intervals).
 func TestGossipCullNetwork(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("#3620")
-
-	// Set the cullInterval to a low value to guarantee it kicks in quickly.
-	origCullInterval := cullInterval
-	cullInterval = 5 * time.Millisecond
-	defer func() {
-		cullInterval = origCullInterval
-	}()
 
 	// Create the local gossip and minPeers peers.
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	local := startGossip(1, stopper, t)
+	local.SetCullInterval(5 * time.Millisecond)
 	peers := []*Gossip{}
 	for i := 0; i < minPeers; i++ {
 		peers = append(peers, startGossip(roachpb.NodeID(i+2), stopper, t))

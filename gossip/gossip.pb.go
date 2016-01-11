@@ -9,6 +9,7 @@
 		cockroach/gossip/gossip.proto
 
 	It has these top-level messages:
+		BootstrapInfo
 		Node
 		Request
 		Response
@@ -35,6 +36,19 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+
+// BootstrapInfo contains information necessary to bootstrapping the
+// gossip network from a cold start.
+type BootstrapInfo struct {
+	// A map from node ID to address.
+	Addresses []cockroach_util.UnresolvedAddr `protobuf:"bytes,1,rep,name=addresses" json:"addresses"`
+	// Timestamp at which the bootstrap info was written.
+	Timestamp cockroach_roachpb1.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+}
+
+func (m *BootstrapInfo) Reset()         { *m = BootstrapInfo{} }
+func (m *BootstrapInfo) String() string { return proto.CompactTextString(m) }
+func (*BootstrapInfo) ProtoMessage()    {}
 
 // Node contains information about a gossip node.
 type Node struct {
@@ -110,11 +124,50 @@ func (m *Info) String() string { return proto.CompactTextString(m) }
 func (*Info) ProtoMessage()    {}
 
 func init() {
+	proto.RegisterType((*BootstrapInfo)(nil), "cockroach.gossip.BootstrapInfo")
 	proto.RegisterType((*Node)(nil), "cockroach.gossip.Node")
 	proto.RegisterType((*Request)(nil), "cockroach.gossip.Request")
 	proto.RegisterType((*Response)(nil), "cockroach.gossip.Response")
 	proto.RegisterType((*Info)(nil), "cockroach.gossip.Info")
 }
+func (m *BootstrapInfo) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *BootstrapInfo) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Addresses) > 0 {
+		for _, msg := range m.Addresses {
+			data[i] = 0xa
+			i++
+			i = encodeVarintGossip(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	data[i] = 0x12
+	i++
+	i = encodeVarintGossip(data, i, uint64(m.Timestamp.Size()))
+	n1, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n1
+	return i, nil
+}
+
 func (m *Node) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -166,19 +219,19 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintGossip(data, i, uint64(m.Addr.Size()))
-	n1, err := m.Addr.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n1
-	data[i] = 0x1a
-	i++
-	i = encodeVarintGossip(data, i, uint64(m.LAddr.Size()))
-	n2, err := m.LAddr.MarshalTo(data[i:])
+	n2, err := m.Addr.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n2
+	data[i] = 0x1a
+	i++
+	i = encodeVarintGossip(data, i, uint64(m.LAddr.Size()))
+	n3, err := m.LAddr.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
 	if len(m.Nodes) > 0 {
 		for k := range m.Nodes {
 			data[i] = 0x22
@@ -196,11 +249,11 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 			data[i] = 0x12
 			i++
 			i = encodeVarintGossip(data, i, uint64(v.Size()))
-			n3, err := v.MarshalTo(data[i:])
+			n4, err := v.MarshalTo(data[i:])
 			if err != nil {
 				return 0, err
 			}
-			i += n3
+			i += n4
 		}
 	}
 	if len(m.Delta) > 0 {
@@ -221,11 +274,11 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 			data[i] = 0x12
 			i++
 			i = encodeVarintGossip(data, i, uint64(v.Size()))
-			n4, err := v.MarshalTo(data[i:])
+			n5, err := v.MarshalTo(data[i:])
 			if err != nil {
 				return 0, err
 			}
-			i += n4
+			i += n5
 		}
 	}
 	return i, nil
@@ -254,20 +307,20 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintGossip(data, i, uint64(m.Addr.Size()))
-	n5, err := m.Addr.MarshalTo(data[i:])
+	n6, err := m.Addr.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n5
+	i += n6
 	if m.AlternateAddr != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintGossip(data, i, uint64(m.AlternateAddr.Size()))
-		n6, err := m.AlternateAddr.MarshalTo(data[i:])
+		n7, err := m.AlternateAddr.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n6
+		i += n7
 	}
 	if m.AlternateNodeID != 0 {
 		data[i] = 0x20
@@ -292,11 +345,11 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 			data[i] = 0x12
 			i++
 			i = encodeVarintGossip(data, i, uint64(v.Size()))
-			n7, err := v.MarshalTo(data[i:])
+			n8, err := v.MarshalTo(data[i:])
 			if err != nil {
 				return 0, err
 			}
-			i += n7
+			i += n8
 		}
 	}
 	if len(m.Nodes) > 0 {
@@ -316,11 +369,11 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 			data[i] = 0x12
 			i++
 			i = encodeVarintGossip(data, i, uint64(v.Size()))
-			n8, err := v.MarshalTo(data[i:])
+			n9, err := v.MarshalTo(data[i:])
 			if err != nil {
 				return 0, err
 			}
-			i += n8
+			i += n9
 		}
 	}
 	return i, nil
@@ -344,11 +397,11 @@ func (m *Info) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintGossip(data, i, uint64(m.Value.Size()))
-	n9, err := m.Value.MarshalTo(data[i:])
+	n10, err := m.Value.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n9
+	i += n10
 	if m.OrigStamp != 0 {
 		data[i] = 0x10
 		i++
@@ -404,6 +457,20 @@ func encodeVarintGossip(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	return offset + 1
 }
+func (m *BootstrapInfo) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Addresses) > 0 {
+		for _, e := range m.Addresses {
+			l = e.Size()
+			n += 1 + l + sovGossip(uint64(l))
+		}
+	}
+	l = m.Timestamp.Size()
+	n += 1 + l + sovGossip(uint64(l))
+	return n
+}
+
 func (m *Node) Size() (n int) {
 	var l int
 	_ = l
@@ -530,6 +597,117 @@ func sovGossip(x uint64) (n int) {
 }
 func sozGossip(x uint64) (n int) {
 	return sovGossip(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *BootstrapInfo) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGossip
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BootstrapInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BootstrapInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Addresses", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGossip
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthGossip
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Addresses = append(m.Addresses, cockroach_util.UnresolvedAddr{})
+			if err := m.Addresses[len(m.Addresses)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGossip
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthGossip
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Timestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGossip(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthGossip
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
 }
 func (m *Node) Unmarshal(data []byte) error {
 	l := len(data)

@@ -44,6 +44,11 @@ func StoreIdentKey() roachpb.Key {
 	return MakeStoreKey(localStoreIdentSuffix, roachpb.RKey{})
 }
 
+// StoreGossipKey returns a store-local key for the gossip bootstrap metadata.
+func StoreGossipKey() roachpb.Key {
+	return MakeStoreKey(localStoreGossipSuffix, roachpb.RKey{})
+}
+
 // StoreStatusKey returns the key for accessing the store status for the
 // specified store ID.
 func StoreStatusKey(storeID int32) roachpb.Key {

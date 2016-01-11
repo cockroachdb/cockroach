@@ -21,8 +21,10 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -30,7 +32,7 @@ import (
 
 func TestStoresAddStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewStores()
+	ls := NewStores(hlc.NewClock(hlc.UnixNano))
 	store := Store{}
 	ls.AddStore(&store)
 	if !ls.HasStore(store.Ident.StoreID) {
@@ -43,7 +45,7 @@ func TestStoresAddStore(t *testing.T) {
 
 func TestStoresRemoveStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewStores()
+	ls := NewStores(hlc.NewClock(hlc.UnixNano))
 
 	storeID := roachpb.StoreID(89)
 
@@ -58,7 +60,7 @@ func TestStoresRemoveStore(t *testing.T) {
 
 func TestStoresGetStoreCount(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewStores()
+	ls := NewStores(hlc.NewClock(hlc.UnixNano))
 	if ls.GetStoreCount() != 0 {
 		t.Errorf("expected 0 stores in new local sender")
 	}
@@ -74,7 +76,7 @@ func TestStoresGetStoreCount(t *testing.T) {
 
 func TestStoresVisitStores(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewStores()
+	ls := NewStores(hlc.NewClock(hlc.UnixNano))
 	numStores := 10
 	for i := 0; i < numStores; i++ {
 		ls.AddStore(&Store{Ident: roachpb.StoreIdent{StoreID: roachpb.StoreID(i)}})
@@ -100,7 +102,7 @@ func TestStoresVisitStores(t *testing.T) {
 
 func TestStoresGetStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ls := NewStores()
+	ls := NewStores(hlc.NewClock(hlc.UnixNano))
 	store := Store{}
 	replica := roachpb.ReplicaDescriptor{StoreID: store.Ident.StoreID}
 	s, err := ls.GetStore(replica.StoreID)
@@ -127,7 +129,7 @@ func TestStoresLookupReplica(t *testing.T) {
 	ctx := TestStoreContext
 	manualClock := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manualClock.UnixNano)
-	ls := NewStores()
+	ls := NewStores(ctx.Clock)
 
 	// Create two new stores with ranges we care about.
 	var e [2]engine.Engine
@@ -181,5 +183,135 @@ func TestStoresLookupReplica(t *testing.T) {
 
 	if desc, err := ls.FirstRange(); err != nil || !reflect.DeepEqual(desc, d[0]) {
 		t.Fatalf("first range not as expected: error=%v, desc=%+v", err, desc)
+	}
+}
+
+var storeIDAlloc roachpb.StoreID
+
+// createStores creates a slice of count stores.
+func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores, *stop.Stopper) {
+	stopper := stop.NewStopper()
+	ctx := TestStoreContext
+	manualClock := hlc.NewManualClock(0)
+	ctx.Clock = hlc.NewClock(manualClock.UnixNano)
+	ls := NewStores(ctx.Clock)
+
+	// Create two stores with ranges we care about.
+	stores := []*Store{}
+	for i := 0; i < 2; i++ {
+		ctx.Transport = NewLocalRPCTransport(stopper)
+		defer ctx.Transport.Close()
+		s := NewStore(ctx, engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper), &roachpb.NodeDescriptor{NodeID: 1})
+		storeIDAlloc++
+		s.Ident.StoreID = storeIDAlloc
+		stores = append(stores, s)
+	}
+
+	return manualClock, stores, ls, stopper
+}
+
+// TestStoresGossipStorage verifies reading and writing of bootstrap info.
+func TestStoresGossipStorage(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	manual, stores, ls, stopper := createStores(2, t)
+	defer stopper.Stop()
+	ls.AddStore(stores[0])
+
+	manual.Set(1)
+
+	// Verify initial read is empty.
+	var bi gossip.BootstrapInfo
+	if err := ls.ReadBootstrapInfo(&bi); err != nil {
+		t.Fatal(err)
+	}
+	if len(bi.Addresses) != 0 {
+		t.Errorf("expected empty bootstrap info: %+v", bi)
+	}
+
+	// Add a fake address and write.
+	manual.Increment(1)
+	bi.Addresses = append(bi.Addresses, util.MakeUnresolvedAddr("tcp", "127.0.0.1:8001"))
+	if err := ls.WriteBootstrapInfo(&bi); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify on read.
+	manual.Increment(1)
+	var newBI gossip.BootstrapInfo
+	if err := ls.ReadBootstrapInfo(&newBI); err != nil {
+		t.Fatal(err)
+	}
+	if len(newBI.Addresses) != 1 {
+		t.Errorf("expected single bootstrap info address: %+v", newBI)
+	}
+
+	// Add another store and verify it has bootstrap info written.
+	ls.AddStore(stores[1])
+
+	// Create a new stores object to verify read.
+	ls2 := NewStores(ls.clock)
+	ls2.AddStore(stores[1])
+	var verifyBI gossip.BootstrapInfo
+	if err := ls2.ReadBootstrapInfo(&verifyBI); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(bi, verifyBI) {
+		t.Errorf("bootstrap info %+v not equal to expected %+v", verifyBI, bi)
+	}
+}
+
+// TestStoresGossipStorageReadLatest verifies that the latest
+// bootstrap info from multiple stores is returned on Read.
+func TestStoresGossipStorageReadLatest(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	manual, stores, ls, stopper := createStores(2, t)
+	defer stopper.Stop()
+	ls.AddStore(stores[0])
+
+	// Set clock to 1.
+	manual.Set(1)
+
+	// Add a fake address and write.
+	var bi gossip.BootstrapInfo
+	bi.Addresses = append(bi.Addresses, util.MakeUnresolvedAddr("tcp", "127.0.0.1:8001"))
+	if err := ls.WriteBootstrapInfo(&bi); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now remove store 0 and add store 1.
+	ls.RemoveStore(stores[0])
+	ls.AddStore(stores[1])
+
+	// Increment clock, add another address and write.
+	manual.Increment(1)
+	bi.Addresses = append(bi.Addresses, util.MakeUnresolvedAddr("tcp", "127.0.0.1:8002"))
+	if err := ls.WriteBootstrapInfo(&bi); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a new stores object to freshly read. Should get latest
+	// version from store 1.
+	manual.Increment(1)
+	ls2 := NewStores(ls.clock)
+	ls2.AddStore(stores[0])
+	ls2.AddStore(stores[1])
+	var verifyBI gossip.BootstrapInfo
+	if err := ls2.ReadBootstrapInfo(&verifyBI); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(bi, verifyBI) {
+		t.Errorf("bootstrap info %+v not equal to expected %+v", verifyBI, bi)
+	}
+
+	// Verify that stores[0], which had old info, was updated with
+	// latest bootstrap info during the read.
+	ls3 := NewStores(ls.clock)
+	ls3.AddStore(stores[0])
+	verifyBI.Reset()
+	if err := ls2.ReadBootstrapInfo(&verifyBI); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(bi, verifyBI) {
+		t.Errorf("bootstrap info %+v not equal to expected %+v", verifyBI, bi)
 	}
 }

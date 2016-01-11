@@ -77,7 +77,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Gossip = gossip.New(rpcContext, gossip.TestBootstrap)
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20, ltc.Stopper)
 
-	ltc.stores = storage.NewStores()
+	ltc.stores = storage.NewStores(ltc.Clock)
 	var rpcSend rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr,
 		getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message,
 		_ *rpc.Context) ([]proto.Message, error) {

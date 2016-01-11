@@ -610,7 +610,7 @@ func (s *Store) startGossip() {
 			log.Warningc(ctx, "error gossiping first range data: %s", err)
 		}
 		s.initComplete.Done()
-		ticker := time.NewTicker(clusterIDGossipInterval)
+		ticker := time.NewTicker(sentinelGossipInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -650,7 +650,7 @@ func (s *Store) startGossip() {
 // loop in the event that the returned error indicates that the state
 // of the leader lease is not known. This can happen on lease command
 // timeouts. The retry loop makes sure we try hard to keep asking for
-// the lease instead of waiting for the next clusterIDGossipInterval
+// the lease instead of waiting for the next sentinelGossipInterval
 // to transpire.
 func (s *Store) maybeGossipFirstRange() error {
 	retryOptions := retry.Options{
@@ -735,7 +735,7 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 	s.Ident = ident
 	kvs, err := engine.Scan(s.engine,
 		engine.MakeMVCCMetadataKey(roachpb.Key(roachpb.RKeyMin)),
-		engine.MakeMVCCMetadataKey(roachpb.Key(roachpb.RKeyMax)), 1)
+		engine.MakeMVCCMetadataKey(roachpb.Key(roachpb.RKeyMax)), 10)
 	if err != nil {
 		return util.Errorf("store %s: unable to access: %s", s.engine, err)
 	} else if len(kvs) > 0 {
@@ -747,7 +747,11 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		if ok {
 			return util.Errorf("store %s already belongs to cockroach cluster %s", s.engine, s.Ident.ClusterID)
 		}
-		return util.Errorf("store %s is not-empty and has invalid contents (first key: %q)", s.engine, kvs[0].Key)
+		keyVals := []string{}
+		for _, kv := range kvs {
+			keyVals = append(keyVals, fmt.Sprintf("%s: %q", kv.Key, kv.Value))
+		}
+		return util.Errorf("store %s is non-empty but does not contain store metadata (first %d key/values: %s)", s.engine, len(keyVals), keyVals)
 	}
 	err = engine.MVCCPutProto(s.engine, nil, keys.StoreIdentKey(), roachpb.ZeroTimestamp, nil, &s.Ident)
 	return err

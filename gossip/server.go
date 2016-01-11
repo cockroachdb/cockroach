@@ -17,10 +17,8 @@
 package gossip
 
 import (
-	"math"
 	"math/rand"
 	"net"
-	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -61,7 +59,7 @@ type server struct {
 func newServer() *server {
 	s := &server{
 		is:       newInfoStore(0, util.UnresolvedAddr{}),
-		incoming: makeNodeSet(1),
+		incoming: makeNodeSet(minPeers),
 		lAddrMap: map[string]clientInfo{},
 		nodeMap:  map[roachpb.NodeID]string{},
 		tighten:  make(chan roachpb.NodeID, 1),
@@ -102,7 +100,6 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 	canAccept := true
 	if args.NodeID != 0 {
 		if !s.incoming.hasNode(args.NodeID) {
-			s.incoming.setMaxSize(s.maxPeers())
 			if !s.incoming.hasSpace() {
 				canAccept = false
 			} else {
@@ -135,9 +132,7 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 				log.Warningf("node %d failed to fully combine gossip delta from node %d: %s", s.is.NodeID, args.NodeID, err)
 			}
 			if log.V(1) {
-				log.Infof("received %s from node %d (%d fresh)", args.Delta, args.NodeID, freshCount)
-			} else {
-				log.Infof("node %d received %d (%d fresh) info(s) from node %d", s.is.NodeID, len(args.Delta), freshCount, args.NodeID)
+				log.Infof("node %d received %s from node %d (%d fresh)", s.is.NodeID, extractKeys(args.Delta), args.NodeID, freshCount)
 			}
 			if s.closed {
 				return nil, util.Errorf("gossip server shutdown")
@@ -157,7 +152,9 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 		if canAccept {
 			reply.Delta = s.is.delta(args.NodeID, s.lAddrMap[lAddr.String()].nodes)
 			if len(reply.Delta) > 0 {
-				log.Infof("node %d returned %d info(s) to node %d", s.is.NodeID, len(reply.Delta), args.NodeID)
+				if log.V(1) {
+					log.Infof("node %d returned %d info(s) to node %d", s.is.NodeID, len(reply.Delta), args.NodeID)
+				}
 				reply.Nodes = s.is.getNodes()
 				s.sent += len(reply.Delta)
 				return reply, nil
@@ -208,43 +205,19 @@ func (s *server) InfosReceived() int {
 // to start a new client connection.
 func (s *server) maybeTighten() {
 	distantNodeID, distantHops := s.is.mostDistant()
-	log.Infof("@%d: distantHops: %d from %d", s.is.NodeID, distantHops, distantNodeID)
+	if log.V(1) {
+		log.Infof("@%d: distantHops: %d from %d", s.is.NodeID, distantHops, distantNodeID)
+	}
 	if distantHops > MaxHops {
 		select {
 		case s.tighten <- distantNodeID:
-			log.Infof("if possible, tightening network to node %d (%d > %d)",
-				distantNodeID, distantHops, MaxHops)
+			if log.V(1) {
+				log.Infof("if possible, tightening network to node %d (%d > %d)", distantNodeID, distantHops, MaxHops)
+			}
 		default:
 			// Do nothing.
 		}
 	}
-}
-
-// maxPeers returns the maximum number of peers each gossip node
-// may connect to. This is based on maxHops, which is a preset
-// maximum for number of hops allowed before the gossip network
-// will seek to "tighten" by creating new connections to distant
-// nodes.
-func (s *server) maxPeers() int {
-	var nodeCount int
-
-	if err := s.is.visitInfos(func(key string, i *Info) error {
-		if strings.HasPrefix(key, KeyNodeIDPrefix) {
-			nodeCount++
-		}
-		return nil
-	}); err != nil {
-		panic(err)
-	}
-
-	// This formula uses MaxHops-1, instead of MaxHops, to provide a
-	// "fudge" factor for max connected peers, to account for the
-	// arbitrary, decentralized way in which gossip networks are created.
-	peers := int(math.Ceil(math.Exp(math.Log(float64(nodeCount)) / float64(MaxHops-1))))
-	if peers < minPeers {
-		return minPeers
-	}
-	return peers
 }
 
 // start initializes the infostore with the rpc server address and

@@ -23,25 +23,38 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
-// A Stores provides methods to access a collection of local stores.
+// A Stores provides methods to access a collection of stores. There's
+// a visitor pattern and also an implementation of the client.Sender
+// interface which directs a call to the appropriate store based on
+// the call's key range. Stores also implements the gossip.Storage
+// interface, which allows gossip bootstrap information to be
+// persisted consistently to every store and the most recent bootstrap
+// information to be read at node startup.
 type Stores struct {
-	mu       sync.RWMutex               // Protects storeMap and addrs
-	storeMap map[roachpb.StoreID]*Store // Map from StoreID to Store
+	clock      *hlc.Clock
+	mu         sync.RWMutex               // Protects storeMap and addrs
+	storeMap   map[roachpb.StoreID]*Store // Map from StoreID to Store
+	biLatestTS roachpb.Timestamp          // Timestamp of gossip bootstrap info
 }
 
-var _ client.Sender = &Stores{}
+var _ client.Sender = &Stores{}  // Stores implements the client.Sender interface
+var _ gossip.Storage = &Stores{} // Stores implements the gossip.Storage interface
 
 // NewStores returns a local-only sender which directly accesses
 // a collection of stores.
-func NewStores() *Stores {
+func NewStores(clock *hlc.Clock) *Stores {
 	return &Stores{
+		clock:    clock,
 		storeMap: map[roachpb.StoreID]*Store{},
 	}
 }
@@ -78,9 +91,17 @@ func (ls *Stores) AddStore(s *Store) {
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
 	if _, ok := ls.storeMap[s.Ident.StoreID]; ok {
-		panic(fmt.Sprintf("cannot add store twice to local db: %+v", s.Ident))
+		panic(fmt.Sprintf("cannot add store twice: %+v", s.Ident))
 	}
 	ls.storeMap[s.Ident.StoreID] = s
+	// If we've already read the gossip bootstrap info, ensure that
+	// all stores have the most recent values.
+	if !ls.biLatestTS.Equal(roachpb.ZeroTimestamp) {
+		// ReadBootstrapInfo calls updateAllBootstrapInfos.
+		if err := ls.readBootstrapInfoLocked(&gossip.BootstrapInfo{}); err != nil {
+			log.Errorf("failed to update bootstrap info on stores: %s", err)
+		}
+	}
 }
 
 // RemoveStore removes the specified store from the store map.
@@ -224,4 +245,67 @@ func (ls *Stores) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, cons
 		return nil, pErr.GoError()
 	}
 	return br.Responses[0].GetInner().(*roachpb.RangeLookupResponse).Ranges, nil
+}
+
+// ReadBootstrapInfo implements the gossip.Storage interface. Read
+// attempts to read gossip bootstrap info from every known store and
+// finds the most recent from all stores to initialize the bootstrap
+// info argument. Returns an error on any issues reading data for the
+// stores (but excluding the case in which no data has been persisted
+// yet).
+func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
+	ls.mu.RLock()
+	defer ls.mu.RUnlock()
+	return ls.readBootstrapInfoLocked(bi)
+}
+
+func (ls *Stores) readBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
+	latestTS := roachpb.ZeroTimestamp
+	timestamps := map[roachpb.StoreID]roachpb.Timestamp{}
+
+	// Find the most recent bootstrap info, collecting timestamps for
+	// each store along the way.
+	for id, s := range ls.storeMap {
+		var storeBI gossip.BootstrapInfo
+		ok, err := engine.MVCCGetProto(s.engine, keys.StoreGossipKey(), roachpb.ZeroTimestamp, true, nil, &storeBI)
+		if err != nil {
+			return err
+		}
+		timestamps[id] = storeBI.Timestamp
+		if ok && latestTS.Less(storeBI.Timestamp) {
+			latestTS = storeBI.Timestamp
+			*bi = storeBI
+		}
+	}
+
+	// Update all stores with an earlier timestamp.
+	for id, s := range ls.storeMap {
+		if timestamps[id].Less(latestTS) {
+			if err := engine.MVCCPutProto(s.engine, nil, keys.StoreGossipKey(), roachpb.ZeroTimestamp, nil, bi); err != nil {
+				return err
+			}
+			log.Infof("updated gossip bootstrap info to %s", s)
+		}
+	}
+
+	ls.biLatestTS = latestTS
+	return nil
+}
+
+// WriteBootstrapInfo implements the gossip.Storage interface. Write
+// persists the supplied bootstrap info to every known store. Returns
+// nil on success; otherwise returns first error encountered writing
+// to the stores.
+func (ls *Stores) WriteBootstrapInfo(bi *gossip.BootstrapInfo) error {
+	ls.mu.RLock()
+	defer ls.mu.RUnlock()
+	ls.biLatestTS = ls.clock.Now()
+	bi.Timestamp = ls.biLatestTS
+	for _, s := range ls.storeMap {
+		if err := engine.MVCCPutProto(s.engine, nil, keys.StoreGossipKey(), roachpb.ZeroTimestamp, nil, bi); err != nil {
+			return err
+		}
+		log.Infof("wrote gossip bootstrap info to %s", s)
+	}
+	return nil
 }

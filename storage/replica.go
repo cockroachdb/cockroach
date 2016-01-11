@@ -54,16 +54,15 @@ const (
 	// it may be aborted by conflicting txns.
 	DefaultHeartbeatInterval = 5 * time.Second
 
-	// clusterIDGossipTTL is time-to-live for cluster ID. The cluster ID
-	// serves as the sentinel gossip key which informs a node whether or
-	// not it's connected to the primary gossip network and not just a
-	// partition. As such it must expire on a reasonable basis and be
-	// continually re-gossiped. The replica which is the raft leader of
-	// the first range gossips it.
-	clusterIDGossipTTL = 2 * time.Minute
-	// clusterIDGossipInterval is the approximate interval at which the
+	// sentinelGossipTTL is time-to-live for the gossip sentinel. The
+	// sentinel informs a node whether or not it's connected to the
+	// primary gossip network and not just a partition. As such it must
+	// expire on a reasonable basis and be continually re-gossiped. The
+	// replica which is the raft leader of the first range gossips it.
+	sentinelGossipTTL = 2 * time.Minute
+	// sentinalGossipInterval is the approximate interval at which the
 	// sentinel info is gossiped.
-	clusterIDGossipInterval = clusterIDGossipTTL / 2
+	sentinelGossipInterval = sentinelGossipTTL / 2
 
 	// configGossipTTL is the time-to-live for configuration maps.
 	configGossipTTL = 0 // does not expire
@@ -1593,17 +1592,18 @@ func (r *Replica) maybeGossipFirstRange() error {
 	if err == nil && bytes != nil {
 		gossipClusterID := string(bytes)
 		if gossipClusterID != r.store.ClusterID() {
-			log.Fatalc(ctx, "store %d belongs to cluster %s, but attemp to join cluster %s via gossip",
+			log.Fatalc(ctx, "store %d belongs to cluster %s, but attempted to join cluster %s via gossip",
 				r.store.StoreID(), r.store.ClusterID(), gossipClusterID)
 		}
 	}
 
-	// Gossip the cluster ID from all replicas of the first range.
+	// Gossip the cluster ID from all replicas of the first range; there
+	// is no expiration on the cluster ID.
 	if log.V(1) {
 		log.Infoc(ctx, "gossiping cluster id %s from store %d, range %d", r.store.ClusterID(),
 			r.store.StoreID(), r.RangeID)
 	}
-	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, []byte(r.store.ClusterID()), clusterIDGossipTTL); err != nil {
+	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, []byte(r.store.ClusterID()), 0*time.Second); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
 	if ok, err := r.getLeaseForGossip(ctx); !ok || err != nil {
@@ -1612,7 +1612,7 @@ func (r *Replica) maybeGossipFirstRange() error {
 	if log.V(1) {
 		log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.store.StoreID(), r.RangeID)
 	}
-	if err := r.store.Gossip().AddInfo(gossip.KeySentinel, []byte(r.store.ClusterID()), clusterIDGossipTTL); err != nil {
+	if err := r.store.Gossip().AddInfo(gossip.KeySentinel, []byte(r.store.ClusterID()), sentinelGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip sentinel: %s", err)
 	}
 	if log.V(1) {

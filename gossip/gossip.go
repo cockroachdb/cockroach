@@ -54,6 +54,8 @@ package gossip
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
 	"math/rand"
 	"net"
 	"sync"
@@ -66,7 +68,6 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
 )
@@ -85,28 +86,39 @@ const (
 	// ttlNodeDescriptorGossip is time-to-live for node ID -> address.
 	ttlNodeDescriptorGossip = 0 * time.Second
 
-	// stallInterval is the default interval for checking whether the
-	// incoming and outgoing connections to the gossip network are
+	// defaultStallInterval is the default interval for checking whether
+	// the incoming and outgoing connections to the gossip network are
 	// insufficient to keep the network connected.
-	stallInterval = 1 * time.Second
+	defaultStallInterval = 1 * time.Second
 
-	// bootstrapInterval is the minimum time between successive
-	// bootstrapping attempts to avoid busy-looping trying to find
-	// the sentinel gossip info.
-	bootstrapInterval = 1 * time.Second
+	// defaultBootstrapInterval is the minimum time between successive
+	// bootstrapping attempts to avoid busy-looping trying to find the
+	// sentinel gossip info.
+	defaultBootstrapInterval = 1 * time.Second
+
+	// defaultCullInterval is the default interval for culling the least
+	// "useful" outgoing gossip connection to free up space for a more
+	// efficiently targeted connection to the most distant node.
+	defaultCullInterval = 60 * time.Second
 )
 
 var (
-	// cullInterval is the default interval for culling the least
-	// "useful" outgoing gossip connection to free up space for a
-	// more efficiently targeted connection to the most distant node.
-	//
-	// Note: this value is a var instead of const for testing.
-	cullInterval = 60 * time.Second
-
 	// TestBootstrap is the default gossip bootstrap used for running tests.
 	TestBootstrap = []resolver.Resolver{}
 )
+
+// Storage is an interface which allows the gossip instance
+// to read and write bootstrapping data to persistent storage
+// between instantiations.
+type Storage interface {
+	// ReadBootstrapInfo fetches the bootstrap data from the persistent
+	// store into the provided bootstrap protobuf. Returns nil or an
+	// error on failure.
+	ReadBootstrapInfo(*BootstrapInfo) error
+	// WriteBootstrapInfo stores the provided bootstrap data to the
+	// persistent store. Returns nil or an error on failure.
+	WriteBootstrapInfo(*BootstrapInfo) error
+}
 
 // Gossip is an instance of a gossip node. It embeds a gossip server.
 // During bootstrapping, the bootstrap list contains candidates for
@@ -117,11 +129,17 @@ type Gossip struct {
 	rpcContext    *rpc.Context        // The context required for RPC
 	*server                           // Embedded gossip RPC server
 	outgoing      nodeSet             // Set of outgoing client node IDs
+	storage       Storage             // Persistent storage interface
+	bootstrapInfo BootstrapInfo       // BootstrapInfo proto for persistent storage
 	bootstrapping map[string]struct{} // Set of active bootstrap clients
 	clientsMu     sync.Mutex          // Mutex protects the clients slice
 	clients       []*client           // Slice of clients
 	disconnected  chan *client        // Channel of disconnected clients
 	stalled       chan struct{}       // Channel to wakeup stalled bootstrap
+
+	stallInterval     time.Duration
+	bootstrapInterval time.Duration
+	cullInterval      time.Duration
 
 	// The system config is treated unlike other info objects.
 	// It is used so often that we keep an unmarshalled version of it
@@ -134,24 +152,28 @@ type Gossip struct {
 
 	// resolvers is a list of resolvers used to determine
 	// bootstrap hosts for connecting to the gossip network.
-	resolverIdx int
-	resolvers   []resolver.Resolver
-	triedAll    bool // True when all resolvers have been tried once
+	resolverIdx    int
+	resolvers      []resolver.Resolver
+	resolversTried map[int]struct{}            // Set of attempted resolver indexes
+	nodesSeen      map[roachpb.NodeID]struct{} // Transitive set of all nodes we've seen gossip from
 }
 
 // New creates an instance of a gossip node.
 func New(rpcContext *rpc.Context, resolvers []resolver.Resolver) *Gossip {
 	g := &Gossip{
-		Connected:     make(chan struct{}),
-		server:        newServer(),
-		outgoing:      makeNodeSet(1),
-		bootstrapping: map[string]struct{}{},
-		clients:       []*client{},
-		disconnected:  make(chan *client, 10),
-		stalled:       make(chan struct{}, 1),
-		resolverIdx:   len(resolvers) - 1,
-		resolvers:     resolvers,
+		Connected:         make(chan struct{}),
+		server:            newServer(),
+		outgoing:          makeNodeSet(minPeers),
+		bootstrapping:     map[string]struct{}{},
+		clients:           []*client{},
+		disconnected:      make(chan *client, 10),
+		stalled:           make(chan struct{}, 1),
+		stallInterval:     defaultStallInterval,
+		bootstrapInterval: defaultBootstrapInterval,
+		cullInterval:      defaultCullInterval,
+		nodesSeen:         map[roachpb.NodeID]struct{}{},
 	}
+	g.SetResolvers(resolvers)
 	// The gossip RPC context doesn't measure clock offsets, isn't
 	// shared with the other RPC clients which the node may be using,
 	// and disables reconnects to make it possible to know for certain
@@ -165,6 +187,9 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver) *Gossip {
 
 	// Add ourselves as a SystemConfig watcher.
 	g.is.registerCallback(KeySystemConfig, g.updateSystemConfig)
+	// Add ourselves as a node descriptor watcher.
+	g.is.registerCallback(MakePrefixPattern(KeyNodeIDPrefix), g.updateNodeAddress)
+
 	return g
 }
 
@@ -197,6 +222,109 @@ func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	return nil
 }
 
+// SetStallInterval sets the interval between periodic checks to
+// determine whether the node is not fully connected to the gossip
+// network.
+func (g *Gossip) SetStallInterval(interval time.Duration) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.stallInterval = interval
+}
+
+// SetBootstrapInterval sets a minimum interval between successive
+// attempts to connect to new hosts in order to join the gossip
+// network.
+func (g *Gossip) SetBootstrapInterval(interval time.Duration) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.bootstrapInterval = interval
+}
+
+// SetCullInterval sets the interval between periodic shutdown of
+// outgoing gossip client connections in an effort to improve the
+// fitness of the network.
+func (g *Gossip) SetCullInterval(interval time.Duration) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.cullInterval = interval
+}
+
+// SetStorage provides an instance of the Storage interface
+// for reading and writing gossip bootstrap data from persistent
+// storage. This should be invoked as early in the lifecycle of a
+// gossip instance as possible, but can be called at any time.
+func (g *Gossip) SetStorage(storage Storage) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.storage = storage
+
+	// Read the bootstrap info from the persistent store.
+	var storedBI BootstrapInfo
+	err := storage.ReadBootstrapInfo(&storedBI)
+	if err != nil {
+		log.Warningf("failed to read bootstrap info: %s", err)
+	}
+	log.Infof("read %d gossip host(s) for bootstrapping from persistent storage", len(storedBI.Addresses))
+
+	// Merge the stored bootstrap info addresses with any we've become
+	// aware of through the --gossip bootstrap hosts we've connected to.
+	if len(g.bootstrapInfo.Addresses) > 0 {
+		existing := map[string]struct{}{}
+		makeKey := func(a util.UnresolvedAddr) string { return fmt.Sprintf("%s,%s", a.Network(), a.String()) }
+		for _, addr := range g.bootstrapInfo.Addresses {
+			existing[makeKey(addr)] = struct{}{}
+		}
+		for _, addr := range storedBI.Addresses {
+			if _, ok := existing[makeKey(addr)]; !ok {
+				g.bootstrapInfo.Addresses = append(g.bootstrapInfo.Addresses, addr)
+			}
+		}
+		// Persist merged addresses.
+		if numAddrs := len(g.bootstrapInfo.Addresses); numAddrs > len(storedBI.Addresses) {
+			if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
+				log.Error(err)
+			} else {
+				log.Infof("wrote %d merged gossip host(s) to persistent storage", numAddrs)
+			}
+		}
+	} else {
+		g.bootstrapInfo = storedBI
+	}
+
+	// Cycle through all persisted bootstrap hosts and add resolvers for
+	// any which haven't already been added.
+	newResolverFound := false
+	for _, addr := range g.bootstrapInfo.Addresses {
+		r, err := resolver.NewResolverFromUnresolvedAddr(addr)
+		if err != nil {
+			log.Warningf("bad bootstrap address %s: %s", addr, err)
+			continue
+		}
+		if g.haveResolver(r) {
+			continue
+		}
+		// If we find a new resolver, reset the resolver index so that the
+		// next resolver we try is the first of the new resolvers.
+		if !newResolverFound {
+			newResolverFound = true
+			g.resolverIdx = len(g.resolvers) - 1
+		}
+		g.resolvers = append(g.resolvers, r)
+	}
+	// If there are no resolvers after persistent storage has been queried, fatal error.
+	if len(g.resolvers) == 0 {
+		log.Fatalf("no resolvers specified for gossip network")
+	}
+	// If a new resolver was found, immediately signal bootstrap.
+	if newResolverFound {
+		if log.V(1) {
+			log.Infof("found new resolvers from storage; signalling bootstrap")
+		}
+		g.signalStalled()
+	}
+	return nil
+}
+
 // SetResolvers initializes the set of gossip resolvers used to
 // find nodes to bootstrap the gossip network.
 func (g *Gossip) SetResolvers(resolvers []resolver.Resolver) {
@@ -205,7 +333,12 @@ func (g *Gossip) SetResolvers(resolvers []resolver.Resolver) {
 	// Start index at end because get next address loop logic increments as first step.
 	g.resolverIdx = len(resolvers) - 1
 	g.resolvers = resolvers
-	g.triedAll = false
+	g.resolversTried = map[int]struct{}{}
+	// Initialize the bootstrap info with addresses of specified resolvers.
+	for _, r := range resolvers {
+		addr := util.MakeUnresolvedAddr(r.Type(), r.Addr())
+		g.bootstrapInfo.Addresses = append(g.bootstrapInfo.Addresses, addr)
+	}
 }
 
 // GetNodeIDAddress looks up the address of the node by ID.
@@ -246,6 +379,85 @@ func (g *Gossip) SimulationCycle() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.simulationCycler.Broadcast()
+}
+
+// haveResolver returns whether the specified resolver is already in
+// the gossip node's list of resolvers. The caller must hold the
+// gossip mutex.
+func (g *Gossip) haveResolver(r resolver.Resolver) bool {
+	for _, ex := range g.resolvers {
+		if ex.Type() == r.Type() && ex.Addr() == r.Addr() {
+			return true
+		}
+	}
+	return false
+}
+
+// maxPeers returns the maximum number of peers each gossip node
+// may connect to. This is based on maxHops, which is a preset
+// maximum for number of hops allowed before the gossip network
+// will seek to "tighten" by creating new connections to distant
+// nodes.
+func (g *Gossip) maxPeers(nodeCount int) int {
+	// This formula uses MaxHops-1, instead of MaxHops, to provide a
+	// "fudge" factor for max connected peers, to account for the
+	// arbitrary, decentralized way in which gossip networks are created.
+	maxPeers := int(math.Ceil(math.Exp(math.Log(float64(nodeCount)) / float64(MaxHops-1))))
+	if maxPeers < minPeers {
+		return minPeers
+	}
+	return maxPeers
+}
+
+// updateNodeAddress is a gossip callback which fires with each
+// update to the node address. This allows us to compute the
+// total size of the gossip network (for determining max peers
+// each gossip node is allowed to have), as well as to create
+// new resolvers for each encountered host and to write the
+// set of gossip node addresses to persistent storage when it
+// changes.
+func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
+	var desc roachpb.NodeDescriptor
+	if err := content.GetProto(&desc); err != nil {
+		log.Error(err)
+		return
+	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	// If the node has already been seen, return immediately.
+	if _, ok := g.nodesSeen[desc.NodeID]; ok {
+		return
+	}
+
+	g.nodesSeen[desc.NodeID] = struct{}{} // add it!
+
+	// Recompute max peers based on size of network and set the max
+	// sizes for incoming and outgoing node sets.
+	maxPeers := g.maxPeers(len(g.nodesSeen))
+	g.incoming.setMaxSize(maxPeers)
+	g.outgoing.setMaxSize(maxPeers)
+
+	// Add this new node to our list of resolvers so we can keep
+	// connecting to gossip if the original resolvers go offline.
+	r, err := resolver.NewResolverFromUnresolvedAddr(desc.Address)
+	if err != nil {
+		log.Warningf("bad address from gossip node %s: %s", desc, err)
+		return
+	}
+	if g.haveResolver(r) {
+		return
+	}
+	g.resolvers = append(g.resolvers, r)
+	// Add new address to bootstrap info and persist if possible.
+	g.bootstrapInfo.Addresses = append(g.bootstrapInfo.Addresses, desc.Address)
+	if g.storage != nil {
+		// TODO(spencer): need to clean up ancient gossip nodes, which
+		//   will otherwise stick around in the bootstrap info forever.
+		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
+			log.Error(err)
+		}
+	}
 }
 
 // getNodeDescriptorLocked looks up the descriptor of the node by ID. The mutex
@@ -459,7 +671,6 @@ func (g *Gossip) Start(rpcServer *rpc.Server, addr net.Addr, stopper *stop.Stopp
 	g.server.start(rpcServer, addr, stopper) // serve gossip protocol
 	g.bootstrap(stopper)                     // bootstrap gossip client
 	g.manage(stopper)                        // manage gossip clients
-	g.maybeWarnAboutInit(stopper)
 }
 
 // hasIncoming returns whether the server has an incoming gossip
@@ -492,16 +703,10 @@ func (g *Gossip) filterExtant(nodes nodeSet) nodeSet {
 // slice supplied to the constructor or set using setBootstrap().
 // The lock is assumed held.
 func (g *Gossip) getNextBootstrapAddress() net.Addr {
-	if len(g.resolvers) == 0 {
-		log.Fatalf("no resolvers specified for gossip network")
-	}
-
 	// Run through resolvers round robin starting at last resolved index.
 	for i := 0; i < len(g.resolvers); i++ {
 		g.resolverIdx = (g.resolverIdx + 1) % len(g.resolvers)
-		if g.resolverIdx == len(g.resolvers)-1 {
-			g.triedAll = true
-		}
+		g.resolversTried[g.resolverIdx] = struct{}{}
 		resolver := g.resolvers[g.resolverIdx]
 		addr, err := resolver.GetAddress()
 		if err != nil {
@@ -547,7 +752,7 @@ func (g *Gossip) bootstrap(stopper *stop.Stopper) {
 
 			// Pause an interval before next possible bootstrap.
 			select {
-			case <-time.After(bootstrapInterval):
+			case <-time.After(g.bootstrapInterval):
 				// continue
 			case <-stopper.ShouldStop():
 				return
@@ -575,8 +780,8 @@ func (g *Gossip) bootstrap(stopper *stop.Stopper) {
 // is notified via the stalled conditional variable.
 func (g *Gossip) manage(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
-		cullTicker := time.NewTicker(g.jitteredInterval(cullInterval))
-		stallTicker := time.NewTicker(g.jitteredInterval(stallInterval))
+		cullTicker := time.NewTicker(g.jitteredInterval(g.cullInterval))
+		stallTicker := time.NewTicker(g.jitteredInterval(g.stallInterval))
 		defer cullTicker.Stop()
 		defer stallTicker.Stop()
 		for {
@@ -610,7 +815,6 @@ func (g *Gossip) jitteredInterval(interval time.Duration) time.Duration {
 func (g *Gossip) tightenNetwork(stopper *stop.Stopper, distantNodeID roachpb.NodeID) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.outgoing.setMaxSize(g.maxPeers())
 	if g.outgoing.hasSpace() {
 		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
 			log.Errorf("node %d: %s", distantNodeID, err)
@@ -638,7 +842,9 @@ func (g *Gossip) cullNetwork() {
 		}
 		return
 	}
-	log.Infof("closing least useful client to node %d to tighten network graph", leastUsefulID)
+	if log.V(1) {
+		log.Infof("closing least useful client to node %d to tighten network graph", leastUsefulID)
+	}
 	g.closeClient(leastUsefulID)
 }
 
@@ -661,7 +867,7 @@ func (g *Gossip) maybeSignalStalledLocked() {
 	if g.outgoing.len()+g.incoming.len() == 0 {
 		g.signalStalled()
 	} else if g.is.getInfo(KeySentinel) == nil {
-		log.Warningf("missing sentinel gossip; assuming partition in gossip network")
+		g.warnAboutStall()
 		g.signalStalled()
 	}
 }
@@ -673,48 +879,22 @@ func (g *Gossip) signalStalled() {
 	}
 }
 
-// maybeWarnAboutInit looks for signs indicating a cluster which
-// hasn't been initialized and warns. There's no absolutely sure way
-// to determine whether the current node is simply waiting to be
-// bootstrapped to an existing cluster vs. the operator having failed
-// to initialize the cluster via the "cockroach init" command, so
-// we can only warn.
-//
-// This method checks whether all gossip bootstrap hosts are
-// connected, and whether the node itself is a bootstrap host, but
-// there is still no sentinel gossip.
-func (g *Gossip) maybeWarnAboutInit(stopper *stop.Stopper) {
-	stopper.RunWorker(func() {
-		// Wait 5s before first check.
-		select {
-		case <-stopper.ShouldStop():
-			return
-		case <-time.After(5 * time.Second):
-		}
-		retryOptions := retry.Options{
-			InitialBackoff: 5 * time.Second,      // first backoff at 5s
-			MaxBackoff:     60 * time.Second,     // max backoff is 60s
-			Multiplier:     2,                    // doubles
-			Closer:         stopper.ShouldStop(), // stop no matter what on stopper
-		}
-		// This will never error because of infinite retries.
-		for r := retry.Start(retryOptions); r.Next(); {
-			g.mu.Lock()
-			hasConnections := g.outgoing.len()+g.incoming.len() > 0
-			hasSentinel := g.is.getInfo(KeySentinel) != nil
-			triedAll := g.triedAll
-			g.mu.Unlock()
-			// If we have the sentinel, exit the retry loop.
-			if hasSentinel {
-				break
-			}
-			if !hasConnections {
-				log.Warningf("not connected to gossip; check that gossip flag is set appropriately")
-			} else if triedAll {
-				log.Warningf("missing gossip sentinel; first range unavailable or cluster not initialized")
-			}
-		}
-	})
+// warnAboutStall attempts to diagnose the cause of a gossip network
+// not being connected to the sentinel. This could happen in a network
+// partition, or because of misconfiguration. It's impossible to tell,
+// but we can warn appropriately. If there are no incoming or outgoing
+// connections, we warn about the --gossip flag being set. If we've
+// connected, and all resolvers have been tried, we warn about either
+// the first range not being available or else possible the cluster
+// never having been initialized.
+func (g *Gossip) warnAboutStall() {
+	if g.outgoing.len()+g.incoming.len() == 0 {
+		log.Warningf("not connected to gossip; check that gossip flag is set appropriately")
+	} else if len(g.resolversTried) == len(g.resolvers) {
+		log.Warningf("first range unavailable or cluster not initialized")
+	} else {
+		log.Warningf("partition in gossip network; attempting new connection")
+	}
 }
 
 // checkHasConnected checks whether this gossip instance is connected
@@ -745,24 +925,33 @@ func (g *Gossip) startClient(addr net.Addr, stopper *stop.Stopper) {
 
 // closeClient finds and removes a client from the clients slice.
 func (g *Gossip) closeClient(nodeID roachpb.NodeID) {
-	c := g.findClient(func(c *client) bool { return c.peerID == nodeID })
+	c := g.removeMatchingClient(func(c *client) bool { return c.peerID == nodeID })
 	if c != nil {
 		c.close()
 	}
 }
 
-// removeClient finds and removes the client by nodeID from the clients slice.
+// removeClient removes the specified client. Called when a client
+// disconnects.
 func (g *Gossip) removeClient(c *client) {
+	g.removeMatchingClient(func(match *client) bool { return c == match })
+}
+
+// removeMatchingClient finds and removes a client which matches the
+// provided match function from the clients slice. Returns the client
+// if found and removed.
+func (g *Gossip) removeMatchingClient(match func(*client) bool) *client {
 	g.clientsMu.Lock()
-	for i := 0; i < len(g.clients); i++ {
-		if g.clients[i] == c {
+	defer g.clientsMu.Unlock()
+	for i, c := range g.clients {
+		if match(c) {
 			g.clients = append(g.clients[:i], g.clients[i+1:]...)
-			break
+			delete(g.bootstrapping, c.addr.String())
+			g.outgoing.removeNode(c.peerID)
+			return c
 		}
 	}
-	delete(g.bootstrapping, c.addr.String())
-	g.outgoing.removeNode(c.peerID)
-	g.clientsMu.Unlock()
+	return nil
 }
 
 func (g *Gossip) findClient(match func(*client) bool) *client {
