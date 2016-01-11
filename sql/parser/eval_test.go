@@ -430,3 +430,26 @@ func TestSimilarEscape(t *testing.T) {
 		}
 	}
 }
+
+var optimizedLikePatterns = []string{
+	`test%`,
+	`%test%`,
+	`%test`,
+}
+
+func benchmarkLike(b *testing.B, ctx EvalContext) {
+	likeFn := cmpOps[cmpArgs{Like, stringType, stringType}].fn
+	for n := 0; n < b.N; n++ {
+		for _, p := range optimizedLikePatterns {
+			likeFn(ctx, DString("test"), DString(p))
+		}
+	}
+}
+
+func BenchmarkLikeWithCache(b *testing.B) {
+	benchmarkLike(b, EvalContext{ReCache: NewRegexpCache(len(optimizedLikePatterns))})
+}
+
+func BenchmarkLikeWithoutCache(b *testing.B) {
+	benchmarkLike(b, EvalContext{})
+}
