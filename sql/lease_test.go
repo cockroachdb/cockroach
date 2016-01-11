@@ -33,6 +33,9 @@ import (
 )
 
 const (
+	// TODO(peter): This is ugly. All system tables should have static IDs. There
+	// isn't much point in dynamically IDs for system tables and it makes tests
+	// either more complex or more fragile.
 	leaseTableID = keys.MaxSystemConfigDescID + 1
 )
 
