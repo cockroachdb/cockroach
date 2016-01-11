@@ -70,7 +70,7 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var cs raftpb.ConfState
 	// For uninitalized ranges, membership is unknown at this point.
 	if found || initialized {
-		for _, rep := range r.desc.Replicas {
+		for _, rep := range r.mu.desc.Replicas {
 			cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 		}
 	}
@@ -195,8 +195,8 @@ func (r *Replica) LastIndex() (uint64, error) {
 // current entry. This includes both entries that have been compacted away
 // and the dummy entries that make up the starting point of an empty log.
 func (r *Replica) raftTruncatedState() (roachpb.RaftTruncatedState, error) {
-	r.Lock()
-	defer r.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.raftTruncatedStateLocked()
 }
 
@@ -240,6 +240,14 @@ func (r *Replica) FirstIndex() (uint64, error) {
 	return ts.Index + 1, nil
 }
 
+// GetFirstIndex is the same function as FirstIndex but it does not require
+// that the replica lock is held.
+func (r *Replica) GetFirstIndex() (uint64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.FirstIndex()
+}
+
 // loadAppliedIndexLocked retrieves the applied index from the supplied engine.
 // loadAppliedIndexLocked requires that the replica lock is held.
 func (r *Replica) loadAppliedIndexLocked(eng engine.Engine) (uint64, error) {
@@ -278,8 +286,8 @@ func setAppliedIndex(eng engine.Engine, rangeID roachpb.RangeID, appliedIndex ui
 
 // loadLastIndex retrieves the last index from storage.
 func (r *Replica) loadLastIndex() (uint64, error) {
-	r.Lock()
-	defer r.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.loadLastIndexLocked()
 }
 
@@ -342,7 +350,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	// We ignore intents on the range descriptor (consistent=false) because we
 	// know they cannot be committed yet; operations that modify range
 	// descriptors resolve their own intents when they commit.
-	ok, err := engine.MVCCGetProto(snap, keys.RangeDescriptorKey(r.desc.StartKey),
+	ok, err := engine.MVCCGetProto(snap, keys.RangeDescriptorKey(r.mu.desc.StartKey),
 		r.store.Clock().Now(), false /* !consistent */, nil, &desc)
 	if err != nil {
 		return raftpb.Snapshot{}, util.Errorf("failed to get desc: %s", err)
@@ -392,6 +400,14 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 			ConfState: cs,
 		},
 	}, nil
+}
+
+// GetSnapshot is the same function as Snapshot but it does not require the
+// replica lock to be held.
+func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.Snapshot()
 }
 
 // append the given entries to the raft log.
