@@ -1334,7 +1334,12 @@ var (
 	containsRe   = regexp.MustCompile(`^%([^_%]+)%$`)
 )
 
+// Simplifies LIKE expressions that do not need full regular expressions to evaluate the condition.
+// For example, when the expression is just checking to see if a string starts with a given
+// pattern.
 func optimizedLikeFunc(pattern string) func(string) bool {
+	// if guards below protect from escapes on trailing %.
+	// Cases like "something\%" are not optimized, but this does not affect correctness.
 	if pre := startsWithRe.FindStringSubmatch(pattern); pre != nil && !strings.HasSuffix(pattern, `\`) {
 		return func(s string) bool {
 			return strings.HasPrefix(s, pre[1])
