@@ -574,6 +574,9 @@ func (tc *TxnCoordSender) heartbeatLoop(id string) {
 		case <-closer:
 			// Transaction finished normally.
 			return
+
+		case <-tc.stopper.ShouldDrain():
+			return
 		}
 	}
 }

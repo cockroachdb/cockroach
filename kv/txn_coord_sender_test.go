@@ -18,7 +18,6 @@ package kv
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -592,54 +591,6 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				i, test.nodeSeen, nodes)
 		}
 	}
-}
-
-// TestTxnDrainingNode tests that pending transactions tasks' intents
-// are resolved if they commit while draining, and that a
-// NodeUnavailableError is received when attempting to run a new
-// transaction on a draining node.
-func TestTxnDrainingNode(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	s := createTestDB(t)
-
-	done := make(chan struct{})
-	// Dummy task that keeps the node in draining state.
-	if !s.Stopper.RunAsyncTask(func() {
-		<-done
-	}) {
-		t.Fatal("stopper draining prematurely")
-	}
-
-	key := roachpb.Key("a")
-	txn := client.NewTxn(*s.DB)
-	// Begin before draining.
-	if err := txn.Put(key, []byte("value")); err != nil {
-		t.Fatal(err)
-	}
-	go func() {
-		s.Stopper.Stop()
-	}()
-	util.SucceedsWithin(t, time.Second, func() error {
-		if s.Stopper.RunTask(func() {}) {
-			return errors.New("stopper not yet draining")
-		}
-		return nil
-	})
-	// Commit after draining.
-	if err := txn.Commit(); err != nil {
-		t.Fatal(err)
-	}
-	verifyCleanup(key, s.Sender, s.Eng, t) // make sure intent gets resolved
-
-	// Attempt to start another transaction, but it should be too late.
-	txn2 := client.NewTxn(*s.DB)
-	err := txn2.Put(key, []byte("value"))
-	if _, ok := err.(*roachpb.NodeUnavailableError); !ok {
-		teardownHeartbeats(s.Sender)
-		t.Fatal(err)
-	}
-	close(done)
-	<-s.Stopper.IsStopped()
 }
 
 // TestTxnMultipleCoord checks that a coordinator uses the Writing flag to
