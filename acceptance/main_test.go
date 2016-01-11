@@ -212,8 +212,6 @@ func testDockerSuccess(t *testing.T, tag string, cmd []string) {
 }
 
 func testDocker(t *testing.T, tag string, cmd []string) (result dockerclient.WaitResult, logs string) {
-	t.Skip("skip until docker issues fixed")
-
 	l := MustStartLocal(t)
 	defer l.AssertAndStop(t)
 

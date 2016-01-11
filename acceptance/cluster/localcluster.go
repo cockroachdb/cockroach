@@ -414,6 +414,11 @@ func (l *LocalCluster) processEvent(e dockerclient.EventOrError, monitorStopper 
 		return false
 	}
 
+	switch e.Status {
+	case "pull", "create", "start":
+		return false
+	}
+
 	for i, n := range l.Nodes {
 		if n != nil && n.ID == e.Id {
 			if log.V(1) {
