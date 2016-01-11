@@ -166,12 +166,12 @@ type Replica struct {
 	// RWMutex
 	readOnlyCmdMu sync.RWMutex
 
-	sync.RWMutex                 // Protects the following fields:
-	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
-	tsCache      *TimestampCache // Most recent timestamps for keys / key ranges
-	pendingSeq   uint64          // atomic sequence counter for cmdIDKey generation
-	pendingCmds  map[cmdIDKey]*pendingCmd
-	desc         *roachpb.RangeDescriptor
+	sync.Mutex                  // Protects the following fields:
+	cmdQ        *CommandQueue   // Enforce at most one command is running per key(s)
+	tsCache     *TimestampCache // Most recent timestamps for keys / key ranges
+	pendingSeq  uint64          // atomic sequence counter for cmdIDKey generation
+	pendingCmds map[cmdIDKey]*pendingCmd
+	desc        *roachpb.RangeDescriptor
 
 	truncatedState unsafe.Pointer // *roachpb.RaftTruncatedState
 
@@ -506,8 +506,8 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace) *roachpb.E
 // another node. It is false when a range has been created in response
 // to an incoming message but we are waiting for our initial snapshot.
 func (r *Replica) isInitialized() bool {
-	r.RLock()
-	defer r.RUnlock()
+	r.Lock()
+	defer r.Unlock()
 	return r.isInitializedLocked()
 }
 
@@ -515,15 +515,15 @@ func (r *Replica) isInitialized() bool {
 // because we created it or we have received an initial snapshot from
 // another node. It is false when a range has been created in response
 // to an incoming message but we are waiting for our initial snapshot.
-// isInitializedLocked requires that the replica read lock is held.
+// isInitializedLocked requires that the replica lock is held.
 func (r *Replica) isInitializedLocked() bool {
 	return len(r.desc.EndKey) > 0
 }
 
 // Desc returns the range's descriptor.
 func (r *Replica) Desc() *roachpb.RangeDescriptor {
-	r.RLock()
-	defer r.RUnlock()
+	r.Lock()
+	defer r.Unlock()
 	return r.desc
 }
 
@@ -579,8 +579,8 @@ func (r *Replica) GetReplica() *roachpb.ReplicaDescriptor {
 // ReplicaDescriptor returns information about the given member of
 // this replica's range.
 func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
-	r.RLock()
-	defer r.RUnlock()
+	r.Lock()
+	defer r.Unlock()
 
 	desc := r.desc
 	for _, repAddress := range desc.Replicas {
