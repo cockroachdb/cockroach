@@ -90,7 +90,7 @@ func (sc *SchemaChanger) createSchemaChangeLease() TableDescriptor_SchemaChangeL
 func (sc *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, error) {
 	var lease TableDescriptor_SchemaChangeLease
 	err := sc.db.Txn(func(txn *client.Txn) error {
-		txn.SetSystemDBTrigger()
+		txn.SetSystemConfigTrigger()
 		tableDesc, err := getTableDescFromID(txn, sc.tableID)
 		if err != nil {
 			return err
@@ -136,7 +136,7 @@ func (sc *SchemaChanger) ReleaseLease(lease TableDescriptor_SchemaChangeLease) e
 			return err
 		}
 		tableDesc.Lease = nil
-		txn.SetSystemDBTrigger()
+		txn.SetSystemConfigTrigger()
 		return txn.Put(MakeDescMetadataKey(tableDesc.ID), wrapDescriptor(tableDesc))
 	})
 }
@@ -150,7 +150,7 @@ func (sc *SchemaChanger) ExtendLease(lease TableDescriptor_SchemaChangeLease) (T
 		}
 		lease = sc.createSchemaChangeLease()
 		tableDesc.Lease = &lease
-		txn.SetSystemDBTrigger()
+		txn.SetSystemConfigTrigger()
 		return txn.Put(MakeDescMetadataKey(tableDesc.ID), wrapDescriptor(tableDesc))
 	})
 	return lease, err

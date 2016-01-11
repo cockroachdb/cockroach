@@ -32,6 +32,13 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
+const (
+	// TODO(peter): This is ugly. All system tables should have static IDs. There
+	// isn't much point in dynamically allocating IDs for system tables and it
+	// makes tests either more complex or more fragile.
+	leaseTableID = keys.MaxSystemConfigDescID + 1
+)
+
 type leaseTest struct {
 	*testing.T
 	server *server.TestServer
@@ -142,7 +149,7 @@ func TestLeaseManager(testingT *testing.T) {
 	t := newLeaseTest(testingT)
 	defer t.cleanup()
 
-	const descID = keys.LeaseTableID
+	const descID = leaseTableID
 
 	// We can't acquire a lease on a non-existent table.
 	expected := "table ID 10000 not found"
@@ -235,7 +242,7 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	t := newLeaseTest(testingT)
 	defer t.cleanup()
 
-	const descID = keys.LeaseTableID
+	const descID = leaseTableID
 
 	// Acquire 2 leases from the same node. They should point to the same lease
 	// structure.
@@ -282,7 +289,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	t := newLeaseTest(testingT)
 	defer t.cleanup()
 
-	const descID = keys.LeaseTableID
+	const descID = leaseTableID
 
 	// Start two goroutines that are concurrently trying to publish a new version
 	// of the descriptor. The first goroutine progresses to the update function

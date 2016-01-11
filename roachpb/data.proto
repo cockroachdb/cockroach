@@ -151,7 +151,7 @@ message ChangeReplicasTrigger {
 // ModifiedSpanTrigger indicates that a specific span has been modified.
 // This can be used to trigger scan-and-gossip for the given span.
 message ModifiedSpanTrigger {
-  optional bool system_db_span = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SystemDBSpan"];
+  optional bool system_config_span = 1 [(gogoproto.nullable) = false];
 }
 
 // InternalCommitTrigger encapsulates all of the internal-only commit triggers.

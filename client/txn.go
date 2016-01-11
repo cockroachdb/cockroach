@@ -86,9 +86,9 @@ type Txn struct {
 	db      DB
 	wrapped Sender
 	Proto   roachpb.Transaction
-	// systemDBTrigger is set to true when modifying keys from the
-	// SystemDB span. This sets the SystemDBTrigger on EndTransactionRequest.
-	systemDBTrigger bool
+	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
+	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
+	systemConfigTrigger bool
 }
 
 // NewTxn returns a new txn.
@@ -139,15 +139,15 @@ func (txn *Txn) InternalSetPriority(priority int32) {
 	txn.db.userPriority = float64(-priority)
 }
 
-// SetSystemDBTrigger sets the system db trigger to true on this transaction.
+// SetSystemConfigTrigger sets the system db trigger to true on this transaction.
 // This will impact the EndTransactionRequest.
-func (txn *Txn) SetSystemDBTrigger() {
-	txn.systemDBTrigger = true
+func (txn *Txn) SetSystemConfigTrigger() {
+	txn.systemConfigTrigger = true
 }
 
-// SystemDBTrigger returns the systemDBTrigger flag.
-func (txn *Txn) SystemDBTrigger() bool {
-	return txn.systemDBTrigger
+// SystemConfigTrigger returns the systemConfigTrigger flag.
+func (txn *Txn) SystemConfigTrigger() bool {
+	return txn.systemConfigTrigger
 }
 
 // NewBatch creates and returns a new empty batch object for use with the Txn.
@@ -333,7 +333,7 @@ func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, err
 	if txn != b.txn {
 		return nil, fmt.Errorf("a batch b can only be committed by b.txn")
 	}
-	b.reqs = append(b.reqs, endTxnReq(true /* commit */, nil, txn.SystemDBTrigger()))
+	b.reqs = append(b.reqs, endTxnReq(true /* commit */, nil, txn.SystemConfigTrigger()))
 	b.initResult(1, 0, nil)
 	return txn.RunWithResponse(b)
 }
@@ -359,7 +359,7 @@ func (txn *Txn) Rollback() error {
 }
 
 func (txn *Txn) sendEndTxnReq(commit bool, deadline *roachpb.Timestamp) error {
-	_, pErr := txn.send(endTxnReq(commit, deadline, txn.SystemDBTrigger()))
+	_, pErr := txn.send(endTxnReq(commit, deadline, txn.SystemConfigTrigger()))
 	return pErr.GoError()
 }
 
@@ -371,7 +371,7 @@ func endTxnReq(commit bool, deadline *roachpb.Timestamp, hasTrigger bool) roachp
 	if hasTrigger {
 		req.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
 			ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{
-				SystemDBSpan: true,
+				SystemConfigSpan: true,
 			},
 		}
 	}

@@ -167,9 +167,8 @@ var (
 	// TableDataMin is the end of the range of table data keys.
 	TableDataMax = roachpb.Key(encoding.EncodeVarint(nil, math.MaxInt64))
 
-	// ReservedTableDataMin is the start key of reserved structured data
-	// (excluding SystemDB).
-	ReservedTableDataMin = roachpb.Key(MakeTablePrefix(MaxSystemDescID + 1))
+	// SystemConfigTableDataMax is the end key of system config structured data.
+	SystemConfigTableDataMax = roachpb.Key(MakeTablePrefix(MaxSystemConfigDescID + 1))
 
 	// UserTableDataMin is the start key of user structured data.
 	UserTableDataMin = roachpb.Key(MakeTablePrefix(MaxReservedDescID + 1))
@@ -183,34 +182,25 @@ var (
 // Various IDs used by the structured data layer.
 // NOTE: these must not change during the lifetime of a cluster.
 const (
-	// MaxSystemDescID is the maximum value of the system IDs under
-	// 'TableDataPrefix'. Reserved objects with IDs in this range are considered
-	// "system" objects and have considerable special semantics.
-	//
-	// TODO: There is quite a bit of disagreement over the best way to handle
-	// the special semantics needed by these tables; in particular, there is
-	// considerable hesitance to use multiple reserved ranges to hold tables
-	// which require different levels of special support. For the immediate
-	// moment we are using multiple reserved ranges, but that may not be the
-	// case in the near future. Active discussion on github issue #3444:
-	// https://github.com/cockroachdb/cockroach/issues/3444
-	MaxSystemDescID = 500
+	// MaxSystemConfigDescID is the maximum system descriptor ID that will be
+	// gossiped as part of the SystemConfig. Be careful adding new descriptors to
+	// this ID range.
+	MaxSystemConfigDescID = 10
 
-	// MaxReservedDescID is the maximum value of reserved descriptor IDs
-	// under 'TableDataPrefix'. Reserved IDs are used by namespaces and tables
-	// used internally by cockroach.
-	MaxReservedDescID = 999
+	// MaxReservedDescID is the maximum value of reserved descriptor
+	// IDs. Reserved IDs are used by namespaces and tables used internally by
+	// cockroach.
+	MaxReservedDescID = 49
 
 	// RootNamespaceID is the ID of the root namespace.
 	RootNamespaceID = 0
 
 	// SystemDatabaseID and following are the database/table IDs for objects
 	// in the system span.
-	// NOTE: IDs should remain <= MaxSystemDescID.
+	// NOTE: IDs should remain <= MaxSystemConfigDescID.
 	SystemDatabaseID  = 1
 	NamespaceTableID  = 2
 	DescriptorTableID = 3
-	LeaseTableID      = 4
-	UsersTableID      = 5
-	ZonesTableID      = 6
+	UsersTableID      = 4
+	ZonesTableID      = 5
 )

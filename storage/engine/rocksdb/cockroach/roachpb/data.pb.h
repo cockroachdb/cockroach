@@ -1075,22 +1075,22 @@ class ModifiedSpanTrigger : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional bool system_db_span = 1;
-  bool has_system_db_span() const;
-  void clear_system_db_span();
-  static const int kSystemDbSpanFieldNumber = 1;
-  bool system_db_span() const;
-  void set_system_db_span(bool value);
+  // optional bool system_config_span = 1;
+  bool has_system_config_span() const;
+  void clear_system_config_span();
+  static const int kSystemConfigSpanFieldNumber = 1;
+  bool system_config_span() const;
+  void set_system_config_span(bool value);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ModifiedSpanTrigger)
  private:
-  inline void set_has_system_db_span();
-  inline void clear_has_system_db_span();
+  inline void set_has_system_config_span();
+  inline void clear_has_system_config_span();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  bool system_db_span_;
+  bool system_config_span_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fdata_2eproto();
@@ -2685,28 +2685,28 @@ inline void ChangeReplicasTrigger::set_next_replica_id(::google::protobuf::int32
 
 // ModifiedSpanTrigger
 
-// optional bool system_db_span = 1;
-inline bool ModifiedSpanTrigger::has_system_db_span() const {
+// optional bool system_config_span = 1;
+inline bool ModifiedSpanTrigger::has_system_config_span() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void ModifiedSpanTrigger::set_has_system_db_span() {
+inline void ModifiedSpanTrigger::set_has_system_config_span() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void ModifiedSpanTrigger::clear_has_system_db_span() {
+inline void ModifiedSpanTrigger::clear_has_system_config_span() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void ModifiedSpanTrigger::clear_system_db_span() {
-  system_db_span_ = false;
-  clear_has_system_db_span();
+inline void ModifiedSpanTrigger::clear_system_config_span() {
+  system_config_span_ = false;
+  clear_has_system_config_span();
 }
-inline bool ModifiedSpanTrigger::system_db_span() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ModifiedSpanTrigger.system_db_span)
-  return system_db_span_;
+inline bool ModifiedSpanTrigger::system_config_span() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ModifiedSpanTrigger.system_config_span)
+  return system_config_span_;
 }
-inline void ModifiedSpanTrigger::set_system_db_span(bool value) {
-  set_has_system_db_span();
-  system_db_span_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ModifiedSpanTrigger.system_db_span)
+inline void ModifiedSpanTrigger::set_system_config_span(bool value) {
+  set_has_system_config_span();
+  system_config_span_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ModifiedSpanTrigger.system_config_span)
 }
 
 // -------------------------------------------------------------------

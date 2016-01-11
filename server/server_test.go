@@ -486,7 +486,7 @@ func TestSQLServer(t *testing.T) {
 	}
 }
 
-func TestSystemDBGossip(t *testing.T) {
+func TestSystemConfigGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	defer s.Stop()
@@ -526,9 +526,9 @@ func TestSystemDBGossip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// This time mark the transaction as having a SystemDB trigger.
+	// This time mark the transaction as having a Gossip trigger.
 	if err := db.Txn(func(txn *client.Txn) error {
-		txn.SetSystemDBTrigger()
+		txn.SetSystemConfigTrigger()
 		return txn.Put(key, valAt(2))
 	}); err != nil {
 		t.Fatal(err)

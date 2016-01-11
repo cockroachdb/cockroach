@@ -81,7 +81,7 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, er
 	// where the table already exists. This will generate some false
 	// refreshes, but that's expected to be quite rare in practice.
 	if stmt.StatementType() == parser.DDL {
-		p.txn.SetSystemDBTrigger()
+		p.txn.SetSystemConfigTrigger()
 	}
 
 	switch n := stmt.(type) {

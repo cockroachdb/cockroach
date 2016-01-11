@@ -30,21 +30,12 @@ import (
 // start running correctly, thus requiring this special initialization.
 type MetadataSchema struct {
 	systemObjects []systemObject
-	databases     []MetadataDatabase
+	tables        []metadataTable
 }
 
 type systemObject struct {
 	parentID ID
 	desc     descriptorProto
-}
-
-// MetadataDatabase represents a database to be created on a bootstrapped
-// cockroach cluster. This structure should only be created by calling the
-// "AddDatabase()" method of a MetadataSchema object.
-type MetadataDatabase struct {
-	name       string
-	privileges *PrivilegeDescriptor
-	tables     []metadataTable
 }
 
 type metadataTable struct {
@@ -68,25 +59,9 @@ func (ms *MetadataSchema) AddSystemDescriptor(parentID ID, desc descriptorProto)
 	ms.systemObjects = append(ms.systemObjects, systemObject{parentID, desc})
 }
 
-// AddDatabase adds a metadata database to the initial schema. The database must
-// be fully described (via calls to MetadataDatabase.AddTable()) before adding
-// it to the MetadataSchema.
-func (ms *MetadataSchema) AddDatabase(db MetadataDatabase) {
-	ms.databases = append(ms.databases, db)
-}
-
-// MakeMetadataDatabase constructs a new MetadataDatabase value used to describe
-// a database in a MetadataSchema.
-func MakeMetadataDatabase(name string, privileges *PrivilegeDescriptor) MetadataDatabase {
-	return MetadataDatabase{
-		name:       name,
-		privileges: privileges,
-	}
-}
-
-// AddTable adds a new table to this MetadataDatabase descriptor.
-func (md *MetadataDatabase) AddTable(definition string, privileges *PrivilegeDescriptor) {
-	md.tables = append(md.tables, metadataTable{
+// AddTable adds a new table to the system database.
+func (ms *MetadataSchema) AddTable(definition string, privileges *PrivilegeDescriptor) {
+	ms.tables = append(ms.tables, metadataTable{
 		definition: definition,
 		privileges: privileges,
 	})
@@ -96,10 +71,7 @@ func (md *MetadataDatabase) AddTable(definition string, privileges *PrivilegeDes
 // this schema. This value is needed to automate certain tests.
 func (ms MetadataSchema) DescriptorCount() int {
 	count := len(ms.systemObjects)
-	count += len(ms.databases)
-	for _, db := range ms.databases {
-		count += len(db.tables)
-	}
+	count += len(ms.tables)
 	return count
 }
 
@@ -149,27 +121,17 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 
 	// Descriptor IDs for non-system databases and objects will be generated
 	// sequentially within the non-system reserved range.
-	initialDescID := keys.MaxSystemDescID + 1
+	initialDescID := keys.MaxSystemConfigDescID + 1
 	nextID := func() ID {
 		next := initialDescID
 		initialDescID++
 		return ID(next)
 	}
 
-	// Generate initial values for non-system metadata tables, which do not need
-	// well-known IDs.
-	for _, db := range ms.databases {
-		dbID := nextID()
-		addDescriptor(keys.RootNamespaceID, &DatabaseDescriptor{
-			Name:       db.name,
-			ID:         dbID,
-			Privileges: db.privileges,
-		})
-
-		for _, tbl := range db.tables {
-			desc := createTableDescriptor(nextID(), dbID, tbl.definition, tbl.privileges)
-			addDescriptor(dbID, &desc)
-		}
+	for _, tbl := range ms.tables {
+		dbID := ID(keys.SystemDatabaseID)
+		desc := createTableDescriptor(nextID(), dbID, tbl.definition, tbl.privileges)
+		addDescriptor(dbID, &desc)
 	}
 
 	// Sort returned key values; this is valuable because it matches the way the

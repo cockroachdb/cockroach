@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
@@ -323,6 +324,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 // are correct when scanning in reverse order.
 func TestRangeLookupUseReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 

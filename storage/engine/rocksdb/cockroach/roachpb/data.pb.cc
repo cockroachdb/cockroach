@@ -215,7 +215,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto() {
       -1);
   ModifiedSpanTrigger_descriptor_ = file->message_type(8);
   static const int ModifiedSpanTrigger_offsets_[1] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ModifiedSpanTrigger, system_db_span_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ModifiedSpanTrigger, system_config_span_),
   };
   ModifiedSpanTrigger_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -460,50 +460,49 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "B\004\310\336\037\000\022D\n\020updated_replicas\030\003 \003(\0132$.cockr"
     "oach.roachpb.ReplicaDescriptorB\004\310\336\037\000\022;\n\017"
     "next_replica_id\030\004 \001(\005B\"\310\336\037\000\342\336\037\rNextRepli"
-    "caID\372\336\037\tReplicaID\"C\n\023ModifiedSpanTrigger"
-    "\022,\n\016system_db_span\030\001 \001(\010B\024\310\336\037\000\342\336\037\014System"
-    "DBSpan\"\237\002\n\025InternalCommitTrigger\0226\n\rspli"
-    "t_trigger\030\001 \001(\0132\037.cockroach.roachpb.Spli"
-    "tTrigger\0226\n\rmerge_trigger\030\002 \001(\0132\037.cockro"
-    "ach.roachpb.MergeTrigger\022I\n\027change_repli"
-    "cas_trigger\030\003 \001(\0132(.cockroach.roachpb.Ch"
-    "angeReplicasTrigger\022E\n\025modified_span_tri"
-    "gger\030\004 \001(\0132&.cockroach.roachpb.ModifiedS"
-    "panTrigger:\004\210\240\037\001\"\'\n\010NodeList\022\033\n\005nodes\030\001 "
-    "\003(\005B\014\020\001\372\336\037\006NodeID\"\362\004\n\013Transaction\022\022\n\004nam"
-    "e\030\001 \001(\tB\004\310\336\037\000\022\024\n\003key\030\002 \001(\014B\007\372\336\037\003Key\022\022\n\002i"
-    "d\030\003 \001(\014B\006\342\336\037\002ID\022\026\n\010priority\030\004 \001(\005B\004\310\336\037\000\022"
-    "9\n\tisolation\030\005 \001(\0162 .cockroach.roachpb.I"
-    "solationTypeB\004\310\336\037\000\022:\n\006status\030\006 \001(\0162$.coc"
-    "kroach.roachpb.TransactionStatusB\004\310\336\037\000\022\023"
-    "\n\005epoch\030\007 \001(\rB\004\310\336\037\000\0224\n\016last_heartbeat\030\010 "
-    "\001(\0132\034.cockroach.roachpb.Timestamp\0225\n\ttim"
-    "estamp\030\t \001(\0132\034.cockroach.roachpb.Timesta"
-    "mpB\004\310\336\037\000\022:\n\016orig_timestamp\030\n \001(\0132\034.cockr"
-    "oach.roachpb.TimestampB\004\310\336\037\000\0229\n\rmax_time"
-    "stamp\030\013 \001(\0132\034.cockroach.roachpb.Timestam"
-    "pB\004\310\336\037\000\0228\n\rcertain_nodes\030\014 \001(\0132\033.cockroa"
-    "ch.roachpb.NodeListB\004\310\336\037\000\022\025\n\007Writing\030\r \001"
-    "(\010B\004\310\336\037\000\022\026\n\010Sequence\030\016 \001(\rB\004\310\336\037\000\022.\n\007Inte"
-    "nts\030\017 \003(\0132\027.cockroach.roachpb.SpanB\004\310\336\037\000"
-    ":\004\230\240\037\000\"l\n\006Intent\022/\n\004span\030\001 \001(\0132\027.cockroa"
-    "ch.roachpb.SpanB\010\310\336\037\000\320\336\037\001\0221\n\003txn\030\002 \001(\0132\036"
-    ".cockroach.roachpb.TransactionB\004\310\336\037\000\"\265\001\n"
-    "\005Lease\0221\n\005start\030\001 \001(\0132\034.cockroach.roachp"
-    "b.TimestampB\004\310\336\037\000\0226\n\nexpiration\030\002 \001(\0132\034."
-    "cockroach.roachpb.TimestampB\004\310\336\037\000\022;\n\007rep"
-    "lica\030\003 \001(\0132$.cockroach.roachpb.ReplicaDe"
-    "scriptorB\004\310\336\037\000:\004\230\240\037\000\"a\n\022SequenceCacheEnt"
-    "ry\022\024\n\003key\030\001 \001(\014B\007\372\336\037\003Key\0225\n\ttimestamp\030\002 "
-    "\001(\0132\034.cockroach.roachpb.TimestampB\004\310\336\037\000*"
-    "Q\n\tValueType\022\013\n\007UNKNOWN\020\000\022\007\n\003INT\020\001\022\t\n\005FL"
-    "OAT\020\002\022\t\n\005BYTES\020\003\022\010\n\004TIME\020\004\022\016\n\nTIMESERIES"
-    "\020d*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLICA\020\000"
-    "\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationT"
-    "ype\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036"
-    "\000*B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022\r\n\tC"
-    "OMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\tZ\007roachpb"
-    "X\001", 2882);
+    "caID\372\336\037\tReplicaID\"7\n\023ModifiedSpanTrigger"
+    "\022 \n\022system_config_span\030\001 \001(\010B\004\310\336\037\000\"\237\002\n\025I"
+    "nternalCommitTrigger\0226\n\rsplit_trigger\030\001 "
+    "\001(\0132\037.cockroach.roachpb.SplitTrigger\0226\n\r"
+    "merge_trigger\030\002 \001(\0132\037.cockroach.roachpb."
+    "MergeTrigger\022I\n\027change_replicas_trigger\030"
+    "\003 \001(\0132(.cockroach.roachpb.ChangeReplicas"
+    "Trigger\022E\n\025modified_span_trigger\030\004 \001(\0132&"
+    ".cockroach.roachpb.ModifiedSpanTrigger:\004"
+    "\210\240\037\001\"\'\n\010NodeList\022\033\n\005nodes\030\001 \003(\005B\014\020\001\372\336\037\006N"
+    "odeID\"\362\004\n\013Transaction\022\022\n\004name\030\001 \001(\tB\004\310\336\037"
+    "\000\022\024\n\003key\030\002 \001(\014B\007\372\336\037\003Key\022\022\n\002id\030\003 \001(\014B\006\342\336\037"
+    "\002ID\022\026\n\010priority\030\004 \001(\005B\004\310\336\037\000\0229\n\tisolation"
+    "\030\005 \001(\0162 .cockroach.roachpb.IsolationType"
+    "B\004\310\336\037\000\022:\n\006status\030\006 \001(\0162$.cockroach.roach"
+    "pb.TransactionStatusB\004\310\336\037\000\022\023\n\005epoch\030\007 \001("
+    "\rB\004\310\336\037\000\0224\n\016last_heartbeat\030\010 \001(\0132\034.cockro"
+    "ach.roachpb.Timestamp\0225\n\ttimestamp\030\t \001(\013"
+    "2\034.cockroach.roachpb.TimestampB\004\310\336\037\000\022:\n\016"
+    "orig_timestamp\030\n \001(\0132\034.cockroach.roachpb"
+    ".TimestampB\004\310\336\037\000\0229\n\rmax_timestamp\030\013 \001(\0132"
+    "\034.cockroach.roachpb.TimestampB\004\310\336\037\000\0228\n\rc"
+    "ertain_nodes\030\014 \001(\0132\033.cockroach.roachpb.N"
+    "odeListB\004\310\336\037\000\022\025\n\007Writing\030\r \001(\010B\004\310\336\037\000\022\026\n\010"
+    "Sequence\030\016 \001(\rB\004\310\336\037\000\022.\n\007Intents\030\017 \003(\0132\027."
+    "cockroach.roachpb.SpanB\004\310\336\037\000:\004\230\240\037\000\"l\n\006In"
+    "tent\022/\n\004span\030\001 \001(\0132\027.cockroach.roachpb.S"
+    "panB\010\310\336\037\000\320\336\037\001\0221\n\003txn\030\002 \001(\0132\036.cockroach.r"
+    "oachpb.TransactionB\004\310\336\037\000\"\265\001\n\005Lease\0221\n\005st"
+    "art\030\001 \001(\0132\034.cockroach.roachpb.TimestampB"
+    "\004\310\336\037\000\0226\n\nexpiration\030\002 \001(\0132\034.cockroach.ro"
+    "achpb.TimestampB\004\310\336\037\000\022;\n\007replica\030\003 \001(\0132$"
+    ".cockroach.roachpb.ReplicaDescriptorB\004\310\336"
+    "\037\000:\004\230\240\037\000\"a\n\022SequenceCacheEntry\022\024\n\003key\030\001 "
+    "\001(\014B\007\372\336\037\003Key\0225\n\ttimestamp\030\002 \001(\0132\034.cockro"
+    "ach.roachpb.TimestampB\004\310\336\037\000*Q\n\tValueType"
+    "\022\013\n\007UNKNOWN\020\000\022\007\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BYT"
+    "ES\020\003\022\010\n\004TIME\020\004\022\016\n\nTIMESERIES\020d*>\n\021Replic"
+    "aChangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_R"
+    "EPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SERIA"
+    "LIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021Transac"
+    "tionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013"
+    "\n\007ABORTED\020\002\032\004\210\243\036\000B\tZ\007roachpbX\001", 2870);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/data.proto", &protobuf_RegisterTypes);
   Span::default_instance_ = new Span();
@@ -3857,7 +3856,7 @@ void ChangeReplicasTrigger::clear_next_replica_id() {
 // ===================================================================
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
-const int ModifiedSpanTrigger::kSystemDbSpanFieldNumber;
+const int ModifiedSpanTrigger::kSystemConfigSpanFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ModifiedSpanTrigger::ModifiedSpanTrigger()
@@ -3879,7 +3878,7 @@ ModifiedSpanTrigger::ModifiedSpanTrigger(const ModifiedSpanTrigger& from)
 
 void ModifiedSpanTrigger::SharedCtor() {
   _cached_size_ = 0;
-  system_db_span_ = false;
+  system_config_span_ = false;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -3919,7 +3918,7 @@ ModifiedSpanTrigger* ModifiedSpanTrigger::New(::google::protobuf::Arena* arena) 
 }
 
 void ModifiedSpanTrigger::Clear() {
-  system_db_span_ = false;
+  system_config_span_ = false;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->Clear();
@@ -3936,13 +3935,13 @@ bool ModifiedSpanTrigger::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional bool system_db_span = 1;
+      // optional bool system_config_span = 1;
       case 1: {
         if (tag == 8) {
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
-                 input, &system_db_span_)));
-          set_has_system_db_span();
+                 input, &system_config_span_)));
+          set_has_system_config_span();
         } else {
           goto handle_unusual;
         }
@@ -3975,9 +3974,9 @@ failure:
 void ModifiedSpanTrigger::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.ModifiedSpanTrigger)
-  // optional bool system_db_span = 1;
-  if (has_system_db_span()) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(1, this->system_db_span(), output);
+  // optional bool system_config_span = 1;
+  if (has_system_config_span()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(1, this->system_config_span(), output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -3990,9 +3989,9 @@ void ModifiedSpanTrigger::SerializeWithCachedSizes(
 ::google::protobuf::uint8* ModifiedSpanTrigger::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.ModifiedSpanTrigger)
-  // optional bool system_db_span = 1;
-  if (has_system_db_span()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(1, this->system_db_span(), target);
+  // optional bool system_config_span = 1;
+  if (has_system_config_span()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(1, this->system_config_span(), target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -4006,8 +4005,8 @@ void ModifiedSpanTrigger::SerializeWithCachedSizes(
 int ModifiedSpanTrigger::ByteSize() const {
   int total_size = 0;
 
-  // optional bool system_db_span = 1;
-  if (has_system_db_span()) {
+  // optional bool system_config_span = 1;
+  if (has_system_config_span()) {
     total_size += 1 + 1;
   }
 
@@ -4037,8 +4036,8 @@ void ModifiedSpanTrigger::MergeFrom(const ::google::protobuf::Message& from) {
 void ModifiedSpanTrigger::MergeFrom(const ModifiedSpanTrigger& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_system_db_span()) {
-      set_system_db_span(from.system_db_span());
+    if (from.has_system_config_span()) {
+      set_system_config_span(from.system_config_span());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -4068,7 +4067,7 @@ void ModifiedSpanTrigger::Swap(ModifiedSpanTrigger* other) {
   InternalSwap(other);
 }
 void ModifiedSpanTrigger::InternalSwap(ModifiedSpanTrigger* other) {
-  std::swap(system_db_span_, other->system_db_span_);
+  std::swap(system_config_span_, other->system_config_span_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -4085,28 +4084,28 @@ void ModifiedSpanTrigger::InternalSwap(ModifiedSpanTrigger* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // ModifiedSpanTrigger
 
-// optional bool system_db_span = 1;
-bool ModifiedSpanTrigger::has_system_db_span() const {
+// optional bool system_config_span = 1;
+bool ModifiedSpanTrigger::has_system_config_span() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-void ModifiedSpanTrigger::set_has_system_db_span() {
+void ModifiedSpanTrigger::set_has_system_config_span() {
   _has_bits_[0] |= 0x00000001u;
 }
-void ModifiedSpanTrigger::clear_has_system_db_span() {
+void ModifiedSpanTrigger::clear_has_system_config_span() {
   _has_bits_[0] &= ~0x00000001u;
 }
-void ModifiedSpanTrigger::clear_system_db_span() {
-  system_db_span_ = false;
-  clear_has_system_db_span();
+void ModifiedSpanTrigger::clear_system_config_span() {
+  system_config_span_ = false;
+  clear_has_system_config_span();
 }
- bool ModifiedSpanTrigger::system_db_span() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ModifiedSpanTrigger.system_db_span)
-  return system_db_span_;
+ bool ModifiedSpanTrigger::system_config_span() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ModifiedSpanTrigger.system_config_span)
+  return system_config_span_;
 }
- void ModifiedSpanTrigger::set_system_db_span(bool value) {
-  set_has_system_db_span();
-  system_db_span_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ModifiedSpanTrigger.system_db_span)
+ void ModifiedSpanTrigger::set_system_config_span(bool value) {
+  set_has_system_config_span();
+  system_config_span_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ModifiedSpanTrigger.system_config_span)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
@@ -61,6 +62,7 @@ func createSplitRanges(store *storage.Store) (*roachpb.RangeDescriptor, *roachpb
 // together.
 func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
@@ -88,6 +90,7 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 // subsumed range is cleaned up on merge.
 func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
@@ -165,10 +168,11 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 // each containing data.
 func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	content := roachpb.Key("testing!")
-
+	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
+
+	content := roachpb.Key("testing!")
 
 	aDesc, bDesc, err := createSplitRanges(store)
 	if err != nil {

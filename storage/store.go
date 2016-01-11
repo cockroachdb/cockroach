@@ -678,10 +678,10 @@ func (s *Store) maybeGossipFirstRange() error {
 	return nil
 }
 
-// maybeGossipSystemConfig looks for the range containing SystemDB keys and
+// maybeGossipSystemConfig looks for the range containing SystemConfig keys and
 // lets that range gossip them.
 func (s *Store) maybeGossipSystemConfig() error {
-	rng := s.LookupReplica(roachpb.RKey(keys.SystemDBSpan.Key), nil)
+	rng := s.LookupReplica(roachpb.RKey(keys.SystemConfigSpan.Key), nil)
 	if rng == nil {
 		// This store has no range with this configuration.
 		return nil

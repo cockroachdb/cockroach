@@ -89,6 +89,7 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 // UserTableDataMin and still gossip the SystemConfig properly.
 func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
@@ -107,7 +108,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 
 	// Update SystemConfig to trigger gossip.
 	if err := store.DB().Txn(func(txn *client.Txn) error {
-		txn.SetSystemDBTrigger()
+		txn.SetSystemConfigTrigger()
 		// We don't care about the values, just the keys.
 		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + 1))
 		return txn.Put(k, desc)
@@ -140,6 +141,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 // a table row will cause a split at a boundary between rows.
 func TestStoreRangeSplitInsideRow(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
@@ -194,6 +196,7 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 // to split at the start of the newly split range.
 func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
@@ -217,6 +220,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 // because the split key is invalid after the first split succeeds.
 func TestStoreRangeSplitConcurrent(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
@@ -259,6 +263,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 // and sequence cache have been properly accounted for.
 func TestStoreRangeSplitIdempotency(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 	rangeID := roachpb.RangeID(1)
@@ -397,6 +402,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 // the pre-split.
 func TestStoreRangeSplitStats(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
@@ -515,7 +521,8 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 
 	maxBytes := int64(1 << 16)
 	// Set max bytes.
-	config.TestingSetZoneConfig(1000, &config.ZoneConfig{RangeMaxBytes: maxBytes})
+	descID := uint32(keys.MaxReservedDescID + 1)
+	config.TestingSetZoneConfig(descID, &config.ZoneConfig{RangeMaxBytes: maxBytes})
 
 	// Trigger gossip callback.
 	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
@@ -526,7 +533,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	originalRange := store.LookupReplica(roachpb.RKey(keys.UserTableDataMin), nil)
 	var rng *storage.Replica
 	if err := util.IsTrueWithin(func() bool {
-		rng = store.LookupReplica(keys.MakeTablePrefix(1000), nil)
+		rng = store.LookupReplica(keys.MakeTablePrefix(descID), nil)
 		return rng.RangeID != originalRange.RangeID
 	}, time.Second); err != nil {
 		t.Fatalf("failed to notice range max bytes update: %s", err)
@@ -543,13 +550,13 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	}
 
 	// Look in the range after prefix we're writing to.
-	fillRange(store, rng.RangeID, keys.MakeTablePrefix(1000), maxBytes, t)
+	fillRange(store, rng.RangeID, keys.MakeTablePrefix(descID), maxBytes, t)
 
 	// Verify that the range is in fact split (give it a few seconds for very
 	// slow test machines).
 	var newRng *storage.Replica
 	util.SucceedsWithin(t, 5*time.Second, func() error {
-		newRng = store.LookupReplica(keys.MakeTablePrefix(2000), nil)
+		newRng = store.LookupReplica(keys.MakeTablePrefix(descID+1), nil)
 		if newRng.RangeID == rng.RangeID {
 			return util.Errorf("range has not yet split")
 		}
@@ -575,7 +582,8 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 
 	// Set max bytes.
 	maxBytes := int64(1 << 16)
-	config.TestingSetZoneConfig(1000, &config.ZoneConfig{RangeMaxBytes: maxBytes})
+	descID := uint32(keys.MaxReservedDescID + 1)
+	config.TestingSetZoneConfig(descID, &config.ZoneConfig{RangeMaxBytes: maxBytes})
 
 	// Trigger gossip callback.
 	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
@@ -584,7 +592,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 
 	// Verify that the range is split and the new range has the correct max bytes.
 	util.SucceedsWithin(t, time.Second, func() error {
-		newRng := store.LookupReplica(keys.MakeTablePrefix(1000), nil)
+		newRng := store.LookupReplica(keys.MakeTablePrefix(descID), nil)
 		if newRng.RangeID == origRng.RangeID {
 			return util.Errorf("expected new range created by split")
 		}
@@ -596,15 +604,14 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	})
 }
 
-// TestStoreRangeSystemSplits verifies that splits are based on the
-// contents of the SystemDB span.
+// TestStoreRangeSystemSplits verifies that splits are based on the contents of
+// the SystemConfig span.
 func TestStoreRangeSystemSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
 	initialSystemValues := sql.MakeMetadataSchema().GetInitialValues()
-	numInitialValues := len(initialSystemValues)
 	// Write the initial sql values to the system DB as well
 	// as the equivalent of table descriptors for X user tables.
 	// This does two things:
@@ -612,7 +619,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	// - the write triggers a SystemConfig update and gossip.
 	// We should end up with splits at each user table prefix.
 	if err := store.DB().Txn(func(txn *client.Txn) error {
-		txn.SetSystemDBTrigger()
+		txn.SetSystemConfigTrigger()
 		for i, kv := range initialSystemValues {
 			bytes, err := kv.Value.GetBytes()
 			if err != nil {
@@ -639,7 +646,10 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	verifySplitsAtTablePrefixes := func(maxTableID int) {
 		// We expect splits at each of the user tables, but not at the system
 		// tables boundaries.
-		expKeys := make([]roachpb.Key, 0, maxTableID+1)
+		expKeys := make([]roachpb.Key, 0, maxTableID+2)
+		expKeys = append(expKeys,
+			keys.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(keys.MaxSystemConfigDescID+1)),
+		)
 		for i := 1; i <= maxTableID; i++ {
 			expKeys = append(expKeys,
 				keys.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(keys.MaxReservedDescID+uint32(i))),
@@ -665,11 +675,11 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 	verifySplitsAtTablePrefixes(len(initialSystemValues))
 
-	numTotalValues := numInitialValues + 5
+	numTotalValues := keys.MaxSystemConfigDescID + 5
 
 	// Write another, disjoint descriptor for a user table.
 	if err := store.DB().Txn(func(txn *client.Txn) error {
-		txn.SetSystemDBTrigger()
+		txn.SetSystemConfigTrigger()
 		// This time, only write the last table descriptor. Splits
 		// still occur for every intervening ID.
 		// We don't care about the values, just the keys.
@@ -847,7 +857,6 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 		t.Fatal(err)
 	}
 	mtc.waitForValues(rightKey, 3*time.Second, []int64{0, 0, 0, 222, 222, 222})
-
 }
 
 // TestStoreSplitReadRace prevents regression of #3148. It begins a couple of
@@ -859,6 +868,7 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 func TestStoreSplitReadRace(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	defer func() { storage.TestingCommandFilter = nil }()
+	defer config.TestingDisableTableSplits()()
 	splitKey := roachpb.Key("a")
 	key := func(i int) roachpb.Key {
 		return append(splitKey.Next(), []byte(fmt.Sprintf("%03d", i))...)

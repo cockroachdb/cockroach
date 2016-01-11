@@ -492,7 +492,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 				}
 			}
 			if ct.GetModifiedSpanTrigger() != nil {
-				if ct.ModifiedSpanTrigger.SystemDBSpan {
+				if ct.ModifiedSpanTrigger.SystemConfigSpan {
 					// Check if we need to gossip the system config.
 					batch.Defer(r.maybeGossipSystemConfig)
 				}
@@ -1193,7 +1193,7 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 	}
 
 	// Gossip system config if this range includes the system span.
-	if r.ContainsKey(keys.SystemDBSpan.Key) {
+	if r.ContainsKey(keys.SystemConfigSpan.Key) {
 		r.maybeGossipSystemConfig()
 	}
 	return reply, nil

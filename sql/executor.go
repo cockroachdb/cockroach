@@ -193,8 +193,8 @@ func (e *Executor) ExecuteStatements(user string, session Session, stmts string,
 	if planMaker.session.Txn != nil {
 		txn := client.NewTxn(e.db)
 		txn.Proto = planMaker.session.Txn.Txn
-		if planMaker.session.MutatesSystemDB {
-			txn.SetSystemDBTrigger()
+		if planMaker.session.MutatesSystemConfig {
+			txn.SetSystemConfigTrigger()
 		}
 		planMaker.setTxn(txn, planMaker.session.Txn.Timestamp.GoTime())
 	}
@@ -214,10 +214,10 @@ func (e *Executor) ExecuteStatements(user string, session Session, stmts string,
 			Txn:       planMaker.txn.Proto,
 			Timestamp: driver.Timestamp(planMaker.evalCtx.TxnTimestamp.Time),
 		}
-		planMaker.session.MutatesSystemDB = planMaker.txn.SystemDBTrigger()
+		planMaker.session.MutatesSystemConfig = planMaker.txn.SystemConfigTrigger()
 	} else {
 		planMaker.session.Txn = nil
-		planMaker.session.MutatesSystemDB = false
+		planMaker.session.MutatesSystemConfig = false
 	}
 	bytes, err := proto.Marshal(&planMaker.session)
 	if err != nil {

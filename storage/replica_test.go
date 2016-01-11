@@ -579,8 +579,8 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
 	tc.rng.setDescWithoutProcessUpdate(rngDesc)
 
-	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
-	key := keys.MakeTablePrefix(keys.MaxSystemDescID)
+	// Write some arbitrary data in the system config span.
+	key := keys.MakeTablePrefix(keys.MaxSystemConfigDescID)
 	var val roachpb.Value
 	val.SetInt(42)
 	if err := engine.MVCCPut(tc.engine, nil, key, roachpb.MinTimestamp, val, nil); err != nil {
@@ -3483,27 +3483,27 @@ func TestBatchErrorWithIndex(t *testing.T) {
 
 }
 
-// TestReplicaLoadSystemDBSpanIntent verifies that intents on the SystemDBSpan
+// TestReplicaLoadSystemConfigSpanIntent verifies that intents on the SystemConfigSpan
 // cause an error, but trigger asynchronous cleanup.
-func TestReplicaLoadSystemDBSpanIntent(t *testing.T) {
+func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	rng := tc.store.LookupReplica(keys.Addr(keys.SystemDBSpan.Key), nil)
+	rng := tc.store.LookupReplica(keys.Addr(keys.SystemConfigSpan.Key), nil)
 	if rng == nil {
-		t.Fatalf("no replica contains the SystemDB span")
+		t.Fatalf("no replica contains the SystemConfig span")
 	}
 	v := roachpb.MakeValueFromString("foo")
 	// Create a transaction. We don't write a txn record, so pushing this will
 	// succeed and abort the intent we write here.
 	txn := newTransaction("test", []byte("a"), 1, roachpb.SERIALIZABLE, rng.store.Clock())
 	if err := engine.MVCCPut(rng.store.Engine(), &engine.MVCCStats{},
-		keys.SystemDBSpan.Key, rng.store.Clock().Now(), v, txn); err != nil {
+		keys.SystemConfigSpan.Key, rng.store.Clock().Now(), v, txn); err != nil {
 		t.Fatal(err)
 	}
-	// Verify that this trips up loading the SystemDB data.
-	if _, _, err := rng.loadSystemDBSpan(); err != errSystemDBIntent {
+	// Verify that this trips up loading the SystemConfig data.
+	if _, _, err := rng.loadSystemConfigSpan(); err != errSystemConfigIntent {
 		t.Fatal(err)
 	}
 
@@ -3511,17 +3511,17 @@ func TestReplicaLoadSystemDBSpanIntent(t *testing.T) {
 	// there and verify that we can now load the data as expected.
 	util.SucceedsWithin(t, time.Second, func() error {
 		if err := engine.MVCCPut(rng.store.Engine(), &engine.MVCCStats{},
-			keys.SystemDBSpan.Key, rng.store.Clock().Now(), v, nil); err != nil {
+			keys.SystemConfigSpan.Key, rng.store.Clock().Now(), v, nil); err != nil {
 			return err
 		}
 
-		kvs, _, err := rng.loadSystemDBSpan()
+		kvs, _, err := rng.loadSystemConfigSpan()
 		if err != nil {
 			return err
 		}
 
-		if len(kvs) != 1 || !bytes.Equal(kvs[0].Key, keys.SystemDBSpan.Key) {
-			return util.Errorf("expected only key %q in SystemDB map: %+v", keys.SystemDBSpan.Key, kvs)
+		if len(kvs) != 1 || !bytes.Equal(kvs[0].Key, keys.SystemConfigSpan.Key) {
+			return util.Errorf("expected only key %s in SystemConfigSpan map: %+v", keys.SystemConfigSpan.Key, kvs)
 		}
 		return nil
 	})

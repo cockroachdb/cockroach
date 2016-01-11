@@ -296,20 +296,20 @@ func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.
 		return nil
 	}
 
-	tableStart := roachpb.RKey(keys.ReservedTableDataMin)
+	tableStart := roachpb.RKey(keys.SystemConfigTableDataMax)
 	if !tableStart.Less(endKey) {
 		// This range is before the user tables span: no required splits.
 		return nil
 	}
 
 	startID, ok := ObjectIDForKey(startKey)
-	if !ok || startID <= keys.MaxSystemDescID {
+	if !ok || startID <= keys.MaxSystemConfigDescID {
 		// The start key is either:
 		// - not part of the structured data span
 		// - part of the system span
 		// In either case, start looking for splits at the first ID usable
 		// by the user data span.
-		startID = keys.MaxSystemDescID + 1
+		startID = keys.MaxSystemConfigDescID + 1
 	} else {
 		// The start key is either already a split key, or after the split
 		// key for its ID. We can skip straight to the next one.

@@ -14,7 +14,7 @@ In order to support performant SQL queries, each gateway node must be able to ad
 
 # Detailed design
 
-The entire `keys.SystemDBSpan` span will have its writes bifurcated into gossip (with a TTL TBD) in the same way that `storage.(*Replica).maybeGossipConfigs()` works today. The gossip system will provide atomicity in propagating these modifications through the usual sequence number mechanism.
+The entire `keys.SystemConfigSpan` span will have its writes bifurcated into gossip (with a TTL TBD) in the same way that `storage.(*Replica).maybeGossipConfigs()` works today. The gossip system will provide atomicity in propagating these modifications through the usual sequence number mechanism.
 
 Complete propagation of new metadata will take at most `numHops * gossipInterval` where `numHops` is the maximum number of hops between any node and the publishing node, and `gossipInterval` is the maximum interval between sequential writes to the gossip network on a given node.
 

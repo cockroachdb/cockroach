@@ -268,7 +268,7 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) err
 			// Write the updated descriptor.
 			b := txn.NewBatch()
 			b.Put(descKey, desc)
-			txn.SetSystemDBTrigger()
+			txn.SetSystemConfigTrigger()
 			return txn.CommitInBatch(b)
 		})
 
