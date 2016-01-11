@@ -384,7 +384,7 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 		{LT, `0`, `1`, 0},
 		// LIKE and NOT LIKE
 		{Like, `TEST`, `T%T`, 1},
-		{NotLike, `TEST`, `%E%`, 1},
+		{NotLike, `TEST`, `%E%T`, 1},
 		// SIMILAR TO and NOT SIMILAR TO
 		{SimilarTo, `abc`, `(b|c)%`, 1},
 		{NotSimilarTo, `abc`, `%(b|d)%`, 1},
@@ -441,7 +441,9 @@ func benchmarkLike(b *testing.B, ctx EvalContext) {
 	likeFn := cmpOps[cmpArgs{Like, stringType, stringType}].fn
 	for n := 0; n < b.N; n++ {
 		for _, p := range optimizedLikePatterns {
-			likeFn(ctx, DString("test"), DString(p))
+			if _, err := likeFn(ctx, DString("test"), DString(p)); err != nil {
+				b.Fatalf("LIKE evaluation failed with error: %v", err)
+			}
 		}
 	}
 }
