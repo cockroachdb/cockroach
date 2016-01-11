@@ -476,12 +476,17 @@ var cmpOps = map[cmpArgs]cmpOp{
 
 	cmpArgs{Like, stringType, stringType}: {
 		fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
-			key := likeKey(right.(DString))
-			re, err := ctx.ReCache.GetRegexp(key)
-			if err != nil {
-				panic(fmt.Sprintf("LIKE regexp compilations should not fail: %v", err))
+			pattern := string(right.(DString))
+			like := optimizedLikeFunc(pattern)
+			if like == nil {
+				key := likeKey(pattern)
+				re, err := ctx.ReCache.GetRegexp(key)
+				if err != nil {
+					panic(fmt.Sprintf("LIKE regexp compilations should not fail: %v", err))
+				}
+				like = re.MatchString
 			}
-			return DBool(re.MatchString(string(left.(DString)))), nil
+			return DBool(like(string(left.(DString)))), nil
 		},
 	},
 
@@ -1321,6 +1326,31 @@ func (ctx EvalContext) ParseTimestamp(s DString) (DTimestamp, error) {
 	}
 
 	return DTimestamp{}, err
+}
+
+var (
+	startsWithRe = regexp.MustCompile(`^([^_%]+)%$`)
+	endsWithRe   = regexp.MustCompile(`^%([^_%]+)$`)
+	containsRe   = regexp.MustCompile(`^%([^_%]+)%$`)
+)
+
+func optimizedLikeFunc(pattern string) func(string) bool {
+	if pre := startsWithRe.FindStringSubmatch(pattern); pre != nil && !strings.HasSuffix(pattern, `\`) {
+		return func(s string) bool {
+			return strings.HasPrefix(s, pre[1])
+		}
+	}
+	if suf := endsWithRe.FindStringSubmatch(pattern); suf != nil {
+		return func(s string) bool {
+			return strings.HasSuffix(s, suf[1])
+		}
+	}
+	if cont := containsRe.FindStringSubmatch(pattern); cont != nil && !strings.HasSuffix(pattern, `\`) {
+		return func(s string) bool {
+			return strings.Contains(s, cont[1])
+		}
+	}
+	return nil
 }
 
 type likeKey string

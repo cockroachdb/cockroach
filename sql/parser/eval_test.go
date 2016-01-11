@@ -384,7 +384,7 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 		{LT, `0`, `1`, 0},
 		// LIKE and NOT LIKE
 		{Like, `TEST`, `T%T`, 1},
-		{NotLike, `TEST`, `%E%`, 1},
+		{NotLike, `TEST`, `%E%T`, 1},
 		// SIMILAR TO and NOT SIMILAR TO
 		{SimilarTo, `abc`, `(b|c)%`, 1},
 		{NotSimilarTo, `abc`, `%(b|d)%`, 1},
