@@ -174,7 +174,7 @@ type multiTestContext struct {
 	engineStoppers     []*stop.Stopper
 	timeUntilStoreDead time.Duration
 
-	disableTableSplits func()
+	reenableTableSplits func()
 
 	// 'stores' and 'stoppers' may change at runtime so the pointers
 	// they contain are protected by 'mu'.
@@ -193,7 +193,7 @@ func startMultiTestContext(t *testing.T, numStores int) *multiTestContext {
 
 func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	m.t = t
-	m.disableTableSplits = config.TestingDisableTableSplits()
+	m.reenableTableSplits = config.TestingDisableTableSplits()
 	if m.manualClock == nil {
 		m.manualClock = hlc.NewManualClock(0)
 	}
@@ -271,7 +271,7 @@ func (m *multiTestContext) Stop() {
 			s.Stop()
 		}
 		close(done)
-		m.disableTableSplits()
+		m.reenableTableSplits()
 	}()
 
 	select {
