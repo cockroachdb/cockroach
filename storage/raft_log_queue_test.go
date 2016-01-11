@@ -88,6 +88,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	// Enable the raft log scanner and and force a truncation.
 	store.DisableRaftLogQueue(false)
 	store.ForceRaftLogScanAndProcess()
+	stopper.Quiesce()
 
 	r.RLock()
 	newFirstIndex, err := r.FirstIndex()
