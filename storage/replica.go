@@ -466,6 +466,11 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp 
 	r.llMu.Lock()
 	defer r.llMu.Unlock()
 
+	// When requesting a leader lease, always request coverage through the
+	// greater of the command's timestamp and the node's local clock's
+	// timestamp.
+	timestamp.Forward(r.store.Clock().Now())
+
 	if lease := r.getLease(); lease.Covers(timestamp) {
 		if lease.OwnedBy(r.store.StoreID()) {
 			// Happy path: We have an active lease, nothing to do.
