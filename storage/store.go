@@ -580,12 +580,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 				return
 			}
 		})
-
 	}
-
-	// Initialize txn entry GC - for now, it's pretty much disabled. See
-	// #2062, #3005.
-	s.engine.SetGCTimeouts(0)
 
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)

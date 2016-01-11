@@ -119,11 +119,6 @@ type Engine interface {
 	Merge(key MVCCKey, value []byte) error
 	// Capacity returns capacity details for the engine's available storage.
 	Capacity() (roachpb.StoreCapacity, error)
-	// SetGCTimeouts sets timeout values for GC of transaction entries. The
-	// values are specified in unix time in nanoseconds for the minimum
-	// transaction row timestamp. Rows with timestamps less than the associated
-	// value will be GC'd during compaction.
-	SetGCTimeouts(minTxnTS int64)
 	// ApproximateSize returns the approximate number of bytes the engine is
 	// using to store data for the given range of keys.
 	ApproximateSize(start, end MVCCKey) (uint64, error)
