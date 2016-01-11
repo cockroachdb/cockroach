@@ -75,6 +75,9 @@ func (p *planner) Explain(n *parser.Explain) (planNode, error) {
 
 func markDebug(plan planNode, mode explainMode) (planNode, error) {
 	switch t := plan.(type) {
+	case *selectNode:
+		return markDebug(t.from, mode)
+
 	case *scanNode:
 		// Mark the node as being explained.
 		t.columns = []column{
