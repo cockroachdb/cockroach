@@ -231,7 +231,7 @@ func TestPGPrepared(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(s, t, security.RootUser, os.TempDir(), "TestPGPrepared")
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, os.TempDir(), "TestPGPrepared")
 	defer cleanupFn()
 
 	db, err := sql.Open("postgres", pgUrl.String())

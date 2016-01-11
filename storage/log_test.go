@@ -34,7 +34,7 @@ func TestLogSplits(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(s, t, security.RootUser, os.TempDir(), "TestLogSplits")
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, os.TempDir(), "TestLogSplits")
 	defer cleanupFn()
 
 	db, err := sql.Open("postgres", pgUrl.String())
