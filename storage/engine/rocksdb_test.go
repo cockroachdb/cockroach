@@ -24,100 +24,19 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 	"time"
 
 	"github.com/termie/go-shutil"
 
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/uuid"
-	"github.com/gogo/protobuf/proto"
 )
 
 const testCacheSize = 1 << 30 // 1 GB
-
-// encodePutResponse creates a put response using the specified
-// timestamp and encodes it using gogoprotobuf.
-func encodePutResponse(timestamp roachpb.Timestamp, t *testing.T) []byte {
-	batch := &roachpb.BatchResponse{}
-	batch.Timestamp = timestamp
-	batch.Add(&roachpb.PutResponse{
-		ResponseHeader: roachpb.ResponseHeader{
-			Timestamp: timestamp,
-		},
-	})
-	data, err := proto.Marshal(batch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return data
-}
-
-// encodeTransaction creates a transaction using the specified
-// timestamp and encodes it using gogoprotobuf.
-func encodeTransaction(timestamp roachpb.Timestamp, t *testing.T) []byte {
-	txn := &roachpb.Transaction{
-		Timestamp: timestamp,
-	}
-	data, err := proto.Marshal(txn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return data
-}
-
-// TestRocksDBCompaction verifies that a garbage collector can be
-// installed on a RocksDB engine and will properly compact transaction
-// entries.
-func TestRocksDBCompaction(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	rocksdb := NewInMem(roachpb.Attributes{}, testCacheSize, stopper)
-	rocksdb.SetGCTimeouts(1)
-
-	// Write two transaction values such that exactly one should be GC'd based
-	// on our GC timeouts.
-	kvs := []roachpb.KeyValue{
-		{
-			Key:   keys.TransactionKey(roachpb.Key("a"), roachpb.Key(uuid.NewUUID4())),
-			Value: roachpb.MakeValueFromBytes(encodeTransaction(makeTS(1, 0), t)),
-		},
-		{
-			Key:   keys.TransactionKey(roachpb.Key("b"), roachpb.Key(uuid.NewUUID4())),
-			Value: roachpb.MakeValueFromBytes(encodeTransaction(makeTS(2, 0), t)),
-		},
-	}
-	for _, kv := range kvs {
-		if err := MVCCPut(rocksdb, nil, kv.Key, roachpb.ZeroTimestamp, kv.Value, nil); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Compact range and scan remaining values to compare.
-	rocksdb.CompactRange(NilKey, NilKey)
-	actualKVs, _, err := MVCCScan(rocksdb, keyMin, keyMax, 0, roachpb.ZeroTimestamp, true, nil)
-	if err != nil {
-		t.Fatalf("could not run scan: %v", err)
-	}
-	var keys []roachpb.Key
-	for _, kv := range actualKVs {
-		keys = append(keys, kv.Key)
-	}
-	expKeys := []roachpb.Key{
-		kvs[1].Key,
-	}
-	if !reflect.DeepEqual(expKeys, keys) {
-		t.Errorf("expected keys %+v, got keys %+v", expKeys, keys)
-	}
-}
 
 // readAllFiles reads all of the files matching pattern thus ensuring they are
 // in the OS buffer cache.

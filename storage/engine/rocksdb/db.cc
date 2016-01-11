@@ -135,10 +135,7 @@ namespace {
 // NOTE: these constants must be kept in sync with the values in
 // storage/engine/keys.go. Both kKeyLocalRangeIDPrefix and
 // kKeyLocalRangePrefix are the mvcc-encoded prefixes.
-const int kKeyLocalRangePrefixSize = 2;
 const rocksdb::Slice kKeyLocalRangeIDPrefix("\x01i", 2);
-const rocksdb::Slice kKeyLocalRangePrefix("\x01k", 2);
-const rocksdb::Slice kKeyLocalTransactionSuffix("\x00\x01txn-", 6);
 const rocksdb::Slice kKeyLocalMax("\x02", 1);
 
 const DBStatus kSuccess = { NULL, 0 };
@@ -316,113 +313,6 @@ void SerializeProtoToValue(std::string *val, const google::protobuf::Message &ms
   SetTag(val, cockroach::roachpb::BYTES);
   msg.AppendToString(val);
 }
-
-// DBCompactionFilter implements our garbage collection policy for
-// key/value pairs which can be considered in isolation. This
-// includes:
-//
-// - Transactions: transaction table entries are garbage collected
-//   according to the commit time of the transaction vs. the oldest
-//   remaining write intent across the entire system. The oldest write
-//   intent is maintained as a low-water mark, updated after polling
-//   all ranges in the map.
-class DBCompactionFilter : public rocksdb::CompactionFilter {
- public:
-  DBCompactionFilter(int64_t min_txn_ts)
-      : min_txn_ts_(min_txn_ts) {
-  }
-
-  bool IsTransactionRecord(rocksdb::Slice key) const {
-    // The transaction key format is:
-    //   <prefix>[key]<suffix>[remainder].
-    if (!key.starts_with(kKeyLocalRangePrefix)) {
-      return false;
-    }
-
-    rocksdb::Slice dec_key;
-    rocksdb::Slice dummy;
-    if (!SplitKey(key, &dec_key, &dummy)) {
-      return false;
-    }
-    dec_key.remove_prefix(kKeyLocalRangePrefixSize);
-
-    // Search for "suffix" within "dec_key".
-    const rocksdb::Slice suffix(kKeyLocalTransactionSuffix);
-    const char *result = std::search(
-        dec_key.data(), dec_key.data() + dec_key.size(),
-        suffix.data(), suffix.data() + suffix.size());
-    const int xpos = result - dec_key.data();
-    return xpos + suffix.size() <= dec_key.size();
-  }
-
-  virtual bool Filter(int level,
-                      const rocksdb::Slice& key,
-                      const rocksdb::Slice& existing_value,
-                      std::string* new_value,
-                      bool* value_changed) const {
-    *value_changed = false;
-
-    // Only filter transaction rows.
-    if (!IsTransactionRecord(key)) {
-      return false;
-    }
-    // Parse MVCC metadata for inlined value.
-    cockroach::storage::engine::MVCCMetadata meta;
-    if (!meta.ParseFromArray(existing_value.data(), existing_value.size())) {
-      // *error_msg = (char*)"failed to parse mvcc metadata entry";
-      return false;
-    }
-    if (!meta.has_raw_bytes()) {
-      // *error_msg = (char*)"not an inlined mvcc value";
-      return false;
-    }
-    // Transaction rows are GC'd if their timestamp is older than
-    // the system-wide minimum write intent timestamp. This
-    // system-wide minimum write intent is periodically computed via
-    // map-reduce over all ranges and gossiped.
-    cockroach::roachpb::Transaction txn;
-    if (!ParseProtoFromValue(meta.raw_bytes(), &txn)) {
-      // *error_msg = (char*)"failed to parse transaction entry";
-      return false;
-    }
-    if (txn.timestamp().wall_time() <= min_txn_ts_) {
-      return true;
-    }
-    return false;
-  }
-
-  virtual const char* Name() const {
-    return "cockroach_compaction_filter";
-  }
-
- private:
-  const int64_t min_txn_ts_;
-};
-
-class DBCompactionFilterFactory : public rocksdb::CompactionFilterFactory {
- public:
-  DBCompactionFilterFactory() {}
-
-  virtual std::unique_ptr<rocksdb::CompactionFilter> CreateCompactionFilter(
-      const rocksdb::CompactionFilter::Context& context) override {
-    google::protobuf::MutexLock l(&mu_); // Protect access to gc timeouts.
-    return std::unique_ptr<rocksdb::CompactionFilter>(
-        new DBCompactionFilter(min_txn_ts_));
-  }
-
-  virtual const char* Name() const override {
-    return "cockroach_compaction_filter_factory";
-  }
-
-  void SetGCTimeouts(int64_t min_txn_ts) {
-    google::protobuf::MutexLock l(&mu_);
-    min_txn_ts_ = min_txn_ts;
-  }
-
- private:
-  google::protobuf::Mutex mu_; // Protects values below.
-  int64_t min_txn_ts_;
-};
 
 class DBComparator : public rocksdb::Comparator {
  public:
@@ -1305,7 +1195,6 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
 
   rocksdb::Options options(rocksdb::DBOptions(), cf_options);
   options.allow_os_buffer = db_opts.allow_os_buffer;
-  options.compaction_filter_factory.reset(new DBCompactionFilterFactory());
   options.comparator = &kComparator;
   options.create_if_missing = true;
   options.info_log.reset(new DBLogger(db_opts.logging_enabled));
@@ -1346,12 +1235,6 @@ DBStatus DBFlush(DBEngine* db) {
   rocksdb::FlushOptions options;
   options.wait = true;
   return ToDBStatus(db->rep->Flush(options));
-}
-
-void DBSetGCTimeouts(DBEngine * db, int64_t min_txn_ts) {
-  DBCompactionFilterFactory *db_cff =
-      (DBCompactionFilterFactory*)db->rep->GetOptions().compaction_filter_factory.get();
-  db_cff->SetGCTimeouts(min_txn_ts);
 }
 
 DBStatus DBCompactRange(DBEngine* db, DBKey* start, DBKey* end) {

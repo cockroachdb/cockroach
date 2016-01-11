@@ -212,11 +212,6 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	return capacity, nil
 }
 
-// SetGCTimeouts calls through to the DBEngine's SetGCTimeouts method.
-func (r *RocksDB) SetGCTimeouts(minTxnTS int64) {
-	C.DBSetGCTimeouts(r.rdb, C.int64_t(minTxnTS))
-}
-
 // CompactRange compacts the specified key range. Specifying nil for
 // the start key starts the compaction from the start of the database.
 // Similarly, specifying nil for the end key will compact through the
@@ -347,10 +342,6 @@ func (r *rocksDBSnapshot) Capacity() (roachpb.StoreCapacity, error) {
 	return r.parent.Capacity()
 }
 
-// SetGCTimeouts is a noop for a snapshot.
-func (r *rocksDBSnapshot) SetGCTimeouts(minTxnTS int64) {
-}
-
 // ApproximateSize returns the approximate number of bytes the engine is
 // using to store data for the given range of keys.
 func (r *rocksDBSnapshot) ApproximateSize(start, end MVCCKey) (uint64, error) {
@@ -443,10 +434,6 @@ func (r *rocksDBBatch) Clear(key MVCCKey) error {
 
 func (r *rocksDBBatch) Capacity() (roachpb.StoreCapacity, error) {
 	return r.parent.Capacity()
-}
-
-func (r *rocksDBBatch) SetGCTimeouts(minTxnTS int64) {
-	// no-op
 }
 
 func (r *rocksDBBatch) ApproximateSize(start, end MVCCKey) (uint64, error) {
