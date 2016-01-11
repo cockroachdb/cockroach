@@ -1069,21 +1069,26 @@ func (r *Replica) handleRaftReady() error {
 	r.Unlock()
 	logRaftReady(r.store.StoreID(), r.RangeID, rd)
 
+	batch := r.store.Engine().NewBatch()
+	defer batch.Close()
 	if !raft.IsEmptySnap(rd.Snapshot) {
-		if err := r.applySnapshot(rd.Snapshot); err != nil {
+		if err := r.applySnapshot(batch, rd.Snapshot); err != nil {
 			return err
 		}
 		// TODO(bdarnell): update coalesced heartbeat mapping with snapshot info.
 	}
 	if len(rd.Entries) > 0 {
-		if err := r.append(rd.Entries); err != nil {
+		if err := r.append(batch, rd.Entries); err != nil {
 			return err
 		}
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
-		if err := r.setHardState(rd.HardState); err != nil {
+		if err := r.setHardState(batch, rd.HardState); err != nil {
 			return err
 		}
+	}
+	if err := batch.Commit(); err != nil {
+		return err
 	}
 
 	for _, msg := range rd.Messages {
