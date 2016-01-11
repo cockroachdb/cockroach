@@ -36,7 +36,7 @@ import (
 // guards all the inner fields.
 
 // InitialState implements the raft.Storage interface.
-// InitialState requires that the replica read lock be held.
+// InitialState requires that the replica lock be held.
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var hs raftpb.HardState
 	found, err := engine.MVCCGetProto(r.store.Engine(), keys.RaftHardStateKey(r.RangeID),
@@ -83,7 +83,7 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // maxBytes. Passing maxBytes equal to zero disables size checking.
 // TODO(bdarnell): consider caching for recent entries, if rocksdb's builtin caching
 // is insufficient.
-// Entries requires that the replica read lock is held.
+// Entries requires that the replica lock is held.
 func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	if lo > hi {
 		return nil, util.Errorf("lo:%d is greater than hi:%d", lo, hi)
@@ -165,7 +165,7 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 }
 
 // Term implements the raft.Storage interface.
-// Term requires that the replica read lock is held.
+// Term requires that the replica lock is held.
 func (r *Replica) Term(i uint64) (uint64, error) {
 	ents, err := r.Entries(i, i+1, 0)
 	if err == raft.ErrCompacted {
@@ -195,12 +195,12 @@ func (r *Replica) LastIndex() (uint64, error) {
 // current entry. This includes both entries that have been compacted away
 // and the dummy entries that make up the starting point of an empty log.
 func (r *Replica) raftTruncatedState() (roachpb.RaftTruncatedState, error) {
-	r.RLock()
-	defer r.RUnlock()
+	r.Lock()
+	defer r.Unlock()
 	return r.raftTruncatedStateLocked()
 }
 
-// raftTruncatedState requires that the replica read lock be held.
+// raftTruncatedState requires that the replica lock be held.
 func (r *Replica) raftTruncatedStateLocked() (roachpb.RaftTruncatedState, error) {
 	if ts := r.getCachedTruncatedState(); ts != nil {
 		return *ts, nil
@@ -231,7 +231,7 @@ func (r *Replica) raftTruncatedStateLocked() (roachpb.RaftTruncatedState, error)
 }
 
 // FirstIndex implements the raft.Storage interface.
-// FirstIndex requires that the replica read lock is held.
+// FirstIndex requires that the replica lock is held.
 func (r *Replica) FirstIndex() (uint64, error) {
 	ts, err := r.raftTruncatedStateLocked()
 	if err != nil {
@@ -241,7 +241,7 @@ func (r *Replica) FirstIndex() (uint64, error) {
 }
 
 // loadAppliedIndexLocked retrieves the applied index from the supplied engine.
-// loadAppliedIndexLocked requires that the replica read lock is held.
+// loadAppliedIndexLocked requires that the replica lock is held.
 func (r *Replica) loadAppliedIndexLocked(eng engine.Engine) (uint64, error) {
 	var appliedIndex uint64
 	if r.isInitializedLocked() {
@@ -278,13 +278,13 @@ func setAppliedIndex(eng engine.Engine, rangeID roachpb.RangeID, appliedIndex ui
 
 // loadLastIndex retrieves the last index from storage.
 func (r *Replica) loadLastIndex() (uint64, error) {
-	r.RLock()
-	defer r.RUnlock()
+	r.Lock()
+	defer r.Unlock()
 	return r.loadLastIndexLocked()
 }
 
 // loadLastIndexLocked retrieves the last index from storage.
-// loadLastIndexLocked requires that the replica read lock is held.
+// loadLastIndexLocked requires that the replica lock is held.
 func (r *Replica) loadLastIndexLocked() (uint64, error) {
 	lastIndex := uint64(0)
 	v, _, err := engine.MVCCGet(r.store.Engine(),
@@ -324,7 +324,7 @@ func setLastIndex(eng engine.Engine, rangeID roachpb.RangeID, lastIndex uint64) 
 }
 
 // Snapshot implements the raft.Storage interface.
-// Snapshot requires that the replica read lock is held.
+// Snapshot requires that the replica lock is held.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	// Copy all the data from a consistent RocksDB snapshot into a RaftSnapshotData.
 	snap := r.store.NewSnapshot()
