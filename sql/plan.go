@@ -51,10 +51,10 @@ type planner struct {
 
 	testingVerifyMetadata func(config.SystemConfig) error
 
-	parser                   parser.Parser
-	extractAggregatesVisitor extractAggregatesVisitor
-	params                   parameters
-	subqueryVisitor          subqueryVisitor
+	parser             parser.Parser
+	isAggregateVisitor isAggregateVisitor
+	params             parameters
+	subqueryVisitor    subqueryVisitor
 }
 
 func (p *planner) setTxn(txn *client.Txn, timestamp time.Time) {
