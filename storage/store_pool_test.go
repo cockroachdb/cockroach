@@ -113,7 +113,7 @@ func waitUntilDead(t *testing.T, mc *hlc.ManualClock, sp *StorePool, storeID roa
 	})
 }
 
-// TestStorePoolGossipUpdate ensures that a store is marked as dead after it
+// TestStorePoolDies ensures that a store is marked as dead after it
 // times out and that it will be revived after a new update is received.
 func TestStorePoolDies(t *testing.T) {
 	defer leaktest.AfterTest(t)
