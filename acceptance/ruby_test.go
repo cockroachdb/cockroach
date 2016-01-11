@@ -18,17 +18,21 @@
 
 package acceptance
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 // TestRuby connects to a cluster with ruby.
 func TestRuby(t *testing.T) {
-	testDocker(t, "ruby", []string{"ruby", "-e", ruby})
+	testDockerSuccess(t, "ruby", []string{"ruby", "-e", fmt.Sprintf(ruby, 3)})
+	testDockerFail(t, "ruby", []string{"ruby", "-e", fmt.Sprintf(ruby, `"a"`)})
 }
 
 const ruby = `
 require 'pg'
 
 conn = PG.connect()
-res = conn.exec_params('SELECT 1, 2 > $1, $1', [3])
+res = conn.exec_params('SELECT 1, 2 > $1, $1', [%v])
 raise 'Unexpected: ' + res.values.to_s unless res.values == [["1", "f", "3"]]
 `
