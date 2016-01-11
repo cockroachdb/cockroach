@@ -466,6 +466,20 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp 
 	r.llMu.Lock()
 	defer r.llMu.Unlock()
 
+	// This is subtle: suppose the following happens:
+	// - Node A acquires the leader lease
+	// - Node B attempts to service a command, and redirects to Node A
+	// - Node A dies
+	// - Node B retries, redirecting to Node A indefinitely, because Node B's
+	// leader lease cache is never invalidated, since it will always satisfy
+	// the command's timestamp, which does not advance.
+	//
+	// To deal with this, we do not consider a leader lease in effect unless it
+	// covers the greater of the command's timestamp and the current node's
+	// clock's timestamp. This is kind of a hack, but we don't have a better way
+	// of invalidating the leader lease cache.
+	timestamp.Forward(r.store.Clock().Now())
+
 	if lease := r.getLease(); lease.Covers(timestamp) {
 		if lease.OwnedBy(r.store.StoreID()) {
 			// Happy path: We have an active lease, nothing to do.
