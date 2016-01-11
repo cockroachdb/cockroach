@@ -203,7 +203,7 @@ func (t *logicTest) setUser(tempDir, user string) {
 
 	// The entire tempDir will be deleted later, so the cleanup function can be
 	// ignored.
-	pgUrl, _ := sqlutils.PGUrl(t.srv, t.T, user, tempDir, "TestLogic")
+	pgUrl, _ := sqlutils.PGUrl(t.T, t.srv, user, tempDir, "TestLogic")
 	db, err := sql.Open("postgres", pgUrl.String())
 	if err != nil {
 		t.Fatal(err)
