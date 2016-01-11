@@ -399,8 +399,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) {
 	if err := bq.impl.process(clock.Now(), repl, cfg); err != nil {
 		bq.eventLog.Errorf("%s: error: %v", repl, err)
 	} else {
-		bq.eventLog.Infof(log.V(2), "%s: done: %0.2fms", repl,
-			time.Since(start).Seconds()*1000)
+		bq.eventLog.Infof(log.V(2), "%s: done: %s", repl, time.Since(start))
 	}
 }
 
