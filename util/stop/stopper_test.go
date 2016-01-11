@@ -120,11 +120,7 @@ func TestStopperMultipleStopees(t *testing.T) {
 		close(done)
 	}()
 
-	select {
-	case <-done:
-	case <-time.After(10 * time.Millisecond):
-		t.Errorf("timed out waiting for stop")
-	}
+	<-done
 }
 
 func TestStopperStartFinishTasks(t *testing.T) {
