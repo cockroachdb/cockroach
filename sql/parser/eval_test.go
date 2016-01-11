@@ -137,9 +137,15 @@ func TestEval(t *testing.T) {
 		{`'TEST' LIKE 'TE%'`, `true`},
 		{`'TEST' LIKE '%E%'`, `true`},
 		{`'TEST' LIKE 'TES_'`, `true`},
+		{`'TEST' LIKE 'TE_%'`, `true`},
 		{`'TEST' LIKE 'TE_'`, `false`},
+		{`'TEST' LIKE '%'`, `true`},
 		{`'TEST' LIKE '%R'`, `false`},
 		{`'TEST' LIKE 'TESTER'`, `false`},
+		{`'TEST' LIKE ''`, `false`},
+		{`'' LIKE ''`, `true`},
+		{`'T' LIKE '_'`, `true`},
+		{`'TE' LIKE '_'`, `false`},
 		{`'TEST' NOT LIKE '%E%'`, `false`},
 		{`'TEST' NOT LIKE 'TES_'`, `false`},
 		{`'TEST' NOT LIKE 'TE_'`, `true`},
@@ -384,7 +390,7 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 		{LT, `0`, `1`, 0},
 		// LIKE and NOT LIKE
 		{Like, `TEST`, `T%T`, 1},
-		{NotLike, `TEST`, `%E%`, 1},
+		{NotLike, `TEST`, `%E%T`, 1},
 		// SIMILAR TO and NOT SIMILAR TO
 		{SimilarTo, `abc`, `(b|c)%`, 1},
 		{NotSimilarTo, `abc`, `%(b|d)%`, 1},
@@ -431,23 +437,37 @@ func TestSimilarEscape(t *testing.T) {
 	}
 }
 
-var optimizedLikePatterns = []string{
+var benchmarkLikePatterns = []string{
 	`test%`,
 	`%test%`,
 	`%test`,
+	``,
+	`%`,
+	`_`,
+	`test`,
+	`bad`,
+	`also\%`,
 }
 
 func benchmarkLike(b *testing.B, ctx EvalContext) {
 	likeFn := cmpOps[cmpArgs{Like, stringType, stringType}].fn
-	for n := 0; n < b.N; n++ {
-		for _, p := range optimizedLikePatterns {
-			likeFn(ctx, DString("test"), DString(p))
+	iter := func() {
+		for _, p := range benchmarkLikePatterns {
+			if _, err := likeFn(ctx, DString("test"), DString(p)); err != nil {
+				b.Fatalf("LIKE evaluation failed with error: %v", err)
+			}
 		}
+	}
+	// Warm up cache, if applicable
+	iter()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		iter()
 	}
 }
 
 func BenchmarkLikeWithCache(b *testing.B) {
-	benchmarkLike(b, EvalContext{ReCache: NewRegexpCache(len(optimizedLikePatterns))})
+	benchmarkLike(b, EvalContext{ReCache: NewRegexpCache(len(benchmarkLikePatterns))})
 }
 
 func BenchmarkLikeWithoutCache(b *testing.B) {
