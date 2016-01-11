@@ -108,6 +108,7 @@ func goroutineLeaked() bool {
 func AfterTest(t testing.TB) {
 	if atomic.LoadInt32(&hasFailed) > 0 {
 		t.Log("prior leak detected, leaktest disabled")
+		return
 	}
 	if r := recover(); r != nil {
 		// Don't bother with leaktest if we're recovering from a panic.
