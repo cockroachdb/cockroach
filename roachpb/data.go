@@ -225,7 +225,7 @@ func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
 }
 
 // Next returns the timestamp with the next later timestamp.
-func (t *Timestamp) Next() Timestamp {
+func (t Timestamp) Next() Timestamp {
 	if t.Logical == math.MaxInt32 {
 		if t.WallTime == math.MaxInt64 {
 			panic("cannot take the next value to a max timestamp")
@@ -241,7 +241,7 @@ func (t *Timestamp) Next() Timestamp {
 }
 
 // Prev returns the next earliest timestamp.
-func (t *Timestamp) Prev() Timestamp {
+func (t Timestamp) Prev() Timestamp {
 	if t.Logical > 0 {
 		return Timestamp{
 			WallTime: t.WallTime,
