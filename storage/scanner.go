@@ -208,15 +208,15 @@ func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 
 		for {
 			var shouldStop bool
-			if rs.replicas.EstimatedCount() == 0 {
-				// Just wait without processing any replica.
+			count := 0
+			rs.replicas.Visit(func(repl *Replica) bool {
+				count++
+				shouldStop = rs.waitAndProcess(start, clock, stopper, repl)
+				return !shouldStop
+			})
+			if count == 0 {
+				// No replicas processed, just wait.
 				shouldStop = rs.waitAndProcess(start, clock, stopper, nil)
-			} else {
-				shouldStop = true
-				rs.replicas.Visit(func(repl *Replica) bool {
-					shouldStop = rs.waitAndProcess(start, clock, stopper, repl)
-					return !shouldStop
-				})
 			}
 
 			shouldStop = shouldStop || !stopper.RunTask(func() {
