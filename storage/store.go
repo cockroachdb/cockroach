@@ -1511,9 +1511,9 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	if err != nil {
 		return err
 	}
-	r.Lock()
-	err = r.raftGroup.Step(req.Message)
-	r.Unlock()
+	r.mu.Lock()
+	err = r.mu.raftGroup.Step(req.Message)
+	r.mu.Unlock()
 	if err != nil {
 		return err
 	}
@@ -1584,9 +1584,9 @@ func (s *Store) processRaft() {
 				// TODO(bdarnell): rework raft ticker.
 				s.Lock()
 				for rangeID, r := range s.replicas {
-					r.Lock()
-					r.raftGroup.Tick()
-					r.Unlock()
+					r.mu.Lock()
+					r.mu.raftGroup.Tick()
+					r.mu.Unlock()
 					s.pendingRaftGroups[rangeID] = struct{}{}
 				}
 				s.Unlock()

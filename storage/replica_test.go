@@ -665,7 +665,9 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
 	now := roachpb.Timestamp{WallTime: tc.manualClock.UnixNano()}
 
-	baseRTS, _ := tc.rng.tsCache.GetMax(roachpb.Key("a"), nil /* end */, nil /* txn */)
+	tc.rng.mu.Lock()
+	baseRTS, _ := tc.rng.mu.tsCache.GetMax(roachpb.Key("a"), nil /* end */, nil /* txn */)
+	tc.rng.mu.Unlock()
 	baseLowWater := baseRTS.WallTime
 
 	testCases := []struct {
@@ -697,7 +699,9 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 			},
 		})
 		// Verify expected low water mark.
-		rTS, wTS := tc.rng.tsCache.GetMax(roachpb.Key("a"), nil, nil)
+		tc.rng.mu.Lock()
+		rTS, wTS := tc.rng.mu.tsCache.GetMax(roachpb.Key("a"), nil, nil)
+		tc.rng.mu.Unlock()
 		if rTS.WallTime != test.expLowWater || wTS.WallTime != test.expLowWater {
 			t.Errorf("%d: expected low water %d; got %d, %d", i, test.expLowWater, rTS.WallTime, wTS.WallTime)
 		}
@@ -1079,17 +1083,19 @@ func TestRangeUpdateTSCache(t *testing.T) {
 		t.Error(pErr)
 	}
 	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
-	rTS, wTS := tc.rng.tsCache.GetMax(roachpb.Key("a"), nil, nil)
+	tc.rng.mu.Lock()
+	defer tc.rng.mu.Unlock()
+	rTS, wTS := tc.rng.mu.tsCache.GetMax(roachpb.Key("a"), nil, nil)
 	if rTS.WallTime != t0.Nanoseconds() || wTS.WallTime != 0 {
 		t.Errorf("expected rTS=1s and wTS=0s, but got %s, %s", rTS, wTS)
 	}
 	// Verify the timestamp cache has rTS=0s and wTS=2s for "b".
-	rTS, wTS = tc.rng.tsCache.GetMax(roachpb.Key("b"), nil, nil)
+	rTS, wTS = tc.rng.mu.tsCache.GetMax(roachpb.Key("b"), nil, nil)
 	if rTS.WallTime != 0 || wTS.WallTime != t1.Nanoseconds() {
 		t.Errorf("expected rTS=0s and wTS=2s, but got %s, %s", rTS, wTS)
 	}
 	// Verify another key ("c") has 0sec in timestamp cache.
-	rTS, wTS = tc.rng.tsCache.GetMax(roachpb.Key("c"), nil, nil)
+	rTS, wTS = tc.rng.mu.tsCache.GetMax(roachpb.Key("c"), nil, nil)
 	if rTS.WallTime != 0 || wTS.WallTime != 0 {
 		t.Errorf("expected rTS=0s and wTS=0s, but got %s %s", rTS, wTS)
 	}
@@ -2774,9 +2780,9 @@ func TestTruncateLog(t *testing.T) {
 	}
 
 	// FirstIndex has changed.
-	tc.rng.Lock()
+	tc.rng.mu.Lock()
 	firstIndex, err := tc.rng.FirstIndex()
-	tc.rng.Unlock()
+	tc.rng.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2785,9 +2791,9 @@ func TestTruncateLog(t *testing.T) {
 	}
 
 	// We can still get what remains of the log.
-	tc.rng.Lock()
+	tc.rng.mu.Lock()
 	entries, err := tc.rng.Entries(indexes[5], indexes[9], math.MaxUint64)
-	tc.rng.Unlock()
+	tc.rng.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2796,17 +2802,17 @@ func TestTruncateLog(t *testing.T) {
 	}
 
 	// But any range that includes the truncated entries returns an error.
-	tc.rng.Lock()
+	tc.rng.mu.Lock()
 	_, err = tc.rng.Entries(indexes[4], indexes[9], math.MaxUint64)
-	tc.rng.Unlock()
+	tc.rng.mu.Unlock()
 	if err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
 	}
 
 	// The term of the last truncated entry is still available.
-	tc.rng.Lock()
+	tc.rng.mu.Lock()
 	term, err := tc.rng.Term(indexes[4])
-	tc.rng.Unlock()
+	tc.rng.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2815,9 +2821,9 @@ func TestTruncateLog(t *testing.T) {
 	}
 
 	// The terms of older entries are gone.
-	tc.rng.Lock()
+	tc.rng.mu.Lock()
 	_, err = tc.rng.Term(indexes[3])
-	tc.rng.Unlock()
+	tc.rng.mu.Unlock()
 	if err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
 	}
@@ -2836,10 +2842,10 @@ func TestTruncateLog(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	tc.rng.Lock()
+	tc.rng.mu.Lock()
 	// The term of the last truncated entry is still available.
 	term, err = tc.rng.Term(indexes[4])
-	tc.rng.Unlock()
+	tc.rng.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3629,9 +3635,9 @@ func TestEntries(t *testing.T) {
 		// Case 14: lo is available, hi is not, but it was cut off by maxBytes.
 		{lo: indexes[5], hi: indexes[9] + 1000, maxBytes: 1, expResultCount: 1},
 	} {
-		rng.Lock()
+		rng.mu.Lock()
 		ents, err := rng.Entries(tc.lo, tc.hi, tc.maxBytes)
-		rng.Unlock()
+		rng.mu.Unlock()
 		if tc.expError == nil && err != nil {
 			t.Errorf("%d: expected no error, got %s", i, err)
 			continue
@@ -3645,11 +3651,11 @@ func TestEntries(t *testing.T) {
 	}
 
 	// Case 15: Lo must be less than or equal to hi.
-	rng.Lock()
+	rng.mu.Lock()
 	if _, err := rng.Entries(indexes[9], indexes[5], 0); err == nil {
 		t.Errorf("15: error expected, got none")
 	}
-	rng.Unlock()
+	rng.mu.Unlock()
 
 	// Case 16: add a gap to the indexes.
 	if err := engine.MVCCDelete(tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), roachpb.ZeroTimestamp,
@@ -3657,8 +3663,8 @@ func TestEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rng.Lock()
-	defer rng.Unlock()
+	rng.mu.Lock()
+	defer rng.mu.Unlock()
 	if _, err := rng.Entries(indexes[5], indexes[9], 0); err == nil {
 		t.Errorf("16: error expected, got none")
 	}
@@ -3709,8 +3715,8 @@ func TestTerm(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	rng.Lock()
-	defer rng.Unlock()
+	rng.mu.Lock()
+	defer rng.mu.Unlock()
 
 	firstIndex, err := rng.FirstIndex()
 	if err != nil {
