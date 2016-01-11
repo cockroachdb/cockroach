@@ -88,6 +88,9 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	// Enable the raft log scanner and and force a truncation.
 	store.DisableRaftLogQueue(false)
 	store.ForceRaftLogScanAndProcess()
+	// Wait for tasks to finish, in case the processLoop grabbed the event
+	// before ForceRaftLogScanAndProcess but is still working on it.
+	stopper.Quiesce()
 
 	r.RLock()
 	newFirstIndex, err := r.FirstIndex()
@@ -97,7 +100,6 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	}
 
 	if newFirstIndex <= firstIndex {
-		t.Skip("flaky test: #3702")
 		t.Errorf("log was not correctly truncated, older first index:%d, current first index:%d", firstIndex,
 			newFirstIndex)
 	}
