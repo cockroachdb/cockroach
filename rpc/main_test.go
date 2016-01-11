@@ -38,12 +38,10 @@ func init() {
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
 
 func TestMain(m *testing.M) {
-	defer func(hbInterval time.Duration, retryOpts retry.Options) {
-		heartbeatInterval = hbInterval
+	defer func(retryOpts retry.Options) {
 		clientRetryOptions = retryOpts
-	}(heartbeatInterval, clientRetryOptions)
+	}(clientRetryOptions)
 
-	heartbeatInterval = 10 * time.Millisecond
 	clientRetryOptions = retry.Options{
 		InitialBackoff: 1 * time.Millisecond,
 		MaxBackoff:     1 * time.Millisecond,
@@ -58,7 +56,9 @@ func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *Context {
 	if clock == nil {
 		clock = hlc.NewClock(hlc.UnixNano)
 	}
-	return NewContext(testutils.NewNodeTestBaseContext(), clock, stopper)
+	ctx := NewContext(testutils.NewNodeTestBaseContext(), clock, stopper)
+	ctx.heartbeatInterval = 10 * time.Millisecond
+	return ctx
 }
 
 func newTestServer(t *testing.T, ctx *Context, manual bool) (*Server, net.Listener) {

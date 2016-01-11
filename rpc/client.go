@@ -37,6 +37,7 @@ import (
 
 const (
 	defaultHeartbeatInterval = 3 * time.Second
+	defaultHeartbeatTimeout  = 2 * defaultHeartbeatInterval
 
 	// Affects maximum error in reading the clock of the remote. 1.5 seconds is
 	// the longest NTP allows for a remote clock reading. After 1.5 seconds, we
@@ -45,9 +46,8 @@ const (
 )
 
 var (
-	clientMu          sync.Mutex         // Protects access to the client cache.
-	clients           map[string]*Client // Cache of RPC clients.
-	heartbeatInterval = defaultHeartbeatInterval
+	clientMu sync.Mutex         // Protects access to the client cache.
+	clients  map[string]*Client // Cache of RPC clients.
 	// TODO(tschottdorf) err{Closed,Unstarted} are candidates for NodeUnavailableError.
 	errClosed    = errors.New("client is closed")
 	errUnstarted = errors.New("not started yet")
@@ -91,6 +91,8 @@ type Client struct {
 	clock             *hlc.Clock
 	remoteClocks      *RemoteClockMonitor
 	remoteOffset      RemoteOffset
+	heartbeatInterval time.Duration
+	heartbeatTimeout  time.Duration
 }
 
 // NewClient returns a client RPC stub for the specified address
@@ -131,6 +133,15 @@ func NewClient(addr net.Addr, context *Context) *Client {
 		disableReconnects: context.DisableReconnects,
 		clock:             context.localClock,
 		remoteClocks:      context.RemoteClocks,
+		heartbeatInterval: context.heartbeatInterval,
+		heartbeatTimeout:  context.heartbeatTimeout,
+	}
+
+	if c.heartbeatInterval == 0 {
+		c.heartbeatInterval = defaultHeartbeatInterval
+	}
+	if c.heartbeatTimeout == 0 {
+		c.heartbeatTimeout = defaultHeartbeatTimeout
 	}
 
 	c.healthy.Store(make(chan struct{}))
@@ -248,6 +259,18 @@ func (c *Client) close() {
 	}
 }
 
+func (c *Client) maybeClose(extCloser <-chan struct{}) bool {
+	select {
+	case <-c.closer:
+		return true
+	case <-extCloser:
+		c.close()
+		return true
+	default:
+		return false
+	}
+}
+
 // runHeartbeat sends periodic heartbeats to client, marking the client healthy
 // or unhealthy and reconnecting appropriately until either the Client or the
 // supplied channel is closed.
@@ -280,13 +303,8 @@ func (c *Client) runHeartbeat(retryOpts retry.Options) {
 	var err = errUnstarted // initial condition
 	for {
 		for r := retry.Start(retryOpts); r.Next(); {
-			select {
-			case <-c.closer:
+			if c.maybeClose(retryOpts.Closer) {
 				return
-			case <-retryOpts.Closer:
-				c.close()
-				return
-			default:
 			}
 
 			// Reconnect on failure.
@@ -306,6 +324,9 @@ func (c *Client) runHeartbeat(retryOpts retry.Options) {
 			if err = c.heartbeat(retryOpts.Closer); err != nil {
 				setUnhealthy()
 				log.Warning(err)
+				if c.maybeClose(retryOpts.Closer) {
+					return
+				}
 				continue
 			}
 
@@ -321,7 +342,7 @@ func (c *Client) runHeartbeat(retryOpts retry.Options) {
 		case <-retryOpts.Closer:
 			c.close()
 			return
-		case <-time.After(heartbeatInterval):
+		case <-time.After(c.heartbeatInterval):
 			// TODO(tamird): Perhaps retry more aggressively when the client is unhealthy.
 		}
 	}
@@ -357,8 +378,8 @@ func (c *Client) heartbeat(closer <-chan struct{}) error {
 		if err := call.Error; err != nil {
 			return err
 		}
-	case <-time.After(2 * heartbeatInterval):
-		return util.Errorf("heartbeat timed out after %s", 2*heartbeatInterval)
+	case <-time.After(c.heartbeatTimeout):
+		return util.Errorf("heartbeat timed out after %s", c.heartbeatTimeout)
 	}
 
 	receiveTime := c.clock.PhysicalNow()

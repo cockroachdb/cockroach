@@ -34,7 +34,7 @@ var (
 )
 
 func init() {
-	monitorInterval = heartbeatInterval * 10
+	monitorInterval = defaultHeartbeatInterval * 10
 }
 
 // RemoteClockMonitor keeps track of the most recent measurements of remote

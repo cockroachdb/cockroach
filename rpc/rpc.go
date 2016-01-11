@@ -19,6 +19,9 @@ type Context struct {
 	DisableCache      bool // Disable client cache when calling NewClient()
 	DisableReconnects bool // Disable client reconnects
 	HealthWait        time.Duration
+
+	heartbeatInterval time.Duration
+	heartbeatTimeout  time.Duration
 }
 
 // NewContext creates an rpc Context with the supplied values.
