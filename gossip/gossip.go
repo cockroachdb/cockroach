@@ -559,7 +559,7 @@ type Callback func(string, roachpb.Value)
 // matched pattern. Returns a function to unregister the callback.
 func (g *Gossip) RegisterCallback(pattern string, method Callback) func() {
 	if pattern == KeySystemConfig {
-		log.Warning("raw gossip callback registered on %s, consider using RegisterSystemConfigCallback",
+		log.Warningf("raw gossip callback registered on %s, consider using RegisterSystemConfigChannel",
 			KeySystemConfig)
 	}
 
@@ -580,8 +580,6 @@ func (g *Gossip) GetSystemConfig() *config.SystemConfig {
 	defer g.systemConfigMu.RUnlock()
 	return g.systemConfig
 }
-
-type systemConfigCallback func(*config.SystemConfig)
 
 // RegisterSystemConfigChannel registers a channel to signify updates for the
 // system config. It is notified after registration, and whenever a new
