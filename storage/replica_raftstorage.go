@@ -395,13 +395,10 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 }
 
 // append the given entries to the raft log.
-func (r *Replica) append(entries []raftpb.Entry) error {
+func (r *Replica) append(batch engine.Engine, entries []raftpb.Entry) error {
 	if len(entries) == 0 {
 		return nil
 	}
-	batch := r.store.Engine().NewBatch()
-	defer batch.Close()
-
 	for _, ent := range entries {
 		err := engine.MVCCPutProto(batch, nil, keys.RaftLogKey(r.RangeID, ent.Index),
 			roachpb.ZeroTimestamp, nil, &ent)
@@ -424,11 +421,10 @@ func (r *Replica) append(entries []raftpb.Entry) error {
 	if err := setLastIndex(batch, r.RangeID, lastIndex); err != nil {
 		return err
 	}
-	if err := batch.Commit(); err != nil {
-		return err
-	}
+	batch.Defer(func() {
+		atomic.StoreUint64(&r.lastIndex, lastIndex)
+	})
 
-	atomic.StoreUint64(&r.lastIndex, lastIndex)
 	return nil
 }
 
@@ -464,7 +460,7 @@ func (r *Replica) updateRangeInfo() error {
 }
 
 // applySnapshot updates the replica based on the given snapshot.
-func (r *Replica) applySnapshot(snap raftpb.Snapshot) error {
+func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) error {
 	snapData := roachpb.RaftSnapshotData{}
 	err := proto.Unmarshal(snap.Data, &snapData)
 	if err != nil {
@@ -473,10 +469,15 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot) error {
 
 	rangeID := r.RangeID
 
-	// First, save the HardState.  The HardState must not be changed
-	// because it may record a previous vote cast by this node.
+	// First, save the HardState. The HardState must not be changed
+	// because it may record a previous vote cast by this node. This is
+	// usually unnecessary because a snapshot is nearly always
+	// accompanied by a new HardState which incorporates both our former
+	// state and new information from the leader, but in the event that
+	// the HardState has not changed, we want to use our own previous
+	// HardState and not one that was transmitted via the snapshot.
 	hardStateKey := keys.RaftHardStateKey(rangeID)
-	hardState, _, err := engine.MVCCGet(r.store.Engine(), hardStateKey, roachpb.ZeroTimestamp, true /* consistent */, nil)
+	hardState, _, err := engine.MVCCGet(batch, hardStateKey, roachpb.ZeroTimestamp, true /* consistent */, nil)
 	if err != nil {
 		return err
 	}
@@ -484,11 +485,8 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot) error {
 	// Extract the updated range descriptor.
 	desc := snapData.RangeDescriptor
 
-	batch := r.store.Engine().NewBatch()
-	defer batch.Close()
-
 	// Delete everything in the range and recreate it from the snapshot.
-	iter := newReplicaDataIterator(&desc, r.store.Engine())
+	iter := newReplicaDataIterator(&desc, batch)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		if err := batch.Clear(iter.Key()); err != nil {
@@ -545,38 +543,36 @@ func (r *Replica) applySnapshot(snap raftpb.Snapshot) error {
 		return err
 	}
 
-	if err := batch.Commit(); err != nil {
-		return err
-	}
+	batch.Defer(func() {
+		// Update the range stats.
+		r.stats.Replace(newStats)
 
-	// Update the range stats.
-	r.stats.Replace(newStats)
+		// As outlined above, last and applied index are the same after applying
+		// the snapshot.
+		atomic.StoreUint64(&r.lastIndex, snap.Metadata.Index)
+		atomic.StoreUint64(&r.appliedIndex, snap.Metadata.Index)
 
-	// As outlined above, last and applied index are the same after applying
-	// the snapshot.
-	atomic.StoreUint64(&r.lastIndex, snap.Metadata.Index)
-	atomic.StoreUint64(&r.appliedIndex, snap.Metadata.Index)
+		// Atomically update the descriptor and lease.
+		if err := r.setDesc(&desc); err != nil {
+			panic(err)
+		}
+		// Update other fields which are uninitialized or need updating.
+		// This may not happen if the system config has not yet been loaded.
+		// While config update will correctly set the fields, there is no order
+		// guarangee in ApplySnapshot.
+		// TODO: should go through the standard store lock when adding a replica.
+		if err := r.updateRangeInfo(); err != nil {
+			panic(err)
+		}
 
-	// Atomically update the descriptor and lease.
-	if err := r.setDesc(&desc); err != nil {
-		return err
-	}
-	// Update other fields which are uninitialized or need updating.
-	// This may not happen if the system config has not yet been loaded.
-	// While config update will correctly set the fields, there is no order
-	// guarangee in ApplySnapshot.
-	// TODO: should go through the standard store lock when adding a replica.
-	if err := r.updateRangeInfo(); err != nil {
-		return err
-	}
-
-	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
+		atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
+	})
 	return nil
 }
 
 // setHardState persists the raft HardState.
-func (r *Replica) setHardState(st raftpb.HardState) error {
-	return engine.MVCCPutProto(r.store.Engine(), nil, keys.RaftHardStateKey(r.RangeID),
+func (r *Replica) setHardState(batch engine.Engine, st raftpb.HardState) error {
+	return engine.MVCCPutProto(batch, nil, keys.RaftHardStateKey(r.RangeID),
 		roachpb.ZeroTimestamp, nil, &st)
 }
 
