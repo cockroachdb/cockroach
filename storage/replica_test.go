@@ -2946,30 +2946,33 @@ func TestAppliedIndex(t *testing.T) {
 // the range as corrupt.
 func TestReplicaCorruption(t *testing.T) {
 	defer leaktest.AfterTest(t)
+
+	defer func() { TestingCommandFilter = nil }()
+	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+		if args.Header().Key.Equal(roachpb.Key("boom")) {
+			return newReplicaCorruptionError()
+		}
+		return nil
+	}
+
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
 
-	args := putArgs(roachpb.Key("test"), []byte("value"))
-	_, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &args)
-	if err != nil {
+	// First send a regular command.
+	args := putArgs(roachpb.Key("test1"), []byte("value"))
+	if _, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &args); err != nil {
 		t.Fatal(err)
 	}
-	// Set the stored applied index sky high.
-	newIndex := 2*atomic.LoadUint64(&tc.rng.appliedIndex) + 1
-	atomic.StoreUint64(&tc.rng.appliedIndex, newIndex)
-	// Not really needed, but let's be thorough.
-	err = setAppliedIndex(tc.rng.store.Engine(), tc.rng.RangeID, newIndex)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Should mark replica corrupt (and panic as a result) since we messed
-	// with the applied index.
-	_, err = client.SendWrapped(tc.Sender(), tc.rng.context(), &args)
 
-	if err == nil || !strings.Contains(err.Error(), "replica corruption (processed=true)") {
+	// maybeSetCorrupt should have been called.
+	args = putArgs(roachpb.Key("boom"), []byte("value"))
+	_, err := client.SendWrapped(tc.Sender(), tc.rng.context(), &args)
+	if !testutils.IsError(err, "replica corruption \\(processed=true\\)") {
 		t.Fatalf("unexpected error: %s", err)
 	}
+
+	// TODO(bdarnell): when maybeSetCorrupt is finished verify that future commands fail too.
 }
 
 // TestChangeReplicasDuplicateError tests that a replica change that would
