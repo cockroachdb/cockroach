@@ -1177,20 +1177,20 @@ func (r *Replica) handleRaftReady() error {
 
 func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	groupID := r.RangeID
-	r.store.mu.RLock()
+	r.store.Lock()
 	toReplica, err := r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.To))
 	if err != nil {
 		log.Warningf("failed to lookup recipient replica %d in group %s: %s", msg.To, groupID, err)
-		r.store.mu.RUnlock()
+		r.store.Unlock()
 		return
 	}
 	fromReplica, err := r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.From))
 	if err != nil {
 		log.Warningf("failed to lookup sender replica %d in group %s: %s", msg.From, groupID, err)
-		r.store.mu.RUnlock()
+		r.store.Unlock()
 		return
 	}
-	r.store.mu.RUnlock()
+	r.store.Unlock()
 	err = r.store.ctx.Transport.Send(&RaftMessageRequest{
 		GroupID:     groupID,
 		ToReplica:   toReplica,
