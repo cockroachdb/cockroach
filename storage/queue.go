@@ -367,7 +367,6 @@ func (bq *baseQueue) processOne(clock *hlc.Clock) {
 // bq.Lock should not be held while calling this method.
 func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) {
 	start := time.Now()
-	now := clock.Now()
 
 	// Load the system config.
 	cfg := bq.gossip.GetSystemConfig()
@@ -389,7 +388,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) {
 	// and renew or acquire if necessary.
 	if bq.impl.needsLeaderLease() {
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-		if err := repl.redirectOnOrAcquireLeaderLease(nil /* Trace */, now); err != nil {
+		if err := repl.redirectOnOrAcquireLeaderLease(nil /* Trace */); err != nil {
 			bq.eventLog.Infof(log.V(3), "%s: could not acquire leader lease; skipping", repl)
 			return
 		}
@@ -397,7 +396,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) {
 
 	bq.eventLog.Infof(log.V(3), "%s: processing", repl)
 
-	if err := bq.impl.process(now, repl, cfg); err != nil {
+	if err := bq.impl.process(clock.Now(), repl, cfg); err != nil {
 		bq.eventLog.Errorf("%s: error: %v", repl, err)
 	} else {
 		bq.eventLog.Infof(log.V(2), "%s: done: %0.2fms", repl,

@@ -60,6 +60,12 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 		}
 	}
 
+	// Update the node clock with the serviced request. This maintains a
+	// high water mark for all ops serviced, so that received ops
+	// without a timestamp specified are guaranteed one higher than any
+	// op already executed for overlapping keys.
+	r.store.Clock().Update(ts)
+
 	var reply roachpb.Response
 	var intents []roachpb.Intent
 	var err error
@@ -147,12 +153,6 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 	if log.V(2) {
 		log.Infof("executed %s command %+v: %+v, err=%s", args.Method(), args, reply, err)
 	}
-
-	// Update the node clock with the serviced request. This maintains a
-	// high water mark for all ops serviced, so that received ops
-	// without a timestamp specified are guaranteed one higher than any
-	// op already executed for overlapping keys.
-	r.store.Clock().Update(ts)
 
 	// Propagate the request timestamp (which may have changed).
 	// TODO(tschottdorf): really? Think this should be done by executeBatch.
