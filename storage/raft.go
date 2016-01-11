@@ -48,68 +48,59 @@ type raftLogger struct {
 	group uint64
 }
 
-func (r *raftLogger) prependContext(format string, v []interface{}) string {
-	var s string
+func (r *raftLogger) context() string {
 	if r.group != 0 {
-		v2 := append([]interface{}{r.group}, v...)
-		s = fmt.Sprintf("[group %d] "+format, v2...)
-	} else {
-		s = fmt.Sprintf(format, v...)
+		return fmt.Sprintf("[group %d] ", r.group)
 	}
-	return s
+	return ""
 }
 
 func (*raftLogger) Debug(v ...interface{}) {
 	if log.V(2) {
-		log.InfoDepth(1, v...)
+		log.InfoDepth(1, "", v...)
 	}
 }
 
 func (r *raftLogger) Debugf(format string, v ...interface{}) {
 	if log.V(2) {
-		s := r.prependContext(format, v)
-		log.InfoDepth(1, s)
+		log.InfoDepth(1, r.context()+format, v...)
 	}
 }
 
 func (*raftLogger) Info(v ...interface{}) {
 	if log.V(1) {
-		log.InfoDepth(1, v...)
+		log.InfoDepth(1, "", v...)
 	}
 }
 
 func (r *raftLogger) Infof(format string, v ...interface{}) {
 	if log.V(1) {
-		s := r.prependContext(format, v)
-		log.InfoDepth(1, s)
+		log.InfoDepth(1, r.context()+format, v...)
 	}
 }
 
 func (*raftLogger) Warning(v ...interface{}) {
-	log.WarningDepth(1, v...)
+	log.WarningDepth(1, "", v...)
 }
 
 func (r *raftLogger) Warningf(format string, v ...interface{}) {
-	s := r.prependContext(format, v)
-	log.WarningDepth(1, s)
+	log.WarningDepth(1, r.context()+format, v...)
 }
 
 func (*raftLogger) Error(v ...interface{}) {
-	log.ErrorDepth(1, v...)
+	log.ErrorDepth(1, "", v...)
 }
 
 func (r *raftLogger) Errorf(format string, v ...interface{}) {
-	s := r.prependContext(format, v)
-	log.ErrorDepth(1, s)
+	log.ErrorDepth(1, r.context()+format, v...)
 }
 
 func (*raftLogger) Fatal(v ...interface{}) {
-	log.FatalDepth(1, v...)
+	log.FatalDepth(1, "", v...)
 }
 
 func (r *raftLogger) Fatalf(format string, v ...interface{}) {
-	s := r.prependContext(format, v)
-	log.FatalDepth(1, s)
+	log.FatalDepth(1, r.context()+format, v...)
 }
 
 func (*raftLogger) Panic(v ...interface{}) {
@@ -119,9 +110,8 @@ func (*raftLogger) Panic(v ...interface{}) {
 }
 
 func (r *raftLogger) Panicf(format string, v ...interface{}) {
-	s := r.prependContext(format, v)
-	log.ErrorDepth(1, s)
-	panic(s)
+	log.ErrorDepth(1, r.context()+format, v...)
+	panic(fmt.Sprintf(r.context()+format, v...))
 }
 
 var logRaftReadyMu sync.Mutex

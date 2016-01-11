@@ -86,8 +86,8 @@ func Infof(format string, args ...interface{}) {
 
 // InfoDepth logs to the INFO log, offsetting the caller's stack frame by
 // 'depth'.
-func InfoDepth(depth int, args ...interface{}) {
-	logDepth(nil, depth+1, InfoLog, "", args)
+func InfoDepth(depth int, format string, args ...interface{}) {
+	logDepth(nil, depth+1, InfoLog, format, args)
 }
 
 // Warningc logs to the WARNING and INFO logs. It extracts values from the
@@ -114,8 +114,8 @@ func Warningf(format string, args ...interface{}) {
 
 // WarningDepth logs to the WARNING and INFO logs, offsetting the caller's
 // stack frame by 'depth'.
-func WarningDepth(depth int, args ...interface{}) {
-	logDepth(nil, depth+1, WarningLog, "", args)
+func WarningDepth(depth int, format string, args ...interface{}) {
+	logDepth(nil, depth+1, WarningLog, format, args)
 }
 
 // Errorc logs to the ERROR, WARNING, and INFO logs. It extracts values from
@@ -140,8 +140,8 @@ func Errorf(format string, args ...interface{}) {
 
 // ErrorDepth logs to the ERROR, WARNING, and INFO logs, offsetting the
 // caller's stack frame by 'depth'.
-func ErrorDepth(depth int, args ...interface{}) {
-	logDepth(nil, depth+1, ErrorLog, "", args)
+func ErrorDepth(depth int, format string, args ...interface{}) {
+	logDepth(nil, depth+1, ErrorLog, format, args)
 }
 
 // Fatalc logs to the INFO, WARNING, ERROR, and FATAL logs, including a stack
@@ -170,8 +170,8 @@ func Fatalf(format string, args ...interface{}) {
 // FatalDepth logs to the INFO, WARNING, ERROR, and FATAL logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255),
 // offsetting the caller's stack frame by 'depth'.
-func FatalDepth(depth int, args ...interface{}) {
-	logDepth(nil, depth+1, FatalLog, "", args)
+func FatalDepth(depth int, format string, args ...interface{}) {
+	logDepth(nil, depth+1, FatalLog, format, args)
 }
 
 // V returns true if the logging verbosity is set to the specified level or
