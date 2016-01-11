@@ -472,7 +472,7 @@ func TestRangeLeaderLease(t *testing.T) {
 		t.Errorf("expected another replica to have leader lease")
 	}
 
-	err := tc.rng.redirectOnOrAcquireLeaderLease(nil, tc.clock.Now())
+	err := tc.rng.redirectOnOrAcquireLeaderLease(nil)
 	if lErr, ok := err.(*roachpb.NotLeaderError); !ok || lErr == nil {
 		t.Fatalf("wanted NotLeaderError, got %s", err)
 	}
@@ -495,7 +495,7 @@ func TestRangeLeaderLease(t *testing.T) {
 		}
 	}
 
-	if _, ok := rng.redirectOnOrAcquireLeaderLease(nil, tc.clock.Now()).(*roachpb.NotLeaderError); !ok {
+	if _, ok := rng.redirectOnOrAcquireLeaderLease(nil).(*roachpb.NotLeaderError); !ok {
 		t.Fatalf("expected %T, got %s", &roachpb.NotLeaderError{}, err)
 	}
 }
@@ -1026,7 +1026,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 		// matic lease for us at the beginning, we'll basically create a lease from
 		// then on.
 		expStart := tc.rng.getLease().Start
-		tc.manualClock.Set(int64(DefaultLeaderLeaseDuration + 1000))
+		tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1000))
 
 		ts := tc.clock.Now()
 		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: ts}, test); err != nil {
@@ -1038,8 +1038,8 @@ func TestAcquireLeaderLease(t *testing.T) {
 		lease := tc.rng.getLease()
 		// The lease may start earlier than our request timestamp, but the
 		// expiration will still be measured relative to it.
-		expExpiration := ts.Add(int64(DefaultLeaderLeaseDuration), 0)
-		if !lease.Start.Equal(expStart) || !lease.Expiration.Equal(expExpiration) {
+		expExpiration := ts.Next().Add(int64(DefaultLeaderLeaseDuration), 0)
+		if !(lease.Start.Equal(expStart) && lease.Expiration.Equal(expExpiration)) {
 			t.Errorf("%d: unexpected lease timing %s, %s; expected %s, %s", i,
 				lease.Start, lease.Expiration, expStart, expExpiration)
 		}

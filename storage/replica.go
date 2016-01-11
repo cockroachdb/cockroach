@@ -462,9 +462,11 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 //  will fail as well. If it succeeds, as is likely, then the write
 //  will not incur latency waiting for the command to complete.
 //  Reads, however, must wait.
-func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace, timestamp roachpb.Timestamp) error {
+func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace) error {
 	r.llMu.Lock()
 	defer r.llMu.Unlock()
+
+	timestamp := r.store.Clock().Now()
 
 	if lease := r.getLease(); lease.Covers(timestamp) {
 		if lease.OwnedBy(r.store.StoreID()) {
@@ -801,7 +803,7 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 	}
 
 	// Admin commands always require the leader lease.
-	if err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), ba.Timestamp); err != nil {
+	if err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx)); err != nil {
 		return nil, err
 	}
 
@@ -834,7 +836,6 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
 func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
-	header := ba.Header
 	trace := tracer.FromCtx(ctx)
 
 	// Add the read to the command queue to gate subsequent
@@ -846,7 +847,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 	// If there are command keys (there might not be if reads are
 	// inconsistent), the read requires the leader lease.
 	if len(cmdKeys) > 0 {
-		if err := r.redirectOnOrAcquireLeaderLease(trace, header.Timestamp); err != nil {
+		if err := r.redirectOnOrAcquireLeaderLease(trace); err != nil {
 			r.endCmds(cmdKeys, ba, err)
 			return nil, err
 		}
@@ -909,7 +910,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 	qDone()
 
 	// This replica must have leader lease to process a write.
-	if err := r.redirectOnOrAcquireLeaderLease(trace, ba.Timestamp); err != nil {
+	if err := r.redirectOnOrAcquireLeaderLease(trace); err != nil {
 		r.endCmds(cmdKeys, ba, err)
 		return nil, err
 	}
@@ -1544,9 +1545,8 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, error) {
 	var hasLease bool
 	var err error
 	if !r.store.Stopper().RunTask(func() {
-		timestamp := r.store.Clock().Now()
 		// Check for or obtain the lease, if none active.
-		err = r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx), timestamp)
+		err = r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx))
 		hasLease = err == nil
 		if err != nil {
 			switch e := err.(type) {
