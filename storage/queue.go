@@ -114,7 +114,7 @@ type queueLog struct {
 
 func (l queueLog) Infof(logv bool, format string, a ...interface{}) {
 	if logv {
-		log.Infof(l.prefix+format, a...)
+		log.InfofDepth(1, l.prefix+format, a...)
 	}
 	l.traceLog.Printf(format, a...)
 }
