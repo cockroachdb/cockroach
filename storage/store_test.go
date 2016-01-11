@@ -818,23 +818,24 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
+	baseID := uint32(keys.MaxReservedDescID + 1)
 	testData := []struct {
 		rng         *Replica
 		expMaxBytes int64
 	}{
 		{store.LookupReplica(roachpb.RKeyMin, nil),
 			config.DefaultZoneConfig.RangeMaxBytes},
-		{splitTestRange(store, roachpb.RKeyMin, keys.MakeTablePrefix(1000), t),
+		{splitTestRange(store, roachpb.RKeyMin, keys.MakeTablePrefix(baseID), t),
 			1 << 20},
-		{splitTestRange(store, keys.MakeTablePrefix(1000), keys.MakeTablePrefix(1001), t),
+		{splitTestRange(store, keys.MakeTablePrefix(baseID), keys.MakeTablePrefix(baseID+1), t),
 			config.DefaultZoneConfig.RangeMaxBytes},
-		{splitTestRange(store, keys.MakeTablePrefix(1001), keys.MakeTablePrefix(1002), t),
+		{splitTestRange(store, keys.MakeTablePrefix(baseID+1), keys.MakeTablePrefix(baseID+2), t),
 			2 << 20},
 	}
 
 	// Set zone configs.
-	config.TestingSetZoneConfig(1000, &config.ZoneConfig{RangeMaxBytes: 1 << 20})
-	config.TestingSetZoneConfig(1002, &config.ZoneConfig{RangeMaxBytes: 2 << 20})
+	config.TestingSetZoneConfig(baseID, &config.ZoneConfig{RangeMaxBytes: 1 << 20})
+	config.TestingSetZoneConfig(baseID+2, &config.ZoneConfig{RangeMaxBytes: 2 << 20})
 
 	// Despite faking the zone configs, we still need to have a gossip entry.
 	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
