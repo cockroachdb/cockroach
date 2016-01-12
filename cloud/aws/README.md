@@ -58,8 +58,8 @@ Use the load balancer address to connect to the cluster. You may need to wait a 
 ELB creation for its DNS name to be resolvable.
 
 ```
-$ ./cockroach sql --insecure --addr=<elb_address from terraform output>
-elb-1289187553.us-east-1.elb.amazonaws.com:26257> show databases;
+$ ./cockroach sql --insecure --host=<hostname part of elb_address from terraform output>
+root@elb-1289187553.us-east-1.elb.amazonaws.com:26257> show databases;
 +----------+
 | Database |
 +----------+

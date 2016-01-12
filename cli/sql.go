@@ -40,7 +40,7 @@ var sqlShellCmd = &cobra.Command{
 	Use:   "sql [options]",
 	Short: "open a sql shell",
 	Long: `
-Open a sql shell running against the cockroach database at --addr.
+Open a sql shell running against a cockroach database.
 `,
 	Run: runTerm,
 }

@@ -18,6 +18,7 @@ package cli
 
 import (
 	"flag"
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -29,8 +30,7 @@ import (
 var maxResults int64
 
 var connURL string
-var connUser, connHost, connDBName string
-var connPort int
+var connUser, connHost, connPort, connPGPort, connDBName string
 
 // pflagValue wraps flag.Value and implements the extra methods of the
 // pflag.Value interface.
@@ -49,8 +49,6 @@ func (v pflagValue) IsBoolFlag() bool {
 }
 
 var flagUsage = map[string]string{
-	"addr": wrapText(`
-The host:port to bind for HTTP/RPC traffic.`),
 	"attrs": wrapText(`
 An ordered, colon-separated list of node attributes. Attributes are
 arbitrary strings specifying topography or machine
@@ -207,8 +205,9 @@ func initFlags(ctx *Context) {
 		f.BoolVar(&ctx.EphemeralSingleNode, "dev", ctx.EphemeralSingleNode, usage("dev"))
 
 		// Server flags.
-		f.StringVar(&ctx.Addr, "addr", ctx.Addr, usage("addr"))
-		f.StringVar(&ctx.PGAddr, "pgaddr", ctx.PGAddr, usage("pgaddr"))
+		f.StringVar(&connHost, "host", "", flagUsage["host"])
+		f.StringVar(&connPort, "port", "26257", flagUsage["port"])
+		f.StringVar(&connPGPort, "pgport", "15432", flagUsage["pgport"])
 		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, usage("attrs"))
 		f.StringVar(&ctx.Stores, "stores", ctx.Stores, usage("stores"))
 		f.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, usage("max-offset"))
@@ -272,6 +271,7 @@ func initFlags(ctx *Context) {
 		f.BoolVar(&context.EphemeralSingleNode, "dev", context.EphemeralSingleNode, usage("dev"))
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, usage("certs"))
+		f.StringVar(&connHost, "host", "", flagUsage["host"])
 	}
 
 	{
@@ -279,22 +279,21 @@ func initFlags(ctx *Context) {
 		f.BoolVarP(&ctx.OneShotSQL, "execute", "e", ctx.OneShotSQL, flagUsage["execute"])
 	}
 
-	// Commands that take a plain --addr=<host>:<port> flag.
+	// Commands that need the cockroach port.
 	simpleCmds := []*cobra.Command{kvCmd, rangeCmd, exterminateCmd, quitCmd}
 	for _, cmd := range simpleCmds {
 		f := cmd.PersistentFlags()
-		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
+		f.StringVar(&connPort, "port", "26257", flagUsage["port"])
 	}
 
-	// Commands that take a SQL connection URL.
+	// Commands that establish a SQL connection.
 	sqlCmds := []*cobra.Command{sqlShellCmd, userCmd, zoneCmd}
 	for _, cmd := range sqlCmds {
 		f := cmd.PersistentFlags()
 		f.StringVar(&connURL, "url", "", flagUsage["url"])
 
 		f.StringVar(&connUser, "user", security.RootUser, flagUsage["user"])
-		f.StringVar(&connHost, "host", "localhost", flagUsage["host"])
-		f.IntVar(&connPort, "port", 15432, flagUsage["port"])
+		f.StringVar(&connPGPort, "pgport", "15432", flagUsage["pgport"])
 		f.StringVar(&connDBName, "database", "", flagUsage["database"])
 	}
 
@@ -312,5 +311,7 @@ func init() {
 		if context.EphemeralSingleNode {
 			context.Insecure = true
 		}
+		context.Addr = fmt.Sprintf("%s:%s", connHost, connPort)
+		context.PGAddr = fmt.Sprintf("%s:%s", connHost, connPGPort)
 	})
 }
