@@ -642,6 +642,28 @@ var builtins = map[string][]builtin{
 	"min": aggregateImpls(boolType, intType, floatType, stringType, bytesType, dateType, timestampType, intervalType),
 	"sum": aggregateImpls(intType, floatType),
 
+	"variance": {
+		builtin{
+			types:      argTypes{intType},
+			returnType: typeFloat,
+		},
+		builtin{
+			types:      argTypes{floatType},
+			returnType: typeFloat,
+		},
+	},
+
+	"stddev": {
+		builtin{
+			types:      argTypes{intType},
+			returnType: typeFloat,
+		},
+		builtin{
+			types:      argTypes{floatType},
+			returnType: typeFloat,
+		},
+	},
+
 	// Math functions
 
 	"abs": {
