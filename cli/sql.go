@@ -39,7 +39,7 @@ var sqlShellCmd = &cobra.Command{
 	Use:   "sql [options]",
 	Short: "open a sql shell",
 	Long: `
-Open a sql shell running against the cockroach database at --addr.
+Open a sql shell running against a cockroach database.
 `,
 	Run: runTerm, // TODO(tschottdorf): should be able to return err code when reading from stdin
 }
