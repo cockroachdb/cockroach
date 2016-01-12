@@ -141,6 +141,8 @@ func (ms *MVCCStats) Delta(oms *MVCCStats) MVCCStats {
 }
 
 // Add adds values from oms to ms.
+// TODO(tschottdorf): age computations here are broken when
+// LastUpdateNanos isn't the same.
 func (ms *MVCCStats) Add(oms *MVCCStats) {
 	ms.LiveBytes += oms.LiveBytes
 	ms.KeyBytes += oms.KeyBytes
@@ -160,6 +162,8 @@ func (ms *MVCCStats) Add(oms *MVCCStats) {
 }
 
 // Subtract subtracts the values of oms from ms.
+// TODO(tschottdorf): age computations here are broken when
+// LastUpdateNanos isn't the same.
 func (ms *MVCCStats) Subtract(oms *MVCCStats) {
 	ms.LiveBytes -= oms.LiveBytes
 	ms.KeyBytes -= oms.KeyBytes
