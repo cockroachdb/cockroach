@@ -47,18 +47,16 @@ type metadataTable struct {
 	privileges *PrivilegeDescriptor
 }
 
-// MakeMetadataSchema constructs a new MetadataSchema value which contains the
-// sql SystemDB.
+// MakeMetadataSchema constructs a new MetadataSchema value which constructs
+// the "system" database.
 func MakeMetadataSchema() MetadataSchema {
 	ms := MetadataSchema{}
 	addSystemDatabaseToSchema(&ms)
 	return ms
 }
 
-// AddDescriptor adds a new system descriptor to the schema. System
-// descriptors have well-known, static descriptors; however, the MetadataSchema
-// is used to generate the KeyValue objects needed to install them on a new
-// cockroach store.
+// AddDescriptor adds a new descriptor to the system schema. Used only for
+// SystemConfig tables and databases. Prefer AddTable for most uses.
 func (ms *MetadataSchema) AddDescriptor(parentID ID, desc descriptorProto) {
 	ms.descs = append(ms.descs, metadataDescriptor{parentID, desc})
 }

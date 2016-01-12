@@ -207,7 +207,7 @@ const (
 	UsersTableID      = 4
 	ZonesTableID      = 5
 
-	// Reserved IDS for other system tables.
+	// Reserved IDs for other system tables.
 	// NOTE: IDs must be <= MaxReservedDescID.
 	LeaseTableID      = 11
 	RangeEventTableID = 12
