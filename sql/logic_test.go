@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -200,7 +201,9 @@ func (t *logicTest) setUser(tempDir, user string) {
 		return
 	}
 
-	pgUrl, _ := pgURL(t.T, t.srv, user, tempDir, "TestLogic")
+	// The entire tempDir will be deleted later, so the cleanup function can be
+	// ignored.
+	pgUrl, _ := sqlutils.PGUrl(t.T, t.srv, user, tempDir, "TestLogic")
 	db, err := sql.Open("postgres", pgUrl.String())
 	if err != nil {
 		t.Fatal(err)

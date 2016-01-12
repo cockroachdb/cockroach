@@ -28,13 +28,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 )
 
 func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *sql.DB)) {
 	s := server.StartTestServer(b)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := pgURL(b, s, security.RootUser, os.TempDir(), "benchmarkCockroach")
+	pgUrl, cleanupFn := sqlutils.PGUrl(b, s, security.RootUser, os.TempDir(), "benchmarkCockroach")
 	defer cleanupFn()
 
 	db, err := sql.Open("postgres", pgUrl.String())
