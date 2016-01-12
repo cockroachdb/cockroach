@@ -410,38 +410,37 @@ func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
 	return r.Snapshot()
 }
 
-// append the given entries to the raft log.
-func (r *Replica) append(batch engine.Engine, entries []raftpb.Entry) error {
+// append the given entries to the raft log. Takes the previous value
+// of r.lastIndex and returns a new value. We do this rather than
+// modifying r.lastIndex directly because this modification needs to
+// be atomic with the commit of the batch.
+func (r *Replica) append(batch engine.Engine, prevLastIndex uint64, entries []raftpb.Entry) (uint64, error) {
 	if len(entries) == 0 {
-		return nil
+		return prevLastIndex, nil
 	}
 	for _, ent := range entries {
 		err := engine.MVCCPutProto(batch, nil, keys.RaftLogKey(r.RangeID, ent.Index),
 			roachpb.ZeroTimestamp, nil, &ent)
 		if err != nil {
-			return err
+			return 0, err
 		}
 	}
 	lastIndex := entries[len(entries)-1].Index
-	prevLastIndex := atomic.LoadUint64(&r.lastIndex)
 	// Delete any previously appended log entries which never committed.
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
 		err := engine.MVCCDelete(batch, nil,
 			keys.RaftLogKey(r.RangeID, i), roachpb.ZeroTimestamp, nil)
 		if err != nil {
-			return err
+			return 0, err
 		}
 	}
 
 	// Commit the batch and update the last index.
 	if err := setLastIndex(batch, r.RangeID, lastIndex); err != nil {
-		return err
+		return 0, err
 	}
-	batch.Defer(func() {
-		atomic.StoreUint64(&r.lastIndex, lastIndex)
-	})
 
-	return nil
+	return lastIndex, nil
 }
 
 // updateRangeInfo is called whenever a range is updated by ApplySnapshot
@@ -476,11 +475,12 @@ func (r *Replica) updateRangeInfo() error {
 }
 
 // applySnapshot updates the replica based on the given snapshot.
-func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) error {
+// Returns the new last index.
+func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint64, error) {
 	snapData := roachpb.RaftSnapshotData{}
 	err := proto.Unmarshal(snap.Data, &snapData)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	rangeID := r.RangeID
@@ -495,7 +495,7 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) error
 	hardStateKey := keys.RaftHardStateKey(rangeID)
 	hardState, _, err := engine.MVCCGet(batch, hardStateKey, roachpb.ZeroTimestamp, true /* consistent */, nil)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// Extract the updated range descriptor.
@@ -506,7 +506,7 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) error
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		if err := batch.Clear(iter.Key()); err != nil {
-			return err
+			return 0, err
 		}
 	}
 
@@ -517,7 +517,7 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) error
 			Timestamp: kv.Timestamp,
 		}
 		if err := batch.Put(mvccKey, kv.Value); err != nil {
-			return err
+			return 0, err
 		}
 	}
 
@@ -525,26 +525,26 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) error
 	if hardState == nil {
 		err := engine.MVCCDelete(batch, nil, hardStateKey, roachpb.ZeroTimestamp, nil)
 		if err != nil {
-			return err
+			return 0, err
 		}
 	} else {
 		err := engine.MVCCPut(batch, nil, hardStateKey, roachpb.ZeroTimestamp, *hardState, nil)
 		if err != nil {
-			return err
+			return 0, err
 		}
 	}
 
 	// Read the leader lease.
 	lease, err := loadLeaderLease(batch, desc.RangeID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// Load updated range stats. The local newStats variable will be assigned
 	// to r.stats after the batch commits.
 	newStats, err := newRangeStats(desc.RangeID, batch)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// The next line sets the persisted last index to the last applied index.
@@ -556,7 +556,7 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) error
 	// about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.
 	if err := setLastIndex(batch, rangeID, snap.Metadata.Index); err != nil {
-		return err
+		return 0, err
 	}
 
 	batch.Defer(func() {
@@ -565,7 +565,6 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) error
 
 		// As outlined above, last and applied index are the same after applying
 		// the snapshot.
-		atomic.StoreUint64(&r.lastIndex, snap.Metadata.Index)
 		atomic.StoreUint64(&r.appliedIndex, snap.Metadata.Index)
 
 		// Atomically update the descriptor and lease.
@@ -583,7 +582,7 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) error
 
 		atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
 	})
-	return nil
+	return snap.Metadata.Index, nil
 }
 
 // setHardState persists the raft HardState.
