@@ -65,7 +65,7 @@ func farmer(t *testing.T) *terrafarm.Farmer {
 	logDir := *logDir
 	if logDir == "" {
 		var err error
-		logDir, err = ioutil.TempDir(os.TempDir(), "clustertest_")
+		logDir, err = ioutil.TempDir("", "clustertest_")
 		if err != nil {
 			t.Fatal(err)
 		}

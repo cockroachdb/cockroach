@@ -20,6 +20,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 
@@ -39,15 +40,14 @@ var sqlShellCmd = &cobra.Command{
 	Use:   "sql [options]",
 	Short: "open a sql shell",
 	Long: `
-Open a sql shell running against the cockroach database at --addr.
+Open a sql shell running against a cockroach database.
 `,
 	Run: runTerm,
 }
 
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
-func runInteractive(db *sql.DB) {
-
+func runInteractive(db *sql.DB, dbURL string) {
 	liner := liner.NewLiner()
 	defer func() {
 		_ = liner.Close()
@@ -55,10 +55,15 @@ func runInteractive(db *sql.DB) {
 
 	fmt.Print(infoMessage)
 
-	// Default prompt is "hostname> "
-	// continued statement prompt it: "        -> "
-	// TODO(marc): maybe switch to "user@hostname" and strip port if present.
-	fullPrompt := context.Addr
+	// Default prompt is part of the connection URL. eg: "marc@localhost>"
+	// continued statement prompt is: "        -> "
+	fullPrompt := dbURL
+	if parsedURL, err := url.Parse(dbURL); err == nil {
+		// If parsing fails, we keep the entire URL. The Open call succeeded, and that
+		// is the important part.
+		fullPrompt = fmt.Sprintf("%s@%s", parsedURL.User, parsedURL.Host)
+	}
+
 	if len(fullPrompt) == 0 {
 		fullPrompt = " "
 	}
@@ -152,7 +157,6 @@ func runStatements(db *sql.DB, stmts []string) {
 				fmt.Fprintln(os.Stdout, strings.Join(row, "\t"))
 			}
 		}
-
 	}
 }
 
@@ -162,14 +166,13 @@ func runTerm(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	db := makeSQLClient()
+	db, dbURL := makeSQLClient()
 	defer func() { _ = db.Close() }()
 
 	if context.OneShotSQL {
 		// Single-line sql; run as simple as possible, without noise on stdout.
 		runStatements(db, args)
 	} else {
-		runInteractive(db)
+		runInteractive(db, dbURL)
 	}
-
 }

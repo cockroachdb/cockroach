@@ -18,14 +18,20 @@ package cli
 
 import (
 	"flag"
+	"net"
 	"reflect"
 	"strings"
 
 	"github.com/kr/text"
 	"github.com/spf13/cobra"
+
+	"github.com/cockroachdb/cockroach/security"
 )
 
 var maxResults int64
+
+var connURL string
+var connUser, connHost, connPort, connPGPort, connDBName string
 
 // pflagValue wraps flag.Value and implements the extra methods of the
 // pflag.Value interface.
@@ -44,8 +50,6 @@ func (v pflagValue) IsBoolFlag() bool {
 }
 
 var flagUsage = map[string]string{
-	"addr": wrapText(`
-The host:port to bind for HTTP/RPC traffic.`),
 	"attrs": wrapText(`
 An ordered, colon-separated list of node attributes. Attributes are
 arbitrary strings specifying topography or machine
@@ -59,12 +63,27 @@ nodes. For example:`) + `
 
   --attrs=us-west-1b,gpu
 `,
+	"balance-mode": wrapText(`
+Determines the criteria used by nodes to make balanced allocation
+decisions. Valid options are "usage" (default) or "rangecount".`),
 	"cache-size": wrapText(`
 Total size in bytes for caches, shared evenly if there are multiple
 storage devices.`),
 	"certs": wrapText(`
 Directory containing RSA key and x509 certs. This flag is required if
 --insecure=false.`),
+	"dev": wrapText(`
+Runs the node as a standalone in-memory cluster and forces --insecure
+for all server and client commands. Useful for developing Cockroach
+itself.`),
+	"execute": wrapText(`
+Execute the SQL statement(s) on the command line, then exit.  Each
+subsequent positional argument on the command line may contain
+one or more SQL statements, separated by semicolons. If an
+error occurs in any statement, the command exits with a
+non-zero status code and further statements are not
+executed. The results of the last SQL statement in each
+positional argument are printed on the standard output.`),
 	"gossip": wrapText(`
 A comma-separated list of gossip addresses or resolvers for gossip
 bootstrap. Each item in the list has an optional type:
@@ -78,32 +97,37 @@ Type is one of:`) + `
 - self: for single node systems, specify --gossip=self (the
   <address> is omitted).
 `,
+	"host": wrapText(`
+Database server host.`),
+	"insecure": wrapText(`
+Run over plain HTTP. WARNING: this is strongly discouraged.`),
 	"key-size": wrapText(`
 Key size in bits for CA/Node/Client certificates.`),
 	"linearizable": wrapText(`
 Enables linearizable behaviour of operations on this node by making
 sure that no commit timestamp is reported back to the client until all
 other node clocks have necessarily passed it.`),
-	"dev": wrapText(`
-Runs the node as a standalone in-memory cluster and forces --insecure
-for all server and client commands. Useful for developing Cockroach
-itself.`),
-	"insecure": wrapText(`
-Run over plain HTTP. WARNING: this is strongly discouraged.`),
 	"max-offset": wrapText(`
 The maximum clock offset for the cluster. Clock offset is measured on
 all node-to-node links and if any node notices it has clock offset in
 excess of --max-offset, it will commit suicide. Setting this value too
 high may decrease transaction performance in the presence of
 contention.`),
+	"max-results": wrapText(`
+Define the maximum number of results that will be retrieved.`),
 	"memtable-budget": wrapText(`
 Total size in bytes for memtables, shared evenly if there are multiple
 storage devices.`),
 	"metrics-frequency": wrapText(`
 Adjust the frequency at which the server records its own internal metrics.
 `),
-	"pgaddr": wrapText(`
-The host:port to bind for Postgres traffic.`),
+	"password": wrapText(`
+The created user's password. If provided, disables prompting. Pass '-' to
+provide the password on standard input.`),
+	"pgport": wrapText(`
+The port to bind for Postgres traffic.`),
+	"port": wrapText(`
+The port to bind for cockroach traffic.`),
 	"scan-interval": wrapText(`
 Adjusts the target for the duration of a single scan through a store's
 ranges. The scan is slowed as necessary to approximately achieve this
@@ -111,10 +135,6 @@ duration.`),
 	"scan-max-idle-time": wrapText(`
 Adjusts the max idle time of the scanner. This speeds up the scanner on small
 clusters to be more responsive.`),
-	"time-until-store-dead": wrapText(`
-Adjusts the timeout for stores.  If there's been no gossiped updated
-from a store after this time, the store is considered unavailable.
-Replicas on an unavailable store will be moved to available ones.`),
 	"stores": wrapText(`
 A comma-separated list of stores, specified by a colon-separated list
 of device attributes followed by '=' and either a filepath for a
@@ -126,22 +146,15 @@ attributes might also include speeds and other specs (7200rpm,
 
   --stores=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824
 `,
-	"max-results": wrapText(`
-Define the maximum number of results that will be retrieved.`),
-	"balance-mode": wrapText(`
-Determines the criteria used by nodes to make balanced allocation
-decisions. Valid options are "usage" (default) or "rangecount".`),
-	"password": wrapText(`
-The created user's password. If provided, disables prompting. Pass '-' to
-provide the password on standard input.`),
-	"execute": wrapText(`
-Execute the SQL statement(s) on the command line, then exit.  Each
-subsequent positional argument on the command line may contain
-one or more SQL statements, separated by semicolons. If an
-error occurs in any statement, the command exits with a
-non-zero status code and further statements are not
-executed. The results of the last SQL statement in each
-positional argument are printed on the standard output.`),
+	"time-until-store-dead": wrapText(`
+Adjusts the timeout for stores.  If there's been no gossiped updated
+from a store after this time, the store is considered unavailable.
+Replicas on an unavailable store will be moved to available ones.`),
+	"url": wrapText(`
+Connection url. eg: postgresql://myuser@localhost:15432/mydb
+If left empty, the connection flags are used (host, port, user, database, insecure, certs).`),
+	"user": wrapText(`
+Database user name.`),
 }
 
 const usageIndentation = 8
@@ -193,8 +206,9 @@ func initFlags(ctx *Context) {
 		f.BoolVar(&ctx.EphemeralSingleNode, "dev", ctx.EphemeralSingleNode, usage("dev"))
 
 		// Server flags.
-		f.StringVar(&ctx.Addr, "addr", ctx.Addr, usage("addr"))
-		f.StringVar(&ctx.PGAddr, "pgaddr", ctx.PGAddr, usage("pgaddr"))
+		f.StringVar(&connHost, "host", "", flagUsage["host"])
+		f.StringVar(&connPort, "port", "26257", flagUsage["port"])
+		f.StringVar(&connPGPort, "pgport", "15432", flagUsage["pgport"])
 		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, usage("attrs"))
 		f.StringVar(&ctx.Stores, "stores", ctx.Stores, usage("stores"))
 		f.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, usage("max-offset"))
@@ -256,15 +270,32 @@ func initFlags(ctx *Context) {
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
 		f.BoolVar(&context.EphemeralSingleNode, "dev", context.EphemeralSingleNode, usage("dev"))
-
-		f.StringVar(&ctx.Addr, "addr", ctx.Addr, usage("addr"))
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, usage("certs"))
+		f.StringVar(&connHost, "host", "", flagUsage["host"])
 	}
 
 	{
 		f := sqlShellCmd.Flags()
 		f.BoolVarP(&ctx.OneShotSQL, "execute", "e", ctx.OneShotSQL, flagUsage["execute"])
+	}
+
+	// Commands that need the cockroach port.
+	simpleCmds := []*cobra.Command{kvCmd, nodeCmd, rangeCmd, exterminateCmd, quitCmd}
+	for _, cmd := range simpleCmds {
+		f := cmd.PersistentFlags()
+		f.StringVar(&connPort, "port", "26257", flagUsage["port"])
+	}
+
+	// Commands that establish a SQL connection.
+	sqlCmds := []*cobra.Command{sqlShellCmd, userCmd, zoneCmd}
+	for _, cmd := range sqlCmds {
+		f := cmd.PersistentFlags()
+		f.StringVar(&connURL, "url", "", flagUsage["url"])
+
+		f.StringVar(&connUser, "user", security.RootUser, flagUsage["user"])
+		f.StringVar(&connPGPort, "pgport", "15432", flagUsage["pgport"])
+		f.StringVar(&connDBName, "database", "", flagUsage["database"])
 	}
 
 	// Max results flag for scan, reverse scan, and range list.
@@ -281,5 +312,7 @@ func init() {
 		if context.EphemeralSingleNode {
 			context.Insecure = true
 		}
+		context.Addr = net.JoinHostPort(connHost, connPort)
+		context.PGAddr = net.JoinHostPort(connHost, connPGPort)
 	})
 }

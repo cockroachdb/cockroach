@@ -20,25 +20,39 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"regexp"
+
+	// Import postgres driver.
+	_ "github.com/lib/pq"
 
 	"github.com/olekukonko/tablewriter"
 
 	"github.com/cockroachdb/cockroach/security"
 )
 
-func makeSQLClient() *sql.DB {
+var selectPattern = regexp.MustCompile(`(?i)^\s*(SELECT|SHOW)`)
+
+func makeSQLClient() (*sql.DB, string) {
 	// Use the sql administrator by default (root user).
-	// TODO(marc): allow passing on the commandline.
-	db, err := sql.Open("cockroach",
-		fmt.Sprintf("%s://%s@%s?certs=%s",
-			context.HTTPRequestScheme(),
-			security.RootUser,
-			context.Addr,
-			context.Certs))
+	sqlURL := connURL
+	if len(connURL) == 0 {
+		sslOptions := ""
+		if context.Insecure {
+			sslOptions = "sslmode=disable"
+		} else {
+			sslOptions = fmt.Sprintf("sslmode=verify-full&sslcert=%s&sslkey=%s&sslrootcert=%s",
+				security.ClientCertPath(context.Certs, connUser),
+				security.ClientKeyPath(context.Certs, connUser),
+				security.CACertPath(context.Certs))
+		}
+		sqlURL = fmt.Sprintf("postgresql://%s@%s:%s/%s?%s",
+			connUser, connHost, connPGPort, connDBName, sslOptions)
+	}
+	db, err := sql.Open("postgres", sqlURL)
 	if err != nil {
 		panicf("failed to initialize SQL client: %s", err)
 	}
-	return db
+	return db, sqlURL
 }
 
 // fmtMap is a mapping from column name to a function that takes the raw input,
@@ -58,13 +72,20 @@ func runQuery(db *sql.DB, query string, parameters ...interface{}) (
 // found in the map are run through the corresponding callback.
 func runQueryWithFormat(db *sql.DB, format fmtMap, query string, parameters ...interface{}) (
 	[]string, [][]string, error) {
-	rows, err := db.Query(query, parameters...)
-	if err != nil {
-		return nil, nil, fmt.Errorf("query error: %s", err)
-	}
+	if selectPattern.MatchString(query) {
+		rows, err := db.Query(query, parameters...)
+		if err != nil {
+			return nil, nil, fmt.Errorf("query error: %s", err)
+		}
 
-	defer rows.Close()
-	return sqlRowsToStrings(rows, format)
+		defer rows.Close()
+		return sqlRowsToStrings(rows, format)
+	}
+	_, err := db.Exec(query, parameters...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("statement error: %s", err)
+	}
+	return nil, nil, nil
 }
 
 // runPrettyQueryWithFormat takes a 'query' with optional 'parameters'.
