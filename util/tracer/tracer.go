@@ -187,9 +187,10 @@ func (t *Trace) Fork() *Trace {
 // Trace.
 func (t Trace) String() string {
 	const tab = "\t"
-	buf := bytes.NewBuffer(nil)
-	w := tabwriter.NewWriter(buf, 1, 1, 0, ' ', 0)
-	fmt.Fprintln(w, "Name", tab, "Origin", tab, "Ts", tab, "Dur", tab, "Desc", tab, "File")
+	var buf bytes.Buffer
+	w := tabwriter.NewWriter(&buf, 1, 1, 0, ' ', 0)
+	fmt.Fprintln(w, "Trace", t.Name)
+	fmt.Fprintln(w, "Origin", tab, "Ts", tab, "Dur", tab, "Desc", tab, "File")
 
 	const traceTimeFormat = "15:04:05.000000"
 	for _, c := range t.Content {
@@ -197,9 +198,9 @@ func (t Trace) String() string {
 		if c.depth > 1 {
 			namePrefix = strings.Repeat("·", int(c.depth-1))
 		}
-		fmt.Fprintln(w, t.Name, tab, c.Origin, tab,
-			c.Timestamp.Format(traceTimeFormat), tab, c.Duration, tab,
-			namePrefix+c.Name, tab, c.File+":"+strconv.Itoa(c.Line))
+		fmt.Fprintln(w, c.Origin, tab, c.Timestamp.Format(traceTimeFormat),
+			tab, c.Duration, tab, namePrefix+c.Name, tab,
+			c.File+":"+strconv.Itoa(c.Line))
 	}
 
 	_ = w.Flush()

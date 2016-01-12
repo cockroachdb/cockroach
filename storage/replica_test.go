@@ -1028,7 +1028,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 		expStart := tc.rng.getLease().Start
 		tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1000))
 
-		ts := tc.clock.Now()
+		ts := tc.clock.Now().Next()
 		if _, err := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: ts}, test); err != nil {
 			t.Fatal(err)
 		}
@@ -1036,12 +1036,14 @@ func TestAcquireLeaderLease(t *testing.T) {
 			t.Fatalf("%d: expected lease acquisition", i)
 		}
 		lease := tc.rng.getLease()
-		// The lease may start earlier than our request timestamp, but the
-		// expiration will still be measured relative to it.
-		expExpiration := ts.Next().Add(int64(DefaultLeaderLeaseDuration), 0)
-		if !(lease.Start.Equal(expStart) && lease.Expiration.Equal(expExpiration)) {
-			t.Errorf("%d: unexpected lease timing %s, %s; expected %s, %s", i,
-				lease.Start, lease.Expiration, expStart, expExpiration)
+		if !lease.Start.Equal(expStart) {
+			t.Errorf("%d: unexpected lease start: %s; expected %s", i, lease.Start, expStart)
+		}
+		// The lease should last at least through our request timestamp, but may
+		// last longer in case the node's clock has advanced past the request
+		// timestamp.
+		if expExpiration := ts.Add(int64(DefaultLeaderLeaseDuration), 0); lease.Expiration.Less(expExpiration) {
+			t.Errorf("%d: unexpected lease expiration: %s; expected %s", i, lease.Expiration, expExpiration)
 		}
 		tc.Stop()
 	}

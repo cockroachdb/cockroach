@@ -84,10 +84,11 @@ func Infof(format string, args ...interface{}) {
 	logDepth(nil, 1, InfoLog, format, args)
 }
 
-// InfoDepth logs to the INFO log, offsetting the caller's stack frame by
-// 'depth'.
-func InfoDepth(depth int, args ...interface{}) {
-	logDepth(nil, depth+1, InfoLog, "", args)
+// InfofDepth logs to the INFO log, offsetting the caller's stack frame by
+// 'depth'. Passing an empty string for `format` causes this method to
+// naturally format `args`.
+func InfofDepth(depth int, format string, args ...interface{}) {
+	logDepth(nil, depth+1, InfoLog, format, args)
 }
 
 // Warningc logs to the WARNING and INFO logs. It extracts values from the
@@ -112,10 +113,11 @@ func Warningf(format string, args ...interface{}) {
 	logDepth(nil, 1, WarningLog, format, args)
 }
 
-// WarningDepth logs to the WARNING and INFO logs, offsetting the caller's
-// stack frame by 'depth'.
-func WarningDepth(depth int, args ...interface{}) {
-	logDepth(nil, depth+1, WarningLog, "", args)
+// WarningfDepth logs to the WARNING and INFO logs, offsetting the caller's
+// stack frame by 'depth'. Passing an empty string for `format` causes this
+// method to naturally format `args`.
+func WarningfDepth(depth int, format string, args ...interface{}) {
+	logDepth(nil, depth+1, WarningLog, format, args)
 }
 
 // Errorc logs to the ERROR, WARNING, and INFO logs. It extracts values from
@@ -138,10 +140,11 @@ func Errorf(format string, args ...interface{}) {
 	logDepth(nil, 1, ErrorLog, format, args)
 }
 
-// ErrorDepth logs to the ERROR, WARNING, and INFO logs, offsetting the
-// caller's stack frame by 'depth'.
-func ErrorDepth(depth int, args ...interface{}) {
-	logDepth(nil, depth+1, ErrorLog, "", args)
+// ErrorfDepth logs to the ERROR, WARNING, and INFO logs, offsetting the
+// caller's stack frame by 'depth'. Passing an empty string for `format` causes
+// this method to naturally format `args`.
+func ErrorfDepth(depth int, format string, args ...interface{}) {
+	logDepth(nil, depth+1, ErrorLog, format, args)
 }
 
 // Fatalc logs to the INFO, WARNING, ERROR, and FATAL logs, including a stack
@@ -167,11 +170,12 @@ func Fatalf(format string, args ...interface{}) {
 	logDepth(nil, 1, FatalLog, format, args)
 }
 
-// FatalDepth logs to the INFO, WARNING, ERROR, and FATAL logs,
+// FatalfDepth logs to the INFO, WARNING, ERROR, and FATAL logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255),
-// offsetting the caller's stack frame by 'depth'.
-func FatalDepth(depth int, args ...interface{}) {
-	logDepth(nil, depth+1, FatalLog, "", args)
+// offsetting the caller's stack frame by 'depth'. Passing an empty string for
+// `format` causes this method to naturally format `args`.
+func FatalfDepth(depth int, format string, args ...interface{}) {
+	logDepth(nil, depth+1, FatalLog, format, args)
 }
 
 // V returns true if the logging verbosity is set to the specified level or
