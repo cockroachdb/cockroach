@@ -43,13 +43,19 @@ function isLGPLV3() {
   grep -q '[[:space:]]Version 3' "$1"
 }
 
+function isMIT() {
+  if grep -q 'MIT License' "$1"; then
+    return 0
+  fi
+  grep -q 'Permission is hereby granted, free of charge, to any person' "$1" && \
+  grep -q 'The above copyright notice and this permission notice' "$1"
+}
+
 function inspect() {
   local dir="$1"
 
-  local files="${toplevel}/LICENSE"
-  files="${files} ${toplevel}/COPYING"
-  files="${files} ${toplevel}/internal/LICENSE"
-  files="${files} ${toplevel}/internal/COPYING"
+  local files="$(ls ${toplevel}/{LICENSE,COPYING} 2>/dev/null)"
+  files="${files} $(ls ${toplevel}/LICEN[CS]E.{md,txt,code} 2>/dev/null)"
   files="${files} $(ls ${toplevel}/*/{LICENSE,COPYING} 2>/dev/null)"
 
   for file in $files; do
@@ -68,6 +74,9 @@ function inspect() {
         return
       elif isLGPLV3 "${file}"; then
         echo "GNU Lesser General Public License 3.0"
+        return
+      elif isMIT "${file}"; then
+        echo "MIT License"
         return
       fi
       # TODO(pmattis): This is incomplete. Add other license
