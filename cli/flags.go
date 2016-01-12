@@ -61,6 +61,10 @@ var flagUsage = map[string]string{
 
           --attrs=us-west-1b,gpu
 `,
+	"balance-mode": `
+        Determines the criteria used by nodes to make balanced allocation
+        decisions.  Valid options are "usage" (default) or "rangecount".
+`,
 	"cache-size": `
         Total size in bytes for caches, shared evenly if there are multiple
         storage devices.
@@ -68,6 +72,11 @@ var flagUsage = map[string]string{
 	"certs": `
         Directory containing RSA key and x509 certs. This flag is required if
         --insecure=false.
+`,
+	"dev": `
+        Runs the node as a standalone in-memory cluster and forces --insecure
+        for all server and client commands. Useful for developing Cockroach
+        itself.
 `,
 	"gossip": `
         A comma-separated list of gossip addresses or resolvers for gossip
@@ -81,6 +90,9 @@ var flagUsage = map[string]string{
         - http-lb: HTTP load balancer: we query
           http(s)://<address>/_status/details/local
 `,
+	"insecure": `
+        Run over plain HTTP. WARNING: this is strongly discouraged.
+`,
 	"key-size": `
         Key size in bits for CA/Node/Client certificates.
 `,
@@ -89,14 +101,6 @@ var flagUsage = map[string]string{
         sure that no commit timestamp is reported back to the client until all
         other node clocks have necessarily passed it.
 `,
-	"dev": `
-        Runs the node as a standalone in-memory cluster and forces --insecure
-        for all server and client commands. Useful for developing Cockroach
-        itself.
-`,
-	"insecure": `
-        Run over plain HTTP. WARNING: this is strongly discouraged.
-`,
 	"max-offset": `
         The maximum clock offset for the cluster. Clock offset is measured on
         all node-to-node links and if any node notices it has clock offset in
@@ -104,12 +108,19 @@ var flagUsage = map[string]string{
         high may decrease transaction performance in the presence of
         contention.
 `,
+	"max-results": `
+        Define the maximum number of results that will be retrieved.
+`,
 	"memtable-budget": `
         Total size in bytes for memtables, shared evenly if there are multiple
         storage devices.
 `,
 	"metrics-frequency": `
         Adjust the frequency at which the server records its own internal metrics.
+`,
+	"password": `
+        The created user's password. If provided, disables prompting. Pass '-' to provide
+        the password on standard input.
 `,
 	"pgaddr": `
         The host:port to bind for Postgres traffic.
@@ -123,11 +134,6 @@ var flagUsage = map[string]string{
         Adjusts the max idle time of the scanner. This speeds up the scanner on small
         clusters to be more responsive.
 `,
-	"time-until-store-dead": `
-		Adjusts the timeout for stores.  If there's been no gossiped updated
-		from a store after this time, the store is considered unavailable.
-        Replicas on an unavailable store will be moved to available ones.
-`,
 	"stores": `
         A comma-separated list of stores, specified by a colon-separated list
         of device attributes followed by '=' and either a filepath for a
@@ -139,16 +145,10 @@ var flagUsage = map[string]string{
 
           --stores=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824
 `,
-	"max-results": `
-        Define the maximum number of results that will be retrieved.
-`,
-	"balance-mode": `
-		Determines the criteria used by nodes to make balanced allocation
-		decisions.  Valid options are "usage" (default) or "rangecount".
-`,
-	"password": `
-        The created user's password. If provided, disables prompting. Pass '-' to provide
-	the password on standard input.
+	"time-until-store-dead": `
+        Adjusts the timeout for stores.  If there's been no gossiped updated
+        from a store after this time, the store is considered unavailable.
+        Replicas on an unavailable store will be moved to available ones.
 `,
 }
 
@@ -243,7 +243,6 @@ func initFlags(ctx *server.Context) {
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
 		f.BoolVar(&context.EphemeralSingleNode, "dev", context.EphemeralSingleNode, flagUsage["dev"])
-
 		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, flagUsage["insecure"])
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])
