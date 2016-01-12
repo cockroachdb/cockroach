@@ -59,6 +59,18 @@ func (expr *BinaryExpr) TypeCheck(args MapArgs) (Datum, error) {
 	expr.ltype = reflect.TypeOf(dummyLeft)
 	expr.rtype = reflect.TypeOf(dummyRight)
 
+	if expr.ltype == valargType {
+		if _, err := args.setInferredType(dummyLeft, dummyRight); err != nil {
+			return nil, err
+		}
+		expr.ltype = expr.rtype
+	} else if expr.rtype == valargType {
+		if _, err := args.setInferredType(dummyRight, dummyLeft); err != nil {
+			return nil, err
+		}
+		expr.rtype = expr.ltype
+	}
+
 	var ok bool
 	if expr.fn, ok = binOps[binArgs{expr.Operator, expr.ltype, expr.rtype}]; ok {
 		return expr.fn.returnType, nil

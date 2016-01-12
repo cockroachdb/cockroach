@@ -60,6 +60,7 @@ var (
 	intervalType  = reflect.TypeOf(DummyInterval)
 	tupleType     = reflect.TypeOf(dummyTuple)
 	nullType      = reflect.TypeOf(DNull)
+	valargType    = reflect.TypeOf(DValArg{})
 )
 
 // A Datum holds either a bool, int64, float64, string or []Datum.

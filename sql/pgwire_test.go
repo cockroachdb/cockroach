@@ -213,6 +213,11 @@ func TestPGPrepared(t *testing.T) {
 		"SELECT $1::int, $1::float": {
 			base.Params("1").Results(1, 1.0),
 		},
+		"SELECT 3 + $1, $1 + $2": {
+			base.Params("1", "2").Results(4, 3),
+			base.Params(3, "4").Results(6, 7),
+			base.Params(0, "a").Error(`pq: param $2 ("a"): unknown int value`),
+		},
 		// TODO(mjibson): test date/time types
 	}
 
@@ -233,6 +238,7 @@ func TestPGPrepared(t *testing.T) {
 		log.Infof("prepare: %s, err: %s", query, err)
 		if err != nil {
 			t.Errorf("prepare error: %s: %s", query, err)
+			continue
 		}
 		for _, test := range tests {
 			rows, err := stmt.Query(test.params...)
@@ -277,6 +283,8 @@ func TestPGPrepared(t *testing.T) {
 		"SELECT $1 = $1":           "pq: unsupported comparison operator: <valarg> = <valarg>",
 		"SELECT $1 > 0 AND NOT $1": "pq: incompatible NOT argument type: int",
 		"SELECT $1":                "pq: unsupported result type: valarg",
+		"SELECT $1 + $1":           "pq: unsupported binary operator: <valarg> + <valarg>",
+		"SELECT now() + $1":        "pq: unsupported binary operator: <timestamp> + <valarg>",
 	}
 
 	for query, reason := range testFailures {
