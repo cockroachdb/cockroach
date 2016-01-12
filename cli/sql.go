@@ -19,6 +19,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 
@@ -49,7 +50,7 @@ func runTerm(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	db := makeSQLClient()
+	db, dbURL := makeSQLClient()
 	defer func() { _ = db.Close() }()
 
 	liner := liner.NewLiner()
@@ -59,10 +60,15 @@ func runTerm(cmd *cobra.Command, args []string) {
 
 	fmt.Print(infoMessage)
 
-	// Default prompt is "hostname> "
-	// continued statement prompt it: "        -> "
-	// TODO(marc): maybe switch to "user@hostname" and strip port if present.
-	fullPrompt := context.Addr
+	// Default prompt is part of the connection URL. eg: "marc@localhost>"
+	// continued statement prompt is: "        -> "
+	fullPrompt := dbURL
+	if parsedURL, err := url.Parse(dbURL); err == nil {
+		// If parsing fails, we keep the entire URL. The Open call succeeded, and that
+		// the important part.
+		fullPrompt = fmt.Sprintf("%s@%s", parsedURL.User, parsedURL.Host)
+	}
+
 	if len(fullPrompt) == 0 {
 		fullPrompt = " "
 	}

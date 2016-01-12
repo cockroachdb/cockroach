@@ -23,10 +23,15 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 )
 
 var maxResults int64
+
+var connURL string
+var connUser, connHost, connDBName string
+var connPort int
 
 // pflagValue wraps flag.Value and implements the extra methods of the
 // pflag.Value interface.
@@ -73,6 +78,9 @@ var flagUsage = map[string]string{
         Directory containing RSA key and x509 certs. This flag is required if
         --insecure=false.
 `,
+	"database": `
+        Database to use.
+`,
 	"dev": `
         Runs the node as a standalone in-memory cluster and forces --insecure
         for all server and client commands. Useful for developing Cockroach
@@ -89,6 +97,9 @@ var flagUsage = map[string]string{
         - lb: RPC load balancer forwarding to an arbitrary node
         - http-lb: HTTP load balancer: we query
           http(s)://<address>/_status/details/local
+`,
+	"host": `
+        Database server host.
 `,
 	"insecure": `
         Run over plain HTTP. WARNING: this is strongly discouraged.
@@ -125,6 +136,9 @@ var flagUsage = map[string]string{
 	"pgaddr": `
         The host:port to bind for Postgres traffic.
 `,
+	"port": `
+        Database server port.
+`,
 	"scan-interval": `
         Adjusts the target for the duration of a single scan through a store's
         ranges. The scan is slowed as necessary to approximately achieve this
@@ -149,6 +163,13 @@ var flagUsage = map[string]string{
         Adjusts the timeout for stores.  If there's been no gossiped updated
         from a store after this time, the store is considered unavailable.
         Replicas on an unavailable store will be moved to available ones.
+`,
+	"url": `
+        Connection url. eg: postgresql://myuser@localhost:15432/mydb
+        If left empty, the connection flags are used (host, port, user, database, insecure, certs).
+`,
+	"user": `
+        Database user name.
 `,
 }
 
@@ -243,9 +264,27 @@ func initFlags(ctx *server.Context) {
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
 		f.BoolVar(&context.EphemeralSingleNode, "dev", context.EphemeralSingleNode, flagUsage["dev"])
-		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, flagUsage["insecure"])
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])
+	}
+
+	// Commands that take a plain --addr=<host>:<port> flag.
+	simpleCmds := []*cobra.Command{kvCmd, rangeCmd, exterminateCmd, quitCmd}
+	for _, cmd := range simpleCmds {
+		f := cmd.PersistentFlags()
+		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
+	}
+
+	// Commands that take a SQL connection URL.
+	sqlCmds := []*cobra.Command{sqlShellCmd, userCmd, zoneCmd}
+	for _, cmd := range sqlCmds {
+		f := cmd.PersistentFlags()
+		f.StringVar(&connURL, "url", "", flagUsage["url"])
+
+		f.StringVar(&connUser, "user", security.RootUser, flagUsage["user"])
+		f.StringVar(&connHost, "host", "localhost", flagUsage["host"])
+		f.IntVar(&connPort, "port", 15432, flagUsage["port"])
+		f.StringVar(&connDBName, "database", "", flagUsage["database"])
 	}
 
 	// Max results flag for scan, reverse scan, and range list.
