@@ -26,7 +26,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"golang.org/x/net/context"
 
@@ -155,8 +154,7 @@ type Replica struct {
 	// Last index applied to the state machine. Updated atomically.
 	appliedIndex uint64
 	systemDBHash []byte         // sha1 hash of the system config @ last gossip
-	lease        unsafe.Pointer // Information for leader lease, updated atomically
-	llMu         sync.Mutex     // Synchronizes readers' requests for leader lease
+	llMu         sync.Mutex     // Synchronizes (throttles) readers' requests for leader lease
 	sequence     *SequenceCache // Provides txn replay protection
 
 	// proposeRaftCommandFn can be set to mock out the propose operation.
@@ -177,6 +175,7 @@ type Replica struct {
 		replicaID      roachpb.ReplicaID
 		raftGroup      *raft.RawNode
 		truncatedState *roachpb.RaftTruncatedState
+		leaderLease    *roachpb.Lease
 	}
 }
 
@@ -194,9 +193,7 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store) (*Replica, error) {
 		return nil, err
 	}
 
-	if r.ContainsKey(keys.SystemConfigSpan.Key) {
-		r.maybeGossipSystemConfig()
-	}
+	r.maybeGossipSystemConfig()
 
 	var err error
 	if r.stats, err = newRangeStats(desc.RangeID, store.Engine()); err != nil {
@@ -232,7 +229,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	if err != nil {
 		return err
 	}
-	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
+	r.mu.leaderLease = lease
 
 	_, repDesc := desc.FindReplica(r.store.StoreID())
 	if repDesc != nil {
@@ -370,9 +367,11 @@ func loadLeaderLease(eng engine.Engine, rangeID roachpb.RangeID) (*roachpb.Lease
 	return lease, nil
 }
 
-// getLease returns the current leader lease.
-func (r *Replica) getLease() *roachpb.Lease {
-	return (*roachpb.Lease)(atomic.LoadPointer(&r.lease))
+// getLeaderLease returns the current leader lease.
+func (r *Replica) getLeaderLease() *roachpb.Lease {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.leaderLease
 }
 
 // newNotLeaderError returns a NotLeaderError initialized with the
@@ -464,12 +463,14 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) *roachpb.Error
 //  will not incur latency waiting for the command to complete.
 //  Reads, however, must wait.
 func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace) *roachpb.Error {
+	// llMU is used to throttle all incoming leader lease requests and is not
+	// used to protect any variables.
 	r.llMu.Lock()
 	defer r.llMu.Unlock()
 
 	timestamp := r.store.Clock().Now()
 
-	if lease := r.getLease(); lease.Covers(timestamp) {
+	if lease := r.getLeaderLease(); lease.Covers(timestamp) {
 		if lease.OwnedBy(r.store.StoreID()) {
 			// Happy path: We have an active lease, nothing to do.
 			return nil
@@ -489,7 +490,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace) *roachpb.E
 	//
 	// In all cases, the error is converted to a NotLeaderError.
 	if _, ok := pErr.GoError().(*roachpb.LeaseRejectedError); ok {
-		lease := r.getLease()
+		lease := r.getLeaderLease()
 		if !lease.Covers(timestamp) {
 			// The lease was rejected even though it was not obtained by another
 			// replica.
@@ -1333,7 +1334,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 
 		// TODO(tschottdorf): shouldn't be in the loop. Currently is because
 		// we haven't cleaned up the timestamp handling fully.
-		if lease := r.getLease(); args.Method() != roachpb.LeaderLease &&
+		if lease := r.getLeaderLease(); args.Method() != roachpb.LeaderLease &&
 			(!lease.OwnedBy(originReplica.StoreID) || !lease.Covers(ba.Timestamp)) {
 			// Verify the leader lease is held, unless this command is trying to
 			// obtain it. Any other Raft command has had the leader lease held
@@ -1641,7 +1642,11 @@ func (r *Replica) maybeGossipSystemConfig() {
 		return
 	}
 
-	if lease := r.getLease(); !lease.OwnedBy(r.store.StoreID()) || !lease.Covers(r.store.Clock().Now()) {
+	if !r.ContainsKey(keys.SystemConfigSpan.Key) {
+		return
+	}
+
+	if lease := r.getLeaderLease(); !lease.OwnedBy(r.store.StoreID()) || !lease.Covers(r.store.Clock().Now()) {
 		// Do not gossip when a leader lease is not held.
 		return
 	}

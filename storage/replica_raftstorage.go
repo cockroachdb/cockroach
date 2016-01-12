@@ -18,7 +18,6 @@ package storage
 
 import (
 	"sync/atomic"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -575,7 +574,9 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) error
 			panic(err)
 		}
 
-		atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.mu.leaderLease = lease
 	})
 	return nil
 }
