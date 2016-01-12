@@ -110,51 +110,61 @@ prepare_artifacts() {
 
 trap prepare_artifacts EXIT
 
-# 1. Run "make check" to verify coding guidelines.
-echo "make check"
-time ${builder} make check | tee "${outdir}/check.log"
+function is_shard() {
+  test $(($1 % $CIRCLE_NODE_TOTAL)) -eq $CIRCLE_NODE_INDEX
+}
 
-# 2.1 Verify that "go generate" was run.
-echo "verifying generated files"
-time ${builder} /bin/bash -c "go generate ./..."
-time ${builder} /bin/bash -c "(git ls-files --modified --deleted --others --exclude-standard | diff /dev/null -) || (git add -A && git diff -u HEAD && false)" | tee "${outdir}/generate.log"
-# 2.2 Avoid code rot.
-echo "building gossip simulation"
-time ${builder} /bin/bash -c "go build ./gossip/simulation/..."
+if is_shard 0; then
+  # Run "make check" to verify coding guidelines.
+  echo "make check"
+  time ${builder} make check | tee "${outdir}/check.log"
 
-# 3. Run "make test".
-echo "make test"
-time ${builder} make test \
-  TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2,tracer=2' | \
-  tr -d '\r' | tee "${outdir}/test.log" | \
-  grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
-  awk '{print "test:", $0}'
+  # Verify that "go generate" was run.
+  echo "verifying generated files"
+  time ${builder} /bin/bash -c "go generate ./..."
+  time ${builder} /bin/bash -c "(git ls-files --modified --deleted --others --exclude-standard | diff /dev/null -) || (git add -A && git diff -u HEAD && false)" | tee "${outdir}/generate.log"
+  # Avoid code rot.
+  echo "building gossip simulation"
+  time ${builder} /bin/bash -c "go build ./gossip/simulation/..."
 
-# 4. Run the acceptance tests (only on Linux). We can run the
-# acceptance tests on the Mac's, but circle-deps.sh only built the
-# acceptance tests for Linux.
-if [ "$(uname)" = "Linux" ]; then
-  # Make a place for the containers to write their logs.
-  mkdir -p ${outdir}/acceptance
+  # Run the acceptance tests (only on Linux). We can run the
+  # acceptance tests on the Mac's, but circle-deps.sh only built the
+  # acceptance tests for Linux.
+  if [ "$(uname)" = "Linux" ]; then
+    # Make a place for the containers to write their logs.
+    mkdir -p ${outdir}/acceptance
 
-  # Note that this test requires 2>&1 but the others don't because
-  # this one runs outside the builder container (and inside the
-  # container, something is already combining stdout and stderr).
-  time $(dirname $0)/../acceptance.test -num-local 3 -l ${outdir}/acceptance \
-    -test.v -test.timeout 5m \
-    --verbosity=1 --vmodule=monitor=2 2>&1 | \
-    tr -d '\r' | tee "${outdir}/acceptance.log" | \
-    grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
-    awk '{print "acceptance:", $0}'
-else
-  echo "skipping acceptance tests on $(uname): use 'make acceptance' instead"
+    # Note that this test requires 2>&1 but the others don't because
+    # this one runs outside the builder container (and inside the
+    # container, something is already combining stdout and stderr).
+    time $(dirname $0)/../acceptance.test -num-local 3 -l ${outdir}/acceptance \
+      -test.v -test.timeout 5m \
+      --verbosity=1 --vmodule=monitor=2 2>&1 | \
+      tr -d '\r' | tee "${outdir}/acceptance.log" | \
+      grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
+      awk '{print "acceptance:", $0}'
+  else
+    echo "skipping acceptance tests on $(uname): use 'make acceptance' instead"
+  fi
 fi
 
-# 5. Run "make testrace". This takes a long time and fails mostly for flaky
-# tests, so it's last to give the "real" failures a chance first.
-echo "make testrace"
-time ${builder} make testrace \
-  TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' | \
-  tr -d '\r' | tee "${outdir}/testrace.log" | \
-  grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
-  awk '{print "race:", $0}'
+if is_shard 1; then
+  # Run "make test".
+  echo "make test"
+  time ${builder} make test \
+    TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2,tracer=2' | \
+    tr -d '\r' | tee "${outdir}/test.log" | \
+    grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
+    awk '{print "test:", $0}'
+fi
+
+if is_shard 2; then
+  # Run "make testrace". This takes a long time and fails mostly for flaky
+  # tests, so it's last to give the "real" failures a chance first.
+  echo "make testrace"
+  time ${builder} make testrace \
+    TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' | \
+    tr -d '\r' | tee "${outdir}/testrace.log" | \
+    grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
+    awk '{print "race:", $0}'
+fi
