@@ -1407,11 +1407,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 
-	// Copy the timestamp cache into the new range. Commit triggers already
-	// acquire the read lock since concurrent reads could add updates that
-	// never make it to the new Range (see #3148), so all we grab here is
-	// the actual lock (at time of writing, this isn't necessary but for
-	// convention).
+	// Copy the timestamp cache into the new range.
 	r.mu.Lock()
 	newRng.mu.Lock()
 	r.mu.tsCache.MergeInto(newRng.mu.tsCache, true /* clear */)
