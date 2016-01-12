@@ -476,12 +476,17 @@ var cmpOps = map[cmpArgs]cmpOp{
 
 	cmpArgs{Like, stringType, stringType}: {
 		fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
-			key := likeKey(right.(DString))
-			re, err := ctx.ReCache.GetRegexp(key)
-			if err != nil {
-				panic(fmt.Sprintf("LIKE regexp compilations should not fail: %v", err))
+			pattern := string(right.(DString))
+			like := optimizedLikeFunc(pattern)
+			if like == nil {
+				key := likeKey(pattern)
+				re, err := ctx.ReCache.GetRegexp(key)
+				if err != nil {
+					panic(fmt.Sprintf("LIKE regexp compilations should not fail: %v", err))
+				}
+				like = re.MatchString
 			}
-			return DBool(re.MatchString(string(left.(DString)))), nil
+			return DBool(like(string(left.(DString)))), nil
 		},
 	},
 
@@ -1321,6 +1326,50 @@ func (ctx EvalContext) ParseTimestamp(s DString) (DTimestamp, error) {
 	}
 
 	return DTimestamp{}, err
+}
+
+// Simplifies LIKE expressions that do not need full regular expressions to evaluate the condition.
+// For example, when the expression is just checking to see if a string starts with a given
+// pattern.
+func optimizedLikeFunc(pattern string) func(string) bool {
+	switch len(pattern) {
+	case 0:
+		return func(s string) bool {
+			return s == ""
+		}
+	case 1:
+		switch pattern[0] {
+		case '%':
+			return func(s string) bool {
+				return true
+			}
+		case '_':
+			return func(s string) bool {
+				return len(s) == 1
+			}
+		}
+	default:
+		if !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
+			// Cases like "something\%" are not optimized, but this does not affect correctness.
+			anyEnd := pattern[len(pattern)-1] == '%' && pattern[len(pattern)-2] != '\\'
+			anyStart := pattern[0] == '%'
+			switch {
+			case anyEnd && anyStart:
+				return func(s string) bool {
+					return strings.Contains(s, pattern[1:len(pattern)-1])
+				}
+			case anyEnd:
+				return func(s string) bool {
+					return strings.HasPrefix(s, pattern[:len(pattern)-1])
+				}
+			case anyStart:
+				return func(s string) bool {
+					return strings.HasSuffix(s, pattern[1:])
+				}
+			}
+		}
+	}
+	return nil
 }
 
 type likeKey string
