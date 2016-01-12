@@ -20,6 +20,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 
@@ -47,7 +48,6 @@ Open a sql shell running against the cockroach database at --addr.
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
 func runInteractive(db *sql.DB) {
-
 	liner := liner.NewLiner()
 	defer func() {
 		_ = liner.Close()
@@ -55,10 +55,15 @@ func runInteractive(db *sql.DB) {
 
 	fmt.Print(infoMessage)
 
-	// Default prompt is "hostname> "
-	// continued statement prompt it: "        -> "
-	// TODO(marc): maybe switch to "user@hostname" and strip port if present.
-	fullPrompt := context.Addr
+	// Default prompt is part of the connection URL. eg: "marc@localhost>"
+	// continued statement prompt is: "        -> "
+	fullPrompt := dbURL
+	if parsedURL, err := url.Parse(dbURL); err == nil {
+		// If parsing fails, we keep the entire URL. The Open call succeeded, and that
+		// the important part.
+		fullPrompt = fmt.Sprintf("%s@%s", parsedURL.User, parsedURL.Host)
+	}
+
 	if len(fullPrompt) == 0 {
 		fullPrompt = " "
 	}
