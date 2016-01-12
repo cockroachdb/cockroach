@@ -50,9 +50,6 @@ func (v pflagValue) IsBoolFlag() bool {
 }
 
 var flagUsage = map[string]string{
-	"addr": `
-        The host:port to bind for HTTP/RPC traffic.
-`,
 	"attrs": `
         An ordered, colon-separated list of node attributes. Attributes are
         arbitrary strings specifying topography or machine
@@ -270,14 +267,14 @@ func initFlags(ctx *server.Context) {
 		f.StringVar(&connHost, "host", "", flagUsage["host"])
 	}
 
-	// Commands that take a plain --addr=<host>:<port> flag.
+	// Commands that need the cockroach port.
 	simpleCmds := []*cobra.Command{kvCmd, rangeCmd, exterminateCmd, quitCmd}
 	for _, cmd := range simpleCmds {
 		f := cmd.PersistentFlags()
 		f.StringVar(&connCockroachPort, "cockroach-port", "26257", flagUsage["cockroach-port"])
 	}
 
-	// Commands that take a SQL connection URL.
+	// Commands that establish a SQL connection.
 	sqlCmds := []*cobra.Command{sqlShellCmd, userCmd, zoneCmd}
 	for _, cmd := range sqlCmds {
 		f := cmd.PersistentFlags()
