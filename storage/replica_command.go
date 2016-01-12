@@ -23,9 +23,7 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
-	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -1134,9 +1132,12 @@ func (r *Replica) TruncateLog(batch engine.Engine, ms *engine.MVCCStats, h roach
 // lease, all duties required of the range leader are commenced, including
 // clearing the command queue and timestamp cache.
 func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.LeaderLeaseRequest) (roachpb.LeaderLeaseResponse, error) {
+	defer r.maybeGossipSystemConfig()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	var reply roachpb.LeaderLeaseResponse
 
-	prevLease := r.getLease()
+	prevLease := r.mu.leaderLease
 	isExtension := prevLease.Replica.StoreID == args.Lease.Replica.StoreID
 	effectiveStart := args.Lease.Start
 	// We return this error in "normal" lease-overlap related failures.
@@ -1153,7 +1154,7 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 	}
 
 	// Verify that requestion replica is part of the current replica set.
-	if idx, _ := r.Desc().FindReplica(args.Lease.Replica.StoreID); idx == -1 {
+	if idx, _ := r.mu.desc.FindReplica(args.Lease.Replica.StoreID); idx == -1 {
 		rErr.Message = "replica not found"
 		return reply, rErr
 	}
@@ -1197,25 +1198,19 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 	if err := engine.MVCCPutProto(batch, ms, keys.RaftLeaderLeaseKey(r.RangeID), roachpb.ZeroTimestamp, nil, &args.Lease); err != nil {
 		return reply, err
 	}
-	atomic.StorePointer(&r.lease, unsafe.Pointer(&args.Lease))
+	r.mu.leaderLease = &args.Lease
 
 	// If this replica is a new holder of the lease, update the
 	// low water mark in the timestamp cache. We add the maximum
 	// clock offset to account for any difference in clocks
 	// between the expiration (set by a remote node) and this
 	// node.
-	if r.getLease().Replica.StoreID == r.store.StoreID() &&
-		prevLease.Replica.StoreID != r.getLease().Replica.StoreID {
-		r.mu.Lock()
+	if r.mu.leaderLease.Replica.StoreID == r.store.StoreID() &&
+		prevLease.Replica.StoreID != r.mu.leaderLease.Replica.StoreID {
 		r.mu.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.store.Clock().MaxOffset()), 0))
-		r.mu.Unlock()
 		log.Infof("range %d: new leader lease %s", r.RangeID, args.Lease)
 	}
 
-	// Gossip system config if this range includes the system span.
-	if r.ContainsKey(keys.SystemConfigSpan.Key) {
-		r.maybeGossipSystemConfig()
-	}
 	return reply, nil
 }
 
