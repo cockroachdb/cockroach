@@ -87,7 +87,50 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 	if pErr := s.initFrom(p, parsed); pErr != nil {
 		return nil, pErr
 	}
-	return s, nil
+
+	// TODO(radu): for now we assume from is always a scanNode
+	scan := s.from.(*scanNode)
+
+	// NB: both orderBy and groupBy are passed and can modify `scan` but orderBy must do so first.
+	sort, pErr := p.orderBy(parsed, scan)
+	if pErr != nil {
+		return nil, pErr
+	}
+	group, pErr := p.groupBy(parsed, scan)
+	if pErr != nil {
+		return nil, pErr
+	}
+
+	if scan.filter != nil && group != nil {
+		// Allow the group-by to add an implicit "IS NOT NULL" filter.
+		scan.filter = group.isNotNullFilter(scan.filter)
+	}
+
+	// Get the ordering for index selection (if any).
+	var ordering []int
+	var grouping bool
+
+	if group != nil {
+		ordering = group.desiredOrdering
+		grouping = true
+	} else if sort != nil {
+		ordering, _ = sort.Ordering()
+	}
+
+	plan, pErr := p.selectIndex(scan, ordering, grouping)
+	if pErr != nil {
+		return nil, pErr
+	}
+
+	// Update s.from with the new plan.
+	s.from = plan
+
+	// Wrap this node as necessary.
+	limit, pErr := p.limit(parsed, p.distinct(parsed, sort.wrap(group.wrap(s))))
+	if pErr != nil {
+		return nil, pErr
+	}
+	return limit, nil
 }
 
 // Initializes the from node, given the parsed select expression
@@ -113,38 +156,12 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 		return s.pErr
 	}
 
-	s.from, s.pErr = p.initScanNode(scan, parsed)
-	return s.pErr
-}
-
-func (p *planner) initScanNode(scan *scanNode, n *parser.Select) (planNode, *roachpb.Error) {
-	// TODO(radu): much of the logic below will move into selectNode
-	if pErr := scan.initWhere(n.Where); pErr != nil {
-		return nil, pErr
+	s.pErr = scan.init(parsed)
+	if s.pErr != nil {
+		return s.pErr
 	}
-	if pErr := scan.initTargets(n.Exprs); pErr != nil {
-		return nil, pErr
-	}
-	// NB: both orderBy and groupBy are passed and can modify `scan` but orderBy must do so first.
-	sort, pErr := p.orderBy(n, scan)
-	if pErr != nil {
-		return nil, pErr
-	}
-	group, pErr := p.groupBy(n, scan)
-	if pErr != nil {
-		return nil, pErr
-	}
-
-	plan, pErr := p.selectIndex(scan, group, sort)
-	if pErr != nil {
-		return nil, pErr
-	}
-
-	limit, pErr := p.limit(n, p.distinct(n, sort.wrap(group.wrap(plan))))
-	if pErr != nil {
-		return nil, pErr
-	}
-	return limit, nil
+	s.from = scan
+	return nil
 }
 
 // selectIndex analyzes the scanNode to determine if there is an index
@@ -156,14 +173,9 @@ func (p *planner) initScanNode(scan *scanNode, n *parser.Select) (planNode, *roa
 // constraints is created for the index. The candidate indexes are ranked using
 // these constraints and the best index is selected. The contraints are then
 // transformed into a set of spans to scan within the index.
-func (p *planner) selectIndex(s *scanNode, group *groupNode, sort *sortNode) (planNode, *roachpb.Error) {
-	var ordering []int
-	if group != nil {
-		ordering = group.desiredOrdering
-	} else if sort != nil {
-		ordering, _ = sort.Ordering()
-	}
-
+//
+// If grouping is true, the ordering is the desired ordering for grouping.
+func (p *planner) selectIndex(s *scanNode, ordering []int, grouping bool) (planNode, *roachpb.Error) {
 	if s.desc == nil || (s.filter == nil && ordering == nil) {
 		// No table or no where-clause and no ordering.
 		s.initOrdering(0)
@@ -196,11 +208,6 @@ func (p *planner) selectIndex(s *scanNode, group *groupNode, sort *sortNode) (pl
 	}
 
 	if s.filter != nil {
-		if group != nil {
-			// Allow the group-by to add an implicit "IS NOT NULL" filter.
-			s.filter = group.isNotNullFilter(s.filter)
-		}
-
 		// Analyze the filter expression, simplifying it and splitting it up into
 		// possibly overlapping ranges.
 		exprs, equivalent := analyzeExpr(s.filter)
@@ -289,12 +296,12 @@ func (p *planner) selectIndex(s *scanNode, group *groupNode, sort *sortNode) (pl
 		}
 	}
 
-	if group != nil && len(group.desiredOrdering) == 1 && len(s.spans) == 1 && s.filter == nil {
+	if grouping && len(ordering) == 1 && len(s.spans) == 1 && s.filter == nil {
 		// If grouping has a desired order and there is a single span for which the
 		// filter is true, check to see if the ordering matches the desired
 		// ordering. If it does we can limit the scan to a single key.
 		existingOrdering, prefix := plan.Ordering()
-		match := computeOrderingMatch(group.desiredOrdering, existingOrdering, prefix, +1)
+		match := computeOrderingMatch(ordering, existingOrdering, prefix, +1)
 		if match == 1 {
 			s.spans[0].count = 1
 		}
