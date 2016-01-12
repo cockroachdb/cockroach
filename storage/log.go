@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // RangeEventLogType describes a specific event type recorded in the range log
@@ -59,7 +58,7 @@ type rangeLogEvent struct {
 	info         string
 }
 
-func (s *Store) insertRangeLogEvent(txn *client.Txn, event rangeLogEvent) error {
+func (s *Store) insertRangeLogEvent(txn *client.Txn, event rangeLogEvent) *roachpb.Error {
 	const insertEventTableStmt = `
 INSERT INTO system.rangelog (
   timestamp, rangeID, eventType, storeID, otherRangeID
@@ -84,7 +83,7 @@ VALUES(
 		return err
 	}
 	if rows != 1 {
-		return util.Errorf("%d rows affected by log insertion; expected exactly one row affected.", rows)
+		return roachpb.NewErrorf("%d rows affected by log insertion; expected exactly one row affected.", rows)
 	}
 	return nil
 }
@@ -99,7 +98,7 @@ func AddEventLogToMetadataSchema(schema *sql.MetadataSchema) {
 // logSplit logs a range split event into the event table. The affected range is
 // the range which previously existed and is being split in half; the "other"
 // range is the new range which is being created.
-func (s *Store) logSplit(txn *client.Txn, updated, new roachpb.RangeDescriptor) error {
+func (s *Store) logSplit(txn *client.Txn, updated, new roachpb.RangeDescriptor) *roachpb.Error {
 	if !s.ctx.LogRangeEvents {
 		return nil
 	}

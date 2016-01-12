@@ -18,6 +18,7 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 )
 
@@ -31,7 +32,7 @@ type InternalExecutor struct {
 
 // ExecuteStatementInTransaction executes the supplied SQL statement as part of
 // the supplied transaction. Statements are currently executed as the root user.
-func (ie InternalExecutor) ExecuteStatementInTransaction(txn *client.Txn, statement string, params ...interface{}) (int, error) {
+func (ie InternalExecutor) ExecuteStatementInTransaction(txn *client.Txn, statement string, params ...interface{}) (int, *roachpb.Error) {
 	p := planner{txn: txn, user: security.RootUser, leaseMgr: ie.LeaseManager}
 	return p.exec(statement, params...)
 }

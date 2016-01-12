@@ -190,7 +190,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		Tracer:          tracer,
 		StorePool:       s.storePool,
 		SQLExecutor: sql.InternalExecutor{
-			LeaseManager: leaseMgr,
+			LeaseManager: s.leaseMgr,
 		},
 		LogRangeEvents: true,
 		AllocatorOptions: storage.AllocatorOptions{

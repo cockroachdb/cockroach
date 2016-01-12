@@ -325,7 +325,7 @@ func TestSingleRangeReverseScan(t *testing.T) {
 	}
 	// Case 3: Test roachpb.TableDataMin. Expected to return "g" and "h".
 	wanted := 2
-	if rows, pErr := db.ReverseScan("g", keys.TableDataMin, 0); err != nil {
+	if rows, pErr := db.ReverseScan("g", keys.TableDataMin, 0); pErr != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", pErr)
 	} else if l := len(rows); l != wanted {
 		t.Errorf("expected %d rows; got %d", wanted, l)
