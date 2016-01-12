@@ -68,11 +68,10 @@ type Iterator interface {
 	// computes stats counters based on the values. This method is used after a
 	// range is split to recompute stats for each subrange. The start key is
 	// always adjusted to avoid counting local keys in the event stats are being
-	// recomputed for the first range (i.e. the one with start key ==
-	// KeyMin). The nowNanos arg specifies the wall time in nanoseconds since the
-	// epoch and is used to compute the total age of all intents. The computed
-	// stats are accumulated (not assigned) to the ms parameter.
-	ComputeStats(ms *MVCCStats, start, end MVCCKey, nowNanos int64) error
+	// recomputed for the first range (i.e. the one with start key == KeyMin).
+	// The nowNanos arg specifies the wall time in nanoseconds since the
+	// epoch and is used to compute the total age of all intents.
+	ComputeStats(start, end MVCCKey, nowNanos int64) (MVCCStats, error)
 }
 
 // Engine is the interface that wraps the core operations of a
