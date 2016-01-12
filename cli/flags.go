@@ -59,12 +59,27 @@ nodes. For example:`) + `
 
   --attrs=us-west-1b,gpu
 `,
+	"balance-mode": wrapText(`
+Determines the criteria used by nodes to make balanced allocation
+decisions. Valid options are "usage" (default) or "rangecount".`),
 	"cache-size": wrapText(`
 Total size in bytes for caches, shared evenly if there are multiple
 storage devices.`),
 	"certs": wrapText(`
 Directory containing RSA key and x509 certs. This flag is required if
 --insecure=false.`),
+	"dev": wrapText(`
+Runs the node as a standalone in-memory cluster and forces --insecure
+for all server and client commands. Useful for developing Cockroach
+itself.`),
+	"execute": wrapText(`
+Execute the SQL statement(s) on the command line, then exit.  Each
+subsequent positional argument on the command line may contain
+one or more SQL statements, separated by semicolons. If an
+error occurs in any statement, the command exits with a
+non-zero status code and further statements are not
+executed. The results of the last SQL statement in each
+positional argument are printed on the standard output.`),
 	"gossip": wrapText(`
 A comma-separated list of gossip addresses or resolvers for gossip
 bootstrap. Each item in the list has an optional type:
@@ -78,30 +93,31 @@ Type is one of:`) + `
 - self: for single node systems, specify --gossip=self (the
   <address> is omitted).
 `,
+	"insecure": wrapText(`
+Run over plain HTTP. WARNING: this is strongly discouraged.`),
 	"key-size": wrapText(`
 Key size in bits for CA/Node/Client certificates.`),
 	"linearizable": wrapText(`
 Enables linearizable behaviour of operations on this node by making
 sure that no commit timestamp is reported back to the client until all
 other node clocks have necessarily passed it.`),
-	"dev": wrapText(`
-Runs the node as a standalone in-memory cluster and forces --insecure
-for all server and client commands. Useful for developing Cockroach
-itself.`),
-	"insecure": wrapText(`
-Run over plain HTTP. WARNING: this is strongly discouraged.`),
 	"max-offset": wrapText(`
 The maximum clock offset for the cluster. Clock offset is measured on
 all node-to-node links and if any node notices it has clock offset in
 excess of --max-offset, it will commit suicide. Setting this value too
 high may decrease transaction performance in the presence of
 contention.`),
+	"max-results": wrapText(`
+Define the maximum number of results that will be retrieved.`),
 	"memtable-budget": wrapText(`
 Total size in bytes for memtables, shared evenly if there are multiple
 storage devices.`),
 	"metrics-frequency": wrapText(`
 Adjust the frequency at which the server records its own internal metrics.
 `),
+	"password": wrapText(`
+The created user's password. If provided, disables prompting. Pass '-' to
+provide the password on standard input.`),
 	"pgaddr": wrapText(`
 The host:port to bind for Postgres traffic.`),
 	"scan-interval": wrapText(`
@@ -111,10 +127,6 @@ duration.`),
 	"scan-max-idle-time": wrapText(`
 Adjusts the max idle time of the scanner. This speeds up the scanner on small
 clusters to be more responsive.`),
-	"time-until-store-dead": wrapText(`
-Adjusts the timeout for stores.  If there's been no gossiped updated
-from a store after this time, the store is considered unavailable.
-Replicas on an unavailable store will be moved to available ones.`),
 	"stores": wrapText(`
 A comma-separated list of stores, specified by a colon-separated list
 of device attributes followed by '=' and either a filepath for a
@@ -126,22 +138,10 @@ attributes might also include speeds and other specs (7200rpm,
 
   --stores=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824
 `,
-	"max-results": wrapText(`
-Define the maximum number of results that will be retrieved.`),
-	"balance-mode": wrapText(`
-Determines the criteria used by nodes to make balanced allocation
-decisions. Valid options are "usage" (default) or "rangecount".`),
-	"password": wrapText(`
-The created user's password. If provided, disables prompting. Pass '-' to
-provide the password on standard input.`),
-	"execute": wrapText(`
-Execute the SQL statement(s) on the command line, then exit.  Each
-subsequent positional argument on the command line may contain
-one or more SQL statements, separated by semicolons. If an
-error occurs in any statement, the command exits with a
-non-zero status code and further statements are not
-executed. The results of the last SQL statement in each
-positional argument are printed on the standard output.`),
+	"time-until-store-dead": wrapText(`
+Adjusts the timeout for stores.  If there's been no gossiped updated
+from a store after this time, the store is considered unavailable.
+Replicas on an unavailable store will be moved to available ones.`),
 }
 
 const usageIndentation = 8
@@ -256,7 +256,6 @@ func initFlags(ctx *Context) {
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
 		f.BoolVar(&context.EphemeralSingleNode, "dev", context.EphemeralSingleNode, usage("dev"))
-
 		f.StringVar(&ctx.Addr, "addr", ctx.Addr, usage("addr"))
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, usage("certs"))
