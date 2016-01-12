@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -108,9 +109,9 @@ func TestMakeTableDescColumns(t *testing.T) {
 		if err := create.Table.NormalizeTableName(""); err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		schema, err := makeTableDesc(create, 1)
-		if err != nil {
-			t.Fatalf("%d: %v", i, err)
+		schema, pErr := makeTableDesc(create, 1)
+		if pErr != nil {
+			t.Fatalf("%d: %v", i, pErr)
 		}
 		if !reflect.DeepEqual(d.colType, schema.Columns[0].Type) {
 			t.Fatalf("%d: expected %+v, but got %+v", i, d.colType, schema.Columns[0])
@@ -203,9 +204,9 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		if err := create.Table.NormalizeTableName(""); err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		schema, err := makeTableDesc(create, 1)
+		schema, pErr := makeTableDesc(create, 1)
 		if err != nil {
-			t.Fatalf("%d: %v", i, err)
+			t.Fatalf("%d: %v", i, pErr)
 		}
 		if !reflect.DeepEqual(d.primary, schema.PrimaryIndex) {
 			t.Fatalf("%d: expected %+v, but got %+v", i, d.primary, schema.PrimaryIndex)
@@ -228,11 +229,12 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	if err := create.Table.NormalizeTableName(""); err != nil {
 		t.Fatal(err)
 	}
-	desc, err := makeTableDesc(create, 1)
-	if err != nil {
-		t.Fatal(err)
+	desc, pErr := makeTableDesc(create, 1)
+	if pErr != nil {
+		t.Fatal(pErr)
 	}
-	if err := desc.AllocateIDs(); err != errMissingPrimaryKey {
-		t.Fatal(err)
+	pErr = desc.AllocateIDs()
+	if !testutils.IsError(pErr.GoError(), errMissingPrimaryKey.Error()) {
+		t.Fatalf("unexpected error: %s", pErr)
 	}
 }

@@ -68,9 +68,9 @@ func parseAndNormalizeExpr(t *testing.T, sql string) (parser.Expr, qvalMap) {
 		t.Fatal(err)
 	}
 
-	expr, err = s.resolveQNames(expr)
-	if err != nil {
-		t.Fatalf("%s: %v", sql, err)
+	expr, nErr := s.resolveQNames(expr)
+	if nErr != nil {
+		t.Fatalf("%s: %v", sql, nErr)
 	}
 	if _, err := expr.TypeCheck(nil); err != nil {
 		t.Fatalf("%s: %v", sql, err)

@@ -280,8 +280,8 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 		}
 	}
 
-	if err := repl.resolveIntents(repl.context(), intents, true /* wait */, false /* !poison */); err != nil {
-		return err
+	if pErr := repl.resolveIntents(repl.context(), intents, true /* wait */, false /* !poison */); pErr != nil {
+		return pErr.GoError()
 	}
 
 	// Deal with any leftover sequence cache keys. There shouldn't be many of

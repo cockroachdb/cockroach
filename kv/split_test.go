@@ -69,7 +69,7 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 			return
 		default:
 			first := true
-			err := db.Txn(func(txn *client.Txn) error {
+			pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 				if first && txnChannel != nil {
 					select {
 					case txnChannel <- struct{}{}:
@@ -82,15 +82,15 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 				for j := 0; j <= int(src.Int31n(10)); j++ {
 					key := randutil.RandBytes(src, 10)
 					val := randutil.RandBytes(src, int(src.Int31n(valBytes)))
-					if err := txn.Put(key, val); err != nil {
-						log.Infof("experienced an error in routine %d: %s", i, err)
-						return err
+					if pErr := txn.Put(key, val); pErr != nil {
+						log.Infof("experienced an error in routine %d: %s", i, pErr)
+						return pErr
 					}
 				}
 				return nil
 			})
-			if err != nil {
-				t.Error(err)
+			if pErr != nil {
+				t.Error(pErr)
 			} else {
 				time.Sleep(1 * time.Millisecond)
 			}
@@ -112,8 +112,8 @@ func TestRangeSplitMeta(t *testing.T) {
 	// Execute the consecutive splits.
 	for _, splitKey := range splitKeys {
 		log.Infof("starting split at key %q...", splitKey)
-		if err := s.DB.AdminSplit(roachpb.Key(splitKey)); err != nil {
-			t.Fatal(err)
+		if pErr := s.DB.AdminSplit(roachpb.Key(splitKey)); pErr != nil {
+			t.Fatal(pErr)
 		}
 		log.Infof("split at key %q complete", splitKey)
 	}
@@ -160,8 +160,8 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 			<-txnChannel
 		}
 		log.Infof("starting split at key %q...", splitKey)
-		if err := s.DB.AdminSplit(splitKey); err != nil {
-			t.Error(err)
+		if pErr := s.DB.AdminSplit(splitKey); pErr != nil {
+			t.Error(pErr)
 		}
 		log.Infof("split at key %q complete", splitKey)
 	}
@@ -241,18 +241,13 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 		t.Fatal(err)
 	}
 	log.Infof("split at key %q first time complete", splitKey)
-	ch := make(chan error)
+	ch := make(chan *roachpb.Error)
 	go func() {
 		// should return error other than infinite loop
 		ch <- s.DB.AdminSplit(splitKey)
 	}()
 
-	select {
-	case err := <-ch:
-		if err == nil {
-			t.Error("range split on same splitKey should fail")
-		}
-	case <-time.After(500 * time.Millisecond):
-		t.Error("range split on same splitKey timed out")
+	if pErr := <-ch; pErr == nil {
+		t.Error("range split on same splitKey should fail")
 	}
 }

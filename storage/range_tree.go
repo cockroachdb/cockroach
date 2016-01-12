@@ -78,8 +78,8 @@ func (tc *treeContext) flush(b *client.Batch) error {
 // GetRangeTree fetches the RangeTree proto and sets up the range tree context.
 func getRangeTree(txn *client.Txn) (*treeContext, error) {
 	tree := new(roachpb.RangeTree)
-	if err := txn.GetProto(keys.RangeTreeRoot, tree); err != nil {
-		return nil, err
+	if pErr := txn.GetProto(keys.RangeTreeRoot, tree); pErr != nil {
+		return nil, pErr.GoError()
 	}
 	return &treeContext{
 		txn:   txn,
@@ -130,8 +130,8 @@ func (tc *treeContext) getNode(key roachpb.RKey) (*roachpb.RangeTreeNode, error)
 
 	// We don't have it cached so fetch it and add it to the cache.
 	node := new(roachpb.RangeTreeNode)
-	if err := tc.txn.GetProto(keys.RangeTreeNodeKey(key), node); err != nil {
-		return nil, err
+	if pErr := tc.txn.GetProto(keys.RangeTreeNodeKey(key), node); pErr != nil {
+		return nil, pErr.GoError()
 	}
 	tc.nodes[keyString] = cachedNode{
 		node:  node,

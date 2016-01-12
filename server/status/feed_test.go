@@ -84,7 +84,7 @@ func TestNodeEventFeed(t *testing.T) {
 		},
 		{
 			publishTo: func(nef status.NodeEventFeed) {
-				nef.CallComplete(wrap(roachpb.NewGet(roachpb.Key("abc"))), 0, roachpb.NewError(util.Errorf("error")))
+				nef.CallComplete(wrap(roachpb.NewGet(roachpb.Key("abc"))), 0, roachpb.NewErrorf("error"))
 			},
 			expected: &status.CallErrorEvent{
 				NodeID: roachpb.NodeID(1),
@@ -95,10 +95,9 @@ func TestNodeEventFeed(t *testing.T) {
 			publishTo: func(nef status.NodeEventFeed) {
 				nef.CallComplete(wrap(roachpb.NewGet(roachpb.Key("abc"))), time.Minute, &roachpb.Error{
 					Detail: &roachpb.ErrorDetail{
-						WriteIntent: &roachpb.WriteIntentError{
-							Index: &roachpb.ErrPosition{Index: 0},
-						},
+						WriteIntent: &roachpb.WriteIntentError{},
 					},
+					Index:   &roachpb.ErrPosition{Index: 0},
 					Message: "boo",
 				})
 			},
@@ -217,7 +216,7 @@ func TestServerNodeEventFeed(t *testing.T) {
 	// Add some data in a transaction. It could restart, but we return nil
 	// intentionally (i.e. we're giving up if we don't succeed immediately,
 	// this is all about generating events and we don't check success).
-	if err = db.Txn(func(txn *client.Txn) error {
+	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		b := txn.NewBatch()
 		b.Put("a", "asdf")
 		b.Put("c", "jkl;")
@@ -226,8 +225,8 @@ func TestServerNodeEventFeed(t *testing.T) {
 			log.Warning(err)
 		}
 		return nil
-	}); err != nil {
-		t.Fatalf("error putting data to db: %s", err)
+	}); pErr != nil {
+		t.Fatalf("error putting data to db: %s", pErr)
 	}
 
 	// Get some data, discarding the result.
@@ -237,12 +236,12 @@ func TestServerNodeEventFeed(t *testing.T) {
 
 	// Scan, which should fail (before it makes it to server, so this won't
 	// be tracked)
-	if _, err := db.Scan("b", "a", 0); !testutils.IsError(err, "empty batch") {
-		t.Fatalf("unexpected Scan error: %v", err)
+	if _, pErr := db.Scan("b", "a", 0); !testutils.IsError(pErr.GoError(), "empty batch") {
+		t.Fatalf("unexpected Scan error: %v", pErr)
 	}
 
-	if err := db.CPut("test", "will", "fail"); !testutils.IsError(err, "unexpected value") {
-		t.Fatalf("unexpected CPut error: %v", err)
+	if pErr := db.CPut("test", "will", "fail"); !testutils.IsError(pErr.GoError(), "unexpected value") {
+		t.Fatalf("unexpected CPut error: %v", pErr)
 	}
 
 	// Close feed and wait for reader to receive all events.
@@ -322,10 +321,9 @@ func TestNodeEventFeedTransactionRestart(t *testing.T) {
 		TransactionRestart: roachpb.TransactionRestart_ABORT})
 	nodefeed.CallComplete(wrap(&roachpb.PutRequest{}), d, &roachpb.Error{
 		Detail: &roachpb.ErrorDetail{
-			WriteIntent: &roachpb.WriteIntentError{
-				Index: &roachpb.ErrPosition{Index: 0},
-			},
+			WriteIntent: &roachpb.WriteIntentError{},
 		},
+		Index:              &roachpb.ErrPosition{Index: 0},
 		TransactionRestart: roachpb.TransactionRestart_ABORT,
 	})
 

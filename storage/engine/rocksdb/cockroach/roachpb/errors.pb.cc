@@ -67,6 +67,24 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* SendError_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   SendError_reflection_ = NULL;
+const ::google::protobuf::Descriptor* RaftGroupDeletedError_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  RaftGroupDeletedError_reflection_ = NULL;
+const ::google::protobuf::Descriptor* ReplicaCorruptionError_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  ReplicaCorruptionError_reflection_ = NULL;
+const ::google::protobuf::Descriptor* LeaseVersionChangedError_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  LeaseVersionChangedError_reflection_ = NULL;
+const ::google::protobuf::Descriptor* DidntUpdateDescriptorError_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  DidntUpdateDescriptorError_reflection_ = NULL;
+const ::google::protobuf::Descriptor* SqlTransactionAbortedError_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  SqlTransactionAbortedError_reflection_ = NULL;
+const ::google::protobuf::Descriptor* ExistingSchemaChangeLeaseError_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  ExistingSchemaChangeLeaseError_reflection_ = NULL;
 const ::google::protobuf::Descriptor* ErrorDetail_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   ErrorDetail_reflection_ = NULL;
@@ -231,10 +249,9 @@ void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TransactionStatusError, _internal_metadata_),
       -1);
   WriteIntentError_descriptor_ = file->message_type(9);
-  static const int WriteIntentError_offsets_[3] = {
+  static const int WriteIntentError_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(WriteIntentError, intents_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(WriteIntentError, resolved_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(WriteIntentError, index_),
   };
   WriteIntentError_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -278,9 +295,8 @@ void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(OpRequiresTxnError, _internal_metadata_),
       -1);
   ConditionFailedError_descriptor_ = file->message_type(12);
-  static const int ConditionFailedError_offsets_[2] = {
+  static const int ConditionFailedError_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ConditionFailedError, actual_value_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ConditionFailedError, index_),
   };
   ConditionFailedError_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -326,8 +342,94 @@ void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto() {
       sizeof(SendError),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(SendError, _internal_metadata_),
       -1);
-  ErrorDetail_descriptor_ = file->message_type(15);
-  static const int ErrorDetail_offsets_[15] = {
+  RaftGroupDeletedError_descriptor_ = file->message_type(15);
+  static const int RaftGroupDeletedError_offsets_[1] = {
+  };
+  RaftGroupDeletedError_reflection_ =
+    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
+      RaftGroupDeletedError_descriptor_,
+      RaftGroupDeletedError::default_instance_,
+      RaftGroupDeletedError_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftGroupDeletedError, _has_bits_[0]),
+      -1,
+      -1,
+      sizeof(RaftGroupDeletedError),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftGroupDeletedError, _internal_metadata_),
+      -1);
+  ReplicaCorruptionError_descriptor_ = file->message_type(16);
+  static const int ReplicaCorruptionError_offsets_[2] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ReplicaCorruptionError, error_msg_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ReplicaCorruptionError, processed_),
+  };
+  ReplicaCorruptionError_reflection_ =
+    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
+      ReplicaCorruptionError_descriptor_,
+      ReplicaCorruptionError::default_instance_,
+      ReplicaCorruptionError_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ReplicaCorruptionError, _has_bits_[0]),
+      -1,
+      -1,
+      sizeof(ReplicaCorruptionError),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ReplicaCorruptionError, _internal_metadata_),
+      -1);
+  LeaseVersionChangedError_descriptor_ = file->message_type(17);
+  static const int LeaseVersionChangedError_offsets_[1] = {
+  };
+  LeaseVersionChangedError_reflection_ =
+    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
+      LeaseVersionChangedError_descriptor_,
+      LeaseVersionChangedError::default_instance_,
+      LeaseVersionChangedError_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(LeaseVersionChangedError, _has_bits_[0]),
+      -1,
+      -1,
+      sizeof(LeaseVersionChangedError),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(LeaseVersionChangedError, _internal_metadata_),
+      -1);
+  DidntUpdateDescriptorError_descriptor_ = file->message_type(18);
+  static const int DidntUpdateDescriptorError_offsets_[1] = {
+  };
+  DidntUpdateDescriptorError_reflection_ =
+    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
+      DidntUpdateDescriptorError_descriptor_,
+      DidntUpdateDescriptorError::default_instance_,
+      DidntUpdateDescriptorError_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(DidntUpdateDescriptorError, _has_bits_[0]),
+      -1,
+      -1,
+      sizeof(DidntUpdateDescriptorError),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(DidntUpdateDescriptorError, _internal_metadata_),
+      -1);
+  SqlTransactionAbortedError_descriptor_ = file->message_type(19);
+  static const int SqlTransactionAbortedError_offsets_[1] = {
+  };
+  SqlTransactionAbortedError_reflection_ =
+    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
+      SqlTransactionAbortedError_descriptor_,
+      SqlTransactionAbortedError::default_instance_,
+      SqlTransactionAbortedError_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(SqlTransactionAbortedError, _has_bits_[0]),
+      -1,
+      -1,
+      sizeof(SqlTransactionAbortedError),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(SqlTransactionAbortedError, _internal_metadata_),
+      -1);
+  ExistingSchemaChangeLeaseError_descriptor_ = file->message_type(20);
+  static const int ExistingSchemaChangeLeaseError_offsets_[1] = {
+  };
+  ExistingSchemaChangeLeaseError_reflection_ =
+    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
+      ExistingSchemaChangeLeaseError_descriptor_,
+      ExistingSchemaChangeLeaseError::default_instance_,
+      ExistingSchemaChangeLeaseError_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ExistingSchemaChangeLeaseError, _has_bits_[0]),
+      -1,
+      -1,
+      sizeof(ExistingSchemaChangeLeaseError),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ExistingSchemaChangeLeaseError, _internal_metadata_),
+      -1);
+  ErrorDetail_descriptor_ = file->message_type(21);
+  static const int ErrorDetail_offsets_[21] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, not_leader_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, range_not_found_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, range_key_mismatch_),
@@ -343,6 +445,12 @@ void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto() {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, lease_rejected_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, node_unavailable_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, send_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, raft_group_deleted_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, replica_corruption_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, lease_version_changed_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, didnt_update_descriptor_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, sql_tranasction_aborted_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, existing_scheme_change_lease_),
   };
   ErrorDetail_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -355,7 +463,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto() {
       sizeof(ErrorDetail),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrorDetail, _internal_metadata_),
       -1);
-  ErrPosition_descriptor_ = file->message_type(16);
+  ErrPosition_descriptor_ = file->message_type(22);
   static const int ErrPosition_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrPosition, index_),
   };
@@ -370,12 +478,14 @@ void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto() {
       sizeof(ErrPosition),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ErrPosition, _internal_metadata_),
       -1);
-  Error_descriptor_ = file->message_type(17);
-  static const int Error_offsets_[4] = {
+  Error_descriptor_ = file->message_type(23);
+  static const int Error_offsets_[6] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, message_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, retryable_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, transaction_restart_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, txn_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, detail_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, index_),
   };
   Error_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -432,6 +542,18 @@ void protobuf_RegisterTypes(const ::std::string&) {
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       SendError_descriptor_, &SendError::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+      RaftGroupDeletedError_descriptor_, &RaftGroupDeletedError::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+      ReplicaCorruptionError_descriptor_, &ReplicaCorruptionError::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+      LeaseVersionChangedError_descriptor_, &LeaseVersionChangedError::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+      DidntUpdateDescriptorError_descriptor_, &DidntUpdateDescriptorError::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+      SqlTransactionAbortedError_descriptor_, &SqlTransactionAbortedError::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+      ExistingSchemaChangeLeaseError_descriptor_, &ExistingSchemaChangeLeaseError::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       ErrorDetail_descriptor_, &ErrorDetail::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       ErrPosition_descriptor_, &ErrPosition::default_instance());
@@ -472,6 +594,18 @@ void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto() {
   delete LeaseRejectedError_reflection_;
   delete SendError::default_instance_;
   delete SendError_reflection_;
+  delete RaftGroupDeletedError::default_instance_;
+  delete RaftGroupDeletedError_reflection_;
+  delete ReplicaCorruptionError::default_instance_;
+  delete ReplicaCorruptionError_reflection_;
+  delete LeaseVersionChangedError::default_instance_;
+  delete LeaseVersionChangedError_reflection_;
+  delete DidntUpdateDescriptorError::default_instance_;
+  delete DidntUpdateDescriptorError_reflection_;
+  delete SqlTransactionAbortedError::default_instance_;
+  delete SqlTransactionAbortedError_reflection_;
+  delete ExistingSchemaChangeLeaseError::default_instance_;
+  delete ExistingSchemaChangeLeaseError_reflection_;
   delete ErrorDetail::default_instance_;
   delete ErrorDetail_reflection_;
   delete ErrPosition::default_instance_;
@@ -519,55 +653,73 @@ void protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto() {
     "\001 \001(\0132\036.cockroach.roachpb.TransactionB\004\310"
     "\336\037\000\"^\n\026TransactionStatusError\0221\n\003txn\030\001 \001"
     "(\0132\036.cockroach.roachpb.TransactionB\004\310\336\037\000"
-    "\022\021\n\003msg\030\002 \001(\tB\004\310\336\037\000\"\213\001\n\020WriteIntentError"
-    "\0220\n\007intents\030\001 \003(\0132\031.cockroach.roachpb.In"
-    "tentB\004\310\336\037\000\022\026\n\010resolved\030\002 \001(\010B\004\310\336\037\000\022-\n\005in"
-    "dex\030\003 \001(\0132\036.cockroach.roachpb.ErrPositio"
-    "n\"\211\001\n\020WriteTooOldError\0225\n\ttimestamp\030\001 \001("
-    "\0132\034.cockroach.roachpb.TimestampB\004\310\336\037\000\022>\n"
-    "\022existing_timestamp\030\002 \001(\0132\034.cockroach.ro"
-    "achpb.TimestampB\004\310\336\037\000\"\024\n\022OpRequiresTxnEr"
-    "ror\"u\n\024ConditionFailedError\022.\n\014actual_va"
-    "lue\030\001 \001(\0132\030.cockroach.roachpb.Value\022-\n\005i"
-    "ndex\030\002 \001(\0132\036.cockroach.roachpb.ErrPositi"
-    "on\"\220\001\n\022LeaseRejectedError\022\025\n\007message\030\001 \001"
-    "(\tB\004\310\336\037\000\0221\n\trequested\030\002 \001(\0132\030.cockroach."
-    "roachpb.LeaseB\004\310\336\037\000\0220\n\010existing\030\003 \001(\0132\030."
-    "cockroach.roachpb.LeaseB\004\310\336\037\000\";\n\tSendErr"
-    "or\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\022\027\n\tretryable\030\002"
-    " \001(\010B\004\310\336\037\000\"\361\007\n\013ErrorDetail\0225\n\nnot_leader"
-    "\030\001 \001(\0132!.cockroach.roachpb.NotLeaderErro"
-    "r\022>\n\017range_not_found\030\002 \001(\0132%.cockroach.r"
-    "oachpb.RangeNotFoundError\022D\n\022range_key_m"
-    "ismatch\030\003 \001(\0132(.cockroach.roachpb.RangeK"
-    "eyMismatchError\022_\n read_within_uncertain"
-    "ty_interval\030\004 \001(\01325.cockroach.roachpb.Re"
-    "adWithinUncertaintyIntervalError\022G\n\023tran"
-    "saction_aborted\030\005 \001(\0132*.cockroach.roachp"
-    "b.TransactionAbortedError\022A\n\020transaction"
-    "_push\030\006 \001(\0132\'.cockroach.roachpb.Transact"
-    "ionPushError\022C\n\021transaction_retry\030\007 \001(\0132"
-    "(.cockroach.roachpb.TransactionRetryErro"
-    "r\022E\n\022transaction_status\030\010 \001(\0132).cockroac"
-    "h.roachpb.TransactionStatusError\0229\n\014writ"
-    "e_intent\030\t \001(\0132#.cockroach.roachpb.Write"
-    "IntentError\022:\n\rwrite_too_old\030\n \001(\0132#.coc"
-    "kroach.roachpb.WriteTooOldError\022>\n\017op_re"
-    "quires_txn\030\013 \001(\0132%.cockroach.roachpb.OpR"
-    "equiresTxnError\022A\n\020condition_failed\030\014 \001("
-    "\0132\'.cockroach.roachpb.ConditionFailedErr"
-    "or\022=\n\016lease_rejected\030\r \001(\0132%.cockroach.r"
-    "oachpb.LeaseRejectedError\022A\n\020node_unavai"
-    "lable\030\016 \001(\0132\'.cockroach.roachpb.NodeUnav"
-    "ailableError\022*\n\004send\030\017 \001(\0132\034.cockroach.r"
-    "oachpb.SendError:\004\310\240\037\001\"\"\n\013ErrPosition\022\023\n"
-    "\005index\030\001 \001(\005B\004\310\336\037\000\"\267\001\n\005Error\022\025\n\007message\030"
-    "\001 \001(\tB\004\310\336\037\000\022\027\n\tretryable\030\002 \001(\010B\004\310\336\037\000\022H\n\023"
-    "transaction_restart\030\003 \001(\0162%.cockroach.ro"
-    "achpb.TransactionRestartB\004\310\336\037\000\022.\n\006detail"
-    "\030\004 \001(\0132\036.cockroach.roachpb.ErrorDetail:\004"
-    "\230\240\037\000*;\n\022TransactionRestart\022\t\n\005ABORT\020\000\022\013\n"
-    "\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020\002B\tZ\007roachpbX\002", 3118);
+    "\022\021\n\003msg\030\002 \001(\tB\004\310\336\037\000\"\\\n\020WriteIntentError\022"
+    "0\n\007intents\030\001 \003(\0132\031.cockroach.roachpb.Int"
+    "entB\004\310\336\037\000\022\026\n\010resolved\030\002 \001(\010B\004\310\336\037\000\"\211\001\n\020Wr"
+    "iteTooOldError\0225\n\ttimestamp\030\001 \001(\0132\034.cock"
+    "roach.roachpb.TimestampB\004\310\336\037\000\022>\n\022existin"
+    "g_timestamp\030\002 \001(\0132\034.cockroach.roachpb.Ti"
+    "mestampB\004\310\336\037\000\"\024\n\022OpRequiresTxnError\"F\n\024C"
+    "onditionFailedError\022.\n\014actual_value\030\001 \001("
+    "\0132\030.cockroach.roachpb.Value\"\220\001\n\022LeaseRej"
+    "ectedError\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\0221\n\treq"
+    "uested\030\002 \001(\0132\030.cockroach.roachpb.LeaseB\004"
+    "\310\336\037\000\0220\n\010existing\030\003 \001(\0132\030.cockroach.roach"
+    "pb.LeaseB\004\310\336\037\000\";\n\tSendError\022\025\n\007message\030\001"
+    " \001(\tB\004\310\336\037\000\022\027\n\tretryable\030\002 \001(\010B\004\310\336\037\000\"\027\n\025R"
+    "aftGroupDeletedError\"J\n\026ReplicaCorruptio"
+    "nError\022\027\n\terror_msg\030\001 \001(\tB\004\310\336\037\000\022\027\n\tproce"
+    "ssed\030\002 \001(\010B\004\310\336\037\000\"\032\n\030LeaseVersionChangedE"
+    "rror\"\034\n\032DidntUpdateDescriptorError\"\034\n\032Sq"
+    "lTransactionAbortedError\" \n\036ExistingSche"
+    "maChangeLeaseError\"\303\013\n\013ErrorDetail\0225\n\nno"
+    "t_leader\030\001 \001(\0132!.cockroach.roachpb.NotLe"
+    "aderError\022>\n\017range_not_found\030\002 \001(\0132%.coc"
+    "kroach.roachpb.RangeNotFoundError\022D\n\022ran"
+    "ge_key_mismatch\030\003 \001(\0132(.cockroach.roachp"
+    "b.RangeKeyMismatchError\022_\n read_within_u"
+    "ncertainty_interval\030\004 \001(\01325.cockroach.ro"
+    "achpb.ReadWithinUncertaintyIntervalError"
+    "\022G\n\023transaction_aborted\030\005 \001(\0132*.cockroac"
+    "h.roachpb.TransactionAbortedError\022A\n\020tra"
+    "nsaction_push\030\006 \001(\0132\'.cockroach.roachpb."
+    "TransactionPushError\022C\n\021transaction_retr"
+    "y\030\007 \001(\0132(.cockroach.roachpb.TransactionR"
+    "etryError\022E\n\022transaction_status\030\010 \001(\0132)."
+    "cockroach.roachpb.TransactionStatusError"
+    "\0229\n\014write_intent\030\t \001(\0132#.cockroach.roach"
+    "pb.WriteIntentError\022:\n\rwrite_too_old\030\n \001"
+    "(\0132#.cockroach.roachpb.WriteTooOldError\022"
+    ">\n\017op_requires_txn\030\013 \001(\0132%.cockroach.roa"
+    "chpb.OpRequiresTxnError\022A\n\020condition_fai"
+    "led\030\014 \001(\0132\'.cockroach.roachpb.ConditionF"
+    "ailedError\022=\n\016lease_rejected\030\r \001(\0132%.coc"
+    "kroach.roachpb.LeaseRejectedError\022A\n\020nod"
+    "e_unavailable\030\016 \001(\0132\'.cockroach.roachpb."
+    "NodeUnavailableError\022*\n\004send\030\017 \001(\0132\034.coc"
+    "kroach.roachpb.SendError\022D\n\022raft_group_d"
+    "eleted\030\020 \001(\0132(.cockroach.roachpb.RaftGro"
+    "upDeletedError\022E\n\022replica_corruption\030\021 \001"
+    "(\0132).cockroach.roachpb.ReplicaCorruption"
+    "Error\022J\n\025lease_version_changed\030\022 \001(\0132+.c"
+    "ockroach.roachpb.LeaseVersionChangedErro"
+    "r\022N\n\027didnt_update_descriptor\030\023 \001(\0132-.coc"
+    "kroach.roachpb.DidntUpdateDescriptorErro"
+    "r\022N\n\027sql_tranasction_aborted\030\024 \001(\0132-.coc"
+    "kroach.roachpb.SqlTransactionAbortedErro"
+    "r\022W\n\034existing_scheme_change_lease\030\025 \001(\0132"
+    "1.cockroach.roachpb.ExistingSchemaChange"
+    "LeaseError:\004\310\240\037\001\"\"\n\013ErrPosition\022\023\n\005index"
+    "\030\001 \001(\005B\004\310\336\037\000\"\223\002\n\005Error\022\025\n\007message\030\001 \001(\tB"
+    "\004\310\336\037\000\022\027\n\tretryable\030\002 \001(\010B\004\310\336\037\000\022H\n\023transa"
+    "ction_restart\030\003 \001(\0162%.cockroach.roachpb."
+    "TransactionRestartB\004\310\336\037\000\022+\n\003txn\030\004 \001(\0132\036."
+    "cockroach.roachpb.Transaction\022.\n\006detail\030"
+    "\005 \001(\0132\036.cockroach.roachpb.ErrorDetail\022-\n"
+    "\005index\030\006 \001(\0132\036.cockroach.roachpb.ErrPosi"
+    "tion:\004\230\240\037\000*;\n\022TransactionRestart\022\t\n\005ABOR"
+    "T\020\000\022\013\n\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020\002B\tZ\007roach"
+    "pbX\002", 3804);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/errors.proto", &protobuf_RegisterTypes);
   NotLeaderError::default_instance_ = new NotLeaderError();
@@ -585,6 +737,12 @@ void protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto() {
   ConditionFailedError::default_instance_ = new ConditionFailedError();
   LeaseRejectedError::default_instance_ = new LeaseRejectedError();
   SendError::default_instance_ = new SendError();
+  RaftGroupDeletedError::default_instance_ = new RaftGroupDeletedError();
+  ReplicaCorruptionError::default_instance_ = new ReplicaCorruptionError();
+  LeaseVersionChangedError::default_instance_ = new LeaseVersionChangedError();
+  DidntUpdateDescriptorError::default_instance_ = new DidntUpdateDescriptorError();
+  SqlTransactionAbortedError::default_instance_ = new SqlTransactionAbortedError();
+  ExistingSchemaChangeLeaseError::default_instance_ = new ExistingSchemaChangeLeaseError();
   ErrorDetail::default_instance_ = new ErrorDetail();
   ErrPosition::default_instance_ = new ErrPosition();
   Error::default_instance_ = new Error();
@@ -603,6 +761,12 @@ void protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto() {
   ConditionFailedError::default_instance_->InitAsDefaultInstance();
   LeaseRejectedError::default_instance_->InitAsDefaultInstance();
   SendError::default_instance_->InitAsDefaultInstance();
+  RaftGroupDeletedError::default_instance_->InitAsDefaultInstance();
+  ReplicaCorruptionError::default_instance_->InitAsDefaultInstance();
+  LeaseVersionChangedError::default_instance_->InitAsDefaultInstance();
+  DidntUpdateDescriptorError::default_instance_->InitAsDefaultInstance();
+  SqlTransactionAbortedError::default_instance_->InitAsDefaultInstance();
+  ExistingSchemaChangeLeaseError::default_instance_->InitAsDefaultInstance();
   ErrorDetail::default_instance_->InitAsDefaultInstance();
   ErrPosition::default_instance_->InitAsDefaultInstance();
   Error::default_instance_->InitAsDefaultInstance();
@@ -3874,7 +4038,6 @@ void TransactionStatusError::clear_msg() {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int WriteIntentError::kIntentsFieldNumber;
 const int WriteIntentError::kResolvedFieldNumber;
-const int WriteIntentError::kIndexFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 WriteIntentError::WriteIntentError()
@@ -3884,7 +4047,6 @@ WriteIntentError::WriteIntentError()
 }
 
 void WriteIntentError::InitAsDefaultInstance() {
-  index_ = const_cast< ::cockroach::roachpb::ErrPosition*>(&::cockroach::roachpb::ErrPosition::default_instance());
 }
 
 WriteIntentError::WriteIntentError(const WriteIntentError& from)
@@ -3898,7 +4060,6 @@ WriteIntentError::WriteIntentError(const WriteIntentError& from)
 void WriteIntentError::SharedCtor() {
   _cached_size_ = 0;
   resolved_ = false;
-  index_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -3909,7 +4070,6 @@ WriteIntentError::~WriteIntentError() {
 
 void WriteIntentError::SharedDtor() {
   if (this != default_instance_) {
-    delete index_;
   }
 }
 
@@ -3939,12 +4099,7 @@ WriteIntentError* WriteIntentError::New(::google::protobuf::Arena* arena) const 
 }
 
 void WriteIntentError::Clear() {
-  if (_has_bits_[0 / 32] & 6u) {
-    resolved_ = false;
-    if (has_index()) {
-      if (index_ != NULL) index_->::cockroach::roachpb::ErrPosition::Clear();
-    }
-  }
+  resolved_ = false;
   intents_.Clear();
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -3989,19 +4144,6 @@ bool WriteIntentError::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(26)) goto parse_index;
-        break;
-      }
-
-      // optional .cockroach.roachpb.ErrPosition index = 3;
-      case 3: {
-        if (tag == 26) {
-         parse_index:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_index()));
-        } else {
-          goto handle_unusual;
-        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -4042,12 +4184,6 @@ void WriteIntentError::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(2, this->resolved(), output);
   }
 
-  // optional .cockroach.roachpb.ErrPosition index = 3;
-  if (has_index()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      3, *this->index_, output);
-  }
-
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -4070,13 +4206,6 @@ void WriteIntentError::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(2, this->resolved(), target);
   }
 
-  // optional .cockroach.roachpb.ErrPosition index = 3;
-  if (has_index()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        3, *this->index_, target);
-  }
-
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -4088,20 +4217,11 @@ void WriteIntentError::SerializeWithCachedSizes(
 int WriteIntentError::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[1 / 32] & 6u) {
-    // optional bool resolved = 2;
-    if (has_resolved()) {
-      total_size += 1 + 1;
-    }
-
-    // optional .cockroach.roachpb.ErrPosition index = 3;
-    if (has_index()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *this->index_);
-    }
-
+  // optional bool resolved = 2;
+  if (has_resolved()) {
+    total_size += 1 + 1;
   }
+
   // repeated .cockroach.roachpb.Intent intents = 1;
   total_size += 1 * this->intents_size();
   for (int i = 0; i < this->intents_size(); i++) {
@@ -4140,9 +4260,6 @@ void WriteIntentError::MergeFrom(const WriteIntentError& from) {
     if (from.has_resolved()) {
       set_resolved(from.resolved());
     }
-    if (from.has_index()) {
-      mutable_index()->::cockroach::roachpb::ErrPosition::MergeFrom(from.index());
-    }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -4173,7 +4290,6 @@ void WriteIntentError::Swap(WriteIntentError* other) {
 void WriteIntentError::InternalSwap(WriteIntentError* other) {
   intents_.UnsafeArenaSwap(&other->intents_);
   std::swap(resolved_, other->resolved_);
-  std::swap(index_, other->index_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -4242,49 +4358,6 @@ void WriteIntentError::clear_resolved() {
   set_has_resolved();
   resolved_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.WriteIntentError.resolved)
-}
-
-// optional .cockroach.roachpb.ErrPosition index = 3;
-bool WriteIntentError::has_index() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-void WriteIntentError::set_has_index() {
-  _has_bits_[0] |= 0x00000004u;
-}
-void WriteIntentError::clear_has_index() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-void WriteIntentError::clear_index() {
-  if (index_ != NULL) index_->::cockroach::roachpb::ErrPosition::Clear();
-  clear_has_index();
-}
-const ::cockroach::roachpb::ErrPosition& WriteIntentError::index() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.WriteIntentError.index)
-  return index_ != NULL ? *index_ : *default_instance_->index_;
-}
-::cockroach::roachpb::ErrPosition* WriteIntentError::mutable_index() {
-  set_has_index();
-  if (index_ == NULL) {
-    index_ = new ::cockroach::roachpb::ErrPosition;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.WriteIntentError.index)
-  return index_;
-}
-::cockroach::roachpb::ErrPosition* WriteIntentError::release_index() {
-  clear_has_index();
-  ::cockroach::roachpb::ErrPosition* temp = index_;
-  index_ = NULL;
-  return temp;
-}
-void WriteIntentError::set_allocated_index(::cockroach::roachpb::ErrPosition* index) {
-  delete index_;
-  index_ = index;
-  if (index) {
-    set_has_index();
-  } else {
-    clear_has_index();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.WriteIntentError.index)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
@@ -4856,7 +4929,6 @@ void OpRequiresTxnError::InternalSwap(OpRequiresTxnError* other) {
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ConditionFailedError::kActualValueFieldNumber;
-const int ConditionFailedError::kIndexFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ConditionFailedError::ConditionFailedError()
@@ -4867,7 +4939,6 @@ ConditionFailedError::ConditionFailedError()
 
 void ConditionFailedError::InitAsDefaultInstance() {
   actual_value_ = const_cast< ::cockroach::roachpb::Value*>(&::cockroach::roachpb::Value::default_instance());
-  index_ = const_cast< ::cockroach::roachpb::ErrPosition*>(&::cockroach::roachpb::ErrPosition::default_instance());
 }
 
 ConditionFailedError::ConditionFailedError(const ConditionFailedError& from)
@@ -4881,7 +4952,6 @@ ConditionFailedError::ConditionFailedError(const ConditionFailedError& from)
 void ConditionFailedError::SharedCtor() {
   _cached_size_ = 0;
   actual_value_ = NULL;
-  index_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -4893,7 +4963,6 @@ ConditionFailedError::~ConditionFailedError() {
 void ConditionFailedError::SharedDtor() {
   if (this != default_instance_) {
     delete actual_value_;
-    delete index_;
   }
 }
 
@@ -4923,13 +4992,8 @@ ConditionFailedError* ConditionFailedError::New(::google::protobuf::Arena* arena
 }
 
 void ConditionFailedError::Clear() {
-  if (_has_bits_[0 / 32] & 3u) {
-    if (has_actual_value()) {
-      if (actual_value_ != NULL) actual_value_->::cockroach::roachpb::Value::Clear();
-    }
-    if (has_index()) {
-      if (index_ != NULL) index_->::cockroach::roachpb::ErrPosition::Clear();
-    }
+  if (has_actual_value()) {
+    if (actual_value_ != NULL) actual_value_->::cockroach::roachpb::Value::Clear();
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -4952,19 +5016,6 @@ bool ConditionFailedError::MergePartialFromCodedStream(
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_actual_value()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(18)) goto parse_index;
-        break;
-      }
-
-      // optional .cockroach.roachpb.ErrPosition index = 2;
-      case 2: {
-        if (tag == 18) {
-         parse_index:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_index()));
         } else {
           goto handle_unusual;
         }
@@ -5003,12 +5054,6 @@ void ConditionFailedError::SerializeWithCachedSizes(
       1, *this->actual_value_, output);
   }
 
-  // optional .cockroach.roachpb.ErrPosition index = 2;
-  if (has_index()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      2, *this->index_, output);
-  }
-
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -5026,13 +5071,6 @@ void ConditionFailedError::SerializeWithCachedSizes(
         1, *this->actual_value_, target);
   }
 
-  // optional .cockroach.roachpb.ErrPosition index = 2;
-  if (has_index()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        2, *this->index_, target);
-  }
-
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -5044,22 +5082,13 @@ void ConditionFailedError::SerializeWithCachedSizes(
 int ConditionFailedError::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3u) {
-    // optional .cockroach.roachpb.Value actual_value = 1;
-    if (has_actual_value()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *this->actual_value_);
-    }
-
-    // optional .cockroach.roachpb.ErrPosition index = 2;
-    if (has_index()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *this->index_);
-    }
-
+  // optional .cockroach.roachpb.Value actual_value = 1;
+  if (has_actual_value()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+        *this->actual_value_);
   }
+
   if (_internal_metadata_.have_unknown_fields()) {
     total_size +=
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
@@ -5088,9 +5117,6 @@ void ConditionFailedError::MergeFrom(const ConditionFailedError& from) {
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_actual_value()) {
       mutable_actual_value()->::cockroach::roachpb::Value::MergeFrom(from.actual_value());
-    }
-    if (from.has_index()) {
-      mutable_index()->::cockroach::roachpb::ErrPosition::MergeFrom(from.index());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -5121,7 +5147,6 @@ void ConditionFailedError::Swap(ConditionFailedError* other) {
 }
 void ConditionFailedError::InternalSwap(ConditionFailedError* other) {
   std::swap(actual_value_, other->actual_value_);
-  std::swap(index_, other->index_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -5179,49 +5204,6 @@ void ConditionFailedError::set_allocated_actual_value(::cockroach::roachpb::Valu
     clear_has_actual_value();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ConditionFailedError.actual_value)
-}
-
-// optional .cockroach.roachpb.ErrPosition index = 2;
-bool ConditionFailedError::has_index() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-void ConditionFailedError::set_has_index() {
-  _has_bits_[0] |= 0x00000002u;
-}
-void ConditionFailedError::clear_has_index() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-void ConditionFailedError::clear_index() {
-  if (index_ != NULL) index_->::cockroach::roachpb::ErrPosition::Clear();
-  clear_has_index();
-}
-const ::cockroach::roachpb::ErrPosition& ConditionFailedError::index() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ConditionFailedError.index)
-  return index_ != NULL ? *index_ : *default_instance_->index_;
-}
-::cockroach::roachpb::ErrPosition* ConditionFailedError::mutable_index() {
-  set_has_index();
-  if (index_ == NULL) {
-    index_ = new ::cockroach::roachpb::ErrPosition;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ConditionFailedError.index)
-  return index_;
-}
-::cockroach::roachpb::ErrPosition* ConditionFailedError::release_index() {
-  clear_has_index();
-  ::cockroach::roachpb::ErrPosition* temp = index_;
-  index_ = NULL;
-  return temp;
-}
-void ConditionFailedError::set_allocated_index(::cockroach::roachpb::ErrPosition* index) {
-  delete index_;
-  index_ = index;
-  if (index) {
-    set_has_index();
-  } else {
-    clear_has_index();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ConditionFailedError.index)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
@@ -6084,6 +6066,1322 @@ void SendError::clear_retryable() {
 // ===================================================================
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+RaftGroupDeletedError::RaftGroupDeletedError()
+  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.RaftGroupDeletedError)
+}
+
+void RaftGroupDeletedError::InitAsDefaultInstance() {
+}
+
+RaftGroupDeletedError::RaftGroupDeletedError(const RaftGroupDeletedError& from)
+  : ::google::protobuf::Message(),
+    _internal_metadata_(NULL) {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.RaftGroupDeletedError)
+}
+
+void RaftGroupDeletedError::SharedCtor() {
+  _cached_size_ = 0;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+RaftGroupDeletedError::~RaftGroupDeletedError() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.RaftGroupDeletedError)
+  SharedDtor();
+}
+
+void RaftGroupDeletedError::SharedDtor() {
+  if (this != default_instance_) {
+  }
+}
+
+void RaftGroupDeletedError::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* RaftGroupDeletedError::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return RaftGroupDeletedError_descriptor_;
+}
+
+const RaftGroupDeletedError& RaftGroupDeletedError::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
+  return *default_instance_;
+}
+
+RaftGroupDeletedError* RaftGroupDeletedError::default_instance_ = NULL;
+
+RaftGroupDeletedError* RaftGroupDeletedError::New(::google::protobuf::Arena* arena) const {
+  RaftGroupDeletedError* n = new RaftGroupDeletedError;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void RaftGroupDeletedError::Clear() {
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  if (_internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->Clear();
+  }
+}
+
+bool RaftGroupDeletedError::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.RaftGroupDeletedError)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+  handle_unusual:
+    if (tag == 0 ||
+        ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+        ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+      goto success;
+    }
+    DO_(::google::protobuf::internal::WireFormat::SkipField(
+          input, tag, mutable_unknown_fields()));
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.RaftGroupDeletedError)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.RaftGroupDeletedError)
+  return false;
+#undef DO_
+}
+
+void RaftGroupDeletedError::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.RaftGroupDeletedError)
+  if (_internal_metadata_.have_unknown_fields()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.RaftGroupDeletedError)
+}
+
+::google::protobuf::uint8* RaftGroupDeletedError::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.RaftGroupDeletedError)
+  if (_internal_metadata_.have_unknown_fields()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.roachpb.RaftGroupDeletedError)
+  return target;
+}
+
+int RaftGroupDeletedError::ByteSize() const {
+  int total_size = 0;
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void RaftGroupDeletedError::MergeFrom(const ::google::protobuf::Message& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  const RaftGroupDeletedError* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const RaftGroupDeletedError>(
+          &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void RaftGroupDeletedError::MergeFrom(const RaftGroupDeletedError& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (from._internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+  }
+}
+
+void RaftGroupDeletedError::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void RaftGroupDeletedError::CopyFrom(const RaftGroupDeletedError& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool RaftGroupDeletedError::IsInitialized() const {
+
+  return true;
+}
+
+void RaftGroupDeletedError::Swap(RaftGroupDeletedError* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void RaftGroupDeletedError::InternalSwap(RaftGroupDeletedError* other) {
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::google::protobuf::Metadata RaftGroupDeletedError::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = RaftGroupDeletedError_descriptor_;
+  metadata.reflection = RaftGroupDeletedError_reflection_;
+  return metadata;
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// RaftGroupDeletedError
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int ReplicaCorruptionError::kErrorMsgFieldNumber;
+const int ReplicaCorruptionError::kProcessedFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+ReplicaCorruptionError::ReplicaCorruptionError()
+  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.ReplicaCorruptionError)
+}
+
+void ReplicaCorruptionError::InitAsDefaultInstance() {
+}
+
+ReplicaCorruptionError::ReplicaCorruptionError(const ReplicaCorruptionError& from)
+  : ::google::protobuf::Message(),
+    _internal_metadata_(NULL) {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ReplicaCorruptionError)
+}
+
+void ReplicaCorruptionError::SharedCtor() {
+  ::google::protobuf::internal::GetEmptyString();
+  _cached_size_ = 0;
+  error_msg_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  processed_ = false;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+ReplicaCorruptionError::~ReplicaCorruptionError() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.ReplicaCorruptionError)
+  SharedDtor();
+}
+
+void ReplicaCorruptionError::SharedDtor() {
+  error_msg_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (this != default_instance_) {
+  }
+}
+
+void ReplicaCorruptionError::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* ReplicaCorruptionError::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return ReplicaCorruptionError_descriptor_;
+}
+
+const ReplicaCorruptionError& ReplicaCorruptionError::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
+  return *default_instance_;
+}
+
+ReplicaCorruptionError* ReplicaCorruptionError::default_instance_ = NULL;
+
+ReplicaCorruptionError* ReplicaCorruptionError::New(::google::protobuf::Arena* arena) const {
+  ReplicaCorruptionError* n = new ReplicaCorruptionError;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void ReplicaCorruptionError::Clear() {
+  if (_has_bits_[0 / 32] & 3u) {
+    if (has_error_msg()) {
+      error_msg_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    }
+    processed_ = false;
+  }
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  if (_internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->Clear();
+  }
+}
+
+bool ReplicaCorruptionError::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.ReplicaCorruptionError)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional string error_msg = 1;
+      case 1: {
+        if (tag == 10) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_error_msg()));
+          ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+            this->error_msg().data(), this->error_msg().length(),
+            ::google::protobuf::internal::WireFormat::PARSE,
+            "cockroach.roachpb.ReplicaCorruptionError.error_msg");
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(16)) goto parse_processed;
+        break;
+      }
+
+      // optional bool processed = 2;
+      case 2: {
+        if (tag == 16) {
+         parse_processed:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &processed_)));
+          set_has_processed();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.ReplicaCorruptionError)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.ReplicaCorruptionError)
+  return false;
+#undef DO_
+}
+
+void ReplicaCorruptionError::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.ReplicaCorruptionError)
+  // optional string error_msg = 1;
+  if (has_error_msg()) {
+    ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+      this->error_msg().data(), this->error_msg().length(),
+      ::google::protobuf::internal::WireFormat::SERIALIZE,
+      "cockroach.roachpb.ReplicaCorruptionError.error_msg");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      1, this->error_msg(), output);
+  }
+
+  // optional bool processed = 2;
+  if (has_processed()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(2, this->processed(), output);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ReplicaCorruptionError)
+}
+
+::google::protobuf::uint8* ReplicaCorruptionError::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.ReplicaCorruptionError)
+  // optional string error_msg = 1;
+  if (has_error_msg()) {
+    ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+      this->error_msg().data(), this->error_msg().length(),
+      ::google::protobuf::internal::WireFormat::SERIALIZE,
+      "cockroach.roachpb.ReplicaCorruptionError.error_msg");
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteStringToArray(
+        1, this->error_msg(), target);
+  }
+
+  // optional bool processed = 2;
+  if (has_processed()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(2, this->processed(), target);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.roachpb.ReplicaCorruptionError)
+  return target;
+}
+
+int ReplicaCorruptionError::ByteSize() const {
+  int total_size = 0;
+
+  if (_has_bits_[0 / 32] & 3u) {
+    // optional string error_msg = 1;
+    if (has_error_msg()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::StringSize(
+          this->error_msg());
+    }
+
+    // optional bool processed = 2;
+    if (has_processed()) {
+      total_size += 1 + 1;
+    }
+
+  }
+  if (_internal_metadata_.have_unknown_fields()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void ReplicaCorruptionError::MergeFrom(const ::google::protobuf::Message& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  const ReplicaCorruptionError* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const ReplicaCorruptionError>(
+          &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void ReplicaCorruptionError::MergeFrom(const ReplicaCorruptionError& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_error_msg()) {
+      set_has_error_msg();
+      error_msg_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.error_msg_);
+    }
+    if (from.has_processed()) {
+      set_processed(from.processed());
+    }
+  }
+  if (from._internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+  }
+}
+
+void ReplicaCorruptionError::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void ReplicaCorruptionError::CopyFrom(const ReplicaCorruptionError& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool ReplicaCorruptionError::IsInitialized() const {
+
+  return true;
+}
+
+void ReplicaCorruptionError::Swap(ReplicaCorruptionError* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void ReplicaCorruptionError::InternalSwap(ReplicaCorruptionError* other) {
+  error_msg_.Swap(&other->error_msg_);
+  std::swap(processed_, other->processed_);
+  std::swap(_has_bits_[0], other->_has_bits_[0]);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::google::protobuf::Metadata ReplicaCorruptionError::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = ReplicaCorruptionError_descriptor_;
+  metadata.reflection = ReplicaCorruptionError_reflection_;
+  return metadata;
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// ReplicaCorruptionError
+
+// optional string error_msg = 1;
+bool ReplicaCorruptionError::has_error_msg() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+void ReplicaCorruptionError::set_has_error_msg() {
+  _has_bits_[0] |= 0x00000001u;
+}
+void ReplicaCorruptionError::clear_has_error_msg() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+void ReplicaCorruptionError::clear_error_msg() {
+  error_msg_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_error_msg();
+}
+ const ::std::string& ReplicaCorruptionError::error_msg() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ReplicaCorruptionError.error_msg)
+  return error_msg_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void ReplicaCorruptionError::set_error_msg(const ::std::string& value) {
+  set_has_error_msg();
+  error_msg_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ReplicaCorruptionError.error_msg)
+}
+ void ReplicaCorruptionError::set_error_msg(const char* value) {
+  set_has_error_msg();
+  error_msg_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ReplicaCorruptionError.error_msg)
+}
+ void ReplicaCorruptionError::set_error_msg(const char* value, size_t size) {
+  set_has_error_msg();
+  error_msg_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ReplicaCorruptionError.error_msg)
+}
+ ::std::string* ReplicaCorruptionError::mutable_error_msg() {
+  set_has_error_msg();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ReplicaCorruptionError.error_msg)
+  return error_msg_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ ::std::string* ReplicaCorruptionError::release_error_msg() {
+  clear_has_error_msg();
+  return error_msg_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void ReplicaCorruptionError::set_allocated_error_msg(::std::string* error_msg) {
+  if (error_msg != NULL) {
+    set_has_error_msg();
+  } else {
+    clear_has_error_msg();
+  }
+  error_msg_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), error_msg);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ReplicaCorruptionError.error_msg)
+}
+
+// optional bool processed = 2;
+bool ReplicaCorruptionError::has_processed() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+void ReplicaCorruptionError::set_has_processed() {
+  _has_bits_[0] |= 0x00000002u;
+}
+void ReplicaCorruptionError::clear_has_processed() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+void ReplicaCorruptionError::clear_processed() {
+  processed_ = false;
+  clear_has_processed();
+}
+ bool ReplicaCorruptionError::processed() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ReplicaCorruptionError.processed)
+  return processed_;
+}
+ void ReplicaCorruptionError::set_processed(bool value) {
+  set_has_processed();
+  processed_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ReplicaCorruptionError.processed)
+}
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+LeaseVersionChangedError::LeaseVersionChangedError()
+  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.LeaseVersionChangedError)
+}
+
+void LeaseVersionChangedError::InitAsDefaultInstance() {
+}
+
+LeaseVersionChangedError::LeaseVersionChangedError(const LeaseVersionChangedError& from)
+  : ::google::protobuf::Message(),
+    _internal_metadata_(NULL) {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.LeaseVersionChangedError)
+}
+
+void LeaseVersionChangedError::SharedCtor() {
+  _cached_size_ = 0;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+LeaseVersionChangedError::~LeaseVersionChangedError() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.LeaseVersionChangedError)
+  SharedDtor();
+}
+
+void LeaseVersionChangedError::SharedDtor() {
+  if (this != default_instance_) {
+  }
+}
+
+void LeaseVersionChangedError::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* LeaseVersionChangedError::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return LeaseVersionChangedError_descriptor_;
+}
+
+const LeaseVersionChangedError& LeaseVersionChangedError::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
+  return *default_instance_;
+}
+
+LeaseVersionChangedError* LeaseVersionChangedError::default_instance_ = NULL;
+
+LeaseVersionChangedError* LeaseVersionChangedError::New(::google::protobuf::Arena* arena) const {
+  LeaseVersionChangedError* n = new LeaseVersionChangedError;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void LeaseVersionChangedError::Clear() {
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  if (_internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->Clear();
+  }
+}
+
+bool LeaseVersionChangedError::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.LeaseVersionChangedError)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+  handle_unusual:
+    if (tag == 0 ||
+        ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+        ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+      goto success;
+    }
+    DO_(::google::protobuf::internal::WireFormat::SkipField(
+          input, tag, mutable_unknown_fields()));
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.LeaseVersionChangedError)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.LeaseVersionChangedError)
+  return false;
+#undef DO_
+}
+
+void LeaseVersionChangedError::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.LeaseVersionChangedError)
+  if (_internal_metadata_.have_unknown_fields()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.LeaseVersionChangedError)
+}
+
+::google::protobuf::uint8* LeaseVersionChangedError::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.LeaseVersionChangedError)
+  if (_internal_metadata_.have_unknown_fields()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.roachpb.LeaseVersionChangedError)
+  return target;
+}
+
+int LeaseVersionChangedError::ByteSize() const {
+  int total_size = 0;
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void LeaseVersionChangedError::MergeFrom(const ::google::protobuf::Message& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  const LeaseVersionChangedError* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const LeaseVersionChangedError>(
+          &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void LeaseVersionChangedError::MergeFrom(const LeaseVersionChangedError& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (from._internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+  }
+}
+
+void LeaseVersionChangedError::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void LeaseVersionChangedError::CopyFrom(const LeaseVersionChangedError& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool LeaseVersionChangedError::IsInitialized() const {
+
+  return true;
+}
+
+void LeaseVersionChangedError::Swap(LeaseVersionChangedError* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void LeaseVersionChangedError::InternalSwap(LeaseVersionChangedError* other) {
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::google::protobuf::Metadata LeaseVersionChangedError::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = LeaseVersionChangedError_descriptor_;
+  metadata.reflection = LeaseVersionChangedError_reflection_;
+  return metadata;
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// LeaseVersionChangedError
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+DidntUpdateDescriptorError::DidntUpdateDescriptorError()
+  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.DidntUpdateDescriptorError)
+}
+
+void DidntUpdateDescriptorError::InitAsDefaultInstance() {
+}
+
+DidntUpdateDescriptorError::DidntUpdateDescriptorError(const DidntUpdateDescriptorError& from)
+  : ::google::protobuf::Message(),
+    _internal_metadata_(NULL) {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.DidntUpdateDescriptorError)
+}
+
+void DidntUpdateDescriptorError::SharedCtor() {
+  _cached_size_ = 0;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+DidntUpdateDescriptorError::~DidntUpdateDescriptorError() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.DidntUpdateDescriptorError)
+  SharedDtor();
+}
+
+void DidntUpdateDescriptorError::SharedDtor() {
+  if (this != default_instance_) {
+  }
+}
+
+void DidntUpdateDescriptorError::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* DidntUpdateDescriptorError::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return DidntUpdateDescriptorError_descriptor_;
+}
+
+const DidntUpdateDescriptorError& DidntUpdateDescriptorError::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
+  return *default_instance_;
+}
+
+DidntUpdateDescriptorError* DidntUpdateDescriptorError::default_instance_ = NULL;
+
+DidntUpdateDescriptorError* DidntUpdateDescriptorError::New(::google::protobuf::Arena* arena) const {
+  DidntUpdateDescriptorError* n = new DidntUpdateDescriptorError;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void DidntUpdateDescriptorError::Clear() {
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  if (_internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->Clear();
+  }
+}
+
+bool DidntUpdateDescriptorError::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.DidntUpdateDescriptorError)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+  handle_unusual:
+    if (tag == 0 ||
+        ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+        ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+      goto success;
+    }
+    DO_(::google::protobuf::internal::WireFormat::SkipField(
+          input, tag, mutable_unknown_fields()));
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.DidntUpdateDescriptorError)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.DidntUpdateDescriptorError)
+  return false;
+#undef DO_
+}
+
+void DidntUpdateDescriptorError::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.DidntUpdateDescriptorError)
+  if (_internal_metadata_.have_unknown_fields()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.DidntUpdateDescriptorError)
+}
+
+::google::protobuf::uint8* DidntUpdateDescriptorError::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.DidntUpdateDescriptorError)
+  if (_internal_metadata_.have_unknown_fields()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.roachpb.DidntUpdateDescriptorError)
+  return target;
+}
+
+int DidntUpdateDescriptorError::ByteSize() const {
+  int total_size = 0;
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void DidntUpdateDescriptorError::MergeFrom(const ::google::protobuf::Message& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  const DidntUpdateDescriptorError* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const DidntUpdateDescriptorError>(
+          &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void DidntUpdateDescriptorError::MergeFrom(const DidntUpdateDescriptorError& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (from._internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+  }
+}
+
+void DidntUpdateDescriptorError::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void DidntUpdateDescriptorError::CopyFrom(const DidntUpdateDescriptorError& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool DidntUpdateDescriptorError::IsInitialized() const {
+
+  return true;
+}
+
+void DidntUpdateDescriptorError::Swap(DidntUpdateDescriptorError* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void DidntUpdateDescriptorError::InternalSwap(DidntUpdateDescriptorError* other) {
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::google::protobuf::Metadata DidntUpdateDescriptorError::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = DidntUpdateDescriptorError_descriptor_;
+  metadata.reflection = DidntUpdateDescriptorError_reflection_;
+  return metadata;
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// DidntUpdateDescriptorError
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+SqlTransactionAbortedError::SqlTransactionAbortedError()
+  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.SqlTransactionAbortedError)
+}
+
+void SqlTransactionAbortedError::InitAsDefaultInstance() {
+}
+
+SqlTransactionAbortedError::SqlTransactionAbortedError(const SqlTransactionAbortedError& from)
+  : ::google::protobuf::Message(),
+    _internal_metadata_(NULL) {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.SqlTransactionAbortedError)
+}
+
+void SqlTransactionAbortedError::SharedCtor() {
+  _cached_size_ = 0;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+SqlTransactionAbortedError::~SqlTransactionAbortedError() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.SqlTransactionAbortedError)
+  SharedDtor();
+}
+
+void SqlTransactionAbortedError::SharedDtor() {
+  if (this != default_instance_) {
+  }
+}
+
+void SqlTransactionAbortedError::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* SqlTransactionAbortedError::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return SqlTransactionAbortedError_descriptor_;
+}
+
+const SqlTransactionAbortedError& SqlTransactionAbortedError::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
+  return *default_instance_;
+}
+
+SqlTransactionAbortedError* SqlTransactionAbortedError::default_instance_ = NULL;
+
+SqlTransactionAbortedError* SqlTransactionAbortedError::New(::google::protobuf::Arena* arena) const {
+  SqlTransactionAbortedError* n = new SqlTransactionAbortedError;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void SqlTransactionAbortedError::Clear() {
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  if (_internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->Clear();
+  }
+}
+
+bool SqlTransactionAbortedError::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.SqlTransactionAbortedError)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+  handle_unusual:
+    if (tag == 0 ||
+        ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+        ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+      goto success;
+    }
+    DO_(::google::protobuf::internal::WireFormat::SkipField(
+          input, tag, mutable_unknown_fields()));
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.SqlTransactionAbortedError)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.SqlTransactionAbortedError)
+  return false;
+#undef DO_
+}
+
+void SqlTransactionAbortedError::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.SqlTransactionAbortedError)
+  if (_internal_metadata_.have_unknown_fields()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.SqlTransactionAbortedError)
+}
+
+::google::protobuf::uint8* SqlTransactionAbortedError::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.SqlTransactionAbortedError)
+  if (_internal_metadata_.have_unknown_fields()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.roachpb.SqlTransactionAbortedError)
+  return target;
+}
+
+int SqlTransactionAbortedError::ByteSize() const {
+  int total_size = 0;
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void SqlTransactionAbortedError::MergeFrom(const ::google::protobuf::Message& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  const SqlTransactionAbortedError* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const SqlTransactionAbortedError>(
+          &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void SqlTransactionAbortedError::MergeFrom(const SqlTransactionAbortedError& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (from._internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+  }
+}
+
+void SqlTransactionAbortedError::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void SqlTransactionAbortedError::CopyFrom(const SqlTransactionAbortedError& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool SqlTransactionAbortedError::IsInitialized() const {
+
+  return true;
+}
+
+void SqlTransactionAbortedError::Swap(SqlTransactionAbortedError* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void SqlTransactionAbortedError::InternalSwap(SqlTransactionAbortedError* other) {
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::google::protobuf::Metadata SqlTransactionAbortedError::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = SqlTransactionAbortedError_descriptor_;
+  metadata.reflection = SqlTransactionAbortedError_reflection_;
+  return metadata;
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// SqlTransactionAbortedError
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+ExistingSchemaChangeLeaseError::ExistingSchemaChangeLeaseError()
+  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.ExistingSchemaChangeLeaseError)
+}
+
+void ExistingSchemaChangeLeaseError::InitAsDefaultInstance() {
+}
+
+ExistingSchemaChangeLeaseError::ExistingSchemaChangeLeaseError(const ExistingSchemaChangeLeaseError& from)
+  : ::google::protobuf::Message(),
+    _internal_metadata_(NULL) {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ExistingSchemaChangeLeaseError)
+}
+
+void ExistingSchemaChangeLeaseError::SharedCtor() {
+  _cached_size_ = 0;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+ExistingSchemaChangeLeaseError::~ExistingSchemaChangeLeaseError() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.ExistingSchemaChangeLeaseError)
+  SharedDtor();
+}
+
+void ExistingSchemaChangeLeaseError::SharedDtor() {
+  if (this != default_instance_) {
+  }
+}
+
+void ExistingSchemaChangeLeaseError::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* ExistingSchemaChangeLeaseError::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return ExistingSchemaChangeLeaseError_descriptor_;
+}
+
+const ExistingSchemaChangeLeaseError& ExistingSchemaChangeLeaseError::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
+  return *default_instance_;
+}
+
+ExistingSchemaChangeLeaseError* ExistingSchemaChangeLeaseError::default_instance_ = NULL;
+
+ExistingSchemaChangeLeaseError* ExistingSchemaChangeLeaseError::New(::google::protobuf::Arena* arena) const {
+  ExistingSchemaChangeLeaseError* n = new ExistingSchemaChangeLeaseError;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void ExistingSchemaChangeLeaseError::Clear() {
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  if (_internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->Clear();
+  }
+}
+
+bool ExistingSchemaChangeLeaseError::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.ExistingSchemaChangeLeaseError)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+  handle_unusual:
+    if (tag == 0 ||
+        ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+        ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+      goto success;
+    }
+    DO_(::google::protobuf::internal::WireFormat::SkipField(
+          input, tag, mutable_unknown_fields()));
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.ExistingSchemaChangeLeaseError)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.ExistingSchemaChangeLeaseError)
+  return false;
+#undef DO_
+}
+
+void ExistingSchemaChangeLeaseError::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.ExistingSchemaChangeLeaseError)
+  if (_internal_metadata_.have_unknown_fields()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ExistingSchemaChangeLeaseError)
+}
+
+::google::protobuf::uint8* ExistingSchemaChangeLeaseError::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.ExistingSchemaChangeLeaseError)
+  if (_internal_metadata_.have_unknown_fields()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.roachpb.ExistingSchemaChangeLeaseError)
+  return target;
+}
+
+int ExistingSchemaChangeLeaseError::ByteSize() const {
+  int total_size = 0;
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void ExistingSchemaChangeLeaseError::MergeFrom(const ::google::protobuf::Message& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  const ExistingSchemaChangeLeaseError* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const ExistingSchemaChangeLeaseError>(
+          &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void ExistingSchemaChangeLeaseError::MergeFrom(const ExistingSchemaChangeLeaseError& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (from._internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+  }
+}
+
+void ExistingSchemaChangeLeaseError::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void ExistingSchemaChangeLeaseError::CopyFrom(const ExistingSchemaChangeLeaseError& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool ExistingSchemaChangeLeaseError::IsInitialized() const {
+
+  return true;
+}
+
+void ExistingSchemaChangeLeaseError::Swap(ExistingSchemaChangeLeaseError* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void ExistingSchemaChangeLeaseError::InternalSwap(ExistingSchemaChangeLeaseError* other) {
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::google::protobuf::Metadata ExistingSchemaChangeLeaseError::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = ExistingSchemaChangeLeaseError_descriptor_;
+  metadata.reflection = ExistingSchemaChangeLeaseError_reflection_;
+  return metadata;
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// ExistingSchemaChangeLeaseError
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ErrorDetail::kNotLeaderFieldNumber;
 const int ErrorDetail::kRangeNotFoundFieldNumber;
 const int ErrorDetail::kRangeKeyMismatchFieldNumber;
@@ -6099,6 +7397,12 @@ const int ErrorDetail::kConditionFailedFieldNumber;
 const int ErrorDetail::kLeaseRejectedFieldNumber;
 const int ErrorDetail::kNodeUnavailableFieldNumber;
 const int ErrorDetail::kSendFieldNumber;
+const int ErrorDetail::kRaftGroupDeletedFieldNumber;
+const int ErrorDetail::kReplicaCorruptionFieldNumber;
+const int ErrorDetail::kLeaseVersionChangedFieldNumber;
+const int ErrorDetail::kDidntUpdateDescriptorFieldNumber;
+const int ErrorDetail::kSqlTranasctionAbortedFieldNumber;
+const int ErrorDetail::kExistingSchemeChangeLeaseFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ErrorDetail::ErrorDetail()
@@ -6123,6 +7427,12 @@ void ErrorDetail::InitAsDefaultInstance() {
   lease_rejected_ = const_cast< ::cockroach::roachpb::LeaseRejectedError*>(&::cockroach::roachpb::LeaseRejectedError::default_instance());
   node_unavailable_ = const_cast< ::cockroach::roachpb::NodeUnavailableError*>(&::cockroach::roachpb::NodeUnavailableError::default_instance());
   send_ = const_cast< ::cockroach::roachpb::SendError*>(&::cockroach::roachpb::SendError::default_instance());
+  raft_group_deleted_ = const_cast< ::cockroach::roachpb::RaftGroupDeletedError*>(&::cockroach::roachpb::RaftGroupDeletedError::default_instance());
+  replica_corruption_ = const_cast< ::cockroach::roachpb::ReplicaCorruptionError*>(&::cockroach::roachpb::ReplicaCorruptionError::default_instance());
+  lease_version_changed_ = const_cast< ::cockroach::roachpb::LeaseVersionChangedError*>(&::cockroach::roachpb::LeaseVersionChangedError::default_instance());
+  didnt_update_descriptor_ = const_cast< ::cockroach::roachpb::DidntUpdateDescriptorError*>(&::cockroach::roachpb::DidntUpdateDescriptorError::default_instance());
+  sql_tranasction_aborted_ = const_cast< ::cockroach::roachpb::SqlTransactionAbortedError*>(&::cockroach::roachpb::SqlTransactionAbortedError::default_instance());
+  existing_scheme_change_lease_ = const_cast< ::cockroach::roachpb::ExistingSchemaChangeLeaseError*>(&::cockroach::roachpb::ExistingSchemaChangeLeaseError::default_instance());
 }
 
 ErrorDetail::ErrorDetail(const ErrorDetail& from)
@@ -6150,6 +7460,12 @@ void ErrorDetail::SharedCtor() {
   lease_rejected_ = NULL;
   node_unavailable_ = NULL;
   send_ = NULL;
+  raft_group_deleted_ = NULL;
+  replica_corruption_ = NULL;
+  lease_version_changed_ = NULL;
+  didnt_update_descriptor_ = NULL;
+  sql_tranasction_aborted_ = NULL;
+  existing_scheme_change_lease_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -6175,6 +7491,12 @@ void ErrorDetail::SharedDtor() {
     delete lease_rejected_;
     delete node_unavailable_;
     delete send_;
+    delete raft_group_deleted_;
+    delete replica_corruption_;
+    delete lease_version_changed_;
+    delete didnt_update_descriptor_;
+    delete sql_tranasction_aborted_;
+    delete existing_scheme_change_lease_;
   }
 }
 
@@ -6230,7 +7552,7 @@ void ErrorDetail::Clear() {
       if (transaction_status_ != NULL) transaction_status_->::cockroach::roachpb::TransactionStatusError::Clear();
     }
   }
-  if (_has_bits_[8 / 32] & 32512u) {
+  if (_has_bits_[8 / 32] & 65280u) {
     if (has_write_intent()) {
       if (write_intent_ != NULL) write_intent_->::cockroach::roachpb::WriteIntentError::Clear();
     }
@@ -6252,6 +7574,26 @@ void ErrorDetail::Clear() {
     if (has_send()) {
       if (send_ != NULL) send_->::cockroach::roachpb::SendError::Clear();
     }
+    if (has_raft_group_deleted()) {
+      if (raft_group_deleted_ != NULL) raft_group_deleted_->::cockroach::roachpb::RaftGroupDeletedError::Clear();
+    }
+  }
+  if (_has_bits_[16 / 32] & 2031616u) {
+    if (has_replica_corruption()) {
+      if (replica_corruption_ != NULL) replica_corruption_->::cockroach::roachpb::ReplicaCorruptionError::Clear();
+    }
+    if (has_lease_version_changed()) {
+      if (lease_version_changed_ != NULL) lease_version_changed_->::cockroach::roachpb::LeaseVersionChangedError::Clear();
+    }
+    if (has_didnt_update_descriptor()) {
+      if (didnt_update_descriptor_ != NULL) didnt_update_descriptor_->::cockroach::roachpb::DidntUpdateDescriptorError::Clear();
+    }
+    if (has_sql_tranasction_aborted()) {
+      if (sql_tranasction_aborted_ != NULL) sql_tranasction_aborted_->::cockroach::roachpb::SqlTransactionAbortedError::Clear();
+    }
+    if (has_existing_scheme_change_lease()) {
+      if (existing_scheme_change_lease_ != NULL) existing_scheme_change_lease_->::cockroach::roachpb::ExistingSchemaChangeLeaseError::Clear();
+    }
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -6265,7 +7607,7 @@ bool ErrorDetail::MergePartialFromCodedStream(
   ::google::protobuf::uint32 tag;
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.ErrorDetail)
   for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(16383);
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
@@ -6459,6 +7801,84 @@ bool ErrorDetail::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(130)) goto parse_raft_group_deleted;
+        break;
+      }
+
+      // optional .cockroach.roachpb.RaftGroupDeletedError raft_group_deleted = 16;
+      case 16: {
+        if (tag == 130) {
+         parse_raft_group_deleted:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_raft_group_deleted()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(138)) goto parse_replica_corruption;
+        break;
+      }
+
+      // optional .cockroach.roachpb.ReplicaCorruptionError replica_corruption = 17;
+      case 17: {
+        if (tag == 138) {
+         parse_replica_corruption:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_replica_corruption()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(146)) goto parse_lease_version_changed;
+        break;
+      }
+
+      // optional .cockroach.roachpb.LeaseVersionChangedError lease_version_changed = 18;
+      case 18: {
+        if (tag == 146) {
+         parse_lease_version_changed:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_lease_version_changed()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(154)) goto parse_didnt_update_descriptor;
+        break;
+      }
+
+      // optional .cockroach.roachpb.DidntUpdateDescriptorError didnt_update_descriptor = 19;
+      case 19: {
+        if (tag == 154) {
+         parse_didnt_update_descriptor:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_didnt_update_descriptor()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(162)) goto parse_sql_tranasction_aborted;
+        break;
+      }
+
+      // optional .cockroach.roachpb.SqlTransactionAbortedError sql_tranasction_aborted = 20;
+      case 20: {
+        if (tag == 162) {
+         parse_sql_tranasction_aborted:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_sql_tranasction_aborted()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(170)) goto parse_existing_scheme_change_lease;
+        break;
+      }
+
+      // optional .cockroach.roachpb.ExistingSchemaChangeLeaseError existing_scheme_change_lease = 21;
+      case 21: {
+        if (tag == 170) {
+         parse_existing_scheme_change_lease:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_existing_scheme_change_lease()));
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -6578,6 +7998,42 @@ void ErrorDetail::SerializeWithCachedSizes(
       15, *this->send_, output);
   }
 
+  // optional .cockroach.roachpb.RaftGroupDeletedError raft_group_deleted = 16;
+  if (has_raft_group_deleted()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      16, *this->raft_group_deleted_, output);
+  }
+
+  // optional .cockroach.roachpb.ReplicaCorruptionError replica_corruption = 17;
+  if (has_replica_corruption()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      17, *this->replica_corruption_, output);
+  }
+
+  // optional .cockroach.roachpb.LeaseVersionChangedError lease_version_changed = 18;
+  if (has_lease_version_changed()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      18, *this->lease_version_changed_, output);
+  }
+
+  // optional .cockroach.roachpb.DidntUpdateDescriptorError didnt_update_descriptor = 19;
+  if (has_didnt_update_descriptor()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      19, *this->didnt_update_descriptor_, output);
+  }
+
+  // optional .cockroach.roachpb.SqlTransactionAbortedError sql_tranasction_aborted = 20;
+  if (has_sql_tranasction_aborted()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      20, *this->sql_tranasction_aborted_, output);
+  }
+
+  // optional .cockroach.roachpb.ExistingSchemaChangeLeaseError existing_scheme_change_lease = 21;
+  if (has_existing_scheme_change_lease()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      21, *this->existing_scheme_change_lease_, output);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -6693,6 +8149,48 @@ void ErrorDetail::SerializeWithCachedSizes(
         15, *this->send_, target);
   }
 
+  // optional .cockroach.roachpb.RaftGroupDeletedError raft_group_deleted = 16;
+  if (has_raft_group_deleted()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        16, *this->raft_group_deleted_, target);
+  }
+
+  // optional .cockroach.roachpb.ReplicaCorruptionError replica_corruption = 17;
+  if (has_replica_corruption()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        17, *this->replica_corruption_, target);
+  }
+
+  // optional .cockroach.roachpb.LeaseVersionChangedError lease_version_changed = 18;
+  if (has_lease_version_changed()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        18, *this->lease_version_changed_, target);
+  }
+
+  // optional .cockroach.roachpb.DidntUpdateDescriptorError didnt_update_descriptor = 19;
+  if (has_didnt_update_descriptor()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        19, *this->didnt_update_descriptor_, target);
+  }
+
+  // optional .cockroach.roachpb.SqlTransactionAbortedError sql_tranasction_aborted = 20;
+  if (has_sql_tranasction_aborted()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        20, *this->sql_tranasction_aborted_, target);
+  }
+
+  // optional .cockroach.roachpb.ExistingSchemaChangeLeaseError existing_scheme_change_lease = 21;
+  if (has_existing_scheme_change_lease()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        21, *this->existing_scheme_change_lease_, target);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -6762,7 +8260,7 @@ int ErrorDetail::ByteSize() const {
     }
 
   }
-  if (_has_bits_[8 / 32] & 32512u) {
+  if (_has_bits_[8 / 32] & 65280u) {
     // optional .cockroach.roachpb.WriteIntentError write_intent = 9;
     if (has_write_intent()) {
       total_size += 1 +
@@ -6810,6 +8308,50 @@ int ErrorDetail::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *this->send_);
+    }
+
+    // optional .cockroach.roachpb.RaftGroupDeletedError raft_group_deleted = 16;
+    if (has_raft_group_deleted()) {
+      total_size += 2 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->raft_group_deleted_);
+    }
+
+  }
+  if (_has_bits_[16 / 32] & 2031616u) {
+    // optional .cockroach.roachpb.ReplicaCorruptionError replica_corruption = 17;
+    if (has_replica_corruption()) {
+      total_size += 2 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->replica_corruption_);
+    }
+
+    // optional .cockroach.roachpb.LeaseVersionChangedError lease_version_changed = 18;
+    if (has_lease_version_changed()) {
+      total_size += 2 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->lease_version_changed_);
+    }
+
+    // optional .cockroach.roachpb.DidntUpdateDescriptorError didnt_update_descriptor = 19;
+    if (has_didnt_update_descriptor()) {
+      total_size += 2 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->didnt_update_descriptor_);
+    }
+
+    // optional .cockroach.roachpb.SqlTransactionAbortedError sql_tranasction_aborted = 20;
+    if (has_sql_tranasction_aborted()) {
+      total_size += 2 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->sql_tranasction_aborted_);
+    }
+
+    // optional .cockroach.roachpb.ExistingSchemaChangeLeaseError existing_scheme_change_lease = 21;
+    if (has_existing_scheme_change_lease()) {
+      total_size += 2 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->existing_scheme_change_lease_);
     }
 
   }
@@ -6886,6 +8428,26 @@ void ErrorDetail::MergeFrom(const ErrorDetail& from) {
     if (from.has_send()) {
       mutable_send()->::cockroach::roachpb::SendError::MergeFrom(from.send());
     }
+    if (from.has_raft_group_deleted()) {
+      mutable_raft_group_deleted()->::cockroach::roachpb::RaftGroupDeletedError::MergeFrom(from.raft_group_deleted());
+    }
+  }
+  if (from._has_bits_[16 / 32] & (0xffu << (16 % 32))) {
+    if (from.has_replica_corruption()) {
+      mutable_replica_corruption()->::cockroach::roachpb::ReplicaCorruptionError::MergeFrom(from.replica_corruption());
+    }
+    if (from.has_lease_version_changed()) {
+      mutable_lease_version_changed()->::cockroach::roachpb::LeaseVersionChangedError::MergeFrom(from.lease_version_changed());
+    }
+    if (from.has_didnt_update_descriptor()) {
+      mutable_didnt_update_descriptor()->::cockroach::roachpb::DidntUpdateDescriptorError::MergeFrom(from.didnt_update_descriptor());
+    }
+    if (from.has_sql_tranasction_aborted()) {
+      mutable_sql_tranasction_aborted()->::cockroach::roachpb::SqlTransactionAbortedError::MergeFrom(from.sql_tranasction_aborted());
+    }
+    if (from.has_existing_scheme_change_lease()) {
+      mutable_existing_scheme_change_lease()->::cockroach::roachpb::ExistingSchemaChangeLeaseError::MergeFrom(from.existing_scheme_change_lease());
+    }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -6929,6 +8491,12 @@ void ErrorDetail::InternalSwap(ErrorDetail* other) {
   std::swap(lease_rejected_, other->lease_rejected_);
   std::swap(node_unavailable_, other->node_unavailable_);
   std::swap(send_, other->send_);
+  std::swap(raft_group_deleted_, other->raft_group_deleted_);
+  std::swap(replica_corruption_, other->replica_corruption_);
+  std::swap(lease_version_changed_, other->lease_version_changed_);
+  std::swap(didnt_update_descriptor_, other->didnt_update_descriptor_);
+  std::swap(sql_tranasction_aborted_, other->sql_tranasction_aborted_);
+  std::swap(existing_scheme_change_lease_, other->existing_scheme_change_lease_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -7590,6 +9158,264 @@ void ErrorDetail::set_allocated_send(::cockroach::roachpb::SendError* send) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.send)
 }
 
+// optional .cockroach.roachpb.RaftGroupDeletedError raft_group_deleted = 16;
+bool ErrorDetail::has_raft_group_deleted() const {
+  return (_has_bits_[0] & 0x00008000u) != 0;
+}
+void ErrorDetail::set_has_raft_group_deleted() {
+  _has_bits_[0] |= 0x00008000u;
+}
+void ErrorDetail::clear_has_raft_group_deleted() {
+  _has_bits_[0] &= ~0x00008000u;
+}
+void ErrorDetail::clear_raft_group_deleted() {
+  if (raft_group_deleted_ != NULL) raft_group_deleted_->::cockroach::roachpb::RaftGroupDeletedError::Clear();
+  clear_has_raft_group_deleted();
+}
+const ::cockroach::roachpb::RaftGroupDeletedError& ErrorDetail::raft_group_deleted() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorDetail.raft_group_deleted)
+  return raft_group_deleted_ != NULL ? *raft_group_deleted_ : *default_instance_->raft_group_deleted_;
+}
+::cockroach::roachpb::RaftGroupDeletedError* ErrorDetail::mutable_raft_group_deleted() {
+  set_has_raft_group_deleted();
+  if (raft_group_deleted_ == NULL) {
+    raft_group_deleted_ = new ::cockroach::roachpb::RaftGroupDeletedError;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorDetail.raft_group_deleted)
+  return raft_group_deleted_;
+}
+::cockroach::roachpb::RaftGroupDeletedError* ErrorDetail::release_raft_group_deleted() {
+  clear_has_raft_group_deleted();
+  ::cockroach::roachpb::RaftGroupDeletedError* temp = raft_group_deleted_;
+  raft_group_deleted_ = NULL;
+  return temp;
+}
+void ErrorDetail::set_allocated_raft_group_deleted(::cockroach::roachpb::RaftGroupDeletedError* raft_group_deleted) {
+  delete raft_group_deleted_;
+  raft_group_deleted_ = raft_group_deleted;
+  if (raft_group_deleted) {
+    set_has_raft_group_deleted();
+  } else {
+    clear_has_raft_group_deleted();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.raft_group_deleted)
+}
+
+// optional .cockroach.roachpb.ReplicaCorruptionError replica_corruption = 17;
+bool ErrorDetail::has_replica_corruption() const {
+  return (_has_bits_[0] & 0x00010000u) != 0;
+}
+void ErrorDetail::set_has_replica_corruption() {
+  _has_bits_[0] |= 0x00010000u;
+}
+void ErrorDetail::clear_has_replica_corruption() {
+  _has_bits_[0] &= ~0x00010000u;
+}
+void ErrorDetail::clear_replica_corruption() {
+  if (replica_corruption_ != NULL) replica_corruption_->::cockroach::roachpb::ReplicaCorruptionError::Clear();
+  clear_has_replica_corruption();
+}
+const ::cockroach::roachpb::ReplicaCorruptionError& ErrorDetail::replica_corruption() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorDetail.replica_corruption)
+  return replica_corruption_ != NULL ? *replica_corruption_ : *default_instance_->replica_corruption_;
+}
+::cockroach::roachpb::ReplicaCorruptionError* ErrorDetail::mutable_replica_corruption() {
+  set_has_replica_corruption();
+  if (replica_corruption_ == NULL) {
+    replica_corruption_ = new ::cockroach::roachpb::ReplicaCorruptionError;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorDetail.replica_corruption)
+  return replica_corruption_;
+}
+::cockroach::roachpb::ReplicaCorruptionError* ErrorDetail::release_replica_corruption() {
+  clear_has_replica_corruption();
+  ::cockroach::roachpb::ReplicaCorruptionError* temp = replica_corruption_;
+  replica_corruption_ = NULL;
+  return temp;
+}
+void ErrorDetail::set_allocated_replica_corruption(::cockroach::roachpb::ReplicaCorruptionError* replica_corruption) {
+  delete replica_corruption_;
+  replica_corruption_ = replica_corruption;
+  if (replica_corruption) {
+    set_has_replica_corruption();
+  } else {
+    clear_has_replica_corruption();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.replica_corruption)
+}
+
+// optional .cockroach.roachpb.LeaseVersionChangedError lease_version_changed = 18;
+bool ErrorDetail::has_lease_version_changed() const {
+  return (_has_bits_[0] & 0x00020000u) != 0;
+}
+void ErrorDetail::set_has_lease_version_changed() {
+  _has_bits_[0] |= 0x00020000u;
+}
+void ErrorDetail::clear_has_lease_version_changed() {
+  _has_bits_[0] &= ~0x00020000u;
+}
+void ErrorDetail::clear_lease_version_changed() {
+  if (lease_version_changed_ != NULL) lease_version_changed_->::cockroach::roachpb::LeaseVersionChangedError::Clear();
+  clear_has_lease_version_changed();
+}
+const ::cockroach::roachpb::LeaseVersionChangedError& ErrorDetail::lease_version_changed() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorDetail.lease_version_changed)
+  return lease_version_changed_ != NULL ? *lease_version_changed_ : *default_instance_->lease_version_changed_;
+}
+::cockroach::roachpb::LeaseVersionChangedError* ErrorDetail::mutable_lease_version_changed() {
+  set_has_lease_version_changed();
+  if (lease_version_changed_ == NULL) {
+    lease_version_changed_ = new ::cockroach::roachpb::LeaseVersionChangedError;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorDetail.lease_version_changed)
+  return lease_version_changed_;
+}
+::cockroach::roachpb::LeaseVersionChangedError* ErrorDetail::release_lease_version_changed() {
+  clear_has_lease_version_changed();
+  ::cockroach::roachpb::LeaseVersionChangedError* temp = lease_version_changed_;
+  lease_version_changed_ = NULL;
+  return temp;
+}
+void ErrorDetail::set_allocated_lease_version_changed(::cockroach::roachpb::LeaseVersionChangedError* lease_version_changed) {
+  delete lease_version_changed_;
+  lease_version_changed_ = lease_version_changed;
+  if (lease_version_changed) {
+    set_has_lease_version_changed();
+  } else {
+    clear_has_lease_version_changed();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.lease_version_changed)
+}
+
+// optional .cockroach.roachpb.DidntUpdateDescriptorError didnt_update_descriptor = 19;
+bool ErrorDetail::has_didnt_update_descriptor() const {
+  return (_has_bits_[0] & 0x00040000u) != 0;
+}
+void ErrorDetail::set_has_didnt_update_descriptor() {
+  _has_bits_[0] |= 0x00040000u;
+}
+void ErrorDetail::clear_has_didnt_update_descriptor() {
+  _has_bits_[0] &= ~0x00040000u;
+}
+void ErrorDetail::clear_didnt_update_descriptor() {
+  if (didnt_update_descriptor_ != NULL) didnt_update_descriptor_->::cockroach::roachpb::DidntUpdateDescriptorError::Clear();
+  clear_has_didnt_update_descriptor();
+}
+const ::cockroach::roachpb::DidntUpdateDescriptorError& ErrorDetail::didnt_update_descriptor() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorDetail.didnt_update_descriptor)
+  return didnt_update_descriptor_ != NULL ? *didnt_update_descriptor_ : *default_instance_->didnt_update_descriptor_;
+}
+::cockroach::roachpb::DidntUpdateDescriptorError* ErrorDetail::mutable_didnt_update_descriptor() {
+  set_has_didnt_update_descriptor();
+  if (didnt_update_descriptor_ == NULL) {
+    didnt_update_descriptor_ = new ::cockroach::roachpb::DidntUpdateDescriptorError;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorDetail.didnt_update_descriptor)
+  return didnt_update_descriptor_;
+}
+::cockroach::roachpb::DidntUpdateDescriptorError* ErrorDetail::release_didnt_update_descriptor() {
+  clear_has_didnt_update_descriptor();
+  ::cockroach::roachpb::DidntUpdateDescriptorError* temp = didnt_update_descriptor_;
+  didnt_update_descriptor_ = NULL;
+  return temp;
+}
+void ErrorDetail::set_allocated_didnt_update_descriptor(::cockroach::roachpb::DidntUpdateDescriptorError* didnt_update_descriptor) {
+  delete didnt_update_descriptor_;
+  didnt_update_descriptor_ = didnt_update_descriptor;
+  if (didnt_update_descriptor) {
+    set_has_didnt_update_descriptor();
+  } else {
+    clear_has_didnt_update_descriptor();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.didnt_update_descriptor)
+}
+
+// optional .cockroach.roachpb.SqlTransactionAbortedError sql_tranasction_aborted = 20;
+bool ErrorDetail::has_sql_tranasction_aborted() const {
+  return (_has_bits_[0] & 0x00080000u) != 0;
+}
+void ErrorDetail::set_has_sql_tranasction_aborted() {
+  _has_bits_[0] |= 0x00080000u;
+}
+void ErrorDetail::clear_has_sql_tranasction_aborted() {
+  _has_bits_[0] &= ~0x00080000u;
+}
+void ErrorDetail::clear_sql_tranasction_aborted() {
+  if (sql_tranasction_aborted_ != NULL) sql_tranasction_aborted_->::cockroach::roachpb::SqlTransactionAbortedError::Clear();
+  clear_has_sql_tranasction_aborted();
+}
+const ::cockroach::roachpb::SqlTransactionAbortedError& ErrorDetail::sql_tranasction_aborted() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorDetail.sql_tranasction_aborted)
+  return sql_tranasction_aborted_ != NULL ? *sql_tranasction_aborted_ : *default_instance_->sql_tranasction_aborted_;
+}
+::cockroach::roachpb::SqlTransactionAbortedError* ErrorDetail::mutable_sql_tranasction_aborted() {
+  set_has_sql_tranasction_aborted();
+  if (sql_tranasction_aborted_ == NULL) {
+    sql_tranasction_aborted_ = new ::cockroach::roachpb::SqlTransactionAbortedError;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorDetail.sql_tranasction_aborted)
+  return sql_tranasction_aborted_;
+}
+::cockroach::roachpb::SqlTransactionAbortedError* ErrorDetail::release_sql_tranasction_aborted() {
+  clear_has_sql_tranasction_aborted();
+  ::cockroach::roachpb::SqlTransactionAbortedError* temp = sql_tranasction_aborted_;
+  sql_tranasction_aborted_ = NULL;
+  return temp;
+}
+void ErrorDetail::set_allocated_sql_tranasction_aborted(::cockroach::roachpb::SqlTransactionAbortedError* sql_tranasction_aborted) {
+  delete sql_tranasction_aborted_;
+  sql_tranasction_aborted_ = sql_tranasction_aborted;
+  if (sql_tranasction_aborted) {
+    set_has_sql_tranasction_aborted();
+  } else {
+    clear_has_sql_tranasction_aborted();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.sql_tranasction_aborted)
+}
+
+// optional .cockroach.roachpb.ExistingSchemaChangeLeaseError existing_scheme_change_lease = 21;
+bool ErrorDetail::has_existing_scheme_change_lease() const {
+  return (_has_bits_[0] & 0x00100000u) != 0;
+}
+void ErrorDetail::set_has_existing_scheme_change_lease() {
+  _has_bits_[0] |= 0x00100000u;
+}
+void ErrorDetail::clear_has_existing_scheme_change_lease() {
+  _has_bits_[0] &= ~0x00100000u;
+}
+void ErrorDetail::clear_existing_scheme_change_lease() {
+  if (existing_scheme_change_lease_ != NULL) existing_scheme_change_lease_->::cockroach::roachpb::ExistingSchemaChangeLeaseError::Clear();
+  clear_has_existing_scheme_change_lease();
+}
+const ::cockroach::roachpb::ExistingSchemaChangeLeaseError& ErrorDetail::existing_scheme_change_lease() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorDetail.existing_scheme_change_lease)
+  return existing_scheme_change_lease_ != NULL ? *existing_scheme_change_lease_ : *default_instance_->existing_scheme_change_lease_;
+}
+::cockroach::roachpb::ExistingSchemaChangeLeaseError* ErrorDetail::mutable_existing_scheme_change_lease() {
+  set_has_existing_scheme_change_lease();
+  if (existing_scheme_change_lease_ == NULL) {
+    existing_scheme_change_lease_ = new ::cockroach::roachpb::ExistingSchemaChangeLeaseError;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorDetail.existing_scheme_change_lease)
+  return existing_scheme_change_lease_;
+}
+::cockroach::roachpb::ExistingSchemaChangeLeaseError* ErrorDetail::release_existing_scheme_change_lease() {
+  clear_has_existing_scheme_change_lease();
+  ::cockroach::roachpb::ExistingSchemaChangeLeaseError* temp = existing_scheme_change_lease_;
+  existing_scheme_change_lease_ = NULL;
+  return temp;
+}
+void ErrorDetail::set_allocated_existing_scheme_change_lease(::cockroach::roachpb::ExistingSchemaChangeLeaseError* existing_scheme_change_lease) {
+  delete existing_scheme_change_lease_;
+  existing_scheme_change_lease_ = existing_scheme_change_lease;
+  if (existing_scheme_change_lease) {
+    set_has_existing_scheme_change_lease();
+  } else {
+    clear_has_existing_scheme_change_lease();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.existing_scheme_change_lease)
+}
+
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
 
 // ===================================================================
@@ -7857,7 +9683,9 @@ void ErrPosition::clear_index() {
 const int Error::kMessageFieldNumber;
 const int Error::kRetryableFieldNumber;
 const int Error::kTransactionRestartFieldNumber;
+const int Error::kTxnFieldNumber;
 const int Error::kDetailFieldNumber;
+const int Error::kIndexFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Error::Error()
@@ -7867,7 +9695,9 @@ Error::Error()
 }
 
 void Error::InitAsDefaultInstance() {
+  txn_ = const_cast< ::cockroach::roachpb::Transaction*>(&::cockroach::roachpb::Transaction::default_instance());
   detail_ = const_cast< ::cockroach::roachpb::ErrorDetail*>(&::cockroach::roachpb::ErrorDetail::default_instance());
+  index_ = const_cast< ::cockroach::roachpb::ErrPosition*>(&::cockroach::roachpb::ErrPosition::default_instance());
 }
 
 Error::Error(const Error& from)
@@ -7884,7 +9714,9 @@ void Error::SharedCtor() {
   message_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   retryable_ = false;
   transaction_restart_ = 0;
+  txn_ = NULL;
   detail_ = NULL;
+  index_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -7896,7 +9728,9 @@ Error::~Error() {
 void Error::SharedDtor() {
   message_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != default_instance_) {
+    delete txn_;
     delete detail_;
+    delete index_;
   }
 }
 
@@ -7934,13 +9768,19 @@ void Error::Clear() {
            ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
 } while (0)
 
-  if (_has_bits_[0 / 32] & 15u) {
+  if (_has_bits_[0 / 32] & 63u) {
     ZR_(retryable_, transaction_restart_);
     if (has_message()) {
       message_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
     }
+    if (has_txn()) {
+      if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
+    }
     if (has_detail()) {
       if (detail_ != NULL) detail_->::cockroach::roachpb::ErrorDetail::Clear();
+    }
+    if (has_index()) {
+      if (index_ != NULL) index_->::cockroach::roachpb::ErrPosition::Clear();
     }
   }
 
@@ -8010,16 +9850,42 @@ bool Error::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(34)) goto parse_detail;
+        if (input->ExpectTag(34)) goto parse_txn;
         break;
       }
 
-      // optional .cockroach.roachpb.ErrorDetail detail = 4;
+      // optional .cockroach.roachpb.Transaction txn = 4;
       case 4: {
         if (tag == 34) {
+         parse_txn:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_txn()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(42)) goto parse_detail;
+        break;
+      }
+
+      // optional .cockroach.roachpb.ErrorDetail detail = 5;
+      case 5: {
+        if (tag == 42) {
          parse_detail:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_detail()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(50)) goto parse_index;
+        break;
+      }
+
+      // optional .cockroach.roachpb.ErrPosition index = 6;
+      case 6: {
+        if (tag == 50) {
+         parse_index:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_index()));
         } else {
           goto handle_unusual;
         }
@@ -8073,10 +9939,22 @@ void Error::SerializeWithCachedSizes(
       3, this->transaction_restart(), output);
   }
 
-  // optional .cockroach.roachpb.ErrorDetail detail = 4;
+  // optional .cockroach.roachpb.Transaction txn = 4;
+  if (has_txn()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      4, *this->txn_, output);
+  }
+
+  // optional .cockroach.roachpb.ErrorDetail detail = 5;
   if (has_detail()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      4, *this->detail_, output);
+      5, *this->detail_, output);
+  }
+
+  // optional .cockroach.roachpb.ErrPosition index = 6;
+  if (has_index()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      6, *this->index_, output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -8111,11 +9989,25 @@ void Error::SerializeWithCachedSizes(
       3, this->transaction_restart(), target);
   }
 
-  // optional .cockroach.roachpb.ErrorDetail detail = 4;
+  // optional .cockroach.roachpb.Transaction txn = 4;
+  if (has_txn()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        4, *this->txn_, target);
+  }
+
+  // optional .cockroach.roachpb.ErrorDetail detail = 5;
   if (has_detail()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        4, *this->detail_, target);
+        5, *this->detail_, target);
+  }
+
+  // optional .cockroach.roachpb.ErrPosition index = 6;
+  if (has_index()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        6, *this->index_, target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -8129,7 +10021,7 @@ void Error::SerializeWithCachedSizes(
 int Error::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 15u) {
+  if (_has_bits_[0 / 32] & 63u) {
     // optional string message = 1;
     if (has_message()) {
       total_size += 1 +
@@ -8148,11 +10040,25 @@ int Error::ByteSize() const {
         ::google::protobuf::internal::WireFormatLite::EnumSize(this->transaction_restart());
     }
 
-    // optional .cockroach.roachpb.ErrorDetail detail = 4;
+    // optional .cockroach.roachpb.Transaction txn = 4;
+    if (has_txn()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->txn_);
+    }
+
+    // optional .cockroach.roachpb.ErrorDetail detail = 5;
     if (has_detail()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *this->detail_);
+    }
+
+    // optional .cockroach.roachpb.ErrPosition index = 6;
+    if (has_index()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->index_);
     }
 
   }
@@ -8192,8 +10098,14 @@ void Error::MergeFrom(const Error& from) {
     if (from.has_transaction_restart()) {
       set_transaction_restart(from.transaction_restart());
     }
+    if (from.has_txn()) {
+      mutable_txn()->::cockroach::roachpb::Transaction::MergeFrom(from.txn());
+    }
     if (from.has_detail()) {
       mutable_detail()->::cockroach::roachpb::ErrorDetail::MergeFrom(from.detail());
+    }
+    if (from.has_index()) {
+      mutable_index()->::cockroach::roachpb::ErrPosition::MergeFrom(from.index());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -8226,7 +10138,9 @@ void Error::InternalSwap(Error* other) {
   message_.Swap(&other->message_);
   std::swap(retryable_, other->retryable_);
   std::swap(transaction_restart_, other->transaction_restart_);
+  std::swap(txn_, other->txn_);
   std::swap(detail_, other->detail_);
+  std::swap(index_, other->index_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -8345,15 +10259,58 @@ void Error::clear_transaction_restart() {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Error.transaction_restart)
 }
 
-// optional .cockroach.roachpb.ErrorDetail detail = 4;
-bool Error::has_detail() const {
+// optional .cockroach.roachpb.Transaction txn = 4;
+bool Error::has_txn() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
-void Error::set_has_detail() {
+void Error::set_has_txn() {
   _has_bits_[0] |= 0x00000008u;
 }
-void Error::clear_has_detail() {
+void Error::clear_has_txn() {
   _has_bits_[0] &= ~0x00000008u;
+}
+void Error::clear_txn() {
+  if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
+  clear_has_txn();
+}
+const ::cockroach::roachpb::Transaction& Error::txn() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Error.txn)
+  return txn_ != NULL ? *txn_ : *default_instance_->txn_;
+}
+::cockroach::roachpb::Transaction* Error::mutable_txn() {
+  set_has_txn();
+  if (txn_ == NULL) {
+    txn_ = new ::cockroach::roachpb::Transaction;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Error.txn)
+  return txn_;
+}
+::cockroach::roachpb::Transaction* Error::release_txn() {
+  clear_has_txn();
+  ::cockroach::roachpb::Transaction* temp = txn_;
+  txn_ = NULL;
+  return temp;
+}
+void Error::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
+  delete txn_;
+  txn_ = txn;
+  if (txn) {
+    set_has_txn();
+  } else {
+    clear_has_txn();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Error.txn)
+}
+
+// optional .cockroach.roachpb.ErrorDetail detail = 5;
+bool Error::has_detail() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+void Error::set_has_detail() {
+  _has_bits_[0] |= 0x00000010u;
+}
+void Error::clear_has_detail() {
+  _has_bits_[0] &= ~0x00000010u;
 }
 void Error::clear_detail() {
   if (detail_ != NULL) detail_->::cockroach::roachpb::ErrorDetail::Clear();
@@ -8386,6 +10343,49 @@ void Error::set_allocated_detail(::cockroach::roachpb::ErrorDetail* detail) {
     clear_has_detail();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Error.detail)
+}
+
+// optional .cockroach.roachpb.ErrPosition index = 6;
+bool Error::has_index() const {
+  return (_has_bits_[0] & 0x00000020u) != 0;
+}
+void Error::set_has_index() {
+  _has_bits_[0] |= 0x00000020u;
+}
+void Error::clear_has_index() {
+  _has_bits_[0] &= ~0x00000020u;
+}
+void Error::clear_index() {
+  if (index_ != NULL) index_->::cockroach::roachpb::ErrPosition::Clear();
+  clear_has_index();
+}
+const ::cockroach::roachpb::ErrPosition& Error::index() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Error.index)
+  return index_ != NULL ? *index_ : *default_instance_->index_;
+}
+::cockroach::roachpb::ErrPosition* Error::mutable_index() {
+  set_has_index();
+  if (index_ == NULL) {
+    index_ = new ::cockroach::roachpb::ErrPosition;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Error.index)
+  return index_;
+}
+::cockroach::roachpb::ErrPosition* Error::release_index() {
+  clear_has_index();
+  ::cockroach::roachpb::ErrPosition* temp = index_;
+  index_ = NULL;
+  return temp;
+}
+void Error::set_allocated_index(::cockroach::roachpb::ErrPosition* index) {
+  delete index_;
+  index_ = index;
+  if (index) {
+    set_has_index();
+  } else {
+    clear_has_index();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Error.index)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

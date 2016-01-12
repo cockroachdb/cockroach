@@ -320,7 +320,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			_, ok := tc.txns[id]
 			tc.Unlock()
 			if !ok {
-				return nil, roachpb.NewError(util.Errorf("transaction must not write on multiple coordinators"))
+				return nil, roachpb.NewErrorf("transaction must not write on multiple coordinators")
 			}
 		}
 
@@ -336,7 +336,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		if rArgs, ok := ba.GetArg(roachpb.EndTransaction); ok {
 			et := rArgs.(*roachpb.EndTransactionRequest)
 			if len(et.Key) != 0 {
-				return nil, roachpb.NewError(util.Errorf("EndTransaction must not have a Key set"))
+				return nil, roachpb.NewErrorf("EndTransaction must not have a Key set")
 			}
 			et.Key = ba.Txn.Key
 			// Remember when EndTransaction started in case we want to
@@ -346,7 +346,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 				// TODO(tschottdorf): it may be useful to allow this later.
 				// That would be part of a possible plan to allow txns which
 				// write on multiple coordinators.
-				return nil, roachpb.NewError(util.Errorf("client must not pass intents to EndTransaction"))
+				return nil, roachpb.NewErrorf("client must not pass intents to EndTransaction")
 			}
 			tc.Lock()
 			txnMeta, metaOK := tc.txns[id]
@@ -373,13 +373,13 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 				// TODO(bdarnell): if we had a GetTransactionStatus API then
 				// we could lookup the transaction and return either nil or
 				// TransactionAbortedError instead of this ambivalent error.
-				return nil, roachpb.NewError(util.Errorf("transaction is already committed or aborted"))
+				return nil, roachpb.NewErrorf("transaction is already committed or aborted")
 			}
 			if len(et.IntentSpans) == 0 {
 				// If there aren't any intents, then there's factually no
 				// transaction to end. Read-only txns have all of their state in
 				// the client.
-				return nil, roachpb.NewError(util.Errorf("cannot commit a read-only transaction"))
+				return nil, roachpb.NewErrorf("cannot commit a read-only transaction")
 			}
 			if log.V(1) {
 				for _, intent := range et.IntentSpans {
@@ -645,10 +645,9 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	newTxn.Update(ba.Txn)
 	// TODO(tamird): remove this clone. It's currently needed to avoid race conditions.
 	pErr = proto.Clone(pErr).(*roachpb.Error)
-	err := pErr.GoError()
 	// TODO(bdarnell): We're writing to errors here (and where using ErrorWithIndex);
 	// since there's no concept of ownership copy-on-write is always preferable.
-	switch t := err.(type) {
+	switch t := pErr.GoError().(type) {
 	case nil:
 		newTxn.Update(br.Txn)
 		// Move txn timestamp forward to response timestamp if applicable.
@@ -678,6 +677,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		newTxn.Timestamp.Forward(candidateTS)
 		newTxn.Restart(ba.UserPriority, newTxn.Priority, newTxn.Timestamp)
 		t.Txn = *newTxn
+		pErr.Txn = newTxn
 	case *roachpb.TransactionAbortedError:
 		trace.SetError()
 		newTxn.Update(&t.Txn)
@@ -685,6 +685,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		newTxn.Timestamp.Forward(t.Txn.Timestamp)
 		newTxn.Priority = t.Txn.Priority
 		t.Txn = *newTxn
+		pErr.Txn = newTxn
 		// Clean up the freshly aborted transaction in defer(), avoiding a
 		// race with the state update below.
 		defer tc.cleanupTxn(trace, t.Txn)
@@ -695,16 +696,12 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		newTxn.Timestamp.Forward(t.PusheeTxn.Timestamp.Add(0, 1))
 		newTxn.Restart(ba.UserPriority, t.PusheeTxn.Priority-1, newTxn.Timestamp)
 		t.Txn = newTxn
+		pErr.Txn = newTxn
 	case *roachpb.TransactionRetryError:
 		newTxn.Update(&t.Txn)
 		newTxn.Restart(ba.UserPriority, t.Txn.Priority, newTxn.Timestamp)
 		t.Txn = *newTxn
-	case roachpb.TransactionRestartError:
-		// Assertion: The above cases should exhaust all ErrorDetails which
-		// carry a Transaction.
-		if pErr.Detail != nil {
-			panic(fmt.Sprintf("unhandled TransactionRestartError %T", err))
-		}
+		pErr.Txn = newTxn
 	default:
 		trace.SetError()
 	}
@@ -730,7 +727,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		// after all, it **has** laid down intents and only the coordinator
 		// can augment a potential EndTransaction call). See #3303.
 		intents := ba.GetIntentSpans()
-		if len(intents) > 0 && (err == nil || newTxn.Writing) {
+		if len(intents) > 0 && (pErr == nil || newTxn.Writing) {
 			if txnMeta == nil {
 				if !newTxn.Writing {
 					panic("txn with intents marked as non-writing")
@@ -750,7 +747,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 				// the coordinator - the transaction has laid down intents, so
 				// we expect it to be committed/aborted at some point in the
 				// future.
-				if _, isEnding := ba.GetArg(roachpb.EndTransaction); err != nil || !isEnding {
+				if _, isEnding := ba.GetArg(roachpb.EndTransaction); pErr != nil || !isEnding {
 					trace.Event("coordinator spawns")
 					if !tc.stopper.RunAsyncTask(func() {
 						tc.heartbeatLoop(id)
@@ -779,7 +776,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 				txnMeta.addKeyRange(intent.Key, intent.EndKey)
 			}
 		}
-		if err == nil {
+		if pErr == nil {
 			// For successful transactional requests, always send the updated txn
 			// record back.
 			br.Txn = newTxn
@@ -799,19 +796,19 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 	}
 	tmpDB := client.NewDBWithPriority(tc, ba.UserPriority)
 	var br *roachpb.BatchResponse
-	err := tmpDB.Txn(func(txn *client.Txn) error {
+	pErr := tmpDB.Txn(func(txn *client.Txn) *roachpb.Error {
 		txn.SetDebugName("auto-wrap", 0)
 		b := txn.NewBatch()
 		for _, arg := range ba.Requests {
 			req := arg.GetInner()
 			b.InternalAddRequest(req)
 		}
-		var err error
-		br, err = txn.CommitInBatchWithResponse(b)
-		return err
+		var pErr *roachpb.Error
+		br, pErr = txn.CommitInBatchWithResponse(b)
+		return pErr
 	})
-	if err != nil {
-		return nil, roachpb.NewError(err)
+	if pErr != nil {
+		return nil, pErr
 	}
 	br.Txn = nil // hide the evidence
 	return br, nil

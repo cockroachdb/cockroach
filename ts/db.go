@@ -133,5 +133,5 @@ func (db *DB) StoreData(r Resolution, data []TimeSeriesData) error {
 		})
 	}
 
-	return db.db.Run(&b)
+	return db.db.Run(&b).GoError()
 }

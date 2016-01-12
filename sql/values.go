@@ -20,11 +20,12 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
 // Values constructs a valuesNode from a VALUES expression.
-func (p *planner) Values(n parser.Values) (planNode, error) {
+func (p *planner) Values(n parser.Values) (planNode, *roachpb.Error) {
 	v := &valuesNode{
 		rows: make([]parser.DTuple, 0, len(n)),
 	}
@@ -33,38 +34,39 @@ func (p *planner) Values(n parser.Values) (planNode, error) {
 		if num == 0 {
 			v.columns = make([]column, 0, len(tuple))
 		} else if a, e := len(tuple), len(v.columns); a != e {
-			return nil, fmt.Errorf("VALUES lists must all be the same length, %d for %d", a, e)
+			return nil, roachpb.NewUErrorf("VALUES lists must all be the same length, %d for %d", a, e)
 		}
 
 		for i := range tuple {
-			var err error
-			tuple[i], err = p.expandSubqueries(tuple[i], 1)
-			if err != nil {
-				return nil, err
+			var pErr *roachpb.Error
+			tuple[i], pErr = p.expandSubqueries(tuple[i], 1)
+			if pErr != nil {
+				return nil, pErr
 			}
+			var err error
 			typ, err := tuple[i].TypeCheck(p.evalCtx.Args)
 			if err != nil {
-				return nil, err
+				return nil, roachpb.NewError(err)
 			}
 			tuple[i], err = p.parser.NormalizeExpr(p.evalCtx, tuple[i])
 			if err != nil {
-				return nil, err
+				return nil, roachpb.NewError(err)
 			}
 			if num == 0 {
 				v.columns = append(v.columns, column{name: "column" + strconv.Itoa(i+1), typ: typ})
 			} else if v.columns[i].typ == parser.DNull {
 				v.columns[i].typ = typ
 			} else if typ != parser.DNull && typ != v.columns[i].typ {
-				return nil, fmt.Errorf("VALUES list type mismatch, %s for %s", typ.Type(), v.columns[i].typ.Type())
+				return nil, roachpb.NewUErrorf("VALUES list type mismatch, %s for %s", typ.Type(), v.columns[i].typ.Type())
 			}
 		}
 		data, err := tuple.Eval(p.evalCtx)
 		if err != nil {
-			return nil, err
+			return nil, roachpb.NewError(err)
 		}
 		vals, ok := data.(parser.DTuple)
 		if !ok {
-			return nil, fmt.Errorf("expected a tuple, but found %T", data)
+			return nil, roachpb.NewUErrorf("expected a tuple, but found %T", data)
 		}
 		v.rows = append(v.rows, vals)
 	}
@@ -99,7 +101,7 @@ func (n *valuesNode) Next() bool {
 	return true
 }
 
-func (*valuesNode) Err() error {
+func (*valuesNode) PErr() *roachpb.Error {
 	return nil
 }
 

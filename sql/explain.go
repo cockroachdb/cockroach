@@ -17,11 +17,10 @@
 package sql
 
 import (
-	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 type explainMode int
@@ -36,7 +35,7 @@ const (
 // info about a DELETE, INSERT, SELECT or UPDATE statement.
 //
 // Privileges: the same privileges as the statement being explained.
-func (p *planner) Explain(n *parser.Explain) (planNode, error) {
+func (p *planner) Explain(n *parser.Explain) (planNode, *roachpb.Error) {
 	mode := explainNone
 	if len(n.Options) == 1 && strings.EqualFold(n.Options[0], "DEBUG") {
 		mode = explainDebug
@@ -44,7 +43,7 @@ func (p *planner) Explain(n *parser.Explain) (planNode, error) {
 		mode = explainPlan
 	}
 	if mode == explainNone {
-		return nil, fmt.Errorf("unsupported EXPLAIN options: %s", n)
+		return nil, roachpb.NewUErrorf("unsupported EXPLAIN options: %s", n)
 	}
 
 	plan, err := p.makePlan(n.Statement, false)
@@ -55,7 +54,7 @@ func (p *planner) Explain(n *parser.Explain) (planNode, error) {
 	case explainDebug:
 		plan, err = markDebug(plan, mode)
 		if err != nil {
-			return nil, fmt.Errorf("%v: %s", err, n)
+			return nil, roachpb.NewUErrorf("%v: %s", err, n)
 		}
 		return plan, nil
 	case explainPlan:
@@ -68,12 +67,12 @@ func (p *planner) Explain(n *parser.Explain) (planNode, error) {
 		populateExplain(v, plan, 0)
 		plan = v
 	default:
-		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)
+		return nil, roachpb.NewUErrorf("unsupported EXPLAIN mode: %d", mode)
 	}
 	return plan, nil
 }
 
-func markDebug(plan planNode, mode explainMode) (planNode, error) {
+func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 	switch t := plan.(type) {
 	case *selectNode:
 		return markDebug(t.from, mode)
@@ -96,7 +95,7 @@ func markDebug(plan planNode, mode explainMode) (planNode, error) {
 		return markDebug(t.plan, mode)
 
 	default:
-		return nil, util.Errorf("TODO(pmattis): unimplemented %T", plan)
+		return nil, roachpb.NewErrorf("TODO(pmattis): unimplemented %T", plan)
 	}
 }
 

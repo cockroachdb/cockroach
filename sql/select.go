@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -37,7 +36,7 @@ type selectNode struct {
 	// etc.
 	from planNode
 
-	err error
+	pErr *roachpb.Error
 }
 
 // For now scanNode implements all the logic and selectNode just proxies the
@@ -59,11 +58,11 @@ func (s *selectNode) Next() bool {
 	return s.from.Next()
 }
 
-func (s *selectNode) Err() error {
-	if s.err != nil {
-		return s.err
+func (s *selectNode) PErr() *roachpb.Error {
+	if s.pErr != nil {
+		return s.pErr
 	}
-	return s.from.Err()
+	return s.from.PErr()
 }
 
 func (s *selectNode) ExplainPlan() (name, description string, children []planNode) {
@@ -79,20 +78,20 @@ func (s *selectNode) ExplainPlan() (name, description string, children []planNod
 // Privileges: SELECT on table
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
-func (p *planner) Select(parsed *parser.Select) (planNode, error) {
+func (p *planner) Select(parsed *parser.Select) (planNode, *roachpb.Error) {
 	node := &selectNode{planner: p}
 	return p.initSelect(node, parsed)
 }
 
-func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, error) {
-	if err := s.initFrom(p, parsed); err != nil {
-		return nil, err
+func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *roachpb.Error) {
+	if pErr := s.initFrom(p, parsed); pErr != nil {
+		return nil, pErr
 	}
 	return s, nil
 }
 
 // Initializes the from node, given the parsed select expression
-func (s *selectNode) initFrom(p *planner, parsed *parser.Select) error {
+func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error {
 	scan := &scanNode{planner: p, txn: p.txn}
 
 	from := parsed.From
@@ -103,47 +102,47 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) error {
 	case 1:
 		ate, ok := from[0].(*parser.AliasedTableExpr)
 		if !ok {
-			return util.Errorf("TODO(pmattis): unsupported FROM: %s", from)
+			return roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", from)
 		}
-		s.err = scan.initTableExpr(p, ate)
-		if s.err != nil {
-			return s.err
+		s.pErr = scan.initTableExpr(p, ate)
+		if s.pErr != nil {
+			return s.pErr
 		}
 	default:
-		s.err = util.Errorf("TODO(pmattis): unsupported FROM: %s", from)
-		return s.err
+		s.pErr = roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", from)
+		return s.pErr
 	}
 
-	s.from, s.err = p.initScanNode(scan, parsed)
-	return s.err
+	s.from, s.pErr = p.initScanNode(scan, parsed)
+	return s.pErr
 }
 
-func (p *planner) initScanNode(scan *scanNode, n *parser.Select) (planNode, error) {
+func (p *planner) initScanNode(scan *scanNode, n *parser.Select) (planNode, *roachpb.Error) {
 	// TODO(radu): much of the logic below will move into selectNode
-	if err := scan.initWhere(n.Where); err != nil {
-		return nil, err
+	if pErr := scan.initWhere(n.Where); pErr != nil {
+		return nil, pErr
 	}
-	if err := scan.initTargets(n.Exprs); err != nil {
-		return nil, err
+	if pErr := scan.initTargets(n.Exprs); pErr != nil {
+		return nil, pErr
 	}
 	// NB: both orderBy and groupBy are passed and can modify `scan` but orderBy must do so first.
-	sort, err := p.orderBy(n, scan)
-	if err != nil {
-		return nil, err
+	sort, pErr := p.orderBy(n, scan)
+	if pErr != nil {
+		return nil, pErr
 	}
-	group, err := p.groupBy(n, scan)
-	if err != nil {
-		return nil, err
-	}
-
-	plan, err := p.selectIndex(scan, group, sort)
-	if err != nil {
-		return nil, err
+	group, pErr := p.groupBy(n, scan)
+	if pErr != nil {
+		return nil, pErr
 	}
 
-	limit, err := p.limit(n, p.distinct(n, sort.wrap(group.wrap(plan))))
-	if err != nil {
-		return nil, err
+	plan, pErr := p.selectIndex(scan, group, sort)
+	if pErr != nil {
+		return nil, pErr
+	}
+
+	limit, pErr := p.limit(n, p.distinct(n, sort.wrap(group.wrap(plan))))
+	if pErr != nil {
+		return nil, pErr
 	}
 	return limit, nil
 }
@@ -157,7 +156,7 @@ func (p *planner) initScanNode(scan *scanNode, n *parser.Select) (planNode, erro
 // constraints is created for the index. The candidate indexes are ranked using
 // these constraints and the best index is selected. The contraints are then
 // transformed into a set of spans to scan within the index.
-func (p *planner) selectIndex(s *scanNode, group *groupNode, sort *sortNode) (planNode, error) {
+func (p *planner) selectIndex(s *scanNode, group *groupNode, sort *sortNode) (planNode, *roachpb.Error) {
 	var ordering []int
 	if group != nil {
 		ordering = group.desiredOrdering
@@ -283,10 +282,10 @@ func (p *planner) selectIndex(s *scanNode, group *groupNode, sort *sortNode) (pl
 		s.initOrdering(c.exactPrefix)
 		plan = s
 	} else {
-		var err error
-		plan, err = makeIndexJoin(s, c.exactPrefix)
-		if err != nil {
-			return nil, err
+		var pErr *roachpb.Error
+		plan, pErr = makeIndexJoin(s, c.exactPrefix)
+		if pErr != nil {
+			return nil, pErr
 		}
 	}
 
@@ -682,9 +681,9 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 				case parser.DTuple:
 					start = buf[:0]
 					for _, i := range c.tupleMap {
-						var err error
-						if start, err = encodeTableKey(start, t[i]); err != nil {
-							panic(err)
+						var pErr *roachpb.Error
+						if start, pErr = encodeTableKey(start, t[i]); pErr != nil {
+							panic(pErr)
 						}
 					}
 
@@ -696,24 +695,24 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 							if i+1 == len(c.tupleMap) {
 								d = d.Next()
 							}
-							var err error
-							if end, err = encodeTableKey(end, d); err != nil {
-								panic(err)
+							var pErr *roachpb.Error
+							if end, pErr = encodeTableKey(end, d); pErr != nil {
+								panic(pErr)
 							}
 						}
 					}
 
 				default:
-					var err error
-					if start, err = encodeTableKey(buf[:0], datum); err != nil {
-						panic(err)
+					var pErr *roachpb.Error
+					if start, pErr = encodeTableKey(buf[:0], datum); pErr != nil {
+						panic(pErr)
 					}
 
 					end = start
 					if lastEnd {
-						var err error
-						if end, err = encodeTableKey(nil, datum.Next()); err != nil {
-							panic(err)
+						var pErr *roachpb.Error
+						if end, pErr = encodeTableKey(nil, datum.Next()); pErr != nil {
+							panic(pErr)
 						}
 					}
 				}
@@ -743,9 +742,9 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 				}
 			default:
 				if datum, ok := c.start.Right.(parser.Datum); ok {
-					key, err := encodeTableKey(buf[:0], datum)
-					if err != nil {
-						panic(err)
+					key, pErr := encodeTableKey(buf[:0], datum)
+					if pErr != nil {
+						panic(pErr)
 					}
 					// Append the constraint to all of the existing spans.
 					for i := range spans {
@@ -769,9 +768,9 @@ func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span
 					if lastEnd && c.end.Operator != parser.LT {
 						datum = datum.Next()
 					}
-					key, err := encodeTableKey(buf[:0], datum)
-					if err != nil {
-						panic(err)
+					key, pErr := encodeTableKey(buf[:0], datum)
+					if pErr != nil {
+						panic(pErr)
 					}
 					// Append the constraint to all of the existing spans.
 					for i := range spans {

@@ -181,11 +181,11 @@ func (sc *SequenceCache) CopyFrom(e engine.Engine, originRangeID roachpb.RangeID
 }
 
 // Put writes a sequence number for the specified transaction ID.
-func (sc *SequenceCache) Put(e engine.Engine, id []byte, epoch, seq uint32, txnKey roachpb.Key, txnTS roachpb.Timestamp, err error) error {
+func (sc *SequenceCache) Put(e engine.Engine, id []byte, epoch, seq uint32, txnKey roachpb.Key, txnTS roachpb.Timestamp, pErr *roachpb.Error) error {
 	if seq <= 0 || len(id) == 0 {
 		return errEmptyTxnID
 	}
-	if !sc.shouldCacheError(err) {
+	if !sc.shouldCacheError(pErr) {
 		return nil
 	}
 
@@ -198,8 +198,8 @@ func (sc *SequenceCache) Put(e engine.Engine, id []byte, epoch, seq uint32, txnK
 // Responses with write-too-old, write-intent and not leader errors
 // are retried on the server, and so are not recorded in the sequence
 // cache in the hopes of retrying to a successful outcome.
-func (sc *SequenceCache) shouldCacheError(err error) bool {
-	switch err.(type) {
+func (sc *SequenceCache) shouldCacheError(pErr *roachpb.Error) bool {
+	switch pErr.GoError().(type) {
 	case *roachpb.WriteTooOldError, *roachpb.WriteIntentError, *roachpb.NotLeaderError, *roachpb.RangeKeyMismatchError:
 		return false
 	}

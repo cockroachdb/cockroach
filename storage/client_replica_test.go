@@ -235,7 +235,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		// Start a txn that does read-after-write.
 		// The txn will be restarted twice, and the out-of-order put
 		// will happen in the second epoch.
-		if err := store.DB().Txn(func(txn *client.Txn) error {
+		if pErr := store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
 			epoch++
 
 			if epoch == 1 {
@@ -245,14 +245,14 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			}
 
 			updatedVal := []byte("updatedVal")
-			if err := txn.Put(key, updatedVal); err != nil {
-				return err
+			if pErr := txn.Put(key, updatedVal); pErr != nil {
+				return pErr
 			}
 
 			// Make sure a get will return the value that was just written.
-			actual, err := txn.Get(key)
-			if err != nil {
-				return err
+			actual, pErr := txn.Get(key)
+			if pErr != nil {
+				return pErr
 			}
 			if !bytes.Equal(actual.ValueBytes(), updatedVal) {
 				t.Fatalf("unexpected get result: %s", actual)
@@ -265,10 +265,9 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			}
 
 			b := txn.NewBatch()
-			err = txn.CommitInBatch(b)
-			return err
-		}); err != nil {
-			t.Fatal(err)
+			return txn.CommitInBatch(b)
+		}); pErr != nil {
+			t.Fatal(pErr)
 		}
 
 		if epoch != 2 {
@@ -291,11 +290,11 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		Key: roachpb.Key(key),
 	}
 	ts := clock.Now()
-	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+	if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		Timestamp:    ts,
 		UserPriority: priority,
-	}, &roachpb.GetRequest{Span: requestHeader}); err != nil {
-		t.Fatalf("failed to get: %s", err)
+	}, &roachpb.GetRequest{Span: requestHeader}); pErr != nil {
+		t.Fatalf("failed to get: %s", pErr)
 	}
 
 	// Wait until the writer restarts the txn.
@@ -309,10 +308,10 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manualClock.Increment(100)
 
 	ts = clock.Now()
-	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+	if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		Timestamp:    ts,
 		UserPriority: priority,
-	}, &roachpb.GetRequest{Span: requestHeader}); err == nil {
+	}, &roachpb.GetRequest{Span: requestHeader}); pErr == nil {
 		t.Fatal("unexpected success of get")
 	}
 
@@ -338,9 +337,9 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}
 
 	for _, split := range splits {
-		_, err := client.SendWrapped(rg1(store), nil, &split)
-		if err != nil {
-			t.Fatalf("%q: split unexpected error: %s", split.SplitKey, err)
+		_, pErr := client.SendWrapped(rg1(store), nil, &split)
+		if pErr != nil {
+			t.Fatalf("%q: split unexpected error: %s", split.SplitKey, pErr)
 		}
 	}
 
@@ -352,8 +351,8 @@ func TestRangeLookupUseReverse(t *testing.T) {
 		},
 	}
 	util.SucceedsWithin(t, time.Second, func() error {
-		_, err := client.SendWrapped(rg1(store), nil, &scanArgs)
-		return err
+		_, pErr := client.SendWrapped(rg1(store), nil, &scanArgs)
+		return pErr.GoError()
 	})
 
 	revScanArgs := func(key []byte, maxResults int32) *roachpb.RangeLookupRequest {
@@ -419,11 +418,11 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		resp, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+		resp, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, test.request)
-		if err != nil {
-			t.Fatalf("RangeLookup error: %s", err)
+		if pErr != nil {
+			t.Fatalf("RangeLookup error: %s", pErr)
 		}
 
 		rlReply := resp.(*roachpb.RangeLookupResponse)

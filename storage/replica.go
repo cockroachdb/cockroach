@@ -21,7 +21,6 @@ package storage
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -390,7 +389,7 @@ func (r *Replica) newNotLeaderError(l *roachpb.Lease, originStoreID roachpb.Stor
 // requestLeaderLease sends a request to obtain or extend a leader lease for
 // this replica. Unless an error is returned, the obtained lease will be valid
 // for a time interval containing the requested timestamp.
-func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
+func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) *roachpb.Error {
 	// TODO(Tobias): get duration from configuration, either as a config flag
 	// or, later, dynamically adjusted.
 	duration := DefaultLeaderLeaseDuration
@@ -400,7 +399,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	desc := r.Desc()
 	_, replica := desc.FindReplica(r.store.StoreID())
 	if replica == nil {
-		return roachpb.NewRangeNotFoundError(r.RangeID)
+		return roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
 	}
 	args := &roachpb.LeaderLeaseRequest{
 		Span: roachpb.Span{
@@ -431,7 +430,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	// waiting for the result has an active Trace.
 	pendingCmd, err := r.proposeRaftCommand(ctx, ba)
 	if err != nil {
-		return err
+		return roachpb.NewError(err)
 	}
 
 	// Next if the command was committed, wait for the range to apply it.
@@ -441,7 +440,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 	case <-ctx.Done():
 		// If the context expired we don't know who got the lease but we
 		// know we didn't.
-		return r.newNotLeaderError(nil, r.store.StoreID())
+		return roachpb.NewError(r.newNotLeaderError(nil, r.store.StoreID()))
 	}
 }
 
@@ -461,7 +460,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) error {
 //  will fail as well. If it succeeds, as is likely, then the write
 //  will not incur latency waiting for the command to complete.
 //  Reads, however, must wait.
-func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace) error {
+func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace) *roachpb.Error {
 	r.llMu.Lock()
 	defer r.llMu.Unlock()
 
@@ -473,11 +472,11 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace) error {
 			return nil
 		}
 		// If lease is currently held by another, redirect to holder.
-		return r.newNotLeaderError(lease, r.store.StoreID())
+		return roachpb.NewError(r.newNotLeaderError(lease, r.store.StoreID()))
 	}
 	defer trace.Epoch("request leader lease")()
 	// Otherwise, no active lease: Request renewal.
-	err := r.requestLeaderLease(timestamp)
+	pErr := r.requestLeaderLease(timestamp)
 
 	// Getting a LeaseRejectedError back means someone else got there first, or
 	// the lease request was somehow invalid due to a concurrent change.
@@ -486,20 +485,20 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace) error {
 	// it can't be this replica because we're holding a lock.
 	//
 	// In all cases, the error is converted to a NotLeaderError.
-	if _, ok := err.(*roachpb.LeaseRejectedError); ok {
+	if _, ok := pErr.GoError().(*roachpb.LeaseRejectedError); ok {
 		lease := r.getLease()
 		if !lease.Covers(timestamp) {
 			// The lease was rejected even though it was not obtained by another
 			// replica.
 			if log.V(1) {
 				log.Warningf("Lease for range %s rejected at timestamp %v: %s",
-					r, timestamp, err)
+					r, timestamp, pErr)
 			}
 			lease = nil
 		}
-		return r.newNotLeaderError(lease, r.store.StoreID())
+		return roachpb.NewError(r.newNotLeaderError(lease, r.store.StoreID()))
 	}
-	return err
+	return pErr
 }
 
 // isInitialized is true if we know the metadata of this range, either
@@ -651,7 +650,6 @@ func (r *Replica) RaftStatus() *raft.Status {
 // TODO(tschottdorf): use BatchRequest w/o pointer receiver.
 func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	var br *roachpb.BatchResponse
-	var err error
 
 	if err := r.checkBatchRequest(ba); err != nil {
 		return nil, roachpb.NewError(err)
@@ -661,15 +659,16 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	// won't be traced.
 	trace := tracer.FromCtx(ctx)
 	// Differentiate between admin, read-only and write.
+	var pErr *roachpb.Error
 	if ba.IsAdmin() {
 		defer trace.Epoch("admin path")()
-		br, err = r.addAdminCmd(ctx, ba)
+		br, pErr = r.addAdminCmd(ctx, ba)
 	} else if ba.IsReadOnly() {
 		defer trace.Epoch("read-only path")()
-		br, err = r.addReadOnlyCmd(ctx, ba)
+		br, pErr = r.addReadOnlyCmd(ctx, ba)
 	} else if ba.IsWrite() {
 		defer trace.Epoch("read-write path")()
-		br, err = r.addWriteCmd(ctx, ba, nil)
+		br, pErr = r.addWriteCmd(ctx, ba, nil)
 	} else if len(ba.Requests) == 0 {
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
@@ -678,24 +677,24 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	} else {
 		panic(fmt.Sprintf("don't know how to handle command %s", ba))
 	}
-	if err == errRaftGroupDeleted {
+	if _, ok := pErr.GoError().(*roachpb.RaftGroupDeletedError); ok {
 		// This error needs to be converted appropriately so that
 		// clients will retry.
-		err = roachpb.NewRangeNotFoundError(r.RangeID)
+		pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
 	}
 	// TODO(tschottdorf): assert nil reply on error.
-	if err != nil {
+	if pErr != nil {
 		trace.SetError()
-		trace.Event(fmt.Sprintf("error: %s", err))
-		return nil, roachpb.NewError(err)
+		trace.Event(fmt.Sprintf("error: %s", pErr))
+		return nil, pErr
 	}
 	return br, nil
 }
 
 // TODO(tschottdorf): almost obsolete.
-func (r *Replica) checkCmdHeader(header *roachpb.Span) error {
+func (r *Replica) checkCmdHeader(header *roachpb.Span) *roachpb.Error {
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
-		return roachpb.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
+		return roachpb.NewError(roachpb.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc()))
 	}
 	return nil
 }
@@ -765,11 +764,11 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) []interface{} {
 
 // endCmds removes pending commands from the command queue and updates
 // the timestamp cache using the final timestamp of each command.
-func (r *Replica) endCmds(cmdKeys []interface{}, ba roachpb.BatchRequest, err error) {
+func (r *Replica) endCmds(cmdKeys []interface{}, ba roachpb.BatchRequest, pErr *roachpb.Error) {
 	r.Lock()
 	// Only update the timestamp cache if the command succeeded and we're not
 	// doing inconsistent ops (in which case the ops are always read-only).
-	if err == nil && ba.ReadConsistency != roachpb.INCONSISTENT {
+	if pErr == nil && ba.ReadConsistency != roachpb.INCONSISTENT {
 		for _, union := range ba.Requests {
 			args := union.GetInner()
 			if usesTimestampCache(args) {
@@ -791,38 +790,38 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba roachpb.BatchRequest, err er
 // are not meant to consistently access or modify the underlying data.
 // Admin commands must run on the leader replica. Batch support here is
 // limited to single-element batches; everything else catches an error.
-func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(ba.Requests) != 1 {
-		return nil, util.Errorf("only single-element admin batches allowed")
+		return nil, roachpb.NewErrorf("only single-element admin batches allowed")
 	}
 	args := ba.Requests[0].GetInner()
 
-	if err := r.checkCmdHeader(args.Header()); err != nil {
-		return nil, err
+	if pErr := r.checkCmdHeader(args.Header()); pErr != nil {
+		return nil, pErr
 	}
 
 	// Admin commands always require the leader lease.
-	if err := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx)); err != nil {
-		return nil, err
+	if pErr := r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx)); pErr != nil {
+		return nil, pErr
 	}
 
 	var resp roachpb.Response
-	var err error
+	var pErr *roachpb.Error
 	switch tArgs := args.(type) {
 	case *roachpb.AdminSplitRequest:
 		var reply roachpb.AdminSplitResponse
-		reply, err = r.AdminSplit(*tArgs, r.Desc())
+		reply, pErr = r.AdminSplit(*tArgs, r.Desc())
 		resp = &reply
 	case *roachpb.AdminMergeRequest:
 		var reply roachpb.AdminMergeResponse
-		reply, err = r.AdminMerge(*tArgs, r.Desc())
+		reply, pErr = r.AdminMerge(*tArgs, r.Desc())
 		resp = &reply
 	default:
-		return nil, util.Errorf("unrecognized admin command: %T", args)
+		return nil, roachpb.NewErrorf("unrecognized admin command: %T", args)
 	}
 
-	if err != nil {
-		return nil, err
+	if pErr != nil {
+		return nil, pErr
 	}
 	br := &roachpb.BatchResponse{}
 	br.Add(resp)
@@ -834,7 +833,7 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 // addReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
-func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	trace := tracer.FromCtx(ctx)
 
 	// Add the read to the command queue to gate subsequent
@@ -846,9 +845,9 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 	// If there are command keys (there might not be if reads are
 	// inconsistent), the read requires the leader lease.
 	if len(cmdKeys) > 0 {
-		if err := r.redirectOnOrAcquireLeaderLease(trace); err != nil {
-			r.endCmds(cmdKeys, ba, err)
-			return nil, err
+		if pErr := r.redirectOnOrAcquireLeaderLease(trace); pErr != nil {
+			r.endCmds(cmdKeys, ba, pErr)
+			return nil, pErr
 		}
 	}
 
@@ -856,23 +855,23 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 	// Execute read-only batch command. It checks for matching key range; note
 	// that holding readMu throughout is important to avoid reads from the
 	// "wrong" key range being served after the range has been split.
-	br, intents, err := r.executeBatch(r.store.Engine(), nil, ba)
+	br, intents, pErr := r.executeBatch(r.store.Engine(), nil, ba)
 
-	if err == nil && ba.Txn != nil {
+	if pErr == nil && ba.Txn != nil {
 		// Checking the sequence cache on reads makes sure that when our
 		// transaction has already been aborted, we don't experience anomalous
 		// conditions as described in #2231.
-		err = r.checkSequenceCache(r.store.Engine(), *ba.Txn)
+		pErr = r.checkSequenceCache(r.store.Engine(), *ba.Txn)
 	}
 	r.handleSkippedIntents(intents)
 
 	// Remove keys from command queue.
-	r.endCmds(cmdKeys, ba, err)
+	r.endCmds(cmdKeys, ba, pErr)
 	// Important to unlock only here to capture the timestamp cache update.
 	r.readOnlyCmdMu.RUnlock()
 
-	if err != nil {
-		return nil, err
+	if pErr != nil {
+		return nil, pErr
 	}
 	return br, nil
 }
@@ -885,7 +884,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 // error returned. If a WaitGroup is supplied, it is signaled when the command
 // enters Raft or the function returns with a preprocessing error, whichever
 // happens earlier.
-func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *sync.WaitGroup) (*roachpb.BatchResponse, error) {
+func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *sync.WaitGroup) (*roachpb.BatchResponse, *roachpb.Error) {
 	signal := func() {
 		if wg != nil {
 			wg.Done()
@@ -909,9 +908,9 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 	qDone()
 
 	// This replica must have leader lease to process a write.
-	if err := r.redirectOnOrAcquireLeaderLease(trace); err != nil {
-		r.endCmds(cmdKeys, ba, err)
-		return nil, err
+	if pErr := r.redirectOnOrAcquireLeaderLease(trace); pErr != nil {
+		r.endCmds(cmdKeys, ba, pErr)
+		return nil, pErr
 	}
 
 	// Two important invariants of Cockroach: 1) encountering a more
@@ -964,14 +963,16 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 	signal()
 
 	var br *roachpb.BatchResponse
+	var pErr *roachpb.Error
 	if err == nil {
 		// If the command was accepted by raft, wait for the range to apply it.
 		respWithErr := <-pendingCmd.done
-		br, err = respWithErr.Reply, respWithErr.Err
+		br, pErr = respWithErr.Reply, respWithErr.Err
+	} else {
+		pErr = roachpb.NewError(err)
 	}
-
-	r.endCmds(cmdKeys, ba, err)
-	return br, err
+	r.endCmds(cmdKeys, ba, pErr)
+	return br, pErr
 }
 
 // proposeRaftCommand prepares necessary pending command struct and
@@ -1219,7 +1220,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 // struct to get args and reply and then applying the command to the
 // state machine via applyRaftCommand(). The error result is sent on
 // the command's done channel, if available.
-func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd roachpb.RaftCommand) error {
+func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd roachpb.RaftCommand) *roachpb.Error {
 	if index == 0 {
 		log.Fatalc(r.context(), "processRaftCommand requires a non-zero index")
 	}
@@ -1261,7 +1262,7 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd roach
 // When certain critical operations fail, a replicaCorruptionError may be
 // returned and must be handled by the caller.
 func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originReplica roachpb.ReplicaDescriptor,
-	ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+	ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	if index <= 0 {
 		log.Fatalc(ctx, "raft command index is <= 0")
 	}
@@ -1269,7 +1270,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 	// If we have an out of order index, there's corruption. No sense in trying
 	// to update anything or run the command. Simply return a corruption error.
 	if oldIndex := atomic.LoadUint64(&r.appliedIndex); oldIndex >= index {
-		return nil, newReplicaCorruptionError(util.Errorf("applied index moved backwards: %d >= %d", oldIndex, index))
+		return nil, roachpb.NewError(newReplicaCorruptionError(util.Errorf("applied index moved backwards: %d >= %d", oldIndex, index)))
 	}
 
 	// Call the helper, which returns a batch containing data written
@@ -1283,7 +1284,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 		log.Fatalc(ctx, "setting applied index in a batch should never fail: %s", err)
 	}
 	if err := batch.Commit(); err != nil {
-		rErr = newReplicaCorruptionError(util.Errorf("could not commit batch"), err, rErr)
+		rErr = roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not commit batch"), err, rErr.GoError()))
 	} else {
 		// Update cached appliedIndex if we were able to set the applied index on disk.
 		atomic.StoreUint64(&r.appliedIndex, index)
@@ -1318,7 +1319,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 // returns the batch containing the results. The caller is responsible
 // for committing the batch, even on error.
 func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, originReplica roachpb.ReplicaDescriptor,
-	ba roachpb.BatchRequest, ms *engine.MVCCStats) (engine.Engine, *roachpb.BatchResponse, []intentsWithArg, error) {
+	ba roachpb.BatchRequest, ms *engine.MVCCStats) (engine.Engine, *roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
 	// Create a new batch for the command to ensure all or nothing semantics.
 	btch := r.store.Engine().NewBatch()
 
@@ -1357,7 +1358,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			// sender stuck in an infinite loop, retrieving a stale
 			// NotLeaderError over and over again, even when proposing at the
 			// correct replica.
-			return btch, nil, nil, r.newNotLeaderError(lease, originReplica.StoreID)
+			return btch, nil, nil, roachpb.NewError(r.newNotLeaderError(lease, originReplica.StoreID))
 		}
 	}
 
@@ -1404,13 +1405,13 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 // replay violation or if the transaction has been aborted, transaction retry
 // or transaction abort error is returned, respectively.
 // checkSequenceCache locks the replica.
-func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) error {
+func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) *roachpb.Error {
 	r.Lock()
 	defer r.Unlock()
 
 	var entry roachpb.SequenceCacheEntry
 	if epoch, sequence, readErr := r.sequence.Get(b, txn.ID, &entry); readErr != nil {
-		return newReplicaCorruptionError(util.Errorf("could not read from sequence cache"), readErr)
+		return roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not read from sequence cache"), readErr))
 	} else if txn.Epoch > epoch {
 		// No cache hit from current or future epoch, continue.
 	} else if sequence == roachpb.SequencePoisonAbort {
@@ -1418,7 +1419,7 @@ func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) e
 		// aborted and learns about that right now.
 		abortErr := roachpb.NewTransactionAbortedError(&txn)
 		abortErr.Txn.Timestamp.Forward(entry.Timestamp)
-		return abortErr
+		return roachpb.NewError(abortErr)
 	} else if sequence >= txn.Sequence || epoch > txn.Epoch {
 		// We hit the cache, so let the transaction restart.
 		// This is also the path taken by roachpb.SequencePoisonRestart.
@@ -1427,7 +1428,9 @@ func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) e
 		}
 		retryErr := roachpb.NewTransactionRetryError(&txn)
 		retryErr.Txn.Timestamp.Forward(entry.Timestamp)
-		return retryErr
+		pErr := roachpb.NewError(retryErr)
+		pErr.Txn = &txn
+		return pErr
 	}
 	return nil
 }
@@ -1437,7 +1440,7 @@ type intentsWithArg struct {
 	intents []roachpb.Intent
 }
 
-func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roachpb.BatchRequest) (*roachpb.BatchResponse, []intentsWithArg, error) {
+func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roachpb.BatchRequest) (*roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
 	br := &roachpb.BatchResponse{}
 	br.Timestamp = ba.Timestamp
 	var intents []intentsWithArg
@@ -1493,7 +1496,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 		header := ba.Header
 		header.Timestamp = ts
 
-		reply, curIntents, err := r.executeCmd(batch, ms, header, args)
+		reply, curIntents, pErr := r.executeCmd(batch, ms, header, args)
 
 		// Collect intents skipped over the course of execution.
 		if len(curIntents) > 0 {
@@ -1501,11 +1504,17 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 			intents = append(intents, intentsWithArg{args: args, intents: curIntents})
 		}
 
-		if err != nil {
-			if iErr, ok := err.(roachpb.IndexedError); ok {
-				iErr.SetErrorIndex(int32(index))
+		if pErr != nil {
+			// Initialize the error index.
+			// TODO(kaneda): Always set the index when the
+			// error stems from an individual command.
+			if _, ok := pErr.GoError().(*roachpb.WriteIntentError); ok {
+				pErr.SetErrorIndex(int32(index))
 			}
-			return nil, intents, err
+			if _, ok := pErr.GoError().(*roachpb.ConditionFailedError); ok {
+				pErr.SetErrorIndex(int32(index))
+			}
+			return nil, intents, pErr
 		}
 
 		// Add the response to the batch, updating the timestamp.
@@ -1541,44 +1550,44 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 
 // getLeaseForGossip tries to obtain a leader lease. Only one of the replicas
 // should gossip; the bool returned indicates whether it's us.
-func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, error) {
+func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) {
 	// If no Gossip available (some tests) or range too fresh, noop.
 	if r.store.Gossip() == nil || !r.isInitialized() {
-		return false, util.Errorf("no gossip or range not initialized")
+		return false, roachpb.NewErrorf("no gossip or range not initialized")
 	}
 	var hasLease bool
-	var err error
+	var pErr *roachpb.Error
 	if !r.store.Stopper().RunTask(func() {
 		// Check for or obtain the lease, if none active.
-		err = r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx))
-		hasLease = err == nil
-		if err != nil {
-			switch e := err.(type) {
+		pErr = r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx))
+		hasLease = pErr == nil
+		if pErr != nil {
+			switch e := pErr.GoError().(type) {
 			case *roachpb.NotLeaderError:
 				// NotLeaderError means there is an active lease, but only if
 				// the leader is set; otherwise, it's likely a timeout.
 				if e.Leader != nil {
-					err = nil
+					pErr = nil
 				}
 			case *roachpb.LeaseRejectedError:
 				// leaseRejectedError means we tried to get one but someone
 				// beat us to it.
-				err = nil
+				pErr = nil
 			default:
 				// Any other error is worth being logged visibly.
 				log.Warningc(ctx, "could not acquire lease for range gossip: %s", e)
 			}
 		}
 	}) {
-		err = util.Errorf("node is stopping")
+		pErr = roachpb.NewErrorf("node is stopping")
 	}
-	return hasLease, err
+	return hasLease, pErr
 }
 
 // maybeGossipFirstRange adds the sentinel and first range metadata to gossip
 // if this is the first range and a leader lease can be obtained. The Store
 // calls this periodically on first range replicas.
-func (r *Replica) maybeGossipFirstRange() error {
+func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	if !r.IsFirstRange() {
 		return nil
 	}
@@ -1606,8 +1615,8 @@ func (r *Replica) maybeGossipFirstRange() error {
 	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, []byte(r.store.ClusterID()), 0*time.Second); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
-	if ok, err := r.getLeaseForGossip(ctx); !ok || err != nil {
-		return err
+	if ok, pErr := r.getLeaseForGossip(ctx); !ok || pErr != nil {
+		return pErr
 	}
 	if log.V(1) {
 		log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.store.StoreID(), r.RangeID)
@@ -1684,15 +1693,15 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 		args := proto.Clone(item.args).(roachpb.Request)
 		stopper.RunAsyncTask(func() {
 			h := roachpb.Header{Timestamp: now}
-			resolveIntents, err := r.store.resolveWriteIntentError(ctx, &roachpb.WriteIntentError{
+			resolveIntents, pErr := r.store.resolveWriteIntentError(ctx, &roachpb.WriteIntentError{
 				Intents: item.intents,
 			}, r, args, h, roachpb.PUSH_TOUCH)
-			if wiErr, ok := err.(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
-				log.Warningc(ctx, "failed to push during intent resolution: %s", err)
+			if wiErr, ok := pErr.GoError().(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
+				log.Warningc(ctx, "failed to push during intent resolution: %s", pErr)
 				return
 			}
-			if err := r.resolveIntents(ctx, resolveIntents, true /* wait */, true /* poison */); err != nil {
-				log.Warningc(ctx, "failed to resolve intents: %s", err)
+			if pErr := r.resolveIntents(ctx, resolveIntents, true /* wait */, true /* poison */); pErr != nil {
+				log.Warningc(ctx, "failed to resolve intents: %s", pErr)
 				return
 			}
 			// We successfully resolved the intents, so we're able to GC from
@@ -1728,77 +1737,34 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 	}
 }
 
-// TODO(spencerkimball): move to util.
-type chainedError struct {
-	error
-	cause *chainedError
-}
-
-// Error implements the error interface, printing the underlying chain of errors.
-func (ce *chainedError) Error() string {
-	if ce == nil {
-		ce = &chainedError{}
-	}
-	if ce.cause != nil {
-		return fmt.Sprintf("%s (caused by %s)", ce.error, ce.cause)
-	}
-	return ce.error.Error()
-}
-
-// newChainedError returns a chainedError made up from the given errors,
-// omitting nil values. It returns nil unless at least one of its arguments
-// is not nil.
-func newChainedError(errs ...error) *chainedError {
-	if len(errs) == 0 || (len(errs) == 1 && errs[0] == nil) {
-		return nil
-	}
-	ce := &chainedError{error: errs[0]}
-	for _, err := range errs[1:] {
-		if err == nil {
-			continue
-		}
-		ce.cause = &chainedError{error: err}
-		ce = ce.cause
-	}
-	return ce
-}
-
-// A replicaCorruptionError indicates that the replica has experienced an error
-// which puts its integrity at risk.
-type replicaCorruptionError struct {
-	error
-	// processed indicates that the error has been taken into account and
-	// necessary steps will be taken. For now, required for testing.
-	processed bool
-}
-
-// Error implements the error interface.
-func (rce *replicaCorruptionError) Error() string {
-	if rce == nil {
-		rce = newReplicaCorruptionError()
-	}
-	return fmt.Sprintf("replica corruption (processed=%t): %s", rce.processed, rce.error)
-}
-
 // newReplicaCorruptionError creates a new error indicating a corrupt replica,
 // with the supplied list of errors given as history.
-func newReplicaCorruptionError(err ...error) *replicaCorruptionError {
-	return &replicaCorruptionError{error: newChainedError(err...)}
+func newReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
+	var errMsg string
+	for i := range errs {
+		err := errs[len(errs)-i-1]
+		if len(errMsg) == 0 {
+			errMsg = err.Error()
+		} else {
+			errMsg = fmt.Sprintf("%s (caused by %s)", err, errMsg)
+		}
+	}
+	return &roachpb.ReplicaCorruptionError{ErrorMsg: errMsg}
 }
 
 // maybeSetCorrupt is a stand-in for proper handling of failing replicas. Such a
-// failure is indicated by a call to maybeSetCorrupt with a replicaCorruptionError.
+// failure is indicated by a call to maybeSetCorrupt with a ReplicaCorruptionError.
 // Currently any error is passed through, but prospectively it should stop the
 // range from participating in progress, trigger a rebalance operation and
 // decide on an error-by-error basis whether the corruption is limited to the
 // range, store, node or cluster with corresponding actions taken.
-func (r *Replica) maybeSetCorrupt(err error) error {
-	if cErr, ok := err.(*replicaCorruptionError); ok && cErr != nil {
-		log.Errorc(r.context(), "stalling replica due to: %s", cErr.error)
-		cErr.processed = true
-		return cErr
+func (r *Replica) maybeSetCorrupt(pErr *roachpb.Error) *roachpb.Error {
+	if cErr, ok := pErr.GoError().(*roachpb.ReplicaCorruptionError); ok {
+		log.Errorc(r.context(), "stalling replica due to: %s", cErr.ErrorMsg)
+		cErr.Processed = true
+		return roachpb.NewError(cErr)
 	}
-	return err
+	return pErr
 }
 
 // resolveIntents resolves the given intents. For those which are local to the
@@ -1809,7 +1775,7 @@ func (r *Replica) maybeSetCorrupt(err error) error {
 // commands have been **proposed** (not executed). This ensures that if a
 // waiting client retries immediately after calling this function, it will not
 // hit the same intents again.
-func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, wait bool, poison bool) error {
+func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, wait bool, poison bool) *roachpb.Error {
 	trace := tracer.FromCtx(ctx)
 	tracer.ToCtx(ctx, nil) // we're doing async stuff below; those need new traces
 	trace.Event(fmt.Sprintf("resolving intents [wait=%t]", wait))
@@ -1855,12 +1821,12 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 	// The local batch goes directly to Raft.
 	var wg sync.WaitGroup
 	if len(baLocal.Requests) > 0 {
-		action := func() error {
+		action := func() *roachpb.Error {
 			// Trace this under the ID of the intent owner.
 			trace := r.store.Tracer().NewTrace(tracer.Node, baLocal)
 			defer trace.Finalize()
-			_, err := r.addWriteCmd(tracer.ToCtx(ctx, trace), baLocal, &wg)
-			return err
+			_, pErr := r.addWriteCmd(tracer.ToCtx(ctx, trace), baLocal, &wg)
+			return pErr
 		}
 		wg.Add(1)
 		if wait || !r.store.Stopper().RunAsyncTask(func() {
@@ -1882,7 +1848,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 	if len(reqsRemote) > 0 {
 		b := &client.Batch{}
 		b.InternalAddRequest(reqsRemote...)
-		action := func() error {
+		action := func() *roachpb.Error {
 			// TODO(tschottdorf): no tracing here yet.
 			return r.store.DB().Run(b)
 		}
@@ -1905,19 +1871,19 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 	return nil
 }
 
-var errSystemConfigIntent = errors.New("must retry later due to intent on SystemConfigSpan")
+var errSystemConfigIntent = roachpb.NewErrorf("must retry later due to intent on SystemConfigSpan")
 
 // loadSystemConfigSpan scans the entire SystemConfig span and returns the full
 // list of key/value pairs along with the sha1 checksum of the contents (key
 // and value).
-func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
+func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, *roachpb.Error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: keys.SystemConfigSpan})
-	br, intents, err := r.executeBatch(r.store.Engine(), nil, ba)
-	if err != nil {
-		return nil, nil, err
+	br, intents, pErr := r.executeBatch(r.store.Engine(), nil, ba)
+	if pErr != nil {
+		return nil, nil, pErr
 	}
 	if len(intents) > 0 {
 		// There were intents, so what we read may not be consistent. Attempt
@@ -1927,7 +1893,7 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 		return nil, nil, errSystemConfigIntent
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
-	return kvs, config.SystemConfig{Values: kvs}.Hash(), err
+	return kvs, config.SystemConfig{Values: kvs}.Hash(), pErr
 }
 
 // maybeAddToSplitQueue checks whether the current size of the range
