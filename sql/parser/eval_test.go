@@ -137,6 +137,7 @@ func TestEval(t *testing.T) {
 		{`'TEST' LIKE 'TE%'`, `true`},
 		{`'TEST' LIKE '%E%'`, `true`},
 		{`'TEST' LIKE 'TES_'`, `true`},
+		{`'TEST' LIKE 'TE_%'`, `true`},
 		{`'TEST' LIKE 'TE_'`, `false`},
 		{`'TEST' LIKE '%R'`, `false`},
 		{`'TEST' LIKE 'TESTER'`, `false`},

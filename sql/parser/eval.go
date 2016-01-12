@@ -1332,7 +1332,7 @@ func (ctx EvalContext) ParseTimestamp(s DString) (DTimestamp, error) {
 // For example, when the expression is just checking to see if a string starts with a given
 // pattern.
 func optimizedLikeFunc(pattern string) func(string) bool {
-	if !strings.ContainsRune(pattern[1:len(pattern)-1], '%') {
+	if !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
 		// Cases like "something\%" are not optimized, but this does not affect correctness.
 		matchStart := pattern[len(pattern)-1] == '%' && pattern[len(pattern)-2] != '\\'
 		matchEnd := pattern[0] == '%'
