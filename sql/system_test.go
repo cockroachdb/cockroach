@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -38,8 +37,9 @@ func TestInitialKeys(t *testing.T) {
 	}
 
 	// Add an additional table.
-	ms.AddTable("CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)",
-		sql.NewPrivilegeDescriptor(security.RootUser, privilege.List{privilege.ALL}))
+	ms.AddTable(keys.MaxSystemConfigDescID+1,
+		"CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)",
+		privilege.List{privilege.ALL})
 	kv = ms.GetInitialValues()
 	// IDGenerator + 2 for each descriptor in the schema.
 	if actual, expected := len(kv), 1+2*ms.DescriptorCount(); actual != expected {

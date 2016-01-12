@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 )
@@ -91,8 +91,7 @@ VALUES(
 // AddEventLogToMetadataSchema adds the range event log table to the supplied
 // MetadataSchema.
 func AddEventLogToMetadataSchema(schema *sql.MetadataSchema) {
-	allPrivileges := sql.NewPrivilegeDescriptor(security.RootUser, privilege.List{privilege.ALL})
-	schema.AddTable(rangeEventTableSchema, allPrivileges)
+	schema.AddTable(keys.RangeEventTableID, rangeEventTableSchema, privilege.List{privilege.ALL})
 }
 
 // logSplit logs a range split event into the event table. The affected range is

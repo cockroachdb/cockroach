@@ -54,8 +54,8 @@ func (p *planner) getDatabaseDesc(name string) (*DatabaseDescriptor, *roachpb.Er
 // getCachedDatabaseDesc looks up the database descriptor given its name in the
 // descriptor cache.
 func (p *planner) getCachedDatabaseDesc(name string) (*DatabaseDescriptor, *roachpb.Error) {
-	if name == SystemDB.Name {
-		return &SystemDB, nil
+	if name == systemDB.Name {
+		return &systemDB, nil
 	}
 
 	nameKey := databaseKey{name}
