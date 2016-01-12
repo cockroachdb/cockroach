@@ -202,7 +202,7 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 	context.RemoteClocks.mu.Unlock()
 }
 
-func TestFailedOffestMeasurement(t *testing.T) {
+func TestFailedOffsetMeasurement(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	stopper := stop.NewStopper()
@@ -227,9 +227,11 @@ func TestFailedOffestMeasurement(t *testing.T) {
 	clientManual := hlc.NewManualClock(0)
 	clientClock := hlc.NewClock(clientManual.UnixNano)
 	context := newNodeTestContext(clientClock, stopper)
+	context.heartbeatTimeout = 20 * context.heartbeatInterval
 	c := NewClient(ln.Addr(), context)
 	heartbeat.ready <- struct{}{} // Allow one heartbeat for initialization.
 	<-c.Healthy()
+
 	// Synchronously wait on missing the next heartbeat.
 	if err := util.IsTrueWithin(func() bool {
 		select {
@@ -238,7 +240,7 @@ func TestFailedOffestMeasurement(t *testing.T) {
 		default:
 			return true
 		}
-	}, heartbeatInterval*10); err != nil {
+	}, context.heartbeatTimeout*10); err != nil {
 		t.Fatal(err)
 	}
 	if !proto.Equal(&c.remoteOffset, &RemoteOffset{}) {

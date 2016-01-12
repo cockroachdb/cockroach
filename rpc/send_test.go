@@ -59,7 +59,7 @@ func TestSendToOneClient(t *testing.T) {
 		N:               1,
 		Ordering:        OrderStable,
 		SendNextTimeout: 1 * time.Second,
-		Timeout:         1 * time.Second,
+		Timeout:         10 * time.Second,
 	}
 	replies, err := sendPing(opts, []net.Addr{ln.Addr()}, ctx)
 	if err != nil {
@@ -92,7 +92,7 @@ func TestSendToMultipleClients(t *testing.T) {
 			N:               n,
 			Ordering:        OrderStable,
 			SendNextTimeout: 1 * time.Second,
-			Timeout:         1 * time.Second,
+			Timeout:         10 * time.Second,
 		}
 		replies, err := sendPing(opts, addrs, nodeContext)
 		if err != nil {
@@ -113,6 +113,7 @@ func TestRetryableError(t *testing.T) {
 	defer stopper.Stop()
 
 	nodeContext := newNodeTestContext(nil, stopper)
+	nodeContext.heartbeatTimeout = 10 * nodeContext.heartbeatInterval
 	_, ln := newTestServer(t, nodeContext, false)
 
 	c := NewClient(ln.Addr(), nodeContext)
@@ -133,8 +134,8 @@ func TestRetryableError(t *testing.T) {
 	opts := Options{
 		N:               1,
 		Ordering:        OrderStable,
-		SendNextTimeout: 1 * time.Second,
-		Timeout:         1 * time.Second,
+		SendNextTimeout: 100 * time.Millisecond,
+		Timeout:         100 * time.Millisecond,
 	}
 	if _, err := sendPing(opts, []net.Addr{ln.Addr()}, nodeContext); err != nil {
 		retryErr, ok := err.(retry.Retryable)
@@ -172,7 +173,7 @@ func TestUnretryableError(t *testing.T) {
 		N:               1,
 		Ordering:        OrderStable,
 		SendNextTimeout: 1 * time.Second,
-		Timeout:         5 * time.Second,
+		Timeout:         10 * time.Second,
 	}
 	getArgs := func(addr net.Addr) proto.Message {
 		return &roachpb.Span{}
@@ -241,28 +242,27 @@ func TestClientNotReady(t *testing.T) {
 	// Send the RPC again with no timeout.
 	opts.SendNextTimeout = 0
 	opts.Timeout = 0
-	c := make(chan struct{})
+	c := make(chan error)
 	go func() {
 		if _, err := sendPing(opts, []net.Addr{ln.Addr()}, nodeContext); err == nil {
-			t.Fatalf("expected error when client is closed")
+			c <- util.Errorf("expected error when client is closed")
 		} else if !strings.Contains(err.Error(), "failed as client connection was closed") {
-			t.Fatal(err)
+			c <- err
 		}
 		close(c)
 	}()
+
 	select {
 	case <-c:
 		t.Fatalf("Unexpected end of rpc call")
 	case <-time.After(1 * time.Millisecond):
 	}
 
-	// Grab the client for our invalid address and close it. This will
-	// cause the blocked ping RPC to finish.
+	// Grab the client for our invalid address and close it. This will cause the
+	// blocked ping RPC to finish.
 	NewClient(ln.Addr(), nodeContext).Close()
-	select {
-	case <-c:
-	case <-time.After(100 * time.Millisecond):
-		t.Fatalf("RPC call failed to return")
+	if err := <-c; err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -323,7 +323,7 @@ func TestComplexScenarios(t *testing.T) {
 			N:               test.numRequests,
 			Ordering:        OrderStable,
 			SendNextTimeout: 1 * time.Second,
-			Timeout:         1 * time.Second,
+			Timeout:         10 * time.Second,
 		}
 		getArgs := func(addr net.Addr) proto.Message {
 			return &PingRequest{}
