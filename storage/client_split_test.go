@@ -610,6 +610,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 // the SystemConfig span.
 func TestStoreRangeSystemSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("#3698")
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 

@@ -280,6 +280,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 
 func TestAsyncSchemaChanger(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("#3764")
 	// Disable synchronous schema change execution so
 	// the asynchronous schema changer executes all
 	// schema changes.
