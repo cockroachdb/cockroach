@@ -191,19 +191,13 @@ func (r *Replica) LastIndex() (uint64, error) {
 	return atomic.LoadUint64(&r.lastIndex), nil
 }
 
-// raftTruncatedState returns metadata about the log that preceded the first
-// current entry. This includes both entries that have been compacted away
+// raftTruncatedStateLocked returns metadata about the log that preceded the
+// first current entry. This includes both entries that have been compacted away
 // and the dummy entries that make up the starting point of an empty log.
-func (r *Replica) raftTruncatedState() (roachpb.RaftTruncatedState, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.raftTruncatedStateLocked()
-}
-
-// raftTruncatedState requires that the replica lock be held.
+// raftTruncatedStateLocked requires that the replica lock be held.
 func (r *Replica) raftTruncatedStateLocked() (roachpb.RaftTruncatedState, error) {
-	if ts := r.getCachedTruncatedState(); ts != nil {
-		return *ts, nil
+	if r.mu.truncatedState != nil {
+		return *r.mu.truncatedState, nil
 	}
 	ts := roachpb.RaftTruncatedState{}
 	ok, err := engine.MVCCGetProto(r.store.Engine(), keys.RaftTruncatedStateKey(r.RangeID),
@@ -225,7 +219,7 @@ func (r *Replica) raftTruncatedStateLocked() (roachpb.RaftTruncatedState, error)
 	}
 
 	if ts.Index != 0 {
-		r.setCachedTruncatedState(&ts)
+		r.mu.truncatedState = &ts
 	}
 	return ts, nil
 }

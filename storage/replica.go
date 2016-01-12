@@ -167,17 +167,16 @@ type Replica struct {
 	// RWMutex
 	readOnlyCmdMu sync.RWMutex
 
-	truncatedState unsafe.Pointer // *roachpb.RaftTruncatedState
-
 	mu struct {
-		sync.Mutex                  // Protects all fields in the mu struct.
-		cmdQ        *CommandQueue   // Enforce at most one command is running per key(s)
-		tsCache     *TimestampCache // Most recent timestamps for keys / key ranges
-		pendingSeq  uint64          // atomic sequence counter for cmdIDKey generation
-		pendingCmds map[cmdIDKey]*pendingCmd
-		desc        *roachpb.RangeDescriptor
-		replicaID   roachpb.ReplicaID
-		raftGroup   *raft.RawNode
+		sync.Mutex                     // Protects all fields in the mu struct.
+		cmdQ           *CommandQueue   // Enforce at most one command is running per key(s)
+		tsCache        *TimestampCache // Most recent timestamps for keys / key ranges
+		pendingSeq     uint64          // atomic sequence counter for cmdIDKey generation
+		pendingCmds    map[cmdIDKey]*pendingCmd
+		desc           *roachpb.RangeDescriptor
+		replicaID      roachpb.ReplicaID
+		raftGroup      *raft.RawNode
+		truncatedState *roachpb.RaftTruncatedState
 	}
 }
 
@@ -560,17 +559,6 @@ func (r *Replica) setDescWithoutProcessUpdateLocked(desc *roachpb.RangeDescripto
 			desc.RangeID, r.RangeID))
 	}
 	r.mu.desc = desc
-}
-
-// getCachedTruncatedState atomically returns the range's cached truncated
-// state.
-func (r *Replica) getCachedTruncatedState() *roachpb.RaftTruncatedState {
-	return (*roachpb.RaftTruncatedState)(atomic.LoadPointer(&r.truncatedState))
-}
-
-// setCachedTruncatedState atomically sets the range's truncated state.
-func (r *Replica) setCachedTruncatedState(state *roachpb.RaftTruncatedState) {
-	atomic.StorePointer(&r.truncatedState, unsafe.Pointer(state))
 }
 
 // GetReplica returns the replica for this range from the range descriptor.
@@ -1292,10 +1280,12 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 	} else {
 		// Update cached appliedIndex if we were able to set the applied index on disk.
 		atomic.StoreUint64(&r.appliedIndex, index)
-		// Invalidate the cache and let raftTruncatedState() read the value the next
-		// time it's required.
+		// Invalidate the cache and let raftTruncatedStateLocked() read the
+		// value the next time it's required.
 		if _, ok := ba.GetArg(roachpb.TruncateLog); ok {
-			r.setCachedTruncatedState(nil)
+			r.mu.Lock()
+			r.mu.truncatedState = nil
+			r.mu.Unlock()
 		}
 	}
 
