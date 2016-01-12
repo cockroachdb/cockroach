@@ -652,6 +652,48 @@ var builtins = map[string][]builtin{
 	"min": aggregateImpls(boolType, intType, floatType, stringType, bytesType, dateType, timestampType, intervalType),
 	"sum": aggregateImpls(intType, floatType),
 
+	"variance": {
+		builtin{
+			types:      argTypes{intType},
+			returnType: typeFloat,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				if args[0] == DNull {
+					return args[0], nil
+				}
+				// VARIANCE returns a float when given an int argument.
+				return DFloat(args[0].(DInt)), nil
+			},
+		},
+		builtin{
+			types:      argTypes{floatType},
+			returnType: typeFloat,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				return args[0], nil
+			},
+		},
+	},
+
+	"stddev": {
+		builtin{
+			types:      argTypes{intType},
+			returnType: typeFloat,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				if args[0] == DNull {
+					return args[0], nil
+				}
+				// STDDEV returns a float when given an int argument.
+				return DFloat(args[0].(DInt)), nil
+			},
+		},
+		builtin{
+			types:      argTypes{floatType},
+			returnType: typeFloat,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				return args[0], nil
+			},
+		},
+	},
+
 	// Math functions
 
 	"abs": {
