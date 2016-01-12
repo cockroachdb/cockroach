@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracer"
 	"github.com/coreos/etcd/raft"
@@ -166,17 +167,18 @@ type Replica struct {
 	// RWMutex
 	readOnlyCmdMu sync.RWMutex
 
-	sync.RWMutex                 // Protects the following fields:
-	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
-	tsCache      *TimestampCache // Most recent timestamps for keys / key ranges
-	pendingSeq   uint64          // atomic sequence counter for cmdIDKey generation
-	pendingCmds  map[cmdIDKey]*pendingCmd
-	desc         *roachpb.RangeDescriptor
-
 	truncatedState unsafe.Pointer // *roachpb.RaftTruncatedState
 
-	replicaID roachpb.ReplicaID
-	raftGroup *raft.RawNode
+	mu struct {
+		sync.Mutex                  // Protects all fields in the mu struct.
+		cmdQ        *CommandQueue   // Enforce at most one command is running per key(s)
+		tsCache     *TimestampCache // Most recent timestamps for keys / key ranges
+		pendingSeq  uint64          // atomic sequence counter for cmdIDKey generation
+		pendingCmds map[cmdIDKey]*pendingCmd
+		desc        *roachpb.RangeDescriptor
+		replicaID   roachpb.ReplicaID
+		raftGroup   *raft.RawNode
+	}
 }
 
 var _ client.Sender = &Replica{}
@@ -184,15 +186,12 @@ var _ client.Sender = &Replica{}
 // NewReplica initializes the replica using the given metadata.
 func NewReplica(desc *roachpb.RangeDescriptor, store *Store) (*Replica, error) {
 	r := &Replica{
-		store:       store,
-		cmdQ:        NewCommandQueue(),
-		tsCache:     NewTimestampCache(store.Clock()),
-		sequence:    NewSequenceCache(desc.RangeID),
-		pendingCmds: map[cmdIDKey]*pendingCmd{},
-		RangeID:     desc.RangeID,
+		store:    store,
+		sequence: NewSequenceCache(desc.RangeID),
+		RangeID:  desc.RangeID,
 	}
 
-	if err := r.newReplicaInner(desc); err != nil {
+	if err := r.newReplicaInner(desc, store.Clock()); err != nil {
 		return nil, err
 	}
 
@@ -208,9 +207,14 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store) (*Replica, error) {
 	return r, nil
 }
 
-func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor) error {
-	r.Lock()
-	defer r.Unlock()
+func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Clock) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.mu.cmdQ = NewCommandQueue()
+	r.mu.tsCache = NewTimestampCache(clock)
+	r.mu.pendingCmds = map[cmdIDKey]*pendingCmd{}
+
 	r.setDescWithoutProcessUpdateLocked(desc)
 
 	lastIndex, err := r.loadLastIndexLocked()
@@ -276,18 +280,18 @@ func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor) error {
 }
 
 func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
-	r.Lock()
-	defer r.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.setReplicaIDLocked(replicaID)
 }
 
 // setReplicaIDLocked requires that the replica lock is held.
 func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
-	if r.replicaID == replicaID {
+	if r.mu.replicaID == replicaID {
 		return nil
-	} else if r.replicaID > replicaID {
+	} else if r.mu.replicaID > replicaID {
 		return util.Errorf("replicaID cannot move backwards")
-	} else if r.replicaID != 0 {
+	} else if r.mu.replicaID != 0 {
 		// TODO(bdarnell): clean up previous raftGroup (cancel pending commands,
 		// update peers)
 	}
@@ -307,8 +311,8 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	if err != nil {
 		return err
 	}
-	r.replicaID = replicaID
-	r.raftGroup = raftGroup
+	r.mu.replicaID = replicaID
+	r.mu.raftGroup = raftGroup
 
 	// Automatically campaign and elect a leader for this group if there's
 	// exactly one known node for this group.
@@ -326,7 +330,7 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	// could happen is both nodes ending up in candidate state, timing
 	// out and then voting again. This is expected to be an extremely
 	// rare event.
-	if len(r.desc.Replicas) == 1 && r.desc.Replicas[0].StoreID == r.store.StoreID() {
+	if len(r.mu.desc.Replicas) == 1 && r.mu.desc.Replicas[0].StoreID == r.store.StoreID() {
 		if err := raftGroup.Campaign(); err != nil {
 			return err
 		}
@@ -506,8 +510,8 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace) *roachpb.E
 // another node. It is false when a range has been created in response
 // to an incoming message but we are waiting for our initial snapshot.
 func (r *Replica) isInitialized() bool {
-	r.RLock()
-	defer r.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.isInitializedLocked()
 }
 
@@ -515,16 +519,16 @@ func (r *Replica) isInitialized() bool {
 // because we created it or we have received an initial snapshot from
 // another node. It is false when a range has been created in response
 // to an incoming message but we are waiting for our initial snapshot.
-// isInitializedLocked requires that the replica read lock is held.
+// isInitializedLocked requires that the replica lock is held.
 func (r *Replica) isInitializedLocked() bool {
-	return len(r.desc.EndKey) > 0
+	return len(r.mu.desc.EndKey) > 0
 }
 
 // Desc returns the range's descriptor.
 func (r *Replica) Desc() *roachpb.RangeDescriptor {
-	r.RLock()
-	defer r.RUnlock()
-	return r.desc
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.desc
 }
 
 // setDesc atomically sets the range's descriptor. This method calls
@@ -542,8 +546,8 @@ func (r *Replica) setDesc(desc *roachpb.RangeDescriptor) error {
 // setDescWithoutProcessUpdate updates the range descriptor without calling
 // processRangeDescriptorUpdate.
 func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
-	r.Lock()
-	defer r.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.setDescWithoutProcessUpdateLocked(desc)
 }
 
@@ -555,7 +559,7 @@ func (r *Replica) setDescWithoutProcessUpdateLocked(desc *roachpb.RangeDescripto
 		panic(fmt.Sprintf("range descriptor ID (%d) does not match replica's range ID (%d)",
 			desc.RangeID, r.RangeID))
 	}
-	r.desc = desc
+	r.mu.desc = desc
 }
 
 // getCachedTruncatedState atomically returns the range's cached truncated
@@ -579,10 +583,10 @@ func (r *Replica) GetReplica() *roachpb.ReplicaDescriptor {
 // ReplicaDescriptor returns information about the given member of
 // this replica's range.
 func (r *Replica) ReplicaDescriptor(replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
-	r.RLock()
-	defer r.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	desc := r.desc
+	desc := r.mu.desc
 	for _, repAddress := range desc.Replicas {
 		if repAddress.ReplicaID == replicaID {
 			return repAddress, nil
@@ -637,9 +641,9 @@ func (r *Replica) SetLastVerificationTimestamp(timestamp roachpb.Timestamp) erro
 
 // RaftStatus returns the current raft status of the replica.
 func (r *Replica) RaftStatus() *raft.Status {
-	r.Lock()
-	defer r.Unlock()
-	return r.raftGroup.Status()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.raftGroup.Status()
 }
 
 // Send adds a command for execution on this range. The command's
@@ -732,7 +736,7 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) []interface{} {
 	var cmdKeys []interface{}
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
-		r.Lock()
+		r.mu.Lock()
 		var wg sync.WaitGroup
 		var spans []roachpb.Span
 		readOnly := ba.IsReadOnly()
@@ -740,9 +744,9 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) []interface{} {
 			h := union.GetInner().Header()
 			spans = append(spans, roachpb.Span{Key: h.Key, EndKey: h.EndKey})
 		}
-		r.cmdQ.GetWait(readOnly, &wg, spans...)
-		cmdKeys = append(cmdKeys, r.cmdQ.Add(readOnly, spans...)...)
-		r.Unlock()
+		r.mu.cmdQ.GetWait(readOnly, &wg, spans...)
+		cmdKeys = append(cmdKeys, r.mu.cmdQ.Add(readOnly, spans...)...)
+		r.mu.Unlock()
 		wg.Wait()
 	}
 
@@ -765,7 +769,7 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) []interface{} {
 // endCmds removes pending commands from the command queue and updates
 // the timestamp cache using the final timestamp of each command.
 func (r *Replica) endCmds(cmdKeys []interface{}, ba roachpb.BatchRequest, pErr *roachpb.Error) {
-	r.Lock()
+	r.mu.Lock()
 	// Only update the timestamp cache if the command succeeded and we're not
 	// doing inconsistent ops (in which case the ops are always read-only).
 	if pErr == nil && ba.ReadConsistency != roachpb.INCONSISTENT {
@@ -777,12 +781,12 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba roachpb.BatchRequest, pErr *
 				if ba.Txn != nil {
 					txnID = ba.Txn.ID
 				}
-				r.tsCache.Add(header.Key, header.EndKey, ba.Timestamp, txnID, roachpb.IsReadOnly(args))
+				r.mu.tsCache.Add(header.Key, header.EndKey, ba.Timestamp, txnID, roachpb.IsReadOnly(args))
 			}
 		}
 	}
-	r.cmdQ.Remove(cmdKeys)
-	r.Unlock()
+	r.mu.cmdQ.Remove(cmdKeys)
+	r.mu.Unlock()
 }
 
 // addAdminCmd executes the command directly. There is no interaction
@@ -924,7 +928,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 	//
 	// Find the maximum timestamp required to satisfy all requests in
 	// the batch and then apply that to all requests.
-	r.Lock()
+	r.mu.Lock()
 	for _, union := range ba.Requests {
 		args := union.GetInner()
 		if usesTimestampCache(args) {
@@ -933,7 +937,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 			if ba.Txn != nil {
 				txnID = ba.Txn.ID
 			}
-			rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, txnID)
+			rTS, wTS := r.mu.tsCache.GetMax(header.Key, header.EndKey, txnID)
 
 			// Always push the timestamp forward if there's been a read which
 			// occurred after our txn timestamp.
@@ -954,7 +958,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 		}
 	}
 
-	r.Unlock()
+	r.mu.Unlock()
 
 	defer trace.Epoch("raft")()
 
@@ -980,9 +984,9 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 // proposes the command to Raft and returns the error channel and
 // pending command struct for receiving.
 func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchRequest) (*pendingCmd, error) {
-	r.Lock()
-	defer r.Unlock()
-	_, replica := r.desc.FindReplica(r.store.StoreID())
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, replica := r.mu.desc.FindReplica(r.store.StoreID())
 	if replica == nil {
 		return nil, roachpb.NewRangeNotFoundError(r.RangeID)
 	}
@@ -999,19 +1003,19 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 		},
 	}
 
-	if _, ok := r.pendingCmds[idKey]; ok {
+	if _, ok := r.mu.pendingCmds[idKey]; ok {
 		log.Fatalf("pending command already exists for %s", idKey)
 	}
-	r.pendingCmds[idKey] = pendingCmd
+	r.mu.pendingCmds[idKey] = pendingCmd
 
 	if err := r.proposePendingCmdLocked(idKey, pendingCmd); err != nil {
-		delete(r.pendingCmds, idKey)
+		delete(r.mu.pendingCmds, idKey)
 		return nil, err
 	}
 	return pendingCmd, nil
 }
 
-// proposePendingCmdLocked proposes or re-proposes a command in r.pendingCmds.
+// proposePendingCmdLocked proposes or re-proposes a command in r.mu.pendingCmds.
 // The replica lock must be held.
 func (r *Replica) proposePendingCmdLocked(idKey cmdIDKey, p *pendingCmd) error {
 	if r.proposeRaftCommandFn != nil {
@@ -1048,7 +1052,7 @@ func (r *Replica) proposePendingCmdLocked(idKey cmdIDKey, p *pendingCmd) error {
 				return err
 			}
 
-			return r.raftGroup.ProposeConfChange(
+			return r.mu.raftGroup.ProposeConfChange(
 				raftpb.ConfChange{
 					Type:    changeTypeInternalToRaft[crt.ChangeType],
 					NodeID:  uint64(crt.Replica.ReplicaID),
@@ -1056,17 +1060,17 @@ func (r *Replica) proposePendingCmdLocked(idKey cmdIDKey, p *pendingCmd) error {
 				})
 		}
 	}
-	return r.raftGroup.Propose(encodeRaftCommand(string(idKey), data))
+	return r.mu.raftGroup.Propose(encodeRaftCommand(string(idKey), data))
 }
 
 func (r *Replica) handleRaftReady() error {
-	r.Lock()
-	if !r.raftGroup.HasReady() {
-		r.Unlock()
+	r.mu.Lock()
+	if !r.mu.raftGroup.HasReady() {
+		r.mu.Unlock()
 		return nil
 	}
-	rd := r.raftGroup.Ready()
-	r.Unlock()
+	rd := r.mu.raftGroup.Ready()
+	r.mu.Unlock()
 	logRaftReady(r.store.StoreID(), r.RangeID, rd)
 
 	batch := r.store.Engine().NewBatch()
@@ -1139,59 +1143,59 @@ func (r *Replica) handleRaftReady() error {
 			}
 			if err := r.processRaftCommand(cmdIDKey(ctx.CommandID), e.Index, command); err == nil {
 				// TODO(bdarnell): update coalesced heartbeat mapping
-				r.Lock()
-				r.raftGroup.ApplyConfChange(cc)
-				r.Unlock()
+				r.mu.Lock()
+				r.mu.raftGroup.ApplyConfChange(cc)
+				r.mu.Unlock()
 			} else {
 				// If processRaftCommand failed, tell raft that the config change was aborted.
-				r.Lock()
-				r.raftGroup.ApplyConfChange(raftpb.ConfChange{})
-				r.Unlock()
+				r.mu.Lock()
+				r.mu.raftGroup.ApplyConfChange(raftpb.ConfChange{})
+				r.mu.Unlock()
 			}
 
 		}
 
 	}
 	if hasEmptyEntry {
-		r.Lock()
-		if len(r.pendingCmds) > 0 {
+		r.mu.Lock()
+		if len(r.mu.pendingCmds) > 0 {
 			if log.V(1) {
-				log.Infof("reproposing %d commands after empty entry", len(r.pendingCmds))
+				log.Infof("reproposing %d commands after empty entry", len(r.mu.pendingCmds))
 			}
-			for idKey, p := range r.pendingCmds {
+			for idKey, p := range r.mu.pendingCmds {
 				if err := r.proposePendingCmdLocked(idKey, p); err != nil {
-					r.Unlock()
+					r.mu.Unlock()
 					return err
 				}
 			}
 		}
-		r.Unlock()
+		r.mu.Unlock()
 	}
 	// TODO(bdarnell): need to check replica id and not Advance if it
 	// has changed. Or do we need more locking to guarantee that replica
 	// ID cannot change during handleRaftReady?
-	r.Lock()
-	r.raftGroup.Advance(rd)
-	r.Unlock()
+	r.mu.Lock()
+	r.mu.raftGroup.Advance(rd)
+	r.mu.Unlock()
 	return nil
 }
 
 func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	groupID := r.RangeID
-	r.store.mu.RLock()
+	r.store.mu.Lock()
 	toReplica, err := r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.To))
 	if err != nil {
 		log.Warningf("failed to lookup recipient replica %d in group %s: %s", msg.To, groupID, err)
-		r.store.mu.RUnlock()
+		r.store.mu.Unlock()
 		return
 	}
 	fromReplica, err := r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.From))
 	if err != nil {
 		log.Warningf("failed to lookup sender replica %d in group %s: %s", msg.From, groupID, err)
-		r.store.mu.RUnlock()
+		r.store.mu.Unlock()
 		return
 	}
-	r.store.mu.RUnlock()
+	r.store.mu.Unlock()
 	err = r.store.ctx.Transport.Send(&RaftMessageRequest{
 		GroupID:     groupID,
 		ToReplica:   toReplica,
@@ -1202,17 +1206,17 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	if err != nil {
 		log.Warningf("group %s on store %s failed to send message to %s: %s", groupID,
 			r.store.StoreID(), toReplica.StoreID, err)
-		r.Lock()
-		r.raftGroup.ReportUnreachable(msg.To)
-		r.Unlock()
+		r.mu.Lock()
+		r.mu.raftGroup.ReportUnreachable(msg.To)
+		r.mu.Unlock()
 		snapStatus = raft.SnapshotFailure
 	}
 	if msg.Type == raftpb.MsgSnap {
 		// TODO(bdarnell): add an ack for snapshots and don't report status until
 		// ack, error, or timeout.
-		r.Lock()
-		r.raftGroup.ReportSnapshot(msg.To, snapStatus)
-		r.Unlock()
+		r.mu.Lock()
+		r.mu.raftGroup.ReportSnapshot(msg.To, snapStatus)
+		r.mu.Unlock()
 	}
 }
 
@@ -1225,10 +1229,10 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd roach
 		log.Fatalc(r.context(), "processRaftCommand requires a non-zero index")
 	}
 
-	r.Lock()
-	cmd := r.pendingCmds[idKey]
-	delete(r.pendingCmds, idKey)
-	r.Unlock()
+	r.mu.Lock()
+	cmd := r.mu.pendingCmds[idKey]
+	delete(r.mu.pendingCmds, idKey)
+	r.mu.Unlock()
 
 	var ctx context.Context
 	if cmd != nil {
@@ -1406,8 +1410,8 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 // or transaction abort error is returned, respectively.
 // checkSequenceCache locks the replica.
 func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) *roachpb.Error {
-	r.Lock()
-	defer r.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	var entry roachpb.SequenceCacheEntry
 	if epoch, sequence, readErr := r.sequence.Get(b, txn.ID, &entry); readErr != nil {

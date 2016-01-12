@@ -57,9 +57,9 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		t.Error(err)
 	}
 
-	r.RLock()
+	r.mu.Lock()
 	firstIndex, err := r.FirstIndex()
-	r.RUnlock()
+	r.mu.Unlock()
 	if err != nil {
 		t.Error(err)
 	}
@@ -92,9 +92,9 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	// before ForceRaftLogScanAndProcess but is still working on it.
 	stopper.Quiesce()
 
-	r.RLock()
+	r.mu.Lock()
 	newFirstIndex, err := r.FirstIndex()
-	r.RUnlock()
+	r.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}

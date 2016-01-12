@@ -89,8 +89,8 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 		}
 	}
 
-	r.RLock()
-	defer r.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	firstIndex, err := r.FirstIndex()
 	if err != nil {
 		return 0, 0, util.Errorf("error retrieving first index for range %d: %s", rangeID, err)
