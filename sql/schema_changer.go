@@ -158,9 +158,10 @@ func (sc *SchemaChanger) ReleaseLease(lease TableDescriptor_SchemaChangeLease) *
 }
 
 // ExtendLease for the current leaser.
-func (sc *SchemaChanger) ExtendLease(lease TableDescriptor_SchemaChangeLease) (TableDescriptor_SchemaChangeLease, *roachpb.Error) {
+func (sc *SchemaChanger) ExtendLease(existingLease TableDescriptor_SchemaChangeLease) (TableDescriptor_SchemaChangeLease, *roachpb.Error) {
+	var lease TableDescriptor_SchemaChangeLease
 	err := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
-		tableDesc, err := sc.findTableWithLease(txn, lease)
+		tableDesc, err := sc.findTableWithLease(txn, existingLease)
 		if err != nil {
 			return err
 		}
@@ -340,6 +341,7 @@ func (sc *SchemaChanger) purgeMutations(lease *TableDescriptor_SchemaChangeLease
 				// mutations if they have the mutation ID we're looking for.
 				break
 			}
+			log.Warningf("Purging schema change mutation: %v", desc.Mutations[i])
 			switch mutation.Direction {
 			case DescriptorMutation_ADD:
 				desc.Mutations[i].Direction = DescriptorMutation_DROP
