@@ -18,6 +18,7 @@ package cli
 
 import (
 	"flag"
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -30,8 +31,7 @@ import (
 var maxResults int64
 
 var connURL string
-var connUser, connHost, connDBName string
-var connPort int
+var connUser, connHost, connCockroachPort, connPort, connDBName string
 
 // pflagValue wraps flag.Value and implements the extra methods of the
 // pflag.Value interface.
@@ -77,6 +77,9 @@ var flagUsage = map[string]string{
 	"certs": `
         Directory containing RSA key and x509 certs. This flag is required if
         --insecure=false.
+`,
+	"cockroach-port": `
+        The port to bind for cockroach traffic.
 `,
 	"database": `
         Database to use.
@@ -133,11 +136,8 @@ var flagUsage = map[string]string{
         The created user's password. If provided, disables prompting. Pass '-' to provide
         the password on standard input.
 `,
-	"pgaddr": `
-        The host:port to bind for Postgres traffic.
-`,
 	"port": `
-        Database server port.
+        The port to bind for Postgres traffic.
 `,
 	"scan-interval": `
         Adjusts the target for the duration of a single scan through a store's
@@ -201,8 +201,9 @@ func initFlags(ctx *server.Context) {
 		f.BoolVar(&ctx.EphemeralSingleNode, "dev", ctx.EphemeralSingleNode, flagUsage["dev"])
 
 		// Server flags.
-		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
-		f.StringVar(&ctx.PGAddr, "pgaddr", ctx.PGAddr, flagUsage["pgaddr"])
+		f.StringVar(&connHost, "host", "", flagUsage["host"])
+		f.StringVar(&connCockroachPort, "cockroach-port", "26257", flagUsage["cockroach-port"])
+		f.StringVar(&connPort, "port", "15432", flagUsage["port"])
 		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, flagUsage["attrs"])
 		f.StringVar(&ctx.Stores, "stores", ctx.Stores, flagUsage["stores"])
 		f.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, flagUsage["max-offset"])
@@ -266,13 +267,14 @@ func initFlags(ctx *server.Context) {
 		f.BoolVar(&context.EphemeralSingleNode, "dev", context.EphemeralSingleNode, flagUsage["dev"])
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, flagUsage["insecure"])
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])
+		f.StringVar(&connHost, "host", "", flagUsage["host"])
 	}
 
 	// Commands that take a plain --addr=<host>:<port> flag.
 	simpleCmds := []*cobra.Command{kvCmd, rangeCmd, exterminateCmd, quitCmd}
 	for _, cmd := range simpleCmds {
 		f := cmd.PersistentFlags()
-		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
+		f.StringVar(&connCockroachPort, "cockroach-port", "26257", flagUsage["cockroach-port"])
 	}
 
 	// Commands that take a SQL connection URL.
@@ -282,8 +284,7 @@ func initFlags(ctx *server.Context) {
 		f.StringVar(&connURL, "url", "", flagUsage["url"])
 
 		f.StringVar(&connUser, "user", security.RootUser, flagUsage["user"])
-		f.StringVar(&connHost, "host", "localhost", flagUsage["host"])
-		f.IntVar(&connPort, "port", 15432, flagUsage["port"])
+		f.StringVar(&connPort, "port", "15432", flagUsage["port"])
 		f.StringVar(&connDBName, "database", "", flagUsage["database"])
 	}
 
@@ -301,5 +302,7 @@ func init() {
 		if context.EphemeralSingleNode {
 			context.Insecure = true
 		}
+		context.Addr = fmt.Sprintf("%s:%s", connHost, connCockroachPort)
+		context.PGAddr = fmt.Sprintf("%s:%s", connHost, connPort)
 	})
 }
