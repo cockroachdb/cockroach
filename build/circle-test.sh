@@ -86,13 +86,10 @@ prepare_artifacts() {
       # Generate string of failed tests: 'TestRaftRemoveRace TestChaos TestHoneyBooBoo'
       FAILEDTESTS=$(grep -oh '^--- FAIL: \w*' "${outdir}/excerpt.txt" | sed -e 's/--- FAIL: //' | tr '\n' ' ' || true)
       if [ -z "${FAILEDTESTS}" -a -n "${CIRCLE_TEST_REPORTS-}" ]; then
-        # If a test timed out, try to grab that from the xml. This is already
-        # almost trying too hard to be clever.
-        FAILEDTESTS=$(find "${CIRCLE_TEST_REPORTS}" -type f -iname '*.xml' |
-          xargs cat |
-          grep -Pzo 'name="[^"]+".*\n.*failure' |
-          sed -E -e 's/.*name="([^"]+)".*/\1/' |
-          head -n 1 || true)
+        # If we generated XML reports and the simple grep didn't find
+        # anything (which happens for timeouts and panics), parse the
+        # XML for more robust results.
+        FAILEDTESTS=$(python3 -c 'import sys, xml.etree.ElementTree as ET; [print(t.attrib["name"]) for t in ET.parse(filename).findall(".//failure/..") for filename in sys.argv[1:]]' "$(find "${CIRCLE_TEST_REPORTS}" -type f -iname '*.xml')")
       fi
       # Generate string for JSON labels below:
       # '"test-failure", "TestRaftRemoveRace", "TestChaos", "TestHoneyBooBoo"'
