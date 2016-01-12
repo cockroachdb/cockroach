@@ -17,6 +17,7 @@
 package gossip_test
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -28,17 +29,34 @@ import (
 )
 
 type testStorage struct {
+	mu          sync.Mutex
 	read, write bool
 	info        gossip.BootstrapInfo
 }
 
+func (tp *testStorage) isRead() bool {
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
+	return tp.read
+}
+
+func (tp *testStorage) isWrite() bool {
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
+	return tp.write
+}
+
 func (tp *testStorage) ReadBootstrapInfo(info *gossip.BootstrapInfo) error {
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
 	tp.read = true
 	*info = *proto.Clone(&tp.info).(*gossip.BootstrapInfo)
 	return nil
 }
 
 func (tp *testStorage) WriteBootstrapInfo(info *gossip.BootstrapInfo) error {
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
 	tp.write = true
 	tp.info = *proto.Clone(info).(*gossip.BootstrapInfo)
 	return nil
@@ -68,10 +86,10 @@ func TestGossipStorage(t *testing.T) {
 	network.RunUntilFullyConnected()
 
 	for i, p := range stores {
-		if !p.read {
+		if !p.isRead() {
 			t.Errorf("%d: expected read from storage", i)
 		}
-		if !p.write {
+		if !p.isWrite() {
 			t.Errorf("%d: expected write from storage", i)
 		}
 		// Verify all gossip addresses are written to each persistent store.
