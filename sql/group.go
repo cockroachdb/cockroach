@@ -18,6 +18,7 @@ package sql
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -26,11 +27,13 @@ import (
 )
 
 var aggregates = map[string]func() aggregateImpl{
-	"avg":   newAvgAggregate,
-	"count": newCountAggregate,
-	"max":   newMaxAggregate,
-	"min":   newMinAggregate,
-	"sum":   newSumAggregate,
+	"avg":      newAvgAggregate,
+	"count":    newCountAggregate,
+	"max":      newMaxAggregate,
+	"min":      newMinAggregate,
+	"sum":      newSumAggregate,
+	"stddev":   newStddevAggregate,
+	"variance": newVarianceAggregate,
 }
 
 func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, *roachpb.Error) {
@@ -608,6 +611,8 @@ var _ aggregateImpl = &countAggregate{}
 var _ aggregateImpl = &maxAggregate{}
 var _ aggregateImpl = &minAggregate{}
 var _ aggregateImpl = &sumAggregate{}
+var _ aggregateImpl = &stddevAggregate{}
+var _ aggregateImpl = &varianceAggregate{}
 var _ aggregateImpl = &identAggregate{}
 
 // In order to render the unaggregated (i.e. grouped) fields, during aggregation,
@@ -800,4 +805,66 @@ func (a *sumAggregate) result() (parser.Datum, error) {
 		return parser.DNull, nil
 	}
 	return a.sum, nil
+}
+
+type varianceAggregate struct {
+	count   int
+	mean    parser.DFloat
+	sqrDiff parser.DFloat
+}
+
+func newVarianceAggregate() aggregateImpl {
+	return &varianceAggregate{}
+}
+
+func (a *varianceAggregate) add(datum parser.Datum) error {
+	if datum == parser.DNull {
+		return nil
+	}
+
+	var d parser.DFloat
+	switch t := datum.(type) {
+	case parser.DInt:
+		d = parser.DFloat(t)
+	case parser.DFloat:
+		d = t
+	default:
+		return fmt.Errorf("unexpected VARIANCE argument type: %s", datum.Type())
+	}
+
+	// Uses the Knuth/Welford method for accurately computing variance online in a
+	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
+	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
+	a.count++
+	delta := d - a.mean
+	a.mean += delta / parser.DFloat(a.count)
+	a.sqrDiff += delta * (d - a.mean)
+	return nil
+}
+
+func (a *varianceAggregate) result() (parser.Datum, error) {
+	if a.count < 2 {
+		return parser.DNull, nil
+	}
+	return a.sqrDiff / (parser.DFloat(a.count) - 1), nil
+}
+
+type stddevAggregate struct {
+	varianceAggregate
+}
+
+func newStddevAggregate() aggregateImpl {
+	return &stddevAggregate{}
+}
+
+func (a *stddevAggregate) result() (parser.Datum, error) {
+	variance, err := a.varianceAggregate.result()
+	if err != nil || variance == parser.DNull {
+		return variance, err
+	}
+	switch t := variance.(type) {
+	case parser.DFloat:
+		return parser.DFloat(math.Sqrt(float64(t))), nil
+	}
+	return nil, fmt.Errorf("unexpected variance result type: %s", variance.Type())
 }
