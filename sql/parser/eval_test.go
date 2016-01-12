@@ -139,8 +139,13 @@ func TestEval(t *testing.T) {
 		{`'TEST' LIKE 'TES_'`, `true`},
 		{`'TEST' LIKE 'TE_%'`, `true`},
 		{`'TEST' LIKE 'TE_'`, `false`},
+		{`'TEST' LIKE '%'`, `true`},
 		{`'TEST' LIKE '%R'`, `false`},
 		{`'TEST' LIKE 'TESTER'`, `false`},
+		{`'TEST' LIKE ''`, `false`},
+		{`'' LIKE ''`, `true`},
+		{`'T' LIKE '_'`, `true`},
+		{`'TE' LIKE '_'`, `false`},
 		{`'TEST' NOT LIKE '%E%'`, `false`},
 		{`'TEST' NOT LIKE 'TES_'`, `false`},
 		{`'TEST' NOT LIKE 'TE_'`, `true`},
@@ -436,6 +441,9 @@ var optimizedLikePatterns = []string{
 	`test%`,
 	`%test%`,
 	`%test`,
+	``,
+	`%`,
+	`_`,
 	`test`,
 	`bad`,
 	`also\%`,
@@ -443,12 +451,18 @@ var optimizedLikePatterns = []string{
 
 func benchmarkLike(b *testing.B, ctx EvalContext) {
 	likeFn := cmpOps[cmpArgs{Like, stringType, stringType}].fn
-	for n := 0; n < b.N; n++ {
+	iter := func() {
 		for _, p := range optimizedLikePatterns {
 			if _, err := likeFn(ctx, DString("test"), DString(p)); err != nil {
 				b.Fatalf("LIKE evaluation failed with error: %v", err)
 			}
 		}
+	}
+	// Warm up cache, if applicable
+	iter()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		iter()
 	}
 }
 

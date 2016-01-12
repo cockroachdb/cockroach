@@ -1332,22 +1332,40 @@ func (ctx EvalContext) ParseTimestamp(s DString) (DTimestamp, error) {
 // For example, when the expression is just checking to see if a string starts with a given
 // pattern.
 func optimizedLikeFunc(pattern string) func(string) bool {
-	if !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
-		// Cases like "something\%" are not optimized, but this does not affect correctness.
-		matchStart := pattern[len(pattern)-1] == '%' && pattern[len(pattern)-2] != '\\'
-		matchEnd := pattern[0] == '%'
-		switch {
-		case matchStart && matchEnd:
+	switch len(pattern) {
+	case 0:
+		return func(s string) bool {
+			return s == ""
+		}
+	case 1:
+		switch pattern[0] {
+		case '%':
 			return func(s string) bool {
-				return strings.Contains(s, pattern[1:len(pattern)-1])
+				return true
 			}
-		case matchStart:
+		case '_':
 			return func(s string) bool {
-				return strings.HasPrefix(s, pattern[:len(pattern)-1])
+				return len(s) == 1
 			}
-		case matchEnd:
-			return func(s string) bool {
-				return strings.HasSuffix(s, pattern[1:])
+		}
+	default:
+		if !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
+			// Cases like "something\%" are not optimized, but this does not affect correctness.
+			anyEnd := pattern[len(pattern)-1] == '%' && pattern[len(pattern)-2] != '\\'
+			anyStart := pattern[0] == '%'
+			switch {
+			case anyEnd && anyStart:
+				return func(s string) bool {
+					return strings.Contains(s, pattern[1:len(pattern)-1])
+				}
+			case anyEnd:
+				return func(s string) bool {
+					return strings.HasPrefix(s, pattern[:len(pattern)-1])
+				}
+			case anyStart:
+				return func(s string) bool {
+					return strings.HasSuffix(s, pattern[1:])
+				}
 			}
 		}
 	}
