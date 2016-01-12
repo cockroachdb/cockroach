@@ -48,6 +48,7 @@ func (tp *testStorage) WriteBootstrapInfo(info *gossip.BootstrapInfo) error {
 // using the bootstrap hosts in a gossip.Storage object.
 func TestGossipStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("#3755")
 
 	const numNodes = 3
 	network := simulation.NewNetwork(3)
