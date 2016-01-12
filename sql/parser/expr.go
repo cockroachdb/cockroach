@@ -633,7 +633,10 @@ type FuncExpr struct {
 	Name  *QualifiedName
 	Type  funcType
 	Exprs Exprs
-	fn    builtin
+
+	// non-AST fields
+	fn      builtin
+	fnFound bool
 }
 
 type funcType int

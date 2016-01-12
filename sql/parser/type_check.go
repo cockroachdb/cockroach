@@ -258,7 +258,7 @@ func (expr *FuncExpr) TypeCheck(args MapArgs) (Datum, error) {
 	}
 
 	// Cache is cold, do the lookup.
-	if expr.fn.fn == nil {
+	if !expr.fnFound {
 		if len(expr.Name.Indirect) > 0 {
 			// We don't support qualified function names (yet).
 			return nil, fmt.Errorf("unknown function: %s", expr.Name)
@@ -273,12 +273,13 @@ func (expr *FuncExpr) TypeCheck(args MapArgs) (Datum, error) {
 		for _, candidate := range candidates {
 			if candidate.types.match(types) {
 				expr.fn = candidate
+				expr.fnFound = true
 				break
 			}
 		}
 
 		// Function lookup failed.
-		if expr.fn.fn == nil {
+		if !expr.fnFound {
 			typeNames := make([]string, 0, len(dummyArgs))
 			for _, dummyArg := range dummyArgs {
 				typeNames = append(typeNames, dummyArg.Type())
