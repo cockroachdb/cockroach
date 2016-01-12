@@ -39,11 +39,16 @@ func ClientKeyPath(certDir, username string) string {
 	return filepath.Join(certDir, username+".client.key")
 }
 
+// CACertPath returns a path to a certificate file for the given cert path.
+func CACertPath(certDir string) string {
+	return filepath.Join(certDir, "ca.crt")
+}
+
 // loadCACertAndKey loads the certificate and key files in the specified
 // directory, parses them, and returns the x509 certificate and private key.
 func loadCACertAndKey(certsDir string) (*x509.Certificate, crypto.PrivateKey, error) {
 	// Load the CA certificate.
-	caCertPath := filepath.Join(certsDir, "ca.crt")
+	caCertPath := CACertPath(certsDir)
 	caKeyPath := filepath.Join(certsDir, "ca.key")
 
 	// LoadX509KeyPair does a bunch of validation, including len(Certificates) != 0.

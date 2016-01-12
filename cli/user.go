@@ -43,7 +43,7 @@ func runGetUser(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)
 		return
 	}
-	db := makeSQLClient()
+	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
 	err := runPrettyQuery(db, os.Stdout, `SELECT * FROM system.users WHERE username=$1`, args[0])
 	if err != nil {
@@ -67,7 +67,7 @@ func runLsUsers(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)
 		return
 	}
-	db := makeSQLClient()
+	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
 	err := runPrettyQuery(db, os.Stdout, `SELECT username FROM system.users`)
 	if err != nil {
@@ -91,7 +91,7 @@ func runRmUser(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)
 		return
 	}
-	db := makeSQLClient()
+	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
 	err := runPrettyQuery(db, os.Stdout, `DELETE FROM system.users WHERE username=$1`, args[0])
 	if err != nil {
@@ -158,7 +158,7 @@ func runSetUser(cmd *cobra.Command, args []string) {
 			panic(err)
 		}
 	}
-	db := makeSQLClient()
+	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
 	// TODO(marc): switch to UPSERT.
 	err = runPrettyQuery(db, os.Stdout, `INSERT INTO system.users VALUES ($1, $2)`, args[0], hashed)
