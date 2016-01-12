@@ -348,6 +348,17 @@ func (n *scanNode) initScan() bool {
 	return true
 }
 
+func (n *scanNode) initScanNode(sel *parser.Select) *roachpb.Error {
+	// TODO(radu): the where/targets logic will move into selectNode
+	if pErr := n.initWhere(sel.Where); pErr != nil {
+		return pErr
+	}
+	if pErr := n.initTargets(sel.Exprs); pErr != nil {
+		return pErr
+	}
+	return nil
+}
+
 func (n *scanNode) initWhere(where *parser.Where) *roachpb.Error {
 	if where == nil {
 		return nil
@@ -872,9 +883,9 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 		return nil, expr
 
 	case *parser.FuncExpr:
-		// Special case handling for COUNT(*) and COUNT(foo.*), expanding the star
-		// into a tuple containing the columns in the primary key of the referenced
-		// table.
+		// Special case handling for COUNT(*). This is a special construct to
+		// count the number of rows; in this case * does NOT refer to a set of
+		// columns.
 		if len(t.Name.Indirect) > 0 || !strings.EqualFold(string(t.Name.Base), "count") {
 			break
 		}
@@ -896,20 +907,8 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 			// will perform normal qualified name resolution.
 			break
 		}
-		// We've got either COUNT(*) or COUNT(foo.*). Retrieve the descriptor.
-		desc := v.getDesc(qname)
-		if desc == nil {
-			break
-		}
-		// Replace the function argument with a non-NULL column. We currently use
-		// the first column of the primary index since that column will be a
-		// candidate for index selection, but any non-NULL column would do for
-		// correctness of the aggregate.
-		var col *ColumnDescriptor
-		if col, v.pErr = desc.FindColumnByID(desc.PrimaryIndex.ColumnIDs[0]); v.pErr != nil {
-			return nil, expr
-		}
-		t.Exprs[0] = v.getQVal(*col)
+		// Replace the function argument with a special non-NULL VariableExpr.
+		t.Exprs[0] = &dummyCountStar{datum: parser.DummyInt}
 		return v, expr
 
 	case *parser.Subquery:
@@ -941,4 +940,31 @@ func (n *scanNode) resolveQNames(expr parser.Expr) (parser.Expr, *roachpb.Error)
 	v := qnameVisitor{scanNode: n}
 	expr = parser.WalkExpr(&v, expr)
 	return expr, v.pErr
+}
+
+// A VariableExpr used as a dummy argument for the special case COUNT(*).  This
+// ends up being processed correctly by the count aggregator since it is not
+// parser.DNull.
+type dummyCountStar struct {
+	datum parser.Datum
+}
+
+var _ parser.VariableExpr = &dummyCountStar{}
+
+func (*dummyCountStar) Variable() {}
+
+func (q *dummyCountStar) String() string {
+	return "DummyCountStar"
+}
+
+func (q *dummyCountStar) Walk(v parser.Visitor) {
+	q.datum = parser.WalkExpr(v, q.datum).(parser.Datum)
+}
+
+func (q *dummyCountStar) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
+	return q.datum.TypeCheck(args)
+}
+
+func (q *dummyCountStar) Eval(ctx parser.EvalContext) (parser.Datum, error) {
+	return q.datum.Eval(ctx)
 }
