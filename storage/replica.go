@@ -1075,14 +1075,17 @@ func (r *Replica) handleRaftReady() error {
 
 	batch := r.store.Engine().NewBatch()
 	defer batch.Close()
+	lastIndex := atomic.LoadUint64(&r.lastIndex)
 	if !raft.IsEmptySnap(rd.Snapshot) {
-		if err := r.applySnapshot(batch, rd.Snapshot); err != nil {
+		var err error
+		if lastIndex, err = r.applySnapshot(batch, rd.Snapshot); err != nil {
 			return err
 		}
 		// TODO(bdarnell): update coalesced heartbeat mapping with snapshot info.
 	}
 	if len(rd.Entries) > 0 {
-		if err := r.append(batch, rd.Entries); err != nil {
+		var err error
+		if lastIndex, err = r.append(batch, lastIndex, rd.Entries); err != nil {
 			return err
 		}
 	}
@@ -1094,6 +1097,7 @@ func (r *Replica) handleRaftReady() error {
 	if err := batch.Commit(); err != nil {
 		return err
 	}
+	atomic.StoreUint64(&r.lastIndex, lastIndex)
 
 	for _, msg := range rd.Messages {
 		r.sendRaftMessage(msg)
