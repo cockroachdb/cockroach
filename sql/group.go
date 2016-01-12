@@ -172,9 +172,13 @@ func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, error) {
 	return group, nil
 }
 
+// A groupNode implements the planNode interface and handles the grouping logic.
+// It "wraps" a planNode which is used to retrieve the ungrouped results.
 type groupNode struct {
 	planner *planner
-	plan    planNode
+
+	// The "wrapped" node (which returns ungrouped results).
+	plan planNode
 
 	render []parser.Expr
 	having parser.Expr

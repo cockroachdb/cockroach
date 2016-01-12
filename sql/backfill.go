@@ -164,7 +164,7 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc *TableDescriptor, 
 			desc:    oldTableDesc,
 		}
 		scan.initDescDefaults()
-		rows, err := p.selectWithScan(scan, &parser.Select{Exprs: oldTableDesc.allColumnsSelector()})
+		rows, err := p.initScanNode(scan, &parser.Select{Exprs: oldTableDesc.allColumnsSelector()})
 		if err != nil {
 			return err
 		}

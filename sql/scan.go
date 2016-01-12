@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -214,68 +213,57 @@ func (n *scanNode) ExplainPlan() (name, description string, children []planNode)
 	return name, description, nil
 }
 
-func (n *scanNode) initFrom(p *planner, from parser.TableExprs) error {
-	switch len(from) {
-	case 0:
-		// n.desc is nil, but can be set externally.
-		return nil
-
-	case 1:
-		if n.desc, n.err = p.getAliasedTableLease(from[0]); n.err != nil {
-			return n.err
-		}
-
-		if err := p.checkPrivilege(n.desc, privilege.SELECT); err != nil {
-			return err
-		}
-
-		// This is only kosher because we know that getAliasedDesc() succeeded.
-		qname := from[0].(*parser.AliasedTableExpr).Expr.(*parser.QualifiedName)
-		indexName := qname.Index()
-		if indexName != "" && !equalName(n.desc.PrimaryIndex.Name, indexName) {
-			for i := range n.desc.Indexes {
-				if equalName(n.desc.Indexes[i].Name, indexName) {
-					// Remove all but the matching index from the descriptor.
-					n.desc.Indexes = n.desc.Indexes[i : i+1]
-					n.index = &n.desc.Indexes[0]
-					break
-				}
-			}
-			if n.index == nil {
-				n.err = fmt.Errorf("index \"%s\" not found", indexName)
-				return n.err
-			}
-			// If the table was not aliased, use the index name instead of the table
-			// name for fully-qualified columns in the expression.
-			if from[0].(*parser.AliasedTableExpr).As == "" {
-				n.desc.Alias = n.index.Name
-			}
-			// Strip out any columns from the table that are not present in the
-			// index.
-			indexColIDs := map[ColumnID]struct{}{}
-			for _, colID := range n.index.ColumnIDs {
-				indexColIDs[colID] = struct{}{}
-			}
-			for _, colID := range n.index.ImplicitColumnIDs {
-				indexColIDs[colID] = struct{}{}
-			}
-			for _, col := range n.desc.Columns {
-				if _, ok := indexColIDs[col.ID]; !ok {
-					continue
-				}
-				n.visibleCols = append(n.visibleCols, col)
-			}
-			n.isSecondaryIndex = true
-		} else {
-			n.initDescDefaults()
-		}
-
-		return nil
-
-	default:
-		n.err = util.Errorf("TODO(pmattis): unsupported FROM: %s", from)
+// Initializes a scanNode from an AliasedTableExpr
+func (n *scanNode) initTableExpr(p *planner, ate *parser.AliasedTableExpr) error {
+	if n.desc, n.err = p.getAliasedTableLease(ate); n.err != nil {
 		return n.err
 	}
+
+	if err := p.checkPrivilege(n.desc, privilege.SELECT); err != nil {
+		return err
+	}
+
+	qname := ate.Expr.(*parser.QualifiedName)
+	indexName := qname.Index()
+	if indexName != "" && !equalName(n.desc.PrimaryIndex.Name, indexName) {
+		for i := range n.desc.Indexes {
+			if equalName(n.desc.Indexes[i].Name, indexName) {
+				// Remove all but the matching index from the descriptor.
+				n.desc.Indexes = n.desc.Indexes[i : i+1]
+				n.index = &n.desc.Indexes[0]
+				break
+			}
+		}
+		if n.index == nil {
+			n.err = fmt.Errorf("index \"%s\" not found", indexName)
+			return n.err
+		}
+		// If the table was not aliased, use the index name instead of the table
+		// name for fully-qualified columns in the expression.
+		if ate.As == "" {
+			n.desc.Alias = n.index.Name
+		}
+		// Strip out any columns from the table that are not present in the
+		// index.
+		indexColIDs := map[ColumnID]struct{}{}
+		for _, colID := range n.index.ColumnIDs {
+			indexColIDs[colID] = struct{}{}
+		}
+		for _, colID := range n.index.ImplicitColumnIDs {
+			indexColIDs[colID] = struct{}{}
+		}
+		for _, col := range n.desc.Columns {
+			if _, ok := indexColIDs[col.ID]; !ok {
+				continue
+			}
+			n.visibleCols = append(n.visibleCols, col)
+		}
+		n.isSecondaryIndex = true
+	} else {
+		n.initDescDefaults()
+	}
+
+	return nil
 }
 
 func (n *scanNode) initDescDefaults() {
