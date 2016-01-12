@@ -636,42 +636,61 @@ func MakePriority(userPriority float64) int32 {
 	//   pri = user priority
 	//   max = MaxInt32
 	//
-	// The normal probability of a win (probW) with pri=1 is probW = 1/2.
+	// The normal probability of a win (probW) with pri=1 is equal to the normal
+	// probability of a loss (probL), i.e, probW = probL.
 	//
 	// The user priority is a multiple and is defined as the probability
 	// of winning divided by the probability of losing:
-	// pri = probW / (1-probW) ==> probW = pri / (1 + pri).
+	// pri = probW / probL
 	//
 	// If pri > 1, let:
 	//   x = fraction of max such that choosing rand in [max*x, max)
 	//       is pri times more likely to be greater than random [0, max).
 	//
 	// For every random trial, if the normal priority is chosen < max*x,
-	// the user priority wins 100% of the time; otherwise, wins 50% of
-	// the time. Therefore, x fraction of the time, win is user(100%)
-	// and (1-x) fraction of the time win is user(50%).
+	// the user priority wins 100% of the time; otherwise, ties
+	// (1 / (max * (1-x))) (q) of the time, wins (1/2 * (1 - q)) of
+	// the time, loses (1/2 * (1-q)) of the time. Therefore, x fraction of
+	// the time, win is user(100%) and (1-x) fraction of the time win is
+	// user(1/2 * (1-q)).
 	//
-	//   x + (1-x) * 1/2 = pri / (1 + pri)
-	//   x/2 = pri / (1 + pri) - 1/2
-	//   x = (pri - 1) / (1 + pri)
+	//   q = 1 / (max * (1-x))
+	//   pri = (x + (1-x) * 1/2 * (1-q)) / ((1-x) * 1/2 * (1-q))
+	//
+	// Solve the above equations, we get:
+	//
+	//   x = (max * pri - max - pri + 1) / (max * pri + max)
 	//
 	// Otherwise, if pri < 1, let:
 	//   x = fraction of max such that choosing rand in [0, max*x)
 	//       is pri times more likely to be greater than random [0, max).
 	//
 	// For every random trial, if the normal priority is chosen >= max*x,
-	// the user priority loses 100% of the time; otherwise, wins 50% of
-	// the time. Therefore, (1-x) fraction of the time, loss is user(100%)
-	// and x fraction of the time win is user(50%).
+	// the user priority loses 100% of the time; otherwise, ties
+	// (1 / (max*x)) (q) of the time, wins (1/2 * (1-q)) of the time, loses
+	// (1/2 * (1-q)) of the time. Therefore, (1-x) fraction of the time, loss is
+	// user(100%) and x fraction of the time win is user(1/2 * (1-q)).
 	//
-	//   x * 1/2 = pri / (1 + pri)
-	//   x = 2*pri / (1 + pri) = (pri - 1)/(pri + 1) + 1
+	// q = 1 / (max*x)
+	// pri = (x * 1/2 * (1-q)) / (1 - x + x * 1/2 * (1 - q))
+	//
+	// Solve the above equations, we get:
+	//
+	//   x = (2 * max * pri - pri + 1) / (pri * max + max)
 	pri := float64(userPriority)
-	x := (pri - 1) / (pri + 1)
+	max := float64(math.MaxInt32)
+	divisor := max*pri + max
+	dividend := 1 - pri
 	if userPriority >= 1 {
-		return math.MaxInt32 - rand.Int31n(int32(float64(math.MaxInt32)*(1-x)))
+		dividend += max*pri - max
+	} else {
+		dividend += 2 * max * pri
 	}
-	return rand.Int31n(int32(float64(math.MaxInt32) * (1 + x)))
+	x := dividend / divisor
+	if userPriority >= 1 {
+		return math.MaxInt32 - rand.Int31n(int32(max*(1-x)))
+	}
+	return rand.Int31n(int32(max*x)) + 1
 }
 
 // TxnIDEqual returns whether the transaction IDs are equal.
