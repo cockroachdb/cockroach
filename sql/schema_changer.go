@@ -19,7 +19,6 @@ package sql
 import (
 	"bytes"
 	"math"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -406,12 +405,9 @@ func (sc *SchemaChanger) IsDone() (bool, *roachpb.Error) {
 // processing the schema change this manager acts as a backup
 // execution mechanism.
 type SchemaChangeManager struct {
-	// System Config and mutex.
-	systemConfig   config.SystemConfig
-	systemConfigMu sync.RWMutex
-	db             client.DB
-	gossip         *gossip.Gossip
-	leaseMgr       *LeaseManager
+	db       client.DB
+	gossip   *gossip.Gossip
+	leaseMgr *LeaseManager
 	// Create a schema changer for every outstanding schema change seen.
 	schemaChangers map[ID]SchemaChanger
 }
@@ -419,20 +415,6 @@ type SchemaChangeManager struct {
 // NewSchemaChangeManager returns a new SchemaChangeManager.
 func NewSchemaChangeManager(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager) *SchemaChangeManager {
 	return &SchemaChangeManager{db: db, gossip: gossip, leaseMgr: leaseMgr, schemaChangers: make(map[ID]SchemaChanger)}
-}
-
-// updateSystemConfig is called whenever the system config gossip entry is updated.
-func (s *SchemaChangeManager) updateSystemConfig(cfg config.SystemConfig) {
-	s.systemConfigMu.Lock()
-	defer s.systemConfigMu.Unlock()
-	s.systemConfig = cfg
-}
-
-// getSystemConfig returns a pointer to the latest system config.
-func (s *SchemaChangeManager) getSystemConfig() config.SystemConfig {
-	s.systemConfigMu.RLock()
-	defer s.systemConfigMu.RUnlock()
-	return s.systemConfig
 }
 
 var (
@@ -503,7 +485,6 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 			select {
 			case <-gossipUpdateC:
 				cfg := *s.gossip.GetSystemConfig()
-				s.updateSystemConfig(cfg)
 				// Read all tables and their versions
 				if log.V(2) {
 					log.Info("received a new config %v", cfg)

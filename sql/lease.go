@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -545,11 +544,6 @@ func (t *tableState) releaseNodeLease(lease *LeaseState, store LeaseStore) *roac
 // for testing.
 type LeaseManager struct {
 	LeaseStore
-
-	// System Config and mutex.
-	systemConfig   config.SystemConfig
-	systemConfigMu sync.RWMutex
-
 	mu     sync.Mutex
 	tables map[ID]*tableState
 }
@@ -597,20 +591,6 @@ func (m *LeaseManager) findTableState(tableID ID, create bool) *tableState {
 	return t
 }
 
-// updateSystemConfig is called whenever the system config gossip entry is updated.
-func (m *LeaseManager) updateSystemConfig(cfg config.SystemConfig) {
-	m.systemConfigMu.Lock()
-	defer m.systemConfigMu.Unlock()
-	m.systemConfig = cfg
-}
-
-// getSystemConfig returns a pointer to the latest system config.
-func (m *LeaseManager) getSystemConfig() config.SystemConfig {
-	m.systemConfigMu.RLock()
-	defer m.systemConfigMu.RUnlock()
-	return m.systemConfig
-}
-
 // RefreshLeases starts a goroutine that refreshes the lease manager
 // leases for tables received in the latest system configuration via gossip.
 func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gossip.Gossip) {
@@ -621,8 +601,6 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 			select {
 			case <-gossipUpdateC:
 				cfg := *gossip.GetSystemConfig()
-				m.updateSystemConfig(cfg)
-
 				// Read all tables and their versions
 				if log.V(2) {
 					log.Info("received a new config %v", cfg)
