@@ -40,7 +40,7 @@ func makeSQLClient() (*sql.DB, string) {
 				security.ClientKeyPath(context.Certs, connUser),
 				security.CACertPath(context.Certs))
 		}
-		connURL = fmt.Sprintf("postgresql://%s@%s:%d/%s?%s",
+		connURL = fmt.Sprintf("postgresql://%s@%s:%s/%s?%s",
 			connUser, connHost, connPort, connDBName, sslOptions)
 	}
 	db, err := sql.Open("postgres", connURL)

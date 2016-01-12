@@ -227,7 +227,7 @@ func (ctx *Context) initEngine(attrsStr, path string, stopper *stop.Stopper) (en
 
 // SelfGossipAddr is a special flag that configures a node to gossip
 // only with itself. This avoids having to specify the port twice for
-// single-node clusters (i.e. once in --addr, and again in --gossip).
+// single-node clusters (i.e. once in --host/--port, and again in --gossip).
 const SelfGossipAddr = "self="
 
 // parseGossipBootstrapResolvers parses a comma-separated list of
