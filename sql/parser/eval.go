@@ -1328,31 +1328,27 @@ func (ctx EvalContext) ParseTimestamp(s DString) (DTimestamp, error) {
 	return DTimestamp{}, err
 }
 
-var (
-	startsWithRe = regexp.MustCompile(`^([^_%]+)%$`)
-	endsWithRe   = regexp.MustCompile(`^%([^_%]+)$`)
-	containsRe   = regexp.MustCompile(`^%([^_%]+)%$`)
-)
-
 // Simplifies LIKE expressions that do not need full regular expressions to evaluate the condition.
 // For example, when the expression is just checking to see if a string starts with a given
 // pattern.
 func optimizedLikeFunc(pattern string) func(string) bool {
-	// if guards below protect from escapes on trailing %.
-	// Cases like "something\%" are not optimized, but this does not affect correctness.
-	if pre := startsWithRe.FindStringSubmatch(pattern); pre != nil && !strings.HasSuffix(pattern, `\`) {
-		return func(s string) bool {
-			return strings.HasPrefix(s, pre[1])
-		}
-	}
-	if suf := endsWithRe.FindStringSubmatch(pattern); suf != nil {
-		return func(s string) bool {
-			return strings.HasSuffix(s, suf[1])
-		}
-	}
-	if cont := containsRe.FindStringSubmatch(pattern); cont != nil && !strings.HasSuffix(pattern, `\`) {
-		return func(s string) bool {
-			return strings.Contains(s, cont[1])
+	if !strings.ContainsRune(pattern[1:len(pattern)-1], '%') {
+		// Cases like "something\%" are not optimized, but this does not affect correctness.
+		matchStart := pattern[len(pattern)-1] == '%' && pattern[len(pattern)-2] != '\\'
+		matchEnd := pattern[0] == '%'
+		switch {
+		case matchStart && matchEnd:
+			return func(s string) bool {
+				return strings.Contains(s, pattern[1:len(pattern)-1])
+			}
+		case matchStart:
+			return func(s string) bool {
+				return strings.HasPrefix(s, pattern[:len(pattern)-1])
+			}
+		case matchEnd:
+			return func(s string) bool {
+				return strings.HasSuffix(s, pattern[1:])
+			}
 		}
 	}
 	return nil

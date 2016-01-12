@@ -435,6 +435,9 @@ var optimizedLikePatterns = []string{
 	`test%`,
 	`%test%`,
 	`%test`,
+	`test`,
+	`bad`,
+	`also\%`,
 }
 
 func benchmarkLike(b *testing.B, ctx EvalContext) {
