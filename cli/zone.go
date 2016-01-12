@@ -81,7 +81,7 @@ func runGetZone(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	db := makeSQLClient()
+	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
 	_, rows, err := runQueryWithFormat(db, fmtMap{"config": formatZone},
 		`SELECT * FROM system.zones WHERE id=$1`, id)
@@ -114,7 +114,7 @@ func runLsZones(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)
 		return
 	}
-	db := makeSQLClient()
+	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
 	_, rows, err := runQueryWithFormat(db, fmtMap{"config": formatZone}, `SELECT * FROM system.zones`)
 	if err != nil {
@@ -155,7 +155,7 @@ func runRmZone(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	db := makeSQLClient()
+	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
 	err = runPrettyQuery(db, os.Stdout, `DELETE FROM system.zones WHERE id=$1`, id)
 	if err != nil {
@@ -226,7 +226,7 @@ func runSetZone(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	db := makeSQLClient()
+	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
 	// TODO(marc): switch to UPSERT.
 	err = runPrettyQuery(db, os.Stdout, `INSERT INTO system.zones VALUES ($1, $2)`, id, buf)
