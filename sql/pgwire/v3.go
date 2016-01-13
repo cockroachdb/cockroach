@@ -60,6 +60,7 @@ const (
 	serverMsgEmptyQuery           serverMessageType = 'I'
 	serverMsgParameterDescription serverMessageType = 't'
 	serverMsgBindComplete         serverMessageType = '2'
+	serverMsgParameterStatus      serverMessageType = 'S'
 )
 
 //go:generate stringer -type=prepareType
@@ -159,6 +160,20 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	c.writeBuf.putInt32(authOK)
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
 		return err
+	}
+	for key, value := range map[string]string{
+		"client_encoding": "UTF8",
+		"DateStyle":       "ISO",
+	} {
+		c.writeBuf.initMsg(serverMsgParameterStatus)
+		for _, str := range [...]string{key, value} {
+			if err := c.writeBuf.writeString(str); err != nil {
+				return err
+			}
+		}
+		if err := c.writeBuf.finishMsg(c.wr); err != nil {
+			return err
+		}
 	}
 	if err := c.wr.Flush(); err != nil {
 		return err
@@ -307,10 +322,16 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		inTypes:     make([]oid.Oid, len(args)),
 		portalNames: make(map[string]struct{}),
 	}
+	copy(pq.inTypes, inTypeHints)
 	for k, v := range args {
 		i, err := strconv.Atoi(k)
 		if err != nil {
 			return c.sendError(fmt.Sprintf("non-integer parameter name: %s", k))
+		}
+		// OID to Datum is not a 1-1 mapping (for example, int4 and int8 both map
+		// to DummyInt), so we need to maintain the types sent by the client.
+		if pq.inTypes[i-1] != 0 {
+			continue
 		}
 		id, ok := datumToOid[v]
 		if !ok {
@@ -461,8 +482,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		}
 		d, err := decodeOidDatum(t, paramFormatCodes[i], b)
 		if err != nil {
-			// TODO(mjibson): format b correctly on a binary format code.
-			return c.sendError(fmt.Sprintf("param $%d (%q): %s", i+1, string(b), err))
+			return c.sendError(fmt.Sprintf("param $%d: %s", i+1, err))
 		}
 		params[i] = d
 	}
@@ -538,7 +558,13 @@ func (c *v3Conn) executeStatements(stmts string, params []driver.Datum, formatCo
 
 func (c *v3Conn) sendCommandComplete(tag []byte) error {
 	c.writeBuf.initMsg(serverMsgCommandComplete)
-	c.writeBuf.Write(tag)
+	// Callers are required to provide the null terminator, except for the nil
+	// case where it is done for them.
+	if tag == nil {
+		c.writeBuf.WriteByte(0)
+	} else {
+		c.writeBuf.Write(tag)
+	}
 	return c.writeBuf.finishMsg(c.wr)
 }
 
@@ -646,6 +672,15 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, se
 			tag = appendUint(tag, uint(len(resultRows.Rows)))
 			tag = append(tag, byte(0))
 			if err := c.sendCommandComplete(tag); err != nil {
+				return err
+			}
+
+		// Ack messages do not have a corresponding protobuf field, so handle those
+		// with a default.
+		default:
+			// A real Postgres will send a tag back, but testing so far shows that
+			// clients will accept an empty tag also.
+			if err := c.sendCommandComplete(nil); err != nil {
 				return err
 			}
 		}

@@ -23,16 +23,22 @@ import (
 	"testing"
 )
 
-// TestRuby connects to a cluster with ruby.
-func TestRuby(t *testing.T) {
-	testDockerSuccess(t, "ruby", []string{"ruby", "-e", strings.Replace(ruby, "%v", "3", 1)})
-	testDockerFail(t, "ruby", []string{"ruby", "-e", strings.Replace(ruby, "%v", `"a"`, 1)})
+// TestPHP connects to a cluster with PHP.
+func TestPHP(t *testing.T) {
+	testDockerSuccess(t, "php", []string{"-r", strings.Replace(php, "%v", "3", 1)})
+	testDockerFail(t, "php", []string{"-r", strings.Replace(php, "%v", `"a"`, 1)})
 }
 
-const ruby = `
-require 'pg'
+const php = `
+function kill($msg) {
+	echo($msg);
+	exit(1);
+}
 
-conn = PG.connect()
-res = conn.exec_params('SELECT 1, 2 > $1, $1', [%v])
-raise 'Unexpected: ' + res.values.to_s unless res.values == [["1", "f", "3"]]
+$dbconn = pg_connect('')
+	or kill('Could not connect: ' . pg_last_error());
+$result = pg_query_params('SELECT 1, 2 > $1, $1', [%v])
+	or kill('Query failed: ' . pg_last_error());
+$arr = pg_fetch_row($result);
+($arr === ['1', 'f', '3']) or kill('Unexpected: ' . print_r($arr, true));
 `
