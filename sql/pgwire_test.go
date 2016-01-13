@@ -228,7 +228,7 @@ func TestPGPrepared(t *testing.T) {
 		"SELECT 3 + $1, $1 + $2": {
 			base.Params("1", "2").Results(4, 3),
 			base.Params(3, "4").Results(6, 7),
-			base.Params(0, "a").Error(`pq: param $2 ("a"): unknown int value`),
+			base.Params(0, "a").Error(`pq: param $2: strconv.ParseInt: parsing "a": invalid syntax`),
 		},
 		// TODO(mjibson): test date/time types
 	}
