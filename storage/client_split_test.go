@@ -516,7 +516,6 @@ func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key
 // exceeding zone's RangeMaxBytes.
 func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("#3762")
 	store, stopper := createTestStore(t)
 	config.TestingSetupZoneConfigHook(stopper)
 	defer stopper.Stop()
@@ -534,12 +533,13 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	// Wait for the range to be split along table boundaries.
 	originalRange := store.LookupReplica(roachpb.RKey(keys.UserTableDataMin), nil)
 	var rng *storage.Replica
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, splitTimeout, func() error {
 		rng = store.LookupReplica(keys.MakeTablePrefix(descID), nil)
-		return rng.RangeID != originalRange.RangeID
-	}, splitTimeout); err != nil {
-		t.Fatalf("failed to notice range max bytes update: %s", err)
-	}
+		if rng.RangeID == originalRange.RangeID {
+			return util.Errorf("expected new range created by split")
+		}
+		return nil
+	})
 
 	// Check range's max bytes settings.
 	if rng.GetMaxBytes() != maxBytes {
@@ -576,7 +576,6 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 // split.
 func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("#3749")
 	store, stopper := createTestStore(t)
 	config.TestingSetupZoneConfigHook(stopper)
 	defer stopper.Stop()
@@ -611,7 +610,6 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 // the SystemConfig span.
 func TestStoreRangeSystemSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("#3698")
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
