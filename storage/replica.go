@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -959,8 +960,13 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 	var pErr *roachpb.Error
 	if err == nil {
 		// If the command was accepted by raft, wait for the range to apply it.
-		respWithErr := <-pendingCmd.done
-		br, pErr = respWithErr.Reply, respWithErr.Err
+		select {
+		case respWithErr := <-pendingCmd.done:
+			br, pErr = respWithErr.Reply, respWithErr.Err
+		case <-ctx.Done():
+			return br, roachpb.NewError(ctx.Err())
+		}
+
 	} else {
 		pErr = roachpb.NewError(err)
 	}
@@ -1608,7 +1614,7 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	// Gossip the cluster ID from all replicas of the first range; there
 	// is no expiration on the cluster ID.
 	if log.V(1) {
-		log.Infoc(ctx, "gossiping cluster id %s from store %d, range %d", r.store.ClusterID(),
+		log.Infoc(ctx, "gossiping cluster id %q from store %d, range %d", r.store.ClusterID(),
 			r.store.StoreID(), r.RangeID)
 	}
 	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, []byte(r.store.ClusterID()), 0*time.Second); err != nil {
@@ -1714,8 +1720,9 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 			if args.Method() == roachpb.EndTransaction {
 				var ba roachpb.BatchRequest
 				txn := item.intents[0].Txn
+				gcKey := r.Desc().StartKey.AsRawKey()
 				gcArgs := roachpb.GCRequest{
-					Span: roachpb.Span{Key: r.Desc().StartKey.AsRawKey()},
+					Span: roachpb.Span{Key: gcKey, EndKey: gcKey.Next()},
 				}
 				{
 					kvs, err := r.sequence.GetAllTransactionID(r.store.Engine(), txn.ID)
@@ -1732,7 +1739,9 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 				gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{Key: keys.TransactionKey(txn.Key, txn.ID)})
 
 				ba.Add(&gcArgs)
-				if _, pErr := r.addWriteCmd(ctx, ba, nil /* nil */); pErr != nil {
+				ctxWithDeadline, cancel := context.WithDeadline(ctx, time.Now().Add(rpc.DefaultRPCTimeout))
+				defer cancel()
+				if _, pErr := r.addWriteCmd(ctxWithDeadline, ba, nil /* nil */); pErr != nil {
 					log.Warningf("could not GC completed transaction: %s", pErr)
 				}
 			}

@@ -35,6 +35,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
+// DefaultRPCTimeout is the default timeout on RPC calls.
+const DefaultRPCTimeout = 5 * time.Second
+
 const (
 	defaultHeartbeatInterval = 3 * time.Second
 

@@ -41,7 +41,6 @@ import (
 // Default constants for timeouts.
 const (
 	defaultSendNextTimeout = 10 * time.Second // for now; see #2500
-	defaultRPCTimeout      = 5 * time.Second
 	defaultClientTimeout   = 10 * time.Second
 	retryBackoff           = 250 * time.Millisecond
 	maxRetryBackoff        = 30 * time.Second
@@ -336,7 +335,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 		N:               1,
 		Ordering:        order,
 		SendNextTimeout: defaultSendNextTimeout,
-		Timeout:         defaultRPCTimeout,
+		Timeout:         rpc.DefaultRPCTimeout,
 		Trace:           trace,
 	}
 	// getArgs clones the arguments on demand for all but the first replica.
