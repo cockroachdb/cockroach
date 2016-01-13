@@ -341,7 +341,7 @@ func TestRangeReadConsistency(t *testing.T) {
 
 	// Lose the lease and verify CONSISTENT reads receive NotLeaderError
 	// and INCONSISTENT reads work as expected.
-	start := tc.rng.getLease().Expiration.Add(1, 0)
+	start := tc.rng.getLeaderLease().Expiration.Add(1, 0)
 	tc.manualClock.Set(start.WallTime)
 	setLeaderLease(t, tc.rng, &roachpb.Lease{
 		Start:      start,
@@ -392,7 +392,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	pArgs := putArgs(roachpb.Key("a"), []byte("asd"))
 
 	// Lose the lease.
-	start := tc.rng.getLease().Expiration.Add(1, 0)
+	start := tc.rng.getLeaderLease().Expiration.Add(1, 0)
 	tc.manualClock.Set(start.WallTime)
 	setLeaderLease(t, tc.rng, &roachpb.Lease{
 		Start:      start,
@@ -431,7 +431,7 @@ func TestRangeRangeBoundsChecking(t *testing.T) {
 // hasLease returns whether the most recent leader lease was held by the given
 // range replica and whether it's expired for the given timestamp.
 func hasLease(rng *Replica, timestamp roachpb.Timestamp) (bool, bool) {
-	l := rng.getLease()
+	l := rng.getLeaderLease()
 	return l.OwnedBy(rng.store.StoreID()), !l.Covers(timestamp)
 }
 
@@ -866,7 +866,7 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 
 	// Increment the clock's timestamp to expire the leader lease.
 	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration) + 1)
-	if lease := tc.rng.getLease(); lease.Covers(tc.clock.Now()) {
+	if lease := tc.rng.getLeaderLease(); lease.Covers(tc.clock.Now()) {
 		t.Fatal("leader lease should have been expired")
 	}
 
@@ -1029,7 +1029,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 		// the start of a lease as far as possible, and since there is an auto-
 		// matic lease for us at the beginning, we'll basically create a lease from
 		// then on.
-		expStart := tc.rng.getLease().Start
+		expStart := tc.rng.getLeaderLease().Start
 		tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1000))
 
 		ts := tc.clock.Now().Next()
@@ -1039,7 +1039,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 		if held, expired := hasLease(tc.rng, ts); !held || expired {
 			t.Fatalf("%d: expected lease acquisition", i)
 		}
-		lease := tc.rng.getLease()
+		lease := tc.rng.getLeaderLease()
 		if !lease.Start.Equal(expStart) {
 			t.Errorf("%d: unexpected lease start: %s; expected %s", i, lease.Start, expStart)
 		}

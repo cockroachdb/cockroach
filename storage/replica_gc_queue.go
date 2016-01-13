@@ -75,7 +75,7 @@ func (*replicaGCQueue) acceptsUnsplitRanges() bool {
 func (*replicaGCQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 	_ *config.SystemConfig) (bool, float64) {
 
-	return rng.getLease().Expiration.Add(
+	return rng.getLeaderLease().Expiration.Add(
 		ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0,
 	).Less(now), 0
 }

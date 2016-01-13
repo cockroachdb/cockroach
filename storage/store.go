@@ -1797,7 +1797,7 @@ func (s *Store) computeReplicationStatus(now int64) (
 			}
 
 			// If any replica holds the leader lease, the range is available.
-			if rng.getLease().Covers(timestamp) {
+			if rng.getLeaderLease().Covers(timestamp) {
 				availableRangeCount++
 			} else {
 				// If there is no leader lease, then as long as more than 50%
