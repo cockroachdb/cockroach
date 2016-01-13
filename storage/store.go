@@ -902,8 +902,6 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	return nil
 }
 
-// The following methods implement the RangeManager interface.
-
 // ClusterID accessor.
 func (s *Store) ClusterID() string { return s.Ident.ClusterID }
 
