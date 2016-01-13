@@ -1385,7 +1385,8 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	if ba.IsWrite() {
 		if err == nil {
 			// If command was successful, flush the MVCC stats to the batch.
-			if err := r.stats.MergeMVCCStats(btch, ms, ba.Timestamp.WallTime); err != nil {
+			ms.AgeTo(ba.Timestamp.WallTime)
+			if err := r.stats.MergeMVCCStats(btch, *ms); err != nil {
 				// TODO(tschottdorf): ReplicaCorruptionError.
 				log.Fatalc(ctx, "setting mvcc stats in a batch should never fail: %s", err)
 			}
