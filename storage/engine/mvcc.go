@@ -227,8 +227,9 @@ func updateStatsForInline(ms *MVCCStats, key roachpb.Key, origMetaKeySize, origM
 // values. Unfortunately, we're unable to keep accurate stats on merge
 // as the actual details of the merge play out asynchronously during
 // compaction. Instead, we undercount by adding only the size of the
-// value.Bytes byte slice. These errors are corrected during splits
-// and merges.
+// value.Bytes byte slice (an estimated 12 bytes for timestamp,
+// included in valSize by caller). These errors are corrected during
+// splits and merges.
 func updateStatsOnMerge(ms *MVCCStats, key roachpb.Key, valSize int64) {
 	ok, sys := updateStatsForKey(ms, key)
 	if !ok {
@@ -965,7 +966,7 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp
 // concatenates undifferentiated byte slice values, and efficiently
 // combines time series observations if the roachpb.Value tag value
 // indicates the value byte slice is of type TIMESERIES.
-func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, value roachpb.Value) error {
+func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp, value roachpb.Value) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -973,6 +974,10 @@ func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, value roachpb.Valu
 
 	// Encode and merge the MVCC metadata with inlined value.
 	meta := &MVCCMetadata{RawBytes: value.RawBytes}
+	// If non-zero, set the merge timestamp to provide some replay protection.
+	if !timestamp.Equal(roachpb.ZeroTimestamp) {
+		meta.MergeTimestamp = &timestamp
+	}
 	data, err := proto.Marshal(meta)
 	if err != nil {
 		return err
@@ -981,7 +986,7 @@ func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, value roachpb.Valu
 		return err
 	}
 	// Every type flows through here, so we can't use the typed getters.
-	updateStatsOnMerge(ms, key, int64(len(value.RawBytes)))
+	updateStatsOnMerge(ms, key, int64(len(value.RawBytes))+mvccVersionTimestampSize)
 	return nil
 }
 
