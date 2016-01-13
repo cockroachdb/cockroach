@@ -64,8 +64,8 @@ CREATE TABLE system.zones (
 )
 
 var (
-	// SystemDB is the descriptor for the system database.
-	SystemDB = DatabaseDescriptor{
+	// systemDB is the descriptor for the system database.
+	systemDB = DatabaseDescriptor{
 		Name: "system",
 		ID:   keys.SystemDatabaseID,
 		// Assign max privileges to root user.
@@ -73,17 +73,17 @@ var (
 			SystemAllowedPrivileges[keys.SystemDatabaseID]),
 	}
 
-	// NamespaceTable is the descriptor for the namespace table.
-	NamespaceTable = createSystemTable(keys.NamespaceTableID, namespaceTableSchema)
+	// namespaceTable is the descriptor for the namespace table.
+	namespaceTable = createSystemTable(keys.NamespaceTableID, namespaceTableSchema)
 
-	// DescriptorTable is the descriptor for the descriptor table.
-	DescriptorTable = createSystemTable(keys.DescriptorTableID, descriptorTableSchema)
+	// descriptorTable is the descriptor for the descriptor table.
+	descriptorTable = createSystemTable(keys.DescriptorTableID, descriptorTableSchema)
 
-	// UsersTable is the descriptor for the users table.
-	UsersTable = createSystemTable(keys.UsersTableID, usersTableSchema)
+	// usersTable is the descriptor for the users table.
+	usersTable = createSystemTable(keys.UsersTableID, usersTableSchema)
 
-	// ZonesTable is the descriptor for the zones table.
-	ZonesTable = createSystemTable(keys.ZonesTableID, zonesTableSchema)
+	// zonesTable is the descriptor for the zones table.
+	zonesTable = createSystemTable(keys.ZonesTableID, zonesTableSchema)
 
 	// SystemAllowedPrivileges describes the privileges allowed for each
 	// system object. No user may have more than those privileges, and
@@ -95,6 +95,8 @@ var (
 		keys.DescriptorTableID: privilege.ReadData,
 		keys.UsersTableID:      privilege.ReadWriteData,
 		keys.ZonesTableID:      privilege.ReadWriteData,
+		keys.LeaseTableID:      privilege.ReadWriteData,
+		keys.RangeEventTableID: privilege.ReadWriteData,
 	}
 
 	// NumSystemDescriptors should be set to the number of system descriptors
@@ -129,7 +131,7 @@ func createTableDescriptor(id, parentID ID, schema string, privileges *Privilege
 
 	desc.ID = id
 	if err := desc.AllocateIDs(); err != nil {
-		log.Fatal(err)
+		log.Fatalf("%s: %v", desc.Name, err)
 	}
 
 	return desc
@@ -141,20 +143,24 @@ func createTableDescriptor(id, parentID ID, schema string, privileges *Privilege
 // descriptors to the cockroach store.
 func addSystemDatabaseToSchema(target *MetadataSchema) {
 	// Add system database.
-	target.AddSystemDescriptor(keys.RootNamespaceID, &SystemDB)
+	target.AddDescriptor(keys.RootNamespaceID, &systemDB)
 
 	// Add system config tables.
-	target.AddSystemDescriptor(keys.SystemDatabaseID, &NamespaceTable)
-	target.AddSystemDescriptor(keys.SystemDatabaseID, &DescriptorTable)
-	target.AddSystemDescriptor(keys.SystemDatabaseID, &UsersTable)
-	target.AddSystemDescriptor(keys.SystemDatabaseID, &ZonesTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &namespaceTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &descriptorTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &usersTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &zonesTable)
 
 	// Add other system tables.
-	target.AddTable(leaseTableSchema,
-		NewPrivilegeDescriptor(security.RootUser, privilege.List{privilege.ALL}))
+	target.AddTable(keys.LeaseTableID, leaseTableSchema, privilege.List{privilege.ALL})
 }
 
-// isSystemConfigID returns true if this ID is reserved for system objects.
+// isSystemConfigID returns true if this ID is for a system config object.
 func isSystemConfigID(id ID) bool {
 	return id > 0 && id <= keys.MaxSystemConfigDescID
+}
+
+// isSystemID returns true if this ID is for a system object.
+func isSystemID(id ID) bool {
+	return id > 0 && id <= keys.MaxReservedDescID
 }

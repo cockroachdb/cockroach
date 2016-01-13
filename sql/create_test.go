@@ -67,7 +67,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
 	}
 
-	start := roachpb.Key(keys.MakeTablePrefix(uint32(sql.NamespaceTable.ID)))
+	start := roachpb.Key(keys.MakeTablePrefix(uint32(keys.NamespaceTableID)))
 	if kvs, err := kvDB.Scan(start, start.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else {

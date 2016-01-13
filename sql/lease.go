@@ -595,7 +595,7 @@ func (m *LeaseManager) findTableState(tableID ID, create bool) *tableState {
 // leases for tables received in the latest system configuration via gossip.
 func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gossip.Gossip) {
 	s.RunWorker(func() {
-		descKeyPrefix := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
+		descKeyPrefix := keys.MakeTablePrefix(uint32(descriptorTable.ID))
 		gossipUpdateC := gossip.RegisterSystemConfigChannel()
 		for {
 			select {

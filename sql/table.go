@@ -215,7 +215,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*TableDescriptor, 
 		return nil, roachpb.NewError(err)
 	}
 
-	if qname.Database() == SystemDB.Name || testDisableTableLeases {
+	if qname.Database() == systemDB.Name || testDisableTableLeases {
 		// We don't go through the normal lease mechanism for system tables. The
 		// system.lease and system.descriptor table, in particular, are problematic
 		// because they are used for acquiring leases itself, creating a

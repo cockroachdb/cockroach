@@ -200,10 +200,15 @@ const (
 
 	// SystemDatabaseID and following are the database/table IDs for objects
 	// in the system span.
-	// NOTE: IDs should remain <= MaxSystemConfigDescID.
+	// NOTE: IDs must be <= MaxSystemConfigDescID.
 	SystemDatabaseID  = 1
 	NamespaceTableID  = 2
 	DescriptorTableID = 3
 	UsersTableID      = 4
 	ZonesTableID      = 5
+
+	// Reserved IDs for other system tables.
+	// NOTE: IDs must be <= MaxReservedDescID.
+	LeaseTableID      = 11
+	RangeEventTableID = 12
 )
