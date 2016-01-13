@@ -94,7 +94,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	sCtx.Gossip = gossip.New(rpcContext, gossip.TestBootstrap)
 	sCtx.Gossip.SetNodeID(nodeDesc.NodeID)
 	sCtx.Tracer = tracer.NewTracer(nil, "testing")
-	localSender := storage.NewStores(clock)
+	stores := storage.NewStores(clock)
 	rpcSend := func(_ rpc.Options, _ string, _ []net.Addr,
 		getArgs func(addr net.Addr) proto.Message, _ func() proto.Message,
 		_ *rpc.Context) ([]proto.Message, error) {
@@ -102,7 +102,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 		trace := sCtx.Tracer.NewTrace("store", ba)
 		defer trace.Finalize()
 		ctx := tracer.ToCtx(context.Background(), trace)
-		br, pErr := localSender.Send(ctx, *ba)
+		br, pErr := stores.Send(ctx, *ba)
 		if br == nil {
 			br = &roachpb.BatchResponse{}
 		}
@@ -115,8 +115,8 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	}
 	distSender := kv.NewDistSender(&kv.DistSenderContext{
 		Clock:             clock,
-		RPCSend:           rpcSend,     // defined above
-		RangeDescriptorDB: localSender, // for descriptor lookup
+		RPCSend:           rpcSend, // defined above
+		RangeDescriptorDB: stores,  // for descriptor lookup
 	}, sCtx.Gossip)
 
 	sender := kv.NewTxnCoordSender(distSender, clock, false, nil, stopper)
@@ -130,7 +130,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 			t.Fatal(err)
 		}
 	}
-	localSender.AddStore(store)
+	stores.AddStore(store)
 	if bootstrap {
 		if err := store.BootstrapRange(sql.MakeMetadataSchema().GetInitialValues()); err != nil {
 			t.Fatal(err)
@@ -333,7 +333,7 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 		case *roachpb.RangeKeyMismatchError:
 		case *roachpb.NotLeaderError:
 			if tErr.Leader == nil {
-				// localSender has the range, is *not* the Leader, but the
+				// stores has the range, is *not* the Leader, but the
 				// Leader is not known; this can happen if the leader is removed
 				// from the group. Move the manual clock forward in an attempt to
 				// expire the lease.
