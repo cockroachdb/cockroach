@@ -999,7 +999,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 	// This may not happen if the system config has not yet been loaded.
 	// Since this is done under the store lock, system config update will
 	// properly set these fields.
-	if err := newRng.updateRangeInfo(); err != nil {
+	if err := newRng.updateRangeInfo(newRng.Desc()); err != nil {
 		return err
 	}
 
