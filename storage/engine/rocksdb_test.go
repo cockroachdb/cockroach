@@ -456,10 +456,12 @@ func runMVCCMerge(value *roachpb.Value, numKeys int, b *testing.B) {
 	b.ResetTimer()
 
 	// Use parallelism if specified when test is run.
+	ts := roachpb.Timestamp{}
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			ms := MVCCStats{}
-			if err := MVCCMerge(rocksdb, &ms, keys[rand.Intn(numKeys)], *value); err != nil {
+			ts.Logical++
+			if err := MVCCMerge(rocksdb, &ms, keys[rand.Intn(numKeys)], ts, *value); err != nil {
 				b.Fatal(err)
 			}
 		}
