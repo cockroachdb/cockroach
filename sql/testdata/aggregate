@@ -496,3 +496,34 @@ EXPLAIN SELECT MAX(x) FROM xyz WHERE (z, y) = (3, 2)
 ----
 0 group   MAX(x)
 1 revscan xyz@zyx 1:/3/2/#-/3/3
+
+query RRR
+SELECT VARIANCE(x), VARIANCE(y), VARIANCE(z) FROM xyz;
+----
+9 4.5 6.333333333333333
+
+query R
+SELECT VARIANCE(x) FROM xyz WHERE x = 10;
+----
+NULL
+
+query R
+SELECT VARIANCE(x) FROM xyz WHERE x = 1;
+----
+NULL
+
+query ITT
+EXPLAIN SELECT VARIANCE(x) FROM xyz WHERE x = 1;
+----
+0 group VARIANCE(x)
+1 scan xyz@xy /1-/2
+
+query RRR
+SELECT STDDEV(x), STDDEV(y), STDDEV(z) FROM xyz;
+----
+3 2.1213203435596424 2.516611478423583
+
+query R
+SELECT STDDEV(x) FROM xyz WHERE x = 1;
+----
+NULL
