@@ -616,6 +616,20 @@ bool MergeValues(cockroach::storage::engine::MVCCMetadata *left,
       rocksdb::Warn(logger, "inconsistent value types for merge (left = bytes, right = ?)");
       return false;
     }
+    // Check for replay; if left timestamp is equal to right, then
+    // ignore the merge request. Replays can happen on merges as there
+    // is no higher-level replay protection and Raft may duplicate commands.
+    // NOTE: there are test cases in storage/engine/merge_test and in
+    //   ts/db_test which will send MVCCMetadata with empty timestamps
+    //   and should always be merged; thus the check for non-empty timestamps.
+    if ((left->timestamp().wall_time() != 0 || left->timestamp().logical() != 0) &&
+        (right.timestamp().wall_time() != 0 || right.timestamp().logical() != 0) &&
+        left->timestamp().wall_time() == right.timestamp().wall_time() &&
+        left->timestamp().logical() == right.timestamp().logical()) {
+      return true;
+    }
+    left->mutable_timestamp()->CopyFrom(right.timestamp());
+
     if (IsTimeSeriesData(left->raw_bytes()) || IsTimeSeriesData(right.raw_bytes())) {
       // The right operand must also be a time series.
       if (!IsTimeSeriesData(left->raw_bytes()) || !IsTimeSeriesData(right.raw_bytes())) {
@@ -631,6 +645,7 @@ bool MergeValues(cockroach::storage::engine::MVCCMetadata *left,
     return true;
   } else {
     left->mutable_raw_bytes()->assign(right.raw_bytes());
+    left->mutable_timestamp()->CopyFrom(right.timestamp());
     if (full_merge && IsTimeSeriesData(left->raw_bytes())) {
       ConsolidateTimeSeriesValue(left->mutable_raw_bytes(), logger);
     }
@@ -679,7 +694,6 @@ class DBMergeOperator : public rocksdb::MergeOperator {
     // corruption error will be returned, but likely only after the next
     // read of the key). In effect, there is no propagation of error
     // information to the client.
-
     cockroach::storage::engine::MVCCMetadata meta;
     if (existing_value != NULL) {
       if (!meta.ParseFromArray(existing_value->data(), existing_value->size())) {
