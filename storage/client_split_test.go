@@ -534,12 +534,13 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	// Wait for the range to be split along table boundaries.
 	originalRange := store.LookupReplica(roachpb.RKey(keys.UserTableDataMin), nil)
 	var rng *storage.Replica
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, splitTimeout, func() error {
 		rng = store.LookupReplica(keys.MakeTablePrefix(descID), nil)
-		return rng.RangeID != originalRange.RangeID
-	}, splitTimeout); err != nil {
-		t.Fatalf("failed to notice range max bytes update: %s", err)
-	}
+		if rng.RangeID == originalRange.RangeID {
+			return util.Errorf("expected new range created by split")
+		}
+		return nil
+	})
 
 	// Check range's max bytes settings.
 	if rng.GetMaxBytes() != maxBytes {
