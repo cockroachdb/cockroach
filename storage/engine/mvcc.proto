@@ -24,7 +24,10 @@ import weak "gogoproto/gogo.proto";
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 message MVCCMetadata {
   optional roachpb.Transaction txn = 1;
-  // The timestamp of the most recent versioned value.
+  // The timestamp of the most recent versioned value if this is a
+  // value that may have multiple versions. For inline values this
+  // will always be set to zero. Inline values will have raw_bytes
+  // set (e.g. on merged time series data).
   optional roachpb.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   // Is the most recent value a deletion tombstone?
   optional bool deleted = 3 [(gogoproto.nullable) = false];
@@ -32,12 +35,16 @@ message MVCCMetadata {
   optional int64 key_bytes = 4 [(gogoproto.nullable) = false];
   // The size in bytes of the most recent versioned value.
   optional int64 val_bytes = 5 [(gogoproto.nullable) = false];
-  // Inline value, used for values with zero timestamp. This provides
-  // an efficient short circuit of the normal MVCC metadata sentinel
-  // and subsequent version rows. If timestamp == (0, 0), then there
-  // is only a single MVCC metadata row with value inlined, and with
-  // empty timestamp, key_bytes, and val_bytes.
+  // Inline value, used for non-versioned values with zero
+  // timestamp. This provides an efficient short circuit of the normal
+  // MVCC metadata sentinel and subsequent version rows. If timestamp
+  // == (0, 0), then there is only a single MVCC metadata row with
+  // value inlined, and with empty timestamp, key_bytes, and
+  // val_bytes.
   optional bytes raw_bytes = 6;
+  // This provides a measure of protection against replays caused by
+  // Raft duplicating merge commands.
+  optional roachpb.Timestamp merge_timestamp = 7;
 }
 
 // MVCCStats tracks byte and instance counts for:

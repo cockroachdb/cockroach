@@ -616,6 +616,23 @@ bool MergeValues(cockroach::storage::engine::MVCCMetadata *left,
       rocksdb::Warn(logger, "inconsistent value types for merge (left = bytes, right = ?)");
       return false;
     }
+    // Check for replay; if left merge_timestamp is equal to right,
+    // then ignore the merge request. Replays can happen on merges as
+    // there is no higher-level replay protection and Raft may
+    // duplicate commands.
+    //
+    // NOTE: there are test cases in storage/engine/merge_test and in
+    //   ts/db_test which will send MVCCMetadata with empty
+    //   merge_timestamps and should always be merged; thus the check
+    //   for non-empty merge_timestamps.
+    if (left->has_merge_timestamp() && right.has_merge_timestamp()) {
+      if (left->merge_timestamp().wall_time() == right.merge_timestamp().wall_time() &&
+          left->merge_timestamp().logical() == right.merge_timestamp().logical()) {
+        return true;
+      }
+      left->mutable_merge_timestamp()->CopyFrom(right.merge_timestamp());
+    }
+
     if (IsTimeSeriesData(left->raw_bytes()) || IsTimeSeriesData(right.raw_bytes())) {
       // The right operand must also be a time series.
       if (!IsTimeSeriesData(left->raw_bytes()) || !IsTimeSeriesData(right.raw_bytes())) {
@@ -631,6 +648,9 @@ bool MergeValues(cockroach::storage::engine::MVCCMetadata *left,
     return true;
   } else {
     left->mutable_raw_bytes()->assign(right.raw_bytes());
+    if (right.has_merge_timestamp()) {
+      left->mutable_merge_timestamp()->CopyFrom(right.merge_timestamp());
+    }
     if (full_merge && IsTimeSeriesData(left->raw_bytes())) {
       ConsolidateTimeSeriesValue(left->mutable_raw_bytes(), logger);
     }
@@ -679,7 +699,6 @@ class DBMergeOperator : public rocksdb::MergeOperator {
     // corruption error will be returned, but likely only after the next
     // read of the key). In effect, there is no propagation of error
     // information to the client.
-
     cockroach::storage::engine::MVCCMetadata meta;
     if (existing_value != NULL) {
       if (!meta.ParseFromArray(existing_value->data(), existing_value->size())) {
