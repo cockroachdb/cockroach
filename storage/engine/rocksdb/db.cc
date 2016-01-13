@@ -1482,6 +1482,10 @@ DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
   return MergeResult(&meta, new_value);
 }
 
+// TODO(tschottdorf): it's unfortunate that this method duplicates the logic
+// in (*MVCCStats).AgeTo. Passing now_nanos in is semantically tricky if there
+// is a chance that we run into values ahead of now_nanos. Instead, now_nanos
+// should be taken as a hint but determined by the max timestamp encountered.
 MVCCStatsResult MVCCComputeStats(
     DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos) {
   MVCCStatsResult stats;
@@ -1541,7 +1545,7 @@ MVCCStatsResult MVCCComputeStats(
           stats.live_bytes += total_bytes;
           stats.live_count++;
         } else {
-          stats.gc_bytes_age += total_bytes * ((now_nanos - meta.timestamp().wall_time()) / 1e9);
+          stats.gc_bytes_age += total_bytes * (now_nanos / 1e9 - meta.timestamp().wall_time() / 1e9);
         }
         stats.key_bytes += meta_key_size;
         stats.val_bytes += meta_val_size;
@@ -1564,12 +1568,12 @@ MVCCStatsResult MVCCComputeStats(
         if (!meta.deleted()) {
           stats.live_bytes += total_bytes;
         } else {
-          stats.gc_bytes_age += total_bytes * ((now_nanos - meta.timestamp().wall_time()) / 1e9);
+          stats.gc_bytes_age += total_bytes * (now_nanos / 1e9 - meta.timestamp().wall_time() / 1e9);
         }
         if (meta.has_txn()) {
           stats.intent_bytes += total_bytes;
           stats.intent_count++;
-          stats.intent_age += (now_nanos - meta.timestamp().wall_time()) / 1e9;
+          stats.intent_age += now_nanos / 1e9 - meta.timestamp().wall_time() / 1e9;
         }
         if (meta.key_bytes() != kMVCCVersionTimestampSize) {
           stats.status = FmtStatus("expected mvcc metadata val bytes to equal %d; got %d",
@@ -1582,7 +1586,7 @@ MVCCStatsResult MVCCComputeStats(
           break;
         }
       } else {
-        stats.gc_bytes_age += total_bytes * ((now_nanos - walltime) / 1e9);
+        stats.gc_bytes_age += total_bytes * (now_nanos / 1e9 - walltime / 1e9);
       }
       stats.key_bytes += kMVCCVersionTimestampSize;
       stats.val_bytes += value.size();
@@ -1590,5 +1594,6 @@ MVCCStatsResult MVCCComputeStats(
     }
   }
 
+  stats.last_update_nanos = now_nanos;
   return stats;
 }

@@ -91,3 +91,20 @@ func TestSucceedsWithin(t *testing.T) {
 		return Errorf("%s elapsed, waiting until %s elapses", elapsed, duration)
 	})
 }
+
+func TestNoZeroField(t *testing.T) {
+	type foo struct {
+		X, Y int
+	}
+	testFoo := foo{1, 2}
+	if err := NoZeroField(&testFoo); err != nil {
+		t.Fatal(err)
+	}
+	if err := NoZeroField(interface{}(testFoo)); err != nil {
+		t.Fatal(err)
+	}
+	testFoo.Y = 0
+	if err := NoZeroField(&testFoo); err == nil {
+		t.Fatal("expected an error")
+	}
+}

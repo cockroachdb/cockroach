@@ -290,7 +290,7 @@ func NewStoreStatusMonitor(id roachpb.StoreID, metaRegistry *metric.Registry) *S
 func (ssm *StoreStatusMonitor) registerRange(event *storage.RegisterRangeEvent) {
 	ssm.Lock()
 	defer ssm.Unlock()
-	ssm.stats.Add(&event.Stats)
+	ssm.stats.Add(event.Stats)
 	ssm.rangeCount.Inc(1)
 	ssm.updateStorageGaugesLocked()
 }
@@ -298,16 +298,16 @@ func (ssm *StoreStatusMonitor) registerRange(event *storage.RegisterRangeEvent) 
 func (ssm *StoreStatusMonitor) updateRange(event *storage.UpdateRangeEvent) {
 	ssm.Lock()
 	defer ssm.Unlock()
-	ssm.stats.Add(&event.Delta)
+	ssm.stats.Add(event.Delta)
 	ssm.updateStorageGaugesLocked()
 }
 
 func (ssm *StoreStatusMonitor) removeRange(event *storage.RemoveRangeEvent) {
 	ssm.Lock()
 	defer ssm.Unlock()
-	ssm.stats.Subtract(&event.Stats)
-	ssm.updateStorageGaugesLocked()
+	ssm.stats.Subtract(event.Stats)
 	ssm.rangeCount.Dec(1)
+	ssm.updateStorageGaugesLocked()
 }
 
 func (ssm *StoreStatusMonitor) splitRange(event *storage.SplitRangeEvent) {

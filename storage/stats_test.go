@@ -75,7 +75,7 @@ func TestRangeStatsMerge(t *testing.T) {
 	}
 	tc.Start(t)
 	defer tc.Stop()
-	ms := engine.MVCCStats{
+	initialMS := engine.MVCCStats{
 		LiveBytes:       1,
 		KeyBytes:        2,
 		ValBytes:        2,
@@ -88,46 +88,33 @@ func TestRangeStatsMerge(t *testing.T) {
 		GCBytesAge:      1,
 		LastUpdateNanos: 1 * 1E9,
 	}
-	if err := tc.rng.stats.MergeMVCCStats(tc.engine, &ms, 10*1E9); err != nil {
+
+	ms := initialMS
+	ms.AgeTo(10 * 1E9)
+	if err := tc.rng.stats.MergeMVCCStats(tc.engine, ms); err != nil {
 		t.Fatal(err)
 	}
-	expMS := engine.MVCCStats{
-		LiveBytes:       1,
-		KeyBytes:        2,
-		ValBytes:        2,
-		IntentBytes:     1,
-		LiveCount:       1,
-		KeyCount:        1,
-		ValCount:        1,
-		IntentCount:     1,
-		IntentAge:       1,
-		GCBytesAge:      1,
-		LastUpdateNanos: 10 * 1E9,
-	}
-	if err := engine.MVCCGetRangeStats(tc.engine, 1, &ms); err != nil {
+	// Expect those stats to be forwarded to 10s and added to an empty stats
+	// object (the latter of which is a noop). Everything will be equal but
+	// the intent and gc bytes age, which will have increased.
+	expMS := ms
+	expMS.AgeTo(10 * 1E9)
+
+	if err := engine.MVCCGetRangeStats(tc.engine, 1, &initialMS); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(ms, expMS) {
-		t.Errorf("expected %+v; got %+v", expMS, ms)
+		t.Errorf("expected:\n%+v\ngot:\n%+v\n", expMS, ms)
 	}
 
-	// Merge again, but with 10 more ns.
-	if err := tc.rng.stats.MergeMVCCStats(tc.engine, &ms, 20*1E9); err != nil {
+	// Merge again, but with 10 more s and an incoming stat which has been
+	// created at 20s. This needs to age the existing stat and add the new one.
+	ms = initialMS
+	ms.LastUpdateNanos = 20 * 1E9
+	if err := tc.rng.stats.MergeMVCCStats(tc.engine, ms); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{
-		LiveBytes:       2,
-		KeyBytes:        4,
-		ValBytes:        4,
-		IntentBytes:     2,
-		LiveCount:       2,
-		KeyCount:        2,
-		ValCount:        2,
-		IntentCount:     2,
-		IntentAge:       12,
-		GCBytesAge:      32,
-		LastUpdateNanos: 20 * 1E9,
-	}
+	expMS.Add(ms)
 	if err := engine.MVCCGetRangeStats(tc.engine, 1, &ms); err != nil {
 		t.Fatal(err)
 	}
