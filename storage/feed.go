@@ -287,7 +287,7 @@ func makeSplitRangeEvent(id roachpb.StoreID, rngOrig, rngNew *Replica) *SplitRan
 	}
 	// Size delta of original range is the additive inverse of stats for
 	// the new range.
-	sre.Original.Delta.Subtract(&sre.New.Stats)
+	sre.Original.Delta.Subtract(sre.New.Stats)
 	return sre
 }
 

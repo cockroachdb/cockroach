@@ -150,7 +150,7 @@ func (nsr *NodeStatusRecorder) GetStatusSummaries() (*NodeStatus, []storage.Stor
 		// TODO(mrtracy): A number of the fields on the protocol buffer are
 		// Int32s when they would be more easily represented as Int64.
 		nodeStat.StoreIDs = append(nodeStat.StoreIDs, ssm.ID)
-		nodeStat.Stats.Add(&ssm.stats)
+		nodeStat.Stats.Add(ssm.stats)
 		nodeStat.RangeCount += int32(ssm.rangeCount.Count())
 		nodeStat.LeaderRangeCount += int32(ssm.leaderRangeCount.Value())
 		nodeStat.ReplicatedRangeCount += int32(ssm.replicatedRangeCount.Value())

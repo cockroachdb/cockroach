@@ -1350,7 +1350,7 @@ func (r *Replica) computeStats(d *roachpb.RangeDescriptor, e engine.Engine, nowN
 		if err != nil {
 			return engine.MVCCStats{}, err
 		}
-		ms.Add(&msDelta)
+		ms.Add(msDelta)
 	}
 	return *ms, nil
 }

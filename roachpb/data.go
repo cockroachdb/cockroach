@@ -815,8 +815,6 @@ func AsIntents(spans []Span, txn *Transaction) []Intent {
 }
 
 // Equal compares for equality.
-// TODO(tschottdorf): chance for code rot here. Adding a test like we did for
-// transactions (TestTransactionUpdate) can't hurt.
 func (s Span) Equal(o Span) bool {
 	return s.Key.Equal(o.Key) && s.EndKey.Equal(o.EndKey)
 }

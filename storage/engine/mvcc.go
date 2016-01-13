@@ -133,17 +133,47 @@ func (meta MVCCMetadata) IsIntentOf(txn *roachpb.Transaction) bool {
 	return meta.Txn != nil && txn != nil && bytes.Equal(meta.Txn.ID, txn.ID)
 }
 
+// GCBytes is a convenience function which returns the number of gc bytes,
+// that is the key and value bytes excluding the live bytes.
+func (ms *MVCCStats) GCBytes() int64 {
+	return ms.KeyBytes + ms.ValBytes - ms.LiveBytes
+}
+
 // Delta returns the difference between two MVCCStats structures.
+// TODO(tschottdorf): needed?
 func (ms *MVCCStats) Delta(oms *MVCCStats) MVCCStats {
 	result := *ms
-	result.Subtract(oms)
+	result.Subtract(*oms)
 	return result
 }
 
-// Add adds values from oms to ms.
-// TODO(tschottdorf): age computations here are broken when
-// LastUpdateNanos isn't the same.
-func (ms *MVCCStats) Add(oms *MVCCStats) {
+// AgeTo encapsulates the complexity of computing the increment in age
+// quantities contained in MVCCStats. Two MVCCStats structs only add and
+// subtract meaningfully if their LastUpdateNanos matches, so aging them to
+// the max of their LastUpdateNanos is a prerequisite.
+// If nowNanos is behind LastUpdateNanos, this method is a noop.
+func (ms *MVCCStats) AgeTo(nowNanos int64) {
+	if ms.LastUpdateNanos >= nowNanos {
+		return
+	}
+	diffSeconds := nowNanos/1E9 - ms.LastUpdateNanos/1E9
+
+	ms.GCBytesAge += MVCCComputeGCBytesAge(ms.GCBytes(), diffSeconds)
+	ms.IntentAge += ms.IntentCount * diffSeconds
+	ms.LastUpdateNanos = nowNanos
+}
+
+// Add adds values from oms to ms. The ages will be moved forward to the
+// larger of the LastUpdateNano timestamps involved.
+func (ms *MVCCStats) Add(oms MVCCStats) {
+	// Enforce the max LastUpdateNanos for both ages based on their
+	// pre-addition state.
+	ms.AgeTo(oms.LastUpdateNanos)
+	oms.AgeTo(ms.LastUpdateNanos)
+	// Now that we've done that, we may just add them.
+	ms.IntentAge += oms.IntentAge
+	ms.GCBytesAge += oms.GCBytesAge
+
 	ms.LiveBytes += oms.LiveBytes
 	ms.KeyBytes += oms.KeyBytes
 	ms.ValBytes += oms.ValBytes
@@ -152,19 +182,20 @@ func (ms *MVCCStats) Add(oms *MVCCStats) {
 	ms.KeyCount += oms.KeyCount
 	ms.ValCount += oms.ValCount
 	ms.IntentCount += oms.IntentCount
-	ms.IntentAge += oms.IntentAge
-	ms.GCBytesAge += oms.GCBytesAge
 	ms.SysBytes += oms.SysBytes
 	ms.SysCount += oms.SysCount
-	if oms.LastUpdateNanos > ms.LastUpdateNanos {
-		ms.LastUpdateNanos = oms.LastUpdateNanos
-	}
 }
 
-// Subtract subtracts the values of oms from ms.
-// TODO(tschottdorf): age computations here are broken when
-// LastUpdateNanos isn't the same.
-func (ms *MVCCStats) Subtract(oms *MVCCStats) {
+// Subtract adds values from oms to ms. The ages will be moved forward to the
+// larger of the LastUpdateNano timestamps involved.
+func (ms *MVCCStats) Subtract(oms MVCCStats) {
+	// Enforce the max LastUpdateNanos for both ages based on their
+	// pre-subtraction state.
+	ms.AgeTo(oms.LastUpdateNanos)
+	oms.AgeTo(ms.LastUpdateNanos)
+	// Now that we've done that, we may subtract.
+	ms.IntentAge -= oms.IntentAge
+	ms.GCBytesAge -= oms.GCBytesAge
 	ms.LiveBytes -= oms.LiveBytes
 	ms.KeyBytes -= oms.KeyBytes
 	ms.ValBytes -= oms.ValBytes
@@ -173,13 +204,8 @@ func (ms *MVCCStats) Subtract(oms *MVCCStats) {
 	ms.KeyCount -= oms.KeyCount
 	ms.ValCount -= oms.ValCount
 	ms.IntentCount -= oms.IntentCount
-	ms.IntentAge -= oms.IntentAge
-	ms.GCBytesAge -= oms.GCBytesAge
 	ms.SysBytes -= oms.SysBytes
 	ms.SysCount -= oms.SysCount
-	if oms.LastUpdateNanos > ms.LastUpdateNanos {
-		ms.LastUpdateNanos = oms.LastUpdateNanos
-	}
 }
 
 // updateStatsForKey returns whether or not the bytes and counts for

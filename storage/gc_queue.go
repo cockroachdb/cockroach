@@ -110,10 +110,10 @@ func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 	intentScore := repl.stats.GetAvgIntentAge(now.WallTime) / float64(intentAgeNormalization.Nanoseconds()/1E9)
 
 	// Compute priority.
-	if gcScore > 1 {
+	if gcScore >= 1 {
 		priority += gcScore
 	}
-	if intentScore > 1 {
+	if intentScore >= 1 {
 		priority += intentScore
 	}
 	shouldQ = priority > 0

@@ -588,22 +588,18 @@ func (r *rocksDBIterator) ComputeStats(start, end MVCCKey, nowNanos int64) (MVCC
 	if err := statusToError(result.status); err != nil {
 		return ms, err
 	}
-	ms.LiveBytes += int64(result.live_bytes)
-	ms.KeyBytes += int64(result.key_bytes)
-	ms.ValBytes += int64(result.val_bytes)
-	ms.IntentBytes += int64(result.intent_bytes)
-	ms.LiveCount += int64(result.live_count)
-	ms.KeyCount += int64(result.key_count)
-	ms.ValCount += int64(result.val_count)
-	ms.IntentCount += int64(result.intent_count)
-	// TODO(tschottdorf): this isn't legal since it messes up the age
-	// computations. Need to take into account the old LastUpdateNanos
-	// and besides, there's already MVCCStats.Add which should be
-	// used here.
-	ms.IntentAge += int64(result.intent_age)
-	ms.GCBytesAge += int64(result.gc_bytes_age)
-	ms.SysBytes += int64(result.sys_bytes)
-	ms.SysCount += int64(result.sys_count)
+	ms.LiveBytes = int64(result.live_bytes)
+	ms.KeyBytes = int64(result.key_bytes)
+	ms.ValBytes = int64(result.val_bytes)
+	ms.IntentBytes = int64(result.intent_bytes)
+	ms.LiveCount = int64(result.live_count)
+	ms.KeyCount = int64(result.key_count)
+	ms.ValCount = int64(result.val_count)
+	ms.IntentCount = int64(result.intent_count)
+	ms.IntentAge = int64(result.intent_age)
+	ms.GCBytesAge = int64(result.gc_bytes_age)
+	ms.SysBytes = int64(result.sys_bytes)
+	ms.SysCount = int64(result.sys_count)
 	ms.LastUpdateNanos = nowNanos
 	return ms, nil
 }
