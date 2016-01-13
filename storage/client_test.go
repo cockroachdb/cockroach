@@ -29,6 +29,7 @@ import (
 	"math"
 	"net"
 	"reflect"
+	"sort"
 	"strconv"
 	"sync"
 	"testing"
@@ -226,7 +227,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.db == nil {
 		m.distSender = kv.NewDistSender(&kv.DistSenderContext{
 			Clock:             m.clock,
-			RangeDescriptorDB: m.senders[0],
+			RangeDescriptorDB: m,
 			RPCSend:           m.rpcSend,
 		}, m.gossip)
 		sender := kv.NewTxnCoordSender(m.distSender, m.clock, false, nil, m.clientStopper)
@@ -358,6 +359,59 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 		panic("err must not be nil here")
 	}
 	return fail(pErr)
+}
+
+// rangeDescByAge implements sort.Interface for RangeDescriptor, sorting by the
+// age of the RangeDescriptor. This is intended to find the most recent version
+// of the same RangeDescriptor, when multiple versions of it are available.
+type rangeDescByAge []*roachpb.RangeDescriptor
+
+func (rd rangeDescByAge) Len() int      { return len(rd) }
+func (rd rangeDescByAge) Swap(i, j int) { rd[i], rd[j] = rd[j], rd[i] }
+func (rd rangeDescByAge) Less(i, j int) bool {
+	// A RangeDescriptor version with a higher NextReplicaID is always more recent.
+	if rd[i].NextReplicaID != rd[j].NextReplicaID {
+		return rd[i].NextReplicaID < rd[j].NextReplicaID
+	}
+	// If two RangeDescriptor versions have the same NextReplicaID, then the one
+	// with the fewest descriptors is the newest.
+	return len(rd[i].Replicas) < len(rd[i].Replicas)
+}
+
+// FirstRange implements the RangeDescriptorDB interface. It returns the range
+// descriptor which contains KeyMin.
+//
+// DistSender's implementation of FirstRange() does not work correctly because
+// the gossip network used by multiTestContext is only partially operational.
+func (m *multiTestContext) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
+	var descs []*roachpb.RangeDescriptor
+	for _, str := range m.senders {
+		// Find every version of the RangeDescriptor for the first range by
+		// querying all stores; it may not be present on all stores, but the
+		// current version is guaranteed to be present on one of them.
+		if err := str.VisitStores(func(s *storage.Store) error {
+			firstRng := s.LookupReplica(roachpb.RKeyMin, nil)
+			if firstRng != nil {
+				descs = append(descs, firstRng.Desc())
+			}
+			return nil
+		}); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+	}
+	// Sort the RangeDescriptor versions by age and return the most recent
+	// version.
+	sort.Sort(rangeDescByAge(descs))
+	return descs[len(descs)-1], nil
+}
+
+// RangeLookup implements the RangeDescriptorDB interface. It looks up the
+// descriptors for the given (meta) key.
+func (m *multiTestContext) RangeLookup(key roachpb.RKey, desc *roachpb.RangeDescriptor, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, *roachpb.Error) {
+	// DistSender's RangeLookup function will work correctly, as long as
+	// multiTestContext's FirstRange() method returns the correct descriptor for the
+	// first range.
+	return m.distSender.RangeLookup(key, desc, considerIntents, useReverseScan)
 }
 
 func (m *multiTestContext) makeContext(i int) storage.StoreContext {
