@@ -439,7 +439,7 @@ func (r *Replica) append(batch engine.Engine, prevLastIndex uint64, entries []ra
 // updateRangeInfo is called whenever a range is updated by ApplySnapshot
 // or is created by range splitting to setup the fields which are
 // uninitialized or need updating.
-func (r *Replica) updateRangeInfo() error {
+func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	// RangeMaxBytes should be updated by looking up Zone Config in two cases:
 	// 1. After snapshot applying, if no updating of zone config
 	// for this key range, then maxBytes of this range will not
@@ -458,7 +458,7 @@ func (r *Replica) updateRangeInfo() error {
 	}
 
 	// Find zone config for this range.
-	zone, err := cfg.GetZoneConfigForKey(r.Desc().StartKey)
+	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
 		return util.Errorf("failed to lookup zone config for Range %s: %s", r, err)
 	}
@@ -560,16 +560,17 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 		// the snapshot.
 		atomic.StoreUint64(&r.appliedIndex, snap.Metadata.Index)
 
-		// Atomically update the descriptor and lease.
-		if err := r.setDesc(&desc); err != nil {
-			panic(err)
-		}
 		// Update other fields which are uninitialized or need updating.
 		// This may not happen if the system config has not yet been loaded.
 		// While config update will correctly set the fields, there is no order
 		// guarangee in ApplySnapshot.
 		// TODO: should go through the standard store lock when adding a replica.
-		if err := r.updateRangeInfo(); err != nil {
+		if err := r.updateRangeInfo(&desc); err != nil {
+			panic(err)
+		}
+
+		// Atomically update the descriptor and lease.
+		if err := r.setDesc(&desc); err != nil {
 			panic(err)
 		}
 
