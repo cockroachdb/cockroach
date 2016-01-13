@@ -516,7 +516,6 @@ func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key
 // exceeding zone's RangeMaxBytes.
 func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("#3762")
 	store, stopper := createTestStore(t)
 	config.TestingSetupZoneConfigHook(stopper)
 	defer stopper.Stop()
@@ -577,7 +576,6 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 // split.
 func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("#3749")
 	store, stopper := createTestStore(t)
 	config.TestingSetupZoneConfigHook(stopper)
 	defer stopper.Stop()
@@ -612,7 +610,6 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 // the SystemConfig span.
 func TestStoreRangeSystemSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("#3698")
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 

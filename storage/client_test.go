@@ -93,6 +93,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	sCtx.Gossip = gossip.New(rpcContext, gossip.TestBootstrap)
 	sCtx.Gossip.SetNodeID(nodeDesc.NodeID)
+	sCtx.ScanMaxIdleTime = splitTimeout / 10
 	sCtx.Tracer = tracer.NewTracer(nil, "testing")
 	stores := storage.NewStores(clock)
 	rpcSend := func(_ rpc.Options, _ string, _ []net.Addr,
@@ -122,6 +123,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	sender := kv.NewTxnCoordSender(distSender, clock, false, nil, stopper)
 	sCtx.Clock = clock
 	sCtx.DB = client.NewDB(sender)
+	sCtx.StorePool = storage.NewStorePool(sCtx.Gossip, clock, storage.TestTimeUntilStoreDeadOff, stopper)
 	sCtx.Transport = storage.NewLocalRPCTransport(stopper)
 	// TODO(bdarnell): arrange to have the transport closed.
 	store := storage.NewStore(*sCtx, eng, nodeDesc)
