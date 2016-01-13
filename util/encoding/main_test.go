@@ -17,6 +17,7 @@
 package encoding_test
 
 import (
+	"os"
 	"testing"
 
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
@@ -25,5 +26,5 @@ import (
 
 func TestMain(m *testing.M) {
 	randutil.SeedForTests()
-	m.Run()
+	os.Exit(m.Run())
 }

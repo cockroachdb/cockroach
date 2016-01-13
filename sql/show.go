@@ -100,7 +100,8 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, *roachpb.Err
 	}
 	v := &valuesNode{columns: []column{{name: "Database", typ: parser.DummyString}}}
 	for _, row := range sr {
-		_, name, err := encoding.DecodeString(bytes.TrimPrefix(row.Key, prefix), nil)
+		_, name, err := encoding.DecodeStringAscending(
+			bytes.TrimPrefix(row.Key, prefix), nil)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
