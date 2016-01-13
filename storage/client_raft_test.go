@@ -366,9 +366,6 @@ func TestFailedReplicaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	defer func() { storage.TestingCommandFilter = nil }()
 
-	mtc := startMultiTestContext(t, 2)
-	defer mtc.Stop()
-
 	var runFilter atomic.Value
 	runFilter.Store(true)
 
@@ -381,6 +378,9 @@ func TestFailedReplicaChange(t *testing.T) {
 		}
 		return nil
 	}
+
+	mtc := startMultiTestContext(t, 2)
+	defer mtc.Stop()
 
 	rng, err := mtc.stores[0].GetReplica(1)
 	if err != nil {
