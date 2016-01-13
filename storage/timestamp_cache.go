@@ -158,12 +158,8 @@ func (tc *TimestampCache) MergeInto(dest *TimestampCache, clear bool) {
 		dest.lowWater = tc.lowWater
 		dest.latest = tc.latest
 	} else {
-		if dest.lowWater.Less(tc.lowWater) {
-			dest.lowWater = tc.lowWater
-		}
-		if dest.latest.Less(tc.latest) {
-			tc.latest = dest.latest
-		}
+		dest.lowWater.Forward(tc.lowWater)
+		dest.latest.Forward(tc.latest)
 	}
 	tc.cache.Do(func(k, v interface{}) {
 		dest.cache.Add(k, v)
