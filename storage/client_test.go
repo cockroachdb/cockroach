@@ -57,7 +57,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-const replicationTimeout = 3 * time.Second
+const replicationTimeout = 5 * time.Second
 
 // Check that Stores implements the RangeDescriptorDB interface.
 var _ kv.RangeDescriptorDB = &storage.Stores{}
