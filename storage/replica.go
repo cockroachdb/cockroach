@@ -1712,7 +1712,6 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 			// TODO(tschottdorf): down the road, can probably unclog the system
 			// here by batching up a bunch of those GCRequests before proposing.
 			if args.Method() == roachpb.EndTransaction {
-				var ba roachpb.BatchRequest
 				txn := item.intents[0].Txn
 				gcArgs := roachpb.GCRequest{
 					Span: roachpb.Span{Key: r.Desc().StartKey.AsRawKey()},
@@ -1730,9 +1729,9 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 					}
 				}
 				gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{Key: keys.TransactionKey(txn.Key, txn.ID)})
-
-				ba.Add(&gcArgs)
-				if _, pErr := r.addWriteCmd(ctx, ba, nil /* nil */); pErr != nil {
+				b := &client.Batch{}
+				b.InternalAddRequest(&gcArgs)
+				if pErr := r.store.DB().Run(b); pErr != nil {
 					log.Warningf("could not GC completed transaction: %s", pErr)
 				}
 			}
