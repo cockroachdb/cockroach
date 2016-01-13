@@ -19,8 +19,10 @@ package util
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"reflect"
 	"time"
 )
@@ -64,32 +66,30 @@ func CreateTempDir(t Tester, prefix string) string {
 	return dir
 }
 
-// CreateTempRestrictedFile creates a temporary file on disk which contains the
+// CreateRestrictedFile creates a file on disk which contains the
 // supplied byte string as its content. The resulting file will have restrictive
 // permissions; specifically, u=rw (0600). Returns the path of the created file
 // along with a function that will delete the created file.
 //
 // This is needed for some Go libraries (e.g. postgres SQL driver) which will
 // refuse to open certificate files that have overly permissive permissions.
-func CreateTempRestrictedFile(t Tester, contents []byte, tempdir, prefix string) (string, func()) {
-	tempFile, err := ioutil.TempFile(tempdir, prefix)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := tempFile.Close(); err != nil {
-		t.Fatal(err)
-	}
-	tempPath := tempFile.Name()
-	if err := os.Remove(tempPath); err != nil {
-		t.Fatal(err)
-	}
+func CreateRestrictedFile(t Tester, contents []byte, tempdir, name string) (string, func()) {
+	tempPath := filepath.Join(tempdir, name)
 	if err := ioutil.WriteFile(tempPath, contents, 0600); err != nil {
-		t.Fatal(err)
+		if t == nil {
+			log.Fatal(err)
+		} else {
+			t.Fatal(err)
+		}
 	}
 	return tempPath, func() {
 		if err := os.Remove(tempPath); err != nil {
 			// Not Fatal() because we might already be panicking.
-			t.Error(err)
+			if t == nil {
+				log.Print(err)
+			} else {
+				t.Error(err)
+			}
 		}
 	}
 }

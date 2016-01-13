@@ -179,7 +179,9 @@ func (t *logicTest) close() {
 }
 
 // setUser sets the DB client to the specified user.
-func (t *logicTest) setUser(tempDir, user string) {
+// It returns a cleanup function to be run when the credentials
+// are no longer needed.
+func (t *logicTest) setUser(user string) func() {
 	if t.db != nil {
 		var dbName string
 
@@ -200,18 +202,22 @@ func (t *logicTest) setUser(tempDir, user string) {
 	}
 	if db, ok := t.clients[user]; ok {
 		t.db = db
-		return
+		// No cleanup necessary, but return a no-op func to avoid nil pointer dereference.
+		return func() {}
 	}
 
-	// The entire tempDir will be deleted later, so the cleanup function can be
-	// ignored.
-	pgUrl, _ := sqlutils.PGUrl(t.T, t.srv, user, tempDir, "TestLogic")
+	credsDir, err := ioutil.TempDir("", "user-credentials")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pgUrl, cleanupFunc := sqlutils.PGUrl(t.T, t.srv, user, credsDir, "TestLogic")
 	db, err := sql.Open("postgres", pgUrl.String())
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.clients[user] = db
 	t.db = db
+	return cleanupFunc
 }
 
 // TODO(tschottdorf): some logic tests currently take a long time to run.
@@ -233,7 +239,7 @@ func (t *logicTest) run(path string) {
 	t.srv = setupTestServer(t.T)
 
 	// Make a temporary directory to hold all our on-disk crypto assets.
-	tempDir, err := ioutil.TempDir(os.TempDir(), "TestLogic")
+	tempDir, err := ioutil.TempDir("", "TestLogic")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +252,8 @@ func (t *logicTest) run(path string) {
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
-	t.setUser(tempDir, security.RootUser)
+	cleanupFunc := t.setUser(security.RootUser)
+	defer cleanupFunc()
 
 	if _, err := t.db.Exec(`
 CREATE DATABASE test;
@@ -403,7 +410,8 @@ SET DATABASE = test;
 			if len(fields[1]) == 0 {
 				t.Fatal("user command requires a non-blank argument")
 			}
-			t.setUser(tempDir, fields[1])
+			cleanupUserFunc := t.setUser(fields[1])
+			defer cleanupUserFunc()
 
 		case "skipif":
 			if len(fields) < 2 {
