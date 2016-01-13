@@ -20,12 +20,15 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -33,6 +36,13 @@ import (
 
 type cliTest struct {
 	*server.TestServer
+	certsDir    string
+	cleanupFunc func()
+}
+
+func (c cliTest) stop() {
+	c.cleanupFunc()
+	security.SetReadFileFn(securitytest.Asset)
 }
 
 func newCLITest() cliTest {
@@ -48,7 +58,40 @@ func newCLITest() cliTest {
 		log.Fatalf("Could not start server: %v", err)
 	}
 
-	return cliTest{TestServer: s}
+	tempDir, err := ioutil.TempDir("", "cli-test")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Copy these assets to disk from embedded strings, so this test can
+	// run from a standalone binary.
+	// Disable embedded certs, or the security library will try to load
+	// our real files as embedded assets.
+	security.ResetReadFileFn()
+
+	assets := []string{
+		security.CACertPath(security.EmbeddedCertsDir),
+		security.ClientCertPath(security.EmbeddedCertsDir, security.RootUser),
+		security.ClientKeyPath(security.EmbeddedCertsDir, security.RootUser),
+		security.ClientCertPath(security.EmbeddedCertsDir, security.NodeUser),
+		security.ClientKeyPath(security.EmbeddedCertsDir, security.NodeUser),
+	}
+
+	cleanups := []func(){}
+	for _, i := range assets {
+		_, cleanupFn := securitytest.RestrictedCopy(nil, i, tempDir, filepath.Base(i))
+		cleanups = append(cleanups, cleanupFn)
+	}
+
+	return cliTest{
+		TestServer: s,
+		certsDir:   tempDir,
+		cleanupFunc: func() {
+			for _, f := range cleanups {
+				f()
+			}
+		},
+	}
 }
 
 func (c cliTest) Run(line string) {
@@ -78,7 +121,7 @@ func (c cliTest) RunWithArgs(a []string) {
 		args = append(args, fmt.Sprintf("--port=%s", pg))
 	}
 	// Always load test certs.
-	args = append(args, fmt.Sprintf("--certs=%s", security.EmbeddedCertsDir))
+	args = append(args, fmt.Sprintf("--certs=%s", c.certsDir))
 	args = append(args, a[1:]...)
 
 	fmt.Fprintf(os.Stderr, "%s\n", args)
@@ -90,6 +133,7 @@ func (c cliTest) RunWithArgs(a []string) {
 
 func Example_basic() {
 	c := newCLITest()
+	defer c.stop()
 
 	c.Run("kv put a 1 b 2 c 3")
 	c.Run("kv scan")
@@ -150,6 +194,7 @@ func Example_basic() {
 
 func Example_quoted() {
 	c := newCLITest()
+	defer c.stop()
 
 	c.Run(`kv put a\x00 日本語`)                                  // UTF-8 input text
 	c.Run(`kv put a\x01 \u65e5\u672c\u8a9e`)                   // explicit Unicode code points
@@ -209,6 +254,7 @@ func Example_insecure() {
 
 func Example_ranges() {
 	c := newCLITest()
+	defer c.stop()
 
 	c.Run("kv put a 1 b 2 c 3 d 4")
 	c.Run("kv scan")
@@ -294,6 +340,7 @@ func Example_ranges() {
 
 func Example_logging() {
 	c := newCLITest()
+	defer c.stop()
 
 	c.Run("kv --alsologtostderr=false scan")
 	c.Run("kv --log-backtrace-at=foo.go:1 scan")
@@ -322,6 +369,7 @@ func Example_logging() {
 
 func Example_cput() {
 	c := newCLITest()
+	defer c.stop()
 
 	c.Run("kv put a 1 b 2 c 3 d 4")
 	c.Run("kv scan")
@@ -353,6 +401,7 @@ func Example_cput() {
 
 func Example_max_results() {
 	c := newCLITest()
+	defer c.stop()
 
 	c.Run("kv put a 1 b 2 c 3 d 4")
 	c.Run("kv scan --max-results=3")
@@ -387,62 +436,64 @@ func Example_max_results() {
 
 func Example_zone() {
 	/*
-			c := newCLITest()
+		c := newCLITest()
+		defer c.stop()
 
-			zone100 := `replicas:
-		- attrs: [us-east-1a,ssd]
-		- attrs: [us-east-1b,ssd]
-		- attrs: [us-west-1b,ssd]
-		range_min_bytes: 8388608
-		range_max_bytes: 67108864
-		`
-			c.Run("zone ls")
-			// Call RunWithArgs to bypass the "split-by-whitespace" arg builder.
-			c.RunWithArgs([]string{"zone", "set", "100", zone100})
-			c.Run("zone ls")
-			c.Run("zone get 100")
-			c.Run("zone rm 100")
-			c.Run("zone ls")
-			c.Run("quit")
+		zone100 := `replicas:
+				- attrs: [us-east-1a,ssd]
+				- attrs: [us-east-1b,ssd]
+				- attrs: [us-west-1b,ssd]
+				range_min_bytes: 8388608
+				range_max_bytes: 67108864
+				`
+		c.Run("zone ls")
+		// Call RunWithArgs to bypass the "split-by-whitespace" arg builder.
+		c.RunWithArgs([]string{"zone", "set", "100", zone100})
+		c.Run("zone ls")
+		c.Run("zone get 100")
+		c.Run("zone rm 100")
+		c.Run("zone ls")
+		c.Run("quit")
 
-			// Output:
-			// zone ls
-			// zone set 100 replicas:
-			// - attrs: [us-east-1a,ssd]
-			// - attrs: [us-east-1b,ssd]
-			// - attrs: [us-west-1b,ssd]
-			// range_min_bytes: 8388608
-			// range_max_bytes: 67108864
-			//
-			// OK
-			// zone ls
-			// Object 100:
-			// replicas:
-			// - attrs: [us-east-1a, ssd]
-			// - attrs: [us-east-1b, ssd]
-			// - attrs: [us-west-1b, ssd]
-			// range_min_bytes: 8388608
-			// range_max_bytes: 67108864
-			//
-			// zone get 100
-			// replicas:
-			// - attrs: [us-east-1a, ssd]
-			// - attrs: [us-east-1b, ssd]
-			// - attrs: [us-west-1b, ssd]
-			// range_min_bytes: 8388608
-			// range_max_bytes: 67108864
-			//
-			// zone rm 100
-			// OK
-			// zone ls
-			// quit
-			// node drained and shutdown: ok
+		// Output:
+		// zone ls
+		// zone set 100 replicas:
+		// - attrs: [us-east-1a,ssd]
+		// - attrs: [us-east-1b,ssd]
+		// - attrs: [us-west-1b,ssd]
+		// range_min_bytes: 8388608
+		// range_max_bytes: 67108864
+		//
+		// OK
+		// zone ls
+		// Object 100:
+		// replicas:
+		// - attrs: [us-east-1a, ssd]
+		// - attrs: [us-east-1b, ssd]
+		// - attrs: [us-west-1b, ssd]
+		// range_min_bytes: 8388608
+		// range_max_bytes: 67108864
+		//
+		// zone get 100
+		// replicas:
+		// - attrs: [us-east-1a, ssd]
+		// - attrs: [us-east-1b, ssd]
+		// - attrs: [us-west-1b, ssd]
+		// range_min_bytes: 8388608
+		// range_max_bytes: 67108864
+		//
+		// zone rm 100
+		// OK
+		// zone ls
+		// quit
+		// node drained and shutdown: ok
 	*/
 }
 
 func Example_user() {
 	/*
 		c := newCLITest()
+		defer c.stop()
 
 		c.Run("user ls")
 		c.Run("user set foo --password=bar")

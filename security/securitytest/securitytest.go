@@ -17,7 +17,10 @@
 // Package securitytest embeds the TLS test certificates.
 package securitytest
 
-import "github.com/cockroachdb/cockroach/util"
+import (
+	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
+)
 
 //go:generate go-bindata -pkg securitytest -mode 0644 -modtime 1400000000 -o ./embedded.go -ignore README.md -prefix ../../resource ../../resource/test_certs/...
 //go:generate gofmt -s -w embedded.go
@@ -33,7 +36,11 @@ import "github.com/cockroachdb/cockroach/util"
 func RestrictedCopy(t util.Tester, path, tempdir, name string) (string, func()) {
 	contents, err := Asset(path)
 	if err != nil {
-		t.Fatal(err)
+		if t == nil {
+			log.Fatal(err)
+		} else {
+			t.Fatal(err)
+		}
 	}
 	return util.CreateRestrictedFile(t, contents, tempdir, name)
 }

@@ -19,6 +19,7 @@ package util
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -74,12 +75,20 @@ func CreateTempDir(t Tester, prefix string) string {
 func CreateRestrictedFile(t Tester, contents []byte, tempdir, name string) (string, func()) {
 	tempPath := filepath.Join(tempdir, name)
 	if err := ioutil.WriteFile(tempPath, contents, 0600); err != nil {
-		t.Fatal(err)
+		if t == nil {
+			log.Fatal(err)
+		} else {
+			t.Fatal(err)
+		}
 	}
 	return tempPath, func() {
 		if err := os.Remove(tempPath); err != nil {
 			// Not Fatal() because we might already be panicking.
-			t.Error(err)
+			if t == nil {
+				log.Print(err)
+			} else {
+				t.Error(err)
+			}
 		}
 	}
 }
