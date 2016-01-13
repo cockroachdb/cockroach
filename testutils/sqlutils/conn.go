@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
@@ -43,15 +42,15 @@ func PGUrl(t util.Tester, ts *server.TestServer, user, tempDir, prefix string) (
 		t.Fatal(err)
 	}
 
-	caPath := filepath.Join(security.EmbeddedCertsDir, "ca.crt")
+	caPath := security.CACertPath(security.EmbeddedCertsDir)
 	certPath := security.ClientCertPath(security.EmbeddedCertsDir, user)
 	keyPath := security.ClientKeyPath(security.EmbeddedCertsDir, user)
 
 	// Copy these assets to disk from embedded strings, so this test can
 	// run from a standalone binary.
-	tempCAPath, tempCACleanup := securitytest.TempRestrictedCopy(t, caPath, tempDir, "TestLogic_ca")
-	tempCertPath, tempCertCleanup := securitytest.TempRestrictedCopy(t, certPath, tempDir, "TestLogic_cert")
-	tempKeyPath, tempKeyCleanup := securitytest.TempRestrictedCopy(t, keyPath, tempDir, "TestLogic_key")
+	tempCAPath, tempCACleanup := securitytest.RestrictedCopy(t, caPath, tempDir, "TestLogic_ca")
+	tempCertPath, tempCertCleanup := securitytest.RestrictedCopy(t, certPath, tempDir, "TestLogic_cert")
+	tempKeyPath, tempKeyCleanup := securitytest.RestrictedCopy(t, keyPath, tempDir, "TestLogic_key")
 
 	return url.URL{
 			Scheme: "postgres",
