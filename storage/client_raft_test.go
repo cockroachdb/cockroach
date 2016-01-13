@@ -592,6 +592,28 @@ func getRangeMetadata(key roachpb.RKey, mtc *multiTestContext, t *testing.T) roa
 	return reply.Ranges[0]
 }
 
+// TestUnreplicateFirstRange verifies that multiTestContext still functions in
+// the case where the first range (which contains range metadata) is
+// unreplicated from the first store. This situation can arise occasionally in
+// tests, as can a similar situation where the first store is no longer the leader of
+// the first range; this verifies that those tests will not be affected.
+func TestUnreplicateFirstRange(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	rangeID := roachpb.RangeID(1)
+	// Replicate the range to store 1.
+	mtc.replicateRange(rangeID, 0, 1)
+	// Unreplicate the from from store 0.
+	mtc.unreplicateRange(rangeID, 1, 0)
+	// Replicate the range to store 2. The first range is no longer available on
+	// store 1, and this command will fail if that situation is not properly
+	// supported.
+	mtc.replicateRange(rangeID, 1, 2)
+}
+
 // TestStoreRangeDownReplicate verifies that the replication queue will notice
 // over-replicated ranges and remove replicas from them.
 func TestStoreRangeDownReplicate(t *testing.T) {
