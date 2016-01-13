@@ -231,14 +231,13 @@ func TestTimestampCacheMergeInto(t *testing.T) {
 			if rTS, _ := tc2.GetMax(roachpb.Key("a"), roachpb.Key("c"), nil); !rTS.Equal(aaTS) {
 				t.Error("expected \"a\"-\"c\" to have aaTS timestamp")
 			}
-			//Proposed new test by AbhishekSaha
-			//Tests PR #3797
-			if !tc2.latest.Equal(cTS) { //Thrown if dest timestamp cache doesn't have origin's latest timestamp
+
+			if !tc2.latest.Equal(cTS) {
 				t.Error("expected \"aa\" to have cTS timestamp")
 			}
-			if !tc1.latest.Equal(cTS) {//Thrown if origin's timestamp is replaced; tests for bug that triggered PR
+			if !tc1.latest.Equal(cTS) {
 				t.Error("expected \"a\"-\"c\" to have cTS timestamp")
-		}
+			}
 		}
 	}
 }
