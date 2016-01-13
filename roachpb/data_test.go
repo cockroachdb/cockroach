@@ -18,13 +18,12 @@ package roachpb
 
 import (
 	"bytes"
-	"fmt"
 	"math"
 	"math/rand"
-	"reflect"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -438,28 +437,15 @@ var nonZeroTxn = Transaction{
 }
 
 func TestTransactionUpdate(t *testing.T) {
-	noZeroField := func(txn Transaction) error {
-		ele := reflect.ValueOf(&txn).Elem()
-		eleT := ele.Type()
-		for i := 0; i < ele.NumField(); i++ {
-			f := ele.Field(i)
-			zero := reflect.Zero(f.Type())
-			if reflect.DeepEqual(f.Interface(), zero.Interface()) {
-				return fmt.Errorf("expected %s field to be non-zero", eleT.Field(i).Name)
-			}
-		}
-		return nil
-	}
 	txn := nonZeroTxn
-
-	if err := noZeroField(txn); err != nil {
+	if err := util.NoZeroField(txn); err != nil {
 		t.Fatal(err)
 	}
 
 	var txn2 Transaction
 	txn2.Update(&txn)
 
-	if err := noZeroField(txn2); err != nil {
+	if err := util.NoZeroField(txn2); err != nil {
 		t.Fatal(err)
 	}
 
@@ -469,7 +455,7 @@ func TestTransactionUpdate(t *testing.T) {
 	txn3.Isolation = SNAPSHOT
 	txn3.Update(&txn)
 
-	if err := noZeroField(txn3); err != nil {
+	if err := util.NoZeroField(txn3); err != nil {
 		t.Fatal(err)
 	}
 
