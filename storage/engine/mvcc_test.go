@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -88,6 +90,120 @@ type mvccKeys []MVCCKey
 func (n mvccKeys) Len() int           { return len(n) }
 func (n mvccKeys) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
 func (n mvccKeys) Less(i, j int) bool { return n[i].Less(n[j]) }
+
+func TestMVCCStatsAddSubAgeTo(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	goldMS := MVCCStats{
+		KeyBytes:        1,
+		KeyCount:        1,
+		ValBytes:        1,
+		ValCount:        1,
+		IntentBytes:     1,
+		IntentCount:     1,
+		IntentAge:       1,
+		GCBytesAge:      1,
+		LiveBytes:       1,
+		LiveCount:       1,
+		SysBytes:        1,
+		SysCount:        1,
+		LastUpdateNanos: 1,
+	}
+	ms := goldMS
+	zeroWithLU := MVCCStats{LastUpdateNanos: ms.LastUpdateNanos}
+
+	cmp := func(act, exp MVCCStats) {
+		f, l, _ := caller.Lookup(1)
+		if !reflect.DeepEqual(act, exp) {
+			t.Fatalf("%s:%d: wanted %+v back, got %+v", f, l, exp, act)
+		}
+	}
+
+	if err := util.NoZeroField(&ms); err != nil {
+		t.Fatal(err) // prevent rot as fields are added
+	}
+
+	ms.Subtract(goldMS)
+	cmp(ms, zeroWithLU)
+
+	ms.Add(goldMS)
+	cmp(ms, goldMS)
+
+	// Double-add double-sub guards against mistaking `+=` for `=`.
+	ms = zeroWithLU
+	ms.Add(goldMS)
+	ms.Add(goldMS)
+	ms.Subtract(goldMS)
+	ms.Subtract(goldMS)
+	cmp(ms, zeroWithLU)
+
+	// Run some checks for AgeTo.
+	goldDelta := MVCCStats{
+		KeyBytes:        42,
+		IntentCount:     11,
+		LastUpdateNanos: 1e9 - 1000,
+	}
+	delta := goldDelta
+
+	for i, ns := range []int64{1, 1e9 - 1001, 1e9 - 1000, 1E9 - 1, 1E9, 1E9 + 1, 2E9 - 1} {
+		oldDelta := delta
+		delta.AgeTo(ns)
+		if delta.LastUpdateNanos < ns {
+			t.Fatalf("%d: should always update LastUpdateNanos", i)
+		}
+		shouldAge := ns/1E9 > oldDelta.LastUpdateNanos/1E9
+		if shouldAge != (delta.IntentAge != oldDelta.IntentAge &&
+			delta.GCBytesAge != oldDelta.GCBytesAge) {
+			t.Fatalf("%d: should age: %t, but had\n%+v\nand now\n%+v", i, shouldAge, oldDelta, delta)
+		}
+	}
+
+	expDelta := goldDelta
+	expDelta.LastUpdateNanos = 2E9 - 1
+	expDelta.GCBytesAge = 42
+	expDelta.IntentAge = 11
+	cmp(delta, expDelta)
+
+	delta.AgeTo(2E9)
+	expDelta.LastUpdateNanos = 2E9
+	expDelta.GCBytesAge += 42
+	expDelta.IntentAge += 11
+	cmp(delta, expDelta)
+
+	delta.AgeTo(3E9 - 1)
+	delta.AgeTo(5) // should be noop
+	expDelta.LastUpdateNanos = 3E9 - 1
+	cmp(delta, expDelta)
+
+	// Check that Add calls AgeTo appropriately.
+	mss := []MVCCStats{goldMS, goldMS}
+
+	mss[0].LastUpdateNanos = 2E9 - 1
+	mss[1].LastUpdateNanos = 10E9 + 1
+
+	expMS := goldMS
+	expMS.Add(goldMS)
+	expMS.LastUpdateNanos = 10E9 + 1
+	expMS.IntentAge += 9  // from aging 9 ticks from 2E9-1 to 10E9+1
+	expMS.GCBytesAge += 9 // ditto
+
+	for i := range mss[:1] {
+		ms := mss[(1+i)%2]
+		ms.Add(mss[i])
+		cmp(ms, expMS)
+	}
+
+	// Finally, check AgeTo with negative counts (can happen).
+	neg := zeroWithLU
+	neg.Subtract(goldMS)
+	exp := neg
+
+	neg.AgeTo(2E9)
+
+	exp.LastUpdateNanos = 2E9
+	exp.GCBytesAge = -3
+	exp.IntentAge = -3
+	cmp(neg, exp)
+}
 
 // Verify the sort ordering of successive keys with metadata and
 // versioned values. In particular, the following sequence of keys /
