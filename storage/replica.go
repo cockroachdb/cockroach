@@ -148,9 +148,7 @@ type Replica struct {
 	RangeID roachpb.RangeID // Should only be set by the constructor.
 	store   *Store
 	stats   *rangeStats // Range statistics
-	// Last index persisted to the raft log (not necessarily committed).
-	// Updated atomically.
-	lastIndex uint64
+
 	// Last index applied to the state machine. Updated atomically.
 	appliedIndex uint64
 	systemDBHash []byte         // sha1 hash of the system config @ last gossip
@@ -169,6 +167,7 @@ type Replica struct {
 		sync.Mutex                   // Protects all fields in the mu struct.
 		cmdQ           *CommandQueue // Enforce at most one command is running per key(s)
 		desc           *roachpb.RangeDescriptor
+		lastIndex      uint64 // Last index persisted to the raft log (not necessarily committed).
 		leaderLease    *roachpb.Lease
 		maxBytes       int64 // Max bytes before split.
 		pendingCmds    map[cmdIDKey]*pendingCmd
@@ -214,11 +213,11 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 
 	r.setDescWithoutProcessUpdateLocked(desc)
 
-	lastIndex, err := r.loadLastIndexLocked()
+	var err error
+	r.mu.lastIndex, err = r.loadLastIndexLocked()
 	if err != nil {
 		return err
 	}
-	atomic.StoreUint64(&r.lastIndex, lastIndex)
 
 	appliedIndex, err := r.loadAppliedIndexLocked(r.store.Engine())
 	if err != nil {
@@ -1063,18 +1062,20 @@ func (r *Replica) proposePendingCmdLocked(idKey cmdIDKey, p *pendingCmd) error {
 }
 
 func (r *Replica) handleRaftReady() error {
+	// TODO(bram): There is a lot of locking and unlocking of the replica,
+	// consider refactoring this.
 	r.mu.Lock()
 	if !r.mu.raftGroup.HasReady() {
 		r.mu.Unlock()
 		return nil
 	}
 	rd := r.mu.raftGroup.Ready()
+	lastIndex := r.mu.lastIndex
 	r.mu.Unlock()
 	logRaftReady(r.store.StoreID(), r.RangeID, rd)
 
 	batch := r.store.Engine().NewBatch()
 	defer batch.Close()
-	lastIndex := atomic.LoadUint64(&r.lastIndex)
 	if !raft.IsEmptySnap(rd.Snapshot) {
 		var err error
 		if lastIndex, err = r.applySnapshot(batch, rd.Snapshot); err != nil {
@@ -1096,7 +1097,9 @@ func (r *Replica) handleRaftReady() error {
 	if err := batch.Commit(); err != nil {
 		return err
 	}
-	atomic.StoreUint64(&r.lastIndex, lastIndex)
+	r.mu.Lock()
+	r.mu.lastIndex = lastIndex
+	r.mu.Unlock()
 
 	for _, msg := range rd.Messages {
 		r.sendRaftMessage(msg)

@@ -50,12 +50,11 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 			// Set the initial log term.
 			hs.Term = raftInitialLogTerm
 			hs.Commit = raftInitialLogIndex
-
-			atomic.StoreUint64(&r.lastIndex, raftInitialLogIndex)
+			r.mu.lastIndex = raftInitialLogIndex
 		} else {
 			// This is a new range we are receiving from another node. Start
 			// from zero so we will receive a snapshot.
-			atomic.StoreUint64(&r.lastIndex, 0)
+			r.mu.lastIndex = 0
 		}
 	} else if initialized && hs.Commit == 0 {
 		// Normally, when the commit index changes, raft gives us a new
@@ -186,8 +185,17 @@ func (r *Replica) Term(i uint64) (uint64, error) {
 }
 
 // LastIndex implements the raft.Storage interface.
+// LastIndex requires that the replica lock is held.
 func (r *Replica) LastIndex() (uint64, error) {
-	return atomic.LoadUint64(&r.lastIndex), nil
+	return r.mu.lastIndex, nil
+}
+
+// GetLastIndex is the same function as LastIndex but it does not require
+// that the replica lock is held.
+func (r *Replica) GetLastIndex() (uint64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.LastIndex()
 }
 
 // raftTruncatedStateLocked returns metadata about the log that preceded the
