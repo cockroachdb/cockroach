@@ -89,7 +89,7 @@ prepare_artifacts() {
         # If we generated XML reports and the simple grep didn't find
         # anything (which happens for timeouts and panics), parse the
         # XML for more robust results.
-        FAILEDTESTS=$(python3 -c 'import sys, xml.etree.ElementTree as ET; [print(t.attrib["name"]) for filename in sys.argv[1:] for t in ET.parse(filename).findall(".//failure/..")]' "$(find "${CIRCLE_TEST_REPORTS}" -type f -iname '*.xml')")
+        FAILEDTESTS=$(python3 -c 'import sys, xml.etree.ElementTree as ET; [print(t.attrib["name"]) for filename in sys.argv[1:] for t in ET.parse(filename).findall(".//failure/..")]' $(find "${CIRCLE_TEST_REPORTS}" -type f -iname '*.xml'))
       fi
       # Generate string for JSON labels below:
       # '"test-failure", "TestRaftRemoveRace", "TestChaos", "TestHoneyBooBoo"'
