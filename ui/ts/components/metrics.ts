@@ -46,21 +46,29 @@ module Components {
         static colors: d3.scale.Ordinal<Domain, string> = d3.scale.category10();
 
         // nvd3 chart.
-        chart: any = nv.models.lineChart()
-          .x((d: Models.Proto.Datapoint) => new Date(d.timestamp_nanos / 1.0e6))
-          .y((d: Models.Proto.Datapoint) => d.value)
-          // .interactive(true)
-          .useInteractiveGuideline(true)
-          .showLegend(true)
-          .showYAxis(true)
-          .showXAxis(true)
-          .xScale(d3.time.scale())
-          .margin({top: 0, right: 0, bottom: 0, left: 0});
+        chart: any;
 
         constructor(public vm: ViewModel) {
+          if (vm.axis.stacked()) {
+            this.chart = nv.models.stackedAreaChart()
+              .showControls(false);
+          } else {
+            this.chart = nv.models.lineChart();
+          }
+          this.chart
+            .x((d: Models.Proto.Datapoint) => new Date(d.timestamp_nanos / 1.0e6))
+            .y((d: Models.Proto.Datapoint) => d.value)
+            // .interactive(true)
+            .useInteractiveGuideline(true)
+            .showLegend(true)
+            .showYAxis(true)
+            .showXAxis(true)
+            .xScale(d3.time.scale())
+            .margin({top: 20, right: 60, bottom: 20, left: 60});
+
           // Set xAxis ticks to properly format.
           this.chart.xAxis
-            .tickFormat(d3.time.format("%H:%M:%S"))
+            .tickFormat(function(t: string|Date): string { return typeof t === "string" ? t : d3.time.format("%H:%M:%S")(t); })
             .showMaxMin(false);
           this.chart.yAxis
             .axisLabel(vm.axis.label())
@@ -69,6 +77,18 @@ module Components {
           if (vm.axis.format()) {
             this.chart.yAxis.tickFormat(vm.axis.format());
           }
+
+          let range: number[] = vm.axis.range();
+
+          if (range) {
+            if (vm.axis.stacked() && range.length === 2) {
+              this.chart.yDomain(range);
+            } else if (!vm.axis.stacked()) {
+              this.chart.forceY(range);
+            }
+          }
+
+          // this.chart.stacked(vm.axis.stacked());
         }
 
         /**
@@ -88,7 +108,7 @@ module Components {
           let shouldRender: boolean = !context.epoch || context.epoch < this.vm.query.result.Epoch();
 
           if (shouldRender) {
-            this.chart.showLegend(this.vm.axis.selectors().length > 1);
+            this.chart.showLegend(this.vm.axis.selectors().length > 1 && this.vm.axis.selectors().length < 4);
             let formattedData: any[] = [];
             // The result() property will be empty if an error
             // occurred. For now, we will just display the "No Data"

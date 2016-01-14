@@ -35,7 +35,7 @@ module AdminViews {
           },
           {
             title: "Cluster",
-            route: "/cluster", // TODO: currently goes to node page, create cluster page
+            route: "/cluster",
             icon: SvgIcons.clusterIcon,
           },
           {
