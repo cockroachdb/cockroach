@@ -338,7 +338,7 @@ func init() {
 	roachpb.PrettyPrintKey = PrettyPrint
 }
 
-// MassagePrettyPrintedSpanForTest does some transformations on pretty-printed spans and keys:
+// Does some transformations on pretty-printed spans and keys:
 // - if dirs is not nil, replace all ints with their ones' complement for
 // descendingly-encoded columns.
 // - strips line numbers from error messages.
@@ -346,7 +346,7 @@ func MassagePrettyPrintedSpanForTest(span string, dirs []encoding.Direction) str
 	var r string
 	colIdx := -1
 	for i := 0; i < len(span); i++ {
-		d := -789
+		var d int = -789
 		fmt.Sscanf(span[i:], "%d", &d)
 		if (dirs != nil) && (d != -789) {
 			// We've managed to consume an int.

@@ -39,7 +39,6 @@ func testTableDesc() *TableDescriptor {
 			{Name: "g", Type: ColumnType{Kind: ColumnType_BOOL}},
 			{Name: "h", Type: ColumnType{Kind: ColumnType_FLOAT}},
 			{Name: "i", Type: ColumnType{Kind: ColumnType_STRING}},
-			{Name: "j", Type: ColumnType{Kind: ColumnType_INT}},
 		},
 		PrimaryIndex: IndexDescriptor{
 			Name: "primary", Unique: true, ColumnNames: []string{"a"},
