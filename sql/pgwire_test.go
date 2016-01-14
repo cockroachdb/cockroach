@@ -159,31 +159,30 @@ func TestPGWire(t *testing.T) {
 	}
 }
 
-type preparedTest struct {
-	params []interface{}
-	error  string
-	result []interface{}
+type preparedQueryTest struct {
+	params, results []interface{}
+	error           string
 }
 
-func (p preparedTest) Params(v ...interface{}) preparedTest {
+func (p preparedQueryTest) Params(v ...interface{}) preparedQueryTest {
 	p.params = v
 	return p
 }
 
-func (p preparedTest) Error(err string) preparedTest {
+func (p preparedQueryTest) Results(v ...interface{}) preparedQueryTest {
+	p.results = v
+	return p
+}
+
+func (p preparedQueryTest) Error(err string) preparedQueryTest {
 	p.error = err
 	return p
 }
 
-func (p preparedTest) Results(v ...interface{}) preparedTest {
-	p.result = v
-	return p
-}
-
-func TestPGPrepared(t *testing.T) {
+func TestPGPreparedQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	var base preparedTest
-	queryTests := map[string][]preparedTest{
+	var base preparedQueryTest
+	queryTests := map[string][]preparedQueryTest{
 		"SELECT $1 > 0": {
 			base.Params(1).Results(true),
 			base.Params("1").Results(true),
@@ -280,8 +279,8 @@ func TestPGPrepared(t *testing.T) {
 				if test.error != "" && err == nil {
 					t.Errorf("expected error: %s: %#v", query, test.params)
 				}
-				dst := make([]interface{}, len(test.result))
-				for i, d := range test.result {
+				dst := make([]interface{}, len(test.results))
+				for i, d := range test.results {
 					dst[i] = reflect.New(reflect.TypeOf(d)).Interface()
 				}
 				if !rows.Next() {
@@ -295,8 +294,8 @@ func TestPGPrepared(t *testing.T) {
 					v := reflect.Indirect(reflect.ValueOf(d)).Interface()
 					dst[i] = v
 				}
-				if !reflect.DeepEqual(dst, test.result) {
-					t.Errorf("%s: %#v: expected %v, got %v", query, test.params, test.result, dst)
+				if !reflect.DeepEqual(dst, test.results) {
+					t.Errorf("%s: %#v: expected %v, got %v", query, test.params, test.results, dst)
 				}
 			}
 		}
@@ -322,6 +321,86 @@ func TestPGPrepared(t *testing.T) {
 		}
 		if err.Error() != reason {
 			t.Errorf("unexpected error: %s: %s", query, err)
+		}
+	}
+}
+
+type preparedExecTest struct {
+	params []interface{}
+	error  string
+}
+
+func (p preparedExecTest) Params(v ...interface{}) preparedExecTest {
+	p.params = v
+	return p
+}
+
+func (p preparedExecTest) Error(err string) preparedExecTest {
+	p.error = err
+	return p
+}
+
+func TestPGPreparedExec(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	var base preparedExecTest
+	queryTests := map[string][]preparedExecTest{
+		"INSERT INTO system.users VALUES ($1, $2)": {
+			base.Params("hello", "world"),
+		},
+	}
+
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, os.TempDir(), "TestPGPrepared")
+	defer cleanupFn()
+
+	db, err := sql.Open("postgres", pgUrl.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	for query, tests := range queryTests {
+		stmt, err := db.Prepare(query)
+		if err != nil {
+			t.Errorf("prepare error: %s: %s", query, err)
+			continue
+		}
+
+		type result struct {
+			res sql.Result
+			err error
+		}
+
+		for _, test := range tests {
+			var results []result
+			{
+				res, err := db.Exec(query, test.params...)
+				results = append(results, result{res: res, err: err})
+			}
+			{
+				res, err := stmt.Exec(test.params...)
+				results = append(results, result{res: res, err: err})
+			}
+			for _, resStruct := range results {
+				_, err := resStruct.res, resStruct.err
+				if err != nil {
+					if test.error == "" {
+						t.Errorf("%s: %#v: unexpected error: %s", query, test.params, err)
+					}
+					if test.error != err.Error() {
+						t.Errorf("%s: %#v: expected error: %s, got %s", query, test.params, test.error, err)
+					}
+					continue
+				}
+				if test.error != "" && err == nil {
+					t.Errorf("expected error: %s: %#v", query, test.params)
+				}
+			}
+		}
+		if err := stmt.Close(); err != nil {
+			t.Error(err)
 		}
 	}
 }
