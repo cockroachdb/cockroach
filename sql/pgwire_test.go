@@ -325,3 +325,43 @@ func TestPGPrepared(t *testing.T) {
 		}
 	}
 }
+
+func TestCmdCompleteVsEmptyStatements(t *testing.T) {
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, os.TempDir(), "TestPGWire")
+	defer cleanupFn()
+
+	db, err := sql.Open("postgres", pgUrl.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS testing`); err != nil {
+		t.Fatal(err)
+	}
+
+	nonempty, err := db.Exec("CREATE TABLE testing.foo (k int)")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// lib/pq handles the empty query response by returning a nil driver.Result.
+	// Unfortunately sql.Exec wraps that in a non-nil sql.Result which doesn't expose
+	// the underlying driver.Result, only methods which (attempt to) dereference it.
+	//
+	// TODO(dt): This would be prettier and generate better failures with testify/assert's helpers.
+	nonempty.RowsAffected() // should not panic if lib/pq returned a non-nil result.
+
+	empty, err := db.Exec(" ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		recover()
+	}()
+	empty.RowsAffected() // will panic if lib/pq returned a nil result as expected.
+	t.Fatal("should not get here -- empty result from empty query should panic")
+}
