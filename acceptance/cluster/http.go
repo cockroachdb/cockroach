@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // HTTPClient is an http.Client configured for querying a cluster. We need to
@@ -46,10 +45,5 @@ func getJSON(tls bool, hostport, path string, v interface{}) error {
 		scheme = "http"
 	}
 
-	if err := util.GetJSON(&HTTPClient, scheme, hostport, path, v); err != nil {
-		if log.V(1) {
-			log.Error(err)
-		}
-	}
-	return nil
+	return util.GetJSON(&HTTPClient, scheme, hostport, path, v)
 }
