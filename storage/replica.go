@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -145,12 +144,9 @@ type cmdIDKey string
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Replica struct {
-	RangeID roachpb.RangeID // Should only be set by the constructor.
-	store   *Store
-	stats   *rangeStats // Range statistics
-
-	// Last index applied to the state machine. Updated atomically.
-	appliedIndex uint64
+	RangeID      roachpb.RangeID // Should only be set by the constructor.
+	store        *Store
+	stats        *rangeStats    // Range statistics
 	systemDBHash []byte         // sha1 hash of the system config @ last gossip
 	llMu         sync.Mutex     // Synchronizes (throttles) readers' requests for leader lease
 	sequence     *SequenceCache // Provides txn replay protection
@@ -165,6 +161,7 @@ type Replica struct {
 
 	mu struct {
 		sync.Mutex                   // Protects all fields in the mu struct.
+		appliedIndex   uint64        // Last index applied to the state machine.
 		cmdQ           *CommandQueue // Enforce at most one command is running per key(s)
 		desc           *roachpb.RangeDescriptor
 		lastIndex      uint64 // Last index persisted to the raft log (not necessarily committed).
@@ -219,17 +216,15 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 		return err
 	}
 
-	appliedIndex, err := r.loadAppliedIndexLocked(r.store.Engine())
+	r.mu.appliedIndex, err = r.loadAppliedIndexLocked(r.store.Engine())
 	if err != nil {
 		return err
 	}
-	atomic.StoreUint64(&r.appliedIndex, appliedIndex)
 
-	lease, err := loadLeaderLease(r.store.Engine(), desc.RangeID)
+	r.mu.leaderLease, err = loadLeaderLease(r.store.Engine(), desc.RangeID)
 	if err != nil {
 		return err
 	}
-	r.mu.leaderLease = lease
 
 	_, repDesc := desc.FindReplica(r.store.StoreID())
 	if repDesc != nil {
@@ -294,7 +289,7 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 
 	raftCfg := &raft.Config{
 		ID:            uint64(replicaID),
-		Applied:       atomic.LoadUint64(&r.appliedIndex),
+		Applied:       r.mu.appliedIndex,
 		ElectionTick:  r.store.ctx.RaftElectionTimeoutTicks,
 		HeartbeatTick: r.store.ctx.RaftHeartbeatIntervalTicks,
 		Storage:       r,
@@ -1279,7 +1274,10 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 
 	// If we have an out of order index, there's corruption. No sense in trying
 	// to update anything or run the command. Simply return a corruption error.
-	if oldIndex := atomic.LoadUint64(&r.appliedIndex); oldIndex >= index {
+	r.mu.Lock()
+	oldIndex := r.mu.appliedIndex
+	r.mu.Unlock()
+	if oldIndex >= index {
 		return nil, roachpb.NewError(newReplicaCorruptionError(util.Errorf("applied index moved backwards: %d >= %d", oldIndex, index)))
 	}
 
@@ -1296,15 +1294,16 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 	if err := batch.Commit(); err != nil {
 		rErr = roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not commit batch"), err, rErr.GoError()))
 	} else {
-		// Update cached appliedIndex if we were able to set the applied index on disk.
-		atomic.StoreUint64(&r.appliedIndex, index)
+		r.mu.Lock()
+		// Update cached appliedIndex if we were able to set the applied index
+		// on disk.
+		r.mu.appliedIndex = index
 		// Invalidate the cache and let raftTruncatedStateLocked() read the
 		// value the next time it's required.
 		if _, ok := ba.GetArg(roachpb.TruncateLog); ok {
-			r.mu.Lock()
 			r.mu.truncatedState = nil
-			r.mu.Unlock()
 		}
+		r.mu.Unlock()
 	}
 
 	// On successful write commands, flush to event feed, and handle other

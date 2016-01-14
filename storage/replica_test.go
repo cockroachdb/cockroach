@@ -2939,7 +2939,9 @@ func TestAppliedIndex(t *testing.T) {
 			t.Errorf("expected %d, got %d", sum, reply.NewValue)
 		}
 
-		newAppliedIndex := atomic.LoadUint64(&tc.rng.appliedIndex)
+		tc.rng.mu.Lock()
+		newAppliedIndex := tc.rng.mu.appliedIndex
+		tc.rng.mu.Unlock()
 		if newAppliedIndex <= appliedIndex {
 			t.Errorf("appliedIndex did not advance. Was %d, now %d", appliedIndex, newAppliedIndex)
 		}
