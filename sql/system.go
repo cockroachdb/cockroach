@@ -61,6 +61,19 @@ CREATE TABLE system.zones (
   id     INT PRIMARY KEY,
   config BYTES
 );`
+
+	// Cluster Reporting table schema
+	reportingTableSchema = `
+CREATE TABLE system.reporting (
+  email       STRING PRIMARY KEY,
+  optin       BOOLEAN,
+  dismissed   BOOLEAN,
+  firstname   STRING,
+  lastname    STRING,
+  company     STRING,
+  updates     BOOLEAN,
+  lastUpdated TIMESTAMP
+);`
 )
 
 var (
@@ -85,6 +98,9 @@ var (
 	// zonesTable is the descriptor for the zones table.
 	zonesTable = createSystemTable(keys.ZonesTableID, zonesTableSchema)
 
+	// ReportingTable is the descriptor for the cluster reporting opt-in table.
+	ReportingTable = createSystemTable(keys.ReportingTableID, reportingTableSchema)
+
 	// SystemAllowedPrivileges describes the privileges allowed for each
 	// system object. No user may have more than those privileges, and
 	// the root user must have exactly those privileges.
@@ -97,6 +113,8 @@ var (
 		keys.ZonesTableID:      privilege.ReadWriteData,
 		keys.LeaseTableID:      privilege.ReadWriteData,
 		keys.RangeEventTableID: privilege.ReadWriteData,
+		keys.ReportingTableID:  privilege.ReadWriteData,
+
 	}
 
 	// NumSystemDescriptors should be set to the number of system descriptors
@@ -150,6 +168,8 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &descriptorTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &usersTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &zonesTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &ReportingTable)
+
 
 	// Add other system tables.
 	target.AddTable(keys.LeaseTableID, leaseTableSchema, privilege.List{privilege.ALL})

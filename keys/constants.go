@@ -209,6 +209,7 @@ const (
 	DescriptorTableID = 3
 	UsersTableID      = 4
 	ZonesTableID      = 5
+	ReportingTableID  = 6
 
 	// Reserved IDs for other system tables.
 	// NOTE: IDs must be <= MaxReservedDescID.
