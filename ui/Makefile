@@ -120,11 +120,13 @@ $(CSS_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
 	stylus $(STYL_ROOT)/app.styl \
 	       --compress \
 	       --include-css \
+	       --use nib \
 	       --out $@
 
 $(CSS_DEBUG_TARGET): $(shell find $(STYL_ROOT)) npm.installed bower.installed
 	stylus $(STYL_ROOT)/app.styl \
 	       --include-css \
+	       --use nib \
 	       --out $@
 
 $(GOBINDATA_TARGET): $(GOBINDATA_DEPS) bower.installed release/$(INDEX)
