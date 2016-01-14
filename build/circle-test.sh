@@ -114,7 +114,14 @@ function is_shard() {
   test $(($1 % $CIRCLE_NODE_TOTAL)) -eq $CIRCLE_NODE_INDEX
 }
 
-if is_shard 0; then
+# Note that the order of the is_shard tests is a bit odd. It would be
+# more natural to check shard 0, then 1, and then 2. The odd ordering
+# is done so that the tests are performed in the pre-parallel order
+# when parallelism is disabled. That is, we get a good ordering when
+# only a single container is running the tests (CIRCLE_NODE_INDEX ==
+# 1).
+
+if is_shard 2; then
   # Run "make check" to verify coding guidelines.
   echo "make check"
   time ${builder} make check | tee "${outdir}/check.log"
@@ -125,7 +132,7 @@ if is_shard 0; then
   time ${builder} /bin/bash -c "(git ls-files --modified --deleted --others --exclude-standard | diff /dev/null -) || (git add -A && git diff -u HEAD && false)" | tee "${outdir}/generate.log"
 fi
 
-if is_shard 1; then
+if is_shard 0; then
   # Run "make test".
   echo "make test"
   time ${builder} make test \
@@ -155,7 +162,7 @@ if is_shard 1; then
   fi
 fi
 
-if is_shard 2; then
+if is_shard 1; then
   # Run "make testrace".
   echo "make testrace"
   time ${builder} make testrace \
