@@ -615,11 +615,6 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, se
 		}
 
 		switch result := result.GetUnion().(type) {
-		case *driver.Response_Result_DDL_:
-			// Send EmptyQueryResponse.
-			c.writeBuf.initMsg(serverMsgEmptyQuery)
-			return c.writeBuf.finishMsg(c.wr)
-
 		case *driver.Response_Result_RowsAffected:
 			// Send CommandComplete.
 			// TODO(bdarnell): tags for other types of commands.
@@ -677,6 +672,7 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, se
 
 		// Ack messages do not have a corresponding protobuf field, so handle those
 		// with a default.
+		// This also includes DDLs which want CommandComcplete as well.
 		default:
 			// A real Postgres will send a tag back, but testing so far shows that
 			// clients will accept an empty tag also.
