@@ -114,7 +114,7 @@ function is_shard() {
   test $(($1 % $CIRCLE_NODE_TOTAL)) -eq $CIRCLE_NODE_INDEX
 }
 
-if is_shard 0; then
+if is_shard 2; then
   # Run "make check" to verify coding guidelines.
   echo "make check"
   time ${builder} make check | tee "${outdir}/check.log"
@@ -125,7 +125,7 @@ if is_shard 0; then
   time ${builder} /bin/bash -c "(git ls-files --modified --deleted --others --exclude-standard | diff /dev/null -) || (git add -A && git diff -u HEAD && false)" | tee "${outdir}/generate.log"
 fi
 
-if is_shard 1; then
+if is_shard 0; then
   # Run "make test".
   echo "make test"
   time ${builder} make test \
@@ -155,7 +155,7 @@ if is_shard 1; then
   fi
 fi
 
-if is_shard 2; then
+if is_shard 1; then
   # Run "make testrace".
   echo "make testrace"
   time ${builder} make testrace \
