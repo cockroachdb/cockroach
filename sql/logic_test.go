@@ -50,7 +50,7 @@ import (
 var (
 	resultsRE = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
 	errorRE   = regexp.MustCompile(`^(?:statement|query)\s+error\s+(.*)$`)
-	testdata  = flag.String("d", "testdata/*", "test data glob")
+	testdata  = flag.String("d", "testdata/[^.]*", "test data glob")
 	bigtest   = flag.Bool("bigtest", false, "use the big set of logic test files (overrides testdata)")
 )
 
