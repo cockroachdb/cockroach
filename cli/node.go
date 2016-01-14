@@ -31,10 +31,6 @@ const (
 	localTimeFormat = "2006-01-02 15:04:05"
 )
 
-//
-// List nodes.
-//
-
 var lsNodesColumnHeaders = []string{
 	"id",
 }
@@ -47,18 +43,18 @@ var lsNodesCmd = &cobra.Command{
 	commands.
 	`,
 	SilenceUsage: true,
-	RunE:         panicGuard(runLsNodes),
+	RunE:         runLsNodes,
 }
 
-func runLsNodes(cmd *cobra.Command, args []string) {
+func runLsNodes(cmd *cobra.Command, args []string) error {
 	if len(args) != 0 {
 		mustUsage(cmd)
 	}
 
 	// Extract Node IDs from NodeStatuses.
 	nodeStatuses := map[string][]status.NodeStatus{}
-	if err := getJSON(context.Addr, server.PathForAllNodesStatus(), &nodeStatuses); err != nil {
-		panic(err)
+	if err := getJSON(context.Addr, server.PathForNodeStatus(""), &nodeStatuses); err != nil {
+		return err
 	}
 
 	var rows [][]string
@@ -67,12 +63,9 @@ func runLsNodes(cmd *cobra.Command, args []string) {
 			strconv.FormatInt(int64(nodeStatus.Desc.NodeID), 10),
 		})
 	}
-	printQueryOutput(os.Stdout, lsNodesColumnHeaders, rows)
-}
 
-//
-// Node Status.
-//
+	return printQueryOutput(os.Stdout, lsNodesColumnHeaders, rows)
+}
 
 var nodesColumnHeaders = []string{
 	"id",
@@ -97,18 +90,18 @@ var statusNodeCmd = &cobra.Command{
 	is specified, this will display the status for all nodes in the cluster.
 	`,
 	SilenceUsage: true,
-	RunE:         panicGuard(runStatusNode),
+	RunE:         runStatusNode,
 }
 
-func runStatusNode(cmd *cobra.Command, args []string) {
+func runStatusNode(cmd *cobra.Command, args []string) error {
 	var nodeStatuses []status.NodeStatus
 
 	switch len(args) {
 	case 0:
 		// Show status for all nodes.
 		jsonResponse := map[string][]status.NodeStatus{}
-		if err := getJSON(context.Addr, server.PathForAllNodesStatus(), &jsonResponse); err != nil {
-			panic(err)
+		if err := getJSON(context.Addr, server.PathForNodeStatus(""), &jsonResponse); err != nil {
+			return err
 		}
 		nodeStatuses = jsonResponse["d"]
 
@@ -116,19 +109,20 @@ func runStatusNode(cmd *cobra.Command, args []string) {
 		nodeStatus := status.NodeStatus{}
 		nodeID := args[0]
 		if err := getJSON(context.Addr, server.PathForNodeStatus(nodeID), &nodeStatus); err != nil {
-			panic(err)
+			return err
 		}
 		nodeStatuses = []status.NodeStatus{nodeStatus}
 
 	default:
 		mustUsage(cmd)
-		return
+		return nil
 	}
 
-	printQueryOutput(os.Stdout, nodesColumnHeaders, nodeStatusesToRows(nodeStatuses))
+	return printQueryOutput(os.Stdout, nodesColumnHeaders, nodeStatusesToRows(nodeStatuses))
 }
 
-// Converts NodeStatuses to SQL-like result rows, so that we can pretty-print them.
+// nodeStatusesToRows converts NodeStatuses to SQL-like result rows, so that we can pretty-print
+// them.
 func nodeStatusesToRows(statuses []status.NodeStatus) [][]string {
 	// Create results that are like the results for SQL results, so that we can pretty-print them.
 	var rows [][]string
@@ -162,10 +156,6 @@ var nodeCmds = []*cobra.Command{
 	lsNodesCmd,
 	statusNodeCmd,
 }
-
-//
-// Top-level node command.
-//
 
 var nodeCmd = &cobra.Command{
 	Use:   "node [command]",
