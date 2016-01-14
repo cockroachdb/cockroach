@@ -455,7 +455,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	}
 
 	// Get that command's log index.
-	index, err := rng.LastIndex()
+	index, err := rng.GetLastIndex()
 	if err != nil {
 		t.Fatal(err)
 	}

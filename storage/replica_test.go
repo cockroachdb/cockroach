@@ -2763,7 +2763,7 @@ func TestTruncateLog(t *testing.T) {
 		if _, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &args); pErr != nil {
 			t.Fatal(pErr)
 		}
-		idx, err := tc.rng.LastIndex()
+		idx, err := tc.rng.GetLastIndex()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2779,9 +2779,7 @@ func TestTruncateLog(t *testing.T) {
 	}
 
 	// FirstIndex has changed.
-	tc.rng.mu.Lock()
-	firstIndex, err := tc.rng.FirstIndex()
-	tc.rng.mu.Unlock()
+	firstIndex, err := tc.rng.GetFirstIndex()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2941,7 +2939,9 @@ func TestAppliedIndex(t *testing.T) {
 			t.Errorf("expected %d, got %d", sum, reply.NewValue)
 		}
 
-		newAppliedIndex := atomic.LoadUint64(&tc.rng.appliedIndex)
+		tc.rng.mu.Lock()
+		newAppliedIndex := tc.rng.mu.appliedIndex
+		tc.rng.mu.Unlock()
 		if newAppliedIndex <= appliedIndex {
 			t.Errorf("appliedIndex did not advance. Was %d, now %d", appliedIndex, newAppliedIndex)
 		}
@@ -3577,7 +3577,7 @@ func TestEntries(t *testing.T) {
 		if _, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &args); pErr != nil {
 			t.Fatal(pErr)
 		}
-		idx, err := tc.rng.LastIndex()
+		idx, err := tc.rng.GetLastIndex()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3701,7 +3701,7 @@ func TestTerm(t *testing.T) {
 		if _, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &args); pErr != nil {
 			t.Fatal(pErr)
 		}
-		idx, err := tc.rng.LastIndex()
+		idx, err := tc.rng.GetLastIndex()
 		if err != nil {
 			t.Fatal(err)
 		}

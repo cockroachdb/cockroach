@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -145,15 +144,9 @@ type cmdIDKey string
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Replica struct {
-	RangeID  roachpb.RangeID // Should only be set by the constructor.
-	store    *Store
-	stats    *rangeStats // Range statistics
-	maxBytes int64       // Max bytes before split.
-	// Last index persisted to the raft log (not necessarily committed).
-	// Updated atomically.
-	lastIndex uint64
-	// Last index applied to the state machine. Updated atomically.
-	appliedIndex uint64
+	RangeID      roachpb.RangeID // Should only be set by the constructor.
+	store        *Store
+	stats        *rangeStats    // Range statistics
 	systemDBHash []byte         // sha1 hash of the system config @ last gossip
 	llMu         sync.Mutex     // Synchronizes (throttles) readers' requests for leader lease
 	sequence     *SequenceCache // Provides txn replay protection
@@ -167,16 +160,19 @@ type Replica struct {
 	readOnlyCmdMu sync.RWMutex
 
 	mu struct {
-		sync.Mutex                     // Protects all fields in the mu struct.
-		cmdQ           *CommandQueue   // Enforce at most one command is running per key(s)
-		tsCache        *TimestampCache // Most recent timestamps for keys / key ranges
-		pendingSeq     uint64          // atomic sequence counter for cmdIDKey generation
-		pendingCmds    map[cmdIDKey]*pendingCmd
+		sync.Mutex                   // Protects all fields in the mu struct.
+		appliedIndex   uint64        // Last index applied to the state machine.
+		cmdQ           *CommandQueue // Enforce at most one command is running per key(s)
 		desc           *roachpb.RangeDescriptor
-		replicaID      roachpb.ReplicaID
-		raftGroup      *raft.RawNode
-		truncatedState *roachpb.RaftTruncatedState
+		lastIndex      uint64 // Last index persisted to the raft log (not necessarily committed).
 		leaderLease    *roachpb.Lease
+		maxBytes       int64 // Max bytes before split.
+		pendingCmds    map[cmdIDKey]*pendingCmd
+		pendingSeq     uint64 // atomic sequence counter for cmdIDKey generation
+		raftGroup      *raft.RawNode
+		replicaID      roachpb.ReplicaID
+		truncatedState *roachpb.RaftTruncatedState
+		tsCache        *TimestampCache // Most recent timestamps for keys / key ranges
 	}
 }
 
@@ -214,23 +210,21 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 
 	r.setDescWithoutProcessUpdateLocked(desc)
 
-	lastIndex, err := r.loadLastIndexLocked()
+	var err error
+	r.mu.lastIndex, err = r.loadLastIndexLocked()
 	if err != nil {
 		return err
 	}
-	atomic.StoreUint64(&r.lastIndex, lastIndex)
 
-	appliedIndex, err := r.loadAppliedIndexLocked(r.store.Engine())
+	r.mu.appliedIndex, err = r.loadAppliedIndexLocked(r.store.Engine())
 	if err != nil {
 		return err
 	}
-	atomic.StoreUint64(&r.appliedIndex, appliedIndex)
 
-	lease, err := loadLeaderLease(r.store.Engine(), desc.RangeID)
+	r.mu.leaderLease, err = loadLeaderLease(r.store.Engine(), desc.RangeID)
 	if err != nil {
 		return err
 	}
-	r.mu.leaderLease = lease
 
 	_, repDesc := desc.FindReplica(r.store.StoreID())
 	if repDesc != nil {
@@ -295,7 +289,7 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 
 	raftCfg := &raft.Config{
 		ID:            uint64(replicaID),
-		Applied:       atomic.LoadUint64(&r.appliedIndex),
+		Applied:       r.mu.appliedIndex,
 		ElectionTick:  r.store.ctx.RaftElectionTimeoutTicks,
 		HeartbeatTick: r.store.ctx.RaftHeartbeatIntervalTicks,
 		Storage:       r,
@@ -346,13 +340,17 @@ func (r *Replica) context() context.Context {
 
 // GetMaxBytes atomically gets the range maximum byte limit.
 func (r *Replica) GetMaxBytes() int64 {
-	return atomic.LoadInt64(&r.maxBytes)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.maxBytes
 }
 
 // SetMaxBytes atomically sets the maximum byte limit before
 // split. This value is cached by the range for efficiency.
 func (r *Replica) SetMaxBytes(maxBytes int64) {
-	atomic.StoreInt64(&r.maxBytes, maxBytes)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.maxBytes = maxBytes
 }
 
 // IsFirstRange returns true if this is the first range.
@@ -1059,18 +1057,20 @@ func (r *Replica) proposePendingCmdLocked(idKey cmdIDKey, p *pendingCmd) error {
 }
 
 func (r *Replica) handleRaftReady() error {
+	// TODO(bram): There is a lot of locking and unlocking of the replica,
+	// consider refactoring this.
 	r.mu.Lock()
 	if !r.mu.raftGroup.HasReady() {
 		r.mu.Unlock()
 		return nil
 	}
 	rd := r.mu.raftGroup.Ready()
+	lastIndex := r.mu.lastIndex
 	r.mu.Unlock()
 	logRaftReady(r.store.StoreID(), r.RangeID, rd)
 
 	batch := r.store.Engine().NewBatch()
 	defer batch.Close()
-	lastIndex := atomic.LoadUint64(&r.lastIndex)
 	if !raft.IsEmptySnap(rd.Snapshot) {
 		var err error
 		if lastIndex, err = r.applySnapshot(batch, rd.Snapshot); err != nil {
@@ -1092,7 +1092,9 @@ func (r *Replica) handleRaftReady() error {
 	if err := batch.Commit(); err != nil {
 		return err
 	}
-	atomic.StoreUint64(&r.lastIndex, lastIndex)
+	r.mu.Lock()
+	r.mu.lastIndex = lastIndex
+	r.mu.Unlock()
 
 	for _, msg := range rd.Messages {
 		r.sendRaftMessage(msg)
@@ -1272,7 +1274,10 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 
 	// If we have an out of order index, there's corruption. No sense in trying
 	// to update anything or run the command. Simply return a corruption error.
-	if oldIndex := atomic.LoadUint64(&r.appliedIndex); oldIndex >= index {
+	r.mu.Lock()
+	oldIndex := r.mu.appliedIndex
+	r.mu.Unlock()
+	if oldIndex >= index {
 		return nil, roachpb.NewError(newReplicaCorruptionError(util.Errorf("applied index moved backwards: %d >= %d", oldIndex, index)))
 	}
 
@@ -1289,15 +1294,16 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 	if err := batch.Commit(); err != nil {
 		rErr = roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not commit batch"), err, rErr.GoError()))
 	} else {
-		// Update cached appliedIndex if we were able to set the applied index on disk.
-		atomic.StoreUint64(&r.appliedIndex, index)
+		r.mu.Lock()
+		// Update cached appliedIndex if we were able to set the applied index
+		// on disk.
+		r.mu.appliedIndex = index
 		// Invalidate the cache and let raftTruncatedStateLocked() read the
 		// value the next time it's required.
 		if _, ok := ba.GetArg(roachpb.TruncateLog); ok {
-			r.mu.Lock()
 			r.mu.truncatedState = nil
-			r.mu.Unlock()
 		}
+		r.mu.Unlock()
 	}
 
 	// On successful write commands, flush to event feed, and handle other

@@ -17,8 +17,6 @@
 package storage
 
 import (
-	"sync/atomic"
-
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -50,12 +48,11 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 			// Set the initial log term.
 			hs.Term = raftInitialLogTerm
 			hs.Commit = raftInitialLogIndex
-
-			atomic.StoreUint64(&r.lastIndex, raftInitialLogIndex)
+			r.mu.lastIndex = raftInitialLogIndex
 		} else {
 			// This is a new range we are receiving from another node. Start
 			// from zero so we will receive a snapshot.
-			atomic.StoreUint64(&r.lastIndex, 0)
+			r.mu.lastIndex = 0
 		}
 	} else if initialized && hs.Commit == 0 {
 		// Normally, when the commit index changes, raft gives us a new
@@ -186,8 +183,17 @@ func (r *Replica) Term(i uint64) (uint64, error) {
 }
 
 // LastIndex implements the raft.Storage interface.
+// LastIndex requires that the replica lock is held.
 func (r *Replica) LastIndex() (uint64, error) {
-	return atomic.LoadUint64(&r.lastIndex), nil
+	return r.mu.lastIndex, nil
+}
+
+// GetLastIndex is the same function as LastIndex but it does not require
+// that the replica lock is held.
+func (r *Replica) GetLastIndex() (uint64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.LastIndex()
 }
 
 // raftTruncatedStateLocked returns metadata about the log that preceded the
@@ -556,14 +562,17 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 		// Update the range stats.
 		r.stats.Replace(newStats)
 
+		r.mu.Lock()
 		// As outlined above, last and applied index are the same after applying
 		// the snapshot.
-		atomic.StoreUint64(&r.appliedIndex, snap.Metadata.Index)
+		r.mu.appliedIndex = snap.Metadata.Index
+		r.mu.leaderLease = lease
+		r.mu.Unlock()
 
 		// Update other fields which are uninitialized or need updating.
 		// This may not happen if the system config has not yet been loaded.
 		// While config update will correctly set the fields, there is no order
-		// guarangee in ApplySnapshot.
+		// guarantee in ApplySnapshot.
 		// TODO: should go through the standard store lock when adding a replica.
 		if err := r.updateRangeInfo(&desc); err != nil {
 			panic(err)
@@ -574,10 +583,6 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 		if err := r.setDesc(&desc); err != nil {
 			panic(err)
 		}
-
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		r.mu.leaderLease = lease
 	})
 	return snap.Metadata.Index, nil
 }
