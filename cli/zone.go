@@ -245,7 +245,7 @@ var zoneCmds = []*cobra.Command{
 
 var zoneCmd = &cobra.Command{
 	Use:   "zone",
-	Short: "get, set, list and remove zones\n",
+	Short: "get, set, list and remove zones",
 	Run: func(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)
 	},

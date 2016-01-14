@@ -625,3 +625,13 @@ func respondAsJSON(w http.ResponseWriter, r *http.Request, response interface{})
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
+
+// Returns the path needed to issue a GET request for node status.
+func PathForNodeStatus(nodeID string) string {
+	return fmt.Sprintf("%s/%s", statusNodesPrefix, nodeID)
+}
+
+// Returns the path needed to issue a GET request for node status.
+func PathForAllNodesStatus() string {
+	return statusNodesPrefix
+}
