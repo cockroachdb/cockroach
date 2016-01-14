@@ -35,6 +35,12 @@ type cliTest struct {
 	*server.TestServer
 }
 
+// Stop the server, or wait until stopping is done
+// if it was already initiated by the caller.
+func (c *cliTest) cleanup() {
+	c.Stop()
+}
+
 func newCLITest() cliTest {
 	// Reset the client context for each test. We don't reset the
 	// pointer (because they are tied into the flags), but instead
@@ -71,8 +77,17 @@ func (c cliTest) RunWithArgs(a []string) {
 	}
 }
 
+func TestQuit(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	c := newCLITest()
+	c.Run("quit")
+	// Wait until this async command stopps the server.
+	<-c.Stopper().IsStopped()
+}
+
 func Example_basic() {
 	c := newCLITest()
+	defer c.cleanup()
 
 	c.Run("kv put a 1 b 2 c 3")
 	c.Run("kv scan")
@@ -88,7 +103,6 @@ func Example_basic() {
 	c.Run("kv scan")
 	c.Run("kv revscan")
 	c.Run("kv inc c b")
-	c.Run("quit")
 
 	// Output:
 	// kv put a 1 b 2 c 3
@@ -127,12 +141,11 @@ func Example_basic() {
 	// 2 result(s)
 	// kv inc c b
 	// invalid increment: b: strconv.ParseInt: parsing "b": invalid syntax
-	// quit
-	// node drained and shutdown: ok
 }
 
 func Example_quoted() {
 	c := newCLITest()
+	defer c.cleanup()
 
 	c.Run(`kv put a\x00 日本語`)                                  // UTF-8 input text
 	c.Run(`kv put a\x01 \u65e5\u672c\u8a9e`)                   // explicit Unicode code points
@@ -143,7 +156,6 @@ func Example_quoted() {
 	c.Run(`kv del a\x00`)
 	c.Run(`kv inc 1\x01`)
 	c.Run(`kv get 1\x01`)
-	c.Run("quit")
 
 	// Output:
 	// kv put a\x00 日本語
@@ -163,8 +175,6 @@ func Example_quoted() {
 	// 1
 	// kv get 1\x01
 	// 1
-	// quit
-	// node drained and shutdown: ok
 }
 
 func Example_insecure() {
@@ -175,10 +185,10 @@ func Example_insecure() {
 	if err := c.Start(); err != nil {
 		log.Fatalf("Could not start server: %v", err)
 	}
+	defer c.cleanup()
 
 	c.Run("kv --insecure put a 1 b 2")
 	c.Run("kv --insecure scan")
-	c.Run("quit --insecure")
 
 	// Output:
 	// kv --insecure put a 1 b 2
@@ -186,12 +196,11 @@ func Example_insecure() {
 	// "a"	"1"
 	// "b"	"2"
 	// 2 result(s)
-	// quit --insecure
-	// node drained and shutdown: ok
 }
 
 func Example_ranges() {
 	c := newCLITest()
+	defer c.cleanup()
 
 	c.Run("kv put a 1 b 2 c 3 d 4")
 	c.Run("kv scan")
@@ -206,7 +215,6 @@ func Example_ranges() {
 	c.Run("kv revscan")
 	c.Run("kv delrange a c")
 	c.Run("kv scan")
-	c.Run("quit")
 
 	// Output:
 	// kv put a 1 b 2 c 3 d 4
@@ -271,12 +279,11 @@ func Example_ranges() {
 	// "c"	"3"
 	// "d"	"4"
 	// 2 result(s)
-	// quit
-	// node drained and shutdown: ok
 }
 
 func Example_logging() {
 	c := newCLITest()
+	defer c.cleanup()
 
 	c.Run("kv --alsologtostderr=false scan")
 	c.Run("kv --log-backtrace-at=foo.go:1 scan")
@@ -284,7 +291,6 @@ func Example_logging() {
 	c.Run("kv --logtostderr=true scan")
 	c.Run("kv --verbosity=0 scan")
 	c.Run("kv --vmodule=foo=1 scan")
-	c.Run("quit")
 
 	// Output:
 	// kv --alsologtostderr=false scan
@@ -299,19 +305,17 @@ func Example_logging() {
 	// 0 result(s)
 	// kv --vmodule=foo=1 scan
 	// 0 result(s)
-	// quit
-	// node drained and shutdown: ok
 }
 
 func Example_cput() {
 	c := newCLITest()
+	defer c.cleanup()
 
 	c.Run("kv put a 1 b 2 c 3 d 4")
 	c.Run("kv scan")
 	c.Run("kv cput e 5")
 	c.Run("kv cput b 3 2")
 	c.Run("kv scan")
-	c.Run("quit")
 
 	// Output:
 	// kv put a 1 b 2 c 3 d 4
@@ -330,12 +334,11 @@ func Example_cput() {
 	// "d"	"4"
 	// "e"	"5"
 	// 5 result(s)
-	// quit
-	// node drained and shutdown: ok
 }
 
 func Example_max_results() {
 	c := newCLITest()
+	defer c.cleanup()
 
 	c.Run("kv put a 1 b 2 c 3 d 4")
 	c.Run("kv scan --max-results=3")
@@ -343,7 +346,6 @@ func Example_max_results() {
 	c.Run("range split c")
 	c.Run("range split d")
 	c.Run("range ls --max-results=2")
-	c.Run("quit")
 
 	// Output:
 	// kv put a 1 b 2 c 3 d 4
@@ -364,12 +366,11 @@ func Example_max_results() {
 	// "c"-"d" [4]
 	// 	0: node-id=1 store-id=1
 	// 2 result(s)
-	// quit
-	// node drained and shutdown: ok
 }
 
 func Example_zone() {
 	c := newCLITest()
+	defer c.cleanup()
 
 	zone100 := `replicas:
 - attrs: [us-east-1a,ssd]
@@ -385,7 +386,6 @@ range_max_bytes: 67108864
 	c.Run("zone get 100")
 	c.Run("zone rm 100")
 	c.Run("zone ls")
-	c.Run("quit")
 
 	// Output:
 	// zone ls
@@ -417,12 +417,11 @@ range_max_bytes: 67108864
 	// zone rm 100
 	// OK
 	// zone ls
-	// quit
-	// node drained and shutdown: ok
 }
 
 func Example_user() {
 	c := newCLITest()
+	defer c.cleanup()
 
 	c.Run("user ls")
 	c.Run("user set foo --password=bar")
@@ -431,7 +430,6 @@ func Example_user() {
 	c.Run("user ls")
 	c.Run("user rm foo")
 	c.Run("user ls")
-	c.Run("quit")
 
 	// Output:
 	// user ls
@@ -454,8 +452,6 @@ func Example_user() {
 	// | username |
 	// +----------+
 	// +----------+
-	// quit
-	// node drained and shutdown: ok
 }
 
 // TestFlagUsage is a basic test to make sure the fragile
