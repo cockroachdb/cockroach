@@ -41,7 +41,6 @@ if [ -t 0 ]; then
   tty="--tty"
 fi
 
-buildcache_dir="buildcache"
 uicache_dir="uicache"
 
 # Absolute path to the toplevel cockroach directory.
@@ -70,11 +69,11 @@ docker run -i ${tty-} ${rm} \
   --volume="${gopath0}/pkg/linux_amd64_netgo:/usr/src/go/pkg/linux_amd64_netgo" \
   --volume="${gopath0}/pkg/linux_amd64_race:/usr/src/go/pkg/linux_amd64_race" \
   --volume="${gopath0}/bin/linux_amd64:/go/bin" \
-  --volume="${HOME}/${buildcache_dir}:/${buildcache_dir}" \
   --volume="${HOME}/${uicache_dir}:/${uicache_dir}" \
   --volume="${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach" \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
-  --env="CACHE=/${buildcache_dir}" \
   --env="PAGER=cat" \
   --env="TSD_GITHUB_TOKEN=${TSD_GITHUB_TOKEN-}" \
+  --env="CIRCLE_NODE_INDEX=${CIRCLE_NODE_INDEX}" \
+  --env="CIRCLE_NODE_TOTAL=${CIRCLE_NODE_TOTAL}" \
   "${image}" "$@"
