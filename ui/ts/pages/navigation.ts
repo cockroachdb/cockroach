@@ -58,6 +58,11 @@ module AdminViews {
             route: "/sql?title=Databases&q=" + encodeURIComponent("SHOW DATABASES;"),
             icon: SvgIcons.databaseIcon,
           },
+          {
+            title: "Support",
+            route: "/settings/support",
+            icon: SvgIcons.wrenchIcon,
+          },
         ].map(function(v: {title: string; route: string; icon: string; liClass?: string; }): NavigationBar.Target {
           return {
             view: [

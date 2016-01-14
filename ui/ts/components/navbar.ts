@@ -35,20 +35,29 @@ module Components {
     export function view(ctrl: any, args: {ts: TargetSet; }): _mithril.MithrilVirtualElement {
       return m(
         "ul.nav",
-        _.map(args.ts.targets(), (t: Target) =>
-          m("li",
-            {
-              className: (args.ts.isActive(t) ? "active" : "") + (t.liClass ? " " + t.liClass : " normal")
-            },
-            m("a",
-              {
-                config: m.route,
-                href: args.ts.baseRoute + t.route,
-              },
-              t.view
-              )
-          )
-      ));
+        _.map(args.ts.targets(), function generateLinks(t: Target): MithrilVirtualElement {
+        let linkAttrs: any = {
+          config: m.route,
+          href: args.ts.baseRoute + t.route,
+        };
+        if (/^https?:\/\//.test(t.route.toLowerCase())) {
+          linkAttrs = {
+            href: t.route,
+            target: "_blank",
+          };
+        }
+        return m(
+          "li",
+          {
+            className: (args.ts.isActive(t) ? "active" : "") + (t.liClass ? " " + t.liClass : " normal")
+          },
+          m("a",
+            linkAttrs,
+            t.view
+            )
+          );
+        })
+      );
     }
   }
 }

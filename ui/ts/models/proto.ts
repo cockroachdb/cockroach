@@ -334,7 +334,7 @@ module Models {
         error?: string;
         ddl?: DDL;
         rows_affected?: number;
-        rows?: Rows;
+        Rows?: Rows;
       }
 
       export interface DDL {
