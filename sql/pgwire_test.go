@@ -325,3 +325,44 @@ func TestPGPrepared(t *testing.T) {
 		}
 	}
 }
+
+// A DDL should return "CommandComplete", not "EmptyQuery" Response.
+func TestCmdCompleteVsEmptyStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, os.TempDir(), "TestCmdCompleteVsEmptyStatements")
+	defer cleanupFn()
+
+	db, err := sql.Open("postgres", pgUrl.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// lib/pq handles the empty query response by returning a nil driver.Result.
+	// Unfortunately sql.Exec wraps that, nil or not, in a sql.Result which doesn't
+	// expose the underlying driver.Result.
+	// sql.Result does however have methods which attempt to dereference the underlying
+	// driver.Result and can thus be used to determine if it is nil.
+	// TODO(dt): This would be prettier and generate better failures with testify/assert's helpers.
+
+	// Result of a DDL (command complete) yields a non-nil underlying driver result.
+	nonempty, err := db.Exec(`CREATE DATABASE IF NOT EXISTS testing`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = nonempty.RowsAffected() // should not panic if lib/pq returned a non-nil result.
+
+	empty, err := db.Exec(" ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = recover()
+	}()
+	_, _ = empty.RowsAffected() // should panic if lib/pq returned a nil result as expected.
+	t.Fatal("should not get here -- empty result from empty query should panic first")
+	// TODO(dt): clean this up with testify/assert and add tests for less trivial empty queries.
+}
