@@ -242,8 +242,8 @@ func MarshalResponse(r *http.Request, value interface{}, allowed []EncodingType)
 	return
 }
 
-// GetJSON retrieves the URL specified by the parameters and and unmarshals the result into the
-// supplied interface.
+// GetJSON uses the supplied client to retrieve the URL specified by the parameters and
+// unmarshals the result into the supplied interface.
 func GetJSON(httpClient *http.Client, scheme, hostport, path string, v interface{}) error {
 	url := fmt.Sprintf("%s://%s%s", scheme, hostport, path)
 	resp, err := httpClient.Get(url)
@@ -255,8 +255,5 @@ func GetJSON(httpClient *http.Client, scheme, hostport, path string, v interface
 	if err != nil {
 		return err
 	}
-	if err := json.Unmarshal(b, v); err != nil {
-		return err
-	}
-	return nil
+	return json.Unmarshal(b, v)
 }

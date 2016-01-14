@@ -72,16 +72,9 @@ func panicf(format string, args ...interface{}) {
 func getJSON(hostport, path string, v interface{}) error {
 	httpClient, err := context.GetHTTPClient()
 	if err != nil {
-		if log.V(1) {
-			log.Error(err)
-		}
 		return err
 	}
-	err = util.GetJSON(httpClient, context.HTTPRequestScheme(), hostport, path, v)
-	if err != nil && log.V(1) {
-		log.Error(err)
-	}
-	return err
+	return util.GetJSON(httpClient, context.HTTPRequestScheme(), hostport, path, v)
 }
 
 // initCmd command initializes a new Cockroach cluster.

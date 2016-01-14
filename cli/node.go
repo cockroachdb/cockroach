@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/server/status"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 const (
@@ -115,7 +116,7 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 
 	default:
 		mustUsage(cmd)
-		return nil
+		return util.Errorf("expected no arguments or a single node ID")
 	}
 
 	return printQueryOutput(os.Stdout, nodesColumnHeaders, nodeStatusesToRows(nodeStatuses))
