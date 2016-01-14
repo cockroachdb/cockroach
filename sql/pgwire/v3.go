@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 
 	"github.com/lib/pq/oid"
 
@@ -544,6 +545,13 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 func (c *v3Conn) executeStatements(stmts string, params []driver.Datum, formatCodes []formatCode, sendDescription bool) error {
 	c.session.Database = c.opts.database
 
+	// TODO (davidt): this is a clumsy check better left to the actual parser. #3852
+	if len(strings.TrimSpace(stmts)) == 0 {
+		// Skip useless execute and just send EmptyQueryResponse.
+		c.writeBuf.initMsg(serverMsgEmptyQuery)
+		return c.writeBuf.finishMsg(c.wr)
+	}
+
 	resp, _, err := c.executor.ExecuteStatements(c.opts.user, c.session, stmts, params)
 	if err != nil {
 		return c.sendError(err.Error())
@@ -612,11 +620,6 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, se
 		}
 
 		switch result := result.GetUnion().(type) {
-		case *driver.Response_Result_DDL_:
-			// Send EmptyQueryResponse.
-			c.writeBuf.initMsg(serverMsgEmptyQuery)
-			return c.writeBuf.finishMsg(c.wr)
-
 		case *driver.Response_Result_RowsAffected:
 			// Send CommandComplete.
 			// TODO(bdarnell): tags for other types of commands.
@@ -672,9 +675,9 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, se
 
 		// Ack messages do not have a corresponding protobuf field, so handle those
 		// with a default.
+		// This also includes DDLs which want CommandComplete as well.
 		default:
-			// A real Postgres will send a tag back, but testing so far shows that
-			// clients will accept an empty tag also.
+			// TODO: A real Postgres will send a tag back. #3890
 			if err := c.sendCommandComplete(nil); err != nil {
 				return err
 			}
