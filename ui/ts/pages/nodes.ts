@@ -175,14 +175,14 @@ module AdminViews {
               Metrics.Select.Avg(_storeMetric("ranges.available"))
                 .sources(this.sources)
                 .title("Available Ranges")
-              ).format(d3.format("0")));
+              ).format(d3.format("d")));
 
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("exec.error.count"))
+              Metrics.Select.AvgRate(_nodeMetric("exec.error-count"))
                 .sources(this.sources)
                 .title("Error Calls")
-              ));
+              ).format(d3.format("d")));
 
           this._addChart(
             Metrics.NewAxis(
@@ -196,7 +196,7 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("cpu.user.percent"))
                 .sources(this.sources) // TODO: store sources vs node sources
                 .title("CPU User %")
-              ).format(d3.format("%")));
+              ).format(d3.format(".2%")));
 
           this.exec = new Metrics.Executor(this._query);
           this._refresh();
@@ -343,14 +343,14 @@ module AdminViews {
           this._query = Metrics.NewQuery();
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("exec.success.count"))
+              Metrics.Select.AvgRate(_nodeMetric("exec.success-count"))
                 .sources([nodeId])
                 .title("Successful Calls")
               )
               .label("Count / 10 sec."));
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("exec.error.count"))
+              Metrics.Select.AvgRate(_nodeMetric("exec.error-count"))
                 .sources([nodeId])
                 .title("Error Calls")
               )
