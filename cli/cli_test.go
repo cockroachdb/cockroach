@@ -517,6 +517,7 @@ Available Commands:
   user        get, set, list and remove users
   range       list, split and merge ranges
   zone        get, set, list and remove zones
+  node        list nodes and show their status
 
   version     output version information
 
