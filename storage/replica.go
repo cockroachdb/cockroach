@@ -145,10 +145,9 @@ type cmdIDKey string
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Replica struct {
-	RangeID  roachpb.RangeID // Should only be set by the constructor.
-	store    *Store
-	stats    *rangeStats // Range statistics
-	maxBytes int64       // Max bytes before split.
+	RangeID roachpb.RangeID // Should only be set by the constructor.
+	store   *Store
+	stats   *rangeStats // Range statistics
 	// Last index persisted to the raft log (not necessarily committed).
 	// Updated atomically.
 	lastIndex uint64
@@ -167,16 +166,17 @@ type Replica struct {
 	readOnlyCmdMu sync.RWMutex
 
 	mu struct {
-		sync.Mutex                     // Protects all fields in the mu struct.
-		cmdQ           *CommandQueue   // Enforce at most one command is running per key(s)
-		tsCache        *TimestampCache // Most recent timestamps for keys / key ranges
-		pendingSeq     uint64          // atomic sequence counter for cmdIDKey generation
-		pendingCmds    map[cmdIDKey]*pendingCmd
+		sync.Mutex                   // Protects all fields in the mu struct.
+		cmdQ           *CommandQueue // Enforce at most one command is running per key(s)
 		desc           *roachpb.RangeDescriptor
-		replicaID      roachpb.ReplicaID
-		raftGroup      *raft.RawNode
-		truncatedState *roachpb.RaftTruncatedState
 		leaderLease    *roachpb.Lease
+		maxBytes       int64 // Max bytes before split.
+		pendingCmds    map[cmdIDKey]*pendingCmd
+		pendingSeq     uint64 // atomic sequence counter for cmdIDKey generation
+		raftGroup      *raft.RawNode
+		replicaID      roachpb.ReplicaID
+		truncatedState *roachpb.RaftTruncatedState
+		tsCache        *TimestampCache // Most recent timestamps for keys / key ranges
 	}
 }
 
@@ -346,13 +346,17 @@ func (r *Replica) context() context.Context {
 
 // GetMaxBytes atomically gets the range maximum byte limit.
 func (r *Replica) GetMaxBytes() int64 {
-	return atomic.LoadInt64(&r.maxBytes)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.maxBytes
 }
 
 // SetMaxBytes atomically sets the maximum byte limit before
 // split. This value is cached by the range for efficiency.
 func (r *Replica) SetMaxBytes(maxBytes int64) {
-	atomic.StoreInt64(&r.maxBytes, maxBytes)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.maxBytes = maxBytes
 }
 
 // IsFirstRange returns true if this is the first range.
