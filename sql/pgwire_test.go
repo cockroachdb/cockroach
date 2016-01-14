@@ -149,30 +149,30 @@ func TestPGWire(t *testing.T) {
 	}
 }
 
-type preparedTest struct {
+type preparedQueryTest struct {
 	params, results []interface{}
 	error           string
 }
 
-func (p preparedTest) Params(v ...interface{}) preparedTest {
+func (p preparedQueryTest) Params(v ...interface{}) preparedQueryTest {
 	p.params = v
 	return p
 }
 
-func (p preparedTest) Error(err string) preparedTest {
-	p.error = err
+func (p preparedQueryTest) Results(v ...interface{}) preparedQueryTest {
+	p.results = v
 	return p
 }
 
-func (p preparedTest) Results(v ...interface{}) preparedTest {
-	p.results = v
+func (p preparedQueryTest) Error(err string) preparedQueryTest {
+	p.error = err
 	return p
 }
 
 func TestPGPreparedQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	var base preparedTest
-	queryTests := map[string][]preparedTest{
+	var base preparedQueryTest
+	queryTests := map[string][]preparedQueryTest{
 		"SELECT $1 > 0": {
 			base.Params(1).Results(true),
 			base.Params("1").Results(true),
@@ -251,40 +251,39 @@ func TestPGPreparedQuery(t *testing.T) {
 				},
 				stmt.Query,
 			} {
-				rows, err := queryFunc(test.params...)
-				if err != nil {
-					if test.error == "" {
-						t.Errorf("%s: %#v: unexpected error: %s", query, test.params, err)
-					} else if test.error != err.Error() {
-						t.Errorf("%s: %#v: expected error: %s, got %s", query, test.params, test.error, err)
+				func() {
+					if rows, err := queryFunc(test.params...); err != nil {
+						if test.error == "" {
+							t.Errorf("%s: %v: unexpected error: %s", query, test.params, err)
+						} else if test.error != err.Error() {
+							t.Errorf("%s: %v: expected error: %s, got %s", query, test.params, test.error, err)
+						}
+					} else {
+						defer rows.Close()
+
+						if test.error != "" {
+							t.Errorf("expected error: %s: %v", query, test.params)
+						} else {
+							if !rows.Next() {
+								t.Errorf("expected row: %s: %v", query, test.params)
+							} else {
+								dst := make([]interface{}, len(test.results))
+								for i, d := range test.results {
+									dst[i] = reflect.New(reflect.TypeOf(d)).Interface()
+								}
+								if err := rows.Scan(dst...); err != nil {
+									t.Error(err)
+								}
+								for i, d := range dst {
+									dst[i] = reflect.Indirect(reflect.ValueOf(d)).Interface()
+								}
+								if !reflect.DeepEqual(dst, test.results) {
+									t.Errorf("%s: %v: expected %v, got %v", query, test.params, test.results, dst)
+								}
+							}
+						}
 					}
-					continue
-				}
-				if test.error != "" && err == nil {
-					t.Errorf("expected error: %s: %#v", query, test.params)
-					continue
-				}
-				dst := make([]interface{}, len(test.results))
-				for i, d := range test.results {
-					dst[i] = reflect.New(reflect.TypeOf(d)).Interface()
-				}
-				if !rows.Next() {
-					t.Errorf("expected row: %s: %#v", query, test.params)
-					continue
-				}
-				if err := rows.Scan(dst...); err != nil {
-					t.Error(err)
-					continue
-				}
-				rows.Close()
-				for i, d := range dst {
-					v := reflect.Indirect(reflect.ValueOf(d)).Interface()
-					dst[i] = v
-				}
-				if !reflect.DeepEqual(dst, test.results) {
-					t.Errorf("%s: %#v: expected %v, got %v", query, test.params, test.results, dst)
-					continue
-				}
+				}()
 			}
 		}
 		if err := stmt.Close(); err != nil {
@@ -313,32 +312,34 @@ func TestPGPreparedQuery(t *testing.T) {
 	}
 }
 
+type preparedExecTest struct {
+	params []interface{}
+	error  string
+}
+
+func (p preparedExecTest) Params(v ...interface{}) preparedExecTest {
+	p.params = v
+	return p
+}
+
+func (p preparedExecTest) Error(err string) preparedExecTest {
+	p.error = err
+	return p
+}
+
 func TestPGPreparedExec(t *testing.T) {
 	defer leaktest.AfterTest(t)
-
-	var base preparedTest
-	queryTests := []struct {
-		query string
-		tests []preparedTest
-	}{
-		{
-			"INSERT INTO d.t VALUES ($1, $2, $3)",
-			[]preparedTest{
-				base.Params(1, "one", 2),
-				base.Params("two", 2, 2).Error(`pq: param $1: strconv.ParseInt: parsing "two": invalid syntax`),
-			},
+	var base preparedExecTest
+	queryTests := map[string][]preparedExecTest{
+		"INSERT INTO d.t VALUES ($1, $2, $3)": {
+			base.Params(1, "one", 2),
+			base.Params("two", 2, 2).Error(`pq: param $1: strconv.ParseInt: parsing "two": invalid syntax`),
 		},
-		{
-			"UPDATE d.t SET s = $1, i = i + $2, d = 1 + $3 WHERE i = $4",
-			[]preparedTest{
-				base.Params(4, 3, 2, 1),
-			},
+		"UPDATE d.t SET s = $1, i = i + $2, d = 1 + $3 WHERE i = $4": {
+			base.Params(4, 3, 2, 1),
 		},
-		{
-			"DELETE FROM d.t WHERE s = $1 and i = $2 and d = 2 + $3",
-			[]preparedTest{
-				base.Params(1, 2, 3),
-			},
+		"DELETE FROM d.t WHERE s = $1 and i = $2 and d = 2 + $3": {
+			base.Params(1, 2, 3),
 		},
 	}
 
@@ -359,22 +360,29 @@ func TestPGPreparedExec(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, queryTest := range queryTests {
-		stmt, err := db.Prepare(queryTest.query)
+	for query, tests := range queryTests {
+		stmt, err := db.Prepare(query)
 		if err != nil {
-			t.Fatalf("prepare error: %s: %s", queryTest.query, err)
+			t.Errorf("prepare error: %s: %s", query, err)
+			continue
 		}
-		for _, test := range queryTest.tests {
-			_, err := stmt.Exec(test.params...)
-			if err != nil {
-				if test.error == "" {
-					t.Fatalf("%s: %#v: unexpected error: %s", queryTest.query, test.params, err)
-				} else if test.error != err.Error() {
-					t.Fatalf("%s: %#v: expected error: %s, got %s", queryTest.query, test.params, test.error, err)
-				}
-			}
-			if test.error != "" && err == nil {
-				t.Fatalf("expected error: %s: %#v", queryTest.query, test.params)
+
+		for _, test := range tests {
+			for _, execFunc := range []func(...interface{}) (sql.Result, error){
+				func(args ...interface{}) (sql.Result, error) {
+					return db.Exec(query, args...)
+				},
+				stmt.Exec,
+			} {
+				func() {
+					if _, err := execFunc(test.params...); err != nil {
+						if test.error == "" {
+							t.Errorf("%s: %v: unexpected error: %s", query, test.params, err)
+						} else if test.error != err.Error() {
+							t.Errorf("%s: %v: expected error: %s, got %s", query, test.params, test.error, err)
+						}
+					}
+				}()
 			}
 		}
 		if err := stmt.Close(); err != nil {
