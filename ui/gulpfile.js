@@ -3,6 +3,7 @@
 // imports
 var gulp = require('gulp')
     ,stylus = require('gulp-stylus')
+    ,nib = require('nib')
     ,ts = require('gulp-typescript')
     ,livereload = require('gulp-livereload')
     ,del = require('del')
@@ -12,9 +13,12 @@ var gulp = require('gulp')
 // generate css from styl files
 gulp.task('stylus', function () {
     return gulp.src('styl/app.styl')
-        .pipe(stylus({
-            "include css": true
-        }))
+        .pipe(
+          stylus({
+            "include css": true,
+            use: nib()
+          })
+        )
         .pipe(rename('app_debug.css'))
         .pipe(gulp.dest('build'))
         .pipe(livereload());
