@@ -48,11 +48,8 @@ endif
 .PHONY: all
 all: build test check
 
-# On a release build, rebuild everything to make sure that the
-# 'release' build tag is taken into account.
 .PHONY: release
 release: TAGS += release
-release: GOFLAGS += -a
 release: build
 
 .PHONY: build
