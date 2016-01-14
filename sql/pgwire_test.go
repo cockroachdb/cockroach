@@ -251,37 +251,53 @@ func TestPGPrepared(t *testing.T) {
 			continue
 		}
 
+		type result struct {
+			rows *sql.Rows
+			err  error
+		}
+
 		for _, test := range tests {
-			rows, err := stmt.Query(test.params...)
-			if err != nil {
-				if test.error == "" {
-					t.Errorf("%s: %#v: unexpected error: %s", query, test.params, err)
+			var results []result
+			{
+				rows, err := db.Query(query, test.params...)
+				results = append(results, result{rows: rows, err: err})
+			}
+			{
+				rows, err := stmt.Query(test.params...)
+				results = append(results, result{rows: rows, err: err})
+			}
+			for _, res := range results {
+				rows, err := res.rows, res.err
+				if err != nil {
+					if test.error == "" {
+						t.Errorf("%s: %#v: unexpected error: %s", query, test.params, err)
+					}
+					if test.error != err.Error() {
+						t.Errorf("%s: %#v: expected error: %s, got %s", query, test.params, test.error, err)
+					}
+					continue
 				}
-				if test.error != err.Error() {
-					t.Errorf("%s: %#v: expected error: %s, got %s", query, test.params, test.error, err)
+				if test.error != "" && err == nil {
+					t.Errorf("expected error: %s: %#v", query, test.params)
 				}
-				continue
-			}
-			if test.error != "" && err == nil {
-				t.Errorf("expected error: %s: %#v", query, test.params)
-			}
-			dst := make([]interface{}, len(test.result))
-			for i, d := range test.result {
-				dst[i] = reflect.New(reflect.TypeOf(d)).Interface()
-			}
-			if !rows.Next() {
-				t.Errorf("expected row: %s: %#v", query, test.params)
-			}
-			if err := rows.Scan(dst...); err != nil {
-				t.Error(err)
-			}
-			rows.Close()
-			for i, d := range dst {
-				v := reflect.Indirect(reflect.ValueOf(d)).Interface()
-				dst[i] = v
-			}
-			if !reflect.DeepEqual(dst, test.result) {
-				t.Errorf("%s: %#v: expected %v, got %v", query, test.params, test.result, dst)
+				dst := make([]interface{}, len(test.result))
+				for i, d := range test.result {
+					dst[i] = reflect.New(reflect.TypeOf(d)).Interface()
+				}
+				if !rows.Next() {
+					t.Errorf("expected row: %s: %#v", query, test.params)
+				}
+				if err := rows.Scan(dst...); err != nil {
+					t.Error(err)
+				}
+				rows.Close()
+				for i, d := range dst {
+					v := reflect.Indirect(reflect.ValueOf(d)).Interface()
+					dst[i] = v
+				}
+				if !reflect.DeepEqual(dst, test.result) {
+					t.Errorf("%s: %#v: expected %v, got %v", query, test.params, test.result, dst)
+				}
 			}
 		}
 		if err := stmt.Close(); err != nil {
