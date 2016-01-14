@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/gogo/protobuf/proto"
 )
@@ -97,13 +98,12 @@ func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		log.Errorf("could not find GC policy for range %s: %s", repl, err)
+		log.Errorf("could not find zone config for range %s: %s", repl, err)
 		return
 	}
-	policy := zone.GC
 
 	// GC score is the total GC'able bytes age normalized by 1 MB * the replica's TTL in seconds.
-	gcScore := float64(repl.stats.GetGCBytesAge(now.WallTime)) / float64(policy.TTLSeconds) / float64(gcByteCountNormalization)
+	gcScore := float64(repl.stats.GetGCBytesAge(now.WallTime)) / float64(zone.GC.TTLSeconds) / float64(gcByteCountNormalization)
 
 	// Intent score. This computes the average age of outstanding intents
 	// and normalizes.
@@ -155,11 +155,10 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	// Lookup the GC policy for the zone containing this key range.
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		return fmt.Errorf("could not find GC policy for range %s: %s", repl, err)
+		return util.Errorf("could not find zone config for range %s: %s", repl, err)
 	}
-	policy := zone.GC
 
-	gc := engine.NewGarbageCollector(now, *policy)
+	gc := engine.NewGarbageCollector(now, zone.GC)
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now

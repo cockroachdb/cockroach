@@ -47,6 +47,8 @@ var yamlConfig = []byte(`replicas:
 - attrs: [b, hdd]
 range_min_bytes: 1048576
 range_max_bytes: 67108864
+gc:
+  ttlseconds: 0
 `)
 
 var jsonConfig = []byte(`{
@@ -77,7 +79,10 @@ var jsonConfig = []byte(`{
     }
   ],
   "range_min_bytes": 1048576,
-  "range_max_bytes": 67108864
+  "range_max_bytes": 67108864,
+  "gc": {
+    "ttl_seconds": 0
+  }
 }`)
 
 var protobufConfig []byte
@@ -138,7 +143,7 @@ func TestUnmarshalRequest(t *testing.T) {
 				t.Errorf("%d: unexpected success", i)
 			}
 			continue
-		} else if !test.expError && err != nil {
+		} else if err != nil {
 			t.Errorf("%d: unexpected failure: %s", i, err)
 			continue
 		}
@@ -186,7 +191,7 @@ func TestMarshalResponse(t *testing.T) {
 			t.Fatalf("%d: %s", i, err)
 		}
 		if !bytes.Equal(body, test.expBody) {
-			t.Errorf("%d: expected %q; got %q", i, test.expBody, body)
+			t.Errorf("%d: expected:\n%q\ngot\n%q", i, test.expBody, body)
 		}
 		if cType != test.expCType {
 			t.Errorf("%d: expected %s content type; got %s", i, test.expCType, cType)
