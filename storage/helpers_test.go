@@ -21,14 +21,16 @@
 
 package storage
 
-// ForceReplicationScan iterates over all ranges and enqueues any that
-// need to be replicated. Exposed only for testing.
-func (s *Store) ForceReplicationScan() {
+// ForceReplicationScanAndProcess iterates over all ranges and
+// enqueues any that need to be replicated. Exposed only for testing.
+func (s *Store) ForceReplicationScanAndProcess() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	for _, r := range s.mu.replicas {
 		s.replicateQueue.MaybeAdd(r, s.ctx.Clock.Now())
 	}
+	s.mu.Unlock()
+
+	s.replicateQueue.DrainQueue(s.ctx.Clock)
 }
 
 // DisableReplicaGCQueue disables or enables the replica GC queue.

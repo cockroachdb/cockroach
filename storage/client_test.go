@@ -56,7 +56,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-const replicationTimeout = 3 * time.Second
+const replicationTimeout = 5 * time.Second
 
 // Check that Stores implements the RangeDescriptorDB interface.
 var _ kv.RangeDescriptorDB = &storage.Stores{}
@@ -276,7 +276,20 @@ func (m *multiTestContext) Stop() {
 		m.reenableTableSplits()
 	}()
 
-	<-done
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		// If we've already failed, just attach another failure to the
+		// test, since a timeout during shutdown after a failure is
+		// probably not interesting, and will prevent the display of any
+		// pending t.Error. If we're timing out but the test was otherwise
+		// a success, panic so we see stack traces from other goroutines.
+		if m.t.Failed() {
+			m.t.Error("timed out during shutdown")
+		} else {
+			panic("timed out during shutdown")
+		}
+	}
 }
 
 // rpcSend implements the client.rpcSender interface. This implementation of "rpcSend" is
