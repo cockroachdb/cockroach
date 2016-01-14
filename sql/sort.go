@@ -28,9 +28,9 @@ import (
 )
 
 // orderBy constructs a sortNode based on the ORDER BY clause. Construction of
-// the sortNode might adjust the number of render targets in the scanNode if
+// the sortNode might adjust the number of render targets in the selectNode if
 // any ordering expressions are specified.
-func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, *roachpb.Error) {
+func (p *planner) orderBy(n *parser.Select, s *selectNode) (*sortNode, *roachpb.Error) {
 	if n.OrderBy == nil {
 		return nil, nil
 	}
@@ -73,10 +73,10 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, *roachpb.Er
 				if err := qname.NormalizeColumnName(); err != nil {
 					return nil, roachpb.NewError(err)
 				}
-				if qname.Table() == "" || equalName(s.desc.Alias, qname.Table()) {
+				if qname.Table() == "" || equalName(s.from.alias, qname.Table()) {
 					for j, r := range s.render {
 						if qval, ok := r.(*qvalue); ok {
-							if equalName(qval.col.Name, qname.Column()) {
+							if equalName(qval.colRef.get().Name, qname.Column()) {
 								index = j
 								break
 							}

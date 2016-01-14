@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -164,11 +163,7 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc *TableDescriptor, 
 			desc:    oldTableDesc,
 		}
 		scan.initDescDefaults()
-		pErr := scan.init(&parser.Select{Exprs: oldTableDesc.allColumnsSelector()})
-		if pErr != nil {
-			return pErr
-		}
-		rows, pErr := p.selectIndex(scan, nil, false)
+		rows, pErr := p.selectIndex(&selectNode{}, scan, nil, false)
 		if pErr != nil {
 			return pErr
 		}

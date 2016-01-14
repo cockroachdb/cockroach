@@ -30,38 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
-// qvalue implements the parser.DRereference interface and is used as a
-// replacement node for QualifiedNames in expressions that can change their
-// values for each row. Since it is a reference, expression walking can
-// discover the qvalues and the columns they refer to.
-type qvalue struct {
-	datum parser.Datum
-	col   ColumnDescriptor
-}
-
-var _ parser.VariableExpr = &qvalue{}
-
-func (*qvalue) Variable() {}
-
-func (q *qvalue) String() string {
-	return q.col.Name
-}
-
-func (q *qvalue) Walk(v parser.Visitor) {
-	q.datum = parser.WalkExpr(v, q.datum).(parser.Datum)
-}
-
-func (q *qvalue) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
-	return q.datum.TypeCheck(args)
-}
-
-func (q *qvalue) Eval(ctx parser.EvalContext) (parser.Datum, error) {
-	return q.datum.Eval(ctx)
-}
-
-type qvalMap map[ColumnID]*qvalue
-type colKindMap map[ColumnID]ColumnType_Kind
-
 type span struct {
 	start roachpb.Key // inclusive key
 	end   roachpb.Key // exclusive key
@@ -127,12 +95,27 @@ func prettySpans(spans []span, skip int) string {
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
 type scanNode struct {
-	planner          *planner
-	txn              *client.Txn
-	desc             *TableDescriptor
-	index            *IndexDescriptor
+	planner *planner
+	txn     *client.Txn
+	desc    *TableDescriptor
+	index   *IndexDescriptor
+
+	// visibleCols are normally a copy of desc.Columns (even when we are using an index). The only
+	// exception is when we are selecting from a specific index (SELECT * from t@abc), in which case
+	// it contains only the columns in the index.
+	visibleCols []ColumnDescriptor
+	// There is a 1-1 correspondence between visibleCols and resultColumns.
+	resultColumns []ResultColumn
+	// row contains values for the current row. There is a 1-1 correspondence between resultColumns and vals.
+	row parser.DTuple
+	// for each column in resultColumns, indicates if the value is needed (used as an optimization
+	// when the upper layer doesn't need all values).
+	valNeededForCol []bool
+
+	// Map used to get the index for columns in visibleCols.
+	colIdxMap map[ColumnID]int
+
 	spans            []span
-	visibleCols      []ColumnDescriptor
 	isSecondaryIndex bool
 	reverse          bool
 	columns          []ResultColumn
@@ -151,17 +134,12 @@ type scanNode struct {
 	vals             []parser.Datum    // the index key values for the current row
 	implicitValTypes []parser.Datum    // the implicit value types for unique indexes
 	implicitVals     []parser.Datum    // the implicit values for unique indexes
-	qvals            qvalMap           // the values in the current row
-	colKind          colKindMap        // map of column kinds for decoding column values
-	row              parser.DTuple     // the rendered row
-	filter           parser.Expr       // filtering expression for rows
-	render           []parser.Expr     // rendering expressions for rows
 	explain          explainMode
 	explainValue     parser.Datum
 }
 
 func (n *scanNode) Columns() []ResultColumn {
-	return n.columns
+	return n.resultColumns
 }
 
 func (n *scanNode) Ordering() orderingInfo {
@@ -256,20 +234,23 @@ func (n *scanNode) initTableExpr(p *planner, ate *parser.AliasedTableExpr) *roac
 		}
 		// Strip out any columns from the table that are not present in the
 		// index.
-		indexColIDs := map[ColumnID]struct{}{}
+		visibleCols := make([]ColumnDescriptor, 0, len(n.index.ColumnIDs)+len(n.index.ImplicitColumnIDs))
 		for _, colID := range n.index.ColumnIDs {
-			indexColIDs[colID] = struct{}{}
+			var col *ColumnDescriptor
+			if col, n.pErr = n.desc.FindColumnByID(colID); n.pErr != nil {
+				return n.pErr
+			}
+			visibleCols = append(visibleCols, *col)
 		}
 		for _, colID := range n.index.ImplicitColumnIDs {
-			indexColIDs[colID] = struct{}{}
-		}
-		for _, col := range n.desc.Columns {
-			if _, ok := indexColIDs[col.ID]; !ok {
-				continue
+			var col *ColumnDescriptor
+			if col, n.pErr = n.desc.FindColumnByID(colID); n.pErr != nil {
+				return n.pErr
 			}
-			n.visibleCols = append(n.visibleCols, col)
+			visibleCols = append(visibleCols, *col)
 		}
 		n.isSecondaryIndex = true
+		n.initVisibleCols(visibleCols)
 	} else {
 		n.initDescDefaults()
 	}
@@ -279,7 +260,69 @@ func (n *scanNode) initTableExpr(p *planner, ate *parser.AliasedTableExpr) *roac
 
 func (n *scanNode) initDescDefaults() {
 	n.index = &n.desc.PrimaryIndex
-	n.visibleCols = n.desc.Columns
+	n.initVisibleCols(n.desc.Columns)
+}
+
+// isColumnHidden returns true if the column with the given index shouldn't be be resolved by
+// a star reference (e.g. SELECT * FROM t)
+func (n *scanNode) isColumnHidden(idx int) bool {
+	if idx < 0 || idx >= len(n.visibleCols) {
+		panic(fmt.Sprintf("Invalid column index %d", idx))
+	}
+	if n.isSecondaryIndex {
+		// When selecting from a specific index, we should hide the ImplicitColumnIDs
+		return idx >= len(n.index.ColumnIDs)
+	}
+	return n.visibleCols[idx].Hidden
+}
+
+// makeResultColumns converts ColumnDescriptors to ResultColumns
+func makeResultColumns(colDescs []ColumnDescriptor) []ResultColumn {
+	cols := make([]ResultColumn, 0, len(colDescs))
+	for _, colDesc := range colDescs {
+		// Convert the ColumnDescriptor to ResultColumn.
+		var typ parser.Datum
+
+		switch colDesc.Type.Kind {
+		case ColumnType_INT:
+			typ = parser.DummyInt
+		case ColumnType_BOOL:
+			typ = parser.DummyBool
+		case ColumnType_FLOAT:
+			typ = parser.DummyFloat
+		case ColumnType_DECIMAL:
+			typ = parser.DummyDecimal
+		case ColumnType_STRING:
+			typ = parser.DummyString
+		case ColumnType_BYTES:
+			typ = parser.DummyBytes
+		case ColumnType_DATE:
+			typ = parser.DummyDate
+		case ColumnType_TIMESTAMP:
+			typ = parser.DummyTimestamp
+		case ColumnType_INTERVAL:
+			typ = parser.DummyInterval
+		default:
+			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Kind))
+		}
+		cols = append(cols, ResultColumn{Name: colDesc.Name, Typ: typ})
+	}
+	return cols
+}
+
+// Initializes the visibleCols and associated structures (resultColumns, colIdxMap).
+func (n *scanNode) initVisibleCols(visibleCols []ColumnDescriptor) {
+	n.visibleCols = visibleCols
+	n.resultColumns = makeResultColumns(visibleCols)
+	n.colIdxMap = make(map[ColumnID]int, len(visibleCols))
+	for i, c := range visibleCols {
+		n.colIdxMap[c.ID] = i
+	}
+	n.valNeededForCol = make([]bool, len(visibleCols))
+	for i := range visibleCols {
+		n.valNeededForCol[i] = true
+	}
+	n.row = make([]parser.Datum, len(visibleCols))
 }
 
 // initScan initializes (and performs) the key-value scan.
@@ -347,66 +390,8 @@ func (n *scanNode) initScan() bool {
 			}
 			n.implicitVals = make([]parser.Datum, len(n.implicitValTypes))
 		}
-
-		// Prepare a map from column ID to column kind used for unmarshalling values.
-		n.colKind = make(colKindMap, len(n.desc.Columns))
-		for _, col := range n.desc.Columns {
-			n.colKind[col.ID] = col.Type.Kind
-		}
 	}
 	return true
-}
-
-func (n *scanNode) init(sel *parser.Select) *roachpb.Error {
-	// TODO(radu): the where/targets logic will move into selectNode
-	if pErr := n.initWhere(sel.Where); pErr != nil {
-		return pErr
-	}
-	return n.initTargets(sel.Exprs)
-}
-
-func (n *scanNode) initWhere(where *parser.Where) *roachpb.Error {
-	if where == nil {
-		return nil
-	}
-	n.filter, n.pErr = n.resolveQNames(where.Expr)
-	if n.pErr == nil {
-		var whereType parser.Datum
-		var err error
-		whereType, err = n.filter.TypeCheck(n.planner.evalCtx.Args)
-		n.pErr = roachpb.NewError(err)
-		if n.pErr == nil {
-			if !(whereType == parser.DummyBool || whereType == parser.DNull) {
-				n.pErr = roachpb.NewUErrorf("argument of WHERE must be type %s, not type %s", parser.DummyBool.Type(), whereType.Type())
-			}
-		}
-	}
-	if n.pErr == nil {
-		// Normalize the expression (this will also evaluate any branches that are
-		// constant).
-		var err error
-		n.filter, err = n.planner.parser.NormalizeExpr(n.planner.evalCtx, n.filter)
-		n.pErr = roachpb.NewError(err)
-	}
-	if n.pErr == nil {
-		n.filter, n.pErr = n.planner.expandSubqueries(n.filter, 1)
-	}
-	return n.pErr
-}
-
-func (n *scanNode) initTargets(targets parser.SelectExprs) *roachpb.Error {
-	// Loop over the select expressions and expand them into the expressions
-	// we're going to use to generate the returned column set and the names for
-	// those columns.
-	for _, target := range targets {
-		if n.pErr = n.addRender(target); n.pErr != nil {
-			return n.pErr
-		}
-	}
-	// `groupBy` or `orderBy` may internally add additional columns which we
-	// do not want to include in validation of e.g. `GROUP BY 2`.
-	n.originalCols = n.columns
-	return nil
 }
 
 // initOrdering initializes the ordering info using the selected index. This
@@ -416,202 +401,42 @@ func (n *scanNode) initOrdering(exactPrefix int) {
 		return
 	}
 	n.columnIDs, n.columnDirs = n.index.fullColumnIDs()
-	n.ordering = computeOrdering(n.render, n.index, exactPrefix, n.reverse)
+	n.ordering = n.computeOrdering(n.index, exactPrefix, n.reverse)
 }
 
-// Searches for a render target for the value of the given column.
-func findRenderIndexForCol(render []parser.Expr, colID ColumnID) (idx int, ok bool) {
-	for i, r := range render {
-		if qval, ok := r.(*qvalue); ok && qval.col.ID == colID {
-			return i, true
-		}
-	}
-	return -1, false
-}
-
-// computeOrdering calculates ordering information for render target columns assuming that:
+// computeOrdering calculates ordering information for table columns (visibleCols) assuming that:
 //    - we scan a given index (potentially in reverse order), and
 //    - the first `exactPrefix` columns of the index each have an exact (single value) match
 //      (see orderingInfo).
-//
-// Some examples:
-//
-//    SELECT a, b FROM t@abc ...
-//    	the ordering is: first by column 0 (a), then by column 1 (b)
-//
-//    SELECT a, b FROM t@abc WHERE a = 1 ...
-//    	the ordering is: exact match column (a), ordered by column 1 (b)
-//
-//    SELECT b, a FROM t@abc ...
-//      the ordering is: first by column 1 (a), then by column 0 (a)
-//
-//    SELECT a, c FROM t@abc ...
-//      the ordering is: just by column 0 (a). Here we don't have b as a render target so we
-//      cannot possibly use (or even express) the second-rank order by b (which makes any lower
-//      ranks unusable as well).
-//
-//      Note that for queries like
-//         SELECT a, c FROM t@abc ORDER by a,b,c
-//      we internally add b as a render target. The same holds for any targets required for
-//      grouping.
-func computeOrdering(
-	render []parser.Expr, index *IndexDescriptor, exactPrefix int, reverse bool) orderingInfo {
+func (n *scanNode) computeOrdering(index *IndexDescriptor, exactPrefix int, reverse bool) orderingInfo {
 	var ordering orderingInfo
 
 	columnIDs, dirs := index.fullColumnIDs()
 
 	for i, colID := range columnIDs {
-		renderIdx, ok := findRenderIndexForCol(render, colID)
-		if ok {
-			if i < exactPrefix {
-				ordering.addExactMatchColumn(renderIdx)
-			} else {
-				dir := dirs[i]
-				if reverse {
-					dir = dir.Reverse()
-				}
-				ordering.addColumn(renderIdx, dir)
-			}
-			continue
+		idx, ok := n.colIdxMap[colID]
+		if !ok {
+			panic(fmt.Sprintf("index refers to unknown column id %d", colID))
 		}
-		// We have a column that isn't part of the output.
 		if i < exactPrefix {
-			// Fortunately this is an "exact match" column, so we can safely ignore it.
-			//
-			// For example, assume we are using an ascending index on (k, v) with the query:
-			//
-			//   SELECT v FROM t WHERE k = 1
-			//
-			// The rows from the index are ordered by k then by v, but since k is an exact match
-			// column the results are also ordered just by v.
-			continue
+			ordering.addExactMatchColumn(idx)
 		} else {
-			// Once we find a column that is not part of the output, the rest of the ordered
-			// columns aren't useful.
-			//
-			// For example, assume we are using an ascending index on (k, v) with the query:
-			//
-			//   SELECT v FROM t WHERE k > 1
-			//
-			// The rows from the index are ordered by k then by v. We cannot make any use of this
-			// ordering as an ordering on v.
-			break
+			dir := dirs[i]
+			if reverse {
+				dir = dir.Reverse()
+			}
+			ordering.addColumn(idx, dir)
 		}
 	}
 	return ordering
 }
 
-func (n *scanNode) addRender(target parser.SelectExpr) *roachpb.Error {
-	// When generating an output column name it should exactly match the original
-	// expression, so determine the output column name before we perform any
-	// manipulations to the expression (such as star expansion).
-	var outputName string
-	if target.As != "" {
-		outputName = string(target.As)
-	} else {
-		outputName = target.Expr.String()
-	}
-
-	// If a QualifiedName has a StarIndirection suffix we need to match the
-	// prefix of the qualified name to one of the tables in the query and
-	// then expand the "*" into a list of columns.
-	if qname, ok := target.Expr.(*parser.QualifiedName); ok {
-		if n.pErr = roachpb.NewError(qname.NormalizeColumnName()); n.pErr != nil {
-			return n.pErr
-		}
-		if qname.IsStar() {
-			if n.desc == nil {
-				return roachpb.NewUErrorf("\"%s\" with no tables specified is not valid", qname)
-			}
-			if target.As != "" {
-				return roachpb.NewUErrorf("\"%s\" cannot be aliased", qname)
-			}
-			tableName := qname.Table()
-			if tableName != "" && !equalName(n.desc.Alias, tableName) {
-				return roachpb.NewUErrorf("table \"%s\" not found", tableName)
-			}
-
-			if n.isSecondaryIndex {
-				for _, id := range n.index.ColumnIDs {
-					var col *ColumnDescriptor
-					if col, n.pErr = n.desc.FindColumnByID(id); n.pErr != nil {
-						return n.pErr
-					}
-					qval := n.getQVal(*col)
-					n.columns = append(n.columns, ResultColumn{Name: col.Name, Typ: qval.datum})
-					n.render = append(n.render, qval)
-				}
-			} else {
-				for _, col := range n.desc.VisibleColumns() {
-					qval := n.getQVal(col)
-					n.columns = append(n.columns, ResultColumn{Name: col.Name, Typ: qval.datum})
-					n.render = append(n.render, qval)
-				}
-			}
-			return nil
-		}
-	}
-
-	// Resolve qualified names. This has the side-effect of normalizing any
-	// qualified name found.
-	var resolved parser.Expr
-	if resolved, n.pErr = n.resolveQNames(target.Expr); n.pErr != nil {
-		return n.pErr
-	}
-	if resolved, n.pErr = n.planner.expandSubqueries(resolved, 1); n.pErr != nil {
-		return n.pErr
-	}
-	var typ parser.Datum
-	var err error
-	typ, err = resolved.TypeCheck(n.planner.evalCtx.Args)
-	n.pErr = roachpb.NewError(err)
-	if n.pErr != nil {
-		return n.pErr
-	}
-	var normalized parser.Expr
-	normalized, err = n.planner.parser.NormalizeExpr(n.planner.evalCtx, resolved)
-	n.pErr = roachpb.NewError(err)
-	if n.pErr != nil {
-		return n.pErr
-	}
-	n.render = append(n.render, normalized)
-
-	if target.As == "" {
-		switch t := target.Expr.(type) {
-		case *parser.QualifiedName:
-			// If the expression is a qualified name, use the column name, not the
-			// full qualification as the column name to return.
-			outputName = t.Column()
-		}
-	}
-	n.columns = append(n.columns, ResultColumn{Name: outputName, Typ: typ})
-	return nil
-}
-
-func (n *scanNode) colIndex(expr parser.Expr) (int, error) {
-	switch i := expr.(type) {
-	case parser.DInt:
-		index := int(i)
-		if numCols := len(n.originalCols); index < 1 || index > numCols {
-			return -1, fmt.Errorf("invalid column index: %d not in range [1, %d]", index, numCols)
-		}
-		return index - 1, nil
-
-	case parser.Datum:
-		return -1, fmt.Errorf("non-integer constant column index: %s", expr)
-
-	default:
-		// expr doesn't look like a col index (i.e. not a constant).
-		return -1, nil
-	}
-}
-
 func (n *scanNode) processKV(kv client.KeyValue) bool {
 	if n.indexKey == nil {
-		// Reset the qvals map expressions to nil. The expressions will get filled
-		// in with the column values as we decode the key-value pairs for the row.
-		for _, qval := range n.qvals {
-			qval.datum = nil
+		// Reset the row to nil; it will get filled in in with the column
+		// values as we decode the key-value pairs for the row.
+		for i := range n.row {
+			n.row[i] = nil
 		}
 	}
 
@@ -627,8 +452,8 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 		// This is the first key for the row, initialize the column values that are
 		// part of the index key.
 		for i, id := range n.columnIDs {
-			if qval, ok := n.qvals[id]; ok {
-				qval.datum = n.vals[i]
+			if idx, ok := n.colIdxMap[id]; ok {
+				n.row[idx] = n.vals[i]
 			}
 		}
 	}
@@ -645,19 +470,21 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 			return false
 		}
 		n.colID = ColumnID(v)
-		if qval, ok := n.qvals[n.colID]; ok && qval.datum == nil {
+		if idx, ok := n.colIdxMap[n.colID]; ok && n.valNeededForCol[idx] {
 			value, ok = n.unmarshalValue(kv)
 			if !ok {
 				return false
 			}
-			qval.datum = value
+			if n.row[idx] != nil {
+				panic(fmt.Sprintf("duplicate value for column %d", idx))
+			}
+			n.row[idx] = value
 			if log.V(2) {
 				log.Infof("Scan %s -> %v", kv.Key, value)
 			}
 		} else {
 			// No need to unmarshal the column value. Either the column was part of
-			// the index key or it isn't needed by any of the render or filter
-			// expressions.
+			// the index key or it isn't needed.
 			if log.V(2) {
 				log.Infof("Scan %s -> [%d] (skipped)", kv.Key, n.colID)
 			}
@@ -673,8 +500,8 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 				return false
 			}
 			for i, id := range n.index.ImplicitColumnIDs {
-				if qval, ok := n.qvals[id]; ok {
-					qval.datum = n.implicitVals[i]
+				if idx, ok := n.colIdxMap[id]; ok && n.valNeededForCol[idx] {
+					n.row[idx] = n.implicitVals[i]
 				}
 			}
 		}
@@ -728,85 +555,42 @@ func (n *scanNode) maybeOutputRow() bool {
 			!bytes.HasPrefix(n.kvs[n.kvIndex].Key, n.indexKey)) {
 		// The current key belongs to a new row. Output the current row.
 		n.indexKey = nil
-		output := n.filterRow()
-		if n.pErr != nil {
-			return true
+
+		// Fill in any missing values with NULLs
+		for i, col := range n.visibleCols {
+			if n.valNeededForCol[i] && n.row[i] == nil {
+				if !col.Nullable {
+					panic("Non-nullable column with no value!")
+				}
+				n.row[i] = parser.DNull
+			}
 		}
-		if output {
-			n.renderRow()
-			return true
-		} else if n.explainValue != nil {
-			n.explainDebug(true, false)
-			return true
+		if n.explainValue != nil {
+			n.explainDebug(true)
 		}
+		return true
 	} else if n.explainValue != nil {
-		n.explainDebug(false, false)
+		n.explainDebug(false)
 		return true
 	}
 	return false
 }
 
-// filterRow checks to see if the current row matches the filter (i.e. the
-// where-clause). May set n.pErr if an error occurs during expression
-// evaluation.
-func (n *scanNode) filterRow() bool {
-	if n.desc != nil {
-		for _, col := range n.visibleCols {
-			if !col.Nullable {
-				continue
-			}
-			if qval, ok := n.qvals[col.ID]; ok && qval.datum == nil {
-				qval.datum = parser.DNull
-				continue
-			}
-		}
+// explainDebug fills in four extra debugging values in the current row:
+//  - the row index,
+//  - the key,
+//  - a value string,
+//  - a true bool if we are at the end of the row, or a NULL otherwise.
+func (n *scanNode) explainDebug(endOfRow bool) {
+	if len(n.row) == len(n.visibleCols) {
+		n.row = append(n.row, nil, nil, nil, nil)
 	}
+	debugVals := n.row[len(n.row)-4:]
 
-	if n.filter == nil {
-		return true
-	}
-
-	var d parser.Datum
-	var err error
-	d, err = n.filter.Eval(n.planner.evalCtx)
-	n.pErr = roachpb.NewError(err)
-	if n.pErr != nil {
-		return false
-	}
-
-	return d != parser.DNull && bool(d.(parser.DBool))
-}
-
-// renderRow renders the row by evaluating the render expressions. May set
-// n.pErr if an error occurs during expression evaluation.
-func (n *scanNode) renderRow() {
-	if n.explain == explainDebug {
-		n.explainDebug(true, true)
-		return
-	}
-
-	if n.row == nil {
-		n.row = make([]parser.Datum, len(n.render))
-	}
-	for i, e := range n.render {
-		var err error
-		n.row[i], err = e.Eval(n.planner.evalCtx)
-		n.pErr = roachpb.NewError(err)
-		if n.pErr != nil {
-			return
-		}
-	}
-	n.rowIndex++
-}
-
-func (n *scanNode) explainDebug(endOfRow, outputRow bool) {
-	if n.row == nil {
-		n.row = make([]parser.Datum, len(n.columns))
-	}
-	n.row[0] = parser.DInt(n.rowIndex)
-	n.row[1] = parser.DString(n.prettyKey())
+	debugVals[0] = parser.DInt(n.rowIndex)
+	debugVals[1] = parser.DString(n.prettyKey())
 	if n.implicitVals != nil {
-		n.row[2] = parser.DString(prettyDatums(n.implicitVals))
+		debugVals[2] = parser.DString(prettyDatums(n.implicitVals))
 	} else {
 		// This conversion to DString is odd. `n.explainValue` is already a
 		// `Datum`, but logic_test currently expects EXPLAIN DEBUG output
@@ -814,13 +598,13 @@ func (n *scanNode) explainDebug(endOfRow, outputRow bool) {
 		// consistent across all printing of strings in logic_test, though.
 		// TODO(tamird/pmattis): figure out a consistent story for string
 		// printing in logic_test.
-		n.row[2] = parser.DString(n.explainValue.String())
+		debugVals[2] = parser.DString(n.explainValue.String())
 	}
 	if endOfRow {
-		n.row[3] = parser.DBool(outputRow)
+		debugVals[3] = parser.DBool(true)
 		n.rowIndex++
 	} else {
-		n.row[3] = parser.DNull
+		debugVals[3] = parser.DNull
 	}
 	n.explainValue = nil
 }
@@ -843,188 +627,13 @@ func (n *scanNode) prettyKey() string {
 }
 
 func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
-	kind, ok := n.colKind[n.colID]
+	idx, ok := n.colIdxMap[n.colID]
 	if !ok {
 		n.pErr = roachpb.NewUErrorf("column-id \"%d\" does not exist", n.colID)
 		return nil, false
 	}
+	kind := n.visibleCols[idx].Type.Kind
 	var d parser.Datum
 	d, n.pErr = unmarshalColumnValue(kind, kv.Value)
 	return d, n.pErr == nil
-}
-
-func (n *scanNode) getQVal(col ColumnDescriptor) *qvalue {
-	if n.qvals == nil {
-		n.qvals = make(qvalMap)
-	}
-	qval := n.qvals[col.ID]
-	if qval == nil {
-		qval = &qvalue{col: col}
-		// We initialize the qvalue expression to a datum of the type matching the
-		// column. This allows type analysis to be performed on the expression
-		// before we start retrieving rows.
-		//
-		// TODO(pmattis): Nullable columns can have NULL values. The type analysis
-		// needs to take that into consideration, but how to surface that info?
-		switch col.Type.Kind {
-		case ColumnType_INT:
-			qval.datum = parser.DummyInt
-		case ColumnType_BOOL:
-			qval.datum = parser.DummyBool
-		case ColumnType_FLOAT:
-			qval.datum = parser.DummyFloat
-		case ColumnType_DECIMAL:
-			qval.datum = parser.DummyDecimal
-		case ColumnType_STRING:
-			qval.datum = parser.DummyString
-		case ColumnType_BYTES:
-			qval.datum = parser.DummyBytes
-		case ColumnType_DATE:
-			qval.datum = parser.DummyDate
-		case ColumnType_TIMESTAMP:
-			qval.datum = parser.DummyTimestamp
-		case ColumnType_INTERVAL:
-			qval.datum = parser.DummyInterval
-		default:
-			panic(fmt.Sprintf("unsupported column type: %s", col.Type.Kind))
-		}
-		n.qvals[col.ID] = qval
-	}
-	return qval
-}
-
-type qnameVisitor struct {
-	*scanNode
-	pErr *roachpb.Error
-}
-
-var _ parser.Visitor = &qnameVisitor{}
-
-func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
-	if !pre || v.pErr != nil {
-		return nil, expr
-	}
-
-	switch t := expr.(type) {
-	case *qvalue:
-		// We will encounter a qvalue in the expression during retry of an
-		// auto-transaction. When that happens, we've already gone through
-		// qualified name normalization and lookup, we just need to hook the qvalue
-		// up to the scanNode.
-		//
-		// TODO(pmattis): Should we be more careful about ensuring that the various
-		// statement implementations do not modify the AST nodes they are passed?
-		return v, v.getQVal(t.col)
-
-	case *parser.QualifiedName:
-		qname := t
-
-		v.pErr = roachpb.NewError(qname.NormalizeColumnName())
-		if v.pErr != nil {
-			return nil, expr
-		}
-		if qname.IsStar() {
-			v.pErr = roachpb.NewUErrorf("qualified name \"%s\" not found", qname)
-			return nil, expr
-		}
-
-		if desc := v.getDesc(qname); desc != nil {
-			name := qname.Column()
-			for _, col := range v.visibleCols {
-				if !equalName(name, col.Name) {
-					continue
-				}
-				return v, v.getQVal(col)
-			}
-		}
-
-		v.pErr = roachpb.NewUErrorf("qualified name \"%s\" not found", qname)
-		return nil, expr
-
-	case *parser.FuncExpr:
-		// Special case handling for COUNT(*). This is a special construct to
-		// count the number of rows; in this case * does NOT refer to a set of
-		// columns.
-		if len(t.Name.Indirect) > 0 || !strings.EqualFold(string(t.Name.Base), "count") {
-			break
-		}
-		// The COUNT function takes a single argument. Exit out if this isn't true
-		// as this will be detected during expression evaluation.
-		if len(t.Exprs) != 1 {
-			break
-		}
-		qname, ok := t.Exprs[0].(*parser.QualifiedName)
-		if !ok {
-			break
-		}
-		v.pErr = roachpb.NewError(qname.NormalizeColumnName())
-		if v.pErr != nil {
-			return nil, expr
-		}
-		if !qname.IsStar() {
-			// This will cause us to recurse into the arguments of the function which
-			// will perform normal qualified name resolution.
-			break
-		}
-		// Replace the function argument with a special non-NULL VariableExpr.
-		t.Exprs[0] = starDatumInstance
-		return v, expr
-
-	case *parser.Subquery:
-		// Do not recurse into subqueries.
-		return nil, expr
-	}
-
-	return v, expr
-}
-
-func (v *qnameVisitor) getDesc(qname *parser.QualifiedName) *TableDescriptor {
-	if v.desc == nil {
-		return nil
-	}
-	if qname.Base == "" {
-		qname.Base = parser.Name(v.desc.Alias)
-		return v.desc
-	}
-	if equalName(v.desc.Alias, string(qname.Base)) {
-		return v.desc
-	}
-	return nil
-}
-
-func (n *scanNode) resolveQNames(expr parser.Expr) (parser.Expr, *roachpb.Error) {
-	if expr == nil {
-		return expr, nil
-	}
-	v := qnameVisitor{scanNode: n}
-	expr = parser.WalkExpr(&v, expr)
-	return expr, v.pErr
-}
-
-// A VariableExpr used as a dummy argument for the special case COUNT(*).  This
-// ends up being processed correctly by the count aggregator since it is not
-// parser.DNull.
-//
-// We need to implement enough functionality to satisfy the type checker and to
-// allow the the intermediate rendering of the row (before the group
-// aggregation).
-type starDatum struct{}
-
-var starDatumInstance = &starDatum{}
-var _ parser.VariableExpr = starDatumInstance
-
-func (*starDatum) Variable() {}
-
-func (*starDatum) String() string {
-	return "*"
-}
-
-func (*starDatum) Walk(v parser.Visitor) {}
-
-func (*starDatum) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
-	return parser.DummyInt.TypeCheck(args)
-}
-
-func (*starDatum) Eval(ctx parser.EvalContext) (parser.Datum, error) {
-	return parser.DummyInt.Eval(ctx)
 }
