@@ -109,7 +109,7 @@ module AdminViews {
             )
           ),
         ]);
-      };
+      }
     }
   }
 }

@@ -101,6 +101,7 @@ OK
 | lease      |
 | namespace  |
 | rangelog   |
+| reporting  |
 | users      |
 | zones      |
 +------------+

@@ -1,4 +1,4 @@
-// source: pages/nodes.ts
+// source: component/navbar.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../../typings/browser.d.ts" />
 /// <reference path="../util/property.ts" />
@@ -35,20 +35,32 @@ module Components {
     export function view(ctrl: any, args: {ts: TargetSet; }): _mithril.MithrilVirtualElement {
       return m(
         "ul.nav",
-        _.map(args.ts.targets(), (t: Target) =>
-          m("li",
+        _.map(args.ts.targets(), function generateLinks(t: Target): MithrilVirtualElement {
+          // settings for a relative URL using the mithril router
+          let linkAttrs: any = {
+            config: m.route,
+            href: args.ts.baseRoute + t.route,
+          };
+          // handle absolute urls by detecting leading http[s]://
+          if (/^https?:\/\//.test(t.route.toLowerCase())) {
+            linkAttrs = {
+              href: t.route,
+              target: "_blank", // open in a new tab/window
+            };
+          }
+          // relative urls
+          return m(
+            "li",
             {
               className: (args.ts.isActive(t) ? "active" : "") + (t.liClass ? " " + t.liClass : " normal")
             },
             m("a",
-              {
-                config: m.route,
-                href: args.ts.baseRoute + t.route,
-              },
+              linkAttrs,
               t.view
-              )
-          )
-      ));
+            )
+          );
+        })
+      );
     }
   }
 }
