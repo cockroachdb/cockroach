@@ -18,6 +18,7 @@ package pgwire
 
 import (
 	"crypto/tls"
+	"io"
 	"net"
 	"sync"
 
@@ -106,7 +107,7 @@ func (s *Server) serve(ln net.Listener) {
 			}()
 
 			if err := s.serveConn(conn); err != nil {
-				if !s.isClosing() {
+				if err != io.EOF && !s.isClosing() {
 					log.Error(err)
 				}
 			}

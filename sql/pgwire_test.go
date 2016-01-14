@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func trivialQuery(pgUrl url.URL) error {
@@ -247,14 +246,13 @@ func TestPGPrepared(t *testing.T) {
 
 	for query, tests := range queryTests {
 		stmt, err := db.Prepare(query)
-		log.Infof("prepare: %s, err: %s", query, err)
 		if err != nil {
 			t.Errorf("prepare error: %s: %s", query, err)
 			continue
 		}
+
 		for _, test := range tests {
 			rows, err := stmt.Query(test.params...)
-			log.Infof("query: %s, params: %v, err: %s", query, test.params, err)
 			if err != nil {
 				if test.error == "" {
 					t.Errorf("%s: %#v: unexpected error: %s", query, test.params, err)

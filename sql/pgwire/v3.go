@@ -145,7 +145,9 @@ func (c *v3Conn) parseOptions(data []byte) error {
 		case "user":
 			c.opts.user = value
 		default:
-			log.Warningf("unrecognized configuration parameter %q", key)
+			if log.V(1) {
+				log.Warningf("unrecognized configuration parameter %q", key)
+			}
 		}
 	}
 }
