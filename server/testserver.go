@@ -279,6 +279,14 @@ func (ts *TestServer) Stop() {
 	ts.Server.Stop()
 }
 
+// WaitForStopped blocks until the server's Stopper is stopped (i.e. its
+// Stop() method returned).
+// Useful when the server is not stopped with the above Stop(), but rather
+// through an async process like Run("quit").
+func (ts *TestServer) WaitForStopped() {
+	<-ts.Stopper().IsStopped()
+}
+
 // SetRangeRetryOptions sets the retry options for stores in TestServer.
 func (ts *TestServer) SetRangeRetryOptions(ro retry.Options) {
 	if err := ts.node.stores.VisitStores(func(s *storage.Store) error {
