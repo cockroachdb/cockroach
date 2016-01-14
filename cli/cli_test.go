@@ -35,6 +35,16 @@ type cliTest struct {
 	*server.TestServer
 }
 
+// Stop the server, or wait until stopping is done
+// if it was already initiated by the caller.
+func (c *cliTest) cleanup(wasStopped *bool) {
+	if *wasStopped {
+		c.WaitForStopped()
+	} else {
+		c.Stop()
+	}
+}
+
 func newCLITest() cliTest {
 	// Reset the client context for each test. We don't reset the
 	// pointer (because they are tied into the flags), but instead
@@ -73,6 +83,8 @@ func (c cliTest) RunWithArgs(a []string) {
 
 func Example_basic() {
 	c := newCLITest()
+	stopped := false
+	defer c.cleanup(&stopped)
 
 	c.Run("kv put a 1 b 2 c 3")
 	c.Run("kv scan")
@@ -89,6 +101,7 @@ func Example_basic() {
 	c.Run("kv revscan")
 	c.Run("kv inc c b")
 	c.Run("quit")
+	stopped = true
 
 	// Output:
 	// kv put a 1 b 2 c 3
@@ -133,6 +146,8 @@ func Example_basic() {
 
 func Example_quoted() {
 	c := newCLITest()
+	stopped := false
+	defer c.cleanup(&stopped)
 
 	c.Run(`kv put a\x00 日本語`)                                  // UTF-8 input text
 	c.Run(`kv put a\x01 \u65e5\u672c\u8a9e`)                   // explicit Unicode code points
@@ -144,6 +159,7 @@ func Example_quoted() {
 	c.Run(`kv inc 1\x01`)
 	c.Run(`kv get 1\x01`)
 	c.Run("quit")
+	stopped = true
 
 	// Output:
 	// kv put a\x00 日本語
@@ -175,10 +191,13 @@ func Example_insecure() {
 	if err := c.Start(); err != nil {
 		log.Fatalf("Could not start server: %v", err)
 	}
+	stopped := false
+	defer c.cleanup(&stopped)
 
 	c.Run("kv --insecure put a 1 b 2")
 	c.Run("kv --insecure scan")
 	c.Run("quit --insecure")
+	stopped = true
 
 	// Output:
 	// kv --insecure put a 1 b 2
@@ -192,6 +211,8 @@ func Example_insecure() {
 
 func Example_ranges() {
 	c := newCLITest()
+	stopped := false
+	defer c.cleanup(&stopped)
 
 	c.Run("kv put a 1 b 2 c 3 d 4")
 	c.Run("kv scan")
@@ -207,6 +228,7 @@ func Example_ranges() {
 	c.Run("kv delrange a c")
 	c.Run("kv scan")
 	c.Run("quit")
+	stopped = true
 
 	// Output:
 	// kv put a 1 b 2 c 3 d 4
@@ -277,6 +299,8 @@ func Example_ranges() {
 
 func Example_logging() {
 	c := newCLITest()
+	stopped := false
+	defer c.cleanup(&stopped)
 
 	c.Run("kv --alsologtostderr=false scan")
 	c.Run("kv --log-backtrace-at=foo.go:1 scan")
@@ -285,6 +309,7 @@ func Example_logging() {
 	c.Run("kv --verbosity=0 scan")
 	c.Run("kv --vmodule=foo=1 scan")
 	c.Run("quit")
+	stopped = true
 
 	// Output:
 	// kv --alsologtostderr=false scan
@@ -305,6 +330,8 @@ func Example_logging() {
 
 func Example_cput() {
 	c := newCLITest()
+	stopped := false
+	defer c.cleanup(&stopped)
 
 	c.Run("kv put a 1 b 2 c 3 d 4")
 	c.Run("kv scan")
@@ -312,6 +339,7 @@ func Example_cput() {
 	c.Run("kv cput b 3 2")
 	c.Run("kv scan")
 	c.Run("quit")
+	stopped = true
 
 	// Output:
 	// kv put a 1 b 2 c 3 d 4
@@ -336,6 +364,8 @@ func Example_cput() {
 
 func Example_max_results() {
 	c := newCLITest()
+	stopped := false
+	defer c.cleanup(&stopped)
 
 	c.Run("kv put a 1 b 2 c 3 d 4")
 	c.Run("kv scan --max-results=3")
@@ -344,6 +374,7 @@ func Example_max_results() {
 	c.Run("range split d")
 	c.Run("range ls --max-results=2")
 	c.Run("quit")
+	stopped = true
 
 	// Output:
 	// kv put a 1 b 2 c 3 d 4
@@ -370,6 +401,8 @@ func Example_max_results() {
 
 func Example_zone() {
 	c := newCLITest()
+	stopped := false
+	defer c.cleanup(&stopped)
 
 	zone100 := `replicas:
 - attrs: [us-east-1a,ssd]
@@ -386,6 +419,7 @@ range_max_bytes: 67108864
 	c.Run("zone rm 100")
 	c.Run("zone ls")
 	c.Run("quit")
+	stopped = true
 
 	// Output:
 	// zone ls
@@ -423,6 +457,8 @@ range_max_bytes: 67108864
 
 func Example_user() {
 	c := newCLITest()
+	stopped := false
+	defer c.cleanup(&stopped)
 
 	c.Run("user ls")
 	c.Run("user set foo --password=bar")
@@ -432,6 +468,7 @@ func Example_user() {
 	c.Run("user rm foo")
 	c.Run("user ls")
 	c.Run("quit")
+	stopped = true
 
 	// Output:
 	// user ls
