@@ -2710,7 +2710,6 @@ func TestRangeStatsComputation(t *testing.T) {
 // that values passed to Merge are being merged.
 func TestMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("#3555")
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()

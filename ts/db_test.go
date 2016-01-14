@@ -250,7 +250,6 @@ func datapoint(timestamp int64, val float64) *TimeSeriesDatapoint {
 // it is storing time series correctly.
 func TestStoreTimeSeries(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("#3646")
 	tm := newTestModel(t)
 	tm.Start()
 	defer tm.Stop()

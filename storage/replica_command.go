@@ -1063,14 +1063,15 @@ func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
 }
 
 // Merge is used to merge a value into an existing key. Merge is an
-// efficient accumulation operation which is exposed by RocksDB, used by
-// Cockroach for the efficient accumulation of certain values. Due to the
-// difficulty of making these operations transactional, merges are not currently
-// exposed directly to clients. Merged values are explicitly not MVCC data.
+// efficient accumulation operation which is exposed by RocksDB, used
+// by CockroachDB for the efficient accumulation of certain
+// values. Due to the difficulty of making these operations
+// transactional, merges are not currently exposed directly to
+// clients. Merged values are explicitly not MVCC data.
 func (r *Replica) Merge(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.MergeRequest) (roachpb.MergeResponse, error) {
 	var reply roachpb.MergeResponse
 
-	return reply, engine.MVCCMerge(batch, ms, args.Key, args.Value)
+	return reply, engine.MVCCMerge(batch, ms, args.Key, h.Timestamp, args.Value)
 }
 
 // TruncateLog discards a prefix of the raft log. Truncating part of a log that

@@ -31,7 +31,10 @@ var _ = math.Inf
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 type MVCCMetadata struct {
 	Txn *cockroach_roachpb1.Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
-	// The timestamp of the most recent versioned value.
+	// The timestamp of the most recent versioned value if this is a
+	// value that may have multiple versions. For values which may have
+	// only one version, the data is stored inline (via raw_bytes), and
+	// timestamp is set to zero.
 	Timestamp cockroach_roachpb1.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 	// Is the most recent value a deletion tombstone?
 	Deleted bool `protobuf:"varint,3,opt,name=deleted" json:"deleted"`
@@ -39,12 +42,16 @@ type MVCCMetadata struct {
 	KeyBytes int64 `protobuf:"varint,4,opt,name=key_bytes" json:"key_bytes"`
 	// The size in bytes of the most recent versioned value.
 	ValBytes int64 `protobuf:"varint,5,opt,name=val_bytes" json:"val_bytes"`
-	// Inline value, used for values with zero timestamp. This provides
-	// an efficient short circuit of the normal MVCC metadata sentinel
-	// and subsequent version rows. If timestamp == (0, 0), then there
-	// is only a single MVCC metadata row with value inlined, and with
-	// empty timestamp, key_bytes, and val_bytes.
+	// Inline value, used for non-versioned values with zero
+	// timestamp. This provides an efficient short circuit of the normal
+	// MVCC metadata sentinel and subsequent version rows. If timestamp
+	// == (0, 0), then there is only a single MVCC metadata row with
+	// value inlined, and with empty timestamp, key_bytes, and
+	// val_bytes.
 	RawBytes []byte `protobuf:"bytes,6,opt,name=raw_bytes" json:"raw_bytes,omitempty"`
+	// This provides a measure of protection against replays caused by
+	// Raft duplicating merge commands.
+	MergeTimestamp *cockroach_roachpb1.Timestamp `protobuf:"bytes,7,opt,name=merge_timestamp" json:"merge_timestamp,omitempty"`
 }
 
 func (m *MVCCMetadata) Reset()         { *m = MVCCMetadata{} }
@@ -137,6 +144,16 @@ func (m *MVCCMetadata) MarshalTo(data []byte) (int, error) {
 		i++
 		i = encodeVarintMvcc(data, i, uint64(len(m.RawBytes)))
 		i += copy(data[i:], m.RawBytes)
+	}
+	if m.MergeTimestamp != nil {
+		data[i] = 0x3a
+		i++
+		i = encodeVarintMvcc(data, i, uint64(m.MergeTimestamp.Size()))
+		n3, err := m.MergeTimestamp.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
 	}
 	return i, nil
 }
@@ -241,6 +258,10 @@ func (m *MVCCMetadata) Size() (n int) {
 	n += 1 + sovMvcc(uint64(m.ValBytes))
 	if m.RawBytes != nil {
 		l = len(m.RawBytes)
+		n += 1 + l + sovMvcc(uint64(l))
+	}
+	if m.MergeTimestamp != nil {
+		l = m.MergeTimestamp.Size()
 		n += 1 + l + sovMvcc(uint64(l))
 	}
 	return n
@@ -455,6 +476,39 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.RawBytes = append([]byte{}, data[iNdEx:postIndex]...)
+			iNdEx = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MergeTimestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMvcc
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.MergeTimestamp == nil {
+				m.MergeTimestamp = &cockroach_roachpb1.Timestamp{}
+			}
+			if err := m.MergeTimestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
