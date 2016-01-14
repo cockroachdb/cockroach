@@ -97,10 +97,14 @@ func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		log.Errorf("could not find GC policy for range %s: %s", repl, err)
+		log.Errorf("could not find zone config for range %s: %s", repl, err)
 		return
 	}
 	policy := zone.GC
+	if policy == nil {
+		log.Errorf("could not find GC policy for range %s: %s", repl, zone)
+		return
+	}
 
 	// GC score is the total GC'able bytes age normalized by 1 MB * the replica's TTL in seconds.
 	gcScore := float64(repl.stats.GetGCBytesAge(now.WallTime)) / float64(policy.TTLSeconds) / float64(gcByteCountNormalization)
