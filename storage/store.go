@@ -1307,9 +1307,11 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 				resolveIntents, pErr = s.resolveWriteIntentError(ctx, wiErr, rng, args, ba.Header, pushType)
 				if len(resolveIntents) > 0 {
 					if resErr := rng.resolveIntents(ctx, resolveIntents, false /* !wait */, true /* poison */); resErr != nil {
-						// When resolving asynchronously, should never get an error
-						// back here.
-						panic(resErr)
+						// When resolving asynchronously, errors should not
+						// usually be returned here, although there are some cases
+						// when they may be (especially when a test cluster is in
+						// the process of shutting down).
+						log.Warningf("asynchronous resolveIntents failed: %s", resErr)
 					}
 				}
 				// Make sure that if an index is carried in the error, it

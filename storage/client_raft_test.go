@@ -550,7 +550,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	wg.Wait()
 
 	// Once we know our peers, trigger a scan.
-	mtc.stores[0].ForceReplicationScan()
+	mtc.stores[0].ForceReplicationScanAndProcess()
 
 	// The range should become available on every node.
 	if err := util.IsTrueWithin(func() bool {
@@ -629,62 +629,6 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	}
 	wg.Wait()
 
-	// storeIDset is used to compare the replica sets from different views (i.e.
-	// local range descriptors)
-	type storeIDset map[roachpb.StoreID]struct{}
-	makeStoreIDset := func(replicas []roachpb.ReplicaDescriptor) storeIDset {
-		idSet := make(storeIDset)
-		for _, r := range replicas {
-			idSet[r.StoreID] = struct{}{}
-		}
-		return idSet
-	}
-
-	// Function to see if the replication level of the new range has reached the
-	// expected equilibrium. If equilibrium has not been reached, this function
-	// returns the list of stores that *should* have a replica for the range.
-	checkReplication := func() (bool, storeIDset) {
-		// Query each store for a replica of the range, generating a real map of
-		// the replicas.
-		foundIDset := make(storeIDset)
-		foundLocalRangeDescs := make([]*roachpb.RangeDescriptor, 0, len(mtc.stores))
-		for _, s := range mtc.stores {
-			r := s.LookupReplica(keys.Addr(splitKey), nil)
-			if r != nil {
-				foundLocalRangeDescs = append(foundLocalRangeDescs, r.Desc())
-				foundIDset[s.StoreID()] = struct{}{}
-			}
-		}
-
-		// Fail immediately if there are less than three replicas.
-		replicaCount := len(foundIDset)
-		if replicaCount < 3 {
-			t.Fatalf("Removed too many replicas; expected at least three replicas, found %d", replicaCount)
-		}
-
-		// Look up the official range descriptor, make sure it agrees with the
-		// found replicas.
-		realRangeDesc := getRangeMetadata(keys.Addr(rightKey), mtc, t)
-		realIDset := makeStoreIDset(realRangeDesc.Replicas)
-		if !reflect.DeepEqual(realIDset, foundIDset) {
-			return false, realIDset
-		}
-
-		// Ensure the local range descriptors everywhere agree with reality.
-		for _, desc := range foundLocalRangeDescs {
-			localIDset := makeStoreIDset(desc.Replicas)
-			if !reflect.DeepEqual(localIDset, foundIDset) {
-				return false, realIDset
-			}
-		}
-
-		// If we have only three replicas, exit the loop.
-		if replicaCount == 3 {
-			return true, nil
-		}
-		return false, foundIDset
-	}
-
 	maxTimeout := time.After(10 * time.Second)
 	succeeded := false
 	for !succeeded {
@@ -693,24 +637,20 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 			t.Fatalf("Failed to achieve proper replication within 10 seconds")
 		case <-time.After(10 * time.Millisecond):
 			mtc.expireLeaderLeases()
-			// If our replication level matches the target, we have succeeded.
-			var idSet storeIDset
-			succeeded, idSet = checkReplication()
-			if succeeded {
+			rangeDesc := getRangeMetadata(keys.Addr(rightKey), mtc, t)
+			if count := len(rangeDesc.Replicas); count < 3 {
+				t.Fatalf("Removed too many replicas; expected at least 3 replicas, found %d", count)
+			} else if count == 3 {
+				succeeded = true
 				break
 			}
 
-			// Kick off a manual ReplicaGC Scan on any store which is not part of the
-			// current replica set. Kick off a Replication scan on *one* store which
-			// is part of the replica set.
-			kickedOffReplicationQueue := false
+			// Run replication scans on every store; only the store with the
+			// leader lease will actually do anything. If we did not wait
+			// for the scan to complete here it could be interrupted by the
+			// next call to expireLeaderLeases.
 			for _, store := range mtc.stores {
-				if _, ok := idSet[store.StoreID()]; !ok {
-					store.ForceReplicaGCScanAndProcess()
-				} else if !kickedOffReplicationQueue {
-					store.ForceReplicationScan()
-					kickedOffReplicationQueue = true
-				}
+				store.ForceReplicationScanAndProcess()
 			}
 		}
 	}
@@ -1208,8 +1148,8 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 				mtc.stores[1].GossipStore()
 			})
 			// Force the repair queues on all alive stores to run.
-			mtc.stores[0].ForceReplicationScan()
-			mtc.stores[1].ForceReplicationScan()
+			mtc.stores[0].ForceReplicationScanAndProcess()
+			mtc.stores[1].ForceReplicationScanAndProcess()
 		}
 	}
 	ticker.Stop()
@@ -1283,7 +1223,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 			}
 
 			mtc.expireLeaderLeases()
-			mtc.stores[1].ForceReplicationScan()
+			mtc.stores[1].ForceReplicationScanAndProcess()
 		}
 	}
 }
