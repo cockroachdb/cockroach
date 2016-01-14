@@ -18,6 +18,7 @@ package cli
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 
 	"github.com/cockroachdb/cockroach/security"
@@ -45,7 +46,9 @@ func runGetUser(cmd *cobra.Command, args []string) {
 	}
 	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
-	err := runPrettyQuery(db, os.Stdout, `SELECT * FROM system.users WHERE username=$1`, args[0])
+	// TODO(marc): use placeholders once they work with pgwire.
+	err := runPrettyQuery(db, os.Stdout,
+		fmt.Sprintf(`SELECT * FROM system.users WHERE username='%s'`, args[0]))
 	if err != nil {
 		panic(err)
 	}
@@ -93,7 +96,9 @@ func runRmUser(cmd *cobra.Command, args []string) {
 	}
 	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
-	err := runPrettyQuery(db, os.Stdout, `DELETE FROM system.users WHERE username=$1`, args[0])
+	// TODO(marc): switch to placeholders when working.
+	err := runPrettyQuery(db, os.Stdout,
+		fmt.Sprintf(`DELETE FROM system.users WHERE username='%s'`, args[0]))
 	if err != nil {
 		panic(err)
 	}
@@ -161,7 +166,9 @@ func runSetUser(cmd *cobra.Command, args []string) {
 	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
 	// TODO(marc): switch to UPSERT.
-	err = runPrettyQuery(db, os.Stdout, `INSERT INTO system.users VALUES ($1, $2)`, args[0], hashed)
+	// TODO(marc): switch to placeholders when they work again with pgwire.
+	err = runPrettyQuery(db, os.Stdout,
+		fmt.Sprintf(`INSERT INTO system.users VALUES ('%s', '%s'::bytes)`, args[0], string(hashed)))
 	if err != nil {
 		panic(err)
 	}

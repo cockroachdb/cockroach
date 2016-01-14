@@ -435,99 +435,95 @@ func Example_max_results() {
 }
 
 func Example_zone() {
-	/*
-		c := newCLITest()
-		defer c.stop()
+	c := newCLITest()
+	defer c.stop()
 
-		zone100 := `replicas:
-				- attrs: [us-east-1a,ssd]
-				- attrs: [us-east-1b,ssd]
-				- attrs: [us-west-1b,ssd]
-				range_min_bytes: 8388608
-				range_max_bytes: 67108864
-				`
-		c.Run("zone ls")
-		// Call RunWithArgs to bypass the "split-by-whitespace" arg builder.
-		c.RunWithArgs([]string{"zone", "set", "100", zone100})
-		c.Run("zone ls")
-		c.Run("zone get 100")
-		c.Run("zone rm 100")
-		c.Run("zone ls")
-		c.Run("quit")
+	zone100 := `replicas:
+- attrs: [us-east-1a,ssd]
+- attrs: [us-east-1b,ssd]
+- attrs: [us-west-1b,ssd]
+range_min_bytes: 8388608
+range_max_bytes: 67108864
+`
+	c.Run("zone ls")
+	// Call RunWithArgs to bypass the "split-by-whitespace" arg builder.
+	c.RunWithArgs([]string{"zone", "set", "100", zone100})
+	c.Run("zone ls")
+	c.Run("zone get 100")
+	c.Run("zone rm 100")
+	c.Run("zone ls")
+	c.Run("quit")
 
-		// Output:
-		// zone ls
-		// zone set 100 replicas:
-		// - attrs: [us-east-1a,ssd]
-		// - attrs: [us-east-1b,ssd]
-		// - attrs: [us-west-1b,ssd]
-		// range_min_bytes: 8388608
-		// range_max_bytes: 67108864
-		//
-		// OK
-		// zone ls
-		// Object 100:
-		// replicas:
-		// - attrs: [us-east-1a, ssd]
-		// - attrs: [us-east-1b, ssd]
-		// - attrs: [us-west-1b, ssd]
-		// range_min_bytes: 8388608
-		// range_max_bytes: 67108864
-		//
-		// zone get 100
-		// replicas:
-		// - attrs: [us-east-1a, ssd]
-		// - attrs: [us-east-1b, ssd]
-		// - attrs: [us-west-1b, ssd]
-		// range_min_bytes: 8388608
-		// range_max_bytes: 67108864
-		//
-		// zone rm 100
-		// OK
-		// zone ls
-		// quit
-		// node drained and shutdown: ok
-	*/
+	// Output:
+	// zone ls
+	// zone set 100 replicas:
+	// - attrs: [us-east-1a,ssd]
+	// - attrs: [us-east-1b,ssd]
+	// - attrs: [us-west-1b,ssd]
+	// range_min_bytes: 8388608
+	// range_max_bytes: 67108864
+	//
+	// OK
+	// zone ls
+	// Object 100:
+	// replicas:
+	// - attrs: [us-east-1a, ssd]
+	// - attrs: [us-east-1b, ssd]
+	// - attrs: [us-west-1b, ssd]
+	// range_min_bytes: 8388608
+	// range_max_bytes: 67108864
+	//
+	// zone get 100
+	// replicas:
+	// - attrs: [us-east-1a, ssd]
+	// - attrs: [us-east-1b, ssd]
+	// - attrs: [us-west-1b, ssd]
+	// range_min_bytes: 8388608
+	// range_max_bytes: 67108864
+	//
+	// zone rm 100
+	// OK
+	// zone ls
+	// quit
+	// node drained and shutdown: ok
 }
 
 func Example_user() {
-	/*
-		c := newCLITest()
-		defer c.stop()
+	c := newCLITest()
+	defer c.stop()
 
-		c.Run("user ls")
-		c.Run("user set foo --password=bar")
-		// Don't use get, since the output of hashedPassword is random.
-		// c.Run("user get foo")
-		c.Run("user ls")
-		c.Run("user rm foo")
-		c.Run("user ls")
-		c.Run("quit")
+	c.Run("user ls")
+	c.Run("user set foo --password=bar")
+	// Don't use get, since the output of hashedPassword is random.
+	// c.Run("user get foo")
+	c.Run("user ls")
+	c.Run("user rm foo")
+	c.Run("user ls")
+	c.Run("quit")
 
-		// Output:
-		// user ls
-		// +----------+
-		// | username |
-		// +----------+
-		// +----------+
-		// user set foo --password=bar
-		// OK
-		// user ls
-		// +----------+
-		// | username |
-		// +----------+
-		// | foo      |
-		// +----------+
-		// user rm foo
-		// OK
-		// user ls
-		// +----------+
-		// | username |
-		// +----------+
-		// +----------+
-		// quit
-		// node drained and shutdown: ok
-	*/
+	// Output:
+	// user ls
+	// +----------+
+	// | username |
+	// +----------+
+	// +----------+
+	// user set foo --password=bar
+	// OK
+	// user ls
+	// +----------+
+	// | username |
+	// +----------+
+	// | "foo"    |
+	// +----------+
+	// user rm foo
+	// OK
+	// user ls
+	// +----------+
+	// | username |
+	// +----------+
+	// +----------+
+	// quit
+	// node drained and shutdown: ok
 }
 
 // TestFlagUsage is a basic test to make sure the fragile
