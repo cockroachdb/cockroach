@@ -59,7 +59,7 @@ func (p *planner) Explain(n *parser.Explain) (planNode, *roachpb.Error) {
 		return plan, nil
 	case explainPlan:
 		v := &valuesNode{}
-		v.columns = []column{
+		v.columns = []resultColumn{
 			{name: "Level", typ: parser.DummyInt},
 			{name: "Type", typ: parser.DummyString},
 			{name: "Description", typ: parser.DummyString},
@@ -79,7 +79,7 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 
 	case *scanNode:
 		// Mark the node as being explained.
-		t.columns = []column{
+		t.columns = []resultColumn{
 			{name: "RowIdx", typ: parser.DummyInt},
 			{name: "Key", typ: parser.DummyString},
 			{name: "Value", typ: parser.DummyString},

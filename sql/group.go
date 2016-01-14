@@ -205,7 +205,7 @@ type groupNode struct {
 	pErr            *roachpb.Error
 }
 
-func (n *groupNode) Columns() []column {
+func (n *groupNode) Columns() []resultColumn {
 	return n.values.Columns()
 }
 
