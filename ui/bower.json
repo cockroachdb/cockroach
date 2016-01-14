@@ -3,7 +3,7 @@
   "dependencies": {
     "d3": "3.5.8",
     "lodash": "3.10.1",
-    "mithriljs": "df114a4ee27ed64d3602741dc461d052fbc9c284",
+    "mithriljs": "https://github.com/maxlang/mithril.js.git#1fa5368c1748dc21585d035da1960ab01adbe766",
     "nvd3": "1.8.1",
     "protobuf": "https://github.com/cockroachdb/protobuf.js.git#~5.0.0",
     "moment": "2.10.6",
