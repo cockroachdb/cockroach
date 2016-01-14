@@ -75,7 +75,7 @@ func (p *planner) Explain(n *parser.Explain) (planNode, *roachpb.Error) {
 func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 	switch t := plan.(type) {
 	case *selectNode:
-		return markDebug(t.from, mode)
+		return markDebug(t.from.node, mode)
 
 	case *scanNode:
 		// Mark the node as being explained.
@@ -88,11 +88,13 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 		t.explain = mode
 		return t, nil
 
-	case *indexJoinNode:
-		return markDebug(t.index, mode)
+		/* MEH
+		case *indexJoinNode:
+			return markDebug(t.index, mode)
 
-	case *sortNode:
-		return markDebug(t.plan, mode)
+		case *sortNode:
+			return markDebug(t.plan, mode)
+		*/
 
 	default:
 		return nil, roachpb.NewErrorf("TODO(pmattis): unimplemented %T", plan)

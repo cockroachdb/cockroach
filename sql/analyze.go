@@ -1417,7 +1417,7 @@ func varEqual(a, b parser.Expr) bool {
 	case *qvalue:
 		switch tb := b.(type) {
 		case *qvalue:
-			return ta.col.ID == tb.col.ID
+			return ta.colRef == tb.colRef
 		}
 
 	case parser.Tuple:
@@ -1443,13 +1443,4 @@ func makeIsNotNull(left parser.Expr) parser.Expr {
 		Left:     left,
 		Right:    parser.DNull,
 	}
-}
-
-func findColumnInTuple(tuple parser.Tuple, colID ColumnID) int {
-	for i, v := range tuple {
-		if q, ok := v.(*qvalue); ok && q.col.ID == colID {
-			return i
-		}
-	}
-	return -1
 }

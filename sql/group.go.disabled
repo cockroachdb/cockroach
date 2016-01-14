@@ -436,7 +436,8 @@ func (v *extractAggregatesVisitor) Visit(expr parser.Expr, pre bool) (parser.Vis
 		}
 	case *qvalue:
 		if v.groupedCopy != nil {
-			v.err = fmt.Errorf("column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function", t.col.Name)
+			v.err = fmt.Errorf("column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
+				t.colRef.get())
 			return v, expr
 		}
 		f := &aggregateFunc{
@@ -580,25 +581,6 @@ func (a *aggregateFunc) Eval(ctx parser.EvalContext) (parser.Datum, error) {
 
 	// This is almost certainly the identity. Oh well.
 	return datum.Eval(ctx)
-}
-
-func encodeDatum(b []byte, d parser.Datum) ([]byte, *roachpb.Error) {
-	if values, ok := d.(parser.DTuple); ok {
-		dt, err := encodeDTuple(b, values)
-		return dt, roachpb.NewError(err)
-	}
-	return encodeTableKey(b, d, encoding.Ascending)
-}
-
-func encodeDTuple(b []byte, d parser.DTuple) ([]byte, error) {
-	for _, val := range d {
-		var pErr *roachpb.Error
-		b, pErr = encodeDatum(b, val)
-		if pErr != nil {
-			return nil, pErr.GoError()
-		}
-	}
-	return b, nil
 }
 
 type aggregateImpl interface {

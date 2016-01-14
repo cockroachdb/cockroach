@@ -17,56 +17,95 @@
 package sql
 
 import (
-	"bytes"
+	//	"bytes"
 	"fmt"
-	"reflect"
-	"sort"
+	//	"reflect"
+	//	"sort"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/cockroachdb/cockroach/util/log"
+	//	"github.com/cockroachdb/cockroach/util/encoding"
+	//	"github.com/cockroachdb/cockroach/util/log"
 )
 
+// fromInfo contains the information for a select "source" (FROM).
+type fromInfo struct {
+	// node which can be used to retrieve the data (normally a scanNode). For performance purposes,
+	// this node can be aware of the filters, grouping etc.
+	node planNode
+
+	// alias (if no alias is given and the source is a table, this is the table name)
+	alias string
+
+	// resultColumns which match the node.Columns() 1-to-1. However the column names might be
+	// different if the statement renames them using AS.
+	columns []ResultColumn
+
+	// Last row of values received.
+	values parser.DTuple
+}
+
+// selectNode encapsulates the core logic of a select statement: retrieving filtered results from
+// the sources. Grouping, sorting, distinct and limits are implemented on top of this node (as
+// wrappers), though these are taken into consideration at the selectNode level for optimization
+// (e.g. index selection).
 type selectNode struct {
 	planner *planner
 
-	// A planNode containing the "from" data (normally a scanNode). For
-	// performance purposes, this node can be aware of the filters, grouping
-	// etc.
-	from planNode
+	from fromInfo
+
+	// Map of qvalues encountered in expressions.
+	qvals qvalMap
 
 	pErr *roachpb.Error
+
+	// rendering expressions for rows and coresponding output columns
+	render  []parser.Expr
+	columns []ResultColumn
+	// the rendered row
+	row parser.DTuple
+
+	// We may internally add render targets (columns) for grouping or ordering. The original columns
+	// are columns[:numOriginalCols], the internally added ones are columns[numOriginalCols:].
+	numOriginalCols int
 }
 
 // For now scanNode implements all the logic and selectNode just proxies the
 // calls.
 
 func (s *selectNode) Columns() []ResultColumn {
-	return s.from.Columns()
+	return s.columns
 }
 
 func (s *selectNode) Ordering() orderingInfo {
-	return s.from.Ordering()
+	// MEH
+	return orderingInfo{}
 }
 
 func (s *selectNode) Values() parser.DTuple {
-	return s.from.Values()
+	return s.row
 }
 
 func (s *selectNode) Next() bool {
-	return s.from.Next()
+	if !s.from.node.Next() {
+		return false
+	}
+	s.from.values = s.from.node.Values()
+	s.populateQVals()
+	/* MEH: filter. */
+	s.renderRow()
+	return true
 }
 
 func (s *selectNode) PErr() *roachpb.Error {
 	if s.pErr != nil {
 		return s.pErr
 	}
-	return s.from.PErr()
+	return s.from.node.PErr()
 }
 
 func (s *selectNode) ExplainPlan() (name, description string, children []planNode) {
-	return s.from.ExplainPlan()
+	return s.from.node.ExplainPlan()
 }
 
 // Select selects rows from a single table. Select is the workhorse of the SQL
@@ -84,13 +123,20 @@ func (p *planner) Select(parsed *parser.Select) (planNode, *roachpb.Error) {
 }
 
 func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *roachpb.Error) {
+	s.qvals = make(qvalMap)
+
 	if pErr := s.initFrom(p, parsed); pErr != nil {
 		return nil, pErr
 	}
 
-	// TODO(radu): for now we assume from is always a scanNode
-	scan := s.from.(*scanNode)
+	if pErr := s.initTargets(parsed.Exprs); pErr != nil {
+		return nil, pErr
+	}
 
+	// TODO(radu): for now we assume from is always a scanNode
+	scan := s.from.node.(*scanNode)
+
+	/* MEH
 	// NB: both orderBy and groupBy are passed and can modify `scan` but orderBy must do so first.
 	sort, pErr := p.orderBy(parsed, scan)
 	if pErr != nil {
@@ -105,8 +151,10 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 		// Allow the group-by to add an implicit "IS NOT NULL" filter.
 		scan.filter = group.isNotNullFilter(scan.filter)
 	}
+	*/
 
 	// Get the ordering for index selection (if any).
+	/* MEH
 	var ordering columnOrdering
 	var grouping bool
 
@@ -116,17 +164,23 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 	} else if sort != nil {
 		ordering = sort.Ordering().ordering
 	}
+	*/
 
-	plan, pErr := p.selectIndex(scan, ordering, grouping)
-	if pErr != nil {
-		return nil, pErr
-	}
+	scan.initOrdering(0)
+	/*
+		plan, pErr := p.selectIndex(scan, ordering, grouping)
+		if pErr != nil {
+			return nil, pErr
+		}
+	*/
+	plan := scan
 
 	// Update s.from with the new plan.
-	s.from = plan
+	s.from.node = plan
 
 	// Wrap this node as necessary.
-	limit, pErr := p.limit(parsed, p.distinct(parsed, sort.wrap(group.wrap(s))))
+	/* MEH limit, pErr := p.limit(parsed, p.distinct(parsed, sort.wrap(group.wrap(s)))) */
+	limit, pErr := p.limit(parsed, p.distinct(parsed, s))
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -160,9 +214,134 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 	if s.pErr != nil {
 		return s.pErr
 	}
-	s.from = scan
+	s.from.node = scan
+	s.from.alias = scan.desc.Alias
+	s.from.columns = scan.Columns()
 	return nil
 }
+
+func (s *selectNode) initTargets(targets parser.SelectExprs) *roachpb.Error {
+	// Loop over the select expressions and expand them into the expressions
+	// we're going to use to generate the returned column set and the names for
+	// those columns.
+	for _, target := range targets {
+		if s.pErr = s.addRender(target); s.pErr != nil {
+			return s.pErr
+		}
+	}
+	// `groupBy` or `orderBy` may internally add additional columns which we
+	// do not want to include in validation of e.g. `GROUP BY 2`. We record the
+	// current (initial) number of columns.
+	s.numOriginalCols = len(s.columns)
+	if len(s.render) != len(s.columns) {
+		panic(fmt.Sprintf("%d renders but %d columns!", len(s.render), len(s.columns)))
+	}
+	return nil
+}
+
+func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
+	// When generating an output column name it should exactly match the original
+	// expression, so determine the output column name before we perform any
+	// manipulations to the expression (such as star expansion).
+	var outputName string
+	if target.As != "" {
+		outputName = string(target.As)
+	} else {
+		outputName = target.Expr.String()
+	}
+
+	// If a QualifiedName has a StarIndirection suffix we need to match the
+	// prefix of the qualified name to one of the tables in the query and
+	// then expand the "*" into a list of columns.
+	if qname, ok := target.Expr.(*parser.QualifiedName); ok {
+		if s.pErr = roachpb.NewError(qname.NormalizeColumnName()); s.pErr != nil {
+			return s.pErr
+		}
+		if qname.IsStar() {
+			/* MEH
+			if n.alias == nil {
+				return roachpb.NewUErrorf("\"%s\" with no tables specified is not valid", qname)
+			}
+			*/
+			if target.As != "" {
+				return roachpb.NewUErrorf("\"%s\" cannot be aliased", qname)
+			}
+			// TODO(radu): support multiple FROMs, consolidate with logic in findColumn
+			tableName := qname.Table()
+			if tableName != "" && !equalName(s.from.alias, tableName) {
+				return roachpb.NewUErrorf("table \"%s\" not found", tableName)
+			}
+
+			for idx, col := range s.from.node.Columns() {
+				qval := s.getQVal(columnRef{&s.from, idx})
+				s.columns = append(s.columns, ResultColumn{Name: col.Name, Typ: qval.datum})
+				s.render = append(s.render, qval)
+			}
+
+			return nil
+		}
+	}
+
+	// Resolve qualified names. This has the side-effect of normalizing any
+	// qualified name found.
+	var resolved parser.Expr
+	if resolved, s.pErr = s.resolveQNames(target.Expr); s.pErr != nil {
+		return s.pErr
+	}
+	if resolved, s.pErr = s.planner.expandSubqueries(resolved, 1); s.pErr != nil {
+		return s.pErr
+	}
+	var typ parser.Datum
+	var err error
+	typ, err = resolved.TypeCheck(s.planner.evalCtx.Args)
+	s.pErr = roachpb.NewError(err)
+	if s.pErr != nil {
+		return s.pErr
+	}
+	var normalized parser.Expr
+	normalized, err = s.planner.parser.NormalizeExpr(s.planner.evalCtx, resolved)
+	s.pErr = roachpb.NewError(err)
+	if s.pErr != nil {
+		return s.pErr
+	}
+	s.render = append(s.render, normalized)
+
+	if target.As == "" {
+		switch t := target.Expr.(type) {
+		case *parser.QualifiedName:
+			// If the expression is a qualified name, use the column name, not the
+			// full qualification as the column name to return.
+			outputName = t.Column()
+		}
+	}
+	s.columns = append(s.columns, ResultColumn{Name: outputName, Typ: typ})
+	return nil
+}
+
+// renderRow renders the row by evaluating the render expressions. May set
+// n.pErr if an error occurs during expression evaluation.
+func (n *selectNode) renderRow() {
+	/* MEH
+	if n.explain == explainDebug {
+		n.explainDebug(true, true)
+		return
+	}
+	*/
+
+	if n.row == nil {
+		n.row = make([]parser.Datum, len(n.render))
+	}
+	for i, e := range n.render {
+		var err error
+		n.row[i], err = e.Eval(n.planner.evalCtx)
+		n.pErr = roachpb.NewError(err)
+		if n.pErr != nil {
+			return
+		}
+	}
+}
+
+/*
 
 // selectIndex analyzes the scanNode to determine if there is an index
 // available that can fulfill the query with a more restrictive scan.
@@ -449,6 +628,18 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering columnOrdering) {
 	}
 }
 
+func (v *indexInfo) findColumnInTuple(tuple parser.Tuple, colID ColumnID) int {
+	for i, v := range tuple {
+		q, ok := v.(*qvalue)
+		// TODO(radu): when we will have multiple FROMs, we should check
+		// that the qval refers to us.
+		if ok && v.desc.Columns[q.colIDx].ID == colID {
+			return i
+		}
+	}
+	return -1
+}
+
 // makeConstraints populates the indexInfo.constraints field based on the
 // analyzed expressions. The constraints are a start and end expressions for a
 // prefix of the columns that make up the index. For example, consider
@@ -543,7 +734,7 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 					// but simply provide a mapping from the order in the tuple to the
 					// order in the index.
 					for _, colID := range v.index.ColumnIDs[i:] {
-						idx := findColumnInTuple(t, colID)
+						idx := v.findColumnInTuple(t, colID)
 						if idx == -1 {
 							break
 						}
@@ -1267,3 +1458,5 @@ func diffSorted(a, b parser.DTuple) parser.DTuple {
 	}
 	return r
 }
+
+*/

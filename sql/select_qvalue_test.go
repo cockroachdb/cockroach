@@ -23,6 +23,20 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
+func testInitDummySelectNode(desc *TableDescriptor) *selectNode {
+	scan := &scanNode{}
+	scan.desc = desc
+	scan.initDescDefaults()
+
+	sel := &selectNode{}
+	sel.qvals = make(qvalMap)
+	sel.from.node = scan
+	sel.from.alias = desc.Alias
+	sel.from.columns = scan.Columns()
+
+	return sel
+}
+
 // Test that we can resolve the qnames in an expression that has already been
 // resolved.
 func TestRetryResolveQNames(t *testing.T) {
@@ -34,10 +48,9 @@ func TestRetryResolveQNames(t *testing.T) {
 	}
 
 	for i := 0; i < 2; i++ {
-		s := &scanNode{}
-		s.desc = testTableDesc()
-		s.visibleCols = s.desc.Columns
-		if err := s.desc.AllocateIDs(); err != nil {
+		desc := testTableDesc()
+		s := testInitDummySelectNode(desc)
+		if err := desc.AllocateIDs(); err != nil {
 			t.Fatal(err)
 		}
 
@@ -48,8 +61,8 @@ func TestRetryResolveQNames(t *testing.T) {
 		if len(s.qvals) != 1 {
 			t.Fatalf("%d: expected 1 qvalue, but found %d", i, len(s.qvals))
 		}
-		if _, ok := s.qvals[ColumnID(1)]; !ok {
-			t.Fatalf("%d: unable to find qvalue for column ID 1", i)
+		if _, ok := s.qvals[columnRef{&s.from, 0}]; !ok {
+			t.Fatalf("%d: unable to find qvalue for column 0 (a)", i)
 		}
 	}
 }
