@@ -145,7 +145,9 @@ func (c *v3Conn) parseOptions(data []byte) error {
 		case "user":
 			c.opts.user = value
 		default:
-			log.Warningf("unrecognized configuration parameter %q", key)
+			if log.V(1) {
+				log.Warningf("unrecognized configuration parameter %q", key)
+			}
 		}
 	}
 }
@@ -558,13 +560,8 @@ func (c *v3Conn) executeStatements(stmts string, params []driver.Datum, formatCo
 
 func (c *v3Conn) sendCommandComplete(tag []byte) error {
 	c.writeBuf.initMsg(serverMsgCommandComplete)
-	// Callers are required to provide the null terminator, except for the nil
-	// case where it is done for them.
-	if tag == nil {
-		c.writeBuf.WriteByte(0)
-	} else {
-		c.writeBuf.Write(tag)
-	}
+	c.writeBuf.Write(tag)
+	c.writeBuf.WriteByte(0)
 	return c.writeBuf.finishMsg(c.wr)
 }
 
@@ -625,7 +622,6 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, se
 			// TODO(bdarnell): tags for other types of commands.
 			tag := append(c.tagBuf[:0], "SELECT "...)
 			tag = strconv.AppendInt(tag, int64(result.RowsAffected), 10)
-			tag = append(tag, byte(0))
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
@@ -670,7 +666,6 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, se
 			// TODO(bdarnell): tags for other types of commands.
 			tag := append(c.tagBuf[:0], "SELECT "...)
 			tag = appendUint(tag, uint(len(resultRows.Rows)))
-			tag = append(tag, byte(0))
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
