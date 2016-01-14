@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "bower": ">=1.5.3",
+    "bower": ">=1.7.2",
     "del": ">=2.0.2",
     "gulp": ">=3.9.0",
     "gulp-livereload": ">=3.8.0",
@@ -11,6 +11,7 @@
     "gulp-stylus": ">=2.0.7",
     "gulp-typescript": ">=2.9.0",
     "moment-timezone": ">=0.4.1",
+    "nib": "^1.1.0",
     "npm": ">=3.3.4",
     "protobufjs": "git+https://github.com/cockroachdb/protobuf.js.git",
     "request": ">=2.67.0",
