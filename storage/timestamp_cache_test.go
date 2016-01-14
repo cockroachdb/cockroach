@@ -231,6 +231,13 @@ func TestTimestampCacheMergeInto(t *testing.T) {
 			if rTS, _ := tc2.GetMax(roachpb.Key("a"), roachpb.Key("c"), nil); !rTS.Equal(aaTS) {
 				t.Error("expected \"a\"-\"c\" to have aaTS timestamp")
 			}
+
+			if !tc2.latest.Equal(cTS) {
+				t.Error("expected \"aa\" to have cTS timestamp")
+			}
+			if !tc1.latest.Equal(cTS) {
+				t.Error("expected \"a\"-\"c\" to have cTS timestamp")
+			}
 		}
 	}
 }
