@@ -267,7 +267,7 @@ func (p *planner) selectIndex(s *scanNode, group *groupNode, sort *sortNode) (pl
 	c := candidates[0]
 	s.index = c.index
 	s.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
-	s.spans = makeSpans(c.constraints, c.desc.ID, c.index)
+	s.spans = makeSpans(c.constraints, c.desc.ID, c.index.ID)
 	if len(s.spans) == 0 {
 		// There are no spans to scan.
 		s.desc = nil
@@ -337,10 +337,6 @@ func (c indexConstraint) String() string {
 	return buf.String()
 }
 
-// indexConstraints is a set of constraints on a prefix of the columns
-// in a single index. The constraints are ordered as the columns in the index.
-// A constraint referencing a tuple accounts for several columns (the size of
-// its .tupleMap).
 type indexConstraints []indexConstraint
 
 func (c indexConstraints) String() string {
@@ -411,8 +407,7 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
 	v.exactPrefix = exactPrefix(v.constraints)
 
 	// Compute the ordering provided by the index.
-	colIds, _ := v.index.fullColumnIDs()
-	indexOrdering := scan.computeOrdering(colIds)
+	indexOrdering := scan.computeOrdering(v.index.fullColumnIDs())
 
 	// Compute how much of the index ordering matches the requested ordering for
 	// both forward and reverse scans.
@@ -446,9 +441,6 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
 // have the constraints:
 //
 //   {a: {start: > 1}}
-//   !!! this is not true, and there's even a test about showing constraints for
-//   both a and b. Probably because this function never gets ">". Simplification
-//   turns it into ">=". The function could assert that?
 //
 // Why is there no constraint on "b"? Because the start constraint was > and
 // such a constraint does not allow us to consider further columns in the
@@ -459,16 +451,6 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
 // Start constraints look for comparison expressions with the operators >, >=,
 // = or IN. End constraints look for comparison expressions with the operators
 // <, <=, = or IN.
-//
-// Attention: The generated constraints do not take into consideration the
-// ordering of the encoding of the columns in the index.
-//
-// This method generates one indexConstraint for a prefix of the columns in
-// the index (except for tuple constraints which can account for more than
-// one column). A prefix of the generated constraints has a .start, and
-// similarly a prefix of the contraints has a .end); in other words,
-// once a constraint doesn't have a .start, no further constraints will
-// have one. This is because they wouldn't be useful when generating spans.
 func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 	if len(exprs) != 1 {
 		return
@@ -614,9 +596,6 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) {
 			endDone = true
 		}
 		if startDone && endDone {
-			// The rest of the expressions don't matter; when we'll construct index spans
-			// based on these constraints we won't be able to accumulate more in either
-			// the start key prefix nor the end key prefix.
 			break
 		}
 	}
@@ -659,30 +638,21 @@ func (v indexInfoByCost) Sort() {
 }
 
 // makeSpans constructs the spans for an index given a set of constraints.
-//
-// The spans will be constructed by iterating over the constraints (and implicitly
-// over the index columns) - each constraint contributes to a value to the column's
-// slot in each span.
-func makeSpans(constraints indexConstraints, tableID ID, index *IndexDescriptor) []span {
-	prefix := roachpb.Key(MakeIndexKeyPrefix(tableID, index.ID))
+func makeSpans(constraints indexConstraints, tableID ID, indexID IndexID) []span {
+	prefix := roachpb.Key(MakeIndexKeyPrefix(tableID, indexID))
 	spans := []span{{
 		start: append(roachpb.Key(nil), prefix...),
 		end:   append(roachpb.Key(nil), prefix...),
 	}}
 	var buf [100]byte
 
-	colIdx := -1 // The column that the current constraint refers to.
 	for i, c := range constraints {
-		colIdx++
 		// Is this the last end constraint? We perform special processing on the
 		// last end constraint to account for the exclusive nature of the scan end
 		// key.
 		lastEnd := c.end != nil &&
 			(i+1 == len(constraints) || constraints[i+1].end == nil)
 
-		// Special handling of IN exprssions. Such expressions apply to both the
-		// start and end key, but also cause an explosion in the number of spans
-		// searched within an index.
 		if (c.start != nil && c.start.Operator == parser.In) ||
 			(c.end != nil && c.end.Operator == parser.In) {
 			var e *parser.ComparisonExpr
@@ -692,6 +662,9 @@ func makeSpans(constraints indexConstraints, tableID ID, index *IndexDescriptor)
 				e = c.end
 			}
 
+			// Special handling of IN exprssions. Such expressions apply to both the
+			// start and end key, but also cause an explosion in the number of spans
+			// searched within an index.
 			tuple, ok := e.Right.(parser.DTuple)
 			if !ok {
 				break
@@ -707,55 +680,38 @@ func makeSpans(constraints indexConstraints, tableID ID, index *IndexDescriptor)
 				switch t := datum.(type) {
 				case parser.DTuple:
 					start = buf[:0]
-					for i, tupleIdx := range c.tupleMap {
-						var dir encoding.Direction
-						var err error
-						if dir, err = index.ColumnDirections[colIdx+i].toEncodingDirection(); err != nil {
-							panic(err)
-						}
+					for _, i := range c.tupleMap {
 						var pErr *roachpb.Error
-						if start, pErr = encodeTableKey(start, t[tupleIdx], dir); pErr != nil {
-							panic(err)
+						if start, pErr = encodeTableKey(start, t[i]); pErr != nil {
+							panic(pErr)
 						}
 					}
 
-					// Even though the end key is exclusive, we can use start as part of
-					// the end key. We'll take care later to append something to make the
-					// exclusion work.
 					end = start
 					if lastEnd {
 						end = nil
-						for i, tupleIdx := range c.tupleMap {
-							d := t[tupleIdx]
+						for i := range c.tupleMap {
+							d := t[c.tupleMap[i]]
 							if i+1 == len(c.tupleMap) {
 								d = d.Next()
 							}
-							var dir encoding.Direction
-							var err error
-							if dir, err = index.ColumnDirections[colIdx+i].toEncodingDirection(); err != nil {
-								panic(err)
-							}
 							var pErr *roachpb.Error
-							if end, pErr = encodeTableKey(end, d, dir); pErr != nil {
+							if end, pErr = encodeTableKey(end, d); pErr != nil {
 								panic(pErr)
 							}
 						}
 					}
+
 				default:
-					var dir encoding.Direction
-					var err error
-					if dir, err = index.ColumnDirections[colIdx].toEncodingDirection(); err != nil {
-						panic(err)
-					}
 					var pErr *roachpb.Error
-					if start, pErr = encodeTableKey(buf[:0], datum, dir); pErr != nil {
+					if start, pErr = encodeTableKey(buf[:0], datum); pErr != nil {
 						panic(pErr)
 					}
 
 					end = start
 					if lastEnd {
 						var pErr *roachpb.Error
-						if end, pErr = encodeTableKey(nil, datum.Next(), dir); pErr != nil {
+						if end, pErr = encodeTableKey(nil, datum.Next()); pErr != nil {
 							panic(pErr)
 						}
 					}
@@ -772,28 +728,7 @@ func makeSpans(constraints indexConstraints, tableID ID, index *IndexDescriptor)
 				}
 			}
 
-			// Skip over the columns covered by the tuple.
-			colIdx += len(c.tupleMap) - 1
 			continue
-		}
-
-		var dir encoding.Direction
-		var err error
-		if dir, err = index.ColumnDirections[colIdx].toEncodingDirection(); err != nil {
-			panic(err)
-		}
-
-		// If the column direction in the index is Descending, we need to invert
-		// the start and end constraints. But rather than switching the
-		// constraints, it's easier code-wise to just switch the start and end
-		// keys.
-		var startKey, endKey *roachpb.Key
-		if dir == encoding.Ascending {
-			startKey = &spans[i].start
-			endKey = &spans[i].end
-		} else {
-			startKey = &spans[i].end
-			endKey = &spans[i].start
 		}
 
 		if c.start != nil {
@@ -802,22 +737,18 @@ func makeSpans(constraints indexConstraints, tableID ID, index *IndexDescriptor)
 			case parser.NE, parser.IsNot:
 				// A != or IS NOT NULL expression allows us to constrain the start of
 				// the range to not include NULL.
-				for range spans {
-					if dir == encoding.Ascending {
-						*startKey = encoding.EncodeNotNullAscending(*startKey)
-					} else {
-						*startKey = encoding.EncodeNotNullDescending(*startKey)
-					}
+				for i := range spans {
+					spans[i].start = encoding.EncodeNotNull(spans[i].start)
 				}
 			default:
 				if datum, ok := c.start.Right.(parser.Datum); ok {
-					key, pErr := encodeTableKey(buf[:0], datum, dir)
+					key, pErr := encodeTableKey(buf[:0], datum)
 					if pErr != nil {
-						panic(err)
+						panic(pErr)
 					}
 					// Append the constraint to all of the existing spans.
-					for range spans {
-						*startKey = append(*startKey, key...)
+					for i := range spans {
+						spans[i].start = append(spans[i].start, key...)
 					}
 				}
 			}
@@ -827,41 +758,31 @@ func makeSpans(constraints indexConstraints, tableID ID, index *IndexDescriptor)
 			// We have an end constraint.
 			switch c.end.Operator {
 			case parser.Is:
-				// makeConstraints() only passes along IS NULL expressions as end expressions.
-				// These allow us to constrain the end of the range to stop at NULL.
-				for range spans {
-					if dir == encoding.Ascending {
-						*endKey = encoding.EncodeNotNullAscending(*endKey)
-					} else {
-						*endKey = encoding.EncodeNotNullDescending(*endKey)
-					}
+				// An IS NULL expressions allows us to constrain the end of the range
+				// to stop at NULL.
+				for i := range spans {
+					spans[i].end = encoding.EncodeNotNull(spans[i].end)
 				}
 			default:
 				if datum, ok := c.end.Right.(parser.Datum); ok {
 					if lastEnd && c.end.Operator != parser.LT {
 						datum = datum.Next()
 					}
-					key, pErr := encodeTableKey(buf[:0], datum, dir)
+					key, pErr := encodeTableKey(buf[:0], datum)
 					if pErr != nil {
-						panic(err)
+						panic(pErr)
 					}
 					// Append the constraint to all of the existing spans.
-					for range spans {
-						*endKey = append(*endKey, key...)
+					for i := range spans {
+						spans[i].end = append(spans[i].end, key...)
 					}
 				}
 
 				if c.start == nil && (i == 0 || constraints[i-1].start != nil) {
 					// This is the first constraint for which we don't have a start
-					// constraint. Add a not-NULL start-point.
-					// TODO(andrei): add this start-point to all the subsequent columns
-					// with an end constraint.
-					for range spans {
-						if dir == encoding.Ascending {
-							*startKey = encoding.EncodeNotNullAscending(*startKey)
-						} else {
-							*startKey = encoding.EncodeNotNullDescending(*startKey)
-						}
+					// constraint. Add a not-NULL endpoint.
+					for i := range spans {
+						spans[i].start = encoding.EncodeNotNull(spans[i].start)
 					}
 				}
 			}

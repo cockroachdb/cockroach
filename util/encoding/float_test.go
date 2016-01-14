@@ -124,57 +124,36 @@ func TestEncodeFloat(t *testing.T) {
 		{math.Inf(1), []byte{0x1f}},
 	}
 
-	var lastEncoded []byte
-	for _, dir := range []Direction{Ascending, Descending} {
-		for i, c := range testCases {
-			var enc []byte
-			var err error
-			var dec float64
-			if dir == Ascending {
-				enc = EncodeFloatAscending(nil, c.Value)
-				_, dec, err = DecodeFloatAscending(enc, nil)
-			} else {
-				enc = EncodeFloatDescending(nil, c.Value)
-				_, dec, err = DecodeFloatDescending(enc, nil)
+	for i, c := range testCases {
+		enc := EncodeFloat(nil, c.Value)
+		if !bytes.Equal(enc, c.Encoding) {
+			t.Errorf("unexpected mismatch for %v. expected [% x], got [% x]",
+				c.Value, c.Encoding, enc)
+		}
+		if i > 0 {
+			if bytes.Compare(testCases[i-1].Encoding, enc) >= 0 {
+				t.Errorf("%v: expected [% x] to be less than [% x]",
+					c.Value, testCases[i-1].Encoding, enc)
 			}
-			if dir == Ascending && !bytes.Equal(enc, c.Encoding) {
-				t.Errorf("unexpected mismatch for %v. expected [% x], got [% x]",
-					c.Value, c.Encoding, enc)
-			}
-			if i > 0 {
-				if (bytes.Compare(lastEncoded, enc) >= 0 && dir == Ascending) ||
-					(bytes.Compare(lastEncoded, enc) <= 0 && dir == Descending) {
-					t.Errorf("%v: expected [% x] to be less than [% x]",
-						c.Value, testCases[i-1].Encoding, enc)
-				}
-			}
-			if err != nil {
-				t.Error(err)
-				continue
-			}
-			if math.IsNaN(c.Value) {
-				if !math.IsNaN(dec) {
-					t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
-				}
-			} else if dec != c.Value {
+		}
+		_, dec, err := DecodeFloat(enc, nil)
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+		if math.IsNaN(c.Value) {
+			if !math.IsNaN(dec) {
 				t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
 			}
-			lastEncoded = enc
+		} else if dec != c.Value {
+			t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
 		}
+	}
 
-		// Test that appending the float to an existing buffer works.
-		var enc []byte
-		var dec float64
-		if dir == Ascending {
-			enc = EncodeFloatAscending([]byte("hello"), 1.23)
-			_, dec, _ = DecodeFloatAscending(enc[5:], nil)
-		} else {
-			enc = EncodeFloatDescending([]byte("hello"), 1.23)
-			_, dec, _ = DecodeFloatDescending(enc[5:], nil)
-		}
-		if dec != 1.23 {
-			t.Errorf("unexpected mismatch for %v. got %v", 1.23, dec)
-		}
+	// Test that appending the float to an existing buffer works.
+	enc := EncodeFloat([]byte("hello"), 1.23)
+	if _, dec, _ := DecodeFloat(enc[5:], nil); dec != 1.23 {
+		t.Errorf("unexpected mismatch for %v. got %v", 1.23, dec)
 	}
 }
 
@@ -190,7 +169,7 @@ func BenchmarkEncodeFloat(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = EncodeFloatAscending(buf, vals[i%len(vals)])
+		_ = EncodeFloat(buf, vals[i%len(vals)])
 	}
 }
 
@@ -199,13 +178,13 @@ func BenchmarkDecodeFloat(b *testing.B) {
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
-		vals[i] = EncodeFloatAscending(nil, rng.Float64())
+		vals[i] = EncodeFloat(nil, rng.Float64())
 	}
 
 	buf := make([]byte, 0, 100)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _ = DecodeFloatAscending(vals[i%len(vals)], buf)
+		_, _, _ = DecodeFloat(vals[i%len(vals)], buf)
 	}
 }

@@ -166,9 +166,9 @@ var (
 	StatusNodePrefix = roachpb.Key(MakeKey(StatusPrefix, roachpb.RKey("node-")))
 
 	// TableDataMin is the start of the range of table data keys.
-	TableDataMin = roachpb.Key(encoding.EncodeVarintAscending(nil, math.MinInt64))
+	TableDataMin = roachpb.Key(encoding.EncodeVarint(nil, math.MinInt64))
 	// TableDataMin is the end of the range of table data keys.
-	TableDataMax = roachpb.Key(encoding.EncodeVarintAscending(nil, math.MaxInt64))
+	TableDataMax = roachpb.Key(encoding.EncodeVarint(nil, math.MaxInt64))
 
 	// SystemConfigTableDataMax is the end key of system config structured data.
 	SystemConfigTableDataMax = roachpb.Key(MakeTablePrefix(MaxSystemConfigDescID + 1))

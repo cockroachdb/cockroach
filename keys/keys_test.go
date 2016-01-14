@@ -365,7 +365,7 @@ func TestMakeSplitKey(t *testing.T) {
 	e := func(vals ...uint64) roachpb.Key {
 		var k roachpb.Key
 		for _, v := range vals {
-			k = encoding.EncodeUvarintAscending(k, v)
+			k = encoding.EncodeUvarint(k, v)
 		}
 		return k
 	}

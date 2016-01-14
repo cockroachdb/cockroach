@@ -155,7 +155,7 @@ func (n *indexJoinNode) Next() bool {
 			vals := n.index.Values()
 			var primaryIndexKey []byte
 			primaryIndexKey, _, n.pErr = encodeIndexKey(
-				n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
+				n.table.index.ColumnIDs, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
 			if n.pErr != nil {
 				return false
 			}

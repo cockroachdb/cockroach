@@ -247,9 +247,8 @@ func TestMakeSpans(t *testing.T) {
 	}
 	for _, d := range testData {
 		desc, index := makeTestIndex(t, d.columns)
-
 		constraints, _ := makeConstraints(t, d.expr, desc, index)
-		spans := makeSpans(constraints, desc.ID, index)
+		spans := makeSpans(constraints, desc.ID, index.ID)
 		if s := prettySpans(spans, 2); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
