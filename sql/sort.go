@@ -117,13 +117,13 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, *roachpb.Er
 
 type sortNode struct {
 	plan     planNode
-	columns  []column
+	columns  []resultColumn
 	ordering []int
 	needSort bool
 	pErr     *roachpb.Error
 }
 
-func (n *sortNode) Columns() []column {
+func (n *sortNode) Columns() []resultColumn {
 	return n.columns
 }
 
