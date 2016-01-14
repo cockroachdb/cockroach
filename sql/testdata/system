@@ -12,6 +12,7 @@ eventlog
 lease
 namespace
 rangelog
+reporting
 users
 zones
 
@@ -25,8 +26,9 @@ EXPLAIN (DEBUG) SELECT * FROM system.namespace
 4 /namespace/primary/1/'lease'/id      11   ROW
 5 /namespace/primary/1/'namespace'/id  2    ROW
 6 /namespace/primary/1/'rangelog'/id   13   ROW
-7 /namespace/primary/1/'users'/id      4    ROW
-8 /namespace/primary/1/'zones'/id      5    ROW
+7 /namespace/primary/1/'reporting'/id  6    ROW
+8 /namespace/primary/1/'users'/id      4    ROW
+9 /namespace/primary/1/'zones'/id      5    ROW
 
 query ITI
 SELECT * FROM system.namespace
@@ -38,6 +40,7 @@ SELECT * FROM system.namespace
 1 lease      11
 1 namespace  2
 1 rangelog   13
+1 reporting  6
 1 users      4
 1 zones      5
 
@@ -49,6 +52,7 @@ SELECT id FROM system.descriptor
 3
 4
 5
+6
 11
 12
 13

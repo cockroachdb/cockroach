@@ -8,6 +8,8 @@
 /// <reference path="pages/nodes.ts" />
 /// <reference path="pages/stores.ts" />
 /// <reference path="pages/sql.ts" />
+/// <reference path="pages/helpus.ts" />
+/// <reference path="pages/helpusprompt.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
@@ -31,5 +33,8 @@ m.route(document.getElementById("root"), "/cluster", {
   "/store/:store_id/:detail": AdminViews.Stores.StorePage,
   "/stores/:store_id/:detail": AdminViews.Stores.StorePage,
   "/sql": AdminViews.SQL.Page,
+  "/help-us/:detail": AdminViews.HelpUs.Page,
   "/cluster": AdminViews.Cluster.Page,
 });
+
+m.mount(document.getElementById("helpus"), AdminViews.SubModules.HelpUsPrompt);

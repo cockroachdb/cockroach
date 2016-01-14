@@ -37,12 +37,20 @@ body
 #root
   position relative
   padding-left $nav-width
-  min-height calc(100% - 4rem)
+  min-height 100%
+  min-width 1420px
 
   &:after
     content ""
     display table
     clear both
+
+#content
+  min-height 100%
+
+.page.registration
+  height 100%
+  background-color white
 
 .section
   padding 1rem 2rem
@@ -70,6 +78,78 @@ body
     margin-bottom 10px
     font-weight normal
 
+  .header
+    width 100%
+    height 88px
+    background-color $secondary-gray-4
+    margin -20px -20px 0 -20px
+    padding 40px 30px
+    border-bottom 1px solid $secondary-gray-1
+    h1
+      font-size 19px
+      line-height 19px
+      padding 0
+      margin 0
+
+  .form
+    padding 40px 30px
+    width 440px
+    font-size 13px
+
+    hr
+      border 1px solid $secondary-gray-8
+      margin 40px 0
+
+input
+  border-radius 5px
+  border 1px solid $secondary-gray-1
+  padding 15px 20px
+  font-size 13px
+  font-family Lato-Bold
+  margin-bottom 25px
+
+  &:placeholder-shown
+    font-style italic
+
+  &:not([type=checkbox])
+    width 100%
+    height 40px
+
+  &[type=checkbox]
+    display inline
+    margin-right 15px
+    padding-bottom 0
+    margin-bottom 25px
+
+  &:invalid
+    border-color $secondary-red-2
+  &:invalid + span.status:after
+      content "Required"
+  &:invalid + * + span.icon:after
+    content "\26A0"
+
+span.status
+  position absolute
+  margin-left -55px
+  margin-top 10px
+  color $secondary-red-3
+
+span.icon
+  margin-top 10px
+  color $secondary-red-4
+  position absolute
+  margin-left 5px
+
+button
+  width 100px
+  height 45px
+  border-radius 2px
+  border 0
+  background-color $secondary-blue
+  color white
+  font-family Lato-Bold
+  font-size 16px
+  margin-right 20px
 
 .topbar
   padding 0 3rem 1rem
@@ -77,7 +157,7 @@ body
   border-bottom 1px solid $topbar-border
   height $top-bar-height
   width "calc(100% - %s)" % $nav-width
-  position fixed
+  position absolute
   top 0
   right 0
   z-index 1
@@ -110,7 +190,7 @@ body
   letter-spacing 2.17px
   border-bottom 1px solid $secondary-gray-1
   height $subnav-height
-  position fixed
+  position absolute
   top $top-bar-height
   right 0
   width "calc(100% - %s)" % $nav-width
@@ -139,3 +219,146 @@ a.toggle
 
 .charts h2:first-child
   padding-top 0
+
+.banner
+  width 100%
+  height 73px
+  background-color $secondary-blue
+  transition height 1s
+  font-family Lato-Bold
+  font-size 13px
+  text-align center
+  line-height 73px
+  color white
+  position relative
+
+  button
+    margin-left 15px
+    background-color $secondary-gold
+    height 33px
+    text-shadow 1px 1px rgba(0, 0, 0, .24)
+
+  .checkmark
+    font-size 15px
+    margin-right 15px
+    border-radius 100%
+    border 2px solid white
+    width 38px
+    height 38px
+    padding 5px 5px 5px 7px
+
+  .close
+    position absolute
+    top -27px
+    right 5px
+
+.modal-container
+  z-index 10
+
+  &.close
+    .screen, .modal
+      transition opacity .2s ease-in
+      opacity 0
+
+  .screen
+    position fixed
+    top 0
+    left 0
+    bottom 0
+    right 0
+    background-color rgba(21, 31, 52, .8)
+    z-index 10
+
+  .modal
+    position absolute
+    width 575px
+    height 790x
+    background-color white
+    top 20px
+    z-index 20
+    left 50%
+    margin-left -287.5px
+    border 8px solid rgba(21, 31, 52, .4)
+    box-shadow 0 2px 4px rgba(0, 0, 0, .5)
+    border-radius 4px
+    background-clip padding-box
+    padding 30px
+    opacity 1
+    transition height .4s ease-in, width .4s ease-in, opacity .2s ease-in, margin .4s ease-in
+
+    &.hide-modal
+      opacity 0
+
+    &.thanks, &.thanks-pre
+      width 500px
+      height 375px
+      margin-left -250px
+
+    &.thanks
+      button
+        margin-left 52px
+
+    h1, .intro, .thanks, button, form
+      transition opacity .2s ease-in
+
+    &.hide, &.thanks-pre
+      h1, .intro, .thanks, button, form
+        opacity 0
+        transition opacity .2s ease-in
+
+
+    h1
+      color $secondary-gold
+      margin-bottom 5px
+      margin-top 35px
+      width 100%
+      text-align left
+      font-size 33px
+
+    .intro
+      color $main-navy
+      margin 35px 15px
+      line-height 18px
+
+    .thanks
+      margin 35px 52px
+
+      a
+        color $main-navy
+
+    .inputs
+      background-color $secondary-gray-3
+      margin 0 -30px
+      padding 35px 35px
+      border-top 1px solid $secondary-gray-1
+      border-bottom 1px solid $secondary-gray-1
+
+    .close
+      position absolute
+      top 30px
+      right 30px
+      color $secondary-gray-9
+
+    button
+      margin 35px 65px
+      width auto
+      padding 10px
+      margin-left 81px
+
+#content
+  position relative
+
+.saving
+  display inline
+  font-family Lato-Medium
+  color $secondary-gray-2
+  transition opacity .5s ease-in
+  opacity 0
+  &.no-animate
+    transition opacity 0s
+  &.failed
+    opacity 1
+
+.optin-text
+  font-size 10px
+  margin -17px 35px 20px
