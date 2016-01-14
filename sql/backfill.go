@@ -168,10 +168,13 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc *TableDescriptor, 
 		if pErr != nil {
 			return pErr
 		}
+		/* MEH
 		rows, pErr := p.selectIndex(scan, nil, false)
 		if pErr != nil {
 			return pErr
 		}
+		*/
+		rows := scan
 
 		// Construct a map from column ID to the index the value appears at within a
 		// row.

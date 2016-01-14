@@ -356,6 +356,25 @@ func encodeColumns(columnIDs []ColumnID, directions []encoding.Direction, colMap
 	return key, containsNull, nil
 }
 
+func encodeDatum(b []byte, d parser.Datum) ([]byte, *roachpb.Error) {
+	if values, ok := d.(parser.DTuple); ok {
+		dt, err := encodeDTuple(b, values)
+		return dt, roachpb.NewError(err)
+	}
+	return encodeTableKey(b, d, encoding.Ascending)
+}
+
+func encodeDTuple(b []byte, d parser.DTuple) ([]byte, error) {
+	for _, val := range d {
+		var pErr *roachpb.Error
+		b, pErr = encodeDatum(b, val)
+		if pErr != nil {
+			return nil, pErr.GoError()
+		}
+	}
+	return b, nil
+}
+
 // Encodes `val` into `b` and returns the new buffer.
 func encodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte, *roachpb.Error) {
 	if (dir != encoding.Ascending) && (dir != encoding.Descending) {

@@ -17,15 +17,15 @@
 package sql
 
 import (
-	"fmt"
-	"math"
-	"strings"
+	//"fmt"
+	//"math"
+	//"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/sql/parser"
+	//"github.com/cockroachdb/cockroach/keys"
+	//"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	//"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func makeTestIndex(t *testing.T, columns []string, dirs []encoding.Direction) (
@@ -53,6 +53,7 @@ func makeTestIndex(t *testing.T, columns []string, dirs []encoding.Direction) (
 	return desc, idx
 }
 
+/* MEH
 func makeConstraints(t *testing.T, sql string, desc *TableDescriptor,
 	index *IndexDescriptor) (indexConstraints, parser.Expr) {
 	expr, _ := parseAndNormalizeExpr(t, sql)
@@ -452,3 +453,4 @@ func TestApplyConstraints(t *testing.T) {
 		}
 	}
 }
+*/

@@ -45,10 +45,10 @@ type planner struct {
 
 	testingVerifyMetadata func(config.SystemConfig) error
 
-	parser             parser.Parser
-	isAggregateVisitor isAggregateVisitor
-	params             parameters
-	subqueryVisitor    subqueryVisitor
+	parser parser.Parser
+	/* MEH isAggregateVisitor isAggregateVisitor */
+	params          parameters
+	subqueryVisitor subqueryVisitor
 }
 
 func (p *planner) setTxn(txn *client.Txn, timestamp time.Time) {
@@ -262,10 +262,12 @@ type planNode interface {
 }
 
 var _ planNode = &distinctNode{}
-var _ planNode = &groupNode{}
-var _ planNode = &indexJoinNode{}
+
+// MEH var _ planNode = &groupNode{}
+// MEH var _ planNode = &indexJoinNode{}
 var _ planNode = &limitNode{}
 var _ planNode = &scanNode{}
-var _ planNode = &sortNode{}
+
+// MEH var _ planNode = &sortNode{}
 var _ planNode = &valuesNode{}
 var _ planNode = &selectNode{}
