@@ -542,20 +542,19 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	})
 
 	// Check range's max bytes settings.
-	if rng.GetMaxBytes() != maxBytes {
-		t.Fatalf("range max bytes mismatch, got: %d, expected: %d", rng.GetMaxBytes(), maxBytes)
+	if actualMaxBytes := rng.GetMaxBytes(); actualMaxBytes != maxBytes {
+		t.Fatalf("range %s max bytes mismatch, got: %d, expected: %d", rng, actualMaxBytes, maxBytes)
 	}
 
 	// Make sure the second range goes to the end.
-	if !roachpb.RKeyMax.Equal(rng.Desc().EndKey) {
-		t.Fatalf("second range has split: %+v", rng.Desc())
+	if desc := rng.Desc(); !desc.EndKey.Equal(roachpb.RKeyMax) {
+		t.Fatalf("second range has split: %+v", desc)
 	}
 
 	// Look in the range after prefix we're writing to.
 	fillRange(store, rng.RangeID, keys.MakeTablePrefix(descID), maxBytes, t)
 
-	// Verify that the range is in fact split (give it a few seconds for very
-	// slow test machines).
+	// Verify that the range is in fact split.
 	var newRng *storage.Replica
 	util.SucceedsWithin(t, splitTimeout, func() error {
 		newRng = store.LookupReplica(keys.MakeTablePrefix(descID+1), nil)
@@ -566,8 +565,8 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	})
 
 	// Make sure the new range goes to the end.
-	if !roachpb.RKeyMax.Equal(newRng.Desc().EndKey) {
-		t.Fatalf("second range has split: %+v", rng.Desc())
+	if desc := newRng.Desc(); !desc.EndKey.Equal(roachpb.RKeyMax) {
+		t.Fatalf("second range has split: %+v", desc)
 	}
 }
 
