@@ -299,7 +299,13 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := StartTestServer(t)
 	defer s.Stop()
-	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock(), RPCContext: s.RPCContext()}, s.Gossip())
+	retryOpts := kv.GetDefaultDistSenderRetryOptions()
+	retryOpts.Closer = s.stopper.ShouldDrain()
+	ds := kv.NewDistSender(&kv.DistSenderContext{
+		Clock:           s.Clock(),
+		RPCContext:      s.RPCContext(),
+		RPCRetryOptions: &retryOpts,
+	}, s.Gossip())
 	tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, nil, s.stopper)
 
 	if err := s.node.ctx.DB.AdminSplit("m"); err != nil {
@@ -391,7 +397,13 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 	for i, tc := range testCases {
 		s := StartTestServer(t)
 		defer s.Stop()
-		ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock(), RPCContext: s.RPCContext()}, s.Gossip())
+		retryOpts := kv.GetDefaultDistSenderRetryOptions()
+		retryOpts.Closer = s.stopper.ShouldDrain()
+		ds := kv.NewDistSender(&kv.DistSenderContext{
+			Clock:           s.Clock(),
+			RPCContext:      s.RPCContext(),
+			RPCRetryOptions: &retryOpts,
+		}, s.Gossip())
 		tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, nil, s.stopper)
 
 		for _, sk := range tc.splitKeys {

@@ -553,6 +553,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 		var desc *roachpb.RangeDescriptor
 		var needAnother bool
 		var pErr *roachpb.Error
+		var finished bool
 		for r := retry.Start(ds.rpcRetryOptions); r.Next(); {
 			// Get range descriptor (or, when spanning range, descriptors). Our
 			// error handling below may clear them on certain errors, so we
@@ -627,6 +628,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			}()
 			// If sending succeeded, break this loop.
 			if pErr == nil {
+				finished = true
 				break
 			}
 
@@ -707,6 +709,13 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 		// Immediately return if querying a range failed non-retryably.
 		if pErr != nil {
 			return nil, pErr, false
+		} else if !finished {
+			select {
+			case <-ds.rpcRetryOptions.Closer:
+				return nil, roachpb.NewErrorf("shutting down"), false
+			default:
+				log.Fatal("exited retry loop with nil error but finished=false")
+			}
 		}
 
 		ba.Txn.Update(curReply.Txn)
