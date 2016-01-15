@@ -138,10 +138,7 @@ additional details.`,
 // cluster via the gossip network.
 func runStart(_ *cobra.Command, _ []string) error {
 	info := util.GetBuildInfo()
-	log.Infof("build Vers: %s", info.Vers)
-	log.Infof("build Tag:  %s", info.Tag)
-	log.Infof("build Time: %s", info.Time)
-	log.Infof("build Deps: %s", info.Deps)
+	log.Infof("[build] %s @ %s (%s)", info.Tag, info.Time, info.Vers)
 
 	// Default user for servers.
 	context.User = security.NodeUser
