@@ -72,30 +72,35 @@ func TestDates(t *testing.T) {
 			t.Error(err)
 			continue
 		}
+		testDatesInternal(t, loc)
+	}
+}
 
-		s, db := setup(t, loc)
-		defer cleanup(s, db)
+// This is not inlined in TestDates to force the cleanup after we're done with
+// each server (this prevents races from two TestServers running at the same time).
+func testDatesInternal(t *testing.T, loc *time.Location) {
+	server, db := setup(t, loc)
+	defer cleanup(server, db)
 
-		var date *driver.Date
-		for _, year := range []int{
-			1200, // distant past
-			2020, // present day, for DST rules
-			4000, // distant future
+	var date *driver.Date
+	for _, year := range []int{
+		1200, // distant past
+		2020, // present day, for DST rules
+		4000, // distant future
+	} {
+		for _, month := range []time.Month{
+			time.December, // winter
+			time.August,   // summer
 		} {
-			for _, month := range []time.Month{
-				time.December, // winter
-				time.August,   // summer
-			} {
-				for hour := 0; hour < 24; hour++ {
-					timestamp := time.Date(year, month, 20, hour, 34, 45, 123, loc)
+			for hour := 0; hour < 24; hour++ {
+				timestamp := time.Date(year, month, 20, hour, 34, 45, 123, loc)
 
-					if err := db.QueryRow("SELECT $1::DATE", timestamp).Scan(&date); err != nil {
-						t.Fatal(err)
-					}
+				if err := db.QueryRow("SELECT $1::DATE", timestamp).Scan(&date); err != nil {
+					t.Fatal(err)
+				}
 
-					if expected := driver.MakeDate(timestamp); *date != expected {
-						t.Fatalf("expected date to be truncated to:\n%s\nbut got:\n%s", expected, date)
-					}
+				if expected := driver.MakeDate(timestamp); *date != expected {
+					t.Fatalf("expected date to be truncated to:\n%s\nbut got:\n%s", expected, date)
 				}
 			}
 		}

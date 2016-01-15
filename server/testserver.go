@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -173,13 +174,20 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 		ts.Ctx = NewTestContext()
 	}
 
-	// TODO(marc): set this in the zones table when we have an entry
-	// for the default cluster-wide zone config.
-	config.DefaultZoneConfig.ReplicaAttrs = []roachpb.Attributes{{}}
-
 	if stopper == nil {
 		stopper = stop.NewStopper()
 	}
+
+	// Change the replication requirements so we don't get log spam
+	// about ranges not being replicated enough.
+	// TODO(marc): set this in the zones table when we have an entry
+	// for the default cluster-wide zone config and remove these
+	// shenanigans about mutating the global default.
+	oldDefaultZC := proto.Clone(config.DefaultZoneConfig).(*config.ZoneConfig)
+	config.DefaultZoneConfig.ReplicaAttrs = []roachpb.Attributes{{}}
+	stopper.AddCloser(stop.CloserFn(func() {
+		config.DefaultZoneConfig = oldDefaultZC
+	}))
 
 	var err error
 	ts.Server, err = NewServer(ts.Ctx, stopper)
