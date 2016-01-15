@@ -182,6 +182,7 @@ var keywords = map[string]int{
 	"SNAPSHOT":          SNAPSHOT,
 	"SOME":              SOME,
 	"SQL":               SQL,
+	"START":             START,
 	"STORING":           STORING,
 	"STRICT":            STRICT,
 	"STRING":            STRING,

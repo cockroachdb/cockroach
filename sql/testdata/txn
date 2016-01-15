@@ -147,6 +147,10 @@ ROLLBACK TRANSACTION
 statement ok
 BEGIN; COMMIT
 
+# END is same as commit
+statement ok
+BEGIN; END
+
 # COMMIT/ROLLBACK without a transaction are errors.
 
 statement error there is no transaction in progress
