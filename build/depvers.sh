@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Output the revision control version information (git/hg SHA) for the
 # current directory's dependencies. If multiple packages are contained
