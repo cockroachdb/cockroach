@@ -21,6 +21,8 @@ if [ "${1-}" = "docker" ]; then
   # same build order as the pre-parallel deps script.
 
   if is_shard 2; then
+    build/stale.sh github.com/cockroachdb/c-protobuf/cmd/protoc
+
     # Symlink the cache into the source tree if they don't exist.
     # In circleci they never do, but this script can also be run
     # locally where they might.
@@ -105,6 +107,14 @@ if ! docker images | grep -q "${tag}"; then
   fi
 fi
 
+gopath0="${GOPATH%%:*}"
+cachevers="${builder_dir}/cachevers.2"
+if [ ! -e "${cachevers}" ]; then
+  rm -f ${builder_dir}/cachevers.*
+  touch "${cachevers}"
+  rm -fr "${HOME}/uicache" "${gopath0}/bin" "${gopath0}/pkg"
+fi
+
 HOME="" go get -u github.com/robfig/glock
 grep -v '^cmd' GLOCKFILE | glock sync -n
 
@@ -118,20 +128,20 @@ $(dirname $0)/builder.sh $0 docker
 # this limitation by copying the build output from shards 1 and 2 over
 # to shard 0. On shard 0 we wait for this remote data to be copied.
 
-gopath0="${GOPATH%%:*}"
-
 if is_shard 2; then
   # We might already be on shard 0 if we're running without
   # parallelism. Avoid deleting our build output in that case.
   if ! is_shard 0; then
     dir="${HOME}/uicache"
-    time rsync -av --delete "${dir}/" node0:"${dir}"
+    time ssh node0 sudo chown -R ubuntu.ubuntu "${dir}"
+    time rsync -a --delete "${dir}/" node0:"${dir}"
 
     cmds=$(grep '^cmd' GLOCKFILE | grep -v glock | awk '{print $2}' | awk -F/ '{print $NF}')
     time ssh node0 mkdir -p "${gopath0}/bin/linux_amd64"
+    time ssh node0 sudo chown ubuntu.ubuntu "${gopath0}/bin/linux_amd64"
     for cmd in ${cmds}; do
       path="${gopath0}/bin/linux_amd64/${cmd}"
-      time rsync -v "${path}" node0:"${path}"
+      time rsync "${path}" node0:"${path}"
     done
   fi
   notify
@@ -142,7 +152,8 @@ if is_shard 1; then
   # parallelism. Avoid deleting our build output in that case.
   if ! is_shard 0; then
     dir="${gopath0}/pkg/linux_amd64_race"
-    time rsync -av --delete "${dir}/" node0:"${dir}"
+    time ssh node0 sudo chown -R ubuntu.ubuntu "${dir}"
+    time rsync -a --delete "${dir}/" node0:"${dir}"
   fi
   notify
 fi
@@ -157,4 +168,14 @@ if is_shard 0; then
     sleep 1
   done
   echo "waited $(($(date +%s) - ${start})) secs"
+
+  # Sync the go packages from the node which built the commands. We
+  # have to do this as a pull instead of as a push because node 0 is
+  # building an overlapping set of packages.
+  if ! is_shard 2; then
+    node=$((2 % $CIRCLE_NODE_TOTAL))
+    dir="${gopath0}/pkg/linux_amd64"
+    time sudo chown -R ubuntu.ubuntu "${dir}"
+    time rsync -au node${node}:"${dir}/" "${dir}"
+  fi
 fi
