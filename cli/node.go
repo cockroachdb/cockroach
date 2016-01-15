@@ -17,6 +17,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -111,6 +112,11 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 		nodeID := args[0]
 		if err := getJSON(context.Addr, server.PathForNodeStatus(nodeID), &nodeStatus); err != nil {
 			return err
+		}
+		if nodeStatus.Desc.NodeID == 0 {
+			// I'm not sure why the status call doesn't return an error when the given NodeID doesn't
+			// exist. This should be revisited.
+			return fmt.Errorf("Error: node %s doesn't exist", nodeID)
 		}
 		nodeStatuses = []status.NodeStatus{nodeStatus}
 
