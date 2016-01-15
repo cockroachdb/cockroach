@@ -78,7 +78,11 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		g.Start(rpcServer, ln.Addr(), stopper)
 	}
 	ctx.Gossip = g
-	sender := kv.NewDistSender(&kv.DistSenderContext{Clock: ctx.Clock, RPCContext: nodeRPCContext}, g)
+	sender := kv.NewDistSender(&kv.DistSenderContext{
+		Clock:      ctx.Clock,
+		Stopper:    stopper,
+		RPCContext: nodeRPCContext,
+	}, g)
 	ctx.DB = client.NewDB(sender)
 	// TODO(bdarnell): arrange to have the transport closed.
 	// (or attach LocalRPCTransport.Close to the stopper)

@@ -121,6 +121,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	}
 	distSender := kv.NewDistSender(&kv.DistSenderContext{
 		Clock:             clock,
+		Stopper:           stopper,
 		RPCSend:           rpcSend, // defined above
 		RangeDescriptorDB: stores,  // for descriptor lookup
 	}, sCtx.Gossip)
@@ -231,6 +232,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.db == nil {
 		m.distSender = kv.NewDistSender(&kv.DistSenderContext{
 			Clock:             m.clock,
+			Stopper:           m.clientStopper,
 			RangeDescriptorDB: m,
 			RPCSend:           m.rpcSend,
 		}, m.gossip)

@@ -146,6 +146,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	retryOpts.Closer = stopper.ShouldDrain()
 	ds := kv.NewDistSender(&kv.DistSenderContext{
 		Clock:           s.clock,
+		Stopper:         s.stopper,
 		RPCContext:      s.rpcContext,
 		RPCRetryOptions: &retryOpts,
 	}, s.gossip)

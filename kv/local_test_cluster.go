@@ -96,7 +96,8 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 		return []proto.Message{br}, nil
 	}
 	ltc.distSender = NewDistSender(&DistSenderContext{
-		Clock: ltc.Clock,
+		Clock:                    ltc.Clock,
+		Stopper:                  ltc.Stopper,
 		RangeDescriptorCacheSize: defaultRangeDescriptorCacheSize,
 		RangeLookupMaxRanges:     defaultRangeLookupMaxRanges,
 		LeaderCacheSize:          defaultLeaderCacheSize,

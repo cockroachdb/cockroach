@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
 	"github.com/gogo/protobuf/proto"
 )
@@ -106,6 +107,8 @@ type DistSender struct {
 	// clock is used to set time for some calls. E.g. read-only ops
 	// which span ranges and don't require read consistency.
 	clock *hlc.Clock
+	// stopper is used to know when to stop retrying RPCs.
+	stopper *stop.Stopper
 	// gossip provides up-to-date information about the start of the
 	// key range, used to find the replica metadata for arbitrary key
 	// ranges.
@@ -133,6 +136,7 @@ type rpcSendFn func(rpc.Options, string, []net.Addr,
 // DistSenderContext holds auxiliary objects that can be passed to
 // NewDistSender.
 type DistSenderContext struct {
+	Stopper                  *stop.Stopper
 	Clock                    *hlc.Clock
 	RangeDescriptorCacheSize int32
 	// RangeLookupMaxRanges sets how many ranges will be prefetched into the
@@ -164,8 +168,9 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 		clock = hlc.NewClock(hlc.UnixNano)
 	}
 	ds := &DistSender{
-		clock:  clock,
-		gossip: gossip,
+		clock:   clock,
+		stopper: ctx.Stopper,
+		gossip:  gossip,
 	}
 	if ctx.nodeDescriptor != nil {
 		atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(ctx.nodeDescriptor))
@@ -553,7 +558,12 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 		var desc *roachpb.RangeDescriptor
 		var needAnother bool
 		var pErr *roachpb.Error
-		for r := retry.Start(ds.rpcRetryOptions); r.Next(); {
+		var finished bool
+		retryOpts := ds.rpcRetryOptions
+		if ds.stopper != nil {
+			retryOpts.Closer = ds.stopper.ShouldDrain()
+		}
+		for r := retry.Start(retryOpts); r.Next(); {
 			// Get range descriptor (or, when spanning range, descriptors). Our
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
@@ -627,6 +637,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			}()
 			// If sending succeeded, break this loop.
 			if pErr == nil {
+				finished = true
 				break
 			}
 
@@ -707,6 +718,13 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 		// Immediately return if querying a range failed non-retryably.
 		if pErr != nil {
 			return nil, pErr, false
+		} else if !finished {
+			select {
+			case <-retryOpts.Closer:
+				return nil, roachpb.NewErrorf("shutting down"), false
+			default:
+				log.Fatalf("exited retry loop with nil error but finished=false")
+			}
 		}
 
 		ba.Txn.Update(curReply.Txn)
