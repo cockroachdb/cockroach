@@ -216,6 +216,9 @@ func (n *sortNode) initValues() bool {
 		v.ordering = n.ordering
 	} else {
 		v = &valuesNode{ordering: n.ordering}
+		// TODO(andrei): If we're scanning an index with a prefix matching an
+		// ordering prefix, we should only accumulate values for equal fields
+		// in this prefix, then sort the accumulated chunk and output.
 		for n.plan.Next() {
 			values := n.plan.Values()
 			valuesCopy := make(parser.DTuple, len(values))

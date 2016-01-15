@@ -233,7 +233,9 @@ func (p *planner) selectIndex(s *scanNode, ordering []int, grouping bool) (planN
 
 		// TODO(pmattis): If "len(exprs) > 1" then we have multiple disjunctive
 		// expressions. For example, "a=1 OR a=3" will get translated into "[[a=1],
-		// [a=3]]". We need to perform index selection independently for each of
+		// [a=3]]".
+		// Right now we don't generate any constraints if we have multiple disjunctions.
+		// We would need to perform index selection independently for each of
 		// the disjunctive expressions and then take the resulting index info and
 		// determine if we're performing distinct scans in the indexes or if the
 		// scans overlap. If the scans overlap we'll need to union the output
@@ -264,8 +266,8 @@ func (p *planner) selectIndex(s *scanNode, ordering []int, grouping bool) (planN
 
 	if log.V(2) {
 		for i, c := range candidates {
-			log.Infof("%d: selectIndex(%s): cost=%v constraints=%s",
-				i, c.index.Name, c.cost, c.constraints)
+			log.Infof("%d: selectIndex(%s): cost=%v constraints=%s reverse=%t",
+				i, c.index.Name, c.cost, c.constraints, c.reverse)
 		}
 	}
 
@@ -993,6 +995,9 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 }
 
 // makeSpans constructs the spans for an index given a set of constraints.
+// The resulting spans are non-overlapping (by virtue of the input constraints
+// being disjunct) and are ordered as the index is (i.e. scanning them in order
+// would require only iterating forward through the index).
 func makeSpans(constraints indexConstraints,
 	tableID ID, index *IndexDescriptor) []span {
 	prefix := roachpb.Key(MakeIndexKeyPrefix(tableID, index.ID))
@@ -1001,7 +1006,7 @@ func makeSpans(constraints indexConstraints,
 	// But we also have (...) IN <tuple> constraints that span multiple columns.
 	// These constraints split each span, and that's how we can end up with
 	// multiple spans.
-	spans := []span{{
+	spans := spans{{
 		start: append(roachpb.Key(nil), prefix...),
 		end:   append(roachpb.Key(nil), prefix...),
 	}}
@@ -1062,6 +1067,8 @@ func makeSpans(constraints indexConstraints,
 		}
 	}
 	spans = spans[:n]
+	// Sort the spans to return them in index order.
+	sort.Sort(spans)
 	return spans
 }
 

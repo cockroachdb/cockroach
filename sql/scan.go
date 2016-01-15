@@ -67,6 +67,13 @@ type span struct {
 	count int64
 }
 
+type spans []span
+
+// implement Sort.Interface
+func (a spans) Len() int           { return len(a) }
+func (a spans) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a spans) Less(i, j int) bool { return a[i].start.Compare(a[j].start) < 0 }
+
 // prettyKey pretty-prints the specified key, skipping over the first `skip`
 // fields. The pretty printed key looks like:
 //
