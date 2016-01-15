@@ -228,7 +228,7 @@ func (ctx *Context) initEngine(attrsStr, path string, stopper *stop.Stopper) (en
 // SelfGossipAddr is a special flag that configures a node to gossip
 // only with itself. This avoids having to specify the port twice for
 // single-node clusters (i.e. once in --addr, and again in --gossip).
-const SelfGossipAddr = "self="
+const SelfGossipAddr = "self"
 
 // parseGossipBootstrapResolvers parses a comma-separated list of
 // gossip bootstrap resolvers.
@@ -239,7 +239,7 @@ func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error)
 		if len(address) == 0 {
 			continue
 		}
-		if strings.HasPrefix(address, SelfGossipAddr) {
+		if address == SelfGossipAddr {
 			address = ctx.Addr
 		}
 		resolver, err := resolver.NewResolver(&ctx.Context, address)
