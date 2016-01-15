@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// EncodeFloatAscending returns the resulting byte slice with the encoded float64
+// EncodeFloat returns the resulting byte slice with the encoded float64
 // appended to b.
 //
 // Values are classified as large, medium, or small according to the value of
@@ -48,7 +48,7 @@ import (
 // as a byte 0x13-E followed by the ones-complement of M. Large negative values
 // consist of the single byte 0x08 followed by the ones-complement of the
 // varint encoding of E followed by the ones-complement of M.
-func EncodeFloatAscending(b []byte, f float64) []byte {
+func EncodeFloat(b []byte, f float64) []byte {
 	// Handle the simplistic cases first.
 	switch {
 	case math.IsNaN(f):
@@ -79,17 +79,9 @@ func EncodeFloatAscending(b []byte, f float64) []byte {
 	return nil
 }
 
-// EncodeFloatDescending is the descending version of EncodeFloatAscending.
-func EncodeFloatDescending(b []byte, f float64) []byte {
-	if math.IsNaN(f) {
-		return append(b, floatNaNDesc)
-	}
-	return EncodeFloatAscending(b, -f)
-}
-
-// DecodeFloatAscending returns the remaining byte slice after decoding and the decoded
+// DecodeFloat returns the remaining byte slice after decoding and the decoded
 // float64 from buf.
-func DecodeFloatAscending(buf []byte, tmp []byte) ([]byte, float64, error) {
+func DecodeFloat(buf []byte, tmp []byte) ([]byte, float64, error) {
 	if buf[0] == floatZero {
 		return buf[1:], 0, nil
 	}
@@ -97,8 +89,6 @@ func DecodeFloatAscending(buf []byte, tmp []byte) ([]byte, float64, error) {
 	idx := bytes.Index(buf, []byte{floatTerminator})
 	switch {
 	case buf[0] == floatNaN:
-		return buf[1:], math.NaN(), nil
-	case buf[0] == floatNaNDesc:
 		return buf[1:], math.NaN(), nil
 	case buf[0] == floatInfinity:
 		return buf[1:], math.Inf(1), nil
@@ -131,12 +121,6 @@ func DecodeFloatAscending(buf []byte, tmp []byte) ([]byte, float64, error) {
 	default:
 		return nil, 0, util.Errorf("unknown prefix of the encoded byte slice: %q", buf)
 	}
-}
-
-// DecodeFloatDescending decodes floats encoded with EncodeFloatDescending.
-func DecodeFloatDescending(buf []byte, tmp []byte) ([]byte, float64, error) {
-	b, r, err := DecodeFloatAscending(buf, tmp)
-	return b, -r, err
 }
 
 // floatMandE computes and returns the mantissa M and exponent E for f.

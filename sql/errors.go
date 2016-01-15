@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 type errUniquenessConstraintViolation struct {
@@ -66,16 +65,8 @@ func convertBatchError(tableDesc *TableDescriptor, b client.Batch, origPErr *roa
 			if pErr != nil {
 				return pErr
 			}
-			dirs := make([]encoding.Direction, 0, len(index.ColumnIDs))
-			for _, dir := range index.ColumnDirections {
-				convertedDir, err := dir.toEncodingDirection()
-				if err != nil {
-					return roachpb.NewError(err)
-				}
-				dirs = append(dirs, convertedDir)
-			}
 			vals := make([]parser.Datum, len(valTypes))
-			if _, pErr := decodeKeyVals(valTypes, vals, dirs, key); pErr != nil {
+			if _, pErr := decodeKeyVals(valTypes, vals, key); pErr != nil {
 				return pErr
 			}
 

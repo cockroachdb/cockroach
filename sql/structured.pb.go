@@ -261,9 +261,6 @@ type IndexDescriptor struct {
 	// indexes these columns will be stored in the value. The extra column IDs is
 	// computed as PrimaryIndex.column_ids - column_ids. For the primary index
 	// the list will be empty.
-	// The distinction about whether the columns are written in the key or the value
-	// comes because we want to always do writes using a single operation - this
-	// way for unique indexes we can do a conditional put on the key.
 	ImplicitColumnIDs []ColumnID `protobuf:"varint,7,rep,name=implicit_column_ids,casttype=ColumnID" json:"implicit_column_ids,omitempty"`
 }
 

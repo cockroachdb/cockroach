@@ -163,7 +163,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		}
 
 		primaryIndexKey, _, epErr := encodeIndexKey(
-			&primaryIndex, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
+			primaryIndex.ColumnIDs, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
 		if epErr != nil {
 			return nil, epErr
 		}

@@ -111,8 +111,7 @@ func (n *Network) StartNode(node *Node) error {
 	}); err != nil {
 		return err
 	}
-	if err := node.Gossip.AddInfo(node.Addr.String(),
-		encoding.EncodeUint64Ascending(nil, 0), time.Hour); err != nil {
+	if err := node.Gossip.AddInfo(node.Addr.String(), encoding.EncodeUint64(nil, 0), time.Hour); err != nil {
 		return err
 	}
 	node.Gossip.Start(node.Server, node.Addr, n.Stopper)
@@ -156,22 +155,15 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 	nodes := n.Nodes
 	for cycle := 1; simCallback(cycle, n); cycle++ {
 		// Node 0 gossips sentinel & cluster ID every cycle.
-		if err := nodes[0].Gossip.AddInfo(
-			gossip.KeySentinel,
-			encoding.EncodeUint64Ascending(nil, uint64(cycle)),
-			time.Hour); err != nil {
+		if err := nodes[0].Gossip.AddInfo(gossip.KeySentinel, encoding.EncodeUint64(nil, uint64(cycle)), time.Hour); err != nil {
 			log.Fatal(err)
 		}
-		if err := nodes[0].Gossip.AddInfo(gossip.KeyClusterID,
-			encoding.EncodeUint64Ascending(nil, uint64(cycle)), 0*time.Second); err != nil {
+		if err := nodes[0].Gossip.AddInfo(gossip.KeyClusterID, encoding.EncodeUint64(nil, uint64(cycle)), 0*time.Second); err != nil {
 			log.Fatal(err)
 		}
 		// Every node gossips cycle.
 		for _, node := range nodes {
-			if err := node.Gossip.AddInfo(
-				node.Addr.String(),
-				encoding.EncodeUint64Ascending(nil, uint64(cycle)),
-				time.Hour); err != nil {
+			if err := node.Gossip.AddInfo(node.Addr.String(), encoding.EncodeUint64(nil, uint64(cycle)), time.Hour); err != nil {
 				log.Fatal(err)
 			}
 			node.Gossip.SimulationCycle()

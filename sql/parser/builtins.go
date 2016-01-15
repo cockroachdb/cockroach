@@ -1343,7 +1343,7 @@ func generateUniqueBytes(nodeID roachpb.NodeID) DBytes {
 	uniqueBytesState.Unlock()
 
 	b := make([]byte, 0, 8+binary.MaxVarintLen32)
-	b = encoding.EncodeUint64Ascending(b, nanos)
+	b = encoding.EncodeUint64(b, nanos)
 	// We use binary.PutUvarint instead of encoding.EncodeUvarint because the
 	// former uses less space for values < 128 which is a common occurrence for
 	// node IDs.

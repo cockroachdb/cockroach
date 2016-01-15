@@ -713,7 +713,7 @@ func setupClientBenchData(useSSL bool, numVersions, numKeys int, b *testing.B) (
 		batch := &client.Batch{}
 		for i := 0; i < numKeys; i++ {
 			if t == 1 {
-				keys[i] = roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(i)))
+				keys[i] = roachpb.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))
 				nvs[i] = int(rand.Int31n(int32(numVersions)) + 1)
 			}
 			// Only write values if this iteration is less than the random
@@ -761,10 +761,8 @@ func runClientScan(useSSL bool, numRows, numVersions int, b *testing.B) {
 		for pb.Next() {
 			// Choose a random key to start scan.
 			keyIdx := rand.Int31n(int32(numKeys - numRows))
-			startKey := roachpb.Key(encoding.EncodeUvarintAscending(
-				startKeyBuf, uint64(keyIdx)))
-			endKey := roachpb.Key(encoding.EncodeUvarintAscending(
-				endKeyBuf, uint64(keyIdx)+uint64(numRows)))
+			startKey := roachpb.Key(encoding.EncodeUvarint(startKeyBuf, uint64(keyIdx)))
+			endKey := roachpb.Key(encoding.EncodeUvarint(endKeyBuf, uint64(keyIdx)+uint64(numRows)))
 			rows, pErr := db.Scan(startKey, endKey, int64(numRows))
 			if pErr != nil {
 				b.Fatalf("failed scan: %s", pErr)

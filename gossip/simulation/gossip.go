@@ -210,7 +210,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 				missing = append(missing, otherNode.Gossip.GetNodeID())
 				quiescent = false
 			} else {
-				_, val, err := encoding.DecodeUint64Ascending(info)
+				_, val, err := encoding.DecodeUint64(info)
 				if err != nil {
 					log.Fatalf("bad decode of node info cycle: %s", err)
 				}
@@ -224,7 +224,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 		if info, err := node.GetInfo(gossip.KeySentinel); err != nil {
 			log.Infof("error getting info for sentinel gossip key %q: %s", gossip.KeySentinel, err)
 		} else {
-			_, val, err := encoding.DecodeUint64Ascending(info)
+			_, val, err := encoding.DecodeUint64(info)
 			if err != nil {
 				log.Fatalf("bad decode of sentinel cycle: %s", err)
 			}

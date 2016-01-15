@@ -69,55 +69,26 @@ func TestPrettyPrint(t *testing.T) {
 		{UserTableDataMin, "/Table/50"},
 		{MakeTablePrefix(111), "/Table/111"},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey("foo")), `/Table/42/"foo"`},
-		{MakeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeFloatAscending(nil, float64(233.221112)))),
-			"/Table/42/233.221112"},
-		{MakeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeFloatDescending(nil, float64(-233.221112)))),
-			"/Table/42/233.221112"},
-		{MakeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeVarintAscending(nil, 1222)),
-			roachpb.RKey(encoding.EncodeStringAscending(nil, "handsome man"))),
-			`/Table/42/1222/"handsome man"`},
-		{MakeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeVarintAscending(nil, 1222))),
-			`/Table/42/1222`},
-		{MakeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeVarintDescending(nil, 1222))),
-			`/Table/42/-1223`},
-		{MakeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeBytesAscending(nil, []byte{1, 2, 8, 255}))),
-			`/Table/42/"\x01\x02\b\xff"`},
-		{MakeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeBytesAscending(nil, []byte{1, 2, 8, 255})),
-			roachpb.RKey("bar")), `/Table/42/"\x01\x02\b\xff"/"bar"`},
-		{MakeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeBytesDescending(nil, []byte{1, 2, 8, 255})),
-			roachpb.RKey("bar")), `/Table/42/"\x01\x02\b\xff"/"bar"`},
-		{MakeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeNullAscending(nil))), "/Table/42/NULL"},
-		{MakeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeNotNullAscending(nil))), "/Table/42/#"},
-		{MakeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeTimeAscending(nil, tm))),
-			"/Table/42/Sat Mar  7 11:06:39 UTC 2015"},
-		{MakeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeTimeDescending(nil, tm))),
-			"/Table/42/Sat Mar  7 11:06:39 UTC 2015"},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeFloat(nil, float64(233.221112)))), "/Table/42/233.221112"},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeVarint(nil, 1222)), roachpb.RKey(encoding.EncodeString(nil, "handsome man"))), `/Table/42/1222/"handsome man"`},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeBytes(nil, []byte{1, 2, 8, 255}))), `/Table/42/"\x01\x02\b\xff"`},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeBytes(nil, []byte{1, 2, 8, 255})), roachpb.RKey("bar")), `/Table/42/"\x01\x02\b\xff"/"bar"`},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeNull(nil))), "/Table/42/NULL"},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeNotNull(nil))), "/Table/42/#"},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey(encoding.EncodeTime(nil, tm))), "/Table/42/Sat Mar  7 11:06:39 UTC 2015"},
 
 		// others
 		{MakeKey([]byte("")), "/Min"},
-		{MakeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x21, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:9999: unknown escape sequence: 0x0 0x2>"},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x20, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:407: unknown escape>"},
 	}
 	for i, test := range testCases {
-		keyInfo := MassagePrettyPrintedSpanForTest(PrettyPrint(test.key), nil)
-		exp := MassagePrettyPrintedSpanForTest(test.exp, nil)
-		if exp != keyInfo {
-			t.Fatalf("%d: expected %s, got %s", i, exp, keyInfo)
+		keyInfo := PrettyPrint(test.key)
+		if test.exp != keyInfo {
+			t.Fatalf("%d: expected %s, got %s", i, test.exp, keyInfo)
 		}
 
-		if exp != MassagePrettyPrintedSpanForTest(test.key.String(), nil) {
-			t.Fatalf("%d: expected %s, got %s", i, exp, test.key.String())
+		if test.exp != test.key.String() {
+			t.Fatalf("%d: expected %s, got %s", i, test.exp, keyInfo)
 		}
 	}
 }

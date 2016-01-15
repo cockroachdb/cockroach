@@ -184,7 +184,7 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 		result.rows = append(result.rows, parser.DTuple(nil))
 
 		primaryIndexKey, _, pErr := encodeIndexKey(
-			&primaryIndex, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
+			primaryIndex.ColumnIDs, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
 		if pErr != nil {
 			return nil, pErr
 		}

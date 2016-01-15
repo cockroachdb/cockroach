@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 // ID, ColumnID, and IndexID are all uint32, but are each given a
@@ -78,18 +77,6 @@ func validateName(name, typ string) error {
 	}
 	// TODO(pmattis): Do we want to be more restrictive than this?
 	return nil
-}
-
-// toEncodingDirection converts a direction from the proto to an encoding.Direction.
-func (dir IndexDescriptor_Direction) toEncodingDirection() (encoding.Direction, error) {
-	switch dir {
-	case IndexDescriptor_ASC:
-		return encoding.Ascending, nil
-	case IndexDescriptor_DESC:
-		return encoding.Descending, nil
-	default:
-		return encoding.Ascending, util.Errorf("invalid direction: %s", dir)
-	}
 }
 
 // allocateName sets desc.Name to a value that is not equalName to any
@@ -157,29 +144,16 @@ func (desc *IndexDescriptor) containsColumnID(colID ColumnID) bool {
 }
 
 // fullColumnIDs returns the index column IDs including any implicit column IDs
-// for non-unique indexes. It also returns the direction with which each column
-// was encoded.
-func (desc *IndexDescriptor) fullColumnIDs() ([]ColumnID, []encoding.Direction) {
-	dirs := make([]encoding.Direction, 0, len(desc.ColumnIDs))
-	for _, dir := range desc.ColumnDirections {
-		convertedDir, err := dir.toEncodingDirection()
-		if err != nil {
-			panic(err)
-		}
-		dirs = append(dirs, convertedDir)
-	}
+// for non-unique indexes.
+func (desc *IndexDescriptor) fullColumnIDs() []ColumnID {
 	if desc.Unique {
-		return desc.ColumnIDs, dirs
+		return desc.ColumnIDs
 	}
-	// Non-unique indexes have some of the primary-key columns appended to
+	// Non-unique indexes have the some of the primary-key columns appended to
 	// their key.
 	columnIDs := append([]ColumnID(nil), desc.ColumnIDs...)
 	columnIDs = append(columnIDs, desc.ImplicitColumnIDs...)
-	for range desc.ImplicitColumnIDs {
-		// Implicit columns are encoded ascendingly.
-		dirs = append(dirs, encoding.Ascending)
-	}
-	return columnIDs, dirs
+	return columnIDs
 }
 
 // SetID implements the descriptorProto interface.
