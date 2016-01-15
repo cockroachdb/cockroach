@@ -348,7 +348,7 @@ func unimplemented() {
 %token <str>   SEARCH SECOND SELECT
 %token <str>   SERIALIZABLE SESSION SESSION_USER SET SHOW
 %token <str>   SIMILAR SIMPLE SMALLINT SNAPSHOT SOME SQL
-%token <str>   STRICT STRING STORING SUBSTRING
+%token <str>   START STRICT STRING STORING SUBSTRING
 %token <str>   SYMMETRIC
 
 %token <str>   TABLE TABLES TEXT THEN
@@ -1396,13 +1396,21 @@ opt_set_data:
   SET DATA {}
 | /* EMPTY */ {}
 
-// BEGIN / COMMIT / ROLLBACK / ...
+// BEGIN / START / COMMIT / END / ROLLBACK / ...
 transaction_stmt:
   BEGIN opt_transaction opt_transaction_iso_level
   {
     $$ = &BeginTransaction{Isolation: $3}
   }
+| START TRANSACTION opt_transaction_iso_level
+  {
+    $$ = &BeginTransaction{Isolation: $3}
+  }
 | COMMIT opt_transaction
+  {
+    $$ = &CommitTransaction{}
+  }
+| END opt_transaction
   {
     $$ = &CommitTransaction{}
   }
@@ -3597,6 +3605,7 @@ unreserved_keyword:
 | SIMPLE
 | SNAPSHOT
 | SQL
+| START
 | STORING
 | STRICT
 | TABLES
