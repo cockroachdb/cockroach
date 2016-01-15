@@ -334,11 +334,6 @@ func (g *Gossip) SetResolvers(resolvers []resolver.Resolver) {
 	g.resolverIdx = len(resolvers) - 1
 	g.resolvers = resolvers
 	g.resolversTried = map[int]struct{}{}
-	// Initialize the bootstrap info with addresses of specified resolvers.
-	for _, r := range resolvers {
-		addr := util.MakeUnresolvedAddr(r.Type(), r.Addr())
-		g.bootstrapInfo.Addresses = append(g.bootstrapInfo.Addresses, addr)
-	}
 }
 
 // GetNodeIDAddress looks up the address of the node by ID.
