@@ -2611,10 +2611,10 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 	}
 }
 
-// TestResovleIntentWithLowerEpoch verifies that trying to resolve
+// TestResolveIntentWithLowerEpoch verifies that trying to resolve
 // an intent at an epoch that is lower than the epoch of the intent
 // leaves the intent untouched.
-func TestResovleIntentWithLowerEpoch(t *testing.T) {
+func TestResolveIntentWithLowerEpoch(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
