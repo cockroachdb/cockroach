@@ -166,7 +166,6 @@ type multiTestContext struct {
 	// use distinct clocks per store.
 	clocks  []*hlc.Clock
 	engines []engine.Engine
-	idents  []roachpb.StoreIdent
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. clientStopper is for 'db', transportStopper is
 	// for 'transport', and the 'stoppers' slice corresponds to the
@@ -184,6 +183,7 @@ type multiTestContext struct {
 	senders  []*storage.Stores
 	stores   []*storage.Store
 	stoppers []*stop.Stopper
+	idents   []roachpb.StoreIdent
 }
 
 // startMultiTestContext is a convenience function to create, start, and return
@@ -220,11 +220,6 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		}
 		m.storePool = storage.NewStorePool(m.gossip, m.clock, m.timeUntilStoreDead, m.clientStopper)
 	}
-
-	// Always create the first sender.
-	m.mu.Lock()
-	m.senders = append(m.senders, storage.NewStores(m.clock))
-	m.mu.Unlock()
 
 	if m.db == nil {
 		m.distSender = kv.NewDistSender(&kv.DistSenderContext{
@@ -324,9 +319,7 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 		// Run the send in a Task on the destination store to simulate what
 		// would happen with real RPCs.
 		if s := m.stoppers[nodeIndex]; s == nil || !s.RunTask(func() {
-			m.mu.RLock()
 			sender := m.senders[nodeIndex]
-			m.mu.RUnlock()
 			br, pErr = sender.Send(context.Background(), ba)
 		}) {
 			pErr = &roachpb.Error{}
@@ -392,6 +385,7 @@ func (rd rangeDescByAge) Less(i, j int) bool {
 func (m *multiTestContext) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
 	var descs []*roachpb.RangeDescriptor
 	m.mu.RLock()
+	defer m.mu.RUnlock()
 	for _, str := range m.senders {
 		// Find every version of the RangeDescriptor for the first range by
 		// querying all stores; it may not be present on all stores, but the
@@ -407,7 +401,11 @@ func (m *multiTestContext) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Erro
 				"no error should be possible from this invocation of VisitStores, but found %s", err))
 		}
 	}
-	m.mu.RUnlock()
+	if len(descs) == 0 {
+		// This is a panic because it should currently be impossible in a properly
+		// constructed multiTestContext.
+		panic("first Range is not present on any store in the multiTestContext.")
+	}
 	// Sort the RangeDescriptor versions by age and return the most recent
 	// version.
 	sort.Sort(rangeDescByAge(descs))
@@ -441,7 +439,9 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 
 // AddStore creates a new store on the same Transport but doesn't create any ranges.
 func (m *multiTestContext) addStore() {
+	m.mu.RLock()
 	idx := len(m.stores)
+	m.mu.RUnlock()
 	var clock *hlc.Clock
 	if len(m.clocks) > idx {
 		clock = m.clocks[idx]
@@ -485,18 +485,21 @@ func (m *multiTestContext) addStore() {
 		m.t.Fatal(err)
 	}
 	store.WaitForInit()
+
+	// Add newly created objects to the multiTestContext's collections.
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.stores = append(m.stores, store)
-	if len(m.senders) == idx {
-		m.senders = append(m.senders, storage.NewStores(clock))
-	}
-	m.senders[idx].AddStore(store)
+	m.stoppers = append(m.stoppers, stopper)
+	sender := storage.NewStores(clock)
+	sender.AddStore(store)
+	m.senders = append(m.senders, sender)
 	if err := gossipNodeDesc(m.gossip, nodeID); err != nil {
 		m.t.Fatal(err)
 	}
 	// Save the store identities for later so we can use them in
 	// replication operations even while the store is stopped.
 	m.idents = append(m.idents, store.Ident)
-	m.stoppers = append(m.stoppers, stopper)
 }
 
 // gossipNodeDesc adds the node descriptor to the gossip network.
@@ -701,6 +704,8 @@ func (m *multiTestContext) expireLeaderLeases() {
 func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID, d time.Duration) *storage.Replica {
 	var raftLeaderRepl *storage.Replica
 	util.SucceedsWithinDepth(1, m.t, d, func() error {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
 		var latestTerm uint64
 		for _, store := range m.stores {
 			raftStatus := store.RaftStatus(rangeID)
