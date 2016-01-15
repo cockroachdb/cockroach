@@ -55,7 +55,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	}
 	mtc.Start(t, numNodes)
 	defer mtc.Stop()
-	mtc.replicateRange(1, 0, 1, 2)
+	mtc.replicateRange(1, 1, 2)
 
 	// Advance the leader's clock ahead of the followers (by more than
 	// MaxOffset but less than the leader lease) and execute a command.

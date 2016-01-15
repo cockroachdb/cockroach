@@ -1061,7 +1061,7 @@ func (s *Store) AddReplicaTest(rng *Replica) error {
 // the same Range ID has already been added to this store.
 // addReplicaInternalLocked requires that the store lock is held.
 func (s *Store) addReplicaInternalLocked(rng *Replica) error {
-	if !rng.isInitialized() {
+	if !rng.IsInitialized() {
 		return util.Errorf("attempted to add uninitialized range %s", rng)
 	}
 
@@ -1149,7 +1149,7 @@ func (s *Store) processRangeDescriptorUpdate(rng *Replica) error {
 
 // processRangeDescriptorUpdateLocked requires that the store lock is held.
 func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
-	if !rng.isInitialized() {
+	if !rng.IsInitialized() {
 		return util.Errorf("attempted to process uninitialized range %s", rng)
 	}
 
@@ -1706,7 +1706,7 @@ func (s *Store) cacheReplicaDescriptorLocked(groupID roachpb.RangeID, replica ro
 // the replica).
 // canApplySnapshot requires that the store lock is held.
 func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snapshot) bool {
-	if r, ok := s.mu.replicas[rangeID]; ok && r.isInitialized() {
+	if r, ok := s.mu.replicas[rangeID]; ok && r.IsInitialized() {
 		// We have the range and it's initialized, so let the snapshot
 		// through.
 		return true
