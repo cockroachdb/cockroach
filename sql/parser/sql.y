@@ -1406,6 +1406,10 @@ transaction_stmt:
   {
     $$ = &CommitTransaction{}
   }
+| END opt_transaction
+  {
+    $$ = &CommitTransaction{}
+  }
 | ROLLBACK opt_transaction
   {
     $$ = &RollbackTransaction{}
