@@ -530,13 +530,14 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Wait for the range to be split along table boundaries.
-	originalRange := store.LookupReplica(roachpb.RKey(keys.UserTableDataMin), nil)
 	var rng *storage.Replica
+
+	// Wait for the range to be split along table boundaries.
+	tableBoundary := roachpb.RKey(keys.MakeTablePrefix(descID))
 	util.SucceedsWithin(t, splitTimeout, func() error {
-		rng = store.LookupReplica(keys.MakeTablePrefix(descID), nil)
-		if rng.RangeID == originalRange.RangeID {
-			return util.Errorf("expected new range created by split")
+		rng = store.LookupReplica(tableBoundary, nil)
+		if startKey := rng.Desc().StartKey; !startKey.Equal(tableBoundary) {
+			return util.Errorf("expected range %s to have start key %s", rng, tableBoundary)
 		}
 		return nil
 	})
