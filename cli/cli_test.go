@@ -580,6 +580,7 @@ Use "cockroach [command] --help" for more information about a command.
 
 func Example_Node() {
 	c := newCLITest()
+	defer c.Stop()
 
 	// Refresh time series data, which is required to retrieve stats.
 	if err := c.TestServer.WriteSummaries(); err != nil {
@@ -588,7 +589,6 @@ func Example_Node() {
 
 	c.Run("node ls")
 	c.Run("node status 10000")
-	c.Run("quit")
 
 	// Output:
 	// node ls
@@ -599,8 +599,6 @@ func Example_Node() {
 	// +----+
 	// node status 10000
 	// Error: node 10000 doesn't exist
-	// quit
-	// node drained and shutdown: ok
 }
 
 func TestNodeStatus(t *testing.T) {
@@ -608,6 +606,7 @@ func TestNodeStatus(t *testing.T) {
 
 	start := time.Now()
 	c := newCLITest()
+	defer c.Stop()
 
 	// Refresh time series data, which is required to retrieve stats.
 	if err := c.TestServer.WriteSummaries(); err != nil {
@@ -616,17 +615,15 @@ func TestNodeStatus(t *testing.T) {
 
 	out, err := c.RunWithCapture("node status 1")
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	checkNodeStatus(t, c, out, start)
 
 	out, err = c.RunWithCapture("node status")
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	checkNodeStatus(t, c, out, start)
-
-	c.Run("quit")
 }
 
 func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
@@ -635,14 +632,14 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 
 	// Skip command line.
 	if !s.Scan() {
-		t.Fatal("Couldn't skip command line.")
+		t.Fatalf("Couldn't skip command line: %s", s.Err())
 	}
 
 	checkSeparatorLine(t, s)
 
 	// check column names.
 	if !s.Scan() {
-		t.Fatal("end of output while reading column names")
+		t.Fatalf("Error reading column names: %s", s.Err())
 	}
 	cols := extractFields(s.Text())
 	if !reflect.DeepEqual(cols, nodesColumnHeaders) {
@@ -653,31 +650,30 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 
 	// Check node status.
 	if !s.Scan() {
-		t.Fatal("end of output while reading node status")
+		t.Fatalf("error reading node status: %s", s.Err())
 	}
 	fields := extractFields(s.Text())
-	if len(fields) != len(nodesColumnHeaders) {
-		t.Fatalf("# of fields for node status (%d) != expected (%d)",
-			len(fields), len(lsNodesColumnHeaders))
+	if a, e := len(fields), len(nodesColumnHeaders); a != e {
+		t.Fatalf("# of fields for node status (%d) != expected (%d)", a, e)
 	}
 
 	nodeID := c.Gossip().GetNodeID()
 	nodeIDStr := strconv.FormatInt(int64(nodeID), 10)
-	if fields[0] != nodeIDStr {
-		t.Errorf("node id (%s) != expected (%s)", fields[0], nodeIDStr)
+	if a, e := fields[0], nodeIDStr; a != e {
+		t.Errorf("node id (%s) != expected (%s)", a, e)
 	}
 
 	nodeAddr, err := c.Gossip().GetNodeIDAddress(nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if nodeAddr.String() != fields[1] {
-		t.Errorf("node address (%s) != expected (%s)", fields[1], nodeAddr.String())
+	if a, e := fields[1], nodeAddr.String(); a != e {
+		t.Errorf("node address (%s) != expected (%s)", a, e)
 	}
 
 	// Verify that updated_at and started_at are reasonably recent.
-	checkTimeElapsed(t, fields[2], 5, start)
-	checkTimeElapsed(t, fields[3], 5, start)
+	checkTimeElapsed(t, fields[2], time.Duration(5)*time.Second, start)
+	checkTimeElapsed(t, fields[3], time.Duration(5)*time.Second, start)
 
 	// Verify all byte/range metrics.
 	testcases := []struct {
@@ -712,22 +708,20 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 	checkSeparatorLine(t, s)
 }
 
+var separatorLineExp = regexp.MustCompile(`[\+-]+$`)
+
 func checkSeparatorLine(t *testing.T, s *bufio.Scanner) {
 	if !s.Scan() {
-		t.Fatal("end of output while reading separator line")
+		t.Fatalf("error reading separator line: %s", s.Err())
 	}
-	matched, err := regexp.MatchString(`[\+-]+$`, s.Text())
-	if !matched {
+	if !separatorLineExp.MatchString(s.Text()) {
 		t.Fatalf("separator line not found: %s", s.Text())
-	}
-	if err != nil {
-		t.Fatal(err)
 	}
 }
 
 // checkRecentTime produces a test error if the time is not within the specified number
 // of seconds of the given start time.
-func checkTimeElapsed(t *testing.T, timeStr string, secs int, start time.Time) {
+func checkTimeElapsed(t *testing.T, timeStr string, elapsed time.Duration, start time.Time) {
 	// Truncate start time, because the CLI currently outputs times with a second-level
 	// granularity.
 	start, err := time.Parse(localTimeFormat, start.Format(localTimeFormat))
@@ -738,12 +732,12 @@ func checkTimeElapsed(t *testing.T, timeStr string, secs int, start time.Time) {
 
 	tm, err := time.Parse(localTimeFormat, timeStr)
 	if err != nil {
-		t.Errorf("couldn't parse time '%s': %v", timeStr, err)
+		t.Errorf("couldn't parse time '%s': %s", timeStr, err)
 		return
 	}
-	end := start.Add(time.Duration(secs) * time.Second)
+	end := start.Add(elapsed)
 	if tm.Before(start) || tm.After(end) {
-		t.Errorf("time (%v) not within range [%v,%v]", tm, start, end)
+		t.Errorf("time (%s) not within range [%s,%s]", tm, start, end)
 	}
 }
 
