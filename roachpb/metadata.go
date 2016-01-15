@@ -104,23 +104,26 @@ func (a Attributes) SortedString() string {
 	return strings.Join(attrs, ",")
 }
 
+// RSpan returns the RangeDescriptor's resolved span.
+func (r RangeDescriptor) RSpan() RSpan {
+	return RSpan{Key: r.StartKey, EndKey: r.EndKey}
+}
+
 // ContainsKey returns whether this RangeDescriptor contains the specified key.
-func (r *RangeDescriptor) ContainsKey(key RKey) bool {
-	rs := RSpan{Key: r.StartKey, EndKey: r.EndKey}
-	return rs.ContainsKey(key)
+func (r RangeDescriptor) ContainsKey(key RKey) bool {
+	return r.RSpan().ContainsKey(key)
 }
 
 // ContainsKeyRange returns whether this RangeDescriptor contains the specified
 // key range from start (inclusive) to end (exclusive).
 // If end is empty, returns ContainsKey(start).
-func (r *RangeDescriptor) ContainsKeyRange(start, end RKey) bool {
-	rs := RSpan{Key: r.StartKey, EndKey: r.EndKey}
-	return rs.ContainsKeyRange(start, end)
+func (r RangeDescriptor) ContainsKeyRange(start, end RKey) bool {
+	return r.RSpan().ContainsKeyRange(start, end)
 }
 
 // FindReplica returns the replica which matches the specified store
 // ID. If no replica matches, (-1, nil) is returned.
-func (r *RangeDescriptor) FindReplica(storeID StoreID) (int, *ReplicaDescriptor) {
+func (r RangeDescriptor) FindReplica(storeID StoreID) (int, *ReplicaDescriptor) {
 	for i := range r.Replicas {
 		if r.Replicas[i].StoreID == storeID {
 			return i, &r.Replicas[i]
@@ -130,7 +133,7 @@ func (r *RangeDescriptor) FindReplica(storeID StoreID) (int, *ReplicaDescriptor)
 }
 
 // Validate performs some basic validation of the contents of a range descriptor.
-func (r *RangeDescriptor) Validate() error {
+func (r RangeDescriptor) Validate() error {
 	if r.NextReplicaID == 0 {
 		return util.Errorf("NextReplicaID must be non-zero")
 	}

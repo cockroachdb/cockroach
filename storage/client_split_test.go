@@ -530,44 +530,40 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Wait for the range to be split along table boundaries.
-	originalRange := store.LookupReplica(roachpb.RKey(keys.UserTableDataMin), nil)
-	var rng *storage.Replica
-	util.SucceedsWithin(t, splitTimeout, func() error {
-		rng = store.LookupReplica(keys.MakeTablePrefix(descID), nil)
-		if rng.RangeID == originalRange.RangeID {
-			return util.Errorf("expected new range created by split")
+	tableBoundary := keys.MakeTablePrefix(descID)
+
+	{
+		var rng *storage.Replica
+
+		// Wait for the range to be split along table boundaries.
+		expectedRSpan := roachpb.RSpan{Key: roachpb.RKey(tableBoundary), EndKey: roachpb.RKeyMax}
+		util.SucceedsWithin(t, splitTimeout, func() error {
+			rng = store.LookupReplica(tableBoundary, nil)
+			if actualRSpan := rng.Desc().RSpan(); !actualRSpan.Equal(expectedRSpan) {
+				return util.Errorf("expected range %s to span %s", rng, expectedRSpan)
+			}
+			return nil
+		})
+
+		// Check range's max bytes settings.
+		if actualMaxBytes := rng.GetMaxBytes(); actualMaxBytes != maxBytes {
+			t.Fatalf("range %s max bytes mismatch, got: %d, expected: %d", rng, actualMaxBytes, maxBytes)
 		}
-		return nil
-	})
 
-	// Check range's max bytes settings.
-	if actualMaxBytes := rng.GetMaxBytes(); actualMaxBytes != maxBytes {
-		t.Fatalf("range %s max bytes mismatch, got: %d, expected: %d", rng, actualMaxBytes, maxBytes)
+		// Look in the range after prefix we're writing to.
+		fillRange(store, rng.RangeID, tableBoundary, maxBytes, t)
 	}
-
-	// Make sure the second range goes to the end.
-	if desc := rng.Desc(); !desc.EndKey.Equal(roachpb.RKeyMax) {
-		t.Fatalf("second range has split: %+v", desc)
-	}
-
-	// Look in the range after prefix we're writing to.
-	fillRange(store, rng.RangeID, keys.MakeTablePrefix(descID), maxBytes, t)
 
 	// Verify that the range is in fact split.
-	var newRng *storage.Replica
 	util.SucceedsWithin(t, splitTimeout, func() error {
-		newRng = store.LookupReplica(keys.MakeTablePrefix(descID+1), nil)
-		if newRng.RangeID == rng.RangeID {
-			return util.Errorf("range has not yet split")
+		rng := store.LookupReplica(keys.MakeTablePrefix(descID+1), nil)
+		rngDesc := rng.Desc()
+		rngStart, rngEnd := rngDesc.StartKey, rngDesc.EndKey
+		if rngStart.Equal(tableBoundary) || !rngEnd.Equal(roachpb.RKeyMax) {
+			return util.Errorf("range %s has not yet split", rng)
 		}
 		return nil
 	})
-
-	// Make sure the new range goes to the end.
-	if desc := newRng.Desc(); !desc.EndKey.Equal(roachpb.RKeyMax) {
-		t.Fatalf("second range has split: %+v", desc)
-	}
 }
 
 // TestStoreRangeSplitWithMaxBytesUpdate tests a scenario where a new
