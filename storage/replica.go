@@ -504,11 +504,11 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace) *roachpb.E
 	return pErr
 }
 
-// isInitialized is true if we know the metadata of this range, either
+// IsInitialized is true if we know the metadata of this range, either
 // because we created it or we have received an initial snapshot from
 // another node. It is false when a range has been created in response
 // to an incoming message but we are waiting for our initial snapshot.
-func (r *Replica) isInitialized() bool {
+func (r *Replica) IsInitialized() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.isInitializedLocked()
@@ -1563,7 +1563,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 // should gossip; the bool returned indicates whether it's us.
 func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) {
 	// If no Gossip available (some tests) or range too fresh, noop.
-	if r.store.Gossip() == nil || !r.isInitialized() {
+	if r.store.Gossip() == nil || !r.IsInitialized() {
 		return false, roachpb.NewErrorf("no gossip or range not initialized")
 	}
 	var hasLease bool
@@ -1654,7 +1654,7 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 // need to avoid deadlocking in redirectOnOrAcquireLeaderLease.
 // TODO(tschottdorf): Can possibly simplify.
 func (r *Replica) maybeGossipSystemConfig() {
-	if r.store.Gossip() == nil || !r.isInitialized() {
+	if r.store.Gossip() == nil || !r.IsInitialized() {
 		return
 	}
 

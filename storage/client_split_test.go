@@ -736,8 +736,8 @@ func setupSplitSnapshotRace(t *testing.T) (mtc *multiTestContext, leftKey roachp
 	leftRangeID := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil).RangeID
 
 	// Replicate the left range onto nodes 1-3 and remove it from node 0.
-	mtc.replicateRange(leftRangeID, 0, 1, 2, 3)
-	mtc.unreplicateRange(leftRangeID, 0, 0)
+	mtc.replicateRange(leftRangeID, 1, 2, 3)
+	mtc.unreplicateRange(leftRangeID, 0)
 	mtc.expireLeaderLeases()
 
 	mtc.waitForValues(leftKey, splitTimeout, []int64{0, 1, 1, 1, 0, 0})
@@ -755,12 +755,19 @@ func setupSplitSnapshotRace(t *testing.T) (mtc *multiTestContext, leftKey roachp
 
 	// Get the right range's ID. Since the split was performed on node
 	// 1, it is currently 11 and not 3 as might be expected.
-	rightRangeID := mtc.stores[1].LookupReplica(roachpb.RKey("z"), nil).RangeID
+	var rightRangeID roachpb.RangeID
+	util.SucceedsWithin(t, splitTimeout, func() error {
+		rightRangeID = mtc.stores[1].LookupReplica(roachpb.RKey("z"), nil).RangeID
+		if rightRangeID == leftRangeID {
+			return util.Errorf("store 1 hasn't processed split yet")
+		}
+		return nil
+	})
 
 	// Relocate the right range onto nodes 3-5.
-	mtc.replicateRange(rightRangeID, 1, 4, 5)
-	mtc.unreplicateRange(rightRangeID, 1, 2)
-	mtc.unreplicateRange(rightRangeID, 1, 1)
+	mtc.replicateRange(rightRangeID, 4, 5)
+	mtc.unreplicateRange(rightRangeID, 2)
+	mtc.unreplicateRange(rightRangeID, 1)
 
 	mtc.waitForValues(rightKey, splitTimeout, []int64{0, 0, 0, 2, 2, 2})
 
@@ -958,7 +965,7 @@ func TestLeaderAfterSplit(t *testing.T) {
 	mtc.Start(t, 3)
 	defer mtc.Stop()
 
-	mtc.replicateRange(1, 0, 1, 2)
+	mtc.replicateRange(1, 1, 2)
 
 	leftKey := roachpb.Key("a")
 	splitKey := roachpb.Key("m")
