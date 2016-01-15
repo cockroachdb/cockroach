@@ -149,10 +149,6 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	return store
 }
 
-type multiStoreSender struct {
-	*multiTestContext
-}
-
 type multiTestContext struct {
 	t            *testing.T
 	storeContext *storage.StoreContext
@@ -170,7 +166,6 @@ type multiTestContext struct {
 	// use distinct clocks per store.
 	clocks  []*hlc.Clock
 	engines []engine.Engine
-	senders []*storage.Stores
 	idents  []roachpb.StoreIdent
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. clientStopper is for 'db', transportStopper is
@@ -183,9 +178,10 @@ type multiTestContext struct {
 
 	reenableTableSplits func()
 
-	// 'stores' and 'stoppers' may change at runtime so the pointers
-	// they contain are protected by 'mu'.
+	// The fields below may mutate at runtime so the pointers they contain are
+	// protected by 'mu'.
 	mu       sync.RWMutex
+	senders  []*storage.Stores
 	stores   []*storage.Store
 	stoppers []*stop.Stopper
 }
@@ -226,7 +222,9 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	}
 
 	// Always create the first sender.
+	m.mu.Lock()
 	m.senders = append(m.senders, storage.NewStores(m.clock))
+	m.mu.Unlock()
 
 	if m.db == nil {
 		m.distSender = kv.NewDistSender(&kv.DistSenderContext{
@@ -326,7 +324,10 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 		// Run the send in a Task on the destination store to simulate what
 		// would happen with real RPCs.
 		if s := m.stoppers[nodeIndex]; s == nil || !s.RunTask(func() {
-			br, pErr = m.senders[nodeIndex].Send(context.Background(), ba)
+			m.mu.RLock()
+			sender := m.senders[nodeIndex]
+			m.mu.RUnlock()
+			br, pErr = sender.Send(context.Background(), ba)
 		}) {
 			pErr = &roachpb.Error{}
 			pErr.SetGoError(rpc.NewSendError("store is stopped", false))
@@ -390,6 +391,7 @@ func (rd rangeDescByAge) Less(i, j int) bool {
 // the gossip network used by multiTestContext is only partially operational.
 func (m *multiTestContext) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
 	var descs []*roachpb.RangeDescriptor
+	m.mu.RLock()
 	for _, str := range m.senders {
 		// Find every version of the RangeDescriptor for the first range by
 		// querying all stores; it may not be present on all stores, but the
@@ -401,9 +403,11 @@ func (m *multiTestContext) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Erro
 			}
 			return nil
 		}); err != nil {
-			return nil, roachpb.NewError(err)
+			panic(fmt.Sprintf(
+				"no error should be possible from this invocation of VisitStores, but found %s", err))
 		}
 	}
+	m.mu.RUnlock()
 	// Sort the RangeDescriptor versions by age and return the most recent
 	// version.
 	sort.Sort(rangeDescByAge(descs))
