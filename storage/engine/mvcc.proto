@@ -48,10 +48,10 @@ message MVCCMetadata {
 }
 
 // MVCCStats tracks byte and instance counts for various groups of keys,
-// values or key-value pairs; see the field comments for details.
+// values, or key-value pairs; see the field comments for details.
 //
 // It also tracks two cumulative ages, namely that of intents and non-live
-// (i.e. GCable) bytes. This computation is intrinsically linked to
+// (i.e. GC-able) bytes. This computation is intrinsically linked to
 // last_update_nanos and is easy to get wrong. Updates happen only once every
 // full second, as measured by last_update_nanos/1e9. That is, forward updates
 // don't change last_update_nanos until an update at a timestamp which,

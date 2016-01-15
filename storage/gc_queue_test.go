@@ -58,8 +58,9 @@ func TestGCQueueShouldQueue(t *testing.T) {
 	}
 	desc := tc.rng.Desc()
 	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		log.Errorf("could not find GC policy for range %s: %s", tc.rng, err)
+	if err != nil || zone.GC != nil {
+		log.Errorf("could not find GC policy for range %s: %s, got zone %+v",
+			tc.rng, err, zone)
 		return
 	}
 	policy := zone.GC

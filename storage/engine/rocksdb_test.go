@@ -461,7 +461,8 @@ func runMVCCMerge(value *roachpb.Value, numKeys int, b *testing.B) {
 		for pb.Next() {
 			ms := MVCCStats{}
 			ts.Logical++
-			if err := MVCCMerge(rocksdb, &ms, keys[rand.Intn(numKeys)], ts, *value); err != nil {
+			err := MVCCMerge(rocksdb, &ms, keys[rand.Intn(numKeys)], ts, *value)
+			if err != nil {
 				b.Fatal(err)
 			}
 		}
