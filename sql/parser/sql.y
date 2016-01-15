@@ -1396,13 +1396,17 @@ opt_set_data:
   SET DATA {}
 | /* EMPTY */ {}
 
-// BEGIN / COMMIT / ROLLBACK / ...
+// BEGIN / COMMIT / END / ROLLBACK / ...
 transaction_stmt:
   BEGIN opt_transaction opt_transaction_iso_level
   {
     $$ = &BeginTransaction{Isolation: $3}
   }
 | COMMIT opt_transaction
+  {
+    $$ = &CommitTransaction{}
+  }
+| END opt_transaction
   {
     $$ = &CommitTransaction{}
   }
