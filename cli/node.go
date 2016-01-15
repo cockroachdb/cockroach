@@ -116,6 +116,8 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 		if nodeStatus.Desc.NodeID == 0 {
 			// I'm not sure why the status call doesn't return an error when the given NodeID doesn't
 			// exist. This should be revisited.
+			//
+			// TODO(cdo): Look into why status call returns erroneous data when given node ID of 0.
 			return fmt.Errorf("Error: node %s doesn't exist", nodeID)
 		}
 		nodeStatuses = []status.NodeStatus{nodeStatus}

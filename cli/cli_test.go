@@ -61,10 +61,10 @@ func (c cliTest) Run(line string) {
 	c.RunWithArgs(a)
 }
 
-// RunWithCapture runs the CLI and returns a string containing the output of the CLI
+// RunWithCapture runs c and returns a string containing the output of c
 // and any error that may have occurred capturing the output. We do not propagate
-// errors in executing the CLI, because those will be caught when the test verifies
-// the output of the CLI.
+// errors in executing c, because those will be caught when the test verifies
+// the output of c.
 func (c cliTest) RunWithCapture(line string) (out string, err error) {
 	// Heavily inspired by Go's testing/example.go:runExample().
 
@@ -86,11 +86,7 @@ func (c cliTest) RunWithCapture(line string) (out string, err error) {
 		var buf bytes.Buffer
 		_, err := io.Copy(&buf, r)
 		r.Close()
-		if err != nil {
-			outC <- captureResult{"", err}
-			return
-		}
-		outC <- captureResult{buf.String(), nil}
+		outC <- captureResult{buf.String(), err}
 	}()
 
 	// Clean up and record output in separate function to handle panics.
@@ -99,17 +95,13 @@ func (c cliTest) RunWithCapture(line string) (out string, err error) {
 		w.Close()
 		os.Stdout = stdout
 		outResult := <-outC
-
-		// Pass results back through return values.
+		out, err = outResult.out, outResult.err
 		if x := recover(); x != nil {
 			err = util.Errorf("panic: %v", x)
-			return
 		}
-		out = outResult.out
-		err = outResult.err
 	}()
 
-	// Run the CLI. The output will be returned in the defer block.
+	// Run the command. The output will be returned in the defer block.
 	c.Run(line)
 	return
 }
@@ -590,11 +582,14 @@ func Example_Node() {
 	c := newCLITest()
 
 	// Refresh time series data, which is required to retrieve stats.
-	c.TestServer.WriteSummaries()
+	if err := c.TestServer.WriteSummaries(); err != nil {
+		log.Fatalf("Couldn't write stats summaries: %s", err)
+	}
 
 	c.Run("node ls")
 	c.Run("node status 10000")
 	c.Run("quit")
+
 	// Output:
 	// node ls
 	// +----+
@@ -615,7 +610,9 @@ func TestNodeStatus(t *testing.T) {
 	c := newCLITest()
 
 	// Refresh time series data, which is required to retrieve stats.
-	c.TestServer.WriteSummaries()
+	if err := c.TestServer.WriteSummaries(); err != nil {
+		t.Fatalf("couldn't write stats summaries: %s", err)
+	}
 
 	out, err := c.RunWithCapture("node status 1")
 	if err != nil {
