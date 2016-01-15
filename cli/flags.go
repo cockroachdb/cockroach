@@ -79,7 +79,7 @@ var flagUsage = map[string]string{
         - lb: RPC load balancer forwarding to an arbitrary node
         - http-lb: HTTP load balancer: we query
           http(s)://<address>/_status/details/local
-        - self: for single node systems, specify --gossip=self= (the
+        - self: for single node systems, specify --gossip=self (the
           <address> is omitted).
 `,
 	"key-size": `
