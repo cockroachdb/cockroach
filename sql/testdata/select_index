@@ -6,7 +6,8 @@ CREATE TABLE t (
   d CHAR,
   PRIMARY KEY (a, b),
   INDEX bc (b, c),
-  INDEX dc (d, c)
+  INDEX dc (d, c),
+  INDEX a_desc (a DESC)
 )
 
 statement ok
@@ -87,6 +88,21 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE c = 22
 0 /t/dc/'bar'/22/2/'two'    NULL true
 1 /t/dc/'blah'/33/3/'three' NULL false
 2 /t/dc/'foo'/11/1/'one'    NULL false
+
+# Use the descending index
+query ITTB
+EXPLAIN (DEBUG) SELECT a FROM t ORDER BY a DESC
+----
+0  /t/a_desc/3/'three'  NULL  true
+1  /t/a_desc/2/'two'    NULL  true
+2  /t/a_desc/1/'one'    NULL  true
+
+# Use the descending index with multiple spans.
+query ITTB
+EXPLAIN (DEBUG) SELECT a FROM t WHERE a in (2, 3) ORDER BY a DESC
+----
+0  /t/a_desc/3/'three'  NULL  true
+1  /t/a_desc/2/'two'    NULL  true
 
 statement ok
 TRUNCATE TABLE t

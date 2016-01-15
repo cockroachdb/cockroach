@@ -67,6 +67,13 @@ type span struct {
 	count int64
 }
 
+type spans []span
+
+// implement Sort.Interface
+func (a spans) Len() int           { return len(a) }
+func (a spans) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a spans) Less(i, j int) bool { return a[i].start.Compare(a[j].start) < 0 }
+
 // prettyKey pretty-prints the specified key, skipping over the first `skip`
 // fields. The pretty printed key looks like:
 //
@@ -408,7 +415,7 @@ func (n *scanNode) initOrdering(exactPrefix int) {
 	}
 	n.exactPrefix = exactPrefix
 	n.columnIDs, n.columnDirs = n.index.fullColumnIDs()
-	n.ordering = n.computeOrdering(n.columnIDs)
+	n.ordering = n.computeOrdering(n.columnIDs, n.columnDirs)
 	if n.reverse {
 		for i := range n.ordering {
 			n.ordering[i] = -n.ordering[i]
@@ -423,17 +430,20 @@ func (n *scanNode) initOrdering(exactPrefix int) {
 //
 //   SELECT v FROM t WHERE k = 1
 //
-// If there is an index on (k, v) and we're asking for the ordering for those
+// If there is an ascending index on (k, v) and we're asking for the ordering for those
 // columns, computeOrdering will return (0, 1). This indicates that column k is
 // not part of the output column set and column v is in ascending order.
-func (n *scanNode) computeOrdering(columnIDs []ColumnID) []int {
+func (n *scanNode) computeOrdering(columnIDs []ColumnID, dirs []encoding.Direction) []int {
 	// Loop over the column IDs and determine if they are used for any of the
 	// render targets.
 	ordering := make([]int, len(columnIDs))
 	for j, colID := range columnIDs {
 		for i, r := range n.render {
 			if qval, ok := r.(*qvalue); ok && qval.col.ID == colID {
-				ordering[j] = i + 1
+				ordering[j] = i + 1 // indexes in ordering are 1-based
+				if dirs[j] == encoding.Descending {
+					ordering[j] *= -1
+				}
 				break
 			}
 		}
