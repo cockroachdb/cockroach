@@ -66,7 +66,6 @@ cockroach_toplevel="$(dirname $(cd $(dirname $0); pwd))"
 docker run -i ${tty-} ${rm} \
   --volume="${gopath0}/src:/go/src" \
   --volume="${gopath0}/pkg:/go/pkg" \
-  --volume="${gopath0}/pkg/linux_amd64_netgo:/usr/src/go/pkg/linux_amd64_netgo" \
   --volume="${gopath0}/pkg/linux_amd64_race:/usr/src/go/pkg/linux_amd64_race" \
   --volume="${gopath0}/bin/linux_amd64:/go/bin" \
   --volume="${HOME}/${uicache_dir}:/${uicache_dir}" \
@@ -74,6 +73,6 @@ docker run -i ${tty-} ${rm} \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
   --env="PAGER=cat" \
   --env="TSD_GITHUB_TOKEN=${TSD_GITHUB_TOKEN-}" \
-  --env="CIRCLE_NODE_INDEX=${CIRCLE_NODE_INDEX}" \
-  --env="CIRCLE_NODE_TOTAL=${CIRCLE_NODE_TOTAL}" \
+  --env="CIRCLE_NODE_INDEX=${CIRCLE_NODE_INDEX-0}" \
+  --env="CIRCLE_NODE_TOTAL=${CIRCLE_NODE_TOTAL-1}" \
   "${image}" "$@"
