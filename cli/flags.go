@@ -74,12 +74,13 @@ var flagUsage = map[string]string{
         bootstrap. Each item in the list has an optional type:
         [type=]<address>. An unspecified type means ip address or dns.
         Type is one of:
-        - tcp: (default if type is omitted): plain ip address or hostname,
-          or "self" for single-node systems.
+        - tcp: (default if type is omitted): plain ip address or hostname.
         - unix: unix socket
         - lb: RPC load balancer forwarding to an arbitrary node
         - http-lb: HTTP load balancer: we query
           http(s)://<address>/_status/details/local
+        - self: for single node systems, specify --gossip=self= (the
+          <address> is omitted).
 `,
 	"key-size": `
         Key size in bits for CA/Node/Client certificates.
