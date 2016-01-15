@@ -672,8 +672,8 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 	}
 
 	// Verify that updated_at and started_at are reasonably recent.
-	checkTimeElapsed(t, fields[2], time.Duration(5)*time.Second, start)
-	checkTimeElapsed(t, fields[3], time.Duration(5)*time.Second, start)
+	checkTimeElapsed(t, fields[2], 5*time.Second, start)
+	checkTimeElapsed(t, fields[3], 5*time.Second, start)
 
 	// Verify all byte/range metrics.
 	testcases := []struct {
@@ -724,13 +724,8 @@ func checkSeparatorLine(t *testing.T, s *bufio.Scanner) {
 func checkTimeElapsed(t *testing.T, timeStr string, elapsed time.Duration, start time.Time) {
 	// Truncate start time, because the CLI currently outputs times with a second-level
 	// granularity.
-	start, err := time.Parse(localTimeFormat, start.Format(localTimeFormat))
-	if err != nil {
-		t.Fatalf("couldn't truncate start time: %v", err)
-		return
-	}
-
-	tm, err := time.Parse(localTimeFormat, timeStr)
+	start = start.Truncate(time.Second)
+	tm, err := time.ParseInLocation(localTimeFormat, timeStr, start.Location())
 	if err != nil {
 		t.Errorf("couldn't parse time '%s': %s", timeStr, err)
 		return
