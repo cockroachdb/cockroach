@@ -70,8 +70,8 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	mtc.Start(t, numStores)
 	defer mtc.Stop()
 
-	mtc.replicateRange(rangeID, 0, 1, 2)
-	mtc.unreplicateRange(rangeID, 0, 1)
+	mtc.replicateRange(rangeID, 1, 2)
+	mtc.unreplicateRange(rangeID, 1)
 
 	// Make sure the range is removed from the store.
 	util.SucceedsWithin(t, time.Second, func() error {
@@ -93,8 +93,8 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 	mtc.stores[1].DisableReplicaGCQueue(true)
 
 	rangeID := roachpb.RangeID(1)
-	mtc.replicateRange(rangeID, 0, 1, 2)
-	mtc.unreplicateRange(rangeID, 0, 1)
+	mtc.replicateRange(rangeID, 1, 2)
+	mtc.unreplicateRange(rangeID, 1)
 
 	// Wait long enough for the direct replica GC to have had a chance and been
 	// discarded because the queue is disabled.

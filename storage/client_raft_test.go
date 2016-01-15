@@ -605,13 +605,13 @@ func TestUnreplicateFirstRange(t *testing.T) {
 
 	rangeID := roachpb.RangeID(1)
 	// Replicate the range to store 1.
-	mtc.replicateRange(rangeID, 0, 1)
+	mtc.replicateRange(rangeID, 1)
 	// Unreplicate the from from store 0.
-	mtc.unreplicateRange(rangeID, 1, 0)
+	mtc.unreplicateRange(rangeID, 0)
 	// Replicate the range to store 2. The first range is no longer available on
 	// store 1, and this command will fail if that situation is not properly
 	// supported.
-	mtc.replicateRange(rangeID, 1, 2)
+	mtc.replicateRange(rangeID, 2)
 }
 
 // TestStoreRangeDownReplicate verifies that the replication queue will notice
@@ -629,7 +629,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	rightKey := roachpb.Key("z")
 	{
 		replica := store0.LookupReplica(roachpb.RKeyMin, nil)
-		mtc.replicateRange(replica.RangeID, 0, 1, 2)
+		mtc.replicateRange(replica.RangeID, 1, 2)
 		desc := replica.Desc()
 		splitArgs := adminSplitArgs(splitKey, splitKey)
 		if _, err := replica.AdminSplit(splitArgs, desc); err != nil {
@@ -639,7 +639,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	// Replicate the new range to all five stores.
 	replica := store0.LookupReplica(keys.Addr(rightKey), nil)
 	desc := replica.Desc()
-	mtc.replicateRange(desc.RangeID, 0, 3, 4)
+	mtc.replicateRange(desc.RangeID, 3, 4)
 
 	// Initialize the gossip network.
 	var wg sync.WaitGroup
@@ -758,7 +758,7 @@ func TestProgressWithDownNode(t *testing.T) {
 	defer mtc.Stop()
 
 	rangeID := roachpb.RangeID(1)
-	mtc.replicateRange(rangeID, 0, 1, 2)
+	mtc.replicateRange(rangeID, 1, 2)
 
 	incArgs := incrementArgs([]byte("a"), 5)
 	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
@@ -810,7 +810,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 
 		// Replicate the initial range to three of the four nodes.
 		rangeID := roachpb.RangeID(1)
-		mtc.replicateRange(rangeID, 0, 3, 1)
+		mtc.replicateRange(rangeID, 3, 1)
 
 		incArgs := incrementArgs([]byte("a"), 5)
 		if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
@@ -840,11 +840,11 @@ func TestReplicateAddAndRemove(t *testing.T) {
 		// Stop a store and replace it.
 		mtc.stopStore(1)
 		if addFirst {
-			mtc.replicateRange(rangeID, 0, 2)
-			mtc.unreplicateRange(rangeID, 0, 1)
+			mtc.replicateRange(rangeID, 2)
+			mtc.unreplicateRange(rangeID, 1)
 		} else {
-			mtc.unreplicateRange(rangeID, 0, 1)
-			mtc.replicateRange(rangeID, 0, 2)
+			mtc.unreplicateRange(rangeID, 1)
+			mtc.replicateRange(rangeID, 2)
 		}
 		verify([]int64{5, 5, 5, 5})
 
@@ -892,7 +892,7 @@ func TestRaftHeartbeats(t *testing.T) {
 
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
-	mtc.replicateRange(1, 0, 1, 2)
+	mtc.replicateRange(1, 1, 2)
 
 	// Capture the initial term and state.
 	status := mtc.stores[0].RaftStatus(1)
@@ -942,7 +942,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Now add the second replica.
-	mtc.replicateRange(rangeID2, 0, 1)
+	mtc.replicateRange(rangeID2, 1)
 
 	if mtc.stores[1].LookupReplica(roachpb.RKey(key), nil).GetMaxBytes() == 0 {
 		t.Error("Range MaxBytes is not set after snapshot applied")
@@ -1049,10 +1049,10 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	}
 
 	rangeID := roachpb.RangeID(2)
-	mtc.replicateRange(rangeID, 0, 1, 2)
+	mtc.replicateRange(rangeID, 1, 2)
 
-	mtc.unreplicateRange(rangeID, 0, 2)
-	mtc.unreplicateRange(rangeID, 0, 1)
+	mtc.unreplicateRange(rangeID, 2)
+	mtc.unreplicateRange(rangeID, 1)
 
 	// Wait for the removal to be processed.
 	util.SucceedsWithin(t, time.Second, func() error {
@@ -1088,7 +1088,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	}
 	// Execute another replica change to ensure that raft has processed
 	// the heartbeat just sent.
-	mtc.replicateRange(roachpb.RangeID(1), 0, 1)
+	mtc.replicateRange(roachpb.RangeID(1), 1)
 }
 
 // TestRaftRemoveRace adds and removes a replica repeatedly in an
@@ -1103,11 +1103,11 @@ func TestRaftRemoveRace(t *testing.T) {
 	defer mtc.Stop()
 
 	rangeID := roachpb.RangeID(1)
-	mtc.replicateRange(rangeID, 0, 1, 2)
+	mtc.replicateRange(rangeID, 1, 2)
 
 	for i := 0; i < 10; i++ {
-		mtc.unreplicateRange(rangeID, 0, 2)
-		mtc.replicateRange(rangeID, 0, 2)
+		mtc.unreplicateRange(rangeID, 2)
+		mtc.replicateRange(rangeID, 2)
 	}
 }
 
@@ -1124,7 +1124,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 
 	// Replicate the range to all stores.
 	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
-	mtc.replicateRange(replica.RangeID, 0, 1, 2)
+	mtc.replicateRange(replica.RangeID, 1, 2)
 
 	// Initialize the gossip network.
 	var storeIDs []roachpb.StoreID
@@ -1200,7 +1200,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 	store0 := mtc.stores[0]
 	replica := store0.LookupReplica(roachpb.RKeyMin, nil)
 	desc := replica.Desc()
-	mtc.replicateRange(desc.RangeID, 0, 1, 2)
+	mtc.replicateRange(desc.RangeID, 1, 2)
 
 	// Initialize the gossip network with fake capacity data.
 	storeDescs := make([]*roachpb.StoreDescriptor, 0, len(mtc.stores))
@@ -1262,7 +1262,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 
 	// First put the range on all three nodes.
 	raftID := roachpb.RangeID(1)
-	mtc.replicateRange(raftID, 0, 1, 2)
+	mtc.replicateRange(raftID, 1, 2)
 
 	// Put some data in the range so we'll have something to test for.
 	incArgs := incrementArgs([]byte("a"), 5)
@@ -1275,8 +1275,8 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 
 	// Stop node 2; while it is down remove the range from nodes 2 and 1.
 	mtc.stopStore(2)
-	mtc.unreplicateRange(raftID, 0, 2)
-	mtc.unreplicateRange(raftID, 0, 1)
+	mtc.unreplicateRange(raftID, 2)
+	mtc.unreplicateRange(raftID, 1)
 
 	// Make a write on node 0; this will not be replicated because 0 is the only node left.
 	incArgs = incrementArgs([]byte("a"), 11)
@@ -1355,7 +1355,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 
 	// First put the range on all three nodes.
 	raftID := roachpb.RangeID(1)
-	mtc.replicateRange(raftID, 0, 1, 2)
+	mtc.replicateRange(raftID, 1, 2)
 
 	// Put some data in the range so we'll have something to test for.
 	incArgs := incrementArgs([]byte("a"), 5)
@@ -1369,7 +1369,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 	// Stop node 2; while it is down remove the range from it. Since the node is
 	// down it won't see the removal and clean up its replica.
 	mtc.stopStore(2)
-	mtc.unreplicateRange(raftID, 0, 2)
+	mtc.unreplicateRange(raftID, 2)
 
 	// Perform another write.
 	incArgs = incrementArgs([]byte("a"), 11)
@@ -1386,7 +1386,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 	// process. An ill-timed GC has been known to cause bugs including
 	// https://github.com/cockroachdb/cockroach/issues/2873.
 	mtc.restartStore(2)
-	mtc.replicateRange(raftID, 0, 2)
+	mtc.replicateRange(raftID, 2)
 
 	// The range should be synced back up.
 	mtc.waitForValues(roachpb.Key("a"), 3*time.Second, []int64{16, 16, 16})
@@ -1406,9 +1406,9 @@ func TestLeaderRemoveSelf(t *testing.T) {
 	// helps avoid a deadlock at shutdown.
 	mtc.stores[0].DisableReplicaGCQueue(true)
 	raftID := roachpb.RangeID(1)
-	mtc.replicateRange(raftID, 0, 1)
+	mtc.replicateRange(raftID, 1)
 	// Remove the replica from first store.
-	mtc.unreplicateRange(raftID, 0, 0)
+	mtc.unreplicateRange(raftID, 0)
 	getArgs := getArgs([]byte("a"))
 
 	// Force the read command request a new lease.

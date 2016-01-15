@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -535,6 +536,38 @@ func (m *multiTestContext) restartStore(i int) {
 	m.senders[i].AddStore(m.stores[i])
 }
 
+// findStartKeyLocked returns the start key of the given range.
+func (m *multiTestContext) findStartKeyLocked(rangeID roachpb.RangeID) roachpb.RKey {
+	// We can use the first store that returns results because the start
+	// key never changes.
+	for _, s := range m.stores {
+		rep, err := s.GetReplica(rangeID)
+		if err == nil && rep.Desc() != nil {
+			return rep.Desc().StartKey
+		}
+	}
+	m.t.Fatalf("couldn't find range %s on any store", rangeID)
+	return nil // unreached, but the compiler can't tell.
+}
+
+// findMemberStoreLocked finds a non-stopped Store which is a member
+// of the given range.
+func (m *multiTestContext) findMemberStoreLocked(desc roachpb.RangeDescriptor) *storage.Store {
+	for _, s := range m.stores {
+		if s == nil {
+			// Store is stopped.
+			continue
+		}
+		for _, r := range desc.Replicas {
+			if s.StoreID() == r.StoreID {
+				return s
+			}
+		}
+	}
+	m.t.Fatalf("couldn't find a live member of %s", desc)
+	return nil // unreached, but the compiler can't tell.
+}
+
 // restart stops and restarts all stores but leaves the engines intact,
 // so the stores should contain the same persistent storage as before.
 func (m *multiTestContext) restart() {
@@ -547,20 +580,32 @@ func (m *multiTestContext) restart() {
 }
 
 // replicateRange replicates the given range onto the given stores.
-func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, sourceStoreIndex int, dests ...int) {
+func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	rng, err := m.stores[sourceStoreIndex].GetReplica(rangeID)
-	if err != nil {
-		m.t.Fatal(err)
-	}
+
+	startKey := m.findStartKeyLocked(rangeID)
 
 	for _, dest := range dests {
-		err = rng.ChangeReplicas(roachpb.ADD_REPLICA,
+		// Perform a consistent read to get the range descriptor, to make
+		// sure we have the effects of the previous ChangeReplicas call.
+		// By the time ChangeReplicas returns the raft leader is
+		// guaranteed to have the updated version, but followers are not.
+		var desc roachpb.RangeDescriptor
+		if err := m.db.GetProto(keys.RangeDescriptorKey(startKey), &desc); err != nil {
+			m.t.Fatal(err)
+		}
+
+		rep, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
+		if err != nil {
+			m.t.Fatal(err)
+		}
+
+		err = rep.ChangeReplicas(roachpb.ADD_REPLICA,
 			roachpb.ReplicaDescriptor{
 				NodeID:  m.stores[dest].Ident.NodeID,
 				StoreID: m.stores[dest].Ident.StoreID,
-			}, rng.Desc())
+			}, &desc)
 		if err != nil {
 			m.t.Fatal(err)
 		}
@@ -571,7 +616,7 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, sourceStoreIn
 		for _, dest := range dests {
 			// Use LookupRange(keys) instead of GetRange(rangeID) to ensure that the
 			// snapshot has been transferred and the descriptor initialized.
-			if m.stores[dest].LookupReplica(rng.Desc().StartKey, nil) == nil {
+			if m.stores[dest].LookupReplica(startKey, nil) == nil {
 				return util.Errorf("range not found on store %d", dest)
 			}
 		}
@@ -579,38 +624,31 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, sourceStoreIn
 	})
 }
 
-// unreplicateRange removes a replica of the range in the source store
-// from the dest store.
-func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, source, dest int) {
+// unreplicateRange removes a replica of the range from the dest store.
+func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	rng, err := m.stores[source].GetReplica(rangeID)
+
+	startKey := m.findStartKeyLocked(rangeID)
+
+	var desc roachpb.RangeDescriptor
+	if err := m.db.GetProto(keys.RangeDescriptorKey(startKey), &desc); err != nil {
+		m.t.Fatal(err)
+	}
+
+	rep, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
 	if err != nil {
 		m.t.Fatal(err)
 	}
 
-	err = rng.ChangeReplicas(roachpb.REMOVE_REPLICA,
+	err = rep.ChangeReplicas(roachpb.REMOVE_REPLICA,
 		roachpb.ReplicaDescriptor{
 			NodeID:  m.idents[dest].NodeID,
 			StoreID: m.idents[dest].StoreID,
-		}, rng.Desc())
+		}, &desc)
 	if err != nil {
 		m.t.Fatal(err)
 	}
-
-	// Wait for the source node's ReplicaDescriptor to update.
-	util.SucceedsWithin(m.t, replicationTimeout, func() error {
-		rngDesc := m.stores[source].LookupReplica(rng.Desc().StartKey, nil)
-		if rngDesc == nil {
-			return util.Errorf("range not found on store %d", source)
-		}
-		for _, replDesc := range rngDesc.Desc().Replicas {
-			if replDesc.StoreID == m.idents[dest].StoreID {
-				return util.Errorf("store %d not yet removed", source)
-			}
-		}
-		return nil
-	})
 }
 
 // readIntFromEngines reads the current integer value at the given key
