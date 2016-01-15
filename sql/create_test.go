@@ -50,13 +50,22 @@ func TestDatabaseDescriptor(t *testing.T) {
 		t.Fatal("expected non-existing key")
 	}
 
-	// Write some junk that is going to interfere with table creation.
+	// Write a descriptor key that will interfere with database creation.
 	dbDescKey := sql.MakeDescMetadataKey(sql.ID(expectedCounter))
-	if err := kvDB.CPut(dbDescKey, "foo", nil); err != nil {
+	dbDesc := &sql.Descriptor{
+		Union: &sql.Descriptor_Database{
+			Database: &sql.DatabaseDescriptor{
+				Name:       "sentinel",
+				ID:         sql.ID(expectedCounter),
+				Privileges: &sql.PrivilegeDescriptor{},
+			},
+		},
+	}
+	if err := kvDB.CPut(dbDescKey, dbDesc, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	// Table creation should fail, and nothing should have been written.
+	// Database creation should fail, and nothing should have been written.
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); !testutils.IsError(err, "unexpected value") {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -76,7 +85,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 		}
 	}
 
-	// Remove the junk; allow table creation to proceed.
+	// Remove the junk; allow database creation to proceed.
 	if err := kvDB.Del(dbDescKey); err != nil {
 		t.Fatal(err)
 	}
