@@ -1482,6 +1482,10 @@ DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
   return MergeResult(&meta, new_value);
 }
 
+inline int64_t age_factor(int64_t fromNS, int64_t toNS) {
+  return toNS/1e9 - fromNS/1e9; // not the same as (toNS-fromNS)/1e9!
+}
+
 // TODO(tschottdorf): it's unfortunate that this method duplicates the logic
 // in (*MVCCStats).AgeTo. Passing now_nanos in is semantically tricky if there
 // is a chance that we run into values ahead of now_nanos. Instead, now_nanos
@@ -1545,7 +1549,7 @@ MVCCStatsResult MVCCComputeStats(
           stats.live_bytes += total_bytes;
           stats.live_count++;
         } else {
-          stats.gc_bytes_age += total_bytes * (now_nanos / 1e9 - meta.timestamp().wall_time() / 1e9);
+          stats.gc_bytes_age += total_bytes * age_factor(meta.timestamp().wall_time(), now_nanos);
         }
         stats.key_bytes += meta_key_size;
         stats.val_bytes += meta_val_size;
@@ -1568,12 +1572,12 @@ MVCCStatsResult MVCCComputeStats(
         if (!meta.deleted()) {
           stats.live_bytes += total_bytes;
         } else {
-          stats.gc_bytes_age += total_bytes * (now_nanos / 1e9 - meta.timestamp().wall_time() / 1e9);
+          stats.gc_bytes_age += total_bytes * age_factor(meta.timestamp().wall_time(), now_nanos);
         }
         if (meta.has_txn()) {
           stats.intent_bytes += total_bytes;
           stats.intent_count++;
-          stats.intent_age += now_nanos / 1e9 - meta.timestamp().wall_time() / 1e9;
+          stats.intent_age += age_factor(meta.timestamp().wall_time(), now_nanos);
         }
         if (meta.key_bytes() != kMVCCVersionTimestampSize) {
           stats.status = FmtStatus("expected mvcc metadata val bytes to equal %d; got %d",
@@ -1586,7 +1590,7 @@ MVCCStatsResult MVCCComputeStats(
           break;
         }
       } else {
-        stats.gc_bytes_age += total_bytes * (now_nanos / 1e9 - walltime / 1e9);
+        stats.gc_bytes_age += total_bytes * age_factor(walltime, now_nanos);
       }
       stats.key_bytes += kMVCCVersionTimestampSize;
       stats.val_bytes += value.size();

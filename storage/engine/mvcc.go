@@ -135,15 +135,14 @@ func (meta MVCCMetadata) IsIntentOf(txn *roachpb.Transaction) bool {
 
 // GCBytes is a convenience function which returns the number of gc bytes,
 // that is the key and value bytes excluding the live bytes.
-func (ms *MVCCStats) GCBytes() int64 {
+func (ms MVCCStats) GCBytes() int64 {
 	return ms.KeyBytes + ms.ValBytes - ms.LiveBytes
 }
 
 // Delta returns the difference between two MVCCStats structures.
-// TODO(tschottdorf): needed?
-func (ms *MVCCStats) Delta(oms *MVCCStats) MVCCStats {
-	result := *ms
-	result.Subtract(*oms)
+func (ms MVCCStats) Delta(oms MVCCStats) MVCCStats {
+	result := ms // for clarity
+	result.Subtract(oms)
 	return result
 }
 
@@ -151,14 +150,14 @@ func (ms *MVCCStats) Delta(oms *MVCCStats) MVCCStats {
 // quantities contained in MVCCStats. Two MVCCStats structs only add and
 // subtract meaningfully if their LastUpdateNanos matches, so aging them to
 // the max of their LastUpdateNanos is a prerequisite.
-// If nowNanos is behind LastUpdateNanos, this method is a noop.
+// If nowNanos is behind ms.LastUpdateNanos, this method is a noop.
 func (ms *MVCCStats) AgeTo(nowNanos int64) {
 	if ms.LastUpdateNanos >= nowNanos {
 		return
 	}
-	diffSeconds := nowNanos/1E9 - ms.LastUpdateNanos/1E9
+	diffSeconds := nowNanos/1E9 - ms.LastUpdateNanos/1E9 // not (...)/1E9!
 
-	ms.GCBytesAge += MVCCComputeGCBytesAge(ms.GCBytes(), diffSeconds)
+	ms.GCBytesAge += ms.GCBytes() * diffSeconds
 	ms.IntentAge += ms.IntentCount * diffSeconds
 	ms.LastUpdateNanos = nowNanos
 }
@@ -186,8 +185,8 @@ func (ms *MVCCStats) Add(oms MVCCStats) {
 	ms.SysCount += oms.SysCount
 }
 
-// Subtract adds values from oms to ms. The ages will be moved forward to the
-// larger of the LastUpdateNano timestamps involved.
+// Subtract removes oms from ms. The ages will be moved forward to the larger of
+// the LastUpdateNano timestamps involved.
 func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	// Enforce the max LastUpdateNanos for both ages based on their
 	// pre-subtraction state.
@@ -208,21 +207,16 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.SysCount -= oms.SysCount
 }
 
-// updateStatsForKey returns whether or not the bytes and counts for
-// the specified key should be tracked at all, and if so, whether the
-// key is system-local.
-func updateStatsForKey(ms *MVCCStats, key roachpb.Key) (bool, bool) {
-	return ms != nil, key.Compare(keys.LocalMax) < 0
+// isSysLocal returns whether the whether the key is system-local.
+func isSysLocal(key roachpb.Key) bool {
+	return key.Compare(keys.LocalMax) < 0
 }
 
 // updateStatsForInline updates stat counters for an inline value.
 // These are simpler as they don't involve intents or multiple
 // versions.
 func updateStatsForInline(ms *MVCCStats, key roachpb.Key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64) {
-	ok, sys := updateStatsForKey(ms, key)
-	if !ok {
-		return
-	}
+	sys := isSysLocal(key)
 	// Remove counts for this key if the original size is non-zero.
 	if origMetaKeySize != 0 {
 		if sys {
@@ -260,17 +254,17 @@ func updateStatsForInline(ms *MVCCStats, key roachpb.Key, origMetaKeySize, origM
 // value.Bytes byte slice (an estimated 12 bytes for timestamp,
 // included in valSize by caller). These errors are corrected during
 // splits and merges.
-func updateStatsOnMerge(ms *MVCCStats, key roachpb.Key, valSize int64) {
-	ok, sys := updateStatsForKey(ms, key)
-	if !ok {
-		return
-	}
+func updateStatsOnMerge(key roachpb.Key, valSize, nowNanos int64) MVCCStats {
+	var ms MVCCStats
+	sys := isSysLocal(key)
+	ms.AgeTo(nowNanos)
 	if sys {
 		ms.SysBytes += valSize
 	} else {
 		ms.LiveBytes += valSize
 		ms.ValBytes += valSize
 	}
+	return ms
 }
 
 // updateStatsOnPut updates stat counters for a newly put value,
@@ -278,18 +272,21 @@ func updateStatsOnMerge(ms *MVCCStats, key roachpb.Key, valSize int64) {
 // versioned value's key & value bytes. If the value is not a
 // deletion tombstone, updates the live stat counters as well.
 // If this value is an intent, updates the intent counters.
-func updateStatsOnPut(ms *MVCCStats, key roachpb.Key, origMetaKeySize, origMetaValSize,
-	metaKeySize, metaValSize int64, orig, meta *MVCCMetadata, origAgeSeconds int64) {
-	ok, sys := updateStatsForKey(ms, key)
-	if !ok {
-		return
-	}
+func updateStatsOnPut(key roachpb.Key, origMetaKeySize, origMetaValSize,
+	metaKeySize, metaValSize int64, orig, meta *MVCCMetadata) MVCCStats {
+	var ms MVCCStats
+	sys := isSysLocal(key)
+
 	// Remove current live counts for this key.
 	if orig != nil {
 		if sys {
 			ms.SysBytes -= (origMetaKeySize + origMetaValSize)
 			ms.SysCount--
 		} else {
+			// Move the (so far empty) stats to the timestamp at which the
+			// previous entry was created, which is where we wish to reclassify
+			// its contributions.
+			ms.AgeTo(orig.Timestamp.WallTime)
 			// If original version value for this key wasn't deleted, subtract
 			// its contribution from live bytes in anticipation of adding in
 			// contribution from new version below.
@@ -297,11 +294,8 @@ func updateStatsOnPut(ms *MVCCStats, key roachpb.Key, origMetaKeySize, origMetaV
 				ms.LiveBytes -= orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize
 				ms.LiveCount--
 				// Also, add the bytes from overwritten value to the GC'able bytes age stat.
-				ms.GCBytesAge += MVCCComputeGCBytesAge(orig.KeyBytes+orig.ValBytes, origAgeSeconds)
-			} else {
-				// Remove the meta byte previously counted for deleted value from GC'able bytes age stat.
-				ms.GCBytesAge -= MVCCComputeGCBytesAge(origMetaKeySize+origMetaValSize, origAgeSeconds)
 			}
+
 			ms.KeyBytes -= origMetaKeySize
 			ms.ValBytes -= origMetaValSize
 			ms.KeyCount--
@@ -314,16 +308,18 @@ func updateStatsOnPut(ms *MVCCStats, key roachpb.Key, origMetaKeySize, origMetaV
 				ms.ValCount--
 				ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
 				ms.IntentCount--
-				ms.IntentAge -= origAgeSeconds
 			}
 		}
 	}
 
-	// If new version isn't a deletion tombstone, add it to live counters.
+	// Move the stats to the new meta's timestamp. If we had an orig meta, this
+	// ages those original stats by the time which the previous version was live.
+	ms.AgeTo(meta.Timestamp.WallTime)
 	if sys {
 		ms.SysBytes += meta.KeyBytes + meta.ValBytes + metaKeySize + metaValSize
 		ms.SysCount++
 	} else {
+		// If new version isn't a deletion tombstone, add it to live counters.
 		if !meta.Deleted {
 			ms.LiveBytes += meta.KeyBytes + meta.ValBytes + metaKeySize + metaValSize
 			ms.LiveCount++
@@ -337,21 +333,25 @@ func updateStatsOnPut(ms *MVCCStats, key roachpb.Key, origMetaKeySize, origMetaV
 			ms.IntentCount++
 		}
 	}
+	return ms
 }
 
 // updateStatsOnResolve updates stat counters with the difference
 // between the original and new metadata sizes. The size of the
 // resolved value (key & bytes) are subtracted from the intents
 // counters if commit=true.
-func updateStatsOnResolve(ms *MVCCStats, key roachpb.Key, origMetaKeySize, origMetaValSize,
-	metaKeySize, metaValSize int64, meta *MVCCMetadata, commit bool, origAgeSeconds int64) {
-	ok, sys := updateStatsForKey(ms, key)
-	if !ok {
-		return
-	}
-	// We're pushing or committing an intent; update counts with
-	// difference in bytes between old metadata and new.
+func updateStatsOnResolve(key roachpb.Key, origMetaKeySize, origMetaValSize,
+	metaKeySize, metaValSize int64, orig, meta MVCCMetadata, commit bool) MVCCStats {
+	var ms MVCCStats
+	// In this case, we're only removing the contribution from having the
+	// meta key around from orig.Timestamp to meta.Timestamp.
+	ms.AgeTo(orig.Timestamp.WallTime)
+	sys := isSysLocal(key)
+
+	// Always zero.
 	keyDiff := metaKeySize - origMetaKeySize
+	// This is going to be nonpositive: the old meta key was
+	// real, the new one is implicit.
 	valDiff := metaValSize - origMetaValSize
 
 	if sys {
@@ -366,44 +366,31 @@ func updateStatsOnResolve(ms *MVCCStats, key roachpb.Key, origMetaKeySize, origM
 		if commit {
 			ms.IntentBytes -= (meta.KeyBytes + meta.ValBytes)
 			ms.IntentCount--
-			ms.IntentAge -= origAgeSeconds
 		}
 	}
+	ms.AgeTo(meta.Timestamp.WallTime)
+	return ms
 }
 
 // updateStatsOnAbort updates stat counters by subtracting an
 // aborted value's key and value byte sizes. If an earlier version
 // was restored, the restored values are added to live bytes and
 // count if the restored value isn't a deletion tombstone.
-func updateStatsOnAbort(ms *MVCCStats, key roachpb.Key, origMetaKeySize, origMetaValSize,
+func updateStatsOnAbort(key roachpb.Key, origMetaKeySize, origMetaValSize,
 	restoredMetaKeySize, restoredMetaValSize int64, orig, restored *MVCCMetadata,
-	origAgeSeconds, restoredAgeSeconds int64) {
-	ok, sys := updateStatsForKey(ms, key)
-	if !ok {
-		return
-	}
-	origTotalBytes := orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize
-	if sys {
-		ms.SysBytes -= origTotalBytes
-		ms.SysCount--
-	} else {
-		if !orig.Deleted {
-			ms.LiveBytes -= origTotalBytes
-			ms.LiveCount--
-		} else {
-			// Remove the bytes from previously deleted intent from the GC'able bytes age stat.
-			ms.GCBytesAge -= MVCCComputeGCBytesAge(origTotalBytes, origAgeSeconds)
-		}
-		ms.KeyBytes -= (orig.KeyBytes + origMetaKeySize)
-		ms.ValBytes -= (orig.ValBytes + origMetaValSize)
-		ms.KeyCount--
-		ms.ValCount--
-		ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
-		ms.IntentCount--
-		ms.IntentAge -= origAgeSeconds
-	}
-	// If restored version isn't a deletion tombstone, add it to live counters.
+	restoredNanos, txnNanos int64) MVCCStats {
+	sys := isSysLocal(key)
+
+	var ms MVCCStats
+
+	// Three epochs of time here:
+	// 1) creation of previous value (or 0) to creation of intent:
+	//		[restoredNanos, orig.Timestamp.WallTime)
+	// 2) creation of the intent (which we're now aborting) to the timestamp
+	//    at which we're aborting:
+	//		[orig.Timestamp.WallTime, txnNanos)
 	if restored != nil {
+		ms.AgeTo(restoredNanos)
 		if sys {
 			ms.SysBytes += restoredMetaKeySize + restoredMetaValSize
 			ms.SysCount++
@@ -411,11 +398,6 @@ func updateStatsOnAbort(ms *MVCCStats, key roachpb.Key, origMetaKeySize, origMet
 			if !restored.Deleted {
 				ms.LiveBytes += restored.KeyBytes + restored.ValBytes + restoredMetaKeySize + restoredMetaValSize
 				ms.LiveCount++
-				// Also, remove the bytes from previously overwritten value from the GC'able bytes age stat.
-				ms.GCBytesAge -= MVCCComputeGCBytesAge(restored.KeyBytes+restored.ValBytes, restoredAgeSeconds)
-			} else {
-				// Add back in the meta key/value bytes to GC'able bytes age stat.
-				ms.GCBytesAge += MVCCComputeGCBytesAge(restoredMetaKeySize+restoredMetaValSize, restoredAgeSeconds)
 			}
 			ms.KeyBytes += restoredMetaKeySize
 			ms.ValBytes += restoredMetaValSize
@@ -425,6 +407,28 @@ func updateStatsOnAbort(ms *MVCCStats, key roachpb.Key, origMetaKeySize, origMet
 			}
 		}
 	}
+
+	ms.AgeTo(orig.Timestamp.WallTime)
+
+	origTotalBytes := orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize
+	if sys {
+		ms.SysBytes -= origTotalBytes
+		ms.SysCount--
+	} else {
+		if !orig.Deleted {
+			ms.LiveBytes -= origTotalBytes
+			ms.LiveCount--
+		}
+		ms.KeyBytes -= (orig.KeyBytes + origMetaKeySize)
+		ms.ValBytes -= (orig.ValBytes + origMetaValSize)
+		ms.KeyCount--
+		ms.ValCount--
+		ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
+		ms.IntentCount--
+	}
+	ms.AgeTo(txnNanos)
+
+	return ms
 }
 
 // updateStatsOnGC updates stat counters after garbage collection
@@ -432,11 +436,9 @@ func updateStatsOnAbort(ms *MVCCStats, key roachpb.Key, origMetaKeySize, origMet
 // value counts, and updating the GC'able bytes age. If meta is
 // not nil, then the value being GC'd is the mvcc metadata and we
 // decrement the key count.
+// TODO(tschottdorf): forgot fixing this one. Clearly needs test coverage.
 func updateStatsOnGC(ms *MVCCStats, key roachpb.Key, keySize, valSize int64, meta *MVCCMetadata, ageSeconds int64) {
-	ok, sys := updateStatsForKey(ms, key)
-	if !ok {
-		return
-	}
+	sys := isSysLocal(key)
 	if sys {
 		ms.SysBytes -= (keySize + valSize)
 		if meta != nil {
@@ -450,14 +452,8 @@ func updateStatsOnGC(ms *MVCCStats, key roachpb.Key, keySize, valSize int64, met
 		} else {
 			ms.ValCount--
 		}
-		ms.GCBytesAge -= MVCCComputeGCBytesAge(keySize+valSize, ageSeconds)
+		ms.GCBytesAge -= (keySize + valSize) * ageSeconds
 	}
-}
-
-// MVCCComputeGCBytesAge computes the value to assign to the specified
-// number of bytes, at the given age (in seconds).
-func MVCCComputeGCBytesAge(bytes, ageSeconds int64) int64 {
-	return bytes * ageSeconds
 }
 
 // MVCCGetRangeStats reads stat counters for the specified range and
@@ -562,6 +558,17 @@ func MVCCGet(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consis
 	return value, intents, err
 }
 
+// mvccGetMetadata returns or reconstructs the meta key for the given key.
+// A prefix scan using the iterator is performed, resulting in one of the
+// following successful outcomes:
+// 1) iterator finds nothing; returns (false, 0, 0, nil).
+// 2) iterator finds an explicit meta key; unmarshals and returns its size.
+// 3) iterator finds a value, i.e. the meta key is implicit.
+//    In this case, it accounts for the size of the key with the portion
+//    of the user key found which is not the MVCC timestamp suffix (since
+//    that is the usual contribution of the meta key). The value size returned
+//    will be zero.
+// The passed in MVCCMetadata must not be nil.
 func mvccGetMetadata(iter Iterator, metaKey MVCCKey,
 	meta *MVCCMetadata) (ok bool, keyBytes, valBytes int64, err error) {
 	iter.Seek(metaKey)
@@ -830,16 +837,16 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp ro
 			buf.meta = MVCCMetadata{RawBytes: value}
 			metaKeySize, metaValSize, err = PutProto(engine, metaKey, &buf.meta)
 		}
-		updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
+		if ms != nil {
+			updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
+		}
 		return err
 	}
 
 	var meta *MVCCMetadata
-	var origAgeSeconds int64
 	if ok {
 		// There is existing metadata for this key; ensure our write is permitted.
 		meta = &buf.meta
-		origAgeSeconds = timestamp.WallTime/1E9 - meta.Timestamp.WallTime/1E9
 
 		if meta.Txn != nil {
 			// There is an uncommitted write intent.
@@ -908,7 +915,10 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp ro
 	}
 
 	// Update MVCC stats.
-	updateStatsOnPut(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta, origAgeSeconds)
+	if ms != nil {
+		ms.Add(updateStatsOnPut(key, origMetaKeySize, origMetaValSize,
+			metaKeySize, metaValSize, meta, newMeta))
+	}
 
 	return nil
 }
@@ -1016,7 +1026,9 @@ func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.
 		return err
 	}
 	// Every type flows through here, so we can't use the typed getters.
-	updateStatsOnMerge(ms, key, int64(len(value.RawBytes))+mvccVersionTimestampSize)
+	if ms != nil {
+		ms.Add(updateStatsOnMerge(key, int64(len(value.RawBytes))+mvccVersionTimestampSize, timestamp.WallTime))
+	}
 	return nil
 }
 
@@ -1297,7 +1309,7 @@ func MVCCIterate(engine Engine, startKey, endKey roachpb.Key, timestamp roachpb.
 // its original timestamp after laying down intents at higher timestamps.
 // Doesn't look like this code here caught that. Shouldn't resolve intents
 // when they're not at the timestamp the Txn mandates them to be.
-func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp, txn *roachpb.Transaction) error {
+func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, txn *roachpb.Transaction) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -1319,7 +1331,6 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, times
 	if !ok || !txn.Equal(meta.Txn) {
 		return nil
 	}
-	origAgeSeconds := timestamp.WallTime/1E9 - meta.Timestamp.WallTime/1E9
 
 	// If we're committing, or if the commit timestamp of the intent has
 	// been moved forward, and if the proposed epoch matches the existing
@@ -1331,11 +1342,13 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, times
 	pushed := txn.Status == roachpb.PENDING && meta.Txn.Timestamp.Less(txn.Timestamp)
 	if (commit || pushed) && meta.Txn.Epoch == txn.Epoch {
 		newMeta := *meta
+		// Set the timestamp for upcoming write (or at least the stats update).
+		newMeta.Timestamp = txn.Timestamp
+
 		var metaKeySize, metaValSize int64
 		var err error
 		if pushed {
 			// Keep intent if we're pushing timestamp.
-			newMeta.Timestamp = txn.Timestamp
 			newMeta.Txn = txn
 			metaKeySize, metaValSize, err = PutProto(engine, metaKey, &newMeta)
 		} else {
@@ -1347,7 +1360,9 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, times
 		}
 
 		// Update stat counters related to resolving the intent.
-		updateStatsOnResolve(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, &newMeta, commit, origAgeSeconds)
+		if ms != nil {
+			ms.Add(updateStatsOnResolve(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, *meta, newMeta, commit))
+		}
 
 		// If timestamp of value changed, need to rewrite versioned value.
 		if !meta.Timestamp.Equal(txn.Timestamp) {
@@ -1395,7 +1410,9 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, times
 			return err
 		}
 		// Clear stat counters attributable to the intent we're aborting.
-		updateStatsOnAbort(ms, key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, origAgeSeconds, 0)
+		if ms != nil {
+			ms.Add(updateStatsOnAbort(key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, 0, txn.Timestamp.WallTime))
+		}
 		return nil
 	}
 
@@ -1416,10 +1433,11 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, times
 	}
 	metaKeySize := int64(metaKey.EncodedSize())
 	metaValSize := int64(0)
-	restoredAgeSeconds := timestamp.WallTime/1E9 - iterKey.Timestamp.WallTime/1E9
 
 	// Update stat counters with older version.
-	updateStatsOnAbort(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta, origAgeSeconds, restoredAgeSeconds)
+	if ms != nil {
+		ms.Add(updateStatsOnAbort(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta, iterKey.Timestamp.WallTime, txn.Timestamp.WallTime))
+	}
 
 	return nil
 }
@@ -1428,7 +1446,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, times
 // range of write intents specified by start and end keys for a given
 // txn. ResolveWriteIntentRange will skip write intents of other
 // txns. Specify max=0 for unbounded resolves.
-func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp, txn *roachpb.Transaction) (int64, error) {
+func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey roachpb.Key, max int64, txn *roachpb.Transaction) (int64, error) {
 	if txn == nil {
 		return 0, util.Errorf("no txn specified")
 	}
@@ -1450,7 +1468,7 @@ func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey roach
 
 		key0 := kvs[0].Key
 		if !key0.IsValue() {
-			err = MVCCResolveWriteIntent(engine, ms, key0.Key, timestamp, txn)
+			err = MVCCResolveWriteIntent(engine, ms, key0.Key, txn)
 		}
 		if err != nil {
 			log.Warningf("failed to resolve intent for key %q: %v", key0.Key, err)
@@ -1502,7 +1520,9 @@ func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []roachpb.GCRequest_G
 				return util.Errorf("request to GC intent at %q", gcKey.Key)
 			}
 			ageSeconds := timestamp.WallTime/1E9 - meta.Timestamp.WallTime/1E9
-			updateStatsOnGC(ms, gcKey.Key, metaKeySize, metaValSize, meta, ageSeconds)
+			if ms != nil {
+				updateStatsOnGC(ms, gcKey.Key, metaKeySize, metaValSize, meta, ageSeconds)
+			}
 			if !implicitMeta {
 				if err := engine.Clear(iter.Key()); err != nil {
 					return err
@@ -1526,7 +1546,9 @@ func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []roachpb.GCRequest_G
 			}
 			if !gcKey.Timestamp.Less(iterKey.Timestamp) {
 				ageSeconds := timestamp.WallTime/1E9 - iterKey.Timestamp.WallTime/1E9
-				updateStatsOnGC(ms, gcKey.Key, mvccVersionTimestampSize, int64(len(iter.Value())), nil, ageSeconds)
+				if ms != nil {
+					updateStatsOnGC(ms, gcKey.Key, mvccVersionTimestampSize, int64(len(iter.Value())), nil, ageSeconds)
+				}
 				if err := engine.Clear(iterKey); err != nil {
 					return err
 				}
