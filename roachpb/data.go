@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
+	"github.com/shopspring/decimal"
 )
 
 const (
@@ -425,6 +426,14 @@ func (v *Value) SetTime(t time.Time) {
 	v.setTag(ValueType_TIME)
 }
 
+// SetDecimal encodes the specified decimal value into the bytes field of
+// the receiver, sets the tag and clears the checksum.
+func (v *Value) SetDecimal(d decimal.Decimal) {
+	v.RawBytes = make([]byte, headerSize, 16)
+	v.RawBytes = encoding.EncodeDecimalAscending(v.RawBytes[:headerSize], d)
+	v.setTag(ValueType_DECIMAL)
+}
+
 // GetBytes returns the bytes field of the receiver. If the tag is not
 // BYTES an error will be returned.
 func (v Value) GetBytes() ([]byte, error) {
@@ -489,10 +498,17 @@ func (v Value) GetTime() (time.Time, error) {
 		return time.Time{}, fmt.Errorf("value type is not %s: %s", ValueType_TIME, tag)
 	}
 	_, t, err := encoding.DecodeTimeAscending(v.dataBytes())
-	if err != nil {
-		return t, err
+	return t, err
+}
+
+// GetDecimal decodes a decimal value from the bytes of the receiver. If the
+// tag is not DECIMAL an error will be returned.
+func (v Value) GetDecimal() (decimal.Decimal, error) {
+	if tag := v.GetTag(); tag != ValueType_DECIMAL {
+		return decimal.Decimal{}, fmt.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
 	}
-	return t, nil
+	_, d, err := encoding.DecodeDecimalAscending(v.dataBytes())
+	return d, err
 }
 
 // GetTimeseries decodes an InternalTimeSeriesData value from the bytes

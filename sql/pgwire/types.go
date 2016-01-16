@@ -68,6 +68,9 @@ func typeForDatum(d driver.Datum) pgType {
 	case *driver.Datum_FloatVal:
 		return pgType{oid.T_float8, 8}
 
+	case *driver.Datum_DecimalVal:
+		return pgType{oid.T_numeric, -1}
+
 	case *driver.Datum_BytesVal, *driver.Datum_StringVal:
 		return pgType{oid.T_text, -1}
 
@@ -116,6 +119,11 @@ func (b *writeBuffer) writeTextDatum(d driver.Datum) error {
 		s := strconv.AppendFloat(b.putbuf[4:4], v.FloatVal, 'f', -1, 64)
 		b.putInt32(int32(len(s)))
 		_, err := b.Write(s)
+		return err
+
+	case *driver.Datum_DecimalVal:
+		b.putInt32(int32(len(v.DecimalVal)))
+		_, err := b.WriteString(v.DecimalVal)
 		return err
 
 	case *driver.Datum_BytesVal:
@@ -220,6 +228,7 @@ var (
 		oid.T_int4:      parser.DummyInt,
 		oid.T_int8:      parser.DummyInt,
 		oid.T_interval:  parser.DummyInterval,
+		oid.T_numeric:   parser.DummyDecimal,
 		oid.T_text:      parser.DummyString,
 		oid.T_timestamp: parser.DummyTimestamp,
 	}
@@ -230,6 +239,7 @@ var (
 		parser.DummyFloat:     oid.T_float8,
 		parser.DummyInt:       oid.T_int8,
 		parser.DummyInterval:  oid.T_interval,
+		parser.DummyDecimal:   oid.T_numeric,
 		parser.DummyString:    oid.T_text,
 		parser.DummyTimestamp: oid.T_timestamp,
 	}
@@ -249,7 +259,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error)
 			}
 			d.Payload = &driver.Datum_BoolVal{BoolVal: v}
 		default:
-			return d, fmt.Errorf("unsupported bool format code: %s", code)
+			return d, fmt.Errorf("unsupported bool format code: %d", code)
 		}
 	case oid.T_int2:
 		switch code {
@@ -267,7 +277,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error)
 			}
 			d.Payload = &driver.Datum_IntVal{IntVal: int64(i)}
 		default:
-			return d, fmt.Errorf("unsupported int2 format code: %s", code)
+			return d, fmt.Errorf("unsupported int2 format code: %d", code)
 		}
 	case oid.T_int4:
 		switch code {
@@ -285,7 +295,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error)
 			}
 			d.Payload = &driver.Datum_IntVal{IntVal: int64(i)}
 		default:
-			return d, fmt.Errorf("unsupported int4 format code: %s", code)
+			return d, fmt.Errorf("unsupported int4 format code: %d", code)
 		}
 	case oid.T_int8:
 		switch code {
@@ -303,7 +313,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error)
 			}
 			d.Payload = &driver.Datum_IntVal{IntVal: i}
 		default:
-			return d, fmt.Errorf("unsupported int8 format code: %s", code)
+			return d, fmt.Errorf("unsupported int8 format code: %d", code)
 		}
 	case oid.T_float4:
 		switch code {
@@ -321,7 +331,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error)
 			}
 			d.Payload = &driver.Datum_FloatVal{FloatVal: float64(f)}
 		default:
-			return d, fmt.Errorf("unsupported float4 format code: %s", code)
+			return d, fmt.Errorf("unsupported float4 format code: %d", code)
 		}
 	case oid.T_float8:
 		switch code {
@@ -339,14 +349,21 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error)
 			}
 			d.Payload = &driver.Datum_FloatVal{FloatVal: f}
 		default:
-			return d, fmt.Errorf("unsupported float8 format code: %s", code)
+			return d, fmt.Errorf("unsupported float8 format code: %d", code)
+		}
+	case oid.T_numeric:
+		switch code {
+		case formatText:
+			d.Payload = &driver.Datum_DecimalVal{DecimalVal: string(b)}
+		default:
+			return d, fmt.Errorf("unsupported numeric format code: %d", code)
 		}
 	case oid.T_text:
 		switch code {
 		case formatText:
 			d.Payload = &driver.Datum_StringVal{StringVal: string(b)}
 		default:
-			return d, fmt.Errorf("unsupported text format code: %s", code)
+			return d, fmt.Errorf("unsupported text format code: %d", code)
 		}
 	// TODO(mjibson): implement date/time types
 	default:

@@ -28,6 +28,7 @@ var (
 	typeBytes     = func(MapArgs, DTuple) (Datum, error) { return DummyBytes, nil }
 	typeDate      = func(MapArgs, DTuple) (Datum, error) { return DummyDate, nil }
 	typeFloat     = func(MapArgs, DTuple) (Datum, error) { return DummyFloat, nil }
+	typeDecimal   = func(MapArgs, DTuple) (Datum, error) { return DummyDecimal, nil }
 	typeInt       = func(MapArgs, DTuple) (Datum, error) { return DummyInt, nil }
 	typeInterval  = func(MapArgs, DTuple) (Datum, error) { return DummyInterval, nil }
 	typeString    = func(MapArgs, DTuple) (Datum, error) { return DummyString, nil }
@@ -141,25 +142,31 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 	switch expr.Type.(type) {
 	case *BoolType:
 		switch dummyExpr {
-		case DNull, DummyBool, DummyInt, DummyFloat, DummyString:
+		case DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString:
 			return DummyBool, nil
 		}
 
 	case *IntType:
 		switch dummyExpr {
-		case DNull, DummyBool, DummyInt, DummyFloat, DummyString:
+		case DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString:
 			return DummyInt, nil
 		}
 
 	case *FloatType:
 		switch dummyExpr {
-		case DNull, DummyBool, DummyInt, DummyFloat, DummyString:
+		case DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString:
 			return DummyFloat, nil
+		}
+
+	case *DecimalType:
+		switch dummyExpr {
+		case DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString:
+			return DummyDecimal, nil
 		}
 
 	case *StringType:
 		switch dummyExpr {
-		case DNull, DummyBool, DummyInt, DummyFloat, DummyString, DummyBytes:
+		case DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString, DummyBytes:
 			return DummyString, nil
 		}
 
@@ -186,9 +193,6 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		case DNull, DummyString, DummyInt:
 			return DummyInterval, nil
 		}
-
-	// TODO(pmattis): unimplemented.
-	case *DecimalType:
 	}
 
 	return nil, fmt.Errorf("invalid cast: %s -> %s", dummyExpr.Type(), expr.Type)
@@ -497,6 +501,11 @@ func (expr DDate) TypeCheck(args MapArgs) (Datum, error) {
 // TypeCheck implements the Expr interface.
 func (expr DFloat) TypeCheck(args MapArgs) (Datum, error) {
 	return DummyFloat, nil
+}
+
+// TypeCheck implements the Expr interface.
+func (expr DDecimal) TypeCheck(args MapArgs) (Datum, error) {
+	return DummyDecimal, nil
 }
 
 // TypeCheck implements the Expr interface.

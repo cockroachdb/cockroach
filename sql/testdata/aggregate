@@ -338,6 +338,11 @@ SELECT AVG(k), AVG(v), SUM(k), SUM(v) FROM kv
 ----
 5 2.8 30 14
 
+query RRRR
+SELECT AVG(k::decimal), AVG(v::decimal), SUM(k::decimal), SUM(v::decimal) FROM kv
+----
+5 2.8 30 14
+
 query RRII
 SELECT AVG(DISTINCT k), AVG(DISTINCT v), SUM(DISTINCT k), SUM(DISTINCT v) FROM kv
 ----
@@ -358,26 +363,27 @@ statement ok
 CREATE TABLE abc (
   a CHAR PRIMARY KEY,
   b FLOAT,
-  c BOOLEAN
+  c BOOLEAN,
+  d DECIMAL
 )
 
 statement ok
-INSERT INTO abc VALUES ('one', 1.5, true), ('two', 2.0, false)
+INSERT INTO abc VALUES ('one', 1.5, true, 5::decimal), ('two', 2.0, false, 1.1::decimal)
 
-query TRB
-SELECT MIN(a), MIN(b), MIN(c) FROM abc
+query TRBR
+SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM abc
 ----
-one 1.5 false
+one 1.5 false 1.1
 
-query TRB
-SELECT MAX(a), MAX(b), MAX(c) FROM abc
+query TRBR
+SELECT MAX(a), MAX(b), MAX(c), MAX(d) FROM abc
 ----
-two 2 true
+two 2 true 5
 
-query RR
-SELECT AVG(b), SUM(b) FROM abc
+query RRRR
+SELECT AVG(b), SUM(b), AVG(d), SUM(d) FROM abc
 ----
-1.75 3.5
+1.75 3.5 3.05 6.1
 
 query error unknown signature for AVG: AVG\(string\)
 SELECT AVG(a) FROM abc

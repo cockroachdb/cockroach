@@ -546,8 +546,11 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 	} else {
 		uval, err = strconv.ParseUint(lval.str, 10, 64)
 	}
-	if err == nil && uval > 1<<63 {
-		err = fmt.Errorf("integer value out of range: %d", uval)
+	if err == strconv.ErrRange || uval > 1<<63 {
+		// Integers that would overflow an int64 should be parsed
+		// as NumVals so they can have arbitrary precision.
+		lval.id = FCONST
+		return
 	}
 	// uval is now in the range [0, 1<<63]. Casting to an int64 leaves the range
 	// [0, 1<<63 - 1] intact and moves 1<<63 to -1<<63 (a.k.a. math.MinInt64).

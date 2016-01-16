@@ -62,6 +62,7 @@ enum ValueType {
   FLOAT = 2,
   BYTES = 3,
   TIME = 4,
+  DECIMAL = 5,
   TIMESERIES = 100
 };
 bool ValueType_IsValid(int value);
