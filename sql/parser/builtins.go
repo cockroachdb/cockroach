@@ -1260,7 +1260,10 @@ func round(x float64, n int64) (Datum, error) {
 	}
 	const b = 64
 	y, err := strconv.ParseFloat(strconv.FormatFloat(x, 'f', int(n), b), b)
-	return DFloat(y), err
+	if err != nil {
+		panic(fmt.Sprintf("parsing a float that was just formatted failed: %v", err))
+	}
+	return DFloat(y), nil
 }
 
 // typeTuple returns the Datum type that all arguments share, or an error
