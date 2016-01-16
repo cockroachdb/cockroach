@@ -220,6 +220,9 @@ type FileInfo struct {
 // on the local node, in any of the configured log directories.
 func ListLogFiles() ([]FileInfo, error) {
 	var results []FileInfo
+	if *logDir == "" {
+		return nil, nil
+	}
 	infos, err := ioutil.ReadDir(*logDir)
 	if err != nil {
 		return results, err

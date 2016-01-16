@@ -27,11 +27,8 @@ import (
 )
 
 func TestBuildInfo(t *testing.T) {
-	if *numLocal == 0 {
-		t.Skip("skipping since not run against local cluster")
-	}
-	l := cluster.CreateLocal(1, 1, *logDir, stopper) // intentionally using a local cluster
-	l.Start()
+	SkipUnlessLocal(t)
+	l := StartCluster(t).(*cluster.LocalCluster)
 	defer l.AssertAndStop(t)
 
 	checkGossip(t, l, 20*time.Second, hasPeers(l.NumNodes()))
