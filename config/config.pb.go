@@ -53,11 +53,11 @@ type ZoneConfig struct {
 	// for each replica in the zone. The order in which the attributes are stored
 	// in ReplicaAttrs is arbitrary and may change.
 	ReplicaAttrs  []cockroach_roachpb.Attributes `protobuf:"bytes,1,rep,name=replica_attrs" json:"replica_attrs" yaml:"replicas,omitempty"`
-	RangeMinBytes int64                          `protobuf:"varint,2,opt,name=range_min_bytes" json:"range_min_bytes" yaml:"range_min_bytes,omitempty"`
-	RangeMaxBytes int64                          `protobuf:"varint,3,opt,name=range_max_bytes" json:"range_max_bytes" yaml:"range_max_bytes,omitempty"`
+	RangeMinBytes int64                          `protobuf:"varint,2,opt,name=range_min_bytes" json:"range_min_bytes" yaml:"range_min_bytes"`
+	RangeMaxBytes int64                          `protobuf:"varint,3,opt,name=range_max_bytes" json:"range_max_bytes" yaml:"range_max_bytes"`
 	// If GC policy is not set, uses the next highest, non-null policy
 	// in the zone config hierarchy, up to the default policy if necessary.
-	GC *GCPolicy `protobuf:"bytes,4,opt,name=gc" json:"gc,omitempty" yaml:"gc,omitempty"`
+	GC GCPolicy `protobuf:"bytes,4,opt,name=gc" json:"gc"`
 }
 
 func (m *ZoneConfig) Reset()         { *m = ZoneConfig{} }
@@ -131,16 +131,14 @@ func (m *ZoneConfig) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x18
 	i++
 	i = encodeVarintConfig(data, i, uint64(m.RangeMaxBytes))
-	if m.GC != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintConfig(data, i, uint64(m.GC.Size()))
-		n1, err := m.GC.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n1
+	data[i] = 0x22
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.GC.Size()))
+	n1, err := m.GC.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
 	}
+	i += n1
 	return i, nil
 }
 
@@ -219,10 +217,8 @@ func (m *ZoneConfig) Size() (n int) {
 	}
 	n += 1 + sovConfig(uint64(m.RangeMinBytes))
 	n += 1 + sovConfig(uint64(m.RangeMaxBytes))
-	if m.GC != nil {
-		l = m.GC.Size()
-		n += 1 + l + sovConfig(uint64(l))
-	}
+	l = m.GC.Size()
+	n += 1 + l + sovConfig(uint64(l))
 	return n
 }
 
@@ -443,9 +439,6 @@ func (m *ZoneConfig) Unmarshal(data []byte) error {
 			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
-			}
-			if m.GC == nil {
-				m.GC = &GCPolicy{}
 			}
 			if err := m.GC.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err

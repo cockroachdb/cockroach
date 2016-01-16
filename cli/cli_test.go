@@ -399,6 +399,8 @@ range_max_bytes: 67108864
 	// - attrs: [us-west-1b, ssd]
 	// range_min_bytes: 8388608
 	// range_max_bytes: 67108864
+	// gc:
+	//   ttlseconds: 0
 	//
 	// zone get 100
 	// replicas:
@@ -407,6 +409,8 @@ range_max_bytes: 67108864
 	// - attrs: [us-west-1b, ssd]
 	// range_min_bytes: 8388608
 	// range_max_bytes: 67108864
+	// gc:
+	//   ttlseconds: 0
 	//
 	// zone rm 100
 	// OK

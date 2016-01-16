@@ -46,7 +46,7 @@ var (
 		},
 		RangeMinBytes: 1048576,
 		RangeMaxBytes: 67108864,
-		GC: &GCPolicy{
+		GC: GCPolicy{
 			TTLSeconds: 24 * 60 * 60, // 1 day
 		},
 	}
