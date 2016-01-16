@@ -42,6 +42,7 @@ type Datum struct {
 	//	*Datum_DateVal
 	//	*Datum_TimeVal
 	//	*Datum_IntervalVal
+	//	*Datum_DecimalVal
 	Payload isDatum_Payload `protobuf_oneof:"payload"`
 }
 
@@ -79,6 +80,9 @@ type Datum_TimeVal struct {
 type Datum_IntervalVal struct {
 	IntervalVal int64 `protobuf:"varint,8,opt,name=interval_val,oneof"`
 }
+type Datum_DecimalVal struct {
+	DecimalVal string `protobuf:"bytes,9,opt,name=decimal_val,oneof"`
+}
 
 func (*Datum_BoolVal) isDatum_Payload()     {}
 func (*Datum_IntVal) isDatum_Payload()      {}
@@ -88,6 +92,7 @@ func (*Datum_StringVal) isDatum_Payload()   {}
 func (*Datum_DateVal) isDatum_Payload()     {}
 func (*Datum_TimeVal) isDatum_Payload()     {}
 func (*Datum_IntervalVal) isDatum_Payload() {}
+func (*Datum_DecimalVal) isDatum_Payload()  {}
 
 func (m *Datum) GetPayload() isDatum_Payload {
 	if m != nil {
@@ -152,6 +157,13 @@ func (m *Datum) GetIntervalVal() int64 {
 	return 0
 }
 
+func (m *Datum) GetDecimalVal() string {
+	if x, ok := m.GetPayload().(*Datum_DecimalVal); ok {
+		return x.DecimalVal
+	}
+	return ""
+}
+
 // XXX_OneofFuncs is for the internal use of the proto package.
 func (*Datum) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), []interface{}) {
 	return _Datum_OneofMarshaler, _Datum_OneofUnmarshaler, []interface{}{
@@ -163,6 +175,7 @@ func (*Datum) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, 
 		(*Datum_DateVal)(nil),
 		(*Datum_TimeVal)(nil),
 		(*Datum_IntervalVal)(nil),
+		(*Datum_DecimalVal)(nil),
 	}
 }
 
@@ -200,6 +213,9 @@ func _Datum_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 	case *Datum_IntervalVal:
 		_ = b.EncodeVarint(8<<3 | proto.WireVarint)
 		_ = b.EncodeVarint(uint64(x.IntervalVal))
+	case *Datum_DecimalVal:
+		_ = b.EncodeVarint(9<<3 | proto.WireBytes)
+		_ = b.EncodeStringBytes(x.DecimalVal)
 	case nil:
 	default:
 		return fmt.Errorf("Datum.Payload has unexpected type %T", x)
@@ -266,6 +282,13 @@ func _Datum_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) 
 		}
 		x, err := b.DecodeVarint()
 		m.Payload = &Datum_IntervalVal{int64(x)}
+		return true, err
+	case 9: // payload.decimal_val
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		x, err := b.DecodeStringBytes()
+		m.Payload = &Datum_DecimalVal{x}
 		return true, err
 	default:
 		return false, nil
@@ -592,6 +615,14 @@ func (m *Datum_IntervalVal) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x40
 	i++
 	i = encodeVarintWire(data, i, uint64(m.IntervalVal))
+	return i, nil
+}
+func (m *Datum_DecimalVal) MarshalTo(data []byte) (int, error) {
+	i := 0
+	data[i] = 0x4a
+	i++
+	i = encodeVarintWire(data, i, uint64(len(m.DecimalVal)))
+	i += copy(data[i:], m.DecimalVal)
 	return i, nil
 }
 func (m *Datum_Timestamp) Marshal() (data []byte, err error) {
@@ -975,6 +1006,13 @@ func (m *Datum_IntervalVal) Size() (n int) {
 	n += 1 + sovWire(uint64(m.IntervalVal))
 	return n
 }
+func (m *Datum_DecimalVal) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.DecimalVal)
+	n += 1 + l + sovWire(uint64(l))
+	return n
+}
 func (m *Datum_Timestamp) Size() (n int) {
 	var l int
 	_ = l
@@ -1334,6 +1372,35 @@ func (m *Datum) Unmarshal(data []byte) error {
 				}
 			}
 			m.Payload = &Datum_IntervalVal{v}
+		case 9:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DecimalVal", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Payload = &Datum_DecimalVal{string(data[iNdEx:postIndex])}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipWire(data[iNdEx:])

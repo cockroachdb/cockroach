@@ -182,6 +182,9 @@ func (DDate) Walk(_ Visitor) {}
 func (DFloat) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
+func (DDecimal) Walk(_ Visitor) {}
+
+// Walk implements the Expr interface.
 func (DInt) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.

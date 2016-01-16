@@ -25,6 +25,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/shopspring/decimal"
 )
 
 const (
@@ -638,6 +639,36 @@ func DecodeTimeDescending(b []byte) ([]byte, time.Time, error) {
 		return b, time.Time{}, err
 	}
 	return b, time.Unix(sec, nsec), nil
+}
+
+// EncodeDecimalAscending ... TODO(nvanbenschoten)
+func EncodeDecimalAscending(b []byte, d decimal.Decimal) []byte {
+	return EncodeStringAscending(b, d.String())
+}
+
+// EncodeDecimalDescending ... TODO(nvanbenschoten)
+func EncodeDecimalDescending(b []byte, d decimal.Decimal) []byte {
+	return EncodeStringDescending(b, d.String())
+}
+
+// DecodeDecimalAscending ... TODO(nvanbenschoten)
+func DecodeDecimalAscending(b []byte) ([]byte, decimal.Decimal, error) {
+	b, s, err := DecodeStringAscending(b, nil)
+	if err != nil {
+		return b, decimal.Decimal{}, err
+	}
+	d, err := decimal.NewFromString(s)
+	return b, d, err
+}
+
+// DecodeDecimalDescending ... TODO(nvanbenschoten)
+func DecodeDecimalDescending(b []byte) ([]byte, decimal.Decimal, error) {
+	b, s, err := DecodeStringDescending(b, nil)
+	if err != nil {
+		return b, decimal.Decimal{}, err
+	}
+	d, err := decimal.NewFromString(s)
+	return b, d, err
 }
 
 // Type represents the type of a value encoded by

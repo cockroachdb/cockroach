@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/shopspring/decimal"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
@@ -557,6 +558,8 @@ func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
 		return parser.DTimestamp{Time: t}, true
 	case time.Duration:
 		return parser.DInterval{Duration: t}, true
+	case decimal.Decimal:
+		return parser.DDecimal{Decimal: t}, true
 	}
 
 	// Handle all types which have an underlying type that can be stored in the
@@ -595,6 +598,7 @@ func checkResultDatum(datum parser.Datum) *roachpb.Error {
 	case parser.DBool:
 	case parser.DInt:
 	case parser.DFloat:
+	case parser.DDecimal:
 	case parser.DBytes:
 	case parser.DString:
 	case parser.DDate:

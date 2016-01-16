@@ -531,7 +531,7 @@ func (t *logicTest) execQuery(query logicQuery) {
 						t.Fatalf("%s: expected int value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				case 'R':
-					if valT != reflect.Float64 {
+					if valT != reflect.Float64 && valT != reflect.Slice {
 						t.Fatalf("%s: expected float value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				case 'B':

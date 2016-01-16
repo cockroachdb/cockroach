@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/shopspring/decimal"
 )
 
 var aggregates = map[string]func() aggregateImpl{
@@ -668,9 +669,13 @@ func (a *avgAggregate) result() (parser.Datum, error) {
 	}
 	switch t := sum.(type) {
 	case parser.DInt:
+		// TODO(nvanbenschoten) decimal: this should be a numeric, once
+		// better type coercion semantics are defined.
 		return parser.DFloat(t) / parser.DFloat(a.count), nil
 	case parser.DFloat:
 		return t / parser.DFloat(a.count), nil
+	case parser.DDecimal:
+		return parser.DDecimal{Decimal: t.Div(decimal.New(int64(a.count), 0))}, nil
 	default:
 		return parser.DNull, util.Errorf("unexpected SUM result type: %s", t.Type())
 	}
@@ -795,6 +800,12 @@ func (a *sumAggregate) add(datum parser.Datum) error {
 			a.sum = v + t
 			return nil
 		}
+
+	case parser.DDecimal:
+		if v, ok := a.sum.(parser.DDecimal); ok {
+			a.sum = parser.DDecimal{Decimal: v.Add(t.Decimal)}
+			return nil
+		}
 	}
 
 	return util.Errorf("unexpected SUM argument type: %s", datum.Type())
@@ -828,6 +839,9 @@ func (a *varianceAggregate) add(datum parser.Datum) error {
 		d = parser.DFloat(t)
 	case parser.DFloat:
 		d = t
+	// case parser.DDecimal:
+	// TODO(nvanbenschoten) add support for decimal variance and stddev
+	// aggregation functions. Will require adding decimal.Sqrt() to library.
 	default:
 		return util.Errorf("unexpected VARIANCE argument type: %s", datum.Type())
 	}
