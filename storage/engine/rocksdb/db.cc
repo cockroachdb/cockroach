@@ -1483,7 +1483,12 @@ DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
 }
 
 inline int64_t age_factor(int64_t fromNS, int64_t toNS) {
-  return toNS/1e9 - fromNS/1e9; // not the same as (toNS-fromNS)/1e9!
+  // TODO(petermattis): explain why I need to define div below.
+  // The previous code (explicitly writing 1e9) would give,
+  // for example, 3749632704/1e9 - 2787942144/1e9 = 0.
+  // Got to be something about implicit conversion and int64_t.
+  const int64_t div = 1e9;
+  return toNS/div - fromNS/div;
 }
 
 // TODO(tschottdorf): it's unfortunate that this method duplicates the logic
