@@ -58,30 +58,69 @@ func (m *MVCCMetadata) Reset()         { *m = MVCCMetadata{} }
 func (m *MVCCMetadata) String() string { return proto.CompactTextString(m) }
 func (*MVCCMetadata) ProtoMessage()    {}
 
-// MVCCStats tracks byte and instance counts for:
-//  - Live key/values (i.e. what a scan at current time will reveal;
-//    note that this includes intent keys and values, but not keys and
-//    values with most recent value deleted)
-//  - Key bytes (includes all keys, even those with most recent value deleted)
-//  - Value bytes (includes all versions)
-//  - Key count (count of all keys, including keys with deleted tombstones)
-//  - Value count (all versions, including deleted tombstones)
-//  - Intents (provisional values written during txns)
-//  - System-local key counts and byte totals
+// MVCCStats tracks byte and instance counts for various groups of keys,
+// values, or key-value pairs; see the field comments for details.
+//
+// It also tracks two cumulative ages, namely that of intents and non-live
+// (i.e. GC-able) bytes. This computation is intrinsically linked to
+// last_update_nanos and is easy to get wrong. Updates happen only once every
+// full second, as measured by last_update_nanos/1e9. That is, forward updates
+// don't change last_update_nanos until an update at a timestamp which,
+// truncated to the second, is ahead of last_update_nanos/1e9. Then, that
+// difference in seconds times the base quantity (excluding the currently
+// running update) is added to the age. It gets more complicated when data is
+// accounted for with a timestamp behind last_update_nanos. In this case, if
+// more than a second has passed (computed via truncation above), the ages have
+// to be adjusted to account for this late addition. This isn't hard: add the
+// new data's base quantity times the (truncated) number of seconds behind.
+// Important to keep in mind with those computations is that (x/1e9 - y/1e9)
+// does not equal (x-y)/1e9 in most cases.
 type MVCCStats struct {
-	LiveBytes       int64 `protobuf:"varint,1,opt,name=live_bytes" json:"live_bytes"`
-	KeyBytes        int64 `protobuf:"varint,2,opt,name=key_bytes" json:"key_bytes"`
-	ValBytes        int64 `protobuf:"varint,3,opt,name=val_bytes" json:"val_bytes"`
-	IntentBytes     int64 `protobuf:"varint,4,opt,name=intent_bytes" json:"intent_bytes"`
-	LiveCount       int64 `protobuf:"varint,5,opt,name=live_count" json:"live_count"`
-	KeyCount        int64 `protobuf:"varint,6,opt,name=key_count" json:"key_count"`
-	ValCount        int64 `protobuf:"varint,7,opt,name=val_count" json:"val_count"`
-	IntentCount     int64 `protobuf:"varint,8,opt,name=intent_count" json:"intent_count"`
-	IntentAge       int64 `protobuf:"varint,9,opt,name=intent_age" json:"intent_age"`
-	GCBytesAge      int64 `protobuf:"varint,10,opt,name=gc_bytes_age" json:"gc_bytes_age"`
-	SysBytes        int64 `protobuf:"varint,12,opt,name=sys_bytes" json:"sys_bytes"`
-	SysCount        int64 `protobuf:"varint,13,opt,name=sys_count" json:"sys_count"`
-	LastUpdateNanos int64 `protobuf:"varint,30,opt,name=last_update_nanos" json:"last_update_nanos"`
+	// last_update_nanos is a timestamp at which the ages were last
+	// updated. See the comment on MVCCStats.
+	LastUpdateNanos int64 `protobuf:"varint,1,opt,name=last_update_nanos" json:"last_update_nanos"`
+	// intent_age is the cumulative age of the tracked intents.
+	// See the comment on MVCCStats.
+	IntentAge int64 `protobuf:"varint,2,opt,name=intent_age" json:"intent_age"`
+	// gc_bytes_age is the cumulative age of the non-live data (i.e.
+	// data included in key_bytes and val_bytes, but not live_bytes).
+	// See the comment on MVCCStats.
+	GCBytesAge int64 `protobuf:"varint,3,opt,name=gc_bytes_age" json:"gc_bytes_age"`
+	// live_bytes is the number of bytes stored in keys and values which can in
+	// principle be read by means of a Scan or Get, including intents but not
+	// deletion tombstones (or their intents). Note that the size of the meta kv
+	// pair (which could be explicit or implicit) is included in this.
+	// Only the meta kv pair counts for the actual length of the encoded key
+	// (regular pairs only count the timestamp suffix).
+	LiveBytes int64 `protobuf:"varint,4,opt,name=live_bytes" json:"live_bytes"`
+	// live_count is the number of meta keys tracked under live_bytes.
+	LiveCount int64 `protobuf:"varint,5,opt,name=live_count" json:"live_count"`
+	// key_bytes is the number of bytes stored in all non-system
+	// keys, including live, meta, old, and deleted keys.
+	// Only meta keys really account for the "full" key; value
+	// keys only for the timestamp suffix.
+	KeyBytes int64 `protobuf:"varint,6,opt,name=key_bytes" json:"key_bytes"`
+	// key_count is the number of meta keys tracked under key_bytes.
+	KeyCount int64 `protobuf:"varint,7,opt,name=key_count" json:"key_count"`
+	// value_bytes is the number of bytes in all non-system version
+	// values, including meta values.
+	ValBytes int64 `protobuf:"varint,8,opt,name=val_bytes" json:"val_bytes"`
+	// val_count is the number of meta values tracked under val_bytes.
+	ValCount int64 `protobuf:"varint,9,opt,name=val_count" json:"val_count"`
+	// intent_bytes is the number of bytes in intent key-value
+	// pairs (without their meta keys).
+	IntentBytes int64 `protobuf:"varint,10,opt,name=intent_bytes" json:"intent_bytes"`
+	// intent_count is the number of keys tracked under intent_bytes.
+	// It is equal to the number of meta keys in the system with
+	// a non-empty Transaction proto.
+	IntentCount int64 `protobuf:"varint,11,opt,name=intent_count" json:"intent_count"`
+	// sys_bytes is the number of bytes stored in system-local  kv-pairs.
+	// This tracks the same quantity as (key_bytes + val_bytes), but
+	// for system-local keys (which aren't counted in either key_bytes
+	// or val_bytes).
+	SysBytes int64 `protobuf:"varint,12,opt,name=sys_bytes" json:"sys_bytes"`
+	// sys_count is the number of meta keys tracked under sys_bytes.
+	SysCount int64 `protobuf:"varint,13,opt,name=sys_count" json:"sys_count"`
 }
 
 func (m *MVCCStats) Reset()         { *m = MVCCStats{} }
@@ -175,45 +214,43 @@ func (m *MVCCStats) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0x8
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.LiveBytes))
+	i = encodeVarintMvcc(data, i, uint64(m.LastUpdateNanos))
 	data[i] = 0x10
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.KeyBytes))
+	i = encodeVarintMvcc(data, i, uint64(m.IntentAge))
 	data[i] = 0x18
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.ValBytes))
+	i = encodeVarintMvcc(data, i, uint64(m.GCBytesAge))
 	data[i] = 0x20
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.IntentBytes))
+	i = encodeVarintMvcc(data, i, uint64(m.LiveBytes))
 	data[i] = 0x28
 	i++
 	i = encodeVarintMvcc(data, i, uint64(m.LiveCount))
 	data[i] = 0x30
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.KeyCount))
+	i = encodeVarintMvcc(data, i, uint64(m.KeyBytes))
 	data[i] = 0x38
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.ValCount))
+	i = encodeVarintMvcc(data, i, uint64(m.KeyCount))
 	data[i] = 0x40
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.IntentCount))
+	i = encodeVarintMvcc(data, i, uint64(m.ValBytes))
 	data[i] = 0x48
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.IntentAge))
+	i = encodeVarintMvcc(data, i, uint64(m.ValCount))
 	data[i] = 0x50
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.GCBytesAge))
+	i = encodeVarintMvcc(data, i, uint64(m.IntentBytes))
+	data[i] = 0x58
+	i++
+	i = encodeVarintMvcc(data, i, uint64(m.IntentCount))
 	data[i] = 0x60
 	i++
 	i = encodeVarintMvcc(data, i, uint64(m.SysBytes))
 	data[i] = 0x68
 	i++
 	i = encodeVarintMvcc(data, i, uint64(m.SysCount))
-	data[i] = 0xf0
-	i++
-	data[i] = 0x1
-	i++
-	i = encodeVarintMvcc(data, i, uint64(m.LastUpdateNanos))
 	return i, nil
 }
 
@@ -270,19 +307,19 @@ func (m *MVCCMetadata) Size() (n int) {
 func (m *MVCCStats) Size() (n int) {
 	var l int
 	_ = l
-	n += 1 + sovMvcc(uint64(m.LiveBytes))
-	n += 1 + sovMvcc(uint64(m.KeyBytes))
-	n += 1 + sovMvcc(uint64(m.ValBytes))
-	n += 1 + sovMvcc(uint64(m.IntentBytes))
-	n += 1 + sovMvcc(uint64(m.LiveCount))
-	n += 1 + sovMvcc(uint64(m.KeyCount))
-	n += 1 + sovMvcc(uint64(m.ValCount))
-	n += 1 + sovMvcc(uint64(m.IntentCount))
+	n += 1 + sovMvcc(uint64(m.LastUpdateNanos))
 	n += 1 + sovMvcc(uint64(m.IntentAge))
 	n += 1 + sovMvcc(uint64(m.GCBytesAge))
+	n += 1 + sovMvcc(uint64(m.LiveBytes))
+	n += 1 + sovMvcc(uint64(m.LiveCount))
+	n += 1 + sovMvcc(uint64(m.KeyBytes))
+	n += 1 + sovMvcc(uint64(m.KeyCount))
+	n += 1 + sovMvcc(uint64(m.ValBytes))
+	n += 1 + sovMvcc(uint64(m.ValCount))
+	n += 1 + sovMvcc(uint64(m.IntentBytes))
+	n += 1 + sovMvcc(uint64(m.IntentCount))
 	n += 1 + sovMvcc(uint64(m.SysBytes))
 	n += 1 + sovMvcc(uint64(m.SysCount))
-	n += 2 + sovMvcc(uint64(m.LastUpdateNanos))
 	return n
 }
 
@@ -562,6 +599,63 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LastUpdateNanos", wireType)
+			}
+			m.LastUpdateNanos = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.LastUpdateNanos |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IntentAge", wireType)
+			}
+			m.IntentAge = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.IntentAge |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GCBytesAge", wireType)
+			}
+			m.GCBytesAge = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.GCBytesAge |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LiveBytes", wireType)
 			}
 			m.LiveBytes = 0
@@ -575,63 +669,6 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 				b := data[iNdEx]
 				iNdEx++
 				m.LiveBytes |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field KeyBytes", wireType)
-			}
-			m.KeyBytes = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.KeyBytes |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ValBytes", wireType)
-			}
-			m.ValBytes = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.ValBytes |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 4:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IntentBytes", wireType)
-			}
-			m.IntentBytes = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.IntentBytes |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -657,6 +694,25 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 			}
 		case 6:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field KeyBytes", wireType)
+			}
+			m.KeyBytes = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.KeyBytes |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 7:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field KeyCount", wireType)
 			}
 			m.KeyCount = 0
@@ -674,7 +730,26 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 7:
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ValBytes", wireType)
+			}
+			m.ValBytes = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.ValBytes |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 9:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ValCount", wireType)
 			}
@@ -693,7 +768,26 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 8:
+		case 10:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IntentBytes", wireType)
+			}
+			m.IntentBytes = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.IntentBytes |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 11:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field IntentCount", wireType)
 			}
@@ -708,44 +802,6 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 				b := data[iNdEx]
 				iNdEx++
 				m.IntentCount |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 9:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IntentAge", wireType)
-			}
-			m.IntentAge = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.IntentAge |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 10:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field GCBytesAge", wireType)
-			}
-			m.GCBytesAge = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.GCBytesAge |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -784,25 +840,6 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 				b := data[iNdEx]
 				iNdEx++
 				m.SysCount |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 30:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LastUpdateNanos", wireType)
-			}
-			m.LastUpdateNanos = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.LastUpdateNanos |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

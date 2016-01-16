@@ -52,47 +52,74 @@ func TestGCQueueShouldQueue(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
+		t.Fatal("nil config")
+	}
+	desc := tc.rng.Desc()
+	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
+	if err != nil {
+		log.Errorf("could not find GC policy for range %s: %s, got zone %+v",
+			tc.rng, err, zone)
+		return
+	}
+	policy := zone.GC
+
 	iaN := intentAgeNormalization.Nanoseconds()
 	ia := iaN / 1E9
 	bc := int64(gcByteCountNormalization)
-	ttl := int64(24 * 60 * 60)
+	ttl := int64(policy.TTLSeconds)
+
+	now := makeTS(iaN, 0) // at time of stats object
 
 	testCases := []struct {
 		gcBytes     int64
 		gcBytesAge  int64
 		intentCount int64
 		intentAge   int64
-		now         roachpb.Timestamp
+		now         roachpb.Timestamp // at time of shouldQueue
 		shouldQ     bool
 		priority    float64
 	}{
+		// First, test cases where shouldQueue is called with the same
+		// timestamp that the stats are at.
+
 		// No GC'able bytes, no time elapsed.
-		{0, 0, 0, 0, makeTS(0, 0), false, 0},
+		{0, 0, 0, 0, now, false, 0},
 		// No GC'able bytes, with intent age, 1/2 intent normalization period elapsed.
-		{0, 0, 1, ia / 2, makeTS(0, 0), false, 0},
+		{0, 0, 1, ia / 2, now, false, 0},
 		// No GC'able bytes, with intent age=1/2 period, and other 1/2 period elapsed.
-		{0, 0, 1, ia / 2, makeTS(iaN/2, 0), false, 0},
-		// No GC'able bytes, with intent age=2*intent normalization.
-		{0, 0, 1, 3 * ia / 2, makeTS(iaN/2, 0), true, 2},
-		// No GC'able bytes, 2 intents, with avg intent age=4x intent normalization.
-		{0, 0, 2, 7 * ia, makeTS(iaN, 0), true, 4.5},
+		{0, 0, 1, ia / 2, now, false, 0},
+		// No GC'able bytes, with (abs and avg) intent age=1.5*normalization.
+		{0, 0, 1, 3 * ia / 2, now, true, 1.5},
+		// No GC'able bytes, 2 intents, with avg intent age=3.5*normalization.
+		{0, 0, 2, 7 * ia, now, true, 3.5},
 		// GC'able bytes, no time elapsed.
-		{bc, 0, 0, 0, makeTS(0, 0), false, 0},
-		// GC'able bytes, avg age = TTLSeconds.
-		{bc, bc * ttl, 0, 0, makeTS(0, 0), false, 0},
+		{bc, 0, 0, 0, now, false, 0},
+		// GC'able bytes, avg age = just below TTLSeconds.
+		{bc, bc*ttl - 1, 0, 0, now, false, 0},
 		// GC'able bytes, avg age = 2*TTLSeconds.
-		{bc, 2 * bc * ttl, 0, 0, makeTS(0, 0), true, 2},
+		{bc, 2 * bc * ttl, 0, 0, now, true, 2},
 		// x2 GC'able bytes, avg age = TTLSeconds.
-		{2 * bc, 2 * bc * ttl, 0, 0, makeTS(0, 0), true, 2},
+		{2 * bc, 2 * bc * ttl, 0, 0, now, true, 2},
 		// GC'able bytes, intent bytes, and intent normalization * 2 elapsed.
-		{bc, bc * ttl, 1, 0, makeTS(iaN*2, 0), true, 5},
+		// Queues solely because of gc'able bytes.
+		{bc, 5 * bc * ttl, 10 * ia, 0, now, true, 5},
+		// A contribution of 1 from gc, 10/5 from intents.
+		{bc, bc * ttl, 5, 10 * ia, now, true, 1 + 2},
+
+		// Some tests where the ages increase since we call shouldNow with
+		// a later timestamp.
+
+		// One normalized unit of unaged gc'able bytes at time zero.
+		{ttl * bc, 0, 0, 0, roachpb.ZeroTimestamp, true, float64(now.WallTime) / 1E9},
+
+		// 2 intents aging from zero to now (which is exactly the intent age
+		// normalization).
+		{0, 0, 2, 0, roachpb.ZeroTimestamp, true, 1},
 	}
 
 	gcQ := newGCQueue(tc.gossip)
-	cfg := tc.gossip.GetSystemConfig()
-	if cfg == nil {
-		t.Fatal("nil config")
-	}
 
 	for i, test := range testCases {
 		// Write gc'able bytes as key bytes; since "live" bytes will be
@@ -100,15 +127,16 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		// intent count. Note: the actual accounting on bytes is fictional
 		// in this test.
 		stats := engine.MVCCStats{
-			KeyBytes:    test.gcBytes,
-			IntentCount: test.intentCount,
-			IntentAge:   test.intentAge,
-			GCBytesAge:  test.gcBytesAge,
+			KeyBytes:        test.gcBytes,
+			IntentCount:     test.intentCount,
+			IntentAge:       test.intentAge,
+			GCBytesAge:      test.gcBytesAge,
+			LastUpdateNanos: test.now.WallTime,
 		}
 		if err := tc.rng.stats.SetMVCCStats(tc.rng.store.Engine(), stats); err != nil {
 			t.Fatal(err)
 		}
-		shouldQ, priority := gcQ.shouldQueue(test.now, tc.rng, cfg)
+		shouldQ, priority := gcQ.shouldQueue(now, tc.rng, cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}

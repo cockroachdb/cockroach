@@ -82,19 +82,12 @@ func (rs *rangeStats) GetSize() int64 {
 	return rs.KeyBytes + rs.ValBytes
 }
 
-// MergeMVCCStats merges the results of an MVCC operation or series of
-// MVCC operations into the range's stats. The intent age is augmented
-// by multiplying the previous intent count by the elapsed nanos since
-// the last update to range stats. Stats are stored to the underlying
-// engine and the rangeStats MVCCStats updated to reflect merged totals.
-func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms *engine.MVCCStats, nowNanos int64) error {
+// MergeMVCCStats merges the results of an MVCC operation or series of MVCC
+// operations into the range's stats. Stats are stored to the underlying engine
+// and the rangeStats MVCCStats updated to reflect merged totals.
+func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms engine.MVCCStats) error {
 	rs.Lock()
 	defer rs.Unlock()
-	// Augment the current intent age.
-	diffSeconds := nowNanos/1E9 - rs.LastUpdateNanos/1E9
-	ms.LastUpdateNanos = nowNanos
-	ms.IntentAge += rs.IntentCount * diffSeconds
-	ms.GCBytesAge += engine.MVCCComputeGCBytesAge(rs.KeyBytes+rs.ValBytes-rs.LiveBytes, diffSeconds)
 	rs.MVCCStats.Add(ms)
 	return engine.MVCCSetRangeStats(e, rs.rangeID, &rs.MVCCStats)
 }
@@ -116,21 +109,17 @@ func (rs *rangeStats) GetAvgIntentAge(nowNanos int64) float64 {
 		return 0
 	}
 	// Advance age by any elapsed time since last computed.
-	elapsedSeconds := nowNanos/1E9 - rs.LastUpdateNanos/1E9
-	advancedIntentAge := rs.IntentAge + rs.IntentCount*elapsedSeconds
-	return float64(advancedIntentAge) / float64(rs.IntentCount)
+	rs.AgeTo(nowNanos)
+	return float64(rs.IntentAge) / float64(rs.IntentCount)
 }
 
 // GetGCBytesAge returns the total age of outstanding gc'able
 // bytes, based on current wall time specified via nowNanos.
+// nowNanos is ignored if it's a past timestamp as seen by
+// rs.LastUpdateNanos.
 func (rs *rangeStats) GetGCBytesAge(nowNanos int64) int64 {
 	rs.Lock()
 	defer rs.Unlock()
-	gcBytes := (rs.KeyBytes + rs.ValBytes - rs.LiveBytes)
-	if gcBytes == 0 {
-		return 0
-	}
-	// Advance gc bytes age by any elapsed time since last computed.
-	elapsedSeconds := nowNanos/1E9 - rs.LastUpdateNanos/1E9
-	return rs.GCBytesAge + engine.MVCCComputeGCBytesAge(gcBytes, elapsedSeconds)
+	rs.AgeTo(nowNanos)
+	return rs.GCBytesAge
 }

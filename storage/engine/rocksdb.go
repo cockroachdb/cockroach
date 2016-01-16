@@ -582,25 +582,26 @@ func (r *rocksDBIterator) setState(state C.DBIterState) {
 	r.value = state.value
 }
 
-func (r *rocksDBIterator) ComputeStats(ms *MVCCStats, start, end MVCCKey, nowNanos int64) error {
+func (r *rocksDBIterator) ComputeStats(start, end MVCCKey, nowNanos int64) (MVCCStats, error) {
 	result := C.MVCCComputeStats(r.iter, goToCKey(start), goToCKey(end), C.int64_t(nowNanos))
+	ms := MVCCStats{}
 	if err := statusToError(result.status); err != nil {
-		return err
+		return ms, err
 	}
-	ms.LiveBytes += int64(result.live_bytes)
-	ms.KeyBytes += int64(result.key_bytes)
-	ms.ValBytes += int64(result.val_bytes)
-	ms.IntentBytes += int64(result.intent_bytes)
-	ms.LiveCount += int64(result.live_count)
-	ms.KeyCount += int64(result.key_count)
-	ms.ValCount += int64(result.val_count)
-	ms.IntentCount += int64(result.intent_count)
-	ms.IntentAge += int64(result.intent_age)
-	ms.GCBytesAge += int64(result.gc_bytes_age)
-	ms.SysBytes += int64(result.sys_bytes)
-	ms.SysCount += int64(result.sys_count)
+	ms.LiveBytes = int64(result.live_bytes)
+	ms.KeyBytes = int64(result.key_bytes)
+	ms.ValBytes = int64(result.val_bytes)
+	ms.IntentBytes = int64(result.intent_bytes)
+	ms.LiveCount = int64(result.live_count)
+	ms.KeyCount = int64(result.key_count)
+	ms.ValCount = int64(result.val_count)
+	ms.IntentCount = int64(result.intent_count)
+	ms.IntentAge = int64(result.intent_age)
+	ms.GCBytesAge = int64(result.gc_bytes_age)
+	ms.SysBytes = int64(result.sys_bytes)
+	ms.SysCount = int64(result.sys_count)
 	ms.LastUpdateNanos = nowNanos
-	return nil
+	return ms, nil
 }
 
 // goToCSlice converts a go byte slice to a DBSlice. Note that this is

@@ -429,7 +429,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 					return nil
 				}
 				return engine.MVCCResolveWriteIntent(batch, ms,
-					span.Key, reply.Txn.Timestamp, reply.Txn)
+					span.Key, reply.Txn)
 			}
 			// For intent ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
@@ -440,7 +440,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 			}
 			if inSpan != nil {
 				_, err := engine.MVCCResolveWriteIntentRange(batch, ms,
-					inSpan.Key, inSpan.EndKey, 0, reply.Txn.Timestamp, reply.Txn)
+					inSpan.Key, inSpan.EndKey, 0, reply.Txn)
 				return err
 			}
 			return nil
@@ -1044,7 +1044,7 @@ func (r *Replica) maybePoison(batch engine.Engine, shouldPoison bool, txn roachp
 func (r *Replica) ResolveIntent(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.ResolveIntentRequest) (roachpb.ResolveIntentResponse, error) {
 	var reply roachpb.ResolveIntentResponse
 
-	if err := engine.MVCCResolveWriteIntent(batch, ms, args.Key, h.Timestamp, &args.IntentTxn); err != nil {
+	if err := engine.MVCCResolveWriteIntent(batch, ms, args.Key, &args.IntentTxn); err != nil {
 		return reply, err
 	}
 	return reply, r.maybePoison(batch, args.Poison, args.IntentTxn)
@@ -1056,7 +1056,7 @@ func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
 	h roachpb.Header, args roachpb.ResolveIntentRangeRequest) (roachpb.ResolveIntentRangeResponse, error) {
 	var reply roachpb.ResolveIntentRangeResponse
 
-	if _, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, h.Timestamp, &args.IntentTxn); err != nil {
+	if _, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, &args.IntentTxn); err != nil {
 		return reply, err
 	}
 	return reply, r.maybePoison(batch, args.Poison, args.IntentTxn)
@@ -1346,10 +1346,11 @@ func (r *Replica) computeStats(d *roachpb.RangeDescriptor, e engine.Engine, nowN
 
 	ms := &engine.MVCCStats{}
 	for _, r := range makeReplicaKeyRanges(d) {
-		err := iter.ComputeStats(ms, r.start, r.end, nowNanos)
+		msDelta, err := iter.ComputeStats(r.start, r.end, nowNanos)
 		if err != nil {
-			return *ms, err
+			return engine.MVCCStats{}, err
 		}
+		ms.Add(msDelta)
 	}
 	return *ms, nil
 }

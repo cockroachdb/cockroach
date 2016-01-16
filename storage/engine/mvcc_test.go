@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -89,6 +91,121 @@ func (n mvccKeys) Len() int           { return len(n) }
 func (n mvccKeys) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
 func (n mvccKeys) Less(i, j int) bool { return n[i].Less(n[j]) }
 
+func TestMVCCStatsAddSubAgeTo(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	goldMS := MVCCStats{
+		KeyBytes:        1,
+		KeyCount:        1,
+		ValBytes:        1,
+		ValCount:        1,
+		IntentBytes:     1,
+		IntentCount:     1,
+		IntentAge:       1,
+		GCBytesAge:      1,
+		LiveBytes:       1,
+		LiveCount:       1,
+		SysBytes:        1,
+		SysCount:        1,
+		LastUpdateNanos: 1,
+	}
+	if err := util.NoZeroField(&goldMS); err != nil {
+		t.Fatal(err) // prevent rot as fields are added
+	}
+
+	cmp := func(act, exp MVCCStats) {
+		f, l, _ := caller.Lookup(1)
+		if !reflect.DeepEqual(act, exp) {
+			t.Fatalf("%s:%d: wanted %+v back, got %+v", f, l, exp, act)
+		}
+	}
+
+	ms := goldMS
+	zeroWithLU := MVCCStats{LastUpdateNanos: ms.LastUpdateNanos}
+
+	ms.Subtract(goldMS)
+	cmp(ms, zeroWithLU)
+
+	ms.Add(goldMS)
+	cmp(ms, goldMS)
+
+	// Double-add double-sub guards against mistaking `+=` for `=`.
+	ms = zeroWithLU
+	ms.Add(goldMS)
+	ms.Add(goldMS)
+	ms.Subtract(goldMS)
+	ms.Subtract(goldMS)
+	cmp(ms, zeroWithLU)
+
+	// Run some checks for AgeTo.
+	goldDelta := MVCCStats{
+		KeyBytes:        42,
+		IntentCount:     11,
+		LastUpdateNanos: 1e9 - 1000,
+	}
+	delta := goldDelta
+
+	for i, ns := range []int64{1, 1e9 - 1001, 1e9 - 1000, 1E9 - 1, 1E9, 1E9 + 1, 2E9 - 1} {
+		oldDelta := delta
+		delta.AgeTo(ns)
+		if delta.LastUpdateNanos < ns {
+			t.Fatalf("%d: expected LastUpdateNanos < %d, got %d", i, ns, delta.LastUpdateNanos)
+		}
+		shouldAge := ns/1E9-oldDelta.LastUpdateNanos/1E9 > 0
+		didAge := delta.IntentAge != oldDelta.IntentAge &&
+			delta.GCBytesAge != oldDelta.GCBytesAge
+		if shouldAge != didAge {
+			t.Fatalf("%d: should age: %t, but had\n%+v\nand now\n%+v", i, shouldAge, oldDelta, delta)
+		}
+	}
+
+	expDelta := goldDelta
+	expDelta.LastUpdateNanos = 2E9 - 1
+	expDelta.GCBytesAge = 42
+	expDelta.IntentAge = 11
+	cmp(delta, expDelta)
+
+	delta.AgeTo(2E9)
+	expDelta.LastUpdateNanos = 2E9
+	expDelta.GCBytesAge += 42
+	expDelta.IntentAge += 11
+	cmp(delta, expDelta)
+
+	delta.AgeTo(3E9 - 1)
+	delta.AgeTo(5) // should be noop
+	expDelta.LastUpdateNanos = 3E9 - 1
+	cmp(delta, expDelta)
+
+	// Check that Add calls AgeTo appropriately.
+	mss := []MVCCStats{goldMS, goldMS}
+
+	mss[0].LastUpdateNanos = 2E9 - 1
+	mss[1].LastUpdateNanos = 10E9 + 1
+
+	expMS := goldMS
+	expMS.Add(goldMS)
+	expMS.LastUpdateNanos = 10E9 + 1
+	expMS.IntentAge += 9  // from aging 9 ticks from 2E9-1 to 10E9+1
+	expMS.GCBytesAge += 9 // ditto
+
+	for i := range mss[:1] {
+		ms := mss[(1+i)%2]
+		ms.Add(mss[i])
+		cmp(ms, expMS)
+	}
+
+	// Finally, check AgeTo with negative counts (can happen).
+	neg := zeroWithLU
+	neg.Subtract(goldMS)
+	exp := neg
+
+	neg.AgeTo(2E9)
+
+	exp.LastUpdateNanos = 2E9
+	exp.GCBytesAge = -3
+	exp.IntentAge = -3
+	cmp(neg, exp)
+}
+
 // Verify the sort ordering of successive keys with metadata and
 // versioned values. In particular, the following sequence of keys /
 // versions:
@@ -141,7 +258,7 @@ func TestMVCCEmptyKey(t *testing.T) {
 	if _, _, err := MVCCScan(engine, testKey1, roachpb.Key{}, 0, makeTS(0, 1), true, nil); err == nil {
 		t.Error("expected empty key error")
 	}
-	if err := MVCCResolveWriteIntent(engine, nil, roachpb.Key{}, makeTS(0, 1), txn1); err == nil {
+	if err := MVCCResolveWriteIntent(engine, nil, roachpb.Key{}, txn1); err == nil {
 		t.Error("expected empty key error")
 	}
 }
@@ -1378,7 +1495,7 @@ func TestMVCCResolveTxn(t *testing.T) {
 	}
 
 	// Resolve will write with txn1's timestamp which is 0,1.
-	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(0, 1), txn1Commit); err != nil {
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, txn1Commit); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1438,8 +1555,11 @@ func TestMVCCAbortTxn(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
+	txn1Abort := txn1Abort.Clone()
+	txn1Abort.Timestamp = makeTS(0, 1)
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(0, 1), txn1Abort)
+	err = MVCCResolveWriteIntent(engine, nil, testKey1, txn1Abort)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1466,10 +1586,13 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
+	txn1Abort := txn1Abort.Clone()
+	txn1Abort.Timestamp = makeTS(2, 0)
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil)
 	err = MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, nil)
 	err = MVCCPut(engine, nil, testKey1, makeTS(2, 0), value3, txn1)
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(2, 0), txn1Abort)
+	err = MVCCResolveWriteIntent(engine, nil, testKey1, txn1Abort)
 	if err := engine.Commit(); err != nil {
 		t.Fatal(err)
 	}
@@ -1522,7 +1645,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Resolve the intent.
-	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(1, 0), makeTxn(txn1e2Commit, makeTS(1, 0))); err != nil {
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTxn(txn1e2Commit, makeTS(1, 0))); err != nil {
 		t.Fatal(err)
 	}
 	// Now try writing an earlier intent--should get WriteTooOldError.
@@ -1632,7 +1755,7 @@ func TestMVCCReadWithPushedTimestamp(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Resolve the intent, pushing its timestamp forward.
-	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(0, 1), makeTxn(txn1, makeTS(1, 0))); err != nil {
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTxn(txn1, makeTS(1, 0))); err != nil {
 		t.Fatal(err)
 	}
 	// Attempt to read using naive txn's previous timestamp.
@@ -1654,7 +1777,7 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 	if err := MVCCPut(engine, nil, testKey2, makeTS(0, 1), value2, txn1e2); err != nil {
 		t.Fatal(err)
 	}
-	num, err := MVCCResolveWriteIntentRange(engine, nil, testKey1, testKey2.Next(), 2, makeTS(0, 1), txn1e2Commit)
+	num, err := MVCCResolveWriteIntentRange(engine, nil, testKey1, testKey2.Next(), 2, txn1e2Commit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1700,7 +1823,7 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 
 	// Resolve with a higher commit timestamp -- this should rewrite the
 	// intent when making it permanent.
-	if err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(1, 0), makeTxn(txn1Commit, makeTS(1, 0))); err != nil {
+	if err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTxn(txn1Commit, makeTS(1, 0))); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1741,7 +1864,7 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 
 	// Resolve with a higher commit timestamp, but with still-pending transaction.
 	// This represents a straightforward push (i.e. from a read/write conflict).
-	if err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(1, 0), makeTxn(txn1, makeTS(1, 0))); err != nil {
+	if err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTxn(txn1, makeTS(1, 0))); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1770,21 +1893,23 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 	engine := createTestEngine(stopper)
 
 	// Resolve a non existent key; noop.
-	err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(0, 1), txn1Commit)
+	err := MVCCResolveWriteIntent(engine, nil, testKey1, txn1Commit)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Add key and resolve despite there being no intent.
 	err = MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil)
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(0, 1), txn2Commit)
+	err = MVCCResolveWriteIntent(engine, nil, testKey1, txn2Commit)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Write intent and resolve with different txn.
 	err = MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, txn1)
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(1, 0), txn2Commit)
+	txn2Commit := txn2Commit.Clone()
+	txn2Commit.Timestamp = makeTS(1, 0)
+	err = MVCCResolveWriteIntent(engine, nil, testKey1, txn2Commit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1809,7 +1934,7 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	num, err := MVCCResolveWriteIntentRange(engine, nil, testKey1, testKey4.Next(), 0, makeTS(0, 1), txn1Commit)
+	num, err := MVCCResolveWriteIntentRange(engine, nil, testKey1, testKey4.Next(), 0, txn1Commit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2162,6 +2287,9 @@ func verifyStats(debug string, ms *MVCCStats, expMS *MVCCStats, t *testing.T) {
 	if ms.IntentCount != expMS.IntentCount {
 		t.Errorf("%s: mvcc intentCount %d; expected %d", debug, ms.IntentCount, expMS.IntentCount)
 	}
+	if ms.LastUpdateNanos != expMS.LastUpdateNanos {
+		t.Fatalf("%s: mvcc lastUpdateNanos %d; expected %d", debug, ms.LastUpdateNanos, expMS.LastUpdateNanos)
+	}
 	if ms.IntentAge != expMS.IntentAge {
 		t.Errorf("%s: mvcc intentAge %d; expected %d", debug, ms.IntentAge, expMS.IntentAge)
 	}
@@ -2205,14 +2333,18 @@ func TestMVCCStatsBasic(t *testing.T) {
 	vValSize := int64(len(value.RawBytes))
 
 	expMS := MVCCStats{
-		LiveBytes: mKeySize + vKeySize + vValSize,
-		LiveCount: 1,
-		KeyBytes:  mKeySize + vKeySize,
-		KeyCount:  1,
-		ValBytes:  vValSize,
-		ValCount:  1,
+		LiveBytes:       mKeySize + vKeySize + vValSize,
+		LiveCount:       1,
+		KeyBytes:        mKeySize + vKeySize,
+		KeyCount:        1,
+		ValBytes:        vValSize,
+		ValCount:        1,
+		LastUpdateNanos: 1E9,
 	}
 	verifyStats("after put", ms, &expMS, t)
+	if e, a := int64(0), ms.GCBytes(); e != a {
+		t.Fatalf("GCBytes: expected %d, got %d", e, a)
+	}
 
 	// Delete the value using a transaction.
 	txn := &roachpb.Transaction{ID: []byte("txn1"), Timestamp: makeTS(1*1E9, 0)}
@@ -2223,37 +2355,51 @@ func TestMVCCStatsBasic(t *testing.T) {
 	m2ValSize := encodedSize(&MVCCMetadata{Timestamp: ts2, Deleted: true, Txn: txn}, t)
 	v2KeySize := mvccVersionTimestampSize
 	v2ValSize := int64(0)
+
 	expMS2 := MVCCStats{
-		KeyBytes:    mKeySize + vKeySize + v2KeySize,
-		KeyCount:    1,
-		ValBytes:    m2ValSize + vValSize + v2ValSize,
-		ValCount:    2,
-		IntentBytes: v2KeySize + v2ValSize,
-		IntentCount: 1,
-		IntentAge:   0,
-		GCBytesAge:  vValSize + vKeySize, // immediately recognizes GC'able bytes from old value
+		KeyBytes:        mKeySize + vKeySize + v2KeySize,
+		KeyCount:        1,
+		ValBytes:        m2ValSize + vValSize + v2ValSize,
+		ValCount:        2,
+		IntentBytes:     v2KeySize + v2ValSize,
+		IntentCount:     1,
+		IntentAge:       0,
+		GCBytesAge:      vValSize + vKeySize, // immediately recognizes GC'able bytes from old value at 1E9
+		LastUpdateNanos: 2E9,
 	}
 	verifyStats("after delete", ms, &expMS2, t)
+	// This is expMS2.KeyBytes + expMS2.ValBytes - expMS2.LiveBytes
+	expGC2 := mKeySize + vKeySize + v2KeySize + m2ValSize + vValSize + v2ValSize
+	if a := ms.GCBytes(); expGC2 != a {
+		t.Fatalf("GCBytes: expected %d, got %d", expGC2, a)
+	}
 
 	// Resolve the deletion by aborting it.
 	txn.Status = roachpb.ABORTED
-	if err := MVCCResolveWriteIntent(engine, ms, key, ts2, txn); err != nil {
+	txn.Timestamp.Forward(ts2)
+	if err := MVCCResolveWriteIntent(engine, ms, key, txn); err != nil {
 		t.Fatal(err)
 	}
 	// Stats should equal same as before the deletion after aborting the intent.
+	expMS.LastUpdateNanos = 2E9
 	verifyStats("after abort", ms, &expMS, t)
 
 	// Re-delete, but this time, we're going to commit it.
 	txn.Status = roachpb.PENDING
 	ts3 := makeTS(3*1E9, 0)
+	txn.Timestamp.Forward(ts3)
 	if err := MVCCDelete(engine, ms, key, ts3, txn); err != nil {
 		t.Fatal(err)
 	}
-	// GCBytesAge will be x2 seconds now.
+	// GCBytesAge will now count the deleted value from ts=1E9 to ts=3E9.
 	expMS2.GCBytesAge = (vValSize + vKeySize) * 2
+	expMS2.LastUpdateNanos = 3E9
 	verifyStats("after 2nd delete", ms, &expMS2, t) // should be same as before.
+	if a := ms.GCBytes(); expGC2 != a {
+		t.Fatalf("GCBytes: expected %d, got %d", expGC2, a)
+	}
 
-	// Put another intent, which should age deleted intent.
+	// Write a second transactional value (i.e. an intent).
 	ts4 := makeTS(4*1E9, 0)
 	txn.Timestamp = ts4
 	key2 := roachpb.Key("b")
@@ -2274,29 +2420,73 @@ func TestMVCCStatsBasic(t *testing.T) {
 		LiveCount:   1,
 		IntentBytes: v2KeySize + v2ValSize + vKey2Size + vVal2Size,
 		IntentCount: 2,
-		GCBytesAge:  (vValSize + vKeySize) * 2,
+		IntentAge:   1,
+		// It gets interesting: The first term is the contribution from the
+		// deletion of the first put (written at 1s, deleted at 3s). From 3s
+		// to 4s, on top of that we age the intent's meta entry plus deletion
+		// tombstone on top of that (expGC2).
+		GCBytesAge:      (vValSize+vKeySize)*2 + expGC2,
+		LastUpdateNanos: 4E9,
 	}
+
+	expGC3 := expGC2 // no change, didn't delete anything
 	verifyStats("after 2nd put", ms, &expMS3, t)
+	if a := ms.GCBytes(); expGC3 != a {
+		t.Fatalf("GCBytes: expected %d, got %d", expGC3, a)
+	}
 
 	// Now commit both values.
 	txn.Status = roachpb.COMMITTED
-	if err := MVCCResolveWriteIntent(engine, ms, key, ts4, txn); err != nil {
-		t.Fatal(err)
-	}
-	if err := MVCCResolveWriteIntent(engine, ms, key2, ts4, txn); err != nil {
+	if err := MVCCResolveWriteIntent(engine, ms, key, txn); err != nil {
 		t.Fatal(err)
 	}
 	expMS4 := MVCCStats{
-		KeyBytes:   mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
-		KeyCount:   2,
-		ValBytes:   vValSize + v2ValSize + vVal2Size,
-		ValCount:   3,
-		LiveBytes:  mKey2Size + vKey2Size + vVal2Size,
-		LiveCount:  1,
-		IntentAge:  -1,
-		GCBytesAge: (vValSize + vKeySize) * 2,
+		KeyBytes:    mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
+		KeyCount:    2,
+		ValBytes:    vValSize + v2ValSize + mVal2Size + vVal2Size,
+		ValCount:    3,
+		LiveBytes:   mKey2Size + vKey2Size + mVal2Size + vVal2Size,
+		LiveCount:   1,
+		IntentBytes: vKey2Size + vVal2Size,
+		IntentCount: 1,
+		// The commit turned the explicit deletion intent meta back into an
+		// implicit one; so we see the originally written value which is now 3s
+		// old, plus the implicit meta key contribution (basically the key
+		// prefix) along with the deletion tombstone kv pair.
+		// You could also write this as
+		//	(vValSize+vKeySize)*2 + (expGC3 - m2ValSize)
+		// as we do in the second commit.
+		GCBytesAge:      (vValSize+vKeySize)*3 + (mKeySize + v2ValSize + v2KeySize),
+		LastUpdateNanos: 4E9,
 	}
-	verifyStats("after commit", ms, &expMS4, t)
+	verifyStats("after first commit", ms, &expMS4, t)
+
+	// With commit of the deletion intent, what really happens is that the
+	// explicit meta (carrying the intent) becomes implicit (so its key
+	// gets counted in the same way by convention, but its value is now empty).
+	expGC4 := expGC3 - m2ValSize
+	if a := ms.GCBytes(); expGC4 != a {
+		t.Fatalf("GCBytes: expected %d, got %d", expGC4, a)
+	}
+
+	if err := MVCCResolveWriteIntent(engine, ms, key2, txn); err != nil {
+		t.Fatal(err)
+	}
+	expMS4 = MVCCStats{
+		KeyBytes:        mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
+		KeyCount:        2,
+		ValBytes:        vValSize + v2ValSize + vVal2Size,
+		ValCount:        3,
+		LiveBytes:       mKey2Size + vKey2Size + vVal2Size,
+		LiveCount:       1,
+		IntentAge:       0,
+		GCBytesAge:      (vValSize+vKeySize)*2 + (expGC3 - m2ValSize),
+		LastUpdateNanos: 4E9,
+	}
+	verifyStats("after second commit", ms, &expMS4, t)
+	if a := ms.GCBytes(); expGC4 != a { // no change here
+		t.Fatalf("GCBytes: expected %d, got %d", expGC4, a)
+	}
 
 	// Write over existing value to create GC'able bytes.
 	ts5 := makeTS(10*1E9, 0) // skip ahead 6s
@@ -2307,7 +2497,9 @@ func TestMVCCStatsBasic(t *testing.T) {
 	expMS5.KeyBytes += vKey2Size
 	expMS5.ValBytes += vVal2Size
 	expMS5.ValCount = 4
-	expMS5.GCBytesAge += (vKey2Size + vVal2Size) * 6 // since we skipped ahead 6s
+	// The age increases: 6 seconds for each key2 and key.
+	expMS5.GCBytesAge += (vKey2Size+vVal2Size)*6 + expGC4*6
+	expMS5.LastUpdateNanos = 10E9
 	verifyStats("after overwrite", ms, &expMS5, t)
 
 	// Write a transaction record which is a system-local key.
@@ -2347,15 +2539,14 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 			log.Infof("*** cycle %d", i)
 		}
 		// Manually advance aggregate intent age based on one extra second of simulation.
-		ms.IntentAge += ms.IntentCount
 		// Same for aggregate gc'able bytes age.
-		ms.GCBytesAge += ms.KeyBytes + ms.ValBytes - ms.LiveBytes
 
 		key := []byte(fmt.Sprintf("%s-%d", randutil.RandBytes(rng, int(rng.Int31n(32))), i))
 		keys[i] = key
+		ts := makeTS(int64(i+1)*1E9, 0)
 		var txn *roachpb.Transaction
 		if rng.Int31n(2) == 0 { // create a txn with 50% prob
-			txn = &roachpb.Transaction{ID: []byte(fmt.Sprintf("txn-%d", i)), Timestamp: makeTS(int64(i+1)*1E9, 0)}
+			txn = &roachpb.Transaction{ID: []byte(fmt.Sprintf("txn-%d", i)), Timestamp: ts}
 		}
 		// With 25% probability, put a new value; otherwise, delete an earlier
 		// key. Because an earlier step in this process may have itself been
@@ -2367,21 +2558,26 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 			if log.V(1) {
 				log.Infof("*** DELETE index %d", idx)
 			}
-			if err := MVCCDelete(engine, ms, keys[idx], makeTS(int64(i+1)*1E9, 0), txn); err != nil {
+			if err := MVCCDelete(engine, ms, keys[idx], ts, txn); err != nil {
 				// Abort any write intent on an earlier, unresolved txn.
 				if wiErr, ok := err.(*roachpb.WriteIntentError); ok {
 					wiErr.Intents[0].Txn.Status = roachpb.ABORTED
 					if log.V(1) {
 						log.Infof("*** ABORT index %d", idx)
 					}
-					if err := MVCCResolveWriteIntent(engine, ms, keys[idx], makeTS(int64(i+1)*1E9, 0), &wiErr.Intents[0].Txn); err != nil {
+					// Note that this already incorporates committing an intent
+					// at a later time (since we use a potentially later ts here
+					// for the resolution).
+					intentTxn := wiErr.Intents[0].Txn.Clone()
+					intentTxn.Timestamp = ts
+					if err := MVCCResolveWriteIntent(engine, ms, keys[idx], intentTxn); err != nil {
 						t.Fatal(err)
 					}
 					// Now, re-delete.
 					if log.V(1) {
 						log.Infof("*** RE-DELETE index %d", idx)
 					}
-					if err := MVCCDelete(engine, ms, keys[idx], makeTS(int64(i+1)*1E9, 0), txn); err != nil {
+					if err := MVCCDelete(engine, ms, keys[idx], ts, txn); err != nil {
 						t.Fatal(err)
 					}
 				} else {
@@ -2393,7 +2589,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 			if log.V(1) {
 				log.Infof("*** PUT index %d; TXN=%t", i, txn != nil)
 			}
-			if err := MVCCPut(engine, ms, key, makeTS(int64(i+1)*1E9, 0), rngVal, txn); err != nil {
+			if err := MVCCPut(engine, ms, key, ts, rngVal, txn); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -2405,17 +2601,17 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 			if log.V(1) {
 				log.Infof("*** RESOLVE index %d; COMMIT=%t", i, txn.Status == roachpb.COMMITTED)
 			}
-			if err := MVCCResolveWriteIntent(engine, ms, key, makeTS(int64(i+1)*1E9, 0), txn); err != nil {
+			if err := MVCCResolveWriteIntent(engine, ms, key, txn); err != nil {
 				t.Fatal(err)
 			}
 		}
 
+		ms.AgeTo(ts.WallTime) // a noop may not have updated the stats
 		// Every 10th step, verify the stats via manual engine scan.
 		if i%10 == 0 {
 			// Compute the stats manually.
 			iter := engine.NewIterator(false)
-			var expMS MVCCStats
-			err := iter.ComputeStats(&expMS, mvccKey(roachpb.KeyMin),
+			expMS, err := iter.ComputeStats(mvccKey(roachpb.KeyMin),
 				mvccKey(roachpb.KeyMax), int64(i+1)*1E9)
 			iter.Close()
 			if err != nil {
@@ -2457,9 +2653,6 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	}
 
 	for i := 0; i < 3; i++ {
-		// Manually advance aggregate gc'able bytes age based on one extra second of simulation.
-		ms.GCBytesAge += ms.KeyBytes + ms.ValBytes - ms.LiveBytes
-
 		for _, test := range testData {
 			if i >= len(test.vals) {
 				continue
@@ -2520,8 +2713,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 
 	// Verify aggregated stats match computed stats after GC.
 	iter := engine.NewIterator(false)
-	var expMS MVCCStats
-	err = iter.ComputeStats(&expMS, mvccKey(roachpb.KeyMin),
+	expMS, err := iter.ComputeStats(mvccKey(roachpb.KeyMin),
 		mvccKey(roachpb.KeyMax), ts3.WallTime)
 	iter.Close()
 	if err != nil {
@@ -2542,9 +2734,8 @@ func TestMVCCComputeStatsError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var ms MVCCStats
 	iter := engine.NewIterator(false)
-	err := iter.ComputeStats(&ms, mvccKey(roachpb.KeyMin),
+	_, err := iter.ComputeStats(mvccKey(roachpb.KeyMin),
 		mvccKey(roachpb.KeyMax), 100)
 	iter.Close()
 	if e := "unable to decode MVCCMetadata"; !testutils.IsError(err, e) {
@@ -2611,10 +2802,10 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 	}
 }
 
-// TestResovleIntentWithLowerEpoch verifies that trying to resolve
+// TestResolveIntentWithLowerEpoch verifies that trying to resolve
 // an intent at an epoch that is lower than the epoch of the intent
 // leaves the intent untouched.
-func TestResovleIntentWithLowerEpoch(t *testing.T) {
+func TestResolveIntentWithLowerEpoch(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -2625,7 +2816,7 @@ func TestResovleIntentWithLowerEpoch(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Resolve the intent with a low epoch.
-	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(0, 1), txn1); err != nil {
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, txn1); err != nil {
 		t.Fatal(err)
 	}
 

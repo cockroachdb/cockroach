@@ -349,11 +349,11 @@ func TestNodeStatusRecorder(t *testing.T) {
 	}
 	// Use base stats to generate expected summary stat values.
 	for i := 0; i < 3; i++ {
-		expectedStoreSummaries[0].Stats.Add(&stats)
+		expectedStoreSummaries[0].Stats.Add(stats)
 	}
-	expectedStoreSummaries[1].Stats.Add(&stats)
+	expectedStoreSummaries[1].Stats.Add(stats)
 	for _, ss := range expectedStoreSummaries {
-		expectedNodeSummary.Stats.Add(&ss.Stats)
+		expectedNodeSummary.Stats.Add(ss.Stats)
 	}
 
 	nodeSummary, storeSummaries := recorder.GetStatusSummaries()

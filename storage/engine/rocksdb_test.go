@@ -461,7 +461,8 @@ func runMVCCMerge(value *roachpb.Value, numKeys int, b *testing.B) {
 		for pb.Next() {
 			ms := MVCCStats{}
 			ts.Logical++
-			if err := MVCCMerge(rocksdb, &ms, keys[rand.Intn(numKeys)], ts, *value); err != nil {
+			err := MVCCMerge(rocksdb, &ms, keys[rand.Intn(numKeys)], ts, *value)
+			if err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -558,10 +559,10 @@ func runMVCCComputeStats(valueBytes int, b *testing.B) {
 	b.ResetTimer()
 
 	var stats MVCCStats
+	var err error
 	for i := 0; i < b.N; i++ {
 		iter := rocksdb.NewIterator(false)
-		stats = MVCCStats{}
-		err := iter.ComputeStats(&stats, mvccKey(roachpb.KeyMin), mvccKey(roachpb.KeyMax), 0)
+		stats, err = iter.ComputeStats(mvccKey(roachpb.KeyMin), mvccKey(roachpb.KeyMax), 0)
 		iter.Close()
 		if err != nil {
 			b.Fatal(err)
