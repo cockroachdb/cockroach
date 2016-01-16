@@ -83,7 +83,9 @@ func (r rpcError) CanRetry() bool { return true }
 // sendOneFn is overwritten in tests to mock sendOne.
 var sendOneFn = sendOne
 
-// NewSendError creates a SendError.
+// NewSendError creates a SendError. canRetry should be true in most
+// cases; the only non-retryable SendErrors are for things like
+// malformed (and not merely unresolvable) addresses.
 func NewSendError(msg string, canRetry bool) *roachpb.SendError {
 	return &roachpb.SendError{Message: msg, Retryable: canRetry}
 }
