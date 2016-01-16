@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/shopspring/decimal"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
@@ -499,6 +500,12 @@ func (p parameters) Arg(name string) (parser.Datum, bool) {
 		return parser.DInt(t.IntVal), true
 	case *driver.Datum_FloatVal:
 		return parser.DFloat(t.FloatVal), true
+	case *driver.Datum_DecimalVal:
+		d, err := decimal.NewFromString(t.DecimalVal)
+		if err != nil {
+			return nil, false
+		}
+		return parser.DDecimal{Decimal: d}, true
 	case *driver.Datum_BytesVal:
 		return parser.DBytes(t.BytesVal), true
 	case *driver.Datum_StringVal:
@@ -545,6 +552,8 @@ func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
 		return parser.DTimestamp{Time: t}, true
 	case time.Duration:
 		return parser.DInterval{Duration: t}, true
+	case decimal.Decimal:
+		return parser.DDecimal{Decimal: t}, true
 	}
 
 	// Handle all types which have an underlying type that can be stored in the
@@ -591,6 +600,10 @@ func makeDriverDatum(datum parser.Datum) (driver.Datum, *roachpb.Error) {
 	case parser.DFloat:
 		return driver.Datum{
 			Payload: &driver.Datum_FloatVal{FloatVal: float64(vt)},
+		}, nil
+	case parser.DDecimal:
+		return driver.Datum{
+			Payload: &driver.Datum_StringVal{StringVal: vt.Decimal.String()},
 		}, nil
 	case parser.DBytes:
 		return driver.Datum{

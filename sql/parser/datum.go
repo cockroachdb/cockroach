@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/shopspring/decimal"
 )
 
 var (
@@ -35,6 +36,8 @@ var (
 	DummyInt Datum = DInt(0)
 	// DummyFloat is a placeholder DFloat value.
 	DummyFloat Datum = DFloat(0)
+	// DummyDecimal is a placeholder DDecimal value.
+	DummyDecimal Datum = DDecimal{}
 	// DummyString is a placeholder DString value.
 	DummyString Datum = DString("")
 	// DummyBytes is a placeholder DBytes value.
@@ -53,6 +56,7 @@ var (
 	boolType      = reflect.TypeOf(DummyBool)
 	intType       = reflect.TypeOf(DummyInt)
 	floatType     = reflect.TypeOf(DummyFloat)
+	decimalType   = reflect.TypeOf(DummyDecimal)
 	stringType    = reflect.TypeOf(DummyString)
 	bytesType     = reflect.TypeOf(DummyBytes)
 	dateType      = reflect.TypeOf(DummyDate)
@@ -304,6 +308,61 @@ func (d DFloat) String() string {
 		}
 	}
 	return strconv.FormatFloat(float64(d), fmt, prec, 64)
+}
+
+// DDecimal is the decimal Datum.
+type DDecimal struct {
+	decimal.Decimal
+}
+
+// Type implements the Datum interface.
+func (d DDecimal) Type() string {
+	return "decimal"
+}
+
+// Compare implements the Datum interface.
+func (d DDecimal) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := other.(DDecimal)
+	if !ok {
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+	}
+	return d.Cmp(v.Decimal)
+}
+
+// HasPrev implements the Datum interface.
+func (d DDecimal) HasPrev() bool {
+	return false
+}
+
+// Prev implements the Datum interface.
+func (d DDecimal) Prev() Datum {
+	panic(d.Type() + ".Prev() not supported")
+}
+
+// Next implements the Datum interface.
+func (d DDecimal) Next() Datum {
+	// TODO(nvanbenschoten) How can we get this? decimal.Decimal
+	// supports up to 2^31 digits after the decimal point. Probably
+	// going to based on the roachpb.Value encoding we use.
+	panic(d.Type() + ".Next() not supported")
+}
+
+// IsMax implements the Datum interface.
+func (d DDecimal) IsMax() bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d DDecimal) IsMin() bool {
+	return false
+}
+
+func (d DDecimal) String() string {
+	return d.Decimal.String()
 }
 
 // DString is the string Datum.
