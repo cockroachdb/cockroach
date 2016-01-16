@@ -45,6 +45,7 @@ github.com/peterh/liner d5e5aeeb67ca5aeeddeb0b6c3af05421ff63a0b6
 github.com/rcrowley/go-metrics 51425a2415d21afadfd55cd93432c0bc69e9598d
 github.com/robfig/glock cb3c3ec56de988289cab7bbd284eddc04dfee6c9
 github.com/samalba/dockerclient 548a5825c12336eb640190d7eb253e155fc286ad
+github.com/shopspring/decimal af95951b3f91e0748623df28c8756ed65f805161
 github.com/spf13/cobra 9c9300901990faada0c5fb3b5730f452585c7c2b
 github.com/spf13/pflag 7f60f83a2c81bc3c3c0d5297f61ddfa68da9d3b7
 github.com/tebeka/go2xunit fff0d031ea2b81ed06c367293219e4bc005235d0
