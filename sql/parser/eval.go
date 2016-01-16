@@ -723,7 +723,11 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		case DInt:
 			return d, nil
 		case DFloat:
-			return DInt(v), nil
+			f, err := round(float64(v), 0)
+			if err != nil {
+				panic(fmt.Sprintf("round should never fail with digits hardcoded to 0: %s", err))
+			}
+			return DInt(f.(DFloat)), nil
 		case DString:
 			i, err := strconv.ParseInt(string(v), 0, 64)
 			if err != nil {
