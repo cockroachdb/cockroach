@@ -641,7 +641,10 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 	if !s.Scan() {
 		t.Fatalf("Error reading column names: %s", s.Err())
 	}
-	cols := extractFields(s.Text())
+	cols, err := extractFields(s.Text())
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
 	if !reflect.DeepEqual(cols, nodesColumnHeaders) {
 		t.Fatalf("columns (%s) don't match expected (%s)", cols, nodesColumnHeaders)
 	}
@@ -652,9 +655,9 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 	if !s.Scan() {
 		t.Fatalf("error reading node status: %s", s.Err())
 	}
-	fields := extractFields(s.Text())
-	if a, e := len(fields), len(nodesColumnHeaders); a != e {
-		t.Fatalf("# of fields for node status (%d) != expected (%d)", a, e)
+	fields, err := extractFields(s.Text())
+	if err != nil {
+		t.Fatalf("%s", err)
 	}
 
 	nodeID := c.Gossip().GetNodeID()
@@ -738,13 +741,18 @@ func checkTimeElapsed(t *testing.T, timeStr string, elapsed time.Duration, start
 
 // extractFields extracts the fields from a pretty-printed row of SQL output,
 // discarding excess whitespace and column separators.
-func extractFields(line string) []string {
+func extractFields(line string) ([]string, error) {
 	fields := strings.Split(line, "|")
+	// fields has two extra entries, one for the empty token to the left of the first
+	// |, and another empty one to the right of the final |. So, we need to take those
+	// out.
+	if a, e := len(fields), len(nodesColumnHeaders)+2; a != e {
+		return nil, util.Errorf("can't extract fields: # of fields (%d) != expected (%d)", a, e)
+	}
+	fields = fields[1 : len(fields)-1]
 	var r []string
 	for _, f := range fields {
-		if f != "" {
-			r = append(r, strings.TrimSpace(f))
-		}
+		r = append(r, strings.TrimSpace(f))
 	}
-	return r
+	return r, nil
 }
