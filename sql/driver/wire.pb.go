@@ -1527,7 +1527,10 @@ func (m *Request) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Session = append([]byte{}, data[iNdEx:postIndex]...)
+			m.Session = append(m.Session[:0], data[iNdEx:postIndex]...)
+			if m.Session == nil {
+				m.Session = []byte{}
+			}
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -1665,7 +1668,10 @@ func (m *Response) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Session = append([]byte{}, data[iNdEx:postIndex]...)
+			m.Session = append(m.Session[:0], data[iNdEx:postIndex]...)
+			if m.Session == nil {
+				m.Session = []byte{}
+			}
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {

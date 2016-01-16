@@ -512,7 +512,10 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.RawBytes = append([]byte{}, data[iNdEx:postIndex]...)
+			m.RawBytes = append(m.RawBytes[:0], data[iNdEx:postIndex]...)
+			if m.RawBytes == nil {
+				m.RawBytes = []byte{}
+			}
 			iNdEx = postIndex
 		case 7:
 			if wireType != 2 {

@@ -82,7 +82,8 @@ func runPrettyQueryWithFormat(db *sql.DB, w io.Writer, format fmtMap, query stri
 	if err != nil {
 		return err
 	}
-	return printQueryOutput(w, cols, allRows)
+	printQueryOutput(w, cols, allRows)
+	return nil
 }
 
 // sqlRowsToStrings turns 'rows' into a list of rows, each of which
@@ -129,11 +130,11 @@ func sqlRowsToStrings(rows *sql.Rows, format fmtMap) ([]string, [][]string, erro
 
 // printQueryOutput takes a list of column names and a list of row contents
 // writes a pretty table to 'w', or "OK" if empty.
-func printQueryOutput(w io.Writer, cols []string, allRows [][]string) error {
+func printQueryOutput(w io.Writer, cols []string, allRows [][]string) {
 	if len(cols) == 0 {
 		// This operation did not return rows, just show success.
 		fmt.Fprintln(w, "OK")
-		return nil
+		return
 	}
 
 	// Initialize tablewriter and set column names as the header row.
@@ -143,13 +144,10 @@ func printQueryOutput(w io.Writer, cols []string, allRows [][]string) error {
 	table.SetHeader(cols)
 
 	for _, row := range allRows {
-		if err := table.Append(row); err != nil {
-			return err
-		}
+		table.Append(row)
 	}
 
 	table.Render()
-	return nil
 }
 
 func formatVal(val interface{}) string {

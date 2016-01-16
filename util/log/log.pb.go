@@ -581,7 +581,10 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Key = append([]byte{}, data[iNdEx:postIndex]...)
+			m.Key = append(m.Key[:0], data[iNdEx:postIndex]...)
+			if m.Key == nil {
+				m.Key = []byte{}
+			}
 			iNdEx = postIndex
 		case 13:
 			if wireType != 2 {
@@ -609,7 +612,10 @@ func (m *LogEntry) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Stacks = append([]byte{}, data[iNdEx:postIndex]...)
+			m.Stacks = append(m.Stacks[:0], data[iNdEx:postIndex]...)
+			if m.Stacks == nil {
+				m.Stacks = []byte{}
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -745,7 +751,10 @@ func (m *LogEntry_Arg) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Json = append([]byte{}, data[iNdEx:postIndex]...)
+			m.Json = append(m.Json[:0], data[iNdEx:postIndex]...)
+			if m.Json == nil {
+				m.Json = []byte{}
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
