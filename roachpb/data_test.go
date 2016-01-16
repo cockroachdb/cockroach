@@ -483,20 +483,25 @@ func TestMakePriority(t *testing.T) {
 	normalPris := make([]int32, 0, trials)
 	for i, userPri := range userPs {
 		priWins := 0
+		priLosses := 0
 		for j := 0; j < trials; j++ {
 			if i == 0 {
 				normalPris = append(normalPris, MakePriority(1))
 			}
-			if MakePriority(userPri) >= normalPris[j] {
+			pri := MakePriority(userPri)
+			if pri > normalPris[j] {
 				priWins++
+			} else if pri < normalPris[j] {
+				priLosses++
 			}
 		}
 		// Special case to verify that specifying 0 has same effect as specifying 1.
 		if userPri == 0 {
 			userPri = 1
 		}
-		diff := math.Abs(float64(priWins)/float64(trials-priWins) - float64(userPri))
-		t.Logf("%d: multiple=%f, diff=%f, wins: %d", i, float64(priWins)/float64(trials-priWins), diff, priWins)
+		multiple := float64(priWins) / float64(priLosses)
+		diff := math.Abs(multiple - float64(userPri))
+		t.Logf("%d: multiple=%f, diff=%f, wins: %d, losses: %d", i, multiple, diff, priWins, priLosses)
 		if d := diff / float64(userPri); d > 1 {
 			t.Errorf("%d: measured difference from expected exceeded limit %.2f > 1", i, d)
 		}
