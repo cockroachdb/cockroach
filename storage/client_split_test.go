@@ -816,7 +816,6 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 // so it still has a conflicting range.
 func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("TODO(bdarnell): https://github.com/cockroachdb/cockroach/issues/3121")
 	mtc, leftKey, rightKey := setupSplitSnapshotRace(t)
 	defer mtc.Stop()
 
