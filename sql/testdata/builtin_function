@@ -380,10 +380,10 @@ SELECT right('abcde💩', 2)
 ----
 e💩
 
-query RRRII
-SELECT abs(-1.2), abs(1.2), abs(-0.0), abs(0), abs(1)
+query RRRIIR
+SELECT abs(-1.2), abs(1.2), abs(-0.0), abs(0), abs(1), abs(-1.2121::decimal)
 ----
-1.2 1.2 0 0 1
+1.2 1.2 0 0 1 1.2121
 
 query error abs: abs of min integer value \(-9223372036854775808\) not defined
 SELECT abs(-9223372036854775808)
@@ -398,76 +398,87 @@ SELECT abs(sin(pi())) < 1e-12
 ----
 true
 
-query RR
-SELECT acos(-0.5), acos(0.5)
+query RRR
+SELECT acos(-0.5), acos(0.5), acos(0.75::decimal)
 ----
-2.0943951023931957 1.0471975511965976
+2.0943951023931957 1.0471975511965976 0.7227342478134156
+
+query RRRR
+SELECT asin(-0.5), asin(0.5), asin(1.5), asin(0.75::decimal)
+----
+-0.5235987755982989 0.5235987755982989 NaN 0.848062078981481
 
 query RRR
-SELECT asin(-0.5), asin(0.5), asin(1.5)
+SELECT atan(-0.5), atan(0.5), atan(0.75::decimal)
 ----
--0.5235987755982989 0.5235987755982989 NaN
-
-query RR
-SELECT atan(-0.5), atan(0.5)
-----
--0.4636476090008061 0.4636476090008061
-
-query RR
-SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0)
-----
--1.1071487177940904 1.1071487177940904
+-0.4636476090008061 0.4636476090008061 0.6435011087932844
 
 query RRR
-SELECT ceil(-0.5), ceil(0.5), ceiling(0.5)
+SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0), atan2(7.5::decimal, 5.0::decimal)
 ----
--0 1 1
-
-query RR
-SELECT cos(-0.5), cos(0.5)
-----
-0.8775825618903728 0.8775825618903728
-
-query RR
-SELECT degrees(-0.5), degrees(0.5)
-----
--28.64788975654116 28.64788975654116
+-1.1071487177940904 1.1071487177940904 0.982793723247329
 
 query RRR
-SELECT div(-1.0, 2.0), div(1.0, 2.0), div(1.0, 0.0)
+SELECT cbrt(-1.0), cbrt(27.0), cbrt(19.3::decimal)
 ----
--0.5 0.5 +Inf
+-1 3 2.682372592629673
+
+query RRRRR
+SELECT ceil(-0.5), ceil(0.5), ceiling(0.5), ceil(0.1::decimal), ceiling(-0.9::decimal)
+----
+-0 1 1 1 0
+
+query RRR
+SELECT cos(-0.5), cos(0.5), cos(0.75::decimal)
+----
+0.8775825618903728 0.8775825618903728 0.7316888688738209
+
+query RRR
+SELECT degrees(-0.5), degrees(0.5), degrees(0.5::decimal)
+----
+-28.64788975654116 28.64788975654116 28.6478897565411626
+
+query RRRR
+SELECT div(-1.0, 2.0), div(1.0, 2.0), div(1.0, 0.0), div(1111.0::decimal, 9.44::decimal)
+----
+-0.5 0.5 +Inf 117.6906779661016949
+
+query error div: division by zero
+SELECT div(1.0::decimal, 0.0::decimal)
+
+query RRR
+SELECT exp(-1.0), exp(1.0), exp(2.0::decimal)
+----
+0.36787944117144233 2.718281828459045 7.38905609893065
+
+query RRR
+SELECT floor(-1.5), floor(1.5), floor(9.123456789::decimal)
+----
+-2 1 9
+
+query RRR
+SELECT ln(-2.0), ln(2.0), ln(2.5::decimal)
+----
+NaN 0.6931471805599453 0.9162907318741551
 
 query RR
-SELECT exp(-1.0), exp(1.0)
+SELECT log(10.0), log(100.000::decimal)
 ----
-0.36787944117144233 2.718281828459045
+1 2
 
-query RR
-SELECT floor(-1.5), floor(1.5)
+query RRIR
+SELECT mod(5.0, 2.0), mod(1.0, 0.0), mod(5, 2), mod(19.3::decimal, 2::decimal)
 ----
--2 1
-
-query RR
-SELECT ln(-2.0), ln(2.0)
-----
-NaN 0.6931471805599453
-
-query R
-SELECT log(10.0)
-----
-1
-
-query RRI
-SELECT mod(5.0, 2.0), mod(1.0, 0.0), mod(5, 2)
-----
-1 NaN 1
+1 NaN 1 1.3
 
 # mod returns the same results as PostgreSQL 9.4.4
 # in tests below (except for the error message).
 
 query error mod: zero modulus
 SELECT mod(5, 0)
+
+query error mod: zero modulus
+SELECT mod(5::decimal, 0::decimal)
 
 query II
 SELECT mod(-100, -8), mod(-100, 8)
@@ -514,15 +525,15 @@ SELECT pi()
 ----
 3.141592653589793
 
-query RR
-SELECT pow(-3.0, 2.0), pow(3.0, 2.0)
+query RRR
+SELECT pow(-3.0, 2.0), power(3.0, 2.0), pow(5.0::decimal, 2.0::decimal)
 ----
-9 9
+9 9 25
 
-query RR
-SELECT radians(-45.0), radians(45.0)
+query RRR
+SELECT radians(-45.0), radians(45.0), radians(60.0::decimal)
 ----
--0.7853981633974483 0.7853981633974483
+-0.7853981633974483 0.7853981633974483 1.0471975511965976
 
 # Our implementation of round is not fully Postgres-compatible because we do
 # not allow negative numbers of digits.
@@ -530,10 +541,10 @@ SELECT radians(-45.0), radians(45.0)
 query error round: number of digits must be greater than 0
 SELECT round(41.2, -1)
 
-query RR
-SELECT round(4.2, 0), round(4.2, 50)
+query RRR
+SELECT round(4.2, 0), round(4.2, 50), round(4.22222222::decimal, 3)
 ----
-4 4.2
+4 4.2 4.222
 
 query R
 SELECT round(1e-308, 324)
@@ -550,6 +561,17 @@ query RRRRRR
 SELECT round(-2.5), round(-1.5), round(-0.0), round(0.0), round(1.5), round(2.5)
 ----
 -2 -2 -0 0 2 2
+
+# round up for decimals
+query RRRR
+SELECT round(-2.5::decimal, 0), round(-1.5::decimal, 0), round(1.5::decimal, 0), round(2.5::decimal, 0)
+----
+-3 -2 2 3
+
+query RRRRR
+SELECT round(-2.5::decimal), round(-1.5::decimal), round(0.0::decimal), round(1.5::decimal), round(2.5::decimal)
+----
+-3 -2 0 2 3
 
 # Test rounding to 14 digits, because the logic test itself
 # formats floats rounded to 15 digits behind the decimal point.
@@ -579,25 +601,25 @@ SELECT sin(-1.0), sin(0.0), sin(1.0)
 ----
 -0.8414709848078965 0 0.8414709848078965
 
-query RR
-SELECT sqrt(-1.0), sqrt(4.0)
+query RRR
+SELECT sin(-1.0::decimal), sin(0.0::decimal), sin(1.0::decimal)
 ----
-NaN 2
-
-query RR
-SELECT cbrt(-1.0), cbrt(27.0)
-----
--1 3
+-0.8414709848078965 0 0.8414709848078965
 
 query RRR
-SELECT tan(-5.0), tan(0.0), tan(5.0)
+SELECT sqrt(-1.0), sqrt(4.0), sqrt(9.0::decimal)
 ----
-3.3805150062465854 0 -3.3805150062465854
+NaN 2 3
 
-query RRR
-SELECT trunc(-0.0), trunc(0.0), trunc(1.9)
+query RRRR
+SELECT tan(-5.0), tan(0.0), tan(5.0), tan(2.5::decimal)
 ----
--0 0 1
+3.3805150062465854 0 -3.3805150062465854 -0.7470222972386603
+
+query RRRR
+SELECT trunc(-0.0), trunc(0.0), trunc(1.9), trunc(19.5678::decimal)
+----
+-0 0 1 19
 
 query T
 SELECT translate('Techonthenet.com', 'e.to', '456')
@@ -805,5 +827,59 @@ true true false false
 
 query BBBB
 select 1 >= 1.0, 1.0 >= 1, 1.0 >= 2, 1 >= 2.0
+----
+true true false false
+
+# Test decimal and int comparison.
+
+query BBBB
+select 1 = 1.0::decimal, 1.0::decimal = 1, 1 = 2.0::decimal, 2.0::decimal = 1
+----
+true true false false
+
+query BBBB
+select 1 < 2.0::decimal, 1.0::decimal < 2, 2.0::decimal < 1, 2 < 1.0::decimal
+----
+true true false false
+
+query BBBB
+select 1 <= 1.0::decimal, 1.0::decimal <= 1, 2.0::decimal <= 1, 2 <= 1.0::decimal
+----
+true true false false
+
+query BBBB
+select 2 > 1.0::decimal, 2.0::decimal > 1, 1 > 2.0::decimal, 1.0::decimal > 2
+----
+true true false false
+
+query BBBB
+select 1 >= 1.0::decimal, 1.0::decimal >= 1, 1.0::decimal >= 2, 1 >= 2.0::decimal
+----
+true true false false
+
+# Test float and decimal comparison.
+
+query BBBB
+select 1::decimal = 1.0, 1.0 = 1::decimal, 1::decimal = 2.0, 2.0 = 1::decimal
+----
+true true false false
+
+query BBBB
+select 1::decimal < 2.0, 1.0 < 2::decimal, 2.0 < 1::decimal, 2::decimal < 1.0
+----
+true true false false
+
+query BBBB
+select 1::decimal <= 1.0, 1.0 <= 1::decimal, 2.0 <= 1::decimal, 2::decimal <= 1.0
+----
+true true false false
+
+query BBBB
+select 2::decimal > 1.0, 2.0 > 1::decimal, 1::decimal > 2.0, 1.0 > 2::decimal
+----
+true true false false
+
+query BBBB
+select 1::decimal >= 1.0, 1.0 >= 1::decimal, 1.0 >= 2::decimal, 1::decimal >= 2.0
 ----
 true true false false

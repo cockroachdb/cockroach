@@ -42,6 +42,7 @@ message Datum {
     int64 date_val = 6;
     Timestamp time_val = 7;
     int64 interval_val = 8;
+    string decimal_val = 9;
   }
 
   // TODO(pmattis): How to add end-to-end checksumming? Just adding a checksum

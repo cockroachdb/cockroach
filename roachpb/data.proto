@@ -60,6 +60,7 @@ enum ValueType {
   FLOAT = 2;
   BYTES = 3;
   TIME = 4;
+  DECIMAL = 5;
 
   // TIMESERIES is applied to values which contain InternalTimeSeriesData.
   TIMESERIES = 100;

@@ -31,6 +31,7 @@ const (
 	ValueType_FLOAT   ValueType = 2
 	ValueType_BYTES   ValueType = 3
 	ValueType_TIME    ValueType = 4
+	ValueType_DECIMAL ValueType = 5
 	// TIMESERIES is applied to values which contain InternalTimeSeriesData.
 	ValueType_TIMESERIES ValueType = 100
 )
@@ -41,6 +42,7 @@ var ValueType_name = map[int32]string{
 	2:   "FLOAT",
 	3:   "BYTES",
 	4:   "TIME",
+	5:   "DECIMAL",
 	100: "TIMESERIES",
 }
 var ValueType_value = map[string]int32{
@@ -49,6 +51,7 @@ var ValueType_value = map[string]int32{
 	"FLOAT":      2,
 	"BYTES":      3,
 	"TIME":       4,
+	"DECIMAL":    5,
 	"TIMESERIES": 100,
 }
 
