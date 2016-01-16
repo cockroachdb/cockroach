@@ -540,7 +540,10 @@ func (m *ConfChangeContext) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Payload = append([]byte{}, data[iNdEx:postIndex]...)
+			m.Payload = append(m.Payload[:0], data[iNdEx:postIndex]...)
+			if m.Payload == nil {
+				m.Payload = []byte{}
+			}
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {

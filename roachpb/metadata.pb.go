@@ -835,7 +835,10 @@ func (m *RangeDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.StartKey = append([]byte{}, data[iNdEx:postIndex]...)
+			m.StartKey = append(m.StartKey[:0], data[iNdEx:postIndex]...)
+			if m.StartKey == nil {
+				m.StartKey = []byte{}
+			}
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -863,7 +866,10 @@ func (m *RangeDescriptor) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.EndKey = append([]byte{}, data[iNdEx:postIndex]...)
+			m.EndKey = append(m.EndKey[:0], data[iNdEx:postIndex]...)
+			if m.EndKey == nil {
+				m.EndKey = []byte{}
+			}
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
@@ -991,7 +997,10 @@ func (m *RangeTree) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.RootKey = append([]byte{}, data[iNdEx:postIndex]...)
+			m.RootKey = append(m.RootKey[:0], data[iNdEx:postIndex]...)
+			if m.RootKey == nil {
+				m.RootKey = []byte{}
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -1069,7 +1078,10 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Key = append([]byte{}, data[iNdEx:postIndex]...)
+			m.Key = append(m.Key[:0], data[iNdEx:postIndex]...)
+			if m.Key == nil {
+				m.Key = []byte{}
+			}
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
@@ -1117,7 +1129,10 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ParentKey = append([]byte{}, data[iNdEx:postIndex]...)
+			m.ParentKey = append(m.ParentKey[:0], data[iNdEx:postIndex]...)
+			if m.ParentKey == nil {
+				m.ParentKey = []byte{}
+			}
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
@@ -1145,7 +1160,10 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.LeftKey = append([]byte{}, data[iNdEx:postIndex]...)
+			m.LeftKey = append(m.LeftKey[:0], data[iNdEx:postIndex]...)
+			if m.LeftKey == nil {
+				m.LeftKey = []byte{}
+			}
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
@@ -1173,7 +1191,10 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.RightKey = append([]byte{}, data[iNdEx:postIndex]...)
+			m.RightKey = append(m.RightKey[:0], data[iNdEx:postIndex]...)
+			if m.RightKey == nil {
+				m.RightKey = []byte{}
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
