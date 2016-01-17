@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/shopspring/decimal"
+	"github.com/cockroachdb/decimal"
 )
 
 var (
@@ -343,11 +343,13 @@ func (d DDecimal) Prev() Datum {
 	panic(d.Type() + ".Prev() not supported")
 }
 
+// HasNext implements the Datum interface.
+func (d DDecimal) HasNext() bool {
+	return false
+}
+
 // Next implements the Datum interface.
 func (d DDecimal) Next() Datum {
-	// TODO(nvanbenschoten) How can we get this? decimal.Decimal
-	// supports up to 2^31 digits after the decimal point. Probably
-	// going to based on the roachpb.Value encoding we use.
 	panic(d.Type() + ".Next() not supported")
 }
 

@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	"github.com/shopspring/decimal"
+	"github.com/cockroachdb/decimal"
 )
 
 var errEmptyInputString = errors.New("the input string must not be empty")
@@ -702,22 +702,31 @@ var builtins = map[string][]builtin{
 		},
 	},
 
-	"acos": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
-		return DFloat(math.Acos(x)), nil
-	}),
+	"acos": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Acos(x)), nil
+		}),
+	},
 
-	"asin": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
-		return DFloat(math.Asin(x)), nil
-	}),
+	"asin": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Asin(x)), nil
+		}),
+	},
 
-	"atan": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
-		return DFloat(math.Atan(x)), nil
-	}),
+	"atan": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Atan(x)), nil
+		}),
+	},
 
-	"atan2": floatOrDecimalBuiltin2(func(x, y float64) (Datum, error) {
-		return DFloat(math.Atan2(x, y)), nil
-	}),
+	"atan2": {
+		floatBuiltin2(func(x, y float64) (Datum, error) {
+			return DFloat(math.Atan2(x, y)), nil
+		}),
+	},
 
+	// TODO(nvanbenschoten) Add native support for decimal.
 	"cbrt": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
 		return DFloat(math.Cbrt(x)), nil
 	}),
@@ -725,9 +734,11 @@ var builtins = map[string][]builtin{
 	"ceil":    ceilImpl,
 	"ceiling": ceilImpl,
 
-	"cos": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
-		return DFloat(math.Cos(x)), nil
-	}),
+	"cos": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Cos(x)), nil
+		}),
+	},
 
 	"cot": {
 		floatBuiltin1(func(x float64) (Datum, error) {
@@ -739,11 +750,6 @@ var builtins = map[string][]builtin{
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return DFloat(180.0 * x / math.Pi), nil
 		}),
-		decimalBuiltin1(func(x decimal.Decimal) (Datum, error) {
-			oneEighty := decimal.New(180, 0)
-			pi := decimal.NewFromFloat(math.Pi)
-			return DDecimal{Decimal: oneEighty.Mul(x).Div(pi)}, nil
-		}),
 	},
 
 	"div": {
@@ -754,10 +760,11 @@ var builtins = map[string][]builtin{
 			if y.Equals(decimal.Zero) {
 				return nil, errDivByZero
 			}
-			return DDecimal{Decimal: x.Div(y)}, nil
+			return DDecimal{Decimal: x.Div(y).Truncate(0)}, nil
 		}),
 	},
 
+	// TODO(nvanbenschoten) Add native support for decimal.
 	"exp": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
 		return DFloat(math.Exp(x)), nil
 	}),
@@ -771,10 +778,12 @@ var builtins = map[string][]builtin{
 		}),
 	},
 
+	// TODO(nvanbenschoten) Add native support for decimal.
 	"ln": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
 		return DFloat(math.Log(x)), nil
 	}),
 
+	// TODO(nvanbenschoten) Add native support for decimal.
 	"log": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
 		return DFloat(math.Log10(x)), nil
 	}),
@@ -818,9 +827,11 @@ var builtins = map[string][]builtin{
 	"pow":   powImpls,
 	"power": powImpls,
 
-	"radians": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
-		return DFloat(x * math.Pi / 180.0), nil
-	}),
+	"radians": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(x * math.Pi / 180.0), nil
+		}),
+	},
 
 	"round": {
 		floatBuiltin1(func(x float64) (Datum, error) {
@@ -845,9 +856,11 @@ var builtins = map[string][]builtin{
 		},
 	},
 
-	"sin": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
-		return DFloat(math.Sin(x)), nil
-	}),
+	"sin": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Sin(x)), nil
+		}),
+	},
 
 	"sign": {
 		floatBuiltin1(func(x float64) (Datum, error) {
@@ -878,13 +891,16 @@ var builtins = map[string][]builtin{
 		},
 	},
 
+	// TODO(nvanbenschoten) Add native support for decimal.
 	"sqrt": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
 		return DFloat(math.Sqrt(x)), nil
 	}),
 
-	"tan": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
-		return DFloat(math.Tan(x)), nil
-	}),
+	"tan": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Tan(x)), nil
+		}),
+	},
 
 	"trunc": {
 		floatBuiltin1(func(x float64) (Datum, error) {
@@ -1009,6 +1025,7 @@ var nowImpl = builtin{
 	},
 }
 
+// TODO(nvanbenschoten) Add native support for decimal.
 var powImpls = floatOrDecimalBuiltin2(func(x, y float64) (Datum, error) {
 	return DFloat(math.Pow(x, y)), nil
 })

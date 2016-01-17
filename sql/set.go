@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/shopspring/decimal"
+	"github.com/cockroachdb/decimal"
 )
 
 // Set sets session variables.

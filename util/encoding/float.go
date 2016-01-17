@@ -60,23 +60,9 @@ func EncodeFloatAscending(b []byte, f float64) []byte {
 	case f == 0:
 		return append(b, floatZero)
 	}
-	e, m := floatMandE(b, f)
-
-	var buf []byte
-	if n := len(m) + maxVarintSize + 2; n <= cap(b)-len(b) {
-		buf = b[len(b) : len(b)+n]
-	} else {
-		buf = make([]byte, len(m)+maxVarintSize+2)
-	}
-	switch {
-	case e < 0:
-		return append(b, encodeSmallNumber(f < 0, e, m, buf)...)
-	case e >= 0 && e <= 10:
-		return append(b, encodeMediumNumber(f < 0, e, m, buf)...)
-	case e >= 11:
-		return append(b, encodeLargeNumber(f < 0, e, m, buf)...)
-	}
-	return nil
+	// TODO(nvanbenschoten) Switch to a base-256 mantissa.
+	e, m := floatMandE(b[len(b):], f)
+	return encodeMandE(b, f < 0, e, m)
 }
 
 // EncodeFloatDescending is the descending version of EncodeFloatAscending.
@@ -90,20 +76,20 @@ func EncodeFloatDescending(b []byte, f float64) []byte {
 // DecodeFloatAscending returns the remaining byte slice after decoding and the decoded
 // float64 from buf.
 func DecodeFloatAscending(buf []byte, tmp []byte) ([]byte, float64, error) {
-	if buf[0] == floatZero {
+	// Handle the simplistic cases first.
+	switch buf[0] {
+	case floatNaN, floatNaNDesc:
+		return buf[1:], math.NaN(), nil
+	case floatInfinity:
+		return buf[1:], math.Inf(1), nil
+	case floatNegativeInfinity:
+		return buf[1:], math.Inf(-1), nil
+	case floatZero:
 		return buf[1:], 0, nil
 	}
 	tmp = tmp[len(tmp):cap(tmp)]
 	idx := bytes.Index(buf, []byte{floatTerminator})
 	switch {
-	case buf[0] == floatNaN:
-		return buf[1:], math.NaN(), nil
-	case buf[0] == floatNaNDesc:
-		return buf[1:], math.NaN(), nil
-	case buf[0] == floatInfinity:
-		return buf[1:], math.Inf(1), nil
-	case buf[0] == floatNegativeInfinity:
-		return buf[1:], math.Inf(-1), nil
 	case buf[0] == floatNegLarge:
 		// Negative large.
 		e, m := decodeLargeNumber(true, buf[:idx+1], tmp)
@@ -154,7 +140,7 @@ func DecodeFloatDescending(buf []byte, tmp []byte) ([]byte, float64, error) {
 // If we assume all digits of the mantissa occur to the right of the decimal
 // point, then the exponent E is the power of one hundred by which one must
 // multiply the mantissa to recover the original value.
-func floatMandE(b []byte, f float64) (int, []byte) {
+func floatMandE(tmp []byte, f float64) (int, []byte) {
 	if f < 0 {
 		f = -f
 	}
@@ -162,39 +148,39 @@ func floatMandE(b []byte, f float64) (int, []byte) {
 	// Use strconv.FormatFloat to handle the intricacies of determining how much
 	// precision is necessary to precisely represent f. The 'e' format is
 	// d.dddde±dd.
-	b = strconv.AppendFloat(b[len(b):], f, 'e', -1, 64)
-	if len(b) < 4 {
+	tmp = strconv.AppendFloat(tmp, f, 'e', -1, 64)
+	if len(tmp) < 4 {
 		// The formatted float must be at least 4 bytes ("1e+0") or something
 		// unexpected has occurred.
-		panic(fmt.Sprintf("malformed float: %v -> %s", f, b))
+		panic(fmt.Sprintf("malformed float: %v -> %s", f, tmp))
 	}
 
 	// Parse the exponent.
-	e := bytes.IndexByte(b, 'e')
+	e := bytes.IndexByte(tmp, 'e')
 	e10 := 0
-	for i := e + 2; i < len(b); i++ {
-		e10 = e10*10 + int(b[i]-'0')
+	for i := e + 2; i < len(tmp); i++ {
+		e10 = e10*10 + int(tmp[i]-'0')
 	}
-	switch b[e+1] {
+	switch tmp[e+1] {
 	case '-':
 		e10 = -e10
 	case '+':
 	default:
-		panic(fmt.Sprintf("malformed float: %v -> %s", f, b))
+		panic(fmt.Sprintf("malformed float: %v -> %s", f, tmp))
 	}
 
 	// Strip off the exponent.
-	b = b[:e]
+	tmp = tmp[:e]
 
 	// Move all of the digits after the decimal and prepend a leading 0.
-	if len(b) > 1 {
+	if len(tmp) > 1 {
 		// "d.dddd" -> "dddddd"
-		b[1] = b[0]
+		tmp[1] = tmp[0]
 	} else {
 		// "d" -> "dd"
-		b = append(b, b[0])
+		tmp = append(tmp, tmp[0])
 	}
-	b[0] = '0' // "0ddddd"
+	tmp[0] = '0' // "0ddddd"
 	e10++
 
 	// Convert the power-10 exponent to a power of 100 exponent.
@@ -207,19 +193,19 @@ func floatMandE(b []byte, f float64) (int, []byte) {
 	// Strip the leading 0 if the conversion to e100 did not add a multiple of
 	// 10.
 	if e100*2 == e10 {
-		b = b[1:]
+		tmp = tmp[1:]
 	}
 
 	// Ensure that the number of digits is even.
-	if len(b)%2 != 0 {
-		b = append(b, '0')
+	if len(tmp)%2 != 0 {
+		tmp = append(tmp, '0')
 	}
 
 	// Convert the base-10 'b' slice to a base-100 'm' slice. We do this
 	// conversion in place to avoid an allocation.
-	m := b[:len(b)/2]
-	for i := 0; i < len(b); i += 2 {
-		accum := 10*int(b[i]-'0') + int(b[i+1]-'0')
+	m := tmp[:len(tmp)/2]
+	for i := 0; i < len(tmp); i += 2 {
+		accum := 10*int(tmp[i]-'0') + int(tmp[i+1]-'0')
 		// The bytes are encoded as 2n+1.
 		m[i/2] = byte(2*accum + 1)
 	}
@@ -280,6 +266,24 @@ func makeFloatFromMandE(negative bool, e int, m []byte, tmp []byte) float64 {
 		panic(err)
 	}
 	return f
+}
+
+func encodeMandE(b []byte, negative bool, e int, m []byte) []byte {
+	var buf []byte
+	if n := len(m) + maxVarintSize + 2; n <= cap(b)-len(b) {
+		buf = b[len(b) : len(b)+n]
+	} else {
+		buf = make([]byte, n)
+	}
+	switch {
+	case e < 0:
+		return append(b, encodeSmallNumber(negative, e, m, buf)...)
+	case e >= 0 && e <= 10:
+		return append(b, encodeMediumNumber(negative, e, m, buf)...)
+	case e >= 11:
+		return append(b, encodeLargeNumber(negative, e, m, buf)...)
+	}
+	panic("unreachable")
 }
 
 func encodeSmallNumber(negative bool, e int, m []byte, buf []byte) []byte {

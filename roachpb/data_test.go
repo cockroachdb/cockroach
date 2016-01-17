@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/uuid"
+	"github.com/cockroachdb/decimal"
 )
 
 // TestKeyNext tests that the method for creating lexicographic
@@ -297,14 +298,30 @@ func TestSetGetChecked(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	v.SetFloat(1.1)
-	if _, err := v.GetFloat(); err != nil {
+	f := 1.1
+	v.SetFloat(f)
+	if r, err := v.GetFloat(); err != nil {
 		t.Fatal(err)
+	} else if f != r {
+		t.Errorf("set %f on a value and extracted it, expected %f back, but got %f", f, f, r)
 	}
 
-	v.SetInt(1)
-	if _, err := v.GetInt(); err != nil {
+	i := int64(1)
+	v.SetInt(i)
+	if r, err := v.GetInt(); err != nil {
 		t.Fatal(err)
+	} else if i != r {
+		t.Errorf("set %d on a value and extracted it, expected %d back, but got %d", i, i, r)
+	}
+
+	d := decimal.New(11, -1)
+	if err := v.SetDecimal(d); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := v.GetDecimal(); err != nil {
+		t.Fatal(err)
+	} else if !d.Equals(r) {
+		t.Errorf("set %s on a value and extracted it, expected %s back, but got %s", d, d, r)
 	}
 
 	if err := v.SetProto(&Value{}); err != nil {
@@ -324,9 +341,12 @@ func TestSetGetChecked(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	v.SetTime(time.Time{})
-	if _, err := v.GetTime(); err != nil {
+	ti := time.Time{}
+	v.SetTime(ti)
+	if r, err := v.GetTime(); err != nil {
 		t.Fatal(err)
+	} else if !ti.Equal(r) {
+		t.Errorf("set %s on a value and extracted it, expected %s back, but got %s", ti, ti, r)
 	}
 }
 
