@@ -212,7 +212,7 @@ func datumFromProto(d driver.Datum) parser.Datum {
 	case *driver.Datum_DecimalVal:
 		dec, err := decimal.NewFromString(t.DecimalVal)
 		if err != nil {
-			return panic(err)
+			panic(fmt.Sprintf("could not parse decimal: %v", err))
 		}
 		return parser.DDecimal{Decimal: dec}
 	case *driver.Datum_BytesVal:

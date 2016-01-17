@@ -61,10 +61,10 @@ func TestFloatMandE(t *testing.T) {
 		{1e-307, -153, []byte{0x14}},
 		{1e308, 155, []byte{0x2}},
 		// The following value cannot be precisely represented as a float.
-		// {9223372036854775807, 10, []byte{0x93, 0x2d, 0x43, 0x91, 0x07, 0x89, 0x6d, 0x9b, 0x75, 0x0e}},
+		// {9223372036854775807, 10, []byte{0x13, 0x2d, 0x43, 0x91, 0x07, 0x89, 0x6d, 0x9b, 0x75, 0x0e}},
 	}
 	for _, c := range testCases {
-		if e, m := floatMandE(nil, c.Value); e != c.E || !bytes.Equal(m, c.M) {
+		if e, m := floatMandE(c.Value, nil); e != c.E || !bytes.Equal(m, c.M) {
 			t.Errorf("unexpected mismatch in E/M for %v. expected E=%v | M=[% x], got E=%v | M=[% x]",
 				c.Value, c.E, c.M, e, m)
 		}

@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/shopspring/decimal"
+	"github.com/cockroachdb/decimal"
 )
 
 var aggregates = map[string]func() aggregateImpl{

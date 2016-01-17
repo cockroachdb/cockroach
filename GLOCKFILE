@@ -20,6 +20,7 @@ github.com/cockroachdb/c-lz4 c40aaae2fc50293eb8750b34632bc3efe813e23f
 github.com/cockroachdb/c-protobuf 4feb192131ea08dfbd7253a00868ad69cbb61b81
 github.com/cockroachdb/c-rocksdb b7fb7bddcb55be35eacdf67e9e2c931083ce02c4
 github.com/cockroachdb/c-snappy 5c6d0932e0adaffce4bfca7bdf2ac37f79952ccf
+github.com/cockroachdb/decimal 5c4ecc7240b4ae5f60895cb8a5c5bc948a39bbba
 github.com/cockroachdb/yacc 443154b1852a8702b07d675da6cd97cd9177a316
 github.com/codahale/hdrhistogram 954f16e8b9ef0e5d5189456aa4c1202758e04f17
 github.com/coreos/etcd 8199147cf859882f625523446c28ae2e53b2432f
@@ -47,7 +48,6 @@ github.com/peterh/liner d5e5aeeb67ca5aeeddeb0b6c3af05421ff63a0b6
 github.com/rcrowley/go-metrics 51425a2415d21afadfd55cd93432c0bc69e9598d
 github.com/robfig/glock cb3c3ec56de988289cab7bbd284eddc04dfee6c9
 github.com/samalba/dockerclient 548a5825c12336eb640190d7eb253e155fc286ad
-github.com/shopspring/decimal af95951b3f91e0748623df28c8756ed65f805161
 github.com/spf13/cobra 9c9300901990faada0c5fb3b5730f452585c7c2b
 github.com/spf13/pflag 7f60f83a2c81bc3c3c0d5297f61ddfa68da9d3b7
 github.com/tebeka/go2xunit fff0d031ea2b81ed06c367293219e4bc005235d0

@@ -30,7 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/shopspring/decimal"
+	"github.com/cockroachdb/decimal"
 )
 
 var (
@@ -322,14 +322,12 @@ var binOps = map[binArgs]binOp{
 	binArgs{Mod, decimalType, decimalType}: {
 		returnType: DummyDecimal,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-			// TODO(nvanbenschoten) change to .Mod once PR goes through
 			l := left.(DDecimal)
 			r := right.(DDecimal)
 			if r.Equals(decimal.Zero) {
 				return nil, errZeroModulus
 			}
-			quo := l.Div(r.Decimal).Truncate(0)
-			return DDecimal{Decimal: l.Sub(r.Mul(quo))}, nil
+			return DDecimal{Decimal: l.Mod(r.Decimal)}, nil
 		},
 	},
 

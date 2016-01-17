@@ -21,11 +21,12 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strconv"
 	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/shopspring/decimal"
+	"github.com/cockroachdb/decimal"
 )
 
 const (
@@ -641,36 +642,6 @@ func DecodeTimeDescending(b []byte) ([]byte, time.Time, error) {
 	return b, time.Unix(sec, nsec), nil
 }
 
-// EncodeDecimalAscending ... TODO(nvanbenschoten)
-func EncodeDecimalAscending(b []byte, d decimal.Decimal) []byte {
-	return EncodeStringAscending(b, d.String())
-}
-
-// EncodeDecimalDescending ... TODO(nvanbenschoten)
-func EncodeDecimalDescending(b []byte, d decimal.Decimal) []byte {
-	return EncodeStringDescending(b, d.String())
-}
-
-// DecodeDecimalAscending ... TODO(nvanbenschoten)
-func DecodeDecimalAscending(b []byte) ([]byte, decimal.Decimal, error) {
-	b, s, err := DecodeStringAscending(b, nil)
-	if err != nil {
-		return b, decimal.Decimal{}, err
-	}
-	d, err := decimal.NewFromString(s)
-	return b, d, err
-}
-
-// DecodeDecimalDescending ... TODO(nvanbenschoten)
-func DecodeDecimalDescending(b []byte) ([]byte, decimal.Decimal, error) {
-	b, s, err := DecodeStringDescending(b, nil)
-	if err != nil {
-		return b, decimal.Decimal{}, err
-	}
-	d, err := decimal.NewFromString(s)
-	return b, d, err
-}
-
 // Type represents the type of a value encoded by
 // Encode{Null,NotNull,Varint,Uvarint,Float,Bytes}.
 type Type int
@@ -712,4 +683,91 @@ func PeekType(b []byte) Type {
 		}
 	}
 	return Unknown
+}
+
+// PrettyPrintValue returns the string representation of all contiguous decodable
+// values in the provided byte slice, separated by a provided separator.
+func PrettyPrintValue(b []byte, sep string) string {
+	var buf bytes.Buffer
+	for len(b) > 0 {
+		bb, s, err := prettyPrintFirstValue(b)
+		if err != nil {
+			fmt.Fprintf(&buf, "%s<%v>", sep, err)
+		} else {
+			fmt.Fprintf(&buf, "%s%s", sep, s)
+		}
+		b = bb
+	}
+	return buf.String()
+}
+
+// prettyPrintFirstValue returns a string representation of the first decodable
+// value in the provided byte slice, along with the remaining byte slice
+// after decoding.
+func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
+	var err error
+	switch PeekType(b) {
+	case Null:
+		b, _ = DecodeIfNull(b)
+		return b, "NULL", nil
+	case NotNull:
+		b, _ = DecodeIfNotNull(b)
+		return b, "#", nil
+	case Int:
+		var i int64
+		b, i, err = DecodeVarintAscending(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, strconv.FormatInt(i, 10), nil
+	case Float:
+		// Handle float specific values separately.
+		switch b[0] {
+		case floatNaN, floatNaNDesc:
+			return b[1:], strconv.FormatFloat(math.NaN(), 'e', -1, 64), nil
+		case floatInfinity:
+			return b[1:], strconv.FormatFloat(math.Inf(1), 'e', -1, 64), nil
+		case floatNegativeInfinity:
+			return b[1:], strconv.FormatFloat(math.Inf(-1), 'e', -1, 64), nil
+		}
+		// Decode both floats and decimals as decimals to avoid
+		// overflow.
+		var d decimal.Decimal
+		b, d, err = DecodeDecimalAscending(b, nil)
+		if err != nil {
+			return b, "", err
+		}
+		return b, d.String(), nil
+	case Bytes:
+		var s string
+		b, s, err = DecodeStringAscending(b, nil)
+		if err != nil {
+			return b, "", err
+		}
+		return b, strconv.Quote(s), nil
+	case BytesDesc:
+		var s string
+		b, s, err = DecodeStringDescending(b, nil)
+		if err != nil {
+			return b, "", err
+		}
+		return b, strconv.Quote(s), nil
+	case Time:
+		var t time.Time
+		b, t, err = DecodeTimeAscending(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, t.UTC().Format(time.UnixDate), nil
+	case TimeDesc:
+		var t time.Time
+		b, t, err = DecodeTimeDescending(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, t.UTC().Format(time.UnixDate), nil
+	default:
+		// This shouldn't ever happen, but if it does, return an empty slice.
+		return nil, strconv.Quote(string(b)), nil
+	}
 }

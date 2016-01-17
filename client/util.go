@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/decimal"
 	"github.com/gogo/protobuf/proto"
-	"github.com/shopspring/decimal"
 )
 
 // TODO(pmattis): The methods in this file needs tests.
@@ -67,8 +67,8 @@ func marshalValue(v interface{}) (roachpb.Value, error) {
 		return r, nil
 
 	case decimal.Decimal:
-		r.SetDecimal(t)
-		return r, nil
+		err := r.SetDecimal(t)
+		return r, err
 
 	case roachpb.Key:
 		r.SetBytes([]byte(t))
