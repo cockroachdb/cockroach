@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/util/uuid"
+	"github.com/cockroachdb/decimal"
 )
 
 // TestKeyNext tests that the method for creating lexicographic
@@ -305,6 +306,11 @@ func TestSetGetChecked(t *testing.T) {
 
 	v.SetInt(1)
 	if _, err := v.GetInt(); err != nil {
+		t.Fatal(err)
+	}
+
+	v.SetDecimal(decimal.New(11, -1))
+	if _, err := v.GetDecimal(); err != nil {
 		t.Fatal(err)
 	}
 
