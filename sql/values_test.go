@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/shopspring/decimal"
+	"github.com/cockroachdb/decimal"
 )
 
 func TestValues(t *testing.T) {
