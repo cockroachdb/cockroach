@@ -76,7 +76,7 @@ func EncodeFloatAscending(b []byte, f float64) []byte {
 	case e >= 11:
 		return append(b, encodeLargeNumber(f < 0, e, m, buf)...)
 	}
-	return nil
+	panic("unreachable")
 }
 
 // EncodeFloatDescending is the descending version of EncodeFloatAscending.

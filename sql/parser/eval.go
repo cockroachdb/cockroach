@@ -30,7 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/shopspring/decimal"
+	"github.com/cockroachdb/decimal"
 )
 
 var (

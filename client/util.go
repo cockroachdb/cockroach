@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/decimal"
 	"github.com/gogo/protobuf/proto"
-	"github.com/shopspring/decimal"
 )
 
 // TODO(pmattis): The methods in this file needs tests.
