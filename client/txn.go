@@ -45,6 +45,9 @@ type txnSender Txn
 func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Send call through wrapped sender.
 	ba.Txn = &ts.Proto
+	if ts.UserPriority > 0 {
+		ba.UserPriority = ts.UserPriority
+	}
 	ba.SetNewRequest()
 	br, pErr := ts.wrapped.Send(ctx, ba)
 	if br != nil && br.Error != nil {
@@ -81,6 +84,7 @@ type Txn struct {
 	db      DB
 	wrapped Sender
 	Proto   roachpb.Transaction
+	UserPriority float64
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
 	systemConfigTrigger bool
@@ -122,6 +126,19 @@ func (txn *Txn) SetIsolation(isolation roachpb.IsolationType) *roachpb.Error {
 			return roachpb.NewErrorf("cannot change the isolation level of a running transaction")
 		}
 		txn.Proto.Isolation = isolation
+	}
+	return nil
+}
+
+func (txn *Txn) SetUserPriority(userPriority float64) *roachpb.Error {
+	if txn.UserPriority != userPriority {
+		if txn.Proto.IsInitialized() {
+			return roachpb.NewErrorf("cannot change the user priority of a running transaction")
+		}
+		if userPriority < roachpb.MinUserPriority || userPriority > roachpb.MaxUserPriority {
+			return roachpb.NewErrorf("the given user priority %f is out of the allowed range [%f, %f]", userPriority, roachpb.MinUserPriority, roachpb.MaxUserPriority)
+		}
+		txn.UserPriority = userPriority
 	}
 	return nil
 }

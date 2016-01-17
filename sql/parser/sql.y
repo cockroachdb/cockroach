@@ -73,6 +73,7 @@ func unimplemented() {
   alterTableCmd  AlterTableCmd
   alterTableCmds AlterTableCmds
   isoLevel       IsolationLevel
+  userPriority   UserPriority
   idxElem        IndexElem
   idxElems       IndexElemList
 }
@@ -115,7 +116,8 @@ func unimplemented() {
 
 %type <empty> opt_drop_behavior
 
-%type <isoLevel> opt_transaction_iso_level transaction_iso_level
+%type <isoLevel> transaction_iso_level
+%type <userPriority>  transaction_user_priority
 
 %type <str>   name opt_name
 
@@ -129,6 +131,7 @@ func unimplemented() {
 // %type <empty> math_op
 
 %type <isoLevel> iso_level
+%type <userPriority> user_priority
 %type <empty> opt_encoding
 
 %type <tblDefs> opt_table_elem_list table_elem_list
@@ -182,7 +185,7 @@ func unimplemented() {
 %type <empty> opt_conf_expr
 %type <empty> opt_on_conflict
 
-%type <stmt>  generic_set set_rest set_rest_more
+%type <stmt>  generic_set set_rest set_rest_more transaction_mode_list opt_transaction_mode_list
 
 %type <strs> opt_storing
 %type <colDef> column_def
@@ -313,7 +316,7 @@ func unimplemented() {
 
 %token <str>   GRANT GRANTS GREATEST GROUP GROUPING
 
-%token <str>   HAVING HOUR
+%token <str>   HAVING HIGH HOUR
 
 %token <str>   IF IFNULL IN
 %token <str>   INDEX INITIALLY
@@ -326,11 +329,11 @@ func unimplemented() {
 
 %token <str>   LATERAL
 %token <str>   LEADING LEAST LEFT LEVEL LIKE LIMIT LOCAL
-%token <str>   LOCALTIME LOCALTIMESTAMP LSHIFT
+%token <str>   LOCALTIME LOCALTIMESTAMP LOW LSHIFT
 
 %token <str>   MATCH MINUTE MONTH
 
-%token <str>   NAME NAMES NATURAL NEXT NO
+%token <str>   NAME NAMES NATURAL NEXT NO NORMAL
 %token <str>   NOT NOTHING NULL NULLIF
 %token <str>   NULLS NUMERIC
 
@@ -338,7 +341,7 @@ func unimplemented() {
 %token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY
 
 %token <str>   PARTIAL PARTITION PLACING POSITION
-%token <str>   PRECEDING PRECISION PRIMARY
+%token <str>   PRECEDING PRECISION PRIMARY PRIORITY
 
 %token <str>   RANGE READ REAL RECURSIVE REF REFERENCES
 %token <str>   RENAME REPEATABLE
@@ -794,11 +797,36 @@ set_stmt:
   }
 
 set_rest:
-  TRANSACTION transaction_iso_level
+  TRANSACTION transaction_mode_list
   {
-    $$ = &SetTransaction{Isolation: $2}
+    $$ = $2
   }
 | set_rest_more
+
+transaction_mode_list:
+  transaction_iso_level
+  {
+    $$ = &SetTransaction{Isolation: $1, UserPriority: UnspecifiedUserPriority}
+  }
+| transaction_user_priority 
+  {
+    $$ = &SetTransaction{Isolation: UnspecifiedIsolation, UserPriority: $1}
+  }
+| transaction_iso_level ',' transaction_user_priority
+  {
+    $$ = &SetTransaction{Isolation: $1, UserPriority: $3}
+  }
+| transaction_user_priority ',' transaction_iso_level
+  {
+    $$ = &SetTransaction{Isolation: $3, UserPriority: $1}
+  }
+
+
+transaction_user_priority:
+  PRIORITY user_priority
+  {
+    $$ = $2
+  }
 
 generic_set:
   var_name TO var_list
@@ -874,6 +902,20 @@ iso_level:
   {
     $$ = SerializableIsolation
   }
+
+user_priority:
+	LOW
+	{
+		$$ = Low
+	}
+| NORMAL
+	{
+		$$ = Normal
+	}
+| HIGH
+	{
+		$$ = High
+	}	
 
 opt_boolean_or_string:
   TRUE
@@ -984,6 +1026,10 @@ show_stmt:
 | SHOW TRANSACTION ISOLATION LEVEL
   {
     $$ = &Show{Name: "TRANSACTION ISOLATION LEVEL"}
+  }
+| SHOW TRANSACTION PRIORITY
+  {
+    $$ = &Show{Name: "TRANSACTION PRIORITY"}
   }
 | SHOW ALL
   {
@@ -1398,9 +1444,9 @@ opt_set_data:
 
 // BEGIN / COMMIT / ROLLBACK / ...
 transaction_stmt:
-  BEGIN opt_transaction opt_transaction_iso_level
+  BEGIN opt_transaction opt_transaction_mode_list
   {
-    $$ = &BeginTransaction{Isolation: $3}
+    $$ = $3
   }
 | COMMIT opt_transaction
   {
@@ -1415,11 +1461,26 @@ opt_transaction:
   TRANSACTION {}
 | /* EMPTY */ {}
 
-opt_transaction_iso_level:
+opt_transaction_mode_list:												
   transaction_iso_level
+  {
+    $$ = &BeginTransaction{Isolation: $1, UserPriority: UnspecifiedUserPriority}
+  }
+| transaction_user_priority 
+  {
+    $$ = &BeginTransaction{Isolation: UnspecifiedIsolation, UserPriority: $1}
+  }
+| transaction_iso_level ',' transaction_user_priority
+  {
+    $$ = &BeginTransaction{Isolation: $1, UserPriority: $3}
+  }
+| transaction_user_priority ',' transaction_iso_level
+  {
+    $$ = &BeginTransaction{Isolation: $3, UserPriority: $1}
+  }
 | /* EMPTY */
   {
-    $$ = UnspecifiedIsolation
+    $$ = &BeginTransaction{Isolation: UnspecifiedIsolation, UserPriority: UnspecifiedUserPriority}
   }
 
 transaction_iso_level:
@@ -3555,12 +3616,14 @@ unreserved_keyword:
 | FIRST
 | FOLLOWING
 | GRANTS
+| HIGH
 | HOUR
 | INSERT
 | ISOLATION
 | KEY
 | LEVEL
 | LOCAL
+| LOW
 | MATCH
 | MINUTE
 | MONTH
@@ -3568,6 +3631,7 @@ unreserved_keyword:
 | NAMES
 | NEXT
 | NO
+| NORMAL 
 | NOTHING
 | NULLS
 | OF
@@ -3577,6 +3641,7 @@ unreserved_keyword:
 | PARTIAL
 | PARTITION
 | PRECEDING
+| PRIORITY
 | RANGE
 | READ
 | RECURSIVE

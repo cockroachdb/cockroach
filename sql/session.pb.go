@@ -125,7 +125,8 @@ type Session_Transaction struct {
 	Txn cockroach_roachpb1.Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn"`
 	// Timestamp to be used by SQL in the above transaction. Note: this is not the
 	// transaction timestamp in roachpb.Transaction above.
-	Timestamp cockroach_sql_driver.Datum_Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	Timestamp    cockroach_sql_driver.Datum_Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	UserPriority float64                              `protobuf:"fixed64,3,opt,name=user_priority" json:"user_priority"`
 }
 
 func (m *Session_Transaction) Reset()         { *m = Session_Transaction{} }
@@ -232,6 +233,9 @@ func (m *Session_Transaction) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n4
+	data[i] = 0x19
+	i++
+	i = encodeFixed64Session(data, i, uint64(math.Float64bits(m.UserPriority)))
 	return i, nil
 }
 
@@ -299,6 +303,7 @@ func (m *Session_Transaction) Size() (n int) {
 	n += 1 + l + sovSession(uint64(l))
 	l = m.Timestamp.Size()
 	n += 1 + l + sovSession(uint64(l))
+	n += 9
 	return n
 }
 
@@ -604,6 +609,24 @@ func (m *Session_Transaction) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 3:
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UserPriority", wireType)
+			}
+			var v uint64
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += 8
+			v = uint64(data[iNdEx-8])
+			v |= uint64(data[iNdEx-7]) << 8
+			v |= uint64(data[iNdEx-6]) << 16
+			v |= uint64(data[iNdEx-5]) << 24
+			v |= uint64(data[iNdEx-4]) << 32
+			v |= uint64(data[iNdEx-3]) << 40
+			v |= uint64(data[iNdEx-2]) << 48
+			v |= uint64(data[iNdEx-1]) << 56
+			m.UserPriority = float64(math.Float64frombits(v))
 		default:
 			iNdEx = preIndex
 			skippy, err := skipSession(data[iNdEx:])

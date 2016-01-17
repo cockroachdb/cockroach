@@ -22,7 +22,10 @@
 
 package parser
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+)
 
 // Set represents a SET statement.
 type Set struct {
@@ -40,10 +43,19 @@ func (node *Set) String() string {
 // SetTransaction represents a SET TRANSACTION statement.
 type SetTransaction struct {
 	Isolation IsolationLevel
+	UserPriority UserPriority
 }
 
 func (node *SetTransaction) String() string {
-	return fmt.Sprintf("SET TRANSACTION ISOLATION LEVEL %s", node.Isolation)
+	var buf bytes.Buffer
+	buf.WriteString("SET TRANSACTION")
+	if node.Isolation != UnspecifiedIsolation {
+		fmt.Fprintf(&buf, " ISOLATION LEVEL %s", node.Isolation)
+	}
+	if node.UserPriority != UnspecifiedUserPriority {
+		fmt.Fprintf(&buf, " PRIORITY %s", node.UserPriority)
+	}
+	return buf.String()
 }
 
 // SetTimeZone represents a SET TIME ZONE statement.

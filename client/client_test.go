@@ -162,7 +162,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 					return pErr
 				}
 			}
-			txn.InternalSetPriority(int32(txnPri))
+			txn.InternalSetPriority(txnPri)
 
 			count++
 			// Lay down the intent.

@@ -45,6 +45,8 @@ func (p *planner) Show(n *parser.Show) (planNode, *roachpb.Error) {
 		v.rows = append(v.rows, []parser.Datum{parser.DString(parser.Syntax(p.session.Syntax).String())})
 	case `TRANSACTION ISOLATION LEVEL`:
 		v.rows = append(v.rows, []parser.Datum{parser.DString(p.txn.Proto.Isolation.String())})
+	case `TRANSACTION PRIORITY`:
+		v.rows = append(v.rows, []parser.Datum{parser.DString((roachpb.UserPriority(p.txn.UserPriority)).String())})
 	default:
 		return nil, roachpb.NewUErrorf("unknown variable: %q", name)
 	}

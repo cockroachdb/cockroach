@@ -30,6 +30,7 @@ message Session {
     // Timestamp to be used by SQL in the above transaction. Note: this is not the
     // transaction timestamp in roachpb.Transaction above.
     optional driver.Datum.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+    optional double user_priority = 3  [(gogoproto.nullable) = false];
   }
   // Open transaction.
   optional Transaction txn = 3;
