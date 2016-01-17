@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/decimal"
 	"github.com/gogo/protobuf/proto"
-	"github.com/shopspring/decimal"
 )
 
 var testDisableTableLeases bool
@@ -559,9 +559,9 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 	case parser.DDecimal:
 		var d decimal.Decimal
 		if dir == encoding.Ascending {
-			rkey, d, err = encoding.DecodeDecimalAscending(key)
+			rkey, d, err = encoding.DecodeDecimalAscending(key, nil)
 		} else {
-			rkey, d, err = encoding.DecodeDecimalDescending(key)
+			rkey, d, err = encoding.DecodeDecimalDescending(key, nil)
 		}
 		return parser.DDecimal{Decimal: d}, rkey, err
 	case parser.DString:

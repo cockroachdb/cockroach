@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	"github.com/shopspring/decimal"
+	"github.com/cockroachdb/decimal"
 )
 
 var errEmptyInputString = errors.New("the input string must not be empty")

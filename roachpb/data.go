@@ -23,6 +23,7 @@ import (
 	"hash"
 	"hash/crc32"
 	"math"
+	"math/big"
 	"math/rand"
 	"sort"
 	"strconv"
@@ -33,8 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
+	"github.com/cockroachdb/decimal"
 	"github.com/gogo/protobuf/proto"
-	"github.com/shopspring/decimal"
 )
 
 const (
@@ -421,17 +422,25 @@ func (v *Value) SetProto(msg proto.Message) error {
 // SetTime encodes the specified time value into the bytes field of the
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetTime(t time.Time) {
-	v.RawBytes = make([]byte, headerSize, 16)
-	v.RawBytes = encoding.EncodeTimeAscending(v.RawBytes[:headerSize], t)
+	const encodingSizeOverestimate = 11
+	v.RawBytes = make([]byte, headerSize, headerSize+encodingSizeOverestimate)
+	v.RawBytes = encoding.EncodeTimeAscending(v.RawBytes, t)
 	v.setTag(ValueType_TIME)
 }
 
 // SetDecimal encodes the specified decimal value into the bytes field of
 // the receiver, sets the tag and clears the checksum.
-func (v *Value) SetDecimal(d decimal.Decimal) {
-	v.RawBytes = make([]byte, headerSize, 16)
-	v.RawBytes = encoding.EncodeDecimalAscending(v.RawBytes[:headerSize], d)
+func (v *Value) SetDecimal(d decimal.Decimal) error {
+	bb, err := d.BigInt().GobEncode()
+	if err != nil {
+		return fmt.Errorf("failed to Gob encode decimal's big.Int: %v", err)
+	}
+	v.RawBytes = make([]byte, headerSize+binary.MaxVarintLen64+len(bb))
+	n := binary.PutVarint(v.RawBytes[headerSize:], int64(d.Exponent()))
+	copy(v.RawBytes[headerSize+n:], bb)
+	v.RawBytes = v.RawBytes[:headerSize+n+len(bb)]
 	v.setTag(ValueType_DECIMAL)
+	return nil
 }
 
 // GetBytes returns the bytes field of the receiver. If the tag is not
@@ -507,8 +516,17 @@ func (v Value) GetDecimal() (decimal.Decimal, error) {
 	if tag := v.GetTag(); tag != ValueType_DECIMAL {
 		return decimal.Decimal{}, fmt.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
 	}
-	_, d, err := encoding.DecodeDecimalAscending(v.dataBytes())
-	return d, err
+	data := v.dataBytes()
+	i, n := binary.Varint(data)
+	if n <= 0 {
+		return decimal.Decimal{}, fmt.Errorf("int64 varint decoding failed: %d", n)
+	}
+	bi := new(big.Int)
+	err := bi.GobDecode(data[n:])
+	if err != nil {
+		return decimal.Decimal{}, err
+	}
+	return decimal.NewFromBigInt(bi, int32(i)), nil
 }
 
 // GetTimeseries decodes an InternalTimeSeriesData value from the bytes
