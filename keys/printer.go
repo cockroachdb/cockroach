@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/decimal"
 )
 
 type dictEntry struct {
@@ -220,10 +221,13 @@ func decodeKeyPrint(key roachpb.Key) string {
 				fmt.Fprintf(&buf, "/%d", i)
 			}
 		case encoding.Float:
-			var f float64
-			key, f, err = encoding.DecodeFloatAscending(key, nil)
+			// Decode both floats and decimals as decimals to avoid
+			// overflow.
+			// TODO(nvanbenschoten) This doesn't work with infinity or NaN.
+			var d decimal.Decimal
+			key, d, err = encoding.DecodeDecimalAscending(key, nil)
 			if err == nil {
-				fmt.Fprintf(&buf, "/%f", f)
+				fmt.Fprintf(&buf, "/%s", d)
 			}
 		case encoding.Bytes:
 			var s string

@@ -61,22 +61,7 @@ func EncodeFloatAscending(b []byte, f float64) []byte {
 		return append(b, floatZero)
 	}
 	e, m := floatMandE(b, f)
-
-	var buf []byte
-	if n := len(m) + maxVarintSize + 2; n <= cap(b)-len(b) {
-		buf = b[len(b) : len(b)+n]
-	} else {
-		buf = make([]byte, len(m)+maxVarintSize+2)
-	}
-	switch {
-	case e < 0:
-		return append(b, encodeSmallNumber(f < 0, e, m, buf)...)
-	case e >= 0 && e <= 10:
-		return append(b, encodeMediumNumber(f < 0, e, m, buf)...)
-	case e >= 11:
-		return append(b, encodeLargeNumber(f < 0, e, m, buf)...)
-	}
-	return nil
+	return encodeMandE(b, f < 0, e, m)
 }
 
 // EncodeFloatDescending is the descending version of EncodeFloatAscending.
@@ -280,6 +265,24 @@ func makeFloatFromMandE(negative bool, e int, m []byte, tmp []byte) float64 {
 		panic(err)
 	}
 	return f
+}
+
+func encodeMandE(b []byte, negative bool, e int, m []byte) []byte {
+	var buf []byte
+	if n := len(m) + maxVarintSize + 2; n <= cap(b)-len(b) {
+		buf = b[len(b) : len(b)+n]
+	} else {
+		buf = make([]byte, n)
+	}
+	switch {
+	case e < 0:
+		return append(b, encodeSmallNumber(negative, e, m, buf)...)
+	case e >= 0 && e <= 10:
+		return append(b, encodeMediumNumber(negative, e, m, buf)...)
+	case e >= 11:
+		return append(b, encodeLargeNumber(negative, e, m, buf)...)
+	}
+	panic("unreachable")
 }
 
 func encodeSmallNumber(negative bool, e int, m []byte, buf []byte) []byte {

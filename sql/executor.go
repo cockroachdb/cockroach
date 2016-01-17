@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/shopspring/decimal"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
@@ -38,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/decimal"
 )
 
 var testingWaitForMetadata bool

@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/shopspring/decimal"
+	"github.com/cockroachdb/decimal"
 )
 
 func TestValues(t *testing.T) {
@@ -147,7 +147,7 @@ func TestGolangParams(t *testing.T) {
 		{float32(1.0), reflect.TypeOf(parser.DummyFloat)},
 		{float64(1.0), reflect.TypeOf(parser.DummyFloat)},
 
-		// Decimal type
+		// Decimal type.
 		{decimal.New(55, -1), reflect.TypeOf(parser.DummyDecimal)},
 
 		// String type.

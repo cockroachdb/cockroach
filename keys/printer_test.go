@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/decimal"
 )
 
 func TestPrettyPrint(t *testing.T) {
@@ -104,10 +105,16 @@ func TestPrettyPrint(t *testing.T) {
 		{MakeKey(MakeTablePrefix(42),
 			roachpb.RKey(encoding.EncodeTimeDescending(nil, tm))),
 			"/Table/42/Sat Mar  7 11:06:39 UTC 2015"},
+		{MakeKey(MakeTablePrefix(42),
+			roachpb.RKey(encoding.EncodeDecimalAscending(nil, decimal.New(1234, -2)))),
+			"/Table/42/12.34"},
+		{MakeKey(MakeTablePrefix(42),
+			roachpb.RKey(encoding.EncodeDecimalDescending(nil, decimal.New(1234, -2)))),
+			"/Table/42/-12.34"},
 
 		// others
 		{MakeKey([]byte("")), "/Min"},
-		{MakeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x21, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:9999: unknown escape sequence: 0x0 0x2>"},
+		{MakeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x2c, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:9999: unknown escape sequence: 0x0 0x2>"},
 	}
 	for i, test := range testCases {
 		keyInfo := MassagePrettyPrintedSpanForTest(PrettyPrint(test.key), nil)
