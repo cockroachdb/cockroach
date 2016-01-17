@@ -398,30 +398,30 @@ SELECT abs(sin(pi())) < 1e-12
 ----
 true
 
-query RRR
-SELECT acos(-0.5), acos(0.5), acos(0.75::decimal)
+query RR
+SELECT acos(-0.5), acos(0.5)
 ----
-2.0943951023931957 1.0471975511965976 0.7227342478134156
+2.0943951023931957 1.0471975511965976
 
 query RR
 SELECT cot(-0.5), cot(0.5)
 ----
 -1.830487721712452 1.830487721712452
 
-query RRRR
-SELECT asin(-0.5), asin(0.5), asin(1.5), asin(0.75::decimal)
-----
--0.5235987755982989 0.5235987755982989 NaN 0.848062078981481
-
 query RRR
-SELECT atan(-0.5), atan(0.5), atan(0.75::decimal)
+SELECT asin(-0.5), asin(0.5), asin(1.5)
 ----
--0.4636476090008061 0.4636476090008061 0.6435011087932844
+-0.5235987755982989 0.5235987755982989 NaN
 
-query RRR
-SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0), atan2(7.5::decimal, 5.0::decimal)
+query RR
+SELECT atan(-0.5), atan(0.5)
 ----
--1.1071487177940904 1.1071487177940904 0.982793723247329
+-0.4636476090008061 0.4636476090008061
+
+query RR
+SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0)
+----
+-1.1071487177940904 1.1071487177940904
 
 query RRR
 SELECT cbrt(-1.0), cbrt(27.0), cbrt(19.3::decimal)
@@ -433,25 +433,25 @@ SELECT ceil(-0.5), ceil(0.5), ceiling(0.5), ceil(0.1::decimal), ceiling(-0.9::de
 ----
 -0 1 1 1 0
 
-query RRR
-SELECT cos(-0.5), cos(0.5), cos(0.75::decimal)
+query RR
+SELECT cos(-0.5), cos(0.5)
 ----
-0.8775825618903728 0.8775825618903728 0.7316888688738209
+0.8775825618903728 0.8775825618903728
 
 query RRRRR
 SELECT div(-1.0, 2.0), div(1.0, 2.0), div(9.0, 4.0), div(-9.0, 4.0), div(1.0, 0.0)
 ----
 -0 0 2 -2 +Inf
 
-query RRR
-SELECT degrees(-0.5), degrees(0.5), degrees(0.5::decimal)
+query RR
+SELECT degrees(-0.5), degrees(0.5)
 ----
--28.64788975654116 28.64788975654116 28.6478897565411626
+-28.64788975654116 28.64788975654116
 
-query RRRR
-SELECT div(-1.0, 2.0), div(1.0, 2.0), div(1.0, 0.0), div(1111.0::decimal, 9.44::decimal)
+query RRRRRR
+SELECT div(-1.0, 2.0), div(1.0, 2.0), div(9.0, 4.0), div(-9.0, 4.0), div(1.0, 0.0), div(1111.0::decimal, 9.44::decimal)
 ----
--0.5 0.5 +Inf 117.6906779661016949
+-0 0 2 -2 +Inf 117
 
 query error div: division by zero
 SELECT div(1.0::decimal, 0.0::decimal)
@@ -562,10 +562,10 @@ SELECT pow(-3.0, 2.0), power(3.0, 2.0), pow(5.0::decimal, 2.0::decimal)
 ----
 9 9 25
 
-query RRR
-SELECT radians(-45.0), radians(45.0), radians(60.0::decimal)
+query RR
+SELECT radians(-45.0), radians(45.0)
 ----
--0.7853981633974483 0.7853981633974483 1.0471975511965976
+-0.7853981633974483 0.7853981633974483
 
 # Our implementation of round is not fully Postgres-compatible because we do
 # not allow negative numbers of digits.
@@ -634,19 +634,14 @@ SELECT sin(-1.0), sin(0.0), sin(1.0)
 -0.8414709848078965 0 0.8414709848078965
 
 query RRR
-SELECT sin(-1.0::decimal), sin(0.0::decimal), sin(1.0::decimal)
-----
--0.8414709848078965 0 0.8414709848078965
-
-query RRR
 SELECT sqrt(-1.0), sqrt(4.0), sqrt(9.0::decimal)
 ----
 NaN 2 3
 
-query RRRR
-SELECT tan(-5.0), tan(0.0), tan(5.0), tan(2.5::decimal)
+query RRR
+SELECT tan(-5.0), tan(0.0), tan(5.0)
 ----
-3.3805150062465854 0 -3.3805150062465854 -0.7470222972386603
+3.3805150062465854 0 -3.3805150062465854
 
 query RRRR
 SELECT trunc(-0.0), trunc(0.0), trunc(1.9), trunc(19.5678::decimal)
