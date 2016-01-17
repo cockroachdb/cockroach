@@ -37,10 +37,6 @@ import (
 )
 
 const (
-	// MinUserPriority is the minimum allowed user priority.
-	MinUserPriority = 0.0001
-	// MaxUserPriority is the maximum allowed user priority.
-	MaxUserPriority = 10000
 	// TransactionIDLen is the length (in bytes) of the transaction IDs used.
 	TransactionIDLen = 16
 	// SequencePoisonAbort is a special value for the sequence cache which

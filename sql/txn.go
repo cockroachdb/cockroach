@@ -29,6 +29,9 @@ func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, *roach
 	if pErr := p.setIsolationLevel(n.Isolation); pErr != nil {
 		return nil, pErr
 	}
+	if pErr := p.setUserPriority(n.UserPriority); pErr != nil {
+		return nil, pErr
+	}
 	return &valuesNode{}, nil
 }
 
@@ -53,6 +56,9 @@ func (p *planner) SetTransaction(n *parser.SetTransaction) (planNode, *roachpb.E
 	if pErr := p.setIsolationLevel(n.Isolation); pErr != nil {
 		return nil, pErr
 	}
+	if pErr := p.setUserPriority(n.UserPriority); pErr != nil {
+		return nil, pErr
+	}
 	return &valuesNode{}, nil
 }
 
@@ -66,5 +72,20 @@ func (p *planner) setIsolationLevel(level parser.IsolationLevel) *roachpb.Error 
 		return p.txn.SetIsolation(roachpb.SERIALIZABLE)
 	default:
 		return roachpb.NewErrorf("unknown isolation level: %s", level)
+	}
+}
+
+func (p *planner) setUserPriority(userPriority parser.UserPriority) *roachpb.Error {
+	switch userPriority {
+	case parser.UnspecifiedUserPriority:
+		return nil
+	case parser.Low:
+		return p.txn.SetUserPriority(roachpb.LowUserPriority)
+	case parser.Normal:
+		return p.txn.SetUserPriority(roachpb.NormalUserPriority)
+	case parser.High:
+		return p.txn.SetUserPriority(roachpb.HighUserPriority)
+	default:
+		return roachpb.NewErrorf("unknown user priority: %s", userPriority)
 	}
 }

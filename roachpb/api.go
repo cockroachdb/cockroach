@@ -24,6 +24,35 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+type UserPriority float64
+
+func (up UserPriority) String() string {
+	switch up {
+	case LowUserPriority:
+		return "LOW"
+	// UnspecifiedUserPriority means NormalUserPriority
+	case 0, NormalUserPriority:
+		return "NORMAL"
+	case HighUserPriority:
+		return "HIGH"
+	default:
+		return fmt.Sprintf("%g", float64(up))
+	}
+}
+
+const (
+	// MinUserPriority is the minimum allowed user priority.
+	MinUserPriority    = 0.0001
+	// Low user priority
+	LowUserPriority    = 0.01
+	// Normal user priority
+	NormalUserPriority = 1
+	// High user priority
+	HighUserPriority   = 100
+	// MaxUserPriority is the maximum allowed user priority.
+	MaxUserPriority    = 10000
+)
+
 // A RangeID is a unique ID associated to a Raft consensus group.
 type RangeID int64
 
