@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/decimal"
 )
 
 type dictEntry struct {
@@ -224,6 +225,12 @@ func decodeKeyPrint(key roachpb.Key) string {
 			key, f, err = encoding.DecodeFloatAscending(key, nil)
 			if err == nil {
 				fmt.Fprintf(&buf, "/%f", f)
+			}
+		case encoding.Decimal:
+			var d decimal.Decimal
+			key, d, err = encoding.DecodeDecimalAscending(key, nil)
+			if err == nil {
+				fmt.Fprintf(&buf, "/%s", d)
 			}
 		case encoding.Bytes:
 			var s string

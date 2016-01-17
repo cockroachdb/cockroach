@@ -24,7 +24,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/shopspring/decimal"
 )
 
 const (
@@ -47,7 +46,20 @@ const (
 	floatNaNDesc          = floatInfinity + 1 // NaN encoded descendingly
 	floatTerminator       = 0x00
 
-	bytesMarker     byte = floatNaNDesc + 1
+	decimalNaN              = floatNaNDesc + 1
+	decimalNegativeInfinity = decimalNaN + 1
+	decimalNegValPosExp     = decimalNegativeInfinity + 1
+	decimalNegValZeroExp    = decimalNegValPosExp + 1
+	decimalNegValNegExp     = decimalNegValZeroExp + 1
+	decimalZero             = decimalNegValNegExp + 1
+	decimalPosValNegExp     = decimalZero + 1
+	decimalPosValZeroExp    = decimalPosValNegExp + 1
+	decimalPosValPosExp     = decimalPosValZeroExp + 1
+	decimalInfinity         = decimalPosValPosExp + 1
+	decimalNaNDesc          = decimalInfinity + 1 // NaN encoded descendingly
+	decimalTerminator       = 0x00
+
+	bytesMarker     byte = decimalNaNDesc + 1
 	timeMarker      byte = bytesMarker + 1
 	bytesDescMarker byte = timeMarker + 1
 	timeDescMarker  byte = bytesDescMarker + 1
@@ -628,36 +640,6 @@ func DecodeTimeDescending(b []byte) ([]byte, time.Time, error) {
 	return b, time.Unix(sec, nsec), nil
 }
 
-// EncodeDecimalAscending ... TODO(nvanbenschoten)
-func EncodeDecimalAscending(b []byte, d decimal.Decimal) []byte {
-	return EncodeStringAscending(b, d.String())
-}
-
-// EncodeDecimalDescending ... TODO(nvanbenschoten)
-func EncodeDecimalDescending(b []byte, d decimal.Decimal) []byte {
-	return EncodeStringDescending(b, d.String())
-}
-
-// DecodeDecimalAscending ... TODO(nvanbenschoten)
-func DecodeDecimalAscending(b []byte) ([]byte, decimal.Decimal, error) {
-	b, s, err := DecodeStringAscending(b, nil)
-	if err != nil {
-		return b, decimal.Decimal{}, err
-	}
-	d, err := decimal.NewFromString(s)
-	return b, d, err
-}
-
-// DecodeDecimalDescending ... TODO(nvanbenschoten)
-func DecodeDecimalDescending(b []byte) ([]byte, decimal.Decimal, error) {
-	b, s, err := DecodeStringDescending(b, nil)
-	if err != nil {
-		return b, decimal.Decimal{}, err
-	}
-	d, err := decimal.NewFromString(s)
-	return b, d, err
-}
-
 // Type represents the type of a value encoded by
 // Encode{Null,NotNull,Varint,Uvarint,Float,Bytes}.
 type Type int
@@ -669,6 +651,7 @@ const (
 	NotNull
 	Int
 	Float
+	Decimal
 	Bytes
 	BytesDesc // Bytes encoded descendingly
 	Time
@@ -696,6 +679,8 @@ func PeekType(b []byte) Type {
 			return Int
 		case m >= floatNaN && m <= floatNaNDesc:
 			return Float
+		case m >= decimalNaN && m <= decimalNaNDesc:
+			return Decimal
 		}
 	}
 	return Unknown

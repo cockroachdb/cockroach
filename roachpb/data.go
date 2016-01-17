@@ -33,8 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
+	"github.com/cockroachdb/decimal"
 	"github.com/gogo/protobuf/proto"
-	"github.com/shopspring/decimal"
 )
 
 const (
@@ -429,8 +429,7 @@ func (v *Value) SetTime(t time.Time) {
 // SetDecimal encodes the specified decimal value into the bytes field of
 // the receiver, sets the tag and clears the checksum.
 func (v *Value) SetDecimal(d decimal.Decimal) {
-	v.RawBytes = make([]byte, headerSize, 16)
-	v.RawBytes = encoding.EncodeDecimalAscending(v.RawBytes[:headerSize], d)
+	v.SetBytes(encoding.EncodeDecimalAscending(nil, d))
 	v.setTag(ValueType_DECIMAL)
 }
 
@@ -507,7 +506,7 @@ func (v Value) GetDecimal() (decimal.Decimal, error) {
 	if tag := v.GetTag(); tag != ValueType_DECIMAL {
 		return decimal.Decimal{}, fmt.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
 	}
-	_, d, err := encoding.DecodeDecimalAscending(v.dataBytes())
+	_, d, err := encoding.DecodeDecimalAscending(v.dataBytes(), nil)
 	return d, err
 }
 
