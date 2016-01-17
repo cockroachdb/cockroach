@@ -17,12 +17,14 @@
 package keys
 
 import (
+	"math"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/decimal"
 )
 
 func TestPrettyPrint(t *testing.T) {
@@ -76,6 +78,12 @@ func TestPrettyPrint(t *testing.T) {
 			roachpb.RKey(encoding.EncodeFloatDescending(nil, float64(-233.221112)))),
 			"/Table/42/233.221112"},
 		{MakeKey(MakeTablePrefix(42),
+			roachpb.RKey(encoding.EncodeFloatAscending(nil, math.Inf(1)))),
+			"/Table/42/+Inf"},
+		{MakeKey(MakeTablePrefix(42),
+			roachpb.RKey(encoding.EncodeFloatAscending(nil, math.NaN()))),
+			"/Table/42/NaN"},
+		{MakeKey(MakeTablePrefix(42),
 			roachpb.RKey(encoding.EncodeVarintAscending(nil, 1222)),
 			roachpb.RKey(encoding.EncodeStringAscending(nil, "handsome man"))),
 			`/Table/42/1222/"handsome man"`},
@@ -104,6 +112,12 @@ func TestPrettyPrint(t *testing.T) {
 		{MakeKey(MakeTablePrefix(42),
 			roachpb.RKey(encoding.EncodeTimeDescending(nil, tm))),
 			"/Table/42/Sat Mar  7 11:06:39 UTC 2015"},
+		{MakeKey(MakeTablePrefix(42),
+			roachpb.RKey(encoding.EncodeDecimalAscending(nil, decimal.New(1234, -2)))),
+			"/Table/42/12.34"},
+		{MakeKey(MakeTablePrefix(42),
+			roachpb.RKey(encoding.EncodeDecimalDescending(nil, decimal.New(1234, -2)))),
+			"/Table/42/-12.34"},
 
 		// others
 		{MakeKey([]byte("")), "/Min"},

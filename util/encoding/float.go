@@ -61,22 +61,7 @@ func EncodeFloatAscending(b []byte, f float64) []byte {
 		return append(b, floatZero)
 	}
 	e, m := floatMandE(b, f)
-
-	var buf []byte
-	if n := len(m) + maxVarintSize + 2; n <= cap(b)-len(b) {
-		buf = b[len(b) : len(b)+n]
-	} else {
-		buf = make([]byte, len(m)+maxVarintSize+2)
-	}
-	switch {
-	case e < 0:
-		return append(b, encodeSmallNumber(f < 0, e, m, buf)...)
-	case e >= 0 && e <= 10:
-		return append(b, encodeMediumNumber(f < 0, e, m, buf)...)
-	case e >= 11:
-		return append(b, encodeLargeNumber(f < 0, e, m, buf)...)
-	}
-	return nil
+	return encodeMandE(b, f < 0, e, m)
 }
 
 // EncodeFloatDescending is the descending version of EncodeFloatAscending.
@@ -90,20 +75,20 @@ func EncodeFloatDescending(b []byte, f float64) []byte {
 // DecodeFloatAscending returns the remaining byte slice after decoding and the decoded
 // float64 from buf.
 func DecodeFloatAscending(buf []byte, tmp []byte) ([]byte, float64, error) {
-	if buf[0] == floatZero {
+	// Handle the simplistic cases first.
+	switch buf[0] {
+	case floatNaN, floatNaNDesc:
+		return buf[1:], math.NaN(), nil
+	case floatInfinity:
+		return buf[1:], math.Inf(1), nil
+	case floatNegativeInfinity:
+		return buf[1:], math.Inf(-1), nil
+	case floatZero:
 		return buf[1:], 0, nil
 	}
 	tmp = tmp[len(tmp):cap(tmp)]
 	idx := bytes.Index(buf, []byte{floatTerminator})
 	switch {
-	case buf[0] == floatNaN:
-		return buf[1:], math.NaN(), nil
-	case buf[0] == floatNaNDesc:
-		return buf[1:], math.NaN(), nil
-	case buf[0] == floatInfinity:
-		return buf[1:], math.Inf(1), nil
-	case buf[0] == floatNegativeInfinity:
-		return buf[1:], math.Inf(-1), nil
 	case buf[0] == floatNegLarge:
 		// Negative large.
 		e, m := decodeLargeNumber(true, buf[:idx+1], tmp)
@@ -280,6 +265,24 @@ func makeFloatFromMandE(negative bool, e int, m []byte, tmp []byte) float64 {
 		panic(err)
 	}
 	return f
+}
+
+func encodeMandE(b []byte, negative bool, e int, m []byte) []byte {
+	var buf []byte
+	if n := len(m) + maxVarintSize + 2; n <= cap(b)-len(b) {
+		buf = b[len(b) : len(b)+n]
+	} else {
+		buf = make([]byte, n)
+	}
+	switch {
+	case e < 0:
+		return append(b, encodeSmallNumber(negative, e, m, buf)...)
+	case e >= 0 && e <= 10:
+		return append(b, encodeMediumNumber(negative, e, m, buf)...)
+	case e >= 11:
+		return append(b, encodeLargeNumber(negative, e, m, buf)...)
+	}
+	panic("unreachable")
 }
 
 func encodeSmallNumber(negative bool, e int, m []byte, buf []byte) []byte {

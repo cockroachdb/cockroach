@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/shopspring/decimal"
+	"github.com/cockroachdb/decimal"
 )
 
 var (
