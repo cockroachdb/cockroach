@@ -33,29 +33,25 @@ func (*planner) distinct(n *parser.Select, p planNode) planNode {
 		planNode:   p,
 		suffixSeen: make(map[string]struct{}),
 	}
-	ordering, prefix := p.Ordering()
-	if len(ordering) != 0 {
+	ordering := p.Ordering()
+	if !ordering.isEmpty() {
 		d.columnsInOrder = make([]bool, len(p.Columns()))
-	}
-	for _, p := range ordering {
-		if p == 0 {
-			if prefix > 0 {
-				prefix--
+		for colIdx := range ordering.exactMatchCols {
+			if colIdx >= len(d.columnsInOrder) {
+				// If the exact-match column is not part of the output, we can safely ignore it.
 				continue
 			}
-			break
+			d.columnsInOrder[colIdx] = true
 		}
-		if p < 0 {
-			p = -p
-		}
-		if p <= len(d.columnsInOrder) {
-			d.columnsInOrder[p-1] = true
-		} else {
-			// Cannot use sort order. This happens when the
-			// columns used for sorting are not part of the output.
-			// e.g. SELECT a FROM t ORDER BY c.
-			d.columnsInOrder = nil
-			break
+		for _, c := range ordering.ordering {
+			if c.colIdx >= len(d.columnsInOrder) {
+				// Cannot use sort order. This happens when the
+				// columns used for sorting are not part of the output.
+				// e.g. SELECT a FROM t ORDER BY c.
+				d.columnsInOrder = nil
+				break
+			}
+			d.columnsInOrder[c.colIdx] = true
 		}
 	}
 	return d
