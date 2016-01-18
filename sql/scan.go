@@ -139,8 +139,7 @@ type scanNode struct {
 	columnIDs        []ColumnID
 	// The direction with which the corresponding column was encoded.
 	columnDirs       []encoding.Direction
-	ordering         []int
-	exactPrefix      int
+	ordering         orderingInfo
 	pErr             *roachpb.Error
 	indexKey         []byte            // the index key of the current row
 	kvs              []client.KeyValue // the raw key/value pairs
@@ -164,8 +163,8 @@ func (n *scanNode) Columns() []resultColumn {
 	return n.columns
 }
 
-func (n *scanNode) Ordering() ([]int, int) {
-	return n.ordering, n.exactPrefix
+func (n *scanNode) Ordering() orderingInfo {
+	return n.ordering
 }
 
 func (n *scanNode) Values() parser.DTuple {
@@ -413,39 +412,87 @@ func (n *scanNode) initOrdering(exactPrefix int) {
 	if n.index == nil {
 		return
 	}
-	n.exactPrefix = exactPrefix
 	n.columnIDs, n.columnDirs = n.index.fullColumnIDs()
-	n.ordering = n.computeOrdering(n.columnIDs, n.columnDirs)
-	if n.reverse {
-		for i := range n.ordering {
-			n.ordering[i] = -n.ordering[i]
-		}
-	}
+	n.ordering = computeOrdering(n.render, n.index, exactPrefix, n.reverse)
 }
 
-// computeOrdering computes the ordering information for the specified set of
-// columns. The returned slice will be the same length as the input slice. If a
-// column is not part of the output 0 will be returned in the corresponding
-// field of the output. Consider the query:
+// Searches for a render target for the value of the given column.
+func findRenderIndexForCol(render []parser.Expr, colID ColumnID) (idx int, ok bool) {
+	for i, r := range render {
+		if qval, ok := r.(*qvalue); ok && qval.col.ID == colID {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
+// computeOrdering calculates ordering information for render target columns assuming that:
+//    - we scan a given index (potentially in reverse order), and
+//    - the first `exactPrefix` columns of the index each have an exact (single value) match
+//      (see orderingInfo).
 //
-//   SELECT v FROM t WHERE k = 1
+// Some examples:
 //
-// If there is an ascending index on (k, v) and we're asking for the ordering for those
-// columns, computeOrdering will return (0, 1). This indicates that column k is
-// not part of the output column set and column v is in ascending order.
-func (n *scanNode) computeOrdering(columnIDs []ColumnID, dirs []encoding.Direction) []int {
-	// Loop over the column IDs and determine if they are used for any of the
-	// render targets.
-	ordering := make([]int, len(columnIDs))
-	for j, colID := range columnIDs {
-		for i, r := range n.render {
-			if qval, ok := r.(*qvalue); ok && qval.col.ID == colID {
-				ordering[j] = i + 1 // indexes in ordering are 1-based
-				if dirs[j] == encoding.Descending {
-					ordering[j] *= -1
+//    SELECT a, b FROM t@abc ...
+//    	the ordering is: first by column 0 (a), then by column 1 (b)
+//
+//    SELECT a, b FROM t@abc WHERE a = 1 ...
+//    	the ordering is: exact match column (a), ordered by column 1 (b)
+//
+//    SELECT b, a FROM t@abc ...
+//      the ordering is: first by column 1 (a), then by column 0 (a)
+//
+//    SELECT a, c FROM t@abc ...
+//      the ordering is: just by column 0 (a). Here we don't have b as a render target so we
+//      cannot possibly use (or even express) the second-rank order by b (which makes any lower
+//      ranks unusable as well).
+//
+//      Note that for queries like
+//         SELECT a, c FROM t@abc ORDER by a,b,c
+//      we internally add b as a render target. The same holds for any targets required for
+//      grouping.
+func computeOrdering(
+	render []parser.Expr, index *IndexDescriptor, exactPrefix int, reverse bool) orderingInfo {
+	var ordering orderingInfo
+
+	columnIDs, dirs := index.fullColumnIDs()
+
+	for i, colID := range columnIDs {
+		renderIdx, ok := findRenderIndexForCol(render, colID)
+		if ok {
+			if i < exactPrefix {
+				ordering.addExactMatchColumn(renderIdx)
+			} else {
+				dir := dirs[i]
+				if reverse {
+					dir = dir.Reverse()
 				}
-				break
+				ordering.addColumn(renderIdx, dir)
 			}
+			continue
+		}
+		// We have a column that isn't part of the output.
+		if i < exactPrefix {
+			// Fortunately this is an "exact match" column, so we can safely ignore it.
+			//
+			// For example, assume we are using an ascending index on (k, v) with the query:
+			//
+			//   SELECT v FROM t WHERE k = 1
+			//
+			// The rows from the index are ordered by k then by v, but since k is an exact match
+			// column the results are also ordered just by v.
+			continue
+		} else {
+			// Once we find a column that is not part of the output, the rest of the ordered
+			// columns aren't useful.
+			//
+			// For example, assume we are using an ascending index on (k, v) with the query:
+			//
+			//   SELECT v FROM t WHERE k > 1
+			//
+			// The rows from the index are ordered by k then by v. We cannot make any use of this
+			// ordering as an ordering on v.
+			break
 		}
 	}
 	return ordering

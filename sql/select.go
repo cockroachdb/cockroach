@@ -46,7 +46,7 @@ func (s *selectNode) Columns() []resultColumn {
 	return s.from.Columns()
 }
 
-func (s *selectNode) Ordering() (ordering []int, prefix int) {
+func (s *selectNode) Ordering() orderingInfo {
 	return s.from.Ordering()
 }
 
@@ -107,14 +107,14 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 	}
 
 	// Get the ordering for index selection (if any).
-	var ordering []int
+	var ordering columnOrdering
 	var grouping bool
 
 	if group != nil {
 		ordering = group.desiredOrdering
 		grouping = true
 	} else if sort != nil {
-		ordering, _ = sort.Ordering()
+		ordering = sort.Ordering().ordering
 	}
 
 	plan, pErr := p.selectIndex(scan, ordering, grouping)
@@ -175,7 +175,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 // transformed into a set of spans to scan within the index.
 //
 // If grouping is true, the ordering is the desired ordering for grouping.
-func (p *planner) selectIndex(s *scanNode, ordering []int, grouping bool) (planNode, *roachpb.Error) {
+func (p *planner) selectIndex(s *scanNode, ordering columnOrdering, grouping bool) (planNode, *roachpb.Error) {
 	if s.desc == nil || (s.filter == nil && ordering == nil) {
 		// No table or no where-clause and no ordering.
 		s.initOrdering(0)
@@ -302,8 +302,8 @@ func (p *planner) selectIndex(s *scanNode, ordering []int, grouping bool) (planN
 		// If grouping has a desired order and there is a single span for which the
 		// filter is true, check to see if the ordering matches the desired
 		// ordering. If it does we can limit the scan to a single key.
-		existingOrdering, prefix := plan.Ordering()
-		match := computeOrderingMatch(ordering, existingOrdering, prefix, +1)
+		existingOrdering := plan.Ordering()
+		match := computeOrderingMatch(ordering, existingOrdering, false)
 		if match == 1 {
 			s.spans[0].count = 1
 		}
@@ -416,19 +416,18 @@ func (v *indexInfo) analyzeExprs(exprs []parser.Exprs) {
 // analyzeOrdering analyzes the ordering provided by the index and determines
 // if it matches the ordering requested by the query. Non-matching orderings
 // increase the cost of using the index.
-func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
+func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering columnOrdering) {
 	// Compute the prefix of the index for which we have exact constraints. This
 	// prefix is inconsequential for ordering because the values are identical.
 	v.exactPrefix = exactPrefix(v.constraints)
 
 	// Compute the ordering provided by the index.
-	colIds, colDirs := v.index.fullColumnIDs()
-	indexOrdering := scan.computeOrdering(colIds, colDirs)
+	indexOrdering := computeOrdering(scan.render, v.index, v.exactPrefix, false)
 
 	// Compute how much of the index ordering matches the requested ordering for
 	// both forward and reverse scans.
-	fwdMatch := computeOrderingMatch(ordering, indexOrdering, v.exactPrefix, +1)
-	revMatch := computeOrderingMatch(ordering, indexOrdering, v.exactPrefix, -1)
+	fwdMatch := computeOrderingMatch(ordering, indexOrdering, false)
+	revMatch := computeOrderingMatch(ordering, indexOrdering, true)
 
 	// Weight the cost by how much of the ordering matched.
 	//
