@@ -18,6 +18,7 @@ package pgwire
 
 import (
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -35,6 +36,8 @@ const (
 	version30  = 196608
 	versionSSL = 80877103
 )
+
+const pgPort = 15432
 
 var (
 	sslSupported   = []byte{'S'}
@@ -60,7 +63,7 @@ func NewServer(context *Context) *Server {
 
 // Start a server on the given address.
 func (s *Server) Start(addr net.Addr) error {
-	ln, err := net.Listen(addr.Network(), addr.String())
+	ln, err := net.Listen(addr.Network(), portPadding(addr.String()))
 	if err != nil {
 		return err
 	}
@@ -201,4 +204,14 @@ func (s *Server) serveConn(conn net.Conn) error {
 	}
 
 	return util.Errorf("unknown protocol version %d", version)
+}
+
+func portPadding(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if host != "" || err != nil {
+		if port == "" {
+			return fmt.Sprintf("%s:%d", addr, pgPort)
+		}
+	}
+	return addr
 }
