@@ -139,8 +139,7 @@ type scanNode struct {
 	columnIDs        []ColumnID
 	// The direction with which the corresponding column was encoded.
 	columnDirs       []encoding.Direction
-	ordering         []int
-	exactPrefix      int
+	ordering         orderingInfo
 	pErr             *roachpb.Error
 	indexKey         []byte            // the index key of the current row
 	kvs              []client.KeyValue // the raw key/value pairs
@@ -164,8 +163,8 @@ func (n *scanNode) Columns() []resultColumn {
 	return n.columns
 }
 
-func (n *scanNode) Ordering() ([]int, int) {
-	return n.ordering, n.exactPrefix
+func (n *scanNode) Ordering() orderingInfo {
+	return n.ordering
 }
 
 func (n *scanNode) Values() parser.DTuple {
@@ -407,45 +406,66 @@ func (n *scanNode) initTargets(targets parser.SelectExprs) *roachpb.Error {
 	return nil
 }
 
+// Searches for a render target for the value of the given column.
+func findRenderIndexForCol(render []parser.Expr, colID ColumnID) (idx int, ok bool) {
+	for i, r := range render {
+		if qval, ok := r.(*qvalue); ok && qval.col.ID == colID {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
 // initOrdering initializes the ordering info using the selected index. This
 // must be called after index selection is performed.
 func (n *scanNode) initOrdering(exactPrefix int) {
 	if n.index == nil {
 		return
 	}
-	n.exactPrefix = exactPrefix
 	n.columnIDs, n.columnDirs = n.index.fullColumnIDs()
-	n.ordering = n.computeOrdering(n.columnIDs, n.columnDirs)
+	n.ordering = n.computeOrdering(n.columnIDs, n.columnDirs, exactPrefix)
 	if n.reverse {
-		for i := range n.ordering {
-			n.ordering[i] = -n.ordering[i]
+		for i := range n.ordering.ordering {
+			n.ordering.ordering[i].reverse = !n.ordering.ordering[i].reverse
 		}
 	}
 }
 
-// computeOrdering computes the ordering information for the specified set of
-// columns. The returned slice will be the same length as the input slice. If a
-// column is not part of the output 0 will be returned in the corresponding
-// field of the output. Consider the query:
-//
-//   SELECT v FROM t WHERE k = 1
-//
-// If there is an ascending index on (k, v) and we're asking for the ordering for those
-// columns, computeOrdering will return (0, 1). This indicates that column k is
-// not part of the output column set and column v is in ascending order.
-func (n *scanNode) computeOrdering(columnIDs []ColumnID, dirs []encoding.Direction) []int {
-	// Loop over the column IDs and determine if they are used for any of the
-	// render targets.
-	ordering := make([]int, len(columnIDs))
-	for j, colID := range columnIDs {
-		for i, r := range n.render {
-			if qval, ok := r.(*qvalue); ok && qval.col.ID == colID {
-				ordering[j] = i + 1 // indexes in ordering are 1-based
-				if dirs[j] == encoding.Descending {
-					ordering[j] *= -1
-				}
+// computeOrdering computes the ordering information for the specified set of columns.
+func (n *scanNode) computeOrdering(columnIDs []ColumnID, dirs []encoding.Direction, exactPrefix int) orderingInfo {
+	var ordering orderingInfo
+
+	for i, colID := range columnIDs {
+		renderIdx, ok := findRenderIndexForCol(n.render, colID)
+		if !ok {
+			// We have a column that isn't part of the output.
+			if i < exactPrefix {
+				// Fortunately this is a single-result column, so we can safely ignore it.
+				//
+				// For example, assume we are using an ascending index on (k, b) with the query:
+				//
+				//   SELECT v FROM t WHERE k = 1
+				//
+				// Results are ordered by k then by v, but since k is a single-result column the
+				// results are also effectively ordered just by v.
+				continue
+			} else {
+				// Once we find a columnn that is not part of the output, the rest of the ordered
+				// columns aren't useful.
+				//
+				// For example, assume we are using an ascending index on (k, b) with the query:
+				//
+				//   SELECT v FROM t WHERE k > 1
+				//
+				// Results are ordered by k then by v. We cannot make any use of this ordering as an
+				// ordering on v.
 				break
 			}
+		}
+		if i < exactPrefix {
+			ordering.addSingleResultCol(renderIdx)
+		} else {
+			ordering.addColumn(renderIdx, (dirs[i] == encoding.Descending))
 		}
 	}
 	return ordering
