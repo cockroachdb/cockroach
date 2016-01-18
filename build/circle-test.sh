@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+CIRCLE_NODE_INDEX="${CIRCLE_NODE_INDEX-0}"
+CIRCLE_NODE_TOTAL="${CIRCLE_NODE_TOTAL-1}"
+
 if [ -n "${CIRCLE_ARTIFACTS-}" ]; then
   outdir="${CIRCLE_ARTIFACTS}"
 elif [ -n "${TMPDIR-}" ]; then

@@ -2,6 +2,9 @@
 
 set -eux
 
+CIRCLE_NODE_INDEX="${CIRCLE_NODE_INDEX-0}"
+CIRCLE_NODE_TOTAL="${CIRCLE_NODE_TOTAL-1}"
+
 function is_shard() {
   test $(($1 % $CIRCLE_NODE_TOTAL)) -eq $CIRCLE_NODE_INDEX
 }
@@ -68,11 +71,19 @@ shard2_done="${HOME}/shard2"
 
 function notify() {
   if is_shard 1; then
-    time ssh node0 touch "${shard1_done}"
+    if ! is_shard 0; then
+      time ssh node0 touch "${shard1_done}"
+    else
+      touch "${shard1_done}"
+    fi
   fi
 
   if is_shard 2; then
-    time ssh node0 touch "${shard2_done}"
+    if ! is_shard 0; then
+      time ssh node0 touch "${shard2_done}"
+    else
+      touch "${shard2_done}"
+    fi
   fi
 }
 
