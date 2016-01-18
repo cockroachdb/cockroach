@@ -111,7 +111,7 @@ func (n *indexJoinNode) Columns() []resultColumn {
 	return n.table.Columns()
 }
 
-func (n *indexJoinNode) Ordering() ([]int, int) {
+func (n *indexJoinNode) Ordering() orderingInfo {
 	return n.index.Ordering()
 }
 

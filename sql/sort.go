@@ -37,10 +37,10 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, *roachpb.Er
 	// We grab a copy of columns here because we might add new render targets
 	// below. This is the set of columns requested by the query.
 	columns := s.Columns()
-	var ordering []int
+	var ordering columnOrdering
 
 	for _, o := range n.OrderBy {
-		index := 0
+		index := -1
 
 		// Normalize the expression which has the side-effect of evaluating
 		// constant expressions and unwrapping expressions like "((a))" to "a".
@@ -58,13 +58,13 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, *roachpb.Er
 				target := string(qname.Base)
 				for j, col := range columns {
 					if equalName(target, col.name) {
-						index = j + 1
+						index = j
 						break
 					}
 				}
 			}
 
-			if index == 0 {
+			if index == -1 {
 				// No output column matched the qualified name, so look for an existing
 				// render target that matches the column name. This handles cases like:
 				//
@@ -76,7 +76,7 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, *roachpb.Er
 					for j, r := range s.render {
 						if qval, ok := r.(*qvalue); ok {
 							if equalName(qval.col.Name, qname.Column()) {
-								index = j + 1
+								index = j
 								break
 							}
 						}
@@ -85,13 +85,13 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, *roachpb.Er
 			}
 		}
 
-		if index == 0 {
+		if index == -1 {
 			// The order by expression matched neither an output column nor an
 			// existing render target.
 			if col, err := s.colIndex(expr); err != nil {
 				return nil, roachpb.NewError(err)
 			} else if col >= 0 {
-				index = col + 1
+				index = col
 			} else {
 				// Add a new render expression to use for ordering. This handles cases
 				// were the expression is either not a qualified name or is a qualified
@@ -102,14 +102,10 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, *roachpb.Er
 				if err := s.addRender(parser.SelectExpr{Expr: expr}); err != nil {
 					return nil, err
 				}
-				index = len(s.columns)
+				index = len(s.columns) - 1
 			}
 		}
-
-		if o.Direction == parser.Descending {
-			index = -index
-		}
-		ordering = append(ordering, index)
+		ordering = append(ordering, columnOrderInfo{colIdx: index, reverse: o.Direction == parser.Descending})
 	}
 
 	return &sortNode{columns: columns, ordering: ordering}, nil
@@ -118,7 +114,7 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, *roachpb.Er
 type sortNode struct {
 	plan     planNode
 	columns  []resultColumn
-	ordering []int
+	ordering columnOrdering
 	needSort bool
 	pErr     *roachpb.Error
 }
@@ -127,11 +123,11 @@ func (n *sortNode) Columns() []resultColumn {
 	return n.columns
 }
 
-func (n *sortNode) Ordering() ([]int, int) {
+func (n *sortNode) Ordering() orderingInfo {
 	if n == nil {
-		return nil, 0
+		return orderingInfo{}
 	}
-	return n.ordering, 0
+	return orderingInfo{singleResultCols: nil, ordering: n.ordering}
 }
 
 func (n *sortNode) Values() parser.DTuple {
@@ -166,11 +162,10 @@ func (n *sortNode) ExplainPlan() (name, description string, children []planNode)
 	strs := make([]string, len(n.ordering))
 	for i, o := range n.ordering {
 		prefix := '+'
-		if o < 0 {
-			o = -o
+		if o.reverse {
 			prefix = '-'
 		}
-		strs[i] = fmt.Sprintf("%c%s", prefix, columns[o-1].name)
+		strs[i] = fmt.Sprintf("%c%s", prefix, columns[o.colIdx].name)
 	}
 	description = strings.Join(strs, ",")
 
@@ -182,11 +177,11 @@ func (n *sortNode) wrap(plan planNode) planNode {
 	if n != nil {
 		// Check to see if the requested ordering is compatible with the existing
 		// ordering.
-		existingOrdering, prefix := plan.Ordering()
+		existingOrdering := plan.Ordering()
 		if log.V(2) {
-			log.Infof("Sort: existing=%d (%d) desired=%d", existingOrdering, prefix, n.ordering)
+			log.Infof("Sort: existing=%d desired=%d", existingOrdering, n.ordering)
 		}
-		match := computeOrderingMatch(n.ordering, existingOrdering, prefix, +1)
+		match := computeOrderingMatch(n.ordering, existingOrdering, false)
 		if match < len(n.ordering) {
 			n.plan = plan
 			n.needSort = true
@@ -233,25 +228,4 @@ func (n *sortNode) initValues() bool {
 	sort.Sort(v)
 	n.plan = v
 	return true
-}
-
-func computeOrderingMatch(desired, existing []int, prefix, reverse int) int {
-	match := 0
-	for match < len(desired) && match < len(existing) {
-		if desired[match] == reverse*existing[match] {
-			// The existing ordering matched the desired ordering.
-			prefix = 0
-			match++
-			continue
-		}
-		// The existing ordering did not match the desired ordering. Check if we're
-		// still considering a prefix of the existing ordering for which there was
-		// an exact match (and thus ordering is inconsequential).
-		if prefix == 0 {
-			break
-		}
-		prefix--
-		existing = existing[1:]
-	}
-	return match
 }

@@ -201,7 +201,7 @@ type groupNode struct {
 	// During rendering, aggregateFuncs compute their result for group.currentBucket.
 	currentBucket string
 
-	desiredOrdering []int
+	desiredOrdering columnOrdering
 	pErr            *roachpb.Error
 }
 
@@ -209,9 +209,9 @@ func (n *groupNode) Columns() []resultColumn {
 	return n.values.Columns()
 }
 
-func (n *groupNode) Ordering() ([]int, int) {
+func (n *groupNode) Ordering() orderingInfo {
 	// TODO(dt): aggregate buckets are returned un-ordered for now.
-	return nil, 0
+	return orderingInfo{}
 }
 
 func (n *groupNode) Values() parser.DTuple {
@@ -335,11 +335,8 @@ func (n *groupNode) isNotNullFilter(expr parser.Expr) parser.Expr {
 	if len(n.desiredOrdering) != 1 {
 		return expr
 	}
-	i := n.desiredOrdering[0]
-	if i < 0 {
-		i = -i
-	}
-	f := n.funcs[i-1]
+	i := n.desiredOrdering[0].colIdx
+	f := n.funcs[i]
 	isNotNull := &parser.ComparisonExpr{
 		Operator: parser.IsNot,
 		Left:     f.arg,
@@ -359,20 +356,21 @@ func (n *groupNode) isNotNullFilter(expr parser.Expr) parser.Expr {
 // aggregation. If zero or multiple MIN/MAX aggregations are requested then no
 // ordering will be requested. A negative index indicates a MAX aggregation was
 // requested for the output column.
-func desiredAggregateOrdering(funcs []*aggregateFunc) []int {
-	var limit int
+func desiredAggregateOrdering(funcs []*aggregateFunc) columnOrdering {
+	limit := -1
+	reverse := false
 	for i, f := range funcs {
 		impl := f.create()
 		switch impl.(type) {
 		case *maxAggregate, *minAggregate:
-			if limit != 0 || f.arg == nil {
+			if limit != -1 || f.arg == nil {
 				return nil
 			}
 			switch f.arg.(type) {
 			case *qvalue:
-				limit = i + 1
+				limit = i
 				if _, ok := impl.(*maxAggregate); ok {
-					limit = -limit
+					reverse = true
 				}
 			default:
 				return nil
@@ -382,10 +380,10 @@ func desiredAggregateOrdering(funcs []*aggregateFunc) []int {
 			return nil
 		}
 	}
-	if limit == 0 {
+	if limit == -1 {
 		return nil
 	}
-	return []int{limit}
+	return columnOrdering{{limit, reverse}}
 }
 
 type extractAggregatesVisitor struct {

@@ -28,11 +28,11 @@ func TestDesiredAggregateOrder(t *testing.T) {
 
 	testData := []struct {
 		expr     string
-		ordering []int
+		ordering columnOrdering
 	}{
 		{`a`, nil},
-		{`MIN(a)`, []int{1}},
-		{`MAX(a)`, []int{-1}},
+		{`MIN(a)`, columnOrdering{{0, false}}},
+		{`MAX(a)`, columnOrdering{{0, true}}},
 		{`(MIN(a), MAX(a))`, nil},
 		{`(MIN(a), AVG(a))`, nil},
 		{`(MIN(a), COUNT(a))`, nil},
@@ -53,7 +53,7 @@ func TestDesiredAggregateOrder(t *testing.T) {
 		}
 		ordering := desiredAggregateOrdering(group.funcs)
 		if !reflect.DeepEqual(d.ordering, ordering) {
-			t.Fatalf("%s: expected %d, but found %d", d.expr, d.ordering, ordering)
+			t.Fatalf("%s: expected %v, but found %v", d.expr, d.ordering, ordering)
 		}
 	}
 }
