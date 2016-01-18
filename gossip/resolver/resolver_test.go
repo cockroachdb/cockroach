@@ -26,7 +26,7 @@ import (
 var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
 
 func TestParseResolverSpec(t *testing.T) {
-	def := util.EnsureHostPort(":")
+	def := util.EnsureHostPort(":", util.CockroachPort)
 	testCases := []struct {
 		input           string
 		success         bool
