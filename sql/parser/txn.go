@@ -81,7 +81,7 @@ func (node *BeginTransaction) String() string {
 		fmt.Fprintf(&buf, " ISOLATION LEVEL %s", node.Isolation)
 	}
 	if node.UserPriority != UnspecifiedUserPriority {
-		fmt.Fprintf(&buf, " PRIORITY %s", node.UserPriority)
+		fmt.Fprintf(&buf, ", PRIORITY %s", node.UserPriority)
 	}
 	return buf.String()
 }

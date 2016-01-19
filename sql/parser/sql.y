@@ -808,7 +808,7 @@ transaction_mode_list:
   {
     $$ = &SetTransaction{Isolation: $1, UserPriority: UnspecifiedUserPriority}
   }
-| transaction_user_priority 
+| transaction_user_priority
   {
     $$ = &SetTransaction{Isolation: UnspecifiedIsolation, UserPriority: $1}
   }
@@ -904,18 +904,18 @@ iso_level:
   }
 
 user_priority:
-	LOW
-	{
-		$$ = Low
-	}
+  LOW
+  {
+    $$ = Low
+  }
 | NORMAL
-	{
-		$$ = Normal
-	}
+  {
+    $$ = Normal
+  }
 | HIGH
-	{
-		$$ = High
-	}	
+  {
+    $$ = High
+  }
 
 opt_boolean_or_string:
   TRUE
@@ -1461,12 +1461,12 @@ opt_transaction:
   TRANSACTION {}
 | /* EMPTY */ {}
 
-opt_transaction_mode_list:												
+opt_transaction_mode_list:
   transaction_iso_level
   {
     $$ = &BeginTransaction{Isolation: $1, UserPriority: UnspecifiedUserPriority}
   }
-| transaction_user_priority 
+| transaction_user_priority
   {
     $$ = &BeginTransaction{Isolation: UnspecifiedIsolation, UserPriority: $1}
   }
@@ -3631,7 +3631,7 @@ unreserved_keyword:
 | NAMES
 | NEXT
 | NO
-| NORMAL 
+| NORMAL
 | NOTHING
 | NULLS
 | OF

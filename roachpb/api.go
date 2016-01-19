@@ -30,8 +30,7 @@ func (up UserPriority) String() string {
 	switch up {
 	case LowUserPriority:
 		return "LOW"
-	// UnspecifiedUserPriority means NormalUserPriority
-	case 0, NormalUserPriority:
+	case UnspecifiedUserPriority, NormalUserPriority:
 		return "NORMAL"
 	case HighUserPriority:
 		return "HIGH"
@@ -45,6 +44,8 @@ const (
 	MinUserPriority    = 0.0001
 	// Low user priority
 	LowUserPriority    = 0.01
+	// Unspecified user priority. UnspecifiedUserPriority means NormalUserPriority.
+	UnspecifiedUserPriority = 0
 	// Normal user priority
 	NormalUserPriority = 1
 	// High user priority
