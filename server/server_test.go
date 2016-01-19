@@ -24,14 +24,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -503,8 +501,6 @@ func TestSystemConfigGossip(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 
-	resultChan := make(chan roachpb.Value)
-	var count int32
 	db := s.db
 	key := sql.MakeDescMetadataKey(keys.MaxReservedDescID)
 	valAt := func(i int) *sql.DatabaseDescriptor {
@@ -512,19 +508,15 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// Register a callback for gossip updates.
-	s.Gossip().RegisterCallback(gossip.KeySystemConfig, func(_ string, content roachpb.Value) {
-		newCount := atomic.AddInt32(&count, 1)
-		if newCount != 2 {
-			// RegisterCallback calls us right away with the contents,
-			// so ignore the very first call.
-			// We also only want the first value of all our writes.
-			return
-		}
-		resultChan <- content
-	})
+	resultChan := s.Gossip().RegisterSystemConfigChannel()
 
-	// The span only gets gossiped when it first shows up, or when
-	// the EndTransaction trigger is set.
+	// The span gets gossiped when it first shows up.
+	select {
+	case <-resultChan:
+
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("did not receive gossip message")
+	}
 
 	// Try a plain KV write first.
 	if err := db.Put(key, valAt(0)); err != nil {
@@ -538,6 +530,16 @@ func TestSystemConfigGossip(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
+	// Gossip channel should be dormant.
+	var systemConfig config.SystemConfig
+	select {
+	case <-resultChan:
+		systemConfig = *s.gossip.GetSystemConfig()
+		t.Fatalf("unexpected message received on gossip channel: %v", systemConfig)
+
+	case <-time.After(50 * time.Millisecond):
+	}
+
 	// This time mark the transaction as having a Gossip trigger.
 	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		txn.SetSystemConfigTrigger()
@@ -546,18 +548,16 @@ func TestSystemConfigGossip(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Wait for the callback.
-	var systemConfig config.SystemConfig
+	// New system config received.
 	select {
-	case content := <-resultChan:
-		if err := content.GetProto(&systemConfig); err != nil {
-			t.Fatal(err)
-		}
+	case <-resultChan:
+		systemConfig = *s.gossip.GetSystemConfig()
+
 	case <-time.After(500 * time.Millisecond):
-		t.Fatal("did not receive gossip callback")
+		t.Fatal("did not receive gossip message")
 	}
 
-	// Now check the gossip callback.
+	// Now check the new config.
 	var val *roachpb.Value
 	for _, kv := range systemConfig.Values {
 		if bytes.Equal(key, kv.Key) {
