@@ -1482,8 +1482,13 @@ DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
   return MergeResult(&meta, new_value);
 }
 
+const int64_t kNanosecondPerSecond = 1e9;
+
 inline int64_t age_factor(int64_t fromNS, int64_t toNS) {
-  return toNS/1e9 - fromNS/1e9; // not the same as (toNS-fromNS)/1e9!
+  // Careful about implicit conversions here.
+  // toNS/1e9 - fromNS/1e9 is not the same since
+  // "1e9" is a double.
+  return toNS/kNanosecondPerSecond - fromNS/kNanosecondPerSecond;
 }
 
 // TODO(tschottdorf): it's unfortunate that this method duplicates the logic

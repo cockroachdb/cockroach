@@ -436,8 +436,9 @@ func updateStatsOnAbort(key roachpb.Key, origMetaKeySize, origMetaValSize,
 // value counts, and updating the GC'able bytes age. If meta is
 // not nil, then the value being GC'd is the mvcc metadata and we
 // decrement the key count.
-// TODO(tschottdorf): forgot fixing this one. Clearly needs test coverage.
-func updateStatsOnGC(ms *MVCCStats, key roachpb.Key, keySize, valSize int64, meta *MVCCMetadata, ageSeconds int64) {
+func updateStatsOnGC(key roachpb.Key, keySize, valSize int64, meta *MVCCMetadata, fromNS, toNS int64) MVCCStats {
+	var ms MVCCStats
+	ms.AgeTo(fromNS)
 	sys := isSysLocal(key)
 	if sys {
 		ms.SysBytes -= (keySize + valSize)
@@ -452,8 +453,9 @@ func updateStatsOnGC(ms *MVCCStats, key roachpb.Key, keySize, valSize int64, met
 		} else {
 			ms.ValCount--
 		}
-		ms.GCBytesAge -= (keySize + valSize) * ageSeconds
 	}
+	ms.AgeTo(toNS)
+	return ms
 }
 
 // MVCCGetRangeStats reads stat counters for the specified range and
@@ -1519,9 +1521,8 @@ func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []roachpb.GCRequest_G
 			if meta.Txn != nil {
 				return util.Errorf("request to GC intent at %q", gcKey.Key)
 			}
-			ageSeconds := timestamp.WallTime/1E9 - meta.Timestamp.WallTime/1E9
 			if ms != nil {
-				updateStatsOnGC(ms, gcKey.Key, metaKeySize, metaValSize, meta, ageSeconds)
+				ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize, meta, meta.Timestamp.WallTime, timestamp.WallTime))
 			}
 			if !implicitMeta {
 				if err := engine.Clear(iter.Key()); err != nil {
@@ -1545,9 +1546,8 @@ func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []roachpb.GCRequest_G
 				break
 			}
 			if !gcKey.Timestamp.Less(iterKey.Timestamp) {
-				ageSeconds := timestamp.WallTime/1E9 - iterKey.Timestamp.WallTime/1E9
 				if ms != nil {
-					updateStatsOnGC(ms, gcKey.Key, mvccVersionTimestampSize, int64(len(iter.Value())), nil, ageSeconds)
+					ms.Add(updateStatsOnGC(gcKey.Key, mvccVersionTimestampSize, int64(len(iter.Value())), nil, iterKey.Timestamp.WallTime, timestamp.WallTime))
 				}
 				if err := engine.Clear(iterKey); err != nil {
 					return err

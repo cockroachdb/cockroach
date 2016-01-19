@@ -2262,7 +2262,6 @@ func encodedSize(msg proto.Message, t *testing.T) int64 {
 }
 
 func verifyStats(debug string, ms *MVCCStats, expMS *MVCCStats, t *testing.T) {
-	// ...And verify stats.
 	if ms.LiveBytes != expMS.LiveBytes {
 		t.Errorf("%s: mvcc live bytes %d; expected %d", debug, ms.LiveBytes, expMS.LiveBytes)
 	}
@@ -2288,7 +2287,7 @@ func verifyStats(debug string, ms *MVCCStats, expMS *MVCCStats, t *testing.T) {
 		t.Errorf("%s: mvcc intentCount %d; expected %d", debug, ms.IntentCount, expMS.IntentCount)
 	}
 	if ms.LastUpdateNanos != expMS.LastUpdateNanos {
-		t.Fatalf("%s: mvcc lastUpdateNanos %d; expected %d", debug, ms.LastUpdateNanos, expMS.LastUpdateNanos)
+		t.Errorf("%s: mvcc lastUpdateNanos %d; expected %d", debug, ms.LastUpdateNanos, expMS.LastUpdateNanos)
 	}
 	if ms.IntentAge != expMS.IntentAge {
 		t.Errorf("%s: mvcc intentAge %d; expected %d", debug, ms.IntentAge, expMS.IntentAge)
@@ -2534,16 +2533,21 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 	// Each put and delete may or may not involve a txn. Resolves may
 	// either commit or abort.
 	keys := map[int32][]byte{}
+	var lastWT int64
 	for i := int32(0); i < int32(1000); i++ {
+		// Create random future timestamp, up to a few seconds ahead.
+		ts := makeTS(lastWT+int64(rng.Float32()*4E9), int32(rng.Int()))
+		lastWT = ts.WallTime
+
 		if log.V(1) {
-			log.Infof("*** cycle %d", i)
+			log.Infof("*** cycle %d @ %s", i, ts)
 		}
 		// Manually advance aggregate intent age based on one extra second of simulation.
 		// Same for aggregate gc'able bytes age.
 
 		key := []byte(fmt.Sprintf("%s-%d", randutil.RandBytes(rng, int(rng.Int31n(32))), i))
 		keys[i] = key
-		ts := makeTS(int64(i+1)*1E9, 0)
+
 		var txn *roachpb.Transaction
 		if rng.Int31n(2) == 0 { // create a txn with 50% prob
 			txn = &roachpb.Transaction{ID: []byte(fmt.Sprintf("txn-%d", i)), Timestamp: ts}
@@ -2612,12 +2616,15 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 			// Compute the stats manually.
 			iter := engine.NewIterator(false)
 			expMS, err := iter.ComputeStats(mvccKey(roachpb.KeyMin),
-				mvccKey(roachpb.KeyMax), int64(i+1)*1E9)
+				mvccKey(roachpb.KeyMax), ts.WallTime)
 			iter.Close()
 			if err != nil {
 				t.Fatal(err)
 			}
 			verifyStats(fmt.Sprintf("cycle %d", i), ms, &expMS, t)
+			if t.Failed() {
+				t.Fatal("giving up")
+			}
 		}
 	}
 }
