@@ -19,10 +19,13 @@ package server
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/cloudfoundry/gosigar"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -148,7 +151,14 @@ func (ctx *Context) InitDefaults() {
 	ctx.Addr = defaultAddr
 	ctx.PGAddr = defaultPGAddr
 	ctx.MaxOffset = defaultMaxOffset
-	ctx.CacheSize = defaultCacheSize
+	m, err := totalMem()
+	if err == nil {
+		ctx.CacheSize = int64(m / 2)
+	} else {
+		ctx.CacheSize = defaultCacheSize
+		log.Warningf("error determining total memory: %s", err)
+	}
+	log.Infof("cache size set to %d MB", ctx.CacheSize>>20)
 	ctx.MemtableBudget = defaultMemtableBudget
 	ctx.ScanInterval = defaultScanInterval
 	ctx.ScanMaxIdleTime = defaultScanMaxIdleTime
@@ -263,4 +273,27 @@ func parseAttributes(attrsStr string) roachpb.Attributes {
 		}
 	}
 	return roachpb.Attributes{Attrs: filtered}
+}
+
+// totalMem returns the minimum of total system memory and cgroup
+// memory limit. An error is returned if the content of the memory limit file
+// can not be parsed or gosigar can not obtain the memory information.
+func totalMem() (uint64, error) {
+	var cm uint64
+	d, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+	if err == nil {
+		cm, err = strconv.ParseUint(strings.TrimSpace(string(d)), 10, 64)
+		if err != nil {
+			return 0, err
+		}
+	}
+	sm := sigar.Mem{}
+	err = sm.Get()
+	if err != nil {
+		return 0, err
+	}
+	if cm == 0 || sm.Total < cm {
+		return sm.Total, nil
+	}
+	return cm, nil
 }
