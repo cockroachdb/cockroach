@@ -391,16 +391,18 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 	if err := txn.Put("x", "y"); err != nil {
 		t.Fatal(err)
 	}
-	pErr, ok := txn.CPut(key, []byte("x"), []byte("born to fail")).GoError().(*roachpb.ConditionFailedError)
+	err, ok := txn.CPut(key, []byte("x"), []byte("born to fail")).GoError().(*roachpb.ConditionFailedError)
 	if !ok {
-		t.Fatal(pErr)
+		t.Fatal(err)
 	}
 	s.Sender.Lock()
 	intentSpans := s.Sender.txns[string(txn.Proto.ID)].intentSpans()
 	expSpans := []roachpb.Span{{Key: key, EndKey: []byte("")}}
 	equal := !reflect.DeepEqual(intentSpans, expSpans)
 	s.Sender.Unlock()
-	_ = txn.Rollback()
+	if pErr := txn.Rollback(); pErr != nil {
+		t.Fatal(pErr)
+	}
 	if !equal {
 		t.Fatalf("expected stored intents %v, got %v", expSpans, intentSpans)
 	}
