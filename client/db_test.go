@@ -325,12 +325,14 @@ func TestDebugName(t *testing.T) {
 	defer s.Stop()
 
 	file, _, _ := caller.Lookup(0)
-	_ = db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		if !strings.HasPrefix(txn.DebugName(), file+":") {
 			t.Fatalf("expected \"%s\" to have the prefix \"%s:\"", txn.DebugName(), file)
 		}
 		return nil
-	})
+	}); pErr != nil {
+		t.Errorf("txn failed: %s", pErr)
+	}
 }
 
 func TestCommonMethods(t *testing.T) {
