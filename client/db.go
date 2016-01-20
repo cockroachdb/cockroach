@@ -418,6 +418,7 @@ func sendAndFill(send func(...roachpb.Request) (*roachpb.BatchResponse, *roachpb
 	// result gets initialized with an error from the corresponding call.
 	br, pErr := send(b.reqs...)
 	if pErr != nil {
+		// Discard errors from fillResults.
 		_ = b.fillResults(nil, pErr)
 		return nil, pErr
 	}
