@@ -729,6 +729,12 @@ var builtins = map[string][]builtin{
 		}),
 	},
 
+	"cot": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(1 / math.Tan(x)), nil
+		}),
+	},
+
 	"degrees": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return DFloat(180.0 * x / math.Pi), nil
