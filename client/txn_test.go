@@ -498,8 +498,12 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 		}, nil))
 
 		txn := NewTxn(*db)
-		_ = txn.Put("a", "b")
-		_ = txn.Commit()
+		if pErr := txn.Put("a", "b"); pErr != nil {
+			t.Errorf("put failed: %s", pErr)
+		}
+		if pErr := txn.Commit(); pErr == nil {
+			t.Errorf("unexpected commit success")
+		}
 
 		if !commit {
 			t.Errorf("%T: failed to find commit", test.err)
