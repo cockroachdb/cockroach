@@ -95,12 +95,14 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 		br.Error = pErr
 		return []proto.Message{br}, nil
 	}
+	retryOpts := GetDefaultDistSenderRetryOptions()
+	retryOpts.Closer = ltc.Stopper.ShouldDrain()
 	ltc.distSender = NewDistSender(&DistSenderContext{
 		Clock: ltc.Clock,
 		RangeDescriptorCacheSize: defaultRangeDescriptorCacheSize,
 		RangeLookupMaxRanges:     defaultRangeLookupMaxRanges,
 		LeaderCacheSize:          defaultLeaderCacheSize,
-		RPCRetryOptions:          &defaultRPCRetryOptions,
+		RPCRetryOptions:          &retryOpts,
 		nodeDescriptor:           nodeDesc,
 		RPCSend:                  rpcSend,    // defined above
 		RangeDescriptorDB:        ltc.stores, // for descriptor lookup

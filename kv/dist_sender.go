@@ -553,6 +553,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 		var desc *roachpb.RangeDescriptor
 		var needAnother bool
 		var pErr *roachpb.Error
+		var finished bool
 		for r := retry.Start(ds.rpcRetryOptions); r.Next(); {
 			// Get range descriptor (or, when spanning range, descriptors). Our
 			// error handling below may clear them on certain errors, so we
@@ -627,6 +628,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			}()
 			// If sending succeeded, break this loop.
 			if pErr == nil {
+				finished = true
 				break
 			}
 
@@ -674,10 +676,10 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				continue
 			case *roachpb.NotLeaderError:
 				newLeader := tErr.Leader
-				// Verify that leader is a known replica according to the
-				// descriptor. If not, we've got a stale replica; evict cache.
-				// Next, cache the new leader.
 				if newLeader != nil {
+					// Verify that leader is a known replica according to the
+					// descriptor. If not, we've got a stale range descriptor;
+					// evict cache.
 					if i, _ := desc.FindReplica(newLeader.StoreID); i == -1 {
 						if log.V(1) {
 							log.Infof("error indicates unknown leader %s, expunging descriptor %s", newLeader, desc)
@@ -685,8 +687,20 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 						evictDesc()
 					}
 				} else {
+					// If the new leader is unknown, we were talking to a
+					// replica that is partitioned away from the majority. Our
+					// range descriptor may be stale, so clear the cache.
+					//
+					// TODO(bdarnell): An unknown-leader error doesn't
+					// necessarily mean our descriptor is stale. Ideally we
+					// would treat these errors more like SendError: retry on
+					// another node (at a lower level), and then if it reaches
+					// this level then we know we've exhausted our options and
+					// must clear the cache.
+					evictDesc()
 					newLeader = &roachpb.ReplicaDescriptor{}
 				}
+				// Next, cache the new leader.
 				ds.updateLeaderCache(roachpb.RangeID(desc.RangeID), *newLeader)
 				if log.V(1) {
 					log.Warning(tErr)
@@ -707,6 +721,13 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 		// Immediately return if querying a range failed non-retryably.
 		if pErr != nil {
 			return nil, pErr, false
+		} else if !finished {
+			select {
+			case <-ds.rpcRetryOptions.Closer:
+				return nil, roachpb.NewError(&roachpb.NodeUnavailableError{}), false
+			default:
+				log.Fatal("exited retry loop with nil error but finished=false")
+			}
 		}
 
 		ba.Txn.Update(curReply.Txn)

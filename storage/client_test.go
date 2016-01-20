@@ -119,10 +119,13 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	if err := gossipNodeDesc(sCtx.Gossip, nodeDesc.NodeID); err != nil {
 		t.Fatal(err)
 	}
+	retryOpts := kv.GetDefaultDistSenderRetryOptions()
+	retryOpts.Closer = stopper.ShouldDrain()
 	distSender := kv.NewDistSender(&kv.DistSenderContext{
 		Clock:             clock,
 		RPCSend:           rpcSend, // defined above
-		RangeDescriptorDB: stores,  // for descriptor lookup
+		RPCRetryOptions:   &retryOpts,
+		RangeDescriptorDB: stores, // for descriptor lookup
 	}, sCtx.Gossip)
 
 	sender := kv.NewTxnCoordSender(distSender, clock, false, nil, stopper)
@@ -222,10 +225,13 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	}
 
 	if m.db == nil {
+		retryOpts := kv.GetDefaultDistSenderRetryOptions()
+		retryOpts.Closer = m.clientStopper.ShouldDrain()
 		m.distSender = kv.NewDistSender(&kv.DistSenderContext{
 			Clock:             m.clock,
 			RangeDescriptorDB: m,
 			RPCSend:           m.rpcSend,
+			RPCRetryOptions:   &retryOpts,
 		}, m.gossip)
 		sender := kv.NewTxnCoordSender(m.distSender, m.clock, false, nil, m.clientStopper)
 		m.db = client.NewDB(sender)
@@ -323,7 +329,7 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 			br, pErr = sender.Send(context.Background(), ba)
 		}) {
 			pErr = &roachpb.Error{}
-			pErr.SetGoError(rpc.NewSendError("store is stopped", false))
+			pErr.SetGoError(rpc.NewSendError("store is stopped", true))
 			m.expireLeaderLeases()
 			continue
 		}
