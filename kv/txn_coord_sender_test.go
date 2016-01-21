@@ -484,6 +484,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	origTS := makeTS(123, 0)
 	testCases := []struct {
 		pErr             *roachpb.Error
+		pErrTxn          *roachpb.Transaction
 		expEpoch         uint32
 		expPri           int32
 		expTS, expOrigTS roachpb.Timestamp
@@ -535,10 +536,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		},
 		{
 			// On retry, restart with new epoch, timestamp and priority.
-			pErr: roachpb.NewError(&roachpb.TransactionRetryError{
-				Txn: roachpb.Transaction{
-					Timestamp: origTS.Add(10, 10), Priority: int32(10)},
-			}),
+			pErr: roachpb.NewError(&roachpb.TransactionRetryError{}),
+			pErrTxn: &roachpb.Transaction{
+				Timestamp: origTS.Add(10, 10), Priority: int32(10)},
 			expEpoch:  1,
 			expPri:    10,
 			expTS:     origTS.Add(10, 10),
@@ -557,6 +557,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			var reply *roachpb.BatchResponse
 			if test.pErr == nil {
 				reply = ba.CreateReply()
+			} else {
+				test.pErr.Txn = test.pErrTxn
 			}
 			return reply, test.pErr
 		}), clock, false, nil, stopper)
@@ -693,7 +695,9 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 	ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		txn := ba.Txn.Clone()
 		txn.Writing = true
-		return nil, roachpb.NewError(roachpb.NewTransactionRetryError(txn))
+		pErr := roachpb.NewError(roachpb.NewTransactionRetryError())
+		pErr.Txn = txn
+		return nil, pErr
 	}), clock, false, nil, stopper)
 	defer stopper.Stop()
 
