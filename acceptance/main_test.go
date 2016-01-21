@@ -88,7 +88,9 @@ func farmer(t *testing.T) *terrafarm.Farmer {
 	return f
 }
 
-// StartCluster starts a cluster from the relevant flags.
+// StartCluster starts a cluster from the relevant flags. All test clusters
+// should be created through this command since it sets up the logging in a
+// unified way.
 func StartCluster(t *testing.T) cluster.Cluster {
 	if *numLocal > 0 {
 		if *numRemote > 0 {
@@ -116,6 +118,7 @@ func StartCluster(t *testing.T) cluster.Cluster {
 		_ = f.Destroy()
 		t.Fatalf("cluster not ready in time: %v", err)
 	}
+	checkRangeReplication(t, f, 20*time.Second)
 	return f
 }
 
@@ -136,14 +139,11 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// MustStartLocal skips tests not running against a local cluster.
-func MustStartLocal(t *testing.T) *cluster.LocalCluster {
+// SkipUnlessLocal calls t.Skip if not running against a local cluster.
+func SkipUnlessLocal(t *testing.T) {
 	if *numLocal == 0 {
 		t.Skip("skipping since not run against local cluster")
 	}
-	l := cluster.CreateLocal(*numLocal, *numStores, *logDir, stopper)
-	l.Start()
-	return l
 }
 
 func makeClient(t util.Tester, str string) (*client.DB, *stop.Stopper) {
@@ -212,7 +212,9 @@ func testDockerSuccess(t *testing.T, tag string, cmd []string) {
 }
 
 func testDocker(t *testing.T, tag string, cmd []string) (result dockerclient.WaitResult, logs string) {
-	l := MustStartLocal(t)
+	SkipUnlessLocal(t)
+	l := StartCluster(t).(*cluster.LocalCluster)
+
 	defer l.AssertAndStop(t)
 
 	addr := l.Nodes[0].PGAddr()

@@ -19,7 +19,6 @@
 package acceptance
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -44,9 +43,9 @@ var retryOptions = retry.Options{
 }
 
 // get performs an HTTPS GET to the specified path for a specific node.
-func get(t *testing.T, node *cluster.Container, path string) []byte {
-	url := fmt.Sprintf("https://%s%s", node.Addr(""), path)
+func get(t *testing.T, base, rel string) []byte {
 	// TODO(bram) #2059: Remove retry logic.
+	url := fmt.Sprintf("%s/%s", base, rel)
 	for r := retry.Start(retryOptions); r.Next(); {
 		resp, err := cluster.HTTPClient.Get(url)
 		if err != nil {
@@ -73,65 +72,55 @@ func get(t *testing.T, node *cluster.Container, path string) []byte {
 // checkNode checks all the endpoints of the status server hosted by node and
 // requests info for the node with otherNodeID. That node could be the same
 // other node, the same node or "local".
-func checkNode(t *testing.T, node *cluster.Container, nodeID, otherNodeID, expectedNodeID string) {
-	body := get(t, node, "/_status/details/"+otherNodeID)
+func checkNode(t *testing.T, c cluster.Cluster, i int, nodeID, otherNodeID, expectedNodeID string) {
 	var detail details
-	if err := json.Unmarshal(body, &detail); err != nil {
+	if err := getJSON(c.URL(i), "/_status/details/"+otherNodeID, &detail); err != nil {
 		t.Fatal(util.ErrorfSkipFrames(1, "unable to parse details - %s", err))
 	}
 	if actualNodeID := detail.NodeID.String(); actualNodeID != expectedNodeID {
 		t.Fatal(util.ErrorfSkipFrames(1, "%s calling %s: node ids don't match - expected %s, actual %s", nodeID, otherNodeID, expectedNodeID, actualNodeID))
 	}
 
-	get(t, node, fmt.Sprintf("/_status/gossip/%s", otherNodeID))
-	get(t, node, fmt.Sprintf("/_status/logfiles/%s", otherNodeID))
-	get(t, node, fmt.Sprintf("/_status/logs/%s", otherNodeID))
-	get(t, node, fmt.Sprintf("/_status/stacks/%s", otherNodeID))
-	get(t, node, fmt.Sprintf("/_status/nodes/%s", otherNodeID))
+	get(t, c.URL(i), fmt.Sprintf("/_status/gossip/%s", otherNodeID))
+	get(t, c.URL(i), fmt.Sprintf("/_status/logfiles/%s", otherNodeID))
+	get(t, c.URL(i), fmt.Sprintf("/_status/logs/%s", otherNodeID))
+	get(t, c.URL(i), fmt.Sprintf("/_status/stacks/%s", otherNodeID))
+	get(t, c.URL(i), fmt.Sprintf("/_status/nodes/%s", otherNodeID))
 }
 
 // TestStatusServer starts up an N node cluster and tests the status server on
 // each node.
 func TestStatusServer(t *testing.T) {
-	if *numLocal == 0 {
-		t.Skip("skipping since not run against local cluster")
-	}
-
-	l := cluster.CreateLocal(*numLocal, *numStores, *logDir, stopper) // intentionally using local cluster
-	l.ForceLogging = true
-	l.Start()
-	defer l.AssertAndStop(t)
-
-	checkRangeReplication(t, l, 20*time.Second)
+	c := StartCluster(t)
+	defer c.AssertAndStop(t)
 
 	// Get the ids for each node.
-	idMap := make(map[string]string)
-	for _, node := range l.Nodes {
-		body := get(t, node, "/_status/details/local")
+	idMap := make(map[int]string)
+	for i := 0; i < c.NumNodes(); i++ {
 		var detail details
-		if err := json.Unmarshal(body, &detail); err != nil {
-			t.Fatalf("unable to parse details - %s", err)
+		if err := getJSON(c.URL(i), "/_status/details/local", &detail); err != nil {
+			t.Fatal(err)
 		}
-		idMap[node.ID] = detail.NodeID.String()
+		idMap[i] = detail.NodeID.String()
 	}
 
 	// Check local response for the every node.
-	for _, node := range l.Nodes {
-		checkNode(t, node, idMap[node.ID], "local", idMap[node.ID])
-		get(t, node, "/_status/nodes")
-		get(t, node, "/_status/stores")
+	for i := 0; i < c.NumNodes(); i++ {
+		checkNode(t, c, i, idMap[i], "local", idMap[i])
+		get(t, c.URL(i), "/_status/nodes")
+		get(t, c.URL(i), "/_status/stores")
 	}
 
 	// Proxy from the first node to the last node.
-	firstNode := l.Nodes[0]
-	lastNode := l.Nodes[len(l.Nodes)-1]
-	firstID := idMap[firstNode.ID]
-	lastID := idMap[lastNode.ID]
-	checkNode(t, firstNode, firstID, lastID, lastID)
+	firstNode := 0
+	lastNode := c.NumNodes() - 1
+	firstID := idMap[firstNode]
+	lastID := idMap[lastNode]
+	checkNode(t, c, firstNode, firstID, lastID, lastID)
 
 	// And from the last node to the first node.
-	checkNode(t, lastNode, lastID, firstID, firstID)
+	checkNode(t, c, lastNode, lastID, firstID, firstID)
 
 	// And from the last node to the last node.
-	checkNode(t, lastNode, lastID, lastID, lastID)
+	checkNode(t, c, lastNode, lastID, lastID, lastID)
 }

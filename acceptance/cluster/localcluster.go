@@ -118,7 +118,6 @@ type LocalCluster struct {
 	monitorStopper chan struct{}
 	logDir         string
 	keepLogs       bool
-	ForceLogging   bool // Forces logging to disk on a per test basis
 }
 
 // CreateLocal creates a new local cockroach cluster. The stopper is used to
@@ -287,12 +286,6 @@ func (l *LocalCluster) initCluster() {
 		if err := os.MkdirAll(l.logDir, 0777); err != nil {
 			log.Fatal(err)
 		}
-	} else if l.ForceLogging {
-		l.logDir, err = ioutil.TempDir(pwd, ".localcluster.logs.")
-		if err != nil {
-			panic(err)
-		}
-		binds = append(binds, l.logDir+":/logs")
 	}
 	if *cockroachImage == builderImage {
 		path, err := filepath.Abs(*cockroachBinary)
