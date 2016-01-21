@@ -400,7 +400,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		// retry error if the commit timestamp isn't equal to the txn
 		// timestamp.
 		if h.Txn.Isolation == roachpb.SERIALIZABLE && !reply.Txn.Timestamp.Equal(h.Txn.OrigTimestamp) {
-			return reply, nil, roachpb.NewTransactionRetryError(reply.Txn)
+			return reply, nil, roachpb.NewTransactionRetryError()
 		}
 		reply.Txn.Status = roachpb.COMMITTED
 	} else {

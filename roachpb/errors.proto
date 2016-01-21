@@ -86,10 +86,8 @@ message TransactionPushError {
 }
 
 // A TransactionRetryError indicates that the transaction must be
-// retried, usually with an increased transaction timestamp. The
-// transaction struct to use is returned with the error.
+// retried, usually with an increased transaction timestamp.
 message TransactionRetryError {
-  optional Transaction txn = 1 [(gogoproto.nullable) = false];
 }
 
 // A TransactionStatusError indicates that the transaction status is

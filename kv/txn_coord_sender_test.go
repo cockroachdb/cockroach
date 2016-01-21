@@ -535,10 +535,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		},
 		{
 			// On retry, restart with new epoch, timestamp and priority.
-			pErr: roachpb.NewError(&roachpb.TransactionRetryError{
-				Txn: roachpb.Transaction{
-					Timestamp: origTS.Add(10, 10), Priority: int32(10)},
-			}),
+			pErr: roachpb.NewErrorWithTxn(&roachpb.TransactionRetryError{},
+				&roachpb.Transaction{
+					Timestamp: origTS.Add(10, 10), Priority: int32(10)}),
 			expEpoch:  1,
 			expPri:    10,
 			expTS:     origTS.Add(10, 10),
@@ -693,7 +692,9 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 	ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		txn := ba.Txn.Clone()
 		txn.Writing = true
-		return nil, roachpb.NewError(roachpb.NewTransactionRetryError(txn))
+		pErr := roachpb.NewError(roachpb.NewTransactionRetryError())
+		pErr.Txn = txn
+		return nil, pErr
 	}), clock, false, nil, stopper)
 	defer stopper.Stop()
 
