@@ -1430,7 +1430,9 @@ func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) *
 		// aborted and learns about that right now.
 		abortErr := roachpb.NewTransactionAbortedError(&txn)
 		abortErr.Txn.Timestamp.Forward(entry.Timestamp)
-		return roachpb.NewError(abortErr)
+		pErr := roachpb.NewError(abortErr)
+		pErr.Txn = &abortErr.Txn
+		return pErr
 	} else if sequence >= txn.Sequence || epoch > txn.Epoch {
 		// We hit the cache, so let the transaction restart.
 		// This is also the path taken by roachpb.SequencePoisonRestart.
@@ -1440,7 +1442,7 @@ func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) *
 		retryErr := roachpb.NewTransactionRetryError(&txn)
 		retryErr.Txn.Timestamp.Forward(entry.Timestamp)
 		pErr := roachpb.NewError(retryErr)
-		pErr.Txn = &txn
+		pErr.Txn = &retryErr.Txn
 		return pErr
 	}
 	return nil
