@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	"math/rand"
 	"os"
 	"testing"
 
@@ -233,6 +234,51 @@ func BenchmarkInsert100_Cockroach(b *testing.B) {
 
 func BenchmarkInsert100_Postgres(b *testing.B) {
 	benchmarkPostgres(b, runBenchmarkInsert100)
+}
+
+// runBenchmarkUpdate benchmarks updating a random row.
+func runBenchmarkUpdate(b *testing.B, db *sql.DB) {
+	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.update`); err != nil {
+		b.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE bench.update (k INT PRIMARY KEY, v INT)`); err != nil {
+		b.Fatal(err)
+	}
+
+	rows := 5000
+
+	var buf bytes.Buffer
+	buf.WriteString(`INSERT INTO bench.update VALUES `)
+	for i := 0; i < rows; i++ {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		fmt.Fprintf(&buf, "(%d, %d)", i, i)
+	}
+	if _, err := db.Exec(buf.String()); err != nil {
+		b.Fatal(err)
+	}
+	s := rand.New(rand.NewSource(5432))
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := db.Exec(fmt.Sprintf(`UPDATE bench.update SET v = v + 1 WHERE k = %d`, s.Intn(rows))); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+
+	if _, err := db.Exec(`DROP TABLE bench.update`); err != nil {
+		b.Fatal(err)
+	}
+}
+
+func BenchmarkUpdate_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkUpdate)
+}
+
+func BenchmarkUpdate_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkUpdate)
 }
 
 // runBenchmarkScan benchmarks scanning a table containing count rows.
