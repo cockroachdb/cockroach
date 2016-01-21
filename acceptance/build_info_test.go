@@ -22,28 +22,26 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/util"
 )
 
 func TestBuildInfo(t *testing.T) {
-	SkipUnlessLocal(t)
-	l := StartCluster(t).(*cluster.LocalCluster)
-	defer l.AssertAndStop(t)
+	c := StartCluster(t)
+	defer c.AssertAndStop(t)
 
-	checkGossip(t, l, 20*time.Second, hasPeers(l.NumNodes()))
+	checkGossip(t, c, 20*time.Second, hasPeers(c.NumNodes()))
 
 	util.SucceedsWithin(t, 10*time.Second, func() error {
 		select {
 		case <-stopper:
 			t.Fatalf("interrupted")
 			return nil
-		case <-time.After(200 * time.Millisecond):
+		default:
 		}
 		var r struct {
 			BuildInfo map[string]string
 		}
-		if err := l.Nodes[0].GetJSON("", "/_status/details/local", &r); err != nil {
+		if err := getJSON(c.URL(0), "/_status/details/local", &r); err != nil {
 			return err
 		}
 		for _, key := range []string{"goVersion", "tag", "time", "dependencies"} {

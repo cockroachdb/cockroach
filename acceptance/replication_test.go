@@ -20,7 +20,6 @@ package acceptance
 
 import (
 	"fmt"
-	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
@@ -39,14 +38,14 @@ func countRangeReplicas(db *client.DB) (int, error) {
 	return len(desc.Replicas), nil
 }
 
-func checkRangeReplication(t util.Tester, c *cluster.LocalCluster, d time.Duration) {
+func checkRangeReplication(t util.Tester, c cluster.Cluster, d time.Duration) {
 	// Always talk to node 0.
 	client, dbStopper := makeClient(t, c.ConnString(0))
 	defer dbStopper.Stop()
 
 	wantedReplicas := 3
-	if len(c.Nodes) < 3 {
-		wantedReplicas = len(c.Nodes)
+	if c.NumNodes() < 3 {
+		wantedReplicas = c.NumNodes()
 	}
 
 	log.Infof("waiting for first range to have %d replicas", wantedReplicas)
@@ -70,12 +69,4 @@ func checkRangeReplication(t util.Tester, c *cluster.LocalCluster, d time.Durati
 		}
 		return fmt.Errorf("expected %d replicas, only found %d", wantedReplicas, foundReplicas)
 	})
-}
-
-func TestRangeReplication(t *testing.T) {
-	SkipUnlessLocal(t)
-	l := StartCluster(t).(*cluster.LocalCluster)
-	defer l.AssertAndStop(t)
-
-	checkRangeReplication(t, l, 20*time.Second)
 }

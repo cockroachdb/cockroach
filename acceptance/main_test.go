@@ -118,6 +118,7 @@ func StartCluster(t *testing.T) cluster.Cluster {
 		_ = f.Destroy()
 		t.Fatalf("cluster not ready in time: %v", err)
 	}
+	checkRangeReplication(t, f, 20*time.Second)
 	return f
 }
 
@@ -138,7 +139,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// SkipUnlessLocal skips if not running against a local cluster.
+// SkipUnlessLocal calls t.Skip if not running against a local cluster.
 func SkipUnlessLocal(t *testing.T) {
 	if *numLocal == 0 {
 		t.Skip("skipping since not run against local cluster")
