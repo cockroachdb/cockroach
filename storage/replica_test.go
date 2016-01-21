@@ -2240,6 +2240,51 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 	}
 }
 
+// TestSequenceCacheError verifies that roachpb.Errors returned by checkSequenceCache
+// have txns that are identical to txns stored in Transaction{Retry,Aborted}Error.
+func TestSequenceCacheError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	txn := roachpb.Transaction{}
+	txn.ID = []byte("id")
+	txn.Sequence = 1
+	txn.Timestamp = roachpb.Timestamp{WallTime: 1}
+
+	// Populate the sequence cache with a higher sequence number
+	// to trigger TransactionRetryError.
+	key := roachpb.Key("k")
+	ts := txn.Timestamp.Next()
+	if err := tc.rng.sequence.Put(tc.engine, txn.ID, txn.Epoch, txn.Sequence+1, key, ts, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	pErr := tc.rng.checkSequenceCache(tc.engine, txn)
+	if err, ok := pErr.GoError().(*roachpb.TransactionRetryError); ok {
+		if pErr.Txn == nil || !reflect.DeepEqual(pErr.Txn, &err.Txn) {
+			t.Errorf("txn does not match: %s v.s. %s", pErr.Txn, err.Txn)
+		}
+	} else {
+		t.Errorf("unexpected error: %s", pErr)
+	}
+
+	// Poison the sequence cache to trigger TransactionAbortedError.
+	if err := tc.rng.sequence.Put(tc.engine, txn.ID, txn.Epoch, roachpb.SequencePoisonAbort, key, ts, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	pErr = tc.rng.checkSequenceCache(tc.engine, txn)
+	if err, ok := pErr.GoError().(*roachpb.TransactionAbortedError); ok {
+		if pErr.Txn == nil || !reflect.DeepEqual(pErr.Txn, &err.Txn) {
+			t.Errorf("txn does not match: %s v.s. %s", pErr.Txn, err.Txn)
+		}
+	} else {
+		t.Errorf("unexpected error: %s", pErr)
+	}
+}
+
 // TestPushTxnBadKey verifies that args.Key equals args.PusheeTxn.ID.
 func TestPushTxnBadKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
