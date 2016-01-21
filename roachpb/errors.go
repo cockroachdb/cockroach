@@ -103,6 +103,12 @@ func (e *internalError) canRestartTransaction() TransactionRestart {
 	return e.TransactionRestart
 }
 
+// structuredError is an interface for each error detail.
+type structuredError interface {
+	// message returns an error message.
+	message(pErr *Error) string
+}
+
 // CanRetry implements the retry.Retryable interface.
 func (e *Error) CanRetry() bool {
 	return e.Retryable
@@ -137,7 +143,11 @@ func (e *Error) SetGoError(err error) {
 	if e.Message != "" {
 		panic("cannot re-use roachpb.Error")
 	}
-	e.Message = err.Error()
+	if sErr, ok := err.(structuredError); ok {
+		e.Message = sErr.message(e)
+	} else {
+		e.Message = err.Error()
+	}
 	if r, ok := err.(retry.Retryable); ok {
 		e.Retryable = r.CanRetry()
 	}
@@ -278,15 +288,23 @@ func (*TransactionPushError) canRestartTransaction() TransactionRestart {
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
 // Txn is the transaction which will be retried (a copy is taken).
-func NewTransactionRetryError(txn *Transaction) *TransactionRetryError {
-	return &TransactionRetryError{Txn: *txn.Clone()}
+func NewTransactionRetryError() *TransactionRetryError {
+	return &TransactionRetryError{}
 }
 
 // Error formats error.
+// TODO(kaneda): Delete this method once we fully unimplement error for every
+// error detail.
 func (e *TransactionRetryError) Error() string {
-	return fmt.Sprintf("retry txn %s", e.Txn)
+	return fmt.Sprintf("retry txn")
 }
 
+// message returns an error message.
+func (e *TransactionRetryError) message(pErr *Error) string {
+	return fmt.Sprintf("retry txn %s", pErr.Txn)
+}
+
+var _ structuredError = &TransactionRetryError{}
 var _ transactionRestartError = &TransactionRetryError{}
 
 // canRestartTransaction implements the transactionRestartError interface.

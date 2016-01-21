@@ -873,24 +873,12 @@ class TransactionRetryError : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.roachpb.Transaction txn = 1;
-  bool has_txn() const;
-  void clear_txn();
-  static const int kTxnFieldNumber = 1;
-  const ::cockroach::roachpb::Transaction& txn() const;
-  ::cockroach::roachpb::Transaction* mutable_txn();
-  ::cockroach::roachpb::Transaction* release_txn();
-  void set_allocated_txn(::cockroach::roachpb::Transaction* txn);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.TransactionRetryError)
  private:
-  inline void set_has_txn();
-  inline void clear_has_txn();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::cockroach::roachpb::Transaction* txn_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
@@ -3270,49 +3258,6 @@ inline void TransactionPushError::set_allocated_pushee_txn(::cockroach::roachpb:
 // -------------------------------------------------------------------
 
 // TransactionRetryError
-
-// optional .cockroach.roachpb.Transaction txn = 1;
-inline bool TransactionRetryError::has_txn() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void TransactionRetryError::set_has_txn() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void TransactionRetryError::clear_has_txn() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void TransactionRetryError::clear_txn() {
-  if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
-  clear_has_txn();
-}
-inline const ::cockroach::roachpb::Transaction& TransactionRetryError::txn() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionRetryError.txn)
-  return txn_ != NULL ? *txn_ : *default_instance_->txn_;
-}
-inline ::cockroach::roachpb::Transaction* TransactionRetryError::mutable_txn() {
-  set_has_txn();
-  if (txn_ == NULL) {
-    txn_ = new ::cockroach::roachpb::Transaction;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TransactionRetryError.txn)
-  return txn_;
-}
-inline ::cockroach::roachpb::Transaction* TransactionRetryError::release_txn() {
-  clear_has_txn();
-  ::cockroach::roachpb::Transaction* temp = txn_;
-  txn_ = NULL;
-  return temp;
-}
-inline void TransactionRetryError::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
-  delete txn_;
-  txn_ = txn;
-  if (txn) {
-    set_has_txn();
-  } else {
-    clear_has_txn();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.TransactionRetryError.txn)
-}
 
 // -------------------------------------------------------------------
 
