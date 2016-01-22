@@ -76,12 +76,14 @@ type BeginTransaction struct {
 
 func (node *BeginTransaction) String() string {
 	var buf bytes.Buffer
+	var sep string
 	buf.WriteString("BEGIN TRANSACTION")
 	if node.Isolation != UnspecifiedIsolation {
 		fmt.Fprintf(&buf, " ISOLATION LEVEL %s", node.Isolation)
+		sep = ","
 	}
 	if node.UserPriority != UnspecifiedUserPriority {
-		fmt.Fprintf(&buf, ", PRIORITY %s", node.UserPriority)
+		fmt.Fprintf(&buf, "%s PRIORITY %s", sep, node.UserPriority)
 	}
 	return buf.String()
 }

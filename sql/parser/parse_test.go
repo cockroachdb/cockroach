@@ -123,6 +123,7 @@ func TestParse(t *testing.T) {
 		{`SHOW GRANTS FOR bar, baz`},
 
 		{`SHOW TRANSACTION ISOLATION LEVEL`},
+		{`SHOW TRANSACTION PRIORITY`},
 
 		// Tables are the default, but can also be specified with
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
