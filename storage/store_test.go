@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -272,45 +273,37 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	if _, err := store.GetReplica(0); err == nil {
-		t.Error("expected GetRange to fail on missing range")
-	}
+	_, err := store.GetReplica(0)
+	require.Error(t, err, "expected GetRange to fail on missing range")
+
 	// Range 1 already exists. Make sure we can fetch it.
 	rng1, err := store.GetReplica(1)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
+
 	// Remove range 1.
-	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, store.RemoveReplica(rng1, *rng1.Desc(), true))
+
 	// Create a new range (id=2).
 	rng2 := createRange(store, 2, roachpb.RKey("a"), roachpb.RKey("b"))
-	if err := store.AddReplicaTest(rng2); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, store.AddReplicaTest(rng2))
+
 	// Try to add the same range twice
 	err = store.AddReplicaTest(rng2)
-	if err == nil {
-		t.Fatal("expected error re-adding same range")
-	}
-	if _, ok := err.(rangeAlreadyExists); !ok {
-		t.Fatalf("expected rangeAlreadyExists error; got %s", err)
-	}
+	require.Error(t, err, "expected error re-adding same range")
+	require.IsType(t, rangeAlreadyExists{}, err)
+
 	// Try to remove range 1 again.
-	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err == nil {
-		t.Fatal("expected error re-removing same range")
-	}
+	require.Error(t, store.RemoveReplica(rng1, *rng1.Desc(), true),
+		"expected error re-removing same range")
+
 	// Try to add a range with previously-used (but now removed) ID.
 	rng2Dup := createRange(store, 1, roachpb.RKey("a"), roachpb.RKey("b"))
-	if err := store.AddReplicaTest(rng2Dup); err == nil {
-		t.Fatal("expected error inserting a duplicated range")
-	}
+	require.Error(t, store.AddReplicaTest(rng2Dup),
+		"expected error inserting a duplicated range")
+
 	// Add another range with different key range and then test lookup.
 	rng3 := createRange(store, 3, roachpb.RKey("c"), roachpb.RKey("d"))
-	if err := store.AddReplicaTest(rng3); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, store.AddReplicaTest(rng3))
 
 	testCases := []struct {
 		start, end roachpb.RKey
@@ -330,10 +323,8 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		{roachpb.RKey("d"), nil, nil},
 	}
 
-	for i, test := range testCases {
-		if r := store.LookupReplica(test.start, test.end); r != test.expRng {
-			t.Errorf("%d: expected range %v; got %v", i, test.expRng, r)
-		}
+	for _, test := range testCases {
+		require.Equal(t, test.expRng, store.LookupReplica(test.start, test.end))
 	}
 }
 
@@ -343,25 +334,18 @@ func TestStoreRemoveReplicaOldDescriptor(t *testing.T) {
 	defer stopper.Stop()
 
 	rng1, err := store.GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	origDesc := rng1.Desc()
 	newDesc := proto.Clone(origDesc).(*roachpb.RangeDescriptor)
 	_, newRep := newDesc.FindReplica(store.StoreID())
 	newRep.ReplicaID++
 	newDesc.NextReplicaID++
-	if err := rng1.setDesc(newDesc); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, rng1.setDesc(newDesc))
 	if err := store.RemoveReplica(rng1, *origDesc, true); !testutils.IsError(err, "replica ID has changed") {
 		t.Fatalf("expected error 'replica ID has changed' but got %s", err)
 	}
-
 	// Now try the latest descriptor and succeed.
-	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, store.RemoveReplica(rng1, *rng1.Desc(), true))
 }
 
 func TestStoreRangeSet(t *testing.T) {
@@ -371,41 +355,28 @@ func TestStoreRangeSet(t *testing.T) {
 
 	// Remove range 1.
 	rng1, err := store.GetReplica(1)
-	if err != nil {
-		t.Error(err)
-	}
-	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, store.RemoveReplica(rng1, *rng1.Desc(), true))
+
 	// Add 10 new ranges.
 	const newCount = 10
 	for i := 0; i < newCount; i++ {
 		rng := createRange(store, roachpb.RangeID(i+1), roachpb.RKey(fmt.Sprintf("a%02d", i)), roachpb.RKey(fmt.Sprintf("a%02d", i+1)))
-		if err := store.AddReplicaTest(rng); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, store.AddReplicaTest(rng))
 	}
 
 	// Verify two passes of the visit.
 	ranges := newStoreRangeSet(store)
 	for pass := 0; pass < 2; pass++ {
-		if ec := ranges.EstimatedCount(); ec != 10 {
-			t.Errorf("expected 10 remaining; got %d", ec)
-		}
+		require.Equal(t, 10, ranges.EstimatedCount())
 		i := 1
 		ranges.Visit(func(rng *Replica) bool {
-			if rng.RangeID != roachpb.RangeID(i) {
-				t.Errorf("expected range with Range ID %d; got %v", i, rng)
-			}
-			if ec := ranges.EstimatedCount(); ec != 10-i {
-				t.Errorf("expected %d remaining; got %d", 10-i, ec)
-			}
+			require.Equal(t, roachpb.RangeID(i), rng.RangeID)
+			require.Equal(t, 10-i, ranges.EstimatedCount())
 			i++
 			return true
 		})
-		if ec := ranges.EstimatedCount(); ec != 10 {
-			t.Errorf("expected 10 remaining; got %d", ec)
-		}
+		require.Equal(t, 10, ranges.EstimatedCount())
 	}
 
 	// Try visiting with an addition and a removal.
@@ -416,53 +387,36 @@ func TestStoreRangeSet(t *testing.T) {
 		i := 1
 		ranges.Visit(func(rng *Replica) bool {
 			if i == 1 {
-				if rng.RangeID != roachpb.RangeID(i) {
-					t.Errorf("expected range with Range ID %d; got %v", i, rng)
-				}
+				require.Equal(t, roachpb.RangeID(i), rng.RangeID)
 				close(visited)
 				<-updated
 			} else {
 				// The second range will be removed and skipped.
-				if rng.RangeID != roachpb.RangeID(i+1) {
-					t.Errorf("expected range with Range ID %d; got %v", i+1, rng)
-				}
+				require.Equal(t, roachpb.RangeID(i+1), rng.RangeID)
 			}
 			i++
 			return true
 		})
-		if i != 10 {
-			t.Errorf("expected visit of 9 ranges, but got %v", i-1)
-		}
+		require.Equal(t, i, 10, "expected visit of 9 ranges, but got %v", i-1)
 		close(done)
 	}()
 
 	<-visited
-	if ec := ranges.EstimatedCount(); ec != 9 {
-		t.Errorf("expected 9 remaining; got %d", ec)
-	}
+	require.Equal(t, 9, ranges.EstimatedCount())
 
 	// Split the first range to insert a new range as second range.
 	// The range is never visited with this iteration.
 	rng := createRange(store, 11, roachpb.RKey("a000"), roachpb.RKey("a01"))
-	if err = store.SplitRange(store.LookupReplica(roachpb.RKey("a00"), nil), rng); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, store.SplitRange(store.LookupReplica(roachpb.RKey("a00"), nil), rng))
+
 	// Estimated count will still be 9, as it's cached.
-	if ec := ranges.EstimatedCount(); ec != 9 {
-		t.Errorf("expected 9 remaining; got %d", ec)
-	}
+	require.Equal(t, 9, ranges.EstimatedCount())
 
 	// Now, remove the next range in the iteration and verify we skip the removed range.
 	rng = store.LookupReplica(roachpb.RKey("a01"), nil)
-	if rng.RangeID != 2 {
-		t.Errorf("expected fetch of rangeID=2; got %d", rng.RangeID)
-	}
-	if err := store.RemoveReplica(rng, *rng.Desc(), true); err != nil {
-		t.Error(err)
-	}
-	if ec := ranges.EstimatedCount(); ec != 9 {
-		t.Errorf("expected 9 remaining; got %d", ec)
-	}
+	require.Equal(t, roachpb.RangeID(2), rng.RangeID)
+	require.NoError(t, store.RemoveReplica(rng, *rng.Desc(), true))
+	require.Equal(t, 9, ranges.EstimatedCount())
 
 	close(updated)
 	<-done
@@ -477,13 +431,10 @@ func TestHasOverlappingReplica(t *testing.T) {
 	}
 	// Range 1 already exists. Make sure we can fetch it.
 	rng1, err := store.GetReplica(1)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
+
 	// Remove range 1.
-	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, store.RemoveReplica(rng1, *rng1.Desc(), true))
 
 	// Create ranges.
 	rngDescs := []struct {
@@ -497,9 +448,7 @@ func TestHasOverlappingReplica(t *testing.T) {
 
 	for _, desc := range rngDescs {
 		rng := createRange(store, roachpb.RangeID(desc.id), desc.start, desc.end)
-		if err := store.AddReplicaTest(rng); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, store.AddReplicaTest(rng))
 	}
 
 	testCases := []struct {
@@ -517,11 +466,9 @@ func TestHasOverlappingReplica(t *testing.T) {
 		{roachpb.RKey("a"), roachpb.RKey("b"), false},
 	}
 
-	for i, test := range testCases {
+	for _, test := range testCases {
 		rngDesc := &roachpb.RangeDescriptor{StartKey: test.start, EndKey: test.end}
-		if r := store.hasOverlappingReplicaLocked(rngDesc); r != test.exp {
-			t.Errorf("%d: expected range %v; got %v", i, test.exp, r)
-		}
+		require.Equal(t, test.exp, store.hasOverlappingReplicaLocked(rngDesc))
 	}
 }
 
@@ -554,13 +501,9 @@ func TestStoreExecuteNoop(t *testing.T) {
 	ba.Add(&roachpb.NoopRequest{})
 
 	br, pErr := store.Send(context.Background(), ba)
-	if pErr != nil {
-		t.Error(pErr)
-	}
+	require.Nil(t, pErr)
 	reply := br.Responses[1].GetInner()
-	if _, ok := reply.(*roachpb.NoopResponse); !ok {
-		t.Errorf("expected *roachpb.NoopResponse, got %T", reply)
-	}
+	require.IsType(t, (*roachpb.NoopResponse)(nil), reply)
 }
 
 // TestStoreVerifyKeys checks that key length is enforced and
@@ -631,9 +574,7 @@ func TestStoreSendUpdateTime(t *testing.T) {
 	reqTS := store.ctx.Clock.Now()
 	reqTS.WallTime += (100 * time.Millisecond).Nanoseconds()
 	_, pErr := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Timestamp: reqTS}, &args)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
+	require.Nil(t, pErr)
 	ts := store.ctx.Clock.Timestamp()
 	if ts.WallTime != reqTS.WallTime || ts.Logical <= reqTS.Logical {
 		t.Errorf("expected store clock to advance to %s; got %s", reqTS, ts)
@@ -651,9 +592,7 @@ func TestStoreSendWithZeroTime(t *testing.T) {
 	// Set clock to time 1.
 	mc.Set(1)
 	resp, pErr := client.SendWrapped(store.testSender(), nil, &args)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
+	require.Nil(t, pErr)
 	reply := resp.(*roachpb.GetResponse)
 	// The Logical time will increase over the course of the command
 	// execution so we can only rely on comparing the WallTime.
@@ -704,20 +643,12 @@ func TestStoreSendBadRange(t *testing.T) {
 // TODO(bdarnell): convert tests that use this function to use AdminSplit instead.
 func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Replica {
 	rng := store.LookupReplica(key, nil)
-	if rng == nil {
-		t.Fatalf("couldn't lookup range for key %q", key)
-	}
+	require.NotNil(t, rng, "couldn't lookup range for key %q", key)
 	desc, err := store.NewRangeDescriptor(splitKey, rng.Desc().EndKey, rng.Desc().Replicas)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	newRng, err := NewReplica(desc, store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = store.SplitRange(rng, newRng); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, store.SplitRange(rng, newRng))
 	return newRng
 }
 
@@ -759,12 +690,8 @@ func TestStoreRangeIDAllocation(t *testing.T) {
 	for i := 0; i < rangeIDAllocCount*3; i++ {
 		replicas := []roachpb.ReplicaDescriptor{{StoreID: store.StoreID()}}
 		desc, err := store.NewRangeDescriptor(roachpb.RKey(fmt.Sprintf("%03d", i)), roachpb.RKey(fmt.Sprintf("%03d", i+1)), replicas)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if desc.RangeID != roachpb.RangeID(2+i) {
-			t.Errorf("expected range id %d; got %d", 2+i, desc.RangeID)
-		}
+		require.NoError(t, err)
+		require.Equal(t, roachpb.RangeID(2+i), desc.RangeID)
 	}
 }
 
