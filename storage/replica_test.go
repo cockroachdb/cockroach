@@ -2278,9 +2278,11 @@ func TestSequenceCacheError(t *testing.T) {
 	}
 
 	pErr = tc.rng.checkSequenceCache(tc.engine, txn)
-	if err, ok := pErr.GoError().(*roachpb.TransactionAbortedError); ok {
-		if pErr.Txn == nil || !reflect.DeepEqual(pErr.Txn, &err.Txn) {
-			t.Errorf("txn does not match: %s v.s. %s", pErr.Txn, err.Txn)
+	if _, ok := pErr.GoError().(*roachpb.TransactionAbortedError); ok {
+		expected := txn.Clone()
+		expected.Timestamp = ts
+		if pErr.Txn == nil || !reflect.DeepEqual(pErr.Txn, expected) {
+			t.Errorf("txn does not match: %s v.s. %s", pErr.Txn, expected)
 		}
 	} else {
 		t.Errorf("unexpected error: %s", pErr)

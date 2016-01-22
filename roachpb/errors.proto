@@ -72,7 +72,6 @@ message ReadWithinUncertaintyIntervalError {
 // A TransactionAbortedError indicates that the transaction was
 // aborted by another concurrent transaction.
 message TransactionAbortedError {
-  optional Transaction txn = 1 [(gogoproto.nullable) = false];
 }
 
 // A TransactionPushError indicates that the transaction could not

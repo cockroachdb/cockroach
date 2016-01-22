@@ -68,7 +68,7 @@ func NewError(err error) *Error {
 // NewErrorWithTxn creates an Error from the given error and a transaction.
 func NewErrorWithTxn(err error, txn *Transaction) *Error {
 	e := NewError(err)
-	e.Txn = txn
+	e.SetTxn(txn)
 	return e
 }
 
@@ -172,6 +172,17 @@ func (e *Error) SetGoError(err error) {
 	}
 }
 
+// SetTxn sets the txn and resets the error message.
+func (e *Error) SetTxn(txn *Transaction) {
+	e.Txn = txn.Clone()
+	err := e.GoError()
+	if sErr, ok := err.(structuredError); ok {
+		e.Message = sErr.message(e)
+	} else {
+		e.Message = err.Error()
+	}
+}
+
 // SetErrorIndex sets the index of the error.
 func (e *Error) SetErrorIndex(index int32) {
 	e.Index = &ErrPosition{Index: index}
@@ -248,9 +259,15 @@ func (*RangeKeyMismatchError) CanRetry() bool {
 
 // Error formats error.
 func (e *TransactionAbortedError) Error() string {
-	return fmt.Sprintf("txn aborted %s", e.Txn)
+	return fmt.Sprintf("txn aborted")
 }
 
+// message returns an error message.
+func (e *TransactionAbortedError) message(pErr *Error) string {
+	return fmt.Sprintf("txn aborted %s", pErr.Txn)
+}
+
+var _ structuredError = &TransactionAbortedError{}
 var _ transactionRestartError = &TransactionAbortedError{}
 
 // canRestartTransaction implements the transactionRestartError interface.
@@ -258,10 +275,9 @@ func (*TransactionAbortedError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_BACKOFF
 }
 
-// NewTransactionAbortedError initializes a new TransactionAbortedError. It
-// creates a copy of the given Transaction.
-func NewTransactionAbortedError(txn *Transaction) *TransactionAbortedError {
-	return &TransactionAbortedError{Txn: *txn.Clone()}
+// NewTransactionAbortedError initializes a new TransactionAbortedError.
+func NewTransactionAbortedError() *TransactionAbortedError {
+	return &TransactionAbortedError{}
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.

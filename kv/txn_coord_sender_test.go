@@ -513,11 +513,10 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		{
 			// On abort, nothing changes but we get a new priority to use for
 			// the next attempt.
-			pErr: roachpb.NewError(&roachpb.TransactionAbortedError{
-				Txn: roachpb.Transaction{
+			pErr: roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{},
+				&roachpb.Transaction{
 					Timestamp: origTS.Add(20, 10), Priority: 10,
-				},
-			}),
+				}),
 			expPri: 10,
 		},
 		{
