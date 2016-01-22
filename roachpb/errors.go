@@ -294,7 +294,6 @@ func (*TransactionPushError) canRestartTransaction() TransactionRestart {
 }
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
-// Txn is the transaction which will be retried (a copy is taken).
 func NewTransactionRetryError() *TransactionRetryError {
 	return &TransactionRetryError{}
 }
