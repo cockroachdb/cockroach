@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
@@ -346,23 +347,18 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	// expose the underlying driver.Result.
 	// sql.Result does however have methods which attempt to dereference the underlying
 	// driver.Result and can thus be used to determine if it is nil.
-	// TODO(dt): This would be prettier and generate better failures with testify/assert's helpers.
 
 	// Result of a DDL (command complete) yields a non-nil underlying driver result.
 	nonempty, err := db.Exec(`CREATE DATABASE IF NOT EXISTS testing`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, _ = nonempty.RowsAffected() // should not panic if lib/pq returned a non-nil result.
+	require.NoError(t, err)
+	require.NotPanics(t, func() {
+		_, _ = nonempty.RowsAffected()
+	}, "should not panic if lib/pq returned a non-nil result.")
 
 	empty, err := db.Exec(" ")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		_ = recover()
-	}()
-	_, _ = empty.RowsAffected() // should panic if lib/pq returned a nil result as expected.
-	t.Fatal("should not get here -- empty result from empty query should panic first")
-	// TODO(dt): clean this up with testify/assert and add tests for less trivial empty queries.
+	require.NoError(t, err)
+
+	require.Panics(t, func() {
+		_, _ = empty.RowsAffected()
+	}, "should panic if lib/pq returned a nil result as expected.")
 }

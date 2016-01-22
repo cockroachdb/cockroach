@@ -49,6 +49,7 @@ github.com/spf13/cobra 9c9300901990faada0c5fb3b5730f452585c7c2b
 github.com/spf13/pflag 7f60f83a2c81bc3c3c0d5297f61ddfa68da9d3b7
 github.com/tebeka/go2xunit fff0d031ea2b81ed06c367293219e4bc005235d0
 github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
+github.com/stretchr/testify f390dcf405f7b83c997eac1b06768bb9f44dec18
 golang.org/x/crypto 3760e016850398b85094c4c99e955b8c3dea5711
 golang.org/x/net c92cdcb05f66ce5b61460e23498d2dc5fcf69aaf
 golang.org/x/text cf4986612c83df6c55578ba198316d1684a9a287
