@@ -1439,11 +1439,9 @@ func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) *
 		if log.V(1) {
 			log.Infof("found sequence cache entry for %s@%d", txn.Short(), txn.Sequence)
 		}
-		retryErr := roachpb.NewTransactionRetryError(&txn)
-		retryErr.Txn.Timestamp.Forward(entry.Timestamp)
-		pErr := roachpb.NewError(retryErr)
-		pErr.Txn = &retryErr.Txn
-		return pErr
+		newTxn := txn.Clone()
+		newTxn.Timestamp.Forward(entry.Timestamp)
+		return roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), newTxn)
 	}
 	return nil
 }

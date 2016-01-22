@@ -698,9 +698,8 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		t.Txn = newTxn
 		pErr.Txn = newTxn
 	case *roachpb.TransactionRetryError:
-		newTxn.Update(&t.Txn)
-		newTxn.Restart(ba.UserPriority, t.Txn.Priority, newTxn.Timestamp)
-		t.Txn = *newTxn
+		newTxn.Update(pErr.Txn)
+		newTxn.Restart(ba.UserPriority, pErr.Txn.Priority, newTxn.Timestamp)
 		pErr.Txn = newTxn
 	default:
 		trace.SetError()
