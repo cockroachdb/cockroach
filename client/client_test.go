@@ -279,7 +279,7 @@ func TestClientRunTransaction(t *testing.T) {
 
 		if commit != (pErr == nil) {
 			t.Errorf("expected success? %t; got %s", commit, pErr)
-		} else if !commit && !testutils.IsError(pErr.GoError(), "purposefully failing transaction") {
+		} else if !commit && !testutils.IsPError(pErr, "purposefully failing transaction") {
 			t.Errorf("unexpected failure with !commit: %s", pErr)
 		}
 
