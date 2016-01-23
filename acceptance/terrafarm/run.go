@@ -77,7 +77,7 @@ func (f *Farmer) runErr(cmd string, args ...string) error {
 }
 
 func (f *Farmer) appendDefaults(args []string) []string {
-	return append(args, "--var=key_name="+f.KeyName)
+	return append(args, "-no-color", "--var=key_name="+f.KeyName)
 }
 
 func (f *Farmer) apply(args ...string) error {
@@ -90,7 +90,7 @@ func (f *Farmer) apply(args ...string) error {
 }
 
 func (f *Farmer) output(key string) []string {
-	o, _, err := f.run("terraform", "output", key)
+	o, _, err := f.run("terraform", "output", key, "-no-color")
 	if _, ok := err.(*exec.ExitError); err != nil && !ok {
 		f.logf("%s", err)
 		return nil
