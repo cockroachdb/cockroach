@@ -16,7 +16,7 @@
 
 package sql
 
-// desiredOrdering is used to describe a desired column ordering. For example,
+// columnOrdering is used to describe a desired column ordering. For example,
 //     []columnOrderInfo{ {3, true}, {1, false} }
 // represents an ordering first by column 3 (descending), then by column 1 (ascending).
 type columnOrdering []columnOrderInfo
@@ -28,11 +28,11 @@ type columnOrderInfo struct {
 
 // orderingInfo describes the column ordering on a set of results.
 //
-// If results are restricted to a certain value on some columns, we call these "single result
-// columns"; these are inconsequential w.r.t ordering.
+// If results are known to be restricted to a single value on some columns, we call these "exact
+// match" columns; these are inconsequential w.r.t ordering.
 //
 // For example, if an index was defined on columns (a, b, c, d) and the WHERE clause was
-// "(a, c) = (1, 2)" then a and c are single-result columns and we have an ordering by b then d.
+// "(a, c) = (1, 2)" then a and c are exact-match columns and we have an ordering by b then d.
 // Such an ordering satisfies any of the following desired orderings (among many others):
 //    a, c
 //    c, a
@@ -45,27 +45,27 @@ type columnOrderInfo struct {
 //    b, a, c, d
 //
 type orderingInfo struct {
-	singleResultCols map[int]struct{}
-	ordering         columnOrdering
+	exactMatchCols map[int]struct{}
+	ordering       columnOrdering
 }
 
-func (ord orderingInfo) isNil() bool {
-	return len(ord.singleResultCols) == 0 && len(ord.ordering) == 0
+func (ord orderingInfo) isEmpty() bool {
+	return len(ord.exactMatchCols) == 0 && len(ord.ordering) == 0
 }
 
-func (ord *orderingInfo) addSingleResultCol(colIdx int) {
-	if ord.singleResultCols == nil {
-		ord.singleResultCols = make(map[int]struct{})
+func (ord *orderingInfo) addExactMatchColumn(colIdx int) {
+	if ord.exactMatchCols == nil {
+		ord.exactMatchCols = make(map[int]struct{})
 	}
-	ord.singleResultCols[colIdx] = struct{}{}
+	ord.exactMatchCols[colIdx] = struct{}{}
 }
 
 func (ord *orderingInfo) addColumn(colIdx int, reverse bool) {
 	ord.ordering = append(ord.ordering, columnOrderInfo{colIdx, reverse})
 }
 
-// Computes how long of a prefix of a desiredOrdering is matched by an existing ordering. If reverse
-// is set, we assume the reverse of the existing ordering.
+// Computes how long of a prefix of a desired columnOrdering is matched by an existing ordering. If
+// reverse is set, we assume the reverse of the existing ordering.
 //
 // Returns a value between 0 and len(desired).
 func computeOrderingMatch(desired columnOrdering, existing orderingInfo, reverse bool) int {
@@ -75,14 +75,15 @@ func computeOrderingMatch(desired columnOrdering, existing orderingInfo, reverse
 		if pos < len(existing.ordering) {
 			ci := existing.ordering[pos]
 
-			// Check that the next column matches. Note: "!=" is used as XOR.
+			// Check that the next column matches. Note: after potentially reversing the existing
+			// ordering, the column ordering is (ci.reverse XOR reverse); "!=" acts as XOR.
 			if ci.colIdx == col.colIdx && (ci.reverse != reverse) == col.reverse {
 				pos++
 				continue
 			}
 		}
-		// If the column did not match, check if it is one of the single-result columns.
-		if _, ok := existing.singleResultCols[col.colIdx]; !ok {
+		// If the column did not match, check if it is one of the exact match columns.
+		if _, ok := existing.exactMatchCols[col.colIdx]; !ok {
 			// Everything matched up to this point.
 			return i
 		}

@@ -34,13 +34,14 @@ func (*planner) distinct(n *parser.Select, p planNode) planNode {
 		suffixSeen: make(map[string]struct{}),
 	}
 	ordering := p.Ordering()
-	if !ordering.isNil() {
+	if !ordering.isEmpty() {
 		d.columnsInOrder = make([]bool, len(p.Columns()))
-		for colIdx := range ordering.singleResultCols {
-			// If the single-result column is not part of the output, we can safely ignore it.
-			if colIdx < len(d.columnsInOrder) {
-				d.columnsInOrder[colIdx] = true
+		for colIdx := range ordering.exactMatchCols {
+			if colIdx >= len(d.columnsInOrder) {
+				// If the exact-match column is not part of the output, we can safely ignore it.
+				continue
 			}
+			d.columnsInOrder[colIdx] = true
 		}
 		for _, c := range ordering.ordering {
 			if c.colIdx >= len(d.columnsInOrder) {

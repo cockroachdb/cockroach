@@ -127,7 +127,7 @@ func (n *sortNode) Ordering() orderingInfo {
 	if n == nil {
 		return orderingInfo{}
 	}
-	return orderingInfo{singleResultCols: nil, ordering: n.ordering}
+	return orderingInfo{exactMatchCols: nil, ordering: n.ordering}
 }
 
 func (n *sortNode) Values() parser.DTuple {

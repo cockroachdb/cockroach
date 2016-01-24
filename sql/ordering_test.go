@@ -35,13 +35,18 @@ type computeOrderCase struct {
 	cases    []desiredCase
 }
 
-// Returns the line where it is called, used to indentify testcases in errors.
-func getLine() int {
+func defTestCase(expected, expectedReverse int, desired columnOrdering) desiredCase {
+	// The line number is used to identify testcases in error messages.
 	_, _, line, _ := runtime.Caller(1)
-	return line
+	return desiredCase{
+		line:            line,
+		desired:         desired,
+		expected:        expected,
+		expectedReverse: expectedReverse,
+	}
 }
 
-func TestComputeOrderMatch(t *testing.T) {
+func TestComputeOrderingMatch(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	e := struct{}{}
@@ -49,96 +54,46 @@ func TestComputeOrderMatch(t *testing.T) {
 		{
 			// No existing ordering
 			existing: orderingInfo{
-				singleResultCols: nil,
-				ordering:         nil,
+				exactMatchCols: nil,
+				ordering:       nil,
 			},
 			cases: []desiredCase{
-				{
-					line:            getLine(),
-					desired:         columnOrdering{{1, true}, {5, false}},
-					expected:        0,
-					expectedReverse: 0,
-				},
+				defTestCase(0, 0, columnOrdering{{1, true}, {5, false}}),
 			},
 		},
 		{
-			// Ordering with no single-result columns
+			// Ordering with no exact-match columns
 			existing: orderingInfo{
-				singleResultCols: nil,
-				ordering:         []columnOrderInfo{{1, true}, {2, false}},
+				exactMatchCols: nil,
+				ordering:       []columnOrderInfo{{1, true}, {2, false}},
 			},
 			cases: []desiredCase{
-				{
-					line:            getLine(),
-					desired:         columnOrdering{{1, true}, {5, false}},
-					expected:        1,
-					expectedReverse: 0,
-				},
-				{
-					line:            getLine(),
-					desired:         columnOrdering{{1, false}, {5, false}, {2, false}},
-					expected:        0,
-					expectedReverse: 1,
-				},
+				defTestCase(1, 0, columnOrdering{{1, true}, {5, false}}),
+				defTestCase(0, 1, columnOrdering{{1, false}, {5, false}, {2, false}}),
 			},
 		},
 		{
-			// Ordering with only single-result columns
+			// Ordering with only exact-match columns
 			existing: orderingInfo{
-				singleResultCols: map[int]struct{}{1: e, 2: e},
-				ordering:         nil,
+				exactMatchCols: map[int]struct{}{1: e, 2: e},
+				ordering:       nil,
 			},
 			cases: []desiredCase{
-				{
-					line:            getLine(),
-					desired:         columnOrdering{{2, true}, {5, false}, {1, false}},
-					expected:        1,
-					expectedReverse: 1,
-				},
-				{
-					line:            getLine(),
-					desired:         columnOrdering{{5, false}, {2, false}},
-					expected:        0,
-					expectedReverse: 0,
-				},
+				defTestCase(1, 1, columnOrdering{{2, true}, {5, false}, {1, false}}),
+				defTestCase(0, 0, columnOrdering{{5, false}, {2, false}}),
 			},
 		},
 		{
 			existing: orderingInfo{
-				singleResultCols: map[int]struct{}{0: e, 5: e, 6: e},
-				ordering:         []columnOrderInfo{{1, true}, {2, false}},
+				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
+				ordering:       []columnOrderInfo{{1, true}, {2, false}},
 			},
 			cases: []desiredCase{
-				{
-					line:            getLine(),
-					desired:         columnOrdering{{1, true}, {5, false}},
-					expected:        2,
-					expectedReverse: 0,
-				},
-				{
-					line:            getLine(),
-					desired:         columnOrdering{{0, true}, {5, false}},
-					expected:        2,
-					expectedReverse: 2,
-				},
-				{
-					line:            getLine(),
-					desired:         columnOrdering{{1, true}, {2, true}},
-					expected:        1,
-					expectedReverse: 0,
-				},
-				{
-					line:            getLine(),
-					desired:         columnOrdering{{0, false}, {6, true}, {1, true}, {5, true}, {2, false}},
-					expected:        5,
-					expectedReverse: 2,
-				},
-				{
-					line:            getLine(),
-					desired:         columnOrdering{{0, false}, {6, true}, {2, false}, {5, true}, {1, true}},
-					expected:        2,
-					expectedReverse: 2,
-				},
+				defTestCase(2, 0, columnOrdering{{1, true}, {5, false}}),
+				defTestCase(2, 2, columnOrdering{{0, true}, {5, false}}),
+				defTestCase(1, 0, columnOrdering{{1, true}, {2, true}}),
+				defTestCase(5, 2, columnOrdering{{0, false}, {6, true}, {1, true}, {5, true}, {2, false}}),
+				defTestCase(2, 2, columnOrdering{{0, false}, {6, true}, {2, false}, {5, true}, {1, true}}),
 			},
 		},
 	}

@@ -437,35 +437,36 @@ func (n *scanNode) computeOrdering(columnIDs []ColumnID, dirs []encoding.Directi
 
 	for i, colID := range columnIDs {
 		renderIdx, ok := findRenderIndexForCol(n.render, colID)
-		if !ok {
-			// We have a column that isn't part of the output.
+		if ok {
 			if i < exactPrefix {
-				// Fortunately this is a single-result column, so we can safely ignore it.
-				//
-				// For example, assume we are using an ascending index on (k, b) with the query:
-				//
-				//   SELECT v FROM t WHERE k = 1
-				//
-				// Results are ordered by k then by v, but since k is a single-result column the
-				// results are also effectively ordered just by v.
-				continue
+				ordering.addExactMatchColumn(renderIdx)
 			} else {
-				// Once we find a columnn that is not part of the output, the rest of the ordered
-				// columns aren't useful.
-				//
-				// For example, assume we are using an ascending index on (k, b) with the query:
-				//
-				//   SELECT v FROM t WHERE k > 1
-				//
-				// Results are ordered by k then by v. We cannot make any use of this ordering as an
-				// ordering on v.
-				break
+				ordering.addColumn(renderIdx, (dirs[i] == encoding.Descending))
 			}
+			continue
 		}
+		// We have a column that isn't part of the output.
 		if i < exactPrefix {
-			ordering.addSingleResultCol(renderIdx)
+			// Fortunately this is an "exact match" column, so we can safely ignore it.
+			//
+			// For example, assume we are using an ascending index on (k, v) with the query:
+			//
+			//   SELECT v FROM t WHERE k = 1
+			//
+			// The rows from the index are ordered by k then by v, but since k is an exact match
+			// column the results are also ordered just by v.
+			continue
 		} else {
-			ordering.addColumn(renderIdx, (dirs[i] == encoding.Descending))
+			// Once we find a column that is not part of the output, the rest of the ordered
+			// columns aren't useful.
+			//
+			// For example, assume we are using an ascending index on (k, v) with the query:
+			//
+			//   SELECT v FROM t WHERE k > 1
+			//
+			// The rows from the index are ordered by k then by v. We cannot make any use of this
+			// ordering as an ordering on v.
+			break
 		}
 	}
 	return ordering
