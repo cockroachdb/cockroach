@@ -1497,7 +1497,7 @@ func TestRangeSequenceCacheReadError(t *testing.T) {
 	_, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		Txn: txn,
 	}, &args)
-	if !testutils.IsError(pErr.GoError(), "replica corruption") {
+	if !testutils.IsPError(pErr, "replica corruption") {
 		t.Fatal(pErr)
 	}
 }
@@ -1658,7 +1658,7 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 	}
 
 	txn.Sequence++
-	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args); !testutils.IsError(pErr.GoError(), "range does not match splits") {
+	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args); !testutils.IsPError(pErr, "range does not match splits") {
 		t.Errorf("expected range does not match splits error; got %s", pErr)
 	}
 }
@@ -1918,7 +1918,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		args, h := endTxnArgs(txn, true)
 		txn.Sequence++
 
-		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args); !testutils.IsError(pErr.GoError(), test.expErrRegexp) {
+		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args); !testutils.IsPError(pErr, test.expErrRegexp) {
 			t.Errorf("expected error:\n%s\nto match:\n%s", pErr, test.expErrRegexp)
 		}
 	}
@@ -2300,7 +2300,7 @@ func TestPushTxnBadKey(t *testing.T) {
 	args := pushTxnArgs(pusher, pushee, roachpb.PUSH_ABORT)
 	args.Key = pusher.Key
 
-	if _, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &args); !testutils.IsError(pErr.GoError(), ".*should match pushee.*") {
+	if _, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &args); !testutils.IsPError(pErr, ".*should match pushee.*") {
 		t.Errorf("unexpected error %s", pErr)
 	}
 }
@@ -3022,7 +3022,7 @@ func TestReplicaCorruption(t *testing.T) {
 	// maybeSetCorrupt should have been called.
 	args = putArgs(roachpb.Key("boom"), []byte("value"))
 	_, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &args)
-	if !testutils.IsError(pErr.GoError(), "replica corruption \\(processed=true\\)") {
+	if !testutils.IsPError(pErr, "replica corruption \\(processed=true\\)") {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
 
@@ -3144,7 +3144,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	// First, try this consistently, which should not be allowed.
 	rlArgs.ConsiderIntents = true
 	_, pErr = client.SendWrapped(tc.Sender(), tc.rng.context(), rlArgs)
-	if !testutils.IsError(pErr.GoError(), "can not read consistently and special-case intents") {
+	if !testutils.IsPError(pErr, "can not read consistently and special-case intents") {
 		t.Fatalf("wanted specific error, not %s", pErr)
 	}
 	// After changing back to inconsistent lookups, should be good to go.
@@ -3529,7 +3529,7 @@ func TestBatchErrorWithIndex(t *testing.T) {
 
 	if _, pErr := tc.Sender().Send(tc.rng.context(), ba); pErr == nil {
 		t.Fatal("expected an error")
-	} else if pErr.Index == nil || pErr.Index.Index != 1 || !testutils.IsError(pErr.GoError(), "unexpected value") {
+	} else if pErr.Index == nil || pErr.Index.Index != 1 || !testutils.IsPError(pErr, "unexpected value") {
 		t.Fatalf("invalid index or error type: %s", pErr)
 	}
 

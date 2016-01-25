@@ -704,7 +704,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 	ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: key}})
 	ba.Add(&roachpb.EndTransactionRequest{})
 	ba.Txn = &roachpb.Transaction{Name: "test"}
-	if _, pErr := ts.Send(context.Background(), ba); !testutils.IsError(pErr.GoError(), "retry txn") {
+	if _, pErr := ts.Send(context.Background(), ba); !testutils.IsPError(pErr, "retry txn") {
 		t.Fatalf("unexpected error: %v", pErr)
 	}
 

@@ -571,29 +571,29 @@ func TestStoreVerifyKeys(t *testing.T) {
 	defer stopper.Stop()
 	// Try a start key == KeyMax.
 	gArgs := getArgs(roachpb.KeyMax)
-	if _, pErr := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsError(pErr.GoError(), "must be less than KeyMax") {
+	if _, pErr := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsPError(pErr, "must be less than KeyMax") {
 		t.Fatalf("expected error for start key == KeyMax: %v", pErr)
 	}
 	// Try a get with an end key specified (get requires only a start key and should fail).
 	gArgs.EndKey = roachpb.KeyMax
-	if _, pErr := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsError(pErr.GoError(), "must be less than KeyMax") {
+	if _, pErr := client.SendWrapped(store.testSender(), nil, &gArgs); !testutils.IsPError(pErr, "must be less than KeyMax") {
 		t.Fatalf("unexpected error for end key specified on a non-range-based operation: %v", pErr)
 	}
 	// Try a scan with end key < start key.
 	sArgs := scanArgs([]byte("b"), []byte("a"))
-	if _, pErr := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsError(pErr.GoError(), "must be greater than") {
+	if _, pErr := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsPError(pErr, "must be greater than") {
 		t.Fatalf("unexpected error for end key < start: %v", pErr)
 	}
 	// Try a scan with start key == end key.
 	sArgs.Key = []byte("a")
 	sArgs.EndKey = sArgs.Key
-	if _, pErr := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsError(pErr.GoError(), "must be greater than") {
+	if _, pErr := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsPError(pErr, "must be greater than") {
 		t.Fatalf("unexpected error for start == end key: %v", pErr)
 	}
 	// Try a scan with range-local start key, but "regular" end key.
 	sArgs.Key = keys.MakeRangeKey([]byte("test"), []byte("sffx"), nil)
 	sArgs.EndKey = []byte("z")
-	if _, pErr := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsError(pErr.GoError(), "range-local") {
+	if _, pErr := client.SendWrapped(store.testSender(), nil, &sArgs); !testutils.IsPError(pErr, "range-local") {
 		t.Fatalf("unexpected error for local start, non-local end key: %v", pErr)
 	}
 
@@ -1596,7 +1596,7 @@ func TestStoreBadRequests(t *testing.T) {
 		if test.header.Txn != nil {
 			test.header.Txn.Sequence++
 		}
-		if _, pErr := client.SendWrappedWith(store.testSender(), nil, *test.header, test.args); pErr == nil || test.err == "" || !testutils.IsError(pErr.GoError(), test.err) {
+		if _, pErr := client.SendWrappedWith(store.testSender(), nil, *test.header, test.args); pErr == nil || test.err == "" || !testutils.IsPError(pErr, test.err) {
 			t.Errorf("%d unexpected result: %s", i, pErr)
 		}
 	}

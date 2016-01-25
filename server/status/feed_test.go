@@ -236,11 +236,11 @@ func TestServerNodeEventFeed(t *testing.T) {
 
 	// Scan, which should fail (before it makes it to server, so this won't
 	// be tracked)
-	if _, pErr := db.Scan("b", "a", 0); !testutils.IsError(pErr.GoError(), "empty batch") {
+	if _, pErr := db.Scan("b", "a", 0); !testutils.IsPError(pErr, "empty batch") {
 		t.Fatalf("unexpected Scan error: %v", pErr)
 	}
 
-	if pErr := db.CPut("test", "will", "fail"); !testutils.IsError(pErr.GoError(), "unexpected value") {
+	if pErr := db.CPut("test", "will", "fail"); !testutils.IsPError(pErr, "unexpected value") {
 		t.Fatalf("unexpected CPut error: %v", pErr)
 	}
 

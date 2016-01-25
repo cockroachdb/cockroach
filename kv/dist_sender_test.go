@@ -550,7 +550,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		ds.updateLeaderCache(1, leader)
 		put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value")).(*roachpb.PutRequest)
 
-		if _, pErr := client.SendWrapped(ds, nil, put); pErr != nil && !testutils.IsError(pErr.GoError(), "boom") {
+		if _, pErr := client.SendWrapped(ds, nil, put); pErr != nil && !testutils.IsPError(pErr, "boom") {
 			t.Errorf("put encountered unexpected error: %s", pErr)
 		}
 		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &roachpb.ReplicaDescriptor{}) && !tc.shouldClearLeader {

@@ -407,19 +407,19 @@ func TestBadRequest(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	if _, pErr := db.Scan("a", "a", 0); !testutils.IsError(pErr.GoError(), "truncation resulted in empty batch") {
+	if _, pErr := db.Scan("a", "a", 0); !testutils.IsPError(pErr, "truncation resulted in empty batch") {
 		t.Fatalf("unexpected error on scan with startkey == endkey: %v", pErr)
 	}
 
-	if _, pErr := db.ReverseScan("a", "a", 0); !testutils.IsError(pErr.GoError(), "truncation resulted in empty batch") {
+	if _, pErr := db.ReverseScan("a", "a", 0); !testutils.IsPError(pErr, "truncation resulted in empty batch") {
 		t.Fatalf("unexpected pError on reverse scan with startkey == endkey: %v", pErr)
 	}
 
-	if pErr := db.DelRange("x", "a"); !testutils.IsError(pErr.GoError(), "truncation resulted in empty batch") {
+	if pErr := db.DelRange("x", "a"); !testutils.IsPError(pErr, "truncation resulted in empty batch") {
 		t.Fatalf("unexpected error on deletion on [x, a): %v", pErr)
 	}
 
-	if pErr := db.DelRange("", "z"); !testutils.IsError(pErr.GoError(), "must be greater than LocalMax") {
+	if pErr := db.DelRange("", "z"); !testutils.IsPError(pErr, "must be greater than LocalMax") {
 		t.Fatalf("unexpected error on deletion on [KeyMin, z): %v", pErr)
 	}
 }
