@@ -16,14 +16,19 @@
 
 package sql
 
+import (
+	"fmt"
+	"github.com/cockroachdb/cockroach/util/encoding"
+)
+
 // columnOrdering is used to describe a desired column ordering. For example,
 //     []columnOrderInfo{ {3, true}, {1, false} }
 // represents an ordering first by column 3 (descending), then by column 1 (ascending).
 type columnOrdering []columnOrderInfo
 
 type columnOrderInfo struct {
-	colIdx  int
-	reverse bool
+	colIdx    int
+	direction encoding.Direction
 }
 
 // orderingInfo describes the column ordering on a set of results.
@@ -45,8 +50,11 @@ type columnOrderInfo struct {
 //    b, a, c, d
 //
 type orderingInfo struct {
+	// columns for which we know we have a single value.
 	exactMatchCols map[int]struct{}
-	ordering       columnOrdering
+
+	// ordering of any other columns (the columns in exactMatchCols do not appear in this ordering).
+	ordering columnOrdering
 }
 
 func (ord orderingInfo) isEmpty() bool {
@@ -60,8 +68,11 @@ func (ord *orderingInfo) addExactMatchColumn(colIdx int) {
 	ord.exactMatchCols[colIdx] = struct{}{}
 }
 
-func (ord *orderingInfo) addColumn(colIdx int, reverse bool) {
-	ord.ordering = append(ord.ordering, columnOrderInfo{colIdx, reverse})
+func (ord *orderingInfo) addColumn(colIdx int, dir encoding.Direction) {
+	if dir != encoding.Ascending && dir != encoding.Descending {
+		panic(fmt.Sprintf("Invalid direction %d", dir))
+	}
+	ord.ordering = append(ord.ordering, columnOrderInfo{colIdx, dir})
 }
 
 // Computes how long of a prefix of a desired columnOrdering is matched by an existing ordering. If
@@ -75,9 +86,8 @@ func computeOrderingMatch(desired columnOrdering, existing orderingInfo, reverse
 		if pos < len(existing.ordering) {
 			ci := existing.ordering[pos]
 
-			// Check that the next column matches. Note: after potentially reversing the existing
-			// ordering, the column ordering is (ci.reverse XOR reverse); "!=" acts as XOR.
-			if ci.colIdx == col.colIdx && (ci.reverse != reverse) == col.reverse {
+			// Check that the next column matches. Note: "!=" acts as logical XOR.
+			if ci.colIdx == col.colIdx && (ci.direction == col.direction) != reverse {
 				pos++
 				continue
 			}

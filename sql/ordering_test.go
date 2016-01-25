@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -50,6 +51,8 @@ func TestComputeOrderingMatch(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	e := struct{}{}
+	asc := encoding.Ascending
+	desc := encoding.Descending
 	testSets := []computeOrderCase{
 		{
 			// No existing ordering
@@ -58,18 +61,18 @@ func TestComputeOrderingMatch(t *testing.T) {
 				ordering:       nil,
 			},
 			cases: []desiredCase{
-				defTestCase(0, 0, columnOrdering{{1, true}, {5, false}}),
+				defTestCase(0, 0, columnOrdering{{1, desc}, {5, asc}}),
 			},
 		},
 		{
 			// Ordering with no exact-match columns
 			existing: orderingInfo{
 				exactMatchCols: nil,
-				ordering:       []columnOrderInfo{{1, true}, {2, false}},
+				ordering:       []columnOrderInfo{{1, desc}, {2, asc}},
 			},
 			cases: []desiredCase{
-				defTestCase(1, 0, columnOrdering{{1, true}, {5, false}}),
-				defTestCase(0, 1, columnOrdering{{1, false}, {5, false}, {2, false}}),
+				defTestCase(1, 0, columnOrdering{{1, desc}, {5, asc}}),
+				defTestCase(0, 1, columnOrdering{{1, asc}, {5, asc}, {2, asc}}),
 			},
 		},
 		{
@@ -79,21 +82,21 @@ func TestComputeOrderingMatch(t *testing.T) {
 				ordering:       nil,
 			},
 			cases: []desiredCase{
-				defTestCase(1, 1, columnOrdering{{2, true}, {5, false}, {1, false}}),
-				defTestCase(0, 0, columnOrdering{{5, false}, {2, false}}),
+				defTestCase(1, 1, columnOrdering{{2, desc}, {5, asc}, {1, asc}}),
+				defTestCase(0, 0, columnOrdering{{5, asc}, {2, asc}}),
 			},
 		},
 		{
 			existing: orderingInfo{
 				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
-				ordering:       []columnOrderInfo{{1, true}, {2, false}},
+				ordering:       []columnOrderInfo{{1, desc}, {2, asc}},
 			},
 			cases: []desiredCase{
-				defTestCase(2, 0, columnOrdering{{1, true}, {5, false}}),
-				defTestCase(2, 2, columnOrdering{{0, true}, {5, false}}),
-				defTestCase(1, 0, columnOrdering{{1, true}, {2, true}}),
-				defTestCase(5, 2, columnOrdering{{0, false}, {6, true}, {1, true}, {5, true}, {2, false}}),
-				defTestCase(2, 2, columnOrdering{{0, false}, {6, true}, {2, false}, {5, true}, {1, true}}),
+				defTestCase(2, 0, columnOrdering{{1, desc}, {5, asc}}),
+				defTestCase(2, 2, columnOrdering{{0, desc}, {5, asc}}),
+				defTestCase(1, 0, columnOrdering{{1, desc}, {2, desc}}),
+				defTestCase(5, 2, columnOrdering{{0, asc}, {6, desc}, {1, desc}, {5, desc}, {2, asc}}),
+				defTestCase(2, 2, columnOrdering{{0, asc}, {6, desc}, {2, asc}, {5, desc}, {1, desc}}),
 			},
 		},
 	}

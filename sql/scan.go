@@ -426,7 +426,7 @@ func (n *scanNode) initOrdering(exactPrefix int) {
 	n.ordering = n.computeOrdering(n.columnIDs, n.columnDirs, exactPrefix)
 	if n.reverse {
 		for i := range n.ordering.ordering {
-			n.ordering.ordering[i].reverse = !n.ordering.ordering[i].reverse
+			n.ordering.ordering[i].direction = n.ordering.ordering[i].direction.Reverse()
 		}
 	}
 }
@@ -441,7 +441,7 @@ func (n *scanNode) computeOrdering(columnIDs []ColumnID, dirs []encoding.Directi
 			if i < exactPrefix {
 				ordering.addExactMatchColumn(renderIdx)
 			} else {
-				ordering.addColumn(renderIdx, (dirs[i] == encoding.Descending))
+				ordering.addColumn(renderIdx, dirs[i])
 			}
 			continue
 		}

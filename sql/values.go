@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 // Values constructs a valuesNode from a VALUES expression.
@@ -116,12 +117,12 @@ func (n *valuesNode) Less(i, j int) bool {
 	ra, rb := n.rows[i], n.rows[j]
 	for _, c := range n.ordering {
 		var da, db parser.Datum
-		if c.reverse {
-			da = rb[c.colIdx]
-			db = ra[c.colIdx]
-		} else {
+		if c.direction == encoding.Ascending {
 			da = ra[c.colIdx]
 			db = rb[c.colIdx]
+		} else {
+			da = rb[c.colIdx]
+			db = ra[c.colIdx]
 		}
 		// TODO(pmattis): This is assuming that the datum types are compatible. I'm
 		// not sure this always holds as `CASE` expressions can return different

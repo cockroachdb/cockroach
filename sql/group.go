@@ -358,7 +358,7 @@ func (n *groupNode) isNotNullFilter(expr parser.Expr) parser.Expr {
 // requested for the output column.
 func desiredAggregateOrdering(funcs []*aggregateFunc) columnOrdering {
 	limit := -1
-	reverse := false
+	direction := encoding.Ascending
 	for i, f := range funcs {
 		impl := f.create()
 		switch impl.(type) {
@@ -370,7 +370,7 @@ func desiredAggregateOrdering(funcs []*aggregateFunc) columnOrdering {
 			case *qvalue:
 				limit = i
 				if _, ok := impl.(*maxAggregate); ok {
-					reverse = true
+					direction = encoding.Descending
 				}
 			default:
 				return nil
@@ -383,7 +383,7 @@ func desiredAggregateOrdering(funcs []*aggregateFunc) columnOrdering {
 	if limit == -1 {
 		return nil
 	}
-	return columnOrdering{{limit, reverse}}
+	return columnOrdering{{limit, direction}}
 }
 
 type extractAggregatesVisitor struct {

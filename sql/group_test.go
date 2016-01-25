@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -31,8 +32,8 @@ func TestDesiredAggregateOrder(t *testing.T) {
 		ordering columnOrdering
 	}{
 		{`a`, nil},
-		{`MIN(a)`, columnOrdering{{0, false}}},
-		{`MAX(a)`, columnOrdering{{0, true}}},
+		{`MIN(a)`, columnOrdering{{0, encoding.Ascending}}},
+		{`MAX(a)`, columnOrdering{{0, encoding.Descending}}},
 		{`(MIN(a), MAX(a))`, nil},
 		{`(MIN(a), AVG(a))`, nil},
 		{`(MIN(a), COUNT(a))`, nil},

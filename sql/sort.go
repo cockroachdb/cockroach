@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -105,7 +106,11 @@ func (p *planner) orderBy(n *parser.Select, s *scanNode) (*sortNode, *roachpb.Er
 				index = len(s.columns) - 1
 			}
 		}
-		ordering = append(ordering, columnOrderInfo{colIdx: index, reverse: o.Direction == parser.Descending})
+		direction := encoding.Ascending
+		if o.Direction == parser.Descending {
+			direction = encoding.Descending
+		}
+		ordering = append(ordering, columnOrderInfo{index, direction})
 	}
 
 	return &sortNode{columns: columns, ordering: ordering}, nil
@@ -162,7 +167,7 @@ func (n *sortNode) ExplainPlan() (name, description string, children []planNode)
 	strs := make([]string, len(n.ordering))
 	for i, o := range n.ordering {
 		prefix := '+'
-		if o.reverse {
+		if o.direction == encoding.Descending {
 			prefix = '-'
 		}
 		strs[i] = fmt.Sprintf("%c%s", prefix, columns[o.colIdx].name)
