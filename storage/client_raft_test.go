@@ -472,7 +472,6 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
 		t.Fatal(err)
 	}
-	mvcc := rng.GetMVCCStats()
 
 	// Now add the second replica.
 	if err := rng.ChangeReplicas(roachpb.ADD_REPLICA,
@@ -492,11 +491,11 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		if err != nil {
 			return false
 		}
-		getResp := reply.(*roachpb.GetResponse)
+		val := mustGetInt(reply.(*roachpb.GetResponse).Value)
 		if log.V(1) {
-			log.Infof("read value %d", mustGetInt(getResp.Value))
+			log.Infof("read value %d", val)
 		}
-		return mustGetInt(getResp.Value) == 16
+		return val == 16
 	}, replicaReadTimeout); err != nil {
 		t.Fatal(err)
 	}
@@ -505,8 +504,8 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mvcc2 := rng2.GetMVCCStats(); !reflect.DeepEqual(mvcc, mvcc2) {
-		log.Errorf("expected stats on new range to equal old; %+v != %+v", mvcc2, mvcc)
+	if mvcc, mvcc2 := rng.GetMVCCStats(), rng2.GetMVCCStats(); !reflect.DeepEqual(mvcc, mvcc2) {
+		t.Fatalf("expected stats on new range:\n%+v\nto equal old:\n%+v", mvcc2, mvcc)
 	}
 
 	// Send a third command to verify that the log states are synced up so the
@@ -524,9 +523,11 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		if err != nil {
 			return false
 		}
-		getResp := reply.(*roachpb.GetResponse)
-		log.Infof("read value %d", mustGetInt(getResp.Value))
-		return mustGetInt(getResp.Value) == 39
+		val := mustGetInt(reply.(*roachpb.GetResponse).Value)
+		if log.V(1) {
+			log.Infof("read value %d", val)
+		}
+		return val == 39
 	}, replicaReadTimeout); err != nil {
 		t.Fatal(err)
 	}
