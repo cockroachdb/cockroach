@@ -520,6 +520,14 @@ func TestParse2(t *testing.T) {
 			`SELECT RTRIM('xyxtrimyyx')`},
 		{`SELECT TRIM(trailing 'xyxtrimyyx')`,
 			`SELECT RTRIM('xyxtrimyyx')`},
+		{`BEGIN`,
+			`BEGIN TRANSACTION`},
+		{`START TRANSACTION`,
+			`BEGIN TRANSACTION`},
+		{`COMMIT`,
+			`COMMIT TRANSACTION`},
+		{`END`,
+			`COMMIT TRANSACTION`},
 	}
 	for _, d := range testData {
 		stmts, err := parseTraditional(d.sql)
