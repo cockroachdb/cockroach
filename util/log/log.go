@@ -16,7 +16,11 @@
 
 package log
 
-import "golang.org/x/net/context"
+import (
+	"os"
+
+	"golang.org/x/net/context"
+)
 
 func init() {
 	// TODO(tschottdorf) this should go to our logger. Currently this will log
@@ -145,6 +149,40 @@ func Errorf(format string, args ...interface{}) {
 // this method to naturally format `args`.
 func ErrorfDepth(depth int, format string, args ...interface{}) {
 	logDepth(nil, depth+1, ErrorLog, format, args)
+}
+
+// ExitWithErrorc logs to the ERROR, WARNING, and INFO logs, then
+// exits with status 1. It extracts values from field keys specified
+// in this package and logs them along with the given message and any
+// additional pairs specified as consecutive elements in kvs.
+func ExitWithErrorc(ctx context.Context, format string, args ...interface{}) {
+	logDepth(ctx, 1, ErrorLog, format, args)
+	os.Exit(1)
+}
+
+// Error logs to the ERROR, WARNING, and INFO logs, then exits with
+// status 1.  Arguments are handled in the manner of fmt.Print; a
+// newline is appended.
+func ExitWithError(args ...interface{}) {
+	logDepth(nil, 1, ErrorLog, "", args)
+	os.Exit(1)
+}
+
+// Errorf logs to the ERROR, WARNING, and INFO logs, then exits with
+// status 1. Arguments are handled in the manner of fmt.Printf; a
+// newline is appended if missing.
+func ExitWithErrorf(format string, args ...interface{}) {
+	logDepth(nil, 1, ErrorLog, format, args)
+	os.Exit(1)
+}
+
+// ErrorfDepth logs to the ERROR, WARNING, and INFO logs, offsetting
+// the caller's stack frame by 'depth', then exits with status
+// 1. Passing an empty string for `format` causes this method to
+// naturally format `args`.
+func ExitWithErrorfDepth(depth int, format string, args ...interface{}) {
+	logDepth(nil, depth+1, ErrorLog, format, args)
+	os.Exit(1)
 }
 
 // Fatalc logs to the INFO, WARNING, ERROR, and FATAL logs, including a stack
