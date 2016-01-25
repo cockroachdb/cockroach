@@ -295,6 +295,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 // fails.
 func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
