@@ -34,13 +34,17 @@ BENCHTIMEOUT := 5m
 TESTFLAGS    :=
 STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
+BUILDMODE    := install
+
+# Note: We pass `-v` go `go build` and `go test -i` so that warnings
+# from the linker aren't suppressed. The usage of `-v` also shows when
+# dependencies are rebuilt which is useful when switching between
+# normal and race test builds.
 
 ifeq ($(STATIC),1)
 # Static linking with glibc is a bad time; see
 # https://github.com/golang/go/issues/13470. If a static build is
 # requested, only link libgcc and libstdc++ statically.
-# `-v` so warnings from the linker aren't suppressed.
-GOFLAGS += -v
 # TODO(peter): Allow this only when `go env CC` reports "gcc".
 LDFLAGS += -extldflags "-static-libgcc -static-libstdc++"
 endif
@@ -49,22 +53,20 @@ endif
 all: build test check
 
 .PHONY: release
-release: TAGS += release
 release: build
 
 .PHONY: build
-build: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTag=$(shell git describe --dirty --tags)"
-build: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
-build: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildDeps=$(shell GOPATH=${GOPATH} build/depvers.sh)"
-build:
-	$(GO) build -tags '$(TAGS)' $(GOFLAGS) -ldflags '$(LDFLAGS)' -i -o cockroach
+build: GOFLAGS += -i -o cockroach
+build: BUILDMODE = build
+build: install
 
 .PHONY: install
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTag=$(shell git describe --dirty --tags)"
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildDeps=$(shell GOPATH=${GOPATH} build/depvers.sh)"
 install:
-	$(GO) install -tags '$(TAGS)' $(GOFLAGS) -ldflags '$(LDFLAGS)'
+	@echo $(GO) $(BUILDMODE) -v $(GOFLAGS)
+	@$(GO) $(BUILDMODE) -v $(GOFLAGS) -ldflags '$(LDFLAGS)'
 
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.
@@ -79,7 +81,7 @@ testbuild:
 	  NAME=$$(basename "$$p"); \
 	  OUT="$$NAME.test"; \
 	  DIR=$$($(GO) list -f {{.Dir}} -tags '$(TAGS)' $$p); \
-	  $(GO) test $(GOFLAGS) -tags '$(TAGS)' -o "$$DIR"/"$$OUT" -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
+	  $(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -o "$$DIR"/"$$OUT" -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
 	done
 
 # Build all tests into DIR and strips each.
@@ -95,7 +97,7 @@ endif
 	  NAME=$$(basename "$$p"); \
 	  PKGDIR=$$($(GO) list -f {{.ImportPath}} $$p); \
 		OUTPUT_FILE="$(DIR)/$${PKGDIR}/$${NAME}.test"; \
-	  $(GO) test $(GOFLAGS) -o $${OUTPUT_FILE} -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
+	  $(GO) test -v $(GOFLAGS) -o $${OUTPUT_FILE} -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
 	  if [ -s $${OUTPUT_FILE} ]; then strip -S $${OUTPUT_FILE}; fi \
 	done
 
@@ -103,20 +105,20 @@ endif
 # tests.
 .PHONY: test
 test:
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+	$(GO) test -v $(GOFLAGS) -i $(PKG)
+	$(GO) test $(GOFLAGS) -run $(TESTS) -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: testslow
 testslow: TESTFLAGS += -v
 testslow:
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+	$(GO) test -v $(GOFLAGS) -i $(PKG)
+	$(GO) test $(GOFLAGS) -run $(TESTS) -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 .PHONY: testraceslow
 testraceslow: TESTFLAGS += -v
 testraceslow:
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -run $(TESTS) -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+	$(GO) test -v $(GOFLAGS) -i $(PKG)
+	$(GO) test $(GOFLAGS) -race -run $(TESTS) -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 # "go test -i" builds dependencies and installs them into GOPATH/pkg, but does not run the
 # tests. Run it as a part of "testrace" since race-enabled builds are not covered by
@@ -124,30 +126,30 @@ testraceslow:
 # slow-to-compile cgo packages).
 .PHONY: testrace
 testrace:
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -run $(TESTS) -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS)
+	$(GO) test -v $(GOFLAGS) -race -i $(PKG)
+	$(GO) test $(GOFLAGS) -race -run $(TESTS) -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: bench
 bench:
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run - -bench $(TESTS) -timeout $(BENCHTIMEOUT) $(PKG) $(TESTFLAGS)
+	$(GO) test -v $(GOFLAGS) -i $(PKG)
+	$(GO) test $(GOFLAGS) -run - -bench $(TESTS) -timeout $(BENCHTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: coverage
 coverage:
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
+	$(GO) test -v $(GOFLAGS) -i $(PKG)
+	$(GO) test $(GOFLAGS) -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 # "make stress PKG=./storage TESTS=TestBlah" will build the given test
 # and run it in a loop (the PKG argument is required; if TESTS is not
 # given all tests in the package will be run).
 .PHONY: stress
 stress:
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i -c $(PKG) -o stress.test
+	$(GO) test -v $(GOFLAGS) -i -c $(PKG) -o stress.test
 	stress $(STRESSFLAGS) ./stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 .PHONY: stressrace
 stressrace:
-	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -i -c $(PKG) -o stress.test
+	$(GO) test $(GOFLAGS) -race -v -i -c $(PKG) -o stress.test
 	stress $(STRESSFLAGS) ./stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 .PHONY: acceptance
@@ -190,7 +192,7 @@ check:
 
 .PHONY: clean
 clean:
-	$(GO) clean -tags '$(TAGS)' $(GOFLAGS) -i github.com/cockroachdb/...
+	$(GO) clean $(GOFLAGS) -i github.com/cockroachdb/...
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -f .bootstrap
 
