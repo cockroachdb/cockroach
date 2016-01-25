@@ -23,6 +23,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -570,11 +571,11 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// Make sure the returned value is valAt(2).
-	var got sql.DatabaseDescriptor
-	if err := val.GetProto(&got); err != nil {
+	got := new(sql.DatabaseDescriptor)
+	if err := val.GetProto(got); err != nil {
 		t.Fatal(err)
 	}
-	if got.ID != 2 {
-		t.Fatalf("mismatch: expected %+v, got %+v", valAt(2), got)
+	if expected := valAt(2); !reflect.DeepEqual(got, expected) {
+		t.Fatalf("mismatch: expected %+v, got %+v", *expected, *got)
 	}
 }
