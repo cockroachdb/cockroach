@@ -313,7 +313,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	}
 	// If there are no resolvers after persistent storage has been queried, fatal error.
 	if len(g.resolvers) == 0 {
-		log.Fatalf("no resolvers specified for gossip network")
+		log.ExitWithErrorf("no resolvers specified for gossip network. Try adding more peers via --gossip.")
 	}
 	// If a new resolver was found, immediately signal bootstrap.
 	if newResolverFound {
