@@ -18,6 +18,8 @@ package util
 
 import (
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"math"
 	"net/http"
 	"reflect"
@@ -238,4 +240,20 @@ func MarshalResponse(r *http.Request, value interface{}, allowed []EncodingType)
 		}
 	}
 	return
+}
+
+// GetJSON uses the supplied client to retrieve the URL specified by the parameters and
+// unmarshals the result into the supplied interface.
+func GetJSON(httpClient *http.Client, scheme, hostport, path string, v interface{}) error {
+	url := fmt.Sprintf("%s://%s%s", scheme, hostport, path)
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, v)
 }

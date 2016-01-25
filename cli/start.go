@@ -47,6 +47,8 @@ var errMissingParams = errors.New("missing or invalid parameters")
 // panicGuard wraps an errorless command into one wrapping panics into errors.
 // This simplifies error handling for many commands for which more elaborate
 // error handling isn't needed and would otherwise bloat the code.
+//
+// Deprecated: When introducing a new cobra.Command, simply return an error.
 func panicGuard(cmdFn func(*cobra.Command, []string)) func(*cobra.Command, []string) error {
 	return func(c *cobra.Command, args []string) (err error) {
 		defer func() {
@@ -63,6 +65,16 @@ func panicGuard(cmdFn func(*cobra.Command, []string)) func(*cobra.Command, []str
 // stack trace doesn't matter then.
 func panicf(format string, args ...interface{}) {
 	panic(fmt.Sprintf(format, args...))
+}
+
+// getJSON is a convenience wrapper around util.GetJSON that uses our Context to populate
+// parts of the request.
+func getJSON(hostport, path string, v interface{}) error {
+	httpClient, err := context.GetHTTPClient()
+	if err != nil {
+		return err
+	}
+	return util.GetJSON(httpClient, context.HTTPRequestScheme(), hostport, path, v)
 }
 
 // initCmd command initializes a new Cockroach cluster.

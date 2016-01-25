@@ -18,13 +18,10 @@ package cluster
 
 import (
 	"crypto/tls"
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // HTTPClient is an http.Client configured for querying a cluster. We need to
@@ -39,32 +36,14 @@ var HTTPClient = http.Client{
 		},
 	}}
 
-// getJSON retrieves the URL specified by the parameters and
-// and unmarshals the result into the supplied interface.
+// getJSON is a convenience wrapper around cockroach/util.GetJSON(), which retrieves
+// an URL specified by the parameters and unmarshals the result into the supplied
+// interface.
 func getJSON(tls bool, hostport, path string, v interface{}) error {
-	protocol := "https"
+	scheme := "https"
 	if !tls {
-		protocol = "http"
+		scheme = "http"
 	}
-	resp, err := HTTPClient.Get(fmt.Sprintf("%s://%s%s", protocol, hostport, path))
-	if err != nil {
-		if log.V(1) {
-			log.Info(err)
-		}
-		return err
-	}
-	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		if log.V(1) {
-			log.Info(err)
-		}
-		return err
-	}
-	if err := json.Unmarshal(b, v); err != nil {
-		if log.V(1) {
-			log.Infof("%v\n%s", err, b)
-		}
-	}
-	return nil
+
+	return util.GetJSON(&HTTPClient, scheme, hostport, path, v)
 }

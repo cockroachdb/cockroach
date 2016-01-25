@@ -17,16 +17,21 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -54,6 +59,51 @@ func newCLITest() cliTest {
 func (c cliTest) Run(line string) {
 	a := strings.Fields(line)
 	c.RunWithArgs(a)
+}
+
+// RunWithCapture runs c and returns a string containing the output of c
+// and any error that may have occurred capturing the output. We do not propagate
+// errors in executing c, because those will be caught when the test verifies
+// the output of c.
+func (c cliTest) RunWithCapture(line string) (out string, err error) {
+	// Heavily inspired by Go's testing/example.go:runExample().
+
+	// Funnel stdout into a pipe.
+	stdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		return "", err
+	}
+	os.Stdout = w
+
+	// Send all bytes from piped stdout through the output channel.
+	type captureResult struct {
+		out string
+		err error
+	}
+	outC := make(chan captureResult)
+	go func() {
+		var buf bytes.Buffer
+		_, err := io.Copy(&buf, r)
+		r.Close()
+		outC <- captureResult{buf.String(), err}
+	}()
+
+	// Clean up and record output in separate function to handle panics.
+	defer func() {
+		// Close pipe and restore normal stdout.
+		w.Close()
+		os.Stdout = stdout
+		outResult := <-outC
+		out, err = outResult.out, outResult.err
+		if x := recover(); x != nil {
+			err = util.Errorf("panic: %v", x)
+		}
+	}()
+
+	// Run the command. The output will be returned in the defer block.
+	c.Run(line)
+	return
 }
 
 func (c cliTest) RunWithArgs(a []string) {
@@ -511,6 +561,7 @@ Available Commands:
   user        get, set, list and remove users
   range       list, split and merge ranges
   zone        get, set, list and remove zones
+  node        list nodes and show their status
 
   version     output version information
 
@@ -529,4 +580,183 @@ Use "cockroach [command] --help" for more information about a command.
 	if got != expected {
 		t.Errorf("got:\n%s\n----\nexpected:\n%s", got, expected)
 	}
+}
+
+func Example_Node() {
+	c := newCLITest()
+	defer c.Stop()
+
+	// Refresh time series data, which is required to retrieve stats.
+	if err := c.TestServer.WriteSummaries(); err != nil {
+		log.Fatalf("Couldn't write stats summaries: %s", err)
+	}
+
+	c.Run("node ls")
+	c.Run("node status 10000")
+
+	// Output:
+	// node ls
+	// +----+
+	// | id |
+	// +----+
+	// |  1 |
+	// +----+
+	// node status 10000
+	// Error: node 10000 doesn't exist
+}
+
+func TestNodeStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	start := time.Now()
+	c := newCLITest()
+	defer c.Stop()
+
+	// Refresh time series data, which is required to retrieve stats.
+	if err := c.TestServer.WriteSummaries(); err != nil {
+		t.Fatalf("couldn't write stats summaries: %s", err)
+	}
+
+	out, err := c.RunWithCapture("node status 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkNodeStatus(t, c, out, start)
+
+	out, err = c.RunWithCapture("node status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkNodeStatus(t, c, out, start)
+}
+
+func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
+	buf := bytes.NewBufferString(output)
+	s := bufio.NewScanner(buf)
+
+	// Skip command line.
+	if !s.Scan() {
+		t.Fatalf("Couldn't skip command line: %s", s.Err())
+	}
+
+	checkSeparatorLine(t, s)
+
+	// check column names.
+	if !s.Scan() {
+		t.Fatalf("Error reading column names: %s", s.Err())
+	}
+	cols, err := extractFields(s.Text())
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
+	if !reflect.DeepEqual(cols, nodesColumnHeaders) {
+		t.Fatalf("columns (%s) don't match expected (%s)", cols, nodesColumnHeaders)
+	}
+
+	checkSeparatorLine(t, s)
+
+	// Check node status.
+	if !s.Scan() {
+		t.Fatalf("error reading node status: %s", s.Err())
+	}
+	fields, err := extractFields(s.Text())
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
+
+	nodeID := c.Gossip().GetNodeID()
+	nodeIDStr := strconv.FormatInt(int64(nodeID), 10)
+	if a, e := fields[0], nodeIDStr; a != e {
+		t.Errorf("node id (%s) != expected (%s)", a, e)
+	}
+
+	nodeAddr, err := c.Gossip().GetNodeIDAddress(nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, e := fields[1], nodeAddr.String(); a != e {
+		t.Errorf("node address (%s) != expected (%s)", a, e)
+	}
+
+	// Verify that updated_at and started_at are reasonably recent.
+	checkTimeElapsed(t, fields[2], 5*time.Second, start)
+	checkTimeElapsed(t, fields[3], 5*time.Second, start)
+
+	// Verify all byte/range metrics.
+	testcases := []struct {
+		name   string
+		idx    int
+		maxval int64
+	}{
+		{"live_bytes", 4, 10000},
+		{"key_bytes", 5, 10000},
+		{"value_bytes", 6, 10000},
+		{"intent_bytes", 7, 10000},
+		{"system_bytes", 8, 10000},
+		{"leader_ranges", 9, 3},
+		{"repl_ranges", 10, 3},
+		{"avail_ranges", 11, 3},
+	}
+	for _, tc := range testcases {
+		val, err := strconv.ParseInt(fields[tc.idx], 10, 64)
+		if err != nil {
+			t.Errorf("couldn't parse %s '%s': %v", tc.name, fields[tc.idx], err)
+			continue
+		}
+		if val < 0 {
+			t.Errorf("value for %s (%d) cannot be less than 0", tc.name, val)
+			continue
+		}
+		if val > tc.maxval {
+			t.Errorf("value for %s (%d) greater than max (%d)", tc.name, val, tc.maxval)
+		}
+	}
+
+	checkSeparatorLine(t, s)
+}
+
+var separatorLineExp = regexp.MustCompile(`[\+-]+$`)
+
+func checkSeparatorLine(t *testing.T, s *bufio.Scanner) {
+	if !s.Scan() {
+		t.Fatalf("error reading separator line: %s", s.Err())
+	}
+	if !separatorLineExp.MatchString(s.Text()) {
+		t.Fatalf("separator line not found: %s", s.Text())
+	}
+}
+
+// checkRecentTime produces a test error if the time is not within the specified number
+// of seconds of the given start time.
+func checkTimeElapsed(t *testing.T, timeStr string, elapsed time.Duration, start time.Time) {
+	// Truncate start time, because the CLI currently outputs times with a second-level
+	// granularity.
+	start = start.Truncate(time.Second)
+	tm, err := time.ParseInLocation(localTimeFormat, timeStr, start.Location())
+	if err != nil {
+		t.Errorf("couldn't parse time '%s': %s", timeStr, err)
+		return
+	}
+	end := start.Add(elapsed)
+	if tm.Before(start) || tm.After(end) {
+		t.Errorf("time (%s) not within range [%s,%s]", tm, start, end)
+	}
+}
+
+// extractFields extracts the fields from a pretty-printed row of SQL output,
+// discarding excess whitespace and column separators.
+func extractFields(line string) ([]string, error) {
+	fields := strings.Split(line, "|")
+	// fields has two extra entries, one for the empty token to the left of the first
+	// |, and another empty one to the right of the final |. So, we need to take those
+	// out.
+	if a, e := len(fields), len(nodesColumnHeaders)+2; a != e {
+		return nil, util.Errorf("can't extract fields: # of fields (%d) != expected (%d)", a, e)
+	}
+	fields = fields[1 : len(fields)-1]
+	var r []string
+	for _, f := range fields {
+		r = append(r, strings.TrimSpace(f))
+	}
+	return r, nil
 }
