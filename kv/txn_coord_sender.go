@@ -731,15 +731,6 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 				if !newTxn.Writing {
 					panic("txn with intents marked as non-writing")
 				}
-				txnMeta = &txnMetadata{
-					txn:              *newTxn,
-					keys:             cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
-					firstUpdateNanos: tc.clock.PhysicalNow(),
-					lastUpdateNanos:  tc.clock.PhysicalNow(),
-					timeoutDuration:  tc.clientTimeout,
-					txnEnd:           make(chan struct{}),
-				}
-				tc.txns[id] = txnMeta
 				// If the transaction is already over, there's no point in
 				// launching a one-off coordinator which will shut down right
 				// away. If we ended up here with an error, we'll always start
@@ -748,6 +739,16 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 				// future.
 				if _, isEnding := ba.GetArg(roachpb.EndTransaction); pErr != nil || !isEnding {
 					trace.Event("coordinator spawns")
+					txnMeta = &txnMetadata{
+						txn:              *newTxn,
+						keys:             cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
+						firstUpdateNanos: tc.clock.PhysicalNow(),
+						lastUpdateNanos:  tc.clock.PhysicalNow(),
+						timeoutDuration:  tc.clientTimeout,
+						txnEnd:           make(chan struct{}),
+					}
+					tc.txns[id] = txnMeta
+
 					if !tc.stopper.RunAsyncTask(func() {
 						tc.heartbeatLoop(id)
 					}) {

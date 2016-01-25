@@ -715,3 +715,24 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 		t.Fatalf("expected transaction to be tracked")
 	}
 }
+
+// TestTxnCoordSenderReleaseTxnMeta verifies that TxnCoordSender releases the
+// txnMetadata after the txn has committed succeed.
+func TestTxnCoordSenderReleaseTxnMeta(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := createTestDB(t)
+	defer s.Stop()
+	defer teardownHeartbeats(s.Sender)
+
+	txn := client.NewTxn(*s.DB)
+	ba := txn.NewBatch()
+	ba.Put(roachpb.Key("a"), []byte("value"))
+	ba.Put(roachpb.Key("b"), []byte("value"))
+	if err := txn.CommitInBatch(ba); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := s.Sender.txns[string(txn.Proto.ID)]; ok {
+		t.Fatal("expected TxnCoordSender has released the txn")
+	}
+}
