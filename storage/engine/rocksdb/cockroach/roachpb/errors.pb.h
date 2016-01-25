@@ -579,15 +579,6 @@ class ReadWithinUncertaintyIntervalError : public ::google::protobuf::Message {
   ::google::protobuf::int32 node_id() const;
   void set_node_id(::google::protobuf::int32 value);
 
-  // optional .cockroach.roachpb.Transaction txn = 4;
-  bool has_txn() const;
-  void clear_txn();
-  static const int kTxnFieldNumber = 4;
-  const ::cockroach::roachpb::Transaction& txn() const;
-  ::cockroach::roachpb::Transaction* mutable_txn();
-  ::cockroach::roachpb::Transaction* release_txn();
-  void set_allocated_txn(::cockroach::roachpb::Transaction* txn);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ReadWithinUncertaintyIntervalError)
  private:
   inline void set_has_timestamp();
@@ -596,15 +587,12 @@ class ReadWithinUncertaintyIntervalError : public ::google::protobuf::Message {
   inline void clear_has_existing_timestamp();
   inline void set_has_node_id();
   inline void clear_has_node_id();
-  inline void set_has_txn();
-  inline void clear_has_txn();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::Timestamp* timestamp_;
   ::cockroach::roachpb::Timestamp* existing_timestamp_;
-  ::cockroach::roachpb::Transaction* txn_;
   ::google::protobuf::int32 node_id_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
@@ -3061,49 +3049,6 @@ inline void ReadWithinUncertaintyIntervalError::set_node_id(::google::protobuf::
   set_has_node_id();
   node_id_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ReadWithinUncertaintyIntervalError.node_id)
-}
-
-// optional .cockroach.roachpb.Transaction txn = 4;
-inline bool ReadWithinUncertaintyIntervalError::has_txn() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
-}
-inline void ReadWithinUncertaintyIntervalError::set_has_txn() {
-  _has_bits_[0] |= 0x00000008u;
-}
-inline void ReadWithinUncertaintyIntervalError::clear_has_txn() {
-  _has_bits_[0] &= ~0x00000008u;
-}
-inline void ReadWithinUncertaintyIntervalError::clear_txn() {
-  if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
-  clear_has_txn();
-}
-inline const ::cockroach::roachpb::Transaction& ReadWithinUncertaintyIntervalError::txn() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ReadWithinUncertaintyIntervalError.txn)
-  return txn_ != NULL ? *txn_ : *default_instance_->txn_;
-}
-inline ::cockroach::roachpb::Transaction* ReadWithinUncertaintyIntervalError::mutable_txn() {
-  set_has_txn();
-  if (txn_ == NULL) {
-    txn_ = new ::cockroach::roachpb::Transaction;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ReadWithinUncertaintyIntervalError.txn)
-  return txn_;
-}
-inline ::cockroach::roachpb::Transaction* ReadWithinUncertaintyIntervalError::release_txn() {
-  clear_has_txn();
-  ::cockroach::roachpb::Transaction* temp = txn_;
-  txn_ = NULL;
-  return temp;
-}
-inline void ReadWithinUncertaintyIntervalError::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
-  delete txn_;
-  txn_ = txn;
-  if (txn) {
-    set_has_txn();
-  } else {
-    clear_has_txn();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ReadWithinUncertaintyIntervalError.txn)
 }
 
 // -------------------------------------------------------------------
