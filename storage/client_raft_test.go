@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -265,9 +264,9 @@ func TestReplicateRange(t *testing.T) {
 		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &getArgs); err != nil {
-			return util.Errorf("failed to read data")
-		} else if v := mustGetInt(reply.(*roachpb.GetResponse).Value); v != 5 {
-			return util.Errorf("failed to read correct data: %d", v)
+			return util.Errorf("failed to read data: %s", err)
+		} else if e, v := int64(5), mustGetInt(reply.(*roachpb.GetResponse).Value); v != e {
+			return util.Errorf("failed to read correct data: expected %d, got %d", e, v)
 		}
 		return nil
 	})
@@ -332,18 +331,17 @@ func TestRestoreReplicas(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, replicaReadTimeout, func() error {
 		getArgs := getArgs([]byte("a"))
-		reply, pErr := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
+		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
-		}, &getArgs)
-		if pErr != nil {
-			return false
+		}, &getArgs); err != nil {
+			return util.Errorf("failed to read data: %s", err)
+		} else if e, v := int64(39), mustGetInt(reply.(*roachpb.GetResponse).Value); v != e {
+			return util.Errorf("failed to read correct data: expected %d, got %d", e, v)
 		}
-		return mustGetInt(reply.(*roachpb.GetResponse).Value) == 39
-	}, replicaReadTimeout); err != nil {
-		t.Fatal(err)
-	}
+		return nil
+	})
 
 	// Both replicas have a complete list in Desc.Replicas
 	for i, store := range mtc.stores {
@@ -483,22 +481,17 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	}
 
 	// Once it catches up, the effects of both commands can be seen.
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, replicaReadTimeout, func() error {
 		getArgs := getArgs([]byte("a"))
-		reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
+		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
-		}, &getArgs)
-		if err != nil {
-			return false
+		}, &getArgs); err != nil {
+			return util.Errorf("failed to read data: %s", err)
+		} else if e, v := int64(16), mustGetInt(reply.(*roachpb.GetResponse).Value); v != e {
+			return util.Errorf("failed to read correct data: expected %d, got %d", e, v)
 		}
-		val := mustGetInt(reply.(*roachpb.GetResponse).Value)
-		if log.V(1) {
-			log.Infof("read value %d", val)
-		}
-		return val == 16
-	}, replicaReadTimeout); err != nil {
-		t.Fatal(err)
-	}
+		return nil
+	})
 
 	rng2, err := mtc.stores[1].GetReplica(1)
 	if err != nil {
@@ -515,22 +508,17 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, replicaReadTimeout, func() error {
 		getArgs := getArgs([]byte("a"))
-		reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
+		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
-		}, &getArgs)
-		if err != nil {
-			return false
+		}, &getArgs); err != nil {
+			return util.Errorf("failed to read data: %s", err)
+		} else if e, v := int64(39), mustGetInt(reply.(*roachpb.GetResponse).Value); v != e {
+			return util.Errorf("failed to read correct data: expected %d, got %d", e, v)
 		}
-		val := mustGetInt(reply.(*roachpb.GetResponse).Value)
-		if log.V(1) {
-			log.Infof("read value %d", val)
-		}
-		return val == 39
-	}, replicaReadTimeout); err != nil {
-		t.Fatal(err)
-	}
+		return nil
+	})
 }
 
 // TestStoreRangeUpReplicate verifies that the replication queue will notice
@@ -733,7 +721,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	if rd, err := mtc.stores[0].ReplicaDescriptor(origDesc.RangeID, origDesc.NextReplicaID); err != nil {
 		t.Fatalf("failed to look up replica %s", origDesc.NextReplicaID)
 	} else if a, e := rd.StoreID, mtc.stores[1].Ident.StoreID; a != e {
-		log.Infof("expected replica %s to point to store %s, but got %s", origDesc.NextReplicaID, a, e)
+		t.Fatalf("expected replica %s to point to store %s, but got %s", origDesc.NextReplicaID, a, e)
 	}
 
 	// Add to third store with fresh descriptor.
@@ -949,24 +937,19 @@ func TestReplicateAfterSplit(t *testing.T) {
 		t.Error("Range MaxBytes is not set after snapshot applied")
 	}
 	// Once it catches up, the effects of increment commands can be seen.
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, replicaReadTimeout, func() error {
 		getArgs := getArgs(key)
 		// Reading on non-leader replica should use inconsistent read
-		reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
+		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
 			RangeID:         rangeID2,
 			ReadConsistency: roachpb.INCONSISTENT,
-		}, &getArgs)
-		if err != nil {
-			return false
+		}, &getArgs); err != nil {
+			return util.Errorf("failed to read data: %s", err)
+		} else if e, v := int64(11), mustGetInt(reply.(*roachpb.GetResponse).Value); v != e {
+			return util.Errorf("failed to read correct data: expected %d, got %d", e, v)
 		}
-		getResp := reply.(*roachpb.GetResponse)
-		if log.V(1) {
-			log.Infof("read value %d", mustGetInt(getResp.Value))
-		}
-		return mustGetInt(getResp.Value) == 11
-	}, replicaReadTimeout); err != nil {
-		t.Fatal(err)
-	}
+		return nil
+	})
 }
 
 // TestRangeDescriptorSnapshotRace calls Snapshot() repeatedly while
