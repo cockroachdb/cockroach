@@ -148,10 +148,24 @@ func (e *Executor) StatementResult(user string, stmt parser.Statement, args pars
 		systemConfig: e.getSystemConfig(),
 	}
 
-	planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: time.Now()}
-	plan, err := planMaker.makePlan(stmt, false)
-	if err != nil {
-		return nil, err
+	var plan planNode
+	f := func(timestamp time.Time) *roachpb.Error {
+		var pErr *roachpb.Error
+		planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: timestamp}
+		plan, pErr = planMaker.prepare(stmt)
+		return pErr
+	}
+	if pErr := e.db.Txn(func(txn *client.Txn) *roachpb.Error {
+		timestamp := time.Now()
+		planMaker.setTxn(txn, timestamp)
+		pErr := f(timestamp)
+		planMaker.resetTxn()
+		return pErr
+	}); pErr != nil {
+		return nil, pErr
+	}
+	if plan == nil {
+		return nil, nil
 	}
 	cols := make([]*driver.Response_Result_Rows_Column, len(plan.Columns()))
 	for i, c := range plan.Columns() {
