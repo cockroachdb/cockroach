@@ -94,7 +94,7 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, *roachpb.Error) 
 			location = "UTC"
 		}
 		if _, err := time.LoadLocation(location); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, roachpb.NewUErrorf("cannot find %s: %v", location, err)
 		}
 		p.session.Timezone = &Session_Location{Location: location}
 
