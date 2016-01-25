@@ -625,12 +625,14 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 							Left:     c.Left,
 							Right:    c.Right,
 						}
-					} else {
+					} else if c.Right.(parser.Datum).HasNext() {
 						*startExpr = &parser.ComparisonExpr{
 							Operator: parser.GE,
 							Left:     c.Left,
 							Right:    c.Right.(parser.Datum).Next(),
 						}
+					} else {
+						*startExpr = c
 					}
 				case parser.LT:
 					if *endDone || (*endExpr != nil) {
@@ -890,7 +892,7 @@ func encodeInclusiveEndValue(
 	needExclusiveKey := false
 	if isLastEndConstraint {
 		if dir == encoding.Ascending {
-			if datum.IsMax() {
+			if datum.IsMax() || !datum.HasNext() {
 				needExclusiveKey = true
 			} else {
 				datum = datum.Next()
