@@ -743,7 +743,7 @@ var builtins = map[string][]builtin{
 
 	"div": {
 		floatBuiltin2(func(x, y float64) (Datum, error) {
-			return DFloat(x / y), nil
+			return DFloat(math.Trunc(x / y)), nil
 		}),
 	},
 
