@@ -33,6 +33,7 @@ type planner struct {
 	session      Session
 	user         string
 	evalCtx      parser.EvalContext
+	prepareOnly  bool
 	leases       map[ID]*LeaseState
 	leaseMgr     *LeaseManager
 	systemConfig config.SystemConfig
@@ -146,6 +147,18 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 		return p.Values(n)
 	default:
 		return nil, roachpb.NewErrorf("unknown statement type: %T", stmt)
+	}
+}
+
+func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
+	p.prepareOnly = true
+	switch n := stmt.(type) {
+	case *parser.Insert:
+		return p.Insert(n, false)
+	case *parser.Select:
+		return p.Select(n)
+	default:
+		return nil, roachpb.NewErrorf("prepare statement not supported: %T", stmt)
 	}
 }
 
