@@ -514,6 +514,28 @@ SELECT mod(9223372036854775807, 4)
 ----
 3
 
+# div and mod are a logical pair
+
+query R
+SELECT div(9.0, 2.0) * 2.0 + mod(9.0, 2.0)
+----
+9
+
+query R
+SELECT div(9.0, -2.0) * -2.0 + mod(9.0, -2.0)
+----
+9
+
+query R
+SELECT div(-9.0, 2.0) * 2.0 + mod(-9.0, 2.0)
+----
+-9
+
+query R
+SELECT div(-9.0, -2.0) * -2.0 + mod(-9.0, -2.0)
+----
+-9
+
 query R
 SELECT pi()
 ----
