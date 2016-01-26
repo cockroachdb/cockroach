@@ -212,7 +212,7 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 		// cannot be used as index values.
 		for i, val := range newVals {
 			var mpErr *roachpb.Error
-			if marshalled[i], mpErr = marshalColumnValue(cols[i], val); mpErr != nil {
+			if marshalled[i], mpErr = marshalColumnValue(cols[i], val, p.evalCtx.Args); mpErr != nil {
 				return nil, mpErr
 			}
 		}
