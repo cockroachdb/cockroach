@@ -231,3 +231,134 @@ SERIALIZABLE
 
 statement ok
 COMMIT
+
+# user priority
+
+statement error there is no transaction in progress
+SET TRANSACTION PRIORITY LOW
+
+statement ok
+BEGIN TRANSACTION PRIORITY LOW; COMMIT
+
+statement ok
+BEGIN TRANSACTION PRIORITY NORMAL; COMMIT
+
+statement ok
+BEGIN TRANSACTION PRIORITY HIGH; COMMIT
+
+statement ok
+BEGIN TRANSACTION; SET TRANSACTION PRIORITY LOW; COMMIT
+
+statement ok
+BEGIN TRANSACTION; SET TRANSACTION PRIORITY NORMAL; COMMIT
+
+statement ok
+BEGIN TRANSACTION; SET TRANSACTION PRIORITY HIGH; COMMIT
+
+# It is an error to change the isolation level of a running transaction.
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+UPDATE kv SET v = 'b' WHERE k in ('a')
+
+statement error cannot change the user priority of a running transaction
+SET TRANSACTION PRIORITY HIGH
+
+statement ok
+ROLLBACK
+
+# User priority default to normal
+
+statement ok
+BEGIN TRANSACTION
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+NORMAL
+
+statement ok
+SET TRANSACTION PRIORITY HIGH
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+HIGH
+
+statement ok
+COMMIT
+
+# We can explicitly start a transaction in low user priority.
+
+statement ok
+BEGIN TRANSACTION PRIORITY LOW
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+LOW
+
+statement ok
+SET TRANSACTION PRIORITY NORMAL
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+NORMAL
+
+statement ok
+COMMIT
+
+# We can specify both isolation level and user priority.
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW; COMMIT
+
+statement ok
+BEGIN TRANSACTION PRIORITY LOW, ISOLATION LEVEL SNAPSHOT; COMMIT
+
+# We can explicitly start a transaction in snapshot isolation level and low user priority.
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW 
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+SNAPSHOT
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+LOW
+
+statement ok
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+SERIALIZABLE
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+HIGH
+
+statement ok
+SET TRANSACTION PRIORITY NORMAL, ISOLATION LEVEL SNAPSHOT
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+SNAPSHOT
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+NORMAL
+
+statement ok
+COMMIT

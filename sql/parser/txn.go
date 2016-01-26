@@ -44,16 +44,47 @@ func (i IsolationLevel) String() string {
 	return isolationLevelNames[i]
 }
 
+// UserPriority holds the user priority for a transaction.
+type UserPriority int
+
+// UserPriority values
+const (
+	UnspecifiedUserPriority UserPriority = iota
+	Low
+	Normal
+	High
+)
+
+var userPriorityNames = [...]string{
+	UnspecifiedIsolation: "UNSPECIFIED",
+	Low:                  "LOW",
+	Normal:               "NORMAL",
+	High:                 "HIGH",
+}
+
+func (up UserPriority) String() string {
+	if up < 0 || up > UserPriority(len(userPriorityNames)-1) {
+		return fmt.Sprintf("UserPriority(%d)", up)
+	}
+	return userPriorityNames[up]
+}
+
 // BeginTransaction represents a BEGIN statement
 type BeginTransaction struct {
-	Isolation IsolationLevel
+	Isolation    IsolationLevel
+	UserPriority UserPriority
 }
 
 func (node *BeginTransaction) String() string {
 	var buf bytes.Buffer
+	var sep string
 	buf.WriteString("BEGIN TRANSACTION")
 	if node.Isolation != UnspecifiedIsolation {
 		fmt.Fprintf(&buf, " ISOLATION LEVEL %s", node.Isolation)
+		sep = ","
+	}
+	if node.UserPriority != UnspecifiedUserPriority {
+		fmt.Fprintf(&buf, "%s PRIORITY %s", sep, node.UserPriority)
 	}
 	return buf.String()
 }

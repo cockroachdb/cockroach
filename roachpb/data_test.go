@@ -471,7 +471,7 @@ func checkVal(val, expected, errFraction float64) bool {
 // in MakePriority returning priorities that are P times more likely
 // to be higher than a priority with user priority = 1.
 func TestMakePriority(t *testing.T) {
-	userPs := []float64{
+	userPs := []UserPriority{
 		0.001,
 		0.01,
 		0.1,
@@ -507,7 +507,7 @@ func TestMakePriority(t *testing.T) {
 			if p2 == 0 {
 				p2 = 1
 			}
-			priRatio := p1 / p2
+			priRatio := float64(p1 / p2)
 
 			// Don't verify extreme ratios (we don't have enough resolution or trials)
 			if math.Max(priRatio, 1/priRatio) >= 1000 {
@@ -536,7 +536,7 @@ func TestMakePriority(t *testing.T) {
 // value sets it exactly.
 func TestMakePriorityExplicit(t *testing.T) {
 	explicitPs := []struct {
-		userPri float64
+		userPri UserPriority
 		expPri  int32
 	}{
 		{-math.MaxInt32, math.MaxInt32},
@@ -554,7 +554,7 @@ func TestMakePriorityExplicit(t *testing.T) {
 // TestMakePriorityLimits verifies that min & max priorities are
 // enforced and still yield randomized values.
 func TestMakePriorityLimits(t *testing.T) {
-	userPs := []float64{
+	userPs := []UserPriority{
 		0.000000001,
 		0.00001,
 		0.00009,
