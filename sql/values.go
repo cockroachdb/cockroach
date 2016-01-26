@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 // Values constructs a valuesNode from a VALUES expression.
@@ -76,7 +77,7 @@ func (p *planner) Values(n parser.Values) (planNode, *roachpb.Error) {
 
 type valuesNode struct {
 	columns  []resultColumn
-	ordering []int
+	ordering columnOrdering
 	rows     []parser.DTuple
 	nextRow  int // The index of the next row.
 }
@@ -85,8 +86,8 @@ func (n *valuesNode) Columns() []resultColumn {
 	return n.columns
 }
 
-func (n *valuesNode) Ordering() ([]int, int) {
-	return nil, 0
+func (n *valuesNode) Ordering() orderingInfo {
+	return orderingInfo{}
 }
 
 func (n *valuesNode) Values() parser.DTuple {
@@ -114,14 +115,14 @@ func (n *valuesNode) Less(i, j int) bool {
 	// be to construct a sort-key per row using encodeTableKey(). Using a
 	// sort-key approach would likely fit better with a disk-based sort.
 	ra, rb := n.rows[i], n.rows[j]
-	for _, k := range n.ordering {
+	for _, c := range n.ordering {
 		var da, db parser.Datum
-		if k < 0 {
-			da = rb[-(k + 1)]
-			db = ra[-(k + 1)]
+		if c.direction == encoding.Ascending {
+			da = ra[c.colIdx]
+			db = rb[c.colIdx]
 		} else {
-			da = ra[k-1]
-			db = rb[k-1]
+			da = rb[c.colIdx]
+			db = ra[c.colIdx]
 		}
 		// TODO(pmattis): This is assuming that the datum types are compatible. I'm
 		// not sure this always holds as `CASE` expressions can return different
