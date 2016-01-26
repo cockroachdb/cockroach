@@ -276,8 +276,8 @@ func (m *multiTestContext) Stop() {
 		for _, s := range m.engineStoppers {
 			s.Stop()
 		}
-		close(done)
 		m.reenableTableSplits()
+		close(done)
 	}()
 
 	select {

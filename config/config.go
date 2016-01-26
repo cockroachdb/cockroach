@@ -70,6 +70,9 @@ var (
 // that re-enables this splitting.
 func TestingDisableTableSplits() func() {
 	testingLock.Lock()
+	if testingDisableTableSplits {
+		log.Fatalf("TestingDisableTableSplits called twice without cleaning up")
+	}
 	testingDisableTableSplits = true
 	testingLock.Unlock()
 	return func() {
