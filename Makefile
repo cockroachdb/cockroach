@@ -172,6 +172,8 @@ check:
 	@! ineffassign . | grep -vF gossip/gossip.pb.go
 	@echo "errcheck"
 	@errcheck -ignore 'bytes:Write.*,io:Close,net:Close,net/http:Close,net/rpc:Close,os:Close,database/sql:Close' $(PKG)
+	@echo "returncheck"
+	@returncheck $(PKG)
 	@echo "vet"
 	@! $(GO) tool vet . 2>&1 | \
 	  grep -vE '^vet: cannot process directory .git'

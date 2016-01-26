@@ -5,6 +5,7 @@ cmd github.com/golang/lint/golint
 cmd github.com/gordonklaus/ineffassign
 cmd github.com/jteeuwen/go-bindata/go-bindata
 cmd github.com/kisielk/errcheck
+cmd github.com/kkaneda/returncheck
 cmd github.com/mibk/dupl
 cmd github.com/opennota/check/cmd/varcheck
 cmd github.com/robfig/glock
@@ -33,6 +34,7 @@ github.com/jteeuwen/go-bindata a0ff2567cfb70903282db057e799fd826784d41d
 github.com/julienschmidt/httprouter 21439ef4d70ba4f3e2a5ed9249e7b03af4019b40
 github.com/kisielk/errcheck 1cd10f9f7824cdbedd5175a6cea0da9763bbeece
 github.com/kisielk/gotool 58a7a198f2ec6ea7af221fd216e7f559d663ce02
+github.com/kkaneda/returncheck bf081fa7155e3a27df1f056a49d50685edfa5b1b
 github.com/kr/pretty e6ac2fc51e89a3249e82157fa0bb7a18ef9dd5bb
 github.com/kr/text bb797dc4fb8320488f47bf11de07a733d7233e1f
 github.com/lib/pq 8ad2b298cadd691a77015666a5372eae5dbfac8f
