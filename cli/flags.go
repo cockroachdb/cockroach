@@ -125,8 +125,8 @@ var flagUsage = map[string]string{
         clusters to be more responsive.
 `,
 	"time-until-store-dead": `
-		Adjusts the timeout for stores.  If there's been no gossiped updated
-		from a store after this time, the store is considered unavailable.
+        Adjusts the timeout for stores.  If there's been no gossiped updated
+        from a store after this time, the store is considered unavailable.
         Replicas on an unavailable store will be moved to available ones.
 `,
 	"stores": `
@@ -144,12 +144,12 @@ var flagUsage = map[string]string{
         Define the maximum number of results that will be retrieved.
 `,
 	"balance-mode": `
-		Determines the criteria used by nodes to make balanced allocation
-		decisions.  Valid options are "usage" (default) or "rangecount".
+        Determines the criteria used by nodes to make balanced allocation
+        decisions. Valid options are "usage" (default) or "rangecount".
 `,
 	"password": `
-        The created user's password. If provided, disables prompting. Pass '-' to provide
-	the password on standard input.
+        The created user's password. If provided, disables prompting.
+        Pass '-' to provide	the password on standard input.
 `,
 }
 
