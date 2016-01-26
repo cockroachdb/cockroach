@@ -303,7 +303,7 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 	// gossip can bootstrap using the most recently persisted set of
 	// node addresses.
 	if err := n.ctx.Gossip.SetStorage(n.stores); err != nil {
-		log.Warningf("failed to set gossip persistence: %s; relying on --gossip bootstrap flag", err)
+		return fmt.Errorf("failed to initialize the gossip interface: %s", err)
 	}
 
 	// Connect gossip before starting bootstrap. For new nodes, connecting
