@@ -77,12 +77,16 @@ type Datum interface {
 	// Prev returns the previous datum. If the receiver is "b" and the returned datum
 	// is "a", then "a < b" and no other datum will compare such that "a < c <
 	// b".
-	// The return value is undefined is `IsMin()`.
+	// The return value is undefined if `IsMin()`.
 	Prev() Datum
+	// HasNext is a type trait specifying if Next() can be used to compute a
+	// next value for a datum. For example, DDecimal doesn't support it
+	// (the next for 1.0 is 1.00..1).
+	HasNext() bool
 	// Next returns the next datum. If the receiver is "a" and the returned datum
 	// is "b", then "a < b" and no other datum will compare such that "a < c <
 	// b".
-	// The return value is undefined is `IsMax()`.
+	// The return value is undefined if `IsMax()`.
 	Next() Datum
 	// IsMax returns true if the datum is equal to the maximum value the datum
 	// type can hold.
@@ -138,6 +142,11 @@ func (d DBool) HasPrev() bool {
 // Prev implements the Datum interface.
 func (d DBool) Prev() Datum {
 	return DBool(false)
+}
+
+// HasNext implements the Datum interface.
+func (d DBool) HasNext() bool {
+	return true
 }
 
 // Next implements the Datum interface.
@@ -196,6 +205,11 @@ func (d DInt) Prev() Datum {
 	return d - 1
 }
 
+// HasNext implements the Datum interface.
+func (d DInt) HasNext() bool {
+	return true
+}
+
 // Next implements the Datum interface.
 func (d DInt) Next() Datum {
 	return d + 1
@@ -250,6 +264,11 @@ func (d DFloat) HasPrev() bool {
 // Prev implements the Datum interface.
 func (d DFloat) Prev() Datum {
 	return DFloat(math.Nextafter(float64(d), math.Inf(-1)))
+}
+
+// HasNext implements the Datum interface.
+func (d DFloat) HasNext() bool {
+	return true
 }
 
 // Next implements the Datum interface.
@@ -324,6 +343,11 @@ func (d DString) Prev() Datum {
 	panic(d.Type() + ".Prev() not supported")
 }
 
+// HasNext implements the Datum interface.
+func (d DString) HasNext() bool {
+	return true
+}
+
 // Next implements the Datum interface.
 func (d DString) Next() Datum {
 	return DString(roachpb.Key(d).Next())
@@ -379,6 +403,11 @@ func (d DBytes) HasPrev() bool {
 // Prev implements the Datum interface.
 func (d DBytes) Prev() Datum {
 	panic(d.Type() + ".Prev() not supported")
+}
+
+// HasNext implements the Datum interface.
+func (d DBytes) HasNext() bool {
+	return true
 }
 
 // Next implements the Datum interface.
@@ -438,6 +467,11 @@ func (d DDate) Prev() Datum {
 	return d - 1
 }
 
+// HasNext implements the Datum interface.
+func (d DDate) HasNext() bool {
+	return true
+}
+
 // Next implements the Datum interface.
 func (d DDate) Next() Datum {
 	return d + 1
@@ -494,6 +528,11 @@ func (d DTimestamp) HasPrev() bool {
 // Prev implements the Datum interface.
 func (d DTimestamp) Prev() Datum {
 	return DTimestamp{Time: d.Add(-1)}
+}
+
+// HasNext implements the Datum interface.
+func (d DTimestamp) HasNext() bool {
+	return true
 }
 
 // Next implements the Datum interface.
@@ -556,6 +595,11 @@ func (d DInterval) Prev() Datum {
 	return DInterval{Duration: d.Duration - 1}
 }
 
+// HasNext implements the Datum interface.
+func (d DInterval) HasNext() bool {
+	return true
+}
+
 // Next implements the Datum interface.
 func (d DInterval) Next() Datum {
 	return DInterval{Duration: d.Duration + 1}
@@ -610,22 +654,48 @@ func (d DTuple) Compare(other Datum) int {
 
 // HasPrev implements the Datum interface.
 func (d DTuple) HasPrev() bool {
+	for i := len(d) - 1; i >= 0; i-- {
+		if d[i].HasPrev() {
+			return true
+		}
+	}
 	return false
 }
 
 // Prev implements the Datum interface.
 func (d DTuple) Prev() Datum {
-	// We could implement it depending on the constituents of the tuple, but it's
-	// not needed.
-	panic(fmt.Errorf("can't compute Prev() on a tuple"))
+	n := make(DTuple, len(d))
+	copy(n, d)
+	for i := len(n) - 1; i >= 0; i-- {
+		if n[i].HasPrev() {
+			n[i] = n[i].Prev()
+			return n
+		}
+	}
+	panic(fmt.Errorf("Prev() cannot be computed on a tuple whose datum does not support it"))
+}
+
+// HasNext implements the Datum interface.
+func (d DTuple) HasNext() bool {
+	for i := len(d) - 1; i >= 0; i-- {
+		if d[i].HasNext() {
+			return true
+		}
+	}
+	return false
 }
 
 // Next implements the Datum interface.
 func (d DTuple) Next() Datum {
 	n := make(DTuple, len(d))
 	copy(n, d)
-	n[len(n)-1] = n[len(n)-1].Next()
-	return n
+	for i := len(n) - 1; i >= 0; i-- {
+		if n[i].HasNext() {
+			n[i] = n[i].Next()
+			return n
+		}
+	}
+	panic(fmt.Errorf("Next() cannot be computed on a tuple whose datum does not support it"))
 }
 
 // IsMax implements the Datum interface.
@@ -711,12 +781,17 @@ func (d dNull) HasPrev() bool {
 
 // Prev implements the Datum interface.
 func (d dNull) Prev() Datum {
-	panic(fmt.Errorf("cannot compute Prev() on Null"))
+	panic(d.Type() + ".Prev not supported")
+}
+
+// HasNext implements the Datum interface.
+func (d dNull) HasNext() bool {
+	return false
 }
 
 // Next implements the Datum interface.
 func (d dNull) Next() Datum {
-	panic("dNull.Next not supported")
+	panic(d.Type() + ".Next not supported")
 }
 
 // IsMax implements the Datum interface.
@@ -761,6 +836,11 @@ func (d DValArg) HasPrev() bool {
 // Prev implements the Datum interface.
 func (d DValArg) Prev() Datum {
 	panic(d.Type() + ".Prev not supported")
+}
+
+// HasNext implements the Datum interface.
+func (d DValArg) HasNext() bool {
+	return false
 }
 
 // Next implements the Datum interface.
