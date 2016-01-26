@@ -467,6 +467,37 @@ range_max_bytes: 67108864
 	// zone ls
 }
 
+func Example_sql() {
+	c := newCLITest()
+	defer c.Stop()
+
+	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
+	c.RunWithArgs([]string{"sql", "-e", "select 3", "select * from t.f"})
+	c.RunWithArgs([]string{"sql", "-e", "begin", "select 3", "commit"})
+	c.RunWithArgs([]string{"sql", "-e", "select 3; select * from t.f"})
+
+	// Output:
+	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
+	// OK
+	// sql -e select 3 select * from t.f
+	// 1 rows
+	// 3
+	// 3
+	// 1 rows
+	// x	y
+	// 42	69
+	// sql -e begin select 3 commit
+	// OK
+	// 1 rows
+	// 3
+	// 3
+	// OK
+	// sql -e select 3; select * from t.f
+	// 1 rows
+	// x	y
+	// 42	69
+}
+
 func Example_user() {
 	c := newCLITest()
 	defer c.Stop()

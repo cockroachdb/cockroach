@@ -39,8 +39,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Context is the CLI Context used for the server.
-var context = server.NewContext()
+// Context is the CLI Context used for the command-line client.
+var context = NewContext()
 
 var errMissingParams = errors.New("missing or invalid parameters")
 
@@ -183,7 +183,7 @@ func runStart(_ *cobra.Command, _ []string) error {
 	}
 
 	log.Info("starting cockroach node")
-	s, err := server.NewServer(context, stopper)
+	s, err := server.NewServer(&context.Context, stopper)
 	if err != nil {
 		return util.Errorf("failed to start Cockroach server: %s", err)
 	}
@@ -285,7 +285,7 @@ completed, the server exits.
 
 // runQuit accesses the quit shutdown path.
 func runQuit(_ *cobra.Command, _ []string) {
-	admin := client.NewAdminClient(&context.Context, context.Addr, client.Quit)
+	admin := client.NewAdminClient(&context.Context.Context, context.Addr, client.Quit)
 	body, err := admin.Get()
 	// TODO(tschottdorf): needs cleanup. An error here can happen if the shutdown
 	// happened faster than the HTTP request made it back.

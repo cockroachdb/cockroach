@@ -17,6 +17,7 @@
 package cli
 
 import (
+	"database/sql"
 	"fmt"
 	"io"
 	"os"
@@ -40,17 +41,12 @@ var sqlShellCmd = &cobra.Command{
 	Long: `
 Open a sql shell running against the cockroach database at --addr.
 `,
-	Run: runTerm, // TODO(tschottdorf): should be able to return err code when reading from stdin
+	Run: runTerm,
 }
 
-func runTerm(cmd *cobra.Command, args []string) {
-	if len(args) != 0 {
-		mustUsage(cmd)
-		return
-	}
-
-	db := makeSQLClient()
-	defer func() { _ = db.Close() }()
+// runInteractive runs the SQL client interactively, presenting
+// a prompt to the user for each statement.
+func runInteractive(db *sql.DB) {
 
 	liner := liner.NewLiner()
 	defer func() {
@@ -79,6 +75,9 @@ func runTerm(cmd *cobra.Command, args []string) {
 	var stmt []string
 	var l string
 	var err error
+
+	exitCode := 0
+
 	for {
 		if len(stmt) == 0 {
 			l, err = liner.Prompt(fullPrompt)
@@ -88,6 +87,7 @@ func runTerm(cmd *cobra.Command, args []string) {
 		if err != nil {
 			if err != io.EOF {
 				fmt.Fprintf(osStderr, "Input error: %s\n", err)
+				exitCode = 1
 			}
 			break
 		}
@@ -112,11 +112,64 @@ func runTerm(cmd *cobra.Command, args []string) {
 		fullStmt := strings.Join(stmt, "\n")
 		liner.AppendHistory(fullStmt)
 
+		exitCode = 0
 		if err := runPrettyQuery(db, os.Stdout, fullStmt); err != nil {
-			fmt.Println(err)
+			fmt.Fprintln(osStderr, err)
+			exitCode = 1
 		}
 
 		// Clear the saved statement.
 		stmt = stmt[:0]
 	}
+
+	if exitCode != 0 {
+		os.Exit(exitCode)
+	}
+}
+
+// runOneStatement executes one statement and terminates
+// on error.
+func runStatements(db *sql.DB, stmts []string) {
+	for _, stmt := range stmts {
+		fullStmt := stmt + "\n"
+		cols, allRows, err := runQuery(db, fullStmt)
+		if err != nil {
+			fmt.Fprintln(osStderr, err)
+			os.Exit(1)
+		}
+
+		if len(cols) == 0 {
+			// No result selected, inform the user.
+			fmt.Fprintln(os.Stdout, "OK")
+		} else {
+			// Some results selected, inform the user about how much data to expect.
+			fmt.Fprintf(os.Stdout, "%d row%s", len(allRows),
+				map[bool]string{true: "", false: "s"}[len(allRows) == 1])
+
+			// Then print the results themselves.
+			fmt.Fprintln(os.Stdout, strings.Join(cols, "\t"))
+			for _, row := range allRows {
+				fmt.Fprintln(os.Stdout, strings.Join(row, "\t"))
+			}
+		}
+
+	}
+}
+
+func runTerm(cmd *cobra.Command, args []string) {
+	if !(len(args) >= 1 && context.OneShotSQL) && len(args) != 0 {
+		mustUsage(cmd)
+		return
+	}
+
+	db := makeSQLClient()
+	defer func() { _ = db.Close() }()
+
+	if context.OneShotSQL {
+		// single-line sql; run as simple as possible, without noise on stdout.
+		runStatements(db, args)
+	} else {
+		runInteractive(db)
+	}
+
 }
