@@ -590,7 +590,8 @@ message Header {
   // priority is treated the same as 1. This value is ignored if txn
   // is specified. The min and max user priorities are set via
   // MinUserPriority and MaxUserPriority in data.go.
-  optional double user_priority = 4 [(gogoproto.nullable) = false];
+  optional double user_priority = 4 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "UserPriority"];
   // txn is set non-nil if a transaction is underway. To start a txn,
   // the first request should set this field to non-nil with name and
   // isolation level set as desired. The response will contain the

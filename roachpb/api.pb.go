@@ -939,7 +939,7 @@ type Header struct {
 	// priority is treated the same as 1. This value is ignored if txn
 	// is specified. The min and max user priorities are set via
 	// MinUserPriority and MaxUserPriority in data.go.
-	UserPriority float64 `protobuf:"fixed64,4,opt,name=user_priority" json:"user_priority"`
+	UserPriority UserPriority `protobuf:"fixed64,4,opt,name=user_priority,casttype=UserPriority" json:"user_priority"`
 	// txn is set non-nil if a transaction is underway. To start a txn,
 	// the first request should set this field to non-nil with name and
 	// isolation level set as desired. The response will contain the
@@ -3088,7 +3088,7 @@ func (m *Header) MarshalTo(data []byte) (int, error) {
 	i = encodeVarintApi(data, i, uint64(m.RangeID))
 	data[i] = 0x21
 	i++
-	i = encodeFixed64Api(data, i, uint64(math.Float64bits(m.UserPriority)))
+	i = encodeFixed64Api(data, i, uint64(math.Float64bits(float64(m.UserPriority))))
 	if m.Txn != nil {
 		data[i] = 0x2a
 		i++
@@ -10635,7 +10635,7 @@ func (m *Header) Unmarshal(data []byte) error {
 			v |= uint64(data[iNdEx-3]) << 40
 			v |= uint64(data[iNdEx-2]) << 48
 			v |= uint64(data[iNdEx-1]) << 56
-			m.UserPriority = float64(math.Float64frombits(v))
+			m.UserPriority = UserPriority(math.Float64frombits(v))
 		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Txn", wireType)

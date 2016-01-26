@@ -1259,7 +1259,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		// Next, write intents for keyA and keyB. Note that the
 		// transactions have unpushable priorities if canPush is true and
 		// very pushable ones otherwise.
-		priority := float64(-math.MaxInt32)
+		priority := roachpb.UserPriority(-math.MaxInt32)
 		if canPush {
 			priority = -1
 		}
@@ -1397,7 +1397,7 @@ func TestStoreScanIntents(t *testing.T) {
 			key := roachpb.Key(fmt.Sprintf("key%d-%02d", i, j))
 			keys = append(keys, key)
 			if txn == nil {
-				priority := float64(-1)
+				priority := roachpb.UserPriority(-1)
 				if !test.canPush {
 					priority = -math.MaxInt32
 				}

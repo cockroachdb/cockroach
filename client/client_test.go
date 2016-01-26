@@ -93,7 +93,7 @@ func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user str
 
 // createTestNotifyClient creates a new client which connects using an HTTP
 // sender to the server at addr. It contains a waitgroup to allow waiting.
-func createTestNotifyClient(stopper *stop.Stopper, addr string, priority float64) (*client.DB, *notifyingSender) {
+func createTestNotifyClient(stopper *stop.Stopper, addr string, priority roachpb.UserPriority) (*client.DB, *notifyingSender) {
 	db, err := client.Open(stopper, fmt.Sprintf("rpcs://%s@%s?certs=%s",
 		security.NodeUser,
 		addr,
@@ -144,7 +144,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 	for i, test := range testCases {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
 		var txnPri int32 = 1
-		var clientPri float64 = 1
+		var clientPri roachpb.UserPriority = 1
 		if test.canPush {
 			clientPri = 2
 		} else {
@@ -162,7 +162,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 					return pErr
 				}
 			}
-			txn.InternalSetPriority(int32(txnPri))
+			txn.InternalSetPriority(txnPri)
 
 			count++
 			// Lay down the intent.

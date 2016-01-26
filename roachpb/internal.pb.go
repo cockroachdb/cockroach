@@ -251,16 +251,16 @@ func (m *InternalTimeSeriesSample) MarshalTo(data []byte) (int, error) {
 	i = encodeVarintInternal(data, i, uint64(m.Count))
 	data[i] = 0x39
 	i++
-	i = encodeFixed64Internal(data, i, uint64(math.Float64bits(m.Sum)))
+	i = encodeFixed64Internal(data, i, uint64(math.Float64bits(float64(m.Sum))))
 	if m.Max != nil {
 		data[i] = 0x41
 		i++
-		i = encodeFixed64Internal(data, i, uint64(math.Float64bits(*m.Max)))
+		i = encodeFixed64Internal(data, i, uint64(math.Float64bits(float64(*m.Max))))
 	}
 	if m.Min != nil {
 		data[i] = 0x49
 		i++
-		i = encodeFixed64Internal(data, i, uint64(math.Float64bits(*m.Min)))
+		i = encodeFixed64Internal(data, i, uint64(math.Float64bits(float64(*m.Min))))
 	}
 	return i, nil
 }

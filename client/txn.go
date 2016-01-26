@@ -45,6 +45,9 @@ type txnSender Txn
 func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Send call through wrapped sender.
 	ba.Txn = &ts.Proto
+	if ts.UserPriority > 0 {
+		ba.UserPriority = ts.UserPriority
+	}
 	ba.SetNewRequest()
 	br, pErr := ts.wrapped.Send(ctx, ba)
 	if br != nil && br.Error != nil {
@@ -78,9 +81,10 @@ func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachp
 // Txn is an in-progress distributed database transaction. A Txn is not safe for
 // concurrent use by multiple goroutines.
 type Txn struct {
-	db      DB
-	wrapped Sender
-	Proto   roachpb.Transaction
+	db           DB
+	wrapped      Sender
+	Proto        roachpb.Transaction
+	UserPriority roachpb.UserPriority
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
 	systemConfigTrigger bool
@@ -126,12 +130,28 @@ func (txn *Txn) SetIsolation(isolation roachpb.IsolationType) *roachpb.Error {
 	return nil
 }
 
+// SetUserPriority sets the transaction's user priority. Transactions default to
+// normal user priority. The user priority must be set before any operations are
+// performed on the transaction.
+func (txn *Txn) SetUserPriority(userPriority roachpb.UserPriority) *roachpb.Error {
+	if txn.UserPriority != userPriority {
+		if txn.Proto.IsInitialized() {
+			return roachpb.NewErrorf("cannot change the user priority of a running transaction")
+		}
+		if userPriority < roachpb.MinUserPriority || userPriority > roachpb.MaxUserPriority {
+			return roachpb.NewErrorf("the given user priority %f is out of the allowed range [%f, %f]", userPriority, roachpb.MinUserPriority, roachpb.MaxUserPriority)
+		}
+		txn.UserPriority = userPriority
+	}
+	return nil
+}
+
 // InternalSetPriority sets the transaction priority. It is intended for
 // internal (testing) use only.
 func (txn *Txn) InternalSetPriority(priority int32) {
 	// The negative user priority is translated on the server into a positive,
 	// non-randomized, priority for the transaction.
-	txn.db.userPriority = float64(-priority)
+	txn.db.userPriority = roachpb.UserPriority(-priority)
 }
 
 // SetSystemConfigTrigger sets the system db trigger to true on this transaction.

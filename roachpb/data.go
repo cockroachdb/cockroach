@@ -37,10 +37,6 @@ import (
 )
 
 const (
-	// MinUserPriority is the minimum allowed user priority.
-	MinUserPriority = 0.001
-	// MaxUserPriority is the maximum allowed user priority.
-	MaxUserPriority = 1000
 	// TransactionIDLen is the length (in bytes) of the transaction IDs used.
 	TransactionIDLen = 16
 	// SequencePoisonAbort is a special value for the sequence cache which
@@ -541,7 +537,7 @@ func (v Value) computeChecksum(key []byte) uint32 {
 // randomly chosen value to yield a final priority, used to settle
 // write conflicts in a way that avoids starvation of long-running
 // transactions (see Replica.PushTxn).
-func NewTransaction(name string, baseKey Key, userPriority float64,
+func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 	isolation IsolationType, now Timestamp, maxOffset int64) *Transaction {
 	// Compute priority by adjusting based on userPriority factor.
 	priority := MakePriority(userPriority)
@@ -610,13 +606,13 @@ func (t *Transaction) IsInitialized() bool {
 // userPriority = 0.1, the random priority will be 1/10th as likely to
 // be greater than if userPriority=1. Balance is achieved when
 // userPriority=1, in which case the priority chosen is unbiased.
-func MakePriority(userPriority float64) int32 {
+func MakePriority(userPriority UserPriority) int32 {
 	// A currently undocumented feature allows an explicit priority to
 	// be set by specifying priority < 1. The explicit priority is
 	// simply -userPriority in this case. This is hacky, but currently
 	// used for unittesting. Perhaps this should be documented and allowed.
 	if userPriority < 0 {
-		if -userPriority > float64(math.MaxInt32) {
+		if -userPriority > UserPriority(math.MaxInt32) {
 			panic(fmt.Sprintf("cannot set explicit priority to a value less than -%d", math.MaxInt32))
 		}
 		return int32(-userPriority)
@@ -667,7 +663,7 @@ func MakePriority(userPriority float64) int32 {
 	//
 	// We can generate an exponentially distributed value using (rand.ExpFloat64() / lambda).
 	// In our case this works out to simply rand.ExpFloat64() * userPriority.
-	val := rand.ExpFloat64() * userPriority
+	val := rand.ExpFloat64() * float64(userPriority)
 
 	// To convert to an integer, we scale things to accommodate a few (5) standard deviations for
 	// the maximum priority. The choice of the value is a trade-off between loss of resolution for
@@ -691,7 +687,7 @@ func TxnIDEqual(a, b []byte) bool {
 // incremented for an in-place restart. The timestamp of the
 // transaction on restart is set to the maximum of the transaction's
 // timestamp and the specified timestamp.
-func (t *Transaction) Restart(userPriority float64, upgradePriority int32, timestamp Timestamp) {
+func (t *Transaction) Restart(userPriority UserPriority, upgradePriority int32, timestamp Timestamp) {
 	t.Epoch++
 	if t.Timestamp.Less(timestamp) {
 		t.Timestamp = timestamp

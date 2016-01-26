@@ -251,7 +251,7 @@ func (m *TimeSeriesDatapoint) MarshalTo(data []byte) (int, error) {
 	i = encodeVarintTimeseries(data, i, uint64(m.TimestampNanos))
 	data[i] = 0x11
 	i++
-	i = encodeFixed64Timeseries(data, i, uint64(math.Float64bits(m.Value)))
+	i = encodeFixed64Timeseries(data, i, uint64(math.Float64bits(float64(m.Value))))
 	return i, nil
 }
 

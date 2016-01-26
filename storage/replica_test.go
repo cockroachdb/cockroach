@@ -215,7 +215,7 @@ func (tc *testContext) initConfigs(realRange bool) error {
 	return nil
 }
 
-func newTransaction(name string, baseKey roachpb.Key, userPriority float64,
+func newTransaction(name string, baseKey roachpb.Key, userPriority roachpb.UserPriority,
 	isolation roachpb.IsolationType, clock *hlc.Clock) *roachpb.Transaction {
 	var offset int64
 	var now roachpb.Timestamp

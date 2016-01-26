@@ -33,11 +33,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-// defaultUserPriority is set to 1, meaning ops run through the database
-// are all given equal weight when a random priority is chosen. This can
-// be set specifically via NewDBWithPriority().
-const defaultUserPriority = 1
-
 // KeyValue represents a single key/value pair and corresponding
 // timestamp. This is similar to roachpb.KeyValue except that the value may be
 // nil.
@@ -174,7 +169,7 @@ type DB struct {
 	// userPriority is the default user priority to set on API calls. If
 	// userPriority is set to any value except 1 in call arguments, this
 	// value is ignored.
-	userPriority    float64
+	userPriority    roachpb.UserPriority
 	txnRetryOptions retry.Options
 }
 
@@ -187,13 +182,13 @@ func (db *DB) GetSender() Sender {
 func NewDB(sender Sender) *DB {
 	return &DB{
 		sender:          sender,
-		userPriority:    defaultUserPriority,
+		userPriority:    roachpb.NormalUserPriority,
 		txnRetryOptions: DefaultTxnRetryOptions,
 	}
 }
 
 // NewDBWithPriority returns a new DB.
-func NewDBWithPriority(sender Sender, userPriority float64) *DB {
+func NewDBWithPriority(sender Sender, userPriority roachpb.UserPriority) *DB {
 	db := NewDB(sender)
 	db.userPriority = userPriority
 	return db
@@ -249,7 +244,7 @@ func Open(stopper *stop.Stopper, addr string) (*DB, error) {
 
 	db := &DB{
 		sender:          sender,
-		userPriority:    defaultUserPriority,
+		userPriority:    roachpb.NormalUserPriority,
 		txnRetryOptions: DefaultTxnRetryOptions,
 	}
 
@@ -258,7 +253,7 @@ func Open(stopper *stop.Stopper, addr string) (*DB, error) {
 		if err != nil {
 			return nil, err
 		}
-		db.userPriority = p
+		db.userPriority = roachpb.UserPriority(p)
 	}
 
 	return db, nil
