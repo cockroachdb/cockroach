@@ -22,8 +22,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-
-	"github.com/cockroachdb/cockroach/server"
 )
 
 var maxResults int64
@@ -151,16 +149,25 @@ var flagUsage = map[string]string{
         The created user's password. If provided, disables prompting. Pass '-' to provide
 	the password on standard input.
 `,
+	"execute": `
+        Execute the SQL statement(s) on the command line, then exit.  Each
+	      subsequent positional argument on the command line may contain
+	      one or more SQL statements, separated by semicolons. If an
+	      error occurs in any statement, the command exits with a
+	      non-zero status code and further statements are not
+	      executed. The results of the last SQL statement in each
+	      positional argument are printed on the standard output.
+`,
 }
 
 func normalizeStdFlagName(s string) string {
 	return strings.Replace(s, "_", "-", -1)
 }
 
-// initFlags sets the server.Context values to flag values.
+// initFlags sets the cli.Context values to flag values.
 // Keep in sync with "server/context.go". Values in Context should be
 // settable here.
-func initFlags(ctx *server.Context) {
+func initFlags(ctx *Context) {
 	// Map any flags registered in the standard "flag" package into the
 	// top-level cockroach command.
 	pf := cockroachCmd.PersistentFlags()
@@ -248,6 +255,11 @@ func initFlags(ctx *server.Context) {
 		f.StringVar(&ctx.Addr, "addr", ctx.Addr, flagUsage["addr"])
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, flagUsage["insecure"])
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])
+	}
+
+	{
+		f := sqlShellCmd.Flags()
+		f.BoolVarP(&ctx.OneShotSQL, "execute", "e", ctx.OneShotSQL, flagUsage["execute"])
 	}
 
 	// Max results flag for scan, reverse scan, and range list.
