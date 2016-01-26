@@ -133,6 +133,11 @@ type Context struct {
 	// TimeUntilStoreDead is the time after which if there is no new gossiped
 	// information about a store, it is considered dead.
 	TimeUntilStoreDead time.Duration
+
+	// OneShotSQL indicates the SQL client should run the command-line
+	// statement(s) and terminate directly, without presenting a REPL to
+	// the user.
+	OneShotSQL bool
 }
 
 // NewContext returns a Context with default values.
@@ -155,6 +160,7 @@ func (ctx *Context) InitDefaults() {
 	ctx.MetricsFrequency = defaultMetricsFrequency
 	ctx.TimeUntilStoreDead = defaultTimeUntilStoreDead
 	ctx.BalanceMode = defaultBalanceMode
+	ctx.OneShotSQL = false
 }
 
 // Get the stores on both start and init.
