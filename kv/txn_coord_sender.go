@@ -677,18 +677,17 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		newTxn.Timestamp.Forward(candidateTS)
 		newTxn.Restart(ba.UserPriority, newTxn.Priority, newTxn.Timestamp)
 		t.Txn = *newTxn
-		pErr.Txn = newTxn
+		pErr.SetTxn(newTxn)
 	case *roachpb.TransactionAbortedError:
 		trace.SetError()
-		newTxn.Update(&t.Txn)
+		newTxn.Update(pErr.GetTxn())
 		// Increase timestamp if applicable.
-		newTxn.Timestamp.Forward(t.Txn.Timestamp)
-		newTxn.Priority = t.Txn.Priority
-		t.Txn = *newTxn
-		pErr.Txn = newTxn
+		newTxn.Timestamp.Forward(pErr.GetTxn().Timestamp)
+		newTxn.Priority = pErr.GetTxn().Priority
+		pErr.SetTxn(newTxn)
 		// Clean up the freshly aborted transaction in defer(), avoiding a
 		// race with the state update below.
-		defer tc.cleanupTxn(trace, t.Txn)
+		defer tc.cleanupTxn(trace, *pErr.GetTxn())
 	case *roachpb.TransactionPushError:
 		newTxn.Update(t.Txn)
 		// Increase timestamp if applicable, ensuring that we're
@@ -696,11 +695,11 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		newTxn.Timestamp.Forward(t.PusheeTxn.Timestamp.Add(0, 1))
 		newTxn.Restart(ba.UserPriority, t.PusheeTxn.Priority-1, newTxn.Timestamp)
 		t.Txn = newTxn
-		pErr.Txn = newTxn
+		pErr.SetTxn(newTxn)
 	case *roachpb.TransactionRetryError:
-		newTxn.Update(pErr.Txn)
-		newTxn.Restart(ba.UserPriority, pErr.Txn.Priority, newTxn.Timestamp)
-		pErr.Txn = newTxn
+		newTxn.Update(pErr.GetTxn())
+		newTxn.Restart(ba.UserPriority, pErr.GetTxn().Priority, newTxn.Timestamp)
+		pErr.SetTxn(newTxn)
 	default:
 		trace.SetError()
 	}

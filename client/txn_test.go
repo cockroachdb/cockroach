@@ -157,9 +157,8 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 func TestTxnResetTxnOnAbort(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		return nil, roachpb.NewError(&roachpb.TransactionAbortedError{
-			Txn: *proto.Clone(ba.Txn).(*roachpb.Transaction),
-		})
+		return nil, roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{},
+			proto.Clone(ba.Txn).(*roachpb.Transaction))
 	}, nil))
 
 	txn := NewTxn(*db)

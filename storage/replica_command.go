@@ -48,7 +48,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 	}
 
 	if pErr := r.checkCmdHeader(args.Header()); pErr != nil {
-		pErr.Txn = h.Txn
+		pErr.SetTxn(h.Txn)
 		return nil, nil, pErr
 	}
 
@@ -56,7 +56,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 	if TestingCommandFilter != nil {
 		if err := TestingCommandFilter(r.store.StoreID(), args, h); err != nil {
 			pErr := roachpb.NewError(err)
-			pErr.Txn = h.Txn
+			pErr.SetTxn(h.Txn)
 			return nil, nil, pErr
 		}
 	}
@@ -180,10 +180,10 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 	if err != nil {
 		pErr = roachpb.NewError(err)
 		if reply.Header() != nil {
-			pErr.Txn = reply.Header().Txn
+			pErr.SetTxn(reply.Header().Txn)
 		}
-		if pErr.Txn == nil {
-			pErr.Txn = h.Txn
+		if pErr.GetTxn() == nil {
+			pErr.SetTxn(h.Txn)
 		}
 	}
 	return reply, intents, pErr
@@ -292,10 +292,11 @@ func (r *Replica) BeginTransaction(batch engine.Engine, ms *engine.MVCCStats, h 
 	if ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp, true, nil, &txn); err != nil {
 		return reply, err
 	} else if ok {
+		reply.Txn = &txn
 		// Check whether someone has come in ahead and already aborted the
 		// txn.
 		if txn.Status == roachpb.ABORTED {
-			return reply, roachpb.NewTransactionAbortedError(&txn)
+			return reply, roachpb.NewTransactionAbortedError()
 		} else if txn.Status == roachpb.PENDING && h.Txn.Epoch > txn.Epoch {
 			// On a transaction retry there will be an extant txn record but
 			// this run should have an upgraded epoch. This is a pass
@@ -346,7 +347,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		// and (b) not able to write on error (see #1989), we can't write
 		// ABORTED into the master transaction record, which remains
 		// PENDING, and that's pretty bad.
-		return reply, roachpb.AsIntents(args.IntentSpans, reply.Txn), roachpb.NewTransactionAbortedError(reply.Txn)
+		return reply, roachpb.AsIntents(args.IntentSpans, reply.Txn), roachpb.NewTransactionAbortedError()
 	}
 
 	// Verify that we can either commit it or abort it (according
@@ -360,7 +361,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		// that we know them, so we return them all for asynchronous
 		// resolution (we're currently not able to write on error, but
 		// see #1989).
-		return reply, roachpb.AsIntents(args.IntentSpans, reply.Txn), roachpb.NewTransactionAbortedError(reply.Txn)
+		return reply, roachpb.AsIntents(args.IntentSpans, reply.Txn), roachpb.NewTransactionAbortedError()
 	} else if h.Txn.Epoch < reply.Txn.Epoch {
 		// TODO(tschottdorf): this leaves the Txn record (and more
 		// importantly, intents) dangling; we can't currently write on

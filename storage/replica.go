@@ -1428,11 +1428,9 @@ func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) *
 	} else if sequence == roachpb.SequencePoisonAbort {
 		// We were poisoned, which means that our Transaction has been
 		// aborted and learns about that right now.
-		abortErr := roachpb.NewTransactionAbortedError(&txn)
-		abortErr.Txn.Timestamp.Forward(entry.Timestamp)
-		pErr := roachpb.NewError(abortErr)
-		pErr.Txn = &abortErr.Txn
-		return pErr
+		newTxn := txn.Clone()
+		newTxn.Timestamp.Forward(entry.Timestamp)
+		return roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), newTxn)
 	} else if sequence >= txn.Sequence || epoch > txn.Epoch {
 		// We hit the cache, so let the transaction restart.
 		// This is also the path taken by roachpb.SequencePoisonRestart.
