@@ -791,9 +791,7 @@ func TestProgressWithDownNode(t *testing.T) {
 func TestReplicateAddAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	// Run the test twice, once adding the replacement before removing
-	// the downed node, and once removing the downed node first.
-	for _, addFirst := range []bool{true, false} {
+	testFunc := func(addFirst bool) {
 		mtc := startMultiTestContext(t, 4)
 		defer mtc.Stop()
 
@@ -872,6 +870,10 @@ func TestReplicateAddAndRemove(t *testing.T) {
 			t.Fatalf("expected replica IDs to be %v but got %v", expected, replicaIDsByStore)
 		}
 	}
+	// Run the test twice, once adding the replacement before removing
+	// the downed node, and once removing the downed node first.
+	testFunc(true)
+	testFunc(false)
 }
 
 // TestRaftHeartbeats verifies that coalesced heartbeats are correctly
