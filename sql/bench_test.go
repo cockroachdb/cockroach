@@ -175,6 +175,11 @@ func runBenchmarkInsert(b *testing.B, db *sql.DB, count int) {
 	if _, err := db.Exec(`CREATE TABLE bench.insert (k INT PRIMARY KEY)`); err != nil {
 		b.Fatal(err)
 	}
+	defer func() {
+		if _, err := db.Exec(`DROP TABLE bench.insert`); err != nil {
+			b.Fatal(err)
+		}
+	}()
 
 	b.ResetTimer()
 	var buf bytes.Buffer
@@ -195,9 +200,6 @@ func runBenchmarkInsert(b *testing.B, db *sql.DB, count int) {
 	}
 	b.StopTimer()
 
-	if _, err := db.Exec(`DROP TABLE bench.insert`); err != nil {
-		b.Fatal(err)
-	}
 }
 
 func runBenchmarkInsert1(b *testing.B, db *sql.DB) {
@@ -236,7 +238,9 @@ func BenchmarkInsert100_Postgres(b *testing.B) {
 	benchmarkPostgres(b, runBenchmarkInsert100)
 }
 
-func prepareUpdateBenchData(b *testing.B, db *sql.DB, rows int) {
+// runBenchmarkUpdate benchmarks updating count random rows in a table.
+func runBenchmarkUpdate(b *testing.B, db *sql.DB, count int) {
+	rows := 10000
 	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.update`); err != nil {
 		b.Fatal(err)
 	}
@@ -255,31 +259,23 @@ func prepareUpdateBenchData(b *testing.B, db *sql.DB, rows int) {
 	if _, err := db.Exec(buf.String()); err != nil {
 		b.Fatal(err)
 	}
-}
 
-func cleanupUpdateBenchData(b *testing.B, db *sql.DB) {
-	if _, err := db.Exec(`DROP TABLE bench.update`); err != nil {
-		b.Fatal(err)
-	}
-}
-
-// runBenchmarkUpdate benchmarks updating count random rows in a table.
-func runBenchmarkUpdate(b *testing.B, db *sql.DB, count int) {
-	rows := 10000
-	prepareUpdateBenchData(b, db, rows)
-	defer cleanupUpdateBenchData(b, db)
+	defer func() {
+		if _, err := db.Exec(`DROP TABLE bench.update`); err != nil {
+			b.Fatal(err)
+		}
+	}()
 
 	s := rand.New(rand.NewSource(5432))
 
 	b.ResetTimer()
-	var buf bytes.Buffer
 	for i := 0; i < b.N; i++ {
 		buf.Reset()
-		_, _ = buf.WriteString(`BEGIN; `)
+		buf.WriteString(`BEGIN; `)
 		for j := 0; j < count; j++ {
 			fmt.Fprintf(&buf, `UPDATE bench.update SET v = v + 1 WHERE k = %d; `, s.Intn(rows))
 		}
-		_, _ = buf.WriteString(`COMMIT;`)
+		buf.WriteString(`COMMIT;`)
 		if _, err := db.Exec(buf.String()); err != nil {
 			b.Fatal(err)
 		}
@@ -321,6 +317,89 @@ func BenchmarkUpdate100_Cockroach(b *testing.B) {
 
 func BenchmarkUpdate100_Postgres(b *testing.B) {
 	benchmarkPostgres(b, runBenchmarkUpdate100)
+}
+
+// runBenchmarkDelete benchmarks deleting count rows from a table.
+func runBenchmarkDelete(b *testing.B, db *sql.DB, rows int) {
+	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.delete`); err != nil {
+		b.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE bench.delete (k INT PRIMARY KEY)`); err != nil {
+		b.Fatal(err)
+	}
+	defer func() {
+		if _, err := db.Exec(`DROP TABLE bench.delete`); err != nil {
+			b.Fatal(err)
+		}
+	}()
+
+	b.ResetTimer()
+	var buf bytes.Buffer
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		buf.Reset()
+		buf.WriteString(`INSERT INTO bench.delete VALUES `)
+		for j := 0; j < rows; j++ {
+			if j > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, "(%d)", j)
+		}
+		if _, err := db.Exec(buf.String()); err != nil {
+			b.Fatal(err)
+		}
+		b.StartTimer()
+
+		buf.Reset()
+		buf.WriteString(`DELETE FROM bench.delete WHERE k IN (`)
+		for j := 0; j < rows; j++ {
+			if j > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, `%d`, j)
+		}
+		buf.WriteString(`)`)
+		if _, err := db.Exec(buf.String()); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+}
+
+func runBenchmarkDelete1(b *testing.B, db *sql.DB) {
+	runBenchmarkDelete(b, db, 1)
+}
+
+func runBenchmarkDelete10(b *testing.B, db *sql.DB) {
+	runBenchmarkDelete(b, db, 10)
+}
+
+func runBenchmarkDelete100(b *testing.B, db *sql.DB) {
+	runBenchmarkDelete(b, db, 100)
+}
+
+func BenchmarkDelete1_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkDelete1)
+}
+
+func BenchmarkDelete1_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkDelete1)
+}
+
+func BenchmarkDelete10_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkDelete10)
+}
+
+func BenchmarkDelete10_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkDelete10)
+}
+
+func BenchmarkDelete100_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkDelete100)
+}
+
+func BenchmarkDelete100_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkDelete100)
 }
 
 // runBenchmarkScan benchmarks scanning a table containing count rows.
