@@ -461,12 +461,17 @@ func TestTransactionUpdate(t *testing.T) {
 
 }
 
+// checkVal verifies if a value is close to an expected value, within a fraction (e.g. if
+// fraction=0.1, it checks if val is within 10% of expected).
+func checkVal(val, expected, errFraction float64) bool {
+	return val > expected*(1-errFraction) && val < expected*(1+errFraction)
+}
+
 // TestMakePriority verifies that setting user priority of P results
 // in MakePriority returning priorities that are P times more likely
 // to be higher than a priority with user priority = 1.
 func TestMakePriority(t *testing.T) {
 	userPs := []float64{
-		0.0001,
 		0.001,
 		0.01,
 		0.1,
@@ -477,28 +482,52 @@ func TestMakePriority(t *testing.T) {
 		10.0,
 		100.0,
 		1000.0,
-		10000.0,
 	}
-	const trials = 10000
-	normalPris := make([]int32, 0, trials)
+
+	// Generate values for all priorities
+	const trials = 100000
+	values := make([][trials]int32, len(userPs))
 	for i, userPri := range userPs {
-		priWins := 0
-		for j := 0; j < trials; j++ {
-			if i == 0 {
-				normalPris = append(normalPris, MakePriority(1))
-			}
-			if MakePriority(userPri) >= normalPris[j] {
-				priWins++
-			}
+		for t := 0; t < trials; t++ {
+			values[i][t] = MakePriority(userPri)
 		}
-		// Special case to verify that specifying 0 has same effect as specifying 1.
-		if userPri == 0 {
-			userPri = 1
-		}
-		diff := math.Abs(float64(priWins)/float64(trials-priWins) - float64(userPri))
-		t.Logf("%d: multiple=%f, diff=%f, wins: %d", i, float64(priWins)/float64(trials-priWins), diff, priWins)
-		if d := diff / float64(userPri); d > 1 {
-			t.Errorf("%d: measured difference from expected exceeded limit %.2f > 1", i, d)
+	}
+
+	// Check win-vs-loss ratios for all pairs
+	for i, p1 := range userPs {
+		for j, p2 := range userPs {
+			if i >= j {
+				continue
+			}
+
+			// Special case to verify that specifying 0 has same effect as specifying 1.
+			if p1 == 0 {
+				p1 = 1
+			}
+			if p2 == 0 {
+				p2 = 1
+			}
+			priRatio := p1 / p2
+
+			// Don't verify extreme ratios (we don't have enough resolution or trials)
+			if math.Max(priRatio, 1/priRatio) >= 1000 {
+				continue
+			}
+			wins := 0
+			for t := 0; t < trials; t++ {
+				if values[i][t] > values[j][t] {
+					wins++
+				}
+			}
+
+			winRatio := float64(wins) / float64(trials-wins)
+
+			t.Logf("%f vs %f: %d wins, %d losses (winRatio=%f, priRatio=%f)",
+				p1, p2, wins, trials-wins, winRatio, priRatio)
+			if !checkVal(winRatio, priRatio, 0.2) {
+				t.Errorf("Error (%f vs %f: %d wins, %d losses): winRatio=%f not "+
+					"close to priRatio=%f", p1, p2, wins, trials-wins, winRatio, priRatio)
+			}
 		}
 	}
 }
@@ -534,13 +563,13 @@ func TestMakePriorityLimits(t *testing.T) {
 		math.MaxFloat64,
 	}
 	const trials = 100
-	for i, userPri := range userPs {
+	for _, userPri := range userPs {
 		seen := map[int32]struct{}{} // set of priorities
 		for j := 0; j < trials; j++ {
 			seen[MakePriority(userPri)] = struct{}{}
 		}
-		if len(seen) < 90 {
-			t.Errorf("%d: expected randomized values, got %v", i, seen)
+		if len(seen) < 85 {
+			t.Errorf("%f: expected randomized values, got %d: %v", userPri, len(seen), seen)
 		}
 	}
 }

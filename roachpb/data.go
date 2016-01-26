@@ -38,9 +38,9 @@ import (
 
 const (
 	// MinUserPriority is the minimum allowed user priority.
-	MinUserPriority = 0.0001
+	MinUserPriority = 0.001
 	// MaxUserPriority is the maximum allowed user priority.
-	MaxUserPriority = 10000
+	MaxUserPriority = 1000
 	// TransactionIDLen is the length (in bytes) of the transaction IDs used.
 	TransactionIDLen = 16
 	// SequencePoisonAbort is a special value for the sequence cache which
@@ -627,51 +627,59 @@ func MakePriority(userPriority float64) int32 {
 	} else if userPriority < MinUserPriority {
 		userPriority = MinUserPriority
 	}
-	// The idea here is to bias selection of a random priority from the
-	// range [1, 2^31) such that the resulting priority is
-	// "userPriority" times more likely to be a higher int32 than a
-	// random priority chosen in range [1, 2^31). For purposes of this
-	// discussion, assume:
+
+	// We generate random values which are biased according to priorities. If v1 is a value
+	// generated for priority p1 and v2 is a value of priority v2, we want the ratio of wins vs
+	// losses to be the same with the ratio of priorities:
 	//
-	//   pri = user priority
-	//   max = MaxInt32
+	//    P[ v1 > v2 ]     p1                                           p1
+	//    ------------  =  --     or, equivalently:    P[ v1 > v2 ] = -------
+	//    P[ v2 < v1 ]     p2                                         p1 + p2
 	//
-	// The normal probability of a win (probW) with pri=1 is probW = 1/2.
 	//
-	// The user priority is a multiple and is defined as the probability
-	// of winning divided by the probability of losing:
-	// pri = probW / (1-probW) ==> probW = pri / (1 + pri).
+	// For example, priority 10 wins 10 out of 11 times over priority 1, and it wins 100 out of 101
+	// times over priority 0.1.
 	//
-	// If pri > 1, let:
-	//   x = fraction of max such that choosing rand in [max*x, max)
-	//       is pri times more likely to be greater than random [0, max).
 	//
-	// For every random trial, if the normal priority is chosen < max*x,
-	// the user priority wins 100% of the time; otherwise, wins 50% of
-	// the time. Therefore, x fraction of the time, win is user(100%)
-	// and (1-x) fraction of the time win is user(50%).
+	// We use the exponential distribution. This distribution has the probability density function
+	//   PDF_lambda(x) = lambda * exp(-lambda * x)
+	// and the cumulative distribution function (i.e. probability that a random value is smaller
+	// than x):
+	//   CDF_lambda(x) = Integral_0^x PDF_lambda(x) dx
+	//                 = 1 - exp(-lambda * x)
 	//
-	//   x + (1-x) * 1/2 = pri / (1 + pri)
-	//   x/2 = pri / (1 + pri) - 1/2
-	//   x = (pri - 1) / (1 + pri)
+	// Let's assume we generate x from the exponential distribution with the lambda rate set to
+	// l1 and we generate y from the distribution with the rate set to l2. The probability that x
+	// wins is:
+	//    P[ x > y ] = Integral_0^inf Integral_0^x PDF_l1(x) PDF_l2(y) dy dx
+	//               = Integral_0^inf PDF_l1(x) Integral_0^x PDF_l2(y) dy dx
+	//               = Integral_0^inf PDF_l1(x) CDF_l2(x) dx
+	//               = Integral_0^inf PDF_l1(x) (1 - exp(-l2 * x)) dx
+	//               = 1 - Integral_0^inf l1 * exp(-(l1+l2) * x) dx
+	//               = 1 - l1 / (l1 + l2) * Integral_0^inf PDF_(l1+l2)(x) dx
+	//               = 1 - l1 / (l1 + l2)
+	//               = l2 / (l1 + l2)
 	//
-	// Otherwise, if pri < 1, let:
-	//   x = fraction of max such that choosing rand in [0, max*x)
-	//       is pri times more likely to be greater than random [0, max).
+	// We want this probability to be p1 / (p1 + p2) which we can get by setting
+	//    l1 = 1 / p1
+	//    l2 = 1 / p2
+	// It's easy to verify that (1/p2) / (1/p1 + 1/p2) = p1 / (p2 + p1).
 	//
-	// For every random trial, if the normal priority is chosen >= max*x,
-	// the user priority loses 100% of the time; otherwise, wins 50% of
-	// the time. Therefore, (1-x) fraction of the time, loss is user(100%)
-	// and x fraction of the time win is user(50%).
+	// We can generate an exponentially distributed value using (rand.ExpFloat64() / lambda).
+	// In our case this works out to simply rand.ExpFloat64() * userPriority.
+	val := rand.ExpFloat64() * userPriority
+
+	// To convert to an integer, we scale things to accommodate a few (5) standard deviations for
+	// the maximum priority. The choice of the value is a trade-off between loss of resolution for
+	// low priorities and overflow (capping the value to MaxInt32) for high priorities.
 	//
-	//   x * 1/2 = pri / (1 + pri)
-	//   x = 2*pri / (1 + pri) = (pri - 1)/(pri + 1) + 1
-	pri := float64(userPriority)
-	x := (pri - 1) / (pri + 1)
-	if userPriority >= 1 {
-		return math.MaxInt32 - rand.Int31n(int32(float64(math.MaxInt32)*(1-x)))
+	// For userPriority=MaxUserPriority, the probability of overflow is 0.7%.
+	// For userPriority=(MaxUserPriority/2), the probability of overflow is 0.005%.
+	val = (val / (5 * MaxUserPriority)) * math.MaxInt32
+	if val >= math.MaxInt32 {
+		return math.MaxInt32
 	}
-	return rand.Int31n(int32(float64(math.MaxInt32) * (1 + x)))
+	return int32(val)
 }
 
 // TxnIDEqual returns whether the transaction IDs are equal.
