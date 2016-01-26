@@ -487,25 +487,28 @@ func (m *multiTestContext) addStore() {
 			}
 		}
 	}
-	if err := store.Start(stopper); err != nil {
-		m.t.Fatal(err)
-	}
-	store.WaitForInit()
 
 	// Add newly created objects to the multiTestContext's collections.
+	// (these must be populated before the store is started so that
+	// FirstRange() can find the sender)
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.stores = append(m.stores, store)
 	m.stoppers = append(m.stoppers, stopper)
 	sender := storage.NewStores(clock)
 	sender.AddStore(store)
 	m.senders = append(m.senders, sender)
-	if err := gossipNodeDesc(m.gossip, nodeID); err != nil {
-		m.t.Fatal(err)
-	}
 	// Save the store identities for later so we can use them in
 	// replication operations even while the store is stopped.
 	m.idents = append(m.idents, store.Ident)
+	m.mu.Unlock()
+
+	if err := gossipNodeDesc(m.gossip, nodeID); err != nil {
+		m.t.Fatal(err)
+	}
+	if err := store.Start(stopper); err != nil {
+		m.t.Fatal(err)
+	}
+	store.WaitForInit()
 }
 
 // gossipNodeDesc adds the node descriptor to the gossip network.
