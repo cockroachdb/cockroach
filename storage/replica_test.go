@@ -2771,7 +2771,7 @@ func TestMerge(t *testing.T) {
 		mergeArgs := internalMergeArgs(key, roachpb.MakeValueFromString(str))
 
 		if _, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &mergeArgs); pErr != nil {
-			t.Fatalf("unexpected error from Merge: %s", pErr.GoError().Error())
+			t.Fatalf("unexpected error from Merge: %s", pErr.Message)
 		}
 	}
 

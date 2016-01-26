@@ -128,7 +128,7 @@ func (db *testDescriptorDB) assertLookupCount(t *testing.T, expected int, key st
 func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) *roachpb.RangeDescriptor {
 	r, pErr := rc.LookupRangeDescriptor(roachpb.RKey(key), false /* considerIntents */, false /* useReverseScan */)
 	if pErr != nil {
-		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", pErr.GoError().Error())
+		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", pErr.Message)
 	}
 	if !r.ContainsKey(keys.Addr(roachpb.Key(key))) {
 		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)

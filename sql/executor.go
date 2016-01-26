@@ -451,7 +451,7 @@ func makeResultFromError(planMaker *planner, pErr *roachpb.Error) driver.Respons
 			planMaker.txn.Cleanup(pErr)
 		}
 	}
-	errString := pErr.GoError().Error()
+	errString := pErr.Message
 	return driver.Response_Result{Error: &errString}
 }
 
