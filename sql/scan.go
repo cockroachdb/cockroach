@@ -406,6 +406,16 @@ func (n *scanNode) initTargets(targets parser.SelectExprs) *roachpb.Error {
 	return nil
 }
 
+// initOrdering initializes the ordering info using the selected index. This
+// must be called after index selection is performed.
+func (n *scanNode) initOrdering(exactPrefix int) {
+	if n.index == nil {
+		return
+	}
+	n.columnIDs, n.columnDirs = n.index.fullColumnIDs()
+	n.ordering = computeOrdering(n.render, n.index, exactPrefix, n.reverse)
+}
+
 // Searches for a render target for the value of the given column.
 func findRenderIndexForCol(render []parser.Expr, colID ColumnID) (idx int, ok bool) {
 	for i, r := range render {
@@ -416,32 +426,48 @@ func findRenderIndexForCol(render []parser.Expr, colID ColumnID) (idx int, ok bo
 	return -1, false
 }
 
-// initOrdering initializes the ordering info using the selected index. This
-// must be called after index selection is performed.
-func (n *scanNode) initOrdering(exactPrefix int) {
-	if n.index == nil {
-		return
-	}
-	n.columnIDs, n.columnDirs = n.index.fullColumnIDs()
-	n.ordering = n.computeOrdering(n.columnIDs, n.columnDirs, exactPrefix)
-	if n.reverse {
-		for i := range n.ordering.ordering {
-			n.ordering.ordering[i].direction = n.ordering.ordering[i].direction.Reverse()
-		}
-	}
-}
-
-// computeOrdering computes the ordering information for the specified set of columns.
-func (n *scanNode) computeOrdering(columnIDs []ColumnID, dirs []encoding.Direction, exactPrefix int) orderingInfo {
+// computeOrdering calculates ordering information for render target columns assuming that:
+//    - we scan a given index (potentially in reverse order), and
+//    - the first `exactPrefix` columns of the index each have an exact (single value) match
+//      (see orderingInfo).
+//
+// Some examples:
+//
+//    SELECT a, b FROM t@abc ...
+//    	the ordering is: first by column 0 (a), then by column 1 (b)
+//
+//    SELECT a, b FROM t@abc WHERE a = 1 ...
+//    	the ordering is: exact match column (a), ordered by column 1 (b)
+//
+//    SELECT b, a FROM t@abc ...
+//      the ordering is: first by column 1 (a), then by column 0 (a)
+//
+//    SELECT a, c FROM t@abc ...
+//      the ordering is: just by column 0 (a). Here we don't have b as a render target so we
+//      cannot possibly use (or even express) the second-rank order by b (which makes any lower
+//      ranks unusable as well).
+//
+//      Note that for queries like
+//         SELECT a, c FROM t@abc ORDER by a,b,c
+//      we internally add b as a render target. The same holds for any targets required for
+//      grouping.
+func computeOrdering(
+	render []parser.Expr, index *IndexDescriptor, exactPrefix int, reverse bool) orderingInfo {
 	var ordering orderingInfo
 
+	columnIDs, dirs := index.fullColumnIDs()
+
 	for i, colID := range columnIDs {
-		renderIdx, ok := findRenderIndexForCol(n.render, colID)
+		renderIdx, ok := findRenderIndexForCol(render, colID)
 		if ok {
 			if i < exactPrefix {
 				ordering.addExactMatchColumn(renderIdx)
 			} else {
-				ordering.addColumn(renderIdx, dirs[i])
+				dir := dirs[i]
+				if reverse {
+					dir = dir.Reverse()
+				}
+				ordering.addColumn(renderIdx, dir)
 			}
 			continue
 		}

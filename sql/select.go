@@ -422,8 +422,7 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering columnOrdering) {
 	v.exactPrefix = exactPrefix(v.constraints)
 
 	// Compute the ordering provided by the index.
-	colIds, colDirs := v.index.fullColumnIDs()
-	indexOrdering := scan.computeOrdering(colIds, colDirs, v.exactPrefix)
+	indexOrdering := computeOrdering(scan.render, v.index, v.exactPrefix, false)
 
 	// Compute how much of the index ordering matches the requested ordering for
 	// both forward and reverse scans.
