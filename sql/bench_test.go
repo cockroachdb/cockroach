@@ -263,8 +263,8 @@ func cleanupUpdateBenchData(b *testing.B, db *sql.DB) {
 	}
 }
 
-// runBenchmarkUpdate benchmarks updating a random row.
-func runBenchmarkUpdate(b *testing.B, db *sql.DB) {
+// runBenchmarkUpdate benchmarks updating count random rows in a table.
+func runBenchmarkUpdate(b *testing.B, db *sql.DB, count int) {
 	rows := 10000
 	prepareUpdateBenchData(b, db, rows)
 	defer cleanupUpdateBenchData(b, db)
@@ -272,82 +272,55 @@ func runBenchmarkUpdate(b *testing.B, db *sql.DB) {
 	s := rand.New(rand.NewSource(5432))
 
 	b.ResetTimer()
+	var buf bytes.Buffer
 	for i := 0; i < b.N; i++ {
-		q := fmt.Sprintf(`UPDATE bench.update SET v = v + 1 WHERE k = %d`, s.Intn(rows))
-		if _, err := db.Exec(q); err != nil {
+		buf.Reset()
+		_, _ = buf.WriteString(`BEGIN; `)
+		for j := 0; j < count; j++ {
+			fmt.Fprintf(&buf, `UPDATE bench.update SET v = v + 1 WHERE k = %d; `, s.Intn(rows))
+		}
+		_, _ = buf.WriteString(`COMMIT;`)
+		if _, err := db.Exec(buf.String()); err != nil {
 			b.Fatal(err)
 		}
 	}
 	b.StopTimer()
 }
 
-// runBenchmarkUpdateTxn benchmarks updating a random row in a transaction.
-func runBenchmarkUpdateTxn(b *testing.B, db *sql.DB) {
-	rows := 10000
-	prepareUpdateBenchData(b, db, rows)
-	defer cleanupUpdateBenchData(b, db)
-
-	s := rand.New(rand.NewSource(5432))
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		q := fmt.Sprintf(
-			`BEGIN; UPDATE bench.update SET v = v + 1 WHERE k = %d; COMMIT;`,
-			s.Intn(rows))
-		if _, err := db.Exec(q); err != nil {
-			b.Fatal(err)
-		}
-	}
-	b.StopTimer()
+func runBenchmarkUpdate1(b *testing.B, db *sql.DB) {
+	runBenchmarkUpdate(b, db, 1)
 }
 
-// runBenchmarkUpdate2RowsTxn benchmarks updating two random rows in a single transaction.
-func runBenchmarkUpdate2RowsTxn(b *testing.B, db *sql.DB) {
-	rows := 10000
-	prepareUpdateBenchData(b, db, rows)
-	defer cleanupUpdateBenchData(b, db)
-
-	s := rand.New(rand.NewSource(5432))
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		q := fmt.Sprintf(
-			`BEGIN;
-			 UPDATE bench.update SET v = v + 1 WHERE k = %d;
-			 UPDATE bench.update SET v = v - 1 WHERE k = %d;
-			 COMMIT;`,
-			s.Intn(rows),
-			s.Intn(rows),
-		)
-		if _, err := db.Exec(q); err != nil {
-			b.Fatal(err)
-		}
-	}
-	b.StopTimer()
+func runBenchmarkUpdate10(b *testing.B, db *sql.DB) {
+	runBenchmarkUpdate(b, db, 10)
 }
 
-func BenchmarkUpdate_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkUpdate)
+func runBenchmarkUpdate100(b *testing.B, db *sql.DB) {
+	runBenchmarkUpdate(b, db, 100)
 }
 
-func BenchmarkUpdate_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkUpdate)
+func BenchmarkUpdate1_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkUpdate1)
 }
 
-func BenchmarkUpdateTxn_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkUpdateTxn)
+func BenchmarkUpdate1_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkUpdate1)
 }
 
-func BenchmarkUpdateTxn_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkUpdateTxn)
+func BenchmarkUpdate10_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkUpdate10)
 }
 
-func BenchmarkUpdate2RowsTxn_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkUpdate2RowsTxn)
+func BenchmarkUpdate10_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkUpdate10)
 }
 
-func BenchmarkUpdate2RowsTxn_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkUpdate2RowsTxn)
+func BenchmarkUpdate100_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkUpdate100)
+}
+
+func BenchmarkUpdate100_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkUpdate100)
 }
 
 // runBenchmarkScan benchmarks scanning a table containing count rows.
