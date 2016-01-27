@@ -466,19 +466,20 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering []int) {
 //
 // makeConstraints takes into account the direction of the columns in the index.
 // For ascending cols, start constraints look for comparison expressions with the
-// operators >=, = or IN and end constraints look for comparison expressions
+// operators >, >=, = or IN and end constraints look for comparison expressions
 // with the operators <, <=, = or IN. Vice versa for descending cols.
 //
 // Whenever possible, < and > are converted to <= and >=, respectively.
 // This is because we can use inclusive constraints better than exclusive ones;
-// with inclusive constraints we can continue accumulate constraints for
+// with inclusive constraints we can continue to accumulate constraints for
 // next columns. Not so with exclusive ones: Consider "a < 1 AND b < 2".
 // "a < 1" will be encoded as an exclusive span end; if we were to append
 // anything about "b" to it, that would be incorrect.
-// Note that it's not always possible to transform "<" to "<=", because some
-// types do not support the Prev() operation.
-// So, the resulting constraints will never contain ">". They might contain
-// "<", in which case that will be the last constraint with `.end` filled.
+// Note that it's not always possible to transform ">" to ">=", because some
+// types do not support the Next() operation. Similarly, it is not always possible
+// to transform "<" to "<=", because some types do not support the Prev() operation.
+// So, the resulting constraints might contain ">" or "<" (depending on encoding
+// direction), in which case that will be the last constraint with `.end` filled.
 //
 // TODO(pmattis): It would be more obvious to perform this transform in
 // simplifyComparisonExpr, but doing so there eliminates some of the other
@@ -752,60 +753,40 @@ func encodeStartConstraintAscending(spans []span, c *parser.ComparisonExpr) {
 	case parser.IsNot:
 		// A IS NOT NULL expression allows us to constrain the start of
 		// the range to not include NULL.
+		if c.Right != parser.DNull {
+			panic(fmt.Sprintf("expected NULL operand for IS NOT operator, found %v", c.Right))
+		}
 		for i := range spans {
 			spans[i].start = encoding.EncodeNotNullAscending(spans[i].start)
 		}
-	case parser.GT:
-		panic("'>' operators should have been transformed to '>='.")
 	case parser.NE:
 		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
-	default:
-		if datum, ok := c.Right.(parser.Datum); ok {
-			key, err := encodeTableKey(nil, datum, encoding.Ascending)
-			if err != nil {
-				panic(err)
-			}
-			// Append the constraint to all of the existing spans.
-			for i := range spans {
-				spans[i].start = append(spans[i].start, key...)
-			}
+	case parser.GE, parser.EQ:
+		datum := c.Right.(parser.Datum)
+		key, err := encodeTableKey(nil, datum, encoding.Ascending)
+		if err != nil {
+			panic(err)
 		}
-	}
-}
-
-func encodeEndConstraintAscending(spans []span, c *parser.ComparisonExpr,
-	isLastEndConstraint bool) {
-	switch c.Operator {
-	case parser.Is:
-		// An IS NULL expressions allows us to constrain the end of the range
-		// to stop at NULL.
-		if c.Right != parser.DNull {
-			panic("Expected NULL operand for IS operator.")
-		}
+		// Append the constraint to all of the existing spans.
 		for i := range spans {
-			spans[i].end = encoding.EncodeNotNullAscending(spans[i].end)
+			spans[i].start = append(spans[i].start, key...)
+		}
+	case parser.GT:
+		// A ">" constraint is the last start constraint. Since the constraint
+		// is exclusive and the start key is inclusive, we're going to apply
+		// a .PrefixEnd(). Note that ">" is usually transformed to a ">=".
+		datum := c.Right.(parser.Datum)
+		key, pErr := encodeTableKey(nil, datum, encoding.Ascending)
+		if pErr != nil {
+			panic(pErr)
+		}
+		// Append the constraint to all of the existing spans.
+		for i := range spans {
+			spans[i].start = append(spans[i].start, key...)
+			spans[i].start = spans[i].start.PrefixEnd()
 		}
 	default:
-		if datum, ok := c.Right.(parser.Datum); ok {
-			if c.Operator != parser.LT {
-				for i := range spans {
-					spans[i].end = encodeInclusiveEndValue(
-						spans[i].end, datum, encoding.Ascending, isLastEndConstraint)
-				}
-				break
-			}
-			if !isLastEndConstraint {
-				panic("Can't have other end constraints after a '<' constraint.")
-			}
-			key, err := encodeTableKey(nil, datum, encoding.Ascending)
-			if err != nil {
-				panic(err)
-			}
-			// Append the constraint to all of the existing spans.
-			for i := range spans {
-				spans[i].end = append(spans[i].end, key...)
-			}
-		}
+		panic(fmt.Sprintf("unexpected operator: %s", c))
 	}
 }
 
@@ -816,39 +797,75 @@ func encodeStartConstraintDescending(
 		// An IS NULL expressions allows us to constrain the start of the range
 		// to begin at NULL.
 		if c.Right != parser.DNull {
-			panic("Expected NULL operand for IS operator.")
+			panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.Right))
 		}
 		for i := range spans {
 			spans[i].start = encoding.EncodeNullDescending(spans[i].start)
 		}
+	case parser.NE:
+		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
 	case parser.LE, parser.EQ:
-		if datum, ok := c.Right.(parser.Datum); ok {
-			key, pErr := encodeTableKey(nil, datum, encoding.Descending)
-			if pErr != nil {
-				panic(pErr)
-			}
-			// Append the constraint to all of the existing spans.
-			for i := range spans {
-				spans[i].start = append(spans[i].start, key...)
-			}
+		datum := c.Right.(parser.Datum)
+		key, pErr := encodeTableKey(nil, datum, encoding.Descending)
+		if pErr != nil {
+			panic(pErr)
+		}
+		// Append the constraint to all of the existing spans.
+		for i := range spans {
+			spans[i].start = append(spans[i].start, key...)
 		}
 	case parser.LT:
 		// A "<" constraint is the last start constraint. Since the constraint
 		// is exclusive and the start key is inclusive, we're going to apply
-		// a .PrefixEnd().
-		if datum, ok := c.Right.(parser.Datum); ok {
-			key, pErr := encodeTableKey(nil, datum, encoding.Descending)
-			if pErr != nil {
-				panic(pErr)
-			}
-			// Append the constraint to all of the existing spans.
-			for i := range spans {
-				spans[i].start = append(spans[i].start, key...)
-				spans[i].start = spans[i].start.PrefixEnd()
-			}
+		// a .PrefixEnd(). Note that "<" is usually transformed to a "<=".
+		datum := c.Right.(parser.Datum)
+		key, pErr := encodeTableKey(nil, datum, encoding.Descending)
+		if pErr != nil {
+			panic(pErr)
+		}
+		// Append the constraint to all of the existing spans.
+		for i := range spans {
+			spans[i].start = append(spans[i].start, key...)
+			spans[i].start = spans[i].start.PrefixEnd()
+		}
+
+	default:
+		panic(fmt.Sprintf("unexpected operator: %s", c))
+	}
+}
+
+func encodeEndConstraintAscending(spans []span, c *parser.ComparisonExpr,
+	isLastEndConstraint bool) {
+	switch c.Operator {
+	case parser.Is:
+		// An IS NULL expressions allows us to constrain the end of the range
+		// to stop at NULL.
+		if c.Right != parser.DNull {
+			panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.Right))
+		}
+		for i := range spans {
+			spans[i].end = encoding.EncodeNotNullAscending(spans[i].end)
 		}
 	default:
-		panic(fmt.Errorf("unexpected operator: %s", c.String()))
+		datum := c.Right.(parser.Datum)
+		if c.Operator != parser.LT {
+			for i := range spans {
+				spans[i].end = encodeInclusiveEndValue(
+					spans[i].end, datum, encoding.Ascending, isLastEndConstraint)
+			}
+			break
+		}
+		if !isLastEndConstraint {
+			panic(fmt.Sprintf("can't have other end constraints after a '<' constraint, found %v", c.Operator))
+		}
+		key, err := encodeTableKey(nil, datum, encoding.Ascending)
+		if err != nil {
+			panic(err)
+		}
+		// Append the constraint to all of the existing spans.
+		for i := range spans {
+			spans[i].end = append(spans[i].end, key...)
+		}
 	}
 }
 
@@ -856,24 +873,34 @@ func encodeEndConstraintDescending(spans []span, c *parser.ComparisonExpr,
 	isLastEndConstraint bool) {
 	switch c.Operator {
 	case parser.IsNot:
-		// An IS NULL expressions allows us to constrain the end of the range
+		// An IS NOT NULL expressions allows us to constrain the end of the range
 		// to stop at NULL.
 		if c.Right != parser.DNull {
-			panic("Expected NULL operand for IS NOT operator.")
+			panic(fmt.Sprintf("expected NULL operand for IS NOT operator, found %v", c.Right))
 		}
 		for i := range spans {
 			spans[i].end = encoding.EncodeNotNullDescending(spans[i].end)
 		}
-	case parser.GE, parser.EQ:
-		datum := c.Right.(parser.Datum)
-		for i := range spans {
-			spans[i].end = encodeInclusiveEndValue(
-				spans[i].end, datum, encoding.Descending, isLastEndConstraint)
-		}
-	case parser.GT:
-		panic("'>' operators should have been transformed to '>='.")
 	default:
-		panic(fmt.Errorf("unexpected operator: %s", c.String()))
+		datum := c.Right.(parser.Datum)
+		if c.Operator != parser.GT {
+			for i := range spans {
+				spans[i].end = encodeInclusiveEndValue(
+					spans[i].end, datum, encoding.Descending, isLastEndConstraint)
+			}
+			break
+		}
+		if !isLastEndConstraint {
+			panic(fmt.Sprintf("can't have other end constraints after a '>' constraint, found %v", c.Operator))
+		}
+		key, err := encodeTableKey(nil, datum, encoding.Descending)
+		if err != nil {
+			panic(err)
+		}
+		// Append the constraint to all of the existing spans.
+		for i := range spans {
+			spans[i].end = append(spans[i].end, key...)
+		}
 	}
 }
 
