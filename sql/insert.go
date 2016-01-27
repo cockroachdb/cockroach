@@ -43,10 +43,14 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 
+	var cols []ColumnDescriptor
 	// Determine which columns we're inserting into.
-	cols, pErr := p.processColumns(tableDesc, n.Columns)
-	if pErr != nil {
-		return nil, pErr
+	if n.DefaultValues() {
+		cols = tableDesc.Columns
+	} else {
+		if cols, pErr = p.processColumns(tableDesc, n.Columns); pErr != nil {
+			return nil, pErr
+		}
 	}
 	// Number of columns expecting an input. This doesn't include the
 	// columns receiving a default value.
@@ -101,7 +105,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	}
 
 	// Replace any DEFAULT markers with the corresponding default expressions.
-	if n.Rows, pErr = p.fillDefaults(defaultExprs, cols, n.Rows); pErr != nil {
+	if n.Rows, pErr = p.fillDefaults(defaultExprs, cols, n); pErr != nil {
 		return nil, pErr
 	}
 
@@ -251,6 +255,9 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 func (p *planner) processColumns(tableDesc *TableDescriptor,
 	node parser.QualifiedNames) ([]ColumnDescriptor, *roachpb.Error) {
 	if node == nil {
+		// VisibleColumns is used here to prevent INSERT ... VALUES (...) from
+		// writing "hidden" columns. At present, the only hidden column is the
+		// implicit rowid primary key.
 		return tableDesc.VisibleColumns(), nil
 	}
 
@@ -277,10 +284,8 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 }
 
 func (p *planner) fillDefaults(defaultExprs []parser.Expr,
-	cols []ColumnDescriptor, rows parser.SelectStatement) (parser.SelectStatement, *roachpb.Error) {
-	switch values := rows.(type) {
-	case nil:
-		// This indicates a DEFAULT VALUES expression.
+	cols []ColumnDescriptor, n *parser.Insert) (parser.SelectStatement, *roachpb.Error) {
+	if n.DefaultValues() {
 		row := make(parser.Tuple, 0, len(cols))
 		for i := range cols {
 			if defaultExprs == nil {
@@ -290,7 +295,9 @@ func (p *planner) fillDefaults(defaultExprs []parser.Expr,
 			row = append(row, defaultExprs[i])
 		}
 		return parser.Values{row}, nil
+	}
 
+	switch values := n.Rows.(type) {
 	case parser.Values:
 		for _, tuple := range values {
 			for i, val := range tuple {
@@ -305,7 +312,7 @@ func (p *planner) fillDefaults(defaultExprs []parser.Expr,
 			}
 		}
 	}
-	return rows, nil
+	return n.Rows, nil
 }
 
 func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, *roachpb.Error) {
