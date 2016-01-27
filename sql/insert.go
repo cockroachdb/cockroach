@@ -83,6 +83,10 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 			addIfDefault(*col)
 		}
 	}
+	// DEFAULT VALUES do count default columns as inputs.
+	if n.DefaultValues() {
+		numInputColumns = len(cols)
+	}
 
 	// Verify we have at least the columns that are part of the primary key.
 	primaryKeyCols := map[ColumnID]struct{}{}
