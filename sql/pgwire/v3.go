@@ -619,11 +619,22 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, se
 			continue
 		}
 
+		tagStr := "SELECT"
+		if result.Tag != nil {
+			tagStr = *result.Tag
+			if tagStr == "INSERT" {
+				// From the postgres docs (49.5. Message Formats):
+				// `INSERT oid rows`... oid is the object ID of the inserted row if
+				//	rows is 1 and the target table has OIDs; otherwise oid is 0.
+				tagStr = "INSERT 0"
+			}
+		}
+		tag := append(c.tagBuf[:0], tagStr...)
+
 		switch result := result.GetUnion().(type) {
 		case *driver.Response_Result_RowsAffected:
 			// Send CommandComplete.
-			// TODO(bdarnell): tags for other types of commands.
-			tag := append(c.tagBuf[:0], "SELECT "...)
+			tag = append(tag, ' ')
 			tag = strconv.AppendInt(tag, int64(result.RowsAffected), 10)
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
@@ -666,9 +677,7 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, se
 			}
 
 			// Send CommandComplete.
-			// TODO(bdarnell): tags for other types of commands.
-			tag := append(c.tagBuf[:0], "SELECT "...)
-			tag = appendUint(tag, uint(len(resultRows.Rows)))
+			tag = appendSpaceAndUint(tag, uint(len(resultRows.Rows)))
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
@@ -677,8 +686,7 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, se
 		// with a default.
 		// This also includes DDLs which want CommandComplete as well.
 		default:
-			// TODO(dt): A real Postgres will send a tag back. #3890
-			if err := c.sendCommandComplete(nil); err != nil {
+			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
 		}
@@ -713,13 +721,14 @@ func (c *v3Conn) sendRowDescription(columns []*driver.Response_Result_Rows_Colum
 	return c.writeBuf.finishMsg(c.wr)
 }
 
-func appendUint(in []byte, u uint) []byte {
+func appendSpaceAndUint(in []byte, u uint) []byte {
 	var buf []byte
-	if cap(in)-len(in) >= 10 {
-		buf = in[len(in) : len(in)+10]
+	if cap(in)-len(in) >= 11 {
+		buf = in[len(in) : len(in)+11]
 	} else {
-		buf = make([]byte, 10)
+		buf = make([]byte, 11)
 	}
+	buf[0] = ' '
 	i := len(buf)
 
 	for u >= 10 {

@@ -100,6 +100,9 @@ message Response {
       uint32 rows_affected = 3;
       Rows rows = 4;
     }
+
+    optional string tag = 5;
+
   }
 
   // Setting that should be reflected back in all subsequent requests.

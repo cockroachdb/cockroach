@@ -326,6 +326,7 @@ type Response_Result struct {
 	//	*Response_Result_RowsAffected
 	//	*Response_Result_Rows_
 	Union isResponse_Result_Union `protobuf_oneof:"union"`
+	Tag   *string                 `protobuf:"bytes,5,opt,name=tag" json:"tag,omitempty"`
 }
 
 func (m *Response_Result) Reset()         { *m = Response_Result{} }
@@ -726,6 +727,12 @@ func (m *Response_Result) MarshalTo(data []byte) (int, error) {
 		}
 		i += nn3
 	}
+	if m.Tag != nil {
+		data[i] = 0x2a
+		i++
+		i = encodeVarintWire(data, i, uint64(len(*m.Tag)))
+		i += copy(data[i:], *m.Tag)
+	}
 	return i, nil
 }
 
@@ -1028,6 +1035,10 @@ func (m *Response_Result) Size() (n int) {
 	}
 	if m.Union != nil {
 		n += m.Union.Size()
+	}
+	if m.Tag != nil {
+		l = len(*m.Tag)
+		n += 1 + l + sovWire(uint64(l))
 	}
 	return n
 }
@@ -1867,6 +1878,36 @@ func (m *Response_Result) Unmarshal(data []byte) error {
 				return err
 			}
 			m.Union = &Response_Result_Rows_{v}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Tag", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(data[iNdEx:postIndex])
+			m.Tag = &s
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

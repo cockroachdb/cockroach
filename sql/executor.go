@@ -341,7 +341,9 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 			return pErr
 		}
 
-		switch stmt.StatementType() {
+		typ, tag := stmt.StatementType()
+		result.Tag = &tag
+		switch typ {
 		case parser.DDL:
 			result.Union = &driver.Response_Result_DDL_{DDL: &driver.Response_Result_DDL{}}
 		case parser.RowsAffected:
