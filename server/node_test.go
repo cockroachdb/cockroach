@@ -134,7 +134,7 @@ func TestBootstrapCluster(t *testing.T) {
 	// Scan the complete contents of the local database.
 	rows, pErr := localDB.Scan(keys.LocalMax, roachpb.KeyMax, 0)
 	if pErr != nil {
-		t.Fatal(pErr.GoError())
+		t.Fatal(pErr)
 	}
 	var foundKeys keySlice
 	for _, kv := range rows {
