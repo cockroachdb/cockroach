@@ -73,7 +73,8 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
 	// where the table already exists. This will generate some false
 	// refreshes, but that's expected to be quite rare in practice.
-	if stmt.StatementType() == parser.DDL {
+
+	if typ, _ := stmt.StatementType(); typ == parser.DDL {
 		p.txn.SetSystemConfigTrigger()
 	}
 
