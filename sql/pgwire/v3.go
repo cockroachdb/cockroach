@@ -618,11 +618,18 @@ func (c *v3Conn) sendResponse(resp sql.Response, formatCodes []formatCode, sendD
 			continue
 		}
 
+		if result.PGTag == "INSERT" {
+			// From the postgres docs (49.5. Message Formats):
+			// `INSERT oid rows`... oid is the object ID of the inserted row if
+			//	rows is 1 and the target table has OIDs; otherwise oid is 0.
+			result.PGTag = "INSERT 0"
+		}
+		tag := append(c.tagBuf[:0], result.PGTag...)
+
 		switch result.Type {
 		case parser.RowsAffected:
 			// Send CommandComplete.
-			// TODO(bdarnell): tags for other types of commands.
-			tag := append(c.tagBuf[:0], "SELECT "...)
+			tag = append(tag, ' ')
 			tag = strconv.AppendInt(tag, int64(result.RowsAffected), 10)
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
@@ -663,8 +670,7 @@ func (c *v3Conn) sendResponse(resp sql.Response, formatCodes []formatCode, sendD
 			}
 
 			// Send CommandComplete.
-			// TODO(bdarnell): tags for other types of commands.
-			tag := append(c.tagBuf[:0], "SELECT "...)
+			tag = append(tag, ' ')
 			tag = appendUint(tag, uint(len(result.Rows)))
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
@@ -674,8 +680,7 @@ func (c *v3Conn) sendResponse(resp sql.Response, formatCodes []formatCode, sendD
 		// with a default.
 		// This also includes DDLs which want CommandComplete as well.
 		default:
-			// TODO(dt): A real Postgres will send a tag back. #3890
-			if err := c.sendCommandComplete(nil); err != nil {
+			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
 		}
