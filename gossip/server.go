@@ -36,6 +36,7 @@ type clientInfo struct {
 	id    roachpb.NodeID
 	addr  *util.UnresolvedAddr
 	nodes map[int32]*Node
+	open  bool
 }
 
 // server maintains an array of connected peers to which it gossips
@@ -88,7 +89,14 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 		return nil, util.Errorf("local addr %s could not be converted to net.Addr: %s", args.LAddr, err)
 	}
 	// Verify that the client connection is valid and hasn't been closed.
-	if _, ok := s.lAddrMap[lAddr.String()]; !ok {
+	if ci, ok := s.lAddrMap[lAddr.String()]; !ok {
+		incoming := []string{}
+		for key := range s.lAddrMap {
+			incoming = append(incoming, key)
+		}
+		return nil, util.Errorf("node %d: node %d believes its address is %s but that doesn't match any incoming connections: %s",
+			s.is.NodeID, args.NodeID, lAddr, incoming)
+	} else if !ci.open {
 		return nil, util.Errorf("node %d: connection already closed from node %d (%s); ignoring gossip", s.is.NodeID, args.NodeID, lAddr)
 	}
 
@@ -121,7 +129,12 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 	// removed from the incoming addr set when its connection is
 	// closed. See server.serveConn() below.
 	if canAccept {
-		s.lAddrMap[lAddr.String()] = clientInfo{args.NodeID, &args.Addr, args.Nodes}
+		s.lAddrMap[lAddr.String()] = clientInfo{
+			id:    args.NodeID,
+			addr:  &args.Addr,
+			nodes: args.Nodes,
+			open:  true,
+		}
 
 		// If incoming infos are specified, combine and exit. This is a
 		// "push" from the incoming client.
@@ -270,7 +283,7 @@ func (s *server) onOpen(conn net.Conn) {
 	defer s.mu.Unlock()
 	remoteAddr := conn.RemoteAddr().String()
 	if _, ok := s.lAddrMap[remoteAddr]; !ok {
-		s.lAddrMap[remoteAddr] = clientInfo{}
+		s.lAddrMap[remoteAddr] = clientInfo{open: true}
 	}
 }
 
@@ -283,7 +296,7 @@ func (s *server) onClose(conn net.Conn) {
 	if cInfo, ok := s.lAddrMap[remoteAddr]; ok {
 		s.incoming.removeNode(cInfo.id)
 		delete(s.nodeMap, cInfo.id)
-		delete(s.lAddrMap, remoteAddr)
+		s.lAddrMap[remoteAddr] = clientInfo{open: false}
 		s.ready.Broadcast() // wake up clients
 	}
 }

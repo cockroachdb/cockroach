@@ -215,7 +215,7 @@ func TestClientNodeID(t *testing.T) {
 func verifyServerMaps(g *Gossip, expCount int) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return len(g.lAddrMap) == expCount && len(g.nodeMap) == expCount
+	return len(g.nodeMap) == expCount
 }
 
 // TestClientDisconnectLoopback verifies that the gossip server
