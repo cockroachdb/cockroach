@@ -1705,16 +1705,22 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 		// still be careful though, a retry could happen and race with args.
 		args := proto.Clone(item.args).(roachpb.Request)
 		stopper.RunAsyncTask(func() {
+			// Everything here is best effort; give up rather than waiting
+			// too long (helps avoid deadlocks during test shutdown,
+			// although this is imperfect due to the use of an
+			// uninterruptible WaitGroup.Wait in beginCmds).
+			ctxWithDeadline, cancel := context.WithDeadline(ctx, time.Now().Add(rpc.DefaultRPCTimeout))
+			defer cancel()
 			h := roachpb.Header{Timestamp: now}
-			resolveIntents, pErr := r.store.resolveWriteIntentError(ctx, &roachpb.WriteIntentError{
+			resolveIntents, pErr := r.store.resolveWriteIntentError(ctxWithDeadline, &roachpb.WriteIntentError{
 				Intents: item.intents,
 			}, r, args, h, roachpb.PUSH_TOUCH)
 			if wiErr, ok := pErr.GoError().(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
-				log.Warningc(ctx, "failed to push during intent resolution: %s", pErr)
+				log.Warningc(ctxWithDeadline, "failed to push during intent resolution: %s", pErr)
 				return
 			}
-			if pErr := r.resolveIntents(ctx, resolveIntents, true /* wait */, true /* poison */); pErr != nil {
-				log.Warningc(ctx, "failed to resolve intents: %s", pErr)
+			if pErr := r.resolveIntents(ctxWithDeadline, resolveIntents, true /* wait */, true /* poison */); pErr != nil {
+				log.Warningc(ctxWithDeadline, "failed to resolve intents: %s", pErr)
 				return
 			}
 			// We successfully resolved the intents, so we're able to GC from
@@ -1743,8 +1749,6 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 				gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{Key: keys.TransactionKey(txn.Key, txn.ID)})
 
 				ba.Add(&gcArgs)
-				ctxWithDeadline, cancel := context.WithDeadline(ctx, time.Now().Add(rpc.DefaultRPCTimeout))
-				defer cancel()
 				if _, pErr := r.addWriteCmd(ctxWithDeadline, ba, nil /* nil */); pErr != nil {
 					log.Warningf("could not GC completed transaction: %s", pErr)
 				}
