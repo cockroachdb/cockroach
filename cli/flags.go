@@ -18,7 +18,7 @@ package cli
 
 import (
 	"flag"
-	"fmt"
+	"net"
 	"reflect"
 	"strings"
 
@@ -269,7 +269,7 @@ func initFlags(ctx *server.Context) {
 	}
 
 	// Commands that need the cockroach port.
-	simpleCmds := []*cobra.Command{kvCmd, rangeCmd, exterminateCmd, quitCmd}
+	simpleCmds := []*cobra.Command{kvCmd, nodeCmd, rangeCmd, exterminateCmd, quitCmd}
 	for _, cmd := range simpleCmds {
 		f := cmd.PersistentFlags()
 		f.StringVar(&connCockroachPort, "cockroach-port", "26257", flagUsage["cockroach-port"])
@@ -300,7 +300,7 @@ func init() {
 		if context.EphemeralSingleNode {
 			context.Insecure = true
 		}
-		context.Addr = fmt.Sprintf("%s:%s", connHost, connCockroachPort)
-		context.PGAddr = fmt.Sprintf("%s:%s", connHost, connPort)
+		context.Addr = net.JoinHostPort(connHost, connCockroachPort)
+		context.PGAddr = net.JoinHostPort(connHost, connPort)
 	})
 }
