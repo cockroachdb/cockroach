@@ -18,14 +18,17 @@
 package sql
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/driver"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/gogo/protobuf/proto"
 )
@@ -92,13 +95,13 @@ func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reply, code, err := s.Execute(args)
+	reply, code, err := s.Execute(requestFromProto(args))
 	if err != nil {
 		http.Error(w, err.Error(), code)
 	}
 
 	// Marshal the response.
-	body, contentType, err := util.MarshalResponse(r, &reply, allowedEncodings)
+	body, contentType, err := util.MarshalResponse(r, protoFromResponse(reply), allowedEncodings)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -116,6 +119,152 @@ func (s Server) RegisterRPC(rpcServer *rpc.Server) error {
 
 func (s Server) executeCmd(argsI proto.Message) (proto.Message, error) {
 	args := argsI.(*driver.Request)
-	reply, _, err := s.Execute(*args)
-	return &reply, err
+	reply, _, err := s.Execute(requestFromProto(*args))
+	return protoFromResponse(reply), err
+}
+
+func requestFromProto(dr driver.Request) Request {
+	r := Request{
+		User:    dr.User,
+		Session: dr.Session,
+		SQL:     dr.Sql,
+		Params:  make([]parser.Datum, 0, len(dr.Params)),
+	}
+	for _, d := range dr.Params {
+		r.Params = append(r.Params, datumFromProto(d))
+	}
+	return r
+}
+
+func protoFromResponse(r Response) *driver.Response {
+	dr := &driver.Response{
+		Session: r.Session,
+		Results: make([]driver.Response_Result, 0, len(r.Results)),
+	}
+	for _, rr := range r.Results {
+		dr.Results = append(dr.Results, protoFromResult(rr))
+	}
+	return dr
+}
+
+func protoFromResult(r Result) driver.Response_Result {
+	drr := driver.Response_Result{}
+	if r.Err != nil {
+		drr.Error = proto.String(r.Err.Error())
+	}
+	switch r.Type {
+	case parser.DDL:
+		drr.Union = &driver.Response_Result_DDL_{
+			DDL: &driver.Response_Result_DDL{},
+		}
+	case parser.RowsAffected:
+		drr.Union = &driver.Response_Result_RowsAffected{
+			RowsAffected: uint32(r.RowsAffected),
+		}
+	case parser.Rows:
+		rows := &driver.Response_Result_Rows{
+			Columns: make([]*driver.Response_Result_Rows_Column, 0, len(r.Columns)),
+			Rows:    make([]driver.Response_Result_Rows_Row, 0, len(r.Rows)),
+		}
+		for _, col := range r.Columns {
+			rows.Columns = append(rows.Columns, protoFromColumn(col))
+		}
+		for _, row := range r.Rows {
+			rows.Rows = append(rows.Rows, protoFromRow(row))
+		}
+		drr.Union = &driver.Response_Result_Rows_{
+			Rows: rows,
+		}
+	}
+	return drr
+}
+
+func protoFromColumn(c ResultColumn) *driver.Response_Result_Rows_Column {
+	return &driver.Response_Result_Rows_Column{
+		Name: c.Name,
+		Typ:  protoFromDatum(c.Typ),
+	}
+}
+
+func protoFromRow(r ResultRow) driver.Response_Result_Rows_Row {
+	rr := driver.Response_Result_Rows_Row{
+		Values: make([]driver.Datum, 0, len(r.Values)),
+	}
+	for _, v := range r.Values {
+		rr.Values = append(rr.Values, protoFromDatum(v))
+	}
+	return rr
+}
+
+func datumFromProto(d driver.Datum) parser.Datum {
+	arg := d.Payload
+	if arg == nil {
+		return parser.DNull
+	}
+	switch t := arg.(type) {
+	case *driver.Datum_BoolVal:
+		return parser.DBool(t.BoolVal)
+	case *driver.Datum_IntVal:
+		return parser.DInt(t.IntVal)
+	case *driver.Datum_FloatVal:
+		return parser.DFloat(t.FloatVal)
+	case *driver.Datum_BytesVal:
+		return parser.DBytes(t.BytesVal)
+	case *driver.Datum_StringVal:
+		return parser.DString(t.StringVal)
+	case *driver.Datum_DateVal:
+		return parser.DDate(t.DateVal)
+	case *driver.Datum_TimeVal:
+		return parser.DTimestamp{Time: t.TimeVal.GoTime()}
+	case *driver.Datum_IntervalVal:
+		return parser.DInterval{Duration: time.Duration(t.IntervalVal)}
+	default:
+		panic(fmt.Sprintf("unexpected type %T", t))
+	}
+}
+
+func protoFromDatum(datum parser.Datum) driver.Datum {
+	if datum == parser.DNull {
+		return driver.Datum{}
+	}
+
+	switch vt := datum.(type) {
+	case parser.DBool:
+		return driver.Datum{
+			Payload: &driver.Datum_BoolVal{BoolVal: bool(vt)},
+		}
+	case parser.DInt:
+		return driver.Datum{
+			Payload: &driver.Datum_IntVal{IntVal: int64(vt)},
+		}
+	case parser.DFloat:
+		return driver.Datum{
+			Payload: &driver.Datum_FloatVal{FloatVal: float64(vt)},
+		}
+	case parser.DBytes:
+		return driver.Datum{
+			Payload: &driver.Datum_BytesVal{BytesVal: []byte(vt)},
+		}
+	case parser.DString:
+		return driver.Datum{
+			Payload: &driver.Datum_StringVal{StringVal: string(vt)},
+		}
+	case parser.DDate:
+		return driver.Datum{
+			Payload: &driver.Datum_DateVal{DateVal: int64(vt)},
+		}
+	case parser.DTimestamp:
+		wireTimestamp := driver.Timestamp(vt.Time)
+		return driver.Datum{
+			Payload: &driver.Datum_TimeVal{
+				TimeVal: &wireTimestamp,
+			},
+		}
+	case parser.DInterval:
+		return driver.Datum{
+			Payload: &driver.Datum_IntervalVal{IntervalVal: vt.Nanoseconds()},
+		}
+	default:
+		panic(util.Errorf("unsupported result type: %s", datum.Type()))
+	}
 }
