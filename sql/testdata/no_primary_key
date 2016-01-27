@@ -67,3 +67,6 @@ c STRING true NULL
 
 statement ok
 CREATE INDEX a_idx ON t (a);
+
+statement ok
+INSERT INTO t DEFAULT VALUES

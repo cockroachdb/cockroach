@@ -65,6 +65,10 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 			if _, ok := colIDtoRowIndex[col.ID]; !ok {
 				colIDtoRowIndex[col.ID] = len(cols)
 				cols = append(cols, col)
+				// DEFAULT VALUES do count default columns as inputs.
+				if n.DefaultValues() {
+					numInputColumns++
+				}
 			}
 		}
 	}
