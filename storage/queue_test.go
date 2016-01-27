@@ -326,12 +326,11 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	bq.MaybeRemove(r)
 
 	// Wake the queue
-	testQueue.blocker <- struct{}{}
+	close(testQueue.blocker)
 
 	// Make sure the queue has actually run through a few times
 	for i := 0; i < cap(bq.incoming)+1; i++ {
 		bq.incoming <- struct{}{}
-		testQueue.blocker <- struct{}{}
 	}
 
 	if pc := atomic.LoadInt32(&testQueue.processed); pc > 0 {
