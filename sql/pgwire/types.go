@@ -25,7 +25,6 @@ import (
 
 	"github.com/lib/pq/oid"
 
-	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -54,122 +53,123 @@ type pgType struct {
 	size int
 }
 
-func typeForDatum(d driver.Datum) pgType {
-	switch d.Payload.(type) {
-	case nil:
+func typeForDatum(d parser.Datum) pgType {
+	if d == parser.DNull {
 		return pgType{}
-
-	case *driver.Datum_BoolVal:
+	}
+	switch d.(type) {
+	case parser.DBool:
 		return pgType{oid.T_bool, 1}
 
-	case *driver.Datum_IntVal:
+	case parser.DInt:
 		return pgType{oid.T_int8, 8}
 
-	case *driver.Datum_FloatVal:
+	case parser.DFloat:
 		return pgType{oid.T_float8, 8}
 
-	case *driver.Datum_BytesVal, *driver.Datum_StringVal:
+	case parser.DBytes, parser.DString:
 		return pgType{oid.T_text, -1}
 
-	case *driver.Datum_DateVal:
+	case parser.DDate:
 		return pgType{oid.T_date, 8}
 
-	case *driver.Datum_TimeVal:
+	case parser.DTimestamp:
 		return pgType{oid.T_timestamp, 8}
 
-	case *driver.Datum_IntervalVal:
+	case parser.DInterval:
 		return pgType{oid.T_interval, 8}
 
 	default:
-		panic(fmt.Sprintf("unsupported type %T", d.Payload))
+		panic(fmt.Sprintf("unsupported type %T", d))
 	}
 }
 
 const secondsInDay = 24 * 60 * 60
 
-func (b *writeBuffer) writeTextDatum(d driver.Datum) error {
+func (b *writeBuffer) writeTextDatum(d parser.Datum) error {
 	if log.V(2) {
-		log.Infof("pgwire writing TEXT datum of type: %T, %#v", d.Payload, d.Payload)
+		log.Infof("pgwire writing TEXT datum of type: %T, %#v", d, d)
 	}
-	switch v := d.Payload.(type) {
-	case nil:
+	if d == parser.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
 		b.putInt32(-1)
 		return nil
-	case *driver.Datum_BoolVal:
+	}
+	switch v := d.(type) {
+	case parser.DBool:
 		b.putInt32(1)
-		if v.BoolVal {
+		if v {
 			return b.WriteByte('t')
 		}
 		return b.WriteByte('f')
 
-	case *driver.Datum_IntVal:
+	case parser.DInt:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
 		// TODO(tamird): @petermattis sez this allocates. Investigate.
-		s := strconv.AppendInt(b.putbuf[4:4], v.IntVal, 10)
+		s := strconv.AppendInt(b.putbuf[4:4], int64(v), 10)
 		b.putInt32(int32(len(s)))
 		_, err := b.Write(s)
 		return err
 
-	case *driver.Datum_FloatVal:
+	case parser.DFloat:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := strconv.AppendFloat(b.putbuf[4:4], v.FloatVal, 'f', -1, 64)
+		s := strconv.AppendFloat(b.putbuf[4:4], float64(v), 'f', -1, 64)
 		b.putInt32(int32(len(s)))
 		_, err := b.Write(s)
 		return err
 
-	case *driver.Datum_BytesVal:
-		b.putInt32(int32(len(v.BytesVal)))
-		_, err := b.Write(v.BytesVal)
+	case parser.DBytes:
+		b.putInt32(int32(len(v)))
+		_, err := b.Write([]byte(v))
 		return err
 
-	case *driver.Datum_StringVal:
-		b.putInt32(int32(len(v.StringVal)))
-		_, err := b.WriteString(v.StringVal)
+	case parser.DString:
+		b.putInt32(int32(len(v)))
+		_, err := b.WriteString(string(v))
 		return err
 
-	case *driver.Datum_DateVal:
-		t := time.Unix(v.DateVal*secondsInDay, 0).UTC()
+	case parser.DDate:
+		t := time.Unix(int64(v)*secondsInDay, 0).UTC()
 		s := formatTs(t)
 		b.putInt32(int32(len(s)))
 		_, err := b.Write(s)
 		return err
 
-	case *driver.Datum_TimeVal:
-		t := v.TimeVal.GoTime().UTC()
+	case parser.DTimestamp:
+		t := v.UTC()
 		s := formatTs(t)
 		b.putInt32(int32(len(s)))
 		_, err := b.Write(s)
 		return err
 
-	case *driver.Datum_IntervalVal:
-		s := time.Duration(v.IntervalVal).String()
+	case parser.DInterval:
+		s := v.String()
 		b.putInt32(int32(len(s)))
 		_, err := b.WriteString(s)
 		return err
 
 	default:
-		return util.Errorf("unsupported type %T", d.Payload)
+		return util.Errorf("unsupported type %T", d)
 	}
 }
 
-func (b *writeBuffer) writeBinaryDatum(d driver.Datum) error {
+func (b *writeBuffer) writeBinaryDatum(d parser.Datum) error {
 	if log.V(2) {
-		log.Infof("pgwire writing BINARY datum of type: %T, %#v", d.Payload, d.Payload)
+		log.Infof("pgwire writing BINARY datum of type: %T, %#v", d, d)
 	}
-	switch v := d.Payload.(type) {
-	case nil:
+	if d == parser.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
 		b.putInt32(-1)
 		return nil
-
-	case *driver.Datum_IntVal:
+	}
+	switch v := d.(type) {
+	case parser.DInt:
 		b.putInt32(8)
-		b.putInt64(v.IntVal)
+		b.putInt64(int64(v))
 		return nil
 
 	default:
-		return util.Errorf("unsupported type %T", d.Payload)
+		return util.Errorf("unsupported type %T", d)
 	}
 }
 
@@ -237,8 +237,8 @@ var (
 
 // decodeOidDatum decodes bytes with specified Oid and format code into
 // a datum.
-func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error) {
-	var d driver.Datum
+func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error) {
+	var d parser.Datum
 	switch id {
 	case oid.T_bool:
 		switch code {
@@ -247,9 +247,9 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error)
 			if err != nil {
 				return d, err
 			}
-			d.Payload = &driver.Datum_BoolVal{BoolVal: v}
+			d = parser.DBool(v)
 		default:
-			return d, fmt.Errorf("unsupported bool format code: %s", code)
+			return d, fmt.Errorf("unsupported bool format code: %d", code)
 		}
 	case oid.T_int2:
 		switch code {
@@ -258,16 +258,16 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error)
 			if err != nil {
 				return d, err
 			}
-			d.Payload = &driver.Datum_IntVal{IntVal: i}
+			d = parser.DInt(i)
 		case formatBinary:
 			var i int16
 			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &i)
 			if err != nil {
 				return d, err
 			}
-			d.Payload = &driver.Datum_IntVal{IntVal: int64(i)}
+			d = parser.DInt(i)
 		default:
-			return d, fmt.Errorf("unsupported int2 format code: %s", code)
+			return d, fmt.Errorf("unsupported int2 format code: %d", code)
 		}
 	case oid.T_int4:
 		switch code {
@@ -276,16 +276,16 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error)
 			if err != nil {
 				return d, err
 			}
-			d.Payload = &driver.Datum_IntVal{IntVal: i}
+			d = parser.DInt(i)
 		case formatBinary:
 			var i int32
 			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &i)
 			if err != nil {
 				return d, err
 			}
-			d.Payload = &driver.Datum_IntVal{IntVal: int64(i)}
+			d = parser.DInt(i)
 		default:
-			return d, fmt.Errorf("unsupported int4 format code: %s", code)
+			return d, fmt.Errorf("unsupported int4 format code: %d", code)
 		}
 	case oid.T_int8:
 		switch code {
@@ -294,16 +294,16 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error)
 			if err != nil {
 				return d, err
 			}
-			d.Payload = &driver.Datum_IntVal{IntVal: i}
+			d = parser.DInt(i)
 		case formatBinary:
 			var i int64
 			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &i)
 			if err != nil {
 				return d, err
 			}
-			d.Payload = &driver.Datum_IntVal{IntVal: i}
+			d = parser.DInt(i)
 		default:
-			return d, fmt.Errorf("unsupported int8 format code: %s", code)
+			return d, fmt.Errorf("unsupported int8 format code: %d", code)
 		}
 	case oid.T_float4:
 		switch code {
@@ -312,16 +312,16 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error)
 			if err != nil {
 				return d, err
 			}
-			d.Payload = &driver.Datum_FloatVal{FloatVal: f}
+			d = parser.DFloat(f)
 		case formatBinary:
 			var f float32
 			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &f)
 			if err != nil {
 				return d, err
 			}
-			d.Payload = &driver.Datum_FloatVal{FloatVal: float64(f)}
+			d = parser.DFloat(f)
 		default:
-			return d, fmt.Errorf("unsupported float4 format code: %s", code)
+			return d, fmt.Errorf("unsupported float4 format code: %d", code)
 		}
 	case oid.T_float8:
 		switch code {
@@ -330,23 +330,23 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (driver.Datum, error)
 			if err != nil {
 				return d, err
 			}
-			d.Payload = &driver.Datum_FloatVal{FloatVal: f}
+			d = parser.DFloat(f)
 		case formatBinary:
 			var f float64
 			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &f)
 			if err != nil {
 				return d, err
 			}
-			d.Payload = &driver.Datum_FloatVal{FloatVal: f}
+			d = parser.DFloat(f)
 		default:
-			return d, fmt.Errorf("unsupported float8 format code: %s", code)
+			return d, fmt.Errorf("unsupported float8 format code: %d", code)
 		}
 	case oid.T_text:
 		switch code {
 		case formatText:
-			d.Payload = &driver.Datum_StringVal{StringVal: string(b)}
+			d = parser.DString(b)
 		default:
-			return d, fmt.Errorf("unsupported text format code: %s", code)
+			return d, fmt.Errorf("unsupported text format code: %d", code)
 		}
 	// TODO(mjibson): implement date/time types
 	default:

@@ -92,13 +92,13 @@ func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reply, code, err := s.Execute(args)
+	reply, code, err := s.Execute(requestFromProto(args))
 	if err != nil {
 		http.Error(w, err.Error(), code)
 	}
 
 	// Marshal the response.
-	body, contentType, err := util.MarshalResponse(r, &reply, allowedEncodings)
+	body, contentType, err := util.MarshalResponse(r, protoFromResponse(reply), allowedEncodings)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -116,6 +116,6 @@ func (s Server) RegisterRPC(rpcServer *rpc.Server) error {
 
 func (s Server) executeCmd(argsI proto.Message) (proto.Message, error) {
 	args := argsI.(*driver.Request)
-	reply, _, err := s.Execute(*args)
-	return &reply, err
+	reply, _, err := s.Execute(requestFromProto(*args))
+	return protoFromResponse(reply), err
 }

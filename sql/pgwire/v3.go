@@ -28,7 +28,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
-	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -81,7 +80,7 @@ const (
 type preparedStatement struct {
 	query       string
 	inTypes     []oid.Oid
-	columns     []*driver.Response_Result_Rows_Column
+	columns     []sql.Column
 	portalNames map[string]struct{}
 }
 
@@ -89,7 +88,7 @@ type preparedStatement struct {
 type preparedPortal struct {
 	stmt       preparedStatement
 	stmtName   string
-	params     []driver.Datum
+	params     []parser.Datum
 	outFormats []formatCode
 }
 
@@ -469,7 +468,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	if int(numValues) != numParams {
 		return c.sendError(fmt.Sprintf("expected %d parameters, got %d", numParams, numValues))
 	}
-	params := make([]driver.Datum, numParams)
+	params := make([]parser.Datum, numParams)
 	for i, t := range stmt.inTypes {
 		plen, err := buf.getInt32()
 		if err != nil {
@@ -542,7 +541,7 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 	return c.executeStatements(portal.stmt.query, portal.params, portal.outFormats, false)
 }
 
-func (c *v3Conn) executeStatements(stmts string, params []driver.Datum, formatCodes []formatCode, sendDescription bool) error {
+func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCodes []formatCode, sendDescription bool) error {
 	c.session.Database = c.opts.database
 
 	// TODO(dt): this is a clumsy check better left to the actual parser. #3852
@@ -607,20 +606,20 @@ func (c *v3Conn) sendError(errToSend string) error {
 	return c.writeBuf.finishMsg(c.wr)
 }
 
-func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, sendDescription bool) error {
+func (c *v3Conn) sendResponse(resp sql.Response, formatCodes []formatCode, sendDescription bool) error {
 	if len(resp.Results) == 0 {
 		return c.sendCommandComplete(nil)
 	}
 	for _, result := range resp.Results {
-		if result.Error != nil {
-			if err := c.sendError(*result.Error); err != nil {
+		if result.Err != nil {
+			if err := c.sendError(result.Err.Error()); err != nil {
 				return err
 			}
 			continue
 		}
 
-		switch result := result.GetUnion().(type) {
-		case *driver.Response_Result_RowsAffected:
+		switch result.Type {
+		case parser.RowsAffected:
 			// Send CommandComplete.
 			// TODO(bdarnell): tags for other types of commands.
 			tag := append(c.tagBuf[:0], "SELECT "...)
@@ -629,17 +628,15 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, se
 				return err
 			}
 
-		case *driver.Response_Result_Rows_:
-			resultRows := result.Rows
-
+		case parser.Rows:
 			if sendDescription {
-				if err := c.sendRowDescription(resultRows.Columns, formatCodes); err != nil {
+				if err := c.sendRowDescription(result.Columns, formatCodes); err != nil {
 					return err
 				}
 			}
 
 			// Send DataRows.
-			for _, row := range resultRows.Rows {
+			for _, row := range result.Rows {
 				c.writeBuf.initMsg(serverMsgDataRow)
 				c.writeBuf.putInt16(int16(len(row.Values)))
 				for i, col := range row.Values {
@@ -668,7 +665,7 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, se
 			// Send CommandComplete.
 			// TODO(bdarnell): tags for other types of commands.
 			tag := append(c.tagBuf[:0], "SELECT "...)
-			tag = appendUint(tag, uint(len(resultRows.Rows)))
+			tag = appendUint(tag, uint(len(result.Rows)))
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
@@ -687,12 +684,12 @@ func (c *v3Conn) sendResponse(resp driver.Response, formatCodes []formatCode, se
 	return nil
 }
 
-func (c *v3Conn) sendRowDescription(columns []*driver.Response_Result_Rows_Column, formatCodes []formatCode) error {
+func (c *v3Conn) sendRowDescription(columns []sql.Column, formatCodes []formatCode) error {
 	c.writeBuf.initMsg(serverMsgRowDescription)
 	c.writeBuf.putInt16(int16(len(columns)))
 	for i, column := range columns {
 		if log.V(2) {
-			log.Infof("pgwire writing column %s of type: %T", column.Name, column.Typ.Payload)
+			log.Infof("pgwire writing column %s of type: %T", column.Name, column.Typ)
 		}
 		if err := c.writeBuf.writeString(column.Name); err != nil {
 			return err

@@ -33,7 +33,7 @@ func (p *planner) Values(n parser.Values) (planNode, *roachpb.Error) {
 
 	for num, tuple := range n {
 		if num == 0 {
-			v.columns = make([]resultColumn, 0, len(tuple))
+			v.columns = make([]Column, 0, len(tuple))
 		} else if a, e := len(tuple), len(v.columns); a != e {
 			return nil, roachpb.NewUErrorf("VALUES lists must all be the same length, %d for %d", a, e)
 		}
@@ -54,11 +54,11 @@ func (p *planner) Values(n parser.Values) (planNode, *roachpb.Error) {
 				return nil, roachpb.NewError(err)
 			}
 			if num == 0 {
-				v.columns = append(v.columns, resultColumn{name: "column" + strconv.Itoa(i+1), typ: typ})
-			} else if v.columns[i].typ == parser.DNull {
-				v.columns[i].typ = typ
-			} else if typ != parser.DNull && typ != v.columns[i].typ {
-				return nil, roachpb.NewUErrorf("VALUES list type mismatch, %s for %s", typ.Type(), v.columns[i].typ.Type())
+				v.columns = append(v.columns, Column{Name: "column" + strconv.Itoa(i+1), Typ: typ})
+			} else if v.columns[i].Typ == parser.DNull {
+				v.columns[i].Typ = typ
+			} else if typ != parser.DNull && typ != v.columns[i].Typ {
+				return nil, roachpb.NewUErrorf("VALUES list type mismatch, %s for %s", typ.Type(), v.columns[i].Typ.Type())
 			}
 		}
 		data, err := tuple.Eval(p.evalCtx)
@@ -76,13 +76,13 @@ func (p *planner) Values(n parser.Values) (planNode, *roachpb.Error) {
 }
 
 type valuesNode struct {
-	columns  []resultColumn
+	columns  []Column
 	ordering columnOrdering
 	rows     []parser.DTuple
 	nextRow  int // The index of the next row.
 }
 
-func (n *valuesNode) Columns() []resultColumn {
+func (n *valuesNode) Columns() []Column {
 	return n.columns
 }
 

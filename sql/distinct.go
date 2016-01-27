@@ -142,7 +142,7 @@ func (n *distinctNode) ExplainPlan() (string, string, []planNode) {
 		strs := make([]string, 0, len(columns))
 		for i, column := range columns {
 			if n.columnsInOrder[i] {
-				strs = append(strs, column.name)
+				strs = append(strs, column.Name)
 			}
 		}
 		description = strings.Join(strs, ",")
