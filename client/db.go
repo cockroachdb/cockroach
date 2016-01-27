@@ -154,7 +154,7 @@ type Result struct {
 
 func (r Result) String() string {
 	if r.PErr != nil {
-		return r.PErr.GoError().Error()
+		return r.PErr.String()
 	}
 	var buf bytes.Buffer
 	for i, row := range r.Rows {

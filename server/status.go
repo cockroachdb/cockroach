@@ -516,7 +516,7 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 	rows, pErr := s.db.Scan(startKey, endKey, 0)
 	if pErr != nil {
 		log.Error(pErr)
-		http.Error(w, pErr.GoError().Error(), http.StatusInternalServerError)
+		http.Error(w, pErr.String(), http.StatusInternalServerError)
 		return
 	}
 
@@ -545,7 +545,7 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 	nodeStatus := &status.NodeStatus{}
 	if pErr := s.db.GetProto(key, nodeStatus); pErr != nil {
 		log.Error(pErr)
-		http.Error(w, pErr.GoError().Error(), http.StatusInternalServerError)
+		http.Error(w, pErr.String(), http.StatusInternalServerError)
 		return
 	}
 
@@ -560,7 +560,7 @@ func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request
 	rows, pErr := s.db.Scan(startKey, endKey, 0)
 	if pErr != nil {
 		log.Error(pErr)
-		http.Error(w, pErr.GoError().Error(), http.StatusInternalServerError)
+		http.Error(w, pErr.String(), http.StatusInternalServerError)
 		return
 	}
 
@@ -592,7 +592,7 @@ func (s *statusServer) handleStoreStatus(w http.ResponseWriter, r *http.Request,
 	storeStatus := &storage.StoreStatus{}
 	if pErr := s.db.GetProto(key, storeStatus); pErr != nil {
 		log.Error(pErr)
-		http.Error(w, pErr.GoError().Error(), http.StatusInternalServerError)
+		http.Error(w, pErr.String(), http.StatusInternalServerError)
 		return
 	}
 	respondAsJSON(w, r, storeStatus)

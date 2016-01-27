@@ -488,7 +488,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
 	// Fatal error on descriptor lookup, propagated to reply.
-	if _, pErr := client.SendWrapped(ds, nil, put); pErr.GoError().Error() != "fatal boom" {
+	if _, pErr := client.SendWrapped(ds, nil, put); pErr.String() != "fatal boom" {
 		t.Errorf("unexpected error: %s", pErr)
 	}
 	// Retryable error on descriptor lookup, second attempt successful.
