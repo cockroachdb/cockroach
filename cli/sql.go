@@ -65,7 +65,7 @@ func runTerm(cmd *cobra.Command, args []string) {
 	fullPrompt := dbURL
 	if parsedURL, err := url.Parse(dbURL); err == nil {
 		// If parsing fails, we keep the entire URL. The Open call succeeded, and that
-		// the important part.
+		// is the important part.
 		fullPrompt = fmt.Sprintf("%s@%s", parsedURL.User, parsedURL.Host)
 	}
 

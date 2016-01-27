@@ -23,13 +23,14 @@ import (
 	"regexp"
 
 	// Import postgres driver.
+
 	_ "github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/olekukonko/tablewriter"
 )
 
-var insertPattern = regexp.MustCompile(`(?i)^\s*(SELECT|SHOW)`)
+var selectPattern = regexp.MustCompile(`(?i)^\s*(SELECT|SHOW)`)
 
 func makeSQLClient() (*sql.DB, string) {
 	// Use the sql administrator by default (root user).
@@ -71,7 +72,7 @@ func runQuery(db *sql.DB, query string, parameters ...interface{}) (
 // found in the map are run through the corresponding callback.
 func runQueryWithFormat(db *sql.DB, format fmtMap, query string, parameters ...interface{}) (
 	[]string, [][]string, error) {
-	if insertPattern.MatchString(query) {
+	if selectPattern.MatchString(query) {
 		rows, err := db.Query(query, parameters...)
 		if err != nil {
 			return nil, nil, fmt.Errorf("query error: %s", err)
