@@ -333,5 +333,5 @@ func (br *BatchResponse) SetGoError(err error) {
 		return
 	}
 	br.Error = &Error{}
-	br.Error.SetGoError(err)
+	br.Error.setGoError(err)
 }

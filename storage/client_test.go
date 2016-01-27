@@ -328,8 +328,7 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 			sender := m.senders[nodeIndex]
 			br, pErr = sender.Send(context.Background(), ba)
 		}) {
-			pErr = &roachpb.Error{}
-			pErr.SetGoError(rpc.NewSendError("store is stopped", true))
+			pErr = roachpb.NewError(rpc.NewSendError("store is stopped", true))
 			m.expireLeaderLeases()
 			continue
 		}
