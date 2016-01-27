@@ -468,7 +468,7 @@ var builtins = map[string][]builtin{
 		},
 	},
 
-	"experimental_unique_int": {
+	"unique_rowid": {
 		builtin{
 			types:      argTypes{},
 			returnType: typeInt,
@@ -1381,6 +1381,9 @@ func generateUniqueInt(nodeID roachpb.NodeID) DInt {
 	// TODO(pmattis): Do we have to worry about persisting the milliseconds value
 	// periodically to avoid the clock ever going backwards (e.g. due to NTP
 	// adjustment)?
+	//
+	// TODO(mjibson): consider reversing the bits so the generated values are
+	// not k-sorted.
 	const precision = uint64(10 * time.Microsecond)
 	const nodeIDBits = 15
 

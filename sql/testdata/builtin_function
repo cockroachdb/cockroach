@@ -729,7 +729,7 @@ SELECT experimental_unique_bytes() < experimental_unique_bytes(), length(experim
 true 9
 
 query B
-SELECT experimental_unique_int() < experimental_unique_int()
+SELECT unique_rowid() < unique_rowid()
 ----
 true
 
