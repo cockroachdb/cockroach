@@ -230,8 +230,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TransactionRetryError, _internal_metadata_),
       -1);
   TransactionStatusError_descriptor_ = file->message_type(8);
-  static const int TransactionStatusError_offsets_[2] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TransactionStatusError, txn_),
+  static const int TransactionStatusError_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TransactionStatusError, msg_),
   };
   TransactionStatusError_reflection_ =
@@ -644,75 +643,74 @@ void protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto() {
     "or\022+\n\003txn\030\001 \001(\0132\036.cockroach.roachpb.Tran"
     "saction\0228\n\npushee_txn\030\002 \001(\0132\036.cockroach."
     "roachpb.TransactionB\004\310\336\037\000\"\027\n\025Transaction"
-    "RetryError\"^\n\026TransactionStatusError\0221\n\003"
-    "txn\030\001 \001(\0132\036.cockroach.roachpb.Transactio"
-    "nB\004\310\336\037\000\022\021\n\003msg\030\002 \001(\tB\004\310\336\037\000\"\\\n\020WriteInten"
-    "tError\0220\n\007intents\030\001 \003(\0132\031.cockroach.roac"
-    "hpb.IntentB\004\310\336\037\000\022\026\n\010resolved\030\002 \001(\010B\004\310\336\037\000"
-    "\"\211\001\n\020WriteTooOldError\0225\n\ttimestamp\030\001 \001(\013"
-    "2\034.cockroach.roachpb.TimestampB\004\310\336\037\000\022>\n\022"
-    "existing_timestamp\030\002 \001(\0132\034.cockroach.roa"
-    "chpb.TimestampB\004\310\336\037\000\"\024\n\022OpRequiresTxnErr"
-    "or\"F\n\024ConditionFailedError\022.\n\014actual_val"
-    "ue\030\001 \001(\0132\030.cockroach.roachpb.Value\"\220\001\n\022L"
-    "easeRejectedError\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000"
-    "\0221\n\trequested\030\002 \001(\0132\030.cockroach.roachpb."
-    "LeaseB\004\310\336\037\000\0220\n\010existing\030\003 \001(\0132\030.cockroac"
-    "h.roachpb.LeaseB\004\310\336\037\000\";\n\tSendError\022\025\n\007me"
-    "ssage\030\001 \001(\tB\004\310\336\037\000\022\027\n\tretryable\030\002 \001(\010B\004\310\336"
-    "\037\000\"\027\n\025RaftGroupDeletedError\"J\n\026ReplicaCo"
-    "rruptionError\022\027\n\terror_msg\030\001 \001(\tB\004\310\336\037\000\022\027"
-    "\n\tprocessed\030\002 \001(\010B\004\310\336\037\000\"\032\n\030LeaseVersionC"
-    "hangedError\"\034\n\032DidntUpdateDescriptorErro"
-    "r\"\034\n\032SqlTransactionAbortedError\" \n\036Exist"
-    "ingSchemaChangeLeaseError\"\303\013\n\013ErrorDetai"
-    "l\0225\n\nnot_leader\030\001 \001(\0132!.cockroach.roachp"
-    "b.NotLeaderError\022>\n\017range_not_found\030\002 \001("
-    "\0132%.cockroach.roachpb.RangeNotFoundError"
-    "\022D\n\022range_key_mismatch\030\003 \001(\0132(.cockroach"
-    ".roachpb.RangeKeyMismatchError\022_\n read_w"
-    "ithin_uncertainty_interval\030\004 \001(\01325.cockr"
-    "oach.roachpb.ReadWithinUncertaintyInterv"
-    "alError\022G\n\023transaction_aborted\030\005 \001(\0132*.c"
-    "ockroach.roachpb.TransactionAbortedError"
-    "\022A\n\020transaction_push\030\006 \001(\0132\'.cockroach.r"
-    "oachpb.TransactionPushError\022C\n\021transacti"
-    "on_retry\030\007 \001(\0132(.cockroach.roachpb.Trans"
-    "actionRetryError\022E\n\022transaction_status\030\010"
-    " \001(\0132).cockroach.roachpb.TransactionStat"
-    "usError\0229\n\014write_intent\030\t \001(\0132#.cockroac"
-    "h.roachpb.WriteIntentError\022:\n\rwrite_too_"
-    "old\030\n \001(\0132#.cockroach.roachpb.WriteTooOl"
-    "dError\022>\n\017op_requires_txn\030\013 \001(\0132%.cockro"
-    "ach.roachpb.OpRequiresTxnError\022A\n\020condit"
-    "ion_failed\030\014 \001(\0132\'.cockroach.roachpb.Con"
-    "ditionFailedError\022=\n\016lease_rejected\030\r \001("
-    "\0132%.cockroach.roachpb.LeaseRejectedError"
-    "\022A\n\020node_unavailable\030\016 \001(\0132\'.cockroach.r"
-    "oachpb.NodeUnavailableError\022*\n\004send\030\017 \001("
-    "\0132\034.cockroach.roachpb.SendError\022D\n\022raft_"
-    "group_deleted\030\020 \001(\0132(.cockroach.roachpb."
-    "RaftGroupDeletedError\022E\n\022replica_corrupt"
-    "ion\030\021 \001(\0132).cockroach.roachpb.ReplicaCor"
-    "ruptionError\022J\n\025lease_version_changed\030\022 "
-    "\001(\0132+.cockroach.roachpb.LeaseVersionChan"
-    "gedError\022N\n\027didnt_update_descriptor\030\023 \001("
-    "\0132-.cockroach.roachpb.DidntUpdateDescrip"
-    "torError\022N\n\027sql_tranasction_aborted\030\024 \001("
-    "\0132-.cockroach.roachpb.SqlTransactionAbor"
-    "tedError\022W\n\034existing_scheme_change_lease"
-    "\030\025 \001(\01321.cockroach.roachpb.ExistingSchem"
-    "aChangeLeaseError:\004\310\240\037\001\"\"\n\013ErrPosition\022\023"
-    "\n\005index\030\001 \001(\005B\004\310\336\037\000\"\245\002\n\005Error\022\025\n\007message"
-    "\030\001 \001(\tB\004\310\336\037\000\022\027\n\tretryable\030\002 \001(\010B\004\310\336\037\000\022H\n"
-    "\023transaction_restart\030\003 \001(\0162%.cockroach.r"
-    "oachpb.TransactionRestartB\004\310\336\037\000\022=\n\003txn\030\004"
-    " \001(\0132\036.cockroach.roachpb.TransactionB\020\342\336"
-    "\037\014UnexposedTxn\022.\n\006detail\030\005 \001(\0132\036.cockroa"
-    "ch.roachpb.ErrorDetail\022-\n\005index\030\006 \001(\0132\036."
-    "cockroach.roachpb.ErrPosition:\004\230\240\037\000*;\n\022T"
-    "ransactionRestart\022\t\n\005ABORT\020\000\022\013\n\007BACKOFF\020"
-    "\001\022\r\n\tIMMEDIATE\020\002B\tZ\007roachpbX\002", 3669);
+    "RetryError\"+\n\026TransactionStatusError\022\021\n\003"
+    "msg\030\001 \001(\tB\004\310\336\037\000\"\\\n\020WriteIntentError\0220\n\007i"
+    "ntents\030\001 \003(\0132\031.cockroach.roachpb.IntentB"
+    "\004\310\336\037\000\022\026\n\010resolved\030\002 \001(\010B\004\310\336\037\000\"\211\001\n\020WriteT"
+    "ooOldError\0225\n\ttimestamp\030\001 \001(\0132\034.cockroac"
+    "h.roachpb.TimestampB\004\310\336\037\000\022>\n\022existing_ti"
+    "mestamp\030\002 \001(\0132\034.cockroach.roachpb.Timest"
+    "ampB\004\310\336\037\000\"\024\n\022OpRequiresTxnError\"F\n\024Condi"
+    "tionFailedError\022.\n\014actual_value\030\001 \001(\0132\030."
+    "cockroach.roachpb.Value\"\220\001\n\022LeaseRejecte"
+    "dError\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\0221\n\trequest"
+    "ed\030\002 \001(\0132\030.cockroach.roachpb.LeaseB\004\310\336\037\000"
+    "\0220\n\010existing\030\003 \001(\0132\030.cockroach.roachpb.L"
+    "easeB\004\310\336\037\000\";\n\tSendError\022\025\n\007message\030\001 \001(\t"
+    "B\004\310\336\037\000\022\027\n\tretryable\030\002 \001(\010B\004\310\336\037\000\"\027\n\025RaftG"
+    "roupDeletedError\"J\n\026ReplicaCorruptionErr"
+    "or\022\027\n\terror_msg\030\001 \001(\tB\004\310\336\037\000\022\027\n\tprocessed"
+    "\030\002 \001(\010B\004\310\336\037\000\"\032\n\030LeaseVersionChangedError"
+    "\"\034\n\032DidntUpdateDescriptorError\"\034\n\032SqlTra"
+    "nsactionAbortedError\" \n\036ExistingSchemaCh"
+    "angeLeaseError\"\303\013\n\013ErrorDetail\0225\n\nnot_le"
+    "ader\030\001 \001(\0132!.cockroach.roachpb.NotLeader"
+    "Error\022>\n\017range_not_found\030\002 \001(\0132%.cockroa"
+    "ch.roachpb.RangeNotFoundError\022D\n\022range_k"
+    "ey_mismatch\030\003 \001(\0132(.cockroach.roachpb.Ra"
+    "ngeKeyMismatchError\022_\n read_within_uncer"
+    "tainty_interval\030\004 \001(\01325.cockroach.roachp"
+    "b.ReadWithinUncertaintyIntervalError\022G\n\023"
+    "transaction_aborted\030\005 \001(\0132*.cockroach.ro"
+    "achpb.TransactionAbortedError\022A\n\020transac"
+    "tion_push\030\006 \001(\0132\'.cockroach.roachpb.Tran"
+    "sactionPushError\022C\n\021transaction_retry\030\007 "
+    "\001(\0132(.cockroach.roachpb.TransactionRetry"
+    "Error\022E\n\022transaction_status\030\010 \001(\0132).cock"
+    "roach.roachpb.TransactionStatusError\0229\n\014"
+    "write_intent\030\t \001(\0132#.cockroach.roachpb.W"
+    "riteIntentError\022:\n\rwrite_too_old\030\n \001(\0132#"
+    ".cockroach.roachpb.WriteTooOldError\022>\n\017o"
+    "p_requires_txn\030\013 \001(\0132%.cockroach.roachpb"
+    ".OpRequiresTxnError\022A\n\020condition_failed\030"
+    "\014 \001(\0132\'.cockroach.roachpb.ConditionFaile"
+    "dError\022=\n\016lease_rejected\030\r \001(\0132%.cockroa"
+    "ch.roachpb.LeaseRejectedError\022A\n\020node_un"
+    "available\030\016 \001(\0132\'.cockroach.roachpb.Node"
+    "UnavailableError\022*\n\004send\030\017 \001(\0132\034.cockroa"
+    "ch.roachpb.SendError\022D\n\022raft_group_delet"
+    "ed\030\020 \001(\0132(.cockroach.roachpb.RaftGroupDe"
+    "letedError\022E\n\022replica_corruption\030\021 \001(\0132)"
+    ".cockroach.roachpb.ReplicaCorruptionErro"
+    "r\022J\n\025lease_version_changed\030\022 \001(\0132+.cockr"
+    "oach.roachpb.LeaseVersionChangedError\022N\n"
+    "\027didnt_update_descriptor\030\023 \001(\0132-.cockroa"
+    "ch.roachpb.DidntUpdateDescriptorError\022N\n"
+    "\027sql_tranasction_aborted\030\024 \001(\0132-.cockroa"
+    "ch.roachpb.SqlTransactionAbortedError\022W\n"
+    "\034existing_scheme_change_lease\030\025 \001(\01321.co"
+    "ckroach.roachpb.ExistingSchemaChangeLeas"
+    "eError:\004\310\240\037\001\"\"\n\013ErrPosition\022\023\n\005index\030\001 \001"
+    "(\005B\004\310\336\037\000\"\245\002\n\005Error\022\025\n\007message\030\001 \001(\tB\004\310\336\037"
+    "\000\022\027\n\tretryable\030\002 \001(\010B\004\310\336\037\000\022H\n\023transactio"
+    "n_restart\030\003 \001(\0162%.cockroach.roachpb.Tran"
+    "sactionRestartB\004\310\336\037\000\022=\n\003txn\030\004 \001(\0132\036.cock"
+    "roach.roachpb.TransactionB\020\342\336\037\014Unexposed"
+    "Txn\022.\n\006detail\030\005 \001(\0132\036.cockroach.roachpb."
+    "ErrorDetail\022-\n\005index\030\006 \001(\0132\036.cockroach.r"
+    "oachpb.ErrPosition:\004\230\240\037\000*;\n\022TransactionR"
+    "estart\022\t\n\005ABORT\020\000\022\013\n\007BACKOFF\020\001\022\r\n\tIMMEDI"
+    "ATE\020\002B\tZ\007roachpbX\002", 3618);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/errors.proto", &protobuf_RegisterTypes);
   NotLeaderError::default_instance_ = new NotLeaderError();
@@ -3357,7 +3355,6 @@ void TransactionRetryError::InternalSwap(TransactionRetryError* other) {
 // ===================================================================
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
-const int TransactionStatusError::kTxnFieldNumber;
 const int TransactionStatusError::kMsgFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -3368,7 +3365,6 @@ TransactionStatusError::TransactionStatusError()
 }
 
 void TransactionStatusError::InitAsDefaultInstance() {
-  txn_ = const_cast< ::cockroach::roachpb::Transaction*>(&::cockroach::roachpb::Transaction::default_instance());
 }
 
 TransactionStatusError::TransactionStatusError(const TransactionStatusError& from)
@@ -3382,7 +3378,6 @@ TransactionStatusError::TransactionStatusError(const TransactionStatusError& fro
 void TransactionStatusError::SharedCtor() {
   ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
-  txn_ = NULL;
   msg_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
@@ -3395,7 +3390,6 @@ TransactionStatusError::~TransactionStatusError() {
 void TransactionStatusError::SharedDtor() {
   msg_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != default_instance_) {
-    delete txn_;
   }
 }
 
@@ -3425,13 +3419,8 @@ TransactionStatusError* TransactionStatusError::New(::google::protobuf::Arena* a
 }
 
 void TransactionStatusError::Clear() {
-  if (_has_bits_[0 / 32] & 3u) {
-    if (has_txn()) {
-      if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
-    }
-    if (has_msg()) {
-      msg_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-    }
+  if (has_msg()) {
+    msg_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -3449,22 +3438,9 @@ bool TransactionStatusError::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.roachpb.Transaction txn = 1;
+      // optional string msg = 1;
       case 1: {
         if (tag == 10) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_txn()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(18)) goto parse_msg;
-        break;
-      }
-
-      // optional string msg = 2;
-      case 2: {
-        if (tag == 18) {
-         parse_msg:
           DO_(::google::protobuf::internal::WireFormatLite::ReadString(
                 input, this->mutable_msg()));
           ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
@@ -3503,20 +3479,14 @@ failure:
 void TransactionStatusError::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.TransactionStatusError)
-  // optional .cockroach.roachpb.Transaction txn = 1;
-  if (has_txn()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      1, *this->txn_, output);
-  }
-
-  // optional string msg = 2;
+  // optional string msg = 1;
   if (has_msg()) {
     ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
       this->msg().data(), this->msg().length(),
       ::google::protobuf::internal::WireFormat::SERIALIZE,
       "cockroach.roachpb.TransactionStatusError.msg");
     ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
-      2, this->msg(), output);
+      1, this->msg(), output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -3529,14 +3499,7 @@ void TransactionStatusError::SerializeWithCachedSizes(
 ::google::protobuf::uint8* TransactionStatusError::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.TransactionStatusError)
-  // optional .cockroach.roachpb.Transaction txn = 1;
-  if (has_txn()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        1, *this->txn_, target);
-  }
-
-  // optional string msg = 2;
+  // optional string msg = 1;
   if (has_msg()) {
     ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
       this->msg().data(), this->msg().length(),
@@ -3544,7 +3507,7 @@ void TransactionStatusError::SerializeWithCachedSizes(
       "cockroach.roachpb.TransactionStatusError.msg");
     target =
       ::google::protobuf::internal::WireFormatLite::WriteStringToArray(
-        2, this->msg(), target);
+        1, this->msg(), target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -3558,22 +3521,13 @@ void TransactionStatusError::SerializeWithCachedSizes(
 int TransactionStatusError::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 3u) {
-    // optional .cockroach.roachpb.Transaction txn = 1;
-    if (has_txn()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *this->txn_);
-    }
-
-    // optional string msg = 2;
-    if (has_msg()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::StringSize(
-          this->msg());
-    }
-
+  // optional string msg = 1;
+  if (has_msg()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::StringSize(
+        this->msg());
   }
+
   if (_internal_metadata_.have_unknown_fields()) {
     total_size +=
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
@@ -3600,9 +3554,6 @@ void TransactionStatusError::MergeFrom(const ::google::protobuf::Message& from) 
 void TransactionStatusError::MergeFrom(const TransactionStatusError& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_txn()) {
-      mutable_txn()->::cockroach::roachpb::Transaction::MergeFrom(from.txn());
-    }
     if (from.has_msg()) {
       set_has_msg();
       msg_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.msg_);
@@ -3635,7 +3586,6 @@ void TransactionStatusError::Swap(TransactionStatusError* other) {
   InternalSwap(other);
 }
 void TransactionStatusError::InternalSwap(TransactionStatusError* other) {
-  std::swap(txn_, other->txn_);
   msg_.Swap(&other->msg_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
@@ -3653,58 +3603,15 @@ void TransactionStatusError::InternalSwap(TransactionStatusError* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // TransactionStatusError
 
-// optional .cockroach.roachpb.Transaction txn = 1;
-bool TransactionStatusError::has_txn() const {
+// optional string msg = 1;
+bool TransactionStatusError::has_msg() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-void TransactionStatusError::set_has_txn() {
+void TransactionStatusError::set_has_msg() {
   _has_bits_[0] |= 0x00000001u;
 }
-void TransactionStatusError::clear_has_txn() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-void TransactionStatusError::clear_txn() {
-  if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
-  clear_has_txn();
-}
-const ::cockroach::roachpb::Transaction& TransactionStatusError::txn() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionStatusError.txn)
-  return txn_ != NULL ? *txn_ : *default_instance_->txn_;
-}
-::cockroach::roachpb::Transaction* TransactionStatusError::mutable_txn() {
-  set_has_txn();
-  if (txn_ == NULL) {
-    txn_ = new ::cockroach::roachpb::Transaction;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TransactionStatusError.txn)
-  return txn_;
-}
-::cockroach::roachpb::Transaction* TransactionStatusError::release_txn() {
-  clear_has_txn();
-  ::cockroach::roachpb::Transaction* temp = txn_;
-  txn_ = NULL;
-  return temp;
-}
-void TransactionStatusError::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
-  delete txn_;
-  txn_ = txn;
-  if (txn) {
-    set_has_txn();
-  } else {
-    clear_has_txn();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.TransactionStatusError.txn)
-}
-
-// optional string msg = 2;
-bool TransactionStatusError::has_msg() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-void TransactionStatusError::set_has_msg() {
-  _has_bits_[0] |= 0x00000002u;
-}
 void TransactionStatusError::clear_has_msg() {
-  _has_bits_[0] &= ~0x00000002u;
+  _has_bits_[0] &= ~0x00000001u;
 }
 void TransactionStatusError::clear_msg() {
   msg_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());

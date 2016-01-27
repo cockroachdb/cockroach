@@ -340,15 +340,22 @@ func (*TransactionRetryError) canRestartTransaction() TransactionRestart {
 }
 
 // NewTransactionStatusError initializes a new TransactionStatusError from
-// the given Transaction (which is copied) and a message.
-func NewTransactionStatusError(txn Transaction, msg string) *TransactionStatusError {
-	return &TransactionStatusError{Txn: *txn.Clone(), Msg: msg}
+// the given message.
+func NewTransactionStatusError(msg string) *TransactionStatusError {
+	return &TransactionStatusError{Msg: msg}
 }
 
 // Error formats error.
 func (e *TransactionStatusError) Error() string {
-	return fmt.Sprintf("txn %s: %s", e.Txn, e.Msg)
+	return e.Msg
 }
+
+// message returns an error message.
+func (e *TransactionStatusError) message(pErr *Error) string {
+	return fmt.Sprintf("txn %s: %s", pErr.UnexposedTxn, e.Msg)
+}
+
+var _ structuredError = &TransactionStatusError{}
 
 // Error formats error.
 func (e *WriteIntentError) Error() string {

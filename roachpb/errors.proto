@@ -95,8 +95,7 @@ message TransactionRetryError {
 // regression in transaction epoch or timestamp, both of which may
 // only monotonically increase.
 message TransactionStatusError {
-  optional Transaction txn = 1 [(gogoproto.nullable) = false];
-  optional string msg = 2 [(gogoproto.nullable) = false];
+  optional string msg = 1 [(gogoproto.nullable) = false];
 }
 
 // A WriteIntentError indicates that one or more write intent

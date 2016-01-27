@@ -302,7 +302,7 @@ func (r *Replica) BeginTransaction(batch engine.Engine, ms *engine.MVCCStats, h 
 			// this run should have an upgraded epoch. This is a pass
 			// through to set the new transaction record.
 		} else {
-			return reply, roachpb.NewTransactionStatusError(txn, "non-aborted transaction exists already")
+			return reply, roachpb.NewTransactionStatusError("non-aborted transaction exists already")
 		}
 	}
 
@@ -354,7 +354,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	// to args.Commit), and also that the Timestamp and Epoch have
 	// not suffered regression.
 	if reply.Txn.Status == roachpb.COMMITTED {
-		return reply, nil, roachpb.NewTransactionStatusError(*reply.Txn, "already committed")
+		return reply, nil, roachpb.NewTransactionStatusError("already committed")
 	} else if reply.Txn.Status == roachpb.ABORTED {
 		// If the transaction was previously aborted by a concurrent
 		// writer's push, any intents written are still open. It's only now
@@ -367,14 +367,14 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		// importantly, intents) dangling; we can't currently write on
 		// error. Would panic, but that makes TestEndTransactionWithErrors
 		// awkward.
-		return reply, nil, roachpb.NewTransactionStatusError(*reply.Txn, fmt.Sprintf("epoch regression: %d", h.Txn.Epoch))
+		return reply, nil, roachpb.NewTransactionStatusError(fmt.Sprintf("epoch regression: %d", h.Txn.Epoch))
 	} else if h.Txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(h.Txn.OrigTimestamp) {
 		// The transaction record can only ever be pushed forward, so it's an
 		// error if somehow the transaction record has an earlier timestamp
 		// than the original transaction timestamp.
 
 		// TODO(tschottdorf): see above comment on epoch regression.
-		return reply, nil, roachpb.NewTransactionStatusError(*reply.Txn, fmt.Sprintf("timestamp regression: %s", h.Txn.OrigTimestamp))
+		return reply, nil, roachpb.NewTransactionStatusError(fmt.Sprintf("timestamp regression: %s", h.Txn.OrigTimestamp))
 	}
 
 	// Take max of requested epoch and existing epoch. The requester
