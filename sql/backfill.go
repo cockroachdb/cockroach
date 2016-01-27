@@ -31,7 +31,7 @@ func makeColIDtoRowIndex(row planNode, desc *TableDescriptor) (map[ColumnID]int,
 	columns := row.Columns()
 	colIDtoRowIndex := make(map[ColumnID]int, len(columns))
 	for i, column := range columns {
-		col, pErr := desc.FindActiveColumnByName(column.name)
+		col, pErr := desc.FindActiveColumnByName(column.Name)
 		if pErr != nil {
 			return nil, pErr
 		}

@@ -62,6 +62,60 @@ var plannerPool = sync.Pool{
 	},
 }
 
+// Request is an SQL request to cockroach. A transaction can consist of multiple
+// requests.
+type Request struct {
+	// User is the originating user.
+	User string
+	// Session settings that were returned in the last response that
+	// contained them, being reflected back to the server.
+	Session []byte
+	// SQL statement(s) to be serially executed by the server. Multiple
+	// statements are passed as a single string separated by semicolons.
+	SQL string
+	// Parameters referred to in the above SQL statement(s) using "?".
+	Params []parser.Datum
+}
+
+// Response is the reply to an SQL request to cockroach.
+type Response struct {
+	// Setting that should be reflected back in all subsequent requests.
+	// When not set, future requests should continue to use existing settings.
+	Session []byte
+	// The list of results. There is one result object per SQL statement in the
+	// request.
+	Results []Result
+}
+
+// Result corresponds to the execution of a single SQL statement.
+type Result struct {
+	Err error
+	// The type of statement that the result is for.
+	Type parser.StatementType
+	// RowsAffected will be populated if the statement type is "RowsAffected".
+	RowsAffected int
+	// Columns will be populated if the statement type is "Rows". It will contain
+	// the names and types of the columns returned in the result set in the order
+	// specified in the SQL statement. The number of columns will equal the number
+	// of values in each Row.
+	Columns []ResultColumn
+	// Rows will be populated if the statement type is "Rows". It will contain
+	// the result set of the result.
+	// TODO(nvanbenschoten): Can this be streamed from the planNode?
+	Rows []ResultRow
+}
+
+// ResultColumn contains the name and type of a SQL "cell".
+type ResultColumn struct {
+	Name string
+	Typ  parser.Datum
+}
+
+// ResultRow is a collection of values representing a row in a result.
+type ResultRow struct {
+	Values []parser.Datum
+}
+
 // An Executor executes SQL statements.
 type Executor struct {
 	db       client.DB
@@ -130,7 +184,7 @@ func (e *Executor) getSystemConfig() config.SystemConfig {
 }
 
 // StatementResult returns the result types of the given statement(s).
-func (e *Executor) StatementResult(user string, stmt parser.Statement, args parser.MapArgs) ([]*driver.Response_Result_Rows_Column, *roachpb.Error) {
+func (e *Executor) StatementResult(user string, stmt parser.Statement, args parser.MapArgs) ([]ResultColumn, *roachpb.Error) {
 	planMaker := plannerPool.Get().(*planner)
 	defer plannerPool.Put(planMaker)
 
@@ -153,15 +207,10 @@ func (e *Executor) StatementResult(user string, stmt parser.Statement, args pars
 	if err != nil {
 		return nil, err
 	}
-	cols := make([]*driver.Response_Result_Rows_Column, len(plan.Columns()))
-	for i, c := range plan.Columns() {
-		d, err := makeDriverDatum(c.typ)
-		if err != nil {
+	cols := plan.Columns()
+	for _, c := range cols {
+		if err := checkResultDatum(c.Typ); err != nil {
 			return nil, err
-		}
-		cols[i] = &driver.Response_Result_Rows_Column{
-			Name: c.name,
-			Typ:  d,
 		}
 	}
 	return cols, nil
@@ -169,7 +218,7 @@ func (e *Executor) StatementResult(user string, stmt parser.Statement, args pars
 
 // ExecuteStatements executes the given statement(s) and returns a response.
 // On error, the returned integer is an HTTP error code.
-func (e *Executor) ExecuteStatements(user string, session Session, stmts string, params []driver.Datum) (driver.Response, int, error) {
+func (e *Executor) ExecuteStatements(user string, session Session, stmts string, params []parser.Datum) (Response, int, error) {
 	planMaker := plannerPool.Get().(*planner)
 	defer plannerPool.Put(planMaker)
 
@@ -219,7 +268,7 @@ func (e *Executor) ExecuteStatements(user string, session Session, stmts string,
 	}
 	bytes, err := proto.Marshal(&planMaker.session)
 	if err != nil {
-		return driver.Response{}, http.StatusInternalServerError, err
+		return Response{}, http.StatusInternalServerError, err
 	}
 	reply.Session = bytes
 
@@ -228,21 +277,21 @@ func (e *Executor) ExecuteStatements(user string, session Session, stmts string,
 
 // Execute the statement(s) in the given request and returns a response.
 // On error, the returned integer is an HTTP error code.
-func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
+func (e *Executor) Execute(args Request) (Response, int, error) {
 	defer func(start time.Time) {
 		e.latency.RecordValue(time.Now().Sub(start).Nanoseconds())
 	}(time.Now())
 	var session Session
 	if err := proto.Unmarshal(args.Session, &session); err != nil {
-		return driver.Response{}, http.StatusBadRequest, err
+		return Response{}, http.StatusBadRequest, err
 	}
-	return e.ExecuteStatements(args.GetUser(), session, args.Sql, args.Params)
+	return e.ExecuteStatements(args.User, session, args.SQL, args.Params)
 }
 
 // exec executes the request. Any error encountered is returned; it is
 // the caller's responsibility to update the response.
-func (e *Executor) execStmts(sql string, planMaker *planner) driver.Response {
-	var resp driver.Response
+func (e *Executor) execStmts(sql string, planMaker *planner) Response {
+	var resp Response
 	stmts, err := planMaker.parser.Parse(sql, parser.Syntax(planMaker.session.Syntax))
 	if err != nil {
 		// A parse error occurred: we can't determine if there were multiple
@@ -294,8 +343,8 @@ func (e *Executor) execStmts(sql string, planMaker *planner) driver.Response {
 	return resp
 }
 
-func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.Response_Result, *roachpb.Error) {
-	var result driver.Response_Result
+func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, *roachpb.Error) {
+	var result Result
 	switch stmt.(type) {
 	case *parser.BeginTransaction:
 		if planMaker.txn != nil {
@@ -341,44 +390,28 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 			return pErr
 		}
 
-		switch stmt.StatementType() {
-		case parser.DDL:
-			result.Union = &driver.Response_Result_DDL_{DDL: &driver.Response_Result_DDL{}}
+		switch result.Type = stmt.StatementType(); result.Type {
 		case parser.RowsAffected:
-			resultRowsAffected := driver.Response_Result_RowsAffected{}
-			result.Union = &resultRowsAffected
 			for plan.Next() {
-				resultRowsAffected.RowsAffected++
+				result.RowsAffected++
 			}
 
 		case parser.Rows:
-			var resultRows driver.Response_Result_Rows
-			for _, column := range plan.Columns() {
-				datum, pErr := makeDriverDatum(column.typ)
-				if pErr != nil {
-					return pErr
+			result.Columns = plan.Columns()
+			for _, c := range result.Columns {
+				if err := checkResultDatum(c.Typ); err != nil {
+					return err
 				}
-
-				resultRows.Columns = append(resultRows.Columns, &driver.Response_Result_Rows_Column{
-					Name: column.name,
-					Typ:  datum,
-				})
 			}
 
-			result.Union = &driver.Response_Result_Rows_{
-				Rows: &resultRows,
-			}
 			for plan.Next() {
-				values := plan.Values()
-				row := driver.Response_Result_Rows_Row{Values: make([]driver.Datum, 0, len(values))}
-				for _, val := range values {
-					datum, pErr := makeDriverDatum(val)
-					if pErr != nil {
-						return pErr
+				row := ResultRow{Values: plan.Values()}
+				for _, val := range row.Values {
+					if err := checkResultDatum(val); err != nil {
+						return err
 					}
-					row.Values = append(row.Values, datum)
 				}
-				resultRows.Rows = append(resultRows.Rows, row)
+				result.Rows = append(result.Rows, row)
 			}
 		}
 
@@ -445,19 +478,18 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 // If we hit an error and there is a pending transaction, rollback
 // the transaction before returning. The client does not have to
 // deal with cleaning up transaction state.
-func makeResultFromError(planMaker *planner, pErr *roachpb.Error) driver.Response_Result {
+func makeResultFromError(planMaker *planner, pErr *roachpb.Error) Result {
 	if planMaker.txn != nil {
 		if _, ok := pErr.GoError().(*roachpb.SqlTransactionAbortedError); !ok {
 			planMaker.txn.Cleanup(pErr)
 		}
 	}
-	errString := pErr.String()
-	return driver.Response_Result{Error: &errString}
+	return Result{Err: pErr.GoError()}
 }
 
 var _ parser.Args = parameters{}
 
-type parameters []driver.Datum
+type parameters []parser.Datum
 
 var errNamedArgument = errors.New("named arguments are not supported")
 
@@ -488,30 +520,7 @@ func (p parameters) Arg(name string) (parser.Datum, bool) {
 	if i < 1 || int(i) > len(p) {
 		return nil, false
 	}
-	arg := p[i-1].Payload
-	if arg == nil {
-		return parser.DNull, true
-	}
-	switch t := arg.(type) {
-	case *driver.Datum_BoolVal:
-		return parser.DBool(t.BoolVal), true
-	case *driver.Datum_IntVal:
-		return parser.DInt(t.IntVal), true
-	case *driver.Datum_FloatVal:
-		return parser.DFloat(t.FloatVal), true
-	case *driver.Datum_BytesVal:
-		return parser.DBytes(t.BytesVal), true
-	case *driver.Datum_StringVal:
-		return parser.DString(t.StringVal), true
-	case *driver.Datum_DateVal:
-		return parser.DDate(t.DateVal), true
-	case *driver.Datum_TimeVal:
-		return parser.DTimestamp{Time: t.TimeVal.GoTime()}, true
-	case *driver.Datum_IntervalVal:
-		return parser.DInterval{Duration: time.Duration(t.IntervalVal)}, true
-	default:
-		panic(fmt.Sprintf("unexpected type %T", t))
-	}
+	return p[i-1], true
 }
 
 var _ parser.Args = golangParameters{}
@@ -574,48 +583,22 @@ func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
 	panic(fmt.Sprintf("unexpected type %T", arg))
 }
 
-func makeDriverDatum(datum parser.Datum) (driver.Datum, *roachpb.Error) {
+func checkResultDatum(datum parser.Datum) *roachpb.Error {
 	if datum == parser.DNull {
-		return driver.Datum{}, nil
+		return nil
 	}
 
-	switch vt := datum.(type) {
+	switch datum.(type) {
 	case parser.DBool:
-		return driver.Datum{
-			Payload: &driver.Datum_BoolVal{BoolVal: bool(vt)},
-		}, nil
 	case parser.DInt:
-		return driver.Datum{
-			Payload: &driver.Datum_IntVal{IntVal: int64(vt)},
-		}, nil
 	case parser.DFloat:
-		return driver.Datum{
-			Payload: &driver.Datum_FloatVal{FloatVal: float64(vt)},
-		}, nil
 	case parser.DBytes:
-		return driver.Datum{
-			Payload: &driver.Datum_BytesVal{BytesVal: []byte(vt)},
-		}, nil
 	case parser.DString:
-		return driver.Datum{
-			Payload: &driver.Datum_StringVal{StringVal: string(vt)},
-		}, nil
 	case parser.DDate:
-		return driver.Datum{
-			Payload: &driver.Datum_DateVal{DateVal: int64(vt)},
-		}, nil
 	case parser.DTimestamp:
-		wireTimestamp := driver.Timestamp(vt.Time)
-		return driver.Datum{
-			Payload: &driver.Datum_TimeVal{
-				TimeVal: &wireTimestamp,
-			},
-		}, nil
 	case parser.DInterval:
-		return driver.Datum{
-			Payload: &driver.Datum_IntervalVal{IntervalVal: vt.Nanoseconds()},
-		}, nil
 	default:
-		return driver.Datum{}, roachpb.NewUErrorf("unsupported result type: %s", datum.Type())
+		return roachpb.NewUErrorf("unsupported result type: %s", datum.Type())
 	}
+	return nil
 }

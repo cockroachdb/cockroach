@@ -42,7 +42,7 @@ type selectNode struct {
 // For now scanNode implements all the logic and selectNode just proxies the
 // calls.
 
-func (s *selectNode) Columns() []resultColumn {
+func (s *selectNode) Columns() []ResultColumn {
 	return s.from.Columns()
 }
 

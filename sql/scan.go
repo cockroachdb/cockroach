@@ -134,8 +134,8 @@ type scanNode struct {
 	visibleCols      []ColumnDescriptor
 	isSecondaryIndex bool
 	reverse          bool
-	columns          []resultColumn
-	originalCols     []resultColumn // copy of `columns` before additions (e.g. by sort or group)
+	columns          []ResultColumn
+	originalCols     []ResultColumn // copy of `columns` before additions (e.g. by sort or group)
 	columnIDs        []ColumnID
 	// The direction with which the corresponding column was encoded.
 	columnDirs       []encoding.Direction
@@ -159,7 +159,7 @@ type scanNode struct {
 	explainValue     parser.Datum
 }
 
-func (n *scanNode) Columns() []resultColumn {
+func (n *scanNode) Columns() []ResultColumn {
 	return n.columns
 }
 
@@ -535,13 +535,13 @@ func (n *scanNode) addRender(target parser.SelectExpr) *roachpb.Error {
 						return n.pErr
 					}
 					qval := n.getQVal(*col)
-					n.columns = append(n.columns, resultColumn{name: col.Name, typ: qval.datum})
+					n.columns = append(n.columns, ResultColumn{Name: col.Name, Typ: qval.datum})
 					n.render = append(n.render, qval)
 				}
 			} else {
 				for _, col := range n.desc.VisibleColumns() {
 					qval := n.getQVal(col)
-					n.columns = append(n.columns, resultColumn{name: col.Name, typ: qval.datum})
+					n.columns = append(n.columns, ResultColumn{Name: col.Name, Typ: qval.datum})
 					n.render = append(n.render, qval)
 				}
 			}
@@ -581,7 +581,7 @@ func (n *scanNode) addRender(target parser.SelectExpr) *roachpb.Error {
 			outputName = t.Column()
 		}
 	}
-	n.columns = append(n.columns, resultColumn{name: outputName, typ: typ})
+	n.columns = append(n.columns, ResultColumn{Name: outputName, Typ: typ})
 	return nil
 }
 
