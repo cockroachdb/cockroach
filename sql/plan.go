@@ -238,17 +238,12 @@ func (p *planner) releaseLeases(db client.DB) {
 	}
 }
 
-type resultColumn struct {
-	name string
-	typ  parser.Datum
-}
-
 // planNode defines the interface for executing a query or portion of a query.
 type planNode interface {
 	// Columns returns the column names and types . The length of the
 	// returned slice is guaranteed to be equal to the length of the
 	// tuple returned by Values().
-	Columns() []resultColumn
+	Columns() []ResultColumn
 	// The indexes of the columns the output is ordered by.
 	Ordering() orderingInfo
 	// Values returns the values at the current row. The result is only valid
