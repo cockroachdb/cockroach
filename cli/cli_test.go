@@ -83,8 +83,8 @@ func newCLITest() cliTest {
 	}
 
 	cleanups := []func(){}
-	for _, i := range assets {
-		_, cleanupFn := securitytest.RestrictedCopy(nil, i, tempDir, filepath.Base(i))
+	for _, a := range assets {
+		_, cleanupFn := securitytest.RestrictedCopy(nil, a, tempDir, filepath.Base(a))
 		cleanups = append(cleanups, cleanupFn)
 	}
 
@@ -165,7 +165,7 @@ func (c cliTest) RunWithArgs(a []string) {
 		fmt.Println(err)
 	}
 	args = append(args, fmt.Sprintf("--host=%s", h))
-	if a[0] == "kv" || a[0] == "quit" || a[0] == "range" || a[0] == "exterminate" {
+	if a[0] == "kv" || a[0] == "quit" || a[0] == "range" || a[0] == "exterminate" || a[0] == "node" {
 		args = append(args, fmt.Sprintf("--cockroach-port=%s", p))
 	} else {
 		args = append(args, fmt.Sprintf("--port=%s", pg))
@@ -184,6 +184,7 @@ func (c cliTest) RunWithArgs(a []string) {
 func TestQuit(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	c := newCLITest()
+	defer c.stop()
 	c.Run("quit")
 	// Wait until this async command stops the server.
 	<-c.Stopper().IsStopped()
@@ -207,6 +208,7 @@ func Example_basic() {
 	c.Run("kv scan")
 	c.Run("kv revscan")
 	c.Run("kv inc c b")
+	c.Run("quit")
 
 	// Output:
 	// kv put a 1 b 2 c 3
@@ -245,6 +247,8 @@ func Example_basic() {
 	// 2 result(s)
 	// kv inc c b
 	// invalid increment: b: strconv.ParseInt: parsing "b": invalid syntax
+	// quit
+	// node drained and shutdown: ok
 }
 
 func Example_quoted() {
@@ -260,6 +264,7 @@ func Example_quoted() {
 	c.Run(`kv del a\x00`)
 	c.Run(`kv inc 1\x01`)
 	c.Run(`kv get 1\x01`)
+	c.Run("quit")
 
 	// Output:
 	// kv put a\x00 日本語
@@ -279,20 +284,23 @@ func Example_quoted() {
 	// 1
 	// kv get 1\x01
 	// 1
+	// quit
+	// node drained and shutdown: ok
 }
 
 func Example_insecure() {
-	c := cliTest{}
+	c := cliTest{cleanupFunc: func() {}}
 	c.TestServer = &server.TestServer{}
 	c.Ctx = server.NewTestContext()
 	c.Ctx.Insecure = true
 	if err := c.Start(); err != nil {
 		log.Fatalf("Could not start server: %v", err)
 	}
-	defer c.Stop()
+	defer c.stop()
 
 	c.Run("kv --insecure put a 1 b 2")
 	c.Run("kv --insecure scan")
+	c.Run("quit")
 
 	// Output:
 	// kv --insecure put a 1 b 2
@@ -300,6 +308,8 @@ func Example_insecure() {
 	// "a"	"1"
 	// "b"	"2"
 	// 2 result(s)
+	// quit
+	// node drained and shutdown: ok
 }
 
 func Example_ranges() {
@@ -319,6 +329,7 @@ func Example_ranges() {
 	c.Run("kv revscan")
 	c.Run("kv delrange a c")
 	c.Run("kv scan")
+	c.Run("quit")
 
 	// Output:
 	// kv put a 1 b 2 c 3 d 4
@@ -383,6 +394,8 @@ func Example_ranges() {
 	// "c"	"3"
 	// "d"	"4"
 	// 2 result(s)
+	// quit
+	// node drained and shutdown: ok
 }
 
 func Example_logging() {
@@ -395,6 +408,7 @@ func Example_logging() {
 	c.Run("kv --logtostderr=true scan")
 	c.Run("kv --verbosity=0 scan")
 	c.Run("kv --vmodule=foo=1 scan")
+	c.Run("quit")
 
 	// Output:
 	// kv --alsologtostderr=false scan
@@ -409,6 +423,8 @@ func Example_logging() {
 	// 0 result(s)
 	// kv --vmodule=foo=1 scan
 	// 0 result(s)
+	// quit
+	// node drained and shutdown: ok
 }
 
 func Example_cput() {
@@ -420,6 +436,7 @@ func Example_cput() {
 	c.Run("kv cput e 5")
 	c.Run("kv cput b 3 2")
 	c.Run("kv scan")
+	c.Run("quit")
 
 	// Output:
 	// kv put a 1 b 2 c 3 d 4
@@ -438,6 +455,8 @@ func Example_cput() {
 	// "d"	"4"
 	// "e"	"5"
 	// 5 result(s)
+	// quit
+	// node drained and shutdown: ok
 }
 
 func Example_max_results() {
@@ -450,6 +469,7 @@ func Example_max_results() {
 	c.Run("range split c")
 	c.Run("range split d")
 	c.Run("range ls --max-results=2")
+	c.Run("quit")
 
 	// Output:
 	// kv put a 1 b 2 c 3 d 4
@@ -470,8 +490,12 @@ func Example_max_results() {
 	// "c"-"d" [4]
 	// 	0: node-id=1 store-id=1
 	// 2 result(s)
+	// quit
+	// node drained and shutdown: ok
 }
 
+// TODO(marc): re-enable when the `zone set` command works with bytes.
+/*
 func Example_zone() {
 	c := newCLITest()
 	defer c.stop()
@@ -525,6 +549,7 @@ range_max_bytes: 67108864
 	// quit
 	// node drained and shutdown: ok
 }
+*/
 
 func Example_sql() {
 	c := newCLITest()
@@ -677,7 +702,7 @@ Use "cockroach [command] --help" for more information about a command.
 
 func Example_Node() {
 	c := newCLITest()
-	defer c.Stop()
+	defer c.stop()
 
 	// Refresh time series data, which is required to retrieve stats.
 	if err := c.TestServer.WriteSummaries(); err != nil {
@@ -686,6 +711,7 @@ func Example_Node() {
 
 	c.Run("node ls")
 	c.Run("node status 10000")
+	c.Run("quit")
 
 	// Output:
 	// node ls
@@ -696,6 +722,8 @@ func Example_Node() {
 	// +----+
 	// node status 10000
 	// Error: node 10000 doesn't exist
+	// quit
+	// node drained and shutdown: ok
 }
 
 func TestNodeStatus(t *testing.T) {
@@ -703,6 +731,7 @@ func TestNodeStatus(t *testing.T) {
 
 	start := time.Now()
 	c := newCLITest()
+	defer c.stop()
 	defer c.Stop()
 
 	// Refresh time series data, which is required to retrieve stats.
