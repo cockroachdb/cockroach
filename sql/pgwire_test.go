@@ -366,3 +366,76 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	t.Fatal("should not get here -- empty result from empty query should panic first")
 	// TODO(dt): clean this up with testify/assert and add tests for less trivial empty queries.
 }
+
+// Unfortunately lib/pq doesn't expose returned command tags directly, but we can test
+// the methods where it depends on their values (Begin, Commit, RowsAffected for INSERTs).
+func TestPGCommandTags(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "", "TestPGCommandTags")
+	defer cleanupFn()
+
+	db, err := sql.Open("postgres", pgUrl.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	_, err = db.Exec(`CREATE DATABASE IF NOT EXISTS testing`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`CREATE TABLE testing.tags (k INT PRIMARY KEY, v INT)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Begin will error if the returned tag is not BEGIN.
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Commit also checks the correct tag is returned.
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	// lib/pq has a special-case for INSERT (due to oids), so test insert and update statements.
+	res, err := db.Exec("INSERT INTO testing.tags VALUES (1, 1), (2, 2)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if affected != 2 {
+		t.Fatal("unexpected number of rows affected:", affected)
+	}
+
+	res, err = db.Exec("INSERT INTO testing.tags VALUES (3, 3)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	affected, err = res.RowsAffected()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if affected != 1 {
+		t.Fatal("unexpected number of rows affected:", affected)
+	}
+
+	res, err = db.Exec("UPDATE testing.tags SET v = 3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	affected, err = res.RowsAffected()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if affected != 3 {
+		t.Fatal("unexpected number of rows affected:", affected)
+	}
+}
