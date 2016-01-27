@@ -522,8 +522,8 @@ func TestPropagateTxnOnError(t *testing.T) {
 		b.CPut(targetKey, "new_val", origVal)
 		pErr := txn.CommitInBatch(b)
 		if epoch == 1 {
-			if tErr, ok := pErr.GoError().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
-				if !tErr.Txn.Writing {
+			if _, ok := pErr.GoError().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
+				if !pErr.GetTxn().Writing {
 					t.Errorf("unexpected non-writing txn on error")
 				}
 			} else {

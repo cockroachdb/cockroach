@@ -66,7 +66,6 @@ message ReadWithinUncertaintyIntervalError {
   optional Timestamp timestamp = 1 [(gogoproto.nullable) = false];
   optional Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
   optional int32 node_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
-  optional Transaction txn = 4 [(gogoproto.nullable) = false];
 }
 
 // A TransactionAbortedError indicates that the transaction was

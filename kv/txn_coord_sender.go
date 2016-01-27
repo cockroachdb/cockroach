@@ -667,7 +667,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		if t.NodeID == 0 {
 			panic("no replica set in header on uncertainty restart")
 		}
-		newTxn.Update(&t.Txn)
+		newTxn.Update(pErr.GetTxn())
 		newTxn.CertainNodes.Add(t.NodeID)
 		// If the reader encountered a newer write within the uncertainty
 		// interval, move the timestamp forward, just past that write or
@@ -676,7 +676,6 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		candidateTS.Backward(t.ExistingTimestamp.Add(0, 1))
 		newTxn.Timestamp.Forward(candidateTS)
 		newTxn.Restart(ba.UserPriority, newTxn.Priority, newTxn.Timestamp)
-		t.Txn = *newTxn
 		pErr.SetTxn(newTxn)
 	case *roachpb.TransactionAbortedError:
 		trace.SetError()
