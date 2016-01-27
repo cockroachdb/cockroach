@@ -144,7 +144,8 @@ executed. The results of the last SQL statement in each
 positional argument are printed on the standard output.`),
 }
 
-const wrapWidth = 79
+const usageIndentation = 8
+const wrapWidth = 79 - usageIndentation
 
 func wrapText(s string) string {
 	return text.Wrap(s, wrapWidth)
@@ -158,7 +159,10 @@ func usage(name string) string {
 	if s[len(s)-1] != '\n' {
 		s = s + "\n"
 	}
-	return text.Indent(s, "        ")
+	// github.com/spf13/pflag appends the default value after the usage text. Add
+	// the correct indentation (7 spaces) here. This is admittedly fragile.
+	return text.Indent(s, strings.Repeat(" ", usageIndentation)) +
+		strings.Repeat(" ", usageIndentation-1)
 }
 
 func normalizeStdFlagName(s string) string {
