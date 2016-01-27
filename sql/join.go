@@ -107,7 +107,7 @@ func makeIndexJoin(indexScan *scanNode, exactPrefix int) (*indexJoinNode, *roach
 	}, nil
 }
 
-func (n *indexJoinNode) Columns() []resultColumn {
+func (n *indexJoinNode) Columns() []ResultColumn {
 	return n.table.Columns()
 }
 
