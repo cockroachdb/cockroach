@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -43,39 +44,44 @@ const rangeEventTableSchema = `
 CREATE TABLE system.rangelog (
   timestamp     TIMESTAMP  NOT NULL,
   rangeID       INT        NOT NULL,
-  eventType     STRING     NOT NULL,
   storeID       INT        NOT NULL,
+  eventType     STRING     NOT NULL,
   otherRangeID  INT,
+  info          STRING,
   PRIMARY KEY (timestamp, rangeID)
 );`
 
 type rangeLogEvent struct {
 	timestamp    time.Time
 	rangeID      roachpb.RangeID
-	eventType    RangeEventLogType
 	storeID      roachpb.StoreID
+	eventType    RangeEventLogType
 	otherRangeID *roachpb.RangeID
-	info         string
+	info         *string
 }
 
 func (s *Store) insertRangeLogEvent(txn *client.Txn, event rangeLogEvent) *roachpb.Error {
 	const insertEventTableStmt = `
 INSERT INTO system.rangelog (
-  timestamp, rangeID, eventType, storeID, otherRangeID
+  timestamp, rangeID, storeID, eventType, otherRangeID, info
 )
 VALUES(
-  $1, $2, $3, $4, $5
+  $1, $2, $3, $4, $5, $6
 )
 `
 	args := []interface{}{
 		event.timestamp,
 		event.rangeID,
-		event.eventType,
 		event.storeID,
-		nil, //otherRangeID
+		event.eventType,
+		nil, // otherRangeID
+		nil, // info
 	}
 	if event.otherRangeID != nil {
 		args[4] = *event.otherRangeID
+	}
+	if event.info != nil {
+		args[5] = *event.info
 	}
 
 	rows, err := s.ctx.SQLExecutor.ExecuteStatementInTransaction(txn, insertEventTableStmt, args...)
@@ -97,15 +103,25 @@ func AddEventLogToMetadataSchema(schema *sql.MetadataSchema) {
 // logSplit logs a range split event into the event table. The affected range is
 // the range which previously existed and is being split in half; the "other"
 // range is the new range which is being created.
-func (s *Store) logSplit(txn *client.Txn, updated, new roachpb.RangeDescriptor) *roachpb.Error {
+func (s *Store) logSplit(txn *client.Txn, updatedDesc, newDesc roachpb.RangeDescriptor) *roachpb.Error {
 	if !s.ctx.LogRangeEvents {
 		return nil
 	}
+	info := struct {
+		UpdatedDesc roachpb.RangeDescriptor
+		NewDesc     roachpb.RangeDescriptor
+	}{updatedDesc, newDesc}
+	infoBytes, err := json.Marshal(info)
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+	infoStr := string(infoBytes)
 	return s.insertRangeLogEvent(txn, rangeLogEvent{
 		timestamp:    txn.Proto.Timestamp.GoTime(),
-		rangeID:      updated.RangeID,
+		rangeID:      updatedDesc.RangeID,
 		eventType:    RangeEventLogSplit,
 		storeID:      s.StoreID(),
-		otherRangeID: &new.RangeID,
+		otherRangeID: &newDesc.RangeID,
+		info:         &infoStr,
 	})
 }

@@ -18,12 +18,14 @@ package storage_test
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
 
 	_ "github.com/lib/pq"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
@@ -79,22 +81,41 @@ func TestLogSplits(t *testing.T) {
 	// verify that RangeID always increases (a good way to see that the splits
 	// are logged correctly)
 	// TODO(mrtracy): Change to parameterized query when #3660 is fixed.
-	rows, err := db.Query(fmt.Sprintf(`SELECT rangeID, otherRangeID FROM system.rangelog WHERE eventType = '%s'`, string(storage.RangeEventLogSplit)))
+	rows, err := db.Query(fmt.Sprintf(`SELECT rangeID, otherRangeID, info FROM system.rangelog WHERE eventType = '%s'`, string(storage.RangeEventLogSplit)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for rows.Next() {
 		var rangeID int64
 		var otherRangeID sql.NullInt64
-		if err := rows.Scan(&rangeID, &otherRangeID); err != nil {
+		var infoStr sql.NullString
+		if err := rows.Scan(&rangeID, &otherRangeID, &infoStr); err != nil {
 			t.Fatal(err)
 		}
 
 		if !otherRangeID.Valid {
-			t.Fatalf("otherRangeID not recorded for split of range %d", rangeID)
+			t.Errorf("otherRangeID not recorded for split of range %d", rangeID)
 		}
 		if otherRangeID.Int64 <= rangeID {
-			t.Fatalf("otherRangeID %d is not greater than rangeID %d", otherRangeID.Int64, rangeID)
+			t.Errorf("otherRangeID %d is not greater than rangeID %d", otherRangeID.Int64, rangeID)
+		}
+		// Verify that info returns a json struct.
+		if !infoStr.Valid {
+			t.Errorf("info not recorded for split of range %d", rangeID)
+		}
+		var info struct {
+			UpdatedDesc roachpb.RangeDescriptor
+			NewDesc     roachpb.RangeDescriptor
+		}
+		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
+			t.Errorf("error unmarshalling info string for split of range %d: %s", rangeID, err)
+			continue
+		}
+		if int64(info.UpdatedDesc.RangeID) != rangeID {
+			t.Errorf("recorded wrong updated descriptor %s for split of range %d", info.UpdatedDesc, rangeID)
+		}
+		if int64(info.NewDesc.RangeID) != otherRangeID.Int64 {
+			t.Errorf("recorded wrong new descriptor %s for split of range %d", info.NewDesc, rangeID)
 		}
 	}
 	if rows.Err() != nil {
