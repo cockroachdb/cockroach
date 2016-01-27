@@ -43,6 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+const testTimeout = 3 * time.Second
+
 // createTestNode creates an rpc server using the specified address,
 // gossip instance, KV database and a node using the specified slice
 // of engines. The server, clock and node are returned. If gossipBS is
@@ -67,7 +69,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	g := gossip.New(nodeRPCContext, testContext.GossipBootstrapResolvers)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
-		if gossipBS == addr {
+		if gossipBS.Network() == addr.Network() && gossipBS.String() == addr.String() {
 			gossipBS = ln.Addr()
 		}
 		r, err := resolver.NewResolverFromAddress(gossipBS)
@@ -80,11 +82,12 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	ctx.Gossip = g
 	retryOpts := kv.GetDefaultDistSenderRetryOptions()
 	retryOpts.Closer = stopper.ShouldDrain()
-	sender := kv.NewDistSender(&kv.DistSenderContext{
+	distSender := kv.NewDistSender(&kv.DistSenderContext{
 		Clock:           ctx.Clock,
 		RPCContext:      nodeRPCContext,
 		RPCRetryOptions: &retryOpts,
 	}, g)
+	sender := kv.NewTxnCoordSender(distSender, ctx.Clock, false, nil, stopper)
 	ctx.DB = client.NewDB(sender)
 	// TODO(bdarnell): arrange to have the transport closed.
 	// (or attach LocalRPCTransport.Close to the stopper)
@@ -186,11 +189,14 @@ func TestBootstrapNewStore(t *testing.T) {
 
 	// Non-initialized stores (in this case the new in-memory-based
 	// store) will be bootstrapped by the node upon start. This happens
-	// in a goroutine, so we'll have to wait a bit (maximum 1s) until
-	// we can find the new node.
-	if err := util.IsTrueWithin(func() bool { return node.stores.GetStoreCount() == 3 }, 1*time.Second); err != nil {
-		t.Error(err)
-	}
+	// in a goroutine, so we'll have to wait a bit until we can find the
+	// new node.
+	util.SucceedsWithin(t, testTimeout, func() error {
+		if n := node.stores.GetStoreCount(); n != 3 {
+			return util.Errorf("expected 3 stores but got %d", n)
+		}
+		return nil
+	})
 
 	// Check whether all stores are started properly.
 	if err := node.stores.VisitStores(func(s *storage.Store) error {
@@ -229,7 +235,7 @@ func TestNodeJoin(t *testing.T) {
 	defer stopper2.Stop()
 
 	// Verify new node is able to bootstrap its store.
-	if err := util.IsTrueWithin(func() bool { return node2.stores.GetStoreCount() == 1 }, time.Second); err != nil {
+	if err := util.IsTrueWithin(func() bool { return node2.stores.GetStoreCount() == 1 }, testTimeout); err != nil {
 		t.Fatal(err)
 	}
 
@@ -452,7 +458,7 @@ func TestStatusSummaries(t *testing.T) {
 
 	// Wait for full replication of initial ranges.
 	initialRanges := int32(ExpectedInitialRangeCount())
-	util.SucceedsWithin(t, time.Second, func() error {
+	util.SucceedsWithin(t, testTimeout, func() error {
 		for i := 1; i <= int(initialRanges); i++ {
 			if s.RaftStatus(roachpb.RangeID(i)) == nil {
 				return util.Errorf("Store %d replica %d is not present in raft", s.StoreID(), i)
