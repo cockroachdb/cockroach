@@ -668,6 +668,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 
 	// Expire leader leases one more time, so that any remaining resolutions can
 	// get a leader lease.
+	// TODO(bdarnell): understand why some tests need this.
 	mtc.expireLeaderLeases()
 }
 
@@ -1075,6 +1076,10 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	// Execute another replica change to ensure that raft has processed
 	// the heartbeat just sent.
 	mtc.replicateRange(roachpb.RangeID(1), 1)
+
+	// Expire leases to ensure any remaining intent resolutions can complete.
+	// TODO(bdarnell): understand why some tests need this.
+	mtc.expireLeaderLeases()
 }
 
 // TestRaftRemoveRace adds and removes a replica repeatedly in an
