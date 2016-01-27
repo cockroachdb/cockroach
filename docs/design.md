@@ -1275,4 +1275,4 @@ in particular [roachpb/api.proto](https://github.com/cockroachdb/cockroach/blob/
 
 # Structured Data API
 
-A preliminary design can be found in the [Go source documentation](http://godoc.org/github.com/cockroachdb/cockroach/structured).
+A preliminary design can be found in the [Go source documentation](https://godoc.org/github.com/cockroachdb/cockroach/sql).
