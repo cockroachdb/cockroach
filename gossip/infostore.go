@@ -205,19 +205,20 @@ func (is *infoStore) getNodes() map[int32]*Node {
 // invoked whenever new info for a gossip key matching pattern is
 // received. The callback method is invoked with the info key which
 // matched pattern. Returns a function to unregister the callback.
+// Note: the callback can fire immediately after being unregistered.
 func (is *infoStore) registerCallback(pattern string, method Callback) func() {
 	re := regexp.MustCompile(pattern)
 	cb := &callback{pattern: re, method: method}
 	is.callbacks = append(is.callbacks, cb)
 	if err := is.visitInfos(func(key string, i *Info) error {
 		if re.MatchString(key) {
-			// Run callbacks in a goroutine to avoid mutex reentry.
-			go method(key, i.Value)
+			is.runCallbacks(key, i.Value, method)
 		}
 		return nil
 	}); err != nil {
 		panic(err)
 	}
+
 	return func() {
 		for i, targetCB := range is.callbacks {
 			if targetCB == cb {
@@ -240,10 +241,13 @@ func (is *infoStore) processCallbacks(key string, content roachpb.Value) {
 			matches = append(matches, cb.method)
 		}
 	}
+	is.runCallbacks(key, content, matches...)
+}
 
-	// Add the matching callbacks to the callback work list.
+func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks ...Callback) {
+	// Add the callbacks to the callback work list.
 	f := func() {
-		for _, method := range matches {
+		for _, method := range callbacks {
 			method(key, content)
 		}
 	}
@@ -255,8 +259,7 @@ func (is *infoStore) processCallbacks(key string, content roachpb.Value) {
 	// callbacks are run in order such that if a key is updated twice in
 	// succession, the second callback will never be run before the first.
 	go func() {
-		// Grab the callback mutex to prevent another goroutine from invoking
-		// callbacks.
+		// Grab the callback mutex to serialize execution of the callbacks.
 		is.callbackMu.Lock()
 		defer is.callbackMu.Unlock()
 
