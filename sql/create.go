@@ -126,7 +126,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, *roachpb.Error) 
 
 	if len(desc.PrimaryIndex.ColumnNames) == 0 {
 		// Ensure a Primary Key exists.
-		s := "experimental_unique_int()"
+		s := "unique_rowid()"
 		col := ColumnDescriptor{
 			Name: "rowid",
 			Type: ColumnType{

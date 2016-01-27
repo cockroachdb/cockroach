@@ -490,6 +490,17 @@ var builtins = map[string][]builtin{
 		},
 	},
 
+	"unique_rowid": {
+		builtin{
+			types:      argTypes{},
+			returnType: typeInt,
+			impure:     true,
+			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
+				return generateUniqueInt(ctx.NodeID), nil
+			},
+		},
+	},
+
 	"greatest": {
 		builtin{
 			types:      anyType{},
