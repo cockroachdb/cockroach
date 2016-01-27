@@ -18,18 +18,29 @@ package storage_test
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
 
 	_ "github.com/lib/pq"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
+
+// splitInfo needs to be kept up-to-date with splitInfo in the storage package.
+// splitInfo, as stored in the logs, is not intended for consumption by any
+// cockroach system, and thus the field is not exported from the storage
+// package.
+type splitInfo struct {
+	UpdatedDesc roachpb.RangeDescriptor
+	NewDesc     roachpb.RangeDescriptor
+}
 
 func TestLogSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)
@@ -79,22 +90,38 @@ func TestLogSplits(t *testing.T) {
 	// verify that RangeID always increases (a good way to see that the splits
 	// are logged correctly)
 	// TODO(mrtracy): Change to parameterized query when #3660 is fixed.
-	rows, err := db.Query(fmt.Sprintf(`SELECT rangeID, otherRangeID FROM system.rangelog WHERE eventType = '%s'`, string(storage.RangeEventLogSplit)))
+	rows, err := db.Query(fmt.Sprintf(`SELECT rangeID, otherRangeID, info FROM system.rangelog WHERE eventType = '%s'`, string(storage.RangeEventLogSplit)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for rows.Next() {
 		var rangeID int64
 		var otherRangeID sql.NullInt64
-		if err := rows.Scan(&rangeID, &otherRangeID); err != nil {
+		var infoStr sql.NullString
+		if err := rows.Scan(&rangeID, &otherRangeID, &infoStr); err != nil {
 			t.Fatal(err)
 		}
 
 		if !otherRangeID.Valid {
-			t.Fatalf("otherRangeID not recorded for split of range %d", rangeID)
+			t.Errorf("otherRangeID not recorded for split of range %d", rangeID)
 		}
 		if otherRangeID.Int64 <= rangeID {
-			t.Fatalf("otherRangeID %d is not greater than rangeID %d", otherRangeID.Int64, rangeID)
+			t.Errorf("otherRangeID %d is not greater than rangeID %d", otherRangeID.Int64, rangeID)
+		}
+		// Verify that info returns a json struct.
+		if !infoStr.Valid {
+			t.Errorf("info not recorded for split of range %d", rangeID)
+		}
+		var infoStruct splitInfo
+		if err := json.Unmarshal([]byte(infoStr.String), &infoStruct); err != nil {
+			t.Errorf("error unmarshalling info string for split of range %d: %s", rangeID, err)
+			continue
+		}
+		if int64(infoStruct.UpdatedDesc.RangeID) != rangeID {
+			t.Errorf("recorded wrong updated descriptor %s for split of range %d", infoStruct.UpdatedDesc, rangeID)
+		}
+		if int64(infoStruct.NewDesc.RangeID) != otherRangeID.Int64 {
+			t.Errorf("recorded wrong new descriptor %s for split of range %d", infoStruct.NewDesc, rangeID)
 		}
 	}
 	if rows.Err() != nil {
