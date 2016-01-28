@@ -18,6 +18,7 @@ package server
 
 import (
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -274,9 +275,27 @@ func (ts *TestServer) ServingAddr() string {
 	return ts.listener.Addr().String()
 }
 
+// ServingHost returns the host portion of the rpc server's address.
+func (ts *TestServer) ServingHost() (string, error) {
+	h, _, err := net.SplitHostPort(ts.ServingAddr())
+	return h, err
+}
+
+// ServingPort returns the port portion of the rpc server's address.
+func (ts *TestServer) ServingPort() (string, error) {
+	_, p, err := net.SplitHostPort(ts.ServingAddr())
+	return p, err
+}
+
 // PGAddr returns the Postgres-protocol endpoint's address.
 func (ts *TestServer) PGAddr() string {
 	return ts.pgServer.Addr().String()
+}
+
+// PGPort returns the port portion of the Postgres-protocol endpoint's address.
+func (ts *TestServer) PGPort() (string, error) {
+	_, p, err := net.SplitHostPort(ts.PGAddr())
+	return p, err
 }
 
 // Stop stops the TestServer.

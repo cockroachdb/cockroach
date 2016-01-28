@@ -22,12 +22,12 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/gogo/protobuf/proto"
+	"github.com/spf13/cobra"
 	yaml "gopkg.in/yaml.v1"
 
-	"github.com/spf13/cobra"
+	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // zoneProtoToYAMLString takes a marshalled proto and returns
@@ -81,10 +81,11 @@ func runGetZone(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	db := makeSQLClient()
+	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
+	// TODO(marc): switch to placeholders once they work with pgwire.
 	_, rows, err := runQueryWithFormat(db, fmtMap{"config": formatZone},
-		`SELECT * FROM system.zones WHERE id=$1`, id)
+		fmt.Sprintf(`SELECT * FROM system.zones WHERE id=%d`, id))
 	if err != nil {
 		log.Error(err)
 		return
@@ -114,7 +115,7 @@ func runLsZones(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)
 		return
 	}
-	db := makeSQLClient()
+	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
 	_, rows, err := runQueryWithFormat(db, fmtMap{"config": formatZone}, `SELECT * FROM system.zones`)
 	if err != nil {
@@ -155,9 +156,11 @@ func runRmZone(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	db := makeSQLClient()
+	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
-	err = runPrettyQuery(db, os.Stdout, `DELETE FROM system.zones WHERE id=$1`, id)
+	// TODO(marc): use placeholders once they work with pgwire.
+	err = runPrettyQuery(db, os.Stdout,
+		fmt.Sprintf(`DELETE FROM system.zones WHERE id=%d`, id))
 	if err != nil {
 		log.Error(err)
 		return
@@ -226,10 +229,12 @@ func runSetZone(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	db := makeSQLClient()
+	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
 	// TODO(marc): switch to UPSERT.
-	err = runPrettyQuery(db, os.Stdout, `INSERT INTO system.zones VALUES ($1, $2)`, id, buf)
+	// TODO(marc): switch to placeholders when they're fixed with pgwire.
+	err = runPrettyQuery(db, os.Stdout,
+		fmt.Sprintf(`INSERT INTO system.zones VALUES (%d, '%s'::bytes)`, id, string(buf)))
 	if err != nil {
 		log.Error(err)
 		return
