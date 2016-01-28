@@ -65,6 +65,9 @@ type selectNode struct {
 	// the rendered row
 	row parser.DTuple
 
+	// filtering expression for rows
+	filter parser.Expr
+
 	// We may internally add render targets (columns) for grouping or ordering. The original columns
 	// are columns[:numOriginalCols], the internally added ones are columns[numOriginalCols:].
 	numOriginalCols int
@@ -97,32 +100,42 @@ func (s *selectNode) Values() parser.DTuple {
 }
 
 func (s *selectNode) Next() bool {
-	if !s.from.node.Next() {
-		return false
-	}
-	s.from.values = s.from.node.Values()
-
-	if s.explain == explainDebug {
-		if len(s.row) != 4 {
-			s.row = make(parser.DTuple, 4)
+	for {
+		if !s.from.node.Next() {
+			return false
 		}
-		debugValues := s.from.values[len(s.from.values)-4:]
-		if debugValues[3] == parser.DNull {
-			// We are not at the end of the row; just emit the debug values
-			copy(s.row, debugValues)
+		s.from.values = s.from.node.Values()
+
+		if s.explain == explainDebug {
+			if len(s.row) != 4 {
+				s.row = make(parser.DTuple, 4)
+			}
+			debugValues := s.from.values[len(s.from.values)-4:]
+			if debugValues[3] == parser.DNull {
+				// We are not at the end of the row; just emit the debug values
+				copy(s.row, debugValues)
+				return true
+			}
+		}
+
+		s.populateQVals()
+		output := s.filterRow()
+		if s.pErr != nil {
 			return true
 		}
-	}
 
-	s.populateQVals()
-	/* MEH: filter. */
-	if s.explain == explainDebug {
-		copy(s.row, s.from.values[len(s.from.values)-4:])
-		/* MEH: reset third value depending on filter */
-	} else {
-		s.renderRow()
+		if s.explain == explainDebug {
+			copy(s.row, s.from.values[len(s.from.values)-4:])
+			s.row[3] = parser.DBool(output)
+			return true
+		}
+
+		if output {
+			s.renderRow()
+			return true
+		}
+		/* Row was filtered out; grab the next row. */
 	}
-	return true
 }
 
 func (s *selectNode) PErr() *roachpb.Error {
@@ -158,6 +171,10 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 	}
 
 	if pErr := s.initTargets(parsed.Exprs); pErr != nil {
+		return nil, pErr
+	}
+
+	if pErr := s.initWhere(parsed.Where); pErr != nil {
 		return nil, pErr
 	}
 
@@ -238,10 +255,6 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 		return s.pErr
 	}
 
-	s.pErr = scan.init(parsed)
-	if s.pErr != nil {
-		return s.pErr
-	}
 	s.from.node = scan
 	s.from.alias = scan.desc.Alias
 	s.from.columns = scan.Columns()
@@ -265,6 +278,36 @@ func (s *selectNode) initTargets(targets parser.SelectExprs) *roachpb.Error {
 		panic(fmt.Sprintf("%d renders but %d columns!", len(s.render), len(s.columns)))
 	}
 	return nil
+}
+
+func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
+	if where == nil {
+		return nil
+	}
+	s.filter, s.pErr = s.resolveQNames(where.Expr)
+	if s.pErr == nil {
+		var whereType parser.Datum
+		var err error
+		whereType, err = s.filter.TypeCheck(s.planner.evalCtx.Args)
+		s.pErr = roachpb.NewError(err)
+		if s.pErr == nil {
+			if !(whereType == parser.DummyBool || whereType == parser.DNull) {
+				s.pErr = roachpb.NewUErrorf("argument of WHERE must be type %s, not type %s",
+					parser.DummyBool.Type(), whereType.Type())
+			}
+		}
+	}
+	if s.pErr == nil {
+		// Normalize the expression (this will also evaluate any branches that are
+		// constant).
+		var err error
+		s.filter, err = s.planner.parser.NormalizeExpr(s.planner.evalCtx, s.filter)
+		s.pErr = roachpb.NewError(err)
+	}
+	if s.pErr == nil {
+		s.filter, s.pErr = s.planner.expandSubqueries(s.filter, 1)
+	}
+	return s.pErr
 }
 
 func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
@@ -346,8 +389,27 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 	return nil
 }
 
-// renderRow renders the row by evaluating the render expressions. May set
-// n.pErr if an error occurs during expression evaluation.
+// filterRow checks to see if the current row matches the filter (i.e. the where-clause). Assumes
+// the qvals have been populated with the current row. May set n.pErr if an error occurs during
+// expression evaluation.
+func (s *selectNode) filterRow() bool {
+	if s.filter == nil {
+		return true
+	}
+
+	var d parser.Datum
+	var err error
+	d, err = s.filter.Eval(s.planner.evalCtx)
+	s.pErr = roachpb.NewError(err)
+	if s.pErr != nil {
+		return false
+	}
+
+	return d != parser.DNull && bool(d.(parser.DBool))
+}
+
+// renderRow renders the row by evaluating the render expressions. Assumes the qvals have been
+// populated with the current row. May set n.pErr if an error occurs during expression evaluation.
 func (s *selectNode) renderRow() {
 	if s.row == nil {
 		s.row = make([]parser.Datum, len(s.render))
