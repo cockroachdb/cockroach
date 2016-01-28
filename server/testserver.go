@@ -99,8 +99,7 @@ func NewTestContext() *Context {
 //
 type TestServer struct {
 	// Ctx is the context used by this server.
-	Ctx           *Context
-	SkipBootstrap bool
+	Ctx *Context
 	// server is the embedded Cockroach server struct.
 	*Server
 	StoresPerNode int
@@ -196,24 +195,15 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 		return err
 	}
 
-	// Ensure we have the correct number of engines. Add in in-memory ones where
-	// needed.  There must be at least one store/engine.
+	// Ensure we have the correct number of engines. Add in-memory ones where
+	// needed. There must be at least one store/engine.
 	if ts.StoresPerNode < 1 {
 		ts.StoresPerNode = 1
 	}
 	for i := len(ts.Ctx.Engines); i < ts.StoresPerNode; i++ {
 		ts.Ctx.Engines = append(ts.Ctx.Engines, engine.NewInMem(roachpb.Attributes{}, 100<<20, ts.Server.stopper))
 	}
-
-	if !ts.SkipBootstrap {
-		stopper := stop.NewStopper()
-		_, err := BootstrapCluster("cluster-1", ts.Ctx.Engines, stopper)
-		if err != nil {
-			return util.Errorf("could not bootstrap cluster: %s", err)
-		}
-		stopper.Stop()
-	}
-	if err := ts.Server.Start(true); err != nil {
+	if err := ts.Server.Start(); err != nil {
 		return err
 	}
 
