@@ -367,6 +367,8 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 		return &roachpb.BatchResponse{}
 	}
 
+	tracer.AnnotateTrace()
+	defer tracer.AnnotateTrace()
 	const method = "Node.Batch"
 	replies, err := ds.rpcSend(rpcOpts, method, addrs, getArgs, getReply, ds.rpcContext)
 	if err != nil {
@@ -468,6 +470,8 @@ func (ds *DistSender) sendSingleRange(trace *tracer.Trace, ba roachpb.BatchReque
 // of a transaction, but no entry. Pushing such a transaction will succeed, and
 // may lead to the transaction being aborted early.
 func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	tracer.AnnotateTrace()
+
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
 	if ba.ReadConsistency == roachpb.INCONSISTENT && ba.Timestamp.Equal(roachpb.ZeroTimestamp) {

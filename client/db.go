@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/tracer"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -480,6 +481,7 @@ func (db *DB) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Er
 	if ba.UserPriority == 0 && db.userPriority != 1 {
 		ba.UserPriority = db.userPriority
 	}
+	tracer.AnnotateTrace()
 	br, pErr := db.sender.Send(context.TODO(), ba)
 	if pErr != nil {
 		if log.V(1) {
