@@ -61,7 +61,7 @@ func TestSendAndReceive(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
-	g := gossip.New(nodeRPCContext, gossip.TestBootstrap)
+	g := gossip.New(nodeRPCContext, gossip.TestBootstrap, stopper)
 	g.SetNodeID(roachpb.NodeID(1))
 
 	// Create several servers, each of which has two stores (A raft
@@ -236,7 +236,7 @@ func TestInOrderDelivery(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
-	g := gossip.New(nodeRPCContext, gossip.TestBootstrap)
+	g := gossip.New(nodeRPCContext, gossip.TestBootstrap, stopper)
 	g.SetNodeID(roachpb.NodeID(1))
 
 	server := rpc.NewServer(nodeRPCContext)

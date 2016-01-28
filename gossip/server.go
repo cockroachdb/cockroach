@@ -17,6 +17,7 @@
 package gossip
 
 import (
+	"errors"
 	"math/rand"
 	"net"
 	"sync"
@@ -28,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
 )
+
+var errGossipShutdown = errors.New("gossip server shutdown")
 
 // A clientInfo holds information about an incoming client connection
 // and is stored in the server's lAddrMap, which is keyed by an
@@ -42,9 +45,10 @@ type clientInfo struct {
 // server maintains an array of connected peers to which it gossips
 // newly arrived information on a periodic basis.
 type server struct {
+	stopper *stop.Stopper
+
 	mu       sync.Mutex                // Protects the fields below
 	is       *infoStore                // The backing infostore
-	closed   bool                      // True if server was closed
 	incoming nodeSet                   // Incoming client node IDs
 	lAddrMap map[string]clientInfo     // Incoming client's local address -> client's node info
 	nodeMap  map[roachpb.NodeID]string // Incoming client's node ID -> local address (string)
@@ -57,8 +61,9 @@ type server struct {
 }
 
 // newServer creates and returns a server struct.
-func newServer() *server {
+func newServer(stopper *stop.Stopper) *server {
 	s := &server{
+		stopper:  stopper,
 		is:       newInfoStore(0, util.UnresolvedAddr{}),
 		incoming: makeNodeSet(minPeers),
 		lAddrMap: map[string]clientInfo{},
@@ -147,8 +152,8 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 			if log.V(1) {
 				log.Infof("node %d received %s from node %d (%d fresh)", s.is.NodeID, extractKeys(args.Delta), args.NodeID, freshCount)
 			}
-			if s.closed {
-				return nil, util.Errorf("gossip server shutdown")
+			if !s.stopper.RunTask(func() {}) {
+				return nil, errGossipShutdown
 			}
 			s.maybeTighten()
 			reply.Nodes = s.is.getNodes()
@@ -159,8 +164,8 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 	// Otherwise, loop until the server has deltas for the client.
 	for {
 		// The exit condition for waiting clients.
-		if s.closed {
-			return nil, util.Errorf("gossip server shutdown")
+		if !s.stopper.RunTask(func() {}) {
+			return nil, errGossipShutdown
 		}
 		if canAccept {
 			reply.Delta = s.is.delta(args.NodeID, s.lAddrMap[lAddr.String()].nodes)
@@ -237,7 +242,7 @@ func (s *server) maybeTighten() {
 // then begins processing connecting clients in an infinite select
 // loop via goroutine. Periodically, clients connected and awaiting
 // the next round of gossip are awoken via the conditional variable.
-func (s *server) start(rpcServer *rpc.Server, addr net.Addr, stopper *stop.Stopper) {
+func (s *server) start(rpcServer *rpc.Server, addr net.Addr) {
 	s.is.NodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 	if err := rpcServer.Register("Gossip.Gossip", s.Gossip, &Request{}); err != nil {
 		log.Fatalf("unable to register gossip service with RPC server: %s", err)
@@ -251,23 +256,13 @@ func (s *server) start(rpcServer *rpc.Server, addr net.Addr, stopper *stop.Stopp
 	}
 	unregister := s.is.registerCallback(".*", updateCallback)
 
-	stopper.RunWorker(func() {
-		select {
-		case <-stopper.ShouldStop():
-			s.stop(unregister)
-			return
-		}
+	s.stopper.RunWorker(func() {
+		<-s.stopper.ShouldStop()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		unregister()
+		s.ready.Broadcast() // wake up clients
 	})
-}
-
-// stop sets the server's closed bool to true and broadcasts to
-// waiting gossip clients to wakeup and finish.
-func (s *server) stop(unregister func()) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	unregister()
-	s.closed = true
-	s.ready.Broadcast() // wake up clients
 }
 
 // onOpen is invoked by the rpcServer each time a client connects.

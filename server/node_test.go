@@ -66,7 +66,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := gossip.New(nodeRPCContext, testContext.GossipBootstrapResolvers)
+	g := gossip.New(nodeRPCContext, testContext.GossipBootstrapResolvers, stopper)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
 		if gossipBS.Network() == addr.Network() && gossipBS.String() == addr.String() {
@@ -77,7 +77,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 			t.Fatalf("bad gossip address %s: %s", gossipBS, err)
 		}
 		g.SetResolvers([]resolver.Resolver{r})
-		g.Start(rpcServer, ln.Addr(), stopper)
+		g.Start(rpcServer, ln.Addr())
 	}
 	ctx.Gossip = g
 	retryOpts := kv.GetDefaultDistSenderRetryOptions()

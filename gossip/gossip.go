@@ -159,10 +159,10 @@ type Gossip struct {
 }
 
 // New creates an instance of a gossip node.
-func New(rpcContext *rpc.Context, resolvers []resolver.Resolver) *Gossip {
+func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.Stopper) *Gossip {
 	g := &Gossip{
 		Connected:         make(chan struct{}),
-		server:            newServer(),
+		server:            newServer(stopper),
 		outgoing:          makeNodeSet(minPeers),
 		bootstrapping:     map[string]struct{}{},
 		clients:           []*client{},
@@ -662,10 +662,10 @@ func (g *Gossip) MaxHops() uint32 {
 //
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
-func (g *Gossip) Start(rpcServer *rpc.Server, addr net.Addr, stopper *stop.Stopper) {
-	g.server.start(rpcServer, addr, stopper) // serve gossip protocol
-	g.bootstrap(stopper)                     // bootstrap gossip client
-	g.manage(stopper)                        // manage gossip clients
+func (g *Gossip) Start(rpcServer *rpc.Server, addr net.Addr) {
+	g.server.start(rpcServer, addr) // serve gossip protocol
+	g.bootstrap()                   // bootstrap gossip client
+	g.manage()                      // manage gossip clients
 }
 
 // hasIncoming returns whether the server has an incoming gossip
@@ -727,23 +727,23 @@ func (g *Gossip) getNextBootstrapAddress() net.Addr {
 // connection, this method will block on the stalled condvar, which
 // receives notifications that gossip network connectivity has been
 // lost and requires re-bootstrapping.
-func (g *Gossip) bootstrap(stopper *stop.Stopper) {
+func (g *Gossip) bootstrap() {
+	stopper := g.server.stopper
+
 	stopper.RunWorker(func() {
 		for {
-			g.mu.Lock()
-			if g.closed {
-				g.mu.Unlock()
-				return
-			}
-			haveClients := g.outgoing.len() > 0
-			haveSentinel := g.is.getInfo(KeySentinel) != nil
-			if !haveClients || !haveSentinel {
-				// Try to get another bootstrap address from the resolvers.
-				if addr := g.getNextBootstrapAddress(); addr != nil {
-					g.startClient(addr, stopper)
+			stopper.RunTask(func() {
+				g.mu.Lock()
+				defer g.mu.Unlock()
+				haveClients := g.outgoing.len() > 0
+				haveSentinel := g.is.getInfo(KeySentinel) != nil
+				if !haveClients || !haveSentinel {
+					// Try to get another bootstrap address from the resolvers.
+					if addr := g.getNextBootstrapAddress(); addr != nil {
+						g.startClient(addr, stopper)
+					}
 				}
-			}
-			g.mu.Unlock()
+			})
 
 			// Pause an interval before next possible bootstrap.
 			select {
@@ -773,7 +773,9 @@ func (g *Gossip) bootstrap(stopper *stop.Stopper) {
 // the outgoing address set. If there are no longer any outgoing
 // connections or the sentinel gossip is unavailable, the bootstrapper
 // is notified via the stalled conditional variable.
-func (g *Gossip) manage(stopper *stop.Stopper) {
+func (g *Gossip) manage() {
+	stopper := g.server.stopper
+
 	stopper.RunWorker(func() {
 		cullTicker := time.NewTicker(g.jitteredInterval(g.cullInterval))
 		stallTicker := time.NewTicker(g.jitteredInterval(g.stallInterval))
