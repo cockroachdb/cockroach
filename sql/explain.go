@@ -52,7 +52,7 @@ func (p *planner) Explain(n *parser.Explain) (planNode, *roachpb.Error) {
 	}
 	switch mode {
 	case explainDebug:
-		plan, err = markDebug(plan, mode)
+		err = markDebug(plan, mode)
 		if err != nil {
 			return nil, roachpb.NewUErrorf("%v: %s", err, n)
 		}
@@ -72,21 +72,15 @@ func (p *planner) Explain(n *parser.Explain) (planNode, *roachpb.Error) {
 	return plan, nil
 }
 
-func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
+func markDebug(plan planNode, mode explainMode) *roachpb.Error {
 	switch t := plan.(type) {
 	case *selectNode:
+		t.explain = mode
 		return markDebug(t.from.node, mode)
 
 	case *scanNode:
-		// Mark the node as being explained.
-		t.columns = []ResultColumn{
-			{Name: "RowIdx", Typ: parser.DummyInt},
-			{Name: "Key", Typ: parser.DummyString},
-			{Name: "Value", Typ: parser.DummyString},
-			{Name: "Output", Typ: parser.DummyBool},
-		}
 		t.explain = mode
-		return t, nil
+		return nil
 
 		/* MEH
 		case *indexJoinNode:
@@ -97,7 +91,7 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 		*/
 
 	default:
-		return nil, roachpb.NewErrorf("TODO(pmattis): unimplemented %T", plan)
+		return roachpb.NewErrorf("TODO(pmattis): unimplemented %T", plan)
 	}
 }
 

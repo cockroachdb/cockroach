@@ -68,12 +68,22 @@ type selectNode struct {
 	// We may internally add render targets (columns) for grouping or ordering. The original columns
 	// are columns[:numOriginalCols], the internally added ones are columns[numOriginalCols:].
 	numOriginalCols int
+
+	explain explainMode
 }
 
-// For now scanNode implements all the logic and selectNode just proxies the
-// calls.
+// Columns for explainDebug mode.
+var debugColumns = []ResultColumn{
+	{Name: "RowIdx", Typ: parser.DummyInt},
+	{Name: "Key", Typ: parser.DummyString},
+	{Name: "Value", Typ: parser.DummyString},
+	{Name: "Output", Typ: parser.DummyBool},
+}
 
 func (s *selectNode) Columns() []ResultColumn {
+	if s.explain == explainDebug {
+		return debugColumns
+	}
 	return s.columns
 }
 
@@ -91,9 +101,27 @@ func (s *selectNode) Next() bool {
 		return false
 	}
 	s.from.values = s.from.node.Values()
+
+	if s.explain == explainDebug {
+		if len(s.row) != 4 {
+			s.row = make(parser.DTuple, 4)
+		}
+		debugValues := s.from.values[len(s.from.values)-4:]
+		if debugValues[3] == parser.DNull {
+			// We are not at the end of the row; just emit the debug values
+			copy(s.row, debugValues)
+			return true
+		}
+	}
+
 	s.populateQVals()
 	/* MEH: filter. */
-	s.renderRow()
+	if s.explain == explainDebug {
+		copy(s.row, s.from.values[len(s.from.values)-4:])
+		/* MEH: reset third value depending on filter */
+	} else {
+		s.renderRow()
+	}
 	return true
 }
 
@@ -320,22 +348,15 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 
 // renderRow renders the row by evaluating the render expressions. May set
 // n.pErr if an error occurs during expression evaluation.
-func (n *selectNode) renderRow() {
-	/* MEH
-	if n.explain == explainDebug {
-		n.explainDebug(true, true)
-		return
+func (s *selectNode) renderRow() {
+	if s.row == nil {
+		s.row = make([]parser.Datum, len(s.render))
 	}
-	*/
-
-	if n.row == nil {
-		n.row = make([]parser.Datum, len(n.render))
-	}
-	for i, e := range n.render {
+	for i, e := range s.render {
 		var err error
-		n.row[i], err = e.Eval(n.planner.evalCtx)
-		n.pErr = roachpb.NewError(err)
-		if n.pErr != nil {
+		s.row[i], err = e.Eval(s.planner.evalCtx)
+		s.pErr = roachpb.NewError(err)
+		if s.pErr != nil {
 			return
 		}
 	}

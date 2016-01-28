@@ -673,25 +673,14 @@ func (n *scanNode) maybeOutputRow() bool {
 				n.row[i] = parser.DNull
 			}
 		}
+		if n.explainValue != nil {
+			n.explainDebug(true)
+		}
 		return true
-	}
-	/* MEH
-		output := n.filterRow()
-		if n.pErr != nil {
-			return true
-		}
-		if output {
-			n.renderRow()
-			return true
-		} else if n.explainValue != nil {
-			n.explainDebug(true, false)
-			return true
-		}
 	} else if n.explainValue != nil {
-		n.explainDebug(false, false)
+		n.explainDebug(false)
 		return true
 	}
-	*/
 	return false
 }
 
@@ -727,15 +716,23 @@ func (n *scanNode) filterRow() bool {
 
 	return d != parser.DNull && bool(d.(parser.DBool))
 }
+*/
 
-func (n *scanNode) explainDebug(endOfRow, outputRow bool) {
-	if n.row == nil {
-		n.row = make([]parser.Datum, len(n.columns))
+// explainDebug fills in four extra debugging values in the current row:
+//  - the row index,
+//  - the key,
+//  - a value string,
+//  - a true bool if we are at the end of the row, or a NULL otherwise.
+func (n *scanNode) explainDebug(endOfRow bool) {
+	if len(n.row) == len(n.visibleCols) {
+		n.row = append(n.row, nil, nil, nil, nil)
 	}
-	n.row[0] = parser.DInt(n.rowIndex)
-	n.row[1] = parser.DString(n.prettyKey())
+	debugVals := n.row[len(n.row)-4:]
+
+	debugVals[0] = parser.DInt(n.rowIndex)
+	debugVals[1] = parser.DString(n.prettyKey())
 	if n.implicitVals != nil {
-		n.row[2] = parser.DString(prettyDatums(n.implicitVals))
+		debugVals[2] = parser.DString(prettyDatums(n.implicitVals))
 	} else {
 		// This conversion to DString is odd. `n.explainValue` is already a
 		// `Datum`, but logic_test currently expects EXPLAIN DEBUG output
@@ -743,17 +740,16 @@ func (n *scanNode) explainDebug(endOfRow, outputRow bool) {
 		// consistent across all printing of strings in logic_test, though.
 		// TODO(tamird/pmattis): figure out a consistent story for string
 		// printing in logic_test.
-		n.row[2] = parser.DString(n.explainValue.String())
+		debugVals[2] = parser.DString(n.explainValue.String())
 	}
 	if endOfRow {
-		n.row[3] = parser.DBool(outputRow)
+		debugVals[3] = parser.DBool(true)
 		n.rowIndex++
 	} else {
-		n.row[3] = parser.DNull
+		debugVals[3] = parser.DNull
 	}
 	n.explainValue = nil
 }
-*/
 
 func (n *scanNode) prettyKey() string {
 	if n.desc == nil {
