@@ -18,18 +18,14 @@ package tracer
 
 import "golang.org/x/net/context"
 
-// contextKeyType is a dummy type to avoid naming collisions with other
-// package's context keys.
-type contextKeyType int
-
-// contextKey is the key claimed for storing and retrieving a Trace from
-// a context.Context.
-const contextKey contextKeyType = 0
+// contextKey is the key claimed for storing and retrieving a Trace from a
+// context.Context. The value does not matter, only the address of contextKey.
+var contextKey int
 
 // FromCtx is a helper to pass a Trace in a context.Context. It returns the
 // Trace stored at ContextKey or nil.
 func FromCtx(ctx context.Context) *Trace {
-	if t, ok := ctx.Value(contextKey).(*Trace); ok {
+	if t, ok := ctx.Value(&contextKey).(*Trace); ok {
 		return t
 	}
 	return nil
@@ -37,5 +33,5 @@ func FromCtx(ctx context.Context) *Trace {
 
 // ToCtx is a helper to store a Trace in a context.Context under ContextKey.
 func ToCtx(ctx context.Context, trace *Trace) context.Context {
-	return context.WithValue(ctx, contextKey, trace)
+	return context.WithValue(ctx, &contextKey, trace)
 }
