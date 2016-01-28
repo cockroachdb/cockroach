@@ -17,6 +17,7 @@
 package stop_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -369,4 +370,49 @@ func TestStopperShouldDrain(t *testing.T) {
 	s.Stop()
 	close(waiting)
 	<-cleanup
+}
+
+func maybePrint() {
+	if testing.Verbose() { // This just needs to be complicated enough not to inline.
+		fmt.Println("blah")
+	}
+}
+
+func BenchmarkDirectCall(b *testing.B) {
+	defer leaktest.AfterTest(b)
+	s := stop.NewStopper()
+	defer s.Stop()
+	for i := 0; i < b.N; i++ {
+		maybePrint()
+	}
+}
+
+func BenchmarkStopper(b *testing.B) {
+	defer leaktest.AfterTest(b)
+	s := stop.NewStopper()
+	defer s.Stop()
+	for i := 0; i < b.N; i++ {
+		s.RunTask(maybePrint)
+	}
+}
+func BenchmarkDirectCallPar(b *testing.B) {
+	defer leaktest.AfterTest(b)
+	s := stop.NewStopper()
+	defer s.Stop()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			maybePrint()
+		}
+	})
+}
+
+func BenchmarkStopperPar(b *testing.B) {
+	defer leaktest.AfterTest(b)
+	s := stop.NewStopper()
+	defer s.Stop()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			s.RunTask(maybePrint)
+		}
+	})
 }
