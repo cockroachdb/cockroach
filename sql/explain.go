@@ -52,7 +52,7 @@ func (p *planner) Explain(n *parser.Explain) (planNode, *roachpb.Error) {
 	}
 	switch mode {
 	case explainDebug:
-		err = markDebug(plan, mode)
+		plan, err = markDebug(plan, mode)
 		if err != nil {
 			return nil, roachpb.NewUErrorf("%v: %s", err, n)
 		}
@@ -72,26 +72,35 @@ func (p *planner) Explain(n *parser.Explain) (planNode, *roachpb.Error) {
 	return plan, nil
 }
 
-func markDebug(plan planNode, mode explainMode) *roachpb.Error {
+func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 	switch t := plan.(type) {
 	case *selectNode:
 		t.explain = mode
-		return markDebug(t.from.node, mode)
+
+		if _, ok := t.from.node.(*indexJoinNode); ok {
+			// We will replace the indexJoinNode with the index node; we cannot
+			// process filters anymore (we don't have all the values).
+			t.filter = nil
+		}
+		// Mark the from node as debug (and potentially replace it).
+		newNode, err := markDebug(t.from.node, mode)
+		t.from.node = newNode.(fromNode)
+		return t, err
 
 	case *scanNode:
 		t.explain = mode
-		return nil
+		return t, nil
 
-		/* MEH
-		case *indexJoinNode:
-			return markDebug(t.index, mode)
+	case *indexJoinNode:
+		// Replace the indexJoinNode with the index node.
+		return markDebug(t.index, mode)
 
-		case *sortNode:
-			return markDebug(t.plan, mode)
-		*/
+	case *sortNode:
+		// Replace the sort node with the node it wraps.
+		return markDebug(t.plan, mode)
 
 	default:
-		return roachpb.NewErrorf("TODO(pmattis): unimplemented %T", plan)
+		return nil, roachpb.NewErrorf("TODO(pmattis): unimplemented %T", plan)
 	}
 }
 

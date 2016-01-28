@@ -17,22 +17,31 @@
 package sql
 
 import (
-	//	"bytes"
+	"bytes"
 	"fmt"
-	//	"reflect"
-	//	"sort"
+	"reflect"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	//	"github.com/cockroachdb/cockroach/util/encoding"
-	//	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/log"
 )
+
+// fromNode is a planNode that appears in the FROM part of a SELECT query.
+type fromNode interface {
+	planNode
+	isColumnHidden(idx int) bool
+}
+
+var _ planNode = &scanNode{}
+var _ planNode = &indexJoinNode{}
 
 // fromInfo contains the information for a select "source" (FROM).
 type fromInfo struct {
 	// node which can be used to retrieve the data (normally a scanNode). For performance purposes,
 	// this node can be aware of the filters, grouping etc.
-	node planNode
+	node fromNode
 
 	// alias (if no alias is given and the source is a table, this is the table name)
 	alias string
@@ -112,30 +121,31 @@ func (s *selectNode) Next() bool {
 				s.row = make(parser.DTuple, 4)
 			}
 			debugValues := s.from.values[len(s.from.values)-4:]
-			if debugValues[3] == parser.DNull {
-				// We are not at the end of the row; just emit the debug values
-				copy(s.row, debugValues)
-				return true
+
+			if debugValues[3] != parser.DNull && s.filter != nil {
+				// We are at the end of the row and we have a filtering expression
+				s.populateQVals()
+				output := s.filterRow()
+				if s.pErr != nil {
+					return false
+				}
+				debugValues[3] = parser.DBool(output)
 			}
+			copy(s.row, debugValues)
+			return true
 		}
 
 		s.populateQVals()
 		output := s.filterRow()
 		if s.pErr != nil {
-			return true
-		}
-
-		if s.explain == explainDebug {
-			copy(s.row, s.from.values[len(s.from.values)-4:])
-			s.row[3] = parser.DBool(output)
-			return true
+			return false
 		}
 
 		if output {
 			s.renderRow()
 			return true
 		}
-		/* Row was filtered out; grab the next row. */
+		// Row was filtered out; grab the next row.
 	}
 }
 
@@ -205,7 +215,6 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 	}
 
 	// Get the ordering for index selection (if any).
-	/* MEH
 	var ordering columnOrdering
 	var grouping bool
 
@@ -215,20 +224,16 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 	} else if sort != nil {
 		ordering = sort.Ordering().ordering
 	}
-	*/
 
-	scan.initOrdering(0)
-	s.ordering = s.computeOrdering(scan.ordering)
-	/*
-		plan, pErr := p.selectIndex(scan, ordering, grouping)
-		if pErr != nil {
-			return nil, pErr
-		}
-	*/
-	plan := scan
+	plan, pErr := p.selectIndex(s, scan, ordering, grouping)
+	if pErr != nil {
+		return nil, pErr
+	}
 
 	// Update s.from with the new plan.
 	s.from.node = plan
+
+	s.ordering = s.computeOrdering(plan.Ordering())
 
 	// Wrap this node as necessary.
 	limit, pErr := p.limit(parsed, p.distinct(parsed, sort.wrap(group.wrap(s))))
@@ -361,11 +366,9 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 			return s.pErr
 		}
 		if qname.IsStar() {
-			/* MEH
-			if n.alias == nil {
+			if s.from.alias == "" {
 				return roachpb.NewUErrorf("\"%s\" with no tables specified is not valid", qname)
 			}
-			*/
 			if target.As != "" {
 				return roachpb.NewUErrorf("\"%s\" cannot be aliased", qname)
 			}
@@ -376,6 +379,9 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 			}
 
 			for idx, col := range s.from.node.Columns() {
+				if s.from.node.isColumnHidden(idx) {
+					continue
+				}
 				qval := s.getQVal(columnRef{&s.from, idx})
 				s.columns = append(s.columns, ResultColumn{Name: col.Name, Typ: qval.datum})
 				s.render = append(s.render, qval)
@@ -524,8 +530,6 @@ func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 	return ordering
 }
 
-/*
-
 // selectIndex analyzes the scanNode to determine if there is an index
 // available that can fulfill the query with a more restrictive scan.
 //
@@ -537,8 +541,8 @@ func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 // transformed into a set of spans to scan within the index.
 //
 // If grouping is true, the ordering is the desired ordering for grouping.
-func (p *planner) selectIndex(s *scanNode, ordering columnOrdering, grouping bool) (planNode, *roachpb.Error) {
-	if s.desc == nil || (s.filter == nil && ordering == nil) {
+func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrdering, grouping bool) (fromNode, *roachpb.Error) {
+	if s.desc == nil || (sel.filter == nil && ordering == nil) {
 		// No table or no where-clause and no ordering.
 		s.initOrdering(0)
 		return s, nil
@@ -569,12 +573,12 @@ func (p *planner) selectIndex(s *scanNode, ordering columnOrdering, grouping boo
 		c.init(s)
 	}
 
-	if s.filter != nil {
+	if sel.filter != nil {
 		// Analyze the filter expression, simplifying it and splitting it up into
 		// possibly overlapping ranges.
-		exprs, equivalent := analyzeExpr(s.filter)
+		exprs, equivalent := analyzeExpr(sel.filter)
 		if log.V(2) {
-			log.Infof("analyzeExpr: %s -> %s [equivalent=%v]", s.filter, exprs, equivalent)
+			log.Infof("analyzeExpr: %s -> %s [equivalent=%v]", sel.filter, exprs, equivalent)
 		}
 
 		// Check to see if the filter simplified to a constant.
@@ -590,7 +594,7 @@ func (p *planner) selectIndex(s *scanNode, ordering columnOrdering, grouping boo
 		// If the simplified expression is equivalent and there is a single
 		// disjunction, use it for the filter instead of the original expression.
 		if equivalent && len(exprs) == 1 {
-			s.filter = joinAndExprs(exprs[0])
+			sel.filter = joinAndExprs(exprs[0])
 		}
 
 		// TODO(pmattis): If "len(exprs) > 1" then we have multiple disjunctive
@@ -620,7 +624,7 @@ func (p *planner) selectIndex(s *scanNode, ordering columnOrdering, grouping boo
 
 	if ordering != nil {
 		for _, c := range candidates {
-			c.analyzeOrdering(s, ordering)
+			c.analyzeOrdering(sel, s, ordering)
 		}
 	}
 
@@ -645,10 +649,10 @@ func (p *planner) selectIndex(s *scanNode, ordering columnOrdering, grouping boo
 		s.index = nil
 		return s, nil
 	}
-	s.filter = applyConstraints(s.filter, c.constraints)
+	sel.filter = applyConstraints(sel.filter, c.constraints)
 	s.reverse = c.reverse
 
-	var plan planNode
+	var plan fromNode
 	if c.covering {
 		s.initOrdering(c.exactPrefix)
 		plan = s
@@ -660,7 +664,7 @@ func (p *planner) selectIndex(s *scanNode, ordering columnOrdering, grouping boo
 		}
 	}
 
-	if grouping && len(ordering) == 1 && len(s.spans) == 1 && s.filter == nil {
+	if grouping && len(ordering) == 1 && len(s.spans) == 1 && sel.filter == nil {
 		// If grouping has a desired order and there is a single span for which the
 		// filter is true, check to see if the ordering matches the desired
 		// ordering. If it does we can limit the scan to a single key.
@@ -672,7 +676,7 @@ func (p *planner) selectIndex(s *scanNode, ordering columnOrdering, grouping boo
 	}
 
 	if log.V(3) {
-		log.Infof("%s: filter=%v", c.index.Name, s.filter)
+		log.Infof("%s: filter=%v", c.index.Name, sel.filter)
 		for i, span := range s.spans {
 			log.Infof("%s/%d: %s", c.index.Name, i, prettySpan(span, 2))
 		}
@@ -738,7 +742,7 @@ type indexInfo struct {
 }
 
 func (v *indexInfo) init(s *scanNode) {
-	v.covering = v.isCoveringIndex(s.qvals)
+	v.covering = v.isCoveringIndex(s)
 
 	// The base cost is the number of keys per row.
 	if v.index == &v.desc.PrimaryIndex {
@@ -778,13 +782,13 @@ func (v *indexInfo) analyzeExprs(exprs []parser.Exprs) {
 // analyzeOrdering analyzes the ordering provided by the index and determines
 // if it matches the ordering requested by the query. Non-matching orderings
 // increase the cost of using the index.
-func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering columnOrdering) {
+func (v *indexInfo) analyzeOrdering(sel *selectNode, scan *scanNode, ordering columnOrdering) {
 	// Compute the prefix of the index for which we have exact constraints. This
 	// prefix is inconsequential for ordering because the values are identical.
 	v.exactPrefix = exactPrefix(v.constraints)
 
 	// Compute the ordering provided by the index.
-	indexOrdering := computeOrdering(scan.render, v.index, v.exactPrefix, false)
+	indexOrdering := sel.computeOrdering(scan.computeOrdering(v.index, v.exactPrefix, false))
 
 	// Compute how much of the index ordering matches the requested ordering for
 	// both forward and reverse scans.
@@ -812,11 +816,11 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering columnOrdering) {
 }
 
 func (v *indexInfo) findColumnInTuple(tuple parser.Tuple, colID ColumnID) int {
-	for i, v := range tuple {
-		q, ok := v.(*qvalue)
+	for i, val := range tuple {
+		qval, ok := val.(*qvalue)
 		// TODO(radu): when we will have multiple FROMs, we should check
 		// that the qval refers to us.
-		if ok && v.desc.Columns[q.colIDx].ID == colID {
+		if ok && v.desc.Columns[qval.colRef.colIdx].ID == colID {
 			return i
 		}
 	}
@@ -903,7 +907,7 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 				var tupleMap []int
 				switch t := c.Left.(type) {
 				case *qvalue:
-					if t.col.ID != colID {
+					if v.desc.Columns[t.colRef.colIdx].ID != colID {
 						// This expression refers to a column other than the one we're
 						// looking for.
 						continue
@@ -1085,19 +1089,21 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 	return nil
 }
 
-// isCoveringIndex returns true if all of the columns referenced by the target
-// expressions and where clause are contained within the index. This allows a
-// scan of only the index to be performed without requiring subsequent lookup
-// of the full row.
-func (v *indexInfo) isCoveringIndex(qvals qvalMap) bool {
+// isCoveringIndex returns true if all of the columns needed from the scanNode are contained within
+// the index. This allows a scan of only the index to be performed without requiring subsequent
+// lookup of the full row.
+func (v *indexInfo) isCoveringIndex(scan *scanNode) bool {
 	if v.index == &v.desc.PrimaryIndex {
 		// The primary key index always covers all of the columns.
 		return true
 	}
 
-	for colID := range qvals {
-		if !v.index.containsColumnID(colID) {
-			return false
+	for i, needed := range scan.valNeededForCol {
+		if needed {
+			colID := scan.visibleCols[i].ID
+			if !v.index.containsColumnID(colID) {
+				return false
+			}
 		}
 	}
 	return true
@@ -1668,5 +1674,3 @@ func diffSorted(a, b parser.DTuple) parser.DTuple {
 	}
 	return r
 }
-
-*/

@@ -234,19 +234,20 @@ func (n *scanNode) initTableExpr(p *planner, ate *parser.AliasedTableExpr) *roac
 		}
 		// Strip out any columns from the table that are not present in the
 		// index.
-		indexColIDs := map[ColumnID]struct{}{}
+		visibleCols := []ColumnDescriptor(nil)
 		for _, colID := range n.index.ColumnIDs {
-			indexColIDs[colID] = struct{}{}
+			var col *ColumnDescriptor
+			if col, n.pErr = n.desc.FindColumnByID(colID); n.pErr != nil {
+				return n.pErr
+			}
+			visibleCols = append(visibleCols, *col)
 		}
 		for _, colID := range n.index.ImplicitColumnIDs {
-			indexColIDs[colID] = struct{}{}
-		}
-		visibleCols := []ColumnDescriptor(nil)
-		for _, col := range n.desc.Columns {
-			if _, ok := indexColIDs[col.ID]; !ok {
-				continue
+			var col *ColumnDescriptor
+			if col, n.pErr = n.desc.FindColumnByID(colID); n.pErr != nil {
+				return n.pErr
 			}
-			visibleCols = append(visibleCols, col)
+			visibleCols = append(visibleCols, *col)
 		}
 		n.isSecondaryIndex = true
 		n.initVisibleCols(visibleCols)
@@ -260,6 +261,19 @@ func (n *scanNode) initTableExpr(p *planner, ate *parser.AliasedTableExpr) *roac
 func (n *scanNode) initDescDefaults() {
 	n.index = &n.desc.PrimaryIndex
 	n.initVisibleCols(n.desc.Columns)
+}
+
+// isColumnHidden returns true if the column with the given inde shouldn't be be resolved by
+// a star reference (e.g. SELECT * FROM t)
+func (n *scanNode) isColumnHidden(idx int) bool {
+	if idx < 0 || idx >= len(n.visibleCols) {
+		panic(fmt.Sprintf("Invalid column index %d", idx))
+	}
+	if n.isSecondaryIndex {
+		// When selecting from a specific index, we should hide the ImplicitColumnIDs
+		return idx >= len(n.index.ColumnIDs)
+	}
+	return n.visibleCols[idx].Hidden
 }
 
 // getResultColumns converts ColumnDescriptors to ResultColumns

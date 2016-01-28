@@ -42,7 +42,7 @@ func (cr columnRef) get() ResultColumn {
 	return cr.from.columns[cr.colIdx]
 }
 
-// findColumn looks up the column described by a QualifiedName.
+// findColumn looks up the column described by a QualifiedName. The qname will be normalized.
 func (s *selectNode) findColumn(qname *parser.QualifiedName) (columnRef, *roachpb.Error) {
 
 	ref := columnRef{colIdx: invalidColIdx}
@@ -60,10 +60,13 @@ func (s *selectNode) findColumn(qname *parser.QualifiedName) (columnRef, *roachp
 	// TODO(radu): when we support multiple FROMs, we will find the node with the correct alias; if
 	// no alias is given, we will search for the column in all FROMs and make sure there is only
 	// one.  For now we just check that the name matches (if given).
-	if qname.Base == "" || equalName(s.from.alias, string(qname.Base)) {
+	if qname.Base == "" {
+		qname.Base = parser.Name(s.from.alias)
+	}
+	if equalName(s.from.alias, string(qname.Base)) {
 		colName := qname.Column()
 		for idx, col := range s.from.columns {
-			if col.Name == colName {
+			if equalName(col.Name, colName) {
 				ref.from = &s.from
 				ref.colIdx = idx
 				return ref, nil
@@ -150,7 +153,10 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 		//
 		// TODO(pmattis): Should we be more careful about ensuring that the various
 		// statement implementations do not modify the AST nodes they are passed?
-		return v, v.selNode.getQVal(t.colRef)
+		colRef := t.colRef
+		// TODO(radu): this is pretty hacky and won't work with multiple FROMs..
+		colRef.from = &v.selNode.from
+		return v, v.selNode.getQVal(colRef)
 
 	case *parser.QualifiedName:
 		var colRef columnRef
