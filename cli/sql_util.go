@@ -45,7 +45,7 @@ func makeSQLClient() (*sql.DB, string) {
 				security.CACertPath(context.Certs))
 		}
 		sqlURL = fmt.Sprintf("postgresql://%s@%s:%s/%s?%s",
-			connUser, connHost, connPort, connDBName, sslOptions)
+			connUser, connHost, connPGPort, connDBName, sslOptions)
 	}
 	db, err := sql.Open("postgres", sqlURL)
 	if err != nil {
