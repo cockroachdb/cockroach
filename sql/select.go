@@ -181,12 +181,12 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 	// TODO(radu): for now we assume from is always a scanNode
 	scan := s.from.node.(*scanNode)
 
-	/* MEH
 	// NB: both orderBy and groupBy are passed and can modify `scan` but orderBy must do so first.
-	sort, pErr := p.orderBy(parsed, scan)
+	sort, pErr := p.orderBy(parsed, s)
 	if pErr != nil {
 		return nil, pErr
 	}
+	/* MEH
 	group, pErr := p.groupBy(parsed, scan)
 	if pErr != nil {
 		return nil, pErr
@@ -225,7 +225,7 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 
 	// Wrap this node as necessary.
 	/* MEH limit, pErr := p.limit(parsed, p.distinct(parsed, sort.wrap(group.wrap(s)))) */
-	limit, pErr := p.limit(parsed, p.distinct(parsed, s))
+	limit, pErr := p.limit(parsed, p.distinct(parsed, sort.wrap(s)))
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -308,6 +308,28 @@ func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
 		s.filter, s.pErr = s.planner.expandSubqueries(s.filter, 1)
 	}
 	return s.pErr
+}
+
+// colIndex takes an expression that refers to a column using an integer, verifies it refers to a
+// valid render target and returns the corresponding column index. For example:
+//    SELECT a from T ORDER by 1
+// Here "1" refers to the first render target "a". The returned index is 0.
+func (s *selectNode) colIndex(expr parser.Expr) (int, error) {
+	switch i := expr.(type) {
+	case parser.DInt:
+		index := int(i)
+		if numCols := s.numOriginalCols; index < 1 || index > numCols {
+			return -1, fmt.Errorf("invalid column index: %d not in range [1, %d]", index, numCols)
+		}
+		return index - 1, nil
+
+	case parser.Datum:
+		return -1, fmt.Errorf("non-integer constant column index: %s", expr)
+
+	default:
+		// expr doesn't look like a col index (i.e. not a constant).
+		return -1, nil
+	}
 }
 
 func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {

@@ -80,9 +80,8 @@ func (s *selectNode) findColumn(qname *parser.QualifiedName) (columnRef, *roachp
 // values for each row. Since it is a reference, expression walking can
 // discover the qvalues and the columns they refer to.
 type qvalue struct {
-	datum   parser.Datum
-	colName string
-	colRef  columnRef
+	datum  parser.Datum
+	colRef columnRef
 }
 
 type qvalMap map[columnRef]*qvalue
@@ -120,7 +119,7 @@ func (s *selectNode) getQVal(colRef columnRef) *qvalue {
 		//
 		// TODO(pmattis): Nullable columns can have NULL values. The type analysis
 		// needs to take that into consideration, but how to surface that info?
-		qval = &qvalue{colRef: colRef, colName: col.Name, datum: col.Typ}
+		qval = &qvalue{colRef: colRef, datum: col.Typ}
 		s.qvals[colRef] = qval
 	}
 	return qval
