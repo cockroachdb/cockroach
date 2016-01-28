@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	_ "github.com/cockroachdb/cockroach/util/log" // Needed to import --verbosity
 )
 
 var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
@@ -39,7 +40,6 @@ func TestParseResolverSpec(t *testing.T) {
 		{"127.0.0.1", true, "tcp", "127.0.0.1:26257"},
 		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1:26257"},
 		{"tcp=127.0.0.1:23456", true, "tcp", "127.0.0.1:23456"},
-		{"lb=127.0.0.1", true, "lb", "127.0.0.1:26257"},
 		{"unix=/tmp/unix-socket12345", true, "unix", "/tmp/unix-socket12345"},
 		{"http-lb=localhost:26257", true, "http-lb", "localhost:26257"},
 		{"http-lb=newhost:1234", true, "http-lb", "newhost:1234"},
@@ -47,7 +47,6 @@ func TestParseResolverSpec(t *testing.T) {
 		{"http-lb=:", true, "http-lb", def},
 		{"", false, "", ""},
 		{"foo=127.0.0.1", false, "", ""},
-		{"lb=", false, "", ""},
 		{"", false, "tcp", ""},
 		{":", true, "tcp", def},
 		{"tcp=", false, "tcp", ""},
@@ -83,9 +82,6 @@ func TestGetAddress(t *testing.T) {
 		{"tcp=127.0.0.1", true, true, "tcp", "127.0.0.1:26257"},
 		{"tcp=localhost:80", true, true, "tcp", "localhost:80"},
 		// We should test unresolvable dns too, but this would be fragile.
-		{"lb=localhost:80", true, false, "tcp", "localhost:80"},
-		{"lb=127.0.0.1:80", true, false, "tcp", "127.0.0.1:80"},
-		{"lb=127.0.0.1", true, false, "tcp", "127.0.0.1:26257"},
 		{"unix=/tmp/foo", true, true, "unix", "/tmp/foo"},
 	}
 

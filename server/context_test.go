@@ -30,7 +30,6 @@ func TestParseNodeAttributes(t *testing.T) {
 	ctx := NewContext()
 	ctx.Attrs = "attr1=val1::attr2=val2"
 	ctx.Stores = "mem=1"
-	ctx.GossipBootstrap = SelfGossipAddr
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	if err := ctx.InitStores(stopper); err != nil {
@@ -45,12 +44,12 @@ func TestParseNodeAttributes(t *testing.T) {
 	}
 }
 
-// TestParseGossipBootstrapAddrs verifies that GossipBootstrap is
-// parsed correctly.
-func TestParseGossipBootstrapAddrs(t *testing.T) {
+// TestParseJoinUsingAddrs verifies that JoinUsing is parsed
+// correctly.
+func TestParseJoinUsingAddrs(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	ctx := NewContext()
-	ctx.GossipBootstrap = "localhost:12345,,localhost:23456"
+	ctx.JoinUsing = "localhost:12345,,localhost:23456"
 	ctx.Stores = "mem=1"
 	stopper := stop.NewStopper()
 	defer stopper.Stop()

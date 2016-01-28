@@ -117,7 +117,7 @@ func (r *RocksDB) Open() error {
 		return util.Errorf("could not open rocksdb instance: %s", err)
 	}
 
-	// Start a gorountine that will finish when the underlying handle
+	// Start a goroutine that will finish when the underlying handle
 	// is deallocated. This is used to check a leak in tests.
 	go func() {
 		<-r.deallocated

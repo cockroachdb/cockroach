@@ -124,17 +124,16 @@ func (s keySlice) Less(i, j int) bool { return bytes.Compare(s[i], s[j]) < 0 }
 func TestBootstrapCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
+	defer stopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
-	localDB, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper)
-	if err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}); err != nil {
 		t.Fatal(err)
 	}
-	defer stopper.Stop()
 
-	// Scan the complete contents of the local database.
-	rows, pErr := localDB.Scan(keys.LocalMax, roachpb.KeyMax, 0)
-	if pErr != nil {
-		t.Fatal(pErr.GoError())
+	// Scan the complete contents of the local database directly from the engine.
+	rows, _, err := engine.MVCCScan(e, keys.LocalMax, roachpb.KeyMax, 0, roachpb.MaxTimestamp, true, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
 	var foundKeys keySlice
 	for _, kv := range rows {
@@ -169,11 +168,9 @@ func TestBootstrapNewStore(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
-	eagerStopper := stop.NewStopper()
-	if _, err := BootstrapCluster("cluster-1", []engine.Engine{e}, eagerStopper); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}); err != nil {
 		t.Fatal(err)
 	}
-	eagerStopper.Stop()
 
 	// Start a new node with two new stores which will require bootstrapping.
 	engines := []engine.Engine{
@@ -210,12 +207,9 @@ func TestNodeJoin(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
-	stopper := stop.NewStopper()
-	_, err := BootstrapCluster("cluster-1", []engine.Engine{e}, stopper)
-	if err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}); err != nil {
 		t.Fatal(err)
 	}
-	stopper.Stop()
 
 	// Start the bootstrap node.
 	engines1 := []engine.Engine{e}
@@ -264,12 +258,9 @@ func TestCorruptedClusterID(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
 	defer engineStopper.Stop()
-	eagerStopper := stop.NewStopper()
-	_, err := BootstrapCluster("cluster-1", []engine.Engine{e}, eagerStopper)
-	if err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}); err != nil {
 		t.Fatal(err)
 	}
-	eagerStopper.Stop()
 
 	// Set the cluster ID to an empty string.
 	sIdent := roachpb.StoreIdent{
@@ -277,7 +268,7 @@ func TestCorruptedClusterID(t *testing.T) {
 		NodeID:    1,
 		StoreID:   1,
 	}
-	if err = engine.MVCCPutProto(e, nil, keys.StoreIdentKey(), roachpb.ZeroTimestamp, nil, &sIdent); err != nil {
+	if err := engine.MVCCPutProto(e, nil, keys.StoreIdentKey(), roachpb.ZeroTimestamp, nil, &sIdent); err != nil {
 		t.Fatal(err)
 	}
 
