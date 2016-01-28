@@ -1272,7 +1272,10 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 	var pErr *roachpb.Error
 
 	// Add the command to the range for execution; exit retry loop on success.
-	for r := retry.Start(s.ctx.RangeRetryOptions); next(&r); {
+	s.mu.Lock()
+	retryOpts := s.ctx.RangeRetryOptions
+	s.mu.Unlock()
+	for r := retry.Start(retryOpts); next(&r); {
 		// Get range and add command to the range for execution.
 		var err error
 		rng, err = s.GetReplica(ba.RangeID)
@@ -1840,6 +1843,10 @@ func (s *Store) PublishStatus() error {
 
 // SetRangeRetryOptions sets the retry options used for this store.
 // For unittests only.
+// TODO(bdarnell): have the affected tests pass retry options in through
+// the StoreContext.
 func (s *Store) SetRangeRetryOptions(ro retry.Options) {
+	s.mu.Lock()
 	s.ctx.RangeRetryOptions = ro
+	s.mu.Unlock()
 }
