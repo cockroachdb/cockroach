@@ -873,6 +873,8 @@ func (n *scanNode) getQVal(col ColumnDescriptor) *qvalue {
 			qval.datum = parser.DummyBool
 		case ColumnType_FLOAT:
 			qval.datum = parser.DummyFloat
+		case ColumnType_DECIMAL:
+			qval.datum = parser.DummyDecimal
 		case ColumnType_STRING:
 			qval.datum = parser.DummyString
 		case ColumnType_BYTES:

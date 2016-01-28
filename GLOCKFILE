@@ -20,6 +20,7 @@ github.com/cockroachdb/c-lz4 c40aaae2fc50293eb8750b34632bc3efe813e23f
 github.com/cockroachdb/c-protobuf 4feb192131ea08dfbd7253a00868ad69cbb61b81
 github.com/cockroachdb/c-rocksdb b7fb7bddcb55be35eacdf67e9e2c931083ce02c4
 github.com/cockroachdb/c-snappy 5c6d0932e0adaffce4bfca7bdf2ac37f79952ccf
+github.com/cockroachdb/decimal 5c4ecc7240b4ae5f60895cb8a5c5bc948a39bbba
 github.com/cockroachdb/yacc 443154b1852a8702b07d675da6cd97cd9177a316
 github.com/codahale/hdrhistogram 954f16e8b9ef0e5d5189456aa4c1202758e04f17
 github.com/coreos/etcd 8199147cf859882f625523446c28ae2e53b2432f

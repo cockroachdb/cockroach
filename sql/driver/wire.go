@@ -94,6 +94,10 @@ func (d Datum) Value() (driver.Value, error) {
 		val = t.IntVal
 	case *Datum_FloatVal:
 		val = t.FloatVal
+	case *Datum_DecimalVal:
+		// For now, we just return the decimal string, to be consistent
+		// with lib/pq's driver.
+		val = t.DecimalVal
 	case *Datum_BytesVal:
 		val = t.BytesVal
 	case *Datum_StringVal:

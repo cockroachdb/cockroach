@@ -238,6 +238,7 @@ func TestScanNumber(t *testing.T) {
 		{`1e-3-`, `1e-3`, FCONST},
 		{`1e+3`, `1e+3`, FCONST},
 		{`1e+3+`, `1e+3`, FCONST},
+		{`9223372036854775809`, `9223372036854775809`, FCONST},
 	}
 	for _, d := range testData {
 		s := makeScanner(d.sql, Traditional)
@@ -392,7 +393,6 @@ func TestScanError(t *testing.T) {
 		{`1.0x`, "invalid hexadecimal literal"},
 		{`0x0x`, "invalid hexadecimal literal"},
 		{`00x0x`, "invalid hexadecimal literal"},
-		{`9223372036854775809`, "integer value out of range"},
 		{`$9223372036854775809`, "integer value out of range"},
 	}
 	for _, d := range testData {

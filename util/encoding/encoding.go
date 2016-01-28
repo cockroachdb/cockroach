@@ -21,10 +21,12 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strconv"
 	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/decimal"
 )
 
 const (
@@ -681,4 +683,91 @@ func PeekType(b []byte) Type {
 		}
 	}
 	return Unknown
+}
+
+// PrettyPrintValue returns the string representation of all contiguous decodable
+// values in the provided byte slice, separated by a provided separator.
+func PrettyPrintValue(b []byte, sep string) string {
+	var buf bytes.Buffer
+	for len(b) > 0 {
+		bb, s, err := prettyPrintFirstValue(b)
+		if err != nil {
+			fmt.Fprintf(&buf, "%s<%v>", sep, err)
+		} else {
+			fmt.Fprintf(&buf, "%s%s", sep, s)
+		}
+		b = bb
+	}
+	return buf.String()
+}
+
+// prettyPrintFirstValue returns a string representation of the first decodable
+// value in the provided byte slice, along with the remaining byte slice
+// after decoding.
+func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
+	var err error
+	switch PeekType(b) {
+	case Null:
+		b, _ = DecodeIfNull(b)
+		return b, "NULL", nil
+	case NotNull:
+		b, _ = DecodeIfNotNull(b)
+		return b, "#", nil
+	case Int:
+		var i int64
+		b, i, err = DecodeVarintAscending(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, strconv.FormatInt(i, 10), nil
+	case Float:
+		// Handle float specific values separately.
+		switch b[0] {
+		case floatNaN, floatNaNDesc:
+			return b[1:], strconv.FormatFloat(math.NaN(), 'e', -1, 64), nil
+		case floatInfinity:
+			return b[1:], strconv.FormatFloat(math.Inf(1), 'e', -1, 64), nil
+		case floatNegativeInfinity:
+			return b[1:], strconv.FormatFloat(math.Inf(-1), 'e', -1, 64), nil
+		}
+		// Decode both floats and decimals as decimals to avoid
+		// overflow.
+		var d decimal.Decimal
+		b, d, err = DecodeDecimalAscending(b, nil)
+		if err != nil {
+			return b, "", err
+		}
+		return b, d.String(), nil
+	case Bytes:
+		var s string
+		b, s, err = DecodeStringAscending(b, nil)
+		if err != nil {
+			return b, "", err
+		}
+		return b, strconv.Quote(s), nil
+	case BytesDesc:
+		var s string
+		b, s, err = DecodeStringDescending(b, nil)
+		if err != nil {
+			return b, "", err
+		}
+		return b, strconv.Quote(s), nil
+	case Time:
+		var t time.Time
+		b, t, err = DecodeTimeAscending(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, t.UTC().Format(time.UnixDate), nil
+	case TimeDesc:
+		var t time.Time
+		b, t, err = DecodeTimeDescending(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, t.UTC().Format(time.UnixDate), nil
+	default:
+		// This shouldn't ever happen, but if it does, return an empty slice.
+		return nil, strconv.Quote(string(b)), nil
+	}
 }

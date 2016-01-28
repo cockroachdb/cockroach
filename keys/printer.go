@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -203,64 +202,7 @@ func print(key roachpb.Key) string {
 }
 
 func decodeKeyPrint(key roachpb.Key) string {
-	var buf bytes.Buffer
-	for k := 0; len(key) > 0; k++ {
-		var err error
-		switch encoding.PeekType(key) {
-		case encoding.Null:
-			key, _ = encoding.DecodeIfNull(key)
-			fmt.Fprintf(&buf, "/NULL")
-		case encoding.NotNull:
-			key, _ = encoding.DecodeIfNotNull(key)
-			fmt.Fprintf(&buf, "/#")
-		case encoding.Int:
-			var i int64
-			key, i, err = encoding.DecodeVarintAscending(key)
-			if err == nil {
-				fmt.Fprintf(&buf, "/%d", i)
-			}
-		case encoding.Float:
-			var f float64
-			key, f, err = encoding.DecodeFloatAscending(key, nil)
-			if err == nil {
-				fmt.Fprintf(&buf, "/%f", f)
-			}
-		case encoding.Bytes:
-			var s string
-			key, s, err = encoding.DecodeStringAscending(key, nil)
-			if err == nil {
-				fmt.Fprintf(&buf, "/%q", s)
-			}
-		case encoding.BytesDesc:
-			var s string
-			key, s, err = encoding.DecodeStringDescending(key, nil)
-			if err == nil {
-				fmt.Fprintf(&buf, "/%q", s)
-			}
-		case encoding.Time:
-			var t time.Time
-			key, t, err = encoding.DecodeTimeAscending(key)
-			if err == nil {
-				fmt.Fprintf(&buf, "/%s", t.UTC().Format(time.UnixDate))
-			}
-		case encoding.TimeDesc:
-			var t time.Time
-			key, t, err = encoding.DecodeTimeDescending(key)
-			if err == nil {
-				fmt.Fprintf(&buf, "/%s", t.UTC().Format(time.UnixDate))
-			}
-		default:
-			// This shouldn't ever happen, but if it does let the loop exit.
-			fmt.Fprintf(&buf, "/%q", []byte(key))
-			key = nil
-		}
-
-		if err != nil {
-			fmt.Fprintf(&buf, "/<%v>", err)
-			continue
-		}
-	}
-	return buf.String()
+	return encoding.PrettyPrintValue(key, "/")
 }
 
 // PrettyPrint prints the key in a human readable format:

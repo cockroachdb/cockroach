@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/decimal"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -130,6 +131,7 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		col.Type.Kind = ColumnType_DECIMAL
 		col.Type.Width = int32(t.Scale)
 		col.Type.Precision = int32(t.Prec)
+		colDatumType = parser.DummyDecimal
 	case *parser.DateType:
 		col.Type.Kind = ColumnType_DATE
 		colDatumType = parser.DummyDate
@@ -389,6 +391,11 @@ func encodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			return encoding.EncodeFloatAscending(b, float64(t)), nil
 		}
 		return encoding.EncodeFloatDescending(b, float64(t)), nil
+	case parser.DDecimal:
+		if dir == encoding.Ascending {
+			return encoding.EncodeDecimalAscending(b, t.Decimal), nil
+		}
+		return encoding.EncodeDecimalDescending(b, t.Decimal), nil
 	case parser.DString:
 		if dir == encoding.Ascending {
 			return encoding.EncodeStringAscending(b, string(t)), nil
@@ -432,6 +439,8 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, *
 			vals[i] = parser.DummyInt
 		case ColumnType_FLOAT:
 			vals[i] = parser.DummyFloat
+		case ColumnType_DECIMAL:
+			vals[i] = parser.DummyDecimal
 		case ColumnType_STRING:
 			vals[i] = parser.DummyString
 		case ColumnType_BYTES:
@@ -547,6 +556,14 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 			rkey, f, err = encoding.DecodeFloatDescending(key, nil)
 		}
 		return parser.DFloat(f), rkey, err
+	case parser.DDecimal:
+		var d decimal.Decimal
+		if dir == encoding.Ascending {
+			rkey, d, err = encoding.DecodeDecimalAscending(key, nil)
+		} else {
+			rkey, d, err = encoding.DecodeDecimalDescending(key, nil)
+		}
+		return parser.DDecimal{Decimal: d}, rkey, err
 	case parser.DString:
 		var r string
 		if dir == encoding.Ascending {
@@ -668,6 +685,10 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (interface{}, *r
 		if v, ok := val.(parser.DFloat); ok {
 			return float64(v), nil
 		}
+	case ColumnType_DECIMAL:
+		if v, ok := val.(parser.DDecimal); ok {
+			return v.Decimal, nil
+		}
 	case ColumnType_STRING:
 		if v, ok := val.(parser.DString); ok {
 			return string(v), nil
@@ -722,6 +743,12 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 			return nil, roachpb.NewError(err)
 		}
 		return parser.DFloat(v), nil
+	case ColumnType_DECIMAL:
+		v, err := value.GetDecimal()
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		return parser.DDecimal{Decimal: v}, nil
 	case ColumnType_STRING:
 		v, err := value.GetBytes()
 		if err != nil {

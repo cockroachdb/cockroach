@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/decimal"
 )
 
 // Set sets session variables.
@@ -106,6 +107,10 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, *roachpb.Error) 
 
 	case parser.DFloat:
 		offset = int64(float64(v) * 60.0 * 60.0)
+
+	case parser.DDecimal:
+		sixty := decimal.New(60, 0)
+		offset = v.Mul(sixty).Mul(sixty).IntPart()
 
 	default:
 		return nil, roachpb.NewUErrorf("bad time zone value: %v", n.Value)

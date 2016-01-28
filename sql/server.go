@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/decimal"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -208,6 +209,12 @@ func datumFromProto(d driver.Datum) parser.Datum {
 		return parser.DInt(t.IntVal)
 	case *driver.Datum_FloatVal:
 		return parser.DFloat(t.FloatVal)
+	case *driver.Datum_DecimalVal:
+		dec, err := decimal.NewFromString(t.DecimalVal)
+		if err != nil {
+			panic(fmt.Sprintf("could not parse decimal: %v", err))
+		}
+		return parser.DDecimal{Decimal: dec}
 	case *driver.Datum_BytesVal:
 		return parser.DBytes(t.BytesVal)
 	case *driver.Datum_StringVal:
@@ -240,6 +247,10 @@ func protoFromDatum(datum parser.Datum) driver.Datum {
 	case parser.DFloat:
 		return driver.Datum{
 			Payload: &driver.Datum_FloatVal{FloatVal: float64(vt)},
+		}
+	case parser.DDecimal:
+		return driver.Datum{
+			Payload: &driver.Datum_DecimalVal{DecimalVal: vt.Decimal.String()},
 		}
 	case parser.DBytes:
 		return driver.Datum{
