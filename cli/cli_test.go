@@ -167,9 +167,9 @@ func (c cliTest) RunWithArgs(a []string) {
 	}
 	args = append(args, fmt.Sprintf("--host=%s", h))
 	if a[0] == "kv" || a[0] == "quit" || a[0] == "range" || a[0] == "exterminate" || a[0] == "node" {
-		args = append(args, fmt.Sprintf("--cockroach-port=%s", p))
+		args = append(args, fmt.Sprintf("--port=%s", p))
 	} else {
-		args = append(args, fmt.Sprintf("--port=%s", pg))
+		args = append(args, fmt.Sprintf("--pgport=%s", pg))
 	}
 	// Always load test certs.
 	args = append(args, fmt.Sprintf("--certs=%s", c.certsDir))
@@ -532,12 +532,12 @@ range_max_bytes: 67108864
 
 func Example_sql() {
 	c := newCLITest()
-	defer c.Stop()
+	defer c.stop()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
 	c.RunWithArgs([]string{"sql", "-e", "select 3", "select * from t.f"})
 	c.RunWithArgs([]string{"sql", "-e", "begin", "select 3", "commit"})
-	c.RunWithArgs([]string{"sql", "-e", "select 3; select * from t.f"})
+	c.RunWithArgs([]string{"sql", "-e", "select * from t.f"})
 
 	// Output:
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
@@ -555,7 +555,7 @@ func Example_sql() {
 	// 3
 	// 3
 	// OK
-	// sql -e select 3; select * from t.f
+	// sql -e select * from t.f
 	// 1 row
 	// x	y
 	// 42	69

@@ -47,7 +47,7 @@ Open a sql shell running against a cockroach database.
 
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
-func runInteractive(db *sql.DB) {
+func runInteractive(db *sql.DB, dbURL string) {
 	liner := liner.NewLiner()
 	defer func() {
 		_ = liner.Close()
@@ -157,7 +157,6 @@ func runStatements(db *sql.DB, stmts []string) {
 				fmt.Fprintln(os.Stdout, strings.Join(row, "\t"))
 			}
 		}
-
 	}
 }
 
@@ -167,14 +166,13 @@ func runTerm(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	db := makeSQLClient()
+	db, dbURL := makeSQLClient()
 	defer func() { _ = db.Close() }()
 
 	if context.OneShotSQL {
 		// Single-line sql; run as simple as possible, without noise on stdout.
 		runStatements(db, args)
 	} else {
-		runInteractive(db)
+		runInteractive(db, dbURL)
 	}
-
 }

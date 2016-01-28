@@ -366,7 +366,7 @@ func (l *LocalCluster) startNode(i int) *Container {
 		"--stores=" + stores,
 		"--certs=/certs",
 		"--host=" + nodeStr(i),
-		"--cockroach-port=" + fmt.Sprintf("%d", cockroachPort),
+		"--port=" + fmt.Sprintf("%d", cockroachPort),
 		"--gossip=" + strings.Join(gossipNodes, ","),
 		"--scan-max-idle-time=200ms", // set low to speed up tests
 	}
