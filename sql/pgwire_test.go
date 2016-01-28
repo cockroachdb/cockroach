@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/pgwire"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -510,5 +511,66 @@ func TestPGCommandTags(t *testing.T) {
 	}
 	if affected != 3 {
 		t.Fatal("unexpected number of rows affected:", affected)
+	}
+}
+
+// checkPGWireMetrics returns the server's pgwire bytesIn/bytesOut and an error if the
+// bytesIn/bytesOut don't satisfy the given minimums and maximums.
+func checkPGWireMetrics(s *server.TestServer, minBytesIn, minBytesOut, maxBytesIn, maxBytesOut int64) (int64, int64, error) {
+	nid := s.Gossip().GetNodeID().String()
+	if err := s.WriteSummaries(); err != nil {
+		return -1, -1, err
+	}
+
+	bytesIn := s.MustGetCounter("cr.node.pgwire.bytesin." + nid)
+	bytesOut := s.MustGetCounter("cr.node.pgwire.bytesout." + nid)
+	if a, min := bytesIn, minBytesIn; a < min {
+		return bytesIn, bytesOut, util.Errorf("bytesin %d < expected min %d", a, min)
+	}
+	if a, min := bytesOut, minBytesOut; a < min {
+		return bytesIn, bytesOut, util.Errorf("bytesout %d < expected min %d", a, min)
+	}
+	if a, max := bytesIn, maxBytesIn; a > max {
+		return bytesIn, bytesOut, util.Errorf("bytesin %d > expected max %d", a, max)
+	}
+	if a, max := bytesOut, maxBytesOut; a > max {
+		return bytesIn, bytesOut, util.Errorf("bytesout %d > expected max %d", a, max)
+	}
+	return bytesIn, bytesOut, nil
+}
+
+func TestPGWireMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	// Setup pgwire client.
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, os.TempDir(), "TestPGWireMetrics")
+	defer cleanupFn()
+
+	const minbytes = 20
+
+	// Make sure we're starting at 0.
+	if _, _, err := checkPGWireMetrics(s, 0, 0, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// A single query should give us some I/O.
+	if err := trivialQuery(pgUrl); err != nil {
+		t.Fatal(err)
+	}
+	bytesIn, bytesOut, err := checkPGWireMetrics(s, minbytes, minbytes, 256, 256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := trivialQuery(pgUrl); err != nil {
+		t.Fatal(err)
+	}
+
+	// A second query should give us more I/O.
+	_, _, err = checkPGWireMetrics(s, bytesIn+minbytes, bytesOut+minbytes, 256, 256)
+	if err != nil {
+		t.Fatal(err)
 	}
 }

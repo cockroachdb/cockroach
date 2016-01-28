@@ -32,6 +32,9 @@ var DefaultTimeScales = []TimeScale{scale1M, scale10M, scale1H}
 
 // A Registry bundles up various iterables (i.e. typically metrics or other
 // registries) to provide a single point of access to them.
+//
+// A Registry can be added to another Registry through the Add/MustAdd methods. This allows a
+// hierarchy of Registry instances to be created.
 type Registry struct {
 	sync.Mutex
 	tracked map[string]Iterable
@@ -151,4 +154,11 @@ func (r *Registry) Rates(prefix string) Rates {
 	}
 	c := r.Counter(prefix + sep + "count")
 	return Rates{Counter: c, Rates: es}
+}
+
+// SubRegistry is a simple helper struct used for tracking a Registry to add to another
+// Registry at a later time (e.g. when we have a NodeID).
+type SubRegistry struct {
+	Name     string
+	Registry *Registry
 }

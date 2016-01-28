@@ -24,6 +24,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/metric"
 )
 
 const maxMessageSize = 1 << 24
@@ -65,30 +66,32 @@ func (b *readBuffer) reset(size int) {
 // readMsg reads a length-prefixed message. It is only used directly
 // during the authentication phase of the protocol; readTypedMsg is
 // used at all other times.
-func (b *readBuffer) readUntypedMsg(rd io.Reader) error {
-	if _, err := io.ReadFull(rd, b.tmp[:]); err != nil {
-		return err
+func (b *readBuffer) readUntypedMsg(rd io.Reader) (int, error) {
+	nread, err := io.ReadFull(rd, b.tmp[:])
+	if err != nil {
+		return nread, err
 	}
 	size := int(binary.BigEndian.Uint32(b.tmp[:]))
 	// size includes itself.
 	size -= 4
 	if size > maxMessageSize || size < 0 {
-		return util.Errorf("message size %d out of bounds (0..%d)",
+		return nread, util.Errorf("message size %d out of bounds (0..%d)",
 			size, maxMessageSize)
 	}
 
 	b.reset(size)
-	_, err := io.ReadFull(rd, b.msg)
-	return err
+	n, err := io.ReadFull(rd, b.msg)
+	return nread + n, err
 }
 
 // readTypedMsg reads a message, returning its type code and body.
-func (b *readBuffer) readTypedMsg(rd bufferedReader) (clientMessageType, error) {
+func (b *readBuffer) readTypedMsg(rd bufferedReader) (clientMessageType, int, error) {
 	typ, err := rd.ReadByte()
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return clientMessageType(typ), b.readUntypedMsg(rd)
+	n, err := b.readUntypedMsg(rd)
+	return clientMessageType(typ), n, err
 }
 
 // getString reads a null-terminated string.
@@ -139,7 +142,8 @@ func (b *readBuffer) getInt32() (int32, error) {
 
 type writeBuffer struct {
 	bytes.Buffer
-	putbuf [64]byte
+	putbuf    [64]byte
+	bytecount *metric.Counter
 }
 
 // writeString writes a null-terminated string.
@@ -174,7 +178,8 @@ func (b *writeBuffer) initMsg(typ serverMessageType) {
 func (b *writeBuffer) finishMsg(w io.Writer) error {
 	bytes := b.Bytes()
 	binary.BigEndian.PutUint32(bytes[1:5], uint32(b.Len()-1))
-	_, err := w.Write(bytes)
+	n, err := w.Write(bytes)
+	b.bytecount.Inc(int64(n))
 	b.Reset()
 	return err
 }

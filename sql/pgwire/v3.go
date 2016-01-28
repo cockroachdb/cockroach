@@ -110,19 +110,23 @@ type v3Conn struct {
 	// specified in documentation. Consult the sources before you modify:
 	// https://github.com/postgres/postgres/blob/master/src/backend/tcop/postgres.c
 	doingExtendedQueryMessage, ignoreTillSync bool
+
+	metrics *serverMetrics
 }
 
 type opts struct {
 	user, database string
 }
 
-func makeV3Conn(conn net.Conn, executor *sql.Executor) v3Conn {
+func makeV3Conn(conn net.Conn, executor *sql.Executor, metrics *serverMetrics) v3Conn {
 	return v3Conn{
 		rd:                 bufio.NewReader(conn),
 		wr:                 bufio.NewWriter(conn),
 		executor:           executor,
+		writeBuf:           writeBuffer{bytecount: metrics.bytesOutCount},
 		preparedStatements: make(map[string]preparedStatement),
 		preparedPortals:    make(map[string]preparedPortal),
+		metrics:            metrics,
 	}
 }
 
@@ -209,7 +213,8 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 		if err := c.wr.Flush(); err != nil {
 			return err
 		}
-		typ, err := c.readBuf.readTypedMsg(c.rd)
+		typ, n, err := c.readBuf.readTypedMsg(c.rd)
+		c.metrics.bytesInCount.Inc(int64(n))
 		if err != nil {
 			return err
 		}

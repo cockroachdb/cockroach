@@ -129,7 +129,16 @@ type Executor struct {
 	reCache  *parser.RegexpCache
 	leaseMgr *LeaseManager
 
-	latency metric.Histograms
+	// Transient stats.
+	registry    *metric.Registry
+	latency     metric.Histograms
+	selectCount *metric.Counter
+	txnCount    *metric.Counter
+	updateCount *metric.Counter
+	insertCount *metric.Counter
+	deleteCount *metric.Counter
+	ddlCount    *metric.Counter
+	miscCount   *metric.Counter
 
 	// System Config and mutex.
 	systemConfig     config.SystemConfig
@@ -139,13 +148,22 @@ type Executor struct {
 
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
-func NewExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, metaRegistry *metric.Registry, stopper *stop.Stopper) *Executor {
+func NewExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, stopper *stop.Stopper) *Executor {
+	registry := metric.NewRegistry()
 	exec := &Executor{
 		db:       db,
 		reCache:  parser.NewRegexpCache(512),
 		leaseMgr: leaseMgr,
 
-		latency: metaRegistry.Latency("sql.latency"),
+		registry:    registry,
+		latency:     registry.Latency("latency"),
+		txnCount:    registry.Counter("transaction.count"),
+		selectCount: registry.Counter("select.count"),
+		updateCount: registry.Counter("update.count"),
+		insertCount: registry.Counter("insert.count"),
+		deleteCount: registry.Counter("delete.count"),
+		ddlCount:    registry.Counter("ddl.count"),
+		miscCount:   registry.Counter("misc.count"),
 	}
 	exec.systemConfigCond = sync.NewCond(&exec.systemConfigMu)
 
@@ -365,6 +383,8 @@ func (e *Executor) execStmts(sql string, planMaker *planner) Response {
 
 func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, *roachpb.Error) {
 	var result Result
+
+	e.updateStmtCounts(stmt)
 	switch stmt.(type) {
 	case *parser.BeginTransaction:
 		if planMaker.txn != nil {
@@ -374,6 +394,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 		// transaction from being called within an auto-transaction below.
 		planMaker.setTxn(client.NewTxn(e.db), time.Now())
 		planMaker.txn.SetDebugName("sql", 0)
+		e.txnCount.Inc(1)
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		if planMaker.txn == nil {
 			return result, roachpb.NewError(errNoTransactionInProgress)
@@ -469,6 +490,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 	// No transaction. Run the command as a retryable block in an
 	// auto-transaction.
 	if pErr := e.db.Txn(func(txn *client.Txn) *roachpb.Error {
+		// For transient stats, we do not report implicit transactions as part of txnCount.
 		timestamp := time.Now()
 		planMaker.setTxn(txn, timestamp)
 		pErr := f(timestamp, true)
@@ -499,6 +521,37 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 	}
 
 	return result, nil
+}
+
+// updateStmtCounts updates metrics for the number of times the different types of SQL
+// statements have been received by this node.
+func (e *Executor) updateStmtCounts(stmt parser.Statement) {
+	switch stmt.(type) {
+	case *parser.Select:
+		e.selectCount.Inc(1)
+
+	case *parser.Update:
+		e.updateCount.Inc(1)
+
+	case *parser.Insert:
+		e.insertCount.Inc(1)
+
+	case *parser.Delete:
+		e.deleteCount.Inc(1)
+
+	default:
+		if stmt.StatementType() == parser.DDL {
+			e.ddlCount.Inc(1)
+		} else {
+			e.miscCount.Inc(1)
+		}
+	}
+}
+
+// Registry returns our metrics Registry, which must be added to another Registry so that
+// the Server's Registry is aware of this one.
+func (e *Executor) Registry() *metric.Registry {
+	return e.registry
 }
 
 // If we hit an error and there is a pending transaction, rollback

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
@@ -320,4 +321,24 @@ func (ts *TestServer) SetRangeRetryOptions(ro retry.Options) {
 // that query server stats.
 func (ts *TestServer) WriteSummaries() error {
 	return ts.Server.writeSummaries()
+}
+
+// MustGetCounter returns the value of a counter from the metrics registry. Runs in
+// O(# of metrics) time, which is fine for test code.
+func (ts *TestServer) MustGetCounter(name string) int64 {
+	var c int64
+	var err error
+	found := false
+
+	ts.registry.Each(func(n string, v interface{}) {
+		if !found && err == nil && name == n {
+			if cnt, ok := v.(*metric.Counter); ok {
+				c = cnt.Count()
+				found = true
+			} else {
+				err = util.Errorf("%s is not a counter: %T", n, v)
+			}
+		}
+	})
+	return c
 }
