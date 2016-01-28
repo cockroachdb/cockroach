@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
 //go:generate stringer -type=clientMessageType
@@ -542,6 +543,8 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 }
 
 func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCodes []formatCode, sendDescription bool) error {
+	tracer.AnnotateTrace()
+
 	c.session.Database = c.opts.database
 
 	// TODO(dt): this is a clumsy check better left to the actual parser. #3852
