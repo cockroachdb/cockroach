@@ -47,6 +47,16 @@ if [ "${1-}" = "docker" ]; then
 
     cmds=$(grep '^cmd' GLOCKFILE | grep -v glock | awk '{print $2}')
     time go install -v ${cmds}
+
+    # TODO(pmattis): This works around the problem seen in
+    # https://github.com/cockroachdb/cockroach/issues/4013 where
+    # certain checks and code generation tools rely on compiled
+    # packages. In particular, `stringer` definitely relies on
+    # compiled packages for imports and it appears `go vet` is
+    # similar. Would be nice to find a different solution, but simply
+    # removing the out of date packages does not fix the problem (it
+    # causes `stringer` to complain).
+    time make build
   fi
 
   if is_shard 1; then
@@ -56,7 +66,7 @@ if [ "${1-}" = "docker" ]; then
   fi
 
   if is_shard 0; then
-    time make install GOFLAGS=-v
+    time make install
     time go test -v -i ./...
     time go test -v -c -tags acceptance ./acceptance
     # Avoid code rot.
