@@ -233,17 +233,10 @@ func (l *LocalCluster) initCluster() {
 		}
 	}
 	create := func() (*Container, error) {
-		var entrypoint []string
-		if *cockroachImage == builderImage {
-			entrypoint = append(entrypoint, "/"+filepath.Base(*cockroachBinary))
-		} else if *cockroachEntry != "" {
-			entrypoint = append(entrypoint, *cockroachEntry)
-		}
 		return createContainer(l, dockerclient.ContainerConfig{
 			Image:      *cockroachImage,
 			Volumes:    vols,
-			Entrypoint: entrypoint,
-			Cmd:        []string{"init", "--stores=ssd=" + dataStr(0, 0)},
+			Entrypoint: []string{"/bin/true"},
 		})
 	}
 	c, err := create()
@@ -351,11 +344,6 @@ func (l *LocalCluster) createNodeCerts() {
 }
 
 func (l *LocalCluster) startNode(i int) *Container {
-	gossipNodes := []string{}
-	for j := 0; j < l.numLocal; j++ {
-		gossipNodes = append(gossipNodes, fmt.Sprintf("%s:%d", nodeStr(j), cockroachPort))
-	}
-
 	var stores = "ssd=" + dataStr(i, 0)
 	for j := 1; j < l.numStores; j++ {
 		stores += ",ssd=" + dataStr(i, j)
@@ -367,9 +355,13 @@ func (l *LocalCluster) startNode(i int) *Container {
 		"--certs=/certs",
 		"--host=" + nodeStr(i),
 		"--port=" + fmt.Sprintf("%d", cockroachPort),
-		"--gossip=" + strings.Join(gossipNodes, ","),
 		"--scan-max-idle-time=200ms", // set low to speed up tests
 	}
+	// Append --join flag for all nodes except first.
+	if i > 0 {
+		cmd = append(cmd, fmt.Sprintf("--join=%s:%d", nodeStr(0), cockroachPort))
+	}
+
 	var locallogDir string
 	if len(l.logDir) > 0 {
 		dockerlogDir := "/logs/" + nodeStr(i)

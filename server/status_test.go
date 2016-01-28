@@ -261,7 +261,7 @@ func startServer(t *testing.T) TestServer {
 	ts.Ctx = NewTestContext()
 	ts.StoresPerNode = 3
 	if err := ts.Start(); err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to start test server: %s", err)
 	}
 
 	// Make sure the range is spun up with an arbitrary read command. We do not

@@ -77,7 +77,7 @@ func TestInitEngine(t *testing.T) {
 	}
 	for _, spec := range testCases {
 		ctx := NewContext()
-		ctx.Stores, ctx.GossipBootstrap = spec.key, SelfGossipAddr
+		ctx.Stores = spec.key
 		if err := ctx.InitStores(stopper); err == nil {
 			engines := ctx.Engines
 			if spec.wantError {
@@ -109,7 +109,6 @@ func TestInitEngines(t *testing.T) {
 
 	ctx := NewContext()
 	ctx.Stores = fmt.Sprintf("mem=1000,mem:ddr3=1000,ssd=%s,hdd:7200rpm=%s", tmp[0], tmp[1])
-	ctx.GossipBootstrap = SelfGossipAddr
 	expEngines := []struct {
 		attrs roachpb.Attributes
 		isMem bool

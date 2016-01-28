@@ -35,7 +35,7 @@ func main() {
 		os.Args = append(os.Args, "help")
 	}
 	if err := cli.Run(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed running command %q: %v\n", os.Args[1:], err)
+		fmt.Fprintf(os.Stderr, "Failed running %q\n", os.Args[1])
 		os.Exit(1)
 	}
 }
