@@ -205,7 +205,7 @@ func (is *infoStore) getNodes() map[int32]*Node {
 // invoked whenever new info for a gossip key matching pattern is
 // received. The callback method is invoked with the info key which
 // matched pattern. Returns a function to unregister the callback.
-// Note: the callback may fire immediately after being unregistered.
+// Note: the callback may fire after being unregistered.
 func (is *infoStore) registerCallback(pattern string, method Callback) func() {
 	re := regexp.MustCompile(pattern)
 	cb := &callback{pattern: re, method: method}
