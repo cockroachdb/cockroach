@@ -1007,7 +1007,7 @@ func makeSpans(constraints indexConstraints,
 	// But we also have (...) IN <tuple> constraints that span multiple columns.
 	// These constraints split each span, and that's how we can end up with
 	// multiple spans.
-	spans := spans{{
+	resultSpans := spans{{
 		start: append(roachpb.Key(nil), prefix...),
 		end:   append(roachpb.Key(nil), prefix...),
 	}}
@@ -1024,7 +1024,7 @@ func makeSpans(constraints indexConstraints,
 		if ((c.start != nil) && (c.start.Operator == parser.In)) ||
 			((c.end != nil) && (c.end.Operator == parser.IN)) {
 			var coveredCols int
-			spans, coveredCols = applyInConstraint(spans, c, colIdx, index, lastEnd)
+			resultSpans, coveredCols = applyInConstraint(resultSpans, c, colIdx, index, lastEnd)
 			// Skip over all the columns contained in the tuple.
 			colIdx += coveredCols - 1
 			continue
@@ -1036,24 +1036,24 @@ func makeSpans(constraints indexConstraints,
 		}
 		if c.start != nil {
 			if dir == encoding.Ascending {
-				encodeStartConstraintAscending(spans, c.start)
+				encodeStartConstraintAscending(resultSpans, c.start)
 			} else {
-				encodeStartConstraintDescending(spans, c.start)
+				encodeStartConstraintDescending(resultSpans, c.start)
 			}
 		}
 		if c.end != nil {
 			if dir == encoding.Ascending {
-				encodeEndConstraintAscending(spans, c.end, lastEnd)
+				encodeEndConstraintAscending(resultSpans, c.end, lastEnd)
 			} else {
-				encodeEndConstraintDescending(spans, c.end, lastEnd)
+				encodeEndConstraintDescending(resultSpans, c.end, lastEnd)
 			}
 		}
 	}
 
 	// If we had no end constraints, make it so that we scan the whole index.
 	if len(constraints) == 0 || constraints[0].end == nil {
-		for i := range spans {
-			spans[i].end = spans[i].end.PrefixEnd()
+		for i := range resultSpans {
+			resultSpans[i].end = resultSpans[i].end.PrefixEnd()
 		}
 	}
 
@@ -1061,16 +1061,16 @@ func makeSpans(constraints indexConstraints,
 	// "a > 1 AND a < 2" which we do not simplify to false but which is treated
 	// as "a >= 2 AND a < 2" for span generation.
 	n := 0
-	for _, s := range spans {
+	for _, s := range resultSpans {
 		if bytes.Compare(s.start, s.end) < 0 {
-			spans[n] = s
+			resultSpans[n] = s
 			n++
 		}
 	}
-	spans = spans[:n]
+	resultSpans = resultSpans[:n]
 	// Sort the spans to return them in index order.
-	sort.Sort(spans)
-	return spans
+	sort.Sort(resultSpans)
+	return resultSpans
 }
 
 // exactPrefix returns the count of the columns of the index for which an exact

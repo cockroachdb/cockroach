@@ -1555,28 +1555,29 @@ func TestMVCCAbortTxn(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	txn1Abort := txn1Abort.Clone()
-	txn1Abort.Timestamp = makeTS(0, 1)
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+		t.Fatal(err)
+	}
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, txn1Abort)
-	if err != nil {
+	txn1AbortWithTS := txn1Abort.Clone()
+	txn1AbortWithTS.Timestamp = makeTS(0, 1)
+
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, txn1AbortWithTS); err != nil {
 		t.Fatal(err)
 	}
 	if err := engine.Commit(); err != nil {
 		t.Fatal(err)
 	}
 
-	value, _, err := MVCCGet(engine, testKey1, makeTS(1, 0), true, nil)
-	if err != nil || value != nil {
-		t.Fatalf("the value should be empty: %s", err)
-	}
-	meta, err := engine.Get(mvccKey(testKey1))
-	if err != nil {
+	if value, _, err := MVCCGet(engine, testKey1, makeTS(1, 0), true, nil); err != nil {
 		t.Fatal(err)
+	} else if value != nil {
+		t.Fatalf("expected the value to be empty: %s", value)
 	}
-	if len(meta) != 0 {
-		t.Fatalf("expected no more MVCCMetadata")
+	if meta, err := engine.Get(mvccKey(testKey1)); err != nil {
+		t.Fatal(err)
+	} else if len(meta) != 0 {
+		t.Fatalf("expected no more MVCCMetadata, got: %s", meta)
 	}
 }
 
@@ -1586,34 +1587,38 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	txn1Abort := txn1Abort.Clone()
-	txn1Abort.Timestamp = makeTS(2, 0)
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(engine, nil, testKey1, makeTS(2, 0), value3, txn1); err != nil {
+		t.Fatal(err)
+	}
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil)
-	err = MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, nil)
-	err = MVCCPut(engine, nil, testKey1, makeTS(2, 0), value3, txn1)
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, txn1Abort)
+	txn1AbortWithTS := txn1Abort.Clone()
+	txn1AbortWithTS.Timestamp = makeTS(2, 0)
+
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, txn1AbortWithTS); err != nil {
+		t.Fatal(err)
+	}
 	if err := engine.Commit(); err != nil {
 		t.Fatal(err)
 	}
 
-	meta, err := engine.Get(mvccKey(testKey1))
-	if err != nil {
+	if meta, err := engine.Get(mvccKey(testKey1)); err != nil {
 		t.Fatal(err)
-	}
-	if len(meta) != 0 {
-		t.Fatalf("did not expect the MVCCMetadata")
+	} else if len(meta) != 0 {
+		t.Fatalf("expected no more MVCCMetadata, got: %s", meta)
 	}
 
-	value, _, err := MVCCGet(engine, testKey1, makeTS(3, 0), true, nil)
-	if err != nil {
+	if value, _, err := MVCCGet(engine, testKey1, makeTS(3, 0), true, nil); err != nil {
 		t.Fatal(err)
-	}
-	if !value.Timestamp.Equal(makeTS(1, 0)) {
-		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, makeTS(1, 0))
-	}
-	if !bytes.Equal(value2.RawBytes, value.RawBytes) {
-		t.Fatalf("the value %s in get result does not match the value %s in request",
+	} else if expTS := makeTS(1, 0); !value.Timestamp.Equal(expTS) {
+		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, expTS)
+	} else if !bytes.Equal(value2.RawBytes, value.RawBytes) {
+		t.Fatalf("the value %q in get result does not match the value %q in request",
 			value.RawBytes, value2.RawBytes)
 	}
 }
@@ -1893,24 +1898,26 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 	engine := createTestEngine(stopper)
 
 	// Resolve a non existent key; noop.
-	err := MVCCResolveWriteIntent(engine, nil, testKey1, txn1Commit)
-	if err != nil {
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, txn1Commit); err != nil {
 		t.Fatal(err)
 	}
 
 	// Add key and resolve despite there being no intent.
-	err = MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil)
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, txn2Commit)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, txn2Commit); err != nil {
 		t.Fatal(err)
 	}
 
 	// Write intent and resolve with different txn.
-	err = MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, txn1)
-	txn2Commit := txn2Commit.Clone()
-	txn2Commit.Timestamp = makeTS(1, 0)
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, txn2Commit)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, txn1); err != nil {
+		t.Fatal(err)
+	}
+
+	txn1CommitWithTS := txn2Commit.Clone()
+	txn1CommitWithTS.Timestamp = makeTS(1, 0)
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, txn1CommitWithTS); err != nil {
 		t.Fatal(err)
 	}
 }
