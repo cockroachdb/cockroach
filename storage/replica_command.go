@@ -1703,7 +1703,7 @@ func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica r
 		return err
 	}
 
-	err = r.store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := r.store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.
 		b := &client.Batch{}
@@ -1732,9 +1732,9 @@ func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica r
 			},
 		})
 		return txn.Run(b)
-	}).GoError()
-	if err != nil {
-		return util.Errorf("change replicas of %d failed: %s", desc.RangeID, err)
+	})
+	if pErr != nil {
+		return util.Errorf("change replicas of %d failed: %s", desc.RangeID, pErr)
 	}
 	return nil
 }
