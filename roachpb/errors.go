@@ -60,7 +60,7 @@ func NewError(err error) *Error {
 	if intErr, ok := err.(*internalError); ok {
 		*e = *(*Error)(intErr)
 	} else {
-		e.SetGoError(err)
+		e.setGoError(err)
 	}
 	return e
 }
@@ -145,8 +145,8 @@ func (e *Error) GoError() error {
 	return err
 }
 
-// SetGoError sets Error using err.
-func (e *Error) SetGoError(err error) {
+// setGoError sets Error using err.
+func (e *Error) setGoError(err error) {
 	if e.Message != "" {
 		panic("cannot re-use roachpb.Error")
 	}
