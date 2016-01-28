@@ -135,7 +135,6 @@ type scanNode struct {
 	implicitValTypes []parser.Datum    // the implicit value types for unique indexes
 	implicitVals     []parser.Datum    // the implicit values for unique indexes
 	qvals            qvalMap           // the values in the current row
-	filter           parser.Expr       // filtering expression for rows
 	render           []parser.Expr     // rendering expressions for rows
 	explain          explainMode
 	explainValue     parser.Datum
@@ -382,48 +381,6 @@ func (n *scanNode) initScan() bool {
 	}
 	return true
 }
-
-func (n *scanNode) init(sel *parser.Select) *roachpb.Error {
-	return nil
-	/* MEH
-	// TODO(radu): the where/targets logic will move into selectNode
-	if pErr := n.initWhere(sel.Where); pErr != nil {
-		return pErr
-	}
-	return n.initTargets(sel.Exprs)
-	*/
-}
-
-/* MEH
-func (n *scanNode) initWhere(where *parser.Where) *roachpb.Error {
-	if where == nil {
-		return nil
-	}
-	n.filter, n.pErr = n.resolveQNames(where.Expr)
-	if n.pErr == nil {
-		var whereType parser.Datum
-		var err error
-		whereType, err = n.filter.TypeCheck(n.planner.evalCtx.Args)
-		n.pErr = roachpb.NewError(err)
-		if n.pErr == nil {
-			if !(whereType == parser.DummyBool || whereType == parser.DNull) {
-				n.pErr = roachpb.NewUErrorf("argument of WHERE must be type %s, not type %s", parser.DummyBool.Type(), whereType.Type())
-			}
-		}
-	}
-	if n.pErr == nil {
-		// Normalize the expression (this will also evaluate any branches that are
-		// constant).
-		var err error
-		n.filter, err = n.planner.parser.NormalizeExpr(n.planner.evalCtx, n.filter)
-		n.pErr = roachpb.NewError(err)
-	}
-	if n.pErr == nil {
-		n.filter, n.pErr = n.planner.expandSubqueries(n.filter, 1)
-	}
-	return n.pErr
-}
-*/
 
 // initOrdering initializes the ordering info using the selected index. This
 // must be called after index selection is performed.
@@ -683,40 +640,6 @@ func (n *scanNode) maybeOutputRow() bool {
 	}
 	return false
 }
-
-/*
-
-// filterRow checks to see if the current row matches the filter (i.e. the
-// where-clause). May set n.pErr if an error occurs during expression
-// evaluation.
-func (n *scanNode) filterRow() bool {
-	if n.desc != nil {
-		for _, col := range n.visibleCols {
-			if !col.Nullable {
-				continue
-			}
-			if qval, ok := n.qvals[col.ID]; ok && qval.datum == nil {
-				qval.datum = parser.DNull
-				continue
-			}
-		}
-	}
-
-	if n.filter == nil {
-		return true
-	}
-
-	var d parser.Datum
-	var err error
-	d, err = n.filter.Eval(n.planner.evalCtx)
-	n.pErr = roachpb.NewError(err)
-	if n.pErr != nil {
-		return false
-	}
-
-	return d != parser.DNull && bool(d.(parser.DBool))
-}
-*/
 
 // explainDebug fills in four extra debugging values in the current row:
 //  - the row index,
