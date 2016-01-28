@@ -187,7 +187,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 						} else {
 							pErr = db.Put(key, "value")
 						}
-						if _, ok := pErr.GoError().(*roachpb.WriteIntentError); !ok {
+						if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 							break
 						}
 					}

@@ -163,7 +163,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 
 	txn := NewTxn(*db)
 	_, pErr := txn.db.sender.Send(context.Background(), testPut())
-	if _, ok := pErr.GoError().(*roachpb.TransactionAbortedError); !ok {
+	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
 		t.Fatalf("expected TransactionAbortedError, got %v", pErr)
 	}
 
@@ -456,7 +456,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 			if count != 1 {
 				t.Errorf("%d: expected no retries; got %d", i, count)
 			}
-			if reflect.TypeOf(pErr.GoError()) != reflect.TypeOf(test.err) {
+			if reflect.TypeOf(pErr.GetDetail()) != reflect.TypeOf(test.err) {
 				t.Errorf("%d: expected error of type %T; got %T", i, test.err, pErr)
 			}
 		}

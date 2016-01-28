@@ -358,7 +358,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 				}
 			case 1:
 				// Past deadline.
-				if _, ok := pErr.GoError().(*roachpb.TransactionAbortedError); !ok {
+				if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
 					t.Errorf("expected TransactionAbortedError but got %T: %s", pErr, pErr)
 				}
 			case 2:
@@ -391,7 +391,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 	if err := txn.Put("x", "y"); err != nil {
 		t.Fatal(err)
 	}
-	err, ok := txn.CPut(key, []byte("x"), []byte("born to fail")).GoError().(*roachpb.ConditionFailedError)
+	err, ok := txn.CPut(key, []byte("x"), []byte("born to fail")).GetDetail().(*roachpb.ConditionFailedError)
 	if !ok {
 		t.Fatal(err)
 	}
@@ -433,7 +433,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	// Now end the transaction and verify we've cleanup up, even though
 	// end transaction failed.
 	pErr := txn1.Commit()
-	switch pErr.GoError().(type) {
+	switch pErr.GetDetail().(type) {
 	case *roachpb.TransactionAbortedError:
 		// Expected
 	default:

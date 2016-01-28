@@ -63,7 +63,7 @@ func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachp
 	if pErr == nil {
 		ts.Proto.Update(br.Txn)
 		return br, nil
-	} else if _, ok := pErr.GoError().(*roachpb.TransactionAbortedError); ok {
+	} else if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		// On Abort, reset the transaction so we start anew on restart.
 		ts.Proto = roachpb.Transaction{
 			Name:      ts.Proto.Name,

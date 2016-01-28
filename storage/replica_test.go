@@ -357,7 +357,7 @@ func TestRangeReadConsistency(t *testing.T) {
 	_, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		ReadConsistency: roachpb.CONSISTENT,
 	}, &gArgs)
-	if _, ok := pErr.GoError().(*roachpb.NotLeaderError); !ok {
+	if _, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok {
 		t.Errorf("expected not leader error; got %s", pErr)
 	}
 
@@ -407,7 +407,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	_, pErr := client.SendWrappedWith(tc.Sender(), nil, roachpb.Header{
 		Timestamp: tc.clock.Now().Add(-100, 0),
 	}, &pArgs)
-	if _, ok := pErr.GoError().(*roachpb.NotLeaderError); !ok {
+	if _, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok {
 		t.Fatalf("expected not leader error in return, got %v", pErr)
 	}
 }
@@ -423,7 +423,7 @@ func TestRangeRangeBoundsChecking(t *testing.T) {
 
 	_, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &gArgs)
 
-	if _, ok := pErr.GoError().(*roachpb.RangeKeyMismatchError); !ok {
+	if _, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); !ok {
 		t.Errorf("expected range key mismatch error: %s", pErr)
 	}
 }
@@ -473,7 +473,7 @@ func TestRangeLeaderLease(t *testing.T) {
 	}
 
 	pErr := tc.rng.redirectOnOrAcquireLeaderLease(nil)
-	if lErr, ok := pErr.GoError().(*roachpb.NotLeaderError); !ok || lErr == nil {
+	if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok || lErr == nil {
 		t.Fatalf("wanted NotLeaderError, got %s", pErr)
 	}
 
@@ -495,7 +495,7 @@ func TestRangeLeaderLease(t *testing.T) {
 		}
 	}
 
-	if _, ok := rng.redirectOnOrAcquireLeaderLease(nil).GoError().(*roachpb.NotLeaderError); !ok {
+	if _, ok := rng.redirectOnOrAcquireLeaderLease(nil).GetDetail().(*roachpb.NotLeaderError); !ok {
 		t.Fatalf("expected %T, got %s", &roachpb.NotLeaderError{}, err)
 	}
 }
@@ -553,7 +553,7 @@ func TestRangeNotLeaderError(t *testing.T) {
 	for i, test := range testCases {
 		_, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: now}, test)
 
-		if _, ok := pErr.GoError().(*roachpb.NotLeaderError); !ok {
+		if _, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok {
 			t.Errorf("%d: expected not leader error: %s", i, pErr)
 		}
 	}
@@ -1520,7 +1520,7 @@ func TestRangeSequenceCacheStoredTxnRetryError(t *testing.T) {
 		_, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			Txn: txn,
 		}, &args)
-		if _, ok := pErr.GoError().(*roachpb.TransactionRetryError); !ok {
+		if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 			t.Fatalf("%d: unexpected error %v", i, pErr)
 		}
 	}
@@ -1543,7 +1543,7 @@ func TestRangeSequenceCacheStoredTxnRetryError(t *testing.T) {
 	txn.Timestamp.Forward(txn.Timestamp.Add(10, 10)) // can't hurt
 	{
 		pErr := try()
-		if _, ok := pErr.GoError().(*roachpb.TransactionRetryError); !ok {
+		if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 			t.Fatal(pErr)
 		}
 	}
@@ -1607,7 +1607,7 @@ func TestEndTransactionDeadline(t *testing.T) {
 				}
 			case 1:
 				// Past deadline.
-				if _, ok := pErr.GoError().(*roachpb.TransactionAbortedError); !ok {
+				if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
 					t.Errorf("expected TransactionAbortedError but got %T: %s", pErr, pErr)
 				}
 			case 2:
@@ -1809,7 +1809,7 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 			if pErr == nil {
 				t.Errorf("expected error")
 			}
-			if _, ok := pErr.GoError().(*roachpb.TransactionRetryError); !ok {
+			if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 				t.Errorf("expected retry error; got %s", pErr)
 			}
 		} else {
@@ -2039,7 +2039,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	// Check if the intent in the other range has not yet been resolved.
 	gArgs := getArgs(splitKey)
 	_, pErr := client.SendWrapped(newRng, newRng.context(), &gArgs)
-	if _, ok := pErr.GoError().(*roachpb.WriteIntentError); !ok {
+	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 		t.Errorf("expected write intent error, but got %s", pErr)
 	}
 
@@ -2189,7 +2189,7 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 				t.Fatal(pErr)
 			}
 			assert = func(pErr *roachpb.Error) {
-				if _, ok := pErr.GoError().(*roachpb.TransactionAbortedError); !ok {
+				if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
 					t.Fatalf("abort=%t, iso=%s: expected txn abort, got %s", abort, iso, pErr)
 				}
 			}
@@ -2206,7 +2206,7 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 				t.Fatal(pErr)
 			}
 			assert = func(pErr *roachpb.Error) {
-				if _, ok := pErr.GoError().(*roachpb.TransactionRetryError); !ok {
+				if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 					t.Fatalf("abort=%t, iso=%s: expected txn retry, got %s",
 						abort, iso, pErr)
 				}
@@ -2262,7 +2262,7 @@ func TestSequenceCacheError(t *testing.T) {
 	}
 
 	pErr := tc.rng.checkSequenceCache(tc.engine, txn)
-	if _, ok := pErr.GoError().(*roachpb.TransactionRetryError); ok {
+	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); ok {
 		expected := txn.Clone()
 		expected.Timestamp = ts
 		if pErr.GetTxn() == nil || !reflect.DeepEqual(pErr.GetTxn(), expected) {
@@ -2278,7 +2278,7 @@ func TestSequenceCacheError(t *testing.T) {
 	}
 
 	pErr = tc.rng.checkSequenceCache(tc.engine, txn)
-	if _, ok := pErr.GoError().(*roachpb.TransactionAbortedError); ok {
+	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		expected := txn.Clone()
 		expected.Timestamp = ts
 		if pErr.GetTxn() == nil || !reflect.DeepEqual(pErr.GetTxn(), expected) {
@@ -2488,7 +2488,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 			continue
 		}
 		if pErr != nil {
-			if _, ok := pErr.GoError().(*roachpb.TransactionPushError); !ok {
+			if _, ok := pErr.GetDetail().(*roachpb.TransactionPushError); !ok {
 				t.Errorf("%d: expected txn push error: %s", i, pErr)
 			}
 		} else if txn := reply.(*roachpb.PushTxnResponse).PusheeTxn; txn.Status != roachpb.ABORTED {
@@ -2559,7 +2559,7 @@ func TestPushTxnPriorities(t *testing.T) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, pErr)
 		}
 		if pErr != nil {
-			if _, ok := pErr.GoError().(*roachpb.TransactionPushError); !ok {
+			if _, ok := pErr.GetDetail().(*roachpb.TransactionPushError); !ok {
 				t.Errorf("expected txn push error: %s", pErr)
 			}
 		}
@@ -2926,7 +2926,7 @@ func TestConditionFailedError(t *testing.T) {
 
 	_, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: roachpb.MinTimestamp}, &args)
 
-	if cErr, ok := pErr.GoError().(*roachpb.ConditionFailedError); pErr == nil || !ok {
+	if cErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); pErr == nil || !ok {
 		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
 			pErr, pErr)
 	} else if valueBytes, err := cErr.ActualValue.GetBytes(); err != nil {
@@ -3138,7 +3138,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	_, pErr = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 		ReadConsistency: roachpb.CONSISTENT,
 	}, rlArgs)
-	if _, ok := pErr.GoError().(*roachpb.WriteIntentError); !ok {
+	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 		t.Fatalf("expected WriteIntentError, not %s", pErr)
 	}
 
@@ -3433,7 +3433,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 		Timestamp: ts,
 		RangeID:   1,
 	}, &gArgs)
-	if _, ok := pErr.GoError().(*roachpb.RangeNotFoundError); !ok {
+	if _, ok := pErr.GetDetail().(*roachpb.RangeNotFoundError); !ok {
 		t.Fatalf("expected a RangeNotFoundError, get %s", pErr)
 	}
 }

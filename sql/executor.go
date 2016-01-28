@@ -347,7 +347,7 @@ func (e *Executor) execStmts(sql string, planMaker *planner) Response {
 							break
 						}
 						if pErr := sc.exec(); pErr != nil {
-							if _, ok := pErr.GoError().(*roachpb.ExistingSchemaChangeLeaseError); ok {
+							if _, ok := pErr.GetDetail().(*roachpb.ExistingSchemaChangeLeaseError); ok {
 								// Try again.
 								continue
 							}
@@ -507,7 +507,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 // deal with cleaning up transaction state.
 func makeResultFromError(planMaker *planner, pErr *roachpb.Error) Result {
 	if planMaker.txn != nil {
-		if _, ok := pErr.GoError().(*roachpb.SqlTransactionAbortedError); !ok {
+		if _, ok := pErr.GetDetail().(*roachpb.SqlTransactionAbortedError); !ok {
 			planMaker.txn.Cleanup(pErr)
 		}
 	}

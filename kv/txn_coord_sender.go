@@ -396,7 +396,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		var pErr *roachpb.Error
 		br, pErr = tc.wrapped.Send(ctx, ba)
 
-		if _, ok := pErr.GoError().(*roachpb.OpRequiresTxnError); ok {
+		if _, ok := pErr.GetDetail().(*roachpb.OpRequiresTxnError); ok {
 			br, pErr = tc.resendWithTxn(ba)
 		}
 
@@ -647,7 +647,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	pErr = proto.Clone(pErr).(*roachpb.Error)
 	// TODO(bdarnell): We're writing to errors here (and where using ErrorWithIndex);
 	// since there's no concept of ownership copy-on-write is always preferable.
-	switch t := pErr.GoError().(type) {
+	switch t := pErr.GetDetail().(type) {
 	case nil:
 		newTxn.Update(br.Txn)
 		// Move txn timestamp forward to response timestamp if applicable.

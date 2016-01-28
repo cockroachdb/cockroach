@@ -677,7 +677,7 @@ func (s *Store) maybeGossipFirstRange() *roachpb.Error {
 		rng := s.LookupReplica(roachpb.RKeyMin, nil)
 		if rng != nil {
 			pErr := rng.maybeGossipFirstRange()
-			if nlErr, ok := pErr.GoError().(*roachpb.NotLeaderError); !ok || nlErr.Leader != nil {
+			if nlErr, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok || nlErr.Leader != nil {
 				return pErr
 			}
 		} else {
@@ -1292,7 +1292,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 		// because this is the code path with the requesting client
 		// waiting. We don't want every replica to attempt to resolve the
 		// intent independently, so we can't do it there.
-		if wiErr, ok := pErr.GoError().(*roachpb.WriteIntentError); ok {
+		if wiErr, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
 			var pushType roachpb.PushTxnType
 			if ba.IsWrite() {
 				pushType = roachpb.PUSH_ABORT
@@ -1323,11 +1323,11 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 			}
 		}
 
-		switch t := pErr.GoError().(type) {
+		switch t := pErr.GetDetail().(type) {
 		case *roachpb.ReadWithinUncertaintyIntervalError:
 			t.NodeID = ba.Replica.NodeID
 		case *roachpb.WriteTooOldError:
-			trace.Event(fmt.Sprintf("error: %T", pErr.GoError()))
+			trace.Event(fmt.Sprintf("error: %T", pErr.GetDetail()))
 			// Update request timestamp and retry immediately.
 			ba.Timestamp = t.ExistingTimestamp.Next()
 			r.Reset()
@@ -1336,7 +1336,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 			}
 			continue
 		case *roachpb.WriteIntentError:
-			trace.Event(fmt.Sprintf("error: %T", pErr.GoError()))
+			trace.Event(fmt.Sprintf("error: %T", pErr.GetDetail()))
 			// If write intent error is resolved, exit retry/backoff loop to
 			// immediately retry.
 			if t.Resolved {
@@ -1769,7 +1769,7 @@ func raftEntryFormatter(data []byte) string {
 // GetStatus fetches the latest store status from the stored value on the cluster.
 // Returns nil if the scanner has not yet run. The scanner runs once every
 // ctx.ScanInterval.
-func (s *Store) GetStatus() (*StoreStatus, error) {
+func (s *Store) GetStatus() (*StoreStatus, *roachpb.Error) {
 	if s.scanner.Count() == 0 {
 		// The scanner hasn't completed a first run yet.
 		return nil, nil
@@ -1777,7 +1777,7 @@ func (s *Store) GetStatus() (*StoreStatus, error) {
 	key := keys.StoreStatusKey(int32(s.Ident.StoreID))
 	status := &StoreStatus{}
 	if pErr := s.db.GetProto(key, status); pErr != nil {
-		return nil, pErr.GoError()
+		return nil, pErr
 	}
 	return status, nil
 }

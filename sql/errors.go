@@ -52,7 +52,7 @@ func convertBatchError(tableDesc *TableDescriptor, b client.Batch, origPErr *roa
 		panic(fmt.Sprintf("index %d outside of results: %+v", index, b.Results))
 	}
 	result := b.Results[index]
-	if _, ok := origPErr.GoError().(*roachpb.ConditionFailedError); ok {
+	if _, ok := origPErr.GetDetail().(*roachpb.ConditionFailedError); ok {
 		for _, row := range result.Rows {
 			indexID, key, pErr := decodeIndexKeyPrefix(tableDesc, row.Key)
 			if pErr != nil {

@@ -356,7 +356,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	_, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		Txn: txn,
 	}, &lIncArgs)
-	if _, ok := pErr.GoError().(*roachpb.TransactionRetryError); !ok {
+	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 		t.Fatalf("unexpected sequence cache miss: %v", pErr)
 	}
 
@@ -366,7 +366,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		RangeID: newRng.RangeID,
 		Txn:     txn,
 	}, &rIncArgs)
-	if _, ok := pErr.GoError().(*roachpb.TransactionRetryError); !ok {
+	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 		t.Fatalf("unexpected sequence cache miss: %v", pErr)
 	}
 
@@ -501,7 +501,7 @@ func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key
 		}, &pArgs)
 		// When the split occurs in the background, our writes may start failing.
 		// We know we can stop writing when this happens.
-		if _, ok := pErr.GoError().(*roachpb.RangeKeyMismatchError); ok {
+		if _, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); ok {
 			return
 		} else if pErr != nil {
 			t.Fatal(pErr)
