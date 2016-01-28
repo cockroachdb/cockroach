@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/uuid"
 
 	"github.com/spf13/cobra"
 )
@@ -77,77 +76,30 @@ func getJSON(hostport, path string, v interface{}) error {
 	return util.GetJSON(httpClient, context.HTTPRequestScheme(), hostport, path, v)
 }
 
-// initCmd command initializes a new Cockroach cluster.
-var initCmd = &cobra.Command{
-	Use:   "init --stores=...",
-	Short: "init new Cockroach cluster",
-	Long: `
-Initialize a new Cockroach cluster using the --stores flag to specify one or
-more storage locations. The first of these storage locations is used to
-bootstrap the first replica of the first range. If any of the storage locations
-are already part of a pre-existing cluster, the bootstrap will fail.
-`,
-	Example:      `  cockroach init --stores=ssd=/mnt/ssd1,ssd=/mnt/ssd2`,
-	SilenceUsage: true,
-	RunE:         runInit,
-}
-
-// runInit initializes the engine based on the first
-// store. The bootstrap engine may not be an in-memory type.
-func runInit(_ *cobra.Command, _ []string) error {
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-
-	// Default user for servers.
-	context.User = security.NodeUser
-
-	if err := context.InitStores(stopper); err != nil {
-		return util.Errorf("failed to initialize stores: %s", err)
-	}
-	if len(context.Engines) > 1 {
-		return util.Errorf("cannot bootstrap to more than one store")
-	}
-
-	return initCluster(stopper)
-}
-
-func initCluster(stopper *stop.Stopper) error {
-	// Generate a new UUID for cluster ID and bootstrap the cluster.
-	clusterID := uuid.NewUUID4().String()
-	if _, err := server.BootstrapCluster(clusterID, context.Engines, stopper); err != nil {
-		return util.Errorf("unable to bootstrap cluster: %s", err)
-	}
-
-	log.Infof("cockroach cluster %s has been initialized", clusterID)
-	return nil
-}
-
-// startCmd command starts nodes by joining the gossip network.
+// startCmd starts a node by initializing the stores and joining
+// the cluster.
 var startCmd = &cobra.Command{
 	Use:   "start",
-	Short: "start a node by joining the gossip network",
+	Short: "start a node",
 	Long: `
-Start a Cockroach node by joining the gossip network and exporting key ranges
-stored on physical device(s). The gossip network is joined by contacting one or
-more well-known hosts specified by the --gossip flag. Every node should be run
-with the same list of bootstrap hosts to guarantee a connected network. An
-alternate approach is to use a single host for --gossip and round-robin DNS.
+Start a CockroachDB node, which will export data from one or more
+storage devices, specified via the --stores flag.
 
-Each node exports data from one or more physical devices. These devices are
-specified via the --stores flag. This is a comma-separated list of paths to
-storage directories or for in-memory stores, the number of bytes. Although the
-paths should be specified to correspond uniquely to physical devices, this
-requirement isn't strictly enforced. See the --stores flag help description for
-additional details.`,
-	Example:      `  cockroach start --certs=<dir> --gossip=host1:port1[,...] --stores=ssd=/mnt/ssd1,...`,
+If no cluster exists yet and this is the first node, no additional
+flags are required. If the cluster already exists, and this node is
+uninitialized, specify the --join flag to point to any healhty node
+(or list of nodes) already part of the cluster. Alternatively, the
+environment variable COCKROACH_JOIN can be set.
+`,
+	Example:      `  cockroach start --certs=<dir> --stores=ssd=/mnt/ssd1,... [--join=host:port,[host:port]]`,
 	SilenceUsage: true,
 	RunE:         runStart,
 }
 
 // runStart starts the cockroach node using --stores as the list of
-// storage devices ("stores") on this machine and --gossip as the list
-// of "well-known" hosts used to join this node to the cockroach
-// cluster via the gossip network.
+// storage devices ("stores") on this machine and --join as the list
+// of other active nodes used to join this node to the cockroach
+// cluster, if this is its first time connecting.
 func runStart(_ *cobra.Command, _ []string) error {
 	info := util.GetBuildInfo()
 	log.Infof("[build] %s @ %s (%s)", info.Tag, info.Time, info.Vers)
@@ -160,36 +112,25 @@ func runStart(_ *cobra.Command, _ []string) error {
 		// for the default cluster-wide zone config.
 		config.DefaultZoneConfig.ReplicaAttrs = []roachpb.Attributes{{}}
 		context.Stores = "mem=1073741824"
-		context.GossipBootstrap = server.SelfGossipAddr
 	}
 
 	stopper := stop.NewStopper()
 	if err := context.InitStores(stopper); err != nil {
-		return util.Errorf("failed to initialize stores: %s", err)
-	}
-
-	if context.EphemeralSingleNode {
-		// A separate stopper for bootstrapping so that we can properly shutdown
-		// all of the stores.
-		initStopper := stop.NewStopper()
-		if err := initCluster(initStopper); err != nil {
-			return err
-		}
-		initStopper.Stop()
+		return fmt.Errorf("failed to initialize stores: %s", err)
 	}
 
 	if err := context.InitNode(); err != nil {
-		return util.Errorf("failed to initialize node: %s", err)
+		return fmt.Errorf("failed to initialize node: %s", err)
 	}
 
 	log.Info("starting cockroach node")
 	s, err := server.NewServer(context, stopper)
 	if err != nil {
-		return util.Errorf("failed to start Cockroach server: %s", err)
+		return fmt.Errorf("failed to start Cockroach server: %s", err)
 	}
 
-	if err := s.Start(false); err != nil {
-		return util.Errorf("cockroach server exited with error: %s", err)
+	if err := s.Start(); err != nil {
+		return fmt.Errorf("cockroach server exited with error: %s", err)
 	}
 
 	signalCh := make(chan os.Signal, 1)

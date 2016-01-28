@@ -57,7 +57,6 @@ var cockroachCmd = &cobra.Command{
 
 func init() {
 	cockroachCmd.AddCommand(
-		initCmd,
 		startCmd,
 		certCmd,
 		exterminateCmd,

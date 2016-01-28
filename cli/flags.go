@@ -18,6 +18,7 @@ package cli
 
 import (
 	"flag"
+	"os"
 	"reflect"
 	"strings"
 
@@ -69,18 +70,14 @@ var flagUsage = map[string]string{
         Directory containing RSA key and x509 certs. This flag is required if
         --insecure=false.
 `,
-	"gossip": `
-        A comma-separated list of gossip addresses or resolvers for gossip
-        bootstrap. Each item in the list has an optional type:
+	"join": `
+        A comma-separated list of addresses to use when a new node is joining
+        an existing cluster. Each address in the list has an optional type:
         [type=]<address>. An unspecified type means ip address or dns.
         Type is one of:
         - tcp: (default if type is omitted): plain ip address or hostname.
-        - unix: unix socket
-        - lb: RPC load balancer forwarding to an arbitrary node
         - http-lb: HTTP load balancer: we query
           http(s)://<address>/_status/details/local
-        - self: for single node systems, specify --gossip=self (the
-          <address> is omitted).
 `,
 	"key-size": `
         Key size in bits for CA/Node/Client certificates.
@@ -125,8 +122,8 @@ var flagUsage = map[string]string{
         clusters to be more responsive.
 `,
 	"time-until-store-dead": `
-		Adjusts the timeout for stores.  If there's been no gossiped updated
-		from a store after this time, the store is considered unavailable.
+		Adjusts the timeout for stores. If there's been no communication from
+		a store in this time interval, the store is considered unavailable.
         Replicas on an unavailable store will be moved to available ones.
 `,
 	"stores": `
@@ -157,6 +154,10 @@ func normalizeStdFlagName(s string) string {
 	return strings.Replace(s, "_", "-", -1)
 }
 
+// JoinUsingEnv is the name of the environment variable to fall back
+// on in the event that the --join flag was not specified.
+const JoinUsingEnv = "COCKROACH_JOIN"
+
 // initFlags sets the server.Context values to flag values.
 // Keep in sync with "server/context.go". Values in Context should be
 // settable here.
@@ -167,14 +168,6 @@ func initFlags(ctx *server.Context) {
 	flag.VisitAll(func(f *flag.Flag) {
 		pf.Var(pflagValue{f.Value}, normalizeStdFlagName(f.Name), f.Usage)
 	})
-
-	{
-		f := initCmd.Flags()
-		f.StringVar(&ctx.Stores, "stores", ctx.Stores, flagUsage["stores"])
-		if err := initCmd.MarkFlagRequired("stores"); err != nil {
-			panic(err)
-		}
-	}
 
 	{
 		f := startCmd.Flags()
@@ -193,8 +186,8 @@ func initFlags(ctx *server.Context) {
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, flagUsage["certs"])
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, flagUsage["insecure"])
 
-		// Gossip flags.
-		f.StringVar(&ctx.GossipBootstrap, "gossip", ctx.GossipBootstrap, flagUsage["gossip"])
+		// Cluster joining flags.
+		f.StringVar(&ctx.JoinUsing, "join", os.Getenv(JoinUsingEnv), flagUsage["join"])
 
 		// KV flags.
 		f.BoolVar(&ctx.Linearizable, "linearizable", ctx.Linearizable, flagUsage["linearizable"])
@@ -206,9 +199,6 @@ func initFlags(ctx *server.Context) {
 		f.DurationVar(&ctx.ScanMaxIdleTime, "scan-max-idle-time", ctx.ScanMaxIdleTime, flagUsage["scan-max-idle-time"])
 		f.DurationVar(&ctx.TimeUntilStoreDead, "time-until-store-dead", ctx.TimeUntilStoreDead, flagUsage["time-until-store-dead"])
 
-		if err := startCmd.MarkFlagRequired("gossip"); err != nil {
-			panic(err)
-		}
 		if err := startCmd.MarkFlagRequired("stores"); err != nil {
 			panic(err)
 		}
