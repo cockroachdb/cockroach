@@ -179,7 +179,7 @@ check:
 	  grep -vE '^vet: cannot process directory .git'
 	@echo "vet --shadow"
 	@! $(GO) tool vet --shadow . 2>&1 | \
-	  grep -vE '(declaration of err shadows|^vet: cannot process directory \.git)'
+	  grep -vE '(declaration of (pE|e)rr shadows|^vet: cannot process directory \.git)'
 	@echo "golint"
 	@! golint $(PKG) | \
 	  grep -vE '(\.pb\.go|embedded\.go|_string\.go|LastInsertId|sql/parser/(yaccpar|sql\.y):)' \

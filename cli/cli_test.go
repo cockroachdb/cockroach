@@ -613,7 +613,7 @@ Use "cockroach [command] --help" for more information about a command.
 	}
 }
 
-func Example_Node() {
+func Example_node() {
 	c := newCLITest()
 	defer c.Stop()
 
