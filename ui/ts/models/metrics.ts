@@ -244,8 +244,8 @@ module Models {
        */
       stacked: Utils.ChainProperty<boolean, Axis> = Utils.ChainProp(this, false);
 
-      // stores the hard-coded title if one is set
-       private _title: string;
+      // Stores the hard-coded title if one is set.
+      private _title: string;
 
       /**
        * Title returns an appropriate title for a chart displaying this
@@ -253,12 +253,12 @@ module Models {
        * on the axis.
        */
       title(): string;
-      title(t: string): this;
+      title(t: string): Axis;
 
       title(t?: string): (any) {
         if (typeof t === "string") {
           this._title = t;
-          return this;
+          return <Axis>this;
         } else {
           let selectors: Select.Selector[] = this.selectors();
           let customTitle: string = this._title;
