@@ -474,26 +474,6 @@ func computeOrdering(
 	*/
 }
 
-/* MEH
-func (n *scanNode) colIndex(expr parser.Expr) (int, error) {
-	switch i := expr.(type) {
-	case parser.DInt:
-		index := int(i)
-		if numCols := len(n.originalCols); index < 1 || index > numCols {
-			return -1, fmt.Errorf("invalid column index: %d not in range [1, %d]", index, numCols)
-		}
-		return index - 1, nil
-
-	case parser.Datum:
-		return -1, fmt.Errorf("non-integer constant column index: %s", expr)
-
-	default:
-		// expr doesn't look like a col index (i.e. not a constant).
-		return -1, nil
-	}
-}
-*/
-
 func (n *scanNode) processKV(kv client.KeyValue) bool {
 	if n.indexKey == nil {
 		// Reset the row to nil; it will get filled in in with the column
