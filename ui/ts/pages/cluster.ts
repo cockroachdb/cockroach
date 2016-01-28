@@ -142,7 +142,7 @@ module AdminViews {
             this);
           this._addChart(Metrics.NewAxis.apply(this, latencySelectors)
           .format(Utils.Convert.NanoToMilli)
-          ._title("Latency (ms)")
+          .title("Latency (ms)")
           .label("Milliseconds")
           .range([0]));
 

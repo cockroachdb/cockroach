@@ -52,8 +52,15 @@ module Components {
           if (vm.axis.stacked()) {
             this.chart = nv.models.stackedAreaChart()
               .showControls(false);
+
+            this.chart.xAxis
+              .tickFormat(function(t: string): string { console.log(t); console.log(typeof t); return d3.time.format("%H:%M:%S")(moment(t).toDate()); });
+
           } else {
             this.chart = nv.models.lineChart();
+
+            this.chart.xAxis
+              .tickFormat(function(t: Date): string { return d3.time.format("%H:%M:%S")(t); });
           }
           this.chart
             .x((d: Models.Proto.Datapoint) => new Date(d.timestamp_nanos / 1.0e6))
@@ -68,7 +75,6 @@ module Components {
 
           // Set xAxis ticks to properly format.
           this.chart.xAxis
-            .tickFormat(function(t: string|Date): string { return typeof t === "string" ? t : d3.time.format("%H:%M:%S")(t); })
             .showMaxMin(false);
           this.chart.yAxis
             .axisLabel(vm.axis.label())
@@ -87,8 +93,6 @@ module Components {
               this.chart.forceY(range);
             }
           }
-
-          // this.chart.stacked(vm.axis.stacked());
         }
 
         /**

@@ -253,12 +253,12 @@ module Models {
        * on the axis.
        */
       title(): string;
-      title(t: string): this;
+      title(t: string): Axis;
 
       title(t?: string): (any) {
         if (typeof t === "string") {
           this._title = t;
-          return this;
+          return <Axis>this;
         } else {
           let selectors: Select.Selector[] = this.selectors();
           let customTitle: string = this._title;
