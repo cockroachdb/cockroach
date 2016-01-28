@@ -58,7 +58,7 @@ SELECT rowid FROM t WHERE a = 10
 11
 
 query TTBT
-SHOW COLUMNS FROM t;
+SHOW COLUMNS FROM t
 ----
 a INT true NULL
 b INT true NULL
@@ -66,4 +66,10 @@ rowid INT false experimental_unique_int()
 c STRING true NULL
 
 statement ok
-CREATE INDEX a_idx ON t (a);
+CREATE INDEX a_idx ON t (a)
+
+statement ok
+INSERT INTO t DEFAULT VALUES
+
+statement error syntax error
+INSERT INTO t (a, b) DEFAULT VALUES
