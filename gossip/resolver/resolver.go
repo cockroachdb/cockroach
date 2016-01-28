@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
+	_ "github.com/cockroachdb/cockroach/util/log"
 )
 
 // Resolver is an interface which provides an abstract factory for
@@ -35,7 +36,6 @@ type Resolver interface {
 
 var validTypes = map[string]struct{}{
 	"tcp":     {},
-	"lb":      {},
 	"unix":    {},
 	"http-lb": {},
 }
@@ -44,7 +44,6 @@ var validTypes = map[string]struct{}{
 // A specification is of the form: [<network type>=]<address>
 // Network type can be one of:
 // - tcp: plain hostname of ip address
-// - lb: load balancer host name or ip: points to an unknown number of backends
 // - unix: unix sockets
 // - http-lb: http load balancer: queries http(s)://<lb>/_status/details/local
 //   for node addresses

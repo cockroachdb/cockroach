@@ -683,7 +683,6 @@ func setupClientBenchData(useSSL bool, numVersions, numKeys int, b *testing.B) (
 
 	s := &server.TestServer{}
 	s.Ctx = server.NewTestContext()
-	s.SkipBootstrap = exists
 	if !useSSL {
 		s.Ctx.Insecure = true
 	}

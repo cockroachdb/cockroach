@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -44,6 +45,7 @@ type Stores struct {
 	mu         sync.RWMutex               // Protects storeMap and addrs
 	storeMap   map[roachpb.StoreID]*Store // Map from StoreID to Store
 	biLatestTS roachpb.Timestamp          // Timestamp of gossip bootstrap info
+	latestBI   *gossip.BootstrapInfo      // Latest cached bootstrap info
 }
 
 var _ client.Sender = &Stores{}  // Stores implements the client.Sender interface
@@ -96,9 +98,8 @@ func (ls *Stores) AddStore(s *Store) {
 	// If we've already read the gossip bootstrap info, ensure that
 	// all stores have the most recent values.
 	if !ls.biLatestTS.Equal(roachpb.ZeroTimestamp) {
-		// ReadBootstrapInfo calls updateAllBootstrapInfos.
-		if err := ls.readBootstrapInfoLocked(&gossip.BootstrapInfo{}); err != nil {
-			log.Errorf("failed to update bootstrap info on stores: %s", err)
+		if err := ls.updateBootstrapInfo(ls.latestBI); err != nil {
+			log.Errorf("failed to update bootstrap info on newly added store: %s", err)
 		}
 	}
 }
@@ -256,40 +257,22 @@ func (ls *Stores) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, cons
 func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
-	return ls.readBootstrapInfoLocked(bi)
-}
-
-func (ls *Stores) readBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 	latestTS := roachpb.ZeroTimestamp
-	timestamps := map[roachpb.StoreID]roachpb.Timestamp{}
 
-	// Find the most recent bootstrap info, collecting timestamps for
-	// each store along the way.
-	for id, s := range ls.storeMap {
+	// Find the most recent bootstrap info.
+	for _, s := range ls.storeMap {
 		var storeBI gossip.BootstrapInfo
 		ok, err := engine.MVCCGetProto(s.engine, keys.StoreGossipKey(), roachpb.ZeroTimestamp, true, nil, &storeBI)
 		if err != nil {
 			return err
 		}
-		timestamps[id] = storeBI.Timestamp
 		if ok && latestTS.Less(storeBI.Timestamp) {
 			latestTS = storeBI.Timestamp
 			*bi = storeBI
 		}
 	}
-
-	// Update all stores with an earlier timestamp.
-	for id, s := range ls.storeMap {
-		if timestamps[id].Less(latestTS) {
-			if err := engine.MVCCPutProto(s.engine, nil, keys.StoreGossipKey(), roachpb.ZeroTimestamp, nil, bi); err != nil {
-				return err
-			}
-			log.Infof("updated gossip bootstrap info to %s", s)
-		}
-	}
-
-	ls.biLatestTS = latestTS
-	return nil
+	log.Infof("read %d node addresses from persistent storage", len(bi.Addresses))
+	return ls.updateBootstrapInfo(bi)
 }
 
 // WriteBootstrapInfo implements the gossip.Storage interface. Write
@@ -299,13 +282,26 @@ func (ls *Stores) readBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 func (ls *Stores) WriteBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
-	ls.biLatestTS = ls.clock.Now()
-	bi.Timestamp = ls.biLatestTS
+	bi.Timestamp = ls.clock.Now()
+	if err := ls.updateBootstrapInfo(bi); err != nil {
+		return err
+	}
+	log.Infof("wrote %d node addresses to persistent storage", len(bi.Addresses))
+	return nil
+}
+
+func (ls *Stores) updateBootstrapInfo(bi *gossip.BootstrapInfo) error {
+	if bi.Timestamp.Less(ls.biLatestTS) {
+		return nil
+	}
+	// Update the latest timestamp and set cached version.
+	ls.biLatestTS = bi.Timestamp
+	ls.latestBI = proto.Clone(bi).(*gossip.BootstrapInfo)
+	// Update all stores.
 	for _, s := range ls.storeMap {
 		if err := engine.MVCCPutProto(s.engine, nil, keys.StoreGossipKey(), roachpb.ZeroTimestamp, nil, bi); err != nil {
 			return err
 		}
-		log.Infof("wrote gossip bootstrap info to %s", s)
 	}
 	return nil
 }

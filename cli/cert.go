@@ -17,8 +17,9 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/util"
 
 	"github.com/spf13/cobra"
 )
@@ -44,7 +45,7 @@ individual files in the directory specified by --certs (required).
 // to their corresponding files.
 func runCreateCACert(cmd *cobra.Command, args []string) error {
 	if err := security.RunCreateCACert(context.Certs, keySize); err != nil {
-		return util.Errorf("failed to generate CA certificate: %s", err)
+		return fmt.Errorf("failed to generate CA certificate: %s", err)
 	}
 	return nil
 }
@@ -68,7 +69,7 @@ At least one host should be passed in (either IP address of dns name).
 // to their corresponding files.
 func runCreateNodeCert(cmd *cobra.Command, args []string) error {
 	if err := security.RunCreateNodeCert(context.Certs, keySize, args); err != nil {
-		return util.Errorf("failed to generate node certificate: %s", err)
+		return fmt.Errorf("failed to generate node certificate: %s", err)
 	}
 	return nil
 }
@@ -95,7 +96,7 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 		return errMissingParams
 	}
 	if err := security.RunCreateClientCert(context.Certs, keySize, args[0]); err != nil {
-		return util.Errorf("failed to generate clent certificate: %s", err)
+		return fmt.Errorf("failed to generate clent certificate: %s", err)
 	}
 	return nil
 }

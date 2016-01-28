@@ -31,7 +31,6 @@ import (
 	snappy "github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	crpc "github.com/cockroachdb/cockroach/rpc"
@@ -206,10 +205,9 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	return s, nil
 }
 
-// Start runs the RPC and HTTP servers, starts the gossip instance (if
-// selfBootstrap is true, uses the rpc server's address as the gossip
-// bootstrap), and starts the node using the supplied engines slice.
-func (s *Server) Start(selfBootstrap bool) error {
+// Start starts the server on the specified port, starts gossip and
+// initializes the node using the engines from the server's context.
+func (s *Server) Start() error {
 	tlsConfig, err := s.ctx.GetServerTLSConfig()
 	if err != nil {
 		return err
@@ -222,18 +220,8 @@ func (s *Server) Start(selfBootstrap bool) error {
 	}
 
 	s.listener = ln
-
 	addr := ln.Addr()
-	addrStr := addr.String()
 
-	// Handle self-bootstrapping case for a single node.
-	if selfBootstrap {
-		selfResolver, err := resolver.NewResolver(&s.ctx.Context, addrStr)
-		if err != nil {
-			return err
-		}
-		s.gossip.SetResolvers([]resolver.Resolver{selfResolver})
-	}
 	s.gossip.Start(s.rpc, addr, s.stopper)
 
 	if err := s.node.start(s.rpc, addr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
