@@ -145,7 +145,7 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 		// This range is a current member of the raft group. Acquire the lease
 		// to avoid processing this range again before the next inactivity threshold.
 		if pErr := rng.requestLeaderLease(now); pErr != nil {
-			if _, ok := pErr.GoError().(*roachpb.LeaseRejectedError); !ok {
+			if _, ok := pErr.GetDetail().(*roachpb.LeaseRejectedError); !ok {
 				if log.V(1) {
 					log.Infof("unable to acquire lease from valid range %s: %s", rng, pErr)
 				}

@@ -570,7 +570,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				for _, sc := range s.schemaChangers {
 					if time.Since(sc.execAfter) > 0 {
 						pErr := sc.exec()
-						if _, ok := pErr.GoError().(*roachpb.ExistingSchemaChangeLeaseError); !ok && pErr != nil {
+						if _, ok := pErr.GetDetail().(*roachpb.ExistingSchemaChangeLeaseError); !ok && pErr != nil {
 							log.Info(pErr)
 						}
 						// Advance the execAfter time so that this schema changer

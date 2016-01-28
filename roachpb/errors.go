@@ -17,6 +17,7 @@
 package roachpb
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/util/caller"
@@ -44,11 +45,22 @@ type transactionRestartError interface {
 	canRestartTransaction() TransactionRestart
 }
 
-func (e Error) getDetail() error {
-	if e.Detail == nil {
+// GetDetail returns a structured error associated with the error.
+func (e *Error) GetDetail() StructuredError {
+	if e == nil {
 		return nil
 	}
-	return e.Detail.GetValue().(error)
+	if e.Detail == nil {
+		// Unknown error detail; return the generic error.
+		return (*internalError)(e)
+	}
+
+	err := e.Detail.GetValue().(StructuredError)
+	if err == nil {
+		// Unknown error detail; return the generic error.
+		return (*internalError)(e)
+	}
+	return err
 }
 
 // NewError creates an Error from the given error.
@@ -100,6 +112,11 @@ func (e *internalError) Error() string {
 	return (*Error)(e).String()
 }
 
+// message returns an error message.
+func (e *internalError) message(pErr *Error) string {
+	return (*Error)(e).String()
+}
+
 // CanRetry implements the retry.Retryable interface.
 func (e *internalError) CanRetry() bool {
 	return e.Retryable
@@ -110,8 +127,10 @@ func (e *internalError) canRestartTransaction() TransactionRestart {
 	return e.TransactionRestart
 }
 
-// structuredError is an interface for each error detail.
-type structuredError interface {
+var _ StructuredError = &internalError{}
+
+// StructuredError is an interface for each error detail.
+type StructuredError interface {
 	// message returns an error message.
 	message(pErr *Error) string
 }
@@ -121,28 +140,12 @@ func (e *Error) CanRetry() bool {
 	return e.Retryable
 }
 
-// GoError returns the non-nil error from the roachpb.Error union.
+// GoError returns a Go error converted from Error.
 func (e *Error) GoError() error {
 	if e == nil {
 		return nil
 	}
-	if e.Detail == nil {
-		return (*internalError)(e)
-	}
-	err := e.getDetail()
-	if err == nil {
-		// Unknown error detail; return the generic error.
-		return (*internalError)(e)
-	}
-	// Make sure that the flags in the generic portion of the error
-	// match the methods of the specific error type.
-	if e.Retryable {
-		if r, ok := err.(retry.Retryable); !ok || !r.CanRetry() {
-			panic(fmt.Sprintf("inconsistent error proto; expected %T to be retryable", err))
-		}
-	}
-
-	return err
+	return errors.New(e.Message)
 }
 
 // setGoError sets Error using err.
@@ -150,7 +153,8 @@ func (e *Error) setGoError(err error) {
 	if e.Message != "" {
 		panic("cannot re-use roachpb.Error")
 	}
-	if sErr, ok := err.(structuredError); ok {
+	if e.Detail != nil {
+		sErr := e.Detail.GetValue().(StructuredError)
 		e.Message = sErr.message(e)
 	} else {
 		e.Message = err.Error()
@@ -175,11 +179,11 @@ func (e *Error) setGoError(err error) {
 // SetTxn sets the txn and resets the error message.
 func (e *Error) SetTxn(txn *Transaction) {
 	e.UnexposedTxn = txn.Clone()
-	err := e.GoError()
-	if sErr, ok := err.(structuredError); ok {
+	if e.Detail != nil {
+		sErr := e.Detail.GetValue().(StructuredError)
 		e.Message = sErr.message(e)
 	} else {
-		e.Message = err.Error()
+		// No change to the message as txn does not matter.
 	}
 }
 
@@ -198,13 +202,32 @@ func (*NodeUnavailableError) Error() string {
 	return "node unavailable; try another peer"
 }
 
+// message returns an error message.
+func (e *NodeUnavailableError) message(pErr *Error) string {
+	return "node unavailable; try another peer"
+}
+
+var _ StructuredError = &NodeUnavailableError{}
+
 // Error formats error.
 func (e *NotLeaderError) Error() string {
 	return fmt.Sprintf("range %d: replica %s not leader; leader is %s", e.RangeID, e.Replica, e.Leader)
 }
 
+// message returns an error message.
+func (e *NotLeaderError) message(pErr *Error) string {
+	return fmt.Sprintf("range %d: replica %s not leader; leader is %s", e.RangeID, e.Replica, e.Leader)
+}
+
+var _ StructuredError = &NotLeaderError{}
+
 // Error formats error.
 func (e *LeaseRejectedError) Error() string {
+	return fmt.Sprintf("cannot replace lease %s with %s: %s", e.Existing, e.Requested, e.Message)
+}
+
+// message returns an error message.
+func (e *LeaseRejectedError) message(pErr *Error) string {
 	return fmt.Sprintf("cannot replace lease %s with %s: %s", e.Existing, e.Requested, e.Message)
 }
 
@@ -214,13 +237,22 @@ func (*LeaseRejectedError) CanRetry() bool {
 	return false
 }
 
+var _ StructuredError = &LeaseRejectedError{}
+
 // Error formats error.
 func (s SendError) Error() string {
 	return "failed to send RPC: " + s.Message
 }
 
+// message returns an error message.
+func (s *SendError) message(pErr *Error) string {
+	return "failed to send RPC: " + s.Message
+}
+
 // CanRetry implements the Retryable interface.
 func (s SendError) CanRetry() bool { return s.Retryable }
+
+var _ StructuredError = &SendError{}
 
 // NewRangeNotFoundError initializes a new RangeNotFoundError.
 func NewRangeNotFoundError(rangeID RangeID) *RangeNotFoundError {
@@ -234,10 +266,17 @@ func (e *RangeNotFoundError) Error() string {
 	return fmt.Sprintf("range %d was not found", e.RangeID)
 }
 
+// message returns an error message.
+func (e *RangeNotFoundError) message(pErr *Error) string {
+	return fmt.Sprintf("range %d was not found", e.RangeID)
+}
+
 // CanRetry indicates whether or not this RangeNotFoundError can be retried.
 func (*RangeNotFoundError) CanRetry() bool {
 	return true
 }
+
+var _ StructuredError = &RangeNotFoundError{}
 
 // NewRangeKeyMismatchError initializes a new RangeKeyMismatchError.
 func NewRangeKeyMismatchError(start, end Key, desc *RangeDescriptor) *RangeKeyMismatchError {
@@ -257,10 +296,21 @@ func (e *RangeKeyMismatchError) Error() string {
 	return fmt.Sprintf("key range %s-%s could not be located within a range on store", e.RequestStartKey, e.RequestEndKey)
 }
 
+// message returns an error message.
+func (e *RangeKeyMismatchError) message(pErr *Error) string {
+	if e.Range != nil {
+		return fmt.Sprintf("key range %s-%s outside of bounds of range %s-%s",
+			e.RequestStartKey, e.RequestEndKey, e.Range.StartKey, e.Range.EndKey)
+	}
+	return fmt.Sprintf("key range %s-%s could not be located within a range on store", e.RequestStartKey, e.RequestEndKey)
+}
+
 // CanRetry indicates whether or not this RangeKeyMismatchError can be retried.
 func (*RangeKeyMismatchError) CanRetry() bool {
 	return true
 }
+
+var _ StructuredError = &RangeNotFoundError{}
 
 // Error formats error.
 func (e *TransactionAbortedError) Error() string {
@@ -272,7 +322,7 @@ func (e *TransactionAbortedError) message(pErr *Error) string {
 	return fmt.Sprintf("txn aborted %s", pErr.UnexposedTxn)
 }
 
-var _ structuredError = &TransactionAbortedError{}
+var _ StructuredError = &TransactionAbortedError{}
 var _ transactionRestartError = &TransactionAbortedError{}
 
 // canRestartTransaction implements the transactionRestartError interface.
@@ -307,6 +357,15 @@ func (e *TransactionPushError) Error() string {
 	return fmt.Sprintf("txn %s failed to push %s", e.Txn, e.PusheeTxn)
 }
 
+// message returns an error message.
+func (e *TransactionPushError) message(pErr *Error) string {
+	if e.Txn == nil {
+		return fmt.Sprintf("failed to push %s", e.PusheeTxn)
+	}
+	return fmt.Sprintf("txn %s failed to push %s", e.Txn, e.PusheeTxn)
+}
+
+var _ StructuredError = &TransactionPushError{}
 var _ transactionRestartError = &TransactionPushError{}
 
 // canRestartTransaction implements the transactionRestartError interface.
@@ -331,7 +390,7 @@ func (e *TransactionRetryError) message(pErr *Error) string {
 	return fmt.Sprintf("retry txn %s", pErr.UnexposedTxn)
 }
 
-var _ structuredError = &TransactionRetryError{}
+var _ StructuredError = &TransactionRetryError{}
 var _ transactionRestartError = &TransactionRetryError{}
 
 // canRestartTransaction implements the transactionRestartError interface.
@@ -355,7 +414,7 @@ func (e *TransactionStatusError) message(pErr *Error) string {
 	return fmt.Sprintf("txn %s: %s", pErr.UnexposedTxn, e.Msg)
 }
 
-var _ structuredError = &TransactionStatusError{}
+var _ StructuredError = &TransactionStatusError{}
 
 // Error formats error.
 func (e *WriteIntentError) Error() string {
@@ -366,16 +425,40 @@ func (e *WriteIntentError) Error() string {
 	return fmt.Sprintf("conflicting intents on %v: resolved? %t", keys, e.Resolved)
 }
 
+// message returns an error message.
+func (e *WriteIntentError) message(pErr *Error) string {
+	var keys []Key
+	for _, intent := range e.Intents {
+		keys = append(keys, intent.Key)
+	}
+	return fmt.Sprintf("conflicting intents on %v: resolved? %t", keys, e.Resolved)
+}
+
+var _ StructuredError = &WriteIntentError{}
+
 // Error formats error.
 func (e *WriteTooOldError) Error() string {
 	return fmt.Sprintf("write too old: timestamp %s <= %s", e.Timestamp, e.ExistingTimestamp)
 }
+
+// message returns an error message.
+func (e *WriteTooOldError) message(pErr *Error) string {
+	return fmt.Sprintf("write too old: timestamp %s <= %s", e.Timestamp, e.ExistingTimestamp)
+}
+
+var _ StructuredError = &WriteTooOldError{}
 
 // Error formats error.
 func (e *ReadWithinUncertaintyIntervalError) Error() string {
 	return fmt.Sprintf("read at time %s encountered previous write with future timestamp %s within uncertainty interval", e.Timestamp, e.ExistingTimestamp)
 }
 
+// message returns an error message.
+func (e *ReadWithinUncertaintyIntervalError) message(pErr *Error) string {
+	return fmt.Sprintf("read at time %s encountered previous write with future timestamp %s within uncertainty interval", e.Timestamp, e.ExistingTimestamp)
+}
+
+var _ StructuredError = &ReadWithinUncertaintyIntervalError{}
 var _ transactionRestartError = &ReadWithinUncertaintyIntervalError{}
 
 // canRestartTransaction implements the transactionRestartError interface.
@@ -388,37 +471,93 @@ func (*OpRequiresTxnError) Error() string {
 	return "the operation requires transactional context"
 }
 
+// message returns an error message.
+func (e *OpRequiresTxnError) message(pErr *Error) string {
+	return "the operation requires transactional context"
+}
+
+var _ StructuredError = &OpRequiresTxnError{}
+
 // Error formats error.
 func (e *ConditionFailedError) Error() string {
 	return fmt.Sprintf("unexpected value: %s", e.ActualValue)
 }
+
+// message returns an error message.
+func (e *ConditionFailedError) message(pErr *Error) string {
+	return fmt.Sprintf("unexpected value: %s", e.ActualValue)
+}
+
+var _ StructuredError = &ConditionFailedError{}
 
 // Error formats error.
 func (*RaftGroupDeletedError) Error() string {
 	return "raft group deleted"
 }
 
+// message returns an error message.
+func (e *RaftGroupDeletedError) message(pErr *Error) string {
+	return "raft group deleted"
+}
+
+var _ StructuredError = &RaftGroupDeletedError{}
+
 // Error formats error.
 func (e *ReplicaCorruptionError) Error() string {
 	return fmt.Sprintf("replica corruption (processed=%t): %s", e.Processed, e.ErrorMsg)
 }
+
+// message returns an error message.
+func (e *ReplicaCorruptionError) message(pErr *Error) string {
+	return fmt.Sprintf("replica corruption (processed=%t): %s", e.Processed, e.ErrorMsg)
+}
+
+var _ StructuredError = &ReplicaCorruptionError{}
 
 // Error formats error.
 func (*LeaseVersionChangedError) Error() string {
 	return "lease version changed"
 }
 
+// message returns an error message.
+func (e *LeaseVersionChangedError) message(pErr *Error) string {
+	return "lease version changed"
+}
+
+var _ StructuredError = &LeaseVersionChangedError{}
+
 // Error formats error.
 func (*DidntUpdateDescriptorError) Error() string {
 	return "didn't update the table descriptor"
 }
+
+// message returns an error message.
+func (e *DidntUpdateDescriptorError) message(pErr *Error) string {
+	return "didn't update the table descriptor"
+}
+
+var _ StructuredError = &DidntUpdateDescriptorError{}
 
 // Error formats error.
 func (*SqlTransactionAbortedError) Error() string {
 	return "current transaction is aborted, commands ignored until end of transaction block"
 }
 
+// message returns an error message.
+func (e *SqlTransactionAbortedError) message(pErr *Error) string {
+	return "current transaction is aborted, commands ignored until end of transaction block"
+}
+
+var _ StructuredError = &SqlTransactionAbortedError{}
+
 // Error formats error.
 func (*ExistingSchemaChangeLeaseError) Error() string {
 	return "an outstanding schema change lease exists"
 }
+
+// message returns an error message.
+func (e *ExistingSchemaChangeLeaseError) message(pErr *Error) string {
+	return "an outstanding schema change lease exists"
+}
+
+var _ StructuredError = &ExistingSchemaChangeLeaseError{}

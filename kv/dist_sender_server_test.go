@@ -522,7 +522,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 		b.CPut(targetKey, "new_val", origVal)
 		pErr := txn.CommitInBatch(b)
 		if epoch == 1 {
-			if _, ok := pErr.GoError().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
+			if _, ok := pErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
 				if !pErr.GetTxn().Writing {
 					t.Errorf("unexpected non-writing txn on error")
 				}
@@ -605,7 +605,7 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 		// TransactionPushError.Transaction() returns nil.
 		pErr := txn.CommitInBatch(b)
 		if epoch == 1 {
-			if tErr, ok := pErr.GoError().(*roachpb.TransactionPushError); ok {
+			if tErr, ok := pErr.GetDetail().(*roachpb.TransactionPushError); ok {
 				if len(tErr.Txn.ID) == 0 {
 					t.Errorf("txn ID is not set unexpectedly: %s", tErr)
 				}

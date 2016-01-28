@@ -75,7 +75,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, *roachpb.E
 	b.Del(oldKey)
 
 	if pErr := p.txn.Run(&b); pErr != nil {
-		if _, ok := pErr.GoError().(*roachpb.ConditionFailedError); ok {
+		if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); ok {
 			return nil, roachpb.NewUErrorf("the new database name %q already exists", string(n.NewName))
 		}
 		return nil, pErr
@@ -175,7 +175,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, *roachpb.Error) 
 	b.Del(tbKey)
 
 	if pErr := p.txn.Run(&b); pErr != nil {
-		if _, ok := pErr.GoError().(*roachpb.ConditionFailedError); ok {
+		if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); ok {
 			return nil, roachpb.NewUErrorf("table name %q already exists", n.NewName.Table())
 		}
 		return nil, pErr

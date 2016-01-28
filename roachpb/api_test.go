@@ -19,16 +19,15 @@ package roachpb
 import (
 	"reflect"
 	"testing"
-
-	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 type testError struct{}
 
-func (t *testError) Error() string             { return "test" }
-func (t *testError) CanRetry() bool            { return true }
-func (t *testError) ErrorIndex() (int32, bool) { return 99, true }
-func (t *testError) SetErrorIndex(_ int32)     { panic("unsupported") }
+func (t *testError) Error() string              { return "test" }
+func (t *testError) message(pErr *Error) string { return "test" }
+func (t *testError) CanRetry() bool             { return true }
+func (t *testError) ErrorIndex() (int32, bool)  { return 99, true }
+func (t *testError) SetErrorIndex(_ int32)      { panic("unsupported") }
 
 // TestSetGoError verifies that a test error that
 // implements retryable or indexed is converted properly into a generic error.
@@ -41,9 +40,6 @@ func TestSetGoErrorGeneric(t *testing.T) {
 	}
 	if !br.Error.Retryable {
 		t.Error("expected generic error to be retryable")
-	}
-	if rErr, ok := br.Error.GoError().(retry.Retryable); !ok || !rErr.CanRetry() {
-		t.Error("generated GoError is not retryable")
 	}
 }
 

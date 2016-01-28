@@ -322,7 +322,7 @@ func TestRestoreReplicas(t *testing.T) {
 	incArgs = incrementArgs([]byte("a"), 11)
 	{
 		_, pErr := client.SendWrapped(rg1(mtc.stores[1]), nil, &incArgs)
-		if _, ok := pErr.GoError().(*roachpb.NotLeaderError); !ok {
+		if _, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok {
 			t.Fatalf("expected not leader error; got %s", pErr)
 		}
 	}
@@ -1408,7 +1408,7 @@ func TestLeaderRemoveSelf(t *testing.T) {
 
 	// Expect get a RangeNotFoundError.
 	_, pErr := client.SendWrappedWith(rg1(mtc.stores[0]), nil, header, &getArgs)
-	if _, ok := pErr.GoError().(*roachpb.RangeNotFoundError); !ok {
+	if _, ok := pErr.GetDetail().(*roachpb.RangeNotFoundError); !ok {
 		t.Fatalf("expect get RangeNotFoundError, actual get %v ", pErr)
 	}
 }

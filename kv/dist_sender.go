@@ -639,13 +639,13 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			if log.V(1) {
 				log.Warningf("failed to invoke %s: %s", ba, pErr)
 			}
-			trace.Event(fmt.Sprintf("reply error: %T", pErr.GoError()))
+			trace.Event(fmt.Sprintf("reply error: %T", pErr.GetDetail()))
 
 			// Error handling below.
 			// If retryable, allow retry. For range not found or range
 			// key mismatch errors, we don't backoff on the retry,
 			// but reset the backoff loop so we can retry immediately.
-			switch tErr := pErr.GoError().(type) {
+			switch tErr := pErr.GetDetail().(type) {
 			case *roachpb.SendError:
 				// For an RPC error to occur, we must've been unable to contact
 				// any replicas. In this case, likely all nodes are down (or

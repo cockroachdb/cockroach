@@ -210,10 +210,10 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 				// Read within the transaction.
 				gr, pErr := txn.Get(key)
 				if pErr != nil {
-					if _, ok := pErr.GoError().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
+					if _, ok := pErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
 						return pErr
 					}
-					return roachpb.NewErrorf("unexpected read error of type %s: %s", reflect.TypeOf(pErr.GoError()), pErr)
+					return roachpb.NewErrorf("unexpected read error of type %s: %s", reflect.TypeOf(pErr.GetDetail()), pErr)
 				}
 				if !gr.Exists() {
 					return roachpb.NewErrorf("no value read")

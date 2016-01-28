@@ -335,7 +335,7 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 		if pErr == nil {
 			return br, nil
 		}
-		switch tErr := pErr.GoError().(type) {
+		switch tErr := pErr.GetDetail().(type) {
 		case *roachpb.RangeKeyMismatchError:
 		case *roachpb.NotLeaderError:
 			if tErr.Leader == nil {
@@ -349,7 +349,7 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 				m.expireLeaderLeases()
 			}
 		default:
-			if testutils.IsError(tErr, `store \d+ not found`) {
+			if testutils.IsPError(pErr, `store \d+ not found`) {
 				break
 			}
 			// If any store fails with an error that doesn't indicate we simply
