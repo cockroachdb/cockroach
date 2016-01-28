@@ -355,6 +355,64 @@ module AdminViews {
                 .title("Error Calls")
               )
               .label("Count / 10 sec."));
+          this._addChart(
+            Metrics.NewAxis(
+              Metrics.Select.AvgRate(_nodeMetric("sql.transaction.count"))
+                .sources([nodeId])
+                .title("Transactions")
+              )
+              .label("Count / 10 sec."));
+          this._addChart(
+            Metrics.NewAxis(
+              Metrics.Select.AvgRate(_nodeMetric("pgwire.bytesin"))
+                .sources([nodeId])
+                .title("SQL Bytes In")
+              )
+              .label("Count / 10 sec."));
+
+          this._addChart(
+            Metrics.NewAxis(
+              Metrics.Select.AvgRate(_nodeMetric("pgwire.bytesout"))
+                .sources([nodeId])
+                .title("SQL Bytes Out")
+              )
+              .label("Count / 10 sec."));
+
+          this._addChart(
+            Metrics.NewAxis(
+              Metrics.Select.AvgRate(_nodeMetric("sql.select.count"))
+                .sources([nodeId])
+                .title("SELECTs")
+              )
+              .label("Count / 10 sec."));
+          this._addChart(
+            Metrics.NewAxis(
+              Metrics.Select.AvgRate(_nodeMetric("sql.update.count"))
+                .sources([nodeId])
+                .title("UPDATEs")
+              )
+              .label("Count / 10 sec."));
+          this._addChart(
+            Metrics.NewAxis(
+              Metrics.Select.AvgRate(_nodeMetric("sql.insert.count"))
+                .sources([nodeId])
+                .title("INSERTs")
+              )
+              .label("Count / 10 sec."));
+          this._addChart(
+            Metrics.NewAxis(
+              Metrics.Select.AvgRate(_nodeMetric("sql.delete.count"))
+                .sources([nodeId])
+                .title("DELETEs")
+              )
+              .label("Count / 10 sec."));
+          this._addChart(
+            Metrics.NewAxis(
+              Metrics.Select.AvgRate(_nodeMetric("sql.ddl.count"))
+                .sources([nodeId])
+                .title("DDL Statements")
+              )
+              .label("Count / 10 sec."));
 
           this.exec = new Metrics.Executor(this._query);
           this._refresh();

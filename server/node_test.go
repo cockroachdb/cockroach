@@ -93,7 +93,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	// (or attach LocalRPCTransport.Close to the stopper)
 	ctx.Transport = storage.NewLocalRPCTransport(stopper)
 	ctx.EventFeed = util.NewFeed(stopper)
-	node := NewNode(ctx, metric.NewRegistry(), stopper)
+	node := NewNode(ctx, metric.NewRegistry(), metric.NewRegistry(), stopper)
 	return rpcServer, ln.Addr(), ctx.Clock, node, stopper
 }
 

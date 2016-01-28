@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 )
 
 // ErrSSLRequired is returned when a client attempts to connect to a
@@ -48,13 +49,24 @@ type Server struct {
 	mu       sync.Mutex // Mutex protects the fields below
 	conns    map[net.Conn]struct{}
 	closing  bool
+	registry *metric.Registry
+	metrics  *serverMetrics
+}
+
+type serverMetrics struct {
+	bytesInCount  *metric.Counter
+	bytesOutCount *metric.Counter
 }
 
 // NewServer creates a Server.
-func NewServer(context *Context) *Server {
+func NewServer(context *Context, registry *metric.Registry) *Server {
 	return &Server{
 		context: context,
 		conns:   make(map[net.Conn]struct{}),
+		metrics: &serverMetrics{
+			registry.Counter("pgwire.bytesin"),
+			registry.Counter("pgwire.bytesout"),
+		},
 	}
 }
 
@@ -136,7 +148,9 @@ func (s *Server) close() {
 // and delegating to the appropriate connection type.
 func (s *Server) serveConn(conn net.Conn) error {
 	var buf readBuffer
-	if err := buf.readUntypedMsg(conn); err != nil {
+	n, err := buf.readUntypedMsg(conn)
+	s.metrics.bytesInCount.Inc(int64(n))
+	if err != nil {
 		return err
 	}
 	version, err := buf.getInt32()
@@ -164,7 +178,9 @@ func (s *Server) serveConn(conn net.Conn) error {
 			conn = tls.Server(conn, tlsConfig)
 		}
 
-		if err := buf.readUntypedMsg(conn); err != nil {
+		n, err := buf.readUntypedMsg(conn)
+		s.metrics.bytesInCount.Inc(int64(n))
+		if err != nil {
 			return err
 		}
 		version, err = buf.getInt32()
@@ -176,7 +192,7 @@ func (s *Server) serveConn(conn net.Conn) error {
 	}
 
 	if version == version30 {
-		v3conn := makeV3Conn(conn, s.context.Executor)
+		v3conn := makeV3Conn(conn, s.context.Executor, s.metrics)
 		// This is better than always flushing on error.
 		defer func() {
 			if err := v3conn.wr.Flush(); err != nil {

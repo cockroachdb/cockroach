@@ -81,6 +81,7 @@ type Server struct {
 	tsDB                *ts.DB
 	tsServer            *ts.Server
 	raftTransport       storage.RaftTransport
+	registry            *metric.Registry
 	metaRegistry        *metric.Registry
 	stopper             *stop.Stopper
 	sqlExecutor         *sql.Executor
@@ -113,6 +114,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		ctx:          ctx,
 		mux:          http.NewServeMux(),
 		clock:        hlc.NewClock(hlc.UnixNano),
+		registry:     metric.NewRegistry(),
 		metaRegistry: metric.NewRegistry(),
 		stopper:      stopper,
 	}
@@ -166,7 +168,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
-	s.sqlExecutor = sql.NewExecutor(*s.db, s.gossip, s.leaseMgr, s.metaRegistry, s.stopper)
+	s.sqlExecutor = sql.NewExecutor(*s.db, s.gossip, s.leaseMgr, s.registry, s.metaRegistry, s.stopper)
 	s.sqlServer = sql.MakeServer(&s.ctx.Context, s.sqlExecutor)
 	if err := s.sqlServer.RegisterRPC(s.rpc); err != nil {
 		return nil, err
@@ -176,7 +178,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		Context:  &s.ctx.Context,
 		Executor: s.sqlServer.Executor,
 		Stopper:  stopper,
-	})
+	}, s.registry)
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
@@ -198,7 +200,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 			Mode:           s.ctx.BalanceMode,
 		},
 	}
-	s.node = NewNode(nCtx, s.metaRegistry, s.stopper)
+	s.node = NewNode(nCtx, s.registry, s.metaRegistry, s.stopper)
 	s.admin = newAdminServer(s.db, s.stopper)
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)

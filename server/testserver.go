@@ -17,6 +17,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"time"
@@ -320,4 +321,16 @@ func (ts *TestServer) SetRangeRetryOptions(ro retry.Options) {
 // that query server stats.
 func (ts *TestServer) WriteSummaries() error {
 	return ts.Server.writeSummaries()
+}
+
+// GetMetaRegistryMap returns a copy of the metaRegistry (which contains transient stats)
+// as a map of keys to interface{}s.
+func (ts *TestServer) GetMetaRegistryMap() (map[string]interface{}, error) {
+	b, err := ts.Server.metaRegistry.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]interface{})
+	err = json.Unmarshal(b, &m)
+	return m, err
 }

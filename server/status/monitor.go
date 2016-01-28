@@ -48,8 +48,7 @@ type NodeStatusMonitor struct {
 }
 
 // NewNodeStatusMonitor initializes a new NodeStatusMonitor instance.
-func NewNodeStatusMonitor(metaRegistry *metric.Registry) *NodeStatusMonitor {
-	registry := metric.NewRegistry()
+func NewNodeStatusMonitor(registry *metric.Registry, metaRegistry *metric.Registry) *NodeStatusMonitor {
 	return &NodeStatusMonitor{
 		stores:       make(map[roachpb.StoreID]*StoreStatusMonitor),
 		metaRegistry: metaRegistry,
@@ -198,7 +197,9 @@ func (nsm *NodeStatusMonitor) OnStartNode(event *StartNodeEvent) {
 	defer nsm.Unlock()
 	nsm.startedAt = event.StartedAt
 	nsm.desc = event.Desc
-	// Outputs using format `<prefix>.<metric>.<id>`.
+	// Add nsm.registry as a sub-registry of metaRegistry. This is needed, because before this
+	// method is called, we don't have an ID and thus can't format the key for the time series
+	// data. Outputs using format `<prefix>.<metric>.<id>`.
 	nsm.metaRegistry.MustAdd(nodeTimeSeriesPrefix+"%s."+event.Desc.NodeID.String(),
 		nsm.registry)
 }
