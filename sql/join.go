@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -38,61 +40,39 @@ type indexJoinNode struct {
 }
 
 func makeIndexJoin(indexScan *scanNode, exactPrefix int) (*indexJoinNode, *roachpb.Error) {
-	// Copy the index scan node into a new table scan node and reset the fields
-	// that were set up for the index scan.
-	table := &scanNode{}
-	*table = *indexScan
-	table.index = &table.desc.PrimaryIndex
-	table.spans = nil
-	table.reverse = false
-	table.isSecondaryIndex = false
+	// Create a new table scan node with the primary index.
+	table := &scanNode{planner: indexScan.planner, txn: indexScan.txn}
+	table.desc = indexScan.desc
+	table.initDescDefaults()
 	table.initOrdering(0)
 
-	// Clear the index filter expression. We want to pass all of the rows to the
-	// table.
-	//
-	// TODO(pmattis): This is correct, though not optimal. An alternative would
-	// be to remove any expression that refers to a column that is not part of
-	// the index.
-	indexScan.filter = nil
+	// TODO(radu): the join node should be aware of any filtering expressions that refer only to
+	// columns in the index to filter out rows during the join.
 
-	// We want to the index scan to keep the same render target indexes for
-	// columns which are part of the primary key or part of the index. This
-	// allows sorting (which was calculated based on the output columns) to be
-	// avoided if possible.
 	colIDtoRowIndex := map[ColumnID]int{}
 	for _, colID := range table.desc.PrimaryIndex.ColumnIDs {
-		colIDtoRowIndex[colID] = -1
+		idx, ok := indexScan.colIdxMap[colID]
+		if !ok {
+			panic(fmt.Sprintf("Unknown column %d in PrimaryIndex!", colID))
+		}
+		colIDtoRowIndex[colID] = idx
 	}
 	for _, colID := range indexScan.index.ColumnIDs {
-		colIDtoRowIndex[colID] = -1
+		idx, ok := indexScan.colIdxMap[colID]
+		if !ok {
+			panic(fmt.Sprintf("Unknown column %d in index!", colID))
+		}
+		colIDtoRowIndex[colID] = idx
 	}
 
-	// Rebuild the render targets for the index scan by looping over the render
-	// targets for the table. Any referenced column that is part of the index or
-	// the primary key is kept in its current location. Any other render target
-	// is replaced with "1".
-	indexScan.render = nil
-	for _, render := range table.render {
-		switch t := render.(type) {
-		case *qvalue:
-			if _, ok := colIDtoRowIndex[t.col.ID]; ok {
-				colIDtoRowIndex[t.col.ID] = len(indexScan.render)
-				indexScan.render = append(indexScan.render, t)
-				continue
-			}
-		}
-		indexScan.render = append(indexScan.render, parser.DInt(1))
-	}
-	for colID, index := range colIDtoRowIndex {
-		if index == -1 {
-			col, err := table.desc.FindColumnByID(colID)
-			if err != nil {
-				return nil, err
-			}
-			colIDtoRowIndex[col.ID] = len(indexScan.render)
-			indexScan.render = append(indexScan.render, indexScan.getQVal(*col))
-		}
+	for i := range indexScan.valNeededForCol {
+		// We transfer valNeededForCol to the table node
+		table.valNeededForCol[i] = indexScan.valNeededForCol[i]
+
+		// For the index node, we set valNeededForCol for columns that are part of the index.
+		id := indexScan.visibleCols[i].ID
+		_, found := colIDtoRowIndex[id]
+		indexScan.valNeededForCol[i] = found
 	}
 
 	indexScan.initOrdering(exactPrefix)
@@ -109,6 +89,10 @@ func makeIndexJoin(indexScan *scanNode, exactPrefix int) (*indexJoinNode, *roach
 
 func (n *indexJoinNode) Columns() []ResultColumn {
 	return n.table.Columns()
+}
+
+func (n *indexJoinNode) isColumnHidden(idx int) bool {
+	return n.table.isColumnHidden(idx)
 }
 
 func (n *indexJoinNode) Ordering() orderingInfo {

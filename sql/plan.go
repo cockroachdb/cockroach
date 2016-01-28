@@ -262,7 +262,7 @@ var _ planNode = &distinctNode{}
 
 var _ planNode = &groupNode{}
 
-// MEH var _ planNode = &indexJoinNode{}
+var _ planNode = &indexJoinNode{}
 var _ planNode = &limitNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &sortNode{}
