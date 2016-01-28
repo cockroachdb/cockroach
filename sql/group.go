@@ -39,7 +39,9 @@ var aggregates = map[string]func() aggregateImpl{
 	"variance": newVarianceAggregate,
 }
 
-func (p *planner) groupBy(n *parser.Select, s *scanNode) (*groupNode, *roachpb.Error) {
+// groupBy constructs a groupNode according to grouping functions or clauses. This may adjust the
+// render targets in the selectNode as necessary.
+func (p *planner) groupBy(n *parser.Select, s *selectNode) (*groupNode, *roachpb.Error) {
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
 	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
@@ -438,7 +440,7 @@ func (v *extractAggregatesVisitor) Visit(expr parser.Expr, pre bool) (parser.Vis
 	case *qvalue:
 		if v.groupedCopy != nil {
 			v.err = fmt.Errorf("column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
-				t.colRef.get())
+				t.colRef.get().Name)
 			return v, expr
 		}
 		f := &aggregateFunc{
