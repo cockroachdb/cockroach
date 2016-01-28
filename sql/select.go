@@ -197,6 +197,13 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 		s.filter = group.isNotNullFilter(s.filter)
 	}
 
+	// Find the set of columns that we actually need values for. This is an optimization to avoid
+	// unmarshalling unnecessary values and is also used for index selection.
+	for i := range scan.valNeededForCol {
+		_, ok := s.qvals[columnRef{&s.from, i}]
+		scan.valNeededForCol[i] = ok
+	}
+
 	// Get the ordering for index selection (if any).
 	/* MEH
 	var ordering columnOrdering
