@@ -99,22 +99,26 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 	// above. So "UPDATE t SET (a, b) = (1, 2)" translates into select targets of
 	// "*, 1, 2", not "*, (1, 2)".
 	targets := tableDesc.allColumnsSelector()
+	i := 0
 	for _, expr := range n.Exprs {
 		if expr.Tuple {
 			switch t := expr.Expr.(type) {
 			case parser.Tuple:
-				for i, e := range t {
+				for _, e := range t {
 					e = fillDefault(e, i, defaultExprs)
 					targets = append(targets, parser.SelectExpr{Expr: e})
+					i++
 				}
 			case parser.DTuple:
 				for _, e := range t {
 					targets = append(targets, parser.SelectExpr{Expr: e})
+					i++
 				}
 			}
 		} else {
-			e := fillDefault(expr.Expr, 0, defaultExprs)
+			e := fillDefault(expr.Expr, i, defaultExprs)
 			targets = append(targets, parser.SelectExpr{Expr: e})
+			i++
 		}
 	}
 
