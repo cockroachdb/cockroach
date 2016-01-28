@@ -96,7 +96,7 @@ func (nsr *NodeStatusRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
 	// Record node stats.
 	now := nsr.clock.PhysicalNow()
 	recorder := registryRecorder{
-		registry:       nsr.registry,
+		registry:       nsr.nodeRegistry,
 		prefix:         nodeTimeSeriesPrefix,
 		source:         nsr.source,
 		timestampNanos: now,
@@ -107,7 +107,7 @@ func (nsr *NodeStatusRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
 	nsr.visitStoreMonitors(func(ssm *StoreStatusMonitor) {
 		now := nsr.clock.PhysicalNow()
 		storeRecorder := registryRecorder{
-			registry:       ssm.registry,
+			registry:       ssm.storeRegistry,
 			prefix:         storeTimeSeriesPrefix,
 			source:         strconv.FormatInt(int64(ssm.ID), 10),
 			timestampNanos: now,

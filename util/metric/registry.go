@@ -32,6 +32,9 @@ var DefaultTimeScales = []TimeScale{scale1M, scale10M, scale1H}
 
 // A Registry bundles up various iterables (i.e. typically metrics or other
 // registries) to provide a single point of access to them.
+//
+// A Registry can be added to another Registry through the Add/MustAdd methods. This allows a
+// hierarchy of Registry instances to be created.
 type Registry struct {
 	sync.Mutex
 	tracked map[string]Iterable

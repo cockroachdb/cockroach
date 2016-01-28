@@ -63,25 +63,30 @@ type Server struct {
 
 	listener net.Listener // Only used in tests.
 
-	mux                 *http.ServeMux
-	httpReady           chan struct{}
-	clock               *hlc.Clock
-	rpcContext          *crpc.Context
-	rpc                 *crpc.Server
-	gossip              *gossip.Gossip
-	storePool           *storage.StorePool
-	db                  *client.DB
-	kvDB                *kv.DBServer
-	sqlServer           sql.Server
-	pgServer            *pgwire.Server
-	node                *Node
-	recorder            *status.NodeStatusRecorder
-	admin               *adminServer
-	status              *statusServer
-	tsDB                *ts.DB
-	tsServer            *ts.Server
-	raftTransport       storage.RaftTransport
-	metaRegistry        *metric.Registry
+	mux           *http.ServeMux
+	httpReady     chan struct{}
+	clock         *hlc.Clock
+	rpcContext    *crpc.Context
+	rpc           *crpc.Server
+	gossip        *gossip.Gossip
+	storePool     *storage.StorePool
+	db            *client.DB
+	kvDB          *kv.DBServer
+	sqlServer     sql.Server
+	pgServer      *pgwire.Server
+	node          *Node
+	recorder      *status.NodeStatusRecorder
+	admin         *adminServer
+	status        *statusServer
+	tsDB          *ts.DB
+	tsServer      *ts.Server
+	raftTransport storage.RaftTransport
+
+	// registry is the root metrics Registry in a Cockroach node. Adding metrics directly to this
+	// registry should be rare. Instead, add more specialized registries to this one. Refer to the
+	// package docs for util/metric for more information on metrics.
+	registry *metric.Registry
+
 	stopper             *stop.Stopper
 	sqlExecutor         *sql.Executor
 	leaseMgr            *sql.LeaseManager
@@ -110,12 +115,12 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	s := &Server{
-		ctx:          ctx,
-		mux:          http.NewServeMux(),
-		httpReady:    make(chan struct{}),
-		clock:        hlc.NewClock(hlc.UnixNano),
-		metaRegistry: metric.NewRegistry(),
-		stopper:      stopper,
+		ctx:       ctx,
+		mux:       http.NewServeMux(),
+		httpReady: make(chan struct{}),
+		clock:     hlc.NewClock(hlc.UnixNano),
+		registry:  metric.NewRegistry(),
+		stopper:   stopper,
 	}
 	s.clock.SetMaxOffset(ctx.MaxOffset)
 
@@ -167,7 +172,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
-	s.sqlExecutor = sql.NewExecutor(*s.db, s.gossip, s.leaseMgr, s.metaRegistry, s.stopper)
+	s.sqlExecutor = sql.NewExecutor(*s.db, s.gossip, s.leaseMgr, s.stopper)
 	s.sqlServer = sql.MakeServer(&s.ctx.Context, s.sqlExecutor)
 	if err := s.sqlServer.RegisterRPC(s.rpc); err != nil {
 		return nil, err
@@ -199,7 +204,11 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 			Mode:           s.ctx.BalanceMode,
 		},
 	}
-	s.node = NewNode(nCtx, s.metaRegistry, s.stopper)
+	subRegistries := []status.NodeSubregistry{
+		{"pgwire", s.pgServer.Registry()},
+		{"sql", s.sqlExecutor.Registry()},
+	}
+	s.node = NewNode(nCtx, s.registry, s.stopper, subRegistries)
 	s.admin = newAdminServer(s.db, s.stopper)
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
@@ -248,7 +257,7 @@ func (s *Server) Start() error {
 	s.schemaChangeManager = sql.NewSchemaChangeManager(*s.db, s.gossip, s.leaseMgr)
 	s.schemaChangeManager.Start(s.stopper)
 
-	s.status = newStatusServer(s.db, s.gossip, s.metaRegistry, s.ctx)
+	s.status = newStatusServer(s.db, s.gossip, s.registry, s.ctx)
 
 	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), addr)
 	s.initHTTP()

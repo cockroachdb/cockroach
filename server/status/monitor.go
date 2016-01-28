@@ -26,6 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 )
 
+// NodeSubregistry contains a name and sub-registry that will be added to the NodeStatusMonitor's
+// nodeRegistry when OnStartNode is called later.
+type NodeSubregistry struct {
+	Name     string
+	Registry *metric.Registry
+}
+
 // NodeStatusMonitor monitors the status of a server node. Status information
 // is collected from event feeds provided by lower level components.
 //
@@ -37,25 +44,33 @@ type NodeStatusMonitor struct {
 	mSuccess metric.Rates
 	mError   metric.Rates
 
-	sync.RWMutex // Mutex to guard the following fields
-	registry     *metric.Registry
-	metaRegistry *metric.Registry
-	stores       map[roachpb.StoreID]*StoreStatusMonitor
-	desc         roachpb.NodeDescriptor
-	startedAt    int64
+	sync.RWMutex   // Mutex to guard the following fields
+	serverRegistry *metric.Registry
+	nodeRegistry   *metric.Registry
+	stores         map[roachpb.StoreID]*StoreStatusMonitor
+	desc           roachpb.NodeDescriptor
+	startedAt      int64
 }
 
-// NewNodeStatusMonitor initializes a new NodeStatusMonitor instance.
-func NewNodeStatusMonitor(metaRegistry *metric.Registry) *NodeStatusMonitor {
-	registry := metric.NewRegistry()
-	return &NodeStatusMonitor{
-		stores:       make(map[roachpb.StoreID]*StoreStatusMonitor),
-		metaRegistry: metaRegistry,
-		registry:     registry,
+// NewNodeStatusMonitor initializes a new NodeStatusMonitor instance. Upon receiving an
+// OnStartNode event, which sets the node ID, the given subregistries are added to serverRegistry
+// in a time series-compatible format, along with node metrics created within the NodeStatusMonitor.
+func NewNodeStatusMonitor(serverRegistry *metric.Registry, subRegistries []NodeSubregistry) *NodeStatusMonitor {
+	// Create a Registry for this node and add all passed in sub-Registries to it. In OnStartNode(),
+	// when we know our node ID, we will add nodeRegistry to the serverRegistry.
+	nodeRegistry := metric.NewRegistry()
+	for _, sr := range subRegistries {
+		nodeRegistry.MustAdd(sr.Name+".%s", sr.Registry)
+	}
 
-		mLatency: registry.Latency("exec.latency"),
-		mSuccess: registry.Rates("exec.success"),
-		mError:   registry.Rates("exec.error"),
+	return &NodeStatusMonitor{
+		stores:         make(map[roachpb.StoreID]*StoreStatusMonitor),
+		serverRegistry: serverRegistry,
+		nodeRegistry:   nodeRegistry,
+
+		mLatency: nodeRegistry.Latency("exec.latency"),
+		mSuccess: nodeRegistry.Rates("exec.success"),
+		mError:   nodeRegistry.Rates("exec.error"),
 	}
 }
 
@@ -76,7 +91,7 @@ func (nsm *NodeStatusMonitor) GetStoreMonitor(id roachpb.StoreID) *StoreStatusMo
 	if s, ok = nsm.stores[id]; ok {
 		return s
 	}
-	s = NewStoreStatusMonitor(id, nsm.metaRegistry)
+	s = NewStoreStatusMonitor(id, nsm.serverRegistry)
 	nsm.stores[id] = s
 	return s
 }
@@ -196,9 +211,11 @@ func (nsm *NodeStatusMonitor) OnStartNode(event *StartNodeEvent) {
 	defer nsm.Unlock()
 	nsm.startedAt = event.StartedAt
 	nsm.desc = event.Desc
-	// Outputs using format `<prefix>.<metric>.<id>`.
-	nsm.metaRegistry.MustAdd(nodeTimeSeriesPrefix+"%s."+event.Desc.NodeID.String(),
-		nsm.registry)
+	// Add the node registry to the main registry. This needs to be here, because before this
+	// method is called, we don't have a node ID and thus can't format the key for the time series
+	// data. Outputs using format `<prefix>.<metric>.<id>`.
+	nsm.serverRegistry.MustAdd(nodeTimeSeriesPrefix+"%s."+event.Desc.NodeID.String(),
+		nsm.nodeRegistry)
 }
 
 // OnCallSuccess receives CallSuccessEvents from a node event subscription. This
@@ -240,40 +257,40 @@ type StoreStatusMonitor struct {
 	capacity        *metric.Gauge
 	available       *metric.Gauge
 
-	sync.Mutex // Mutex to guard the following fields
-	registry   *metric.Registry
-	stats      engine.MVCCStats
-	ID         roachpb.StoreID
-	desc       *roachpb.StoreDescriptor
-	startedAt  int64
+	sync.Mutex    // Mutex to guard the following fields
+	storeRegistry *metric.Registry
+	stats         engine.MVCCStats
+	ID            roachpb.StoreID
+	desc          *roachpb.StoreDescriptor
+	startedAt     int64
 }
 
 // NewStoreStatusMonitor constructs a StoreStatusMonitor with the given ID.
-func NewStoreStatusMonitor(id roachpb.StoreID, metaRegistry *metric.Registry) *StoreStatusMonitor {
-	registry := metric.NewRegistry()
+func NewStoreStatusMonitor(id roachpb.StoreID, serverRegistry *metric.Registry) *StoreStatusMonitor {
+	storeRegistry := metric.NewRegistry()
 	// Format as `cr.store.<metric>.<id>` in output, in analogy to the time
 	// series data written.
-	metaRegistry.MustAdd(storeTimeSeriesPrefix+"%s."+id.String(), registry)
+	serverRegistry.MustAdd(storeTimeSeriesPrefix+"%s."+id.String(), storeRegistry)
 	return &StoreStatusMonitor{
 		ID:                   id,
-		registry:             registry,
-		rangeCount:           registry.Counter("ranges"),
-		leaderRangeCount:     registry.Gauge("ranges.leader"),
-		replicatedRangeCount: registry.Gauge("ranges.replicated"),
-		availableRangeCount:  registry.Gauge("ranges.available"),
-		liveBytes:            registry.Gauge("livebytes"),
-		keyBytes:             registry.Gauge("keybytes"),
-		valBytes:             registry.Gauge("valbytes"),
-		intentBytes:          registry.Gauge("intentbytes"),
-		liveCount:            registry.Gauge("livecount"),
-		keyCount:             registry.Gauge("keycount"),
-		valCount:             registry.Gauge("valcount"),
-		intentCount:          registry.Gauge("intentcount"),
-		intentAge:            registry.Gauge("intentage"),
-		gcBytesAge:           registry.Gauge("gcbytesage"),
-		lastUpdateNanos:      registry.Gauge("lastupdatenanos"),
-		capacity:             registry.Gauge("capacity"),
-		available:            registry.Gauge("capacity.available"),
+		storeRegistry:        storeRegistry,
+		rangeCount:           storeRegistry.Counter("ranges"),
+		leaderRangeCount:     storeRegistry.Gauge("ranges.leader"),
+		replicatedRangeCount: storeRegistry.Gauge("ranges.replicated"),
+		availableRangeCount:  storeRegistry.Gauge("ranges.available"),
+		liveBytes:            storeRegistry.Gauge("livebytes"),
+		keyBytes:             storeRegistry.Gauge("keybytes"),
+		valBytes:             storeRegistry.Gauge("valbytes"),
+		intentBytes:          storeRegistry.Gauge("intentbytes"),
+		liveCount:            storeRegistry.Gauge("livecount"),
+		keyCount:             storeRegistry.Gauge("keycount"),
+		valCount:             storeRegistry.Gauge("valcount"),
+		intentCount:          storeRegistry.Gauge("intentcount"),
+		intentAge:            storeRegistry.Gauge("intentage"),
+		gcBytesAge:           storeRegistry.Gauge("gcbytesage"),
+		lastUpdateNanos:      storeRegistry.Gauge("lastupdatenanos"),
+		capacity:             storeRegistry.Gauge("capacity"),
+		available:            storeRegistry.Gauge("capacity.available"),
 	}
 }
 
