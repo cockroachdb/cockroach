@@ -17,6 +17,7 @@
 package server
 
 import (
+	"os"
 	"reflect"
 	"testing"
 
@@ -30,7 +31,6 @@ func TestParseNodeAttributes(t *testing.T) {
 	ctx := NewContext()
 	ctx.Attrs = "attr1=val1::attr2=val2"
 	ctx.Stores = "mem=1"
-	ctx.GossipBootstrap = SelfGossipAddr
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	if err := ctx.InitStores(stopper); err != nil {
@@ -45,31 +45,52 @@ func TestParseNodeAttributes(t *testing.T) {
 	}
 }
 
-// TestParseGossipBootstrapAddrs verifies that GossipBootstrap is
-// parsed correctly.
-func TestParseGossipBootstrapAddrs(t *testing.T) {
+// TestParseJoinUsingAddrs verifies that JoinUsing is parsed
+// correctly. Also verifies that if JoinUsing isn't set, the
+// JoinUsingEnv environment variable is consulted.
+func TestParseJoinUsingAddrs(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	ctx := NewContext()
-	ctx.GossipBootstrap = "localhost:12345,,localhost:23456"
-	ctx.Stores = "mem=1"
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	if err := ctx.InitStores(stopper); err != nil {
-		t.Fatalf("Failed to initialize stores: %s", err)
-	}
-	if err := ctx.InitNode(); err != nil {
-		t.Fatalf("Failed to initialize node: %s", err)
-	}
-	r1, err := resolver.NewResolver(&ctx.Context, "tcp=localhost:12345")
-	if err != nil {
-		t.Fatal(err)
-	}
-	r2, err := resolver.NewResolver(&ctx.Context, "tcp=localhost:23456")
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected := []resolver.Resolver{r1, r2}
-	if !reflect.DeepEqual(ctx.GossipBootstrapResolvers, expected) {
-		t.Fatalf("Unexpected bootstrap addresses: %v, expected: %v", ctx.GossipBootstrapResolvers, expected)
+	for _, useEnv := range []bool{false, true} {
+		ctx := NewContext()
+		if useEnv {
+			prevJoinUsing := os.Getenv(JoinUsingEnv)
+			if err := os.Setenv(JoinUsingEnv, "localhost:12345,,localhost:23456"); err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				if len(prevJoinUsing) > 0 {
+					if err := os.Setenv(JoinUsingEnv, prevJoinUsing); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					if err := os.Unsetenv(JoinUsingEnv); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}()
+		} else {
+			ctx.JoinUsing = "localhost:12345,,localhost:23456"
+		}
+		ctx.Stores = "mem=1"
+		stopper := stop.NewStopper()
+		defer stopper.Stop()
+		if err := ctx.InitStores(stopper); err != nil {
+			t.Fatalf("Failed to initialize stores: %s", err)
+		}
+		if err := ctx.InitNode(); err != nil {
+			t.Fatalf("Failed to initialize node: %s", err)
+		}
+		r1, err := resolver.NewResolver(&ctx.Context, "tcp=localhost:12345")
+		if err != nil {
+			t.Fatal(err)
+		}
+		r2, err := resolver.NewResolver(&ctx.Context, "tcp=localhost:23456")
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := []resolver.Resolver{r1, r2}
+		if !reflect.DeepEqual(ctx.GossipBootstrapResolvers, expected) {
+			t.Fatalf("Unexpected bootstrap addresses: %v, expected: %v", ctx.GossipBootstrapResolvers, expected)
+		}
 	}
 }

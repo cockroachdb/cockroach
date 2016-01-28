@@ -19,6 +19,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -82,9 +83,9 @@ type Context struct {
 	// Maximum clock offset for the cluster.
 	MaxOffset time.Duration
 
-	// GossipBootstrap is a comma-separated list of node addresses that
+	// JoinUsing is a comma-separated list of node addresses that
 	// act as bootstrap hosts for connecting to the gossip network.
-	GossipBootstrap string
+	JoinUsing string
 
 	// Enables running the node as a single-node in-memory cluster.
 	EphemeralSingleNode bool
@@ -193,6 +194,11 @@ func (ctx *Context) InitNode() error {
 	// Initialize attributes.
 	ctx.NodeAttributes = parseAttributes(ctx.Attrs)
 
+	// Skip gossip bootstrap if we're running as an ephemeral single node.
+	if ctx.EphemeralSingleNode {
+		return nil
+	}
+
 	// Get the gossip bootstrap resolvers.
 	resolvers, err := ctx.parseGossipBootstrapResolvers()
 	if err != nil {
@@ -206,6 +212,8 @@ func (ctx *Context) InitNode() error {
 }
 
 var errUnsizedInMemStore = errors.New("unable to initialize an in-memory store with capacity 0")
+
+var errCannotJoinSelf = errors.New("cannot specify --join as node's own address")
 
 // initEngine parses the store attributes as a colon-separated list
 // and instantiates an engine based on the dir parameter. If dir parses
@@ -225,22 +233,28 @@ func (ctx *Context) initEngine(attrsStr, path string, stopper *stop.Stopper) (en
 	return engine.NewRocksDB(attrs, path, ctx.CacheSize, ctx.MemtableBudget, stopper), nil
 }
 
-// SelfGossipAddr is a special flag that configures a node to gossip
-// only with itself. This avoids having to specify the port twice for
-// single-node clusters (i.e. once in --addr, and again in --gossip).
-const SelfGossipAddr = "self"
+// JoinUsingEnv is the name of the environment variable to fall back
+// on in the event that the --join flag was not specified.
+const JoinUsingEnv = "COCKROACH_JOIN"
 
 // parseGossipBootstrapResolvers parses a comma-separated list of
 // gossip bootstrap resolvers.
 func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error) {
+	joinUsing := ctx.JoinUsing
+	if len(joinUsing) == 0 {
+		joinUsing = os.Getenv(JoinUsingEnv)
+	}
 	var bootstrapResolvers []resolver.Resolver
-	addresses := strings.Split(ctx.GossipBootstrap, ",")
+	addresses := strings.Split(joinUsing, ",")
 	for _, address := range addresses {
 		if len(address) == 0 {
 			continue
 		}
-		if address == SelfGossipAddr {
-			address = ctx.Addr
+		if address == ctx.Addr {
+			if len(addresses) == 1 {
+				return nil, errCannotJoinSelf
+			}
+			continue
 		}
 		resolver, err := resolver.NewResolver(&ctx.Context, address)
 		if err != nil {

@@ -25,7 +25,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // nodeLookupResolver implements Resolver.
@@ -33,10 +32,9 @@ import (
 // address. This is useful for http load balancers which will not forward RPC.
 // It is never exhausted.
 type nodeLookupResolver struct {
-	context   *base.Context
-	typ       string
-	addr      string
-	exhausted bool
+	context *base.Context
+	typ     string
+	addr    string
 	// We need our own client so that we may specify timeouts.
 	httpClient *http.Client
 }
@@ -48,20 +46,7 @@ func (nl *nodeLookupResolver) Type() string { return nl.typ }
 func (nl *nodeLookupResolver) Addr() string { return nl.addr }
 
 // GetAddress returns a net.Addr or error.
-// Upon errors, we set exhausted=true, then flip it back when called again.
 func (nl *nodeLookupResolver) GetAddress() (net.Addr, error) {
-	// TODO(marc): this is a bit of a hack to allow the server to start.
-	// In single-node setups, this resolver will never return anything since
-	// the status handlers are not serving yet. Instead, we specify multiple
-	// gossip addresses (--gossip=localhost,http-lb=lb). We need this one to
-	// be exhausted from time to time so that we have a chance to hit the fixed address.
-	// Remove once the status pages are served before we've established a connection to
-	// the gossip network.
-	if nl.exhausted {
-		nl.exhausted = false
-		return nil, util.Errorf("skipping temporarily-exhausted resolver")
-	}
-
 	if nl.httpClient == nil {
 		tlsConfig, err := nl.context.GetClientTLSConfig()
 		if err != nil {
@@ -73,14 +58,12 @@ func (nl *nodeLookupResolver) GetAddress() (net.Addr, error) {
 		}
 	}
 
-	nl.exhausted = true
 	// TODO(marc): put common URIs in base and reuse everywhere.
 	url := fmt.Sprintf("%s://%s/_status/details/local", nl.context.HTTPRequestScheme(), nl.addr)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	log.Infof("querying %s for gossip nodes", url)
 	resp, err := nl.httpClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -106,8 +89,6 @@ func (nl *nodeLookupResolver) GetAddress() (net.Addr, error) {
 	if err != nil {
 		return nil, err
 	}
-	nl.exhausted = false
-	log.Infof("found gossip node: %+v", addr)
 	return addr, nil
 }
 
@@ -124,4 +105,4 @@ func resolveAddress(network, address string) (net.Addr, error) {
 
 // IsExhausted returns whether the resolver can yield further
 // addresses.
-func (nl *nodeLookupResolver) IsExhausted() bool { return nl.exhausted }
+func (nl *nodeLookupResolver) IsExhausted() bool { return true }

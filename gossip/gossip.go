@@ -262,20 +262,18 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	var storedBI BootstrapInfo
 	err := storage.ReadBootstrapInfo(&storedBI)
 	if err != nil {
-		log.Warningf("failed to read bootstrap info: %s", err)
+		log.Warningf("failed to read gossip bootstrap info: %s", err)
 	}
-	log.Infof("read %d gossip host(s) for bootstrapping from persistent storage", len(storedBI.Addresses))
 
 	// Merge the stored bootstrap info addresses with any we've become
-	// aware of through the --gossip bootstrap hosts we've connected to.
+	// aware of through the --join bootstrap hosts we've connected to.
 	if len(g.bootstrapInfo.Addresses) > 0 {
 		existing := map[string]struct{}{}
-		makeKey := func(a util.UnresolvedAddr) string { return fmt.Sprintf("%s,%s", a.Network(), a.String()) }
 		for _, addr := range g.bootstrapInfo.Addresses {
-			existing[makeKey(addr)] = struct{}{}
+			existing[addr.String()] = struct{}{}
 		}
 		for _, addr := range storedBI.Addresses {
-			if _, ok := existing[makeKey(addr)]; !ok {
+			if _, ok := existing[addr.String()]; !ok {
 				g.bootstrapInfo.Addresses = append(g.bootstrapInfo.Addresses, addr)
 			}
 		}
@@ -283,8 +281,6 @@ func (g *Gossip) SetStorage(storage Storage) error {
 		if numAddrs := len(g.bootstrapInfo.Addresses); numAddrs > len(storedBI.Addresses) {
 			if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
 				log.Error(err)
-			} else {
-				log.Infof("wrote %d merged gossip host(s) to persistent storage", numAddrs)
 			}
 		}
 	} else {
@@ -297,7 +293,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	for _, addr := range g.bootstrapInfo.Addresses {
 		r, err := resolver.NewResolverFromUnresolvedAddr(addr)
 		if err != nil {
-			log.Warningf("bad bootstrap address %s: %s", addr, err)
+			log.Warningf("bad node address %s: %s", addr, err)
 			continue
 		}
 		if g.haveResolver(r) {
@@ -312,9 +308,10 @@ func (g *Gossip) SetStorage(storage Storage) error {
 		g.resolvers = append(g.resolvers, r)
 	}
 
-	// If there are no resolvers after persistent storage has been queried, fatal error.
+	// If there are no resolvers even after merging known nodes from
+	// persistent storage, we need to error out.
 	if len(g.resolvers) == 0 {
-		return fmt.Errorf("no resolvers specified for gossip network: try adding peers via --gossip")
+		return fmt.Errorf("no nodes were found to connect to cluster; use --join")
 	}
 
 	// If a new resolver was found, immediately signal bootstrap.
@@ -336,6 +333,14 @@ func (g *Gossip) SetResolvers(resolvers []resolver.Resolver) {
 	g.resolverIdx = len(resolvers) - 1
 	g.resolvers = resolvers
 	g.resolversTried = map[int]struct{}{}
+}
+
+// HasResolvers returns true if this gossip instance has any
+// configured resolvers.
+func (g *Gossip) HasResolvers() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return len(g.resolvers) > 0
 }
 
 // GetNodeIDAddress looks up the address of the node by ID.
@@ -384,6 +389,18 @@ func (g *Gossip) SimulationCycle() {
 func (g *Gossip) haveResolver(r resolver.Resolver) bool {
 	for _, ex := range g.resolvers {
 		if ex.Type() == r.Type() && ex.Addr() == r.Addr() {
+			return true
+		}
+	}
+	return false
+}
+
+// haveBootstrapAddress returns whether there is already a bootstrap
+// address matching the specified address. The caller must hold the
+// gossip mutex.
+func (g *Gossip) haveBootstrapAddress(addr util.UnresolvedAddr) bool {
+	for _, ex := range g.bootstrapInfo.Addresses {
+		if ex.NetworkField == addr.NetworkField && ex.AddressField == addr.AddressField {
 			return true
 		}
 	}
@@ -442,17 +459,18 @@ func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 		log.Warningf("bad address from gossip node %s: %s", desc, err)
 		return
 	}
-	if g.haveResolver(r) {
-		return
+	if !g.haveResolver(r) {
+		g.resolvers = append(g.resolvers, r)
 	}
-	g.resolvers = append(g.resolvers, r)
 	// Add new address to bootstrap info and persist if possible.
-	g.bootstrapInfo.Addresses = append(g.bootstrapInfo.Addresses, desc.Address)
-	if g.storage != nil {
-		// TODO(spencer): need to clean up ancient gossip nodes, which
-		//   will otherwise stick around in the bootstrap info forever.
-		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
-			log.Error(err)
+	if !g.haveBootstrapAddress(desc.Address) {
+		g.bootstrapInfo.Addresses = append(g.bootstrapInfo.Addresses, desc.Address)
+		if g.storage != nil {
+			// TODO(spencer): need to clean up ancient gossip nodes, which
+			//   will otherwise stick around in the bootstrap info forever.
+			if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
+				log.Error(err)
+			}
 		}
 	}
 }
@@ -653,8 +671,9 @@ func (g *Gossip) MaxHops() uint32 {
 }
 
 // Start launches the gossip instance, which commences joining the
-// gossip network using the supplied rpc server and the gossip
-// bootstrap addresses specified via command-line flag: --gossip.
+// gossip network using the supplied rpc server and previously known
+// peer addresses in addition to any bootstrap addresses specified via
+// --join.
 //
 // The supplied address is used to identify the gossip instance in the
 // gossip network; it will be used by other instances to connect to
@@ -878,13 +897,13 @@ func (g *Gossip) signalStalled() {
 // not being connected to the sentinel. This could happen in a network
 // partition, or because of misconfiguration. It's impossible to tell,
 // but we can warn appropriately. If there are no incoming or outgoing
-// connections, we warn about the --gossip flag being set. If we've
+// connections, we warn about the --join flag being set. If we've
 // connected, and all resolvers have been tried, we warn about either
 // the first range not being available or else possible the cluster
 // never having been initialized.
 func (g *Gossip) warnAboutStall() {
 	if g.outgoing.len()+g.incoming.len() == 0 {
-		log.Warningf("not connected to gossip; check that gossip flag is set appropriately")
+		log.Warningf("not connected to cluster; check --join specifies another active node")
 	} else if len(g.resolversTried) == len(g.resolvers) {
 		log.Warningf("first range unavailable or cluster not initialized")
 	} else {
