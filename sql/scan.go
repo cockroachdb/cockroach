@@ -133,8 +133,6 @@ type scanNode struct {
 	vals             []parser.Datum    // the index key values for the current row
 	implicitValTypes []parser.Datum    // the implicit value types for unique indexes
 	implicitVals     []parser.Datum    // the implicit values for unique indexes
-	qvals            qvalMap           // the values in the current row
-	render           []parser.Expr     // rendering expressions for rows
 	explain          explainMode
 	explainValue     parser.Datum
 }
@@ -144,7 +142,7 @@ func (n *scanNode) Columns() []ResultColumn {
 }
 
 func (n *scanNode) Ordering() orderingInfo {
-	return orderingInfo{}
+	return n.ordering
 }
 
 func (n *scanNode) Values() parser.DTuple {
@@ -384,94 +382,34 @@ func (n *scanNode) initOrdering(exactPrefix int) {
 		return
 	}
 	n.columnIDs, n.columnDirs = n.index.fullColumnIDs()
-	n.ordering = computeOrdering(n.render, n.index, exactPrefix, n.reverse)
+	n.ordering = n.computeOrdering(n.index, exactPrefix, n.reverse)
 }
 
-/* MEH
-// Searches for a render target for the value of the given column.
-func findRenderIndexForCol(render []parser.Expr, colID ColumnID) (idx int, ok bool) {
-	for i, r := range render {
-		if qval, ok := r.(*qvalue); ok && qval.col.ID == colID {
-			return i, true
-		}
-	}
-	return -1, false
-}
-*/
-
-// computeOrdering calculates ordering information for render target columns assuming that:
+// computeOrdering calculates ordering information for table columns (visibleCols) assuming that:
 //    - we scan a given index (potentially in reverse order), and
 //    - the first `exactPrefix` columns of the index each have an exact (single value) match
 //      (see orderingInfo).
-//
-// Some examples:
-//
-//    SELECT a, b FROM t@abc ...
-//    	the ordering is: first by column 0 (a), then by column 1 (b)
-//
-//    SELECT a, b FROM t@abc WHERE a = 1 ...
-//    	the ordering is: exact match column (a), ordered by column 1 (b)
-//
-//    SELECT b, a FROM t@abc ...
-//      the ordering is: first by column 1 (a), then by column 0 (a)
-//
-//    SELECT a, c FROM t@abc ...
-//      the ordering is: just by column 0 (a). Here we don't have b as a render target so we
-//      cannot possibly use (or even express) the second-rank order by b (which makes any lower
-//      ranks unusable as well).
-//
-//      Note that for queries like
-//         SELECT a, c FROM t@abc ORDER by a,b,c
-//      we internally add b as a render target. The same holds for any targets required for
-//      grouping.
-func computeOrdering(
-	render []parser.Expr, index *IndexDescriptor, exactPrefix int, reverse bool) orderingInfo {
-	return orderingInfo{}
-	/* MEH
+func (n *scanNode) computeOrdering(index *IndexDescriptor, exactPrefix int, reverse bool) orderingInfo {
 	var ordering orderingInfo
 
 	columnIDs, dirs := index.fullColumnIDs()
 
 	for i, colID := range columnIDs {
-		renderIdx, ok := findRenderIndexForCol(render, colID)
-		if ok {
-			if i < exactPrefix {
-				ordering.addExactMatchColumn(renderIdx)
-			} else {
-				dir := dirs[i]
-				if reverse {
-					dir = dir.Reverse()
-				}
-				ordering.addColumn(renderIdx, dir)
-			}
-			continue
+		idx, ok := n.colIdxMap[colID]
+		if !ok {
+			panic(fmt.Sprintf("Index refers to unknown column id %d", colID))
 		}
-		// We have a column that isn't part of the output.
 		if i < exactPrefix {
-			// Fortunately this is an "exact match" column, so we can safely ignore it.
-			//
-			// For example, assume we are using an ascending index on (k, v) with the query:
-			//
-			//   SELECT v FROM t WHERE k = 1
-			//
-			// The rows from the index are ordered by k then by v, but since k is an exact match
-			// column the results are also ordered just by v.
-			continue
+			ordering.addExactMatchColumn(idx)
 		} else {
-			// Once we find a column that is not part of the output, the rest of the ordered
-			// columns aren't useful.
-			//
-			// For example, assume we are using an ascending index on (k, v) with the query:
-			//
-			//   SELECT v FROM t WHERE k > 1
-			//
-			// The rows from the index are ordered by k then by v. We cannot make any use of this
-			// ordering as an ordering on v.
-			break
+			dir := dirs[i]
+			if reverse {
+				dir = dir.Reverse()
+			}
+			ordering.addColumn(idx, dir)
 		}
 	}
 	return ordering
-	*/
 }
 
 func (n *scanNode) processKV(kv client.KeyValue) bool {
