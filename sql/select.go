@@ -73,6 +73,8 @@ type selectNode struct {
 	numOriginalCols int
 
 	explain explainMode
+
+	ordering orderingInfo
 }
 
 // Columns for explainDebug mode.
@@ -91,8 +93,7 @@ func (s *selectNode) Columns() []ResultColumn {
 }
 
 func (s *selectNode) Ordering() orderingInfo {
-	// MEH
-	return orderingInfo{}
+	return s.ordering
 }
 
 func (s *selectNode) Values() parser.DTuple {
@@ -212,6 +213,7 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 	*/
 
 	scan.initOrdering(0)
+	s.ordering = s.computeOrdering(scan.ordering)
 	/*
 		plan, pErr := p.selectIndex(scan, ordering, grouping)
 		if pErr != nil {
@@ -444,6 +446,74 @@ func (s *selectNode) renderRow() {
 			return
 		}
 	}
+}
+
+// Searches for a render target that matches the given column reference.
+func (s *selectNode) findRenderIndexForCol(colRef columnRef) (idx int, ok bool) {
+	for i, r := range s.render {
+		if qval, ok := r.(*qvalue); ok && qval.colRef == colRef {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
+// Computes ordering information for the select node, given ordering information for the "from"
+// node.
+//
+//    SELECT a, b FROM t@abc ...
+//    	the ordering is: first by column 0 (a), then by column 1 (b)
+//
+//    SELECT a, b FROM t@abc WHERE a = 1 ...
+//    	the ordering is: exact match column (a), ordered by column 1 (b)
+//
+//    SELECT b, a FROM t@abc ...
+//      the ordering is: first by column 1 (a), then by column 0 (a)
+//
+//    SELECT a, c FROM t@abc ...
+//      the ordering is: just by column 0 (a). Here we don't have b as a render target so we
+//      cannot possibly use (or even express) the second-rank order by b (which makes any lower
+//      ranks unusable as well).
+//
+//      Note that for queries like
+//         SELECT a, c FROM t@abc ORDER by a,b,c
+//      we internally add b as a render target. The same holds for any targets required for
+//      grouping.
+func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
+	var ordering orderingInfo
+
+	// See if any of the "exact match" columns have render targets. We can ignore any columns that
+	// don't have render targets. For example, assume we are using an ascending index on (k, v) with
+	// the query:
+	//
+	//   SELECT v FROM t WHERE k = 1
+	//
+	// The rows from the index are ordered by k then by v, but since k is an exact match
+	// column the results are also ordered just by v.
+	for colIdx := range fromOrder.exactMatchCols {
+		colRef := columnRef{&s.from, colIdx}
+		if renderIdx, ok := s.findRenderIndexForCol(colRef); ok {
+			ordering.addExactMatchColumn(renderIdx)
+		}
+	}
+	// Find the longest prefix of columns that have render targets. Once we find a column that is
+	// not part of the output, the rest of the ordered columns aren't useful.
+	//
+	// For example, assume we are using an ascending index on (k, v) with the query:
+	//
+	//   SELECT v FROM t WHERE k > 1
+	//
+	// The rows from the index are ordered by k then by v. We cannot make any use of this
+	// ordering as an ordering on v.
+	for _, colOrder := range fromOrder.ordering {
+		colRef := columnRef{&s.from, colOrder.colIdx}
+		renderIdx, ok := s.findRenderIndexForCol(colRef)
+		if !ok {
+			break
+		}
+		ordering.addColumn(renderIdx, colOrder.direction)
+	}
+	return ordering
 }
 
 /*
