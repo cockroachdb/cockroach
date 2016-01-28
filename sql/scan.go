@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
 // qvalue implements the parser.DRereference interface and is used as a
@@ -172,6 +173,8 @@ func (n *scanNode) Values() parser.DTuple {
 }
 
 func (n *scanNode) Next() bool {
+	tracer.AnnotateTrace()
+
 	if n.pErr != nil {
 		return false
 	}

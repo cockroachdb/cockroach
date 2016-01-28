@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -68,6 +69,8 @@ func (p *planner) resetTxn() {
 // Note: The autoCommit parameter enables operations to enable the 1PC
 // optimization. This is a bit hackish/preliminary at present.
 func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *roachpb.Error) {
+	tracer.AnnotateTrace()
+
 	// This will set the system DB trigger for transactions containing
 	// DDL statements that have no effect, such as
 	// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
