@@ -70,18 +70,16 @@ type Datum interface {
 	// Compare returns -1 if the receiver is less than other, 0 if receiver is
 	// equal to other and +1 if receiver is greater than other.
 	Compare(other Datum) int
-	// HasPrev is a type trait specifying if Prev() can be used to compute a
-	// previous value for a datum. For example, DBytes doesn't support it
-	// (the previous for BB is BAZZZ..).
+	// HasPrev specifies if Prev() can be used to compute a previous value for
+	// a datum. For example, DBytes doesn't support it (the previous for BB is BAZZZ..).
 	HasPrev() bool
 	// Prev returns the previous datum. If the receiver is "b" and the returned datum
 	// is "a", then "a < b" and no other datum will compare such that "a < c <
 	// b".
 	// The return value is undefined if `IsMin()`.
 	Prev() Datum
-	// HasNext is a type trait specifying if Next() can be used to compute a
-	// next value for a datum. For example, DDecimal doesn't support it
-	// (the next for 1.0 is 1.00..1).
+	// HasNext specifies if Next() can be used to compute a next value for a
+	// datum. For example, DDecimal doesn't support it (the next for 1.0 is 1.00..1).
 	HasNext() bool
 	// Next returns the next datum. If the receiver is "a" and the returned datum
 	// is "b", then "a < b" and no other datum will compare such that "a < c <
