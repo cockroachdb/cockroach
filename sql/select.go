@@ -187,17 +187,15 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 	if pErr != nil {
 		return nil, pErr
 	}
-	/* MEH
-	group, pErr := p.groupBy(parsed, scan)
+	group, pErr := p.groupBy(parsed, s)
 	if pErr != nil {
 		return nil, pErr
 	}
 
-	if scan.filter != nil && group != nil {
+	if s.filter != nil && group != nil {
 		// Allow the group-by to add an implicit "IS NOT NULL" filter.
-		scan.filter = group.isNotNullFilter(scan.filter)
+		s.filter = group.isNotNullFilter(s.filter)
 	}
-	*/
 
 	// Get the ordering for index selection (if any).
 	/* MEH
@@ -226,8 +224,7 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 	s.from.node = plan
 
 	// Wrap this node as necessary.
-	/* MEH limit, pErr := p.limit(parsed, p.distinct(parsed, sort.wrap(group.wrap(s)))) */
-	limit, pErr := p.limit(parsed, p.distinct(parsed, sort.wrap(s)))
+	limit, pErr := p.limit(parsed, p.distinct(parsed, sort.wrap(group.wrap(s))))
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -258,7 +255,11 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 	}
 
 	s.from.node = scan
-	s.from.alias = scan.desc.Alias
+	if scan.desc != nil {
+		s.from.alias = scan.desc.Alias
+	} else {
+		s.from.alias = ""
+	}
 	s.from.columns = scan.Columns()
 	return nil
 }

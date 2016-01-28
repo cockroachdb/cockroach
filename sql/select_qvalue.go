@@ -91,7 +91,7 @@ var _ parser.VariableExpr = &qvalue{}
 func (*qvalue) Variable() {}
 
 func (q *qvalue) String() string {
-	return fmt.Sprintf("col%d", q.colRef.colIdx)
+	return q.colRef.get().Name
 }
 
 func (q *qvalue) Walk(v parser.Visitor) {
