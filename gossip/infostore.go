@@ -302,15 +302,15 @@ func (is *infoStore) visitInfos(visitInfo func(string, *Info) error) error {
 // infos in the provided delta.
 func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) (freshCount int, err error) {
 	for key, i := range infos {
-		copy := *i
-		copy.Hops++
-		copy.PeerID = nodeID
+		infoCopy := *i
+		infoCopy.Hops++
+		infoCopy.PeerID = nodeID
 		// Errors from addInfo here are not a problem; they simply
 		// indicate that the data in *is is newer than in *delta.
-		if copy.OrigStamp == 0 {
+		if infoCopy.OrigStamp == 0 {
 			panic(util.Errorf("combining info from node %d with 0 original timestamp", nodeID))
 		}
-		if addErr := is.addInfo(key, &copy); addErr == nil {
+		if addErr := is.addInfo(key, &infoCopy); addErr == nil {
 			freshCount++
 		} else if addErr != errNotFresh {
 			err = addErr
