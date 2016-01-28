@@ -43,6 +43,10 @@ type planner struct {
 	// on these schema changers to roll out the new schema.
 	schemaChangers []SchemaChanger
 
+	// TODO(mjibson): remove prepareOnly in favor of a 2-step prepare-exec solution
+	// that is also able to save the plan to skip work during the exec step.
+	prepareOnly bool
+
 	testingVerifyMetadata func(config.SystemConfig) error
 
 	parser             parser.Parser
@@ -149,6 +153,28 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 		return p.Values(n)
 	default:
 		return nil, roachpb.NewErrorf("unknown statement type: %T", stmt)
+	}
+}
+
+func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
+	p.prepareOnly = true
+	switch n := stmt.(type) {
+	case *parser.Insert:
+		return p.Insert(n, false)
+	case *parser.Select:
+		return p.Select(n)
+	default:
+		return nil, roachpb.NewUErrorf("prepare statement not supported: %T", stmt)
+
+		/* TODO(mjibson): add support for the remainder of the types
+
+		// Broken because of QualifiedName
+		*parser.Update,
+		*parser.Delete,
+
+		// Broken because conflicts with INSERT's use of VALUES
+		parser.Values,
+		*/
 	}
 }
 

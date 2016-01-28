@@ -160,9 +160,8 @@ func TestPGWire(t *testing.T) {
 }
 
 type preparedTest struct {
-	params []interface{}
-	error  string
-	result []interface{}
+	params, results []interface{}
+	error           string
 }
 
 func (p preparedTest) Params(v ...interface{}) preparedTest {
@@ -176,11 +175,11 @@ func (p preparedTest) Error(err string) preparedTest {
 }
 
 func (p preparedTest) Results(v ...interface{}) preparedTest {
-	p.result = v
+	p.results = v
 	return p
 }
 
-func TestPGPrepared(t *testing.T) {
+func TestPGPreparedQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	var base preparedTest
 	queryTests := map[string][]preparedTest{
@@ -251,52 +250,46 @@ func TestPGPrepared(t *testing.T) {
 			continue
 		}
 
-		type result struct {
-			rows *sql.Rows
-			err  error
-		}
-
 		for _, test := range tests {
-			var results []result
-			{
-				rows, err := db.Query(query, test.params...)
-				results = append(results, result{rows: rows, err: err})
-			}
-			{
-				rows, err := stmt.Query(test.params...)
-				results = append(results, result{rows: rows, err: err})
-			}
-			for _, res := range results {
-				rows, err := res.rows, res.err
+			for _, queryFunc := range []func(...interface{}) (*sql.Rows, error){
+				func(args ...interface{}) (*sql.Rows, error) {
+					return db.Query(query, args...)
+				},
+				stmt.Query,
+			} {
+				rows, err := queryFunc(test.params...)
 				if err != nil {
 					if test.error == "" {
 						t.Errorf("%s: %#v: unexpected error: %s", query, test.params, err)
-					}
-					if test.error != err.Error() {
+					} else if test.error != err.Error() {
 						t.Errorf("%s: %#v: expected error: %s, got %s", query, test.params, test.error, err)
 					}
 					continue
 				}
 				if test.error != "" && err == nil {
 					t.Errorf("expected error: %s: %#v", query, test.params)
+					continue
 				}
-				dst := make([]interface{}, len(test.result))
-				for i, d := range test.result {
+				dst := make([]interface{}, len(test.results))
+				for i, d := range test.results {
 					dst[i] = reflect.New(reflect.TypeOf(d)).Interface()
 				}
 				if !rows.Next() {
 					t.Errorf("expected row: %s: %#v", query, test.params)
+					continue
 				}
 				if err := rows.Scan(dst...); err != nil {
 					t.Error(err)
+					continue
 				}
 				rows.Close()
 				for i, d := range dst {
 					v := reflect.Indirect(reflect.ValueOf(d)).Interface()
 					dst[i] = v
 				}
-				if !reflect.DeepEqual(dst, test.result) {
-					t.Errorf("%s: %#v: expected %v, got %v", query, test.params, test.result, dst)
+				if !reflect.DeepEqual(dst, test.results) {
+					t.Errorf("%s: %#v: expected %v, got %v", query, test.params, test.results, dst)
+					continue
 				}
 			}
 		}
@@ -322,6 +315,90 @@ func TestPGPrepared(t *testing.T) {
 		}
 		if err.Error() != reason {
 			t.Errorf("unexpected error: %s: %s", query, err)
+		}
+	}
+}
+
+func TestPGPreparedExec(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	var base preparedTest
+	queryTests := []struct {
+		query string
+		tests []preparedTest
+	}{
+		{
+			"CREATE DATABASE d",
+			nil,
+		},
+		{
+			"CREATE TABLE d.t (i INT, s STRING)",
+			nil,
+		},
+		{
+			"INSERT INTO d.t VALUES ($1, $2)",
+			[]preparedTest{
+				base.Params(1, "one"),
+				base.Params("two", 2).Error(`pq: param $1: strconv.ParseInt: parsing "two": invalid syntax`),
+			},
+		},
+	}
+
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, os.TempDir(), "TestPGPrepared")
+	defer cleanupFn()
+
+	db, err := sql.Open("postgres", pgUrl.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	for _, queryTest := range queryTests {
+		if queryTest.tests == nil {
+			_, err := db.Exec(queryTest.query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		stmt, err := db.Prepare(queryTest.query)
+		if err != nil {
+			t.Fatalf("prepare error: %s: %s", queryTest.query, err)
+		}
+		for _, test := range queryTest.tests {
+			_, err := stmt.Exec(test.params...)
+			if err != nil {
+				if test.error == "" {
+					t.Fatalf("%s: %#v: unexpected error: %s", queryTest.query, test.params, err)
+				} else if test.error != err.Error() {
+					t.Fatalf("%s: %#v: expected error: %s, got %s", queryTest.query, test.params, test.error, err)
+				}
+			}
+			if test.error != "" && err == nil {
+				t.Fatalf("expected error: %s: %#v", queryTest.query, test.params)
+			}
+		}
+		if err := stmt.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	testFailures := map[string]string{
+		"CREATE TABLE $1 (id INT)": "pq: syntax error at or near \"1\"\nCREATE TABLE $1 (id INT)\n             ^\n",
+		"DROP TABLE t":             "pq: prepare statement not supported: *parser.DropTable",
+	}
+
+	for query, reason := range testFailures {
+		stmt, err := db.Prepare(query)
+		if err == nil {
+			t.Errorf("expected error: %s", query)
+			stmt.Close()
+			continue
+		}
+		if err.Error() != reason {
+			t.Errorf("unexpected error: %s: %q", query, err)
 		}
 	}
 }

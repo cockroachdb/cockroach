@@ -320,10 +320,15 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	if err := parser.InferArgs(stmt, args); err != nil {
 		return c.sendError(err.Error())
 	}
+	cols, pErr := c.executor.StatementResult(c.opts.user, stmt, args)
+	if pErr != nil {
+		return c.sendError(pErr.String())
+	}
 	pq := preparedStatement{
 		query:       query,
 		inTypes:     make([]oid.Oid, len(args)),
 		portalNames: make(map[string]struct{}),
+		columns:     cols,
 	}
 	copy(pq.inTypes, inTypeHints)
 	for k, v := range args {
@@ -342,11 +347,6 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		}
 		pq.inTypes[i-1] = id
 	}
-	cols, pErr := c.executor.StatementResult(c.opts.user, stmt, args)
-	if pErr != nil {
-		return c.sendError(pErr.String())
-	}
-	pq.columns = cols
 	c.preparedStatements[name] = pq
 	c.writeBuf.initMsg(serverMsgParseComplete)
 	return c.writeBuf.finishMsg(c.wr)

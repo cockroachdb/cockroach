@@ -60,12 +60,12 @@ func (expr *BinaryExpr) TypeCheck(args MapArgs) (Datum, error) {
 	expr.rtype = reflect.TypeOf(dummyRight)
 
 	if expr.ltype == valargType {
-		if _, err := args.setInferredType(dummyLeft, dummyRight); err != nil {
+		if _, err := args.SetInferredType(dummyLeft, dummyRight); err != nil {
 			return nil, err
 		}
 		expr.ltype = expr.rtype
 	} else if expr.rtype == valargType {
-		if _, err := args.setInferredType(dummyRight, dummyLeft); err != nil {
+		if _, err := args.SetInferredType(dummyRight, dummyLeft); err != nil {
 			return nil, err
 		}
 		expr.rtype = expr.ltype
@@ -132,7 +132,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		return nil, err
 	}
 
-	if set, err := args.setInferredType(dummyExpr, DummyString); err != nil {
+	if set, err := args.SetInferredType(dummyExpr, DummyString); err != nil {
 		return nil, err
 	} else if set != nil {
 		dummyExpr = DummyString
@@ -546,7 +546,7 @@ func typeCheckBooleanExprs(args MapArgs, op string, exprs ...Expr) (Datum, error
 		if dummyExpr == DNull {
 			continue
 		}
-		if set, err := args.setInferredType(dummyExpr, DummyBool); err != nil {
+		if set, err := args.SetInferredType(dummyExpr, DummyBool); err != nil {
 			return nil, err
 		} else if set != nil {
 			continue
@@ -559,11 +559,11 @@ func typeCheckBooleanExprs(args MapArgs, op string, exprs ...Expr) (Datum, error
 }
 
 func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight Datum) (Datum, cmpOp, error) {
-	if set, err := args.setInferredType(dummyLeft, dummyRight); err != nil {
+	if set, err := args.SetInferredType(dummyLeft, dummyRight); err != nil {
 		return nil, cmpOp{}, err
 	} else if set != nil {
 		dummyLeft = set
-	} else if set, err := args.setInferredType(dummyRight, dummyLeft); err != nil {
+	} else if set, err := args.SetInferredType(dummyRight, dummyLeft); err != nil {
 		return nil, cmpOp{}, err
 	} else if set != nil {
 		dummyRight = set

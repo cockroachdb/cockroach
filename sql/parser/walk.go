@@ -234,11 +234,11 @@ func (m MapArgs) Arg(name string) (Datum, bool) {
 	return d, ok
 }
 
-// setValArg sets the bind var argument d to the type typ in m. If m is nil
-// or d is not a DValArg, nil is returned. If the bind var argument is set,
+// SetInferredType sets the bind var argument d to the type typ in m. If m is
+// nil or d is not a DValArg, nil is returned. If the bind var argument is set,
 // typ is returned. An error is returned if typ cannot be set because a
 // different type is already present.
-func (m MapArgs) setInferredType(d, typ Datum) (set Datum, err error) {
+func (m MapArgs) SetInferredType(d, typ Datum) (set Datum, err error) {
 	if m == nil {
 		return nil, nil
 	}

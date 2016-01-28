@@ -161,9 +161,13 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		for i, val := range rowVals {
 			// Make sure the value can be written to the column before proceeding.
 			var mpErr *roachpb.Error
-			if marshalled[i], mpErr = marshalColumnValue(cols[i], val); mpErr != nil {
+			if marshalled[i], mpErr = marshalColumnValue(cols[i], val, p.evalCtx.Args); mpErr != nil {
 				return nil, mpErr
 			}
+		}
+
+		if p.prepareOnly {
+			continue
 		}
 
 		primaryIndexKey, _, epErr := encodeIndexKey(
@@ -231,6 +235,10 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	}
 	if pErr := rows.PErr(); pErr != nil {
 		return nil, pErr
+	}
+
+	if p.prepareOnly {
+		return nil, nil
 	}
 
 	if isSystemConfigID(tableDesc.GetID()) {
