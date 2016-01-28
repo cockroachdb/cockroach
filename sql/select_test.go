@@ -287,11 +287,7 @@ func TestMakeSpans(t *testing.T) {
 			`/-9223372036854775808-/<util/encoding/encoding.go: varint 9223372036854775808 overflows int64>`},
 	}
 	for _, d := range testData {
-		for i := range []int{0, 1} {
-			dir := encoding.Ascending
-			if i == 1 {
-				dir = encoding.Descending
-			}
+		for _, dir := range []encoding.Direction{encoding.Ascending, encoding.Descending} {
 			dirs := make([]encoding.Direction, 0, len(d.columns))
 			for range d.columns {
 				dirs = append(dirs, dir)
