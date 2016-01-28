@@ -37,7 +37,7 @@ import (
 func TestGossipInfoStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), nil)
-	g := New(rpcContext, TestBootstrap)
+	g := New(rpcContext, TestBootstrap, stop.NewStopper())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	slice := []byte("b")
@@ -75,7 +75,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	if len(resolvers) != 6 {
 		t.Errorf("expected 6 resolvers; got %d", len(resolvers))
 	}
-	g := New(nil, resolvers)
+	g := New(nil, resolvers, stop.NewStopper())
 
 	// Using specified resolvers, fetch bootstrap addresses 10 times
 	// and verify the results match expected addresses.
@@ -124,7 +124,7 @@ func TestGossipCullNetwork(t *testing.T) {
 		local.startClient(pAddr, stopper)
 	}
 	local.mu.Unlock()
-	local.manage(stopper)
+	local.manage()
 
 	util.SucceedsWithin(t, 10*time.Second, func() error {
 		// Verify that a client is closed within the cull interval.

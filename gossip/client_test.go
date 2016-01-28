@@ -48,7 +48,7 @@ func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T) *Go
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := New(rpcContext, TestBootstrap)
+	g := New(rpcContext, TestBootstrap, stopper)
 	g.SetNodeID(nodeID)
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  nodeID,
@@ -56,7 +56,7 @@ func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T) *Go
 	}); err != nil {
 		t.Fatal(err)
 	}
-	g.start(server, ln.Addr(), stopper)
+	g.start(server, ln.Addr())
 	time.Sleep(time.Millisecond)
 	return g
 }
@@ -108,8 +108,8 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 	if err != nil {
 		t.Fatal(err)
 	}
-	local = New(lRPCContext, TestBootstrap)
-	local.start(lserver, lln.Addr(), stopper)
+	local = New(lRPCContext, TestBootstrap, stopper)
+	local.start(lserver, lln.Addr())
 
 	rclock := hlc.NewClock(hlc.UnixNano)
 	rRPCContext := rpc.NewContext(&base.Context{Insecure: true}, rclock, stopper)
@@ -231,7 +231,7 @@ func TestClientDisconnectLoopback(t *testing.T) {
 	lAddr := local.is.NodeAddr
 	local.startClient(lAddr, stopper)
 	local.mu.Unlock()
-	local.manage(stopper)
+	local.manage()
 	util.SucceedsWithin(t, 10*time.Second, func() error {
 		ok := local.findClient(func(c *client) bool { return c.addr.String() == lAddr.String() }) != nil
 		if !ok && verifyServerMaps(local, 0) {
@@ -260,8 +260,8 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	remote.startClient(lAddr, stopper)
 	local.mu.Unlock()
 	remote.mu.Unlock()
-	local.manage(stopper)
-	remote.manage(stopper)
+	local.manage()
+	remote.manage()
 	util.SucceedsWithin(t, 10*time.Second, func() error {
 		// Check which of the clients is connected to the other.
 		ok1 := local.findClient(func(c *client) bool { return c.addr.String() == rAddr.String() }) != nil
@@ -299,8 +299,8 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 	local.startClient(rAddr, stopper)
 	local.mu.Unlock()
 	remote.mu.Unlock()
-	local.manage(stopper)
-	remote.manage(stopper)
+	local.manage()
+	remote.manage()
 	util.SucceedsWithin(t, 10*time.Second, func() error {
 		// Verify that the remote server has only a single incoming
 		// connection and the local server has only a single outgoing
@@ -350,9 +350,9 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		var resolvers []resolver.Resolver
 		resolver, _ := resolver.NewResolver(&RPCContext.Context, gossipAddr)
 		resolvers = append(resolvers, resolver)
-		gnode := New(RPCContext, resolvers)
+		gnode := New(RPCContext, resolvers, stopper)
 		g = append(g, gnode)
-		gnode.Start(server, ln.Addr(), stopper)
+		gnode.Start(server, ln.Addr())
 	}
 
 	util.SucceedsWithin(t, 5*time.Second, func() error {
