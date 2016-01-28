@@ -202,10 +202,16 @@ func (e *Executor) StatementResult(user string, stmt parser.Statement, args pars
 		systemConfig: e.getSystemConfig(),
 	}
 
-	planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: time.Now()}
-	plan, err := planMaker.makePlan(stmt, false)
-	if err != nil {
-		return nil, err
+	timestamp := time.Now()
+	txn := client.NewTxn(e.db)
+	planMaker.setTxn(txn, timestamp)
+	planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: timestamp}
+	plan, pErr := planMaker.prepare(stmt)
+	if pErr != nil {
+		return nil, pErr
+	}
+	if plan == nil {
+		return nil, nil
 	}
 	cols := plan.Columns()
 	for _, c := range cols {
