@@ -266,12 +266,18 @@ type Store struct {
 	initComplete      sync.WaitGroup // Signaled by async init tasks
 	raftRequestChan   chan *RaftMessageRequest
 
-	// Lock ordering notes: The processRaft goroutine acts as a kind of
-	// mutex. To avoid deadlocks, the following lock order must be
-	// obeyed: processRaft goroutine < Store.mu.Mutex < Replica.mu.Mutex. (i.e.
-	// methods like removeReplica which depend on the processRaft
-	// goroutine must not be called while holding Store.mu.Mutex).
-	mu struct {
+	// Locking notes: To avoid deadlocks, the following lock order
+	// must be obeyed: processRaftMu < Store.mu.Mutex <
+	// Replica.mu.Mutex.
+	//
+	// Methods of Store with a "Locked" suffix require that
+	// Store.mu.Mutex be held. Other locking requirements are indicated
+	// in comments.
+
+	// processRaftMu is held while doing anything raft-related.
+	// TODO(bdarnell): replace processRaftMu with a range-level lock.
+	processRaftMu sync.Mutex
+	mu            struct {
 		sync.Mutex                                  // Protects all variables in the mu struct.
 		replicas       map[roachpb.RangeID]*Replica // Map of replicas by Range ID
 		replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
@@ -1569,6 +1575,7 @@ func (s *Store) processRaft() {
 		defer ticker.Stop()
 		for {
 			var replicas []*Replica
+			s.processRaftMu.Lock()
 			s.mu.Lock()
 			for rangeID := range s.mu.pendingRaftGroups {
 				r, ok := s.mu.replicas[rangeID]
@@ -1587,20 +1594,26 @@ func (s *Store) processRaft() {
 					panic(err) // TODO(bdarnell)
 				}
 			}
+			s.processRaftMu.Unlock()
 
 			select {
 			case <-s.wakeRaftLoop:
 
 			case op := <-s.removeReplicaChan:
+				s.processRaftMu.Lock()
 				op.ch <- s.removeReplicaImpl(op.rep, op.origDesc, op.destroy)
+				s.processRaftMu.Unlock()
 
 			case req := <-s.raftRequestChan:
+				s.processRaftMu.Lock()
 				if err := s.handleRaftMessage(req); err != nil {
 					log.Errorf("error handling raft message: %s", err)
 				}
+				s.processRaftMu.Unlock()
 
 			case <-ticker.C:
 				// TODO(bdarnell): rework raft ticker.
+				s.processRaftMu.Lock()
 				s.mu.Lock()
 				for rangeID, r := range s.mu.replicas {
 					r.mu.Lock()
@@ -1609,6 +1622,7 @@ func (s *Store) processRaft() {
 					s.mu.pendingRaftGroups[rangeID] = struct{}{}
 				}
 				s.mu.Unlock()
+				s.processRaftMu.Unlock()
 
 			case <-s.stopper.ShouldStop():
 				return
