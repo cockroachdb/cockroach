@@ -28,6 +28,11 @@ import cockroach_util "github.com/cockroachdb/cockroach/util"
 
 import github_com_cockroachdb_cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 
+import (
+	context "golang.org/x/net/context"
+	grpc "google.golang.org/grpc"
+)
+
 import errors "errors"
 
 import io "io"
@@ -68,13 +73,10 @@ type Request struct {
 	NodeID github_com_cockroachdb_cockroach_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,proto3,casttype=github.com/cockroachdb/cockroach/roachpb.NodeID" json:"node_id,omitempty"`
 	// Address of the requesting client.
 	Addr cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=addr" json:"addr"`
-	// Local address of client on requesting node (this is a kludge to
-	// allow gossip to know when client connections are dropped).
-	LAddr cockroach_util.UnresolvedAddr `protobuf:"bytes,3,opt,name=l_addr" json:"l_addr"`
 	// Map of information about other nodes, as seen by the requester.
-	Nodes map[int32]*Node `protobuf:"bytes,4,rep,name=nodes" json:"nodes,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
+	Nodes map[int32]*Node `protobuf:"bytes,3,rep,name=nodes" json:"nodes,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 	// Delta of Infos originating at sender.
-	Delta map[string]*Info `protobuf:"bytes,5,rep,name=delta" json:"delta,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
+	Delta map[string]*Info `protobuf:"bytes,4,rep,name=delta" json:"delta,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 }
 
 func (m *Request) Reset()         { *m = Request{} }
@@ -130,6 +132,106 @@ func init() {
 	proto.RegisterType((*Response)(nil), "cockroach.gossip.Response")
 	proto.RegisterType((*Info)(nil), "cockroach.gossip.Info")
 }
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ context.Context
+var _ grpc.ClientConn
+
+// Client API for Gossip service
+
+type GossipClient interface {
+	Gossip(ctx context.Context, opts ...grpc.CallOption) (Gossip_GossipClient, error)
+}
+
+type gossipClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewGossipClient(cc *grpc.ClientConn) GossipClient {
+	return &gossipClient{cc}
+}
+
+func (c *gossipClient) Gossip(ctx context.Context, opts ...grpc.CallOption) (Gossip_GossipClient, error) {
+	stream, err := grpc.NewClientStream(ctx, &_Gossip_serviceDesc.Streams[0], c.cc, "/cockroach.gossip.Gossip/Gossip", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &gossipGossipClient{stream}
+	return x, nil
+}
+
+type Gossip_GossipClient interface {
+	Send(*Request) error
+	Recv() (*Response, error)
+	grpc.ClientStream
+}
+
+type gossipGossipClient struct {
+	grpc.ClientStream
+}
+
+func (x *gossipGossipClient) Send(m *Request) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *gossipGossipClient) Recv() (*Response, error) {
+	m := new(Response)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// Server API for Gossip service
+
+type GossipServer interface {
+	Gossip(Gossip_GossipServer) error
+}
+
+func RegisterGossipServer(s *grpc.Server, srv GossipServer) {
+	s.RegisterService(&_Gossip_serviceDesc, srv)
+}
+
+func _Gossip_Gossip_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(GossipServer).Gossip(&gossipGossipServer{stream})
+}
+
+type Gossip_GossipServer interface {
+	Send(*Response) error
+	Recv() (*Request, error)
+	grpc.ServerStream
+}
+
+type gossipGossipServer struct {
+	grpc.ServerStream
+}
+
+func (x *gossipGossipServer) Send(m *Response) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *gossipGossipServer) Recv() (*Request, error) {
+	m := new(Request)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+var _Gossip_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "cockroach.gossip.Gossip",
+	HandlerType: (*GossipServer)(nil),
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Gossip",
+			Handler:       _Gossip_Gossip_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
+}
+
 func (m *BootstrapInfo) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -224,17 +326,9 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n2
-	data[i] = 0x1a
-	i++
-	i = encodeVarintGossip(data, i, uint64(m.LAddr.Size()))
-	n3, err := m.LAddr.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n3
 	if len(m.Nodes) > 0 {
 		for k := range m.Nodes {
-			data[i] = 0x22
+			data[i] = 0x1a
 			i++
 			v := m.Nodes[k]
 			if v == nil {
@@ -249,16 +343,16 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 			data[i] = 0x12
 			i++
 			i = encodeVarintGossip(data, i, uint64(v.Size()))
-			n4, err := v.MarshalTo(data[i:])
+			n3, err := v.MarshalTo(data[i:])
 			if err != nil {
 				return 0, err
 			}
-			i += n4
+			i += n3
 		}
 	}
 	if len(m.Delta) > 0 {
 		for k := range m.Delta {
-			data[i] = 0x2a
+			data[i] = 0x22
 			i++
 			v := m.Delta[k]
 			if v == nil {
@@ -274,11 +368,11 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 			data[i] = 0x12
 			i++
 			i = encodeVarintGossip(data, i, uint64(v.Size()))
-			n5, err := v.MarshalTo(data[i:])
+			n4, err := v.MarshalTo(data[i:])
 			if err != nil {
 				return 0, err
 			}
-			i += n5
+			i += n4
 		}
 	}
 	return i, nil
@@ -307,20 +401,20 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintGossip(data, i, uint64(m.Addr.Size()))
-	n6, err := m.Addr.MarshalTo(data[i:])
+	n5, err := m.Addr.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n6
+	i += n5
 	if m.AlternateAddr != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintGossip(data, i, uint64(m.AlternateAddr.Size()))
-		n7, err := m.AlternateAddr.MarshalTo(data[i:])
+		n6, err := m.AlternateAddr.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n7
+		i += n6
 	}
 	if m.AlternateNodeID != 0 {
 		data[i] = 0x20
@@ -345,11 +439,11 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 			data[i] = 0x12
 			i++
 			i = encodeVarintGossip(data, i, uint64(v.Size()))
-			n8, err := v.MarshalTo(data[i:])
+			n7, err := v.MarshalTo(data[i:])
 			if err != nil {
 				return 0, err
 			}
-			i += n8
+			i += n7
 		}
 	}
 	if len(m.Nodes) > 0 {
@@ -369,11 +463,11 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 			data[i] = 0x12
 			i++
 			i = encodeVarintGossip(data, i, uint64(v.Size()))
-			n9, err := v.MarshalTo(data[i:])
+			n8, err := v.MarshalTo(data[i:])
 			if err != nil {
 				return 0, err
 			}
-			i += n9
+			i += n8
 		}
 	}
 	return i, nil
@@ -397,11 +491,11 @@ func (m *Info) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintGossip(data, i, uint64(m.Value.Size()))
-	n10, err := m.Value.MarshalTo(data[i:])
+	n9, err := m.Value.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n10
+	i += n9
 	if m.OrigStamp != 0 {
 		data[i] = 0x10
 		i++
@@ -490,8 +584,6 @@ func (m *Request) Size() (n int) {
 		n += 1 + sovGossip(uint64(m.NodeID))
 	}
 	l = m.Addr.Size()
-	n += 1 + l + sovGossip(uint64(l))
-	l = m.LAddr.Size()
 	n += 1 + l + sovGossip(uint64(l))
 	if len(m.Nodes) > 0 {
 		for k, v := range m.Nodes {
@@ -877,36 +969,6 @@ func (m *Request) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LAddr", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowGossip
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthGossip
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.LAddr.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Nodes", wireType)
 			}
 			var msglen int
@@ -1011,7 +1073,7 @@ func (m *Request) Unmarshal(data []byte) error {
 			}
 			m.Nodes[mapkey] = mapvalue
 			iNdEx = postIndex
-		case 5:
+		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Delta", wireType)
 			}

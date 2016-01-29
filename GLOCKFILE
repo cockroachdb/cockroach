@@ -29,6 +29,7 @@ github.com/elazarl/go-bindata-assetfs 57eb5e1fc594ad4b0b1dbea7b286d299e0cb43c2
 github.com/go-sql-driver/mysql 6fd058ce0d6b7ee43174e80d5a3e7f483c4dfbe5
 github.com/gogo/protobuf e8904f58e872a473a5b91bc9bf3377d223555263
 github.com/golang/lint 32a87160691b3c96046c0c678fe57c5bef761456
+github.com/golang/protobuf 45bba206dd5270d96bac4942dcfe515726613249
 github.com/google/btree cc6329d4279e3f025a53a83c397d2339b5705c45
 github.com/gordonklaus/ineffassign 507e48671a072e56dbc5dbbee2872ce0d662697e
 github.com/jteeuwen/go-bindata a0ff2567cfb70903282db057e799fd826784d41d
