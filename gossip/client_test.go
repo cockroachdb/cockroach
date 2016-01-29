@@ -22,15 +22,17 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/gogo/protobuf/proto"
 )
 
 // startGossip creates and starts a gossip instance.
@@ -39,12 +41,12 @@ func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T) *Go
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
 
 	addr := util.CreateTestAddr("tcp")
-	server := rpc.NewServer(rpcContext)
+	server := grpc.NewServer()
 	tlsConfig, err := rpcContext.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	ln, err := util.ListenAndServe(stopper, server, addr, tlsConfig)
+	ln, err := grpcutil.ListenAndServeGRPC(stopper, server, addr, tlsConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,27 +68,33 @@ type fakeGossipServer struct {
 	nodeIDChan chan roachpb.NodeID
 }
 
-func newFakeGossipServer(rpcServer *rpc.Server, stopper *stop.Stopper) (*fakeGossipServer, error) {
+func newFakeGossipServer(grpcServer *grpc.Server, stopper *stop.Stopper) *fakeGossipServer {
 	s := &fakeGossipServer{
 		nodeIDChan: make(chan roachpb.NodeID, 1),
 	}
-	if err := rpcServer.Register("Gossip.Gossip", s.Gossip, &Request{}); err != nil {
-		return nil, util.Errorf("unable to register gossip service with RPC server: %s", err)
-	}
-	return s, nil
+	RegisterGossipServer(grpcServer, s)
+	return s
 }
 
-func (s *fakeGossipServer) Gossip(argsI proto.Message) (proto.Message, error) {
-	args := argsI.(*Request)
-	select {
-	case s.nodeIDChan <- args.NodeID:
-	default:
-	}
+func (s *fakeGossipServer) Gossip(stream Gossip_GossipServer) error {
+	for {
+		args, err := stream.Recv()
+		if err != nil {
+			return err
+		}
 
-	return &Response{
-		// Just don't conflict with other nodes.
-		NodeID: math.MaxInt32,
-	}, nil
+		select {
+		case s.nodeIDChan <- args.NodeID:
+		default:
+		}
+
+		if err := stream.Send(&Response{
+			// Just don't conflict with other nodes.
+			NodeID: math.MaxInt32,
+		}); err != nil {
+			return err
+		}
+	}
 }
 
 // startFakeServerGossips creates local gossip instances and remote
@@ -98,12 +106,12 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 	lRPCContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
 
 	laddr := util.CreateTestAddr("tcp")
-	lserver := rpc.NewServer(lRPCContext)
+	lserver := grpc.NewServer()
 	lTLSConfig, err := lRPCContext.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	lln, err := util.ListenAndServe(stopper, lserver, laddr, lTLSConfig)
+	lln, err := grpcutil.ListenAndServeGRPC(stopper, lserver, laddr, lTLSConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,19 +122,17 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 	rRPCContext := rpc.NewContext(&base.Context{Insecure: true}, rclock, stopper)
 
 	raddr := util.CreateTestAddr("tcp")
-	rserver := rpc.NewServer(rRPCContext)
+	rserver := grpc.NewServer()
 	rTLSConfig, err := rRPCContext.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rln, err := util.ListenAndServe(stopper, rserver, raddr, rTLSConfig)
+	rln, err := grpcutil.ListenAndServeGRPC(stopper, rserver, raddr, rTLSConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if remote, err = newFakeGossipServer(rserver, stopper); err != nil {
-		t.Fatal(err)
-	}
+	remote = newFakeGossipServer(rserver, stopper)
 	addr := rln.Addr()
 	remote.nodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 	time.Sleep(time.Millisecond)
@@ -322,12 +328,12 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		RPCContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
 
 		addr := util.CreateTestAddr("tcp")
-		server := rpc.NewServer(RPCContext)
+		server := grpc.NewServer()
 		TLSConfig, err := RPCContext.GetServerTLSConfig()
 		if err != nil {
 			t.Fatal(err)
 		}
-		ln, err := util.ListenAndServe(stopper, server, addr, TLSConfig)
+		ln, err := grpcutil.ListenAndServeGRPC(stopper, server, addr, TLSConfig)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -341,18 +347,20 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		resolver, _ := resolver.NewResolver(&RPCContext.Context, gossipAddr)
 		resolvers = append(resolvers, resolver)
 		gnode := New(RPCContext, resolvers, stopper)
+		// node ID must be non-zero
+		gnode.SetNodeID(roachpb.NodeID(i + 1))
 		g = append(g, gnode)
 		gnode.Start(server, ln.Addr())
 	}
 
 	util.SucceedsWithin(t, 5*time.Second, func() error {
 		// The first gossip node should have two gossip client address
-		// in lAddrMap if these three gossip nodes registered success.
+		// in nodeMap if these three gossip nodes registered success.
 		g[0].mu.Lock()
 		defer g[0].mu.Unlock()
-		if len(g[0].lAddrMap) == 2 {
-			return nil
+		if a, e := len(g[0].nodeMap), 2; a != e {
+			return util.Errorf("expected %s to contain %d nodes, got %d", g[0].nodeMap, e, a)
 		}
-		return util.Errorf("gossip client register fail.")
+		return nil
 	})
 }

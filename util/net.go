@@ -24,39 +24,53 @@ import (
 	"strings"
 	"sync"
 
+	"golang.org/x/net/http2"
+
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+// Listen delegates to `net.Listen` and, if tlsConfig is not nil, to `tls.NewListener`.
+// The returned listener's Addr() method will return an address with the hostname unresovled,
+// which means it can be used to initiate TLS connections.
+func Listen(addr net.Addr, tlsConfig *tls.Config) (net.Listener, error) {
+	ln, err := net.Listen(addr.Network(), addr.String())
+	if err == nil && tlsConfig != nil {
+		ln = tls.NewListener(ln, tlsConfig)
+	}
+
+	return ln, err
+}
+
 // ListenAndServe creates a listener and serves handler on it, closing
 // the listener when signalled by the stopper.
-func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, config *tls.Config) (net.Listener, error) {
-	ln, err := net.Listen(addr.Network(), addr.String())
+func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, tlsConfig *tls.Config) (net.Listener, error) {
+	ln, err := Listen(addr, tlsConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	if config != nil {
-		ln = tls.NewListener(ln, config)
+	var mu sync.Mutex
+	activeConns := make(map[net.Conn]struct{})
+
+	httpServer := http.Server{
+		TLSConfig: tlsConfig,
+		Handler:   handler,
+		ConnState: func(conn net.Conn, state http.ConnState) {
+			mu.Lock()
+			switch state {
+			case http.StateNew:
+				activeConns[conn] = struct{}{}
+			case http.StateClosed:
+				delete(activeConns, conn)
+			}
+			mu.Unlock()
+		},
+	}
+	if err := http2.ConfigureServer(&httpServer, nil); err != nil {
+		return nil, err
 	}
 
 	stopper.RunWorker(func() {
-		var mu sync.Mutex
-		activeConns := make(map[net.Conn]struct{})
-
-		httpServer := http.Server{
-			Handler: handler,
-			ConnState: func(conn net.Conn, state http.ConnState) {
-				mu.Lock()
-				switch state {
-				case http.StateNew:
-					activeConns[conn] = struct{}{}
-				case http.StateClosed:
-					delete(activeConns, conn)
-				}
-				mu.Unlock()
-			},
-		}
-
 		if err := httpServer.Serve(ln); err != nil && !IsClosedConnection(err) {
 			log.Fatal(err)
 		}

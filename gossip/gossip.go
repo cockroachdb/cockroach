@@ -61,6 +61,8 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -683,10 +685,10 @@ func (g *Gossip) MaxHops() uint32 {
 //
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
-func (g *Gossip) Start(rpcServer *rpc.Server, addr net.Addr) {
-	g.server.start(rpcServer, addr) // serve gossip protocol
-	g.bootstrap()                   // bootstrap gossip client
-	g.manage()                      // manage gossip clients
+func (g *Gossip) Start(grpcServer *grpc.Server, addr net.Addr) {
+	g.server.start(grpcServer, addr) // serve gossip protocol
+	g.bootstrap()                    // bootstrap gossip client
+	g.manage()                       // manage gossip clients
 }
 
 // hasIncoming returns whether the server has an incoming gossip

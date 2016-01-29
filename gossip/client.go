@@ -19,7 +19,10 @@ package gossip
 import (
 	"fmt"
 	"net"
-	netrpc "net/rpc"
+
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -30,13 +33,12 @@ import (
 
 // client is a client-side RPC connection to a gossip peer node.
 type client struct {
-	peerID        roachpb.NodeID  // Peer node ID; 0 until first gossip response
-	addr          net.Addr        // Peer node network address
-	rpcClient     *rpc.Client     // RPC client
-	forwardAddr   net.Addr        // Set if disconnected with an alternate addr
-	sendingGossip bool            // True if there's an outstanding RPC to send gossip
-	remoteNodes   map[int32]*Node // Remote server's high water timestamps and min hops
-	closer        chan struct{}   // Client shutdown channel
+	peerID      roachpb.NodeID  // Peer node ID; 0 until first gossip response
+	addr        net.Addr        // Peer node network address
+	rpcClient   GossipClient    // RPC client
+	forwardAddr net.Addr        // Set if disconnected with an alternate addr
+	remoteNodes map[int32]*Node // Remote server's high water timestamps and min hops
+	closer      chan struct{}   // Client shutdown channel
 }
 
 // extractKeys returns a string representation of a gossip delta's keys.
@@ -58,29 +60,42 @@ func newClient(addr net.Addr) *client {
 }
 
 // start dials the remote addr and commences gossip once connected.
-// Upon exit, signals client is done by pushing it onto the done
-// channel. If the client experienced an error, its err field will
+// Upon exit, the client is sent on the disconnected channel.
+// If the client experienced an error, its err field will
 // be set. This method starts client processing in a goroutine and
 // returns immediately.
-func (c *client) start(g *Gossip, done chan *client, context *rpc.Context, stopper *stop.Stopper) {
+func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
-		var err error
+		defer func() {
+			disconnected <- c
+		}()
 
-		c.rpcClient = rpc.NewClient(c.addr, context)
-		select {
-		case <-c.rpcClient.Healthy():
-			// Start gossiping and wait for disconnect or error.
-			err = c.gossip(g, stopper)
-			if context.DisableCache {
-				c.rpcClient.Close()
+		var dialOpt grpc.DialOption
+		if ctx.Insecure {
+			dialOpt = grpc.WithInsecure()
+		} else {
+			tlsConfig, err := ctx.GetClientTLSConfig()
+			if err != nil {
+				log.Error(err)
+				return
 			}
-		case <-c.rpcClient.Closed:
-			err = util.Errorf("client closed")
+			dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 		}
 
-		done <- c
-
+		conn, err := grpc.Dial(c.addr.String(), dialOpt)
 		if err != nil {
+			log.Errorf("failed to dial: %v", err)
+			return
+		}
+		defer func() {
+			if err := conn.Close(); err != nil {
+				log.Error(err)
+			}
+		}()
+		c.rpcClient = NewGossipClient(conn)
+
+		// Start gossiping.
+		if err := c.gossip(g, stopper); err != nil {
 			if c.peerID != 0 {
 				log.Infof("closing client to node %d (%s): %s", c.peerID, c.addr, err)
 			} else {
@@ -95,63 +110,46 @@ func (c *client) close() {
 	close(c.closer)
 }
 
-// getGossip requests the latest gossip from the remote server by
+// requestGossip requests the latest gossip from the remote server by
 // supplying a map of this node's knowledge of other nodes' high water
 // timestamps and min hops.
-func (c *client) getGossip(g *Gossip, addr, lAddr util.UnresolvedAddr, done chan *netrpc.Call) {
+func (c *client) requestGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_GossipClient) error {
 	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	nodeID := g.is.NodeID
-	args := Request{
-		NodeID: nodeID,
+	args := &Request{
+		NodeID: g.is.NodeID,
 		Addr:   addr,
-		LAddr:  lAddr,
 		Nodes:  g.is.getNodes(),
 	}
-	reply := Response{}
-	c.rpcClient.Go("Gossip.Gossip", &args, &reply, done)
+	g.mu.Unlock()
+
+	return stream.Send(args)
 }
 
 // sendGossip sends the latest gossip to the remote server, based on
 // the remote server's notion of other nodes' high water timestamps
 // and min hops.
-func (c *client) sendGossip(g *Gossip, addr, lAddr util.UnresolvedAddr, done chan *netrpc.Call) {
+func (c *client) sendGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_GossipClient) error {
 	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	if c.sendingGossip {
-		return
-	}
-	nodeID := g.is.NodeID
-	delta := g.is.delta(c.remoteNodes)
-	if len(delta) == 0 {
-		return
-	}
-
-	args := Request{
-		NodeID: nodeID,
+	args := &Request{
+		NodeID: g.is.NodeID,
 		Addr:   addr,
-		LAddr:  lAddr,
-		Delta:  delta,
+		Delta:  g.is.delta(c.remoteNodes),
 		Nodes:  g.is.getNodes(),
 	}
-	reply := Response{}
-	c.rpcClient.Go("Gossip.Gossip", &args, &reply, done)
-	c.sendingGossip = true
+	g.mu.Unlock()
+
+	if len(args.Delta) == 0 {
+		return nil
+	}
+
+	return stream.Send(args)
 }
 
-// handleGossip handles errors, remote forwarding, and combines delta
+// handleResponse handles errors, remote forwarding, and combines delta
 // gossip infos from the remote server with this node's infostore.
-func (c *client) handleGossip(g *Gossip, call *netrpc.Call) error {
+func (c *client) handleResponse(g *Gossip, reply *Response) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-
-	if call.Error != nil {
-		return call.Error
-	}
-	args := call.Args.(*Request)
-	reply := call.Reply.(*Response)
 
 	// Combine remote node's infostore delta with ours.
 	if reply.Delta != nil {
@@ -165,10 +163,6 @@ func (c *client) handleGossip(g *Gossip, call *netrpc.Call) error {
 			}
 		}
 		g.maybeTighten()
-	} else if len(args.Delta) > 0 {
-		if log.V(1) {
-			log.Infof("node %d sent %d info(s) to node %d", g.is.NodeID, len(args.Delta), reply.NodeID)
-		}
 	}
 	c.peerID = reply.NodeID
 	g.outgoing.addNode(c.peerID)
@@ -205,6 +199,25 @@ func (c *client) handleGossip(g *Gossip, call *netrpc.Call) error {
 	return nil
 }
 
+// TODO(tamird): extract
+type contextWithStopper struct {
+	context.Context
+	stopper *stop.Stopper
+}
+
+func (ctx contextWithStopper) Done() <-chan struct{} {
+	return ctx.stopper.ShouldDrain()
+}
+
+func (ctx contextWithStopper) Err() error {
+	select {
+	case <-ctx.Done():
+		return context.Canceled
+	default:
+		return nil
+	}
+}
+
 // gossip loops, sending deltas of the infostore and receiving deltas
 // in turn. If an alternate is proposed on response, the client addr
 // is modified and method returns for forwarding by caller.
@@ -215,54 +228,56 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 	addr := g.is.NodeAddr
 	g.mu.Unlock()
 
-	lAddr := util.MakeUnresolvedAddr(c.rpcClient.LocalAddr().Network(), c.rpcClient.LocalAddr().String())
-	done := make(chan *netrpc.Call, 10)
-	c.getGossip(g, addr, lAddr, done)
+	ctx := contextWithStopper{
+		Context: context.Background(),
+		stopper: stopper,
+	}
+
+	stream, err := c.rpcClient.Gossip(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := c.requestGossip(g, addr, stream); err != nil {
+		return err
+	}
+
+	sendGossipChan := make(chan struct{}, 1)
 
 	// Register a callback for gossip updates.
 	updateCallback := func(_ string, _ roachpb.Value) {
-		c.sendGossip(g, addr, lAddr, done)
+		select {
+		case sendGossipChan <- struct{}{}:
+		default:
+		}
 	}
 	// Defer calling "undoer" callback returned from registration.
 	defer g.RegisterCallback(".*", updateCallback)()
 
-	// Loop until stopper is signalled, or until either the gossip or
-	// RPC clients are closed. getGossip is a hanging get, returning
-	// results only when the remote server has new gossip information to
-	// share. sendGossip is sent to the remote server when this node has
-	// new gossip information to share with the server.
-	//
-	// Nodes "pull" gossip in order to guarantee that they're connected
-	// to the sentinel and not too distant from other nodes in the
-	// network. The also "push" their own gossip which guarantees that
-	// the sentinel node will contain their info, and therefore every
-	// node connected to the sentinel. Just pushing or just pulling
-	// wouldn't guarantee a fully connected network.
+	// Loop in worker, sending updates from the info store.
+	stopper.RunWorker(func() {
+		for {
+			select {
+			case <-sendGossipChan:
+				if err := c.sendGossip(g, addr, stream); err != nil {
+					log.Error(err)
+					return
+				}
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
+
+	// Loop until stopper is signalled, or until either the gossip or RPC clients are closed.
+	// The stopper's signal is propagated through the context attached to the stream.
 	for {
-		select {
-		case call := <-done:
-			if err := c.handleGossip(g, call); err != nil {
-				return err
-			}
-			req := call.Args.(*Request)
-			// If this was from a gossip pull request, fetch again.
-			if req.Delta == nil {
-				c.getGossip(g, addr, lAddr, done)
-			} else {
-				// Otherwise, it's a gossip push request; set sendingGossip
-				// flag false and maybe send more gossip if there have been
-				// additional updates.
-				g.mu.Lock()
-				c.sendingGossip = false
-				g.mu.Unlock()
-				c.sendGossip(g, addr, lAddr, done)
-			}
-		case <-c.rpcClient.Closed:
-			return util.Errorf("client closed")
-		case <-c.closer:
-			return nil
-		case <-stopper.ShouldStop():
-			return nil
+		reply, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		if err := c.handleResponse(g, reply); err != nil {
+			return err
 		}
 	}
 }

@@ -15,9 +15,13 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package log
+package grpcutil
 
-import "google.golang.org/grpc/grpclog"
+import (
+	"google.golang.org/grpc/grpclog"
+
+	"github.com/cockroachdb/cockroach/util/log"
+)
 
 func init() {
 	grpclog.SetLogger(logger{})
@@ -26,25 +30,25 @@ func init() {
 type logger struct{}
 
 func (logger) Fatal(args ...interface{}) {
-	logDepth(nil, 2, FatalLog, "", args)
+	log.FatalfDepth(1, "", args...)
 }
 
 func (logger) Fatalf(format string, args ...interface{}) {
-	logDepth(nil, 2, FatalLog, format, args)
+	log.FatalfDepth(1, format, args...)
 }
 
 func (logger) Fatalln(args ...interface{}) {
-	logDepth(nil, 2, FatalLog, "", args)
+	log.FatalfDepth(1, "", args...)
 }
 
 func (logger) Print(args ...interface{}) {
-	logDepth(nil, 2, InfoLog, "", args)
+	log.InfofDepth(1, "", args...)
 }
 
 func (logger) Printf(format string, args ...interface{}) {
-	logDepth(nil, 2, InfoLog, format, args)
+	log.InfofDepth(1, format, args...)
 }
 
 func (logger) Println(args ...interface{}) {
-	logDepth(nil, 2, InfoLog, "", args)
+	log.InfofDepth(1, "", args...)
 }
