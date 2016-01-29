@@ -17,9 +17,6 @@
 package resolver
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 
@@ -74,30 +71,15 @@ func (nl *nodeLookupResolver) GetAddress() (net.Addr, error) {
 	}
 
 	nl.exhausted = true
-	// TODO(marc): put common URIs in base and reuse everywhere.
-	url := fmt.Sprintf("%s://%s/_status/details/local", nl.context.HTTPRequestScheme(), nl.addr)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	log.Infof("querying %s for gossip nodes", url)
-	resp, err := nl.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	contents, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
 
 	local := struct {
 		Address util.UnresolvedAddr `json:"address"`
 		// We ignore all other fields.
 	}{}
 
-	err = json.Unmarshal(contents, &local)
+	log.Infof("querying %s for gossip nodes", nl.addr)
+	// TODO(marc): put common URIs in base and reuse everywhere.
+	err := util.GetJSON(nl.httpClient, nl.context.HTTPRequestScheme(), nl.addr, "/_status/details/local", &local)
 	if err != nil {
 		return nil, err
 	}
