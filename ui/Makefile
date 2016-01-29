@@ -143,3 +143,8 @@ $(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEBUG_DEPS) bower.installed debug/$(INDEX
 
 watch: debug
 	gulp watch
+
+.PHONY:
+clean:
+	rm -f npm.installed bower.installed tsd.installed $(INDEX)
+	rm -rf node_module typings bower_components build generated
