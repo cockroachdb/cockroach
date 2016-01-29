@@ -81,16 +81,16 @@ GOGOPROTO_FOLDER  := $(GOPATH)/src/github.com/gogo/protobuf
 GOGOPROTO         := $(GOGOPROTO_FOLDER)/gogoproto/gogo.proto
 PROTO_JSON_TARGET := $(GENERATED_ROOT)/wireproto.json
 
-.PHONY:
+.PHONY: all
 all: lint $(GOBINDATA_TARGET) $(TEST_TARGET) $(PROTO_JSON_TARGET)
 	rm -f $(GOBINDATA_DEBUG_TARGET)
 
-.PHONY:
+.PHONY: lint
 lint: npm.installed
 	stylint -c .stylintrc $(STYL_ROOT)
 	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts')
 
-.PHONY:
+.PHONY: debug
 debug: $(GOBINDATA_DEBUG_TARGET) $(TEST_TARGET) $(PROTO_JSON_TARGET)
 	rm -f $(GOBINDATA_TARGET)
 
@@ -143,3 +143,8 @@ $(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEBUG_DEPS) bower.installed debug/$(INDEX
 
 watch: debug
 	gulp watch
+
+.PHONY: clean
+clean:
+	rm -f $(REMOTE_DEPS) $(INDEX)
+	rm -rf $(NODE_MODULES) $(BOWER_COMPONENTS) build generated typings
