@@ -135,15 +135,13 @@ func (txn *Txn) SetIsolation(isolation roachpb.IsolationType) *roachpb.Error {
 // normal user priority. The user priority must be set before any operations are
 // performed on the transaction.
 func (txn *Txn) SetUserPriority(userPriority roachpb.UserPriority) *roachpb.Error {
-	if txn.UserPriority != userPriority {
-		if txn.Proto.IsInitialized() {
-			return roachpb.NewErrorf("cannot change the user priority of a running transaction")
-		}
-		if userPriority < roachpb.MinUserPriority || userPriority > roachpb.MaxUserPriority {
-			return roachpb.NewErrorf("the given user priority %f is out of the allowed range [%f, %f]", userPriority, roachpb.MinUserPriority, roachpb.MaxUserPriority)
-		}
-		txn.UserPriority = userPriority
+	if txn.Proto.IsInitialized() {
+		return roachpb.NewErrorf("cannot change the user priority of a running transaction")
 	}
+	if userPriority < roachpb.MinUserPriority || userPriority > roachpb.MaxUserPriority {
+		return roachpb.NewErrorf("the given user priority %f is out of the allowed range [%f, %f]", userPriority, roachpb.MinUserPriority, roachpb.MaxUserPriority)
+	}
+	txn.UserPriority = userPriority
 	return nil
 }
 
