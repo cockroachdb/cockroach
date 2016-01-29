@@ -128,7 +128,7 @@ var _ client.Sender = &DistSender{}
 // rpcSendFn is the function type used to dispatch RPC calls.
 type rpcSendFn func(rpc.Options, string, []net.Addr,
 	func(addr net.Addr) proto.Message, func() proto.Message,
-	*rpc.Context) ([]proto.Message, error)
+	*rpc.Context) (proto.Message, error)
 
 // DistSenderContext holds auxiliary objects that can be passed to
 // NewDistSender.
@@ -332,7 +332,6 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := rpc.Options{
-		N:               1,
 		Ordering:        order,
 		SendNextTimeout: defaultSendNextTimeout,
 		Timeout:         rpc.DefaultRPCTimeout,
@@ -371,11 +370,11 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 	defer tracer.AnnotateTrace()
 
 	const method = "Node.Batch"
-	replies, err := ds.rpcSend(rpcOpts, method, addrs, getArgs, getReply, ds.rpcContext)
+	reply, err := ds.rpcSend(rpcOpts, method, addrs, getArgs, getReply, ds.rpcContext)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	return replies[0].(*roachpb.BatchResponse), nil
+	return reply.(*roachpb.BatchResponse), nil
 }
 
 // getDescriptors looks up the range descriptor to use for a query over the

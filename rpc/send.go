@@ -32,6 +32,11 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+// TODO(pmattis): This code is only used by kv.DistSender. Perhaps move it to
+// the kv package. We might also want to de-generalize it so that it knows
+// about the types of the request and response protos
+// (Batch{Request,Response}).
+
 // OrderingPolicy is an enum for ordering strategies when there
 // are multiple endpoints available.
 type OrderingPolicy int
@@ -47,8 +52,6 @@ const (
 // one or more replicas, depending on error conditions and how many
 // successful responses are required.
 type Options struct {
-	// N is the number of successful responses required.
-	N int
 	// Ordering indicates how the available endpoints are ordered when
 	// deciding which to send to (if there are more than one).
 	Ordering OrderingPolicy
@@ -90,26 +93,20 @@ func NewSendError(msg string, canRetry bool) *roachpb.SendError {
 	return &roachpb.SendError{Message: msg, Retryable: canRetry}
 }
 
-// Send sends one or more method RPCs to clients specified by the
-// slice of endpoint addrs. Arguments for methods are obtained using
-// the supplied getArgs function. The number of required replies is
-// given by opts.N. Reply structs are obtained through the getReply()
-// function. On success, Send returns a slice of replies of length
-// opts.N. Otherwise, Send returns an error if and as soon as the
-// number of failed RPCs exceeds the available endpoints less the
-// number of required replies.
+// Send sends one or more method RPCs to clients specified by the slice of
+// endpoint addrs. Arguments for methods are obtained using the supplied
+// getArgs function. Reply structs are obtained through the getReply()
+// function. On success, Send returns the first successful reply. Otherwise,
+// Send returns an error if and as soon as the number of failed RPCs exceeds
+// the available endpoints less the number of required replies.
 func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message,
-	getReply func() proto.Message, context *Context) ([]proto.Message, error) {
+	getReply func() proto.Message, context *Context) (proto.Message, error) {
 	trace := opts.Trace // not thread safe!
 
-	if opts.N <= 0 {
-		return nil, NewSendError(fmt.Sprintf("opts.N must be positive: %d", opts.N), false)
-	}
-
-	if len(addrs) < opts.N {
+	if len(addrs) < 1 {
 		return nil, NewSendError(
 			fmt.Sprintf("insufficient replicas (%d) to satisfy send request of %d",
-				len(addrs), opts.N), false)
+				len(addrs), 1), false)
 	}
 
 	done := make(chan *rpc.Call, len(addrs))
@@ -160,17 +157,14 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 		}
 	}
 
-	// Start clients up to opts.N.
-	head, tail := orderedClients[:opts.N], orderedClients[opts.N:]
-	for _, client := range head {
-		sendFn(client)
-	}
+	// Send the first request.
+	sendFn(orderedClients[0])
+	orderedClients = orderedClients[1:]
 
-	var replies []proto.Message
 	var errors, retryableErrors int
 
 	// Wait for completions.
-	for len(replies) < opts.N {
+	for {
 		select {
 		case call := <-done:
 			if call.Error == nil {
@@ -191,8 +185,7 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 					log.Infof("%s: successful reply: %+v", method, call.Reply)
 				}
 
-				replies = append(replies, call.Reply.(proto.Message))
-				break // end the select
+				return call.Reply.(proto.Message), nil
 			}
 
 			// Error handling.
@@ -208,28 +201,27 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 				retryableErrors++
 			}
 
-			if remainingNonErrorRPCs := len(addrs) - errors; remainingNonErrorRPCs < opts.N {
+			if remainingNonErrorRPCs := len(addrs) - errors; remainingNonErrorRPCs < 1 {
 				return nil, NewSendError(
 					fmt.Sprintf("too many errors encountered (%d of %d total): %v",
-						errors, len(clients), err), remainingNonErrorRPCs+retryableErrors >= opts.N)
+						errors, len(clients), err), remainingNonErrorRPCs+retryableErrors >= 1)
 			}
 			// Send to additional replicas if available.
-			if len(tail) > 0 {
+			if len(orderedClients) > 0 {
 				trace.Event("error, trying next peer")
-				sendFn(tail[0])
-				tail = tail[1:]
+				sendFn(orderedClients[0])
+				orderedClients = orderedClients[1:]
 			}
 
 		case <-time.After(opts.SendNextTimeout):
 			// On successive RPC timeouts, send to additional replicas if available.
-			if len(tail) > 0 {
+			if len(orderedClients) > 0 {
 				trace.Event("timeout, trying next peer")
-				sendFn(tail[0])
-				tail = tail[1:]
+				sendFn(orderedClients[0])
+				orderedClients = orderedClients[1:]
 			}
 		}
 	}
-	return replies, nil
 }
 
 // sendOne invokes the specified RPC on the supplied client when the

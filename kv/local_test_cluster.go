@@ -80,7 +80,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.stores = storage.NewStores(ltc.Clock)
 	var rpcSend rpcSendFn = func(_ rpc.Options, _ string, _ []net.Addr,
 		getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message,
-		_ *rpc.Context) ([]proto.Message, error) {
+		_ *rpc.Context) (proto.Message, error) {
 		// TODO(tschottdorf): remove getReply().
 		if ltc.Latency > 0 {
 			time.Sleep(ltc.Latency)
@@ -93,7 +93,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 			panic(roachpb.ErrorUnexpectedlySet(ltc.stores, br))
 		}
 		br.Error = pErr
-		return []proto.Message{br}, nil
+		return br, nil
 	}
 	retryOpts := GetDefaultDistSenderRetryOptions()
 	retryOpts.Closer = ltc.Stopper.ShouldDrain()
