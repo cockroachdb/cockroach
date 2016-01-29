@@ -151,7 +151,19 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 				log.Infof("%s: sending request to %s: %+v", method, addr, args)
 			}
 			trace.Event(fmt.Sprintf("sending to %s", addr))
-			go sendOneFn(client, opts.Timeout, method, args, getReply(), done)
+
+			reply := getReply()
+
+			// Don't bother firing off a goroutine in the common case where a client
+			// is already healthy.
+			select {
+			case <-client.Healthy():
+				client.Go(method, args, reply, done)
+				return
+			default:
+			}
+
+			go sendOneFn(client, opts.Timeout, method, args, reply, done)
 		} else {
 			done <- &rpc.Call{Error: newRPCError(util.Errorf("nil arguments returned for client %s", addr))}
 		}
