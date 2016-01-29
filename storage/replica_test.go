@@ -1530,34 +1530,34 @@ func TestRangeSequenceCacheStoredTxnRetryError(t *testing.T) {
 	txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
 	txn.Sequence = 321
 	args := incrementArgs(key, 1)
-	try := func() error {
+	try := func() *roachpb.Error {
 		_, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			Txn: txn,
 		}, &args)
-		return pErr.GoError()
+		return pErr
 	}
 
-	if err := try(); err != nil {
-		t.Fatal(err)
+	if pErr := try(); pErr != nil {
+		t.Fatal(pErr)
 	}
 	txn.Timestamp.Forward(txn.Timestamp.Add(10, 10)) // can't hurt
 	{
-		err := try()
-		if _, ok := err.(*roachpb.TransactionRetryError); !ok {
-			t.Fatal(err)
+		pErr := try()
+		if _, ok := pErr.GoError().(*roachpb.TransactionRetryError); !ok {
+			t.Fatal(pErr)
 		}
 	}
 
 	//  Pretend we restarted by increasing the epoch. That's all that's needed.
 	txn.Epoch++
-	if err := try(); err != nil {
-		t.Fatal(err)
+	if pErr := try(); pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Now increase the sequence as well. Still good to go.
 	txn.Sequence++
-	if err := try(); err != nil {
-		t.Fatal(err)
+	if pErr := try(); pErr != nil {
+		t.Fatal(pErr)
 	}
 }
 
@@ -2148,26 +2148,26 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 		pusher.Priority = 2
 		pushee.Priority = 1 // pusher will win
 
-		inc := func(actor *roachpb.Transaction, k roachpb.Key) (*roachpb.IncrementResponse, error) {
+		inc := func(actor *roachpb.Transaction, k roachpb.Key) (*roachpb.IncrementResponse, *roachpb.Error) {
 			actor.Sequence++
 			reply, pErr := client.SendWrappedWith(tc.store, nil, roachpb.Header{
 				Txn:     actor,
 				RangeID: 1,
 			}, &roachpb.IncrementRequest{Span: roachpb.Span{Key: k}, Increment: 123})
 			if pErr != nil {
-				return nil, pErr.GoError()
+				return nil, pErr
 			}
 			return reply.(*roachpb.IncrementResponse), nil
 		}
 
-		get := func(actor *roachpb.Transaction, k roachpb.Key) error {
+		get := func(actor *roachpb.Transaction, k roachpb.Key) *roachpb.Error {
 			actor.Sequence++
 			_, pErr := client.SendWrappedWith(tc.store, nil, roachpb.Header{
 				Txn:       actor,
 				Timestamp: actor.Timestamp,
 				RangeID:   1,
 			}, &roachpb.GetRequest{Span: roachpb.Span{Key: k}})
-			return pErr.GoError()
+			return pErr
 		}
 
 		// Begin the pushee's transaction and write an intent.
@@ -2176,61 +2176,61 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 			btH, &btArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
-		if _, err := inc(pushee, key); err != nil {
-			t.Fatal(err)
+		if _, pErr := inc(pushee, key); pErr != nil {
+			t.Fatal(pErr)
 		}
 
 		// Have the pusher run into the intent. That pushes our pushee and resolves
 		// the intent, which in turn should poison the sequence cache.
-		var assert func(error)
+		var assert func(*roachpb.Error)
 		if abort {
 			// Write/Write conflict will abort pushee.
-			if _, err := inc(pusher, key); err != nil {
-				t.Fatal(err)
+			if _, pErr := inc(pusher, key); pErr != nil {
+				t.Fatal(pErr)
 			}
-			assert = func(err error) {
-				if _, ok := err.(*roachpb.TransactionAbortedError); !ok {
-					t.Fatalf("abort=%t, iso=%s: expected txn abort, got %s", abort, iso, err)
+			assert = func(pErr *roachpb.Error) {
+				if _, ok := pErr.GoError().(*roachpb.TransactionAbortedError); !ok {
+					t.Fatalf("abort=%t, iso=%s: expected txn abort, got %s", abort, iso, pErr)
 				}
 			}
 		} else if iso == roachpb.SNAPSHOT {
 			// At SNAPSHOT, we shouldn't be restart-poisoned.
-			assert = func(err error) {
-				if err != nil {
-					t.Fatalf("abort=%t, iso=%s: unexpected: %s", abort, iso, err)
+			assert = func(pErr *roachpb.Error) {
+				if pErr != nil {
+					t.Fatalf("abort=%t, iso=%s: unexpected: %s", abort, iso, pErr)
 				}
 			}
 		} else {
 			// Trigger a Read/Write conflict which pushes pushee's timestamp.
-			if err := get(pusher, key); err != nil {
-				t.Fatal(err)
+			if pErr := get(pusher, key); pErr != nil {
+				t.Fatal(pErr)
 			}
-			assert = func(err error) {
-				if _, ok := err.(*roachpb.TransactionRetryError); !ok {
+			assert = func(pErr *roachpb.Error) {
+				if _, ok := pErr.GoError().(*roachpb.TransactionRetryError); !ok {
 					t.Fatalf("abort=%t, iso=%s: expected txn retry, got %s",
-						abort, iso, err)
+						abort, iso, pErr)
 				}
 			}
 		}
 
 		// We shouldn't be able to read or write within the transaction on this
 		// Range.
-		err := get(pushee, key)
-		assert(err)
-		_, err = inc(pushee, key)
-		assert(err)
+		pErr := get(pushee, key)
+		assert(pErr)
+		_, pErr = inc(pushee, key)
+		assert(pErr)
 		// Still poisoned (on any key on the Range).
-		err = get(pushee, key.Next())
-		assert(err)
-		_, err = inc(pushee, key.Next())
-		assert(err)
+		pErr = get(pushee, key.Next())
+		assert(pErr)
+		_, pErr = inc(pushee, key.Next())
+		assert(pErr)
 
 		// Pretend we're coming back. This works regardless of retry or restart,
 		// but obviously in practice only on a retry would the Txn actually come
 		// back with an increased epoch.
 		pushee.Epoch++
-		if _, err := inc(pushee, roachpb.Key("b")); err != nil {
-			t.Fatal(err)
+		if _, pErr := inc(pushee, roachpb.Key("b")); pErr != nil {
+			t.Fatal(pErr)
 		}
 	}
 
