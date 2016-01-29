@@ -234,7 +234,7 @@ func (n *scanNode) initTableExpr(p *planner, ate *parser.AliasedTableExpr) *roac
 		}
 		// Strip out any columns from the table that are not present in the
 		// index.
-		visibleCols := []ColumnDescriptor(nil)
+		visibleCols := make([]ColumnDescriptor, 0, len(n.index.ColumnIDs)+len(n.index.ImplicitColumnIDs))
 		for _, colID := range n.index.ColumnIDs {
 			var col *ColumnDescriptor
 			if col, n.pErr = n.desc.FindColumnByID(colID); n.pErr != nil {
@@ -263,7 +263,7 @@ func (n *scanNode) initDescDefaults() {
 	n.initVisibleCols(n.desc.Columns)
 }
 
-// isColumnHidden returns true if the column with the given inde shouldn't be be resolved by
+// isColumnHidden returns true if the column with the given index shouldn't be be resolved by
 // a star reference (e.g. SELECT * FROM t)
 func (n *scanNode) isColumnHidden(idx int) bool {
 	if idx < 0 || idx >= len(n.visibleCols) {
@@ -276,8 +276,8 @@ func (n *scanNode) isColumnHidden(idx int) bool {
 	return n.visibleCols[idx].Hidden
 }
 
-// getResultColumns converts ColumnDescriptors to ResultColumns
-func getResultColumns(colDescs []ColumnDescriptor) []ResultColumn {
+// makeResultColumns converts ColumnDescriptors to ResultColumns
+func makeResultColumns(colDescs []ColumnDescriptor) []ResultColumn {
 	cols := make([]ResultColumn, 0, len(colDescs))
 	for _, colDesc := range colDescs {
 		// Convert the ColumnDescriptor to ResultColumn.
@@ -313,8 +313,8 @@ func getResultColumns(colDescs []ColumnDescriptor) []ResultColumn {
 // Initializes the visibleCols and associated structures (resultColumns, colIdxMap).
 func (n *scanNode) initVisibleCols(visibleCols []ColumnDescriptor) {
 	n.visibleCols = visibleCols
-	n.resultColumns = getResultColumns(visibleCols)
-	n.colIdxMap = map[ColumnID]int{}
+	n.resultColumns = makeResultColumns(visibleCols)
+	n.colIdxMap = make(map[ColumnID]int, len(visibleCols))
 	for i, c := range visibleCols {
 		n.colIdxMap[c.ID] = i
 	}
@@ -416,7 +416,7 @@ func (n *scanNode) computeOrdering(index *IndexDescriptor, exactPrefix int, reve
 	for i, colID := range columnIDs {
 		idx, ok := n.colIdxMap[colID]
 		if !ok {
-			panic(fmt.Sprintf("Index refers to unknown column id %d", colID))
+			panic(fmt.Sprintf("index refers to unknown column id %d", colID))
 		}
 		if i < exactPrefix {
 			ordering.addExactMatchColumn(idx)
@@ -474,6 +474,9 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 			value, ok = n.unmarshalValue(kv)
 			if !ok {
 				return false
+			}
+			if n.row[idx] != nil {
+				panic(fmt.Sprintf("duplicate value for column %d", idx))
 			}
 			n.row[idx] = value
 			if log.V(2) {

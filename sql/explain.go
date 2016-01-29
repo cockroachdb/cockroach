@@ -99,6 +99,10 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 		// Replace the sort node with the node it wraps.
 		return markDebug(t.plan, mode)
 
+	case *groupNode:
+		// Replace the group node with the node it wraps.
+		return markDebug(t.plan, mode)
+
 	default:
 		return nil, roachpb.NewErrorf("TODO(pmattis): unimplemented %T", plan)
 	}

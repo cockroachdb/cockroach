@@ -213,10 +213,11 @@ func (s *selectNode) resolveQNames(expr parser.Expr) (parser.Expr, *roachpb.Erro
 	return expr, v.pErr
 }
 
-// Populates the datum fields of the qvalues in the qval map (using from.values).
-func (s *selectNode) populateQVals() {
+// Populates the datum fields of the qvalues in the qval map (given a row
+// of values retrieved from the fromNode).
+func (s *selectNode) populateQVals(row parser.DTuple) {
 	for ref, qval := range s.qvals {
-		qval.datum = ref.from.values[ref.colIdx]
+		qval.datum = row[ref.colIdx]
 		if qval.datum == nil {
 			panic(fmt.Sprintf("Unpopulated value for column %d", ref.colIdx))
 		}

@@ -49,9 +49,6 @@ type fromInfo struct {
 	// resultColumns which match the node.Columns() 1-to-1. However the column names might be
 	// different if the statement renames them using AS.
 	columns []ResultColumn
-
-	// Last row of values received.
-	values parser.DTuple
 }
 
 // selectNode encapsulates the core logic of a select statement: retrieving filtered results from
@@ -68,17 +65,19 @@ type selectNode struct {
 
 	pErr *roachpb.Error
 
-	// rendering expressions for rows and coresponding output columns
+	// Rendering expressions for rows and corresponding output columns.
 	render  []parser.Expr
 	columns []ResultColumn
-	// the rendered row
+
+	// The rendered row, with one value for each render expression.
 	row parser.DTuple
 
-	// filtering expression for rows
+	// Filtering expression for rows.
 	filter parser.Expr
 
-	// We may internally add render targets (columns) for grouping or ordering. The original columns
-	// are columns[:numOriginalCols], the internally added ones are columns[numOriginalCols:].
+	// The number of initial columns - before adding any internal render targets for grouping or
+	// ordering. The original columns are columns[:numOriginalCols], the internally added ones are
+	// columns[numOriginalCols:].
 	numOriginalCols int
 
 	explain explainMode
@@ -114,17 +113,17 @@ func (s *selectNode) Next() bool {
 		if !s.from.node.Next() {
 			return false
 		}
-		s.from.values = s.from.node.Values()
+		row := s.from.node.Values()
 
 		if s.explain == explainDebug {
 			if len(s.row) != 4 {
 				s.row = make(parser.DTuple, 4)
 			}
-			debugValues := s.from.values[len(s.from.values)-4:]
+			debugValues := row[len(row)-4:]
 
 			if debugValues[3] != parser.DNull && s.filter != nil {
 				// We are at the end of the row and we have a filtering expression
-				s.populateQVals()
+				s.populateQVals(row)
 				output := s.filterRow()
 				if s.pErr != nil {
 					return false
@@ -135,7 +134,7 @@ func (s *selectNode) Next() bool {
 			return true
 		}
 
-		s.populateQVals()
+		s.populateQVals(row)
 		output := s.filterRow()
 		if s.pErr != nil {
 			return false
@@ -208,7 +207,7 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 	}
 
 	// Find the set of columns that we actually need values for. This is an optimization to avoid
-	// unmarshalling unnecessary values and is also used for index selection.
+	// unmarshaling unnecessary values and is also used for index selection.
 	for i := range scan.valNeededForCol {
 		_, ok := s.qvals[columnRef{&s.from, i}]
 		scan.valNeededForCol[i] = ok
@@ -251,6 +250,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 	switch len(from) {
 	case 0:
 		// Nothing to do
+		// TODO(radu): we shouldn't be using a scanNode in this case at all.
 
 	case 1:
 		ate, ok := from[0].(*parser.AliasedTableExpr)
@@ -300,28 +300,29 @@ func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
 		return nil
 	}
 	s.filter, s.pErr = s.resolveQNames(where.Expr)
-	if s.pErr == nil {
-		var whereType parser.Datum
-		var err error
-		whereType, err = s.filter.TypeCheck(s.planner.evalCtx.Args)
+	if s.pErr != nil {
+		return s.pErr
+	}
+
+	whereType, err := s.filter.TypeCheck(s.planner.evalCtx.Args)
+	if err != nil {
 		s.pErr = roachpb.NewError(err)
-		if s.pErr == nil {
-			if !(whereType == parser.DummyBool || whereType == parser.DNull) {
-				s.pErr = roachpb.NewUErrorf("argument of WHERE must be type %s, not type %s",
-					parser.DummyBool.Type(), whereType.Type())
-			}
-		}
+		return s.pErr
 	}
-	if s.pErr == nil {
-		// Normalize the expression (this will also evaluate any branches that are
-		// constant).
-		var err error
-		s.filter, err = s.planner.parser.NormalizeExpr(s.planner.evalCtx, s.filter)
+	if !(whereType == parser.DummyBool || whereType == parser.DNull) {
+		s.pErr = roachpb.NewUErrorf("argument of WHERE must be type %s, not type %s",
+			parser.DummyBool.Type(), whereType.Type())
+		return s.pErr
+	}
+
+	// Normalize the expression (this will also evaluate any branches that are
+	// constant).
+	s.filter, err = s.planner.parser.NormalizeExpr(s.planner.evalCtx, s.filter)
+	if err != nil {
 		s.pErr = roachpb.NewError(err)
+		return s.pErr
 	}
-	if s.pErr == nil {
-		s.filter, s.pErr = s.planner.expandSubqueries(s.filter, 1)
-	}
+	s.filter, s.pErr = s.planner.expandSubqueries(s.filter, 1)
 	return s.pErr
 }
 
