@@ -143,3 +143,7 @@ $(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEBUG_DEPS) bower.installed debug/$(INDEX
 
 watch: debug
 	gulp watch
+
+.PHONY:
+clean:
+	git clean -dXf
