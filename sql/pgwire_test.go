@@ -388,8 +388,8 @@ func checkPGWireMetrics(s *server.TestServer, minBytesIn, minBytesOut, maxBytesI
 }
 
 func TestPGWireMetrics(t *testing.T) {
-	// Setup test server.
 	defer leaktest.AfterTest(t)
+
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
