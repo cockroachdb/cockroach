@@ -80,17 +80,15 @@ func (s *fakeGossipServer) Gossip(stream Gossip_GossipServer) error {
 	if err != nil {
 		return err
 	}
-
-	reply := &Response{
-		// Just don't conflict with other nodes.
-		NodeID: math.MaxInt32,
-	}
 	select {
 	case s.nodeIDChan <- args.NodeID:
 	default:
 	}
 
-	return stream.Send(reply)
+	return stream.Send(&Response{
+		// Just don't conflict with other nodes.
+		NodeID: math.MaxInt32,
+	})
 }
 
 // startFakeServerGossips creates local gossip instances and remote
@@ -179,6 +177,9 @@ func TestClientNodeID(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	local, remote, stopper := startFakeServerGossips(t)
+	nodeID := roachpb.NodeID(1)
+	local.SetNodeID(nodeID)
+
 	disconnected := make(chan *client, 1)
 
 	// Use an insecure context. We're talking to tcp socket which are not in the certs.
@@ -193,24 +194,12 @@ func TestClientNodeID(t *testing.T) {
 			t.Errorf("expected client disconnect after remote close")
 		}
 	}()
+
 	c.start(local, disconnected, rpcContext, stopper)
 	// Wait for c.gossip to start.
-	receivedNodeID := <-remote.nodeIDChan
-
-	nodeID := roachpb.NodeID(1)
-	// Simulate a nodeID setting after c.gossip started.
-	local.SetNodeID(nodeID)
-	// Check if client send the correct NodeID after new nodeID take effect.
-	util.SucceedsWithin(t, time.Second, func() error {
-		select {
-		case receivedNodeID = <-remote.nodeIDChan:
-			if receivedNodeID == nodeID {
-				return nil
-			}
-		default:
-		}
-		return util.Errorf("client should send NodeID with %v, got %v", nodeID, receivedNodeID)
-	})
+	if receivedNodeID := <-remote.nodeIDChan; receivedNodeID != nodeID {
+		t.Errorf("client should send NodeID with %v, got %v", nodeID, receivedNodeID)
+	}
 }
 
 func verifyServerMaps(g *Gossip, expCount int) bool {
