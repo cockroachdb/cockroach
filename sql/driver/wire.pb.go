@@ -568,7 +568,7 @@ func (m *Datum_FloatVal) MarshalTo(data []byte) (int, error) {
 	i := 0
 	data[i] = 0x19
 	i++
-	i = encodeFixed64Wire(data, i, uint64(math.Float64bits(m.FloatVal)))
+	i = encodeFixed64Wire(data, i, uint64(math.Float64bits(float64(m.FloatVal))))
 	return i, nil
 }
 func (m *Datum_BytesVal) MarshalTo(data []byte) (int, error) {

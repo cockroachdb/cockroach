@@ -24,6 +24,39 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+// UserPriority is a custom type for transaction's user priority.
+type UserPriority float64
+
+func (up UserPriority) String() string {
+	switch up {
+	case LowUserPriority:
+		return "LOW"
+	case UnspecifiedUserPriority, NormalUserPriority:
+		return "NORMAL"
+	case HighUserPriority:
+		return "HIGH"
+	default:
+		return fmt.Sprintf("%g", float64(up))
+	}
+}
+
+const (
+	// MinUserPriority is the minimum allowed user priority.
+	MinUserPriority = 0.001
+	// LowUserPriority is the minimum user priority settable with SQL.
+	LowUserPriority = 0.1
+	// UnspecifiedUserPriority means NormalUserPriority.
+	UnspecifiedUserPriority = 0
+	// NormalUserPriority is set to 1, meaning ops run through the database
+	// are all given equal weight when a random priority is chosen. This can
+	// be set specifically via client.NewDBWithPriority().
+	NormalUserPriority = 1
+	// HighUserPriority is the maximum user priority settable with SQL.
+	HighUserPriority = 10
+	// MaxUserPriority is the maximum allowed user priority.
+	MaxUserPriority = 1000
+)
+
 // A RangeID is a unique ID associated to a Raft consensus group.
 type RangeID int64
 

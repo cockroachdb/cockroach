@@ -377,6 +377,7 @@ func TestCommonMethods(t *testing.T) {
 		key{txnType, "RunWithResponse"}:           {},
 		key{txnType, "SetDebugName"}:              {},
 		key{txnType, "SetIsolation"}:              {},
+		key{txnType, "SetUserPriority"}:           {},
 		key{txnType, "SetSystemConfigTrigger"}:    {},
 		key{txnType, "SystemConfigTrigger"}:       {},
 	}

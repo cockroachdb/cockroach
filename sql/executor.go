@@ -241,6 +241,7 @@ func (e *Executor) ExecuteStatements(user string, session Session, stmts string,
 	if planMaker.session.Txn != nil {
 		txn := client.NewTxn(e.db)
 		txn.Proto = planMaker.session.Txn.Txn
+		txn.UserPriority = planMaker.session.Txn.UserPriority
 		if planMaker.session.MutatesSystemConfig {
 			txn.SetSystemConfigTrigger()
 		}
@@ -259,8 +260,9 @@ func (e *Executor) ExecuteStatements(user string, session Session, stmts string,
 		// the transaction state and restore it when the transaction is restored.
 		planMaker.releaseLeases(e.db)
 		planMaker.session.Txn = &Session_Transaction{
-			Txn:       planMaker.txn.Proto,
-			Timestamp: driver.Timestamp(planMaker.evalCtx.TxnTimestamp.Time),
+			Txn:          planMaker.txn.Proto,
+			Timestamp:    driver.Timestamp(planMaker.evalCtx.TxnTimestamp.Time),
+			UserPriority: planMaker.txn.UserPriority,
 		}
 		planMaker.session.MutatesSystemConfig = planMaker.txn.SystemConfigTrigger()
 	} else {
