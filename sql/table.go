@@ -667,7 +667,7 @@ func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
 // marshalColumnValue returns a Go primitive value equivalent of val, of the
 // type expected by col. If val's type is incompatible with col, or if
 // col's type is not yet implemented, an error is returned.
-func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (interface{}, *roachpb.Error) {
+func marshalColumnValue(col ColumnDescriptor, val parser.Datum, args parser.MapArgs) (interface{}, *roachpb.Error) {
 	if val == parser.DNull {
 		return nil, nil
 	}
@@ -677,37 +677,85 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (interface{}, *r
 		if v, ok := val.(parser.DBool); ok {
 			return bool(v), nil
 		}
+		if set, err := args.SetInferredType(val, parser.DummyBool); err != nil {
+			return nil, roachpb.NewError(err)
+		} else if set != nil {
+			return nil, nil
+		}
 	case ColumnType_INT:
 		if v, ok := val.(parser.DInt); ok {
 			return int64(v), nil
+		}
+		if set, err := args.SetInferredType(val, parser.DummyInt); err != nil {
+			return nil, roachpb.NewError(err)
+		} else if set != nil {
+			return nil, nil
 		}
 	case ColumnType_FLOAT:
 		if v, ok := val.(parser.DFloat); ok {
 			return float64(v), nil
 		}
+		if set, err := args.SetInferredType(val, parser.DummyFloat); err != nil {
+			return nil, roachpb.NewError(err)
+		} else if set != nil {
+			return nil, nil
+		}
 	case ColumnType_DECIMAL:
 		if v, ok := val.(parser.DDecimal); ok {
 			return v.Decimal, nil
+		}
+		if set, err := args.SetInferredType(val, parser.DummyDecimal); err != nil {
+			return nil, roachpb.NewError(err)
+		} else if set != nil {
+			return nil, nil
 		}
 	case ColumnType_STRING:
 		if v, ok := val.(parser.DString); ok {
 			return string(v), nil
 		}
+		if set, err := args.SetInferredType(val, parser.DummyString); err != nil {
+			return nil, roachpb.NewError(err)
+		} else if set != nil {
+			return nil, nil
+		}
 	case ColumnType_BYTES:
 		if v, ok := val.(parser.DBytes); ok {
 			return string(v), nil
+		}
+		if v, ok := val.(parser.DString); ok {
+			return string(v), nil
+		}
+		if set, err := args.SetInferredType(val, parser.DummyBytes); err != nil {
+			return nil, roachpb.NewError(err)
+		} else if set != nil {
+			return nil, nil
 		}
 	case ColumnType_DATE:
 		if v, ok := val.(parser.DDate); ok {
 			return int64(v), nil
 		}
+		if set, err := args.SetInferredType(val, parser.DummyDate); err != nil {
+			return nil, roachpb.NewError(err)
+		} else if set != nil {
+			return nil, nil
+		}
 	case ColumnType_TIMESTAMP:
 		if v, ok := val.(parser.DTimestamp); ok {
 			return v.Time, nil
 		}
+		if set, err := args.SetInferredType(val, parser.DummyTimestamp); err != nil {
+			return nil, roachpb.NewError(err)
+		} else if set != nil {
+			return nil, nil
+		}
 	case ColumnType_INTERVAL:
 		if v, ok := val.(parser.DInterval); ok {
 			return v.Duration, nil
+		}
+		if set, err := args.SetInferredType(val, parser.DummyInterval); err != nil {
+			return nil, roachpb.NewError(err)
+		} else if set != nil {
+			return nil, nil
 		}
 	default:
 		return nil, roachpb.NewErrorf("unsupported column type: %s", col.Type.Kind)
