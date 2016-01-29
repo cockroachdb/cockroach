@@ -36,7 +36,7 @@ func TestInvalidAddrLength(t *testing.T) {
 
 	// The provided addrs is nil, so its length will be always
 	// less than the specified response number
-	ret, err := Send(Options{N: 1}, "", nil, nil, nil, nil)
+	ret, err := Send(Options{}, "", nil, nil, nil, nil)
 
 	// the expected return is nil and SendError
 	if _, ok := err.(*roachpb.SendError); !ok || ret != nil {
@@ -56,51 +56,16 @@ func TestSendToOneClient(t *testing.T) {
 	_, ln := newTestServer(t, ctx, false)
 
 	opts := Options{
-		N:               1,
 		Ordering:        OrderStable,
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         10 * time.Second,
 	}
-	replies, err := sendPing(opts, []net.Addr{ln.Addr()}, ctx)
+	reply, err := sendPing(opts, []net.Addr{ln.Addr()}, ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(replies) != 1 {
-		t.Errorf("Exactly one reply is expected, but got %v", len(replies))
-	}
-}
-
-// TestSendToMultipleClients verifies that Send correctly sends
-// multiple requests to multiple server using the heartbeat RPC.
-func TestSendToMultipleClients(t *testing.T) {
-	defer leaktest.AfterTest(t)
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-
-	nodeContext := newNodeTestContext(nil, stopper)
-
-	numServers := 4
-	var addrs []net.Addr
-	for i := 0; i < numServers; i++ {
-		_, ln := newTestServer(t, nodeContext, false)
-		addrs = append(addrs, ln.Addr())
-	}
-	for n := 1; n < numServers; n++ {
-		// Send n requests.
-		opts := Options{
-			N:               n,
-			Ordering:        OrderStable,
-			SendNextTimeout: 1 * time.Second,
-			Timeout:         10 * time.Second,
-		}
-		replies, err := sendPing(opts, addrs, nodeContext)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(replies) != n {
-			t.Errorf("%v replies are expected, but got %v", n, len(replies))
-		}
+	if reply == nil {
+		t.Errorf("expected reply")
 	}
 }
 
@@ -132,7 +97,6 @@ func TestRetryableError(t *testing.T) {
 	}()
 
 	opts := Options{
-		N:               1,
 		Ordering:        OrderStable,
 		SendNextTimeout: 100 * time.Millisecond,
 		Timeout:         100 * time.Millisecond,
@@ -170,7 +134,6 @@ func TestUnretryableError(t *testing.T) {
 	_, ln := newTestServer(t, nodeContext, false)
 
 	opts := Options{
-		N:               1,
 		Ordering:        OrderStable,
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         10 * time.Second,
@@ -220,7 +183,6 @@ func TestClientNotReady(t *testing.T) {
 	}
 
 	opts := Options{
-		N:               1,
 		Ordering:        OrderStable,
 		SendNextTimeout: 100 * time.Nanosecond,
 		Timeout:         100 * time.Nanosecond,
@@ -278,34 +240,27 @@ func TestComplexScenarios(t *testing.T) {
 
 	testCases := []struct {
 		numServers               int
-		numRequests              int
 		numErrors                int
 		numRetryableErrors       int
 		success                  bool
 		isRetryableErrorExpected bool
 	}{
 		// --- Success scenarios ---
-		{1, 1, 0, 0, true, false},
-		{5, 1, 0, 0, true, false},
-		{5, 5, 0, 0, true, false},
+		{1, 0, 0, true, false},
+		{5, 0, 0, true, false},
 		// There are some errors, but enough RPCs succeed.
-		{5, 1, 1, 0, true, false},
-		{5, 1, 4, 0, true, false},
-		{5, 3, 2, 0, true, false},
+		{5, 1, 0, true, false},
+		{5, 4, 0, true, false},
+		{5, 2, 0, true, false},
 
 		// --- Failure scenarios ---
-		// Too many requests.
-		{1, 5, 0, 0, false, false},
 		// All RPCs fail.
-		{5, 1, 5, 0, false, false},
-		// Some RPCs fail and we do not have enough remaining clients.
-		{5, 3, 3, 0, false, false},
+		{5, 5, 0, false, false},
 		// All RPCs fail, but some of the errors are retryable.
-		{5, 1, 5, 1, false, true},
-		{5, 3, 5, 3, false, true},
+		{5, 5, 1, false, true},
+		{5, 5, 3, false, true},
 		// Some RPCs fail, but we do have enough remaining clients and recoverable errors.
-		{5, 3, 3, 1, false, true},
-		{5, 3, 4, 2, false, true},
+		{5, 5, 2, false, true},
 	}
 	for i, test := range testCases {
 		// Copy the values to avoid data race. sendOneFn might
@@ -320,7 +275,6 @@ func TestComplexScenarios(t *testing.T) {
 		}
 
 		opts := Options{
-			N:               test.numRequests,
 			Ordering:        OrderStable,
 			SendNextTimeout: 1 * time.Second,
 			Timeout:         10 * time.Second,
@@ -355,10 +309,10 @@ func TestComplexScenarios(t *testing.T) {
 		}
 		defer func() { sendOneFn = sendOne }()
 
-		replies, err := Send(opts, "Heartbeat.Ping", serverAddrs, getArgs, getReply, nodeContext)
+		reply, err := Send(opts, "Heartbeat.Ping", serverAddrs, getArgs, getReply, nodeContext)
 		if test.success {
-			if len(replies) != test.numRequests {
-				t.Errorf("%d: %v replies are expected, but got %v", i, test.numRequests, len(replies))
+			if reply == nil {
+				t.Errorf("%d: expected reply", i)
 			}
 			continue
 		}
@@ -374,13 +328,13 @@ func TestComplexScenarios(t *testing.T) {
 }
 
 // sendPing sends Ping requests to specified addresses using Send.
-func sendPing(opts Options, addrs []net.Addr, rpcContext *Context) ([]proto.Message, error) {
+func sendPing(opts Options, addrs []net.Addr, rpcContext *Context) (proto.Message, error) {
 	return sendRPC(opts, addrs, rpcContext, "Heartbeat.Ping",
 		&PingRequest{}, &PingResponse{})
 }
 
 func sendRPC(opts Options, addrs []net.Addr, rpcContext *Context, name string,
-	args, reply proto.Message) ([]proto.Message, error) {
+	args, reply proto.Message) (proto.Message, error) {
 	getArgs := func(addr net.Addr) proto.Message {
 		return args
 	}

@@ -50,12 +50,9 @@ func TestUnregisteredMethod(t *testing.T) {
 
 	_, ln := newTestServer(t, nodeContext, false)
 
-	opts := Options{
-		N: 1,
-	}
-
 	// Sending an invalid method fails cleanly, but leaves the connection
 	// in a valid state.
+	opts := Options{}
 	_, err := sendRPC(opts, []net.Addr{ln.Addr()}, nodeContext, "Foo.Bar",
 		&PingRequest{}, &PingResponse{})
 	if !testutils.IsError(err, ".*rpc: couldn't find method: Foo.Bar") {

@@ -103,7 +103,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	stores := storage.NewStores(clock)
 	rpcSend := func(_ rpc.Options, _ string, _ []net.Addr,
 		getArgs func(addr net.Addr) proto.Message, _ func() proto.Message,
-		_ *rpc.Context) ([]proto.Message, error) {
+		_ *rpc.Context) (proto.Message, error) {
 		ba := getArgs(nil /* net.Addr */).(*roachpb.BatchRequest)
 		trace := sCtx.Tracer.NewTrace("store", ba)
 		defer trace.Finalize()
@@ -113,7 +113,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 			br = &roachpb.BatchResponse{}
 		}
 		br.Error = pErr
-		return []proto.Message{br}, nil
+		return br, nil
 	}
 
 	if err := gossipNodeDesc(sCtx.Gossip, nodeDesc.NodeID); err != nil {
@@ -302,13 +302,13 @@ func (m *multiTestContext) Stop() {
 // sent in order until no error is returned.
 func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 	getArgs func(addr net.Addr) proto.Message,
-	getReply func() proto.Message, _ *rpc.Context) ([]proto.Message, error) {
+	getReply func() proto.Message, _ *rpc.Context) (proto.Message, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	fail := func(pErr *roachpb.Error) ([]proto.Message, error) {
+	fail := func(pErr *roachpb.Error) (proto.Message, error) {
 		br := &roachpb.BatchResponse{}
 		br.Error = pErr
-		return []proto.Message{br}, nil
+		return br, nil
 	}
 	var br *roachpb.BatchResponse
 	var pErr *roachpb.Error
@@ -333,7 +333,7 @@ func (m *multiTestContext) rpcSend(_ rpc.Options, _ string, addrs []net.Addr,
 			continue
 		}
 		if pErr == nil {
-			return []proto.Message{br}, nil
+			return br, nil
 		}
 		switch tErr := pErr.GoError().(type) {
 		case *roachpb.RangeKeyMismatchError:
