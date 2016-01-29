@@ -20,10 +20,14 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"net/http"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -58,11 +62,19 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, ctx.Clock, stopper)
 	ctx.ScanInterval = 10 * time.Hour
 	rpcServer := rpc.NewServer(nodeRPCContext)
+	grpcServer := grpc.NewServer()
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor == 2 && strings.Contains(r.Header.Get("Content-Type"), "application/grpc") {
+			grpcServer.ServeHTTP(w, r)
+		} else {
+			rpcServer.ServeHTTP(w, r)
+		}
+	})
 	tlsConfig, err := nodeRPCContext.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	ln, err := util.ListenAndServe(stopper, rpcServer, addr, tlsConfig)
+	ln, err := util.ListenAndServe(stopper, handler, addr, tlsConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +89,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 			t.Fatalf("bad gossip address %s: %s", gossipBS, err)
 		}
 		g.SetResolvers([]resolver.Resolver{r})
-		g.Start(rpcServer, ln.Addr())
+		g.Start(grpcServer, ln.Addr())
 	}
 	ctx.Gossip = g
 	retryOpts := kv.GetDefaultDistSenderRetryOptions()

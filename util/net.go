@@ -25,6 +25,9 @@ import (
 	"strings"
 	"sync"
 
+	"golang.org/x/net/http2"
+	"google.golang.org/grpc"
+
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -80,9 +83,7 @@ func updatedAddr(oldAddr, newAddr net.Addr) (net.Addr, error) {
 	}
 }
 
-// ListenAndServe creates a listener and serves handler on it, closing
-// the listener when signalled by the stopper.
-func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, config *tls.Config) (net.Listener, error) {
+func listen(addr net.Addr, config *tls.Config) (net.Listener, error) {
 	ln, err := net.Listen(addr.Network(), addr.String())
 	if err != nil {
 		return nil, err
@@ -96,24 +97,63 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 		ln = tls.NewListener(ln, config)
 	}
 
+	return listener{newAddr, ln}, nil
+}
+
+// ListenAndServeGRPC creates a listener and serves server on it, closing
+// the listener when signalled by the stopper.
+func ListenAndServeGRPC(stopper *stop.Stopper, server *grpc.Server, addr net.Addr, config *tls.Config) (net.Listener, error) {
+	ln, err := listen(addr, config)
+	if err != nil {
+		return nil, err
+	}
+
 	stopper.RunWorker(func() {
-		var mu sync.Mutex
-		activeConns := make(map[net.Conn]struct{})
-
-		httpServer := http.Server{
-			Handler: handler,
-			ConnState: func(conn net.Conn, state http.ConnState) {
-				mu.Lock()
-				switch state {
-				case http.StateNew:
-					activeConns[conn] = struct{}{}
-				case http.StateClosed:
-					delete(activeConns, conn)
-				}
-				mu.Unlock()
-			},
+		if err := server.Serve(ln); err != nil && !IsClosedConnection(err) {
+			log.Fatal(err)
 		}
+	})
 
+	stopper.RunWorker(func() {
+		<-stopper.ShouldStop()
+		if err := ln.Close(); err != nil {
+			log.Fatal(err)
+		}
+	})
+
+	return ln, nil
+}
+
+// ListenAndServe creates a listener and serves handler on it, closing
+// the listener when signalled by the stopper.
+func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, config *tls.Config) (net.Listener, error) {
+	ln, err := listen(addr, config)
+	if err != nil {
+		return nil, err
+	}
+
+	var mu sync.Mutex
+	activeConns := make(map[net.Conn]struct{})
+
+	httpServer := http.Server{
+		TLSConfig: config,
+		Handler:   handler,
+		ConnState: func(conn net.Conn, state http.ConnState) {
+			mu.Lock()
+			switch state {
+			case http.StateNew:
+				activeConns[conn] = struct{}{}
+			case http.StateClosed:
+				delete(activeConns, conn)
+			}
+			mu.Unlock()
+		},
+	}
+	if err := http2.ConfigureServer(&httpServer, nil); err != nil {
+		return nil, err
+	}
+
+	stopper.RunWorker(func() {
 		if err := httpServer.Serve(ln); err != nil && !IsClosedConnection(err) {
 			log.Fatal(err)
 		}
@@ -134,7 +174,7 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 		}
 	})
 
-	return listener{newAddr, ln}, nil
+	return ln, nil
 }
 
 // IsClosedConnection returns true if err is the net package's errClosed.

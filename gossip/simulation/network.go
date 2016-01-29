@@ -21,6 +21,8 @@ import (
 	"net"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -38,7 +40,7 @@ import (
 // server.
 type Node struct {
 	Gossip *gossip.Gossip
-	Server *rpc.Server
+	Server *grpc.Server
 	Addr   net.Addr
 }
 
@@ -88,9 +90,9 @@ func NewNetwork(nodeCount int) *Network {
 
 // CreateNode creates a simulation node and starts an RPC server for it.
 func (n *Network) CreateNode() (*Node, error) {
-	server := rpc.NewServer(n.rpcContext)
+	server := grpc.NewServer()
 	testAddr := util.CreateTestAddr("tcp")
-	ln, err := util.ListenAndServe(n.Stopper, server, testAddr, n.tlsConfig)
+	ln, err := util.ListenAndServeGRPC(n.Stopper, server, testAddr, n.tlsConfig)
 	if err != nil {
 		return nil, err
 	}
