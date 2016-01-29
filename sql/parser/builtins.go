@@ -1421,7 +1421,7 @@ func typeTuple(params MapArgs, args DTuple) (Datum, error) {
 	}
 	if hasValArgs {
 		for _, arg := range args {
-			_, err := params.setInferredType(arg, datum)
+			_, err := params.SetInferredType(arg, datum)
 			if err != nil {
 				return nil, err
 			}

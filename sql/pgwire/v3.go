@@ -302,10 +302,6 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		}
 		inTypeHints[i] = oid.Oid(typ)
 	}
-	stmt, err := parser.ParseOneTraditional(query)
-	if err != nil {
-		return c.sendError(err.Error())
-	}
 	args := make(parser.MapArgs)
 	for i, t := range inTypeHints {
 		if t == 0 {
@@ -317,13 +313,15 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		}
 		args[fmt.Sprint(i+1)] = v
 	}
-	if err := parser.InferArgs(stmt, args); err != nil {
-		return c.sendError(err.Error())
+	cols, pErr := c.executor.Prepare(c.opts.user, query, args)
+	if pErr != nil {
+		return c.sendError(pErr.String())
 	}
 	pq := preparedStatement{
 		query:       query,
 		inTypes:     make([]oid.Oid, len(args)),
 		portalNames: make(map[string]struct{}),
+		columns:     cols,
 	}
 	copy(pq.inTypes, inTypeHints)
 	for k, v := range args {
@@ -342,11 +340,6 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		}
 		pq.inTypes[i-1] = id
 	}
-	cols, pErr := c.executor.StatementResult(c.opts.user, stmt, args)
-	if pErr != nil {
-		return c.sendError(pErr.String())
-	}
-	pq.columns = cols
 	c.preparedStatements[name] = pq
 	c.writeBuf.initMsg(serverMsgParseComplete)
 	return c.writeBuf.finishMsg(c.wr)

@@ -1374,7 +1374,7 @@ func (t Tuple) Eval(ctx EvalContext) (Datum, error) {
 
 // Eval implements the Expr interface.
 func (t ValArg) Eval(_ EvalContext) (Datum, error) {
-	return nil, util.Errorf("unhandled type %T", t)
+	return DValArg{name: t.name}, nil
 }
 
 // Eval implements the Expr interface.

@@ -132,6 +132,55 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 		return nil, pErr
 	}
 
+	// ValArgs have their types populated in the above Select if they are part
+	// of an expression ("SET a = 2 + $1") in the type check step where those
+	// types are inferred. For the simpler case ("SET a = $1"), populate them
+	// using marshalColumnValue. This step also verifies that the expression
+	// types match the column types.
+	if p.prepareOnly {
+		i := 0
+		f := func(expr parser.Expr) *roachpb.Error {
+			idx := i
+			i++
+			// DefaultVal doesn't implement TypeCheck
+			if _, ok := expr.(parser.DefaultVal); ok {
+				return nil
+			}
+			d, err := expr.TypeCheck(nil)
+			if err != nil {
+				return roachpb.NewError(err)
+			}
+			if _, err := marshalColumnValue(cols[idx], d, p.evalCtx.Args); err != nil {
+				return err
+			}
+			return nil
+		}
+		for _, expr := range n.Exprs {
+			if expr.Tuple {
+				switch t := expr.Expr.(type) {
+				case parser.Tuple:
+					for _, e := range t {
+						if err := f(e); err != nil {
+							return nil, err
+						}
+					}
+				case parser.DTuple:
+					for _, e := range t {
+						if err := f(e); err != nil {
+							return nil, err
+						}
+					}
+				}
+			} else {
+				if err := f(expr.Expr); err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		return nil, nil
+	}
+
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
 	colIDtoRowIndex := map[ColumnID]int{}
@@ -216,7 +265,7 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 		// cannot be used as index values.
 		for i, val := range newVals {
 			var mpErr *roachpb.Error
-			if marshalled[i], mpErr = marshalColumnValue(cols[i], val); mpErr != nil {
+			if marshalled[i], mpErr = marshalColumnValue(cols[i], val, p.evalCtx.Args); mpErr != nil {
 				return nil, mpErr
 			}
 		}
