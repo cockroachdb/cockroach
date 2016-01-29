@@ -725,13 +725,13 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) []interface{} {
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
 		r.mu.Lock()
-		var wg sync.WaitGroup
 		var spans []roachpb.Span
 		readOnly := ba.IsReadOnly()
 		for _, union := range ba.Requests {
 			h := union.GetInner().Header()
 			spans = append(spans, roachpb.Span{Key: h.Key, EndKey: h.EndKey})
 		}
+		var wg sync.WaitGroup
 		r.mu.cmdQ.GetWait(readOnly, &wg, spans...)
 		cmdKeys = append(cmdKeys, r.mu.cmdQ.Add(readOnly, spans...)...)
 		r.mu.Unlock()
@@ -758,6 +758,7 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) []interface{} {
 // the timestamp cache using the final timestamp of each command.
 func (r *Replica) endCmds(cmdKeys []interface{}, ba roachpb.BatchRequest, pErr *roachpb.Error) {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	// Only update the timestamp cache if the command succeeded and we're not
 	// doing inconsistent ops (in which case the ops are always read-only).
 	if pErr == nil && ba.ReadConsistency != roachpb.INCONSISTENT {
@@ -774,7 +775,6 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba roachpb.BatchRequest, pErr *
 		}
 	}
 	r.mu.cmdQ.Remove(cmdKeys)
-	r.mu.Unlock()
 }
 
 // addAdminCmd executes the command directly. There is no interaction
@@ -916,37 +916,38 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 	//
 	// Find the maximum timestamp required to satisfy all requests in
 	// the batch and then apply that to all requests.
-	r.mu.Lock()
-	for _, union := range ba.Requests {
-		args := union.GetInner()
-		if usesTimestampCache(args) {
-			header := args.Header()
-			var txnID []byte
-			if ba.Txn != nil {
-				txnID = ba.Txn.ID
-			}
-			rTS, wTS := r.mu.tsCache.GetMax(header.Key, header.EndKey, txnID)
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		for _, union := range ba.Requests {
+			args := union.GetInner()
+			if usesTimestampCache(args) {
+				header := args.Header()
+				var txnID []byte
+				if ba.Txn != nil {
+					txnID = ba.Txn.ID
+				}
+				rTS, wTS := r.mu.tsCache.GetMax(header.Key, header.EndKey, txnID)
 
-			// Always push the timestamp forward if there's been a read which
-			// occurred after our txn timestamp.
-			if !rTS.Less(ba.Timestamp) {
-				ba.Timestamp = rTS.Next()
-			}
-			// If there's a newer write timestamp...
-			if !wTS.Less(ba.Timestamp) {
-				// If we're in a txn, we still go ahead and try the write since
-				// we want to avoid restarting the transaction in the event that
-				// there isn't an intent or the intent can be pushed by us.
-				//
-				// If we're not in a txn, it's trivial to just advance our timestamp.
-				if ba.Txn == nil {
-					ba.Timestamp = wTS.Next()
+				// Always push the timestamp forward if there's been a read which
+				// occurred after our txn timestamp.
+				if !rTS.Less(ba.Timestamp) {
+					ba.Timestamp = rTS.Next()
+				}
+				// If there's a newer write timestamp...
+				if !wTS.Less(ba.Timestamp) {
+					// If we're in a txn, we still go ahead and try the write since
+					// we want to avoid restarting the transaction in the event that
+					// there isn't an intent or the intent can be pushed by us.
+					//
+					// If we're not in a txn, it's trivial to just advance our timestamp.
+					if ba.Txn == nil {
+						ba.Timestamp = wTS.Next()
+					}
 				}
 			}
 		}
-	}
-
-	r.mu.Unlock()
+	}()
 
 	defer trace.Epoch("raft")()
 
@@ -1111,12 +1112,27 @@ func (r *Replica) handleRaftReady() error {
 	// but it's hard to distinguish so we resubmit everything
 	// anyway). We delay resubmission until after we have processed
 	// the entire batch of entries.
-	hasEmptyEntry := false
+	reproposeCmds := func() error { return nil }
 	for _, e := range rd.CommittedEntries {
 		switch e.Type {
 		case raftpb.EntryNormal:
 			if len(e.Data) == 0 {
-				hasEmptyEntry = true
+				reproposeCmds = func() error {
+					r.mu.Lock()
+					defer r.mu.Unlock()
+					if len(r.mu.pendingCmds) > 0 {
+						if log.V(1) {
+							log.Infof("reproposing %d commands after empty entry", len(r.mu.pendingCmds))
+						}
+						for idKey, p := range r.mu.pendingCmds {
+							if err := r.proposePendingCmdLocked(idKey, p); err != nil {
+								return err
+							}
+						}
+					}
+					return nil
+				}
+
 				continue
 			}
 			commandID, encodedCommand := decodeRaftCommand(e.Data)
@@ -1142,36 +1158,21 @@ func (r *Replica) handleRaftReady() error {
 			if err := command.Unmarshal(ctx.Payload); err != nil {
 				return err
 			}
-			if err := r.processRaftCommand(cmdIDKey(ctx.CommandID), e.Index, command); err == nil {
-				// TODO(bdarnell): update coalesced heartbeat mapping
-				r.mu.Lock()
-				r.mu.raftGroup.ApplyConfChange(cc)
-				r.mu.Unlock()
-			} else {
+			if err := r.processRaftCommand(cmdIDKey(ctx.CommandID), e.Index, command); err != nil {
 				// If processRaftCommand failed, tell raft that the config change was aborted.
-				r.mu.Lock()
-				r.mu.raftGroup.ApplyConfChange(raftpb.ConfChange{})
-				r.mu.Unlock()
+				cc = raftpb.ConfChange{}
 			}
-
+			// TODO(bdarnell): update coalesced heartbeat mapping
+			r.mu.Lock()
+			r.mu.raftGroup.ApplyConfChange(cc)
+			r.mu.Unlock()
 		}
 
 	}
-	if hasEmptyEntry {
-		r.mu.Lock()
-		if len(r.mu.pendingCmds) > 0 {
-			if log.V(1) {
-				log.Infof("reproposing %d commands after empty entry", len(r.mu.pendingCmds))
-			}
-			for idKey, p := range r.mu.pendingCmds {
-				if err := r.proposePendingCmdLocked(idKey, p); err != nil {
-					r.mu.Unlock()
-					return err
-				}
-			}
-		}
-		r.mu.Unlock()
+	if err := reproposeCmds(); err != nil {
+		return err
 	}
+
 	// TODO(bdarnell): need to check replica id and not Advance if it
 	// has changed. Or do we need more locking to guarantee that replica
 	// ID cannot change during handleRaftReady?
@@ -1183,21 +1184,25 @@ func (r *Replica) handleRaftReady() error {
 
 func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	groupID := r.RangeID
-	r.store.mu.Lock()
-	toReplica, err := r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.To))
-	if err != nil {
-		log.Warningf("failed to lookup recipient replica %d in group %s: %s", msg.To, groupID, err)
-		r.store.mu.Unlock()
+	var toReplica, fromReplica roachpb.ReplicaDescriptor
+	if err := func() error {
+		r.store.mu.Lock()
+		defer r.store.mu.Unlock()
+		var err error
+		toReplica, err = r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.To))
+		if err != nil {
+			return fmt.Errorf("failed to lookup recipient replica %d in group %s: %s", msg.To, groupID, err)
+		}
+		fromReplica, err = r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.From))
+		if err != nil {
+			return fmt.Errorf("failed to lookup sender replica %d in group %s: %s", msg.From, groupID, err)
+		}
+		return nil
+	}(); err != nil {
+		log.Warning(err)
 		return
 	}
-	fromReplica, err := r.store.replicaDescriptorLocked(groupID, roachpb.ReplicaID(msg.From))
-	if err != nil {
-		log.Warningf("failed to lookup sender replica %d in group %s: %s", msg.From, groupID, err)
-		r.store.mu.Unlock()
-		return
-	}
-	r.store.mu.Unlock()
-	err = r.store.ctx.Transport.Send(&RaftMessageRequest{
+	err := r.store.ctx.Transport.Send(&RaftMessageRequest{
 		GroupID:     groupID,
 		ToReplica:   toReplica,
 		FromReplica: fromReplica,
