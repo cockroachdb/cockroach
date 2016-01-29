@@ -69,3 +69,9 @@ query IBB
 SELECT a, b <= now(), c >= 0.0 FROM t WHERE a = 2
 ----
 2 true true
+
+statement ok
+UPDATE t SET b = DEFAULT, c = DEFAULT
+
+statement ok
+UPDATE t SET (b) = (DEFAULT), (c) = (DEFAULT)
