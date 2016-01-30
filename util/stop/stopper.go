@@ -40,6 +40,15 @@ func (f CloserFn) Close() {
 	f()
 }
 
+type taskKey struct {
+	file string
+	line int
+}
+
+func (k taskKey) String() string {
+	return fmt.Sprintf("%s:%d", k.file, k.line)
+}
+
 // A Stopper provides a channel-based mechanism to stop an arbitrary
 // array of workers. Each worker is registered with the stopper via
 // the RunWorker() method. The system further allows execution of functions
@@ -64,7 +73,7 @@ type Stopper struct {
 	drain    *sync.Cond     // Conditional variable to wait for outstanding tasks
 	draining bool           // true when Stop() has been called
 	numTasks int            // number of outstanding tasks
-	tasks    map[string]int
+	tasks    map[taskKey]int
 	closers  []Closer
 }
 
@@ -74,7 +83,7 @@ func NewStopper() *Stopper {
 		drainer: make(chan struct{}),
 		stopper: make(chan struct{}),
 		stopped: make(chan struct{}),
-		tasks:   map[string]int{},
+		tasks:   map[taskKey]int{},
 	}
 	s.drain = sync.NewCond(&s.mu)
 	return s
@@ -107,12 +116,12 @@ func (s *Stopper) AddCloser(c Closer) {
 // function f was not called.
 func (s *Stopper) RunTask(f func()) bool {
 	file, line, _ := caller.Lookup(1)
-	taskKey := fmt.Sprintf("%s:%d", file, line)
-	if !s.runPrelude(taskKey) {
+	key := taskKey{file, line}
+	if !s.runPrelude(key) {
 		return false
 	}
 	// Call f.
-	defer s.runPostlude(taskKey)
+	defer s.runPostlude(key)
 	f()
 	return true
 }
@@ -121,34 +130,34 @@ func (s *Stopper) RunTask(f func()) bool {
 // Stopper is draining and the function is not executed.
 func (s *Stopper) RunAsyncTask(f func()) bool {
 	file, line, _ := caller.Lookup(1)
-	taskKey := fmt.Sprintf("%s:%d", file, line)
-	if !s.runPrelude(taskKey) {
+	key := taskKey{file, line}
+	if !s.runPrelude(key) {
 		return false
 	}
 	// Call f.
 	go func() {
-		defer s.runPostlude(taskKey)
+		defer s.runPostlude(key)
 		f()
 	}()
 	return true
 }
 
-func (s *Stopper) runPrelude(taskKey string) bool {
+func (s *Stopper) runPrelude(key taskKey) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.draining {
 		return false
 	}
 	s.numTasks++
-	s.tasks[taskKey]++
+	s.tasks[key]++
 	return true
 }
 
-func (s *Stopper) runPostlude(taskKey string) {
+func (s *Stopper) runPostlude(key taskKey) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.numTasks--
-	s.tasks[taskKey]--
+	s.tasks[key]--
 	s.drain.Broadcast()
 }
 
@@ -174,7 +183,7 @@ func (tm TaskMap) String() string {
 }
 
 // RunningTasks returns a map containing the count of running tasks keyed by
-// callsite.
+// call site.
 func (s *Stopper) RunningTasks() TaskMap {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -187,7 +196,7 @@ func (s *Stopper) runningTasksLocked() TaskMap {
 		if s.tasks[k] == 0 {
 			continue
 		}
-		m[k] = s.tasks[k]
+		m[k.String()] = s.tasks[k]
 	}
 	return m
 }
