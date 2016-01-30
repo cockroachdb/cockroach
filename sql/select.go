@@ -267,9 +267,9 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 		if s.pErr != nil {
 			return s.pErr
 		}
-		if ate.As != "" {
+		if ate.As.Alias != "" {
 			// If an alias was specified, use that.
-			s.from.alias = string(ate.As)
+			s.from.alias = string(ate.As.Alias)
 		}
 	default:
 		s.pErr = roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", from)
