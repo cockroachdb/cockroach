@@ -32,6 +32,7 @@ func TestTypeCheck(t *testing.T) {
 		`NULL + 'hello'`,
 		`NULL::int`,
 		`NULL + 'hello'::bytes`,
+		`(1.1::decimal)::decimal`,
 		`NULL = 1`,
 		`1 = NULL`,
 		`true AND NULL`,

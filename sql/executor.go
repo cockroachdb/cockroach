@@ -582,7 +582,9 @@ func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
 	case time.Duration:
 		return parser.DInterval{Duration: t}, true
 	case *inf.Dec:
-		return parser.DDecimal{Dec: t}, true
+		dd := parser.DDecimal{}
+		dd.Set(t)
+		return dd, true
 	}
 
 	// Handle all types which have an underlying type that can be stored in the

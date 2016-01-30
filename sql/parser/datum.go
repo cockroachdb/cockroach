@@ -334,7 +334,7 @@ func (d DFloat) String() string {
 
 // DDecimal is the decimal Datum.
 type DDecimal struct {
-	*inf.Dec
+	inf.Dec
 }
 
 // Type implements the Datum interface.
@@ -358,7 +358,7 @@ func (d DDecimal) Compare(other Datum) int {
 	if !ok {
 		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
-	return d.Cmp(v.Dec)
+	return d.Cmp(&v.Dec)
 }
 
 // HasPrev implements the Datum interface.

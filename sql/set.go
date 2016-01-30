@@ -111,7 +111,7 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, *roachpb.Error) 
 
 	case parser.DDecimal:
 		sixty := inf.NewDec(60, 0)
-		sixty.Mul(sixty, sixty).Mul(sixty, v.Dec)
+		sixty.Mul(sixty, sixty).Mul(sixty, &v.Dec)
 		var ok bool
 		if offset, ok = sixty.Unscaled(); !ok {
 			return nil, roachpb.NewUErrorf("time zone value %s would overflow an int64", sixty)
