@@ -614,8 +614,8 @@ func (c *v3Conn) sendResponse(resp sql.Response, formatCodes []formatCode, sendD
 		return c.sendCommandComplete(nil)
 	}
 	for _, result := range resp.Results {
-		if result.Err != nil {
-			if err := c.sendError(result.Err.Error()); err != nil {
+		if result.PErr != nil {
+			if err := c.sendError(result.PErr.String()); err != nil {
 				return err
 			}
 			continue

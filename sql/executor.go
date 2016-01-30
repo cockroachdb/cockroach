@@ -90,7 +90,7 @@ type Response struct {
 
 // Result corresponds to the execution of a single SQL statement.
 type Result struct {
-	Err error
+	PErr *roachpb.Error
 	// The type of statement that the result is for.
 	Type parser.StatementType
 	// RowsAffected will be populated if the statement type is "RowsAffected".
@@ -490,7 +490,7 @@ func makeResultFromError(planMaker *planner, pErr *roachpb.Error) Result {
 			planMaker.txn.Cleanup(pErr)
 		}
 	}
-	return Result{Err: pErr.GoError()}
+	return Result{PErr: pErr}
 }
 
 var _ parser.Args = parameters{}
