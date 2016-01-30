@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -92,12 +91,10 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 		"127.0.0.1:9005",
 	}
 	for i := 0; i < len(expAddresses); i++ {
-		log.Infof("getting next address")
-		addr := g.getNextBootstrapAddress()
-		if addr == nil {
+		if addr := g.getNextBootstrapAddress(); addr == nil {
 			t.Errorf("%d: unexpected nil addr when expecting %s", i, expAddresses[i])
-		} else if addr.String() != expAddresses[i] {
-			t.Errorf("%d: expected addr %s; got %s", i, expAddresses[i], addr.String())
+		} else if addrStr := addr.String(); addrStr != expAddresses[i] {
+			t.Errorf("%d: expected addr %s; got %s", i, expAddresses[i], addrStr)
 		}
 	}
 }
