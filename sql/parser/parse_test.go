@@ -217,10 +217,16 @@ func TestParse(t *testing.T) {
 		{`SELECT "FROM" FROM t`},
 		{`SELECT CAST(1 AS TEXT)`},
 		{`SELECT FROM t AS bar`},
+		{`SELECT FROM t AS bar (bar1)`},
+		{`SELECT FROM t AS bar (bar1, bar2, bar3)`},
 		{`SELECT FROM (SELECT 1 FROM t)`},
 		{`SELECT FROM (SELECT 1 FROM t) AS bar`},
+		{`SELECT FROM (SELECT 1 FROM t) AS bar (bar1)`},
+		{`SELECT FROM (SELECT 1 FROM t) AS bar (bar1, bar2, bar3)`},
 		{`SELECT FROM t1, t2`},
 		{`SELECT FROM t AS t1`},
+		{`SELECT FROM t AS t1 (c1)`},
+		{`SELECT FROM t AS t1 (c1, c2, c3, c4)`},
 		{`SELECT FROM s.t`},
 
 		{`SELECT COUNT(DISTINCT a) FROM t`},
@@ -341,8 +347,7 @@ func TestParse(t *testing.T) {
 		{`SELECT OVERLAY('w333333rce' PLACING 'resou' FROM 3 FOR 5)`},
 
 		{`SELECT * FROM (VALUES (1, 2)) AS foo`},
-		// TODO(pmattis): unimplemented. see sql.y:2003.
-		// {`SELECT * FROM (VALUES (1, 2)) AS foo (a, b)`},
+		{`SELECT * FROM (VALUES (1, 2)) AS foo (a, b)`},
 
 		// TODO(pmattis): Is this a postgres extension?
 		{`TABLE a`}, // Shorthand for: SELECT * FROM a
@@ -448,6 +453,8 @@ func TestParse2(t *testing.T) {
 		// Alias expressions are always output using AS.
 		{`SELECT 1 FROM t t1`,
 			`SELECT 1 FROM t AS t1`},
+		{`SELECT 1 FROM t t1 (c1, c2)`,
+			`SELECT 1 FROM t AS t1 (c1, c2)`},
 		// Alternate not-equal operator.
 		{`SELECT FROM t WHERE a <> b`,
 			`SELECT FROM t WHERE a != b`},

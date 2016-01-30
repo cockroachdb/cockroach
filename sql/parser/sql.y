@@ -53,6 +53,7 @@ func unimplemented() {
   exprs          Exprs
   selExpr        SelectExpr
   selExprs       SelectExprs
+  aliasClause    AliasClause
   tblExpr        TableExpr
   tblExprs       TableExprs
   joinCond       JoinCond
@@ -206,7 +207,7 @@ func unimplemented() {
 // %type <empty> sub_type
 %type <expr> ctext_expr
 %type <expr> numeric_only
-%type <str> alias_clause opt_alias_clause
+%type <aliasClause> alias_clause opt_alias_clause
 %type <order> sortby
 %type <idxElem> index_elem
 %type <tblExpr> table_ref
@@ -2019,11 +2020,11 @@ from_list:
 table_ref:
   relation_expr opt_alias_clause
   {
-    $$ = &AliasedTableExpr{Expr: $1, As: Name($2)}
+    $$ = &AliasedTableExpr{Expr: $1, As: $2}
   }
 | select_with_parens opt_alias_clause
   {
-    $$ = &AliasedTableExpr{Expr: &Subquery{Select: $1}, As: Name($2)}
+    $$ = &AliasedTableExpr{Expr: &Subquery{Select: $1}, As: $2}
   }
 | joined_table
 | '(' joined_table ')' alias_clause { unimplemented() }
@@ -2069,22 +2070,28 @@ joined_table:
   }
 
 alias_clause:
-  AS name '(' name_list ')' { unimplemented() }
+  AS name '(' name_list ')'
+  {
+    $$ = AliasClause{Alias: Name($2), Cols: NameList($4)}
+  }
 | AS name
   {
-    $$ = $2
+    $$ = AliasClause{Alias: Name($2)}
   }
-| name '(' name_list ')' { unimplemented() }
+| name '(' name_list ')'
+  {
+    $$ = AliasClause{Alias: Name($1), Cols: NameList($3)}
+  }
 | name
   {
-    $$ = $1
+    $$ = AliasClause{Alias: Name($1)}
   }
 
 opt_alias_clause:
   alias_clause
 | /* EMPTY */
   {
-    $$ = ""
+    $$ = AliasClause{}
   }
 
 join_type:
@@ -2172,11 +2179,11 @@ relation_expr_opt_alias:
   }
 | relation_expr name
   {
-    $$ = &AliasedTableExpr{Expr: $1, As: Name($2)}
+    $$ = &AliasedTableExpr{Expr: $1, As: AliasClause{Alias: Name($2)}}
   }
 | relation_expr AS name
   {
-    $$ = &AliasedTableExpr{Expr: $1, As: Name($3)}
+    $$ = &AliasedTableExpr{Expr: $1, As: AliasClause{Alias: Name($3)}}
   }
 
 where_clause:

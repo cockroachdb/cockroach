@@ -110,6 +110,21 @@ func (node SelectExpr) String() string {
 	return buf.String()
 }
 
+// AliasClause represents an alias, optionally with a column list:
+// "AS name" or "AS name(col1, col2)".
+type AliasClause struct {
+	Alias Name
+	Cols  NameList
+}
+
+func (a AliasClause) String() string {
+	if len(a.Cols) == 0 {
+		return a.Alias.String()
+	}
+	// Build a string of the form "alias (col1, col2, ...)".
+	return fmt.Sprintf("%s (%s)", a.Alias, a.Cols)
+}
+
 // TableExprs represents a list of table expressions.
 type TableExprs []TableExpr
 
@@ -141,13 +156,13 @@ func (*JoinTableExpr) tableExpr()    {}
 // alias.
 type AliasedTableExpr struct {
 	Expr SimpleTableExpr
-	As   Name
+	As   AliasClause
 }
 
 func (node *AliasedTableExpr) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s", node.Expr)
-	if node.As != "" {
+	if node.As.Alias != "" {
 		fmt.Fprintf(&buf, " AS %s", node.As)
 	}
 	return buf.String()

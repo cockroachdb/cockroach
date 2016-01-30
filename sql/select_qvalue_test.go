@@ -31,7 +31,7 @@ func testInitDummySelectNode(desc *TableDescriptor) *selectNode {
 	sel := &selectNode{}
 	sel.qvals = make(qvalMap)
 	sel.from.node = scan
-	sel.from.alias = desc.Alias
+	sel.from.alias = desc.Name
 	sel.from.columns = scan.Columns()
 
 	return sel
