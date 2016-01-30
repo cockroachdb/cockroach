@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -139,6 +140,9 @@ func (t *Trace) epoch(name string) func() {
 // Finalize submits the Trace to the underlying feed. If there is an open
 // Epoch, a panic occurs.
 func (t *Trace) Finalize() {
+	if t == nil {
+		return
+	}
 	defer t.nTrace.Finish()
 	if t == nil || len(t.Content) == 0 {
 		return
@@ -231,8 +235,16 @@ var dummyTracer = &Tracer{
 	now: time.Now,
 }
 
+// TODO(pmattis): Tracing every operation has a very noticeable performance
+// impact. This is a hammer to disble it. We need to either optimize tracing,
+// or make it sample only a fraction of operations or both.
+var tracerDisabled = os.Getenv("DISABLE_TRACER") == "1"
+
 // NewTrace creates a Trace for the given Traceable.
 func (t *Tracer) NewTrace(family string, tracee Traceable) *Trace {
+	if tracerDisabled {
+		return nil
+	}
 	if t == nil {
 		t = dummyTracer
 	}
