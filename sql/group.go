@@ -615,6 +615,8 @@ var _ aggregateImpl = &minAggregate{}
 var _ aggregateImpl = &sumAggregate{}
 var _ aggregateImpl = &stddevAggregate{}
 var _ aggregateImpl = &varianceAggregate{}
+var _ aggregateImpl = &floatVarianceAggregate{}
+var _ aggregateImpl = &decimalVarianceAggregate{}
 var _ aggregateImpl = &identAggregate{}
 
 // In order to render the unaggregated (i.e. grouped) fields, during aggregation,
@@ -835,13 +837,13 @@ func (a *sumAggregate) result() (parser.Datum, error) {
 }
 
 type varianceAggregate struct {
-	count   int
-	mean    parser.DFloat
-	sqrDiff parser.DFloat
+	typedAggregate aggregateImpl
+	// Used for passing int64s as *inf.Dec values.
+	tmpDec *inf.Dec
 }
 
 func newVarianceAggregate() aggregateImpl {
-	return &varianceAggregate{}
+	return &varianceAggregate{tmpDec: new(inf.Dec)}
 }
 
 func (a *varianceAggregate) add(datum parser.Datum) error {
@@ -849,34 +851,134 @@ func (a *varianceAggregate) add(datum parser.Datum) error {
 		return nil
 	}
 
-	var d parser.DFloat
+	unexpectedErr := util.Errorf("unexpected VARIANCE argument type: %s", datum.Type())
 	switch t := datum.(type) {
-	case parser.DInt:
-		d = parser.DFloat(t)
 	case parser.DFloat:
-		d = t
-	// case parser.DDecimal:
-	// TODO(nvanbenschoten) add support for decimal variance and stddev
-	// aggregation functions. Will require adding decimal.Sqrt() to library.
+		if a.typedAggregate == nil {
+			a.typedAggregate = newFloatVarianceAggregate()
+		} else {
+			switch a.typedAggregate.(type) {
+			case *floatVarianceAggregate:
+			default:
+				return unexpectedErr
+			}
+		}
+		return a.typedAggregate.add(t)
+	case parser.DInt:
+		if a.typedAggregate == nil {
+			a.typedAggregate = newDecimalVarianceAggregate()
+		} else {
+			switch a.typedAggregate.(type) {
+			case *decimalVarianceAggregate:
+			default:
+				return unexpectedErr
+			}
+		}
+		a.tmpDec.SetUnscaled(int64(t))
+		return a.typedAggregate.add(parser.DDecimal{Dec: a.tmpDec})
+	case parser.DDecimal:
+		if a.typedAggregate == nil {
+			a.typedAggregate = newDecimalVarianceAggregate()
+		} else {
+			switch a.typedAggregate.(type) {
+			case *decimalVarianceAggregate:
+			default:
+				return unexpectedErr
+			}
+		}
+		return a.typedAggregate.add(t)
 	default:
-		return util.Errorf("unexpected VARIANCE argument type: %s", datum.Type())
+		return unexpectedErr
 	}
+}
+
+func (a *varianceAggregate) result() (parser.Datum, error) {
+	if a.typedAggregate == nil {
+		return parser.DNull, nil
+	}
+	return a.typedAggregate.result()
+}
+
+type floatVarianceAggregate struct {
+	count   int
+	mean    float64
+	sqrDiff float64
+}
+
+func newFloatVarianceAggregate() aggregateImpl {
+	return &floatVarianceAggregate{}
+}
+
+func (a *floatVarianceAggregate) add(datum parser.Datum) error {
+	f := float64(datum.(parser.DFloat))
 
 	// Uses the Knuth/Welford method for accurately computing variance online in a
 	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
 	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
 	a.count++
-	delta := d - a.mean
-	a.mean += delta / parser.DFloat(a.count)
-	a.sqrDiff += delta * (d - a.mean)
+	delta := f - a.mean
+	a.mean += delta / float64(a.count)
+	a.sqrDiff += delta * (f - a.mean)
 	return nil
 }
 
-func (a *varianceAggregate) result() (parser.Datum, error) {
+func (a *floatVarianceAggregate) result() (parser.Datum, error) {
 	if a.count < 2 {
 		return parser.DNull, nil
 	}
-	return a.sqrDiff / (parser.DFloat(a.count) - 1), nil
+	return parser.DFloat(a.sqrDiff / (float64(a.count) - 1)), nil
+}
+
+type decimalVarianceAggregate struct {
+	// Variables used across iterations.
+	count   *inf.Dec
+	mean    *inf.Dec
+	sqrDiff *inf.Dec
+
+	// Variables used as scratch space within iterations.
+	delta *inf.Dec
+	tmp   *inf.Dec
+}
+
+func newDecimalVarianceAggregate() aggregateImpl {
+	return &decimalVarianceAggregate{
+		count:   inf.NewDec(0, 0),
+		mean:    inf.NewDec(0, 0),
+		sqrDiff: inf.NewDec(0, 0),
+		delta:   new(inf.Dec),
+		tmp:     new(inf.Dec),
+	}
+}
+
+// Read-only constants used for compuation.
+var (
+	decimalOne = inf.NewDec(1, 0)
+	decimalTwo = inf.NewDec(2, 0)
+)
+
+func (a *decimalVarianceAggregate) add(datum parser.Datum) error {
+	d := datum.(parser.DDecimal).Dec
+
+	// Uses the Knuth/Welford method for accurately computing variance online in a
+	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
+	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
+	a.count.Add(a.count, decimalOne)
+	a.delta.Sub(d, a.mean)
+	a.tmp.QuoRound(a.delta, a.count, util.DecimalPrecision, inf.RoundHalfUp)
+	a.mean.Add(a.mean, a.tmp)
+	a.tmp.Sub(d, a.mean)
+	a.sqrDiff.Add(a.sqrDiff, a.delta.Mul(a.delta, a.tmp))
+	return nil
+}
+
+func (a *decimalVarianceAggregate) result() (parser.Datum, error) {
+	if a.count.Cmp(decimalTwo) < 0 {
+		return parser.DNull, nil
+	}
+	a.tmp.Sub(a.count, decimalOne)
+	dec := new(inf.Dec)
+	dec.QuoRound(a.sqrDiff, a.tmp, util.DecimalPrecision, inf.RoundHalfUp)
+	return parser.DDecimal{Dec: dec}, nil
 }
 
 type stddevAggregate struct {
@@ -884,7 +986,7 @@ type stddevAggregate struct {
 }
 
 func newStddevAggregate() aggregateImpl {
-	return &stddevAggregate{}
+	return &stddevAggregate{varianceAggregate: *newVarianceAggregate().(*varianceAggregate)}
 }
 
 func (a *stddevAggregate) result() (parser.Datum, error) {
@@ -895,6 +997,9 @@ func (a *stddevAggregate) result() (parser.Datum, error) {
 	switch t := variance.(type) {
 	case parser.DFloat:
 		return parser.DFloat(math.Sqrt(float64(t))), nil
+	case parser.DDecimal:
+		util.DecSqrt(t.Dec, t.Dec, util.DecimalPrecision)
+		return t, nil
 	}
 	return nil, util.Errorf("unexpected variance result type: %s", variance.Type())
 }

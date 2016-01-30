@@ -341,7 +341,7 @@ SELECT AVG(k), AVG(v), SUM(k), SUM(v) FROM kv
 query RRRR
 SELECT AVG(k::decimal), AVG(v::decimal), SUM(k::decimal), SUM(v::decimal) FROM kv
 ----
-5 2.8 30 14
+5.0000000000000000 2.8000000000000000 30 14
 
 query RRII
 SELECT AVG(DISTINCT k), AVG(DISTINCT v), SUM(DISTINCT k), SUM(DISTINCT v) FROM kv
@@ -383,7 +383,7 @@ two 2 true 5
 query RRRR
 SELECT AVG(b), SUM(b), AVG(d), SUM(d) FROM abc
 ----
-1.75 3.5 3.05 6.1
+1.75 3.5 3.0500000000000000 6.1
 
 query error unknown signature for AVG: AVG\(string\)
 SELECT AVG(a) FROM abc
@@ -407,13 +407,13 @@ statement ok
 CREATE TABLE xyz (
   x INT PRIMARY KEY,
   y INT,
-  z INT,
+  z FLOAT,
   INDEX xy (x, y),
   INDEX zyx (z, y, x)
 )
 
 statement ok
-INSERT INTO xyz VALUES (1, 2, 3), (4, 5, 6), (7, NULL, 8)
+INSERT INTO xyz VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
 
 query I
 SELECT MIN(x) FROM xyz
@@ -482,31 +482,31 @@ EXPLAIN SELECT MAX(y) FROM xyz WHERE x = 7
 1 revscan xyz@xy 1:/7/#-/8
 
 query I
-SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3)
+SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 1
 
 query ITT
-EXPLAIN SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3)
+EXPLAIN SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 0 group MIN(x)
 1 scan  xyz@zyx 1:/3/2/#-/3/3
 
 query I
-SELECT MAX(x) FROM xyz WHERE (z, y) = (3, 2)
+SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 1
 
 query ITT
-EXPLAIN SELECT MAX(x) FROM xyz WHERE (z, y) = (3, 2)
+EXPLAIN SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 0 group   MAX(x)
 1 revscan xyz@zyx 1:/3/2/#-/3/3
 
 query RRR
-SELECT VARIANCE(x), VARIANCE(y), VARIANCE(z) FROM xyz;
+SELECT VARIANCE(x), VARIANCE(y::decimal), VARIANCE(z) FROM xyz;
 ----
-9 4.5 6.333333333333333
+9.0000000000000000 4.5000000000000000 6.333333333333333
 
 query R
 SELECT VARIANCE(x) FROM xyz WHERE x = 10;
@@ -525,9 +525,9 @@ EXPLAIN SELECT VARIANCE(x) FROM xyz WHERE x = 1;
 1 scan xyz@xy /1-/2
 
 query RRR
-SELECT STDDEV(x), STDDEV(y), STDDEV(z) FROM xyz;
+SELECT STDDEV(x), STDDEV(y::decimal), STDDEV(z) FROM xyz;
 ----
-3 2.1213203435596424 2.516611478423583
+3.0000000000000000 2.1213203435596426 2.516611478423583
 
 query R
 SELECT STDDEV(x) FROM xyz WHERE x = 1;
