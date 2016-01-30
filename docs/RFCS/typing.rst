@@ -4,7 +4,7 @@
 - RFC PR: TBD
 - Cockroach Issue: #4024, #4026, #3633
 
-(WIP: Andrei, knz)
+(WIP: Andrei, knz, nathan)
 
 Overview
 ========
