@@ -28,7 +28,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	yaml "gopkg.in/yaml.v1"
+	"gopkg.in/yaml.v1"
 )
 
 const (

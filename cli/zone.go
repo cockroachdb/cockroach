@@ -24,7 +24,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
-	yaml "gopkg.in/yaml.v1"
+	"gopkg.in/yaml.v1"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/util/log"
