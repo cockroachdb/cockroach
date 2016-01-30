@@ -331,8 +331,7 @@ var binOps = map[binArgs]binOp{
 			if right.(DDecimal).Sign() == 0 {
 				return nil, errZeroModulus
 			}
-			return nil, nil
-			// TODO
+			return DDecimal{Dec: util.DecMod(nil, left.(DDecimal).Dec, right.(DDecimal).Dec)}, nil
 		},
 	},
 

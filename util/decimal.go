@@ -88,3 +88,70 @@ func Float64FromDec(dec *inf.Dec) (float64, error) {
 	return strconv.ParseFloat(dec.String(), 64)
 }
 
+// DecMod performs the modulo arithmatic x % y and stores the
+// result in z, which is also the return value. It is valid for z
+// to be nil, in which case it will be allocated internally.
+// DecMod will panic if the y is zero.
+//
+// The modulo calculation is implemented using the algorithm:
+//     x % y = x - (y * ⌊x / y⌋).
+func DecMod(z, x, y *inf.Dec) *inf.Dec {
+	switch z {
+	case nil:
+		z = new(inf.Dec)
+	case x:
+		x = new(inf.Dec)
+		x.Set(z)
+	case y:
+		y = new(inf.Dec)
+		y.Set(z)
+	}
+	z.QuoRound(x, y, 0, inf.RoundDown)
+	return z.Sub(x, z.Mul(z, y))
+}
+
+// DecSqrt calculates the square root of x to the specified scale
+// and stores the result in z, which is also the return value.
+// The function will panic if x is a negative number.
+//
+// The square root calculation is implemented using Newton's Method.
+// We start with an initial estimate for sqrt(d), and then iterate:
+//     x_{n+1} = 1/2 * ( x_n + (d / x_n) ).
+func DecSqrt(z, x *inf.Dec, s inf.Scale) *inf.Dec {
+	switch z {
+	case nil:
+		z = new(inf.Dec)
+	case x:
+		x = new(inf.Dec)
+		x.Set(z)
+	}
+
+	// Validate the sign of x.
+	switch x.Sign() {
+	case -1:
+		panic(fmt.Sprintf("square root of negative number: %s", x))
+	case 0:
+		return z.SetUnscaled(0).SetScale(0)
+	}
+
+	// Use half as the initial estimate.
+	z.Mul(x, decimalHalf)
+
+	// Determine the maximum number of iterations needed.
+	scale := len(x.UnscaledBig().String())
+	if x.Scale() < 0 {
+		scale -= int(x.Scale())
+	}
+	steps := scale + int(s)
+
+	// Iterate.
+	tmp := new(inf.Dec)
+	for i := 0; i <= steps; i++ {
+		tmp.QuoRound(x, z, s, inf.RoundHalfUp) // t = d / x_n
+		tmp.Add(tmp, z)                        // t = x_n + (d / x_n)
+		z.Mul(tmp, decimalHalf)                // x_{n+1} = 0.5 * t
+	}
+
+	// Round to the desired scale.
+	return z.Round(z, s, inf.RoundHalfUp)
+}

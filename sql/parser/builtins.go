@@ -810,8 +810,7 @@ var builtins = map[string][]builtin{
 			if y.Sign() == 0 {
 				return nil, errZeroModulus
 			}
-			return nil, nil
-			// TODO
+			return DDecimal{Dec: util.DecMod(nil, x, y)}, nil
 		}),
 		builtin{
 			returnType: typeInt,
@@ -906,10 +905,20 @@ var builtins = map[string][]builtin{
 		},
 	},
 
-	// TODO(nvanbenschoten) Add native support for decimal.
-	"sqrt": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
-		return DFloat(math.Sqrt(x)), nil
-	}),
+	"sqrt": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			if x < 0 {
+				return nil, errSqrtOfNegNumber
+			}
+			return DFloat(math.Sqrt(x)), nil
+		}),
+		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+			if x.Sign() < 0 {
+				return nil, errSqrtOfNegNumber
+			}
+			return DDecimal{Dec: util.DecSqrt(nil, x, util.DecimalPrecision)}, nil
+		}),
+	},
 
 	"tan": {
 		floatBuiltin1(func(x float64) (Datum, error) {
