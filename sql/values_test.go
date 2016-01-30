@@ -22,10 +22,11 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/decimal"
 )
 
 func TestValues(t *testing.T) {
@@ -148,7 +149,7 @@ func TestGolangParams(t *testing.T) {
 		{float64(1.0), reflect.TypeOf(parser.DummyFloat)},
 
 		// Decimal type.
-		{decimal.New(55, -1), reflect.TypeOf(parser.DummyDecimal)},
+		{inf.NewDec(55, 1), reflect.TypeOf(parser.DummyDecimal)},
 
 		// String type.
 		{"test", reflect.TypeOf(parser.DummyString)},

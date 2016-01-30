@@ -47,7 +47,7 @@ func TestEval(t *testing.T) {
 		{`4 / 5`, `0.8`},
 		{`1.0 / 0.0`, `+Inf`},
 		{`-1.0 * (1.0 / 0.0)`, `-Inf`},
-		{`1.1::decimal / 2.2::decimal`, `0.5`},
+		{`1.1::decimal / 2.2::decimal`, `0.5000000000000000`},
 		// Grouping
 		{`1 + 2 + (3 * 4)`, `15`},
 		// Unary operators.

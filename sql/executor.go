@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -37,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/decimal"
 )
 
 var testingWaitForMetadata bool
@@ -560,8 +561,8 @@ func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
 		return parser.DTimestamp{Time: t}, true
 	case time.Duration:
 		return parser.DInterval{Duration: t}, true
-	case decimal.Decimal:
-		return parser.DDecimal{Decimal: t}, true
+	case *inf.Dec:
+		return parser.DDecimal{Dec: t}, true
 	}
 
 	// Handle all types which have an underlying type that can be stored in the

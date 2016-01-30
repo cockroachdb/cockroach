@@ -20,13 +20,14 @@ import (
 	"bytes"
 	"time"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/cockroachdb/decimal"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -393,9 +394,9 @@ func encodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 		return encoding.EncodeFloatDescending(b, float64(t)), nil
 	case parser.DDecimal:
 		if dir == encoding.Ascending {
-			return encoding.EncodeDecimalAscending(b, t.Decimal), nil
+			return encoding.EncodeDecimalAscending(b, t.Dec), nil
 		}
-		return encoding.EncodeDecimalDescending(b, t.Decimal), nil
+		return encoding.EncodeDecimalDescending(b, t.Dec), nil
 	case parser.DString:
 		if dir == encoding.Ascending {
 			return encoding.EncodeStringAscending(b, string(t)), nil
@@ -557,13 +558,13 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 		}
 		return parser.DFloat(f), rkey, err
 	case parser.DDecimal:
-		var d decimal.Decimal
+		var d *inf.Dec
 		if dir == encoding.Ascending {
 			rkey, d, err = encoding.DecodeDecimalAscending(key, nil)
 		} else {
 			rkey, d, err = encoding.DecodeDecimalDescending(key, nil)
 		}
-		return parser.DDecimal{Decimal: d}, rkey, err
+		return parser.DDecimal{Dec: d}, rkey, err
 	case parser.DString:
 		var r string
 		if dir == encoding.Ascending {
@@ -687,7 +688,7 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (interface{}, *r
 		}
 	case ColumnType_DECIMAL:
 		if v, ok := val.(parser.DDecimal); ok {
-			return v.Decimal, nil
+			return v.Dec, nil
 		}
 	case ColumnType_STRING:
 		if v, ok := val.(parser.DString); ok {
@@ -748,7 +749,7 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		return parser.DDecimal{Decimal: v}, nil
+		return parser.DDecimal{Dec: v}, nil
 	case ColumnType_STRING:
 		v, err := value.GetBytes()
 		if err != nil {

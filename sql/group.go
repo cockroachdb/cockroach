@@ -21,12 +21,13 @@ import (
 	"math"
 	"strings"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/decimal"
 )
 
 var aggregates = map[string]func() aggregateImpl{
@@ -675,7 +676,9 @@ func (a *avgAggregate) result() (parser.Datum, error) {
 	case parser.DFloat:
 		return t / parser.DFloat(a.count), nil
 	case parser.DDecimal:
-		return parser.DDecimal{Decimal: t.Div(decimal.New(int64(a.count), 0))}, nil
+		count := inf.NewDec(int64(a.count), 0)
+		t.Dec.QuoRound(t.Dec, count, util.DecimalPrecision, inf.RoundHalfUp)
+		return t, nil
 	default:
 		return parser.DNull, util.Errorf("unexpected SUM result type: %s", t.Type())
 	}
@@ -784,6 +787,12 @@ func (a *sumAggregate) add(datum parser.Datum) error {
 		return nil
 	}
 	if a.sum == nil {
+		switch t := datum.(type) {
+		case parser.DDecimal:
+			// Make copy of decimal to allow for modification later.
+			dec := new(inf.Dec)
+			datum = parser.DDecimal{Dec: dec.Set(t.Dec)}
+		}
 		a.sum = datum
 		return nil
 	}
@@ -803,7 +812,7 @@ func (a *sumAggregate) add(datum parser.Datum) error {
 
 	case parser.DDecimal:
 		if v, ok := a.sum.(parser.DDecimal); ok {
-			a.sum = parser.DDecimal{Decimal: v.Add(t.Decimal)}
+			v.Dec.Add(v.Dec, t.Dec)
 			return nil
 		}
 	}
@@ -815,7 +824,14 @@ func (a *sumAggregate) result() (parser.Datum, error) {
 	if a.sum == nil {
 		return parser.DNull, nil
 	}
-	return a.sum, nil
+	switch t := a.sum.(type) {
+	case parser.DDecimal:
+		// Allocate a new decimal, because this must be idempotent.
+		dec := new(inf.Dec)
+		return parser.DDecimal{Dec: dec.Set(t.Dec)}, nil
+	default:
+		return a.sum, nil
+	}
 }
 
 type varianceAggregate struct {
