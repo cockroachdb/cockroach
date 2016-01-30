@@ -14,7 +14,7 @@
 //
 // Author: Nathan VanBenschoten (nvanbenschoten@gmail.com)
 
-package util
+package decimal
 
 import (
 	"fmt"
@@ -25,9 +25,9 @@ import (
 	"gopkg.in/inf.v0"
 )
 
-// DecimalPrecision defines the minimum precision all inexact decimal
+// Precision defines the minimum precision all inexact decimal
 // calculations should attempt to achieve.
-const DecimalPrecision = 16
+const Precision = 16
 
 // Read-only constants used for compuation.
 var decimalHalf = inf.NewDec(5, 1)
@@ -88,14 +88,14 @@ func Float64FromDec(dec *inf.Dec) (float64, error) {
 	return strconv.ParseFloat(dec.String(), 64)
 }
 
-// DecMod performs the modulo arithmatic x % y and stores the
+// Mod performs the modulo arithmatic x % y and stores the
 // result in z, which is also the return value. It is valid for z
 // to be nil, in which case it will be allocated internally.
-// DecMod will panic if the y is zero.
+// Mod will panic if the y is zero.
 //
 // The modulo calculation is implemented using the algorithm:
 //     x % y = x - (y * ⌊x / y⌋).
-func DecMod(z, x, y *inf.Dec) *inf.Dec {
+func Mod(z, x, y *inf.Dec) *inf.Dec {
 	switch z {
 	case nil:
 		z = new(inf.Dec)
@@ -110,14 +110,14 @@ func DecMod(z, x, y *inf.Dec) *inf.Dec {
 	return z.Sub(x, z.Mul(z, y))
 }
 
-// DecSqrt calculates the square root of x to the specified scale
+// Sqrt calculates the square root of x to the specified scale
 // and stores the result in z, which is also the return value.
 // The function will panic if x is a negative number.
 //
 // The square root calculation is implemented using Newton's Method.
 // We start with an initial estimate for sqrt(d), and then iterate:
 //     x_{n+1} = 1/2 * ( x_n + (d / x_n) ).
-func DecSqrt(z, x *inf.Dec, s inf.Scale) *inf.Dec {
+func Sqrt(z, x *inf.Dec, s inf.Scale) *inf.Dec {
 	switch z {
 	case nil:
 		z = new(inf.Dec)

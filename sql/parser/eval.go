@@ -32,6 +32,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/decimal"
 )
 
 var (
@@ -295,7 +296,7 @@ var binOps = map[binArgs]binOp{
 				return nil, errDivByZero
 			}
 			dec := new(inf.Dec)
-			return DDecimal{Dec: dec.QuoRound(left.(DDecimal).Dec, right.(DDecimal).Dec, util.DecimalPrecision, inf.RoundHalfUp)}, nil
+			return DDecimal{Dec: dec.QuoRound(left.(DDecimal).Dec, right.(DDecimal).Dec, decimal.Precision, inf.RoundHalfUp)}, nil
 		},
 	},
 	binArgs{Div, intervalType, intType}: {
@@ -331,7 +332,7 @@ var binOps = map[binArgs]binOp{
 			if right.(DDecimal).Sign() == 0 {
 				return nil, errZeroModulus
 			}
-			return DDecimal{Dec: util.DecMod(nil, left.(DDecimal).Dec, right.(DDecimal).Dec)}, nil
+			return DDecimal{Dec: decimal.Mod(nil, left.(DDecimal).Dec, right.(DDecimal).Dec)}, nil
 		},
 	},
 
@@ -435,13 +436,13 @@ var cmpOps = map[cmpArgs]cmpOp{
 	cmpArgs{EQ, decimalType, floatType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := left.(DDecimal).Dec
-			r := util.NewDecFromFloat(float64(right.(DFloat)))
+			r := decimal.NewDecFromFloat(float64(right.(DFloat)))
 			return DBool(l.Cmp(r) == 0), nil
 		},
 	},
 	cmpArgs{EQ, floatType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			l := util.NewDecFromFloat(float64(left.(DFloat)))
+			l := decimal.NewDecFromFloat(float64(left.(DFloat)))
 			r := right.(DDecimal).Dec
 			return DBool(l.Cmp(r) == 0), nil
 		},
@@ -519,13 +520,13 @@ var cmpOps = map[cmpArgs]cmpOp{
 	cmpArgs{LT, decimalType, floatType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := left.(DDecimal).Dec
-			r := util.NewDecFromFloat(float64(right.(DFloat)))
+			r := decimal.NewDecFromFloat(float64(right.(DFloat)))
 			return DBool(l.Cmp(r) < 0), nil
 		},
 	},
 	cmpArgs{LT, floatType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			l := util.NewDecFromFloat(float64(left.(DFloat)))
+			l := decimal.NewDecFromFloat(float64(left.(DFloat)))
 			r := right.(DDecimal).Dec
 			return DBool(l.Cmp(r) < 0), nil
 		},
@@ -603,13 +604,13 @@ var cmpOps = map[cmpArgs]cmpOp{
 	cmpArgs{LE, decimalType, floatType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := left.(DDecimal).Dec
-			r := util.NewDecFromFloat(float64(right.(DFloat)))
+			r := decimal.NewDecFromFloat(float64(right.(DFloat)))
 			return DBool(l.Cmp(r) <= 0), nil
 		},
 	},
 	cmpArgs{LE, floatType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			l := util.NewDecFromFloat(float64(left.(DFloat)))
+			l := decimal.NewDecFromFloat(float64(left.(DFloat)))
 			r := right.(DDecimal).Dec
 			return DBool(l.Cmp(r) <= 0), nil
 		},
@@ -914,7 +915,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		case DFloat:
 			return d, nil
 		case DDecimal:
-			f, err := util.Float64FromDec(v.Dec)
+			f, err := decimal.Float64FromDec(v.Dec)
 			if err != nil {
 				return nil, errFloatOutOfRange
 			}
@@ -937,7 +938,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		case DInt:
 			return DDecimal{Dec: inf.NewDec(int64(v), 0)}, nil
 		case DFloat:
-			return DDecimal{Dec: util.NewDecFromFloat(float64(v))}, nil
+			return DDecimal{Dec: decimal.NewDecFromFloat(float64(v))}, nil
 		case DDecimal:
 			return d, nil
 		case DString:

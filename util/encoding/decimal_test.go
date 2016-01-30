@@ -25,7 +25,7 @@ import (
 
 	"gopkg.in/inf.v0"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
@@ -100,7 +100,7 @@ func TestEncodeDecimal(t *testing.T) {
 		Value    *inf.Dec
 		Encoding []byte
 	}{
-		{util.NewDecFromFloat(-math.MaxFloat64), []byte{0x04, 0x64, 0xfc, 0x60, 0x66, 0x44, 0xe4, 0x9e, 0x82, 0xc0, 0x8d, 0x0}},
+		{decimal.NewDecFromFloat(-math.MaxFloat64), []byte{0x04, 0x64, 0xfc, 0x60, 0x66, 0x44, 0xe4, 0x9e, 0x82, 0xc0, 0x8d, 0x0}},
 		{inf.NewDec(-1, -308), []byte{0x04, 0x64, 0xfd, 0x0}},
 		// Four duplicates to make sure -1*10^4 <= -10*10^3 <= -100*10^2 <= -1*10^4
 		{inf.NewDec(-1, -4), []byte{0x0c, 0xfd, 0x0}},
@@ -113,9 +113,9 @@ func TestEncodeDecimal(t *testing.T) {
 		{inf.NewDec(-1, 0), []byte{0x0e, 0xfd, 0x0}},
 		{inf.NewDec(-123, 5), []byte{0x10, 0x1, 0xe6, 0xc3, 0x0}},
 		{inf.NewDec(-1, 307), []byte{0x10, 0x99, 0xeb, 0x0}},
-		{util.NewDecFromFloat(-math.SmallestNonzeroFloat64), []byte{0x10, 0xa1, 0xf5, 0x0}},
+		{decimal.NewDecFromFloat(-math.SmallestNonzeroFloat64), []byte{0x10, 0xa1, 0xf5, 0x0}},
 		{inf.NewDec(0, 0), []byte{0x11}},
-		{util.NewDecFromFloat(math.SmallestNonzeroFloat64), []byte{0x12, 0x5e, 0xa, 0x0}},
+		{decimal.NewDecFromFloat(math.SmallestNonzeroFloat64), []byte{0x12, 0x5e, 0xa, 0x0}},
 		{inf.NewDec(1, 307), []byte{0x12, 0x66, 0x14, 0x0}},
 		{inf.NewDec(123, 5), []byte{0x12, 0xfe, 0x19, 0x3c, 0x0}},
 		{inf.NewDec(123, 4), []byte{0x13, 0x03, 0x2e, 0x0}},
@@ -146,7 +146,7 @@ func TestEncodeDecimal(t *testing.T) {
 		{inf.NewDec(12345, 0), []byte{0x16, 0x03, 0x2f, 0x5a, 0x0}},
 		{inf.NewDec(123450, 0), []byte{0x16, 0x19, 0x45, 0x64, 0x0}},
 		{inf.NewDec(1, -308), []byte{0x1e, 0x9b, 0x2, 0x0}},
-		{util.NewDecFromFloat(math.MaxFloat64), []byte{0x1e, 0x9b, 0x3, 0x9f, 0x99, 0xbb, 0x1b, 0x61, 0x7d, 0x3f, 0x72, 0x0}},
+		{decimal.NewDecFromFloat(math.MaxFloat64), []byte{0x1e, 0x9b, 0x3, 0x9f, 0x99, 0xbb, 0x1b, 0x61, 0x7d, 0x3f, 0x72, 0x0}},
 	}
 
 	var lastEncoded []byte
@@ -205,7 +205,7 @@ func BenchmarkEncodeDecimal(b *testing.B) {
 
 	vals := make([]*inf.Dec, 10000)
 	for i := range vals {
-		vals[i] = util.NewDecFromFloat(rng.Float64())
+		vals[i] = decimal.NewDecFromFloat(rng.Float64())
 	}
 
 	buf := make([]byte, 0, 100)
@@ -221,7 +221,7 @@ func BenchmarkDecodeDecimal(b *testing.B) {
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
-		d := util.NewDecFromFloat(rng.Float64())
+		d := decimal.NewDecFromFloat(rng.Float64())
 		vals[i] = EncodeDecimalAscending(nil, d)
 	}
 

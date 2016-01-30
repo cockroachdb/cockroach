@@ -39,7 +39,7 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -810,7 +810,7 @@ var builtins = map[string][]builtin{
 			if y.Sign() == 0 {
 				return nil, errZeroModulus
 			}
-			return DDecimal{Dec: util.DecMod(nil, x, y)}, nil
+			return DDecimal{Dec: decimal.Mod(nil, x, y)}, nil
 		}),
 		builtin{
 			returnType: typeInt,
@@ -916,7 +916,7 @@ var builtins = map[string][]builtin{
 			if x.Sign() < 0 {
 				return nil, errSqrtOfNegNumber
 			}
-			return DDecimal{Dec: util.DecSqrt(nil, x, util.DecimalPrecision)}, nil
+			return DDecimal{Dec: decimal.Sqrt(nil, x, decimal.Precision)}, nil
 		}),
 	},
 
@@ -1110,7 +1110,7 @@ func floatOrDecimalBuiltin1(f func(float64) (Datum, error)) []builtin {
 			types:      argTypes{decimalType},
 			returnType: typeDecimal,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				v, err := util.Float64FromDec(args[0].(DDecimal).Dec)
+				v, err := decimal.Float64FromDec(args[0].(DDecimal).Dec)
 				if err != nil {
 					return nil, err
 				}
@@ -1124,7 +1124,7 @@ func floatOrDecimalBuiltin1(f func(float64) (Datum, error)) []builtin {
 					// into the decimal library to support it here.
 					return nil, fmt.Errorf("decimal does not support NaN")
 				}
-				return DDecimal{Dec: util.NewDecFromFloat(rf)}, nil
+				return DDecimal{Dec: decimal.NewDecFromFloat(rf)}, nil
 			},
 		},
 	}
@@ -1143,11 +1143,11 @@ func floatOrDecimalBuiltin2(f func(float64, float64) (Datum, error)) []builtin {
 			types:      argTypes{decimalType, decimalType},
 			returnType: typeDecimal,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				v1, err := util.Float64FromDec(args[0].(DDecimal).Dec)
+				v1, err := decimal.Float64FromDec(args[0].(DDecimal).Dec)
 				if err != nil {
 					return nil, err
 				}
-				v2, err := util.Float64FromDec(args[1].(DDecimal).Dec)
+				v2, err := decimal.Float64FromDec(args[1].(DDecimal).Dec)
 				if err != nil {
 					return nil, err
 				}
@@ -1161,7 +1161,7 @@ func floatOrDecimalBuiltin2(f func(float64, float64) (Datum, error)) []builtin {
 					// into the decimal library to support it here.
 					return nil, fmt.Errorf("decimal does not support NaN")
 				}
-				return DDecimal{Dec: util.NewDecFromFloat(rf)}, nil
+				return DDecimal{Dec: decimal.NewDecFromFloat(rf)}, nil
 			},
 		},
 	}
