@@ -23,12 +23,13 @@ import (
 	"strconv"
 	"time"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/lib/pq/oid"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/decimal"
 )
 
 //go:generate stringer -type=formatCode
@@ -123,7 +124,7 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum) error {
 		return err
 
 	case parser.DDecimal:
-		vs := v.Decimal.String()
+		vs := v.Dec.String()
 		b.putInt32(int32(len(vs)))
 		_, err := b.WriteString(vs)
 		return err
@@ -356,11 +357,11 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 	case oid.T_numeric:
 		switch code {
 		case formatText:
-			dec, err := decimal.NewFromString(string(b))
-			if err != nil {
-				return d, err
+			dec := new(inf.Dec)
+			if _, ok := dec.SetString(string(b)); !ok {
+				return nil, fmt.Errorf("could not parse string %q as decimal", b)
 			}
-			d = parser.DDecimal{Decimal: dec}
+			d = parser.DDecimal{Dec: dec}
 		default:
 			return d, fmt.Errorf("unsupported numeric format code: %d", code)
 		}

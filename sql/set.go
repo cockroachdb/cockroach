@@ -20,9 +20,10 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/decimal"
 )
 
 // Set sets session variables.
@@ -109,8 +110,12 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, *roachpb.Error) 
 		offset = int64(float64(v) * 60.0 * 60.0)
 
 	case parser.DDecimal:
-		sixty := decimal.New(60, 0)
-		offset = v.Mul(sixty).Mul(sixty).IntPart()
+		sixty := inf.NewDec(60, 0)
+		sixty.Mul(sixty, sixty).Mul(sixty, v.Dec)
+		var ok bool
+		if offset, ok = sixty.Unscaled(); !ok {
+			return nil, roachpb.NewUErrorf("time zone value %s would overflow an int64", sixty)
+		}
 
 	default:
 		return nil, roachpb.NewUErrorf("bad time zone value: %v", n.Value)

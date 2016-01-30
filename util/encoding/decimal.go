@@ -25,8 +25,9 @@ import (
 	"math/big"
 	"unsafe"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/decimal"
 )
 
 // EncodeDecimalAscending returns the resulting byte slice with the encoded decimal
@@ -46,19 +47,19 @@ import (
 // as a byte 0x13-E followed by the ones-complement of M. Large negative values
 // consist of the single byte 0x08 followed by the ones-complement of the
 // varint encoding of E followed by the ones-complement of M.
-func EncodeDecimalAscending(b []byte, d decimal.Decimal) []byte {
+func EncodeDecimalAscending(b []byte, d *inf.Dec) []byte {
 	return encodeDecimal(b, d, false)
 }
 
 // EncodeDecimalDescending is the descending version of EncodeDecimalAscending.
-func EncodeDecimalDescending(b []byte, d decimal.Decimal) []byte {
+func EncodeDecimalDescending(b []byte, d *inf.Dec) []byte {
 	return encodeDecimal(b, d, true)
 }
 
-func encodeDecimal(b []byte, d decimal.Decimal, invert bool) []byte {
+func encodeDecimal(b []byte, d *inf.Dec, invert bool) []byte {
 	// Handle the simplistic cases first.
 	neg := false
-	switch d.BigInt().Sign() {
+	switch d.Sign() {
 	case -1:
 		neg = true
 	case 0:
@@ -84,15 +85,16 @@ func encodeDecimal(b []byte, d decimal.Decimal, invert bool) []byte {
 // If we assume all digits of the mantissa occur to the right of the decimal
 // point, then the exponent E is the power of one hundred by which one must
 // multiply the mantissa to recover the original value.
-func decimalMandE(d decimal.Decimal, tmp []byte) (int, []byte) {
-	bs := d.BigInt().String()
+func decimalMandE(d *inf.Dec, tmp []byte) (int, []byte) {
+	bs := d.UnscaledBig().String()
 	if bs[0] == '-' {
 		bs = bs[1:]
 	}
 
 	// The exponent will be the combination of the decimal's exponent, and the
-	// number of digits in the big.Int.
-	e10 := int(d.Exponent()) + len(bs)
+	// number of digits in the big.Int. Note that the decimal's exponent is
+	// given by the inverse of dec.Scale.
+	e10 := int(-d.Scale()) + len(bs)
 
 	// Strip off trailing zeros in big.Int's string representation.
 	for bs[len(bs)-1] == '0' {
@@ -143,24 +145,24 @@ func decimalMandE(d decimal.Decimal, tmp []byte) (int, []byte) {
 
 // DecodeDecimalAscending returns the remaining byte slice after decoding and the decoded
 // decimal from buf.
-func DecodeDecimalAscending(buf []byte, tmp []byte) ([]byte, decimal.Decimal, error) {
+func DecodeDecimalAscending(buf []byte, tmp []byte) ([]byte, *inf.Dec, error) {
 	return decodeDecimal(buf, tmp, false)
 }
 
 // DecodeDecimalDescending decodes floats encoded with EncodeDecimalDescending.
-func DecodeDecimalDescending(buf []byte, tmp []byte) ([]byte, decimal.Decimal, error) {
+func DecodeDecimalDescending(buf []byte, tmp []byte) ([]byte, *inf.Dec, error) {
 	return decodeDecimal(buf, tmp, true)
 }
 
-func decodeDecimal(buf []byte, tmp []byte, invert bool) ([]byte, decimal.Decimal, error) {
+func decodeDecimal(buf []byte, tmp []byte, invert bool) ([]byte, *inf.Dec, error) {
 	// Handle the simplistic cases first.
 	switch buf[0] {
 	case floatNaN, floatNaNDesc:
-		return nil, decimal.Decimal{}, util.Errorf("decimal does not support NaN values: %q", buf)
+		return nil, nil, util.Errorf("decimal does not support NaN values: %q", buf)
 	case floatInfinity, floatNegativeInfinity:
-		return nil, decimal.Decimal{}, util.Errorf("decimal does not support infinite values: %q", buf)
+		return nil, nil, util.Errorf("decimal does not support infinite values: %q", buf)
 	case floatZero:
-		return buf[1:], decimal.Decimal{}, nil
+		return buf[1:], inf.NewDec(0, 0), nil
 	}
 	tmp = tmp[len(tmp):cap(tmp)]
 	idx := bytes.Index(buf, []byte{floatTerminator})
@@ -190,13 +192,13 @@ func decodeDecimal(buf []byte, tmp []byte, invert bool) ([]byte, decimal.Decimal
 		e, m := decodeSmallNumber(false, buf[:idx+1], tmp)
 		return buf[idx+1:], makeDecimalFromMandE(invert, e, m, tmp), nil
 	default:
-		return nil, decimal.Decimal{}, util.Errorf("unknown prefix of the encoded byte slice: %q", buf)
+		return nil, nil, util.Errorf("unknown prefix of the encoded byte slice: %q", buf)
 	}
 }
 
 // makeDecimalFromMandE reconstructs the decimal from the mantissa M and
 // exponent E.
-func makeDecimalFromMandE(negative bool, e int, m []byte, tmp []byte) decimal.Decimal {
+func makeDecimalFromMandE(negative bool, e int, m []byte, tmp []byte) *inf.Dec {
 	// ±dddd.
 	b := tmp[:0]
 	if n := len(m)*2 + 1; cap(b) < n {
@@ -227,5 +229,5 @@ func makeDecimalFromMandE(negative bool, e int, m []byte, tmp []byte) decimal.De
 		exp++
 	}
 
-	return decimal.NewFromBigInt(bi, int32(exp))
+	return inf.NewDecBig(bi, inf.Scale(-exp))
 }

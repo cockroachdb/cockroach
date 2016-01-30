@@ -25,8 +25,9 @@ import (
 	"strconv"
 	"time"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/decimal"
 )
 
 var (
@@ -333,7 +334,7 @@ func (d DFloat) String() string {
 
 // DDecimal is the decimal Datum.
 type DDecimal struct {
-	decimal.Decimal
+	*inf.Dec
 }
 
 // Type implements the Datum interface.
@@ -357,7 +358,7 @@ func (d DDecimal) Compare(other Datum) int {
 	if !ok {
 		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
-	return d.Cmp(v.Decimal)
+	return d.Cmp(v.Dec)
 }
 
 // HasPrev implements the Datum interface.
@@ -391,7 +392,7 @@ func (d DDecimal) IsMin() bool {
 }
 
 func (d DDecimal) String() string {
-	return d.Decimal.String()
+	return d.Dec.String()
 }
 
 // DString is the string Datum.

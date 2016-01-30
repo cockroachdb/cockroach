@@ -23,9 +23,10 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	"github.com/cockroachdb/decimal"
 )
 
 // TestKeyNext tests that the method for creating lexicographic
@@ -314,14 +315,14 @@ func TestSetGetChecked(t *testing.T) {
 		t.Errorf("set %d on a value and extracted it, expected %d back, but got %d", i, i, r)
 	}
 
-	d := decimal.New(11, -1)
-	if err := v.SetDecimal(d); err != nil {
+	dec := inf.NewDec(11, 1)
+	if err := v.SetDecimal(dec); err != nil {
 		t.Fatal(err)
 	}
 	if r, err := v.GetDecimal(); err != nil {
 		t.Fatal(err)
-	} else if !d.Equals(r) {
-		t.Errorf("set %s on a value and extracted it, expected %s back, but got %s", d, d, r)
+	} else if dec.Cmp(r) != 0 {
+		t.Errorf("set %s on a value and extracted it, expected %s back, but got %s", dec, dec, r)
 	}
 
 	if err := v.SetProto(&Value{}); err != nil {
