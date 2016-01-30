@@ -260,8 +260,8 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	var heartbeatTS roachpb.Timestamp
 	for i := 0; i < 3; i++ {
 		if err := util.IsTrueWithin(func() bool {
-			ok, txn, err := getTxn(s.Sender, &initialTxn.Proto)
-			if !ok || err != nil {
+			ok, txn, pErr := getTxn(s.Sender, &initialTxn.Proto)
+			if !ok || pErr != nil {
 				return false
 			}
 			// Advance clock by 1ns.
@@ -281,7 +281,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 }
 
 // getTxn fetches the requested key and returns the transaction info.
-func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (bool, *roachpb.Transaction, error) {
+func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (bool, *roachpb.Transaction, *roachpb.Error) {
 	hb := &roachpb.HeartbeatTxnRequest{
 		Span: roachpb.Span{
 			Key: txn.Key,
@@ -291,7 +291,7 @@ func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (bool, *roachpb.Tra
 		Txn: txn,
 	}, hb)
 	if pErr != nil {
-		return false, nil, pErr.GoError()
+		return false, nil, pErr
 	}
 	return true, reply.(*roachpb.HeartbeatTxnResponse).Txn, nil
 }
