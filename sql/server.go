@@ -24,8 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/inf.v0"
-
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
@@ -211,11 +209,11 @@ func datumFromProto(d driver.Datum) parser.Datum {
 	case *driver.Datum_FloatVal:
 		return parser.DFloat(t.FloatVal)
 	case *driver.Datum_DecimalVal:
-		dec := new(inf.Dec)
-		if _, ok := dec.SetString(t.DecimalVal); !ok {
+		dd := parser.DDecimal{}
+		if _, ok := dd.SetString(t.DecimalVal); !ok {
 			panic(fmt.Sprintf("could not parse string %q as decimal", t.DecimalVal))
 		}
-		return parser.DDecimal{Dec: dec}
+		return dd
 	case *driver.Datum_BytesVal:
 		return parser.DBytes(t.BytesVal)
 	case *driver.Datum_StringVal:

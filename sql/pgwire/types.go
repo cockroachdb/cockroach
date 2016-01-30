@@ -20,10 +20,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"reflect"
 	"strconv"
 	"time"
-
-	"gopkg.in/inf.v0"
 
 	"github.com/lib/pq/oid"
 
@@ -235,16 +234,17 @@ var (
 		oid.T_text:      parser.DummyString,
 		oid.T_timestamp: parser.DummyTimestamp,
 	}
-	datumToOid = map[parser.Datum]oid.Oid{
-		parser.DummyBool:      oid.T_bool,
-		parser.DummyBytes:     oid.T_text,
-		parser.DummyDate:      oid.T_date,
-		parser.DummyFloat:     oid.T_float8,
-		parser.DummyInt:       oid.T_int8,
-		parser.DummyInterval:  oid.T_interval,
-		parser.DummyDecimal:   oid.T_numeric,
-		parser.DummyString:    oid.T_text,
-		parser.DummyTimestamp: oid.T_timestamp,
+	// Using reflection to support unhashable types.
+	datumToOid = map[reflect.Type]oid.Oid{
+		reflect.TypeOf(parser.DummyBool):      oid.T_bool,
+		reflect.TypeOf(parser.DummyBytes):     oid.T_text,
+		reflect.TypeOf(parser.DummyDate):      oid.T_date,
+		reflect.TypeOf(parser.DummyFloat):     oid.T_float8,
+		reflect.TypeOf(parser.DummyInt):       oid.T_int8,
+		reflect.TypeOf(parser.DummyInterval):  oid.T_interval,
+		reflect.TypeOf(parser.DummyDecimal):   oid.T_numeric,
+		reflect.TypeOf(parser.DummyString):    oid.T_text,
+		reflect.TypeOf(parser.DummyTimestamp): oid.T_timestamp,
 	}
 )
 
@@ -357,11 +357,11 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 	case oid.T_numeric:
 		switch code {
 		case formatText:
-			dec := new(inf.Dec)
-			if _, ok := dec.SetString(string(b)); !ok {
+			dd := parser.DDecimal{}
+			if _, ok := dd.SetString(string(b)); !ok {
 				return nil, fmt.Errorf("could not parse string %q as decimal", b)
 			}
-			d = parser.DDecimal{Dec: dec}
+			d = dd
 		default:
 			return d, fmt.Errorf("unsupported numeric format code: %d", code)
 		}

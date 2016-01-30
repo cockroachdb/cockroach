@@ -14,15 +14,15 @@
 //
 // Author: Nathan VanBenschoten (nvanbenschoten@gmail.com)
 
-package util
+package decimal
 
 import (
 	"math"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/util/randutil"
-
 	"gopkg.in/inf.v0"
+
+	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
 var floatDecimalEqualities = map[float64]*inf.Dec{
@@ -41,6 +41,11 @@ func TestNewDecFromFloat(t *testing.T) {
 	for tf, td := range floatDecimalEqualities {
 		if dec := NewDecFromFloat(tf); dec.Cmp(td) != 0 {
 			t.Errorf("NewDecFromFloat(%f) expected to give %s, but got %s", tf, td, dec)
+		}
+
+		var dec inf.Dec
+		if SetFromFloat(&dec, tf); dec.Cmp(td) != 0 {
+			t.Errorf("SetFromFloat(%f) expected to set decimal to %s, but got %s", tf, td, dec)
 		}
 	}
 }
@@ -77,20 +82,20 @@ func TestDecimalMod(t *testing.T) {
 		exp.SetString(tc.z)
 
 		// Test return value.
-		z := DecMod(nil, x, y)
+		z := Mod(nil, x, y)
 		if exp.Cmp(z) != 0 {
 			t.Errorf("%d: expected %s, got %s", i, exp, z)
 		}
 
 		// Test provided decimal mutation.
 		z.SetString("0.0")
-		DecMod(z, x, y)
+		Mod(z, x, y)
 		if exp.Cmp(z) != 0 {
 			t.Errorf("%d: expected %s, got %s", i, exp, z)
 		}
 
 		// Test same argument mutation.
-		DecMod(x, x, y)
+		Mod(x, x, y)
 		if exp.Cmp(x) != 0 {
 			t.Errorf("%d: expected %s, got %s", i, exp, x)
 		}
@@ -116,7 +121,7 @@ func BenchmarkDecimalMod(b *testing.B) {
 	z := new(inf.Dec)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		DecMod(z, dividends[i%len(dividends)], divisors[i%len(divisors)])
+		Mod(z, dividends[i%len(dividends)], divisors[i%len(divisors)])
 	}
 }
 
@@ -140,20 +145,20 @@ func TestDecimalSqrt(t *testing.T) {
 		exp.SetString(tc.expected)
 
 		// Test return value.
-		z := DecSqrt(nil, x, 16)
+		z := Sqrt(nil, x, 16)
 		if exp.Cmp(z) != 0 {
 			t.Errorf("%d: expected %s, got %s", i, exp, z)
 		}
 
 		// Test provided decimal mutation.
 		z.SetString("0.0")
-		DecSqrt(z, x, 16)
+		Sqrt(z, x, 16)
 		if exp.Cmp(z) != 0 {
 			t.Errorf("%d: expected %s, got %s", i, exp, z)
 		}
 
 		// Test same argument mutation.
-		DecSqrt(x, x, 16)
+		Sqrt(x, x, 16)
 		if exp.Cmp(x) != 0 {
 			t.Errorf("%d: expected %s, got %s", i, exp, x)
 		}
@@ -171,6 +176,6 @@ func BenchmarkDecimalSqrt(b *testing.B) {
 	z := new(inf.Dec)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		DecSqrt(z, vals[i%len(vals)], 16)
+		Sqrt(z, vals[i%len(vals)], 16)
 	}
 }

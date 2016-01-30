@@ -412,9 +412,9 @@ func encodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 		return encoding.EncodeFloatDescending(b, float64(t)), nil
 	case parser.DDecimal:
 		if dir == encoding.Ascending {
-			return encoding.EncodeDecimalAscending(b, t.Dec), nil
+			return encoding.EncodeDecimalAscending(b, &t.Dec), nil
 		}
-		return encoding.EncodeDecimalDescending(b, t.Dec), nil
+		return encoding.EncodeDecimalDescending(b, &t.Dec), nil
 	case parser.DString:
 		if dir == encoding.Ascending {
 			return encoding.EncodeStringAscending(b, string(t)), nil
@@ -582,7 +582,9 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 		} else {
 			rkey, d, err = encoding.DecodeDecimalDescending(key, nil)
 		}
-		return parser.DDecimal{Dec: d}, rkey, err
+		dd := parser.DDecimal{}
+		dd.Set(d)
+		return dd, rkey, err
 	case parser.DString:
 		var r string
 		if dir == encoding.Ascending {
@@ -815,7 +817,9 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		return parser.DDecimal{Dec: v}, nil
+		dd := parser.DDecimal{}
+		dd.Set(v)
+		return dd, nil
 	case ColumnType_STRING:
 		v, err := value.GetBytes()
 		if err != nil {
