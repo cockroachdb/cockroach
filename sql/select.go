@@ -257,9 +257,19 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 		if !ok {
 			return roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", from)
 		}
-		s.pErr = scan.initTableExpr(p, ate)
+
+		table, ok := ate.Expr.(*parser.QualifiedName)
+		if !ok {
+			return roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", from)
+		}
+
+		s.from.alias, s.pErr = scan.initTable(p, table)
 		if s.pErr != nil {
 			return s.pErr
+		}
+		if ate.As != "" {
+			// If an alias was specified, use that.
+			s.from.alias = string(ate.As)
 		}
 	default:
 		s.pErr = roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", from)
@@ -267,11 +277,6 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 	}
 
 	s.from.node = scan
-	if scan.desc != nil {
-		s.from.alias = scan.desc.Alias
-	} else {
-		s.from.alias = ""
-	}
 	s.from.columns = scan.Columns()
 	return nil
 }

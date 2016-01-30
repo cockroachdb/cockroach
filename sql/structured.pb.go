@@ -390,10 +390,7 @@ func _DescriptorMutation_OneofUnmarshaler(msg proto.Message, tag, wire int, b *p
 // {Column,Index}Descriptors have locally-unique IDs.
 type TableDescriptor struct {
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
-	// The alias for the table. This is only used during query
-	// processing and not stored persistently.
-	Alias string `protobuf:"bytes,2,opt,name=alias" json:"alias"`
-	ID    ID     `protobuf:"varint,3,opt,name=id,casttype=ID" json:"id"`
+	ID   ID     `protobuf:"varint,3,opt,name=id,casttype=ID" json:"id"`
 	// ID of the parent database.
 	ParentID ID `protobuf:"varint,4,opt,name=parent_id,casttype=ID" json:"parent_id"`
 	// Monotonically increasing version of the table descriptor.
@@ -472,13 +469,6 @@ func (*TableDescriptor) ProtoMessage()    {}
 func (m *TableDescriptor) GetName() string {
 	if m != nil {
 		return m.Name
-	}
-	return ""
-}
-
-func (m *TableDescriptor) GetAlias() string {
-	if m != nil {
-		return m.Alias
 	}
 	return ""
 }
@@ -994,10 +984,6 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	i++
 	i = encodeVarintStructured(data, i, uint64(len(m.Name)))
 	i += copy(data[i:], m.Name)
-	data[i] = 0x12
-	i++
-	i = encodeVarintStructured(data, i, uint64(len(m.Alias)))
-	i += copy(data[i:], m.Alias)
 	data[i] = 0x18
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.ID))
@@ -1337,8 +1323,6 @@ func (m *TableDescriptor) Size() (n int) {
 	var l int
 	_ = l
 	l = len(m.Name)
-	n += 1 + l + sovStructured(uint64(l))
-	l = len(m.Alias)
 	n += 1 + l + sovStructured(uint64(l))
 	n += 1 + sovStructured(uint64(m.ID))
 	n += 1 + sovStructured(uint64(m.ParentID))
@@ -2211,35 +2195,6 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Name = string(data[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Alias", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowStructured
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthStructured
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Alias = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 0 {

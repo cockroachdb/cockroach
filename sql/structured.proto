@@ -165,9 +165,6 @@ message TableDescriptor {
   option (gogoproto.goproto_getters) = true;
 
   optional string name = 1 [(gogoproto.nullable) = false];
-  // The alias for the table. This is only used during query
-  // processing and not stored persistently.
-  optional string alias = 2 [(gogoproto.nullable) = false];
   optional uint32 id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
   // ID of the parent database.
