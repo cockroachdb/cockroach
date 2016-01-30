@@ -237,11 +237,11 @@ func (m MapArgs) Arg(name string) (Datum, bool) {
 	return d, ok
 }
 
-// setValArg sets the bind var argument d to the type typ in m. If m is nil
-// or d is not a DValArg, nil is returned. If the bind var argument is set,
+// SetInferredType sets the bind var argument d to the type typ in m. If m is
+// nil or d is not a DValArg, nil is returned. If the bind var argument is set,
 // typ is returned. An error is returned if typ cannot be set because a
 // different type is already present.
-func (m MapArgs) setInferredType(d, typ Datum) (set Datum, err error) {
+func (m MapArgs) SetInferredType(d, typ Datum) (set Datum, err error) {
 	if m == nil {
 		return nil, nil
 	}
@@ -366,25 +366,4 @@ func containsSubquery(expr Expr) bool {
 	v := containsSubqueryVisitor{containsSubquery: false}
 	_ = WalkExpr(&v, expr)
 	return v.containsSubquery
-}
-
-type checkVisitor struct {
-	args MapArgs
-	err  error
-}
-
-func (v *checkVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
-	if !pre || v.err != nil {
-		return nil, expr
-	}
-	_, v.err = expr.TypeCheck(v.args)
-	// Return nil to stop recursion since TypeCheck above recurses.
-	return nil, expr
-}
-
-// InferArgs populates args with the inferred types of stmt's placeholders.
-func InferArgs(stmt Statement, args MapArgs) error {
-	v := checkVisitor{args: args}
-	WalkStmt(&v, stmt)
-	return v.err
 }

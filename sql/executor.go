@@ -184,8 +184,14 @@ func (e *Executor) getSystemConfig() config.SystemConfig {
 	return cfg
 }
 
-// StatementResult returns the result types of the given statement(s).
-func (e *Executor) StatementResult(user string, stmt parser.Statement, args parser.MapArgs) ([]ResultColumn, *roachpb.Error) {
+// Prepare returns the result types of the given statement. Args may be a
+// partially populated val args map. Prepare will populate the missing val
+// args. The column result types are returned (or nil if there are no results).
+func (e *Executor) Prepare(user string, query string, args parser.MapArgs) ([]ResultColumn, *roachpb.Error) {
+	stmt, err := parser.ParseOneTraditional(query)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
 	planMaker := plannerPool.Get().(*planner)
 	defer plannerPool.Put(planMaker)
 
@@ -203,10 +209,16 @@ func (e *Executor) StatementResult(user string, stmt parser.Statement, args pars
 		systemConfig: e.getSystemConfig(),
 	}
 
-	planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: time.Now()}
-	plan, err := planMaker.makePlan(stmt, false)
-	if err != nil {
-		return nil, err
+	timestamp := time.Now()
+	txn := client.NewTxn(e.db)
+	planMaker.setTxn(txn, timestamp)
+	planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: timestamp}
+	plan, pErr := planMaker.prepare(stmt)
+	if pErr != nil {
+		return nil, pErr
+	}
+	if plan == nil {
+		return nil, nil
 	}
 	cols := plan.Columns()
 	for _, c := range cols {

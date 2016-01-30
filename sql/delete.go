@@ -49,6 +49,10 @@ func (p *planner) Delete(n *parser.Delete) (planNode, *roachpb.Error) {
 		return nil, pErr
 	}
 
+	if p.prepareOnly {
+		return nil, nil
+	}
+
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
 	colIDtoRowIndex, pErr := makeColIDtoRowIndex(rows, tableDesc)
