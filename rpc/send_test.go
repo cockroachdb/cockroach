@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/tracer"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -287,7 +288,9 @@ func TestComplexScenarios(t *testing.T) {
 		}
 
 		// Mock sendOne.
-		sendOneFn = func(client *Client, timeout time.Duration, method string, args, reply proto.Message, done chan *rpc.Call) {
+		sendOneFn = func(client *Client, timeout time.Duration, method string,
+			getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message,
+			trace *tracer.Trace, done chan *rpc.Call) {
 			addr := client.addr
 			addrID := -1
 			for serverAddrID, serverAddr := range serverAddrs {
@@ -300,7 +303,7 @@ func TestComplexScenarios(t *testing.T) {
 				t.Fatalf("%d: %v is not found in serverAddrs: %v", i, addr, serverAddrs)
 			}
 			call := rpc.Call{
-				Reply: reply,
+				Reply: getReply(),
 			}
 			if addrID < numErrors {
 				call.Error = NewSendError("test", addrID < numRetryableErrors)

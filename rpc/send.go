@@ -83,9 +83,6 @@ func newRPCError(err error) rpcError {
 // and without a positive outlook.
 func (r rpcError) CanRetry() bool { return true }
 
-// sendOneFn is overwritten in tests to mock sendOne.
-var sendOneFn = sendOne
-
 // NewSendError creates a SendError. canRetry should be true in most
 // cases; the only non-retryable SendErrors are for things like
 // malformed (and not merely unresolvable) addresses.
@@ -143,22 +140,8 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 	// heartbeat measure ping times. With a bit of seasoning, each
 	// node will be able to order the healthy replicas based on latency.
 
-	sendFn := func(client *Client) {
-		addr := client.RemoteAddr()
-
-		if args := getArgs(addr); args != nil {
-			if log.V(2) {
-				log.Infof("%s: sending request to %s: %+v", method, addr, args)
-			}
-			trace.Event(fmt.Sprintf("sending to %s", addr))
-			go sendOneFn(client, opts.Timeout, method, args, getReply(), done)
-		} else {
-			done <- &rpc.Call{Error: newRPCError(util.Errorf("nil arguments returned for client %s", addr))}
-		}
-	}
-
 	// Send the first request.
-	sendFn(orderedClients[0])
+	sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, trace, done)
 	orderedClients = orderedClients[1:]
 
 	var errors, retryableErrors int
@@ -209,7 +192,7 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 			// Send to additional replicas if available.
 			if len(orderedClients) > 0 {
 				trace.Event("error, trying next peer")
-				sendFn(orderedClients[0])
+				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, trace, done)
 				orderedClients = orderedClients[1:]
 			}
 
@@ -217,27 +200,64 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 			// On successive RPC timeouts, send to additional replicas if available.
 			if len(orderedClients) > 0 {
 				trace.Event("timeout, trying next peer")
-				sendFn(orderedClients[0])
+				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, trace, done)
 				orderedClients = orderedClients[1:]
 			}
 		}
 	}
 }
 
+// sendOneFn is overwritten in tests to mock sendOne.
+var sendOneFn = sendOne
+
 // sendOne invokes the specified RPC on the supplied client when the
 // client is ready. On success, the reply is sent on the channel;
 // otherwise an error is sent.
-func sendOne(client *Client, timeout time.Duration, method string, args, reply proto.Message, done chan *rpc.Call) {
-	var timeoutChan <-chan time.Time
-	if timeout != 0 {
-		timeoutChan = time.After(timeout)
+//
+// Do not call directly, but instead use sendOneFn. Tests mock out this method
+// via sendOneFn in order to test various error cases.
+func sendOne(client *Client, timeout time.Duration, method string,
+	getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message,
+	trace *tracer.Trace, done chan *rpc.Call) {
+
+	addr := client.RemoteAddr()
+	args := getArgs(addr)
+	if args == nil {
+		done <- &rpc.Call{Error: newRPCError(
+			util.Errorf("nil arguments returned for client %s", addr))}
+		return
 	}
+
+	if log.V(2) {
+		log.Infof("%s: sending request to %s: %+v", method, addr, args)
+	}
+	trace.Event(fmt.Sprintf("sending to %s", addr))
+
+	reply := getReply()
+
+	// Don't bother firing off a goroutine in the common case where a client
+	// is already healthy.
 	select {
 	case <-client.Healthy():
 		client.Go(method, args, reply, done)
-	case <-client.Closed:
-		done <- &rpc.Call{Error: newRPCError(util.Errorf("rpc to %s failed as client connection was closed", method))}
-	case <-timeoutChan:
-		done <- &rpc.Call{Error: newRPCError(util.Errorf("rpc to %s: client not ready after %s", method, timeout))}
+		return
+	default:
 	}
+
+	go func() {
+		var timeoutChan <-chan time.Time
+		if timeout != 0 {
+			timeoutChan = time.After(timeout)
+		}
+		select {
+		case <-client.Healthy():
+			client.Go(method, args, reply, done)
+		case <-client.Closed:
+			done <- &rpc.Call{Error: newRPCError(
+				util.Errorf("rpc to %s failed as client connection was closed", method))}
+		case <-timeoutChan:
+			done <- &rpc.Call{Error: newRPCError(
+				util.Errorf("rpc to %s: client not ready after %s", method, timeout))}
+		}
+	}()
 }
