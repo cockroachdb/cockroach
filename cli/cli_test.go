@@ -685,8 +685,8 @@ func Example_node() {
 	defer c.stop()
 
 	// Refresh time series data, which is required to retrieve stats.
-	if err := c.TestServer.WriteSummaries(); err != nil {
-		log.Fatalf("Couldn't write stats summaries: %s", err)
+	if pErr := c.TestServer.WriteSummaries(); pErr != nil {
+		log.Fatalf("Couldn't write stats summaries: %s", pErr)
 	}
 
 	c.Run("node ls")
@@ -711,8 +711,8 @@ func TestNodeStatus(t *testing.T) {
 	defer c.stop()
 
 	// Refresh time series data, which is required to retrieve stats.
-	if err := c.TestServer.WriteSummaries(); err != nil {
-		t.Fatalf("couldn't write stats summaries: %s", err)
+	if pErr := c.TestServer.WriteSummaries(); pErr != nil {
+		t.Fatalf("couldn't write stats summaries: %s", pErr)
 	}
 
 	out, err := c.RunWithCapture("node status 1")
