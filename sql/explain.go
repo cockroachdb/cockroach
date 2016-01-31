@@ -84,7 +84,7 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 		}
 		// Mark the from node as debug (and potentially replace it).
 		newNode, err := markDebug(t.from.node, mode)
-		t.from.node = newNode.(fromNode)
+		t.from.node = newNode
 		return t, err
 
 	case *scanNode:
