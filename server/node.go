@@ -232,10 +232,6 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 func (n *Node) start(rpcServer *rpc.Server, addr net.Addr, engines []engine.Engine,
 	attrs roachpb.Attributes) error {
 	n.initDescriptor(addr, attrs)
-	const method = "Node.Batch"
-	if err := rpcServer.Register(method, n.executeCmd, &roachpb.BatchRequest{}); err != nil {
-		log.Fatalf("unable to register node service with RPC server: %s", err)
-	}
 
 	// Start status monitor.
 	n.status.StartMonitorFeed(n.ctx.EventFeed)
@@ -255,6 +251,14 @@ func (n *Node) start(rpcServer *rpc.Server, addr net.Addr, engines []engine.Engi
 
 	n.startPublishStatuses(n.stopper)
 	n.startGossip(n.stopper)
+
+	// Register the RPC methods we support last as doing so allows RPCs to be
+	// received which may access state initialized above without locks.
+	const method = "Node.Batch"
+	if err := rpcServer.Register(method, n.executeCmd, &roachpb.BatchRequest{}); err != nil {
+		log.Fatalf("unable to register node service with RPC server: %s", err)
+	}
+
 	log.Infoc(n.context(), "Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil
 }

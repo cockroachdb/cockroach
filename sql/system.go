@@ -124,7 +124,7 @@ func createTableDescriptor(id, parentID ID, schema string, privileges *Privilege
 
 	desc, pErr := makeTableDesc(stmt.(*parser.CreateTable), parentID)
 	if pErr != nil {
-		log.Fatal(err)
+		log.Fatal(pErr)
 	}
 
 	desc.Privileges = privileges

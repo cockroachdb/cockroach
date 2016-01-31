@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"net"
 	"net/rpc"
+	"os"
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -207,6 +208,13 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 	}
 }
 
+// Allow local calls to be dispatched directly to the local server without
+// sending an RPC.
+//
+// TODO(pmattis): We should either always enable local calls or remove this
+// support. Revisit once the current performance work has completed.
+var enableLocalCalls = os.Getenv("ENABLE_LOCAL_CALLS") == "1"
+
 // sendOneFn is overwritten in tests to mock sendOne.
 var sendOneFn = sendOne
 
@@ -232,6 +240,12 @@ func sendOne(client *Client, timeout time.Duration, method string,
 		log.Infof("%s: sending request to %s: %+v", method, addr, args)
 	}
 	trace.Event(fmt.Sprintf("sending to %s", addr))
+
+	if enableLocalCalls && client.localServer != nil {
+		if localCall(client.localServer, method, args, done) {
+			return
+		}
+	}
 
 	reply := getReply()
 
@@ -260,4 +274,38 @@ func sendOne(client *Client, timeout time.Duration, method string,
 				util.Errorf("rpc to %s: client not ready after %s", method, timeout))}
 		}
 	}()
+}
+
+// localCall invokes the specified method directly. Returns false if the method
+// is public and cannot be served with a local call.
+func localCall(s *Server, method string, args proto.Message, done chan *rpc.Call) bool {
+	s.mu.RLock()
+	m := s.methods[method]
+	s.mu.RUnlock()
+
+	if m.handler == nil {
+		done <- &rpc.Call{
+			Error: newRPCError(util.Errorf("rpc:couldn't find method: %s", method)),
+		}
+		return true
+	}
+
+	if m.public {
+		return false
+	}
+
+	// TODO(pmattis): Note that we're passing the request directly through to the
+	// handler. This differs from an actual RPC which would encode the request
+	// and decode it on the remote side. The result is that the method handler
+	// might mutate the request which in turn might surprise the caller. We
+	// should add a check to guard against that.
+	m.handler(args, func(reply proto.Message, err error) {
+		done <- &rpc.Call{
+			ServiceMethod: method,
+			Error:         err,
+			Reply:         reply,
+			Args:          args,
+		}
+	})
+	return true
 }
