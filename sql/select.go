@@ -247,6 +247,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 	scan := &scanNode{planner: p, txn: p.txn}
 
 	from := parsed.From
+	var colAlias parser.NameList
 	switch len(from) {
 	case 0:
 		// Nothing to do
@@ -257,22 +258,46 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 		if !ok {
 			return roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", from)
 		}
-		s.pErr = scan.initTableExpr(p, ate)
+
+		table, ok := ate.Expr.(*parser.QualifiedName)
+		if !ok {
+			return roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", from)
+		}
+
+		s.from.alias, s.pErr = scan.initTable(p, table)
 		if s.pErr != nil {
 			return s.pErr
 		}
+		if ate.As.Alias != "" {
+			// If an alias was specified, use that.
+			s.from.alias = string(ate.As.Alias)
+		}
+		colAlias = ate.As.Cols
 	default:
 		s.pErr = roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", from)
 		return s.pErr
 	}
 
 	s.from.node = scan
-	if scan.desc != nil {
-		s.from.alias = scan.desc.Alias
-	} else {
-		s.from.alias = ""
-	}
 	s.from.columns = scan.Columns()
+	if len(colAlias) > 0 {
+		// Make a copy of the slice since we are about to modify the contents.
+		s.from.columns = append([]ResultColumn(nil), s.from.columns...)
+
+		// The column aliases can only refer to explicit columns.
+		for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
+			if colIdx >= len(s.from.columns) {
+				return roachpb.NewErrorf(
+					"table \"%s\" has %d columns available but %d columns specified",
+					s.from.alias, aliasIdx, len(colAlias))
+			}
+			if s.from.node.isColumnHidden(colIdx) {
+				continue
+			}
+			s.from.columns[colIdx].Name = string(colAlias[aliasIdx])
+			aliasIdx++
+		}
+	}
 	return nil
 }
 
@@ -379,7 +404,7 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 				return roachpb.NewUErrorf("table \"%s\" not found", tableName)
 			}
 
-			for idx, col := range s.from.node.Columns() {
+			for idx, col := range s.from.columns {
 				if s.from.node.isColumnHidden(idx) {
 					continue
 				}

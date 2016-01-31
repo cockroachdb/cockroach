@@ -202,18 +202,20 @@ func (n *scanNode) ExplainPlan() (name, description string, children []planNode)
 	return name, description, nil
 }
 
-// Initializes a scanNode from an AliasedTableExpr
-func (n *scanNode) initTableExpr(p *planner, ate *parser.AliasedTableExpr) *roachpb.Error {
-	if n.desc, n.pErr = p.getAliasedTableLease(ate); n.pErr != nil {
-		return n.pErr
+// Initializes a scanNode with a tableName. Returns the table or index name that can be used for
+// fully-qualified columns if an alias is not specified.
+func (n *scanNode) initTable(p *planner, tableName *parser.QualifiedName) (string, *roachpb.Error) {
+	if n.desc, n.pErr = p.getTableLease(tableName); n.pErr != nil {
+		return "", n.pErr
 	}
 
 	if pErr := p.checkPrivilege(n.desc, privilege.SELECT); pErr != nil {
-		return pErr
+		return "", pErr
 	}
 
-	qname := ate.Expr.(*parser.QualifiedName)
-	indexName := qname.Index()
+	alias := n.desc.Name
+
+	indexName := tableName.Index()
 	if indexName != "" && !equalName(n.desc.PrimaryIndex.Name, indexName) {
 		for i := range n.desc.Indexes {
 			if equalName(n.desc.Indexes[i].Name, indexName) {
@@ -225,27 +227,25 @@ func (n *scanNode) initTableExpr(p *planner, ate *parser.AliasedTableExpr) *roac
 		}
 		if n.index == nil {
 			n.pErr = roachpb.NewUErrorf("index \"%s\" not found", indexName)
-			return n.pErr
+			return "", n.pErr
 		}
-		// If the table was not aliased, use the index name instead of the table
-		// name for fully-qualified columns in the expression.
-		if ate.As == "" {
-			n.desc.Alias = n.index.Name
-		}
+		// Use the index name instead of the table name for fully-qualified columns in the
+		// expression.
+		alias = n.index.Name
 		// Strip out any columns from the table that are not present in the
 		// index.
 		visibleCols := make([]ColumnDescriptor, 0, len(n.index.ColumnIDs)+len(n.index.ImplicitColumnIDs))
 		for _, colID := range n.index.ColumnIDs {
 			var col *ColumnDescriptor
 			if col, n.pErr = n.desc.FindColumnByID(colID); n.pErr != nil {
-				return n.pErr
+				return "", n.pErr
 			}
 			visibleCols = append(visibleCols, *col)
 		}
 		for _, colID := range n.index.ImplicitColumnIDs {
 			var col *ColumnDescriptor
 			if col, n.pErr = n.desc.FindColumnByID(colID); n.pErr != nil {
-				return n.pErr
+				return "", n.pErr
 			}
 			visibleCols = append(visibleCols, *col)
 		}
@@ -255,7 +255,7 @@ func (n *scanNode) initTableExpr(p *planner, ate *parser.AliasedTableExpr) *roac
 		n.initDescDefaults()
 	}
 
-	return nil
+	return alias, nil
 }
 
 func (n *scanNode) initDescDefaults() {
