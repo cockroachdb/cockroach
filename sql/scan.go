@@ -251,6 +251,11 @@ func (n *scanNode) initTable(p *planner, tableName *parser.QualifiedName) (strin
 		}
 		n.isSecondaryIndex = true
 		n.initVisibleCols(visibleCols)
+
+		// Hide the ImplicitColumnIDs>
+		for idx := len(n.index.ColumnIDs); idx < len(n.visibleCols); idx++ {
+			n.resultColumns[idx].hidden = true
+		}
 	} else {
 		n.initDescDefaults()
 	}
@@ -261,19 +266,6 @@ func (n *scanNode) initTable(p *planner, tableName *parser.QualifiedName) (strin
 func (n *scanNode) initDescDefaults() {
 	n.index = &n.desc.PrimaryIndex
 	n.initVisibleCols(n.desc.Columns)
-}
-
-// isColumnHidden returns true if the column with the given index shouldn't be be resolved by
-// a star reference (e.g. SELECT * FROM t)
-func (n *scanNode) isColumnHidden(idx int) bool {
-	if idx < 0 || idx >= len(n.visibleCols) {
-		panic(fmt.Sprintf("Invalid column index %d", idx))
-	}
-	if n.isSecondaryIndex {
-		// When selecting from a specific index, we should hide the ImplicitColumnIDs
-		return idx >= len(n.index.ColumnIDs)
-	}
-	return n.visibleCols[idx].Hidden
 }
 
 // makeResultColumns converts ColumnDescriptors to ResultColumns
@@ -305,9 +297,17 @@ func makeResultColumns(colDescs []ColumnDescriptor) []ResultColumn {
 		default:
 			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Kind))
 		}
-		cols = append(cols, ResultColumn{Name: colDesc.Name, Typ: typ})
+		cols = append(cols, ResultColumn{Name: colDesc.Name, Typ: typ, hidden: colDesc.Hidden})
 	}
 	return cols
+}
+
+// setNeededColumns sets the flags indicating which columns are needed by the upper layer.
+func (n *scanNode) setNeededColumns(needed []bool) {
+	if len(needed) != len(n.valNeededForCol) {
+		panic("Invalid setNeededColumns argument!")
+	}
+	copy(n.valNeededForCol, needed)
 }
 
 // Initializes the visibleCols and associated structures (resultColumns, colIdxMap).

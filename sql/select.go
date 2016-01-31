@@ -28,20 +28,11 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// fromNode is a planNode that appears in the FROM part of a SELECT query.
-type fromNode interface {
-	planNode
-	isColumnHidden(idx int) bool
-}
-
-var _ planNode = &scanNode{}
-var _ planNode = &indexJoinNode{}
-
 // fromInfo contains the information for a select "source" (FROM).
 type fromInfo struct {
 	// node which can be used to retrieve the data (normally a scanNode). For performance purposes,
 	// this node can be aware of the filters, grouping etc.
-	node fromNode
+	node planNode
 
 	// alias (if no alias is given and the source is a table, this is the table name)
 	alias string
@@ -188,10 +179,7 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 		return nil, pErr
 	}
 
-	// TODO(radu): for now we assume from is always a scanNode
-	scan := s.from.node.(*scanNode)
-
-	// NB: both orderBy and groupBy are passed and can modify `scan` but orderBy must do so first.
+	// NB: both orderBy and groupBy are passed and can modify the selectNode but orderBy must do so first.
 	sort, pErr := p.orderBy(parsed, s)
 	if pErr != nil {
 		return nil, pErr
@@ -206,13 +194,6 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 		s.filter = group.isNotNullFilter(s.filter)
 	}
 
-	// Find the set of columns that we actually need values for. This is an optimization to avoid
-	// unmarshaling unnecessary values and is also used for index selection.
-	for i := range scan.valNeededForCol {
-		_, ok := s.qvals[columnRef{&s.from, i}]
-		scan.valNeededForCol[i] = ok
-	}
-
 	// Get the ordering for index selection (if any).
 	var ordering columnOrdering
 	var grouping bool
@@ -224,15 +205,26 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 		ordering = sort.Ordering().ordering
 	}
 
-	plan, pErr := p.selectIndex(s, scan, ordering, grouping)
-	if pErr != nil {
-		return nil, pErr
+	if scan, ok := s.from.node.(*scanNode); ok {
+		// Find the set of columns that we actually need values for. This is an optimization to avoid
+		// unmarshaling unnecessary values and is also used for index selection.
+		neededCols := make([]bool, len(s.from.columns))
+		for i := range neededCols {
+			_, ok := s.qvals[columnRef{&s.from, i}]
+			neededCols[i] = ok
+		}
+		scan.setNeededColumns(neededCols)
+
+		plan, pErr := p.selectIndex(s, scan, ordering, grouping)
+		if pErr != nil {
+			return nil, pErr
+		}
+
+		// Update s.from with the new plan.
+		s.from.node = plan
 	}
 
-	// Update s.from with the new plan.
-	s.from.node = plan
-
-	s.ordering = s.computeOrdering(plan.Ordering())
+	s.ordering = s.computeOrdering(s.from.node.Ordering())
 
 	// Wrap this node as necessary.
 	limit, pErr := p.limit(parsed, p.distinct(parsed, sort.wrap(group.wrap(s))))
@@ -244,14 +236,13 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 
 // Initializes the from node, given the parsed select expression
 func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error {
-	scan := &scanNode{planner: p, txn: p.txn}
-
 	from := parsed.From
 	var colAlias parser.NameList
 	switch len(from) {
 	case 0:
 		// Nothing to do
 		// TODO(radu): we shouldn't be using a scanNode in this case at all.
+		s.from.node = &scanNode{planner: p, txn: p.txn}
 
 	case 1:
 		ate, ok := from[0].(*parser.AliasedTableExpr)
@@ -259,15 +250,31 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 			return roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", from)
 		}
 
-		table, ok := ate.Expr.(*parser.QualifiedName)
-		if !ok {
+		switch expr := ate.Expr.(type) {
+		case *parser.QualifiedName:
+			// Usual case: a table.
+			scan := &scanNode{planner: p, txn: p.txn}
+			s.from.alias, s.pErr = scan.initTable(p, expr)
+			if s.pErr != nil {
+				return s.pErr
+			}
+			s.from.node = scan
+
+		case *parser.Subquery:
+			// We have a subquery (this includes a simple "VALUES").
+			if ate.As.Alias == "" {
+				return roachpb.NewErrorf("subquery in FROM must have an alias")
+			}
+
+			s.from.node, s.pErr = p.makePlan(expr.Select, false)
+			if s.pErr != nil {
+				return s.pErr
+			}
+
+		default:
 			return roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", from)
 		}
 
-		s.from.alias, s.pErr = scan.initTable(p, table)
-		if s.pErr != nil {
-			return s.pErr
-		}
 		if ate.As.Alias != "" {
 			// If an alias was specified, use that.
 			s.from.alias = string(ate.As.Alias)
@@ -278,8 +285,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 		return s.pErr
 	}
 
-	s.from.node = scan
-	s.from.columns = scan.Columns()
+	s.from.columns = s.from.node.Columns()
 	if len(colAlias) > 0 {
 		// Make a copy of the slice since we are about to modify the contents.
 		s.from.columns = append([]ResultColumn(nil), s.from.columns...)
@@ -291,7 +297,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 					"table \"%s\" has %d columns available but %d columns specified",
 					s.from.alias, aliasIdx, len(colAlias))
 			}
-			if s.from.node.isColumnHidden(colIdx) {
+			if s.from.columns[colIdx].hidden {
 				continue
 			}
 			s.from.columns[colIdx].Name = string(colAlias[aliasIdx])
@@ -405,7 +411,7 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 			}
 
 			for idx, col := range s.from.columns {
-				if s.from.node.isColumnHidden(idx) {
+				if col.hidden {
 					continue
 				}
 				qval := s.getQVal(columnRef{&s.from, idx})
@@ -567,7 +573,7 @@ func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 // transformed into a set of spans to scan within the index.
 //
 // If grouping is true, the ordering is the desired ordering for grouping.
-func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrdering, grouping bool) (fromNode, *roachpb.Error) {
+func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrdering, grouping bool) (planNode, *roachpb.Error) {
 	if s.desc == nil || (sel.filter == nil && ordering == nil) {
 		// No table or no where-clause and no ordering.
 		s.initOrdering(0)
@@ -678,7 +684,7 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 	sel.filter = applyConstraints(sel.filter, c.constraints)
 	s.reverse = c.reverse
 
-	var plan fromNode
+	var plan planNode
 	if c.covering {
 		s.initOrdering(c.exactPrefix)
 		plan = s

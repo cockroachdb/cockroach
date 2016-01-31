@@ -1,3 +1,5 @@
+# Tests for subqueries (SELECT statements which are part of a bigger statement).
+
 query I
 SELECT (SELECT 1)
 ----
@@ -145,3 +147,112 @@ query B
 SELECT EXISTS(SELECT 1 FROM kv WHERE k = 2)
 ----
 false
+
+
+# Tests for subquery in the FROM part of a SELECT
+
+query II colnames
+SELECT * FROM (VALUES (1, 2)) AS foo
+----
+column1 column2
+1 2
+
+query error subquery in FROM must have an alias
+SELECT * FROM (VALUES (1, 2))
+
+query IT colnames
+SELECT * FROM (VALUES (1, 'one'), (2, 'two'), (3, 'three')) AS foo
+----
+column1 column2
+1 one
+2 two
+3 three
+
+query III colnames
+SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo
+----
+column1 column2 column3
+1 2 3
+4 5 6
+
+query III colnames
+SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo (foo1, foo2, foo3)
+----
+foo1 foo2 foo3
+1 2 3
+4 5 6
+
+query III colnames
+SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo (foo1, foo2)
+----
+foo1 foo2 column3
+1 2 3
+4 5 6
+
+query III colnames
+SELECT * FROM (SELECT * FROM xyz) AS foo
+----
+x y z
+1 2  3
+4 5  6
+7 11 12
+
+query III colnames
+SELECT * FROM (SELECT * FROM xyz) AS foo (foo1)
+----
+foo1 y z
+1 2  3
+4 5  6
+7 11 12
+
+query III colnames
+SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3)) as foo (foo1)
+----
+foo1 moo2 moo3
+1 2  3
+4 5  6
+7 11 12
+
+query III colnames
+SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo (foo1)
+----
+foo1 moo2 moo3
+1 2  3
+4 5  6
+7 11 12
+
+query III colnames
+SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo (foo1) ORDER BY moo2 DESC
+----
+foo1 moo2 moo3
+7 11 12
+4 5  6
+1 2  3
+
+query III colnames
+SELECT * FROM (SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS moo (moo1, moo2, moo3) WHERE moo1 = 4) as foo (foo1)
+----
+foo1 moo2 moo3
+4 5 6
+
+query III colnames
+SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
+----
+foo1 moo2 moo3
+1 8 8
+2 4 4
+3 1 1
+
+query ITT
+EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
+----
+0 sort +foo1
+1 sort +moo2
+2 values 3 columns, 3 rows
+
+query II colnames
+SELECT a, b FROM (VALUES (1, 2, 3), (3, 4, 7), (5, 6, 10)) AS foo (a, b, c) WHERE a + b = c
+----
+a b
+1 2
+3 4
