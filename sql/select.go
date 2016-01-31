@@ -28,45 +28,135 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+// fromNode is a planNode that appears in the FROM part of a SELECT query.
+type fromNode interface {
+	planNode
+	isColumnHidden(idx int) bool
+}
+
+var _ planNode = &scanNode{}
+var _ planNode = &indexJoinNode{}
+
+// fromInfo contains the information for a select "source" (FROM).
+type fromInfo struct {
+	// node which can be used to retrieve the data (normally a scanNode). For performance purposes,
+	// this node can be aware of the filters, grouping etc.
+	node fromNode
+
+	// alias (if no alias is given and the source is a table, this is the table name)
+	alias string
+
+	// resultColumns which match the node.Columns() 1-to-1. However the column names might be
+	// different if the statement renames them using AS.
+	columns []ResultColumn
+}
+
+// selectNode encapsulates the core logic of a select statement: retrieving filtered results from
+// the sources. Grouping, sorting, distinct and limits are implemented on top of this node (as
+// wrappers), though these are taken into consideration at the selectNode level for optimization
+// (e.g. index selection).
 type selectNode struct {
 	planner *planner
 
-	// A planNode containing the "from" data (normally a scanNode). For
-	// performance purposes, this node can be aware of the filters, grouping
-	// etc.
-	from planNode
+	from fromInfo
+
+	// Map of qvalues encountered in expressions.
+	qvals qvalMap
 
 	pErr *roachpb.Error
+
+	// Rendering expressions for rows and corresponding output columns.
+	render  []parser.Expr
+	columns []ResultColumn
+
+	// The rendered row, with one value for each render expression.
+	row parser.DTuple
+
+	// Filtering expression for rows.
+	filter parser.Expr
+
+	// The number of initial columns - before adding any internal render targets for grouping or
+	// ordering. The original columns are columns[:numOriginalCols], the internally added ones are
+	// columns[numOriginalCols:].
+	numOriginalCols int
+
+	explain explainMode
+
+	ordering orderingInfo
 }
 
-// For now scanNode implements all the logic and selectNode just proxies the
-// calls.
+// Columns for explainDebug mode.
+var debugColumns = []ResultColumn{
+	{Name: "RowIdx", Typ: parser.DummyInt},
+	{Name: "Key", Typ: parser.DummyString},
+	{Name: "Value", Typ: parser.DummyString},
+	{Name: "Output", Typ: parser.DummyBool},
+}
 
 func (s *selectNode) Columns() []ResultColumn {
-	return s.from.Columns()
+	if s.explain == explainDebug {
+		return debugColumns
+	}
+	return s.columns
 }
 
 func (s *selectNode) Ordering() orderingInfo {
-	return s.from.Ordering()
+	return s.ordering
 }
 
 func (s *selectNode) Values() parser.DTuple {
-	return s.from.Values()
+	return s.row
 }
 
 func (s *selectNode) Next() bool {
-	return s.from.Next()
+	for {
+		if !s.from.node.Next() {
+			return false
+		}
+		row := s.from.node.Values()
+
+		if s.explain == explainDebug {
+			if len(s.row) != 4 {
+				s.row = make(parser.DTuple, 4)
+			}
+			debugValues := row[len(row)-4:]
+
+			if debugValues[3] != parser.DNull && s.filter != nil {
+				// We are at the end of the row and we have a filtering expression
+				s.populateQVals(row)
+				output := s.filterRow()
+				if s.pErr != nil {
+					return false
+				}
+				debugValues[3] = parser.DBool(output)
+			}
+			copy(s.row, debugValues)
+			return true
+		}
+
+		s.populateQVals(row)
+		output := s.filterRow()
+		if s.pErr != nil {
+			return false
+		}
+
+		if output {
+			s.renderRow()
+			return true
+		}
+		// Row was filtered out; grab the next row.
+	}
 }
 
 func (s *selectNode) PErr() *roachpb.Error {
 	if s.pErr != nil {
 		return s.pErr
 	}
-	return s.from.PErr()
+	return s.from.node.PErr()
 }
 
 func (s *selectNode) ExplainPlan() (name, description string, children []planNode) {
-	return s.from.ExplainPlan()
+	return s.from.node.ExplainPlan()
 }
 
 // Select selects rows from a single table. Select is the workhorse of the SQL
@@ -84,26 +174,43 @@ func (p *planner) Select(parsed *parser.Select) (planNode, *roachpb.Error) {
 }
 
 func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *roachpb.Error) {
+	s.qvals = make(qvalMap)
+
 	if pErr := s.initFrom(p, parsed); pErr != nil {
 		return nil, pErr
 	}
 
+	if pErr := s.initTargets(parsed.Exprs); pErr != nil {
+		return nil, pErr
+	}
+
+	if pErr := s.initWhere(parsed.Where); pErr != nil {
+		return nil, pErr
+	}
+
 	// TODO(radu): for now we assume from is always a scanNode
-	scan := s.from.(*scanNode)
+	scan := s.from.node.(*scanNode)
 
 	// NB: both orderBy and groupBy are passed and can modify `scan` but orderBy must do so first.
-	sort, pErr := p.orderBy(parsed, scan)
+	sort, pErr := p.orderBy(parsed, s)
 	if pErr != nil {
 		return nil, pErr
 	}
-	group, pErr := p.groupBy(parsed, scan)
+	group, pErr := p.groupBy(parsed, s)
 	if pErr != nil {
 		return nil, pErr
 	}
 
-	if scan.filter != nil && group != nil {
+	if s.filter != nil && group != nil {
 		// Allow the group-by to add an implicit "IS NOT NULL" filter.
-		scan.filter = group.isNotNullFilter(scan.filter)
+		s.filter = group.isNotNullFilter(s.filter)
+	}
+
+	// Find the set of columns that we actually need values for. This is an optimization to avoid
+	// unmarshaling unnecessary values and is also used for index selection.
+	for i := range scan.valNeededForCol {
+		_, ok := s.qvals[columnRef{&s.from, i}]
+		scan.valNeededForCol[i] = ok
 	}
 
 	// Get the ordering for index selection (if any).
@@ -117,13 +224,15 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 		ordering = sort.Ordering().ordering
 	}
 
-	plan, pErr := p.selectIndex(scan, ordering, grouping)
+	plan, pErr := p.selectIndex(s, scan, ordering, grouping)
 	if pErr != nil {
 		return nil, pErr
 	}
 
 	// Update s.from with the new plan.
-	s.from = plan
+	s.from.node = plan
+
+	s.ordering = s.computeOrdering(plan.Ordering())
 
 	// Wrap this node as necessary.
 	limit, pErr := p.limit(parsed, p.distinct(parsed, sort.wrap(group.wrap(s))))
@@ -141,6 +250,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 	switch len(from) {
 	case 0:
 		// Nothing to do
+		// TODO(radu): we shouldn't be using a scanNode in this case at all.
 
 	case 1:
 		ate, ok := from[0].(*parser.AliasedTableExpr)
@@ -156,12 +266,269 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 		return s.pErr
 	}
 
-	s.pErr = scan.init(parsed)
+	s.from.node = scan
+	if scan.desc != nil {
+		s.from.alias = scan.desc.Alias
+	} else {
+		s.from.alias = ""
+	}
+	s.from.columns = scan.Columns()
+	return nil
+}
+
+func (s *selectNode) initTargets(targets parser.SelectExprs) *roachpb.Error {
+	// Loop over the select expressions and expand them into the expressions
+	// we're going to use to generate the returned column set and the names for
+	// those columns.
+	for _, target := range targets {
+		if s.pErr = s.addRender(target); s.pErr != nil {
+			return s.pErr
+		}
+	}
+	// `groupBy` or `orderBy` may internally add additional columns which we
+	// do not want to include in validation of e.g. `GROUP BY 2`. We record the
+	// current (initial) number of columns.
+	s.numOriginalCols = len(s.columns)
+	if len(s.render) != len(s.columns) {
+		panic(fmt.Sprintf("%d renders but %d columns!", len(s.render), len(s.columns)))
+	}
+	return nil
+}
+
+func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
+	if where == nil {
+		return nil
+	}
+	s.filter, s.pErr = s.resolveQNames(where.Expr)
 	if s.pErr != nil {
 		return s.pErr
 	}
-	s.from = scan
+
+	whereType, err := s.filter.TypeCheck(s.planner.evalCtx.Args)
+	if err != nil {
+		s.pErr = roachpb.NewError(err)
+		return s.pErr
+	}
+	if !(whereType == parser.DummyBool || whereType == parser.DNull) {
+		s.pErr = roachpb.NewUErrorf("argument of WHERE must be type %s, not type %s",
+			parser.DummyBool.Type(), whereType.Type())
+		return s.pErr
+	}
+
+	// Normalize the expression (this will also evaluate any branches that are
+	// constant).
+	s.filter, err = s.planner.parser.NormalizeExpr(s.planner.evalCtx, s.filter)
+	if err != nil {
+		s.pErr = roachpb.NewError(err)
+		return s.pErr
+	}
+	s.filter, s.pErr = s.planner.expandSubqueries(s.filter, 1)
+	return s.pErr
+}
+
+// colIndex takes an expression that refers to a column using an integer, verifies it refers to a
+// valid render target and returns the corresponding column index. For example:
+//    SELECT a from T ORDER by 1
+// Here "1" refers to the first render target "a". The returned index is 0.
+func (s *selectNode) colIndex(expr parser.Expr) (int, error) {
+	switch i := expr.(type) {
+	case parser.DInt:
+		index := int(i)
+		if numCols := s.numOriginalCols; index < 1 || index > numCols {
+			return -1, fmt.Errorf("invalid column index: %d not in range [1, %d]", index, numCols)
+		}
+		return index - 1, nil
+
+	case parser.Datum:
+		return -1, fmt.Errorf("non-integer constant column index: %s", expr)
+
+	default:
+		// expr doesn't look like a col index (i.e. not a constant).
+		return -1, nil
+	}
+}
+
+func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
+	// When generating an output column name it should exactly match the original
+	// expression, so determine the output column name before we perform any
+	// manipulations to the expression (such as star expansion).
+	var outputName string
+	if target.As != "" {
+		outputName = string(target.As)
+	} else {
+		outputName = target.Expr.String()
+	}
+
+	// If a QualifiedName has a StarIndirection suffix we need to match the
+	// prefix of the qualified name to one of the tables in the query and
+	// then expand the "*" into a list of columns.
+	if qname, ok := target.Expr.(*parser.QualifiedName); ok {
+		if s.pErr = roachpb.NewError(qname.NormalizeColumnName()); s.pErr != nil {
+			return s.pErr
+		}
+		if qname.IsStar() {
+			if s.from.alias == "" {
+				return roachpb.NewUErrorf("\"%s\" with no tables specified is not valid", qname)
+			}
+			if target.As != "" {
+				return roachpb.NewUErrorf("\"%s\" cannot be aliased", qname)
+			}
+			// TODO(radu): support multiple FROMs, consolidate with logic in findColumn
+			tableName := qname.Table()
+			if tableName != "" && !equalName(s.from.alias, tableName) {
+				return roachpb.NewUErrorf("table \"%s\" not found", tableName)
+			}
+
+			for idx, col := range s.from.node.Columns() {
+				if s.from.node.isColumnHidden(idx) {
+					continue
+				}
+				qval := s.getQVal(columnRef{&s.from, idx})
+				s.columns = append(s.columns, ResultColumn{Name: col.Name, Typ: qval.datum})
+				s.render = append(s.render, qval)
+			}
+
+			return nil
+		}
+	}
+
+	// Resolve qualified names. This has the side-effect of normalizing any
+	// qualified name found.
+	var resolved parser.Expr
+	if resolved, s.pErr = s.resolveQNames(target.Expr); s.pErr != nil {
+		return s.pErr
+	}
+	if resolved, s.pErr = s.planner.expandSubqueries(resolved, 1); s.pErr != nil {
+		return s.pErr
+	}
+	var typ parser.Datum
+	var err error
+	typ, err = resolved.TypeCheck(s.planner.evalCtx.Args)
+	s.pErr = roachpb.NewError(err)
+	if s.pErr != nil {
+		return s.pErr
+	}
+	var normalized parser.Expr
+	normalized, err = s.planner.parser.NormalizeExpr(s.planner.evalCtx, resolved)
+	s.pErr = roachpb.NewError(err)
+	if s.pErr != nil {
+		return s.pErr
+	}
+	s.render = append(s.render, normalized)
+
+	if target.As == "" {
+		switch t := target.Expr.(type) {
+		case *parser.QualifiedName:
+			// If the expression is a qualified name, use the column name, not the
+			// full qualification as the column name to return.
+			outputName = t.Column()
+		}
+	}
+	s.columns = append(s.columns, ResultColumn{Name: outputName, Typ: typ})
 	return nil
+}
+
+// filterRow checks to see if the current row matches the filter (i.e. the where-clause). Assumes
+// the qvals have been populated with the current row. May set n.pErr if an error occurs during
+// expression evaluation.
+func (s *selectNode) filterRow() bool {
+	if s.filter == nil {
+		return true
+	}
+
+	var d parser.Datum
+	var err error
+	d, err = s.filter.Eval(s.planner.evalCtx)
+	s.pErr = roachpb.NewError(err)
+	if s.pErr != nil {
+		return false
+	}
+
+	return d != parser.DNull && bool(d.(parser.DBool))
+}
+
+// renderRow renders the row by evaluating the render expressions. Assumes the qvals have been
+// populated with the current row. May set n.pErr if an error occurs during expression evaluation.
+func (s *selectNode) renderRow() {
+	if s.row == nil {
+		s.row = make([]parser.Datum, len(s.render))
+	}
+	for i, e := range s.render {
+		var err error
+		s.row[i], err = e.Eval(s.planner.evalCtx)
+		s.pErr = roachpb.NewError(err)
+		if s.pErr != nil {
+			return
+		}
+	}
+}
+
+// Searches for a render target that matches the given column reference.
+func (s *selectNode) findRenderIndexForCol(colRef columnRef) (idx int, ok bool) {
+	for i, r := range s.render {
+		if qval, ok := r.(*qvalue); ok && qval.colRef == colRef {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
+// Computes ordering information for the select node, given ordering information for the "from"
+// node.
+//
+//    SELECT a, b FROM t@abc ...
+//    	the ordering is: first by column 0 (a), then by column 1 (b)
+//
+//    SELECT a, b FROM t@abc WHERE a = 1 ...
+//    	the ordering is: exact match column (a), ordered by column 1 (b)
+//
+//    SELECT b, a FROM t@abc ...
+//      the ordering is: first by column 1 (a), then by column 0 (a)
+//
+//    SELECT a, c FROM t@abc ...
+//      the ordering is: just by column 0 (a). Here we don't have b as a render target so we
+//      cannot possibly use (or even express) the second-rank order by b (which makes any lower
+//      ranks unusable as well).
+//
+//      Note that for queries like
+//         SELECT a, c FROM t@abc ORDER by a,b,c
+//      we internally add b as a render target. The same holds for any targets required for
+//      grouping.
+func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
+	var ordering orderingInfo
+
+	// See if any of the "exact match" columns have render targets. We can ignore any columns that
+	// don't have render targets. For example, assume we are using an ascending index on (k, v) with
+	// the query:
+	//
+	//   SELECT v FROM t WHERE k = 1
+	//
+	// The rows from the index are ordered by k then by v, but since k is an exact match
+	// column the results are also ordered just by v.
+	for colIdx := range fromOrder.exactMatchCols {
+		colRef := columnRef{&s.from, colIdx}
+		if renderIdx, ok := s.findRenderIndexForCol(colRef); ok {
+			ordering.addExactMatchColumn(renderIdx)
+		}
+	}
+	// Find the longest prefix of columns that have render targets. Once we find a column that is
+	// not part of the output, the rest of the ordered columns aren't useful.
+	//
+	// For example, assume we are using an ascending index on (k, v) with the query:
+	//
+	//   SELECT v FROM t WHERE k > 1
+	//
+	// The rows from the index are ordered by k then by v. We cannot make any use of this
+	// ordering as an ordering on v.
+	for _, colOrder := range fromOrder.ordering {
+		colRef := columnRef{&s.from, colOrder.colIdx}
+		renderIdx, ok := s.findRenderIndexForCol(colRef)
+		if !ok {
+			break
+		}
+		ordering.addColumn(renderIdx, colOrder.direction)
+	}
+	return ordering
 }
 
 // selectIndex analyzes the scanNode to determine if there is an index
@@ -175,8 +542,8 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 // transformed into a set of spans to scan within the index.
 //
 // If grouping is true, the ordering is the desired ordering for grouping.
-func (p *planner) selectIndex(s *scanNode, ordering columnOrdering, grouping bool) (planNode, *roachpb.Error) {
-	if s.desc == nil || (s.filter == nil && ordering == nil) {
+func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrdering, grouping bool) (fromNode, *roachpb.Error) {
+	if s.desc == nil || (sel.filter == nil && ordering == nil) {
 		// No table or no where-clause and no ordering.
 		s.initOrdering(0)
 		return s, nil
@@ -207,12 +574,12 @@ func (p *planner) selectIndex(s *scanNode, ordering columnOrdering, grouping boo
 		c.init(s)
 	}
 
-	if s.filter != nil {
+	if sel.filter != nil {
 		// Analyze the filter expression, simplifying it and splitting it up into
 		// possibly overlapping ranges.
-		exprs, equivalent := analyzeExpr(s.filter)
+		exprs, equivalent := analyzeExpr(sel.filter)
 		if log.V(2) {
-			log.Infof("analyzeExpr: %s -> %s [equivalent=%v]", s.filter, exprs, equivalent)
+			log.Infof("analyzeExpr: %s -> %s [equivalent=%v]", sel.filter, exprs, equivalent)
 		}
 
 		// Check to see if the filter simplified to a constant.
@@ -228,7 +595,7 @@ func (p *planner) selectIndex(s *scanNode, ordering columnOrdering, grouping boo
 		// If the simplified expression is equivalent and there is a single
 		// disjunction, use it for the filter instead of the original expression.
 		if equivalent && len(exprs) == 1 {
-			s.filter = joinAndExprs(exprs[0])
+			sel.filter = joinAndExprs(exprs[0])
 		}
 
 		// TODO(pmattis): If "len(exprs) > 1" then we have multiple disjunctive
@@ -258,7 +625,7 @@ func (p *planner) selectIndex(s *scanNode, ordering columnOrdering, grouping boo
 
 	if ordering != nil {
 		for _, c := range candidates {
-			c.analyzeOrdering(s, ordering)
+			c.analyzeOrdering(sel, s, ordering)
 		}
 	}
 
@@ -283,10 +650,10 @@ func (p *planner) selectIndex(s *scanNode, ordering columnOrdering, grouping boo
 		s.index = nil
 		return s, nil
 	}
-	s.filter = applyConstraints(s.filter, c.constraints)
+	sel.filter = applyConstraints(sel.filter, c.constraints)
 	s.reverse = c.reverse
 
-	var plan planNode
+	var plan fromNode
 	if c.covering {
 		s.initOrdering(c.exactPrefix)
 		plan = s
@@ -298,7 +665,7 @@ func (p *planner) selectIndex(s *scanNode, ordering columnOrdering, grouping boo
 		}
 	}
 
-	if grouping && len(ordering) == 1 && len(s.spans) == 1 && s.filter == nil {
+	if grouping && len(ordering) == 1 && len(s.spans) == 1 && sel.filter == nil {
 		// If grouping has a desired order and there is a single span for which the
 		// filter is true, check to see if the ordering matches the desired
 		// ordering. If it does we can limit the scan to a single key.
@@ -310,7 +677,7 @@ func (p *planner) selectIndex(s *scanNode, ordering columnOrdering, grouping boo
 	}
 
 	if log.V(3) {
-		log.Infof("%s: filter=%v", c.index.Name, s.filter)
+		log.Infof("%s: filter=%v", c.index.Name, sel.filter)
 		for i, span := range s.spans {
 			log.Infof("%s/%d: %s", c.index.Name, i, prettySpan(span, 2))
 		}
@@ -376,7 +743,7 @@ type indexInfo struct {
 }
 
 func (v *indexInfo) init(s *scanNode) {
-	v.covering = v.isCoveringIndex(s.qvals)
+	v.covering = v.isCoveringIndex(s)
 
 	// The base cost is the number of keys per row.
 	if v.index == &v.desc.PrimaryIndex {
@@ -416,13 +783,13 @@ func (v *indexInfo) analyzeExprs(exprs []parser.Exprs) {
 // analyzeOrdering analyzes the ordering provided by the index and determines
 // if it matches the ordering requested by the query. Non-matching orderings
 // increase the cost of using the index.
-func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering columnOrdering) {
+func (v *indexInfo) analyzeOrdering(sel *selectNode, scan *scanNode, ordering columnOrdering) {
 	// Compute the prefix of the index for which we have exact constraints. This
 	// prefix is inconsequential for ordering because the values are identical.
 	v.exactPrefix = exactPrefix(v.constraints)
 
 	// Compute the ordering provided by the index.
-	indexOrdering := computeOrdering(scan.render, v.index, v.exactPrefix, false)
+	indexOrdering := sel.computeOrdering(scan.computeOrdering(v.index, v.exactPrefix, false))
 
 	// Compute how much of the index ordering matches the requested ordering for
 	// both forward and reverse scans.
@@ -447,6 +814,18 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, ordering columnOrdering) {
 		log.Infof("%s: analyzeOrdering: weight=%0.2f reverse=%v index=%d requested=%d",
 			v.index.Name, weight, v.reverse, indexOrdering, ordering)
 	}
+}
+
+func (v *indexInfo) findColumnInTuple(tuple parser.Tuple, colID ColumnID) int {
+	for i, val := range tuple {
+		qval, ok := val.(*qvalue)
+		// TODO(radu): when we will have multiple FROMs, we should check
+		// that the qval refers to us.
+		if ok && v.desc.Columns[qval.colRef.colIdx].ID == colID {
+			return i
+		}
+	}
+	return -1
 }
 
 // makeConstraints populates the indexInfo.constraints field based on the
@@ -529,7 +908,7 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 				var tupleMap []int
 				switch t := c.Left.(type) {
 				case *qvalue:
-					if t.col.ID != colID {
+					if v.desc.Columns[t.colRef.colIdx].ID != colID {
 						// This expression refers to a column other than the one we're
 						// looking for.
 						continue
@@ -544,7 +923,7 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 					// but simply provide a mapping from the order in the tuple to the
 					// order in the index.
 					for _, colID := range v.index.ColumnIDs[i:] {
-						idx := findColumnInTuple(t, colID)
+						idx := v.findColumnInTuple(t, colID)
 						if idx == -1 {
 							break
 						}
@@ -711,19 +1090,21 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 	return nil
 }
 
-// isCoveringIndex returns true if all of the columns referenced by the target
-// expressions and where clause are contained within the index. This allows a
-// scan of only the index to be performed without requiring subsequent lookup
-// of the full row.
-func (v *indexInfo) isCoveringIndex(qvals qvalMap) bool {
+// isCoveringIndex returns true if all of the columns needed from the scanNode are contained within
+// the index. This allows a scan of only the index to be performed without requiring subsequent
+// lookup of the full row.
+func (v *indexInfo) isCoveringIndex(scan *scanNode) bool {
 	if v.index == &v.desc.PrimaryIndex {
 		// The primary key index always covers all of the columns.
 		return true
 	}
 
-	for colID := range qvals {
-		if !v.index.containsColumnID(colID) {
-			return false
+	for i, needed := range scan.valNeededForCol {
+		if needed {
+			colID := scan.visibleCols[i].ID
+			if !v.index.containsColumnID(colID) {
+				return false
+			}
 		}
 	}
 	return true

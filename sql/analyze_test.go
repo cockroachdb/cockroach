@@ -61,22 +61,19 @@ func parseAndNormalizeExpr(t *testing.T, sql string) (parser.Expr, qvalMap) {
 
 	// Perform qualified name resolution because {analyze,simplify}Expr want
 	// expressions containing qvalues.
-	s := &scanNode{}
-	s.desc = testTableDesc()
-	s.visibleCols = s.desc.Columns
-
-	if err := s.desc.AllocateIDs(); err != nil {
+	desc := testTableDesc()
+	sel := testInitDummySelectNode(desc)
+	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
-
-	expr, nErr := s.resolveQNames(expr)
+	expr, nErr := sel.resolveQNames(expr)
 	if nErr != nil {
 		t.Fatalf("%s: %v", sql, nErr)
 	}
 	if _, err := expr.TypeCheck(nil); err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
-	return expr, s.qvals
+	return expr, sel.qvals
 }
 
 func checkEquivExpr(a, b parser.Expr, qvals qvalMap) error {

@@ -75,23 +75,32 @@ func (p *planner) Explain(n *parser.Explain) (planNode, *roachpb.Error) {
 func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 	switch t := plan.(type) {
 	case *selectNode:
-		return markDebug(t.from, mode)
+		t.explain = mode
+
+		if _, ok := t.from.node.(*indexJoinNode); ok {
+			// We will replace the indexJoinNode with the index node; we cannot
+			// process filters anymore (we don't have all the values).
+			t.filter = nil
+		}
+		// Mark the from node as debug (and potentially replace it).
+		newNode, err := markDebug(t.from.node, mode)
+		t.from.node = newNode.(fromNode)
+		return t, err
 
 	case *scanNode:
-		// Mark the node as being explained.
-		t.columns = []ResultColumn{
-			{Name: "RowIdx", Typ: parser.DummyInt},
-			{Name: "Key", Typ: parser.DummyString},
-			{Name: "Value", Typ: parser.DummyString},
-			{Name: "Output", Typ: parser.DummyBool},
-		}
 		t.explain = mode
 		return t, nil
 
 	case *indexJoinNode:
+		// Replace the indexJoinNode with the index node.
 		return markDebug(t.index, mode)
 
 	case *sortNode:
+		// Replace the sort node with the node it wraps.
+		return markDebug(t.plan, mode)
+
+	case *groupNode:
+		// Replace the group node with the node it wraps.
 		return markDebug(t.plan, mode)
 
 	default:
