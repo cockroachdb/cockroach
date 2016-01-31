@@ -517,8 +517,8 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	}
 	for i, txnCmds := range txnMap {
 		go func(i int, txnCmds []*cmd) {
-			if err := hv.runTxn(i, priorities[i-1], isolations[i-1], txnCmds, db, t); err != nil {
-				t.Errorf("(%s): unexpected failure running %s: %v", cmds, cmds[i], err)
+			if pErr := hv.runTxn(i, priorities[i-1], isolations[i-1], txnCmds, db, t); pErr != nil {
+				t.Errorf("(%s): unexpected failure running %s: %v", cmds, cmds[i], pErr)
 			}
 		}(i, txnCmds)
 	}
@@ -564,7 +564,7 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 }
 
 func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
-	isolation roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
+	isolation roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) *roachpb.Error {
 	var retry int
 	txnName := fmt.Sprintf("txn%d", txnIdx)
 	pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
@@ -601,7 +601,7 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 		return nil
 	})
 	hv.wg.Done()
-	return pErr.GoError()
+	return pErr
 }
 
 func (hv *historyVerifier) runCmd(txn *client.Txn, txnIdx, retry, cmdIdx int, cmds []*cmd, t *testing.T) *roachpb.Error {
