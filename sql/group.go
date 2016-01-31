@@ -241,9 +241,7 @@ func (n *groupNode) computeAggregates() {
 		// TODO(dt): optimization: skip buckets when underlying plan is ordered by grouped values.
 
 		var encoded []byte
-		var err error
-		encoded, err = encodeDTuple(scratch, groupedValues)
-		n.pErr = roachpb.NewError(err)
+		encoded, n.pErr = encodeDTuple(scratch, groupedValues)
 		if n.pErr != nil {
 			return
 		}
@@ -585,18 +583,17 @@ func (a *aggregateFunc) Eval(ctx parser.EvalContext) (parser.Datum, error) {
 
 func encodeDatum(b []byte, d parser.Datum) ([]byte, *roachpb.Error) {
 	if values, ok := d.(parser.DTuple); ok {
-		dt, err := encodeDTuple(b, values)
-		return dt, roachpb.NewError(err)
+		return encodeDTuple(b, values)
 	}
 	return encodeTableKey(b, d, encoding.Ascending)
 }
 
-func encodeDTuple(b []byte, d parser.DTuple) ([]byte, error) {
+func encodeDTuple(b []byte, d parser.DTuple) ([]byte, *roachpb.Error) {
 	for _, val := range d {
 		var pErr *roachpb.Error
 		b, pErr = encodeDatum(b, val)
 		if pErr != nil {
-			return nil, pErr.GoError()
+			return nil, pErr
 		}
 	}
 	return b, nil
