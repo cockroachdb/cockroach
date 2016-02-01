@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 )
 
-var selectPattern = regexp.MustCompile(`(?i)^\s*(SELECT|SHOW)`)
+var selectPattern = regexp.MustCompile(`(?i)^\s*(EXPLAIN|SELECT|SHOW)`)
 
 func makeSQLClient() (*sql.DB, string) {
 	// Use the sql administrator by default (root user).
