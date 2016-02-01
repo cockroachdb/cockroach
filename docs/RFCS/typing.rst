@@ -5,8 +5,38 @@
 :RFC PR: TBD
 :Cockroach Issue: #4024, #4026, #3633
 
+.. contents::
+		  
+Summary
+=======
+
+This RFC proposes to revamp the SQL semantic analysis (what happens
+after the parser and before the query is compiled or executed) with
+a few goals in mind:
+
+- address some limitations of the current implementation;
+- improve support for fancy (and not-so-fancy) uses of SQL and typing
+  of placeholders for prepared queries;
+- improve the quality of the code internally;
+- pave the way for implementing sub-selects eventually.
+
+To reach these goals the RFC proposes to:
+
+- separate semantic analysis in separate phases after parsing;
+- formalize constant folding using lossless arithmetic;
+- perform typing after constant folding, using a new, simpler yet more
+  powerful set of typing rules;
+- unify all typed SQL statements (including select/update/insert) as
+  expressions (select as expressions is anyway a prerequisite for
+  sub-selects which we intend to support eventually anyways);
+- structure typing as a visitor that annotates types as attributes in
+  AST nodes.
+  
+Motivation
+==========
+
 Overview
-========
+--------
 
 We need a better typing system.
 
@@ -17,8 +47,40 @@ this runs counter to our design ideal to "make data easy".
 How: let's look at a few examples, understand what goes Really Wrong,
 propose some reasonable expected behavior(s) and see how to get there.
 
+Problems considered
+-------------------
+
+This RFC considers specifically the following issues:
+
+- overall architecture of semantic analysis in the SQL engine
+- typing expressions involving only untyped literals
+- typing expressions involving only untyped literals and placeholders
+- overload resolution in calls with untyped literals or placeholders
+  as arguments
+
+The following issues are related to typing but fall outside of the
+scope of this RFC:
+  
+- "prepare" reports type X to client, client does not *know* X (and
+  thus unable to send the proper format byte in subsequent "execute")
+
+  This issue can be addressed by extending/completing the client
+  Postgres driver.
+
+- program/client uses a string literal in a position of another type,
+  expects a coercion like in pg.
+
+  For this issue one can argue the client is wrong; this issue may be
+  addressed at a later stage if real-world use shows that demand for
+  legacy compatibility here is real.
+  
+- prepare reports type "int" to client, client feeds "string" during
+  execute
+
+  Same as previous point.
+
 What typing is about
-====================
+--------------------
 
 There are 4 different roles for typing in SQL:
 
@@ -51,36 +113,9 @@ There are often applicable reasons why this is so, for example
 interest for this issue 3) organic growth of the machinery and 4)
 general developer ignorance about typing.
 
-Problems considered
-===================
-
-This RFC considers specifically the following issues:
-
-- expressions involving only untyped literals
-- expressions involving only untyped literals and placeholders
-- overload resolution in calls with untyped literals or placeholders as arguments
-
-The following issues are related to typing but fall outside of the scope of t his RFC:
-  
-- prepare reports type X to client, client does not *know* X (and thus
-  unable to send the proper format byte in subsequent execute)
-
-  This issue can be addressed by extending/completing the client
-  Postgres driver.
-
-- program/client uses a string literal in a position of another type,
-  expects a coercion like in pg.
-
-  For this issue one can argue the client is wrong; this issue may be
-  addressed at a later stage if real-world use shows that demand for
-  legacy compatibility here is real.
-  
-- prepare reports type "int" to client, client feeds "string" during execute
-
-  Same as previous point.
 
 Examples that go wrong (arguably)
-=================================
+---------------------------------
 
 It's rather difficult to find examples where soundness goes wrong
 because people tend to care about this most. That said, it is
@@ -112,7 +147,7 @@ For example:
    This inserts 1 in Postgres (this is slightly surprising) and 1.5 in
    CockroachDB (this looks and feels OK). However 
    if the example is turned around, we get a result that looks
-   strange and invalid in CockroachDB::
+   strange in CockroachDB::
 
         create table u (x int);
 	insert into u(x) values (((9 / 3) * (1 / 3))::int)
@@ -124,11 +159,14 @@ For example:
    Of course here the case can be made that the two engines differ on
    their semantics for division, nevertheless a case can be made that
    the Postgres behavior looks more homogeneous / predictable /
-   symmetrical (no arithmetic operator has a special typing there, unlike
-   CockroachDB's division).
+   symmetrical (no arithmetic operator has a special typing there,
+   unlike CockroachDB's division).
 
    (Arguably this specific example is more a concern about the
-   definition of the arithmetic division and not a typing issue.)
+   definition of the arithmetic division and not a typing issue. But:
+   as soon as division is extended to also support integer arithmetic,
+   deciding which implementation to use and when becomes a typing
+   issue.)
 
 2) pessimistic typing for numeric literals.
 
@@ -184,7 +222,7 @@ For example:
    
 
 Things that look wrong but really aren't
-========================================
+----------------------------------------
 
 1) loss of equivalence between prepared and direct statements::
 
@@ -214,41 +252,58 @@ Things that look wrong but really aren't
    monomorphic and that prepare statements are evaluated independently
    of subsequent queries: there is simply no SQL type that can be
    inferred for the placeholder in a way that provides sensible
-   behavior for all subsequent queries. And introducing
-   polymorphic types (or type families) just for this purpose
-   doesn't seem sufficiently justified, since an easy workaround is available::
+   behavior for all subsequent queries. And introducing polymorphic
+   types (or type families) just for this purpose doesn't seem
+   sufficiently justified, since an easy workaround is available::
 
      prepare a as select $1::float + 2;
      execute a(1.5)
    
+2) Casts as type hints.
+
+   Postgres uses casts as a way to indicate type hints on
+   placeholders. One could argue that this is not intuitive, because a
+   user may legitimately want to use a value of a given type in a
+   context where another type is needed, without restricting the type
+   of the placeholder. For example::
    
+     create table t (x int, s text);
+     insert into t (x, s)  values ($1, "hello " + $1::text)
+   
+   Here intuition says we want this to infer "int" for $1, not get a
+   type error due to conflicting types.
 
+   However in any such case it is always possible to rewrite the
+   query to both take advantage of type hints and also demand
+   the required cast, for example::
+   
+     create table t (x int, s text);
+     insert into t (x, s)  values ($1::int, "hello " + ($1::int)::text)
+   
+   Therefore the use of casts as type hints should not be seem as a
+   hurdle, and simply requires the documentation to properly mention
+   to the user "if you intend to cast, explain the intended source
+   type of your placeholder inside your cast first".
 
-Pitfalls
-========
+Detailed design
+===============
 
-Postgres uses casts as a way to indicate type hints on
-placeholders. Note that this is not intuitive, because
-a user may legitimately want to
-use a value of a given type in a context where another type is needed,
-without restricting the type of the placeholder. For example::
+AST changes and new types
+-------------------------
 
-  create table t (x int, s text);
-  insert into t (x, s)  values ($1, "hello " + $1::text)
+SELECT, INSERT and UPDATE should really be expressions.
 
-Here intuition says we want this to infer "int" for $1, not get a type error.
+The type of a SELECT expression should be an aggregate.
 
-If we use casts as type hints, this needs to be properly documented, so that
-the user wanting to express the exampe above is guided to write instead::
+Table names should type as the aggregate type derived from their
+schema.
 
-  create table t (x int, s text);
-  insert into t (x, s)  values ($1::int, "hello " + ($1::int)::text)
+An insert/update should really be seen as an expression like
+a function call where the type of the arguments
+is determined by the column names targeted by the insert.
 
-(Possible notice in documentation: "if you intend to cast, explain
-the intended source type of your placeholder inside your cast first")
-
-Strategy
-========
+Proposed typing strategy
+------------------------
 
 We use the following notations below::
 
@@ -278,8 +333,8 @@ We also thus denote::
    E [*K]     E has an unknown type in category K
 
 
-We assume that an initial/earlier phase has performed
-the reduction of casted placeholders (but only placeholders!), that is, folding::
+We assume that an initial/earlier phase has performed the reduction of
+casted placeholders (but only placeholders!), that is, folding::
 
      $1::T      => $1[T]
      x::T       => x :: T  (for any x that is not a placeholder)
@@ -298,7 +353,8 @@ A. Constant folding.
    and functions applications applied only to such expressions.
    
    Which exact types are used:
-   - for literals that look like numbers, the type from the ... library
+   - for literals that look like numbers, the type from the
+     exact arithmetic library (ref? nathan?)
    - for literals that look like strings, use bytea internally
    
    While the constant expressions are folded, the results must be
@@ -318,8 +374,9 @@ A. Constant folding.
      abs(-2)                      => 2[*N]
      abs(-2e10000)                => 2e10000[*N]
 
-   Note that folding does not take place for functions/operators that are overloaded
-   and when the operands have different types (we resolve type coercions at a later phase)::
+   Note that folding does not take place for functions/operators that
+   are overloaded and when the operands have different types (we
+   resolve type coercions at a later phase)::
 
      23 + 'abc'                   => 23[*N] + 'abc'[*S]
      23 + sin(23)                 => 23[*N] + -0.8462204041751706[float]
@@ -328,15 +385,16 @@ A. Constant folding.
 
      case x when 1 + 2 then 3 - 4 => (case x[?] when 3[*N] then -1[*N])[*N]
 
-   Note that casts select a specific type, but may stop the fold because the surrounding
-   operation becomes applied to different types::
+   Note that casts select a specific type, but may stop the fold
+   because the surrounding operation becomes applied to different
+   types::
 
      true::bool and false         => false[bool] (both operands of "and" are bool)
      1::int + 23                  => 1[int] + 23[*N]
      (2 + 3)::int + 23            => 5[int] + 23[*N]
 
-   The optimization for functions only takes place for a limited subset
-   of supported functions, they need to be pure and have an
+   The optimization for functions only takes place for a limited
+   subset of supported functions, they need to be pure and have an
    implementation for the exact type.
 
 B. Culling and candidate type collection.
@@ -349,26 +407,31 @@ B. Culling and candidate type collection.
    
    i.   the candidate types of the children are computed first
    
-   ii.  the current node is looked at, some candidate overloads may be filtered out
+   ii.  the current node is looked at, some candidate overloads may be
+        filtered out
    
-   iii. in case of call to an overloaded op/fun, the argument types are used to restrict the candidate set
-        of the direct child nodes (set intersection).
+   iii. in case of call to an overloaded op/fun, the argument types
+        are used to restrict the candidate set of the direct child
+        nodes (set intersection).
 	
-   iv.  if the steps above determine more than 1 possible type for a node, and that node
-        is neither a constant nor a placeholder, typing fails as ambiguous. If the step determines
-	there are no possible types for a node, fail as a typing error.
+   iv.  if the steps above determine more than 1 possible type for a
+        node, and that node is neither a constant nor a placeholder,
+        typing fails as ambiguous. If the step determines there are no
+        possible types for a node, fail as a typing error.
 
-        (Note: this is probably a point where we can look at implicit coercions)
+        (Note: this is probably a point where we can look at implicit
+        coercions)
 
-   For this step we expand all the "unknown type in kind K" notations into the actual
-   set of possible types in that kind.
+   For this step we expand all the "unknown type in kind K" notations
+   into the actual set of possible types in that kind.
 
    Simple example::
 
       5[int] + 23[*N]
 
-   This filters the candidates for + to only the one taking int and int (rule ii).  Then by rule iii
-   the annotation on  23 is changed, and we obtain::
+   This filters the candidates for + to only the one taking int and
+   int (rule ii).  Then by rule iii the annotation on 23 is changed,
+   and we obtain::
 
       ( 5[int] + 23[int] )[int]
       
@@ -376,12 +439,13 @@ B. Culling and candidate type collection.
 
      'abc' + $1
 
-   In this expression constant folding/typing has given us type [text,bytea]
-   (all types in kind S) for the literal 'abc' and "unknown" (any
-   type) for $1.
+   In this expression constant folding/typing has given us type
+   [text,bytea] (all types in kind S) for the literal 'abc' and
+   "unknown" (any type) for $1.
 
-   The addition has has many overloads, but the 1st argument's candidate types ([text,bytea])
-   restricts the overload to those candidates (rule ii)::
+   The addition has has many overloads, but the 1st argument's
+   candidate types ([text,bytea]) restricts the overload to those
+   candidates (rule ii)::
 
          text x text -> text
 	 bytea x bytea -> bytea
@@ -428,8 +492,8 @@ B. Culling and candidate type collection.
 
     At this point, we are looking at ``f($1[int,float,numeric,...])``.
     Yet f is only overloaded for int and float, therefore, we restrict
-    the set of candidates to those allowed by the type of $1 at that point,
-    and that reduces us to::
+    the set of candidates to those allowed by the type of $1 at that
+    point, and that reduces us to::
 
         f:int->int
 	f:float->float
@@ -445,8 +509,9 @@ B. Culling and candidate type collection.
        (12[*N] + $1[int,float])[*N] + f($1[int,float])[int,float]
                                     .
 
-    Aha! Now the plus sees an operand on the right more restricted than the one on the left,
-    so it filters out all the unapplicable candidates, and only the following are left over::
+    Aha! Now the plus sees an operand on the right more restricted
+    than the one on the left, so it filters out all the unapplicable
+    candidates, and only the following are left over::
 
        +: int,int->int
        +: float,float->float
@@ -483,9 +548,10 @@ D. Refine the type of constants.
      12[int,float] + $1[int,float] => 12[int] + $1[int, float]
 
 
-   The reason why we consider constants here (and not placeholders) is that
-   the programmers express an intent about typing in the form of their literals.
-   That is, there is a special meaning expressed by writing "2.0" instead of "2".
+   The reason why we consider constants here (and not placeholders) is
+   that the programmers express an intent about typing in the form of
+   their literals.  That is, there is a special meaning expressed by
+   writing "2.0" instead of "2".
 
 E. Run B-C again. This will refine the type of placeholders
    automatically.
@@ -495,7 +561,9 @@ F. If there is any remaining candidate type set with more than one
 
 
 Revisiting the examples from earlier with this strategy
-=======================================================
+-------------------------------------------------------
+
+From section `Examples that go wrong (arguably)`_:
 
 ::
 
@@ -506,30 +574,7 @@ Revisiting the examples from earlier with this strategy
 			3[int] + $1[int]  B
 
     OK
- 
-    prepare a as select ($1 + 2)
-                         $1[*N] + 2[*N]   B
-			 $1[*N] + 2[int]  D
-			 $1[int] + 2[int] B
-    execute a(1.5)
-    (Casualty, but recoverable by explicit type hints in the prepare
-    statement)
-
-
-    select floor($1 + $2)
-                 $1[*N] + $2[*N]  B
-    => failure
-    (Casualty, can't push demanded types yet)
-
-
-    f(int) -> int
-    f(float) -> float
-    g(int) -> int
-    prepare a as select g(f($1))
-                            $1[int,float]  B
-    => failure
-    (Casualty, can't push demanded types yet)
-
+    
     create table t (x decimal);
     insert into t(x) values (3/2)
                              (3/2)[*N]        A
@@ -547,11 +592,11 @@ Revisiting the examples from earlier with this strategy
 
     create tabe t (x float);
     insert into t(x) values (1e10000 * 1e-9999)
-                             10[*N]    A
-                             10[float] B
+                             10[*N]     A
+                             10[float]  B
 			     
     OK
-
+    
     select length(E'\\000' + 'a'::bytea)
                   E'\\000'[*S] + 'a'[bytea]  
 		  E'\\000'[bytea] + 'a'[bytea]  B
@@ -562,8 +607,12 @@ Revisiting the examples from earlier with this strategy
                   E'\\000a'[bytea] || 'b'[text]
 		  then failure, no overload for || found
 		  
-    OK		  
-
+    OK
+    
+Fancy example that shows the power of the proposed
+type system, with an example where Postgres would
+give up::
+  
     f:int,float->int
     f:string,string->int
     g:float,numeric->int
@@ -590,8 +639,13 @@ Revisiting the examples from earlier with this strategy
               (B stops, all types have been resolved)
 
      => $1, $2, $3 must be texts
-     
 
+
+Drawbacks
+=========
+
+The following example types differently from Postgres::
+     
      select (3 + $1) + ($1 + 3.5)
              3[*N] + $1[*N] + $1[*N] + 3.5[*N]       B
              3[int] + $1[*N] + $1[*N] + 3.5[float]   D
@@ -600,5 +654,53 @@ Revisiting the examples from earlier with this strategy
              3[int] + $1[int] + $1[int] + 3.5[float] B
 		                       .  failure, unknown overload
 
-     (Casualty? Postgres infers numeric)
+Here Postgres would infer "numeric" for $1 whereas
+our proposed algorithm fails.
+
+The following situations are not handled, although they were mentioned
+in section `Examples that go wrong (arguably)`_ as possible candidates
+for an improvement::
+
+    select floor($1 + $2)
+                 $1[*N] + $2[*N]  B
+    => failure, ambiguous types for $1 and $2
+
+    f(int) -> int
+    f(float) -> float
+    g(int) -> int
+    prepare a as select g(f($1))
+                            $1[int,float]  B
+    => failure, ambiguous types for $1 and $2
+
+Alternatives
+============
+
+To properly address situations like ``floor($1 + $2)`` one might
+suggest the application of a "bidirectional" typing algorithm, where
+the allowable types in a given context guide the typing of
+sub-expressions.
+
+This is akin to constraint-driven typing and a number
+of established algorithms exist, such as Hindley-Milner.
+
+The introduction of a more powerful typing system would certainlly
+attract attention to CockroachDB and probably attract a crowd of
+language enthousiasts, with possible benefits in terms of external
+contributions.
+
+However, from a practical perspective, more complex type systems are
+also more complex to implement and troubleshoot (they are usually
+implemented functionally and need to be first translated to
+non-functional Go code) and may have non-trivial run-time costs
+(e.g. extensions to Hindley-Milner to support overloading resolve in
+quadratic time).
+
+Unresolved questions
+====================
+
+How much Postgres compatibility is really required?
+
+
+     
+
 
