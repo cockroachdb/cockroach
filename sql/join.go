@@ -91,10 +91,6 @@ func (n *indexJoinNode) Columns() []ResultColumn {
 	return n.table.Columns()
 }
 
-func (n *indexJoinNode) isColumnHidden(idx int) bool {
-	return n.table.isColumnHidden(idx)
-}
-
 func (n *indexJoinNode) Ordering() orderingInfo {
 	return n.index.Ordering()
 }

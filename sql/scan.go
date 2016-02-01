@@ -250,7 +250,7 @@ func (n *scanNode) initTable(p *planner, tableName *parser.QualifiedName) (strin
 			visibleCols = append(visibleCols, *col)
 		}
 		n.isSecondaryIndex = true
-		n.initVisibleCols(visibleCols)
+		n.initVisibleCols(visibleCols, len(n.index.ImplicitColumnIDs))
 	} else {
 		n.initDescDefaults()
 	}
@@ -260,26 +260,14 @@ func (n *scanNode) initTable(p *planner, tableName *parser.QualifiedName) (strin
 
 func (n *scanNode) initDescDefaults() {
 	n.index = &n.desc.PrimaryIndex
-	n.initVisibleCols(n.desc.Columns)
+	n.initVisibleCols(n.desc.Columns, 0)
 }
 
-// isColumnHidden returns true if the column with the given index shouldn't be be resolved by
-// a star reference (e.g. SELECT * FROM t)
-func (n *scanNode) isColumnHidden(idx int) bool {
-	if idx < 0 || idx >= len(n.visibleCols) {
-		panic(fmt.Sprintf("Invalid column index %d", idx))
-	}
-	if n.isSecondaryIndex {
-		// When selecting from a specific index, we should hide the ImplicitColumnIDs
-		return idx >= len(n.index.ColumnIDs)
-	}
-	return n.visibleCols[idx].Hidden
-}
-
-// makeResultColumns converts ColumnDescriptors to ResultColumns
-func makeResultColumns(colDescs []ColumnDescriptor) []ResultColumn {
+// makeResultColumns converts ColumnDescriptors to ResultColumns. The last numImplicit columns are
+// marked as hidden.
+func makeResultColumns(colDescs []ColumnDescriptor, numImplicit int) []ResultColumn {
 	cols := make([]ResultColumn, 0, len(colDescs))
-	for _, colDesc := range colDescs {
+	for idx, colDesc := range colDescs {
 		// Convert the ColumnDescriptor to ResultColumn.
 		var typ parser.Datum
 
@@ -305,15 +293,26 @@ func makeResultColumns(colDescs []ColumnDescriptor) []ResultColumn {
 		default:
 			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Kind))
 		}
-		cols = append(cols, ResultColumn{Name: colDesc.Name, Typ: typ})
+		hidden := colDesc.Hidden || idx >= len(colDescs)-numImplicit
+		cols = append(cols, ResultColumn{Name: colDesc.Name, Typ: typ, hidden: hidden})
 	}
 	return cols
 }
 
+// setNeededColumns sets the flags indicating which columns are needed by the upper layer.
+func (n *scanNode) setNeededColumns(needed []bool) {
+	if len(needed) != len(n.valNeededForCol) {
+		panic(fmt.Sprintf("invalid setNeededColumns argument (len %d instead of %d): %v",
+			len(needed), len(n.valNeededForCol), needed))
+	}
+	copy(n.valNeededForCol, needed)
+}
+
 // Initializes the visibleCols and associated structures (resultColumns, colIdxMap).
-func (n *scanNode) initVisibleCols(visibleCols []ColumnDescriptor) {
+// The last numImplicit columns are marked as hidden.
+func (n *scanNode) initVisibleCols(visibleCols []ColumnDescriptor, numImplicit int) {
 	n.visibleCols = visibleCols
-	n.resultColumns = makeResultColumns(visibleCols)
+	n.resultColumns = makeResultColumns(visibleCols, numImplicit)
 	n.colIdxMap = make(map[ColumnID]int, len(visibleCols))
 	for i, c := range visibleCols {
 		n.colIdxMap[c.ID] = i

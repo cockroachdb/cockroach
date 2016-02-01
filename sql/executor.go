@@ -110,6 +110,9 @@ type Result struct {
 type ResultColumn struct {
 	Name string
 	Typ  parser.Datum
+
+	// If set, this is an implicit column; used internally.
+	hidden bool
 }
 
 // ResultRow is a collection of values representing a row in a result.
