@@ -15,6 +15,10 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 /*
+Package client and its KV API has been deprecated for external usage. Please use
+a postgres-compatible SQL driver (e.g. github.com/lib/pq). For more details, see
+http://www.cockroachlabs.com/blog/sql-in-cockroachdb-mapping-table-data-to-key-value-storage/.
+
 Package client provides clients for accessing the various externally-facing
 Cockroach database endpoints.
 
