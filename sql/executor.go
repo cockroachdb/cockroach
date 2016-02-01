@@ -93,6 +93,8 @@ type Result struct {
 	PErr *roachpb.Error
 	// The type of statement that the result is for.
 	Type parser.StatementType
+	// The tag of the statement that the result is for.
+	PGTag string
 	// RowsAffected will be populated if the statement type is "RowsAffected".
 	RowsAffected int
 	// Columns will be populated if the statement type is "Rows". It will contain
@@ -408,7 +410,10 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 			return pErr
 		}
 
-		switch result.Type = stmt.StatementType(); result.Type {
+		result.PGTag = stmt.StatementTag()
+		result.Type = stmt.StatementType()
+
+		switch result.Type {
 		case parser.RowsAffected:
 			for plan.Next() {
 				result.RowsAffected++
