@@ -227,7 +227,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	clientManual := hlc.NewManualClock(0)
 	clientClock := hlc.NewClock(clientManual.UnixNano)
 	context := newNodeTestContext(clientClock, stopper)
-	context.heartbeatTimeout = 20 * context.heartbeatInterval
+	context.HeartbeatTimeout = 20 * context.HeartbeatInterval
 	c := NewClient(ln.Addr(), context)
 	heartbeat.ready <- struct{}{} // Allow one heartbeat for initialization.
 	<-c.Healthy()
@@ -240,7 +240,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 		default:
 			return true
 		}
-	}, context.heartbeatTimeout*10); err != nil {
+	}, context.HeartbeatTimeout*10); err != nil {
 		t.Fatal(err)
 	}
 	if !proto.Equal(&c.remoteOffset, &RemoteOffset{}) {
