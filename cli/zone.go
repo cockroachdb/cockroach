@@ -83,9 +83,8 @@ func runGetZone(cmd *cobra.Command, args []string) {
 
 	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
-	// TODO(marc): switch to placeholders once they work with pgwire.
 	_, rows, err := runQueryWithFormat(db, fmtMap{"config": formatZone},
-		fmt.Sprintf(`SELECT * FROM system.zones WHERE id=%d`, id))
+		`SELECT * FROM system.zones WHERE id=$1`, id)
 	if err != nil {
 		log.Error(err)
 		return
@@ -158,9 +157,8 @@ func runRmZone(cmd *cobra.Command, args []string) {
 
 	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
-	// TODO(marc): use placeholders once they work with pgwire.
 	err = runPrettyQuery(db, os.Stdout,
-		fmt.Sprintf(`DELETE FROM system.zones WHERE id=%d`, id))
+		`DELETE FROM system.zones WHERE id=$1`, id)
 	if err != nil {
 		log.Error(err)
 		return
@@ -232,9 +230,8 @@ func runSetZone(cmd *cobra.Command, args []string) {
 	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
 	// TODO(marc): switch to UPSERT.
-	// TODO(marc): switch to placeholders when they're fixed with pgwire.
 	err = runPrettyQuery(db, os.Stdout,
-		fmt.Sprintf(`INSERT INTO system.zones VALUES (%d, '%s'::bytes)`, id, string(buf)))
+		`INSERT INTO system.zones VALUES ($1, $2)`, id, buf)
 	if err != nil {
 		log.Error(err)
 		return
