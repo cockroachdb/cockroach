@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
-	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
 	opentracing "github.com/opentracing/opentracing-go"
 )
@@ -228,7 +228,7 @@ func (ds *DistSender) RangeLookup(key roachpb.RKey, desc *roachpb.RangeDescripto
 	replicas := newReplicaSlice(ds.gossip, desc)
 	// TODO(tschottdorf) consider a Trace here, potentially that of the request
 	// that had the cache miss and waits for the result.
-	trace := tracer.NilTrace()
+	trace := tracing.NilTrace()
 	br, err := ds.sendRPC(trace, desc.RangeID, replicas, orderRandom, ba)
 	if err != nil {
 		return nil, err
@@ -368,8 +368,8 @@ func (ds *DistSender) sendRPC(trace opentracing.Span, rangeID roachpb.RangeID, r
 		return &roachpb.BatchResponse{}
 	}
 
-	tracer.AnnotateTrace()
-	defer tracer.AnnotateTrace()
+	tracing.AnnotateTrace()
+	defer tracing.AnnotateTrace()
 
 	const method = "Node.Batch"
 	reply, err := ds.rpcSend(rpcOpts, method, addrs, getArgs, getReply, ds.rpcContext)
@@ -472,7 +472,7 @@ func (ds *DistSender) sendSingleRange(trace opentracing.Span, ba roachpb.BatchRe
 // of a transaction, but no entry. Pushing such a transaction will succeed, and
 // may lead to the transaction being aborted early.
 func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	tracer.AnnotateTrace()
+	tracing.AnnotateTrace()
 
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
@@ -544,7 +544,7 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error, bool) {
 	isReverse := ba.IsReverse()
 
-	trace := tracer.SpanFromContext(ctx)
+	trace := tracing.SpanFromContext(ctx)
 
 	// The minimal key range encompassing all requests contained within.
 	// Local addressing has already been resolved.
