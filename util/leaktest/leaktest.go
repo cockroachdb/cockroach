@@ -51,6 +51,9 @@ func interestingGoroutines() (gs []string) {
 		}
 		stack := strings.TrimSpace(sl[1])
 		if stack == "" ||
+			strings.Contains(stack, "created by google.golang.org/grpc.(*Server).Serve") ||
+			strings.Contains(stack, "created by google.golang.org/grpc.NewConn") ||
+			strings.Contains(stack, "created by google.golang.org/grpc/transport.newHTTP2Server") ||
 			strings.Contains(stack, "created by net.startServer") ||
 			strings.Contains(stack, "created by testing.RunTests") ||
 			strings.Contains(stack, "closeWriteAndWait") ||
