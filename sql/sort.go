@@ -73,7 +73,7 @@ func (p *planner) orderBy(n *parser.Select, s *selectNode) (*sortNode, *roachpb.
 				if err := qname.NormalizeColumnName(); err != nil {
 					return nil, roachpb.NewError(err)
 				}
-				if qname.Table() == "" || equalName(s.from.alias, qname.Table()) {
+				if qname.Table() == "" || equalName(s.table.alias, qname.Table()) {
 					for j, r := range s.render {
 						if qval, ok := r.(*qvalue); ok {
 							if equalName(qval.colRef.get().Name, qname.Column()) {

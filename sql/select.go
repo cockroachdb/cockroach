@@ -28,8 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// fromInfo contains the information for a select "source" (FROM).
-type fromInfo struct {
+// tableInfo contains the information for table used by a select statement. It can be an actual
+// table, or a "virtual table" which is the result of a subquery.
+type tableInfo struct {
 	// node which can be used to retrieve the data (normally a scanNode). For performance purposes,
 	// this node can be aware of the filters, grouping etc.
 	node planNode
@@ -49,7 +50,7 @@ type fromInfo struct {
 type selectNode struct {
 	planner *planner
 
-	from fromInfo
+	table tableInfo
 
 	// Map of qvalues encountered in expressions.
 	qvals qvalMap
@@ -101,10 +102,10 @@ func (s *selectNode) Values() parser.DTuple {
 
 func (s *selectNode) Next() bool {
 	for {
-		if !s.from.node.Next() {
+		if !s.table.node.Next() {
 			return false
 		}
-		row := s.from.node.Values()
+		row := s.table.node.Values()
 
 		if s.explain == explainDebug {
 			if len(s.row) != 4 {
@@ -143,11 +144,11 @@ func (s *selectNode) PErr() *roachpb.Error {
 	if s.pErr != nil {
 		return s.pErr
 	}
-	return s.from.node.PErr()
+	return s.table.node.PErr()
 }
 
 func (s *selectNode) ExplainPlan() (name, description string, children []planNode) {
-	return s.from.node.ExplainPlan()
+	return s.table.node.ExplainPlan()
 }
 
 // Select selects rows from a single table. Select is the workhorse of the SQL
@@ -205,12 +206,12 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 		ordering = sort.Ordering().ordering
 	}
 
-	if scan, ok := s.from.node.(*scanNode); ok {
+	if scan, ok := s.table.node.(*scanNode); ok {
 		// Find the set of columns that we actually need values for. This is an optimization to avoid
 		// unmarshaling unnecessary values and is also used for index selection.
-		neededCols := make([]bool, len(s.from.columns))
+		neededCols := make([]bool, len(s.table.columns))
 		for i := range neededCols {
-			_, ok := s.qvals[columnRef{&s.from, i}]
+			_, ok := s.qvals[columnRef{&s.table, i}]
 			neededCols[i] = ok
 		}
 		scan.setNeededColumns(neededCols)
@@ -220,11 +221,11 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 			return nil, pErr
 		}
 
-		// Update s.from with the new plan.
-		s.from.node = plan
+		// Update s.table with the new plan.
+		s.table.node = plan
 	}
 
-	s.ordering = s.computeOrdering(s.from.node.Ordering())
+	s.ordering = s.computeOrdering(s.table.node.Ordering())
 
 	// Wrap this node as necessary.
 	limit, pErr := p.limit(parsed, p.distinct(parsed, sort.wrap(group.wrap(s))))
@@ -234,15 +235,13 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 	return limit, nil
 }
 
-// Initializes the from node, given the parsed select expression
+// Initializes the table node, given the parsed select expression
 func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error {
 	from := parsed.From
 	var colAlias parser.NameList
 	switch len(from) {
 	case 0:
-		// Nothing to do
-		// TODO(radu): we shouldn't be using a scanNode in this case at all.
-		s.from.node = &scanNode{planner: p, txn: p.txn}
+		s.table.node = &emptyNode{atEnd: false}
 
 	case 1:
 		ate, ok := from[0].(*parser.AliasedTableExpr)
@@ -254,11 +253,11 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 		case *parser.QualifiedName:
 			// Usual case: a table.
 			scan := &scanNode{planner: p, txn: p.txn}
-			s.from.alias, s.pErr = scan.initTable(p, expr)
+			s.table.alias, s.pErr = scan.initTable(p, expr)
 			if s.pErr != nil {
 				return s.pErr
 			}
-			s.from.node = scan
+			s.table.node = scan
 
 		case *parser.Subquery:
 			// We have a subquery (this includes a simple "VALUES").
@@ -266,7 +265,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 				return roachpb.NewErrorf("subquery in FROM must have an alias")
 			}
 
-			s.from.node, s.pErr = p.makePlan(expr.Select, false)
+			s.table.node, s.pErr = p.makePlan(expr.Select, false)
 			if s.pErr != nil {
 				return s.pErr
 			}
@@ -277,7 +276,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 
 		if ate.As.Alias != "" {
 			// If an alias was specified, use that.
-			s.from.alias = string(ate.As.Alias)
+			s.table.alias = string(ate.As.Alias)
 		}
 		colAlias = ate.As.Cols
 	default:
@@ -285,22 +284,22 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error 
 		return s.pErr
 	}
 
-	s.from.columns = s.from.node.Columns()
+	s.table.columns = s.table.node.Columns()
 	if len(colAlias) > 0 {
 		// Make a copy of the slice since we are about to modify the contents.
-		s.from.columns = append([]ResultColumn(nil), s.from.columns...)
+		s.table.columns = append([]ResultColumn(nil), s.table.columns...)
 
 		// The column aliases can only refer to explicit columns.
 		for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
-			if colIdx >= len(s.from.columns) {
+			if colIdx >= len(s.table.columns) {
 				return roachpb.NewErrorf(
 					"table \"%s\" has %d columns available but %d columns specified",
-					s.from.alias, aliasIdx, len(colAlias))
+					s.table.alias, aliasIdx, len(colAlias))
 			}
-			if s.from.columns[colIdx].hidden {
+			if s.table.columns[colIdx].hidden {
 				continue
 			}
-			s.from.columns[colIdx].Name = string(colAlias[aliasIdx])
+			s.table.columns[colIdx].Name = string(colAlias[aliasIdx])
 			aliasIdx++
 		}
 	}
@@ -398,7 +397,7 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 			return s.pErr
 		}
 		if qname.IsStar() {
-			if s.from.alias == "" {
+			if s.table.alias == "" {
 				return roachpb.NewUErrorf("\"%s\" with no tables specified is not valid", qname)
 			}
 			if target.As != "" {
@@ -406,15 +405,15 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 			}
 			// TODO(radu): support multiple FROMs, consolidate with logic in findColumn
 			tableName := qname.Table()
-			if tableName != "" && !equalName(s.from.alias, tableName) {
+			if tableName != "" && !equalName(s.table.alias, tableName) {
 				return roachpb.NewUErrorf("table \"%s\" not found", tableName)
 			}
 
-			for idx, col := range s.from.columns {
+			for idx, col := range s.table.columns {
 				if col.hidden {
 					continue
 				}
-				qval := s.getQVal(columnRef{&s.from, idx})
+				qval := s.getQVal(columnRef{&s.table, idx})
 				s.columns = append(s.columns, ResultColumn{Name: col.Name, Typ: qval.datum})
 				s.render = append(s.render, qval)
 			}
@@ -537,7 +536,7 @@ func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 	// The rows from the index are ordered by k then by v, but since k is an exact match
 	// column the results are also ordered just by v.
 	for colIdx := range fromOrder.exactMatchCols {
-		colRef := columnRef{&s.from, colIdx}
+		colRef := columnRef{&s.table, colIdx}
 		if renderIdx, ok := s.findRenderIndexForCol(colRef); ok {
 			ordering.addExactMatchColumn(renderIdx)
 		}
@@ -552,7 +551,7 @@ func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 	// The rows from the index are ordered by k then by v. We cannot make any use of this
 	// ordering as an ordering on v.
 	for _, colOrder := range fromOrder.ordering {
-		colRef := columnRef{&s.from, colOrder.colIdx}
+		colRef := columnRef{&s.table, colOrder.colIdx}
 		renderIdx, ok := s.findRenderIndexForCol(colRef)
 		if !ok {
 			break
@@ -617,9 +616,7 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 		if len(exprs) == 1 && len(exprs[0]) == 1 {
 			if d, ok := exprs[0][0].(parser.DBool); ok && bool(!d) {
 				// The expression simplified to false.
-				s.desc = nil
-				s.index = nil
-				return s, nil
+				return &emptyNode{atEnd: true}, nil
 			}
 		}
 
@@ -677,9 +674,7 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 	s.spans = makeSpans(c.constraints, c.desc.ID, c.index)
 	if len(s.spans) == 0 {
 		// There are no spans to scan.
-		s.desc = nil
-		s.index = nil
-		return s, nil
+		return &emptyNode{atEnd: true}, nil
 	}
 	sel.filter = applyConstraints(sel.filter, c.constraints)
 	s.reverse = c.reverse

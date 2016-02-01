@@ -29,7 +29,7 @@ import (
 
 // columnRef is a reference to a resultColumn of a FROM node
 type columnRef struct {
-	from *fromInfo
+	table *tableInfo
 
 	// Index of column (in from.columns).
 	colIdx int
@@ -39,7 +39,7 @@ const invalidColIdx = -1
 
 // get dereferences the columnRef to the resultColumn.
 func (cr columnRef) get() ResultColumn {
-	return cr.from.columns[cr.colIdx]
+	return cr.table.columns[cr.colIdx]
 }
 
 // findColumn looks up the column described by a QualifiedName. The qname will be normalized.
@@ -61,13 +61,13 @@ func (s *selectNode) findColumn(qname *parser.QualifiedName) (columnRef, *roachp
 	// no alias is given, we will search for the column in all FROMs and make sure there is only
 	// one.  For now we just check that the name matches (if given).
 	if qname.Base == "" {
-		qname.Base = parser.Name(s.from.alias)
+		qname.Base = parser.Name(s.table.alias)
 	}
-	if equalName(s.from.alias, string(qname.Base)) {
+	if equalName(s.table.alias, string(qname.Base)) {
 		colName := qname.Column()
-		for idx, col := range s.from.columns {
+		for idx, col := range s.table.columns {
 			if equalName(col.Name, colName) {
-				ref.from = &s.from
+				ref.table = &s.table
 				ref.colIdx = idx
 				return ref, nil
 			}
@@ -155,7 +155,7 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 		// statement implementations do not modify the AST nodes they are passed?
 		colRef := t.colRef
 		// TODO(radu): this is pretty hacky and won't work with multiple FROMs..
-		colRef.from = &v.selNode.from
+		colRef.table = &v.selNode.table
 		return v, v.selNode.getQVal(colRef)
 
 	case *parser.QualifiedName:

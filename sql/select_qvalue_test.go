@@ -30,9 +30,9 @@ func testInitDummySelectNode(desc *TableDescriptor) *selectNode {
 
 	sel := &selectNode{}
 	sel.qvals = make(qvalMap)
-	sel.from.node = scan
-	sel.from.alias = desc.Name
-	sel.from.columns = scan.Columns()
+	sel.table.node = scan
+	sel.table.alias = desc.Name
+	sel.table.columns = scan.Columns()
 
 	return sel
 }
@@ -61,7 +61,7 @@ func TestRetryResolveQNames(t *testing.T) {
 		if len(s.qvals) != 1 {
 			t.Fatalf("%d: expected 1 qvalue, but found %d", i, len(s.qvals))
 		}
-		if _, ok := s.qvals[columnRef{&s.from, 0}]; !ok {
+		if _, ok := s.qvals[columnRef{&s.table, 0}]; !ok {
 			t.Fatalf("%d: unable to find qvalue for column 0 (a)", i)
 		}
 	}
