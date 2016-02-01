@@ -1,8 +1,10 @@
 - Feature Name:
-- Status: draft
+- Status: draft/in-progress/completed/rejected/obsolete
 - Start Date: YYYY-MM-DD
-- RFC PR:
-- Cockroach Issue:
+- Authors: 
+- RFC PR: (PR # after acceptance of initial draft)
+- Cockroach Issue: (one or more # from the issue tracker)
+
 
 # Summary
 
