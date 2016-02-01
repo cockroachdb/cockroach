@@ -14,7 +14,7 @@
 //
 // Author: Peter Mattis (petermattis@gmail.com)
 
-package tracer
+package tracing
 
 // static void annotateTrace() {
 // }

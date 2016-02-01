@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 // A Stores provides methods to access a collection of stores. There's
@@ -129,7 +129,7 @@ func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 // executed locally, and the replica is determined via lookup through each
 // store's LookupRange method. The latter path is taken only by unit tests.
 func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	trace := tracer.SpanFromContext(ctx)
+	trace := tracing.SpanFromContext(ctx)
 	var store *Store
 	var pErr *roachpb.Error
 

@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
-	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
 	"github.com/opentracing/opentracing-go"
 )
@@ -96,7 +96,7 @@ func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr n
 	getReply func() proto.Message, context *rpc.Context) (proto.Message, error) {
 	trace := opts.Trace // not thread safe!
 	if trace == nil {
-		trace = tracer.NilTrace()
+		trace = tracing.NilTrace()
 	}
 
 	if len(addrs) < 1 {
