@@ -542,6 +542,8 @@ func Example_sql() {
 	c.RunWithArgs([]string{"sql", "-e", "select 3", "select * from t.f"})
 	c.RunWithArgs([]string{"sql", "-e", "begin", "select 3", "commit"})
 	c.RunWithArgs([]string{"sql", "-e", "select * from t.f"})
+	c.RunWithArgs([]string{"sql", "-e", "show databases"})
+	c.RunWithArgs([]string{"sql", "-e", "explain select 3"})
 
 	// Output:
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
@@ -563,6 +565,15 @@ func Example_sql() {
 	// 1 row
 	// x	y
 	// 42	69
+	// sql -e show databases
+	// 2 rows
+	// Database
+	// "system"
+	// "t"
+	// sql -e explain select 3
+	// 1 row
+	// Level	Type	Description
+	// 0	"scan"	"-"
 }
 
 func Example_user() {
