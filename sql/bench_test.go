@@ -239,7 +239,7 @@ func BenchmarkInsert100_Postgres(b *testing.B) {
 }
 
 // runBenchmarkUpdate benchmarks updating count random rows in a table.
-func runBenchmarkUpdate(b *testing.B, db *sql.DB, count int) {
+func runBenchmarkUpdate(b *testing.B, db *sql.DB, parallel bool, count int) {
 	rows := 10000
 	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.update`); err != nil {
 		b.Fatal(err)
@@ -269,30 +269,58 @@ func runBenchmarkUpdate(b *testing.B, db *sql.DB, count int) {
 	s := rand.New(rand.NewSource(5432))
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		buf.Reset()
-		buf.WriteString(`BEGIN; `)
-		for j := 0; j < count; j++ {
-			fmt.Fprintf(&buf, `UPDATE bench.update SET v = v + 1 WHERE k = %d; `, s.Intn(rows))
-		}
-		buf.WriteString(`COMMIT;`)
-		if _, err := db.Exec(buf.String()); err != nil {
-			b.Fatal(err)
+	if parallel {
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				buf.Reset()
+				buf.WriteString(`BEGIN; `)
+				for j := 0; j < count; j++ {
+					fmt.Fprintf(&buf, `UPDATE bench.update SET v = v + 1 WHERE k = %d; `, s.Intn(rows))
+				}
+				buf.WriteString(`COMMIT;`)
+				if _, err := db.Exec(buf.String()); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	} else {
+		for i := 0; i < b.N; i++ {
+			buf.Reset()
+			buf.WriteString(`BEGIN; `)
+			for j := 0; j < count; j++ {
+				fmt.Fprintf(&buf, `UPDATE bench.update SET v = v + 1 WHERE k = %d; `, s.Intn(rows))
+			}
+			buf.WriteString(`COMMIT;`)
+			if _, err := db.Exec(buf.String()); err != nil {
+				b.Fatal(err)
+			}
 		}
 	}
 	b.StopTimer()
 }
 
 func runBenchmarkUpdate1(b *testing.B, db *sql.DB) {
-	runBenchmarkUpdate(b, db, 1)
+	runBenchmarkUpdate(b, db, false, 1)
 }
 
 func runBenchmarkUpdate10(b *testing.B, db *sql.DB) {
-	runBenchmarkUpdate(b, db, 10)
+	runBenchmarkUpdate(b, db, false, 10)
 }
 
 func runBenchmarkUpdate100(b *testing.B, db *sql.DB) {
-	runBenchmarkUpdate(b, db, 100)
+	runBenchmarkUpdate(b, db, false, 100)
+}
+
+func runBenchmarkUpdate1Par(b *testing.B, db *sql.DB) {
+	runBenchmarkUpdate(b, db, true, 1)
+}
+
+func runBenchmarkUpdate10Par(b *testing.B, db *sql.DB) {
+	runBenchmarkUpdate(b, db, true, 10)
+}
+
+func runBenchmarkUpdate100Par(b *testing.B, db *sql.DB) {
+	runBenchmarkUpdate(b, db, true, 100)
 }
 
 func BenchmarkUpdate1_Cockroach(b *testing.B) {
@@ -316,6 +344,30 @@ func BenchmarkUpdate100_Cockroach(b *testing.B) {
 }
 
 func BenchmarkUpdate100_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkUpdate100)
+}
+
+func BenchmarkUpdate1Par_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkUpdate1)
+}
+
+func BenchmarkUpdate1Par_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkUpdate1)
+}
+
+func BenchmarkUpdate10Par_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkUpdate10)
+}
+
+func BenchmarkUpdate10Par_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkUpdate10)
+}
+
+func BenchmarkUpdate100Par_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkUpdate100)
+}
+
+func BenchmarkUpdate100Par_Postgres(b *testing.B) {
 	benchmarkPostgres(b, runBenchmarkUpdate100)
 }
 
