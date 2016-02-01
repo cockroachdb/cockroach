@@ -197,6 +197,7 @@ clean:
 	$(GO) clean $(GOFLAGS) -i github.com/cockroachdb/...
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -f .bootstrap
+	make -C ui clean
 
 .PHONY: protobuf
 protobuf:
