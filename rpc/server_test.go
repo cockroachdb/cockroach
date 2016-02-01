@@ -17,13 +17,20 @@
 package rpc
 
 import (
-	"net"
+	netrpc "net/rpc"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/gogo/protobuf/proto"
 )
+
+type Heartbeat struct{}
+
+func (h *Heartbeat) Ping(args proto.Message) (proto.Message, error) {
+	return &PingResponse{}, nil
+}
 
 func TestDuplicateRegistration(t *testing.T) {
 	defer leaktest.AfterTest(t)
@@ -52,13 +59,14 @@ func TestUnregisteredMethod(t *testing.T) {
 
 	// Sending an invalid method fails cleanly, but leaves the connection
 	// in a valid state.
-	opts := Options{}
-	_, err := sendRPC(opts, []net.Addr{ln.Addr()}, nodeContext, "Foo.Bar",
-		&PingRequest{}, &PingResponse{})
-	if !testutils.IsError(err, ".*rpc: couldn't find method: Foo.Bar") {
-		t.Fatalf("expected 'couldn't find method' but got %s", err)
-	}
-	if _, err := sendPing(opts, []net.Addr{ln.Addr()}, nodeContext); err != nil {
-		t.Fatalf("unexpected failure sending ping after unknown request: %s", err)
+	client := NewClient(ln.Addr(), nodeContext)
+	<-client.Healthy()
+
+	done := make(chan *netrpc.Call, 1)
+	client.Go("Foo.Bar", &PingRequest{}, &PingResponse{}, done)
+	call := <-done
+
+	if !testutils.IsError(call.Error, "rpc: unable to find method: Foo.Bar") {
+		t.Fatalf("expected 'rpc: unable to find method' but got %s", call.Error)
 	}
 }

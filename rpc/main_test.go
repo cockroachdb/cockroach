@@ -57,8 +57,8 @@ func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *Context {
 		clock = hlc.NewClock(hlc.UnixNano)
 	}
 	ctx := NewContext(testutils.NewNodeTestBaseContext(), clock, stopper)
-	ctx.heartbeatInterval = 10 * time.Millisecond
-	ctx.heartbeatTimeout = 2 * defaultHeartbeatInterval
+	ctx.HeartbeatInterval = 10 * time.Millisecond
+	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
 	return ctx
 }
 

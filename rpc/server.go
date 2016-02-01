@@ -67,11 +67,7 @@ type Server struct {
 
 // NewServer creates a new instance of Server.
 func NewServer(context *Context) *Server {
-	s := &Server{
-		insecure:    context.Insecure,
-		activeConns: make(map[net.Conn]struct{}),
-		methods:     map[string]method{},
-	}
+	s := NewManualServer(context)
 	heartbeat := &HeartbeatService{
 		clock:              context.localClock,
 		remoteClockMonitor: context.RemoteClocks,
@@ -80,6 +76,15 @@ func NewServer(context *Context) *Server {
 		log.Fatalf("unable to register heartbeat service with RPC server: %s", err)
 	}
 	return s
+}
+
+// NewManualServer creates a new instance of Server without a heartbeat service.
+func NewManualServer(context *Context) *Server {
+	return &Server{
+		insecure:    context.Insecure,
+		activeConns: make(map[net.Conn]struct{}),
+		methods:     map[string]method{},
+	}
 }
 
 // Register a new method handler. `name` is a qualified name of the
@@ -166,6 +171,40 @@ func (s *Server) runCloseCallbacks(conn net.Conn) {
 	}
 }
 
+// LocalCall invokes the specified method directly. Returns false if the method
+// is public and cannot be served with a local call.
+func (s *Server) LocalCall(method string, args proto.Message, done chan *rpc.Call) bool {
+	s.mu.RLock()
+	m := s.methods[method]
+	s.mu.RUnlock()
+
+	if m.handler == nil {
+		done <- &rpc.Call{
+			Error: util.Errorf("rpc: unable to find method: %s", method),
+		}
+		return true
+	}
+
+	if m.public {
+		return false
+	}
+
+	// TODO(pmattis): Note that we're passing the request directly through to the
+	// handler. This differs from an actual RPC which would encode the request
+	// and decode it on the remote side. The result is that the method handler
+	// might mutate the request which in turn might surprise the caller. We
+	// should add a check to guard against that.
+	m.handler(args, func(reply proto.Message, err error) {
+		done <- &rpc.Call{
+			ServiceMethod: method,
+			Error:         err,
+			Reply:         reply,
+			Args:          args,
+		}
+	})
+	return true
+}
+
 var _ http.Handler = &Server{}
 
 // ServeHTTP implements an http.Handler that answers RPC requests.
@@ -244,7 +283,7 @@ func (s *Server) readRequests(conn net.Conn, codec rpc.ServerCodec, authHook fun
 		if meth.handler == nil {
 			responses <- serverResponse{
 				req: req,
-				err: util.Errorf("rpc: couldn't find method: %s", req.ServiceMethod),
+				err: util.Errorf("rpc: unable to find method: %s", req.ServiceMethod),
 			}
 			continue
 		}
