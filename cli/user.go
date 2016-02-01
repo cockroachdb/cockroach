@@ -18,7 +18,6 @@ package cli
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -46,9 +45,8 @@ func runGetUser(cmd *cobra.Command, args []string) {
 	}
 	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
-	// TODO(marc): use placeholders once they work with pgwire.
 	err := runPrettyQuery(db, os.Stdout,
-		fmt.Sprintf(`SELECT * FROM system.users WHERE username='%s'`, args[0]))
+		`SELECT * FROM system.users WHERE username=$1`, args[0])
 	if err != nil {
 		panic(err)
 	}
@@ -96,9 +94,8 @@ func runRmUser(cmd *cobra.Command, args []string) {
 	}
 	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
-	// TODO(marc): switch to placeholders when working.
 	err := runPrettyQuery(db, os.Stdout,
-		fmt.Sprintf(`DELETE FROM system.users WHERE username='%s'`, args[0]))
+		`DELETE FROM system.users WHERE username=$1`, args[0])
 	if err != nil {
 		panic(err)
 	}
@@ -166,9 +163,8 @@ func runSetUser(cmd *cobra.Command, args []string) {
 	db, _ := makeSQLClient()
 	defer func() { _ = db.Close() }()
 	// TODO(marc): switch to UPSERT.
-	// TODO(marc): switch to placeholders when they work again with pgwire.
 	err = runPrettyQuery(db, os.Stdout,
-		fmt.Sprintf(`INSERT INTO system.users VALUES ('%s', '%s'::bytes)`, args[0], string(hashed)))
+		`INSERT INTO system.users VALUES ($1, $2)`, args[0], hashed)
 	if err != nil {
 		panic(err)
 	}

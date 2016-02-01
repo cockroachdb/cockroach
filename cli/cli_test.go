@@ -476,8 +476,6 @@ func Example_max_results() {
 	// 2 result(s)
 }
 
-// TODO(marc): re-enable when the `zone set` command works with bytes.
-/*
 func Example_zone() {
 	c := newCLITest()
 	defer c.stop()
@@ -532,7 +530,6 @@ range_max_bytes: 67108864
 	// OK
 	// zone ls
 }
-*/
 
 func Example_sql() {
 	c := newCLITest()
