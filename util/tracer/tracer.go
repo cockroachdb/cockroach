@@ -144,7 +144,7 @@ func (t *Trace) Finalize() {
 		return
 	}
 	defer t.nTrace.Finish()
-	if t == nil || len(t.Content) == 0 {
+	if len(t.Content) == 0 {
 		return
 	}
 	if r := recover(); r != nil {
