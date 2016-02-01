@@ -570,7 +570,7 @@ func Example_sql() {
 	// sql -e explain select 3
 	// 1 row
 	// Level	Type	Description
-	// 0	"scan"	"-"
+	// 0	"empty"	"-"
 }
 
 func Example_user() {
