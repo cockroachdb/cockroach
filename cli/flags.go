@@ -82,7 +82,7 @@ subsequent positional argument on the command line may contain
 one or more SQL statements, separated by semicolons. If an
 error occurs in any statement, the command exits with a
 non-zero status code and further statements are not
-executed. The results of the last SQL statement in each
+executed. Only the results of the first SQL statement in each
 positional argument are printed on the standard output.`),
 	"gossip": wrapText(`
 A comma-separated list of gossip addresses or resolvers for gossip
