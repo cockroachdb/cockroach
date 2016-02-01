@@ -41,7 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
 	"github.com/opentracing/opentracing-go"
@@ -125,7 +125,7 @@ func bootstrapCluster(engines []engine.Engine) (string, error) {
 	ctx := storage.StoreContext{}
 	ctx.ScanInterval = 10 * time.Minute
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
-	ctx.Tracer = tracer.NewTracer()
+	ctx.Tracer = tracing.NewTracer()
 	// Create a KV DB with a local sender.
 	stores := storage.NewStores(ctx.Clock)
 	sender := kv.NewTxnCoordSender(stores, ctx.Clock, false, ctx.Tracer, stopper)

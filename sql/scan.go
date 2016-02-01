@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 type span struct {
@@ -151,7 +151,7 @@ func (n *scanNode) Values() parser.DTuple {
 }
 
 func (n *scanNode) Next() bool {
-	tracer.AnnotateTrace()
+	tracing.AnnotateTrace()
 
 	if n.pErr != nil {
 		return false

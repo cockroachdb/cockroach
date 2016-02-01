@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -109,7 +109,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 		RangeDescriptorDB:        ltc.stores, // for descriptor lookup
 	}, ltc.Gossip)
 
-	tracer := tracer.NewTracer()
+	tracer := tracing.NewTracer()
 	ltc.Sender = NewTxnCoordSender(ltc.distSender, ltc.Clock, false /* !linearizable */, tracer, ltc.Stopper)
 	ltc.DB = client.NewDB(ltc.Sender)
 	transport := storage.NewLocalRPCTransport(ltc.Stopper)

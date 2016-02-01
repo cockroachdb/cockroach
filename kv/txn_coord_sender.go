@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 const statusLogInterval = 5 * time.Second
@@ -189,7 +189,7 @@ var _ client.Sender = &TxnCoordSender{}
 // distributed DB instance.
 func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable bool, trcr opentracing.Tracer, stopper *stop.Stopper) *TxnCoordSender {
 	if trcr == nil {
-		trcr = tracer.NewTracer()
+		trcr = tracing.NewTracer()
 	}
 	tc := &TxnCoordSender{
 		wrapped:           wrapped,
@@ -643,7 +643,7 @@ func (tc *TxnCoordSender) heartbeat(id string, trace opentracing.Span, ctx conte
 // object when adequate. It also updates certain errors with the
 // updated transaction for use by client restarts.
 func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
-	trace := tracer.SpanFromContext(ctx)
+	trace := tracing.SpanFromContext(ctx)
 	newTxn := &roachpb.Transaction{}
 	newTxn.Update(ba.Txn)
 	// TODO(tamird): remove this clone. It's currently needed to avoid race conditions.

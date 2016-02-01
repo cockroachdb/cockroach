@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
-	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -307,8 +307,8 @@ func (txn *Txn) Run(b *Batch) *roachpb.Error {
 
 // RunWithResponse is a version of Run that returns the BatchResponse.
 func (txn *Txn) RunWithResponse(b *Batch) (*roachpb.BatchResponse, *roachpb.Error) {
-	tracer.AnnotateTrace()
-	defer tracer.AnnotateTrace()
+	tracing.AnnotateTrace()
+	defer tracing.AnnotateTrace()
 
 	if pErr := b.prepare(); pErr != nil {
 		return nil, pErr

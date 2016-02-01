@@ -41,7 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 )
@@ -78,7 +78,7 @@ var (
 	// TestStoreContext has some fields initialized with values relevant
 	// in tests.
 	TestStoreContext = StoreContext{
-		Tracer:                     tracer.NewTracer(),
+		Tracer:                     tracing.NewTracer(),
 		RaftTickInterval:           100 * time.Millisecond,
 		RaftHeartbeatIntervalTicks: 1,
 		RaftElectionTimeoutTicks:   2,
@@ -1217,7 +1217,7 @@ func (s *Store) ReplicaCount() int {
 // command using the fetched range.
 func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	ctx = s.Context(ctx)
-	trace := tracer.SpanFromContext(ctx)
+	trace := tracing.SpanFromContext(ctx)
 
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
@@ -1402,7 +1402,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	if log.V(6) {
 		log.Infoc(ctx, "resolving write intent %s", wiErr)
 	}
-	trace := tracer.SpanFromContext(ctx)
+	trace := tracing.SpanFromContext(ctx)
 	trace.LogEvent("intent resolution")
 
 	// Split intents into those we need to push and those which are good to
