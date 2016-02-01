@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/roachpb"
 	crpc "github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
@@ -310,12 +311,12 @@ func (s *Server) startWriteSummaries() {
 
 // writeSummaries retrieves status summaries from the supplied
 // NodeStatusRecorder and persists them to the cockroach data store.
-func (s *Server) writeSummaries() error {
+func (s *Server) writeSummaries() *roachpb.Error {
 	nodeStatus, storeStatuses := s.recorder.GetStatusSummaries()
 	if nodeStatus != nil {
 		key := keys.NodeStatusKey(int32(nodeStatus.Desc.NodeID))
 		if pErr := s.db.Put(key, nodeStatus); pErr != nil {
-			return pErr.GoError()
+			return pErr
 		}
 		if log.V(1) {
 			statusJSON, err := json.Marshal(nodeStatus)
@@ -329,7 +330,7 @@ func (s *Server) writeSummaries() error {
 	for _, ss := range storeStatuses {
 		key := keys.StoreStatusKey(int32(ss.Desc.StoreID))
 		if pErr := s.db.Put(key, &ss); pErr != nil {
-			return pErr.GoError()
+			return pErr
 		}
 		if log.V(1) {
 			statusJSON, err := json.Marshal(&ss)
