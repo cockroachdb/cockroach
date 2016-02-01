@@ -20,11 +20,11 @@ type Context struct {
 	DisableReconnects bool // Disable client reconnects
 	HealthWait        time.Duration
 
-	heartbeatInterval time.Duration
-	heartbeatTimeout  time.Duration
+	HeartbeatInterval time.Duration
+	HeartbeatTimeout  time.Duration
 
-	localServer *Server // Holds the local RPC server handle
-	localAddr   string
+	LocalServer *Server // Holds the local RPC server handle
+	LocalAddr   string
 }
 
 // NewContext creates an rpc Context with the supplied values.
@@ -49,6 +49,6 @@ func (c *Context) Copy() *Context {
 
 // SetLocalServer sets the local RPC server handle to the context.
 func (c *Context) SetLocalServer(s *Server, addr string) {
-	c.localServer = s
-	c.localAddr = addr
+	c.LocalServer = s
+	c.LocalAddr = addr
 }

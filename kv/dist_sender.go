@@ -116,7 +116,7 @@ type DistSender struct {
 	// leaderCache caches the last known leader replica for range
 	// consensus groups.
 	leaderCache *leaderCache
-	// RPCSend is used to send RPC calls and defaults to rpc.Send
+	// RPCSend is used to send RPC calls and defaults to send
 	// outside of tests.
 	rpcSend         rpcSendFn
 	rpcContext      *rpc.Context
@@ -126,7 +126,7 @@ type DistSender struct {
 var _ client.Sender = &DistSender{}
 
 // rpcSendFn is the function type used to dispatch RPC calls.
-type rpcSendFn func(rpc.Options, string, []net.Addr,
+type rpcSendFn func(Options, string, []net.Addr,
 	func(addr net.Addr) proto.Message, func() proto.Message,
 	*rpc.Context) (proto.Message, error)
 
@@ -144,8 +144,8 @@ type DistSenderContext struct {
 	// lives on, for instance when deciding where to send RPCs.
 	// Usually it is filled in from the Gossip network on demand.
 	nodeDescriptor *roachpb.NodeDescriptor
-	// The RPC dispatcher. Defaults to rpc.Send but can be changed here
-	// for testing purposes.
+	// The RPC dispatcher. Defaults to send but can be changed here for testing
+	// purposes.
 	RPCSend           rpcSendFn
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
@@ -187,7 +187,7 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	if ctx.RangeLookupMaxRanges <= 0 {
 		ds.rangeLookupMaxRanges = defaultRangeLookupMaxRanges
 	}
-	ds.rpcSend = rpc.Send
+	ds.rpcSend = send
 	if ctx.RPCSend != nil {
 		ds.rpcSend = ctx.RPCSend
 	}
@@ -227,7 +227,7 @@ func (ds *DistSender) RangeLookup(key roachpb.RKey, desc *roachpb.RangeDescripto
 	replicas := newReplicaSlice(ds.gossip, desc)
 	// TODO(tschottdorf) consider a Trace here, potentially that of the request
 	// that had the cache miss and waits for the result.
-	br, err := ds.sendRPC(nil /* Trace */, desc.RangeID, replicas, rpc.OrderRandom, ba)
+	br, err := ds.sendRPC(nil /* Trace */, desc.RangeID, replicas, orderRandom, ba)
 	if err != nil {
 		return nil, err
 	}
@@ -250,9 +250,9 @@ func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
 	return rangeDesc, nil
 }
 
-func (ds *DistSender) optimizeReplicaOrder(replicas replicaSlice) rpc.OrderingPolicy {
+func (ds *DistSender) optimizeReplicaOrder(replicas replicaSlice) orderingPolicy {
 	// Unless we know better, send the RPCs randomly.
-	order := rpc.OrderingPolicy(rpc.OrderRandom)
+	order := orderingPolicy(orderRandom)
 	nodeDesc := ds.getNodeDescriptor()
 	// If we don't know which node we're on, don't optimize anything.
 	if nodeDesc == nil {
@@ -264,12 +264,12 @@ func (ds *DistSender) optimizeReplicaOrder(replicas replicaSlice) rpc.OrderingPo
 		// There's at least some attribute prefix, and we hope that the
 		// replicas that come early in the slice are now located close to
 		// us and hence better candidates.
-		order = rpc.OrderStable
+		order = orderStable
 	}
 	// If there is a replica in local node, move it to the front.
 	if i := replicas.FindReplicaByNodeID(nodeDesc.NodeID); i > 0 {
 		replicas.MoveToFront(i)
-		order = rpc.OrderStable
+		order = orderStable
 	}
 	return order
 }
@@ -306,11 +306,11 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 // sendRPC sends one or more RPCs to replicas from the supplied roachpb.Replica
 // slice. First, replicas which have gossiped addresses are corralled (and
 // rearranged depending on proximity and whether the request needs to go to a
-// leader) and then sent via rpc.Send, with requirement that one RPC to a
-// server must succeed. Returns an RPC error if the request could not be sent.
-// Note that the reply may contain a higher level error and must be checked in
+// leader) and then sent via Send, with requirement that one RPC to a server
+// must succeed. Returns an RPC error if the request could not be sent. Note
+// that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
-func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, replicas replicaSlice, order rpc.OrderingPolicy,
+func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, replicas replicaSlice, order orderingPolicy,
 	ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(replicas) == 0 {
 		return nil, roachpb.NewError(noNodeAddrsAvailError{})
@@ -331,7 +331,7 @@ func (ds *DistSender) sendRPC(trace *tracer.Trace, rangeID roachpb.RangeID, repl
 	ba.RangeID = rangeID
 
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
-	rpcOpts := rpc.Options{
+	rpcOpts := Options{
 		Ordering:        order,
 		SendNextTimeout: defaultSendNextTimeout,
 		Timeout:         rpc.DefaultRPCTimeout,
@@ -437,7 +437,7 @@ func (ds *DistSender) sendSingleRange(trace *tracer.Trace, ba roachpb.BatchReque
 		leader.StoreID > 0 {
 		if i := replicas.FindReplica(leader.StoreID); i >= 0 {
 			replicas.MoveToFront(i)
-			order = rpc.OrderStable
+			order = orderStable
 		}
 	}
 
