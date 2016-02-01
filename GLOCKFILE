@@ -1,5 +1,6 @@
 cmd github.com/cockroachdb/c-protobuf/cmd/protoc
 cmd github.com/cockroachdb/cockroach/cmd/protoc-gen-gogoroach
+cmd github.com/cockroachdb/stress
 cmd github.com/cockroachdb/yacc
 cmd github.com/golang/lint/golint
 cmd github.com/gordonklaus/ineffassign
@@ -11,7 +12,6 @@ cmd github.com/opennota/check/cmd/varcheck
 cmd github.com/robfig/glock
 cmd github.com/tebeka/go2xunit
 cmd golang.org/x/tools/cmd/goimports
-cmd golang.org/x/tools/cmd/stress
 cmd golang.org/x/tools/cmd/stringer
 github.com/VividCortex/ewma c34099b489e4ac33ca8d8c5f9d29d6eeaf69f2ed
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
@@ -21,6 +21,7 @@ github.com/cockroachdb/c-protobuf 4feb192131ea08dfbd7253a00868ad69cbb61b81
 github.com/cockroachdb/c-rocksdb b7fb7bddcb55be35eacdf67e9e2c931083ce02c4
 github.com/cockroachdb/c-snappy 5c6d0932e0adaffce4bfca7bdf2ac37f79952ccf
 github.com/cockroachdb/decimal 5c4ecc7240b4ae5f60895cb8a5c5bc948a39bbba
+github.com/cockroachdb/stress 59f39ff87026147c876ea51e59ba2f052ec0c228
 github.com/cockroachdb/yacc 443154b1852a8702b07d675da6cd97cd9177a316
 github.com/codahale/hdrhistogram 954f16e8b9ef0e5d5189456aa4c1202758e04f17
 github.com/coreos/etcd 8199147cf859882f625523446c28ae2e53b2432f
