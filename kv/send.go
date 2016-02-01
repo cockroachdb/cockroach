@@ -14,18 +14,19 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package rpc
+package kv
 
 import (
 	"fmt"
 	"io"
 	"math/rand"
 	"net"
-	"net/rpc"
+	netrpc "net/rpc"
 	"os"
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -33,29 +34,29 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-// TODO(pmattis): This code is only used by kv.DistSender. Perhaps move it to
-// the kv package. We might also want to de-generalize it so that it knows
-// about the types of the request and response protos
-// (Batch{Request,Response}).
+// TODO(pmattis): We might also want to de-generalize this code so that it
+// knows about the types of the request and response protos
+// (Batch{Request,Response}). This would simplify the interface between
+// DistSender.send() and send() (perhaps no need for getArgs/getReply).
 
-// OrderingPolicy is an enum for ordering strategies when there
+// orderingPolicy is an enum for ordering strategies when there
 // are multiple endpoints available.
-type OrderingPolicy int
+type orderingPolicy int
 
 const (
-	// OrderStable uses endpoints in the order provided.
-	OrderStable = iota
-	// OrderRandom randomly orders available endpoints.
-	OrderRandom
+	// orderStable uses endpoints in the order provided.
+	orderStable = iota
+	// orderRandom randomly orders available endpoints.
+	orderRandom
 )
 
-// An Options structure describes the algorithm for sending RPCs to
-// one or more replicas, depending on error conditions and how many
-// successful responses are required.
-type Options struct {
+// A SendOptions structure describes the algorithm for sending RPCs to one or
+// more replicas, depending on error conditions and how many successful
+// responses are required.
+type SendOptions struct {
 	// Ordering indicates how the available endpoints are ordered when
 	// deciding which to send to (if there are more than one).
-	Ordering OrderingPolicy
+	Ordering orderingPolicy
 	// SendNextTimeout is the duration after which RPCs are sent to
 	// other replicas in a set.
 	SendNextTimeout time.Duration
@@ -84,43 +85,36 @@ func newRPCError(err error) rpcError {
 // and without a positive outlook.
 func (r rpcError) CanRetry() bool { return true }
 
-// NewSendError creates a SendError. canRetry should be true in most
-// cases; the only non-retryable SendErrors are for things like
-// malformed (and not merely unresolvable) addresses.
-func NewSendError(msg string, canRetry bool) *roachpb.SendError {
-	return &roachpb.SendError{Message: msg, Retryable: canRetry}
-}
-
 // Send sends one or more method RPCs to clients specified by the slice of
 // endpoint addrs. Arguments for methods are obtained using the supplied
 // getArgs function. Reply structs are obtained through the getReply()
 // function. On success, Send returns the first successful reply. Otherwise,
 // Send returns an error if and as soon as the number of failed RPCs exceeds
 // the available endpoints less the number of required replies.
-func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message,
-	getReply func() proto.Message, context *Context) (proto.Message, error) {
+func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message,
+	getReply func() proto.Message, context *rpc.Context) (proto.Message, error) {
 	trace := opts.Trace // not thread safe!
 
 	if len(addrs) < 1 {
-		return nil, NewSendError(
+		return nil, roachpb.NewSendError(
 			fmt.Sprintf("insufficient replicas (%d) to satisfy send request of %d",
 				len(addrs), 1), false)
 	}
 
-	done := make(chan *rpc.Call, len(addrs))
+	done := make(chan *netrpc.Call, len(addrs))
 
-	var clients []*Client
+	var clients []*rpc.Client
 	for _, addr := range addrs {
-		clients = append(clients, NewClient(addr, context))
+		clients = append(clients, rpc.NewClient(addr, context))
 	}
 
-	var orderedClients []*Client
+	var orderedClients []*rpc.Client
 	switch opts.Ordering {
-	case OrderStable:
+	case orderStable:
 		orderedClients = clients
-	case OrderRandom:
+	case orderRandom:
 		// Randomly permute order, but keep known-unhealthy clients last.
-		var healthy, unhealthy []*Client
+		var healthy, unhealthy []*rpc.Client
 		for _, client := range clients {
 			select {
 			case <-client.Healthy():
@@ -142,7 +136,7 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 	// node will be able to order the healthy replicas based on latency.
 
 	// Send the first request.
-	sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, trace, done)
+	sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, trace, done)
 	orderedClients = orderedClients[1:]
 
 	var errors, retryableErrors int
@@ -180,20 +174,20 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 			errors++
 
 			// Since we have a reconnecting client here, disconnect errors are retryable.
-			disconnected := err == rpc.ErrShutdown || err == io.ErrUnexpectedEOF
+			disconnected := err == netrpc.ErrShutdown || err == io.ErrUnexpectedEOF
 			if retryErr, ok := err.(retry.Retryable); disconnected || (ok && retryErr.CanRetry()) {
 				retryableErrors++
 			}
 
 			if remainingNonErrorRPCs := len(addrs) - errors; remainingNonErrorRPCs < 1 {
-				return nil, NewSendError(
+				return nil, roachpb.NewSendError(
 					fmt.Sprintf("too many errors encountered (%d of %d total): %v",
 						errors, len(clients), err), remainingNonErrorRPCs+retryableErrors >= 1)
 			}
 			// Send to additional replicas if available.
 			if len(orderedClients) > 0 {
 				trace.Event("error, trying next peer")
-				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, trace, done)
+				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, trace, done)
 				orderedClients = orderedClients[1:]
 			}
 
@@ -201,7 +195,7 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 			// On successive RPC timeouts, send to additional replicas if available.
 			if len(orderedClients) > 0 {
 				trace.Event("timeout, trying next peer")
-				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, trace, done)
+				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, trace, done)
 				orderedClients = orderedClients[1:]
 			}
 		}
@@ -224,14 +218,14 @@ var sendOneFn = sendOne
 //
 // Do not call directly, but instead use sendOneFn. Tests mock out this method
 // via sendOneFn in order to test various error cases.
-func sendOne(client *Client, timeout time.Duration, method string,
+func sendOne(client *rpc.Client, timeout time.Duration, method string,
 	getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message,
-	trace *tracer.Trace, done chan *rpc.Call) {
+	context *rpc.Context, trace *tracer.Trace, done chan *netrpc.Call) {
 
 	addr := client.RemoteAddr()
 	args := getArgs(addr)
 	if args == nil {
-		done <- &rpc.Call{Error: newRPCError(
+		done <- &netrpc.Call{Error: newRPCError(
 			util.Errorf("nil arguments returned for client %s", addr))}
 		return
 	}
@@ -241,8 +235,8 @@ func sendOne(client *Client, timeout time.Duration, method string,
 	}
 	trace.Event(fmt.Sprintf("sending to %s", addr))
 
-	if enableLocalCalls && client.localServer != nil {
-		if localCall(client.localServer, method, args, done) {
+	if enableLocalCalls && context.LocalServer != nil && addr.String() == context.LocalAddr {
+		if context.LocalServer.LocalCall(method, args, done) {
 			return
 		}
 	}
@@ -267,45 +261,11 @@ func sendOne(client *Client, timeout time.Duration, method string,
 		case <-client.Healthy():
 			client.Go(method, args, reply, done)
 		case <-client.Closed:
-			done <- &rpc.Call{Error: newRPCError(
+			done <- &netrpc.Call{Error: newRPCError(
 				util.Errorf("rpc to %s failed as client connection was closed", method))}
 		case <-timeoutChan:
-			done <- &rpc.Call{Error: newRPCError(
+			done <- &netrpc.Call{Error: newRPCError(
 				util.Errorf("rpc to %s: client not ready after %s", method, timeout))}
 		}
 	}()
-}
-
-// localCall invokes the specified method directly. Returns false if the method
-// is public and cannot be served with a local call.
-func localCall(s *Server, method string, args proto.Message, done chan *rpc.Call) bool {
-	s.mu.RLock()
-	m := s.methods[method]
-	s.mu.RUnlock()
-
-	if m.handler == nil {
-		done <- &rpc.Call{
-			Error: newRPCError(util.Errorf("rpc:couldn't find method: %s", method)),
-		}
-		return true
-	}
-
-	if m.public {
-		return false
-	}
-
-	// TODO(pmattis): Note that we're passing the request directly through to the
-	// handler. This differs from an actual RPC which would encode the request
-	// and decode it on the remote side. The result is that the method handler
-	// might mutate the request which in turn might surprise the caller. We
-	// should add a check to guard against that.
-	m.handler(args, func(reply proto.Message, err error) {
-		done <- &rpc.Call{
-			ServiceMethod: method,
-			Error:         err,
-			Reply:         reply,
-			Args:          args,
-		}
-	})
-	return true
 }

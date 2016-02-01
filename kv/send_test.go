@@ -14,17 +14,20 @@
 //
 // Author: joezxy (joe.zxy@foxmail.com)
 
-package rpc
+package kv
 
 import (
 	"net"
-	"net/rpc"
+	netrpc "net/rpc"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -32,12 +35,46 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+// newNodeTestContext returns a rpc.Context for testing.
+// It is meant to be used by nodes.
+func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
+	if clock == nil {
+		clock = hlc.NewClock(hlc.UnixNano)
+	}
+	ctx := rpc.NewContext(testutils.NewNodeTestBaseContext(), clock, stopper)
+	ctx.HeartbeatInterval = 10 * time.Millisecond
+	ctx.HeartbeatTimeout = 5 * time.Second
+	return ctx
+}
+
+func newTestServer(t *testing.T, ctx *rpc.Context, manual bool) (*rpc.Server, net.Listener) {
+	var s *rpc.Server
+	if manual {
+		s = rpc.NewManualServer(ctx)
+	} else {
+		s = rpc.NewServer(ctx)
+	}
+
+	tlsConfig, err := ctx.GetServerTLSConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	addr := util.CreateTestAddr("tcp")
+	ln, err := util.ListenAndServe(ctx.Stopper, s, addr, tlsConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return s, ln
+}
+
 func TestInvalidAddrLength(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	// The provided addrs is nil, so its length will be always
 	// less than the specified response number
-	ret, err := Send(Options{}, "", nil, nil, nil, nil)
+	ret, err := send(SendOptions{}, "", nil, nil, nil, nil)
 
 	// the expected return is nil and SendError
 	if _, ok := err.(*roachpb.SendError); !ok || ret != nil {
@@ -56,8 +93,8 @@ func TestSendToOneClient(t *testing.T) {
 	ctx := newNodeTestContext(nil, stopper)
 	_, ln := newTestServer(t, ctx, false)
 
-	opts := Options{
-		Ordering:        OrderStable,
+	opts := SendOptions{
+		Ordering:        orderStable,
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         10 * time.Second,
 	}
@@ -79,10 +116,10 @@ func TestRetryableError(t *testing.T) {
 	defer stopper.Stop()
 
 	nodeContext := newNodeTestContext(nil, stopper)
-	nodeContext.heartbeatTimeout = 10 * nodeContext.heartbeatInterval
+	nodeContext.HeartbeatTimeout = 10 * nodeContext.HeartbeatInterval
 	_, ln := newTestServer(t, nodeContext, false)
 
-	c := NewClient(ln.Addr(), nodeContext)
+	c := rpc.NewClient(ln.Addr(), nodeContext)
 	// Wait until the client becomes healthy and shut down the server.
 	<-c.Healthy()
 	ln.Close()
@@ -97,8 +134,8 @@ func TestRetryableError(t *testing.T) {
 		}
 	}()
 
-	opts := Options{
-		Ordering:        OrderStable,
+	opts := SendOptions{
+		Ordering:        orderStable,
 		SendNextTimeout: 100 * time.Millisecond,
 		Timeout:         100 * time.Millisecond,
 	}
@@ -134,8 +171,8 @@ func TestUnretryableError(t *testing.T) {
 	nodeContext := newNodeTestContext(nil, stopper)
 	_, ln := newTestServer(t, nodeContext, false)
 
-	opts := Options{
-		Ordering:        OrderStable,
+	opts := SendOptions{
+		Ordering:        orderStable,
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         10 * time.Second,
 	}
@@ -147,7 +184,7 @@ func TestUnretryableError(t *testing.T) {
 	getReply := func() proto.Message {
 		return &BrokenResponse{&roachpb.ResponseHeader{}}
 	}
-	_, err := Send(opts, "Heartbeat.Ping", []net.Addr{ln.Addr()}, getArgs, getReply, nodeContext)
+	_, err := send(opts, "Heartbeat.Ping", []net.Addr{ln.Addr()}, getArgs, getReply, nodeContext)
 	if err == nil {
 		t.Fatalf("Unexpected success")
 	}
@@ -164,7 +201,7 @@ type Heartbeat struct{}
 
 func (h *Heartbeat) Ping(args proto.Message) (proto.Message, error) {
 	time.Sleep(50 * time.Millisecond)
-	return &PingResponse{}, nil
+	return &rpc.PingResponse{}, nil
 }
 
 // TestClientNotReady verifies that Send gets an RPC error when a client
@@ -179,12 +216,12 @@ func TestClientNotReady(t *testing.T) {
 
 	// Construct a server that listens but doesn't do anything.
 	s, ln := newTestServer(t, nodeContext, true)
-	if err := s.RegisterPublic("Heartbeat.Ping", (&Heartbeat{}).Ping, &PingRequest{}); err != nil {
+	if err := s.RegisterPublic("Heartbeat.Ping", (&Heartbeat{}).Ping, &rpc.PingRequest{}); err != nil {
 		t.Fatal(err)
 	}
 
-	opts := Options{
-		Ordering:        OrderStable,
+	opts := SendOptions{
+		Ordering:        orderStable,
 		SendNextTimeout: 100 * time.Nanosecond,
 		Timeout:         100 * time.Nanosecond,
 	}
@@ -223,7 +260,7 @@ func TestClientNotReady(t *testing.T) {
 
 	// Grab the client for our invalid address and close it. This will cause the
 	// blocked ping RPC to finish.
-	NewClient(ln.Addr(), nodeContext).Close()
+	rpc.NewClient(ln.Addr(), nodeContext).Close()
 	if err := <-c; err != nil {
 		t.Fatal(err)
 	}
@@ -275,23 +312,23 @@ func TestComplexScenarios(t *testing.T) {
 			serverAddrs = append(serverAddrs, ln.Addr())
 		}
 
-		opts := Options{
-			Ordering:        OrderStable,
+		opts := SendOptions{
+			Ordering:        orderStable,
 			SendNextTimeout: 1 * time.Second,
 			Timeout:         10 * time.Second,
 		}
 		getArgs := func(addr net.Addr) proto.Message {
-			return &PingRequest{}
+			return &rpc.PingRequest{}
 		}
 		getReply := func() proto.Message {
-			return &PingResponse{}
+			return &rpc.PingResponse{}
 		}
 
 		// Mock sendOne.
-		sendOneFn = func(client *Client, timeout time.Duration, method string,
+		sendOneFn = func(client *rpc.Client, timeout time.Duration, method string,
 			getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message,
-			trace *tracer.Trace, done chan *rpc.Call) {
-			addr := client.addr
+			context *rpc.Context, trace *tracer.Trace, done chan *netrpc.Call) {
+			addr := client.RemoteAddr()
 			addrID := -1
 			for serverAddrID, serverAddr := range serverAddrs {
 				if serverAddr.String() == addr.String() {
@@ -302,17 +339,17 @@ func TestComplexScenarios(t *testing.T) {
 			if addrID == -1 {
 				t.Fatalf("%d: %v is not found in serverAddrs: %v", i, addr, serverAddrs)
 			}
-			call := rpc.Call{
+			call := netrpc.Call{
 				Reply: getReply(),
 			}
 			if addrID < numErrors {
-				call.Error = NewSendError("test", addrID < numRetryableErrors)
+				call.Error = roachpb.NewSendError("test", addrID < numRetryableErrors)
 			}
 			done <- &call
 		}
 		defer func() { sendOneFn = sendOne }()
 
-		reply, err := Send(opts, "Heartbeat.Ping", serverAddrs, getArgs, getReply, nodeContext)
+		reply, err := send(opts, "Heartbeat.Ping", serverAddrs, getArgs, getReply, nodeContext)
 		if test.success {
 			if reply == nil {
 				t.Errorf("%d: expected reply", i)
@@ -331,12 +368,12 @@ func TestComplexScenarios(t *testing.T) {
 }
 
 // sendPing sends Ping requests to specified addresses using Send.
-func sendPing(opts Options, addrs []net.Addr, rpcContext *Context) (proto.Message, error) {
+func sendPing(opts SendOptions, addrs []net.Addr, rpcContext *rpc.Context) (proto.Message, error) {
 	return sendRPC(opts, addrs, rpcContext, "Heartbeat.Ping",
-		&PingRequest{}, &PingResponse{})
+		&rpc.PingRequest{}, &rpc.PingResponse{})
 }
 
-func sendRPC(opts Options, addrs []net.Addr, rpcContext *Context, name string,
+func sendRPC(opts SendOptions, addrs []net.Addr, rpcContext *rpc.Context, name string,
 	args, reply proto.Message) (proto.Message, error) {
 	getArgs := func(addr net.Addr) proto.Message {
 		return args
@@ -344,5 +381,5 @@ func sendRPC(opts Options, addrs []net.Addr, rpcContext *Context, name string,
 	getReply := func() proto.Message {
 		return proto.Clone(reply)
 	}
-	return Send(opts, name, addrs, getArgs, getReply, rpcContext)
+	return send(opts, name, addrs, getArgs, getReply, rpcContext)
 }

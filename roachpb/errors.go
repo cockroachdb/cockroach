@@ -214,6 +214,13 @@ func (*LeaseRejectedError) CanRetry() bool {
 	return false
 }
 
+// NewSendError creates a SendError. canRetry should be true in most cases; the
+// only non-retryable SendErrors are for things like malformed (and not merely
+// unresolvable) addresses.
+func NewSendError(msg string, canRetry bool) *SendError {
+	return &SendError{Message: msg, Retryable: canRetry}
+}
+
 // Error formats error.
 func (s SendError) Error() string {
 	return "failed to send RPC: " + s.Message
