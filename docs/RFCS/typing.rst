@@ -14,23 +14,23 @@ This RFC proposes to revamp the SQL semantic analysis (what happens
 after the parser and before the query is compiled or executed) with
 a few goals in mind:
 
-- address some limitations of the current implementation;
+- address some limitations of the current type-checking implementation
 - improve support for fancy (and not-so-fancy) uses of SQL and typing
-  of placeholders for prepared queries;
-- improve the quality of the code internally;
-- pave the way for implementing sub-selects eventually.
+  of placeholders for prepared queries
+- improve the quality of the code internally
+- pave the way for implementing sub-selects eventually
 
 To reach these goals the RFC proposes to:
 
-- separate semantic analysis in separate phases after parsing;
-- formalize constant folding using lossless arithmetic;
+- separate semantic analysis in separate phases after parsing
+- formalize constant folding using lossless arithmetic on untyped values
 - perform typing after constant folding, using a new, simpler yet more
-  powerful set of typing rules;
-- unify all typed SQL statements (including select/update/insert) as
-  expressions (select as expressions is anyway a prerequisite for
-  sub-selects which we intend to support eventually anyways);
+  powerful set of typing rules
+- unify all typed SQL statements (including ``SELECT``/``UPDATE``/``INSERT``) as
+  expressions (``SELECT`` as an expressions is already a prerequisite for
+  sub-selects)
 - structure typing as a visitor that annotates types as attributes in
-  AST nodes.
+  AST nodes
   
 Motivation
 ==========
@@ -45,7 +45,7 @@ other things behave incongruously and are difficult to understand, and
 this runs counter to our design ideal to "make data easy".
 
 How: let's look at a few examples, understand what goes Really Wrong,
-propose some reasonable expected behavior(s) and see how to get there.
+propose some reasonable expected behavior(s), and see how to get there.
 
 Problems considered
 -------------------
@@ -55,7 +55,7 @@ This RFC considers specifically the following issues:
 - overall architecture of semantic analysis in the SQL engine
 - typing expressions involving only untyped literals
 - typing expressions involving only untyped literals and placeholders
-- overload resolution in calls with untyped literals or placeholders
+- overloaded function resolution in calls with untyped literals or placeholders
   as arguments
 
 The following issues are related to typing but fall outside of the
@@ -87,18 +87,19 @@ There are 4 different roles for typing in SQL:
 1. **soundness analysis**, the most important is shared with other
    languages: check that the code is semantically sound -- that the
    operations given are actually computable. Typing tells you
-   e.g. that ``3 + "foo"`` does not make sense.
+   e.g. that ``3 + "foo"`` does not make sense and should be rejected.
 
 2. **implementation selection** deciding what meaning to give
-   to overloaded constructs in the language. For example some
+   to type-overloaded constructs in the language. For example some
    operators behave differently when given ``int`` or ``float``
-   arguments (+, - etc) and there are also overloaded functions
-   (``length`` is different for ``text`` and ``bytes``). This is also a
-   feature shared with other languages, when overloading exists.
+   arguments (+, - etc). Additionally, there are overloaded functions
+   (``length`` is different for ``string`` and ``bytes``) that behave
+   differently depending on provided arguments. These are both
+   features shared with other languages, when overloading exists.
 
 3. **inferring implicit conversions**, ie. determine where to insert
-   implicit casts, when your flavor SQL supports this (this is like in
-   a few other languages, like C).
+   implicit casts in contexts with disjoint types, when your flavor 
+   SQL supports this (this is like in a few other languages, like C).
 
 4. **typing placeholders** inferring the type of
    placeholders (``$1``..., sometimes also noted ``?``), because the
@@ -106,7 +107,7 @@ There are 4 different roles for typing in SQL:
    ``execute``.
 
 What we see in CockroachDB at this time, as well as in some other SQL
-products, is that SQL engines have issues for all 4 aspects.
+products, is that SQL engines have issues in all 4 aspects.
 
 There are often applicable reasons why this is so, for example
 1) lack of specification of the SQL language itself 2) lack of
@@ -119,14 +120,14 @@ Examples that go wrong (arguably)
 
 It's rather difficult to find examples where soundness goes wrong
 because people tend to care about this most. That said, it is
-reasonably easy to find example SQL code that really seems to make
+reasonably easy to find example SQL code that seems to make logical
 sense, but which engines reject as being unsound. For example::
 
     prepare a as select 3 + case (4) when 4 then $1 end
 
-this fails in Postgres because ``$1`` is typed as ``text`` always and
-you can't add text to int (this is a soundness error). What we'd
-rather want is to infer ``$1`` either as ``int`` (or numeric) and let
+this fails in Postgres because ``$1`` is typed as ``string`` always and
+you can't add string to int (this is a soundness error). What we'd
+rather want is to infer ``$1`` either as ``int`` (or decimal) and let
 the operation succeed, or fail with a type inference error ("can't
 decide the type"). In CockroachDB this does not even compile, there is
 no inference available within ``CASE``.
@@ -183,11 +184,11 @@ For example:
 
    For example::
 
-      select length(E'\\000a'::bytea || 'b'::text)
+      select length(E'\\000a'::bytes || 'b'::string)
 
    Succeeds (wrongly!) in Postgres and reports 6 as result.  This
-   should have failed with either "cannot concatenate bytea and text",
-   or created a bytearray of 3 bytes (\x00ab), or a string with a
+   should have failed with either "cannot concatenate bytes and string",
+   or created a bytesrray of 3 bytes (\x00ab), or a string with a
    single character (b), or a 0-sized string.
 
    (CockroachDB does not yet support byte arrays)
@@ -198,7 +199,7 @@ For example:
        select floor($1 + $2)
 
    This fails in Postgres with "can't infer the types" whereas the
-   context suggests that inferring ``numeric`` would be perfectly
+   context suggests that inferring ``decimal`` would be perfectly
    fine.
 
 5) failure to use context information to infer types where this
@@ -267,8 +268,8 @@ Things that look wrong but really aren't
    context where another type is needed, without restricting the type
    of the placeholder. For example::
    
-     create table t (x int, s text);
-     insert into t (x, s)  values ($1, "hello " + $1::text)
+     create table t (x int, s string);
+     insert into t (x, s)  values ($1, "hello " + $1::string)
    
    Here intuition says we want this to infer "int" for $1, not get a
    type error due to conflicting types.
@@ -277,8 +278,8 @@ Things that look wrong but really aren't
    query to both take advantage of type hints and also demand
    the required cast, for example::
    
-     create table t (x int, s text);
-     insert into t (x, s)  values ($1::int, "hello " + ($1::int)::text)
+     create table t (x int, s string);
+     insert into t (x, s)  values ($1::int, "hello " + ($1::int)::string)
    
    Therefore the use of casts as type hints should not be seem as a
    hurdle, and simply requires the documentation to properly mention
@@ -291,15 +292,15 @@ Detailed design
 AST changes and new types
 -------------------------
 
-SELECT, INSERT and UPDATE should really be expressions.
+SELECT, INSERT and UPDATE should really be **expressions**.
 
-The type of a SELECT expression should be an aggregate.
+The type of a SELECT expression should be an **aggregate**.
 
-Table names should type as the aggregate type derived from their
+Table names should type as the **aggregate type** derived from their
 schema.
 
 An insert/update should really be seen as an expression like
-a function call where the type of the arguments
+a **function call** where the type of the arguments
 is determined by the column names targeted by the insert.
 
 Proposed typing strategy
@@ -318,12 +319,11 @@ unknown type belongs to all kinds").
 ======== =================
 Type     Kind
 ======== =================
-numeric  Number-like (N)
+decimal  Number-like (N)
 float    Number-like (N)
 int      Number-like (N)
-text     String-like (S)
-varchar  String-like (S)
-bytea    String-like (S)
+string   String-like (S)
+bytes    String-like (S)
 bool     Boolean (B)
 ======== =================
     
@@ -346,16 +346,19 @@ Then we type using the following types
 A. Constant folding.
 
    This reduces complex expressions without losing information (like
-   in Go!). Literal constants are evaluated using either their type if
-   intrinsically known (for unambiguous literals like true/false), or
-   an internal exact implementation type for ambiguous literals. This
+   in `Go <https://blog.golang.org/constants>`_!). Literal constants 
+   are evaluated using either their type if intrinsically known 
+   (for unambiguous literals like true/false), or an internal exact 
+   implementation type for ambiguous literals. This
    is performed for all expressions involving only untyped literals
    and functions applications applied only to such expressions.
    
-   Which exact types are used:
+   Which exact types are used?:
+   
    - for literals that look like numbers, the type from the
-     exact arithmetic library (ref? nathan?)
-   - for literals that look like strings, use bytea internally
+     `exact <https://godoc.org/golang.org/x/tools/go/exact>`_ 
+     arithmetic library should be used
+   - for literals that look like strings, use bytes internally
    
    While the constant expressions are folded, the results must be
    typed using either the intrinsic type if all operands had one; or
@@ -440,32 +443,32 @@ B. Culling and candidate type collection.
      'abc' + $1
 
    In this expression constant folding/typing has given us type
-   [text,bytea] (all types in kind S) for the literal 'abc' and
+   [string,bytes] (all types in kind S) for the literal 'abc' and
    "unknown" (any type) for $1.
 
    The addition has has many overloads, but the 1st argument's
-   candidate types ([text,bytea]) restricts the overload to those
+   candidate types ([string,bytes]) restricts the overload to those
    candidates (rule ii)::
 
-         text x text -> text
-	 bytea x bytea -> bytea
+          string x string -> string
+	      bytes x bytes -> bytes
 
    Given this information (restriction of the overload) we change the
    type annotation on the 2nd argument to intersect with the possible
    types at that location::
      
-         'abc'[text,bytea] + $1[text,bytea]
+         'abc'[string,bytes] + $1[string,bytes]
 
    And given these arguments, we resolve the set of possible types
    for the addition as a whole::
 
-         ('abc'[text,bytea] + $1[text,bytea] )[text,bytea]
+         ('abc'[string,bytes] + $1[string,bytes] )[string,bytes]
 
    Another example::
    
        f:int->int
        f:float->float
-       f:text->text
+       f:string->string
        (12 + $1) + f($1)
 
    We type as follows::
@@ -490,7 +493,7 @@ B. Culling and candidate type collection.
        (12[*N] + $1[*N])[*N] + f($1[*N])
                                .
 
-    At this point, we are looking at ``f($1[int,float,numeric,...])``.
+    At this point, we are looking at ``f($1[int,float,decimal,...])``.
     Yet f is only overloaded for int and float, therefore, we restrict
     the set of candidates to those allowed by the type of $1 at that
     point, and that reduces us to::
@@ -523,7 +526,7 @@ B. Culling and candidate type collection.
 
     Notice how the restrictions only apply to the direct children
     nodes when there is a call and not pushed further down (e.g. to
-    ``12[*N]`` in this example).
+    12[*N] in this example).
 
 C. Repeat B as long as there is at least one candidate set with more
    than 1 type, and until the candidate sets do not evolve any more.
@@ -539,9 +542,9 @@ D. Refine the type of constants.
    For every constant with more than one type in its candidate type
    set, pick the best type that can represent the constant.
 
-   - for numeric types, we use the order int, float, numeric
-   - for strings and bytea, we use string if possible (no nul byte nor
-     invalid unicode encoding), otherwise bytea
+   - for numeric types, we use the order int, float, decimal
+   - for string-like types, we use string if possible (no null byte nor
+     invalid unicode encoding), otherwise bytes
 
    For example::
 
@@ -597,14 +600,14 @@ From section `Examples that go wrong (arguably)`_:
 			     
     OK
     
-    select length(E'\\000' + 'a'::bytea)
-                  E'\\000'[*S] + 'a'[bytea]  
-		  E'\\000'[bytea] + 'a'[bytea]  B
+    select length(E'\\000' + 'a'::bytes)
+                  E'\\000'[*S] + 'a'[bytes]  
+		  E'\\000'[bytes] + 'a'[bytes]  B
 		 
     OK
 
-    select length(E'\\000a'::bytea || 'b'::text)
-                  E'\\000a'[bytea] || 'b'[text]
+    select length(E'\\000a'::bytes || 'b'::string)
+                  E'\\000a'[bytes] || 'b'[string]
 		  then failure, no overload for || found
 		  
     OK
@@ -615,30 +618,30 @@ give up::
   
     f:int,float->int
     f:string,string->int
-    g:float,numeric->int
+    g:float,decimal->int
     g:string,string->int
-    h:numeric,float->int
+    h:decimal,float->int
     h:string,string->int
     prepare a as select  f($1,$2) + g($2,$3) + h($3,$1)
-              f($1[int,text],$2[float,text]) + ....
+              f($1[int,string],$2[float,string]) + ....
 	      .
-	      f(...)+g($2[float,text],$3[numeric,text]) + ...
+	      f(...)+g($2[float,string],$3[decimal,string]) + ...
 	                                .
-              f(...)+g(...)+h($3[numeric,text],$1[text])
+              f(...)+g(...)+h($3[decimal,string],$1[string])
 	                                         .
 
               (B re-iterates)
 
-              f($1[text],$2[text]) + ...
+              f($1[string],$2[string]) + ...
 	                   .    
-	      f(...)+g($2[text],$3[text]) + ...
+	      f(...)+g($2[string],$3[string]) + ...
 	                          .
-              f(...)+g(...)+h($3[text],$1[text])
+              f(...)+g(...)+h($3[string],$1[string])
 	                                 .
 
               (B stops, all types have been resolved)
 
-     => $1, $2, $3 must be texts
+     => $1, $2, $3 must be strings
 
 
 Drawbacks
@@ -654,7 +657,7 @@ The following example types differently from Postgres::
              3[int] + $1[int] + $1[int] + 3.5[float] B
 		                       .  failure, unknown overload
 
-Here Postgres would infer "numeric" for $1 whereas
+Here Postgres would infer "decimal" for $1 whereas
 our proposed algorithm fails.
 
 The following situations are not handled, although they were mentioned
@@ -700,7 +703,7 @@ Unresolved questions
 
 How much Postgres compatibility is really required?
 
-
+What should our type-coercion story be in terms of implicitly
+making conversions from a subset of available casts at type
+discontinuity boundaries in SQL expressions?
      
-
-
