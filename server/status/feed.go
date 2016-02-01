@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/opentracing/opentracing-go"
 )
 
 // StartNodeEvent is published when a node is started.
@@ -118,7 +118,7 @@ type NodeEventListener interface {
 	OnCallSuccess(event *CallSuccessEvent)
 	OnCallError(event *CallErrorEvent)
 	// TODO(tschottdorf): break this out into a TraceEventListener.
-	OnTrace(event *tracer.Trace)
+	OnTrace(event opentracing.Span)
 }
 
 // ProcessNodeEvent dispatches an event on the NodeEventListener.
@@ -126,7 +126,7 @@ func ProcessNodeEvent(l NodeEventListener, event interface{}) {
 	switch specificEvent := event.(type) {
 	case *StartNodeEvent:
 		l.OnStartNode(specificEvent)
-	case *tracer.Trace:
+	case opentracing.Span:
 		l.OnTrace(specificEvent)
 	case *CallSuccessEvent:
 		l.OnCallSuccess(specificEvent)

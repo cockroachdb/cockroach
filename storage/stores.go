@@ -129,7 +129,7 @@ func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 // executed locally, and the replica is determined via lookup through each
 // store's LookupRange method. The latter path is taken only by unit tests.
 func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	trace := tracer.FromCtx(ctx)
+	trace := tracer.SpanFromContext(ctx)
 	var store *Store
 	var pErr *roachpb.Error
 
@@ -164,7 +164,7 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	// accomplishes that. See roachpb.Transaction.CertainNodes for details.
 	if ba.Txn != nil && ba.Txn.CertainNodes.Contains(ba.Replica.NodeID) {
 		// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
-		trace.Event("read has no clock uncertainty")
+		trace.LogEvent("read has no clock uncertainty")
 		ba.Txn.MaxTimestamp = ba.Txn.Timestamp
 	}
 	br, pErr = store.Send(ctx, ba)
