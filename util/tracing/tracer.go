@@ -14,7 +14,7 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package tracer
+package tracing
 
 import (
 	"github.com/opentracing/opentracing-go"
