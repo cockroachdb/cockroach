@@ -124,7 +124,7 @@ func (c *client) sendGossip(g *Gossip, addr, lAddr util.UnresolvedAddr, done cha
 		return
 	}
 	nodeID := g.is.NodeID
-	delta := g.is.delta(c.peerID, c.remoteNodes)
+	delta := g.is.delta(c.remoteNodes)
 	if len(delta) == 0 {
 		return
 	}

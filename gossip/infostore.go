@@ -325,7 +325,7 @@ func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) (fre
 // perspective of the peer asking for the delta. That is, the map
 // contains a record of the most recent info timestamp and min hops
 // which the requester has seen from each node in the network.
-func (is *infoStore) delta(nodeID roachpb.NodeID, nodes map[int32]*Node) map[string]*Info {
+func (is *infoStore) delta(nodes map[int32]*Node) map[string]*Info {
 	infos := make(map[string]*Info)
 	// Compute delta of infos.
 	if err := is.visitInfos(func(key string, i *Info) error {

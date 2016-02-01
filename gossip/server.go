@@ -168,7 +168,7 @@ func (s *server) Gossip(argsI proto.Message) (proto.Message, error) {
 			return nil, errGossipShutdown
 		}
 		if canAccept {
-			reply.Delta = s.is.delta(args.NodeID, s.lAddrMap[lAddr.String()].nodes)
+			reply.Delta = s.is.delta(s.lAddrMap[lAddr.String()].nodes)
 			if len(reply.Delta) > 0 {
 				if log.V(1) {
 					log.Infof("node %d returned %d info(s) to node %d", s.is.NodeID, len(reply.Delta), args.NodeID)

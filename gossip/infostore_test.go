@@ -203,13 +203,13 @@ func TestInfoStoreDelta(t *testing.T) {
 	is := createTestInfoStore(t)
 
 	// Verify deltas with successive high water timestamps & min hops.
-	infos := is.delta(4, map[int32]*Node{})
+	infos := is.delta(map[int32]*Node{})
 	for i := 0; i < 10; i++ {
 		if i > 0 {
 			infoA := is.getInfo(fmt.Sprintf("a.%d", i-1))
 			infoB := is.getInfo(fmt.Sprintf("b.%d", i-1))
 			infoC := is.getInfo(fmt.Sprintf("c.%d", i-1))
-			infos = is.delta(4, map[int32]*Node{
+			infos = is.delta(map[int32]*Node{
 				1: {infoA.OrigStamp, 0},
 				2: {infoB.OrigStamp, 0},
 				3: {infoC.OrigStamp, 0},
@@ -226,7 +226,7 @@ func TestInfoStoreDelta(t *testing.T) {
 		}
 	}
 
-	if infos := is.delta(4, map[int32]*Node{
+	if infos := is.delta(map[int32]*Node{
 		1: {math.MaxInt64, 10},
 		2: {math.MaxInt64, 10},
 		3: {math.MaxInt64, 10},
