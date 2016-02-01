@@ -193,12 +193,7 @@ func (n *scanNode) ExplainPlan() (name, description string, children []planNode)
 	} else {
 		name = "scan"
 	}
-	if n.desc == nil {
-		description = "-"
-	} else {
-		description = fmt.Sprintf("%s@%s %s", n.desc.Name, n.index.Name,
-			prettySpans(n.spans, 2))
-	}
+	description = fmt.Sprintf("%s@%s %s", n.desc.Name, n.index.Name, prettySpans(n.spans, 2))
 	return name, description, nil
 }
 
@@ -332,13 +327,6 @@ func (n *scanNode) initVisibleCols(visibleCols []ColumnDescriptor, numImplicit i
 // structure.
 func (n *scanNode) initScan() bool {
 	// Initialize our key/values.
-	if n.desc == nil {
-		// No table to read from, pretend there is a single empty row.
-		n.kvs = []client.KeyValue{}
-		n.indexKey = []byte{}
-		return true
-	}
-
 	if len(n.spans) == 0 {
 		// If no spans were specified retrieve all of the keys that start with our
 		// index key prefix.
@@ -609,9 +597,6 @@ func (n *scanNode) explainDebug(endOfRow bool) {
 }
 
 func (n *scanNode) prettyKey() string {
-	if n.desc == nil {
-		return ""
-	}
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "/%s/%s%s", n.desc.Name, n.index.Name, prettyDatums(n.vals))
 	if n.colID > 0 {

@@ -63,7 +63,7 @@ func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 	default:
 		return nil, roachpb.NewUErrorf("unknown variable: %q", name)
 	}
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }
 
 func (p *planner) getStringVal(name string, values parser.Exprs) (string, *roachpb.Error) {
@@ -119,5 +119,5 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, *roachpb.Error) 
 		p.session.Timezone = &Session_Offset{Offset: offset}
 	}
 	p.evalCtx.GetLocation = p.session.getLocation
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }

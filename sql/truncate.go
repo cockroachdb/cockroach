@@ -56,5 +56,5 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, *roachpb.Error) {
 		return nil, pErr
 	}
 
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }

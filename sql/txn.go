@@ -32,7 +32,7 @@ func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, *roach
 	if pErr := p.setUserPriority(n.UserPriority); pErr != nil {
 		return nil, pErr
 	}
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }
 
 // CommitTransaction commits a transaction.
@@ -40,7 +40,7 @@ func (p *planner) CommitTransaction(n *parser.CommitTransaction) (planNode, *roa
 	pErr := p.txn.Commit()
 	// Reset transaction.
 	p.resetTxn()
-	return &valuesNode{}, pErr
+	return &emptyNode{}, pErr
 }
 
 // RollbackTransaction rolls back a transaction.
@@ -48,7 +48,7 @@ func (p *planner) RollbackTransaction(n *parser.RollbackTransaction) (planNode, 
 	pErr := p.txn.Rollback()
 	// Reset transaction.
 	p.resetTxn()
-	return &valuesNode{}, pErr
+	return &emptyNode{}, pErr
 }
 
 // SetTransaction sets a transaction's isolation level
@@ -59,7 +59,7 @@ func (p *planner) SetTransaction(n *parser.SetTransaction) (planNode, *roachpb.E
 	if pErr := p.setUserPriority(n.UserPriority); pErr != nil {
 		return nil, pErr
 	}
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }
 
 func (p *planner) setIsolationLevel(level parser.IsolationLevel) *roachpb.Error {
