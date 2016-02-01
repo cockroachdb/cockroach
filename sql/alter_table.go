@@ -45,7 +45,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 	if !gr.Exists() {
 		if n.IfExists {
 			// Noop.
-			return &valuesNode{}, nil
+			return &emptyNode{}, nil
 		}
 		// Key does not exist, but we want it to: error out.
 		return nil, roachpb.NewUErrorf("table %q does not exist", n.Table.Table())
@@ -177,7 +177,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 	// this line, but tests that run redundant operations like dropping
 	// a column when it's already dropped will hit this condition and exit.
 	if numMutations == len(tableDesc.Mutations) {
-		return &valuesNode{}, nil
+		return &emptyNode{}, nil
 	}
 	tableDesc.UpVersion = true
 	mutationID := tableDesc.NextMutationID
@@ -192,5 +192,5 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 	}
 	p.notifySchemaChange(tableDesc.ID, mutationID)
 
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }

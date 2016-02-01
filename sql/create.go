@@ -41,7 +41,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, *roachpb.E
 	if err := p.createDescriptor(databaseKey{string(n.Name)}, &desc, n.IfNotExists); err != nil {
 		return nil, err
 	}
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }
 
 // CreateIndex creates an index.
@@ -67,7 +67,7 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, *roachpb.Error) 
 		}
 		if n.IfNotExists {
 			// Noop.
-			return &valuesNode{}, nil
+			return &emptyNode{}, nil
 		}
 	}
 
@@ -97,7 +97,7 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, *roachpb.Error) 
 	}
 	p.notifySchemaChange(tableDesc.ID, mutationID)
 
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }
 
 // CreateTable creates a table.
@@ -153,5 +153,5 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, *roachpb.Error) 
 	if pErr := p.createDescriptor(tableKey{dbDesc.ID, n.Table.Table()}, &desc, n.IfNotExists); pErr != nil {
 		return nil, pErr
 	}
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }

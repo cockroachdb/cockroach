@@ -77,14 +77,18 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 	case *selectNode:
 		t.explain = mode
 
-		if _, ok := t.from.node.(*indexJoinNode); ok {
+		if _, ok := t.table.node.(*indexJoinNode); ok {
 			// We will replace the indexJoinNode with the index node; we cannot
 			// process filters anymore (we don't have all the values).
 			t.filter = nil
+		} else if _, ok := t.table.node.(*scanNode); !ok {
+			// TODO(radu): We don't support debug mode for selects with no table or with a
+			// virtual table (subquery).
+			return t, nil
 		}
 		// Mark the from node as debug (and potentially replace it).
-		newNode, err := markDebug(t.from.node, mode)
-		t.from.node = newNode
+		newNode, err := markDebug(t.table.node, mode)
+		t.table.node = newNode
 		return t, err
 
 	case *scanNode:

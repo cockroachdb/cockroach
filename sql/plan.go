@@ -281,12 +281,37 @@ type planNode interface {
 }
 
 var _ planNode = &distinctNode{}
-
 var _ planNode = &groupNode{}
-
 var _ planNode = &indexJoinNode{}
 var _ planNode = &limitNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &valuesNode{}
 var _ planNode = &selectNode{}
+var _ planNode = &emptyNode{}
+
+// emptyNode is a planNode with no columns and either no rows (default) or a single row with empty
+// results (if results is initializer to true). The former is used for nodes that have no results
+// (e.g. a table for which the filtering condition has a contradiction), the latter is used by
+// select statements that have no table or where we detect the filtering condition throws away all
+// results.
+type emptyNode struct {
+	results bool
+}
+
+func (*emptyNode) Columns() []ResultColumn { return nil }
+func (*emptyNode) Ordering() orderingInfo  { return orderingInfo{} }
+func (*emptyNode) Values() parser.DTuple   { return nil }
+func (*emptyNode) PErr() *roachpb.Error    { return nil }
+
+func (*emptyNode) ExplainPlan() (name, description string, children []planNode) {
+	return "empty", "-", nil
+}
+
+func (e *emptyNode) Next() bool {
+	if !e.results {
+		return false
+	}
+	e.results = false
+	return true
+}

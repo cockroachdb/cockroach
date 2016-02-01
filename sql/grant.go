@@ -56,7 +56,7 @@ func (p *planner) changePrivileges(targets parser.TargetList, grantees parser.Na
 	if ok {
 		p.notifySchemaChange(tableDesc.ID, invalidMutationID)
 	}
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }
 
 // Grant adds privileges to users.
