@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
-	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/opentracing/opentracing-go"
 )
 
 // NodeStatusMonitor monitors the status of a server node. Status information
@@ -219,7 +219,7 @@ func (nsm *NodeStatusMonitor) OnCallError(event *CallErrorEvent) {
 
 // OnTrace receives Trace objects from a node event subscription. This method
 // is part of the implementation of NodeEventListener.
-func (nsm *NodeStatusMonitor) OnTrace(trace *tracer.Trace) {
+func (nsm *NodeStatusMonitor) OnTrace(trace opentracing.Span) {
 	if log.V(2) {
 		log.Infof("received trace:\n%s", trace)
 	}

@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/tracer"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/coreos/etcd/raft"
 	"github.com/gogo/protobuf/proto"
@@ -472,7 +473,7 @@ func TestRangeLeaderLease(t *testing.T) {
 		t.Errorf("expected another replica to have leader lease")
 	}
 
-	pErr := tc.rng.redirectOnOrAcquireLeaderLease(nil)
+	pErr := tc.rng.redirectOnOrAcquireLeaderLease(tracer.NilTrace())
 	if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok || lErr == nil {
 		t.Fatalf("wanted NotLeaderError, got %s", pErr)
 	}
@@ -495,7 +496,7 @@ func TestRangeLeaderLease(t *testing.T) {
 		}
 	}
 
-	if _, ok := rng.redirectOnOrAcquireLeaderLease(nil).GetDetail().(*roachpb.NotLeaderError); !ok {
+	if _, ok := rng.redirectOnOrAcquireLeaderLease(tracer.NilTrace()).GetDetail().(*roachpb.NotLeaderError); !ok {
 		t.Fatalf("expected %T, got %s", &roachpb.NotLeaderError{}, err)
 	}
 }

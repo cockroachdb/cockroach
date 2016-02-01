@@ -44,6 +44,7 @@ github.com/mibk/dupl 47b66d6a523fb992d21bc375c1a2fef7320ccaa1
 github.com/montanaflynn/stats 2c10aa99e7ec8c4607d4427ec7a1a60fcdfce85f
 github.com/olekukonko/tablewriter cca8bbc0798408af109aaaa239cbd2634846b340
 github.com/opennota/check 2647c7f78677e5af42e988a36343bc83194b7109
+github.com/opentracing/opentracing-go a33c13ce61bf7d67fb342d044d5d899e8a9da77a
 github.com/peterh/liner d5e5aeeb67ca5aeeddeb0b6c3af05421ff63a0b6
 github.com/rcrowley/go-metrics 51425a2415d21afadfd55cd93432c0bc69e9598d
 github.com/robfig/glock cb3c3ec56de988289cab7bbd284eddc04dfee6c9

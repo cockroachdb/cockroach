@@ -128,7 +128,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.storePool = storage.NewStorePool(s.gossip, s.clock, ctx.TimeUntilStoreDead, stopper)
 
 	feed := util.NewFeed(stopper)
-	tracer := tracer.NewTracer(feed, ctx.Addr)
+	tracer := tracer.NewTracer()
 
 	// A custom RetryOptions is created which uses stopper.ShouldDrain() as
 	// the Closer. This prevents infinite retry loops from occuring during

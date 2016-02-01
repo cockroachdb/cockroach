@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracer"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
+	"github.com/opentracing/opentracing-go"
 )
 
 const (
@@ -124,9 +125,10 @@ func bootstrapCluster(engines []engine.Engine) (string, error) {
 	ctx := storage.StoreContext{}
 	ctx.ScanInterval = 10 * time.Minute
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
+	ctx.Tracer = tracer.NewTracer()
 	// Create a KV DB with a local sender.
 	stores := storage.NewStores(ctx.Clock)
-	sender := kv.NewTxnCoordSender(stores, ctx.Clock, false, nil, stopper)
+	sender := kv.NewTxnCoordSender(stores, ctx.Clock, false, ctx.Tracer, stopper)
 	ctx.DB = client.NewDB(sender)
 	ctx.Transport = storage.NewLocalRPCTransport(stopper)
 	for i, eng := range engines {
@@ -524,17 +526,17 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 	f := func() {
 		// TODO(tschottdorf) get a hold of the client's ID, add it to the
 		// context before dispatching, and create an ID for tracing the request.
-		trace := n.ctx.Tracer.NewTrace(tracer.Node, ba)
-		defer trace.Finalize()
-		defer trace.Epoch("node")()
-		ctx := tracer.ToCtx((*Node)(n).context(), trace)
+		trace := n.ctx.Tracer.StartTrace(ba.TraceID())
+		defer trace.Finish()
+		trace.LogEvent("node")
+		ctx, _ := opentracing.ContextWithSpan((*Node)(n).context(), trace)
 
 		tStart := time.Now()
 		var pErr *roachpb.Error
 		br, pErr = n.stores.Send(ctx, *ba)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
-			trace.Event(fmt.Sprintf("error: %T", pErr.GetDetail()))
+			trace.LogEvent(fmt.Sprintf("error: %T", pErr.GetDetail()))
 		}
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
