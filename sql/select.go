@@ -339,7 +339,7 @@ func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
 		s.pErr = roachpb.NewError(err)
 		return s.pErr
 	}
-	if !(whereType == parser.DummyBool || whereType == parser.DNull) {
+	if !(whereType.TypeEqual(parser.DummyBool) || whereType == parser.DNull) {
 		s.pErr = roachpb.NewUErrorf("argument of WHERE must be type %s, not type %s",
 			parser.DummyBool.Type(), whereType.Type())
 		return s.pErr

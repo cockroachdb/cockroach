@@ -57,7 +57,7 @@ func (p *planner) Values(n parser.Values) (planNode, *roachpb.Error) {
 				v.columns = append(v.columns, ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
 			} else if v.columns[i].Typ == parser.DNull {
 				v.columns[i].Typ = typ
-			} else if typ != parser.DNull && typ != v.columns[i].Typ {
+			} else if typ != parser.DNull && !typ.TypeEqual(v.columns[i].Typ) {
 				return nil, roachpb.NewUErrorf("VALUES list type mismatch, %s for %s", typ.Type(), v.columns[i].Typ.Type())
 			}
 		}
