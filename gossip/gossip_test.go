@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -37,7 +36,7 @@ import (
 func TestGossipInfoStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), nil)
-	g := New(rpcContext, TestBootstrap)
+	g := New(rpcContext, TestBootstrap, nil)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	slice := []byte("b")
@@ -75,7 +74,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	if len(resolvers) != 6 {
 		t.Errorf("expected 6 resolvers; got %d", len(resolvers))
 	}
-	g := New(nil, resolvers)
+	g := New(nil, resolvers, nil)
 
 	// Using specified resolvers, fetch bootstrap addresses 10 times
 	// and verify the results match expected addresses.
@@ -92,12 +91,10 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 		"127.0.0.1:9005",
 	}
 	for i := 0; i < len(expAddresses); i++ {
-		log.Infof("getting next address")
-		addr := g.getNextBootstrapAddress()
-		if addr == nil {
+		if addr := g.getNextBootstrapAddress(); addr == nil {
 			t.Errorf("%d: unexpected nil addr when expecting %s", i, expAddresses[i])
-		} else if addr.String() != expAddresses[i] {
-			t.Errorf("%d: expected addr %s; got %s", i, expAddresses[i], addr.String())
+		} else if addrStr := addr.String(); addrStr != expAddresses[i] {
+			t.Errorf("%d: expected addr %s; got %s", i, expAddresses[i], addrStr)
 		}
 	}
 }
@@ -124,7 +121,7 @@ func TestGossipCullNetwork(t *testing.T) {
 		local.startClient(pAddr, stopper)
 	}
 	local.mu.Unlock()
-	local.manage(stopper)
+	local.manage()
 
 	util.SucceedsWithin(t, 10*time.Second, func() error {
 		// Verify that a client is closed within the cull interval.

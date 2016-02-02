@@ -95,7 +95,7 @@ func (n *Network) CreateNode() (*Node, error) {
 		return nil, err
 	}
 	node := &Node{Server: server, Addr: ln.Addr()}
-	node.Gossip = gossip.New(n.rpcContext, nil)
+	node.Gossip = gossip.New(n.rpcContext, nil, n.Stopper)
 	n.Nodes = append(n.Nodes, node)
 	return node, nil
 }
@@ -115,7 +115,7 @@ func (n *Network) StartNode(node *Node) error {
 		encoding.EncodeUint64Ascending(nil, 0), time.Hour); err != nil {
 		return err
 	}
-	node.Gossip.Start(node.Server, node.Addr, n.Stopper)
+	node.Gossip.Start(node.Server, node.Addr)
 	node.Gossip.EnableSimulationCycler(true)
 	return nil
 }
