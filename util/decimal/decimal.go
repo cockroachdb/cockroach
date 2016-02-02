@@ -108,6 +108,9 @@ func Mod(z, x, y *inf.Dec) *inf.Dec {
 	case x:
 		x = new(inf.Dec)
 		x.Set(z)
+		if z == y {
+			y = x
+		}
 	case y:
 		y = new(inf.Dec)
 		y.Set(z)
