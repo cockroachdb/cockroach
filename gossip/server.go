@@ -109,10 +109,10 @@ func (s *server) Gossip(serverStream Gossip_GossipServer) error {
 			s.incoming.addNode(args.NodeID)
 			s.nodeMap[args.Addr] = args.NodeID
 
-			defer func() {
-				s.incoming.removeNode(args.NodeID)
-				delete(s.nodeMap, args.Addr)
-			}()
+			defer func(nodeID roachpb.NodeID, addr util.UnresolvedAddr) {
+				s.incoming.removeNode(nodeID)
+				delete(s.nodeMap, addr)
+			}(args.NodeID, args.Addr)
 		} else {
 			var alternateAddr util.UnresolvedAddr
 			var alternateNodeID roachpb.NodeID

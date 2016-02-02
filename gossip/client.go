@@ -298,7 +298,7 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 	})
 
 	// Loop until stopper is signalled, or until either the gossip or RPC clients are closed.
-	// The stopper's signal is propagated through the context passed to the outgoing RPC.
+	// The stopper's signal is propagated through the context attached to the stream.
 	for {
 		reply, err := stream.Recv()
 		if err != nil {
