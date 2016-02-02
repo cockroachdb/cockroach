@@ -41,7 +41,7 @@ func TestQueryCounts(t *testing.T) {
 	for _, tc := range testcases {
 		if tc.query != "" {
 			if _, err := sqlDB.Exec(tc.query); err != nil {
-				t.Fatalf("Unexpected error executing '%s': %s'", tc.query, err)
+				t.Fatalf("unexpected error executing '%s': %s'", tc.query, err)
 			}
 		}
 

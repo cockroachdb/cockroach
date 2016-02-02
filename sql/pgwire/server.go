@@ -154,7 +154,6 @@ func (s *Server) close() {
 func (s *Server) serveConn(conn net.Conn) error {
 	var buf readBuffer
 	n, err := buf.readUntypedMsg(conn)
-	s.metrics.bytesInCount.Inc(int64(n))
 	if err != nil {
 		return err
 	}
@@ -162,6 +161,7 @@ func (s *Server) serveConn(conn net.Conn) error {
 	if err != nil {
 		return err
 	}
+	s.metrics.bytesInCount.Inc(int64(n))
 	errSSLRequired := false
 	if version == versionSSL {
 		if len(buf.msg) > 0 {
@@ -184,10 +184,10 @@ func (s *Server) serveConn(conn net.Conn) error {
 		}
 
 		n, err := buf.readUntypedMsg(conn)
-		s.metrics.bytesInCount.Inc(int64(n))
 		if err != nil {
 			return err
 		}
+		s.metrics.bytesInCount.Inc(int64(n))
 		version, err = buf.getInt32()
 		if err != nil {
 			return err
