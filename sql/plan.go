@@ -169,7 +169,7 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
 		return p.Update(n)
 	default:
 		// TODO(mjibson): use stmt.PGTag() instead of %T
-		return nil, roachpb.NewUErrorf("prepare statement not supported: %T", stmt)
+		return nil, roachpb.NewUErrorf("prepare statement not supported: %s", stmt.StatementTag())
 
 		// TODO(mjibson): add support for parser.Values.
 		// Broken because it conflicts with INSERT's use of VALUES.

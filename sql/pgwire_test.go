@@ -172,7 +172,7 @@ func TestPGPrepareFail(t *testing.T) {
 		"SELECT now() + $1":        "pq: unsupported binary operator: <timestamp> + <valarg>",
 
 		"CREATE TABLE $1 (id INT)":  "pq: syntax error at or near \"1\"\nCREATE TABLE $1 (id INT)\n             ^\n",
-		"DROP TABLE t":              "pq: prepare statement not supported: *parser.DropTable",
+		"DROP TABLE t":              "pq: prepare statement not supported: DROP TABLE",
 		"UPDATE d.t SET s = i + $1": "pq: value type int doesn't match type STRING of column \"s\"",
 	}
 
