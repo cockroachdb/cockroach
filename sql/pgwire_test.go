@@ -26,8 +26,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/lib/pq"
-
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
@@ -36,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/pq"
 )
 
 func trivialQuery(pgUrl url.URL) error {
@@ -542,7 +541,7 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	}
 	defer db.Close()
 
-	// lib/pq handles the empty query response by returning a nil driver.Result.
+	// cockroachdb/pq handles the empty query response by returning a nil driver.Result.
 	// Unfortunately sql.Exec wraps that, nil or not, in a sql.Result which doesn't
 	// expose the underlying driver.Result.
 	// sql.Result does however have methods which attempt to dereference the underlying
@@ -554,7 +553,7 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _ = nonempty.RowsAffected() // should not panic if lib/pq returned a non-nil result.
+	_, _ = nonempty.RowsAffected() // should not panic if cockroachdb/pq returned a non-nil result.
 
 	empty, err := db.Exec(" ")
 	if err != nil {
@@ -563,12 +562,12 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	defer func() {
 		_ = recover()
 	}()
-	_, _ = empty.RowsAffected() // should panic if lib/pq returned a nil result as expected.
+	_, _ = empty.RowsAffected() // should panic if cockroachdb/pq returned a nil result as expected.
 	t.Fatal("should not get here -- empty result from empty query should panic first")
 	// TODO(dt): clean this up with testify/assert and add tests for less trivial empty queries.
 }
 
-// Unfortunately lib/pq doesn't expose returned command tags directly, but we can test
+// Unfortunately cockroachdb/pq doesn't expose returned command tags directly, but we can test
 // the methods where it depends on their values (Begin, Commit, RowsAffected for INSERTs).
 func TestPGCommandTags(t *testing.T) {
 	defer leaktest.AfterTest(t)
@@ -601,7 +600,7 @@ func TestPGCommandTags(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// lib/pq has a special-case for INSERT (due to oids), so test insert and update statements.
+	// cockroachdb/pq has a special-case for INSERT (due to oids), so test insert and update statements.
 	res, err := db.Exec("INSERT INTO testing.tags VALUES (1, 1), (2, 2)")
 	if err != nil {
 		t.Fatal(err)

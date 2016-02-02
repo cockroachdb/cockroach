@@ -22,8 +22,6 @@ import (
 	"fmt"
 	"testing"
 
-	_ "github.com/lib/pq"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -32,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	_ "github.com/cockroachdb/pq"
 )
 
 func TestLogSplits(t *testing.T) {

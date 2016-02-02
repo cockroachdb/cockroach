@@ -23,16 +23,21 @@ import (
 	"io"
 	"net"
 
-	"github.com/lib/pq"
-
 	"github.com/olekukonko/tablewriter"
 
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/pq"
 )
+
+// nextResult is a special SQL query which indicates we want the next result
+// for a multi-statement query. Instead of sending a query, we invoke
+// sqlConn.Next().
+const nextResult = `\next`
 
 type sqlConnI interface {
 	driver.Conn
 	driver.Queryer
+	Next() (driver.Rows, error)
 }
 
 type sqlConn struct {
@@ -56,6 +61,20 @@ func (c *sqlConn) Query(query string, args []driver.Value) (*sqlRows, error) {
 		return nil, err
 	}
 	rows, err := c.conn.Query(query, args)
+	if err == driver.ErrBadConn {
+		c.Close()
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &sqlRows{Rows: rows, conn: c}, nil
+}
+
+func (c *sqlConn) Next() (*sqlRows, error) {
+	if c.conn == nil {
+		return nil, driver.ErrBadConn
+	}
+	rows, err := c.conn.Next()
 	if err == driver.ErrBadConn {
 		c.Close()
 	}
@@ -118,16 +137,16 @@ type fmtMap map[string]func(driver.Value) string
 
 // runQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and returns a list of columns names and a list of rows.
-func runQuery(db *sqlConn, query string, parameters ...driver.Value) (
+func runQuery(conn *sqlConn, query string, parameters ...driver.Value) (
 	[]string, [][]string, error) {
-	return runQueryWithFormat(db, nil, query, parameters...)
+	return runQueryWithFormat(conn, nil, query, parameters...)
 }
 
-// runQuery takes a 'query' with optional 'parameters'.
+// runQueryWithFormat takes a 'query' with optional 'parameters'.
 // It runs the sql query and returns a list of columns names and a list of rows.
 // If 'format' is not nil, the values with column name
 // found in the map are run through the corresponding callback.
-func runQueryWithFormat(db *sqlConn, format fmtMap, query string, parameters ...driver.Value) (
+func runQueryWithFormat(conn *sqlConn, format fmtMap, query string, parameters ...driver.Value) (
 	[]string, [][]string, error) {
 	// driver.Value is an alias for interface{}, but must adhere to a restricted
 	// set of types when being passed to driver.Queryer.Query (see
@@ -143,24 +162,36 @@ func runQueryWithFormat(db *sqlConn, format fmtMap, query string, parameters ...
 		}
 	}
 
-	rows, err := db.Query(query, parameters)
+	var rows *sqlRows
+	var err error
+	if query == nextResult {
+		rows, err = conn.Next()
+	} else {
+		rows, err = conn.Query(query, parameters)
+	}
 	if err != nil {
-		return nil, nil, fmt.Errorf("query error: %s", err)
+		return nil, nil, err
 	}
 
 	defer func() { _ = rows.Close() }()
 	return sqlRowsToStrings(rows, format)
 }
 
-// runPrettyQueryWithFormat takes a 'query' with optional 'parameters'.
+// runPrettyQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and writes pretty output to 'w'.
-func runPrettyQuery(db *sqlConn, w io.Writer, query string, parameters ...driver.Value) error {
-	cols, allRows, err := runQuery(db, query, parameters...)
-	if err != nil {
-		return err
+func runPrettyQuery(conn *sqlConn, w io.Writer, query string, parameters ...driver.Value) error {
+	for {
+		cols, allRows, err := runQuery(conn, query, parameters...)
+		if err != nil {
+			if err == pq.ErrNoMoreResults {
+				return nil
+			}
+			return err
+		}
+		printQueryOutput(w, cols, allRows)
+		query = nextResult
+		parameters = nil
 	}
-	printQueryOutput(w, cols, allRows)
-	return nil
 }
 
 // sqlRowsToStrings turns 'rows' into a list of rows, each of which

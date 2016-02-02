@@ -25,14 +25,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lib/pq/oid"
-
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/cockroachdb/pq/oid"
 )
 
 //go:generate stringer -type=clientMessageType

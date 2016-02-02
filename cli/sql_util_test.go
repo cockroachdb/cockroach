@@ -129,38 +129,31 @@ OK
 	}
 	b.Reset()
 
-	// TODO(pmattis): This test case fails now as lib/pq doesn't handle multiple
-	// results correctly. We were previously incorrectly ignoring the error from
-	// sql.Rows.Err() which is what allowed the test to pass.
+	// Test multiple results.
+	if err := runPrettyQuery(conn, &b, `SELECT 1; SELECT 2, 3; SELECT 'hello'`); err != nil {
+		t.Fatal(err)
+	}
 
-	/**
-		// Test multiple results.
-		if err := runPrettyQuery(conn, &b, `SELECT 1; SELECT 2, 3; SELECT 'hello'`); err != nil {
-			t.Fatal(err)
-		}
+	expected = `
++---+
+| 1 |
++---+
+| 1 |
++---+
++---+---+
+| 2 | 3 |
++---+---+
+| 2 | 3 |
++---+---+
++---------+
+| 'hello' |
++---------+
+| hello   |
++---------+
+`
 
-		expected = `
-	+---+
-	| 1 |
-	+---+
-	| 1 |
-	+---+
-	`
-		// TODO(pmattis): When #4016 is fixed, we should see:
-		// +---+---+
-		// | 2 | 3 |
-		// +---+---+
-		// | 2 | 3 |
-		// +---+---+
-		// +---------+
-		// | 'hello' |
-		// +---------+
-		// | "hello" |
-		// +---------+
-
-		if a, e := b.String(), expected[1:]; a != e {
-			t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
-		}
-		b.Reset()
-	**/
+	if a, e := b.String(), expected[1:]; a != e {
+		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
+	}
+	b.Reset()
 }
