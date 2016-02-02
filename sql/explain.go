@@ -56,7 +56,9 @@ func (p *planner) Explain(n *parser.Explain) (planNode, *roachpb.Error) {
 		if err != nil {
 			return nil, roachpb.NewUErrorf("%v: %s", err, n)
 		}
-		return plan, nil
+		// Wrap the plan in an explainDebugNode.
+		return &explainDebugNode{plan}, nil
+
 	case explainPlan:
 		v := &valuesNode{}
 		v.columns = []ResultColumn{
@@ -65,11 +67,11 @@ func (p *planner) Explain(n *parser.Explain) (planNode, *roachpb.Error) {
 			{Name: "Description", Typ: parser.DummyString},
 		}
 		populateExplain(v, plan, 0)
-		plan = v
+		return v, nil
+
 	default:
 		return nil, roachpb.NewUErrorf("unsupported EXPLAIN mode: %d", mode)
 	}
-	return plan, nil
 }
 
 func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
@@ -79,8 +81,12 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 
 		if _, ok := t.table.node.(*indexJoinNode); ok {
 			// We will replace the indexJoinNode with the index node; we cannot
-			// process filters anymore (we don't have all the values).
+			// process filter or render expressions (we don't have all the values).
+			// TODO(radu): this should go away once indexJoinNode properly
+			// implements explainDebug.
 			t.filter = nil
+			t.render = nil
+			t.qvals = nil
 		} else if _, ok := t.table.node.(*scanNode); !ok {
 			// TODO(radu): We don't support debug mode for selects with no table or with a
 			// virtual table (subquery).
@@ -125,4 +131,55 @@ func populateExplain(v *valuesNode, plan planNode, level int) {
 	for _, child := range children {
 		populateExplain(v, child, level+1)
 	}
+}
+
+// explainDebugNode is a planNode that wraps another node and converts DebugValues() results to a
+// row of Values(). It is used as the top-level node for EXPLAIN (DEBUG) statements.
+type explainDebugNode struct {
+	plan planNode
+}
+
+// Columns for explainDebug mode.
+var debugColumns = []ResultColumn{
+	{Name: "RowIdx", Typ: parser.DummyInt},
+	{Name: "Key", Typ: parser.DummyString},
+	{Name: "Value", Typ: parser.DummyString},
+	{Name: "Output", Typ: parser.DummyBool},
+}
+
+func (*explainDebugNode) Columns() []ResultColumn { return debugColumns }
+func (*explainDebugNode) Ordering() orderingInfo  { return orderingInfo{} }
+
+func (n *explainDebugNode) PErr() *roachpb.Error { return n.plan.PErr() }
+func (n *explainDebugNode) Next() bool           { return n.plan.Next() }
+
+func (n *explainDebugNode) ExplainPlan() (name, description string, children []planNode) {
+	return n.plan.ExplainPlan()
+}
+
+func (n *explainDebugNode) Values() parser.DTuple {
+	vals := n.plan.DebugValues()
+
+	// The "output" value is NULL for partial rows, or a DBool indicating if the row passed the
+	// filtering.
+	outputVal := parser.DNull
+
+	switch vals.output {
+	case debugValueFiltered:
+		outputVal = parser.DBool(false)
+
+	case debugValueRow:
+		outputVal = parser.DBool(true)
+	}
+
+	return parser.DTuple{
+		parser.DInt(vals.rowIdx),
+		parser.DString(vals.key),
+		vals.value,
+		outputVal,
+	}
+}
+
+func (*explainDebugNode) DebugValues() debugValues {
+	panic("Debug mode not implemented by explainDebugNode")
 }

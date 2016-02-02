@@ -94,6 +94,15 @@ func (n *valuesNode) Values() parser.DTuple {
 	return n.rows[n.nextRow-1]
 }
 
+func (n *valuesNode) DebugValues() debugValues {
+	return debugValues{
+		rowIdx: n.nextRow - 1,
+		key:    fmt.Sprintf("%d", n.nextRow-1),
+		value:  n.rows[n.nextRow-1],
+		output: debugValueRow,
+	}
+}
+
 func (n *valuesNode) Next() bool {
 	if n.nextRow >= len(n.rows) {
 		return false

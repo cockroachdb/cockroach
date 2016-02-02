@@ -99,6 +99,11 @@ func (n *indexJoinNode) Values() parser.DTuple {
 	return n.table.Values()
 }
 
+func (*indexJoinNode) DebugValues() debugValues {
+	// TODO(radu)
+	panic("Debug mode not implemented in sortNode")
+}
+
 func (n *indexJoinNode) Next() bool {
 	// Loop looking up the next row. We either are going to pull a row from the
 	// table or a batch of rows from the index. If we pull a batch of rows from

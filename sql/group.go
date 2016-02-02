@@ -221,6 +221,11 @@ func (n *groupNode) Values() parser.DTuple {
 	return n.values.Values()
 }
 
+func (*groupNode) DebugValues() debugValues {
+	// TODO(radu)
+	panic("Debug mode not implemented in sortNode")
+}
+
 func (n *groupNode) Next() bool {
 	if !n.populated && n.pErr == nil {
 		n.computeAggregates()

@@ -72,17 +72,10 @@ type selectNode struct {
 	// columns[numOriginalCols:].
 	numOriginalCols int
 
-	explain explainMode
+	explain   explainMode
+	debugVals debugValues
 
 	ordering orderingInfo
-}
-
-// Columns for explainDebug mode.
-var debugColumns = []ResultColumn{
-	{Name: "RowIdx", Typ: parser.DummyInt},
-	{Name: "Key", Typ: parser.DummyString},
-	{Name: "Value", Typ: parser.DummyString},
-	{Name: "Output", Typ: parser.DummyBool},
 }
 
 func (s *selectNode) Columns() []ResultColumn {
@@ -100,32 +93,28 @@ func (s *selectNode) Values() parser.DTuple {
 	return s.row
 }
 
+func (s *selectNode) DebugValues() debugValues {
+	if s.explain != explainDebug {
+		panic("DebugValues called, node not in debug mode.")
+	}
+	return s.debugVals
+}
+
 func (s *selectNode) Next() bool {
 	for {
 		if !s.table.node.Next() {
 			return false
 		}
-		row := s.table.node.Values()
 
 		if s.explain == explainDebug {
-			if len(s.row) != 4 {
-				s.row = make(parser.DTuple, 4)
-			}
-			debugValues := row[len(row)-4:]
+			s.debugVals = s.table.node.DebugValues()
 
-			if debugValues[3] != parser.DNull && s.filter != nil {
-				// We are at the end of the row and we have a filtering expression
-				s.populateQVals(row)
-				output := s.filterRow()
-				if s.pErr != nil {
-					return false
-				}
-				debugValues[3] = parser.DBool(output)
+			if s.debugVals.output != debugValueRow {
+				// Let the debug values pass through.
+				return true
 			}
-			copy(s.row, debugValues)
-			return true
 		}
-
+		row := s.table.node.Values()
 		s.populateQVals(row)
 		output := s.filterRow()
 		if s.pErr != nil {
@@ -134,6 +123,10 @@ func (s *selectNode) Next() bool {
 
 		if output {
 			s.renderRow()
+			return true
+		} else if s.explain == explainDebug {
+			// Mark the row as filtered out.
+			s.debugVals.output = debugValueFiltered
 			return true
 		}
 		// Row was filtered out; grab the next row.
