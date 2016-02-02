@@ -231,7 +231,8 @@ func TestNodeJoin(t *testing.T) {
 
 	// Create a new node.
 	engines2 := []engine.Engine{engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)}
-	_, server2Addr, node2, stopper2 := createAndStartTestNode(util.CreateTestAddr("tcp"), engines2, server1Addr, t)
+	addr2 := util.CreateTestAddr("tcp")
+	_, server2Addr, node2, stopper2 := createAndStartTestNode(addr2, engines2, server1Addr, t)
 	defer stopper2.Stop()
 
 	// Verify new node is able to bootstrap its store.
@@ -242,25 +243,23 @@ func TestNodeJoin(t *testing.T) {
 	// Verify node1 sees node2 via gossip and vice versa.
 	node1Key := gossip.MakeNodeIDKey(node1.Descriptor.NodeID)
 	node2Key := gossip.MakeNodeIDKey(node2.Descriptor.NodeID)
-	if err := util.IsTrueWithin(func() bool {
-		nodeDesc1 := &roachpb.NodeDescriptor{}
-		if err := node1.ctx.Gossip.GetInfoProto(node2Key, nodeDesc1); err != nil {
-			return false
+	util.SucceedsWithin(t, 50*time.Millisecond, func() error {
+		var nodeDesc1 roachpb.NodeDescriptor
+		if err := node1.ctx.Gossip.GetInfoProto(node2Key, &nodeDesc1); err != nil {
+			return err
 		}
-		if addr2 := nodeDesc1.Address.AddressField; addr2 != server2Addr.String() {
-			t.Errorf("addr2 gossip %s doesn't match addr2 address %s", addr2, server2Addr.String())
+		if addr2Str, server2AddrStr := nodeDesc1.Address.String(), server2Addr.String(); addr2Str != server2AddrStr {
+			return util.Errorf("addr2 gossip %s doesn't match addr2 address %s", addr2Str, server2AddrStr)
 		}
-		nodeDesc2 := &roachpb.NodeDescriptor{}
-		if err := node2.ctx.Gossip.GetInfoProto(node1Key, nodeDesc2); err != nil {
-			return false
+		var nodeDesc2 roachpb.NodeDescriptor
+		if err := node2.ctx.Gossip.GetInfoProto(node1Key, &nodeDesc2); err != nil {
+			return err
 		}
-		if addr1 := nodeDesc2.Address.AddressField; addr1 != server1Addr.String() {
-			t.Errorf("addr1 gossip %s doesn't match addr1 address %s", addr1, server1Addr.String())
+		if addr1Str, server1AddrStr := nodeDesc2.Address.String(), server1Addr.String(); addr1Str != server1AddrStr {
+			return util.Errorf("addr1 gossip %s doesn't match addr1 address %s", addr1Str, server1AddrStr)
 		}
-		return true
-	}, 50*time.Millisecond); err != nil {
-		t.Error(err)
-	}
+		return nil
+	})
 }
 
 // TestCorruptedClusterID verifies that a node fails to start when a
