@@ -17,7 +17,6 @@
 package gossip
 
 import (
-	"fmt"
 	"net"
 	"sync"
 
@@ -37,7 +36,7 @@ type server struct {
 	mu       sync.Mutex                             // Protects the fields below
 	is       *infoStore                             // The backing infostore
 	incoming nodeSet                                // Incoming client node IDs
-	nodeMap  map[roachpb.NodeID]util.UnresolvedAddr // Incoming client's node ID -> local address
+	nodeMap  map[util.UnresolvedAddr]roachpb.NodeID // Incoming client's local address -> node ID
 	tighten  chan roachpb.NodeID                    // Channel of too-distant node IDs
 	sent     int                                    // Count of infos sent from this server to clients
 	received int                                    // Count of infos received from clients
@@ -52,7 +51,7 @@ func newServer(stopper *stop.Stopper) *server {
 		stopper:  stopper,
 		is:       newInfoStore(0, util.UnresolvedAddr{}),
 		incoming: makeNodeSet(minPeers),
-		nodeMap:  make(map[roachpb.NodeID]util.UnresolvedAddr),
+		nodeMap:  make(map[util.UnresolvedAddr]roachpb.NodeID),
 		tighten:  make(chan roachpb.NodeID, 1),
 	}
 	s.ready = sync.NewCond(&s.mu)
@@ -94,47 +93,43 @@ func (s *server) Gossip(serverStream Gossip_GossipServer) error {
 		return err
 	}
 
+	// Verify that there aren't multiple incoming connections from the same
+	// node. This can happen when bootstrap connections are initiated through
+	// a load balancer.
+	if _, ok := s.nodeMap[args.Addr]; ok {
+		return util.Errorf("duplicate connection from node at %s", args.Addr)
+	}
+
 	if args.NodeID != 0 {
 		// Decide whether or not we can accept the incoming connection
 		// as a permanent peer.
 		if s.incoming.hasNode(args.NodeID) {
-			// Verify that there aren't multiple incoming connections from the same
-			// node. This can happen when bootstrap connections are initiated through
-			// a load balancer.
-			if _, ok := s.nodeMap[args.NodeID]; ok {
-				return util.Errorf("duplicate connection from node %d", args.NodeID)
-			}
+			// Do nothing.
 		} else if s.incoming.hasSpace() {
 			s.incoming.addNode(args.NodeID)
-			// This lookup map restricts incoming connections to a single
-			// connection per node ID.
-			s.nodeMap[args.NodeID] = args.Addr
+			s.nodeMap[args.Addr] = args.NodeID
 
-			defer func(nodeID roachpb.NodeID) {
+			defer func(nodeID roachpb.NodeID, addr util.UnresolvedAddr) {
 				s.incoming.removeNode(nodeID)
-				delete(s.nodeMap, nodeID)
-			}(args.NodeID)
+				delete(s.nodeMap, addr)
+			}(args.NodeID, args.Addr)
 		} else {
-			alternateNodeID := s.incoming.selectRandom()
-			alternateNodeAddr, ok := s.nodeMap[alternateNodeID]
-			if !ok {
-				panic(fmt.Sprintf("node ID %d is missing from the node map %s", alternateNodeID, s.nodeMap))
+			var alternateAddr util.UnresolvedAddr
+			var alternateNodeID roachpb.NodeID
+			for addr, id := range s.nodeMap {
+				alternateAddr = addr
+				alternateNodeID = id
+				break
 			}
 
 			log.Infof("refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
-				args.NodeID, s.incoming.maxSize, alternateNodeID, alternateNodeAddr)
+				args.NodeID, s.incoming.maxSize, alternateNodeID, alternateAddr)
 
 			return stream.Send(&Response{
 				NodeID:          s.is.NodeID,
-				AlternateAddr:   &alternateNodeAddr,
+				AlternateAddr:   &alternateAddr,
 				AlternateNodeID: alternateNodeID,
 			})
-		}
-	} else {
-		for _, addr := range s.nodeMap {
-			if addr == args.Addr {
-				return util.Errorf("duplicate connection from node %d on %s", args.NodeID, addr)
-			}
 		}
 	}
 
@@ -201,11 +196,13 @@ func (s *server) Gossip(serverStream Gossip_GossipServer) error {
 			cycler.Wait()
 		}
 
-		// args holds the remote peer state; we need to update it whenever we receive a new request.
-		args, err = stream.Recv()
+		recvArgs, err := stream.Recv()
 		if err != nil {
 			return err
 		}
+
+		// args holds the remote peer state; we need to update it whenever we receive a new request.
+		args = recvArgs
 	}
 }
 
