@@ -28,9 +28,11 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/decimal"
+	"github.com/cockroachdb/cockroach/util/decimal"
 )
 
 var (
@@ -90,7 +92,10 @@ var unaryOps = map[unaryArgs]unaryOp{
 	unaryArgs{UnaryMinus, decimalType}: {
 		returnType: DummyDecimal,
 		fn: func(_ EvalContext, d Datum) (Datum, error) {
-			return DDecimal{Decimal: decimal.Zero.Sub(d.(DDecimal).Decimal)}, nil
+			dec := d.(DDecimal).Dec
+			dd := DDecimal{}
+			dd.Neg(&dec)
+			return dd, nil
 		},
 	},
 
@@ -154,7 +159,11 @@ var binOps = map[binArgs]binOp{
 	binArgs{Plus, decimalType, decimalType}: {
 		returnType: DummyDecimal,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-			return DDecimal{Decimal: left.(DDecimal).Add(right.(DDecimal).Decimal)}, nil
+			l := left.(DDecimal).Dec
+			r := right.(DDecimal).Dec
+			dd := DDecimal{}
+			dd.Add(&l, &r)
+			return dd, nil
 		},
 	},
 	binArgs{Plus, dateType, intType}: {
@@ -202,7 +211,11 @@ var binOps = map[binArgs]binOp{
 	binArgs{Minus, decimalType, decimalType}: {
 		returnType: DummyDecimal,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-			return DDecimal{Decimal: left.(DDecimal).Sub(right.(DDecimal).Decimal)}, nil
+			l := left.(DDecimal).Dec
+			r := right.(DDecimal).Dec
+			dd := DDecimal{}
+			dd.Sub(&l, &r)
+			return dd, nil
 		},
 	},
 	binArgs{Minus, dateType, intType}: {
@@ -251,7 +264,11 @@ var binOps = map[binArgs]binOp{
 	binArgs{Mult, decimalType, decimalType}: {
 		returnType: DummyDecimal,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-			return DDecimal{Decimal: left.(DDecimal).Mul(right.(DDecimal).Decimal)}, nil
+			l := left.(DDecimal).Dec
+			r := right.(DDecimal).Dec
+			dd := DDecimal{}
+			dd.Mul(&l, &r)
+			return dd, nil
 		},
 	},
 	binArgs{Mult, intType, intervalType}: {
@@ -286,10 +303,14 @@ var binOps = map[binArgs]binOp{
 	binArgs{Div, decimalType, decimalType}: {
 		returnType: DummyDecimal,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-			if right.(DDecimal).Equals(decimal.Zero) {
+			l := left.(DDecimal).Dec
+			r := right.(DDecimal).Dec
+			if r.Sign() == 0 {
 				return nil, errDivByZero
 			}
-			return DDecimal{Decimal: left.(DDecimal).Div(right.(DDecimal).Decimal)}, nil
+			dd := DDecimal{}
+			dd.QuoRound(&l, &r, decimal.Precision, inf.RoundHalfUp)
+			return dd, nil
 		},
 	},
 	binArgs{Div, intervalType, intType}: {
@@ -322,12 +343,14 @@ var binOps = map[binArgs]binOp{
 	binArgs{Mod, decimalType, decimalType}: {
 		returnType: DummyDecimal,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-			l := left.(DDecimal)
-			r := right.(DDecimal)
-			if r.Equals(decimal.Zero) {
+			l := left.(DDecimal).Dec
+			r := right.(DDecimal).Dec
+			if r.Sign() == 0 {
 				return nil, errZeroModulus
 			}
-			return DDecimal{Decimal: l.Mod(r.Decimal)}, nil
+			dd := DDecimal{}
+			decimal.Mod(&dd.Dec, &l, &r)
+			return dd, nil
 		},
 	},
 
@@ -401,7 +424,9 @@ var cmpOps = map[cmpArgs]cmpOp{
 	},
 	cmpArgs{EQ, decimalType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			return DBool(left.(DDecimal).Equals(right.(DDecimal).Decimal)), nil
+			l := left.(DDecimal).Dec
+			r := right.(DDecimal).Dec
+			return DBool(l.Cmp(&r) == 0), nil
 		},
 	},
 	cmpArgs{EQ, floatType, intType}: {
@@ -416,30 +441,30 @@ var cmpOps = map[cmpArgs]cmpOp{
 	},
 	cmpArgs{EQ, decimalType, intType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			l := left.(DDecimal).Decimal
-			r := decimal.New(int64(right.(DInt)), 0)
-			return DBool(l.Equals(r)), nil
+			l := left.(DDecimal).Dec
+			r := inf.NewDec(int64(right.(DInt)), 0)
+			return DBool(l.Cmp(r) == 0), nil
 		},
 	},
 	cmpArgs{EQ, intType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			l := decimal.New(int64(left.(DInt)), 0)
-			r := right.(DDecimal).Decimal
-			return DBool(l.Equals(r)), nil
+			l := inf.NewDec(int64(left.(DInt)), 0)
+			r := right.(DDecimal).Dec
+			return DBool(l.Cmp(&r) == 0), nil
 		},
 	},
 	cmpArgs{EQ, decimalType, floatType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			l := left.(DDecimal).Decimal
-			r := decimal.NewFromFloat(float64(right.(DFloat)))
-			return DBool(l.Equals(r)), nil
+			l := left.(DDecimal).Dec
+			r := decimal.NewDecFromFloat(float64(right.(DFloat)))
+			return DBool(l.Cmp(r) == 0), nil
 		},
 	},
 	cmpArgs{EQ, floatType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			l := decimal.NewFromFloat(float64(left.(DFloat)))
-			r := right.(DDecimal).Decimal
-			return DBool(l.Equals(r)), nil
+			l := decimal.NewDecFromFloat(float64(left.(DFloat)))
+			r := right.(DDecimal).Dec
+			return DBool(l.Cmp(&r) == 0), nil
 		},
 	},
 	cmpArgs{EQ, dateType, dateType}: {
@@ -485,7 +510,9 @@ var cmpOps = map[cmpArgs]cmpOp{
 	},
 	cmpArgs{LT, decimalType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			return DBool(left.(DDecimal).Cmp(right.(DDecimal).Decimal) < 0), nil
+			l := left.(DDecimal).Dec
+			r := right.(DDecimal).Dec
+			return DBool(l.Cmp(&r) < 0), nil
 		},
 	},
 	cmpArgs{LT, floatType, intType}: {
@@ -500,30 +527,30 @@ var cmpOps = map[cmpArgs]cmpOp{
 	},
 	cmpArgs{LT, decimalType, intType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			l := left.(DDecimal).Decimal
-			r := decimal.New(int64(right.(DInt)), 0)
+			l := left.(DDecimal).Dec
+			r := inf.NewDec(int64(right.(DInt)), 0)
 			return DBool(l.Cmp(r) < 0), nil
 		},
 	},
 	cmpArgs{LT, intType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			l := decimal.New(int64(left.(DInt)), 0)
-			r := right.(DDecimal).Decimal
-			return DBool(l.Cmp(r) < 0), nil
+			l := inf.NewDec(int64(left.(DInt)), 0)
+			r := right.(DDecimal).Dec
+			return DBool(l.Cmp(&r) < 0), nil
 		},
 	},
 	cmpArgs{LT, decimalType, floatType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			l := left.(DDecimal).Decimal
-			r := decimal.NewFromFloat(float64(right.(DFloat)))
+			l := left.(DDecimal).Dec
+			r := decimal.NewDecFromFloat(float64(right.(DFloat)))
 			return DBool(l.Cmp(r) < 0), nil
 		},
 	},
 	cmpArgs{LT, floatType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			l := decimal.NewFromFloat(float64(left.(DFloat)))
-			r := right.(DDecimal).Decimal
-			return DBool(l.Cmp(r) < 0), nil
+			l := decimal.NewDecFromFloat(float64(left.(DFloat)))
+			r := right.(DDecimal).Dec
+			return DBool(l.Cmp(&r) < 0), nil
 		},
 	},
 	cmpArgs{LT, dateType, dateType}: {
@@ -569,7 +596,9 @@ var cmpOps = map[cmpArgs]cmpOp{
 	},
 	cmpArgs{LE, decimalType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			return DBool(left.(DDecimal).Cmp(right.(DDecimal).Decimal) <= 0), nil
+			l := left.(DDecimal).Dec
+			r := right.(DDecimal).Dec
+			return DBool(l.Cmp(&r) <= 0), nil
 		},
 	},
 	cmpArgs{LE, floatType, intType}: {
@@ -584,30 +613,30 @@ var cmpOps = map[cmpArgs]cmpOp{
 	},
 	cmpArgs{LE, decimalType, intType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			l := left.(DDecimal).Decimal
-			r := decimal.New(int64(right.(DInt)), 0)
+			l := left.(DDecimal).Dec
+			r := inf.NewDec(int64(right.(DInt)), 0)
 			return DBool(l.Cmp(r) <= 0), nil
 		},
 	},
 	cmpArgs{LE, intType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			l := decimal.New(int64(left.(DInt)), 0)
-			r := right.(DDecimal).Decimal
-			return DBool(l.Cmp(r) <= 0), nil
+			l := inf.NewDec(int64(left.(DInt)), 0)
+			r := right.(DDecimal).Dec
+			return DBool(l.Cmp(&r) <= 0), nil
 		},
 	},
 	cmpArgs{LE, decimalType, floatType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			l := left.(DDecimal).Decimal
-			r := decimal.NewFromFloat(float64(right.(DFloat)))
+			l := left.(DDecimal).Dec
+			r := decimal.NewDecFromFloat(float64(right.(DFloat)))
 			return DBool(l.Cmp(r) <= 0), nil
 		},
 	},
 	cmpArgs{LE, floatType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			l := decimal.NewFromFloat(float64(left.(DFloat)))
-			r := right.(DDecimal).Decimal
-			return DBool(l.Cmp(r) <= 0), nil
+			l := decimal.NewDecFromFloat(float64(left.(DFloat)))
+			r := right.(DDecimal).Dec
+			return DBool(l.Cmp(&r) <= 0), nil
 		},
 	},
 	cmpArgs{LE, dateType, dateType}: {
@@ -834,13 +863,6 @@ func (expr *CaseExpr) Eval(ctx EvalContext) (Datum, error) {
 	return DNull, nil
 }
 
-var (
-	maxIntAsDecimal   = decimal.New(math.MaxInt64, 0)
-	minIntAsDecimal   = decimal.New(math.MinInt64, 0)
-	maxFloatAsDecimal = decimal.NewFromFloat(math.MaxFloat64)
-	minFloatAsDecimal = decimal.NewFromFloat(-math.MaxFloat64)
-)
-
 // Eval implements the Expr interface.
 func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 	d, err := expr.Expr.Eval(ctx)
@@ -863,7 +885,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		case DFloat:
 			return DBool(v != 0), nil
 		case DDecimal:
-			return DBool(!v.Equals(decimal.Zero)), nil
+			return DBool(v.Sign() != 0), nil
 		case DString:
 			// TODO(pmattis): strconv.ParseBool is more permissive than the SQL
 			// spec. Is that ok?
@@ -890,11 +912,13 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			}
 			return DInt(f.(DFloat)), nil
 		case DDecimal:
-			if v.Cmp(maxIntAsDecimal) > 0 ||
-				v.Cmp(minIntAsDecimal) < 0 {
+			dec := new(inf.Dec)
+			dec.Round(&v.Dec, 0, inf.RoundHalfUp)
+			i, ok := dec.Unscaled()
+			if !ok {
 				return nil, errIntOutOfRange
 			}
-			return DInt(v.Round(0).IntPart()), nil
+			return DInt(i), nil
 		case DString:
 			i, err := strconv.ParseInt(string(v), 0, 64)
 			if err != nil {
@@ -915,11 +939,10 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		case DFloat:
 			return d, nil
 		case DDecimal:
-			if v.Cmp(maxFloatAsDecimal) > 0 ||
-				v.Cmp(minFloatAsDecimal) < 0 {
+			f, err := decimal.Float64FromDec(&v.Dec)
+			if err != nil {
 				return nil, errFloatOutOfRange
 			}
-			f, _ := v.Float64()
 			return DFloat(f), nil
 		case DString:
 			f, err := strconv.ParseFloat(string(v), 64)
@@ -930,24 +953,26 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		}
 
 	case *DecimalType:
+		dd := DDecimal{}
 		switch v := d.(type) {
 		case DBool:
 			if v {
-				return DDecimal{Decimal: decimal.New(1, 0)}, nil
+				dd.SetUnscaled(1)
 			}
-			return DDecimal{Decimal: decimal.New(0, 0)}, nil
+			return dd, nil
 		case DInt:
-			return DDecimal{Decimal: decimal.New(int64(v), 0)}, nil
+			dd.SetUnscaled(int64(v))
+			return dd, nil
 		case DFloat:
-			return DDecimal{Decimal: decimal.NewFromFloat(float64(v))}, nil
+			decimal.SetFromFloat(&dd.Dec, float64(v))
+			return dd, nil
 		case DDecimal:
 			return d, nil
 		case DString:
-			de, err := decimal.NewFromString(string(v))
-			if err != nil {
-				return nil, err
+			if _, ok := dd.SetString(string(v)); !ok {
+				return nil, fmt.Errorf("could not parse string %q as decimal", v)
 			}
-			return DDecimal{Decimal: de}, nil
+			return dd, nil
 		}
 
 	case *StringType:
@@ -1341,11 +1366,11 @@ func (t NumVal) Eval(_ EvalContext) (Datum, error) {
 	// evaulate NumVals as DDecimals by default, once
 	// type coercion is improved.
 	//
-	// d, err := decimal.NewFromString(string(t))
-	// if err != nil {
-	// 	return DNull, err
+	// d := new(inf.Dec)
+	// if _, ok := d.SetString(string(t)); !ok {
+	//    return ...
 	// }
-	// return DDecimal(d), nil
+	// return DDecimal{Dec: d}, nil
 
 	v, err := strconv.ParseFloat(string(t), 64)
 	if err != nil {

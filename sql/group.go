@@ -21,12 +21,14 @@ import (
 	"math"
 	"strings"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/decimal"
 )
 
 var aggregates = map[string]func() aggregateImpl{
@@ -596,6 +598,8 @@ var _ aggregateImpl = &minAggregate{}
 var _ aggregateImpl = &sumAggregate{}
 var _ aggregateImpl = &stddevAggregate{}
 var _ aggregateImpl = &varianceAggregate{}
+var _ aggregateImpl = &floatVarianceAggregate{}
+var _ aggregateImpl = &decimalVarianceAggregate{}
 var _ aggregateImpl = &identAggregate{}
 
 // In order to render the unaggregated (i.e. grouped) fields, during aggregation,
@@ -657,7 +661,9 @@ func (a *avgAggregate) result() (parser.Datum, error) {
 	case parser.DFloat:
 		return t / parser.DFloat(a.count), nil
 	case parser.DDecimal:
-		return parser.DDecimal{Decimal: t.Div(decimal.New(int64(a.count), 0))}, nil
+		count := inf.NewDec(int64(a.count), 0)
+		t.QuoRound(&t.Dec, count, decimal.Precision, inf.RoundHalfUp)
+		return t, nil
 	default:
 		return parser.DNull, util.Errorf("unexpected SUM result type: %s", t.Type())
 	}
@@ -766,6 +772,13 @@ func (a *sumAggregate) add(datum parser.Datum) error {
 		return nil
 	}
 	if a.sum == nil {
+		switch t := datum.(type) {
+		case parser.DDecimal:
+			// Make copy of decimal to allow for modification later.
+			dd := parser.DDecimal{}
+			dd.Set(&t.Dec)
+			datum = dd
+		}
 		a.sum = datum
 		return nil
 	}
@@ -785,7 +798,8 @@ func (a *sumAggregate) add(datum parser.Datum) error {
 
 	case parser.DDecimal:
 		if v, ok := a.sum.(parser.DDecimal); ok {
-			a.sum = parser.DDecimal{Decimal: v.Add(t.Decimal)}
+			v.Add(&v.Dec, &t.Dec)
+			a.sum = v
 			return nil
 		}
 	}
@@ -797,13 +811,20 @@ func (a *sumAggregate) result() (parser.Datum, error) {
 	if a.sum == nil {
 		return parser.DNull, nil
 	}
-	return a.sum, nil
+	switch t := a.sum.(type) {
+	case parser.DDecimal:
+		dd := parser.DDecimal{}
+		dd.Set(&t.Dec)
+		return dd, nil
+	default:
+		return a.sum, nil
+	}
 }
 
 type varianceAggregate struct {
-	count   int
-	mean    parser.DFloat
-	sqrDiff parser.DFloat
+	typedAggregate aggregateImpl
+	// Used for passing int64s as *inf.Dec values.
+	tmpDec parser.DDecimal
 }
 
 func newVarianceAggregate() aggregateImpl {
@@ -815,34 +836,128 @@ func (a *varianceAggregate) add(datum parser.Datum) error {
 		return nil
 	}
 
-	var d parser.DFloat
+	const unexpectedErrFormat = "unexpected VARIANCE argument type: %s"
 	switch t := datum.(type) {
-	case parser.DInt:
-		d = parser.DFloat(t)
 	case parser.DFloat:
-		d = t
-	// case parser.DDecimal:
-	// TODO(nvanbenschoten) add support for decimal variance and stddev
-	// aggregation functions. Will require adding decimal.Sqrt() to library.
+		if a.typedAggregate == nil {
+			a.typedAggregate = newFloatVarianceAggregate()
+		} else {
+			switch a.typedAggregate.(type) {
+			case *floatVarianceAggregate:
+			default:
+				return util.Errorf(unexpectedErrFormat, datum.Type())
+			}
+		}
+		return a.typedAggregate.add(t)
+	case parser.DInt:
+		if a.typedAggregate == nil {
+			a.typedAggregate = newDecimalVarianceAggregate()
+		} else {
+			switch a.typedAggregate.(type) {
+			case *decimalVarianceAggregate:
+			default:
+				return util.Errorf(unexpectedErrFormat, datum.Type())
+			}
+		}
+		a.tmpDec.SetUnscaled(int64(t))
+		return a.typedAggregate.add(a.tmpDec)
+	case parser.DDecimal:
+		if a.typedAggregate == nil {
+			a.typedAggregate = newDecimalVarianceAggregate()
+		} else {
+			switch a.typedAggregate.(type) {
+			case *decimalVarianceAggregate:
+			default:
+				return util.Errorf(unexpectedErrFormat, datum.Type())
+			}
+		}
+		return a.typedAggregate.add(t)
 	default:
-		return util.Errorf("unexpected VARIANCE argument type: %s", datum.Type())
+		return util.Errorf(unexpectedErrFormat, datum.Type())
 	}
+}
+
+func (a *varianceAggregate) result() (parser.Datum, error) {
+	if a.typedAggregate == nil {
+		return parser.DNull, nil
+	}
+	return a.typedAggregate.result()
+}
+
+type floatVarianceAggregate struct {
+	count   int
+	mean    float64
+	sqrDiff float64
+}
+
+func newFloatVarianceAggregate() aggregateImpl {
+	return &floatVarianceAggregate{}
+}
+
+func (a *floatVarianceAggregate) add(datum parser.Datum) error {
+	f := float64(datum.(parser.DFloat))
 
 	// Uses the Knuth/Welford method for accurately computing variance online in a
 	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
 	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
 	a.count++
-	delta := d - a.mean
-	a.mean += delta / parser.DFloat(a.count)
-	a.sqrDiff += delta * (d - a.mean)
+	delta := f - a.mean
+	a.mean += delta / float64(a.count)
+	a.sqrDiff += delta * (f - a.mean)
 	return nil
 }
 
-func (a *varianceAggregate) result() (parser.Datum, error) {
+func (a *floatVarianceAggregate) result() (parser.Datum, error) {
 	if a.count < 2 {
 		return parser.DNull, nil
 	}
-	return a.sqrDiff / (parser.DFloat(a.count) - 1), nil
+	return parser.DFloat(a.sqrDiff / (float64(a.count) - 1)), nil
+}
+
+type decimalVarianceAggregate struct {
+	// Variables used across iterations.
+	count   inf.Dec
+	mean    inf.Dec
+	sqrDiff inf.Dec
+
+	// Variables used as scratch space within iterations.
+	delta inf.Dec
+	tmp   inf.Dec
+}
+
+func newDecimalVarianceAggregate() aggregateImpl {
+	return &decimalVarianceAggregate{}
+}
+
+// Read-only constants used for compuation.
+var (
+	decimalOne = inf.NewDec(1, 0)
+	decimalTwo = inf.NewDec(2, 0)
+)
+
+func (a *decimalVarianceAggregate) add(datum parser.Datum) error {
+	d := datum.(parser.DDecimal).Dec
+
+	// Uses the Knuth/Welford method for accurately computing variance online in a
+	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
+	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
+	a.count.Add(&a.count, decimalOne)
+	a.delta.Sub(&d, &a.mean)
+	a.tmp.QuoRound(&a.delta, &a.count, decimal.Precision, inf.RoundHalfUp)
+	a.mean.Add(&a.mean, &a.tmp)
+	a.tmp.Sub(&d, &a.mean)
+	a.sqrDiff.Add(&a.sqrDiff, a.delta.Mul(&a.delta, &a.tmp))
+	return nil
+}
+
+func (a *decimalVarianceAggregate) result() (parser.Datum, error) {
+	if a.count.Cmp(decimalTwo) < 0 {
+		return parser.DNull, nil
+	}
+	a.tmp.Sub(&a.count, decimalOne)
+	dd := parser.DDecimal{}
+	dd.QuoRound(&a.sqrDiff, &a.tmp, decimal.Precision, inf.RoundHalfUp)
+	return dd, nil
 }
 
 type stddevAggregate struct {
@@ -850,7 +965,7 @@ type stddevAggregate struct {
 }
 
 func newStddevAggregate() aggregateImpl {
-	return &stddevAggregate{}
+	return &stddevAggregate{varianceAggregate: *newVarianceAggregate().(*varianceAggregate)}
 }
 
 func (a *stddevAggregate) result() (parser.Datum, error) {
@@ -861,6 +976,9 @@ func (a *stddevAggregate) result() (parser.Datum, error) {
 	switch t := variance.(type) {
 	case parser.DFloat:
 		return parser.DFloat(math.Sqrt(float64(t))), nil
+	case parser.DDecimal:
+		decimal.Sqrt(&t.Dec, &t.Dec, decimal.Precision)
+		return t, nil
 	}
 	return nil, util.Errorf("unexpected variance result type: %s", variance.Type())
 }

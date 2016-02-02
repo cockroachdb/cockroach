@@ -21,10 +21,11 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/decimal"
 )
 
 func TestPrettyPrint(t *testing.T) {
@@ -119,10 +120,10 @@ func TestPrettyPrint(t *testing.T) {
 			roachpb.RKey(encoding.EncodeTimeDescending(nil, tm))),
 			"/Table/42/Sat Mar  7 11:06:39 UTC 2015"},
 		{MakeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeDecimalAscending(nil, decimal.New(1234, -2)))),
+			roachpb.RKey(encoding.EncodeDecimalAscending(nil, inf.NewDec(1234, 2)))),
 			"/Table/42/12.34"},
 		{MakeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeDecimalDescending(nil, decimal.New(1234, -2)))),
+			roachpb.RKey(encoding.EncodeDecimalDescending(nil, inf.NewDec(1234, 2)))),
 			"/Table/42/-12.34"},
 
 		// others

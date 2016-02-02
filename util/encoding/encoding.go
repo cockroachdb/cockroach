@@ -25,8 +25,9 @@ import (
 	"time"
 	"unsafe"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/decimal"
 )
 
 const (
@@ -732,7 +733,7 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 		}
 		// Decode both floats and decimals as decimals to avoid
 		// overflow.
-		var d decimal.Decimal
+		var d *inf.Dec
 		b, d, err = DecodeDecimalAscending(b, nil)
 		if err != nil {
 			return b, "", err

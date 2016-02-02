@@ -21,6 +21,7 @@ import (
 	"bufio"
 	"fmt"
 	"net"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -334,7 +335,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		if pq.inTypes[i-1] != 0 {
 			continue
 		}
-		id, ok := datumToOid[v]
+		id, ok := datumToOid[reflect.TypeOf(v)]
 		if !ok {
 			return c.sendError(fmt.Sprintf("unknown datum type: %s", v.Type()))
 		}

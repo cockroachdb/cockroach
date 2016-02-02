@@ -21,8 +21,9 @@ import (
 	"reflect"
 	"time"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/decimal"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -66,8 +67,8 @@ func marshalValue(v interface{}) (roachpb.Value, error) {
 		r.SetBytes(t)
 		return r, nil
 
-	case decimal.Decimal:
-		err := r.SetDecimal(t)
+	case inf.Dec:
+		err := r.SetDecimal(&t)
 		return r, err
 
 	case roachpb.Key:

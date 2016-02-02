@@ -36,15 +36,18 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	"github.com/cockroachdb/decimal"
 )
 
 var errEmptyInputString = errors.New("the input string must not be empty")
 var errAbsOfMinInt64 = errors.New("abs of min integer value (-9223372036854775808) not defined")
 var errRoundNumberDigits = errors.New("number of digits must be greater than 0")
+var errSqrtOfNegNumber = errors.New("cannot take square root of a negative number")
 
 type argTypes []reflect.Type
 
@@ -650,7 +653,11 @@ var builtins = map[string][]builtin{
 	"variance": {
 		builtin{
 			types:      argTypes{intType},
-			returnType: typeFloat,
+			returnType: typeDecimal,
+		},
+		builtin{
+			types:      argTypes{decimalType},
+			returnType: typeDecimal,
 		},
 		builtin{
 			types:      argTypes{floatType},
@@ -661,7 +668,11 @@ var builtins = map[string][]builtin{
 	"stddev": {
 		builtin{
 			types:      argTypes{intType},
-			returnType: typeFloat,
+			returnType: typeDecimal,
+		},
+		builtin{
+			types:      argTypes{decimalType},
+			returnType: typeDecimal,
 		},
 		builtin{
 			types:      argTypes{floatType},
@@ -672,20 +683,14 @@ var builtins = map[string][]builtin{
 	// Math functions
 
 	"abs": {
-		builtin{
-			returnType: typeFloat,
-			types:      argTypes{floatType},
-			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return DFloat(math.Abs(float64(args[0].(DFloat)))), nil
-			},
-		},
-		builtin{
-			returnType: typeDecimal,
-			types:      argTypes{decimalType},
-			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return DDecimal{Decimal: args[0].(DDecimal).Abs()}, nil
-			},
-		},
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Abs(x)), nil
+		}),
+		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+			dd := DDecimal{}
+			dd.Abs(x)
+			return dd, nil
+		}),
 		builtin{
 			returnType: typeInt,
 			types:      argTypes{intType},
@@ -756,11 +761,13 @@ var builtins = map[string][]builtin{
 		floatBuiltin2(func(x, y float64) (Datum, error) {
 			return DFloat(math.Trunc(x / y)), nil
 		}),
-		decimalBuiltin2(func(x, y decimal.Decimal) (Datum, error) {
-			if y.Equals(decimal.Zero) {
+		decimalBuiltin2(func(x, y *inf.Dec) (Datum, error) {
+			if y.Sign() == 0 {
 				return nil, errDivByZero
 			}
-			return DDecimal{Decimal: x.Div(y).Truncate(0)}, nil
+			dd := DDecimal{}
+			dd.QuoRound(x, y, 0, inf.RoundDown)
+			return dd, nil
 		}),
 	},
 
@@ -773,8 +780,10 @@ var builtins = map[string][]builtin{
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return DFloat(math.Floor(x)), nil
 		}),
-		decimalBuiltin1(func(x decimal.Decimal) (Datum, error) {
-			return DDecimal{Decimal: x.Floor()}, nil
+		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+			dd := DDecimal{}
+			dd.Round(x, 0, inf.RoundFloor)
+			return dd, nil
 		}),
 	},
 
@@ -792,11 +801,13 @@ var builtins = map[string][]builtin{
 		floatBuiltin2(func(x, y float64) (Datum, error) {
 			return DFloat(math.Mod(x, y)), nil
 		}),
-		decimalBuiltin2(func(x, y decimal.Decimal) (Datum, error) {
-			if y.Equals(decimal.Zero) {
+		decimalBuiltin2(func(x, y *inf.Dec) (Datum, error) {
+			if y.Sign() == 0 {
 				return nil, errZeroModulus
 			}
-			return DDecimal{Decimal: x.Mod(y)}, nil
+			dd := DDecimal{}
+			decimal.Mod(&dd.Dec, x, y)
+			return dd, nil
 		}),
 		builtin{
 			returnType: typeInt,
@@ -835,8 +846,10 @@ var builtins = map[string][]builtin{
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return round(x, 0)
 		}),
-		decimalBuiltin1(func(x decimal.Decimal) (Datum, error) {
-			return DDecimal{Decimal: x.Round(0)}, nil
+		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+			dd := DDecimal{}
+			dd.Round(x, 0, inf.RoundHalfUp)
+			return dd, nil
 		}),
 		builtin{
 			returnType: typeFloat,
@@ -846,10 +859,13 @@ var builtins = map[string][]builtin{
 			},
 		},
 		builtin{
-			returnType: typeFloat,
+			returnType: typeDecimal,
 			types:      argTypes{decimalType, intType},
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return DDecimal{Decimal: args[0].(DDecimal).Round(int32(args[1].(DInt)))}, nil
+				dec := args[0].(DDecimal).Dec
+				dd := DDecimal{}
+				dd.Round(&dec, inf.Scale(args[1].(DInt)), inf.RoundHalfUp)
+				return dd, nil
 			},
 		},
 	},
@@ -870,8 +886,8 @@ var builtins = map[string][]builtin{
 			}
 			return DFloat(1), nil
 		}),
-		decimalBuiltin1(func(x decimal.Decimal) (Datum, error) {
-			return DFloat(x.Cmp(decimal.Zero)), nil
+		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+			return DFloat(x.Sign()), nil
 		}),
 		builtin{
 			returnType: typeInt,
@@ -889,10 +905,22 @@ var builtins = map[string][]builtin{
 		},
 	},
 
-	// TODO(nvanbenschoten) Add native support for decimal.
-	"sqrt": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
-		return DFloat(math.Sqrt(x)), nil
-	}),
+	"sqrt": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			if x < 0 {
+				return nil, errSqrtOfNegNumber
+			}
+			return DFloat(math.Sqrt(x)), nil
+		}),
+		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+			if x.Sign() < 0 {
+				return nil, errSqrtOfNegNumber
+			}
+			dd := DDecimal{}
+			decimal.Sqrt(&dd.Dec, x, decimal.Precision)
+			return dd, nil
+		}),
+	},
 
 	"tan": {
 		floatBuiltin1(func(x float64) (Datum, error) {
@@ -904,8 +932,10 @@ var builtins = map[string][]builtin{
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return DFloat(math.Trunc(x)), nil
 		}),
-		decimalBuiltin1(func(x decimal.Decimal) (Datum, error) {
-			return DDecimal{Decimal: x.Truncate(0)}, nil
+		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+			dd := DDecimal{}
+			dd.Round(x, 0, inf.RoundDown)
+			return dd, nil
 		}),
 	},
 }
@@ -1010,8 +1040,10 @@ var ceilImpl = []builtin{
 	floatBuiltin1(func(x float64) (Datum, error) {
 		return DFloat(math.Ceil(x)), nil
 	}),
-	decimalBuiltin1(func(x decimal.Decimal) (Datum, error) {
-		return DDecimal{Decimal: x.Ceil()}, nil
+	decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+		dd := DDecimal{}
+		dd.Round(x, 0, inf.RoundCeil)
+		return dd, nil
 	}),
 }
 
@@ -1049,23 +1081,25 @@ func floatBuiltin2(f func(float64, float64) (Datum, error)) builtin {
 	}
 }
 
-func decimalBuiltin1(f func(decimal.Decimal) (Datum, error)) builtin {
+func decimalBuiltin1(f func(*inf.Dec) (Datum, error)) builtin {
 	return builtin{
 		types:      argTypes{decimalType},
 		returnType: typeDecimal,
 		fn: func(_ EvalContext, args DTuple) (Datum, error) {
-			return f(args[0].(DDecimal).Decimal)
+			dec := args[0].(DDecimal).Dec
+			return f(&dec)
 		},
 	}
 }
 
-func decimalBuiltin2(f func(decimal.Decimal, decimal.Decimal) (Datum, error)) builtin {
+func decimalBuiltin2(f func(*inf.Dec, *inf.Dec) (Datum, error)) builtin {
 	return builtin{
 		types:      argTypes{decimalType, decimalType},
 		returnType: typeDecimal,
 		fn: func(_ EvalContext, args DTuple) (Datum, error) {
-			return f(args[0].(DDecimal).Decimal,
-				args[1].(DDecimal).Decimal)
+			dec1 := args[0].(DDecimal).Dec
+			dec2 := args[1].(DDecimal).Dec
+			return f(&dec1, &dec2)
 		},
 	}
 }
@@ -1082,7 +1116,11 @@ func floatOrDecimalBuiltin1(f func(float64) (Datum, error)) []builtin {
 			types:      argTypes{decimalType},
 			returnType: typeDecimal,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				v, _ := args[0].(DDecimal).Float64()
+				dec := args[0].(DDecimal).Dec
+				v, err := decimal.Float64FromDec(&dec)
+				if err != nil {
+					return nil, err
+				}
 				r, err := f(v)
 				if err != nil {
 					return r, err
@@ -1093,7 +1131,9 @@ func floatOrDecimalBuiltin1(f func(float64) (Datum, error)) []builtin {
 					// into the decimal library to support it here.
 					return nil, fmt.Errorf("decimal does not support NaN")
 				}
-				return DDecimal{Decimal: decimal.NewFromFloat(rf)}, nil
+				dd := DDecimal{}
+				decimal.SetFromFloat(&dd.Dec, rf)
+				return dd, nil
 			},
 		},
 	}
@@ -1112,8 +1152,16 @@ func floatOrDecimalBuiltin2(f func(float64, float64) (Datum, error)) []builtin {
 			types:      argTypes{decimalType, decimalType},
 			returnType: typeDecimal,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				v1, _ := args[0].(DDecimal).Float64()
-				v2, _ := args[1].(DDecimal).Float64()
+				dec1 := args[0].(DDecimal).Dec
+				v1, err := decimal.Float64FromDec(&dec1)
+				if err != nil {
+					return nil, err
+				}
+				dec2 := args[1].(DDecimal).Dec
+				v2, err := decimal.Float64FromDec(&dec2)
+				if err != nil {
+					return nil, err
+				}
 				r, err := f(v1, v2)
 				if err != nil {
 					return r, err
@@ -1124,7 +1172,9 @@ func floatOrDecimalBuiltin2(f func(float64, float64) (Datum, error)) []builtin {
 					// into the decimal library to support it here.
 					return nil, fmt.Errorf("decimal does not support NaN")
 				}
-				return DDecimal{Decimal: decimal.NewFromFloat(rf)}, nil
+				dd := DDecimal{}
+				decimal.SetFromFloat(&dd.Dec, rf)
+				return dd, nil
 			},
 		},
 	}
