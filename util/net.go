@@ -39,6 +39,47 @@ func (ln listener) Addr() net.Addr {
 	return ln.addr
 }
 
+// updatedAddr returns our "official" address based on the address we asked for
+// (oldAddr) and the address we successfully bound to (newAddr). It's kind of
+// hacky, but necessary to make TLS work.
+func updatedAddr(oldAddr, newAddr net.Addr) (net.Addr, error) {
+	oldAddrStr := oldAddr.String()
+	newAddrStr := newAddr.String()
+
+	switch network := oldAddr.Network(); network {
+	case "tcp", "tcp4", "tcp6":
+		// After binding, it's possible that our host and/or port will be
+		// different from what we requested. If the hostname is different, we
+		// want to keep the original one since it's more likely to match our
+		// TLS certificate. But if the port is different, it should be because
+		// we asked for ":0" and got an arbitrary unused port; that needs to be
+		// reflected in our addr.
+		host, oldPort, err := net.SplitHostPort(EnsureHostPort(oldAddrStr))
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse original addr '%s': %v", oldAddrStr, err)
+		}
+		_, newPort, err := net.SplitHostPort(newAddrStr)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse new addr '%s': %v", newAddrStr, err)
+		}
+
+		if newPort != oldPort && oldPort != "0" {
+			return nil, fmt.Errorf("asked for port %s, got %s", oldPort, newPort)
+		}
+
+		return MakeUnresolvedAddr(network, net.JoinHostPort(host, newPort)), nil
+
+	case "unix":
+		if oldAddrStr != newAddrStr {
+			return nil, fmt.Errorf("asked for unix addr %s, got %s", oldAddr, newAddr)
+		}
+		return newAddr, nil
+
+	default:
+		return nil, fmt.Errorf("unexpected network type: %s", network)
+	}
+}
+
 // ListenAndServe creates a listener and serves handler on it, closing
 // the listener when signalled by the stopper.
 func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, config *tls.Config) (net.Listener, error) {
@@ -99,45 +140,4 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 // IsClosedConnection returns true if err is the net package's errClosed.
 func IsClosedConnection(err error) bool {
 	return strings.HasSuffix(err.Error(), "use of closed network connection")
-}
-
-// updatedAddr returns our "official" address based on the address we asked for
-// (oldAddr) and the address we successfully bound to (newAddr). It's kind of
-// hacky, but necessary to make TLS work.
-func updatedAddr(oldAddr, newAddr net.Addr) (net.Addr, error) {
-	oldAddrStr := oldAddr.String()
-	newAddrStr := newAddr.String()
-
-	switch network := oldAddr.Network(); network {
-	case "tcp", "tcp4", "tcp6":
-		// After binding, it's possible that our host and/or port will be
-		// different from what we requested. If the hostname is different, we
-		// want to keep the original one since it's more likely to match our
-		// TLS certificate. But if the port is different, it should be because
-		// we asked for ":0" and got an arbitrary unused port; that needs to be
-		// reflected in our addr.
-		host, oldPort, err := net.SplitHostPort(EnsureHostPort(oldAddrStr))
-		if err != nil {
-			return nil, fmt.Errorf("unable to parse original addr '%s': %v", oldAddrStr, err)
-		}
-		_, newPort, err := net.SplitHostPort(newAddrStr)
-		if err != nil {
-			return nil, fmt.Errorf("unable to parse new addr '%s': %v", newAddrStr, err)
-		}
-
-		if newPort != oldPort && oldPort != "0" {
-			return nil, fmt.Errorf("asked for port %s, got %s", oldPort, newPort)
-		}
-
-		return MakeUnresolvedAddr(network, net.JoinHostPort(host, newPort)), nil
-
-	case "unix":
-		if oldAddrStr != newAddrStr {
-			return nil, fmt.Errorf("asked for unix addr %s, got %s", oldAddr, newAddr)
-		}
-		return newAddr, nil
-
-	default:
-		return nil, fmt.Errorf("unexpected network type: %s", network)
-	}
 }
