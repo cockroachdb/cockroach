@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/server"
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -35,7 +34,7 @@ import (
 
 type leaseTest struct {
 	*testing.T
-	server *server.TestServer
+	server *testServer
 	db     *sql.DB
 	nodes  map[uint32]*csql.LeaseManager
 }

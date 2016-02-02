@@ -40,7 +40,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server"
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
@@ -153,7 +152,7 @@ type logicQuery struct {
 // sqllogictest source.
 type logicTest struct {
 	*testing.T
-	srv *server.TestServer
+	srv *testServer
 	// map of built clients. Needs to be persisted so that we can
 	// re-use them and close them all on exit.
 	clients map[string]*sql.DB
@@ -210,7 +209,7 @@ func (t *logicTest) setUser(user string) func() {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pgUrl, cleanupFunc := sqlutils.PGUrl(t.T, t.srv, user, credsDir, "TestLogic")
+	pgUrl, cleanupFunc := sqlutils.PGUrl(t.T, &t.srv.TestServer, user, credsDir, "TestLogic")
 	db, err := sql.Open("postgres", pgUrl.String())
 	if err != nil {
 		t.Fatal(err)
