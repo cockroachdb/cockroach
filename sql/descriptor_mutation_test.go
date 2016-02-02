@@ -71,7 +71,13 @@ func (mt mutationTest) checkQueryResponse(q string, e [][]string) int {
 		}
 		for j, v := range vals {
 			if val := *v.(*interface{}); val != nil {
-				s := fmt.Sprint(val)
+				var s string
+				switch t := val.(type) {
+				case []byte:
+					s = string(t)
+				default:
+					s = fmt.Sprint(val)
+				}
 				if e[i][j] != s {
 					mt.Fatalf("e:%v, v:%v", e[i][j], s)
 				}

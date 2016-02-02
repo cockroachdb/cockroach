@@ -1,0 +1,12 @@
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t VALUES (1)
+
+traceon trace.out
+
+query I
+SELECT * FROM t
+----
+1
