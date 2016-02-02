@@ -830,9 +830,8 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 
 	// Add the read to the command queue to gate subsequent
 	// overlapping commands until this command completes.
-	sp.LogEvent("enter command queue")
+	sp.LogEvent("command queue")
 	cmdKeys := r.beginCmds(&ba)
-	sp.LogEvent("leave command queue")
 
 	// If there are command keys (there might not be if reads are
 	// inconsistent), the read requires the leader lease.
@@ -895,9 +894,8 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 	// done before getting the max timestamp for the key(s), as
 	// timestamp cache is only updated after preceding commands have
 	// been run to successful completion.
-	sp.LogEvent("enter command queue")
+	sp.LogEvent("command queue")
 	cmdKeys := r.beginCmds(&ba)
-	sp.LogEvent("leave command queue")
 
 	// This replica must have leader lease to process a write.
 	if pErr := r.redirectOnOrAcquireLeaderLease(sp); pErr != nil {

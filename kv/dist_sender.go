@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // Default constants for timeouts.
@@ -228,8 +228,7 @@ func (ds *DistSender) RangeLookup(key roachpb.RKey, desc *roachpb.RangeDescripto
 	replicas := newReplicaSlice(ds.gossip, desc)
 	// TODO(tschottdorf) consider a Trace here, potentially that of the request
 	// that had the cache miss and waits for the result.
-	sp := tracing.NilTrace()
-	br, err := ds.sendRPC(sp, desc.RangeID, replicas, orderRandom, ba)
+	br, err := ds.sendRPC(tracing.NilTrace(), desc.RangeID, replicas, orderRandom, ba)
 	if err != nil {
 		return nil, err
 	}
