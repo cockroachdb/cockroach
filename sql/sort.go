@@ -142,6 +142,11 @@ func (n *sortNode) Values() parser.DTuple {
 	return v[:len(n.columns)]
 }
 
+func (*sortNode) DebugValues() debugValues {
+	// TODO(radu)
+	panic("debug mode not implemented in sortNode")
+}
+
 func (n *sortNode) Next() bool {
 	if n.needSort {
 		n.needSort = false

@@ -260,6 +260,19 @@ func (p *planner) releaseLeases(db client.DB) {
 	}
 }
 
+type debugValueType int
+
+const (
+	// The debug values do not refer to a full result row.
+	debugValuePartial debugValueType = iota
+
+	// The debug values refer to a full result row but the row was filtered out.
+	debugValueFiltered
+
+	// The debug values refer to a full result row.
+	debugValueRow
+)
+
 // planNode defines the interface for executing a query or portion of a query.
 type planNode interface {
 	// Columns returns the column names and types . The length of the
@@ -271,6 +284,10 @@ type planNode interface {
 	// Values returns the values at the current row. The result is only valid
 	// until the next call to Next().
 	Values() parser.DTuple
+	// DebugValues returns a set of debug values, valid until the next call to Next(). This is only
+	// available for nodes that have been put in a special "explainDebug" mode. When the output
+	// field in the results is debugValueRow, a set of values is also available through Values().
+	DebugValues() debugValues
 	// Next advances to the next row, returning false if an error is encountered
 	// or if there is no next row.
 	Next() bool
@@ -289,6 +306,7 @@ var _ planNode = &sortNode{}
 var _ planNode = &valuesNode{}
 var _ planNode = &selectNode{}
 var _ planNode = &emptyNode{}
+var _ planNode = &explainDebugNode{}
 
 // emptyNode is a planNode with no columns and either no rows (default) or a single row with empty
 // results (if results is initializer to true). The former is used for nodes that have no results
@@ -299,10 +317,11 @@ type emptyNode struct {
 	results bool
 }
 
-func (*emptyNode) Columns() []ResultColumn { return nil }
-func (*emptyNode) Ordering() orderingInfo  { return orderingInfo{} }
-func (*emptyNode) Values() parser.DTuple   { return nil }
-func (*emptyNode) PErr() *roachpb.Error    { return nil }
+func (*emptyNode) Columns() []ResultColumn  { return nil }
+func (*emptyNode) Ordering() orderingInfo   { return orderingInfo{} }
+func (*emptyNode) Values() parser.DTuple    { return nil }
+func (*emptyNode) DebugValues() debugValues { return debugValues{} }
+func (*emptyNode) PErr() *roachpb.Error     { return nil }
 
 func (*emptyNode) ExplainPlan() (name, description string, children []planNode) {
 	return "empty", "-", nil
