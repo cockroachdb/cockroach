@@ -33,8 +33,6 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/lib/pq"
-
 	"github.com/samalba/dockerclient"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
@@ -46,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
+	_ "github.com/cockroachdb/pq"
 )
 
 var duration = flag.Duration("d", 5*time.Second, "duration to run the test")

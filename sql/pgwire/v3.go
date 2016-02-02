@@ -25,7 +25,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lib/pq/oid"
+	"github.com/cockroachdb/pq/oid"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"

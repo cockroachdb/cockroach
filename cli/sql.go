@@ -24,6 +24,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cockroachdb/pq"
 	"github.com/peterh/liner"
 	"github.com/spf13/cobra"
 )
@@ -136,26 +137,31 @@ func runInteractive(db *sql.DB, dbURL string) {
 // on error.
 func runStatements(db *sql.DB, stmts []string) {
 	for _, stmt := range stmts {
-		fullStmt := stmt + "\n"
-		cols, allRows, err := runQuery(db, fullStmt)
-		if err != nil {
-			fmt.Fprintln(osStderr, err)
-			os.Exit(1)
-		}
-
-		if len(cols) == 0 {
-			// No result selected, inform the user.
-			fmt.Fprintln(os.Stdout, "OK")
-		} else {
-			// Some results selected, inform the user about how much data to expect.
-			fmt.Fprintf(os.Stdout, "%d row%s\n", len(allRows),
-				map[bool]string{true: "", false: "s"}[len(allRows) == 1])
-
-			// Then print the results themselves.
-			fmt.Fprintln(os.Stdout, strings.Join(cols, "\t"))
-			for _, row := range allRows {
-				fmt.Fprintln(os.Stdout, strings.Join(row, "\t"))
+		for {
+			cols, allRows, err := runQuery(db, stmt)
+			if err != nil {
+				if err == pq.ErrNoMoreResults {
+					break
+				}
+				fmt.Fprintln(osStderr, err)
+				os.Exit(1)
 			}
+
+			if len(cols) == 0 {
+				// No result selected, inform the user.
+				fmt.Fprintln(os.Stdout, "OK")
+			} else {
+				// Some results selected, inform the user about how much data to expect.
+				fmt.Fprintf(os.Stdout, "%d row%s\n", len(allRows),
+					map[bool]string{true: "", false: "s"}[len(allRows) == 1])
+
+				// Then print the results themselves.
+				fmt.Fprintln(os.Stdout, strings.Join(cols, "\t"))
+				for _, row := range allRows {
+					fmt.Fprintln(os.Stdout, strings.Join(row, "\t"))
+				}
+			}
+			stmt = pq.NextResults
 		}
 	}
 }
