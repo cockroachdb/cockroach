@@ -101,7 +101,7 @@ func (p *planner) groupBy(n *parser.Select, s *selectNode) (*groupNode, *roachpb
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		if !(havingType == parser.DummyBool || havingType == parser.DNull) {
+		if !(havingType.TypeEqual(parser.DummyBool) || havingType == parser.DNull) {
 			return nil, roachpb.NewUErrorf("argument of HAVING must be type %s, not type %s", parser.DummyBool.Type(), havingType.Type())
 		}
 		n.Having.Expr = having

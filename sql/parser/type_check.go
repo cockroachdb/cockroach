@@ -108,7 +108,7 @@ func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 		if dummyCond == nil || dummyCond == DNull {
 			dummyCond = nextDummyCond
-		} else if !(nextDummyCond == DNull || nextDummyCond == dummyCond) {
+		} else if !(nextDummyCond == DNull || nextDummyCond.TypeEqual(dummyCond)) {
 			return nil, fmt.Errorf("incompatible condition types %s, %s", dummyCond.Type(), nextDummyCond.Type())
 		}
 
@@ -118,13 +118,25 @@ func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 		if dummyVal == nil || dummyVal == DNull {
 			dummyVal = nextDummyVal
-		} else if !(nextDummyVal == DNull || nextDummyVal == dummyVal) {
+		} else if !(nextDummyVal == DNull || nextDummyVal.TypeEqual(dummyVal)) {
 			return nil, fmt.Errorf("incompatible value types %s, %s", dummyVal.Type(), nextDummyVal.Type())
 		}
 	}
 
 	return dummyVal, nil
 }
+
+var (
+	boolCastTypes      = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
+	intCastTypes       = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
+	floatCastTypes     = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
+	decimalCastTypes   = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
+	stringCastTypes    = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString, DummyBytes}
+	bytesCastTypes     = []Datum{DNull, DummyBytes, DummyString}
+	dateCastTypes      = []Datum{DNull, DummyString, DummyTimestamp}
+	timestampCastTypes = []Datum{DNull, DummyString, DummyDate}
+	intervalCastTypes  = []Datum{DNull, DummyString, DummyInt}
+)
 
 // TypeCheck implements the Expr interface.
 func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
@@ -139,59 +151,49 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 		dummyExpr = DummyString
 	}
 
+	var returnDatum Datum
+	var validTypes []Datum
 	switch expr.Type.(type) {
 	case *BoolType:
-		switch dummyExpr {
-		case DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString:
-			return DummyBool, nil
-		}
+		returnDatum = DummyBool
+		validTypes = boolCastTypes
 
 	case *IntType:
-		switch dummyExpr {
-		case DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString:
-			return DummyInt, nil
-		}
+		returnDatum = DummyInt
+		validTypes = intCastTypes
 
 	case *FloatType:
-		switch dummyExpr {
-		case DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString:
-			return DummyFloat, nil
-		}
+		returnDatum = DummyFloat
+		validTypes = floatCastTypes
 
 	case *DecimalType:
-		switch dummyExpr {
-		case DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString:
-			return DummyDecimal, nil
-		}
+		returnDatum = DummyDecimal
+		validTypes = decimalCastTypes
 
 	case *StringType:
-		switch dummyExpr {
-		case DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString, DummyBytes:
-			return DummyString, nil
-		}
+		returnDatum = DummyString
+		validTypes = stringCastTypes
 
 	case *BytesType:
-		switch dummyExpr {
-		case DNull, DummyBytes, DummyString:
-			return DummyBytes, nil
-		}
+		returnDatum = DummyBytes
+		validTypes = bytesCastTypes
 
 	case *DateType:
-		switch dummyExpr {
-		case DNull, DummyString, DummyTimestamp:
-			return DummyDate, nil
-		}
+		returnDatum = DummyDate
+		validTypes = dateCastTypes
 
 	case *TimestampType:
-		switch dummyExpr {
-		case DNull, DummyString, DummyDate:
-			return DummyTimestamp, nil
-		}
+		returnDatum = DummyTimestamp
+		validTypes = timestampCastTypes
 
 	case *IntervalType:
-		switch dummyExpr {
-		case DNull, DummyString, DummyInt:
-			return DummyInterval, nil
+		returnDatum = DummyInterval
+		validTypes = intervalCastTypes
+	}
+
+	for _, t := range validTypes {
+		if dummyExpr.TypeEqual(t) {
+			return returnDatum, nil
 		}
 	}
 
@@ -208,7 +210,7 @@ func (expr *CoalesceExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 		if dummyArg == nil || dummyArg == DNull {
 			dummyArg = arg
-		} else if dummyArg != arg && arg != DNull {
+		} else if !(dummyArg.TypeEqual(arg) || arg == DNull) {
 			return nil, fmt.Errorf("incompatible %s expressions %s, %s", expr.Name, dummyArg.Type(), arg.Type())
 		}
 	}
@@ -317,7 +319,7 @@ func (expr *IfExpr) TypeCheck(args MapArgs) (Datum, error) {
 	if err != nil {
 		return nil, err
 	}
-	if cond != DNull && cond != DummyBool {
+	if !(cond == DNull || cond.TypeEqual(DummyBool)) {
 		return nil, fmt.Errorf("IF condition must be a boolean: %s", cond.Type())
 	}
 	dummyTrue, err := expr.True.TypeCheck(args)
@@ -334,7 +336,7 @@ func (expr *IfExpr) TypeCheck(args MapArgs) (Datum, error) {
 	if dummyElse == DNull {
 		return dummyTrue, nil
 	}
-	if dummyTrue != dummyElse {
+	if !dummyTrue.TypeEqual(dummyElse) {
 		return nil, fmt.Errorf("incompatible IF expressions %s, %s", dummyTrue.Type(), dummyElse.Type())
 	}
 	return dummyTrue, nil
@@ -366,7 +368,7 @@ func (expr *NullIfExpr) TypeCheck(args MapArgs) (Datum, error) {
 	if expr1 == DNull {
 		return expr2, nil
 	}
-	if expr2 != DNull && expr1 != expr2 {
+	if !(expr2 == DNull || expr1.TypeEqual(expr2)) {
 		return nil, fmt.Errorf("incompatible NULLIF expressions %s, %s", expr1.Type(), expr2.Type())
 	}
 	return expr1, nil
@@ -560,7 +562,7 @@ func typeCheckBooleanExprs(args MapArgs, op string, exprs ...Expr) (Datum, error
 		} else if set != nil {
 			continue
 		}
-		if _, ok := dummyExpr.(DBool); !ok {
+		if !dummyExpr.TypeEqual(DummyBool) {
 			return nil, fmt.Errorf("incompatible %s argument type: %s", op, dummyExpr.Type())
 		}
 	}
@@ -582,7 +584,7 @@ func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight 
 		switch op {
 		case Is, IsNot, IsDistinctFrom, IsNotDistinctFrom:
 			// TODO(pmattis): For IS {UNKNOWN,TRUE,FALSE} we should be requiring that
-			// dummyLeft == DummyBool. We currently can't distinguish NULL from
+			// dummyLeft.TypeEquals(DummyBool). We currently can't distinguish NULL from
 			// UNKNOWN. Is it important to do so?
 			return DummyBool, cmpOp{}, nil
 		default:
