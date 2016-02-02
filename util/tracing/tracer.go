@@ -50,8 +50,37 @@ func SetTestTracing() {
 	recorder = testRecorder{}
 }
 
+// Disable changes the environment so that all newly created tracers are
+// trivial (i.e. noop tracers). This is a crutch to turn off tracing during
+// benchmarks until future iterations come with a tunable probabilistic tracing
+// setting. Concurrent calls are not safe. Prescribed use is:
+//
+// func BenchmarkSomething(b *testing.B) {
+//   defer tracing.Disable()() // note the double ()()
+// }
+func Disable() func() {
+	storedRecorder := recorder
+	recorder = noopRecorder{}
+	return func() {
+		recorder = storedRecorder
+	}
+}
+
+type noopTracer struct {
+	// Lazy implementation: we don't use any of the SpanPropagator methods yet,
+	// so we just embed an interface which will be nil in practice.
+	opentracing.SpanPropagator
+}
+
+func (noopTracer) StartTrace(_ string) opentracing.Span {
+	return noopSpan{}
+}
+
 // NewTracer creates a new tracer.
 func NewTracer() opentracing.Tracer {
+	if _, tracingDisabled := recorder.(noopRecorder); tracingDisabled {
+		return noopTracer{}
+	}
 	return standardtracer.New(recorder)
 }
 
@@ -73,7 +102,7 @@ func (noopSpan) Log(_ opentracing.LogData)                   {}
 func (noopSpan) SetTraceAttribute(_, _ string) opentracing.Span {
 	return noopSpan{}
 }
-func (noopSpan) TraceAttribute(restrictedKey string) string {
+func (noopSpan) TraceAttribute(_ string) string {
 	return ""
 }
 
