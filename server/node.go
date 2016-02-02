@@ -526,17 +526,17 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 	f := func() {
 		// TODO(tschottdorf) get a hold of the client's ID, add it to the
 		// context before dispatching, and create an ID for tracing the request.
-		trace := n.ctx.Tracer.StartTrace(ba.TraceID())
-		defer trace.Finish()
-		trace.LogEvent("node")
-		ctx, _ := opentracing.ContextWithSpan((*Node)(n).context(), trace)
+		sp := n.ctx.Tracer.StartTrace(ba.TraceID())
+		defer sp.Finish()
+		sp.LogEvent("node")
+		ctx, _ := opentracing.ContextWithSpan((*Node)(n).context(), sp)
 
 		tStart := time.Now()
 		var pErr *roachpb.Error
 		br, pErr = n.stores.Send(ctx, *ba)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
-			trace.LogEvent(fmt.Sprintf("error: %T", pErr.GetDetail()))
+			sp.LogEvent(fmt.Sprintf("error: %T", pErr.GetDetail()))
 		}
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))

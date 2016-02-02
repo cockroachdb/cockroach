@@ -187,9 +187,9 @@ var _ client.Sender = &TxnCoordSender{}
 
 // NewTxnCoordSender creates a new TxnCoordSender for use from a KV
 // distributed DB instance.
-func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable bool, trcr opentracing.Tracer, stopper *stop.Stopper) *TxnCoordSender {
-	if trcr == nil {
-		trcr = tracing.NewTracer()
+func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable bool, tracer opentracing.Tracer, stopper *stop.Stopper) *TxnCoordSender {
+	if tracer == nil {
+		tracer = tracing.NewTracer()
 	}
 	tc := &TxnCoordSender{
 		wrapped:           wrapped,
@@ -198,7 +198,7 @@ func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable boo
 		clientTimeout:     defaultClientTimeout,
 		txns:              map[string]*txnMetadata{},
 		linearizable:      linearizable,
-		tracer:            trcr,
+		tracer:            tracer,
 		stopper:           stopper,
 	}
 
@@ -307,10 +307,10 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 
 	// This is the earliest point at which the request has an ID (if
 	// applicable). Begin a Trace which follows this request.
-	trace := tc.tracer.StartTrace(ba.TraceID())
-	defer trace.Finish()
-	trace.LogEvent("sending batch")
-	ctx, _ = opentracing.ContextWithSpan(ctx, trace)
+	sp := tc.tracer.StartTrace(ba.TraceID())
+	defer sp.Finish()
+	sp.LogEvent("sending batch")
+	ctx, _ = opentracing.ContextWithSpan(ctx, sp)
 
 	var id string // optional transaction ID
 	if ba.Txn != nil {
@@ -387,7 +387,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			}
 			if log.V(1) {
 				for _, intent := range et.IntentSpans {
-					trace.LogEvent(fmt.Sprintf("intent: [%s,%s)", intent.Key, intent.EndKey))
+					sp.LogEvent(fmt.Sprintf("intent: [%s,%s)", intent.Key, intent.EndKey))
 				}
 			}
 		}
@@ -405,7 +405,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		}
 
 		if pErr = tc.updateState(ctx, ba, br, pErr); pErr != nil {
-			trace.LogEvent(fmt.Sprintf("error: %s", pErr))
+			sp.LogEvent(fmt.Sprintf("error: %s", pErr))
 			return nil, pErr
 		}
 	}
@@ -439,7 +439,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		}()
 	}
 	if br.Txn.Status != roachpb.PENDING {
-		tc.cleanupTxn(trace, *br.Txn)
+		tc.cleanupTxn(sp, *br.Txn)
 	}
 	return br, nil
 }
@@ -553,13 +553,13 @@ func (tc *TxnCoordSender) heartbeatLoop(id string) {
 	}()
 
 	var closer <-chan struct{}
-	var trace opentracing.Span
+	var sp opentracing.Span
 	{
 		tc.Lock()
 		txnMeta := tc.txns[id] // do not leak to outer scope
 		closer = txnMeta.txnEnd
-		trace = tc.tracer.StartTrace(txnMeta.txn.TraceID())
-		defer trace.Finish()
+		sp = tc.tracer.StartTrace(txnMeta.txn.TraceID())
+		defer sp.Finish()
 		tc.Unlock()
 	}
 	if closer == nil {
@@ -567,12 +567,12 @@ func (tc *TxnCoordSender) heartbeatLoop(id string) {
 		// goroutine gets a chance to start.
 		return
 	}
-	ctx, _ := opentracing.ContextWithSpan(context.Background(), trace)
+	ctx, _ := opentracing.ContextWithSpan(context.Background(), sp)
 	// Loop with ticker for periodic heartbeats.
 	for {
 		select {
 		case <-tickChan:
-			if !tc.heartbeat(id, trace, ctx) {
+			if !tc.heartbeat(id, sp, ctx) {
 				return
 			}
 		case <-closer:
@@ -643,7 +643,7 @@ func (tc *TxnCoordSender) heartbeat(id string, trace opentracing.Span, ctx conte
 // object when adequate. It also updates certain errors with the
 // updated transaction for use by client restarts.
 func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
-	trace := tracing.SpanFromContext(ctx)
+	sp := tracing.SpanFromContext(ctx)
 	newTxn := &roachpb.Transaction{}
 	newTxn.Update(ba.Txn)
 	// TODO(tamird): remove this clone. It's currently needed to avoid race conditions.
@@ -661,7 +661,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	case *roachpb.TransactionStatusError:
 		// Likely already committed or more obscure errors such as epoch or
 		// timestamp regressions; consider txn dead.
-		defer tc.cleanupTxn(trace, *pErr.GetTxn())
+		defer tc.cleanupTxn(sp, *pErr.GetTxn())
 	case *roachpb.OpRequiresTxnError:
 		panic("OpRequiresTxnError must not happen at this level")
 	case *roachpb.ReadWithinUncertaintyIntervalError:
@@ -688,7 +688,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		pErr.SetTxn(newTxn)
 		// Clean up the freshly aborted transaction in defer(), avoiding a
 		// race with the state update below.
-		defer tc.cleanupTxn(trace, *pErr.GetTxn())
+		defer tc.cleanupTxn(sp, *pErr.GetTxn())
 	case *roachpb.TransactionPushError:
 		newTxn.Update(t.Txn)
 		// Increase timestamp if applicable, ensuring that we're
@@ -736,7 +736,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 				// we expect it to be committed/aborted at some point in the
 				// future.
 				if _, isEnding := ba.GetArg(roachpb.EndTransaction); pErr != nil || !isEnding {
-					trace.LogEvent("coordinator spawns")
+					sp.LogEvent("coordinator spawns")
 					txnMeta = &txnMetadata{
 						txn:              *newTxn,
 						keys:             cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
