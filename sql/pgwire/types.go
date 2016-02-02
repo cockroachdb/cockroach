@@ -24,7 +24,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/lib/pq/oid"
+	"github.com/cockroachdb/pq/oid"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
@@ -185,8 +185,8 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) error {
 
 const pgTimeStampFormat = "2006-01-02 15:04:05.999999999-07:00"
 
-// formatTs formats t into a format lib/pq understands.
-// Mostly cribbed from github.com/lib/pq.
+// formatTs formats t into a format cockroachdb/pq understands.
+// Mostly cribbed from github.com/cockroachdb/pq.
 func formatTs(t time.Time) (b []byte) {
 	// Need to send dates before 0001 A.D. with " BC" suffix, instead of the
 	// minus sign preferred by Go.

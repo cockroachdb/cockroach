@@ -25,12 +25,12 @@ import (
 	"testing"
 
 	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/tracing"
+	_ "github.com/cockroachdb/pq"
 )
 
 func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *sql.DB)) {

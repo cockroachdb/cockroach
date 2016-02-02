@@ -22,7 +22,7 @@ import (
 	"io"
 
 	// Import postgres driver.
-	_ "github.com/lib/pq"
+	"github.com/cockroachdb/pq"
 
 	"github.com/olekukonko/tablewriter"
 
@@ -49,6 +49,9 @@ func makeSQLClient() (*sql.DB, string) {
 	if err != nil {
 		panicf("failed to initialize SQL client: %s", err)
 	}
+	// Ensure we use only one connection so that retrieval of multiple results
+	// can work without assumptions about connection reuse.
+	db.SetMaxOpenConns(1)
 	return db, sqlURL
 }
 
@@ -63,7 +66,7 @@ func runQuery(db *sql.DB, query string, parameters ...interface{}) (
 	return runQueryWithFormat(db, nil, query, parameters...)
 }
 
-// runQuery takes a 'query' with optional 'parameters'.
+// runQueryWithFormat takes a 'query' with optional 'parameters'.
 // It runs the sql query and returns a list of columns names and a list of rows.
 // If 'format' is not nil, the values with column name
 // found in the map are run through the corresponding callback.
@@ -71,30 +74,28 @@ func runQueryWithFormat(db *sql.DB, format fmtMap, query string, parameters ...i
 	[]string, [][]string, error) {
 	rows, err := db.Query(query, parameters...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("query error: %s", err)
+		return nil, nil, err
 	}
 
 	defer rows.Close()
 	return sqlRowsToStrings(rows, format)
 }
 
-// runPrettyQueryWithFormat takes a 'query' with optional 'parameters'.
+// runPrettyQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and writes pretty output to 'w'.
 func runPrettyQuery(db *sql.DB, w io.Writer, query string, parameters ...interface{}) error {
-	return runPrettyQueryWithFormat(db, w, nil, query, parameters...)
-}
-
-// runPrettyQueryWithFormat takes a 'query' with optional 'parameters'.
-// It runs the sql query and writes pretty output to 'w'.
-// If 'format' is not nil, the values with column name
-// found in the map are run through the corresponding callback.
-func runPrettyQueryWithFormat(db *sql.DB, w io.Writer, format fmtMap, query string, parameters ...interface{}) error {
-	cols, allRows, err := runQueryWithFormat(db, format, query, parameters...)
-	if err != nil {
-		return err
+	for {
+		cols, allRows, err := runQueryWithFormat(db, nil, query, parameters...)
+		if err != nil {
+			if err == pq.ErrNoMoreResults {
+				return nil
+			}
+			return err
+		}
+		printQueryOutput(w, cols, allRows)
+		query = pq.NextResults
+		parameters = nil
 	}
-	printQueryOutput(w, cols, allRows)
-	return nil
 }
 
 // sqlRowsToStrings turns 'rows' into a list of rows, each of which
@@ -134,6 +135,9 @@ func sqlRowsToStrings(rows *sql.Rows, format fmtMap) ([]string, [][]string, erro
 			}
 		}
 		allRows = append(allRows, rowStrings)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
 	}
 
 	return cols, allRows, nil
