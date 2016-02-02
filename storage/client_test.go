@@ -106,9 +106,9 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 		getArgs func(addr net.Addr) proto.Message, _ func() proto.Message,
 		_ *rpc.Context) (proto.Message, error) {
 		ba := getArgs(nil /* net.Addr */).(*roachpb.BatchRequest)
-		trace := sCtx.Tracer.StartTrace(ba.TraceID())
-		defer trace.Finish()
-		ctx, _ := opentracing.ContextWithSpan(context.Background(), trace)
+		sp := sCtx.Tracer.StartTrace(ba.TraceID())
+		defer sp.Finish()
+		ctx, _ := opentracing.ContextWithSpan(context.Background(), sp)
 		br, pErr := stores.Send(ctx, *ba)
 		if br == nil {
 			br = &roachpb.BatchResponse{}

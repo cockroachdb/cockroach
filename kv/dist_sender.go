@@ -228,8 +228,8 @@ func (ds *DistSender) RangeLookup(key roachpb.RKey, desc *roachpb.RangeDescripto
 	replicas := newReplicaSlice(ds.gossip, desc)
 	// TODO(tschottdorf) consider a Trace here, potentially that of the request
 	// that had the cache miss and waits for the result.
-	trace := tracing.NilTrace()
-	br, err := ds.sendRPC(trace, desc.RangeID, replicas, orderRandom, ba)
+	sp := tracing.NilTrace()
+	br, err := ds.sendRPC(sp, desc.RangeID, replicas, orderRandom, ba)
 	if err != nil {
 		return nil, err
 	}
@@ -544,7 +544,7 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error, bool) {
 	isReverse := ba.IsReverse()
 
-	trace := tracing.SpanFromContext(ctx)
+	sp := tracing.SpanFromContext(ctx)
 
 	// The minimal key range encompassing all requests contained within.
 	// Local addressing has already been resolved.
@@ -564,7 +564,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// Get range descriptor (or, when spanning range, descriptors). Our
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
-			trace.LogEvent("meta descriptor lookup")
+			sp.LogEvent("meta descriptor lookup")
 			var evictDesc func()
 			desc, needAnother, evictDesc, pErr = ds.getDescriptors(rs, considerIntents, isReverse)
 
@@ -629,7 +629,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					return nil, roachpb.NewError(trErr)
 				}
 
-				return ds.sendSingleRange(trace, truncBA, desc)
+				return ds.sendSingleRange(sp, truncBA, desc)
 			}()
 			// If sending succeeded, break this loop.
 			if pErr == nil {
@@ -640,7 +640,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			if log.V(1) {
 				log.Warningf("failed to invoke %s: %s", ba, pErr)
 			}
-			trace.LogEvent(fmt.Sprintf("reply error: %T", pErr.GoError()))
+			sp.LogEvent(fmt.Sprintf("reply error: %T", pErr.GoError()))
 
 			// Error handling below.
 			// If retryable, allow retry. For range not found or range
@@ -829,7 +829,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// resulting in a duplicate scan.
 			rs.Key = next(ba, desc.EndKey)
 		}
-		trace.LogEvent("querying next range")
+		sp.LogEvent("querying next range")
 	}
 }
 
