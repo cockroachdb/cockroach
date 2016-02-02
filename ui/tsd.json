@@ -12,7 +12,7 @@
       "commit": "3b7f250dcf631f1c3c545e28d9ff25920c60b5f7"
     },
     "d3/d3.d.ts": {
-      "commit": "3b7f250dcf631f1c3c545e28d9ff25920c60b5f7"
+      "commit": "3d2f9971a107e2eee2de3ec5318f5c54071e16ed"
     },
     "mocha/mocha.d.ts": {
       "commit": "3b7f250dcf631f1c3c545e28d9ff25920c60b5f7"
@@ -28,6 +28,9 @@
     },
     "moment-timezone/moment-timezone.d.ts": {
       "commit": "e5a27ea95e47b95333784f1f0d590127b4e39a89"
+    },
+    "nvd3/nvd3.d.ts": {
+      "commit": "3d2f9971a107e2eee2de3ec5318f5c54071e16ed"
     }
   }
 }

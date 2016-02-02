@@ -1,6 +1,7 @@
 // source: components/metrics.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../../typings/d3/d3.d.ts" />
+/// <reference path="../../typings/nvd3/nvd3.d.ts" />
 /// <reference path="../util/types.ts" />
 /// <reference path="../util/querycache.ts" />
 /// <reference path="../models/metrics.ts" />
@@ -38,6 +39,11 @@ module Components {
         key?: number;
       }
 
+      // Chart margins to match design.
+      const CHART_MARGINS: nv.Margin = {top: 20, right: 60, bottom: 20, left: 60};
+      // Maximum number of series we will show in the legend. If there are more we hide the legend.
+      const MAX_LEGEND_SERIES: number = 3;
+
       /**
        * Controller contains the bulk of functionality needed to render a
        * LineGraph.
@@ -46,21 +52,30 @@ module Components {
         static colors: d3.scale.Ordinal<Domain, string> = d3.scale.category10();
 
         // nvd3 chart.
-        chart: any = nv.models.lineChart()
-          .x((d: Models.Proto.Datapoint) => new Date(d.timestamp_nanos / 1.0e6))
-          .y((d: Models.Proto.Datapoint) => d.value)
-          // .interactive(true)
-          .useInteractiveGuideline(true)
-          .showLegend(true)
-          .showYAxis(true)
-          .showXAxis(true)
-          .xScale(d3.time.scale())
-          .margin({top: 0, right: 0, bottom: 0, left: 0});
+        chart: nv.LineChart;
 
         constructor(public vm: ViewModel) {
+          if (vm.axis.stacked()) {
+            this.chart = nv.models.stackedAreaChart()
+              .showControls(false);
+          } else {
+            this.chart = nv.models.lineChart();
+          }
+          this.chart
+            .x((d: Models.Proto.Datapoint) => new Date(Utils.Convert.NanoToMilli(d.timestamp_nanos)))
+            .y((d: Models.Proto.Datapoint) => d.value)
+            // .interactive(true)
+            .useInteractiveGuideline(true)
+            .showLegend(true)
+            .showYAxis(true)
+            .showXAxis(true)
+            .xScale(d3.time.scale())
+            // chart margins are set to
+            .margin(CHART_MARGINS);
+
           // Set xAxis ticks to properly format.
           this.chart.xAxis
-            .tickFormat(d3.time.format("%H:%M:%S"))
+            .tickFormat(function(t: string|Date): string { return typeof t === "string" ? t : d3.time.format("%H:%M:%S")(t); })
             .showMaxMin(false);
           this.chart.yAxis
             .axisLabel(vm.axis.label())
@@ -68,6 +83,23 @@ module Components {
 
           if (vm.axis.format()) {
             this.chart.yAxis.tickFormat(vm.axis.format());
+          }
+
+          let range: number[] = vm.axis.range();
+
+          // nvd3 doesn't support the same options for stacked area charts as for line charts. Generally we want
+          // .forceY because it will expand the chart if the values exceed the values in the forceY array, but for stacked
+          // area chart we can only support a strict [min, max] two element array.
+          if (range) {
+            // we sanity check that the range is the correct format (array of length 2) before applying it as the yDomain
+            if (vm.axis.stacked() && range.length === 2) {
+              this.chart.yDomain(range);
+            } else if (!vm.axis.stacked()) {
+              this.chart.forceY(range);
+            } else {
+              throw new Error("Unexpected range: " + range + ". " +
+                "For a stacked area chart, the range must be an array of length 2.");
+            }
           }
         }
 
@@ -88,7 +120,7 @@ module Components {
           let shouldRender: boolean = !context.epoch || context.epoch < this.vm.query.result.Epoch();
 
           if (shouldRender) {
-            this.chart.showLegend(this.vm.axis.selectors().length > 1);
+            this.chart.showLegend(this.vm.axis.selectors().length > 1 && this.vm.axis.selectors().length <= MAX_LEGEND_SERIES);
             let formattedData: any[] = [];
             // The result() property will be empty if an error
             // occurred. For now, we will just display the "No Data"
