@@ -382,6 +382,12 @@ func TestPGPreparedExec(t *testing.T) {
 				base.Params(1, 2, 3).RowsAffected(0),
 			},
 		},
+		{
+			"INSERT INTO d.t VALUES ($1), ($2)",
+			[]preparedExecTest{
+				base.Params(1, 2).RowsAffected(2),
+			},
+		},
 	}
 
 	s := server.StartTestServer(t)
