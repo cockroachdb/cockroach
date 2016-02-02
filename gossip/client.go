@@ -61,8 +61,8 @@ func newClient(addr net.Addr) *client {
 }
 
 // start dials the remote addr and commences gossip once connected.
-// Upon exit, signals client is done by pushing it onto the disconnected
-// channel. If the client experienced an error, its err field will
+// Upoon exit, the client is sent on the disconnected channel.
+// If the client experienced an error, its err field will
 // be set. This method starts client processing in a goroutine and
 // returns immediately.
 func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, stopper *stop.Stopper) {
@@ -111,6 +111,7 @@ func (c *client) close() {
 	close(c.closer)
 }
 
+// convenience wrapper that unlocks locker during blocking calls on clientStream.
 type unlockingClientStream struct {
 	clientStream Gossip_GossipClient
 	locker       sync.Locker
@@ -172,9 +173,9 @@ func (c *client) sendGossip(g *Gossip, addr util.UnresolvedAddr, clientStream Go
 	})
 }
 
-// handleGossip handles errors, remote forwarding, and combines delta
+// handleResponse handles errors, remote forwarding, and combines delta
 // gossip infos from the remote server with this node's infostore.
-func (c *client) handleGossip(g *Gossip, reply *Response) error {
+func (c *client) handleResponse(g *Gossip, reply *Response) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -285,8 +286,6 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 	stopper.RunWorker(func() {
 		for {
 			select {
-			// sendGossip is sent to the remote server when this node has
-			// new gossip information to share with the server.
 			case <-sendGossipChan:
 				if err := c.sendGossip(g, addr, stream); err != nil {
 					log.Error(err)
@@ -298,15 +297,14 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 		}
 	})
 
-	// Loop until stopper is signalled, or until either the gossip or
-	// RPC clients are closed. handleGossip handles all responses from the
-	// server.
+	// Loop until stopper is signalled, or until either the gossip or RPC clients are closed.
+	// The stopper's signal is propagated through the context passed to the outgoing RPC.
 	for {
 		reply, err := stream.Recv()
 		if err != nil {
 			return err
 		}
-		if err := c.handleGossip(g, reply); err != nil {
+		if err := c.handleResponse(g, reply); err != nil {
 			return err
 		}
 	}

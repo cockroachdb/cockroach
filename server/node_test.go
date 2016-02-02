@@ -20,10 +20,8 @@ import (
 	"bytes"
 	"fmt"
 	"net"
-	"net/http"
 	"reflect"
 	"sort"
-	"strings"
 	"testing"
 	"time"
 
@@ -63,18 +61,11 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	ctx.ScanInterval = 10 * time.Hour
 	rpcServer := rpc.NewServer(nodeRPCContext)
 	grpcServer := grpc.NewServer()
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.ProtoMajor == 2 && strings.Contains(r.Header.Get("Content-Type"), "application/grpc") {
-			grpcServer.ServeHTTP(w, r)
-		} else {
-			rpcServer.ServeHTTP(w, r)
-		}
-	})
 	tlsConfig, err := nodeRPCContext.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	ln, err := util.ListenAndServe(stopper, handler, addr, tlsConfig)
+	ln, err := util.ListenAndServe(stopper, util.GRPCHandlerFunc(grpcServer, rpcServer), addr, tlsConfig)
 	if err != nil {
 		t.Fatal(err)
 	}

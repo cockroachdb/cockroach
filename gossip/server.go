@@ -59,6 +59,7 @@ func newServer(stopper *stop.Stopper) *server {
 	return s
 }
 
+// convenience wrapper that unlocks locker during blocking calls on serverStream.
 type unlockingServerStream struct {
 	serverStream Gossip_GossipServer
 	locker       sync.Locker
@@ -97,7 +98,7 @@ func (s *server) Gossip(serverStream Gossip_GossipServer) error {
 		// Decide whether or not we can accept the incoming connection
 		// as a permanent peer.
 		if s.incoming.hasNode(args.NodeID) {
-			// Verify that there aren't multiple incoming connetions from the same
+			// Verify that there aren't multiple incoming connections from the same
 			// node. This can happen when bootstrap connections are initiated through
 			// a load balancer.
 			if _, ok := s.nodeMap[args.NodeID]; ok {
@@ -137,8 +138,7 @@ func (s *server) Gossip(serverStream Gossip_GossipServer) error {
 		}
 	}
 
-	// This worker is sends new gossip from the server to the client. It is
-	// triggered by s.ready.
+	// This worker sends new gossip from the server to the client. It is triggered by s.ready.
 	s.stopper.RunWorker(func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -201,14 +201,11 @@ func (s *server) Gossip(serverStream Gossip_GossipServer) error {
 			cycler.Wait()
 		}
 
-		recvArgs, err := stream.Recv()
+		// args holds the remote peer state; we need to update it whenever we receive a new request.
+		args, err = stream.Recv()
 		if err != nil {
 			return err
 		}
-
-		// args holds the remote peer state; we need to update it whenever we
-		// receive a new request.
-		args = recvArgs
 	}
 }
 

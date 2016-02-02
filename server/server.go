@@ -275,21 +275,13 @@ func (s *Server) Start(selfBootstrap bool) error {
 func (s *Server) initHTTP() {
 	s.mux.Handle(rpc.DefaultRPCPath, s.rpc)
 
-	fsHandler := http.FileServer(
+	s.mux.Handle("/", util.GRPCHandlerFunc(s.grpc, http.FileServer(
 		&assetfs.AssetFS{
 			Asset:     ui.Asset,
 			AssetDir:  ui.AssetDir,
 			AssetInfo: ui.AssetInfo,
 		},
-	)
-
-	s.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.ProtoMajor == 2 && strings.Contains(r.Header.Get("Content-Type"), "application/grpc") {
-			s.grpc.ServeHTTP(w, r)
-		} else {
-			fsHandler.ServeHTTP(w, r)
-		}
-	})
+	)))
 
 	// The admin server handles both /debug/ and /_admin/
 	// TODO(marc): when cookie-based authentication exists,

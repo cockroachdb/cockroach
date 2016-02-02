@@ -181,3 +181,13 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 func IsClosedConnection(err error) bool {
 	return strings.HasSuffix(err.Error(), "use of closed network connection")
 }
+
+func GRPCHandlerFunc(grpcServer *grpc.Server, otherHandler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor == 2 && strings.Contains(r.Header.Get("Content-Type"), "application/grpc") {
+			grpcServer.ServeHTTP(w, r)
+		} else {
+			otherHandler.ServeHTTP(w, r)
+		}
+	})
+}
