@@ -46,7 +46,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 	if !gr.Exists() {
 		if n.IfExists {
 			// Noop.
-			return &valuesNode{}, nil
+			return &emptyNode{}, nil
 		}
 		return nil, roachpb.NewUErrorf("database %q does not exist", n.Name)
 	}
@@ -97,7 +97,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 	if pErr := p.txn.Run(b); pErr != nil {
 		return nil, pErr
 	}
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }
 
 // DropIndex drops an index.
@@ -123,7 +123,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 		if pErr != nil {
 			if n.IfExists {
 				// Noop.
-				return &valuesNode{}, nil
+				return &emptyNode{}, nil
 			}
 			// Index does not exist, but we want it to: error out.
 			return nil, pErr
@@ -139,7 +139,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 				return nil, roachpb.NewUErrorf("index %q in the middle of being added, try again later", idxName)
 
 			case DescriptorMutation_DROP:
-				return &valuesNode{}, nil
+				return &emptyNode{}, nil
 			}
 		}
 		tableDesc.UpVersion = true
@@ -154,7 +154,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 		}
 		p.notifySchemaChange(tableDesc.ID, mutationID)
 	}
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }
 
 // DropTable drops a table.
@@ -233,5 +233,5 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 			return nil, pErr
 		}
 	}
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }

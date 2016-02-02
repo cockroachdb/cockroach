@@ -53,7 +53,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, *roachpb.E
 
 	if n.Name == n.NewName {
 		// Noop.
-		return &valuesNode{}, nil
+		return &emptyNode{}, nil
 	}
 
 	// Now update the nameMetadataKey and the descriptor.
@@ -91,7 +91,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, *roachpb.E
 		return expectDeleted(systemConfig, oldKey)
 	}
 
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }
 
 // RenameTable renames the table.
@@ -127,7 +127,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, *roachpb.Error) 
 	if !gr.Exists() {
 		if n.IfExists {
 			// Noop.
-			return &valuesNode{}, nil
+			return &emptyNode{}, nil
 		}
 		// Key does not exist, but we want it to: error out.
 		return nil, roachpb.NewUErrorf("table %q does not exist", n.Name.Table())
@@ -144,7 +144,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, *roachpb.Error) 
 
 	if n.Name.Database() == n.NewName.Database() && n.Name.Table() == n.NewName.Table() {
 		// Noop.
-		return &valuesNode{}, nil
+		return &emptyNode{}, nil
 	}
 
 	tableDesc, pErr := p.getTableDesc(n.Name)
@@ -191,7 +191,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, *roachpb.Error) 
 		return expectDeleted(systemConfig, tbKey)
 	}
 
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }
 
 // RenameIndex renames the index.
@@ -218,7 +218,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, *roachpb.Error) 
 	if pErr != nil {
 		if n.IfExists {
 			// Noop.
-			return &valuesNode{}, nil
+			return &emptyNode{}, nil
 		}
 		// Index does not exist, but we want it to: error out.
 		return nil, pErr
@@ -230,7 +230,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, *roachpb.Error) 
 
 	if equalName(idxName, newIdxName) {
 		// Noop.
-		return &valuesNode{}, nil
+		return &emptyNode{}, nil
 	}
 
 	if _, _, err := tableDesc.FindIndexByName(newIdxName); err == nil {
@@ -252,7 +252,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, *roachpb.Error) 
 		return nil, pErr
 	}
 	p.notifySchemaChange(tableDesc.ID, invalidMutationID)
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }
 
 // RenameColumn renames the column.
@@ -283,7 +283,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, *roachpb.Error
 	if !gr.Exists() {
 		if n.IfExists {
 			// Noop.
-			return &valuesNode{}, nil
+			return &emptyNode{}, nil
 		}
 		// Key does not exist, but we want it to: error out.
 		return nil, roachpb.NewUErrorf("table %q does not exist", n.Table.Table())
@@ -313,7 +313,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, *roachpb.Error
 
 	if equalName(colName, newColName) {
 		// Noop.
-		return &valuesNode{}, nil
+		return &emptyNode{}, nil
 	}
 
 	if _, _, err := tableDesc.FindColumnByName(newColName); err == nil {
@@ -347,5 +347,5 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, *roachpb.Error
 		return nil, pErr
 	}
 	p.notifySchemaChange(tableDesc.ID, invalidMutationID)
-	return &valuesNode{}, nil
+	return &emptyNode{}, nil
 }
