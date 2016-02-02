@@ -29,7 +29,7 @@ const traceTimeFormat = "15:04:05.000000"
 
 type testRecorder struct{}
 
-func (*testRecorder) RecordSpan(sp *standardtracer.RawSpan) {
+func (testRecorder) RecordSpan(sp *standardtracer.RawSpan) {
 	fmt.Fprintf(os.Stderr, "[Trace %s]\n", sp.Operation)
 	for _, log := range sp.Logs {
 		fmt.Fprintln(os.Stderr, " * ", log.Timestamp.Format(traceTimeFormat), log.Event)
@@ -38,16 +38,16 @@ func (*testRecorder) RecordSpan(sp *standardtracer.RawSpan) {
 
 type noopRecorder struct{}
 
-func (*noopRecorder) RecordSpan(sp *standardtracer.RawSpan) {}
+func (noopRecorder) RecordSpan(sp *standardtracer.RawSpan) {}
 
-var recorder standardtracer.SpanRecorder = (*noopRecorder)(nil)
+var recorder standardtracer.SpanRecorder = noopRecorder{}
 
 // SetTestTracing sets up subsequently created tracers returned by
 // NewTracer() so that they record their traces to stderr.
 // Not to be called concurrently with any tracer operations; the
 // right place is init() in main_test.go.
 func SetTestTracing() {
-	recorder = (*testRecorder)(nil)
+	recorder = testRecorder{}
 }
 
 // NewTracer creates a new tracer.
@@ -57,29 +57,37 @@ func NewTracer() opentracing.Tracer {
 
 type noopSpan struct{}
 
-var dummySpan *noopSpan
-
-func (*noopSpan) SetOperationName(operationName string) opentracing.Span         { return dummySpan }
-func (*noopSpan) StartChild(operationName string) opentracing.Span               { return dummySpan }
-func (*noopSpan) SetTag(key string, value interface{}) opentracing.Span          { return dummySpan }
-func (*noopSpan) Finish()                                                        {}
-func (*noopSpan) LogEvent(event string)                                          {}
-func (*noopSpan) LogEventWithPayload(event string, payload interface{})          {}
-func (*noopSpan) Log(data opentracing.LogData)                                   {}
-func (*noopSpan) SetTraceAttribute(restrictedKey, value string) opentracing.Span { return dummySpan }
-func (*noopSpan) TraceAttribute(restrictedKey string) string                     { return "" }
+func (noopSpan) SetOperationName(_ string) opentracing.Span {
+	return noopSpan{}
+}
+func (noopSpan) StartChild(_ string) opentracing.Span {
+	return noopSpan{}
+}
+func (noopSpan) SetTag(_ string, _ interface{}) opentracing.Span {
+	return noopSpan{}
+}
+func (noopSpan) Finish()                                     {}
+func (noopSpan) LogEvent(_ string)                           {}
+func (noopSpan) LogEventWithPayload(_ string, _ interface{}) {}
+func (noopSpan) Log(_ opentracing.LogData)                   {}
+func (noopSpan) SetTraceAttribute(_, _ string) opentracing.Span {
+	return noopSpan{}
+}
+func (noopSpan) TraceAttribute(restrictedKey string) string {
+	return ""
+}
 
 // SpanFromContext wraps opentracing.SpanFromContext so that the returned
 // Span is never nil (instead of a nil Span, a noop Span is returned).
 func SpanFromContext(ctx context.Context) opentracing.Span {
 	sp := opentracing.SpanFromContext(ctx)
 	if sp == nil {
-		return dummySpan
+		return noopSpan{}
 	}
 	return sp
 }
 
-// NilTrace returns a Span for which all methods are noops.
-func NilTrace() opentracing.Span {
-	return SpanFromContext(context.Background())
+// NilSpan returns a Span for which all methods are noops.
+func NilSpan() opentracing.Span {
+	return noopSpan{}
 }
