@@ -23,16 +23,16 @@ import (
 	"io"
 	"net"
 
-	"github.com/lib/pq"
-
 	"github.com/olekukonko/tablewriter"
 
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/pq"
 )
 
 type sqlConnI interface {
 	driver.Conn
 	driver.Queryer
+	Next() (driver.Rows, error)
 }
 
 type sqlConn struct {
@@ -56,6 +56,20 @@ func (c *sqlConn) Query(query string, args []driver.Value) (*sqlRows, error) {
 		return nil, err
 	}
 	rows, err := c.conn.Query(query, args)
+	if err == driver.ErrBadConn {
+		c.Close()
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &sqlRows{Rows: rows, conn: c}, nil
+}
+
+func (c *sqlConn) Next() (*sqlRows, error) {
+	if c.conn == nil {
+		return nil, driver.ErrBadConn
+	}
+	rows, err := c.conn.Next()
 	if err == driver.ErrBadConn {
 		c.Close()
 	}
@@ -116,51 +130,66 @@ func makeSQLClient() *sqlConn {
 // and outputs the string to be displayed.
 type fmtMap map[string]func(driver.Value) string
 
-// runQuery takes a 'query' with optional 'parameters'.
-// It runs the sql query and returns a list of columns names and a list of rows.
-func runQuery(db *sqlConn, query string, parameters ...driver.Value) (
-	[]string, [][]string, error) {
-	return runQueryWithFormat(db, nil, query, parameters...)
+type queryFunc func(conn *sqlConn) (*sqlRows, error)
+
+func nextResult(conn *sqlConn) (*sqlRows, error) {
+	return conn.Next()
+}
+
+func makeQuery(query string, parameters ...driver.Value) queryFunc {
+	return func(conn *sqlConn) (*sqlRows, error) {
+		// driver.Value is an alias for interface{}, but must adhere to a restricted
+		// set of types when being passed to driver.Queryer.Query (see
+		// driver.IsValue). We use driver.DefaultParameterConverter to perform the
+		// necessary conversion. This is usually taken care of by the sql package,
+		// but we have to do so manually because we're talking directly to the
+		// driver.
+		for i := range parameters {
+			var err error
+			parameters[i], err = driver.DefaultParameterConverter.ConvertValue(parameters[i])
+			if err != nil {
+				return nil, err
+			}
+		}
+		return conn.Query(query, parameters)
+	}
 }
 
 // runQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and returns a list of columns names and a list of rows.
+func runQuery(conn *sqlConn, fn queryFunc) ([]string, [][]string, error) {
+	return runQueryWithFormat(conn, nil, fn)
+}
+
+// runQueryWithFormat takes a 'query' with optional 'parameters'.
+// It runs the sql query and returns a list of columns names and a list of rows.
 // If 'format' is not nil, the values with column name
 // found in the map are run through the corresponding callback.
-func runQueryWithFormat(db *sqlConn, format fmtMap, query string, parameters ...driver.Value) (
+func runQueryWithFormat(conn *sqlConn, format fmtMap, fn queryFunc) (
 	[]string, [][]string, error) {
-	// driver.Value is an alias for interface{}, but must adhere to a restricted
-	// set of types when being passed to driver.Queryer.Query (see
-	// driver.IsValue). We use driver.DefaultParameterConverter to perform the
-	// necessary conversion. This is usually taken care of by the sql package,
-	// but we have to do so manually because we're talking directly to the
-	// driver.
-	for i := range parameters {
-		var err error
-		parameters[i], err = driver.DefaultParameterConverter.ConvertValue(parameters[i])
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-
-	rows, err := db.Query(query, parameters)
+	rows, err := fn(conn)
 	if err != nil {
-		return nil, nil, fmt.Errorf("query error: %s", err)
+		return nil, nil, err
 	}
 
 	defer func() { _ = rows.Close() }()
 	return sqlRowsToStrings(rows, format)
 }
 
-// runPrettyQueryWithFormat takes a 'query' with optional 'parameters'.
+// runPrettyQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and writes pretty output to 'w'.
-func runPrettyQuery(db *sqlConn, w io.Writer, query string, parameters ...driver.Value) error {
-	cols, allRows, err := runQuery(db, query, parameters...)
-	if err != nil {
-		return err
+func runPrettyQuery(conn *sqlConn, w io.Writer, fn queryFunc) error {
+	for {
+		cols, allRows, err := runQuery(conn, fn)
+		if err != nil {
+			if err == pq.ErrNoMoreResults {
+				return nil
+			}
+			return err
+		}
+		printQueryOutput(w, cols, allRows)
+		fn = nextResult
 	}
-	printQueryOutput(w, cols, allRows)
-	return nil
 }
 
 // sqlRowsToStrings turns 'rows' into a list of rows, each of which
