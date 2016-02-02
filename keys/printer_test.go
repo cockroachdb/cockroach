@@ -56,16 +56,22 @@ func TestPrettyPrint(t *testing.T) {
 		{RangeTreeNodeKey(roachpb.RKey("111")), `/Local/Range/RangeTreeNode/"111"`},
 		{TransactionKey(roachpb.Key("111"), []byte("22222")), `/Local/Range/Transaction/addrKey:/"111"/id:"22222"`},
 
-		{LocalMax, "/Local/Max"},
+		{LocalMax, `/Meta1/""`}, // LocalMax == Meta1Prefix
 
 		// system
 		{roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo")), `/Meta2/"foo"`},
 		{roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo")), `/Meta1/"foo"`},
+		{RangeMetaKey(roachpb.RKey("f")), `/Meta2/"f"`},
 
 		{StoreStatusKey(2222), "/System/StatusStore/2222"},
 		{NodeStatusKey(1111), "/System/StatusNode/1111"},
 
 		{SystemMax, "/System/Max"},
+
+		// key of key
+		{RangeMetaKey(roachpb.RKey(MakeRangeKeyPrefix(roachpb.RKey("ok")))), `/Meta2/Local/Range/"ok"`},
+		{RangeMetaKey(roachpb.RKey(MakeKey(MakeTablePrefix(42), roachpb.RKey("foo")))), `/Meta2/Table/42/"foo"`},
+		{RangeMetaKey(roachpb.RKey(roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo")))), `/Meta1/"foo"`},
 
 		// table
 		{UserTableDataMin, "/Table/50"},
@@ -121,6 +127,8 @@ func TestPrettyPrint(t *testing.T) {
 
 		// others
 		{MakeKey([]byte("")), "/Min"},
+		{Meta1KeyMax, "/Meta1/Max"},
+		{Meta2KeyMax, "/Meta2/Max"},
 		{MakeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x21, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:9999: unknown escape sequence: 0x0 0x2>"},
 	}
 	for i, test := range testCases {

@@ -34,6 +34,16 @@ type dictEntry struct {
 }
 
 var (
+	constKeyDict = []struct {
+		name  string
+		value roachpb.Key
+	}{
+		{"/Max", MaxKey},
+		{"/Min", MinKey},
+		{"/Meta1/Max", Meta1KeyMax},
+		{"/Meta2/Max", Meta2KeyMax},
+	}
+
 	keyDict = []struct {
 		name    string
 		start   roachpb.Key
@@ -58,6 +68,16 @@ var (
 		{name: "/Table", start: TableDataMin, end: TableDataMax, entries: []dictEntry{
 			{name: "", prefix: nil, ppFunc: decodeKeyPrint},
 		}},
+	}
+
+	// keyofKeyDict means the key of suffix which is itself a key,
+	// should recursively pretty print it, see issue #3228
+	keyOfKeyDict = []struct {
+		name   string
+		prefix []byte
+	}{
+		{name: "/Meta2", prefix: Meta2Prefix},
+		{name: "/Meta1", prefix: Meta1Prefix},
 	}
 
 	rangeIDSuffixDict = []struct {
@@ -205,6 +225,40 @@ func decodeKeyPrint(key roachpb.Key) string {
 	return encoding.PrettyPrintValue(key, "/")
 }
 
+// prettyPrintInternal parse key with prefix in keyDict,
+// if the key don't march any prefix in keyDict, return its byte value with quotation and false,
+// or else return its human readable value and true.
+func prettyPrintInternal(key roachpb.Key) (string, bool) {
+	var buf bytes.Buffer
+	for _, k := range keyDict {
+		if key.Compare(k.start) >= 0 && (k.end == nil || key.Compare(k.end) <= 0) {
+			buf.WriteString(k.name)
+			if k.end != nil && k.end.Compare(key) == 0 {
+				buf.WriteString("/Max")
+				return buf.String(), true
+			}
+
+			hasPrefix := false
+			for _, e := range k.entries {
+				if bytes.HasPrefix(key, e.prefix) {
+					hasPrefix = true
+					key = key[len(e.prefix):]
+					fmt.Fprintf(&buf, "%s%s", e.name, e.ppFunc(key))
+					break
+				}
+			}
+			if !hasPrefix {
+				key = key[len(k.start):]
+				fmt.Fprintf(&buf, "/%q", []byte(key))
+			}
+
+			return buf.String(), true
+		}
+	}
+
+	return fmt.Sprintf("%q", []byte(key)), false
+}
+
 // PrettyPrint prints the key in a human readable format:
 //
 // Key's Format                                   Key's Value
@@ -239,41 +293,24 @@ func decodeKeyPrint(key roachpb.Key) string {
 // /Min                                           ""
 // /Max                                           "\xff\xff"
 func PrettyPrint(key roachpb.Key) string {
-	if bytes.Equal(key, MaxKey) {
-		return "/Max"
-	} else if bytes.Equal(key, MinKey) {
-		return "/Min"
-	}
-
-	var buf bytes.Buffer
-	for _, k := range keyDict {
-		if key.Compare(k.start) >= 0 && (k.end == nil || key.Compare(k.end) <= 0) {
-			fmt.Fprintf(&buf, "%s", k.name)
-			if k.end != nil && k.end.Compare(key) == 0 {
-				fmt.Fprintf(&buf, "/Max")
-				return buf.String()
-			}
-
-			hasPrefix := false
-			for _, e := range k.entries {
-				if bytes.HasPrefix(key, e.prefix) {
-					hasPrefix = true
-					key = key[len(e.prefix):]
-
-					fmt.Fprintf(&buf, "%s%s", e.name, e.ppFunc(key))
-					break
-				}
-			}
-			if !hasPrefix {
-				key = key[len(k.start):]
-				fmt.Fprintf(&buf, "/%q", []byte(key))
-			}
-
-			return buf.String()
+	for _, k := range constKeyDict {
+		if key.Equal(k.value) {
+			return k.name
 		}
 	}
 
-	return fmt.Sprintf("%q", []byte(key))
+	for _, k := range keyOfKeyDict {
+		if bytes.HasPrefix(key, k.prefix) {
+			key = key[len(k.prefix):]
+			str, formatted := prettyPrintInternal(key)
+			if formatted {
+				return k.name + str
+			}
+			return k.name + "/" + str
+		}
+	}
+	str, _ := prettyPrintInternal(key)
+	return str
 }
 
 func init() {
