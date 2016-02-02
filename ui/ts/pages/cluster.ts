@@ -135,35 +135,37 @@ module AdminViews {
           let allStats: Models.Proto.NodeStatus[] = nodeStatuses.allStatuses();
           let totalStats: Models.Proto.Status = nodeStatuses.totalStatus();
           if (allStats) {
-            return m(".primary-stats.half", [
-              {
-                title: "Nodes",
-                visualizationArguments: {
-                  format: ".0s",
-                  data: {value: allStats.length },
+            return m(
+              ".primary-stats.half",
+              [
+                {
+                  title: "Nodes",
+                  visualizationArguments: {
+                    format: ".0s",
+                    data: {value: allStats.length },
+                  },
                 },
-              },
-              {
-                title: "Total Ranges",
-                visualizationArguments: {
-                  format: ".0s",
-                  data: {value: totalStats.range_count},
+                {
+                  title: "Total Ranges",
+                  visualizationArguments: {
+                    format: ".0s",
+                    data: {value: totalStats.range_count},
+                  },
                 },
-              },
-              {
-                title: "Available",
-                visualizationArguments: {
-                  format: "3%",
-                  data: {value: totalStats.available_range_count / totalStats.leader_range_count},
+                {
+                  title: "Available",
+                  visualizationArguments: {
+                    format: "3%",
+                    data: {value: totalStats.available_range_count / totalStats.leader_range_count},
+                  },
                 },
-              },
-              {
-                title: "Fully Replicated",
-                visualizationArguments: {
-                  format: "3%",
-                  data: {value: totalStats.replicated_range_count / totalStats.leader_range_count},
+                {
+                  title: "Fully Replicated",
+                  visualizationArguments: {
+                    format: "3%",
+                    data: {value: totalStats.replicated_range_count / totalStats.leader_range_count},
+                  },
                 },
-              },
               ].map(function (v: any): MithrilComponent<any> {
                 v.virtualVisualizationElement =
                   m.component(Visualizations.NumberVisualization, v.visualizationArguments);

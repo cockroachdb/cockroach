@@ -255,10 +255,11 @@ module Models {
       title(): string;
       title(t: string): Axis;
 
-      title(t?: string): (any) {
+      // TODO: allow computed chain props and move this code there
+      title(t?: string): any {
         if (typeof t === "string") {
           this._title = t;
-          return <Axis>this;
+          return this;
         } else {
           let selectors: Select.Selector[] = this.selectors();
           let customTitle: string = this._title;
