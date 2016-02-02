@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
+
+	"github.com/cockroachdb/pq"
 )
 
 const (
@@ -210,7 +212,7 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 			readline.SetHistoryPath("")
 		}
 
-		if exitErr = runPrettyQuery(conn, os.Stdout, fullStmt); exitErr != nil {
+		if exitErr = runPrettyQuery(conn, os.Stdout, makeQuery(fullStmt)); exitErr != nil {
 			fmt.Fprintln(osStderr, exitErr)
 		}
 
@@ -225,30 +227,36 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 // on error.
 func runStatements(conn *sqlConn, stmts []string) error {
 	for _, stmt := range stmts {
-		fullStmt := stmt + "\n"
-		cols, allRows, err := runQuery(conn, fullStmt)
-		if err != nil {
-			fmt.Fprintln(osStderr, err)
-			return err
-		}
-
-		if len(cols) == 0 {
-			// No result selected, inform the user.
-			fmt.Fprintln(os.Stdout, "OK")
-		} else {
-			// Some results selected, inform the user about how much data to expect.
-			noun := "rows"
-			if len(allRows) == 1 {
-				noun = "row"
+		q := makeQuery(stmt)
+		for {
+			cols, allRows, err := runQuery(conn, q)
+			if err != nil {
+				if err == pq.ErrNoMoreResults {
+					break
+				}
+				fmt.Fprintln(osStderr, err)
+				os.Exit(1)
 			}
 
-			fmt.Fprintf(os.Stdout, "%d %s\n", len(allRows), noun)
+			if len(cols) == 0 {
+				// No result selected, inform the user.
+				fmt.Fprintln(os.Stdout, "OK")
+			} else {
+				// Some results selected, inform the user about how much data to expect.
+				noun := "rows"
+				if len(allRows) == 1 {
+					noun = "row"
+				}
 
-			// Then print the results themselves.
-			fmt.Fprintln(os.Stdout, strings.Join(cols, "\t"))
-			for _, row := range allRows {
-				fmt.Fprintln(os.Stdout, strings.Join(row, "\t"))
+				fmt.Fprintf(os.Stdout, "%d %s\n", len(allRows), noun)
+
+				// Then print the results themselves.
+				fmt.Fprintln(os.Stdout, strings.Join(cols, "\t"))
+				for _, row := range allRows {
+					fmt.Fprintln(os.Stdout, strings.Join(row, "\t"))
+				}
 			}
+			q = nextResult
 		}
 	}
 	return nil
