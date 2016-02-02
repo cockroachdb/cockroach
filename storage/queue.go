@@ -389,7 +389,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) {
 	// and renew or acquire if necessary.
 	if bq.impl.needsLeaderLease() {
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-		if err := repl.redirectOnOrAcquireLeaderLease(tracing.NilTrace()); err != nil {
+		if err := repl.redirectOnOrAcquireLeaderLease(tracing.NilSpan()); err != nil {
 			bq.eventLog.Infof(log.V(3), "%s: could not acquire leader lease; skipping", repl)
 			return
 		}

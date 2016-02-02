@@ -96,7 +96,7 @@ func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr n
 	getReply func() proto.Message, context *rpc.Context) (proto.Message, error) {
 	sp := opts.Trace
 	if sp == nil {
-		sp = tracing.NilTrace()
+		sp = tracing.NilSpan()
 	}
 
 	if len(addrs) < 1 {

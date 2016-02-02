@@ -473,7 +473,7 @@ func TestRangeLeaderLease(t *testing.T) {
 		t.Errorf("expected another replica to have leader lease")
 	}
 
-	pErr := tc.rng.redirectOnOrAcquireLeaderLease(tracing.NilTrace())
+	pErr := tc.rng.redirectOnOrAcquireLeaderLease(tracing.NilSpan())
 	if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok || lErr == nil {
 		t.Fatalf("wanted NotLeaderError, got %s", pErr)
 	}
@@ -496,7 +496,7 @@ func TestRangeLeaderLease(t *testing.T) {
 		}
 	}
 
-	if _, ok := rng.redirectOnOrAcquireLeaderLease(tracing.NilTrace()).GetDetail().(*roachpb.NotLeaderError); !ok {
+	if _, ok := rng.redirectOnOrAcquireLeaderLease(tracing.NilSpan()).GetDetail().(*roachpb.NotLeaderError); !ok {
 		t.Fatalf("expected %T, got %s", &roachpb.NotLeaderError{}, err)
 	}
 }
