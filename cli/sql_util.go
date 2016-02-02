@@ -20,7 +20,6 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	"regexp"
 
 	// Import postgres driver.
 	_ "github.com/lib/pq"
@@ -29,8 +28,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/security"
 )
-
-var selectPattern = regexp.MustCompile(`(?i)^\s*(SELECT|SHOW)`)
 
 func makeSQLClient() (*sql.DB, string) {
 	// Use the sql administrator by default (root user).
@@ -72,20 +69,13 @@ func runQuery(db *sql.DB, query string, parameters ...interface{}) (
 // found in the map are run through the corresponding callback.
 func runQueryWithFormat(db *sql.DB, format fmtMap, query string, parameters ...interface{}) (
 	[]string, [][]string, error) {
-	if selectPattern.MatchString(query) {
-		rows, err := db.Query(query, parameters...)
-		if err != nil {
-			return nil, nil, fmt.Errorf("query error: %s", err)
-		}
-
-		defer rows.Close()
-		return sqlRowsToStrings(rows, format)
-	}
-	_, err := db.Exec(query, parameters...)
+	rows, err := db.Query(query, parameters...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("statement error: %s", err)
+		return nil, nil, fmt.Errorf("query error: %s", err)
 	}
-	return nil, nil, nil
+
+	defer rows.Close()
+	return sqlRowsToStrings(rows, format)
 }
 
 // runPrettyQueryWithFormat takes a 'query' with optional 'parameters'.
