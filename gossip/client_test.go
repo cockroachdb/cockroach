@@ -76,20 +76,24 @@ func newFakeGossipServer(grpcServer *grpc.Server, stopper *stop.Stopper) *fakeGo
 }
 
 func (s *fakeGossipServer) Gossip(stream Gossip_GossipServer) error {
-	args, err := stream.Recv()
-	if err != nil {
-		return err
-	}
+	for {
+		args, err := stream.Recv()
+		if err != nil {
+			return err
+		}
 
-	select {
-	case s.nodeIDChan <- args.NodeID:
-	default:
-	}
+		select {
+		case s.nodeIDChan <- args.NodeID:
+		default:
+		}
 
-	return stream.Send(&Response{
-		// Just don't conflict with other nodes.
-		NodeID: math.MaxInt32,
-	})
+		if err := stream.Send(&Response{
+			// Just don't conflict with other nodes.
+			NodeID: math.MaxInt32,
+		}); err != nil {
+			return err
+		}
+	}
 }
 
 // startFakeServerGossips creates local gossip instances and remote
