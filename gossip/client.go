@@ -19,7 +19,6 @@ package gossip
 import (
 	"fmt"
 	"net"
-	"sync"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -111,66 +110,39 @@ func (c *client) close() {
 	close(c.closer)
 }
 
-// convenience wrapper that unlocks locker during blocking calls on clientStream.
-type unlockingClientStream struct {
-	clientStream Gossip_GossipClient
-	locker       sync.Locker
-}
-
-func (us unlockingClientStream) Send(args *Request) error {
-	us.locker.Unlock()
-	defer us.locker.Lock()
-	return us.clientStream.Send(args)
-}
-
-func (us unlockingClientStream) Recv() (*Response, error) {
-	us.locker.Unlock()
-	defer us.locker.Lock()
-	return us.clientStream.Recv()
-}
-
 // requestGossip requests the latest gossip from the remote server by
 // supplying a map of this node's knowledge of other nodes' high water
 // timestamps and min hops.
-func (c *client) requestGossip(g *Gossip, addr util.UnresolvedAddr, clientStream Gossip_GossipClient) error {
+func (c *client) requestGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_GossipClient) error {
 	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	stream := unlockingClientStream{
-		clientStream: clientStream,
-		locker:       &g.mu,
-	}
-
-	return stream.Send(&Request{
+	reply := &Request{
 		NodeID: g.is.NodeID,
 		Addr:   addr,
 		Nodes:  g.is.getNodes(),
-	})
+	}
+	g.mu.Unlock()
+
+	return stream.Send(reply)
 }
 
 // sendGossip sends the latest gossip to the remote server, based on
 // the remote server's notion of other nodes' high water timestamps
 // and min hops.
-func (c *client) sendGossip(g *Gossip, addr util.UnresolvedAddr, clientStream Gossip_GossipClient) error {
+func (c *client) sendGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_GossipClient) error {
 	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	stream := unlockingClientStream{
-		clientStream: clientStream,
-		locker:       &g.mu,
+	reply := &Request{
+		NodeID: g.is.NodeID,
+		Addr:   addr,
+		Delta:  g.is.delta(c.remoteNodes),
+		Nodes:  g.is.getNodes(),
 	}
+	g.mu.Unlock()
 
-	delta := g.is.delta(c.remoteNodes)
-	if len(delta) == 0 {
+	if len(reply.Delta) == 0 {
 		return nil
 	}
 
-	return stream.Send(&Request{
-		NodeID: g.is.NodeID,
-		Addr:   addr,
-		Delta:  delta,
-		Nodes:  g.is.getNodes(),
-	})
+	return stream.Send(reply)
 }
 
 // handleResponse handles errors, remote forwarding, and combines delta
