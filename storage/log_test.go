@@ -25,6 +25,8 @@ import (
 
 	_ "github.com/lib/pq"
 
+	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
@@ -120,5 +122,144 @@ func TestLogSplits(t *testing.T) {
 	}
 	if rows.Err() != nil {
 		t.Fatal(rows.Err())
+	}
+}
+
+// TestLogRebalances ensures that
+func TestLogRebalances(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	// Use a client to get the RangeDescriptor for the first range. We will use
+	// this range's information to log fake rebalance events.
+	db, err := s.OpenDBClient(security.NodeUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	desc := &roachpb.RangeDescriptor{}
+	if pErr := db.GetProto(keys.RangeDescriptorKey(roachpb.RKeyMin), desc); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// This code assumes that there is only one TestServer, and thus that
+	// StoreID 1 is present on the testserver. If this assumption changes in the
+	// future, *any* store will work, but a new method will need to be added to
+	// Stores (or a creative usage of VisitStores could suffice).
+	store, pErr := s.Stores().GetStore(roachpb.StoreID(1))
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Log several fake events using the store.
+	logEvent := func(changeType roachpb.ReplicaChangeType) {
+		if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+			return store.LogReplicaChangeTest(txn, changeType, desc.Replicas[0], *desc)
+		}); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+	logEvent(roachpb.ADD_REPLICA)
+	logEvent(roachpb.ADD_REPLICA)
+	logEvent(roachpb.REMOVE_REPLICA)
+
+	// Open a SQL connection to verify that the events have been logged.
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, os.TempDir(), "TestLogRebalances")
+	defer cleanupFn()
+
+	sqlDB, err := sql.Open("postgres", pgUrl.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqlDB.Close()
+
+	// verify that two add replica events have been logged.
+	//rows, err := sqlDB.Query(`SELECT rangeID, info FROM system.rangelog WHERE eventType = $1`,
+	//	string(storage.RangeEventLogAdd))
+	rows, err := sqlDB.Query(`SELECT rangeID, info FROM system.rangelog WHERE eventType = 'add'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for rows.Next() {
+		var rangeID int64
+		var infoStr sql.NullString
+		if err := rows.Scan(&rangeID, &infoStr); err != nil {
+			t.Fatal(err)
+		}
+
+		if a, e := roachpb.RangeID(rangeID), desc.RangeID; a != e {
+			t.Errorf("wrong rangeID %d recorded for add event, expected %d", a, e)
+		}
+		// Verify that info returns a json struct.
+		if !infoStr.Valid {
+			t.Errorf("info not recorded for split of range %d", rangeID)
+		}
+		var info struct {
+			AddReplica  roachpb.ReplicaDescriptor
+			UpdatedDesc roachpb.RangeDescriptor
+		}
+		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
+			t.Errorf("error unmarshalling info string for add replica %d: %s", rangeID, err)
+			continue
+		}
+		if int64(info.UpdatedDesc.RangeID) != rangeID {
+			t.Errorf("recorded wrong updated descriptor %s for split of range %d", info.UpdatedDesc, rangeID)
+		}
+		if a, e := info.AddReplica, desc.Replicas[0]; a != e {
+			t.Errorf("recorded wrong updated replica %v for split of range %d, expected %v",
+				a, rangeID, e)
+		}
+		count++
+	}
+	if rows.Err() != nil {
+		t.Fatal(rows.Err())
+	}
+	if a, e := count, 2; a != e {
+		t.Fatalf("expected %d AddReplica events logged, found %d", e, a)
+	}
+
+	// verify that one remove replica event was logged.
+	rows, err = sqlDB.Query(`SELECT rangeID, info FROM system.rangelog WHERE eventType = 'remove'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count = 0
+	for rows.Next() {
+		var rangeID int64
+		var infoStr sql.NullString
+		if err := rows.Scan(&rangeID, &infoStr); err != nil {
+			t.Fatal(err)
+		}
+
+		if a, e := roachpb.RangeID(rangeID), desc.RangeID; a != e {
+			t.Errorf("wrong rangeID %d recorded for add event, expected %d", a, e)
+		}
+		// Verify that info returns a json struct.
+		if !infoStr.Valid {
+			t.Errorf("info not recorded for split of range %d", rangeID)
+		}
+		var info struct {
+			RemovedReplica roachpb.ReplicaDescriptor
+			UpdatedDesc    roachpb.RangeDescriptor
+		}
+		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
+			t.Errorf("error unmarshalling info string for add replica %d: %s", rangeID, err)
+			continue
+		}
+		if int64(info.UpdatedDesc.RangeID) != rangeID {
+			t.Errorf("recorded wrong updated descriptor %s for split of range %d", info.UpdatedDesc, rangeID)
+		}
+		if a, e := info.RemovedReplica, desc.Replicas[0]; a != e {
+			t.Errorf("recorded wrong updated replica %v for split of range %d, expected %v",
+				a, rangeID, e)
+		}
+		count++
+	}
+	if rows.Err() != nil {
+		t.Fatal(rows.Err())
+	}
+	if a, e := count, 1; a != e {
+		t.Fatalf("expected %d RemoveReplica events logged, found %d", e, a)
 	}
 }
