@@ -95,10 +95,27 @@ func TestDecimalMod(t *testing.T) {
 			t.Errorf("%d: expected %s, got %s", i, exp, z)
 		}
 
-		// Test same argument mutation.
+		// Test dividend mutation.
 		Mod(x, x, y)
 		if exp.Cmp(x) != 0 {
 			t.Errorf("%d: expected %s, got %s", i, exp, x)
+		}
+		x.SetString(tc.x)
+
+		// Test divisor mutation.
+		Mod(y, x, y)
+		if exp.Cmp(y) != 0 {
+			t.Errorf("%d: expected %s, got %s", i, exp, y)
+		}
+		y.SetString(tc.y)
+
+		// Test dividend and divisor mutation, if possible.
+		if tc.x == tc.y {
+			Mod(x, x, x)
+			if exp.Cmp(x) != 0 {
+				t.Errorf("%d: expected %s, got %s", i, exp, x)
+			}
+			x.SetString(tc.x)
 		}
 	}
 }
