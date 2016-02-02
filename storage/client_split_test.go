@@ -764,7 +764,24 @@ func setupSplitSnapshotRace(t *testing.T) (mtc *multiTestContext, leftKey roachp
 	mtc.unreplicateRange(rightRangeID, 2)
 	mtc.unreplicateRange(rightRangeID, 1)
 
-	mtc.waitForValues(rightKey, splitTimeout, []int64{0, 0, 0, 2, 2, 2})
+	// Perform another increment after all the replication changes. This
+	// lets us ensure that all the replication changes have been
+	// processed and applied on all replicas. This is necessary because
+	// the range is in an unstable state at the time of the last
+	// unreplicateRange call above. It has four members which means it
+	// can only tolerate one failure without losing quorum. That failure
+	// is store 3 which we stopped earlier. Stopping store 1 too soon
+	// (before it has committed the final config change *and* propagate
+	// that commit to the followers 4 and 5) would constitute a second
+	// failure and render the range unable to achieve quorum after
+	// restart (in the SnapshotWins branch).
+	incArgs = incrementArgs(rightKey, 3)
+	if _, pErr := client.SendWrapped(mtc.distSender, nil, &incArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Store 3 still has the old value, but 4 and 5 are up to date.
+	mtc.waitForValues(rightKey, splitTimeout, []int64{0, 0, 0, 2, 5, 5})
 
 	// Stop the remaining data stores.
 	mtc.stopStore(1)
@@ -807,7 +824,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 	if _, pErr := client.SendWrapped(mtc.distSender, nil, &incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	mtc.waitForValues(rightKey, splitTimeout, []int64{0, 0, 0, 22, 22, 22})
+	mtc.waitForValues(rightKey, splitTimeout, []int64{0, 0, 0, 25, 25, 25})
 }
 
 // TestSplitSnapshotRace_SplitWins exercises one outcome of the
@@ -839,7 +856,7 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	// for. There is a high probability that the message will have been
 	// received by the time that nodes 4 and 5 have processed their
 	// update.
-	mtc.waitForValues(rightKey, splitTimeout, []int64{0, 0, 0, 2, 22, 22})
+	mtc.waitForValues(rightKey, splitTimeout, []int64{0, 0, 0, 2, 25, 25})
 
 	// Wake up the left-hand range. This will allow the left-hand
 	// range's split to complete and unblock the right-hand range.
@@ -859,7 +876,7 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	if _, pErr := client.SendWrapped(mtc.distSender, nil, &incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	mtc.waitForValues(rightKey, splitTimeout, []int64{0, 0, 0, 222, 222, 222})
+	mtc.waitForValues(rightKey, splitTimeout, []int64{0, 0, 0, 225, 225, 225})
 }
 
 // TestStoreSplitReadRace prevents regression of #3148. It begins a couple of
