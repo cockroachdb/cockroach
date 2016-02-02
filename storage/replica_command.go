@@ -1718,6 +1718,11 @@ func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica r
 			return roachpb.NewError(err)
 		}
 
+		// Log the change into the range event log.
+		if err := r.store.logChange(txn, changeType, replica, updatedDesc); err != nil {
+			return err
+		}
+
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a commit trigger.
 		b.InternalAddRequest(&roachpb.EndTransactionRequest{
