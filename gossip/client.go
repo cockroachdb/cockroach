@@ -61,7 +61,7 @@ func newClient(addr net.Addr) *client {
 }
 
 // start dials the remote addr and commences gossip once connected.
-// Upoon exit, the client is sent on the disconnected channel.
+// Upon exit, the client is sent on the disconnected channel.
 // If the client experienced an error, its err field will
 // be set. This method starts client processing in a goroutine and
 // returns immediately.
