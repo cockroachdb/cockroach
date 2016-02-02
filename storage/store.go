@@ -243,35 +243,40 @@ type replicaDescCacheKey struct {
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
-	Ident             roachpb.StoreIdent
-	ctx               StoreContext
-	db                *client.DB
-	engine            engine.Engine   // The underlying key-value store
-	allocator         Allocator       // Makes allocation decisions
-	rangeIDAlloc      *idAllocator    // Range ID allocator
-	gcQueue           *gcQueue        // Garbage collection queue
-	splitQueue        *splitQueue     // Range splitting queue
-	verifyQueue       *verifyQueue    // Checksum verification queue
-	replicateQueue    *replicateQueue // Replication queue
-	replicaGCQueue    *replicaGCQueue // Replica GC queue
-	raftLogQueue      *raftLogQueue   // Raft Log Truncation queue
-	scanner           *replicaScanner // Replica scanner
-	feed              StoreEventFeed  // Event Feed
-	removeReplicaChan chan removeReplicaOp
-	wakeRaftLoop      chan struct{}
-	started           int32
-	stopper           *stop.Stopper
-	startedAt         int64
-	nodeDesc          *roachpb.NodeDescriptor
-	initComplete      sync.WaitGroup // Signaled by async init tasks
-	raftRequestChan   chan *RaftMessageRequest
+	Ident           roachpb.StoreIdent
+	ctx             StoreContext
+	db              *client.DB
+	engine          engine.Engine   // The underlying key-value store
+	allocator       Allocator       // Makes allocation decisions
+	rangeIDAlloc    *idAllocator    // Range ID allocator
+	gcQueue         *gcQueue        // Garbage collection queue
+	splitQueue      *splitQueue     // Range splitting queue
+	verifyQueue     *verifyQueue    // Checksum verification queue
+	replicateQueue  *replicateQueue // Replication queue
+	replicaGCQueue  *replicaGCQueue // Replica GC queue
+	raftLogQueue    *raftLogQueue   // Raft Log Truncation queue
+	scanner         *replicaScanner // Replica scanner
+	feed            StoreEventFeed  // Event Feed
+	wakeRaftLoop    chan struct{}
+	started         int32
+	stopper         *stop.Stopper
+	startedAt       int64
+	nodeDesc        *roachpb.NodeDescriptor
+	initComplete    sync.WaitGroup // Signaled by async init tasks
+	raftRequestChan chan *RaftMessageRequest
 
-	// Lock ordering notes: The processRaft goroutine acts as a kind of
-	// mutex. To avoid deadlocks, the following lock order must be
-	// obeyed: processRaft goroutine < Store.mu.Mutex < Replica.mu.Mutex. (i.e.
-	// methods like removeReplica which depend on the processRaft
-	// goroutine must not be called while holding Store.mu.Mutex).
-	mu struct {
+	// Locking notes: To avoid deadlocks, the following lock order
+	// must be obeyed: processRaftMu < Store.mu.Mutex <
+	// Replica.mu.Mutex.
+	//
+	// Methods of Store with a "Locked" suffix require that
+	// Store.mu.Mutex be held. Other locking requirements are indicated
+	// in comments.
+
+	// processRaftMu is held while doing anything raft-related.
+	// TODO(bdarnell): replace processRaftMu with a range-level lock.
+	processRaftMu sync.Mutex
+	mu            struct {
 		sync.Mutex                                  // Protects all variables in the mu struct.
 		replicas       map[roachpb.RangeID]*Replica // Map of replicas by Range ID
 		replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
@@ -382,14 +387,13 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	}
 
 	s := &Store{
-		ctx:               ctx,
-		db:                ctx.DB, // TODO(tschottdorf) remove redundancy.
-		engine:            eng,
-		allocator:         MakeAllocator(ctx.StorePool, ctx.AllocatorOptions),
-		nodeDesc:          nodeDesc,
-		removeReplicaChan: make(chan removeReplicaOp),
-		wakeRaftLoop:      make(chan struct{}, 1),
-		raftRequestChan:   make(chan *RaftMessageRequest, raftReqBufferSize),
+		ctx:             ctx,
+		db:              ctx.DB, // TODO(tschottdorf) remove redundancy.
+		engine:          eng,
+		allocator:       MakeAllocator(ctx.StorePool, ctx.AllocatorOptions),
+		nodeDesc:        nodeDesc,
+		wakeRaftLoop:    make(chan struct{}, 1),
+		raftRequestChan: make(chan *RaftMessageRequest, raftReqBufferSize),
 	}
 
 	s.mu.Lock()
@@ -1091,13 +1095,6 @@ func (s *Store) addReplicaToRangeMapLocked(rng *Replica) error {
 	return nil
 }
 
-type removeReplicaOp struct {
-	rep      *Replica
-	origDesc roachpb.RangeDescriptor
-	destroy  bool
-	ch       chan<- error
-}
-
 // RemoveReplica removes the replica from the store's replica map and
 // from the sorted replicasByKey btree. The version of the replica
 // descriptor that was used to make the removal decision is passed in,
@@ -1105,13 +1102,14 @@ type removeReplicaOp struct {
 // then. If `destroy` is true, all data beloing to the replica will be
 // deleted. In either case a tombstone record will be written.
 func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool) error {
-
-	ch := make(chan error)
-	s.removeReplicaChan <- removeReplicaOp{rep, origDesc, destroy, ch}
-	return <-ch
+	s.processRaftMu.Lock()
+	defer s.processRaftMu.Unlock()
+	return s.removeReplicaImpl(rep, origDesc, destroy)
 }
 
-// removeReplicaImpl runs on the processRaft goroutine.
+// removeReplicaImpl is the implementation of RemoveReplica, which is
+// sometimes called directly when the necessary lock is already held.
+// It requires that s.processRaftMu is held and that s.mu is not held.
 func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool) error {
 	desc := rep.Desc()
 	_, rd := desc.FindReplica(s.StoreID())
@@ -1478,12 +1476,27 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	return resolveIntents, roachpb.NewError(wiErr)
 }
 
-// TODO(bdarnell): is this buffering necessary? sufficient?
+// enqueueRaftMessage enqueues a request for eventual processing. It
+// returns an error to conform to the RPC interface but it always
+// returns nil without waiting for the message to be processed.
+//
+// TODO(bdarnell): is this buffering necessary? sufficient? It's
+// tempting to move handleRaftMessage off the processRaft goroutine
+// and rely on processRaftMu instead. However, the interaction with
+// the stopper is tricky. Run handleRaftMessage as a task and we see
+// intent resolutions hang during test shutdown because they expect to
+// be able to make progress during the draining phase. Run it without
+// a task and it may run while the stopper is shutting down. It needs
+// to be run from within a Worker and processRaft is a convenient one
+// to use.
 func (s *Store) enqueueRaftMessage(req *RaftMessageRequest) error {
 	s.raftRequestChan <- req
 	return nil
 }
 
+// handleRaftMessage dispatches a raft message to the appropriate
+// Replica. It requires that processRaftMu is held and that s.mu is
+// not held.
 func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	switch req.Message.Type {
 	case raftpb.MsgSnap:
@@ -1569,6 +1582,7 @@ func (s *Store) processRaft() {
 		defer ticker.Stop()
 		for {
 			var replicas []*Replica
+			s.processRaftMu.Lock()
 			s.mu.Lock()
 			for rangeID := range s.mu.pendingRaftGroups {
 				r, ok := s.mu.replicas[rangeID]
@@ -1587,20 +1601,21 @@ func (s *Store) processRaft() {
 					panic(err) // TODO(bdarnell)
 				}
 			}
+			s.processRaftMu.Unlock()
 
 			select {
 			case <-s.wakeRaftLoop:
 
-			case op := <-s.removeReplicaChan:
-				op.ch <- s.removeReplicaImpl(op.rep, op.origDesc, op.destroy)
-
 			case req := <-s.raftRequestChan:
+				s.processRaftMu.Lock()
 				if err := s.handleRaftMessage(req); err != nil {
 					log.Errorf("error handling raft message: %s", err)
 				}
+				s.processRaftMu.Unlock()
 
 			case <-ticker.C:
 				// TODO(bdarnell): rework raft ticker.
+				s.processRaftMu.Lock()
 				s.mu.Lock()
 				for rangeID, r := range s.mu.replicas {
 					r.mu.Lock()
@@ -1609,6 +1624,7 @@ func (s *Store) processRaft() {
 					s.mu.pendingRaftGroups[rangeID] = struct{}{}
 				}
 				s.mu.Unlock()
+				s.processRaftMu.Unlock()
 
 			case <-s.stopper.ShouldStop():
 				return
