@@ -94,9 +94,9 @@ func (r rpcError) CanRetry() bool { return true }
 // the available endpoints less the number of required replies.
 func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message,
 	getReply func() proto.Message, context *rpc.Context) (proto.Message, error) {
-	trace := opts.Trace // not thread safe!
-	if trace == nil {
-		trace = tracing.NilTrace()
+	sp := opts.Trace // not thread safe!
+	if sp == nil {
+		sp = tracing.NilTrace()
 	}
 
 	if len(addrs) < 1 {
@@ -140,7 +140,7 @@ func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr n
 	// node will be able to order the healthy replicas based on latency.
 
 	// Send the first request.
-	sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, trace, done)
+	sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, sp, done)
 	orderedClients = orderedClients[1:]
 
 	var errors, retryableErrors int
@@ -190,16 +190,16 @@ func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr n
 			}
 			// Send to additional replicas if available.
 			if len(orderedClients) > 0 {
-				trace.LogEvent("error, trying next peer")
-				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, trace, done)
+				sp.LogEvent("error, trying next peer")
+				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, sp, done)
 				orderedClients = orderedClients[1:]
 			}
 
 		case <-time.After(opts.SendNextTimeout):
 			// On successive RPC timeouts, send to additional replicas if available.
 			if len(orderedClients) > 0 {
-				trace.LogEvent("timeout, trying next peer")
-				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, trace, done)
+				sp.LogEvent("timeout, trying next peer")
+				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, sp, done)
 				orderedClients = orderedClients[1:]
 			}
 		}
