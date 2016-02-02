@@ -78,16 +78,15 @@ func newFakeGossipServer(rpcServer *rpc.Server, stopper *stop.Stopper) (*fakeGos
 
 func (s *fakeGossipServer) Gossip(argsI proto.Message) (proto.Message, error) {
 	args := argsI.(*Request)
-	reply := &Response{
-		// Just don't conflict with other nodes.
-		NodeID: math.MaxInt32,
-	}
 	select {
 	case s.nodeIDChan <- args.NodeID:
 	default:
 	}
 
-	return reply, nil
+	return &Response{
+		// Just don't conflict with other nodes.
+		NodeID: math.MaxInt32,
+	}, nil
 }
 
 // startFakeServerGossips creates local gossip instances and remote
