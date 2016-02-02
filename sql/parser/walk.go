@@ -249,7 +249,7 @@ func (m MapArgs) SetInferredType(d, typ Datum) (set Datum, err error) {
 	if !ok {
 		return nil, nil
 	}
-	if t, ok := m[v.name]; ok && typ != t {
+	if t, ok := m[v.name]; ok && !typ.TypeEqual(t) {
 		return nil, fmt.Errorf("parameter %s has multiple types: %s, %s", v, typ.Type(), t.Type())
 	}
 	m[v.name] = typ

@@ -71,6 +71,11 @@ var (
 type Datum interface {
 	Expr
 	Type() string
+	// TypeEqual determines if the receiver and the other Datum have the same
+	// type or not. This method should be used for asserting the type of all
+	// Datum, with the exception of DNull, where it is safe/encouraged to perform
+	// a direct equivalence check.
+	TypeEqual(other Datum) bool
 	// Compare returns -1 if the receiver is less than other, 0 if receiver is
 	// equal to other and +1 if receiver is greater than other.
 	Compare(other Datum) int
@@ -115,6 +120,12 @@ func GetBool(d Datum) (DBool, error) {
 // Type implements the Datum interface.
 func (d DBool) Type() string {
 	return "bool"
+}
+
+// TypeEqual implements the Datum interface.
+func (d DBool) TypeEqual(other Datum) bool {
+	_, ok := other.(DBool)
+	return ok
 }
 
 // Compare implements the Datum interface.
@@ -178,6 +189,12 @@ func (d DInt) Type() string {
 	return "int"
 }
 
+// TypeEqual implements the Datum interface.
+func (d DInt) TypeEqual(other Datum) bool {
+	_, ok := other.(DInt)
+	return ok
+}
+
 // Compare implements the Datum interface.
 func (d DInt) Compare(other Datum) int {
 	if other == DNull {
@@ -237,6 +254,12 @@ type DFloat float64
 // Type implements the Datum interface.
 func (d DFloat) Type() string {
 	return "float"
+}
+
+// TypeEqual implements the Datum interface.
+func (d DFloat) TypeEqual(other Datum) bool {
+	_, ok := other.(DFloat)
+	return ok
 }
 
 // Compare implements the Datum interface.
@@ -318,6 +341,12 @@ func (d DDecimal) Type() string {
 	return "decimal"
 }
 
+// TypeEqual implements the Datum interface.
+func (d DDecimal) TypeEqual(other Datum) bool {
+	_, ok := other.(DDecimal)
+	return ok
+}
+
 // Compare implements the Datum interface.
 func (d DDecimal) Compare(other Datum) int {
 	if other == DNull {
@@ -371,6 +400,12 @@ type DString string
 // Type implements the Datum interface.
 func (d DString) Type() string {
 	return "string"
+}
+
+// TypeEqual implements the Datum interface.
+func (d DString) TypeEqual(other Datum) bool {
+	_, ok := other.(DString)
+	return ok
 }
 
 // Compare implements the Datum interface.
@@ -435,6 +470,12 @@ func (d DBytes) Type() string {
 	return "bytes"
 }
 
+// TypeEqual implements the Datum interface.
+func (d DBytes) TypeEqual(other Datum) bool {
+	_, ok := other.(DBytes)
+	return ok
+}
+
 // Compare implements the Datum interface.
 func (d DBytes) Compare(other Datum) int {
 	if other == DNull {
@@ -495,6 +536,12 @@ type DDate int64
 // Type implements the Datum interface.
 func (d DDate) Type() string {
 	return "date"
+}
+
+// TypeEqual implements the Datum interface.
+func (d DDate) TypeEqual(other Datum) bool {
+	_, ok := other.(DDate)
+	return ok
 }
 
 // Compare implements the Datum interface.
@@ -558,6 +605,12 @@ type DTimestamp struct {
 // Type implements the Datum interface.
 func (d DTimestamp) Type() string {
 	return "timestamp"
+}
+
+// TypeEqual implements the Datum interface.
+func (d DTimestamp) TypeEqual(other Datum) bool {
+	_, ok := other.(DTimestamp)
+	return ok
 }
 
 // Compare implements the Datum interface.
@@ -625,6 +678,12 @@ func (d DInterval) Type() string {
 	return "interval"
 }
 
+// TypeEqual implements the Datum interface.
+func (d DInterval) TypeEqual(other Datum) bool {
+	_, ok := other.(DInterval)
+	return ok
+}
+
 // Compare implements the Datum interface.
 func (d DInterval) Compare(other Datum) int {
 	if other == DNull {
@@ -680,6 +739,12 @@ type DTuple []Datum
 // Type implements the Datum interface.
 func (d DTuple) Type() string {
 	return "tuple"
+}
+
+// TypeEqual implements the Datum interface.
+func (d DTuple) TypeEqual(other Datum) bool {
+	_, ok := other.(DTuple)
+	return ok
 }
 
 // Compare implements the Datum interface.
@@ -825,6 +890,12 @@ func (d dNull) Type() string {
 	return "NULL"
 }
 
+// TypeEqual implements the Datum interface.
+func (d dNull) TypeEqual(other Datum) bool {
+	_, ok := other.(dNull)
+	return ok
+}
+
 // Compare implements the Datum interface.
 func (d dNull) Compare(other Datum) int {
 	if other == DNull {
@@ -880,6 +951,12 @@ func (DValArg) Variable() {}
 // Type implements the Datum interface.
 func (DValArg) Type() string {
 	return "valarg"
+}
+
+// TypeEqual implements the Datum interface.
+func (d DValArg) TypeEqual(other Datum) bool {
+	_, ok := other.(DValArg)
+	return ok
 }
 
 // Compare implements the Datum interface.
