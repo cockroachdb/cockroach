@@ -24,27 +24,16 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var maxTransfer = flag.Int("max-transfer", 999, "Maximum amount to transfer in one transaction.")
 var numAccounts = flag.Int("num-accounts", 999, "Number of accounts.")
 
-// BenchmarkBank mirrors the SQL performed by examples/sql_bank, but structured
-// as a benchmark for easier usage of the Go performance analysis tools like
-// pprof, memprof and trace.
-func BenchmarkBank(b *testing.B) {
-	s := server.StartTestServer(b)
-	defer s.Stop()
-
-	db, err := sql.Open("cockroach", "https://root@"+s.ServingAddr()+"?certs="+security.EmbeddedCertsDir)
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer db.Close()
-
+// runBenchmarkBank mirrors the SQL performed by examples/sql_bank, but
+// structured as a benchmark for easier usage of the Go performance analysis
+// tools like pprof, memprof and trace.
+func runBenchmarkBank(b *testing.B, db *sql.DB) {
 	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS bank`); err != nil {
 		b.Fatal(err)
 	}
@@ -56,24 +45,22 @@ CREATE TABLE IF NOT EXISTS bank.accounts (
   id INT PRIMARY KEY,
   balance INT NOT NULL
 )`
-		if _, err = db.Exec(schema); err != nil {
+		if _, err := db.Exec(schema); err != nil {
 			b.Fatal(err)
 		}
-		if _, err = db.Exec("TRUNCATE TABLE bank.accounts"); err != nil {
+		if _, err := db.Exec("TRUNCATE TABLE bank.accounts"); err != nil {
 			b.Fatal(err)
 		}
 
-		var placeholders bytes.Buffer
-		var values []interface{}
+		var values bytes.Buffer
 		for i := 0; i < *numAccounts; i++ {
 			if i > 0 {
-				placeholders.WriteString(", ")
+				values.WriteString(", ")
 			}
-			fmt.Fprintf(&placeholders, "($%d, 0)", i+1)
-			values = append(values, i)
+			fmt.Fprintf(&values, "(%d, 0)", i)
 		}
-		stmt := `INSERT INTO bank.accounts (id, balance) VALUES ` + placeholders.String()
-		if _, err = db.Exec(stmt, values...); err != nil {
+		stmt := `INSERT INTO bank.accounts (id, balance) VALUES ` + values.String()
+		if _, err := db.Exec(stmt); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -94,7 +81,7 @@ UPDATE bank.accounts
   SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
   WHERE id IN ($1, $2) AND (SELECT balance >= $3 FROM bank.accounts WHERE id = $1)
 `
-			if _, err = db.Exec(update, from, to, amount); err != nil {
+			if _, err := db.Exec(update, from, to, amount); err != nil {
 				if log.V(1) {
 					log.Warning(err)
 				}
@@ -103,4 +90,8 @@ UPDATE bank.accounts
 		}
 	})
 	b.StopTimer()
+}
+
+func BenchmarkBank(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkBank)
 }
