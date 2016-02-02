@@ -52,15 +52,17 @@ CREATE TABLE IF NOT EXISTS bank.accounts (
 			b.Fatal(err)
 		}
 
-		var values bytes.Buffer
+		var placeholders bytes.Buffer
+		var values []interface{}
 		for i := 0; i < *numAccounts; i++ {
 			if i > 0 {
-				values.WriteString(", ")
+				placeholders.WriteString(", ")
 			}
-			fmt.Fprintf(&values, "(%d, 0)", i)
+			fmt.Fprintf(&placeholders, "($%d, 0)", i+1)
+			values = append(values, i)
 		}
-		stmt := `INSERT INTO bank.accounts (id, balance) VALUES ` + values.String()
-		if _, err := db.Exec(stmt); err != nil {
+		stmt := `INSERT INTO bank.accounts (id, balance) VALUES ` + placeholders.String()
+		if _, err := db.Exec(stmt, values...); err != nil {
 			b.Fatal(err)
 		}
 	}
