@@ -357,7 +357,7 @@ module AdminViews {
               .label("Count / 10 sec."));
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.transaction.count"))
+              Metrics.Select.AvgRate(_nodeMetric("sql.transaction.begincount"))
                 .sources([nodeId])
                 .title("Transactions")
               )

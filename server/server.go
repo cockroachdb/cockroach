@@ -82,7 +82,7 @@ type Server struct {
 	tsServer      *ts.Server
 	raftTransport storage.RaftTransport
 
-	// registry is the root metrics Registry in a Cockroach node. Add metrics directly to this
+	// registry is the root metrics Registry in a Cockroach node. Adding metrics directly to this
 	// registry should be rare. Instead, add more specialized registries to this one. Refer to the
 	// package docs for util/metric for more information on metrics.
 	registry *metric.Registry
@@ -203,7 +203,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 			Mode:           s.ctx.BalanceMode,
 		},
 	}
-	subRegistries := []metric.SubRegistry{
+	subRegistries := []status.NodeSubregistry{
 		{"pgwire", s.pgServer.Registry()},
 		{"sql", s.sqlExecutor.Registry()},
 	}

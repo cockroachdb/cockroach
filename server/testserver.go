@@ -327,18 +327,16 @@ func (ts *TestServer) WriteSummaries() error {
 // O(# of metrics) time, which is fine for test code.
 func (ts *TestServer) MustGetCounter(name string) int64 {
 	var c int64
-	var err error
-	found := false
+	var found bool
 
 	ts.registry.Each(func(n string, v interface{}) {
-		if !found && err == nil && name == n {
-			if cnt, ok := v.(*metric.Counter); ok {
-				c = cnt.Count()
-				found = true
-			} else {
-				err = util.Errorf("%s is not a counter: %T", n, v)
-			}
+		if name == n {
+			c = v.(*metric.Counter).Count()
+			found = true
 		}
 	})
+	if !found {
+		panic(fmt.Sprintf("couldn't find metric %s", name))
+	}
 	return c
 }

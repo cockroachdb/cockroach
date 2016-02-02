@@ -28,6 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracer"
 )
 
+// NodeSubregistry contains a name and sub-registry that will be added to the NodeStatusMonitor's
+// nodeRegistry when OnStartNode is called later.
+type NodeSubregistry struct {
+	Name     string
+	Registry *metric.Registry
+}
+
 // NodeStatusMonitor monitors the status of a server node. Status information
 // is collected from event feeds provided by lower level components.
 //
@@ -47,16 +54,13 @@ type NodeStatusMonitor struct {
 	startedAt      int64
 }
 
-// NewNodeStatusMonitor initializes a new NodeStatusMonitor instance.
-func NewNodeStatusMonitor(serverRegistry *metric.Registry, subRegistries []metric.SubRegistry) *NodeStatusMonitor {
-	// Create a Registry for execution stats. This will be a sub-registry of this Node's Registry.
-	execRegistry := metric.NewRegistry()
-
-	// Create a Registry for this node and add all passed in sub-Registries and our execution
-	// sub-Registry to it. In OnStartNode(), when we know our node ID, we will add nodeRegistry to
-	// the serverRegistry.
+// NewNodeStatusMonitor initializes a new NodeStatusMonitor instance. Upon receiving an
+// OnStartNode event, which sets the node ID, the given subregistries are added to serverRegistry
+// in a time series-compatible format, along with node metrics created within the NodeStatusMonitor.
+func NewNodeStatusMonitor(serverRegistry *metric.Registry, subRegistries []NodeSubregistry) *NodeStatusMonitor {
+	// Create a Registry for this node and add all passed in sub-Registries to it. In OnStartNode(),
+	// when we know our node ID, we will add nodeRegistry to the serverRegistry.
 	nodeRegistry := metric.NewRegistry()
-	nodeRegistry.MustAdd("exec.%s", execRegistry)
 	for _, sr := range subRegistries {
 		nodeRegistry.MustAdd(sr.Name+".%s", sr.Registry)
 	}
@@ -66,9 +70,9 @@ func NewNodeStatusMonitor(serverRegistry *metric.Registry, subRegistries []metri
 		serverRegistry: serverRegistry,
 		nodeRegistry:   nodeRegistry,
 
-		mLatency: execRegistry.Latency("latency"),
-		mSuccess: execRegistry.Rates("success"),
-		mError:   execRegistry.Rates("error"),
+		mLatency: nodeRegistry.Latency("exec.latency"),
+		mSuccess: nodeRegistry.Rates("exec.success"),
+		mError:   nodeRegistry.Rates("exec.error"),
 	}
 }
 
@@ -209,7 +213,7 @@ func (nsm *NodeStatusMonitor) OnStartNode(event *StartNodeEvent) {
 	defer nsm.Unlock()
 	nsm.startedAt = event.StartedAt
 	nsm.desc = event.Desc
-	// Add all sub-registries to the main registry. This needs to be here, because before this
+	// Add the node registry to the main registry. This needs to be here, because before this
 	// method is called, we don't have a node ID and thus can't format the key for the time series
 	// data. Outputs using format `<prefix>.<metric>.<id>`.
 	nsm.serverRegistry.MustAdd(nodeTimeSeriesPrefix+"%s."+event.Desc.NodeID.String(),

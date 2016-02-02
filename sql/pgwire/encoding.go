@@ -63,9 +63,12 @@ func (b *readBuffer) reset(size int) {
 	b.msg = make([]byte, size, allocSize)
 }
 
-// readMsg reads a length-prefixed message. It is only used directly
+// readUntypedMsg reads a length-prefixed message. It is only used directly
 // during the authentication phase of the protocol; readTypedMsg is
-// used at all other times.
+// used at all other times. This returns the number of bytes read and an error,
+// if there was one. The number of bytes returned can be non-zero even with an
+// error (e.g. if data was read but didn't validate) so that we can more
+// accurately measure network traffic.
 func (b *readBuffer) readUntypedMsg(rd io.Reader) (int, error) {
 	nread, err := io.ReadFull(rd, b.tmp[:])
 	if err != nil {
@@ -84,7 +87,8 @@ func (b *readBuffer) readUntypedMsg(rd io.Reader) (int, error) {
 	return nread + n, err
 }
 
-// readTypedMsg reads a message, returning its type code and body.
+// readTypedMsg reads a message from the provided reader, returning its type code and body.
+// It returns the message type, number of bytes read, and an error if there was one.
 func (b *readBuffer) readTypedMsg(rd bufferedReader) (clientMessageType, int, error) {
 	typ, err := rd.ReadByte()
 	if err != nil {
@@ -142,7 +146,11 @@ func (b *readBuffer) getInt32() (int32, error) {
 
 type writeBuffer struct {
 	bytes.Buffer
-	putbuf    [64]byte
+	putbuf [64]byte
+
+	// bytecount counts the number of bytes written across all pgwire connections, not just this
+	// buffer. This is passed in so that finishMsg can track all messages we've sent to a network
+	// socket, reducing the onus on the many callers of finishMsg.
 	bytecount *metric.Counter
 }
 

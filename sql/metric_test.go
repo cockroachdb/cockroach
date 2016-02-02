@@ -49,7 +49,7 @@ func TestQueryCounts(t *testing.T) {
 		if err := s.WriteSummaries(); err != nil {
 			t.Fatal(err)
 		}
-		if a, e := s.MustGetCounter("cr.node.sql.transaction.count."+nid), tc.txnCount; a != e {
+		if a, e := s.MustGetCounter("cr.node.sql.transaction.begincount."+nid), tc.txnCount; a != e {
 			t.Errorf("transaction count for '%s': actual %d != expected %d", tc.query, a, e)
 		}
 		if a, e := s.MustGetCounter("cr.node.sql.select.count."+nid), tc.selectCount; a != e {

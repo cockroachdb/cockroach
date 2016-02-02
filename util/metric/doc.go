@@ -15,7 +15,6 @@
 // Author: Cuong Do (cdo@cockroachlabs.com)
 
 /*
-
 Package metric provides server metrics (a.k.a. transient stats) for a CockroachDB server. These
 metrics are persisted to the time-series database and are viewable through the web interface and the
 /_status/metrics/<NODEID> HTTP endpoint.
@@ -31,8 +30,8 @@ Next, call methods such as Counter() and Rate() on the Registry to register the 
 		...
 	}
 
-This code block registers the metric "select.count" in sql.Registry. The metric can then be accessed
-through the "selectCount" variable, which can be updated as follows:
+This code block registers the metric "sql.select.count" in sql.Registry. The metric can then be
+accessed through the "selectCount" variable, which can be updated as follows:
 
 	func (e *Executor) doSelect() {
 		// do the SELECT
@@ -77,7 +76,5 @@ endpoint as follows:
 
 Note that a prefix and suffix have been added. The prefix "cr.node." denotes that this metric
 is node-level. The suffix ".1" specifies that this metric is for node 1.
-
-
 */
 package metric

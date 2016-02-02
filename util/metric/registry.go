@@ -155,10 +155,3 @@ func (r *Registry) Rates(prefix string) Rates {
 	c := r.Counter(prefix + sep + "count")
 	return Rates{Counter: c, Rates: es}
 }
-
-// SubRegistry is a simple helper struct used for tracking a Registry to add to another
-// Registry at a later time (e.g. when we have a NodeID).
-type SubRegistry struct {
-	Name     string
-	Registry *Registry
-}

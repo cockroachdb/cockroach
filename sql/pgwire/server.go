@@ -60,7 +60,7 @@ type serverMetrics struct {
 
 // NewServer creates a Server.
 func NewServer(context *Context) *Server {
-	// Create a sub-registry of the main registry to hold pgwire stats.
+	// Create a registry to hold pgwire stats.
 	reg := metric.NewRegistry()
 	metrics := &serverMetrics{
 		bytesInCount:  reg.Counter("bytesin"),
@@ -157,11 +157,11 @@ func (s *Server) serveConn(conn net.Conn) error {
 	if err != nil {
 		return err
 	}
+	s.metrics.bytesInCount.Inc(int64(n))
 	version, err := buf.getInt32()
 	if err != nil {
 		return err
 	}
-	s.metrics.bytesInCount.Inc(int64(n))
 	errSSLRequired := false
 	if version == versionSSL {
 		if len(buf.msg) > 0 {
@@ -224,8 +224,8 @@ func (s *Server) serveConn(conn net.Conn) error {
 	return util.Errorf("unknown protocol version %d", version)
 }
 
-// Registry returns our metrics Registry, which must be added to another Registry so that
-// the Server's Registry is aware of this one.
+// Registry returns registry with the metrics tracked by this server, which can be used to
+// access its stats or be added to another registry.
 func (s *Server) Registry() *metric.Registry {
 	return s.registry
 }
