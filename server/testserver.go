@@ -270,6 +270,11 @@ func (ts *TestServer) WaitForInitialSplits() error {
 	})
 }
 
+// Stores returns the collection of stores from this TestServer's node.
+func (ts *TestServer) Stores() *storage.Stores {
+	return ts.node.stores
+}
+
 // ServingAddr returns the rpc server's address. Should be used by clients.
 func (ts *TestServer) ServingAddr() string {
 	return ts.listener.Addr().String()
