@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 func init() {
@@ -31,5 +32,6 @@ func init() {
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
 
 func TestMain(m *testing.M) {
+	tracing.SetTestTracing()
 	leaktest.TestMainWithLeakCheck(m)
 }

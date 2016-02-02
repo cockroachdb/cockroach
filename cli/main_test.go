@@ -22,10 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 func init() {
 	security.SetReadFileFn(securitytest.Asset)
+	tracing.SetTestTracing()
 }
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
