@@ -100,39 +100,6 @@ func (s *server) Gossip(serverStream Gossip_GossipServer) error {
 		return util.Errorf("duplicate connection from node at %s", args.Addr)
 	}
 
-	if args.NodeID != 0 {
-		// Decide whether or not we can accept the incoming connection
-		// as a permanent peer.
-		if s.incoming.hasNode(args.NodeID) {
-			// Do nothing.
-		} else if s.incoming.hasSpace() {
-			s.incoming.addNode(args.NodeID)
-			s.nodeMap[args.Addr] = args.NodeID
-
-			defer func(nodeID roachpb.NodeID, addr util.UnresolvedAddr) {
-				s.incoming.removeNode(nodeID)
-				delete(s.nodeMap, addr)
-			}(args.NodeID, args.Addr)
-		} else {
-			var alternateAddr util.UnresolvedAddr
-			var alternateNodeID roachpb.NodeID
-			for addr, id := range s.nodeMap {
-				alternateAddr = addr
-				alternateNodeID = id
-				break
-			}
-
-			log.Infof("refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
-				args.NodeID, s.incoming.maxSize, alternateNodeID, alternateAddr)
-
-			return stream.Send(&Response{
-				NodeID:          s.is.NodeID,
-				AlternateAddr:   &alternateAddr,
-				AlternateNodeID: alternateNodeID,
-			})
-		}
-	}
-
 	// This worker sends new gossip from the server to the client. It is triggered by s.ready.
 	s.stopper.RunWorker(func() {
 		s.mu.Lock()
@@ -173,6 +140,39 @@ func (s *server) Gossip(serverStream Gossip_GossipServer) error {
 	// This loop receives gossip from the client. It does not attempt to send the
 	// server's gossip to the client.
 	for {
+		if args.NodeID != 0 {
+			// Decide whether or not we can accept the incoming connection
+			// as a permanent peer.
+			if s.incoming.hasNode(args.NodeID) {
+				// Do nothing.
+			} else if s.incoming.hasSpace() {
+				s.incoming.addNode(args.NodeID)
+				s.nodeMap[args.Addr] = args.NodeID
+
+				defer func(nodeID roachpb.NodeID, addr util.UnresolvedAddr) {
+					s.incoming.removeNode(nodeID)
+					delete(s.nodeMap, addr)
+				}(args.NodeID, args.Addr)
+			} else {
+				var alternateAddr util.UnresolvedAddr
+				var alternateNodeID roachpb.NodeID
+				for addr, id := range s.nodeMap {
+					alternateAddr = addr
+					alternateNodeID = id
+					break
+				}
+
+				log.Infof("refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
+					args.NodeID, s.incoming.maxSize, alternateNodeID, alternateAddr)
+
+				return stream.Send(&Response{
+					NodeID:          s.is.NodeID,
+					AlternateAddr:   &alternateAddr,
+					AlternateNodeID: alternateNodeID,
+				})
+			}
+		}
+
 		s.received += len(args.Delta)
 		freshCount, err := s.is.combine(args.Delta, args.NodeID)
 		if err != nil {
