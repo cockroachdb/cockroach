@@ -1308,14 +1308,14 @@ func (r *Replica) AdminSplit(args roachpb.AdminSplitRequest, desc *roachpb.Range
 		if err := txn.Run(b); err != nil {
 			return err
 		}
+		// Log the split into the range event log.
+		if err := r.store.logSplit(txn, updatedDesc, *newDesc); err != nil {
+			return err
+		}
 		// Update the RangeTree.
 		b = &client.Batch{}
 		if pErr := InsertRange(txn, b, newDesc.StartKey); pErr != nil {
 			return pErr
-		}
-		// Log the split into the range event log.
-		if err := r.store.logSplit(txn, updatedDesc, *newDesc); err != nil {
-			return err
 		}
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
@@ -1718,8 +1718,19 @@ func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica r
 			return roachpb.NewError(err)
 		}
 
+		// Run transaction up to this point.
+		if err := txn.Run(b); err != nil {
+			return err
+		}
+
+		// Log replica change into range event log.
+		if err := r.store.logChange(txn, changeType, replica, updatedDesc); err != nil {
+			return err
+		}
+
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a commit trigger.
+		b = &client.Batch{}
 		b.InternalAddRequest(&roachpb.EndTransactionRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
