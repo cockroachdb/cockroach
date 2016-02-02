@@ -21,6 +21,11 @@
 
 package storage
 
+import (
+	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/roachpb"
+)
+
 // ForceReplicationScanAndProcess iterates over all ranges and
 // enqueues any that need to be replicated. Exposed only for testing.
 func (s *Store) ForceReplicationScanAndProcess() {
@@ -76,4 +81,10 @@ func (s *Store) ForceRaftLogScanAndProcess() {
 	}
 
 	s.raftLogQueue.DrainQueue(s.ctx.Clock)
+}
+
+// LogReplicaChangeTest adds a fake replica change event to the log for the
+// range which contains the given key. This is intended for usage only in unit tests.
+func (s *Store) LogReplicaChangeTest(txn *client.Txn, changeType roachpb.ReplicaChangeType, replica roachpb.ReplicaDescriptor, desc roachpb.RangeDescriptor) *roachpb.Error {
+	return s.logChange(txn, changeType, replica, desc)
 }
