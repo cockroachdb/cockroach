@@ -22,9 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 func init() {
+	tracing.SetTestTracing()
 	security.SetReadFileFn(securitytest.Asset)
 }
 

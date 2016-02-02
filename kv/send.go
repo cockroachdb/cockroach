@@ -94,7 +94,7 @@ func (r rpcError) CanRetry() bool { return true }
 // the available endpoints less the number of required replies.
 func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message,
 	getReply func() proto.Message, context *rpc.Context) (proto.Message, error) {
-	sp := opts.Trace // not thread safe!
+	sp := opts.Trace
 	if sp == nil {
 		sp = tracing.NilTrace()
 	}
