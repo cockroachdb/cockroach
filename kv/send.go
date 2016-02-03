@@ -88,12 +88,12 @@ func (r rpcError) CanRetry() bool { return true }
 
 // Send sends one or more method RPCs to clients specified by the slice of
 // endpoint addrs. Arguments for methods are obtained using the supplied
-// getArgs function. Reply structs are obtained through the getReply()
-// function. On success, Send returns the first successful reply. Otherwise,
-// Send returns an error if and as soon as the number of failed RPCs exceeds
-// the available endpoints less the number of required replies.
+// getArgs function. On success, Send returns the first successful
+// reply. Otherwise, Send returns an error if and as soon as the number of
+// failed RPCs exceeds the available endpoints less the number of required
+// replies.
 func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest,
-	getReply func() *roachpb.BatchResponse, context *rpc.Context) (proto.Message, error) {
+	context *rpc.Context) (proto.Message, error) {
 	sp := opts.Trace
 	if sp == nil {
 		sp = tracing.NilSpan()
@@ -140,7 +140,7 @@ func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr n
 	// node will be able to order the healthy replicas based on latency.
 
 	// Send the first request.
-	sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, sp, done)
+	sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, context, sp, done)
 	orderedClients = orderedClients[1:]
 
 	var errors, retryableErrors int
@@ -191,7 +191,7 @@ func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr n
 			// Send to additional replicas if available.
 			if len(orderedClients) > 0 {
 				sp.LogEvent("error, trying next peer")
-				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, sp, done)
+				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, context, sp, done)
 				orderedClients = orderedClients[1:]
 			}
 
@@ -199,7 +199,7 @@ func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr n
 			// On successive RPC timeouts, send to additional replicas if available.
 			if len(orderedClients) > 0 {
 				sp.LogEvent("timeout, trying next peer")
-				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, sp, done)
+				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, context, sp, done)
 				orderedClients = orderedClients[1:]
 			}
 		}
@@ -223,7 +223,7 @@ var sendOneFn = sendOne
 // Do not call directly, but instead use sendOneFn. Tests mock out this method
 // via sendOneFn in order to test various error cases.
 func sendOne(client *rpc.Client, timeout time.Duration, method string,
-	getArgs func(addr net.Addr) *roachpb.BatchRequest, getReply func() *roachpb.BatchResponse,
+	getArgs func(addr net.Addr) *roachpb.BatchRequest,
 	context *rpc.Context, trace opentracing.Span, done chan *netrpc.Call) {
 
 	addr := client.RemoteAddr()
@@ -245,7 +245,7 @@ func sendOne(client *rpc.Client, timeout time.Duration, method string,
 		}
 	}
 
-	reply := getReply()
+	reply := &roachpb.BatchResponse{}
 
 	// Don't bother firing off a goroutine in the common case where a client
 	// is already healthy.
