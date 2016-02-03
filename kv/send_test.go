@@ -47,13 +47,8 @@ func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
 	return ctx
 }
 
-func newTestServer(t *testing.T, ctx *rpc.Context, manual bool) (*rpc.Server, net.Listener) {
-	var s *rpc.Server
-	if manual {
-		s = rpc.NewManualServer(ctx)
-	} else {
-		s = rpc.NewServer(ctx)
-	}
+func newTestServer(t *testing.T, ctx *rpc.Context) (*rpc.Server, net.Listener) {
+	s := rpc.NewServer(ctx)
 
 	tlsConfig, err := ctx.GetServerTLSConfig()
 	if err != nil {
@@ -67,6 +62,21 @@ func newTestServer(t *testing.T, ctx *rpc.Context, manual bool) (*rpc.Server, ne
 	}
 
 	return s, ln
+}
+
+type Node time.Duration
+
+func registerBatch(t *testing.T, s *rpc.Server, d time.Duration) {
+	if err := s.RegisterPublic("Node.Batch", Node(d).Batch, &roachpb.BatchRequest{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (n Node) Batch(args proto.Message) (proto.Message, error) {
+	if n > 0 {
+		time.Sleep(time.Duration(n))
+	}
+	return &roachpb.BatchResponse{}, nil
 }
 
 func TestInvalidAddrLength(t *testing.T) {
@@ -91,14 +101,15 @@ func TestSendToOneClient(t *testing.T) {
 	defer stopper.Stop()
 
 	ctx := newNodeTestContext(nil, stopper)
-	_, ln := newTestServer(t, ctx, false)
+	s, ln := newTestServer(t, ctx)
+	registerBatch(t, s, 0)
 
 	opts := SendOptions{
 		Ordering:        orderStable,
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         10 * time.Second,
 	}
-	reply, err := sendPing(opts, []net.Addr{ln.Addr()}, ctx)
+	reply, err := sendBatch(opts, []net.Addr{ln.Addr()}, ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +128,8 @@ func TestRetryableError(t *testing.T) {
 
 	nodeContext := newNodeTestContext(nil, stopper)
 	nodeContext.HeartbeatTimeout = 10 * nodeContext.HeartbeatInterval
-	_, ln := newTestServer(t, nodeContext, false)
+	s, ln := newTestServer(t, nodeContext)
+	registerBatch(t, s, 0)
 
 	c := rpc.NewClient(ln.Addr(), nodeContext)
 	// Wait until the client becomes healthy and shut down the server.
@@ -139,7 +151,7 @@ func TestRetryableError(t *testing.T) {
 		SendNextTimeout: 100 * time.Millisecond,
 		Timeout:         100 * time.Millisecond,
 	}
-	if _, err := sendPing(opts, []net.Addr{ln.Addr()}, nodeContext); err != nil {
+	if _, err := sendBatch(opts, []net.Addr{ln.Addr()}, nodeContext); err != nil {
 		retryErr, ok := err.(retry.Retryable)
 		if !ok {
 			t.Fatalf("Unexpected error type: %v", err)
@@ -169,7 +181,7 @@ func TestUnretryableError(t *testing.T) {
 	defer stopper.Stop()
 
 	nodeContext := newNodeTestContext(nil, stopper)
-	_, ln := newTestServer(t, nodeContext, false)
+	_, ln := newTestServer(t, nodeContext)
 
 	opts := SendOptions{
 		Ordering:        orderStable,
@@ -197,13 +209,6 @@ func TestUnretryableError(t *testing.T) {
 	}
 }
 
-type Heartbeat struct{}
-
-func (h *Heartbeat) Ping(args proto.Message) (proto.Message, error) {
-	time.Sleep(50 * time.Millisecond)
-	return &rpc.PingResponse{}, nil
-}
-
 // TestClientNotReady verifies that Send gets an RPC error when a client
 // does not become ready.
 func TestClientNotReady(t *testing.T) {
@@ -215,10 +220,8 @@ func TestClientNotReady(t *testing.T) {
 	nodeContext := newNodeTestContext(nil, stopper)
 
 	// Construct a server that listens but doesn't do anything.
-	s, ln := newTestServer(t, nodeContext, true)
-	if err := s.RegisterPublic("Heartbeat.Ping", (&Heartbeat{}).Ping, &rpc.PingRequest{}); err != nil {
-		t.Fatal(err)
-	}
+	s, ln := newTestServer(t, nodeContext)
+	registerBatch(t, s, 50*time.Millisecond)
 
 	opts := SendOptions{
 		Ordering:        orderStable,
@@ -227,7 +230,7 @@ func TestClientNotReady(t *testing.T) {
 	}
 
 	// Send RPC to an address where no server is running.
-	if _, err := sendPing(opts, []net.Addr{ln.Addr()}, nodeContext); err != nil {
+	if _, err := sendBatch(opts, []net.Addr{ln.Addr()}, nodeContext); err != nil {
 		retryErr, ok := err.(retry.Retryable)
 		if !ok {
 			t.Fatalf("Unexpected error type: %v", err)
@@ -244,7 +247,7 @@ func TestClientNotReady(t *testing.T) {
 	opts.Timeout = 0
 	c := make(chan error)
 	go func() {
-		if _, err := sendPing(opts, []net.Addr{ln.Addr()}, nodeContext); err == nil {
+		if _, err := sendBatch(opts, []net.Addr{ln.Addr()}, nodeContext); err == nil {
 			c <- util.Errorf("expected error when client is closed")
 		} else if !strings.Contains(err.Error(), "failed as client connection was closed") {
 			c <- err
@@ -308,7 +311,7 @@ func TestComplexScenarios(t *testing.T) {
 
 		var serverAddrs []net.Addr
 		for j := 0; j < test.numServers; j++ {
-			_, ln := newTestServer(t, nodeContext, false)
+			_, ln := newTestServer(t, nodeContext)
 			serverAddrs = append(serverAddrs, ln.Addr())
 		}
 
@@ -318,10 +321,10 @@ func TestComplexScenarios(t *testing.T) {
 			Timeout:         10 * time.Second,
 		}
 		getArgs := func(addr net.Addr) proto.Message {
-			return &rpc.PingRequest{}
+			return &roachpb.BatchRequest{}
 		}
 		getReply := func() proto.Message {
-			return &rpc.PingResponse{}
+			return &roachpb.BatchResponse{}
 		}
 
 		// Mock sendOne.
@@ -367,10 +370,10 @@ func TestComplexScenarios(t *testing.T) {
 	}
 }
 
-// sendPing sends Ping requests to specified addresses using Send.
-func sendPing(opts SendOptions, addrs []net.Addr, rpcContext *rpc.Context) (proto.Message, error) {
-	return sendRPC(opts, addrs, rpcContext, "Heartbeat.Ping",
-		&rpc.PingRequest{}, &rpc.PingResponse{})
+// sendBatch sends Batch requests to specified addresses using send.
+func sendBatch(opts SendOptions, addrs []net.Addr, rpcContext *rpc.Context) (proto.Message, error) {
+	return sendRPC(opts, addrs, rpcContext, "Node.Batch",
+		&roachpb.BatchRequest{}, &roachpb.BatchResponse{})
 }
 
 func sendRPC(opts SendOptions, addrs []net.Addr, rpcContext *rpc.Context, name string,
