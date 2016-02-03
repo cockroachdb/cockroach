@@ -87,10 +87,6 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 			t.filter = nil
 			t.render = nil
 			t.qvals = nil
-		} else if _, ok := t.table.node.(*scanNode); !ok {
-			// TODO(radu): We don't support debug mode for selects with no table or with a
-			// virtual table (subquery).
-			return t, nil
 		}
 		// Mark the from node as debug (and potentially replace it).
 		newNode, err := markDebug(t.table.node, mode)
@@ -113,6 +109,14 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 		// Replace the group node with the node it wraps.
 		return markDebug(t.plan, mode)
 
+	case *emptyNode:
+		// emptyNode supports DebugValues without any explicit enablement.
+		return t, nil
+
+	case *valuesNode:
+		// valuesNode supports DebugValues without any explicit enablement.
+		return t, nil
+
 	default:
 		return nil, roachpb.NewErrorf("TODO(pmattis): unimplemented %T", plan)
 	}
@@ -132,6 +136,19 @@ func populateExplain(v *valuesNode, plan planNode, level int) {
 		populateExplain(v, child, level+1)
 	}
 }
+
+type debugValueType int
+
+const (
+	// The debug values do not refer to a full result row.
+	debugValuePartial debugValueType = iota
+
+	// The debug values refer to a full result row but the row was filtered out.
+	debugValueFiltered
+
+	// The debug values refer to a full result row.
+	debugValueRow
+)
 
 // debugValues is a set of values used to implement EXPLAIN (DEBUG).
 type debugValues struct {
@@ -168,6 +185,11 @@ func (n *explainDebugNode) ExplainPlan() (name, description string, children []p
 func (n *explainDebugNode) Values() parser.DTuple {
 	vals := n.plan.DebugValues()
 
+	keyVal := parser.DNull
+	if vals.key != "" {
+		keyVal = parser.DString(vals.key)
+	}
+
 	// The "output" value is NULL for partial rows, or a DBool indicating if the row passed the
 	// filtering.
 	outputVal := parser.DNull
@@ -182,7 +204,7 @@ func (n *explainDebugNode) Values() parser.DTuple {
 
 	return parser.DTuple{
 		parser.DInt(vals.rowIdx),
-		parser.DString(vals.key),
+		keyVal,
 		vals.value,
 		outputVal,
 	}
