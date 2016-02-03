@@ -30,6 +30,9 @@ type Cluster interface {
 	NumNodes() int
 	// ConnString returns a connection string for the given node.
 	ConnString(int) string
+	// PGConnString returns a connection string for the given node
+	// postgres server.
+	PGConnString(int) string
 	// PGAddr returns the Postgres address for the given node.
 	PGAddr(i int) *net.TCPAddr
 	// Assert verifies that the cluster state is as expected (i.e. no unexpected

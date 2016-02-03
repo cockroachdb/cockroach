@@ -23,6 +23,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -466,6 +467,7 @@ func (l *LocalCluster) Start() {
 	l.initCluster()
 	l.createCACert()
 	l.createNodeCerts()
+	maybePanic(security.RunCreateClientCert(l.CertsDir, 512, security.RootUser))
 
 	l.monitorStopper = make(chan struct{})
 	go l.monitor(l.monitorStopper)
@@ -599,6 +601,22 @@ func (l *LocalCluster) ConnString(i int) string {
 // PGAddr returns the Postgres address for the given node.
 func (l *LocalCluster) PGAddr(i int) *net.TCPAddr {
 	return l.Nodes[i].PGAddr()
+}
+
+func (l *LocalCluster) PGConnString(i int) string {
+	certUser := security.RootUser
+	options := url.Values{}
+	options.Add("sslmode", "verify-full")
+	options.Add("sslcert", security.ClientCertPath(l.CertsDir, certUser))
+	options.Add("sslkey", security.ClientKeyPath(l.CertsDir, certUser))
+	options.Add("sslrootcert", security.CACertPath(l.CertsDir))
+	pgUrl := url.URL{
+		Scheme:   "postgres",
+		User:     url.User(certUser),
+		Host:     l.Nodes[i].PGAddr().String(),
+		RawQuery: options.Encode(),
+	}
+	return pgUrl.String()
 }
 
 // NumNodes returns the number of nodes in the cluster.
