@@ -317,7 +317,7 @@ func (desc *TableDescriptor) AllocateIDs() *roachpb.Error {
 			for _, colName := range index.StoreColumnNames {
 				status, i, err := desc.FindColumnByName(colName)
 				if err != nil {
-					return err
+					return roachpb.NewError(err)
 				}
 				var col *ColumnDescriptor
 				if status == DescriptorActive {
@@ -480,7 +480,7 @@ func (desc *TableDescriptor) AddColumn(col ColumnDescriptor) {
 }
 
 // AddIndex adds an index to the table.
-func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) *roachpb.Error {
+func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
 	if primary {
 		// PrimaryIndex is unset.
 		if desc.PrimaryIndex.Name == "" {
@@ -490,7 +490,7 @@ func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) *roachp
 			}
 			desc.PrimaryIndex = idx
 		} else {
-			return roachpb.NewUErrorf("multiple primary keys for table %q are not allowed", desc.Name)
+			return fmt.Errorf("multiple primary keys for table %q are not allowed", desc.Name)
 		}
 	} else {
 		desc.Indexes = append(desc.Indexes, idx)
@@ -501,7 +501,7 @@ func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) *roachp
 // FindColumnByName finds the column with the specified name. It returns
 // DescriptorStatus for the column, and an index into either the columns
 // (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
-func (desc *TableDescriptor) FindColumnByName(name string) (DescriptorStatus, int, *roachpb.Error) {
+func (desc *TableDescriptor) FindColumnByName(name string) (DescriptorStatus, int, error) {
 	for i, c := range desc.Columns {
 		if equalName(c.Name, name) {
 			return DescriptorActive, i, nil
@@ -514,33 +514,33 @@ func (desc *TableDescriptor) FindColumnByName(name string) (DescriptorStatus, in
 			}
 		}
 	}
-	return DescriptorAbsent, -1, roachpb.NewUErrorf("column %q does not exist", name)
+	return DescriptorAbsent, -1, fmt.Errorf("column %q does not exist", name)
 }
 
 // FindActiveColumnByName finds an active column with the specified name.
-func (desc *TableDescriptor) FindActiveColumnByName(name string) (ColumnDescriptor, *roachpb.Error) {
+func (desc *TableDescriptor) FindActiveColumnByName(name string) (ColumnDescriptor, error) {
 	for _, c := range desc.Columns {
 		if equalName(c.Name, name) {
 			return c, nil
 		}
 	}
-	return ColumnDescriptor{}, roachpb.NewUErrorf("column %q does not exist", name)
+	return ColumnDescriptor{}, fmt.Errorf("column %q does not exist", name)
 }
 
 // FindColumnByID finds the active column with specified ID.
-func (desc *TableDescriptor) FindColumnByID(id ColumnID) (*ColumnDescriptor, *roachpb.Error) {
+func (desc *TableDescriptor) FindColumnByID(id ColumnID) (*ColumnDescriptor, error) {
 	for i, c := range desc.Columns {
 		if c.ID == id {
 			return &desc.Columns[i], nil
 		}
 	}
-	return nil, roachpb.NewErrorf("column-id \"%d\" does not exist", id)
+	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
 }
 
 // FindIndexByName finds the index with the specified name. It returns
 // DescriptorStatus for the index, and an index into either the indexes
 // (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
-func (desc *TableDescriptor) FindIndexByName(name string) (DescriptorStatus, int, *roachpb.Error) {
+func (desc *TableDescriptor) FindIndexByName(name string) (DescriptorStatus, int, error) {
 	for i, idx := range desc.Indexes {
 		if equalName(idx.Name, name) {
 			return DescriptorActive, i, nil
@@ -553,11 +553,11 @@ func (desc *TableDescriptor) FindIndexByName(name string) (DescriptorStatus, int
 			}
 		}
 	}
-	return DescriptorAbsent, -1, roachpb.NewUErrorf("index %q does not exist", name)
+	return DescriptorAbsent, -1, fmt.Errorf("index %q does not exist", name)
 }
 
 // FindIndexByID finds the active index with specified ID.
-func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, *roachpb.Error) {
+func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error) {
 	indexes := append(desc.Indexes, desc.PrimaryIndex)
 
 	for i, c := range indexes {
@@ -565,7 +565,7 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, *roach
 			return &indexes[i], nil
 		}
 	}
-	return nil, roachpb.NewErrorf("index-id \"%d\" does not exist", id)
+	return nil, fmt.Errorf("index-id \"%d\" does not exist", id)
 }
 
 func (desc *TableDescriptor) makeMutationComplete(m DescriptorMutation) {

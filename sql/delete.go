@@ -34,8 +34,8 @@ func (p *planner) Delete(n *parser.Delete) (planNode, *roachpb.Error) {
 		return nil, pErr
 	}
 
-	if pErr := p.checkPrivilege(tableDesc, privilege.DELETE); pErr != nil {
-		return nil, pErr
+	if err := p.checkPrivilege(tableDesc, privilege.DELETE); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	// TODO(tamird,pmattis): avoid going through Select to avoid encoding
@@ -55,9 +55,9 @@ func (p *planner) Delete(n *parser.Delete) (planNode, *roachpb.Error) {
 
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
-	colIDtoRowIndex, pErr := makeColIDtoRowIndex(rows, tableDesc)
-	if pErr != nil {
-		return nil, pErr
+	colIDtoRowIndex, err := makeColIDtoRowIndex(rows, tableDesc)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	primaryIndex := tableDesc.PrimaryIndex
@@ -69,10 +69,10 @@ func (p *planner) Delete(n *parser.Delete) (planNode, *roachpb.Error) {
 		rowVals := rows.Values()
 		result.rows = append(result.rows, parser.DTuple(nil))
 
-		primaryIndexKey, _, pErr := encodeIndexKey(
+		primaryIndexKey, _, err := encodeIndexKey(
 			&primaryIndex, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
-		if pErr != nil {
-			return nil, pErr
+		if err != nil {
+			return nil, roachpb.NewError(err)
 		}
 
 		// Delete the secondary indexes.
@@ -84,10 +84,10 @@ func (p *planner) Delete(n *parser.Delete) (planNode, *roachpb.Error) {
 				indexes = append(indexes, *index)
 			}
 		}
-		secondaryIndexEntries, pErr := encodeSecondaryIndexes(
+		secondaryIndexEntries, err := encodeSecondaryIndexes(
 			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
-		if pErr != nil {
-			return nil, pErr
+		if err != nil {
+			return nil, roachpb.NewError(err)
 		}
 
 		for _, secondaryIndexEntry := range secondaryIndexEntries {

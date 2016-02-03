@@ -64,8 +64,8 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 		return nil, roachpb.NewError(err)
 	}
 
-	if pErr := p.checkPrivilege(dbDesc, privilege.DROP); pErr != nil {
-		return nil, pErr
+	if err := p.checkPrivilege(dbDesc, privilege.DROP); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	tbNames, pErr := p.getTableNames(dbDesc)
@@ -115,18 +115,18 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 			return nil, pErr
 		}
 
-		if pErr := p.checkPrivilege(tableDesc, privilege.CREATE); pErr != nil {
-			return nil, pErr
+		if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+			return nil, roachpb.NewError(err)
 		}
 		idxName := indexQualifiedName.Index()
-		status, i, pErr := tableDesc.FindIndexByName(idxName)
-		if pErr != nil {
+		status, i, err := tableDesc.FindIndexByName(idxName)
+		if err != nil {
 			if n.IfExists {
 				// Noop.
 				return &emptyNode{}, nil
 			}
 			// Index does not exist, but we want it to: error out.
-			return nil, pErr
+			return nil, roachpb.NewError(err)
 		}
 		switch status {
 		case DescriptorActive:
@@ -203,8 +203,8 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 			return nil, roachpb.NewError(err)
 		}
 
-		if pErr := p.checkPrivilege(tableDesc, privilege.DROP); pErr != nil {
-			return nil, pErr
+		if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
+			return nil, roachpb.NewError(err)
 		}
 
 		if _, pErr := p.Truncate(&parser.Truncate{Tables: n.Names[i : i+1]}); pErr != nil {

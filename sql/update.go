@@ -37,8 +37,8 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 		return nil, pErr
 	}
 
-	if pErr := p.checkPrivilege(tableDesc, privilege.UPDATE); pErr != nil {
-		return nil, pErr
+	if err := p.checkPrivilege(tableDesc, privilege.UPDATE); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	// Determine which columns we're inserting into.
@@ -70,9 +70,9 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 		}
 		names = append(names, expr.Names...)
 	}
-	cols, pErr := p.processColumns(tableDesc, names)
-	if pErr != nil {
-		return nil, pErr
+	cols, err := p.processColumns(tableDesc, names)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	// Set of columns being updated
@@ -87,9 +87,9 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 		}
 	}
 
-	defaultExprs, pErr := p.makeDefaultExprs(cols)
-	if pErr != nil {
-		return nil, pErr
+	defaultExprs, err := p.makeDefaultExprs(cols)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	// Generate the list of select targets. We need to select all of the columns
@@ -151,7 +151,7 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 				return roachpb.NewError(err)
 			}
 			if _, err := marshalColumnValue(cols[idx], d, p.evalCtx.Args); err != nil {
-				return err
+				return roachpb.NewError(err)
 			}
 			return nil
 		}
@@ -236,16 +236,16 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 		rowVals := rows.Values()
 		result.rows = append(result.rows, parser.DTuple(nil))
 
-		primaryIndexKey, _, pErr := encodeIndexKey(
+		primaryIndexKey, _, err := encodeIndexKey(
 			&primaryIndex, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
-		if pErr != nil {
-			return nil, pErr
+		if err != nil {
+			return nil, roachpb.NewError(err)
 		}
 		// Compute the current secondary index key:value pairs for this row.
-		secondaryIndexEntries, pErr := encodeSecondaryIndexes(
+		secondaryIndexEntries, err := encodeSecondaryIndexes(
 			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
-		if pErr != nil {
-			return nil, pErr
+		if err != nil {
+			return nil, roachpb.NewError(err)
 		}
 
 		// Our updated value expressions occur immediately after the plain
@@ -264,17 +264,17 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 		// happen before index encoding because certain datum types (i.e. tuple)
 		// cannot be used as index values.
 		for i, val := range newVals {
-			var mpErr *roachpb.Error
-			if marshalled[i], mpErr = marshalColumnValue(cols[i], val, p.evalCtx.Args); mpErr != nil {
-				return nil, mpErr
+			var mErr error
+			if marshalled[i], mErr = marshalColumnValue(cols[i], val, p.evalCtx.Args); mErr != nil {
+				return nil, roachpb.NewError(mErr)
 			}
 		}
 
 		// Compute the new secondary index key:value pairs for this row.
-		newSecondaryIndexEntries, epErr := encodeSecondaryIndexes(
+		newSecondaryIndexEntries, eErr := encodeSecondaryIndexes(
 			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
-		if epErr != nil {
-			return nil, epErr
+		if eErr != nil {
+			return nil, roachpb.NewError(eErr)
 		}
 
 		// Update secondary indexes.

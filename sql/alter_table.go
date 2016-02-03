@@ -51,13 +51,13 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 		return nil, roachpb.NewUErrorf("table %q does not exist", n.Table.Table())
 	}
 
-	tableDesc, err := p.getTableDesc(n.Table)
-	if err != nil {
-		return nil, err
+	tableDesc, pErr := p.getTableDesc(n.Table)
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
-		return nil, err
+		return nil, roachpb.NewError(err)
 	}
 
 	numMutations := len(tableDesc.Mutations)
@@ -68,7 +68,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 			d := t.ColumnDef
 			col, idx, err := makeColumnDefDescs(d)
 			if err != nil {
-				return nil, err
+				return nil, roachpb.NewError(err)
 			}
 			status, i, err := tableDesc.FindColumnByName(col.Name)
 			if err == nil {
@@ -115,7 +115,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 					// Noop.
 					continue
 				}
-				return nil, err
+				return nil, roachpb.NewError(err)
 			}
 			switch status {
 			case DescriptorActive:
@@ -148,7 +148,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 					// Noop.
 					continue
 				}
-				return nil, err
+				return nil, roachpb.NewError(err)
 			}
 			switch status {
 			case DescriptorActive:

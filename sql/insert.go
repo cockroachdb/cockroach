@@ -17,10 +17,13 @@
 package sql
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -39,8 +42,8 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 
-	if pErr := p.checkPrivilege(tableDesc, privilege.INSERT); pErr != nil {
-		return nil, pErr
+	if err := p.checkPrivilege(tableDesc, privilege.INSERT); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	var cols []ColumnDescriptor
@@ -48,8 +51,9 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	if n.DefaultValues() {
 		cols = tableDesc.Columns
 	} else {
-		if cols, pErr = p.processColumns(tableDesc, n.Columns); pErr != nil {
-			return nil, pErr
+		var err error
+		if cols, err = p.processColumns(tableDesc, n.Columns); err != nil {
+			return nil, roachpb.NewError(err)
 		}
 	}
 	// Number of columns expecting an input. This doesn't include the
@@ -99,9 +103,9 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 
 	// Construct the default expressions. The returned slice will be nil if no
 	// column in the table has a default expression.
-	defaultExprs, pErr := p.makeDefaultExprs(cols)
-	if pErr != nil {
-		return nil, pErr
+	defaultExprs, err := p.makeDefaultExprs(cols)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	// Replace any DEFAULT markers with the corresponding default expressions.
@@ -160,9 +164,9 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		// cannot be used as index values.
 		for i, val := range rowVals {
 			// Make sure the value can be written to the column before proceeding.
-			var mpErr *roachpb.Error
-			if marshalled[i], mpErr = marshalColumnValue(cols[i], val, p.evalCtx.Args); mpErr != nil {
-				return nil, mpErr
+			var mErr error
+			if marshalled[i], mErr = marshalColumnValue(cols[i], val, p.evalCtx.Args); mErr != nil {
+				return nil, roachpb.NewError(mErr)
 			}
 		}
 
@@ -170,10 +174,10 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 			continue
 		}
 
-		primaryIndexKey, _, epErr := encodeIndexKey(
+		primaryIndexKey, _, eErr := encodeIndexKey(
 			&primaryIndex, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
-		if epErr != nil {
-			return nil, epErr
+		if eErr != nil {
+			return nil, roachpb.NewError(eErr)
 		}
 
 		// Write the secondary indexes.
@@ -186,10 +190,10 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 				}
 			}
 		}
-		secondaryIndexEntries, epErr := encodeSecondaryIndexes(
+		secondaryIndexEntries, eErr := encodeSecondaryIndexes(
 			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
-		if epErr != nil {
-			return nil, epErr
+		if eErr != nil {
+			return nil, roachpb.NewError(eErr)
 		}
 
 		for _, secondaryIndexEntry := range secondaryIndexEntries {
@@ -261,7 +265,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 }
 
 func (p *planner) processColumns(tableDesc *TableDescriptor,
-	node parser.QualifiedNames) ([]ColumnDescriptor, *roachpb.Error) {
+	node parser.QualifiedNames) ([]ColumnDescriptor, error) {
 	if node == nil {
 		// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
 		// (as opposed to INSERT INTO <table> (...) VALUES (...)) from writing
@@ -276,14 +280,14 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 		// TODO(pmattis): If the name is qualified, verify the table name matches
 		// tableDesc.Name.
 		if err := n.NormalizeColumnName(); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
-		col, pErr := tableDesc.FindActiveColumnByName(n.Column())
-		if pErr != nil {
-			return nil, pErr
+		col, err := tableDesc.FindActiveColumnByName(n.Column())
+		if err != nil {
+			return nil, err
 		}
 		if _, ok := colIDSet[col.ID]; ok {
-			return nil, roachpb.NewUErrorf("multiple assignments to same column \"%s\"", n.Column())
+			return nil, fmt.Errorf("multiple assignments to same column \"%s\"", n.Column())
 		}
 		colIDSet[col.ID] = struct{}{}
 		cols[i] = col
@@ -324,7 +328,7 @@ func (p *planner) fillDefaults(defaultExprs []parser.Expr,
 	return n.Rows, nil
 }
 
-func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, *roachpb.Error) {
+func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, error) {
 	// Check to see if any of the columns have DEFAULT expressions. If there are
 	// no DEFAULT expressions, we don't bother with constructing the defaults map
 	// as the defaults are all NULL.
@@ -348,14 +352,14 @@ func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, *roa
 		}
 		expr, err := parser.ParseExprTraditional(*col.DefaultExpr)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		expr, err = p.parser.NormalizeExpr(p.evalCtx, expr)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		if parser.ContainsVars(expr) {
-			return nil, roachpb.NewErrorf("default expression contains variables")
+			return nil, util.Errorf("default expression contains variables")
 		}
 		defaultExprs = append(defaultExprs, expr)
 	}
