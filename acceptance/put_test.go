@@ -39,7 +39,7 @@ func TestPut(t *testing.T) {
 
 	errs := make(chan error, c.NumNodes())
 	start := time.Now()
-	deadline := start.Add(*duration)
+	deadline := start.Add(*flagDuration)
 	var count int64
 	for i := 0; i < c.NumNodes(); i++ {
 		go func() {
