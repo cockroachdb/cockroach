@@ -134,6 +134,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, *roachpb.Error) 
 			},
 			DefaultExpr: &s,
 			Hidden:      true,
+			Nullable:    false,
 		}
 		desc.AddColumn(col)
 		idx := IndexDescriptor{

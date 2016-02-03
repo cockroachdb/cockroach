@@ -24,7 +24,7 @@ query TTBT colnames
 SHOW COLUMNS FROM t
 ----
 Field Type Null Default
-a     INT  true NULL
+a     INT  false NULL
 b     INT  true NULL
 
 statement ok

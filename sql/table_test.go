@@ -101,7 +101,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 	}
 	for i, d := range testData {
 		stmt, err := parser.ParseOneTraditional(
-			"CREATE TABLE foo.test (a " + d.sqlType + " PRIMARY KEY)")
+			"CREATE TABLE foo.test (a " + d.sqlType + " PRIMARY KEY, b " + d.sqlType + ")")
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
@@ -116,8 +116,14 @@ func TestMakeTableDescColumns(t *testing.T) {
 		if !reflect.DeepEqual(d.colType, schema.Columns[0].Type) {
 			t.Fatalf("%d: expected %+v, but got %+v", i, d.colType, schema.Columns[0])
 		}
-		if d.nullable != schema.Columns[0].Nullable {
-			t.Fatalf("%d: expected %+v, but got %+v", i, d.nullable, schema.Columns[0].Nullable)
+		if schema.Columns[0].Nullable {
+			t.Fatalf("%d: expected non-nullable primary key, but got %+v", i, schema.Columns[0].Nullable)
+		}
+		if !reflect.DeepEqual(d.colType, schema.Columns[1].Type) {
+			t.Fatalf("%d: expected %+v, but got %+v", i, d.colType, schema.Columns[1])
+		}
+		if d.nullable != schema.Columns[1].Nullable {
+			t.Fatalf("%d: expected %+v, but got %+v", i, d.nullable, schema.Columns[1].Nullable)
 		}
 	}
 }

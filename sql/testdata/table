@@ -62,12 +62,55 @@ c     c_foo_bar_idx  false  1   foo    ASC        false
 c     c_foo_bar_idx  false  2   bar    DESC       false
 c     c_bar_key      true   1   bar    ASC        false
 
+# primary keys can never be null 
+
+statement ok
+CREATE TABLE d (
+  id    INT PRIMARY KEY NULL
+)
+
+query TTBT colnames
+SHOW COLUMNS FROM d
+----
+Field Type   Null  Default
+id    INT    false  NULL
+
+statement ok
+CREATE TABLE e (
+  id    INT NULL PRIMARY KEY
+)
+
+query TTBT colnames
+SHOW COLUMNS FROM e
+----
+Field Type   Null  Default
+id    INT    false  NULL
+
+statement ok
+CREATE TABLE f (
+  a INT,
+  b INT,
+  c INT,
+  PRIMARY KEY (a, b, c)
+)
+
+query TTBT colnames
+SHOW COLUMNS FROM f
+----
+Field Type   Null  Default
+a     INT   false  NULL
+b     INT   false  NULL
+c     INT   false  NULL
+
 query T
 SHOW TABLES FROM test
 ----
 a
 b
 c
+d
+e
+f
 
 statement ok
 SET DATABASE = ""
@@ -103,7 +146,7 @@ query TTBT colnames
 SHOW COLUMNS FROM test.users
 ----
 Field Type   Null  Default
-id    INT    true  NULL
+id    INT    false  NULL
 name  STRING false NULL
 title STRING true  NULL
 

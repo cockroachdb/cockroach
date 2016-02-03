@@ -691,5 +691,5 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	// Make column "e" live.
 	mt.makeMutationsActive()
 	// Column b changed to d.
-	_ = mt.checkQueryResponse("SHOW COLUMNS FROM t.test", [][]string{{"a", "STRING", "true", "NULL"}, {"d", "STRING", "true", "NULL"}, {"e", "STRING", "true", "NULL"}})
+	_ = mt.checkQueryResponse("SHOW COLUMNS FROM t.test", [][]string{{"a", "STRING", "false", "NULL"}, {"d", "STRING", "true", "NULL"}, {"e", "STRING", "true", "NULL"}})
 }
