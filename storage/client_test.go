@@ -103,7 +103,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	sCtx.Tracer = tracing.NewTracer()
 	stores := storage.NewStores(clock)
 	rpcSend := func(_ kv.SendOptions, _ string, _ []net.Addr,
-		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ func() *roachpb.BatchResponse,
+		getArgs func(addr net.Addr) *roachpb.BatchRequest,
 		_ *rpc.Context) (proto.Message, error) {
 		ba := getArgs(nil /* net.Addr */)
 		sp := sCtx.Tracer.StartTrace(ba.TraceID())
@@ -302,8 +302,7 @@ func (m *multiTestContext) Stop() {
 // the request to multiTestContext's localSenders specified in addrs. The request is
 // sent in order until no error is returned.
 func (m *multiTestContext) rpcSend(_ kv.SendOptions, _ string, addrs []net.Addr,
-	getArgs func(addr net.Addr) *roachpb.BatchRequest,
-	getReply func() *roachpb.BatchResponse, _ *rpc.Context) (proto.Message, error) {
+	getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	fail := func(pErr *roachpb.Error) (proto.Message, error) {

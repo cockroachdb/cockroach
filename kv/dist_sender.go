@@ -128,7 +128,7 @@ var _ client.Sender = &DistSender{}
 
 // rpcSendFn is the function type used to dispatch RPC calls.
 type rpcSendFn func(SendOptions, string, []net.Addr,
-	func(addr net.Addr) *roachpb.BatchRequest, func() *roachpb.BatchResponse,
+	func(addr net.Addr) *roachpb.BatchRequest,
 	*rpc.Context) (proto.Message, error)
 
 // DistSenderContext holds auxiliary objects that can be passed to
@@ -356,22 +356,11 @@ func (ds *DistSender) sendRPC(trace opentracing.Span, rangeID roachpb.RangeID, r
 		}
 		return a
 	}
-	// RPCs are sent asynchronously and there is no synchronized access to
-	// the reply object, so we don't pass itself to RPCSend.
-	// Otherwise there maybe a race case:
-	// If the RPC call times out using our original reply object,
-	// we must not use it any more; the rpc call might still return
-	// and just write to it at any time.
-	// args.CreateReply() should be cheaper than proto.Clone which use reflect.
-	getReply := func() *roachpb.BatchResponse {
-		return &roachpb.BatchResponse{}
-	}
-
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
 	const method = "Node.Batch"
-	reply, err := ds.rpcSend(rpcOpts, method, addrs, getArgs, getReply, ds.rpcContext)
+	reply, err := ds.rpcSend(rpcOpts, method, addrs, getArgs, ds.rpcContext)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}

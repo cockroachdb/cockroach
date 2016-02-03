@@ -79,9 +79,8 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 
 	ltc.stores = storage.NewStores(ltc.Clock)
 	var rpcSend rpcSendFn = func(_ SendOptions, _ string, _ []net.Addr,
-		getArgs func(addr net.Addr) *roachpb.BatchRequest, getReply func() *roachpb.BatchResponse,
+		getArgs func(addr net.Addr) *roachpb.BatchRequest,
 		_ *rpc.Context) (proto.Message, error) {
-		// TODO(tschottdorf): remove getReply().
 		if ltc.Latency > 0 {
 			time.Sleep(ltc.Latency)
 		}
