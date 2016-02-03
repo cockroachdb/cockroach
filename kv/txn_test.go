@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 // TestTxnDBBasics verifies that a simple transaction can be run and
@@ -105,6 +106,7 @@ func TestTxnDBBasics(t *testing.T) {
 // the same key back to back in a single round-trip. Latency is simulated
 // by pausing before each RPC sent.
 func benchmarkSingleRoundtripWithLatency(b *testing.B, latency time.Duration) {
+	defer tracing.Disable()()
 	s := &LocalTestCluster{}
 	s.Latency = latency
 	s.Start(b)

@@ -3345,6 +3345,7 @@ func TestRangeLookup(t *testing.T) {
 // performance of write commands. This benchmark can be run with or without
 // events, and with or without a consumer reading the events.
 func benchmarkEvents(b *testing.B, sendEvents, consumeEvents bool) {
+	defer tracing.Disable()()
 	defer leaktest.AfterTest(b)
 	tc := testContext{}
 
