@@ -216,7 +216,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "405 must CONNECT", http.StatusMethodNotAllowed)
 		return
 	}
-
 	// Construct an authentication hook for this security mode and TLS state.
 	authHook, err := security.ProtoAuthHook(s.insecure, req.TLS)
 	if err != nil {

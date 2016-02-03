@@ -64,6 +64,7 @@ type Server struct {
 	listener net.Listener // Only used in tests.
 
 	mux                 *http.ServeMux
+	httpReady           chan struct{}
 	clock               *hlc.Clock
 	rpcContext          *crpc.Context
 	rpc                 *crpc.Server
@@ -111,6 +112,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s := &Server{
 		ctx:          ctx,
 		mux:          http.NewServeMux(),
+		httpReady:    make(chan struct{}),
 		clock:        hlc.NewClock(hlc.UnixNano),
 		metaRegistry: metric.NewRegistry(),
 		stopper:      stopper,
@@ -273,6 +275,8 @@ func (s *Server) initHTTP() {
 	// The SQL endpoints handles its own authentication, verifying user
 	// credentials against the requested user.
 	s.mux.Handle(driver.Endpoint, s.sqlServer)
+
+	close(s.httpReady)
 }
 
 // startWriteSummaries begins periodically persisting status summaries for the
@@ -340,6 +344,14 @@ func (s *Server) Stop() {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check if we're draining; if so return 503, service unavailable.
 	if !s.stopper.RunTask(func() {
+		// If server is not available, return 503 http response code.
+		select {
+		case <-s.httpReady:
+			// Do nothing
+		default:
+			http.Error(w, "node not yet available", http.StatusServiceUnavailable)
+			return
+		}
 		// Disable caching of responses.
 		w.Header().Set("Cache-control", "no-cache")
 
