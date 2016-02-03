@@ -471,10 +471,22 @@ SELECT ln(-2.0), ln(2.0), ln(2.5::decimal)
 ----
 NaN 0.6931471805599453 0.9162907318741551
 
+query error cannot take logarithm of a negative number
+SELECT ln(-100.000::decimal)
+
+query error cannot take logarithm of zero
+SELECT ln(0::decimal)
+
 query RR
 SELECT log(10.0), log(100.000::decimal)
 ----
-1 2
+1 2.0000000000000000
+
+query error cannot take logarithm of a negative number
+SELECT log(-100.000::decimal)
+
+query error cannot take logarithm of zero
+SELECT log(0::decimal)
 
 query RRIR
 SELECT mod(5.0, 2.0), mod(1.0, 0.0), mod(5, 2), mod(19.3::decimal, 2::decimal)
