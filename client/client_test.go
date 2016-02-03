@@ -696,12 +696,7 @@ func setupClientBenchData(useSSL bool, numVersions, numKeys int, b *testing.B) (
 		b.Fatal(err)
 	}
 
-	db, err := client.Open(s.Stopper(), fmt.Sprintf("%s://%s@%s?certs=%s",
-		s.Ctx.RPCRequestScheme(), security.NodeUser, s.ServingAddr(), s.Ctx.Certs))
-	if err != nil {
-		b.Fatal(err)
-	}
-
+	db := s.DB()
 	if exists {
 		return s, db
 	}

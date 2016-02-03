@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -205,13 +204,7 @@ func TestServerNodeEventFeed(t *testing.T) {
 	ner := nodeEventReader{}
 	ner.readEvents(feed)
 
-	db, err := client.Open(s.Stopper(), fmt.Sprintf("rpcs://%s@%s?certs=%s",
-		security.NodeUser,
-		s.ServingAddr(),
-		security.EmbeddedCertsDir))
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := s.DB()
 
 	// Add some data in a transaction. It could restart, but we return nil
 	// intentionally (i.e. we're giving up if we don't succeed immediately,
