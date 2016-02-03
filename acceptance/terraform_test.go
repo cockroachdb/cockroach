@@ -42,7 +42,7 @@ func TestBuildBabyCluster(t *testing.T) {
 // The test runs until SIGINT is received or the specified duration
 // has passed.
 func TestFiveNodesAndWriters(t *testing.T) {
-	deadline := time.After(*duration)
+	deadline := time.After(*flagDuration)
 	f := farmer(t)
 	defer f.MustDestroy()
 	const size = 5

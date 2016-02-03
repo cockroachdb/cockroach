@@ -6,7 +6,7 @@ $(dirname $0)/build-docker-deploy.sh
 
 cd $(dirname $0)/../acceptance
 if [ -f ./acceptance.test ]; then
-  time ./acceptance.test -i cockroachdb/cockroach -b /cockroach/cockroach -num-local 3 \
+  time ./acceptance.test -i cockroachdb/cockroach -b /cockroach/cockroach -nodes 3 \
     -test.v -test.timeout -5m
 fi
 

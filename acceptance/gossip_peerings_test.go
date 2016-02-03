@@ -107,10 +107,10 @@ func TestGossipPeerings(t *testing.T) {
 	defer c.AssertAndStop(t)
 	num := c.NumNodes()
 
-	deadline := time.Now().Add(*duration)
+	deadline := time.Now().Add(*flagDuration)
 
 	waitTime := longWaitTime
-	if *duration < waitTime {
+	if *flagDuration < waitTime {
 		waitTime = shortWaitTime
 	}
 
@@ -151,10 +151,10 @@ func TestGossipRestart(t *testing.T) {
 	defer c.AssertAndStop(t)
 	num := c.NumNodes()
 
-	deadline := time.Now().Add(*duration)
+	deadline := time.Now().Add(*flagDuration)
 
 	waitTime := longWaitTime
-	if *duration < waitTime {
+	if *flagDuration < waitTime {
 		waitTime = shortWaitTime
 	}
 
