@@ -688,7 +688,7 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 		// If grouping has a desired order and there is a single span for which the
 		// filter is true, check to see if the ordering matches the desired
 		// ordering. If it does we can limit the scan to a single key.
-		existingOrdering := plan.Ordering()
+		existingOrdering := sel.computeOrdering(plan.Ordering())
 		match := computeOrderingMatch(ordering, existingOrdering, false)
 		if match == 1 {
 			s.spans[0].count = 1
