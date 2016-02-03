@@ -59,40 +59,17 @@ func newServer(stopper *stop.Stopper) *server {
 	return s
 }
 
-// convenience wrapper that unlocks locker during blocking calls on serverStream.
-type unlockingServerStream struct {
-	serverStream Gossip_GossipServer
-	locker       sync.Locker
-}
-
-func (us unlockingServerStream) Send(reply *Response) error {
-	us.locker.Unlock()
-	defer us.locker.Lock()
-	return us.serverStream.Send(reply)
-}
-
-func (us unlockingServerStream) Recv() (*Request, error) {
-	us.locker.Unlock()
-	defer us.locker.Lock()
-	return us.serverStream.Recv()
-}
-
 // Gossip receives gossiped information from a peer node.
 // The received delta is combined with the infostore, and this
 // node's own gossip is returned to requesting client.
-func (s *server) Gossip(serverStream Gossip_GossipServer) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	stream := unlockingServerStream{
-		serverStream: serverStream,
-		locker:       &s.mu,
-	}
-
+func (s *server) Gossip(stream Gossip_GossipServer) error {
 	args, err := stream.Recv()
 	if err != nil {
 		return err
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	// Verify that there aren't multiple incoming connections from the same
 	// node. This can happen when bootstrap connections are initiated through
@@ -122,7 +99,10 @@ func (s *server) Gossip(serverStream Gossip_GossipServer) error {
 						Delta:  delta,
 					}
 
-					if err := stream.Send(reply); err != nil {
+					s.mu.Unlock()
+					err := stream.Send(reply)
+					s.mu.Lock()
+					if err != nil {
 						if !grpcutil.IsClosedConnection(err) {
 							log.Error(err)
 						}
@@ -168,11 +148,16 @@ func (s *server) Gossip(serverStream Gossip_GossipServer) error {
 				log.Infof("refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
 					args.NodeID, s.incoming.maxSize, alternateNodeID, alternateAddr)
 
-				return stream.Send(&Response{
+				*reply = Response{
 					NodeID:          s.is.NodeID,
 					AlternateAddr:   &alternateAddr,
 					AlternateNodeID: alternateNodeID,
-				})
+				}
+
+				s.mu.Unlock()
+				err := stream.Send(reply)
+				s.mu.Lock()
+				return err
 			}
 		}
 
@@ -191,7 +176,10 @@ func (s *server) Gossip(serverStream Gossip_GossipServer) error {
 			Nodes:  s.is.getNodes(),
 		}
 
-		if err := stream.Send(reply); err != nil {
+		s.mu.Unlock()
+		err = stream.Send(reply)
+		s.mu.Lock()
+		if err != nil {
 			return err
 		}
 
@@ -199,7 +187,9 @@ func (s *server) Gossip(serverStream Gossip_GossipServer) error {
 			cycler.Wait()
 		}
 
+		s.mu.Unlock()
 		recvArgs, err := stream.Recv()
+		s.mu.Lock()
 		if err != nil {
 			return err
 		}
