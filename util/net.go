@@ -96,5 +96,5 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 
 // IsClosedConnection returns true if err is the net package's errClosed.
 func IsClosedConnection(err error) bool {
-	return strings.HasSuffix(err.Error(), "use of closed network connection")
+	return strings.Contains(err.Error(), "use of closed network connection")
 }

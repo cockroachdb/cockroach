@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -96,10 +97,12 @@ func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, s
 
 		// Start gossiping.
 		if err := c.gossip(g, stopper); err != nil {
-			if c.peerID != 0 {
-				log.Infof("closing client to node %d (%s): %s", c.peerID, c.addr, err)
-			} else {
-				log.Infof("closing client to %s: %s", c.addr, err)
+			if !grpcutil.IsClosedConnection(err) {
+				if c.peerID != 0 {
+					log.Infof("closing client to node %d (%s): %s", c.peerID, c.addr, err)
+				} else {
+					log.Infof("closing client to %s: %s", c.addr, err)
+				}
 			}
 		}
 	})
@@ -260,7 +263,9 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 			select {
 			case <-sendGossipChan:
 				if err := c.sendGossip(g, addr, stream); err != nil {
-					log.Error(err)
+					if !grpcutil.IsClosedConnection(err) {
+						log.Error(err)
+					}
 					return
 				}
 			case <-stopper.ShouldStop():

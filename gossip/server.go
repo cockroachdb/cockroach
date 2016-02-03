@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -83,7 +84,9 @@ func (s *server) gossipSender(argsPtr **Request, senderFn func(*Response) error)
 				err := senderFn(reply)
 				s.mu.Lock()
 				if err != nil {
-					log.Error(err)
+					if !grpcutil.IsClosedConnection(err) {
+						log.Error(err)
+					}
 					return
 				}
 				s.sent += infoCount

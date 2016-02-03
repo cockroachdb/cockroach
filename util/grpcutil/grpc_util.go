@@ -24,6 +24,8 @@ import (
 	"strings"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/transport"
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -65,4 +67,15 @@ func GRPCHandlerFunc(grpcServer *grpc.Server, otherHandler http.Handler) http.Ha
 			otherHandler.ServeHTTP(w, r)
 		}
 	})
+}
+
+// IsClosedConnection returns true if err is an error produced by gRPC on closed connections.
+func IsClosedConnection(err error) bool {
+	if err == transport.ErrConnClosing || grpc.Code(err) == codes.Canceled {
+		return true
+	}
+	if streamErr, ok := err.(transport.StreamError); ok && streamErr.Code == codes.Canceled {
+		return true
+	}
+	return util.IsClosedConnection(err)
 }
