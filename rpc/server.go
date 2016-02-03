@@ -67,7 +67,11 @@ type Server struct {
 
 // NewServer creates a new instance of Server.
 func NewServer(context *Context) *Server {
-	s := NewManualServer(context)
+	s := &Server{
+		insecure:    context.Insecure,
+		activeConns: make(map[net.Conn]struct{}),
+		methods:     map[string]method{},
+	}
 	heartbeat := &HeartbeatService{
 		clock:              context.localClock,
 		remoteClockMonitor: context.RemoteClocks,
@@ -76,15 +80,6 @@ func NewServer(context *Context) *Server {
 		log.Fatalf("unable to register heartbeat service with RPC server: %s", err)
 	}
 	return s
-}
-
-// NewManualServer creates a new instance of Server without a heartbeat service.
-func NewManualServer(context *Context) *Server {
-	return &Server{
-		insecure:    context.Insecure,
-		activeConns: make(map[net.Conn]struct{}),
-		methods:     map[string]method{},
-	}
 }
 
 // Register a new method handler. `name` is a qualified name of the
