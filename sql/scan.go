@@ -136,6 +136,7 @@ type scanNode struct {
 	implicitVals     []parser.Datum    // the implicit values for unique indexes
 	explain          explainMode
 	explainValue     parser.Datum
+	debugVals        debugValues
 }
 
 func (n *scanNode) Columns() []ResultColumn {
@@ -148,6 +149,13 @@ func (n *scanNode) Ordering() orderingInfo {
 
 func (n *scanNode) Values() parser.DTuple {
 	return n.row
+}
+
+func (n *scanNode) DebugValues() debugValues {
+	if n.explain != explainDebug {
+		panic("DebugValues called, node not in debug mode.")
+	}
+	return n.debugVals
 }
 
 func (n *scanNode) Next() bool {
@@ -563,21 +571,13 @@ func (n *scanNode) maybeOutputRow() bool {
 	return false
 }
 
-// explainDebug fills in four extra debugging values in the current row:
-//  - the row index,
-//  - the key,
-//  - a value string,
-//  - a true bool if we are at the end of the row, or a NULL otherwise.
+// explainDebug fills in n.debugVals.
 func (n *scanNode) explainDebug(endOfRow bool) {
-	if len(n.row) == len(n.visibleCols) {
-		n.row = append(n.row, nil, nil, nil, nil)
-	}
-	debugVals := n.row[len(n.row)-4:]
+	n.debugVals.rowIdx = n.rowIndex
+	n.debugVals.key = n.prettyKey()
 
-	debugVals[0] = parser.DInt(n.rowIndex)
-	debugVals[1] = parser.DString(n.prettyKey())
 	if n.implicitVals != nil {
-		debugVals[2] = parser.DString(prettyDatums(n.implicitVals))
+		n.debugVals.value = parser.DString(prettyDatums(n.implicitVals))
 	} else {
 		// This conversion to DString is odd. `n.explainValue` is already a
 		// `Datum`, but logic_test currently expects EXPLAIN DEBUG output
@@ -585,13 +585,13 @@ func (n *scanNode) explainDebug(endOfRow bool) {
 		// consistent across all printing of strings in logic_test, though.
 		// TODO(tamird/pmattis): figure out a consistent story for string
 		// printing in logic_test.
-		debugVals[2] = parser.DString(n.explainValue.String())
+		n.debugVals.value = parser.DString(n.explainValue.String())
 	}
 	if endOfRow {
-		debugVals[3] = parser.DBool(true)
+		n.debugVals.output = debugValueRow
 		n.rowIndex++
 	} else {
-		debugVals[3] = parser.DNull
+		n.debugVals.output = debugValuePartial
 	}
 	n.explainValue = nil
 }

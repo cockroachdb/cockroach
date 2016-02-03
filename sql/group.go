@@ -223,6 +223,11 @@ func (n *groupNode) Values() parser.DTuple {
 	return n.values.Values()
 }
 
+func (*groupNode) DebugValues() debugValues {
+	// TODO(radu)
+	panic("debug mode not implemented in groupNode")
+}
+
 func (n *groupNode) Next() bool {
 	if !n.populated && n.pErr == nil {
 		n.computeAggregates()
