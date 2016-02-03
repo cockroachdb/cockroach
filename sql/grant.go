@@ -23,13 +23,13 @@ import (
 )
 
 func (p *planner) changePrivileges(targets parser.TargetList, grantees parser.NameList, changePrivilege func(*PrivilegeDescriptor, string)) (planNode, *roachpb.Error) {
-	descriptor, err := p.getDescriptorFromTargetList(targets)
-	if err != nil {
-		return nil, err
+	descriptor, pErr := p.getDescriptorFromTargetList(targets)
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	if err := p.checkPrivilege(descriptor, privilege.GRANT); err != nil {
-		return nil, err
+		return nil, roachpb.NewError(err)
 	}
 
 	privileges := descriptor.GetPrivileges()

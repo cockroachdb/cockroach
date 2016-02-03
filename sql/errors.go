@@ -54,17 +54,17 @@ func convertBatchError(tableDesc *TableDescriptor, b client.Batch, origPErr *roa
 	result := b.Results[index]
 	if _, ok := origPErr.GetDetail().(*roachpb.ConditionFailedError); ok {
 		for _, row := range result.Rows {
-			indexID, key, pErr := decodeIndexKeyPrefix(tableDesc, row.Key)
-			if pErr != nil {
-				return pErr
+			indexID, key, err := decodeIndexKeyPrefix(tableDesc, row.Key)
+			if err != nil {
+				return roachpb.NewError(err)
 			}
-			index, pErr := tableDesc.FindIndexByID(indexID)
-			if pErr != nil {
-				return pErr
+			index, err := tableDesc.FindIndexByID(indexID)
+			if err != nil {
+				return roachpb.NewError(err)
 			}
-			valTypes, pErr := makeKeyVals(tableDesc, index.ColumnIDs)
-			if pErr != nil {
-				return pErr
+			valTypes, err := makeKeyVals(tableDesc, index.ColumnIDs)
+			if err != nil {
+				return roachpb.NewError(err)
 			}
 			dirs := make([]encoding.Direction, 0, len(index.ColumnIDs))
 			for _, dir := range index.ColumnDirections {
@@ -75,8 +75,8 @@ func convertBatchError(tableDesc *TableDescriptor, b client.Batch, origPErr *roa
 				dirs = append(dirs, convertedDir)
 			}
 			vals := make([]parser.Datum, len(valTypes))
-			if _, pErr := decodeKeyVals(valTypes, vals, dirs, key); pErr != nil {
-				return pErr
+			if _, err := decodeKeyVals(valTypes, vals, dirs, key); err != nil {
+				return roachpb.NewError(err)
 			}
 
 			return roachpb.NewError(errUniquenessConstraintViolation{index: index, vals: vals})

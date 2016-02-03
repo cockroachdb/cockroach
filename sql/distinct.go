@@ -121,12 +121,16 @@ func (n *distinctNode) encodeValues(values parser.DTuple) ([]byte, []byte) {
 			if prefix == nil {
 				prefix = make([]byte, 0, 100)
 			}
-			prefix, n.pErr = encodeDatum(prefix, val)
+			var err error
+			prefix, err = encodeDatum(prefix, val)
+			n.pErr = roachpb.NewError(err)
 		} else {
 			if suffix == nil {
 				suffix = make([]byte, 0, 100)
 			}
-			suffix, n.pErr = encodeDatum(suffix, val)
+			var err error
+			suffix, err = encodeDatum(suffix, val)
+			n.pErr = roachpb.NewError(err)
 		}
 		if n.pErr != nil {
 			break

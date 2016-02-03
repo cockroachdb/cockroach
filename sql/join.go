@@ -39,7 +39,7 @@ type indexJoinNode struct {
 	pErr             *roachpb.Error
 }
 
-func makeIndexJoin(indexScan *scanNode, exactPrefix int) (*indexJoinNode, *roachpb.Error) {
+func makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoinNode {
 	// Create a new table scan node with the primary index.
 	table := &scanNode{planner: indexScan.planner, txn: indexScan.txn}
 	table.desc = indexScan.desc
@@ -84,7 +84,7 @@ func makeIndexJoin(indexScan *scanNode, exactPrefix int) (*indexJoinNode, *roach
 		table:            table,
 		primaryKeyPrefix: primaryKeyPrefix,
 		colIDtoRowIndex:  colIDtoRowIndex,
-	}, nil
+	}
 }
 
 func (n *indexJoinNode) Columns() []ResultColumn {
@@ -138,9 +138,9 @@ func (n *indexJoinNode) Next() bool {
 			}
 
 			vals := n.index.Values()
-			var primaryIndexKey []byte
-			primaryIndexKey, _, n.pErr = encodeIndexKey(
+			primaryIndexKey, _, err := encodeIndexKey(
 				n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
+			n.pErr = roachpb.NewError(err)
 			if n.pErr != nil {
 				return false
 			}

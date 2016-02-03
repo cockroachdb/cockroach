@@ -21,12 +21,11 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
 // limit constructs a limitNode based on the LIMIT and OFFSET clauses.
-func (p *planner) limit(n *parser.Select, plan planNode) (planNode, *roachpb.Error) {
+func (p *planner) limit(n *parser.Select, plan planNode) (planNode, error) {
 	if n.Limit == nil {
 		return plan, nil
 	}
@@ -48,16 +47,16 @@ func (p *planner) limit(n *parser.Select, plan planNode) (planNode, *roachpb.Err
 			*datum.dst = datum.defaultVal
 		} else {
 			if parser.ContainsVars(datum.src) {
-				return nil, roachpb.NewUErrorf("argument of %s must not contain variables", datum.name)
+				return nil, fmt.Errorf("argument of %s must not contain variables", datum.name)
 			}
 
 			normalized, err := p.parser.NormalizeExpr(p.evalCtx, datum.src)
 			if err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, err
 			}
 			dstDatum, err := normalized.Eval(p.evalCtx)
 			if err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, err
 			}
 
 			if dstDatum == parser.DNull {
@@ -70,7 +69,7 @@ func (p *planner) limit(n *parser.Select, plan planNode) (planNode, *roachpb.Err
 				continue
 			}
 
-			return nil, roachpb.NewUErrorf("argument of %s must be type %s, not type %s", datum.name, parser.DummyInt.Type(), dstDatum.Type())
+			return nil, fmt.Errorf("argument of %s must be type %s, not type %s", datum.name, parser.DummyInt.Type(), dstDatum.Type())
 		}
 	}
 

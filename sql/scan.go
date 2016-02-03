@@ -212,8 +212,8 @@ func (n *scanNode) initTable(p *planner, tableName *parser.QualifiedName) (strin
 		return "", n.pErr
 	}
 
-	if pErr := p.checkPrivilege(n.desc, privilege.SELECT); pErr != nil {
-		return "", pErr
+	if err := p.checkPrivilege(n.desc, privilege.SELECT); err != nil {
+		return "", roachpb.NewError(err)
 	}
 
 	alias := n.desc.Name
@@ -239,15 +239,17 @@ func (n *scanNode) initTable(p *planner, tableName *parser.QualifiedName) (strin
 		// index.
 		visibleCols := make([]ColumnDescriptor, 0, len(n.index.ColumnIDs)+len(n.index.ImplicitColumnIDs))
 		for _, colID := range n.index.ColumnIDs {
-			var col *ColumnDescriptor
-			if col, n.pErr = n.desc.FindColumnByID(colID); n.pErr != nil {
+			col, err := n.desc.FindColumnByID(colID)
+			n.pErr = roachpb.NewError(err)
+			if n.pErr != nil {
 				return "", n.pErr
 			}
 			visibleCols = append(visibleCols, *col)
 		}
 		for _, colID := range n.index.ImplicitColumnIDs {
-			var col *ColumnDescriptor
-			if col, n.pErr = n.desc.FindColumnByID(colID); n.pErr != nil {
+			col, err := n.desc.FindColumnByID(colID)
+			n.pErr = roachpb.NewError(err)
+			if n.pErr != nil {
 				return "", n.pErr
 			}
 			visibleCols = append(visibleCols, *col)
@@ -370,7 +372,10 @@ func (n *scanNode) initScan() bool {
 
 	if n.valTypes == nil {
 		// Prepare our index key vals slice.
-		if n.valTypes, n.pErr = makeKeyVals(n.desc, n.columnIDs); n.pErr != nil {
+		var err error
+		n.valTypes, err = makeKeyVals(n.desc, n.columnIDs)
+		n.pErr = roachpb.NewError(err)
+		if n.pErr != nil {
 			return false
 		}
 		n.vals = make([]parser.Datum, len(n.valTypes))
@@ -380,7 +385,10 @@ func (n *scanNode) initScan() bool {
 			// key. Prepare implicitVals for use in decoding this value.
 			// Primary indexes only contain ascendingly-encoded values. If this
 			// ever changes, we'll probably have to figure out the directions here too.
-			if n.implicitValTypes, n.pErr = makeKeyVals(n.desc, n.index.ImplicitColumnIDs); n.pErr != nil {
+			var err error
+			n.implicitValTypes, err = makeKeyVals(n.desc, n.index.ImplicitColumnIDs)
+			n.pErr = roachpb.NewError(err)
+			if n.pErr != nil {
 				return false
 			}
 			n.implicitVals = make([]parser.Datum, len(n.implicitValTypes))
@@ -436,7 +444,9 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 	}
 
 	var remaining []byte
-	remaining, n.pErr = decodeIndexKey(n.desc, n.index.ID, n.valTypes, n.vals, n.columnDirs, kv.Key)
+	var err error
+	remaining, err = decodeIndexKey(n.desc, n.index.ID, n.valTypes, n.vals, n.columnDirs, kv.Key)
+	n.pErr = roachpb.NewError(err)
 	if n.pErr != nil {
 		return false
 	}
@@ -490,8 +500,10 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 			for range n.index.ImplicitColumnIDs {
 				implicitDirs = append(implicitDirs, encoding.Ascending)
 			}
-			if _, n.pErr = decodeKeyVals(
-				n.implicitValTypes, n.implicitVals, implicitDirs, kv.ValueBytes()); n.pErr != nil {
+			var err error
+			_, err = decodeKeyVals(n.implicitValTypes, n.implicitVals, implicitDirs, kv.ValueBytes())
+			n.pErr = roachpb.NewError(err)
+			if n.pErr != nil {
 				return false
 			}
 			for i, id := range n.index.ImplicitColumnIDs {
@@ -617,7 +629,7 @@ func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 		return nil, false
 	}
 	kind := n.visibleCols[idx].Type.Kind
-	var d parser.Datum
-	d, n.pErr = unmarshalColumnValue(kind, kv.Value)
+	d, err := unmarshalColumnValue(kind, kv.Value)
+	n.pErr = roachpb.NewError(err)
 	return d, n.pErr == nil
 }

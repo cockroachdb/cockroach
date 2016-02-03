@@ -221,9 +221,9 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 	s.ordering = s.computeOrdering(s.table.node.Ordering())
 
 	// Wrap this node as necessary.
-	limit, pErr := p.limit(parsed, p.distinct(parsed, sort.wrap(group.wrap(s))))
-	if pErr != nil {
-		return nil, pErr
+	limit, err := p.limit(parsed, p.distinct(parsed, sort.wrap(group.wrap(s))))
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 	return limit, nil
 }
@@ -677,11 +677,7 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 		s.initOrdering(c.exactPrefix)
 		plan = s
 	} else {
-		var pErr *roachpb.Error
-		plan, pErr = makeIndexJoin(s, c.exactPrefix)
-		if pErr != nil {
-			return nil, pErr
-		}
+		plan = makeIndexJoin(s, c.exactPrefix)
 	}
 
 	if grouping && len(ordering) == 1 && len(s.spans) == 1 && sel.filter == nil {
@@ -1382,9 +1378,8 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 					panic(err)
 				}
 
-				var pErr *roachpb.Error
-				if start, pErr = encodeTableKey(start, t[tupleIdx], colDir); pErr != nil {
-					panic(pErr)
+				if start, err = encodeTableKey(start, t[tupleIdx], colDir); err != nil {
+					panic(err)
 				}
 				end = encodeInclusiveEndValue(
 					end, t[tupleIdx], colDir, isLastEndConstraint && (j == len(c.tupleMap)-1))
@@ -1398,9 +1393,8 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 				panic(err)
 			}
 			coveredColumns = 1
-			var pErr *roachpb.Error
-			if start, pErr = encodeTableKey(nil, datum, colDir); pErr != nil {
-				panic(pErr)
+			if start, err = encodeTableKey(nil, datum, colDir); err != nil {
+				panic(err)
 			}
 
 			end = encodeInclusiveEndValue(nil, datum, colDir, isLastEndConstraint)

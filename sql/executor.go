@@ -229,7 +229,7 @@ func (e *Executor) Prepare(user string, query string, args parser.MapArgs) ([]Re
 	cols := plan.Columns()
 	for _, c := range cols {
 		if err := checkResultDatum(c.Typ); err != nil {
-			return nil, err
+			return nil, roachpb.NewError(err)
 		}
 	}
 	return cols, nil
@@ -424,7 +424,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 			result.Columns = plan.Columns()
 			for _, c := range result.Columns {
 				if err := checkResultDatum(c.Typ); err != nil {
-					return err
+					return roachpb.NewError(err)
 				}
 			}
 
@@ -434,7 +434,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 				row := ResultRow{Values: make([]parser.Datum, 0, len(values))}
 				for _, val := range values {
 					if err := checkResultDatum(val); err != nil {
-						return err
+						return roachpb.NewError(err)
 					}
 					row.Values = append(row.Values, val)
 				}
@@ -614,7 +614,7 @@ func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
 	panic(fmt.Sprintf("unexpected type %T", arg))
 }
 
-func checkResultDatum(datum parser.Datum) *roachpb.Error {
+func checkResultDatum(datum parser.Datum) error {
 	if datum == parser.DNull {
 		return nil
 	}
@@ -630,7 +630,7 @@ func checkResultDatum(datum parser.Datum) *roachpb.Error {
 	case parser.DTimestamp:
 	case parser.DInterval:
 	default:
-		return roachpb.NewUErrorf("unsupported result type: %s", datum.Type())
+		return fmt.Errorf("unsupported result type: %s", datum.Type())
 	}
 	return nil
 }
