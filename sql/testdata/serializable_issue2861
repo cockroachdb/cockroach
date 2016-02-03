@@ -1,0 +1,67 @@
+# Run a simple shell session in which a reader conflicts with an open txn in
+# SERIALIZABLE isolation by means of a read, which is resolved by a Push. Prevents
+# regression of #2861.
+
+statement ok
+CREATE TABLE t (id INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t VALUES (1)
+
+statement ok
+GRANT ALL ON t TO testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY LOW
+
+statement ok
+INSERT INTO t VALUES (2)
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH
+
+# aborts root's transaction. right?
+query I
+SELECT * FROM t
+----
+1
+
+statement ok
+COMMIT
+
+user root
+
+query error txn aborted
+SELECT * FROM t
+
+# statement ok
+# INSERT INTO t VALUES(3)
+
+# statement ok
+# COMMIT
+
+# query I
+# SELECT * FROM t
+# ----
+# 1
+# 3
+
+# user root
+
+# query I
+# SELECT * FROM t
+# ----
+# 1
+# 2
+
+# statement ok
+# COMMIT
+
+# query I
+# SELECT * FROM t
+# ----
+# 1
+# 2
+# 3

@@ -184,17 +184,21 @@ func (t *logicTest) close() {
 // It returns a cleanup function to be run when the credentials
 // are no longer needed.
 func (t *logicTest) setUser(user string) func() {
-	if t.db != nil {
-		var dbName string
+	var outDBName string
 
-		if err := t.db.QueryRow("SHOW DATABASE").Scan(&dbName); err != nil {
+	if t.db != nil {
+		var inDBName string
+
+		if err := t.db.QueryRow("SHOW DATABASE").Scan(&inDBName); err != nil {
 			t.Fatal(err)
 		}
 
 		defer func() {
-			// Propagate the DATABASE setting to the newly-live connection.
-			if _, err := t.db.Exec(fmt.Sprintf("SET DATABASE = %s", dbName)); err != nil {
-				t.Fatal(err)
+			if inDBName != outDBName {
+				// Propagate the DATABASE setting to the newly-live connection.
+				if _, err := t.db.Exec(fmt.Sprintf("SET DATABASE = %s", inDBName)); err != nil {
+					t.Fatal(err)
+				}
 			}
 		}()
 	}
@@ -204,6 +208,11 @@ func (t *logicTest) setUser(user string) func() {
 	}
 	if db, ok := t.clients[user]; ok {
 		t.db = db
+
+		if err := t.db.QueryRow("SHOW DATABASE").Scan(&outDBName); err != nil {
+			t.Fatal(err)
+		}
+
 		// No cleanup necessary, but return a no-op func to avoid nil pointer dereference.
 		return func() {}
 	}
