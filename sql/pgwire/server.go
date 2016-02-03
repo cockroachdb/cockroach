@@ -224,7 +224,7 @@ func (s *Server) serveConn(conn net.Conn) error {
 	return util.Errorf("unknown protocol version %d", version)
 }
 
-// Registry returns registry with the metrics tracked by this server, which can be used to
+// Registry returns a registry with the metrics tracked by this server, which can be used to
 // access its stats or be added to another registry.
 func (s *Server) Registry() *metric.Registry {
 	return s.registry

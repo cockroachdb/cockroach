@@ -544,7 +544,7 @@ func (e *Executor) updateStmtCounts(stmt parser.Statement) {
 	}
 }
 
-// Registry returns registry with the metrics tracked by this executor, which can be used to
+// Registry returns a registry with the metrics tracked by this executor, which can be used to
 // access its stats or be added to another registry.
 func (e *Executor) Registry() *metric.Registry {
 	return e.registry
