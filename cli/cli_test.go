@@ -654,8 +654,7 @@ func TestFlagUsage(t *testing.T) {
   cockroach [command]
 
 Available Commands:
-  init        init new Cockroach cluster
-  start       start a node by joining the gossip network
+  start       start a node
   cert        create ca, node, and client certs
   exterminate destroy all data held by the node
   quit        drain and shutdown node

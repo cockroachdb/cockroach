@@ -188,7 +188,7 @@ func (c *client) handleGossip(g *Gossip, call *netrpc.Call) error {
 		return util.Errorf("received forward from node %d to %d (%s)", reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
 	}
 
-	// If we have the sentinel gossip, we're considered connected.
+	// If we have the sentinel gossip we're considered connected.
 	g.checkHasConnected()
 
 	// Check whether this outgoing client is duplicating work already

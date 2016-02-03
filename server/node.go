@@ -18,6 +18,7 @@ package server
 
 import (
 	"container/list"
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -40,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -50,6 +53,15 @@ const (
 	// from stores to the internal event feed.
 	publishStatusInterval = 10 * time.Second
 )
+
+// errNeedsBootstrap indicates the node should be used as the seed of
+// a new cluster.
+var errNeedsBootstrap = errors.New("node has no initialized stores and no instructions for joining an existing cluster")
+
+// errCannotJoinSelf indicates that a node was started with no initialized
+// stores but --join specifying itself; there's no way to make forward
+// progress in this state.
+var errCannotJoinSelf = errors.New("an uninitialized node cannot specify its own address to join a cluster")
 
 // A Node manages a map of stores (by store ID) for which it serves
 // traffic. A node is the top-level data structure. There is one node
@@ -100,13 +112,15 @@ func GetBootstrapSchema() sql.MetadataSchema {
 	return schema
 }
 
-// BootstrapCluster bootstraps a multiple stores using the provided engines and
-// cluster ID. The first bootstrapped store contains a single range spanning
-// all keys. Initial range lookup metadata is populated for the range.
-//
-// Returns a KV client for unittest purposes. Caller should close the returned
-// client.
-func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.Stopper) (*client.DB, error) {
+// bootstrapCluster bootstraps a multiple stores using the provided
+// engines and cluster ID. The first bootstrapped store contains a
+// single range spanning all keys. Initial range lookup metadata is
+// populated for the range. Returns the cluster ID.
+func bootstrapCluster(engines []engine.Engine) (string, error) {
+	clusterID := uuid.NewUUID4().String()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
 	ctx := storage.StoreContext{}
 	ctx.ScanInterval = 10 * time.Minute
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
@@ -128,12 +142,12 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 
 		// Verify the store isn't already part of a cluster.
 		if len(s.Ident.ClusterID) > 0 {
-			return nil, util.Errorf("storage engine already belongs to a cluster (%s)", s.Ident.ClusterID)
+			return "", util.Errorf("storage engine already belongs to a cluster (%s)", s.Ident.ClusterID)
 		}
 
 		// Bootstrap store to persist the store ident.
 		if err := s.Bootstrap(sIdent, stopper); err != nil {
-			return nil, err
+			return "", err
 		}
 		// Create first range, writing directly to engine. Note this does
 		// not create the range, just its data.  Only do this if this is the
@@ -141,11 +155,11 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 		if i == 0 {
 			initialValues := GetBootstrapSchema().GetInitialValues()
 			if err := s.BootstrapRange(initialValues); err != nil {
-				return nil, err
+				return "", err
 			}
 		}
 		if err := s.Start(stopper); err != nil {
-			return nil, err
+			return "", err
 		}
 
 		stores.AddStore(s)
@@ -153,16 +167,16 @@ func BootstrapCluster(clusterID string, engines []engine.Engine, stopper *stop.S
 		// Initialize node and store ids.  Only initialize the node once.
 		if i == 0 {
 			if nodeID, err := allocateNodeID(ctx.DB); nodeID != sIdent.NodeID || err != nil {
-				return nil, util.Errorf("expected to initialize node id allocator to %d, got %d: %s",
+				return "", util.Errorf("expected to initialize node id allocator to %d, got %d: %s",
 					sIdent.NodeID, nodeID, err)
 			}
 		}
 		if storeID, err := allocateStoreIDs(sIdent.NodeID, 1, ctx.DB); storeID != sIdent.StoreID || err != nil {
-			return nil, util.Errorf("expected to initialize store id allocator to %d, got %d: %s",
+			return "", util.Errorf("expected to initialize store id allocator to %d, got %d: %s",
 				sIdent.StoreID, storeID, err)
 		}
 	}
-	return ctx.DB, nil
+	return clusterID, nil
 }
 
 // NewNode returns a new instance of Node.
@@ -229,8 +243,7 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 // start starts the node by registering the storage instance for the
 // RPC service "Node" and initializing stores for each specified
 // engine. Launches periodic store gossiping in a goroutine.
-func (n *Node) start(rpcServer *rpc.Server, addr net.Addr, engines []engine.Engine,
-	attrs roachpb.Attributes) error {
+func (n *Node) start(rpcServer *rpc.Server, addr net.Addr, engines []engine.Engine, attrs roachpb.Attributes) error {
 	n.initDescriptor(addr, attrs)
 
 	// Start status monitor.
@@ -238,7 +251,28 @@ func (n *Node) start(rpcServer *rpc.Server, addr net.Addr, engines []engine.Engi
 
 	// Initialize stores, including bootstrapping new ones.
 	if err := n.initStores(engines, n.stopper); err != nil {
-		return err
+		if err == errNeedsBootstrap {
+			// This node has no initialized stores and no way to connect to
+			// an existing cluster, so we bootstrap it.
+			clusterID, err := bootstrapCluster(engines)
+			if err != nil {
+				return err
+			}
+			log.Infof("**** cluster %s has been created", clusterID)
+			log.Infof("**** add additional nodes by specifying --join=%s", addr)
+			// Make sure we add the node as a resolver.
+			selfResolver, err := resolver.NewResolverFromAddress(addr)
+			if err != nil {
+				return err
+			}
+			n.ctx.Gossip.SetResolvers([]resolver.Resolver{selfResolver})
+			// After bootstrapping, try again to initialize the stores.
+			if err := n.initStores(engines, n.stopper); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 
 	n.startedAt = n.ctx.Clock.Now().WallTime
@@ -296,6 +330,21 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 		}
 		log.Infof("initialized store %s: %+v", s, capacity)
 		n.stores.AddStore(s)
+	}
+
+	// If there are no initialized stores and no gossip resolvers,
+	// bootstrap this node as the seed of a new cluster.
+	if n.stores.GetStoreCount() == 0 {
+		resolvers := n.ctx.Gossip.GetResolvers()
+		// Check for the case of uninitialized node having only itself specified as join host.
+		switch len(resolvers) {
+		case 0:
+			return errNeedsBootstrap
+		case 1:
+			if addr, err := resolvers[0].GetAddress(); err == nil && addr == n.Descriptor.Address {
+				return errCannotJoinSelf
+			}
+		}
 	}
 
 	// Verify all initialized stores agree on cluster and node IDs.

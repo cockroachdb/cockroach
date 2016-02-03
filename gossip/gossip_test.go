@@ -19,6 +19,9 @@ package gossip
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -53,26 +56,35 @@ func TestGossipInfoStore(t *testing.T) {
 
 func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)
+
+	// Set up an http server for testing the http load balancer.
+	i := 0
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		i++
+		fmt.Fprintf(w, `{"address": {"network": "tcp", "address": "10.10.0.%d:26257"}}`, i)
+	})
+	s := httptest.NewServer(handler)
+	defer s.Close()
+
 	resolverSpecs := []string{
 		"127.0.0.1:9000",
 		"tcp=127.0.0.1:9001",
 		"unix=/tmp/unix-socket12345",
-		"lb=127.0.0.1:9002",
+		fmt.Sprintf("http-lb=%s", s.Listener.Addr()),
 		"foo=127.0.0.1:9003", // error should not resolve.
-		"lb=",                // error should not resolve.
+		"http-lb=",           // error should not resolve.
 		"localhost:9004",
-		"lb=127.0.0.1:9005",
 	}
 
 	resolvers := []resolver.Resolver{}
 	for _, rs := range resolverSpecs {
-		resolver, err := resolver.NewResolver(&base.Context{}, rs)
+		resolver, err := resolver.NewResolver(&base.Context{Insecure: true}, rs)
 		if err == nil {
 			resolvers = append(resolvers, resolver)
 		}
 	}
-	if len(resolvers) != 6 {
-		t.Errorf("expected 6 resolvers; got %d", len(resolvers))
+	if len(resolvers) != 5 {
+		t.Errorf("expected 5 resolvers; got %d", len(resolvers))
 	}
 	g := New(nil, resolvers, nil)
 
@@ -82,13 +94,13 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 		"127.0.0.1:9000",
 		"127.0.0.1:9001",
 		"/tmp/unix-socket12345",
-		"127.0.0.1:9002",
+		"10.10.0.1:26257",
 		"localhost:9004",
-		"127.0.0.1:9005",
-		"127.0.0.1:9002",
-		"127.0.0.1:9005",
-		"127.0.0.1:9002",
-		"127.0.0.1:9005",
+		"10.10.0.2:26257",
+		"10.10.0.3:26257",
+		"10.10.0.4:26257",
+		"10.10.0.5:26257",
+		"10.10.0.6:26257",
 	}
 	for i := 0; i < len(expAddresses); i++ {
 		if addr := g.getNextBootstrapAddress(); addr == nil {
