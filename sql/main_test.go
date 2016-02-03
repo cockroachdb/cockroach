@@ -19,7 +19,7 @@ package sql_test
 import (
 	"bytes"
 	"database/sql"
-	"fmt"
+	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -76,41 +77,51 @@ func checkEndTransactionTrigger(_ roachpb.StoreID, req roachpb.Request, _ roachp
 	return nil
 }
 
-func setupTestServer(t *testing.T) *server.TestServer {
+type testServer struct {
+	server.TestServer
+	cleanupFn func()
+}
+
+func setupTestServer(t *testing.T) *testServer {
 	return setupTestServerWithContext(t, server.NewTestContext())
 }
 
-func setupTestServerWithContext(t *testing.T, ctx *server.Context) *server.TestServer {
+func setupTestServerWithContext(t *testing.T, ctx *server.Context) *testServer {
 	storage.TestingCommandFilter = checkEndTransactionTrigger
-	s := &server.TestServer{Ctx: ctx}
+	s := &testServer{TestServer: server.TestServer{Ctx: ctx}}
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
 	return s
 }
 
-func setup(t *testing.T) (*server.TestServer, *sql.DB, *client.DB) {
+func setup(t *testing.T) (*testServer, *sql.DB, *client.DB) {
 	return setupWithContext(t, server.NewTestContext())
 }
 
-func setupWithContext(t *testing.T, ctx *server.Context) (*server.TestServer, *sql.DB, *client.DB) {
+func setupWithContext(t *testing.T, ctx *server.Context) (*testServer, *sql.DB, *client.DB) {
 	s := setupTestServer(t)
+
 	// SQL requests use "root" which has ALL permissions on everything.
-	sqlDB, err := sql.Open("cockroach", fmt.Sprintf("https://%s@%s?certs=%s",
-		security.RootUser, s.ServingAddr(), security.EmbeddedCertsDir))
+	url, cleanupFn := sqlutils.PGUrl(t, &s.TestServer, security.RootUser, os.TempDir(), "setupWithContext")
+	sqlDB, err := sql.Open("postgres", url.String())
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.cleanupFn = cleanupFn
 
 	return s, sqlDB, s.DB()
 }
 
-func cleanupTestServer(s *server.TestServer) {
+func cleanupTestServer(s *testServer) {
 	s.Stop()
+	if s.cleanupFn != nil {
+		s.cleanupFn()
+	}
 	storage.TestingCommandFilter = nil
 }
 
-func cleanup(s *server.TestServer, db *sql.DB) {
+func cleanup(s *testServer, db *sql.DB) {
 	_ = db.Close()
 	cleanupTestServer(s)
 }

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -38,7 +37,7 @@ var configDescKey = sql.MakeDescMetadataKey(keys.MaxReservedDescID)
 // forceNewConfig forces a system config update by writing a bogus descriptor with an
 // incremented value inside. It then repeatedly fetches the gossip config until the
 // just-written descriptor is found.
-func forceNewConfig(t *testing.T, s *server.TestServer) (*config.SystemConfig, error) {
+func forceNewConfig(t *testing.T, s *testServer) (*config.SystemConfig, error) {
 	configID++
 	configDesc := &sql.Descriptor{
 		Union: &sql.Descriptor_Database{
@@ -60,7 +59,7 @@ func forceNewConfig(t *testing.T, s *server.TestServer) (*config.SystemConfig, e
 	return waitForConfigChange(t, s)
 }
 
-func waitForConfigChange(t *testing.T, s *server.TestServer) (*config.SystemConfig, error) {
+func waitForConfigChange(t *testing.T, s *testServer) (*config.SystemConfig, error) {
 	var foundDesc sql.Descriptor
 	var cfg *config.SystemConfig
 	return cfg, util.IsTrueWithin(func() bool {
