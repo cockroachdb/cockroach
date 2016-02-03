@@ -98,7 +98,7 @@ func (n *valuesNode) DebugValues() debugValues {
 	return debugValues{
 		rowIdx: n.nextRow - 1,
 		key:    fmt.Sprintf("%d", n.nextRow-1),
-		value:  n.rows[n.nextRow-1],
+		value:  n.rows[n.nextRow-1].String(),
 		output: debugValueRow,
 	}
 }

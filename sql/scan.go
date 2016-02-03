@@ -577,15 +577,15 @@ func (n *scanNode) explainDebug(endOfRow bool) {
 	n.debugVals.key = n.prettyKey()
 
 	if n.implicitVals != nil {
-		n.debugVals.value = parser.DString(prettyDatums(n.implicitVals))
+		n.debugVals.value = prettyDatums(n.implicitVals)
 	} else {
-		// This conversion to DString is odd. `n.explainValue` is already a
-		// `Datum`, but logic_test currently expects EXPLAIN DEBUG output
-		// to come out formatted using `encodeSQLString`. This is not
-		// consistent across all printing of strings in logic_test, though.
+		// We convert any datum to string, which will eventually be returned as a DString.
+		// This conversion to DString is odd. `n.explainValue` is already a `Datum`, but logic_test
+		// currently expects EXPLAIN DEBUG output to come out formatted using `encodeSQLString`.
+		// This is not consistent across all printing of strings in logic_test, though.
 		// TODO(tamird/pmattis): figure out a consistent story for string
 		// printing in logic_test.
-		n.debugVals.value = parser.DString(n.explainValue.String())
+		n.debugVals.value = n.explainValue.String()
 	}
 	if endOfRow {
 		n.debugVals.output = debugValueRow
