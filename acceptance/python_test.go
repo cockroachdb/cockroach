@@ -23,11 +23,10 @@ import (
 	"testing"
 )
 
-// TestPython connects to a cluster with python.
-func TestPython(t *testing.T) {
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/3826")
-	testDockerSuccess(t, "python", []string{"-c", strings.Replace(python, "%v", "3", 1)})
-	testDockerFail(t, "python", []string{"-c", strings.Replace(python, "%v", `"a"`, 1)})
+// TestDockerPython connects to a cluster with python.
+func TestDockerPython(t *testing.T) {
+	testDockerSuccess(t, []string{"python", "-c", strings.Replace(python, "%v", "3", 1)})
+	testDockerFail(t, []string{"python", "-c", strings.Replace(python, "%v", `"a"`, 1)})
 }
 
 const python = `
