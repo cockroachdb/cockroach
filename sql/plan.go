@@ -259,19 +259,6 @@ func (p *planner) releaseLeases(db client.DB) {
 	}
 }
 
-type debugValueType int
-
-const (
-	// The debug values do not refer to a full result row.
-	debugValuePartial debugValueType = iota
-
-	// The debug values refer to a full result row but the row was filtered out.
-	debugValueFiltered
-
-	// The debug values refer to a full result row.
-	debugValueRow
-)
-
 // planNode defines the interface for executing a query or portion of a query.
 type planNode interface {
 	// Columns returns the column names and types . The length of the
@@ -316,14 +303,22 @@ type emptyNode struct {
 	results bool
 }
 
-func (*emptyNode) Columns() []ResultColumn  { return nil }
-func (*emptyNode) Ordering() orderingInfo   { return orderingInfo{} }
-func (*emptyNode) Values() parser.DTuple    { return nil }
-func (*emptyNode) DebugValues() debugValues { return debugValues{} }
-func (*emptyNode) PErr() *roachpb.Error     { return nil }
+func (*emptyNode) Columns() []ResultColumn { return nil }
+func (*emptyNode) Ordering() orderingInfo  { return orderingInfo{} }
+func (*emptyNode) Values() parser.DTuple   { return nil }
+func (*emptyNode) PErr() *roachpb.Error    { return nil }
 
 func (*emptyNode) ExplainPlan() (name, description string, children []planNode) {
 	return "empty", "-", nil
+}
+
+func (*emptyNode) DebugValues() debugValues {
+	return debugValues{
+		rowIdx: 0,
+		key:    "",
+		value:  parser.DNull.String(),
+		output: debugValueRow,
+	}
 }
 
 func (e *emptyNode) Next() bool {
