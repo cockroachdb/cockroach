@@ -63,10 +63,92 @@ func TestFloat64FromDec(t *testing.T) {
 	}
 }
 
+type decimalOneArgTestCase struct {
+	input    string
+	expected string
+}
+
+type decimalTwoArgsTestCase struct {
+	input1   string
+	input2   string
+	expected string
+}
+
+func testDecimalSingleArgFunc(t *testing.T, f func(*inf.Dec, *inf.Dec, inf.Scale) *inf.Dec, s inf.Scale, tests []decimalOneArgTestCase) {
+	for i, tc := range tests {
+		x, exp := new(inf.Dec), new(inf.Dec)
+		x.SetString(tc.input)
+		exp.SetString(tc.expected)
+
+		// Test allocated return value.
+		z := f(nil, x, s)
+		if exp.Cmp(z) != 0 {
+			t.Errorf("%d: expected %s, got %s", i, exp, z)
+		}
+
+		// Test provided decimal mutation.
+		z.SetString("0.0")
+		f(z, x, s)
+		if exp.Cmp(z) != 0 {
+			t.Errorf("%d: expected %s, got %s", i, exp, z)
+		}
+
+		// Test same arg mutation.
+		f(x, x, s)
+		if exp.Cmp(x) != 0 {
+			t.Errorf("%d: expected %s, got %s", i, exp, x)
+		}
+		x.SetString(tc.input)
+	}
+}
+
+func testDecimalDoubleArgFunc(t *testing.T, f func(*inf.Dec, *inf.Dec, *inf.Dec, inf.Scale) *inf.Dec, s inf.Scale, tests []decimalTwoArgsTestCase) {
+	for i, tc := range tests {
+		x, y, exp := new(inf.Dec), new(inf.Dec), new(inf.Dec)
+		x.SetString(tc.input1)
+		y.SetString(tc.input2)
+		exp.SetString(tc.expected)
+
+		// Test allocated return value.
+		z := f(nil, x, y, s)
+		if exp.Cmp(z) != 0 {
+			t.Errorf("%d: expected %s, got %s", i, exp, z)
+		}
+
+		// Test provided decimal mutation.
+		z.SetString("0.0")
+		f(z, x, y, s)
+		if exp.Cmp(z) != 0 {
+			t.Errorf("%d: expected %s, got %s", i, exp, z)
+		}
+
+		// Test first arg mutation.
+		f(x, x, y, s)
+		if exp.Cmp(x) != 0 {
+			t.Errorf("%d: expected %s, got %s", i, exp, x)
+		}
+		x.SetString(tc.input1)
+
+		// Test second arg mutation.
+		f(y, x, y, s)
+		if exp.Cmp(y) != 0 {
+			t.Errorf("%d: expected %s, got %s", i, exp, y)
+		}
+		y.SetString(tc.input2)
+
+		// Test both arg mutation, if possible.
+		if tc.input1 == tc.input2 {
+			f(x, x, x, s)
+			if exp.Cmp(x) != 0 {
+				t.Errorf("%d: expected %s, got %s", i, exp, x)
+			}
+			x.SetString(tc.input1)
+		}
+	}
+}
+
 func TestDecimalMod(t *testing.T) {
-	tests := []struct {
-		x, y, z string
-	}{
+	tests := []decimalTwoArgsTestCase{
 		{"3", "2", "1"},
 		{"3451204593", "2454495034", "996709559"},
 		{"24544.95034", ".3451204593", "0.3283950433"},
@@ -76,48 +158,10 @@ func TestDecimalMod(t *testing.T) {
 		{"7.5", "-2", "1.5"},
 		{"-7.5", "-2", "-1.5"},
 	}
-	for i, tc := range tests {
-		x, y, exp := new(inf.Dec), new(inf.Dec), new(inf.Dec)
-		x.SetString(tc.x)
-		y.SetString(tc.y)
-		exp.SetString(tc.z)
-
-		// Test return value.
-		z := Mod(nil, x, y)
-		if exp.Cmp(z) != 0 {
-			t.Errorf("%d: expected %s, got %s", i, exp, z)
-		}
-
-		// Test provided decimal mutation.
-		z.SetString("0.0")
-		Mod(z, x, y)
-		if exp.Cmp(z) != 0 {
-			t.Errorf("%d: expected %s, got %s", i, exp, z)
-		}
-
-		// Test dividend mutation.
-		Mod(x, x, y)
-		if exp.Cmp(x) != 0 {
-			t.Errorf("%d: expected %s, got %s", i, exp, x)
-		}
-		x.SetString(tc.x)
-
-		// Test divisor mutation.
-		Mod(y, x, y)
-		if exp.Cmp(y) != 0 {
-			t.Errorf("%d: expected %s, got %s", i, exp, y)
-		}
-		y.SetString(tc.y)
-
-		// Test dividend and divisor mutation, if possible.
-		if tc.x == tc.y {
-			Mod(x, x, x)
-			if exp.Cmp(x) != 0 {
-				t.Errorf("%d: expected %s, got %s", i, exp, x)
-			}
-			x.SetString(tc.x)
-		}
+	modWithScale := func(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
+		return Mod(z, x, y)
 	}
+	testDecimalDoubleArgFunc(t, modWithScale, 0, tests)
 }
 
 func BenchmarkDecimalMod(b *testing.B) {
@@ -144,10 +188,7 @@ func BenchmarkDecimalMod(b *testing.B) {
 }
 
 func TestDecimalSqrt(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
+	tests := []decimalOneArgTestCase{
 		{"0", "0"},
 		{".12345678987654321122763812", "0.3513641841117891"},
 		{"4", "2"},
@@ -157,30 +198,21 @@ func TestDecimalSqrt(t *testing.T) {
 		{"24544.95034", "156.6682812186308502"},
 		{"1234567898765432112.2763812", "1111111110.0000000055243715"},
 	}
-	for i, tc := range tests {
-		x, exp := new(inf.Dec), new(inf.Dec)
-		x.SetString(tc.input)
-		exp.SetString(tc.expected)
+	testDecimalSingleArgFunc(t, Sqrt, 16, tests)
+}
 
-		// Test return value.
-		z := Sqrt(nil, x, 16)
-		if exp.Cmp(z) != 0 {
-			t.Errorf("%d: expected %s, got %s", i, exp, z)
-		}
-
-		// Test provided decimal mutation.
-		z.SetString("0.0")
-		Sqrt(z, x, 16)
-		if exp.Cmp(z) != 0 {
-			t.Errorf("%d: expected %s, got %s", i, exp, z)
-		}
-
-		// Test same argument mutation.
-		Sqrt(x, x, 16)
-		if exp.Cmp(x) != 0 {
-			t.Errorf("%d: expected %s, got %s", i, exp, x)
-		}
+func TestDecimalSqrtDoubleScale(t *testing.T) {
+	tests := []decimalOneArgTestCase{
+		{"0", "0"},
+		{".12345678987654321122763812", "0.35136418411178907639479458498081"},
+		{"4", "2"},
+		{"9", "3"},
+		{"100", "10"},
+		{"2454495034", "49542.86057546536139455430949116585673"},
+		{"24544.95034", "156.66828121863085021083671472749063"},
+		{"1234567898765432112.2763812", "1111111110.00000000552437154552437153179097"},
 	}
+	testDecimalSingleArgFunc(t, Sqrt, 32, tests)
 }
 
 func BenchmarkDecimalSqrt(b *testing.B) {
@@ -195,5 +227,100 @@ func BenchmarkDecimalSqrt(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		Sqrt(z, vals[i%len(vals)], 16)
+	}
+}
+
+func TestDecimalLog(t *testing.T) {
+	tests := []decimalOneArgTestCase{
+		{".001234567898217312", "-6.6970342501104617"},
+		{".5", "-0.6931471805599453"},
+		{"1", "0"},
+		{"2", "0.6931471805599453"},
+		{"1234.56789", "7.1184763011977896"},
+		{"1234567898765432112.2763812", "41.6572527032084749"},
+	}
+	testDecimalSingleArgFunc(t, Log, 16, tests)
+}
+
+func TestDecimalLogDoubleScale(t *testing.T) {
+	tests := []decimalOneArgTestCase{
+		{".001234567898217312", "-6.69703425011046173258548487981855"},
+		{".5", "-0.69314718055994530941723212145818"},
+		{"1", "0"},
+		{"2", "0.69314718055994530941723212145818"},
+		{"1234.56789", "7.11847630119778961310397607454138"},
+		{"1234567898765432112.2763812", "41.65725270320847492372271693721825"},
+	}
+	testDecimalSingleArgFunc(t, Log, 32, tests)
+}
+
+func TestDecimalLog10(t *testing.T) {
+	tests := []decimalOneArgTestCase{
+		{".001234567898217312", "-2.9084850199400556"},
+		{".001", "-3"},
+		{".123", "-0.9100948885606021"},
+		{"1", "0"},
+		{"123", "2.0899051114393979"},
+		{"1000", "3"},
+		{"1234567898765432112.2763812", "18.0915149802527613"},
+	}
+	testDecimalSingleArgFunc(t, Log10, 16, tests)
+}
+
+func TestDecimalLog10DoubleScale(t *testing.T) {
+	tests := []decimalOneArgTestCase{
+		{".001234567898217312", "-2.90848501994005559707805612700747"},
+		{".001", "-3"},
+		{".123", "-0.91009488856060206819556024677670"},
+		{"1", "0"},
+		{"123", "2.08990511143939793180443975322329"},
+		{"1000", "3"},
+		{"1234567898765432112.2763812", "18.09151498025276129089765759457130"},
+	}
+	testDecimalSingleArgFunc(t, Log10, 32, tests)
+}
+
+func TestDecimalLogN(t *testing.T) {
+	tests := []decimalTwoArgsTestCase{
+		{".001234567898217312", strE, "-6.6970342501104617"},
+		{".001234567898217312", "10", "-2.9084850199400556"},
+		{".001", "10", "-3"},
+		{".123", "10", "-0.9100948885606021"},
+		{"1", "10", "0"},
+		{"123", "10", "2.0899051114393979"},
+		{"1000", "10", "3"},
+		{"1234567898765432112.2763812", strE, "41.6572527032084749"},
+		{"1234567898765432112.2763812", "10", "18.0915149802527613"},
+	}
+	testDecimalDoubleArgFunc(t, LogN, 16, tests)
+}
+
+func TestDecimalLogNDoubleScale(t *testing.T) {
+	tests := []decimalTwoArgsTestCase{
+		{".001234567898217312", strE, "-6.69703425011046173258548487981855"},
+		{".001234567898217312", "10", "-2.90848501994005559707805612700747"},
+		{".001", "10", "-3"},
+		{".123", "10", "-0.91009488856060206819556024677670"},
+		{"1", "10", "0"},
+		{"123", "10", "2.08990511143939793180443975322330"},
+		{"1000", "10", "3"},
+		{"1234567898765432112.2763812", strE, "41.65725270320847492372271693721825"},
+		{"1234567898765432112.2763812", "10", "18.09151498025276129089765759457130"},
+	}
+	testDecimalDoubleArgFunc(t, LogN, 32, tests)
+}
+
+func BenchmarkDecimalLog(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([]*inf.Dec, 10000)
+	for i := range vals {
+		vals[i] = NewDecFromFloat(math.Abs(rng.Float64()))
+	}
+
+	z := new(inf.Dec)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		Log(z, vals[i%len(vals)], 16)
 	}
 }
