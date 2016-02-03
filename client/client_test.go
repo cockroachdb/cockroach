@@ -22,8 +22,6 @@ package client_test
 import (
 	"bytes"
 	"fmt"
-	"math/rand"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -35,12 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
@@ -666,141 +661,4 @@ func TestClientPermissions(t *testing.T) {
 			t.Errorf("#%d: expected success=%t, got err=%s", tcNum, tc.success, pErr)
 		}
 	}
-}
-
-const valueSize = 1 << 10
-
-func setupClientBenchData(useSSL bool, numVersions, numKeys int, b *testing.B) (
-	*server.TestServer, *client.DB) {
-	const cacheSize = 8 << 30        // 8 GB
-	const memtableBudget = 512 << 20 // 512 MB
-	loc := fmt.Sprintf("client_bench_%d_%d", numVersions, numKeys)
-
-	exists := true
-	if _, err := os.Stat(loc); os.IsNotExist(err) {
-		exists = false
-	}
-
-	s := &server.TestServer{}
-	s.Ctx = server.NewTestContext()
-	s.SkipBootstrap = exists
-	if !useSSL {
-		s.Ctx.Insecure = true
-	}
-	stopper := stop.NewStopper()
-	s.Ctx.Engines = []engine.Engine{
-		engine.NewRocksDB(roachpb.Attributes{Attrs: []string{"ssd"}}, loc,
-			cacheSize, memtableBudget, stopper),
-	}
-	if err := s.StartWithStopper(stopper); err != nil {
-		b.Fatal(err)
-	}
-
-	db := s.DB()
-	if exists {
-		return s, db
-	}
-
-	rng, _ := randutil.NewPseudoRand()
-	keys := make([]roachpb.Key, numKeys)
-	nvs := make([]int, numKeys)
-	for t := 1; t <= numVersions; t++ {
-		batch := &client.Batch{}
-		for i := 0; i < numKeys; i++ {
-			if t == 1 {
-				keys[i] = roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(i)))
-				nvs[i] = int(rand.Int31n(int32(numVersions)) + 1)
-			}
-			// Only write values if this iteration is less than the random
-			// number of versions chosen for this key.
-			if t <= nvs[i] {
-				batch.Put(roachpb.Key(keys[i]), randutil.RandBytes(rng, valueSize))
-			}
-			if (i+1)%1000 == 0 {
-				if pErr := db.Run(batch); pErr != nil {
-					b.Fatal(pErr)
-				}
-				batch = &client.Batch{}
-			}
-		}
-		if len(batch.Results) != 0 {
-			if pErr := db.Run(batch); pErr != nil {
-				b.Fatal(pErr)
-			}
-		}
-	}
-
-	if r, ok := s.Ctx.Engines[0].(*engine.RocksDB); ok {
-		r.CompactRange(engine.NilKey, engine.NilKey)
-	}
-
-	return s, db
-}
-
-// runClientScan first creates test data (and resets the benchmarking
-// timer). It then performs b.N client scans in increments of numRows
-// keys over all of the data, restarting at the beginning of the
-// keyspace, as many times as necessary.
-func runClientScan(useSSL bool, numRows, numVersions int, b *testing.B) {
-	const numKeys = 100000
-
-	s, db := setupClientBenchData(useSSL, numVersions, numKeys, b)
-	defer s.Stop()
-
-	b.SetBytes(int64(numRows * valueSize))
-	b.ResetTimer()
-
-	b.RunParallel(func(pb *testing.PB) {
-		startKeyBuf := append(make([]byte, 0, 64), []byte("key-")...)
-		endKeyBuf := append(make([]byte, 0, 64), []byte("key-")...)
-		for pb.Next() {
-			// Choose a random key to start scan.
-			keyIdx := rand.Int31n(int32(numKeys - numRows))
-			startKey := roachpb.Key(encoding.EncodeUvarintAscending(
-				startKeyBuf, uint64(keyIdx)))
-			endKey := roachpb.Key(encoding.EncodeUvarintAscending(
-				endKeyBuf, uint64(keyIdx)+uint64(numRows)))
-			rows, pErr := db.Scan(startKey, endKey, int64(numRows))
-			if pErr != nil {
-				b.Fatalf("failed scan: %s", pErr)
-			}
-			if len(rows) != numRows {
-				b.Fatalf("failed to scan: %d != %d", len(rows), numRows)
-			}
-		}
-	})
-
-	b.StopTimer()
-}
-
-func BenchmarkRPCSSLClientScan1Version1Row(b *testing.B) {
-	runClientScan(true /* SSL */, 1, 1, b)
-}
-
-func BenchmarkRPCSSLClientScan1Version10Rows(b *testing.B) {
-	runClientScan(true /* SSL */, 10, 1, b)
-}
-
-func BenchmarkRPCSSLClientScan1Version100Rows(b *testing.B) {
-	runClientScan(true /* SSL */, 100, 1, b)
-}
-
-func BenchmarkRPCSSLClientScan1Version1000Rows(b *testing.B) {
-	runClientScan(true /* SSL */, 1000, 1, b)
-}
-
-func BenchmarkRPCNoSSLClientScan1Version1Row(b *testing.B) {
-	runClientScan(false /* NoSSL */, 1, 1, b)
-}
-
-func BenchmarkRPCNoSSLClientScan1Version10Rows(b *testing.B) {
-	runClientScan(false /* NoSSL */, 10, 1, b)
-}
-
-func BenchmarkRPCNoSSLClientScan1Version100Rows(b *testing.B) {
-	runClientScan(false /* NoSSL */, 100, 1, b)
-}
-
-func BenchmarkRPCNoSSLClientScan1Version1000Rows(b *testing.B) {
-	runClientScan(false /* NoSSL */, 1000, 1, b)
 }
