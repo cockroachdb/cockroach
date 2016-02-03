@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -108,9 +109,9 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 		RangeDescriptorDB:        ltc.stores, // for descriptor lookup
 	}, ltc.Gossip)
 
-	ltc.Sender = NewTxnCoordSender(ltc.distSender, ltc.Clock, false /* !linearizable */, nil /* tracer */, ltc.Stopper)
+	tracer := tracing.NewTracer()
+	ltc.Sender = NewTxnCoordSender(ltc.distSender, ltc.Clock, false /* !linearizable */, tracer, ltc.Stopper)
 	ltc.DB = client.NewDB(ltc.Sender)
-
 	transport := storage.NewLocalRPCTransport(ltc.Stopper)
 	ltc.Stopper.AddCloser(transport)
 	ctx := storage.TestStoreContext
@@ -118,6 +119,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ctx.DB = ltc.DB
 	ctx.Gossip = ltc.Gossip
 	ctx.Transport = transport
+	ctx.Tracer = tracer
 	ltc.Store = storage.NewStore(ctx, ltc.Eng, nodeDesc)
 	if err := ltc.Store.Bootstrap(roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)

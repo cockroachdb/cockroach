@@ -39,6 +39,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
+	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -58,7 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 const replicationTimeout = 5 * time.Second
@@ -99,15 +100,15 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	sCtx.Gossip = gossip.New(rpcContext, gossip.TestBootstrap, stopper)
 	sCtx.Gossip.SetNodeID(nodeDesc.NodeID)
 	sCtx.ScanMaxIdleTime = splitTimeout / 10
-	sCtx.Tracer = tracer.NewTracer(nil, "testing")
+	sCtx.Tracer = tracing.NewTracer()
 	stores := storage.NewStores(clock)
 	rpcSend := func(_ kv.SendOptions, _ string, _ []net.Addr,
 		getArgs func(addr net.Addr) proto.Message, _ func() proto.Message,
 		_ *rpc.Context) (proto.Message, error) {
 		ba := getArgs(nil /* net.Addr */).(*roachpb.BatchRequest)
-		trace := sCtx.Tracer.NewTrace("store", ba)
-		defer trace.Finalize()
-		ctx := tracer.ToCtx(context.Background(), trace)
+		sp := sCtx.Tracer.StartTrace(ba.TraceID())
+		defer sp.Finish()
+		ctx, _ := opentracing.ContextWithSpan(context.Background(), sp)
 		br, pErr := stores.Send(ctx, *ba)
 		if br == nil {
 			br = &roachpb.BatchResponse{}

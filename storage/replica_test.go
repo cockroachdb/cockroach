@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/coreos/etcd/raft"
 	"github.com/gogo/protobuf/proto"
@@ -472,7 +473,7 @@ func TestRangeLeaderLease(t *testing.T) {
 		t.Errorf("expected another replica to have leader lease")
 	}
 
-	pErr := tc.rng.redirectOnOrAcquireLeaderLease(nil)
+	pErr := tc.rng.redirectOnOrAcquireLeaderLease(tracing.NilSpan())
 	if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok || lErr == nil {
 		t.Fatalf("wanted NotLeaderError, got %s", pErr)
 	}
@@ -495,7 +496,7 @@ func TestRangeLeaderLease(t *testing.T) {
 		}
 	}
 
-	if _, ok := rng.redirectOnOrAcquireLeaderLease(nil).GetDetail().(*roachpb.NotLeaderError); !ok {
+	if _, ok := rng.redirectOnOrAcquireLeaderLease(tracing.NilSpan()).GetDetail().(*roachpb.NotLeaderError); !ok {
 		t.Fatalf("expected %T, got %s", &roachpb.NotLeaderError{}, err)
 	}
 }
@@ -3344,6 +3345,7 @@ func TestRangeLookup(t *testing.T) {
 // performance of write commands. This benchmark can be run with or without
 // events, and with or without a consumer reading the events.
 func benchmarkEvents(b *testing.B, sendEvents, consumeEvents bool) {
+	defer tracing.Disable()()
 	defer leaktest.AfterTest(b)
 	tc := testContext{}
 

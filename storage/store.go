@@ -25,6 +25,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/btree"
+	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -40,7 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 )
@@ -77,6 +78,7 @@ var (
 	// TestStoreContext has some fields initialized with values relevant
 	// in tests.
 	TestStoreContext = StoreContext{
+		Tracer:                     tracing.NewTracer(),
 		RaftTickInterval:           100 * time.Millisecond,
 		RaftHeartbeatIntervalTicks: 1,
 		RaftElectionTimeoutTicks:   2,
@@ -344,7 +346,7 @@ type StoreContext struct {
 	EventFeed *util.Feed
 
 	// Tracer is a request tracer.
-	Tracer *tracer.Tracer
+	Tracer opentracing.Tracer
 
 	// If LogRangeEvents is true, major changes to ranges will be logged into
 	// the range event log.
@@ -357,7 +359,8 @@ type StoreContext struct {
 func (sc *StoreContext) Valid() bool {
 	return sc.Clock != nil && sc.Transport != nil &&
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
-		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval > 0
+		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval > 0 &&
+		sc.Tracer != nil
 }
 
 // setDefaults initializes unset fields in StoreConfig to values
@@ -931,7 +934,7 @@ func (s *Store) Stopper() *stop.Stopper { return s.stopper }
 func (s *Store) EventFeed() StoreEventFeed { return s.feed }
 
 // Tracer accessor.
-func (s *Store) Tracer() *tracer.Tracer { return s.ctx.Tracer }
+func (s *Store) Tracer() opentracing.Tracer { return s.ctx.Tracer }
 
 // NewRangeDescriptor creates a new descriptor based on start and end
 // keys and the supplied roachpb.Replicas slice. It allocates new
@@ -1214,7 +1217,7 @@ func (s *Store) ReplicaCount() int {
 // command using the fetched range.
 func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	ctx = s.Context(ctx)
-	trace := tracer.FromCtx(ctx)
+	sp := tracing.SpanFromContext(ctx)
 
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
@@ -1251,9 +1254,9 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 	s.ctx.Clock.Update(ba.Timestamp)
 
 	if log.V(1) {
-		defer trace.Epoch(fmt.Sprintf("executing %s", ba))()
+		sp.LogEvent(fmt.Sprintf("executing %s", ba))
 	} else {
-		defer trace.Epoch(fmt.Sprintf("executing %d requests", len(ba.Requests)))()
+		sp.LogEvent(fmt.Sprintf("executing %d requests", len(ba.Requests)))
 	}
 	// Backoff and retry loop for handling errors. Backoff times are measured
 	// in the Trace.
@@ -1262,7 +1265,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 	next := func(r *retry.Retry) bool {
 		if r.CurrentAttempt() > 0 {
 			ba.SetNewRequest()
-			defer trace.Epoch("backoff")()
+			sp.LogEvent("backoff")
 		}
 		return r.Next()
 	}
@@ -1327,7 +1330,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 		case *roachpb.ReadWithinUncertaintyIntervalError:
 			t.NodeID = ba.Replica.NodeID
 		case *roachpb.WriteTooOldError:
-			trace.Event(fmt.Sprintf("error: %T", pErr.GetDetail()))
+			sp.LogEvent(fmt.Sprintf("error: %T", pErr.GetDetail()))
 			// Update request timestamp and retry immediately.
 			ba.Timestamp = t.ExistingTimestamp.Next()
 			r.Reset()
@@ -1336,7 +1339,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 			}
 			continue
 		case *roachpb.WriteIntentError:
-			trace.Event(fmt.Sprintf("error: %T", pErr.GetDetail()))
+			sp.LogEvent(fmt.Sprintf("error: %T", pErr.GetDetail()))
 			// If write intent error is resolved, exit retry/backoff loop to
 			// immediately retry.
 			if t.Resolved {
@@ -1364,7 +1367,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 	// By default, retries are indefinite. However, some unittests set a
 	// maximum retry count; return txn retry error for transactional cases
 	// and the original error otherwise.
-	trace.Event("store retry limit exceeded") // good to check for if tests fail
+	sp.LogEvent("store retry limit exceeded") // good to check for if tests fail
 	if ba.Txn != nil {
 		pErr := roachpb.NewError(roachpb.NewTransactionRetryError())
 		pErr.SetTxn(ba.Txn)
@@ -1399,8 +1402,8 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	if log.V(6) {
 		log.Infoc(ctx, "resolving write intent %s", wiErr)
 	}
-	trace := tracer.FromCtx(ctx)
-	defer trace.Epoch("intent resolution")()
+	sp := tracing.SpanFromContext(ctx)
+	sp.LogEvent("intent resolution")
 
 	// Split intents into those we need to push and those which are good to
 	// resolve.

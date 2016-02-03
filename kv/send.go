@@ -30,8 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
-	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
+	"github.com/opentracing/opentracing-go"
 )
 
 // TODO(pmattis): We might also want to de-generalize this code so that it
@@ -64,7 +65,7 @@ type SendOptions struct {
 	// 0 for no timeout.
 	Timeout time.Duration
 	// If not nil, information about the request is added to this trace.
-	Trace *tracer.Trace
+	Trace opentracing.Span
 }
 
 // An rpcError indicates a failure to send the RPC. rpcErrors are
@@ -93,7 +94,10 @@ func (r rpcError) CanRetry() bool { return true }
 // the available endpoints less the number of required replies.
 func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message,
 	getReply func() proto.Message, context *rpc.Context) (proto.Message, error) {
-	trace := opts.Trace // not thread safe!
+	sp := opts.Trace
+	if sp == nil {
+		sp = tracing.NilSpan()
+	}
 
 	if len(addrs) < 1 {
 		return nil, roachpb.NewSendError(
@@ -136,7 +140,7 @@ func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr n
 	// node will be able to order the healthy replicas based on latency.
 
 	// Send the first request.
-	sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, trace, done)
+	sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, sp, done)
 	orderedClients = orderedClients[1:]
 
 	var errors, retryableErrors int
@@ -186,16 +190,16 @@ func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr n
 			}
 			// Send to additional replicas if available.
 			if len(orderedClients) > 0 {
-				trace.Event("error, trying next peer")
-				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, trace, done)
+				sp.LogEvent("error, trying next peer")
+				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, sp, done)
 				orderedClients = orderedClients[1:]
 			}
 
 		case <-time.After(opts.SendNextTimeout):
 			// On successive RPC timeouts, send to additional replicas if available.
 			if len(orderedClients) > 0 {
-				trace.Event("timeout, trying next peer")
-				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, trace, done)
+				sp.LogEvent("timeout, trying next peer")
+				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, getReply, context, sp, done)
 				orderedClients = orderedClients[1:]
 			}
 		}
@@ -220,7 +224,7 @@ var sendOneFn = sendOne
 // via sendOneFn in order to test various error cases.
 func sendOne(client *rpc.Client, timeout time.Duration, method string,
 	getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message,
-	context *rpc.Context, trace *tracer.Trace, done chan *netrpc.Call) {
+	context *rpc.Context, trace opentracing.Span, done chan *netrpc.Call) {
 
 	addr := client.RemoteAddr()
 	args := getArgs(addr)
@@ -233,7 +237,7 @@ func sendOne(client *rpc.Client, timeout time.Duration, method string,
 	if log.V(2) {
 		log.Infof("%s: sending request to %s: %+v", method, addr, args)
 	}
-	trace.Event(fmt.Sprintf("sending to %s", addr))
+	trace.LogEvent(fmt.Sprintf("sending to %s", addr))
 
 	if enableLocalCalls && context.LocalServer != nil && addr.String() == context.LocalAddr {
 		if context.LocalServer.LocalCall(method, args, done) {

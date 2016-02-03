@@ -1,4 +1,4 @@
-// Copyright 2015 The Cockroach Authors.
+// Copyright 2016 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,19 +12,21 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
+// Author: Peter Mattis (petermattis@gmail.com)
 
-package tracer
+package tracing
 
-import (
-	"testing"
+// static void annotateTrace() {
+// }
+import "C"
+import "os"
 
-	"golang.org/x/net/context"
-)
+var annotationEnabled = os.Getenv("ANNOTATE_TRACES") == "1"
 
-func TestContext(t *testing.T) {
-	ctx := ToCtx(context.Background(), NewTracer(nil, "").NewTrace("fml", traceID(5)))
-	if tr := FromCtx(ctx); tr == nil || tr.ID != "5" {
-		t.Fatalf("trace got lost: %+v", tr)
+// AnnotateTrace adds an annotation to the golang executation tracer by calling
+// a no-op cgo function.
+func AnnotateTrace() {
+	if annotationEnabled {
+		C.annotateTrace()
 	}
 }

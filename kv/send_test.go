@@ -31,8 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/tracer"
 	"github.com/gogo/protobuf/proto"
+	"github.com/opentracing/opentracing-go"
 )
 
 // newNodeTestContext returns a rpc.Context for testing.
@@ -327,7 +327,7 @@ func TestComplexScenarios(t *testing.T) {
 		// Mock sendOne.
 		sendOneFn = func(client *rpc.Client, timeout time.Duration, method string,
 			getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message,
-			context *rpc.Context, trace *tracer.Trace, done chan *netrpc.Call) {
+			context *rpc.Context, trace opentracing.Span, done chan *netrpc.Call) {
 			addr := client.RemoteAddr()
 			addrID := -1
 			for serverAddrID, serverAddr := range serverAddrs {

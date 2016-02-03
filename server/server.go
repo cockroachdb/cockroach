@@ -46,7 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/tracer"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	assetfs "github.com/elazarl/go-bindata-assetfs"
 )
 
@@ -128,7 +128,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.storePool = storage.NewStorePool(s.gossip, s.clock, ctx.TimeUntilStoreDead, stopper)
 
 	feed := util.NewFeed(stopper)
-	tracer := tracer.NewTracer(feed, ctx.Addr)
+	tracer := tracing.NewTracer()
 
 	// A custom RetryOptions is created which uses stopper.ShouldDrain() as
 	// the Closer. This prevents infinite retry loops from occuring during
