@@ -485,7 +485,7 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 		br, pErr = n.stores.Send(ctx, *ba)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
-			trace.Event(fmt.Sprintf("error: %T", pErr.GoError()))
+			trace.Event(fmt.Sprintf("error: %T", pErr.GetDetail()))
 		}
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))

@@ -488,7 +488,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace *tracer.Trace) *roachpb.E
 	// it can't be this replica because we're holding a lock.
 	//
 	// In all cases, the error is converted to a NotLeaderError.
-	if _, ok := pErr.GoError().(*roachpb.LeaseRejectedError); ok {
+	if _, ok := pErr.GetDetail().(*roachpb.LeaseRejectedError); ok {
 		lease := r.getLeaderLease()
 		if !lease.Covers(timestamp) {
 			// The lease was rejected even though it was not obtained by another
@@ -669,7 +669,7 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	} else {
 		panic(fmt.Sprintf("don't know how to handle command %s", ba))
 	}
-	if _, ok := pErr.GoError().(*roachpb.RaftGroupDeletedError); ok {
+	if _, ok := pErr.GetDetail().(*roachpb.RaftGroupDeletedError); ok {
 		// This error needs to be converted appropriately so that
 		// clients will retry.
 		pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
@@ -1519,10 +1519,10 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 			// Initialize the error index.
 			// TODO(kaneda): Always set the index when the
 			// error stems from an individual command.
-			if _, ok := pErr.GoError().(*roachpb.WriteIntentError); ok {
+			if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
 				pErr.SetErrorIndex(int32(index))
 			}
-			if _, ok := pErr.GoError().(*roachpb.ConditionFailedError); ok {
+			if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); ok {
 				pErr.SetErrorIndex(int32(index))
 			}
 			return nil, intents, pErr
@@ -1573,7 +1573,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 		pErr = r.redirectOnOrAcquireLeaderLease(tracer.FromCtx(ctx))
 		hasLease = pErr == nil
 		if pErr != nil {
-			switch e := pErr.GoError().(type) {
+			switch e := pErr.GetDetail().(type) {
 			case *roachpb.NotLeaderError:
 				// NotLeaderError means there is an active lease, but only if
 				// the leader is set; otherwise, it's likely a timeout.
@@ -1717,7 +1717,7 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 			resolveIntents, pErr := r.store.resolveWriteIntentError(ctxWithDeadline, &roachpb.WriteIntentError{
 				Intents: item.intents,
 			}, r, args, h, roachpb.PUSH_TOUCH)
-			if wiErr, ok := pErr.GoError().(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
+			if wiErr, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
 				log.Warningc(ctxWithDeadline, "failed to push during intent resolution: %s", pErr)
 				return
 			}
@@ -1781,7 +1781,7 @@ func newReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
 // decide on an error-by-error basis whether the corruption is limited to the
 // range, store, node or cluster with corresponding actions taken.
 func (r *Replica) maybeSetCorrupt(pErr *roachpb.Error) *roachpb.Error {
-	if cErr, ok := pErr.GoError().(*roachpb.ReplicaCorruptionError); ok {
+	if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
 		log.Errorc(r.context(), "stalling replica due to: %s", cErr.ErrorMsg)
 		cErr.Processed = true
 		return roachpb.NewError(cErr)

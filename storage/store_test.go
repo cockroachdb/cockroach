@@ -904,7 +904,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 				t.Errorf("expected pushee to be aborted; got %s", txn.Status)
 			}
 		} else {
-			if rErr, ok := pErr.GoError().(*roachpb.TransactionPushError); !ok {
+			if rErr, ok := pErr.GetDetail().(*roachpb.TransactionPushError); !ok {
 				t.Errorf("expected txn push error; got %s", pErr)
 			} else if !bytes.Equal(rErr.PusheeTxn.ID, pushee.ID) {
 				t.Errorf("expected txn to match pushee %q; got %s", pushee.ID, rErr)
@@ -1044,7 +1044,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 						expTimestamp, etReply.Txn)
 				}
 			} else {
-				if _, ok := cErr.GoError().(*roachpb.TransactionRetryError); !ok {
+				if _, ok := cErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 					t.Errorf("expected transaction retry error; got %s", cErr)
 				}
 			}
@@ -1064,7 +1064,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 				if pErr == nil {
 					t.Errorf("expected read to fail")
 				}
-				if _, ok := pErr.GoError().(*roachpb.TransactionRetryError); !ok {
+				if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 					t.Errorf("expected transaction retry error; got %T", pErr)
 				}
 			}
@@ -1220,7 +1220,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	if pErr == nil {
 		t.Errorf("unexpected success committing transaction")
 	}
-	if _, ok := pErr.GoError().(*roachpb.TransactionAbortedError); !ok {
+	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
 		t.Errorf("expected transaction aborted error; got %s", pErr)
 	}
 }

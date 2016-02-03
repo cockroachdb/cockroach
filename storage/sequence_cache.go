@@ -199,7 +199,7 @@ func (sc *SequenceCache) Put(e engine.Engine, id []byte, epoch, seq uint32, txnK
 // are retried on the server, and so are not recorded in the sequence
 // cache in the hopes of retrying to a successful outcome.
 func (sc *SequenceCache) shouldCacheError(pErr *roachpb.Error) bool {
-	switch pErr.GoError().(type) {
+	switch pErr.GetDetail().(type) {
 	case *roachpb.WriteTooOldError, *roachpb.WriteIntentError, *roachpb.NotLeaderError, *roachpb.RangeKeyMismatchError:
 		return false
 	}

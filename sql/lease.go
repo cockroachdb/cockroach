@@ -272,8 +272,8 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) *ro
 			return txn.CommitInBatch(b)
 		})
 
-		if _, ok := pErr.GoError().(*roachpb.LeaseVersionChangedError); !ok {
-			if _, ok := pErr.GoError().(*roachpb.DidntUpdateDescriptorError); ok {
+		if _, ok := pErr.GetDetail().(*roachpb.LeaseVersionChangedError); !ok {
+			if _, ok := pErr.GetDetail().(*roachpb.DidntUpdateDescriptorError); ok {
 				return nil
 			}
 			return pErr
