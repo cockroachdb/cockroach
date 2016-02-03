@@ -582,7 +582,7 @@ func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
 	case time.Duration:
 		return parser.DInterval{Duration: t}, true
 	case *inf.Dec:
-		dd := parser.DDecimal{}
+		dd := &parser.DDecimal{}
 		dd.Set(t)
 		return dd, true
 	}
@@ -623,7 +623,7 @@ func checkResultDatum(datum parser.Datum) *roachpb.Error {
 	case parser.DBool:
 	case parser.DInt:
 	case parser.DFloat:
-	case parser.DDecimal:
+	case *parser.DDecimal:
 	case parser.DBytes:
 	case parser.DString:
 	case parser.DDate:

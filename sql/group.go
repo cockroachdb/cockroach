@@ -665,7 +665,7 @@ func (a *avgAggregate) result() (parser.Datum, error) {
 		return parser.DFloat(t) / parser.DFloat(a.count), nil
 	case parser.DFloat:
 		return t / parser.DFloat(a.count), nil
-	case parser.DDecimal:
+	case *parser.DDecimal:
 		count := inf.NewDec(int64(a.count), 0)
 		t.QuoRound(&t.Dec, count, decimal.Precision, inf.RoundHalfUp)
 		return t, nil
@@ -778,9 +778,9 @@ func (a *sumAggregate) add(datum parser.Datum) error {
 	}
 	if a.sum == nil {
 		switch t := datum.(type) {
-		case parser.DDecimal:
+		case *parser.DDecimal:
 			// Make copy of decimal to allow for modification later.
-			dd := parser.DDecimal{}
+			dd := &parser.DDecimal{}
 			dd.Set(&t.Dec)
 			datum = dd
 		}
@@ -801,8 +801,8 @@ func (a *sumAggregate) add(datum parser.Datum) error {
 			return nil
 		}
 
-	case parser.DDecimal:
-		if v, ok := a.sum.(parser.DDecimal); ok {
+	case *parser.DDecimal:
+		if v, ok := a.sum.(*parser.DDecimal); ok {
 			v.Add(&v.Dec, &t.Dec)
 			a.sum = v
 			return nil
@@ -817,8 +817,8 @@ func (a *sumAggregate) result() (parser.Datum, error) {
 		return parser.DNull, nil
 	}
 	switch t := a.sum.(type) {
-	case parser.DDecimal:
-		dd := parser.DDecimal{}
+	case *parser.DDecimal:
+		dd := &parser.DDecimal{}
 		dd.Set(&t.Dec)
 		return dd, nil
 	default:
@@ -865,8 +865,8 @@ func (a *varianceAggregate) add(datum parser.Datum) error {
 			}
 		}
 		a.tmpDec.SetUnscaled(int64(t))
-		return a.typedAggregate.add(a.tmpDec)
-	case parser.DDecimal:
+		return a.typedAggregate.add(&a.tmpDec)
+	case *parser.DDecimal:
 		if a.typedAggregate == nil {
 			a.typedAggregate = newDecimalVarianceAggregate()
 		} else {
@@ -941,7 +941,7 @@ var (
 )
 
 func (a *decimalVarianceAggregate) add(datum parser.Datum) error {
-	d := datum.(parser.DDecimal).Dec
+	d := datum.(*parser.DDecimal).Dec
 
 	// Uses the Knuth/Welford method for accurately computing variance online in a
 	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
@@ -960,7 +960,7 @@ func (a *decimalVarianceAggregate) result() (parser.Datum, error) {
 		return parser.DNull, nil
 	}
 	a.tmp.Sub(&a.count, decimalOne)
-	dd := parser.DDecimal{}
+	dd := &parser.DDecimal{}
 	dd.QuoRound(&a.sqrDiff, &a.tmp, decimal.Precision, inf.RoundHalfUp)
 	return dd, nil
 }
@@ -981,7 +981,7 @@ func (a *stddevAggregate) result() (parser.Datum, error) {
 	switch t := variance.(type) {
 	case parser.DFloat:
 		return parser.DFloat(math.Sqrt(float64(t))), nil
-	case parser.DDecimal:
+	case *parser.DDecimal:
 		decimal.Sqrt(&t.Dec, &t.Dec, decimal.Precision)
 		return t, nil
 	}

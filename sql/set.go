@@ -109,7 +109,7 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, *roachpb.Error) 
 	case parser.DFloat:
 		offset = int64(float64(v) * 60.0 * 60.0)
 
-	case parser.DDecimal:
+	case *parser.DDecimal:
 		sixty := inf.NewDec(60, 0)
 		sixty.Mul(sixty, sixty).Mul(sixty, &v.Dec)
 		var ok bool

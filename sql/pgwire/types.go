@@ -68,7 +68,7 @@ func typeForDatum(d parser.Datum) pgType {
 	case parser.DFloat:
 		return pgType{oid.T_float8, 8}
 
-	case parser.DDecimal:
+	case *parser.DDecimal:
 		return pgType{oid.T_numeric, -1}
 
 	case parser.DBytes, parser.DString:
@@ -122,7 +122,7 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum) error {
 		_, err := b.Write(s)
 		return err
 
-	case parser.DDecimal:
+	case *parser.DDecimal:
 		vs := v.Dec.String()
 		b.putInt32(int32(len(vs)))
 		_, err := b.WriteString(vs)
@@ -357,7 +357,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 	case oid.T_numeric:
 		switch code {
 		case formatText:
-			dd := parser.DDecimal{}
+			dd := &parser.DDecimal{}
 			if _, ok := dd.SetString(string(b)); !ok {
 				return nil, fmt.Errorf("could not parse string %q as decimal", b)
 			}
