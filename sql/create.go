@@ -71,8 +71,8 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, *roachpb.Error) 
 		}
 	}
 
-	if pErr := p.checkPrivilege(tableDesc, privilege.CREATE); pErr != nil {
-		return nil, pErr
+	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	indexDesc := IndexDescriptor{
@@ -113,8 +113,8 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, *roachpb.Error) 
 		return nil, pErr
 	}
 
-	if pErr := p.checkPrivilege(dbDesc, privilege.CREATE); pErr != nil {
-		return nil, pErr
+	if err := p.checkPrivilege(dbDesc, privilege.CREATE); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	desc, pErr := makeTableDesc(n, dbDesc.ID)
@@ -142,8 +142,8 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, *roachpb.Error) 
 			ColumnNames:      []string{col.Name},
 			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 		}
-		if pErr := desc.AddIndex(idx, true); pErr != nil {
-			return nil, pErr
+		if err := desc.AddIndex(idx, true); err != nil {
+			return nil, roachpb.NewError(err)
 		}
 	}
 

@@ -254,8 +254,8 @@ func (n *groupNode) computeAggregates() {
 
 		// TODO(dt): optimization: skip buckets when underlying plan is ordered by grouped values.
 
-		var encoded []byte
-		encoded, n.pErr = encodeDTuple(scratch, groupedValues)
+		encoded, err := encodeDTuple(scratch, groupedValues)
+		n.pErr = roachpb.NewError(err)
 		if n.pErr != nil {
 			return
 		}
@@ -264,7 +264,7 @@ func (n *groupNode) computeAggregates() {
 
 		// Feed the aggregateFuncs for this bucket the non-grouped values.
 		for i, value := range aggregatedValues {
-			if n.pErr = n.funcs[i].add(encoded, value); n.pErr != nil {
+			if n.pErr = roachpb.NewError(n.funcs[i].add(encoded, value)); n.pErr != nil {
 				return
 			}
 		}
@@ -560,14 +560,14 @@ type aggregateFunc struct {
 	seen    map[string]struct{}
 }
 
-func (a *aggregateFunc) add(bucket []byte, d parser.Datum) *roachpb.Error {
+func (a *aggregateFunc) add(bucket []byte, d parser.Datum) error {
 	// NB: the compiler *should* optimize `myMap[string(myBytes)]`. See:
 	// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf
 
 	if a.seen != nil {
-		encoded, pErr := encodeDatum(bucket, d)
-		if pErr != nil {
-			return pErr
+		encoded, err := encodeDatum(bucket, d)
+		if err != nil {
+			return err
 		}
 		if _, ok := a.seen[string(encoded)]; ok {
 			// skip
@@ -582,7 +582,7 @@ func (a *aggregateFunc) add(bucket []byte, d parser.Datum) *roachpb.Error {
 		a.buckets[string(bucket)] = impl
 	}
 
-	return roachpb.NewError(impl.add(d))
+	return impl.add(d)
 }
 
 func (*aggregateFunc) Variable() {}

@@ -37,8 +37,8 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, *roachpb.Error) {
 			return nil, pErr
 		}
 
-		if pErr := p.checkPrivilege(tableDesc, privilege.DROP); pErr != nil {
-			return nil, pErr
+		if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
+			return nil, roachpb.NewError(err)
 		}
 
 		tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
