@@ -67,7 +67,6 @@ type LocalTestCluster struct {
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
 func (ltc *LocalTestCluster) Start(t util.Tester) {
-
 	nodeID := roachpb.NodeID(1)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: nodeID}
 	ltc.tester = t
@@ -80,13 +79,13 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 
 	ltc.stores = storage.NewStores(ltc.Clock)
 	var rpcSend rpcSendFn = func(_ SendOptions, _ string, _ []net.Addr,
-		getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message,
+		getArgs func(addr net.Addr) *roachpb.BatchRequest, getReply func() *roachpb.BatchResponse,
 		_ *rpc.Context) (proto.Message, error) {
 		// TODO(tschottdorf): remove getReply().
 		if ltc.Latency > 0 {
 			time.Sleep(ltc.Latency)
 		}
-		br, pErr := ltc.stores.Send(context.Background(), *getArgs(nil).(*roachpb.BatchRequest))
+		br, pErr := ltc.stores.Send(context.Background(), *getArgs(nil))
 		if br == nil {
 			br = &roachpb.BatchResponse{}
 		}

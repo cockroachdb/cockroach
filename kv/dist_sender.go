@@ -128,7 +128,7 @@ var _ client.Sender = &DistSender{}
 
 // rpcSendFn is the function type used to dispatch RPC calls.
 type rpcSendFn func(SendOptions, string, []net.Addr,
-	func(addr net.Addr) proto.Message, func() proto.Message,
+	func(addr net.Addr) *roachpb.BatchRequest, func() *roachpb.BatchResponse,
 	*rpc.Context) (proto.Message, error)
 
 // DistSenderContext holds auxiliary objects that can be passed to
@@ -340,7 +340,7 @@ func (ds *DistSender) sendRPC(trace opentracing.Span, rangeID roachpb.RangeID, r
 	}
 	// getArgs clones the arguments on demand for all but the first replica.
 	firstArgs := true
-	getArgs := func(addr net.Addr) proto.Message {
+	getArgs := func(addr net.Addr) *roachpb.BatchRequest {
 		var a *roachpb.BatchRequest
 		// Use the supplied args proto if this is our first address.
 		if firstArgs {
@@ -363,7 +363,7 @@ func (ds *DistSender) sendRPC(trace opentracing.Span, rangeID roachpb.RangeID, r
 	// we must not use it any more; the rpc call might still return
 	// and just write to it at any time.
 	// args.CreateReply() should be cheaper than proto.Clone which use reflect.
-	getReply := func() proto.Message {
+	getReply := func() *roachpb.BatchResponse {
 		return &roachpb.BatchResponse{}
 	}
 
