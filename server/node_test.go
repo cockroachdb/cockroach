@@ -260,6 +260,23 @@ func TestNodeJoin(t *testing.T) {
 	}
 }
 
+// TestNodeJoinSelf verifies that an uninitialized node trying to join
+// itself will fail.
+func TestNodeJoinSelf(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	engineStopper := stop.NewStopper()
+	defer engineStopper.Stop()
+	engines := []engine.Engine{engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)}
+	addr := util.CreateTestAddr("tcp")
+	rpcServer, addr, _, node, stopper := createTestNode(addr, engines, addr, t)
+	defer stopper.Stop()
+	err := node.start(rpcServer, addr, engines, roachpb.Attributes{})
+	if err != errCannotJoinSelf {
+		t.Fatalf("expected err %s; got %s", errCannotJoinSelf, err)
+	}
+}
+
 // TestCorruptedClusterID verifies that a node fails to start when a
 // store's cluster ID is empty.
 func TestCorruptedClusterID(t *testing.T) {
