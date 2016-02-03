@@ -15,20 +15,24 @@ resource "aws_instance" "cockroach" {
 }
 
 resource "template_file" "supervisor" {
+  count = "${var.num_instances}"
   template = "${file("supervisor.conf.tpl")}"
   vars {
-    elb_address = "${aws_elb.elb.dns_name}:${var.cockroach_port}"
     stores = "${var.stores}"
+    # The value of the --join flag must be empty for the first node,
+    # and a running node for all others. We built a list of addresses
+    # shifted by one (first element is empty), then take the value at index "instance.index".
+    join_address = "${element(concat(split(",", ""), aws_instance.cockroach.*.private_ip), count.index)}"
+    # We need to provide one node address for the block writer.
+    node_address = "${aws_instance.cockroach.0.private_ip}"
   }
 }
 
-# We use a null_resource to break the dependency cycle
-# between aws_elb and aws_instance.
+# We use a null_resource to break the dependency cycle.
 # This can be rolled back into aws_instance when https://github.com/hashicorp/terraform/issues/3999
 # is addressed.
 resource "null_resource" "cockroach-runner" {
   count = "${var.num_instances}"
-  depends_on = [ "null_resource.cockroach-initializer" ]
   connection {
     user = "ubuntu"
     key_file = "~/.ssh/${var.key_name}.pem"
@@ -48,7 +52,7 @@ resource "null_resource" "cockroach-runner" {
   # use rendered templates in the file provisioner.
   provisioner "remote-exec" {
     inline = <<FILE
-echo '${template_file.supervisor.rendered}' > supervisor.conf
+echo '${element(template_file.supervisor.*.rendered, count.index)}' > supervisor.conf
 FILE
   }
 
@@ -61,30 +65,6 @@ FILE
       "mkdir -p logs",
       "if [ ! -e supervisor.pid ]; then supervisord -c supervisor.conf; fi",
       "supervisorctl -c supervisor.conf start cockroach",
-    ]
-  }
-}
-
-# The initializer is only run on the first instance and should be run only once.
-# WARNING: do not "taint" the cockroach-initializer.
-resource "null_resource" "cockroach-initializer" {
-  count = 1
-  connection {
-    user = "ubuntu"
-    key_file = "~/.ssh/${var.key_name}.pem"
-    host = "${aws_instance.cockroach.0.public_ip}"
-  }
-
-  provisioner "file" {
-    source = "download_binary.sh"
-    destination = "/home/ubuntu/download_binary.sh"
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "bash download_binary.sh cockroach/cockroach ${var.cockroach_sha}",
-      "mkdir -p logs",
-      "./cockroach init --logtostderr=true --stores=${element(split(",", "${var.stores}"), 0)}",
     ]
   }
 }

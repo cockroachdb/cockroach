@@ -39,7 +39,7 @@ resource "aws_instance" "example_block_writer" {
   # use rendered templates in the file provisioner.
   provisioner "remote-exec" {
     inline = <<FILE
-echo '${template_file.supervisor.rendered}' > supervisor.conf
+echo '${template_file.supervisor.0.rendered}' > supervisor.conf
 FILE
   }
 

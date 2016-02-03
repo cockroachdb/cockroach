@@ -42,12 +42,11 @@ To see the actions expected to be performed by terraform, use `plan` instead of 
 $ terraform apply --var=num_instances=3
 
 Outputs:
-  elb_address          = elb-1371418843.us-east-1.elb.amazonaws.com:26257
   example_block_writer =
   instances            = ec2-54-152-252-37.compute-1.amazonaws.com
 ```
 
-The cluster is now running with three nodes and is reachable through the `elb_address` (see `Using the cluster`).
+The cluster is now running with three nodes and is reachable through the any of the `instances` (see `Using the cluster`).
 
 To add more nodes, simply rerun the command with `--var=num_instances` set to a different number.
 
@@ -55,12 +54,11 @@ To add more nodes, simply rerun the command with `--var=num_instances` set to a 
 
 #### Connect to the cluster
 
-Use the load balancer address to connect to the cluster. You may need to wait a few minutes after
-ELB creation for its DNS name to be resolvable.
+Use any of the instances listed by terraform.
 
 ```
-$ ./cockroach sql --insecure --host=<hostname part of elb_address from terraform output>
-root@elb-1289187553.us-east-1.elb.amazonaws.com:26257> show databases;
+$ ./cockroach sql --insecure --host=<hostname of one instance from the terraform output>
+root@ec2-54-152-252-37.compute-1.amazonaws.com:26257> show databases;
 +----------+
 | Database |
 +----------+
@@ -76,7 +74,7 @@ The DNS names of AWS instances is shown as a comma-separated list in the terrafo
 $ ssh -i ~/.ssh/cockroach.pem ubuntu@ec2-54-85-12-159.compute-1.amazonaws.com
 
 ubuntu@ip-172-31-15-87:~$ ps -Af|grep cockroach
-ubuntu    1448     1  4 20:03 ?        00:00:39 ./cockroach start --log-dir=logs --logtostderr=false --stores=ssd=data --insecure --gossip=lb=elb-1289187553.us-east-1.elb.amazonaws.com:26257
+ubuntu    1448     1  4 20:03 ?        00:00:39 ./cockroach start --log-dir=logs --logtostderr=false --stores=ssd=data --insecure --join=ec2-54-152-252-37.compute-1.amazonaws.com
 
 ubuntu@ip-172-31-15-87:~$ ls logs
 cockroach.ERROR
@@ -106,7 +104,6 @@ The `block_writer` can be run against the newly-created cluster by running:
 $ terraform apply --var=num_instances=3 --var=example_block_writer_instances=1
 
 Outputs:
-  elb_address          = elb-1371418843.us-east-1.elb.amazonaws.com:26257
   example_block_writer = ec2-54-175-206-76.compute-1.amazonaws.com
   instances            = ec2-54-152-252-37.compute-1.amazonaws.com,ec2-54-175-103-126.compute-1.amazonaws.com,ec2-54-175-166-150.compute-1.amazonaws.com
 ```

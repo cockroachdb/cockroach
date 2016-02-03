@@ -39,23 +39,19 @@ type Farmer struct {
 	KeyName        string
 	Stores         string
 	nodes, writers []string
-	elb            string
 }
 
 func (f *Farmer) refresh() {
 	f.nodes = f.output("instances")
 	f.writers = f.output("example_block_writer")
-	if elbs := f.output("elb_address"); len(elbs) > 0 {
-		f.elb = elbs[0]
-	}
 }
 
-// LoadBalancer returns the load balancer address.
-func (f *Farmer) LoadBalancer() string {
-	if f.elb == "" {
+// FirstInstance returns the address of the first instance.
+func (f *Farmer) FirstInstance() string {
+	if len(f.nodes) == 0 {
 		f.refresh()
 	}
-	return f.elb
+	return f.nodes[0]
 }
 
 // Nodes returns a (copied) slice of provisioned nodes' host names.
@@ -195,14 +191,13 @@ func (f *Farmer) WaitReady(d time.Duration) error {
 	}
 	var err error
 	for r := retry.Start(rOpts); r.Next(); {
-		var elb string
-		elb, _, err = net.SplitHostPort(f.LoadBalancer())
-		if err != nil || elb == "" {
-			err = fmt.Errorf("ELB not found: %v", err)
+		instance := f.FirstInstance()
+		if err != nil || instance == "" {
+			err = fmt.Errorf("no nodes found: %v", err)
 			continue
 		}
 		for i := range f.Nodes() {
-			if err = f.Exec(i, "nslookup "+elb); err != nil {
+			if err = f.Exec(i, "nslookup "+instance); err != nil {
 				break
 			}
 		}

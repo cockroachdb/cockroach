@@ -1,5 +1,5 @@
 ; This is the cockroach supervisor config template.
-; It is first rendered by terraform, filling in elb_address.
+; It is first rendered by terraform, filling in stores, join_address, and node_address.
 
 [inet_http_server]
 port=*:9001
@@ -21,7 +21,7 @@ serverurl=http://127.0.0.1:9001 ; use an http:// url to specify an inet socket
 
 [program:cockroach]
 directory=%(here)s
-command=%(here)s/cockroach start --logtostderr=true --stores=${stores} --insecure --gossip=http-lb=${elb_address}
+command=%(here)s/cockroach start --logtostderr=true --stores=${stores} --insecure --join=${join_address}
 process_name=%(program_name)s
 numprocs=1
 autostart=false
@@ -34,7 +34,7 @@ stdout_logfile=%(here)s/logs/%(program_name)s.stdout
 
 [program:block_writer]
 directory=%(here)s
-command=%(here)s/block_writer --tolerate-errors http://${elb_address}
+command=%(here)s/block_writer --tolerate-errors http://${node_address}
 process_name=%(program_name)s
 numprocs=1
 autostart=false
