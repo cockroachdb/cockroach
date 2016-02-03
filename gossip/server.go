@@ -204,7 +204,9 @@ func (s *server) Gossip(serverStream Gossip_GossipServer) error {
 			return err
 		}
 
-		// args holds the remote peer state; we need to update it whenever we receive a new request.
+		// args holds the remote peer state; we need to update it whenever we receive a new non-nil
+		// request. We avoid assigning to args directly because the gossip sender worker above has
+		// closed over args and may NPE if args were set to nil.
 		args = recvArgs
 	}
 }
