@@ -65,10 +65,7 @@ func TestLogSplits(t *testing.T) {
 	}
 
 	// Generate an explicit split event.
-	kvDB, err := s.OpenDBClient(security.NodeUser)
-	if err != nil {
-		t.Fatal(err)
-	}
+	kvDB := s.DB()
 	if err := kvDB.AdminSplit("splitkey"); err != nil {
 		t.Fatal(err)
 	}

@@ -101,14 +101,8 @@ func setupWithContext(t *testing.T, ctx *server.Context) (*server.TestServer, *s
 	if err != nil {
 		t.Fatal(err)
 	}
-	// All KV requests need "node" certs.
-	kvDB, err := client.Open(s.Stopper(), fmt.Sprintf("rpcs://%s@%s?certs=%s",
-		security.NodeUser, s.ServingAddr(), security.EmbeddedCertsDir))
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	return s, sqlDB, kvDB
+	return s, sqlDB, s.DB()
 }
 
 func cleanupTestServer(s *server.TestServer) {

@@ -33,14 +33,7 @@ import (
 
 func setup() (*server.TestServer, *client.DB) {
 	s := server.StartTestServer(nil)
-	db, err := client.Open(s.Stopper(), fmt.Sprintf("rpcs://%s@%s?certs=%s",
-		security.NodeUser,
-		s.ServingAddr(),
-		security.EmbeddedCertsDir))
-	if err != nil {
-		log.Fatal(err)
-	}
-	return s, db
+	return s, s.DB()
 }
 
 func ExampleDB_Get() {
@@ -276,11 +269,7 @@ func ExampleDB_Put_insecure() {
 	}
 	defer s.Stop()
 
-	db, err := client.Open(s.Stopper(), "rpc://foo@"+s.ServingAddr())
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	db := s.DB()
 	if pErr := db.Put("aa", "1"); pErr != nil {
 		panic(pErr)
 	}

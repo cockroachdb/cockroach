@@ -17,7 +17,6 @@
 package server
 
 import (
-	"fmt"
 	"net"
 	"time"
 
@@ -239,27 +238,14 @@ func ExpectedInitialRangeCount() int {
 	return GetBootstrapSchema().DescriptorCount() - sql.NumSystemDescriptors + 1
 }
 
-// OpenDBClient opens a KVDB Client connecting to the server with the supplied
-// user.
-func (ts *TestServer) OpenDBClient(user string) (*client.DB, error) {
-	connString := fmt.Sprintf("%s://%s@%s?certs=%s",
-		ts.Ctx.RPCRequestScheme(), user, ts.ServingAddr(), ts.Ctx.Certs)
-	return client.Open(ts.Stopper(), connString)
-}
-
 // WaitForInitialSplits waits for the server to complete its expected initial
 // splits at startup. If the expected range count is not reached within a
 // configured timeout, an error is returned.
 func (ts *TestServer) WaitForInitialSplits() error {
-	kvDB, err := ts.OpenDBClient(security.NodeUser)
-	if err != nil {
-		return err
-	}
-
 	expectedRanges := ExpectedInitialRangeCount()
 	return util.RetryForDuration(initialSplitsTimeout, func() error {
 		// Scan all keys in the Meta2Prefix; we only need a count.
-		rows, pErr := kvDB.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+		rows, pErr := ts.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 		if pErr != nil {
 			return pErr.GoError()
 		}
