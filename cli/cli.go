@@ -49,7 +49,9 @@ Output build version information.
 }
 
 var cockroachCmd = &cobra.Command{
-	Use: "cockroach",
+	Use: "cockroach [command] (flags)",
+	// TODO(cdo): Add a pointer to the docs in Long.
+	Long: `CockroachDB command-line interface and server.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		context.Addr = util.EnsureHostPort(context.Addr)
 	},
@@ -73,6 +75,7 @@ func init() {
 
 		// Miscellaneous commands.
 		// TODO(pmattis): stats
+		genCmd,
 		versionCmd,
 		debugCmd,
 	)

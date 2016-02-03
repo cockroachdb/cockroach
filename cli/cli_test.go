@@ -650,7 +650,9 @@ func TestFlagUsage(t *testing.T) {
 		final = append(final, l)
 	}
 	got := strings.Join(final, "\n")
-	expected := `Usage:
+	expected := `CockroachDB command-line interface and server.
+
+Usage:
   cockroach [command]
 
 Available Commands:
@@ -668,6 +670,7 @@ Available Commands:
   zone        get, set, list and remove zones
   node        list nodes and show their status
 
+  gen         generate manpages and bash completion file
   version     output version information
   debug       debugging commands
 
@@ -865,4 +868,84 @@ func extractFields(line string) ([]string, error) {
 		r = append(r, strings.TrimSpace(f))
 	}
 	return r, nil
+}
+
+func TestGenMan(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	// Generate man pages in a temp directory.
+	manpath, err := ioutil.TempDir("", "TestGenMan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err = os.RemoveAll(manpath); err != nil {
+			t.Errorf("couldn't remove temporary directory %s", manpath)
+		}
+	}()
+	if err = Run([]string{"gen", "man", "--path=" + manpath}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure we have a sane number of man pages.
+	count := 0
+	err = filepath.Walk(manpath, func(path string, info os.FileInfo, err error) error {
+		if strings.HasSuffix(path, ".1") && !info.IsDir() {
+			count++
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if min := 20; count < min {
+		t.Errorf("number of man pages (%d) < minimum (%d)", count, min)
+	}
+}
+
+func TestGenAutocomplete(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	// Get a unique path to which we can write our autocomplete files.
+	acfile, err := ioutil.TempFile("", "TestGenAutocomplete")
+	if err != nil {
+		t.Fatal(err)
+	}
+	acpath := acfile.Name()
+	defer func() {
+		_ = os.Remove(acpath)
+	}()
+	if err = acfile.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	const minsize = 25000
+
+	if err = os.Remove(acpath); err != nil {
+		t.Fatal(err)
+	}
+	if err = Run([]string{"gen", "autocomplete", "--out=" + acpath}); err != nil {
+		t.Fatal(err)
+	}
+	s, err := os.Stat(acpath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Size() < minsize {
+		t.Fatalf("autocomplete file size (%d) < minimum (%d)", s.Size(), minsize)
+	}
+
+	if err = os.Remove(acpath); err != nil {
+		t.Fatal(err)
+	}
+	if err = Run([]string{"gen", "autocomplete", "--out=" + acpath, "--type=bash-mac"}); err != nil {
+		t.Fatal(err)
+	}
+	s, err = os.Stat(acpath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Size() < minsize {
+		t.Fatalf("autocomplete file size (%d) < minimum (%d)", s.Size(), minsize)
+	}
 }
