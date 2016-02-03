@@ -23,11 +23,9 @@ import (
 	"testing"
 )
 
-// TestPHP connects to a cluster with PHP.
-func TestPHP(t *testing.T) {
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/3826")
-	testDockerSuccess(t, "php", []string{"-r", strings.Replace(php, "%v", "3", 1)})
-	testDockerFail(t, "php", []string{"-r", strings.Replace(php, "%v", `"a"`, 1)})
+func TestDockerPHP(t *testing.T) {
+	testDockerSuccess(t, []string{"php", "-r", strings.Replace(php, "%v", "3", 1)})
+	testDockerFail(t, []string{"php", "-r", strings.Replace(php, "%v", `"a"`, 1)})
 }
 
 const php = `

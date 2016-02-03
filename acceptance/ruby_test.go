@@ -23,11 +23,10 @@ import (
 	"testing"
 )
 
-// TestRuby connects to a cluster with ruby.
-func TestRuby(t *testing.T) {
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/3826")
-	testDockerSuccess(t, "ruby", []string{"ruby", "-e", strings.Replace(ruby, "%v", "3", 1)})
-	testDockerFail(t, "ruby", []string{"ruby", "-e", strings.Replace(ruby, "%v", `"a"`, 1)})
+func TestDockerRuby(t *testing.T) {
+	t.Skip("times out")
+	testDockerSuccess(t, []string{"ruby", "-e", strings.Replace(ruby, "%v", "3", 1)})
+	testDockerFail(t, []string{"ruby", "-e", strings.Replace(ruby, "%v", `"a"`, 1)})
 }
 
 const ruby = `
