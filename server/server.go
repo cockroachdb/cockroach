@@ -222,6 +222,8 @@ func (s *Server) Start() error {
 	addr := ln.Addr()
 
 	s.rpcContext.SetLocalServer(s.rpc, addr.String())
+	s.rpc.SetDisabled(true)
+	s.mux.Handle(rpc.DefaultRPCPath, s.rpc)
 
 	s.gossip.Start(s.rpc, addr)
 
@@ -256,7 +258,7 @@ func (s *Server) Start() error {
 
 // initHTTP registers http prefixes.
 func (s *Server) initHTTP() {
-	s.mux.Handle(rpc.DefaultRPCPath, s.rpc)
+	s.rpc.SetDisabled(false)
 
 	s.mux.Handle("/", http.FileServer(
 		&assetfs.AssetFS{Asset: ui.Asset, AssetDir: ui.AssetDir, AssetInfo: ui.AssetInfo}))

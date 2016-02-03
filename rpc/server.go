@@ -32,6 +32,7 @@ import (
 )
 
 type method struct {
+	name    string
 	handler func(proto.Message, func(proto.Message, error))
 	reqType reflect.Type
 	public  bool
@@ -59,6 +60,7 @@ type Server struct {
 	insecure bool
 
 	mu             sync.RWMutex
+	disabled       bool
 	activeConns    map[net.Conn]struct{}
 	openCallbacks  []func(conn net.Conn)
 	closeCallbacks []func(conn net.Conn)
@@ -85,6 +87,20 @@ func NewManualServer(context *Context) *Server {
 		activeConns: make(map[net.Conn]struct{}),
 		methods:     map[string]method{},
 	}
+}
+
+// SetDisabled sets the disabled bit. A disabled RPC server will
+// disallow any RPC messages with an appropriate error.
+func (s *Server) SetDisabled(disabled bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.disabled = disabled
+}
+
+func (s *Server) isDisabled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.disabled
 }
 
 // Register a new method handler. `name` is a qualified name of the
@@ -132,6 +148,7 @@ func (s *Server) RegisterAsync(name string, public bool,
 		return util.Errorf("request type not a pointer")
 	}
 	s.methods[name] = method{
+		name:    name,
 		handler: handler,
 		reqType: reqType,
 		public:  public,
@@ -211,12 +228,16 @@ var _ http.Handler = &Server{}
 
 // ServeHTTP implements an http.Handler that answers RPC requests.
 func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// If RPC server is disabled, return 503 http response code.
+	if s.isDisabled() {
+		http.Error(w, "rpc server disabled", http.StatusServiceUnavailable)
+		return
+	}
 	// Note: this code was adapted from net/rpc.Server.ServeHTTP.
 	if req.Method != "CONNECT" {
 		http.Error(w, "405 must CONNECT", http.StatusMethodNotAllowed)
 		return
 	}
-
 	// Construct an authentication hook for this security mode and TLS state.
 	authHook, err := security.ProtoAuthHook(s.insecure, req.TLS)
 	if err != nil {
