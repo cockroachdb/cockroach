@@ -25,13 +25,6 @@ import (
 	"gopkg.in/inf.v0"
 )
 
-// Precision defines the minimum precision all inexact decimal
-// calculations should attempt to achieve.
-const Precision = 16
-
-// Read-only constants used for compuation.
-var decimalHalf = inf.NewDec(5, 1)
-
 // NewDecFromFloat allocates and returns a new Dec set to the given
 // float64 value. The function will panic if the float is NaN or ±Inf.
 func NewDecFromFloat(f float64) *inf.Dec {
@@ -146,20 +139,105 @@ func Sqrt(z, x *inf.Dec, s inf.Scale) *inf.Dec {
 	// Use half as the initial estimate.
 	z.Mul(x, decimalHalf)
 
-	// Determine the maximum number of iterations needed.
-	scale := len(x.UnscaledBig().String())
-	if x.Scale() < 0 {
-		scale -= int(x.Scale())
-	}
-	steps := scale + int(s)
-
 	// Iterate.
 	tmp := new(inf.Dec)
-	for i := 0; i <= steps; i++ {
-		tmp.QuoRound(x, z, s, inf.RoundHalfUp) // t = d / x_n
-		tmp.Add(tmp, z)                        // t = x_n + (d / x_n)
-		z.Mul(tmp, decimalHalf)                // x_{n+1} = 0.5 * t
+	for loop := newLoop("sqrt", z, s, 1); ; {
+		tmp.QuoRound(x, z, s+2, inf.RoundHalfUp) // t = d / x_n
+		tmp.Add(tmp, z)                          // t = x_n + (d / x_n)
+		z.Mul(tmp, decimalHalf)                  // x_{n+1} = 0.5 * t
+		if loop.done(z) {
+			break
+		}
 	}
+
+	// Round to the desired scale.
+	return z.Round(z, s, inf.RoundHalfUp)
+}
+
+// LogN computes the log of x with base n to the specified scale and
+// stores the result in z, which is also the return value. The function
+// will panic if x is a negative number or if n is a negative number.
+func LogN(z *inf.Dec, x *inf.Dec, n *inf.Dec, s inf.Scale) *inf.Dec {
+	if z == n {
+		n = new(inf.Dec).Set(n)
+	}
+	z = Log(z, x, s+1)
+	return z.QuoRound(z, Log(nil, n, s+1), s, inf.RoundHalfUp)
+}
+
+// Log10 computes the log of x with base 10 to the specified scale and
+// stores the result in z, which is also the return value. The function
+// will panic if x is a negative number.
+func Log10(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
+	z = Log(z, x, s)
+	return z.QuoRound(z, decimalLog10, s, inf.RoundHalfUp)
+}
+
+// Log computes the natural log of x using the Maclaurin series for
+// log(1-x) to the specified scale and stores the result in z, which
+// is also the return value. The function will panic if x is a negative
+// number.
+func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
+	// Validate the sign of x.
+	if x.Sign() <= 0 {
+		panic(fmt.Sprintf("natural log of non-positive value: %s", x))
+	}
+
+	// Allocate if needed and make sure args aren't mutated.
+	x = new(inf.Dec).Set(x)
+	if z == nil {
+		z = new(inf.Dec)
+	} else {
+		z.SetUnscaled(0).SetScale(0)
+	}
+
+	// The series wants x < 1, and log 1/x == -log x, so exploit that.
+	invert := false
+	if x.Cmp(decimalOne) > 0 {
+		invert = true
+		x.QuoRound(decimalOne, x, s*2, inf.RoundHalfUp)
+	}
+
+	// x = mantissa * 2**exp, and 0.5 <= mantissa < 1.
+	// So log(x) is log(mantissa)+exp*log(2), and 1-x will be
+	// between 0 and 0.5, so the series for 1-x will converge well.
+	// (The series converges slowly in general.)
+	exp2 := int64(0)
+	for x.Cmp(decimalHalf) < 0 {
+		x.Mul(x, decimalTwo)
+		exp2--
+	}
+	exp := inf.NewDec(exp2, 0)
+	exp.Mul(exp, decimalLog2)
+	if invert {
+		exp.Neg(exp)
+	}
+
+	// y = 1-x (whereupon x = 1-y and we use that in the series).
+	y := inf.NewDec(1, 0)
+	y.Sub(y, x)
+
+	// The Maclaurin series for log(1-y) == log(x) is: -y - y²/2 - y³/3 ...
+	yN := new(inf.Dec).Set(y)
+	term := new(inf.Dec)
+	n := inf.NewDec(1, 0)
+
+	// Loop over the Maclaurin series given above until convergence.
+	for loop := newLoop("log", x, s, 40); ; {
+		n.SetUnscaled(int64(loop.i + 1))
+		term.QuoRound(yN, n, s+2, inf.RoundHalfUp)
+		z.Sub(z, term)
+		if loop.done(z) {
+			break
+		}
+		// Advance y**index (multiply by y).
+		yN.Mul(yN, y)
+	}
+
+	if invert {
+		z.Neg(z)
+	}
+	z.Add(z, exp)
 
 	// Round to the desired scale.
 	return z.Round(z, s, inf.RoundHalfUp)
