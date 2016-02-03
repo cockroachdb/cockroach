@@ -59,6 +59,45 @@ func newServer(stopper *stop.Stopper) *server {
 	return s
 }
 
+func (s *server) gossipSender(args **Request, senderFn func(*Response) error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	reply := new(Response)
+
+	for {
+		if !s.stopper.RunTask(func() {
+			delta := s.is.delta((*args).Nodes)
+			if infoCount := len(delta); infoCount > 0 {
+				if log.V(1) {
+					log.Infof("node %d returned %d info(s) to node %d", s.is.NodeID, infoCount, (*args).NodeID)
+				}
+
+				*reply = Response{
+					NodeID: s.is.NodeID,
+					Nodes:  s.is.getNodes(),
+					Delta:  delta,
+				}
+
+				s.mu.Unlock()
+				err := senderFn(reply)
+				s.mu.Lock()
+				if err != nil {
+					if !grpcutil.IsClosedConnection(err) {
+						log.Error(err)
+					}
+					return
+				}
+				s.sent += infoCount
+			}
+		}) {
+			return
+		}
+
+		s.ready.Wait()
+	}
+}
+
 // Gossip receives gossiped information from a peer node.
 // The received delta is combined with the infostore, and this
 // node's own gossip is returned to requesting client.
@@ -78,44 +117,8 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		return util.Errorf("duplicate connection from node at %s", args.Addr)
 	}
 
-	// This worker sends new gossip from the server to the client. It is triggered by s.ready.
 	s.stopper.RunWorker(func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-
-		reply := new(Response)
-
-		for {
-			if !s.stopper.RunTask(func() {
-				delta := s.is.delta(args.Nodes)
-				if infoCount := len(delta); infoCount > 0 {
-					if log.V(1) {
-						log.Infof("node %d returned %d info(s) to node %d", s.is.NodeID, infoCount, args.NodeID)
-					}
-
-					*reply = Response{
-						NodeID: s.is.NodeID,
-						Nodes:  s.is.getNodes(),
-						Delta:  delta,
-					}
-
-					s.mu.Unlock()
-					err := stream.Send(reply)
-					s.mu.Lock()
-					if err != nil {
-						if !grpcutil.IsClosedConnection(err) {
-							log.Error(err)
-						}
-						return
-					}
-					s.sent += infoCount
-				}
-			}) {
-				return
-			}
-
-			s.ready.Wait()
-		}
+		s.gossipSender(&args, stream.Send)
 	})
 
 	reply := new(Response)
