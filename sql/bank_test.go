@@ -34,21 +34,17 @@ var numAccounts = flag.Int("num-accounts", 999, "Number of accounts.")
 // structured as a benchmark for easier usage of the Go performance analysis
 // tools like pprof, memprof and trace.
 func runBenchmarkBank(b *testing.B, db *sql.DB) {
-	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS bank`); err != nil {
-		b.Fatal(err)
-	}
-
 	{
-		// Initialize the "accounts" table.
+		// Initialize the "bank" table.
 		schema := `
-CREATE TABLE IF NOT EXISTS bank.accounts (
+CREATE TABLE IF NOT EXISTS bench.bank (
   id INT PRIMARY KEY,
   balance INT NOT NULL
 )`
 		if _, err := db.Exec(schema); err != nil {
 			b.Fatal(err)
 		}
-		if _, err := db.Exec("TRUNCATE TABLE bank.accounts"); err != nil {
+		if _, err := db.Exec("TRUNCATE TABLE bench.bank"); err != nil {
 			b.Fatal(err)
 		}
 
@@ -61,7 +57,7 @@ CREATE TABLE IF NOT EXISTS bank.accounts (
 			fmt.Fprintf(&placeholders, "($%d, 0)", i+1)
 			values = append(values, i)
 		}
-		stmt := `INSERT INTO bank.accounts (id, balance) VALUES ` + placeholders.String()
+		stmt := `INSERT INTO bench.bank (id, balance) VALUES ` + placeholders.String()
 		if _, err := db.Exec(stmt, values...); err != nil {
 			b.Fatal(err)
 		}
@@ -78,12 +74,14 @@ CREATE TABLE IF NOT EXISTS bank.accounts (
 
 			amount := rand.Intn(*maxTransfer)
 
-			update := `
-UPDATE bank.accounts
-  SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
-  WHERE id IN ($1, $2) AND (SELECT balance >= $3 FROM bank.accounts WHERE id = $1)
-`
-			if _, err := db.Exec(update, from, to, amount); err != nil {
+			// TODO(mjibson): We can't use query parameters with this query because
+			// it fails type checking on the CASE expression.
+			update := fmt.Sprintf(`
+UPDATE bench.bank
+  SET balance = CASE id WHEN %[1]d THEN balance-%[3]d WHEN %[2]d THEN balance+%[3]d END
+  WHERE id IN (%[1]d, %[2]d) AND (SELECT balance >= %[3]d FROM bench.bank WHERE id = %[1]d)
+`, from, to, amount)
+			if _, err := db.Exec(update); err != nil {
 				if log.V(1) {
 					log.Warning(err)
 				}
@@ -94,6 +92,10 @@ UPDATE bank.accounts
 	b.StopTimer()
 }
 
-func BenchmarkBank(b *testing.B) {
+func BenchmarkBank_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkBank)
+}
+
+func BenchmarkBank_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkBank)
 }
