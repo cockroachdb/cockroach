@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -66,7 +67,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	if err != nil {
 		t.Fatal(err)
 	}
-	ln, err := util.ListenAndServe(stopper, util.GRPCHandlerFunc(grpcServer, rpcServer), addr, tlsConfig)
+	ln, err := util.ListenAndServe(stopper, grpcutil.GRPCHandlerFunc(grpcServer, rpcServer), addr, tlsConfig)
 	if err != nil {
 		t.Fatal(err)
 	}

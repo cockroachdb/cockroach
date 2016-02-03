@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -45,7 +46,7 @@ func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T) *Go
 	if err != nil {
 		t.Fatal(err)
 	}
-	ln, err := util.ListenAndServeGRPC(stopper, server, addr, tlsConfig)
+	ln, err := grpcutil.ListenAndServeGRPC(stopper, server, addr, tlsConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +111,7 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 	if err != nil {
 		t.Fatal(err)
 	}
-	lln, err := util.ListenAndServeGRPC(stopper, lserver, laddr, lTLSConfig)
+	lln, err := grpcutil.ListenAndServeGRPC(stopper, lserver, laddr, lTLSConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +127,7 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 	if err != nil {
 		t.Fatal(err)
 	}
-	rln, err := util.ListenAndServeGRPC(stopper, rserver, raddr, rTLSConfig)
+	rln, err := grpcutil.ListenAndServeGRPC(stopper, rserver, raddr, rTLSConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +333,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ln, err := util.ListenAndServeGRPC(stopper, server, addr, TLSConfig)
+		ln, err := grpcutil.ListenAndServeGRPC(stopper, server, addr, TLSConfig)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/ui"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -262,7 +263,7 @@ func (s *Server) Start() error {
 func (s *Server) initHTTP() {
 	s.mux.Handle(rpc.DefaultRPCPath, s.rpc)
 
-	s.mux.Handle("/", util.GRPCHandlerFunc(s.grpc, http.FileServer(
+	s.mux.Handle("/", grpcutil.GRPCHandlerFunc(s.grpc, http.FileServer(
 		&assetfs.AssetFS{
 			Asset:     ui.Asset,
 			AssetDir:  ui.AssetDir,

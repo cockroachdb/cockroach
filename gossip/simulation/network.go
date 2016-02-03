@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -92,7 +93,7 @@ func NewNetwork(nodeCount int) *Network {
 func (n *Network) CreateNode() (*Node, error) {
 	server := grpc.NewServer()
 	testAddr := util.CreateTestAddr("tcp")
-	ln, err := util.ListenAndServeGRPC(n.Stopper, server, testAddr, n.tlsConfig)
+	ln, err := grpcutil.ListenAndServeGRPC(n.Stopper, server, testAddr, n.tlsConfig)
 	if err != nil {
 		return nil, err
 	}
