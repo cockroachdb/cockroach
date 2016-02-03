@@ -115,14 +115,14 @@ func (c *client) close() {
 // timestamps and min hops.
 func (c *client) requestGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_GossipClient) error {
 	g.mu.Lock()
-	reply := &Request{
+	args := &Request{
 		NodeID: g.is.NodeID,
 		Addr:   addr,
 		Nodes:  g.is.getNodes(),
 	}
 	g.mu.Unlock()
 
-	return stream.Send(reply)
+	return stream.Send(args)
 }
 
 // sendGossip sends the latest gossip to the remote server, based on
@@ -130,7 +130,7 @@ func (c *client) requestGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossi
 // and min hops.
 func (c *client) sendGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_GossipClient) error {
 	g.mu.Lock()
-	reply := &Request{
+	args := &Request{
 		NodeID: g.is.NodeID,
 		Addr:   addr,
 		Delta:  g.is.delta(c.remoteNodes),
@@ -138,11 +138,11 @@ func (c *client) sendGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_G
 	}
 	g.mu.Unlock()
 
-	if len(reply.Delta) == 0 {
+	if len(args.Delta) == 0 {
 		return nil
 	}
 
-	return stream.Send(reply)
+	return stream.Send(args)
 }
 
 // handleResponse handles errors, remote forwarding, and combines delta
