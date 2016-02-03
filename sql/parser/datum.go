@@ -38,7 +38,7 @@ var (
 	// DummyFloat is a placeholder DFloat value.
 	DummyFloat Datum = DFloat(0)
 	// DummyDecimal is a placeholder DDecimal value.
-	DummyDecimal Datum = DDecimal{}
+	DummyDecimal Datum = &DDecimal{}
 	// DummyString is a placeholder DString value.
 	DummyString Datum = DString("")
 	// DummyBytes is a placeholder DBytes value.
@@ -69,6 +69,12 @@ var (
 )
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
+//
+// TODO(nvanbenschoten) It might be worth it in the future to make all
+// Datum implementations receive on pointer types to provide more control
+// over memory allocations when packaging and unpackaging concrete types
+// to and from their Datum interface. This would allow us to make
+// optimizations in terms of shared buffer preallocations.
 type Datum interface {
 	Expr
 	Type() string
@@ -338,23 +344,23 @@ type DDecimal struct {
 }
 
 // Type implements the Datum interface.
-func (d DDecimal) Type() string {
+func (d *DDecimal) Type() string {
 	return "decimal"
 }
 
 // TypeEqual implements the Datum interface.
-func (d DDecimal) TypeEqual(other Datum) bool {
-	_, ok := other.(DDecimal)
+func (d *DDecimal) TypeEqual(other Datum) bool {
+	_, ok := other.(*DDecimal)
 	return ok
 }
 
 // Compare implements the Datum interface.
-func (d DDecimal) Compare(other Datum) int {
+func (d *DDecimal) Compare(other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(DDecimal)
+	v, ok := other.(*DDecimal)
 	if !ok {
 		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
@@ -362,36 +368,36 @@ func (d DDecimal) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d DDecimal) HasPrev() bool {
+func (d *DDecimal) HasPrev() bool {
 	return false
 }
 
 // Prev implements the Datum interface.
-func (d DDecimal) Prev() Datum {
+func (d *DDecimal) Prev() Datum {
 	panic(d.Type() + ".Prev() not supported")
 }
 
 // HasNext implements the Datum interface.
-func (d DDecimal) HasNext() bool {
+func (d *DDecimal) HasNext() bool {
 	return false
 }
 
 // Next implements the Datum interface.
-func (d DDecimal) Next() Datum {
+func (d *DDecimal) Next() Datum {
 	panic(d.Type() + ".Next() not supported")
 }
 
 // IsMax implements the Datum interface.
-func (d DDecimal) IsMax() bool {
+func (d *DDecimal) IsMax() bool {
 	return false
 }
 
 // IsMin implements the Datum interface.
-func (d DDecimal) IsMin() bool {
+func (d *DDecimal) IsMin() bool {
 	return false
 }
 
-func (d DDecimal) String() string {
+func (d *DDecimal) String() string {
 	return d.Dec.String()
 }
 
