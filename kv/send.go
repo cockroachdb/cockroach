@@ -92,8 +92,8 @@ func (r rpcError) CanRetry() bool { return true }
 // function. On success, Send returns the first successful reply. Otherwise,
 // Send returns an error if and as soon as the number of failed RPCs exceeds
 // the available endpoints less the number of required replies.
-func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr net.Addr) proto.Message,
-	getReply func() proto.Message, context *rpc.Context) (proto.Message, error) {
+func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest,
+	getReply func() *roachpb.BatchResponse, context *rpc.Context) (proto.Message, error) {
 	sp := opts.Trace
 	if sp == nil {
 		sp = tracing.NilSpan()
@@ -223,7 +223,7 @@ var sendOneFn = sendOne
 // Do not call directly, but instead use sendOneFn. Tests mock out this method
 // via sendOneFn in order to test various error cases.
 func sendOne(client *rpc.Client, timeout time.Duration, method string,
-	getArgs func(addr net.Addr) proto.Message, getReply func() proto.Message,
+	getArgs func(addr net.Addr) *roachpb.BatchRequest, getReply func() *roachpb.BatchResponse,
 	context *rpc.Context, trace opentracing.Span, done chan *netrpc.Call) {
 
 	addr := client.RemoteAddr()
