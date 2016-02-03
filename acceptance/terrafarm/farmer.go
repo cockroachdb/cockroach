@@ -173,6 +173,11 @@ func (f *Farmer) ConnString(i int) string {
 		"?certs=" + "certswhocares"
 }
 
+// PGUrl returns a URL string for the given node postgres server.
+func (f *Farmer) PGUrl(i int) string {
+	panic("unimplemented")
+}
+
 // PGAddr returns the Postgres address for the given node.
 func (f *Farmer) PGAddr(i int) *net.TCPAddr {
 	panic("unimplemented")
