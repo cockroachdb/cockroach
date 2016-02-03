@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -747,6 +748,7 @@ func setupClientBenchData(useSSL bool, numVersions, numKeys int, b *testing.B) (
 // keys over all of the data, restarting at the beginning of the
 // keyspace, as many times as necessary.
 func runClientScan(useSSL bool, numRows, numVersions int, b *testing.B) {
+	defer tracing.Disable()()
 	const numKeys = 100000
 
 	s, db := setupClientBenchData(useSSL, numVersions, numKeys, b)

@@ -30,9 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *sql.DB)) {
+	defer tracing.Disable()()
 	s := server.StartTestServer(b)
 	defer s.Stop()
 
@@ -121,6 +123,7 @@ func runBenchmarkSelect1(b *testing.B, db *sql.DB) {
 // the overhead of parsing and other non-table processing (e.g. reading
 // requests, writing responses).
 func benchmarkSelect1(b *testing.B, scheme string) {
+	defer tracing.Disable()()
 	s := &server.TestServer{}
 	s.Ctx = server.NewTestContext()
 	s.Ctx.Insecure = (scheme == "http" || scheme == "rpc")

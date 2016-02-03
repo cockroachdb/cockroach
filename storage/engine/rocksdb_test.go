@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 const testCacheSize = 1 << 30 // 1 GB
@@ -157,6 +158,7 @@ func setupMVCCData(numVersions, numKeys, valueBytes int, b *testing.B) (*RocksDB
 // keys over all of the data in the rocksdb instance, restarting at
 // the beginning of the keyspace, as many times as necessary.
 func runMVCCScan(numRows, numVersions, valueSize int, b *testing.B) {
+	defer tracing.Disable()()
 	// Use the same number of keys for all of the mvcc scan
 	// benchmarks. Using a different number of keys per test gives
 	// preferential treatment to tests with fewer keys. Note that the
@@ -303,6 +305,7 @@ func BenchmarkMVCCScan100Versions1000Rows512Bytes(b *testing.B) {
 // runMVCCGet first creates test data (and resets the benchmarking
 // timer). It then performs b.N MVCCGets.
 func runMVCCGet(numVersions, valueSize int, b *testing.B) {
+	defer tracing.Disable()()
 	const overhead = 48          // Per key/value overhead (empirically determined)
 	const targetSize = 512 << 20 // 512 MB
 	// Adjust the number of keys so that each test has approximately the same
@@ -349,6 +352,7 @@ func BenchmarkMVCCGet100Versions8Bytes(b *testing.B) {
 }
 
 func runMVCCPut(valueSize int, b *testing.B) {
+	defer tracing.Disable()()
 	rng, _ := randutil.NewPseudoRand()
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
@@ -388,6 +392,7 @@ func BenchmarkMVCCPut10000(b *testing.B) {
 }
 
 func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
+	defer tracing.Disable()()
 	rng, _ := randutil.NewPseudoRand()
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
@@ -443,6 +448,7 @@ func BenchmarkMVCCBatch100000Put10(b *testing.B) {
 
 // runMVCCMerge merges value into numKeys separate keys.
 func runMVCCMerge(value *roachpb.Value, numKeys int, b *testing.B) {
+	defer tracing.Disable()()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	rocksdb := NewInMem(roachpb.Attributes{}, testCacheSize, stopper)
@@ -498,6 +504,7 @@ func BenchmarkMVCCMergeTimeSeries(b *testing.B) {
 }
 
 func runMVCCDeleteRange(valueBytes int, b *testing.B) {
+	defer tracing.Disable()()
 	// 512 KB ranges so the benchmark doesn't take forever
 	const rangeBytes = 512 * 1024
 	const overhead = 48 // Per key/value overhead (empirically determined)
@@ -549,6 +556,7 @@ func BenchmarkMVCCDeleteRange1Version256Bytes(b *testing.B) {
 
 // runMVCCComputeStats benchmarks computing MVCC stats on a 64MB range of data.
 func runMVCCComputeStats(valueBytes int, b *testing.B) {
+	defer tracing.Disable()()
 	const rangeBytes = 64 * 1024 * 1024
 	const overhead = 48 // Per key/value overhead (empirically determined)
 	numKeys := rangeBytes / (overhead + valueBytes)
