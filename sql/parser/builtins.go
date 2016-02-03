@@ -44,10 +44,14 @@ import (
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
-var errEmptyInputString = errors.New("the input string must not be empty")
-var errAbsOfMinInt64 = errors.New("abs of min integer value (-9223372036854775808) not defined")
-var errRoundNumberDigits = errors.New("number of digits must be greater than 0")
-var errSqrtOfNegNumber = errors.New("cannot take square root of a negative number")
+var (
+	errEmptyInputString  = errors.New("the input string must not be empty")
+	errAbsOfMinInt64     = errors.New("abs of min integer value (-9223372036854775808) not defined")
+	errRoundNumberDigits = errors.New("number of digits must be greater than 0")
+	errSqrtOfNegNumber   = errors.New("cannot take square root of a negative number")
+	errLogOfNegNumber    = errors.New("cannot take logarithm of a negative number")
+	errLogOfZero         = errors.New("cannot take logarithm of zero")
+)
 
 type argTypes []reflect.Type
 
@@ -787,15 +791,39 @@ var builtins = map[string][]builtin{
 		}),
 	},
 
-	// TODO(nvanbenschoten) Add native support for decimal.
-	"ln": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
-		return DFloat(math.Log(x)), nil
-	}),
+	"ln": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Log(x)), nil
+		}),
+		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+			switch x.Sign() {
+			case -1:
+				return nil, errLogOfNegNumber
+			case 0:
+				return nil, errLogOfZero
+			}
+			dd := DDecimal{}
+			decimal.Log(&dd.Dec, x, decimal.Precision)
+			return dd, nil
+		}),
+	},
 
-	// TODO(nvanbenschoten) Add native support for decimal.
-	"log": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
-		return DFloat(math.Log10(x)), nil
-	}),
+	"log": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Log10(x)), nil
+		}),
+		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+			switch x.Sign() {
+			case -1:
+				return nil, errLogOfNegNumber
+			case 0:
+				return nil, errLogOfZero
+			}
+			dd := DDecimal{}
+			decimal.Log10(&dd.Dec, x, decimal.Precision)
+			return dd, nil
+		}),
+	},
 
 	"mod": {
 		floatBuiltin2(func(x, y float64) (Datum, error) {
