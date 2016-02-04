@@ -10,8 +10,9 @@ For multi-user cooperation, please see [Terraform's documentation on remote stat
 ## One-time setup steps
 1. Have an [AWS](http://aws.amazon.com/) account
 2. [Download terraform](https://terraform.io/downloads.html), *version 0.6.7 or greater*, unzip, and add to your `PATH`.
-3. [Valid AWS credentials file](http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-set-up.html#cli-signup).
-4. [Create an AWS keypair](https://console.aws.amazon.com/ec2/v2/home?region=us-east-1#KeyPairs:sort=keyName) named `cockroach` and save the file as `~/.ssh/cockroach.pem`. If sharing an account with other users, you may want to customize the key name (eg: key_name:`cockroach-<myusername>`, key path:`~/.ssh/cockroach-<myusername>.pem`) and modify the variable as mentioned in the next section.
+3. [Create and download AWS credentials](http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-set-up.html#cli-signup).
+4. [Save credentials in ~/.aws/credentials](http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html#cli-config-files).
+5. [Create an AWS keypair](https://console.aws.amazon.com/ec2/v2/home?region=us-east-1#KeyPairs:sort=keyName) named `cockroach` and save the file as `~/.ssh/cockroach.pem`. If sharing an account with other users, you may want to customize the key name (eg: key_name:`cockroach-<myusername>`, key path:`~/.ssh/cockroach-<myusername>.pem`) and modify the variable as mentioned in the next section.
 
 ## Variables
 
