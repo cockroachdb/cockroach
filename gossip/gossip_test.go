@@ -130,7 +130,7 @@ func TestGossipCullNetwork(t *testing.T) {
 	local.mu.Lock()
 	for _, p := range peers {
 		pAddr := p.is.NodeAddr
-		local.startClient(pAddr, stopper)
+		local.startClient(&pAddr, stopper)
 	}
 	local.mu.Unlock()
 	local.manage()

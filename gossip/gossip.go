@@ -507,7 +507,7 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID roachpb.NodeID) (net.Addr, error)
 	if err != nil {
 		return nil, err
 	}
-	return nd.Address, nil
+	return &nd.Address, nil
 }
 
 // AddInfo adds or updates an info object. Returns an error if info

@@ -141,7 +141,7 @@ func TestClientGossip(t *testing.T) {
 	local := startGossip(1, stopper, t)
 	remote := startGossip(2, stopper, t)
 	disconnected := make(chan *client, 1)
-	client := newClient(remote.is.NodeAddr)
+	client := newClient(&remote.is.NodeAddr)
 
 	defer func() {
 		stopper.Stop()
@@ -185,7 +185,7 @@ func TestClientNodeID(t *testing.T) {
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
 
 	// Start a gossip client.
-	c := newClient(remote.nodeAddr)
+	c := newClient(&remote.nodeAddr)
 	defer func() {
 		stopper.Stop()
 		if c != <-disconnected {
@@ -229,7 +229,7 @@ func TestClientDisconnectLoopback(t *testing.T) {
 	// startClient requires locks are held, so acquire here.
 	local.mu.Lock()
 	lAddr := local.is.NodeAddr
-	local.startClient(lAddr, stopper)
+	local.startClient(&lAddr, stopper)
 	local.mu.Unlock()
 	local.manage()
 	util.SucceedsWithin(t, 10*time.Second, func() error {
@@ -256,8 +256,8 @@ func TestClientDisconnectRedundant(t *testing.T) {
 
 	rAddr := remote.is.NodeAddr
 	lAddr := local.is.NodeAddr
-	local.startClient(rAddr, stopper)
-	remote.startClient(lAddr, stopper)
+	local.startClient(&rAddr, stopper)
+	remote.startClient(&lAddr, stopper)
 	local.mu.Unlock()
 	remote.mu.Unlock()
 	local.manage()
@@ -295,8 +295,8 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 	// Start two clients from local to remote. RPC client cache is
 	// disabled via the context, so we'll start two different outgoing
 	// connections.
-	local.startClient(rAddr, stopper)
-	local.startClient(rAddr, stopper)
+	local.startClient(&rAddr, stopper)
+	local.startClient(&rAddr, stopper)
 	local.mu.Unlock()
 	remote.mu.Unlock()
 	local.manage()
