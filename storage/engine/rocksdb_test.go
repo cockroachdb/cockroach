@@ -108,7 +108,7 @@ func setupMVCCData(numVersions, numKeys, valueBytes int, b *testing.B) (*RocksDB
 	}
 
 	// Randomize the order in which the keys are written.
-	for i, n := 0, len(order)-2; i < n; i++ {
+	for i, n := 0, len(order); i < n-1; i++ {
 		j := i + rng.Intn(n-i)
 		order[i], order[j] = order[j], order[i]
 	}
