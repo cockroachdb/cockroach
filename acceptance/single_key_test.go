@@ -51,7 +51,7 @@ func TestSingleKey(t *testing.T) {
 	}
 
 	resultCh := make(chan result, num)
-	deadline := time.Now().Add(*duration)
+	deadline := time.Now().Add(*flagDuration)
 	var expected int64
 
 	// Start up num workers each reading and writing the same

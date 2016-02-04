@@ -154,7 +154,7 @@ if is_shard 0; then
     # Note that this test requires 2>&1 but the others don't because
     # this one runs outside the builder container (and inside the
     # container, something is already combining stdout and stderr).
-    time $(dirname $0)/../acceptance.test -num-local 3 -l ${outdir}/acceptance \
+    time $(dirname $0)/../acceptance.test -nodes 3 -l ${outdir}/acceptance \
       -test.v -test.timeout 5m \
       --verbosity=1 --vmodule=monitor=2 2>&1 | \
       tr -d '\r' | tee "${outdir}/acceptance.log" | \

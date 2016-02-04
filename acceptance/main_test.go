@@ -48,24 +48,24 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-var duration = flag.Duration("d", 5*time.Second, "duration to run the test")
-var numLocal = flag.Int("num-local", 0, "start a local cluster of the given size")
-var numRemote = flag.Int("num-remote", 0, "start a remote cluster of the given size")
-var numStores = flag.Int("num-stores", 1, "number of stores to use for each node")
-var cwd = flag.String("cwd", "../cloud/aws", "directory to run terraform from")
-var stall = flag.Duration("stall", 2*time.Minute, "duration after which if no forward progress is made, consider the test stalled")
-var keyName = flag.String("key-name", "", "name of key for remote cluster")
-var logDir = flag.String("l", "", "the directory to store log files, relative to the test source")
+var flagDuration = flag.Duration("d", 5*time.Second, "duration to run the test")
+var flagNodes = flag.Int("nodes", 3, "number of nodes")
+var flagStores = flag.Int("stores", 1, "number of stores to use for each node")
+var flagRemote = flag.Bool("remote", false, "run the test using terrafarm instead of docker")
+var flagCwd = flag.String("cwd", "../cloud/aws", "directory to run terraform from")
+var flagStall = flag.Duration("stall", 2*time.Minute, "duration after which if no forward progress is made, consider the test stalled")
+var flagKeyName = flag.String("key-name", "", "name of key for remote cluster")
+var flagLogDir = flag.String("l", "", "the directory to store log files, relative to the test source")
 var stopper = make(chan struct{})
 
 func farmer(t *testing.T) *terrafarm.Farmer {
-	if *numRemote <= 0 {
+	if !*flagRemote {
 		t.Skip("running in docker mode")
 	}
-	if *keyName == "" {
+	if *flagKeyName == "" {
 		t.Fatal("-key-name is required") // saves a lot of trouble
 	}
-	logDir := *logDir
+	logDir := *flagLogDir
 	if logDir == "" {
 		var err error
 		logDir, err = ioutil.TempDir("", "clustertest_")
@@ -77,14 +77,14 @@ func farmer(t *testing.T) *terrafarm.Farmer {
 		logDir = filepath.Join(filepath.Clean(os.ExpandEnv("${PWD}")), logDir)
 	}
 	stores := "ssd=data0"
-	for j := 1; j < *numStores; j++ {
+	for j := 1; j < *flagStores; j++ {
 		stores += ",ssd=data" + strconv.Itoa(j)
 	}
 	f := &terrafarm.Farmer{
 		Output:  os.Stderr,
-		Cwd:     *cwd,
+		Cwd:     *flagCwd,
 		LogDir:  logDir,
-		KeyName: *keyName,
+		KeyName: *flagKeyName,
 		Stores:  stores,
 	}
 	log.Infof("logging to %s", logDir)
@@ -95,26 +95,20 @@ func farmer(t *testing.T) *terrafarm.Farmer {
 // should be created through this command since it sets up the logging in a
 // unified way.
 func StartCluster(t *testing.T) cluster.Cluster {
-	if *numLocal > 0 {
-		if *numRemote > 0 {
-			t.Fatal("cannot both specify -num-local and -num-remote")
-		}
-		logDir := *logDir
+	if !*flagRemote {
+		logDir := *flagLogDir
 		if logDir != "" {
 			if _, _, fun := caller.Lookup(1); fun != "" {
 				logDir = filepath.Join(logDir, fun)
 			}
 		}
-		l := cluster.CreateLocal(*numLocal, *numStores, logDir, stopper)
+		l := cluster.CreateLocal(*flagNodes, *flagStores, logDir, stopper)
 		l.Start()
 		checkRangeReplication(t, l, 20*time.Second)
 		return l
 	}
-	if *numRemote == 0 {
-		t.Fatal("need to either specify -num-local or -num-remote")
-	}
 	f := farmer(t)
-	if err := f.Resize(*numRemote, 0); err != nil {
+	if err := f.Resize(*flagNodes, 0); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.WaitReady(5 * time.Minute); err != nil {
@@ -175,7 +169,7 @@ func TestPGConn(t *testing.T) {
 
 // SkipUnlessLocal calls t.Skip if not running against a local cluster.
 func SkipUnlessLocal(t *testing.T) {
-	if *numLocal == 0 {
+	if *flagRemote {
 		t.Skip("skipping since not run against local cluster")
 	}
 }

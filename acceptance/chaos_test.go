@@ -47,7 +47,7 @@ func TestChaos(t *testing.T) {
 	// One error sent by each client. A successful client sends a nil error.
 	errs := make(chan error, num)
 	start := time.Now()
-	deadline := start.Add(*duration)
+	deadline := start.Add(*flagDuration)
 	// The number of successful writes (puts) to the database.
 	var count int64
 	// The number of times chaos monkey has run.
@@ -179,7 +179,7 @@ func TestChaos(t *testing.T) {
 	}()
 
 	prevRound := atomic.LoadInt64(&round)
-	stallTime := time.Now().Add(*stall)
+	stallTime := time.Now().Add(*flagStall)
 	var prevOutput string
 	// Spin until all clients are shut.
 	for numShutClients := 0; numShutClients < num; {
@@ -201,11 +201,11 @@ func TestChaos(t *testing.T) {
 				if curRound == prevRound {
 					if time.Now().After(stallTime) {
 						atomic.StoreInt32(&stalled, 1)
-						t.Fatalf("Stall detected at round %d, no forward progress for %s", curRound, *stall)
+						t.Fatalf("Stall detected at round %d, no forward progress for %s", curRound, *flagStall)
 					}
 				} else {
 					prevRound = curRound
-					stallTime = time.Now().Add(*stall)
+					stallTime = time.Now().Add(*flagStall)
 				}
 				// Periodically print out progress so that we know the test is
 				// still running and making progress.
