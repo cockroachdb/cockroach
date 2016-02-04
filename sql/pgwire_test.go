@@ -279,6 +279,9 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Params(2, 3).Results(2),
 			base.Params(true, 0).Error(`pq: param $1: strconv.ParseInt: parsing "true": invalid syntax`),
 		},
+		"SHOW TIME ZONE": {
+			base.Results("UTC"),
+		},
 		// TODO(mjibson): test date/time types
 	}
 
