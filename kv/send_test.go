@@ -17,6 +17,7 @@
 package kv
 
 import (
+	"errors"
 	"net"
 	netrpc "net/rpc"
 	"strings"
@@ -164,50 +165,49 @@ func TestRetryableError(t *testing.T) {
 	}
 }
 
-// type BrokenResponse struct {
-// 	*roachpb.ResponseHeader
-// }
+// TestUnretryableError verifies that Send returns an unretryable
+// error when it hits a critical error.
+func TestUnretryableError(t *testing.T) {
+	defer leaktest.AfterTest(t)
 
-// func (*BrokenResponse) Verify() error {
-// 	return util.Errorf("boom")
-// }
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
 
-// // TestUnretryableError verifies that Send returns an unretryable
-// // error when it hits a critical error.
-// func TestUnretryableError(t *testing.T) {
-// 	defer leaktest.AfterTest(t)
+	nodeContext := newNodeTestContext(nil, stopper)
+	_, ln := newTestServer(t, nodeContext)
 
-// 	stopper := stop.NewStopper()
-// 	defer stopper.Stop()
+	opts := SendOptions{
+		Ordering:        orderStable,
+		SendNextTimeout: 1 * time.Second,
+		Timeout:         10 * time.Second,
+	}
+	getArgs := func(addr net.Addr) *roachpb.BatchRequest {
+		return &roachpb.BatchRequest{}
+	}
 
-// 	nodeContext := newNodeTestContext(nil, stopper)
-// 	_, ln := newTestServer(t, nodeContext)
+	sendOneFn = func(client *rpc.Client, timeout time.Duration, method string,
+		getArgs func(addr net.Addr) *roachpb.BatchRequest,
+		context *rpc.Context, trace opentracing.Span, done chan *netrpc.Call) {
+		call := netrpc.Call{
+			Reply: &roachpb.BatchResponse{},
+		}
+		call.Error = errors.New("unretryable")
+		done <- &call
+	}
+	defer func() { sendOneFn = sendOne }()
 
-// 	opts := SendOptions{
-// 		Ordering:        orderStable,
-// 		SendNextTimeout: 1 * time.Second,
-// 		Timeout:         10 * time.Second,
-// 	}
-// 	getArgs := func(addr net.Addr) *roachpb.BatchRequest {
-// 		return &roachpb.BatchRequest{}
-// 	}
-// 	// Make getReply return a BrokenResponse so that the proto
-// 	// integrity check fails.
-// 	getReply := func() *roachpb.BatchResponse {
-// 		return &BrokenResponse{&roachpb.ResponseHeader{}}
-// 	}
-// 	_, err := send(opts, "Heartbeat.Ping", []net.Addr{ln.Addr()}, getArgs, getReply, nodeContext)
-// 	if err == nil {
-// 		t.Fatalf("Unexpected success")
-// 	}
-// 	retryErr, ok := err.(retry.Retryable)
-// 	if !ok {
-// 		t.Fatalf("Unexpected error type: %v", err)
-// 	}
-// 	if retryErr.CanRetry() {
-// 		t.Errorf("Unexpected retryable error: %v", retryErr)
-// 	}
-// }
+	_, err := send(opts, "Node.Batch", []net.Addr{ln.Addr()}, getArgs, nodeContext)
+	if err == nil {
+		t.Fatalf("Unexpected success")
+	}
+	retryErr, ok := err.(retry.Retryable)
+	if !ok {
+		t.Fatalf("Unexpected error type: %v", err)
+	}
+	if retryErr.CanRetry() {
+		t.Errorf("Unexpected retryable error: %v", retryErr)
+	}
+}
 
 // TestClientNotReady verifies that Send gets an RPC error when a client
 // does not become ready.
