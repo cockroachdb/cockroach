@@ -17,7 +17,6 @@
 package sqlutils
 
 import (
-	"fmt"
 	"net"
 	"net/url"
 
@@ -51,16 +50,17 @@ func PGUrl(t util.Tester, ts *server.TestServer, user, tempDir, prefix string) (
 	tempCAPath, tempCACleanup := securitytest.RestrictedCopy(t, caPath, tempDir, "TestLogic_ca")
 	tempCertPath, tempCertCleanup := securitytest.RestrictedCopy(t, certPath, tempDir, "TestLogic_cert")
 	tempKeyPath, tempKeyCleanup := securitytest.RestrictedCopy(t, keyPath, tempDir, "TestLogic_key")
+	options := url.Values{}
+	options.Add("sslmode", "verify-full")
+	options.Add("sslrootcert", tempCAPath)
+	options.Add("sslcert", tempCertPath)
+	options.Add("sslkey", tempKeyPath)
 
 	return url.URL{
-			Scheme: "postgres",
-			User:   url.User(user),
-			Host:   net.JoinHostPort(host, port),
-			RawQuery: fmt.Sprintf("sslmode=verify-full&sslrootcert=%s&sslcert=%s&sslkey=%s",
-				url.QueryEscape(tempCAPath),
-				url.QueryEscape(tempCertPath),
-				url.QueryEscape(tempKeyPath),
-			),
+			Scheme:   "postgres",
+			User:     url.User(user),
+			Host:     net.JoinHostPort(host, port),
+			RawQuery: options.Encode(),
 		}, func() {
 			tempCACleanup()
 			tempCertCleanup()
