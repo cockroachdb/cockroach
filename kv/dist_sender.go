@@ -338,18 +338,11 @@ func (ds *DistSender) sendRPC(trace opentracing.Span, rangeID roachpb.RangeID, r
 		Timeout:         rpc.DefaultRPCTimeout,
 		Trace:           trace,
 	}
-	// getArgs clones the arguments on demand for all but the first replica.
-	firstArgs := true
 	getArgs := func(addr net.Addr) *roachpb.BatchRequest {
-		var a *roachpb.BatchRequest
-		// Use the supplied args proto if this is our first address.
-		if firstArgs {
-			firstArgs = false
-			a = &ba
-		} else {
-			// Otherwise, copy the args value and set the replica in the header.
-			a = proto.Clone(&ba).(*roachpb.BatchRequest)
-		}
+		// Make a shall copy of our prototype request so that we can set the
+		// replica differently.
+		a := &roachpb.BatchRequest{}
+		*a = ba
 		if addr != nil {
 			// TODO(tschottdorf): see len(replicas) above.
 			a.Replica = *replicaMap[addr.String()]
