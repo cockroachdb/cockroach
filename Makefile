@@ -35,8 +35,10 @@ TESTFLAGS    :=
 STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
 BUILDMODE    := install
+GOPATH       := $(realpath ../../../..)
+PATH         := $(GOPATH)/bin:$(PATH)
 
-# Note: We pass `-v` go `go build` and `go test -i` so that warnings
+# Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
@@ -65,6 +67,8 @@ install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTag=$(shell g
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildDeps=$(shell GOPATH=${GOPATH} build/depvers.sh)"
 install:
+	@echo "GOPATH set to $$GOPATH"
+	@echo "$$GOPATH/bin added to PATH"
 	@echo $(GO) $(BUILDMODE) -v $(GOFLAGS)
 	@$(GO) $(BUILDMODE) -v $(GOFLAGS) -ldflags '$(LDFLAGS)'
 
