@@ -165,6 +165,18 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
 		return p.Insert(n, false)
 	case *parser.Select:
 		return p.Select(n)
+	case *parser.Show:
+		return p.Show(n)
+	case *parser.ShowColumns:
+		return p.ShowColumns(n)
+	case *parser.ShowDatabases:
+		return p.ShowDatabases(n)
+	case *parser.ShowGrants:
+		return p.ShowGrants(n)
+	case *parser.ShowIndex:
+		return p.ShowIndex(n)
+	case *parser.ShowTables:
+		return p.ShowTables(n)
 	case *parser.Update:
 		return p.Update(n)
 	default:

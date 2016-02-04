@@ -279,6 +279,27 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Params(2, 3).Results(2),
 			base.Params(true, 0).Error(`pq: param $1: strconv.ParseInt: parsing "true": invalid syntax`),
 		},
+		"SHOW database": {
+			base.Results(""),
+		},
+		"SHOW COLUMNS FROM system.users": {
+			base.Results("username", "STRING", false, sql.NullBool{}),
+		},
+		"SHOW DATABASES": {
+			base.Results("system"),
+		},
+		"SHOW GRANTS ON system.users": {
+			base.Results("users", "root", "DELETE,GRANT,INSERT,SELECT,UPDATE"),
+		},
+		"SHOW INDEX FROM system.users": {
+			base.Results("users", "primary", true, 1, "username", "ASC", false),
+		},
+		"SHOW TABLES FROM system": {
+			base.Results("descriptor"),
+		},
+		"SHOW TIME ZONE": {
+			base.Results("UTC"),
+		},
 		// TODO(mjibson): test date/time types
 	}
 
