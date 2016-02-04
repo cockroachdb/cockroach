@@ -66,6 +66,7 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, *roachp
 	// We don't use version 0.
 	desc.Version = 1
 
+	var primaryIndexColumnSet map[parser.Name]struct{}
 	for _, def := range p.Defs {
 		switch d := def.(type) {
 		case *parser.ColumnTableDef:
@@ -102,17 +103,33 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, *roachp
 			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
 				return desc, err
 			}
+			if d.PrimaryKey {
+				primaryIndexColumnSet = make(map[parser.Name]struct{})
+				for _, c := range d.Columns {
+					primaryIndexColumnSet[c.Column] = struct{}{}
+				}
+			}
 		default:
 			return desc, roachpb.NewErrorf("unsupported table def: %T", def)
 		}
 	}
+
+	if primaryIndexColumnSet != nil {
+		// Primary index columns are not nullable.
+		for i := range desc.Columns {
+			if _, ok := primaryIndexColumnSet[parser.Name(desc.Columns[i].Name)]; ok {
+				desc.Columns[i].Nullable = false
+			}
+		}
+	}
+
 	return desc, nil
 }
 
 func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDescriptor, *roachpb.Error) {
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),
-		Nullable: (d.Nullable != parser.NotNull),
+		Nullable: d.Nullable != parser.NotNull && !d.PrimaryKey,
 	}
 
 	var colDatumType parser.Datum

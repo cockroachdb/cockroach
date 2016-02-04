@@ -12,7 +12,7 @@ query TTBT colnames
 SHOW COLUMNS FROM t
 ----
 Field Type      Null Default
-a     INT       true 42
+a     INT       false 42
 b     TIMESTAMP true now()
 c     FLOAT     true random()
 

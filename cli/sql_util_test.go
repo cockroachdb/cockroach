@@ -75,8 +75,8 @@ OK
 	}
 
 	expectedRows := [][]string{
-		{`parentID`, `INT`, `true`, `NULL`},
-		{`name`, `STRING`, `true`, `NULL`},
+		{`parentID`, `INT`, `false`, `NULL`},
+		{`name`, `STRING`, `false`, `NULL`},
 		{`id`, `INT`, `true`, `NULL`},
 	}
 	if !reflect.DeepEqual(expectedRows, rows) {
@@ -88,13 +88,13 @@ OK
 	}
 
 	expected = `
-+----------+--------+------+---------+
-|  Field   |  Type  | Null | Default |
-+----------+--------+------+---------+
-| parentID | INT    | true | NULL    |
-| name     | STRING | true | NULL    |
-| id       | INT    | true | NULL    |
-+----------+--------+------+---------+
++----------+--------+-------+---------+
+|  Field   |  Type  | Null  | Default |
++----------+--------+-------+---------+
+| parentID | INT    | false | NULL    |
+| name     | STRING | false | NULL    |
+| id       | INT    | true  | NULL    |
++----------+--------+-------+---------+
 `
 
 	if a, e := b.String(), expected[1:]; a != e {
