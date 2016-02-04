@@ -344,7 +344,7 @@ func (g *Gossip) GetResolvers() []resolver.Resolver {
 }
 
 // GetNodeIDAddress looks up the address of the node by ID.
-func (g *Gossip) GetNodeIDAddress(nodeID roachpb.NodeID) (net.Addr, error) {
+func (g *Gossip) GetNodeIDAddress(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.getNodeIDAddressLocked(nodeID)
@@ -502,12 +502,12 @@ func (g *Gossip) getNodeDescriptorLocked(nodeID roachpb.NodeID) (*roachpb.NodeDe
 // assumed held by the caller. This method is called externally via
 // GetNodeIDAddress or internally when looking up a "distant" node address to
 // connect directly to.
-func (g *Gossip) getNodeIDAddressLocked(nodeID roachpb.NodeID) (net.Addr, error) {
+func (g *Gossip) getNodeIDAddressLocked(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
 	nd, err := g.getNodeDescriptorLocked(nodeID)
 	if err != nil {
 		return nil, err
 	}
-	return nd.Address, nil
+	return &nd.Address, nil
 }
 
 // AddInfo adds or updates an info object. Returns an error if info
