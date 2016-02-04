@@ -60,11 +60,27 @@ build: GOFLAGS += -i -o cockroach
 build: BUILDMODE = build
 build: install
 
+.PHONY: checkgopath
+checkgopath:
+	@GOPATH_ABS=$$(readlink -f "$$GOPATH"); \
+	if [ ! -d "$$GOPATH_ABS" ]; then \
+	   echo 'Invalid GOPATH. Please make sure GOPATH is set correctly.'; \
+	   exit 1; \
+	fi; \
+	MAKEFILE_ABS=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST)))); \
+	if [ "$${MAKEFILE_ABS#$$GOPATH_ABS}" = "$$MAKEFILE_ABS" ]; then \
+	   echo "Makefile directory not under GOPATH!"; \
+	   echo "GOPATH: $$GOPATH"; \
+	   echo "Makefile directory: $$MAKEFILE_ABS"; \
+	   echo "Please make sure GOPATH is set correctly."; \
+	   exit 1; \
+	fi
+
 .PHONY: install
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTag=$(shell git describe --dirty --tags)"
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildDeps=$(shell GOPATH=${GOPATH} build/depvers.sh)"
-install:
+install: checkgopath
 	@echo $(GO) $(BUILDMODE) -v $(GOFLAGS)
 	@$(GO) $(BUILDMODE) -v $(GOFLAGS) -ldflags '$(LDFLAGS)'
 
@@ -76,7 +92,7 @@ install:
 .PHONY: testbuild
 testbuild: TESTS := $(shell $(GO) list -tags '$(TAGS)' $(PKG))
 testbuild: GOFLAGS += -c
-testbuild:
+testbuild: checkgopath
 	for p in $(TESTS); do \
 	  NAME=$$(basename "$$p"); \
 	  OUT="$$NAME.test"; \
@@ -89,7 +105,7 @@ testbuild:
 .PHONY: testbuildall
 testbuildall: TESTS := $(shell $(GO) list $(PKG))
 testbuildall: GOFLAGS += -c
-testbuildall:
+testbuildall: checkgopath
 ifndef DIR
 	$(error DIR is undefined)
 endif
@@ -104,19 +120,19 @@ endif
 # Similar to "testrace", we want to cache the build before running the
 # tests.
 .PHONY: test
-test:
+test: checkgopath
 	$(GO) test -v $(GOFLAGS) -i $(PKG)
 	$(GO) test $(GOFLAGS) -run $(TESTS) -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: testslow
 testslow: TESTFLAGS += -v
-testslow:
+testslow: checkgopath
 	$(GO) test -v $(GOFLAGS) -i $(PKG)
 	$(GO) test $(GOFLAGS) -run $(TESTS) -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 .PHONY: testraceslow
 testraceslow: TESTFLAGS += -v
-testraceslow:
+testraceslow: checkgopath
 	$(GO) test -v $(GOFLAGS) -i $(PKG)
 	$(GO) test $(GOFLAGS) -race -run $(TESTS) -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
@@ -125,17 +141,17 @@ testraceslow:
 # "make build", and so they would be built from scratch every time (including the
 # slow-to-compile cgo packages).
 .PHONY: testrace
-testrace:
+testrace: checkgopath
 	$(GO) test -v $(GOFLAGS) -race -i $(PKG)
 	$(GO) test $(GOFLAGS) -race -run $(TESTS) -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: bench
-bench:
+bench: checkgopath
 	$(GO) test -v $(GOFLAGS) -i $(PKG)
 	$(GO) test $(GOFLAGS) -run - -bench $(TESTS) -timeout $(BENCHTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: coverage
-coverage:
+coverage: checkgopath
 	$(GO) test -v $(GOFLAGS) -i $(PKG)
 	$(GO) test $(GOFLAGS) -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
 
@@ -143,12 +159,12 @@ coverage:
 # and run it in a loop (the PKG argument is required; if TESTS is not
 # given all tests in the package will be run).
 .PHONY: stress
-stress:
+stress: checkgopath
 	$(GO) test -v $(GOFLAGS) -i -c $(PKG) -o stress.test
 	stress $(STRESSFLAGS) ./stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 .PHONY: stressrace
-stressrace:
+stressrace: checkgopath
 	$(GO) test $(GOFLAGS) -race -v -i -c $(PKG) -o stress.test
 	stress $(STRESSFLAGS) ./stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
@@ -193,7 +209,7 @@ check:
 	@! goimports -l . | grep -vF 'No Exceptions'
 
 .PHONY: clean
-clean:
+clean: checkgopath
 	$(GO) clean $(GOFLAGS) -i github.com/cockroachdb/...
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -f .bootstrap
