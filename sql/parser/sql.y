@@ -127,6 +127,7 @@ func unimplemented() {
 %type <empty> opt_collate
 
 %type <qname> qualified_name
+%type <qname> indirect_name_or_glob
 %type <qname> insert_target
 
 // %type <empty> math_op
@@ -146,6 +147,7 @@ func unimplemented() {
 %type <empty> opt_array_bounds
 %type <tblExprs> from_clause from_list
 %type <qnames> qualified_name_list
+%type <qnames> indirect_name_or_glob_list
 %type <qname> any_name
 %type <qnames> any_name_list
 %type <exprs> expr_list
@@ -192,6 +194,8 @@ func unimplemented() {
 %type <colDef> column_def
 %type <tblDef> table_elem
 %type <expr>  where_clause
+%type <indirectElem> glob_indirection
+%type <indirectElem> name_indirection
 %type <indirectElem> indirection_elem
 %type <expr>  a_expr b_expr c_expr a_expr_const
 %type <expr>  substr_from substr_for
@@ -705,14 +709,13 @@ revoke_stmt:
 
 
 privilege_target:
-  qualified_name_list
+  indirect_name_or_glob_list
   {
+    // Unless "DATABASE" is specified, "TABLE" is the default.
     $$ = TargetList{Tables: QualifiedNames($1)}
   }
-| TABLE qualified_name_list
+| TABLE indirect_name_or_glob_list
   {
-    // TODO(marc): this is postgres' grammar, but do we really need
-    // both "x" and "TABLE X"?
     $$ = TargetList{Tables: QualifiedNames($2)}
   }
 |  DATABASE name_list
@@ -3323,13 +3326,13 @@ case_arg:
   }
 
 indirection_elem:
-  '.' col_label
+  name_indirection
   {
-    $$ = NameIndirection($2)
+    $$ = $1
   }
-| '.' '*'
+| glob_indirection
   {
-    $$ = qualifiedStar
+    $$ = $1
   }
 | '@' col_label
   {
@@ -3342,6 +3345,18 @@ indirection_elem:
 | '[' a_expr ':' a_expr ']'
   {
     $$ = &ArrayIndirection{Begin: $2, End: $4}
+  }
+
+name_indirection:
+  '.' col_label
+  {
+    $$ = NameIndirection($2)
+  }
+
+glob_indirection:
+  '.' '*'
+  {
+    $$ = qualifiedStar
   }
 
 indirection:
@@ -3441,6 +3456,16 @@ qualified_name_list:
     $$ = append($1, $3)
   }
 
+indirect_name_or_glob_list:
+  indirect_name_or_glob
+  {
+    $$ = QualifiedNames{$1}
+  }
+| indirect_name_or_glob_list ',' indirect_name_or_glob
+  {
+    $$ = append($1, $3)
+  }
+
 // The production for a qualified relation name has to exactly match the
 // production for a qualified func_name, because in a FROM clause we cannot
 // tell which we are parsing until we see what comes after it ('(' for a
@@ -3454,6 +3479,29 @@ qualified_name:
 | name indirection
   {
     $$ = &QualifiedName{Base: Name($1), Indirect: $2}
+  }
+
+// indirect_name_or_glob is a subset of `qualified_name` accepting only:
+// <database> / <table>
+// <database>.<table>
+// <database>.*
+// *
+indirect_name_or_glob:
+  name
+  {
+    $$ = &QualifiedName{Base: Name($1)}
+  }
+| name name_indirection
+  {
+    $$ = &QualifiedName{Base: Name($1), Indirect: Indirection{$2}}
+  }
+| name glob_indirection
+  {
+    $$ = &QualifiedName{Base: Name($1), Indirect: Indirection{$2}}
+  }
+| '*'
+  {
+    $$ = &QualifiedName{Indirect: Indirection{unqualifiedStar}}
   }
 
 name_list:

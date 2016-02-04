@@ -313,7 +313,32 @@ func (n *QualifiedName) NormalizeTableName(database string) error {
 	if n.normalized == columnName {
 		return fmt.Errorf("already normalized as a column name: %s", n)
 	}
+	if err := n.QualifyWithDatabase(database); err != nil {
+		return err
+	}
+
+	if len(n.Indirect) > 2 {
+		return fmt.Errorf("invalid table name: %s", n)
+	}
+	if len(n.Indirect) == 2 {
+		if _, ok := n.Indirect[1].(IndexIndirection); !ok {
+			return fmt.Errorf("invalid table name: %s", n)
+		}
+	}
+	n.normalized = tableName
+	return nil
+}
+
+// QualifyWithDatabase adds an indirection for the database, if it's missing.
+// It transforms:
+// table       -> database.table
+// table@index -> database.table@index
+// *           -> database.*
+func (n *QualifiedName) QualifyWithDatabase(database string) error {
 	if len(n.Indirect) == 0 {
+		if database == "" {
+			return fmt.Errorf("no database specified: %s", n)
+		}
 		// table -> database.table
 		if database == "" {
 			return fmt.Errorf("no database specified: %s", n)
@@ -323,15 +348,12 @@ func (n *QualifiedName) NormalizeTableName(database string) error {
 		n.normalized = tableName
 		return nil
 	}
-	if len(n.Indirect) > 2 {
-		return fmt.Errorf("invalid table name: %s", n)
-	}
-	// Either database.table or database.table@index.
 	switch n.Indirect[0].(type) {
 	case NameIndirection:
 		// Nothing to do.
 	case IndexIndirection:
 		// table@index -> database.table@index
+		// *           -> database.*
 		//
 		// Accomplished by prepending n.Base to the existing indirection and then
 		// setting n.Base to the supplied database.
@@ -340,13 +362,20 @@ func (n *QualifiedName) NormalizeTableName(database string) error {
 		}
 		n.Indirect = append(Indirection{NameIndirection(n.Base)}, n.Indirect...)
 		n.Base = Name(database)
-	}
-	if len(n.Indirect) == 2 {
-		if _, ok := n.Indirect[1].(IndexIndirection); !ok {
-			return fmt.Errorf("invalid table name: %s", n)
+	case StarIndirection:
+		// * -> database.*
+		if n.Base != "" {
+			// nothing to do
+			return nil
 		}
+		if n.Base != "" {
+			n.Indirect = append(Indirection{NameIndirection(n.Base)}, n.Indirect...)
+		}
+		if database == "" {
+			return fmt.Errorf("no database specified: %s", n)
+		}
+		n.Base = Name(database)
 	}
-	n.normalized = tableName
 	return nil
 }
 
