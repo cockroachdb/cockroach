@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS bench.bank (
 			amount := rand.Intn(*maxTransfer)
 
 			// TODO(mjibson): We can't use query parameters with this query because
-			// it fails type checking on the CASE expression.
+			// of the subquery.
 			update := fmt.Sprintf(`
 UPDATE bench.bank
   SET balance = CASE id WHEN %[1]d THEN balance-%[3]d WHEN %[2]d THEN balance+%[3]d END
