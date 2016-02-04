@@ -128,6 +128,10 @@ func runInteractive(db *sql.DB, dbURL string) {
 	}
 
 	if exitCode != 0 {
+		// Though we have a defer block that calls liner.Close() above, that defer block is never
+		// executed after we call os.Exit(). So, call it explicitly here to prevent us from leaving
+		// the terminal in a messed up state.
+		_ = liner.Close()
 		os.Exit(exitCode)
 	}
 }
