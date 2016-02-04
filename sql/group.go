@@ -44,6 +44,11 @@ var aggregates = map[string]func() aggregateImpl{
 // groupBy constructs a groupNode according to grouping functions or clauses. This may adjust the
 // render targets in the selectNode as necessary.
 func (p *planner) groupBy(n *parser.Select, s *selectNode) (*groupNode, *roachpb.Error) {
+	// Make sure there are no aggregation functions in the select's WHERE clause.
+	if p.aggregateInWhere(n.Where) {
+		return nil, roachpb.NewUErrorf("aggregate functions are not allowed in WHERE")
+	}
+
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
 	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
@@ -506,11 +511,27 @@ func (v *isAggregateVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, 
 	return v, expr
 }
 
+func (v *isAggregateVisitor) reset() {
+	v.aggregated = false
+}
+
+func (p *planner) aggregateInWhere(where *parser.Where) bool {
+	if where != nil {
+		defer p.isAggregateVisitor.reset()
+		_ = parser.WalkExpr(&p.isAggregateVisitor, where.Expr)
+		if p.isAggregateVisitor.aggregated {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *planner) isAggregate(n *parser.Select) bool {
 	if n.Having != nil || len(n.GroupBy) > 0 {
 		return true
 	}
 
+	defer p.isAggregateVisitor.reset()
 	for _, target := range n.Exprs {
 		_ = parser.WalkExpr(&p.isAggregateVisitor, target.Expr)
 		if p.isAggregateVisitor.aggregated {
