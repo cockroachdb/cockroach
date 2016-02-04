@@ -110,3 +110,86 @@ SHOW GRANTS ON DATABASE a
 Database User      Privileges
 a        readwrite ALL
 a        root      ALL
+
+
+# Errors due to invalid targets.
+statement ok
+SET DATABASE = ""
+
+statement error pq: syntax error at or near "@"
+GRANT ALL ON a.t@xyz TO readwrite
+
+statement error pq: no database specified: *
+GRANT ALL ON * TO readwrite
+
+statement error table "tt" does not exist
+GRANT ALL ON a.t, a.tt TO readwrite
+
+# '*' doesn't work for databases.
+statement error pq: syntax error at or near "*"
+GRANT ALL ON DATABASE * TO readwrite
+
+statement ok
+CREATE DATABASE b
+
+statement ok
+CREATE TABLE b.t (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE b.t2 (id INT PRIMARY KEY)
+
+statement ok
+CREATE DATABASE c
+
+statement ok
+CREATE TABLE c.t (id INT PRIMARY KEY)
+
+# `*` works after you've set a database
+statement ok
+SET DATABASE="b"
+
+statement ok
+GRANT ALL ON * TO Vanilli
+
+query TTT colnames
+SHOW GRANTS ON *
+----
+Table    User      Privileges
+t        Vanilli   ALL
+t        root      ALL
+t2       Vanilli   ALL
+t2       root      ALL
+
+
+# Multiple targets.
+
+statement ok
+GRANT ALL ON c.*, b.t TO Millie
+
+query TTT colnames
+SHOW GRANTS ON b.*
+----
+Table    User      Privileges
+t        Millie    ALL
+t        Vanilli   ALL
+t        root      ALL
+t2       Vanilli   ALL
+t2       root      ALL
+
+query TTT colnames
+SHOW GRANTS ON c.t
+----
+Table    User      Privileges
+t        Millie    ALL
+t        root      ALL
+
+statement ok
+REVOKE ALL ON *, c.* FROM Vanilli
+
+query TTT colnames
+SHOW GRANTS ON b.*
+----
+Table    User      Privileges
+t        Millie    ALL
+t        root      ALL
+t2       root      ALL
