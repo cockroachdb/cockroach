@@ -71,29 +71,30 @@ func (p *planner) checkPrivilege(descriptor descriptorProto, privilege privilege
 }
 
 // createDescriptor takes a Table or Database descriptor and creates it
-// if needed, incrementing the descriptor counter.
-func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptorProto, ifNotExists bool) *roachpb.Error {
+// if needed, incrementing the descriptor counter. Returns true if the table is
+// actually created, false if it already existed.
+func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptorProto, ifNotExists bool) (bool, *roachpb.Error) {
 	idKey := plainKey.Key()
 	// Check whether idKey exists.
 	gr, err := p.txn.Get(idKey)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if gr.Exists() {
 		if ifNotExists {
 			// Noop.
-			return nil
+			return false, nil
 		}
 		// Key exists, but we don't want it to: error out.
-		return roachpb.NewUErrorf("%s %q already exists", descriptor.TypeName(), plainKey.Name())
+		return false, roachpb.NewUErrorf("%s %q already exists", descriptor.TypeName(), plainKey.Name())
 	}
 
 	// Increment unique descriptor counter.
 	if ir, err := p.txn.Inc(keys.DescIDGenerator, 1); err == nil {
 		descriptor.SetID(ID(ir.ValueInt() - 1))
 	} else {
-		return err
+		return false, err
 	}
 
 	// TODO(pmattis): The error currently returned below is likely going to be
@@ -120,7 +121,7 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 		return expectDescriptor(systemConfig, descKey, descDesc)
 	}
 
-	return p.txn.Run(&b)
+	return true, p.txn.Run(&b)
 }
 
 // getDescriptor looks up the descriptor for `plainKey`, validates it,

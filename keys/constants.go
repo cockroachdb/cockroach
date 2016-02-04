@@ -210,5 +210,6 @@ const (
 	// Reserved IDs for other system tables.
 	// NOTE: IDs must be <= MaxReservedDescID.
 	LeaseTableID      = 11
-	RangeEventTableID = 12
+	EventLogTableID   = 12
+	RangeEventTableID = 13
 )

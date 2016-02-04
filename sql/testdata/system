@@ -8,6 +8,7 @@ query T
 SHOW TABLES FROM system
 ----
 descriptor
+eventlog
 lease
 namespace
 rangelog
@@ -20,11 +21,12 @@ EXPLAIN (DEBUG) SELECT * FROM system.namespace
 0 /namespace/primary/0/'system'/id     1    true
 1 /namespace/primary/0/'test'/id       50   true
 2 /namespace/primary/1/'descriptor'/id 3    true
-3 /namespace/primary/1/'lease'/id      11   true
-4 /namespace/primary/1/'namespace'/id  2    true
-5 /namespace/primary/1/'rangelog'/id   12   true
-6 /namespace/primary/1/'users'/id      4    true
-7 /namespace/primary/1/'zones'/id      5    true
+3 /namespace/primary/1/'eventlog'/id   12   true
+4 /namespace/primary/1/'lease'/id      11   true
+5 /namespace/primary/1/'namespace'/id  2    true
+6 /namespace/primary/1/'rangelog'/id   13   true
+7 /namespace/primary/1/'users'/id      4    true
+8 /namespace/primary/1/'zones'/id      5    true
 
 query ITI
 SELECT * FROM system.namespace
@@ -32,9 +34,10 @@ SELECT * FROM system.namespace
 0 system     1
 0 test       50
 1 descriptor 3
+1 eventlog   12
 1 lease      11
 1 namespace  2
-1 rangelog   12
+1 rangelog   13
 1 users      4
 1 zones      5
 
@@ -48,6 +51,7 @@ SELECT id FROM system.descriptor
 5
 11
 12
+13
 50
 
 # Verify we can read "protobuf" columns.

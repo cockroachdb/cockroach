@@ -38,7 +38,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, *roachpb.E
 
 	desc := makeDatabaseDesc(n)
 
-	if err := p.createDescriptor(databaseKey{string(n.Name)}, &desc, n.IfNotExists); err != nil {
+	if _, err := p.createDescriptor(databaseKey{string(n.Name)}, &desc, n.IfNotExists); err != nil {
 		return nil, err
 	}
 	return &emptyNode{}, nil
@@ -151,8 +151,27 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, *roachpb.Error) 
 		return nil, pErr
 	}
 
-	if pErr := p.createDescriptor(tableKey{dbDesc.ID, n.Table.Table()}, &desc, n.IfNotExists); pErr != nil {
+	created, pErr := p.createDescriptor(tableKey{dbDesc.ID, n.Table.Table()}, &desc, n.IfNotExists)
+	if pErr != nil {
 		return nil, pErr
 	}
+
+	if created {
+		// Log Create Table event. The logger uses the same lease manager and
+		// transaction as the table creation.
+		if pErr := MakeEventLogger(p.leaseMgr).insertEventRecord(p.txn,
+			EventLogCreateTable,
+			int32(desc.ID),
+			int32(p.evalCtx.NodeID),
+			struct {
+				TableName string
+				Statement string
+				User      string
+			}{n.Table.String(), n.String(), p.user},
+		); pErr != nil {
+			return nil, pErr
+		}
+	}
+
 	return &emptyNode{}, nil
 }

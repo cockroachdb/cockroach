@@ -342,13 +342,15 @@ func Example_ranges() {
 	// range ls
 	// /Min-"c" [1]
 	// 	0: node-id=1 store-id=1
-	// "c"-/Table/11 [4]
+	// "c"-/Table/11 [5]
 	// 	0: node-id=1 store-id=1
 	// /Table/11-/Table/12 [2]
 	// 	0: node-id=1 store-id=1
-	// /Table/12-/Max [3]
+	// /Table/12-/Table/13 [3]
 	// 	0: node-id=1 store-id=1
-	// 4 result(s)
+	// /Table/13-/Max [4]
+	// 	0: node-id=1 store-id=1
+	// 5 result(s)
 	// kv scan
 	// "a"	"1"
 	// "b"	"2"
@@ -367,9 +369,11 @@ func Example_ranges() {
 	// 	0: node-id=1 store-id=1
 	// /Table/11-/Table/12 [2]
 	// 	0: node-id=1 store-id=1
-	// /Table/12-/Max [3]
+	// /Table/12-/Table/13 [3]
 	// 	0: node-id=1 store-id=1
-	// 3 result(s)
+	// /Table/13-/Max [4]
+	// 	0: node-id=1 store-id=1
+	// 4 result(s)
 	// kv scan
 	// "a"	"1"
 	// "b"	"2"
@@ -471,7 +475,7 @@ func Example_max_results() {
 	// range ls --max-results=2
 	// /Min-"c" [1]
 	// 	0: node-id=1 store-id=1
-	// "c"-"d" [4]
+	// "c"-"d" [5]
 	// 	0: node-id=1 store-id=1
 	// 2 result(s)
 }

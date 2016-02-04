@@ -69,7 +69,16 @@ func checkEndTransactionTrigger(_ roachpb.StoreID, req roachpb.Request, _ roachp
 			break
 		}
 	}
-	if hasSystemKey != modifiedSystemConfigSpan {
+	// If the transaction in question has intents in the system span, then
+	// modifiedSystemConfigSpan should always be true. However, it is possible
+	// for modifiedSystemConfigSpan to be set, even though no system keys are
+	// present. This can occur with certain conditional DDL statements (e.g.
+	// "CREATE TABLE IF NOT EXISTS"), which set the SystemConfigTrigger
+	// aggressively but may not actually end up changing the system DB depending
+	// on the current state.
+	// For more information, see the related comment at the beginning of
+	// planner.makePlan().
+	if hasSystemKey && !modifiedSystemConfigSpan {
 		return util.Errorf("EndTransaction hasSystemKey=%t, but hasSystemConfigTrigger=%t",
 			hasSystemKey, modifiedSystemConfigSpan)
 	}

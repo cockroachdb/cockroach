@@ -1,0 +1,27 @@
+statement ok
+SET DATABASE = test
+
+statement ok
+CREATE TABLE test.a (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE IF NOT EXISTS test.b (id INT PRIMARY KEY)
+
+query I
+SELECT COUNT(*) FROM system.eventlog WHERE eventType = 'create_table'
+----
+2
+
+query II
+SELECT effectingID, reportingID FROM system.eventlog WHERE eventType = 'create_table'
+----
+51 1
+52 1
+
+statement ok
+CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
+
+query I
+SELECT COUNT(*) FROM system.eventlog WHERE eventType = 'create_table'
+----
+2

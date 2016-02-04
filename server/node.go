@@ -110,6 +110,7 @@ func allocateStoreIDs(nodeID roachpb.NodeID, inc int64, db *client.DB) (roachpb.
 func GetBootstrapSchema() sql.MetadataSchema {
 	schema := sql.MakeMetadataSchema()
 	storage.AddEventLogToMetadataSchema(&schema)
+	sql.AddEventLogToMetadataSchema(&schema)
 	return schema
 }
 
