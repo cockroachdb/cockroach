@@ -85,12 +85,14 @@ func (expr *BinaryExpr) TypeCheck(args MapArgs) (Datum, error) {
 func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 	var dummyCond, dummyVal Datum
 
+	valargType := DummyBool
 	if expr.Expr != nil {
 		var err error
 		dummyCond, err = expr.Expr.TypeCheck(args)
 		if err != nil {
 			return nil, err
 		}
+		valargType = dummyCond
 	}
 
 	if expr.Else != nil {
@@ -106,6 +108,11 @@ func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
+		if set, err := args.SetInferredType(nextDummyCond, valargType); err != nil {
+			return nil, err
+		} else if set != nil {
+			nextDummyCond = set
+		}
 		if dummyCond == nil || dummyCond == DNull {
 			dummyCond = nextDummyCond
 		} else if !(nextDummyCond == DNull || nextDummyCond.TypeEqual(dummyCond)) {
@@ -115,6 +122,11 @@ func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 		nextDummyVal, err := when.Val.TypeCheck(args)
 		if err != nil {
 			return nil, err
+		}
+		if set, err := args.SetInferredType(nextDummyVal, dummyVal); err != nil {
+			return nil, err
+		} else if set != nil {
+			nextDummyVal = set
 		}
 		if dummyVal == nil || dummyVal == DNull {
 			dummyVal = nextDummyVal
