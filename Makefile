@@ -36,7 +36,21 @@ STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
 BUILDMODE    := install
 
-# Note: We pass `-v` go `go build` and `go test -i` so that warnings
+# If we are in the default directory (GOPATH/src/github.com/cockroachdb/cockroach), we can set
+# GOPATH automatically. Otherwise (e.g. vendoring), leave it as is.
+GOPATH_CANDIDATE := $(realpath ../../../..)
+
+ifneq ($(wildcard $(GOPATH_CANDIDATE)/src/.),)
+ifneq ($(wildcard $(GOPATH_CANDIDATE)/pkg/.),)
+ifneq ($(wildcard $(GOPATH_CANDIDATE)/bin/.),)
+export GOPATH := $(GOPATH_CANDIDATE)
+export PATH := $(GOPATH)/bin:$(PATH)
+GOPATH_SET := 1
+endif
+endif
+endif
+
+# Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
@@ -65,6 +79,12 @@ install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTag=$(shell g
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildDeps=$(shell GOPATH=${GOPATH} build/depvers.sh)"
 install:
+ifdef GOPATH_SET
+	@echo "GOPATH set to $$GOPATH"
+	@echo "$$GOPATH/bin added to PATH"
+else
+	@echo "GOPATH is $$GOPATH"
+endif
 	@echo $(GO) $(BUILDMODE) -v $(GOFLAGS)
 	@$(GO) $(BUILDMODE) -v $(GOFLAGS) -ldflags '$(LDFLAGS)'
 
