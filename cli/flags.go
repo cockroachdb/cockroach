@@ -18,7 +18,9 @@ package cli
 
 import (
 	"flag"
+	"fmt"
 	"net"
+	"os"
 	"reflect"
 	"strings"
 
@@ -26,6 +28,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var maxResults int64
@@ -297,6 +300,20 @@ func init() {
 	cobra.OnInitialize(func() {
 		if context.EphemeralSingleNode {
 			context.Insecure = true
+			if len(context.JoinUsing) != 0 {
+				log.Errorf("--join cannot be specified when running a node in dev mode (--dev)")
+				os.Exit(1)
+			}
+			fmt.Printf(`
+****
+**
+** This node is being run in DEVELOPMENT mode.
+**
+** All data is ephemeral, and there is no security.
+**
+****
+
+`)
 		}
 		context.Addr = net.JoinHostPort(connHost, connPort)
 		context.PGAddr = net.JoinHostPort(connHost, connPGPort)
