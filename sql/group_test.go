@@ -87,7 +87,7 @@ func makeDecimalTestDatum(count int) []parser.Datum {
 
 	vals := make([]parser.Datum, count)
 	for i := range vals {
-		dd := parser.DDecimal{}
+		dd := &parser.DDecimal{}
 		decimal.SetFromFloat(&dd.Dec, rng.Float64())
 		vals[i] = dd
 	}
