@@ -20,8 +20,11 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
 func TestDesiredAggregateOrder(t *testing.T) {
@@ -57,4 +60,129 @@ func TestDesiredAggregateOrder(t *testing.T) {
 			t.Fatalf("%s: expected %v, but found %v", d.expr, d.ordering, ordering)
 		}
 	}
+}
+
+const testDatumCount = 1000
+
+func makeIntTestDatum() []parser.Datum {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([]parser.Datum, testDatumCount)
+	for i := range vals {
+		vals[i] = parser.DInt(rng.Int63())
+	}
+	return vals
+}
+
+func makeFloatTestDatum() []parser.Datum {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([]parser.Datum, testDatumCount)
+	for i := range vals {
+		vals[i] = parser.DFloat(rng.Float64())
+	}
+	return vals
+}
+
+func makeDecimalTestDatum() []parser.Datum {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([]parser.Datum, testDatumCount)
+	for i := range vals {
+		dd := parser.DDecimal{}
+		decimal.SetFromFloat(&dd.Dec, rng.Float64())
+		vals[i] = dd
+	}
+	return vals
+}
+
+func runBenchmarkAggregate(b *testing.B, aggFunc func() aggregateImpl, vals []parser.Datum) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		aggImpl := aggFunc()
+		for i := range vals {
+			if err := aggImpl.add(vals[i]); err != nil {
+				b.Errorf("adding value to aggregate implementation %T failed: %v", aggImpl, err)
+			}
+		}
+		if _, err := aggImpl.result(); err != nil {
+			b.Errorf("taking result of aggregate implementation %T failed: %v", aggImpl, err)
+		}
+	}
+}
+
+func BenchmarkAvgAggregateInt(b *testing.B) {
+	runBenchmarkAggregate(b, newAvgAggregate, makeIntTestDatum())
+}
+
+func BenchmarkAvgAggregateFloat(b *testing.B) {
+	runBenchmarkAggregate(b, newAvgAggregate, makeFloatTestDatum())
+}
+
+func BenchmarkAvgAggregateDecimal(b *testing.B) {
+	runBenchmarkAggregate(b, newAvgAggregate, makeDecimalTestDatum())
+}
+
+func BenchmarkCountAggregate(b *testing.B) {
+	runBenchmarkAggregate(b, newCountAggregate, makeIntTestDatum())
+}
+
+func BenchmarkSumAggregateInt(b *testing.B) {
+	runBenchmarkAggregate(b, newSumAggregate, makeIntTestDatum())
+}
+
+func BenchmarkSumAggregateFloat(b *testing.B) {
+	runBenchmarkAggregate(b, newSumAggregate, makeFloatTestDatum())
+}
+
+func BenchmarkSumAggregateDecimal(b *testing.B) {
+	runBenchmarkAggregate(b, newSumAggregate, makeDecimalTestDatum())
+}
+
+func BenchmarkMaxAggregateInt(b *testing.B) {
+	runBenchmarkAggregate(b, newMaxAggregate, makeIntTestDatum())
+}
+
+func BenchmarkMaxAggregateFloat(b *testing.B) {
+	runBenchmarkAggregate(b, newMaxAggregate, makeFloatTestDatum())
+}
+
+func BenchmarkMaxAggregateDecimal(b *testing.B) {
+	runBenchmarkAggregate(b, newMaxAggregate, makeDecimalTestDatum())
+}
+
+func BenchmarkMinAggregateInt(b *testing.B) {
+	runBenchmarkAggregate(b, newMinAggregate, makeIntTestDatum())
+}
+
+func BenchmarkMinAggregateFloat(b *testing.B) {
+	runBenchmarkAggregate(b, newMinAggregate, makeFloatTestDatum())
+}
+
+func BenchmarkMinAggregateDecimal(b *testing.B) {
+	runBenchmarkAggregate(b, newMinAggregate, makeDecimalTestDatum())
+}
+
+func BenchmarkVarianceAggregateInt(b *testing.B) {
+	runBenchmarkAggregate(b, newVarianceAggregate, makeIntTestDatum())
+}
+
+func BenchmarkVarianceAggregateFloat(b *testing.B) {
+	runBenchmarkAggregate(b, newVarianceAggregate, makeFloatTestDatum())
+}
+
+func BenchmarkVarianceAggregateDecimal(b *testing.B) {
+	runBenchmarkAggregate(b, newVarianceAggregate, makeDecimalTestDatum())
+}
+
+func BenchmarkStddevAggregateInt(b *testing.B) {
+	runBenchmarkAggregate(b, newStddevAggregate, makeIntTestDatum())
+}
+
+func BenchmarkStddevAggregateFloat(b *testing.B) {
+	runBenchmarkAggregate(b, newStddevAggregate, makeFloatTestDatum())
+}
+
+func BenchmarkStddevAggregateDecimal(b *testing.B) {
+	runBenchmarkAggregate(b, newStddevAggregate, makeDecimalTestDatum())
 }
