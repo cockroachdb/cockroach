@@ -466,10 +466,13 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		if nDesc := ds.getNodeDescriptor(); nDesc != nil {
 			// TODO(tschottdorf): bad style to assume that ba.Txn is ours.
 			// No race here, but should have a better way of doing this.
+			//
 			// TODO(tschottdorf): future refactoring should move this to txn
 			// creation in TxnCoordSender, which is currently unaware of the
 			// NodeID (and wraps *DistSender through client.Sender since it
 			// also needs test compatibility with *LocalSender).
+			//
+			// TODO(pmattis): We should shallow-copy the Txn.
 			ba.Txn.CertainNodes.Add(nDesc.NodeID)
 		}
 	}
