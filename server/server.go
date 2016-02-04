@@ -224,7 +224,7 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	unresolvedAddr := util.MakeUnresolvedAddr("tcp", s.ctx.Addr)
+	unresolvedAddr := util.NewUnresolvedAddr("tcp", s.ctx.Addr)
 	ln, err := util.ListenAndServe(s.stopper, s, unresolvedAddr, tlsConfig)
 	if err != nil {
 		return err
@@ -262,7 +262,7 @@ func (s *Server) Start() error {
 	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), addr)
 	s.initHTTP()
 
-	return s.pgServer.Start(util.MakeUnresolvedAddr("tcp", s.ctx.PGAddr))
+	return s.pgServer.Start(util.NewUnresolvedAddr("tcp", s.ctx.PGAddr))
 }
 
 // initHTTP registers http prefixes.

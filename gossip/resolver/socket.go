@@ -56,7 +56,7 @@ func (sr *socketResolver) GetAddress() (net.Addr, error) {
 			// "tcp" resolvers point to a single host. "lb" have an unknown of number of backends.
 			sr.exhausted = true
 		}
-		return util.MakeUnresolvedAddr("tcp", sr.addr), nil
+		return util.NewUnresolvedAddr("tcp", sr.addr), nil
 	}
 	return nil, util.Errorf("unknown address type: %q", sr.typ)
 }

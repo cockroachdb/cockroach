@@ -255,7 +255,7 @@ func (s *statusServer) handleDetailsLocal(w http.ResponseWriter, r *http.Request
 		BuildInfo: util.GetBuildInfo(),
 	}
 	if addr, err := s.gossip.GetNodeIDAddress(s.gossip.GetNodeID()); err == nil {
-		local.Address = addr.(util.UnresolvedAddr)
+		local.Address = *addr
 	}
 	respondAsJSON(w, r, local)
 }

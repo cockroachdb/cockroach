@@ -23,9 +23,9 @@ import (
 )
 
 func checkUpdateMatches(t *testing.T, network, oldAddrString, newAddrString, expAddrString string) {
-	oldAddr := MakeUnresolvedAddr(network, oldAddrString)
-	newAddr := MakeUnresolvedAddr(network, newAddrString)
-	expAddr := MakeUnresolvedAddr(network, expAddrString)
+	oldAddr := NewUnresolvedAddr(network, oldAddrString)
+	newAddr := NewUnresolvedAddr(network, newAddrString)
+	expAddr := NewUnresolvedAddr(network, expAddrString)
 
 	retAddr, err := updatedAddr(oldAddr, newAddr)
 	if err != nil {
@@ -38,8 +38,8 @@ func checkUpdateMatches(t *testing.T, network, oldAddrString, newAddrString, exp
 }
 
 func checkUpdateFails(t *testing.T, network, oldAddrString, newAddrString string) {
-	oldAddr := MakeUnresolvedAddr(network, oldAddrString)
-	newAddr := MakeUnresolvedAddr(network, newAddrString)
+	oldAddr := NewUnresolvedAddr(network, oldAddrString)
+	newAddr := NewUnresolvedAddr(network, newAddrString)
 
 	retAddr, err := updatedAddr(oldAddr, newAddr)
 	if err == nil {

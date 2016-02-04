@@ -343,8 +343,10 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 		case 0:
 			return errNeedsBootstrap
 		case 1:
-			if addr, err := resolvers[0].GetAddress(); err == nil && addr == n.Descriptor.Address {
-				return errCannotJoinSelf
+			if addr, err := resolvers[0].GetAddress(); err == nil {
+				if uaddr, ok := addr.(*util.UnresolvedAddr); ok && *uaddr == n.Descriptor.Address {
+					return errCannotJoinSelf
+				}
 			}
 		}
 	}

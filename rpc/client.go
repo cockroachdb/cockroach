@@ -363,7 +363,7 @@ func (c *Client) LocalAddr() net.Addr {
 
 // RemoteAddr returns remote address of the client.
 func (c *Client) RemoteAddr() net.Addr {
-	return c.addr
+	return &c.addr
 }
 
 // heartbeat sends a single heartbeat RPC. As part of the heartbeat protocol,

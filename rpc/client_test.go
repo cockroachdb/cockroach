@@ -107,7 +107,7 @@ func TestClientCloseBeforeConnect(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	c := NewClient(
-		util.MakeUnresolvedAddr("tcp", ":1337"),
+		util.NewUnresolvedAddr("tcp", ":1337"),
 		&Context{Stopper: stop.NewStopper()},
 	)
 
