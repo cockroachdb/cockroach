@@ -669,6 +669,7 @@ Available Commands:
   node        list nodes and show their status
 
   version     output version information
+  debug       debugging commands
 
 Flags:
       --alsologtostderr         log to standard error as well as files
