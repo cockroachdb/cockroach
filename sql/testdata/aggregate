@@ -181,6 +181,9 @@ SELECT COUNT(*), k+v FROM kv GROUP BY v
 query error column "v" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT COUNT(*), v/(k+v) FROM kv GROUP BY k+v
 
+query error aggregate functions are not allowed in WHERE
+SELECT k FROM kv WHERE AVG(k) > 1
+
 # Test case from #2761.
 query II rowsort
 SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM kv GROUP BY kv.v + kv.w
