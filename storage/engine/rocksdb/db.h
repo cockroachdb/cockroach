@@ -59,8 +59,8 @@ typedef struct DBIterator DBIterator;
 
 // DBOptions contains local database options.
 typedef struct {
-  int64_t cache_size;
-  int64_t memtable_budget;
+  uint64_t cache_size;
+  uint64_t memtable_budget;
   bool allow_os_buffer;
   bool logging_enabled;
 } DBOptions;
