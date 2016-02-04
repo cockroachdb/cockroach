@@ -266,8 +266,8 @@ func TestSendRPCOrder(t *testing.T) {
 	// Stub to be changed in each test case.
 	var verifyCall func(SendOptions, []net.Addr) error
 
-	var testFn rpcSendFn = func(opts SendOptions, method string,
-		addrs []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+	var testFn rpcSendFn = func(opts SendOptions, addrs []net.Addr,
+		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		if err := verifyCall(opts, addrs); err != nil {
 			return nil, err
 		}
@@ -382,7 +382,8 @@ func TestOwnNodeCertain(t *testing.T) {
 	}
 
 	var act roachpb.NodeList
-	var testFn rpcSendFn = func(_ SendOptions, _ string, _ []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
+		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		ba := getArgs(nil)
 		for _, nodeID := range ba.Txn.CertainNodes.Nodes {
 			act.Add(roachpb.NodeID(nodeID))
@@ -422,7 +423,8 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	}
 	first := true
 
-	var testFn rpcSendFn = func(_ SendOptions, method string, addrs []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+	var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
+		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		if first {
 			reply := &roachpb.BatchResponse{}
 			reply.SetGoError(
@@ -461,7 +463,8 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 
-	var testFn rpcSendFn = func(_ SendOptions, _ string, _ []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
+		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		return getArgs(nil).CreateReply(), nil
 	}
 
@@ -520,7 +523,8 @@ func TestEvictCacheOnError(t *testing.T) {
 		}
 		first := true
 
-		var testFn rpcSendFn = func(_ SendOptions, _ string, _ []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+		var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
+			getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 			if !first {
 				return getArgs(nil).CreateReply(), nil
 			}
@@ -576,7 +580,8 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	newRangeDescriptor.StartKey = badStartKey
 	descStale := true
 
-	var testFn rpcSendFn = func(_ SendOptions, method string, addrs []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+	var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
+		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		ba := getArgs(testAddress)
 		rs := keys.Range(*ba)
 		if _, ok := ba.GetArg(roachpb.RangeLookup); ok {
@@ -688,15 +693,13 @@ func TestSendRPCRetry(t *testing.T) {
 		})
 	}
 	// Define our rpcSend stub which returns success on the second address.
-	var testFn rpcSendFn = func(_ SendOptions, method string, addrs []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
-		if method == "Node.Batch" {
-			batchReply := &roachpb.BatchResponse{}
-			reply := &roachpb.ScanResponse{}
-			batchReply.Add(reply)
-			reply.Rows = append([]roachpb.KeyValue{}, roachpb.KeyValue{Key: roachpb.Key("b"), Value: roachpb.Value{}})
-			return batchReply, nil
-		}
-		return nil, util.Errorf("unexpected method %v", method)
+	var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
+		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+		batchReply := &roachpb.BatchResponse{}
+		reply := &roachpb.ScanResponse{}
+		batchReply.Add(reply)
+		reply.Rows = append([]roachpb.KeyValue{}, roachpb.KeyValue{Key: roachpb.Key("b"), Value: roachpb.Value{}})
+		return batchReply, nil
 	}
 	ctx := &DistSenderContext{
 		RPCSend: testFn,
@@ -776,10 +779,8 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		{Key: roachpb.Key("a"), Value: roachpb.MakeValueFromString("1")},
 		{Key: roachpb.Key("c"), Value: roachpb.MakeValueFromString("2")},
 	}
-	var testFn rpcSendFn = func(_ SendOptions, method string, addrs []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
-		if method != "Node.Batch" {
-			t.Fatalf("unexpected method:%s", method)
-		}
+	var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
+		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		ba := getArgs(testAddress)
 		rs := keys.Range(*ba)
 		batchReply := &roachpb.BatchResponse{}
@@ -827,7 +828,8 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 
-	var testFn rpcSendFn = func(_ SendOptions, method string, addrs []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+	var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
+		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		return getArgs(nil).CreateReply(), nil
 	}
 
@@ -906,11 +908,8 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	// requests. The first request should be the point request on
 	// "a". The second request should be on "b".
 	first := true
-	var testFn rpcSendFn = func(_ SendOptions, method string, addrs []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
-		if method != "Node.Batch" {
-			return nil, util.Errorf("unexpected method %v", method)
-		}
-
+	var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
+		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		ba := getArgs(testAddress)
 		rs := keys.Range(*ba)
 		if first {
@@ -1020,11 +1019,8 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 	// first request.
 	first := true
 	var firstSequence uint32
-	var testFn rpcSendFn = func(_ SendOptions, method string, addrs []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
-		if method != "Node.Batch" {
-			return nil, util.Errorf("unexpected method %v", method)
-		}
-
+	var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
+		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		ba := getArgs(testAddress)
 		rs := keys.Range(*ba)
 		if first {
@@ -1144,7 +1140,8 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 
 	for _, test := range testCases {
 		var act [][]roachpb.Method
-		var testFn rpcSendFn = func(_ SendOptions, method string, addrs []net.Addr, ga func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+		var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
+			ga func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 			ba := ga(testAddress)
 			var cur []roachpb.Method
 			for _, union := range ba.Requests {
