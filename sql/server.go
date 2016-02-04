@@ -209,7 +209,7 @@ func datumFromProto(d driver.Datum) parser.Datum {
 	case *driver.Datum_FloatVal:
 		return parser.DFloat(t.FloatVal)
 	case *driver.Datum_DecimalVal:
-		dd := parser.DDecimal{}
+		dd := &parser.DDecimal{}
 		if _, ok := dd.SetString(t.DecimalVal); !ok {
 			panic(fmt.Sprintf("could not parse string %q as decimal", t.DecimalVal))
 		}
@@ -247,7 +247,7 @@ func protoFromDatum(datum parser.Datum) driver.Datum {
 		return driver.Datum{
 			Payload: &driver.Datum_FloatVal{FloatVal: float64(vt)},
 		}
-	case parser.DDecimal:
+	case *parser.DDecimal:
 		return driver.Datum{
 			Payload: &driver.Datum_DecimalVal{DecimalVal: vt.Dec.String()},
 		}
