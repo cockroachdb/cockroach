@@ -19,57 +19,104 @@
 package acceptance
 
 import (
+	"bytes"
+	"database/sql"
+	"flag"
 	"fmt"
-	"net/rpc"
+	"math/rand"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-// TestChaos starts up a cluster and, for each node, a worker writing to
-// independent keys, while nodes are being killed and restarted continuously.
-// The test measures not write performance, but cluster recovery.
+var maxTransfer = flag.Int("max-transfer", 999, "Maximum amount to transfer in one transaction.")
+var numAccounts = flag.Int("num-accounts", 999, "Number of accounts.")
+
+// TestChaos starts up a cluster with an "accounts" table.
+// It starts transferring money between accounts, while nodes are
+// being killed and restarted continuously.
+// The test doesn't measure write performance, but cluster recovery.
+// TODO(vivek): Expand this test to check that write performance
+// is unaffected by chaos.
 func TestChaos(t *testing.T) {
 	c := StartCluster(t)
 	defer c.AssertAndStop(t)
 
 	num := c.NumNodes()
+	if num <= 0 {
+		t.Fatalf("%d nodes in cluster", num)
+	}
 
 	// One error sent by each client. A successful client sends a nil error.
 	errs := make(chan error, num)
-	start := time.Now()
-	deadline := start.Add(*flagDuration)
 	// The number of successful writes (puts) to the database.
 	var count int64
 	// The number of times chaos monkey has run.
 	var round int64
 	// Set to 1 if chaos monkey has stalled the writes.
 	var stalled int32
+	// One client for each node.
 	clients := make([]struct {
 		sync.RWMutex
-		db      *client.DB
+		db      *sql.DB
 		stopper *stop.Stopper
 		count   int64
 	}, num)
 
-	// initClient requires that the caller holds the client's write lock.
+	// initClient initializes the client talking to node "i".
+	// It requires that the caller hold the client's write lock.
 	initClient := func(i int) {
-		db, dbStopper := makeClient(t, c.ConnString(i))
 		if clients[i].stopper != nil {
 			clients[i].stopper.Stop()
 		}
-		clients[i].db, clients[i].stopper = db, dbStopper
+		clients[i].db = makePGClient(t, c.PGUrl(i))
+		clients[i].stopper = stop.NewStopper()
 	}
 
+	// Initialize the "accounts" table.
+	db := makePGClient(t, c.PGUrl(0))
+
+	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS bank`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Delete table created by a prior instance of a test.
+	if _, err := db.Exec(`DROP TABLE IF EXISTS bank.accounts`); err != nil {
+		t.Fatal(err)
+	}
+
+	schema := `
+CREATE TABLE bank.accounts (
+  id INT PRIMARY KEY,
+  balance INT NOT NULL
+)`
+	if _, err := db.Exec(schema); err != nil {
+		t.Fatal(err)
+	}
+
+	var placeholders bytes.Buffer
+	var values []interface{}
+	for i := 0; i < *numAccounts; i++ {
+		if i > 0 {
+			placeholders.WriteString(", ")
+		}
+		fmt.Fprintf(&placeholders, "($%d, 0)", i+1)
+		values = append(values, i)
+	}
+	stmt := `INSERT INTO bank.accounts (id, balance) VALUES ` + placeholders.String()
+	if _, err := db.Exec(stmt, values...); err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	deadline := start.Add(*flagDuration)
 	done := func() bool {
 		return !time.Now().Before(deadline) || atomic.LoadInt32(&stalled) == 1
 	}
@@ -79,34 +126,35 @@ func TestChaos(t *testing.T) {
 		initClient(i)
 		clients[i].Unlock()
 		go func(i int) {
-			r, _ := randutil.NewPseudoRand()
-			value := randutil.RandBytes(r, 8192)
-			k := atomic.LoadInt64(&count)
-			var prevErrorOutput string
 			for !done() {
 				if err := func() error {
 					clients[i].RLock()
 					defer clients[i].RUnlock()
-					v := value[:r.Intn(len(value))]
-					if pErr := clients[i].db.Put(fmt.Sprintf("%08d", k), v); pErr != nil {
-						err := pErr.GoError()
-						if _, ok := err.(*roachpb.SendError); ok || testutils.IsError(err, rpc.ErrShutdown.Error()) || testutils.IsError(err, "client is unhealthy") {
-							// Common errors we can ignore. Also suppress the
-							// log messages so they don't get spammy.
-							curErrorOutput := fmt.Sprintf("client %d: %s", i, err)
-							if prevErrorOutput != curErrorOutput {
-								log.Warning(curErrorOutput)
-								prevErrorOutput = curErrorOutput
-							}
-						} else {
-							// Unknown error.
-							return err
-						}
-					} else {
-						// Only advance the counts on a successful put.
-						k = atomic.AddInt64(&count, 1)
-						atomic.AddInt64(&clients[i].count, 1)
+					from := rand.Intn(*numAccounts)
+					to := rand.Intn(*numAccounts - 1)
+					if from == to {
+						to = *numAccounts - 1
 					}
+					amount := rand.Intn(*maxTransfer)
+
+					// TODO(mjibson): We can't use query parameters with this query because
+					// it fails type checking on the CASE expression.
+					update := fmt.Sprintf(`
+									UPDATE bank.accounts
+									  SET balance = CASE id WHEN %[1]d THEN balance-%[3]d WHEN %[2]d THEN balance+%[3]d END
+										  WHERE id IN (%[1]d, %[2]d) AND (SELECT balance >= %[3]d FROM bank.accounts WHERE id = %[1]d)
+											`, from, to, amount)
+					if _, err := clients[i].db.Exec(update); err != nil {
+						// Ignore some errors.
+						if testutils.IsError(err, "connection refused") {
+							return nil
+						}
+						return err
+					}
+
+					// Only advance the counts on a successful update.
+					_ = atomic.AddInt64(&count, 1)
+					atomic.AddInt64(&clients[i].count, 1)
 					return nil
 				}(); err != nil {
 					// Report the err and terminate.
@@ -223,6 +271,19 @@ func TestChaos(t *testing.T) {
 				prevOutput = newOutput
 			}
 		}
+	}
+
+	// Verify accounts.
+
+	// Recreate db client because node 0 might have been restarted by
+	// chaos monkey.
+	db = makePGClient(t, c.PGUrl(0))
+	var sum int
+	if err := db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum); err != nil {
+		log.Fatal(err)
+	}
+	if sum != 0 {
+		t.Fatalf("The bank is not in good order. Total value: %d", sum)
 	}
 
 	elapsed := time.Since(start)
