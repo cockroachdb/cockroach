@@ -404,8 +404,9 @@ type extractAggregatesVisitor struct {
 	groupStrs map[string]struct{}
 
 	// groupedCopy is nil when visitor is in an Expr subtree that appears in the GROUP BY clause.
-	groupedCopy *extractAggregatesVisitor
-	err         error
+	groupedCopy         *extractAggregatesVisitor
+	subAggregateVisitor isAggregateVisitor
+	err                 error
 }
 
 var _ parser.Visitor = &extractAggregatesVisitor{}
@@ -432,6 +433,13 @@ func (v *extractAggregatesVisitor) Visit(expr parser.Expr, pre bool) (parser.Vis
 				// if an aggregate function of the wrong arity gets here,
 				// something has gone really wrong.
 				panic(fmt.Sprintf("%s has %d arguments (expected 1)", t.Name.Base, len(t.Exprs)))
+			}
+
+			defer v.subAggregateVisitor.reset()
+			_ = parser.WalkExpr(&v.subAggregateVisitor, t.Exprs[0])
+			if v.subAggregateVisitor.aggregated {
+				v.err = fmt.Errorf("aggregate function calls cannot be nested under %s", t.Name)
+				return v, expr
 			}
 
 			f := &aggregateFunc{
