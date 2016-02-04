@@ -795,34 +795,14 @@ var builtins = map[string][]builtin{
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return DFloat(math.Log(x)), nil
 		}),
-		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
-			switch x.Sign() {
-			case -1:
-				return nil, errLogOfNegNumber
-			case 0:
-				return nil, errLogOfZero
-			}
-			dd := DDecimal{}
-			decimal.Log(&dd.Dec, x, decimal.Precision)
-			return dd, nil
-		}),
+		decimalLogFn(decimal.Log),
 	},
 
 	"log": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return DFloat(math.Log10(x)), nil
 		}),
-		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
-			switch x.Sign() {
-			case -1:
-				return nil, errLogOfNegNumber
-			case 0:
-				return nil, errLogOfZero
-			}
-			dd := DDecimal{}
-			decimal.Log10(&dd.Dec, x, decimal.Precision)
-			return dd, nil
-		}),
+		decimalLogFn(decimal.Log10),
 	},
 
 	"mod": {
@@ -1087,6 +1067,20 @@ var nowImpl = builtin{
 var powImpls = floatOrDecimalBuiltin2(func(x, y float64) (Datum, error) {
 	return DFloat(math.Pow(x, y)), nil
 })
+
+func decimalLogFn(logFn func(*inf.Dec, *inf.Dec, inf.Scale) *inf.Dec) builtin {
+	return decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+		switch x.Sign() {
+		case -1:
+			return nil, errLogOfNegNumber
+		case 0:
+			return nil, errLogOfZero
+		}
+		dd := DDecimal{}
+		logFn(&dd.Dec, x, decimal.Precision)
+		return dd, nil
+	})
+}
 
 func floatBuiltin1(f func(float64) (Datum, error)) builtin {
 	return builtin{
