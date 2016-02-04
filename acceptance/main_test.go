@@ -142,37 +142,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestPGConn(t *testing.T) {
-	c := StartCluster(t)
-	defer c.AssertAndStop(t)
-	db := makePGClient(t, c.PGUrl(0))
-
-	if _, err := db.Exec(`CREATE DATABASE test`); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := db.Exec(`CREATE TABLE test.kv (k INT PRIMARY KEY, v INT)`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Some magic number of entries.
-	n := 13
-	for i := 0; i < n; i++ {
-		if _, err := db.Exec(`INSERT INTO test.kv (k, v) VALUES ($1, $2)`, i, i+1); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	var sum int
-	if err := db.QueryRow("SELECT SUM(v) FROM test.kv").Scan(&sum); err != nil {
-		log.Fatal(err)
-	}
-	expected := n * (n + 1) / 2
-	if sum != expected {
-		t.Fatal("SUM(v) = %d, expected = %d", sum, expected)
-	}
-}
-
 // SkipUnlessLocal calls t.Skip if not running against a local cluster.
 func SkipUnlessLocal(t *testing.T) {
 	if *numLocal == 0 {
