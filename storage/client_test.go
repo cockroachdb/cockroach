@@ -102,7 +102,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	sCtx.ScanMaxIdleTime = splitTimeout / 10
 	sCtx.Tracer = tracing.NewTracer()
 	stores := storage.NewStores(clock)
-	rpcSend := func(_ kv.SendOptions, _ string, _ []net.Addr,
+	rpcSend := func(_ kv.SendOptions, _ []net.Addr,
 		getArgs func(addr net.Addr) *roachpb.BatchRequest,
 		_ *rpc.Context) (proto.Message, error) {
 		ba := getArgs(nil /* net.Addr */)
@@ -301,7 +301,7 @@ func (m *multiTestContext) Stop() {
 // used to multiplex calls between many local senders in a simple way; It sends
 // the request to multiTestContext's localSenders specified in addrs. The request is
 // sent in order until no error is returned.
-func (m *multiTestContext) rpcSend(_ kv.SendOptions, _ string, addrs []net.Addr,
+func (m *multiTestContext) rpcSend(_ kv.SendOptions, addrs []net.Addr,
 	getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

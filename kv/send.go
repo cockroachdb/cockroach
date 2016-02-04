@@ -88,18 +88,17 @@ func shuffleClients(clients []*rpc.Client) {
 	}
 }
 
-// Send sends one or more method RPCs to clients specified by the slice of
-// endpoint addrs. Arguments for methods are obtained using the supplied
-// getArgs function. On success, Send returns the first successful
-// reply. Otherwise, Send returns an error if and as soon as the number of
-// failed RPCs exceeds the available endpoints less the number of required
-// replies.
+// Send sends one or more RPCs to clients specified by the slice of endpoint
+// addrs. Arguments for methods are obtained using the supplied getArgs
+// function. On success, Send returns the first successful reply. Otherwise,
+// Send returns an error if and as soon as the number of failed RPCs exceeds
+// the available endpoints less the number of required replies.
 //
 // TODO(pmattis): Get rid of the getArgs function which requires the caller to
 // maintain a map from address to replica. Instead, pass in the list of
 // replicas instead of a list of addresses and use that to populate the
 // requests.
-func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest,
+func send(opts SendOptions, addrs []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest,
 	context *rpc.Context) (proto.Message, error) {
 	sp := opts.Trace
 	if sp == nil {
@@ -146,7 +145,7 @@ func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr n
 	// node will be able to order the healthy replicas based on latency.
 
 	// Send the first request.
-	sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, context, sp, done)
+	sendOneFn(orderedClients[0], opts.Timeout, getArgs, context, sp, done)
 	orderedClients = orderedClients[1:]
 
 	var errors, retryableErrors int
@@ -170,7 +169,7 @@ func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr n
 			err := call.Error
 			if err == nil {
 				if log.V(2) {
-					log.Infof("%s: successful reply: %+v", method, call.Reply)
+					log.Infof("successful reply: %+v", call.Reply)
 				}
 
 				return call.Reply.(proto.Message), nil
@@ -178,7 +177,7 @@ func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr n
 
 			// Error handling.
 			if log.V(1) {
-				log.Warningf("%s: error reply: %s", method, err)
+				log.Warningf("error reply: %s", err)
 			}
 
 			errors++
@@ -197,7 +196,7 @@ func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr n
 			// Send to additional replicas if available.
 			if len(orderedClients) > 0 {
 				sp.LogEvent("error, trying next peer")
-				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, context, sp, done)
+				sendOneFn(orderedClients[0], opts.Timeout, getArgs, context, sp, done)
 				orderedClients = orderedClients[1:]
 			}
 
@@ -205,7 +204,7 @@ func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr n
 			// On successive RPC timeouts, send to additional replicas if available.
 			if len(orderedClients) > 0 {
 				sp.LogEvent("timeout, trying next peer")
-				sendOneFn(orderedClients[0], opts.Timeout, method, getArgs, context, sp, done)
+				sendOneFn(orderedClients[0], opts.Timeout, getArgs, context, sp, done)
 				orderedClients = orderedClients[1:]
 			}
 		}
@@ -228,9 +227,11 @@ var sendOneFn = sendOne
 //
 // Do not call directly, but instead use sendOneFn. Tests mock out this method
 // via sendOneFn in order to test various error cases.
-func sendOne(client *rpc.Client, timeout time.Duration, method string,
+func sendOne(client *rpc.Client, timeout time.Duration,
 	getArgs func(addr net.Addr) *roachpb.BatchRequest,
 	context *rpc.Context, trace opentracing.Span, done chan *netrpc.Call) {
+
+	const method = "Node.Batch"
 
 	addr := client.RemoteAddr()
 	args := getArgs(addr)
@@ -241,7 +242,7 @@ func sendOne(client *rpc.Client, timeout time.Duration, method string,
 	}
 
 	if log.V(2) {
-		log.Infof("%s: sending request to %s: %+v", method, addr, args)
+		log.Infof("sending request to %s: %+v", addr, args)
 	}
 	trace.LogEvent(fmt.Sprintf("sending to %s", addr))
 

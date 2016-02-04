@@ -78,7 +78,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20, ltc.Stopper)
 
 	ltc.stores = storage.NewStores(ltc.Clock)
-	var rpcSend rpcSendFn = func(_ SendOptions, _ string, _ []net.Addr,
+	var rpcSend rpcSendFn = func(_ SendOptions, _ []net.Addr,
 		getArgs func(addr net.Addr) *roachpb.BatchRequest,
 		_ *rpc.Context) (proto.Message, error) {
 		if ltc.Latency > 0 {

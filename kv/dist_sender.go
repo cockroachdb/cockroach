@@ -127,7 +127,7 @@ type DistSender struct {
 var _ client.Sender = &DistSender{}
 
 // rpcSendFn is the function type used to dispatch RPC calls.
-type rpcSendFn func(SendOptions, string, []net.Addr,
+type rpcSendFn func(SendOptions, []net.Addr,
 	func(addr net.Addr) *roachpb.BatchRequest,
 	*rpc.Context) (proto.Message, error)
 
@@ -352,8 +352,7 @@ func (ds *DistSender) sendRPC(trace opentracing.Span, rangeID roachpb.RangeID, r
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
-	const method = "Node.Batch"
-	reply, err := ds.rpcSend(rpcOpts, method, addrs, getArgs, ds.rpcContext)
+	reply, err := ds.rpcSend(rpcOpts, addrs, getArgs, ds.rpcContext)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
