@@ -74,6 +74,7 @@ func init() {
 		// Miscellaneous commands.
 		// TODO(pmattis): stats
 		versionCmd,
+		debugCmd,
 	)
 }
 
