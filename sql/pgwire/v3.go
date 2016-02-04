@@ -335,16 +335,21 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		if err != nil {
 			return c.sendError(fmt.Sprintf("non-integer parameter name: %s", k))
 		}
+		// ValArgs are 1-indexed, pq.inTypes are 0-indexed.
+		i--
+		if len(pq.inTypes) <= i {
+			return c.sendError("internal error: leftover valargs")
+		}
 		// OID to Datum is not a 1-1 mapping (for example, int4 and int8 both map
 		// to DummyInt), so we need to maintain the types sent by the client.
-		if pq.inTypes[i-1] != 0 {
+		if pq.inTypes[i] != 0 {
 			continue
 		}
 		id, ok := datumToOid[reflect.TypeOf(v)]
 		if !ok {
 			return c.sendError(fmt.Sprintf("unknown datum type: %s", v.Type()))
 		}
-		pq.inTypes[i-1] = id
+		pq.inTypes[i] = id
 	}
 	c.preparedStatements[name] = pq
 	c.writeBuf.initMsg(serverMsgParseComplete)
