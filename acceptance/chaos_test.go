@@ -137,14 +137,11 @@ CREATE TABLE bank.accounts (
 					}
 					amount := rand.Intn(*maxTransfer)
 
-					// TODO(mjibson): We can't use query parameters with this query because
-					// it fails type checking on the CASE expression.
-					update := fmt.Sprintf(`
+					update := `
 									UPDATE bank.accounts
-									  SET balance = CASE id WHEN %[1]d THEN balance-%[3]d WHEN %[2]d THEN balance+%[3]d END
-										  WHERE id IN (%[1]d, %[2]d) AND (SELECT balance >= %[3]d FROM bank.accounts WHERE id = %[1]d)
-											`, from, to, amount)
-					if _, err := clients[i].db.Exec(update); err != nil {
+									  SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
+										  WHERE id IN ($1, $2) AND (SELECT balance >= $3 FROM bank.accounts WHERE id = $1)`
+					if _, err := clients[i].db.Exec(update, from, to, amount); err != nil {
 						// Ignore some errors.
 						if testutils.IsError(err, "connection refused") {
 							return nil
