@@ -35,11 +35,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 )
 
-// TODO(pmattis): We might also want to de-generalize this code so that it
-// knows about the types of the request and response protos
-// (Batch{Request,Response}). This would simplify the interface between
-// DistSender.send() and send() (perhaps no need for getArgs/getReply).
-
 // orderingPolicy is an enum for ordering strategies when there
 // are multiple endpoints available.
 type orderingPolicy int
@@ -86,12 +81,24 @@ func newRPCError(err error) rpcError {
 // and without a positive outlook.
 func (r rpcError) CanRetry() bool { return true }
 
+func shuffleClients(clients []*rpc.Client) {
+	for i, n := 0, len(clients); i < n-1; i++ {
+		j := rand.Intn(n-i) + i
+		clients[i], clients[j] = clients[j], clients[i]
+	}
+}
+
 // Send sends one or more method RPCs to clients specified by the slice of
 // endpoint addrs. Arguments for methods are obtained using the supplied
 // getArgs function. On success, Send returns the first successful
 // reply. Otherwise, Send returns an error if and as soon as the number of
 // failed RPCs exceeds the available endpoints less the number of required
 // replies.
+//
+// TODO(pmattis): Get rid of the getArgs function which requires the caller to
+// maintain a map from address to replica. Instead, pass in the list of
+// replicas instead of a list of addresses and use that to populate the
+// requests.
 func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest,
 	context *rpc.Context) (proto.Message, error) {
 	sp := opts.Trace
@@ -107,7 +114,7 @@ func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr n
 
 	done := make(chan *netrpc.Call, len(addrs))
 
-	var clients []*rpc.Client
+	clients := make([]*rpc.Client, 0, len(addrs))
 	for _, addr := range addrs {
 		clients = append(clients, rpc.NewClient(addr, context))
 	}
@@ -118,21 +125,20 @@ func send(opts SendOptions, method string, addrs []net.Addr, getArgs func(addr n
 		orderedClients = clients
 	case orderRandom:
 		// Randomly permute order, but keep known-unhealthy clients last.
-		var healthy, unhealthy []*rpc.Client
-		for _, client := range clients {
+		var nHealthy int
+		for i, client := range clients {
 			select {
 			case <-client.Healthy():
-				healthy = append(healthy, client)
+				clients[i], clients[nHealthy] = clients[nHealthy], clients[i]
+				nHealthy++
 			default:
-				unhealthy = append(unhealthy, client)
 			}
 		}
-		for _, idx := range rand.Perm(len(healthy)) {
-			orderedClients = append(orderedClients, healthy[idx])
-		}
-		for _, idx := range rand.Perm(len(unhealthy)) {
-			orderedClients = append(orderedClients, unhealthy[idx])
-		}
+
+		shuffleClients(clients[:nHealthy])
+		shuffleClients(clients[nHealthy:])
+
+		orderedClients = clients
 	}
 	// TODO(spencer): going to need to also sort by affinity; closest
 	// ping time should win. Makes sense to have the rpc client/server
