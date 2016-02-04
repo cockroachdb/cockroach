@@ -23,8 +23,6 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
-
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var maxTransfer = flag.Int("max-transfer", 999, "Maximum amount to transfer in one transaction.")
@@ -82,10 +80,7 @@ UPDATE bench.bank
   WHERE id IN (%[1]d, %[2]d) AND (SELECT balance >= %[3]d FROM bench.bank WHERE id = %[1]d)
 `, from, to, amount)
 			if _, err := db.Exec(update); err != nil {
-				if log.V(1) {
-					log.Warning(err)
-				}
-				continue
+				b.Fatal(err)
 			}
 		}
 	})
