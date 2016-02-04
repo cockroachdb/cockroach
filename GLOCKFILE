@@ -20,10 +20,11 @@ github.com/cockroachdb/c-lz4 c40aaae2fc50293eb8750b34632bc3efe813e23f
 github.com/cockroachdb/c-protobuf 4feb192131ea08dfbd7253a00868ad69cbb61b81
 github.com/cockroachdb/c-rocksdb b7fb7bddcb55be35eacdf67e9e2c931083ce02c4
 github.com/cockroachdb/c-snappy 5c6d0932e0adaffce4bfca7bdf2ac37f79952ccf
-github.com/cockroachdb/stress 574c7f17016a4db745b88f6643700995110bdd07 
+github.com/cockroachdb/stress 574c7f17016a4db745b88f6643700995110bdd07
 github.com/cockroachdb/yacc 443154b1852a8702b07d675da6cd97cd9177a316
 github.com/codahale/hdrhistogram 954f16e8b9ef0e5d5189456aa4c1202758e04f17
 github.com/coreos/etcd 8199147cf859882f625523446c28ae2e53b2432f
+github.com/cpuguy83/go-md2man 71acacd42f85e5e82f70a55327789582a5200a90
 github.com/docker/go-units 0bbddae09c5a5419a8c6dcdd7ff90da3d450393b
 github.com/elazarl/go-bindata-assetfs 57eb5e1fc594ad4b0b1dbea7b286d299e0cb43c2
 github.com/go-sql-driver/mysql 6fd058ce0d6b7ee43174e80d5a3e7f483c4dfbe5
@@ -48,7 +49,9 @@ github.com/opentracing/opentracing-go a33c13ce61bf7d67fb342d044d5d899e8a9da77a
 github.com/peterh/liner d5e5aeeb67ca5aeeddeb0b6c3af05421ff63a0b6
 github.com/rcrowley/go-metrics 51425a2415d21afadfd55cd93432c0bc69e9598d
 github.com/robfig/glock cb3c3ec56de988289cab7bbd284eddc04dfee6c9
+github.com/russross/blackfriday d18b67ae0afd61dae240896eae1785f00709aa31
 github.com/samalba/dockerclient 548a5825c12336eb640190d7eb253e155fc286ad
+github.com/shurcooL/sanitized_anchor_name 10ef21a441db47d8b13ebcc5fd2310f636973c77
 github.com/spf13/cobra 9c9300901990faada0c5fb3b5730f452585c7c2b
 github.com/spf13/pflag 7f60f83a2c81bc3c3c0d5297f61ddfa68da9d3b7
 github.com/tebeka/go2xunit fff0d031ea2b81ed06c367293219e4bc005235d0
