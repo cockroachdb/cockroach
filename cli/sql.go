@@ -48,9 +48,14 @@ Open a sql shell running against a cockroach database.
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
 func runInteractive(db *sql.DB, dbURL string) {
+	exitCode := 0
+
 	liner := liner.NewLiner()
 	defer func() {
 		_ = liner.Close()
+		if exitCode != 0 {
+			os.Exit(exitCode)
+		}
 	}()
 
 	fmt.Print(infoMessage)
@@ -80,8 +85,6 @@ func runInteractive(db *sql.DB, dbURL string) {
 	var stmt []string
 	var l string
 	var err error
-
-	exitCode := 0
 
 	for {
 		if len(stmt) == 0 {
@@ -127,13 +130,7 @@ func runInteractive(db *sql.DB, dbURL string) {
 		stmt = stmt[:0]
 	}
 
-	if exitCode != 0 {
-		// Though we have a defer block that calls liner.Close() above, that defer block is never
-		// executed after we call os.Exit(). So, call it explicitly here to prevent us from leaving
-		// the terminal in a messed up state.
-		_ = liner.Close()
-		os.Exit(exitCode)
-	}
+	// The earlier defer block exits with the exitCode.
 }
 
 // runOneStatement executes one statement and terminates
