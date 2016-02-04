@@ -35,8 +35,10 @@ TESTFLAGS    :=
 STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
 BUILDMODE    := install
+GOPATH       := $(realpath $(dir $(realpath $(lastword $(MAKEFILE_LIST))))/../../../..)
+PATH         := $(GOPATH)/bin:$(PATH)
 
-# Note: We pass `-v` go `go build` and `go test -i` so that warnings
+# Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
@@ -60,40 +62,13 @@ build: GOFLAGS += -i -o cockroach
 build: BUILDMODE = build
 build: install
 
-# This target is used to check that GOPATH and PATH are set correctly. GOPATH can have multiple
-# directories, separated by colon; the first one has to match the directory we are in.
-# PATH needs to contain the bin subdirectory of the first GOPATH. To check this, we create a
-# temporary file in that directory and check if "which" finds it. We don't want to do string
-# matching in case symlinks are being used.
-.PHONY: checkgopath
-checkgopath:
-	@GOPATH_FIRST=$$(echo "$$GOPATH" | sed 's/:.*$$//');                                          \
-	GOPATH_ABS=$$(readlink -f "$$GOPATH_FIRST");                                                  \
-	if [ ! -d "$$GOPATH_ABS" ]; then                                                              \
-	   echo 'Invalid GOPATH. Please make sure GOPATH is set correctly.';                          \
-	   exit 1;                                                                                    \
-	fi;                                                                                           \
-	MAKEFILE_ABS=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))));                       \
-	if [ "$${MAKEFILE_ABS#$$GOPATH_ABS}" = "$$MAKEFILE_ABS" ]; then                               \
-	   echo "Makefile directory not under GOPATH!";                                               \
-	   echo "GOPATH: $$GOPATH";                                                                   \
-	   echo "Makefile directory: $$MAKEFILE_ABS";                                                 \
-	   echo "Please make sure GOPATH is set correctly.";                                          \
-	   exit 1;                                                                                    \
-	fi;                                                                                           \
-	TMPFILE=$$(mktemp -p "$$GOPATH_ABS/bin");                                                     \
-	trap "rm -f $$TMPFILE" EXIT;                                                                  \
-	chmod +x $$TMPFILE;                                                                           \
-	if ! which "$$(basename $$TMPFILE)" > /dev/null; then                                         \
-	   echo "PATH needs to contain the bin directory inside GOPATH ($$GOPATH_ABS/bin)!";          \
-	   exit 1;                                                                                    \
-	fi
-
 .PHONY: install
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTag=$(shell git describe --dirty --tags)"
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildDeps=$(shell GOPATH=${GOPATH} build/depvers.sh)"
-install: checkgopath
+install:
+	@echo "GOPATH set to $$GOPATH"
+	@echo "PATH set to $$PATH"
 	@echo $(GO) $(BUILDMODE) -v $(GOFLAGS)
 	@$(GO) $(BUILDMODE) -v $(GOFLAGS) -ldflags '$(LDFLAGS)'
 
@@ -105,7 +80,7 @@ install: checkgopath
 .PHONY: testbuild
 testbuild: TESTS := $(shell $(GO) list -tags '$(TAGS)' $(PKG))
 testbuild: GOFLAGS += -c
-testbuild: checkgopath
+testbuild:
 	for p in $(TESTS); do \
 	  NAME=$$(basename "$$p"); \
 	  OUT="$$NAME.test"; \
@@ -118,7 +93,7 @@ testbuild: checkgopath
 .PHONY: testbuildall
 testbuildall: TESTS := $(shell $(GO) list $(PKG))
 testbuildall: GOFLAGS += -c
-testbuildall: checkgopath
+testbuildall:
 ifndef DIR
 	$(error DIR is undefined)
 endif
@@ -133,19 +108,19 @@ endif
 # Similar to "testrace", we want to cache the build before running the
 # tests.
 .PHONY: test
-test: checkgopath
+test:
 	$(GO) test -v $(GOFLAGS) -i $(PKG)
 	$(GO) test $(GOFLAGS) -run $(TESTS) -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: testslow
 testslow: TESTFLAGS += -v
-testslow: checkgopath
+testslow:
 	$(GO) test -v $(GOFLAGS) -i $(PKG)
 	$(GO) test $(GOFLAGS) -run $(TESTS) -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 .PHONY: testraceslow
 testraceslow: TESTFLAGS += -v
-testraceslow: checkgopath
+testraceslow:
 	$(GO) test -v $(GOFLAGS) -i $(PKG)
 	$(GO) test $(GOFLAGS) -race -run $(TESTS) -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
@@ -154,17 +129,17 @@ testraceslow: checkgopath
 # "make build", and so they would be built from scratch every time (including the
 # slow-to-compile cgo packages).
 .PHONY: testrace
-testrace: checkgopath
+testrace:
 	$(GO) test -v $(GOFLAGS) -race -i $(PKG)
 	$(GO) test $(GOFLAGS) -race -run $(TESTS) -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: bench
-bench: checkgopath
+bench:
 	$(GO) test -v $(GOFLAGS) -i $(PKG)
 	$(GO) test $(GOFLAGS) -run - -bench $(TESTS) -timeout $(BENCHTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: coverage
-coverage: checkgopath
+coverage:
 	$(GO) test -v $(GOFLAGS) -i $(PKG)
 	$(GO) test $(GOFLAGS) -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
 
@@ -172,12 +147,12 @@ coverage: checkgopath
 # and run it in a loop (the PKG argument is required; if TESTS is not
 # given all tests in the package will be run).
 .PHONY: stress
-stress: checkgopath
+stress:
 	$(GO) test -v $(GOFLAGS) -i -c $(PKG) -o stress.test
 	stress $(STRESSFLAGS) ./stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 .PHONY: stressrace
-stressrace: checkgopath
+stressrace:
 	$(GO) test $(GOFLAGS) -race -v -i -c $(PKG) -o stress.test
 	stress $(STRESSFLAGS) ./stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
@@ -222,7 +197,7 @@ check:
 	@! goimports -l . | grep -vF 'No Exceptions'
 
 .PHONY: clean
-clean: checkgopath
+clean:
 	$(GO) clean $(GOFLAGS) -i github.com/cockroachdb/...
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -f .bootstrap
