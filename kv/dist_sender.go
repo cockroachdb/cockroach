@@ -321,7 +321,7 @@ func (ds *DistSender) sendRPC(trace opentracing.Span, rangeID roachpb.RangeID, r
 	addrs := make([]net.Addr, 0, len(replicas))
 	replicaMap := make(map[string]*roachpb.ReplicaDescriptor, len(replicas))
 	for i := range replicas {
-		addr := replicas[i].NodeDesc.Address
+		addr := &replicas[i].NodeDesc.Address
 		addrs = append(addrs, addr)
 		replicaMap[addr.String()] = &replicas[i].ReplicaDescriptor
 	}

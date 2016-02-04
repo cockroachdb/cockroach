@@ -129,7 +129,7 @@ func updatedAddr(oldAddr, newAddr net.Addr) (net.Addr, error) {
 			return nil, fmt.Errorf("asked for port %s, got %s", oldPort, newPort)
 		}
 
-		return MakeUnresolvedAddr(network, net.JoinHostPort(host, newPort)), nil
+		return NewUnresolvedAddr(network, net.JoinHostPort(host, newPort)), nil
 
 	case "unix":
 		if oldAddrStr != newAddrStr {

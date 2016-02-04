@@ -21,22 +21,39 @@ import (
 	"net"
 )
 
-// MakeUnresolvedAddr creates a new UnresolvedAddr from a network
-// and raw address string.
-func MakeUnresolvedAddr(network string, str string) UnresolvedAddr {
+// MakeUnresolvedAddr populates an UnresolvedAddr from a network and raw
+// address string.
+func MakeUnresolvedAddr(network, addr string) UnresolvedAddr {
 	return UnresolvedAddr{
 		NetworkField: network,
-		AddressField: str,
+		AddressField: addr,
 	}
 }
 
+// NewUnresolvedAddr creates a new UnresolvedAddr from a network and raw
+// address string.
+func NewUnresolvedAddr(network, addr string) *UnresolvedAddr {
+	return &UnresolvedAddr{
+		NetworkField: network,
+		AddressField: addr,
+	}
+}
+
+// Note that we make *UnresolvedAddr implement the net.Addr interface, not
+// UnresolvedAddr. This is done because assigning a non-empty struct to an
+// interface requires an allocation, while assigning a pointer to an interface
+// is allocation free. Using an *UnresolvedAddr makes it both clear that an
+// allocation is occurring and allows us to avoid an allocation when an
+// UnresolvedAddr is a field of a struct (e.g. NodeDescriptor.Address).
+var _ net.Addr = &UnresolvedAddr{}
+
 // Network returns the address's network name.
-func (a UnresolvedAddr) Network() string {
+func (a *UnresolvedAddr) Network() string {
 	return a.NetworkField
 }
 
 // String returns the address's string form.
-func (a UnresolvedAddr) String() string {
+func (a *UnresolvedAddr) String() string {
 	return a.AddressField
 }
 

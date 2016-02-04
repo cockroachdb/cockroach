@@ -80,7 +80,7 @@ func resolveAddress(network, address string) (net.Addr, error) {
 		if err != nil {
 			return nil, err
 		}
-		return util.MakeUnresolvedAddr("tcp", address), nil
+		return util.NewUnresolvedAddr("tcp", address), nil
 	}
 	return nil, util.Errorf("unknown address type: %q", network)
 }

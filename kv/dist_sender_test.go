@@ -52,7 +52,7 @@ var testRangeDescriptor = roachpb.RangeDescriptor{
 	},
 }
 
-var testAddress = util.MakeUnresolvedAddr("tcp", "node1:26257")
+var testAddress = util.NewUnresolvedAddr("tcp", "node1:26257")
 
 func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 	n := simulation.NewNetwork(1)
@@ -67,7 +67,7 @@ func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 	nodeIDKey := gossip.MakeNodeIDKey(1)
 	if err := g.AddInfoProto(nodeIDKey, &roachpb.NodeDescriptor{
 		NodeID:  1,
-		Address: util.MakeUnresolvedAddr(testAddress.Network(), testAddress.String()),
+		Address: *testAddress,
 		Attrs:   roachpb.Attributes{Attrs: []string{"attr1", "attr2"}},
 	}, time.Hour); err != nil {
 		t.Fatal(err)
