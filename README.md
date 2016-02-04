@@ -155,7 +155,11 @@ Once that's done, take a look at our [open issues](https://github.com/cockroachd
 
 ## Talks
 
-* [Venue: Golang UK Conference 2015](https://www.youtube.com/watch?v=33oqpLmQ3LE), by [Ben Darnell](https://github.com/bdarnell) on (09/10/2015), 52min.<br />
+* [Venue: Annual RocksDB meetup at Facebook HQ](https://www.youtube.com/watch?v=-ij2OiDTxz0), by [Spencer Kimball] (https://github.com/spencerkimball) on (12/02/2015), 21min.<br />
+  CockroachDB's MVCC model.
+* [Venue: Code Driven NYC](https://www.youtube.com/watch?v=tV-WXM2IJ3U), by [Spencer Kimball] (https://github.com/spencerkimball) on (10/28/2015), 30min.<br />
+  Architecture & Overview.
+* [Venue: Golang UK Conference 2015](https://www.youtube.com/watch?v=33oqpLmQ3LE), by [Ben Darnell](https://github.com/bdarnell) on (08/21/2015), 52min.<br />
 * [Venue: Data Driven NYC](https://youtu.be/TA-Jw78Ms_4), by [Spencer Kimball] (https://github.com/spencerkimball) on (06/16/2015), 23min.<br />
   A short, less technical presentation of CockroachDB.
 * [Venue: NY Enterprise Technology Meetup](https://www.youtube.com/watch?v=SXAEZlpsHNE), by [Tobias Schottdorf](https://github.com/tschottdorf) on (06/10/2015), 15min.<br />
