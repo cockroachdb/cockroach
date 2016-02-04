@@ -166,14 +166,14 @@ func TestPGPrepareFail(t *testing.T) {
 	defer db.Close()
 
 	testFailures := map[string]string{
-		"SELECT $1 = $1":                             "pq: unsupported comparison operator: <valarg> = <valarg>",
-		"SELECT $1 > 0 AND NOT $1":                   "pq: incompatible NOT argument type: int",
-		"SELECT $1":                                  "pq: unsupported result type: valarg",
-		"SELECT $1 + $1":                             "pq: unsupported binary operator: <valarg> + <valarg>",
-		"SELECT now() + $1":                          "pq: unsupported binary operator: <timestamp> + <valarg>",
-		"SELECT CASE $1 WHEN TRUE THEN 1 ELSE 2 END": "pq: incompatible condition types valarg, bool",
-		"SELECT CASE 1 WHEN 2 THEN 1 ELSE $1 END":    "pq: incompatible value types valarg, int",
-		"SELECT CASE 1 WHEN 2 THEN $2 ELSE $1 END":   "pq: unsupported result type: valarg",
+		"SELECT $1 = $1":                           "pq: unsupported comparison operator: <valarg> = <valarg>",
+		"SELECT $1 > 0 AND NOT $1":                 "pq: incompatible NOT argument type: int",
+		"SELECT $1":                                "pq: unsupported result type: valarg",
+		"SELECT $1 + $1":                           "pq: unsupported binary operator: <valarg> + <valarg>",
+		"SELECT now() + $1":                        "pq: unsupported binary operator: <timestamp> + <valarg>",
+		"SELECT CASE $1 WHEN 1 THEN 1 END":         "pq: unsupported case expression type: valarg",
+		"SELECT CASE 1 WHEN 2 THEN 1 ELSE $1 END":  "pq: incompatible value types valarg, int",
+		"SELECT CASE 1 WHEN 2 THEN $2 ELSE $1 END": "pq: unsupported result type: valarg",
 
 		"CREATE TABLE $1 (id INT)":  "pq: syntax error at or near \"1\"\nCREATE TABLE $1 (id INT)\n             ^\n",
 		"DROP TABLE t":              "pq: prepare statement not supported: DROP TABLE",
@@ -278,6 +278,9 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Params(1, 3).Results(3),
 			base.Params(2, 3).Results(2),
 			base.Params(true, 0).Error(`pq: param $1: strconv.ParseInt: parsing "true": invalid syntax`),
+		},
+		"SELECT (SELECT 1+$1)": {
+			base.Params(1).Results(2),
 		},
 		// TODO(mjibson): test date/time types
 	}
@@ -406,6 +409,12 @@ func TestPGPreparedExec(t *testing.T) {
 			"UPDATE d.t SET i = CASE WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
 			[]preparedExecTest{
 				base.Params(true, true, 3).RowsAffected(3),
+			},
+		},
+		{
+			"UPDATE d.t SET i = CASE i WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
+			[]preparedExecTest{
+				base.Params(1, 2, 3).RowsAffected(3),
 			},
 		},
 	}
