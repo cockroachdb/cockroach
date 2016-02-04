@@ -60,7 +60,7 @@ CREATE TABLE system.rangelog (
   otherRangeID  INT,
   info          STRING,
   uniqueID      INT        DEFAULT experimental_unique_int(),
-  PRIMARY KEY (timestamp, rangeID, uniqueID)
+  PRIMARY KEY (timestamp, uniqueID)
 );`
 
 type rangeLogEvent struct {
