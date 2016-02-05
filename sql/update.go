@@ -146,7 +146,7 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 			if _, ok := expr.(parser.DefaultVal); ok {
 				return nil
 			}
-			d, err := expr.TypeCheck(nil)
+			d, err := expr.TypeCheck(p.evalCtx.Args)
 			if err != nil {
 				return roachpb.NewError(err)
 			}

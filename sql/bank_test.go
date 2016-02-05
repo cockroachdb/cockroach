@@ -72,14 +72,11 @@ CREATE TABLE IF NOT EXISTS bench.bank (
 
 			amount := rand.Intn(*maxTransfer)
 
-			// TODO(mjibson): We can't use query parameters with this query because
-			// of the subquery.
-			update := fmt.Sprintf(`
+			const update = `
 UPDATE bench.bank
-  SET balance = CASE id WHEN %[1]d THEN balance-%[3]d WHEN %[2]d THEN balance+%[3]d END
-  WHERE id IN (%[1]d, %[2]d) AND (SELECT balance >= %[3]d FROM bench.bank WHERE id = %[1]d)
-`, from, to, amount)
-			if _, err := db.Exec(update); err != nil {
+  SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
+  WHERE id IN ($1, $2) AND (SELECT balance >= $3 FROM bench.bank WHERE id = $1)`
+			if _, err := db.Exec(update, from, to, amount); err != nil {
 				b.Fatal(err)
 			}
 		}
