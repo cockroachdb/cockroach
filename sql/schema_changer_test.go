@@ -331,6 +331,9 @@ CREATE INDEX foo ON t.test (v)
 
 	// Wait until index is created.
 	for r := retry.Start(retryOpts); r.Next(); {
+		if r.CurrentAttempt() > 30 {
+			t.Fatalf("made %d attempts checking schema change completion", r.CurrentAttempt())
+		}
 		if err := kvDB.GetProto(descKey, desc); err != nil {
 			t.Fatal(err)
 		}
@@ -369,6 +372,9 @@ ALTER INDEX t.test@foo RENAME TO ufo
 	}
 
 	for r := retry.Start(retryOpts); r.Next(); {
+		if r.CurrentAttempt() > 30 {
+			t.Fatalf("made %d attempts checking schema change completion", r.CurrentAttempt())
+		}
 		// Ensure that the version gets incremented.
 		if err := kvDB.GetProto(descKey, desc); err != nil {
 			t.Fatal(err)
