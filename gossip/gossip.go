@@ -154,8 +154,8 @@ type Gossip struct {
 	// bootstrap hosts for connecting to the gossip network.
 	resolverIdx    int
 	resolvers      []resolver.Resolver
-	resolversTried map[int]struct{}            // Set of attempted resolver indexes
-	nodesSeen      map[roachpb.NodeID]struct{} // Transitive set of all nodes we've seen gossip from
+	resolversTried map[int]struct{} // Set of attempted resolver indexes
+	nodeDescs      map[roachpb.NodeID]*roachpb.NodeDescriptor
 }
 
 // New creates an instance of a gossip node.
@@ -171,7 +171,7 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.S
 		stallInterval:     defaultStallInterval,
 		bootstrapInterval: defaultBootstrapInterval,
 		cullInterval:      defaultCullInterval,
-		nodesSeen:         map[roachpb.NodeID]struct{}{},
+		nodeDescs:         map[roachpb.NodeID]*roachpb.NodeDescriptor{},
 	}
 	g.SetResolvers(resolvers)
 	// The gossip RPC context doesn't measure clock offsets, isn't
@@ -352,12 +352,9 @@ func (g *Gossip) GetNodeIDAddress(nodeID roachpb.NodeID) (*util.UnresolvedAddr, 
 
 // GetNodeDescriptor looks up the descriptor of the node by ID.
 func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
-	nodeDescriptor := &roachpb.NodeDescriptor{}
-	if err := g.GetInfoProto(MakeNodeIDKey(nodeID), nodeDescriptor); err != nil {
-		return nil, util.Errorf("unable to lookup descriptor for node %d: %s", nodeID, err)
-	}
-
-	return nodeDescriptor, nil
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.getNodeDescriptorLocked(nodeID)
 }
 
 // EnableSimulationCycler is for TESTING PURPOSES ONLY. It sets a
@@ -441,16 +438,16 @@ func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	// If the node has already been seen, return immediately.
-	if _, ok := g.nodesSeen[desc.NodeID]; ok {
+	n := len(g.nodeDescs)
+	g.nodeDescs[desc.NodeID] = &desc
+	if n == len(g.nodeDescs) {
+		// The node has already been seen, return immediately.
 		return
 	}
 
-	g.nodesSeen[desc.NodeID] = struct{}{} // add it!
-
 	// Recompute max peers based on size of network and set the max
 	// sizes for incoming and outgoing node sets.
-	maxPeers := g.maxPeers(len(g.nodesSeen))
+	maxPeers := g.maxPeers(len(g.nodeDescs))
 	g.incoming.setMaxSize(maxPeers)
 	g.outgoing.setMaxSize(maxPeers)
 
@@ -481,6 +478,13 @@ func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 // is assumed held by the caller. This method is called externally via
 // GetNodeDescriptor and internally by getNodeIDAddressLocked.
 func (g *Gossip) getNodeDescriptorLocked(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
+	if desc, ok := g.nodeDescs[nodeID]; ok {
+		return desc, nil
+	}
+
+	// Fallback to retrieving the node info and unmarshalling the node
+	// descriptor. This path occurs in tests which add a node descriptor to
+	// gossip and then immediately try retrieve it.
 	nodeIDKey := MakeNodeIDKey(nodeID)
 
 	// We can't use GetInfoProto here because that method grabs the lock.
