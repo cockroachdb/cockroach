@@ -181,12 +181,12 @@ func TestUnretryableError(t *testing.T) {
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         10 * time.Second,
 	}
-	getArgs := func(addr net.Addr) *roachpb.BatchRequest {
+	getArgs := func(i int) *roachpb.BatchRequest {
 		return &roachpb.BatchRequest{}
 	}
 
-	sendOneFn = func(client *rpc.Client, timeout time.Duration,
-		getArgs func(addr net.Addr) *roachpb.BatchRequest,
+	sendOneFn = func(client rpcClient, timeout time.Duration,
+		getArgs func(i int) *roachpb.BatchRequest,
 		context *rpc.Context, trace opentracing.Span, done chan *netrpc.Call) {
 		call := netrpc.Call{
 			Reply: &roachpb.BatchResponse{},
@@ -320,13 +320,13 @@ func TestComplexScenarios(t *testing.T) {
 			SendNextTimeout: 1 * time.Second,
 			Timeout:         10 * time.Second,
 		}
-		getArgs := func(addr net.Addr) *roachpb.BatchRequest {
+		getArgs := func(i int) *roachpb.BatchRequest {
 			return &roachpb.BatchRequest{}
 		}
 
 		// Mock sendOne.
-		sendOneFn = func(client *rpc.Client, timeout time.Duration,
-			getArgs func(addr net.Addr) *roachpb.BatchRequest,
+		sendOneFn = func(client rpcClient, timeout time.Duration,
+			getArgs func(i int) *roachpb.BatchRequest,
 			context *rpc.Context, trace opentracing.Span, done chan *netrpc.Call) {
 			addr := client.RemoteAddr()
 			addrID := -1
@@ -374,7 +374,7 @@ func sendBatch(opts SendOptions, addrs []net.Addr, rpcContext *rpc.Context) (pro
 
 func sendRPC(opts SendOptions, addrs []net.Addr, rpcContext *rpc.Context,
 	args *roachpb.BatchRequest) (proto.Message, error) {
-	getArgs := func(addr net.Addr) *roachpb.BatchRequest {
+	getArgs := func(i int) *roachpb.BatchRequest {
 		return args
 	}
 	return send(opts, addrs, getArgs, rpcContext)

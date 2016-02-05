@@ -81,7 +81,12 @@ func newRPCError(err error) rpcError {
 // and without a positive outlook.
 func (r rpcError) CanRetry() bool { return true }
 
-func shuffleClients(clients []*rpc.Client) {
+type rpcClient struct {
+	*rpc.Client
+	index int
+}
+
+func shuffleClients(clients []rpcClient) {
 	for i, n := 0, len(clients); i < n-1; i++ {
 		j := rand.Intn(n-i) + i
 		clients[i], clients[j] = clients[j], clients[i]
@@ -98,7 +103,7 @@ func shuffleClients(clients []*rpc.Client) {
 // maintain a map from address to replica. Instead, pass in the list of
 // replicas instead of a list of addresses and use that to populate the
 // requests.
-func send(opts SendOptions, addrs []net.Addr, getArgs func(addr net.Addr) *roachpb.BatchRequest,
+func send(opts SendOptions, addrs []net.Addr, getArgs func(i int) *roachpb.BatchRequest,
 	context *rpc.Context) (proto.Message, error) {
 	sp := opts.Trace
 	if sp == nil {
@@ -113,12 +118,15 @@ func send(opts SendOptions, addrs []net.Addr, getArgs func(addr net.Addr) *roach
 
 	done := make(chan *netrpc.Call, len(addrs))
 
-	clients := make([]*rpc.Client, 0, len(addrs))
-	for _, addr := range addrs {
-		clients = append(clients, rpc.NewClient(addr, context))
+	clients := make([]rpcClient, 0, len(addrs))
+	for i, addr := range addrs {
+		clients = append(clients, rpcClient{
+			Client: rpc.NewClient(addr, context),
+			index:  i,
+		})
 	}
 
-	var orderedClients []*rpc.Client
+	var orderedClients []rpcClient
 	switch opts.Ordering {
 	case orderStable:
 		orderedClients = clients
@@ -227,14 +235,14 @@ var sendOneFn = sendOne
 //
 // Do not call directly, but instead use sendOneFn. Tests mock out this method
 // via sendOneFn in order to test various error cases.
-func sendOne(client *rpc.Client, timeout time.Duration,
-	getArgs func(addr net.Addr) *roachpb.BatchRequest,
+func sendOne(client rpcClient, timeout time.Duration,
+	getArgs func(i int) *roachpb.BatchRequest,
 	context *rpc.Context, trace opentracing.Span, done chan *netrpc.Call) {
 
 	const method = "Node.Batch"
 
 	addr := client.RemoteAddr()
-	args := getArgs(addr)
+	args := getArgs(client.index)
 	if args == nil {
 		done <- &netrpc.Call{Error: newRPCError(
 			util.Errorf("nil arguments returned for client %s", addr))}

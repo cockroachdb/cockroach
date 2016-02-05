@@ -128,7 +128,7 @@ var _ client.Sender = &DistSender{}
 
 // rpcSendFn is the function type used to dispatch RPC calls.
 type rpcSendFn func(SendOptions, []net.Addr,
-	func(addr net.Addr) *roachpb.BatchRequest,
+	func(i int) *roachpb.BatchRequest,
 	*rpc.Context) (proto.Message, error)
 
 // DistSenderContext holds auxiliary objects that can be passed to
@@ -319,11 +319,9 @@ func (ds *DistSender) sendRPC(trace opentracing.Span, rangeID roachpb.RangeID, r
 
 	// Build a slice of replica addresses.
 	addrs := make([]net.Addr, 0, len(replicas))
-	replicaMap := make(map[string]*roachpb.ReplicaDescriptor, len(replicas))
 	for i := range replicas {
 		addr := &replicas[i].NodeDesc.Address
 		addrs = append(addrs, addr)
-		replicaMap[addr.String()] = &replicas[i].ReplicaDescriptor
 	}
 
 	// TODO(pmattis): This needs to be tested. If it isn't set we'll
@@ -338,14 +336,13 @@ func (ds *DistSender) sendRPC(trace opentracing.Span, rangeID roachpb.RangeID, r
 		Timeout:         rpc.DefaultRPCTimeout,
 		Trace:           trace,
 	}
-	getArgs := func(addr net.Addr) *roachpb.BatchRequest {
+	getArgs := func(i int) *roachpb.BatchRequest {
 		// Make a shallow copy of our prototype request so that we can set the
 		// replica differently.
 		a := &roachpb.BatchRequest{}
 		*a = ba
-		if addr != nil {
-			// TODO(tschottdorf): see len(replicas) above.
-			a.Replica = *replicaMap[addr.String()]
+		if i >= 0 {
+			a.Replica = replicas[i].ReplicaDescriptor
 		}
 		return a
 	}

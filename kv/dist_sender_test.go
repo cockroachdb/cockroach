@@ -267,11 +267,11 @@ func TestSendRPCOrder(t *testing.T) {
 	var verifyCall func(SendOptions, []net.Addr) error
 
 	var testFn rpcSendFn = func(opts SendOptions, addrs []net.Addr,
-		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+		getArgs func(i int) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		if err := verifyCall(opts, addrs); err != nil {
 			return nil, err
 		}
-		return getArgs(addrs[0]).CreateReply(), nil
+		return getArgs(0).CreateReply(), nil
 	}
 
 	ctx := &DistSenderContext{
@@ -383,8 +383,8 @@ func TestOwnNodeCertain(t *testing.T) {
 
 	var act roachpb.NodeList
 	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
-		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
-		ba := getArgs(nil)
+		getArgs func(i int) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+		ba := getArgs(-1)
 		for _, nodeID := range ba.Txn.CertainNodes.Nodes {
 			act.Add(roachpb.NodeID(nodeID))
 		}
@@ -424,7 +424,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	first := true
 
 	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
-		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+		getArgs func(i int) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		if first {
 			reply := &roachpb.BatchResponse{}
 			reply.SetGoError(
@@ -432,7 +432,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 			first = false
 			return reply, nil
 		}
-		return getArgs(nil).CreateReply(), nil
+		return getArgs(-1).CreateReply(), nil
 	}
 
 	ctx := &DistSenderContext{
@@ -464,8 +464,8 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	defer s()
 
 	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
-		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
-		return getArgs(nil).CreateReply(), nil
+		getArgs func(i int) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+		return getArgs(-1).CreateReply(), nil
 	}
 
 	pErrs := []*roachpb.Error{
@@ -524,9 +524,9 @@ func TestEvictCacheOnError(t *testing.T) {
 		first := true
 
 		var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
-			getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+			getArgs func(i int) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 			if !first {
-				return getArgs(nil).CreateReply(), nil
+				return getArgs(-1).CreateReply(), nil
 			}
 			first = false
 			if tc.rpcError {
@@ -581,8 +581,8 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	descStale := true
 
 	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
-		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
-		ba := getArgs(testAddress)
+		getArgs func(i int) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+		ba := getArgs(0)
 		rs := keys.Range(*ba)
 		if _, ok := ba.GetArg(roachpb.RangeLookup); ok {
 			if !descStale && bytes.HasPrefix(rs.Key, keys.Meta2Prefix) {
@@ -693,7 +693,7 @@ func TestSendRPCRetry(t *testing.T) {
 		})
 	}
 	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
-		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+		getArgs func(i int) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		batchReply := &roachpb.BatchResponse{}
 		reply := &roachpb.ScanResponse{}
 		batchReply.Add(reply)
@@ -779,8 +779,8 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		{Key: roachpb.Key("c"), Value: roachpb.MakeValueFromString("2")},
 	}
 	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
-		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
-		ba := getArgs(testAddress)
+		getArgs func(i int) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+		ba := getArgs(0)
 		rs := keys.Range(*ba)
 		batchReply := &roachpb.BatchResponse{}
 		reply := &roachpb.ScanResponse{}
@@ -828,8 +828,8 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	defer s()
 
 	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
-		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
-		return getArgs(nil).CreateReply(), nil
+		getArgs func(i int) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+		return getArgs(-1).CreateReply(), nil
 	}
 
 	ctx := &DistSenderContext{
@@ -908,8 +908,8 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	// "a". The second request should be on "b".
 	first := true
 	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
-		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
-		ba := getArgs(testAddress)
+		getArgs func(i int) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+		ba := getArgs(0)
 		rs := keys.Range(*ba)
 		if first {
 			if !(rs.Key.Equal(roachpb.RKey("a")) && rs.EndKey.Equal(roachpb.RKey("a").Next())) {
@@ -1019,8 +1019,8 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 	first := true
 	var firstSequence uint32
 	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
-		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
-		ba := getArgs(testAddress)
+		getArgs func(i int) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+		ba := getArgs(0)
 		rs := keys.Range(*ba)
 		if first {
 			if !(rs.Key.Equal(roachpb.RKey("a")) && rs.EndKey.Equal(roachpb.RKey("a").Next())) {
@@ -1140,8 +1140,8 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 	for _, test := range testCases {
 		var act [][]roachpb.Method
 		var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
-			ga func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
-			ba := ga(testAddress)
+			ga func(i int) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+			ba := ga(0)
 			var cur []roachpb.Method
 			for _, union := range ba.Requests {
 				cur = append(cur, union.GetInner().Method())

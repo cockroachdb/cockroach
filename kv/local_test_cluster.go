@@ -79,12 +79,12 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 
 	ltc.stores = storage.NewStores(ltc.Clock)
 	var rpcSend rpcSendFn = func(_ SendOptions, _ []net.Addr,
-		getArgs func(addr net.Addr) *roachpb.BatchRequest,
+		getArgs func(i int) *roachpb.BatchRequest,
 		_ *rpc.Context) (proto.Message, error) {
 		if ltc.Latency > 0 {
 			time.Sleep(ltc.Latency)
 		}
-		br, pErr := ltc.stores.Send(context.Background(), *getArgs(nil))
+		br, pErr := ltc.stores.Send(context.Background(), *getArgs(-1))
 		if br == nil {
 			br = &roachpb.BatchResponse{}
 		}
