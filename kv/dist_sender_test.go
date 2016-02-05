@@ -52,7 +52,7 @@ var testRangeDescriptor = roachpb.RangeDescriptor{
 	},
 }
 
-var testAddress = util.NewUnresolvedAddr("tcp", "node1:26257")
+var testAddress = util.NewUnresolvedAddr("tcp", "node1:0")
 
 func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 	n := simulation.NewNetwork(1)

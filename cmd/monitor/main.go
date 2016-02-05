@@ -46,7 +46,7 @@ const (
 )
 
 var interval = flag.Duration("interval", 10*time.Second, "Interval in which to poll the status of each monitored address.")
-var addrs = flag.String("addrs", ":26257", "Comma-separated list of host:port addresses to monitor.")
+var addrs = flag.String("addrs", ":"+base.CockroachPort, "Comma-separated list of host:port addresses to monitor.")
 var insecure = flag.Bool("insecure", false, "True if using an insecure connection.")
 var user = flag.String("user", security.RootUser, "User used to connect to the cluster.")
 var certs = flag.String("certs", "certs", "Directory containing RSA key and x509 certs. This flag is required if --insecure=false.")

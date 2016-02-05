@@ -19,14 +19,14 @@ package resolver
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
 
 func TestParseResolverSpec(t *testing.T) {
-	def := util.EnsureHostPort(":", util.CockroachPort)
+	def := ensureHostPort(":", base.CockroachPort)
 	testCases := []struct {
 		input           string
 		success         bool
@@ -35,14 +35,14 @@ func TestParseResolverSpec(t *testing.T) {
 	}{
 		// Ports are not checked at parsing time. They are at GetAddress time though.
 		{"127.0.0.1:26222", true, "tcp", "127.0.0.1:26222"},
-		{":26257", true, "tcp", def},
-		{"127.0.0.1", true, "tcp", "127.0.0.1:26257"},
-		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1:26257"},
+		{":" + base.CockroachPort, true, "tcp", def},
+		{"127.0.0.1", true, "tcp", "127.0.0.1:" + base.CockroachPort},
+		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1:" + base.CockroachPort},
 		{"tcp=127.0.0.1:23456", true, "tcp", "127.0.0.1:23456"},
 		{"unix=/tmp/unix-socket12345", true, "unix", "/tmp/unix-socket12345"},
-		{"http-lb=localhost:26257", true, "http-lb", "localhost:26257"},
+		{"http-lb=localhost:" + base.CockroachPort, true, "http-lb", "localhost:" + base.CockroachPort},
 		{"http-lb=newhost:1234", true, "http-lb", "newhost:1234"},
-		{"http-lb=:26257", true, "http-lb", def},
+		{"http-lb=:" + base.CockroachPort, true, "http-lb", def},
 		{"http-lb=:", true, "http-lb", def},
 		{"", false, "", ""},
 		{"foo=127.0.0.1", false, "", ""},
@@ -78,7 +78,7 @@ func TestGetAddress(t *testing.T) {
 		addressValue string
 	}{
 		{"tcp=127.0.0.1:26222", true, true, "tcp", "127.0.0.1:26222"},
-		{"tcp=127.0.0.1", true, true, "tcp", "127.0.0.1:26257"},
+		{"tcp=127.0.0.1", true, true, "tcp", "127.0.0.1:" + base.CockroachPort},
 		{"tcp=localhost:80", true, true, "tcp", "localhost:80"},
 		// We should test unresolvable dns too, but this would be fragile.
 		{"unix=/tmp/foo", true, true, "unix", "/tmp/foo"},

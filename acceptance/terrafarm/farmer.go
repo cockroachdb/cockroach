@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
@@ -169,7 +170,7 @@ func (f *Farmer) Exec(i int, cmd string) error {
 func (f *Farmer) ConnString(i int) string {
 	// TODO(tschottdorf,mberhault): TLS all the things!
 	return "rpc://" + "root" + "@" +
-		util.EnsureHostPort(f.Nodes()[i], util.CockroachPort) +
+		net.JoinHostPort(f.Nodes()[i], base.CockroachPort) +
 		"?certs=" + "certswhocares"
 }
 
@@ -262,7 +263,7 @@ func (f *Farmer) Restart(i int) error {
 
 // URL returns the HTTP(s) endpoint.
 func (f *Farmer) URL(i int) string {
-	return "http://" + util.EnsureHostPort(f.Nodes()[i], util.CockroachPort)
+	return "http://" + net.JoinHostPort(f.Nodes()[i], base.CockroachPort)
 }
 
 func (f *Farmer) logf(format string, args ...interface{}) {

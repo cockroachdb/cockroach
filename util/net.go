@@ -116,17 +116,22 @@ func updatedAddr(oldAddr, newAddr net.Addr) (net.Addr, error) {
 		// TLS certificate. But if the port is different, it should be because
 		// we asked for ":0" and got an arbitrary unused port; that needs to be
 		// reflected in our addr.
-		host, oldPort, err := net.SplitHostPort(EnsureHostPort(oldAddrStr, CockroachPort))
+		oldHost, oldPort, err := net.SplitHostPort(oldAddrStr)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse original addr '%s': %v", oldAddrStr, err)
 		}
-		_, newPort, err := net.SplitHostPort(newAddrStr)
+		newHost, newPort, err := net.SplitHostPort(newAddrStr)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse new addr '%s': %v", newAddrStr, err)
 		}
 
 		if newPort != oldPort && oldPort != "0" {
 			return nil, fmt.Errorf("asked for port %s, got %s", oldPort, newPort)
+		}
+
+		host := oldHost
+		if host == "" {
+			host = newHost
 		}
 
 		return NewUnresolvedAddr(network, net.JoinHostPort(host, newPort)), nil
