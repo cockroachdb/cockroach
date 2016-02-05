@@ -61,7 +61,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	i := 0
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		i++
-		fmt.Fprintf(w, `{"address": {"network": "tcp", "address": "10.10.0.%d:26257"}}`, i)
+		fmt.Fprintf(w, `{"address": {"network": "tcp", "address": "10.10.0.%d:12345"}}`, i)
 	})
 	s := httptest.NewServer(handler)
 	defer s.Close()
@@ -94,13 +94,13 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 		"127.0.0.1:9000",
 		"127.0.0.1:9001",
 		"/tmp/unix-socket12345",
-		"10.10.0.1:26257",
+		"10.10.0.1:12345",
 		"localhost:9004",
-		"10.10.0.2:26257",
-		"10.10.0.3:26257",
-		"10.10.0.4:26257",
-		"10.10.0.5:26257",
-		"10.10.0.6:26257",
+		"10.10.0.2:12345",
+		"10.10.0.3:12345",
+		"10.10.0.4:12345",
+		"10.10.0.5:12345",
+		"10.10.0.6:12345",
 	}
 	for i := 0; i < len(expAddresses); i++ {
 		if addr := g.getNextBootstrapAddress(); addr == nil {

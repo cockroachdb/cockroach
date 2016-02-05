@@ -22,7 +22,7 @@ import (
 )
 
 func TestUnresolvedAddr(t *testing.T) {
-	tcpAddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:26257")
+	tcpAddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:12345")
 	if err != nil {
 		t.Fatal(err)
 	}

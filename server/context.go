@@ -41,8 +41,8 @@ import (
 // Context defaults.
 const (
 	defaultCGroupMemPath      = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
-	defaultAddr               = ":26257"
-	defaultPGAddr             = ":15432"
+	defaultAddr               = ":" + base.CockroachPort
+	defaultPGAddr             = ":" + base.PgPort
 	defaultMaxOffset          = 250 * time.Millisecond
 	defaultCacheSize          = 512 << 20 // 512 MB
 	defaultMemtableBudget     = 512 << 20 // 512 MB

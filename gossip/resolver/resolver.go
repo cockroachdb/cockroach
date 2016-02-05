@@ -18,6 +18,7 @@ package resolver
 
 import (
 	"net"
+	"os"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -75,7 +76,7 @@ func NewResolver(context *base.Context, spec string) (Resolver, error) {
 	// For non-unix resolvers, make sure we fill in the host when not specified (eg: ":26257")
 	if typ != "unix" {
 		// Ensure addr has port and host set.
-		addr = util.EnsureHostPort(addr, util.CockroachPort)
+		addr = ensureHostPort(addr, base.CockroachPort)
 	}
 
 	// Create the actual resolver.
@@ -98,4 +99,30 @@ func NewResolverFromAddress(addr net.Addr) (Resolver, error) {
 // NewResolverFromUnresolvedAddr takes a util.UnresolvedAddr and constructs a resolver.
 func NewResolverFromUnresolvedAddr(addr util.UnresolvedAddr) (Resolver, error) {
 	return NewResolverFromAddress(&addr)
+}
+
+// ensureHostPort takes a host:port pair, where the host and port are optional.
+// If host and port are present, the output is equal to the input. If port is
+// not present, use default port 26257(cockroach) or 15432(postgres). If host is
+// not present, host will be equal to the hostname (or "127.0.0.1" as a fallback).
+func ensureHostPort(addr string, defaultPort string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if host != "" || err != nil {
+		if port == "" {
+			return net.JoinHostPort(addr, defaultPort)
+		}
+
+		return addr
+	}
+
+	host, err = os.Hostname()
+	if err != nil {
+		host = "127.0.0.1"
+	}
+
+	if port == "" {
+		port = defaultPort
+	}
+
+	return net.JoinHostPort(host, port)
 }
