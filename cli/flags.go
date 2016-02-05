@@ -27,6 +27,7 @@ import (
 	"github.com/kr/text"
 	"github.com/spf13/cobra"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -199,8 +200,8 @@ func initFlags(ctx *Context) {
 
 		// Server flags.
 		f.StringVar(&connHost, "host", "", flagUsage["host"])
-		f.StringVar(&connPort, "port", "26257", flagUsage["port"])
-		f.StringVar(&connPGPort, "pgport", "15432", flagUsage["pgport"])
+		f.StringVar(&connPort, "port", base.CockroachPort, flagUsage["port"])
+		f.StringVar(&connPGPort, "pgport", base.PGPort, flagUsage["pgport"])
 		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, usage("attrs"))
 		f.StringVar(&ctx.Stores, "stores", ctx.Stores, usage("stores"))
 		f.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, usage("max-offset"))
@@ -273,7 +274,7 @@ func initFlags(ctx *Context) {
 	simpleCmds := []*cobra.Command{kvCmd, nodeCmd, rangeCmd, exterminateCmd, quitCmd}
 	for _, cmd := range simpleCmds {
 		f := cmd.PersistentFlags()
-		f.StringVar(&connPort, "port", "26257", flagUsage["port"])
+		f.StringVar(&connPort, "port", base.CockroachPort, flagUsage["port"])
 	}
 
 	// Commands that establish a SQL connection.
@@ -283,7 +284,7 @@ func initFlags(ctx *Context) {
 		f.StringVar(&connURL, "url", "", flagUsage["url"])
 
 		f.StringVar(&connUser, "user", security.RootUser, flagUsage["user"])
-		f.StringVar(&connPGPort, "pgport", "15432", flagUsage["pgport"])
+		f.StringVar(&connPGPort, "pgport", base.PGPort, flagUsage["pgport"])
 		f.StringVar(&connDBName, "database", "", flagUsage["database"])
 	}
 

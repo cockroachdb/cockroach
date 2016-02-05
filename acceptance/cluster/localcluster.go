@@ -30,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -40,13 +41,11 @@ const (
 	builderImage   = "cockroachdb/builder"
 	dockerspyImage = "cockroachdb/docker-spy"
 	domain         = "local"
-	cockroachPort  = 26257
-	pgPort         = 15432
 )
 
 var (
-	cockroachTCP = fmt.Sprintf("%d/tcp", cockroachPort)
-	pgTCP        = fmt.Sprintf("%d/tcp", pgPort)
+	cockroachTCP = base.CockroachPort + "/tcp"
+	pgTCP        = base.PGPort + "/tcp"
 )
 
 var cockroachImage = flag.String("i", builderImage, "the docker image to run")
@@ -355,12 +354,12 @@ func (l *LocalCluster) startNode(i int) *Container {
 		"--stores=" + stores,
 		"--certs=/certs",
 		"--host=" + nodeStr(i),
-		"--port=" + fmt.Sprintf("%d", cockroachPort),
+		"--port=" + base.CockroachPort,
 		"--scan-max-idle-time=200ms", // set low to speed up tests
 	}
 	// Append --join flag for all nodes except first.
 	if i > 0 {
-		cmd = append(cmd, fmt.Sprintf("--join=%s:%d", nodeStr(0), cockroachPort))
+		cmd = append(cmd, "--join="+net.JoinHostPort(nodeStr(0), base.CockroachPort))
 	}
 
 	var locallogDir string
@@ -386,8 +385,8 @@ func (l *LocalCluster) startNode(i int) *Container {
   trace: %[2]s/debug/requests
   logs:  %[3]s/cockroach.INFO
   certs: %[4]s
-  pprof: docker exec -it %[5]s /bin/bash -c 'go tool pprof /cockroach <(wget --no-check-certificate -qO- https://$(hostname):26257/debug/pprof/heap)'`,
-		c.Name, uri, locallogDir, l.CertsDir, c.ID[:5]))
+  pprof: docker exec -it %[5]s /bin/bash -c 'go tool pprof /cockroach <(wget --no-check-certificate -qO- https://$(hostname):%[6]s/debug/pprof/heap)'`,
+		c.Name, uri, locallogDir, l.CertsDir, c.ID[:5], base.CockroachPort))
 	return c
 }
 
@@ -637,5 +636,5 @@ func (l *LocalCluster) Restart(i int) error {
 
 // URL returns the base url.
 func (l *LocalCluster) URL(i int) string {
-	return "https://" + l.Nodes[i].Addr("26257/tcp").String()
+	return "https://" + l.Nodes[i].Addr(cockroachTCP).String()
 }
