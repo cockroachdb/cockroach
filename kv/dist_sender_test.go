@@ -51,7 +51,7 @@ var testRangeDescriptor = roachpb.RangeDescriptor{
 	},
 }
 
-var testAddress = util.NewUnresolvedAddr("tcp", "node1:0")
+var testAddress = util.NewUnresolvedAddr("tcp", "node1")
 
 func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 	n := simulation.NewNetwork(1)
@@ -148,7 +148,6 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	// Gets filled below to identify the replica by its address.
-	addrToNode := make(map[string]int32)
 	makeVerifier := func(expOrder orderingPolicy,
 		expAddrs []int32) func(SendOptions, ReplicaSlice) error {
 		return func(o SendOptions, replicas ReplicaSlice) error {
@@ -164,7 +163,7 @@ func TestSendRPCOrder(t *testing.T) {
 				if expAddrs[i] == 0 {
 					actualAddrs = append(actualAddrs, 0)
 				} else {
-					actualAddrs = append(actualAddrs, addrToNode[r.NodeDesc.Address.String()])
+					actualAddrs = append(actualAddrs, int32(r.NodeDesc.NodeID))
 				}
 			}
 			if !reflect.DeepEqual(expAddrs, actualAddrs) {
@@ -287,7 +286,6 @@ func TestSendRPCOrder(t *testing.T) {
 		descriptor.Replicas = nil // could do this once above, but more convenient here
 		for i := int32(1); i <= 5; i++ {
 			addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
-			addrToNode[addr.String()] = i
 			nd := &roachpb.NodeDescriptor{
 				NodeID:  roachpb.NodeID(i),
 				Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
