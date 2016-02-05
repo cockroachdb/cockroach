@@ -692,7 +692,6 @@ func TestSendRPCRetry(t *testing.T) {
 			StoreID: roachpb.StoreID(i),
 		})
 	}
-	// Define our rpcSend stub which returns success on the second address.
 	var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
 		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		batchReply := &roachpb.BatchResponse{}

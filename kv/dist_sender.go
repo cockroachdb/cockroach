@@ -339,7 +339,7 @@ func (ds *DistSender) sendRPC(trace opentracing.Span, rangeID roachpb.RangeID, r
 		Trace:           trace,
 	}
 	getArgs := func(addr net.Addr) *roachpb.BatchRequest {
-		// Make a shall copy of our prototype request so that we can set the
+		// Make a shallow copy of our prototype request so that we can set the
 		// replica differently.
 		a := &roachpb.BatchRequest{}
 		*a = ba
