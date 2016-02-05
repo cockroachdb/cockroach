@@ -423,7 +423,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	}
 	first := true
 
-	var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
+	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
 		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		if first {
 			reply := &roachpb.BatchResponse{}
@@ -580,7 +580,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	newRangeDescriptor.StartKey = badStartKey
 	descStale := true
 
-	var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
+	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
 		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		ba := getArgs(testAddress)
 		rs := keys.Range(*ba)
@@ -692,7 +692,7 @@ func TestSendRPCRetry(t *testing.T) {
 			StoreID: roachpb.StoreID(i),
 		})
 	}
-	var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
+	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
 		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		batchReply := &roachpb.BatchResponse{}
 		reply := &roachpb.ScanResponse{}
@@ -778,7 +778,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		{Key: roachpb.Key("a"), Value: roachpb.MakeValueFromString("1")},
 		{Key: roachpb.Key("c"), Value: roachpb.MakeValueFromString("2")},
 	}
-	var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
+	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
 		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		ba := getArgs(testAddress)
 		rs := keys.Range(*ba)
@@ -827,7 +827,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 
-	var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
+	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
 		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		return getArgs(nil).CreateReply(), nil
 	}
@@ -907,7 +907,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	// requests. The first request should be the point request on
 	// "a". The second request should be on "b".
 	first := true
-	var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
+	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
 		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		ba := getArgs(testAddress)
 		rs := keys.Range(*ba)
@@ -1018,7 +1018,7 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 	// first request.
 	first := true
 	var firstSequence uint32
-	var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
+	var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
 		getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		ba := getArgs(testAddress)
 		rs := keys.Range(*ba)
@@ -1139,7 +1139,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 
 	for _, test := range testCases {
 		var act [][]roachpb.Method
-		var testFn rpcSendFn = func(_ SendOptions, addrs []net.Addr,
+		var testFn rpcSendFn = func(_ SendOptions, _ []net.Addr,
 			ga func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 			ba := ga(testAddress)
 			var cur []roachpb.Method
