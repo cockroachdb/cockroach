@@ -83,13 +83,13 @@ func (n Node) Batch(args proto.Message) (proto.Message, error) {
 func TestInvalidAddrLength(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	// The provided addrs is nil, so its length will be always
-	// less than the specified response number
-	ret, err := send(SendOptions{}, nil, nil, nil)
+	// The provided replicas is nil, so its length will be always less than the
+	// specified response number
+	ret, err := send(SendOptions{}, nil, roachpb.BatchRequest{}, nil)
 
 	// the expected return is nil and SendError
 	if _, ok := err.(*roachpb.SendError); !ok || ret != nil {
-		t.Fatalf("Shorter addrs should return nil and SendError.")
+		t.Fatalf("Shorter replicas should return nil and SendError.")
 	}
 }
 
@@ -181,12 +181,8 @@ func TestUnretryableError(t *testing.T) {
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         10 * time.Second,
 	}
-	getArgs := func(addr net.Addr) *roachpb.BatchRequest {
-		return &roachpb.BatchRequest{}
-	}
 
-	sendOneFn = func(client *rpc.Client, timeout time.Duration,
-		getArgs func(addr net.Addr) *roachpb.BatchRequest,
+	sendOneFn = func(client *batchClient, timeout time.Duration,
 		context *rpc.Context, trace opentracing.Span, done chan *netrpc.Call) {
 		call := netrpc.Call{
 			Reply: &roachpb.BatchResponse{},
@@ -196,7 +192,7 @@ func TestUnretryableError(t *testing.T) {
 	}
 	defer func() { sendOneFn = sendOne }()
 
-	_, err := send(opts, []net.Addr{ln.Addr()}, getArgs, nodeContext)
+	_, err := sendBatch(opts, []net.Addr{ln.Addr()}, nodeContext)
 	if err == nil {
 		t.Fatalf("Unexpected success")
 	}
@@ -320,13 +316,9 @@ func TestComplexScenarios(t *testing.T) {
 			SendNextTimeout: 1 * time.Second,
 			Timeout:         10 * time.Second,
 		}
-		getArgs := func(addr net.Addr) *roachpb.BatchRequest {
-			return &roachpb.BatchRequest{}
-		}
 
 		// Mock sendOne.
-		sendOneFn = func(client *rpc.Client, timeout time.Duration,
-			getArgs func(addr net.Addr) *roachpb.BatchRequest,
+		sendOneFn = func(client *batchClient, timeout time.Duration,
 			context *rpc.Context, trace opentracing.Span, done chan *netrpc.Call) {
 			addr := client.RemoteAddr()
 			addrID := -1
@@ -349,7 +341,7 @@ func TestComplexScenarios(t *testing.T) {
 		}
 		defer func() { sendOneFn = sendOne }()
 
-		reply, err := send(opts, serverAddrs, getArgs, nodeContext)
+		reply, err := sendBatch(opts, serverAddrs, nodeContext)
 		if test.success {
 			if reply == nil {
 				t.Errorf("%d: expected reply", i)
@@ -367,15 +359,17 @@ func TestComplexScenarios(t *testing.T) {
 	}
 }
 
-// sendBatch sends Batch requests to specified addresses using send.
-func sendBatch(opts SendOptions, addrs []net.Addr, rpcContext *rpc.Context) (proto.Message, error) {
-	return sendRPC(opts, addrs, rpcContext, &roachpb.BatchRequest{})
+func makeReplicas(addrs ...net.Addr) ReplicaSlice {
+	replicas := make(ReplicaSlice, len(addrs))
+	for i, addr := range addrs {
+		replicas[i].NodeDesc = &roachpb.NodeDescriptor{
+			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+		}
+	}
+	return replicas
 }
 
-func sendRPC(opts SendOptions, addrs []net.Addr, rpcContext *rpc.Context,
-	args *roachpb.BatchRequest) (proto.Message, error) {
-	getArgs := func(addr net.Addr) *roachpb.BatchRequest {
-		return args
-	}
-	return send(opts, addrs, getArgs, rpcContext)
+// sendBatch sends Batch requests to specified addresses using send.
+func sendBatch(opts SendOptions, addrs []net.Addr, rpcContext *rpc.Context) (proto.Message, error) {
+	return send(opts, makeReplicas(addrs...), roachpb.BatchRequest{}, rpcContext)
 }

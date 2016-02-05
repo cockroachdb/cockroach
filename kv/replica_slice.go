@@ -25,28 +25,28 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// replicaInfo extends the Replica structure with the associated node
+// ReplicaInfo extends the Replica structure with the associated node
 // descriptor.
-type replicaInfo struct {
+type ReplicaInfo struct {
 	roachpb.ReplicaDescriptor
 	NodeDesc *roachpb.NodeDescriptor
 }
 
-func (i replicaInfo) attrs() []string {
+func (i ReplicaInfo) attrs() []string {
 	return i.NodeDesc.Attrs.Attrs
 }
 
-// A replicaSlice is a slice of replicaInfo.
-type replicaSlice []replicaInfo
+// A ReplicaSlice is a slice of ReplicaInfo.
+type ReplicaSlice []ReplicaInfo
 
-// newReplicaSlice creates a replicaSlice from the replicas listed in the range
+// newReplicaSlice creates a ReplicaSlice from the replicas listed in the range
 // descriptor and using gossip to lookup node descriptors. Replicas on nodes
 // that are not gossipped are omitted from the result.
-func newReplicaSlice(gossip *gossip.Gossip, desc *roachpb.RangeDescriptor) replicaSlice {
+func newReplicaSlice(gossip *gossip.Gossip, desc *roachpb.RangeDescriptor) ReplicaSlice {
 	if gossip == nil {
 		return nil
 	}
-	replicas := make(replicaSlice, 0, len(desc.Replicas))
+	replicas := make(ReplicaSlice, 0, len(desc.Replicas))
 	for _, r := range desc.Replicas {
 		nd, err := gossip.GetNodeDescriptor(r.NodeID)
 		if err != nil {
@@ -55,7 +55,7 @@ func newReplicaSlice(gossip *gossip.Gossip, desc *roachpb.RangeDescriptor) repli
 			}
 			continue
 		}
-		replicas = append(replicas, replicaInfo{
+		replicas = append(replicas, ReplicaInfo{
 			ReplicaDescriptor: r,
 			NodeDesc:          nd,
 		})
@@ -64,13 +64,13 @@ func newReplicaSlice(gossip *gossip.Gossip, desc *roachpb.RangeDescriptor) repli
 }
 
 // Swap interchanges the replicas stored at the given indices.
-func (rs replicaSlice) Swap(i, j int) {
+func (rs ReplicaSlice) Swap(i, j int) {
 	rs[i], rs[j] = rs[j], rs[i]
 }
 
 // FindReplica returns the index of the replica which matches the specified store
 // ID. If no replica matches, -1 is returned.
-func (rs replicaSlice) FindReplica(storeID roachpb.StoreID) int {
+func (rs ReplicaSlice) FindReplica(storeID roachpb.StoreID) int {
 	for i := range rs {
 		if rs[i].StoreID == storeID {
 			return i
@@ -81,7 +81,7 @@ func (rs replicaSlice) FindReplica(storeID roachpb.StoreID) int {
 
 // FindReplicaByNodeID returns the index of the replica which matches the specified node
 // ID. If no replica matches, -1 is returned.
-func (rs replicaSlice) FindReplicaByNodeID(nodeID roachpb.NodeID) int {
+func (rs ReplicaSlice) FindReplicaByNodeID(nodeID roachpb.NodeID) int {
 	for i := range rs {
 		if rs[i].NodeID == nodeID {
 			return i
@@ -90,14 +90,14 @@ func (rs replicaSlice) FindReplicaByNodeID(nodeID roachpb.NodeID) int {
 	return -1
 }
 
-// SortByCommonAttributePrefix rearranges the replicaSlice by comparing the
+// SortByCommonAttributePrefix rearranges the ReplicaSlice by comparing the
 // attributes to the given reference attributes. The basis for the comparison
 // is that of the common prefix of replica attributes (i.e. the number of equal
 // attributes, starting at the first), with a longer prefix sorting first. The
 // number of attributes successfully matched to at least one replica is
-// returned (hence, if the return value equals the length of the replicaSlice,
+// returned (hence, if the return value equals the length of the ReplicaSlice,
 // at least one replica matched all attributes).
-func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
+func (rs ReplicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 	if len(rs) < 2 {
 		return 0
 	}
@@ -127,7 +127,7 @@ func (rs replicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 // MoveToFront moves the replica at the given index to the front
 // of the slice, keeping the order of the remaining elements stable.
 // The function will panic when invoked with an invalid index.
-func (rs replicaSlice) MoveToFront(i int) {
+func (rs ReplicaSlice) MoveToFront(i int) {
 	if i >= len(rs) {
 		panic("out of bound index")
 	}
@@ -137,7 +137,7 @@ func (rs replicaSlice) MoveToFront(i int) {
 	rs[0] = front
 }
 
-func (rs replicaSlice) randPerm(startIndex int, topIndex int, intnFn func(int) int) {
+func (rs ReplicaSlice) randPerm(startIndex int, topIndex int, intnFn func(int) int) {
 	length := topIndex - startIndex + 1
 	for i := 1; i < length; i++ {
 		j := intnFn(i + 1)

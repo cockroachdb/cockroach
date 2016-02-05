@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"net"
 	"reflect"
 	"sort"
 	"strconv"
@@ -102,14 +101,12 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	sCtx.ScanMaxIdleTime = splitTimeout / 10
 	sCtx.Tracer = tracing.NewTracer()
 	stores := storage.NewStores(clock)
-	rpcSend := func(_ kv.SendOptions, _ []net.Addr,
-		getArgs func(addr net.Addr) *roachpb.BatchRequest,
-		_ *rpc.Context) (proto.Message, error) {
-		ba := getArgs(nil /* net.Addr */)
+	rpcSend := func(_ kv.SendOptions, _ kv.ReplicaSlice,
+		ba roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		sp := sCtx.Tracer.StartTrace(ba.TraceID())
 		defer sp.Finish()
 		ctx, _ := opentracing.ContextWithSpan(context.Background(), sp)
-		br, pErr := stores.Send(ctx, *ba)
+		br, pErr := stores.Send(ctx, ba)
 		if br == nil {
 			br = &roachpb.BatchResponse{}
 		}
@@ -301,8 +298,8 @@ func (m *multiTestContext) Stop() {
 // used to multiplex calls between many local senders in a simple way; It sends
 // the request to multiTestContext's localSenders specified in addrs. The request is
 // sent in order until no error is returned.
-func (m *multiTestContext) rpcSend(_ kv.SendOptions, addrs []net.Addr,
-	getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+func (m *multiTestContext) rpcSend(_ kv.SendOptions, replicas kv.ReplicaSlice,
+	args roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	fail := func(pErr *roachpb.Error) (proto.Message, error) {
@@ -312,10 +309,10 @@ func (m *multiTestContext) rpcSend(_ kv.SendOptions, addrs []net.Addr,
 	}
 	var br *roachpb.BatchResponse
 	var pErr *roachpb.Error
-	for _, addr := range addrs {
-		ba := *getArgs(nil /* net.Addr */)
+	for _, replica := range replicas {
+		ba := *proto.Clone(&args).(*roachpb.BatchRequest)
 		// Node ID is encoded in the address.
-		nodeID, stErr := strconv.Atoi(addr.String())
+		nodeID, stErr := strconv.Atoi(replica.NodeDesc.Address.String())
 		if stErr != nil {
 			m.t.Fatal(stErr)
 		}
