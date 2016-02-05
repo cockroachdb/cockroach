@@ -19,7 +19,6 @@ package kv
 import (
 	"errors"
 	"fmt"
-	"net"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -127,9 +126,8 @@ type DistSender struct {
 var _ client.Sender = &DistSender{}
 
 // rpcSendFn is the function type used to dispatch RPC calls.
-type rpcSendFn func(SendOptions, []net.Addr,
-	func(i int) *roachpb.BatchRequest,
-	*rpc.Context) (proto.Message, error)
+type rpcSendFn func(SendOptions, ReplicaSlice,
+	roachpb.BatchRequest, *rpc.Context) (proto.Message, error)
 
 // DistSenderContext holds auxiliary objects that can be passed to
 // NewDistSender.
@@ -251,7 +249,7 @@ func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
 	return rangeDesc, nil
 }
 
-func (ds *DistSender) optimizeReplicaOrder(replicas replicaSlice) orderingPolicy {
+func (ds *DistSender) optimizeReplicaOrder(replicas ReplicaSlice) orderingPolicy { //
 	// Unless we know better, send the RPCs randomly.
 	order := orderingPolicy(orderRandom)
 	nodeDesc := ds.getNodeDescriptor()
@@ -311,17 +309,10 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 // must succeed. Returns an RPC error if the request could not be sent. Note
 // that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
-func (ds *DistSender) sendRPC(trace opentracing.Span, rangeID roachpb.RangeID, replicas replicaSlice, order orderingPolicy,
-	ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func (ds *DistSender) sendRPC(trace opentracing.Span, rangeID roachpb.RangeID, replicas ReplicaSlice,
+	order orderingPolicy, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(replicas) == 0 {
 		return nil, roachpb.NewError(noNodeAddrsAvailError{})
-	}
-
-	// Build a slice of replica addresses.
-	addrs := make([]net.Addr, 0, len(replicas))
-	for i := range replicas {
-		addr := &replicas[i].NodeDesc.Address
-		addrs = append(addrs, addr)
 	}
 
 	// TODO(pmattis): This needs to be tested. If it isn't set we'll
@@ -336,20 +327,10 @@ func (ds *DistSender) sendRPC(trace opentracing.Span, rangeID roachpb.RangeID, r
 		Timeout:         rpc.DefaultRPCTimeout,
 		Trace:           trace,
 	}
-	getArgs := func(i int) *roachpb.BatchRequest {
-		// Make a shallow copy of our prototype request so that we can set the
-		// replica differently.
-		a := &roachpb.BatchRequest{}
-		*a = ba
-		if i >= 0 {
-			a.Replica = replicas[i].ReplicaDescriptor
-		}
-		return a
-	}
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
-	reply, err := ds.rpcSend(rpcOpts, addrs, getArgs, ds.rpcContext)
+	reply, err := ds.rpcSend(rpcOpts, replicas, ba, ds.rpcContext)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
