@@ -21,20 +21,21 @@ import (
 	"os"
 )
 
+// Default port values.
 const (
-	defaultPort = "26257"
+	CockroachPort = "26257"
+	PgPort        = "15432"
 )
 
 // EnsureHostPort takes a host:port pair, where the host and port are optional.
 // If host and port are present, the output is equal to the input. If port is
-// not present, use default port 26257. If host is not present, host will be
-// equal to the hostname (or "127.0.0.1" as a fallback).
-func EnsureHostPort(addr string) string {
+// not present, use default port 26257(cockroach) or 15432(postgres). If host is
+// not present, host will be equal to the hostname (or "127.0.0.1" as a fallback).
+func EnsureHostPort(addr string, defaultPort string) string {
 	host, port, err := net.SplitHostPort(addr)
 	if host != "" || err != nil {
 		if port == "" {
-			port = defaultPort
-			return net.JoinHostPort(addr, port)
+			return net.JoinHostPort(addr, defaultPort)
 		}
 
 		return addr
