@@ -879,11 +879,11 @@ func TestGenMan(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		if err = os.RemoveAll(manpath); err != nil {
-			t.Errorf("couldn't remove temporary directory %s", manpath)
+		if err := os.RemoveAll(manpath); err != nil {
+			t.Errorf("couldn't remove temporary directory %s: %s", manpath, err)
 		}
 	}()
-	if err = Run([]string{"gen", "man", "--path=" + manpath}); err != nil {
+	if err := Run([]string{"gen", "man", "--path=" + manpath}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -907,41 +907,23 @@ func TestGenAutocomplete(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	// Get a unique path to which we can write our autocomplete files.
-	acfile, err := ioutil.TempFile("", "TestGenAutocomplete")
+	acdir, err := ioutil.TempDir("", "TestGenAutoComplete")
 	if err != nil {
 		t.Fatal(err)
 	}
-	acpath := acfile.Name()
 	defer func() {
-		_ = os.Remove(acpath)
+		if err := os.RemoveAll(acdir); err != nil {
+			t.Errorf("couldn't remove temporary directory %s: %s", acdir, err)
+		}
 	}()
-	if err = acfile.Close(); err != nil {
-		t.Fatal(err)
-	}
 
 	const minsize = 25000
+	acpath := filepath.Join(acdir, "cockroach.bash")
 
-	if err = os.Remove(acpath); err != nil {
-		t.Fatal(err)
-	}
-	if err = Run([]string{"gen", "autocomplete", "--out=" + acpath}); err != nil {
+	if err := Run([]string{"gen", "autocomplete", "--out=" + acpath}); err != nil {
 		t.Fatal(err)
 	}
 	s, err := os.Stat(acpath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if s.Size() < minsize {
-		t.Fatalf("autocomplete file size (%d) < minimum (%d)", s.Size(), minsize)
-	}
-
-	if err = os.Remove(acpath); err != nil {
-		t.Fatal(err)
-	}
-	if err = Run([]string{"gen", "autocomplete", "--out=" + acpath, "--type=bash-mac"}); err != nil {
-		t.Fatal(err)
-	}
-	s, err = os.Stat(acpath)
 	if err != nil {
 		t.Fatal(err)
 	}

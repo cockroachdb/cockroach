@@ -17,9 +17,7 @@
 package cli
 
 import (
-	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -33,9 +31,13 @@ var manPath string
 
 var genManCmd = &cobra.Command{
 	Use:   "man",
-	Short: "Generate man pages bash autocompletion for CockroachDB",
-	Long: `This command generates man pages and bash autocompletion files for CockroachDB. By default,
-this places man pages into the "man" directory under the current directory.`,
+	Short: "Generate man pages and bash autocompletion for CockroachDB",
+	Long: `This command generates man pages and bash autocompletion files for CockroachDB.
+
+By default, this places man pages into the "man/man1" directory under the current directory.
+Use "--path=PATH" to override the output directory.  For example, to install man pages globally on
+many Unix-like systems, use "--path=/usr/local/share/man/man1".
+`,
 	RunE: runGenManCmd,
 }
 
@@ -53,7 +55,7 @@ func runGenManCmd(cmd *cobra.Command, args []string) error {
 
 	if _, err := os.Stat(manPath); err != nil {
 		if os.IsNotExist(err) {
-			if err = os.MkdirAll(manPath, 0755); err != nil {
+			if err := os.MkdirAll(manPath, 0755); err != nil {
 				return err
 			}
 		} else {
@@ -73,10 +75,7 @@ func runGenManCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-var (
-	autoCompletePath string
-	autoCompleteType string
-)
+var autoCompletePath string
 
 var genAutocompleteCmd = &cobra.Command{
 	Use:   "autocomplete",
@@ -87,31 +86,16 @@ to specify the path for the completion file.
 By default, completion file is written to ./cockroach.bash. Use "--flag=/path/to/file" to
 override the file location.
 
---type [bash|bash-mac] specifies the type of bash completion file to create. The "bash-mac"
-type generates a bash completion script that works correctly on OS X.
-	`,
+Note that for the generated file to work on OS X, you'll need to install Homebrew's bash-completion
+package (or an equivalent) and follow the post-install instructions.
+`,
 	RunE: runGenAutocompleteCmd,
 }
 
 func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
-	if autoCompleteType != "bash" && autoCompleteType != "bash-mac" {
-		mustUsage(cmd)
-		return util.Errorf("unknown autocomplete type: %s", autoCompleteType)
-	}
-
-	acbuf := &bytes.Buffer{}
-	if err := cmd.Root().GenBashCompletion(acbuf); err != nil {
+	if err := cmd.Root().GenBashCompletionFile(autoCompletePath); err != nil {
 		return err
 	}
-	acbytes := acbuf.Bytes()
-	if autoCompleteType == "bash-mac" {
-		// Work around minor syntactic differences with bash on OS X. Issue #240 filed against cobra.
-		acbytes = []byte(strings.Replace(string(acbytes), "declare -A", "declare -a", -1))
-	}
-	if err := ioutil.WriteFile(autoCompletePath, acbytes, 0777); err != nil {
-		return err
-	}
-
 	fmt.Println("Generated bash completion file", autoCompletePath)
 	return nil
 }
@@ -131,13 +115,10 @@ var genCmds = []*cobra.Command{
 }
 
 func init() {
-	genManCmd.PersistentFlags().StringVarP(&manPath, "path", "",
-		"man/man1", "path where man pages will be outputted")
-
-	genAutocompleteCmd.PersistentFlags().StringVarP(&autoCompletePath, "out", "",
-		"cockroach.bash", "path to generated autocomplete file")
-	genAutocompleteCmd.PersistentFlags().StringVarP(&autoCompleteType, "type", "",
-		"bash", "autocompletion type (bash or bash-mac)")
+	genManCmd.PersistentFlags().StringVar(&manPath, "path", "man/man1",
+		"path where man pages will be outputted")
+	genAutocompleteCmd.PersistentFlags().StringVar(&autoCompletePath, "out", "cockroach.bash",
+		"path to generated autocomplete file")
 
 	genCmd.AddCommand(genCmds...)
 }
