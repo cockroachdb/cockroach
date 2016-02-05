@@ -19,6 +19,7 @@ package sqlutils
 import (
 	"net"
 	"net/url"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
@@ -47,9 +48,9 @@ func PGUrl(t util.Tester, ts *server.TestServer, user, tempDir, prefix string) (
 
 	// Copy these assets to disk from embedded strings, so this test can
 	// run from a standalone binary.
-	tempCAPath, tempCACleanup := securitytest.RestrictedCopy(t, caPath, tempDir, "TestLogic_ca")
-	tempCertPath, tempCertCleanup := securitytest.RestrictedCopy(t, certPath, tempDir, "TestLogic_cert")
-	tempKeyPath, tempKeyCleanup := securitytest.RestrictedCopy(t, keyPath, tempDir, "TestLogic_key")
+	tempCAPath, tempCACleanup := securitytest.RestrictedCopy(t, caPath, tempDir, strings.Join([]string{user, prefix, "ca"}, "_"))
+	tempCertPath, tempCertCleanup := securitytest.RestrictedCopy(t, certPath, tempDir, strings.Join([]string{user, prefix, "cert"}, "_"))
+	tempKeyPath, tempKeyCleanup := securitytest.RestrictedCopy(t, keyPath, tempDir, strings.Join([]string{user, prefix, "key"}, "_"))
 	options := url.Values{}
 	options.Add("sslmode", "verify-full")
 	options.Add("sslrootcert", tempCAPath)
