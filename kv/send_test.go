@@ -182,7 +182,7 @@ func TestUnretryableError(t *testing.T) {
 		Timeout:         10 * time.Second,
 	}
 
-	sendOneFn = func(client rpcClient, args roachpb.BatchRequest, timeout time.Duration,
+	sendOneFn = func(client *batchClient, timeout time.Duration,
 		context *rpc.Context, trace opentracing.Span, done chan *netrpc.Call) {
 		call := netrpc.Call{
 			Reply: &roachpb.BatchResponse{},
@@ -318,7 +318,7 @@ func TestComplexScenarios(t *testing.T) {
 		}
 
 		// Mock sendOne.
-		sendOneFn = func(client rpcClient, args roachpb.BatchRequest, timeout time.Duration,
+		sendOneFn = func(client *batchClient, timeout time.Duration,
 			context *rpc.Context, trace opentracing.Span, done chan *netrpc.Call) {
 			addr := client.RemoteAddr()
 			addrID := -1
