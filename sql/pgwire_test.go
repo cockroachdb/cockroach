@@ -300,6 +300,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SHOW TIME ZONE": {
 			base.Results("UTC"),
 		},
+		"SELECT (SELECT 1+$1)": {
+			base.Params(1).Results(2),
+		},
 		// TODO(mjibson): test date/time types
 	}
 
@@ -427,6 +430,12 @@ func TestPGPreparedExec(t *testing.T) {
 			"UPDATE d.t SET i = CASE WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
 			[]preparedExecTest{
 				base.Params(true, true, 3).RowsAffected(3),
+			},
+		},
+		{
+			"UPDATE d.t SET i = CASE i WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
+			[]preparedExecTest{
+				base.Params(1, 2, 3).RowsAffected(3),
 			},
 		},
 	}

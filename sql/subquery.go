@@ -67,6 +67,10 @@ func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, par
 		return nil, expr
 	}
 
+	if v.prepareOnly {
+		return nil, expr
+	}
+
 	if exists != nil {
 		// For EXISTS expressions, all we want to know is if there is at least one
 		// result.
