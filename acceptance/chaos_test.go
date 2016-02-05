@@ -280,7 +280,7 @@ CREATE TABLE bank.accounts (
 	db = makePGClient(t, c.PGUrl(0))
 	var sum int
 	if err := db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum); err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 	if sum != 0 {
 		t.Fatalf("The bank is not in good order. Total value: %d", sum)
