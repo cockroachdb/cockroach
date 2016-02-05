@@ -125,13 +125,13 @@ done
 Now, on node 1, initialize the cluster (to `/data`; yours may vary):
 
 ```bash
-./cockroach init --stores=ssd=/data
+./cockroach start --stores=ssd=/data
 ```
 
-Then, start the cluster by starting each individual node.
+Then, add nodes 2, 3, etc. to the cluster by specifying the `--join` flag to connect to any already-joined node.
 
 ```bash
-./cockroach start --stores=ssd=/data --gossip=${NODE1}:26257,${NODE2}:26257,${NODE3}:26257
+./cockroach start --stores=ssd=/data --join=${NODE1}:26257
 ```
 
 Verify that the cluster is connected on the web UI by directing your browser at
