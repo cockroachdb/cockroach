@@ -17,6 +17,8 @@
 package tracing
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
 	"os"
 
@@ -27,27 +29,39 @@ import (
 
 const traceTimeFormat = "15:04:05.000000"
 
-type testRecorder struct{}
+// A StderrRecorder prints received trace spans to stderr.
+type StderrRecorder struct{}
 
-func (testRecorder) RecordSpan(sp *standardtracer.RawSpan) {
+// RecordSpan implements standardtracer.SpanRecorder.
+func (StderrRecorder) RecordSpan(sp *standardtracer.RawSpan) {
 	fmt.Fprintf(os.Stderr, "[Trace %s]\n", sp.Operation)
 	for _, log := range sp.Logs {
 		fmt.Fprintln(os.Stderr, " * ", log.Timestamp.Format(traceTimeFormat), log.Event)
 	}
 }
 
-type noopRecorder struct{}
+// A NoopRecorder silently drops received trace spans.
+type NoopRecorder struct{}
 
-func (noopRecorder) RecordSpan(sp *standardtracer.RawSpan) {}
+// RecordSpan implements standardtracer.SpanRecorder.
+func (NoopRecorder) RecordSpan(sp *standardtracer.RawSpan) {}
 
-var recorder standardtracer.SpanRecorder = noopRecorder{}
+// A CallbackRecorder immediately invokes itself on received trace spans.
+type CallbackRecorder func(sp *standardtracer.RawSpan)
+
+// RecordSpan implements standardtracer.SpanRecorder.
+func (cr CallbackRecorder) RecordSpan(sp *standardtracer.RawSpan) {
+	cr(sp)
+}
+
+var recorder standardtracer.SpanRecorder = NoopRecorder{}
 
 // SetTestTracing sets up subsequently created tracers returned by
 // NewTracer() so that they record their traces to stderr.
 // Not to be called concurrently with any tracer operations; the
 // right place is init() in main_test.go.
 func SetTestTracing() {
-	recorder = testRecorder{}
+	recorder = StderrRecorder{}
 }
 
 // Disable changes the environment so that all newly created tracers are
@@ -60,50 +74,18 @@ func SetTestTracing() {
 // }
 func Disable() func() {
 	storedRecorder := recorder
-	recorder = noopRecorder{}
+	recorder = NoopRecorder{}
 	return func() {
 		recorder = storedRecorder
 	}
 }
 
-type noopTracer struct {
-	// Lazy implementation: we don't use any of the SpanPropagator methods yet,
-	// so we just embed an interface which will be nil in practice.
-	opentracing.SpanPropagator
-}
-
-func (noopTracer) StartTrace(_ string) opentracing.Span {
-	return noopSpan{}
-}
-
 // NewTracer creates a new tracer.
 func NewTracer() opentracing.Tracer {
-	if _, tracingDisabled := recorder.(noopRecorder); tracingDisabled {
-		return noopTracer{}
+	if _, tracingDisabled := recorder.(NoopRecorder); tracingDisabled {
+		return opentracing.NoopTracer{}
 	}
 	return standardtracer.New(recorder)
-}
-
-type noopSpan struct{}
-
-func (noopSpan) SetOperationName(_ string) opentracing.Span {
-	return noopSpan{}
-}
-func (noopSpan) StartChild(_ string) opentracing.Span {
-	return noopSpan{}
-}
-func (noopSpan) SetTag(_ string, _ interface{}) opentracing.Span {
-	return noopSpan{}
-}
-func (noopSpan) Finish()                                     {}
-func (noopSpan) LogEvent(_ string)                           {}
-func (noopSpan) LogEventWithPayload(_ string, _ interface{}) {}
-func (noopSpan) Log(_ opentracing.LogData)                   {}
-func (noopSpan) SetTraceAttribute(_, _ string) opentracing.Span {
-	return noopSpan{}
-}
-func (noopSpan) TraceAttribute(_ string) string {
-	return ""
 }
 
 // SpanFromContext wraps opentracing.SpanFromContext so that the returned
@@ -111,12 +93,36 @@ func (noopSpan) TraceAttribute(_ string) string {
 func SpanFromContext(ctx context.Context) opentracing.Span {
 	sp := opentracing.SpanFromContext(ctx)
 	if sp == nil {
-		return noopSpan{}
+		return NoopSpan
 	}
 	return sp
 }
 
-// NilSpan returns a Span for which all methods are noops.
-func NilSpan() opentracing.Span {
-	return noopSpan{}
+// NoopSpan is a singleton span on which all operations are noops.
+// Its existence is owed to the (currently) unwieldy API of opentracing-go,
+// where serialization logic sits on the tracer and barfs when it gets
+// passed a Span which doesn't have the right underlying type.
+// Since we use noop-spans for requests we don't want to trace (or
+// pay measurable overhead for), comparing with NoopSpan has to guard
+// serialization calls.
+// TODO(tschottdorf): hopefully remove when upstream discussion through.
+var NoopSpan = opentracing.NoopTracer{}.StartTrace("")
+
+// EncodeRawSpan encodes a raw span into bytes, using the given dest slice
+// as buffer.
+func EncodeRawSpan(rawSpan *standardtracer.RawSpan, dest []byte) ([]byte, error) {
+	// This is not a greatly efficient (but convenient) use of gob.
+	buf := bytes.NewBuffer(dest[:0])
+	err := gob.NewEncoder(buf).Encode(rawSpan)
+	return buf.Bytes(), err
 }
+
+// DecodeRawSpan unmarshals into the given RawSpan.
+func DecodeRawSpan(enc []byte, dest *standardtracer.RawSpan) error {
+	return gob.NewDecoder(bytes.NewBuffer(enc)).Decode(dest)
+}
+
+var dummyStdTracer = standardtracer.New(NoopRecorder{})
+
+// PropagateSpanAsBinary exposes standardtracer's binary serialization.
+var PropagateSpanAsBinary = dummyStdTracer.PropagateSpanAsBinary

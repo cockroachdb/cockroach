@@ -106,7 +106,7 @@ func send(opts SendOptions, replicas ReplicaSlice,
 	args roachpb.BatchRequest, context *rpc.Context) (proto.Message, error) {
 	sp := opts.Trace
 	if sp == nil {
-		sp = tracing.NilSpan()
+		sp = tracing.NoopSpan
 	}
 
 	if len(replicas) < 1 {

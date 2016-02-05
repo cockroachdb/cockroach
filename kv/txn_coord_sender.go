@@ -299,18 +299,20 @@ func (tc *TxnCoordSender) startStats() {
 // write intents; they're tagged to an outgoing EndTransaction request, with
 // the receiving replica in charge of resolving them.
 func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sp := tracing.SpanFromContext(ctx)
+	if sp != tracing.NoopSpan {
+		if ba.Trace == nil {
+			ba.Trace = &tracing.Span{}
+		}
+		ba.Trace.Context, ba.Trace.Attributes = tracing.PropagateSpanAsBinary(sp)
+	}
+
 	if err := tc.maybeBeginTxn(&ba); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 	var startNS int64
 	ba.SetNewRequest()
-
-	// This is the earliest point at which the request has an ID (if
-	// applicable). Begin a Trace which follows this request.
-	sp := tc.tracer.StartTrace(ba.TraceID())
-	defer sp.Finish()
 	sp.LogEvent("sending batch")
-	ctx, _ = opentracing.ContextWithSpan(ctx, sp)
 
 	var id string // optional transaction ID
 	if ba.Txn != nil {
