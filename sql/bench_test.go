@@ -21,7 +21,6 @@ import (
 	"database/sql"
 	"fmt"
 	"math/rand"
-	"os"
 	"testing"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -38,7 +37,7 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *sql.DB)) {
 	s := server.StartTestServer(b)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(b, s, security.RootUser, os.TempDir(), "benchmarkCockroach")
+	pgUrl, cleanupFn := sqlutils.PGUrl(b, s, security.RootUser, "benchmarkCockroach")
 	defer cleanupFn()
 
 	db, err := sql.Open("postgres", pgUrl.String())

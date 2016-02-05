@@ -19,7 +19,6 @@ package sql_test
 import (
 	"bytes"
 	"database/sql"
-	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -103,7 +102,7 @@ func setupWithContext(t *testing.T, ctx *server.Context) (*testServer, *sql.DB, 
 	s := setupTestServer(t)
 
 	// SQL requests use "root" which has ALL permissions on everything.
-	url, cleanupFn := sqlutils.PGUrl(t, &s.TestServer, security.RootUser, os.TempDir(), "setupWithContext")
+	url, cleanupFn := sqlutils.PGUrl(t, &s.TestServer, security.RootUser, "setupWithContext")
 	sqlDB, err := sql.Open("postgres", url.String())
 	if err != nil {
 		t.Fatal(err)

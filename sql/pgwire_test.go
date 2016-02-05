@@ -19,6 +19,7 @@ package sql_test
 import (
 	"database/sql"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
@@ -56,12 +57,22 @@ func TestPGWire(t *testing.T) {
 	certPath := security.ClientCertPath(security.EmbeddedCertsDir, certUser)
 	keyPath := security.ClientKeyPath(security.EmbeddedCertsDir, certUser)
 
+	tempDir, err := ioutil.TempDir("", "TestPGWire")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			// Not Fatal() because we might already be panicking.
+			t.Error(err)
+		}
+	}()
+
 	// Copy these assets to disk from embedded strings, so this test can
 	// run from a standalone binary.
-	tempCertPath, tempCertCleanup := securitytest.RestrictedCopy(t, certPath, os.TempDir(), "TestPGWire_cert")
-	defer tempCertCleanup()
-	tempKeyPath, tempKeyCleanup := securitytest.RestrictedCopy(t, keyPath, os.TempDir(), "TestPGWire_key")
-	defer tempKeyCleanup()
+	tempCertPath := securitytest.RestrictedCopy(t, certPath, tempDir, "cert")
+	tempKeyPath := securitytest.RestrictedCopy(t, keyPath, tempDir, "key")
 
 	for _, insecure := range [...]bool{true, false} {
 		ctx := server.NewTestContext()
@@ -156,7 +167,7 @@ func TestPGPrepareFail(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, os.TempDir(), "TestPGPrepareFail")
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGPrepareFail")
 	defer cleanupFn()
 
 	db, err := sql.Open("postgres", pgUrl.String())
@@ -309,7 +320,7 @@ func TestPGPreparedQuery(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, os.TempDir(), "TestPGPreparedQuery")
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGPreparedQuery")
 	defer cleanupFn()
 
 	db, err := sql.Open("postgres", pgUrl.String())
@@ -443,7 +454,7 @@ func TestPGPreparedExec(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, os.TempDir(), "TestPGPreparedExec")
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGPreparedExec")
 	defer cleanupFn()
 
 	db, err := sql.Open("postgres", pgUrl.String())
@@ -507,7 +518,7 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, os.TempDir(), "TestCmdCompleteVsEmptyStatements")
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestCmdCompleteVsEmptyStatements")
 	defer cleanupFn()
 
 	db, err := sql.Open("postgres", pgUrl.String())
@@ -549,7 +560,7 @@ func TestPGCommandTags(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "", "TestPGCommandTags")
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGCommandTags")
 	defer cleanupFn()
 
 	db, err := sql.Open("postgres", pgUrl.String())
@@ -645,7 +656,7 @@ func TestPGWireMetrics(t *testing.T) {
 	defer s.Stop()
 
 	// Setup pgwire client.
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, os.TempDir(), "TestPGWireMetrics")
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGWireMetrics")
 	defer cleanupFn()
 
 	const minbytes = 20
