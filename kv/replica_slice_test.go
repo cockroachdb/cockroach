@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func verifyOrdering(attrs []string, replicas replicaSlice, prefixLen int) bool {
+func verifyOrdering(attrs []string, replicas ReplicaSlice, prefixLen int) bool {
 	prevMatchIndex := len(attrs)
 	for i, replica := range replicas {
 		matchIndex := -1
@@ -66,9 +66,9 @@ func TestReplicaSetSortByCommonAttributePrefix(t *testing.T) {
 	}
 
 	for i, attr := range attrs {
-		rs := replicaSlice{}
+		rs := ReplicaSlice{}
 		for _, c := range replicaAttrs {
-			rs = append(rs, replicaInfo{
+			rs = append(rs, ReplicaInfo{
 				NodeDesc: &roachpb.NodeDescriptor{
 					Attrs: roachpb.Attributes{Attrs: c},
 				},
@@ -81,17 +81,17 @@ func TestReplicaSetSortByCommonAttributePrefix(t *testing.T) {
 	}
 }
 
-func getStores(rs replicaSlice) (r []roachpb.StoreID) {
+func getStores(rs ReplicaSlice) (r []roachpb.StoreID) {
 	for i := range rs {
 		r = append(r, rs[i].StoreID)
 	}
 	return
 }
 
-func createReplicaSlice() replicaSlice {
-	rs := replicaSlice(nil)
+func createReplicaSlice() ReplicaSlice {
+	rs := ReplicaSlice(nil)
 	for i := 0; i < 5; i++ {
-		rs = append(rs, replicaInfo{ReplicaDescriptor: roachpb.ReplicaDescriptor{StoreID: roachpb.StoreID(i + 1)}})
+		rs = append(rs, ReplicaInfo{ReplicaDescriptor: roachpb.ReplicaDescriptor{StoreID: roachpb.StoreID(i + 1)}})
 	}
 	return rs
 }

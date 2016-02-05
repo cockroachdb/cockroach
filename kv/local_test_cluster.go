@@ -17,7 +17,6 @@
 package kv
 
 import (
-	"net"
 	"time"
 
 	"golang.org/x/net/context"
@@ -78,13 +77,12 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20, ltc.Stopper)
 
 	ltc.stores = storage.NewStores(ltc.Clock)
-	var rpcSend rpcSendFn = func(_ SendOptions, _ []net.Addr,
-		getArgs func(i int) *roachpb.BatchRequest,
-		_ *rpc.Context) (proto.Message, error) {
+	var rpcSend rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+		args roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		if ltc.Latency > 0 {
 			time.Sleep(ltc.Latency)
 		}
-		br, pErr := ltc.stores.Send(context.Background(), *getArgs(-1))
+		br, pErr := ltc.stores.Send(context.Background(), args)
 		if br == nil {
 			br = &roachpb.BatchResponse{}
 		}
