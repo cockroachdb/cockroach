@@ -237,18 +237,6 @@ func (t *logicTest) run(path string) {
 	// MySQL or Postgres instance.
 	t.srv = setupTestServer(t.T)
 
-	// Make a temporary directory to hold all our on-disk crypto assets.
-	tempDir, err := ioutil.TempDir("", "TestLogic")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(tempDir); err != nil {
-			// Not Fatal() because we might already be panicking.
-			t.Error(err)
-		}
-	}()
-
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
 	cleanupFunc := t.setUser(security.RootUser)
