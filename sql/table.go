@@ -18,6 +18,7 @@ package sql
 
 import (
 	"bytes"
+	"fmt"
 	"time"
 
 	"gopkg.in/inf.v0"
@@ -71,12 +72,12 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, *roachp
 		case *parser.ColumnTableDef:
 			col, idx, err := makeColumnDefDescs(d)
 			if err != nil {
-				return desc, err
+				return desc, roachpb.NewError(err)
 			}
 			desc.AddColumn(*col)
 			if idx != nil {
 				if err := desc.AddIndex(*idx, d.PrimaryKey); err != nil {
-					return desc, err
+					return desc, roachpb.NewError(err)
 				}
 			}
 		case *parser.IndexTableDef:
@@ -84,11 +85,11 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, *roachp
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing,
 			}
-			if err := idx.fillColumns(d.Columns); err != nil {
-				return desc, err
+			if pErr := idx.fillColumns(d.Columns); pErr != nil {
+				return desc, pErr
 			}
 			if err := desc.AddIndex(idx, false); err != nil {
-				return desc, err
+				return desc, roachpb.NewError(err)
 			}
 		case *parser.UniqueConstraintTableDef:
 			idx := IndexDescriptor{
@@ -96,11 +97,11 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, *roachp
 				Unique:           true,
 				StoreColumnNames: d.Storing,
 			}
-			if err := idx.fillColumns(d.Columns); err != nil {
-				return desc, err
+			if pErr := idx.fillColumns(d.Columns); pErr != nil {
+				return desc, pErr
 			}
 			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
-				return desc, err
+				return desc, roachpb.NewError(err)
 			}
 			if d.PrimaryKey {
 				primaryIndexColumnSet = make(map[parser.Name]struct{})
@@ -125,7 +126,7 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, *roachp
 	return desc, nil
 }
 
-func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDescriptor, *roachpb.Error) {
+func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDescriptor, error) {
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),
 		Nullable: d.Nullable != parser.NotNull && !d.PrimaryKey,
@@ -166,17 +167,17 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		col.Type.Kind = ColumnType_BYTES
 		colDatumType = parser.DummyBytes
 	default:
-		return nil, nil, roachpb.NewErrorf("unexpected type %T", t)
+		return nil, nil, util.Errorf("unexpected type %T", t)
 	}
 
 	if d.DefaultExpr != nil {
 		// Verify the default expression type is compatible with the column type.
 		defaultType, err := d.DefaultExpr.TypeCheck(nil)
 		if err != nil {
-			return nil, nil, roachpb.NewError(err)
+			return nil, nil, err
 		}
 		if colDatumType != defaultType {
-			return nil, nil, roachpb.NewUErrorf("incompatible column type and default expression: %s vs %s",
+			return nil, nil, fmt.Errorf("incompatible column type and default expression: %s vs %s",
 				col.Type.Kind, defaultType.Type())
 		}
 
@@ -281,8 +282,9 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, *roachpb.Error) {
 	// Lookup the database in the cache first, falling back to the KV store if it
 	// isn't present. The cache might cause the usage of a recently renamed
 	// database, but that's a race that could occur anyways.
-	dbDesc, pErr := p.getCachedDatabaseDesc(qname.Database())
-	if pErr != nil {
+	dbDesc, err := p.getCachedDatabaseDesc(qname.Database())
+	if err != nil {
+		var pErr *roachpb.Error
 		dbDesc, pErr = p.getDatabaseDesc(qname.Database())
 		if pErr != nil {
 			return 0, pErr
@@ -338,12 +340,12 @@ func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNam
 // encodeIndexKey doesn't deal with ImplicitColumnIDs, so it doesn't always produce
 // a full index key.
 func encodeIndexKey(index *IndexDescriptor, colMap map[ColumnID]int,
-	values []parser.Datum, indexKey []byte) ([]byte, bool, *roachpb.Error) {
+	values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
 	dirs := make([]encoding.Direction, 0, len(index.ColumnIDs))
 	for _, dir := range index.ColumnDirections {
 		convertedDir, err := dir.toEncodingDirection()
 		if err != nil {
-			return nil, false, roachpb.NewError(err)
+			return nil, false, err
 		}
 		dirs = append(dirs, convertedDir)
 	}
@@ -352,7 +354,7 @@ func encodeIndexKey(index *IndexDescriptor, colMap map[ColumnID]int,
 
 // Version of encodeIndexKey that takes ColumnIDs and directions explicitly.
 func encodeColumns(columnIDs []ColumnID, directions []encoding.Direction, colMap map[ColumnID]int,
-	values []parser.Datum, indexKey []byte) ([]byte, bool, *roachpb.Error) {
+	values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
 	var key []byte
 	var containsNull bool
 	key = append(key, indexKey...)
@@ -371,36 +373,36 @@ func encodeColumns(columnIDs []ColumnID, directions []encoding.Direction, colMap
 			containsNull = true
 		}
 
-		var pErr *roachpb.Error
-		if key, pErr = encodeTableKey(key, val, directions[colIdx]); pErr != nil {
-			return nil, containsNull, pErr
+		var err error
+		if key, err = encodeTableKey(key, val, directions[colIdx]); err != nil {
+			return nil, containsNull, err
 		}
 	}
 	return key, containsNull, nil
 }
 
-func encodeDatum(b []byte, d parser.Datum) ([]byte, *roachpb.Error) {
+func encodeDatum(b []byte, d parser.Datum) ([]byte, error) {
 	if values, ok := d.(parser.DTuple); ok {
 		return encodeDTuple(b, values)
 	}
 	return encodeTableKey(b, d, encoding.Ascending)
 }
 
-func encodeDTuple(b []byte, d parser.DTuple) ([]byte, *roachpb.Error) {
+func encodeDTuple(b []byte, d parser.DTuple) ([]byte, error) {
 	for _, val := range d {
-		var pErr *roachpb.Error
-		b, pErr = encodeDatum(b, val)
-		if pErr != nil {
-			return nil, pErr
+		var err error
+		b, err = encodeDatum(b, val)
+		if err != nil {
+			return nil, err
 		}
 	}
 	return b, nil
 }
 
 // Encodes `val` into `b` and returns the new buffer.
-func encodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte, *roachpb.Error) {
+func encodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte, error) {
 	if (dir != encoding.Ascending) && (dir != encoding.Descending) {
-		return nil, roachpb.NewErrorf("invalid direction: %d", dir)
+		return nil, util.Errorf("invalid direction: %d", dir)
 	}
 
 	if val == parser.DNull {
@@ -463,15 +465,15 @@ func encodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 		}
 		return encoding.EncodeVarintDescending(b, int64(t.Duration)), nil
 	}
-	return nil, roachpb.NewUErrorf("unable to encode table key: %T", val)
+	return nil, util.Errorf("unable to encode table key: %T", val)
 }
 
-func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, *roachpb.Error) {
+func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, error) {
 	vals := make([]parser.Datum, len(columnIDs))
 	for i, id := range columnIDs {
-		col, pErr := desc.FindColumnByID(id)
-		if pErr != nil {
-			return nil, pErr
+		col, err := desc.FindColumnByID(id)
+		if err != nil {
+			return nil, err
 		}
 		switch col.Type.Kind {
 		case ColumnType_BOOL:
@@ -493,28 +495,28 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, *
 		case ColumnType_INTERVAL:
 			vals[i] = parser.DummyInterval
 		default:
-			return nil, roachpb.NewErrorf("TODO(pmattis): decoded index key: %s", col.Type.Kind)
+			return nil, util.Errorf("TODO(pmattis): decoded index key: %s", col.Type.Kind)
 		}
 	}
 	return vals, nil
 }
 
-func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, *roachpb.Error) {
+func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, error) {
 	if encoding.PeekType(key) != encoding.Int {
-		return 0, nil, roachpb.NewErrorf("%s: invalid key prefix: %q", desc.Name, key)
+		return 0, nil, util.Errorf("%s: invalid key prefix: %q", desc.Name, key)
 	}
 
 	key, tableID, err := encoding.DecodeUvarintAscending(key)
 	if err != nil {
-		return 0, nil, roachpb.NewError(err)
+		return 0, nil, err
 	}
 	key, indexID, err := encoding.DecodeUvarintAscending(key)
 	if err != nil {
-		return 0, nil, roachpb.NewError(err)
+		return 0, nil, err
 	}
 
 	if ID(tableID) != desc.ID {
-		return IndexID(indexID), nil, roachpb.NewErrorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
+		return IndexID(indexID), nil, util.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
 	}
 
 	return IndexID(indexID), key, nil
@@ -526,14 +528,14 @@ func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, *
 // primary key index, the primary key suffix for non-unique secondary indexes
 // or unique secondary indexes containing NULL or empty.
 func decodeIndexKey(desc *TableDescriptor, indexID IndexID,
-	valTypes, vals []parser.Datum, colDirs []encoding.Direction, key []byte) ([]byte, *roachpb.Error) {
-	decodedIndexID, remaining, pErr := decodeIndexKeyPrefix(desc, key)
-	if pErr != nil {
-		return nil, pErr
+	valTypes, vals []parser.Datum, colDirs []encoding.Direction, key []byte) ([]byte, error) {
+	decodedIndexID, remaining, err := decodeIndexKeyPrefix(desc, key)
+	if err != nil {
+		return nil, err
 	}
 
 	if decodedIndexID != indexID {
-		return nil, roachpb.NewErrorf("%s: unexpected index ID: %d != %d", desc.Name, indexID, decodedIndexID)
+		return nil, util.Errorf("%s: unexpected index ID: %d != %d", desc.Name, indexID, decodedIndexID)
 	}
 	return decodeKeyVals(valTypes, vals, colDirs, remaining)
 }
@@ -546,16 +548,16 @@ func decodeIndexKey(desc *TableDescriptor, indexID IndexID,
 // be parser.DNull. The remaining bytes in the key after decoding the values
 // are returned.
 func decodeKeyVals(valTypes, vals []parser.Datum, directions []encoding.Direction,
-	key []byte) ([]byte, *roachpb.Error) {
+	key []byte) ([]byte, error) {
 	if len(directions) != len(valTypes) {
-		return nil, roachpb.NewErrorf("encoding directions doesn't parallel valTypes: %d vs %d.",
+		return nil, util.Errorf("encoding directions doesn't parallel valTypes: %d vs %d.",
 			len(directions), len(valTypes))
 	}
 	for j := range valTypes {
 		var err error
 		vals[j], key, err = decodeTableKey(valTypes[j], key, directions[j])
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 	}
 	return key, nil
@@ -659,14 +661,14 @@ type indexEntry struct {
 
 // colMap maps ColumnIds to indexes in `values`.
 func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
-	colMap map[ColumnID]int, values []parser.Datum) ([]indexEntry, *roachpb.Error) {
+	colMap map[ColumnID]int, values []parser.Datum) ([]indexEntry, error) {
 	var secondaryIndexEntries []indexEntry
 	for _, secondaryIndex := range indexes {
 		secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
-		secondaryIndexKey, containsNull, pErr := encodeIndexKey(
+		secondaryIndexKey, containsNull, err := encodeIndexKey(
 			&secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
-		if pErr != nil {
-			return nil, pErr
+		if err != nil {
+			return nil, err
 		}
 
 		// Add the implicit columns - they are encoded ascendingly.
@@ -674,10 +676,10 @@ func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
 		for range secondaryIndex.ImplicitColumnIDs {
 			implicitDirs = append(implicitDirs, encoding.Ascending)
 		}
-		extraKey, _, pErr := encodeColumns(secondaryIndex.ImplicitColumnIDs, implicitDirs,
+		extraKey, _, err := encodeColumns(secondaryIndex.ImplicitColumnIDs, implicitDirs,
 			colMap, values, nil)
-		if pErr != nil {
-			return nil, pErr
+		if err != nil {
+			return nil, err
 		}
 
 		entry := indexEntry{key: secondaryIndexKey}
@@ -710,7 +712,7 @@ func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
 // marshalColumnValue returns a Go primitive value equivalent of val, of the
 // type expected by col. If val's type is incompatible with col, or if
 // col's type is not yet implemented, an error is returned.
-func marshalColumnValue(col ColumnDescriptor, val parser.Datum, args parser.MapArgs) (interface{}, *roachpb.Error) {
+func marshalColumnValue(col ColumnDescriptor, val parser.Datum, args parser.MapArgs) (interface{}, error) {
 	if val == parser.DNull {
 		return nil, nil
 	}
@@ -721,7 +723,7 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum, args parser.MapA
 			return bool(v), nil
 		}
 		if set, err := args.SetInferredType(val, parser.DummyBool); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		} else if set != nil {
 			return nil, nil
 		}
@@ -730,7 +732,7 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum, args parser.MapA
 			return int64(v), nil
 		}
 		if set, err := args.SetInferredType(val, parser.DummyInt); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		} else if set != nil {
 			return nil, nil
 		}
@@ -739,7 +741,7 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum, args parser.MapA
 			return float64(v), nil
 		}
 		if set, err := args.SetInferredType(val, parser.DummyFloat); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		} else if set != nil {
 			return nil, nil
 		}
@@ -748,7 +750,7 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum, args parser.MapA
 			return v.Dec, nil
 		}
 		if set, err := args.SetInferredType(val, parser.DummyDecimal); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		} else if set != nil {
 			return nil, nil
 		}
@@ -757,7 +759,7 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum, args parser.MapA
 			return string(v), nil
 		}
 		if set, err := args.SetInferredType(val, parser.DummyString); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		} else if set != nil {
 			return nil, nil
 		}
@@ -769,7 +771,7 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum, args parser.MapA
 			return string(v), nil
 		}
 		if set, err := args.SetInferredType(val, parser.DummyBytes); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		} else if set != nil {
 			return nil, nil
 		}
@@ -778,7 +780,7 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum, args parser.MapA
 			return int64(v), nil
 		}
 		if set, err := args.SetInferredType(val, parser.DummyDate); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		} else if set != nil {
 			return nil, nil
 		}
@@ -787,7 +789,7 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum, args parser.MapA
 			return v.Time, nil
 		}
 		if set, err := args.SetInferredType(val, parser.DummyTimestamp); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		} else if set != nil {
 			return nil, nil
 		}
@@ -796,21 +798,21 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum, args parser.MapA
 			return v.Duration, nil
 		}
 		if set, err := args.SetInferredType(val, parser.DummyInterval); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		} else if set != nil {
 			return nil, nil
 		}
 	default:
-		return nil, roachpb.NewErrorf("unsupported column type: %s", col.Type.Kind)
+		return nil, util.Errorf("unsupported column type: %s", col.Type.Kind)
 	}
-	return nil, roachpb.NewUErrorf("value type %s doesn't match type %s of column %q",
+	return nil, fmt.Errorf("value type %s doesn't match type %s of column %q",
 		val.Type(), col.Type.Kind, col.Name)
 }
 
 // unmarshalColumnValue decodes the value from a key-value pair using the type
 // expected by the column. An error is returned if the value's type does not
 // match the column's type.
-func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Datum, *roachpb.Error) {
+func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Datum, error) {
 	if value == nil {
 		return parser.DNull, nil
 	}
@@ -819,25 +821,25 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 	case ColumnType_BOOL:
 		v, err := value.GetInt()
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		return parser.DBool(v != 0), nil
 	case ColumnType_INT:
 		v, err := value.GetInt()
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		return parser.DInt(v), nil
 	case ColumnType_FLOAT:
 		v, err := value.GetFloat()
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		return parser.DFloat(v), nil
 	case ColumnType_DECIMAL:
 		v, err := value.GetDecimal()
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		dd := &parser.DDecimal{}
 		dd.Set(v)
@@ -845,34 +847,34 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 	case ColumnType_STRING:
 		v, err := value.GetBytes()
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		return parser.DString(v), nil
 	case ColumnType_BYTES:
 		v, err := value.GetBytes()
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		return parser.DBytes(v), nil
 	case ColumnType_DATE:
 		v, err := value.GetInt()
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		return parser.DDate(v), nil
 	case ColumnType_TIMESTAMP:
 		v, err := value.GetTime()
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		return parser.DTimestamp{Time: v}, nil
 	case ColumnType_INTERVAL:
 		v, err := value.GetInt()
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		return parser.DInterval{Duration: time.Duration(v)}, nil
 	default:
-		return nil, roachpb.NewErrorf("unsupported column type: %s", kind)
+		return nil, util.Errorf("unsupported column type: %s", kind)
 	}
 }

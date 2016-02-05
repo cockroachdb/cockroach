@@ -26,13 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func makeColIDtoRowIndex(row planNode, desc *TableDescriptor) (map[ColumnID]int, *roachpb.Error) {
+func makeColIDtoRowIndex(row planNode, desc *TableDescriptor) (map[ColumnID]int, error) {
 	columns := row.Columns()
 	colIDtoRowIndex := make(map[ColumnID]int, len(columns))
 	for i, column := range columns {
-		col, pErr := desc.FindActiveColumnByName(column.Name)
-		if pErr != nil {
-			return nil, pErr
+		col, err := desc.FindActiveColumnByName(column.Name)
+		if err != nil {
+			return nil, err
 		}
 		colIDtoRowIndex[col.ID] = i
 	}
@@ -170,19 +170,19 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc *TableDescriptor, 
 
 		// Construct a map from column ID to the index the value appears at within a
 		// row.
-		colIDtoRowIndex, pErr := makeColIDtoRowIndex(rows, oldTableDesc)
-		if pErr != nil {
-			return pErr
+		colIDtoRowIndex, err := makeColIDtoRowIndex(rows, oldTableDesc)
+		if err != nil {
+			return roachpb.NewError(err)
 		}
 
 		for rows.Next() {
 			rowVals := rows.Values()
 
 			for _, newIndexDesc := range newIndexDescs {
-				secondaryIndexEntries, pErr := encodeSecondaryIndexes(
+				secondaryIndexEntries, err := encodeSecondaryIndexes(
 					oldTableDesc.ID, []IndexDescriptor{newIndexDesc}, colIDtoRowIndex, rowVals)
-				if pErr != nil {
-					return pErr
+				if err != nil {
+					return roachpb.NewError(err)
 				}
 
 				for _, secondaryIndexEntry := range secondaryIndexEntries {

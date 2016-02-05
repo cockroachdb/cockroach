@@ -138,8 +138,8 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, *roachpb.Error) 
 		return nil, pErr
 	}
 
-	if pErr := p.checkPrivilege(targetDbDesc, privilege.CREATE); pErr != nil {
-		return nil, pErr
+	if err := p.checkPrivilege(targetDbDesc, privilege.CREATE); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	if n.Name.Database() == n.NewName.Database() && n.Name.Table() == n.NewName.Table() {
@@ -152,8 +152,8 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, *roachpb.Error) 
 		return nil, pErr
 	}
 
-	if pErr := p.checkPrivilege(tableDesc, privilege.DROP); pErr != nil {
-		return nil, pErr
+	if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	tableDesc.SetName(n.NewName.Table())
@@ -214,18 +214,18 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, *roachpb.Error) 
 	}
 
 	idxName := n.Name.Index()
-	status, i, pErr := tableDesc.FindIndexByName(idxName)
-	if pErr != nil {
+	status, i, err := tableDesc.FindIndexByName(idxName)
+	if err != nil {
 		if n.IfExists {
 			// Noop.
 			return &emptyNode{}, nil
 		}
 		// Index does not exist, but we want it to: error out.
-		return nil, pErr
+		return nil, roachpb.NewError(err)
 	}
 
-	if pErr := p.checkPrivilege(tableDesc, privilege.CREATE); pErr != nil {
-		return nil, pErr
+	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	if equalName(idxName, newIdxName) {
@@ -295,10 +295,10 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, *roachpb.Error
 	}
 
 	colName := string(n.Name)
-	status, i, pErr := tableDesc.FindColumnByName(colName)
+	status, i, err := tableDesc.FindColumnByName(colName)
 	// n.IfExists only applies to table, no need to check here.
-	if pErr != nil {
-		return nil, pErr
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 	var column *ColumnDescriptor
 	if status == DescriptorActive {
@@ -307,8 +307,8 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, *roachpb.Error
 		column = tableDesc.Mutations[i].GetColumn()
 	}
 
-	if pErr := p.checkPrivilege(tableDesc, privilege.CREATE); pErr != nil {
-		return nil, pErr
+	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	if equalName(colName, newColName) {

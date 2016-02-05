@@ -62,11 +62,11 @@ type descriptorProto interface {
 }
 
 // checkPrivilege verifies that p.user has `privilege` on `descriptor`.
-func (p *planner) checkPrivilege(descriptor descriptorProto, privilege privilege.Kind) *roachpb.Error {
+func (p *planner) checkPrivilege(descriptor descriptorProto, privilege privilege.Kind) error {
 	if descriptor.GetPrivileges().CheckPrivilege(p.user, privilege) {
 		return nil
 	}
-	return roachpb.NewUErrorf("user %s does not have %s privilege on %s %s",
+	return fmt.Errorf("user %s does not have %s privilege on %s %s",
 		p.user, privilege, descriptor.TypeName(), descriptor.GetName())
 }
 
@@ -136,8 +136,8 @@ func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorPro
 
 	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
 	desc := &Descriptor{}
-	if err := p.txn.GetProto(descKey, desc); err != nil {
-		return err
+	if pErr := p.txn.GetProto(descKey, desc); pErr != nil {
+		return pErr
 	}
 
 	switch t := descriptor.(type) {
@@ -168,9 +168,9 @@ func (p *planner) getDescriptorFromTargetList(targets parser.TargetList) (descri
 		} else if len(targets.Databases) != 1 {
 			return nil, roachpb.NewErrorf("TODO(marc): multiple targets not implemented")
 		}
-		descriptor, err := p.getDatabaseDesc(targets.Databases[0])
-		if err != nil {
-			return nil, err
+		descriptor, pErr := p.getDatabaseDesc(targets.Databases[0])
+		if pErr != nil {
+			return nil, pErr
 		}
 		return descriptor, nil
 	}
