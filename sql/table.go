@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/gogo/protobuf/proto"
 )
 
 var testDisableTableLeases bool
@@ -229,7 +228,11 @@ func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, *roachpb.Erro
 }
 
 // getTableLease acquires a lease for the specified table. The lease will be
-// released when the planner closes.
+// released when the planner closes. Note that a shallow copy of the table
+// descriptor is returned. It is safe to mutate fields of the returned
+// descriptor, but the values those fields point to should not be modified.
+//
+// TODO(pmattis): Return a TableDesriptor value instead of a pointer.
 func (p *planner) getTableLease(qname *parser.QualifiedName) (*TableDescriptor, *roachpb.Error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return nil, roachpb.NewError(err)
@@ -262,7 +265,9 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*TableDescriptor, 
 		p.leases[tableID] = lease
 	}
 
-	return proto.Clone(&lease.TableDescriptor).(*TableDescriptor), nil
+	desc := &TableDescriptor{}
+	*desc = lease.TableDescriptor
+	return desc, nil
 }
 
 // getTableID retrieves the table ID for the specified table. It uses the
