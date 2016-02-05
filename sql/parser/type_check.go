@@ -92,6 +92,9 @@ func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
+		if _, ok := dummyCond.(DValArg); ok {
+			return nil, fmt.Errorf("unsupported case expression type: %s", dummyCond.Type())
+		}
 		valArgType = dummyCond
 	}
 
