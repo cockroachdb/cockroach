@@ -102,10 +102,10 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	sCtx.ScanMaxIdleTime = splitTimeout / 10
 	sCtx.Tracer = tracing.NewTracer()
 	stores := storage.NewStores(clock)
-	rpcSend := func(_ kv.SendOptions, _ string, _ []net.Addr,
-		getArgs func(addr net.Addr) proto.Message, _ func() proto.Message,
+	rpcSend := func(_ kv.SendOptions, _ []net.Addr,
+		getArgs func(addr net.Addr) *roachpb.BatchRequest,
 		_ *rpc.Context) (proto.Message, error) {
-		ba := getArgs(nil /* net.Addr */).(*roachpb.BatchRequest)
+		ba := getArgs(nil /* net.Addr */)
 		sp := sCtx.Tracer.StartTrace(ba.TraceID())
 		defer sp.Finish()
 		ctx, _ := opentracing.ContextWithSpan(context.Background(), sp)
@@ -301,9 +301,8 @@ func (m *multiTestContext) Stop() {
 // used to multiplex calls between many local senders in a simple way; It sends
 // the request to multiTestContext's localSenders specified in addrs. The request is
 // sent in order until no error is returned.
-func (m *multiTestContext) rpcSend(_ kv.SendOptions, _ string, addrs []net.Addr,
-	getArgs func(addr net.Addr) proto.Message,
-	getReply func() proto.Message, _ *rpc.Context) (proto.Message, error) {
+func (m *multiTestContext) rpcSend(_ kv.SendOptions, addrs []net.Addr,
+	getArgs func(addr net.Addr) *roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	fail := func(pErr *roachpb.Error) (proto.Message, error) {
@@ -314,7 +313,7 @@ func (m *multiTestContext) rpcSend(_ kv.SendOptions, _ string, addrs []net.Addr,
 	var br *roachpb.BatchResponse
 	var pErr *roachpb.Error
 	for _, addr := range addrs {
-		ba := *getArgs(nil /* net.Addr */).(*roachpb.BatchRequest)
+		ba := *getArgs(nil /* net.Addr */)
 		// Node ID is encoded in the address.
 		nodeID, stErr := strconv.Atoi(addr.String())
 		if stErr != nil {

@@ -127,8 +127,8 @@ type DistSender struct {
 var _ client.Sender = &DistSender{}
 
 // rpcSendFn is the function type used to dispatch RPC calls.
-type rpcSendFn func(SendOptions, string, []net.Addr,
-	func(addr net.Addr) proto.Message, func() proto.Message,
+type rpcSendFn func(SendOptions, []net.Addr,
+	func(addr net.Addr) *roachpb.BatchRequest,
 	*rpc.Context) (proto.Message, error)
 
 // DistSenderContext holds auxiliary objects that can be passed to
@@ -338,40 +338,21 @@ func (ds *DistSender) sendRPC(trace opentracing.Span, rangeID roachpb.RangeID, r
 		Timeout:         rpc.DefaultRPCTimeout,
 		Trace:           trace,
 	}
-	// getArgs clones the arguments on demand for all but the first replica.
-	firstArgs := true
-	getArgs := func(addr net.Addr) proto.Message {
-		var a *roachpb.BatchRequest
-		// Use the supplied args proto if this is our first address.
-		if firstArgs {
-			firstArgs = false
-			a = &ba
-		} else {
-			// Otherwise, copy the args value and set the replica in the header.
-			a = proto.Clone(&ba).(*roachpb.BatchRequest)
-		}
+	getArgs := func(addr net.Addr) *roachpb.BatchRequest {
+		// Make a shallow copy of our prototype request so that we can set the
+		// replica differently.
+		a := &roachpb.BatchRequest{}
+		*a = ba
 		if addr != nil {
 			// TODO(tschottdorf): see len(replicas) above.
 			a.Replica = *replicaMap[addr.String()]
 		}
 		return a
 	}
-	// RPCs are sent asynchronously and there is no synchronized access to
-	// the reply object, so we don't pass itself to RPCSend.
-	// Otherwise there maybe a race case:
-	// If the RPC call times out using our original reply object,
-	// we must not use it any more; the rpc call might still return
-	// and just write to it at any time.
-	// args.CreateReply() should be cheaper than proto.Clone which use reflect.
-	getReply := func() proto.Message {
-		return &roachpb.BatchResponse{}
-	}
-
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
-	const method = "Node.Batch"
-	reply, err := ds.rpcSend(rpcOpts, method, addrs, getArgs, getReply, ds.rpcContext)
+	reply, err := ds.rpcSend(rpcOpts, addrs, getArgs, ds.rpcContext)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -485,10 +466,13 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		if nDesc := ds.getNodeDescriptor(); nDesc != nil {
 			// TODO(tschottdorf): bad style to assume that ba.Txn is ours.
 			// No race here, but should have a better way of doing this.
+			//
 			// TODO(tschottdorf): future refactoring should move this to txn
 			// creation in TxnCoordSender, which is currently unaware of the
 			// NodeID (and wraps *DistSender through client.Sender since it
 			// also needs test compatibility with *LocalSender).
+			//
+			// TODO(pmattis): We should shallow-copy the Txn.
 			ba.Txn.CertainNodes.Add(nDesc.NodeID)
 		}
 	}
