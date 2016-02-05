@@ -179,13 +179,12 @@ func TestPGPrepareFail(t *testing.T) {
 	testFailures := map[string]string{
 		"SELECT $1 = $1":                           "pq: unsupported comparison operator: <valarg> = <valarg>",
 		"SELECT $1 > 0 AND NOT $1":                 "pq: incompatible NOT argument type: int",
-		"SELECT $1":                                "pq: unsupported result type: valarg",
+		"SELECT $1":                                "pq: could not determine data type of parameter $1",
 		"SELECT $1 + $1":                           "pq: unsupported binary operator: <valarg> + <valarg>",
 		"SELECT now() + $1":                        "pq: unsupported binary operator: <timestamp> + <valarg>",
 		"SELECT CASE $1 WHEN 1 THEN 1 END":         "pq: unsupported case expression type: valarg",
 		"SELECT CASE 1 WHEN 2 THEN 1 ELSE $1 END":  "pq: incompatible value types valarg, int",
-		"SELECT CASE 1 WHEN 2 THEN $2 ELSE $1 END": "pq: unsupported result type: valarg",
-
+		"SELECT CASE 1 WHEN 2 THEN $2 ELSE $1 END": "pq: could not determine data type of parameter $1",
 		"CREATE TABLE $1 (id INT)":  "pq: syntax error at or near \"1\"\nCREATE TABLE $1 (id INT)\n             ^\n",
 		"DROP TABLE t":              "pq: prepare statement not supported: DROP TABLE",
 		"UPDATE d.t SET s = i + $1": "pq: value type int doesn't match type STRING of column \"s\"",
