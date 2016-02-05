@@ -178,9 +178,7 @@ func (t *logicTest) close() {
 }
 
 // setUser sets the DB client to the specified user.
-// It returns a cleanup function to be run when the credentials
-// are no longer needed.
-func (t *logicTest) setUser(user string) func() {
+func (t *logicTest) setUser(tempDir, user string) {
 	if t.db != nil {
 		var dbName string
 
@@ -201,22 +199,21 @@ func (t *logicTest) setUser(user string) func() {
 	}
 	if db, ok := t.clients[user]; ok {
 		t.db = db
-		// No cleanup necessary, but return a no-op func to avoid nil pointer dereference.
-		return func() {}
+		return
 	}
 
-	credsDir, err := ioutil.TempDir("", "user-credentials")
+	credsDir, err := ioutil.TempDir(tempDir, "user-credentials-"+user)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pgUrl, cleanupFunc := sqlutils.PGUrl(t.T, &t.srv.TestServer, user, credsDir, "TestLogic")
+	pgUrl, _ := sqlutils.PGUrl(t.T, &t.srv.TestServer, user, credsDir, "TestLogic")
 	db, err := sql.Open("postgres", pgUrl.String())
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.clients[user] = db
 	t.db = db
-	return cleanupFunc
+	return
 }
 
 // TODO(tschottdorf): some logic tests currently take a long time to run.
@@ -251,8 +248,7 @@ func (t *logicTest) run(path string) {
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
-	cleanupFunc := t.setUser(security.RootUser)
-	defer cleanupFunc()
+	t.setUser(tempDir, security.RootUser)
 
 	if _, err := t.db.Exec(`
 CREATE DATABASE test;
@@ -409,8 +405,7 @@ SET DATABASE = test;
 			if len(fields[1]) == 0 {
 				t.Fatal("user command requires a non-blank argument")
 			}
-			cleanupUserFunc := t.setUser(fields[1])
-			defer cleanupUserFunc()
+			t.setUser(tempDir, fields[1])
 
 		case "skipif":
 			if len(fields) < 2 {
