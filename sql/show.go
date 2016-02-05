@@ -113,7 +113,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, *roachpb.Err
 }
 
 // ShowGrants returns grant details for the specified objects and users.
-// TODO(marc): implement multiple targets, or no targets (meaning full scan).
+// TODO(marc): implement no targets (meaning full scan).
 // Privileges: None.
 //   Notes: postgres does not have a SHOW GRANTS statement.
 //          mysql only returns the user's privileges.
@@ -121,7 +121,7 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, *roachpb.Error) {
 	if n.Targets == nil {
 		return nil, roachpb.NewErrorf("TODO(marc): implement SHOW GRANT with no targets")
 	}
-	descriptor, pErr := p.getDescriptorFromTargetList(*n.Targets)
+	descriptors, pErr := p.getDescriptorsFromTargetList(*n.Targets)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -146,18 +146,20 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, *roachpb.Error) {
 		wantedUsers[u] = struct{}{}
 	}
 
-	userPrivileges := descriptor.GetPrivileges().Show()
-	for _, userPriv := range userPrivileges {
-		if wantedUsers != nil {
-			if _, ok := wantedUsers[userPriv.User]; !ok {
-				continue
+	for _, descriptor := range descriptors {
+		userPrivileges := descriptor.GetPrivileges().Show()
+		for _, userPriv := range userPrivileges {
+			if wantedUsers != nil {
+				if _, ok := wantedUsers[userPriv.User]; !ok {
+					continue
+				}
 			}
+			v.rows = append(v.rows, []parser.Datum{
+				parser.DString(descriptor.GetName()),
+				parser.DString(userPriv.User),
+				parser.DString(userPriv.Privileges),
+			})
 		}
-		v.rows = append(v.rows, []parser.Datum{
-			parser.DString(descriptor.GetName()),
-			parser.DString(userPriv.User),
-			parser.DString(userPriv.Privileges),
-		})
 	}
 	return v, nil
 }

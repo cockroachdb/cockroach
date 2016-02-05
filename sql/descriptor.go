@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 var (
@@ -158,33 +159,82 @@ func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorPro
 	return roachpb.NewError(descriptor.Validate())
 }
 
-// getDescriptorFromTargetList examines a TargetList and fetches the
-// appropriate descriptor.
-// TODO(marc): support multiple targets.
-func (p *planner) getDescriptorFromTargetList(targets parser.TargetList) (descriptorProto, *roachpb.Error) {
+// getDescriptorsFromTargetList examines a TargetList and fetches the
+// appropriate descriptors.
+func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
+	[]descriptorProto, *roachpb.Error) {
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
 			return nil, roachpb.NewError(errNoDatabase)
-		} else if len(targets.Databases) != 1 {
-			return nil, roachpb.NewErrorf("TODO(marc): multiple targets not implemented")
 		}
-		descriptor, pErr := p.getDatabaseDesc(targets.Databases[0])
-		if pErr != nil {
-			return nil, pErr
+		descs := make([]descriptorProto, 0, len(targets.Databases))
+		for _, database := range targets.Databases {
+			descriptor, pErr := p.getDatabaseDesc(database)
+			if pErr != nil {
+				return nil, pErr
+			}
+			descs = append(descs, descriptor)
 		}
-		return descriptor, nil
+		return descs, nil
 	}
 
 	if len(targets.Tables) == 0 {
 		return nil, roachpb.NewError(errNoTable)
-	} else if len(targets.Tables) != 1 {
-		return nil, roachpb.NewErrorf("TODO(marc): multiple targets not implemented")
 	}
-	descriptor, err := p.getTableDesc(targets.Tables[0])
-	if err != nil {
+	descs := make([]descriptorProto, 0, len(targets.Tables))
+	for _, tableGlob := range targets.Tables {
+		tables, err := p.expandTableGlob(tableGlob)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		for _, table := range tables {
+			descriptor, err := p.getTableDesc(table)
+			if err != nil {
+				return nil, err
+			}
+			descs = append(descs, descriptor)
+		}
+	}
+	return descs, nil
+}
+
+// expandTableGlob expands wildcards from the end of `expr` and
+// returns the list of matching tables.
+// `expr` is possibly modified to be qualified with the database it refers to.
+// `expr` is assumed to be of one of several forms:
+// 		database.table
+// 		table
+// 		*
+func (p *planner) expandTableGlob(expr *parser.QualifiedName) (
+	parser.QualifiedNames, error) {
+	if len(expr.Indirect) == 0 {
+		return parser.QualifiedNames{expr}, nil
+	}
+
+	if err := expr.QualifyWithDatabase(p.session.Database); err != nil {
 		return nil, err
 	}
-	return descriptor, nil
+	// We must have a single indirect: either .table or .*
+	if len(expr.Indirect) != 1 {
+		return nil, util.Errorf("invalid table glob: %s", expr)
+	}
+
+	switch expr.Indirect[0].(type) {
+	case parser.NameIndirection:
+		return parser.QualifiedNames{expr}, nil
+	case parser.StarIndirection:
+		dbDesc, pErr := p.getDatabaseDesc(string(expr.Base))
+		if pErr != nil {
+			return nil, pErr.GoError()
+		}
+		tableNames, pErr := p.getTableNames(dbDesc)
+		if pErr != nil {
+			return nil, pErr.GoError()
+		}
+		return tableNames, nil
+	default:
+		return nil, util.Errorf("invalid table glob: %s", expr)
+	}
 }
 
 func wrapDescriptor(descriptor descriptorProto) *Descriptor {

@@ -23,38 +23,39 @@ import (
 )
 
 func (p *planner) changePrivileges(targets parser.TargetList, grantees parser.NameList, changePrivilege func(*PrivilegeDescriptor, string)) (planNode, *roachpb.Error) {
-	descriptor, pErr := p.getDescriptorFromTargetList(targets)
-	if pErr != nil {
-		return nil, pErr
-	}
-
-	if err := p.checkPrivilege(descriptor, privilege.GRANT); err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	privileges := descriptor.GetPrivileges()
-	for _, grantee := range grantees {
-		changePrivilege(privileges, grantee)
-	}
-
-	if err := descriptor.Validate(); err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	tableDesc, ok := descriptor.(*TableDescriptor)
-	if ok {
-		tableDesc.UpVersion = true
-	}
-
-	// Now update the descriptor.
-	// TODO(marc): do this inside a transaction. This will be needed
-	// when modifying multiple descriptors in the same op.
-	descKey := MakeDescMetadataKey(descriptor.GetID())
-	if err := p.txn.Put(descKey, wrapDescriptor(descriptor)); err != nil {
+	descriptors, err := p.getDescriptorsFromTargetList(targets)
+	if err != nil {
 		return nil, err
 	}
-	if ok {
-		p.notifySchemaChange(tableDesc.ID, invalidMutationID)
+
+	for _, descriptor := range descriptors {
+		if err := p.checkPrivilege(descriptor, privilege.GRANT); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		privileges := descriptor.GetPrivileges()
+		for _, grantee := range grantees {
+			changePrivilege(privileges, grantee)
+		}
+
+		if err := descriptor.Validate(); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+
+		tableDesc, updatingTable := descriptor.(*TableDescriptor)
+		if updatingTable {
+			tableDesc.UpVersion = true
+			p.notifySchemaChange(tableDesc.ID, invalidMutationID)
+		}
+	}
+
+	// Now update the descriptors transactionally.
+	b := p.txn.NewBatch()
+	for _, descriptor := range descriptors {
+		descKey := MakeDescMetadataKey(descriptor.GetID())
+		b.Put(descKey, wrapDescriptor(descriptor))
+	}
+	if pErr := p.txn.Run(b); pErr != nil {
+		return nil, pErr
 	}
 	return &emptyNode{}, nil
 }
