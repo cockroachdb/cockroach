@@ -52,7 +52,7 @@ github.com/robfig/glock cb3c3ec56de988289cab7bbd284eddc04dfee6c9
 github.com/russross/blackfriday d18b67ae0afd61dae240896eae1785f00709aa31
 github.com/samalba/dockerclient 548a5825c12336eb640190d7eb253e155fc286ad
 github.com/shurcooL/sanitized_anchor_name 10ef21a441db47d8b13ebcc5fd2310f636973c77
-github.com/spf13/cobra 9c9300901990faada0c5fb3b5730f452585c7c2b
+github.com/spf13/cobra 801364aa1521eb0ac9735f138901d5fe0f37b4b8
 github.com/spf13/pflag 7f60f83a2c81bc3c3c0d5297f61ddfa68da9d3b7
 github.com/tebeka/go2xunit fff0d031ea2b81ed06c367293219e4bc005235d0
 github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
