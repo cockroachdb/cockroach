@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	csql "github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -330,14 +331,17 @@ CREATE INDEX foo ON t.test (v)
 	}
 
 	// Wait until index is created.
-	for r := retry.Start(retryOpts); r.Next(); {
-		if err := kvDB.GetProto(descKey, desc); err != nil {
-			t.Fatal(err)
+	util.SucceedsWithin(t, 5*time.Second, func() error {
+		for r := retry.Start(retryOpts); r.Next(); {
+			if err := kvDB.GetProto(descKey, desc); err != nil {
+				t.Fatal(err)
+			}
+			if len(desc.GetTable().Indexes) == 1 {
+				break
+			}
 		}
-		if len(desc.GetTable().Indexes) == 1 {
-			break
-		}
-	}
+		return nil
+	})
 
 	// Ensure that the indexes have been created.
 	mTest := mutationTest{
@@ -368,21 +372,23 @@ ALTER INDEX t.test@foo RENAME TO ufo
 		t.Fatal(err)
 	}
 
-	for r := retry.Start(retryOpts); r.Next(); {
-		// Ensure that the version gets incremented.
-		if err := kvDB.GetProto(descKey, desc); err != nil {
-			t.Fatal(err)
+	util.SucceedsWithin(t, 5*time.Second, func() error {
+		for r := retry.Start(retryOpts); r.Next(); {
+			// Ensure that the version gets incremented.
+			if err := kvDB.GetProto(descKey, desc); err != nil {
+				t.Fatal(err)
+			}
+			name := desc.GetTable().Indexes[0].Name
+			if name != "ufo" {
+				t.Fatalf("bad index name %s", name)
+			}
+			newVersion = desc.GetTable().Version
+			if newVersion == expectedVersion {
+				break
+			}
 		}
-		name := desc.GetTable().Indexes[0].Name
-		if name != "ufo" {
-			t.Fatalf("bad index name %s", name)
-		}
-		newVersion = desc.GetTable().Version
-		if newVersion == expectedVersion {
-			break
-		}
-	}
-
+		return nil
+	})
 	// Run many schema changes simultaneously and check
 	// that they all get executed.
 	count := 5
