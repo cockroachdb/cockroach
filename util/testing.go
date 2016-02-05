@@ -73,7 +73,7 @@ func CreateTempDir(t Tester, prefix string) string {
 //
 // This is needed for some Go libraries (e.g. postgres SQL driver) which will
 // refuse to open certificate files that have overly permissive permissions.
-func CreateRestrictedFile(t Tester, contents []byte, tempdir, name string) (string, func()) {
+func CreateRestrictedFile(t Tester, contents []byte, tempdir, name string) string {
 	tempPath := filepath.Join(tempdir, name)
 	if err := ioutil.WriteFile(tempPath, contents, 0600); err != nil {
 		if t == nil {
@@ -82,16 +82,7 @@ func CreateRestrictedFile(t Tester, contents []byte, tempdir, name string) (stri
 			t.Fatal(err)
 		}
 	}
-	return tempPath, func() {
-		if err := os.Remove(tempPath); err != nil {
-			// Not Fatal() because we might already be panicking.
-			if t == nil {
-				log.Print(err)
-			} else {
-				t.Error(err)
-			}
-		}
-	}
+	return tempPath
 }
 
 // CreateNTempDirs creates N temporary directories and returns a slice

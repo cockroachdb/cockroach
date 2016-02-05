@@ -20,7 +20,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
 	"testing"
 
 	_ "github.com/lib/pq"
@@ -40,7 +39,7 @@ func TestLogSplits(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, os.TempDir(), "TestLogSplits")
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestLogSplits")
 	defer cleanupFn()
 
 	db, err := sql.Open("postgres", pgUrl.String())
@@ -157,7 +156,7 @@ func TestLogRebalances(t *testing.T) {
 	logEvent(roachpb.REMOVE_REPLICA)
 
 	// Open a SQL connection to verify that the events have been logged.
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, os.TempDir(), "TestLogRebalances")
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestLogRebalances")
 	defer cleanupFn()
 
 	sqlDB, err := sql.Open("postgres", pgUrl.String())

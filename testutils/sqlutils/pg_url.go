@@ -17,26 +17,31 @@
 package sqlutils
 
 import (
+	"io/ioutil"
 	"net"
 	"net/url"
+	"os"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/util"
 )
 
-// PGUrl returns a postgres connection url which connects to this server with
-// the given user. Returns a connection string and a cleanup function which must
-// be called after any connection created using the string has been closed.
+// PGUrl returns a postgres connection url which connects to this server with the given user, and a
+// cleanup function which must be called after all connections created using the connection url have
+// been closed.
 //
-// In order to connect securely using postgres, this method will create
-// temporary on-disk copies of certain embedded security certificates. The
-// certificates will be created as temporary files in the provided directory,
-// and their filenames will have the provided prefix. The returned cleanup
-// function will delete these temporary files.
-func PGUrl(t util.Tester, ts *server.TestServer, user, tempDir, prefix string) (url.URL, func()) {
+// In order to connect securely using postgres, this method will create temporary on-disk copies of
+// certain embedded security certificates. The certificates will be created in a new temporary
+// directory. The returned cleanup function will delete this temporary directory.
+func PGUrl(t testing.TB, ts *server.TestServer, user, prefix string) (url.URL, func()) {
 	host, port, err := net.SplitHostPort(ts.PGAddr())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tempDir, err := ioutil.TempDir("", prefix)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,9 +52,9 @@ func PGUrl(t util.Tester, ts *server.TestServer, user, tempDir, prefix string) (
 
 	// Copy these assets to disk from embedded strings, so this test can
 	// run from a standalone binary.
-	tempCAPath, tempCACleanup := securitytest.RestrictedCopy(t, caPath, tempDir, "TestLogic_ca")
-	tempCertPath, tempCertCleanup := securitytest.RestrictedCopy(t, certPath, tempDir, "TestLogic_cert")
-	tempKeyPath, tempKeyCleanup := securitytest.RestrictedCopy(t, keyPath, tempDir, "TestLogic_key")
+	tempCAPath := securitytest.RestrictedCopy(t, caPath, tempDir, "ca")
+	tempCertPath := securitytest.RestrictedCopy(t, certPath, tempDir, "cert")
+	tempKeyPath := securitytest.RestrictedCopy(t, keyPath, tempDir, "key")
 	options := url.Values{}
 	options.Add("sslmode", "verify-full")
 	options.Add("sslrootcert", tempCAPath)
@@ -62,8 +67,9 @@ func PGUrl(t util.Tester, ts *server.TestServer, user, tempDir, prefix string) (
 			Host:     net.JoinHostPort(host, port),
 			RawQuery: options.Encode(),
 		}, func() {
-			tempCACleanup()
-			tempCertCleanup()
-			tempKeyCleanup()
+			if err := os.RemoveAll(tempDir); err != nil {
+				// Not Fatal() because we might already be panicking.
+				t.Error(err)
+			}
 		}
 }

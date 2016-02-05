@@ -83,18 +83,16 @@ func newCLITest() cliTest {
 		security.ClientKeyPath(security.EmbeddedCertsDir, security.NodeUser),
 	}
 
-	cleanups := []func(){}
 	for _, a := range assets {
-		_, cleanupFn := securitytest.RestrictedCopy(nil, a, tempDir, filepath.Base(a))
-		cleanups = append(cleanups, cleanupFn)
+		securitytest.RestrictedCopy(nil, a, tempDir, filepath.Base(a))
 	}
 
 	return cliTest{
 		TestServer: s,
 		certsDir:   tempDir,
 		cleanupFunc: func() {
-			for _, f := range cleanups {
-				f()
+			if err := os.RemoveAll(tempDir); err != nil {
+				log.Fatal(err)
 			}
 		},
 	}
