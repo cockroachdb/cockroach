@@ -166,7 +166,10 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	if ba.Txn != nil && ba.Txn.CertainNodes.Contains(ba.Replica.NodeID) {
 		// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
 		sp.LogEvent("read has no clock uncertainty")
-		ba.Txn.MaxTimestamp = ba.Txn.Timestamp
+		// Copy-on-write to protect others we might be sharing the Txn with.
+		shallowTxn := *ba.Txn
+		shallowTxn.MaxTimestamp = ba.Txn.Timestamp
+		ba.Txn = &shallowTxn
 	}
 	br, pErr = store.Send(ctx, ba)
 	if br != nil && br.Error != nil {
