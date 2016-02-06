@@ -177,7 +177,12 @@ func (e *Error) setGoError(err error) {
 // SetTxn sets the txn and resets the error message.
 // TODO(kaneda): Unexpose this method and make callers use NewErrorWithTxn.
 func (e *Error) SetTxn(txn *Transaction) {
-	e.UnexposedTxn = txn.Clone()
+	if txn != nil {
+		e.UnexposedTxn = new(Transaction)
+		*e.UnexposedTxn = txn.Clone()
+	} else {
+		e.UnexposedTxn = nil
+	}
 	if e.Detail != nil {
 		if sErr, ok := e.Detail.GetValue().(ErrorDetailInterface); ok {
 			// Refresh the message as the txn is updated.
@@ -341,12 +346,13 @@ func NewTransactionAbortedError() *TransactionAbortedError {
 // Txn is the transaction which will be retried. Both arguments are copied.
 // Transactions.
 func NewTransactionPushError(txn, pusheeTxn Transaction) *TransactionPushError {
-	err := &TransactionPushError{PusheeTxn: *pusheeTxn.Clone()}
+	err := &TransactionPushError{PusheeTxn: pusheeTxn.Clone()}
 	if len(txn.ID) != 0 {
 		// When the pusher is non-transactional, txn will be
 		// empty but for the priority. In that case, ignore it
 		// here.
-		err.Txn = txn.Clone()
+		err.Txn = new(Transaction)
+		*err.Txn = txn.Clone()
 	}
 	return err
 }

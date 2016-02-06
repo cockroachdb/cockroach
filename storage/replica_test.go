@@ -2266,7 +2266,7 @@ func TestSequenceCacheError(t *testing.T) {
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); ok {
 		expected := txn.Clone()
 		expected.Timestamp = ts
-		if pErr.GetTxn() == nil || !reflect.DeepEqual(pErr.GetTxn(), expected) {
+		if pErr.GetTxn() == nil || !reflect.DeepEqual(pErr.GetTxn(), &expected) {
 			t.Errorf("txn does not match: %s v.s. %s", pErr.GetTxn(), expected)
 		}
 	} else {
@@ -2282,7 +2282,7 @@ func TestSequenceCacheError(t *testing.T) {
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		expected := txn.Clone()
 		expected.Timestamp = ts
-		if pErr.GetTxn() == nil || !reflect.DeepEqual(pErr.GetTxn(), expected) {
+		if pErr.GetTxn() == nil || !reflect.DeepEqual(pErr.GetTxn(), &expected) {
 			t.Errorf("txn does not match: %s v.s. %s", pErr.GetTxn(), expected)
 		}
 	} else {
@@ -2417,7 +2417,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		expTxn.Status = roachpb.ABORTED
 		expTxn.LastHeartbeat = &test.startTS
 
-		if !reflect.DeepEqual(expTxn, &reply.PusheeTxn) {
+		if !reflect.DeepEqual(expTxn, reply.PusheeTxn) {
 			t.Errorf("unexpected push txn in trial %d; expected %+v, got %+v", i, expTxn, reply.PusheeTxn)
 		}
 	}

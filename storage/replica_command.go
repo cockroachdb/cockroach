@@ -912,7 +912,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	// has open intents (which is likely if someone pushes it).
 	if ok {
 		// Start with the persisted transaction record as final transaction.
-		reply.PusheeTxn = *existTxn.Clone()
+		reply.PusheeTxn = existTxn.Clone()
 		// Upgrade the epoch, timestamp and priority as necessary.
 		if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
 			reply.PusheeTxn.Epoch = args.PusheeTxn.Epoch
@@ -927,7 +927,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 		// something to win here by not aborting, but instead pushing the
 		// timestamp. For SERIALIZABLE it's less important, but still better
 		// to have them restart than abort. See #3344.
-		reply.PusheeTxn = *args.PusheeTxn.Clone()
+		reply.PusheeTxn = args.PusheeTxn.Clone()
 		reply.PusheeTxn.Status = roachpb.ABORTED
 		return reply, engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, &reply.PusheeTxn)
 	}
