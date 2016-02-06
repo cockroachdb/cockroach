@@ -77,6 +77,7 @@ var (
 // optimizations in terms of shared buffer preallocations.
 type Datum interface {
 	Expr
+	// Type returns the (user-friendly) name of the type.
 	Type() string
 	// TypeEqual determines if the receiver and the other Datum have the same
 	// type or not. This method should be used for asserting the type of all
@@ -968,7 +969,7 @@ func (DValArg) Variable() {}
 
 // Type implements the Datum interface.
 func (DValArg) Type() string {
-	return "valarg"
+	return "parameter"
 }
 
 // TypeEqual implements the Datum interface.
