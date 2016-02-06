@@ -348,7 +348,7 @@ func (mdb mockRangeDescriptorDB) RangeLookup(key roachpb.RKey, _ *roachpb.RangeD
 		return mdb(key[len(keys.Meta1Prefix):], considerIntents, useReverseScan)
 	}
 	if bytes.HasPrefix(key, keys.Meta1Prefix) {
-		return mdb(keys.MakeKey(keys.Meta2Prefix, key[len(keys.Meta1Prefix):]), considerIntents, useReverseScan)
+		return mdb(testutils.MakeKey(keys.Meta2Prefix, key[len(keys.Meta1Prefix):]), considerIntents, useReverseScan)
 	}
 	// First range.
 	return mdb(nil, considerIntents, useReverseScan)

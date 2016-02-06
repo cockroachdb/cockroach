@@ -48,9 +48,9 @@ func TestKeySorting(t *testing.T) {
 
 func TestMakeKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	if !bytes.Equal(MakeKey(roachpb.Key("A"), roachpb.Key("B")), roachpb.Key("AB")) ||
-		!bytes.Equal(MakeKey(roachpb.Key("A")), roachpb.Key("A")) ||
-		!bytes.Equal(MakeKey(roachpb.Key("A"), roachpb.Key("B"), roachpb.Key("C")), roachpb.Key("ABC")) {
+	if !bytes.Equal(makeKey(roachpb.Key("A"), roachpb.Key("B")), roachpb.Key("AB")) ||
+		!bytes.Equal(makeKey(roachpb.Key("A")), roachpb.Key("A")) ||
+		!bytes.Equal(makeKey(roachpb.Key("A"), roachpb.Key("B"), roachpb.Key("C")), roachpb.Key("ABC")) {
 		t.Fatalf("MakeKey is broken")
 	}
 }
@@ -137,20 +137,20 @@ func TestMetaScanBounds(t *testing.T) {
 			expError: "",
 		},
 		{
-			key:      roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo")),
-			expStart: roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo\x00")),
+			key:      makeKey(Meta2Prefix, roachpb.Key("foo")),
+			expStart: makeKey(Meta2Prefix, roachpb.Key("foo\x00")),
 			expEnd:   Meta2Prefix.PrefixEnd(),
 			expError: "",
 		},
 		{
-			key:      roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo")),
-			expStart: roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo\x00")),
+			key:      makeKey(Meta1Prefix, roachpb.Key("foo")),
+			expStart: makeKey(Meta1Prefix, roachpb.Key("foo\x00")),
 			expEnd:   Meta1Prefix.PrefixEnd(),
 			expError: "",
 		},
 		{
-			key:      roachpb.MakeKey(Meta1Prefix, roachpb.RKeyMax),
-			expStart: roachpb.MakeKey(Meta1Prefix, roachpb.RKeyMax),
+			key:      makeKey(Meta1Prefix, roachpb.RKeyMax),
+			expStart: makeKey(Meta1Prefix, roachpb.RKeyMax),
 			expEnd:   Meta1Prefix.PrefixEnd(),
 			expError: "",
 		},
@@ -221,15 +221,15 @@ func TestMetaReverseScanBounds(t *testing.T) {
 			expError: "body of meta key range lookup is",
 		},
 		{
-			key:      roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo")),
+			key:      makeKey(Meta2Prefix, roachpb.Key("foo")),
 			expStart: Meta2Prefix,
-			expEnd:   roachpb.MakeKey(Meta2Prefix, roachpb.Key("foo\x00")),
+			expEnd:   makeKey(Meta2Prefix, roachpb.Key("foo\x00")),
 			expError: "",
 		},
 		{
-			key:      roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo")),
+			key:      makeKey(Meta1Prefix, roachpb.Key("foo")),
 			expStart: Meta1Prefix,
-			expEnd:   roachpb.MakeKey(Meta1Prefix, roachpb.Key("foo\x00")),
+			expEnd:   makeKey(Meta1Prefix, roachpb.Key("foo\x00")),
 			expError: "",
 		},
 		{
@@ -269,9 +269,9 @@ func TestValidateRangeMetaKey(t *testing.T) {
 		{roachpb.RKeyMin, false},
 		{roachpb.RKey("\x00"), true},
 		{Meta1Prefix, false},
-		{roachpb.MakeKey(Meta1Prefix, roachpb.RKeyMax), false},
-		{roachpb.MakeKey(Meta2Prefix, roachpb.RKeyMax), false},
-		{roachpb.MakeKey(Meta2Prefix, roachpb.RKeyMax.Next()), true},
+		{makeKey(Meta1Prefix, roachpb.RKeyMax), false},
+		{makeKey(Meta2Prefix, roachpb.RKeyMax), false},
+		{makeKey(Meta2Prefix, roachpb.RKeyMax.Next()), true},
 	}
 	for i, test := range testCases {
 		err := validateRangeMetaKey(test.key)

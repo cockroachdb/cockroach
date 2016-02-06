@@ -27,45 +27,56 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// MakeKey makes a new key which is the concatenation of the
-// given inputs, in order.
-func MakeKey(keys ...[]byte) []byte {
-	return roachpb.MakeKey(keys...)
+func makeKey(keys ...[]byte) []byte {
+	return bytes.Join(keys, nil)
 }
 
 // MakeStoreKey creates a store-local key based on the metadata key
 // suffix, and optional detail.
 func MakeStoreKey(suffix, detail roachpb.RKey) roachpb.Key {
-	return roachpb.Key(MakeKey(localStorePrefix, suffix, detail))
+	key := make(roachpb.Key, 0, len(localStorePrefix)+len(suffix)+len(detail))
+	key = append(key, localStorePrefix...)
+	key = append(key, suffix...)
+	key = append(key, detail...)
+	return key
 }
 
 // StoreIdentKey returns a store-local key for the store metadata.
 func StoreIdentKey() roachpb.Key {
-	return MakeStoreKey(localStoreIdentSuffix, roachpb.RKey{})
+	return MakeStoreKey(localStoreIdentSuffix, nil)
 }
 
 // StoreGossipKey returns a store-local key for the gossip bootstrap metadata.
 func StoreGossipKey() roachpb.Key {
-	return MakeStoreKey(localStoreGossipSuffix, roachpb.RKey{})
+	return MakeStoreKey(localStoreGossipSuffix, nil)
 }
 
 // StoreStatusKey returns the key for accessing the store status for the
 // specified store ID.
 func StoreStatusKey(storeID int32) roachpb.Key {
-	return roachpb.Key(
-		MakeKey(StatusStorePrefix, encoding.EncodeUvarintAscending(nil, uint64(storeID))))
+	key := make(roachpb.Key, 0, len(StatusStorePrefix)+9)
+	key = append(key, StatusStorePrefix...)
+	key = encoding.EncodeUvarintAscending(key, uint64(storeID))
+	return key
 }
 
 // NodeStatusKey returns the key for accessing the node status for the
 // specified node ID.
 func NodeStatusKey(nodeID int32) roachpb.Key {
-	return MakeKey(StatusNodePrefix, encoding.EncodeUvarintAscending(nil, uint64(nodeID)))
+	key := make(roachpb.Key, 0, len(StatusNodePrefix)+9)
+	key = append(key, StatusNodePrefix...)
+	key = encoding.EncodeUvarintAscending(key, uint64(nodeID))
+	return key
 }
 
 // MakeRangeIDPrefix creates a range-local key prefix from
 // rangeID.
 func MakeRangeIDPrefix(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeKey(LocalRangeIDPrefix, encoding.EncodeUvarintAscending(nil, uint64(rangeID)))
+	// Size the key buffer so that it is large enough for most callers.
+	key := make(roachpb.Key, 0, 32)
+	key = append(key, LocalRangeIDPrefix...)
+	key = encoding.EncodeUvarintAscending(key, uint64(rangeID))
+	return key
 }
 
 // MakeRangeIDKey creates a range-local key based on the range's
@@ -74,7 +85,11 @@ func MakeRangeIDKey(rangeID roachpb.RangeID, suffix, detail roachpb.RKey) roachp
 	if len(suffix) != localSuffixLength {
 		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, localSuffixLength))
 	}
-	return MakeKey(MakeRangeIDPrefix(rangeID), suffix, detail)
+
+	key := MakeRangeIDPrefix(rangeID)
+	key = append(key, suffix...)
+	key = append(key, detail...)
+	return key
 }
 
 // RaftLogKey returns a system-local key for a Raft log entry.
@@ -85,43 +100,43 @@ func RaftLogKey(rangeID roachpb.RangeID, logIndex uint64) roachpb.Key {
 
 // RaftLogPrefix returns the system-local prefix shared by all entries in a Raft log.
 func RaftLogPrefix(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRaftLogSuffix, roachpb.RKey{})
+	return MakeRangeIDKey(rangeID, localRaftLogSuffix, nil)
 }
 
 // RaftHardStateKey returns a system-local key for a Raft HardState.
 func RaftHardStateKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRaftHardStateSuffix, roachpb.RKey{})
+	return MakeRangeIDKey(rangeID, localRaftHardStateSuffix, nil)
 }
 
 // RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
 func RaftTruncatedStateKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRaftTruncatedStateSuffix, roachpb.RKey{})
+	return MakeRangeIDKey(rangeID, localRaftTruncatedStateSuffix, nil)
 }
 
 // RaftAppliedIndexKey returns a system-local key for a raft applied index.
 func RaftAppliedIndexKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRaftAppliedIndexSuffix, roachpb.RKey{})
+	return MakeRangeIDKey(rangeID, localRaftAppliedIndexSuffix, nil)
 }
 
 // RaftLeaderLeaseKey returns a system-local key for a raft leader lease.
 func RaftLeaderLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRaftLeaderLeaseSuffix, roachpb.RKey{})
+	return MakeRangeIDKey(rangeID, localRaftLeaderLeaseSuffix, nil)
 }
 
 // RaftTombstoneKey returns a system-local key for a raft tombstone.
 func RaftTombstoneKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRaftTombstoneSuffix, roachpb.RKey{})
+	return MakeRangeIDKey(rangeID, localRaftTombstoneSuffix, nil)
 }
 
 // RaftLastIndexKey returns a system-local key for a raft last index.
 func RaftLastIndexKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRaftLastIndexSuffix, roachpb.RKey{})
+	return MakeRangeIDKey(rangeID, localRaftLastIndexSuffix, nil)
 }
 
 // RangeStatsKey returns the key for accessing the MVCCStats struct
 // for the specified Range ID.
 func RangeStatsKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRangeStatsSuffix, roachpb.RKey{})
+	return MakeRangeIDKey(rangeID, localRangeStatsSuffix, nil)
 }
 
 // SequenceCacheKey returns a range-local key by Range ID for a
@@ -150,13 +165,19 @@ func MakeRangeKey(key, suffix, detail roachpb.RKey) roachpb.Key {
 	if len(suffix) != localSuffixLength {
 		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, localSuffixLength))
 	}
-	return MakeKey(MakeRangeKeyPrefix(key), suffix, detail)
+	buf := MakeRangeKeyPrefix(key)
+	buf = append(buf, suffix...)
+	buf = append(buf, detail...)
+	return buf
 }
 
 // MakeRangeKeyPrefix creates a key prefix under which all range-local keys
 // can be found.
 func MakeRangeKeyPrefix(key roachpb.RKey) roachpb.Key {
-	return MakeKey(LocalRangePrefix, encoding.EncodeBytesAscending(nil, key))
+	buf := make(roachpb.Key, 0, len(LocalRangePrefix)+len(key)+1)
+	buf = append(buf, LocalRangePrefix...)
+	buf = encoding.EncodeBytesAscending(buf, key)
+	return buf
 }
 
 // DecodeRangeKey decodes the range key into range start key,
@@ -185,19 +206,19 @@ func DecodeRangeKey(key roachpb.Key) (startKey, suffix, detail roachpb.Key, err 
 // RangeLastVerificationTimestampKey returns a range-local key for
 // the range's last verification timestamp.
 func RangeLastVerificationTimestampKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRangeLastVerificationTimestampSuffix, roachpb.RKey{})
+	return MakeRangeIDKey(rangeID, localRangeLastVerificationTimestampSuffix, nil)
 }
 
 // RangeTreeNodeKey returns a range-local key for the range's
 // node in the range tree.
 func RangeTreeNodeKey(key roachpb.RKey) roachpb.Key {
-	return MakeRangeKey(key, localRangeTreeNodeSuffix, roachpb.RKey{})
+	return MakeRangeKey(key, localRangeTreeNodeSuffix, nil)
 }
 
 // RangeDescriptorKey returns a range-local key for the descriptor
 // for the range with specified key.
 func RangeDescriptorKey(key roachpb.RKey) roachpb.Key {
-	return MakeRangeKey(key, LocalRangeDescriptorSuffix, roachpb.RKey{})
+	return MakeRangeKey(key, LocalRangeDescriptorSuffix, nil)
 }
 
 // TransactionKey returns a transaction key based on the provided
@@ -251,14 +272,21 @@ func RangeMetaKey(key roachpb.RKey) roachpb.Key {
 	if len(key) == 0 {
 		return roachpb.KeyMin
 	}
+	var prefix roachpb.Key
 	switch key[0] {
 	case Meta1Prefix[0]:
 		return roachpb.KeyMin
 	case Meta2Prefix[0]:
-		return MakeKey(Meta1Prefix, key[len(Meta2Prefix):])
+		prefix = Meta1Prefix
+		key = key[len(Meta2Prefix):]
 	default:
-		return MakeKey(Meta2Prefix, key)
+		prefix = Meta2Prefix
 	}
+
+	buf := make(roachpb.Key, 0, len(prefix)+len(key))
+	buf = append(buf, prefix...)
+	buf = append(buf, key...)
+	return buf
 }
 
 // validateRangeMetaKey validates that the given key is a valid Range Metadata

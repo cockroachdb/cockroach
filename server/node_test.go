@@ -146,8 +146,8 @@ func TestBootstrapCluster(t *testing.T) {
 		foundKeys = append(foundKeys, kv.Key)
 	}
 	var expectedKeys = keySlice{
-		roachpb.MakeKey(roachpb.Key("\x02"), roachpb.KeyMax),
-		roachpb.MakeKey(roachpb.Key("\x03"), roachpb.KeyMax),
+		testutils.MakeKey(roachpb.Key("\x02"), roachpb.KeyMax),
+		testutils.MakeKey(roachpb.Key("\x03"), roachpb.KeyMax),
 		roachpb.Key("\x04node-idgen"),
 		roachpb.Key("\x04range-tree-root"),
 		roachpb.Key("\x04store-idgen"),

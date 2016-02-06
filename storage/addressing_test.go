@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -43,11 +44,11 @@ func (ms metaSlice) Swap(i, j int)      { ms[i], ms[j] = ms[j], ms[i] }
 func (ms metaSlice) Less(i, j int) bool { return bytes.Compare(ms[i].key, ms[j].key) < 0 }
 
 func meta1Key(key roachpb.RKey) []byte {
-	return keys.MakeKey(keys.Meta1Prefix, key)
+	return testutils.MakeKey(keys.Meta1Prefix, key)
 }
 
 func meta2Key(key roachpb.RKey) []byte {
-	return keys.MakeKey(keys.Meta2Prefix, key)
+	return testutils.MakeKey(keys.Meta2Prefix, key)
 }
 
 func metaKey(key roachpb.RKey) []byte {

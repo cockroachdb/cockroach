@@ -58,7 +58,7 @@ var (
 	// store-local, range-local by ID, and range-local by key.
 
 	// localStorePrefix is the prefix identifying per-store data.
-	localStorePrefix = MakeKey(localPrefix, roachpb.Key("s"))
+	localStorePrefix = makeKey(localPrefix, roachpb.Key("s"))
 	// localStoreIdentSuffix stores an immutable identifier for this
 	// store, created when the store is first bootstrapped.
 	localStoreIdentSuffix = []byte("iden")
@@ -75,7 +75,7 @@ var (
 	//
 	// NOTE: LocalRangeIDPrefix must be kept in sync with the value
 	// in storage/engine/rocksdb/db.cc.
-	LocalRangeIDPrefix = roachpb.RKey(MakeKey(localPrefix, roachpb.Key("i")))
+	LocalRangeIDPrefix = roachpb.RKey(makeKey(localPrefix, roachpb.Key("i")))
 	// LocalSequenceCacheSuffix is the suffix used for the replay protection
 	// mechanism.
 	LocalSequenceCacheSuffix = []byte("res-")
@@ -108,7 +108,7 @@ var (
 	//
 	// NOTE: LocalRangePrefix must be kept in sync with the value in
 	// storage/engine/rocksdb/db.cc.
-	LocalRangePrefix = roachpb.Key(MakeKey(localPrefix, roachpb.RKey("k")))
+	LocalRangePrefix = roachpb.Key(makeKey(localPrefix, roachpb.RKey("k")))
 	LocalRangeMax    = LocalRangePrefix.PrefixEnd()
 	// LocalRangeDescriptorSuffix is the suffix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
@@ -131,10 +131,10 @@ var (
 	Meta2Prefix = roachpb.Key("\x03")
 	// Meta1KeyMax is the end of the range of the first level of key addressing.
 	// The value is a RangeDescriptor struct.
-	Meta1KeyMax = roachpb.Key(MakeKey(Meta1Prefix, roachpb.RKeyMax))
+	Meta1KeyMax = roachpb.Key(makeKey(Meta1Prefix, roachpb.RKeyMax))
 	// Meta2KeyMax is the end of the range of the second level of key addressing.
 	// The value is a RangeDescriptor struct.
-	Meta2KeyMax = roachpb.Key(MakeKey(Meta2Prefix, roachpb.RKeyMax))
+	Meta2KeyMax = roachpb.Key(makeKey(Meta2Prefix, roachpb.RKeyMax))
 
 	// MetaMin is the start of the range of addressing keys.
 	MetaMin = Meta1Prefix
@@ -148,22 +148,22 @@ var (
 
 	// DescIDGenerator is the global descriptor ID generator sequence used for
 	// table and namespace IDs.
-	DescIDGenerator = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("desc-idgen")))
+	DescIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("desc-idgen")))
 	// NodeIDGenerator is the global node ID generator sequence.
-	NodeIDGenerator = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("node-idgen")))
+	NodeIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("node-idgen")))
 	// RangeIDGenerator is the global range ID generator sequence.
-	RangeIDGenerator = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("range-idgen")))
+	RangeIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("range-idgen")))
 	// StoreIDGenerator is the global store ID generator sequence.
-	StoreIDGenerator = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("store-idgen")))
+	StoreIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("store-idgen")))
 	// RangeTreeRoot specifies the root range in the range tree.
-	RangeTreeRoot = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("range-tree-root")))
+	RangeTreeRoot = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("range-tree-root")))
 
 	// StatusPrefix specifies the key prefix to store all status details.
-	StatusPrefix = roachpb.Key(MakeKey(SystemPrefix, roachpb.RKey("status-")))
+	StatusPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("status-")))
 	// StatusStorePrefix stores all status info for stores.
-	StatusStorePrefix = roachpb.Key(MakeKey(StatusPrefix, roachpb.RKey("store-")))
+	StatusStorePrefix = roachpb.Key(makeKey(StatusPrefix, roachpb.RKey("store-")))
 	// StatusNodePrefix stores all status info for nodes.
-	StatusNodePrefix = roachpb.Key(MakeKey(StatusPrefix, roachpb.RKey("node-")))
+	StatusNodePrefix = roachpb.Key(makeKey(StatusPrefix, roachpb.RKey("node-")))
 
 	// TableDataMin is the start of the range of table data keys.
 	TableDataMin = roachpb.Key(encoding.EncodeVarintAscending(nil, math.MinInt64))
