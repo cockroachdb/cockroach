@@ -33,7 +33,9 @@ type InternalExecutor struct {
 // ExecuteStatementInTransaction executes the supplied SQL statement as part of
 // the supplied transaction. Statements are currently executed as the root user.
 func (ie InternalExecutor) ExecuteStatementInTransaction(txn *client.Txn, statement string, params ...interface{}) (int, *roachpb.Error) {
-	p := planner{user: security.RootUser, leaseMgr: ie.LeaseManager}
+	p := makePlanner()
 	p.setTxn(txn, txn.Proto.Timestamp.GoTime())
+	p.user = security.RootUser
+	p.leaseMgr = ie.LeaseManager
 	return p.exec(statement, params...)
 }

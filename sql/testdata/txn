@@ -105,24 +105,37 @@ SELECT * FROM kv
 ----
 a c
 
-# Abort transaction with a problematic statement, and ignore statements until the end of the transaction block
+# Abort transaction with a problematic statement, and ignore statements until
+# the end of the transaction block (a COMMIT/ROLLBACK statement as the first
+# statement in a batch).
 
 statement ok
 BEGIN
 
 statement error duplicate key value \(k\)=\('a'\) violates unique constraint "primary"
-INSERT INTO kv VALUES('a', 'c')
+INSERT INTO kv VALUES('unique_key', 'some value');
+INSERT INTO kv VALUES('a', 'c');
+INSERT INTO kv VALUES('unique_key2', 'some value');
+COMMIT;
 
+# Txn is still aborted.
 statement error current transaction is aborted, commands ignored until end of transaction block
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
+# Txn is still aborted.
+statement error current transaction is aborted, commands ignored until end of transaction block
+UPDATE kv SET v = 'b' WHERE k in ('a')
+
+# Now the transaction will be ended. After that, statements execute.
 statement ok
-COMMIT
+COMMIT;
+INSERT INTO kv VALUES('x', 'y');
 
 query TT
 SELECT * FROM kv
 ----
 a c
+x y
 
 # BEGIN in the middle of a transaction is an error.
 
