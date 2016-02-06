@@ -82,8 +82,7 @@ const (
 // with regular processing or non-nil to terminate processing with the
 // returned error. Note that in a multi-replica test this filter will
 // be run once for each replica and must produce consistent results
-// each time. Should only be used in tests in the storage and
-// storage_test packages.
+// each time.
 var TestingCommandFilter func(roachpb.StoreID, roachpb.Request, roachpb.Header) error
 
 // This flag controls whether Transaction entries are automatically gc'ed

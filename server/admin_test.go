@@ -143,8 +143,9 @@ func TestAdminAPIDatabases(t *testing.T) {
 	const testdb = "test"
 	var session sql.Session
 	query := "CREATE DATABASE " + testdb
-	if _, _, err := s.sqlExecutor.ExecuteStatements("root", session, query, nil); err != nil {
-		t.Fatal(err)
+	createRes := s.sqlExecutor.ExecuteStatements("root", &session, query, nil)
+	if createRes.ResultList[0].PErr != nil {
+		t.Fatal(createRes.ResultList[0].PErr)
 	}
 
 	type databasesResult struct {
@@ -172,8 +173,9 @@ func TestAdminAPIDatabases(t *testing.T) {
 	privileges := []string{"SELECT", "UPDATE"}
 	testuser := "testuser"
 	grantQuery := "GRANT " + strings.Join(privileges, ", ") + " ON DATABASE " + testdb + " TO " + testuser
-	if _, _, err := s.sqlExecutor.ExecuteStatements("root", session, grantQuery, nil); err != nil {
-		t.Fatal(err)
+	grantRes := s.sqlExecutor.ExecuteStatements("root", &session, grantQuery, nil)
+	if grantRes.ResultList[0].PErr != nil {
+		t.Fatal(grantRes.ResultList[0].PErr)
 	}
 
 	type databaseDetailsResult struct {
