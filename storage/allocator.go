@@ -122,6 +122,18 @@ func (r *BalanceMode) Type() string {
 
 var _ pflag.Value = new(BalanceMode)
 
+type allocatorErr struct{}
+
+// Error implements error.
+func (ae *allocatorErr) Error() string {
+	return "no suitable replication target store found, are you running enough nodes"
+}
+
+// CanRetry implement Retryable.
+func (ae *allocatorErr) CanRetry() bool {
+	return true
+}
+
 // AllocatorOptions are configurable options which effect the way that the
 // replicate queue will handle rebalancing opportunities.
 type AllocatorOptions struct {
@@ -250,10 +262,8 @@ func (a *Allocator) AllocateTarget(required roachpb.Attributes, existing []roach
 		if target := a.balancer.selectGood(sl, existingNodes); target != nil {
 			return target, nil
 		}
-		if len(attrs) == 0 {
-			return nil, util.Errorf("no suitable replication target store found, are you running enough nodes?")
-		} else if !relaxConstraints {
-			return nil, util.Errorf("no target store with attributes %s available", required)
+		if len(attrs) == 0 || !relaxConstraints {
+			return nil, &allocatorErr{}
 		}
 	}
 }

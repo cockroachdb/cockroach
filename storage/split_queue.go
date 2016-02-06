@@ -124,3 +124,8 @@ func (sq *splitQueue) process(now roachpb.Timestamp, rng *Replica,
 func (*splitQueue) timer() time.Duration {
 	return splitQueueTimerDuration
 }
+
+// purgatoryChan returns nil.
+func (*splitQueue) purgatoryChan() <-chan struct{} {
+	return nil
+}

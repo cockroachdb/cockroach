@@ -18,6 +18,7 @@ package storage
 
 import (
 	"container/heap"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -69,6 +70,8 @@ type testQueueImpl struct {
 	duration      time.Duration
 	blocker       chan struct{} // timer() blocks on this if not nil
 	acceptUnsplit bool
+	pChan         chan struct{}
+	err           error // always returns this error on process
 }
 
 func (tq *testQueueImpl) needsLeaderLease() bool     { return false }
@@ -80,7 +83,7 @@ func (tq *testQueueImpl) shouldQueue(now roachpb.Timestamp, r *Replica, _ *confi
 
 func (tq *testQueueImpl) process(now roachpb.Timestamp, r *Replica, _ *config.SystemConfig) error {
 	atomic.AddInt32(&tq.processed, 1)
-	return nil
+	return tq.err
 }
 
 func (tq *testQueueImpl) timer() time.Duration {
@@ -91,6 +94,10 @@ func (tq *testQueueImpl) timer() time.Duration {
 		return tq.duration
 	}
 	return 0
+}
+
+func (tq *testQueueImpl) purgatoryChan() <-chan struct{} {
+	return tq.pChan
 }
 
 // TestQueuePriorityQueue verifies priority queue implementation.
@@ -436,4 +443,122 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	if pc := atomic.LoadInt32(&queued); pc != 3 {
 		t.Errorf("expected queued count of 3; got %d", pc)
 	}
+}
+
+type testErr struct{}
+
+func (*testErr) Error() string {
+	return "test error"
+}
+
+func (*testErr) CanRetry() bool {
+	return true
+}
+
+// TestBaseQueuePurgatory verifies that if error is set on the test
+// queue, items are added to the purgatory, but only up to the maximum
+// number allowed. Verifies that sending on the purgatory channel
+// causes the replicas to be reprocessed.
+func TestBaseQueuePurgatory(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	g, stopper := gossipForTest(t)
+	defer stopper.Stop()
+
+	testQueue := &testQueueImpl{
+		duration: time.Nanosecond,
+		shouldQueueFn: func(now roachpb.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+			shouldQueue = true
+			priority = float64(r.RangeID)
+			return
+		},
+		pChan: make(chan struct{}, 1),
+		err:   &testErr{},
+	}
+	bq := makeBaseQueue("test", testQueue, g, purgatoryMaxSize+1)
+	mc := hlc.NewManualClock(0)
+	clock := hlc.NewClock(mc.UnixNano)
+	bq.Start(clock, stopper)
+
+	for i := 1; i <= purgatoryMaxSize; i++ {
+		r := &Replica{RangeID: roachpb.RangeID(i)}
+		if err := r.setDesc(&roachpb.RangeDescriptor{RangeID: roachpb.RangeID(i)}); err != nil {
+			t.Fatal(err)
+		}
+		bq.MaybeAdd(r, roachpb.ZeroTimestamp)
+	}
+
+	// Two loops; the first loop checks that all items were processed
+	// and verifies the purgatory size. Then another replica is added,
+	// which increases the processed count by 1, but the purgatory max
+	// size should refuse the additional failing replica.
+	for i := 0; i < 2; i++ {
+		util.SucceedsWithin(t, queueItemProcessTimeout, func() error {
+			if pc := atomic.LoadInt32(&testQueue.processed); pc != purgatoryMaxSize+int32(i) {
+				return fmt.Errorf("expected %d processed replicas; got %d", purgatoryMaxSize+i, pc)
+			}
+			return nil
+		})
+
+		bq.Lock() // Protect access to purgatory and priorityQ.
+		// Verify that the size of the purgatory map is correct.
+		if l := len(bq.purgatory); l != purgatoryMaxSize {
+			t.Errorf("expected purgatory size of %d; got %d", purgatoryMaxSize, l)
+		}
+		// ...and priorityQ should be empty.
+		if l := len(bq.priorityQ); l != 0 {
+			t.Errorf("expected empty priorityQ; got %d", l)
+		}
+		bq.Unlock()
+
+		// Add one more range and verify the purgatory max size is maintained.
+		id := roachpb.RangeID(purgatoryMaxSize + 1)
+		r := &Replica{RangeID: id}
+		if err := r.setDesc(&roachpb.RangeDescriptor{RangeID: id}); err != nil {
+			t.Fatal(err)
+		}
+		bq.MaybeAdd(r, roachpb.ZeroTimestamp)
+	}
+
+	// Now, signal that purgatoried replicas should retry.
+	testQueue.pChan <- struct{}{}
+
+	util.SucceedsWithin(t, queueItemProcessTimeout, func() error {
+		if pc := atomic.LoadInt32(&testQueue.processed); pc != purgatoryMaxSize*2+2 {
+			return fmt.Errorf("expected %d processed replicas; got %d", purgatoryMaxSize*2+2, pc)
+		}
+		return nil
+	})
+
+	bq.Lock() // Protect access to purgatory and priorityQ.
+	// Verify the replicas are still in purgatory.
+	if l := len(bq.purgatory); l != purgatoryMaxSize {
+		t.Errorf("expected purgatory size of %d; got %d", purgatoryMaxSize, l)
+	}
+	// ...and priorityQ should be empty.
+	if l := len(bq.priorityQ); l != 0 {
+		t.Errorf("expected empty priorityQ; got %d", l)
+	}
+	bq.Unlock()
+
+	// Remove error and reprocess.
+	testQueue.err = nil
+	testQueue.pChan <- struct{}{}
+
+	util.SucceedsWithin(t, queueItemProcessTimeout, func() error {
+		if pc := atomic.LoadInt32(&testQueue.processed); pc != purgatoryMaxSize*3+2 {
+			return fmt.Errorf("expected %d processed replicas; got %d", purgatoryMaxSize*3+2, pc)
+		}
+		return nil
+	})
+
+	bq.Lock() // Protect access to purgatory and priorityQ.
+	// Verify the replicas are no longer in purgatory.
+	if l := len(bq.purgatory); l != 0 {
+		t.Errorf("expected purgatory size of 0; got %d", l)
+	}
+	// ...and priorityQ should be empty.
+	if l := len(bq.priorityQ); l != 0 {
+		t.Errorf("expected empty priorityQ; got %d", l)
+	}
+	bq.Unlock()
 }
