@@ -32,7 +32,7 @@ import (
 func TestValues(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	p := planner{}
+	p := makePlanner()
 
 	vInt := int64(5)
 	vNum := 3.14159
