@@ -149,3 +149,8 @@ func (rlq *raftLogQueue) process(now roachpb.Timestamp, r *Replica, _ *config.Sy
 func (*raftLogQueue) timer() time.Duration {
 	return RaftLogQueueTimerDuration
 }
+
+// purgatoryChan returns nil.
+func (*raftLogQueue) purgatoryChan() <-chan struct{} {
+	return nil
+}
