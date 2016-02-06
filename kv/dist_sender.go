@@ -442,16 +442,22 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		// Ensure the local NodeID is marked as free from clock offset;
 		// the transaction's timestamp was taken off the local clock.
 		if nDesc := ds.getNodeDescriptor(); nDesc != nil {
-			// TODO(tschottdorf): bad style to assume that ba.Txn is ours.
-			// No race here, but should have a better way of doing this.
-			//
 			// TODO(tschottdorf): future refactoring should move this to txn
 			// creation in TxnCoordSender, which is currently unaware of the
 			// NodeID (and wraps *DistSender through client.Sender since it
 			// also needs test compatibility with *LocalSender).
 			//
-			// TODO(pmattis): We should shallow-copy the Txn.
-			ba.Txn.CertainNodes.Add(nDesc.NodeID)
+			// Taking care below to not modify any memory referenced from
+			// our BatchRequest which may be shared with others.
+			// First, get a shallow clone of our txn (since that holds the
+			// NodeList struct).
+			txnShallow := *ba.Txn
+			// Next, zero out the NodeList pointer. That makes sure that
+			// if we had something of size zero but with capacity, we don't
+			// re-use the existing space (which others may also use).
+			txnShallow.CertainNodes.Nodes = nil
+			txnShallow.CertainNodes.Add(nDesc.NodeID)
+			ba.Txn = &txnShallow
 		}
 	}
 
