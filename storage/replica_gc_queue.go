@@ -45,7 +45,7 @@ const (
 // collections. The GC process asynchronously removes local data for
 // ranges that have been rebalanced away from this store.
 type replicaGCQueue struct {
-	baseQueue
+	*baseQueue
 	db     *client.DB
 	locker sync.Locker
 }
@@ -158,4 +158,9 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 
 func (*replicaGCQueue) timer() time.Duration {
 	return replicaGCQueueTimerDuration
+}
+
+// purgatoryChan returns nil.
+func (*replicaGCQueue) purgatoryChan() <-chan struct{} {
+	return nil
 }

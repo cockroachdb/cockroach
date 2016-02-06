@@ -122,6 +122,30 @@ func (r *BalanceMode) Type() string {
 
 var _ pflag.Value = new(BalanceMode)
 
+// allocatorError indicates a retryable error condition which sends replicas
+// being processed through the replicate_queue into purgatory so that they
+// can be retried quickly as soon as new stores come online, or additional
+// space frees up.
+type allocatorError struct {
+	required         roachpb.Attributes
+	relaxConstraints bool
+}
+
+// Error implements error.
+func (ae *allocatorError) Error() string {
+	anyAll := "all"
+	if ae.relaxConstraints {
+		anyAll = "any"
+	}
+	return fmt.Sprintf("no target store with %s attributes matching %s available, are you running enough nodes?",
+		anyAll, ae.required)
+}
+
+// purgatoryErrorMarker implements purgatoryError.
+func (allocatorError) purgatoryErrorMarker() {}
+
+var _ purgatoryError = &allocatorError{}
+
 // AllocatorOptions are configurable options which effect the way that the
 // replicate queue will handle rebalancing opportunities.
 type AllocatorOptions struct {
@@ -250,10 +274,8 @@ func (a *Allocator) AllocateTarget(required roachpb.Attributes, existing []roach
 		if target := a.balancer.selectGood(sl, existingNodes); target != nil {
 			return target, nil
 		}
-		if len(attrs) == 0 {
-			return nil, util.Errorf("no suitable replication target store found, are you running enough nodes?")
-		} else if !relaxConstraints {
-			return nil, util.Errorf("no target store with attributes %s available", required)
+		if len(attrs) == 0 || !relaxConstraints {
+			return nil, &allocatorError{required: required, relaxConstraints: relaxConstraints}
 		}
 	}
 }
