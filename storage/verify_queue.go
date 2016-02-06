@@ -41,7 +41,7 @@ type rangeCountFn func() int
 // bit-rot in read-only data sets. See
 // http://en.wikipedia.org/wiki/Data_degradation.
 type verifyQueue struct {
-	baseQueue
+	*baseQueue
 	countFn rangeCountFn
 }
 
@@ -113,4 +113,9 @@ func (*verifyQueue) process(now roachpb.Timestamp, rng *Replica,
 // complement of ranges can be scanned within verificationInterval.
 func (vq *verifyQueue) timer() time.Duration {
 	return time.Duration(verificationInterval.Nanoseconds() / int64((vq.countFn() + 1)))
+}
+
+// purgatoryChan returns nil.
+func (*verifyQueue) purgatoryChan() <-chan struct{} {
+	return nil
 }

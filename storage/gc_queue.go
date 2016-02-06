@@ -68,7 +68,7 @@ const (
 // The shouldQueue function combines the need for the above tasks into a
 // single priority. If any task is overdue, shouldQueue returns true.
 type gcQueue struct {
-	baseQueue
+	*baseQueue
 }
 
 // newGCQueue returns a new instance of gcQueue.
@@ -436,6 +436,11 @@ func processSequenceCache(r *Replica, now, cutoff roachpb.Timestamp, prevTxns ma
 // for successive queued replicas.
 func (*gcQueue) timer() time.Duration {
 	return gcQueueTimerDuration
+}
+
+// purgatoryChan returns nil.
+func (*gcQueue) purgatoryChan() <-chan struct{} {
+	return nil
 }
 
 // pushTxn attempts to abort the txn via push. The wait group is signaled on
