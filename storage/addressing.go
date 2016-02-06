@@ -62,6 +62,13 @@ func updateRangeAddressing(b *client.Batch, desc *roachpb.RangeDescriptor) error
 	return rangeAddressing(b, desc, putMeta)
 }
 
+func makeMetaKey(prefix roachpb.Key, key roachpb.RKey) roachpb.Key {
+	res := make(roachpb.Key, 0, len(prefix)+len(key))
+	res = append(res, prefix...)
+	res = append(res, key...)
+	return res
+}
+
 // rangeAddressing updates or deletes the range addressing metadata
 // for the range specified by desc. The action to take is specified by
 // the supplied metaAction function.
@@ -90,12 +97,12 @@ func rangeAddressing(b *client.Batch, desc *roachpb.RangeDescriptor, action meta
 	} else {
 		// 3. the range ends with a normal user key, so we must update the
 		// relevant meta2 entry pointing to the end of this range.
-		action(b, roachpb.Key(keys.MakeKey(keys.Meta2Prefix, desc.EndKey)), desc)
+		action(b, makeMetaKey(keys.Meta2Prefix, desc.EndKey), desc)
 		// 3a. the range starts with KeyMin or a meta2 addressing record,
 		// update the meta1 entry for KeyMax.
 		if bytes.Equal(desc.StartKey, roachpb.RKeyMin) ||
 			bytes.HasPrefix(desc.StartKey, keys.Meta2Prefix) {
-			action(b, roachpb.Key(keys.MakeKey(keys.Meta1Prefix, roachpb.RKeyMax)), desc)
+			action(b, makeMetaKey(keys.Meta1Prefix, roachpb.RKeyMax), desc)
 		}
 	}
 	return nil

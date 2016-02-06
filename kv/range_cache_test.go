@@ -24,6 +24,7 @@ import (
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -105,8 +106,8 @@ func newTestDescriptorDB() *testDescriptorDB {
 	db := &testDescriptorDB{}
 	db.data.Insert(testDescriptorNode{
 		&roachpb.RangeDescriptor{
-			StartKey: keys.MakeKey(keys.Meta2Prefix, roachpb.RKeyMin),
-			EndKey:   keys.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax),
+			StartKey: testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMin),
+			EndKey:   testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax),
 		},
 	})
 	db.data.Insert(testDescriptorNode{

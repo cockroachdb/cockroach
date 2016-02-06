@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -74,8 +75,8 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 
 	for _, key := range []roachpb.Key{
 		keys.Meta1Prefix,
-		keys.MakeKey(keys.Meta1Prefix, []byte("a")),
-		keys.MakeKey(keys.Meta1Prefix, roachpb.RKeyMax),
+		testutils.MakeKey(keys.Meta1Prefix, []byte("a")),
+		testutils.MakeKey(keys.Meta1Prefix, roachpb.RKeyMax),
 		keys.Meta2KeyMax,
 		keys.MakeTablePrefix(10 /* system descriptor ID */),
 	} {
@@ -645,14 +646,14 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		// tables boundaries.
 		expKeys := make([]roachpb.Key, 0, maxTableID+2)
 		expKeys = append(expKeys,
-			keys.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(keys.MaxSystemConfigDescID+1)),
+			testutils.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(keys.MaxSystemConfigDescID+1)),
 		)
 		for i := 1; i <= maxTableID; i++ {
 			expKeys = append(expKeys,
-				keys.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(keys.MaxReservedDescID+uint32(i))),
+				testutils.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(keys.MaxReservedDescID+uint32(i))),
 			)
 		}
-		expKeys = append(expKeys, keys.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax))
+		expKeys = append(expKeys, testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax))
 
 		util.SucceedsWithinDepth(1, t, splitTimeout, func() error {
 			rows, pErr := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)

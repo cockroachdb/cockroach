@@ -54,7 +54,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 
 	// Create an intent on the meta1 record by writing directly to the
 	// engine.
-	key := keys.MakeKey(keys.Meta1Prefix, roachpb.KeyMax)
+	key := testutils.MakeKey(keys.Meta1Prefix, roachpb.KeyMax)
 	now := s.Clock().Now()
 	txn := roachpb.NewTransaction("txn", roachpb.Key("foobar"), 0, roachpb.SERIALIZABLE, now, 0)
 	if err := engine.MVCCPutProto(s.Ctx.Engines[0], nil, key, now, txn, &roachpb.RangeDescriptor{}); err != nil {

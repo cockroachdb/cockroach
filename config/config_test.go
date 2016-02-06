@@ -70,7 +70,7 @@ func TestObjectIDForKey(t *testing.T) {
 		{roachpb.RKeyMax, false, 0},
 
 		// Valid, even if there are things after the ID.
-		{keys.MakeKey(keys.MakeTablePrefix(42), roachpb.RKey("\xff")), true, 42},
+		{testutils.MakeKey(keys.MakeTablePrefix(42), roachpb.RKey("\xff")), true, 42},
 		{keys.MakeTablePrefix(0), true, 0},
 		{keys.MakeTablePrefix(999), true, 999},
 	}
@@ -264,14 +264,14 @@ func TestComputeSplits(t *testing.T) {
 		{userSql, keys.MakeTablePrefix(start + 4), keys.MakeTablePrefix(start + 10), allUserSplits[5:]},
 		{userSql, keys.MakeTablePrefix(start + 5), keys.MakeTablePrefix(start + 10), nil},
 		{userSql, keys.MakeTablePrefix(start + 6), keys.MakeTablePrefix(start + 10), nil},
-		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
+		{userSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
 			keys.MakeTablePrefix(start + 10), allUserSplits[1:]},
-		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
+		{userSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
 			keys.MakeTablePrefix(start + 5), allUserSplits[1:5]},
-		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			keys.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("bar")), allUserSplits[1:5]},
-		{userSql, keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			keys.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("morefoo")), nil},
+		{userSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
+			testutils.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("bar")), allUserSplits[1:5]},
+		{userSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
+			testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("morefoo")), nil},
 
 		// Reserved descriptors.
 		{reservedSql, roachpb.RKeyMin, roachpb.RKeyMax, allReservedSplits},
@@ -281,8 +281,8 @@ func TestComputeSplits(t *testing.T) {
 		{reservedSql, roachpb.RKeyMin, keys.MakeTablePrefix(reservedStart + 2), allReservedSplits[:2]},
 		{reservedSql, roachpb.RKeyMin, keys.MakeTablePrefix(reservedStart + 10), allReservedSplits},
 		{reservedSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(reservedStart + 2), allReservedSplits[1:2]},
-		{reservedSql, keys.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
-			keys.MakeKey(keys.MakeTablePrefix(start+10), roachpb.RKey("foo")), allReservedSplits[1:]},
+		{reservedSql, testutils.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
+			testutils.MakeKey(keys.MakeTablePrefix(start+10), roachpb.RKey("foo")), allReservedSplits[1:]},
 
 		// Reserved/User mix.
 		{allSql, roachpb.RKeyMin, roachpb.RKeyMax, allSplits},
@@ -290,8 +290,8 @@ func TestComputeSplits(t *testing.T) {
 		{allSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, allSplits[4:]},
 		{allSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(start + 10), allSplits[1:]},
 		{allSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 2), allSplits[:5]},
-		{allSql, keys.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
-			keys.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("foo")), allSplits[1:8]},
+		{allSql, testutils.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
+			testutils.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("foo")), allSplits[1:8]},
 	}
 
 	cfg := config.SystemConfig{}

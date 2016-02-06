@@ -599,7 +599,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 
 	// Try a put to meta2 key which would otherwise exceed maximum key
 	// length, but is accepted because of the meta prefix.
-	meta2KeyMax := keys.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax)
+	meta2KeyMax := testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax)
 	pArgs := putArgs(meta2KeyMax, []byte("value"))
 	if _, pErr := client.SendWrapped(store.testSender(), nil, &pArgs); pErr != nil {
 		t.Fatalf("unexpected error on put to meta2 value: %s", pErr)

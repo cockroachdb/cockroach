@@ -57,7 +57,7 @@ import (
 // 		slot := (timestamp / keyDuration) // integer division
 var (
 	// keyDataPrefix is the key prefix for time series data keys.
-	keyDataPrefix = roachpb.Key(roachpb.MakeKey(keys.SystemPrefix, roachpb.Key("tsd")))
+	keyDataPrefix = roachpb.Key(string(keys.SystemPrefix) + "tsd")
 )
 
 // MakeDataKey creates a time series data key for the given series name, source,
