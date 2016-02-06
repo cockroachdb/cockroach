@@ -209,10 +209,7 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 		}
 		scan.setNeededColumns(neededCols)
 
-		plan, pErr := p.selectIndex(s, scan, ordering, grouping)
-		if pErr != nil {
-			return nil, pErr
-		}
+		plan := p.selectIndex(s, scan, ordering, grouping)
 
 		// Update s.table with the new plan.
 		s.table.node = plan
@@ -565,11 +562,11 @@ func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 // transformed into a set of spans to scan within the index.
 //
 // If grouping is true, the ordering is the desired ordering for grouping.
-func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrdering, grouping bool) (planNode, *roachpb.Error) {
+func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrdering, grouping bool) planNode {
 	if s.desc == nil || (sel.filter == nil && ordering == nil) {
 		// No table or no where-clause and no ordering.
 		s.initOrdering(0)
-		return s, nil
+		return s
 	}
 
 	candidates := make([]*indexInfo, 0, len(s.desc.Indexes)+1)
@@ -609,7 +606,7 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 		if len(exprs) == 1 && len(exprs[0]) == 1 {
 			if d, ok := exprs[0][0].(parser.DBool); ok && bool(!d) {
 				// The expression simplified to false.
-				return &emptyNode{}, nil
+				return &emptyNode{}
 			}
 		}
 
@@ -667,7 +664,7 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 	s.spans = makeSpans(c.constraints, c.desc.ID, c.index)
 	if len(s.spans) == 0 {
 		// There are no spans to scan.
-		return &emptyNode{}, nil
+		return &emptyNode{}
 	}
 	sel.filter = applyConstraints(sel.filter, c.constraints)
 	s.reverse = c.reverse
@@ -698,7 +695,7 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 		}
 	}
 
-	return plan, nil
+	return plan
 }
 
 type indexConstraint struct {
