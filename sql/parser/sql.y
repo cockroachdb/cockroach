@@ -26,237 +26,407 @@ func unimplemented() {
 }
 %}
 
+%{
+// sqlSymUnion represents a union of types, providing accessor methods
+// to retrieve the underlying type stored in the union's empty interface.
+// The purpose of the sqlSymUnion struct is to reduce the memory footprint of
+// the sqlSymType because only one value (of a variety of types) is ever needed
+// to be stored in the union field at a time.
+//
+// By using an empty interface, we lose the type checking previously provided
+// by yacc and the Go compiler when dealing with union values. Instead, runtime
+// type assertions must be relied upon in the methods below, and as such, the
+// parser should be thoroughly tested whenever new sytax is added.
+//
+// Alternatives to manually creating this union type were to build "unionizing"
+// functionality into yacc preprocessing, yacc post-processing, or the yacc
+// compiler itself. This would allow access to some of the type checking that
+// the parser had before, but was decided against because:
+// - The processing step would have to be maintained.
+// - It would increase the amount of "magic" involved when converting from
+//   syntax to Go Code.
+// - It still wouldn't provide full access to type checking in some of the
+//   arbitrary Go code within rules, which is provided by the Go compiler.
+//
+// It is important to note that when assigning values to sqlSymUnion.val, all
+// nil values should be typed so that they are stored as nil instances in the
+// empty interface, instead of setting the empty interface to nil. This means
+// that:
+//     $$ = []String(nil)
+// should be used, instead of:
+//     $$ = nil
+// to assign a nil string slice to the union.
+type sqlSymUnion struct {
+    val interface{}
+}
+
+// The following accessor methods come in two forms, depending on the
+// type of the value being accessed. Values and pointers are directly
+// type asserted from the empty interface, meaning that they will panic
+// if the type assertion is incorrect. Interfaces are handled differently
+// because a nil instance of an interface inserted into the empty interface
+// becomes a nil instance of the empty interface and therefore will fail a
+// direct type assertion. Instead, a guarded type assertion must be used,
+// which returns nil if the type assertion fails.
+func (u *sqlSymUnion) ival() IntVal {
+    return u.val.(IntVal)
+}
+func (u *sqlSymUnion) bool() bool {
+    return u.val.(bool)
+}
+func (u *sqlSymUnion) strs() []string {
+    return u.val.([]string)
+}
+func (u *sqlSymUnion) qname() *QualifiedName {
+    return u.val.(*QualifiedName)
+}
+func (u *sqlSymUnion) qnames() QualifiedNames {
+    return u.val.(QualifiedNames)
+}
+func (u *sqlSymUnion) indirectElem() IndirectionElem {
+    if indirectElem, ok := u.val.(IndirectionElem); ok {
+        return indirectElem
+    }
+    return nil
+}
+func (u *sqlSymUnion) indirect() Indirection {
+    return u.val.(Indirection)
+}
+func (u *sqlSymUnion) stmt() Statement {
+    if stmt, ok := u.val.(Statement); ok {
+        return stmt
+    }
+    return nil
+}
+func (u *sqlSymUnion) stmts() []Statement {
+    return u.val.([]Statement)
+}
+func (u *sqlSymUnion) selectStmt() SelectStatement {
+    if selectStmt, ok := u.val.(SelectStatement); ok {
+        return selectStmt
+    }
+    return nil
+}
+func (u *sqlSymUnion) colDef() *ColumnTableDef {
+    return u.val.(*ColumnTableDef)
+}
+func (u *sqlSymUnion) constraintDef() ConstraintTableDef {
+    if constraintDef, ok := u.val.(ConstraintTableDef); ok {
+        return constraintDef
+    }
+    return nil
+}
+func (u *sqlSymUnion) tblDef() TableDef {
+    if tblDef, ok := u.val.(TableDef); ok {
+        return tblDef
+    }
+    return nil
+}
+func (u *sqlSymUnion) tblDefs() TableDefs {
+    return u.val.(TableDefs)
+}
+func (u *sqlSymUnion) colQual() ColumnQualification {
+    if colQual, ok := u.val.(ColumnQualification); ok {
+        return colQual
+    }
+    return nil
+}
+func (u *sqlSymUnion) colQuals() []ColumnQualification {
+    return u.val.([]ColumnQualification)
+}
+func (u *sqlSymUnion) colType() ColumnType {
+    if colType, ok := u.val.(ColumnType); ok {
+        return colType
+    }
+    return nil
+}
+func (u *sqlSymUnion) colTypes() []ColumnType {
+    return u.val.([]ColumnType)
+}
+func (u *sqlSymUnion) expr() Expr {
+    if expr, ok := u.val.(Expr); ok {
+        return expr
+    }
+    return nil
+}
+func (u *sqlSymUnion) exprs() Exprs {
+    return u.val.(Exprs)
+}
+func (u *sqlSymUnion) selExpr() SelectExpr {
+    return u.val.(SelectExpr)
+}
+func (u *sqlSymUnion) selExprs() SelectExprs {
+    return u.val.(SelectExprs)
+}
+func (u *sqlSymUnion) aliasClause() AliasClause {
+    return u.val.(AliasClause)
+}
+func (u *sqlSymUnion) tblExpr() TableExpr {
+    if tblExpr, ok := u.val.(TableExpr); ok {
+        return tblExpr
+    }
+    return nil
+}
+func (u *sqlSymUnion) tblExprs() TableExprs {
+    return u.val.(TableExprs)
+}
+func (u *sqlSymUnion) joinCond() JoinCond {
+    if joinCond, ok := u.val.(JoinCond); ok {
+        return joinCond
+    }
+    return nil
+}
+func (u *sqlSymUnion) when() *When {
+    return u.val.(*When)
+}
+func (u *sqlSymUnion) whens() []*When {
+    return u.val.([]*When)
+}
+func (u *sqlSymUnion) updateExpr() *UpdateExpr {
+    return u.val.(*UpdateExpr)
+}
+func (u *sqlSymUnion) updateExprs() UpdateExprs {
+    return u.val.(UpdateExprs)
+}
+func (u *sqlSymUnion) limit() *Limit {
+    return u.val.(*Limit)
+}
+func (u *sqlSymUnion) targetList() TargetList {
+    return u.val.(TargetList)
+}
+func (u *sqlSymUnion) targetListPtr() *TargetList {
+    return u.val.(*TargetList)
+}
+func (u *sqlSymUnion) privilegeType() privilege.Kind {
+    return u.val.(privilege.Kind)
+}
+func (u *sqlSymUnion) privilegeList() privilege.List {
+    return u.val.(privilege.List)
+}
+func (u *sqlSymUnion) orderBy() OrderBy {
+    return u.val.(OrderBy)
+}
+func (u *sqlSymUnion) order() *Order {
+    return u.val.(*Order)
+}
+func (u *sqlSymUnion) orders() []*Order {
+    return u.val.([]*Order)
+}
+func (u *sqlSymUnion) groupBy() GroupBy {
+    return u.val.(GroupBy)
+}
+func (u *sqlSymUnion) dir() Direction {
+    return u.val.(Direction)
+}
+func (u *sqlSymUnion) alterTableCmd() AlterTableCmd {
+    if alterTableCmd, ok := u.val.(AlterTableCmd); ok {
+        return alterTableCmd
+    }
+    return nil
+}
+func (u *sqlSymUnion) alterTableCmds() AlterTableCmds {
+    return u.val.(AlterTableCmds)
+}
+func (u *sqlSymUnion) isoLevel() IsolationLevel {
+    return u.val.(IsolationLevel)
+}
+func (u *sqlSymUnion) userPriority() UserPriority {
+    return u.val.(UserPriority)
+}
+func (u *sqlSymUnion) idxElem() IndexElem {
+    return u.val.(IndexElem)
+}
+func (u *sqlSymUnion) idxElems() IndexElemList {
+    return u.val.(IndexElemList)
+}
+%}
+
 %union {
   id             int
   pos            int
   empty          struct{}
-  ival           IntVal
-  boolVal        bool
   str            string
-  strs           []string
-  qname          *QualifiedName
-  qnames         QualifiedNames
-  indirectElem   IndirectionElem
-  indirect       Indirection
-  stmt           Statement
-  stmts          []Statement
-  selectStmt     SelectStatement
-  colDef         *ColumnTableDef
-  constraintDef  ConstraintTableDef
-  tblDef         TableDef
-  tblDefs        []TableDef
-  colQual        ColumnQualification
-  colQuals       []ColumnQualification
-  colType        ColumnType
-  colTypes       []ColumnType
-  expr           Expr
-  exprs          Exprs
-  selExpr        SelectExpr
-  selExprs       SelectExprs
-  aliasClause    AliasClause
-  tblExpr        TableExpr
-  tblExprs       TableExprs
-  joinCond       JoinCond
-  when           *When
-  whens          []*When
-  updateExpr     *UpdateExpr
-  updateExprs    []*UpdateExpr
-  limit          *Limit
-  targetList     TargetList
-  targetListPtr  *TargetList
-  privilegeType  privilege.Kind
-  privilegeList  privilege.List
-  orderBy        OrderBy
-  orders         []*Order
-  order          *Order
-  groupBy        GroupBy
-  dir            Direction
-  alterTableCmd  AlterTableCmd
-  alterTableCmds AlterTableCmds
-  isoLevel       IsolationLevel
-  userPriority   UserPriority
-  idxElem        IndexElem
-  idxElems       IndexElemList
+  union          sqlSymUnion
 }
 
-%type <stmts> stmt_block
-%type <stmts> stmt_list
-%type <stmt> stmt
+%type <union> /* <[]Statement> */ stmt_block
+%type <union> /* <[]Statement> */ stmt_list
+%type <union> /* <Statement> */ stmt
 
-%type <stmt> alter_table_stmt
-%type <stmt> create_stmt
-%type <stmt> create_database_stmt
-%type <stmt> create_index_stmt
-%type <stmt> create_table_stmt
-%type <stmt> delete_stmt
-%type <stmt> drop_stmt
-%type <stmt> explain_stmt
-%type <stmt> explainable_stmt
-%type <stmt> grant_stmt
-%type <stmt> insert_stmt
-%type <stmt> preparable_stmt
-%type <stmt> rename_stmt
-%type <stmt> revoke_stmt
-%type <selectStmt> select_stmt
-%type <stmt> set_stmt
-%type <stmt> show_stmt
-%type <stmt> transaction_stmt
-%type <stmt> truncate_stmt
-%type <stmt> update_stmt
+%type <union> /* <Statement> */ alter_table_stmt
+%type <union> /* <Statement> */ create_stmt
+%type <union> /* <Statement> */ create_database_stmt
+%type <union> /* <Statement> */ create_index_stmt
+%type <union> /* <Statement> */ create_table_stmt
+%type <union> /* <Statement> */ delete_stmt
+%type <union> /* <Statement> */ drop_stmt
+%type <union> /* <Statement> */ explain_stmt
+%type <union> /* <Statement> */ explainable_stmt
+%type <union> /* <Statement> */ grant_stmt
+%type <union> /* <Statement> */ insert_stmt
+%type <union> /* <Statement> */ preparable_stmt
+%type <union> /* <Statement> */ rename_stmt
+%type <union> /* <Statement> */ revoke_stmt
+%type <union> /* <SelectStatement> */ select_stmt
+%type <union> /* <Statement> */ set_stmt
+%type <union> /* <Statement> */ show_stmt
+%type <union> /* <Statement> */ transaction_stmt
+%type <union> /* <Statement> */ truncate_stmt
+%type <union> /* <Statement> */ update_stmt
 
-%type <selectStmt> select_no_parens select_with_parens select_clause
-%type <selectStmt> simple_select values_clause
+%type <union> /* <SelectStatement> */ select_no_parens select_with_parens select_clause
+%type <union> /* <SelectStatement> */ simple_select values_clause
 
 %type <empty> alter_column_default alter_using
-%type <dir> opt_asc_desc
+%type <union> /* <Direction> */ opt_asc_desc
 
-%type <alterTableCmd> alter_table_cmd
-%type <alterTableCmds> alter_table_cmds
+%type <union> /* <AlterTableCmd> */ alter_table_cmd
+%type <union> /* <AlterTableCmds> */ alter_table_cmds
 
 %type <empty> opt_collate_clause
 
 %type <empty> opt_drop_behavior
 
-%type <isoLevel> transaction_iso_level
-%type <userPriority>  transaction_user_priority
+%type <union> /* <IsolationLevel> */ transaction_iso_level
+%type <union> /* <UserPriority> */  transaction_user_priority
 
 %type <str>   name opt_name
 
 // %type <empty> subquery_op
-%type <qname> func_name
+%type <union> /* <*QualifiedName> */ func_name
 %type <empty> opt_collate
 
-%type <qname> qualified_name
-%type <qname> indirect_name_or_glob
-%type <qname> insert_target
+%type <union> /* <*QualifiedName> */ qualified_name
+%type <union> /* <*QualifiedName> */ indirect_name_or_glob
+%type <union> /* <*QualifiedName> */ insert_target
 
 // %type <empty> math_op
 
-%type <isoLevel> iso_level
-%type <userPriority> user_priority
+%type <union> /* <IsolationLevel> */ iso_level
+%type <union> /* <UserPriority> */ user_priority
 %type <empty> opt_encoding
 
-%type <tblDefs> opt_table_elem_list table_elem_list
+%type <union> /* <TableDefs> */ opt_table_elem_list table_elem_list
 %type <empty> opt_all_clause
-%type <boolVal> distinct_clause
-%type <strs> opt_column_list
-%type <orderBy> sort_clause opt_sort_clause
-%type <orders> sortby_list
-%type <idxElems> index_params
-%type <strs> name_list opt_name_list
+%type <union> /* <bool> */ distinct_clause
+%type <union> /* <[]string> */ opt_column_list
+%type <union> /* <OrderBy> */ sort_clause opt_sort_clause
+%type <union> /* <[]*Order> */ sortby_list
+%type <union> /* <IndexElemList> */ index_params
+%type <union> /* <[]string> */ name_list opt_name_list
 %type <empty> opt_array_bounds
-%type <tblExprs> from_clause from_list
-%type <qnames> qualified_name_list
-%type <qnames> indirect_name_or_glob_list
-%type <qname> any_name
-%type <qnames> any_name_list
-%type <exprs> expr_list
-%type <indirect> attrs
-%type <selExprs> target_list opt_target_list
-%type <updateExprs> set_clause_list
-%type <updateExpr> set_clause multiple_set_clause
-%type <indirect> indirection
-%type <exprs> ctext_expr_list ctext_row
-%type <groupBy> group_clause
-%type <limit> select_limit
-%type <qnames> relation_expr_list
-%type <selExprs> returning_clause
+%type <union> /* <TableExprs> */ from_clause from_list
+%type <union> /* <QualifiedNames> */ qualified_name_list
+%type <union> /* <QualifiedNames> */ indirect_name_or_glob_list
+%type <union> /* <*QualifiedName> */ any_name
+%type <union> /* <QualifiedNames> */ any_name_list
+%type <union> /* <Exprs> */ expr_list
+%type <union> /* <Indirection> */ attrs
+%type <union> /* <SelectExprs> */ target_list opt_target_list
+%type <union> /* <UpdateExprs> */ set_clause_list
+%type <union> /* <*UpdateExpr> */ set_clause multiple_set_clause
+%type <union> /* <Indirection> */ indirection
+%type <union> /* <Exprs> */ ctext_expr_list ctext_row
+%type <union> /* <GroupBy> */ group_clause
+%type <union> /* <*Limit> */ select_limit
+%type <union> /* <QualifiedNames> */ relation_expr_list
+%type <union> /* <SelectExprs> */ returning_clause
 
-%type <boolVal> all_or_distinct
+%type <union> /* <bool> */ all_or_distinct
 %type <empty> join_outer
-%type <joinCond> join_qual
+%type <union> /* <JoinCond> */ join_qual
 %type <str> join_type
 
-%type <exprs> extract_list
-%type <exprs> overlay_list
-%type <exprs> position_list
-%type <exprs> substr_list
-%type <exprs> trim_list
+%type <union> /* <Exprs> */ extract_list
+%type <union> /* <Exprs> */ overlay_list
+%type <union> /* <Exprs> */ position_list
+%type <union> /* <Exprs> */ substr_list
+%type <union> /* <Exprs> */ trim_list
 %type <empty> opt_interval interval_second
-%type <expr> overlay_placing
+%type <union> /* <Expr> */ overlay_placing
 
-%type <boolVal> opt_unique opt_column
+%type <union> /* <bool> */ opt_unique opt_column
 
 %type <empty> opt_set_data
 
-%type <limit> limit_clause offset_clause
-%type <expr>  select_limit_value
+%type <union> /* <*Limit> */ limit_clause offset_clause
+%type <union> /* <Expr> */  select_limit_value
 // %type <empty> opt_select_fetch_first_value
 %type <empty> row_or_rows
 // %type <empty> first_or_next
 
-%type <stmt>  insert_rest
+%type <union> /* <Statement> */  insert_rest
 %type <empty> opt_conf_expr
 %type <empty> opt_on_conflict
 
-%type <stmt>  generic_set set_rest set_rest_more transaction_mode_list opt_transaction_mode_list
+%type <union> /* <Statement> */  generic_set set_rest set_rest_more transaction_mode_list opt_transaction_mode_list
 
-%type <strs> opt_storing
-%type <colDef> column_def
-%type <tblDef> table_elem
-%type <expr>  where_clause
-%type <indirectElem> glob_indirection
-%type <indirectElem> name_indirection
-%type <indirectElem> indirection_elem
-%type <expr>  a_expr b_expr c_expr a_expr_const
-%type <expr>  substr_from substr_for
-%type <expr>  in_expr
-%type <expr>  having_clause
-%type <expr>  array_expr
-%type <colTypes> type_list
-%type <exprs> array_expr_list
-%type <expr>  row explicit_row implicit_row
-%type <expr>  case_expr case_arg case_default
-%type <when>  when_clause
-%type <whens> when_clause_list
+%type <union> /* <[]string> */ opt_storing
+%type <union> /* <*ColumnTableDef> */ column_def
+%type <union> /* <TableDef> */ table_elem
+%type <union> /* <Expr> */  where_clause
+%type <union> /* <IndirectionElem> */ glob_indirection
+%type <union> /* <IndirectionElem> */ name_indirection
+%type <union> /* <IndirectionElem> */ indirection_elem
+%type <union> /* <Expr> */  a_expr b_expr c_expr a_expr_const
+%type <union> /* <Expr> */  substr_from substr_for
+%type <union> /* <Expr> */  in_expr
+%type <union> /* <Expr> */  having_clause
+%type <union> /* <Expr> */  array_expr
+%type <union> /* <[]ColumnType> */ type_list
+%type <union> /* <Exprs> */ array_expr_list
+%type <union> /* <Expr> */  row explicit_row implicit_row
+%type <union> /* <Expr> */  case_expr case_arg case_default
+%type <union> /* <*When> */  when_clause
+%type <union> /* <[]*When> */ when_clause_list
 // %type <empty> sub_type
-%type <expr> ctext_expr
-%type <expr> numeric_only
-%type <aliasClause> alias_clause opt_alias_clause
-%type <order> sortby
-%type <idxElem> index_elem
-%type <tblExpr> table_ref
-%type <tblExpr> joined_table
-%type <qname> relation_expr
-%type <tblExpr> relation_expr_opt_alias
-%type <selExpr> target_elem
-%type <updateExpr> single_set_clause
+%type <union> /* <Expr> */ ctext_expr
+%type <union> /* <Expr> */ numeric_only
+%type <union> /* <AliasClause> */ alias_clause opt_alias_clause
+%type <union> /* <*Order> */ sortby
+%type <union> /* <IndexElem> */ index_elem
+%type <union> /* <TableExpr> */ table_ref
+%type <union> /* <TableExpr> */ joined_table
+%type <union> /* <*QualifiedName> */ relation_expr
+%type <union> /* <TableExpr> */ relation_expr_opt_alias
+%type <union> /* <SelectExpr> */ target_elem
+%type <union> /* <*UpdateExpr> */ single_set_clause
 
 %type <str> explain_option_name
-%type <strs> explain_option_list
+%type <union> /* <[]string> */ explain_option_list
 
-%type <colType> typename simple_typename const_typename
-%type <colType> numeric opt_numeric_modifiers
-%type <ival> opt_float
-%type <colType> character const_character
-%type <colType> character_with_length character_without_length
-%type <colType> const_datetime const_interval
-%type <colType> bit const_bit bit_with_length bit_without_length
-%type <colType> character_base
+%type <union> /* <ColumnType> */ typename simple_typename const_typename
+%type <union> /* <ColumnType> */ numeric opt_numeric_modifiers
+%type <union> /* <IntVal> */ opt_float
+%type <union> /* <ColumnType> */ character const_character
+%type <union> /* <ColumnType> */ character_with_length character_without_length
+%type <union> /* <ColumnType> */ const_datetime const_interval
+%type <union> /* <ColumnType> */ bit const_bit bit_with_length bit_without_length
+%type <union> /* <ColumnType> */ character_base
 %type <str> extract_arg
 %type <empty> opt_varying
 
-%type <ival>  signed_iconst
-%type <expr>  opt_boolean_or_string
-%type <exprs> var_list
-%type <qname> opt_from_var_name_clause var_name
+%type <union> /* <IntVal> */  signed_iconst
+%type <union> /* <Expr> */  opt_boolean_or_string
+%type <union> /* <Exprs> */ var_list
+%type <union> /* <*QualifiedName> */ opt_from_var_name_clause var_name
 %type <str>   col_label type_function_name
 %type <str>   non_reserved_word
-%type <expr>  non_reserved_word_or_sconst
-%type <expr>  var_value
-%type <expr>  zone_value
+%type <union> /* <Expr> */  non_reserved_word_or_sconst
+%type <union> /* <Expr> */  var_value
+%type <union> /* <Expr> */  zone_value
 
 %type <str>   unreserved_keyword type_func_name_keyword
 %type <str>   col_name_keyword reserved_keyword
 
-%type <constraintDef> table_constraint constraint_elem
-%type <tblDef> index_def
-%type <colQuals> col_qual_list
-%type <colQual> col_qualification col_qualification_elem
+%type <union> /* <ConstraintTableDef> */ table_constraint constraint_elem
+%type <union> /* <TableDef> */ index_def
+%type <union> /* <[]ColumnQualification> */ col_qual_list
+%type <union> /* <ColumnQualification> */ col_qualification col_qualification_elem
 %type <empty> key_actions key_delete key_match key_update key_action
 
-%type <expr>  func_application func_expr_common_subexpr
-%type <expr>  func_expr func_expr_windowless
+%type <union> /* <Expr> */  func_application func_expr_common_subexpr
+%type <union> /* <Expr> */  func_expr func_expr_windowless
 %type <empty> common_table_expr
 %type <empty> with_clause opt_with_clause
 %type <empty> cte_list
@@ -268,11 +438,11 @@ func unimplemented() {
 %type <empty> opt_frame_clause frame_extent frame_bound
 %type <empty> opt_existing_window_name
 
-%type <targetList>    privilege_target
-%type <targetListPtr> on_privilege_target_clause
-%type <strs>          grantee_list for_grantee_clause
-%type <privilegeList> privileges privilege_list
-%type <privilegeType> privilege
+%type <union> /* <TargetList> */    privilege_target
+%type <union> /* <*TargetList> */ on_privilege_target_clause
+%type <union> /* <[]string> */          grantee_list for_grantee_clause
+%type <union> /* <privilege.List> */ privileges privilege_list
+%type <union> /* <privilege.Kind> */ privilege
 
 // Non-keyword token types. These are hard-wired into the "flex" lexer. They
 // must be listed first so that their numeric codes do not depend on the set of
@@ -282,7 +452,7 @@ func unimplemented() {
 // DOT_DOT is unused in the core SQL grammar, and so will always provoke parse
 // errors. It is needed by PL/pgsql.
 %token <str>   IDENT FCONST SCONST BCONST
-%token <ival>  ICONST
+%token <union> /* <IntVal> */  ICONST
 %token <str>   PARAM
 %token <str>   TYPECAST DOT_DOT
 %token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS
@@ -451,22 +621,22 @@ func unimplemented() {
 stmt_block:
   stmt_list
   {
-    sqllex.(*scanner).stmts = $1
+    sqllex.(*scanner).stmts = $1.stmts()
   }
 
 stmt_list:
   stmt_list ';' stmt
   {
-    if $3 != nil {
-      $$ = append($1, $3)
+    if $3.stmt() != nil {
+      $$.val = append($1.stmts(), $3.stmt())
     }
   }
 | stmt
   {
-    if $1 != nil {
-      $$ = []Statement{$1}
+    if $1.stmt() != nil {
+      $$.val = []Statement{$1.stmt()}
     } else {
-      $$ = nil
+      $$.val = []Statement(nil)
     }
   }
 
@@ -482,7 +652,7 @@ stmt:
 | revoke_stmt
 | select_stmt
   {
-    $$ = $1
+    $$.val = $1.selectStmt()
   }
 | set_stmt
 | show_stmt
@@ -491,49 +661,49 @@ stmt:
 | update_stmt
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = Statement(nil)
   }
 
 alter_table_stmt:
   ALTER TABLE relation_expr alter_table_cmds
   {
-    $$ = &AlterTable{Table: $3, IfExists: false, Cmds: $4}
+    $$.val = &AlterTable{Table: $3.qname(), IfExists: false, Cmds: $4.alterTableCmds()}
   }
 | ALTER TABLE IF EXISTS relation_expr alter_table_cmds
   {
-    $$ = &AlterTable{Table: $5, IfExists: true, Cmds: $6}
+    $$.val = &AlterTable{Table: $5.qname(), IfExists: true, Cmds: $6.alterTableCmds()}
   }
 
 alter_table_cmds:
   alter_table_cmd
   {
-    $$ = AlterTableCmds{$1}
+    $$.val = AlterTableCmds{$1.alterTableCmd()}
   }
 | alter_table_cmds ',' alter_table_cmd
   {
-    $$ = append($1, $3)
+    $$.val = append($1.alterTableCmds(), $3.alterTableCmd())
   }
 
 alter_table_cmd:
   // ALTER TABLE <name> ADD <coldef>
   ADD column_def
   {
-    $$ = &AlterTableAddColumn{columnKeyword: false, IfNotExists: false, ColumnDef: $2}
+    $$.val = &AlterTableAddColumn{columnKeyword: false, IfNotExists: false, ColumnDef: $2.colDef()}
   }
   // ALTER TABLE <name> ADD IF NOT EXISTS <coldef>
 | ADD IF NOT EXISTS column_def
   {
-    $$ = &AlterTableAddColumn{columnKeyword: false, IfNotExists: true, ColumnDef: $5}
+    $$.val = &AlterTableAddColumn{columnKeyword: false, IfNotExists: true, ColumnDef: $5.colDef()}
   }
   // ALTER TABLE <name> ADD COLUMN <coldef>
 | ADD COLUMN column_def
   {
-    $$ = &AlterTableAddColumn{columnKeyword: true, IfNotExists: false, ColumnDef: $3}
+    $$.val = &AlterTableAddColumn{columnKeyword: true, IfNotExists: false, ColumnDef: $3.colDef()}
   }
   // ALTER TABLE <name> ADD COLUMN IF NOT EXISTS <coldef>
 | ADD COLUMN IF NOT EXISTS column_def
   {
-    $$ = &AlterTableAddColumn{columnKeyword: true, IfNotExists: true, ColumnDef: $6}
+    $$.val = &AlterTableAddColumn{columnKeyword: true, IfNotExists: true, ColumnDef: $6.colDef()}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> {SET DEFAULT <expr>|DROP DEFAULT}
 | ALTER opt_column name alter_column_default { unimplemented() }
@@ -544,12 +714,12 @@ alter_table_cmd:
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
 | DROP opt_column IF EXISTS name opt_drop_behavior
   {
-    $$ = &AlterTableDropColumn{columnKeyword: $2, IfExists: true, Column: $5}
+    $$.val = &AlterTableDropColumn{columnKeyword: $2.bool(), IfExists: true, Column: $5}
   }
   // ALTER TABLE <name> DROP [COLUMN] <colname> [RESTRICT|CASCADE]
 | DROP opt_column name opt_drop_behavior
   {
-    $$ = &AlterTableDropColumn{columnKeyword: $2, IfExists: false, Column: $3}
+    $$.val = &AlterTableDropColumn{columnKeyword: $2.bool(), IfExists: false, Column: $3}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> [SET DATA] TYPE <typename>
   //     [ USING <expression> ]
@@ -557,7 +727,7 @@ alter_table_cmd:
   // ALTER TABLE <name> ADD CONSTRAINT ...
 | ADD table_constraint
   {
-    $$ = &AlterTableAddConstraint{ConstraintDef: $2}
+    $$.val = &AlterTableAddConstraint{ConstraintDef: $2.constraintDef()}
   }
   // ALTER TABLE <name> ALTER CONSTRAINT ...
 | ALTER CONSTRAINT name { unimplemented() }
@@ -566,12 +736,12 @@ alter_table_cmd:
   // ALTER TABLE <name> DROP CONSTRAINT IF EXISTS <name> [RESTRICT|CASCADE]
 | DROP CONSTRAINT IF EXISTS name opt_drop_behavior
   {
-    $$ = &AlterTableDropConstraint{IfExists: true, Constraint: $5}
+    $$.val = &AlterTableDropConstraint{IfExists: true, Constraint: $5}
   }
   // ALTER TABLE <name> DROP CONSTRAINT <name> [RESTRICT|CASCADE]
 | DROP CONSTRAINT name opt_drop_behavior
   {
-    $$ = &AlterTableDropConstraint{IfExists: false, Constraint: $3}
+    $$.val = &AlterTableDropConstraint{IfExists: false, Constraint: $3}
   }
 
 alter_column_default:
@@ -601,81 +771,81 @@ create_stmt:
 delete_stmt:
   opt_with_clause DELETE FROM relation_expr_opt_alias where_clause
   {
-    $$ = &Delete{Table: $4, Where: newWhere(astWhere, $5)}
+    $$.val = &Delete{Table: $4.tblExpr(), Where: newWhere(astWhere, $5.expr())}
   }
 
 // DROP itemtype [ IF EXISTS ] itemname [, itemname ...] [ RESTRICT | CASCADE ]
 drop_stmt:
   DROP DATABASE name
   {
-    $$ = &DropDatabase{Name: Name($3), IfExists: false}
+    $$.val = &DropDatabase{Name: Name($3), IfExists: false}
   }
 | DROP DATABASE IF EXISTS name
   {
-    $$ = &DropDatabase{Name: Name($5), IfExists: true}
+    $$.val = &DropDatabase{Name: Name($5), IfExists: true}
   }
 | DROP INDEX qualified_name_list opt_drop_behavior
   {
-    $$ = &DropIndex{Names: $3, IfExists: false}
+    $$.val = &DropIndex{Names: $3.qnames(), IfExists: false}
   }
 | DROP INDEX IF EXISTS qualified_name_list opt_drop_behavior
   {
-    $$ = &DropIndex{Names: $5, IfExists: true}
+    $$.val = &DropIndex{Names: $5.qnames(), IfExists: true}
   }
 | DROP TABLE any_name_list
   {
-    $$ = &DropTable{Names: $3, IfExists: false}
+    $$.val = &DropTable{Names: $3.qnames(), IfExists: false}
   }
 | DROP TABLE IF EXISTS any_name_list
   {
-    $$ = &DropTable{Names: $5, IfExists: true}
+    $$.val = &DropTable{Names: $5.qnames(), IfExists: true}
   }
 
 any_name_list:
   any_name
   {
-    $$ = QualifiedNames{$1}
+    $$.val = QualifiedNames{$1.qname()}
   }
 | any_name_list ',' any_name
   {
-    $$ = append($1, $3)
+    $$.val = append($1.qnames(), $3.qname())
   }
 
 any_name:
   name
   {
-    $$ = &QualifiedName{Base: Name($1)}
+    $$.val = &QualifiedName{Base: Name($1)}
   }
 | name attrs
   {
-    $$ = &QualifiedName{Base: Name($1), Indirect: $2}
+    $$.val = &QualifiedName{Base: Name($1), Indirect: $2.indirect()}
   }
 
 attrs:
   '.' col_label
   {
-    $$ = Indirection{NameIndirection($2)}
+    $$.val = Indirection{NameIndirection($2)}
   }
 | attrs '.' col_label
   {
-    $$ = append($1, NameIndirection($3))
+    $$.val = append($1.indirect(), NameIndirection($3))
   }
 
 // EXPLAIN (options) query
 explain_stmt:
   EXPLAIN explainable_stmt
   {
-    $$ = &Explain{Statement: $2}
+    $$.val = &Explain{Statement: $2.stmt()}
   }
 | EXPLAIN '(' explain_option_list ')' explainable_stmt
   {
-    $$ = &Explain{Options: $3, Statement: $5}
+    $$.val = &Explain{Options: $3.strs(), Statement: $5.stmt()}
   }
 
 explainable_stmt:
   select_stmt
   {
-    $$ = $1
+    $$.val = $1.selectStmt()
   }
 | insert_stmt
 | update_stmt
@@ -684,11 +854,11 @@ explainable_stmt:
 explain_option_list:
   explain_option_name
   {
-    $$ = []string{$1}
+    $$.val = []string{$1}
   }
 | explain_option_list ',' explain_option_name
   {
-    $$ = append($1, $3)
+    $$.val = append($1.strs(), $3)
   }
 
 explain_option_name:
@@ -698,79 +868,78 @@ explain_option_name:
 grant_stmt:
   GRANT privileges ON privilege_target TO grantee_list
   {
-    $$ = &Grant{Privileges: $2, Grantees: NameList($6), Targets: $4}
+    $$.val = &Grant{Privileges: $2.privilegeList(), Grantees: NameList($6.strs()), Targets: $4.targetList()}
   }
 
 // REVOKE privileges ON privilege_target FROM grantee_list
 revoke_stmt:
   REVOKE privileges ON privilege_target FROM grantee_list
   {
-    $$ = &Revoke{Privileges: $2, Grantees: NameList($6), Targets: $4}
+    $$.val = &Revoke{Privileges: $2.privilegeList(), Grantees: NameList($6.strs()), Targets: $4.targetList()}
   }
 
 
 privilege_target:
   indirect_name_or_glob_list
   {
-    // Unless "DATABASE" is specified, "TABLE" is the default.
-    $$ = TargetList{Tables: QualifiedNames($1)}
+    $$.val = TargetList{Tables: QualifiedNames($1.qnames())}
   }
 | TABLE indirect_name_or_glob_list
   {
-    $$ = TargetList{Tables: QualifiedNames($2)}
+    $$.val = TargetList{Tables: QualifiedNames($2.qnames())}
   }
 |  DATABASE name_list
   {
-    $$ = TargetList{Databases: NameList($2)}
+    $$.val = TargetList{Databases: NameList($2.strs())}
   }
 
 // ALL is always by itself.
 privileges:
   ALL
   {
-    $$ = privilege.List{privilege.ALL}
+    $$.val = privilege.List{privilege.ALL}
   }
   | privilege_list { }
 
 privilege_list:
   privilege
   {
-    $$ = privilege.List{$1}
+    $$.val = privilege.List{$1.privilegeType()}
   }
   | privilege_list ',' privilege
   {
-    $$ = append($1, $3)
+    $$.val = append($1.privilegeList(), $3.privilegeType())
   }
 
 // This list must match the list of privileges in sql/privilege/privilege.go.
 privilege:
   CREATE
   {
-    $$ = privilege.CREATE
+    $$.val = privilege.CREATE
   }
 | DROP
   {
-    $$ = privilege.DROP
+    $$.val = privilege.DROP
   }
 | GRANT
   {
-    $$ = privilege.GRANT
+    $$.val = privilege.GRANT
   }
 | SELECT
   {
-    $$ = privilege.SELECT
+    $$.val = privilege.SELECT
   }
 | INSERT
   {
-    $$ = privilege.INSERT
+    $$.val = privilege.INSERT
   }
 | DELETE
   {
-    $$ = privilege.DELETE
+    $$.val = privilege.DELETE
   }
 | UPDATE
   {
-    $$ = privilege.UPDATE
+    $$.val = privilege.UPDATE
   }
 
 // TODO(marc): this should not be 'name', but should instead be a
@@ -778,11 +947,11 @@ privilege:
 grantee_list:
   name
   {
-    $$ = []string{$1}
+    $$.val = []string{$1}
   }
 | grantee_list ',' name
   {
-    $$ = append($1, $3)
+    $$.val = append($1.strs(), $3)
   }
 
 // SET name TO 'var_value'
@@ -790,65 +959,65 @@ grantee_list:
 set_stmt:
   SET set_rest
   {
-    $$ = $2
+    $$.val = $2.stmt()
   }
 | SET LOCAL set_rest
   {
-    $$ = $3
+    $$.val = $3.stmt()
   }
 | SET SESSION set_rest
   {
-    $$ = $3
+    $$.val = $3.stmt()
   }
 
 set_rest:
   TRANSACTION transaction_mode_list
   {
-    $$ = $2
+    $$.val = $2.stmt()
   }
 | set_rest_more
 
 transaction_mode_list:
   transaction_iso_level
   {
-    $$ = &SetTransaction{Isolation: $1, UserPriority: UnspecifiedUserPriority}
+    $$.val = &SetTransaction{Isolation: $1.isoLevel(), UserPriority: UnspecifiedUserPriority}
   }
 | transaction_user_priority
   {
-    $$ = &SetTransaction{Isolation: UnspecifiedIsolation, UserPriority: $1}
+    $$.val = &SetTransaction{Isolation: UnspecifiedIsolation, UserPriority: $1.userPriority()}
   }
 | transaction_iso_level ',' transaction_user_priority
   {
-    $$ = &SetTransaction{Isolation: $1, UserPriority: $3}
+    $$.val = &SetTransaction{Isolation: $1.isoLevel(), UserPriority: $3.userPriority()}
   }
 | transaction_user_priority ',' transaction_iso_level
   {
-    $$ = &SetTransaction{Isolation: $3, UserPriority: $1}
+    $$.val = &SetTransaction{Isolation: $3.isoLevel(), UserPriority: $1.userPriority()}
   }
 
 
 transaction_user_priority:
   PRIORITY user_priority
   {
-    $$ = $2
+    $$.val = $2.userPriority()
   }
 
 generic_set:
   var_name TO var_list
   {
-    $$ = &Set{Name: $1, Values: $3}
+    $$.val = &Set{Name: $1.qname(), Values: $3.exprs()}
   }
 | var_name '=' var_list
   {
-    $$ = &Set{Name: $1, Values: $3}
+    $$.val = &Set{Name: $1.qname(), Values: $3.exprs()}
   }
 | var_name TO DEFAULT
   {
-    $$ = &Set{Name: $1}
+    $$.val = &Set{Name: $1.qname()}
   }
 | var_name '=' DEFAULT
   {
-    $$ = &Set{Name: $1}
+    $$.val = &Set{Name: $1.qname()}
   }
 
 set_rest_more:
@@ -858,7 +1027,7 @@ set_rest_more:
   // Special syntaxes mandated by SQL standard:
 | TIME ZONE zone_value
   {
-    $$ = &SetTimeZone{Value: $3}
+    $$.val = &SetTimeZone{Value: $3.expr()}
   }
 | NAMES opt_encoding { unimplemented() }
 
@@ -868,11 +1037,11 @@ var_name:
 var_list:
   var_value
   {
-    $$ = []Expr{$1}
+    $$.val = Exprs{$1.expr()}
   }
 | var_list ',' var_value
   {
-    $$ = append($1, $3)
+    $$.val = append($1.exprs(), $3.expr())
   }
 
 var_value:
@@ -880,60 +1049,57 @@ var_value:
 | numeric_only
 | PARAM
   {
-    $$ = ValArg{name: $1}
+    $$.val = ValArg{name: $1}
   }
 
 iso_level:
   READ UNCOMMITTED
   {
-    // Mapped to the closest supported isolation level.
-    $$ = SnapshotIsolation
+    $$.val = SnapshotIsolation
   }
 | READ COMMITTED
   {
-    // Mapped to the closest supported isolation level.
-    $$ = SnapshotIsolation
+    $$.val = SnapshotIsolation
   }
 | SNAPSHOT
   {
-    $$ = SnapshotIsolation
+    $$.val = SnapshotIsolation
   }
 | REPEATABLE READ
   {
-    // Mapped to the closest supported isolation level.
-    $$ = SerializableIsolation
+    $$.val = SerializableIsolation
   }
 | SERIALIZABLE
   {
-    $$ = SerializableIsolation
+    $$.val = SerializableIsolation
   }
 
 user_priority:
   LOW
   {
-    $$ = Low
+    $$.val = Low
   }
 | NORMAL
   {
-    $$ = Normal
+    $$.val = Normal
   }
 | HIGH
   {
-    $$ = High
+    $$.val = High
   }
 
 opt_boolean_or_string:
   TRUE
   {
-    $$ = DBool(true)
+    $$.val = DBool(true)
   }
 | FALSE
   {
-    $$ = DBool(false)
+    $$.val = DBool(false)
   }
 | ON
   {
-    $$ = DString($1)
+    $$.val = DString($1)
   }
   // OFF is also accepted as a boolean value, but is handled by the
   // non_reserved_word rule. The action for booleans and strings is the same,
@@ -948,17 +1114,15 @@ opt_boolean_or_string:
 zone_value:
   SCONST
   {
-    $$ = DString($1)
+    $$.val = DString($1)
   }
 | IDENT
   {
-    $$ = DString($1)
+    $$.val = DString($1)
   }
 | const_interval SCONST opt_interval
   {
-    // TODO(pmattis): support opt_interval?
-    expr := &CastExpr{Expr: DString($2), Type: $1}
-    // Use an empty EvalContext.
+    expr := &CastExpr{Expr: DString($2), Type: $1.colType()}
     var ctx EvalContext
     d, err := expr.Eval(ctx)
     if err != nil {
@@ -968,16 +1132,16 @@ zone_value:
     if _, ok := d.(DInterval); !ok {
       panic("not an interval type")
     }
-    $$ = d
+    $$.val = d
   }
 | numeric_only
 | DEFAULT
   {
-    $$ = DString($1)
+    $$.val = DString($1)
   }
 | LOCAL
   {
-    $$ = DString($1)
+    $$.val = DString($1)
   }
 
 opt_encoding:
@@ -988,150 +1152,149 @@ opt_encoding:
 non_reserved_word_or_sconst:
   non_reserved_word
   {
-    $$ = DString($1)
+    $$.val = DString($1)
   }
 | SCONST
   {
-    $$ = DString($1)
+    $$.val = DString($1)
   }
 
 show_stmt:
   SHOW IDENT
   {
-    $$ = &Show{Name: $2}
+    $$.val = &Show{Name: $2}
   }
 | SHOW DATABASE
   {
-    $$ = &Show{Name: $2}
+    $$.val = &Show{Name: $2}
   }
 | SHOW COLUMNS FROM var_name
   {
-    $$ = &ShowColumns{Table: $4}
+    $$.val = &ShowColumns{Table: $4.qname()}
   }
 | SHOW DATABASES
   {
-    $$ = &ShowDatabases{}
+    $$.val = &ShowDatabases{}
   }
 | SHOW GRANTS on_privilege_target_clause for_grantee_clause
   {
-    $$ = &ShowGrants{Targets: $3, Grantees: $4}
+    $$.val = &ShowGrants{Targets: $3.targetListPtr(), Grantees: $4.strs()}
   }
 | SHOW INDEX FROM var_name
   {
-    $$ = &ShowIndex{Table: $4}
+    $$.val = &ShowIndex{Table: $4.qname()}
   }
 | SHOW TABLES opt_from_var_name_clause
   {
-    $$ = &ShowTables{Name: $3}
+    $$.val = &ShowTables{Name: $3.qname()}
   }
 | SHOW TIME ZONE
   {
-    $$ = &Show{Name: "TIME ZONE"}
+    $$.val = &Show{Name: "TIME ZONE"}
   }
 | SHOW TRANSACTION ISOLATION LEVEL
   {
-    $$ = &Show{Name: "TRANSACTION ISOLATION LEVEL"}
+    $$.val = &Show{Name: "TRANSACTION ISOLATION LEVEL"}
   }
 | SHOW TRANSACTION PRIORITY
   {
-    $$ = &Show{Name: "TRANSACTION PRIORITY"}
+    $$.val = &Show{Name: "TRANSACTION PRIORITY"}
   }
 | SHOW ALL
   {
-    $$ = nil
+    $$.val = Statement(nil)
   }
 
 opt_from_var_name_clause:
   FROM var_name
   {
-    $$ = $2
+    $$.val = $2.qname()
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = (*QualifiedName)(nil)
   }
 
 on_privilege_target_clause:
   ON privilege_target
   {
-    tmp := $2
-    $$ = &tmp
+    tmp := $2.targetList()
+    $$.val = &tmp
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = (*TargetList)(nil)
   }
 
 for_grantee_clause:
   FOR grantee_list
   {
-    $$ = $2
+    $$.val = $2.strs()
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = []string(nil)
   }
 
 // CREATE TABLE relname
 create_table_stmt:
   CREATE TABLE any_name '(' opt_table_elem_list ')'
   {
-    $$ = &CreateTable{Table: $3, IfNotExists: false, Defs: $5}
+    $$.val = &CreateTable{Table: $3.qname(), IfNotExists: false, Defs: $5.tblDefs()}
   }
 | CREATE TABLE IF NOT EXISTS any_name '(' opt_table_elem_list ')'
   {
-    $$ = &CreateTable{Table: $6, IfNotExists: true, Defs: $8}
+    $$.val = &CreateTable{Table: $6.qname(), IfNotExists: true, Defs: $8.tblDefs()}
   }
 
 opt_table_elem_list:
   table_elem_list
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = TableDefs(nil)
   }
 
 table_elem_list:
   table_elem
   {
-    $$ = TableDefs{$1}
+    $$.val = TableDefs{$1.tblDef()}
   }
 | table_elem_list ',' table_elem
   {
-    $$ = append($1, $3)
+    $$.val = append($1.tblDefs(), $3.tblDef())
   }
 
 table_elem:
   column_def
   {
-    $$ = $1
+    $$.val = $1.colDef()
   }
 | index_def
 | table_constraint
   {
-    $$ = $1
+    $$.val = $1.constraintDef()
   }
 
 column_def:
   name typename col_qual_list
   {
-    $$ = newColumnTableDef(Name($1), $2, $3)
+    $$.val = newColumnTableDef(Name($1), $2.colType(), $3.colQuals())
   }
 
 col_qual_list:
   col_qual_list col_qualification
   {
-    $$ = append($1, $2)
+    $$.val = append($1.colQuals(), $2.colQual())
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = []ColumnQualification(nil)
   }
 
 col_qualification:
   CONSTRAINT name col_qualification_elem
   {
-    // TODO(pmattis): Handle constraint name.
-    $$ = $3
+    $$.val = $3.colQual()
   }
 | col_qualification_elem
 | COLLATE any_name { unimplemented() }
@@ -1151,51 +1314,51 @@ col_qualification:
 col_qualification_elem:
   NOT NULL
   {
-    $$ = NotNullConstraint{}
+    $$.val = NotNullConstraint{}
   }
 | NULL
   {
-    $$ = NullConstraint{}
+    $$.val = NullConstraint{}
   }
 | UNIQUE
   {
-    $$ = UniqueConstraint{}
+    $$.val = UniqueConstraint{}
   }
 | PRIMARY KEY
   {
-    $$ = PrimaryKeyConstraint{}
+    $$.val = PrimaryKeyConstraint{}
   }
 | CHECK '(' a_expr ')' { unimplemented() }
 | DEFAULT b_expr
   {
-    if ContainsVars($2) {
+    if ContainsVars($2.expr()) {
       sqllex.Error("default expression contains a variable")
       return 1
     }
-    if containsSubquery($2) {
+    if containsSubquery($2.expr()) {
       sqllex.Error("default expression contains a subquery")
       return 1
     }
-    $$ = &ColumnDefault{Expr: $2}
+    $$.val = &ColumnDefault{Expr: $2.expr()}
   }
 | REFERENCES qualified_name opt_column_list key_match key_actions { unimplemented() }
 
 index_def:
   INDEX opt_name '(' index_params ')' opt_storing
   {
-    $$ = &IndexTableDef{
+    $$.val = &IndexTableDef{
       Name:    Name($2),
-      Columns: $4,
-      Storing: $6,
+      Columns: $4.idxElems(),
+      Storing: $6.strs(),
     }
   }
 | UNIQUE INDEX opt_name '(' index_params ')' opt_storing
   {
-    $$ = &UniqueConstraintTableDef{
+    $$.val = &UniqueConstraintTableDef{
       IndexTableDef: IndexTableDef {
         Name:    Name($3),
-        Columns: $5,
-        Storing: $7,
+        Columns: $5.idxElems(),
+        Storing: $7.strs(),
       },
     }
   }
@@ -1206,30 +1369,30 @@ index_def:
 table_constraint:
   CONSTRAINT name constraint_elem
   {
-    $$ = $3
-    $$.setName(Name($2))
+    $$.val = $3.constraintDef()
+    $$.val.(ConstraintTableDef).setName(Name($2))
   }
 | constraint_elem
   {
-    $$ = $1
+    $$.val = $1.constraintDef()
   }
 
 constraint_elem:
   CHECK '(' a_expr ')' { unimplemented() }
 | UNIQUE '(' name_list ')' opt_storing
   {
-    $$ = &UniqueConstraintTableDef{
+    $$.val = &UniqueConstraintTableDef{
       IndexTableDef: IndexTableDef{
-        Columns: NameListToIndexElems($3),
-        Storing: $5,
+        Columns: NameListToIndexElems($3.strs()),
+        Storing: $5.strs(),
       },
     }
   }
 | PRIMARY KEY '(' name_list ')'
   {
-    $$ = &UniqueConstraintTableDef{
+    $$.val = &UniqueConstraintTableDef{
       IndexTableDef: IndexTableDef{
-        Columns: NameListToIndexElems($4),
+        Columns: NameListToIndexElems($4.strs()),
       },
       PrimaryKey:    true,
     }
@@ -1253,21 +1416,21 @@ storing:
 opt_storing:
   storing '(' name_list ')'
   {
-    $$ = $3
+    $$.val = $3.strs()
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = []string(nil)
   }
 
 opt_column_list:
   '(' name_list ')'
   {
-    $$ = $2
+    $$.val = $2.strs()
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = []string(nil)
   }
 
 key_match:
@@ -1303,66 +1466,66 @@ key_action:
 numeric_only:
   FCONST
   {
-    $$ = NumVal($1)
+    $$.val = NumVal($1)
   }
 | '-' FCONST
   {
-    $$ = NumVal("-" + $2)
+    $$.val = NumVal("-" + $2)
   }
 | signed_iconst
   {
-    $$ = DInt($1.Val)
+    $$.val = DInt($1.ival().Val)
   }
 
 // TRUNCATE table relname1, relname2, ...
 truncate_stmt:
   TRUNCATE opt_table relation_expr_list opt_drop_behavior
   {
-    $$ = &Truncate{Tables: $3}
+    $$.val = &Truncate{Tables: $3.qnames()}
   }
 
 // CREATE INDEX
 create_index_stmt:
   CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')' opt_storing
   {
-    $$ = &CreateIndex{
+    $$.val = &CreateIndex{
       Name:    Name($4),
-      Table:   $6,
-      Unique:  $2,
-      Columns: $8,
-      Storing: $10,
+      Table:   $6.qname(),
+      Unique:  $2.bool(),
+      Columns: $8.idxElems(),
+      Storing: $10.strs(),
     }
   }
 | CREATE opt_unique INDEX IF NOT EXISTS name ON qualified_name '(' index_params ')' opt_storing
   {
-    $$ = &CreateIndex{
+    $$.val = &CreateIndex{
       Name:        Name($7),
-      Table:       $9,
-      Unique:      $2,
+      Table:       $9.qname(),
+      Unique:      $2.bool(),
       IfNotExists: true,
-      Columns:     $11,
-      Storing:     $13,
+      Columns:     $11.idxElems(),
+      Storing:     $13.strs(),
     }
   }
 
 opt_unique:
   UNIQUE
   {
-    $$ = true
+    $$.val = true
   }
 | /* EMPTY */
   {
-    $$ = false
+    $$.val = false
   }
 
 index_params:
   index_elem
   {
-    $$ = IndexElemList{$1}
+    $$.val = IndexElemList{$1.idxElem()}
   }
 | index_params ',' index_elem
   {
-    $$ = append($1, $3)
+    $$.val = append($1.idxElems(), $3.idxElem())
   }
 
 // Index attributes can be either simple column references, or arbitrary
@@ -1371,7 +1534,7 @@ index_params:
 index_elem:
   name opt_collate opt_asc_desc
   {
-    $$ = IndexElem{Column: Name($1), Direction: $3}
+    $$.val = IndexElem{Column: Name($1), Direction: $3.dir()}
   }
 | func_expr_windowless opt_collate opt_asc_desc { unimplemented() }
 | '(' a_expr ')' opt_collate opt_asc_desc { unimplemented() }
@@ -1383,64 +1546,64 @@ opt_collate:
 opt_asc_desc:
   ASC
   {
-    $$ = Ascending
+    $$.val = Ascending
   }
 | DESC
   {
-    $$ = Descending
+    $$.val = Descending
   }
 | /* EMPTY */
   {
-    $$ = DefaultDirection
+    $$.val = DefaultDirection
   }
 
 // ALTER THING name RENAME TO newname
 rename_stmt:
   ALTER DATABASE name RENAME TO name
   {
-    $$ = &RenameDatabase{Name: Name($3), NewName: Name($6)}
+    $$.val = &RenameDatabase{Name: Name($3), NewName: Name($6)}
   }
 | ALTER TABLE relation_expr RENAME TO qualified_name
   {
-    $$ = &RenameTable{Name: $3, NewName: $6, IfExists: false}
+    $$.val = &RenameTable{Name: $3.qname(), NewName: $6.qname(), IfExists: false}
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME TO qualified_name
   {
-    $$ = &RenameTable{Name: $5, NewName: $8, IfExists: true}
+    $$.val = &RenameTable{Name: $5.qname(), NewName: $8.qname(), IfExists: true}
   }
 | ALTER INDEX qualified_name RENAME TO name
   {
-    $$ = &RenameIndex{Name: $3, NewName: Name($6), IfExists: false}
+    $$.val = &RenameIndex{Name: $3.qname(), NewName: Name($6), IfExists: false}
   }
 | ALTER INDEX IF EXISTS qualified_name RENAME TO name
   {
-    $$ = &RenameIndex{Name: $5, NewName: Name($8), IfExists: true}
+    $$.val = &RenameIndex{Name: $5.qname(), NewName: Name($8), IfExists: true}
   }
 | ALTER TABLE relation_expr RENAME opt_column name TO name
   {
-    $$ = &RenameColumn{Table: $3, Name: Name($6), NewName: Name($8), IfExists: false}
+    $$.val = &RenameColumn{Table: $3.qname(), Name: Name($6), NewName: Name($8), IfExists: false}
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME opt_column name TO name
   {
-    $$ = &RenameColumn{Table: $5, Name: Name($8), NewName: Name($10), IfExists: true}
+    $$.val = &RenameColumn{Table: $5.qname(), Name: Name($8), NewName: Name($10), IfExists: true}
   }
 | ALTER TABLE relation_expr RENAME CONSTRAINT name TO name
   {
-    $$ = nil
+    $$.val = Statement(nil)
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME CONSTRAINT name TO name
   {
-    $$ = nil
+    $$.val = Statement(nil)
   }
 
 opt_column:
   COLUMN
   {
-    $$ = true
+    $$.val = true
   }
 | /* EMPTY */
   {
-    $$ = false
+    $$.val = false
   }
 
 opt_set_data:
@@ -1451,23 +1614,23 @@ opt_set_data:
 transaction_stmt:
   BEGIN opt_transaction opt_transaction_mode_list
   {
-    $$ = $3
+    $$.val = $3.stmt()
   }
 | START TRANSACTION opt_transaction_mode_list
   {
-    $$ = $3
+    $$.val = $3.stmt()
   }
 | COMMIT opt_transaction
   {
-    $$ = &CommitTransaction{}
+    $$.val = &CommitTransaction{}
   }
 | END opt_transaction
   {
-    $$ = &CommitTransaction{}
+    $$.val = &CommitTransaction{}
   }
 | ROLLBACK opt_transaction
   {
-    $$ = &RollbackTransaction{}
+    $$.val = &RollbackTransaction{}
   }
 
 opt_transaction:
@@ -1477,47 +1640,47 @@ opt_transaction:
 opt_transaction_mode_list:
   transaction_iso_level
   {
-    $$ = &BeginTransaction{Isolation: $1, UserPriority: UnspecifiedUserPriority}
+    $$.val = &BeginTransaction{Isolation: $1.isoLevel(), UserPriority: UnspecifiedUserPriority}
   }
 | transaction_user_priority
   {
-    $$ = &BeginTransaction{Isolation: UnspecifiedIsolation, UserPriority: $1}
+    $$.val = &BeginTransaction{Isolation: UnspecifiedIsolation, UserPriority: $1.userPriority()}
   }
 | transaction_iso_level ',' transaction_user_priority
   {
-    $$ = &BeginTransaction{Isolation: $1, UserPriority: $3}
+    $$.val = &BeginTransaction{Isolation: $1.isoLevel(), UserPriority: $3.userPriority()}
   }
 | transaction_user_priority ',' transaction_iso_level
   {
-    $$ = &BeginTransaction{Isolation: $3, UserPriority: $1}
+    $$.val = &BeginTransaction{Isolation: $3.isoLevel(), UserPriority: $1.userPriority()}
   }
 | /* EMPTY */
   {
-    $$ = &BeginTransaction{Isolation: UnspecifiedIsolation, UserPriority: UnspecifiedUserPriority}
+    $$.val = &BeginTransaction{Isolation: UnspecifiedIsolation, UserPriority: UnspecifiedUserPriority}
   }
 
 transaction_iso_level:
   ISOLATION LEVEL iso_level
   {
-    $$ = $3
+    $$.val = $3.isoLevel()
   }
 
 create_database_stmt:
   CREATE DATABASE name
   {
-    $$ = &CreateDatabase{Name: Name($3)}
+    $$.val = &CreateDatabase{Name: Name($3)}
   }
 | CREATE DATABASE IF NOT EXISTS name
   {
-    $$ = &CreateDatabase{IfNotExists: true, Name: Name($6)}
+    $$.val = &CreateDatabase{IfNotExists: true, Name: Name($6)}
   }
 
 insert_stmt:
   opt_with_clause INSERT INTO insert_target insert_rest opt_on_conflict returning_clause
   {
-    $$ = $5
-    $$.(*Insert).Table = $4
-    $$.(*Insert).Returning = $7
+    $$.val = $5.stmt()
+    $$.val.(*Insert).Table = $4.qname()
+    $$.val.(*Insert).Returning = $7.selExprs()
   }
 
 // Can't easily make AS optional here, because VALUES in insert_rest would have
@@ -1532,15 +1695,15 @@ insert_target:
 insert_rest:
   select_stmt
   {
-    $$ = &Insert{Rows: $1}
+    $$.val = &Insert{Rows: $1.selectStmt()}
   }
 | '(' qualified_name_list ')' select_stmt
   {
-    $$ = &Insert{Columns: $2, Rows: $4}
+    $$.val = &Insert{Columns: $2.qnames(), Rows: $4.selectStmt()}
   }
 | DEFAULT VALUES
   {
-    $$ = &Insert{}
+    $$.val = &Insert{}
   }
 
 // TODO(andrei): If this is ever supported, `opt_conf_expr` needs to use something different
@@ -1558,28 +1721,28 @@ opt_conf_expr:
 returning_clause:
   RETURNING target_list
   {
-    $$ = $2
+    $$.val = $2.selExprs()
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = SelectExprs(nil)
   }
 
 update_stmt:
   opt_with_clause UPDATE relation_expr_opt_alias
     SET set_clause_list from_clause where_clause
   {
-    $$ = &Update{Table: $3, Exprs: $5, Where: newWhere(astWhere, $7)}
+    $$.val = &Update{Table: $3.tblExpr(), Exprs: $5.updateExprs(), Where: newWhere(astWhere, $7.expr())}
   }
 
 set_clause_list:
   set_clause
   {
-    $$ = UpdateExprs{$1}
+    $$.val = UpdateExprs{$1.updateExpr()}
   }
 | set_clause_list ',' set_clause
   {
-    $$ = append($1, $3)
+    $$.val = append($1.updateExprs(), $3.updateExpr())
   }
 
 set_clause:
@@ -1589,7 +1752,7 @@ set_clause:
 single_set_clause:
   qualified_name '=' ctext_expr
   {
-    $$ = &UpdateExpr{Names: QualifiedNames{$1}, Expr: $3}
+    $$.val = &UpdateExpr{Names: QualifiedNames{$1.qname()}, Expr: $3.expr()}
   }
 
 // Ideally, we'd accept any row-valued a_expr as RHS of a multiple_set_clause.
@@ -1601,11 +1764,11 @@ single_set_clause:
 multiple_set_clause:
   '(' qualified_name_list ')' '=' ctext_row
   {
-    $$ = &UpdateExpr{Tuple: true, Names: $2, Expr: Tuple($5)}
+    $$.val = &UpdateExpr{Tuple: true, Names: $2.qnames(), Expr: Tuple($5.exprs())}
   }
 | '(' qualified_name_list ')' '=' select_with_parens
   {
-    $$ = &UpdateExpr{Tuple: true, Names: $2, Expr: &Subquery{Select: $5}}
+    $$.val = &UpdateExpr{Tuple: true, Names: $2.qnames(), Expr: &Subquery{Select: $5.selectStmt()}}
   }
 
 // A complete SELECT statement looks like this.
@@ -1652,11 +1815,11 @@ select_stmt:
 select_with_parens:
   '(' select_no_parens ')'
   {
-    $$ = &ParenSelect{Select: $2}
+    $$.val = &ParenSelect{Select: $2.selectStmt()}
   }
 | '(' select_with_parens ')'
   {
-    $$ = &ParenSelect{Select: $2}
+    $$.val = &ParenSelect{Select: $2.selectStmt()}
   }
 
 // This rule parses the equivalent of the standard's <query expression>. The
@@ -1672,36 +1835,36 @@ select_no_parens:
   simple_select
 | select_clause sort_clause
   {
-    $$ = $1
-    if s, ok := $$.(*Select); ok {
-      s.OrderBy = $2
+    $$.val = $1.selectStmt()
+    if s, ok := $$.val.(*Select); ok {
+      s.OrderBy = $2.orderBy()
     }
   }
 | select_clause opt_sort_clause select_limit
   {
-    $$ = $1
-    if s, ok := $$.(*Select); ok {
-      s.OrderBy = $2
-      s.Limit = $3
+    $$.val = $1.selectStmt()
+    if s, ok := $$.val.(*Select); ok {
+      s.OrderBy = $2.orderBy()
+      s.Limit = $3.limit()
     }
   }
 | with_clause select_clause
   {
-    $$ = $2
+    $$.val = $2.selectStmt()
   }
 | with_clause select_clause sort_clause
   {
-    $$ = $2
-    if s, ok := $$.(*Select); ok {
-      s.OrderBy = $3
+    $$.val = $2.selectStmt()
+    if s, ok := $$.val.(*Select); ok {
+      s.OrderBy = $3.orderBy()
     }
   }
 | with_clause select_clause opt_sort_clause select_limit
   {
-    $$ = $2
-    if s, ok := $$.(*Select); ok {
-      s.OrderBy = $3
-      s.Limit = $4
+    $$.val = $2.selectStmt()
+    if s, ok := $$.val.(*Select); ok {
+      s.OrderBy = $3.orderBy()
+      s.Limit = $4.limit()
     }
   }
 
@@ -1736,61 +1899,61 @@ simple_select:
     from_clause where_clause
     group_clause having_clause window_clause
   {
-    $$ = &Select{
-      Exprs:   $3,
-      From:    $4,
-      Where:   newWhere(astWhere, $5),
-      GroupBy: $6,
-      Having:  newWhere(astHaving, $7),
+    $$.val = &Select{
+      Exprs:   $3.selExprs(),
+      From:    $4.tblExprs(),
+      Where:   newWhere(astWhere, $5.expr()),
+      GroupBy: $6.groupBy(),
+      Having:  newWhere(astHaving, $7.expr()),
     }
   }
 | SELECT distinct_clause target_list
     from_clause where_clause
     group_clause having_clause window_clause
   {
-    $$ = &Select{
-      Distinct: $2,
-      Exprs:    $3,
-      From:     $4,
-      Where:    newWhere(astWhere, $5),
-      GroupBy:  $6,
-      Having:   newWhere(astHaving, $7),
+    $$.val = &Select{
+      Distinct: $2.bool(),
+      Exprs:    $3.selExprs(),
+      From:     $4.tblExprs(),
+      Where:    newWhere(astWhere, $5.expr()),
+      GroupBy:  $6.groupBy(),
+      Having:   newWhere(astHaving, $7.expr()),
     }
   }
 | values_clause
 | TABLE relation_expr
   {
-    $$ = &Select{
+    $$.val = &Select{
       Exprs:       SelectExprs{starSelectExpr()},
-      From:        TableExprs{&AliasedTableExpr{Expr: $2}},
+      From:        TableExprs{&AliasedTableExpr{Expr: $2.qname()}},
       tableSelect: true,
     }
   }
 | select_clause UNION all_or_distinct select_clause
   {
-    $$ = &Union{
+    $$.val = &Union{
       Type:  astUnion,
-      Left:  $1,
-      Right: $4,
-      All:   $3,
+      Left:  $1.selectStmt(),
+      Right: $4.selectStmt(),
+      All:   $3.bool(),
     }
   }
 | select_clause INTERSECT all_or_distinct select_clause
   {
-    $$ = &Union{
+    $$.val = &Union{
       Type:  astIntersect,
-      Left:  $1,
-      Right: $4,
-      All:   $3,
+      Left:  $1.selectStmt(),
+      Right: $4.selectStmt(),
+      All:   $3.bool(),
     }
   }
 | select_clause EXCEPT all_or_distinct select_clause
   {
-    $$ = &Union{
+    $$.val = &Union{
       Type:  astExcept,
-      Left:  $1,
-      Right: $4,
-      All:   $3,
+      Left:  $1.selectStmt(),
+      Right: $4.selectStmt(),
+      All:   $3.bool(),
     }
   }
 
@@ -1817,7 +1980,7 @@ common_table_expr:
 preparable_stmt:
   select_stmt
   {
-    $$ = $1
+    $$.val = $1.selectStmt()
   }
 | insert_stmt
 | update_stmt
@@ -1834,21 +1997,21 @@ opt_table:
 all_or_distinct:
   ALL
   {
-    $$ = true
+    $$.val = true
   }
 | DISTINCT
   {
-    $$ = false
+    $$.val = false
   }
 | /* EMPTY */
   {
-    $$ = false
+    $$.val = false
   }
 
 distinct_clause:
   DISTINCT
   {
-    $$ = true
+    $$.val = true
   }
 
 opt_all_clause:
@@ -1858,33 +2021,33 @@ opt_all_clause:
 opt_sort_clause:
   sort_clause
   {
-    $$ = $1
+    $$.val = $1.orderBy()
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = OrderBy(nil)
   }
 
 sort_clause:
   ORDER BY sortby_list
   {
-    $$ = OrderBy($3)
+    $$.val = OrderBy($3.orders())
   }
 
 sortby_list:
   sortby
   {
-    $$ = []*Order{$1}
+    $$.val = []*Order{$1.order()}
   }
 | sortby_list ',' sortby
   {
-    $$ = append($1, $3)
+    $$.val = append($1.orders(), $3.order())
   }
 
 sortby:
   a_expr opt_asc_desc
   {
-    $$ = &Order{Expr: $1, Direction: $2}
+    $$.val = &Order{Expr: $1.expr(), Direction: $2.dir()}
   }
 // TODO(pmattis): Support ordering using arbitrary math ops?
 // | a_expr USING math_op {}
@@ -1892,18 +2055,18 @@ sortby:
 select_limit:
   limit_clause offset_clause
   {
-    if $1 == nil {
-      $$ = $2
+    if $1.limit() == nil {
+      $$.val = $2.limit()
     } else {
-      $$ = $1
-      $$.Offset = $2.Offset
+      $$.val = $1.limit()
+      $$.val.(*Limit).Offset = $2.limit().Offset
     }
   }
 | offset_clause limit_clause
   {
-    $$ = $1
-    if $2 != nil {
-      $$.Count = $2.Count
+    $$.val = $1.limit()
+    if $2.limit() != nil {
+      $$.val.(*Limit).Count = $2.limit().Count
     }
   }
 | limit_clause
@@ -1912,10 +2075,10 @@ select_limit:
 limit_clause:
   LIMIT select_limit_value
   {
-    if $2 == nil {
-      $$ = nil
+    if $2.expr() == nil {
+      $$.val = (*Limit)(nil)
     } else {
-      $$ = &Limit{Count: $2}
+      $$.val = &Limit{Count: $2.expr()}
     }
   }
 // SQL:2008 syntax
@@ -1925,21 +2088,21 @@ limit_clause:
 offset_clause:
   OFFSET a_expr
   {
-    $$ = &Limit{Offset: $2}
+    $$.val = &Limit{Offset: $2.expr()}
   }
   // SQL:2008 syntax
   // The trailing ROW/ROWS in this case prevent the full expression
   // syntax. c_expr is the best we can do.
 | OFFSET c_expr row_or_rows
   {
-    $$ = &Limit{Offset: $2}
+    $$.val = &Limit{Offset: $2.expr()}
   }
 
 select_limit_value:
   a_expr
 | ALL
   {
-    $$ = nil
+    $$.val = Expr(nil)
   }
 
 // Allowing full expressions without parentheses causes various parsing
@@ -1980,31 +2143,31 @@ row_or_rows:
 group_clause:
   GROUP BY expr_list
   {
-    $$ = GroupBy($3)
+    $$.val = GroupBy($3.exprs())
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = GroupBy(nil)
   }
 
 having_clause:
   HAVING a_expr
   {
-    $$ = $2
+    $$.val = $2.expr()
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = Expr(nil)
   }
 
 values_clause:
   VALUES ctext_row
   {
-    $$ = Values{Tuple($2)}
+    $$.val = Values{Tuple($2.exprs())}
   }
 | values_clause ',' ctext_row
   {
-    $$ = append($1.(Values), Tuple($3))
+    $$.val = append($1.selectStmt().(Values), Tuple($3.exprs()))
   }
 
 // clauses common to all optimizable statements:
@@ -2014,32 +2177,32 @@ values_clause:
 from_clause:
   FROM from_list
   {
-    $$ = $2
+    $$.val = $2.tblExprs()
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = TableExprs(nil)
   }
 
 from_list:
   table_ref
   {
-    $$ = TableExprs{$1}
+    $$.val = TableExprs{$1.tblExpr()}
   }
 | from_list ',' table_ref
   {
-    $$ = append($1, $3)
+    $$.val = append($1.tblExprs(), $3.tblExpr())
   }
 
 // table_ref is where an alias clause can be attached.
 table_ref:
   relation_expr opt_alias_clause
   {
-    $$ = &AliasedTableExpr{Expr: $1, As: $2}
+    $$.val = &AliasedTableExpr{Expr: $1.qname(), As: $2.aliasClause()}
   }
 | select_with_parens opt_alias_clause
   {
-    $$ = &AliasedTableExpr{Expr: &Subquery{Select: $1}, As: $2}
+    $$.val = &AliasedTableExpr{Expr: &Subquery{Select: $1.selectStmt()}, As: $2.aliasClause()}
   }
 | joined_table
 | '(' joined_table ')' alias_clause { unimplemented() }
@@ -2061,52 +2224,52 @@ table_ref:
 joined_table:
   '(' joined_table ')'
   {
-    $$ = &ParenTableExpr{Expr: $2}
+    $$.val = &ParenTableExpr{Expr: $2.tblExpr()}
   }
 | table_ref CROSS JOIN table_ref
   {
-    $$ = &JoinTableExpr{Join: astCrossJoin, Left: $1, Right: $4}
+    $$.val = &JoinTableExpr{Join: astCrossJoin, Left: $1.tblExpr(), Right: $4.tblExpr()}
   }
 | table_ref join_type JOIN table_ref join_qual
   {
-    $$ = &JoinTableExpr{Join: $2, Left: $1, Right: $4, Cond: $5}
+    $$.val = &JoinTableExpr{Join: $2, Left: $1.tblExpr(), Right: $4.tblExpr(), Cond: $5.joinCond()}
   }
 | table_ref JOIN table_ref join_qual
   {
-    $$ = &JoinTableExpr{Join: astJoin, Left: $1, Right: $3, Cond: $4}
+    $$.val = &JoinTableExpr{Join: astJoin, Left: $1.tblExpr(), Right: $3.tblExpr(), Cond: $4.joinCond()}
   }
 | table_ref NATURAL join_type JOIN table_ref
   {
-    $$ = &JoinTableExpr{Join: astNaturalJoin, Left: $1, Right: $5}
+    $$.val = &JoinTableExpr{Join: astNaturalJoin, Left: $1.tblExpr(), Right: $5.tblExpr()}
   }
 | table_ref NATURAL JOIN table_ref
   {
-    $$ = &JoinTableExpr{Join: astNaturalJoin, Left: $1, Right: $4}
+    $$.val = &JoinTableExpr{Join: astNaturalJoin, Left: $1.tblExpr(), Right: $4.tblExpr()}
   }
 
 alias_clause:
   AS name '(' name_list ')'
   {
-    $$ = AliasClause{Alias: Name($2), Cols: NameList($4)}
+    $$.val = AliasClause{Alias: Name($2), Cols: NameList($4.strs())}
   }
 | AS name
   {
-    $$ = AliasClause{Alias: Name($2)}
+    $$.val = AliasClause{Alias: Name($2)}
   }
 | name '(' name_list ')'
   {
-    $$ = AliasClause{Alias: Name($1), Cols: NameList($3)}
+    $$.val = AliasClause{Alias: Name($1), Cols: NameList($3.strs())}
   }
 | name
   {
-    $$ = AliasClause{Alias: Name($1)}
+    $$.val = AliasClause{Alias: Name($1)}
   }
 
 opt_alias_clause:
   alias_clause
 | /* EMPTY */
   {
-    $$ = AliasClause{}
+    $$.val = AliasClause{}
   }
 
 join_type:
@@ -2142,42 +2305,39 @@ join_outer:
 join_qual:
   USING '(' name_list ')'
   {
-    $$ = &UsingJoinCond{Cols: NameList($3)}
+    $$.val = &UsingJoinCond{Cols: NameList($3.strs())}
   }
 | ON a_expr
   {
-    $$ = &OnJoinCond{Expr: $2}
+    $$.val = &OnJoinCond{Expr: $2.expr()}
   }
 
 relation_expr:
   qualified_name
   {
-    $$ = $1
+    $$.val = $1.qname()
   }
 | qualified_name '*'
   {
-    // TODO(pmattis): Handle the "*".
-    $$ = $1
+    $$.val = $1.qname()
   }
 | ONLY qualified_name
   {
-    // TODO(pmattis): Support ONLY.
-    $$ = $2
+    $$.val = $2.qname()
   }
 | ONLY '(' qualified_name ')'
   {
-    // TODO(pmattis): Support ONLY.
-    $$ = $3
+    $$.val = $3.qname()
   }
 
 relation_expr_list:
   relation_expr
   {
-    $$ = QualifiedNames{$1}
+    $$.val = QualifiedNames{$1.qname()}
   }
 | relation_expr_list ',' relation_expr
   {
-    $$ = append($1, $3)
+    $$.val = append($1.qnames(), $3.qname())
   }
 
 // Given "UPDATE foo set set ...", we have to decide without looking any
@@ -2190,25 +2350,25 @@ relation_expr_list:
 relation_expr_opt_alias:
   relation_expr %prec UMINUS
   {
-    $$ = &AliasedTableExpr{Expr: $1}
+    $$.val = &AliasedTableExpr{Expr: $1.qname()}
   }
 | relation_expr name
   {
-    $$ = &AliasedTableExpr{Expr: $1, As: AliasClause{Alias: Name($2)}}
+    $$.val = &AliasedTableExpr{Expr: $1.qname(), As: AliasClause{Alias: Name($2)}}
   }
 | relation_expr AS name
   {
-    $$ = &AliasedTableExpr{Expr: $1, As: AliasClause{Alias: Name($3)}}
+    $$.val = &AliasedTableExpr{Expr: $1.qname(), As: AliasClause{Alias: Name($3)}}
   }
 
 where_clause:
   WHERE a_expr
   {
-    $$ = $2
+    $$.val = $2.expr()
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = Expr(nil)
   }
 
 // Type syntax
@@ -2220,7 +2380,7 @@ where_clause:
 typename:
   simple_typename opt_array_bounds
   {
-    $$ = $1
+    $$.val = $1.colType()
   }
   // SQL standard syntax, currently only one-dimensional
 | simple_typename ARRAY '[' ICONST ']' { unimplemented() }
@@ -2240,23 +2400,23 @@ simple_typename:
 | const_interval '(' ICONST ')' { unimplemented() }
 | BLOB
   {
-    $$ = &BytesType{Name: "BLOB"}
+    $$.val = &BytesType{Name: "BLOB"}
   }
 | BYTES
   {
-    $$ = &BytesType{Name: "BYTES"}
+    $$.val = &BytesType{Name: "BYTES"}
   }
 | BYTEA
   {
-    $$ = &BytesType{Name: "BYTEA"}
+    $$.val = &BytesType{Name: "BYTEA"}
   }
 | TEXT
   {
-    $$ = &StringType{Name: "TEXT"}
+    $$.val = &StringType{Name: "TEXT"}
   }
 | STRING
   {
-    $$ = &StringType{Name: "STRING"}
+    $$.val = &StringType{Name: "STRING"}
   }
 
 // We have a separate const_typename to allow defaulting fixed-length types
@@ -2277,83 +2437,83 @@ const_typename:
 opt_numeric_modifiers:
   '(' ICONST ')'
   {
-    $$ = &DecimalType{Prec: int($2.Val)}
+    $$.val = &DecimalType{Prec: int($2.ival().Val)}
   }
 | '(' ICONST ',' ICONST ')'
   {
-    $$ = &DecimalType{Prec: int($2.Val), Scale: int($4.Val)}
+    $$.val = &DecimalType{Prec: int($2.ival().Val), Scale: int($4.ival().Val)}
   }
 | /* EMPTY */
   {
-    $$ = &DecimalType{}
+    $$.val = &DecimalType{}
   }
 
 // SQL numeric data types
 numeric:
   INT
   {
-    $$ = &IntType{Name: "INT"}
+    $$.val = &IntType{Name: "INT"}
   }
 | INT64
   {
-    $$ = &IntType{Name: "INT64"}
+    $$.val = &IntType{Name: "INT64"}
   }
 | INTEGER
   {
-    $$ = &IntType{Name: "INTEGER"}
+    $$.val = &IntType{Name: "INTEGER"}
   }
 | SMALLINT
   {
-    $$ = &IntType{Name: "SMALLINT"}
+    $$.val = &IntType{Name: "SMALLINT"}
   }
 | BIGINT
   {
-    $$ = &IntType{Name: "BIGINT"}
+    $$.val = &IntType{Name: "BIGINT"}
   }
 | REAL
   {
-    $$ = &FloatType{Name: "REAL"}
+    $$.val = &FloatType{Name: "REAL"}
   }
 | FLOAT opt_float
   {
-    $$ = &FloatType{Name: "FLOAT", Prec: int($2.Val)}
+    $$.val = &FloatType{Name: "FLOAT", Prec: int($2.ival().Val)}
   }
 | DOUBLE PRECISION
   {
-    $$ = &FloatType{Name: "DOUBLE PRECISION"}
+    $$.val = &FloatType{Name: "DOUBLE PRECISION"}
   }
 | DECIMAL opt_numeric_modifiers
   {
-    $$ = $2
-    $$.(*DecimalType).Name = "DECIMAL"
+    $$.val = $2.colType()
+    $$.val.(*DecimalType).Name = "DECIMAL"
   }
 | DEC opt_numeric_modifiers
   {
-    $$ = $2
-    $$.(*DecimalType).Name = "DEC"
+    $$.val = $2.colType()
+    $$.val.(*DecimalType).Name = "DEC"
   }
 | NUMERIC opt_numeric_modifiers
   {
-    $$ = $2
-    $$.(*DecimalType).Name = "NUMERIC"
+    $$.val = $2.colType()
+    $$.val.(*DecimalType).Name = "NUMERIC"
   }
 | BOOLEAN
   {
-    $$ = &BoolType{Name: "BOOLEAN"}
+    $$.val = &BoolType{Name: "BOOLEAN"}
   }
 | BOOL
   {
-    $$ = &BoolType{Name: "BOOL"}
+    $$.val = &BoolType{Name: "BOOL"}
   }
 
 opt_float:
   '(' ICONST ')'
   {
-    $$ = $2
+    $$.val = $2.ival()
   }
 | /* EMPTY */
   {
-    $$ = IntVal{}
+    $$.val = IntVal{}
   }
 
 // SQL bit-field data types
@@ -2371,13 +2531,13 @@ const_bit:
 bit_with_length:
   BIT opt_varying '(' ICONST ')'
   {
-    $$ = &IntType{Name: "BIT", N: int($4.Val)}
+    $$.val = &IntType{Name: "BIT", N: int($4.ival().Val)}
   }
 
 bit_without_length:
   BIT opt_varying
   {
-    $$ = &IntType{Name: "BIT"}
+    $$.val = &IntType{Name: "BIT"}
   }
 
 // SQL character data types
@@ -2393,28 +2553,28 @@ const_character:
 character_with_length:
   character_base '(' ICONST ')'
   {
-    $$ = $1
-    $$.(*StringType).N = int($3.Val)
+    $$.val = $1.colType()
+    $$.val.(*StringType).N = int($3.ival().Val)
   }
 
 character_without_length:
   character_base
   {
-    $$ = $1
+    $$.val = $1.colType()
   }
 
 character_base:
   CHARACTER opt_varying
   {
-    $$ = &StringType{Name: "CHAR"}
+    $$.val = &StringType{Name: "CHAR"}
   }
 | CHAR opt_varying
   {
-    $$ = &StringType{Name: "CHAR"}
+    $$.val = &StringType{Name: "CHAR"}
   }
 | VARCHAR
   {
-    $$ = &StringType{Name: "VARCHAR"}
+    $$.val = &StringType{Name: "VARCHAR"}
   }
 
 opt_varying:
@@ -2425,16 +2585,16 @@ opt_varying:
 const_datetime:
   DATE
   {
-    $$ = &DateType{}
+    $$.val = &DateType{}
   }
 | TIMESTAMP
   {
-    $$ = &TimestampType{}
+    $$.val = &TimestampType{}
   }
 
 const_interval:
   INTERVAL {
-    $$ = &IntervalType{}
+    $$.val = &IntervalType{}
   }
 
 opt_interval:
@@ -2480,7 +2640,7 @@ a_expr:
   c_expr
 | a_expr TYPECAST typename
   {
-    $$ = &CastExpr{Expr: $1, Type: $3}
+    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.colType()}
   }
 | a_expr COLLATE any_name { unimplemented() }
 | a_expr AT TIME ZONE a_expr %prec AT { unimplemented() }
@@ -2493,192 +2653,192 @@ a_expr:
   // b_expr and to the math_op list below.
 | '+' a_expr %prec UMINUS
   {
-    $$ = &UnaryExpr{Operator: UnaryPlus, Expr: $2}
+    $$.val = &UnaryExpr{Operator: UnaryPlus, Expr: $2.expr()}
   }
 | '-' a_expr %prec UMINUS
   {
-    $$ = &UnaryExpr{Operator: UnaryMinus, Expr: $2}
+    $$.val = &UnaryExpr{Operator: UnaryMinus, Expr: $2.expr()}
   }
 | '~' a_expr %prec UMINUS
   {
-    $$ = &UnaryExpr{Operator: UnaryComplement, Expr: $2}
+    $$.val = &UnaryExpr{Operator: UnaryComplement, Expr: $2.expr()}
   }
 | a_expr '+' a_expr
   {
-    $$ = &BinaryExpr{Operator: Plus, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Plus, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '-' a_expr
   {
-    $$ = &BinaryExpr{Operator: Minus, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Minus, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '*' a_expr
   {
-    $$ = &BinaryExpr{Operator: Mult, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Mult, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '/' a_expr
   {
-    $$ = &BinaryExpr{Operator: Div, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Div, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '%' a_expr
   {
-    $$ = &BinaryExpr{Operator: Mod, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Mod, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '^' a_expr
   {
-    $$ = &BinaryExpr{Operator: Bitxor, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Bitxor, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '#' a_expr
   {
-    $$ = &BinaryExpr{Operator: Bitxor, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Bitxor, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '&' a_expr
   {
-    $$ = &BinaryExpr{Operator: Bitand, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Bitand, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '|' a_expr
   {
-    $$ = &BinaryExpr{Operator: Bitor, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Bitor, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '<' a_expr
   {
-    $$ = &ComparisonExpr{Operator: LT, Left: $1, Right: $3}
+    $$.val = &ComparisonExpr{Operator: LT, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '>' a_expr
   {
-    $$ = &ComparisonExpr{Operator: GT, Left: $1, Right: $3}
+    $$.val = &ComparisonExpr{Operator: GT, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '=' a_expr
   {
-    $$ = &ComparisonExpr{Operator: EQ, Left: $1, Right: $3}
+    $$.val = &ComparisonExpr{Operator: EQ, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr CONCAT a_expr
   {
-    $$ = &BinaryExpr{Operator: Concat, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Concat, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr LSHIFT a_expr
   {
-    $$ = &BinaryExpr{Operator: LShift, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: LShift, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr RSHIFT a_expr
   {
-    $$ = &BinaryExpr{Operator: RShift, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: RShift, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr LESS_EQUALS a_expr
   {
-    $$ = &ComparisonExpr{Operator: LE, Left: $1, Right: $3}
+    $$.val = &ComparisonExpr{Operator: LE, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr GREATER_EQUALS a_expr
   {
-    $$ = &ComparisonExpr{Operator: GE, Left: $1, Right: $3}
+    $$.val = &ComparisonExpr{Operator: GE, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr NOT_EQUALS a_expr
   {
-    $$ = &ComparisonExpr{Operator: NE, Left: $1, Right: $3}
+    $$.val = &ComparisonExpr{Operator: NE, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr AND a_expr
   {
-    $$ = &AndExpr{Left: $1, Right: $3}
+    $$.val = &AndExpr{Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr OR a_expr
   {
-    $$ = &OrExpr{Left: $1, Right: $3}
+    $$.val = &OrExpr{Left: $1.expr(), Right: $3.expr()}
   }
 | NOT a_expr
   {
-    $$ = &NotExpr{Expr: $2}
+    $$.val = &NotExpr{Expr: $2.expr()}
   }
 | NOT_LA a_expr %prec NOT
   {
-    $$ = &NotExpr{Expr: $2}
+    $$.val = &NotExpr{Expr: $2.expr()}
   }
 | a_expr LIKE a_expr
   {
-    $$ = &ComparisonExpr{Operator: Like, Left: $1, Right: $3}
+    $$.val = &ComparisonExpr{Operator: Like, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr NOT_LA LIKE a_expr %prec NOT_LA
   {
-    $$ = &ComparisonExpr{Operator: NotLike, Left: $1, Right: $4}
+    $$.val = &ComparisonExpr{Operator: NotLike, Left: $1.expr(), Right: $4.expr()}
   }
 | a_expr SIMILAR TO a_expr %prec SIMILAR
   {
-    $$ = &ComparisonExpr{Operator: SimilarTo, Left: $1, Right: $4}
+    $$.val = &ComparisonExpr{Operator: SimilarTo, Left: $1.expr(), Right: $4.expr()}
   }
 | a_expr NOT_LA SIMILAR TO a_expr %prec NOT_LA
   {
-    $$ = &ComparisonExpr{Operator: NotSimilarTo, Left: $1, Right: $5}
+    $$.val = &ComparisonExpr{Operator: NotSimilarTo, Left: $1.expr(), Right: $5.expr()}
   }
 | a_expr IS NULL %prec IS
   {
-    $$ = &ComparisonExpr{Operator: Is, Left: $1, Right: DNull}
+    $$.val = &ComparisonExpr{Operator: Is, Left: $1.expr(), Right: DNull}
   }
 | a_expr IS NOT NULL %prec IS
   {
-    $$ = &ComparisonExpr{Operator: IsNot, Left: $1, Right: DNull}
+    $$.val = &ComparisonExpr{Operator: IsNot, Left: $1.expr(), Right: DNull}
   }
 | row OVERLAPS row { unimplemented() }
 | a_expr IS TRUE %prec IS
   {
-    $$ = &ComparisonExpr{Operator: Is, Left: $1, Right: DBool(true)}
+    $$.val = &ComparisonExpr{Operator: Is, Left: $1.expr(), Right: DBool(true)}
   }
 | a_expr IS NOT TRUE %prec IS
   {
-    $$ = &ComparisonExpr{Operator: IsNot, Left: $1, Right: DBool(true)}
+    $$.val = &ComparisonExpr{Operator: IsNot, Left: $1.expr(), Right: DBool(true)}
   }
 | a_expr IS FALSE %prec IS
   {
-    $$ = &ComparisonExpr{Operator: Is, Left: $1, Right: DBool(false)}
+    $$.val = &ComparisonExpr{Operator: Is, Left: $1.expr(), Right: DBool(false)}
   }
 | a_expr IS NOT FALSE %prec IS
   {
-    $$ = &ComparisonExpr{Operator: IsNot, Left: $1, Right: DBool(false)}
+    $$.val = &ComparisonExpr{Operator: IsNot, Left: $1.expr(), Right: DBool(false)}
   }
 | a_expr IS UNKNOWN %prec IS
   {
-    $$ = &ComparisonExpr{Operator: Is, Left: $1, Right: DNull}
+    $$.val = &ComparisonExpr{Operator: Is, Left: $1.expr(), Right: DNull}
   }
 | a_expr IS NOT UNKNOWN %prec IS
   {
-    $$ = &ComparisonExpr{Operator: IsNot, Left: $1, Right: DNull}
+    $$.val = &ComparisonExpr{Operator: IsNot, Left: $1.expr(), Right: DNull}
   }
 | a_expr IS DISTINCT FROM a_expr %prec IS
   {
-    $$ = &ComparisonExpr{Operator: IsDistinctFrom, Left: $1, Right: $5}
+    $$.val = &ComparisonExpr{Operator: IsDistinctFrom, Left: $1.expr(), Right: $5.expr()}
   }
 | a_expr IS NOT DISTINCT FROM a_expr %prec IS
   {
-    $$ = &ComparisonExpr{Operator: IsNotDistinctFrom, Left: $1, Right: $6}
+    $$.val = &ComparisonExpr{Operator: IsNotDistinctFrom, Left: $1.expr(), Right: $6.expr()}
   }
 | a_expr IS OF '(' type_list ')' %prec IS
   {
-    $$ = &IsOfTypeExpr{Expr: $1, Types: $5}
+    $$.val = &IsOfTypeExpr{Expr: $1.expr(), Types: $5.colTypes()}
   }
 | a_expr IS NOT OF '(' type_list ')' %prec IS
   {
-    $$ = &IsOfTypeExpr{Not: true, Expr: $1, Types: $6}
+    $$.val = &IsOfTypeExpr{Not: true, Expr: $1.expr(), Types: $6.colTypes()}
   }
 | a_expr BETWEEN opt_asymmetric b_expr AND a_expr %prec BETWEEN
   {
-    $$ = &RangeCond{Left: $1, From: $4, To: $6}
+    $$.val = &RangeCond{Left: $1.expr(), From: $4.expr(), To: $6.expr()}
   }
 | a_expr NOT_LA BETWEEN opt_asymmetric b_expr AND a_expr %prec NOT_LA
   {
-    $$ = &RangeCond{Not: true, Left: $1, From: $5, To: $7}
+    $$.val = &RangeCond{Not: true, Left: $1.expr(), From: $5.expr(), To: $7.expr()}
   }
 | a_expr BETWEEN SYMMETRIC b_expr AND a_expr %prec BETWEEN
   {
-    $$ = &RangeCond{Left: $1, From: $4, To: $6}
+    $$.val = &RangeCond{Left: $1.expr(), From: $4.expr(), To: $6.expr()}
   }
 | a_expr NOT_LA BETWEEN SYMMETRIC b_expr AND a_expr %prec NOT_LA
   {
-    $$ = &RangeCond{Not: true, Left: $1, From: $5, To: $7}
+    $$.val = &RangeCond{Not: true, Left: $1.expr(), From: $5.expr(), To: $7.expr()}
   }
 | a_expr IN in_expr
   {
-    $$ = &ComparisonExpr{Operator: In, Left: $1, Right: $3}
+    $$.val = &ComparisonExpr{Operator: In, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr NOT_LA IN in_expr %prec NOT_LA
   {
-    $$ = &ComparisonExpr{Operator: NotIn, Left: $1, Right: $4}
+    $$.val = &ComparisonExpr{Operator: NotIn, Left: $1.expr(), Right: $4.expr()}
   }
 // | a_expr subquery_op sub_type select_with_parens %prec CONCAT { unimplemented() }
 // | a_expr subquery_op sub_type '(' a_expr ')' %prec CONCAT { unimplemented() }
@@ -2695,107 +2855,107 @@ b_expr:
   c_expr
 | b_expr TYPECAST typename
   {
-    $$ = &CastExpr{Expr: $1, Type: $3}
+    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.colType()}
   }
 | '+' b_expr %prec UMINUS
   {
-    $$ = &UnaryExpr{Operator: UnaryPlus, Expr: $2}
+    $$.val = &UnaryExpr{Operator: UnaryPlus, Expr: $2.expr()}
   }
 | '-' b_expr %prec UMINUS
   {
-    $$ = &UnaryExpr{Operator: UnaryMinus, Expr: $2}
+    $$.val = &UnaryExpr{Operator: UnaryMinus, Expr: $2.expr()}
   }
 | '~' b_expr %prec UMINUS
   {
-    $$ = &UnaryExpr{Operator: UnaryComplement, Expr: $2}
+    $$.val = &UnaryExpr{Operator: UnaryComplement, Expr: $2.expr()}
   }
 | b_expr '+' b_expr
   {
-    $$ = &BinaryExpr{Operator: Plus, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Plus, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '-' b_expr
   {
-    $$ = &BinaryExpr{Operator: Minus, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Minus, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '*' b_expr
   {
-    $$ = &BinaryExpr{Operator: Mult, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Mult, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '/' b_expr
   {
-    $$ = &BinaryExpr{Operator: Div, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Div, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '%' b_expr
   {
-    $$ = &BinaryExpr{Operator: Mod, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Mod, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '^' b_expr
   {
-    $$ = &BinaryExpr{Operator: Bitxor, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Bitxor, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '#' b_expr
   {
-    $$ = &BinaryExpr{Operator: Bitxor, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Bitxor, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '&' b_expr
   {
-    $$ = &BinaryExpr{Operator: Bitand, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Bitand, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '|' b_expr
   {
-    $$ = &BinaryExpr{Operator: Bitor, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Bitor, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '<' b_expr
   {
-    $$ = &ComparisonExpr{Operator: LT, Left: $1, Right: $3}
+    $$.val = &ComparisonExpr{Operator: LT, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '>' b_expr
   {
-    $$ = &ComparisonExpr{Operator: GT, Left: $1, Right: $3}
+    $$.val = &ComparisonExpr{Operator: GT, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '=' b_expr
   {
-    $$ = &ComparisonExpr{Operator: EQ, Left: $1, Right: $3}
+    $$.val = &ComparisonExpr{Operator: EQ, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr CONCAT b_expr
   {
-    $$ = &BinaryExpr{Operator: Concat, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: Concat, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr LSHIFT b_expr
   {
-    $$ = &BinaryExpr{Operator: LShift, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: LShift, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr RSHIFT b_expr
   {
-    $$ = &BinaryExpr{Operator: RShift, Left: $1, Right: $3}
+    $$.val = &BinaryExpr{Operator: RShift, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr LESS_EQUALS b_expr
   {
-    $$ = &ComparisonExpr{Operator: LE, Left: $1, Right: $3}
+    $$.val = &ComparisonExpr{Operator: LE, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr GREATER_EQUALS b_expr
   {
-    $$ = &ComparisonExpr{Operator: GE, Left: $1, Right: $3}
+    $$.val = &ComparisonExpr{Operator: GE, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr NOT_EQUALS b_expr
   {
-    $$ = &ComparisonExpr{Operator: NE, Left: $1, Right: $3}
+    $$.val = &ComparisonExpr{Operator: NE, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr IS DISTINCT FROM b_expr %prec IS
   {
-    $$ = &ComparisonExpr{Operator: IsDistinctFrom, Left: $1, Right: $5}
+    $$.val = &ComparisonExpr{Operator: IsDistinctFrom, Left: $1.expr(), Right: $5.expr()}
   }
 | b_expr IS NOT DISTINCT FROM b_expr %prec IS
   {
-    $$ = &ComparisonExpr{Operator: IsNotDistinctFrom, Left: $1, Right: $6}
+    $$.val = &ComparisonExpr{Operator: IsNotDistinctFrom, Left: $1.expr(), Right: $6.expr()}
   }
 | b_expr IS OF '(' type_list ')' %prec IS
   {
-    $$ = &IsOfTypeExpr{Expr: $1, Types: $5}
+    $$.val = &IsOfTypeExpr{Expr: $1.expr(), Types: $5.colTypes()}
   }
 | b_expr IS NOT OF '(' type_list ')' %prec IS
   {
-    $$ = &IsOfTypeExpr{Not: true, Expr: $1, Types: $6}
+    $$.val = &IsOfTypeExpr{Not: true, Expr: $1.expr(), Types: $6.colTypes()}
   }
 
 // Productions that can be used in both a_expr and b_expr.
@@ -2807,44 +2967,44 @@ b_expr:
 c_expr:
   qualified_name
   {
-    $$ = $1
+    $$.val = $1.qname()
   }
 | a_expr_const
 | PARAM
   {
-    $$ = ValArg{name: $1}
+    $$.val = ValArg{name: $1}
   }
 | '(' a_expr ')'
   {
-    $$ = &ParenExpr{Expr: $2}
+    $$.val = &ParenExpr{Expr: $2.expr()}
   }
 | case_expr
 | func_expr
 | select_with_parens %prec UMINUS
   {
-    $$ = &Subquery{Select: $1}
+    $$.val = &Subquery{Select: $1.selectStmt()}
   }
 | select_with_parens indirection
   {
-    $$ = &Subquery{Select: $1}
+    $$.val = &Subquery{Select: $1.selectStmt()}
   }
 | EXISTS select_with_parens
   {
-    $$ = &ExistsExpr{Subquery: &Subquery{Select: $2}}
+    $$.val = &ExistsExpr{Subquery: &Subquery{Select: $2.selectStmt()}}
   }
 // TODO(pmattis): Support this notation?
 // | ARRAY select_with_parens { unimplemented() }
 | ARRAY array_expr
   {
-    $$ = $2
+    $$.val = $2.expr()
   }
 | explicit_row
   {
-    $$ = $1
+    $$.val = $1.expr()
   }
 | implicit_row
   {
-    $$ = $1
+    $$.val = $1.expr()
   }
 // TODO(pmattis): Support this notation?
 // | GROUPING '(' expr_list ')' { unimplemented() }
@@ -2852,28 +3012,25 @@ c_expr:
 func_application:
   func_name '(' ')'
   {
-    $$ = &FuncExpr{Name: $1}
+    $$.val = &FuncExpr{Name: $1.qname()}
   }
 | func_name '(' expr_list opt_sort_clause ')'
   {
-    // TODO(pmattis): Support opt_sort_clause or remove it?
-    $$ = &FuncExpr{Name: $1, Exprs: $3}
+    $$.val = &FuncExpr{Name: $1.qname(), Exprs: $3.exprs()}
   }
 | func_name '(' VARIADIC a_expr opt_sort_clause ')' { unimplemented() }
 | func_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause ')' { unimplemented() }
 | func_name '(' ALL expr_list opt_sort_clause ')'
   {
-    // TODO(pmattis): Support opt_sort_clause or remove it?
-    $$ = &FuncExpr{Name: $1, Type: All, Exprs: $4}
+    $$.val = &FuncExpr{Name: $1.qname(), Type: All, Exprs: $4.exprs()}
   }
 | func_name '(' DISTINCT expr_list opt_sort_clause ')'
   {
-    // TODO(pmattis): Support opt_sort_clause or remove it?
-    $$ = &FuncExpr{Name: $1, Type: Distinct, Exprs: $4}
+    $$.val = &FuncExpr{Name: $1.qname(), Type: Distinct, Exprs: $4.exprs()}
   }
 | func_name '(' '*' ')'
   {
-    $$ = &FuncExpr{Name: $1, Exprs: Exprs{StarExpr()}}
+    $$.val = &FuncExpr{Name: $1.qname(), Exprs: Exprs{StarExpr()}}
   }
 
 // func_expr and its cousin func_expr_windowless are split out from c_expr just
@@ -2886,13 +3043,11 @@ func_application:
 func_expr:
   func_application within_group_clause filter_clause over_clause
   {
-    // TODO(pmattis): Support within_group_clause, filter_clause and
-    // over_clause?
-    $$ = $1
+    $$.val = $1.expr()
   }
 | func_expr_common_subexpr
   {
-    $$ = $1
+    $$.val = $1.expr()
   }
 
 // As func_expr but does not accept WINDOW functions directly (but they can
@@ -2908,19 +3063,19 @@ func_expr_common_subexpr:
   COLLATION FOR '(' a_expr ')' { unimplemented() }
 | CURRENT_DATE
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
   }
 | CURRENT_DATE '(' ')'
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
   }
 | CURRENT_TIMESTAMP
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
   }
 | CURRENT_TIMESTAMP '(' ')'
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
   }
 | CURRENT_ROLE { unimplemented() }
 | CURRENT_USER { unimplemented() }
@@ -2928,64 +3083,64 @@ func_expr_common_subexpr:
 | USER { unimplemented() }
 | CAST '(' a_expr AS typename ')'
   {
-    $$ = &CastExpr{Expr: $3, Type: $5}
+    $$.val = &CastExpr{Expr: $3.expr(), Type: $5.colType()}
   }
 | EXTRACT '(' extract_list ')'
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
+    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.exprs()}
   }
 | OVERLAY '(' overlay_list ')'
   {
-    $$ = &OverlayExpr{FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}}
+    $$.val = &OverlayExpr{FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.exprs()}}
   }
 | POSITION '(' position_list ')'
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: "STRPOS"}, Exprs: $3}
+    $$.val = &FuncExpr{Name: &QualifiedName{Base: "STRPOS"}, Exprs: $3.exprs()}
   }
 | SUBSTRING '(' substr_list ')'
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
+    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.exprs()}
   }
 | TREAT '(' a_expr AS typename ')' { unimplemented() }
 | TRIM '(' BOTH trim_list ')'
   {
-     $$ = &FuncExpr{Name: &QualifiedName{Base: "BTRIM"}, Exprs: $4}
+     $$.val = &FuncExpr{Name: &QualifiedName{Base: "BTRIM"}, Exprs: $4.exprs()}
   }
 | TRIM '(' LEADING trim_list ')'
   {
-     $$ = &FuncExpr{Name: &QualifiedName{Base: "LTRIM"}, Exprs: $4}
+     $$.val = &FuncExpr{Name: &QualifiedName{Base: "LTRIM"}, Exprs: $4.exprs()}
   }
 | TRIM '(' TRAILING trim_list ')'
   {
-     $$ = &FuncExpr{Name: &QualifiedName{Base: "RTRIM"}, Exprs: $4}
+     $$.val = &FuncExpr{Name: &QualifiedName{Base: "RTRIM"}, Exprs: $4.exprs()}
   }
 | TRIM '(' trim_list ')'
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: "BTRIM"}, Exprs: $3}
+    $$.val = &FuncExpr{Name: &QualifiedName{Base: "BTRIM"}, Exprs: $3.exprs()}
   }
 | IF '(' a_expr ',' a_expr ',' a_expr ')'
   {
-    $$ = &IfExpr{Cond: $3, True: $5, Else: $7}
+    $$.val = &IfExpr{Cond: $3.expr(), True: $5.expr(), Else: $7.expr()}
   }
 | NULLIF '(' a_expr ',' a_expr ')'
   {
-    $$ = &NullIfExpr{Expr1: $3, Expr2: $5}
+    $$.val = &NullIfExpr{Expr1: $3.expr(), Expr2: $5.expr()}
   }
 | IFNULL '(' a_expr ',' a_expr ')'
   {
-    $$ = &CoalesceExpr{Name: "IFNULL", Exprs: Exprs{$3, $5}}
+    $$.val = &CoalesceExpr{Name: "IFNULL", Exprs: Exprs{$3.expr(), $5.expr()}}
   }
 | COALESCE '(' expr_list ')'
   {
-    $$ = &CoalesceExpr{Name: "COALESCE", Exprs: $3}
+    $$.val = &CoalesceExpr{Name: "COALESCE", Exprs: $3.exprs()}
   }
 | GREATEST '(' expr_list ')'
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
+    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.exprs()}
   }
 | LEAST '(' expr_list ')'
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
+    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.exprs()}
   }
 
 // Aggregate decoration clauses
@@ -3068,31 +3223,31 @@ frame_bound:
 row:
   ROW '(' expr_list ')'
   {
-    $$ = Row($3)
+    $$.val = Row($3.exprs())
   }
 | ROW '(' ')'
   {
-    $$ = Row(nil)
+    $$.val = Row(nil)
   }
 | '(' expr_list ',' a_expr ')'
   {
-    $$ = Tuple(append($2, $4))
+    $$.val = Tuple(append($2.exprs(), $4.expr()))
   }
 
 explicit_row:
   ROW '(' expr_list ')'
   {
-    $$ = Row($3)
+    $$.val = Row($3.exprs())
   }
 | ROW '(' ')'
   {
-    $$ = Row(nil)
+    $$.val = Row(nil)
   }
 
 implicit_row:
   '(' expr_list ',' a_expr ')'
   {
-    $$ = Tuple(append($2, $4))
+    $$.val = Tuple(append($2.exprs(), $4.expr()))
   }
 
 // sub_type:
@@ -3133,51 +3288,51 @@ implicit_row:
 expr_list:
   a_expr
   {
-    $$ = Exprs{$1}
+    $$.val = Exprs{$1.expr()}
   }
 | expr_list ',' a_expr
   {
-    $$ = append($1, $3)
+    $$.val = append($1.exprs(), $3.expr())
   }
 
 type_list:
   typename
   {
-    $$ = []ColumnType{$1}
+    $$.val = []ColumnType{$1.colType()}
   }
 | type_list ',' typename
   {
-    $$ = append($1, $3)
+    $$.val = append($1.colTypes(), $3.colType())
   }
 
 array_expr:
   '[' expr_list ']'
   {
-    $$ = Array($2)
+    $$.val = Array($2.exprs())
   }
 | '[' array_expr_list ']'
   {
-    $$ = Array($2)
+    $$.val = Array($2.exprs())
   }
 | '[' ']'
   {
-    $$ = Array(nil)
+    $$.val = Array(nil)
   }
 
 array_expr_list:
   array_expr
   {
-    $$ = Exprs{$1}
+    $$.val = Exprs{$1.expr()}
   }
 | array_expr_list ',' array_expr
   {
-    $$ = append($1, $3)
+    $$.val = append($1.exprs(), $3.expr())
   }
 
 extract_list:
   extract_arg FROM a_expr
   {
-    $$ = Exprs{DString($1), $3}
+    $$.val = Exprs{DString($1), $3.expr()}
   }
 
 // TODO(vivek): Narrow down to just IDENT once the other
@@ -3199,28 +3354,28 @@ extract_arg:
 overlay_list:
   a_expr overlay_placing substr_from substr_for
   {
-    $$ = Exprs{$1, $2, $3, $4}
+    $$.val = Exprs{$1.expr(), $2.expr(), $3.expr(), $4.expr()}
   }
 | a_expr overlay_placing substr_from
   {
-    $$ = Exprs{$1, $2, $3}
+    $$.val = Exprs{$1.expr(), $2.expr(), $3.expr()}
   }
 
 overlay_placing:
   PLACING a_expr
   {
-    $$ = $2
+    $$.val = $2.expr()
   }
 
 // position_list uses b_expr not a_expr to avoid conflict with general IN
 position_list:
   b_expr IN b_expr
   {
-    $$ = Exprs{$3, $1}
+    $$.val = Exprs{$3.expr(), $1.expr()}
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = Exprs(nil)
   }
 
 // SUBSTRING() arguments
@@ -3237,63 +3392,63 @@ position_list:
 substr_list:
   a_expr substr_from substr_for
   {
-    $$ = Exprs{$1, $2, $3}
+    $$.val = Exprs{$1.expr(), $2.expr(), $3.expr()}
   }
 | a_expr substr_for substr_from
   {
-    $$ = Exprs{$1, $3, $2}
+    $$.val = Exprs{$1.expr(), $3.expr(), $2.expr()}
   }
 | a_expr substr_from
   {
-    $$ = Exprs{$1, $2}
+    $$.val = Exprs{$1.expr(), $2.expr()}
   }
 | a_expr substr_for
   {
-    $$ = Exprs{$1, DInt(1), $2}
+    $$.val = Exprs{$1.expr(), DInt(1), $2.expr()}
   }
 | expr_list
   {
-    $$ = $1
+    $$.val = $1.exprs()
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = Exprs(nil)
   }
 
 substr_from:
   FROM a_expr
   {
-    $$ = $2
+    $$.val = $2.expr()
   }
 
 substr_for:
   FOR a_expr
   {
-    $$ = $2
+    $$.val = $2.expr()
   }
 
 trim_list:
   a_expr FROM expr_list
   {
-    $$ = append($3, $1)
+    $$.val = append($3.exprs(), $1.expr())
   }
 | FROM expr_list
   {
-    $$ = $2
+    $$.val = $2.exprs()
   }
 | expr_list
   {
-    $$ = $1
+    $$.val = $1.exprs()
   }
 
 in_expr:
   select_with_parens
   {
-    $$ = &Subquery{Select: $1}
+    $$.val = &Subquery{Select: $1.selectStmt()}
   }
 | '(' expr_list ')'
   {
-    $$ = Tuple($2)
+    $$.val = Tuple($2.exprs())
   }
 
 // Define SQL-style CASE clause.
@@ -3304,85 +3459,85 @@ in_expr:
 case_expr:
   CASE case_arg when_clause_list case_default END
   {
-    $$ = &CaseExpr{Expr: $2, Whens: $3, Else: $4}
+    $$.val = &CaseExpr{Expr: $2.expr(), Whens: $3.whens(), Else: $4.expr()}
   }
 
 when_clause_list:
   // There must be at least one
   when_clause
   {
-    $$ = []*When{$1}
+    $$.val = []*When{$1.when()}
   }
 | when_clause_list when_clause
   {
-    $$ = append($1, $2)
+    $$.val = append($1.whens(), $2.when())
   }
 
 when_clause:
   WHEN a_expr THEN a_expr
   {
-    $$ = &When{Cond: $2, Val: $4}
+    $$.val = &When{Cond: $2.expr(), Val: $4.expr()}
   }
 
 case_default:
   ELSE a_expr
   {
-    $$ = $2
+    $$.val = $2.expr()
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = Expr(nil)
   }
 
 case_arg:
   a_expr
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = Expr(nil)
   }
 
 indirection_elem:
   name_indirection
   {
-    $$ = $1
+    $$.val = $1.indirectElem()
   }
 | glob_indirection
   {
-    $$ = $1
+    $$.val = $1.indirectElem()
   }
 | '@' col_label
   {
-    $$ = IndexIndirection($2)
+    $$.val = IndexIndirection($2)
   }
 | '[' a_expr ']'
   {
-    $$ = &ArrayIndirection{Begin: $2}
+    $$.val = &ArrayIndirection{Begin: $2.expr()}
   }
 | '[' a_expr ':' a_expr ']'
   {
-    $$ = &ArrayIndirection{Begin: $2, End: $4}
+    $$.val = &ArrayIndirection{Begin: $2.expr(), End: $4.expr()}
   }
 
 name_indirection:
   '.' col_label
   {
-    $$ = NameIndirection($2)
+    $$.val = NameIndirection($2)
   }
 
 glob_indirection:
   '.' '*'
   {
-    $$ = qualifiedStar
+    $$.val = qualifiedStar
   }
 
 indirection:
   indirection_elem
   {
-    $$ = Indirection{$1}
+    $$.val = Indirection{$1.indirectElem()}
   }
 | indirection indirection_elem
   {
-    $$ = append($1, $2)
+    $$.val = append($1.indirect(), $2.indirectElem())
   }
 
 opt_asymmetric:
@@ -3397,17 +3552,17 @@ ctext_expr:
   a_expr
 | DEFAULT
   {
-    $$ = DefaultVal{}
+    $$.val = DefaultVal{}
   }
 
 ctext_expr_list:
   ctext_expr
   {
-    $$ = []Expr{$1}
+    $$.val = Exprs{$1.expr()}
   }
 | ctext_expr_list ',' ctext_expr
   {
-    $$ = append($1, $3)
+    $$.val = append($1.exprs(), $3.expr())
   }
 
 // We should allow ROW '(' ctext_expr_list ')' too, but that seems to require
@@ -3416,7 +3571,7 @@ ctext_expr_list:
 ctext_row:
   '(' ctext_expr_list ')'
   {
-    $$ = $2
+    $$.val = $2.exprs()
   }
 
 // target list for SELECT
@@ -3424,23 +3579,23 @@ opt_target_list:
   target_list
 | /* EMPTY */
   {
-    $$ = nil
+    $$.val = SelectExprs(nil)
   }
 
 target_list:
   target_elem
   {
-    $$ = SelectExprs{$1}
+    $$.val = SelectExprs{$1.selExpr()}
   }
 | target_list ',' target_elem
   {
-    $$ = append($1, $3)
+    $$.val = append($1.selExprs(), $3.selExpr())
   }
 
 target_elem:
   a_expr AS col_label
   {
-    $$ = SelectExpr{Expr: $1, As: Name($3)}
+    $$.val = SelectExpr{Expr: $1.expr(), As: Name($3)}
   }
   // We support omitting AS only for column labels that aren't any known
   // keyword. There is an ambiguity against postfix operators: is "a ! b" an
@@ -3449,15 +3604,15 @@ target_elem:
   // IDENT a precedence higher than POSTFIXOP.
 | a_expr IDENT
   {
-    $$ = SelectExpr{Expr: $1, As: Name($2)}
+    $$.val = SelectExpr{Expr: $1.expr(), As: Name($2)}
   }
 | a_expr
   {
-    $$ = SelectExpr{Expr: $1}
+    $$.val = SelectExpr{Expr: $1.expr()}
   }
 | '*'
   {
-    $$ = starSelectExpr()
+    $$.val = starSelectExpr()
   }
 
 // Names and constants.
@@ -3465,21 +3620,21 @@ target_elem:
 qualified_name_list:
   qualified_name
   {
-    $$ = QualifiedNames{$1}
+    $$.val = QualifiedNames{$1.qname()}
   }
 | qualified_name_list ',' qualified_name
   {
-    $$ = append($1, $3)
+    $$.val = append($1.qnames(), $3.qname())
   }
 
 indirect_name_or_glob_list:
   indirect_name_or_glob
   {
-    $$ = QualifiedNames{$1}
+    $$.val = QualifiedNames{$1.qname()}
   }
 | indirect_name_or_glob_list ',' indirect_name_or_glob
   {
-    $$ = append($1, $3)
+    $$.val = append($1.qnames(), $3.qname())
   }
 
 // The production for a qualified relation name has to exactly match the
@@ -3490,11 +3645,11 @@ indirect_name_or_glob_list:
 qualified_name:
   name
   {
-    $$ = &QualifiedName{Base: Name($1)}
+    $$.val = &QualifiedName{Base: Name($1)}
   }
 | name indirection
   {
-    $$ = &QualifiedName{Base: Name($1), Indirect: $2}
+    $$.val = &QualifiedName{Base: Name($1), Indirect: $2.indirect()}
   }
 
 // indirect_name_or_glob is a subset of `qualified_name` accepting only:
@@ -3505,35 +3660,35 @@ qualified_name:
 indirect_name_or_glob:
   name
   {
-    $$ = &QualifiedName{Base: Name($1)}
+    $$.val = &QualifiedName{Base: Name($1)}
   }
 | name name_indirection
   {
-    $$ = &QualifiedName{Base: Name($1), Indirect: Indirection{$2}}
+    $$.val = &QualifiedName{Base: Name($1), Indirect: Indirection{$2.indirectElem()}}
   }
 | name glob_indirection
   {
-    $$ = &QualifiedName{Base: Name($1), Indirect: Indirection{$2}}
+    $$.val = &QualifiedName{Base: Name($1), Indirect: Indirection{$2.indirectElem()}}
   }
 | '*'
   {
-    $$ = &QualifiedName{Indirect: Indirection{unqualifiedStar}}
+    $$.val = &QualifiedName{Indirect: Indirection{unqualifiedStar}}
   }
 
 name_list:
   name
   {
-    $$ = []string{$1}
+    $$.val = []string{$1}
   }
 | name_list ',' name
   {
-    $$ = append($1, $3)
+    $$.val = append($1.strs(), $3)
   }
 
 opt_name_list:
   '(' name_list ')'
   {
-    $$ = $2
+    $$.val = $2.strs()
   }
 | /* EMPTY */ {}
 
@@ -3546,68 +3701,66 @@ opt_name_list:
 func_name:
   type_function_name
   {
-    $$ = &QualifiedName{Base: Name($1)}
+    $$.val = &QualifiedName{Base: Name($1)}
   }
 | name indirection
   {
-    $$ = &QualifiedName{Base: Name($1), Indirect: $2}
+    $$.val = &QualifiedName{Base: Name($1), Indirect: $2.indirect()}
   }
 
 // Constants
 a_expr_const:
   ICONST
   {
-    $$ = &IntVal{Val: $1.Val, Str: $1.Str}
+    $$.val = &IntVal{Val: $1.ival().Val, Str: $1.ival().Str}
   }
 | FCONST
   {
-    $$ = NumVal($1)
+    $$.val = NumVal($1)
   }
 | SCONST
   {
-    $$ = DString($1)
+    $$.val = DString($1)
   }
 | BCONST
   {
-    $$ = DBytes($1)
+    $$.val = DBytes($1)
   }
 | func_name '(' expr_list opt_sort_clause ')' SCONST { unimplemented() }
 | const_typename SCONST
   {
-    $$ = &CastExpr{Expr: DString($2), Type: $1}
+    $$.val = &CastExpr{Expr: DString($2), Type: $1.colType()}
   }
 | const_interval SCONST opt_interval
   {
-    // TODO(pmattis): support opt_interval?
-    $$ = &CastExpr{Expr: DString($2), Type: $1}
+    $$.val = &CastExpr{Expr: DString($2), Type: $1.colType()}
   }
 | const_interval '(' ICONST ')' SCONST
   {
-    // TODO(pmattis): Support the precision specification?
-    $$ = &CastExpr{Expr: DString($5), Type: $1}
+    $$.val = &CastExpr{Expr: DString($5), Type: $1.colType()}
   }
 | TRUE
   {
-    $$ = DBool(true)
+    $$.val = DBool(true)
   }
 | FALSE
   {
-    $$ = DBool(false)
+    $$.val = DBool(false)
   }
 | NULL
   {
-    $$ = DNull
+    $$.val = DNull
   }
 
 signed_iconst:
   ICONST
 | '+' ICONST
   {
-    $$ = $2
+    $$.val = $2.ival()
   }
 | '-' ICONST
   {
-    $$ = IntVal{Val: -$2.Val, Str: "-" + $2.Str}
+    $$.val = IntVal{Val: -$2.ival().Val, Str: "-" + $2.ival().Str}
   }
 
 // Name classification hierarchy.
