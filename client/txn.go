@@ -398,45 +398,88 @@ func endTxnReq(commit bool, deadline *roachpb.Timestamp, hasTrigger bool) roachp
 	return req
 }
 
-func (txn *Txn) exec(retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
-	// Run retryable in a retry loop until we encounter a success or
+// TxnExecOptions controls how Exec() runs a transaction and the corresponding
+// closure.
+type TxnExecOptions struct {
+	// If set, the transaction is automatically aborted if the closure returns any
+	// error aside from recoverable internal errors, in which case the closure is
+	// retried. The retryable function should have no side effects which could
+	// cause problems in the event it must be run more than once.
+	// If not set, all errors cause the txn to be aborted.
+	AutoRetry bool
+	// If set, then the txn is automatically committed if no errors are
+	// encountered. If not set, committing or leaving open the txn is the
+	// responsibility of the client.
+	AutoCommit bool
+}
+
+// Exec executes fn in the context of a distributed transaction.
+// Execution is controlled by opt (see comments in TxnExecOptions).
+//
+// opt is passed to fn, and it's valid for fn to modify opt as it sees
+// fit during each execution attempt.
+//
+// It's valid for txn to be nil (meaning the txn has already aborted) if fn
+// can handle that. This is useful for continuing transactions that have been
+// aborted because of an error in a previous batch of statements in the hope
+// that a ROLLBACK will reset the state. Neither opt.AutoRetry not opt.AutoCommit
+// can be set in this case.
+//
+// If an error is returned, the txn has been aborted.
+func (txn *Txn) Exec(
+	opt TxnExecOptions,
+	fn func(txn *Txn, opt *TxnExecOptions) *roachpb.Error) *roachpb.Error {
+	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
 	var pErr *roachpb.Error
-	for r := retry.Start(txn.db.txnRetryOptions); r.Next(); {
-		pErr = retryable(txn)
-		if pErr == nil && txn.Proto.Status == roachpb.PENDING {
-			// retryable succeeded, but didn't commit.
+	var retryOptions retry.Options
+	if txn == nil && (opt.AutoRetry || opt.AutoCommit) {
+		panic("asked to retry  or commit a txn that is already aborted")
+	}
+	if opt.AutoRetry {
+		retryOptions = txn.db.txnRetryOptions
+	}
+RetryLoop:
+	for r := retry.Start(retryOptions); r.Next(); {
+		pErr = fn(txn, &opt)
+		if (pErr == nil) && opt.AutoCommit && (txn.Proto.Status == roachpb.PENDING) {
+			// fn succeeded, but didn't commit.
 			pErr = txn.commit(nil)
 		}
 
-		if pErr != nil {
-			// Make sure the txn record that pErr carries is for this txn.
-			// We check only when txn.Proto.ID has been initialized after an initial successful send.
-			if pErr.GetTxn() != nil && txn.Proto.ID != nil {
-				if errTxn := pErr.GetTxn(); !errTxn.Equal(&txn.Proto) {
-					return roachpb.NewErrorf("mismatching transaction record in the error:\n%s\nv.s.\n%s",
-						errTxn, txn.Proto)
-				}
-			}
-
-			switch pErr.TransactionRestart {
-			case roachpb.TransactionRestart_IMMEDIATE:
-				if log.V(2) {
-					log.Warning(pErr)
-				}
-				r.Reset()
-				continue
-			case roachpb.TransactionRestart_BACKOFF:
-				if log.V(2) {
-					log.Warning(pErr)
-				}
-				continue
-			}
-			// By default, fall through and break.
+		if pErr == nil {
+			break
 		}
-		break
+
+		// Make sure the txn record that pErr carries is for this txn.
+		// We check only when txn.Proto.ID has been initialized after an initial successful send.
+		if pErr.GetTxn() != nil && txn.Proto.ID != nil {
+			if errTxn := pErr.GetTxn(); !errTxn.Equal(&txn.Proto) {
+				return roachpb.NewErrorf("mismatching transaction record in the error:\n%s\nv.s.\n%s",
+					errTxn, txn.Proto)
+			}
+		}
+
+		if !opt.AutoRetry {
+			break RetryLoop
+		}
+		switch pErr.TransactionRestart {
+		case roachpb.TransactionRestart_IMMEDIATE:
+			r.Reset()
+		case roachpb.TransactionRestart_BACKOFF:
+		default:
+			break RetryLoop
+		}
+		if log.V(2) {
+			log.Infof("automatically retrying transaction: %s because of error: %s",
+				txn.DebugName(), pErr)
+		}
 	}
-	txn.Cleanup(pErr)
+	if txn != nil {
+		// TODO(andrei): don't do Cleanup() on retriable errors here.
+		// Let the sql executor do it.
+		txn.Cleanup(pErr)
+	}
 	return pErr
 }
 
