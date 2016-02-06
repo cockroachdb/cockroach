@@ -88,7 +88,7 @@ func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse,
 				status = roachpb.ABORTED
 			}
 		}
-		br.Txn = proto.Clone(ba.Txn).(*roachpb.Transaction)
+		br.Txn = ba.Txn.Clone()
 		if br.Txn != nil && pErr == nil {
 			br.Txn.Writing = writing
 			br.Txn.Status = status
@@ -157,8 +157,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 func TestTxnResetTxnOnAbort(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		return nil, roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{},
-			proto.Clone(ba.Txn).(*roachpb.Transaction))
+		return nil, roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, ba.Txn)
 	}, nil))
 
 	txn := NewTxn(*db)

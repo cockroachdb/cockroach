@@ -454,7 +454,7 @@ var nonZeroTxn = Transaction{
 	},
 	Writing:  true,
 	Sequence: 123,
-	Intents:  []Span{{Key: []byte("a")}},
+	Intents:  []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 }
 
 func TestTransactionUpdate(t *testing.T) {
@@ -479,7 +479,29 @@ func TestTransactionUpdate(t *testing.T) {
 	if err := util.NoZeroField(txn3); err != nil {
 		t.Fatal(err)
 	}
+}
 
+func TestTransactionClone(t *testing.T) {
+	txn := nonZeroTxn.Clone()
+	if &txn.Key[0] != &nonZeroTxn.Key[0] {
+		t.Fatalf("Key should be shared between clone and original")
+	}
+	if &txn.ID[0] != &nonZeroTxn.ID[0] {
+		t.Fatalf("ID should be shared between clone and original")
+	}
+	if txn.LastHeartbeat == nonZeroTxn.LastHeartbeat {
+		t.Fatalf("LastHeartbeat shared between clone and original")
+	}
+	if &txn.CertainNodes.Nodes[0] == &nonZeroTxn.CertainNodes.Nodes[0] {
+		t.Fatalf("CertainNodes.Nodes shared between clone and original")
+	}
+	if &txn.Intents[0] == &nonZeroTxn.Intents[0] {
+		t.Fatalf("Intents shared between clone and original")
+	}
+	if &txn.Intents[0].Key[0] != &nonZeroTxn.Intents[0].Key[0] ||
+		&txn.Intents[0].EndKey[0] != &nonZeroTxn.Intents[0].EndKey[0] {
+		t.Fatalf("Span keys should be shared between clone and original")
+	}
 }
 
 // checkVal verifies if a value is close to an expected value, within a fraction (e.g. if

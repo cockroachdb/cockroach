@@ -2411,7 +2411,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 			t.Fatal(pErr)
 		}
 		reply := resp.(*roachpb.PushTxnResponse)
-		expTxn := proto.Clone(pushee).(*roachpb.Transaction)
+		expTxn := pushee.Clone()
 		expTxn.Epoch = test.expEpoch
 		expTxn.Timestamp = test.expTS
 		expTxn.Status = roachpb.ABORTED
