@@ -159,3 +159,8 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 func (*replicaGCQueue) timer() time.Duration {
 	return replicaGCQueueTimerDuration
 }
+
+// purgatoryChan returns nil.
+func (*replicaGCQueue) purgatoryChan() <-chan struct{} {
+	return nil
+}
