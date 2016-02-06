@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -143,7 +142,7 @@ func SkipUnlessLocal(t *testing.T) {
 	}
 }
 
-func makeClient(t util.Tester, str string) (*client.DB, *stop.Stopper) {
+func makeClient(t *testing.T, str string) (*client.DB, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	db, err := client.Open(stopper, str)
 	if err != nil {
@@ -152,7 +151,7 @@ func makeClient(t util.Tester, str string) (*client.DB, *stop.Stopper) {
 	return db, stopper
 }
 
-func makePGClient(t util.Tester, dest string) *sql.DB {
+func makePGClient(t *testing.T, dest string) *sql.DB {
 	db, err := sql.Open("postgres", dest)
 	if err != nil {
 		t.Fatal(err)
