@@ -27,6 +27,9 @@ func unimplemented() {
 %}
 
 %{
+type sqlIval struct {
+	ival	IntVal
+}
 type sqlBoolVal struct {
 	boolVal	bool
 }
@@ -167,6 +170,7 @@ type sqlSymUnion interface {
 	sqlSymUnion()
 }
 
+func (*sqlIval) sqlSymUnion() {}
 func (*sqlBoolVal) sqlSymUnion() {}
 func (*sqlStrs) sqlSymUnion() {}
 func (*sqlQname) sqlSymUnion() {}
@@ -218,7 +222,6 @@ func (*sqlIdxElems) sqlSymUnion() {}
   id             int
   pos            int
   empty          struct{}
-  ival           IntVal
   str            string
   union          sqlSymUnion
 }
@@ -370,7 +373,7 @@ func (*sqlIdxElems) sqlSymUnion() {}
 
 %type <union> /* <sqlColType> */ typename simple_typename const_typename
 %type <union> /* <sqlColType> */ numeric opt_numeric_modifiers
-%type <ival> opt_float
+%type <union> /* <sqlIval> */ opt_float
 %type <union> /* <sqlColType> */ character const_character
 %type <union> /* <sqlColType> */ character_with_length character_without_length
 %type <union> /* <sqlColType> */ const_datetime const_interval
@@ -379,7 +382,7 @@ func (*sqlIdxElems) sqlSymUnion() {}
 %type <str> extract_arg
 %type <empty> opt_varying
 
-%type <ival>  signed_iconst
+%type <union> /* <sqlIval> */  signed_iconst
 %type <union> /* <sqlExpr> */  opt_boolean_or_string
 %type <union> /* <sqlExprs> */ var_list
 %type <union> /* <sqlQname> */ opt_from_var_name_clause var_name
@@ -425,7 +428,7 @@ func (*sqlIdxElems) sqlSymUnion() {}
 // DOT_DOT is unused in the core SQL grammar, and so will always provoke parse
 // errors. It is needed by PL/pgsql.
 %token <str>   IDENT FCONST SCONST BCONST
-%token <ival>  ICONST
+%token <union> /* <sqlIval> */  ICONST
 %token <str>   PARAM
 %token <str>   TYPECAST DOT_DOT
 %token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS
@@ -1459,7 +1462,7 @@ numeric_only:
   }
 | signed_iconst
   {
-    $$ = &sqlExpr{DInt($1.Val)}
+    $$ = &sqlExpr{DInt($1.(*sqlIval).ival.Val)}
   }
 
 // TRUNCATE table relname1, relname2, ...
@@ -2412,11 +2415,11 @@ const_typename:
 opt_numeric_modifiers:
   '(' ICONST ')'
   {
-    $$ = &sqlColType{&DecimalType{Prec: int($2.Val)}}
+    $$ = &sqlColType{&DecimalType{Prec: int($2.(*sqlIval).ival.Val)}}
   }
 | '(' ICONST ',' ICONST ')'
   {
-    $$ = &sqlColType{&DecimalType{Prec: int($2.Val), Scale: int($4.Val)}}
+    $$ = &sqlColType{&DecimalType{Prec: int($2.(*sqlIval).ival.Val), Scale: int($4.(*sqlIval).ival.Val)}}
   }
 | /* EMPTY */
   {
@@ -2451,7 +2454,7 @@ numeric:
   }
 | FLOAT opt_float
   {
-    $$ = &sqlColType{&FloatType{Name: "FLOAT", Prec: int($2.Val)}}
+    $$ = &sqlColType{&FloatType{Name: "FLOAT", Prec: int($2.(*sqlIval).ival.Val)}}
   }
 | DOUBLE PRECISION
   {
@@ -2488,7 +2491,7 @@ opt_float:
   }
 | /* EMPTY */
   {
-    $$ = IntVal{}
+    $$ = &sqlIval{IntVal{}}
   }
 
 // SQL bit-field data types
@@ -2506,7 +2509,7 @@ const_bit:
 bit_with_length:
   BIT opt_varying '(' ICONST ')'
   {
-    $$ = &sqlColType{&IntType{Name: "BIT", N: int($4.Val)}}
+    $$ = &sqlColType{&IntType{Name: "BIT", N: int($4.(*sqlIval).ival.Val)}}
   }
 
 bit_without_length:
@@ -2529,7 +2532,7 @@ character_with_length:
   character_base '(' ICONST ')'
   {
     $$ = $1
-    $$.(*sqlColType).colType.(*StringType).N = int($3.Val)
+    $$.(*sqlColType).colType.(*StringType).N = int($3.(*sqlIval).ival.Val)
   }
 
 character_without_length:
@@ -3698,7 +3701,7 @@ func_name:
 a_expr_const:
   ICONST
   {
-    $$ = &sqlExpr{&IntVal{Val: $1.Val, Str: $1.Str}}
+    $$ = &sqlExpr{&IntVal{Val: $1.(*sqlIval).ival.Val, Str: $1.(*sqlIval).ival.Str}}
   }
 | FCONST
   {
@@ -3746,7 +3749,7 @@ signed_iconst:
   }
 | '-' ICONST
   {
-    $$ = IntVal{Val: -$2.Val, Str: "-" + $2.Str}
+    $$ = &sqlIval{IntVal{Val: -$2.(*sqlIval).ival.Val, Str: "-" + $2.(*sqlIval).ival.Str}}
   }
 
 // Name classification hierarchy.
