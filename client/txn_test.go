@@ -88,10 +88,13 @@ func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse,
 				status = roachpb.ABORTED
 			}
 		}
-		br.Txn = ba.Txn.Clone()
-		if br.Txn != nil && pErr == nil {
-			br.Txn.Writing = writing
-			br.Txn.Status = status
+		if ba.Txn != nil {
+			txnClone := ba.Txn.Clone()
+			br.Txn = &txnClone
+			if pErr == nil {
+				br.Txn.Writing = writing
+				br.Txn.Status = status
+			}
 		}
 
 		if post != nil {
