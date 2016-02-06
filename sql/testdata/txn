@@ -110,8 +110,16 @@ a c
 statement ok
 BEGIN
 
-statement error duplicate key value \(k\)=\('a'\) violates unique constraint "primary"
-INSERT INTO kv VALUES('a', 'c')
+# The initial error in the next batch is: 'duplicate key value \(k\)=\('a'\)
+# violates unique constraint "primary"'. Unfortunately we only get the last
+# error.
+statement error current transaction is aborted, commands ignored until end of transaction block
+INSERT INTO kv VALUES('unique_key', 'some value');
+INSERT INTO kv VALUES('a', 'c');
+INSERT INTO kv VALUES('unique_key2', 'some value');
+
+statement error current transaction is aborted, commands ignored until end of transaction block
+UPDATE kv SET v = 'b' WHERE k in ('a')
 
 statement error current transaction is aborted, commands ignored until end of transaction block
 UPDATE kv SET v = 'b' WHERE k in ('a')

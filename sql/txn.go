@@ -37,7 +37,8 @@ func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, error)
 }
 
 // CommitTransaction commits a transaction.
-func (p *planner) CommitTransaction(n *parser.CommitTransaction) (planNode, *roachpb.Error) {
+func (p *planner) CommitTransaction(n *parser.CommitTransaction) (
+	planNode, *roachpb.Error) {
 	pErr := p.txn.Commit()
 	// Reset transaction.
 	p.resetTxn()

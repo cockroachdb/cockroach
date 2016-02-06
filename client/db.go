@@ -456,11 +456,15 @@ func (db *DB) RunWithResponse(b *Batch) (*roachpb.BatchResponse, *roachpb.Error)
 // otherwise. The retryable function should have no side effects which could
 // cause problems in the event it must be run more than once.
 //
-// TODO(pmattis): Allow transaction options to be specified.
+// If you need more control over how the txn is executed, check out txn.Exec().
 func (db *DB) Txn(retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
 	txn := NewTxn(*db)
 	txn.SetDebugName("", 1)
-	return txn.exec(retryable)
+	return txn.Exec(TxnExecOptions{AutoRetry: true, AutoCommit: true},
+		func(txn *Txn, opt *TxnExecOptions) *roachpb.Error {
+			// Ignore opt.
+			return retryable(txn)
+		})
 }
 
 // send runs the specified calls synchronously in a single batch and returns

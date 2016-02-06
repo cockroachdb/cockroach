@@ -24,8 +24,8 @@ var _ = math.Inf
 type Session struct {
 	Database string `protobuf:"bytes,1,opt,name=database" json:"database"`
 	Syntax   int32  `protobuf:"varint,2,opt,name=syntax" json:"syntax"`
-	// Open transaction.
-	Txn *Session_Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
+	// Info about the open transaction (if any).
+	Txn Session_Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn"`
 	// Indicates that the above transaction is mutating keys in the
 	// SystemConfig span.
 	MutatesSystemConfig bool `protobuf:"varint,4,opt,name=mutates_system_config" json:"mutates_system_config"`
@@ -124,10 +124,16 @@ func _Session_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer
 }
 
 type Session_Transaction struct {
-	Txn cockroach_roachpb1.Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn"`
-	// Timestamp to be used by SQL in the above transaction. Note: this is not the
-	// transaction timestamp in roachpb.Transaction above.
-	Timestamp    cockroach_sql_driver.Datum_Timestamp                  `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	// If missing, it means we're not inside a (KV) txn.
+	Txn *cockroach_roachpb1.Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
+	// txnAborted is set once executing a statement returned an error from KV.
+	// While in this state, every subsequent statement must be rejected until
+	// a COMMIT/ROLLBACK is seen.
+	TxnAborted bool `protobuf:"varint,4,opt,name=txnAborted" json:"txnAborted"`
+	// Timestamp to be used by SQL (transaction_timestamp()) in the above
+	// transaction. Note: this is not the transaction timestamp in
+	// roachpb.Transaction above, although it probably should be (#4393).
+	TxnTimestamp cockroach_sql_driver.Datum_Timestamp                  `protobuf:"bytes,2,opt,name=txn_timestamp" json:"txn_timestamp"`
 	UserPriority github_com_cockroachdb_cockroach_roachpb.UserPriority `protobuf:"fixed64,3,opt,name=user_priority,casttype=github.com/cockroachdb/cockroach/roachpb.UserPriority" json:"user_priority"`
 }
 
@@ -161,16 +167,14 @@ func (m *Session) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintSession(data, i, uint64(m.Syntax))
-	if m.Txn != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintSession(data, i, uint64(m.Txn.Size()))
-		n1, err := m.Txn.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n1
+	data[i] = 0x1a
+	i++
+	i = encodeVarintSession(data, i, uint64(m.Txn.Size()))
+	n1, err := m.Txn.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
 	}
+	i += n1
 	data[i] = 0x20
 	i++
 	if m.MutatesSystemConfig {
@@ -219,18 +223,20 @@ func (m *Session_Transaction) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintSession(data, i, uint64(m.Txn.Size()))
-	n3, err := m.Txn.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
+	if m.Txn != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintSession(data, i, uint64(m.Txn.Size()))
+		n3, err := m.Txn.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
 	}
-	i += n3
 	data[i] = 0x12
 	i++
-	i = encodeVarintSession(data, i, uint64(m.Timestamp.Size()))
-	n4, err := m.Timestamp.MarshalTo(data[i:])
+	i = encodeVarintSession(data, i, uint64(m.TxnTimestamp.Size()))
+	n4, err := m.TxnTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -238,6 +244,14 @@ func (m *Session_Transaction) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x19
 	i++
 	i = encodeFixed64Session(data, i, uint64(math.Float64bits(float64(m.UserPriority))))
+	data[i] = 0x20
+	i++
+	if m.TxnAborted {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
 	return i, nil
 }
 
@@ -274,10 +288,8 @@ func (m *Session) Size() (n int) {
 	l = len(m.Database)
 	n += 1 + l + sovSession(uint64(l))
 	n += 1 + sovSession(uint64(m.Syntax))
-	if m.Txn != nil {
-		l = m.Txn.Size()
-		n += 1 + l + sovSession(uint64(l))
-	}
+	l = m.Txn.Size()
+	n += 1 + l + sovSession(uint64(l))
 	n += 2
 	if m.Timezone != nil {
 		n += m.Timezone.Size()
@@ -301,11 +313,14 @@ func (m *Session_Offset) Size() (n int) {
 func (m *Session_Transaction) Size() (n int) {
 	var l int
 	_ = l
-	l = m.Txn.Size()
-	n += 1 + l + sovSession(uint64(l))
-	l = m.Timestamp.Size()
+	if m.Txn != nil {
+		l = m.Txn.Size()
+		n += 1 + l + sovSession(uint64(l))
+	}
+	l = m.TxnTimestamp.Size()
 	n += 1 + l + sovSession(uint64(l))
 	n += 9
+	n += 2
 	return n
 }
 
@@ -424,9 +439,6 @@ func (m *Session) Unmarshal(data []byte) error {
 			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
-			}
-			if m.Txn == nil {
-				m.Txn = &Session_Transaction{}
 			}
 			if err := m.Txn.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
@@ -577,13 +589,16 @@ func (m *Session_Transaction) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
+			if m.Txn == nil {
+				m.Txn = &cockroach_roachpb1.Transaction{}
+			}
 			if err := m.Txn.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field TxnTimestamp", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -607,7 +622,7 @@ func (m *Session_Transaction) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Timestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.TxnTimestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -629,6 +644,26 @@ func (m *Session_Transaction) Unmarshal(data []byte) error {
 			v |= uint64(data[iNdEx-2]) << 48
 			v |= uint64(data[iNdEx-1]) << 56
 			m.UserPriority = github_com_cockroachdb_cockroach_roachpb.UserPriority(math.Float64frombits(v))
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TxnAborted", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSession
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.TxnAborted = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipSession(data[iNdEx:])

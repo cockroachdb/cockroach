@@ -398,27 +398,67 @@ func endTxnReq(commit bool, deadline *roachpb.Timestamp, hasTrigger bool) roachp
 	return req
 }
 
-func (txn *Txn) exec(retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
-	// Run retryable in a retry loop until we encounter a success or
+// TxnExecOptions controls how Exec() runs a transaction and the corresponding
+// closure.
+type TxnExecOptions struct {
+	// If set, the transaction is automatically aborted if closure returns any
+	// error aside from recoverable internal errors, in which case the closure is
+	// retried.  The retryable function should have no side effects which could
+	// cause problems in the event it must be run more than once.
+	// 	If not set, all errors cause the txn to be aborted.
+	AutoRetry bool
+	// If set, then the txn is automatically committed if no errors are
+	// encountered. If not set, committing or leaving open the txn is the
+	// responsibility of the cl.
+	AutoCommit bool
+}
+
+// Exec executes closure in the context of a distributed transaction.
+// Execution is controlled by opt (see comments in TxnExecOptions).
+//
+// opt is passed to closure, and it's valid for closure to modify opt as it sees
+// fit during each execution attempt.
+//
+// It's valid for txn to be nil, meaning the txn has already aborted, if closure
+// can handle that.
+//
+// If an error is returned, the txn has been aborted.
+func (txn *Txn) Exec(
+	opt TxnExecOptions,
+	closure func(txn *Txn, opt *TxnExecOptions) *roachpb.Error) *roachpb.Error {
+	// Run closure in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
 	var pErr *roachpb.Error
-	for r := retry.Start(txn.db.txnRetryOptions); r.Next(); {
-		pErr = retryable(txn)
-		if pErr == nil && txn.Proto.Status == roachpb.PENDING {
-			// retryable succeeded, but didn't commit.
+	var retryOptions retry.Options
+	if opt.AutoRetry {
+		retryOptions = txn.db.txnRetryOptions
+	}
+	firstTry := true
+	for r := retry.Start(retryOptions); r.Next(); {
+		if !firstTry && log.V(2) {
+			log.Infof("automatically retrying transaction: %t", txn.DebugName())
+		}
+		firstTry = false
+		pErr = closure(txn, &opt)
+		if (pErr == nil) && opt.AutoCommit && (txn.Proto.Status == roachpb.PENDING) {
+			// closure succeeded, but didn't commit.
 			pErr = txn.commit(nil)
 		}
 
-		if pErr != nil {
-			// Make sure the txn record that pErr carries is for this txn.
-			// We check only when txn.Proto.ID has been initialized after an initial successful send.
-			if pErr.GetTxn() != nil && txn.Proto.ID != nil {
-				if errTxn := pErr.GetTxn(); !errTxn.Equal(&txn.Proto) {
-					return roachpb.NewErrorf("mismatching transaction record in the error:\n%s\nv.s.\n%s",
-						errTxn, txn.Proto)
-				}
-			}
+		if pErr == nil {
+			break
+		}
 
+		// Make sure the txn record that pErr carries is for this txn.
+		// We check only when txn.Proto.ID has been initialized after an initial successful send.
+		if pErr.GetTxn() != nil && txn.Proto.ID != nil {
+			if errTxn := pErr.GetTxn(); !errTxn.Equal(&txn.Proto) {
+				return roachpb.NewErrorf("mismatching transaction record in the error:\n%s\nv.s.\n%s",
+					errTxn, txn.Proto)
+			}
+		}
+
+		if opt.AutoRetry {
 			switch pErr.TransactionRestart {
 			case roachpb.TransactionRestart_IMMEDIATE:
 				if log.V(2) {
@@ -436,7 +476,11 @@ func (txn *Txn) exec(retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
 		}
 		break
 	}
-	txn.Cleanup(pErr)
+	if txn != nil {
+		// TODO(andrei): don't do Cleanup() on retriable errors here.
+		// Let the sql executor do it.
+		txn.Cleanup(pErr)
+	}
 	return pErr
 }
 
