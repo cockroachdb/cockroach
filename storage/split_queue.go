@@ -124,3 +124,9 @@ func (sq *splitQueue) process(now roachpb.Timestamp, rng *Replica,
 func (*splitQueue) timer() time.Duration {
 	return splitQueueTimerDuration
 }
+
+// purgatoryChan returns nil to indicate that failures on the queue
+// are not sent to purgatory for quicker retries.
+func (*splitQueue) purgatoryChan() <-chan struct{} {
+	return nil
+}

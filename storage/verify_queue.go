@@ -114,3 +114,9 @@ func (*verifyQueue) process(now roachpb.Timestamp, rng *Replica,
 func (vq *verifyQueue) timer() time.Duration {
 	return time.Duration(verificationInterval.Nanoseconds() / int64((vq.countFn() + 1)))
 }
+
+// purgatoryChan returns nil to indicate that failures on the queue
+// are not sent to purgatory for quicker retries.
+func (*verifyQueue) purgatoryChan() <-chan struct{} {
+	return nil
+}

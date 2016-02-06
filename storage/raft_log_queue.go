@@ -149,3 +149,9 @@ func (rlq *raftLogQueue) process(now roachpb.Timestamp, r *Replica, _ *config.Sy
 func (*raftLogQueue) timer() time.Duration {
 	return RaftLogQueueTimerDuration
 }
+
+// purgatoryChan returns nil to indicate that failures on the queue
+// are not sent to purgatory for quicker retries.
+func (*raftLogQueue) purgatoryChan() <-chan struct{} {
+	return nil
+}
