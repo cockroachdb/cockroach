@@ -14,29 +14,31 @@
 //
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
-package testutils
+package ts_test
 
 import (
 	"bytes"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"testing"
+
+	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/gogo/protobuf/proto"
 )
 
-// TestHTTPSession is a helper for tests which want to exercise repeated simple
+// testHTTPSession is a helper for tests which want to exercise repeated simple
 // HTTP requests against the same server, especially where no errors are
 // expected in the HTTP layer.
-type TestHTTPSession struct {
-	t       util.Tester
+type testHTTPSession struct {
+	t       *testing.T
 	client  *http.Client
 	baseURL string
 }
 
-// NewTestHTTPSession constructs a new TestHTTPSession. The session will
+// newTestHTTPSession constructs a new testHTTPSession. The session will
 // instantiate a client using the based base context. All HTTP requests from the
 // session will be sent to the given baseUrl.
 //
@@ -45,12 +47,12 @@ type TestHTTPSession struct {
 //
 // If an error occurs in HTTP layer during any session operation, a Fatal method
 // will be called on the supplied t.Tester.
-func NewTestHTTPSession(t util.Tester, ctx *base.Context, baseURL string) *TestHTTPSession {
+func newTestHTTPSession(t *testing.T, ctx *base.Context, baseURL string) *testHTTPSession {
 	client, err := ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("error creating client: %s", err)
 	}
-	return &TestHTTPSession{
+	return &testHTTPSession{
 		t:       t,
 		client:  client,
 		baseURL: ctx.HTTPRequestScheme() + "://" + baseURL,
@@ -60,7 +62,7 @@ func NewTestHTTPSession(t util.Tester, ctx *base.Context, baseURL string) *TestH
 // Post performs an http POST of the given bytes to the given relative URL. Any
 // response returned from the request will be returned from this method as a
 // byte slice.
-func (ths *TestHTTPSession) Post(relative string, body []byte) []byte {
+func (ths *testHTTPSession) Post(relative string, body []byte) []byte {
 	req, err := http.NewRequest("POST", ths.baseURL+relative, bytes.NewBuffer(body))
 	if err != nil {
 		ths.t.Fatal(err)
@@ -93,7 +95,7 @@ func (ths *TestHTTPSession) Post(relative string, body []byte) []byte {
 // PostProto handles the common case where both the data posted and the expected
 // response are encoded protobuffers. This method handles the marshalling of
 // those buffers.
-func (ths *TestHTTPSession) PostProto(relative string, msg proto.Message, out interface{}) {
+func (ths *testHTTPSession) PostProto(relative string, msg proto.Message, out interface{}) {
 	requestBytes, err := json.Marshal(msg)
 	if err != nil {
 		ths.t.Fatal(err)
@@ -106,7 +108,7 @@ func (ths *TestHTTPSession) PostProto(relative string, msg proto.Message, out in
 
 // Get performs an http GET request to the given relative URL. Any response
 // returned from the request will be returned from this method as a byte slice.
-func (ths *TestHTTPSession) Get(relative string) []byte {
+func (ths *testHTTPSession) Get(relative string) []byte {
 	req, err := http.NewRequest("GET", ths.baseURL+relative, nil)
 	if err != nil {
 		ths.t.Fatal(err)
