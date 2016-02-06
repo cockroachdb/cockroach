@@ -157,23 +157,19 @@ func (s *adminServer) internalServerErrorf(w http.ResponseWriter, format string,
 func (s *adminServer) handleDatabases(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	var session sql.Session
 	user := s.getUser(r)
-	resp, _, err := s.sqlExecutor.ExecuteStatements(user, session, "SHOW DATABASES", nil)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	resp := s.sqlExecutor.ExecuteStatements(user, &session, "SHOW DATABASES", nil)
 
-	if a, e := len(resp.Results), 1; a != e {
+	if a, e := len(resp.ResultList), 1; a != e {
 		s.internalServerErrorf(w, "# of results %d != expected %d", a, e)
 		return
 	}
 
-	if resp.Results[0].PErr != nil {
-		s.internalServerErrorf(w, "%s", resp.Results[0].PErr)
+	if resp.ResultList[0].PErr != nil {
+		s.internalServerErrorf(w, "%s", resp.ResultList[0].PErr)
 		return
 	}
 
-	if a, e := len(resp.Results[0].Columns), 1; a != e {
+	if a, e := len(resp.ResultList[0].Columns), 1; a != e {
 		s.internalServerErrorf(w, "# of columns %d != expected %d", a, e)
 		return
 	}
@@ -183,7 +179,7 @@ func (s *adminServer) handleDatabases(w http.ResponseWriter, r *http.Request, _ 
 	// vulnerability: http://haacked.com/archive/2009/06/25/json-hijacking.aspx/
 	//
 	// So, it seems cleaner to wrap the results in a more obvious way.
-	databases := firstColumnToSlice(resp.Results[0])
+	databases := firstColumnToSlice(resp.ResultList[0])
 	result := map[string]interface{}{
 		"Databases": databases,
 	}
@@ -229,18 +225,18 @@ func sqlResultToMaps(result sql.Result) []map[string]interface{} {
 func (s *adminServer) handleDatabaseDetails(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	var session sql.Session
 	dbname, err := s.extractDatabase(ps)
-
-	// TODO(cdo): Use real placeholders for the database name when we've extended our SQL grammar
-	// to allow that.
-	escDBName := parser.Name(dbname).String()
-	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escDBName, escDBName)
-	resp, _, err := s.sqlExecutor.ExecuteStatements(security.RootUser, session, query, nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	for _, res := range resp.Results {
+	// TODO(cdo): Use real placeholders for the database name when we've extended our SQL grammar
+	// to allow that.
+	escDBName := parser.Name(dbname).String()
+	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escDBName, escDBName)
+	resp := s.sqlExecutor.ExecuteStatements(security.RootUser, &session, query, nil)
+
+	for _, res := range resp.ResultList {
 		if res.PErr != nil {
 			if strings.HasSuffix(res.PErr.String(), "does not exist") {
 				http.Error(w, res.PErr.String(), http.StatusNotFound)
@@ -255,12 +251,12 @@ func (s *adminServer) handleDatabaseDetails(w http.ResponseWriter, r *http.Reque
 	// Put the results of the queries in JSON-friendly objects. For grants, we split the comma-
 	// separated lists of privileges into proper slices.
 	const privilegesKey = "Privileges"
-	grants := sqlResultToMaps(resp.Results[0])
+	grants := sqlResultToMaps(resp.ResultList[0])
 	for _, grant := range grants {
 		privileges := string(grant[privilegesKey].(parser.DString))
 		grant[privilegesKey] = strings.Split(privileges, ",")
 	}
-	tables := firstColumnToSlice(resp.Results[1])
+	tables := firstColumnToSlice(resp.ResultList[1])
 	result := map[string]interface{}{
 		"Grants": grants,
 		"Tables": tables,

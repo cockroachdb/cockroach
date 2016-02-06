@@ -147,7 +147,7 @@ func requestFromProto(dr driver.Request) (Request, error) {
 
 	r := Request{
 		User:    dr.User,
-		Session: session,
+		Session: &session,
 		SQL:     dr.Sql,
 		Params:  make([]parser.Datum, 0, len(dr.Params)),
 	}
@@ -158,16 +158,16 @@ func requestFromProto(dr driver.Request) (Request, error) {
 }
 
 func protoFromResponse(r Response) (*driver.Response, error) {
-	bytes, err := proto.Marshal(&r.Session)
+	bytes, err := proto.Marshal(r.Session)
 	if err != nil {
 		return nil, err
 	}
 
 	dr := &driver.Response{
 		Session: bytes,
-		Results: make([]driver.Response_Result, 0, len(r.Results)),
+		Results: make([]driver.Response_Result, 0, len(r.Results.ResultList)),
 	}
-	for _, rr := range r.Results {
+	for _, rr := range r.Results.ResultList {
 		dr.Results = append(dr.Results, protoFromResult(rr))
 	}
 	return dr, nil

@@ -55,7 +55,10 @@ func (sc *SchemaChanger) applyMutations(lease *TableDescriptor_SchemaChangeLease
 	*lease = l
 	return sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		// TODO(vivek): Use the original users privileges.
-		p := planner{user: security.RootUser, systemConfig: sc.cfg, leaseMgr: sc.leaseMgr}
+		p := makePlanner()
+		p.user = security.RootUser
+		p.systemConfig = sc.cfg
+		p.leaseMgr = sc.leaseMgr
 		p.setTxn(txn, time.Now())
 
 		tableDesc, pErr := getTableDescFromID(txn, sc.tableID)

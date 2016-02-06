@@ -60,9 +60,10 @@ a hierarchy of Registry instances underneath that to make your metrics more mana
 
 Testing
 
-After your test does something to trigger your new metric update, you'll probably want to call
-methods in TestServer such as MustGetCounter() to verify that the metric was updated correctly. See
-"sql/metric_test.go" for an example.
+After your test does something to trigger your new metric update, you'll
+probably want to call methods in TestServer such as MustGetSQLCounter() to
+verify that the metric was updated correctly. See "sql/metric_test.go" for an
+example.
 
 Additionally, you can manually verify that your metric is updating by using the metrics
 endpoint.  For example, if you're running the Cockroach DB server with the "--insecure"

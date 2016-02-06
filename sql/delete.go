@@ -84,11 +84,13 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 		p.txn.SetSystemConfigTrigger()
 	}
 
+	/* !!!
 	// Check if we can avoid doing a round-trip to read the values and just
 	// "fast-path" skip to deleting the key ranges without reading them first.
 	if canDeleteWithoutScan(n, rows, len(indexes)) {
 		return p.fastDelete(rows, rh.getResults(), autoCommit)
 	}
+	*/
 
 	b := p.txn.NewBatch()
 

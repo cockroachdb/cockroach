@@ -693,7 +693,7 @@ func (t *logicTest) traceStop() {
 
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer csql.TestingWaitForMetadata()()
+	defer csql.TestingWaitForGossipUpdate()()
 
 	// TODO(marc): splitting ranges at table boundaries causes
 	// a blocked task and won't drain. Investigate and fix.
@@ -750,6 +750,9 @@ func TestLogic(t *testing.T) {
 
 	total := 0
 	for _, p := range paths {
+		if testing.Verbose() || log.V(1) {
+			fmt.Printf("Running logic test on file: %s\n", p)
+		}
 		l := logicTest{T: t}
 		l.run(p)
 		total += l.progress
