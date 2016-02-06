@@ -152,7 +152,7 @@ func bootstrapCluster(engines []engine.Engine) (string, error) {
 			return "", err
 		}
 		// Create first range, writing directly to engine. Note this does
-		// not create the range, just its data.  Only do this if this is the
+		// not create the range, just its data. Only do this if this is the
 		// first store.
 		if i == 0 {
 			initialValues := GetBootstrapSchema().GetInitialValues()

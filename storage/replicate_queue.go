@@ -40,18 +40,32 @@ const (
 // additional replica to their range.
 type replicateQueue struct {
 	baseQueue
-	allocator Allocator
-	clock     *hlc.Clock
+	allocator  Allocator
+	clock      *hlc.Clock
+	updateChan chan struct{}
 }
 
 // newReplicateQueue returns a new instance of replicateQueue.
-func newReplicateQueue(gossip *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
+func newReplicateQueue(g *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
 	options AllocatorOptions) *replicateQueue {
 	rq := &replicateQueue{
-		allocator: allocator,
-		clock:     clock,
+		allocator:  allocator,
+		clock:      clock,
+		updateChan: make(chan struct{}, 1),
 	}
-	rq.baseQueue = makeBaseQueue("replicate", rq, gossip, replicateQueueMaxSize)
+	rq.baseQueue = makeBaseQueue("replicate", rq, g, replicateQueueMaxSize)
+
+	// Register a gossip callback to signal queue that replicas in
+	// purgatory might be retried due to new store gossip.
+	if g != nil {
+		g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ roachpb.Value) {
+			select {
+			case rq.updateChan <- struct{}{}:
+			default:
+			}
+		})
+	}
+
 	return rq
 }
 
@@ -168,4 +182,9 @@ func (rq *replicateQueue) process(now roachpb.Timestamp, repl *Replica, sysCfg *
 
 func (*replicateQueue) timer() time.Duration {
 	return replicateQueueTimerDuration
+}
+
+// purgatoryChan returns the replicate queue's store update channel.
+func (rq *replicateQueue) purgatoryChan() <-chan struct{} {
+	return rq.updateChan
 }

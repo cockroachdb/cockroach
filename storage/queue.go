@@ -35,6 +35,13 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
+const (
+	// purgatoryReportInterval is the duration between reports on purgatory status.
+	purgatoryReportInterval = 10 * time.Minute
+	// purgatoryMaxSize is the maximum size of the purgatory map.
+	purgatoryMaxSize = 100
+)
+
 // A replicaItem holds a replica and its priority for use with a priority queue.
 type replicaItem struct {
 	value    *Replica
@@ -106,6 +113,12 @@ type queueImpl interface {
 	// timer returns a duration to wait between processing the next item
 	// from the queue.
 	timer() time.Duration
+
+	// purgatoryChan returns a channel to signals that it's time to retry
+	// any replicas which have been relegated to purgatory due to failures.
+	// If purgatoryChan returns nil, failing replicas are not sent to
+	// purgatory.
+	purgatoryChan() <-chan struct{}
 }
 
 type queueLog struct {
@@ -146,9 +159,10 @@ type baseQueue struct {
 	gossip      *gossip.Gossip
 	maxSize     int                              // Maximum number of replicas to queue
 	incoming    chan struct{}                    // Channel signaled when a new replica is added to the queue.
-	sync.Locker                                  // Protects priorityQ and replicas
+	sync.Locker                                  // Protects priorityQ, replicas, and purgatory
 	priorityQ   priorityQueue                    // The priority queue
 	replicas    map[roachpb.RangeID]*replicaItem // Map from RangeID to replicaItem (for updating priority)
+	purgatory   map[roachpb.RangeID]error        // Map of replicas to processing errors
 	// Some tests in this package disable queues.
 	disabled int32 // updated atomically
 
@@ -255,11 +269,18 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) e
 		return errQueueDisabled
 	}
 
+	// If the replica is currently in purgatory, don't re-add it.
+	if bq.purgatory != nil {
+		if _, ok := bq.purgatory[repl.RangeID]; ok {
+			return nil
+		}
+	}
+
 	item, ok := bq.replicas[repl.RangeID]
 	if !should {
 		if ok {
 			bq.eventLog.Infof(false, "%s: removing", item.value)
-			bq.remove(item.index)
+			bq.remove(item)
 		}
 		return errReplicaNotAddable
 	} else if ok {
@@ -280,7 +301,7 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) e
 	// If adding this replica has pushed the queue past its maximum size,
 	// remove the lowest priority element.
 	if pqLen := bq.priorityQ.Len(); pqLen > bq.maxSize {
-		bq.remove(pqLen - 1)
+		bq.remove(bq.priorityQ[pqLen-1])
 	}
 	// Signal the processLoop that a replica has been added.
 	select {
@@ -297,7 +318,7 @@ func (bq *baseQueue) MaybeRemove(repl *Replica) {
 	defer bq.Unlock()
 	if item, ok := bq.replicas[repl.RangeID]; ok {
 		bq.eventLog.Infof(log.V(3), "%s: removing", item.value)
-		bq.remove(item.index)
+		bq.remove(item)
 	}
 }
 
@@ -330,7 +351,7 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 			// Process replicas as the timer expires.
 			case <-nextTime:
 				stopper.RunTask(func() {
-					bq.processOne(clock)
+					bq.processOne(clock, stopper)
 				})
 				if bq.Length() == 0 {
 					nextTime = nil
@@ -343,6 +364,7 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				bq.Lock()
 				bq.replicas = map[roachpb.RangeID]*replicaItem{}
 				bq.priorityQ = nil
+				bq.purgatory = nil
 				bq.Unlock()
 				return
 			}
@@ -351,7 +373,7 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 }
 
 // processOne processes the next replica in the queue.
-func (bq *baseQueue) processOne(clock *hlc.Clock) {
+func (bq *baseQueue) processOne(clock *hlc.Clock, stopper *stop.Stopper) {
 	bq.Lock()
 	repl := bq.pop()
 	bq.Unlock()
@@ -360,20 +382,23 @@ func (bq *baseQueue) processOne(clock *hlc.Clock) {
 		return
 	}
 
-	bq.processReplica(repl, clock)
+	start := time.Now()
+	if err := bq.processReplica(repl, clock, stopper); err != nil {
+		bq.eventLog.Errorf("%s: error: %v", repl, err)
+	} else {
+		bq.eventLog.Infof(log.V(2), "%s: done: %s", repl, time.Since(start))
+	}
 }
 
 // processReplica processes a single replica.
 // This should not be called externally to the queue.
 // bq.Lock should not be held while calling this method.
-func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) {
-	start := time.Now()
-
+func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock, stopper *stop.Stopper) error {
 	// Load the system config.
 	cfg := bq.gossip.GetSystemConfig()
 	if cfg == nil {
 		log.Infof("no system config available. skipping")
-		return
+		return nil
 	}
 
 	desc := repl.Desc()
@@ -381,7 +406,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		bq.eventLog.Infof(log.V(3), "%s: split needed; skipping", repl)
-		return
+		return nil
 	}
 
 	// If the queue requires a replica to have the range leader lease in
@@ -391,17 +416,101 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) {
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
 		if err := repl.redirectOnOrAcquireLeaderLease(tracing.NilSpan()); err != nil {
 			bq.eventLog.Infof(log.V(3), "%s: could not acquire leader lease; skipping", repl)
-			return
+			return nil
 		}
 	}
 
 	bq.eventLog.Infof(log.V(3), "%s: processing", repl)
 
-	if err := bq.impl.process(clock.Now(), repl, cfg); err != nil {
-		bq.eventLog.Errorf("%s: error: %v", repl, err)
-	} else {
-		bq.eventLog.Infof(log.V(2), "%s: done: %s", repl, time.Since(start))
+	err := bq.impl.process(clock.Now(), repl, cfg)
+	if err != nil {
+		// Add failing replica to purgatory if the queue supports it and
+		// the stopper is not nil (it's nil when draining the queue).
+		if bq.impl.purgatoryChan() != nil && stopper != nil {
+			bq.addToPurgatory(repl, err, clock, stopper)
+		}
 	}
+	return err
+}
+
+// addToPurgatory adds the specified replica to the purgatory queue,
+// which holds replicas which have failed processing. Each queue has
+// its own mechanism for signaling re-processing of replicas held in
+// purgatory.
+func (bq *baseQueue) addToPurgatory(repl *Replica, err error, clock *hlc.Clock, stopper *stop.Stopper) {
+	bq.Lock()
+	defer bq.Unlock()
+
+	// First, check whether the replica has already been re-added to queue.
+	if _, ok := bq.replicas[repl.RangeID]; ok {
+		return
+	}
+	// Also, limit maximum size of purgatory map.
+	if len(bq.purgatory) >= purgatoryMaxSize {
+		return
+	}
+
+	item := &replicaItem{value: repl}
+	bq.replicas[repl.RangeID] = item
+
+	// If purgatory already exists, just add to the slice and we're done.
+	if bq.purgatory != nil {
+		bq.purgatory[repl.RangeID] = err
+		return
+	}
+
+	// Otherwise, create purgator and start processing.
+	bq.purgatory = map[roachpb.RangeID]error{
+		repl.RangeID: err,
+	}
+
+	stopper.RunWorker(func() {
+		ticker := time.NewTicker(purgatoryReportInterval)
+		for {
+			select {
+			case <-bq.impl.purgatoryChan():
+				// Remove all items from purgatory into a copied slice.
+				bq.Lock()
+				repls := make([]*Replica, 0, len(bq.purgatory))
+				for rangeID := range bq.purgatory {
+					item := bq.replicas[rangeID]
+					repls = append(repls, item.value)
+					bq.remove(item)
+				}
+				bq.Unlock()
+				for _, repl := range repls {
+					stopper.RunTask(func() {
+						if err := bq.processReplica(repl, clock, stopper); err != nil {
+							bq.eventLog.Infof(log.V(2), "%s: error: %v", repl, err)
+						} else {
+							bq.eventLog.Infof(log.V(2), "%s: done", repl)
+						}
+					})
+				}
+				bq.Lock()
+				if len(bq.purgatory) == 0 {
+					log.Infof("[%s] purgatory is now empty", bq.name)
+					bq.purgatory = nil
+					bq.Unlock()
+					return
+				}
+				bq.Unlock()
+			case <-ticker.C:
+				// Report purgatory status.
+				bq.Lock()
+				errMap := map[string]int{}
+				for _, err := range bq.purgatory {
+					errMap[err.Error()]++
+				}
+				bq.Unlock()
+				for errStr, count := range errMap {
+					log.Infof("[%s] %d replicas failing with %q", bq.name, count, errStr)
+				}
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
 }
 
 // pop dequeues the highest priority replica in the queue. Returns the
@@ -416,10 +525,14 @@ func (bq *baseQueue) pop() *Replica {
 	return item.value
 }
 
-// remove removes an element from the priority queue by index. Expects
-// mutex to be locked.
-func (bq *baseQueue) remove(index int) {
-	item := heap.Remove(&bq.priorityQ, index).(*replicaItem)
+// remove removes an element from purgatory (if it's experienced an
+// error) or from the priority queue by index. Caller must hold mutex.
+func (bq *baseQueue) remove(item *replicaItem) {
+	if _, ok := bq.purgatory[item.value.RangeID]; ok {
+		delete(bq.purgatory, item.value.RangeID)
+	} else {
+		heap.Remove(&bq.priorityQ, item.index)
+	}
 	delete(bq.replicas, item.value.RangeID)
 }
 
@@ -431,7 +544,7 @@ func (bq *baseQueue) DrainQueue(clock *hlc.Clock) {
 	repl := bq.pop()
 	bq.Unlock()
 	for repl != nil {
-		bq.processReplica(repl, clock)
+		bq.processReplica(repl, clock, nil)
 		bq.Lock()
 		repl = bq.pop()
 		bq.Unlock()
