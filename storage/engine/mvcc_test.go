@@ -284,8 +284,7 @@ func TestMVCCPutWithTxn(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -332,14 +331,12 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(2, 1), value1, txn1)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(2, 1), value1, txn1); err != nil {
 		t.Fatal(err)
 	}
 
 	// Put operation with earlier walltime. Will NOT be ignored.
-	err = MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, txn1)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, txn1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -509,13 +506,11 @@ func TestMVCCUpdateExistingKeyInTxn(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
 		t.Fatal(err)
 	}
 
-	err = MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, txn1)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, txn1); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -526,13 +521,11 @@ func TestMVCCUpdateExistingKeyDiffTxn(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
 		t.Fatal(err)
 	}
 
-	err = MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, txn2)
-	if err == nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, txn2); err == nil {
 		t.Fatal("expected error on uncommitted write intent")
 	}
 }
@@ -698,34 +691,33 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, txn1)
-	value, _, err := MVCCGet(engine, testKey1, makeTS(2, 0), true, txn1)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, txn1); err != nil {
 		t.Fatal(err)
 	}
-	if value == nil {
+
+	if value, _, err := MVCCGet(engine, testKey1, makeTS(2, 0), true, txn1); err != nil {
+		t.Fatal(err)
+	} else if value == nil {
 		t.Fatal("the value should not be empty")
 	}
 
-	err = MVCCDelete(engine, nil, testKey1, makeTS(3, 0), txn1)
-	if err != nil {
+	if err := MVCCDelete(engine, nil, testKey1, makeTS(3, 0), txn1); err != nil {
 		t.Fatal(err)
 	}
 
 	// Read the latest version which should be deleted.
-	value, _, err = MVCCGet(engine, testKey1, makeTS(4, 0), true, txn1)
-	if err != nil {
+	if value, _, err := MVCCGet(engine, testKey1, makeTS(4, 0), true, txn1); err != nil {
 		t.Fatal(err)
-	}
-	if value != nil {
+	} else if value != nil {
 		t.Fatal("the value should be empty")
 	}
 
 	// Read the old version which shouldn't exist, as within a
 	// transaction, we delete previous values.
-	value, _, err = MVCCGet(engine, testKey1, makeTS(2, 0), true, nil)
-	if value != nil || err != nil {
-		t.Fatalf("expected value and err to be nil: %+v, %v", value, err)
+	if value, _, err := MVCCGet(engine, testKey1, makeTS(2, 0), true, nil); err != nil {
+		t.Fatal(err)
+	} else if value != nil {
+		t.Fatalf("expected value nil, got: %s", value)
 	}
 }
 
@@ -735,18 +727,15 @@ func TestMVCCGetWriteIntentError(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
 		t.Fatal(err)
 	}
 
-	_, _, err = MVCCGet(engine, testKey1, makeTS(1, 0), true, nil)
-	if err == nil {
+	if _, _, err := MVCCGet(engine, testKey1, makeTS(1, 0), true, nil); err == nil {
 		t.Fatal("cannot read the value of a write intent without TxnID")
 	}
 
-	_, _, err = MVCCGet(engine, testKey1, makeTS(1, 0), true, txn2)
-	if err == nil {
+	if _, _, err := MVCCGet(engine, testKey1, makeTS(1, 0), true, txn2); err == nil {
 		t.Fatal("cannot read the value of a write intent from a different TxnID")
 	}
 }
@@ -782,8 +771,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 		}
 		v := *proto.Clone(&kv.Value).(*roachpb.Value)
 		v.Timestamp = roachpb.ZeroTimestamp
-		err := MVCCPut(engine, nil, kv.Key, kv.Value.Timestamp, v, txn)
-		if err != nil {
+		if err := MVCCPut(engine, nil, kv.Key, kv.Value.Timestamp, v, txn); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -877,12 +865,10 @@ func TestMVCCGetInconsistent(t *testing.T) {
 	engine := createTestEngine(stopper)
 
 	// Put two values to key 1, the latest with a txn.
-	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	err = MVCCPut(engine, nil, testKey1, makeTS(2, 0), value2, txn1)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(2, 0), value2, txn1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -909,8 +895,7 @@ func TestMVCCGetInconsistent(t *testing.T) {
 	}
 
 	// Write a single intent for key 2 and verify get returns empty.
-	err = MVCCPut(engine, nil, testKey2, makeTS(2, 0), value1, txn2)
-	if err != nil {
+	if err := MVCCPut(engine, nil, testKey2, makeTS(2, 0), value1, txn2); err != nil {
 		t.Fatal(err)
 	}
 	val, intents, err := MVCCGet(engine, testKey2, makeTS(2, 0), false, nil)
