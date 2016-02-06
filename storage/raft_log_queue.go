@@ -43,7 +43,7 @@ const (
 // raftLogQueue manages a queue of replicas slated to have their raft logs
 // truncated by removing unneeded entries.
 type raftLogQueue struct {
-	baseQueue
+	*baseQueue
 	db *client.DB
 }
 
@@ -148,4 +148,9 @@ func (rlq *raftLogQueue) process(now roachpb.Timestamp, r *Replica, _ *config.Sy
 // timer returns interval between processing successive queued truncations.
 func (*raftLogQueue) timer() time.Duration {
 	return RaftLogQueueTimerDuration
+}
+
+// purgatoryChan returns nil.
+func (*raftLogQueue) purgatoryChan() <-chan struct{} {
+	return nil
 }

@@ -37,7 +37,7 @@ const (
 // splitQueue manages a queue of ranges slated to be split due to size
 // or along intersecting zone config boundaries.
 type splitQueue struct {
-	baseQueue
+	*baseQueue
 	db *client.DB
 }
 
@@ -123,4 +123,9 @@ func (sq *splitQueue) process(now roachpb.Timestamp, rng *Replica,
 // timer returns interval between processing successive queued splits.
 func (*splitQueue) timer() time.Duration {
 	return splitQueueTimerDuration
+}
+
+// purgatoryChan returns nil.
+func (*splitQueue) purgatoryChan() <-chan struct{} {
+	return nil
 }
