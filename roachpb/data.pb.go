@@ -382,6 +382,10 @@ func (*NodeList) ProtoMessage()    {}
 // transaction is assigned a random priority. This priority will be
 // used to decide whether a transaction will be aborted during
 // contention.
+//
+// If you add fields to Transaction you'll need to update
+// Transaction.Clone. Failure to do so will result in test failures.
+//
 // TODO(vivek): Remove parts of Transaction that expose internals.
 type Transaction struct {
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`

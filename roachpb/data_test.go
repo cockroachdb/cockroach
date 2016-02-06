@@ -479,7 +479,17 @@ func TestTransactionUpdate(t *testing.T) {
 	if err := util.NoZeroField(txn3); err != nil {
 		t.Fatal(err)
 	}
+}
 
+func TestTransactionClone(t *testing.T) {
+	txn := nonZeroTxn
+	if err := util.NoZeroField(txn); err != nil {
+		t.Fatal(err)
+	}
+	txn2 := txn.Clone()
+	if err := util.NoZeroField(txn2); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // checkVal verifies if a value is close to an expected value, within a fraction (e.g. if

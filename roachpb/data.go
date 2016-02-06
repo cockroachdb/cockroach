@@ -583,9 +583,43 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 	}
 }
 
+func (t *Transaction) cloneValue() Transaction {
+	// We explicitly list the fields we're cloning so that addition of a new
+	// field will cause TestTransactionClone to fail and require this method to
+	// be fixed.
+	v := Transaction{
+		Name:          t.Name,
+		Key:           t.Key,
+		ID:            t.ID,
+		Priority:      t.Priority,
+		Isolation:     t.Isolation,
+		Status:        t.Status,
+		Epoch:         t.Epoch,
+		Timestamp:     t.Timestamp,
+		OrigTimestamp: t.OrigTimestamp,
+		MaxTimestamp:  t.MaxTimestamp,
+		Writing:       t.Writing,
+		Sequence:      t.Sequence,
+	}
+	if t.LastHeartbeat != nil {
+		h := *t.LastHeartbeat
+		v.LastHeartbeat = &h
+	}
+	v.CertainNodes.Nodes = append([]NodeID(nil), t.CertainNodes.Nodes...)
+	// Note that we're not cloning the span keys under the assumption that the
+	// keys themselves are not mutable.
+	v.Intents = append([]Span(nil), t.Intents...)
+	return v
+}
+
 // Clone creates a deep copy of the given transaction.
 func (t *Transaction) Clone() *Transaction {
-	return proto.Clone(t).(*Transaction)
+	if t == nil {
+		return nil
+	}
+	r := &Transaction{}
+	*r = t.cloneValue()
+	return r
 }
 
 // Equal tests two transactions for equality. They are equal if they are
@@ -735,7 +769,7 @@ func (t *Transaction) Update(o *Transaction) {
 		return
 	}
 	if len(t.ID) == 0 {
-		*t = *proto.Clone(o).(*Transaction)
+		*t = o.cloneValue()
 		return
 	}
 	if len(t.Key) == 0 {
