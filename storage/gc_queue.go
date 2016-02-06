@@ -438,6 +438,12 @@ func (*gcQueue) timer() time.Duration {
 	return gcQueueTimerDuration
 }
 
+// purgatoryChan returns nil to indicate that failures on the GC queue
+// are not sent to purgatory for quicker retries.
+func (*gcQueue) purgatoryChan() <-chan struct{} {
+	return nil
+}
+
 // pushTxn attempts to abort the txn via push. The wait group is signaled on
 // completion.
 func pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Transaction,
