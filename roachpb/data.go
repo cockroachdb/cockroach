@@ -583,46 +583,19 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 	}
 }
 
-func (t *Transaction) cloneValue() Transaction {
-	// We explicitly list the fields we're cloning so that addition of a new
-	// field will cause TestTransactionClone to fail and require this method to
-	// be fixed. Note that we're not performing a deep-copy of Key and ID as
-	// these fields are immutable for the lifetime of a transaction.
-	v := Transaction{
-		Name:          t.Name,
-		Key:           t.Key,
-		ID:            t.ID,
-		Priority:      t.Priority,
-		Isolation:     t.Isolation,
-		Status:        t.Status,
-		Epoch:         t.Epoch,
-		Timestamp:     t.Timestamp,
-		OrigTimestamp: t.OrigTimestamp,
-		MaxTimestamp:  t.MaxTimestamp,
-		Writing:       t.Writing,
-		Sequence:      t.Sequence,
-	}
-	if t.LastHeartbeat != nil {
-		h := *t.LastHeartbeat
-		v.LastHeartbeat = &h
-	}
-	v.CertainNodes.Nodes = append([]NodeID(nil), t.CertainNodes.Nodes...)
-	// Note that we're not cloning the span keys under the assumption that the
-	// keys themselves are not mutable.
-	v.Intents = append([]Span(nil), t.Intents...)
-	return v
-}
-
 // Clone creates a copy of the given transaction. The copy is "mostly" deep,
 // but does share pieces of memory with the original such as Key, ID and the
 // keys with the intent spans.
-func (t *Transaction) Clone() *Transaction {
-	if t == nil {
-		return nil
+func (t Transaction) Clone() Transaction {
+	if t.LastHeartbeat != nil {
+		h := *t.LastHeartbeat
+		t.LastHeartbeat = &h
 	}
-	r := &Transaction{}
-	*r = t.cloneValue()
-	return r
+	t.CertainNodes.Nodes = append([]NodeID(nil), t.CertainNodes.Nodes...)
+	// Note that we're not cloning the span keys under the assumption that the
+	// keys themselves are not mutable.
+	t.Intents = append([]Span(nil), t.Intents...)
+	return t
 }
 
 // Equal tests two transactions for equality. They are equal if they are
@@ -772,7 +745,7 @@ func (t *Transaction) Update(o *Transaction) {
 		return
 	}
 	if len(t.ID) == 0 {
-		*t = o.cloneValue()
+		*t = o.Clone()
 		return
 	}
 	if len(t.Key) == 0 {

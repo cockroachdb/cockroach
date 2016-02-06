@@ -71,10 +71,10 @@ func createTestEngine(stopper *stop.Stopper) Engine {
 
 // makeTxn creates a new transaction using the specified base
 // txn and timestamp.
-func makeTxn(baseTxn *roachpb.Transaction, ts roachpb.Timestamp) *roachpb.Transaction {
+func makeTxn(baseTxn roachpb.Transaction, ts roachpb.Timestamp) *roachpb.Transaction {
 	txn := baseTxn.Clone()
 	txn.Timestamp = ts
-	return txn
+	return &txn
 }
 
 // makeTS creates a new hybrid logical timestamp.
@@ -1562,7 +1562,7 @@ func TestMVCCAbortTxn(t *testing.T) {
 	txn1AbortWithTS := txn1Abort.Clone()
 	txn1AbortWithTS.Timestamp = makeTS(0, 1)
 
-	if err := MVCCResolveWriteIntent(engine, nil, testKey1, txn1AbortWithTS); err != nil {
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, &txn1AbortWithTS); err != nil {
 		t.Fatal(err)
 	}
 	if err := engine.Commit(); err != nil {
@@ -1600,7 +1600,7 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	txn1AbortWithTS := txn1Abort.Clone()
 	txn1AbortWithTS.Timestamp = makeTS(2, 0)
 
-	if err := MVCCResolveWriteIntent(engine, nil, testKey1, txn1AbortWithTS); err != nil {
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, &txn1AbortWithTS); err != nil {
 		t.Fatal(err)
 	}
 	if err := engine.Commit(); err != nil {
@@ -1650,7 +1650,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Resolve the intent.
-	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTxn(txn1e2Commit, makeTS(1, 0))); err != nil {
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTxn(*txn1e2Commit, makeTS(1, 0))); err != nil {
 		t.Fatal(err)
 	}
 	// Now try writing an earlier intent--should get WriteTooOldError.
@@ -1760,7 +1760,7 @@ func TestMVCCReadWithPushedTimestamp(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Resolve the intent, pushing its timestamp forward.
-	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTxn(txn1, makeTS(1, 0))); err != nil {
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTxn(*txn1, makeTS(1, 0))); err != nil {
 		t.Fatal(err)
 	}
 	// Attempt to read using naive txn's previous timestamp.
@@ -1828,7 +1828,7 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 
 	// Resolve with a higher commit timestamp -- this should rewrite the
 	// intent when making it permanent.
-	if err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTxn(txn1Commit, makeTS(1, 0))); err != nil {
+	if err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTxn(*txn1Commit, makeTS(1, 0))); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1869,7 +1869,7 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 
 	// Resolve with a higher commit timestamp, but with still-pending transaction.
 	// This represents a straightforward push (i.e. from a read/write conflict).
-	if err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTxn(txn1, makeTS(1, 0))); err != nil {
+	if err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTxn(*txn1, makeTS(1, 0))); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1917,7 +1917,7 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 
 	txn1CommitWithTS := txn2Commit.Clone()
 	txn1CommitWithTS.Timestamp = makeTS(1, 0)
-	if err := MVCCResolveWriteIntent(engine, nil, testKey1, txn1CommitWithTS); err != nil {
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, &txn1CommitWithTS); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -2581,7 +2581,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 					// for the resolution).
 					intentTxn := wiErr.Intents[0].Txn.Clone()
 					intentTxn.Timestamp = ts
-					if err := MVCCResolveWriteIntent(engine, ms, keys[idx], intentTxn); err != nil {
+					if err := MVCCResolveWriteIntent(engine, ms, keys[idx], &intentTxn); err != nil {
 						t.Fatal(err)
 					}
 					// Now, re-delete.
