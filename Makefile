@@ -227,6 +227,6 @@ $(GLOCK):
 	@$(GLOCK) sync github.com/cockroachdb/cockroach
 	touch $@
 
--include .bootstrap
+include .bootstrap
 
 endif
