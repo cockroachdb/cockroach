@@ -583,9 +583,27 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 	}
 }
 
+func (t *Transaction) clonePtrFields() {
+	if t.LastHeartbeat != nil {
+		h := *t.LastHeartbeat
+		t.LastHeartbeat = &h
+	}
+	t.ID = append([]byte(nil), t.ID...)
+	t.CertainNodes.Nodes = append([]NodeID(nil), t.CertainNodes.Nodes...)
+	// Note that we're not cloning the span keys under the assumption that the
+	// keys themselves are not mutable.
+	t.Intents = append([]Span(nil), t.Intents...)
+}
+
 // Clone creates a deep copy of the given transaction.
 func (t *Transaction) Clone() *Transaction {
-	return proto.Clone(t).(*Transaction)
+	if t == nil {
+		return nil
+	}
+	r := &Transaction{}
+	*r = *t
+	r.clonePtrFields()
+	return r
 }
 
 // Equal tests two transactions for equality. They are equal if they are
@@ -735,7 +753,8 @@ func (t *Transaction) Update(o *Transaction) {
 		return
 	}
 	if len(t.ID) == 0 {
-		*t = *proto.Clone(o).(*Transaction)
+		*t = *o
+		t.clonePtrFields()
 		return
 	}
 	if len(t.Key) == 0 {

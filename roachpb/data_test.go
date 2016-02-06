@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"math"
 	"math/rand"
+	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -693,5 +695,50 @@ func TestRSpanIntersect(t *testing.T) {
 func TestTransactionIDLen(t *testing.T) {
 	if l := len(nonZeroTxn.ID); l != TransactionIDLen {
 		t.Fatalf("expected %d, got %d", TransactionIDLen, l)
+	}
+}
+
+func findPtrFields(t reflect.Type, prefix string) []string {
+	if t.Kind() != reflect.Struct {
+		return nil
+	}
+	var res []string
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		switch f.Type.Kind() {
+		case reflect.Ptr:
+			res = append(res, prefix+f.Name)
+			if f.Type.Elem().Kind() == reflect.Struct {
+				res = append(res, findPtrFields(f.Type.Elem(), f.Name+".")...)
+			}
+		case reflect.Slice:
+			res = append(res, prefix+f.Name)
+			res = append(res, findPtrFields(f.Type.Elem(), f.Name+".")...)
+		case reflect.Struct:
+			res = append(res, findPtrFields(f.Type, f.Name+".")...)
+		}
+	}
+	return res
+}
+
+func TestTransactionClone(t *testing.T) {
+	// Verify that the only pointer fields in Transactions are the ones
+	// whitelisted below. If this test fails, please update both the whitelist
+	// below and Transaction.cloneFields().
+	txn := &Transaction{}
+	fields := findPtrFields(reflect.TypeOf(txn).Elem(), "")
+	sort.Strings(fields)
+
+	expFields := []string{
+		"CertainNodes.Nodes",
+		"ID",
+		"Intents",
+		"Intents.EndKey",
+		"Intents.Key",
+		"Key",
+		"LastHeartbeat",
+	}
+	if !reflect.DeepEqual(expFields, fields) {
+		t.Fatalf("%s != %s", expFields, fields)
 	}
 }

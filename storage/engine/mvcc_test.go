@@ -72,7 +72,7 @@ func createTestEngine(stopper *stop.Stopper) Engine {
 // makeTxn creates a new transaction using the specified base
 // txn and timestamp.
 func makeTxn(baseTxn *roachpb.Transaction, ts roachpb.Timestamp) *roachpb.Transaction {
-	txn := proto.Clone(baseTxn).(*roachpb.Transaction)
+	txn := baseTxn.Clone()
 	txn.Timestamp = ts
 	return txn
 }
