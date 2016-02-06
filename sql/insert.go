@@ -109,9 +109,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	}
 
 	// Replace any DEFAULT markers with the corresponding default expressions.
-	if n.Rows, pErr = p.fillDefaults(defaultExprs, cols, n); pErr != nil {
-		return nil, pErr
-	}
+	n.Rows = p.fillDefaults(defaultExprs, cols, n)
 
 	// Transform the values into a rows object. This expands SELECT statements or
 	// generates rows from the values contained within the query.
@@ -297,7 +295,7 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 }
 
 func (p *planner) fillDefaults(defaultExprs []parser.Expr,
-	cols []ColumnDescriptor, n *parser.Insert) (parser.SelectStatement, *roachpb.Error) {
+	cols []ColumnDescriptor, n *parser.Insert) parser.SelectStatement {
 	if n.DefaultValues() {
 		row := make(parser.Tuple, 0, len(cols))
 		for i := range cols {
@@ -307,7 +305,7 @@ func (p *planner) fillDefaults(defaultExprs []parser.Expr,
 			}
 			row = append(row, defaultExprs[i])
 		}
-		return parser.Values{row}, nil
+		return parser.Values{row}
 	}
 
 	switch values := n.Rows.(type) {
@@ -325,7 +323,7 @@ func (p *planner) fillDefaults(defaultExprs []parser.Expr,
 			}
 		}
 	}
-	return n.Rows, nil
+	return n.Rows
 }
 
 func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, error) {
