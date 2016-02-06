@@ -26,236 +26,380 @@ func unimplemented() {
 }
 %}
 
+%{
+type sqlBoolVal struct {
+	boolVal	bool
+}
+type sqlStrs struct {
+	strs	[]string
+}
+type sqlQname struct {
+	qname	*QualifiedName
+}
+type sqlQnames struct {
+	qnames	QualifiedNames
+}
+type sqlIndirectElem struct {
+	indirectElem	IndirectionElem
+}
+type sqlIndirect struct {
+	indirect	Indirection
+}
+type sqlStmt struct {
+	stmt	Statement
+}
+type sqlStmts struct {
+	stmts	[]Statement
+}
+type sqlSelectStmt struct {
+	selectStmt	SelectStatement
+}
+type sqlColDef struct {
+	colDef	*ColumnTableDef
+}
+type sqlConstraintDef struct {
+	constraintDef	ConstraintTableDef
+}
+type sqlTblDef struct {
+	tblDef	TableDef
+}
+type sqlTblDefs struct {
+	tblDefs	[]TableDef
+}
+type sqlColQual struct {
+	colQual	ColumnQualification
+}
+type sqlColQuals struct {
+	colQuals	[]ColumnQualification
+}
+type sqlColType struct {
+	colType	ColumnType
+}
+type sqlColTypes struct {
+	colTypes	[]ColumnType
+}
+type sqlExpr struct {
+	expr	Expr
+}
+type sqlExprs struct {
+	exprs	Exprs
+}
+type sqlSelExpr struct {
+	selExpr	SelectExpr
+}
+type sqlSelExprs struct {
+	selExprs	SelectExprs
+}
+type sqlAliasClause struct {
+	aliasClause	AliasClause
+}
+type sqlTblExpr struct {
+	tblExpr	TableExpr
+}
+type sqlTblExprs struct {
+	tblExprs	TableExprs
+}
+type sqlJoinCond struct {
+	joinCond	JoinCond
+}
+type sqlWhen struct {
+	when	*When
+}
+type sqlWhens struct {
+	whens	[]*When
+}
+type sqlUpdateExpr struct {
+	updateExpr	*UpdateExpr
+}
+type sqlUpdateExprs struct {
+	updateExprs	[]*UpdateExpr
+}
+type sqlLimit struct {
+	limit	*Limit
+}
+type sqlTargetList struct {
+	targetList	TargetList
+}
+type sqlTargetListPtr struct {
+	targetListPtr	*TargetList
+}
+type sqlPrivilegeType struct {
+	privilegeType	privilege.Kind
+}
+type sqlPrivilegeList struct {
+	privilegeList	privilege.List
+}
+type sqlOrderBy struct {
+	orderBy	OrderBy
+}
+type sqlOrders struct {
+	orders	[]*Order
+}
+type sqlOrder struct {
+	order	*Order
+}
+type sqlGroupBy struct {
+	groupBy	GroupBy
+}
+type sqlDir struct {
+	dir	Direction
+}
+type sqlAlterTableCmd struct {
+	alterTableCmd	AlterTableCmd
+}
+type sqlAlterTableCmds struct {
+	alterTableCmds	AlterTableCmds
+}
+type sqlIsoLevel struct {
+	isoLevel	IsolationLevel
+}
+type sqlUserPriority struct {
+	userPriority	UserPriority
+}
+type sqlIdxElem struct {
+	idxElem	IndexElem
+}
+type sqlIdxElems struct {
+	idxElems	IndexElemList
+}
+
+type sqlSymUnion interface {
+	sqlSymUnion()
+}
+
+func (*sqlBoolVal) sqlSymUnion() {}
+func (*sqlStrs) sqlSymUnion() {}
+func (*sqlQname) sqlSymUnion() {}
+func (*sqlQnames) sqlSymUnion() {}
+func (*sqlIndirectElem) sqlSymUnion() {}
+func (*sqlIndirect) sqlSymUnion() {}
+func (*sqlStmt) sqlSymUnion() {}
+func (*sqlStmts) sqlSymUnion() {}
+func (*sqlSelectStmt) sqlSymUnion() {}
+func (*sqlColDef) sqlSymUnion() {}
+func (*sqlConstraintDef) sqlSymUnion() {}
+func (*sqlTblDef) sqlSymUnion() {}
+func (*sqlTblDefs) sqlSymUnion() {}
+func (*sqlColQual) sqlSymUnion() {}
+func (*sqlColQuals) sqlSymUnion() {}
+func (*sqlColType) sqlSymUnion() {}
+func (*sqlColTypes) sqlSymUnion() {}
+func (*sqlExpr) sqlSymUnion() {}
+func (*sqlExprs) sqlSymUnion() {}
+func (*sqlSelExpr) sqlSymUnion() {}
+func (*sqlSelExprs) sqlSymUnion() {}
+func (*sqlAliasClause) sqlSymUnion() {}
+func (*sqlTblExpr) sqlSymUnion() {}
+func (*sqlTblExprs) sqlSymUnion() {}
+func (*sqlJoinCond) sqlSymUnion() {}
+func (*sqlWhen) sqlSymUnion() {}
+func (*sqlWhens) sqlSymUnion() {}
+func (*sqlUpdateExpr) sqlSymUnion() {}
+func (*sqlUpdateExprs) sqlSymUnion() {}
+func (*sqlLimit) sqlSymUnion() {}
+func (*sqlTargetList) sqlSymUnion() {}
+func (*sqlTargetListPtr) sqlSymUnion() {}
+func (*sqlPrivilegeType) sqlSymUnion() {}
+func (*sqlPrivilegeList) sqlSymUnion() {}
+func (*sqlOrderBy) sqlSymUnion() {}
+func (*sqlOrders) sqlSymUnion() {}
+func (*sqlOrder) sqlSymUnion() {}
+func (*sqlGroupBy) sqlSymUnion() {}
+func (*sqlDir) sqlSymUnion() {}
+func (*sqlAlterTableCmd) sqlSymUnion() {}
+func (*sqlAlterTableCmds) sqlSymUnion() {}
+func (*sqlIsoLevel) sqlSymUnion() {}
+func (*sqlUserPriority) sqlSymUnion() {}
+func (*sqlIdxElem) sqlSymUnion() {}
+func (*sqlIdxElems) sqlSymUnion() {}
+%}
+
 %union {
   id             int
   pos            int
   empty          struct{}
   ival           IntVal
-  boolVal        bool
   str            string
-  strs           []string
-  qname          *QualifiedName
-  qnames         QualifiedNames
-  indirectElem   IndirectionElem
-  indirect       Indirection
-  stmt           Statement
-  stmts          []Statement
-  selectStmt     SelectStatement
-  colDef         *ColumnTableDef
-  constraintDef  ConstraintTableDef
-  tblDef         TableDef
-  tblDefs        []TableDef
-  colQual        ColumnQualification
-  colQuals       []ColumnQualification
-  colType        ColumnType
-  colTypes       []ColumnType
-  expr           Expr
-  exprs          Exprs
-  selExpr        SelectExpr
-  selExprs       SelectExprs
-  aliasClause    AliasClause
-  tblExpr        TableExpr
-  tblExprs       TableExprs
-  joinCond       JoinCond
-  when           *When
-  whens          []*When
-  updateExpr     *UpdateExpr
-  updateExprs    []*UpdateExpr
-  limit          *Limit
-  targetList     TargetList
-  targetListPtr  *TargetList
-  privilegeType  privilege.Kind
-  privilegeList  privilege.List
-  orderBy        OrderBy
-  orders         []*Order
-  order          *Order
-  groupBy        GroupBy
-  dir            Direction
-  alterTableCmd  AlterTableCmd
-  alterTableCmds AlterTableCmds
-  isoLevel       IsolationLevel
-  userPriority   UserPriority
-  idxElem        IndexElem
-  idxElems       IndexElemList
+  union          sqlSymUnion
 }
 
-%type <stmts> stmt_block
-%type <stmts> stmt_list
-%type <stmt> stmt
+%type <union> /* <sqlStmts> */ stmt_block
+%type <union> /* <sqlStmts> */ stmt_list
+%type <union> /* <sqlStmt> */ stmt
 
-%type <stmt> alter_table_stmt
-%type <stmt> create_stmt
-%type <stmt> create_database_stmt
-%type <stmt> create_index_stmt
-%type <stmt> create_table_stmt
-%type <stmt> delete_stmt
-%type <stmt> drop_stmt
-%type <stmt> explain_stmt
-%type <stmt> explainable_stmt
-%type <stmt> grant_stmt
-%type <stmt> insert_stmt
-%type <stmt> preparable_stmt
-%type <stmt> rename_stmt
-%type <stmt> revoke_stmt
-%type <selectStmt> select_stmt
-%type <stmt> set_stmt
-%type <stmt> show_stmt
-%type <stmt> transaction_stmt
-%type <stmt> truncate_stmt
-%type <stmt> update_stmt
+%type <union> /* <sqlStmt> */ alter_table_stmt
+%type <union> /* <sqlStmt> */ create_stmt
+%type <union> /* <sqlStmt> */ create_database_stmt
+%type <union> /* <sqlStmt> */ create_index_stmt
+%type <union> /* <sqlStmt> */ create_table_stmt
+%type <union> /* <sqlStmt> */ delete_stmt
+%type <union> /* <sqlStmt> */ drop_stmt
+%type <union> /* <sqlStmt> */ explain_stmt
+%type <union> /* <sqlStmt> */ explainable_stmt
+%type <union> /* <sqlStmt> */ grant_stmt
+%type <union> /* <sqlStmt> */ insert_stmt
+%type <union> /* <sqlStmt> */ preparable_stmt
+%type <union> /* <sqlStmt> */ rename_stmt
+%type <union> /* <sqlStmt> */ revoke_stmt
+%type <union> /* <sqlSelectStmt> */ select_stmt
+%type <union> /* <sqlStmt> */ set_stmt
+%type <union> /* <sqlStmt> */ show_stmt
+%type <union> /* <sqlStmt> */ transaction_stmt
+%type <union> /* <sqlStmt> */ truncate_stmt
+%type <union> /* <sqlStmt> */ update_stmt
 
-%type <selectStmt> select_no_parens select_with_parens select_clause
-%type <selectStmt> simple_select values_clause
+%type <union> /* <sqlSelectStmt> */ select_no_parens select_with_parens select_clause
+%type <union> /* <sqlSelectStmt> */ simple_select values_clause
 
 %type <empty> alter_column_default alter_using
-%type <dir> opt_asc_desc
+%type <union> /* <sqlDir> */ opt_asc_desc
 
-%type <alterTableCmd> alter_table_cmd
-%type <alterTableCmds> alter_table_cmds
+%type <union> /* <sqlAlterTableCmd> */ alter_table_cmd
+%type <union> /* <sqlAlterTableCmds> */ alter_table_cmds
 
 %type <empty> opt_collate_clause
 
 %type <empty> opt_drop_behavior
 
-%type <isoLevel> transaction_iso_level
-%type <userPriority>  transaction_user_priority
+%type <union> /* <sqlIsoLevel> */ transaction_iso_level
+%type <union> /* <sqlUserPriority> */  transaction_user_priority
 
 %type <str>   name opt_name
 
 // %type <empty> subquery_op
-%type <qname> func_name
+%type <union> /* <sqlQname> */ func_name
 %type <empty> opt_collate
 
-%type <qname> qualified_name
-%type <qname> indirect_name_or_glob
-%type <qname> insert_target
+%type <union> /* <sqlQname> */ qualified_name
+%type <union> /* <sqlQname> */ indirect_name_or_glob
+%type <union> /* <sqlQname> */ insert_target
 
 // %type <empty> math_op
 
-%type <isoLevel> iso_level
-%type <userPriority> user_priority
+%type <union> /* <sqlIsoLevel> */ iso_level
+%type <union> /* <sqlUserPriority> */ user_priority
 %type <empty> opt_encoding
 
-%type <tblDefs> opt_table_elem_list table_elem_list
+%type <union> /* <sqlTblDefs> */ opt_table_elem_list table_elem_list
 %type <empty> opt_all_clause
-%type <boolVal> distinct_clause
-%type <strs> opt_column_list
-%type <orderBy> sort_clause opt_sort_clause
-%type <orders> sortby_list
-%type <idxElems> index_params
-%type <strs> name_list opt_name_list
+%type <union> /* <sqlBoolVal> */ distinct_clause
+%type <union> /* <sqlStrs> */ opt_column_list
+%type <union> /* <sqlOrderBy> */ sort_clause opt_sort_clause
+%type <union> /* <sqlOrders> */ sortby_list
+%type <union> /* <sqlIdxElems> */ index_params
+%type <union> /* <sqlStrs> */ name_list opt_name_list
 %type <empty> opt_array_bounds
-%type <tblExprs> from_clause from_list
-%type <qnames> qualified_name_list
-%type <qnames> indirect_name_or_glob_list
-%type <qname> any_name
-%type <qnames> any_name_list
-%type <exprs> expr_list
-%type <indirect> attrs
-%type <selExprs> target_list opt_target_list
-%type <updateExprs> set_clause_list
-%type <updateExpr> set_clause multiple_set_clause
-%type <indirect> indirection
-%type <exprs> ctext_expr_list ctext_row
-%type <groupBy> group_clause
-%type <limit> select_limit
-%type <qnames> relation_expr_list
+%type <union> /* <sqlTblExprs> */ from_clause from_list
+%type <union> /* <sqlQnames> */ qualified_name_list
+%type <union> /* <sqlQnames> */ indirect_name_or_glob_list
+%type <union> /* <sqlQname> */ any_name
+%type <union> /* <sqlQnames> */ any_name_list
+%type <union> /* <sqlExprs> */ expr_list
+%type <union> /* <sqlIndirect> */ attrs
+%type <union> /* <sqlSelExprs> */ target_list opt_target_list
+%type <union> /* <sqlUpdateExprs> */ set_clause_list
+%type <union> /* <sqlUpdateExpr> */ set_clause multiple_set_clause
+%type <union> /* <sqlIndirect> */ indirection
+%type <union> /* <sqlExprs> */ ctext_expr_list ctext_row
+%type <union> /* <sqlGroupBy> */ group_clause
+%type <union> /* <sqlLimit> */ select_limit
+%type <union> /* <sqlQnames> */ relation_expr_list
 
-%type <boolVal> all_or_distinct
+%type <union> /* <sqlBoolVal> */ all_or_distinct
 %type <empty> join_outer
-%type <joinCond> join_qual
+%type <union> /* <sqlJoinCond> */ join_qual
 %type <str> join_type
 
-%type <exprs> extract_list
-%type <exprs> overlay_list
-%type <exprs> position_list
-%type <exprs> substr_list
-%type <exprs> trim_list
+%type <union> /* <sqlExprs> */ extract_list
+%type <union> /* <sqlExprs> */ overlay_list
+%type <union> /* <sqlExprs> */ position_list
+%type <union> /* <sqlExprs> */ substr_list
+%type <union> /* <sqlExprs> */ trim_list
 %type <empty> opt_interval interval_second
-%type <expr> overlay_placing
+%type <union> /* <sqlExpr> */ overlay_placing
 
-%type <boolVal> opt_unique opt_column
+%type <union> /* <sqlBoolVal> */ opt_unique opt_column
 
 %type <empty> opt_set_data
 
-%type <limit> limit_clause offset_clause
-%type <expr>  select_limit_value
+%type <union> /* <sqlLimit> */ limit_clause offset_clause
+%type <union> /* <sqlExpr> */  select_limit_value
 // %type <empty> opt_select_fetch_first_value
 %type <empty> row_or_rows
 // %type <empty> first_or_next
 
-%type <stmt>  insert_rest
+%type <union> /* <sqlStmt> */  insert_rest
 %type <empty> opt_conf_expr
 %type <empty> opt_on_conflict
 
-%type <stmt>  generic_set set_rest set_rest_more transaction_mode_list opt_transaction_mode_list
+%type <union> /* <sqlStmt> */  generic_set set_rest set_rest_more transaction_mode_list opt_transaction_mode_list
 
-%type <strs> opt_storing
-%type <colDef> column_def
-%type <tblDef> table_elem
-%type <expr>  where_clause
-%type <indirectElem> glob_indirection
-%type <indirectElem> name_indirection
-%type <indirectElem> indirection_elem
-%type <expr>  a_expr b_expr c_expr a_expr_const
-%type <expr>  substr_from substr_for
-%type <expr>  in_expr
-%type <expr>  having_clause
-%type <expr>  array_expr
-%type <colTypes> type_list
-%type <exprs> array_expr_list
-%type <expr>  row explicit_row implicit_row
-%type <expr>  case_expr case_arg case_default
-%type <when>  when_clause
-%type <whens> when_clause_list
+%type <union> /* <sqlStrs> */ opt_storing
+%type <union> /* <sqlColDef> */ column_def
+%type <union> /* <sqlTblDef> */ table_elem
+%type <union> /* <sqlExpr> */  where_clause
+%type <union> /* <sqlIndirectElem> */ glob_indirection
+%type <union> /* <sqlIndirectElem> */ name_indirection
+%type <union> /* <sqlIndirectElem> */ indirection_elem
+%type <union> /* <sqlExpr> */  a_expr b_expr c_expr a_expr_const
+%type <union> /* <sqlExpr> */  substr_from substr_for
+%type <union> /* <sqlExpr> */  in_expr
+%type <union> /* <sqlExpr> */  having_clause
+%type <union> /* <sqlExpr> */  array_expr
+%type <union> /* <sqlColTypes> */ type_list
+%type <union> /* <sqlExprs> */ array_expr_list
+%type <union> /* <sqlExpr> */  row explicit_row implicit_row
+%type <union> /* <sqlExpr> */  case_expr case_arg case_default
+%type <union> /* <sqlWhen> */  when_clause
+%type <union> /* <sqlWhens> */ when_clause_list
 // %type <empty> sub_type
-%type <expr> ctext_expr
-%type <expr> numeric_only
-%type <aliasClause> alias_clause opt_alias_clause
-%type <order> sortby
-%type <idxElem> index_elem
-%type <tblExpr> table_ref
-%type <tblExpr> joined_table
-%type <qname> relation_expr
-%type <tblExpr> relation_expr_opt_alias
-%type <selExpr> target_elem
-%type <updateExpr> single_set_clause
+%type <union> /* <sqlExpr> */ ctext_expr
+%type <union> /* <sqlExpr> */ numeric_only
+%type <union> /* <sqlAliasClause> */ alias_clause opt_alias_clause
+%type <union> /* <sqlOrder> */ sortby
+%type <union> /* <sqlIdxElem> */ index_elem
+%type <union> /* <sqlTblExpr> */ table_ref
+%type <union> /* <sqlTblExpr> */ joined_table
+%type <union> /* <sqlQname> */ relation_expr
+%type <union> /* <sqlTblExpr> */ relation_expr_opt_alias
+%type <union> /* <sqlSelExpr> */ target_elem
+%type <union> /* <sqlUpdateExpr> */ single_set_clause
 
 %type <str> explain_option_name
-%type <strs> explain_option_list
+%type <union> /* <sqlStrs> */ explain_option_list
 
-%type <colType> typename simple_typename const_typename
-%type <colType> numeric opt_numeric_modifiers
+%type <union> /* <sqlColType> */ typename simple_typename const_typename
+%type <union> /* <sqlColType> */ numeric opt_numeric_modifiers
 %type <ival> opt_float
-%type <colType> character const_character
-%type <colType> character_with_length character_without_length
-%type <colType> const_datetime const_interval
-%type <colType> bit const_bit bit_with_length bit_without_length
-%type <colType> character_base
+%type <union> /* <sqlColType> */ character const_character
+%type <union> /* <sqlColType> */ character_with_length character_without_length
+%type <union> /* <sqlColType> */ const_datetime const_interval
+%type <union> /* <sqlColType> */ bit const_bit bit_with_length bit_without_length
+%type <union> /* <sqlColType> */ character_base
 %type <str> extract_arg
 %type <empty> opt_varying
 
 %type <ival>  signed_iconst
-%type <expr>  opt_boolean_or_string
-%type <exprs> var_list
-%type <qname> opt_from_var_name_clause var_name
+%type <union> /* <sqlExpr> */  opt_boolean_or_string
+%type <union> /* <sqlExprs> */ var_list
+%type <union> /* <sqlQname> */ opt_from_var_name_clause var_name
 %type <str>   col_label type_function_name
 %type <str>   non_reserved_word
-%type <expr>  non_reserved_word_or_sconst
-%type <expr>  var_value
-%type <expr>  zone_value
+%type <union> /* <sqlExpr> */  non_reserved_word_or_sconst
+%type <union> /* <sqlExpr> */  var_value
+%type <union> /* <sqlExpr> */  zone_value
 
 %type <str>   unreserved_keyword type_func_name_keyword
 %type <str>   col_name_keyword reserved_keyword
 
-%type <constraintDef> table_constraint constraint_elem
-%type <tblDef> index_def
-%type <colQuals> col_qual_list
-%type <colQual> col_qualification col_qualification_elem
+%type <union> /* <sqlConstraintDef> */ table_constraint constraint_elem
+%type <union> /* <sqlTblDef> */ index_def
+%type <union> /* <sqlColQuals> */ col_qual_list
+%type <union> /* <sqlColQual> */ col_qualification col_qualification_elem
 %type <empty> key_actions key_delete key_match key_update key_action
 
-%type <expr>  func_application func_expr_common_subexpr
-%type <expr>  func_expr func_expr_windowless
+%type <union> /* <sqlExpr> */  func_application func_expr_common_subexpr
+%type <union> /* <sqlExpr> */  func_expr func_expr_windowless
 %type <empty> common_table_expr
 %type <empty> with_clause opt_with_clause
 %type <empty> cte_list
@@ -267,11 +411,11 @@ func unimplemented() {
 %type <empty> opt_frame_clause frame_extent frame_bound
 %type <empty> opt_existing_window_name
 
-%type <targetList>    privilege_target
-%type <targetListPtr> on_privilege_target_clause
-%type <strs>          grantee_list for_grantee_clause
-%type <privilegeList> privileges privilege_list
-%type <privilegeType> privilege
+%type <union> /* <sqlTargetList> */    privilege_target
+%type <union> /* <sqlTargetListPtr> */ on_privilege_target_clause
+%type <union> /* <sqlStrs> */          grantee_list for_grantee_clause
+%type <union> /* <sqlPrivilegeList> */ privileges privilege_list
+%type <union> /* <sqlPrivilegeType> */ privilege
 
 // Non-keyword token types. These are hard-wired into the "flex" lexer. They
 // must be listed first so that their numeric codes do not depend on the set of
@@ -450,22 +594,24 @@ func unimplemented() {
 stmt_block:
   stmt_list
   {
-    sqllex.(*scanner).stmts = $1
+    sqllex.(*scanner).stmts = $1.(*sqlStmts).stmts
   }
 
 stmt_list:
   stmt_list ';' stmt
   {
-    if $3 != nil {
-      $$ = append($1, $3)
+    if $3.(*sqlStmt).stmt != nil {
+      $1.(*sqlStmts).stmts = append($1.(*sqlStmts).stmts, $3.(*sqlStmt).stmt)
+
+      $$ = $1
     }
   }
 | stmt
   {
-    if $1 != nil {
-      $$ = []Statement{$1}
+    if $1.(*sqlStmt).stmt != nil {
+      $$ = &sqlStmts{[]Statement{$1.(*sqlStmt).stmt}}
     } else {
-      $$ = nil
+      $$ = &sqlStmts{nil}
     }
   }
 
@@ -481,7 +627,7 @@ stmt:
 | revoke_stmt
 | select_stmt
   {
-    $$ = $1
+    $$ = &sqlStmt{$1.(*sqlSelectStmt).selectStmt}
   }
 | set_stmt
 | show_stmt
@@ -490,49 +636,50 @@ stmt:
 | update_stmt
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlStmt{nil}
   }
 
 alter_table_stmt:
   ALTER TABLE relation_expr alter_table_cmds
   {
-    $$ = &AlterTable{Table: $3, IfExists: false, Cmds: $4}
+    $$ = &sqlStmt{&AlterTable{Table: $3.(*sqlQname).qname, IfExists: false, Cmds: $4.(*sqlAlterTableCmds).alterTableCmds}}
   }
 | ALTER TABLE IF EXISTS relation_expr alter_table_cmds
   {
-    $$ = &AlterTable{Table: $5, IfExists: true, Cmds: $6}
+    $$ = &sqlStmt{&AlterTable{Table: $5.(*sqlQname).qname, IfExists: true, Cmds: $6.(*sqlAlterTableCmds).alterTableCmds}}
   }
 
 alter_table_cmds:
   alter_table_cmd
   {
-    $$ = AlterTableCmds{$1}
+    $$ = &sqlAlterTableCmds{AlterTableCmds{$1.(*sqlAlterTableCmd).alterTableCmd}}
   }
 | alter_table_cmds ',' alter_table_cmd
   {
-    $$ = append($1, $3)
+    $1.(*sqlAlterTableCmds).alterTableCmds = append($1.(*sqlAlterTableCmds).alterTableCmds, $3.(*sqlAlterTableCmd).alterTableCmd)
+    $$ = $1
   }
 
 alter_table_cmd:
   // ALTER TABLE <name> ADD <coldef>
   ADD column_def
   {
-    $$ = &AlterTableAddColumn{columnKeyword: false, IfNotExists: false, ColumnDef: $2}
+    $$ = &sqlAlterTableCmd{&AlterTableAddColumn{columnKeyword: false, IfNotExists: false, ColumnDef: $2.(*sqlColDef).colDef}}
   }
   // ALTER TABLE <name> ADD IF NOT EXISTS <coldef>
 | ADD IF NOT EXISTS column_def
   {
-    $$ = &AlterTableAddColumn{columnKeyword: false, IfNotExists: true, ColumnDef: $5}
+    $$ = &sqlAlterTableCmd{&AlterTableAddColumn{columnKeyword: false, IfNotExists: true, ColumnDef: $5.(*sqlColDef).colDef}}
   }
   // ALTER TABLE <name> ADD COLUMN <coldef>
 | ADD COLUMN column_def
   {
-    $$ = &AlterTableAddColumn{columnKeyword: true, IfNotExists: false, ColumnDef: $3}
+    $$ = &sqlAlterTableCmd{&AlterTableAddColumn{columnKeyword: true, IfNotExists: false, ColumnDef: $3.(*sqlColDef).colDef}}
   }
   // ALTER TABLE <name> ADD COLUMN IF NOT EXISTS <coldef>
 | ADD COLUMN IF NOT EXISTS column_def
   {
-    $$ = &AlterTableAddColumn{columnKeyword: true, IfNotExists: true, ColumnDef: $6}
+    $$ = &sqlAlterTableCmd{&AlterTableAddColumn{columnKeyword: true, IfNotExists: true, ColumnDef: $6.(*sqlColDef).colDef}}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> {SET DEFAULT <expr>|DROP DEFAULT}
 | ALTER opt_column name alter_column_default { unimplemented() }
@@ -543,12 +690,12 @@ alter_table_cmd:
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
 | DROP opt_column IF EXISTS name opt_drop_behavior
   {
-    $$ = &AlterTableDropColumn{columnKeyword: $2, IfExists: true, Column: $5}
+    $$ = &sqlAlterTableCmd{&AlterTableDropColumn{columnKeyword: $2.(*sqlBoolVal).boolVal, IfExists: true, Column: $5}}
   }
   // ALTER TABLE <name> DROP [COLUMN] <colname> [RESTRICT|CASCADE]
 | DROP opt_column name opt_drop_behavior
   {
-    $$ = &AlterTableDropColumn{columnKeyword: $2, IfExists: false, Column: $3}
+    $$ = &sqlAlterTableCmd{&AlterTableDropColumn{columnKeyword: $2.(*sqlBoolVal).boolVal, IfExists: false, Column: $3}}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> [SET DATA] TYPE <typename>
   //     [ USING <expression> ]
@@ -556,7 +703,7 @@ alter_table_cmd:
   // ALTER TABLE <name> ADD CONSTRAINT ...
 | ADD table_constraint
   {
-    $$ = &AlterTableAddConstraint{ConstraintDef: $2}
+    $$ = &sqlAlterTableCmd{&AlterTableAddConstraint{ConstraintDef: $2.(*sqlConstraintDef).constraintDef}}
   }
   // ALTER TABLE <name> ALTER CONSTRAINT ...
 | ALTER CONSTRAINT name { unimplemented() }
@@ -565,12 +712,12 @@ alter_table_cmd:
   // ALTER TABLE <name> DROP CONSTRAINT IF EXISTS <name> [RESTRICT|CASCADE]
 | DROP CONSTRAINT IF EXISTS name opt_drop_behavior
   {
-    $$ = &AlterTableDropConstraint{IfExists: true, Constraint: $5}
+    $$ = &sqlAlterTableCmd{&AlterTableDropConstraint{IfExists: true, Constraint: $5}}
   }
   // ALTER TABLE <name> DROP CONSTRAINT <name> [RESTRICT|CASCADE]
 | DROP CONSTRAINT name opt_drop_behavior
   {
-    $$ = &AlterTableDropConstraint{IfExists: false, Constraint: $3}
+    $$ = &sqlAlterTableCmd{&AlterTableDropConstraint{IfExists: false, Constraint: $3}}
   }
 
 alter_column_default:
@@ -600,81 +747,83 @@ create_stmt:
 delete_stmt:
   opt_with_clause DELETE FROM relation_expr_opt_alias where_clause
   {
-    $$ = &Delete{Table: $4, Where: newWhere(astWhere, $5)}
+    $$ = &sqlStmt{&Delete{Table: $4.(*sqlTblExpr).tblExpr, Where: newWhere(astWhere, $5.(*sqlExpr).expr)}}
   }
 
 // DROP itemtype [ IF EXISTS ] itemname [, itemname ...] [ RESTRICT | CASCADE ]
 drop_stmt:
   DROP DATABASE name
   {
-    $$ = &DropDatabase{Name: Name($3), IfExists: false}
+    $$ = &sqlStmt{&DropDatabase{Name: Name($3), IfExists: false}}
   }
 | DROP DATABASE IF EXISTS name
   {
-    $$ = &DropDatabase{Name: Name($5), IfExists: true}
+    $$ = &sqlStmt{&DropDatabase{Name: Name($5), IfExists: true}}
   }
 | DROP INDEX qualified_name_list opt_drop_behavior
   {
-    $$ = &DropIndex{Names: $3, IfExists: false}
+    $$ = &sqlStmt{&DropIndex{Names: $3.(*sqlQnames).qnames, IfExists: false}}
   }
 | DROP INDEX IF EXISTS qualified_name_list opt_drop_behavior
   {
-    $$ = &DropIndex{Names: $5, IfExists: true}
+    $$ = &sqlStmt{&DropIndex{Names: $5.(*sqlQnames).qnames, IfExists: true}}
   }
 | DROP TABLE any_name_list
   {
-    $$ = &DropTable{Names: $3, IfExists: false}
+    $$ = &sqlStmt{&DropTable{Names: $3.(*sqlQnames).qnames, IfExists: false}}
   }
 | DROP TABLE IF EXISTS any_name_list
   {
-    $$ = &DropTable{Names: $5, IfExists: true}
+    $$ = &sqlStmt{&DropTable{Names: $5.(*sqlQnames).qnames, IfExists: true}}
   }
 
 any_name_list:
   any_name
   {
-    $$ = QualifiedNames{$1}
+    $$ = &sqlQnames{QualifiedNames{$1.(*sqlQname).qname}}
   }
 | any_name_list ',' any_name
   {
-    $$ = append($1, $3)
+    $1.(*sqlQnames).qnames = append($1.(*sqlQnames).qnames, $3.(*sqlQname).qname)
+    $$ = $1
   }
 
 any_name:
   name
   {
-    $$ = &QualifiedName{Base: Name($1)}
+    $$ = &sqlQname{&QualifiedName{Base: Name($1)}}
   }
 | name attrs
   {
-    $$ = &QualifiedName{Base: Name($1), Indirect: $2}
+    $$ = &sqlQname{&QualifiedName{Base: Name($1), Indirect: $2.(*sqlIndirect).indirect}}
   }
 
 attrs:
   '.' col_label
   {
-    $$ = Indirection{NameIndirection($2)}
+    $$ = &sqlIndirect{Indirection{NameIndirection($2)}}
   }
 | attrs '.' col_label
   {
-    $$ = append($1, NameIndirection($3))
+    $1.(*sqlIndirect).indirect = append($1.(*sqlIndirect).indirect, NameIndirection($3))
+    $$ = $1
   }
 
 // EXPLAIN (options) query
 explain_stmt:
   EXPLAIN explainable_stmt
   {
-    $$ = &Explain{Statement: $2}
+    $$ = &sqlStmt{&Explain{Statement: $2.(*sqlStmt).stmt}}
   }
 | EXPLAIN '(' explain_option_list ')' explainable_stmt
   {
-    $$ = &Explain{Options: $3, Statement: $5}
+    $$ = &sqlStmt{&Explain{Options: $3.(*sqlStrs).strs, Statement: $5.(*sqlStmt).stmt}}
   }
 
 explainable_stmt:
   select_stmt
   {
-    $$ = $1
+    $$ = &sqlStmt{$1.(*sqlSelectStmt).selectStmt}
   }
 | insert_stmt
 | update_stmt
@@ -683,11 +832,12 @@ explainable_stmt:
 explain_option_list:
   explain_option_name
   {
-    $$ = []string{$1}
+    $$ = &sqlStrs{[]string{$1}}
   }
 | explain_option_list ',' explain_option_name
   {
-    $$ = append($1, $3)
+    $1.(*sqlStrs).strs = append($1.(*sqlStrs).strs, $3)
+    $$ = $1
   }
 
 explain_option_name:
@@ -697,14 +847,14 @@ explain_option_name:
 grant_stmt:
   GRANT privileges ON privilege_target TO grantee_list
   {
-    $$ = &Grant{Privileges: $2, Grantees: NameList($6), Targets: $4}
+    $$ = &sqlStmt{&Grant{Privileges: $2.(*sqlPrivilegeList).privilegeList, Grantees: NameList($6.(*sqlStrs).strs), Targets: $4.(*sqlTargetList).targetList}}
   }
 
 // REVOKE privileges ON privilege_target FROM grantee_list
 revoke_stmt:
   REVOKE privileges ON privilege_target FROM grantee_list
   {
-    $$ = &Revoke{Privileges: $2, Grantees: NameList($6), Targets: $4}
+    $$ = &sqlStmt{&Revoke{Privileges: $2.(*sqlPrivilegeList).privilegeList, Grantees: NameList($6.(*sqlStrs).strs), Targets: $4.(*sqlTargetList).targetList}}
   }
 
 
@@ -712,64 +862,65 @@ privilege_target:
   indirect_name_or_glob_list
   {
     // Unless "DATABASE" is specified, "TABLE" is the default.
-    $$ = TargetList{Tables: QualifiedNames($1)}
+    $$ = &sqlTargetList{TargetList{Tables: QualifiedNames($1.(*sqlQnames).qnames)}}
   }
 | TABLE indirect_name_or_glob_list
   {
-    $$ = TargetList{Tables: QualifiedNames($2)}
+    $$ = &sqlTargetList{TargetList{Tables: QualifiedNames($2.(*sqlQnames).qnames)}}
   }
 |  DATABASE name_list
   {
-    $$ = TargetList{Databases: NameList($2)}
+    $$ = &sqlTargetList{TargetList{Databases: NameList($2.(*sqlStrs).strs)}}
   }
 
 // ALL is always by itself.
 privileges:
   ALL
   {
-    $$ = privilege.List{privilege.ALL}
+    $$ = &sqlPrivilegeList{privilege.List{privilege.ALL}}
   }
-  | privilege_list { }
+| privilege_list { }
 
 privilege_list:
   privilege
   {
-    $$ = privilege.List{$1}
+    $$ = &sqlPrivilegeList{privilege.List{$1.(*sqlPrivilegeType).privilegeType}}
   }
-  | privilege_list ',' privilege
+| privilege_list ',' privilege
   {
-    $$ = append($1, $3)
+    $1.(*sqlPrivilegeList).privilegeList = append($1.(*sqlPrivilegeList).privilegeList, $3.(*sqlPrivilegeType).privilegeType)
+    $$ = $1
   }
 
 // This list must match the list of privileges in sql/privilege/privilege.go.
 privilege:
   CREATE
   {
-    $$ = privilege.CREATE
+    $$ = &sqlPrivilegeType{privilege.CREATE}
   }
 | DROP
   {
-    $$ = privilege.DROP
+    $$ = &sqlPrivilegeType{privilege.DROP}
   }
 | GRANT
   {
-    $$ = privilege.GRANT
+    $$ = &sqlPrivilegeType{privilege.GRANT}
   }
 | SELECT
   {
-    $$ = privilege.SELECT
+    $$ = &sqlPrivilegeType{privilege.SELECT}
   }
 | INSERT
   {
-    $$ = privilege.INSERT
+    $$ = &sqlPrivilegeType{privilege.INSERT}
   }
 | DELETE
   {
-    $$ = privilege.DELETE
+    $$ = &sqlPrivilegeType{privilege.DELETE}
   }
 | UPDATE
   {
-    $$ = privilege.UPDATE
+    $$ = &sqlPrivilegeType{privilege.UPDATE}
   }
 
 // TODO(marc): this should not be 'name', but should instead be a
@@ -777,11 +928,12 @@ privilege:
 grantee_list:
   name
   {
-    $$ = []string{$1}
+    $$ = &sqlStrs{[]string{$1}}
   }
 | grantee_list ',' name
   {
-    $$ = append($1, $3)
+    $1.(*sqlStrs).strs = append($1.(*sqlStrs).strs, $3)
+    $$ = $1
   }
 
 // SET name TO 'var_value'
@@ -810,19 +962,19 @@ set_rest:
 transaction_mode_list:
   transaction_iso_level
   {
-    $$ = &SetTransaction{Isolation: $1, UserPriority: UnspecifiedUserPriority}
+    $$ = &sqlStmt{&SetTransaction{Isolation: $1.(*sqlIsoLevel).isoLevel, UserPriority: UnspecifiedUserPriority}}
   }
 | transaction_user_priority
   {
-    $$ = &SetTransaction{Isolation: UnspecifiedIsolation, UserPriority: $1}
+    $$ = &sqlStmt{&SetTransaction{Isolation: UnspecifiedIsolation, UserPriority: $1.(*sqlUserPriority).userPriority}}
   }
 | transaction_iso_level ',' transaction_user_priority
   {
-    $$ = &SetTransaction{Isolation: $1, UserPriority: $3}
+    $$ = &sqlStmt{&SetTransaction{Isolation: $1.(*sqlIsoLevel).isoLevel, UserPriority: $3.(*sqlUserPriority).userPriority}}
   }
 | transaction_user_priority ',' transaction_iso_level
   {
-    $$ = &SetTransaction{Isolation: $3, UserPriority: $1}
+    $$ = &sqlStmt{&SetTransaction{Isolation: $3.(*sqlIsoLevel).isoLevel, UserPriority: $1.(*sqlUserPriority).userPriority}}
   }
 
 
@@ -835,19 +987,19 @@ transaction_user_priority:
 generic_set:
   var_name TO var_list
   {
-    $$ = &Set{Name: $1, Values: $3}
+    $$ = &sqlStmt{&Set{Name: $1.(*sqlQname).qname, Values: $3.(*sqlExprs).exprs}}
   }
 | var_name '=' var_list
   {
-    $$ = &Set{Name: $1, Values: $3}
+    $$ = &sqlStmt{&Set{Name: $1.(*sqlQname).qname, Values: $3.(*sqlExprs).exprs}}
   }
 | var_name TO DEFAULT
   {
-    $$ = &Set{Name: $1}
+    $$ = &sqlStmt{&Set{Name: $1.(*sqlQname).qname}}
   }
 | var_name '=' DEFAULT
   {
-    $$ = &Set{Name: $1}
+    $$ = &sqlStmt{&Set{Name: $1.(*sqlQname).qname}}
   }
 
 set_rest_more:
@@ -857,7 +1009,7 @@ set_rest_more:
   // Special syntaxes mandated by SQL standard:
 | TIME ZONE zone_value
   {
-    $$ = &SetTimeZone{Value: $3}
+    $$ = &sqlStmt{&SetTimeZone{Value: $3.(*sqlExpr).expr}}
   }
 | NAMES opt_encoding { unimplemented() }
 
@@ -867,11 +1019,12 @@ var_name:
 var_list:
   var_value
   {
-    $$ = []Expr{$1}
+    $$ = &sqlExprs{[]Expr{$1.(*sqlExpr).expr}}
   }
 | var_list ',' var_value
   {
-    $$ = append($1, $3)
+    $1.(*sqlExprs).exprs = append($1.(*sqlExprs).exprs, $3.(*sqlExpr).expr)
+    $$ = $1
   }
 
 var_value:
@@ -879,60 +1032,57 @@ var_value:
 | numeric_only
 | PARAM
   {
-    $$ = ValArg{name: $1}
+    $$ = &sqlExpr{ValArg{name: $1}}
   }
 
 iso_level:
   READ UNCOMMITTED
   {
-    // Mapped to the closest supported isolation level.
-    $$ = SnapshotIsolation
+    $$ = &sqlIsoLevel{SnapshotIsolation}
   }
 | READ COMMITTED
   {
-    // Mapped to the closest supported isolation level.
-    $$ = SnapshotIsolation
+    $$ = &sqlIsoLevel{SnapshotIsolation}
   }
 | SNAPSHOT
   {
-    $$ = SnapshotIsolation
+    $$ = &sqlIsoLevel{SnapshotIsolation}
   }
 | REPEATABLE READ
   {
-    // Mapped to the closest supported isolation level.
-    $$ = SerializableIsolation
+    $$ = &sqlIsoLevel{SerializableIsolation}
   }
 | SERIALIZABLE
   {
-    $$ = SerializableIsolation
+    $$ = &sqlIsoLevel{SerializableIsolation}
   }
 
 user_priority:
   LOW
   {
-    $$ = Low
+    $$ = &sqlUserPriority{Low}
   }
 | NORMAL
   {
-    $$ = Normal
+    $$ = &sqlUserPriority{Normal}
   }
 | HIGH
   {
-    $$ = High
+    $$ = &sqlUserPriority{High}
   }
 
 opt_boolean_or_string:
   TRUE
   {
-    $$ = DBool(true)
+    $$ = &sqlExpr{DBool(true)}
   }
 | FALSE
   {
-    $$ = DBool(false)
+    $$ = &sqlExpr{DBool(false)}
   }
 | ON
   {
-    $$ = DString($1)
+    $$ = &sqlExpr{DString($1)}
   }
   // OFF is also accepted as a boolean value, but is handled by the
   // non_reserved_word rule. The action for booleans and strings is the same,
@@ -947,17 +1097,15 @@ opt_boolean_or_string:
 zone_value:
   SCONST
   {
-    $$ = DString($1)
+    $$ = &sqlExpr{DString($1)}
   }
 | IDENT
   {
-    $$ = DString($1)
+    $$ = &sqlExpr{DString($1)}
   }
 | const_interval SCONST opt_interval
   {
-    // TODO(pmattis): support opt_interval?
-    expr := &CastExpr{Expr: DString($2), Type: $1}
-    // Use an empty EvalContext.
+    expr := &CastExpr{Expr: DString($2), Type: $1.(*sqlColType).colType}
     var ctx EvalContext
     d, err := expr.Eval(ctx)
     if err != nil {
@@ -967,16 +1115,16 @@ zone_value:
     if _, ok := d.(DInterval); !ok {
       panic("not an interval type")
     }
-    $$ = d
+    $$ = &sqlExpr{d}
   }
 | numeric_only
 | DEFAULT
   {
-    $$ = DString($1)
+    $$ = &sqlExpr{DString($1)}
   }
 | LOCAL
   {
-    $$ = DString($1)
+    $$ = &sqlExpr{DString($1)}
   }
 
 opt_encoding:
@@ -987,57 +1135,57 @@ opt_encoding:
 non_reserved_word_or_sconst:
   non_reserved_word
   {
-    $$ = DString($1)
+    $$ = &sqlExpr{DString($1)}
   }
 | SCONST
   {
-    $$ = DString($1)
+    $$ = &sqlExpr{DString($1)}
   }
 
 show_stmt:
   SHOW IDENT
   {
-    $$ = &Show{Name: $2}
+    $$ = &sqlStmt{&Show{Name: $2}}
   }
 | SHOW DATABASE
   {
-    $$ = &Show{Name: $2}
+    $$ = &sqlStmt{&Show{Name: $2}}
   }
 | SHOW COLUMNS FROM var_name
   {
-    $$ = &ShowColumns{Table: $4}
+    $$ = &sqlStmt{&ShowColumns{Table: $4.(*sqlQname).qname}}
   }
 | SHOW DATABASES
   {
-    $$ = &ShowDatabases{}
+    $$ = &sqlStmt{&ShowDatabases{}}
   }
 | SHOW GRANTS on_privilege_target_clause for_grantee_clause
   {
-    $$ = &ShowGrants{Targets: $3, Grantees: $4}
+    $$ = &sqlStmt{&ShowGrants{Targets: $3.(*sqlTargetListPtr).targetListPtr, Grantees: $4.(*sqlStrs).strs}}
   }
 | SHOW INDEX FROM var_name
   {
-    $$ = &ShowIndex{Table: $4}
+    $$ = &sqlStmt{&ShowIndex{Table: $4.(*sqlQname).qname}}
   }
 | SHOW TABLES opt_from_var_name_clause
   {
-    $$ = &ShowTables{Name: $3}
+    $$ = &sqlStmt{&ShowTables{Name: $3.(*sqlQname).qname}}
   }
 | SHOW TIME ZONE
   {
-    $$ = &Show{Name: "TIME ZONE"}
+    $$ = &sqlStmt{&Show{Name: "TIME ZONE"}}
   }
 | SHOW TRANSACTION ISOLATION LEVEL
   {
-    $$ = &Show{Name: "TRANSACTION ISOLATION LEVEL"}
+    $$ = &sqlStmt{&Show{Name: "TRANSACTION ISOLATION LEVEL"}}
   }
 | SHOW TRANSACTION PRIORITY
   {
-    $$ = &Show{Name: "TRANSACTION PRIORITY"}
+    $$ = &sqlStmt{&Show{Name: "TRANSACTION PRIORITY"}}
   }
 | SHOW ALL
   {
-    $$ = nil
+    $$ = &sqlStmt{nil}
   }
 
 opt_from_var_name_clause:
@@ -1047,18 +1195,18 @@ opt_from_var_name_clause:
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlQname{nil}
   }
 
 on_privilege_target_clause:
   ON privilege_target
   {
-    tmp := $2
-    $$ = &tmp
+    tmp := $2.(*sqlTargetList).targetList
+    $$ = &sqlTargetListPtr{&tmp}
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlTargetListPtr{nil}
   }
 
 for_grantee_clause:
@@ -1068,68 +1216,69 @@ for_grantee_clause:
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlStrs{nil}
   }
 
 // CREATE TABLE relname
 create_table_stmt:
   CREATE TABLE any_name '(' opt_table_elem_list ')'
   {
-    $$ = &CreateTable{Table: $3, IfNotExists: false, Defs: $5}
+    $$ = &sqlStmt{&CreateTable{Table: $3.(*sqlQname).qname, IfNotExists: false, Defs: $5.(*sqlTblDefs).tblDefs}}
   }
 | CREATE TABLE IF NOT EXISTS any_name '(' opt_table_elem_list ')'
   {
-    $$ = &CreateTable{Table: $6, IfNotExists: true, Defs: $8}
+    $$ = &sqlStmt{&CreateTable{Table: $6.(*sqlQname).qname, IfNotExists: true, Defs: $8.(*sqlTblDefs).tblDefs}}
   }
 
 opt_table_elem_list:
   table_elem_list
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlTblDefs{nil}
   }
 
 table_elem_list:
   table_elem
   {
-    $$ = TableDefs{$1}
+    $$ = &sqlTblDefs{TableDefs{$1.(*sqlTblDef).tblDef}}
   }
 | table_elem_list ',' table_elem
   {
-    $$ = append($1, $3)
+    $1.(*sqlTblDefs).tblDefs = append($1.(*sqlTblDefs).tblDefs, $3.(*sqlTblDef).tblDef)
+    $$ = $1
   }
 
 table_elem:
   column_def
   {
-    $$ = $1
+    $$ = &sqlTblDef{$1.(*sqlColDef).colDef}
   }
 | index_def
 | table_constraint
   {
-    $$ = $1
+    $$ = &sqlTblDef{$1.(*sqlConstraintDef).constraintDef}
   }
 
 column_def:
   name typename col_qual_list
   {
-    $$ = newColumnTableDef(Name($1), $2, $3)
+    $$ = &sqlColDef{newColumnTableDef(Name($1), $2.(*sqlColType).colType, $3.(*sqlColQuals).colQuals)}
   }
 
 col_qual_list:
   col_qual_list col_qualification
   {
-    $$ = append($1, $2)
+    $1.(*sqlColQuals).colQuals = append($1.(*sqlColQuals).colQuals, $2.(*sqlColQual).colQual)
+    $$ = $1
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlColQuals{nil}
   }
 
 col_qualification:
   CONSTRAINT name col_qualification_elem
   {
-    // TODO(pmattis): Handle constraint name.
     $$ = $3
   }
 | col_qualification_elem
@@ -1150,53 +1299,53 @@ col_qualification:
 col_qualification_elem:
   NOT NULL
   {
-    $$ = NotNullConstraint{}
+    $$ = &sqlColQual{NotNullConstraint{}}
   }
 | NULL
   {
-    $$ = NullConstraint{}
+    $$ = &sqlColQual{NullConstraint{}}
   }
 | UNIQUE
   {
-    $$ = UniqueConstraint{}
+    $$ = &sqlColQual{UniqueConstraint{}}
   }
 | PRIMARY KEY
   {
-    $$ = PrimaryKeyConstraint{}
+    $$ = &sqlColQual{PrimaryKeyConstraint{}}
   }
 | CHECK '(' a_expr ')' { unimplemented() }
 | DEFAULT b_expr
   {
-    if ContainsVars($2) {
+    if ContainsVars($2.(*sqlExpr).expr) {
       sqllex.Error("default expression contains a variable")
       return 1
     }
-    if containsSubquery($2) {
+    if containsSubquery($2.(*sqlExpr).expr) {
       sqllex.Error("default expression contains a subquery")
       return 1
     }
-    $$ = &ColumnDefault{Expr: $2}
+    $$ = &sqlColQual{&ColumnDefault{Expr: $2.(*sqlExpr).expr}}
   }
 | REFERENCES qualified_name opt_column_list key_match key_actions { unimplemented() }
 
 index_def:
   INDEX opt_name '(' index_params ')' opt_storing
   {
-    $$ = &IndexTableDef{
+    $$ = &sqlTblDef{&IndexTableDef{
       Name:    Name($2),
-      Columns: $4,
-      Storing: $6,
-    }
+      Columns: $4.(*sqlIdxElems).idxElems,
+      Storing: $6.(*sqlStrs).strs,
+    }}
   }
 | UNIQUE INDEX opt_name '(' index_params ')' opt_storing
   {
-    $$ = &UniqueConstraintTableDef{
-      IndexTableDef: IndexTableDef {
-        Name:    Name($3),
-        Columns: $5,
-        Storing: $7,
-      },
-    }
+    $$ = &sqlTblDef{&UniqueConstraintTableDef{
+	  IndexTableDef: IndexTableDef {
+	    Name:    Name($3),
+	    Columns: $5.(*sqlIdxElems).idxElems,
+	    Storing: $7.(*sqlStrs).strs,
+	  },
+	}}
   }
 
 // constraint_elem specifies constraint syntax which is not embedded into a
@@ -1206,7 +1355,7 @@ table_constraint:
   CONSTRAINT name constraint_elem
   {
     $$ = $3
-    $$.setName(Name($2))
+    $$.(*sqlConstraintDef).constraintDef.setName(Name($2))
   }
 | constraint_elem
   {
@@ -1217,21 +1366,21 @@ constraint_elem:
   CHECK '(' a_expr ')' { unimplemented() }
 | UNIQUE '(' name_list ')' opt_storing
   {
-    $$ = &UniqueConstraintTableDef{
+    $$ = &sqlConstraintDef{&UniqueConstraintTableDef{
       IndexTableDef: IndexTableDef{
-        Columns: NameListToIndexElems($3),
-        Storing: $5,
+        Columns: NameListToIndexElems($3.(*sqlStrs).strs),
+        Storing: $5.(*sqlStrs).strs,
       },
-    }
+    }}
   }
 | PRIMARY KEY '(' name_list ')'
   {
-    $$ = &UniqueConstraintTableDef{
+    $$ = &sqlConstraintDef{&UniqueConstraintTableDef{
       IndexTableDef: IndexTableDef{
-        Columns: NameListToIndexElems($4),
+        Columns: NameListToIndexElems($4.(*sqlStrs).strs),
       },
       PrimaryKey:    true,
-    }
+    }}
   }
 | FOREIGN KEY '(' name_list ')' REFERENCES qualified_name
     opt_column_list key_match key_actions { unimplemented() }
@@ -1256,7 +1405,7 @@ opt_storing:
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlStrs{nil}
   }
 
 opt_column_list:
@@ -1266,7 +1415,7 @@ opt_column_list:
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlStrs{nil}
   }
 
 key_match:
@@ -1302,66 +1451,67 @@ key_action:
 numeric_only:
   FCONST
   {
-    $$ = NumVal($1)
+    $$ = &sqlExpr{NumVal($1)}
   }
 | '-' FCONST
   {
-    $$ = NumVal("-" + $2)
+    $$ = &sqlExpr{NumVal("-" + $2)}
   }
 | signed_iconst
   {
-    $$ = DInt($1.Val)
+    $$ = &sqlExpr{DInt($1.Val)}
   }
 
 // TRUNCATE table relname1, relname2, ...
 truncate_stmt:
   TRUNCATE opt_table relation_expr_list opt_drop_behavior
   {
-    $$ = &Truncate{Tables: $3}
+    $$ = &sqlStmt{&Truncate{Tables: $3.(*sqlQnames).qnames}}
   }
 
 // CREATE INDEX
 create_index_stmt:
   CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')' opt_storing
   {
-    $$ = &CreateIndex{
+    $$ = &sqlStmt{&CreateIndex{
       Name:    Name($4),
-      Table:   $6,
-      Unique:  $2,
-      Columns: $8,
-      Storing: $10,
-    }
+      Table:   $6.(*sqlQname).qname,
+      Unique:  $2.(*sqlBoolVal).boolVal,
+      Columns: $8.(*sqlIdxElems).idxElems,
+      Storing: $10.(*sqlStrs).strs,
+    }}
   }
 | CREATE opt_unique INDEX IF NOT EXISTS name ON qualified_name '(' index_params ')' opt_storing
   {
-    $$ = &CreateIndex{
+    $$ = &sqlStmt{&CreateIndex{
       Name:        Name($7),
-      Table:       $9,
-      Unique:      $2,
+      Table:       $9.(*sqlQname).qname,
+      Unique:      $2.(*sqlBoolVal).boolVal,
       IfNotExists: true,
-      Columns:     $11,
-      Storing:     $13,
-    }
+      Columns:     $11.(*sqlIdxElems).idxElems,
+      Storing:     $13.(*sqlStrs).strs,
+    }}
   }
 
 opt_unique:
   UNIQUE
   {
-    $$ = true
+    $$ = &sqlBoolVal{true}
   }
 | /* EMPTY */
   {
-    $$ = false
+    $$ = &sqlBoolVal{false}
   }
 
 index_params:
   index_elem
   {
-    $$ = IndexElemList{$1}
+    $$ = &sqlIdxElems{IndexElemList{$1.(*sqlIdxElem).idxElem}}
   }
 | index_params ',' index_elem
   {
-    $$ = append($1, $3)
+    $1.(*sqlIdxElems).idxElems = append($1.(*sqlIdxElems).idxElems, $3.(*sqlIdxElem).idxElem)
+    $$ = $1
   }
 
 // Index attributes can be either simple column references, or arbitrary
@@ -1370,7 +1520,7 @@ index_params:
 index_elem:
   name opt_collate opt_asc_desc
   {
-    $$ = IndexElem{Column: Name($1), Direction: $3}
+    $$ = &sqlIdxElem{IndexElem{Column: Name($1), Direction: $3.(*sqlDir).dir}}
   }
 | func_expr_windowless opt_collate opt_asc_desc { unimplemented() }
 | '(' a_expr ')' opt_collate opt_asc_desc { unimplemented() }
@@ -1382,64 +1532,64 @@ opt_collate:
 opt_asc_desc:
   ASC
   {
-    $$ = Ascending
+    $$ = &sqlDir{Ascending}
   }
 | DESC
   {
-    $$ = Descending
+    $$ = &sqlDir{Descending}
   }
 | /* EMPTY */
   {
-    $$ = DefaultDirection
+    $$ = &sqlDir{DefaultDirection}
   }
 
 // ALTER THING name RENAME TO newname
 rename_stmt:
   ALTER DATABASE name RENAME TO name
   {
-    $$ = &RenameDatabase{Name: Name($3), NewName: Name($6)}
+    $$ = &sqlStmt{&RenameDatabase{Name: Name($3), NewName: Name($6)}}
   }
 | ALTER TABLE relation_expr RENAME TO qualified_name
   {
-    $$ = &RenameTable{Name: $3, NewName: $6, IfExists: false}
+    $$ = &sqlStmt{&RenameTable{Name: $3.(*sqlQname).qname, NewName: $6.(*sqlQname).qname, IfExists: false}}
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME TO qualified_name
   {
-    $$ = &RenameTable{Name: $5, NewName: $8, IfExists: true}
+    $$ = &sqlStmt{&RenameTable{Name: $5.(*sqlQname).qname, NewName: $8.(*sqlQname).qname, IfExists: true}}
   }
 | ALTER INDEX qualified_name RENAME TO name
   {
-    $$ = &RenameIndex{Name: $3, NewName: Name($6), IfExists: false}
+    $$ = &sqlStmt{&RenameIndex{Name: $3.(*sqlQname).qname, NewName: Name($6), IfExists: false}}
   }
 | ALTER INDEX IF EXISTS qualified_name RENAME TO name
   {
-    $$ = &RenameIndex{Name: $5, NewName: Name($8), IfExists: true}
+    $$ = &sqlStmt{&RenameIndex{Name: $5.(*sqlQname).qname, NewName: Name($8), IfExists: true}}
   }
 | ALTER TABLE relation_expr RENAME opt_column name TO name
   {
-    $$ = &RenameColumn{Table: $3, Name: Name($6), NewName: Name($8), IfExists: false}
+    $$ = &sqlStmt{&RenameColumn{Table: $3.(*sqlQname).qname, Name: Name($6), NewName: Name($8), IfExists: false}}
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME opt_column name TO name
   {
-    $$ = &RenameColumn{Table: $5, Name: Name($8), NewName: Name($10), IfExists: true}
+    $$ = &sqlStmt{&RenameColumn{Table: $5.(*sqlQname).qname, Name: Name($8), NewName: Name($10), IfExists: true}}
   }
 | ALTER TABLE relation_expr RENAME CONSTRAINT name TO name
   {
-    $$ = nil
+    $$ = &sqlStmt{nil}
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME CONSTRAINT name TO name
   {
-    $$ = nil
+    $$ = &sqlStmt{nil}
   }
 
 opt_column:
   COLUMN
   {
-    $$ = true
+    $$ = &sqlBoolVal{true}
   }
 | /* EMPTY */
   {
-    $$ = false
+    $$ = &sqlBoolVal{false}
   }
 
 opt_set_data:
@@ -1458,15 +1608,15 @@ transaction_stmt:
   }
 | COMMIT opt_transaction
   {
-    $$ = &CommitTransaction{}
+    $$ = &sqlStmt{&CommitTransaction{}}
   }
 | END opt_transaction
   {
-    $$ = &CommitTransaction{}
+    $$ = &sqlStmt{&CommitTransaction{}}
   }
 | ROLLBACK opt_transaction
   {
-    $$ = &RollbackTransaction{}
+    $$ = &sqlStmt{&RollbackTransaction{}}
   }
 
 opt_transaction:
@@ -1476,23 +1626,23 @@ opt_transaction:
 opt_transaction_mode_list:
   transaction_iso_level
   {
-    $$ = &BeginTransaction{Isolation: $1, UserPriority: UnspecifiedUserPriority}
+    $$ = &sqlStmt{&BeginTransaction{Isolation: $1.(*sqlIsoLevel).isoLevel, UserPriority: UnspecifiedUserPriority}}
   }
 | transaction_user_priority
   {
-    $$ = &BeginTransaction{Isolation: UnspecifiedIsolation, UserPriority: $1}
+    $$ = &sqlStmt{&BeginTransaction{Isolation: UnspecifiedIsolation, UserPriority: $1.(*sqlUserPriority).userPriority}}
   }
 | transaction_iso_level ',' transaction_user_priority
   {
-    $$ = &BeginTransaction{Isolation: $1, UserPriority: $3}
+    $$ = &sqlStmt{&BeginTransaction{Isolation: $1.(*sqlIsoLevel).isoLevel, UserPriority: $3.(*sqlUserPriority).userPriority}}
   }
 | transaction_user_priority ',' transaction_iso_level
   {
-    $$ = &BeginTransaction{Isolation: $3, UserPriority: $1}
+    $$ = &sqlStmt{&BeginTransaction{Isolation: $3.(*sqlIsoLevel).isoLevel, UserPriority: $1.(*sqlUserPriority).userPriority}}
   }
 | /* EMPTY */
   {
-    $$ = &BeginTransaction{Isolation: UnspecifiedIsolation, UserPriority: UnspecifiedUserPriority}
+    $$ = &sqlStmt{&BeginTransaction{Isolation: UnspecifiedIsolation, UserPriority: UnspecifiedUserPriority}}
   }
 
 transaction_iso_level:
@@ -1504,18 +1654,18 @@ transaction_iso_level:
 create_database_stmt:
   CREATE DATABASE name
   {
-    $$ = &CreateDatabase{Name: Name($3)}
+    $$ = &sqlStmt{&CreateDatabase{Name: Name($3)}}
   }
 | CREATE DATABASE IF NOT EXISTS name
   {
-    $$ = &CreateDatabase{IfNotExists: true, Name: Name($6)}
+    $$ = &sqlStmt{&CreateDatabase{IfNotExists: true, Name: Name($6)}}
   }
 
 insert_stmt:
   opt_with_clause INSERT INTO insert_target insert_rest opt_on_conflict
   {
     $$ = $5
-    $$.(*Insert).Table = $4
+    $$.(*sqlStmt).stmt.(*Insert).Table = $4.(*sqlQname).qname
   }
 
 // Can't easily make AS optional here, because VALUES in insert_rest would have
@@ -1530,15 +1680,15 @@ insert_target:
 insert_rest:
   select_stmt
   {
-    $$ = &Insert{Rows: $1}
+    $$ = &sqlStmt{&Insert{Rows: $1.(*sqlSelectStmt).selectStmt}}
   }
 | '(' qualified_name_list ')' select_stmt
   {
-    $$ = &Insert{Columns: $2, Rows: $4}
+    $$ = &sqlStmt{&Insert{Columns: $2.(*sqlQnames).qnames, Rows: $4.(*sqlSelectStmt).selectStmt}}
   }
 | DEFAULT VALUES
   {
-    $$ = &Insert{}
+    $$ = &sqlStmt{&Insert{}}
   }
 
 // TODO(andrei): If this is ever supported, `opt_conf_expr` needs to use something different
@@ -1554,20 +1704,20 @@ opt_conf_expr:
 | /* EMPTY */ {}
 
 update_stmt:
-  opt_with_clause UPDATE relation_expr_opt_alias
-    SET set_clause_list from_clause where_clause
+  opt_with_clause UPDATE relation_expr_opt_alias SET set_clause_list from_clause where_clause
   {
-    $$ = &Update{Table: $3, Exprs: $5, Where: newWhere(astWhere, $7)}
+    $$ = &sqlStmt{&Update{Table: $3.(*sqlTblExpr).tblExpr, Exprs: $5.(*sqlUpdateExprs).updateExprs, Where: newWhere(astWhere, $7.(*sqlExpr).expr)}}
   }
 
 set_clause_list:
   set_clause
   {
-    $$ = UpdateExprs{$1}
+    $$ = &sqlUpdateExprs{UpdateExprs{$1.(*sqlUpdateExpr).updateExpr}}
   }
 | set_clause_list ',' set_clause
   {
-    $$ = append($1, $3)
+    $1.(*sqlUpdateExprs).updateExprs = append($1.(*sqlUpdateExprs).updateExprs, $3.(*sqlUpdateExpr).updateExpr)
+    $$ = $1
   }
 
 set_clause:
@@ -1577,7 +1727,7 @@ set_clause:
 single_set_clause:
   qualified_name '=' ctext_expr
   {
-    $$ = &UpdateExpr{Names: QualifiedNames{$1}, Expr: $3}
+    $$ = &sqlUpdateExpr{&UpdateExpr{Names: QualifiedNames{$1.(*sqlQname).qname}, Expr: $3.(*sqlExpr).expr}}
   }
 
 // Ideally, we'd accept any row-valued a_expr as RHS of a multiple_set_clause.
@@ -1589,11 +1739,11 @@ single_set_clause:
 multiple_set_clause:
   '(' qualified_name_list ')' '=' ctext_row
   {
-    $$ = &UpdateExpr{Tuple: true, Names: $2, Expr: Tuple($5)}
+    $$ = &sqlUpdateExpr{&UpdateExpr{Tuple: true, Names: $2.(*sqlQnames).qnames, Expr: Tuple($5.(*sqlExprs).exprs)}}
   }
 | '(' qualified_name_list ')' '=' select_with_parens
   {
-    $$ = &UpdateExpr{Tuple: true, Names: $2, Expr: &Subquery{Select: $5}}
+    $$ = &sqlUpdateExpr{&UpdateExpr{Tuple: true, Names: $2.(*sqlQnames).qnames, Expr: &Subquery{Select: $5.(*sqlSelectStmt).selectStmt}}}
   }
 
 // A complete SELECT statement looks like this.
@@ -1640,11 +1790,11 @@ select_stmt:
 select_with_parens:
   '(' select_no_parens ')'
   {
-    $$ = &ParenSelect{Select: $2}
+    $$ = &sqlSelectStmt{&ParenSelect{Select: $2.(*sqlSelectStmt).selectStmt}}
   }
 | '(' select_with_parens ')'
   {
-    $$ = &ParenSelect{Select: $2}
+    $$ = &sqlSelectStmt{&ParenSelect{Select: $2.(*sqlSelectStmt).selectStmt}}
   }
 
 // This rule parses the equivalent of the standard's <query expression>. The
@@ -1661,16 +1811,16 @@ select_no_parens:
 | select_clause sort_clause
   {
     $$ = $1
-    if s, ok := $$.(*Select); ok {
-      s.OrderBy = $2
+    if s, ok := $$.(*sqlSelectStmt).selectStmt.(*Select); ok {
+      s.OrderBy = $2.(*sqlOrderBy).orderBy
     }
   }
 | select_clause opt_sort_clause select_limit
   {
     $$ = $1
-    if s, ok := $$.(*Select); ok {
-      s.OrderBy = $2
-      s.Limit = $3
+    if s, ok := $$.(*sqlSelectStmt).selectStmt.(*Select); ok {
+      s.OrderBy = $2.(*sqlOrderBy).orderBy
+      s.Limit = $3.(*sqlLimit).limit
     }
   }
 | with_clause select_clause
@@ -1680,16 +1830,16 @@ select_no_parens:
 | with_clause select_clause sort_clause
   {
     $$ = $2
-    if s, ok := $$.(*Select); ok {
-      s.OrderBy = $3
+    if s, ok := $$.(*sqlSelectStmt).selectStmt.(*Select); ok {
+      s.OrderBy = $3.(*sqlOrderBy).orderBy
     }
   }
 | with_clause select_clause opt_sort_clause select_limit
   {
     $$ = $2
-    if s, ok := $$.(*Select); ok {
-      s.OrderBy = $3
-      s.Limit = $4
+    if s, ok := $$.(*sqlSelectStmt).selectStmt.(*Select); ok {
+      s.OrderBy = $3.(*sqlOrderBy).orderBy
+      s.Limit = $4.(*sqlLimit).limit
     }
   }
 
@@ -1720,66 +1870,62 @@ select_clause:
 // NOTE: only the leftmost component select_stmt should have INTO. However,
 // this is not checked by the grammar; parse analysis must check it.
 simple_select:
-  SELECT opt_all_clause opt_target_list
-    from_clause where_clause
-    group_clause having_clause window_clause
+  SELECT opt_all_clause opt_target_list from_clause where_clause group_clause having_clause window_clause
   {
-    $$ = &Select{
-      Exprs:   $3,
-      From:    $4,
-      Where:   newWhere(astWhere, $5),
-      GroupBy: $6,
-      Having:  newWhere(astHaving, $7),
-    }
+    $$ = &sqlSelectStmt{&Select{
+      Exprs:   $3.(*sqlSelExprs).selExprs,
+      From:    $4.(*sqlTblExprs).tblExprs,
+      Where:   newWhere(astWhere, $5.(*sqlExpr).expr),
+      GroupBy: $6.(*sqlGroupBy).groupBy,
+      Having:  newWhere(astHaving, $7.(*sqlExpr).expr),
+    }}
   }
-| SELECT distinct_clause target_list
-    from_clause where_clause
-    group_clause having_clause window_clause
+| SELECT distinct_clause target_list from_clause where_clause group_clause having_clause window_clause
   {
-    $$ = &Select{
-      Distinct: $2,
-      Exprs:    $3,
-      From:     $4,
-      Where:    newWhere(astWhere, $5),
-      GroupBy:  $6,
-      Having:   newWhere(astHaving, $7),
-    }
+    $$ = &sqlSelectStmt{&Select{
+      Distinct: $2.(*sqlBoolVal).boolVal,
+      Exprs:    $3.(*sqlSelExprs).selExprs,
+      From:     $4.(*sqlTblExprs).tblExprs,
+      Where:    newWhere(astWhere, $5.(*sqlExpr).expr),
+      GroupBy:  $6.(*sqlGroupBy).groupBy,
+      Having:   newWhere(astHaving, $7.(*sqlExpr).expr),
+    }}
   }
 | values_clause
 | TABLE relation_expr
   {
-    $$ = &Select{
+    $$ = &sqlSelectStmt{&Select{
       Exprs:       SelectExprs{starSelectExpr()},
-      From:        TableExprs{&AliasedTableExpr{Expr: $2}},
+      From:        TableExprs{&AliasedTableExpr{Expr: $2.(*sqlQname).qname}},
       tableSelect: true,
-    }
+    }}
   }
 | select_clause UNION all_or_distinct select_clause
   {
-    $$ = &Union{
+    $$ = &sqlSelectStmt{&Union{
       Type:  astUnion,
-      Left:  $1,
-      Right: $4,
-      All:   $3,
-    }
+      Left:  $1.(*sqlSelectStmt).selectStmt,
+      Right: $4.(*sqlSelectStmt).selectStmt,
+      All:   $3.(*sqlBoolVal).boolVal,
+    }}
   }
 | select_clause INTERSECT all_or_distinct select_clause
   {
-    $$ = &Union{
+    $$ = &sqlSelectStmt{&Union{
       Type:  astIntersect,
-      Left:  $1,
-      Right: $4,
-      All:   $3,
-    }
+      Left:  $1.(*sqlSelectStmt).selectStmt,
+      Right: $4.(*sqlSelectStmt).selectStmt,
+      All:   $3.(*sqlBoolVal).boolVal,
+    }}
   }
 | select_clause EXCEPT all_or_distinct select_clause
   {
-    $$ = &Union{
+    $$ = &sqlSelectStmt{&Union{
       Type:  astExcept,
-      Left:  $1,
-      Right: $4,
-      All:   $3,
-    }
+      Left:  $1.(*sqlSelectStmt).selectStmt,
+      Right: $4.(*sqlSelectStmt).selectStmt,
+      All:   $3.(*sqlBoolVal).boolVal,
+    }}
   }
 
 // SQL standard WITH clause looks like:
@@ -1805,7 +1951,7 @@ common_table_expr:
 preparable_stmt:
   select_stmt
   {
-    $$ = $1
+    $$ = &sqlStmt{$1.(*sqlSelectStmt).selectStmt}
   }
 | insert_stmt
 | update_stmt
@@ -1822,21 +1968,21 @@ opt_table:
 all_or_distinct:
   ALL
   {
-    $$ = true
+    $$ = &sqlBoolVal{true}
   }
 | DISTINCT
   {
-    $$ = false
+    $$ = &sqlBoolVal{false}
   }
 | /* EMPTY */
   {
-    $$ = false
+    $$ = &sqlBoolVal{false}
   }
 
 distinct_clause:
   DISTINCT
   {
-    $$ = true
+    $$ = &sqlBoolVal{true}
   }
 
 opt_all_clause:
@@ -1850,29 +1996,30 @@ opt_sort_clause:
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlOrderBy{nil}
   }
 
 sort_clause:
   ORDER BY sortby_list
   {
-    $$ = OrderBy($3)
+    $$ = &sqlOrderBy{OrderBy($3.(*sqlOrders).orders)}
   }
 
 sortby_list:
   sortby
   {
-    $$ = []*Order{$1}
+    $$ = &sqlOrders{[]*Order{$1.(*sqlOrder).order}}
   }
 | sortby_list ',' sortby
   {
-    $$ = append($1, $3)
+    $1.(*sqlOrders).orders = append($1.(*sqlOrders).orders, $3.(*sqlOrder).order)
+    $$ = $1
   }
 
 sortby:
   a_expr opt_asc_desc
   {
-    $$ = &Order{Expr: $1, Direction: $2}
+    $$ = &sqlOrder{&Order{Expr: $1.(*sqlExpr).expr, Direction: $2.(*sqlDir).dir}}
   }
 // TODO(pmattis): Support ordering using arbitrary math ops?
 // | a_expr USING math_op {}
@@ -1884,14 +2031,14 @@ select_limit:
       $$ = $2
     } else {
       $$ = $1
-      $$.Offset = $2.Offset
+      $$.(*sqlLimit).limit.Offset = $2.(*sqlLimit).limit.Offset
     }
   }
 | offset_clause limit_clause
   {
     $$ = $1
-    if $2 != nil {
-      $$.Count = $2.Count
+    if $2.(*sqlLimit).limit != nil {
+      $$.(*sqlLimit).limit.Count = $2.(*sqlLimit).limit.Count
     }
   }
 | limit_clause
@@ -1900,10 +2047,10 @@ select_limit:
 limit_clause:
   LIMIT select_limit_value
   {
-    if $2 == nil {
-      $$ = nil
+    if $2.(*sqlExpr).expr == nil {
+      $$ = &sqlLimit{nil}
     } else {
-      $$ = &Limit{Count: $2}
+      $$ = &sqlLimit{&Limit{Count: $2.(*sqlExpr).expr}}
     }
   }
 // SQL:2008 syntax
@@ -1913,21 +2060,21 @@ limit_clause:
 offset_clause:
   OFFSET a_expr
   {
-    $$ = &Limit{Offset: $2}
+    $$ = &sqlLimit{&Limit{Offset: $2.(*sqlExpr).expr}}
   }
   // SQL:2008 syntax
   // The trailing ROW/ROWS in this case prevent the full expression
   // syntax. c_expr is the best we can do.
 | OFFSET c_expr row_or_rows
   {
-    $$ = &Limit{Offset: $2}
+    $$ = &sqlLimit{&Limit{Offset: $2.(*sqlExpr).expr}}
   }
 
 select_limit_value:
   a_expr
 | ALL
   {
-    $$ = nil
+    $$ = &sqlExpr{nil}
   }
 
 // Allowing full expressions without parentheses causes various parsing
@@ -1968,11 +2115,11 @@ row_or_rows:
 group_clause:
   GROUP BY expr_list
   {
-    $$ = GroupBy($3)
+    $$ = &sqlGroupBy{GroupBy($3.(*sqlExprs).exprs)}
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlGroupBy{nil}
   }
 
 having_clause:
@@ -1982,17 +2129,18 @@ having_clause:
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlExpr{nil}
   }
 
 values_clause:
   VALUES ctext_row
   {
-    $$ = Values{Tuple($2)}
+    $$ = &sqlSelectStmt{Values{Tuple($2.(*sqlExprs).exprs)}}
   }
 | values_clause ',' ctext_row
   {
-    $$ = append($1.(Values), Tuple($3))
+    $1.(*sqlSelectStmt).selectStmt = append($1.(*sqlSelectStmt).selectStmt.(Values), Tuple($3.(*sqlExprs).exprs))
+    $$ = $1
   }
 
 // clauses common to all optimizable statements:
@@ -2006,28 +2154,29 @@ from_clause:
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlTblExprs{nil}
   }
 
 from_list:
   table_ref
   {
-    $$ = TableExprs{$1}
+    $$ = &sqlTblExprs{TableExprs{$1.(*sqlTblExpr).tblExpr}}
   }
 | from_list ',' table_ref
   {
-    $$ = append($1, $3)
+    $1.(*sqlTblExprs).tblExprs = append($1.(*sqlTblExprs).tblExprs, $3.(*sqlTblExpr).tblExpr)
+    $$ = $1
   }
 
 // table_ref is where an alias clause can be attached.
 table_ref:
   relation_expr opt_alias_clause
   {
-    $$ = &AliasedTableExpr{Expr: $1, As: $2}
+    $$ = &sqlTblExpr{&AliasedTableExpr{Expr: $1.(*sqlQname).qname, As: $2.(*sqlAliasClause).aliasClause}}
   }
 | select_with_parens opt_alias_clause
   {
-    $$ = &AliasedTableExpr{Expr: &Subquery{Select: $1}, As: $2}
+    $$ = &sqlTblExpr{&AliasedTableExpr{Expr: &Subquery{Select: $1.(*sqlSelectStmt).selectStmt}, As: $2.(*sqlAliasClause).aliasClause}}
   }
 | joined_table
 | '(' joined_table ')' alias_clause { unimplemented() }
@@ -2049,52 +2198,52 @@ table_ref:
 joined_table:
   '(' joined_table ')'
   {
-    $$ = &ParenTableExpr{Expr: $2}
+    $$ = &sqlTblExpr{&ParenTableExpr{Expr: $2.(*sqlTblExpr).tblExpr}}
   }
 | table_ref CROSS JOIN table_ref
   {
-    $$ = &JoinTableExpr{Join: astCrossJoin, Left: $1, Right: $4}
+    $$ = &sqlTblExpr{&JoinTableExpr{Join: astCrossJoin, Left: $1.(*sqlTblExpr).tblExpr, Right: $4.(*sqlTblExpr).tblExpr}}
   }
 | table_ref join_type JOIN table_ref join_qual
   {
-    $$ = &JoinTableExpr{Join: $2, Left: $1, Right: $4, Cond: $5}
+    $$ = &sqlTblExpr{&JoinTableExpr{Join: $2, Left: $1.(*sqlTblExpr).tblExpr, Right: $4.(*sqlTblExpr).tblExpr, Cond: $5.(*sqlJoinCond).joinCond}}
   }
 | table_ref JOIN table_ref join_qual
   {
-    $$ = &JoinTableExpr{Join: astJoin, Left: $1, Right: $3, Cond: $4}
+    $$ = &sqlTblExpr{&JoinTableExpr{Join: astJoin, Left: $1.(*sqlTblExpr).tblExpr, Right: $3.(*sqlTblExpr).tblExpr, Cond: $4.(*sqlJoinCond).joinCond}}
   }
 | table_ref NATURAL join_type JOIN table_ref
   {
-    $$ = &JoinTableExpr{Join: astNaturalJoin, Left: $1, Right: $5}
+    $$ = &sqlTblExpr{&JoinTableExpr{Join: astNaturalJoin, Left: $1.(*sqlTblExpr).tblExpr, Right: $5.(*sqlTblExpr).tblExpr}}
   }
 | table_ref NATURAL JOIN table_ref
   {
-    $$ = &JoinTableExpr{Join: astNaturalJoin, Left: $1, Right: $4}
+    $$ = &sqlTblExpr{&JoinTableExpr{Join: astNaturalJoin, Left: $1.(*sqlTblExpr).tblExpr, Right: $4.(*sqlTblExpr).tblExpr}}
   }
 
 alias_clause:
   AS name '(' name_list ')'
   {
-    $$ = AliasClause{Alias: Name($2), Cols: NameList($4)}
+    $$ = &sqlAliasClause{AliasClause{Alias: Name($2), Cols: NameList($4.(*sqlStrs).strs)}}
   }
 | AS name
   {
-    $$ = AliasClause{Alias: Name($2)}
+    $$ = &sqlAliasClause{AliasClause{Alias: Name($2)}}
   }
 | name '(' name_list ')'
   {
-    $$ = AliasClause{Alias: Name($1), Cols: NameList($3)}
+    $$ = &sqlAliasClause{AliasClause{Alias: Name($1), Cols: NameList($3.(*sqlStrs).strs)}}
   }
 | name
   {
-    $$ = AliasClause{Alias: Name($1)}
+    $$ = &sqlAliasClause{AliasClause{Alias: Name($1)}}
   }
 
 opt_alias_clause:
   alias_clause
 | /* EMPTY */
   {
-    $$ = AliasClause{}
+    $$ = &sqlAliasClause{AliasClause{}}
   }
 
 join_type:
@@ -2130,11 +2279,11 @@ join_outer:
 join_qual:
   USING '(' name_list ')'
   {
-    $$ = &UsingJoinCond{Cols: NameList($3)}
+    $$ = &sqlJoinCond{&UsingJoinCond{Cols: NameList($3.(*sqlStrs).strs)}}
   }
 | ON a_expr
   {
-    $$ = &OnJoinCond{Expr: $2}
+    $$ = &sqlJoinCond{&OnJoinCond{Expr: $2.(*sqlExpr).expr}}
   }
 
 relation_expr:
@@ -2144,28 +2293,26 @@ relation_expr:
   }
 | qualified_name '*'
   {
-    // TODO(pmattis): Handle the "*".
     $$ = $1
   }
 | ONLY qualified_name
   {
-    // TODO(pmattis): Support ONLY.
     $$ = $2
   }
 | ONLY '(' qualified_name ')'
   {
-    // TODO(pmattis): Support ONLY.
     $$ = $3
   }
 
 relation_expr_list:
   relation_expr
   {
-    $$ = QualifiedNames{$1}
+    $$ = &sqlQnames{QualifiedNames{$1.(*sqlQname).qname}}
   }
 | relation_expr_list ',' relation_expr
   {
-    $$ = append($1, $3)
+    $1.(*sqlQnames).qnames = append($1.(*sqlQnames).qnames, $3.(*sqlQname).qname)
+    $$ = $1
   }
 
 // Given "UPDATE foo set set ...", we have to decide without looking any
@@ -2178,15 +2325,15 @@ relation_expr_list:
 relation_expr_opt_alias:
   relation_expr %prec UMINUS
   {
-    $$ = &AliasedTableExpr{Expr: $1}
+    $$ = &sqlTblExpr{&AliasedTableExpr{Expr: $1.(*sqlQname).qname}}
   }
 | relation_expr name
   {
-    $$ = &AliasedTableExpr{Expr: $1, As: AliasClause{Alias: Name($2)}}
+    $$ = &sqlTblExpr{&AliasedTableExpr{Expr: $1.(*sqlQname).qname, As: AliasClause{Alias: Name($2)}}}
   }
 | relation_expr AS name
   {
-    $$ = &AliasedTableExpr{Expr: $1, As: AliasClause{Alias: Name($3)}}
+    $$ = &sqlTblExpr{&AliasedTableExpr{Expr: $1.(*sqlQname).qname, As: AliasClause{Alias: Name($3)}}}
   }
 
 where_clause:
@@ -2196,7 +2343,7 @@ where_clause:
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlExpr{nil}
   }
 
 // Type syntax
@@ -2228,23 +2375,23 @@ simple_typename:
 | const_interval '(' ICONST ')' { unimplemented() }
 | BLOB
   {
-    $$ = &BytesType{Name: "BLOB"}
+    $$ = &sqlColType{&BytesType{Name: "BLOB"}}
   }
 | BYTES
   {
-    $$ = &BytesType{Name: "BYTES"}
+    $$ = &sqlColType{&BytesType{Name: "BYTES"}}
   }
 | BYTEA
   {
-    $$ = &BytesType{Name: "BYTEA"}
+    $$ = &sqlColType{&BytesType{Name: "BYTEA"}}
   }
 | TEXT
   {
-    $$ = &StringType{Name: "TEXT"}
+    $$ = &sqlColType{&StringType{Name: "TEXT"}}
   }
 | STRING
   {
-    $$ = &StringType{Name: "STRING"}
+    $$ = &sqlColType{&StringType{Name: "STRING"}}
   }
 
 // We have a separate const_typename to allow defaulting fixed-length types
@@ -2265,73 +2412,73 @@ const_typename:
 opt_numeric_modifiers:
   '(' ICONST ')'
   {
-    $$ = &DecimalType{Prec: int($2.Val)}
+    $$ = &sqlColType{&DecimalType{Prec: int($2.Val)}}
   }
 | '(' ICONST ',' ICONST ')'
   {
-    $$ = &DecimalType{Prec: int($2.Val), Scale: int($4.Val)}
+    $$ = &sqlColType{&DecimalType{Prec: int($2.Val), Scale: int($4.Val)}}
   }
 | /* EMPTY */
   {
-    $$ = &DecimalType{}
+    $$ = &sqlColType{&DecimalType{}}
   }
 
 // SQL numeric data types
 numeric:
   INT
   {
-    $$ = &IntType{Name: "INT"}
+    $$ = &sqlColType{&IntType{Name: "INT"}}
   }
 | INT64
   {
-    $$ = &IntType{Name: "INT64"}
+    $$ = &sqlColType{&IntType{Name: "INT64"}}
   }
 | INTEGER
   {
-    $$ = &IntType{Name: "INTEGER"}
+    $$ = &sqlColType{&IntType{Name: "INTEGER"}}
   }
 | SMALLINT
   {
-    $$ = &IntType{Name: "SMALLINT"}
+    $$ = &sqlColType{&IntType{Name: "SMALLINT"}}
   }
 | BIGINT
   {
-    $$ = &IntType{Name: "BIGINT"}
+    $$ = &sqlColType{&IntType{Name: "BIGINT"}}
   }
 | REAL
   {
-    $$ = &FloatType{Name: "REAL"}
+    $$ = &sqlColType{&FloatType{Name: "REAL"}}
   }
 | FLOAT opt_float
   {
-    $$ = &FloatType{Name: "FLOAT", Prec: int($2.Val)}
+    $$ = &sqlColType{&FloatType{Name: "FLOAT", Prec: int($2.Val)}}
   }
 | DOUBLE PRECISION
   {
-    $$ = &FloatType{Name: "DOUBLE PRECISION"}
+    $$ = &sqlColType{&FloatType{Name: "DOUBLE PRECISION"}}
   }
 | DECIMAL opt_numeric_modifiers
   {
     $$ = $2
-    $$.(*DecimalType).Name = "DECIMAL"
+    $$.(*sqlColType).colType.(*DecimalType).Name = "DECIMAL"
   }
 | DEC opt_numeric_modifiers
   {
     $$ = $2
-    $$.(*DecimalType).Name = "DEC"
+    $$.(*sqlColType).colType.(*DecimalType).Name = "DEC"
   }
 | NUMERIC opt_numeric_modifiers
   {
     $$ = $2
-    $$.(*DecimalType).Name = "NUMERIC"
+    $$.(*sqlColType).colType.(*DecimalType).Name = "NUMERIC"
   }
 | BOOLEAN
   {
-    $$ = &BoolType{Name: "BOOLEAN"}
+    $$ = &sqlColType{&BoolType{Name: "BOOLEAN"}}
   }
 | BOOL
   {
-    $$ = &BoolType{Name: "BOOL"}
+    $$ = &sqlColType{&BoolType{Name: "BOOL"}}
   }
 
 opt_float:
@@ -2359,13 +2506,13 @@ const_bit:
 bit_with_length:
   BIT opt_varying '(' ICONST ')'
   {
-    $$ = &IntType{Name: "BIT", N: int($4.Val)}
+    $$ = &sqlColType{&IntType{Name: "BIT", N: int($4.Val)}}
   }
 
 bit_without_length:
   BIT opt_varying
   {
-    $$ = &IntType{Name: "BIT"}
+    $$ = &sqlColType{&IntType{Name: "BIT"}}
   }
 
 // SQL character data types
@@ -2382,7 +2529,7 @@ character_with_length:
   character_base '(' ICONST ')'
   {
     $$ = $1
-    $$.(*StringType).N = int($3.Val)
+    $$.(*sqlColType).colType.(*StringType).N = int($3.Val)
   }
 
 character_without_length:
@@ -2394,15 +2541,15 @@ character_without_length:
 character_base:
   CHARACTER opt_varying
   {
-    $$ = &StringType{Name: "CHAR"}
+    $$ = &sqlColType{&StringType{Name: "CHAR"}}
   }
 | CHAR opt_varying
   {
-    $$ = &StringType{Name: "CHAR"}
+    $$ = &sqlColType{&StringType{Name: "CHAR"}}
   }
 | VARCHAR
   {
-    $$ = &StringType{Name: "VARCHAR"}
+    $$ = &sqlColType{&StringType{Name: "VARCHAR"}}
   }
 
 opt_varying:
@@ -2413,16 +2560,16 @@ opt_varying:
 const_datetime:
   DATE
   {
-    $$ = &DateType{}
+    $$ = &sqlColType{&DateType{}}
   }
 | TIMESTAMP
   {
-    $$ = &TimestampType{}
+    $$ = &sqlColType{&TimestampType{}}
   }
 
 const_interval:
   INTERVAL {
-    $$ = &IntervalType{}
+    $$ = &sqlColType{&IntervalType{}}
   }
 
 opt_interval:
@@ -2468,7 +2615,7 @@ a_expr:
   c_expr
 | a_expr TYPECAST typename
   {
-    $$ = &CastExpr{Expr: $1, Type: $3}
+    $$ = &sqlExpr{&CastExpr{Expr: $1.(*sqlExpr).expr, Type: $3.(*sqlColType).colType}}
   }
 | a_expr COLLATE any_name { unimplemented() }
 | a_expr AT TIME ZONE a_expr %prec AT { unimplemented() }
@@ -2481,192 +2628,192 @@ a_expr:
   // b_expr and to the math_op list below.
 | '+' a_expr %prec UMINUS
   {
-    $$ = &UnaryExpr{Operator: UnaryPlus, Expr: $2}
+    $$ = &sqlExpr{&UnaryExpr{Operator: UnaryPlus, Expr: $2.(*sqlExpr).expr}}
   }
 | '-' a_expr %prec UMINUS
   {
-    $$ = &UnaryExpr{Operator: UnaryMinus, Expr: $2}
+    $$ = &sqlExpr{&UnaryExpr{Operator: UnaryMinus, Expr: $2.(*sqlExpr).expr}}
   }
 | '~' a_expr %prec UMINUS
   {
-    $$ = &UnaryExpr{Operator: UnaryComplement, Expr: $2}
+    $$ = &sqlExpr{&UnaryExpr{Operator: UnaryComplement, Expr: $2.(*sqlExpr).expr}}
   }
 | a_expr '+' a_expr
   {
-    $$ = &BinaryExpr{Operator: Plus, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Plus, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr '-' a_expr
   {
-    $$ = &BinaryExpr{Operator: Minus, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Minus, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr '*' a_expr
   {
-    $$ = &BinaryExpr{Operator: Mult, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Mult, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr '/' a_expr
   {
-    $$ = &BinaryExpr{Operator: Div, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Div, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr '%' a_expr
   {
-    $$ = &BinaryExpr{Operator: Mod, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Mod, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr '^' a_expr
   {
-    $$ = &BinaryExpr{Operator: Bitxor, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Bitxor, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr '#' a_expr
   {
-    $$ = &BinaryExpr{Operator: Bitxor, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Bitxor, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr '&' a_expr
   {
-    $$ = &BinaryExpr{Operator: Bitand, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Bitand, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr '|' a_expr
   {
-    $$ = &BinaryExpr{Operator: Bitor, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Bitor, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr '<' a_expr
   {
-    $$ = &ComparisonExpr{Operator: LT, Left: $1, Right: $3}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: LT, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr '>' a_expr
   {
-    $$ = &ComparisonExpr{Operator: GT, Left: $1, Right: $3}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: GT, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr '=' a_expr
   {
-    $$ = &ComparisonExpr{Operator: EQ, Left: $1, Right: $3}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: EQ, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr CONCAT a_expr
   {
-    $$ = &BinaryExpr{Operator: Concat, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Concat, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr LSHIFT a_expr
   {
-    $$ = &BinaryExpr{Operator: LShift, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: LShift, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr RSHIFT a_expr
   {
-    $$ = &BinaryExpr{Operator: RShift, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: RShift, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr LESS_EQUALS a_expr
   {
-    $$ = &ComparisonExpr{Operator: LE, Left: $1, Right: $3}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: LE, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr GREATER_EQUALS a_expr
   {
-    $$ = &ComparisonExpr{Operator: GE, Left: $1, Right: $3}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: GE, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr NOT_EQUALS a_expr
   {
-    $$ = &ComparisonExpr{Operator: NE, Left: $1, Right: $3}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: NE, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr AND a_expr
   {
-    $$ = &AndExpr{Left: $1, Right: $3}
+    $$ = &sqlExpr{&AndExpr{Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr OR a_expr
   {
-    $$ = &OrExpr{Left: $1, Right: $3}
+    $$ = &sqlExpr{&OrExpr{Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | NOT a_expr
   {
-    $$ = &NotExpr{Expr: $2}
+    $$ = &sqlExpr{&NotExpr{Expr: $2.(*sqlExpr).expr}}
   }
 | NOT_LA a_expr %prec NOT
   {
-    $$ = &NotExpr{Expr: $2}
+    $$ = &sqlExpr{&NotExpr{Expr: $2.(*sqlExpr).expr}}
   }
 | a_expr LIKE a_expr
   {
-    $$ = &ComparisonExpr{Operator: Like, Left: $1, Right: $3}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: Like, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr NOT_LA LIKE a_expr %prec NOT_LA
   {
-    $$ = &ComparisonExpr{Operator: NotLike, Left: $1, Right: $4}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: NotLike, Left: $1.(*sqlExpr).expr, Right: $4.(*sqlExpr).expr}}
   }
 | a_expr SIMILAR TO a_expr %prec SIMILAR
   {
-    $$ = &ComparisonExpr{Operator: SimilarTo, Left: $1, Right: $4}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: SimilarTo, Left: $1.(*sqlExpr).expr, Right: $4.(*sqlExpr).expr}}
   }
 | a_expr NOT_LA SIMILAR TO a_expr %prec NOT_LA
   {
-    $$ = &ComparisonExpr{Operator: NotSimilarTo, Left: $1, Right: $5}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: NotSimilarTo, Left: $1.(*sqlExpr).expr, Right: $5.(*sqlExpr).expr}}
   }
 | a_expr IS NULL %prec IS
   {
-    $$ = &ComparisonExpr{Operator: Is, Left: $1, Right: DNull}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: Is, Left: $1.(*sqlExpr).expr, Right: DNull}}
   }
 | a_expr IS NOT NULL %prec IS
   {
-    $$ = &ComparisonExpr{Operator: IsNot, Left: $1, Right: DNull}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: IsNot, Left: $1.(*sqlExpr).expr, Right: DNull}}
   }
 | row OVERLAPS row { unimplemented() }
 | a_expr IS TRUE %prec IS
   {
-    $$ = &ComparisonExpr{Operator: Is, Left: $1, Right: DBool(true)}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: Is, Left: $1.(*sqlExpr).expr, Right: DBool(true)}}
   }
 | a_expr IS NOT TRUE %prec IS
   {
-    $$ = &ComparisonExpr{Operator: IsNot, Left: $1, Right: DBool(true)}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: IsNot, Left: $1.(*sqlExpr).expr, Right: DBool(true)}}
   }
 | a_expr IS FALSE %prec IS
   {
-    $$ = &ComparisonExpr{Operator: Is, Left: $1, Right: DBool(false)}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: Is, Left: $1.(*sqlExpr).expr, Right: DBool(false)}}
   }
 | a_expr IS NOT FALSE %prec IS
   {
-    $$ = &ComparisonExpr{Operator: IsNot, Left: $1, Right: DBool(false)}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: IsNot, Left: $1.(*sqlExpr).expr, Right: DBool(false)}}
   }
 | a_expr IS UNKNOWN %prec IS
   {
-    $$ = &ComparisonExpr{Operator: Is, Left: $1, Right: DNull}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: Is, Left: $1.(*sqlExpr).expr, Right: DNull}}
   }
 | a_expr IS NOT UNKNOWN %prec IS
   {
-    $$ = &ComparisonExpr{Operator: IsNot, Left: $1, Right: DNull}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: IsNot, Left: $1.(*sqlExpr).expr, Right: DNull}}
   }
 | a_expr IS DISTINCT FROM a_expr %prec IS
   {
-    $$ = &ComparisonExpr{Operator: IsDistinctFrom, Left: $1, Right: $5}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: IsDistinctFrom, Left: $1.(*sqlExpr).expr, Right: $5.(*sqlExpr).expr}}
   }
 | a_expr IS NOT DISTINCT FROM a_expr %prec IS
   {
-    $$ = &ComparisonExpr{Operator: IsNotDistinctFrom, Left: $1, Right: $6}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: IsNotDistinctFrom, Left: $1.(*sqlExpr).expr, Right: $6.(*sqlExpr).expr}}
   }
 | a_expr IS OF '(' type_list ')' %prec IS
   {
-    $$ = &IsOfTypeExpr{Expr: $1, Types: $5}
+    $$ = &sqlExpr{&IsOfTypeExpr{Expr: $1.(*sqlExpr).expr, Types: $5.(*sqlColTypes).colTypes}}
   }
 | a_expr IS NOT OF '(' type_list ')' %prec IS
   {
-    $$ = &IsOfTypeExpr{Not: true, Expr: $1, Types: $6}
+    $$ = &sqlExpr{&IsOfTypeExpr{Not: true, Expr: $1.(*sqlExpr).expr, Types: $6.(*sqlColTypes).colTypes}}
   }
 | a_expr BETWEEN opt_asymmetric b_expr AND a_expr %prec BETWEEN
   {
-    $$ = &RangeCond{Left: $1, From: $4, To: $6}
+    $$ = &sqlExpr{&RangeCond{Left: $1.(*sqlExpr).expr, From: $4.(*sqlExpr).expr, To: $6.(*sqlExpr).expr}}
   }
 | a_expr NOT_LA BETWEEN opt_asymmetric b_expr AND a_expr %prec NOT_LA
   {
-    $$ = &RangeCond{Not: true, Left: $1, From: $5, To: $7}
+    $$ = &sqlExpr{&RangeCond{Not: true, Left: $1.(*sqlExpr).expr, From: $5.(*sqlExpr).expr, To: $7.(*sqlExpr).expr}}
   }
 | a_expr BETWEEN SYMMETRIC b_expr AND a_expr %prec BETWEEN
   {
-    $$ = &RangeCond{Left: $1, From: $4, To: $6}
+    $$ = &sqlExpr{&RangeCond{Left: $1.(*sqlExpr).expr, From: $4.(*sqlExpr).expr, To: $6.(*sqlExpr).expr}}
   }
 | a_expr NOT_LA BETWEEN SYMMETRIC b_expr AND a_expr %prec NOT_LA
   {
-    $$ = &RangeCond{Not: true, Left: $1, From: $5, To: $7}
+    $$ = &sqlExpr{&RangeCond{Not: true, Left: $1.(*sqlExpr).expr, From: $5.(*sqlExpr).expr, To: $7.(*sqlExpr).expr}}
   }
 | a_expr IN in_expr
   {
-    $$ = &ComparisonExpr{Operator: In, Left: $1, Right: $3}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: In, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | a_expr NOT_LA IN in_expr %prec NOT_LA
   {
-    $$ = &ComparisonExpr{Operator: NotIn, Left: $1, Right: $4}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: NotIn, Left: $1.(*sqlExpr).expr, Right: $4.(*sqlExpr).expr}}
   }
 // | a_expr subquery_op sub_type select_with_parens %prec CONCAT { unimplemented() }
 // | a_expr subquery_op sub_type '(' a_expr ')' %prec CONCAT { unimplemented() }
@@ -2683,107 +2830,107 @@ b_expr:
   c_expr
 | b_expr TYPECAST typename
   {
-    $$ = &CastExpr{Expr: $1, Type: $3}
+    $$ = &sqlExpr{&CastExpr{Expr: $1.(*sqlExpr).expr, Type: $3.(*sqlColType).colType}}
   }
 | '+' b_expr %prec UMINUS
   {
-    $$ = &UnaryExpr{Operator: UnaryPlus, Expr: $2}
+    $$ = &sqlExpr{&UnaryExpr{Operator: UnaryPlus, Expr: $2.(*sqlExpr).expr}}
   }
 | '-' b_expr %prec UMINUS
   {
-    $$ = &UnaryExpr{Operator: UnaryMinus, Expr: $2}
+    $$ = &sqlExpr{&UnaryExpr{Operator: UnaryMinus, Expr: $2.(*sqlExpr).expr}}
   }
 | '~' b_expr %prec UMINUS
   {
-    $$ = &UnaryExpr{Operator: UnaryComplement, Expr: $2}
+    $$ = &sqlExpr{&UnaryExpr{Operator: UnaryComplement, Expr: $2.(*sqlExpr).expr}}
   }
 | b_expr '+' b_expr
   {
-    $$ = &BinaryExpr{Operator: Plus, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Plus, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr '-' b_expr
   {
-    $$ = &BinaryExpr{Operator: Minus, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Minus, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr '*' b_expr
   {
-    $$ = &BinaryExpr{Operator: Mult, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Mult, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr '/' b_expr
   {
-    $$ = &BinaryExpr{Operator: Div, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Div, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr '%' b_expr
   {
-    $$ = &BinaryExpr{Operator: Mod, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Mod, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr '^' b_expr
   {
-    $$ = &BinaryExpr{Operator: Bitxor, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Bitxor, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr '#' b_expr
   {
-    $$ = &BinaryExpr{Operator: Bitxor, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Bitxor, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr '&' b_expr
   {
-    $$ = &BinaryExpr{Operator: Bitand, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Bitand, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr '|' b_expr
   {
-    $$ = &BinaryExpr{Operator: Bitor, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Bitor, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr '<' b_expr
   {
-    $$ = &ComparisonExpr{Operator: LT, Left: $1, Right: $3}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: LT, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr '>' b_expr
   {
-    $$ = &ComparisonExpr{Operator: GT, Left: $1, Right: $3}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: GT, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr '=' b_expr
   {
-    $$ = &ComparisonExpr{Operator: EQ, Left: $1, Right: $3}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: EQ, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr CONCAT b_expr
   {
-    $$ = &BinaryExpr{Operator: Concat, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: Concat, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr LSHIFT b_expr
   {
-    $$ = &BinaryExpr{Operator: LShift, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: LShift, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr RSHIFT b_expr
   {
-    $$ = &BinaryExpr{Operator: RShift, Left: $1, Right: $3}
+    $$ = &sqlExpr{&BinaryExpr{Operator: RShift, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr LESS_EQUALS b_expr
   {
-    $$ = &ComparisonExpr{Operator: LE, Left: $1, Right: $3}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: LE, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr GREATER_EQUALS b_expr
   {
-    $$ = &ComparisonExpr{Operator: GE, Left: $1, Right: $3}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: GE, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr NOT_EQUALS b_expr
   {
-    $$ = &ComparisonExpr{Operator: NE, Left: $1, Right: $3}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: NE, Left: $1.(*sqlExpr).expr, Right: $3.(*sqlExpr).expr}}
   }
 | b_expr IS DISTINCT FROM b_expr %prec IS
   {
-    $$ = &ComparisonExpr{Operator: IsDistinctFrom, Left: $1, Right: $5}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: IsDistinctFrom, Left: $1.(*sqlExpr).expr, Right: $5.(*sqlExpr).expr}}
   }
 | b_expr IS NOT DISTINCT FROM b_expr %prec IS
   {
-    $$ = &ComparisonExpr{Operator: IsNotDistinctFrom, Left: $1, Right: $6}
+    $$ = &sqlExpr{&ComparisonExpr{Operator: IsNotDistinctFrom, Left: $1.(*sqlExpr).expr, Right: $6.(*sqlExpr).expr}}
   }
 | b_expr IS OF '(' type_list ')' %prec IS
   {
-    $$ = &IsOfTypeExpr{Expr: $1, Types: $5}
+    $$ = &sqlExpr{&IsOfTypeExpr{Expr: $1.(*sqlExpr).expr, Types: $5.(*sqlColTypes).colTypes}}
   }
 | b_expr IS NOT OF '(' type_list ')' %prec IS
   {
-    $$ = &IsOfTypeExpr{Not: true, Expr: $1, Types: $6}
+    $$ = &sqlExpr{&IsOfTypeExpr{Not: true, Expr: $1.(*sqlExpr).expr, Types: $6.(*sqlColTypes).colTypes}}
   }
 
 // Productions that can be used in both a_expr and b_expr.
@@ -2795,30 +2942,30 @@ b_expr:
 c_expr:
   qualified_name
   {
-    $$ = $1
+    $$ = &sqlExpr{$1.(*sqlQname).qname}
   }
 | a_expr_const
 | PARAM
   {
-    $$ = ValArg{name: $1}
+    $$ = &sqlExpr{ValArg{name: $1}}
   }
 | '(' a_expr ')'
   {
-    $$ = &ParenExpr{Expr: $2}
+    $$ = &sqlExpr{&ParenExpr{Expr: $2.(*sqlExpr).expr}}
   }
 | case_expr
 | func_expr
 | select_with_parens %prec UMINUS
   {
-    $$ = &Subquery{Select: $1}
+    $$ = &sqlExpr{&Subquery{Select: $1.(*sqlSelectStmt).selectStmt}}
   }
 | select_with_parens indirection
   {
-    $$ = &Subquery{Select: $1}
+    $$ = &sqlExpr{&Subquery{Select: $1.(*sqlSelectStmt).selectStmt}}
   }
 | EXISTS select_with_parens
   {
-    $$ = &ExistsExpr{Subquery: &Subquery{Select: $2}}
+    $$ = &sqlExpr{&ExistsExpr{Subquery: &Subquery{Select: $2.(*sqlSelectStmt).selectStmt}}}
   }
 // TODO(pmattis): Support this notation?
 // | ARRAY select_with_parens { unimplemented() }
@@ -2840,28 +2987,25 @@ c_expr:
 func_application:
   func_name '(' ')'
   {
-    $$ = &FuncExpr{Name: $1}
+    $$ = &sqlExpr{&FuncExpr{Name: $1.(*sqlQname).qname}}
   }
 | func_name '(' expr_list opt_sort_clause ')'
   {
-    // TODO(pmattis): Support opt_sort_clause or remove it?
-    $$ = &FuncExpr{Name: $1, Exprs: $3}
+    $$ = &sqlExpr{&FuncExpr{Name: $1.(*sqlQname).qname, Exprs: $3.(*sqlExprs).exprs}}
   }
 | func_name '(' VARIADIC a_expr opt_sort_clause ')' { unimplemented() }
 | func_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause ')' { unimplemented() }
 | func_name '(' ALL expr_list opt_sort_clause ')'
   {
-    // TODO(pmattis): Support opt_sort_clause or remove it?
-    $$ = &FuncExpr{Name: $1, Type: All, Exprs: $4}
+    $$ = &sqlExpr{&FuncExpr{Name: $1.(*sqlQname).qname, Type: All, Exprs: $4.(*sqlExprs).exprs}}
   }
 | func_name '(' DISTINCT expr_list opt_sort_clause ')'
   {
-    // TODO(pmattis): Support opt_sort_clause or remove it?
-    $$ = &FuncExpr{Name: $1, Type: Distinct, Exprs: $4}
+    $$ = &sqlExpr{&FuncExpr{Name: $1.(*sqlQname).qname, Type: Distinct, Exprs: $4.(*sqlExprs).exprs}}
   }
 | func_name '(' '*' ')'
   {
-    $$ = &FuncExpr{Name: $1, Exprs: Exprs{StarExpr()}}
+    $$ = &sqlExpr{&FuncExpr{Name: $1.(*sqlQname).qname, Exprs: Exprs{StarExpr()}}}
   }
 
 // func_expr and its cousin func_expr_windowless are split out from c_expr just
@@ -2874,8 +3018,6 @@ func_application:
 func_expr:
   func_application within_group_clause filter_clause over_clause
   {
-    // TODO(pmattis): Support within_group_clause, filter_clause and
-    // over_clause?
     $$ = $1
   }
 | func_expr_common_subexpr
@@ -2896,19 +3038,19 @@ func_expr_common_subexpr:
   COLLATION FOR '(' a_expr ')' { unimplemented() }
 | CURRENT_DATE
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+    $$ = &sqlExpr{&FuncExpr{Name: &QualifiedName{Base: Name($1)}}}
   }
 | CURRENT_DATE '(' ')'
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+    $$ = &sqlExpr{&FuncExpr{Name: &QualifiedName{Base: Name($1)}}}
   }
 | CURRENT_TIMESTAMP
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+    $$ = &sqlExpr{&FuncExpr{Name: &QualifiedName{Base: Name($1)}}}
   }
 | CURRENT_TIMESTAMP '(' ')'
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+    $$ = &sqlExpr{&FuncExpr{Name: &QualifiedName{Base: Name($1)}}}
   }
 | CURRENT_ROLE { unimplemented() }
 | CURRENT_USER { unimplemented() }
@@ -2916,64 +3058,64 @@ func_expr_common_subexpr:
 | USER { unimplemented() }
 | CAST '(' a_expr AS typename ')'
   {
-    $$ = &CastExpr{Expr: $3, Type: $5}
+    $$ = &sqlExpr{&CastExpr{Expr: $3.(*sqlExpr).expr, Type: $5.(*sqlColType).colType}}
   }
 | EXTRACT '(' extract_list ')'
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
+    $$ = &sqlExpr{&FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.(*sqlExprs).exprs}}
   }
 | OVERLAY '(' overlay_list ')'
   {
-    $$ = &OverlayExpr{FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}}
+    $$ = &sqlExpr{&OverlayExpr{FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.(*sqlExprs).exprs}}}
   }
 | POSITION '(' position_list ')'
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: "STRPOS"}, Exprs: $3}
+    $$ = &sqlExpr{&FuncExpr{Name: &QualifiedName{Base: "STRPOS"}, Exprs: $3.(*sqlExprs).exprs}}
   }
 | SUBSTRING '(' substr_list ')'
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
+    $$ = &sqlExpr{&FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.(*sqlExprs).exprs}}
   }
 | TREAT '(' a_expr AS typename ')' { unimplemented() }
 | TRIM '(' BOTH trim_list ')'
   {
-     $$ = &FuncExpr{Name: &QualifiedName{Base: "BTRIM"}, Exprs: $4}
+     $$ = &sqlExpr{&FuncExpr{Name: &QualifiedName{Base: "BTRIM"}, Exprs: $4.(*sqlExprs).exprs}}
   }
 | TRIM '(' LEADING trim_list ')'
   {
-     $$ = &FuncExpr{Name: &QualifiedName{Base: "LTRIM"}, Exprs: $4}
+     $$ = &sqlExpr{&FuncExpr{Name: &QualifiedName{Base: "LTRIM"}, Exprs: $4.(*sqlExprs).exprs}}
   }
 | TRIM '(' TRAILING trim_list ')'
   {
-     $$ = &FuncExpr{Name: &QualifiedName{Base: "RTRIM"}, Exprs: $4}
+     $$ = &sqlExpr{&FuncExpr{Name: &QualifiedName{Base: "RTRIM"}, Exprs: $4.(*sqlExprs).exprs}}
   }
 | TRIM '(' trim_list ')'
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: "BTRIM"}, Exprs: $3}
+    $$ = &sqlExpr{&FuncExpr{Name: &QualifiedName{Base: "BTRIM"}, Exprs: $3.(*sqlExprs).exprs}}
   }
 | IF '(' a_expr ',' a_expr ',' a_expr ')'
   {
-    $$ = &IfExpr{Cond: $3, True: $5, Else: $7}
+    $$ = &sqlExpr{&IfExpr{Cond: $3.(*sqlExpr).expr, True: $5.(*sqlExpr).expr, Else: $7.(*sqlExpr).expr}}
   }
 | NULLIF '(' a_expr ',' a_expr ')'
   {
-    $$ = &NullIfExpr{Expr1: $3, Expr2: $5}
+    $$ = &sqlExpr{&NullIfExpr{Expr1: $3.(*sqlExpr).expr, Expr2: $5.(*sqlExpr).expr}}
   }
 | IFNULL '(' a_expr ',' a_expr ')'
   {
-    $$ = &CoalesceExpr{Name: "IFNULL", Exprs: Exprs{$3, $5}}
+    $$ = &sqlExpr{&CoalesceExpr{Name: "IFNULL", Exprs: Exprs{$3.(*sqlExpr).expr, $5.(*sqlExpr).expr}}}
   }
 | COALESCE '(' expr_list ')'
   {
-    $$ = &CoalesceExpr{Name: "COALESCE", Exprs: $3}
+    $$ = &sqlExpr{&CoalesceExpr{Name: "COALESCE", Exprs: $3.(*sqlExprs).exprs}}
   }
 | GREATEST '(' expr_list ')'
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
+    $$ = &sqlExpr{&FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.(*sqlExprs).exprs}}
   }
 | LEAST '(' expr_list ')'
   {
-    $$ = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3}
+    $$ = &sqlExpr{&FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.(*sqlExprs).exprs}}
   }
 
 // Aggregate decoration clauses
@@ -3056,31 +3198,31 @@ frame_bound:
 row:
   ROW '(' expr_list ')'
   {
-    $$ = Row($3)
+    $$ = &sqlExpr{Row($3.(*sqlExprs).exprs)}
   }
 | ROW '(' ')'
   {
-    $$ = Row(nil)
+    $$ = &sqlExpr{Row(nil)}
   }
 | '(' expr_list ',' a_expr ')'
   {
-    $$ = Tuple(append($2, $4))
+    $$ = &sqlExpr{Tuple(append($2.(*sqlExprs).exprs, $4.(*sqlExpr).expr))}
   }
 
 explicit_row:
   ROW '(' expr_list ')'
   {
-    $$ = Row($3)
+    $$ = &sqlExpr{Row($3.(*sqlExprs).exprs)}
   }
 | ROW '(' ')'
   {
-    $$ = Row(nil)
+    $$ = &sqlExpr{Row(nil)}
   }
 
 implicit_row:
   '(' expr_list ',' a_expr ')'
   {
-    $$ = Tuple(append($2, $4))
+    $$ = &sqlExpr{Tuple(append($2.(*sqlExprs).exprs, $4.(*sqlExpr).expr))}
   }
 
 // sub_type:
@@ -3121,51 +3263,54 @@ implicit_row:
 expr_list:
   a_expr
   {
-    $$ = Exprs{$1}
+    $$ = &sqlExprs{Exprs{$1.(*sqlExpr).expr}}
   }
 | expr_list ',' a_expr
   {
-    $$ = append($1, $3)
+    $1.(*sqlExprs).exprs = append($1.(*sqlExprs).exprs, $3.(*sqlExpr).expr)
+    $$ = $1
   }
 
 type_list:
   typename
   {
-    $$ = []ColumnType{$1}
+    $$ = &sqlColTypes{[]ColumnType{$1.(*sqlColType).colType}}
   }
 | type_list ',' typename
   {
-    $$ = append($1, $3)
+    $1.(*sqlColTypes).colTypes = append($1.(*sqlColTypes).colTypes, $3.(*sqlColType).colType)
+    $$ = $1
   }
 
 array_expr:
   '[' expr_list ']'
   {
-    $$ = Array($2)
+    $$ = &sqlExpr{Array($2.(*sqlExprs).exprs)}
   }
 | '[' array_expr_list ']'
   {
-    $$ = Array($2)
+    $$ = &sqlExpr{Array($2.(*sqlExprs).exprs)}
   }
 | '[' ']'
   {
-    $$ = Array(nil)
+    $$ = &sqlExpr{Array(nil)}
   }
 
 array_expr_list:
   array_expr
   {
-    $$ = Exprs{$1}
+    $$ = &sqlExprs{Exprs{$1.(*sqlExpr).expr}}
   }
 | array_expr_list ',' array_expr
   {
-    $$ = append($1, $3)
+    $1.(*sqlExprs).exprs = append($1.(*sqlExprs).exprs, $3.(*sqlExpr).expr)
+    $$ = $1
   }
 
 extract_list:
   extract_arg FROM a_expr
   {
-    $$ = Exprs{DString($1), $3}
+    $$ = &sqlExprs{Exprs{DString($1), $3.(*sqlExpr).expr}}
   }
 
 // TODO(vivek): Narrow down to just IDENT once the other
@@ -3187,11 +3332,11 @@ extract_arg:
 overlay_list:
   a_expr overlay_placing substr_from substr_for
   {
-    $$ = Exprs{$1, $2, $3, $4}
+    $$ = &sqlExprs{Exprs{$1.(*sqlExpr).expr, $2.(*sqlExpr).expr, $3.(*sqlExpr).expr, $4.(*sqlExpr).expr}}
   }
 | a_expr overlay_placing substr_from
   {
-    $$ = Exprs{$1, $2, $3}
+    $$ = &sqlExprs{Exprs{$1.(*sqlExpr).expr, $2.(*sqlExpr).expr, $3.(*sqlExpr).expr}}
   }
 
 overlay_placing:
@@ -3204,11 +3349,11 @@ overlay_placing:
 position_list:
   b_expr IN b_expr
   {
-    $$ = Exprs{$3, $1}
+    $$ = &sqlExprs{Exprs{$3.(*sqlExpr).expr, $1.(*sqlExpr).expr}}
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlExprs{nil}
   }
 
 // SUBSTRING() arguments
@@ -3225,19 +3370,19 @@ position_list:
 substr_list:
   a_expr substr_from substr_for
   {
-    $$ = Exprs{$1, $2, $3}
+    $$ = &sqlExprs{Exprs{$1.(*sqlExpr).expr, $2.(*sqlExpr).expr, $3.(*sqlExpr).expr}}
   }
 | a_expr substr_for substr_from
   {
-    $$ = Exprs{$1, $3, $2}
+    $$ = &sqlExprs{Exprs{$1.(*sqlExpr).expr, $3.(*sqlExpr).expr, $2.(*sqlExpr).expr}}
   }
 | a_expr substr_from
   {
-    $$ = Exprs{$1, $2}
+    $$ = &sqlExprs{Exprs{$1.(*sqlExpr).expr, $2.(*sqlExpr).expr}}
   }
 | a_expr substr_for
   {
-    $$ = Exprs{$1, DInt(1), $2}
+    $$ = &sqlExprs{Exprs{$1.(*sqlExpr).expr, DInt(1), $2.(*sqlExpr).expr}}
   }
 | expr_list
   {
@@ -3245,7 +3390,7 @@ substr_list:
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlExprs{nil}
   }
 
 substr_from:
@@ -3263,7 +3408,8 @@ substr_for:
 trim_list:
   a_expr FROM expr_list
   {
-    $$ = append($3, $1)
+    $3.(*sqlExprs).exprs = append($3.(*sqlExprs).exprs, $1.(*sqlExpr).expr)
+    $$ = $3
   }
 | FROM expr_list
   {
@@ -3277,11 +3423,11 @@ trim_list:
 in_expr:
   select_with_parens
   {
-    $$ = &Subquery{Select: $1}
+    $$ = &sqlExpr{&Subquery{Select: $1.(*sqlSelectStmt).selectStmt}}
   }
 | '(' expr_list ')'
   {
-    $$ = Tuple($2)
+    $$ = &sqlExpr{Tuple($2.(*sqlExprs).exprs)}
   }
 
 // Define SQL-style CASE clause.
@@ -3292,24 +3438,25 @@ in_expr:
 case_expr:
   CASE case_arg when_clause_list case_default END
   {
-    $$ = &CaseExpr{Expr: $2, Whens: $3, Else: $4}
+    $$ = &sqlExpr{&CaseExpr{Expr: $2.(*sqlExpr).expr, Whens: $3.(*sqlWhens).whens, Else: $4.(*sqlExpr).expr}}
   }
 
 when_clause_list:
   // There must be at least one
   when_clause
   {
-    $$ = []*When{$1}
+    $$ = &sqlWhens{[]*When{$1.(*sqlWhen).when}}
   }
 | when_clause_list when_clause
   {
-    $$ = append($1, $2)
+    $1.(*sqlWhens).whens = append($1.(*sqlWhens).whens, $2.(*sqlWhen).when)
+    $$ = $1
   }
 
 when_clause:
   WHEN a_expr THEN a_expr
   {
-    $$ = &When{Cond: $2, Val: $4}
+    $$ = &sqlWhen{&When{Cond: $2.(*sqlExpr).expr, Val: $4.(*sqlExpr).expr}}
   }
 
 case_default:
@@ -3319,14 +3466,14 @@ case_default:
   }
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlExpr{nil}
   }
 
 case_arg:
   a_expr
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlExpr{nil}
   }
 
 indirection_elem:
@@ -3340,37 +3487,38 @@ indirection_elem:
   }
 | '@' col_label
   {
-    $$ = IndexIndirection($2)
+    $$ = &sqlIndirectElem{IndexIndirection($2)}
   }
 | '[' a_expr ']'
   {
-    $$ = &ArrayIndirection{Begin: $2}
+    $$ = &sqlIndirectElem{&ArrayIndirection{Begin: $2.(*sqlExpr).expr}}
   }
 | '[' a_expr ':' a_expr ']'
   {
-    $$ = &ArrayIndirection{Begin: $2, End: $4}
+    $$ = &sqlIndirectElem{&ArrayIndirection{Begin: $2.(*sqlExpr).expr, End: $4.(*sqlExpr).expr}}
   }
 
 name_indirection:
   '.' col_label
   {
-    $$ = NameIndirection($2)
+    $$ = &sqlIndirectElem{NameIndirection($2)}
   }
 
 glob_indirection:
   '.' '*'
   {
-    $$ = qualifiedStar
+    $$ = &sqlIndirectElem{qualifiedStar}
   }
 
 indirection:
   indirection_elem
   {
-    $$ = Indirection{$1}
+    $$ = &sqlIndirect{Indirection{$1.(*sqlIndirectElem).indirectElem}}
   }
 | indirection indirection_elem
   {
-    $$ = append($1, $2)
+    $1.(*sqlIndirect).indirect = append($1.(*sqlIndirect).indirect, $2.(*sqlIndirectElem).indirectElem)
+    $$ = $1
   }
 
 opt_asymmetric:
@@ -3385,17 +3533,18 @@ ctext_expr:
   a_expr
 | DEFAULT
   {
-    $$ = DefaultVal{}
+    $$ = &sqlExpr{DefaultVal{}}
   }
 
 ctext_expr_list:
   ctext_expr
   {
-    $$ = []Expr{$1}
+    $$ = &sqlExprs{[]Expr{$1.(*sqlExpr).expr}}
   }
 | ctext_expr_list ',' ctext_expr
   {
-    $$ = append($1, $3)
+    $1.(*sqlExprs).exprs = append($1.(*sqlExprs).exprs, $3.(*sqlExpr).expr)
+    $$ = $1
   }
 
 // We should allow ROW '(' ctext_expr_list ')' too, but that seems to require
@@ -3412,23 +3561,24 @@ opt_target_list:
   target_list
 | /* EMPTY */
   {
-    $$ = nil
+    $$ = &sqlSelExprs{nil}
   }
 
 target_list:
   target_elem
   {
-    $$ = SelectExprs{$1}
+    $$ = &sqlSelExprs{SelectExprs{$1.(*sqlSelExpr).selExpr}}
   }
 | target_list ',' target_elem
   {
-    $$ = append($1, $3)
+    $1.(*sqlSelExprs).selExprs = append($1.(*sqlSelExprs).selExprs, $3.(*sqlSelExpr).selExpr)
+    $$ = $1
   }
 
 target_elem:
   a_expr AS col_label
   {
-    $$ = SelectExpr{Expr: $1, As: Name($3)}
+    $$ = &sqlSelExpr{SelectExpr{Expr: $1.(*sqlExpr).expr, As: Name($3)}}
   }
   // We support omitting AS only for column labels that aren't any known
   // keyword. There is an ambiguity against postfix operators: is "a ! b" an
@@ -3437,15 +3587,15 @@ target_elem:
   // IDENT a precedence higher than POSTFIXOP.
 | a_expr IDENT
   {
-    $$ = SelectExpr{Expr: $1, As: Name($2)}
+    $$ = &sqlSelExpr{SelectExpr{Expr: $1.(*sqlExpr).expr, As: Name($2)}}
   }
 | a_expr
   {
-    $$ = SelectExpr{Expr: $1}
+    $$ = &sqlSelExpr{SelectExpr{Expr: $1.(*sqlExpr).expr}}
   }
 | '*'
   {
-    $$ = starSelectExpr()
+    $$ = &sqlSelExpr{starSelectExpr()}
   }
 
 // Names and constants.
@@ -3453,21 +3603,23 @@ target_elem:
 qualified_name_list:
   qualified_name
   {
-    $$ = QualifiedNames{$1}
+    $$ = &sqlQnames{QualifiedNames{$1.(*sqlQname).qname}}
   }
 | qualified_name_list ',' qualified_name
   {
-    $$ = append($1, $3)
+    $1.(*sqlQnames).qnames = append($1.(*sqlQnames).qnames, $3.(*sqlQname).qname)
+    $$ = $1
   }
 
 indirect_name_or_glob_list:
   indirect_name_or_glob
   {
-    $$ = QualifiedNames{$1}
+    $$ = &sqlQnames{QualifiedNames{$1.(*sqlQname).qname}}
   }
 | indirect_name_or_glob_list ',' indirect_name_or_glob
   {
-    $$ = append($1, $3)
+    $1.(*sqlQnames).qnames = append($1.(*sqlQnames).qnames, $3.(*sqlQname).qname)
+    $$ = $1
   }
 
 // The production for a qualified relation name has to exactly match the
@@ -3478,11 +3630,11 @@ indirect_name_or_glob_list:
 qualified_name:
   name
   {
-    $$ = &QualifiedName{Base: Name($1)}
+    $$ = &sqlQname{&QualifiedName{Base: Name($1)}}
   }
 | name indirection
   {
-    $$ = &QualifiedName{Base: Name($1), Indirect: $2}
+    $$ = &sqlQname{&QualifiedName{Base: Name($1), Indirect: $2.(*sqlIndirect).indirect}}
   }
 
 // indirect_name_or_glob is a subset of `qualified_name` accepting only:
@@ -3493,29 +3645,30 @@ qualified_name:
 indirect_name_or_glob:
   name
   {
-    $$ = &QualifiedName{Base: Name($1)}
+    $$ = &sqlQname{&QualifiedName{Base: Name($1)}}
   }
 | name name_indirection
   {
-    $$ = &QualifiedName{Base: Name($1), Indirect: Indirection{$2}}
+    $$ = &sqlQname{&QualifiedName{Base: Name($1), Indirect: Indirection{$2.(*sqlIndirectElem).indirectElem}}}
   }
 | name glob_indirection
   {
-    $$ = &QualifiedName{Base: Name($1), Indirect: Indirection{$2}}
+    $$ = &sqlQname{&QualifiedName{Base: Name($1), Indirect: Indirection{$2.(*sqlIndirectElem).indirectElem}}}
   }
 | '*'
   {
-    $$ = &QualifiedName{Indirect: Indirection{unqualifiedStar}}
+    $$ = &sqlQname{&QualifiedName{Indirect: Indirection{unqualifiedStar}}}
   }
 
 name_list:
   name
   {
-    $$ = []string{$1}
+    $$ = &sqlStrs{[]string{$1}}
   }
 | name_list ',' name
   {
-    $$ = append($1, $3)
+    $1.(*sqlStrs).strs = append($1.(*sqlStrs).strs, $3)
+    $$ = $1
   }
 
 opt_name_list:
@@ -3534,57 +3687,55 @@ opt_name_list:
 func_name:
   type_function_name
   {
-    $$ = &QualifiedName{Base: Name($1)}
+    $$ = &sqlQname{&QualifiedName{Base: Name($1)}}
   }
 | name indirection
   {
-    $$ = &QualifiedName{Base: Name($1), Indirect: $2}
+    $$ = &sqlQname{&QualifiedName{Base: Name($1), Indirect: $2.(*sqlIndirect).indirect}}
   }
 
 // Constants
 a_expr_const:
   ICONST
   {
-    $$ = &IntVal{Val: $1.Val, Str: $1.Str}
+    $$ = &sqlExpr{&IntVal{Val: $1.Val, Str: $1.Str}}
   }
 | FCONST
   {
-    $$ = NumVal($1)
+    $$ = &sqlExpr{NumVal($1)}
   }
 | SCONST
   {
-    $$ = DString($1)
+    $$ = &sqlExpr{DString($1)}
   }
 | BCONST
   {
-    $$ = DBytes($1)
+    $$ = &sqlExpr{DBytes($1)}
   }
 | func_name '(' expr_list opt_sort_clause ')' SCONST { unimplemented() }
 | const_typename SCONST
   {
-    $$ = &CastExpr{Expr: DString($2), Type: $1}
+    $$ = &sqlExpr{&CastExpr{Expr: DString($2), Type: $1.(*sqlColType).colType}}
   }
 | const_interval SCONST opt_interval
   {
-    // TODO(pmattis): support opt_interval?
-    $$ = &CastExpr{Expr: DString($2), Type: $1}
+    $$ = &sqlExpr{&CastExpr{Expr: DString($2), Type: $1.(*sqlColType).colType}}
   }
 | const_interval '(' ICONST ')' SCONST
   {
-    // TODO(pmattis): Support the precision specification?
-    $$ = &CastExpr{Expr: DString($5), Type: $1}
+    $$ = &sqlExpr{&CastExpr{Expr: DString($5), Type: $1.(*sqlColType).colType}}
   }
 | TRUE
   {
-    $$ = DBool(true)
+    $$ = &sqlExpr{DBool(true)}
   }
 | FALSE
   {
-    $$ = DBool(false)
+    $$ = &sqlExpr{DBool(false)}
   }
 | NULL
   {
-    $$ = DNull
+    $$ = &sqlExpr{DNull}
   }
 
 signed_iconst:
