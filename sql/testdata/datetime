@@ -130,6 +130,8 @@ SELECT clock_timestamp() - statement_timestamp() < interval '10s'
 ----
 true
 
+# Test that implicit transactions use the transaction_timestamp() as
+# the statement_timestamp.
 query B
 SELECT now() - transaction_timestamp() = interval '0s'
 ----
@@ -181,6 +183,33 @@ query I
 SELECT COUNT(DISTINCT v) FROM kv
 ----
 4
+
+# Test that transaction_timestamp() is consistent in transaction
+# spanning multiple batches of statements.
+statement ok
+DELETE FROM kv
+
+statement ok
+BEGIN;
+INSERT INTO kv (k,v) VALUES ('a', transaction_timestamp());
+SELECT * FROM kv;
+
+statement ok
+INSERT INTO kv (k,v) VALUES ('b', transaction_timestamp());
+SELECT * FROM kv;
+COMMIT;
+
+statement ok
+BEGIN;
+SELECT * FROM KV;
+INSERT INTO kv (k,v) VALUES ('c', transaction_timestamp());
+COMMIT;
+
+query I
+SELECT COUNT(DISTINCT v) FROM kv
+----
+2
+
 
 query I
 SELECT extract(year from timestamp '2001-04-10 12:04:59')

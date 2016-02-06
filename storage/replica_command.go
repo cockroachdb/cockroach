@@ -60,6 +60,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 		if err := TestingCommandFilter(r.store.StoreID(), args, h); err != nil {
 			pErr := roachpb.NewError(err)
 			pErr.SetTxn(h.Txn)
+			log.Infof("test injecting error: %s", pErr)
 			return nil, nil, pErr
 		}
 	}

@@ -26,7 +26,6 @@ import (
 
 	"github.com/lib/pq/oid"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
@@ -194,17 +193,18 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	for {
 		if !c.doingExtendedQueryMessage {
 			c.writeBuf.initMsg(serverMsgReady)
-			var txnStatus byte = 'I'
-			if sessionTxn := c.session.Txn; sessionTxn != nil {
-				switch sessionTxn.Txn.Status {
-				case roachpb.PENDING:
-					txnStatus = 'T'
-				case roachpb.COMMITTED:
-					txnStatus = 'I'
-				case roachpb.ABORTED:
-					txnStatus = 'E'
-				}
+			var txnStatus byte
+			switch {
+			case c.session.Txn.TxnAborted:
+				txnStatus = 'E'
+			case c.session.Txn.Txn != nil:
+				// We're in a PENDING txn.
+				txnStatus = 'T'
+			case c.session.Txn.Txn == nil:
+				// We're not in a txn (i.e. the last txn was committed).
+				txnStatus = 'I'
 			}
+
 			if log.V(2) {
 				log.Infof("pgwire: %s: %q", serverMsgReady, txnStatus)
 			}
@@ -323,7 +323,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		}
 		args[fmt.Sprint(i+1)] = v
 	}
-	cols, pErr := c.executor.Prepare(c.opts.user, query, c.session, args)
+	cols, pErr := c.executor.Prepare(c.opts.user, query, &c.session, args)
 	if pErr != nil {
 		return c.sendError(pErr.String())
 	}
@@ -552,22 +552,18 @@ func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCo
 
 	c.session.Database = c.opts.database
 
-	resp, _, err := c.executor.ExecuteStatements(c.opts.user, c.session, stmts, params)
-	if err != nil {
-		return c.sendError(err.Error())
-	}
-
-	c.session.Reset()
-	c.session = resp.Session
+	results := sql.StatementResults(
+		c.executor.ExecuteStatements(c.opts.user, &c.session, stmts, params))
+	response := sql.Response{Results: results, Session: &c.session}
 
 	c.opts.database = c.session.Database
 	tracing.AnnotateTrace()
-	if resp.Empty {
+	if results.Empty {
 		// Skip executor and just send EmptyQueryResponse.
 		c.writeBuf.initMsg(serverMsgEmptyQuery)
 		return c.writeBuf.finishMsg(c.wr)
 	}
-	return c.sendResponse(resp, formatCodes, sendDescription, limit)
+	return c.sendResponse(response, formatCodes, sendDescription, limit)
 }
 
 func (c *v3Conn) sendCommandComplete(tag []byte) error {
@@ -612,10 +608,10 @@ func (c *v3Conn) sendError(errToSend string) error {
 }
 
 func (c *v3Conn) sendResponse(resp sql.Response, formatCodes []formatCode, sendDescription bool, limit int32) error {
-	if len(resp.Results) == 0 {
+	if len(resp.Results.ResultList) == 0 {
 		return c.sendCommandComplete(nil)
 	}
-	for _, result := range resp.Results {
+	for _, result := range resp.Results.ResultList {
 		if result.PErr != nil {
 			if err := c.sendError(result.PErr.String()); err != nil {
 				return err
