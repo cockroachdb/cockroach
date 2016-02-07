@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"math"
 	"math/rand"
+	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -481,26 +483,57 @@ func TestTransactionUpdate(t *testing.T) {
 	}
 }
 
+func equalPtrFields(src, dst reflect.Value, prefix string) []string {
+	t := dst.Type()
+	if t.Kind() != reflect.Struct {
+		return nil
+	}
+	if srcType := src.Type(); srcType != t {
+		return nil
+	}
+	var res []string
+	for i := 0; i < t.NumField(); i++ {
+		srcF, dstF := src.Field(i), dst.Field(i)
+		switch f := t.Field(i); f.Type.Kind() {
+		case reflect.Ptr:
+			if srcF.Interface() == dstF.Interface() {
+				res = append(res, prefix+f.Name)
+			}
+		case reflect.Slice:
+			if srcF.Pointer() == dstF.Pointer() {
+				res = append(res, prefix+f.Name)
+			}
+			l := dstF.Len()
+			if srcLen := srcF.Len(); srcLen < l {
+				l = srcLen
+			}
+			for i := 0; i < l; i++ {
+				res = append(res, equalPtrFields(srcF.Index(i), dstF.Index(i), f.Name+".")...)
+			}
+		case reflect.Struct:
+			res = append(res, equalPtrFields(srcF, dstF, f.Name+".")...)
+		}
+	}
+	return res
+}
+
 func TestTransactionClone(t *testing.T) {
 	txn := nonZeroTxn.Clone()
-	if &txn.Key[0] != &nonZeroTxn.Key[0] {
-		t.Fatalf("Key should be shared between clone and original")
+
+	fields := equalPtrFields(reflect.ValueOf(nonZeroTxn), reflect.ValueOf(txn), "")
+	sort.Strings(fields)
+
+	// Verify that the only equal pointer fields after cloning are the ones
+	// listed below. If this test fails, please update the list below and/or
+	// Transaction.Clone().
+	expFields := []string{
+		"ID",
+		"Intents.EndKey",
+		"Intents.Key",
+		"Key",
 	}
-	if &txn.ID[0] != &nonZeroTxn.ID[0] {
-		t.Fatalf("ID should be shared between clone and original")
-	}
-	if txn.LastHeartbeat == nonZeroTxn.LastHeartbeat {
-		t.Fatalf("LastHeartbeat shared between clone and original")
-	}
-	if &txn.CertainNodes.Nodes[0] == &nonZeroTxn.CertainNodes.Nodes[0] {
-		t.Fatalf("CertainNodes.Nodes shared between clone and original")
-	}
-	if &txn.Intents[0] == &nonZeroTxn.Intents[0] {
-		t.Fatalf("Intents shared between clone and original")
-	}
-	if &txn.Intents[0].Key[0] != &nonZeroTxn.Intents[0].Key[0] ||
-		&txn.Intents[0].EndKey[0] != &nonZeroTxn.Intents[0].EndKey[0] {
-		t.Fatalf("Span keys should be shared between clone and original")
+	if !reflect.DeepEqual(expFields, fields) {
+		t.Fatalf("%s != %s", expFields, fields)
 	}
 }
 
