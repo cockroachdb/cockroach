@@ -20,6 +20,8 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 
 	// Import postgres driver.
 	_ "github.com/lib/pq"
@@ -30,20 +32,25 @@ import (
 )
 
 func makeSQLClient() (*sql.DB, string) {
-	// Use the sql administrator by default (root user).
 	sqlURL := connURL
 	if len(connURL) == 0 {
-		sslOptions := ""
+		options := url.Values{}
 		if context.Insecure {
-			sslOptions = "sslmode=disable"
+			options.Add("sslmode", "disable")
 		} else {
-			sslOptions = fmt.Sprintf("sslmode=verify-full&sslcert=%s&sslkey=%s&sslrootcert=%s",
-				security.ClientCertPath(context.Certs, connUser),
-				security.ClientKeyPath(context.Certs, connUser),
-				security.CACertPath(context.Certs))
+			options.Add("sslmode", "verify-full")
+			options.Add("sslcert", security.ClientCertPath(context.Certs, connUser))
+			options.Add("sslkey", security.ClientKeyPath(context.Certs, connUser))
+			options.Add("sslrootcert", security.CACertPath(context.Certs))
 		}
-		sqlURL = fmt.Sprintf("postgresql://%s@%s:%s/%s?%s",
-			connUser, connHost, connPGPort, connDBName, sslOptions)
+		pgURL := url.URL{
+			Scheme:   "postgresql",
+			User:     url.User(connUser),
+			Host:     net.JoinHostPort(connHost, connPGPort),
+			Path:     connDBName,
+			RawQuery: options.Encode(),
+		}
+		sqlURL = pgURL.String()
 	}
 	db, err := sql.Open("postgres", sqlURL)
 	if err != nil {
