@@ -531,7 +531,15 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			if err := kv.Value.GetProto(&desc); err != nil {
 				return false, err
 			}
-			rng, err := NewReplica(&desc, s)
+
+			if _, repDesc := desc.FindReplica(s.StoreID()); repDesc == nil {
+				// We are no longer a member of the range, but we didn't GC
+				// the replica before shutting down. Destroy the replica now
+				// to avoid creating a new replica without a valid replica ID
+				// (which is necessary to have a non-nil raft group)
+				return false, s.destroyReplicaData(&desc)
+			}
+			rng, err := NewReplica(&desc, s, 0)
 			if err != nil {
 				return false, err
 			}
@@ -539,6 +547,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 				return false, err
 			}
 			s.feed.registerRange(rng, true /* scan */)
+			// TODO(bdarnell): lazily create raft groups to make the following comment true again.
 			// Note that we do not create raft groups at this time; they will be created
 			// on-demand the first time they are needed. This helps reduce the amount of
 			// election-related traffic in a cold start.
@@ -1140,6 +1149,30 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	return nil
 }
 
+// destroyReplicaData deletes all data associated with a replica, leaving a tombstone.
+// If a Replica object exists, use Replica.Destroy instead of this method.
+func (s *Store) destroyReplicaData(desc *roachpb.RangeDescriptor) error {
+	iter := newReplicaDataIterator(desc, s.Engine())
+	defer iter.Close()
+	batch := s.Engine().NewBatch()
+	defer batch.Close()
+	for ; iter.Valid(); iter.Next() {
+		_ = batch.Clear(iter.Key())
+	}
+
+	// Save a tombstone. The range cannot be re-replicated onto this
+	// node without having a replica ID of at least desc.NextReplicaID.
+	tombstoneKey := keys.RaftTombstoneKey(desc.RangeID)
+	tombstone := &roachpb.RaftTombstone{
+		NextReplicaID: desc.NextReplicaID,
+	}
+	if err := engine.MVCCPutProto(batch, nil, tombstoneKey, roachpb.ZeroTimestamp, nil, tombstone); err != nil {
+		return err
+	}
+
+	return batch.Commit()
+}
+
 // processRangeDescriptorUpdate is called whenever a range's
 // descriptor is updated.
 func (s *Store) processRangeDescriptorUpdate(rng *Replica) error {
@@ -1665,11 +1698,8 @@ func (s *Store) getOrCreateReplicaLocked(groupID roachpb.RangeID, replicaID roac
 		RangeID: groupID,
 		// TODO(bdarnell): other fields are unknown; need to populate them from
 		// snapshot.
-	}, s)
+	}, s, replicaID)
 	if err != nil {
-		return nil, err
-	}
-	if err := r.setReplicaID(replicaID); err != nil {
 		return nil, err
 	}
 	// Add the range to range map, but not rangesByKey since

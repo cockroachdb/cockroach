@@ -1411,3 +1411,67 @@ func TestLeaderRemoveSelf(t *testing.T) {
 		t.Fatalf("expect get RangeNotFoundError, actual get %v ", pErr)
 	}
 }
+
+// TestRemoveRangeWithoutGC ensures that we do not panic when a
+// replica has been removed but not yet GC'd (and therefore
+// does not have an active raft group).
+func TestRemoveRangeWithoutGC(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	mtc := startMultiTestContext(t, 2)
+	defer mtc.Stop()
+	// Disable the GC queue and move the range from store 0 to 1.
+	mtc.stores[0].DisableReplicaGCQueue(true)
+	const rangeID roachpb.RangeID = 1
+	mtc.replicateRange(rangeID, 1)
+	mtc.unreplicateRange(rangeID, 0)
+
+	// Wait for store 0 to process the removal.
+	util.SucceedsWithin(t, time.Second, func() error {
+		rep, err := mtc.stores[0].GetReplica(rangeID)
+		if err != nil {
+			return err
+		}
+		desc := rep.Desc()
+		if len(desc.Replicas) != 1 {
+			return util.Errorf("range has %d replicas", len(desc.Replicas))
+		}
+		return nil
+	})
+
+	// The replica's data is still on disk even though the Replica
+	// object is removed.
+	var desc roachpb.RangeDescriptor
+	descKey := keys.RangeDescriptorKey(roachpb.RKeyMin)
+	if ok, err := engine.MVCCGetProto(mtc.stores[0].Engine(), descKey,
+		mtc.stores[0].Clock().Now(), true, nil, &desc); err != nil {
+		t.Fatal(err)
+	} else if !ok {
+		t.Fatal("expected range descriptor to be present")
+	}
+
+	// Stop and restart the store to reset the replica's raftGroup
+	// pointer to nil. As long as the store has not been restarted it
+	// can continue to use its last known replica ID.
+	mtc.stopStore(0)
+	mtc.restartStore(0)
+	// Turn off the GC queue to ensure that the replica is deleted at
+	// startup instead of by the scanner. This is not 100% guaranteed
+	// since the scanner could have already run at this point, but it
+	// should be enough to prevent us from accidentally relying on the
+	// scanner.
+	mtc.stores[0].DisableReplicaGCQueue(true)
+
+	// The Replica object is not recreated.
+	if _, err := mtc.stores[0].GetReplica(rangeID); err == nil {
+		t.Fatalf("expected replica to be missing")
+	}
+
+	// And the data is no longer on disk.
+	if ok, err := engine.MVCCGetProto(mtc.stores[0].Engine(), descKey,
+		mtc.stores[0].Clock().Now(), true, nil, &desc); err != nil {
+		t.Fatal(err)
+	} else if ok {
+		t.Fatal("expected range descriptor to be absent")
+	}
+}
