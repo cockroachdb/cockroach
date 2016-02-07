@@ -3,7 +3,7 @@
 - Authors: Andrei, knz, Nathan
 - Start date: 2016-01-29
 - RFC PR: TBD
-- Cockroach Issue: #4024  #4026  #3633  #4073  #4088
+- Cockroach Issue: #4024  #4026  #3633  #4073  #4088  #3271
 
 # Summary
 
