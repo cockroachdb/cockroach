@@ -212,7 +212,7 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 	// For un-bootstrapped node, g.is.NodeID is 0 when client start gossip,
 	// so it's better to get nodeID from g.is every time.
 	g.mu.Lock()
-	addr := util.MakeUnresolvedAddr(g.is.NodeAddr.Network(), g.is.NodeAddr.String())
+	addr := g.is.NodeAddr
 	g.mu.Unlock()
 
 	lAddr := util.MakeUnresolvedAddr(c.rpcClient.LocalAddr().Network(), c.rpcClient.LocalAddr().String())
