@@ -25,6 +25,7 @@ var keywords = map[string]int{
 	"BOOLEAN":           BOOLEAN,
 	"BOTH":              BOTH,
 	"BY":                BY,
+	"BYTEA":             BYTEA,
 	"BYTES":             BYTES,
 	"CASCADE":           CASCADE,
 	"CASE":              CASE,

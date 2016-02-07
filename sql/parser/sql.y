@@ -298,7 +298,7 @@ func unimplemented() {
 %token <str>   ASYMMETRIC AT
 
 %token <str>   BEGIN BETWEEN BIGINT BIT
-%token <str>   BLOB BOOL BOOLEAN BOTH BY BYTES
+%token <str>   BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
 
 %token <str>   CASCADE CASE CAST CHAR
 %token <str>   CHARACTER CHECK
@@ -2234,6 +2234,10 @@ simple_typename:
   {
     $$ = &BytesType{Name: "BYTES"}
   }
+| BYTEA
+  {
+    $$ = &BytesType{Name: "BYTEA"}
+  }
 | TEXT
   {
     $$ = &StringType{Name: "TEXT"}
@@ -3761,6 +3765,7 @@ col_name_keyword:
 | BIT
 | BOOL
 | BOOLEAN
+| BYTEA
 | BYTES
 | CHAR
 | CHARACTER
