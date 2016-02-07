@@ -207,6 +207,30 @@ For example:
    sufficient to select the 1st overload for ``f`` and thus fully
    determine the type of $1.
 
+5. Lack of clarity about the expected behavior of the division sign.
+
+   Consider the following:
+   
+   ```sql
+       create table w (x int, y float);
+	   insert into w values (3/2, 3/2);
+   ```
+   
+   In PostgreSQL this inserts (1, 1.0), with perhaps a surprise on the
+   2nd value.  In CockroachDB this fails (arguably surprisingly) on
+   the 1st expression (can't insert float into int), although the
+   expression seems well-formed for the receiving column type.
+   
+6. Uncertainty on the typing of placeholders due to conflicting contexts:
+
+   ```sql
+      prepare a as select (3 + $1) + ($1 + 3.5)
+   ```
+   
+   PostgreSQL resolves #1 as `decimal`. CockroachDB can't infer.
+   Arguably both "int" and "float" may come to mind as well.
+   
+   
 
 ## Things that look wrong but really aren't
 
@@ -377,7 +401,7 @@ The details:
         true and false               => false[bool]
         'a' + 'b'                    => "ab"[string]
         12 + 3.5                     => 15.5[*N]
-        case 1 when 1 then x         => x[?] -> ambiguity error
+        case 1 when 1 then x         => x[?] 
         case 1 when 1 then 2         => 2[*N]
         3 + case 1 when 1 then 2     => 5[*N]
         abs(-2)                      => 2[*N]
@@ -392,7 +416,7 @@ The details:
 
    Folding does "as much work as possible", for example:
 
-        case x when 1 + 2 then 3 - 4 => (case x[?] when 3[*N] then -1[*N])[*N]
+        case x when 1 + 2 then 3 - 4 => (case x[?] when 3[*N] then -1[*N])
 
    Note that casts select a specific type, but may stop the fold
    because the surrounding operation becomes applied to different
@@ -402,7 +426,7 @@ The details:
         1::int + 23                  => 1[int] + 23[*N]
         (2 + 3)::int + 23            => 5[int] + 23[*N]
 
-   The optimization for functions only takes place for a limited
+   Constant function evaluation only takes place for a limited
    subset of supported functions, they need to be pure and have an
    implementation for the exact type.
 
@@ -570,8 +594,8 @@ From section [Examples that go wrong (arguably)](#examples-that-go-wrong-arguabl
     --OK
 
     select length(E'\\000' + 'a'::bytes)
-    --            E'\\000'[*S] + 'a'[bytes]     (input, pretype)
-    --            E'\\000'[bytes] + 'a'[bytes]  (ryle 2)
+    --            E'\\000'[string] + 'a'[bytes]     (input, pretype)
+    --            then failure, no overload for + found
     --OK
 
     select length(E'\\000a'::bytes || 'b'::string)
@@ -614,7 +638,7 @@ give up:
 
 ### Drawbacks of Rick
 
-The following example types differently from Postgres::
+The following example types differently from PostgreSQL::
 
 ```sql
      select (3 + $1) + ($1 + 3.5)
@@ -649,7 +673,7 @@ as possible candidates for an improvement:
 
 ### Alternatives around Rick (other than Morty)
 
-There's cases where the type type inference doesn't quite work, like 
+There's cases where the type inference doesn't quite work, like 
 
     floor($1 + $2)
     g(f($1))
@@ -813,7 +837,7 @@ also argue that reporting `int` for `$1` in `(2)` is less surprising.
 
 In `(3)` it's inferred to be `exact` and reported as `numeric`; the
 client can then send numbers as either int, floats or decimal down the
-wire during exeute, we propose to change the parser to accept any
+wire during execute, we propose to change the parser to accept any
 client-provided numeric type for a placeholder when the AST expects
 exact.
 
@@ -843,6 +867,10 @@ then exact gets autocasted to float for insert.
 
 `(9/3)*(1/3)` gets typed and computes down to exact 1, then exact
 gets casted to int as requested.
+
+Note that in this specific case the cast is not required any more
+because the implicit conversion from exact to int would take place
+anyways.
 
 ```sql
       create table t (x float);
@@ -936,13 +964,13 @@ out `float` for `$1`.
     PREPARE a AS SELECT f($1, $2), $2::float
 ```
 
-If we don't implemented Morty iteratively, then it fails to infer
+If we don't implement Morty iteratively, then it fails to infer
 anything for `$1`. If we do, then it infers `$1[int]`, like Rick. See
 the next section for details.
 
 ### Alternatives around Morty
 
-Both Rick and Morty are assymetric algorithms: how much an how well
+Both Rick and Morty are asymmetric algorithms: how much an how well
 the type of a placeholder is typed depends on the order of syntax
 elements. However while Rick tries very hard to hide that property via
 an iterative algorithm, Morty doesn't make much effort and the user
@@ -968,7 +996,7 @@ expressions as long as it manages to type new placeholders. This way:
     --                              ^  fail, but continue
 	--  						 $1 + $2, f($1)      continue
 	--  							        ^ 
-	--  						  ....  , f($1::$1)  now retry
+	--  						  ....  , f($1:int)  now retry
 	--  						    
     --                           $1::int + $2, ...
 	--  						         ^ aha! new information
