@@ -607,15 +607,30 @@ func (tc *TxnCoordSender) heartbeat(id string, trace opentracing.Span, ctx conte
 	// so grab a copy before unlocking.
 	txn := txnMeta.txn
 	tc.Unlock()
+
+	ba := roachpb.BatchRequest{}
+	ba.Timestamp = tc.clock.Now()
+	ba.Txn = txn.Clone()
+
 	if !proceed {
+		// Actively abort the transaction and its intents since we assume it's abandoned
+		et := &roachpb.EndTransactionRequest{
+			Commit:  false,
+			Intents: txnMeta.intents(),
+		}
+		ba.Add(et)
+		tc.stopper.RunAsyncTask(func() {
+			if _, err := tc.Send(ctx, ba); err != nil {
+				if log.V(1) {
+					log.Warningf("abort due to inactivity for %s failed: %s ", txn, err)
+				}
+			}
+		})
 		return false
 	}
 
 	hb := &roachpb.HeartbeatTxnRequest{}
 	hb.Key = txn.Key
-	ba := roachpb.BatchRequest{}
-	ba.Timestamp = tc.clock.Now()
-	ba.Txn = txn.Clone()
 	ba.Add(hb)
 
 	trace.LogEvent("heartbeat")
