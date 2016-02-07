@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -76,7 +77,7 @@ func (tm *testModel) Start() {
 // underlying engine. Data is returned as a map of strings to roachpb.Values.
 func (tm *testModel) getActualData() map[string]roachpb.Value {
 	// Scan over all TS Keys stored in the engine
-	startKey := keyDataPrefix
+	startKey := keys.TimeseriesPrefix
 	endKey := startKey.PrefixEnd()
 	keyValues, _, err := engine.MVCCScan(tm.Eng, startKey, endKey, 0, tm.Clock.Now(), true, nil)
 	if err != nil {

@@ -62,13 +62,6 @@ func updateRangeAddressing(b *client.Batch, desc *roachpb.RangeDescriptor) error
 	return rangeAddressing(b, desc, putMeta)
 }
 
-func makeMetaKey(prefix roachpb.Key, key roachpb.RKey) roachpb.Key {
-	res := make(roachpb.Key, 0, len(prefix)+len(key))
-	res = append(res, prefix...)
-	res = append(res, key...)
-	return res
-}
-
 // rangeAddressing updates or deletes the range addressing metadata
 // for the range specified by desc. The action to take is specified by
 // the supplied metaAction function.
@@ -89,20 +82,23 @@ func rangeAddressing(b *client.Batch, desc *roachpb.RangeDescriptor, action meta
 		bytes.HasPrefix(desc.StartKey, keys.Meta1Prefix) {
 		return util.Errorf("meta1 addressing records cannot be split: %+v", desc)
 	}
+
+	// Note that both cases 2 and 3 are handled by keys.RangeMetaKey.
+	//
 	// 2. the case of the range ending with a meta2 prefix. This means
 	// the range is full of meta2. We must update the relevant meta1
 	// entry pointing to the end of this range.
-	if bytes.HasPrefix(desc.EndKey, keys.Meta2Prefix) {
-		action(b, keys.RangeMetaKey(desc.EndKey), desc)
-	} else {
-		// 3. the range ends with a normal user key, so we must update the
-		// relevant meta2 entry pointing to the end of this range.
-		action(b, makeMetaKey(keys.Meta2Prefix, desc.EndKey), desc)
+	//
+	// 3. the range ends with a normal user key, so we must update the
+	// relevant meta2 entry pointing to the end of this range.
+	action(b, keys.RangeMetaKey(desc.EndKey), desc)
+
+	if !bytes.HasPrefix(desc.EndKey, keys.Meta2Prefix) {
 		// 3a. the range starts with KeyMin or a meta2 addressing record,
 		// update the meta1 entry for KeyMax.
 		if bytes.Equal(desc.StartKey, roachpb.RKeyMin) ||
 			bytes.HasPrefix(desc.StartKey, keys.Meta2Prefix) {
-			action(b, makeMetaKey(keys.Meta1Prefix, roachpb.RKeyMax), desc)
+			action(b, keys.Meta1KeyMax, desc)
 		}
 	}
 	return nil

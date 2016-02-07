@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -58,7 +59,7 @@ func TestDataKeys(t *testing.T) {
 
 	for i, tc := range testCases {
 		encoded := MakeDataKey(tc.name, tc.source, tc.resolution, tc.timestamp)
-		if !bytes.HasPrefix(encoded, keyDataPrefix) {
+		if !bytes.HasPrefix(encoded, keys.TimeseriesPrefix) {
 			t.Errorf("case %d, encoded key %v did not have time series data prefix", i, encoded)
 		}
 		if a, e := len(encoded), tc.expectedLen; a != e {

@@ -165,6 +165,9 @@ var (
 	// StatusNodePrefix stores all status info for nodes.
 	StatusNodePrefix = roachpb.Key(makeKey(StatusPrefix, roachpb.RKey("node-")))
 
+	// TimeseriesPrefix is the key prefix for all timeseries data.
+	TimeseriesPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("tsd")))
+
 	// TableDataMin is the start of the range of table data keys.
 	TableDataMin = roachpb.Key(encoding.EncodeVarintAscending(nil, math.MinInt64))
 	// TableDataMin is the end of the range of table data keys.
