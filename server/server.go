@@ -24,6 +24,7 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -224,19 +225,56 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	unresolvedAddr := util.NewUnresolvedAddr("tcp", s.ctx.Addr)
-	ln, err := util.ListenAndServe(s.stopper, s, unresolvedAddr, tlsConfig)
-	if err != nil {
-		return err
+	officialAddr := util.NewUnresolvedAddr("tcp", s.ctx.Addr)
+
+	// Figure out our "official" (for TLS purposes) address in this scope.
+	{
+		ln, err := util.ListenAndServe(s.stopper, s, officialAddr, tlsConfig)
+		if err != nil {
+			return err
+		}
+		s.listener = ln // Only used in tests.
+
+		unresolvedHost, unresolvedPort, err := net.SplitHostPort(s.ctx.Addr)
+		if err != nil {
+			return err
+		}
+
+		resolvedHost, resolvedPort, err := net.SplitHostPort(ln.Addr().String())
+		if err != nil {
+			return err
+		}
+
+		var host string
+		if unresolvedHost != "" {
+			// A host was provided, use it.
+			host = unresolvedHost
+		} else {
+			// A host was not provided. Ask the kernel, and fall back to the listener.
+			if hostname, err := os.Hostname(); err == nil {
+				host = hostname
+			} else {
+				host = resolvedHost
+			}
+		}
+
+		var port string
+		if unresolvedPort != "0" {
+			// A port was provided, use it.
+			port = unresolvedPort
+		} else {
+			// A port was not provided, but the kernel assigned one.
+			port = resolvedPort
+		}
+
+		officialAddr.AddressField = net.JoinHostPort(host, port)
 	}
-	s.listener = ln
-	addr := ln.Addr()
 
-	s.rpcContext.SetLocalServer(s.rpc, addr.String())
+	s.rpcContext.SetLocalServer(s.rpc, officialAddr.String())
 
-	s.gossip.Start(s.rpc, addr)
+	s.gossip.Start(s.rpc, officialAddr)
 
-	if err := s.node.start(s.rpc, addr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
+	if err := s.node.start(s.rpc, officialAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
 		return err
 	}
 
@@ -259,7 +297,7 @@ func (s *Server) Start() error {
 
 	s.status = newStatusServer(s.db, s.gossip, s.registry, s.ctx)
 
-	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), addr)
+	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), officialAddr)
 	s.initHTTP()
 
 	return s.pgServer.Start(util.NewUnresolvedAddr("tcp", s.ctx.PGAddr))
