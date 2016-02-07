@@ -19,12 +19,15 @@ package cli
 import (
 	"database/sql"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
+	"os/user"
+	"path/filepath"
 	"strings"
 
-	"github.com/peterh/liner"
+	"github.com/GeertJohan/go.linenoise"
+	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
@@ -50,12 +53,6 @@ Open a sql shell running against a cockroach database.
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
 func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
-	liner := liner.NewLiner()
-	defer func() {
-		_ = liner.Close()
-	}()
-
-	fmt.Print(infoMessage)
 
 	// Default prompt is part of the connection URL. eg: "marc@localhost>"
 	// continued statement prompt is: "        -> "
@@ -74,45 +71,85 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 	fullPrompt += "> "
 	continuePrompt += "> "
 
-	// TODO(marc): detect if we're actually on a terminal. If not,
-	// we may want to repeat the statements on stdout.
-	// TODO(marc): add test.
+	histFile := ""
+	keepHistory := false
+
+	if isatty.IsTerminal(os.Stdout.Fd()) {
+		// We only enable history management when the terminal is actually
+		// interactive. This saves on memory when e.g. piping a large SQL
+		// script through the command-line client.
+		keepHistory = true
+		userAcct, err := user.Current()
+		if err != nil {
+			if log.V(2) {
+				log.Warningf("cannot retrieve user information: %s", err)
+				log.Warning("cannot load or save the command-line history.")
+			}
+		} else {
+			histFile = filepath.Join(userAcct.HomeDir, ".cockroachdb_history")
+			if err := linenoise.LoadHistory(histFile); err != nil {
+				log.Warning("cannot load command-line history: %s", err)
+			}
+		}
+	}
+
+	fmt.Print(infoMessage)
+
 	var stmt []string
-	var l string
-	var err error
 
 	for {
-		if len(stmt) == 0 {
-			l, err = liner.Prompt(fullPrompt)
-		} else {
-			l, err = liner.Prompt(continuePrompt)
-		}
-		if err != nil {
-			if err != io.EOF {
-				exitErr = err
-			}
+		l, err := linenoise.Line(map[bool]string{true: fullPrompt, false: continuePrompt}[len(stmt) == 0])
+
+		if err == linenoise.KillSignalError {
 			break
+		} else if err != nil {
+			fmt.Fprintf(osStderr, "input error: %s", err)
+			return err
+		}
+
+		tl := strings.TrimSpace(l)
+		if len(stmt) == 0 && len(tl) == 0 {
+			// Empty line at beginning, simply continue.
+			// However, we don't simply continue after the first line since
+			// we may be in the middle of a string literal where empty lines
+			// may be significant.
+			continue
 		}
 
 		stmt = append(stmt, l)
 
 		// See if we have a semicolon at the end of the line (ignoring
 		// trailing whitespace).
-		if !strings.HasSuffix(strings.TrimSpace(l), ";") {
+		if !strings.HasSuffix(tl, ";") {
 			// No semicolon: read some more.
 			continue
 		}
 
-		// We always insert a newline when continuing statements.
-		// However, it causes problems with lines in the middle of:
-		// - qualified names (eg: database.<newline>table)
-		// - quoted strings (eg: 'foo<newline>bar')
-		// This also makes the history replay horrible.
-		// mysql replaces newlines with spaces in the history, which works
-		// because string concatenation with newlines can also be done with spaces.
-		// postgres keeps the line intact in the history.
+		// We join the statements back together with newlines in case
+		// there is a significant newline inside a string literal. However
+		// we join with spaces for keeping history, because otherwise a
+		// history recall will only pull one line from a multi-line
+		// statement.
 		fullStmt := strings.Join(stmt, "\n")
-		liner.AppendHistory(fullStmt)
+
+		if keepHistory {
+			// We ignore linenoise's error here since it only reports an
+			// error in two situations: out of memory (this will be caught
+			// soon enough by cockroach sql) or duplicate entry (we don't
+			// care).
+			_ = linenoise.AddHistory(strings.Join(stmt, " "))
+
+			if histFile != "" {
+				// We save the history between each statement, This enables
+				// reusing history in another SQL shell without closing the
+				// current shell.
+				if err := linenoise.SaveHistory(histFile); err != nil {
+					log.Warningf("cannot save command-line history: %s", err)
+					log.Info("command-line history will not be saved further in this session.")
+					histFile = ""
+				}
+			}
+		}
 
 		if exitErr = runPrettyQuery(db, os.Stdout, fullStmt); exitErr != nil {
 			fmt.Fprintln(osStderr, exitErr)
@@ -121,6 +158,7 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 		// Clear the saved statement.
 		stmt = stmt[:0]
 	}
+
 	return exitErr
 }
 
