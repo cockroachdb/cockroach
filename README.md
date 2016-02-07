@@ -114,7 +114,7 @@ The code assumes that $NODE{1,2,3} are the host names of the three nodes in the 
 ```bash
 # Create certificates
 ./cockroach cert create-ca
-./cockroach cert create-node 127.0.0.1 localhost $NODE1 $NODE2 $NODE3
+./cockroach cert create-node 127.0.0.1 ::1 localhost $NODE1 $NODE2 $NODE3
 ./cockroach cert create-client root
 # Distribute certificates
 for n in $NODE1 $NODE2 $NODE3; do
