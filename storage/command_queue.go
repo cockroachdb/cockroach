@@ -106,7 +106,7 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 // Add should be invoked after waiting on already-executing, overlapping
 // commands via the WaitGroup initialized through GetWait().
 func (cq *CommandQueue) Add(readOnly bool, spans ...roachpb.Span) []interface{} {
-	var r []interface{}
+	r := make([]interface{}, 0, len(spans))
 	for _, span := range spans {
 		start, end := span.Key, span.EndKey
 		if len(end) == 0 {
