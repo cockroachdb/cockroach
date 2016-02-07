@@ -155,7 +155,7 @@ func getDefaultCacheSize() uint64 {
 			return halfSysMem
 		}
 
-		cgAvlMem, err := strconv.ParseUint(string(buf), 10, 64)
+		cgAvlMem, err := strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64)
 		if err != nil {
 			log.Infof("can't parse available memory from cgroups (%s), setting default rocksdb cache size to %dMB (half of system memory)", err, halfSysMem>>20)
 			return halfSysMem
