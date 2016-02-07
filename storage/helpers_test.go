@@ -88,3 +88,8 @@ func (s *Store) ForceRaftLogScanAndProcess() {
 func (s *Store) LogReplicaChangeTest(txn *client.Txn, changeType roachpb.ReplicaChangeType, replica roachpb.ReplicaDescriptor, desc roachpb.RangeDescriptor) *roachpb.Error {
 	return s.logChange(txn, changeType, replica, desc)
 }
+
+// EnqueueRaftUpdateCheckTest exposes enqueueRaftUpdateCheck for testing.
+func (s *Store) EnqueueRaftUpdateCheckTest(rangeID roachpb.RangeID) {
+	s.enqueueRaftUpdateCheck(rangeID)
+}

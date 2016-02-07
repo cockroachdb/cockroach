@@ -628,10 +628,15 @@ func (r *Replica) SetLastVerificationTimestamp(timestamp roachpb.Timestamp) erro
 	return engine.MVCCPutProto(r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
 }
 
-// RaftStatus returns the current raft status of the replica.
+// RaftStatus returns the current raft status of the replica. May
+// return nil if this replica is not currently an active member of the
+// group.
 func (r *Replica) RaftStatus() *raft.Status {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.mu.raftGroup == nil {
+		return nil
+	}
 	return r.mu.raftGroup.Status()
 }
 
@@ -1059,7 +1064,7 @@ func (r *Replica) handleRaftReady() error {
 	// TODO(bram): There is a lot of locking and unlocking of the replica,
 	// consider refactoring this.
 	r.mu.Lock()
-	if !r.mu.raftGroup.HasReady() {
+	if r.mu.raftGroup == nil || !r.mu.raftGroup.HasReady() {
 		r.mu.Unlock()
 		return nil
 	}

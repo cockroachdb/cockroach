@@ -1412,3 +1412,64 @@ func TestLeaderRemoveSelf(t *testing.T) {
 		t.Fatalf("expect get RangeNotFoundError, actual get %v ", pErr)
 	}
 }
+
+// TestRemoveRangeWithoutGC ensures that we do not panic when a
+// replica has been removed but not yet GC'd (and therefore
+// does not have an active raft group).
+func TestRemoveRangeWithoutGC(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	mtc := startMultiTestContext(t, 2)
+	defer mtc.Stop()
+	// Disable the GC queue and move the range from store 0 to 1.
+	mtc.stores[0].DisableReplicaGCQueue(true)
+	const rangeID roachpb.RangeID = 1
+	mtc.replicateRange(rangeID, 1)
+	mtc.unreplicateRange(rangeID, 0)
+
+	// Wait for store 0 to process the removal.
+	util.SucceedsWithin(t, time.Second, func() error {
+		rep, err := mtc.stores[0].GetReplica(rangeID)
+		if err != nil {
+			return err
+		}
+		desc := rep.Desc()
+		if len(desc.Replicas) != 1 {
+			return util.Errorf("range has %d replicas", len(desc.Replicas))
+		}
+		return nil
+	})
+
+	// Stop and restart the store to reset the replica's raftGroup
+	// pointer to nil. As long as the store has not been restarted it
+	// can continue to use its last known replica ID.
+	mtc.stopStore(0)
+	mtc.restartStore(0)
+	// TODO(bdarnell): we should more eagerly GC ranges in this state at
+	// startup, but when we do so we'll need a non-racy way to prevent
+	// it for this test.
+	mtc.stores[0].DisableReplicaGCQueue(true)
+
+	// Now try everything that might try to access the raft group.
+
+	// Enqueue an update check. Shouldn't really happen in this state
+	// but there could be a lingering entry in the channel.
+	mtc.stores[0].EnqueueRaftUpdateCheckTest(rangeID)
+	// Wait long enough for timers to fire.
+	time.Sleep(2 * storage.TestStoreContext.RaftTickInterval)
+	if s := mtc.stores[0].RaftStatus(rangeID); s != nil {
+		t.Errorf("expected RaftStatus to be nil but got %s", s)
+	}
+	// Propose a command directly on the range (which will fail but
+	// shouldn't panic).
+	rep, err := mtc.stores[0].GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	incArgs := incrementArgs(keys.Meta1Prefix, 1)
+	if _, pErr := client.SendWrapped(rep, nil, &incArgs); pErr == nil {
+		t.Fatalf("expected error but got nil")
+	} else if _, ok := pErr.GetDetail().(*roachpb.RangeNotFoundError); !ok {
+		t.Fatalf("expected RangeNotFoundError but got %s", pErr)
+	}
+}
