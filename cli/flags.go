@@ -166,7 +166,10 @@ func wrapText(s string) string {
 }
 
 func usage(name string) string {
-	s := flagUsage[name]
+	s, ok := flagUsage[name]
+	if !ok {
+		panic(fmt.Sprintf("flag usage not defined for %q", name))
+	}
 	if s[0] != '\n' {
 		s = "\n" + s
 	}
@@ -199,9 +202,9 @@ func initFlags(ctx *Context) {
 		f.BoolVar(&ctx.EphemeralSingleNode, "dev", ctx.EphemeralSingleNode, usage("dev"))
 
 		// Server flags.
-		f.StringVar(&connHost, "host", "", flagUsage["host"])
-		f.StringVar(&connPort, "port", base.CockroachPort, flagUsage["port"])
-		f.StringVar(&connPGPort, "pgport", base.PGPort, flagUsage["pgport"])
+		f.StringVar(&connHost, "host", "", usage("host"))
+		f.StringVar(&connPort, "port", base.CockroachPort, usage("port"))
+		f.StringVar(&connPGPort, "pgport", base.PGPort, usage("pgport"))
 		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, usage("attrs"))
 		f.StringVar(&ctx.Stores, "stores", ctx.Stores, usage("stores"))
 		f.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, usage("max-offset"))
@@ -262,30 +265,30 @@ func initFlags(ctx *Context) {
 		f.BoolVar(&context.EphemeralSingleNode, "dev", context.EphemeralSingleNode, usage("dev"))
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, usage("certs"))
-		f.StringVar(&connHost, "host", "", flagUsage["host"])
+		f.StringVar(&connHost, "host", "", usage("host"))
 	}
 
 	{
 		f := sqlShellCmd.Flags()
-		f.BoolVarP(&ctx.OneShotSQL, "execute", "e", ctx.OneShotSQL, flagUsage["execute"])
+		f.BoolVarP(&ctx.OneShotSQL, "execute", "e", ctx.OneShotSQL, usage("execute"))
 	}
 
 	// Commands that need the cockroach port.
 	simpleCmds := []*cobra.Command{kvCmd, nodeCmd, rangeCmd, exterminateCmd, quitCmd}
 	for _, cmd := range simpleCmds {
 		f := cmd.PersistentFlags()
-		f.StringVar(&connPort, "port", base.CockroachPort, flagUsage["port"])
+		f.StringVar(&connPort, "port", base.CockroachPort, usage("port"))
 	}
 
 	// Commands that establish a SQL connection.
 	sqlCmds := []*cobra.Command{sqlShellCmd, userCmd, zoneCmd}
 	for _, cmd := range sqlCmds {
 		f := cmd.PersistentFlags()
-		f.StringVar(&connURL, "url", "", flagUsage["url"])
+		f.StringVar(&connURL, "url", "", usage("url"))
 
-		f.StringVar(&connUser, "user", security.RootUser, flagUsage["user"])
-		f.StringVar(&connPGPort, "pgport", base.PGPort, flagUsage["pgport"])
-		f.StringVar(&connDBName, "database", "", flagUsage["database"])
+		f.StringVar(&connUser, "user", security.RootUser, usage("user"))
+		f.StringVar(&connPGPort, "pgport", base.PGPort, usage("pgport"))
+		f.StringVar(&connDBName, "database", "", "") // TODO(marc): usage("database"))
 	}
 
 	// Max results flag for scan, reverse scan, and range list.
