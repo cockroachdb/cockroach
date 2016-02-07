@@ -83,13 +83,13 @@ const (
 	// excessive tightening of the network.
 	minPeers = 3
 
-	// ttlNodeDescriptorGossip is time-to-live for node ID -> address.
-	ttlNodeDescriptorGossip = 0 * time.Second
+	// ttlNodeDescriptorGossip is time-to-live for node ID -> descriptor.
+	ttlNodeDescriptorGossip = 1 * time.Hour
 
 	// defaultStallInterval is the default interval for checking whether
 	// the incoming and outgoing connections to the gossip network are
 	// insufficient to keep the network connected.
-	defaultStallInterval = 1 * time.Second
+	defaultStallInterval = 30 * time.Second
 
 	// defaultBootstrapInterval is the minimum time between successive
 	// bootstrapping attempts to avoid busy-looping trying to find the
@@ -274,7 +274,8 @@ func (g *Gossip) SetStorage(storage Storage) error {
 			existing[makeKey(addr)] = struct{}{}
 		}
 		for _, addr := range storedBI.Addresses {
-			if _, ok := existing[makeKey(addr)]; !ok {
+			// If the address is new, and isn't our own address, add it.
+			if _, ok := existing[makeKey(addr)]; !ok && addr != g.is.NodeAddr {
 				g.bootstrapInfo.Addresses = append(g.bootstrapInfo.Addresses, addr)
 			}
 		}
@@ -307,12 +308,6 @@ func (g *Gossip) SetStorage(storage Storage) error {
 			g.resolverIdx = len(g.resolvers) - 1
 		}
 		g.resolvers = append(g.resolvers, r)
-	}
-
-	// If there are no resolvers even after merging known nodes from
-	// persistent storage, we need to error out.
-	if len(g.resolvers) == 0 {
-		return fmt.Errorf("no nodes were found to connect to cluster; use --join")
 	}
 
 	// If a new resolver was found, immediately signal bootstrap.
@@ -438,18 +433,20 @@ func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	n := len(g.nodeDescs)
-	g.nodeDescs[desc.NodeID] = &desc
-	if n == len(g.nodeDescs) {
-		// The node has already been seen, return immediately.
-		return
-	}
 
 	// Recompute max peers based on size of network and set the max
 	// sizes for incoming and outgoing node sets.
-	maxPeers := g.maxPeers(len(g.nodeDescs))
-	g.incoming.setMaxSize(maxPeers)
-	g.outgoing.setMaxSize(maxPeers)
+	defer func() {
+		maxPeers := g.maxPeers(len(g.nodeDescs))
+		g.incoming.setMaxSize(maxPeers)
+		g.outgoing.setMaxSize(maxPeers)
+	}()
+
+	// Skip if the node has already been seen or it's our own address.
+	if _, ok := g.nodeDescs[desc.NodeID]; ok || desc.Address == g.is.NodeAddr {
+		return
+	}
+	g.nodeDescs[desc.NodeID] = &desc
 
 	// Add this new node to our list of resolvers so we can keep
 	// connecting to gossip if the original resolvers go offline.
@@ -882,13 +879,10 @@ func (g *Gossip) doDisconnected(stopper *stop.Stopper, c *client) {
 	g.maybeSignalStalledLocked()
 }
 
+// If the sentinel gossip is missing, log and signal bootstrapper to
+// try another resolver.
 func (g *Gossip) maybeSignalStalledLocked() {
-	// If there are no outgoing hosts or sentinel gossip is missing,
-	// and there are still unused bootstrap hosts, signal bootstrapper
-	// to try another.
-	if g.outgoing.len()+g.incoming.len() == 0 {
-		g.signalStalled()
-	} else if g.is.getInfo(KeySentinel) == nil {
+	if g.is.getInfo(KeySentinel) == nil {
 		g.warnAboutStall()
 		g.signalStalled()
 	}
@@ -911,7 +905,7 @@ func (g *Gossip) signalStalled() {
 // never having been initialized.
 func (g *Gossip) warnAboutStall() {
 	if g.outgoing.len()+g.incoming.len() == 0 {
-		log.Warningf("not connected to cluster; check --join specifies another active node")
+		log.Warningf("not connected to cluster; use --join to specify a connected node")
 	} else if len(g.resolversTried) == len(g.resolvers) {
 		log.Warningf("first range unavailable or cluster not initialized")
 	} else {

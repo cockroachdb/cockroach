@@ -243,7 +243,9 @@ func (s *server) maybeTighten() {
 // loop via goroutine. Periodically, clients connected and awaiting
 // the next round of gossip are awoken via the conditional variable.
 func (s *server) start(rpcServer *rpc.Server, addr net.Addr) {
+	s.mu.Lock()
 	s.is.NodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
+	s.mu.Unlock()
 	if err := rpcServer.Register("Gossip.Gossip", s.Gossip, &Request{}); err != nil {
 		log.Fatalf("unable to register gossip service with RPC server: %s", err)
 	}

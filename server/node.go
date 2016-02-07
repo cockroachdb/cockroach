@@ -473,6 +473,11 @@ func (n *Node) startGossip(stopper *stop.Stopper) {
 		for {
 			select {
 			case <-ticker.C:
+				// Node descriptor.
+				if err := n.ctx.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
+					log.Warningf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
+				}
+				// Store capacities.
 				n.gossipStores()
 			case <-stopper.ShouldStop():
 				return
