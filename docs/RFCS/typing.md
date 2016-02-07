@@ -2,8 +2,8 @@
 - Status: draft
 - Authors: Andrei, knz, Nathan
 - Start date: 2016-01-29
-- RFC PR: TBD
-- Cockroach Issue: #4024, #4026, #3633, #4073
+- RFC PR: #4121
+- Cockroach Issue: #4024  #4026  #3633  #4073  #4088  #3271 #1795
 
 # Summary
 
@@ -27,6 +27,7 @@ To reach these goals the RFC proposes to:
   expressions (`SELECT` as an expression is already a prerequisite for
   sub-selects)
 - structure typing as a visitor that annotates types as attributes in AST nodes
+- extend `EXPLAIN` to pretty-print the inferred types.
 
 As with all in software engineering, more intelligence requires more
 work, and has the potential to make software less predictable. This
@@ -207,6 +208,30 @@ For example:
    sufficient to select the 1st overload for ``f`` and thus fully
    determine the type of $1.
 
+5. Lack of clarity about the expected behavior of the division sign.
+
+   Consider the following:
+   
+   ```sql
+       create table w (x int, y float);
+	   insert into w values (3/2, 3/2);
+   ```
+   
+   In PostgreSQL this inserts (1, 1.0), with perhaps a surprise on the
+   2nd value.  In CockroachDB this fails (arguably surprisingly) on
+   the 1st expression (can't insert float into int), although the
+   expression seems well-formed for the receiving column type.
+   
+6. Uncertainty on the typing of placeholders due to conflicting contexts:
+
+   ```sql
+      prepare a as select (3 + $1) + ($1 + 3.5)
+   ```
+   
+   PostgreSQL resolves #1 as `decimal`. CockroachDB can't infer.
+   Arguably both "int" and "float" may come to mind as well.
+   
+   
 
 ## Things that look wrong but really aren't
 
@@ -377,7 +402,7 @@ The details:
         true and false               => false[bool]
         'a' + 'b'                    => "ab"[string]
         12 + 3.5                     => 15.5[*N]
-        case 1 when 1 then x         => x[?] -> ambiguity error
+        case 1 when 1 then x         => x[?] 
         case 1 when 1 then 2         => 2[*N]
         3 + case 1 when 1 then 2     => 5[*N]
         abs(-2)                      => 2[*N]
@@ -392,7 +417,7 @@ The details:
 
    Folding does "as much work as possible", for example:
 
-        case x when 1 + 2 then 3 - 4 => (case x[?] when 3[*N] then -1[*N])[*N]
+        case x when 1 + 2 then 3 - 4 => (case x[?] when 3[*N] then -1[*N])
 
    Note that casts select a specific type, but may stop the fold
    because the surrounding operation becomes applied to different
@@ -402,7 +427,7 @@ The details:
         1::int + 23                  => 1[int] + 23[*N]
         (2 + 3)::int + 23            => 5[int] + 23[*N]
 
-   The optimization for functions only takes place for a limited
+   Constant function evaluation only takes place for a limited
    subset of supported functions, they need to be pure and have an
    implementation for the exact type.
 
@@ -570,8 +595,8 @@ From section [Examples that go wrong (arguably)](#examples-that-go-wrong-arguabl
     --OK
 
     select length(E'\\000' + 'a'::bytes)
-    --            E'\\000'[*S] + 'a'[bytes]     (input, pretype)
-    --            E'\\000'[bytes] + 'a'[bytes]  (ryle 2)
+    --            E'\\000'[string] + 'a'[bytes]     (input, pretype)
+    --            then failure, no overload for + found
     --OK
 
     select length(E'\\000a'::bytes || 'b'::string)
@@ -614,7 +639,7 @@ give up:
 
 ### Drawbacks of Rick
 
-The following example types differently from Postgres::
+The following example types differently from PostgreSQL::
 
 ```sql
      select (3 + $1) + ($1 + 3.5)
@@ -649,7 +674,7 @@ as possible candidates for an improvement:
 
 ### Alternatives around Rick (other than Morty)
 
-There's cases where the type type inference doesn't quite work, like 
+There's cases where the type inference doesn't quite work, like 
 
     floor($1 + $2)
     g(f($1))
@@ -753,52 +778,145 @@ the constant expression `1.5 - 0.5` evaluates to an `int` an forces
 The complexity and perhaps excessive intelligence of Rick stimulated a
 discussion about the simplest alternative that's still useful for
 enough common cases. Morty was born from this discussion: a simple set
-of rules operating in a single pass on the AST; there's no recursion
+of rules operating in two simple passes on the AST; there's no recursion
 and no iteration.
 
-1. Number literals are typed as an internal type `Exact`. Just like
-   above, we can do arithmethic in this type for constant
-   folding. `Exact` is special because it can be cast to any other
-   numeric type.
-2. Placeholders are typed either by an immediate cast (which
-   constitutes a type hint, like above) or (for convenience) if a
-   placeholder is an argument to a function, or operand, which exactly
-   has 1 candidate overload based on all its non-placeholder
-   arguments, then the type of
-   the placeholder becomes the type demanded by that argument position.  
-3. `INSERT`s and `UPDATE`s come with the same inference rules
+First pass: populating initial types for literals and placeholders.
+
+- for each numeric literal, annotate with an internal type
+  `exact`. Just like for Rick, we can do arithmethic in this type for
+  constant folding.
+  
+- for each placeholder, process immediate casts if any by annotating
+  the placeholder by the type indicated by the cast *when there is no
+  other type discovered earlier for this placeholder* during this
+  phase. If the same placehoder is encountered a 2nd time with a
+  conflicting cast, report a typing error ("conflicting types for $n
+  ...")
+
+Second pass (optional, not part of type checking): constant folding.
+
+Third pass, type inference and soundness analysis:
+
+1. Overload resolution is done using only already typed arguments. This
+   includes non-placeholder arguments, and placeholders with a type discovered
+   earlier (either from the first pass, or earlier in this pass in traversal order).
+2. If, during overload resolution, an expression E of type `exact` is
+   found at some argument position and no candidate accepts `exact` at
+   that position, and *also* there is only one candidate that accepts
+   a numeric type T at that position, then the expression E is
+   automatically substituted by `TYPEASSERT_NUMERIC(E,T)[T]` and
+   typing continues assuming E[T] (see rule 11 below for a definition of `TYPEASSERT_NUMERIC`).   
+3. If, during overload resolution, a *literal* `string` E is
+   found at some argument position and no candidate accepts `string`
+   at that position, and *also* there is only one candidate left based
+   on other arguments that accept type T at that position *which does
+   not have a native literal syntax*, then the expression E is
+   automatically substituted by `TYPEASSERT_STRING(E,T)[T]` and typing
+   continues assuming E[T]. See rule 12 below.
+4. If no candidate overload can be found after steps #2 and #3, typing
+   fails with "no known function with these argument types".
+5. If an overload has only one candidate based on rules #2 and #3,
+   then any placeholder it has as immediate arguments that are not yet
+   typed receive the type indicated by their argument position.
+6. If overload resolution finds more than 1 candidate, typing fails
+   with "ambiguous overload".
+7. `INSERT`s and `UPDATE`s come with the same inference rules
    as function calls.  
-4. If multiple different types are resolved for the same placeholder in
-   multiple locations, then fail with ambiguous typing (the user can
-   resolve with a cast if needed).  
-5. If no type can be inferred for a placeholder (e.g. it's used only
-   in overloaded function calls or only comes in contact with other
-   untyped placeholders), then again fail with ambiguous typing.
-6. literal NULL is typed "unknown" unless there's an immediate cast just
+8. If no type can be inferred for a placeholder (e.g. it's used only
+   in overloaded function calls with multiple remaining candidates or
+   only comes in contact with other untyped placeholders), then again
+   fail with "ambiguous typing for the placeholder".
+9. literal NULL is typed "unknown" unless there's an immediate cast just
    afterwards, and the _type_ "unknown" propagates up expressions until
    either the top level (that's an error) or a function that explicitly
    takes unknown as input type to do something with it (e.g. is_null,
    comparison, or INSERT with nullable columns);
-7. "when" clauses (And the entire surrounding case expression) get typed
-   by the 1st non-placeholder value if one is found, then the other
-   positions are automatically checked against that type. Otherwise a
-   typing error is reported.
+10. "then" clauses (And the entire surrounding case expression) get
+    typed by first attempting to type all the expressions after
+    "then"; then once this done, take the 1st expression that has a
+    type (if any) and type check the other expressions against that
+    type (possibly assigning types to untyped placeholders/exact
+    expressions in that process, as per rule 2/3). If there are "then"
+    clauses with no types after this, a typing error is reported.
+11. `TYPEASSERT_NUMERIC(<expression>, <type>)` accepts an expression of type
+    `exact` as first argument and a numeric type name as 2nd
+    argument. If at run-time the value of the expression fits into the
+    specified type (at least preserving the amplitude for float, and
+    without any information loss for integer and decimal), the value
+    of the expression is returned, casted to the type. Otherwise, a
+    SQL error is generated.
+12. `TYPEASSERT_STRING(<expression>, <type>)` accepts an expression of
+    type `string` as first argument and a type with a possible
+    conversion from string as 2nd argument. If at run-time the
+    converted value of the expression fits into the specified type
+    (the format is correct, and the conversion is at least preserving
+    the amplitude for float, and without any information loss for
+    integer and decimal), the value of the expression is returned,
+    converted to the type. Otherwise, a SQL error is generated.
+13. If during `EXECUTE` a client provides a `string` for a placeholder
+    that was expecting type T *which does not have a native literal representation*, then
+	the value is accepted and treated as if it was enclosed in `TYPEASSERT_STRING(V, T)`.
 
-`Exact` is obviously not supported by the pgwire protocol, or by
-clients, so we'd report `numeric` when `exact` has been inferred for a
-placeholder.  For Morty we then also need to be lenient about the
-incoming types of numeric values during execute, and in some cases
-perhaps cast them back to exact.
-   
 You can see that Morty is simpler than Rick: there's no sets of type candidates for any expressions.  
 Other differences is that Morty relies on the introduction of an
-implicit cast. This has some consequences.  Consider:
+guarded implicit cast. This is because of the following cases:
 
 ```sql
     (1)   INSERT INTO t(int_col) VALUES (4.5)
 ```    
     
-This is a type error in Rick, but would insert `4` in Morty.
+This is a type error in Rick. Without Morty's rule 2 and a "blind"
+implicit cast, this would insert `4` which would be undesirable. With
+rule 2, the semantics become:
+
+```sql
+    (1)   INSERT INTO t(int_col) VALUES (TYPEASSERT_NUMERIC(4.5, int)[int])
+```    
+
+And this would fail, as desired.
+
+`Exact` is obviously not supported by the pgwire protocol, or by
+clients, so we'd report `numeric` when `exact` has been inferred for a
+placeholder.  
+   
+Similarly, and in a fashion compatible with many SQL engines, string
+values are autocasted when there is no ambiguity (rule 3); for
+example:
+   
+```sql
+    (1b)   INSERT INTO t(timestamp_col) VALUES ('2012-02-01 01:02:03')
+	
+	Gets replaced by:
+	
+    (1b)   INSERT INTO t(timestamp_col) VALUES (TYPEASSERT_STRING('2012-02-01 01:02:03', timestamp)[timestamp]) 
+	
+	which succeeds, and 
+	
+    (1c)   INSERT INTO t(timestamp_col) VALUES ('4.5')
+	
+	gets replaced by:
+	
+    (1c)   INSERT INTO t(timestamp_col) VALUES (TYPEASSERT_STRING('4.5', timestamp)[timestamp])
+	
+	which fails at run-time.
+```    
+
+Morty's rules 3 and 13 are proposed for convenience, observing that
+once the SQL implementation starts to provide custom / extended types,
+clients may not support a native wire representation for them. It can
+be observed in many SQL implementations that clients will pass values
+of "exotic" types (interval, timestamps, ranges, etc) as strings,
+expecting the Right Thing to happen automatically. Rules 3 and 13 are
+our proposal to go in this direction.
+
+Rule 3 is restricted to literals however, because we probably don't
+want to support things like `insert into x(timestamp_column) values
+(substring(...) || 'foo')` without an explicit cast to make the
+intention clear.
+
+
+Regarding typing of placeholders:
 
 ```sql
     (2)   INSERT INTO t(int_col) VALUES ($1)
@@ -806,16 +924,35 @@ This is a type error in Rick, but would insert `4` in Morty.
 ```
 
 In `(2)`, `$1` is inferred to be `int`.  Passing the value `"4.5"` for
-`$1` in `(2)` would be a type error during execute, which is arguably
-inconsistent with the direct statement `(1)`. However on the other
-hand it's the statement `(1)` that's really lenient, and one could
-also argue that reporting `int` for `$1` in `(2)` is less surprising.
+`$1` in `(2)` would be a type error during execute.
 
-In `(3)` it's inferred to be `exact` and reported as `numeric`; the
+In `(3)`, `$1` is inferred to be `exact` and reported as `numeric`; the
 client can then send numbers as either int, floats or decimal down the
-wire during exeute, we propose to change the parser to accept any
+wire during execute. (We propose to change the parser to accept any
 client-provided numeric type for a placeholder when the AST expects
-exact.
+exact.)
+
+However meanwhile because the expression `$1 + 1` is also
+`exact`, the semantics are automatically changed to become:
+
+```sql
+    (3)   INSERT INTO t(int_col) VALUES (TYPEASSERT($1 + 1, int)[int])
+```
+
+This way the statement only effectively succeeds when the client
+passes integers for the placeholder. 
+
+Although another type system could have chosen to infer `int` for `$1`
+based on the appearance of the constant 1 in the expression, the true
+strength of Morty comes with statements of the following form:
+
+```sql
+    (4)   INSERT INTO t(int_col) VALUES ($1 + 1.5)
+```
+
+Here `$1` is typed `exact`, clients see `numeric`, and thanks to the
+type assertion, using `$1 = 3.5` for example will actually succeed
+because the result fits into an int.
 
 Typing of constants as `exact` seems to come in handy in some
 situations that Rick didn't handle very well:
@@ -834,7 +971,8 @@ Here Rick would throw a type error for `$1`, whereas Morty infers `exact`.
 ```
 
 `3/2` gets typed as `3::exact / 2::exact`, division gets exact 1.5,
-then exact gets autocasted to float for insert.
+then exact gets autocasted to float for insert (because float
+preserves the amplitude of 1.5).
 
 ```sql
       create table u (x int);
@@ -843,6 +981,10 @@ then exact gets autocasted to float for insert.
 
 `(9/3)*(1/3)` gets typed and computes down to exact 1, then exact
 gets casted to int as requested.
+
+Note that in this specific case the cast is not required any more
+because the implicit conversion from exact to int would take place
+anyways.
 
 ```sql
       create table t (x float);
@@ -888,17 +1030,56 @@ Ambiguous, tough luck. Try with `g(f($1::int))` then all is well.
      insert into t (x, s)  values ($1, "hello " + $1::text)
 ```
 
-`$1` typed by insert context to int, but 2nd cast suggests another
-type, so we bail with a type conflict. The user can resolve with
-explicit casts (`$1::int and $1::int::text`).
+`$1` typed during first phase by collecting the hint `::text`:
+
+```sql
+     insert into t (x, s) values ($1[text], "hello "[text] + $1::text)
+```
+
+Then during type checking, text is found where int is expected in the
+1st position of `values`, and typing fails. The user can force the
+typing for `int` by using explicit hints:
+
+```sql
+     create table t (x int, s text);
+     insert into t (x, s)  values ($1::int, "hello " + $1::int::text)
+```
+
+Regarding case statements:
 
 ```sql
      prepare a as select 3 + case (4) when 4 then $1 end
 ```
 
-`3` and `4` gets typed as `exact`, so `exact` is demanded for `$1`, and
-the entire expression resolves as the exact result of `+` on two `exact` operands.
+Because there is only one `then` clause without a type, typing fails.
+The user can fix by suggesting a type hint. However, with:
 
+
+```sql
+     prepare a as select 3 + case (4) when 4 then $1 else 42 end
+```
+
+`42` gets typed as `exact`, so `exact` is assumed for the other `then` branches
+including `$1` which gets typed as `exact` too.
+
+Indirect overload resolution:
+
+```sql
+    f:int,int->int
+    f:float,float->int
+    PREPARE a AS SELECT f($1, $2), $2::float
+```
+
+Morty sees `$2::float` first, thus types `$2` as float then `$1` as
+float too by rule 5. Likewise:
+
+
+```sql
+    PREPARE a AS SELECT $1 + 4 + $1::int
+```
+
+Morty sees `$1::int` first, then autocasts 4 to `int` and the
+operation is performed on int arguments.
 
 ### Exampes where Morty differs from Rick
 
@@ -917,7 +1098,7 @@ the entire expression resolves as the exact result of `+` on two `exact` operand
     PREPARE a AS (12 + $1) + f($1)
 ```
 
-*M* infers `exact` and says that `f` can't be applied to `exact`, *R* infers `int`.
+*M* infers `exact` and says that `f` is ambiguous for an `exact` argument, *R* infers `int`.
 
 ```sql
     f:int->int
@@ -930,19 +1111,10 @@ the entire expression resolves as the exact result of `+` on two `exact` operand
 *M* can't infer anything, *R* intersects candidate sets and figures
 out `float` for `$1`.
 
-```sql
-    f:int,int->int
-    f:float,float->int
-    PREPARE a AS SELECT f($1, $2), $2::float
-```
-
-If we don't implemented Morty iteratively, then it fails to infer
-anything for `$1`. If we do, then it infers `$1[int]`, like Rick. See
-the next section for details.
 
 ### Alternatives around Morty
 
-Both Rick and Morty are assymetric algorithms: how much an how well
+Both Rick and Morty are asymmetric algorithms: how much an how well
 the type of a placeholder is typed depends on the order of syntax
 elements. However while Rick tries very hard to hide that property via
 an iterative algorithm, Morty doesn't make much effort and the user
@@ -960,7 +1132,7 @@ will see this assymetry much more often.  For example:
 Of course we could explain this in documentation and suggest the use
 of explicit casts in ambiguous contexts. However, if this property is
 deemed too uncomfortable to expose to users, we could make the
-algorithm iterative and repeat applying Morty's rule 2 to all
+algorithm iterative and repeat applying Morty's rule 5 to all
 expressions as long as it manages to type new placeholders. This way:
 
 ```sql
@@ -968,7 +1140,7 @@ expressions as long as it manages to type new placeholders. This way:
     --                              ^  fail, but continue
 	--  						 $1 + $2, f($1)      continue
 	--  							        ^ 
-	--  						  ....  , f($1::$1)  now retry
+	--  						  ....  , f($1:int)  now retry
 	--  						    
     --                           $1::int + $2, ...
 	--  						         ^ aha! new information
@@ -1006,7 +1178,7 @@ expressions as long as it manages to type new placeholders. This way:
   
 The semantic analysis will thus look like::
 
-```go
+    ```go
     type placeholderTypes = map[ValArg]Type
 
     // Mutates the tree and populates .type
@@ -1024,18 +1196,11 @@ The semantic analysis will thus look like::
       var constantFolder ConstantFoldingVisitor = ConstantFoldingVisitor{}
       constantFolder.Visit(root)
     }
-```
+    ```
 
 ## Unresolved questions
 
 How much Postgres compatibility is really required?
-
-What should our type-coercion story be in terms of implicitly
-making conversions from a subset of available casts at type
-discontinuity boundaries in SQL expressions? 
-
-It'd be really
-convenient to say that we don't support any implicit casts.
 
 Note that some of the reasons why implicit casts would be otherwise
 needed go away with the untyped constant arithmetic that we're suggesting,
