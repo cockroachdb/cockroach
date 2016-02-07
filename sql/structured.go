@@ -22,7 +22,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -122,7 +121,7 @@ func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
 }
 
 // Fill in column names and directions.
-func (desc *IndexDescriptor) fillColumns(elems parser.IndexElemList) *roachpb.Error {
+func (desc *IndexDescriptor) fillColumns(elems parser.IndexElemList) error {
 	desc.ColumnNames = make([]string, 0, len(elems))
 	desc.ColumnDirections = make([]IndexDescriptor_Direction, 0, len(elems))
 	for _, c := range elems {
@@ -133,7 +132,7 @@ func (desc *IndexDescriptor) fillColumns(elems parser.IndexElemList) *roachpb.Er
 		case parser.Descending:
 			desc.ColumnDirections = append(desc.ColumnDirections, IndexDescriptor_DESC)
 		default:
-			return roachpb.NewUErrorf("invalid direction %s for column %s", c.Direction, c.Column)
+			return fmt.Errorf("invalid direction %s for column %s", c.Direction, c.Column)
 		}
 	}
 	return nil
@@ -230,7 +229,7 @@ func (desc *TableDescriptor) allNonDropIndexes() []IndexDescriptor {
 
 // AllocateIDs allocates column and index ids for any column or index which has
 // an ID of 0.
-func (desc *TableDescriptor) AllocateIDs() *roachpb.Error {
+func (desc *TableDescriptor) AllocateIDs() error {
 	if desc.NextColumnID == 0 {
 		desc.NextColumnID = 1
 	}
@@ -317,7 +316,7 @@ func (desc *TableDescriptor) AllocateIDs() *roachpb.Error {
 			for _, colName := range index.StoreColumnNames {
 				status, i, err := desc.FindColumnByName(colName)
 				if err != nil {
-					return roachpb.NewError(err)
+					return err
 				}
 				var col *ColumnDescriptor
 				if status == DescriptorActive {
@@ -329,7 +328,7 @@ func (desc *TableDescriptor) AllocateIDs() *roachpb.Error {
 					continue
 				}
 				if index.containsColumnID(col.ID) {
-					return roachpb.NewUErrorf("index \"%s\" already contains column \"%s\"", index.Name, col.Name)
+					return fmt.Errorf("index \"%s\" already contains column \"%s\"", index.Name, col.Name)
 				}
 				index.ImplicitColumnIDs = append(index.ImplicitColumnIDs, col.ID)
 			}
@@ -343,9 +342,9 @@ func (desc *TableDescriptor) AllocateIDs() *roachpb.Error {
 	if desc.ID == 0 {
 		desc.ID = keys.MaxReservedDescID + 1
 	}
-	pErr := roachpb.NewError(desc.Validate())
+	err := desc.Validate()
 	desc.ID = savedID
-	return pErr
+	return err
 }
 
 // Validate validates that the table descriptor is well formed. Checks include
