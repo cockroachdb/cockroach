@@ -615,8 +615,8 @@ func (tc *TxnCoordSender) heartbeat(id string, trace opentracing.Span, ctx conte
 	hb.Key = txn.Key
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.clock.Now()
-	ba.Txn = new(roachpb.Transaction)
-	*ba.Txn = txn.Clone()
+	txn := txn.Clone()
+	ba.Txn = &txn
 	ba.Add(hb)
 
 	trace.LogEvent("heartbeat")

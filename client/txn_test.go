@@ -89,8 +89,8 @@ func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse,
 			}
 		}
 		if ba.Txn != nil {
-			br.Txn = new(roachpb.Transaction)
-			*br.Txn = ba.Txn.Clone()
+			txn := ba.Txn.Clone()
+			br.Txn = &txn
 			if pErr == nil {
 				br.Txn.Writing = writing
 				br.Txn.Status = status

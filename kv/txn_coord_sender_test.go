@@ -656,8 +656,8 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 
 	ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		br := ba.CreateReply()
-		br.Txn = new(roachpb.Transaction)
-		*br.Txn = ba.Txn.Clone()
+		txn := ba.Txn.Clone()
+		br.Txn = &t
 		br.Txn.Writing = true
 		return br, nil
 	}), clock, false, nil, stopper)
