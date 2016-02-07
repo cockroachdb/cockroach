@@ -179,15 +179,18 @@ type Replica struct {
 
 var _ client.Sender = &Replica{}
 
-// NewReplica initializes the replica using the given metadata.
-func NewReplica(desc *roachpb.RangeDescriptor, store *Store) (*Replica, error) {
+// NewReplica initializes the replica using the given metadata. If the
+// replica is initialized (i.e. desc contains more than a RangeID),
+// replicaID should be 0 and the replicaID will be discovered from the
+// descriptor.
+func NewReplica(desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.ReplicaID) (*Replica, error) {
 	r := &Replica{
 		store:    store,
 		sequence: NewSequenceCache(desc.RangeID),
 		RangeID:  desc.RangeID,
 	}
 
-	if err := r.newReplicaInner(desc, store.Clock()); err != nil {
+	if err := r.newReplicaInner(desc, store.Clock(), replicaID); err != nil {
 		return nil, err
 	}
 
@@ -201,7 +204,7 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store) (*Replica, error) {
 	return r, nil
 }
 
-func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Clock) error {
+func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Clock, replicaID roachpb.ReplicaID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -227,11 +230,19 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 		return err
 	}
 
-	_, repDesc := desc.FindReplica(r.store.StoreID())
-	if repDesc != nil {
-		if err := r.setReplicaIDLocked(repDesc.ReplicaID); err != nil {
-			return err
+	if r.isInitializedLocked() && replicaID != 0 {
+		return util.Errorf("replicaID must be 0 when creating an initialized replica")
+	}
+	if replicaID == 0 {
+		if _, repDesc := desc.FindReplica(r.store.StoreID()); repDesc == nil {
+			return util.Errorf("cannot recreate replica that is not a member of its range (StoreID %s not found in %s)",
+				r.store.StoreID(), desc)
+		} else {
+			replicaID = repDesc.ReplicaID
 		}
+	}
+	if err := r.setReplicaIDLocked(replicaID); err != nil {
+		return err
 	}
 
 	return nil
@@ -250,25 +261,7 @@ func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor) error {
 		return util.Errorf("cannot destroy replica %s; replica ID has changed (%s >= %s)",
 			r, rd.ReplicaID, origDesc.NextReplicaID)
 	}
-	iter := newReplicaDataIterator(desc, r.store.Engine())
-	defer iter.Close()
-	batch := r.store.Engine().NewBatch()
-	defer batch.Close()
-	for ; iter.Valid(); iter.Next() {
-		_ = batch.Clear(iter.Key())
-	}
-
-	// Save a tombstone. The range cannot be re-replicated onto this
-	// node without having a replica ID of at least desc.NextReplicaID.
-	tombstoneKey := keys.RaftTombstoneKey(desc.RangeID)
-	tombstone := &roachpb.RaftTombstone{
-		NextReplicaID: desc.NextReplicaID,
-	}
-	if err := engine.MVCCPutProto(batch, nil, tombstoneKey, roachpb.ZeroTimestamp, nil, tombstone); err != nil {
-		return err
-	}
-
-	return batch.Commit()
+	return r.store.destroyReplicaData(desc)
 }
 
 func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {

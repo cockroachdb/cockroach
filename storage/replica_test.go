@@ -164,7 +164,7 @@ func (tc *testContext) Start(t testing.TB) {
 
 	if realRange {
 		if tc.bootstrapMode == bootstrapRangeOnly {
-			rng, err := NewReplica(testRangeDescriptor(), tc.store)
+			rng, err := NewReplica(testRangeDescriptor(), tc.store, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -248,6 +248,11 @@ func TestRangeContains(t *testing.T) {
 		RangeID:  1,
 		StartKey: roachpb.RKey("a"),
 		EndKey:   roachpb.RKey("b"),
+		Replicas: []roachpb.ReplicaDescriptor{{
+			// This test is a little weird since it doesn't call Store.Start and assign IDs.
+			StoreID:   0,
+			ReplicaID: 1,
+		}},
 	}
 
 	stopper := stop.NewStopper()
@@ -259,7 +264,7 @@ func TestRangeContains(t *testing.T) {
 	ctx.Transport = NewLocalRPCTransport(stopper)
 	defer ctx.Transport.Close()
 	store := NewStore(ctx, e, &roachpb.NodeDescriptor{NodeID: 1})
-	r, err := NewReplica(desc, store)
+	r, err := NewReplica(desc, store, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -486,7 +491,7 @@ func TestRangeLeaderLease(t *testing.T) {
 	}
 
 	// Verify that command returns NotLeaderError when lease is rejected.
-	rng, err := NewReplica(testRangeDescriptor(), tc.store)
+	rng, err := NewReplica(testRangeDescriptor(), tc.store, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3418,7 +3423,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	proposeRaftCommandFn := func(cmdIDKey, roachpb.RaftCommand) error {
 		return &roachpb.RaftGroupDeletedError{}
 	}
-	rng, err := NewReplica(testRangeDescriptor(), tc.store)
+	rng, err := NewReplica(testRangeDescriptor(), tc.store, 0)
 	rng.proposeRaftCommandFn = proposeRaftCommandFn
 	if err != nil {
 		t.Fatal(err)
