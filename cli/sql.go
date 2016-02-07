@@ -19,12 +19,13 @@ package cli
 import (
 	"database/sql"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
+	"os/user"
+	"path/filepath"
 	"strings"
 
-	"github.com/peterh/liner"
+	"github.com/GeertJohan/go.linenoise"
 	"github.com/spf13/cobra"
 )
 
@@ -50,12 +51,11 @@ Open a sql shell running against a cockroach database.
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
 func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
-	liner := liner.NewLiner()
-	defer func() {
-		_ = liner.Close()
-	}()
+	var stmt []string
+	var l string
+	var err error
 
-	fmt.Print(infoMessage)
+	// Define the prompt.
 
 	// Default prompt is part of the connection URL. eg: "marc@localhost>"
 	// continued statement prompt is: "        -> "
@@ -74,45 +74,59 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 	fullPrompt += "> "
 	continuePrompt += "> "
 
-	// TODO(marc): detect if we're actually on a terminal. If not,
-	// we may want to repeat the statements on stdout.
-	// TODO(marc): add test.
-	var stmt []string
-	var l string
-	var err error
+	histFile := ""
+	userAcct, err := user.Current()
+	if err == nil {
+		histFile := filepath.Join(userAcct.HomeDir, ".cockroachdb_history")
+		_ = linenoise.LoadHistory(histFile)
+	}
+
+	fmt.Print(infoMessage)
 
 	for {
 		if len(stmt) == 0 {
-			l, err = liner.Prompt(fullPrompt)
+			l, err = linenoise.Line(fullPrompt)
 		} else {
-			l, err = liner.Prompt(continuePrompt)
+			l, err = linenoise.Line(continuePrompt)
 		}
 		if err != nil {
-			if err != io.EOF {
-				exitErr = err
-			}
+			// Linenoise only returns err != nil, a string, when the input
+			// was terminated with Ctrl+C or Ctrl+D. This is not an error,
+			// and merely indicates end of input.  io.EOF is never returned.
 			break
+		}
+
+		tl := strings.TrimSpace(l)
+		if len(stmt) == 0 && len(tl) == 0 {
+			// Empty line at beginning, simply continue.
+			// However, we don't simply continue after the first line since
+			// we may be in the middle of a string literal where empty lines
+			// may be significant.
+			continue
 		}
 
 		stmt = append(stmt, l)
 
 		// See if we have a semicolon at the end of the line (ignoring
 		// trailing whitespace).
-		if !strings.HasSuffix(strings.TrimSpace(l), ";") {
+		if !strings.HasSuffix(tl, ";") {
 			// No semicolon: read some more.
 			continue
 		}
 
-		// We always insert a newline when continuing statements.
-		// However, it causes problems with lines in the middle of:
-		// - qualified names (eg: database.<newline>table)
-		// - quoted strings (eg: 'foo<newline>bar')
-		// This also makes the history replay horrible.
-		// mysql replaces newlines with spaces in the history, which works
-		// because string concatenation with newlines can also be done with spaces.
-		// postgres keeps the line intact in the history.
+		// We join the statements back together with newlines in case
+		// there is a significant newline inside a string literal. However
+		// we join with spaces for keeping history, because otherwise a
+		// history recall will only pull one line from a multi-line
+		// statement.
 		fullStmt := strings.Join(stmt, "\n")
-		liner.AppendHistory(fullStmt)
+		_ = linenoise.AddHistory(strings.Join(stmt, " "))
+		if histFile != "" {
+			// We save the history between each statement: in case something
+			// bad happens and the client panics we want to keep the history
+			// to reproduce the issue quickly.
+			_ = linenoise.SaveHistory(histFile)
+		}
 
 		if exitErr = runPrettyQuery(db, os.Stdout, fullStmt); exitErr != nil {
 			fmt.Fprintln(osStderr, exitErr)
@@ -121,6 +135,7 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 		// Clear the saved statement.
 		stmt = stmt[:0]
 	}
+
 	return exitErr
 }
 
