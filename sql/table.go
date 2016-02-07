@@ -56,10 +56,10 @@ func (tk tableKey) Name() string {
 	return tk.name
 }
 
-func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, *roachpb.Error) {
+func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) {
 	desc := TableDescriptor{}
 	if err := p.Table.NormalizeTableName(""); err != nil {
-		return desc, roachpb.NewError(err)
+		return desc, err
 	}
 	desc.Name = p.Table.Table()
 	desc.ParentID = parentID
@@ -72,12 +72,12 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, *roachp
 		case *parser.ColumnTableDef:
 			col, idx, err := makeColumnDefDescs(d)
 			if err != nil {
-				return desc, roachpb.NewError(err)
+				return desc, err
 			}
 			desc.AddColumn(*col)
 			if idx != nil {
 				if err := desc.AddIndex(*idx, d.PrimaryKey); err != nil {
-					return desc, roachpb.NewError(err)
+					return desc, err
 				}
 			}
 		case *parser.IndexTableDef:
@@ -85,11 +85,11 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, *roachp
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing,
 			}
-			if pErr := idx.fillColumns(d.Columns); pErr != nil {
-				return desc, pErr
+			if err := idx.fillColumns(d.Columns); err != nil {
+				return desc, err
 			}
 			if err := desc.AddIndex(idx, false); err != nil {
-				return desc, roachpb.NewError(err)
+				return desc, err
 			}
 		case *parser.UniqueConstraintTableDef:
 			idx := IndexDescriptor{
@@ -97,11 +97,11 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, *roachp
 				Unique:           true,
 				StoreColumnNames: d.Storing,
 			}
-			if pErr := idx.fillColumns(d.Columns); pErr != nil {
-				return desc, pErr
+			if err := idx.fillColumns(d.Columns); err != nil {
+				return desc, err
 			}
 			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
-				return desc, roachpb.NewError(err)
+				return desc, err
 			}
 			if d.PrimaryKey {
 				primaryIndexColumnSet = make(map[parser.Name]struct{})
@@ -110,7 +110,7 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, *roachp
 				}
 			}
 		default:
-			return desc, roachpb.NewErrorf("unsupported table def: %T", def)
+			return desc, util.Errorf("unsupported table def: %T", def)
 		}
 	}
 

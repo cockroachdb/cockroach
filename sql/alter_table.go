@@ -94,7 +94,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 					StoreColumnNames: d.Storing,
 				}
 				if err := idx.fillColumns(d.Columns); err != nil {
-					return nil, err
+					return nil, roachpb.NewError(err)
 				}
 				status, i, err := tableDesc.FindIndexByName(name)
 				if err == nil {
@@ -184,7 +184,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 	tableDesc.NextMutationID++
 
 	if err := tableDesc.AllocateIDs(); err != nil {
-		return nil, err
+		return nil, roachpb.NewError(err)
 	}
 
 	if pErr := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); err != nil {

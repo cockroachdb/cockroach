@@ -43,17 +43,17 @@ func (cr columnRef) get() ResultColumn {
 }
 
 // findColumn looks up the column described by a QualifiedName. The qname will be normalized.
-func (s *selectNode) findColumn(qname *parser.QualifiedName) (columnRef, *roachpb.Error) {
+func (s *selectNode) findColumn(qname *parser.QualifiedName) (columnRef, error) {
 
 	ref := columnRef{colIdx: invalidColIdx}
 
-	if err := roachpb.NewError(qname.NormalizeColumnName()); err != nil {
+	if err := qname.NormalizeColumnName(); err != nil {
 		return ref, err
 	}
 
 	// We can't resolve stars to a single column.
 	if qname.IsStar() {
-		err := roachpb.NewUErrorf("qualified name \"%s\" not found", qname)
+		err := fmt.Errorf("qualified name \"%s\" not found", qname)
 		return ref, err
 	}
 
@@ -74,7 +74,7 @@ func (s *selectNode) findColumn(qname *parser.QualifiedName) (columnRef, *roachp
 		}
 	}
 
-	err := roachpb.NewUErrorf("qualified name \"%s\" not found", qname)
+	err := fmt.Errorf("qualified name \"%s\" not found", qname)
 	return ref, err
 }
 
@@ -159,9 +159,8 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 		return v, v.selNode.getQVal(colRef)
 
 	case *parser.QualifiedName:
-		var colRef columnRef
-
-		colRef, v.pErr = v.selNode.findColumn(t)
+		colRef, err := v.selNode.findColumn(t)
+		v.pErr = roachpb.NewError(err)
 		if v.pErr != nil {
 			return nil, expr
 		}

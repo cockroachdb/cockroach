@@ -239,8 +239,8 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	pErr = desc.AllocateIDs()
-	if !testutils.IsPError(pErr, errMissingPrimaryKey.Error()) {
-		t.Fatalf("unexpected error: %s", pErr)
+	err = desc.AllocateIDs()
+	if !testutils.IsError(err, errMissingPrimaryKey.Error()) {
+		t.Fatalf("unexpected error: %s", err)
 	}
 }
