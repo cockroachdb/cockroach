@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"golang.org/x/net/context"
@@ -45,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
 	"github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/standardtracer"
 )
 
 const (
@@ -525,12 +527,30 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 	ba := argsI.(*roachpb.BatchRequest)
 	var br *roachpb.BatchResponse
 
-	f := func() {
-		// TODO(tschottdorf) get a hold of the client's ID, add it to the
-		// context before dispatching, and create an ID for tracing the request.
-		sp := n.ctx.Tracer.StartTrace(ba.TraceID())
+	sp := tracing.NoopSpan
+	if ba.Trace != nil {
+		var tracingCB tracing.CallbackRecorder = func(rawSpan *standardtracer.RawSpan) {
+			encSp, err := tracing.EncodeRawSpan(rawSpan, nil)
+			if err != nil {
+				panic(err)
+			}
+			br.CollectedSpans = append(br.CollectedSpans, encSp)
+		}
+
+		// Create a special tracer for this request (note that we're not
+		// using n.ctx.Tracer) so that we can grab the span when it's done.
+		tracer := standardtracer.New(tracingCB)
+
+		var err error
+		sp, err = tracer.JoinTraceFromBinary("node", ba.Trace.Context, ba.Trace.Attributes)
+		if err != nil {
+			return nil, fmt.Errorf("cannot unmarshal trace: %v", err)
+		}
 		defer sp.Finish()
-		sp.LogEvent("node")
+	}
+
+	f := func() {
+		sp.LogEvent("node " + strconv.Itoa(int(n.Descriptor.NodeID)))
 		ctx, _ := opentracing.ContextWithSpan((*Node)(n).context(), sp)
 
 		tStart := time.Now()

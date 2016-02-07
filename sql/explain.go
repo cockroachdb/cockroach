@@ -21,6 +21,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/opentracing/opentracing-go/standardtracer"
 )
 
 type explainMode int
@@ -29,6 +32,7 @@ const (
 	explainNone explainMode = iota
 	explainDebug
 	explainPlan
+	explainTrace
 )
 
 // Explain executes the explain statement, providing debugging and analysis
@@ -37,13 +41,25 @@ const (
 // Privileges: the same privileges as the statement being explained.
 func (p *planner) Explain(n *parser.Explain) (planNode, *roachpb.Error) {
 	mode := explainNone
-	if len(n.Options) == 1 && strings.EqualFold(n.Options[0], "DEBUG") {
-		mode = explainDebug
+	if len(n.Options) == 1 {
+		if strings.EqualFold(n.Options[0], "DEBUG") {
+			mode = explainDebug
+		} else if strings.EqualFold(n.Options[0], "TRACE") {
+			mode = explainTrace
+		}
 	} else if len(n.Options) == 0 {
 		mode = explainPlan
 	}
 	if mode == explainNone {
 		return nil, roachpb.NewUErrorf("unsupported EXPLAIN options: %s", n)
+	}
+
+	if mode == explainTrace {
+		var callback tracing.CallbackRecorder = func(sp *standardtracer.RawSpan) {
+			p.txn.CollectedSpans = append(p.txn.CollectedSpans, *sp)
+		}
+		tracer := standardtracer.New(callback)
+		p.txn.Trace = tracer.StartTrace("sql")
 	}
 
 	plan, err := p.makePlan(n.Statement, false)
@@ -68,6 +84,16 @@ func (p *planner) Explain(n *parser.Explain) (planNode, *roachpb.Error) {
 		}
 		populateExplain(v, plan, 0)
 		return v, nil
+
+	case explainTrace:
+		plan, err = markDebug(plan, explainDebug)
+		if err != nil {
+			return nil, roachpb.NewUErrorf("%v: %s", err, n)
+		}
+		return (&sortNode{
+			ordering: []columnOrderInfo{{0, encoding.Ascending}, {1, encoding.Ascending}},
+			columns:  traceColumns,
+		}).wrap(&explainTraceNode{plan: plan, txn: p.txn}), nil
 
 	default:
 		return nil, roachpb.NewUErrorf("unsupported EXPLAIN mode: %d", mode)
@@ -158,6 +184,32 @@ type debugValues struct {
 	output debugValueType
 }
 
+func (vals *debugValues) AsRow() parser.DTuple {
+	keyVal := parser.DNull
+	if vals.key != "" {
+		keyVal = parser.DString(vals.key)
+	}
+
+	// The "output" value is NULL for partial rows, or a DBool indicating if the row passed the
+	// filtering.
+	outputVal := parser.DNull
+
+	switch vals.output {
+	case debugValueFiltered:
+		outputVal = parser.DBool(false)
+
+	case debugValueRow:
+		outputVal = parser.DBool(true)
+	}
+
+	return parser.DTuple{
+		parser.DInt(vals.rowIdx),
+		keyVal,
+		parser.DString(vals.value),
+		outputVal,
+	}
+}
+
 // explainDebugNode is a planNode that wraps another node and converts DebugValues() results to a
 // row of Values(). It is used as the top-level node for EXPLAIN (DEBUG) statements.
 type explainDebugNode struct {
@@ -184,30 +236,7 @@ func (n *explainDebugNode) ExplainPlan() (name, description string, children []p
 
 func (n *explainDebugNode) Values() parser.DTuple {
 	vals := n.plan.DebugValues()
-
-	keyVal := parser.DNull
-	if vals.key != "" {
-		keyVal = parser.DString(vals.key)
-	}
-
-	// The "output" value is NULL for partial rows, or a DBool indicating if the row passed the
-	// filtering.
-	outputVal := parser.DNull
-
-	switch vals.output {
-	case debugValueFiltered:
-		outputVal = parser.DBool(false)
-
-	case debugValueRow:
-		outputVal = parser.DBool(true)
-	}
-
-	return parser.DTuple{
-		parser.DInt(vals.rowIdx),
-		keyVal,
-		parser.DString(vals.value),
-		outputVal,
-	}
+	return vals.AsRow()
 }
 
 func (*explainDebugNode) DebugValues() debugValues {

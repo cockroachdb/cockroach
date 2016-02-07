@@ -226,7 +226,7 @@ func (ds *DistSender) RangeLookup(key roachpb.RKey, desc *roachpb.RangeDescripto
 	replicas := newReplicaSlice(ds.gossip, desc)
 	// TODO(tschottdorf) consider a Trace here, potentially that of the request
 	// that had the cache miss and waits for the result.
-	br, err := ds.sendRPC(tracing.NilSpan(), desc.RangeID, replicas, orderRandom, ba)
+	br, err := ds.sendRPC(tracing.NoopSpan, desc.RangeID, replicas, orderRandom, ba)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +379,7 @@ func (ds *DistSender) getDescriptors(rs roachpb.RSpan, considerIntents, useRever
 
 // sendSingleRange gathers and rearranges the replicas, and makes an RPC call.
 func (ds *DistSender) sendSingleRange(trace opentracing.Span, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor) (*roachpb.BatchResponse, *roachpb.Error) {
-	trace.LogEvent("sending RPC")
+	trace.LogEvent(fmt.Sprintf("sending RPC to [%s, %s)", desc.StartKey, desc.EndKey))
 
 	leader := ds.leaderCache.Lookup(roachpb.RangeID(desc.RangeID))
 
@@ -497,6 +497,7 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 	reply := rplChunks[0]
 	for _, rpl := range rplChunks[1:] {
 		reply.Responses = append(reply.Responses, rpl.Responses...)
+		reply.CollectedSpans = append(reply.CollectedSpans, rpl.CollectedSpans...)
 	}
 	*reply.Header() = rplChunks[len(rplChunks)-1].BatchResponse_Header
 	return reply, nil
