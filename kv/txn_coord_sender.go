@@ -101,17 +101,19 @@ func (tm *txnMetadata) addKeyRange(start, end roachpb.Key) {
 		end = start.Next()
 		start = end[:len(start)]
 	}
-	key := tm.keys.NewKey(start, end)
-	for _, o := range tm.keys.GetOverlaps(start, end) {
+	key := tm.keys.MakeKey(start, end)
+	for _, o := range tm.keys.GetOverlaps(key.Start(), key.End()) {
 		if o.Key.Contains(key) {
 			return
-		} else if key.Contains(o.Key) {
+		} else if key.Contains(*o.Key) {
 			tm.keys.Del(o.Key)
 		}
 	}
 
 	// Since no existing key range fully covered this range, add it now.
-	tm.keys.Add(key, nil)
+	pkey := &cache.IntervalKey{}
+	*pkey = key
+	tm.keys.Add(pkey, nil)
 }
 
 // setLastUpdate updates the wall time (in nanoseconds) since the most

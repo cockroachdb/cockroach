@@ -101,20 +101,29 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 	if tc.lowWater.Less(timestamp) {
 		// Check existing, overlapping entries. Remove superseded
 		// entries or return without adding this entry if necessary.
-		key := tc.cache.NewKey(start, end)
-		for _, o := range tc.cache.GetOverlaps(start, end) {
-			ce := o.Value.(cacheEntry)
+		key := tc.cache.MakeKey(start, end)
+		for _, o := range tc.cache.GetOverlaps(key.Start(), key.End()) {
+			ce := o.Value.(*cacheEntry)
 			if ce.readOnly != readOnly {
 				continue
 			}
-			if o.Key.Contains(key) && !ce.timestamp.Less(timestamp) {
-				return // don't add this key; there's already a cache entry with >= timestamp.
-			} else if key.Contains(o.Key) && !timestamp.Less(ce.timestamp) {
+			if o.Key.Contains(key) {
+				if !ce.timestamp.Less(timestamp) {
+					return // don't add this key; there's already a cache entry with >= timestamp.
+				}
+				if key.Contains(*o.Key) {
+					// The keys are equal, update the existing cache entry.
+					*ce = cacheEntry{timestamp: timestamp, txnID: txnID, readOnly: readOnly}
+					return
+				}
+			} else if key.Contains(*o.Key) && !timestamp.Less(ce.timestamp) {
 				tc.cache.Del(o.Key) // delete existing key; this cache entry supersedes.
 			}
 		}
-		ce := cacheEntry{timestamp: timestamp, txnID: txnID, readOnly: readOnly}
-		tc.cache.Add(key, ce)
+		ce := &cacheEntry{timestamp: timestamp, txnID: txnID, readOnly: readOnly}
+		pkey := &cache.IntervalKey{}
+		*pkey = key
+		tc.cache.Add(pkey, ce)
 	}
 }
 
@@ -136,7 +145,7 @@ func (tc *TimestampCache) GetMax(start, end roachpb.Key, txnID []byte) (roachpb.
 	maxR := tc.lowWater
 	maxW := tc.lowWater
 	for _, o := range tc.cache.GetOverlaps(start, end) {
-		ce := o.Value.(cacheEntry)
+		ce := o.Value.(*cacheEntry)
 		if ce.txnID == nil || txnID == nil || !roachpb.TxnIDEqual(txnID, ce.txnID) {
 			if ce.readOnly && maxR.Less(ce.timestamp) {
 				maxR = ce.timestamp
@@ -162,14 +171,17 @@ func (tc *TimestampCache) MergeInto(dest *TimestampCache, clear bool) {
 		dest.latest.Forward(tc.latest)
 	}
 	tc.cache.Do(func(k, v interface{}) {
-		dest.cache.Add(k, v)
+		// Cache entries are mutable (see Add), so we give each cache its own
+		// unique copy.
+		ce := *v.(*cacheEntry)
+		dest.cache.Add(k, &ce)
 	})
 }
 
 // shouldEvict returns true if the cache entry's timestamp is no
 // longer within the MinTSCacheWindow.
 func (tc *TimestampCache) shouldEvict(size int, key, value interface{}) bool {
-	ce := value.(cacheEntry)
+	ce := value.(*cacheEntry)
 	// In case low water mark was set higher, evict any entries
 	// which occurred before it.
 	if ce.timestamp.Less(tc.lowWater) {
