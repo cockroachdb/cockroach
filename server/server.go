@@ -33,6 +33,7 @@ import (
 	"golang.org/x/net/http2"
 
 	assetfs "github.com/elazarl/go-bindata-assetfs"
+	"github.com/opentracing/opentracing-go"
 	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
 
@@ -69,7 +70,8 @@ const txnRegistryName = "txn"
 
 // Server is the cockroach server node.
 type Server struct {
-	ctx *Context
+	Tracer opentracing.Tracer
+	ctx    *Context
 
 	mux           *http.ServeMux
 	httpReady     chan struct{}
@@ -124,6 +126,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	s := &Server{
+		Tracer:    tracing.NewTracer(),
 		ctx:       ctx,
 		mux:       http.NewServeMux(),
 		httpReady: make(chan struct{}),
@@ -144,7 +147,6 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.storePool = storage.NewStorePool(s.gossip, s.clock, ctx.TimeUntilStoreDead, stopper)
 
 	feed := util.NewFeed(stopper)
-	tracer := tracing.NewTracer()
 
 	// A custom RetryOptions is created which uses stopper.ShouldDrain() as
 	// the Closer. This prevents infinite retry loops from occurring during
@@ -166,7 +168,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}, s.gossip)
 	txnRegistry := metric.NewRegistry()
 	txnMetrics := kv.NewTxnMetrics(txnRegistry)
-	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, tracer, s.stopper, txnMetrics)
+	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, s.Tracer, s.stopper, txnMetrics)
 	s.db = client.NewDB(sender)
 
 	s.grpc = grpc.NewServer()
@@ -197,7 +199,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		ScanInterval:    s.ctx.ScanInterval,
 		ScanMaxIdleTime: s.ctx.ScanMaxIdleTime,
 		EventFeed:       feed,
-		Tracer:          tracer,
+		Tracer:          s.Tracer,
 		StorePool:       s.storePool,
 		SQLExecutor: sql.InternalExecutor{
 			LeaseManager: s.leaseMgr,

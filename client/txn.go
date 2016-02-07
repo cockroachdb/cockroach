@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
+	"github.com/opentracing/basictracer-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // DefaultTxnRetryOptions are the standard retry options used
@@ -50,12 +52,24 @@ func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachp
 	if ts.UserPriority > 0 {
 		ba.UserPriority = ts.UserPriority
 	}
+
+	ctx, _ = opentracing.ContextWithSpan(ctx, ts.Trace)
+
 	ba.SetNewRequest()
 	br, pErr := ts.wrapped.Send(ctx, ba)
 	if br != nil && br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(ts.wrapped, br))
 	}
 
+	if br != nil {
+		for _, encSp := range br.CollectedSpans {
+			var newSp basictracer.RawSpan
+			if err := tracing.DecodeRawSpan(encSp, &newSp); err != nil {
+				return nil, roachpb.NewError(err)
+			}
+			ts.CollectedSpans = append(ts.CollectedSpans, newSp)
+		}
+	}
 	// Only successful requests can carry an updated Txn in their response
 	// header. Any error (e.g. a restart) can have a Txn attached to them as
 	// well; those update our local state in the same way for the next attempt.
@@ -83,10 +97,12 @@ func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachp
 // Txn is an in-progress distributed database transaction. A Txn is not safe for
 // concurrent use by multiple goroutines.
 type Txn struct {
-	db           DB
-	wrapped      Sender
-	Proto        roachpb.Transaction
-	UserPriority roachpb.UserPriority
+	db             DB
+	wrapped        Sender
+	Proto          roachpb.Transaction
+	UserPriority   roachpb.UserPriority
+	Trace          opentracing.Span // can be nil
+	CollectedSpans []basictracer.RawSpan
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
 	systemConfigTrigger bool

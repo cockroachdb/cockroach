@@ -23,7 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -39,7 +39,10 @@ import (
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
-const statusLogInterval = 5 * time.Second
+const (
+	statusLogInterval = 5 * time.Second
+	opTxnCoordSender  = "txn coordinator"
+)
 
 // txnMetadata holds information about an ongoing transaction, as
 // seen from the perspective of this coordinator. It records all
@@ -305,6 +308,23 @@ func (tc *TxnCoordSender) startStats() {
 // write intents; they're tagged to an outgoing EndTransaction request, with
 // the receiving replica in charge of resolving them.
 func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sp := tracing.SpanFromContext(opTxnCoordSender, tc.tracer, ctx)
+	// TODO(tschottdorf): real tracing should still propagate here, but the
+	// serialization is currently pretty slow and that sucks for benchmarks.
+	if sp.BaggageItem(tracing.Snowball) != "" {
+		carrier := &opentracing.SplitBinaryCarrier{
+			TracerState: ba.Trace.Context,
+			Baggage:     ba.Trace.Baggage,
+		}
+		if err := tc.tracer.Injector(opentracing.SplitBinary).
+			InjectSpan(sp, carrier); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		// TODO(tschottdorf): this isn't pretty; should make it better.
+		ba.Trace.Context = carrier.TracerState
+		ba.Trace.Baggage = carrier.Baggage
+	}
+
 	if err := tc.maybeBeginTxn(&ba); err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -313,8 +333,6 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 
 	// This is the earliest point at which the request has an ID (if
 	// applicable). Begin a Trace which follows this request.
-	sp := tc.tracer.StartSpan("sending batch")
-	defer sp.Finish()
 	ctx, _ = opentracing.ContextWithSpan(ctx, sp)
 
 	if ba.Txn != nil {
@@ -405,6 +423,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		br, pErr = tc.wrapped.Send(ctx, ba)
 
 		if _, ok := pErr.GetDetail().(*roachpb.OpRequiresTxnError); ok {
+			// TODO(tschottdorf): needs to keep the trace.
 			br, pErr = tc.resendWithTxn(ba)
 		}
 
@@ -647,7 +666,7 @@ func (tc *TxnCoordSender) heartbeat(txnID uuid.UUID, trace opentracing.Span, ctx
 // object when adequate. It also updates certain errors with the
 // updated transaction for use by client restarts.
 func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
-	sp := tracing.SpanFromContext(ctx)
+	sp := tracing.SpanFromContext(opTxnCoordSender, tc.tracer, ctx)
 	newTxn := &roachpb.Transaction{}
 	newTxn.Update(ba.Txn)
 	// If the request was successful but we're in a transaction which needs to

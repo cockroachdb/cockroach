@@ -53,6 +53,7 @@ github.com/mibk/dupl c450df04426c2f8c35d91fb588feb88fbe328915
 github.com/olekukonko/tablewriter cca8bbc0798408af109aaaa239cbd2634846b340
 github.com/opencontainers/runc 2c3115481ee1782ad687a9e0b4834f89533c2acf
 github.com/opennota/check 2647c7f78677e5af42e988a36343bc83194b7109
+github.com/opentracing/basictracer-go 8b32ce1c3517a16692f77aae67e46fd50c46ff32
 github.com/opentracing/opentracing-go 0d6663129887f81abfd874da4faa8438a46b42dc
 github.com/rcrowley/go-metrics 51425a2415d21afadfd55cd93432c0bc69e9598d
 github.com/robfig/glock cb3c3ec56de988289cab7bbd284eddc04dfee6c9
