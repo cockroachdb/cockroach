@@ -87,16 +87,14 @@ func writeCertificateAndKey(certsDir string, prefix string,
 	certFilePath := filepath.Join(certsDir, prefix+".crt")
 	certFile, err := os.OpenFile(certFilePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
-		return util.Errorf("error creating certificate file %s: %s", certFilePath, err)
+		return util.Errorf("error creating certificate: %s", err)
 	}
 
-	err = pem.Encode(certFile, certBlock)
-	if err != nil {
+	if err := pem.Encode(certFile, certBlock); err != nil {
 		return util.Errorf("error encoding certificate: %s", err)
 	}
 
-	err = certFile.Close()
-	if err != nil {
+	if err := certFile.Close(); err != nil {
 		return util.Errorf("error closing file %s: %s", certFilePath, err)
 	}
 
@@ -104,16 +102,14 @@ func writeCertificateAndKey(certsDir string, prefix string,
 	keyFilePath := filepath.Join(certsDir, prefix+".key")
 	keyFile, err := os.OpenFile(keyFilePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
-		return util.Errorf("error create key file %s: %s", keyFilePath, err)
+		return util.Errorf("error creating key: %s", err)
 	}
 
-	err = pem.Encode(keyFile, keyBlock)
-	if err != nil {
+	if err := pem.Encode(keyFile, keyBlock); err != nil {
 		return util.Errorf("error encoding key: %s", err)
 	}
 
-	err = keyFile.Close()
-	if err != nil {
+	if err := keyFile.Close(); err != nil {
 		return util.Errorf("error closing file %s: %s", keyFilePath, err)
 	}
 
