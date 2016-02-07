@@ -100,6 +100,14 @@ func runInteractive(db *sql.DB, dbURL string) {
 			break
 		}
 
+		if len(stmt) == 0 && len(strings.TrimSpace(l)) == 0 {
+			// Empty line at beginning, simply continue.
+			// However, we don't simply continue after the first line since
+			// we may be in the middle of a string literal where empty lines
+			// may be significant.
+			continue
+		}
+
 		stmt = append(stmt, l)
 
 		// See if we have a semicolon at the end of the line (ignoring
