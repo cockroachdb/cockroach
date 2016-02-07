@@ -22,7 +22,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -576,5 +578,34 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 	if expected := valAt(2); !reflect.DeepEqual(got, expected) {
 		t.Fatalf("mismatch: expected %+v, got %+v", *expected, *got)
+	}
+}
+
+func checkOfficialize(t *testing.T, network, oldAddrString, newAddrString, expAddrString string) {
+	unresolvedAddr := util.NewUnresolvedAddr(network, oldAddrString)
+	resolvedAddr := util.NewUnresolvedAddr(network, newAddrString)
+
+	if err := officializeAddr(unresolvedAddr, resolvedAddr); err != nil {
+		t.Fatal(err)
+	}
+
+	if retAddrString := unresolvedAddr.String(); retAddrString != expAddrString {
+		t.Errorf("officializeAddr(%s, %s) was %s; expected %s", oldAddrString, newAddrString, retAddrString, expAddrString)
+	}
+}
+
+func TestOfficializeAddr(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, network := range []string{"tcp", "tcp4", "tcp6"} {
+		checkOfficialize(t, network, "hellow.world:0", "127.0.0.1:1234", "hellow.world:1234")
+		checkOfficialize(t, network, "hellow.world:1234", "127.0.0.1:2345", "hellow.world:1234")
+		checkOfficialize(t, network, ":1234", "127.0.0.1:2345", net.JoinHostPort(hostname, "1234"))
+		checkOfficialize(t, network, ":0", "127.0.0.1:2345", net.JoinHostPort(hostname, "2345"))
 	}
 }

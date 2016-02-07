@@ -24,6 +24,7 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -229,14 +230,17 @@ func (s *Server) Start() error {
 	if err != nil {
 		return err
 	}
-	s.listener = ln
-	addr := ln.Addr()
+	s.listener = ln // Only used in tests.
 
-	s.rpcContext.SetLocalServer(s.rpc, addr.String())
+	if err := officializeAddr(unresolvedAddr, ln.Addr()); err != nil {
+		return err
+	}
 
-	s.gossip.Start(s.rpc, addr)
+	s.rpcContext.SetLocalServer(s.rpc, unresolvedAddr.String())
 
-	if err := s.node.start(s.rpc, addr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
+	s.gossip.Start(s.rpc, unresolvedAddr)
+
+	if err := s.node.start(s.rpc, unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
 		return err
 	}
 
@@ -259,7 +263,7 @@ func (s *Server) Start() error {
 
 	s.status = newStatusServer(s.db, s.gossip, s.registry, s.ctx)
 
-	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), addr)
+	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), unresolvedAddr)
 	s.initHTTP()
 
 	return s.pgServer.Start(util.NewUnresolvedAddr("tcp", s.ctx.PGAddr))
@@ -439,4 +443,42 @@ func (w *snappyResponseWriter) Close() {
 		snappyWriterPool.Put(w.Writer)
 		w.Writer = nil
 	}
+}
+
+func officializeAddr(unresolvedAddr *util.UnresolvedAddr, resolvedAddr net.Addr) error {
+	unresolvedHost, unresolvedPort, err := net.SplitHostPort(unresolvedAddr.String())
+	if err != nil {
+		return err
+	}
+
+	resolvedHost, resolvedPort, err := net.SplitHostPort(resolvedAddr.String())
+	if err != nil {
+		return err
+	}
+
+	var host string
+	if unresolvedHost != "" {
+		// A host was provided, use it.
+		host = unresolvedHost
+	} else {
+		// A host was not provided. Ask the system, and fall back to the listener.
+		if hostname, err := os.Hostname(); err == nil {
+			host = hostname
+		} else {
+			host = resolvedHost
+		}
+	}
+
+	var port string
+	if unresolvedPort != "0" {
+		// A port was provided, use it.
+		port = unresolvedPort
+	} else {
+		// A port was not provided, but the system assigned one.
+		port = resolvedPort
+	}
+
+	unresolvedAddr.AddressField = net.JoinHostPort(host, port)
+
+	return nil
 }
