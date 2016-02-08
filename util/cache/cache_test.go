@@ -23,7 +23,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/biogo/store/interval"
 	"github.com/biogo/store/llrb"
 
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
@@ -219,18 +218,11 @@ func TestOrderedCacheClear(t *testing.T) {
 	}
 }
 
-type rangeKey string
-
-// Compare implements interval.Comparable.
-func (rk rangeKey) Compare(b interval.Comparable) int {
-	return bytes.Compare([]byte(rk), []byte(b.(rangeKey)))
-}
-
 func TestIntervalCache(t *testing.T) {
 	ic := NewIntervalCache(Config{Policy: CacheLRU, ShouldEvict: noEviction})
-	key1 := ic.NewKey(rangeKey("a"), rangeKey("b"))
-	key2 := ic.NewKey(rangeKey("a"), rangeKey("c"))
-	key3 := ic.NewKey(rangeKey("d"), rangeKey("d\x00"))
+	key1 := ic.NewKey([]byte("a"), []byte("b"))
+	key2 := ic.NewKey([]byte("a"), []byte("c"))
+	key3 := ic.NewKey([]byte("d"), []byte("d\x00"))
 	ic.Add(key1, 1)
 	ic.Add(key2, 2)
 	ic.Add(key3, 3)
@@ -245,7 +237,7 @@ func TestIntervalCache(t *testing.T) {
 	if v, ok := ic.Get(key3); !ok || v.(int) != 3 {
 		t.Error("failed to fetch value for key \"d\"")
 	}
-	if _, ok := ic.Get(ic.NewKey(rangeKey("a"), rangeKey("a\x00"))); ok {
+	if _, ok := ic.Get(ic.NewKey([]byte("a"), []byte("a\x00"))); ok {
 		t.Error("unexpected success fetching \"a\"")
 	}
 
@@ -258,20 +250,20 @@ func TestIntervalCache(t *testing.T) {
 
 func TestIntervalCacheOverlap(t *testing.T) {
 	ic := NewIntervalCache(Config{Policy: CacheLRU, ShouldEvict: noEviction})
-	ic.Add(ic.NewKey(rangeKey("a"), rangeKey("c")), 1)
-	ic.Add(ic.NewKey(rangeKey("c"), rangeKey("e")), 2)
-	ic.Add(ic.NewKey(rangeKey("b"), rangeKey("g")), 3)
-	ic.Add(ic.NewKey(rangeKey("d"), rangeKey("e")), 4)
-	ic.Add(ic.NewKey(rangeKey("b"), rangeKey("d")), 5)
-	ic.Add(ic.NewKey(rangeKey("e"), rangeKey("g")), 6)
-	ic.Add(ic.NewKey(rangeKey("f"), rangeKey("i")), 7)
-	ic.Add(ic.NewKey(rangeKey("g"), rangeKey("i")), 8)
-	ic.Add(ic.NewKey(rangeKey("f"), rangeKey("h")), 9)
-	ic.Add(ic.NewKey(rangeKey("i"), rangeKey("j")), 10)
+	ic.Add(ic.NewKey([]byte("a"), []byte("c")), 1)
+	ic.Add(ic.NewKey([]byte("c"), []byte("e")), 2)
+	ic.Add(ic.NewKey([]byte("b"), []byte("g")), 3)
+	ic.Add(ic.NewKey([]byte("d"), []byte("e")), 4)
+	ic.Add(ic.NewKey([]byte("b"), []byte("d")), 5)
+	ic.Add(ic.NewKey([]byte("e"), []byte("g")), 6)
+	ic.Add(ic.NewKey([]byte("f"), []byte("i")), 7)
+	ic.Add(ic.NewKey([]byte("g"), []byte("i")), 8)
+	ic.Add(ic.NewKey([]byte("f"), []byte("h")), 9)
+	ic.Add(ic.NewKey([]byte("i"), []byte("j")), 10)
 
 	expValues := []interface{}{3, 2, 4, 6, 7, 9}
 	values := []interface{}{}
-	for _, o := range ic.GetOverlaps(rangeKey("d"), rangeKey("g")) {
+	for _, o := range ic.GetOverlaps([]byte("d"), []byte("g")) {
 		values = append(values, o.Value)
 	}
 	if !reflect.DeepEqual(expValues, values) {
@@ -281,8 +273,8 @@ func TestIntervalCacheOverlap(t *testing.T) {
 
 func TestIntervalCacheClear(t *testing.T) {
 	ic := NewIntervalCache(Config{Policy: CacheLRU, ShouldEvict: noEviction})
-	key1 := ic.NewKey(rangeKey("a"), rangeKey("c"))
-	key2 := ic.NewKey(rangeKey("c"), rangeKey("e"))
+	key1 := ic.NewKey([]byte("a"), []byte("c"))
+	key2 := ic.NewKey([]byte("c"), []byte("e"))
 	ic.Add(key1, 1)
 	ic.Add(key2, 2)
 	ic.Clear()

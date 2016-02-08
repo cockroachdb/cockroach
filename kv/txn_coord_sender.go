@@ -102,7 +102,7 @@ func (tm *txnMetadata) addKeyRange(start, end roachpb.Key) {
 		start = end[:len(start)]
 	}
 	key := tm.keys.MakeKey(start, end)
-	for _, o := range tm.keys.GetOverlaps(key.Start(), key.End()) {
+	for _, o := range tm.keys.GetOverlaps(key.Start, key.End) {
 		if o.Key.Contains(key) {
 			return
 		} else if key.Contains(*o.Key) {
@@ -113,8 +113,12 @@ func (tm *txnMetadata) addKeyRange(start, end roachpb.Key) {
 	// Since no existing key range fully covered this range, add it now. The
 	// strange assignment to pkey makes sure we delay the heap allocation until
 	// we know it is necessary.
-	pkey := key
-	tm.keys.Add(&pkey, nil)
+	alloc := struct {
+		key   cache.IntervalKey
+		entry cache.Entry
+	}{key: key}
+	alloc.entry.Key = &alloc.key
+	tm.keys.AddEntry(&alloc.entry)
 }
 
 // setLastUpdate updates the wall time (in nanoseconds) since the most
@@ -144,9 +148,9 @@ func (tm *txnMetadata) intentSpans() []roachpb.Span {
 	intents := make([]roachpb.Span, 0, tm.keys.Len())
 	for _, o := range tm.keys.GetOverlaps(roachpb.KeyMin, roachpb.KeyMax) {
 		intent := roachpb.Span{
-			Key: o.Key.Start().(roachpb.Key),
+			Key: roachpb.Key(o.Key.Start),
 		}
-		if endKey := o.Key.End().(roachpb.Key); !intent.Key.IsPrev(endKey) {
+		if endKey := roachpb.Key(o.Key.End); !intent.Key.IsPrev(endKey) {
 			intent.EndKey = endKey
 		}
 		intents = append(intents, intent)

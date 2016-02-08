@@ -112,9 +112,18 @@ func (cq *CommandQueue) Add(readOnly bool, spans ...roachpb.Span) []interface{} 
 		if len(end) == 0 {
 			end = start.Next()
 		}
-		key := cq.cache.NewKey(start, end)
-		cq.cache.Add(key, &cmd{readOnly: readOnly})
-		r = append(r, key)
+		alloc := struct {
+			key   cache.IntervalKey
+			value cmd
+			entry cache.Entry
+		}{
+			key:   cq.cache.MakeKey(start, end),
+			value: cmd{readOnly: readOnly},
+		}
+		alloc.entry.Key = &alloc.key
+		alloc.entry.Value = &alloc.value
+		cq.cache.AddEntry(&alloc.entry)
+		r = append(r, &alloc.key)
 	}
 	return r
 }
