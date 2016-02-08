@@ -18,9 +18,7 @@
 package roachpb
 
 import (
-	"encoding/hex"
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -87,30 +85,6 @@ func TestFlagsToStr(t *testing.T) {
 	exp := "AdWrAl"
 	if act := flagsToStr(ba.flags()); act != exp {
 		t.Fatalf("expected %s, got %s", exp, act)
-	}
-}
-
-func TestBatchTraceID(t *testing.T) {
-	var ba BatchRequest
-	ba.Add(&ReverseScanRequest{})
-	ba.Add(&IncrementRequest{})
-
-	expID := "cRdWrRgRv@0.000000000,0"
-	expName := expID[1:]
-	if actID, actName := ba.TraceID(), ba.TraceName(); expID != actID || expName != actName {
-		t.Fatalf("expected (%s,%s), got (%s, %s)", expID, expName, actID, actName)
-	}
-
-	uuidStr := "a53eef22-35f3-4c69-8e98-c563100e028c"
-	bytes, err := hex.DecodeString(strings.Replace(uuidStr, "-", "", -1))
-	if err != nil {
-		t.Fatal(err)
-	}
-	ba.Txn = &Transaction{ID: bytes}
-	expID = "t" + uuidStr
-	expName = expID[:9]
-	if actID, actName := ba.TraceID(), ba.TraceName(); expID != actID || expName != actName {
-		t.Fatalf("expected (%s,%s), got (%s, %s)", expID, expName, actID, actName)
 	}
 }
 
