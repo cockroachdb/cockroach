@@ -48,8 +48,10 @@ import (
 )
 
 const (
-	// gossipInterval is the interval for gossiping storage-related info.
-	gossipInterval = 1 * time.Minute
+	// gossipStoresInterval is the interval for gossiping storage-related info.
+	gossipStoresInterval = 1 * time.Minute
+	// gossipNodeInterval is the interval for gossiping the node descriptor.
+	gossipNodeInterval = 1 * time.Hour
 	// publishStatusInterval is the interval for publishing periodic statistics
 	// from stores to the internal event feed.
 	publishStatusInterval = 10 * time.Second
@@ -237,6 +239,7 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 	}
 	// Gossip the node descriptor to make this node addressable by node ID.
 	n.Descriptor.NodeID = id
+	log.Infof("setting node descriptor %+v", n.Descriptor)
 	if err = n.ctx.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
 		log.Fatalf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 	}
@@ -467,18 +470,21 @@ func (n *Node) connectGossip() {
 // information. Starts a goroutine to loop until the node is closed.
 func (n *Node) startGossip(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
-		ticker := time.NewTicker(gossipInterval)
-		defer ticker.Stop()
+		storesTicker := time.NewTicker(gossipStoresInterval)
+		nodeTicker := time.NewTicker(gossipNodeInterval)
+		defer storesTicker.Stop()
+		defer nodeTicker.Stop()
 		n.gossipStores() // one-off run before going to sleep
 		for {
 			select {
-			case <-ticker.C:
+			case <-storesTicker.C:
+				// Store capacities.
+				n.gossipStores()
+			case <-nodeTicker.C:
 				// Node descriptor.
 				if err := n.ctx.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
 					log.Warningf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 				}
-				// Store capacities.
-				n.gossipStores()
 			case <-stopper.ShouldStop():
 				return
 			}
