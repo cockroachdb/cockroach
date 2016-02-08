@@ -20,8 +20,9 @@ package uuid
 
 import (
 	"crypto/rand"
-	"fmt"
+	"encoding/hex"
 	"io"
+	"unsafe"
 )
 
 const (
@@ -54,7 +55,20 @@ func (u UUID) String() string {
 		return ""
 	}
 	b := []byte(u)
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", b[:4], b[4:6], b[6:8], b[8:10], b[10:])
+	r := make([]byte, 36)
+	hex.Encode(r[:8], b[:4])
+	r[8] = '-'
+	hex.Encode(r[9:13], b[4:6])
+	r[13] = '-'
+	hex.Encode(r[14:18], b[6:8])
+	r[18] = '-'
+	hex.Encode(r[19:23], b[8:10])
+	r[23] = '-'
+	hex.Encode(r[24:], b[10:])
+	// Transform our []byte into a string. This is actually safe because the
+	// []byte never escapes this method.
+	s := *(*string)(unsafe.Pointer(&r))
+	return s
 }
 
 // Short formats the UUID using only the first four bytes for brevity.
@@ -62,6 +76,5 @@ func (u UUID) Short() string {
 	if len(u) != UUIDSize {
 		return ""
 	}
-	b := []byte(u)
-	return fmt.Sprintf("%08x", b[:4])
+	return u.String()[:8]
 }
