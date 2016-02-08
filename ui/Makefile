@@ -99,7 +99,7 @@ bower.installed: bower.json npm.installed
 	touch $@
 
 npm.installed: npm-shrinkwrap.json
-	npm install
+	npm install --progress=false
 	touch $@
 
 tsd.installed: tsd.json npm.installed
