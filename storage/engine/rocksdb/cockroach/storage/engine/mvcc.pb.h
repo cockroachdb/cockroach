@@ -109,14 +109,14 @@ class MVCCMetadata : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.roachpb.Transaction txn = 1;
+  // optional .cockroach.roachpb.Meta txn = 1;
   bool has_txn() const;
   void clear_txn();
   static const int kTxnFieldNumber = 1;
-  const ::cockroach::roachpb::Transaction& txn() const;
-  ::cockroach::roachpb::Transaction* mutable_txn();
-  ::cockroach::roachpb::Transaction* release_txn();
-  void set_allocated_txn(::cockroach::roachpb::Transaction* txn);
+  const ::cockroach::roachpb::Meta& txn() const;
+  ::cockroach::roachpb::Meta* mutable_txn();
+  ::cockroach::roachpb::Meta* release_txn();
+  void set_allocated_txn(::cockroach::roachpb::Meta* txn);
 
   // optional .cockroach.roachpb.Timestamp timestamp = 2;
   bool has_timestamp() const;
@@ -189,7 +189,7 @@ class MVCCMetadata : public ::google::protobuf::Message {
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::cockroach::roachpb::Transaction* txn_;
+  ::cockroach::roachpb::Meta* txn_;
   ::cockroach::roachpb::Timestamp* timestamp_;
   ::google::protobuf::int64 key_bytes_;
   ::google::protobuf::int64 val_bytes_;
@@ -420,7 +420,7 @@ class MVCCStats : public ::google::protobuf::Message {
 #if !PROTOBUF_INLINE_NOT_IN_HEADERS
 // MVCCMetadata
 
-// optional .cockroach.roachpb.Transaction txn = 1;
+// optional .cockroach.roachpb.Meta txn = 1;
 inline bool MVCCMetadata::has_txn() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -431,28 +431,28 @@ inline void MVCCMetadata::clear_has_txn() {
   _has_bits_[0] &= ~0x00000001u;
 }
 inline void MVCCMetadata::clear_txn() {
-  if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
+  if (txn_ != NULL) txn_->::cockroach::roachpb::Meta::Clear();
   clear_has_txn();
 }
-inline const ::cockroach::roachpb::Transaction& MVCCMetadata::txn() const {
+inline const ::cockroach::roachpb::Meta& MVCCMetadata::txn() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.MVCCMetadata.txn)
   return txn_ != NULL ? *txn_ : *default_instance_->txn_;
 }
-inline ::cockroach::roachpb::Transaction* MVCCMetadata::mutable_txn() {
+inline ::cockroach::roachpb::Meta* MVCCMetadata::mutable_txn() {
   set_has_txn();
   if (txn_ == NULL) {
-    txn_ = new ::cockroach::roachpb::Transaction;
+    txn_ = new ::cockroach::roachpb::Meta;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.MVCCMetadata.txn)
   return txn_;
 }
-inline ::cockroach::roachpb::Transaction* MVCCMetadata::release_txn() {
+inline ::cockroach::roachpb::Meta* MVCCMetadata::release_txn() {
   clear_has_txn();
-  ::cockroach::roachpb::Transaction* temp = txn_;
+  ::cockroach::roachpb::Meta* temp = txn_;
   txn_ = NULL;
   return temp;
 }
-inline void MVCCMetadata::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
+inline void MVCCMetadata::set_allocated_txn(::cockroach::roachpb::Meta* txn) {
   delete txn_;
   txn_ = txn;
   if (txn) {

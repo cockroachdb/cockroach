@@ -1795,22 +1795,19 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 		var resolveArgs roachpb.Request
 		var local bool // whether this intent lives on this Range
 		{
-			header := roachpb.Span{
-				Key:    intent.Key,
-				EndKey: intent.EndKey,
-			}
-
 			if len(intent.EndKey) == 0 {
 				resolveArgs = &roachpb.ResolveIntentRequest{
-					Span:      header,
+					Span:      intent.Span,
 					IntentTxn: intent.Txn,
+					Status:    intent.Status,
 					Poison:    poison,
 				}
 				local = r.ContainsKey(intent.Key)
 			} else {
 				resolveArgs = &roachpb.ResolveIntentRangeRequest{
-					Span:      header,
+					Span:      intent.Span,
 					IntentTxn: intent.Txn,
+					Status:    intent.Status,
 					Poison:    poison,
 				}
 				local = r.ContainsKeyRange(intent.Key, intent.EndKey)

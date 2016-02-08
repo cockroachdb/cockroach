@@ -571,16 +571,27 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 	max.WallTime += maxOffset
 
 	return &Transaction{
+		Meta: Meta{
+			Key:       baseKey,
+			ID:        uuid.NewUUID4(),
+			Timestamp: now,
+		},
 		Name:          name,
-		Key:           baseKey,
-		ID:            uuid.NewUUID4(),
 		Priority:      priority,
 		Isolation:     isolation,
-		Timestamp:     now,
 		OrigTimestamp: now,
 		MaxTimestamp:  max,
 		Sequence:      1,
 	}
+}
+
+// GetMeta returns the Transaction's metadata, or nil if the transaction
+// is nil.
+func (t *Transaction) GetMeta() *Meta {
+	if t == nil {
+		return nil
+	}
+	return &t.Meta
 }
 
 // Clone creates a copy of the given transaction. The copy is "mostly" deep,
@@ -828,7 +839,7 @@ func (l Lease) OwnedBy(storeID StoreID) bool {
 func AsIntents(spans []Span, txn *Transaction) []Intent {
 	ret := make([]Intent, len(spans))
 	for i := range spans {
-		ret[i].Span, ret[i].Txn = spans[i], *txn
+		ret[i].Span, ret[i].Txn, ret[i].Status = spans[i], txn.Meta, txn.Status
 	}
 	return ret
 }

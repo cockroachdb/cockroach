@@ -74,6 +74,7 @@
 		ModifiedSpanTrigger
 		InternalCommitTrigger
 		NodeList
+		Meta
 		Transaction
 		Intent
 		Lease
@@ -673,7 +674,7 @@ type PushTxnRequest struct {
 	// the push transaction request. Note that this may not be the most
 	// up-to-date value of the transaction record, but will be set or
 	// merged as appropriate.
-	PusheeTxn Transaction `protobuf:"bytes,3,opt,name=pushee_txn" json:"pushee_txn"`
+	PusheeTxn Meta `protobuf:"bytes,3,opt,name=pushee_txn" json:"pushee_txn"`
 	// PushTo is the timestamp just after which PusheeTxn is attempted to be
 	// pushed. During conflict resolution, it should be set to the timestamp
 	// of the its conflicting write.
@@ -718,10 +719,12 @@ func (*PushTxnResponse) ProtoMessage()    {}
 type ResolveIntentRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// The transaction whose intent is being resolved.
-	IntentTxn Transaction `protobuf:"bytes,2,opt,name=intent_txn" json:"intent_txn"`
+	IntentTxn Meta `protobuf:"bytes,2,opt,name=intent_txn" json:"intent_txn"`
+	// The status of the transaction.
+	Status TransactionStatus `protobuf:"varint,3,opt,name=status,enum=cockroach.roachpb.TransactionStatus" json:"status"`
 	// Optionally poison the sequence cache for the transaction the intent's
 	// range.
-	Poison bool `protobuf:"varint,3,opt,name=poison" json:"poison"`
+	Poison bool `protobuf:"varint,4,opt,name=poison" json:"poison"`
 }
 
 func (m *ResolveIntentRequest) Reset()         { *m = ResolveIntentRequest{} }
@@ -745,10 +748,12 @@ func (*ResolveIntentResponse) ProtoMessage()    {}
 type ResolveIntentRangeRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// The transaction whose intents are being resolved.
-	IntentTxn Transaction `protobuf:"bytes,2,opt,name=intent_txn" json:"intent_txn"`
+	IntentTxn Meta `protobuf:"bytes,2,opt,name=intent_txn" json:"intent_txn"`
+	// The status of the transaction.
+	Status TransactionStatus `protobuf:"varint,3,opt,name=status,enum=cockroach.roachpb.TransactionStatus" json:"status"`
 	// Optionally poison the sequence cache for the transaction on all ranges
 	// on which the intents reside.
-	Poison bool `protobuf:"varint,3,opt,name=poison" json:"poison"`
+	Poison bool `protobuf:"varint,4,opt,name=poison" json:"poison"`
 }
 
 func (m *ResolveIntentRangeRequest) Reset()         { *m = ResolveIntentRangeRequest{} }
@@ -2215,6 +2220,9 @@ func (m *ResolveIntentRequest) MarshalTo(data []byte) (int, error) {
 	i += n48
 	data[i] = 0x18
 	i++
+	i = encodeVarintApi(data, i, uint64(m.Status))
+	data[i] = 0x20
+	i++
 	if m.Poison {
 		data[i] = 1
 	} else {
@@ -2282,6 +2290,9 @@ func (m *ResolveIntentRangeRequest) MarshalTo(data []byte) (int, error) {
 	}
 	i += n51
 	data[i] = 0x18
+	i++
+	i = encodeVarintApi(data, i, uint64(m.Status))
+	data[i] = 0x20
 	i++
 	if m.Poison {
 		data[i] = 1
@@ -3623,6 +3634,7 @@ func (m *ResolveIntentRequest) Size() (n int) {
 	n += 1 + l + sovApi(uint64(l))
 	l = m.IntentTxn.Size()
 	n += 1 + l + sovApi(uint64(l))
+	n += 1 + sovApi(uint64(m.Status))
 	n += 2
 	return n
 }
@@ -3642,6 +3654,7 @@ func (m *ResolveIntentRangeRequest) Size() (n int) {
 	n += 1 + l + sovApi(uint64(l))
 	l = m.IntentTxn.Size()
 	n += 1 + l + sovApi(uint64(l))
+	n += 1 + sovApi(uint64(m.Status))
 	n += 2
 	return n
 }
@@ -7891,6 +7904,25 @@ func (m *ResolveIntentRequest) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 3:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
+			}
+			m.Status = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Status |= (TransactionStatus(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Poison", wireType)
 			}
 			var v int
@@ -8100,6 +8132,25 @@ func (m *ResolveIntentRangeRequest) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
+			}
+			m.Status = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Status |= (TransactionStatus(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Poison", wireType)
 			}
