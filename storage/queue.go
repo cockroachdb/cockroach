@@ -382,11 +382,6 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 
 			// Exit on stopper.
 			case <-stopper.ShouldStop():
-				bq.mu.Lock()
-				bq.mu.replicas = nil
-				bq.mu.priorityQ = nil
-				bq.mu.purgatory = nil
-				bq.mu.Unlock()
 				return
 			}
 		}
