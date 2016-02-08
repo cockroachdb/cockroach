@@ -6,4 +6,5 @@
 
 package interval
 
+// Mode .
 const Mode = BU23

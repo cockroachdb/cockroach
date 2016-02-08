@@ -102,7 +102,7 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 		// Check existing, overlapping entries. Remove superseded
 		// entries or return without adding this entry if necessary.
 		key := tc.cache.MakeKey(start, end)
-		for _, o := range tc.cache.GetOverlaps(key.Start(), key.End()) {
+		for _, o := range tc.cache.GetOverlaps(key.Start, key.End) {
 			ce := o.Value.(*cacheEntry)
 			if ce.readOnly != readOnly {
 				continue

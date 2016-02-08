@@ -19,12 +19,14 @@
 package cache
 
 import (
+	"bytes"
 	"container/list"
 	"fmt"
 	"sync/atomic"
 
-	"github.com/biogo/store/interval"
 	"github.com/biogo/store/llrb"
+
+	"github.com/cockroachdb/cockroach/util/interval"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -89,15 +91,8 @@ func (e *entry) Compare(b llrb.Comparable) int {
 func (e *entry) ID() uintptr {
 	return e.key.(*IntervalKey).id
 }
-func (e *entry) Start() interval.Comparable {
-	return e.key.(*IntervalKey).Start()
-}
-func (e *entry) End() interval.Comparable {
-	return e.key.(*IntervalKey).End()
-}
-func (e *entry) NewMutable() interval.Mutable {
-	ik := e.key.(*IntervalKey)
-	return &IntervalKey{id: 0, start: ik.Start(), end: ik.End()}
+func (e *entry) Range() interval.Range {
+	return e.key.(*IntervalKey).Range
 }
 func (e *entry) Overlap(r interval.Range) bool {
 	return e.key.(*IntervalKey).Overlap(r)
@@ -360,39 +355,27 @@ type IntervalCache struct {
 
 // IntervalKey provides uniqueness as well as key interval.
 type IntervalKey struct {
-	id         uintptr
-	start, end interval.Comparable
+	interval.Range
+	id uintptr
 }
 
 var intervalAlloc int64
 
 // Implementation of the interval.Range & interval.Mutable interfaces.
 
-// Start .
-func (ik *IntervalKey) Start() interval.Comparable { return ik.start }
-
-// End .
-func (ik *IntervalKey) End() interval.Comparable { return ik.end }
-
-// SetStart .
-func (ik *IntervalKey) SetStart(c interval.Comparable) { ik.start = c }
-
-// SetEnd .
-func (ik *IntervalKey) SetEnd(c interval.Comparable) { ik.end = c }
-
 // Overlap .
 func (ik *IntervalKey) Overlap(r interval.Range) bool {
-	return ik.end.Compare(r.Start()) > 0 && ik.start.Compare(r.End()) < 0
+	return ik.End.Compare(r.Start) > 0 && ik.Start.Compare(r.End) < 0
 }
 
 func (ik IntervalKey) String() string {
-	return fmt.Sprintf("%d: %q-%q", ik.id, ik.start, ik.end)
+	return fmt.Sprintf("%d: %q-%q", ik.id, ik.Start, ik.End)
 }
 
 // Contains returns true if the specified IntervalKey is contained
 // within this IntervalKey.
 func (ik IntervalKey) Contains(lk IntervalKey) bool {
-	return lk.start.Compare(ik.start) >= 0 && ik.end.Compare(lk.end) >= 0
+	return lk.Start.Compare(ik.Start) >= 0 && ik.End.Compare(lk.End) >= 0
 }
 
 // NewIntervalCache creates a new Cache backed by an interval tree.
@@ -407,20 +390,22 @@ func NewIntervalCache(config Config) *IntervalCache {
 }
 
 // NewKey creates a new interval key defined by start and end values.
-func (ic *IntervalCache) NewKey(start, end interval.Comparable) *IntervalKey {
+func (ic *IntervalCache) NewKey(start, end []byte) *IntervalKey {
 	k := ic.MakeKey(start, end)
 	return &k
 }
 
 // MakeKey creates a new interval key defined by start and end values.
-func (ic *IntervalCache) MakeKey(start, end interval.Comparable) IntervalKey {
-	if start.Compare(end) >= 0 {
+func (ic *IntervalCache) MakeKey(start, end []byte) IntervalKey {
+	if bytes.Compare(start, end) >= 0 {
 		panic(fmt.Sprintf("start key greater than or equal to end key %s >= %s", start, end))
 	}
 	return IntervalKey{
-		id:    uintptr(atomic.AddInt64(&intervalAlloc, 1)),
-		start: start,
-		end:   end,
+		Range: interval.Range{
+			Start: interval.Comparable(start),
+			End:   interval.Comparable(end),
+		},
+		id: uintptr(atomic.AddInt64(&intervalAlloc, 1)),
 	}
 }
 
@@ -475,8 +460,11 @@ type Overlap struct {
 
 // GetOverlaps returns a slice of values which overlap the specified
 // interval. The slice is only valid until the next call to GetOverlaps.
-func (ic *IntervalCache) GetOverlaps(start, end interval.Comparable) []Overlap {
-	ic.overlapKey.start, ic.overlapKey.end = start, end
+func (ic *IntervalCache) GetOverlaps(start, end []byte) []Overlap {
+	ic.overlapKey.Range = interval.Range{
+		Start: interval.Comparable(start),
+		End:   interval.Comparable(end),
+	}
 	ic.tree.DoMatching(ic.doOverlaps, &ic.overlapKey)
 	overlaps := ic.overlaps
 	ic.overlaps = ic.overlaps[:0]
