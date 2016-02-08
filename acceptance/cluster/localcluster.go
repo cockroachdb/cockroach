@@ -405,7 +405,7 @@ func (l *LocalCluster) processEvent(e dockerclient.EventOrError, monitorStopper 
 	}
 
 	for i, n := range l.Nodes {
-		if n != nil && n.ID == e.Id {
+		if n != nil && n.ID == e.ID {
 			if log.V(1) {
 				log.Errorf("node=%d status=%s", i, e.Status)
 			}
@@ -426,7 +426,7 @@ func (l *LocalCluster) processEvent(e dockerclient.EventOrError, monitorStopper 
 		// There is a very tiny race here: the signal handler might be closing the
 		// stopper simultaneously.
 		log.Errorf("stopping due to unexpected event: %+v", e)
-		if r, err := l.client.ContainerLogs(e.Id, &dockerclient.LogOptions{
+		if r, err := l.client.ContainerLogs(e.ID, &dockerclient.LogOptions{
 			Stdout: true,
 			Stderr: true,
 		}); err == nil {

@@ -1,5 +1,4 @@
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
-/// <reference path="../../typings/tsd.d.ts" />
 /// <reference path="../models/proto.ts" />
 
 module Models {
@@ -29,7 +28,7 @@ module Models {
          *
          * Once this was enabled, we could use proto2typescript to generate
          * typescript definitions of protobufs.
-         * 
+         *
          */
         return xhr;
       };

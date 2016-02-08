@@ -29,15 +29,15 @@ Before committing, be sure to run `make` to generate a non-debug version of
 will result in wasted time waiting for the build.
 
 ## Watch/Livereload
-If you want to automatically recompile/copy the typescript/stylus/index files, 
-you can use `make watch`. This runs [Gulp](http://gulpjs.com/) under the hood. 
+If you want to automatically recompile/copy the typescript/stylus/index files,
+you can use `make watch`. This runs [Gulp](http://gulpjs.com/) under the hood.
 
 The website can also automatically pick up your changes with [LiveReload]
 (http://livereload.com/) while `make watch` is running. The [Chrome LiveReload Plugin]
 (https://chrome.google.com/webstore/detail/livereload/jnihajbhpnppcggbcgedagnkighmdlei?hl=en)
 is an easy way to take advantage of this.
 
-Note that if you add a new file, you'll need to restart `make watch` and run 
+Note that if you add a new file, you'll need to restart `make watch` and run
 `make build` in the project root again.
 
 ## Dependencies
@@ -48,14 +48,14 @@ We use npm to manage various dependencies; be sure that your node installation
 includes a recent version of npm. If you observe problems with npm, try updating
 it using `npm install -g npm`.
 
-We use bower to manage frontend dependencies and tsd to manage typescript
+We use Bower to manage frontend dependencies and Typings to manage typescript
 definition files.
 Our Makefile automatically installs these tools locally, so for the most part,
 you can be blissfully ignorant of their use. However, if you wish to add
-bower/tsd dependencies (and do not have your own opinions on binstubs), you'll
+Bower/Typings dependencies (and do not have your own opinions on binstubs), you'll
 want to run them from the local install using one of:
 - `node_modules/.bin/bower install --save <myAwesomeDep>`
-- `node_modules/.bin/tsd install --save <myAwesomeDep>`
+- `node_modules/.bin/typings install --save <myAwesomeDep>`
 
 If you're adding an npm dependency, you'll need to run:
 ```

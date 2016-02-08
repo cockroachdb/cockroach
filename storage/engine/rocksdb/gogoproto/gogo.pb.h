@@ -145,6 +145,10 @@ static const int kGogoprotoImportFieldNumber = 63027;
 extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FileOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
   gogoproto_import;
+static const int kProtosizerAllFieldNumber = 63028;
+extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FileOptions,
+    ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
+  protosizer_all;
 static const int kGoprotoGettersFieldNumber = 64001;
 extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::MessageOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
@@ -221,6 +225,10 @@ static const int kGoprotoUnrecognizedFieldNumber = 64026;
 extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::MessageOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
   goproto_unrecognized;
+static const int kProtosizerFieldNumber = 64028;
+extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::MessageOptions,
+    ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
+  protosizer;
 static const int kNullableFieldNumber = 65001;
 extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FieldOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
