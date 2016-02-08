@@ -252,18 +252,21 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*TableDescriptor, 
 		return nil, pErr
 	}
 
-	if p.leases == nil {
-		p.leases = make(map[ID]*LeaseState)
+	var lease *LeaseState
+	found := false
+	for _, lease = range p.leases {
+		if lease.TableDescriptor.ID == tableID {
+			found = true
+			break
+		}
 	}
-
-	lease, ok := p.leases[tableID]
-	if !ok {
+	if !found {
 		var pErr *roachpb.Error
 		lease, pErr = p.leaseMgr.Acquire(p.txn, tableID, 0)
 		if pErr != nil {
 			return nil, pErr
 		}
-		p.leases[tableID] = lease
+		p.leases = append(p.leases, lease)
 	}
 
 	desc := &TableDescriptor{}
@@ -279,22 +282,15 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, *roachpb.Error) {
 		return 0, roachpb.NewError(err)
 	}
 
-	// Lookup the database in the cache first, falling back to the KV store if it
-	// isn't present. The cache might cause the usage of a recently renamed
-	// database, but that's a race that could occur anyways.
-	dbDesc, err := p.getCachedDatabaseDesc(qname.Database())
-	if err != nil {
-		var pErr *roachpb.Error
-		dbDesc, pErr = p.getDatabaseDesc(qname.Database())
-		if pErr != nil {
-			return 0, pErr
-		}
+	dbID, pErr := p.getDatabaseID(qname.Database())
+	if pErr != nil {
+		return 0, pErr
 	}
 
 	// Lookup the ID of the table in the cache. The use of the cache might cause
 	// the usage of a recently renamed table, but that's a race that could occur
 	// anyways.
-	nameKey := tableKey{dbDesc.ID, qname.Table()}
+	nameKey := tableKey{dbID, qname.Table()}
 	key := nameKey.Key()
 	if nameVal := p.systemConfig.GetValue(key); nameVal != nil {
 		id, err := nameVal.GetInt()

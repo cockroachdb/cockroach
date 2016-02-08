@@ -144,6 +144,7 @@ type Executor struct {
 
 	// System Config and mutex.
 	systemConfig     config.SystemConfig
+	databaseCache    *databaseCache
 	systemConfigMu   sync.RWMutex
 	systemConfigCond *sync.Cond
 }
@@ -196,17 +197,21 @@ func (e *Executor) SetNodeID(nodeID roachpb.NodeID) {
 func (e *Executor) updateSystemConfig(cfg *config.SystemConfig) {
 	e.systemConfigMu.Lock()
 	e.systemConfig = *cfg
+	// The database cache gets reset whenever the system config changes.
+	e.databaseCache = &databaseCache{
+		databases: map[string]ID{},
+	}
 	e.systemConfigCond.Broadcast()
 	e.systemConfigMu.Unlock()
 }
 
 // getSystemConfig returns a pointer to the latest system config. May be nil,
 // if the gossip callback has not run.
-func (e *Executor) getSystemConfig() config.SystemConfig {
+func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 	e.systemConfigMu.RLock()
-	cfg := e.systemConfig
+	cfg, cache := e.systemConfig, e.databaseCache
 	e.systemConfigMu.RUnlock()
-	return cfg
+	return cfg, cache
 }
 
 // Prepare returns the result types of the given statement. Args may be a
@@ -220,6 +225,7 @@ func (e *Executor) Prepare(user string, query string, args parser.MapArgs) ([]Re
 	planMaker := plannerPool.Get().(*planner)
 	defer plannerPool.Put(planMaker)
 
+	cfg, cache := e.getSystemConfig()
 	*planMaker = planner{
 		user: user,
 		evalCtx: parser.EvalContext{
@@ -230,8 +236,9 @@ func (e *Executor) Prepare(user string, query string, args parser.MapArgs) ([]Re
 			GetLocation: planMaker.evalCtx.GetLocation,
 			Args:        args,
 		},
-		leaseMgr:     e.leaseMgr,
-		systemConfig: e.getSystemConfig(),
+		leaseMgr:      e.leaseMgr,
+		systemConfig:  cfg,
+		databaseCache: cache,
 	}
 
 	timestamp := time.Now()
@@ -260,6 +267,7 @@ func (e *Executor) ExecuteStatements(user string, session Session, stmts string,
 	planMaker := plannerPool.Get().(*planner)
 	defer plannerPool.Put(planMaker)
 
+	cfg, cache := e.getSystemConfig()
 	*planMaker = planner{
 		user: user,
 		evalCtx: parser.EvalContext{
@@ -269,9 +277,10 @@ func (e *Executor) ExecuteStatements(user string, session Session, stmts string,
 			// initial setting.
 			GetLocation: planMaker.evalCtx.GetLocation,
 		},
-		leaseMgr:     e.leaseMgr,
-		systemConfig: e.getSystemConfig(),
-		session:      session,
+		leaseMgr:      e.leaseMgr,
+		systemConfig:  cfg,
+		databaseCache: cache,
+		session:       session,
 	}
 
 	// Resume a pending transaction if present.
