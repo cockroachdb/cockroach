@@ -55,6 +55,7 @@ func TestParseColumnType(t *testing.T) {
 		{"TEXT", &StringType{Name: "TEXT"}},
 		{"BLOB", &BytesType{Name: "BLOB"}},
 		{"BYTES", &BytesType{Name: "BYTES"}},
+		{"BYTEA", &BytesType{Name: "BYTEA"}},
 	}
 	for i, d := range testData {
 		sql := fmt.Sprintf("CREATE TABLE a (b %s)", d.str)
