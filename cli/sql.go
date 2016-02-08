@@ -42,20 +42,17 @@ var sqlShellCmd = &cobra.Command{
 	Long: `
 Open a sql shell running against a cockroach database.
 `,
-	Run: runTerm,
+	RunE:          runTerm,
+	SilenceErrors: true,
+	SilenceUsage:  true,
 }
 
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
-func runInteractive(db *sql.DB, dbURL string) {
-	exitCode := 0
-
+func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 	liner := liner.NewLiner()
 	defer func() {
 		_ = liner.Close()
-		if exitCode != 0 {
-			os.Exit(exitCode)
-		}
 	}()
 
 	fmt.Print(infoMessage)
@@ -77,8 +74,6 @@ func runInteractive(db *sql.DB, dbURL string) {
 	fullPrompt += "> "
 	continuePrompt += "> "
 
-	// TODO(marc): allow passing statements on the command line,
-	// or specifying a flag. This would make testing much simpler.
 	// TODO(marc): detect if we're actually on a terminal. If not,
 	// we may want to repeat the statements on stdout.
 	// TODO(marc): add test.
@@ -94,8 +89,7 @@ func runInteractive(db *sql.DB, dbURL string) {
 		}
 		if err != nil {
 			if err != io.EOF {
-				fmt.Fprintf(osStderr, "Input error: %s\n", err)
-				exitCode = 1
+				exitErr = err
 			}
 			break
 		}
@@ -120,28 +114,24 @@ func runInteractive(db *sql.DB, dbURL string) {
 		fullStmt := strings.Join(stmt, "\n")
 		liner.AppendHistory(fullStmt)
 
-		exitCode = 0
-		if err := runPrettyQuery(db, os.Stdout, fullStmt); err != nil {
-			fmt.Fprintln(osStderr, err)
-			exitCode = 1
+		if exitErr = runPrettyQuery(db, os.Stdout, fullStmt); exitErr != nil {
+			fmt.Fprintln(osStderr, exitErr)
 		}
 
 		// Clear the saved statement.
 		stmt = stmt[:0]
 	}
-
-	// The earlier defer block exits with the exitCode.
+	return exitErr
 }
 
 // runOneStatement executes one statement and terminates
 // on error.
-func runStatements(db *sql.DB, stmts []string) {
+func runStatements(db *sql.DB, stmts []string) error {
 	for _, stmt := range stmts {
 		fullStmt := stmt + "\n"
 		cols, allRows, err := runQuery(db, fullStmt)
 		if err != nil {
-			fmt.Fprintln(osStderr, err)
-			os.Exit(1)
+			return err
 		}
 
 		if len(cols) == 0 {
@@ -159,12 +149,13 @@ func runStatements(db *sql.DB, stmts []string) {
 			}
 		}
 	}
+	return nil
 }
 
-func runTerm(cmd *cobra.Command, args []string) {
-	if !(len(args) >= 1 && context.OneShotSQL) && len(args) != 0 {
+func runTerm(cmd *cobra.Command, args []string) error {
+	if !(context.OneShotSQL || len(args) == 0) {
 		mustUsage(cmd)
-		return
+		return errMissingParams
 	}
 
 	db, dbURL := makeSQLClient()
@@ -172,8 +163,7 @@ func runTerm(cmd *cobra.Command, args []string) {
 
 	if context.OneShotSQL {
 		// Single-line sql; run as simple as possible, without noise on stdout.
-		runStatements(db, args)
-	} else {
-		runInteractive(db, dbURL)
+		return runStatements(db, args)
 	}
+	return runInteractive(db, dbURL)
 }
