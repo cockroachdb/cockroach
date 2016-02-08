@@ -25,6 +25,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/lib/pq"
 
@@ -697,6 +698,41 @@ func TestPGWireMetrics(t *testing.T) {
 	_, _, err = checkPGWireMetrics(s, bytesIn+minbytes, bytesOut+minbytes, 300, 300)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// Verify connection counter.
+	expectConns := func(n, tries int) {
+		nid := s.Gossip().GetNodeID().String()
+		connsKey := "cr.node.pgwire.conns." + nid
+		var conns int64
+		for i := 1; i <= tries; i++ {
+			if conns = s.MustGetCounter(connsKey); conns == int64(n) {
+				return
+			}
+			time.Sleep(time.Duration(i+1) * 250 * time.Millisecond)
+		}
+		t.Fatalf("connections %d != expected %d", conns, n)
+	}
+
+	var conns [10]*sql.DB
+	for i := range conns {
+		var err error
+		if conns[i], err = sql.Open("postgres", pgUrl.String()); err != nil {
+			t.Fatal(err)
+		}
+		defer conns[i].Close()
+
+		rows, err := conns[i].Query("SELECT 1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		rows.Close()
+		expectConns(i+1, 1)
+	}
+
+	for i := len(conns) - 1; i >= 0; i-- {
+		conns[i].Close()
+		expectConns(i, 4)
 	}
 }
 

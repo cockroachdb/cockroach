@@ -204,7 +204,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			// higher values require roughly offset/5 restarts.
 			txnClock.SetMaxOffset(maxOffset)
 
-			sender := NewTxnCoordSender(s.distSender, txnClock, false, tracing.NewTracer(), s.Stopper)
+			sender := NewTxnCoordSender(s.distSender, txnClock, false, tracing.NewTracer(), s.Stopper, DummyTxnMetrics())
 			txnDB := client.NewDB(sender)
 
 			if pErr := txnDB.Txn(func(txn *client.Txn) *roachpb.Error {

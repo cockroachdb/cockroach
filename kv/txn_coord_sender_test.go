@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
@@ -57,6 +58,7 @@ func teardownHeartbeats(tc *TxnCoordSender) {
 	for _, tm := range tc.txns {
 		if tm.txnEnd != nil {
 			close(tm.txnEnd)
+			tm.txnEnd = nil
 		}
 	}
 	defer tc.Unlock()
@@ -564,7 +566,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				reply = ba.CreateReply()
 			}
 			return reply, test.pErr
-		}), clock, false, tracing.NewTracer(), stopper)
+		}), clock, false, tracing.NewTracer(), stopper, DummyTxnMetrics())
 		db := client.NewDB(ts)
 		txn := client.NewTxn(*db)
 		txn.InternalSetPriority(1)
@@ -667,7 +669,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 		br.Txn = &txnClone
 		br.Txn.Writing = true
 		return br, nil
-	}), clock, false, tracing.NewTracer(), stopper)
+	}), clock, false, tracing.NewTracer(), stopper, DummyTxnMetrics())
 
 	// Stop the stopper manually, prior to trying the transaction. This has the
 	// effect of returning a NodeUnavailableError for any attempts at launching
@@ -702,7 +704,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 		pErr := roachpb.NewError(roachpb.NewTransactionRetryError())
 		pErr.SetTxn(&txn)
 		return nil, pErr
-	}), clock, false, tracing.NewTracer(), stopper)
+	}), clock, false, tracing.NewTracer(), stopper, DummyTxnMetrics())
 	defer stopper.Stop()
 
 	var ba roachpb.BatchRequest
@@ -743,5 +745,249 @@ func TestTxnCoordSenderReleaseTxnMeta(t *testing.T) {
 
 	if _, ok := s.Sender.txns[txnID]; ok {
 		t.Fatal("expected TxnCoordSender has released the txn")
+	}
+}
+
+func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string, commits, abandoned, aborts, restarts int64) {
+	// Retry checks, because the TxnCoordSender's metrics are updated asynchronously when the
+	// transaction ends.
+	const tries = 4
+	metrics := sender.metrics
+	for i := 1; i <= tries; i++ {
+		testcases := []struct {
+			name string
+			a, e int64
+		}{
+			{"commits", metrics.Commits.Count(), commits},
+			{"abandoned", metrics.Abandoned.Count(), abandoned},
+			{"aborts", metrics.Aborts.Count(), aborts},
+			{"durations", metrics.Durations[metric.Scale1M].Current().TotalCount(),
+				commits + abandoned + aborts},
+		}
+		errors := 0
+		for _, tc := range testcases {
+			if tc.a != tc.e {
+				errors++
+				if i == tries {
+					t.Errorf("%s: actual %s %d != expected %d", name, tc.name, tc.a, tc.e)
+				}
+			}
+		}
+
+		// Handle restarts separately, because that's a histogram. Though the histogram is approximate,
+		// we're recording so few distinct values that we should be okay.
+		dist := metrics.Restarts.Merge().Distribution()
+		var actualRestarts int64
+		for _, b := range dist {
+			if b.From == 1 && b.To == 1 {
+				actualRestarts += b.Count
+				break
+			} else if b.From != 0 || b.To != 0 {
+				t.Fatalf("unexpected value in histogram: %d-%d", b.From, b.To)
+			}
+		}
+		if a, e := actualRestarts, restarts; a != e {
+			errors++
+			if i == tries {
+				t.Errorf("%s: actual restarts %d != expected %d", name, a, e)
+			}
+		}
+
+		if errors == 0 {
+			return
+		}
+		if i < tries {
+			time.Sleep(time.Duration(i*250) * time.Millisecond)
+		}
+	}
+
+	if t.Failed() {
+		t.FailNow()
+	}
+}
+
+// setupMetricsTest returns a TxnCoordSender and ManualClock pointing to a newly created
+// LocalTestCluster. Also returns a cleanup function to be executed at the end of the
+// test.
+func setupMetricsTest(t *testing.T) (*hlc.ManualClock, *TxnCoordSender, func()) {
+	s := createTestDB(t)
+	reg := metric.NewRegistry()
+	txnMetrics := NewTxnMetrics(reg)
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	sender := NewTxnCoordSender(s.distSender, clock, false, tracing.NewTracer(), s.Stopper, txnMetrics)
+
+	return manual, sender, func() {
+		s.Stop()
+		teardownHeartbeats(sender)
+	}
+}
+
+func TestTxnCommit(t *testing.T) {
+	_, sender, cleanupFn := setupMetricsTest(t)
+	defer cleanupFn()
+	value := []byte("value")
+	db := client.NewDB(sender)
+
+	// Test normal commit.
+	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		key := []byte("key-commit")
+
+		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+			return roachpb.NewError(err)
+		}
+
+		if pErr := txn.Put(key, value); pErr != nil {
+			return pErr
+		}
+
+		if pErr := txn.Commit(); pErr != nil {
+			return pErr
+		}
+
+		return nil
+	}); pErr != nil {
+		t.Fatal(pErr)
+	}
+	checkTxnMetrics(t, sender, "commit txn", 1, 0, 0, 0)
+}
+
+func TestAbandonCount(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	manual, sender, cleanupFn := setupMetricsTest(t)
+	defer cleanupFn()
+	value := []byte("value")
+	db := client.NewDB(sender)
+
+	// Test abandoned transaction by making the client timeout ridiculously short. We also set
+	// the sender to heartbeat very frequently, because the heartbeat detects and tears down
+	// abandoned transactions.
+	sender.heartbeatInterval = 25 * time.Millisecond
+	sender.clientTimeout = 1 * time.Millisecond
+	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		key := []byte("key-abandon")
+
+		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+			return roachpb.NewError(err)
+		}
+
+		if pErr := txn.Put(key, value); pErr != nil {
+			return pErr
+		}
+
+		manual.Increment(int64(sender.clientTimeout + sender.heartbeatInterval*2))
+
+		// We have to sleep a bit to allow wall clock time to pass for the sender's heartbeat
+		// loop to execute and mark the transaction abandoned. We need this sleep here specifically,
+		// because the KV client auto-commits when we exit from this transaction (if there are no
+		// errors).
+		time.Sleep(500 * time.Millisecond)
+
+		return nil
+	}); pErr == nil {
+		t.Fatalf("unexpected success")
+	}
+	checkTxnMetrics(t, sender, "abandon txn", 0, 1, 0, 0)
+}
+
+func TestTxnAbortCount(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	_, sender, cleanupFn := setupMetricsTest(t)
+	defer cleanupFn()
+
+	value := []byte("value")
+	db := client.NewDB(sender)
+
+	// Test aborted transaction.
+	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		key := []byte("key-abort")
+
+		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+			return roachpb.NewError(err)
+		}
+
+		if pErr := txn.Put(key, value); pErr != nil {
+			t.Fatal(pErr)
+		}
+
+		return roachpb.NewErrorf("intentional error to cause abort")
+	}); pErr == nil {
+		t.Fatal("unexpected success when trying to cause aborted transaction")
+	}
+	teardownHeartbeats(sender)
+	checkTxnMetrics(t, sender, "abort txn", 0, 0, 1, 0)
+	fmt.Println("DONE")
+}
+
+func TestTxnRestartCount(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	_, sender, cleanupFn := setupMetricsTest(t)
+	defer cleanupFn()
+
+	key := []byte("key-restart")
+	value := []byte("value")
+	db := client.NewDB(sender)
+
+	// Start a transaction and do a GET. This forces a timestamp to be chosen for the transaction.
+	txn := client.NewTxn(*db)
+	if _, err := txn.Get(key); err != nil {
+		t.Fatal(err)
+	}
+
+	// Outside of the transaction, read the same key as was read within the transaction. This
+	// means that future attempts to write will increase the timestamp.
+	if _, err := db.Get(key); err != nil {
+		t.Fatal(err)
+	}
+
+	// This put increases the candidate timestamp, which causes an immediate restart.
+	if err := txn.Put(key, value); err == nil {
+		t.Fatalf("unexpected success")
+	}
+
+	// Explicitly teardown heartbeats to force stat updates.
+	teardownHeartbeats(sender)
+	checkTxnMetrics(t, sender, "restart txn", 0, 1, 0, 1)
+}
+
+func TestTxnDurations(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	manual, sender, cleanupFn := setupMetricsTest(t)
+	defer cleanupFn()
+
+	db := client.NewDB(sender)
+	const puts = 10
+
+	const incr int64 = 1000
+	key := roachpb.Key("key-txn-durations")
+	for i := 0; i < puts; i++ {
+		if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+				return roachpb.NewError(err)
+			}
+			if err := txn.Put(key, []byte("val")); err != nil {
+				return err
+			}
+			manual.Increment(incr)
+			return nil
+		}); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	teardownHeartbeats(sender)
+	checkTxnMetrics(t, sender, "txn durations", puts, 0, 0, 0)
+
+	hist := sender.metrics.Durations[metric.Scale1M].Current()
+
+	// The clock is a bit odd in these tests, so I can't test the mean without introducing
+	// spurious errors or being overly lax.
+	// TODO(cdo): look into cause of variance.
+	if a, e := hist.TotalCount(), int64(puts); a != e {
+		t.Fatalf("durations %d != expected %d", a, e)
+	}
+
+	if min := hist.Min(); min < incr {
+		t.Fatalf("min %d < %d", min, incr)
 	}
 }

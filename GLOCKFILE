@@ -50,7 +50,6 @@ github.com/lib/pq 69552e54d2a9d4c6a2438926a774930f7bc398ec
 github.com/mattn/go-isatty 56b76bdf51f7708750eac80fa38b952bb9f32639
 github.com/mattn/go-runewidth e882a96ec18dd43fa283187b66af74497c9101c0
 github.com/mibk/dupl c450df04426c2f8c35d91fb588feb88fbe328915
-github.com/montanaflynn/stats 2c10aa99e7ec8c4607d4427ec7a1a60fcdfce85f
 github.com/olekukonko/tablewriter cca8bbc0798408af109aaaa239cbd2634846b340
 github.com/opencontainers/runc 361f9b7921665b5894faef36fc8430aec573dfa4
 github.com/opennota/check 2647c7f78677e5af42e988a36343bc83194b7109

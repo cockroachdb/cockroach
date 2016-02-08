@@ -35,9 +35,16 @@ type TimeScale struct {
 	d    time.Duration
 }
 
-var scale1M = TimeScale{"1m", 1 * time.Minute}
-var scale10M = TimeScale{"10m", 10 * time.Minute}
-var scale1H = TimeScale{"1h", time.Hour}
+var (
+	// Scale1M is a 1 minute window for windowed stats (e.g. Rates and Histograms).
+	Scale1M = TimeScale{"1m", 1 * time.Minute}
+
+	// Scale10M is a 10 minute window for windowed stats (e.g. Rates and Histograms).
+	Scale10M = TimeScale{"10m", 10 * time.Minute}
+
+	// Scale1H is a 1 hour window for windowed stats (e.g. Rates and Histograms).
+	Scale1H = TimeScale{"1h", time.Hour}
+)
 
 // Iterable provides a method for synchronized access to interior objects.
 type Iterable interface {
@@ -80,6 +87,7 @@ type Histogram struct {
 	windowed *hdrhistogram.WindowedHistogram
 	interval time.Duration
 	nextT    time.Time
+	duration time.Duration
 }
 
 // NewHistogram creates a new windowed HDRHistogram with the given parameters.
@@ -90,6 +98,7 @@ func NewHistogram(duration time.Duration, maxVal int64, sigFigs int) *Histogram 
 	h.maxVal = int64(maxVal)
 	h.interval = duration / histWrapNum
 	h.nextT = now()
+	h.duration = duration
 
 	h.windowed = hdrhistogram.NewWindowed(histWrapNum, 0, h.maxVal, sigFigs)
 	return h
@@ -102,6 +111,20 @@ func (h *Histogram) tick() {
 
 func (h *Histogram) nextTick() time.Time {
 	return h.nextT
+}
+
+// Duration returns the duration that this histogram spans.
+func (h *Histogram) Duration() time.Duration {
+	return h.duration
+}
+
+// Merge returns a histogram containing a merged copy of the underlying histograms.
+func (h *Histogram) Merge() *hdrhistogram.Histogram {
+	h.mu.Lock()
+	maybeTick(h)
+	merged := h.windowed.Merge()
+	h.mu.Unlock()
+	return merged
 }
 
 // MarshalJSON outputs to JSON.
@@ -140,8 +163,8 @@ func (h *Histogram) Each(f func(string, interface{})) {
 	f("", h)
 }
 
-// Histograms is a slice of Histogram metrics.
-type Histograms []*Histogram
+// Histograms is a map of Histogram metrics.
+type Histograms map[TimeScale]*Histogram
 
 // RecordValue calls through to each individual Histogram.
 func (hs Histograms) RecordValue(v int64) {
@@ -258,7 +281,7 @@ func (e *Rate) MarshalJSON() ([]byte, error) {
 // Rates is a counter and associated EWMA backed rates at different time scales.
 type Rates struct {
 	*Counter
-	Rates []*Rate
+	Rates map[TimeScale]*Rate
 }
 
 // Add adds the given value to all contained objects.

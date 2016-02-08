@@ -126,7 +126,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 		RangeDescriptorDB: stores, // for descriptor lookup
 	}, sCtx.Gossip)
 
-	sender := kv.NewTxnCoordSender(distSender, clock, false, tracing.NewTracer(), stopper)
+	sender := kv.NewTxnCoordSender(distSender, clock, false, tracing.NewTracer(), stopper, kv.DummyTxnMetrics())
 	sCtx.Clock = clock
 	sCtx.DB = client.NewDB(sender)
 	sCtx.StorePool = storage.NewStorePool(sCtx.Gossip, clock, storage.TestTimeUntilStoreDeadOff, stopper)
@@ -244,7 +244,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 			RPCSend:           m.rpcSend,
 			RPCRetryOptions:   &retryOpts,
 		}, m.gossip)
-		sender := kv.NewTxnCoordSender(m.distSender, m.clock, false, tracing.NewTracer(), m.clientStopper)
+		sender := kv.NewTxnCoordSender(m.distSender, m.clock, false, tracing.NewTracer(), m.clientStopper, kv.DummyTxnMetrics())
 		m.db = client.NewDB(sender)
 	}
 

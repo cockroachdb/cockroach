@@ -56,6 +56,7 @@ type Server struct {
 type serverMetrics struct {
 	bytesInCount  *metric.Counter
 	bytesOutCount *metric.Counter
+	conns         *metric.Counter
 }
 
 // NewServer creates a Server.
@@ -63,6 +64,7 @@ func NewServer(context *Context) *Server {
 	// Create a registry to hold pgwire stats.
 	reg := metric.NewRegistry()
 	metrics := &serverMetrics{
+		conns:         reg.Counter("conns"),
 		bytesInCount:  reg.Counter("bytesin"),
 		bytesOutCount: reg.Counter("bytesout"),
 	}
@@ -114,12 +116,14 @@ func (s *Server) serve(ln net.Listener) {
 		s.mu.Lock()
 		s.conns[conn] = struct{}{}
 		s.mu.Unlock()
+		s.metrics.conns.Inc(1)
 
 		go func() {
 			defer func() {
 				s.mu.Lock()
 				delete(s.conns, conn)
 				s.mu.Unlock()
+				s.metrics.conns.Dec(1)
 				conn.Close()
 			}()
 

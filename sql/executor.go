@@ -129,15 +129,18 @@ type Executor struct {
 	leaseMgr *LeaseManager
 
 	// Transient stats.
-	registry      *metric.Registry
-	latency       metric.Histograms
-	selectCount   *metric.Counter
-	txnBeginCount *metric.Counter
-	updateCount   *metric.Counter
-	insertCount   *metric.Counter
-	deleteCount   *metric.Counter
-	ddlCount      *metric.Counter
-	miscCount     *metric.Counter
+	registry         *metric.Registry
+	latency          metric.Histograms
+	selectCount      *metric.Counter
+	txnBeginCount    *metric.Counter
+	txnCommitCount   *metric.Counter
+	txnAbortCount    *metric.Counter
+	txnRollbackCount *metric.Counter
+	updateCount      *metric.Counter
+	insertCount      *metric.Counter
+	deleteCount      *metric.Counter
+	ddlCount         *metric.Counter
+	miscCount        *metric.Counter
 
 	// System Config and mutex.
 	systemConfig     config.SystemConfig
@@ -155,15 +158,18 @@ func NewExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, st
 		reCache:  parser.NewRegexpCache(512),
 		leaseMgr: leaseMgr,
 
-		registry:      registry,
-		latency:       registry.Latency("latency"),
-		txnBeginCount: registry.Counter("transaction.begincount"),
-		selectCount:   registry.Counter("select.count"),
-		updateCount:   registry.Counter("update.count"),
-		insertCount:   registry.Counter("insert.count"),
-		deleteCount:   registry.Counter("delete.count"),
-		ddlCount:      registry.Counter("ddl.count"),
-		miscCount:     registry.Counter("misc.count"),
+		registry:         registry,
+		latency:          registry.Latency("latency"),
+		txnBeginCount:    registry.Counter("txn.begin.count"),
+		txnCommitCount:   registry.Counter("txn.commit.count"),
+		txnAbortCount:    registry.Counter("txn.abort.count"),
+		txnRollbackCount: registry.Counter("txn.rollback.count"),
+		selectCount:      registry.Counter("select.count"),
+		updateCount:      registry.Counter("update.count"),
+		insertCount:      registry.Counter("insert.count"),
+		deleteCount:      registry.Counter("delete.count"),
+		ddlCount:         registry.Counter("ddl.count"),
+		miscCount:        registry.Counter("misc.count"),
 	}
 	exec.systemConfigCond = sync.NewCond(&exec.systemConfigMu)
 
@@ -394,7 +400,6 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 		// transaction from being called within an auto-transaction below.
 		planMaker.setTxn(client.NewTxn(e.db), time.Now())
 		planMaker.txn.SetDebugName("sql", 0)
-		e.txnBeginCount.Inc(1)
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		if planMaker.txn == nil {
 			return result, roachpb.NewError(errNoTransactionInProgress)
@@ -468,6 +473,9 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 	// If there is a pending transaction.
 	if planMaker.txn != nil {
 		pErr := f(time.Now(), false)
+		if pErr != nil {
+			e.txnAbortCount.Inc(1)
+		}
 		return result, pErr
 	}
 
@@ -527,6 +535,8 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 // statements have been received by this node.
 func (e *Executor) updateStmtCounts(stmt parser.Statement) {
 	switch stmt.(type) {
+	case *parser.BeginTransaction:
+		e.txnBeginCount.Inc(1)
 	case *parser.Select:
 		e.selectCount.Inc(1)
 	case *parser.Update:
@@ -535,6 +545,10 @@ func (e *Executor) updateStmtCounts(stmt parser.Statement) {
 		e.insertCount.Inc(1)
 	case *parser.Delete:
 		e.deleteCount.Inc(1)
+	case *parser.CommitTransaction:
+		e.txnCommitCount.Inc(1)
+	case *parser.RollbackTransaction:
+		e.txnRollbackCount.Inc(1)
 	default:
 		if stmt.StatementType() == parser.DDL {
 			e.ddlCount.Inc(1)

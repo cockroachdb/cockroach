@@ -114,7 +114,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 		RangeDescriptorDB:        ltc.stores, // for descriptor lookup
 	}, ltc.Gossip)
 
-	ltc.Sender = NewTxnCoordSender(ltc.distSender, ltc.Clock, false /* !linearizable */, tracer, ltc.Stopper)
+	ltc.Sender = NewTxnCoordSender(ltc.distSender, ltc.Clock, false /* !linearizable */, tracer, ltc.Stopper, DummyTxnMetrics())
 	ltc.DB = client.NewDB(ltc.Sender)
 	transport := storage.NewLocalRPCTransport(ltc.Stopper)
 	ltc.Stopper.AddCloser(transport)
