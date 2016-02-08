@@ -348,6 +348,14 @@ func (oc *OrderedCache) DoRange(f func(k, v interface{}), from, to interface{}) 
 type IntervalCache struct {
 	*baseCache
 	tree *interval.Tree
+
+	// The fields below are used to avoid allocations during get, del and
+	// GetOverlaps.
+	getID      uintptr
+	getEntry   *entry
+	tmpEntry   entry
+	overlapKey IntervalKey
+	overlaps   []Overlap
 }
 
 // IntervalKey provides uniqueness as well as key interval.
@@ -383,7 +391,7 @@ func (ik IntervalKey) String() string {
 
 // Contains returns true if the specified IntervalKey is contained
 // within this IntervalKey.
-func (ik *IntervalKey) Contains(lk *IntervalKey) bool {
+func (ik IntervalKey) Contains(lk IntervalKey) bool {
 	return lk.start.Compare(ik.start) >= 0 && ik.end.Compare(lk.end) >= 0
 }
 
@@ -400,42 +408,61 @@ func NewIntervalCache(config Config) *IntervalCache {
 
 // NewKey creates a new interval key defined by start and end values.
 func (ic *IntervalCache) NewKey(start, end interval.Comparable) *IntervalKey {
+	k := ic.MakeKey(start, end)
+	return &k
+}
+
+// MakeKey creates a new interval key defined by start and end values.
+func (ic *IntervalCache) MakeKey(start, end interval.Comparable) IntervalKey {
 	if start.Compare(end) >= 0 {
 		panic(fmt.Sprintf("start key greater than or equal to end key %s >= %s", start, end))
 	}
-	return &IntervalKey{id: uintptr(atomic.AddInt64(&intervalAlloc, 1)), start: start, end: end}
+	return IntervalKey{
+		id:    uintptr(atomic.AddInt64(&intervalAlloc, 1)),
+		start: start,
+		end:   end,
+	}
 }
 
 // Implementation of cacheStore interface.
 func (ic *IntervalCache) get(key interface{}) *entry {
 	ik := key.(*IntervalKey)
-	if es := ic.tree.Get(ik); len(es) > 0 {
-		// Search interval slice for any exact match on ID and return it.
-		for _, e := range es {
-			e := e.(*entry)
-			if e.ID() == ik.id {
-				return e
-			}
-		}
-	}
-	return nil
+	ic.getID = ik.id
+	ic.tree.DoMatching(ic.doGet, ik)
+	e := ic.getEntry
+	ic.getEntry = nil
+	return e
 }
+
+func (ic *IntervalCache) doGet(i interval.Interface) bool {
+	e := i.(*entry)
+	if e.ID() == ic.getID {
+		ic.getEntry = e
+		return true
+	}
+	return false
+}
+
 func (ic *IntervalCache) add(e *entry) {
 	if err := ic.tree.Insert(e, false); err != nil {
 		log.Error(err)
 	}
 }
+
 func (ic *IntervalCache) del(key interface{}) {
-	if err := ic.tree.Delete(&entry{key: key}, false); err != nil {
+	ic.tmpEntry.key = key
+	if err := ic.tree.Delete(&ic.tmpEntry, false); err != nil {
 		log.Error(err)
 	}
 }
+
 func (ic *IntervalCache) clear() {
 	ic.tree.Do(func(e interval.Interface) (done bool) {
 		ic.Del(e.(*entry).key.(*IntervalKey))
 		return
 	})
 }
+
 func (ic *IntervalCache) length() int {
 	return ic.tree.Len()
 }
@@ -447,17 +474,23 @@ type Overlap struct {
 }
 
 // GetOverlaps returns a slice of values which overlap the specified
-// interval.
+// interval. The slice is only valid until the next call to GetOverlaps.
 func (ic *IntervalCache) GetOverlaps(start, end interval.Comparable) []Overlap {
-	es := ic.tree.Get(ic.NewKey(start, end))
-	values := make([]Overlap, len(es))
-	for i := range es {
-		e := es[i].(*entry)
-		ic.access(e) // maintain cache eviction ordering
-		values[i].Key = e.key.(*IntervalKey)
-		values[i].Value = e.value
-	}
-	return values
+	ic.overlapKey.start, ic.overlapKey.end = start, end
+	ic.tree.DoMatching(ic.doOverlaps, &ic.overlapKey)
+	overlaps := ic.overlaps
+	ic.overlaps = ic.overlaps[:0]
+	return overlaps
+}
+
+func (ic *IntervalCache) doOverlaps(i interval.Interface) bool {
+	e := i.(*entry)
+	ic.access(e) // maintain cache eviction ordering
+	ic.overlaps = append(ic.overlaps, Overlap{
+		Key:   e.key.(*IntervalKey),
+		Value: e.value,
+	})
+	return false
 }
 
 // Do invokes f on all of the entries in the cache.
