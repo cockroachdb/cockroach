@@ -274,30 +274,6 @@ func (ba BatchRequest) String() string {
 	return strings.Join(str, ", ")
 }
 
-// Short gives gives a short version of the batch, printing the flags and
-// timestamp only.
-func (ba BatchRequest) Short() string {
-	return flagsToStr(ba.flags()) + "@" + ba.Timestamp.String()
-}
-
-// TraceID implements tracer.Traceable by returning the TraceID of the Transaction or,
-// if not transactional, a digest of the batch.
-func (ba BatchRequest) TraceID() string {
-	if r := ba.Txn.TraceID(); r != "" {
-		return r
-	}
-	return "c" + ba.Short()
-}
-
-// TraceName implements tracer.Traceable and behaves like TraceID, but using
-// the TraceName of the object delegated to.
-func (ba BatchRequest) TraceName() string {
-	if r := ba.Txn.TraceID(); r != "" {
-		return ba.Txn.TraceName()
-	}
-	return ba.Short()
-}
-
 // TODO(marc): we should assert
 // var _ security.RequestWithUser = &BatchRequest{}
 // here, but we need to break cycles first.

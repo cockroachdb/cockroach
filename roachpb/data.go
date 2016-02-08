@@ -610,26 +610,6 @@ func (t *Transaction) Equal(s *Transaction) bool {
 	return TxnIDEqual(t.ID, s.ID)
 }
 
-// TraceID implements tracer.Traceable. For a nontrivial Transaction, it
-// returns 't', followed by the transaction ID. Otherwise, the empty string is
-// returned.
-func (t *Transaction) TraceID() string {
-	if t == nil || len(t.ID) == 0 {
-		return ""
-	}
-	s := uuid.UUID(t.ID).String()
-	return "t" + s
-}
-
-// TraceName implements tracer.Traceable. It returns TraceID, but using the
-// short version of the UUID.
-func (t *Transaction) TraceName() string {
-	if t == nil || len(t.ID) == 0 {
-		return "(none)"
-	}
-	return "t" + t.Short()
-}
-
 // IsInitialized returns true if the transaction has been initialized.
 func (t *Transaction) IsInitialized() bool {
 	return len(t.ID) > 0

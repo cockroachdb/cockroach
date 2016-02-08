@@ -103,7 +103,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	stores := storage.NewStores(clock)
 	rpcSend := func(_ kv.SendOptions, _ kv.ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
-		sp := sCtx.Tracer.StartTrace(ba.TraceID())
+		sp := sCtx.Tracer.StartTrace("rpc send")
 		defer sp.Finish()
 		ctx, _ := opentracing.ContextWithSpan(context.Background(), sp)
 		br, pErr := stores.Send(ctx, ba)

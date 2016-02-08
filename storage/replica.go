@@ -1842,7 +1842,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 	if len(baLocal.Requests) > 0 {
 		action := func() *roachpb.Error {
 			// Trace this under the ID of the intent owner.
-			sp := r.store.Tracer().StartTrace(baLocal.TraceID())
+			sp := r.store.Tracer().StartTrace("resolve intents")
 			defer sp.Finish()
 			ctx, _ = opentracing.ContextWithSpan(ctx, sp)
 			_, pErr := r.addWriteCmd(ctx, baLocal, &wg)

@@ -310,9 +310,8 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 
 	// This is the earliest point at which the request has an ID (if
 	// applicable). Begin a Trace which follows this request.
-	sp := tc.tracer.StartTrace(ba.TraceID())
+	sp := tc.tracer.StartTrace("sending batch")
 	defer sp.Finish()
-	sp.LogEvent("sending batch")
 	ctx, _ = opentracing.ContextWithSpan(ctx, sp)
 
 	var id string // optional transaction ID
@@ -561,7 +560,7 @@ func (tc *TxnCoordSender) heartbeatLoop(id string) {
 		tc.Lock()
 		txnMeta := tc.txns[id] // do not leak to outer scope
 		closer = txnMeta.txnEnd
-		sp = tc.tracer.StartTrace(txnMeta.txn.TraceID())
+		sp = tc.tracer.StartTrace("heartbeat loop")
 		defer sp.Finish()
 		tc.Unlock()
 	}
