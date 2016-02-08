@@ -30,53 +30,53 @@ func unimplemented() {
   id             int
   pos            int
   empty          struct{}
-  ival           IntVal
-  boolVal        bool
   str            string
-  strs           []string
-  qname          *QualifiedName
-  qnames         QualifiedNames
-  indirectElem   IndirectionElem
-  indirect       Indirection
-  stmt           Statement
-  stmts          []Statement
-  selectStmt     SelectStatement
-  colDef         *ColumnTableDef
-  constraintDef  ConstraintTableDef
-  tblDef         TableDef
-  tblDefs        []TableDef
-  colQual        ColumnQualification
-  colQuals       []ColumnQualification
-  colType        ColumnType
-  colTypes       []ColumnType
-  expr           Expr
-  exprs          Exprs
-  selExpr        SelectExpr
-  selExprs       SelectExprs
-  aliasClause    AliasClause
-  tblExpr        TableExpr
-  tblExprs       TableExprs
-  joinCond       JoinCond
-  when           *When
-  whens          []*When
-  updateExpr     *UpdateExpr
-  updateExprs    []*UpdateExpr
-  limit          *Limit
-  targetList     TargetList
-  targetListPtr  *TargetList
-  privilegeType  privilege.Kind
-  privilegeList  privilege.List
-  orderBy        OrderBy
-  orders         []*Order
-  order          *Order
-  groupBy        GroupBy
-  dir            Direction
-  alterTableCmd  AlterTableCmd
-  alterTableCmds AlterTableCmds
-  isoLevel       IsolationLevel
-  userPriority   UserPriority
-  idxElem        IndexElem
-  idxElems       IndexElemList
+  ival           IntVal                `union:"true"`
+  boolVal        bool                  `union:"true"`
+  strs           []string              `union:"true"`
+  qname          *QualifiedName        `union:"true"`
+  qnames         QualifiedNames        `union:"true"`
+  indirectElem   IndirectionElem       `union:"true"`
+  indirect       Indirection           `union:"true"`
+  stmt           Statement             `union:"true"`
+  stmts          []Statement           `union:"true"`
+  selectStmt     SelectStatement       `union:"true"`
+  colDef         *ColumnTableDef       `union:"true"`
+  constraintDef  ConstraintTableDef    `union:"true"`
+  tblDef         TableDef              `union:"true"`
+  tblDefs        []TableDef            `union:"true"`
+  colQual        ColumnQualification   `union:"true"`
+  colQuals       []ColumnQualification `union:"true"`
+  colType        ColumnType            `union:"true"`
+  colTypes       []ColumnType          `union:"true"`
+  expr           Expr                  `union:"true"`
+  exprs          Exprs                 `union:"true"`
+  selExpr        SelectExpr            `union:"true"`
+  selExprs       SelectExprs           `union:"true"`
+  aliasClause    AliasClause           `union:"true"`
+  tblExpr        TableExpr             `union:"true"`
+  tblExprs       TableExprs            `union:"true"`
+  joinCond       JoinCond              `union:"true"`
+  when           *When                 `union:"true"`
+  whens          []*When               `union:"true"`
+  updateExpr     *UpdateExpr           `union:"true"`
+  updateExprs    []*UpdateExpr         `union:"true"`
+  limit          *Limit                `union:"true"`
+  targetList     TargetList            `union:"true"`
+  targetListPtr  *TargetList           `union:"true"`
+  privilegeType  privilege.Kind        `union:"true"`
+  privilegeList  privilege.List        `union:"true"`
+  orderBy        OrderBy               `union:"true"`
+  orders         []*Order              `union:"true"`
+  order          *Order                `union:"true"`
+  groupBy        GroupBy               `union:"true"`
+  dir            Direction             `union:"true"`
+  alterTableCmd  AlterTableCmd         `union:"true"`
+  alterTableCmds AlterTableCmds        `union:"true"`
+  isoLevel       IsolationLevel        `union:"true"`
+  userPriority   UserPriority          `union:"true"`
+  idxElem        IndexElem             `union:"true"`
+  idxElems       IndexElemList         `union:"true"`
 }
 
 %type <stmts> stmt_block
