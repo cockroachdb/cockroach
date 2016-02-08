@@ -102,7 +102,7 @@ func (tm *txnMetadata) addKeyRange(start, end roachpb.Key) {
 		start = end[:len(start)]
 	}
 	key := tm.keys.MakeKey(start, end)
-	for _, o := range tm.keys.GetOverlaps(key.Start(), key.End()) {
+	for _, o := range tm.keys.GetOverlaps(key.Start, key.End) {
 		if o.Key.Contains(key) {
 			return
 		} else if key.Contains(*o.Key) {
@@ -144,9 +144,9 @@ func (tm *txnMetadata) intentSpans() []roachpb.Span {
 	intents := make([]roachpb.Span, 0, tm.keys.Len())
 	for _, o := range tm.keys.GetOverlaps(roachpb.KeyMin, roachpb.KeyMax) {
 		intent := roachpb.Span{
-			Key: o.Key.Start().(roachpb.Key),
+			Key: roachpb.Key(o.Key.Start),
 		}
-		if endKey := o.Key.End().(roachpb.Key); !intent.Key.IsPrev(endKey) {
+		if endKey := roachpb.Key(o.Key.End); !intent.Key.IsPrev(endKey) {
 			intent.EndKey = endKey
 		}
 		intents = append(intents, intent)
