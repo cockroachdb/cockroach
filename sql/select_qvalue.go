@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
@@ -43,17 +42,17 @@ func (cr columnRef) get() ResultColumn {
 }
 
 // findColumn looks up the column described by a QualifiedName. The qname will be normalized.
-func (s *selectNode) findColumn(qname *parser.QualifiedName) (columnRef, *roachpb.Error) {
+func (s *selectNode) findColumn(qname *parser.QualifiedName) (columnRef, error) {
 
 	ref := columnRef{colIdx: invalidColIdx}
 
-	if err := roachpb.NewError(qname.NormalizeColumnName()); err != nil {
+	if err := qname.NormalizeColumnName(); err != nil {
 		return ref, err
 	}
 
 	// We can't resolve stars to a single column.
 	if qname.IsStar() {
-		err := roachpb.NewUErrorf("qualified name \"%s\" not found", qname)
+		err := fmt.Errorf("qualified name \"%s\" not found", qname)
 		return ref, err
 	}
 
@@ -74,7 +73,7 @@ func (s *selectNode) findColumn(qname *parser.QualifiedName) (columnRef, *roachp
 		}
 	}
 
-	err := roachpb.NewUErrorf("qualified name \"%s\" not found", qname)
+	err := fmt.Errorf("qualified name \"%s\" not found", qname)
 	return ref, err
 }
 
@@ -132,7 +131,7 @@ func (s *selectNode) getQVal(colRef columnRef) *qvalue {
 // column names in an expression.
 type qnameVisitor struct {
 	selNode *selectNode
-	pErr    *roachpb.Error
+	err     error
 }
 
 var _ parser.Visitor = &qnameVisitor{}
@@ -140,7 +139,7 @@ var _ parser.Visitor = &qnameVisitor{}
 // Visit is invoked for each Expr node. It can return a new expression for the
 // node, or it can stop processing by returning a nil Visitor.
 func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
-	if !pre || v.pErr != nil {
+	if !pre || v.err != nil {
 		return nil, expr
 	}
 
@@ -161,8 +160,8 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 	case *parser.QualifiedName:
 		var colRef columnRef
 
-		colRef, v.pErr = v.selNode.findColumn(t)
-		if v.pErr != nil {
+		colRef, v.err = v.selNode.findColumn(t)
+		if v.err != nil {
 			return nil, expr
 		}
 		return v, v.selNode.getQVal(colRef)
@@ -183,8 +182,8 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 		if !ok {
 			break
 		}
-		v.pErr = roachpb.NewError(qname.NormalizeColumnName())
-		if v.pErr != nil {
+		v.err = qname.NormalizeColumnName()
+		if v.err != nil {
 			return nil, expr
 		}
 		if !qname.IsStar() {
@@ -204,13 +203,13 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 	return v, expr
 }
 
-func (s *selectNode) resolveQNames(expr parser.Expr) (parser.Expr, *roachpb.Error) {
+func (s *selectNode) resolveQNames(expr parser.Expr) (parser.Expr, error) {
 	if expr == nil {
 		return expr, nil
 	}
 	v := qnameVisitor{selNode: s}
 	expr = parser.WalkExpr(&v, expr)
-	return expr, v.pErr
+	return expr, v.err
 }
 
 // Populates the datum fields of the qvalues in the qval map (given a row

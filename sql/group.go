@@ -62,9 +62,9 @@ func (p *planner) groupBy(n *parser.Select, s *selectNode) (*groupNode, *roachpb
 	// that determination is made during validation, which will require matching
 	// expressions.
 	for i := range n.GroupBy {
-		resolved, pErr := s.resolveQNames(n.GroupBy[i])
-		if pErr != nil {
-			return nil, pErr
+		resolved, err := s.resolveQNames(n.GroupBy[i])
+		if err != nil {
+			return nil, roachpb.NewError(err)
 		}
 
 		// We could potentially skip this, since it will be checked in addRender,
@@ -94,12 +94,12 @@ func (p *planner) groupBy(n *parser.Select, s *selectNode) (*groupNode, *roachpb
 
 	// Normalize and check the HAVING expression too if it exists.
 	if n.Having != nil {
-		having, pErr := s.resolveQNames(n.Having.Expr)
-		if pErr != nil {
-			return nil, pErr
+		having, err := s.resolveQNames(n.Having.Expr)
+		if err != nil {
+			return nil, roachpb.NewError(err)
 		}
 
-		having, err := p.parser.NormalizeExpr(p.evalCtx, having)
+		having, err = p.parser.NormalizeExpr(p.evalCtx, having)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
