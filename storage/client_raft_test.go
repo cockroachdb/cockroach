@@ -1165,7 +1165,6 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 			mtc.stores[1].ForceReplicationScanAndProcess()
 		}
 	}
-	ticker.Stop()
 }
 
 // TestStoreRangeRebalance verifies that the replication queue will take
