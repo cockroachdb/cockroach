@@ -272,13 +272,14 @@ CREATE TABLE bank.accounts (
 
 	// Verify accounts.
 
-	// Recreate db client because node 0 might have been restarted by
+	// Hold the read lock on node 0 to prevent it being restarted by
 	// chaos monkey.
-	db = makePGClient(t, c.PGUrl(0))
 	var sum int
-	if err := db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum); err != nil {
+	clients[0].RLock()
+	if err := clients[0].db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum); err != nil {
 		t.Fatal(err)
 	}
+	clients[0].RUnlock()
 	if sum != 0 {
 		t.Fatalf("The bank is not in good order. Total value: %d", sum)
 	}
