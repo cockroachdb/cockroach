@@ -215,7 +215,6 @@ func (g *Gossip) SetNodeID(nodeID roachpb.NodeID) {
 // SetNodeDescriptor adds the node descriptor to the gossip network
 // and sets the infostore's node ID.
 func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
-	log.Infof("setting node descriptor %+v", desc)
 	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, ttlNodeDescriptorGossip); err != nil {
 		return util.Errorf("couldn't gossip descriptor for node %d: %v", desc.NodeID, err)
 	}
