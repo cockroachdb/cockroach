@@ -17,9 +17,10 @@
 package tracing
 
 import (
+	"bytes"
 	"fmt"
-	"os"
 
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/standardtracer"
 	"golang.org/x/net/context"
@@ -30,9 +31,13 @@ const traceTimeFormat = "15:04:05.000000"
 type testRecorder struct{}
 
 func (testRecorder) RecordSpan(sp *standardtracer.RawSpan) {
-	fmt.Fprintf(os.Stderr, "[Trace %s]\n", sp.Operation)
-	for _, log := range sp.Logs {
-		fmt.Fprintln(os.Stderr, " * ", log.Timestamp.Format(traceTimeFormat), log.Event)
+	if log.V(2) {
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "[Trace %s]", sp.Operation)
+		for _, log := range sp.Logs {
+			fmt.Fprint(&buf, "\n * ", log.Timestamp.Format(traceTimeFormat), log.Event)
+		}
+		log.Info(buf.String())
 	}
 }
 
