@@ -319,7 +319,9 @@ func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
 	if where == nil {
 		return nil
 	}
-	s.filter, s.pErr = s.resolveQNames(where.Expr)
+	var err error
+	s.filter, err = s.resolveQNames(where.Expr)
+	s.pErr = roachpb.NewError(err)
 	if s.pErr != nil {
 		return s.pErr
 	}
@@ -415,14 +417,15 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 	// Resolve qualified names. This has the side-effect of normalizing any
 	// qualified name found.
 	var resolved parser.Expr
-	if resolved, s.pErr = s.resolveQNames(target.Expr); s.pErr != nil {
+	var err error
+	if resolved, err = s.resolveQNames(target.Expr); err != nil {
+		s.pErr = roachpb.NewError(err)
 		return s.pErr
 	}
 	if resolved, s.pErr = s.planner.expandSubqueries(resolved, 1); s.pErr != nil {
 		return s.pErr
 	}
 	var typ parser.Datum
-	var err error
 	typ, err = resolved.TypeCheck(s.planner.evalCtx.Args)
 	s.pErr = roachpb.NewError(err)
 	if s.pErr != nil {
