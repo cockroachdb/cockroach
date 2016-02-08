@@ -61,6 +61,8 @@ var (
 	snappyWriterPool sync.Pool
 )
 
+const txnRegistryName = "txn"
+
 // Server is the cockroach server node.
 type Server struct {
 	ctx *Context
@@ -160,7 +162,9 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		RPCContext:      s.rpcContext,
 		RPCRetryOptions: &retryOpts,
 	}, s.gossip)
-	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, tracer, s.stopper)
+	txnRegistry := metric.NewRegistry()
+	txnMetrics := kv.NewTxnMetrics(txnRegistry)
+	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, tracer, s.stopper, txnMetrics)
 	s.db = client.NewDB(sender)
 
 	s.grpc = grpc.NewServer()
@@ -209,8 +213,9 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	subRegistries := []status.NodeSubregistry{
 		{"pgwire", s.pgServer.Registry()},
 		{"sql", s.sqlExecutor.Registry()},
+		{txnRegistryName, txnRegistry},
 	}
-	s.node = NewNode(nCtx, s.registry, s.stopper, subRegistries)
+	s.node = NewNode(nCtx, s.registry, s.stopper, subRegistries, txnMetrics)
 	s.admin = newAdminServer(s.db, s.stopper)
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)

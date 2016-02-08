@@ -329,7 +329,8 @@ module AdminViews {
 
         private static _queryEveryMS: number = 10000;
         exec: Metrics.Executor;
-        axes: Metrics.Axis[] = [];
+        private networkAxes: Metrics.Axis[] = [];
+        private sqlAxes: Metrics.Axis[] = [];
         private _query: Metrics.Query;
         private _interval: number;
         private _nodeId: string;
@@ -341,44 +342,36 @@ module AdminViews {
         public constructor(nodeId: string) {
           this._nodeId = nodeId;
           this._query = Metrics.NewQuery();
+
+          // Network stats.
           this._addChart(
+            this.networkAxes,
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("exec.success-count"))
+              Metrics.Select.Avg(_nodeMetric("pgwire.conns"))
                 .sources([nodeId])
-                .title("Successful Calls")
+                .title("Client Connections")
               )
-              .label("Count / 10 sec."));
+              .label("Count"));
           this._addChart(
-            Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("exec.error-count"))
-                .sources([nodeId])
-                .title("Error Calls")
-              )
-              .label("Count / 10 sec."));
-          this._addChart(
-            Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.transaction.begincount"))
-                .sources([nodeId])
-                .title("Transactions")
-              )
-              .label("Count / 10 sec."));
-          this._addChart(
+            this.networkAxes,
             Metrics.NewAxis(
               Metrics.Select.AvgRate(_nodeMetric("pgwire.bytesin"))
                 .sources([nodeId])
-                .title("SQL Bytes In")
+                .title("Client Bytes In")
               )
               .label("Count / 10 sec."));
-
           this._addChart(
+            this.networkAxes,
             Metrics.NewAxis(
               Metrics.Select.AvgRate(_nodeMetric("pgwire.bytesout"))
                 .sources([nodeId])
-                .title("SQL Bytes Out")
+                .title("Client Bytes Out")
               )
               .label("Count / 10 sec."));
 
+          // Add SQL charts.
           this._addChart(
+            this.sqlAxes,
             Metrics.NewAxis(
               Metrics.Select.AvgRate(_nodeMetric("sql.select.count"))
                 .sources([nodeId])
@@ -386,6 +379,7 @@ module AdminViews {
               )
               .label("Count / 10 sec."));
           this._addChart(
+            this.sqlAxes,
             Metrics.NewAxis(
               Metrics.Select.AvgRate(_nodeMetric("sql.update.count"))
                 .sources([nodeId])
@@ -393,6 +387,7 @@ module AdminViews {
               )
               .label("Count / 10 sec."));
           this._addChart(
+            this.sqlAxes,
             Metrics.NewAxis(
               Metrics.Select.AvgRate(_nodeMetric("sql.insert.count"))
                 .sources([nodeId])
@@ -400,6 +395,7 @@ module AdminViews {
               )
               .label("Count / 10 sec."));
           this._addChart(
+            this.sqlAxes,
             Metrics.NewAxis(
               Metrics.Select.AvgRate(_nodeMetric("sql.delete.count"))
                 .sources([nodeId])
@@ -407,6 +403,39 @@ module AdminViews {
               )
               .label("Count / 10 sec."));
           this._addChart(
+            this.sqlAxes,
+            Metrics.NewAxis(
+              Metrics.Select.AvgRate(_nodeMetric("sql.txn.begin.count"))
+                .sources([nodeId])
+                .title("BEGINs")
+              )
+              .label("Count / 10 sec."));
+          this._addChart(
+            this.sqlAxes,
+            Metrics.NewAxis(
+              Metrics.Select.AvgRate(_nodeMetric("sql.txn.commit.count"))
+                .sources([nodeId])
+                .title("COMMITs")
+              )
+              .label("Count / 10 sec."));
+          this._addChart(
+            this.sqlAxes,
+            Metrics.NewAxis(
+              Metrics.Select.AvgRate(_nodeMetric("sql.txn.rollback.count"))
+                .sources([nodeId])
+                .title("ROLLBACKs")
+              )
+              .label("Count / 10 sec."));
+          this._addChart(
+            this.sqlAxes,
+            Metrics.NewAxis(
+              Metrics.Select.AvgRate(_nodeMetric("sql.txn.abort.count"))
+                .sources([nodeId])
+                .title("Aborted Transactions")
+              )
+              .label("Count / 10 sec."));
+          this._addChart(
+            this.sqlAxes,
             Metrics.NewAxis(
               Metrics.Select.AvgRate(_nodeMetric("sql.ddl.count"))
                 .sources([nodeId])
@@ -457,12 +486,22 @@ module AdminViews {
         }
 
         public RenderGraphs(): MithrilElement {
-          return m(".charts", this.axes.map((axis: Metrics.Axis) => {
-            return m("", { style: "float:left" }, [
-              m("h4", axis.title()),
-              Components.Metrics.LineGraph.create(this.exec, axis),
-            ]);
-          }));
+          return m(".charts", [
+            m("h2", "Network Stats"),
+            this.networkAxes.map((axis: Metrics.Axis) => {
+              return m("", { style: "float:left" }, [
+                m("h4", axis.title()),
+                Components.Metrics.LineGraph.create(this.exec, axis),
+                ]);
+            }),
+            m("h2", "SQL Queries"),
+            this.sqlAxes.map((axis: Metrics.Axis) => {
+              return m("", { style: "float:left" }, [
+                m("h4", axis.title()),
+                Components.Metrics.LineGraph.create(this.exec, axis),
+                ]);
+            }),
+          ]);
         }
 
         public TargetSet(): NavigationBar.TargetSet {
@@ -482,9 +521,9 @@ module AdminViews {
           this.exec.refresh();
         }
 
-        private _addChart(axis: Metrics.Axis): void {
+        private _addChart(axes: Metrics.Axis[], axis: Metrics.Axis): void {
           axis.selectors().forEach((s: Metrics.Select.Selector) => this._query.selectors().push(s));
-          this.axes.push(axis);
+          axes.push(axis);
         }
       }
 
