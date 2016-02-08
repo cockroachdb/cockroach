@@ -37,9 +37,9 @@ if [ "${1-}" = "docker" ]; then
       fi
     done
 
-    time make -C ui npm.installed   || rm -rf ui/node_modules/{*,.bin} && make -C ui npm.installed
-    time make -C ui bower.installed || rm -rf ui/bower_components/*    && make -C ui bower.installed
-    time make -C ui tsd.installed   || rm -rf ui/typings/*             && make -C ui tsd.installed
+    time make -C ui npm.installed     || rm -rf ui/node_modules/{*,.bin} && make -C ui npm.installed
+    time make -C ui bower.installed   || rm -rf ui/bower_components/*    && make -C ui bower.installed
+    time make -C ui typings.installed || rm -rf ui/typings/*             && make -C ui typings.installed
 
     # Fix permissions on the ui/typings directory and subdirectories
     # (they lack the execute permission for group/other).
@@ -116,7 +116,7 @@ if ! docker images | grep -q "${tag}"; then
   # If there's a base image cached, load it. A click on CircleCI's "Clear
   # Cache" will make sure we start with a clean slate.
   builder="${builder_dir}/builder.${tag}.tar"
-  find "${builder_dir}" -not -path "${builder}" -type f -delete  
+  find "${builder_dir}" -not -path "${builder}" -type f -delete
   if [[ ! -e "${builder}" ]]; then
     time docker pull "cockroachdb/builder:${tag}"
     docker tag -f "cockroachdb/builder:${tag}" "cockroachdb/builder:latest"

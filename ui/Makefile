@@ -45,7 +45,7 @@ TYPESCRIPT_TARGET       := build/app.js
 TEST_TARGET             := build/test.js
 CSS_TARGET              := build/app.css
 CSS_DEBUG_TARGET        := build/app_debug.css
-REMOTE_DEPS             := npm.installed bower.installed tsd.installed
+REMOTE_DEPS             := npm.installed bower.installed typings.installed
 INDEX                   := index.html
 GOBINDATA_FONTS         := ./fonts/*
 GOBINDATA_DEPS          := $(TYPESCRIPT_TARGET) $(CSS_TARGET)
@@ -102,8 +102,8 @@ npm.installed: npm-shrinkwrap.json
 	npm install --progress=false
 	touch $@
 
-tsd.installed: tsd.json npm.installed
-	tsd install
+typings.installed: typings.json npm.installed
+	typings install
 	touch $@
 
 $(PROTO_JSON_TARGET): $(PROTO_FILE) $(GOGOPROTO)
