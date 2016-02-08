@@ -43,7 +43,7 @@ var validTypes = map[string]struct{}{
 // NewResolver takes a resolver specification and returns a new resolver.
 // A specification is of the form: [<network type>=]<address>
 // Network type can be one of:
-// - tcp: plain hostname of ip address
+// - tcp: plain hostname or ip address
 // - unix: unix sockets
 // - http-lb: http load balancer: queries http(s)://<lb>/_status/details/local
 //   for node addresses
@@ -106,19 +106,15 @@ func NewResolverFromUnresolvedAddr(addr util.UnresolvedAddr) (Resolver, error) {
 // present, hostname (or "127.0.0.1" as a fallback) is used.
 func ensureHostPort(addr string, defaultPort string) string {
 	host, port, err := net.SplitHostPort(addr)
-	if host != "" || err != nil {
-		if port == "" {
-			return net.JoinHostPort(addr, defaultPort)
-		}
-
-		return addr
-	}
-
-	host, err = os.Hostname()
 	if err != nil {
-		host = "127.0.0.1"
+		return net.JoinHostPort(addr, defaultPort)
 	}
-
+	if host == "" {
+		host, err = os.Hostname()
+		if err != nil {
+			host = "127.0.0.1"
+		}
+	}
 	if port == "" {
 		port = defaultPort
 	}
