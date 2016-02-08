@@ -94,11 +94,23 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 			break
 		}
 
+		tl := strings.TrimSpace(l)
+		if len(stmt) == 0 && len(tl) == 0 {
+			// Empty line at beginning, simply continue.
+			// However, we don't simply continue after the first line since
+			// we may be in the middle of a string literal where empty lines
+			// may be significant.
+			continue
+		}
+
+		// We append the newly read line to the previous line(s), if
+		// any. We add the non-trimmed line here since we may be in the
+		// middle of a string literal.
 		stmt = append(stmt, l)
 
 		// See if we have a semicolon at the end of the line (ignoring
 		// trailing whitespace).
-		if !strings.HasSuffix(strings.TrimSpace(l), ";") {
+		if !strings.HasSuffix(tl, ";") {
 			// No semicolon: read some more.
 			continue
 		}
