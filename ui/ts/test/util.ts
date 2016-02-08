@@ -115,7 +115,7 @@ suite("Properties", () => {
       });
 
       test("computed value is lazily recomputed.", () => {
-        for (var i = 1; i < 3; i++) {
+        for (let i = 1; i < 3; i++) {
           parents.forEach((p: Utils.Property<string>) => {
             p(p() + "_" + i.toString());
             assert.equal(p.Epoch(), i);
@@ -127,7 +127,7 @@ suite("Properties", () => {
       });
 
       test("computed value is recomputed if only one parent changes.", () => {
-        for (var i = 1; i < 3; i++) {
+        for (let i = 1; i < 3; i++) {
           parents[0](parents[0]() + "_" + i.toString());
           assert.equal(computed(), computedString(parents[0](), parents[1](), parents[2](), parents[3](), i));
           assert.equal(computed(), computedString(parents[0](), parents[1](), parents[2](), parents[3](), i));
@@ -136,7 +136,7 @@ suite("Properties", () => {
       });
 
       test("computed epoch is always sum of parent epochs.", () => {
-        for (var i = 1; i < 3; i++) {
+        for (let i = 1; i < 3; i++) {
           parents.forEach((p: Utils.Property<string>) => {
             p(p() + "_" + i.toString());
             assert.equal(p.Epoch(), i);
