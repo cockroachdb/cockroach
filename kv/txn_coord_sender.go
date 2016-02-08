@@ -113,8 +113,12 @@ func (tm *txnMetadata) addKeyRange(start, end roachpb.Key) {
 	// Since no existing key range fully covered this range, add it now. The
 	// strange assignment to pkey makes sure we delay the heap allocation until
 	// we know it is necessary.
-	pkey := key
-	tm.keys.Add(&pkey, nil)
+	alloc := struct {
+		key   cache.IntervalKey
+		entry cache.Entry
+	}{key: key}
+	alloc.entry.Key = &alloc.key
+	tm.keys.AddEntry(&alloc.entry)
 }
 
 // setLastUpdate updates the wall time (in nanoseconds) since the most
