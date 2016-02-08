@@ -94,8 +94,9 @@ func MakeRangeIDKey(rangeID roachpb.RangeID, suffix, detail roachpb.RKey) roachp
 
 // RaftLogKey returns a system-local key for a Raft log entry.
 func RaftLogKey(rangeID roachpb.RangeID, logIndex uint64) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRaftLogSuffix,
-		encoding.EncodeUint64Ascending(nil, logIndex))
+	key := MakeRangeIDKey(rangeID, localRaftLogSuffix, nil)
+	key = encoding.EncodeUint64Ascending(key, logIndex)
+	return key
 }
 
 // RaftLogPrefix returns the system-local prefix shared by all entries in a Raft log.
@@ -143,19 +144,18 @@ func RangeStatsKey(rangeID roachpb.RangeID) roachpb.Key {
 // sequence cache entry, with detail specified by encoding the
 // supplied transaction ID, epoch and sequence number.
 func SequenceCacheKey(rangeID roachpb.RangeID, id []byte, epoch uint32, seq uint32) roachpb.Key {
-	return MakeRangeIDKey(rangeID, LocalSequenceCacheSuffix,
-		encoding.EncodeUint32Descending(
-			encoding.EncodeUint32Descending(
-				encoding.EncodeBytesAscending(nil, id),
-				epoch),
-			seq))
+	key := SequenceCacheKeyPrefix(rangeID, id)
+	key = encoding.EncodeUint32Descending(key, epoch)
+	key = encoding.EncodeUint32Descending(key, seq)
+	return key
 }
 
 // SequenceCacheKeyPrefix returns the prefix common to all sequence cache keys
 // for the given ID.
 func SequenceCacheKeyPrefix(rangeID roachpb.RangeID, id []byte) roachpb.Key {
-	return MakeRangeIDKey(rangeID, LocalSequenceCacheSuffix,
-		encoding.EncodeBytesAscending(nil, id))
+	key := MakeRangeIDKey(rangeID, LocalSequenceCacheSuffix, nil)
+	key = encoding.EncodeBytesAscending(key, id)
+	return key
 }
 
 // MakeRangeKey creates a range-local key based on the range
