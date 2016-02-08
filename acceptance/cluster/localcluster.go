@@ -330,12 +330,10 @@ func (l *LocalCluster) createRoach(i int, cmd ...string) *Container {
 }
 
 func (l *LocalCluster) createCACert() {
-	log.Infof("creating ca (%dbit) in: %s", keyLen, l.CertsDir)
 	maybePanic(security.RunCreateCACert(l.CertsDir, keyLen))
 }
 
 func (l *LocalCluster) createNodeCerts() {
-	log.Infof("creating node (%dbit) certs in: %s", keyLen, l.CertsDir)
 	nodes := []string{dockerIP().String()}
 	for i := 0; i < l.numLocal; i++ {
 		nodes = append(nodes, nodeStr(i))
@@ -384,9 +382,8 @@ func (l *LocalCluster) startNode(i int) *Container {
   ui:    %[2]s
   trace: %[2]s/debug/requests
   logs:  %[3]s/cockroach.INFO
-  certs: %[4]s
-  pprof: docker exec -it %[5]s /bin/bash -c 'go tool pprof /cockroach <(wget --no-check-certificate -qO- https://$(hostname):%[6]s/debug/pprof/heap)'`,
-		c.Name, uri, locallogDir, l.CertsDir, c.ID[:5], base.CockroachPort))
+  pprof: docker exec -it %[4]s /bin/bash -c 'go tool pprof /cockroach <(wget --no-check-certificate -qO- https://$(hostname):%[5]s/debug/pprof/heap)'`,
+		c.Name, uri, locallogDir, c.ID[:5], base.CockroachPort))
 	return c
 }
 
@@ -464,6 +461,7 @@ func (l *LocalCluster) Start() {
 
 	l.runDockerSpy()
 	l.initCluster()
+	log.Infof("creating certs (%dbit) in: %s", keyLen, l.CertsDir)
 	l.createCACert()
 	l.createNodeCerts()
 	maybePanic(security.RunCreateClientCert(l.CertsDir, 512, security.RootUser))
