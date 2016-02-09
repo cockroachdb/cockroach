@@ -1,6 +1,6 @@
 // source: models/log.ts
 /// <reference path="../models/proto.ts" />
-/// <reference path="../../typings/d3/d3.d.ts" />
+/// <reference path="../../typings/browser.d.ts" />
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../util/chainprop.ts" />
 /// <reference path="../util/format.ts" />

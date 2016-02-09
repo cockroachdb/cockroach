@@ -1,6 +1,6 @@
 // source: pages/nodes.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
-/// <reference path="../../typings/lodash/lodash.d.ts"/>
+/// <reference path="../../typings/browser.d.ts"/>
 /// <reference path="../models/status.ts" />
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/table.ts" />
