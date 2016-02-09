@@ -57,6 +57,8 @@ want to run them from the local install using one of:
 - `node_modules/.bin/bower install --save <myAwesomeDep>`
 - `node_modules/.bin/typings install --save <myAwesomeDep>`
 
+Typings dependencies are check in, while bower dependencies are downloaded by `make`.
+
 If you're adding an npm dependency, you'll need to run:
 ```
 	node_modules/.bin/npm install --save <myAwesomeDep> && node_modules/.bin/shonkwrap

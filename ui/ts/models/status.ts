@@ -1,6 +1,5 @@
 // source: models/status.ts
-/// <reference path="../../typings/lodash/lodash.d.ts" />
-/// <reference path="../../typings/moment/moment.d.ts" />
+/// <reference path="../../typings/browser.d.ts" />
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../util/http.ts" />
 /// <reference path="../util/querycache.ts" />

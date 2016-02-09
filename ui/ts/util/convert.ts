@@ -1,5 +1,4 @@
-/// <reference path="../../typings/moment/moment.d.ts" />
-/// <reference path="../../typings/moment-timezone/moment-timezone.d.ts"/>
+/// <reference path="../../typings/browser.d.ts" />
 /// <reference path="../models/proto.ts" />
 
 // source: util/convert.ts

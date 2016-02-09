@@ -45,7 +45,7 @@ TYPESCRIPT_TARGET       := build/app.js
 TEST_TARGET             := build/test.js
 CSS_TARGET              := build/app.css
 CSS_DEBUG_TARGET        := build/app_debug.css
-REMOTE_DEPS             := npm.installed bower.installed typings.installed
+REMOTE_DEPS             := npm.installed bower.installed
 INDEX                   := index.html
 GOBINDATA_FONTS         := ./fonts/*
 GOBINDATA_DEPS          := $(TYPESCRIPT_TARGET) $(CSS_TARGET)
@@ -102,10 +102,6 @@ npm.installed: npm-shrinkwrap.json
 	npm install --progress=false
 	touch $@
 
-typings.installed: typings.json npm.installed
-	typings install
-	touch $@
-
 $(PROTO_JSON_TARGET): $(PROTO_FILE) $(GOGOPROTO)
 	mkdir -p $(GENERATED_ROOT)
 	pbjs $(PROTO_FILE) --path $(PROTO_DEPS_FOLDER) > $@
@@ -149,4 +145,4 @@ watch: debug
 .PHONY: clean
 clean:
 	rm -f $(REMOTE_DEPS) $(INDEX)
-	rm -rf $(NODE_MODULES) $(BOWER_COMPONENTS) build generated typings
+	rm -rf $(NODE_MODULES) $(BOWER_COMPONENTS) build generated

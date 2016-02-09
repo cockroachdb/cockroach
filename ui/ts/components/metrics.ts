@@ -1,7 +1,6 @@
 // source: components/metrics.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
-/// <reference path="../../typings/d3/d3.d.ts" />
-/// <reference path="../../typings/nvd3/nvd3.d.ts" />
+/// <reference path="../../typings/browser.d.ts" />
 /// <reference path="../util/types.ts" />
 /// <reference path="../util/querycache.ts" />
 /// <reference path="../models/metrics.ts" />

@@ -1,7 +1,5 @@
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
-/// <reference path="../../typings/lodash/lodash.d.ts" />
-/// <reference path="../../typings/mocha/mocha.d.ts" />
-/// <reference path="../../typings/chai/chai.d.ts" />
+/// <reference path="../../typings/browser.d.ts" />
 /// <reference path="../components/table.ts" />
 /// <reference path="../util/property.ts" />
 

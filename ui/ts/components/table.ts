@@ -1,6 +1,6 @@
 // source: components/table.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
-/// <reference path="../../typings/lodash/lodash.d.ts" />
+/// <reference path="../../typings/browser.d.ts" />
 /// <reference path="../util/property.ts" />
 /// <reference path="../util/format.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)

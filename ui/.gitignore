@@ -6,13 +6,14 @@ npm.installed
 bower_components
 bower.installed
 
-# Typescript definitions
-typings
-typings.installed
-
 # Generated intermediates
 /build
 /index.html
 
 # Generated proto json/typescript/javascript
 /generated
+
+# Ignore non-browser typings files
+/typings/*
+!/typings/browser.d.ts
+!/typings/browser
