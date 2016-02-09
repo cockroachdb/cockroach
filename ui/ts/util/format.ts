@@ -1,5 +1,5 @@
 // source: util/format.ts
-/// <reference path="../../typings/d3/d3.d.ts" />
+/// <reference path="../../typings/browser.d.ts" />
 /// <reference path="../models/proto.ts" />
 /// <reference path="../util/convert.ts" />
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)

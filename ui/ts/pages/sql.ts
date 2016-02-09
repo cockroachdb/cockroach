@@ -1,7 +1,6 @@
 // source: pages/sql.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
-/// <reference path="../../typings/moment/moment.d.ts" />
-/// <reference path="../../typings/moment-timezone/moment-timezone.d.ts"/>
+/// <reference path="../../typings/browser.d.ts" />
 /// <reference path="../models/sqlquery.ts" />
 /// <reference path="../models/proto.ts" />
 /// <reference path="../util/property.ts" />
