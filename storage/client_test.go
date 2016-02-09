@@ -204,6 +204,9 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.clock == nil {
 		m.clock = hlc.NewClock(m.manualClock.UnixNano)
 	}
+	if m.transportStopper == nil {
+		m.transportStopper = stop.NewStopper()
+	}
 	if m.gossip == nil {
 		rpcContext := rpc.NewContext(&base.Context{}, m.clock, nil)
 		m.gossip = gossip.New(rpcContext, gossip.TestBootstrap, m.transportStopper)
@@ -237,9 +240,6 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 
 	for i := 0; i < numStores; i++ {
 		m.addStore()
-	}
-	if m.transportStopper == nil {
-		m.transportStopper = stop.NewStopper()
 	}
 	m.transportStopper.AddCloser(m.transport)
 

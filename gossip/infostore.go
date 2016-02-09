@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // callback holds regexp pattern match and GossipCallback method.
@@ -47,6 +48,8 @@ type callback struct {
 //
 // infoStores are not thread safe.
 type infoStore struct {
+	stopper *stop.Stopper
+
 	Infos     infoMap             `json:"infos,omitempty"` // Map from key to info
 	NodeID    roachpb.NodeID      `json:"-"`               // Owning node's ID
 	NodeAddr  util.UnresolvedAddr `json:"-"`               // Address of node owning this info store: "host:port"
@@ -105,8 +108,9 @@ func (is *infoStore) String() string {
 }
 
 // newInfoStore allocates and returns a new infoStore.
-func newInfoStore(nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr) *infoStore {
+func newInfoStore(nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr, stopper *stop.Stopper) *infoStore {
 	return &infoStore{
+		stopper:  stopper,
 		Infos:    make(infoMap),
 		NodeID:   nodeID,
 		NodeAddr: nodeAddr,
@@ -258,7 +262,7 @@ func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks .
 	// Run callbacks in a goroutine to avoid mutex reentry. We also guarantee
 	// callbacks are run in order such that if a key is updated twice in
 	// succession, the second callback will never be run before the first.
-	go func() {
+	is.stopper.RunAsyncTask(func() {
 		// Grab the callback mutex to serialize execution of the callbacks.
 		is.callbackMu.Lock()
 		defer is.callbackMu.Unlock()
@@ -272,7 +276,7 @@ func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks .
 		for _, w := range work {
 			w()
 		}
-	}()
+	})
 }
 
 // visitInfos implements a visitor pattern to run the visitInfo
