@@ -566,7 +566,7 @@ func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 //
 // If grouping is true, the ordering is the desired ordering for grouping.
 func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrdering, grouping bool) planNode {
-	if s.desc == nil || (sel.filter == nil && ordering == nil) {
+	if s.desc.isEmpty() || (sel.filter == nil && ordering == nil) {
 		// No table or no where-clause and no ordering.
 		s.initOrdering(0)
 		return s
@@ -577,17 +577,17 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 		// An explicit secondary index was requested. Only add it to the candidate
 		// indexes list.
 		candidates = append(candidates, &indexInfo{
-			desc:  s.desc,
+			desc:  &s.desc,
 			index: s.index,
 		})
 	} else {
 		candidates = append(candidates, &indexInfo{
-			desc:  s.desc,
+			desc:  &s.desc,
 			index: &s.desc.PrimaryIndex,
 		})
 		for i := range s.desc.Indexes {
 			candidates = append(candidates, &indexInfo{
-				desc:  s.desc,
+				desc:  &s.desc,
 				index: &s.desc.Indexes[i],
 			})
 		}
