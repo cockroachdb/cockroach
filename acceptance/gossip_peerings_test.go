@@ -103,14 +103,16 @@ func hasClusterID(infos map[string]interface{}) error {
 }
 
 func TestGossipPeerings(t *testing.T) {
-	c := StartCluster(t)
-	defer c.AssertAndStop(t)
+	runTestOnConfigs(t, testGossipPeeringsInner)
+}
+
+func testGossipPeeringsInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	num := c.NumNodes()
 
-	deadline := time.Now().Add(*flagDuration)
+	deadline := time.Now().Add(cfg.Duration)
 
 	waitTime := longWaitTime
-	if *flagDuration < waitTime {
+	if cfg.Duration < waitTime {
 		waitTime = shortWaitTime
 	}
 
@@ -141,20 +143,24 @@ func TestGossipPeerings(t *testing.T) {
 // re-bootstrapped after a time when all nodes were down
 // simultaneously.
 func TestGossipRestart(t *testing.T) {
+	// TODO(bram): Limit this test to only the relevant cases. No chaos agents
+	// should be required.
+	runTestOnConfigs(t, testGossipRestartInner)
+}
+
+func testGossipRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	// This already replicates the first range (in the local setup).
 	// The replication of the first range is important: as long as the
 	// first range only exists on one node, that node can trivially
 	// acquire the leader lease. Once the range is replicated, however,
 	// nodes must be able to discover each other over gossip before the
 	// lease can be acquired.
-	c := StartCluster(t)
-	defer c.AssertAndStop(t)
 	num := c.NumNodes()
 
-	deadline := time.Now().Add(*flagDuration)
+	deadline := time.Now().Add(cfg.Duration)
 
 	waitTime := longWaitTime
-	if *flagDuration < waitTime {
+	if cfg.Duration < waitTime {
 		waitTime = shortWaitTime
 	}
 

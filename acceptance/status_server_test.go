@@ -93,9 +93,10 @@ func checkNode(t *testing.T, c cluster.Cluster, i int, nodeID, otherNodeID, expe
 // TestStatusServer starts up an N node cluster and tests the status server on
 // each node.
 func TestStatusServer(t *testing.T) {
-	c := StartCluster(t)
-	defer c.AssertAndStop(t)
+	runTestOnConfigs(t, testStatusServerInner)
+}
 
+func testStatusServerInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	// Get the ids for each node.
 	idMap := make(map[int]string)
 	for i := 0; i < c.NumNodes(); i++ {

@@ -31,6 +31,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/util/log"
 	dockerclient "github.com/docker/engine-api/client"
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
@@ -38,10 +41,6 @@ import (
 	"github.com/docker/engine-api/types/strslice"
 	"github.com/docker/go-connections/nat"
 	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -106,6 +105,20 @@ type Event struct {
 	Status    string
 }
 
+type testStore struct {
+	index   int
+	dataStr string
+	config  StoreConfig
+}
+
+type testNode struct {
+	*Container
+	index   int
+	nodeStr string
+	config  NodeConfig
+	stores  []testStore
+}
+
 // LocalCluster manages a local cockroach cluster running on docker. The
 // cluster is composed of a "dns" container which automatically registers dns
 // entries for the cockroach nodes, a "volumes" container which manages the
@@ -116,9 +129,8 @@ type LocalCluster struct {
 	mu                   sync.Mutex // Protects the fields below
 	dns                  *Container
 	vols                 *Container
-	numLocal             int
-	numStores            int
-	Nodes                []*Container
+	config               TestConfig
+	Nodes                []*testNode
 	events               chan Event
 	expectedEvents       chan Event
 	oneshot              *Container
@@ -132,7 +144,7 @@ type LocalCluster struct {
 // CreateLocal creates a new local cockroach cluster. The stopper is used to
 // gracefully shutdown the channel (e.g. when a signal arrives). The cluster
 // must be started before being used.
-func CreateLocal(numLocal, numStores int, logDir string, stopper chan struct{}) *LocalCluster {
+func CreateLocal(cfg TestConfig, logDir string, stopper chan struct{}) *LocalCluster {
 	select {
 	case <-stopper:
 		// The stopper was already closed, exit early.
@@ -148,10 +160,9 @@ func CreateLocal(numLocal, numStores int, logDir string, stopper chan struct{}) 
 	maybePanic(err)
 
 	return &LocalCluster{
-		client:    cli,
-		stopper:   stopper,
-		numLocal:  numLocal,
-		numStores: numStores,
+		client:  cli,
+		stopper: stopper,
+		config:  cfg,
 		// TODO(tschottdorf): deadlocks will occur if these channels fill up.
 		events:         make(chan Event, 1000),
 		expectedEvents: make(chan Event, 1000),
@@ -263,7 +274,7 @@ func (l *LocalCluster) runDockerSpy() {
 // create the volumes container that keeps all of the volumes used by
 // the cluster.
 func (l *LocalCluster) initCluster() {
-	log.Infof("initializing cluster")
+	log.Infof("Initializing Cluster:\n%s", l.config.PrettyString())
 	l.panicOnStop()
 
 	// Create the temporary certs directory in the current working
@@ -298,12 +309,35 @@ func (l *LocalCluster) initCluster() {
 		binds = append(binds, path+":/"+filepath.Base(*cockroachBinary))
 	}
 
+	l.Nodes = []*testNode{}
 	vols := map[string]struct{}{}
-	for i := 0; i < l.numLocal; i++ {
-		for j := 0; j < l.numStores; j++ {
-			vols[dataStr(i, j)] = struct{}{}
+	// Expand the cluster configuration into nodes and stores per node.
+	var nodeCount int
+	for _, nc := range l.config.Nodes {
+		for i := 0; i < int(nc.Count); i++ {
+			newTestNode := &testNode{
+				config:  nc,
+				index:   nodeCount,
+				nodeStr: nodeStr(nodeCount),
+			}
+			nodeCount++
+			var storeCount int
+			for _, sc := range nc.Stores {
+				for j := 0; j < int(sc.Count); j++ {
+					vols[dataStr(nodeCount, storeCount)] = struct{}{}
+					newTestNode.stores = append(newTestNode.stores,
+						testStore{
+							config:  sc,
+							index:   j,
+							dataStr: dataStr(nodeCount, storeCount),
+						})
+					storeCount++
+				}
+			}
+			l.Nodes = append(l.Nodes, newTestNode)
 		}
 	}
+
 	create := func() (*Container, error) {
 		return createContainer(
 			l,
@@ -332,7 +366,7 @@ func (l *LocalCluster) initCluster() {
 	l.vols = c
 }
 
-func (l *LocalCluster) createRoach(i int, dns, vols *Container, cmd ...string) *Container {
+func (l *LocalCluster) createRoach(node *testNode, dns, vols *Container, cmd ...string) {
 	l.panicOnStop()
 
 	hostConfig := container.HostConfig{
@@ -349,8 +383,8 @@ func (l *LocalCluster) createRoach(i int, dns, vols *Container, cmd ...string) *
 	}
 
 	var hostname string
-	if i >= 0 {
-		hostname = fmt.Sprintf("roach%d", i)
+	if node.index >= 0 {
+		hostname = fmt.Sprintf("roach%d", node.index)
 	}
 	var entrypoint []string
 	if *cockroachImage == builderImage {
@@ -358,7 +392,8 @@ func (l *LocalCluster) createRoach(i int, dns, vols *Container, cmd ...string) *
 	} else if *cockroachEntry != "" {
 		entrypoint = append(entrypoint, *cockroachEntry)
 	}
-	c, err := createContainer(
+	var err error
+	node.Container, err = createContainer(
 		l,
 		container.Config{
 			Hostname:   hostname,
@@ -377,10 +412,9 @@ func (l *LocalCluster) createRoach(i int, dns, vols *Container, cmd ...string) *
 			},
 		},
 		hostConfig,
-		nodeStr(i),
+		node.nodeStr,
 	)
 	maybePanic(err)
-	return c
 }
 
 func (l *LocalCluster) createCACert() {
@@ -389,35 +423,42 @@ func (l *LocalCluster) createCACert() {
 
 func (l *LocalCluster) createNodeCerts() {
 	nodes := []string{dockerIP().String()}
-	for i := 0; i < l.numLocal; i++ {
-		nodes = append(nodes, nodeStr(i))
+	for _, node := range l.Nodes {
+		nodes = append(nodes, node.nodeStr)
 	}
 	maybePanic(security.RunCreateNodeCert(l.CertsDir, keyLen, nodes))
 }
 
-func (l *LocalCluster) startNode(i int) *Container {
-	var stores = "ssd=" + dataStr(i, 0)
-	for j := 1; j < l.numStores; j++ {
-		stores += ",ssd=" + dataStr(i, j)
+func (l *LocalCluster) startNode(node *testNode) {
+	var stores string
+	first := true
+	for _, store := range node.stores {
+		if first {
+			first = false
+		} else {
+			stores += ","
+		}
+		stores += "ssd=" + store.dataStr
 	}
 
 	cmd := []string{
 		"start",
 		"--stores=" + stores,
 		"--certs=/certs",
-		"--host=" + nodeStr(i),
+		"--host=" + node.nodeStr,
 		"--port=" + base.CockroachPort,
 		"--scan-max-idle-time=200ms", // set low to speed up tests
 	}
+	log.Warning(stores)
 	// Append --join flag for all nodes except first.
-	if i > 0 {
-		cmd = append(cmd, "--join="+net.JoinHostPort(nodeStr(0), base.CockroachPort))
+	if node.index > 0 {
+		cmd = append(cmd, "--join="+net.JoinHostPort(l.Nodes[0].nodeStr, base.CockroachPort))
 	}
 
 	var locallogDir string
 	if len(l.logDir) > 0 {
-		dockerlogDir := "/logs/" + nodeStr(i)
-		locallogDir = filepath.Join(l.logDir, nodeStr(i))
+		dockerlogDir := "/logs/" + node.nodeStr
+		locallogDir = filepath.Join(l.logDir, node.nodeStr)
 		maybePanic(os.MkdirAll(locallogDir, 0777))
 		cmd = append(
 			cmd,
@@ -425,17 +466,16 @@ func (l *LocalCluster) startNode(i int) *Container {
 			"--logtostderr=false",
 			"--alsologtostderr=true")
 	}
-	c := l.createRoach(i, l.dns, l.vols, cmd...)
-	maybePanic(c.Start())
-	uri := fmt.Sprintf("https://%s", c.Addr(""))
+	l.createRoach(node, l.dns, l.vols, cmd...)
+	maybePanic(node.Start())
+	uri := fmt.Sprintf("https://%s", node.Addr(""))
 	// Infof doesn't take positional parameters, hence the Sprintf.
 	log.Infof(fmt.Sprintf(`*** started %[1]s ***
   ui:    %[2]s
   trace: %[2]s/debug/requests
   logs:  %[3]s/cockroach.INFO
   pprof: docker exec -it %[4]s /bin/bash -c 'go tool pprof /cockroach <(wget --no-check-certificate -qO- https://$(hostname):%[5]s/debug/pprof/heap)'`,
-		c.Name(), uri, locallogDir, c.id[:5], base.CockroachPort))
-	return c
+		node.Name(), uri, locallogDir, node.Container.id[:5], base.CockroachPort))
 }
 
 func (l *LocalCluster) processEvent(event events.Message) bool {
@@ -523,9 +563,9 @@ func (l *LocalCluster) Start() {
 
 	l.monitorCtx, l.monitorCtxCancelFunc = context.WithCancel(context.Background())
 	go l.monitor()
-	l.Nodes = make([]*Container, l.numLocal)
-	for i := range l.Nodes {
-		l.Nodes[i] = l.startNode(i)
+
+	for _, node := range l.Nodes {
+		l.startNode(node)
 	}
 }
 
