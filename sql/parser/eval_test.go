@@ -18,6 +18,7 @@ package parser
 
 import (
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/testutils"
@@ -395,6 +396,7 @@ func TestEvalError(t *testing.T) {
 		{`'11h2m'::interval / 0`, `division by zero`},
 		{`'hello' || b'world'`, `unsupported binary operator: <string> || <bytes>`},
 		{`b'\xff\xfe\xfd'::string`, `invalid utf8: "\xff\xfe\xfd"`},
+		{`'' LIKE ` + string([]byte{0x27, 0xc2, 0x30, 0x7a, 0xd5, 0x25, 0x30, 0x27}), `LIKE regexp compilation failed: error parsing regexp: invalid UTF-8: .*`},
 		// TODO(pmattis): Check for overflow.
 		// {`~0 + 1`, `0`},
 	}
@@ -403,7 +405,7 @@ func TestEvalError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if _, err := expr.Eval(defaultContext); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
+		if _, err := expr.Eval(defaultContext); !testutils.IsError(err, strings.Replace(regexp.QuoteMeta(d.expected), `\.\*`, `.*`, -1)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
 	}

@@ -663,7 +663,7 @@ var cmpOps = map[cmpArgs]cmpOp{
 				key := likeKey(pattern)
 				re, err := ctx.ReCache.GetRegexp(key)
 				if err != nil {
-					panic(fmt.Sprintf("LIKE regexp compilations should not fail: %v", err))
+					return DBool(false), fmt.Errorf("LIKE regexp compilation failed: %v", err)
 				}
 				like = re.MatchString
 			}
