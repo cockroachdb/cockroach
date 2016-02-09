@@ -33,6 +33,7 @@ github.com/gogo/protobuf 82d16f734d6d871204a3feb1a73cb220cc92574c
 github.com/golang/lint 32a87160691b3c96046c0c678fe57c5bef761456
 github.com/google/btree cc6329d4279e3f025a53a83c397d2339b5705c45
 github.com/gordonklaus/ineffassign 507e48671a072e56dbc5dbbee2872ce0d662697e
+github.com/grpc/grpc-go 36d0fa20a1b9fbf5b31546be1ef8da09327e8d19
 github.com/jteeuwen/go-bindata a0ff2567cfb70903282db057e799fd826784d41d
 github.com/julienschmidt/httprouter 2c34ec888a7359c0750064e0a4c8df360806c255
 github.com/kisielk/errcheck 1cd10f9f7824cdbedd5175a6cea0da9763bbeece
