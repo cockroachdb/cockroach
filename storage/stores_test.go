@@ -155,7 +155,7 @@ func TestStoresLookupReplica(t *testing.T) {
 			EndKey:   rng.end,
 			Replicas: []roachpb.ReplicaDescriptor{{StoreID: rng.storeID}},
 		}
-		newRng, err := NewReplica(d[i], s[i])
+		newRng, err := NewReplica(d[i], s[i], 0)
 		if err != nil {
 			t.Fatal(err)
 		}

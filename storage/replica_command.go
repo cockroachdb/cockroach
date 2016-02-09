@@ -1397,7 +1397,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 	// Add the new split replica to the store. This step atomically
 	// updates the EndKey of the updated replica and also adds the
 	// new replica to the store's replica map.
-	newRng, err := NewReplica(&split.NewDesc, r.store)
+	newRng, err := NewReplica(&split.NewDesc, r.store, 0)
 	if err != nil {
 		return err
 	}

@@ -260,8 +260,14 @@ func createRange(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *Re
 		RangeID:  rangeID,
 		StartKey: start,
 		EndKey:   end,
+		Replicas: []roachpb.ReplicaDescriptor{{
+			NodeID:    1,
+			StoreID:   1,
+			ReplicaID: 1,
+		}},
+		NextReplicaID: 2,
 	}
-	r, err := NewReplica(desc, s)
+	r, err := NewReplica(desc, s, 0)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -711,7 +717,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	if err != nil {
 		t.Fatal(err)
 	}
-	newRng, err := NewReplica(desc, store)
+	newRng, err := NewReplica(desc, store, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
