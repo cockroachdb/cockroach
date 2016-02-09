@@ -167,11 +167,19 @@ dupl:
 .PHONY: check
 check:
 	@echo "checking for tabs in shell scripts"
-	@! git grep -F '	' -- '*.sh'
+	@! env PAGER='' git grep -F '	' -- '*.sh'
 	@echo "checking for forbidden imports"
-	@! $(GO) list -f '{{ $$ip := .ImportPath }}{{ range .Imports}}{{ $$ip }}: {{ println . }}{{end}}' $(PKG) | \
+	@$(GO) list -f '{{ $$ip := .ImportPath }}{{ range .Imports}}{{ $$ip }}: {{ println . }}{{end}}' $(PKG) | \
 		grep -E ' (golang/protobuf/proto|log|path)$$' | \
-		grep -Ev '(base|security|sql/driver|util(/(log|randutil|stop))?): log$$'
+		grep -Ev '(base|security|sql/driver|util(/(log|randutil|stop))?): log$$' | tee forbidden.log; \
+	   if grep -E ' path$$' forbidden.log >/dev/null; then \
+	        echo; echo "Consider using 'path/filepath' instead of 'path'."; echo; \
+           fi; \
+	   if grep -E ' log$$' forbidden.log >/dev/null; then \
+	        echo; echo "Consider using 'util/log' instead of 'log'."; echo; \
+           fi; \
+           test ! -s forbidden.log
+	@rm -f forbidden.log
 	@echo "ineffassign"
 	@! ineffassign . | grep -vF gossip/gossip.pb.go
 	@echo "errcheck"
