@@ -357,6 +357,9 @@ func (s *Server) Stop() {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check if we're draining; if so return 503, service unavailable.
 	if !s.stopper.RunTask(func() {
+		// This is our base handler, so catch all panics and make sure they stick.
+		defer log.FatalOnPanic()
+
 		// If server is not available, return 503 http response code.
 		select {
 		case <-s.httpReady:
