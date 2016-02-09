@@ -22,6 +22,7 @@ import (
 	"io"
 	"net"
 	"net/url"
+	"unicode/utf8"
 
 	// Import postgres driver.
 	_ "github.com/lib/pq"
@@ -173,8 +174,11 @@ func formatVal(val interface{}) string {
 	case nil:
 		return "NULL"
 	case []byte:
-		// Ensure that binary protobufs print escaped.
-		return fmt.Sprintf("%q", t)
+		if !utf8.Valid(t) {
+			// Ensure that protobufs containing non-UTF8 binary data print escaped.
+			return fmt.Sprintf("%q", t)
+		}
+		return string(t)
 	}
 	return fmt.Sprint(val)
 }

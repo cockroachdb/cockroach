@@ -567,12 +567,12 @@ func Example_sql() {
 	// sql -e show databases
 	// 2 rows
 	// Database
-	// "system"
-	// "t"
+	// system
+	// t
 	// sql -e explain select 3
 	// 1 row
 	// Level	Type	Description
-	// 0	"empty"	"-"
+	// 0	empty	-
 }
 
 func Example_user() {
@@ -599,7 +599,7 @@ func Example_user() {
 	// +----------+
 	// | username |
 	// +----------+
-	// | "foo"    |
+	// | foo      |
 	// +----------+
 	// user rm foo
 	// OK
