@@ -48,18 +48,15 @@ var testUser = server.TestUser
 // (on call to reset()) for clients which need to wait on a command
 // being sent.
 type notifyingSender struct {
-	waiter  *sync.WaitGroup
-	wrapped client.Sender
+	once     sync.Once
+	onceChan chan struct{}
+	wrapped  client.Sender
 }
 
-func (ss *notifyingSender) reset(waiter *sync.WaitGroup) {
-	waiter.Add(1)
-	ss.waiter = waiter
-}
-
-func (ss *notifyingSender) wait() {
-	ss.waiter.Wait()
-	ss.waiter = nil
+func (ss *notifyingSender) reset(onceChan chan struct{}) {
+	ss.onceChan = onceChan
+	// Reset ss.once so that it runs the Do() function.
+	ss.once = sync.Once{}
 }
 
 func (ss *notifyingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -67,9 +64,11 @@ func (ss *notifyingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*
 	if br != nil && br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(ss.wrapped, br))
 	}
-	if ss.waiter != nil {
-		ss.waiter.Done()
-	}
+	ss.once.Do(func() {
+		if ss.onceChan != nil {
+			ss.onceChan <- struct{}{}
+		}
+	})
 	return br, pErr
 }
 
@@ -164,24 +163,28 @@ func TestClientRetryNonTxn(t *testing.T) {
 			if pErr := txn.Put(key, "txn-value"); pErr != nil {
 				return pErr
 			}
-			// The wait group lets us pause txn until after the non-txn method has run once.
-			wg := sync.WaitGroup{}
 			// On the first true, send the non-txn put or get.
 			if count == 1 {
 				// We use a "notifying" sender here, which allows us to know exactly when the
 				// call has been processed; otherwise, we'd be dependent on timing.
-				sender.reset(&wg)
+				// The channel lets us pause txn until after the non-txn method has run once.
+				onceChan := make(chan struct{})
+				sender.reset(onceChan)
 				// We must try the non-txn put or get in a goroutine because
 				// it might have to retry and will only succeed immediately in
 				// the event we can push.
 				go func() {
 					var pErr *roachpb.Error
-					for i := 0; ; i++ {
+					for {
 						if _, ok := test.args.(*roachpb.GetRequest); ok {
 							_, pErr = db.Get(key)
 						} else {
 							pErr = db.Put(key, "value")
 						}
+						// The above Get/Put() calls Send() which releases
+						// onceChan below; the txn proceeds to succeed.
+						// The above Get/Put() is repeated until no WriteIntentError
+						// is seen.
 						if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 							break
 						}
@@ -191,7 +194,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 						t.Fatalf("%d: expected success on non-txn call to %s; got %s", i, test.args.Method(), pErr)
 					}
 				}()
-				sender.wait()
+				<-onceChan
 			}
 			return nil
 		})
