@@ -569,6 +569,7 @@ func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCo
 	}
 
 	c.opts.database = c.session.Database
+	tracing.AnnotateTrace()
 	return c.sendResponse(resp, formatCodes, sendDescription)
 }
 
