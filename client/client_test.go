@@ -59,7 +59,6 @@ func (ss *notifyingSender) reset(waiter *sync.WaitGroup) {
 
 func (ss *notifyingSender) wait() {
 	ss.waiter.Wait()
-	ss.waiter = nil
 }
 
 func (ss *notifyingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -69,6 +68,7 @@ func (ss *notifyingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*
 	}
 	if ss.waiter != nil {
 		ss.waiter.Done()
+		ss.waiter = nil
 	}
 	return br, pErr
 }
@@ -176,12 +176,16 @@ func TestClientRetryNonTxn(t *testing.T) {
 				// the event we can push.
 				go func() {
 					var pErr *roachpb.Error
-					for i := 0; ; i++ {
+					for {
 						if _, ok := test.args.(*roachpb.GetRequest); ok {
 							_, pErr = db.Get(key)
 						} else {
 							pErr = db.Put(key, "value")
 						}
+						// The above Get/Put() calls Send() and releases the
+						// sender.wait() below; the txn proceeds to succeed.
+						// The above Get/Put() is repeated until no WriteIntentError
+						// is seen.
 						if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 							break
 						}
