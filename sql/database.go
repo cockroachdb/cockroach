@@ -18,11 +18,13 @@ package sql
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // databaseKey implements descriptorKey.
@@ -36,6 +38,31 @@ func (dk databaseKey) Key() roachpb.Key {
 
 func (dk databaseKey) Name() string {
 	return dk.name
+}
+
+// databaseCache holds a cache from database name to database ID. It is
+// populated as database IDs are requested and a new cache is created whenever
+// the system config changes. As such, no attempt is made to limit its size
+// which is naturally limited by the number of database descriptors in the
+// system the periodic reset whenever the system config is gossiped.
+type databaseCache struct {
+	mu        sync.Mutex
+	databases map[string]ID
+}
+
+func (s *databaseCache) getID(name string) ID {
+	if s == nil {
+		return 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.databases[name]
+}
+
+func (s *databaseCache) setID(name string, id ID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.databases[name] = id
 }
 
 func makeDatabaseDesc(p *parser.CreateDatabase) DatabaseDescriptor {
@@ -87,5 +114,30 @@ func (p *planner) getCachedDatabaseDesc(name string) (*DatabaseDescriptor, error
 	if database == nil {
 		return nil, util.Errorf("%q is not a database", name)
 	}
+
 	return database, database.Validate()
+}
+
+func (p *planner) getDatabaseID(name string) (ID, *roachpb.Error) {
+	if id := p.databaseCache.getID(name); id != 0 {
+		return id, nil
+	}
+
+	// Lookup the database in the cache first, falling back to the KV store if it
+	// isn't present. The cache might cause the usage of a recently renamed
+	// database, but that's a race that could occur anyways.
+	desc, err := p.getCachedDatabaseDesc(name)
+	if err != nil {
+		if log.V(3) {
+			log.Infof("%v", err)
+		}
+		var pErr *roachpb.Error
+		desc, pErr = p.getDatabaseDesc(name)
+		if pErr != nil {
+			return 0, pErr
+		}
+	}
+
+	p.databaseCache.setID(name, desc.ID)
+	return desc.ID, nil
 }
