@@ -68,9 +68,7 @@ const keyLen = 1024
 
 func prettyJSON(v interface{}) string {
 	pretty, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		panic(err)
-	}
+	maybePanic(err)
 	return string(pretty)
 }
 
@@ -146,9 +144,7 @@ func CreateLocal(numLocal, numStores int, logDir string, stopper chan struct{}) 
 	}
 
 	cli, err := dockerclient.NewEnvClient()
-	if err != nil {
-		log.Fatal(err)
-	}
+	maybePanic(err)
 
 	return &LocalCluster{
 		client:    cli,
@@ -241,9 +237,7 @@ func (l *LocalCluster) runDockerSpy() {
 			c, err = create()
 		}
 	}
-	if err != nil {
-		panic(err)
-	}
+	maybePanic(err)
 	maybePanic(c.Start())
 	l.dns = c
 	if ci, err := c.Inspect(); err != nil {
@@ -267,9 +261,7 @@ func (l *LocalCluster) initCluster() {
 	// that means that binds of /tmp and /var will be problematic.
 	var err error
 	l.CertsDir, err = ioutil.TempDir(pwd, ".localcluster.certs.")
-	if err != nil {
-		panic(err)
-	}
+	maybePanic(err)
 
 	binds := []string{
 		l.CertsDir + ":/certs",
@@ -285,15 +277,11 @@ func (l *LocalCluster) initCluster() {
 		// If we don't make sure the directory exists, Docker will and then we
 		// may run into ownership issues (think Docker running as root, but us
 		// running as a regular Joe as it happens on CircleCI).
-		if err := os.MkdirAll(l.logDir, 0777); err != nil {
-			log.Fatal(err)
-		}
+		maybePanic(os.MkdirAll(l.logDir, 0777))
 	}
 	if *cockroachImage == builderImage {
 		path, err := filepath.Abs(*cockroachBinary)
-		if err != nil {
-			panic(err)
-		}
+		maybePanic(err)
 		binds = append(binds, path+":/"+filepath.Base(*cockroachBinary))
 	}
 
@@ -337,10 +325,7 @@ func (l *LocalCluster) initCluster() {
 			c, err = create()
 		}
 	}
-
-	if err != nil {
-		panic(err)
-	}
+	maybePanic(err)
 
 	maybePanic(c.Start())
 	maybePanic(c.Wait())
@@ -356,9 +341,7 @@ func (l *LocalCluster) createRoach(i int, dns, vols *Container, cmd ...string) *
 
 	if dns != nil {
 		ci, err := dns.Inspect()
-		if err != nil {
-			panic(err)
-		}
+		maybePanic(err)
 		hostConfig.DNS = append(hostConfig.DNS, ci.NetworkSettings.IPAddress)
 	}
 	if vols != nil {
@@ -396,9 +379,7 @@ func (l *LocalCluster) createRoach(i int, dns, vols *Container, cmd ...string) *
 		hostConfig,
 		nodeStr(i),
 	)
-	if err != nil {
-		panic(err)
-	}
+	maybePanic(err)
 	return c
 }
 
@@ -437,9 +418,7 @@ func (l *LocalCluster) startNode(i int) *Container {
 	if len(l.logDir) > 0 {
 		dockerlogDir := "/logs/" + nodeStr(i)
 		locallogDir = filepath.Join(l.logDir, nodeStr(i))
-		if err := os.MkdirAll(locallogDir, 0777); err != nil {
-			log.Fatal(err)
-		}
+		maybePanic(os.MkdirAll(locallogDir, 0777))
 		cmd = append(
 			cmd,
 			"--log-dir="+dockerlogDir,
@@ -507,18 +486,15 @@ func (l *LocalCluster) processMessage(message events.Message) bool {
 
 func (l *LocalCluster) monitor() {
 	rc, err := l.client.Events(l.monitorCtx, types.EventsOptions{})
-	if err != nil {
-		panic(err)
-	}
+	maybePanic(err)
 	defer rc.Close()
 	dec := json.NewDecoder(rc)
 	for {
 		var message events.Message
 		if err := dec.Decode(&message); err != nil {
-			if err == io.EOF {
-				break
-			}
-			panic(err)
+			log.Errorf("monitoring error: %s", err)
+			l.events <- Event{NodeIndex: -1, Status: eventDie}
+			break
 		}
 
 		if !l.processMessage(message) {
