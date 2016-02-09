@@ -62,7 +62,9 @@ func get(t *testing.T, base, rel string) []byte {
 			log.Infof("could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
 			continue
 		}
-		log.Infof("OK response from %s", url)
+		if log.V(1) {
+			log.Infof("OK response from %s", url)
+		}
 		return body
 	}
 	t.Fatalf("There was an error retrieving %s", url)

@@ -64,7 +64,9 @@ func checkRangeReplication(t *testing.T, c cluster.Cluster, d time.Duration) {
 			return err
 		}
 
-		log.Infof("found %d replicas", foundReplicas)
+		if log.V(1) {
+			log.Infof("found %d replicas", foundReplicas)
+		}
 		if foundReplicas >= wantedReplicas {
 			return nil
 		}
