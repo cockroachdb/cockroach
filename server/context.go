@@ -143,7 +143,9 @@ type Context struct {
 func getDefaultCacheSize() uint64 {
 	mem := sigar.Mem{}
 	if err := mem.Get(); err != nil {
-		log.Infof("can't retrieve system memory information (%s), setting default rocksdb cache size to %dMB", err, defaultCacheSize>>20)
+		if log.V(1) {
+			log.Infof("can't retrieve system memory information (%s), setting default rocksdb cache size to %dMB", err, defaultCacheSize>>20)
+		}
 		return defaultCacheSize
 	}
 
@@ -151,13 +153,17 @@ func getDefaultCacheSize() uint64 {
 	if runtime.GOOS == "linux" {
 		buf, err := ioutil.ReadFile(defaultCGroupMemPath)
 		if err != nil {
-			log.Infof("can't read available memory from cgroups (%s), setting default rocksdb cache size to %dMB (half of system memory)", err, halfSysMem>>20)
+			if log.V(1) {
+				log.Infof("can't read available memory from cgroups (%s), setting default rocksdb cache size to %dMB (half of system memory)", err, halfSysMem>>20)
+			}
 			return halfSysMem
 		}
 
 		cgAvlMem, err := strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64)
 		if err != nil {
-			log.Infof("can't parse available memory from cgroups (%s), setting default rocksdb cache size to %dMB (half of system memory)", err, halfSysMem>>20)
+			if log.V(1) {
+				log.Infof("can't parse available memory from cgroups (%s), setting default rocksdb cache size to %dMB (half of system memory)", err, halfSysMem>>20)
+			}
 			return halfSysMem
 		}
 		if cgAvlMem < mem.Total {
