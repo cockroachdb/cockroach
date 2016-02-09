@@ -48,14 +48,19 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-var flagDuration = flag.Duration("d", 5*time.Second, "duration to run the test")
+var flagDuration = flag.Duration("d", cluster.DefaultDuration, "duration to run the test")
 var flagNodes = flag.Int("nodes", 3, "number of nodes")
 var flagStores = flag.Int("stores", 1, "number of stores to use for each node")
 var flagRemote = flag.Bool("remote", false, "run the test using terrafarm instead of docker")
 var flagCwd = flag.String("cwd", "../cloud/aws", "directory to run terraform from")
-var flagStall = flag.Duration("stall", 2*time.Minute, "duration after which if no forward progress is made, consider the test stalled")
+var flagStall = flag.Duration("stall", cluster.DefaultStall, "duration after which if no forward progress is made, consider "+
+	"the test stalled")
 var flagKeyName = flag.String("key-name", "", "name of key for remote cluster")
 var flagLogDir = flag.String("l", "", "the directory to store log files, relative to the test source")
+var flagTestConfigs = flag.Bool("test-configs", false, "instead of using the passed in configuration, use the default "+
+	"cluster configurations for each test. This overrides the nodes, stores, stall and duration flags and will run "+
+	"the test against a collection of pre-specified cluster configurations.")
+
 var stopper = make(chan struct{})
 
 func farmer(t *testing.T) *terrafarm.Farmer {
@@ -91,10 +96,45 @@ func farmer(t *testing.T) *terrafarm.Farmer {
 	return f
 }
 
+// readConfigFromFlags will convert the flags to a TestConfig for the purposes
+// of starting up a cluster.
+func readConfigFromFlags() cluster.TestConfig {
+	return cluster.TestConfig{
+		Name:     fmt.Sprintf("AdHoc %dx%d", *flagNodes, *flagStores),
+		Duration: *flagDuration,
+		Stall:    *flagStall,
+		Nodes: []cluster.NodeConfig{
+			{
+				Count:  int32(*flagNodes),
+				Stores: []cluster.StoreConfig{{Count: int32(*flagStores)}},
+			},
+		},
+	}
+}
+
+// getConfigs returns a list of test configs based on the passed in flags.
+func getConfigs() []cluster.TestConfig {
+	if *flagTestConfigs {
+		return cluster.DefaultConfigs()
+	}
+	return []cluster.TestConfig{readConfigFromFlags()}
+}
+
+// runTestOnConfigs retrieves the full list of test configurations and runs the
+// passed in test against each on serially.
+func runTestOnConfigs(t *testing.T, testFunc func(*testing.T, cluster.Cluster, cluster.TestConfig)) {
+	cfgs := getConfigs()
+	for _, cfg := range cfgs {
+		cluster := StartCluster(t, cfg)
+		testFunc(t, cluster, cfg)
+		cluster.AssertAndStop(t)
+	}
+}
+
 // StartCluster starts a cluster from the relevant flags. All test clusters
 // should be created through this command since it sets up the logging in a
 // unified way.
-func StartCluster(t *testing.T) cluster.Cluster {
+func StartCluster(t *testing.T, cfg cluster.TestConfig) cluster.Cluster {
 	if !*flagRemote {
 		logDir := *flagLogDir
 		if logDir != "" {
@@ -102,7 +142,7 @@ func StartCluster(t *testing.T) cluster.Cluster {
 				logDir = filepath.Join(logDir, fun)
 			}
 		}
-		l := cluster.CreateLocal(*flagNodes, *flagStores, logDir, stopper)
+		l := cluster.CreateLocal(cfg, logDir, stopper)
 		l.Start()
 		checkRangeReplication(t, l, 20*time.Second)
 		return l
@@ -211,7 +251,8 @@ func testDocker(t *testing.T, name string, cmd []string) error {
 	const image = "cockroachdb/postgres-test"
 	const tag = "20160203-140220"
 	SkipUnlessLocal(t)
-	l := StartCluster(t).(*cluster.LocalCluster)
+	l := StartCluster(t, readConfigFromFlags()).(*cluster.LocalCluster)
+
 	defer l.AssertAndStop(t)
 	addr := l.Nodes[0].PGAddr()
 	containerConfig := container.Config{
