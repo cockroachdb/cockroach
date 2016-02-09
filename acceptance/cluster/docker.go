@@ -26,6 +26,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
@@ -109,7 +110,7 @@ func (c *Container) Kill() error {
 	if err := c.Unpause(); err != nil {
 		log.Warning(err)
 	}
-	if err := c.cluster.client.ContainerKill(c.id, "9"); err != nil {
+	if err := c.cluster.client.ContainerKill(c.id, "9"); err != nil && !strings.Contains(err.Error(), "is not running") {
 		return err
 	}
 	c.cluster.expectEvent(c, "die")
