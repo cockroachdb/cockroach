@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/acceptance/testconfig"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -93,7 +94,14 @@ func checkNode(t *testing.T, c cluster.Cluster, i int, nodeID, otherNodeID, expe
 // TestStatusServer starts up an N node cluster and tests the status server on
 // each node.
 func TestStatusServer(t *testing.T) {
-	c := StartCluster(t)
+	clusterConfigs := getConfigs()
+	for _, clusterConfig := range clusterConfigs {
+		testStatusServerInner(t, clusterConfig)
+	}
+}
+
+func testStatusServerInner(t *testing.T, clusterConfig testconfig.TestConfig) {
+	c := StartCluster(t, clusterConfig)
 	defer c.AssertAndStop(t)
 
 	// Get the ids for each node.
