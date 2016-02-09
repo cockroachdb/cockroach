@@ -51,6 +51,7 @@ github.com/mattn/go-runewidth e882a96ec18dd43fa283187b66af74497c9101c0
 github.com/mibk/dupl c450df04426c2f8c35d91fb588feb88fbe328915
 github.com/montanaflynn/stats 2c10aa99e7ec8c4607d4427ec7a1a60fcdfce85f
 github.com/olekukonko/tablewriter cca8bbc0798408af109aaaa239cbd2634846b340
+github.com/opencontainers/runc d97d5e8b007e4657316eed76ea30bc0f690230cf
 github.com/opennota/check 2647c7f78677e5af42e988a36343bc83194b7109
 github.com/opentracing/opentracing-go bc83a422bc08c8d1b72f0f548faab0145e35bb54
 github.com/rcrowley/go-metrics 51425a2415d21afadfd55cd93432c0bc69e9598d
