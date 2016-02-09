@@ -206,6 +206,21 @@ message NodeList {
   repeated int32 nodes = 1 [packed = true, (gogoproto.casttype) = "NodeID"];
 }
 
+// TxnMeta is the metadata of a Transaction record.
+message TxnMeta {
+  // id is a unique UUID value which identifies the transaction.
+  optional bytes id = 3 [(gogoproto.customname) = "ID"];
+  // key is the key which anchors the transaction. This is typically
+  // the first key read or written during the transaction and determines which
+  // range in the cluster will hold the transaction record.
+  optional bytes key = 2 [(gogoproto.casttype) = "Key"];
+  // Incremented on txn retry.
+  optional uint32 epoch = 7 [(gogoproto.nullable) = false];
+  // The proposed timestamp for the transaction. This starts as
+  // the current wall time on the txn coordinator.
+  optional Timestamp timestamp = 9 [(gogoproto.nullable) = false];
+}
+
 // A Transaction is a unit of work performed on the database.
 // Cockroach transactions support two isolation levels: snapshot
 // isolation and serializable snapshot isolation. Each Cockroach
@@ -220,34 +235,26 @@ message NodeList {
 message Transaction {
   option (gogoproto.goproto_stringer) = false;
 
-  optional string name = 1 [(gogoproto.nullable) = false];
-  // key is the key which anchors the transaction. This is typically
-  // the first key read or written during the transaction and determines which
-  // range in the cluster will hold the transaction record.
-  optional bytes key = 2 [(gogoproto.casttype) = "Key"];
-  // id is a unique UUID value which identifies the transaction.
-  optional bytes id = 3 [(gogoproto.customname) = "ID"];
-  optional int32 priority = 4 [(gogoproto.nullable) = false];
-  optional IsolationType isolation = 5 [(gogoproto.nullable) = false];
-  optional TransactionStatus status = 6 [(gogoproto.nullable) = false];
-  // Incremented on txn retry.
-  optional uint32 epoch = 7 [(gogoproto.nullable) = false];
+  // The transaction metadata. These are persisted with every intent.
+  optional TxnMeta meta = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // A free-text identifier for debug purposes.
+  optional string name = 2 [(gogoproto.nullable) = false];
+  optional int32 priority = 3 [(gogoproto.nullable) = false];
+  optional IsolationType isolation = 4 [(gogoproto.nullable) = false];
+  optional TransactionStatus status = 5 [(gogoproto.nullable) = false];
   // The last heartbeat timestamp.
-  optional Timestamp last_heartbeat = 8;
-  // The proposed timestamp for the transaction. This starts as
-  // the current wall time on the txn coordinator.
-  optional Timestamp timestamp = 9 [(gogoproto.nullable) = false];
+  optional Timestamp last_heartbeat = 6;
   // The original timestamp at which the transaction started. For serializable
   // transactions, if the timestamp drifts from the original timestamp, the
   // transaction will retry.
-  optional Timestamp orig_timestamp = 10 [(gogoproto.nullable) = false];
+  optional Timestamp orig_timestamp = 7 [(gogoproto.nullable) = false];
   // Initial Timestamp + clock skew. Reads which encounter values with
   // timestamps between timestamp and max_timestamp trigger a txn
   // retry error, unless the node being read is listed in certain_nodes
   // (in which case no more read uncertainty can occur).
   // The case max_timestamp < timestamp is possible for transactions which have
   // been pushed; in this case, max_timestamp should be ignored.
-  optional Timestamp max_timestamp = 11 [(gogoproto.nullable) = false];
+  optional Timestamp max_timestamp = 8 [(gogoproto.nullable) = false];
   // A sorted list of ids of nodes for which a ReadWithinUncertaintyIntervalError
   // occurred during a prior read. The purpose of keeping this information is
   // that as a reaction to this error, the transaction's timestamp is forwarded
@@ -266,21 +273,22 @@ message Transaction {
   // Bits of this mechanism are found in the local sender, the range and the
   // txn_coord_sender, with brief comments referring here.
   // See https://github.com/cockroachdb/cockroach/pull/221.
-  optional NodeList certain_nodes = 12 [(gogoproto.nullable) = false];
+  optional NodeList certain_nodes = 9 [(gogoproto.nullable) = false];
   // Writing is true if the transaction has previously executed a successful
   // write request, i.e. a request that may have left intents (across retries).
-  optional bool Writing = 13 [(gogoproto.nullable) = false];
+  optional bool Writing = 10 [(gogoproto.nullable) = false];
   // A one-indexed sequence number which is increased on each batch sent as
   // part of the transaction. Used to prevent replay and out-of-order
   // application protection (by means of a transaction retry).
-  optional uint32 Sequence = 14 [(gogoproto.nullable) = false];
-  repeated Span Intents = 15 [(gogoproto.nullable) = false];
+  optional uint32 Sequence = 11 [(gogoproto.nullable) = false];
+  repeated Span Intents = 12 [(gogoproto.nullable) = false];
 }
 
-// A Intent is a Span together with a Transaction.
+// A Intent is a Span together with a Transaction metadata and its status.
 message Intent {
   optional Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Transaction txn = 2 [(gogoproto.nullable) = false];
+  optional TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  optional TransactionStatus status = 3 [(gogoproto.nullable) = false];
 }
 
 // Lease contains information about leader leases including the
