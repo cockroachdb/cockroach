@@ -26,7 +26,7 @@ import (
 )
 
 // Resolver is an interface which provides an abstract factory for
-// net.Addr addresses.
+// net.Addr addresses. Resolvers are not thread safe.
 type Resolver interface {
 	Type() string
 	Addr() string
