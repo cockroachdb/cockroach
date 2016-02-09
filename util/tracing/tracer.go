@@ -33,9 +33,9 @@ type testRecorder struct{}
 func (testRecorder) RecordSpan(sp *standardtracer.RawSpan) {
 	if log.V(2) {
 		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "[Trace %s]", sp.Operation)
+		fmt.Fprintf(&buf, "[%s]", sp.Operation)
 		for _, log := range sp.Logs {
-			fmt.Fprint(&buf, "\n * ", log.Timestamp.Format(traceTimeFormat), log.Event)
+			fmt.Fprint(&buf, "\n * ", log.Timestamp.Format(traceTimeFormat), " ", log.Event)
 		}
 		log.Info(buf.String())
 	}
