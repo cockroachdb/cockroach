@@ -168,7 +168,7 @@ dupl:
 check:
 	@echo "checking for tabs in shell scripts"
 	@! git grep -F '	' -- '*.sh'
-	@echo "checking for forbidden imports"
+	@echo "checking for forbidden imports (if your code uses path, consider using filepath instead)"
 	@! $(GO) list -f '{{ $$ip := .ImportPath }}{{ range .Imports}}{{ $$ip }}: {{ println . }}{{end}}' $(PKG) | \
 		grep -E ' (golang/protobuf/proto|log|path)$$' | \
 		grep -Ev '(base|security|sql/driver|util(/(log|randutil|stop))?): log$$'
