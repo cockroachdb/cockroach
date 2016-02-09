@@ -70,6 +70,7 @@ module Models {
         xhr.setRequestHeader("Content-Type", "application/x-protobuf");
         xhr.setRequestHeader("Accept", "application/json");
 
+        xhr.timeout = 2000;
         /**
          * TODO: receive data as protobuf instead of JSON
          *

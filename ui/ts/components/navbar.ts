@@ -1,4 +1,4 @@
-// source: component/navbar.ts
+// source: components/navbar.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../../typings/browser.d.ts" />
 /// <reference path="../util/property.ts" />

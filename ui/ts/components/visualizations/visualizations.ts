@@ -17,6 +17,7 @@ module Visualizations {
   export interface VisualizationWrapperInfo {
     title: string;
     virtualVisualizationElement: MithrilVirtualElement;
+    visualizationArguments?: any;
   }
 
   export module VisualizationWrapper {

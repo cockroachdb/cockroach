@@ -42,7 +42,7 @@ module AdminViews {
                 let payload: Datum = row.values[i].Payload;
                 let type: string = _.keys(payload)[0];
                 let viewVal: string = "";
-                if (type === "BytesVal") {
+                if (type === "sql.ts") {
                   viewVal = payload.BytesVal.toString();
                 } else if (type === "TimeVal") {
                   viewVal = Utils.Convert.TimestampToMoment(payload.TimeVal).toString();

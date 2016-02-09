@@ -28,7 +28,7 @@ $stats-table-tr--bg     = white
 $stats-table-tr--bg-alt = $secondary-gray-7
 
 // ---- Data table ----
-.stats-table, .sql-table
+.stats-table, .sql-table, .event-table
   overflow scroll
   table
     border-collapse collapse
@@ -131,3 +131,21 @@ table
   .title
     display inline-block
     width 20rem
+
+
+.event-table
+  table
+    width 100%
+    tbody
+      td
+        border 0
+        font-size 16px
+        font-family Lato-Medium
+        &:first-child
+          width 50px
+        &:nth-child(2)
+          width 75px
+
+      tr
+        height 60px
+        width 100%
