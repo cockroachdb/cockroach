@@ -31,6 +31,8 @@ import (
 type EventLogType string
 
 const (
+	// EventLogCreateDatabase is recorded when a database is created.
+	EventLogCreateDatabase EventLogType = "create_database"
 	// EventLogCreateTable is recorded when a table is created.
 	EventLogCreateTable EventLogType = "create_table"
 )
