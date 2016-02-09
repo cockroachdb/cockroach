@@ -177,7 +177,7 @@ module Components {
           ".visualization-wrapper",
           [
             // TODO: pass in and display info icon tooltip
-            m(".viz-top", m(".viz-info-icon", m(".icon-cockroach-17"))), // Icon Cockroach 17 is the info icon.
+            m(".viz-top", m(".viz-info-icon", m(".icon-info"))),
             g,
             m(".viz-bottom", m(".viz-title", ctrl.vm.axis.title())),
           ]

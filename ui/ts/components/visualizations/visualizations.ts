@@ -30,7 +30,7 @@ module Visualizations {
         ".visualization-wrapper",
         [
           // TODO: pass in and display info icon tooltip
-          m(".viz-top", m(".viz-info-icon", m(".icon-cockroach-17"))), // Icon Cockroach 17 is the info icon.
+          m(".viz-top", m(".viz-info-icon", m(".icon-info"))),
           info.virtualVisualizationElement,
           m(".viz-bottom", m(".viz-title", info.title)),
         ]
