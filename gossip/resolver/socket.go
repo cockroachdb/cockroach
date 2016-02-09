@@ -23,8 +23,7 @@ import (
 )
 
 // socketResolver represents the different types of socket-based
-// address resolvers. Based on the Type, it may return the same
-// address multiple times (eg: "lb") or not (eg: "tcp").
+// address resolvers.
 type socketResolver struct {
 	typ       string
 	addr      string
@@ -47,15 +46,12 @@ func (sr *socketResolver) GetAddress() (net.Addr, error) {
 		}
 		sr.exhausted = true
 		return addr, nil
-	case "tcp", "lb":
+	case "tcp":
 		_, err := net.ResolveTCPAddr("tcp", sr.addr)
 		if err != nil {
 			return nil, err
 		}
-		if sr.typ == "tcp" {
-			// "tcp" resolvers point to a single host. "lb" have an unknown of number of backends.
-			sr.exhausted = true
-		}
+		sr.exhausted = true
 		return util.NewUnresolvedAddr("tcp", sr.addr), nil
 	}
 	return nil, util.Errorf("unknown address type: %q", sr.typ)
