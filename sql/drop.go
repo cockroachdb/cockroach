@@ -115,7 +115,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 			return nil, pErr
 		}
 
-		if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+		if err := p.checkPrivilege(&tableDesc, privilege.CREATE); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 		idxName := indexQualifiedName.Index()
@@ -149,7 +149,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 			return nil, roachpb.NewError(err)
 		}
 
-		if pErr := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); pErr != nil {
+		if pErr := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(&tableDesc)); pErr != nil {
 			return nil, pErr
 		}
 		p.notifySchemaChange(tableDesc.ID, mutationID)

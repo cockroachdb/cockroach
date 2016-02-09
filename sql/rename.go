@@ -152,7 +152,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, *roachpb.Error) 
 		return nil, pErr
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
+	if err := p.checkPrivilege(&tableDesc, privilege.DROP); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -167,7 +167,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, *roachpb.Error) 
 	}
 
 	descID := tableDesc.GetID()
-	descDesc := wrapDescriptor(tableDesc)
+	descDesc := wrapDescriptor(&tableDesc)
 
 	b := client.Batch{}
 	b.Put(descKey, descDesc)
@@ -224,7 +224,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, *roachpb.Error) 
 		return nil, roachpb.NewError(err)
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+	if err := p.checkPrivilege(&tableDesc, privilege.CREATE); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -248,7 +248,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, *roachpb.Error) 
 	if err := tableDesc.Validate(); err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	if pErr := p.txn.Put(descKey, wrapDescriptor(tableDesc)); pErr != nil {
+	if pErr := p.txn.Put(descKey, wrapDescriptor(&tableDesc)); pErr != nil {
 		return nil, pErr
 	}
 	p.notifySchemaChange(tableDesc.ID, invalidMutationID)
@@ -307,7 +307,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, *roachpb.Error
 		column = tableDesc.Mutations[i].GetColumn()
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+	if err := p.checkPrivilege(&tableDesc, privilege.CREATE); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -343,7 +343,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, *roachpb.Error
 	if err := tableDesc.Validate(); err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	if pErr := p.txn.Put(descKey, wrapDescriptor(tableDesc)); pErr != nil {
+	if pErr := p.txn.Put(descKey, wrapDescriptor(&tableDesc)); pErr != nil {
 		return nil, pErr
 	}
 	p.notifySchemaChange(tableDesc.ID, invalidMutationID)

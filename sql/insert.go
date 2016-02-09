@@ -42,7 +42,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.INSERT); err != nil {
+	if err := p.checkPrivilege(&tableDesc, privilege.INSERT); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -52,7 +52,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		cols = tableDesc.Columns
 	} else {
 		var err error
-		if cols, err = p.processColumns(tableDesc, n.Columns); err != nil {
+		if cols, err = p.processColumns(&tableDesc, n.Columns); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
@@ -257,7 +257,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		pErr = p.txn.Run(b)
 	}
 	if pErr != nil {
-		return nil, convertBatchError(tableDesc, *b, pErr)
+		return nil, convertBatchError(&tableDesc, *b, pErr)
 	}
 	return result, nil
 }
