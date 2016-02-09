@@ -207,7 +207,7 @@ func (l *LocalCluster) runDockerSpy() {
 	create := func() (*Container, error) {
 		return createContainer(l,
 			container.Config{
-				Image: dockerspyImage,
+				Image: dockerspyImage + ":" + dockerspyTag,
 				Cmd:   strslice.New("--dns-domain=" + domain),
 			}, container.HostConfig{
 				Binds:           []string{"/var/run/docker.sock:/var/run/docker.sock"},
