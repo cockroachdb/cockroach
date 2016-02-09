@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -33,9 +34,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/docker/docker/pkg/jsonmessage"
+	dockerclient "github.com/docker/engine-api/client"
+	"github.com/docker/engine-api/types"
+	"github.com/docker/engine-api/types/container"
+	"github.com/docker/engine-api/types/strslice"
 	_ "github.com/lib/pq"
-
-	"github.com/samalba/dockerclient"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
@@ -194,34 +199,32 @@ func getJSON(url, rel string, v interface{}) error {
 
 // testDockerFail ensures the specified docker cmd fails.
 func testDockerFail(t *testing.T, tag string, cmd []string) {
-	wr, _ := testDocker(t, tag, cmd)
-	if wr.Error == nil && wr.ExitCode == 0 {
-		t.Errorf("expected failure")
+	if exitCode, logs := testDocker(t, tag, cmd); exitCode == 0 {
+		t.Log(logs)
+		t.Errorf("unexpected failure:\n%s", logs)
 	}
 }
 
 // testDockerSuccess ensures the specified docker cmd succeeds.
 func testDockerSuccess(t *testing.T, tag string, cmd []string) {
-	wr, logs := testDocker(t, tag, cmd)
-	if wr.Error != nil {
-		t.Log(logs)
-		t.Errorf("unexpected error: %s", wr.Error)
-	} else if wr.ExitCode != 0 {
-		t.Log(logs)
-		t.Errorf("unexpected exit code: %v", wr.ExitCode)
+	if exitCode, logs := testDocker(t, tag, cmd); exitCode != 0 {
+		t.Errorf("unexpected success:\n%s", logs)
 	}
 }
 
-func testDocker(t *testing.T, tag string, cmd []string) (result dockerclient.WaitResult, logs string) {
+func testDocker(t *testing.T, tag string, cmd []string) (exitCode int, logs string) {
 	SkipUnlessLocal(t)
 	l := StartCluster(t).(*cluster.LocalCluster)
 
 	defer l.AssertAndStop(t)
 
-	addr := l.Nodes[0].PGAddr()
+	cli, err := dockerclient.NewEnvClient()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	client := cluster.NewDockerClient()
-	containerConfig := dockerclient.ContainerConfig{
+	addr := l.Nodes[0].PGAddr()
+	containerConfig := container.Config{
 		Image: "cockroachdb/postgres-test:" + tag,
 		Env: []string{
 			fmt.Sprintf("PGHOST=%s", addr.IP),
@@ -229,39 +232,70 @@ func testDocker(t *testing.T, tag string, cmd []string) (result dockerclient.Wai
 			"PGSSLCERT=/certs/node.client.crt",
 			"PGSSLKEY=/certs/node.client.key",
 		},
-		Cmd: cmd,
+		Cmd: strslice.New(cmd...),
 	}
-	if err := client.PullImage(containerConfig.Image, nil); err != nil {
-		t.Fatal(err)
-	}
-	id, err := client.CreateContainer(&containerConfig, "", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.RemoveContainer(id, false, false)
-
-	hostConfig := dockerclient.HostConfig{
+	hostConfig := container.HostConfig{
 		Binds:       []string{fmt.Sprintf("%s:%s", l.CertsDir, "/certs")},
 		NetworkMode: "host",
 	}
-	if err := client.StartContainer(id, &hostConfig); err != nil {
+
+	rc, err := cli.ImagePull(context.Background(), types.ImagePullOptions{
+		ImageID: containerConfig.Image,
+		Tag:     tag,
+	}, nil)
+	if err != nil {
 		t.Fatal(err)
 	}
-	wr := <-client.Wait(id)
-	if wr.ExitCode != 0 {
-		rc, err := client.ContainerLogs(id, &dockerclient.LogOptions{
-			Stdout: true,
-			Stderr: true,
+	defer rc.Close()
+	dec := json.NewDecoder(rc)
+	for {
+		var message jsonmessage.JSONMessage
+		if err := dec.Decode(&message); err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Fatal(err)
+		}
+		log.Infof("ImagePull response: %s", message)
+	}
+
+	resp, err := cli.ContainerCreate(&containerConfig, &hostConfig, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, warning := range resp.Warnings {
+		log.Warning(warning)
+	}
+	defer func() {
+		if err := cli.ContainerRemove(types.ContainerRemoveOptions{
+			ContainerID:   resp.ID,
+			RemoveVolumes: true,
+		}); err != nil {
+			t.Error(err)
+		}
+	}()
+	if err := cli.ContainerStart(resp.ID); err != nil {
+		t.Fatal(err)
+	}
+	exitCode, err = cli.ContainerWait(context.Background(), resp.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exitCode != 0 {
+		rc, err := cli.ContainerLogs(context.Background(), types.ContainerLogsOptions{
+			ContainerID: resp.ID,
+			ShowStdout:  true,
+			ShowStderr:  true,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
+		defer rc.Close()
 		b, err := ioutil.ReadAll(rc)
-		rc.Close()
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 		logs = string(b)
 	}
-	return wr, logs
+	return
 }
