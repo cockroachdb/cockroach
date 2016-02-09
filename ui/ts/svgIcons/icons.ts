@@ -213,4 +213,23 @@ module SvgIcons {
     </g>
 </svg>`;
 
+  // TODO: replace with icon from Andrew
+  export var logsIcon: string = `<svg width="23px" height="24px" viewBox="0 0 23 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
+    <!-- Generator: Sketch 3.5.2 (25235) - http://www.bohemiancoding.com/sketch -->
+    <title>Imported Layers</title>
+    <desc>Created with Sketch.</desc>
+    <defs></defs>
+    <g id="Update-8" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd" sketch:type="MSPage">
+        <g id="Cluster-Overview" sketch:type="MSArtboardGroup" transform="translate(-28.000000, -191.000000)" fill="#959797">
+            <g id="Cluster-Column" sketch:type="MSLayerGroup" transform="translate(-1.000000, 93.000000)">
+                <g id="Main-Nav" transform="translate(0.000000, 0.213675)" sketch:type="MSShapeGroup">
+                    <g id="Nodes" transform="translate(0.000000, 0.608974)">
+                        <path d="M29,98 L51.1186667,98 L51.1186667,101.636678 L29,101.636678 L29,98 Z M29,116.804803 L51.1186667,116.804803 L51.1186667,120.441481 L29,120.441481 L29,116.804803 Z M29,107.398871 L51.1186667,107.398871 L51.1186667,111.036431 L29,111.036431 L29,107.398871 Z" id="Imported-Layers"></path>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>`;
+
 }

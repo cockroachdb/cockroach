@@ -102,9 +102,11 @@ module Models {
           available_range_count: 0,
           stats: Proto.NewMVCCStats(),
         };
-        list.forEach((storeStatus: Proto.StoreStatus) => {
-          Proto.AccumulateStatus(status, storeStatus);
-        });
+        if (list) {
+          list.forEach((storeStatus: Proto.StoreStatus) => {
+            Proto.AccumulateStatus(status, storeStatus);
+          });
+        }
         return status;
       });
 
@@ -147,9 +149,11 @@ module Models {
           available_range_count: 0,
           stats: Proto.NewMVCCStats(),
         };
-        list.forEach((nodeStatus: Proto.NodeStatus) => {
-          Proto.AccumulateStatus(status, nodeStatus);
-        });
+        if (list) {
+          list.forEach((nodeStatus: Proto.NodeStatus) => {
+            Proto.AccumulateStatus(status, nodeStatus);
+          });
+        }
         return status;
       });
 

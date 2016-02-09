@@ -50,7 +50,7 @@ module Models {
 
       private _data: Utils.QueryCache<Proto.LogEntry[]> = new Utils.QueryCache(
         (): Promise<Proto.LogEntry[]> => {
-          return m.request({ url: this._url(), method: "GET", extract: nonJsonErrors })
+          return m.request({ url: this._url(), method: "GET", extract: nonJsonErrors, config: function(xhr: XMLHttpRequest): void { xhr.timeout = 2000; } })
             .then((results: LogResponseSet) => {
               return results.d;
             });

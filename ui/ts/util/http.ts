@@ -15,7 +15,7 @@ module Utils {
      * a mithril promise for the results of the request.
      */
     export function Get(url: string): _mithril.MithrilPromise<{}> {
-      return m.request({ url: url, method: "GET", extract: nonJsonErrors });
+      return m.request({ url: url, method: "GET", extract: nonJsonErrors, config: function(xhr: XMLHttpRequest): void { xhr.timeout = 2000; } });
     }
 
     /**
@@ -24,7 +24,7 @@ module Utils {
      * encoded as JSON before being sent as the body of the request.
      */
     export function Post(url: string, data: any): _mithril.MithrilPromise<{}> {
-      return m.request({ url: url, method: "POST", extract: nonJsonErrors, data: data });
+      return m.request({ url: url, method: "POST", extract: nonJsonErrors, data: data, config: function(xhr: XMLHttpRequest): void { xhr.timeout = 2000; }});
     }
 
     /**

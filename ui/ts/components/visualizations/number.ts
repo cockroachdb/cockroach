@@ -12,7 +12,7 @@ module Visualizations {
     value: number;
   }
 
-  interface NumberVisualizationConfig {
+  export interface NumberVisualizationConfig {
     format?: string; // TODO: better automatic formatting
     formatFn?: (n: number) => string;
     zoom?: string; // TODO: compute fontsize/zoom automatically

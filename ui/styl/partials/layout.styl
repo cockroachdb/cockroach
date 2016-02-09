@@ -37,8 +37,8 @@ body
 #root
   position relative
   padding-left $nav-width
-  min-height 100%
-  min-width 1420px
+  min-height 100% // TODO or calc(100% - 4rem)
+  min-width 1500px
 
   &:after
     content ""
@@ -62,6 +62,7 @@ body
 
   .topbar + &
     padding-top $top-bar-height + 10px
+    width 1500px
 
   .nav + &
     padding-top $top-bar-height + $subnav-height + 10px
@@ -151,6 +152,9 @@ button
   font-size 16px
   margin-right 20px
 
+  &.right
+    float right
+
 .topbar
   padding 0 3rem 1rem
   background-color white
@@ -171,14 +175,27 @@ button
     margin-top 0
     display inline-block
 
-  .last-updated
+  img
+    position relative
+    top 8px
+
+  .info-container
     display inline-block
     margin-left 25px
-    line-height $top-bar-height
-    vertical-align bottom
-    font-size 1.1rem
-    font-family Lato-Medium
-    color $last-updated-color
+
+    .last-updated
+      font-size 1.1rem
+      font-family Lato-Medium
+      color $last-updated-color
+    .health
+      font-family Lato-Bold
+      div
+        margin-left 10px
+        position relative
+        top 3px
+        span.refreshing-text
+          color $secondary-gray-2
+          font-variant none
 
     strong
       font-family Lato-Bold
@@ -362,3 +379,45 @@ a.toggle
 .optin-text
   font-size 10px
   margin -17px 35px 20px
+
+.event-table-container
+    background-color white
+  .table-header
+    padding 15px
+    border-top 1px solid $secondary-gray-1
+    button, h1
+      margin 0
+      padding 0
+      display inline
+      margin-right 20px
+    button.toggled, button.untoggled
+      border 2px solid $secondary-blue
+      height auto
+      width auto
+      padding 5px
+      font-size 12px
+    button.untoggled
+      background-color white
+      color $secondary-blue
+
+  .icon-info-filled
+    color $main-green
+    border-radius 100%
+    border 1px solid $secondary-green-1
+    width 18px
+    height 18px
+    padding 0
+    margin 0
+    line-height 0
+
+  .timestamp
+    font-family Lato-Bold
+    font-size 11px
+    color $secondary-gray-10
+
+.page.events
+  .section
+    padding 154px 0 0
+  .event-table-container
+    .table-header
+      display none
