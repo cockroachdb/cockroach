@@ -60,6 +60,9 @@ func (s *databaseCache) getID(name string) ID {
 }
 
 func (s *databaseCache) setID(name string, id ID) {
+	if s == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.databases[name] = id
