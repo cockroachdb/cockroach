@@ -64,7 +64,7 @@ type server struct {
 func newServer(stopper *stop.Stopper) *server {
 	s := &server{
 		stopper:  stopper,
-		is:       newInfoStore(0, util.UnresolvedAddr{}),
+		is:       newInfoStore(0, util.UnresolvedAddr{}, stopper),
 		incoming: makeNodeSet(minPeers),
 		lAddrMap: map[string]clientInfo{},
 		nodeMap:  map[roachpb.NodeID]string{},

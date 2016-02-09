@@ -39,7 +39,9 @@ import (
 func TestGossipInfoStore(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), nil)
-	g := New(rpcContext, TestBootstrap, nil)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	g := New(rpcContext, TestBootstrap, stopper)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	slice := []byte("b")
