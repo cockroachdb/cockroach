@@ -107,9 +107,7 @@ func (c *Container) Remove() error {
 func (c *Container) Kill() error {
 	// Paused containers cannot be killed. Attempt to unpause it first
 	// (which might fail) before killing.
-	if err := c.Unpause(); err != nil {
-		log.Warning(err)
-	}
+	_ = c.Unpause()
 	if err := c.cluster.client.ContainerKill(c.id, "9"); err != nil && !strings.Contains(err.Error(), "is not running") {
 		return err
 	}
