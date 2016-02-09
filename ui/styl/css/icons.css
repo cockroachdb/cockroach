@@ -34,60 +34,123 @@
     -moz-osx-font-smoothing: grayscale;
 }
 
-.icon-cockroach-01:before {
-    content: "a";
+.icon-cockroach-icons-20150827-10:before,
+.icon-settings:before {
+    content: "\61";
 }
-.icon-cockroach-02:before {
-    content: "b";
+.icon-cockroach-icons-20150827-09:before,
+.icon-user:before {
+    content: "\62";
 }
-.icon-cockroach-03:before {
-    content: "c";
+.icon-cockroach-icons-20150827-08:before,
+.icon-database:before {
+    content: "\63";
 }
-.icon-cockroach-04:before {
-    content: "d";
+.icon-cockroach-icons-20150827-07:before,
+.icon-store:before {
+    content: "\64";
 }
-.icon-cockroach-06:before {
-    content: "f";
+.icon-cockroach-icons-20150827-12:before,
+.icon-double-arrow:before {
+    content: "\67";
 }
-.icon-cockroach-05:before {
-    content: "e";
+.icon-cockroach-icons-20150827-13:before,
+.icon-circle:before {
+    content: "\68";
 }
-.icon-cockroach-09:before {
-    content: "i";
+.icon-cockroach-icons-20150827-14:before,
+.icon-gear:before {
+    content: "\69";
 }
-.icon-cockroach-14:before {
-    content: "n";
+.icon-cockroach-icons-20150827-15:before,
+.icon-magnifying-glass:before {
+    content: "\6a";
 }
-.icon-cockroach-07:before {
-    content: "g";
+.icon-cockroach-icons-20150827-16:before,
+.icon-right-triangle:before {
+    content: "\6b";
 }
-.icon-cockroach-16:before {
-    content: "p";
+.icon-cockroach-icons-20150827-17:before,
+.icon-calendar:before {
+    content: "\6c";
 }
-.icon-cockroach-18:before {
-    content: "r";
+.icon-cockroach-icons-20150827-18:before,
+.icon-circle-filled:before {
+    content: "\6d";
 }
-.icon-cockroach-11:before {
-    content: "k";
+.icon-cockroach-icons-20150827-19:before,
+.icon-down-triangle:before {
+    content: "\6e";
 }
-.icon-cockroach-15:before {
-    content: "o";
+.icon-cockroach-icons-20150827-20:before,
+.icon-pushpin:before {
+    content: "\6f";
 }
-.icon-cockroach-19:before {
-    content: "s";
+.icon-cockroach-icons-20150827-21:before,
+.icon-trashcan:before {
+    content: "\70";
 }
-.icon-cockroach-08:before {
-    content: "h";
+.icon-cockroach-icons-20150827-22:before,
+.icon-social:before {
+    content: "\71";
 }
-.icon-cockroach-13:before {
-    content: "m";
+.icon-cockroach-icons-20150827-23:before,
+.icon-info:before {
+    content: "\72";
 }
-.icon-cockroach-12:before {
-    content: "l";
+.icon-cockroach-icons-20150827-24:before,
+.icon-eye:before {
+    content: "\73";
 }
-.icon-cockroach-17:before {
-    content: "q";
+.icon-cockroach-icons-20150827-05:before,
+.icon-globe:before {
+    content: "\65";
 }
-.icon-cockroach-10:before {
-    content: "j";
+.icon-cockroach-icons-20150827-06:before,
+.icon-nodes:before {
+    content: "\66";
+}
+.icon-cl-admin-icons-20:before,
+.icon-check-circle:before {
+    content: "\74";
+}
+.icon-cl-admin-icons-21:before,
+.icon-check:before {
+    content: "\75";
+}
+.icon-cl-admin-icons-25:before,
+.icon-x:before {
+    content: "\76";
+}
+.icon-cl-admin-icons-29:before,
+.icon-error:before {
+    content: "\77";
+}
+.icon-cl-admin-icons-30:before,
+.icon-skull:before {
+    content: "\78";
+}
+.icon-cl-admin-icons-26:before,
+.icon-warning:before {
+    content: "\79";
+}
+.icon-cl-admin-icons-27-1:before,
+.icon-warning-filled:before {
+    content: "\41";
+}
+.icon-cl-admin-icons-28:before,
+.icon-info-filled:before {
+    content: "\7a";
+}
+.icon-cl-admin-icons-28-24:before,
+.icon-up-arrow:before {
+    content: "\42";
+}
+.icon-cl-admin-icons-28-23:before,
+.icon-bell:before {
+    content: "\43";
+}
+.icon-cl-admin-icons-28-22:before,
+.icon-config:before {
+    content: "\44";
 }

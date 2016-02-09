@@ -79,7 +79,7 @@ module AdminViews {
             view: (status: NodeStatus): MithrilVirtualElement => {
               let lastUpdate: Moment = moment(Utils.Convert.NanoToMilli(status.stats.last_update_nanos));
               let s: string = Models.Status.staleStatus(lastUpdate);
-              return m("div.status.icon-cockroach-15." + s); // icon 15 is a circle
+              return m("div.status.icon-circle-filled." + s);
             },
             sortable: true,
           },
