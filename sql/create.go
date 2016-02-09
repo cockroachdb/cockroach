@@ -71,7 +71,7 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, *roachpb.Error) 
 		}
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+	if err := p.checkPrivilege(&tableDesc, privilege.CREATE); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -92,7 +92,7 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, *roachpb.Error) 
 		return nil, pErr
 	}
 
-	if pErr := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); pErr != nil {
+	if pErr := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(&tableDesc)); pErr != nil {
 		return nil, pErr
 	}
 	p.notifySchemaChange(tableDesc.ID, mutationID)

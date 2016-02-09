@@ -197,20 +197,20 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 	return col, idx, nil
 }
 
-func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, *roachpb.Error) {
+func (p *planner) getTableDesc(qname *parser.QualifiedName) (TableDescriptor, *roachpb.Error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
-		return nil, roachpb.NewError(err)
+		return TableDescriptor{}, roachpb.NewError(err)
 	}
 	dbDesc, pErr := p.getDatabaseDesc(qname.Database())
 	if pErr != nil {
-		return nil, pErr
+		return TableDescriptor{}, pErr
 	}
 
 	desc := TableDescriptor{}
 	if pErr := p.getDescriptor(tableKey{dbDesc.ID, qname.Table()}, &desc); pErr != nil {
-		return nil, pErr
+		return TableDescriptor{}, pErr
 	}
-	return &desc, nil
+	return desc, nil
 }
 
 // get the table descriptor for the ID passed in using the planner's txn.
@@ -232,11 +232,9 @@ func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, *roachpb.Erro
 // released when the planner closes. Note that a shallow copy of the table
 // descriptor is returned. It is safe to mutate fields of the returned
 // descriptor, but the values those fields point to should not be modified.
-//
-// TODO(pmattis): Return a TableDesriptor value instead of a pointer.
-func (p *planner) getTableLease(qname *parser.QualifiedName) (*TableDescriptor, *roachpb.Error) {
+func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, *roachpb.Error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
-		return nil, roachpb.NewError(err)
+		return TableDescriptor{}, roachpb.NewError(err)
 	}
 
 	if qname.Database() == systemDB.Name || testDisableTableLeases {
@@ -249,7 +247,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*TableDescriptor, 
 
 	tableID, pErr := p.getTableID(qname)
 	if pErr != nil {
-		return nil, pErr
+		return TableDescriptor{}, pErr
 	}
 
 	if p.leases == nil {
@@ -261,14 +259,12 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*TableDescriptor, 
 		var pErr *roachpb.Error
 		lease, pErr = p.leaseMgr.Acquire(p.txn, tableID, 0)
 		if pErr != nil {
-			return nil, pErr
+			return TableDescriptor{}, pErr
 		}
 		p.leases[tableID] = lease
 	}
 
-	desc := &TableDescriptor{}
-	*desc = lease.TableDescriptor
-	return desc, nil
+	return lease.TableDescriptor, nil
 }
 
 // getTableID retrieves the table ID for the specified table. It uses the

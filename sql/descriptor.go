@@ -193,7 +193,7 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 			if err != nil {
 				return nil, err
 			}
-			descs = append(descs, descriptor)
+			descs = append(descs, &descriptor)
 		}
 	}
 	return descs, nil
