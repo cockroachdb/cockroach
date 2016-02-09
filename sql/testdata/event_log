@@ -32,3 +32,31 @@ query I
 SELECT COUNT(*) FROM system.eventlog WHERE info LIKE '%CREATE TABLE badtable%'
 ----
 0
+
+# DATABASE DDL
+
+statement ok
+CREATE DATABASE eventLogTest
+
+query II
+SELECT targetID, reportingID FROM system.eventlog WHERE
+  eventType = 'create_database' AND
+  info LIKE '%CREATE DATABASE eventLogTest%'
+----
+53 1
+
+statement ok
+CREATE DATABASE IF NOT EXISTS eventLogTest
+
+statement ok
+CREATE DATABASE IF NOT EXISTS eventLogTest2
+
+statement ok
+CREATE DATABASE IF NOT EXISTS eventLogTest2
+
+query II
+SELECT targetID, reportingID FROM system.eventlog WHERE
+  eventType = 'create_database' AND
+  info LIKE '%CREATE DATABASE IF NOT EXISTS eventLogTest%'
+----
+54 1
