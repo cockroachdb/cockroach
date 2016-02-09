@@ -1,8 +1,8 @@
-- Supersede the SQL command-line client with psql
-- Status draft
-- Start Date 2016-02-01
-- Authors knz
-- RFC PR (PR # after acceptance of initial draft)
+- Title: Supersede the SQL command-line client with psql
+- Status: rejected
+- Start Date: 2016-02-01
+- Authors: knz
+- RFC PR: #4059
 - Cockroach Issue #4052, #4016, #4018, #4017, #3985, perhaps #3529
 
 Summary
@@ -86,7 +86,28 @@ Detailed design
 Drawbacks
 =========
 
-Under discussion.
+Peter: We're implementing a SQL database, we should provide a SQL
+shell with our product. It is pretty awesome that we're compatible
+with psql and any other SQL shell that can utilize the pgwire
+protocol, but that doesn't mean we shouldn't provide our own. Yes, our
+SQL shell has bugs and limitations right now, but those can be fixed.
+
+Ben: we should ship our own client (for branding purposes and
+minimizing user confusion if nothing else). I think the main issues
+with our current client should be easy and worthwhile to fix. We may
+not have as many features as other clients at first but that's OK. A
+custom client also gives us a place to put commands that are not
+(currently) exposed via SQL, like splits, and gives us the opportunity
+to switch from pgwire to another protocol when/if that becomes
+desirable.
+
+I'd be OK with forking and extending some existing client if there is
+a suitable one. We don't have to build everything from scratch as long
+as the finished product is under our control (I wouldn't want to count
+on the PostgreSQL team making the behavior of \d configurable in psql,
+for example). I was hoping pgcli would be a good basis since they have
+both mysql and postgres clients, but it doesn't look like there's
+actually much shared code between the two.
 
 Alternatives
 ============
@@ -96,4 +117,4 @@ Keep and advertise only the current custom client and deal with its limitations 
 Unresolved questions
 ====================
 
-None?
+None
