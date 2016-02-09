@@ -63,6 +63,7 @@ type Container struct {
 	cluster *LocalCluster
 }
 
+// Name returns the container's name.
 func (c Container) Name() string {
 	return c.name
 }
