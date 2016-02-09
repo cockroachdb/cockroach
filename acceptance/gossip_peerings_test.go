@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/acceptance/testconfig"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -103,7 +104,14 @@ func hasClusterID(infos map[string]interface{}) error {
 }
 
 func TestGossipPeerings(t *testing.T) {
-	c := StartCluster(t)
+	clusterConfigs := getConfigs()
+	for _, clusterConfig := range clusterConfigs {
+		testGossipPeeringsInner(t, clusterConfig)
+	}
+}
+
+func testGossipPeeringsInner(t *testing.T, clusterConfig testconfig.TestConfig) {
+	c := StartCluster(t, clusterConfig)
 	defer c.AssertAndStop(t)
 	num := c.NumNodes()
 
@@ -141,20 +149,27 @@ func TestGossipPeerings(t *testing.T) {
 // re-bootstrapped after a time when all nodes were down
 // simultaneously.
 func TestGossipRestart(t *testing.T) {
+	clusterConfigs := getConfigs()
+	for _, clusterConfig := range clusterConfigs {
+		testGossipRestartInner(t, clusterConfig)
+	}
+}
+
+func testGossipRestartInner(t *testing.T, clusterConfig testconfig.TestConfig) {
 	// This already replicates the first range (in the local setup).
 	// The replication of the first range is important: as long as the
 	// first range only exists on one node, that node can trivially
 	// acquire the leader lease. Once the range is replicated, however,
 	// nodes must be able to discover each other over gossip before the
 	// lease can be acquired.
-	c := StartCluster(t)
+	c := StartCluster(t, readConfigFromFlags())
 	defer c.AssertAndStop(t)
 	num := c.NumNodes()
 
 	deadline := time.Now().Add(*flagDuration)
 
 	waitTime := longWaitTime
-	if *flagDuration < waitTime {
+	if clusterConfig.Duration < waitTime {
 		waitTime = shortWaitTime
 	}
 

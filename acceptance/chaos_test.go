@@ -31,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/acceptance/testconfig"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -47,7 +48,14 @@ var numAccounts = flag.Int("num-accounts", 999, "Number of accounts.")
 // TODO(vivek): Expand this test to check that write performance
 // is unaffected by chaos.
 func TestChaos(t *testing.T) {
-	c := StartCluster(t)
+	clusterConfigs := getConfigs()
+	for _, clusterConfig := range clusterConfigs {
+		testChaosInner(t, clusterConfig)
+	}
+}
+
+func testChaosInner(t *testing.T, clusterConfig testconfig.TestConfig) {
+	c := StartCluster(t, clusterConfig)
 	defer c.AssertAndStop(t)
 
 	num := c.NumNodes()

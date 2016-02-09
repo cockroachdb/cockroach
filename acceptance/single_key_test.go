@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/acceptance/testconfig"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -32,7 +33,14 @@ import (
 // up an N node cluster and running N workers that are all
 // incrementing the value associated with a single key.
 func TestSingleKey(t *testing.T) {
-	c := StartCluster(t)
+	clusterConfigs := getConfigs()
+	for _, clusterConfig := range clusterConfigs {
+		testSingleKeyInner(t, clusterConfig)
+	}
+}
+
+func testSingleKeyInner(t *testing.T, clusterConfig testconfig.TestConfig) {
+	c := StartCluster(t, clusterConfig)
 	defer c.AssertAndStop(t)
 	num := c.NumNodes()
 
