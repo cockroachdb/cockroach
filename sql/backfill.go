@@ -160,7 +160,7 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc *TableDescriptor, 
 		scan := &scanNode{
 			planner: p,
 			txn:     p.txn,
-			desc:    oldTableDesc,
+			desc:    *oldTableDesc,
 		}
 		scan.initDescDefaults()
 		rows := p.selectIndex(&selectNode{}, scan, nil, false)

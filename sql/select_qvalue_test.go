@@ -25,7 +25,7 @@ import (
 
 func testInitDummySelectNode(desc *TableDescriptor) *selectNode {
 	scan := &scanNode{}
-	scan.desc = desc
+	scan.desc = *desc
 	scan.initDescDefaults()
 
 	sel := &selectNode{}
