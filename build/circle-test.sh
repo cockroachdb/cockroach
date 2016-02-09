@@ -27,12 +27,12 @@ prepare_artifacts() {
   if [ -n "${CIRCLE_TEST_REPORTS-}" ]; then
     if [ -f "${outdir}/test.log" ]; then
       mkdir -p "${CIRCLE_TEST_REPORTS}/test"
-      ${builder} go2xunit < "${outdir}/test.log" \
+      ${builder} go2xunit --fail-on-race < "${outdir}/test.log" \
         > "${CIRCLE_TEST_REPORTS}/test/test.xml"
     fi
     if [ -f "${outdir}/testrace.log" ]; then
       mkdir -p "${CIRCLE_TEST_REPORTS}/race"
-      ${builder} go2xunit < "${outdir}/testrace.log" \
+      ${builder} go2xunit --fail-on-race < "${outdir}/testrace.log" \
         > "${CIRCLE_TEST_REPORTS}/race/testrace.xml"
     fi
     if [ -f "${outdir}/acceptance.log" ]; then
@@ -48,7 +48,7 @@ prepare_artifacts() {
       echo 'ok github.com/cockroachdb/cockroach/acceptance 1337s' \
         >> "${outdir}/acceptance.log"
 
-      ${builder} go2xunit < "${outdir}/acceptance.log" \
+      ${builder} go2xunit --fail-on-race < "${outdir}/acceptance.log" \
         > "${CIRCLE_TEST_REPORTS}/acceptance/acceptance.xml"
     fi
   fi
