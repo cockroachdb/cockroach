@@ -30,9 +30,19 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+type stringMatcher interface {
+	MatchString(string) bool
+}
+
+type allMatcher struct{}
+
+func (allMatcher) MatchString(string) bool {
+	return true
+}
+
 // callback holds regexp pattern match and GossipCallback method.
 type callback struct {
-	pattern *regexp.Regexp
+	matcher stringMatcher
 	method  Callback
 }
 
@@ -207,11 +217,16 @@ func (is *infoStore) getNodes() map[int32]*Node {
 // matched pattern. Returns a function to unregister the callback.
 // Note: the callback may fire after being unregistered.
 func (is *infoStore) registerCallback(pattern string, method Callback) func() {
-	re := regexp.MustCompile(pattern)
-	cb := &callback{pattern: re, method: method}
+	var matcher stringMatcher
+	if pattern == ".*" {
+		matcher = allMatcher{}
+	} else {
+		matcher = regexp.MustCompile(pattern)
+	}
+	cb := &callback{matcher: matcher, method: method}
 	is.callbacks = append(is.callbacks, cb)
 	if err := is.visitInfos(func(key string, i *Info) error {
-		if re.MatchString(key) {
+		if matcher.MatchString(key) {
 			is.runCallbacks(key, i.Value, method)
 		}
 		return nil
@@ -237,7 +252,7 @@ func (is *infoStore) registerCallback(pattern string, method Callback) func() {
 func (is *infoStore) processCallbacks(key string, content roachpb.Value) {
 	var matches []Callback
 	for _, cb := range is.callbacks {
-		if cb.pattern.MatchString(key) {
+		if cb.matcher.MatchString(key) {
 			matches = append(matches, cb.method)
 		}
 	}
