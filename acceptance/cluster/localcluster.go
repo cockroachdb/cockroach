@@ -492,8 +492,6 @@ func (l *LocalCluster) monitor() {
 	for {
 		var message events.Message
 		if err := dec.Decode(&message); err != nil {
-			log.Errorf("monitoring error: %s", err)
-			l.events <- Event{NodeIndex: -1, Status: eventDie}
 			break
 		}
 
