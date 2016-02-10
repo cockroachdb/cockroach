@@ -24,6 +24,7 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -56,10 +57,8 @@ func TestChaos(t *testing.T) {
 
 	// One error sent by each client. A successful client sends a nil error.
 	errs := make(chan error, num)
-	// The number of successful writes (puts) to the database.
-	var count int64
 	// The number of times chaos monkey has run.
-	var round int64
+	var round uint64
 	// Set to 1 if chaos monkey has stalled the writes.
 	var stalled int32
 	// One client for each node.
@@ -67,7 +66,7 @@ func TestChaos(t *testing.T) {
 		sync.RWMutex
 		db      *sql.DB
 		stopper *stop.Stopper
-		count   int64
+		count   uint64
 	}, num)
 
 	// initClient initializes the client talking to node "i".
@@ -150,8 +149,7 @@ CREATE TABLE bank.accounts (
 					}
 
 					// Only advance the counts on a successful update.
-					_ = atomic.AddInt64(&count, 1)
-					atomic.AddInt64(&clients[i].count, 1)
+					atomic.AddUint64(&clients[i].count, 1)
 					return nil
 				}(); err != nil {
 					// Report the err and terminate.
@@ -168,10 +166,10 @@ CREATE TABLE bank.accounts (
 	defer func() {
 		<-teardown
 		for i := range clients {
-			clients[i].RLock()
+			clients[i].Lock()
 			clients[i].stopper.Stop()
 			clients[i].stopper = nil
-			clients[i].RUnlock()
+			clients[i].Unlock()
 		}
 	}()
 
@@ -180,8 +178,8 @@ CREATE TABLE bank.accounts (
 		defer close(teardown)
 		rnd, seed := randutil.NewPseudoRand()
 		log.Warningf("monkey starts (seed %d)", seed)
-		for atomic.StoreInt64(&round, 1); !done(); atomic.AddInt64(&round, 1) {
-			curRound := atomic.LoadInt64(&round)
+		for atomic.StoreUint64(&round, 1); !done(); atomic.AddUint64(&round, 1) {
+			curRound := atomic.LoadUint64(&round)
 			select {
 			case <-stopper:
 				return
@@ -211,19 +209,32 @@ CREATE TABLE bank.accounts (
 			for i := 0; i < num; i++ {
 				clients[i].Unlock()
 			}
-			// Sleep until at least one client is writing successfully.
-			first := true
-			for cur := atomic.LoadInt64(&count); !done() && atomic.LoadInt64(&count) == cur; time.Sleep(time.Second) {
-				c.Assert(t)
-				if first {
-					first = false
-					log.Warningf("round %d: monkey sleeping while cluster recovers...", curRound)
-				}
+
+			preCount := make([]uint64, len(clients))
+			for i, client := range clients {
+				preCount[i] = atomic.LoadUint64(&client.count)
 			}
+
+			madeProgress := func() bool {
+				c.Assert(t)
+				for i, client := range clients {
+					if atomic.LoadUint64(&client.count) > preCount[i] {
+						return true
+					}
+				}
+				return false
+			}
+
+			// Sleep until at least one client is writing successfully.
+			log.Warningf("round %d: monkey sleeping while cluster recovers...", curRound)
+			for !madeProgress() {
+				time.Sleep(time.Second)
+			}
+			log.Warningf("round %d: cluster recovered", curRound)
 		}
 	}()
 
-	prevRound := atomic.LoadInt64(&round)
+	prevRound := atomic.LoadUint64(&round)
 	stallTime := time.Now().Add(*flagStall)
 	var prevOutput string
 	// Spin until all clients are shut.
@@ -242,7 +253,7 @@ CREATE TABLE bank.accounts (
 		case <-time.After(time.Second):
 			var newOutput string
 			if time.Now().Before(deadline) {
-				curRound := atomic.LoadInt64(&round)
+				curRound := atomic.LoadUint64(&round)
 				if curRound == prevRound {
 					if time.Now().After(stallTime) {
 						atomic.StoreInt32(&stalled, 1)
@@ -254,11 +265,11 @@ CREATE TABLE bank.accounts (
 				}
 				// Periodically print out progress so that we know the test is
 				// still running and making progress.
-				cur := make([]string, num)
-				for j := range cur {
-					cur[j] = fmt.Sprintf("%d", atomic.LoadInt64(&clients[j].count))
+				preCount := make([]string, len(clients))
+				for i, client := range clients {
+					preCount[i] = strconv.FormatUint(atomic.LoadUint64(&client.count), 10)
 				}
-				newOutput = fmt.Sprintf("round %d: %d (%s)", curRound, atomic.LoadInt64(&count), strings.Join(cur, ", "))
+				newOutput = fmt.Sprintf("round %d: client counts: (%s)", curRound, strings.Join(preCount, ", "))
 			} else {
 				newOutput = fmt.Sprintf("test finished, waiting for shutdown of %d clients", num-numShutClients)
 			}
@@ -285,5 +296,9 @@ CREATE TABLE bank.accounts (
 	}
 
 	elapsed := time.Since(start)
+	var count uint64
+	for _, client := range clients {
+		count += atomic.LoadUint64(&client.count)
+	}
 	log.Infof("%d %.1f/sec", count, float64(count)/elapsed.Seconds())
 }
