@@ -18,6 +18,7 @@ package cluster
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -28,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
 	"github.com/docker/go-connections/nat"
@@ -66,6 +68,30 @@ type Container struct {
 // Name returns the container's name.
 func (c Container) Name() string {
 	return c.name
+}
+
+func pullImage(l *LocalCluster, options types.ImagePullOptions) error {
+	log.Infof("ImagePull %s:%s starting", options.ImageID, options.Tag)
+	defer log.Infof("ImagePull %s:%s complete", options.ImageID, options.Tag)
+
+	rc, err := l.client.ImagePull(context.Background(), options, nil)
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+	dec := json.NewDecoder(rc)
+	for {
+		var message jsonmessage.JSONMessage
+		if err := dec.Decode(&message); err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		if log.V(2) {
+			log.Infof("ImagePull response: %s", message)
+		}
+	}
 }
 
 // createContainer creates a new container using the specified options. Per the

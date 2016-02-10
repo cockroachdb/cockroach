@@ -30,7 +30,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/docker/docker/pkg/jsonmessage"
 	dockerclient "github.com/docker/engine-api/client"
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
@@ -218,24 +217,11 @@ func (l *LocalCluster) runDockerSpy() {
 	}
 	c, err := create()
 	if dockerclient.IsErrImageNotFound(err) {
-		var rc io.ReadCloser
-		rc, err = l.client.ImagePull(context.Background(), types.ImagePullOptions{ImageID: dockerspyImage, Tag: dockerspyTag}, nil)
-		if err == nil {
-			defer rc.Close()
-			dec := json.NewDecoder(rc)
-			for {
-				var message jsonmessage.JSONMessage
-				if err := dec.Decode(&message); err != nil {
-					if err == io.EOF {
-						break
-					}
-					log.Fatal(err)
-				}
-				log.Infof("ImagePull response: %s", message)
-			}
-
-			c, err = create()
+		if err := pullImage(l, types.ImagePullOptions{ImageID: dockerspyImage, Tag: dockerspyTag}); err != nil {
+			log.Fatal(err)
 		}
+
+		c, err = create()
 	}
 	maybePanic(err)
 	maybePanic(c.Start())
@@ -307,23 +293,10 @@ func (l *LocalCluster) initCluster() {
 	}
 	c, err := create()
 	if dockerclient.IsErrImageNotFound(err) && *cockroachImage == builderImage {
-		var rc io.ReadCloser
-		rc, err = l.client.ImagePull(context.Background(), types.ImagePullOptions{ImageID: *cockroachImage}, nil)
-		if err == nil {
-			defer rc.Close()
-			dec := json.NewDecoder(rc)
-			for {
-				var message jsonmessage.JSONMessage
-				if err := dec.Decode(&message); err != nil {
-					if err == io.EOF {
-						break
-					}
-					log.Fatal(err)
-				}
-				log.Infof("ImagePull response: %s", message)
-			}
-			c, err = create()
+		if err := pullImage(l, types.ImagePullOptions{ImageID: *cockroachImage}); err != nil {
+			log.Fatal(err)
 		}
+		c, err = create()
 	}
 	maybePanic(err)
 
