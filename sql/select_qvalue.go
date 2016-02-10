@@ -108,6 +108,10 @@ func (q *qvalue) Eval(ctx parser.EvalContext) (parser.Datum, error) {
 	return q.datum.Eval(ctx)
 }
 
+func (q *qvalue) DeepCopy() parser.Expr {
+	return q
+}
+
 // getQVal creates a qvalue for a column reference. Created qvalues are
 // stored in the qvals map. If a qvalue was previously created for the same
 // reference, the existing qvalue is returned.
@@ -249,4 +253,8 @@ func (*starDatum) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
 
 func (*starDatum) Eval(ctx parser.EvalContext) (parser.Datum, error) {
 	return parser.DummyInt.Eval(ctx)
+}
+
+func (*starDatum) DeepCopy() parser.Expr {
+	return starDatumInstance
 }
