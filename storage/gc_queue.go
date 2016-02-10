@@ -201,7 +201,10 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 					// expiration threshold.
 					if meta.Timestamp.Less(intentExp) {
 						id := string(meta.Txn.ID)
-						txnMap[id] = meta.Txn
+						txn := &roachpb.Transaction{
+							TxnMeta: *meta.Txn,
+						}
+						txnMap[id] = txn
 						intentSpanMap[id] = append(intentSpanMap[id], roachpb.Span{Key: expBaseKey})
 					}
 					// With an active intent, GC ignores MVCC metadata & intent value.
@@ -274,7 +277,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	for id, txn := range txnMap {
 		if txn.Status != roachpb.PENDING {
 			for _, intent := range intentSpanMap[id] {
-				intents = append(intents, roachpb.Intent{Span: intent, Txn: *txn})
+				intents = append(intents, roachpb.Intent{Span: intent, Status: txn.Status, Txn: txn.TxnMeta})
 			}
 		}
 	}
@@ -397,7 +400,10 @@ func processSequenceCache(r *Replica, now, cutoff roachpb.Timestamp, prevTxns ma
 			txns[idStr] = prevTxn
 			idToKeys[idStr] = append(idToKeys[idStr], roachpb.GCRequest_GCKey{Key: key})
 		} else if !cutoff.Less(v.Timestamp) {
-			txns[idStr] = &roachpb.Transaction{ID: id, Key: v.Key, Status: roachpb.PENDING}
+			txns[idStr] = &roachpb.Transaction{
+				TxnMeta: roachpb.TxnMeta{ID: id, Key: v.Key},
+				Status:  roachpb.PENDING,
+			}
 			idToKeys[idStr] = append(idToKeys[idStr], roachpb.GCRequest_GCKey{Key: key})
 		}
 	})
@@ -459,7 +465,7 @@ func pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Transaction,
 		},
 		Now:       now,
 		PusherTxn: roachpb.Transaction{Priority: roachpb.MaxUserPriority},
-		PusheeTxn: *txn,
+		PusheeTxn: txn.TxnMeta,
 		PushType:  typ,
 	}
 	b := &client.Batch{}

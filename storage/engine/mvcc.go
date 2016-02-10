@@ -560,6 +560,23 @@ func MVCCGet(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consis
 	return value, intents, err
 }
 
+// MVCCGetAsTxn constructs a temporary Transaction from the given txn
+// metadata and calls MVCCGet as that transaction. This method is required
+// only for reading intents of a transaction when only its metadata is known
+// and should rarely be used.
+// The read is carried out without the chance of uncertainty restarts.
+func MVCCGetAsTxn(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txnMeta roachpb.TxnMeta) (*roachpb.Value, []roachpb.Intent, error) {
+	txn := &roachpb.Transaction{
+		TxnMeta:       txnMeta,
+		Priority:      roachpb.MakePriority(roachpb.MinUserPriority),
+		Status:        roachpb.PENDING,
+		Writing:       true,
+		OrigTimestamp: txnMeta.Timestamp,
+		MaxTimestamp:  txnMeta.Timestamp,
+	}
+	return MVCCGet(engine, key, timestamp, consistent, txn)
+}
+
 // mvccGetMetadata returns or reconstructs the meta key for the given key.
 // A prefix scan using the iterator is performed, resulting in one of the
 // following successful outcomes:
@@ -636,7 +653,7 @@ func mvccGetInternal(iter Iterator, metaKey MVCCKey,
 		// at is a historical timestamp < the intent timestamp. However, we
 		// return the intent separately; the caller may want to resolve it.
 		ignoredIntents = append(ignoredIntents,
-			roachpb.Intent{Span: roachpb.Span{Key: metaKey.Key}, Txn: *meta.Txn})
+			roachpb.Intent{Span: roachpb.Span{Key: metaKey.Key}, Status: roachpb.PENDING, Txn: *meta.Txn})
 		timestamp = meta.Timestamp.Prev()
 	}
 
@@ -645,7 +662,7 @@ func mvccGetInternal(iter Iterator, metaKey MVCCKey,
 		// Trying to read the last value, but it's another transaction's intent;
 		// the reader will have to act on this.
 		return nil, nil, &roachpb.WriteIntentError{
-			Intents: []roachpb.Intent{{Span: roachpb.Span{Key: metaKey.Key}, Txn: *meta.Txn}},
+			Intents: []roachpb.Intent{{Span: roachpb.Span{Key: metaKey.Key}, Status: roachpb.PENDING, Txn: *meta.Txn}},
 		}
 	}
 
@@ -856,7 +873,7 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp ro
 			if txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID) {
 				// The current Put operation does not come from the same
 				// transaction.
-				return &roachpb.WriteIntentError{Intents: []roachpb.Intent{{Span: roachpb.Span{Key: key}, Txn: *meta.Txn}}}
+				return &roachpb.WriteIntentError{Intents: []roachpb.Intent{{Span: roachpb.Span{Key: key}, Status: roachpb.PENDING, Txn: *meta.Txn}}}
 			} else if txn.Epoch < meta.Txn.Epoch {
 				return util.Errorf("put with epoch %d came after put with epoch %d in txn %s",
 					txn.Epoch, meta.Txn.Epoch, txn.ID)
@@ -886,7 +903,7 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp ro
 			return nil
 		}
 	}
-	buf.newMeta = MVCCMetadata{Txn: txn, Timestamp: timestamp}
+	buf.newMeta = MVCCMetadata{Txn: txn.GetMeta(), Timestamp: timestamp}
 	newMeta := &buf.newMeta
 
 	versionKey := metaKey
@@ -1311,18 +1328,18 @@ func MVCCIterate(engine Engine, startKey, endKey roachpb.Key, timestamp roachpb.
 // its original timestamp after laying down intents at higher timestamps.
 // Doesn't look like this code here caught that. Shouldn't resolve intents
 // when they're not at the timestamp the Txn mandates them to be.
-func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, txn *roachpb.Transaction) error {
-	if len(key) == 0 {
+func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, intent roachpb.Intent) error {
+	if len(intent.Key) == 0 {
 		return emptyKeyError()
 	}
-	if txn == nil {
-		return util.Errorf("no txn specified")
+	if len(intent.EndKey) > 0 {
+		return util.Errorf("can't resolve range intent as point intent")
 	}
 
 	iter := engine.NewIterator(true /* prefix iteration */)
 	defer iter.Close()
 
-	metaKey := MakeMVCCMetadataKey(key)
+	metaKey := MakeMVCCMetadataKey(intent.Key)
 	meta := &MVCCMetadata{}
 	ok, origMetaKeySize, origMetaValSize, err := mvccGetMetadata(iter, metaKey, meta)
 	if err != nil {
@@ -1330,9 +1347,40 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, txn *
 	}
 	// For cases where there's no write intent to resolve, or one exists
 	// which we can't resolve, this is a noop.
-	if !ok || !txn.Equal(meta.Txn) {
+	if !ok || meta.Txn == nil || !roachpb.TxnIDEqual(intent.Txn.ID, meta.Txn.ID) {
 		return nil
 	}
+
+	// A commit in an old epoch is prevented by the sequence cache (assuming
+	// the client doesn't maliciously send one). A commit with a newer epoch
+	// effectively means that we wrote this intent before an earlier retry, but
+	// didn't write it again after. We assert on the former.
+	commit := intent.Status == roachpb.COMMITTED && meta.Txn.Epoch == intent.Txn.Epoch
+	if intent.Status == roachpb.COMMITTED && meta.Txn.Epoch > intent.Txn.Epoch {
+		panic(fmt.Sprintf("attempt to commit in old epoch %+v, but have newer intent: %+v", intent, meta.Txn))
+	}
+	// Note the small difference to commit epoch handling here: We allow
+	// a push from a previous epoch to move a newer intent. That's necessary,
+	// consider:
+	//
+	// | client A@epo | B (pusher) |
+	// =============================
+	// | write@1      |            |
+	// |              | read       |
+	// |              | push       |
+	// | restart      |            |
+	// | write@2      |            |
+	// |              | resolve@1  |
+	// ============================
+	// In this case, if we required the epochs to match, we would not push the
+	// intent forward, and client B would upon retrying after its successful
+	// push and apparent resolution run into the same intent again, ad
+	// infinitum.
+	// TODO(tschottdorf): various epoch-related scenarios here deserve more
+	// testing.
+	pushed := intent.Status == roachpb.PENDING &&
+		meta.Txn.Timestamp.Less(intent.Txn.Timestamp) &&
+		meta.Txn.Epoch >= intent.Txn.Epoch
 
 	// If we're committing, or if the commit timestamp of the intent has
 	// been moved forward, and if the proposed epoch matches the existing
@@ -1340,18 +1388,16 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, txn *
 	// otherwise, we update its value. We may have to update the actual
 	// version value (remove old and create new with proper
 	// timestamp-encoded key) if timestamp changed.
-	commit := txn.Status == roachpb.COMMITTED
-	pushed := txn.Status == roachpb.PENDING && meta.Txn.Timestamp.Less(txn.Timestamp)
-	if (commit || pushed) && meta.Txn.Epoch == txn.Epoch {
+	if commit || pushed {
 		newMeta := *meta
 		// Set the timestamp for upcoming write (or at least the stats update).
-		newMeta.Timestamp = txn.Timestamp
+		newMeta.Timestamp = intent.Txn.Timestamp
 
 		var metaKeySize, metaValSize int64
 		var err error
 		if pushed {
 			// Keep intent if we're pushing timestamp.
-			newMeta.Txn = txn
+			newMeta.Txn = &intent.Txn
 			metaKeySize, metaValSize, err = PutProto(engine, metaKey, &newMeta)
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
@@ -1363,13 +1409,13 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, txn *
 
 		// Update stat counters related to resolving the intent.
 		if ms != nil {
-			ms.Add(updateStatsOnResolve(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, *meta, newMeta, commit))
+			ms.Add(updateStatsOnResolve(intent.Key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, *meta, newMeta, commit))
 		}
 
 		// If timestamp of value changed, need to rewrite versioned value.
-		if !meta.Timestamp.Equal(txn.Timestamp) {
-			origKey := MVCCKey{Key: key, Timestamp: meta.Timestamp}
-			newKey := MVCCKey{Key: key, Timestamp: txn.Timestamp}
+		if !meta.Timestamp.Equal(intent.Txn.Timestamp) {
+			origKey := MVCCKey{Key: intent.Key, Timestamp: meta.Timestamp}
+			newKey := MVCCKey{Key: intent.Key, Timestamp: intent.Txn.Timestamp}
 			valBytes, err := engine.Get(origKey)
 			if err != nil {
 				return err
@@ -1387,7 +1433,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, txn *
 	// This method shouldn't be called in this instance, but there's
 	// nothing to do if meta's epoch is greater than or equal txn's
 	// epoch and the state is still PENDING.
-	if txn.Status == roachpb.PENDING && meta.Txn.Epoch >= txn.Epoch {
+	if intent.Status == roachpb.PENDING && meta.Txn.Epoch >= intent.Txn.Epoch {
 		return nil
 	}
 
@@ -1395,9 +1441,18 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, txn *
 	// versioned value and reset the metadata's latest timestamp. If
 	// there are no other versioned values, we delete the metadata
 	// key.
+	//
+	// Note that the somewhat unintuitive case of an ABORT with
+	// intent.Txn.Epoch < meta.Txn.Epoch is possible:
+	// - writer1 writes key0 at epoch 0
+	// - writer2 with higher priority encounters intent at key0 (epoch 0)
+	// - writer1 restarts, now at epoch one (txn record not updated)
+	// - writer1 writes key0 at epoch 1
+	// - writer2 dispatches ResolveIntent to key0 (with epoch 0)
+	// - ResolveIntent with epoch 0 aborts intent from epoch 1.
 
 	// First clear the intent value.
-	latestKey := MVCCKey{Key: key, Timestamp: meta.Timestamp}
+	latestKey := MVCCKey{Key: intent.Key, Timestamp: meta.Timestamp}
 	if err := engine.Clear(latestKey); err != nil {
 		return err
 	}
@@ -1407,13 +1462,13 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, txn *
 	iter.Seek(nextKey)
 
 	// If there is no other version, we should just clean up the key entirely.
-	if !iter.Valid() || !iter.unsafeKey().Key.Equal(key) {
+	if !iter.Valid() || !iter.unsafeKey().Key.Equal(intent.Key) {
 		if err = engine.Clear(metaKey); err != nil {
 			return err
 		}
 		// Clear stat counters attributable to the intent we're aborting.
 		if ms != nil {
-			ms.Add(updateStatsOnAbort(key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, 0, txn.Timestamp.WallTime))
+			ms.Add(updateStatsOnAbort(intent.Key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, 0, intent.Txn.Timestamp.WallTime))
 		}
 		return nil
 	}
@@ -1438,7 +1493,9 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, txn *
 
 	// Update stat counters with older version.
 	if ms != nil {
-		ms.Add(updateStatsOnAbort(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta, iterKey.Timestamp.WallTime, txn.Timestamp.WallTime))
+		ms.Add(updateStatsOnAbort(intent.Key, origMetaKeySize, origMetaValSize,
+			metaKeySize, metaValSize, meta, newMeta, iterKey.Timestamp.WallTime,
+			intent.Txn.Timestamp.WallTime))
 	}
 
 	return nil
@@ -1448,16 +1505,13 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key roachpb.Key, txn *
 // range of write intents specified by start and end keys for a given
 // txn. ResolveWriteIntentRange will skip write intents of other
 // txns. Specify max=0 for unbounded resolves.
-func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey roachpb.Key, max int64, txn *roachpb.Transaction) (int64, error) {
-	if txn == nil {
-		return 0, util.Errorf("no txn specified")
-	}
-
-	encKey := MakeMVCCMetadataKey(key)
-	encEndKey := MakeMVCCMetadataKey(endKey)
+func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, intent roachpb.Intent, max int64) (int64, error) {
+	encKey := MakeMVCCMetadataKey(intent.Key)
+	encEndKey := MakeMVCCMetadataKey(intent.EndKey)
 	nextKey := encKey
 
 	num := int64(0)
+	intent.EndKey = nil
 	for {
 		kvs, err := Scan(engine, nextKey, encEndKey, 1)
 		if err != nil {
@@ -1470,7 +1524,8 @@ func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey roach
 
 		key0 := kvs[0].Key
 		if !key0.IsValue() {
-			err = MVCCResolveWriteIntent(engine, ms, key0.Key, txn)
+			intent.Key = key0.Key
+			err = MVCCResolveWriteIntent(engine, ms, intent)
 		}
 		if err != nil {
 			log.Warningf("failed to resolve intent for key %q: %v", key0.Key, err)

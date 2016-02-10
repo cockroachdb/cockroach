@@ -3439,14 +3439,14 @@ class PushTxnRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::Transaction* release_pusher_txn();
   void set_allocated_pusher_txn(::cockroach::roachpb::Transaction* pusher_txn);
 
-  // optional .cockroach.roachpb.Transaction pushee_txn = 3;
+  // optional .cockroach.roachpb.TxnMeta pushee_txn = 3;
   bool has_pushee_txn() const;
   void clear_pushee_txn();
   static const int kPusheeTxnFieldNumber = 3;
-  const ::cockroach::roachpb::Transaction& pushee_txn() const;
-  ::cockroach::roachpb::Transaction* mutable_pushee_txn();
-  ::cockroach::roachpb::Transaction* release_pushee_txn();
-  void set_allocated_pushee_txn(::cockroach::roachpb::Transaction* pushee_txn);
+  const ::cockroach::roachpb::TxnMeta& pushee_txn() const;
+  ::cockroach::roachpb::TxnMeta* mutable_pushee_txn();
+  ::cockroach::roachpb::TxnMeta* release_pushee_txn();
+  void set_allocated_pushee_txn(::cockroach::roachpb::TxnMeta* pushee_txn);
 
   // optional .cockroach.roachpb.Timestamp push_to = 4;
   bool has_push_to() const;
@@ -3493,7 +3493,7 @@ class PushTxnRequest : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::cockroach::roachpb::Span* header_;
   ::cockroach::roachpb::Transaction* pusher_txn_;
-  ::cockroach::roachpb::Transaction* pushee_txn_;
+  ::cockroach::roachpb::TxnMeta* pushee_txn_;
   ::cockroach::roachpb::Timestamp* push_to_;
   ::cockroach::roachpb::Timestamp* now_;
   int push_type_;
@@ -3682,19 +3682,26 @@ class ResolveIntentRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::Span* release_header();
   void set_allocated_header(::cockroach::roachpb::Span* header);
 
-  // optional .cockroach.roachpb.Transaction intent_txn = 2;
+  // optional .cockroach.roachpb.TxnMeta intent_txn = 2;
   bool has_intent_txn() const;
   void clear_intent_txn();
   static const int kIntentTxnFieldNumber = 2;
-  const ::cockroach::roachpb::Transaction& intent_txn() const;
-  ::cockroach::roachpb::Transaction* mutable_intent_txn();
-  ::cockroach::roachpb::Transaction* release_intent_txn();
-  void set_allocated_intent_txn(::cockroach::roachpb::Transaction* intent_txn);
+  const ::cockroach::roachpb::TxnMeta& intent_txn() const;
+  ::cockroach::roachpb::TxnMeta* mutable_intent_txn();
+  ::cockroach::roachpb::TxnMeta* release_intent_txn();
+  void set_allocated_intent_txn(::cockroach::roachpb::TxnMeta* intent_txn);
 
-  // optional bool poison = 3;
+  // optional .cockroach.roachpb.TransactionStatus status = 3;
+  bool has_status() const;
+  void clear_status();
+  static const int kStatusFieldNumber = 3;
+  ::cockroach::roachpb::TransactionStatus status() const;
+  void set_status(::cockroach::roachpb::TransactionStatus value);
+
+  // optional bool poison = 4;
   bool has_poison() const;
   void clear_poison();
-  static const int kPoisonFieldNumber = 3;
+  static const int kPoisonFieldNumber = 4;
   bool poison() const;
   void set_poison(bool value);
 
@@ -3704,6 +3711,8 @@ class ResolveIntentRequest : public ::google::protobuf::Message {
   inline void clear_has_header();
   inline void set_has_intent_txn();
   inline void clear_has_intent_txn();
+  inline void set_has_status();
+  inline void clear_has_status();
   inline void set_has_poison();
   inline void clear_has_poison();
 
@@ -3711,7 +3720,8 @@ class ResolveIntentRequest : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::Span* header_;
-  ::cockroach::roachpb::Transaction* intent_txn_;
+  ::cockroach::roachpb::TxnMeta* intent_txn_;
+  int status_;
   bool poison_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
@@ -3886,19 +3896,26 @@ class ResolveIntentRangeRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::Span* release_header();
   void set_allocated_header(::cockroach::roachpb::Span* header);
 
-  // optional .cockroach.roachpb.Transaction intent_txn = 2;
+  // optional .cockroach.roachpb.TxnMeta intent_txn = 2;
   bool has_intent_txn() const;
   void clear_intent_txn();
   static const int kIntentTxnFieldNumber = 2;
-  const ::cockroach::roachpb::Transaction& intent_txn() const;
-  ::cockroach::roachpb::Transaction* mutable_intent_txn();
-  ::cockroach::roachpb::Transaction* release_intent_txn();
-  void set_allocated_intent_txn(::cockroach::roachpb::Transaction* intent_txn);
+  const ::cockroach::roachpb::TxnMeta& intent_txn() const;
+  ::cockroach::roachpb::TxnMeta* mutable_intent_txn();
+  ::cockroach::roachpb::TxnMeta* release_intent_txn();
+  void set_allocated_intent_txn(::cockroach::roachpb::TxnMeta* intent_txn);
 
-  // optional bool poison = 3;
+  // optional .cockroach.roachpb.TransactionStatus status = 3;
+  bool has_status() const;
+  void clear_status();
+  static const int kStatusFieldNumber = 3;
+  ::cockroach::roachpb::TransactionStatus status() const;
+  void set_status(::cockroach::roachpb::TransactionStatus value);
+
+  // optional bool poison = 4;
   bool has_poison() const;
   void clear_poison();
-  static const int kPoisonFieldNumber = 3;
+  static const int kPoisonFieldNumber = 4;
   bool poison() const;
   void set_poison(bool value);
 
@@ -3908,6 +3925,8 @@ class ResolveIntentRangeRequest : public ::google::protobuf::Message {
   inline void clear_has_header();
   inline void set_has_intent_txn();
   inline void clear_has_intent_txn();
+  inline void set_has_status();
+  inline void clear_has_status();
   inline void set_has_poison();
   inline void clear_has_poison();
 
@@ -3915,7 +3934,8 @@ class ResolveIntentRangeRequest : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::Span* header_;
-  ::cockroach::roachpb::Transaction* intent_txn_;
+  ::cockroach::roachpb::TxnMeta* intent_txn_;
+  int status_;
   bool poison_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
@@ -8416,7 +8436,7 @@ inline void PushTxnRequest::set_allocated_pusher_txn(::cockroach::roachpb::Trans
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.PushTxnRequest.pusher_txn)
 }
 
-// optional .cockroach.roachpb.Transaction pushee_txn = 3;
+// optional .cockroach.roachpb.TxnMeta pushee_txn = 3;
 inline bool PushTxnRequest::has_pushee_txn() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
@@ -8427,28 +8447,28 @@ inline void PushTxnRequest::clear_has_pushee_txn() {
   _has_bits_[0] &= ~0x00000004u;
 }
 inline void PushTxnRequest::clear_pushee_txn() {
-  if (pushee_txn_ != NULL) pushee_txn_->::cockroach::roachpb::Transaction::Clear();
+  if (pushee_txn_ != NULL) pushee_txn_->::cockroach::roachpb::TxnMeta::Clear();
   clear_has_pushee_txn();
 }
-inline const ::cockroach::roachpb::Transaction& PushTxnRequest::pushee_txn() const {
+inline const ::cockroach::roachpb::TxnMeta& PushTxnRequest::pushee_txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.PushTxnRequest.pushee_txn)
   return pushee_txn_ != NULL ? *pushee_txn_ : *default_instance_->pushee_txn_;
 }
-inline ::cockroach::roachpb::Transaction* PushTxnRequest::mutable_pushee_txn() {
+inline ::cockroach::roachpb::TxnMeta* PushTxnRequest::mutable_pushee_txn() {
   set_has_pushee_txn();
   if (pushee_txn_ == NULL) {
-    pushee_txn_ = new ::cockroach::roachpb::Transaction;
+    pushee_txn_ = new ::cockroach::roachpb::TxnMeta;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.PushTxnRequest.pushee_txn)
   return pushee_txn_;
 }
-inline ::cockroach::roachpb::Transaction* PushTxnRequest::release_pushee_txn() {
+inline ::cockroach::roachpb::TxnMeta* PushTxnRequest::release_pushee_txn() {
   clear_has_pushee_txn();
-  ::cockroach::roachpb::Transaction* temp = pushee_txn_;
+  ::cockroach::roachpb::TxnMeta* temp = pushee_txn_;
   pushee_txn_ = NULL;
   return temp;
 }
-inline void PushTxnRequest::set_allocated_pushee_txn(::cockroach::roachpb::Transaction* pushee_txn) {
+inline void PushTxnRequest::set_allocated_pushee_txn(::cockroach::roachpb::TxnMeta* pushee_txn) {
   delete pushee_txn_;
   pushee_txn_ = pushee_txn;
   if (pushee_txn) {
@@ -8707,7 +8727,7 @@ inline void ResolveIntentRequest::set_allocated_header(::cockroach::roachpb::Spa
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ResolveIntentRequest.header)
 }
 
-// optional .cockroach.roachpb.Transaction intent_txn = 2;
+// optional .cockroach.roachpb.TxnMeta intent_txn = 2;
 inline bool ResolveIntentRequest::has_intent_txn() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
@@ -8718,28 +8738,28 @@ inline void ResolveIntentRequest::clear_has_intent_txn() {
   _has_bits_[0] &= ~0x00000002u;
 }
 inline void ResolveIntentRequest::clear_intent_txn() {
-  if (intent_txn_ != NULL) intent_txn_->::cockroach::roachpb::Transaction::Clear();
+  if (intent_txn_ != NULL) intent_txn_->::cockroach::roachpb::TxnMeta::Clear();
   clear_has_intent_txn();
 }
-inline const ::cockroach::roachpb::Transaction& ResolveIntentRequest::intent_txn() const {
+inline const ::cockroach::roachpb::TxnMeta& ResolveIntentRequest::intent_txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResolveIntentRequest.intent_txn)
   return intent_txn_ != NULL ? *intent_txn_ : *default_instance_->intent_txn_;
 }
-inline ::cockroach::roachpb::Transaction* ResolveIntentRequest::mutable_intent_txn() {
+inline ::cockroach::roachpb::TxnMeta* ResolveIntentRequest::mutable_intent_txn() {
   set_has_intent_txn();
   if (intent_txn_ == NULL) {
-    intent_txn_ = new ::cockroach::roachpb::Transaction;
+    intent_txn_ = new ::cockroach::roachpb::TxnMeta;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResolveIntentRequest.intent_txn)
   return intent_txn_;
 }
-inline ::cockroach::roachpb::Transaction* ResolveIntentRequest::release_intent_txn() {
+inline ::cockroach::roachpb::TxnMeta* ResolveIntentRequest::release_intent_txn() {
   clear_has_intent_txn();
-  ::cockroach::roachpb::Transaction* temp = intent_txn_;
+  ::cockroach::roachpb::TxnMeta* temp = intent_txn_;
   intent_txn_ = NULL;
   return temp;
 }
-inline void ResolveIntentRequest::set_allocated_intent_txn(::cockroach::roachpb::Transaction* intent_txn) {
+inline void ResolveIntentRequest::set_allocated_intent_txn(::cockroach::roachpb::TxnMeta* intent_txn) {
   delete intent_txn_;
   intent_txn_ = intent_txn;
   if (intent_txn) {
@@ -8750,15 +8770,40 @@ inline void ResolveIntentRequest::set_allocated_intent_txn(::cockroach::roachpb:
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ResolveIntentRequest.intent_txn)
 }
 
-// optional bool poison = 3;
-inline bool ResolveIntentRequest::has_poison() const {
+// optional .cockroach.roachpb.TransactionStatus status = 3;
+inline bool ResolveIntentRequest::has_status() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void ResolveIntentRequest::set_has_poison() {
+inline void ResolveIntentRequest::set_has_status() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void ResolveIntentRequest::clear_has_poison() {
+inline void ResolveIntentRequest::clear_has_status() {
   _has_bits_[0] &= ~0x00000004u;
+}
+inline void ResolveIntentRequest::clear_status() {
+  status_ = 0;
+  clear_has_status();
+}
+inline ::cockroach::roachpb::TransactionStatus ResolveIntentRequest::status() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ResolveIntentRequest.status)
+  return static_cast< ::cockroach::roachpb::TransactionStatus >(status_);
+}
+inline void ResolveIntentRequest::set_status(::cockroach::roachpb::TransactionStatus value) {
+  assert(::cockroach::roachpb::TransactionStatus_IsValid(value));
+  set_has_status();
+  status_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ResolveIntentRequest.status)
+}
+
+// optional bool poison = 4;
+inline bool ResolveIntentRequest::has_poison() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void ResolveIntentRequest::set_has_poison() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void ResolveIntentRequest::clear_has_poison() {
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void ResolveIntentRequest::clear_poison() {
   poison_ = false;
@@ -8868,7 +8913,7 @@ inline void ResolveIntentRangeRequest::set_allocated_header(::cockroach::roachpb
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ResolveIntentRangeRequest.header)
 }
 
-// optional .cockroach.roachpb.Transaction intent_txn = 2;
+// optional .cockroach.roachpb.TxnMeta intent_txn = 2;
 inline bool ResolveIntentRangeRequest::has_intent_txn() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
@@ -8879,28 +8924,28 @@ inline void ResolveIntentRangeRequest::clear_has_intent_txn() {
   _has_bits_[0] &= ~0x00000002u;
 }
 inline void ResolveIntentRangeRequest::clear_intent_txn() {
-  if (intent_txn_ != NULL) intent_txn_->::cockroach::roachpb::Transaction::Clear();
+  if (intent_txn_ != NULL) intent_txn_->::cockroach::roachpb::TxnMeta::Clear();
   clear_has_intent_txn();
 }
-inline const ::cockroach::roachpb::Transaction& ResolveIntentRangeRequest::intent_txn() const {
+inline const ::cockroach::roachpb::TxnMeta& ResolveIntentRangeRequest::intent_txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ResolveIntentRangeRequest.intent_txn)
   return intent_txn_ != NULL ? *intent_txn_ : *default_instance_->intent_txn_;
 }
-inline ::cockroach::roachpb::Transaction* ResolveIntentRangeRequest::mutable_intent_txn() {
+inline ::cockroach::roachpb::TxnMeta* ResolveIntentRangeRequest::mutable_intent_txn() {
   set_has_intent_txn();
   if (intent_txn_ == NULL) {
-    intent_txn_ = new ::cockroach::roachpb::Transaction;
+    intent_txn_ = new ::cockroach::roachpb::TxnMeta;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResolveIntentRangeRequest.intent_txn)
   return intent_txn_;
 }
-inline ::cockroach::roachpb::Transaction* ResolveIntentRangeRequest::release_intent_txn() {
+inline ::cockroach::roachpb::TxnMeta* ResolveIntentRangeRequest::release_intent_txn() {
   clear_has_intent_txn();
-  ::cockroach::roachpb::Transaction* temp = intent_txn_;
+  ::cockroach::roachpb::TxnMeta* temp = intent_txn_;
   intent_txn_ = NULL;
   return temp;
 }
-inline void ResolveIntentRangeRequest::set_allocated_intent_txn(::cockroach::roachpb::Transaction* intent_txn) {
+inline void ResolveIntentRangeRequest::set_allocated_intent_txn(::cockroach::roachpb::TxnMeta* intent_txn) {
   delete intent_txn_;
   intent_txn_ = intent_txn;
   if (intent_txn) {
@@ -8911,15 +8956,40 @@ inline void ResolveIntentRangeRequest::set_allocated_intent_txn(::cockroach::roa
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ResolveIntentRangeRequest.intent_txn)
 }
 
-// optional bool poison = 3;
-inline bool ResolveIntentRangeRequest::has_poison() const {
+// optional .cockroach.roachpb.TransactionStatus status = 3;
+inline bool ResolveIntentRangeRequest::has_status() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void ResolveIntentRangeRequest::set_has_poison() {
+inline void ResolveIntentRangeRequest::set_has_status() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void ResolveIntentRangeRequest::clear_has_poison() {
+inline void ResolveIntentRangeRequest::clear_has_status() {
   _has_bits_[0] &= ~0x00000004u;
+}
+inline void ResolveIntentRangeRequest::clear_status() {
+  status_ = 0;
+  clear_has_status();
+}
+inline ::cockroach::roachpb::TransactionStatus ResolveIntentRangeRequest::status() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ResolveIntentRangeRequest.status)
+  return static_cast< ::cockroach::roachpb::TransactionStatus >(status_);
+}
+inline void ResolveIntentRangeRequest::set_status(::cockroach::roachpb::TransactionStatus value) {
+  assert(::cockroach::roachpb::TransactionStatus_IsValid(value));
+  set_has_status();
+  status_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ResolveIntentRangeRequest.status)
+}
+
+// optional bool poison = 4;
+inline bool ResolveIntentRangeRequest::has_poison() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void ResolveIntentRangeRequest::set_has_poison() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void ResolveIntentRangeRequest::clear_has_poison() {
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void ResolveIntentRangeRequest::clear_poison() {
   poison_ = false;

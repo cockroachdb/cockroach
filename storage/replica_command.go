@@ -333,14 +333,8 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		return reply, nil, util.Errorf("transaction does not exist: %s on store %d", h.Txn, r.store.StoreID())
 	}
 
-	deadline := args.Deadline
-	deadlineLapsed := deadline != nil && deadline.Less(ts)
-
-	if deadlineLapsed {
+	if args.Deadline != nil && args.Deadline.Less(ts) {
 		reply.Txn.Status = roachpb.ABORTED
-	}
-
-	if deadlineLapsed {
 		// FIXME(#3037):
 		// If the deadline has lapsed, return all the intents for
 		// resolution. Unfortunately, since we're (a) returning an error,
@@ -422,26 +416,28 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	var externalIntents []roachpb.Intent
 	for _, span := range args.IntentSpans {
 		if err := func() error {
+			intent := roachpb.Intent{Span: span, Txn: reply.Txn.TxnMeta, Status: reply.Txn.Status}
 			if len(span.EndKey) == 0 {
 				// For single-key intents, do a KeyAddress-aware check of
 				// whether it's contained in our Range.
 				if !containsKey(desc, span.Key) {
-					externalIntents = append(externalIntents, roachpb.Intent{Span: span, Txn: *reply.Txn})
+					externalIntents = append(externalIntents, intent)
 					return nil
 				}
-				return engine.MVCCResolveWriteIntent(batch, ms,
-					span.Key, reply.Txn)
+				return engine.MVCCResolveWriteIntent(batch, ms, intent)
 			}
 			// For intent ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
 			// an intent range for range-local data is correctly considered local.
 			inSpan, outSpans := intersectSpan(span, desc)
 			for _, span := range outSpans {
-				externalIntents = append(externalIntents, roachpb.Intent{Span: span, Txn: *reply.Txn})
+				outIntent := intent
+				outIntent.Span = span
+				externalIntents = append(externalIntents, outIntent)
 			}
 			if inSpan != nil {
-				_, err := engine.MVCCResolveWriteIntentRange(batch, ms,
-					inSpan.Key, inSpan.EndKey, 0, reply.Txn)
+				intent.Span = *inSpan
+				_, err := engine.MVCCResolveWriteIntentRange(batch, ms, intent, 0)
 				return err
 			}
 			return nil
@@ -740,8 +736,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 		// addressing-related errors). If we guess wrong, the client will try
 		// again and get the other value (within a few tries).
 		for _, intent := range intents {
-			key, txn := intent.Key, &intent.Txn
-			val, _, err := engine.MVCCGet(batch, key, txn.Timestamp, true, txn)
+			val, _, err := engine.MVCCGetAsTxn(batch, intent.Key, intent.Txn.Timestamp, true, intent.Txn)
 			if err != nil {
 				return reply, nil, err
 			}
@@ -757,7 +752,7 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 			// If this is a descriptor we're allowed to return,
 			// do just that and call it a day.
 			if rd != nil {
-				kvs = []roachpb.KeyValue{{Key: key, Value: *val}}
+				kvs = []roachpb.KeyValue{{Key: intent.Key, Value: *val}}
 				rds = []roachpb.RangeDescriptor{*rd}
 				break
 			}
@@ -910,27 +905,23 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	// garbage-collect aborted transactions, or we run the risk of a push
 	// recreating a GC'ed transaction as PENDING, which is an error if it
 	// has open intents (which is likely if someone pushes it).
-	if ok {
-		// Start with the persisted transaction record as final transaction.
-		reply.PusheeTxn = existTxn.Clone()
-		// Upgrade the epoch, timestamp and priority as necessary.
-		if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
-			reply.PusheeTxn.Epoch = args.PusheeTxn.Epoch
-		}
-		reply.PusheeTxn.Timestamp.Forward(args.PusheeTxn.Timestamp)
-		if reply.PusheeTxn.Priority < args.PusheeTxn.Priority {
-			reply.PusheeTxn.Priority = args.PusheeTxn.Priority
-		}
-	} else {
+	if !ok {
 		// The transaction doesn't exist on disk; we're allowed to abort it.
 		// TODO(tschottdorf): especially for SNAPSHOT transactions, there's
 		// something to win here by not aborting, but instead pushing the
 		// timestamp. For SERIALIZABLE it's less important, but still better
 		// to have them restart than abort. See #3344.
-		reply.PusheeTxn = args.PusheeTxn.Clone()
+		// TODO(tschottdorf): double-check for problems emanating from
+		// using a trivial Transaction proto here. Maybe some fields ought
+		// to receive dummy values.
+		reply.PusheeTxn.TxnMeta = args.PusheeTxn
 		reply.PusheeTxn.Status = roachpb.ABORTED
 		return reply, engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, &reply.PusheeTxn)
 	}
+	// Start with the persisted transaction record as final transaction.
+	reply.PusheeTxn = existTxn.Clone()
+	// The pusher might be aware of a newer version of the pushee.
+	reply.PusheeTxn.Timestamp.Forward(args.PusheeTxn.Timestamp)
 
 	// If already committed or aborted, return success.
 	if reply.PusheeTxn.Status != roachpb.PENDING {
@@ -1019,19 +1010,26 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 // or pushed despite being serializable, poisons the sequence cache entry
 // accordingly so that the transaction will be forced to abort or restart,
 // respectively, upon returning to this Range.
-func (r *Replica) maybePoison(batch engine.Engine, shouldPoison bool, txn roachpb.Transaction) error {
+func (r *Replica) maybePoison(batch engine.Engine, shouldPoison bool, txn roachpb.TxnMeta, status roachpb.TransactionStatus) error {
 	if !shouldPoison {
 		return nil
 	}
 	var poison uint32
-	switch txn.Status {
+	switch status {
 	case roachpb.ABORTED:
 		poison = roachpb.SequencePoisonAbort
 	case roachpb.PENDING:
 		poison = roachpb.SequencePoisonRestart
-		if txn.Isolation == roachpb.SNAPSHOT || txn.Timestamp.Equal(txn.OrigTimestamp) {
-			return nil
-		}
+		// TODO(tschottdorf): Previous code here poisoned unless the
+		// transaction was either SERIALIZABLE and with its original timestamp
+		// or SNAPSHOT. This hasn't been possible since we factored out the
+		// transaction metadata from the transaction proto, since now we only
+		// have the **metadata** available at the callsite. With a bit more
+		// elbow grease, it should be possible to thread the necessary
+		// information through ResolveIntent{,Range} to here, at least in cases
+		// where the performance matters (short-circuiting a Transaction helps
+		// avoid redundant work).
+		return nil
 	default:
 		return nil
 	}
@@ -1045,10 +1043,15 @@ func (r *Replica) maybePoison(batch engine.Engine, shouldPoison bool, txn roachp
 func (r *Replica) ResolveIntent(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.ResolveIntentRequest) (roachpb.ResolveIntentResponse, error) {
 	var reply roachpb.ResolveIntentResponse
 
-	if err := engine.MVCCResolveWriteIntent(batch, ms, args.Key, &args.IntentTxn); err != nil {
+	intent := roachpb.Intent{
+		Span:   args.Span,
+		Txn:    args.IntentTxn,
+		Status: args.Status,
+	}
+	if err := engine.MVCCResolveWriteIntent(batch, ms, intent); err != nil {
 		return reply, err
 	}
-	return reply, r.maybePoison(batch, args.Poison, args.IntentTxn)
+	return reply, r.maybePoison(batch, args.Poison, args.IntentTxn, intent.Status)
 }
 
 // ResolveIntentRange resolves write intents in the specified
@@ -1057,10 +1060,16 @@ func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
 	h roachpb.Header, args roachpb.ResolveIntentRangeRequest) (roachpb.ResolveIntentRangeResponse, error) {
 	var reply roachpb.ResolveIntentRangeResponse
 
-	if _, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, &args.IntentTxn); err != nil {
+	intent := roachpb.Intent{
+		Span:   args.Span,
+		Txn:    args.IntentTxn,
+		Status: args.Status,
+	}
+
+	if _, err := engine.MVCCResolveWriteIntentRange(batch, ms, intent, 0); err != nil {
 		return reply, err
 	}
-	return reply, r.maybePoison(batch, args.Poison, args.IntentTxn)
+	return reply, r.maybePoison(batch, args.Poison, args.IntentTxn, intent.Status)
 }
 
 // Merge is used to merge a value into an existing key. Merge is an
