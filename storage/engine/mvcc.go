@@ -535,7 +535,7 @@ var getBufferPool = sync.Pool{
 // ignored for reading the value (but returned via the roachpb.Intent slice);
 // the previous value (if any) is read instead.
 func MVCCGet(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txn *roachpb.Transaction) (*roachpb.Value, []roachpb.Intent, error) {
-	iter := engine.NewIterator(true /* prefix iteration */)
+	iter := engine.NewIterator(key)
 	defer iter.Close()
 
 	return mvccGetUsingIter(iter, key, timestamp, consistent, txn)
@@ -801,7 +801,7 @@ var putBufferPool = sync.Pool{
 // the value. In addition, zero timestamp values may be merged.
 func MVCCPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
 	value roachpb.Value, txn *roachpb.Transaction) error {
-	iter := engine.NewIterator(true /* prefix iteration */)
+	iter := engine.NewIterator(key)
 	defer iter.Close()
 
 	return mvccPutUsingIter(engine, iter, ms, key, timestamp, value, txn)
@@ -829,7 +829,7 @@ func MVCCDelete(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb
 	txn *roachpb.Transaction) error {
 	buf := putBufferPool.Get().(*putBuffer)
 
-	iter := engine.NewIterator(true /* prefix iteration */)
+	iter := engine.NewIterator(key)
 	defer iter.Close()
 
 	err := mvccPutInternal(engine, iter, ms, key, timestamp, nil, txn, buf)
@@ -1006,7 +1006,7 @@ func MVCCIncrement(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roac
 // timestamp as we use to write a value.
 func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp, value roachpb.Value,
 	expVal *roachpb.Value, txn *roachpb.Transaction) error {
-	iter := engine.NewIterator(true /* prefix iteration */)
+	iter := engine.NewIterator(key)
 	defer iter.Close()
 
 	// Use the specified timestamp to read the value. When a write
@@ -1219,7 +1219,7 @@ func MVCCIterate(engine Engine, startKey, endKey roachpb.Key, timestamp roachpb.
 	}
 
 	// Get a new iterator.
-	iter := engine.NewIterator(false)
+	iter := engine.NewIterator(nil)
 	defer iter.Close()
 
 	// Seeking for the first defined position.
@@ -1351,7 +1351,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, intent roachpb.Intent)
 		return util.Errorf("can't resolve range intent as point intent")
 	}
 
-	iter := engine.NewIterator(true /* prefix iteration */)
+	iter := engine.NewIterator(intent.Key)
 	defer iter.Close()
 
 	metaKey := MakeMVCCMetadataKey(intent.Key)
@@ -1569,7 +1569,7 @@ func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, intent roachpb.In
 // key, clearing all values with timestamps <= to expiration.
 // The timestamp parameter is used to compute the intent age on GC.
 func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []roachpb.GCRequest_GCKey, timestamp roachpb.Timestamp) error {
-	iter := engine.NewIterator(false)
+	iter := engine.NewIterator(nil)
 	defer iter.Close()
 	// Iterate through specified GC keys.
 	meta := &MVCCMetadata{}
