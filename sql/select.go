@@ -371,20 +371,20 @@ func (s *selectNode) colIndex(expr parser.Expr) (int, error) {
 }
 
 func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
-	// When generating an output column name it should exactly match the original
-	// expression, so determine the output column name before we perform any
-	// manipulations to the expression (such as star expansion).
-	var outputName string
-	if target.As != "" {
-		outputName = string(target.As)
-	} else {
-		outputName = target.Expr.String()
-	}
+	// outputName will be empty if the target is not aliased.
+	outputName := string(target.As)
 
 	// If a QualifiedName has a StarIndirection suffix we need to match the
 	// prefix of the qualified name to one of the tables in the query and
 	// then expand the "*" into a list of columns.
-	if qname, ok := target.Expr.(*parser.QualifiedName); ok {
+	if qname, ok := target.Expr.(*parser.QualifiedName); !ok {
+		if outputName == "" {
+			// When generating an output column name it should exactly match the original
+			// expression, so determine the output column name before we perform any
+			// manipulations to the expression (such as star expansion).
+			outputName = target.Expr.String()
+		}
+	} else {
 		if s.pErr = roachpb.NewError(qname.NormalizeColumnName()); s.pErr != nil {
 			return s.pErr
 		}
