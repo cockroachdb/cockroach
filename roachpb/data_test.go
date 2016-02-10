@@ -360,7 +360,7 @@ func TestTxnEqual(t *testing.T) {
 	}{
 		{nil, nil, true},
 		{&Transaction{}, nil, false},
-		{&Transaction{ID: []byte("A")}, &Transaction{ID: []byte("B")}, false},
+		{&Transaction{TxnMeta: TxnMeta{ID: []byte("A")}}, &Transaction{TxnMeta: TxnMeta{ID: []byte("B")}}, false},
 	}
 	for i, c := range tc {
 		if c.txn1.Equal(c.txn2) != c.txn2.Equal(c.txn1) || c.txn1.Equal(c.txn2) != c.eq {
@@ -392,15 +392,17 @@ func TestTransactionString(t *testing.T) {
 	id := []byte("ת\x0f^\xe4-Fؽ\xf7\x16\xe4\xf9\xbe^\xbe")
 	ts1 := makeTS(10, 11)
 	txn := Transaction{
+		TxnMeta: TxnMeta{
+			Key:       Key("foo"),
+			ID:        id,
+			Epoch:     2,
+			Timestamp: makeTS(20, 21),
+		},
 		Name:          "name",
-		Key:           Key("foo"),
-		ID:            id,
 		Priority:      957356782,
 		Isolation:     SERIALIZABLE,
 		Status:        COMMITTED,
-		Epoch:         2,
 		LastHeartbeat: &ts1,
-		Timestamp:     makeTS(20, 21),
 		OrigTimestamp: makeTS(30, 31),
 		MaxTimestamp:  makeTS(40, 41),
 	}
@@ -440,15 +442,17 @@ func TestNodeList(t *testing.T) {
 
 var ts = makeTS(10, 11)
 var nonZeroTxn = Transaction{
+	TxnMeta: TxnMeta{
+		Key:       Key("foo"),
+		ID:        uuid.NewUUID4(),
+		Epoch:     2,
+		Timestamp: makeTS(20, 21),
+	},
 	Name:          "name",
-	Key:           Key("foo"),
-	ID:            uuid.NewUUID4(),
 	Priority:      957356782,
 	Isolation:     SNAPSHOT,
 	Status:        COMMITTED,
-	Epoch:         2,
 	LastHeartbeat: &Timestamp{1, 2},
-	Timestamp:     makeTS(20, 21),
 	OrigTimestamp: makeTS(30, 31),
 	MaxTimestamp:  makeTS(40, 41),
 	CertainNodes: NodeList{
@@ -527,10 +531,10 @@ func TestTransactionClone(t *testing.T) {
 	// listed below. If this test fails, please update the list below and/or
 	// Transaction.Clone().
 	expFields := []string{
-		"ID",
 		"Intents.EndKey",
 		"Intents.Key",
-		"Key",
+		"TxnMeta.ID",
+		"TxnMeta.Key",
 	}
 	if !reflect.DeepEqual(expFields, fields) {
 		t.Fatalf("%s != %s", expFields, fields)
