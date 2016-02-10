@@ -581,20 +581,20 @@ var builtins = map[string][]builtin{
 				fromTime := args[1].(DTimestamp)
 				timeSpan := strings.ToLower(string(args[0].(DString)))
 				switch timeSpan {
-				case "year":
+				case "year", "years":
 					return DInt(fromTime.Year()), nil
 
 				case "quarter":
 					return DInt(fromTime.Month()/4 + 1), nil
 
-				case "month":
+				case "month", "months":
 					return DInt(fromTime.Month()), nil
 
-				case "week":
+				case "week", "weeks":
 					_, week := fromTime.ISOWeek()
 					return DInt(week), nil
 
-				case "day":
+				case "day", "days":
 					return DInt(fromTime.Day()), nil
 
 				case "dayofweek", "dow":
@@ -603,23 +603,26 @@ var builtins = map[string][]builtin{
 				case "dayofyear", "doy":
 					return DInt(fromTime.YearDay()), nil
 
-				case "hour":
+				case "hour", "hours":
 					return DInt(fromTime.Hour()), nil
 
-				case "minute":
+				case "minute", "minutes":
 					return DInt(fromTime.Minute()), nil
 
-				case "second":
+				case "second", "seconds":
 					return DInt(fromTime.Second()), nil
 
-				case "millisecond":
+				case "millisecond", "milliseconds":
 					return DInt(fromTime.Nanosecond() / int(time.Millisecond)), nil
 
-				case "microsecond":
+				case "microsecond", "microseconds":
 					return DInt(fromTime.Nanosecond() / int(time.Microsecond)), nil
 
-				case "nanosecond":
+				case "nanosecond", "nanoseconds":
 					return DInt(fromTime.Nanosecond()), nil
+
+				case "epoch_nanoseconds":
+					return DInt(fromTime.UnixNano()), nil
 
 				case "epoch":
 					return DInt(fromTime.Unix()), nil
