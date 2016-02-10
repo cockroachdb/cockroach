@@ -198,21 +198,21 @@ func getJSON(url, rel string, v interface{}) error {
 }
 
 // testDockerFail ensures the specified docker cmd fails.
-func testDockerFail(t *testing.T, tag string, cmd []string) {
-	if exitCode, logs := testDocker(t, tag, cmd); exitCode == 0 {
+func testDockerFail(t *testing.T, cmd []string) {
+	if exitCode, logs := testDocker(t, cmd); exitCode == 0 {
 		t.Log(logs)
 		t.Errorf("unexpected failure:\n%s", logs)
 	}
 }
 
 // testDockerSuccess ensures the specified docker cmd succeeds.
-func testDockerSuccess(t *testing.T, tag string, cmd []string) {
-	if exitCode, logs := testDocker(t, tag, cmd); exitCode != 0 {
+func testDockerSuccess(t *testing.T, cmd []string) {
+	if exitCode, logs := testDocker(t, cmd); exitCode != 0 {
 		t.Errorf("unexpected success:\n%s", logs)
 	}
 }
 
-func testDocker(t *testing.T, tag string, cmd []string) (exitCode int, logs string) {
+func testDocker(t *testing.T, cmd []string) (exitCode int, logs string) {
 	SkipUnlessLocal(t)
 	l := StartCluster(t).(*cluster.LocalCluster)
 
@@ -225,7 +225,7 @@ func testDocker(t *testing.T, tag string, cmd []string) (exitCode int, logs stri
 
 	addr := l.Nodes[0].PGAddr()
 	containerConfig := container.Config{
-		Image: "cockroachdb/postgres-test:" + tag,
+		Image: "cockroachdb/postgres-test:20160203-140220",
 		Env: []string{
 			fmt.Sprintf("PGHOST=%s", addr.IP),
 			fmt.Sprintf("PGPORT=%d", addr.Port),
@@ -241,7 +241,6 @@ func testDocker(t *testing.T, tag string, cmd []string) (exitCode int, logs stri
 
 	rc, err := cli.ImagePull(context.Background(), types.ImagePullOptions{
 		ImageID: containerConfig.Image,
-		Tag:     tag,
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
