@@ -201,8 +201,8 @@ func TestKVDBTransaction(t *testing.T) {
 	value := []byte("value")
 	pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		// Use snapshot isolation so non-transactional read can always push.
-		if pErr := txn.SetIsolation(roachpb.SNAPSHOT); pErr != nil {
-			return pErr
+		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+			return roachpb.NewError(err)
 		}
 
 		if pErr := txn.Put(key, value); pErr != nil {

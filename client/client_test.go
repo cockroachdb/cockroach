@@ -153,8 +153,8 @@ func TestClientRetryNonTxn(t *testing.T) {
 		count := 0 // keeps track of retries
 		pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 			if test.isolation == roachpb.SNAPSHOT {
-				if pErr := txn.SetIsolation(roachpb.SNAPSHOT); pErr != nil {
-					return pErr
+				if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+					return roachpb.NewError(err)
 				}
 			}
 			txn.InternalSetPriority(txnPri)
@@ -246,8 +246,8 @@ func TestClientRunTransaction(t *testing.T) {
 
 		// Use snapshot isolation so non-transactional read can always push.
 		pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
-			if pErr := txn.SetIsolation(roachpb.SNAPSHOT); pErr != nil {
-				return pErr
+			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+				return roachpb.NewError(err)
 			}
 
 			// Put transactional value.
