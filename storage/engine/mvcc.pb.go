@@ -30,7 +30,7 @@ var _ = math.Inf
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 type MVCCMetadata struct {
-	Txn *cockroach_roachpb1.Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
+	Txn *cockroach_roachpb1.TxnMeta `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
 	// The timestamp of the most recent versioned value if this is a
 	// value that may have multiple versions. For values which may have
 	// only one version, the data is stored inline (via raw_bytes), and
@@ -392,7 +392,7 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Txn == nil {
-				m.Txn = &cockroach_roachpb1.Transaction{}
+				m.Txn = &cockroach_roachpb1.TxnMeta{}
 			}
 			if err := m.Txn.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err

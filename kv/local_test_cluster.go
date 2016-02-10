@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
+	"github.com/opentracing/opentracing-go"
 )
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a
@@ -77,12 +78,17 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20, ltc.Stopper)
 
 	ltc.stores = storage.NewStores(ltc.Clock)
+	tracer := tracing.NewTracer()
 	var rpcSend rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
 		args roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		if ltc.Latency > 0 {
 			time.Sleep(ltc.Latency)
 		}
-		br, pErr := ltc.stores.Send(context.Background(), args)
+		sp := tracer.StartTrace("node")
+		defer sp.Finish()
+		ctx, _ := opentracing.ContextWithSpan(context.Background(), sp)
+		sp.LogEvent(args.String())
+		br, pErr := ltc.stores.Send(ctx, args)
 		if br == nil {
 			br = &roachpb.BatchResponse{}
 		}
@@ -90,6 +96,9 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 			panic(roachpb.ErrorUnexpectedlySet(ltc.stores, br))
 		}
 		br.Error = pErr
+		if pErr != nil {
+			sp.LogEvent("error: " + pErr.String())
+		}
 		return br, nil
 	}
 	retryOpts := GetDefaultDistSenderRetryOptions()
@@ -105,7 +114,6 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 		RangeDescriptorDB:        ltc.stores, // for descriptor lookup
 	}, ltc.Gossip)
 
-	tracer := tracing.NewTracer()
 	ltc.Sender = NewTxnCoordSender(ltc.distSender, ltc.Clock, false /* !linearizable */, tracer, ltc.Stopper)
 	ltc.DB = client.NewDB(ltc.Sender)
 	transport := storage.NewLocalRPCTransport(ltc.Stopper)

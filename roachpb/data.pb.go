@@ -376,6 +376,25 @@ func (m *NodeList) Reset()         { *m = NodeList{} }
 func (m *NodeList) String() string { return proto.CompactTextString(m) }
 func (*NodeList) ProtoMessage()    {}
 
+// TxnMeta is the metadata of a Transaction record.
+type TxnMeta struct {
+	// id is a unique UUID value which identifies the transaction.
+	ID []byte `protobuf:"bytes,1,opt,name=id" json:"id,omitempty"`
+	// key is the key which anchors the transaction. This is typically
+	// the first key read or written during the transaction and determines which
+	// range in the cluster will hold the transaction record.
+	Key Key `protobuf:"bytes,2,opt,name=key,casttype=Key" json:"key,omitempty"`
+	// Incremented on txn retry.
+	Epoch uint32 `protobuf:"varint,3,opt,name=epoch" json:"epoch"`
+	// The proposed timestamp for the transaction. This starts as
+	// the current wall time on the txn coordinator.
+	Timestamp Timestamp `protobuf:"bytes,4,opt,name=timestamp" json:"timestamp"`
+}
+
+func (m *TxnMeta) Reset()         { *m = TxnMeta{} }
+func (m *TxnMeta) String() string { return proto.CompactTextString(m) }
+func (*TxnMeta) ProtoMessage()    {}
+
 // A Transaction is a unit of work performed on the database.
 // Cockroach transactions support two isolation levels: snapshot
 // isolation and serializable snapshot isolation. Each Cockroach
@@ -388,34 +407,26 @@ func (*NodeList) ProtoMessage()    {}
 //
 // TODO(vivek): Remove parts of Transaction that expose internals.
 type Transaction struct {
-	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
-	// key is the key which anchors the transaction. This is typically
-	// the first key read or written during the transaction and determines which
-	// range in the cluster will hold the transaction record.
-	Key Key `protobuf:"bytes,2,opt,name=key,casttype=Key" json:"key,omitempty"`
-	// id is a unique UUID value which identifies the transaction.
-	ID        []byte            `protobuf:"bytes,3,opt,name=id" json:"id,omitempty"`
-	Priority  int32             `protobuf:"varint,4,opt,name=priority" json:"priority"`
-	Isolation IsolationType     `protobuf:"varint,5,opt,name=isolation,enum=cockroach.roachpb.IsolationType" json:"isolation"`
-	Status    TransactionStatus `protobuf:"varint,6,opt,name=status,enum=cockroach.roachpb.TransactionStatus" json:"status"`
-	// Incremented on txn retry.
-	Epoch uint32 `protobuf:"varint,7,opt,name=epoch" json:"epoch"`
+	// The transaction metadata. These are persisted with every intent.
+	TxnMeta `protobuf:"bytes,1,opt,name=meta,embedded=meta" json:"meta"`
+	// A free-text identifier for debug purposes.
+	Name      string            `protobuf:"bytes,2,opt,name=name" json:"name"`
+	Priority  int32             `protobuf:"varint,3,opt,name=priority" json:"priority"`
+	Isolation IsolationType     `protobuf:"varint,4,opt,name=isolation,enum=cockroach.roachpb.IsolationType" json:"isolation"`
+	Status    TransactionStatus `protobuf:"varint,5,opt,name=status,enum=cockroach.roachpb.TransactionStatus" json:"status"`
 	// The last heartbeat timestamp.
-	LastHeartbeat *Timestamp `protobuf:"bytes,8,opt,name=last_heartbeat" json:"last_heartbeat,omitempty"`
-	// The proposed timestamp for the transaction. This starts as
-	// the current wall time on the txn coordinator.
-	Timestamp Timestamp `protobuf:"bytes,9,opt,name=timestamp" json:"timestamp"`
+	LastHeartbeat *Timestamp `protobuf:"bytes,6,opt,name=last_heartbeat" json:"last_heartbeat,omitempty"`
 	// The original timestamp at which the transaction started. For serializable
 	// transactions, if the timestamp drifts from the original timestamp, the
 	// transaction will retry.
-	OrigTimestamp Timestamp `protobuf:"bytes,10,opt,name=orig_timestamp" json:"orig_timestamp"`
+	OrigTimestamp Timestamp `protobuf:"bytes,7,opt,name=orig_timestamp" json:"orig_timestamp"`
 	// Initial Timestamp + clock skew. Reads which encounter values with
 	// timestamps between timestamp and max_timestamp trigger a txn
 	// retry error, unless the node being read is listed in certain_nodes
 	// (in which case no more read uncertainty can occur).
 	// The case max_timestamp < timestamp is possible for transactions which have
 	// been pushed; in this case, max_timestamp should be ignored.
-	MaxTimestamp Timestamp `protobuf:"bytes,11,opt,name=max_timestamp" json:"max_timestamp"`
+	MaxTimestamp Timestamp `protobuf:"bytes,8,opt,name=max_timestamp" json:"max_timestamp"`
 	// A sorted list of ids of nodes for which a ReadWithinUncertaintyIntervalError
 	// occurred during a prior read. The purpose of keeping this information is
 	// that as a reaction to this error, the transaction's timestamp is forwarded
@@ -434,24 +445,25 @@ type Transaction struct {
 	// Bits of this mechanism are found in the local sender, the range and the
 	// txn_coord_sender, with brief comments referring here.
 	// See https://github.com/cockroachdb/cockroach/pull/221.
-	CertainNodes NodeList `protobuf:"bytes,12,opt,name=certain_nodes" json:"certain_nodes"`
+	CertainNodes NodeList `protobuf:"bytes,9,opt,name=certain_nodes" json:"certain_nodes"`
 	// Writing is true if the transaction has previously executed a successful
 	// write request, i.e. a request that may have left intents (across retries).
-	Writing bool `protobuf:"varint,13,opt,name=Writing" json:"Writing"`
+	Writing bool `protobuf:"varint,10,opt,name=Writing" json:"Writing"`
 	// A one-indexed sequence number which is increased on each batch sent as
 	// part of the transaction. Used to prevent replay and out-of-order
 	// application protection (by means of a transaction retry).
-	Sequence uint32 `protobuf:"varint,14,opt,name=Sequence" json:"Sequence"`
-	Intents  []Span `protobuf:"bytes,15,rep,name=Intents" json:"Intents"`
+	Sequence uint32 `protobuf:"varint,11,opt,name=Sequence" json:"Sequence"`
+	Intents  []Span `protobuf:"bytes,12,rep,name=Intents" json:"Intents"`
 }
 
 func (m *Transaction) Reset()      { *m = Transaction{} }
 func (*Transaction) ProtoMessage() {}
 
-// A Intent is a Span together with a Transaction.
+// A Intent is a Span together with a Transaction metadata and its status.
 type Intent struct {
-	Span `protobuf:"bytes,1,opt,name=span,embedded=span" json:"span"`
-	Txn  Transaction `protobuf:"bytes,2,opt,name=txn" json:"txn"`
+	Span   `protobuf:"bytes,1,opt,name=span,embedded=span" json:"span"`
+	Txn    TxnMeta           `protobuf:"bytes,2,opt,name=txn" json:"txn"`
+	Status TransactionStatus `protobuf:"varint,3,opt,name=status,enum=cockroach.roachpb.TransactionStatus" json:"status"`
 }
 
 func (m *Intent) Reset()         { *m = Intent{} }
@@ -500,6 +512,7 @@ func init() {
 	proto.RegisterType((*ModifiedSpanTrigger)(nil), "cockroach.roachpb.ModifiedSpanTrigger")
 	proto.RegisterType((*InternalCommitTrigger)(nil), "cockroach.roachpb.InternalCommitTrigger")
 	proto.RegisterType((*NodeList)(nil), "cockroach.roachpb.NodeList")
+	proto.RegisterType((*TxnMeta)(nil), "cockroach.roachpb.TxnMeta")
 	proto.RegisterType((*Transaction)(nil), "cockroach.roachpb.Transaction")
 	proto.RegisterType((*Intent)(nil), "cockroach.roachpb.Intent")
 	proto.RegisterType((*Lease)(nil), "cockroach.roachpb.Lease")
@@ -885,6 +898,47 @@ func (m *NodeList) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *TxnMeta) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TxnMeta) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.ID != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintData(data, i, uint64(len(m.ID)))
+		i += copy(data[i:], m.ID)
+	}
+	if m.Key != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintData(data, i, uint64(len(m.Key)))
+		i += copy(data[i:], m.Key)
+	}
+	data[i] = 0x18
+	i++
+	i = encodeVarintData(data, i, uint64(m.Epoch))
+	data[i] = 0x22
+	i++
+	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
+	n13, err := m.Timestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n13
+	return i, nil
+}
+
 func (m *Transaction) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -902,75 +956,60 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintData(data, i, uint64(len(m.Name)))
-	i += copy(data[i:], m.Name)
-	if m.Key != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintData(data, i, uint64(len(m.Key)))
-		i += copy(data[i:], m.Key)
-	}
-	if m.ID != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintData(data, i, uint64(len(m.ID)))
-		i += copy(data[i:], m.ID)
-	}
-	data[i] = 0x20
-	i++
-	i = encodeVarintData(data, i, uint64(m.Priority))
-	data[i] = 0x28
-	i++
-	i = encodeVarintData(data, i, uint64(m.Isolation))
-	data[i] = 0x30
-	i++
-	i = encodeVarintData(data, i, uint64(m.Status))
-	data[i] = 0x38
-	i++
-	i = encodeVarintData(data, i, uint64(m.Epoch))
-	if m.LastHeartbeat != nil {
-		data[i] = 0x42
-		i++
-		i = encodeVarintData(data, i, uint64(m.LastHeartbeat.Size()))
-		n13, err := m.LastHeartbeat.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n13
-	}
-	data[i] = 0x4a
-	i++
-	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n14, err := m.Timestamp.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.TxnMeta.Size()))
+	n14, err := m.TxnMeta.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n14
-	data[i] = 0x52
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(len(m.Name)))
+	i += copy(data[i:], m.Name)
+	data[i] = 0x18
+	i++
+	i = encodeVarintData(data, i, uint64(m.Priority))
+	data[i] = 0x20
+	i++
+	i = encodeVarintData(data, i, uint64(m.Isolation))
+	data[i] = 0x28
+	i++
+	i = encodeVarintData(data, i, uint64(m.Status))
+	if m.LastHeartbeat != nil {
+		data[i] = 0x32
+		i++
+		i = encodeVarintData(data, i, uint64(m.LastHeartbeat.Size()))
+		n15, err := m.LastHeartbeat.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n15
+	}
+	data[i] = 0x3a
 	i++
 	i = encodeVarintData(data, i, uint64(m.OrigTimestamp.Size()))
-	n15, err := m.OrigTimestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n15
-	data[i] = 0x5a
-	i++
-	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
-	n16, err := m.MaxTimestamp.MarshalTo(data[i:])
+	n16, err := m.OrigTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n16
-	data[i] = 0x62
+	data[i] = 0x42
 	i++
-	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
-	n17, err := m.CertainNodes.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
+	n17, err := m.MaxTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n17
-	data[i] = 0x68
+	data[i] = 0x4a
+	i++
+	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
+	n18, err := m.CertainNodes.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n18
+	data[i] = 0x50
 	i++
 	if m.Writing {
 		data[i] = 1
@@ -978,12 +1017,12 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 		data[i] = 0
 	}
 	i++
-	data[i] = 0x70
+	data[i] = 0x58
 	i++
 	i = encodeVarintData(data, i, uint64(m.Sequence))
 	if len(m.Intents) > 0 {
 		for _, msg := range m.Intents {
-			data[i] = 0x7a
+			data[i] = 0x62
 			i++
 			i = encodeVarintData(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -1014,19 +1053,22 @@ func (m *Intent) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.Span.Size()))
-	n18, err := m.Span.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n18
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.Txn.Size()))
-	n19, err := m.Txn.MarshalTo(data[i:])
+	n19, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n19
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.Txn.Size()))
+	n20, err := m.Txn.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n20
+	data[i] = 0x18
+	i++
+	i = encodeVarintData(data, i, uint64(m.Status))
 	return i, nil
 }
 
@@ -1048,27 +1090,27 @@ func (m *Lease) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.Start.Size()))
-	n20, err := m.Start.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n20
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
-	n21, err := m.Expiration.MarshalTo(data[i:])
+	n21, err := m.Start.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n21
-	data[i] = 0x1a
+	data[i] = 0x12
 	i++
-	i = encodeVarintData(data, i, uint64(m.Replica.Size()))
-	n22, err := m.Replica.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
+	n22, err := m.Expiration.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n22
+	data[i] = 0x1a
+	i++
+	i = encodeVarintData(data, i, uint64(m.Replica.Size()))
+	n23, err := m.Replica.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n23
 	return i, nil
 }
 
@@ -1096,11 +1138,11 @@ func (m *SequenceCacheEntry) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n23, err := m.Timestamp.MarshalTo(data[i:])
+	n24, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n23
+	i += n24
 	return i, nil
 }
 
@@ -1265,29 +1307,37 @@ func (m *NodeList) Size() (n int) {
 	return n
 }
 
-func (m *Transaction) Size() (n int) {
+func (m *TxnMeta) Size() (n int) {
 	var l int
 	_ = l
-	l = len(m.Name)
-	n += 1 + l + sovData(uint64(l))
-	if m.Key != nil {
-		l = len(m.Key)
-		n += 1 + l + sovData(uint64(l))
-	}
 	if m.ID != nil {
 		l = len(m.ID)
 		n += 1 + l + sovData(uint64(l))
 	}
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovData(uint64(l))
+	}
+	n += 1 + sovData(uint64(m.Epoch))
+	l = m.Timestamp.Size()
+	n += 1 + l + sovData(uint64(l))
+	return n
+}
+
+func (m *Transaction) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TxnMeta.Size()
+	n += 1 + l + sovData(uint64(l))
+	l = len(m.Name)
+	n += 1 + l + sovData(uint64(l))
 	n += 1 + sovData(uint64(m.Priority))
 	n += 1 + sovData(uint64(m.Isolation))
 	n += 1 + sovData(uint64(m.Status))
-	n += 1 + sovData(uint64(m.Epoch))
 	if m.LastHeartbeat != nil {
 		l = m.LastHeartbeat.Size()
 		n += 1 + l + sovData(uint64(l))
 	}
-	l = m.Timestamp.Size()
-	n += 1 + l + sovData(uint64(l))
 	l = m.OrigTimestamp.Size()
 	n += 1 + l + sovData(uint64(l))
 	l = m.MaxTimestamp.Size()
@@ -1312,6 +1362,7 @@ func (m *Intent) Size() (n int) {
 	n += 1 + l + sovData(uint64(l))
 	l = m.Txn.Size()
 	n += 1 + l + sovData(uint64(l))
+	n += 1 + sovData(uint64(m.Status))
 	return n
 }
 
@@ -2632,7 +2683,7 @@ func (m *NodeList) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Transaction) Unmarshal(data []byte) error {
+func (m *TxnMeta) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
@@ -2655,17 +2706,17 @@ func (m *Transaction) Unmarshal(data []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: Transaction: wiretype end group for non-group")
+			return fmt.Errorf("proto: TxnMeta: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Transaction: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: TxnMeta: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
 			}
-			var stringLen uint64
+			var byteLen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowData
@@ -2675,20 +2726,22 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
+			if byteLen < 0 {
 				return ErrInvalidLengthData
 			}
-			postIndex := iNdEx + intStringLen
+			postIndex := iNdEx + byteLen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Name = string(data[iNdEx:postIndex])
+			m.ID = append(m.ID[:0], data[iNdEx:postIndex]...)
+			if m.ID == nil {
+				m.ID = []byte{}
+			}
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -2722,94 +2775,6 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowData
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthData
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.ID = append(m.ID[:0], data[iNdEx:postIndex]...)
-			if m.ID == nil {
-				m.ID = []byte{}
-			}
-			iNdEx = postIndex
-		case 4:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Priority", wireType)
-			}
-			m.Priority = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowData
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.Priority |= (int32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 5:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Isolation", wireType)
-			}
-			m.Isolation = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowData
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.Isolation |= (IsolationType(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 6:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
-			}
-			m.Status = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowData
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.Status |= (TransactionStatus(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 7:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Epoch", wireType)
 			}
@@ -2828,7 +2793,203 @@ func (m *Transaction) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 8:
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthData
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Timestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipData(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthData
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Transaction) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowData
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Transaction: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Transaction: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TxnMeta", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthData
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TxnMeta.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthData
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Priority", wireType)
+			}
+			m.Priority = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Priority |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Isolation", wireType)
+			}
+			m.Isolation = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Isolation |= (IsolationType(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
+			}
+			m.Status = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Status |= (TransactionStatus(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LastHeartbeat", wireType)
 			}
@@ -2861,37 +3022,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 9:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowData
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthData
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.Timestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 10:
+		case 7:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field OrigTimestamp", wireType)
 			}
@@ -2921,7 +3052,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 11:
+		case 8:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field MaxTimestamp", wireType)
 			}
@@ -2951,7 +3082,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 12:
+		case 9:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field CertainNodes", wireType)
 			}
@@ -2981,7 +3112,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 13:
+		case 10:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Writing", wireType)
 			}
@@ -3001,7 +3132,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				}
 			}
 			m.Writing = bool(v != 0)
-		case 14:
+		case 11:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Sequence", wireType)
 			}
@@ -3020,7 +3151,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 15:
+		case 12:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Intents", wireType)
 			}
@@ -3161,6 +3292,25 @@ func (m *Intent) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
+			}
+			m.Status = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Status |= (TransactionStatus(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])

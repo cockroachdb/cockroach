@@ -1444,7 +1444,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	var pushIntents, resolveIntents []roachpb.Intent
 	for _, intent := range wiErr.Intents {
 		// The current intent does not need conflict resolution.
-		if intent.Txn.Status != roachpb.PENDING {
+		if intent.Status != roachpb.PENDING {
 			resolveIntents = append(resolveIntents, intent)
 		} else {
 			pushIntents = append(pushIntents, intent)
@@ -1506,7 +1506,9 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	wiErr.Resolved = true // success!
 
 	for i, intent := range pushIntents {
-		intent.Txn = br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
+		pushee := br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
+		intent.Txn = pushee.TxnMeta
+		intent.Status = pushee.Status
 		resolveIntents = append(resolveIntents, intent)
 	}
 	return resolveIntents, roachpb.NewError(wiErr)
