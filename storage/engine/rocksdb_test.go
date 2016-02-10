@@ -391,6 +391,46 @@ func BenchmarkMVCCPut10000(b *testing.B) {
 	runMVCCPut(10000, b)
 }
 
+func runMVCCConditionalPut(valueSize int, b *testing.B) {
+	defer tracing.Disable()()
+	rng, _ := randutil.NewPseudoRand()
+	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
+	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	rocksdb := NewInMem(roachpb.Attributes{}, testCacheSize, stopper)
+
+	b.SetBytes(int64(valueSize))
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
+		ts := makeTS(time.Now().UnixNano(), 0)
+		if err := MVCCConditionalPut(rocksdb, nil, key, ts, value, nil, nil); err != nil {
+			b.Fatalf("failed put: %s", err)
+		}
+	}
+
+	b.StopTimer()
+}
+
+func BenchmarkMVCCConditionalPut10(b *testing.B) {
+	runMVCCConditionalPut(10, b)
+}
+
+func BenchmarkMVCCConditionalPut100(b *testing.B) {
+	runMVCCConditionalPut(100, b)
+}
+
+func BenchmarkMVCCConditionalPut1000(b *testing.B) {
+	runMVCCConditionalPut(1000, b)
+}
+
+func BenchmarkMVCCConditionalPut10000(b *testing.B) {
+	runMVCCConditionalPut(10000, b)
+}
+
 func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
 	defer tracing.Disable()()
 	rng, _ := randutil.NewPseudoRand()
