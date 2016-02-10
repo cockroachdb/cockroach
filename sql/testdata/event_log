@@ -1,62 +1,194 @@
+##################
+# TABLE DDL
+##################
+
+# Create two tables + superfluous "IF NOT EXISTS"
+##################
+
 statement ok
 CREATE TABLE test.a (id INT PRIMARY KEY)
 
 statement ok
 CREATE TABLE IF NOT EXISTS test.b (id INT PRIMARY KEY)
 
+statement ok
+CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
+
+
+# Verify that two create tables were logged - the second
+# NOT EXISTS should not result in a log message.
+##################
+
 query II
-SELECT targetID, reportingID FROM system.eventlog WHERE eventType = 'create_table'
+SELECT targetID, reportingID FROM system.eventlog
+WHERE eventType = 'create_table'
 ----
 51 1
 52 1
 
-statement ok
-CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
+# Verify the contents of the 'Info' field of each log message using a LIKE
+# statement.
+##################
 
-query I
-SELECT COUNT(*) FROM system.eventlog WHERE eventType = 'create_table'
+query II
+SELECT targetID, reportingID
+FROM system.eventlog
+WHERE eventType = 'create_table'
+  AND info LIKE '%CREATE TABLE test.a%'
 ----
-2
+51 1
 
-query I
-SELECT COUNT(*) FROM system.eventlog WHERE info LIKE '%CREATE TABLE test.a%'
+query II
+SELECT targetID, reportingID
+FROM system.eventlog
+WHERE eventType = 'create_table'
+  AND info LIKE '%CREATE TABLE IF NOT EXISTS test.b%'
 ----
-1
+52 1
+
+# Sanity check - check for a non-matching info value.
+##################
 
 query I
-SELECT COUNT(*) FROM system.eventlog WHERE info LIKE '%CREATE TABLE IF NOT EXISTS test.b%'
-----
-1
-
-query I
-SELECT COUNT(*) FROM system.eventlog WHERE info LIKE '%CREATE TABLE badtable%'
+SELECT COUNT(*)
+FROM system.eventlog
+WHERE eventType = 'create_table'
+  AND info LIKE '%CREATE TABLE badtable%'
 ----
 0
 
+
+# Drop both tables + superfluous "IF EXISTS"
+##################
+
+statement ok
+DROP TABLE test.a
+
+statement ok
+DROP TABLE IF EXISTS test.b
+
+statement ok
+DROP TABLE IF EXISTS test.b
+
+
+# Verify that two drop table events were logged - the second IF EXISTS statement
+# should have failed.
+##################
+
+query II
+SELECT targetID, reportingID
+FROM system.eventlog
+WHERE eventType = 'drop_table'
+----
+51 1
+52 1
+
+# Verify the contents of the 'info' field of each event.
+##################
+
+query II
+SELECT targetID, reportingID
+FROM system.eventlog
+WHERE eventType = 'drop_table'
+  AND info LIKE '%DROP TABLE test.a%'
+----
+51 1
+
+query II
+SELECT targetID, reportingID
+FROM system.eventlog
+WHERE eventType = 'drop_table'
+  AND info LIKE '%DROP TABLE IF EXISTS test.b%'
+----
+52 1
+
+
+##################
 # DATABASE DDL
+##################
+
+# Create two databases + superfluous "IF NOT EXISTS"
+##################
 
 statement ok
 CREATE DATABASE eventLogTest
 
+statement ok
+CREATE DATABASE IF NOT EXISTS otherEventLogTest
+
+statement ok
+CREATE DATABASE IF NOT EXISTS otherEventLogTest
+
+
+# Verify the two events that were logged.
+##################
+
 query II
-SELECT targetID, reportingID FROM system.eventlog WHERE
-  eventType = 'create_database' AND
-  info LIKE '%CREATE DATABASE eventLogTest%'
+SELECT targetID, reportingID
+FROM system.eventlog
+WHERE eventType = 'create_database'
+  AND info LIKE '%CREATE DATABASE eventLogTest%'
 ----
 53 1
 
-statement ok
-CREATE DATABASE IF NOT EXISTS eventLogTest
-
-statement ok
-CREATE DATABASE IF NOT EXISTS eventLogTest2
-
-statement ok
-CREATE DATABASE IF NOT EXISTS eventLogTest2
-
 query II
-SELECT targetID, reportingID FROM system.eventlog WHERE
-  eventType = 'create_database' AND
-  info LIKE '%CREATE DATABASE IF NOT EXISTS eventLogTest%'
+SELECT targetID, reportingID
+FROM system.eventlog
+WHERE eventType = 'create_database'
+  AND info LIKE '%CREATE DATABASE IF NOT EXISTS otherEventLogTest%'
 ----
 54 1
+
+# Add some tables to eventLogTest.
+##################
+
+statement ok
+SET DATABASE = eventLogTest
+
+statement ok
+CREATE TABLE eventLogTest.testTable (id int PRIMARY KEY)
+
+statement ok
+CREATE TABLE eventLogTest.anotherTestTable (id int PRIMARY KEY)
+
+# drop both databases.
+##################
+
+statement ok
+DROP DATABASE eventLogTest
+
+statement ok
+DROP DATABASE IF EXISTS otherEventLogTest
+
+statement ok
+DROP DATABASE IF EXISTS otherEventLogTest
+
+# verify contents of drop event
+##################
+
+query II
+SELECT targetID, reportingID
+FROM system.eventlog
+WHERE eventType = 'drop_database'
+  AND info LIKE '%DROP DATABASE eventLogTest%'
+----
+53 1
+
+query II
+SELECT targetID, reportingID
+FROM system.eventlog
+WHERE eventType = 'drop_database'
+  AND info LIKE '%DROP DATABASE IF EXISTS otherEventLogTest%'
+----
+54 1
+
+# verify cascading table drops are logged.
+##################
+query II
+SELECT targetID, reportingID
+FROM system.eventlog
+WHERE eventType = 'drop_database'
+  AND info LIKE '%testTable%'
+  AND info LIKE '%anotherTestTable%'
+----
+53 1

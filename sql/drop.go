@@ -73,8 +73,18 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 		return nil, pErr
 	}
 
-	if _, pErr := p.DropTable(&parser.DropTable{Names: tbNames}); pErr != nil {
-		return nil, pErr
+	tbNameStrings := make([]string, len(tbNames))
+	for i := range tbNames {
+		tbDesc, err := p.dropTableImpl(tbNames, i)
+		if err != nil {
+			return nil, err
+		}
+		if tbDesc == nil {
+			// Database claims to have this table, but it does not exist.
+			return nil, roachpb.NewUErrorf("table %q was described by database %q, but does not exist",
+				tbNames[i].String())
+		}
+		tbNameStrings[i] = tbDesc.Name
 	}
 
 	zoneKey := MakeZoneKey(dbDesc.ID)
@@ -95,6 +105,21 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 	}
 
 	if pErr := p.txn.Run(b); pErr != nil {
+		return nil, pErr
+	}
+
+	// Log Drop Database event.
+	if pErr := MakeEventLogger(p.leaseMgr).insertEventRecord(p.txn,
+		EventLogDropDatabase,
+		int32(dbDesc.ID),
+		int32(p.evalCtx.NodeID),
+		struct {
+			DatabaseName  string
+			Statement     string
+			User          string
+			DroppedTables []string
+		}{n.Name.String(), n.String(), p.user, tbNameStrings},
+	); pErr != nil {
 		return nil, pErr
 	}
 	return &emptyNode{}, nil
@@ -164,74 +189,106 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 	// TODO(XisiHuang): should do truncate and delete descriptor in
 	// the same txn
-	for i, tableQualifiedName := range n.Names {
-		if err := tableQualifiedName.NormalizeTableName(p.session.Database); err != nil {
-			return nil, roachpb.NewError(err)
+	for i := range n.Names {
+		droppedDesc, err := p.dropTableImpl(n.Names, i)
+		if err != nil {
+			return nil, err
 		}
-
-		dbDesc, pErr := p.getDatabaseDesc(tableQualifiedName.Database())
-		if pErr != nil {
-			return nil, pErr
-		}
-
-		tbKey := tableKey{dbDesc.ID, tableQualifiedName.Table()}
-		nameKey := tbKey.Key()
-		gr, pErr := p.txn.Get(nameKey)
-		if pErr != nil {
-			return nil, pErr
-		}
-
-		if !gr.Exists() {
+		if droppedDesc == nil {
 			if n.IfExists {
-				// Noop.
 				continue
 			}
-			// Key does not exist, but we want it to: error out.
-			return nil, roachpb.NewUErrorf("table %q does not exist", tbKey.Name())
+			// Table does not exist, but we want it to: error out.
+			return nil, roachpb.NewUErrorf("table %q does not exist", n.Names[i].Table())
 		}
-
-		desc := &Descriptor{}
-		descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
-		if pErr := p.txn.GetProto(descKey, desc); pErr != nil {
-			return nil, pErr
-		}
-		tableDesc := desc.GetTable()
-		if tableDesc == nil {
-			return nil, roachpb.NewErrorf("%q is not a table", tbKey.Name())
-		}
-		if err := tableDesc.Validate(); err != nil {
-			return nil, roachpb.NewError(err)
-		}
-
-		if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
-			return nil, roachpb.NewError(err)
-		}
-
-		if _, pErr := p.Truncate(&parser.Truncate{Tables: n.Names[i : i+1]}); pErr != nil {
-			return nil, pErr
-		}
-
-		zoneKey := MakeZoneKey(tableDesc.ID)
-
-		// Delete table descriptor
-		b := &client.Batch{}
-		b.Del(descKey)
-		b.Del(nameKey)
-		// Delete the zone config entry for this table.
-		b.Del(zoneKey)
-
-		p.testingVerifyMetadata = func(systemConfig config.SystemConfig) error {
-			for _, key := range [...]roachpb.Key{descKey, nameKey, zoneKey} {
-				if err := expectDeleted(systemConfig, key); err != nil {
-					return err
-				}
-			}
-			return nil
-		}
-
-		if pErr := p.txn.Run(b); pErr != nil {
+		// Log a Drop Table event for this table.
+		if pErr := MakeEventLogger(p.leaseMgr).insertEventRecord(p.txn,
+			EventLogDropTable,
+			int32(droppedDesc.ID),
+			int32(p.evalCtx.NodeID),
+			struct {
+				TableName string
+				Statement string
+				User      string
+			}{droppedDesc.Name, n.String(), p.user},
+		); pErr != nil {
 			return nil, pErr
 		}
 	}
 	return &emptyNode{}, nil
+}
+
+// dropTableImpl is used to drop a single table by name, which can result from
+// either a DROP TABLE or DROP DATABASE statement. This method returns the
+// dropped table descriptor, to be used for the purpose of logging the event.
+func (p *planner) dropTableImpl(names parser.QualifiedNames, index int) (*TableDescriptor, *roachpb.Error) {
+	// TODO(XisiHuang): should do truncate and delete descriptor in
+	// the same txn
+	tableQualifiedName := names[index]
+	if err := tableQualifiedName.NormalizeTableName(p.session.Database); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	dbDesc, pErr := p.getDatabaseDesc(tableQualifiedName.Database())
+	if pErr != nil {
+		return nil, pErr
+	}
+
+	tbKey := tableKey{dbDesc.ID, tableQualifiedName.Table()}
+	nameKey := tbKey.Key()
+	gr, pErr := p.txn.Get(nameKey)
+	if pErr != nil {
+		return nil, pErr
+	}
+
+	if !gr.Exists() {
+		// Return nil descriptor. This might result in an error at a higher
+		// level.
+		return nil, nil
+	}
+
+	desc := &Descriptor{}
+	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
+	if pErr := p.txn.GetProto(descKey, desc); pErr != nil {
+		return nil, pErr
+	}
+	tableDesc := desc.GetTable()
+	if tableDesc == nil {
+		return nil, roachpb.NewErrorf("%q is not a table", tbKey.Name())
+	}
+	if err := tableDesc.Validate(); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	if _, pErr := p.Truncate(&parser.Truncate{Tables: names[index : index+1]}); pErr != nil {
+		return nil, pErr
+	}
+
+	zoneKey := MakeZoneKey(tableDesc.ID)
+
+	// Delete table descriptor
+	b := &client.Batch{}
+	b.Del(descKey)
+	b.Del(nameKey)
+	// Delete the zone config entry for this table.
+	b.Del(zoneKey)
+
+	p.testingVerifyMetadata = func(systemConfig config.SystemConfig) error {
+		for _, key := range [...]roachpb.Key{descKey, nameKey, zoneKey} {
+			if err := expectDeleted(systemConfig, key); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if pErr := p.txn.Run(b); pErr != nil {
+		return nil, pErr
+	}
+
+	return tableDesc, nil
 }
