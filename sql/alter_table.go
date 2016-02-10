@@ -56,7 +56,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 		return nil, pErr
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+	if err := p.checkPrivilege(&tableDesc, privilege.CREATE); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -187,7 +187,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 		return nil, roachpb.NewError(err)
 	}
 
-	if pErr := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); err != nil {
+	if pErr := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(&tableDesc)); err != nil {
 		return nil, pErr
 	}
 	p.notifySchemaChange(tableDesc.ID, mutationID)

@@ -249,7 +249,7 @@ func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, *r
 	if pErr != nil {
 		return nil, pErr
 	}
-	return desc, nil
+	return &desc, nil
 }
 
 // notify that an outstanding schema change exists for the table.

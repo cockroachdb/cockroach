@@ -37,7 +37,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, *roachpb.Error) {
 			return nil, pErr
 		}
 
-		if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
+		if err := p.checkPrivilege(&tableDesc, privilege.DROP); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 

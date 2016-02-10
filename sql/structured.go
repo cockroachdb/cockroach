@@ -630,6 +630,11 @@ func (desc *TableDescriptor) allColumnsSelector() parser.SelectExprs {
 	return exprs
 }
 
+func (desc *TableDescriptor) isEmpty() bool {
+	// Valid tables cannot have an ID of 0.
+	return desc.ID == 0
+}
+
 // SQLString returns the SQL string corresponding to the type.
 func (c *ColumnType) SQLString() string {
 	switch c.Kind {

@@ -97,7 +97,7 @@ func prettySpans(spans []span, skip int) string {
 type scanNode struct {
 	planner *planner
 	txn     *client.Txn
-	desc    *TableDescriptor
+	desc    TableDescriptor
 	index   *IndexDescriptor
 
 	// visibleCols are normally a copy of desc.Columns (even when we are using an index). The only
@@ -212,7 +212,7 @@ func (n *scanNode) initTable(p *planner, tableName *parser.QualifiedName) (strin
 		return "", n.pErr
 	}
 
-	if err := p.checkPrivilege(n.desc, privilege.SELECT); err != nil {
+	if err := p.checkPrivilege(&n.desc, privilege.SELECT); err != nil {
 		return "", roachpb.NewError(err)
 	}
 
@@ -373,7 +373,7 @@ func (n *scanNode) initScan() bool {
 	if n.valTypes == nil {
 		// Prepare our index key vals slice.
 		var err error
-		n.valTypes, err = makeKeyVals(n.desc, n.columnIDs)
+		n.valTypes, err = makeKeyVals(&n.desc, n.columnIDs)
 		n.pErr = roachpb.NewError(err)
 		if n.pErr != nil {
 			return false
@@ -386,7 +386,7 @@ func (n *scanNode) initScan() bool {
 			// Primary indexes only contain ascendingly-encoded values. If this
 			// ever changes, we'll probably have to figure out the directions here too.
 			var err error
-			n.implicitValTypes, err = makeKeyVals(n.desc, n.index.ImplicitColumnIDs)
+			n.implicitValTypes, err = makeKeyVals(&n.desc, n.index.ImplicitColumnIDs)
 			n.pErr = roachpb.NewError(err)
 			if n.pErr != nil {
 				return false
@@ -445,7 +445,7 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 
 	var remaining []byte
 	var err error
-	remaining, err = decodeIndexKey(n.desc, n.index.ID, n.valTypes, n.vals, n.columnDirs, kv.Key)
+	remaining, err = decodeIndexKey(&n.desc, n.index.ID, n.valTypes, n.vals, n.columnDirs, kv.Key)
 	n.pErr = roachpb.NewError(err)
 	if n.pErr != nil {
 		return false
