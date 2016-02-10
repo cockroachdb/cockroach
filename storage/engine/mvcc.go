@@ -535,15 +535,18 @@ var getBufferPool = sync.Pool{
 // ignored for reading the value (but returned via the roachpb.Intent slice);
 // the previous value (if any) is read instead.
 func MVCCGet(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txn *roachpb.Transaction) (*roachpb.Value, []roachpb.Intent, error) {
+	iter := engine.NewIterator(true /* prefix iteration */)
+	defer iter.Close()
+	return mvccGetUsingIter(engine, key, timestamp, consistent, txn, iter)
+}
+
+func mvccGetUsingIter(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txn *roachpb.Transaction, iter Iterator) (*roachpb.Value, []roachpb.Intent, error) {
 	if len(key) == 0 {
 		return nil, nil, emptyKeyError()
 	}
 
 	buf := getBufferPool.Get().(*getBuffer)
 	defer getBufferPool.Put(buf)
-
-	iter := engine.NewIterator(true /* prefix iteration */)
-	defer iter.Close()
 
 	metaKey := MakeMVCCMetadataKey(key)
 	ok, _, _, err := mvccGetMetadata(iter, metaKey, &buf.meta)
@@ -780,13 +783,22 @@ var putBufferPool = sync.Pool{
 // the value. In addition, zero timestamp values may be merged.
 func MVCCPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
 	value roachpb.Value, txn *roachpb.Transaction) error {
+
+	iter := engine.NewIterator(true /* prefix iteration */)
+	defer iter.Close()
+
+	return mvccPutUsingIter(engine, ms, key, timestamp, value, txn, iter)
+}
+
+func mvccPutUsingIter(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
+	value roachpb.Value, txn *roachpb.Transaction, iter Iterator) error {
 	if value.Timestamp != roachpb.ZeroTimestamp {
 		return util.Errorf("cannot have timestamp set in value on Put")
 	}
 
 	buf := putBufferPool.Get().(*putBuffer)
 
-	err := mvccPutInternal(engine, ms, key, timestamp, value.RawBytes, txn, buf)
+	err := mvccPutInternal(engine, ms, key, timestamp, value.RawBytes, txn, buf, iter)
 
 	// Using defer would be more convenient, but it is measurably
 	// slower.
@@ -800,7 +812,10 @@ func MVCCDelete(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb
 	txn *roachpb.Transaction) error {
 	buf := putBufferPool.Get().(*putBuffer)
 
-	err := mvccPutInternal(engine, ms, key, timestamp, nil, txn, buf)
+	iter := engine.NewIterator(true /* prefix iteration */)
+	defer iter.Close()
+
+	err := mvccPutInternal(engine, ms, key, timestamp, nil, txn, buf, iter)
 
 	// Using defer would be more convenient, but it is measurably
 	// slower.
@@ -811,13 +826,10 @@ func MVCCDelete(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb
 // mvccPutInternal adds a new timestamped value to the specified key.
 // If value is nil, creates a deletion tombstone value.
 func mvccPutInternal(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
-	value []byte, txn *roachpb.Transaction, buf *putBuffer) error {
+	value []byte, txn *roachpb.Transaction, buf *putBuffer, iter Iterator) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
-
-	iter := engine.NewIterator(true /* prefix iteration */)
-	defer iter.Close()
 
 	metaKey := MakeMVCCMetadataKey(key)
 	ok, origMetaKeySize, origMetaValSize, err := mvccGetMetadata(iter, metaKey, &buf.meta)
@@ -977,13 +989,16 @@ func MVCCIncrement(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roac
 // timestamp as we use to write a value.
 func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp, value roachpb.Value,
 	expVal *roachpb.Value, txn *roachpb.Transaction) error {
+	iter := engine.NewIterator(true /* prefix iteration */)
+	defer iter.Close()
+
 	// Use the specified timestamp to read the value. When a write
 	// with newer timestamp exists, either of the following will
 	// happen:
 	// - If the conditional check succeeds, either a WriteTooOldError or WriteIntentError
 	//   is returned, depending on whether the newer write is an intent.
 	// - If the conditional check fails, a ConditionFailedError is returned.
-	existVal, _, err := MVCCGet(engine, key, timestamp, true /* consistent */, txn)
+	existVal, _, err := mvccGetUsingIter(engine, key, timestamp, true /* consistent */, txn, iter)
 	if err != nil {
 		return err
 	}
@@ -1001,7 +1016,7 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp
 		}
 	}
 
-	return MVCCPut(engine, ms, key, timestamp, value, txn)
+	return mvccPutUsingIter(engine, ms, key, timestamp, value, txn, iter)
 }
 
 // MVCCMerge implements a merge operation. Merge adds integer values,
