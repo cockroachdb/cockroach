@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	stats "github.com/grpc/grpc-go/benchmark/stats"
+
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -62,6 +64,10 @@ func TestChaos(t *testing.T) {
 	var round int64
 	// Set to 1 if chaos monkey has stalled the writes.
 	var stalled int32
+	// Latency stats.
+	latencyStats := stats.NewStats(0)
+	var latencyStatsMu sync.Mutex
+
 	// One client for each node.
 	clients := make([]struct {
 		sync.RWMutex
@@ -141,6 +147,7 @@ CREATE TABLE bank.accounts (
 									UPDATE bank.accounts
 									  SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
 										  WHERE id IN ($1, $2) AND (SELECT balance >= $3 FROM bank.accounts WHERE id = $1)`
+					begin := time.Now()
 					if _, err := clients[i].db.Exec(update, from, to, amount); err != nil {
 						// Ignore some errors.
 						if testutils.IsError(err, "connection refused") {
@@ -148,7 +155,10 @@ CREATE TABLE bank.accounts (
 						}
 						return err
 					}
-
+					latency := time.Now().Sub(begin)
+					latencyStatsMu.Lock()
+					latencyStats.Add(latency)
+					latencyStatsMu.Unlock()
 					// Only advance the counts on a successful update.
 					_ = atomic.AddInt64(&count, 1)
 					atomic.AddInt64(&clients[i].count, 1)
@@ -272,18 +282,19 @@ CREATE TABLE bank.accounts (
 
 	// Verify accounts.
 
-	// Hold the read lock on node 0 to prevent it being restarted by
-	// chaos monkey.
 	var sum int
-	clients[0].RLock()
-	if err := clients[0].db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum); err != nil {
-		t.Fatal(err)
+	for {
+		// Hold the read lock on node 0 to prevent it being restarted by
+		// chaos monkey.
+		clients[0].RLock()
+		if err := clients[0].db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum); err == nil {
+			break
+		}
+		clients[0].RUnlock()
 	}
-	clients[0].RUnlock()
 	if sum != 0 {
 		t.Fatalf("The bank is not in good order. Total value: %d", sum)
 	}
 
-	elapsed := time.Since(start)
-	log.Infof("%d %.1f/sec", count, float64(count)/elapsed.Seconds())
+	log.Info(latencyStats)
 }
