@@ -33,8 +33,12 @@ type EventLogType string
 const (
 	// EventLogCreateDatabase is recorded when a database is created.
 	EventLogCreateDatabase EventLogType = "create_database"
+	// EventLogDropDatabase is recorded when a database is dropped.
+	EventLogDropDatabase EventLogType = "drop_database"
 	// EventLogCreateTable is recorded when a table is created.
 	EventLogCreateTable EventLogType = "create_table"
+	// EventLogDropTable is recorded when a table is dropped.
+	EventLogDropTable EventLogType = "drop_table"
 )
 
 // eventTableSchema describes the schema of the event log table.
