@@ -28,11 +28,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/samalba/dockerclient"
 )
@@ -480,7 +480,7 @@ func (l *LocalCluster) Start() {
 // Tester receives a fatal error.
 // Currently, the only events generated (and asserted against) are "die" and
 // "restart", to maximize compatibility across different versions of Docker.
-func (l *LocalCluster) Assert(t util.Tester) {
+func (l *LocalCluster) Assert(t *testing.T) {
 	const almostZero = 50 * time.Millisecond
 	filter := func(ch chan Event, wait time.Duration) *Event {
 		for {
@@ -519,7 +519,7 @@ func (l *LocalCluster) Assert(t util.Tester) {
 
 // AssertAndStop calls Assert and then stops the cluster. It is safe to stop
 // the cluster multiple times.
-func (l *LocalCluster) AssertAndStop(t util.Tester) {
+func (l *LocalCluster) AssertAndStop(t *testing.T) {
 	defer l.stop()
 	l.Assert(t)
 }
