@@ -564,9 +564,7 @@ func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCo
 	}
 
 	c.session.Reset()
-	if err := c.session.Unmarshal(resp.Session); err != nil {
-		return err
-	}
+	c.session = resp.Session
 
 	c.opts.database = c.session.Database
 	tracing.AnnotateTrace()

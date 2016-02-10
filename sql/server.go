@@ -95,13 +95,22 @@ func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reply, code, err := s.Execute(requestFromProto(args))
+	req, err := requestFromProto(args)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	reply, code, err := s.Execute(req)
 	if err != nil {
 		http.Error(w, err.Error(), code)
 	}
 
+	resp, err := protoFromResponse(reply)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
 	// Marshal the response.
-	body, contentType, err := util.MarshalResponse(r, protoFromResponse(reply), allowedEncodings)
+	body, contentType, err := util.MarshalResponse(r, resp, allowedEncodings)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -119,32 +128,51 @@ func (s Server) RegisterRPC(rpcServer *rpc.Server) error {
 
 func (s Server) executeCmd(argsI proto.Message) (proto.Message, error) {
 	args := argsI.(*driver.Request)
-	reply, _, err := s.Execute(requestFromProto(*args))
-	return protoFromResponse(reply), err
+	req, err := requestFromProto(*args)
+	if err != nil {
+		return nil, err
+	}
+	reply, _, err := s.Execute(req)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := protoFromResponse(reply)
+	return resp, err
 }
 
-func requestFromProto(dr driver.Request) Request {
+func requestFromProto(dr driver.Request) (Request, error) {
+
+	var session Session
+	if err := proto.Unmarshal(dr.Session, &session); err != nil {
+		return Request{}, err
+	}
+
 	r := Request{
 		User:    dr.User,
-		Session: dr.Session,
+		Session: session,
 		SQL:     dr.Sql,
 		Params:  make([]parser.Datum, 0, len(dr.Params)),
 	}
 	for _, d := range dr.Params {
 		r.Params = append(r.Params, datumFromProto(d))
 	}
-	return r
+	return r, nil
 }
 
-func protoFromResponse(r Response) *driver.Response {
+func protoFromResponse(r Response) (*driver.Response, error) {
+	bytes, err := proto.Marshal(&r.Session)
+	if err != nil {
+		return nil, err
+	}
+
 	dr := &driver.Response{
-		Session: r.Session,
+		Session: bytes,
 		Results: make([]driver.Response_Result, 0, len(r.Results)),
 	}
 	for _, rr := range r.Results {
 		dr.Results = append(dr.Results, protoFromResult(rr))
 	}
-	return dr
+	return dr, nil
 }
 
 func protoFromResult(r Result) driver.Response_Result {
