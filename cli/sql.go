@@ -131,6 +131,7 @@ func runStatements(db *sql.DB, stmts []string) error {
 		fullStmt := stmt + "\n"
 		cols, allRows, err := runQuery(db, fullStmt)
 		if err != nil {
+			fmt.Fprintln(osStderr, err)
 			return err
 		}
 
