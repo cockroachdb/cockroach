@@ -378,7 +378,12 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 	if target.As != "" {
 		outputName = string(target.As)
 	} else {
-		outputName = target.Expr.String()
+		switch target.Expr.(type) {
+		case *parser.QualifiedName:
+			// outputName will be set later after resolving qualified names.
+		default:
+			outputName = target.Expr.String()
+		}
 	}
 
 	// If a QualifiedName has a StarIndirection suffix we need to match the
