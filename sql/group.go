@@ -621,7 +621,7 @@ func (a *aggregateFunc) Eval(ctx parser.EvalContext) (parser.Datum, error) {
 }
 
 func (a *aggregateFunc) DeepCopy() parser.Expr {
-	panic("deep copy not implemented for aggregateFunc")
+	panic(fmt.Sprintf("deep copy not implemented for %T", a))
 }
 
 type aggregateImpl interface {

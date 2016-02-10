@@ -16,6 +16,8 @@
 
 package parser
 
+import "fmt"
+
 // Helper function to deep copy a list of expressions.
 func deepCopyExprs(exprs []Expr) Exprs {
 	if len(exprs) == 0 {
@@ -35,14 +37,10 @@ func (expr *AndExpr) DeepCopy() Expr {
 
 // DeepCopy is part of the Expr interface.
 func (expr *BinaryExpr) DeepCopy() Expr {
-	return &BinaryExpr{
-		Operator: expr.Operator,
-		Left:     expr.Left.DeepCopy(),
-		Right:    expr.Right.DeepCopy(),
-		fn:       expr.fn,
-		ltype:    expr.ltype,
-		rtype:    expr.rtype,
-	}
+	exprCopy := *expr
+	exprCopy.Left = exprCopy.Left.DeepCopy()
+	exprCopy.Right = exprCopy.Right.DeepCopy()
+	return &exprCopy
 }
 
 // DeepCopy is part of the Expr interface.
@@ -64,22 +62,24 @@ func (expr *CaseExpr) DeepCopy() Expr {
 
 // DeepCopy is part of the Expr interface.
 func (expr *CastExpr) DeepCopy() Expr {
-	return &CastExpr{Expr: expr.Expr.DeepCopy(), Type: expr.Type}
+	exprCopy := *expr
+	exprCopy.Expr = exprCopy.Expr.DeepCopy()
+	return &exprCopy
 }
 
 // DeepCopy is part of the Expr interface.
 func (expr *CoalesceExpr) DeepCopy() Expr {
-	return &CoalesceExpr{Name: expr.Name, Exprs: deepCopyExprs(expr.Exprs)}
+	exprCopy := *expr
+	exprCopy.Exprs = deepCopyExprs(exprCopy.Exprs)
+	return &exprCopy
 }
 
 // DeepCopy is part of the Expr interface.
 func (expr *ComparisonExpr) DeepCopy() Expr {
-	return &ComparisonExpr{
-		Operator: expr.Operator,
-		Left:     expr.Left.DeepCopy(),
-		Right:    expr.Right.DeepCopy(),
-		fn:       expr.fn,
-	}
+	exprCopy := *expr
+	exprCopy.Left = exprCopy.Left.DeepCopy()
+	exprCopy.Right = exprCopy.Right.DeepCopy()
+	return &exprCopy
 }
 
 // DeepCopy is part of the Expr interface.
@@ -89,13 +89,9 @@ func (expr *ExistsExpr) DeepCopy() Expr {
 
 // DeepCopy is part of the Expr interface.
 func (expr *FuncExpr) DeepCopy() Expr {
-	return &FuncExpr{
-		Name:    expr.Name,
-		Type:    expr.Type,
-		Exprs:   deepCopyExprs(expr.Exprs),
-		fn:      expr.fn,
-		fnFound: expr.fnFound,
-	}
+	exprCopy := *expr
+	exprCopy.Exprs = deepCopyExprs(exprCopy.Exprs)
+	return &exprCopy
 }
 
 // DeepCopy is part of the Expr interface.
@@ -139,34 +135,29 @@ func (expr *ParenExpr) DeepCopy() Expr {
 
 // DeepCopy is part of the Expr interface.
 func (t *QualifiedName) DeepCopy() Expr {
-	q := &QualifiedName{}
-	*q = *t
-	return q
+	q := *t
+	return &q
 }
 
 // DeepCopy is part of the Expr interface.
 func (expr *RangeCond) DeepCopy() Expr {
-	return &RangeCond{
-		Not:  expr.Not,
-		Left: expr.Left.DeepCopy(),
-		From: expr.From.DeepCopy(),
-		To:   expr.To.DeepCopy(),
-	}
+	exprCopy := *expr
+	exprCopy.Left = exprCopy.Left.DeepCopy()
+	exprCopy.From = exprCopy.From.DeepCopy()
+	exprCopy.To = exprCopy.To.DeepCopy()
+	return &exprCopy
 }
 
 // DeepCopy is part of the Expr interface.
 func (expr *Subquery) DeepCopy() Expr {
-	panic("deep copy for subqueries not implemented")
+	panic(fmt.Sprintf("deep copy not implemented for %T", expr))
 }
 
 // DeepCopy is part of the Expr interface.
 func (expr *UnaryExpr) DeepCopy() Expr {
-	return &UnaryExpr{
-		Operator: expr.Operator,
-		Expr:     expr.Expr.DeepCopy(),
-		fn:       expr.fn,
-		dtype:    expr.dtype,
-	}
+	exprCopy := *expr
+	exprCopy.Expr = exprCopy.Expr.DeepCopy()
+	return &exprCopy
 }
 
 // DeepCopy is part of the Expr interface.
@@ -178,7 +169,10 @@ func (expr Array) DeepCopy() Expr {
 func (t DefaultVal) DeepCopy() Expr { return t }
 
 // DeepCopy is part of the Expr interface.
-func (t *IntVal) DeepCopy() Expr { return &IntVal{Val: t.Val, Str: t.Str} }
+func (t *IntVal) DeepCopy() Expr {
+	tCopy := *t
+	return &tCopy
+}
 
 // DeepCopy is part of the Expr interface.
 func (t NumVal) DeepCopy() Expr { return t }
