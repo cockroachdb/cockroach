@@ -1,0 +1,50 @@
+# Two serializable transactions; `root` starts, reads something (so gets a timestamp).
+# Then `testuser` starts, insert
+
+
+user root
+
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+GRANT ALL on t TO testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
+
+query I
+SELECT * FROM t
+----
+
+
+user testuser
+
+statement ok
+INSERT INTO t(a) VALUES (1)
+
+# Do a read, so the read cache has an entry about testuser's transaction.
+query I
+SELECT * FROM t
+----
+1
+
+user root
+
+# Do a write, which is going to see the read cache value and push root's
+# transaction's timestamp above testuser's.
+statement ok
+INSERT INTO t(a) VALUES (2)
+
+# Read different values from before, since our timestamp has been pushed.
+# This is no bueno.
+query I
+SELECT * FROM t
+----
+1
+2
+
+# Try to commit figures out that we pushed ourselves and we need to restart.
+# Which is good, except that we should have figured it out earlier.
+statement ok
+COMMIT
