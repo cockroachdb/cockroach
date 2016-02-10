@@ -29,9 +29,10 @@ import (
 
 // Insert represents an INSERT statement.
 type Insert struct {
-	Table   *QualifiedName
-	Columns QualifiedNames
-	Rows    SelectStatement
+	Table     *QualifiedName
+	Columns   QualifiedNames
+	Rows      SelectStatement
+	Returning SelectExprs
 }
 
 func (node *Insert) String() string {
@@ -44,6 +45,9 @@ func (node *Insert) String() string {
 		buf.WriteString(" DEFAULT VALUES")
 	} else {
 		fmt.Fprintf(&buf, " %s", node.Rows)
+	}
+	if node.Returning != nil {
+		fmt.Fprintf(&buf, " RETURNING %s", node.Returning)
 	}
 	return buf.String()
 }

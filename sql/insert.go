@@ -129,6 +129,33 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 
 	b := p.txn.NewBatch()
 	result := &valuesNode{}
+	var qvals qvalMap
+	if n.Returning != nil {
+		result.columns = make([]ResultColumn, len(n.Returning))
+		table := tableInfo{
+			columns: makeResultColumns(cols, 0),
+		}
+		qvals = make(qvalMap)
+		for i, c := range n.Returning {
+			expr, err := resolveQNames(&table, qvals, c.Expr)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+			n.Returning[i].Expr = expr
+			typ, err := expr.TypeCheck(p.evalCtx.Args)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+			name := string(c.As)
+			if name == "" {
+				name = expr.String()
+			}
+			result.columns[i] = ResultColumn{
+				Name: name,
+				Typ:  typ,
+			}
+		}
+	}
 	for rows.Next() {
 		rowVals := rows.Values()
 		result.rows = append(result.rows, parser.DTuple(nil))
@@ -234,6 +261,20 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 				b.CPut(key, marshalled[i], nil)
 			}
 		}
+
+		if n.Returning == nil {
+			continue
+		}
+		qvals.populateQVals(rowVals)
+		resrow := make(parser.DTuple, len(n.Returning))
+		for i, c := range n.Returning {
+			d, err := c.Expr.Eval(p.evalCtx)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+			resrow[i] = d
+		}
+		result.rows[len(result.rows)-1] = resrow
 	}
 	if pErr := rows.PErr(); pErr != nil {
 		return nil, pErr

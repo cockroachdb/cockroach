@@ -115,7 +115,7 @@ func (s *selectNode) Next() bool {
 			}
 		}
 		row := s.table.node.Values()
-		s.populateQVals(row)
+		s.qvals.populateQVals(row)
 		output := s.filterRow()
 		if s.pErr != nil {
 			return false
@@ -405,7 +405,7 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 				if col.hidden {
 					continue
 				}
-				qval := s.getQVal(columnRef{&s.table, idx})
+				qval := s.qvals.getQVal(columnRef{&s.table, idx})
 				s.columns = append(s.columns, ResultColumn{Name: col.Name, Typ: qval.datum})
 				s.render = append(s.render, qval)
 			}

@@ -160,6 +160,7 @@ func unimplemented() {
 %type <groupBy> group_clause
 %type <limit> select_limit
 %type <qnames> relation_expr_list
+%type <selExprs> returning_clause
 
 %type <boolVal> all_or_distinct
 %type <empty> join_outer
@@ -1512,10 +1513,11 @@ create_database_stmt:
   }
 
 insert_stmt:
-  opt_with_clause INSERT INTO insert_target insert_rest opt_on_conflict
+  opt_with_clause INSERT INTO insert_target insert_rest opt_on_conflict returning_clause
   {
     $$ = $5
     $$.(*Insert).Table = $4
+    $$.(*Insert).Returning = $7
   }
 
 // Can't easily make AS optional here, because VALUES in insert_rest would have
@@ -1552,6 +1554,16 @@ opt_conf_expr:
   '(' index_params ')' where_clause { unimplemented() }
 | ON CONSTRAINT name { unimplemented() }
 | /* EMPTY */ {}
+
+returning_clause:
+  RETURNING target_list
+  {
+    $$ = $2
+  }
+| /* EMPTY */
+  {
+    $$ = nil
+  }
 
 update_stmt:
   opt_with_clause UPDATE relation_expr_opt_alias
