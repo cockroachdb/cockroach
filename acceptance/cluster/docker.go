@@ -17,84 +17,26 @@
 package cluster
 
 import (
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/docker/docker/pkg/jsonmessage"
+	"github.com/docker/engine-api/types"
+	"github.com/docker/engine-api/types/container"
+	"github.com/docker/go-connections/nat"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/samalba/dockerclient"
 )
-
-func getTLSConfig() *tls.Config {
-	certPath := os.Getenv("DOCKER_CERT_PATH")
-
-	clientCert, err := tls.LoadX509KeyPair(
-		filepath.Join(certPath, "cert.pem"),
-		filepath.Join(certPath, "key.pem"),
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	rootCAs := x509.NewCertPool()
-	caCert, err := ioutil.ReadFile(filepath.Join(certPath, "ca.pem"))
-	if err != nil {
-		panic(err)
-	}
-	rootCAs.AppendCertsFromPEM(caCert)
-
-	return &tls.Config{
-		Certificates: []tls.Certificate{clientCert},
-		RootCAs:      rootCAs,
-	}
-}
-
-// NewDockerClient constructs a new docker client using the best available
-// method. If DOCKER_HOST is set, initialize the client using DOCKER_TLS_VERIFY
-// and DOCKER_CERT_PATH. If DOCKER_HOST is not set, look for the unix domain
-// socket in /run/docker.sock and /var/run/docker.sock.
-func NewDockerClient() dockerclient.Client {
-	if host := os.Getenv("DOCKER_HOST"); host != "" {
-		if os.Getenv("DOCKER_TLS_VERIFY") == "" {
-			c, err := dockerclient.NewDockerClient(host, nil)
-			if err != nil {
-				log.Fatal(err)
-			}
-			return c
-		}
-		c, err := dockerclient.NewDockerClient(host, getTLSConfig())
-		if err != nil {
-			log.Fatal(err)
-		}
-		return c
-	}
-
-	for _, l := range []string{"/run/docker.sock", "/var/run/docker.sock"} {
-		if _, err := os.Stat(l); err != nil {
-			continue
-		}
-		c, err := dockerclient.NewDockerClient("unix://"+l, nil)
-		if err != nil {
-			return nil
-		}
-		return c
-	}
-	log.Fatal("docker not configured")
-	return nil
-}
 
 // Retrieve the IP address of docker itself.
 func dockerIP() net.IP {
@@ -118,21 +60,58 @@ func dockerIP() net.IP {
 // Container provides the programmatic interface for a single docker
 // container.
 type Container struct {
-	ID      string
-	Name    string
+	id      string
+	name    string
 	cluster *LocalCluster
+}
+
+// Name returns the container's name.
+func (c Container) Name() string {
+	return c.name
+}
+
+func pullImage(l *LocalCluster, options types.ImagePullOptions) error {
+	log.Infof("ImagePull %s:%s starting", options.ImageID, options.Tag)
+	defer log.Infof("ImagePull %s:%s complete", options.ImageID, options.Tag)
+
+	rc, err := l.client.ImagePull(context.Background(), options, nil)
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+	dec := json.NewDecoder(rc)
+	for {
+		var message jsonmessage.JSONMessage
+		if err := dec.Decode(&message); err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		if log.V(2) {
+			log.Infof("ImagePull response: %s", message)
+		}
+	}
 }
 
 // createContainer creates a new container using the specified options. Per the
 // docker API, the created container is not running and must be started
 // explicitly.
-func createContainer(l *LocalCluster, config dockerclient.ContainerConfig) (*Container, error) {
-	id, err := l.client.CreateContainer(&config, "", nil)
+func createContainer(l *LocalCluster, containerConfig container.Config, hostConfig container.HostConfig, containerName string) (*Container, error) {
+	// HACK: Removal of docker containers fails on circleci with the error:
+	// "Driver btrfs failed to remove root filesystem". So if we're running on
+	// circleci, we cannot name our containers because our tests reuse names.
+	dockerContainerName := containerName
+	if os.Getenv("CIRCLECI") == "true" {
+		dockerContainerName = ""
+	}
+	resp, err := l.client.ContainerCreate(&containerConfig, &hostConfig, nil, dockerContainerName)
 	if err != nil {
 		return nil, err
 	}
 	return &Container{
-		ID:      id,
+		id:      resp.ID,
+		name:    containerName,
 		cluster: l,
 	}, nil
 }
@@ -152,7 +131,10 @@ func (c *Container) Remove() error {
 		// circleci, just leave the containers around.
 		return nil
 	}
-	return c.cluster.client.RemoveContainer(c.ID, false, true)
+	return c.cluster.client.ContainerRemove(types.ContainerRemoveOptions{
+		ContainerID:   c.id,
+		RemoveVolumes: true,
+	})
 }
 
 // Kill stops a running container, without removing it.
@@ -160,42 +142,28 @@ func (c *Container) Kill() error {
 	// Paused containers cannot be killed. Attempt to unpause it first
 	// (which might fail) before killing.
 	_ = c.Unpause()
-	if err := c.cluster.client.KillContainer(c.ID, "9"); err != nil {
+	if err := c.cluster.client.ContainerKill(c.id, "9"); err != nil && !strings.Contains(err.Error(), "is not running") {
 		return err
 	}
-	c.cluster.expectEvent(c, "die")
+	c.cluster.expectEvent(c, eventDie)
 	return nil
 }
 
 // Start starts a non-running container.
 //
 // TODO(pmattis): Generalize the setting of parameters here.
-func (c *Container) Start(binds []string, dns, vols *Container) error {
-	config := &dockerclient.HostConfig{
-		Binds:           binds,
-		PublishAllPorts: true,
-	}
-	if dns != nil {
-		ci, err := dns.Inspect()
-		if err != nil {
-			return err
-		}
-		config.Dns = append(config.Dns, ci.NetworkSettings.IPAddress)
-	}
-	if vols != nil {
-		config.VolumesFrom = append(config.VolumesFrom, vols.ID)
-	}
-	return c.cluster.client.StartContainer(c.ID, config)
+func (c *Container) Start() error {
+	return c.cluster.client.ContainerStart(c.id)
 }
 
 // Pause pauses a running container.
 func (c *Container) Pause() error {
-	return c.cluster.client.PauseContainer(c.ID)
+	return c.cluster.client.ContainerPause(c.id)
 }
 
 // Unpause resumes a paused container.
 func (c *Container) Unpause() error {
-	return c.cluster.client.UnpauseContainer(c.ID)
+	return c.cluster.client.ContainerUnpause(c.id)
 }
 
 // Restart restarts a running container.
@@ -205,65 +173,50 @@ func (c *Container) Restart(timeoutSeconds int) error {
 	if ci, err := c.Inspect(); err != nil {
 		return err
 	} else if ci.State.Running {
-		exp = append(exp, "die")
+		exp = append(exp, eventDie)
 	}
-	if err := c.cluster.client.RestartContainer(c.ID, timeoutSeconds); err != nil {
+	if err := c.cluster.client.ContainerRestart(c.id, timeoutSeconds); err != nil {
 		return err
 	}
-	c.cluster.expectEvent(c, append(exp, "restart")...)
+	c.cluster.expectEvent(c, append(exp, eventRestart)...)
 	return nil
 }
 
 // Stop a running container.
 func (c *Container) Stop(timeoutSeconds int) error {
-	if err := c.cluster.client.StopContainer(c.ID, timeoutSeconds); err != nil {
+	if err := c.cluster.client.ContainerStop(c.id, timeoutSeconds); err != nil {
 		return err
 	}
-	c.cluster.expectEvent(c, "die")
+	c.cluster.expectEvent(c, eventDie)
 	return nil
 }
 
 // Wait waits for a running container to exit.
 func (c *Container) Wait() error {
-	// TODO(pmattis): dockerclient does not support the "wait" method
-	// (yet), so perform the http call ourselves. Remove once "wait"
-	// support is added to dockerclient.
-	dc := c.cluster.client.(*dockerclient.DockerClient)
-	resp, err := dc.HTTPClient.Post(
-		fmt.Sprintf("%s/containers/%s/wait", dc.URL, c.ID), util.JSONContentType, nil)
+	exitCode, err := c.cluster.client.ContainerWait(context.Background(), c.id)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("no such container: %s", c.ID)
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	var r struct{ StatusCode int }
-	err = json.Unmarshal(body, &r)
-	if err != nil {
-		return err
-	}
-	if r.StatusCode != 0 {
-		_ = c.Logs(os.Stderr)
-		return fmt.Errorf("non-zero exit code: %d", r.StatusCode)
+	if exitCode != 0 {
+		if err := c.Logs(os.Stderr); err != nil {
+			log.Warning(err)
+		}
+		return fmt.Errorf("non-zero exit code: %d", exitCode)
 	}
 	return nil
 }
 
 // Logs outputs the containers logs to the given io.Writer.
 func (c *Container) Logs(w io.Writer) error {
-	r, err := c.cluster.client.ContainerLogs(c.ID, &dockerclient.LogOptions{
-		Stdout: true,
-		Stderr: true,
+	rc, err := c.cluster.client.ContainerLogs(context.Background(), types.ContainerLogsOptions{
+		ContainerID: c.id,
+		ShowStdout:  true,
+		ShowStderr:  true,
 	})
 	if err != nil {
 		return err
 	}
-	defer r.Close()
+	defer rc.Close()
 	// The docker log output is not quite plaintext: each line has a
 	// prefix consisting of one byte file descriptor (stdout vs stderr),
 	// three bytes padding, four byte length. We could use this to
@@ -271,13 +224,13 @@ func (c *Container) Logs(w io.Writer) error {
 	// separate streams, but we don't really care.
 	for {
 		var header uint64
-		if err := binary.Read(r, binary.BigEndian, &header); err == io.EOF {
+		if err := binary.Read(rc, binary.BigEndian, &header); err == io.EOF {
 			break
 		} else if err != nil {
 			return err
 		}
 		size := header & math.MaxUint32
-		if _, err := io.CopyN(w, r, int64(size)); err != nil {
+		if _, err := io.CopyN(w, rc, int64(size)); err != nil {
 			return err
 		}
 	}
@@ -285,12 +238,12 @@ func (c *Container) Logs(w io.Writer) error {
 }
 
 // Inspect retrieves detailed info about a container.
-func (c *Container) Inspect() (*dockerclient.ContainerInfo, error) {
-	return c.cluster.client.InspectContainer(c.ID)
+func (c *Container) Inspect() (types.ContainerJSON, error) {
+	return c.cluster.client.ContainerInspect(c.id)
 }
 
 // Addr returns the address to connect to the specified port.
-func (c *Container) Addr(name string) *net.TCPAddr {
+func (c *Container) Addr(name nat.Port) *net.TCPAddr {
 	containerInfo, err := c.Inspect()
 	if err != nil {
 		return nil
@@ -316,6 +269,6 @@ func (c *Container) PGAddr() *net.TCPAddr {
 
 // GetJSON retrieves the URL specified by https://Addr(<port>)<path>
 // and unmarshals the result as JSON.
-func (c *Container) GetJSON(port, path string, v interface{}) error {
+func (c *Container) GetJSON(port nat.Port, path string, v interface{}) error {
 	return getJSON(true /* tls */, c.Addr(port).String(), path, v)
 }

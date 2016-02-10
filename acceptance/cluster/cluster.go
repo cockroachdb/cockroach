@@ -18,8 +18,7 @@ package cluster
 
 import (
 	"net"
-
-	"github.com/cockroachdb/cockroach/util"
+	"testing"
 )
 
 // A Cluster is an abstraction away from a concrete cluster deployment (i.e.
@@ -37,10 +36,10 @@ type Cluster interface {
 	// Assert verifies that the cluster state is as expected (i.e. no unexpected
 	// restarts or node deaths occurred). Tests can call this periodically to
 	// ascertain cluster health.
-	Assert(util.Tester)
+	Assert(*testing.T)
 	// AssertAndStop performs the same test as Assert but then proceeds to
 	// dismantle the cluster.
-	AssertAndStop(util.Tester)
+	AssertAndStop(*testing.T)
 	// Kill terminates the cockroach process running on the given node number.
 	// The given integer must be in the range [0,NumNodes()-1].
 	Kill(int) error

@@ -24,10 +24,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
@@ -217,7 +217,7 @@ func (f *Farmer) WaitReady(d time.Duration) error {
 // restarts or node deaths occurred). Tests can call this periodically to
 // ascertain cluster health.
 // TODO(tschottdorf): unimplemented when nodes are expected down.
-func (f *Farmer) Assert(t util.Tester) {
+func (f *Farmer) Assert(t *testing.T) {
 	for _, item := range []struct {
 		typ   string
 		hosts []string
@@ -239,7 +239,7 @@ func (f *Farmer) Assert(t util.Tester) {
 
 // AssertAndStop performs the same test as Assert but then proceeds to
 // dismantle the cluster.
-func (f *Farmer) AssertAndStop(t util.Tester) {
+func (f *Farmer) AssertAndStop(t *testing.T) {
 	if err := f.Destroy(); err != nil {
 		t.Fatal(err)
 	}
