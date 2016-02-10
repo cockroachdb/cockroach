@@ -439,17 +439,17 @@ func DecodeBytesDescending(b []byte, r []byte) ([]byte, []byte, error) {
 
 func decodeBytesInternal(b []byte, r []byte, e escapes) ([]byte, []byte, error) {
 	if len(b) == 0 || b[0] != e.marker {
-		return nil, nil, util.Errorf("did not find marker")
+		return nil, nil, util.Errorf("did not find marker %#x in buffer %#x", e.marker, b)
 	}
 	b = b[1:]
 
 	for {
 		i := bytes.IndexByte(b, e.escape)
 		if i == -1 {
-			return nil, nil, util.Errorf("did not find terminator")
+			return nil, nil, util.Errorf("did not find terminator %#x in buffer %#x", e.escape, b)
 		}
 		if i+1 >= len(b) {
-			return nil, nil, util.Errorf("malformed escape")
+			return nil, nil, util.Errorf("malformed escape in buffer %#x", b)
 		}
 
 		v := b[i+1]
