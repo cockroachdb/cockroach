@@ -54,7 +54,7 @@ struct DBEngine {
   virtual DBStatus Delete(DBKey key) = 0;
   virtual DBStatus WriteBatch() = 0;
   virtual DBStatus Get(DBKey key, DBString* value) = 0;
-  virtual DBIterator* NewIter(bool prefix) = 0;
+  virtual DBIterator* NewIter(DBSlice prefix) = 0;
 };
 
 struct DBImpl : public DBEngine {
@@ -83,7 +83,7 @@ struct DBImpl : public DBEngine {
   virtual DBStatus Delete(DBKey key);
   virtual DBStatus WriteBatch();
   virtual DBStatus Get(DBKey key, DBString* value);
-  virtual DBIterator* NewIter(bool prefix);
+  virtual DBIterator* NewIter(DBSlice prefix);
 };
 
 struct DBBatch : public DBEngine {
@@ -100,7 +100,7 @@ struct DBBatch : public DBEngine {
   virtual DBStatus Delete(DBKey key);
   virtual DBStatus WriteBatch();
   virtual DBStatus Get(DBKey key, DBString* value);
-  virtual DBIterator* NewIter(bool prefix);
+  virtual DBIterator* NewIter(DBSlice prefix);
 };
 
 struct DBSnapshot : public DBEngine {
@@ -121,11 +121,16 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus Delete(DBKey key);
   virtual DBStatus WriteBatch();
   virtual DBStatus Get(DBKey key, DBString* value);
-  virtual DBIterator* NewIter(bool prefix);
+  virtual DBIterator* NewIter(DBSlice prefix);
 };
 
 struct DBIterator {
   std::unique_ptr<rocksdb::Iterator> rep;
+  std::string upper_bound_str;
+  rocksdb::Slice upper_bound;
+  rocksdb::Slice *upper_bound_ptr;
+
+  DBIterator(DBSlice prefix);
 };
 
 }  // extern "C"
@@ -1396,18 +1401,20 @@ DBEngine* DBNewBatch(DBEngine *db) {
   return new DBBatch(db);
 }
 
-DBIterator* DBImpl::NewIter(bool prefix) {
-  DBIterator* iter = new DBIterator;
+DBIterator* DBImpl::NewIter(DBSlice prefix) {
+  DBIterator* iter = new DBIterator(prefix);
   rocksdb::ReadOptions opts = read_opts;
-  opts.total_order_seek = !prefix;
+  opts.iterate_upper_bound = iter->upper_bound_ptr;
+  opts.total_order_seek = iter->upper_bound_ptr == NULL;
   iter->rep.reset(rep->NewIterator(opts));
   return iter;
 }
 
-DBIterator* DBBatch::NewIter(bool prefix) {
-  DBIterator* iter = new DBIterator;
+DBIterator* DBBatch::NewIter(DBSlice prefix) {
+  DBIterator* iter = new DBIterator(prefix);
   rocksdb::ReadOptions opts = read_opts;
-  opts.total_order_seek = !prefix;
+  opts.iterate_upper_bound = iter->upper_bound_ptr;
+  opts.total_order_seek = iter->upper_bound_ptr == NULL;
   rocksdb::Iterator* base = rep->NewIterator(opts);
   if (updates == 0) {
     iter->rep.reset(base);
@@ -1418,15 +1425,35 @@ DBIterator* DBBatch::NewIter(bool prefix) {
   return iter;
 }
 
-DBIterator* DBSnapshot::NewIter(bool prefix) {
-  DBIterator* iter = new DBIterator;
+DBIterator* DBSnapshot::NewIter(DBSlice prefix) {
+  DBIterator* iter = new DBIterator(prefix);
   rocksdb::ReadOptions opts = read_opts;
-  opts.total_order_seek = !prefix;
+  opts.iterate_upper_bound = iter->upper_bound_ptr;
+  opts.total_order_seek = iter->upper_bound_ptr == NULL;
   iter->rep.reset(rep->NewIterator(opts));
   return iter;
 }
 
-DBIterator* DBNewIter(DBEngine* db, bool prefix) {
+DBIterator::DBIterator(DBSlice prefix)
+    : upper_bound_ptr(NULL) {
+  if (prefix.len > 0) {
+    // When we're performing a prefix scan, we want to limit the scan
+    // to the keys that have the matching prefix. Prefix in this case
+    // refers to an exact match on the non-timestamp portion of a
+    // key. We do this be constructing an encoded mvcc key which has a
+    // zero timestamp (hence the trailing 0) and is the "next" key
+    // (thus the additional 0). See EncodeKey and SplitKey for more
+    // details on the encoded key format.
+    upper_bound_str.reserve(prefix.len + 2);
+    upper_bound_str.append(prefix.data, prefix.len);
+    upper_bound_str.push_back(0);
+    upper_bound_str.push_back(0);
+    upper_bound = upper_bound_str;
+    upper_bound_ptr = &upper_bound;
+  }
+}
+
+DBIterator* DBNewIter(DBEngine* db, DBSlice prefix) {
   return db->NewIter(prefix);
 }
 
