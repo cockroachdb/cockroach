@@ -371,32 +371,26 @@ func (s *selectNode) colIndex(expr parser.Expr) (int, error) {
 }
 
 func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
-	// When generating an output column name it should exactly match the original
-	// expression, so determine the output column name before we perform any
-	// manipulations to the expression (such as star expansion).
-	var outputName string
-	if target.As != "" {
-		outputName = string(target.As)
-	} else {
-		outputName = target.Expr.String()
-	}
+	// outputName will be empty if the target is not aliased.
+	outputName := string(target.As)
 
-	// If a QualifiedName has a StarIndirection suffix we need to match the
-	// prefix of the qualified name to one of the tables in the query and
-	// then expand the "*" into a list of columns.
-	if qname, ok := target.Expr.(*parser.QualifiedName); ok {
-		if s.pErr = roachpb.NewError(qname.NormalizeColumnName()); s.pErr != nil {
+	switch t := target.Expr.(type) {
+	case *parser.QualifiedName:
+		// If a QualifiedName has a StarIndirection suffix we need to match the
+		// prefix of the qualified name to one of the tables in the query and
+		// then expand the "*" into a list of columns.
+		if s.pErr = roachpb.NewError(t.NormalizeColumnName()); s.pErr != nil {
 			return s.pErr
 		}
-		if qname.IsStar() {
+		if t.IsStar() {
 			if s.table.alias == "" {
-				return roachpb.NewUErrorf("\"%s\" with no tables specified is not valid", qname)
+				return roachpb.NewUErrorf("\"%s\" with no tables specified is not valid", t)
 			}
 			if target.As != "" {
-				return roachpb.NewUErrorf("\"%s\" cannot be aliased", qname)
+				return roachpb.NewUErrorf("\"%s\" cannot be aliased", t)
 			}
 			// TODO(radu): support multiple FROMs, consolidate with logic in findColumn
-			tableName := qname.Table()
+			tableName := t.Table()
 			if tableName != "" && !equalName(s.table.alias, tableName) {
 				return roachpb.NewUErrorf("table \"%s\" not found", tableName)
 			}
@@ -411,6 +405,13 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 			}
 
 			return nil
+		}
+	default:
+		if outputName == "" {
+			// When generating an output column name it should exactly match the original
+			// expression, so determine the output column name before we perform any
+			// manipulations to the expression (such as star expansion).
+			outputName = target.Expr.String()
 		}
 	}
 
