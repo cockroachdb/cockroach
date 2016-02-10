@@ -98,14 +98,7 @@ func pullImage(l *LocalCluster, options types.ImagePullOptions) error {
 // docker API, the created container is not running and must be started
 // explicitly.
 func createContainer(l *LocalCluster, containerConfig container.Config, hostConfig container.HostConfig, containerName string) (*Container, error) {
-	// HACK: Removal of docker containers fails on circleci with the error:
-	// "Driver btrfs failed to remove root filesystem". So if we're running on
-	// circleci, we cannot name our containers because our tests reuse names.
-	dockerContainerName := containerName
-	if os.Getenv("CIRCLECI") == "true" {
-		dockerContainerName = ""
-	}
-	resp, err := l.client.ContainerCreate(&containerConfig, &hostConfig, nil, dockerContainerName)
+	resp, err := l.client.ContainerCreate(&containerConfig, &hostConfig, nil, containerName)
 	if err != nil {
 		return nil, err
 	}
@@ -125,16 +118,18 @@ func maybePanic(err error) {
 // Remove removes the container from docker. It is an error to remove a running
 // container.
 func (c *Container) Remove() error {
-	if os.Getenv("CIRCLECI") == "true" {
-		// HACK: Removal of docker containers fails on circleci with the error:
-		// "Driver btrfs failed to remove root filesystem". So if we're running on
-		// circleci, just leave the containers around.
-		return nil
-	}
-	return c.cluster.client.ContainerRemove(types.ContainerRemoveOptions{
+	err := c.cluster.client.ContainerRemove(types.ContainerRemoveOptions{
 		ContainerID:   c.id,
 		RemoveVolumes: true,
 	})
+
+	if os.Getenv("CIRCLECI") == "true" {
+		// HACK: Removal of docker containers on circleci reports the error:
+		// "Driver btrfs failed to remove root filesystem". So if we're running on
+		// circleci, just ignore the error, the containers are still removed.
+		return nil
+	}
+	return err
 }
 
 // Kill stops a running container, without removing it.
