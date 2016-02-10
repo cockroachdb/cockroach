@@ -136,7 +136,12 @@ func (*Grant) StatementType() StatementType { return DDL }
 func (*Grant) StatementTag() string { return "GRANT" }
 
 // StatementType implements the Statement interface.
-func (*Insert) StatementType() StatementType { return RowsAffected }
+func (n *Insert) StatementType() StatementType {
+	if n.Returning != nil {
+		return Rows
+	}
+	return RowsAffected
+}
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Insert) StatementTag() string { return "INSERT" }

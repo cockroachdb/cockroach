@@ -41,8 +41,13 @@ func (cr columnRef) get() ResultColumn {
 	return cr.table.columns[cr.colIdx]
 }
 
+type qvalTable struct {
+	table *tableInfo
+	qvals qvalMap
+}
+
 // findColumn looks up the column described by a QualifiedName. The qname will be normalized.
-func (s *selectNode) findColumn(qname *parser.QualifiedName) (columnRef, error) {
+func (qt qvalTable) findColumn(qname *parser.QualifiedName) (columnRef, error) {
 
 	ref := columnRef{colIdx: invalidColIdx}
 
@@ -60,13 +65,13 @@ func (s *selectNode) findColumn(qname *parser.QualifiedName) (columnRef, error) 
 	// no alias is given, we will search for the column in all FROMs and make sure there is only
 	// one.  For now we just check that the name matches (if given).
 	if qname.Base == "" {
-		qname.Base = parser.Name(s.table.alias)
+		qname.Base = parser.Name(qt.table.alias)
 	}
-	if equalName(s.table.alias, string(qname.Base)) {
+	if equalName(qt.table.alias, string(qname.Base)) {
 		colName := qname.Column()
-		for idx, col := range s.table.columns {
+		for idx, col := range qt.table.columns {
 			if equalName(col.Name, colName) {
-				ref.table = &s.table
+				ref.table = qt.table
 				ref.colIdx = idx
 				return ref, nil
 			}
@@ -111,8 +116,8 @@ func (q *qvalue) Eval(ctx parser.EvalContext) (parser.Datum, error) {
 // getQVal creates a qvalue for a column reference. Created qvalues are
 // stored in the qvals map. If a qvalue was previously created for the same
 // reference, the existing qvalue is returned.
-func (s *selectNode) getQVal(colRef columnRef) *qvalue {
-	qval := s.qvals[colRef]
+func (q qvalMap) getQVal(colRef columnRef) *qvalue {
+	qval := q[colRef]
 	if qval == nil {
 		col := colRef.get()
 		// We initialize the qvalue expression to a datum of the type matching the
@@ -122,7 +127,7 @@ func (s *selectNode) getQVal(colRef columnRef) *qvalue {
 		// TODO(pmattis): Nullable columns can have NULL values. The type analysis
 		// needs to take that into consideration, but how to surface that info?
 		qval = &qvalue{colRef: colRef, datum: col.Typ}
-		s.qvals[colRef] = qval
+		q[colRef] = qval
 	}
 	return qval
 }
@@ -130,8 +135,8 @@ func (s *selectNode) getQVal(colRef columnRef) *qvalue {
 // qnameVisitor is a parser.Visitor implementation used to resolve the
 // column names in an expression.
 type qnameVisitor struct {
-	selNode *selectNode
-	err     error
+	qt qvalTable
+	err   error
 }
 
 var _ parser.Visitor = &qnameVisitor{}
@@ -154,17 +159,17 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 		// statement implementations do not modify the AST nodes they are passed?
 		colRef := t.colRef
 		// TODO(radu): this is pretty hacky and won't work with multiple FROMs..
-		colRef.table = &v.selNode.table
-		return v, v.selNode.getQVal(colRef)
+		colRef.table = v.qt.table
+		return v, v.qt.qvals.getQVal(colRef)
 
 	case *parser.QualifiedName:
 		var colRef columnRef
 
-		colRef, v.err = v.selNode.findColumn(t)
+		colRef, v.err = v.qt.findColumn(t)
 		if v.err != nil {
 			return nil, expr
 		}
-		return v, v.selNode.getQVal(colRef)
+		return v, v.qt.qvals.getQVal(colRef)
 
 	case *parser.FuncExpr:
 		// Special case handling for COUNT(*). This is a special construct to
@@ -204,18 +209,26 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 }
 
 func (s *selectNode) resolveQNames(expr parser.Expr) (parser.Expr, error) {
+	return resolveQNames(&s.table, s.qvals, expr)
+}
+
+func resolveQNames(table *tableInfo, qvals qvalMap, expr parser.Expr) (parser.Expr, error) {
 	if expr == nil {
 		return expr, nil
 	}
-	v := qnameVisitor{selNode: s}
+	v := qnameVisitor{
+		qt: qvalTable{
+			table: table,
+			qvals: qvals,
+		},
+	}
 	expr = parser.WalkExpr(&v, expr)
 	return expr, v.err
 }
 
-// Populates the datum fields of the qvalues in the qval map (given a row
-// of values retrieved from the fromNode).
-func (s *selectNode) populateQVals(row parser.DTuple) {
-	for ref, qval := range s.qvals {
+// Populates the datum fields in the qval map given a row of values.
+func (q qvalMap) populateQVals(row parser.DTuple) {
+	for ref, qval := range q {
 		qval.datum = row[ref.colIdx]
 		if qval.datum == nil {
 			panic(fmt.Sprintf("Unpopulated value for column %d", ref.colIdx))
