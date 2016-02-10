@@ -31,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -40,47 +41,49 @@ import (
 var maxTransfer = flag.Int("max-transfer", 999, "Maximum amount to transfer in one transaction.")
 var numAccounts = flag.Int("num-accounts", 999, "Number of accounts.")
 
-// TestChaos starts up a cluster with an "accounts" table.
-// It starts transferring money between accounts, while nodes are
-// being killed and restarted continuously.
-// The test doesn't measure write performance, but cluster recovery.
-// TODO(vivek): Expand this test to check that write performance
-// is unaffected by chaos.
-func TestChaos(t *testing.T) {
-	c := StartCluster(t)
-	defer c.AssertAndStop(t)
+type testClient struct {
+	sync.RWMutex
+	db      *sql.DB
+	stopper *stop.Stopper
+	count   uint64
+}
 
-	num := c.NumNodes()
-	if num <= 0 {
-		t.Fatalf("%d nodes in cluster", num)
-	}
-
+type testState struct {
+	t *testing.T
 	// One error sent by each client. A successful client sends a nil error.
-	errs := make(chan error, num)
+	errChan  chan error
+	teardown chan struct{}
 	// The number of times chaos monkey has run.
-	var round uint64
+	monkeyIteration uint64
 	// Set to 1 if chaos monkey has stalled the writes.
-	var stalled int32
-	// One client for each node.
-	clients := make([]struct {
-		sync.RWMutex
-		db      *sql.DB
-		stopper *stop.Stopper
-		count   uint64
-	}, num)
+	stalled  int32
+	deadline time.Time
+	clients  []testClient
+}
 
-	// initClient initializes the client talking to node "i".
-	// It requires that the caller hold the client's write lock.
-	initClient := func(i int) {
-		if clients[i].stopper != nil {
-			clients[i].stopper.Stop()
-		}
-		clients[i].db = makePGClient(t, c.PGUrl(i))
-		clients[i].stopper = stop.NewStopper()
+func (state *testState) done() bool {
+	return !time.Now().Before(state.deadline) || atomic.LoadInt32(&state.stalled) == 1
+}
+
+// initClient initializes the client talking to node "i".
+// It requires that the caller hold the client's write lock.
+func (state *testState) initClient(t *testing.T, c cluster.Cluster, i int) {
+	state.clients[i].db = makePGClient(t, c.PGUrl(i))
+}
+
+// Returns counts from all the clients.
+func (state *testState) counts() []uint64 {
+	counts := make([]uint64, len(state.clients))
+	for i := range state.clients {
+		counts[i] = atomic.LoadUint64(&state.clients[i].count)
 	}
+	return counts
+}
 
-	// Initialize the "accounts" table.
-	db := makePGClient(t, c.PGUrl(0))
+// Initialize the "accounts" table.
+func initBank(t *testing.T, url string) {
+	// Connect to the cluster.
+	db := makePGClient(t, url)
 
 	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS bank`); err != nil {
 		t.Fatal(err)
@@ -113,167 +116,172 @@ CREATE TABLE bank.accounts (
 	if _, err := db.Exec(stmt, values...); err != nil {
 		t.Fatal(err)
 	}
+}
 
-	start := time.Now()
-	deadline := start.Add(*flagDuration)
-	done := func() bool {
-		return !time.Now().Before(deadline) || atomic.LoadInt32(&stalled) == 1
+func transferMoney(client *testClient, numAccounts, maxTransfer int) error {
+	from := rand.Intn(numAccounts)
+	to := rand.Intn(numAccounts - 1)
+	if from == to {
+		to = numAccounts - 1
 	}
+	amount := rand.Intn(maxTransfer)
 
-	for i := 0; i < num; i++ {
-		clients[i].Lock()
-		initClient(i)
-		clients[i].Unlock()
-		go func(i int) {
-			for !done() {
-				if err := func() error {
-					clients[i].RLock()
-					defer clients[i].RUnlock()
-					from := rand.Intn(*numAccounts)
-					to := rand.Intn(*numAccounts - 1)
-					if from == to {
-						to = *numAccounts - 1
-					}
-					amount := rand.Intn(*maxTransfer)
-
-					const update = `
+	const update = `
 									UPDATE bank.accounts
 									  SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
 										  WHERE id IN ($1, $2) AND (SELECT balance >= $3 FROM bank.accounts WHERE id = $1)`
-					if _, err := clients[i].db.Exec(update, from, to, amount); err != nil {
-						// Ignore some errors.
-						if testutils.IsError(err, "connection refused") {
-							return nil
-						}
-						return err
-					}
+	client.RLock()
+	defer client.RUnlock()
+	_, err := client.db.Exec(update, from, to, amount)
+	return err
+}
 
-					// Only advance the counts on a successful update.
-					atomic.AddUint64(&clients[i].count, 1)
-					return nil
-				}(); err != nil {
-					// Report the err and terminate.
-					errs <- err
-					return
-				}
-			}
-			log.Infof("client %d shutting down", i)
-			errs <- nil
-		}(i)
+// Verify accounts.
+func verifyAccounts(t *testing.T, client *testClient) {
+	// Hold the read lock on the client to prevent it being restarted by
+	// chaos monkey.
+	var sum int
+	client.RLock()
+	defer client.RUnlock()
+	if err := client.db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum); err != nil {
+		t.Fatal(err)
 	}
+	if sum != 0 {
+		t.Fatalf("The bank is not in good order. Total value: %d", sum)
+	}
+}
 
-	teardown := make(chan struct{})
-	defer func() {
-		<-teardown
-		for i := range clients {
-			clients[i].Lock()
-			clients[i].stopper.Stop()
-			clients[i].stopper = nil
-			clients[i].Unlock()
+// Continuously transfers money until done().
+func transferMoneyLoop(idx int, state *testState, numAccounts, maxTransfer int) {
+	client := &state.clients[idx]
+	for !state.done() {
+		if err := transferMoney(client, numAccounts, maxTransfer); err != nil {
+			// Ignore some errors.
+			if !testutils.IsError(err, "connection refused") && !testutils.IsError(err, "failed to send RPC") {
+				// Report the err and terminate.
+				state.errChan <- err
+				break
+			}
+		} else {
+			// Only advance the counts on a successful update.
+			atomic.AddUint64(&client.count, 1)
 		}
-	}()
+	}
+	log.Infof("client %d shutting down", idx)
+	state.errChan <- nil
+}
 
-	// Chaos monkey.
-	go func() {
-		defer close(teardown)
-		rnd, seed := randutil.NewPseudoRand()
-		log.Warningf("monkey starts (seed %d)", seed)
-		for atomic.StoreUint64(&round, 1); !done(); atomic.AddUint64(&round, 1) {
-			curRound := atomic.LoadUint64(&round)
+// chaosMonkey picks a set of nodes and restarts them. If stopClients is set
+// all the clients are locked before the nodes are restarted.
+func chaosMonkey(state *testState, c cluster.Cluster, stopClients bool, pickNodes func() []int) {
+	defer close(state.teardown)
+	for curRound := uint64(1); !state.done(); curRound++ {
+		atomic.StoreUint64(&state.monkeyIteration, curRound)
+		select {
+		case <-stopper:
+			return
+		default:
+		}
+
+		// Pick nodes to be restarted.
+		nodes := pickNodes()
+
+		if stopClients {
+			// Prevent all clients from writing while nodes are being restarted.
+			for i := 0; i < len(state.clients); i++ {
+				state.clients[i].Lock()
+			}
+		}
+		log.Infof("round %d: restarting nodes %v", curRound, nodes)
+		for _, i := range nodes {
+			// Two early exit conditions.
 			select {
 			case <-stopper:
-				return
+				break
 			default:
 			}
-			nodes := rnd.Perm(num)[:rnd.Intn(num)+1]
-			// Prevent all clients from writing while nodes are being restarted.
-			for i := 0; i < num; i++ {
-				clients[i].Lock()
+			if state.done() {
+				break
 			}
-			log.Infof("round %d: restarting nodes %v", curRound, nodes)
-			for _, i := range nodes {
-				// Two early exit conditions.
-				select {
-				case <-stopper:
-					break
-				default:
-				}
-				if done() {
-					break
-				}
-				log.Infof("round %d: restarting %d", curRound, i)
-				if err := c.Kill(i); err != nil {
-					t.Fatal(err)
-				}
-				if err := c.Restart(i); err != nil {
-					t.Fatal(err)
-				}
-				initClient(i)
+			log.Infof("round %d: restarting %d", curRound, i)
+			if err := c.Kill(i); err != nil {
+				state.t.Error(err)
 			}
-			for i := 0; i < num; i++ {
-				clients[i].Unlock()
+			if err := c.Restart(i); err != nil {
+				state.t.Error(err)
 			}
-
-			preCount := make([]uint64, len(clients))
-			for i, client := range clients {
-				preCount[i] = atomic.LoadUint64(&client.count)
+			if stopClients {
+				// Reinitialize the client talking to the restarted node.
+				state.initClient(state.t, c, i)
 			}
-
-			madeProgress := func() bool {
-				c.Assert(t)
-				for i, client := range clients {
-					if atomic.LoadUint64(&client.count) > preCount[i] {
-						return true
-					}
-				}
-				return false
-			}
-
-			// Sleep until at least one client is writing successfully.
-			log.Warningf("round %d: monkey sleeping while cluster recovers...", curRound)
-			for !done() && !madeProgress() {
-				time.Sleep(time.Second)
-			}
-			log.Warningf("round %d: cluster recovered", curRound)
 		}
-	}()
+		if stopClients {
+			for i := 0; i < len(state.clients); i++ {
+				state.clients[i].Unlock()
+			}
+		}
 
-	prevRound := atomic.LoadUint64(&round)
-	stallTime := time.Now().Add(*flagStall)
+		preCount := state.counts()
+
+		madeProgress := func() bool {
+			c.Assert(state.t)
+			newCounts := state.counts()
+			for i := range newCounts {
+				if newCounts[i] > preCount[i] {
+					return true
+				}
+			}
+			return false
+		}
+
+		// Sleep until at least one client is writing successfully.
+		log.Warningf("round %d: monkey sleeping while cluster recovers...", curRound)
+		for !state.done() && !madeProgress() {
+			time.Sleep(time.Second)
+		}
+		log.Warningf("round %d: cluster recovered", curRound)
+	}
+}
+
+// Wait until all clients have stopped.
+func waitClientsStop(num int, state *testState, stallDuration time.Duration) {
+	prevRound := atomic.LoadUint64(&state.monkeyIteration)
+	stallTime := time.Now().Add(stallDuration)
 	var prevOutput string
 	// Spin until all clients are shut.
 	for numShutClients := 0; numShutClients < num; {
 		select {
-		case <-teardown:
+		case <-state.teardown:
 		case <-stopper:
-			t.Fatal("interrupted")
+			state.t.Fatal("interrupted")
 
-		case err := <-errs:
+		case err := <-state.errChan:
 			if err != nil {
-				t.Error(err)
+				state.t.Error(err)
 			}
 			numShutClients++
 
 		case <-time.After(time.Second):
 			var newOutput string
-			if time.Now().Before(deadline) {
-				curRound := atomic.LoadUint64(&round)
+			if time.Now().Before(state.deadline) {
+				curRound := atomic.LoadUint64(&state.monkeyIteration)
 				if curRound == prevRound {
 					if time.Now().After(stallTime) {
-						atomic.StoreInt32(&stalled, 1)
-						t.Fatalf("Stall detected at round %d, no forward progress for %s", curRound, *flagStall)
+						atomic.StoreInt32(&state.stalled, 1)
+						state.t.Fatalf("Stall detected at round %d, no forward progress for %s", curRound, stallDuration)
 					}
 				} else {
 					prevRound = curRound
-					stallTime = time.Now().Add(*flagStall)
+					stallTime = time.Now().Add(stallDuration)
 				}
 				// Periodically print out progress so that we know the test is
 				// still running and making progress.
-				preCount := make([]string, len(clients))
-				for i, client := range clients {
-					preCount[i] = strconv.FormatUint(atomic.LoadUint64(&client.count), 10)
+				counts := state.counts()
+				strCounts := make([]string, len(counts))
+				for i := range counts {
+					strCounts[i] = strconv.FormatUint(counts[i], 10)
 				}
-				newOutput = fmt.Sprintf("round %d: client counts: (%s)", curRound, strings.Join(preCount, ", "))
+				newOutput = fmt.Sprintf("round %d: client counts: (%s)", curRound, strings.Join(strCounts, ", "))
 			} else {
 				newOutput = fmt.Sprintf("test finished, waiting for shutdown of %d clients", num-numShutClients)
 			}
@@ -284,26 +292,116 @@ CREATE TABLE bank.accounts (
 			}
 		}
 	}
+}
+
+// TestClusterRecovery starts up a cluster with an "accounts" table.
+// It starts transferring money between accounts, while nodes are
+// being killed and restarted continuously. The test doesn't measure write
+// performance, but cluster recovery.
+func TestClusterRecovery(t *testing.T) {
+	c := StartCluster(t)
+	defer c.AssertAndStop(t)
+
+	num := c.NumNodes()
+	if num <= 0 {
+		t.Fatalf("%d nodes in cluster", num)
+	}
+
+	// One client for each node.
+	initBank(t, c.PGUrl(0))
+
+	start := time.Now()
+	state := testState{
+		t:        t,
+		errChan:  make(chan error, num),
+		teardown: make(chan struct{}),
+		deadline: start.Add(*flagDuration),
+		clients:  make([]testClient, num),
+	}
+
+	for i := 0; i < num; i++ {
+		state.clients[i].Lock()
+		state.initClient(t, c, i)
+		state.clients[i].Unlock()
+		go transferMoneyLoop(i, &state, *numAccounts, *maxTransfer)
+	}
+
+	defer func() {
+		<-state.teardown
+	}()
+
+	// Chaos monkey.
+	rnd, seed := randutil.NewPseudoRand()
+	log.Warningf("monkey starts (seed %d)", seed)
+	pickNodes := func() []int {
+		return rnd.Perm(num)[:rnd.Intn(num)+1]
+	}
+	go chaosMonkey(&state, c, true, pickNodes)
+
+	waitClientsStop(num, &state, *flagStall)
 
 	// Verify accounts.
-
-	// Hold the read lock on node 0 to prevent it being restarted by
-	// chaos monkey.
-	var sum int
-	clients[0].RLock()
-	err := clients[0].db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum)
-	clients[0].RUnlock()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if sum != 0 {
-		t.Fatalf("The bank is not in good order. Total value: %d", sum)
-	}
+	verifyAccounts(t, &state.clients[0])
 
 	elapsed := time.Since(start)
 	var count uint64
-	for _, client := range clients {
-		count += atomic.LoadUint64(&client.count)
+	counts := state.counts()
+	for _, c := range counts {
+		count += c
 	}
+	log.Infof("%d %.1f/sec", count, float64(count)/elapsed.Seconds())
+}
+
+// TestNodeRestart starts up a cluster with an "accounts" table.
+// It uses a client connected to a single node in the cluster to issue SQL
+// commands to transferring money between accounts, while a random node other
+// than the one the client is connected to is being restarted periodically.
+// The test measures read/write performance in the presence of restarts.
+func TestNodeRestart(t *testing.T) {
+	c := StartCluster(t)
+	defer c.AssertAndStop(t)
+
+	num := c.NumNodes()
+	if num <= 0 {
+		t.Fatalf("%d nodes in cluster", num)
+	}
+
+	// One client for each node.
+	initBank(t, c.PGUrl(0))
+
+	start := time.Now()
+	state := testState{
+		t:        t,
+		errChan:  make(chan error, 1),
+		teardown: make(chan struct{}),
+		deadline: start.Add(*flagDuration),
+		clients:  make([]testClient, 1),
+	}
+
+	client := &state.clients[0]
+	client.Lock()
+	client.db = makePGClient(t, c.PGUrl(num-1))
+	client.Unlock()
+	go transferMoneyLoop(0, &state, *numAccounts, *maxTransfer)
+
+	defer func() {
+		<-state.teardown
+	}()
+
+	// Chaos monkey.
+	rnd, seed := randutil.NewPseudoRand()
+	log.Warningf("monkey starts (seed %d)", seed)
+	pickNodes := func() []int {
+		return []int{rnd.Intn(num - 1)}
+	}
+	go chaosMonkey(&state, c, false, pickNodes)
+
+	waitClientsStop(1, &state, *flagStall)
+
+	// Verify accounts.
+	verifyAccounts(t, client)
+
+	elapsed := time.Since(start)
+	count := atomic.LoadUint64(&client.count)
 	log.Infof("%d %.1f/sec", count, float64(count)/elapsed.Seconds())
 }
