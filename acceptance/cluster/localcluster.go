@@ -96,7 +96,8 @@ func dataStr(node, store int) string {
 
 // The various event types.
 const (
-	eventDie = "die"
+	eventDie     = "die"
+	eventRestart = "restart"
 )
 
 // Event for a node containing a node index and the type of event.
@@ -508,10 +509,12 @@ func (l *LocalCluster) Assert(t *testing.T) {
 		for {
 			select {
 			case act := <-ch:
-				if act.Status != "die" && act.Status != "restart" {
+				switch act.Status {
+				case eventDie, eventRestart:
 					continue
+				default:
+					return &act
 				}
-				return &act
 			case <-time.After(wait):
 			}
 			break

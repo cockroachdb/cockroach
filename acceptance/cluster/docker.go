@@ -138,7 +138,7 @@ func (c *Container) Kill() error {
 	if err := c.cluster.client.ContainerKill(c.id, "9"); err != nil && !strings.Contains(err.Error(), "is not running") {
 		return err
 	}
-	c.cluster.expectEvent(c, "die")
+	c.cluster.expectEvent(c, eventDie)
 	return nil
 }
 
@@ -166,12 +166,12 @@ func (c *Container) Restart(timeoutSeconds int) error {
 	if ci, err := c.Inspect(); err != nil {
 		return err
 	} else if ci.State.Running {
-		exp = append(exp, "die")
+		exp = append(exp, eventDie)
 	}
 	if err := c.cluster.client.ContainerRestart(c.id, timeoutSeconds); err != nil {
 		return err
 	}
-	c.cluster.expectEvent(c, append(exp, "restart")...)
+	c.cluster.expectEvent(c, append(exp, eventRestart)...)
 	return nil
 }
 
@@ -180,7 +180,7 @@ func (c *Container) Stop(timeoutSeconds int) error {
 	if err := c.cluster.client.ContainerStop(c.id, timeoutSeconds); err != nil {
 		return err
 	}
-	c.cluster.expectEvent(c, "die")
+	c.cluster.expectEvent(c, eventDie)
 	return nil
 }
 
