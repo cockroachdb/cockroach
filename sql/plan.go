@@ -89,7 +89,8 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	case *parser.AlterTable:
 		return p.AlterTable(n)
 	case *parser.BeginTransaction:
-		return p.BeginTransaction(n)
+		pNode, err := p.BeginTransaction(n)
+		return pNode, roachpb.NewError(err)
 	case *parser.CommitTransaction:
 		return p.CommitTransaction(n)
 	case *parser.CreateDatabase:
@@ -133,7 +134,8 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	case *parser.SetTimeZone:
 		return p.SetTimeZone(n)
 	case *parser.SetTransaction:
-		return p.SetTransaction(n)
+		pNode, err := p.SetTransaction(n)
+		return pNode, roachpb.NewError(err)
 	case *parser.Show:
 		return p.Show(n)
 	case *parser.ShowColumns:

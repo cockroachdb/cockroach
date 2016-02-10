@@ -570,8 +570,8 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 	pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		txn.SetDebugName(txnName, 0)
 		if isolation == roachpb.SNAPSHOT {
-			if pErr := txn.SetIsolation(roachpb.SNAPSHOT); pErr != nil {
-				return pErr
+			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+				return roachpb.NewError(err)
 			}
 		}
 		txn.InternalSetPriority(priority)

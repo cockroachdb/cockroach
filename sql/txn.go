@@ -19,18 +19,19 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // BeginTransaction starts a new transaction.
-func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, *roachpb.Error) {
+func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, error) {
 	if p.txn == nil {
-		return nil, roachpb.NewErrorf("the server should have already created a transaction")
+		return nil, util.Errorf("the server should have already created a transaction")
 	}
-	if pErr := p.setIsolationLevel(n.Isolation); pErr != nil {
-		return nil, pErr
+	if err := p.setIsolationLevel(n.Isolation); err != nil {
+		return nil, err
 	}
-	if pErr := p.setUserPriority(n.UserPriority); pErr != nil {
-		return nil, pErr
+	if err := p.setUserPriority(n.UserPriority); err != nil {
+		return nil, err
 	}
 	return &emptyNode{}, nil
 }
@@ -52,17 +53,17 @@ func (p *planner) RollbackTransaction(n *parser.RollbackTransaction) (planNode, 
 }
 
 // SetTransaction sets a transaction's isolation level
-func (p *planner) SetTransaction(n *parser.SetTransaction) (planNode, *roachpb.Error) {
-	if pErr := p.setIsolationLevel(n.Isolation); pErr != nil {
-		return nil, pErr
+func (p *planner) SetTransaction(n *parser.SetTransaction) (planNode, error) {
+	if err := p.setIsolationLevel(n.Isolation); err != nil {
+		return nil, err
 	}
-	if pErr := p.setUserPriority(n.UserPriority); pErr != nil {
-		return nil, pErr
+	if err := p.setUserPriority(n.UserPriority); err != nil {
+		return nil, err
 	}
 	return &emptyNode{}, nil
 }
 
-func (p *planner) setIsolationLevel(level parser.IsolationLevel) *roachpb.Error {
+func (p *planner) setIsolationLevel(level parser.IsolationLevel) error {
 	switch level {
 	case parser.UnspecifiedIsolation:
 		return nil
@@ -71,11 +72,11 @@ func (p *planner) setIsolationLevel(level parser.IsolationLevel) *roachpb.Error 
 	case parser.SerializableIsolation:
 		return p.txn.SetIsolation(roachpb.SERIALIZABLE)
 	default:
-		return roachpb.NewErrorf("unknown isolation level: %s", level)
+		return util.Errorf("unknown isolation level: %s", level)
 	}
 }
 
-func (p *planner) setUserPriority(userPriority parser.UserPriority) *roachpb.Error {
+func (p *planner) setUserPriority(userPriority parser.UserPriority) error {
 	switch userPriority {
 	case parser.UnspecifiedUserPriority:
 		return nil
@@ -86,6 +87,6 @@ func (p *planner) setUserPriority(userPriority parser.UserPriority) *roachpb.Err
 	case parser.High:
 		return p.txn.SetUserPriority(roachpb.HighUserPriority)
 	default:
-		return roachpb.NewErrorf("unknown user priority: %s", userPriority)
+		return util.Errorf("unknown user priority: %s", userPriority)
 	}
 }

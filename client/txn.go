@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -121,10 +122,10 @@ func (txn *Txn) DebugName() string {
 // SetIsolation sets the transaction's isolation type. Transactions default to
 // serializable isolation. The isolation must be set before any operations are
 // performed on the transaction.
-func (txn *Txn) SetIsolation(isolation roachpb.IsolationType) *roachpb.Error {
+func (txn *Txn) SetIsolation(isolation roachpb.IsolationType) error {
 	if txn.Proto.Isolation != isolation {
 		if txn.Proto.IsInitialized() {
-			return roachpb.NewErrorf("cannot change the isolation level of a running transaction")
+			return util.Errorf("cannot change the isolation level of a running transaction")
 		}
 		txn.Proto.Isolation = isolation
 	}
@@ -134,13 +135,13 @@ func (txn *Txn) SetIsolation(isolation roachpb.IsolationType) *roachpb.Error {
 // SetUserPriority sets the transaction's user priority. Transactions default to
 // normal user priority. The user priority must be set before any operations are
 // performed on the transaction.
-func (txn *Txn) SetUserPriority(userPriority roachpb.UserPriority) *roachpb.Error {
+func (txn *Txn) SetUserPriority(userPriority roachpb.UserPriority) error {
 	if txn.UserPriority != userPriority {
 		if txn.Proto.IsInitialized() {
-			return roachpb.NewErrorf("cannot change the user priority of a running transaction")
+			return util.Errorf("cannot change the user priority of a running transaction")
 		}
 		if userPriority < roachpb.MinUserPriority || userPriority > roachpb.MaxUserPriority {
-			return roachpb.NewErrorf("the given user priority %f is out of the allowed range [%f, %f]", userPriority, roachpb.MinUserPriority, roachpb.MaxUserPriority)
+			return util.Errorf("the given user priority %f is out of the allowed range [%f, %d]", userPriority, roachpb.MinUserPriority, roachpb.MaxUserPriority)
 		}
 		txn.UserPriority = userPriority
 	}

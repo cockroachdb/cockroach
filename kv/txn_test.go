@@ -53,8 +53,8 @@ func TestTxnDBBasics(t *testing.T) {
 
 		pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 			// Use snapshot isolation so non-transactional read can always push.
-			if pErr := txn.SetIsolation(roachpb.SNAPSHOT); pErr != nil {
-				return pErr
+			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+				return roachpb.NewError(err)
 			}
 
 			// Put transactional value.
@@ -413,8 +413,8 @@ func TestTxnTimestampRegression(t *testing.T) {
 	keyB := "b"
 	pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 		// Use snapshot isolation so non-transactional read can always push.
-		if pErr := txn.SetIsolation(roachpb.SNAPSHOT); pErr != nil {
-			return pErr
+		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+			return roachpb.NewError(err)
 		}
 		// Put transactional value.
 		if pErr := txn.Put(keyA, "value1"); pErr != nil {
@@ -457,8 +457,8 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	go func() {
 		pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 			// Use snapshot isolation.
-			if pErr := txn.SetIsolation(roachpb.SNAPSHOT); pErr != nil {
-				return pErr
+			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+				return roachpb.NewError(err)
 			}
 			// Put transactional value.
 			if pErr := txn.Put(keyA, "value1"); pErr != nil {
@@ -487,8 +487,8 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	s.Manual.Set((storage.MinTSCacheWindow + time.Second).Nanoseconds())
 	pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 		// Use snapshot isolation.
-		if pErr := txn.SetIsolation(roachpb.SNAPSHOT); pErr != nil {
-			return pErr
+		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+			return roachpb.NewError(err)
 		}
 
 		// Attempt to get first keyB.
@@ -533,8 +533,8 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	go func() {
 		pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 			// Use snapshot isolation.
-			if pErr := txn.SetIsolation(roachpb.SNAPSHOT); pErr != nil {
-				return pErr
+			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+				return roachpb.NewError(err)
 			}
 			// Put transactional value.
 			if pErr := txn.Put(keyA, "value1"); pErr != nil {
@@ -562,8 +562,8 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 
 	pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 		// Use snapshot isolation.
-		if pErr := txn.SetIsolation(roachpb.SNAPSHOT); pErr != nil {
-			return pErr
+		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+			return roachpb.NewError(err)
 		}
 
 		// First get keyC, value will be nil.
