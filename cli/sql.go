@@ -175,6 +175,7 @@ func runStatements(db *sql.DB, stmts []string) error {
 		fullStmt := stmt + "\n"
 		cols, allRows, err := runQuery(db, fullStmt)
 		if err != nil {
+			fmt.Fprintln(osStderr, err)
 			return err
 		}
 
@@ -183,8 +184,12 @@ func runStatements(db *sql.DB, stmts []string) error {
 			fmt.Fprintln(os.Stdout, "OK")
 		} else {
 			// Some results selected, inform the user about how much data to expect.
-			fmt.Fprintf(os.Stdout, "%d row%s\n", len(allRows),
-				map[bool]string{true: "", false: "s"}[len(allRows) == 1])
+			noun := "rows"
+			if len(allRows) == 1 {
+				noun = "row"
+			}
+
+			fmt.Fprintf(os.Stdout, "%d %s\n", len(allRows), noun)
 
 			// Then print the results themselves.
 			fmt.Fprintln(os.Stdout, strings.Join(cols, "\t"))
