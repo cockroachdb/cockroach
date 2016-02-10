@@ -9,9 +9,8 @@ Before making major changes, consider sending an RFC for discussion.
 This is a lightweight design-document process that is inspired by the
 [process used by the rust project](https://github.com/rust-lang/rfcs).
 
-1. Copy `template.md` or `template.rst` to a new file and fill in the
-   details.  Commit this version in your own fork of the repository or
-   a branch.
+1. Copy `template.md` to a new file and fill in the details. Commit
+   this version in your own fork of the repository or a branch.
    
 2. Submit a pull request to add your new file to the main repository.
    Each RFC should get its own pull request; do not combine RFCs with
