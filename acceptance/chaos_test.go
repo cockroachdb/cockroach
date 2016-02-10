@@ -202,8 +202,12 @@ CREATE TABLE bank.accounts (
 					break
 				}
 				log.Infof("round %d: restarting %d", curRound, i)
-				c.Kill(i)
-				c.Restart(i)
+				if err := c.Kill(i); err != nil {
+					t.Fatal(err)
+				}
+				if err := c.Restart(i); err != nil {
+					t.Fatal(err)
+				}
 				initClient(i)
 			}
 			for i := 0; i < num; i++ {
