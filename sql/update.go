@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 // Update updates columns for a selection of rows from a table.
@@ -32,6 +33,7 @@ import (
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
+	tracing.AnnotateTrace()
 	tableDesc, pErr := p.getAliasedTableLease(n.Table)
 	if pErr != nil {
 		return nil, pErr
@@ -121,6 +123,8 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 			i++
 		}
 	}
+
+	tracing.AnnotateTrace()
 
 	// Query the rows that need updating.
 	rows, pErr := p.Select(&parser.Select{
@@ -232,7 +236,10 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 
 	b := client.Batch{}
 	result := &valuesNode{}
+	tracing.AnnotateTrace()
 	for rows.Next() {
+		tracing.AnnotateTrace()
+
 		rowVals := rows.Values()
 		result.rows = append(result.rows, parser.DTuple(nil))
 
@@ -321,6 +328,7 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 			}
 		}
 	}
+	tracing.AnnotateTrace()
 
 	if pErr := rows.PErr(); pErr != nil {
 		return nil, pErr
@@ -329,6 +337,7 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 		return nil, convertBatchError(tableDesc, b, pErr)
 	}
 
+	tracing.AnnotateTrace()
 	return result, nil
 }
 
