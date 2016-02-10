@@ -296,3 +296,43 @@ CREATE TABLE boom (id INT PRIMARY KEY)
 
 statement error INSERT has more expressions than target columns: \d+/\d+
 INSERT INTO boom VALUES(1,2)
+
+statement ok
+CREATE TABLE return (a INT DEFAULT 3, b INT)
+
+query III
+INSERT INTO return (a) VALUES (default), (8) RETURNING a, 2, a+4
+----
+3 2 7
+8 2 12
+
+query III
+INSERT INTO return (b) VALUES (default), (8) RETURNING a, a+4, b
+----
+3 7 NULL
+3 7 8
+
+# All columns returned if none specified.
+query II
+INSERT INTO return VALUES (default) RETURNING a, b
+----
+3 NULL
+
+# Test column names
+query III colnames
+INSERT INTO return VALUES (default) RETURNING a, b as C, 4
+----
+a C 4
+3 NULL 4
+
+# Can fetch rowid
+statement ok
+INSERT INTO return VALUES (default) RETURNING rowid != experimental_unique_int()
+
+# Cannot return non-default columns when columns specified.
+statement error pq: qualified name """.b" not found
+INSERT INTO return (a) VALUES (default) RETURNING b
+
+# TODO(mjibson): support *
+statement error pq: qualified name """.*" not found
+INSERT INTO return VALUES (default) RETURNING *
