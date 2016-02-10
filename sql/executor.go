@@ -19,15 +19,12 @@ package sql
 import (
 	"errors"
 	"fmt"
-	"net/http"
 	"reflect"
 	"strconv"
 	"sync"
 	"time"
 
 	"gopkg.in/inf.v0"
-
-	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
@@ -72,7 +69,7 @@ type Request struct {
 	User string
 	// Session settings that were returned in the last response that
 	// contained them, being reflected back to the server.
-	Session []byte
+	Session Session
 	// SQL statement(s) to be serially executed by the server. Multiple
 	// statements are passed as a single string separated by semicolons.
 	SQL string
@@ -84,7 +81,7 @@ type Request struct {
 type Response struct {
 	// Setting that should be reflected back in all subsequent requests.
 	// When not set, future requests should continue to use existing settings.
-	Session []byte
+	Session Session
 	// The list of results. There is one result object per SQL statement in the
 	// request.
 	Results []Result
@@ -315,11 +312,7 @@ func (e *Executor) ExecuteStatements(user string, session Session, stmts string,
 		planMaker.session.Txn = nil
 		planMaker.session.MutatesSystemConfig = false
 	}
-	bytes, err := proto.Marshal(&planMaker.session)
-	if err != nil {
-		return Response{}, http.StatusInternalServerError, err
-	}
-	reply.Session = bytes
+	reply.Session = planMaker.session
 
 	return reply, 0, nil
 }
@@ -330,11 +323,7 @@ func (e *Executor) Execute(args Request) (Response, int, error) {
 	defer func(start time.Time) {
 		e.latency.RecordValue(time.Now().Sub(start).Nanoseconds())
 	}(time.Now())
-	var session Session
-	if err := proto.Unmarshal(args.Session, &session); err != nil {
-		return Response{}, http.StatusBadRequest, err
-	}
-	return e.ExecuteStatements(args.User, session, args.SQL, args.Params)
+	return e.ExecuteStatements(args.User, args.Session, args.SQL, args.Params)
 }
 
 // exec executes the request. Any error encountered is returned; it is
