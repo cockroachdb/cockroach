@@ -88,7 +88,10 @@ func DecodeFloatAscending(buf []byte, tmp []byte) ([]byte, float64, error) {
 		return buf[1:], 0, nil
 	}
 	tmp = tmp[len(tmp):cap(tmp)]
-	idx := bytes.Index(buf, []byte{floatTerminator})
+	idx := bytes.IndexByte(buf, floatTerminator)
+	if idx == -1 {
+		return nil, 0, util.Errorf("did not find terminator %#x in buffer %#x", floatTerminator, buf)
+	}
 	switch {
 	case buf[0] == floatNegLarge:
 		// Negative large.

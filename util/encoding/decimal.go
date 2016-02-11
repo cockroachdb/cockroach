@@ -165,7 +165,10 @@ func decodeDecimal(buf []byte, tmp []byte, invert bool) ([]byte, *inf.Dec, error
 		return buf[1:], inf.NewDec(0, 0), nil
 	}
 	tmp = tmp[len(tmp):cap(tmp)]
-	idx := bytes.Index(buf, []byte{floatTerminator})
+	idx := bytes.IndexByte(buf, floatTerminator)
+	if idx == -1 {
+		return nil, nil, util.Errorf("did not find terminator %#x in buffer %#x", floatTerminator, buf)
+	}
 	switch {
 	case buf[0] == floatNegLarge:
 		// Negative large.

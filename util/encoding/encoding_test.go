@@ -367,6 +367,30 @@ func TestDecodeInvalid(t *testing.T) {
 			pattern: "unknown escape",
 			decode:  func(b []byte) error { _, _, err := DecodeBytesDescending(b, nil); return err },
 		},
+		{
+			name:    "Float, no terminator",
+			buf:     []byte{floatPosLarge},
+			pattern: "did not find terminator",
+			decode:  func(b []byte) error { _, _, err := DecodeFloatAscending(b, nil); return err },
+		},
+		{
+			name:    "FloatDecreasing, no terminator",
+			buf:     []byte{floatPosLarge},
+			pattern: "did not find terminator",
+			decode:  func(b []byte) error { _, _, err := DecodeFloatDescending(b, nil); return err },
+		},
+		{
+			name:    "Decimal, no terminator",
+			buf:     []byte{floatPosLarge},
+			pattern: "did not find terminator",
+			decode:  func(b []byte) error { _, _, err := DecodeDecimalAscending(b, nil); return err },
+		},
+		{
+			name:    "DecimalDecreasing, no terminator",
+			buf:     []byte{floatPosLarge},
+			pattern: "did not find terminator",
+			decode:  func(b []byte) error { _, _, err := DecodeDecimalDescending(b, nil); return err },
+		},
 	}
 	for _, test := range tests {
 		err := test.decode(test.buf)
