@@ -81,7 +81,7 @@ Runs the node as a standalone in-memory cluster and forces --insecure
 for all server and client commands. Useful for developing Cockroach
 itself.`),
 	"execute": wrapText(`
-Execute the SQL statement(s) on the command line, then exit.  Each
+Execute the SQL statement(s) on the command line, then exit. Each
 subsequent positional argument on the command line may contain
 one or more SQL statements, separated by semicolons. If an
 error occurs in any statement, the command exits with a
@@ -146,6 +146,11 @@ attributes might also include speeds and other specs (7200rpm,
 200kiops, etc.). For example:`) + `
 
   --stores=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824
+
+` + wrapText(`
+If there are no device attributes, they can be omitted:`) + `
+
+  --stores=/mnt/ssd01,/mnt/ssd02
 `,
 	"time-until-store-dead": wrapText(`
 Adjusts the timeout for stores.  If there's been no gossiped updated
