@@ -19,6 +19,7 @@ package pgwire
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -62,6 +63,9 @@ func typeForDatum(d parser.Datum) pgType {
 	case parser.DBool:
 		return pgType{oid.T_bool, 1}
 
+	case parser.DBytes:
+		return pgType{oid.T_bytea, -1}
+
 	case parser.DInt:
 		return pgType{oid.T_int8, 8}
 
@@ -71,7 +75,7 @@ func typeForDatum(d parser.Datum) pgType {
 	case *parser.DDecimal:
 		return pgType{oid.T_numeric, -1}
 
-	case parser.DBytes, parser.DString:
+	case parser.DString:
 		return pgType{oid.T_text, -1}
 
 	case parser.DDate:
@@ -129,8 +133,15 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum) error {
 		return err
 
 	case parser.DBytes:
-		b.putInt32(int32(len(v)))
-		_, err := b.Write([]byte(v))
+		// http://www.postgresql.org/docs/current/static/datatype-binary.html#AEN5667
+		// Code cribbed from github.com/lib/pq.
+		result := make([]byte, 2+hex.EncodedLen(len(v)))
+		result[0] = '\\'
+		result[1] = 'x'
+		hex.Encode(result[2:], []byte(v))
+
+		b.putInt32(int32(len(result)))
+		_, err := b.Write(result)
 		return err
 
 	case parser.DString:
@@ -178,6 +189,11 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) error {
 		b.putInt64(int64(v))
 		return nil
 
+	case parser.DBytes:
+		b.putInt32(int32(len(v)))
+		_, err := b.Write([]byte(v))
+		return err
+
 	default:
 		return util.Errorf("unsupported type %T", d)
 	}
@@ -223,6 +239,7 @@ func formatTs(t time.Time) (b []byte) {
 var (
 	oidToDatum = map[oid.Oid]parser.Datum{
 		oid.T_bool:      parser.DummyBool,
+		oid.T_bytea:     parser.DummyBytes,
 		oid.T_date:      parser.DummyDate,
 		oid.T_float4:    parser.DummyFloat,
 		oid.T_float8:    parser.DummyFloat,
@@ -237,7 +254,7 @@ var (
 	// Using reflection to support unhashable types.
 	datumToOid = map[reflect.Type]oid.Oid{
 		reflect.TypeOf(parser.DummyBool):      oid.T_bool,
-		reflect.TypeOf(parser.DummyBytes):     oid.T_text,
+		reflect.TypeOf(parser.DummyBytes):     oid.T_bytea,
 		reflect.TypeOf(parser.DummyDate):      oid.T_date,
 		reflect.TypeOf(parser.DummyFloat):     oid.T_float8,
 		reflect.TypeOf(parser.DummyInt):       oid.T_int8,
@@ -371,6 +388,29 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			d = parser.DString(b)
 		default:
 			return d, fmt.Errorf("unsupported text format code: %d", code)
+		}
+	case oid.T_bytea:
+		switch code {
+		case formatText:
+			// http://www.postgresql.org/docs/current/static/datatype-binary.html#AEN5667
+			// Code cribbed from github.com/lib/pq.
+
+			// We only support hex encoding.
+			if len(b) >= 2 && bytes.Equal(b[:2], []byte("\\x")) {
+				b = b[2:] // trim off leading "\\x"
+				result := make([]byte, hex.DecodedLen(len(b)))
+				_, err := hex.Decode(result, b)
+				if err != nil {
+					return d, err
+				}
+				d = parser.DBytes(result)
+			} else {
+				return d, fmt.Errorf("unsupported bytea encoding: %q", b)
+			}
+		case formatBinary:
+			d = parser.DBytes(b)
+		default:
+			return d, fmt.Errorf("unsupported bytea format code: %d", code)
 		}
 	// TODO(mjibson): implement date/time types
 	default:

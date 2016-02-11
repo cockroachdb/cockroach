@@ -172,6 +172,11 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	for key, value := range map[string]string{
 		"client_encoding": "UTF8",
 		"DateStyle":       "ISO",
+		// The latest version of the docs that was consulted during the development
+		// of this package. We specify this version to avoid having to support old
+		// code paths which various client tools fall back to if they can't
+		// determine that the server is new enough.
+		"server_version": "9.5.0",
 	} {
 		c.writeBuf.initMsg(serverMsgParameterStatus)
 		for _, str := range [...]string{key, value} {

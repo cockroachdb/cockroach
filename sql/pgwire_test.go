@@ -292,6 +292,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SHOW database": {
 			base.Results(""),
 		},
+		"SELECT descriptor FROM system.descriptor WHERE descriptor != $1": {
+			base.Params([]byte("abc")).Results([]byte("\x12\x16\n\x06system\x10\x01\x1a\n\n\b\n\x04root\x100")),
+		},
 		"SHOW COLUMNS FROM system.users": {
 			base.Results("username", "STRING", false, sql.NullBool{}),
 		},
@@ -669,7 +672,7 @@ func TestPGWireMetrics(t *testing.T) {
 	if err := trivialQuery(pgUrl); err != nil {
 		t.Fatal(err)
 	}
-	bytesIn, bytesOut, err := checkPGWireMetrics(s, minbytes, minbytes, 256, 256)
+	bytesIn, bytesOut, err := checkPGWireMetrics(s, minbytes, minbytes, 300, 300)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -678,7 +681,7 @@ func TestPGWireMetrics(t *testing.T) {
 	}
 
 	// A second query should give us more I/O.
-	_, _, err = checkPGWireMetrics(s, bytesIn+minbytes, bytesOut+minbytes, 256, 256)
+	_, _, err = checkPGWireMetrics(s, bytesIn+minbytes, bytesOut+minbytes, 300, 300)
 	if err != nil {
 		t.Fatal(err)
 	}
