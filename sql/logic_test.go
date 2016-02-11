@@ -39,6 +39,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/server"
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
@@ -52,6 +53,8 @@ var (
 	testdata  = flag.String("d", "testdata/[^.]*", "test data glob")
 	bigtest   = flag.Bool("bigtest", false, "use the big set of logic test files (overrides testdata)")
 )
+
+const logicMaxOffset = 50 * time.Millisecond
 
 type lineScanner struct {
 	*bufio.Scanner
@@ -156,6 +159,7 @@ type logicTest struct {
 	// re-use them and close them all on exit.
 	clients map[string]*sql.DB
 	// client currently in use.
+	user         string
 	db           *sql.DB
 	progress     int
 	lastProgress time.Time
@@ -211,6 +215,7 @@ func (t *logicTest) setUser(user string) func() {
 	}
 	t.clients[user] = db
 	t.db = db
+	t.user = user
 	return cleanupFunc
 }
 
@@ -230,6 +235,8 @@ func (t *logicTest) run(path string) {
 
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
+	ctx := server.NewTestContext()
+	ctx.MaxOffset = logicMaxOffset
 	t.srv = setupTestServer(t.T)
 
 	// db may change over the lifetime of this function, with intermediate
@@ -452,7 +459,7 @@ SET DATABASE = test;
 
 func (t *logicTest) execStatement(stmt logicStatement) {
 	if testing.Verbose() || log.V(1) {
-		fmt.Printf("%s: %s\n", stmt.pos, stmt.sql)
+		fmt.Printf("%s %s: %s\n", stmt.pos, t.user, stmt.sql)
 	}
 	_, err := t.db.Exec(stmt.sql)
 	switch {
@@ -471,7 +478,7 @@ func (t *logicTest) execStatement(stmt logicStatement) {
 
 func (t *logicTest) execQuery(query logicQuery) {
 	if testing.Verbose() || log.V(1) {
-		fmt.Printf("%s: %s\n", query.pos, query.sql)
+		fmt.Printf("%s %s: %s\n", query.pos, t.user, query.sql)
 	}
 	rows, err := t.db.Query(query.sql)
 	if query.expectErr == "" {
