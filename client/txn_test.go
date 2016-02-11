@@ -22,12 +22,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	"github.com/gogo/protobuf/proto"
 )
 
 var (
@@ -47,11 +47,11 @@ func newDB(sender Sender) *DB {
 // functionality. It responds to PutRequests using testPutResp.
 func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)) SenderFunc {
 	txnKey := roachpb.Key("test-txn")
-	txnID := []byte(uuid.NewUUID4())
+	txnID := uuid.NewV4()
 
 	return func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		ba.UserPriority = 1
-		if ba.Txn != nil && len(ba.Txn.ID) == 0 {
+		if ba.Txn != nil && ba.Txn.ID == nil {
 			ba.Txn.Key = txnKey
 			ba.Txn.ID = txnID
 		}
@@ -169,7 +169,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 		t.Fatalf("expected TransactionAbortedError, got %v", pErr)
 	}
 
-	if len(txn.Proto.ID) != 0 {
+	if txn.Proto.ID != nil {
 		t.Errorf("expected txn to be cleared")
 	}
 }

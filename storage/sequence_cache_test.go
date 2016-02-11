@@ -17,7 +17,6 @@
 package storage
 
 import (
-	"bytes"
 	"reflect"
 	"testing"
 
@@ -29,8 +28,15 @@ import (
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
+const testTxnEpoch = 5
+
 var (
-	batchR = roachpb.BatchResponse{}
+	batchR    = roachpb.BatchResponse{}
+	testTxnID *uuid.UUID
+
+	testTxnKey       = []byte("a")
+	testTxnTimestamp = roachpb.ZeroTimestamp.Add(123, 456)
+	testEntry        = roachpb.SequenceCacheEntry{Key: testTxnKey, Timestamp: testTxnTimestamp}
 )
 
 func init() {
@@ -38,6 +44,12 @@ func init() {
 		NewValue: 1,
 	}
 	batchR.Add(&incR)
+
+	var err error
+	testTxnID, err = uuid.FromString("0ce61c17-5eb4-4587-8c36-dcf4062ada4c")
+	if err != nil {
+		panic(err)
+	}
 }
 
 // createTestSequenceCache creates an in-memory engine and
@@ -46,24 +58,17 @@ func createTestSequenceCache(t *testing.T, rangeID roachpb.RangeID, stopper *sto
 	return NewSequenceCache(rangeID), engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 }
 
-const testTxnEpoch = 5
-
-var testTxnID = uuid.UUID([]byte("0ce61c17-5eb4-4587-8c36-dcf4062ada4c"))
-var testTxnKey = []byte("a")
-var testTxnTimestamp = roachpb.ZeroTimestamp.Add(123, 456)
-var testEntry = roachpb.SequenceCacheEntry{Key: testTxnKey, Timestamp: testTxnTimestamp}
-
 func TestSequenceCacheEncodeDecode(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	const rangeID = 123
 	const expSeq = 987
 	key := keys.SequenceCacheKey(rangeID, testTxnID, testTxnEpoch, expSeq)
-	id, epoch, seq, err := decodeSequenceCacheKey(key, nil)
+	txnID, epoch, seq, err := decodeSequenceCacheKey(key, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(id, testTxnID) {
-		t.Fatalf("expected id %q, got %q", testTxnID, id)
+	if !roachpb.TxnIDEqual(txnID, testTxnID) {
+		t.Fatalf("expected txnID %q, got %q", testTxnID, txnID)
 	}
 	if epoch != testTxnEpoch {
 		t.Fatalf("expected epoch %d, got %d", testTxnEpoch, epoch)

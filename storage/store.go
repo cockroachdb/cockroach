@@ -23,6 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/btree"
 	"github.com/opentracing/opentracing-go"
@@ -42,8 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
-	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 const (
@@ -919,7 +920,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 }
 
 // ClusterID accessor.
-func (s *Store) ClusterID() string { return s.Ident.ClusterID }
+func (s *Store) ClusterID() uuid.UUID { return s.Ident.ClusterID }
 
 // StoreID accessor.
 func (s *Store) StoreID() roachpb.StoreID { return s.Ident.StoreID }
@@ -1495,7 +1496,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 		// push failure, not the original write intent error. The push
 		// failure will instruct the client to restart the transaction
 		// with a backoff.
-		if len(pusherTxn.ID) > 0 && !readOnly {
+		if pusherTxn.ID != nil && !readOnly {
 			return nil, pushErr
 		}
 		// For read/write conflicts, return the write intent error which

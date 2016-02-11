@@ -130,7 +130,7 @@ func (meta MVCCMetadata) IsInline() bool {
 // IsIntentOf returns true if the meta record is an intent of the supplied
 // transaction.
 func (meta MVCCMetadata) IsIntentOf(txn *roachpb.Transaction) bool {
-	return meta.Txn != nil && txn != nil && bytes.Equal(meta.Txn.ID, txn.ID)
+	return meta.Txn != nil && txn != nil && roachpb.TxnIDEqual(meta.Txn.ID, txn.ID)
 }
 
 // GCBytes is a convenience function which returns the number of gc bytes,
@@ -882,7 +882,7 @@ func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Ke
 		if meta.Txn != nil {
 			// There is an uncommitted write intent.
 
-			if txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID) {
+			if txn == nil || !roachpb.TxnIDEqual(meta.Txn.ID, txn.ID) {
 				// The current Put operation does not come from the same
 				// transaction.
 				return &roachpb.WriteIntentError{Intents: []roachpb.Intent{{Span: roachpb.Span{Key: key}, Status: roachpb.PENDING, Txn: *meta.Txn}}}

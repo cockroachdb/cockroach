@@ -625,14 +625,14 @@ class StoreIdent : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional string cluster_id = 1;
+  // optional bytes cluster_id = 1;
   bool has_cluster_id() const;
   void clear_cluster_id();
   static const int kClusterIdFieldNumber = 1;
   const ::std::string& cluster_id() const;
   void set_cluster_id(const ::std::string& value);
   void set_cluster_id(const char* value);
-  void set_cluster_id(const char* value, size_t size);
+  void set_cluster_id(const void* value, size_t size);
   ::std::string* mutable_cluster_id();
   ::std::string* release_cluster_id();
   void set_allocated_cluster_id(::std::string* cluster_id);
@@ -2372,7 +2372,7 @@ inline void KeyValue::set_allocated_value(::cockroach::roachpb::Value* value) {
 
 // StoreIdent
 
-// optional string cluster_id = 1;
+// optional bytes cluster_id = 1;
 inline bool StoreIdent::has_cluster_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -2400,7 +2400,7 @@ inline void StoreIdent::set_cluster_id(const char* value) {
   cluster_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.roachpb.StoreIdent.cluster_id)
 }
-inline void StoreIdent::set_cluster_id(const char* value, size_t size) {
+inline void StoreIdent::set_cluster_id(const void* value, size_t size) {
   set_has_cluster_id();
   cluster_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));

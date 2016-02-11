@@ -17,6 +17,7 @@
 package keys
 
 import (
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -26,12 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 func TestPrettyPrint(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
 	tm, _ := time.Parse(time.UnixDate, "Sat Mar  7 11:06:39 UTC 2015")
+	txnID := uuid.NewV4()
 
 	testCases := []struct {
 		key roachpb.Key
@@ -40,8 +43,8 @@ func TestPrettyPrint(t *testing.T) {
 		// local
 		{StoreIdentKey(), "/Local/Store/storeIdent"},
 		{StoreGossipKey(), "/Local/Store/gossipBootstrap"},
-		{SequenceCacheKeyPrefix(roachpb.RangeID(1000001), []byte("test0")), `/Local/RangeID/1000001/SequenceCache/"test0"`},
-		{SequenceCacheKey(roachpb.RangeID(1000001), []byte("test0"), uint32(111), uint32(222)), `/Local/RangeID/1000001/SequenceCache/"test0"/epoch:111/seq:222`},
+		{SequenceCacheKeyPrefix(roachpb.RangeID(1000001), txnID), fmt.Sprintf(`/Local/RangeID/1000001/SequenceCache/%q`, txnID)},
+		{SequenceCacheKey(roachpb.RangeID(1000001), txnID, uint32(111), uint32(222)), fmt.Sprintf(`/Local/RangeID/1000001/SequenceCache/%q/epoch:111/seq:222`, txnID)},
 		{RaftLeaderLeaseKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftLeaderLease"},
 		{RaftTombstoneKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftTombstone"},
 		{RaftHardStateKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftHardState"},
@@ -55,7 +58,7 @@ func TestPrettyPrint(t *testing.T) {
 		{MakeRangeKeyPrefix(roachpb.RKey("ok")), `/Local/Range/"ok"`},
 		{RangeDescriptorKey(roachpb.RKey("111")), `/Local/Range/RangeDescriptor/"111"`},
 		{RangeTreeNodeKey(roachpb.RKey("111")), `/Local/Range/RangeTreeNode/"111"`},
-		{TransactionKey(roachpb.Key("111"), []byte("22222")), `/Local/Range/Transaction/addrKey:/"111"/id:"22222"`},
+		{TransactionKey(roachpb.Key("111"), txnID), fmt.Sprintf(`/Local/Range/Transaction/addrKey:/"111"/id:%q`, txnID)},
 
 		{LocalMax, `/Meta1/""`}, // LocalMax == Meta1Prefix
 
@@ -136,11 +139,11 @@ func TestPrettyPrint(t *testing.T) {
 		keyInfo := MassagePrettyPrintedSpanForTest(PrettyPrint(test.key), nil)
 		exp := MassagePrettyPrintedSpanForTest(test.exp, nil)
 		if exp != keyInfo {
-			t.Fatalf("%d: expected %s, got %s", i, exp, keyInfo)
+			t.Errorf("%d: expected %s, got %s", i, exp, keyInfo)
 		}
 
 		if exp != MassagePrettyPrintedSpanForTest(test.key.String(), nil) {
-			t.Fatalf("%d: expected %s, got %s", i, exp, test.key.String())
+			t.Errorf("%d: expected %s, got %s", i, exp, test.key.String())
 		}
 	}
 }

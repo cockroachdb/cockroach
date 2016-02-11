@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 const (
@@ -51,8 +52,8 @@ type TimestampCache struct {
 // A cacheValue combines the timestamp with an optional txn ID.
 type cacheValue struct {
 	timestamp roachpb.Timestamp
-	txnID     []byte // Nil for no transaction
-	readOnly  bool   // Command is read-only
+	txnID     *uuid.UUID // Nil for no transaction
+	readOnly  bool       // Command is read-only
 }
 
 func makeCacheEntry(key cache.IntervalKey, value cacheValue) *cache.Entry {
@@ -101,7 +102,7 @@ func (tc *TimestampCache) SetLowWater(lowWater roachpb.Timestamp) {
 // keys from start to end. If end is nil, the range covers the start
 // key only. txnID is nil for no transaction. readOnly specifies
 // whether the command adding this timestamp was read-only or not.
-func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestamp, txnID []byte, readOnly bool) {
+func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestamp, txnID *uuid.UUID, readOnly bool) {
 	// This gives us a memory-efficient end key if end is empty.
 	if len(end) == 0 {
 		end = start.Next()
@@ -151,7 +152,7 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 // the same transaction) would get that as the max timestamp and be
 // forced to increment it. This allows timestamps from the same txn
 // to be ignored.
-func (tc *TimestampCache) GetMax(start, end roachpb.Key, txnID []byte) (roachpb.Timestamp, roachpb.Timestamp) {
+func (tc *TimestampCache) GetMax(start, end roachpb.Key, txnID *uuid.UUID) (roachpb.Timestamp, roachpb.Timestamp) {
 	if len(end) == 0 {
 		end = start.Next()
 	}

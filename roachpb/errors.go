@@ -346,7 +346,7 @@ func NewTransactionAbortedError() *TransactionAbortedError {
 // Transactions.
 func NewTransactionPushError(txn, pusheeTxn Transaction) *TransactionPushError {
 	err := &TransactionPushError{PusheeTxn: pusheeTxn.Clone()}
-	if len(txn.ID) != 0 {
+	if txn.ID != nil {
 		// When the pusher is non-transactional, txn will be
 		// empty but for the priority. In that case, ignore it
 		// here.
