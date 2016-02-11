@@ -289,3 +289,49 @@ func TestIntervalCacheClear(t *testing.T) {
 		t.Error("expected reinsert to succeed")
 	}
 }
+
+func benchmarkCache(b *testing.B, c *baseCache, keys []interface{}) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for j := 0; j < len(keys); j++ {
+			c.Add(keys[j], j)
+		}
+		c.Clear()
+	}
+}
+
+func BenchmarkUnorderedCache(b *testing.B) {
+	mc := NewUnorderedCache(Config{Policy: CacheLRU, ShouldEvict: noEviction})
+	testKeys := []interface{}{
+		testKey("a"),
+		testKey("b"),
+		testKey("c"),
+		testKey("d"),
+		testKey("e"),
+	}
+	benchmarkCache(b, &mc.baseCache, testKeys)
+}
+
+func BenchmarkOrderedCache(b *testing.B) {
+	oc := NewOrderedCache(Config{Policy: CacheLRU, ShouldEvict: noEviction})
+	testKeys := []interface{}{
+		testKey("a"),
+		testKey("b"),
+		testKey("c"),
+		testKey("d"),
+		testKey("e"),
+	}
+	benchmarkCache(b, &oc.baseCache, testKeys)
+}
+
+func BenchmarkIntervalCache(b *testing.B) {
+	ic := NewIntervalCache(Config{Policy: CacheLRU, ShouldEvict: noEviction})
+	testKeys := []interface{}{
+		ic.NewKey([]byte("a"), []byte("c")),
+		ic.NewKey([]byte("b"), []byte("d")),
+		ic.NewKey([]byte("c"), []byte("e")),
+		ic.NewKey([]byte("d"), []byte("f")),
+		ic.NewKey([]byte("e"), []byte("g")),
+	}
+	benchmarkCache(b, &ic.baseCache, testKeys)
+}

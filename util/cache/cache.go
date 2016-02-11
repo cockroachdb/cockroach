@@ -122,14 +122,20 @@ type cacheStore interface {
 type baseCache struct {
 	Config
 	store cacheStore
-	ll    *list.List
+	ll    list.List
 }
 
-func newBaseCache(config Config) *baseCache {
-	return &baseCache{
+func newBaseCache(config Config) baseCache {
+	return baseCache{
 		Config: config,
-		ll:     list.New(),
 	}
+}
+
+// init initializes the baseCache with the provided cacheStore. It must be
+// called with a non-nil cacheStore before use of the cache.
+func (bc *baseCache) init(store cacheStore) {
+	bc.ll.Init()
+	bc.store = store
 }
 
 // Add adds a value to the cache.
@@ -234,7 +240,7 @@ func (bc *baseCache) evict() bool {
 //
 // UnorderedCache is not safe for concurrent access.
 type UnorderedCache struct {
-	*baseCache
+	baseCache
 	hmap map[interface{}]interface{}
 }
 
@@ -244,7 +250,7 @@ func NewUnorderedCache(config Config) *UnorderedCache {
 		baseCache: newBaseCache(config),
 		hmap:      make(map[interface{}]interface{}),
 	}
-	mc.baseCache.store = mc
+	mc.baseCache.init(mc)
 	return mc
 }
 
@@ -278,7 +284,7 @@ func (mc *UnorderedCache) length() int {
 //
 // OrderedCache is not safe for concurrent access.
 type OrderedCache struct {
-	*baseCache
+	baseCache
 	llrb llrb.Tree
 }
 
@@ -289,7 +295,7 @@ func NewOrderedCache(config Config) *OrderedCache {
 	oc := &OrderedCache{
 		baseCache: newBaseCache(config),
 	}
-	oc.baseCache.store = oc
+	oc.baseCache.init(oc)
 	return oc
 }
 
@@ -360,8 +366,8 @@ func (oc *OrderedCache) DoRange(f func(k, v interface{}), from, to interface{}) 
 //
 // IntervalCache is not safe for concurrent access.
 type IntervalCache struct {
-	*baseCache
-	tree *interval.Tree
+	baseCache
+	tree interval.Tree
 
 	// The fields below are used to avoid allocations during get, del and
 	// GetOverlaps.
@@ -402,9 +408,9 @@ func (ik IntervalKey) Contains(lk IntervalKey) bool {
 func NewIntervalCache(config Config) *IntervalCache {
 	ic := &IntervalCache{
 		baseCache: newBaseCache(config),
-		tree:      &interval.Tree{},
+		tree:      interval.Tree{},
 	}
-	ic.baseCache.store = ic
+	ic.baseCache.init(ic)
 	return ic
 }
 
