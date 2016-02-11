@@ -1597,7 +1597,8 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	// so we error out below.
 	if uuidBytes, err := r.store.Gossip().GetInfo(gossip.KeyClusterID); err == nil {
 		if gossipClusterID, err := uuid.FromBytes(uuidBytes); err == nil {
-			if *gossipClusterID != r.store.ClusterID() {
+			clusterID := r.store.ClusterID()
+			if !bytes.Equal(gossipClusterID.Bytes(), clusterID.Bytes()) {
 				log.Fatalc(ctx, "store %d belongs to cluster %s, but attempted to join cluster %s via gossip",
 					r.store.StoreID(), r.store.ClusterID(), gossipClusterID)
 			}
@@ -1610,7 +1611,8 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 		log.Infoc(ctx, "gossiping cluster id %q from store %d, range %d", r.store.ClusterID(),
 			r.store.StoreID(), r.RangeID)
 	}
-	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, r.store.ClusterID().Bytes(), 0*time.Second); err != nil {
+	clusterID := r.store.ClusterID()
+	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, clusterID.Bytes(), 0*time.Second); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
 	if ok, pErr := r.getLeaseForGossip(ctx); !ok || pErr != nil {
@@ -1619,7 +1621,7 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	if log.V(1) {
 		log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.store.StoreID(), r.RangeID)
 	}
-	if err := r.store.Gossip().AddInfo(gossip.KeySentinel, r.store.ClusterID().Bytes(), sentinelGossipTTL); err != nil {
+	if err := r.store.Gossip().AddInfo(gossip.KeySentinel, clusterID.Bytes(), sentinelGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip sentinel: %s", err)
 	}
 	if log.V(1) {

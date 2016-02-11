@@ -67,10 +67,10 @@ var txnIDMax = new(uuid.UUID)
 
 func init() {
 	for i := range txnIDMin.Bytes() {
-		txnIDMin.UUID[i] = '\x00'
+		txnIDMin.Bytes()[i] = '\x00'
 	}
 	for i := range txnIDMax.Bytes() {
-		txnIDMax.UUID[i] = '\xff'
+		txnIDMax.Bytes()[i] = '\xff'
 	}
 }
 
