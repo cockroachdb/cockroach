@@ -25,20 +25,43 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
-// A function used when manipulating filtering expressions. Given a VariableExpr
-// (which is a variable that can change per row), returns a VariableExpr to be used in the output
-// expression, or nil if the expression cannot be converted (e.g. it refers to a column not in a
-// "target" set of columns).
-type varConvertFunc func(expr parser.VariableExpr) (newExpr parser.VariableExpr)
+// varConvertFunc is a callback that is used when splitting filtering expressions (see splitFilter).
+//
+// The purpose of splitting filters is to derive a "restricted" filter expression that can be used at
+// an earlier stage where not all variables are available. For example, we may have an expression
+// that refers to variables in two tables and we want to derive an expression that we can use with a
+// single table (to reject some rows early); or, we could have an expression that refers to a table
+// but we want to derive an expression that we can use only with the columns available in an index.
+//
+// varConvertFunc serves two purposes:
+//
+//  - identifies which variables can be in the "restricted" filtering expression we are trying to
+//    derive, via the "ok" return value.
+//
+//  - optionally, it converts variables in the derived expression to a new type. If no conversion is
+//    necessary, the same variable can be returned.
+//
+// For example, to split a filter and get an expression that only refers to qvalues for column 0, we
+// could use:
+//
+//    func(expr parser.VariableExpr) (bool, parser.VariableExpr) {
+//       q := expr.(*qvalue)
+//       if q.colRef.colIdx == 0 {
+//          return true, q
+//       } else {
+//          return false, nil
+//       }
+//    }
+type varConvertFunc func(expr parser.VariableExpr) (ok bool, newExpr parser.VariableExpr)
 
 type varConvertVisitor struct {
 	// If justCheck is true, the visitor only checks that all VariableExpr in the expression can be
-	// converted; the expression is unchanged and the result flag is set accordingly.
+	// in the restricted filter (i.e. conv returns ok = true).
 	// If justCheck is false, all VariableExpr are converted. This mode can only be run if all
-	// VariableExprs can be converted.
-	justCheck bool
-	result    bool
-	conv      varConvertFunc
+	// variables can be in the restricted filter.
+	justCheck   bool
+	checkFailed bool
+	conv        varConvertFunc
 }
 
 var _ parser.Visitor = &varConvertVisitor{}
@@ -46,17 +69,18 @@ var _ parser.Visitor = &varConvertVisitor{}
 // Visit is invoked for each Expr node. It can return a new expression for the
 // node, or it can stop processing by returning a nil Visitor.
 func (v *varConvertVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
-	if !pre || (v.justCheck && !v.result) {
+	if !pre || (v.justCheck && v.checkFailed) {
 		return nil, expr
 	}
 
 	if varExpr, ok := expr.(parser.VariableExpr); ok {
-		converted := v.conv(varExpr)
-		if converted == nil {
+		ok, converted := v.conv(varExpr)
+		if !ok {
+			// variable not in the "restricted" set of variables.
 			if !v.justCheck {
-				panic(fmt.Sprintf("cannot convert %s", varExpr))
+				panic(fmt.Sprintf("exprConvertVars called with unchecked variable %s", varExpr))
 			}
-			v.result = false
+			v.checkFailed = true
 			return nil, expr
 		}
 		if !v.justCheck {
@@ -69,13 +93,15 @@ func (v *varConvertVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, p
 
 // Checks if the given expression only has vars that are known to the conversion function.
 func exprCheckVars(expr parser.Expr, conv varConvertFunc) bool {
-	v := varConvertVisitor{justCheck: true, result: true, conv: conv}
+	v := varConvertVisitor{justCheck: true, conv: conv}
 	parser.WalkExpr(&v, expr)
-	return v.result
+	return !v.checkFailed
 }
 
+// Convert the variables in the given expression; the expression must only contain
+// variables known to the conversion function (exprCheckVars should be used first).
 func exprConvertVars(expr parser.Expr, conv varConvertFunc) parser.Expr {
-	v := varConvertVisitor{justCheck: false, result: false, conv: conv}
+	v := varConvertVisitor{justCheck: false, conv: conv}
 	return parser.WalkExpr(&v, expr)
 }
 
@@ -117,7 +143,8 @@ func makeNot(expr parser.Expr) parser.Expr {
 
 // splitBoolExpr splits a boolean expression E into two boolean expressions RES and REM such that:
 //
-//  - RES only has "converted" vars
+//  - RES only has variables known to the conversion function (it is "restricted" to a particular
+//    set of variables)
 //
 //  - If weaker is true, for any setting of variables x:
 //       E(x) = (RES(x) AND REM(x))
@@ -128,9 +155,12 @@ func makeNot(expr parser.Expr) parser.Expr {
 //    This implies RES(x) => E(x), i.e. RES is "stronger"
 //
 // Note: the original expression is modified in-place and should not be used again.
-func splitBoolExpr(expr parser.Expr, conv varConvertFunc, weaker bool) (result, remainder parser.Expr) {
+func splitBoolExpr(expr parser.Expr, conv varConvertFunc, weaker bool) (restricted, remainder parser.Expr) {
 	// If the expression only contains "convertible" vars, the split is trivial.
 	if exprCheckVars(expr, conv) {
+		// An "empty" filter is always true in the weaker (normal) case (where the filter is
+		// equivalent to RES AND REM) and always false in the stronger (inverted) case (where the
+		// filter is equivalent to RES OR REM).
 		return exprConvertVars(expr, conv), parser.DBool(weaker)
 	}
 
@@ -183,31 +213,37 @@ func splitBoolExpr(expr parser.Expr, conv varConvertFunc, weaker bool) (result, 
 		return makeNot(exprRes), makeNot(exprRem)
 
 	default:
-		// We can't split off anything.
+		// We can't split off anything. See the comment above on "empty" filters.
 		return parser.DBool(weaker), expr
 	}
 }
 
 // splitFilter splits a boolean expression E into two boolean expressions RES and REM such that:
-//  - RES contains only converted variables (according to conv)
+//
+//  - RES contains only variables known to the conversion function (it is "restricted" to a
+//    particular set of variables). These variables are also converted as returned by conv.
+//
 //  - the original expression is equivalent to the conjunction (AND) between the RES and REM
 //    expressions.
 //
-// This splitting allows us to do filtering at various layers, where one layer may only have the
-// values of some variables available. The implementation is best-effort (it tries to get as much of
-// the expression into RES as possible, and make REM as small as possible).
+// Splitting allows us to do filtering at various layers, where one layer only knows the values of
+// some variables. Instead of evaluating E in an upper layer, we evaluate RES in a lower layer
+// and then evaluate REM in the upper layer (on results that passed the RES filter).
 //
-// Note: the original expression is modified in-place and should not be used again.
-func splitFilter(expr parser.Expr, conv varConvertFunc) (result, remainder parser.Expr) {
+// Notes:
+//  - the implementation is best-effort (it tries to get as much of the expression into RES as
+//    possible, and make REM as small as possible).
+//  - the original expression is modified in-place and should not be used again.
+func splitFilter(expr parser.Expr, conv varConvertFunc) (restricted, remainder parser.Expr) {
 	if expr == nil {
 		return nil, nil
 	}
-	result, remainder = splitBoolExpr(expr, conv, true)
-	if result == parser.DBool(true) {
-		result = nil
+	restricted, remainder = splitBoolExpr(expr, conv, true)
+	if restricted == parser.DBool(true) {
+		restricted = nil
 	}
 	if remainder == parser.DBool(true) {
 		remainder = nil
 	}
-	return result, remainder
+	return restricted, remainder
 }
