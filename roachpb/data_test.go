@@ -28,7 +28,7 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/uuid"
+	"github.com/satori/go.uuid"
 )
 
 // TestKeyNext tests that the method for creating lexicographic
@@ -370,7 +370,7 @@ func TestTxnEqual(t *testing.T) {
 }
 
 func TestTxnIDEqual(t *testing.T) {
-	txn1, txn2 := uuid.NewUUID4(), uuid.NewUUID4()
+	txn1, txn2 := uuid.NewV4().Bytes(), uuid.NewV4().Bytes()
 	txn1Copy := append([]byte(nil), txn1...)
 
 	testCases := []struct {
@@ -444,7 +444,7 @@ var ts = makeTS(10, 11)
 var nonZeroTxn = Transaction{
 	TxnMeta: TxnMeta{
 		Key:       Key("foo"),
-		ID:        uuid.NewUUID4(),
+		ID:        uuid.NewV4().Bytes(),
 		Epoch:     2,
 		Timestamp: makeTS(20, 21),
 	},
@@ -477,7 +477,7 @@ func TestTransactionUpdate(t *testing.T) {
 	}
 
 	var txn3 Transaction
-	txn3.ID = uuid.NewUUID4()
+	txn3.ID = uuid.NewV4().Bytes()
 	txn3.Name = "carl"
 	txn3.Isolation = SNAPSHOT
 	txn3.Update(&txn)

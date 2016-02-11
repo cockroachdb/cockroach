@@ -34,8 +34,8 @@ import (
 	"github.com/biogo/store/interval"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
+	"github.com/satori/go.uuid"
 )
 
 const (
@@ -573,7 +573,7 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 	return &Transaction{
 		TxnMeta: TxnMeta{
 			Key:       baseKey,
-			ID:        uuid.NewUUID4(),
+			ID:        uuid.NewV4().Bytes(),
 			Timestamp: now,
 		},
 		Name:          name,
@@ -790,13 +790,13 @@ func (t Transaction) String() string {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
 	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s",
-		uuid.UUID(t.ID).Short(), t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
+		uuid.UUID(uuid.FromBytesOrNil(t.ID)).String()[:8], t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
 	return buf.String()
 }
 
 // Short returns the short form of the Transaction's UUID.
 func (t Transaction) Short() string {
-	return uuid.UUID(t.ID).Short()
+	return uuid.UUID(uuid.FromBytesOrNil(t.ID)).String()[:8]
 }
 
 // Add adds the given NodeID to the interface (unless already present)

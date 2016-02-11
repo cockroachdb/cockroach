@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/uuid"
+	"github.com/satori/go.uuid"
 )
 
 var (
@@ -48,7 +48,7 @@ func createTestSequenceCache(t *testing.T, rangeID roachpb.RangeID, stopper *sto
 
 const testTxnEpoch = 5
 
-var testTxnID = uuid.UUID([]byte("0ce61c17-5eb4-4587-8c36-dcf4062ada4c"))
+var testTxnID = uuid.UUID(uuid.FromBytesOrNil([]byte("0ce61c17-5eb4-4587-8c36-dcf4062ada4c"))).Bytes()
 var testTxnKey = []byte("a")
 var testTxnTimestamp = roachpb.ZeroTimestamp.Add(123, 456)
 var testEntry = roachpb.SequenceCacheEntry{Key: testTxnKey, Timestamp: testTxnTimestamp}

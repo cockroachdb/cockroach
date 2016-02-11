@@ -26,8 +26,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
+	"github.com/satori/go.uuid"
 )
 
 var (
@@ -47,7 +47,7 @@ func newDB(sender Sender) *DB {
 // functionality. It responds to PutRequests using testPutResp.
 func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)) SenderFunc {
 	txnKey := roachpb.Key("test-txn")
-	txnID := []byte(uuid.NewUUID4())
+	txnID := uuid.NewV4().Bytes()
 
 	return func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		ba.UserPriority = 1
