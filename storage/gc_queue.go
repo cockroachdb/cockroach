@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -29,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 const (
@@ -200,12 +202,12 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 					// Keep track of intent to resolve if older than the intent
 					// expiration threshold.
 					if meta.Timestamp.Less(intentExp) {
-						id := string(meta.Txn.ID)
+						txnID := meta.Txn.ID.String()
 						txn := &roachpb.Transaction{
 							TxnMeta: *meta.Txn,
 						}
-						txnMap[id] = txn
-						intentSpanMap[id] = append(intentSpanMap[id], roachpb.Span{Key: expBaseKey})
+						txnMap[txnID] = txn
+						intentSpanMap[txnID] = append(intentSpanMap[txnID], roachpb.Span{Key: expBaseKey})
 					}
 					// With an active intent, GC ignores MVCC metadata & intent value.
 					startIdx = 2
@@ -274,9 +276,9 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 
 	// Resolve all intents.
 	var intents []roachpb.Intent
-	for id, txn := range txnMap {
+	for txnID, txn := range txnMap {
 		if txn.Status != roachpb.PENDING {
-			for _, intent := range intentSpanMap[id] {
+			for _, intent := range intentSpanMap[txnID] {
 				intents = append(intents, roachpb.Intent{Span: intent, Status: txn.Status, Txn: txn.TxnMeta})
 			}
 		}
@@ -332,7 +334,7 @@ func processTransactionTable(r *Replica, txnMap map[string]*roachpb.Transaction,
 			return nil
 		}
 
-		id := string(txn.ID)
+		txnID := txn.ID.String()
 
 		// The transaction record should be considered for removal.
 		switch txn.Status {
@@ -342,7 +344,7 @@ func processTransactionTable(r *Replica, txnMap map[string]*roachpb.Transaction,
 			// TODO(tschottdorf): refactor so that we can GC PENDING entries
 			// in the same cycle, but keeping the calls to pushTxn in a central
 			// location (keeping it easy to batch them up in the future).
-			txnMap[id] = &txn
+			txnMap[txnID] = &txn
 			return nil
 		case roachpb.ABORTED:
 			// If we remove this transaction, it effectively still counts as
@@ -372,8 +374,8 @@ func processTransactionTable(r *Replica, txnMap map[string]*roachpb.Transaction,
 		return nil
 	}
 
-	startKey := keys.TransactionKey(roachpb.KeyMin, nil)
-	endKey := keys.TransactionKey(roachpb.KeyMax, nil)
+	startKey := keys.TransactionKey(roachpb.KeyMin, uuid.EmptyUUID)
+	endKey := keys.TransactionKey(roachpb.KeyMax, uuid.EmptyUUID)
 
 	_, err := engine.MVCCIterate(snap, startKey, endKey, roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */, false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
 		return false, handleOne(kv)
@@ -391,20 +393,20 @@ func processSequenceCache(r *Replica, now, cutoff roachpb.Timestamp, prevTxns ma
 
 	txns := make(map[string]*roachpb.Transaction)
 	idToKeys := make(map[string][]roachpb.GCRequest_GCKey)
-	r.sequence.Iterate(snap, func(key, id []byte, v roachpb.SequenceCacheEntry) {
-		idStr := string(id)
+	r.sequence.Iterate(snap, func(key []byte, txnIDPtr *uuid.UUID, v roachpb.SequenceCacheEntry) {
+		txnID := txnIDPtr.String()
 		// If we've pushed this Txn previously, attempt cleanup (in case the
 		// push was successful). Initiate new pushes only for newly discovered
 		// "old" entries.
-		if prevTxn, ok := prevTxns[idStr]; ok && prevTxn.Status != roachpb.PENDING {
-			txns[idStr] = prevTxn
-			idToKeys[idStr] = append(idToKeys[idStr], roachpb.GCRequest_GCKey{Key: key})
+		if prevTxn, ok := prevTxns[txnID]; ok && prevTxn.Status != roachpb.PENDING {
+			txns[txnID] = prevTxn
+			idToKeys[txnID] = append(idToKeys[txnID], roachpb.GCRequest_GCKey{Key: key})
 		} else if !cutoff.Less(v.Timestamp) {
-			txns[idStr] = &roachpb.Transaction{
-				TxnMeta: roachpb.TxnMeta{ID: id, Key: v.Key},
+			txns[txnID] = &roachpb.Transaction{
+				TxnMeta: roachpb.TxnMeta{ID: txnIDPtr, Key: v.Key},
 				Status:  roachpb.PENDING,
 			}
-			idToKeys[idStr] = append(idToKeys[idStr], roachpb.GCRequest_GCKey{Key: key})
+			idToKeys[txnID] = append(idToKeys[txnID], roachpb.GCRequest_GCKey{Key: key})
 		}
 	})
 
@@ -422,7 +424,7 @@ func processSequenceCache(r *Replica, now, cutoff roachpb.Timestamp, prevTxns ma
 	wg.Wait()
 
 	var gcKeys []roachpb.GCRequest_GCKey
-	for idStr, txn := range txns {
+	for txnID, txn := range txns {
 		if txn.Status == roachpb.PENDING {
 			continue
 		}
@@ -432,7 +434,7 @@ func processSequenceCache(r *Replica, now, cutoff roachpb.Timestamp, prevTxns ma
 		}
 		if !cutoff.Less(ts) {
 			// This is it, we can delete our sequence cache entries.
-			gcKeys = append(gcKeys, idToKeys[idStr]...)
+			gcKeys = append(gcKeys, idToKeys[txnID]...)
 		}
 	}
 	return gcKeys

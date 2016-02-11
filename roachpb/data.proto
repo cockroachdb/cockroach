@@ -98,7 +98,9 @@ message KeyValue {
 // StoreIdent is written to the underlying storage engine at a
 // store-reserved system key (KeyLocalIdent).
 message StoreIdent {
-  optional string cluster_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ClusterID"];
+  optional bytes cluster_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ClusterID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
   optional int32 node_id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
   optional int32 store_id = 3 [(gogoproto.nullable) = false,
@@ -209,7 +211,8 @@ message NodeList {
 // TxnMeta is the metadata of a Transaction record.
 message TxnMeta {
   // id is a unique UUID value which identifies the transaction.
-  optional bytes id = 1 [(gogoproto.customname) = "ID"];
+  optional bytes id = 1 [(gogoproto.customname) = "ID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
   // key is the key which anchors the transaction. This is typically
   // the first key read or written during the transaction and determines which
   // range in the cluster will hold the transaction record.

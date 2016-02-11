@@ -92,7 +92,9 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	if err := txn.Put(roachpb.Key("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	txnMeta, ok := s.Sender.txns[string(txn.Proto.ID)]
+	txnID := *txn.Proto.ID
+	txnIDStr := txnID.String()
+	txnMeta, ok := s.Sender.txns[txnIDStr]
 	if !ok {
 		t.Fatal("expected a transaction to be created on coordinator")
 	}
@@ -112,7 +114,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	if len(s.Sender.txns) != 1 {
 		t.Errorf("expected length of transactions map to be 1; got %d", len(s.Sender.txns))
 	}
-	txnMeta = s.Sender.txns[string(txn.Proto.ID)]
+	txnMeta = s.Sender.txns[txnIDStr]
 	if lu := atomic.LoadInt64(&txnMeta.lastUpdateNanos); ts >= lu || lu != s.Manual.UnixNano() {
 		t.Errorf("expected last update time to advance; got %d", lu)
 	}
@@ -206,9 +208,12 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 		}
 	}
 
+	txnID := *txn.Proto.ID
+	txnIDStr := txnID.String()
+
 	// Verify that the transaction metadata contains only two entries
 	// in its "keys" interval cache. "a" and range "aa"-"c".
-	txnMeta, ok := s.Sender.txns[string(txn.Proto.ID)]
+	txnMeta, ok := s.Sender.txns[txnIDStr]
 	if !ok {
 		t.Fatalf("expected a transaction to be created on coordinator")
 	}
@@ -396,7 +401,9 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Sender.Lock()
-	intentSpans := s.Sender.txns[string(txn.Proto.ID)].intentSpans()
+	txnID := *txn.Proto.ID
+	txnIDStr := txnID.String()
+	intentSpans := s.Sender.txns[txnIDStr].intentSpans()
 	expSpans := []roachpb.Span{{Key: key, EndKey: []byte("")}}
 	equal := !reflect.DeepEqual(intentSpans, expSpans)
 	s.Sender.Unlock()
@@ -466,10 +473,13 @@ func TestTxnCoordSenderGC(t *testing.T) {
 	s.Manual.Set(defaultClientTimeout.Nanoseconds() + 1)
 	s.Sender.Unlock()
 
+	txnID := *txn.Proto.ID
+	txnIDStr := txnID.String()
+
 	if err := util.IsTrueWithin(func() bool {
 		// Locking the TxnCoordSender to prevent a data race.
 		s.Sender.Lock()
-		_, ok := s.Sender.txns[string(txn.Proto.ID)]
+		_, ok := s.Sender.txns[txnIDStr]
 		s.Sender.Unlock()
 		return !ok
 	}, 50*time.Millisecond); err != nil {
@@ -732,7 +742,10 @@ func TestTxnCoordSenderReleaseTxnMeta(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, ok := s.Sender.txns[string(txn.Proto.ID)]; ok {
+	txnID := *txn.Proto.ID
+	txnIDStr := txnID.String()
+
+	if _, ok := s.Sender.txns[txnIDStr]; ok {
 		t.Fatal("expected TxnCoordSender has released the txn")
 	}
 }

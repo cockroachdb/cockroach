@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 const statusLogInterval = 5 * time.Second
@@ -318,16 +319,16 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 	defer sp.Finish()
 	ctx, _ = opentracing.ContextWithSpan(ctx, sp)
 
-	var id string // optional transaction ID
 	if ba.Txn != nil {
 		// If this request is part of a transaction...
-		id = string(ba.Txn.ID)
+		txnID := *ba.Txn.ID
+		txnIDStr := txnID.String()
 		// Verify that if this Transaction is not read-only, we have it on
 		// file. If not, refuse writes - the client must have issued a write on
 		// another coordinator previously.
 		if ba.Txn.Writing && ba.IsTransactionWrite() {
 			tc.Lock()
-			_, ok := tc.txns[id]
+			_, ok := tc.txns[txnIDStr]
 			tc.Unlock()
 			if !ok {
 				return nil, roachpb.NewErrorf("transaction must not write on multiple coordinators")
@@ -359,8 +360,8 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 				return nil, roachpb.NewErrorf("client must not pass intents to EndTransaction")
 			}
 			tc.Lock()
-			txnMeta, metaOK := tc.txns[id]
-			if id != "" && metaOK {
+			txnMeta, metaOK := tc.txns[txnIDStr]
+			if metaOK {
 				et.IntentSpans = txnMeta.intentSpans()
 			}
 			tc.Unlock()
@@ -465,7 +466,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 	if len(ba.Requests) == 0 {
 		return util.Errorf("empty batch with txn")
 	}
-	if len(ba.Txn.ID) == 0 {
+	if ba.Txn.ID == nil {
 		// Create transaction without a key. The key is set when a begin
 		// transaction request is received.
 		newTxn := roachpb.NewTransaction(ba.Txn.Name, nil, ba.UserPriority,
@@ -505,7 +506,7 @@ func (tc *TxnCoordSender) cleanupTxn(trace opentracing.Span, txn roachpb.Transac
 	trace.LogEvent("coordinator stops")
 	tc.Lock()
 	defer tc.Unlock()
-	txnMeta, ok := tc.txns[string(txn.ID)]
+	txnMeta, ok := tc.txns[txn.ID.String()]
 	// The heartbeat might've already removed the record.
 	if !ok {
 		return
@@ -520,10 +521,11 @@ func (tc *TxnCoordSender) cleanupTxn(trace opentracing.Span, txn roachpb.Transac
 
 // unregisterTxn deletes a txnMetadata object from the sender
 // and collects its stats. It assumes the lock is held.
-func (tc *TxnCoordSender) unregisterTxnLocked(id string) {
-	txnMeta := tc.txns[id] // guaranteed to exist
+func (tc *TxnCoordSender) unregisterTxnLocked(txnID uuid.UUID) {
+	txnIDStr := txnID.String()
+	txnMeta := tc.txns[txnIDStr] // guaranteed to exist
 	if txnMeta == nil {
-		panic("attempt to unregister non-existent transaction: " + id)
+		panic(fmt.Sprintf("attempt to unregister non-existent transaction: %s", txnID))
 	}
 	tc.txnStats.durations = append(tc.txnStats.durations, float64(tc.clock.PhysicalNow()-txnMeta.firstUpdateNanos))
 	tc.txnStats.restarts = append(tc.txnStats.restarts, float64(txnMeta.txn.Epoch))
@@ -537,7 +539,7 @@ func (tc *TxnCoordSender) unregisterTxnLocked(id string) {
 	}
 	txnMeta.keys.Clear()
 
-	delete(tc.txns, id)
+	delete(tc.txns, txnIDStr)
 }
 
 // heartbeatLoop periodically sends a HeartbeatTxn RPC to an extant
@@ -545,7 +547,7 @@ func (tc *TxnCoordSender) unregisterTxnLocked(id string) {
 // committed after attempting to resolve the intents. When the
 // heartbeat stops, the transaction is unregistered from the
 // coordinator,
-func (tc *TxnCoordSender) heartbeatLoop(id string) {
+func (tc *TxnCoordSender) heartbeatLoop(txnID uuid.UUID) {
 	var tickChan <-chan time.Time
 	{
 		ticker := time.NewTicker(tc.heartbeatInterval)
@@ -554,7 +556,7 @@ func (tc *TxnCoordSender) heartbeatLoop(id string) {
 	}
 	defer func() {
 		tc.Lock()
-		tc.unregisterTxnLocked(id)
+		tc.unregisterTxnLocked(txnID)
 		tc.Unlock()
 	}()
 
@@ -562,7 +564,7 @@ func (tc *TxnCoordSender) heartbeatLoop(id string) {
 	var sp opentracing.Span
 	{
 		tc.Lock()
-		txnMeta := tc.txns[id] // do not leak to outer scope
+		txnMeta := tc.txns[txnID.String()] // do not leak to outer scope
 		closer = txnMeta.txnEnd
 		sp = tc.tracer.StartTrace("heartbeat loop")
 		defer sp.Finish()
@@ -578,7 +580,7 @@ func (tc *TxnCoordSender) heartbeatLoop(id string) {
 	for {
 		select {
 		case <-tickChan:
-			if !tc.heartbeat(id, sp, ctx) {
+			if !tc.heartbeat(txnID, sp, ctx) {
 				return
 			}
 		case <-closer:
@@ -591,10 +593,10 @@ func (tc *TxnCoordSender) heartbeatLoop(id string) {
 	}
 }
 
-func (tc *TxnCoordSender) heartbeat(id string, trace opentracing.Span, ctx context.Context) bool {
+func (tc *TxnCoordSender) heartbeat(txnID uuid.UUID, trace opentracing.Span, ctx context.Context) bool {
 	tc.Lock()
 	proceed := true
-	txnMeta := tc.txns[id]
+	txnMeta := tc.txns[txnID.String()]
 	// Before we send a heartbeat, determine whether this transaction
 	// should be considered abandoned. If so, exit heartbeat.
 	if txnMeta.hasClientAbandonedCoord(tc.clock.PhysicalNow()) {
@@ -711,13 +713,14 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	}
 
 	return func() *roachpb.Error {
-		if len(newTxn.ID) <= 0 {
+		if newTxn.ID == nil {
 			return pErr
 		}
-		id := string(newTxn.ID)
+		txnID := *newTxn.ID
+		txnIDStr := txnID.String()
 		tc.Lock()
 		defer tc.Unlock()
-		txnMeta := tc.txns[id]
+		txnMeta := tc.txns[txnIDStr]
 		// For successful transactional requests, keep the written intents and
 		// the updated transaction record to be sent along with the reply.
 		// The transaction metadata is created with the first writing operation.
@@ -752,16 +755,16 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 						timeoutDuration:  tc.clientTimeout,
 						txnEnd:           make(chan struct{}),
 					}
-					tc.txns[id] = txnMeta
+					tc.txns[txnIDStr] = txnMeta
 
 					if !tc.stopper.RunAsyncTask(func() {
-						tc.heartbeatLoop(id)
+						tc.heartbeatLoop(txnID)
 					}) {
 						// The system is already draining and we can't start the
 						// heartbeat. We refuse new transactions for now because
 						// they're likely not going to have all intents committed.
 						// In principle, we can relax this as needed though.
-						tc.unregisterTxnLocked(id)
+						tc.unregisterTxnLocked(txnID)
 						return roachpb.NewError(&roachpb.NodeUnavailableError{})
 					}
 				}

@@ -57,6 +57,7 @@ github.com/opentracing/opentracing-go bc83a422bc08c8d1b72f0f548faab0145e35bb54
 github.com/rcrowley/go-metrics 51425a2415d21afadfd55cd93432c0bc69e9598d
 github.com/robfig/glock cb3c3ec56de988289cab7bbd284eddc04dfee6c9
 github.com/russross/blackfriday 006144af03eeeff1037240a71865a9fd61f1c25f
+github.com/satori/go.uuid d41af8bb6a7704f00bc3b7cba9355ae6a5a80048
 github.com/shurcooL/sanitized_anchor_name 10ef21a441db47d8b13ebcc5fd2310f636973c77
 github.com/spf13/cobra 04d02e318480593f48e66ff338c7b8027e5b7660
 github.com/spf13/pflag 7f60f83a2c81bc3c3c0d5297f61ddfa68da9d3b7

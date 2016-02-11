@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 // NOTE: these tests are in package kv_test to avoid a circular
@@ -580,7 +581,7 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 	//   from the previous txn's. So, the write intent made by the txn of the previous epoch
 	//   is treated as a write made by some different txn.
 	epoch := 0
-	var txnID []byte
+	var txnID *uuid.UUID
 	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		// Set low priority so that the intent will not be pushed.
 		txn.InternalSetPriority(1)
@@ -606,7 +607,7 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 		pErr := txn.CommitInBatch(b)
 		if epoch == 1 {
 			if tErr, ok := pErr.GetDetail().(*roachpb.TransactionPushError); ok {
-				if len(tErr.Txn.ID) == 0 {
+				if tErr.Txn.ID == nil {
 					t.Errorf("txn ID is not set unexpectedly: %s", tErr)
 				}
 				txnID = tErr.Txn.ID

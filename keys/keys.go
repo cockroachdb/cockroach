@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 func makeKey(keys ...[]byte) []byte {
@@ -143,18 +144,18 @@ func RangeStatsKey(rangeID roachpb.RangeID) roachpb.Key {
 // SequenceCacheKey returns a range-local key by Range ID for a
 // sequence cache entry, with detail specified by encoding the
 // supplied transaction ID, epoch and sequence number.
-func SequenceCacheKey(rangeID roachpb.RangeID, id []byte, epoch uint32, seq uint32) roachpb.Key {
-	key := SequenceCacheKeyPrefix(rangeID, id)
+func SequenceCacheKey(rangeID roachpb.RangeID, txnID *uuid.UUID, epoch uint32, seq uint32) roachpb.Key {
+	key := SequenceCacheKeyPrefix(rangeID, txnID)
 	key = encoding.EncodeUint32Descending(key, epoch)
 	key = encoding.EncodeUint32Descending(key, seq)
 	return key
 }
 
 // SequenceCacheKeyPrefix returns the prefix common to all sequence cache keys
-// for the given ID.
-func SequenceCacheKeyPrefix(rangeID roachpb.RangeID, id []byte) roachpb.Key {
+// for the given transaction ID.
+func SequenceCacheKeyPrefix(rangeID roachpb.RangeID, txnID *uuid.UUID) roachpb.Key {
 	key := MakeRangeIDKey(rangeID, LocalSequenceCacheSuffix, nil)
-	key = encoding.EncodeBytesAscending(key, id)
+	key = encoding.EncodeBytesAscending(key, txnID.Bytes())
 	return key
 }
 
@@ -224,8 +225,8 @@ func RangeDescriptorKey(key roachpb.RKey) roachpb.Key {
 // TransactionKey returns a transaction key based on the provided
 // transaction key and ID. The base key is encoded in order to
 // guarantee that all transaction records for a range sort together.
-func TransactionKey(key roachpb.Key, id []byte) roachpb.Key {
-	return MakeRangeKey(Addr(key), localTransactionSuffix, roachpb.RKey(id))
+func TransactionKey(key roachpb.Key, txnID *uuid.UUID) roachpb.Key {
+	return MakeRangeKey(Addr(key), localTransactionSuffix, roachpb.RKey(txnID.Bytes()))
 }
 
 // Addr returns the address for the key, used to lookup the range containing

@@ -17,11 +17,14 @@
 package server
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"net"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -42,8 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	"github.com/gogo/protobuf/proto"
-	"github.com/opentracing/opentracing-go"
 )
 
 const (
@@ -76,7 +77,7 @@ var errCannotJoinSelf = errors.New("an uninitialized node cannot specify its own
 // on subsequent instantiations.
 type Node struct {
 	stopper    *stop.Stopper
-	ClusterID  string                 // UUID for Cockroach cluster
+	ClusterID  uuid.UUID              // UUID for Cockroach cluster
 	Descriptor roachpb.NodeDescriptor // Node ID, network/physical topology
 	ctx        storage.StoreContext   // Context to use and pass to stores
 	stores     *storage.Stores        // Access to node-local stores
@@ -119,8 +120,8 @@ func GetBootstrapSchema() sql.MetadataSchema {
 // engines and cluster ID. The first bootstrapped store contains a
 // single range spanning all keys. Initial range lookup metadata is
 // populated for the range. Returns the cluster ID.
-func bootstrapCluster(engines []engine.Engine) (string, error) {
-	clusterID := uuid.NewUUID4().String()
+func bootstrapCluster(engines []engine.Engine) (uuid.UUID, error) {
+	clusterID := uuid.MakeV4()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
@@ -145,13 +146,13 @@ func bootstrapCluster(engines []engine.Engine) (string, error) {
 		s := storage.NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 		// Verify the store isn't already part of a cluster.
-		if len(s.Ident.ClusterID) > 0 {
-			return "", util.Errorf("storage engine already belongs to a cluster (%s)", s.Ident.ClusterID)
+		if !bytes.Equal(s.Ident.ClusterID.Bytes(), uuid.EmptyUUID.Bytes()) {
+			return uuid.UUID{}, util.Errorf("storage engine already belongs to a cluster (%s)", s.Ident.ClusterID)
 		}
 
 		// Bootstrap store to persist the store ident.
 		if err := s.Bootstrap(sIdent, stopper); err != nil {
-			return "", err
+			return uuid.UUID{}, err
 		}
 		// Create first range, writing directly to engine. Note this does
 		// not create the range, just its data. Only do this if this is the
@@ -159,11 +160,11 @@ func bootstrapCluster(engines []engine.Engine) (string, error) {
 		if i == 0 {
 			initialValues := GetBootstrapSchema().GetInitialValues()
 			if err := s.BootstrapRange(initialValues); err != nil {
-				return "", err
+				return uuid.UUID{}, err
 			}
 		}
 		if err := s.Start(stopper); err != nil {
-			return "", err
+			return uuid.UUID{}, err
 		}
 
 		stores.AddStore(s)
@@ -171,12 +172,12 @@ func bootstrapCluster(engines []engine.Engine) (string, error) {
 		// Initialize node and store ids.  Only initialize the node once.
 		if i == 0 {
 			if nodeID, err := allocateNodeID(ctx.DB); nodeID != sIdent.NodeID || err != nil {
-				return "", util.Errorf("expected to initialize node id allocator to %d, got %d: %s",
+				return uuid.UUID{}, util.Errorf("expected to initialize node id allocator to %d, got %d: %s",
 					sIdent.NodeID, nodeID, err)
 			}
 		}
 		if storeID, err := allocateStoreIDs(sIdent.NodeID, 1, ctx.DB); storeID != sIdent.StoreID || err != nil {
-			return "", util.Errorf("expected to initialize store id allocator to %d, got %d: %s",
+			return uuid.UUID{}, util.Errorf("expected to initialize store id allocator to %d, got %d: %s",
 				sIdent.StoreID, storeID, err)
 		}
 	}
@@ -325,7 +326,7 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 			}
 			return util.Errorf("failed to start store: %s", err)
 		}
-		if s.Ident.ClusterID == "" || s.Ident.NodeID == 0 {
+		if bytes.Equal(s.Ident.ClusterID.Bytes(), uuid.EmptyUUID.Bytes()) || s.Ident.NodeID == 0 {
 			return util.Errorf("unidentified store: %s", s)
 		}
 		capacity, err := s.Capacity()
@@ -388,10 +389,10 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 // the agreed-upon cluster and node IDs.
 func (n *Node) validateStores() error {
 	return n.stores.VisitStores(func(s *storage.Store) error {
-		if n.ClusterID == "" {
+		if bytes.Equal(n.ClusterID.Bytes(), uuid.EmptyUUID.Bytes()) {
 			n.ClusterID = s.Ident.ClusterID
 			n.initNodeID(s.Ident.NodeID)
-		} else if n.ClusterID != s.Ident.ClusterID {
+		} else if !bytes.Equal(n.ClusterID.Bytes(), s.Ident.ClusterID.Bytes()) {
 			return util.Errorf("store %s cluster ID doesn't match node cluster %q", s, n.ClusterID)
 		} else if n.Descriptor.NodeID != s.Ident.NodeID {
 			return util.Errorf("store %s node ID doesn't match node ID: %d", s, n.Descriptor.NodeID)
@@ -405,7 +406,7 @@ func (n *Node) validateStores() error {
 // allocated via a sequence id generator stored at a system key per
 // node.
 func (n *Node) bootstrapStores(bootstraps []*storage.Store, stopper *stop.Stopper) {
-	if n.ClusterID == "" {
+	if bytes.Equal(n.ClusterID.Bytes(), uuid.EmptyUUID.Bytes()) {
 		panic("ClusterID missing during store bootstrap of auxiliary store")
 	}
 
@@ -447,15 +448,19 @@ func (n *Node) connectGossip() {
 	// sufficient for diagnosing this type of condition.
 	<-n.ctx.Gossip.Connected
 
-	bytes, err := n.ctx.Gossip.GetInfo(gossip.KeyClusterID)
+	uuidBytes, err := n.ctx.Gossip.GetInfo(gossip.KeyClusterID)
 	if err != nil {
 		log.Fatalf("unable to ascertain cluster ID from gossip network: %s", err)
 	}
-	gossipClusterID := string(bytes)
+	gossipClusterIDPtr, err := uuid.FromBytes(uuidBytes)
+	if err != nil {
+		log.Fatalf("unable to ascertain cluster ID from gossip network: %s", err)
+	}
+	gossipClusterID := *gossipClusterIDPtr
 
-	if n.ClusterID == "" {
+	if bytes.Equal(n.ClusterID.Bytes(), uuid.EmptyUUID.Bytes()) {
 		n.ClusterID = gossipClusterID
-	} else if n.ClusterID != gossipClusterID {
+	} else if !bytes.Equal(n.ClusterID.Bytes(), gossipClusterID.Bytes()) {
 		log.Fatalf("node %d belongs to cluster %q but is attempting to connect to a gossip network for cluster %q",
 			n.Descriptor.NodeID, n.ClusterID, gossipClusterID)
 	}
