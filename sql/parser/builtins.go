@@ -41,7 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/satori/go.uuid"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 var (

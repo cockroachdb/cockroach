@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/satori/go.uuid"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 // TestLocalKeySorting is a sanity check to make sure that
@@ -64,8 +64,8 @@ func TestKeyAddress(t *testing.T) {
 		{roachpb.Key{}, roachpb.RKeyMin},
 		{roachpb.Key("123"), roachpb.RKey("123")},
 		{RangeDescriptorKey(roachpb.RKey("foo")), roachpb.RKey("foo")},
-		{TransactionKey(roachpb.Key("baz"), uuid.NewV4().Bytes()), roachpb.RKey("baz")},
-		{TransactionKey(roachpb.KeyMax, roachpb.RKey(uuid.NewV4().Bytes())), roachpb.RKeyMax},
+		{TransactionKey(roachpb.Key("baz"), uuid.NewV4()), roachpb.RKey("baz")},
+		{TransactionKey(roachpb.KeyMax, uuid.NewV4()), roachpb.RKeyMax},
 		{nil, nil},
 	}
 	for i, test := range testCases {

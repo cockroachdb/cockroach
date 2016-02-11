@@ -29,18 +29,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/biogo/store/interval"
+	"github.com/gogo/protobuf/proto"
 	"gopkg.in/inf.v0"
 
-	"github.com/biogo/store/interval"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/gogo/protobuf/proto"
-	"github.com/satori/go.uuid"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 const (
-	// TransactionIDLen is the length (in bytes) of the transaction IDs used.
-	TransactionIDLen = 16
 	// SequencePoisonAbort is a special value for the sequence cache which
 	// commands a TransactionAbortedError.
 	SequencePoisonAbort = math.MaxUint32
@@ -573,7 +571,7 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 	return &Transaction{
 		TxnMeta: TxnMeta{
 			Key:       baseKey,
-			ID:        uuid.NewV4().Bytes(),
+			ID:        uuid.NewV4(),
 			Timestamp: now,
 		},
 		Name:          name,
@@ -623,7 +621,7 @@ func (t *Transaction) Equal(s *Transaction) bool {
 
 // IsInitialized returns true if the transaction has been initialized.
 func (t *Transaction) IsInitialized() bool {
-	return len(t.ID) > 0
+	return t.ID != nil
 }
 
 // MakePriority generates a random priority value, biased by the
@@ -705,8 +703,13 @@ func MakePriority(userPriority UserPriority) int32 {
 }
 
 // TxnIDEqual returns whether the transaction IDs are equal.
-func TxnIDEqual(a, b []byte) bool {
-	return bytes.Equal(a, b)
+func TxnIDEqual(a, b *uuid.UUID) bool {
+	if a == nil && b == nil {
+		return true
+	} else if a != nil && b != nil {
+		return uuid.Equal(*a, *b)
+	}
+	return false
 }
 
 // Restart reconfigures a transaction for restart. The epoch is
@@ -735,7 +738,7 @@ func (t *Transaction) Update(o *Transaction) {
 	if o == nil {
 		return
 	}
-	if len(t.ID) == 0 {
+	if t.ID == nil {
 		*t = o.Clone()
 		return
 	}
@@ -790,13 +793,13 @@ func (t Transaction) String() string {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
 	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s",
-		uuid.UUID(uuid.FromBytesOrNil(t.ID)).String()[:8], t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
+		t.Short(), t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
 	return buf.String()
 }
 
 // Short returns the short form of the Transaction's UUID.
 func (t Transaction) Short() string {
-	return uuid.UUID(uuid.FromBytesOrNil(t.ID)).String()[:8]
+	return t.ID.String()[:8]
 }
 
 // Add adds the given NodeID to the interface (unless already present)

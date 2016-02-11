@@ -23,6 +23,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -42,9 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
-	"github.com/gogo/protobuf/proto"
-	"github.com/opentracing/opentracing-go"
-	"github.com/satori/go.uuid"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 const (

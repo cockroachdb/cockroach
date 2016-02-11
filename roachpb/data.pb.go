@@ -10,6 +10,8 @@ import math "math"
 
 // skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
+import github_com_cockroachdb_cockroach_util_uuid "github.com/cockroachdb/cockroach/util/uuid"
+
 import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -379,7 +381,7 @@ func (*NodeList) ProtoMessage()    {}
 // TxnMeta is the metadata of a Transaction record.
 type TxnMeta struct {
 	// id is a unique UUID value which identifies the transaction.
-	ID []byte `protobuf:"bytes,1,opt,name=id" json:"id,omitempty"`
+	ID *github_com_cockroachdb_cockroach_util_uuid.UUID `protobuf:"bytes,1,opt,name=id,customtype=github.com/cockroachdb/cockroach/util/uuid.UUID" json:"id,omitempty"`
 	// key is the key which anchors the transaction. This is typically
 	// the first key read or written during the transaction and determines which
 	// range in the cluster will hold the transaction record.
@@ -916,8 +918,12 @@ func (m *TxnMeta) MarshalTo(data []byte) (int, error) {
 	if m.ID != nil {
 		data[i] = 0xa
 		i++
-		i = encodeVarintData(data, i, uint64(len(m.ID)))
-		i += copy(data[i:], m.ID)
+		i = encodeVarintData(data, i, uint64(m.ID.Size()))
+		n13, err := m.ID.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n13
 	}
 	if m.Key != nil {
 		data[i] = 0x12
@@ -931,11 +937,11 @@ func (m *TxnMeta) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x22
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n13, err := m.Timestamp.MarshalTo(data[i:])
+	n14, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n13
+	i += n14
 	return i, nil
 }
 
@@ -957,11 +963,11 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.TxnMeta.Size()))
-	n14, err := m.TxnMeta.MarshalTo(data[i:])
+	n15, err := m.TxnMeta.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n14
+	i += n15
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(len(m.Name)))
@@ -979,36 +985,36 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x32
 		i++
 		i = encodeVarintData(data, i, uint64(m.LastHeartbeat.Size()))
-		n15, err := m.LastHeartbeat.MarshalTo(data[i:])
+		n16, err := m.LastHeartbeat.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n15
+		i += n16
 	}
 	data[i] = 0x3a
 	i++
 	i = encodeVarintData(data, i, uint64(m.OrigTimestamp.Size()))
-	n16, err := m.OrigTimestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n16
-	data[i] = 0x42
-	i++
-	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
-	n17, err := m.MaxTimestamp.MarshalTo(data[i:])
+	n17, err := m.OrigTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n17
-	data[i] = 0x4a
+	data[i] = 0x42
 	i++
-	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
-	n18, err := m.CertainNodes.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
+	n18, err := m.MaxTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n18
+	data[i] = 0x4a
+	i++
+	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
+	n19, err := m.CertainNodes.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n19
 	data[i] = 0x50
 	i++
 	if m.Writing {
@@ -1053,19 +1059,19 @@ func (m *Intent) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.Span.Size()))
-	n19, err := m.Span.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n19
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.Txn.Size()))
-	n20, err := m.Txn.MarshalTo(data[i:])
+	n20, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n20
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.Txn.Size()))
+	n21, err := m.Txn.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n21
 	data[i] = 0x18
 	i++
 	i = encodeVarintData(data, i, uint64(m.Status))
@@ -1090,27 +1096,27 @@ func (m *Lease) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.Start.Size()))
-	n21, err := m.Start.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n21
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
-	n22, err := m.Expiration.MarshalTo(data[i:])
+	n22, err := m.Start.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n22
-	data[i] = 0x1a
+	data[i] = 0x12
 	i++
-	i = encodeVarintData(data, i, uint64(m.Replica.Size()))
-	n23, err := m.Replica.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
+	n23, err := m.Expiration.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n23
+	data[i] = 0x1a
+	i++
+	i = encodeVarintData(data, i, uint64(m.Replica.Size()))
+	n24, err := m.Replica.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n24
 	return i, nil
 }
 
@@ -1138,11 +1144,11 @@ func (m *SequenceCacheEntry) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n24, err := m.Timestamp.MarshalTo(data[i:])
+	n25, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n24
+	i += n25
 	return i, nil
 }
 
@@ -1311,7 +1317,7 @@ func (m *TxnMeta) Size() (n int) {
 	var l int
 	_ = l
 	if m.ID != nil {
-		l = len(m.ID)
+		l = m.ID.Size()
 		n += 1 + l + sovData(uint64(l))
 	}
 	if m.Key != nil {
@@ -2738,9 +2744,10 @@ func (m *TxnMeta) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ID = append(m.ID[:0], data[iNdEx:postIndex]...)
-			if m.ID == nil {
-				m.ID = []byte{}
+			var v github_com_cockroachdb_cockroach_util_uuid.UUID
+			m.ID = &v
+			if err := m.ID.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
 			}
 			iNdEx = postIndex
 		case 2:
