@@ -31,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/docker/docker/pkg/jsonmessage"
 	dockerclient "github.com/docker/engine-api/client"
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
@@ -121,6 +122,7 @@ type LocalCluster struct {
 	Nodes                []*Container
 	events               chan Event
 	expectedEvents       chan Event
+	oneshotID            string
 	CertsDir             string
 	monitorCtx           context.Context
 	monitorCtxCancelFunc func()
@@ -168,6 +170,74 @@ func (l *LocalCluster) expectEvent(c *Container, msgs ...string) {
 		}
 		break
 	}
+}
+
+// OneShot runs a container, expecting it to successfully run to completion
+// and die, after which it is removed. Not goroutine safe: only one OneShot
+// can be running at once.
+func (l *LocalCluster) OneShot(c container.Config, h container.HostConfig) (exitCode int, logs string, err error) {
+	rc, err := l.client.ImagePull(context.Background(), types.ImagePullOptions{
+		ImageID: c.Image,
+	}, nil)
+	if err != nil {
+		return 0, "", err
+	}
+	defer rc.Close()
+	dec := json.NewDecoder(rc)
+	for {
+		var message jsonmessage.JSONMessage
+		if err := dec.Decode(&message); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return 0, "", err
+		}
+		log.Infof("ImagePull response: %s", message)
+	}
+
+	resp, err := l.client.ContainerCreate(&c, &h, nil, "")
+	if err != nil {
+		return 0, "", err
+	}
+	l.oneshotID = resp.ID
+	defer func() {
+		l.oneshotID = ""
+	}()
+	for _, warning := range resp.Warnings {
+		log.Warning(warning)
+	}
+	defer func() {
+		if err := l.client.ContainerRemove(types.ContainerRemoveOptions{
+			ContainerID:   resp.ID,
+			RemoveVolumes: true,
+		}); err != nil {
+			log.Errorf("ContainerRemove: %s", err)
+		}
+	}()
+	if err := l.client.ContainerStart(resp.ID); err != nil {
+	return 0, "", err
+	}
+	exitCode, err = l.client.ContainerWait(context.Background(), resp.ID)
+	if err != nil {
+	return 0, "", err
+	}
+	if exitCode != 0 {
+		rc, err := l.client.ContainerLogs(context.Background(), types.ContainerLogsOptions{
+			ContainerID: resp.ID,
+			ShowStdout:  true,
+			ShowStderr:  true,
+		})
+		if err != nil {
+			return 0, "", err
+		}
+		defer rc.Close()
+		b, err := ioutil.ReadAll(rc)
+		if err != nil {
+			return 0, "", err
+		}
+		logs = string(b)
+	}
+	return
 }
 
 // stopOnPanic is invoked as a deferred function in Start in order to attempt
@@ -415,6 +485,10 @@ func (l *LocalCluster) startNode(i int) *Container {
 func (l *LocalCluster) processEvent(event events.Message) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
+	if event.ID == l.oneshotID && event.Status == eventDie {
+		return true
+	}
 
 	for i, n := range l.Nodes {
 		if n != nil && n.id == event.ID {

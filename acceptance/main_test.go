@@ -24,7 +24,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -34,13 +33,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/docker/pkg/jsonmessage"
-	dockerclient "github.com/docker/engine-api/client"
-	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
 	"github.com/docker/engine-api/types/strslice"
 	_ "github.com/lib/pq"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
@@ -198,34 +193,27 @@ func getJSON(url, rel string, v interface{}) error {
 }
 
 // testDockerFail ensures the specified docker cmd fails.
-func testDockerFail(t *testing.T, tag string, cmd []string) {
-	if exitCode, logs := testDocker(t, tag, cmd); exitCode == 0 {
+func testDockerFail(t *testing.T, cmd []string) {
+	if exitCode, logs := testDocker(t, cmd); exitCode == 0 {
 		t.Log(logs)
 		t.Errorf("unexpected failure:\n%s", logs)
 	}
 }
 
 // testDockerSuccess ensures the specified docker cmd succeeds.
-func testDockerSuccess(t *testing.T, tag string, cmd []string) {
-	if exitCode, logs := testDocker(t, tag, cmd); exitCode != 0 {
+func testDockerSuccess(t *testing.T, cmd []string) {
+	if exitCode, logs := testDocker(t, cmd); exitCode != 0 {
 		t.Errorf("unexpected success:\n%s", logs)
 	}
 }
 
-func testDocker(t *testing.T, tag string, cmd []string) (exitCode int, logs string) {
+func testDocker(t *testing.T, cmd []string) (exitCode int, logs string) {
 	SkipUnlessLocal(t)
 	l := StartCluster(t).(*cluster.LocalCluster)
-
 	defer l.AssertAndStop(t)
-
-	cli, err := dockerclient.NewEnvClient()
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	addr := l.Nodes[0].PGAddr()
-	containerConfig := container.Config{
-		Image: "cockroachdb/postgres-test:" + tag,
+	c := container.Config{
+		Image: "cockroachdb/postgres-test:20160203-140220",
 		Env: []string{
 			fmt.Sprintf("PGHOST=%s", addr.IP),
 			fmt.Sprintf("PGPORT=%d", addr.Port),
@@ -234,68 +222,13 @@ func testDocker(t *testing.T, tag string, cmd []string) (exitCode int, logs stri
 		},
 		Cmd: strslice.New(cmd...),
 	}
-	hostConfig := container.HostConfig{
+	h := container.HostConfig{
 		Binds:       []string{fmt.Sprintf("%s:%s", l.CertsDir, "/certs")},
 		NetworkMode: "host",
 	}
-
-	rc, err := cli.ImagePull(context.Background(), types.ImagePullOptions{
-		ImageID: containerConfig.Image,
-		Tag:     tag,
-	}, nil)
+	code, logs, err := l.OneShot(c, h)
 	if err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
-	defer rc.Close()
-	dec := json.NewDecoder(rc)
-	for {
-		var message jsonmessage.JSONMessage
-		if err := dec.Decode(&message); err != nil {
-			if err == io.EOF {
-				break
-			}
-			t.Fatal(err)
-		}
-		log.Infof("ImagePull response: %s", message)
-	}
-
-	resp, err := cli.ContainerCreate(&containerConfig, &hostConfig, nil, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, warning := range resp.Warnings {
-		log.Warning(warning)
-	}
-	defer func() {
-		if err := cli.ContainerRemove(types.ContainerRemoveOptions{
-			ContainerID:   resp.ID,
-			RemoveVolumes: true,
-		}); err != nil {
-			t.Error(err)
-		}
-	}()
-	if err := cli.ContainerStart(resp.ID); err != nil {
-		t.Fatal(err)
-	}
-	exitCode, err = cli.ContainerWait(context.Background(), resp.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if exitCode != 0 {
-		rc, err := cli.ContainerLogs(context.Background(), types.ContainerLogsOptions{
-			ContainerID: resp.ID,
-			ShowStdout:  true,
-			ShowStderr:  true,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer rc.Close()
-		b, err := ioutil.ReadAll(rc)
-		if err != nil {
-			t.Fatal(err)
-		}
-		logs = string(b)
-	}
-	return
+	return code, logs
 }
