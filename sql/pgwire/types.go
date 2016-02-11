@@ -223,6 +223,7 @@ func formatTs(t time.Time) (b []byte) {
 var (
 	oidToDatum = map[oid.Oid]parser.Datum{
 		oid.T_bool:      parser.DummyBool,
+		oid.T_bytea:     parser.DummyBytes,
 		oid.T_date:      parser.DummyDate,
 		oid.T_float4:    parser.DummyFloat,
 		oid.T_float8:    parser.DummyFloat,
@@ -237,7 +238,7 @@ var (
 	// Using reflection to support unhashable types.
 	datumToOid = map[reflect.Type]oid.Oid{
 		reflect.TypeOf(parser.DummyBool):      oid.T_bool,
-		reflect.TypeOf(parser.DummyBytes):     oid.T_text,
+		reflect.TypeOf(parser.DummyBytes):     oid.T_bytea,
 		reflect.TypeOf(parser.DummyDate):      oid.T_date,
 		reflect.TypeOf(parser.DummyFloat):     oid.T_float8,
 		reflect.TypeOf(parser.DummyInt):       oid.T_int8,
@@ -371,6 +372,13 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			d = parser.DString(b)
 		default:
 			return d, fmt.Errorf("unsupported text format code: %d", code)
+		}
+	case oid.T_bytea:
+		switch code {
+		case formatText:
+			d = parser.DBytes(b)
+		default:
+			return d, fmt.Errorf("unsupported bytea format code: %d", code)
 		}
 	// TODO(mjibson): implement date/time types
 	default:
