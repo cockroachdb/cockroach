@@ -55,7 +55,7 @@ Other operating systems will have a similar set of commands. Please check Docker
 Pull the CockroachDB Docker image and drop into a shell within it:
 ```bash
 docker pull cockroachdb/cockroach
-docker run -t -i cockroachdb/cockroach shell
+docker run -p 26257:26257 -p 15432:15432 -t -i cockroachdb/cockroach shell
 # root@82cb657cdc42:/cockroach#
 ```
 
@@ -68,6 +68,12 @@ Setting up Cockroach is easy, but starting a test node is even easier. All it ta
 ```bash
 ./cockroach start --dev &
 ```
+
+Verify that you're up and running by visiting the cluster UI. If you're running
+without Docker (or on Linux), you'll find it at
+[localhost:26257](http://localhost:26257); for OSX under Docker, things are a
+little more complicated and you need to run `docker-machine ip default` to get
+the correct address (but the port is the same).
 
 ##### Built-in client
 
