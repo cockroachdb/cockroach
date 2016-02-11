@@ -48,9 +48,14 @@ func (p *planner) Delete(n *parser.Delete) (planNode, *roachpb.Error) {
 	if pErr != nil {
 		return nil, pErr
 	}
+	result := &valuesNode{}
+	qvals, err := p.InitReturning(n.Returning, result, tableDesc.Columns)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	if p.prepareOnly {
-		return nil, nil
+		return result, nil
 	}
 
 	// Construct a map from column ID to the index the value appears at within a
@@ -64,7 +69,6 @@ func (p *planner) Delete(n *parser.Delete) (planNode, *roachpb.Error) {
 	primaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
 	b := client.Batch{}
-	result := &valuesNode{}
 	for rows.Next() {
 		rowVals := rows.Values()
 		result.rows = append(result.rows, parser.DTuple(nil))
@@ -104,6 +108,10 @@ func (p *planner) Delete(n *parser.Delete) (planNode, *roachpb.Error) {
 			log.Infof("DelRange %s - %s", rowStartKey, rowEndKey)
 		}
 		b.DelRange(rowStartKey, rowEndKey)
+
+		if err := p.PopulateReturning(n.Returning, result, qvals, rowVals); err != nil {
+			return nil, roachpb.NewError(err)
+		}
 	}
 
 	if pErr := rows.PErr(); pErr != nil {
