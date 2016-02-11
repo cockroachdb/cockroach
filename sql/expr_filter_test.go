@@ -34,9 +34,10 @@ func (v *countVarsVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, pa
 		return nil, expr
 	}
 
-	if _, ok := expr.(*qvalue); ok {
+	switch expr.(type) {
+	case *qvalue:
 		v.numQValues++
-	} else if _, ok := expr.(*parser.QualifiedName); ok {
+	case *parser.QualifiedName:
 		v.numQNames++
 	}
 
@@ -55,9 +56,17 @@ func countVars(expr parser.Expr) (numQNames, numQValues int) {
 func TestSplitFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
+	// In each testcase, we are splitting the filter in expr according to the set of variables in
+	// vars.
+	//
+	// The "restricted" expression is an expression that is true whenever the filter expression is
+	// true (for any setting of variables) but only references variables in the vars set.
+	//
+	// The "remainder" expression must ensure that the conjunction (AND) between itself and the
+	// restricted expression is equivalent to the original expr filter.
 	testData := []struct {
 		expr        string
-		columns     []string
+		vars        []string
 		expectedRes string
 		expectedRem string
 	}{
@@ -111,18 +120,18 @@ func TestSplitFilter(t *testing.T) {
 	}
 
 	for _, d := range testData {
-		// A function that "converts" only columns in the list.
-		conv := func(expr parser.VariableExpr) parser.VariableExpr {
+		// A function that "converts" only vars in the list.
+		conv := func(expr parser.VariableExpr) (bool, parser.VariableExpr) {
 			q := expr.(*qvalue)
 			colName := q.colRef.get().Name
-			for _, col := range d.columns {
+			for _, col := range d.vars {
 				if colName == col {
 					// Convert to a QualifiedName (to check that conversion happens correctly). It
 					// will print the same.
-					return &parser.QualifiedName{Base: parser.Name(colName)}
+					return true, &parser.QualifiedName{Base: parser.Name(colName)}
 				}
 			}
-			return nil
+			return false, nil
 		}
 		expr, _ := parseAndNormalizeExpr(t, d.expr)
 		res, rem := splitFilter(expr, conv)
@@ -131,21 +140,21 @@ func TestSplitFilter(t *testing.T) {
 		remStr := fmt.Sprint(rem)
 		if testing.Verbose() {
 			fmt.Printf("Expr `%s` split along (%s): `%s`,`%s`\n",
-				expr, strings.Join(d.columns, ","), resStr, remStr)
+				expr, strings.Join(d.vars, ","), resStr, remStr)
 		}
 		if resStr != d.expectedRes || remStr != d.expectedRem {
 			t.Errorf("`%s` split along (%s): expected:\n   `%s`,`%s`\ngot:\n   `%s`,`%s`",
-				d.expr, strings.Join(d.columns, ","), d.expectedRes, d.expectedRem, resStr, remStr)
+				d.expr, strings.Join(d.vars, ","), d.expectedRes, d.expectedRem, resStr, remStr)
 		}
-		numQNames, numQVals := countVars(res)
+		_, numQVals := countVars(res)
 		if numQVals != 0 {
 			t.Errorf("`%s` split along (%s): resulting expression `%s` has unconverted qvalues!",
-				d.expr, strings.Join(d.columns, ","), resStr)
+				d.expr, strings.Join(d.vars, ","), resStr)
 		}
-		numQNames, numQVals = countVars(rem)
+		numQNames, _ := countVars(rem)
 		if numQNames != 0 {
 			t.Errorf("`%s` split along (%s): remainder expressions `%s` has converted qvalues!",
-				d.expr, strings.Join(d.columns, ","), remStr)
+				d.expr, strings.Join(d.vars, ","), remStr)
 		}
 	}
 }
