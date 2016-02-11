@@ -81,7 +81,7 @@ Runs the node as a standalone in-memory cluster and forces --insecure
 for all server and client commands. Useful for developing Cockroach
 itself.`),
 	"execute": wrapText(`
-Execute the SQL statement(s) on the command line, then exit.  Each
+Execute the SQL statement(s) on the command line, then exit. Each
 subsequent positional argument on the command line may contain
 one or more SQL statements, separated by semicolons. If an
 error occurs in any statement, the command exits with a
@@ -137,15 +137,29 @@ duration.`),
 Adjusts the max idle time of the scanner. This speeds up the scanner on small
 clusters to be more responsive.`),
 	"stores": wrapText(`
-A comma-separated list of stores, specified by a colon-separated list
-of device attributes followed by '=' and either a filepath for a
-persistent store or an integer size in bytes for an in-memory
-store. Device attributes typically include whether the store is flash
-(ssd), spinny disk (hdd), fusion-io (fio), in-memory (mem); device
-attributes might also include speeds and other specs (7200rpm,
-200kiops, etc.). For example:`) + `
+A comma-separated list of file paths to storage devices, for example:`) + `
 
-  --stores=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824
+  --stores=/mnt/ssd01,/mnt/ssd02
+
+` + wrapText(`
+Stores can also specify a colon-separated list of device attributes
+as a prefix to the filepaths. Device attributes are used to match
+capabilities for storage of individual databases or tables. For
+example, an OLTP database would probably want to only allocate space
+for its tables on solid state devices, whereas append-only time
+series might prefer cheaper spinning drives. Typical attributes
+include whether the store is flash (ssd), spinny disk (hdd), or
+in-memory (mem). Device attributes might also include speeds and
+other specs (7200rpm, 200kiops, etc.). For example:`) + `
+
+  --stores=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02
+
+` + wrapText(`For an in-memory store, specify an integer instead of a
+filepath. This value represents the maximum size in bytes the in-memory
+store may consume:`) + `
+
+  --stores=mem=1073741824,ssd=/mnt/ssd01
+
 `,
 	"time-until-store-dead": wrapText(`
 Adjusts the timeout for stores.  If there's been no gossiped updated
