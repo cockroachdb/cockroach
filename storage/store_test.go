@@ -43,8 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
+	"github.com/satori/go.uuid"
 )
 
 var testIdent = roachpb.StoreIdent{
@@ -621,7 +621,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 	// Try a put to txn record for a meta2 key (note that this doesn't
 	// actually happen in practice, as txn records are not put directly,
 	// but are instead manipulated only through txn methods).
-	pArgs = putArgs(keys.TransactionKey(meta2KeyMax, []byte(uuid.NewUUID4())),
+	pArgs = putArgs(keys.TransactionKey(meta2KeyMax, uuid.NewV4().Bytes()),
 		[]byte("value"))
 	if _, pErr := client.SendWrapped(store.testSender(), nil, &pArgs); pErr != nil {
 		t.Fatalf("unexpected error on put to txn meta2 value: %s", pErr)

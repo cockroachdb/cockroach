@@ -41,9 +41,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
-	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
 	"github.com/opentracing/opentracing-go"
+	"github.com/satori/go.uuid"
 )
 
 const (
@@ -120,7 +120,7 @@ func GetBootstrapSchema() sql.MetadataSchema {
 // single range spanning all keys. Initial range lookup metadata is
 // populated for the range. Returns the cluster ID.
 func bootstrapCluster(engines []engine.Engine) (string, error) {
-	clusterID := uuid.NewUUID4().String()
+	clusterID := uuid.NewV4().String()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
