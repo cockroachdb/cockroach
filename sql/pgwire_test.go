@@ -669,7 +669,7 @@ func TestPGWireMetrics(t *testing.T) {
 	if err := trivialQuery(pgUrl); err != nil {
 		t.Fatal(err)
 	}
-	bytesIn, bytesOut, err := checkPGWireMetrics(s, minbytes, minbytes, 256, 256)
+	bytesIn, bytesOut, err := checkPGWireMetrics(s, minbytes, minbytes, 300, 300)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -678,7 +678,7 @@ func TestPGWireMetrics(t *testing.T) {
 	}
 
 	// A second query should give us more I/O.
-	_, _, err = checkPGWireMetrics(s, bytesIn+minbytes, bytesOut+minbytes, 256, 256)
+	_, _, err = checkPGWireMetrics(s, bytesIn+minbytes, bytesOut+minbytes, 300, 300)
 	if err != nil {
 		t.Fatal(err)
 	}
