@@ -172,6 +172,7 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	for key, value := range map[string]string{
 		"client_encoding": "UTF8",
 		"DateStyle":       "ISO",
+		"server_version":  "9.1.0",
 	} {
 		c.writeBuf.initMsg(serverMsgParameterStatus)
 		for _, str := range [...]string{key, value} {
