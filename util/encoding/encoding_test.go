@@ -29,7 +29,7 @@ import (
 )
 
 func testBasicEncodeDecode32(encFunc func([]byte, uint32) []byte,
-	decFunc func([]byte) ([]byte, uint32, error), decreasing bool, t *testing.T) {
+	decFunc func([]byte) ([]byte, uint32, error), descending bool, t *testing.T) {
 	testCases := []uint32{
 		0, 1,
 		1<<8 - 1, 1 << 8,
@@ -42,8 +42,8 @@ func testBasicEncodeDecode32(encFunc func([]byte, uint32) []byte,
 	for i, v := range testCases {
 		enc := encFunc(nil, v)
 		if i > 0 {
-			if (decreasing && bytes.Compare(enc, lastEnc) >= 0) ||
-				(!decreasing && bytes.Compare(enc, lastEnc) < 0) {
+			if (descending && bytes.Compare(enc, lastEnc) >= 0) ||
+				(!descending && bytes.Compare(enc, lastEnc) < 0) {
 				t.Errorf("ordered constraint violated for %d: [% x] vs. [% x]", v, enc, lastEnc)
 			}
 		}
@@ -100,7 +100,7 @@ func TestEncodeDecodeUint32Descending(t *testing.T) {
 }
 
 func testBasicEncodeDecodeUint64(encFunc func([]byte, uint64) []byte,
-	decFunc func([]byte) ([]byte, uint64, error), decreasing bool, t *testing.T) {
+	decFunc func([]byte) ([]byte, uint64, error), descending bool, t *testing.T) {
 	testCases := []uint64{
 		0, 1,
 		1<<8 - 1, 1 << 8,
@@ -117,8 +117,8 @@ func testBasicEncodeDecodeUint64(encFunc func([]byte, uint64) []byte,
 	for i, v := range testCases {
 		enc := encFunc(nil, v)
 		if i > 0 {
-			if (decreasing && bytes.Compare(enc, lastEnc) >= 0) ||
-				(!decreasing && bytes.Compare(enc, lastEnc) < 0) {
+			if (descending && bytes.Compare(enc, lastEnc) >= 0) ||
+				(!descending && bytes.Compare(enc, lastEnc) < 0) {
 				t.Errorf("ordered constraint violated for %d: [% x] vs. [% x]", v, enc, lastEnc)
 			}
 		}
@@ -138,7 +138,7 @@ func testBasicEncodeDecodeUint64(encFunc func([]byte, uint64) []byte,
 }
 
 func testBasicEncodeDecodeInt64(encFunc func([]byte, int64) []byte,
-	decFunc func([]byte) ([]byte, int64, error), decreasing bool, t *testing.T) {
+	decFunc func([]byte) ([]byte, int64, error), descending bool, t *testing.T) {
 	testCases := []int64{
 		math.MinInt64, math.MinInt64 + 1,
 		-1<<56 - 1, -1 << 56,
@@ -163,8 +163,8 @@ func testBasicEncodeDecodeInt64(encFunc func([]byte, int64) []byte,
 	for i, v := range testCases {
 		enc := encFunc(nil, v)
 		if i > 0 {
-			if (decreasing && bytes.Compare(enc, lastEnc) >= 0) ||
-				(!decreasing && bytes.Compare(enc, lastEnc) < 0) {
+			if (descending && bytes.Compare(enc, lastEnc) >= 0) ||
+				(!descending && bytes.Compare(enc, lastEnc) < 0) {
 				t.Errorf("ordered constraint violated for %d: [% x] vs. [% x]", v, enc, lastEnc)
 			}
 		}
@@ -224,7 +224,7 @@ func TestEncodeDecodeUint64(t *testing.T) {
 	testCustomEncodeUint64(testCases, EncodeUint64Ascending, t)
 }
 
-func TestEncodeDecodeUint64Decreasing(t *testing.T) {
+func TestEncodeDecodeUint64Descending(t *testing.T) {
 	testBasicEncodeDecodeUint64(EncodeUint64Descending, DecodeUint64Descending, true, t)
 	testCases := []testCaseUint64{
 		{0, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
@@ -338,31 +338,31 @@ func TestDecodeInvalid(t *testing.T) {
 			decode:  func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
 		},
 		{
-			name:    "BytesDecreasing, no marker",
+			name:    "BytesDescending, no marker",
 			buf:     []byte{'a'},
 			pattern: "did not find marker",
 			decode:  func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
 		},
 		{
-			name:    "BytesDecreasing, no terminator",
+			name:    "BytesDescending, no terminator",
 			buf:     []byte{bytesDescMarker, ^byte('a')},
 			pattern: "did not find terminator",
 			decode:  func(b []byte) error { _, _, err := DecodeBytesDescending(b, nil); return err },
 		},
 		{
-			name:    "BytesDecreasing, malformed escape",
+			name:    "BytesDescending, malformed escape",
 			buf:     []byte{bytesDescMarker, ^byte('a'), 0xff},
 			pattern: "malformed escape",
 			decode:  func(b []byte) error { _, _, err := DecodeBytesDescending(b, nil); return err },
 		},
 		{
-			name:    "BytesDecreasing, invalid escape 1",
+			name:    "BytesDescending, invalid escape 1",
 			buf:     []byte{bytesDescMarker, ^byte('a'), 0xff, 0xff},
 			pattern: "unknown escape",
 			decode:  func(b []byte) error { _, _, err := DecodeBytesDescending(b, nil); return err },
 		},
 		{
-			name:    "BytesDecreasing, invalid escape 2",
+			name:    "BytesDescending, invalid escape 2",
 			buf:     []byte{bytesDescMarker, ^byte('a'), 0xff, 0xfd},
 			pattern: "unknown escape",
 			decode:  func(b []byte) error { _, _, err := DecodeBytesDescending(b, nil); return err },
@@ -374,7 +374,7 @@ func TestDecodeInvalid(t *testing.T) {
 			decode:  func(b []byte) error { _, _, err := DecodeFloatAscending(b, nil); return err },
 		},
 		{
-			name:    "FloatDecreasing, no terminator",
+			name:    "FloatDescending, no terminator",
 			buf:     []byte{floatPosLarge},
 			pattern: "did not find terminator",
 			decode:  func(b []byte) error { _, _, err := DecodeFloatDescending(b, nil); return err },
@@ -386,7 +386,7 @@ func TestDecodeInvalid(t *testing.T) {
 			decode:  func(b []byte) error { _, _, err := DecodeDecimalAscending(b, nil); return err },
 		},
 		{
-			name:    "DecimalDecreasing, no terminator",
+			name:    "DecimalDescending, no terminator",
 			buf:     []byte{floatPosLarge},
 			pattern: "did not find terminator",
 			decode:  func(b []byte) error { _, _, err := DecodeDecimalDescending(b, nil); return err },
@@ -556,7 +556,7 @@ func TestEncodeDecodeString(t *testing.T) {
 	}
 }
 
-func TestEncodeDecodeStringDecreasing(t *testing.T) {
+func TestEncodeDecodeStringDescending(t *testing.T) {
 	testCases := []struct {
 		value   string
 		encoded []byte
@@ -880,7 +880,7 @@ func BenchmarkEncodeBytes(b *testing.B) {
 	}
 }
 
-func BenchmarkEncodeBytesDecreasing(b *testing.B) {
+func BenchmarkEncodeBytesDescending(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
 	vals := make([][]byte, 10000)
@@ -912,7 +912,7 @@ func BenchmarkDecodeBytes(b *testing.B) {
 	}
 }
 
-func BenchmarkDecodeBytesDecreasing(b *testing.B) {
+func BenchmarkDecodeBytesDescending(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
 	vals := make([][]byte, 10000)
@@ -976,7 +976,7 @@ func BenchmarkDecodeString(b *testing.B) {
 	}
 }
 
-func BenchmarkDecodeStringDecreasing(b *testing.B) {
+func BenchmarkDecodeStringDescending(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
 	vals := make([][]byte, 10000)
