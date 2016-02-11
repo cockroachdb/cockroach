@@ -195,16 +195,19 @@ func (ctx *Context) InitDefaults() {
 	ctx.BalanceMode = defaultBalanceMode
 }
 
-// Get the stores on both start and init.
-var storesRE = regexp.MustCompile(`([^=]+)=([^,]+)(,|$)`)
+var storesRE = regexp.MustCompile(`(?:([^,=]+)=)?([^=,]+)(,|$)`)
 
 // InitStores interprets the stores parameter to initialize a slice of
 // engine.Engine objects.
 func (ctx *Context) InitStores(stopper *stop.Stopper) error {
+	ctx.Stores = strings.TrimSpace(ctx.Stores)
+	if len(ctx.Stores) == 0 {
+		return fmt.Errorf("no storage specified; see --stores")
+	}
 	storeSpecs := storesRE.FindAllStringSubmatch(ctx.Stores, -1)
 	// Error if regexp doesn't match.
 	if storeSpecs == nil {
-		return fmt.Errorf("invalid or empty engines specification %q, did you specify --stores?", ctx.Stores)
+		return fmt.Errorf("invalid storage specification %q; see --stores", ctx.Stores)
 	}
 
 	for _, storeSpec := range storeSpecs {

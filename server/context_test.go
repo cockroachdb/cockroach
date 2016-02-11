@@ -21,11 +21,66 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/gossip/resolver"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-func TestParseNodeAttributes(t *testing.T) {
+func TestParseStores(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	testCases := []struct {
+		stores   string
+		expFail  bool
+		expCount int
+		expAttrs []roachpb.Attributes
+	}{
+		{"", true, 0, nil},
+		{"/d1", false, 1, []roachpb.Attributes{
+			{},
+		}},
+		{"/d1,/d2", false, 2, []roachpb.Attributes{
+			{},
+			{},
+		}},
+		{"mem=1", false, 1, []roachpb.Attributes{
+			{Attrs: []string{"mem"}},
+		}},
+		{"ssd=/d1,hdd=/d2", false, 2, []roachpb.Attributes{
+			{Attrs: []string{"ssd"}},
+			{Attrs: []string{"hdd"}},
+		}},
+		{"ssd:f=/d1,hdd:a:b:c=/d2", false, 2, []roachpb.Attributes{
+			{Attrs: []string{"ssd", "f"}},
+			{Attrs: []string{"hdd", "a", "b", "c"}},
+		}},
+	}
+
+	for i, tc := range testCases {
+		ctx := NewContext()
+		ctx.Stores = tc.stores
+		stopper := stop.NewStopper()
+		err := ctx.InitStores(stopper)
+		if (err != nil) != tc.expFail {
+			t.Errorf("%d: expected failure? %t; got err=%s", i, tc.expFail, err)
+		}
+		stopper.Stop()
+		if l := len(ctx.Engines); l != tc.expCount {
+			t.Errorf("%d: expected %d engines; got %d", i, tc.expCount, l)
+			continue
+		}
+		if l := len(tc.expAttrs); l != tc.expCount {
+			t.Fatalf("%d: test case expAttrs has incorrect length %d", i, l)
+		}
+		for j, e := range ctx.Engines {
+			if !reflect.DeepEqual(e.Attrs(), tc.expAttrs[j]) {
+				t.Errorf("%d: engine %d expected attributes %s; got %s", i, j, tc.expAttrs[j], e.Attrs())
+			}
+		}
+	}
+}
+
+func TestParseInitNodeAttributes(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	ctx := NewContext()
 	ctx.Attrs = "attr1=val1::attr2=val2"
