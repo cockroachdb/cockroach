@@ -1466,32 +1466,19 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 		// Execute the command.
 		args := union.GetInner()
 
-		// Set the timestamp for this request.
-		ts := ba.Timestamp
-		{
-			// TODO(tschottdorf): Special exception because of pending
-			// self-overlap discussion.
-			// TODO(tschottdorf): currently treating PushTxn specially. Otherwise
-			// conflict resolution would break because a batch full of pushes of
-			// the same Txn for different intents will push the pushee in
-			// iteration, bumping up its priority. Unfortunately PushTxn is flagged
-			// as a write command (is it really?). Interim solution.
-			// Note that being in a txn implies no fiddling.
-			if fiddleWithTimestamps && args.Method() != roachpb.PushTxn {
-				ts = ba.Timestamp.Add(0, int32(index))
-			} else if !isTxn {
-				ts = ba.Timestamp
-			} else {
-				// TODO(tschottdorf): it can happen that the request timestamp
-				// is ahead of the Txn timestamp. A few tests do this on pur-
-				// pose; should undo that and see if there's a legitimate
-				// reason left to keep allowing this behavior.
-				ts.Forward(ba.Txn.Timestamp)
-			}
-		}
-
 		header := ba.Header
-		header.Timestamp = ts
+
+		// TODO(tschottdorf): Special exception because of pending
+		// self-overlap discussion.
+		// TODO(tschottdorf): currently treating PushTxn specially. Otherwise
+		// conflict resolution would break because a batch full of pushes of
+		// the same Txn for different intents will push the pushee in
+		// iteration, bumping up its priority. Unfortunately PushTxn is flagged
+		// as a write command. Interim solution.
+		// Note that being in a txn implies no fiddling.
+		if fiddleWithTimestamps && args.Method() != roachpb.PushTxn {
+			header.Timestamp = ba.Timestamp.Add(0, int32(index))
+		}
 
 		reply, curIntents, pErr := r.executeCmd(batch, ms, header, args)
 
@@ -1515,8 +1502,8 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 		}
 
 		// Add the response to the batch, updating the timestamp.
-		reply.Header().Timestamp.Forward(ts)
-		br.Timestamp.Forward(ts)
+		reply.Header().Timestamp.Forward(header.Timestamp)
+		br.Timestamp.Forward(header.Timestamp)
 		br.Add(reply)
 		if isTxn {
 			if txn := reply.Header().Txn; txn != nil {

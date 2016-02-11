@@ -168,7 +168,13 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		sp.LogEvent("read has no clock uncertainty")
 		// Copy-on-write to protect others we might be sharing the Txn with.
 		shallowTxn := *ba.Txn
-		shallowTxn.MaxTimestamp = ba.Txn.Timestamp
+		// We set to OrigTimestamp because that works for both SNAPSHOT and
+		// SERIALIZABLE: If we used Timestamp instead, we could run into
+		// avoidable retries at SNAPSHOT. For example, a SNAPSHOT txn at
+		// OrigTimestamp = 1000.0, Timestamp = 2000.0, MaxTimestamp = 3000.0
+		// will always read at 1000, so a MaxTimestamp of 2000 will still let
+		// it restart with uncertainty when it finds a value in (1000, 2000).
+		shallowTxn.MaxTimestamp = ba.Txn.OrigTimestamp
 		ba.Txn = &shallowTxn
 	}
 	br, pErr = store.Send(ctx, ba)
