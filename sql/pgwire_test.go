@@ -292,6 +292,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SHOW database": {
 			base.Results(""),
 		},
+		"SELECT descriptor FROM system.descriptor WHERE descriptor != $1": {
+			base.Params([]byte("abc")).Results([]byte("\x12\x16\n\x06system\x10\x01\x1a\n\n\b\n\x04root\x100")),
+		},
 		"SHOW COLUMNS FROM system.users": {
 			base.Results("username", "STRING", false, sql.NullBool{}),
 		},
