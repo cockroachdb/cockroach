@@ -637,7 +637,7 @@ func runMVCCComputeStats(valueBytes int, b *testing.B) {
 	var stats MVCCStats
 	var err error
 	for i := 0; i < b.N; i++ {
-		iter := rocksdb.NewIterator(false)
+		iter := rocksdb.NewIterator(nil)
 		stats, err = iter.ComputeStats(mvccKey(roachpb.KeyMin), mvccKey(roachpb.KeyMax), 0)
 		iter.Close()
 		if err != nil {
@@ -659,4 +659,31 @@ func BenchmarkMVCCComputeStats1Version32Bytes(b *testing.B) {
 
 func BenchmarkMVCCComputeStats1Version256Bytes(b *testing.B) {
 	runMVCCComputeStats(256, b)
+}
+
+func BenchmarkMVCCPutDelete(b *testing.B) {
+	const cacheSize = 1 << 30 // 1 GB
+
+	stopper := stop.NewStopper()
+	rocksdb := NewInMem(roachpb.Attributes{}, cacheSize, stopper)
+	defer stopper.Stop()
+
+	r := rand.New(rand.NewSource(int64(time.Now().UnixNano())))
+	value := roachpb.MakeValueFromBytes(randutil.RandBytes(r, 10))
+	zeroTS := roachpb.ZeroTimestamp
+	var blockNum int64
+
+	for i := 0; i < b.N; i++ {
+		blockID := r.Int63()
+		blockNum++
+		key := encoding.EncodeVarintAscending(nil, blockID)
+		key = encoding.EncodeVarintAscending(key, blockNum)
+
+		if err := MVCCPut(rocksdb, nil, key, zeroTS, value, nil /* txn */); err != nil {
+			b.Fatal(err)
+		}
+		if err := MVCCDelete(rocksdb, nil, key, zeroTS, nil /* txn */); err != nil {
+			b.Fatal(err)
+		}
+	}
 }

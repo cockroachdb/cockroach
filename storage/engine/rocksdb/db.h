@@ -109,21 +109,22 @@ DBStatus DBDelete(DBEngine* db, DBKey key);
 DBStatus DBWriteBatch(DBEngine* db);
 
 // Creates a new snapshot of the database for use in DBGet() and
-// DBNewIter(). It is the callers responsibility to call DBClose().
+// DBNewIter(). It is the caller's responsibility to call DBClose().
 DBEngine* DBNewSnapshot(DBEngine* db);
 
 // Creates a new batch for performing a series of operations
 // atomically. Use DBWriteBatch() on the returned engine to apply the
-// batch to the database. It is the callers responsibility to call
+// batch to the database. It is the caller's responsibility to call
 // DBClose().
 DBEngine* DBNewBatch(DBEngine *db);
 
-// Creates a new database iterator. When prefix is true, Seek will use the
-// user-key prefix of the supplied MVCC key to restrict which sstables are
-// searched, but iteration (using Next) over keys without the same user-key
-// prefix will not work correctly (keys may be skipped). It is the callers
-// responsibility to call DBIterDestroy().
-DBIterator* DBNewIter(DBEngine* db, bool prefix);
+// Creates a new database iterator. When prefix is not empty, Seek
+// will use the user-key prefix of the supplied MVCC key to restrict
+// which sstables are searched, but iteration (using Next) over keys
+// without the same user-key prefix will not work correctly (keys may
+// be skipped). It is the caller's responsibility to call
+// DBIterDestroy().
+DBIterator* DBNewIter(DBEngine* db, DBSlice prefix);
 
 // Destroys an iterator, freeing up any associated memory.
 void DBIterDestroy(DBIterator* iter);
