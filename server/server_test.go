@@ -53,7 +53,7 @@ var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
 // TestInitEngine tests whether the data directory string is parsed correctly.
 func TestInitEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	tmp := util.CreateNTempDirs(t, "_server_test", 5)
+	tmp := util.CreateNTempDirs(t, "_server_test", 6)
 	defer util.CleanupDirs(tmp)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -70,9 +70,9 @@ func TestInitEngine(t *testing.T) {
 		{fmt.Sprintf("mem=%s", tmp[2]), roachpb.Attributes{Attrs: []string{"mem"}}, false, false},
 		{fmt.Sprintf("abc=%s", tmp[3]), roachpb.Attributes{Attrs: []string{"abc"}}, false, false},
 		{fmt.Sprintf("hdd:7200rpm=%s", tmp[4]), roachpb.Attributes{Attrs: []string{"hdd", "7200rpm"}}, false, false},
+		{tmp[5], roachpb.Attributes{}, false, false},
 		{"", roachpb.Attributes{}, true, false},
 		{"  ", roachpb.Attributes{}, true, false},
-		{"arbitrarystring", roachpb.Attributes{}, true, false},
 		{"mem=", roachpb.Attributes{}, true, false},
 		{"ssd=", roachpb.Attributes{}, true, false},
 		{"hdd=", roachpb.Attributes{}, true, false},

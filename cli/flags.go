@@ -67,93 +67,133 @@ nodes. For example:`) + `
 
   --attrs=us-west-1b,gpu
 `,
+
 	"balance-mode": wrapText(`
 Determines the criteria used by nodes to make balanced allocation
 decisions. Valid options are "usage" (default) or "rangecount".`),
+
 	"cache-size": wrapText(`
 Total size in bytes for caches, shared evenly if there are multiple
 storage devices.`),
+
 	"certs": wrapText(`
 Directory containing RSA key and x509 certs. This flag is required if
 --insecure=false.`),
+
 	"dev": wrapText(`
 Runs the node as a standalone in-memory cluster and forces --insecure
 for all server and client commands. Useful for developing Cockroach
 itself.`),
+
 	"execute": wrapText(`
-Execute the SQL statement(s) on the command line, then exit.  Each
+Execute the SQL statement(s) on the command line, then exit. Each
 subsequent positional argument on the command line may contain
 one or more SQL statements, separated by semicolons. If an
 error occurs in any statement, the command exits with a
 non-zero status code and further statements are not
 executed. Only the results of the first SQL statement in each
 positional argument are printed on the standard output.`),
+
 	"join": wrapText(`
 A comma-separated list of addresses to use when a new node is joining
 an existing cluster. For the first node in a cluster, --join should
 NOT be specified. Each address in the list has an optional type:
 [type=]<address>. An unspecified type means ip address or dns.  Type
-is one of:
-- tcp: (default if type is omitted): plain ip address or hostname.
-- http-lb: HTTP load balancer: we query
-           http(s)://<address>/_status/details/local
-`),
+is one of:`) + `
+
+  - tcp: (default if type is omitted): plain ip address or hostname.
+  - http-lb: HTTP load balancer: we query
+             http(s)://<address>/_status/details/local
+`,
+
 	"host": wrapText(`
-Database server host.`),
+Database server host. When running as a server, the node will
+advertise itself using this hostname; it must resolve from
+other nodes in the cluster. When running the sql command shell,
+this is a hostname of a node in the cluster.`),
+
 	"insecure": wrapText(`
 Run over plain HTTP. WARNING: this is strongly discouraged.`),
+
 	"key-size": wrapText(`
 Key size in bits for CA/Node/Client certificates.`),
+
 	"linearizable": wrapText(`
 Enables linearizable behaviour of operations on this node by making
 sure that no commit timestamp is reported back to the client until all
 other node clocks have necessarily passed it.`),
+
 	"max-offset": wrapText(`
 The maximum clock offset for the cluster. Clock offset is measured on
 all node-to-node links and if any node notices it has clock offset in
 excess of --max-offset, it will commit suicide. Setting this value too
 high may decrease transaction performance in the presence of
 contention.`),
+
 	"max-results": wrapText(`
 Define the maximum number of results that will be retrieved.`),
+
 	"memtable-budget": wrapText(`
 Total size in bytes for memtables, shared evenly if there are multiple
 storage devices.`),
+
 	"metrics-frequency": wrapText(`
-Adjust the frequency at which the server records its own internal metrics.
-`),
+Adjust the frequency at which the server records its own internal metrics.`),
+
 	"password": wrapText(`
 The created user's password. If provided, disables prompting. Pass '-' to
 provide the password on standard input.`),
+
 	"pgport": wrapText(`
 The port to bind for Postgres traffic.`),
+
 	"port": wrapText(`
 The port to bind for cockroach traffic.`),
+
 	"scan-interval": wrapText(`
 Adjusts the target for the duration of a single scan through a store's
 ranges. The scan is slowed as necessary to approximately achieve this
 duration.`),
+
 	"scan-max-idle-time": wrapText(`
 Adjusts the max idle time of the scanner. This speeds up the scanner on small
 clusters to be more responsive.`),
-	"stores": wrapText(`
-A comma-separated list of stores, specified by a colon-separated list
-of device attributes followed by '=' and either a filepath for a
-persistent store or an integer size in bytes for an in-memory
-store. Device attributes typically include whether the store is flash
-(ssd), spinny disk (hdd), fusion-io (fio), in-memory (mem); device
-attributes might also include speeds and other specs (7200rpm,
-200kiops, etc.). For example:`) + `
 
-  --stores=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824
+	"stores": wrapText(`
+A comma-separated list of file paths to storage devices, for example:`) + `
+
+  --stores=/mnt/ssd01,/mnt/ssd02
+
+` + wrapText(`
+Stores can also specify a colon-separated list of device attributes
+as a prefix to the filepaths. Device attributes are used to match
+capabilities for storage of individual databases or tables. For
+example, an OLTP database would probably want to only allocate space
+for its tables on solid state devices, whereas append-only time
+series might prefer cheaper spinning drives. Typical attributes
+include whether the store is flash (ssd), spinny disk (hdd), or
+in-memory (mem). Device attributes might also include speeds and
+other specs (7200rpm, 200kiops, etc.). For example:`) + `
+
+  --stores=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02
+
+` + wrapText(`For an in-memory store, specify an integer instead of a
+filepath. This value represents the maximum size in bytes the in-memory
+store may consume:`) + `
+
+  --stores=mem=1073741824,ssd=/mnt/ssd01
 `,
+
 	"time-until-store-dead": wrapText(`
 Adjusts the timeout for stores.  If there's been no gossiped updated
 from a store after this time, the store is considered unavailable.
 Replicas on an unavailable store will be moved to available ones.`),
+
 	"url": wrapText(`
 Connection url. eg: postgresql://myuser@localhost:15432/mydb
-If left empty, the connection flags are used (host, port, user, database, insecure, certs).`),
+If left empty, the connection flags are used (host, port, user,
+database, insecure, certs).`),
+
 	"user": wrapText(`
 Database user name.`),
 }
@@ -170,12 +210,7 @@ func usage(name string) string {
 	if !ok {
 		panic(fmt.Sprintf("flag usage not defined for %q", name))
 	}
-	if s[0] != '\n' {
-		s = "\n" + s
-	}
-	if s[len(s)-1] != '\n' {
-		s = s + "\n"
-	}
+	s = "\n" + strings.TrimSpace(s) + "\n"
 	// github.com/spf13/pflag appends the default value after the usage text. Add
 	// the correct indentation (7 spaces) here. This is admittedly fragile.
 	return text.Indent(s, strings.Repeat(" ", usageIndentation)) +
