@@ -463,73 +463,75 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "\traw_bytes\030\001 \001(\014\0225\n\ttimestamp\030\002 \001(\0132\034.co"
     "ckroach.roachpb.TimestampB\004\310\336\037\000\"O\n\010KeyVa"
     "lue\022\024\n\003key\030\001 \001(\014B\007\372\336\037\003Key\022-\n\005value\030\002 \001(\013"
-    "2\030.cockroach.roachpb.ValueB\004\310\336\037\000\"\214\001\n\nSto"
-    "reIdent\022%\n\ncluster_id\030\001 \001(\tB\021\310\336\037\000\342\336\037\tClu"
-    "sterID\022)\n\007node_id\030\002 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\372"
-    "\336\037\006NodeID\022,\n\010store_id\030\003 \001(\005B\032\310\336\037\000\342\336\037\007Sto"
-    "reID\372\336\037\007StoreID\"\324\001\n\014SplitTrigger\022>\n\014upda"
-    "ted_desc\030\001 \001(\0132\".cockroach.roachpb.Range"
-    "DescriptorB\004\310\336\037\000\022:\n\010new_desc\030\002 \001(\0132\".coc"
-    "kroach.roachpb.RangeDescriptorB\004\310\336\037\000\022H\n\027"
-    "initial_leader_store_id\030\003 \001(\005B\'\310\336\037\000\342\336\037\024I"
-    "nitialLeaderStoreID\372\336\037\007StoreID\"\215\001\n\014Merge"
-    "Trigger\022>\n\014updated_desc\030\001 \001(\0132\".cockroac"
-    "h.roachpb.RangeDescriptorB\004\310\336\037\000\022=\n\021subsu"
-    "med_range_id\030\002 \001(\003B\"\310\336\037\000\342\336\037\017SubsumedRang"
-    "eID\372\336\037\007RangeID\"\230\002\n\025ChangeReplicasTrigger"
-    "\022\?\n\013change_type\030\001 \001(\0162$.cockroach.roachp"
-    "b.ReplicaChangeTypeB\004\310\336\037\000\022;\n\007replica\030\002 \001"
-    "(\0132$.cockroach.roachpb.ReplicaDescriptor"
-    "B\004\310\336\037\000\022D\n\020updated_replicas\030\003 \003(\0132$.cockr"
-    "oach.roachpb.ReplicaDescriptorB\004\310\336\037\000\022;\n\017"
-    "next_replica_id\030\004 \001(\005B\"\310\336\037\000\342\336\037\rNextRepli"
-    "caID\372\336\037\tReplicaID\"7\n\023ModifiedSpanTrigger"
-    "\022 \n\022system_config_span\030\001 \001(\010B\004\310\336\037\000\"\237\002\n\025I"
-    "nternalCommitTrigger\0226\n\rsplit_trigger\030\001 "
-    "\001(\0132\037.cockroach.roachpb.SplitTrigger\0226\n\r"
-    "merge_trigger\030\002 \001(\0132\037.cockroach.roachpb."
-    "MergeTrigger\022I\n\027change_replicas_trigger\030"
-    "\003 \001(\0132(.cockroach.roachpb.ChangeReplicas"
-    "Trigger\022E\n\025modified_span_trigger\030\004 \001(\0132&"
-    ".cockroach.roachpb.ModifiedSpanTrigger:\004"
-    "\210\240\037\001\"\'\n\010NodeList\022\033\n\005nodes\030\001 \003(\005B\014\020\001\372\336\037\006N"
-    "odeID\"\177\n\007TxnMeta\022\022\n\002id\030\001 \001(\014B\006\342\336\037\002ID\022\024\n\003"
-    "key\030\002 \001(\014B\007\372\336\037\003Key\022\023\n\005epoch\030\003 \001(\rB\004\310\336\037\000\022"
-    "5\n\ttimestamp\030\004 \001(\0132\034.cockroach.roachpb.T"
-    "imestampB\004\310\336\037\000\"\260\004\n\013Transaction\0222\n\004meta\030\001"
-    " \001(\0132\032.cockroach.roachpb.TxnMetaB\010\310\336\037\000\320\336"
-    "\037\001\022\022\n\004name\030\002 \001(\tB\004\310\336\037\000\022\026\n\010priority\030\003 \001(\005"
-    "B\004\310\336\037\000\0229\n\tisolation\030\004 \001(\0162 .cockroach.ro"
-    "achpb.IsolationTypeB\004\310\336\037\000\022:\n\006status\030\005 \001("
-    "\0162$.cockroach.roachpb.TransactionStatusB"
-    "\004\310\336\037\000\0224\n\016last_heartbeat\030\006 \001(\0132\034.cockroac"
-    "h.roachpb.Timestamp\022:\n\016orig_timestamp\030\007 "
-    "\001(\0132\034.cockroach.roachpb.TimestampB\004\310\336\037\000\022"
-    "9\n\rmax_timestamp\030\010 \001(\0132\034.cockroach.roach"
-    "pb.TimestampB\004\310\336\037\000\0228\n\rcertain_nodes\030\t \001("
-    "\0132\033.cockroach.roachpb.NodeListB\004\310\336\037\000\022\025\n\007"
-    "Writing\030\n \001(\010B\004\310\336\037\000\022\026\n\010Sequence\030\013 \001(\rB\004\310"
-    "\336\037\000\022.\n\007Intents\030\014 \003(\0132\027.cockroach.roachpb"
-    ".SpanB\004\310\336\037\000:\004\230\240\037\000\"\244\001\n\006Intent\022/\n\004span\030\001 \001"
-    "(\0132\027.cockroach.roachpb.SpanB\010\310\336\037\000\320\336\037\001\022-\n"
-    "\003txn\030\002 \001(\0132\032.cockroach.roachpb.TxnMetaB\004"
-    "\310\336\037\000\022:\n\006status\030\003 \001(\0162$.cockroach.roachpb"
-    ".TransactionStatusB\004\310\336\037\000\"\265\001\n\005Lease\0221\n\005st"
-    "art\030\001 \001(\0132\034.cockroach.roachpb.TimestampB"
-    "\004\310\336\037\000\0226\n\nexpiration\030\002 \001(\0132\034.cockroach.ro"
-    "achpb.TimestampB\004\310\336\037\000\022;\n\007replica\030\003 \001(\0132$"
-    ".cockroach.roachpb.ReplicaDescriptorB\004\310\336"
-    "\037\000:\004\230\240\037\000\"a\n\022SequenceCacheEntry\022\024\n\003key\030\001 "
-    "\001(\014B\007\372\336\037\003Key\0225\n\ttimestamp\030\002 \001(\0132\034.cockro"
-    "ach.roachpb.TimestampB\004\310\336\037\000*^\n\tValueType"
-    "\022\013\n\007UNKNOWN\020\000\022\007\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BYT"
-    "ES\020\003\022\010\n\004TIME\020\004\022\013\n\007DECIMAL\020\005\022\016\n\nTIMESERIE"
-    "S\020d*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLICA\020"
-    "\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolation"
-    "Type\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243"
-    "\036\000*B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022\r\n\t"
-    "COMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\tZ\007roachp"
-    "bX\001", 3003);
+    "2\030.cockroach.roachpb.ValueB\004\310\336\037\000\"\277\001\n\nSto"
+    "reIdent\022X\n\ncluster_id\030\001 \001(\014BD\310\336\037\000\342\336\037\tClu"
+    "sterID\332\336\037/github.com/cockroachdb/cockroa"
+    "ch/util/uuid.UUID\022)\n\007node_id\030\002 \001(\005B\030\310\336\037\000"
+    "\342\336\037\006NodeID\372\336\037\006NodeID\022,\n\010store_id\030\003 \001(\005B\032"
+    "\310\336\037\000\342\336\037\007StoreID\372\336\037\007StoreID\"\324\001\n\014SplitTrig"
+    "ger\022>\n\014updated_desc\030\001 \001(\0132\".cockroach.ro"
+    "achpb.RangeDescriptorB\004\310\336\037\000\022:\n\010new_desc\030"
+    "\002 \001(\0132\".cockroach.roachpb.RangeDescripto"
+    "rB\004\310\336\037\000\022H\n\027initial_leader_store_id\030\003 \001(\005"
+    "B\'\310\336\037\000\342\336\037\024InitialLeaderStoreID\372\336\037\007StoreI"
+    "D\"\215\001\n\014MergeTrigger\022>\n\014updated_desc\030\001 \001(\013"
+    "2\".cockroach.roachpb.RangeDescriptorB\004\310\336"
+    "\037\000\022=\n\021subsumed_range_id\030\002 \001(\003B\"\310\336\037\000\342\336\037\017S"
+    "ubsumedRangeID\372\336\037\007RangeID\"\230\002\n\025ChangeRepl"
+    "icasTrigger\022\?\n\013change_type\030\001 \001(\0162$.cockr"
+    "oach.roachpb.ReplicaChangeTypeB\004\310\336\037\000\022;\n\007"
+    "replica\030\002 \001(\0132$.cockroach.roachpb.Replic"
+    "aDescriptorB\004\310\336\037\000\022D\n\020updated_replicas\030\003 "
+    "\003(\0132$.cockroach.roachpb.ReplicaDescripto"
+    "rB\004\310\336\037\000\022;\n\017next_replica_id\030\004 \001(\005B\"\310\336\037\000\342\336"
+    "\037\rNextReplicaID\372\336\037\tReplicaID\"7\n\023Modified"
+    "SpanTrigger\022 \n\022system_config_span\030\001 \001(\010B"
+    "\004\310\336\037\000\"\237\002\n\025InternalCommitTrigger\0226\n\rsplit"
+    "_trigger\030\001 \001(\0132\037.cockroach.roachpb.Split"
+    "Trigger\0226\n\rmerge_trigger\030\002 \001(\0132\037.cockroa"
+    "ch.roachpb.MergeTrigger\022I\n\027change_replic"
+    "as_trigger\030\003 \001(\0132(.cockroach.roachpb.Cha"
+    "ngeReplicasTrigger\022E\n\025modified_span_trig"
+    "ger\030\004 \001(\0132&.cockroach.roachpb.ModifiedSp"
+    "anTrigger:\004\210\240\037\001\"\'\n\010NodeList\022\033\n\005nodes\030\001 \003"
+    "(\005B\014\020\001\372\336\037\006NodeID\"\262\001\n\007TxnMeta\022E\n\002id\030\001 \001(\014"
+    "B9\342\336\037\002ID\332\336\037/github.com/cockroachdb/cockr"
+    "oach/util/uuid.UUID\022\024\n\003key\030\002 \001(\014B\007\372\336\037\003Ke"
+    "y\022\023\n\005epoch\030\003 \001(\rB\004\310\336\037\000\0225\n\ttimestamp\030\004 \001("
+    "\0132\034.cockroach.roachpb.TimestampB\004\310\336\037\000\"\260\004"
+    "\n\013Transaction\0222\n\004meta\030\001 \001(\0132\032.cockroach."
+    "roachpb.TxnMetaB\010\310\336\037\000\320\336\037\001\022\022\n\004name\030\002 \001(\tB"
+    "\004\310\336\037\000\022\026\n\010priority\030\003 \001(\005B\004\310\336\037\000\0229\n\tisolati"
+    "on\030\004 \001(\0162 .cockroach.roachpb.IsolationTy"
+    "peB\004\310\336\037\000\022:\n\006status\030\005 \001(\0162$.cockroach.roa"
+    "chpb.TransactionStatusB\004\310\336\037\000\0224\n\016last_hea"
+    "rtbeat\030\006 \001(\0132\034.cockroach.roachpb.Timesta"
+    "mp\022:\n\016orig_timestamp\030\007 \001(\0132\034.cockroach.r"
+    "oachpb.TimestampB\004\310\336\037\000\0229\n\rmax_timestamp\030"
+    "\010 \001(\0132\034.cockroach.roachpb.TimestampB\004\310\336\037"
+    "\000\0228\n\rcertain_nodes\030\t \001(\0132\033.cockroach.roa"
+    "chpb.NodeListB\004\310\336\037\000\022\025\n\007Writing\030\n \001(\010B\004\310\336"
+    "\037\000\022\026\n\010Sequence\030\013 \001(\rB\004\310\336\037\000\022.\n\007Intents\030\014 "
+    "\003(\0132\027.cockroach.roachpb.SpanB\004\310\336\037\000:\004\230\240\037\000"
+    "\"\244\001\n\006Intent\022/\n\004span\030\001 \001(\0132\027.cockroach.ro"
+    "achpb.SpanB\010\310\336\037\000\320\336\037\001\022-\n\003txn\030\002 \001(\0132\032.cock"
+    "roach.roachpb.TxnMetaB\004\310\336\037\000\022:\n\006status\030\003 "
+    "\001(\0162$.cockroach.roachpb.TransactionStatu"
+    "sB\004\310\336\037\000\"\265\001\n\005Lease\0221\n\005start\030\001 \001(\0132\034.cockr"
+    "oach.roachpb.TimestampB\004\310\336\037\000\0226\n\nexpirati"
+    "on\030\002 \001(\0132\034.cockroach.roachpb.TimestampB\004"
+    "\310\336\037\000\022;\n\007replica\030\003 \001(\0132$.cockroach.roachp"
+    "b.ReplicaDescriptorB\004\310\336\037\000:\004\230\240\037\000\"a\n\022Seque"
+    "nceCacheEntry\022\024\n\003key\030\001 \001(\014B\007\372\336\037\003Key\0225\n\tt"
+    "imestamp\030\002 \001(\0132\034.cockroach.roachpb.Times"
+    "tampB\004\310\336\037\000*^\n\tValueType\022\013\n\007UNKNOWN\020\000\022\007\n\003"
+    "INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BYTES\020\003\022\010\n\004TIME\020\004\022\013\n"
+    "\007DECIMAL\020\005\022\016\n\nTIMESERIES\020d*>\n\021ReplicaCha"
+    "ngeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_REPLI"
+    "CA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SERIALIZA"
+    "BLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021Transaction"
+    "Status\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007AB"
+    "ORTED\020\002\032\004\210\243\036\000B\tZ\007roachpbX\001", 3106);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/data.proto", &protobuf_RegisterTypes);
   Span::default_instance_ = new Span();
@@ -2251,15 +2253,11 @@ bool StoreIdent::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional string cluster_id = 1;
+      // optional bytes cluster_id = 1;
       case 1: {
         if (tag == 10) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
                 input, this->mutable_cluster_id()));
-          ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
-            this->cluster_id().data(), this->cluster_id().length(),
-            ::google::protobuf::internal::WireFormat::PARSE,
-            "cockroach.roachpb.StoreIdent.cluster_id");
         } else {
           goto handle_unusual;
         }
@@ -2322,13 +2320,9 @@ failure:
 void StoreIdent::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.StoreIdent)
-  // optional string cluster_id = 1;
+  // optional bytes cluster_id = 1;
   if (has_cluster_id()) {
-    ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
-      this->cluster_id().data(), this->cluster_id().length(),
-      ::google::protobuf::internal::WireFormat::SERIALIZE,
-      "cockroach.roachpb.StoreIdent.cluster_id");
-    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
       1, this->cluster_id(), output);
   }
 
@@ -2352,14 +2346,10 @@ void StoreIdent::SerializeWithCachedSizes(
 ::google::protobuf::uint8* StoreIdent::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.StoreIdent)
-  // optional string cluster_id = 1;
+  // optional bytes cluster_id = 1;
   if (has_cluster_id()) {
-    ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
-      this->cluster_id().data(), this->cluster_id().length(),
-      ::google::protobuf::internal::WireFormat::SERIALIZE,
-      "cockroach.roachpb.StoreIdent.cluster_id");
     target =
-      ::google::protobuf::internal::WireFormatLite::WriteStringToArray(
+      ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
         1, this->cluster_id(), target);
   }
 
@@ -2385,10 +2375,10 @@ int StoreIdent::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 7u) {
-    // optional string cluster_id = 1;
+    // optional bytes cluster_id = 1;
     if (has_cluster_id()) {
       total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::StringSize(
+        ::google::protobuf::internal::WireFormatLite::BytesSize(
           this->cluster_id());
     }
 
@@ -2490,7 +2480,7 @@ void StoreIdent::InternalSwap(StoreIdent* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // StoreIdent
 
-// optional string cluster_id = 1;
+// optional bytes cluster_id = 1;
 bool StoreIdent::has_cluster_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -2518,7 +2508,7 @@ void StoreIdent::clear_cluster_id() {
   cluster_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.roachpb.StoreIdent.cluster_id)
 }
- void StoreIdent::set_cluster_id(const char* value, size_t size) {
+ void StoreIdent::set_cluster_id(const void* value, size_t size) {
   set_has_cluster_id();
   cluster_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));

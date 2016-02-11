@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 const testTimeout = 3 * time.Second
@@ -288,9 +289,9 @@ func TestCorruptedClusterID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Set the cluster ID to an empty string.
+	// Set the cluster ID to the empty UUID.
 	sIdent := roachpb.StoreIdent{
-		ClusterID: "",
+		ClusterID: *uuid.EmptyUUID,
 		NodeID:    1,
 		StoreID:   1,
 	}

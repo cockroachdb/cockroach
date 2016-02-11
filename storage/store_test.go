@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -44,11 +45,10 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	"github.com/gogo/protobuf/proto"
 )
 
 var testIdent = roachpb.StoreIdent{
-	ClusterID: "cluster",
+	ClusterID: uuid.MakeV4(),
 	NodeID:    1,
 	StoreID:   1,
 }
@@ -621,8 +621,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 	// Try a put to txn record for a meta2 key (note that this doesn't
 	// actually happen in practice, as txn records are not put directly,
 	// but are instead manipulated only through txn methods).
-	pArgs = putArgs(keys.TransactionKey(meta2KeyMax, []byte(uuid.NewUUID4())),
-		[]byte("value"))
+	pArgs = putArgs(keys.TransactionKey(meta2KeyMax, uuid.NewV4()), []byte("value"))
 	if _, pErr := client.SendWrapped(store.testSender(), nil, &pArgs); pErr != nil {
 		t.Fatalf("unexpected error on put to txn meta2 value: %s", pErr)
 	}
@@ -912,7 +911,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 		} else {
 			if rErr, ok := pErr.GetDetail().(*roachpb.TransactionPushError); !ok {
 				t.Errorf("expected txn push error; got %s", pErr)
-			} else if !bytes.Equal(rErr.PusheeTxn.ID, pushee.ID) {
+			} else if !roachpb.TxnIDEqual(rErr.PusheeTxn.ID, pushee.ID) {
 				t.Errorf("expected txn to match pushee %q; got %s", pushee.ID, rErr)
 			}
 			// Trying again should fail again.

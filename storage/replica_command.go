@@ -871,7 +871,7 @@ func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header
 func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.PushTxnRequest) (roachpb.PushTxnResponse, error) {
 	var reply roachpb.PushTxnResponse
 
-	if len(args.PusherTxn.ID) != 0 {
+	if args.PusherTxn.ID != nil {
 		reply.Txn = &args.PusherTxn
 	}
 
@@ -972,7 +972,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 		// If just attempting to cleanup old or already-committed txns, don't push.
 		pusherWins = false
 	} else if reply.PusheeTxn.Priority < priority ||
-		(reply.PusheeTxn.Priority == priority && len(args.PusherTxn.ID) != 0 &&
+		(reply.PusheeTxn.Priority == priority && args.PusherTxn.ID != nil &&
 			args.PusherTxn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
 		// Pusher wins based on priority; if priorities are equal, order
 		// by lower txn timestamp.

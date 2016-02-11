@@ -360,7 +360,7 @@ func TestTxnEqual(t *testing.T) {
 	}{
 		{nil, nil, true},
 		{&Transaction{}, nil, false},
-		{&Transaction{TxnMeta: TxnMeta{ID: []byte("A")}}, &Transaction{TxnMeta: TxnMeta{ID: []byte("B")}}, false},
+		{&Transaction{TxnMeta: TxnMeta{ID: uuid.NewV4()}}, &Transaction{TxnMeta: TxnMeta{ID: uuid.NewV4()}}, false},
 	}
 	for i, c := range tc {
 		if c.txn1.Equal(c.txn2) != c.txn2.Equal(c.txn1) || c.txn1.Equal(c.txn2) != c.eq {
@@ -370,16 +370,16 @@ func TestTxnEqual(t *testing.T) {
 }
 
 func TestTxnIDEqual(t *testing.T) {
-	txn1, txn2 := uuid.NewUUID4(), uuid.NewUUID4()
-	txn1Copy := append([]byte(nil), txn1...)
+	txn1, txn2 := uuid.NewV4(), uuid.NewV4()
+	txn1Copy := *txn1
 
 	testCases := []struct {
-		a, b     []byte
+		a, b     *uuid.UUID
 		expEqual bool
 	}{
 		{txn1, txn1, true},
 		{txn1, txn2, false},
-		{txn1, txn1Copy, true},
+		{txn1, &txn1Copy, true},
 	}
 	for i, test := range testCases {
 		if eq := TxnIDEqual(test.a, test.b); eq != test.expEqual {
@@ -389,12 +389,15 @@ func TestTxnIDEqual(t *testing.T) {
 }
 
 func TestTransactionString(t *testing.T) {
-	id := []byte("ת\x0f^\xe4-Fؽ\xf7\x16\xe4\xf9\xbe^\xbe")
+	txnID, err := uuid.FromBytes([]byte("ת\x0f^\xe4-Fؽ\xf7\x16\xe4\xf9\xbe^\xbe"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	ts1 := makeTS(10, 11)
 	txn := Transaction{
 		TxnMeta: TxnMeta{
 			Key:       Key("foo"),
-			ID:        id,
+			ID:        txnID,
 			Epoch:     2,
 			Timestamp: makeTS(20, 21),
 		},
@@ -444,7 +447,7 @@ var ts = makeTS(10, 11)
 var nonZeroTxn = Transaction{
 	TxnMeta: TxnMeta{
 		Key:       Key("foo"),
-		ID:        uuid.NewUUID4(),
+		ID:        uuid.NewV4(),
 		Epoch:     2,
 		Timestamp: makeTS(20, 21),
 	},
@@ -477,7 +480,7 @@ func TestTransactionUpdate(t *testing.T) {
 	}
 
 	var txn3 Transaction
-	txn3.ID = uuid.NewUUID4()
+	txn3.ID = uuid.NewV4()
 	txn3.Name = "carl"
 	txn3.Isolation = SNAPSHOT
 	txn3.Update(&txn)
@@ -746,11 +749,5 @@ func TestRSpanIntersect(t *testing.T) {
 		if _, err := rs.Intersect(&desc); err == nil {
 			t.Errorf("%d: unexpected success", i)
 		}
-	}
-}
-
-func TestTransactionIDLen(t *testing.T) {
-	if l := len(nonZeroTxn.ID); l != TransactionIDLen {
-		t.Fatalf("expected %d, got %d", TransactionIDLen, l)
 	}
 }
