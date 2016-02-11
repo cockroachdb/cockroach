@@ -42,6 +42,12 @@ func (u *UUID) Unmarshal(data []byte) error {
 	return u.UUID.UnmarshalBinary(data)
 }
 
+// MakeV4 delegates to "github.com/satori/go.uuid".NewV4 and wraps the result in
+// a UUID.
+func MakeV4() UUID {
+	return UUID{uuid.NewV4()}
+}
+
 // NewV4 delegates to "github.com/satori/go.uuid".NewV4 and wraps the result in
 // a UUID.
 func NewV4() *UUID {
@@ -51,7 +57,7 @@ func NewV4() *UUID {
 // Equal delegates to "github.com/satori/go.uuid".Equal and wraps the result in
 // a UUID.
 func Equal(a, b UUID) bool {
-	return uuid.Equal(a.UUID, b.UUID)
+	return a == b
 }
 
 // FromBytes delegates to "github.com/satori/go.uuid".FromBytes and wraps the

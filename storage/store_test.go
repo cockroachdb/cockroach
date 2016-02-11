@@ -48,7 +48,7 @@ import (
 )
 
 var testIdent = roachpb.StoreIdent{
-	ClusterID: "cluster",
+	ClusterID: uuid.MakeV4(),
 	NodeID:    1,
 	StoreID:   1,
 }

@@ -140,7 +140,7 @@ func (tc *testContext) Start(t testing.TB) {
 		ctx.DB = client.NewDB(sender)
 		tc.store = NewStore(ctx, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
 		if err := tc.store.Bootstrap(roachpb.StoreIdent{
-			ClusterID: "test",
+			ClusterID: uuid.MakeV4(),
 			NodeID:    1,
 			StoreID:   1,
 		}, tc.stopper); err != nil {
