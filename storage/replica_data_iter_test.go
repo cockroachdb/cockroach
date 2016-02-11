@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 func fakePrevKey(k []byte) roachpb.Key {
@@ -72,9 +73,9 @@ func createRangeData(r *Replica, t *testing.T) []engine.MVCCKey {
 		{keys.RangeLastVerificationTimestampKey(r.RangeID), ts0},
 		{keys.RangeStatsKey(r.RangeID), ts0},
 		{keys.RangeDescriptorKey(desc.StartKey), ts},
-		{keys.TransactionKey(roachpb.Key(desc.StartKey), []byte("1234")), ts0},
-		{keys.TransactionKey(roachpb.Key(desc.StartKey.Next()), []byte("5678")), ts0},
-		{keys.TransactionKey(fakePrevKey(desc.EndKey), []byte("2468")), ts0},
+		{keys.TransactionKey(roachpb.Key(desc.StartKey), uuid.NewV4()), ts0},
+		{keys.TransactionKey(roachpb.Key(desc.StartKey.Next()), uuid.NewV4()), ts0},
+		{keys.TransactionKey(fakePrevKey(desc.EndKey), uuid.NewV4()), ts0},
 		// TODO(bdarnell): KeyMin.Next() results in a key in the reserved system-local space.
 		// Once we have resolved https://github.com/cockroachdb/cockroach/issues/437,
 		// replace this with something that reliably generates the first valid key in the range.

@@ -23,6 +23,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -43,8 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	"github.com/gogo/protobuf/proto"
-	"github.com/opentracing/opentracing-go"
 )
 
 const (
@@ -121,7 +121,7 @@ func GetBootstrapSchema() sql.MetadataSchema {
 // single range spanning all keys. Initial range lookup metadata is
 // populated for the range. Returns the cluster ID.
 func bootstrapCluster(engines []engine.Engine) (string, error) {
-	clusterID := uuid.NewUUID4().String()
+	clusterID := uuid.NewV4().String()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 

@@ -64,8 +64,8 @@ func TestKeyAddress(t *testing.T) {
 		{roachpb.Key{}, roachpb.RKeyMin},
 		{roachpb.Key("123"), roachpb.RKey("123")},
 		{RangeDescriptorKey(roachpb.RKey("foo")), roachpb.RKey("foo")},
-		{TransactionKey(roachpb.Key("baz"), uuid.NewUUID4()), roachpb.RKey("baz")},
-		{TransactionKey(roachpb.KeyMax, roachpb.RKey(uuid.NewUUID4())), roachpb.RKeyMax},
+		{TransactionKey(roachpb.Key("baz"), uuid.NewV4()), roachpb.RKey("baz")},
+		{TransactionKey(roachpb.KeyMax, uuid.NewV4()), roachpb.RKeyMax},
 		{nil, nil},
 	}
 	for i, test := range testCases {

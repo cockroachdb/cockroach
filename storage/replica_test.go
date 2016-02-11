@@ -28,6 +28,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coreos/etcd/raft"
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
@@ -44,8 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	"github.com/coreos/etcd/raft"
-	"github.com/gogo/protobuf/proto"
 )
 
 const runUnmarshalCallbackTimeout = 100 * time.Millisecond
@@ -2259,7 +2260,7 @@ func TestSequenceCacheError(t *testing.T) {
 	defer tc.Stop()
 
 	txn := roachpb.Transaction{}
-	txn.ID = []byte("id")
+	txn.ID = uuid.NewV4()
 	txn.Sequence = 1
 	txn.Timestamp = roachpb.Timestamp{WallTime: 1}
 
@@ -2654,7 +2655,7 @@ func TestRangeResolveIntentRange(t *testing.T) {
 	defer tc.Stop()
 
 	// Put two values transactionally.
-	txn := &roachpb.Transaction{TxnMeta: roachpb.TxnMeta{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}, Sequence: 1}
+	txn := &roachpb.Transaction{TxnMeta: roachpb.TxnMeta{ID: uuid.NewV4(), Timestamp: tc.clock.Now()}, Sequence: 1}
 	for _, key := range []roachpb.Key{roachpb.Key("a"), roachpb.Key("b")} {
 		pArgs := putArgs(key, []byte("value1"))
 		txn.Sequence++
@@ -2723,7 +2724,7 @@ func TestRangeStatsComputation(t *testing.T) {
 
 	// Put a 2nd value transactionally.
 	pArgs = putArgs([]byte("b"), []byte("value2"))
-	txn := &roachpb.Transaction{TxnMeta: roachpb.TxnMeta{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}, Sequence: 1}
+	txn := &roachpb.Transaction{TxnMeta: roachpb.TxnMeta{ID: uuid.NewV4(), Timestamp: tc.clock.Now()}, Sequence: 1}
 
 	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -3212,7 +3213,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 		{key: "h", expected: testRanges[1]},
 	}
 
-	txn := &roachpb.Transaction{TxnMeta: roachpb.TxnMeta{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}, Sequence: 1}
+	txn := &roachpb.Transaction{TxnMeta: roachpb.TxnMeta{ID: uuid.NewV4(), Timestamp: tc.clock.Now()}, Sequence: 1}
 	for i, r := range testRanges {
 		if i != withIntentRangeIndex {
 			// Write the new descriptor as an intent.
@@ -3273,7 +3274,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(intentRange.EndKey)), data)
-	txn2 := &roachpb.Transaction{TxnMeta: roachpb.TxnMeta{ID: uuid.NewUUID4(), Timestamp: tc.clock.Now()}, Sequence: 1}
+	txn2 := &roachpb.Transaction{TxnMeta: roachpb.TxnMeta{ID: uuid.NewV4(), Timestamp: tc.clock.Now()}, Sequence: 1}
 	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn2}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}

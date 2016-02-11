@@ -1495,7 +1495,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 		// push failure, not the original write intent error. The push
 		// failure will instruct the client to restart the transaction
 		// with a backoff.
-		if len(pusherTxn.ID) > 0 && !readOnly {
+		if pusherTxn.ID != nil && !readOnly {
 			return nil, pushErr
 		}
 		// For read/write conflicts, return the write intent error which

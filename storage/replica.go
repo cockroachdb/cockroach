@@ -26,6 +26,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
+	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -40,10 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
-	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/gogo/protobuf/proto"
-	"github.com/opentracing/opentracing-go"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 const (
@@ -755,7 +756,7 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba roachpb.BatchRequest, pErr *
 			args := union.GetInner()
 			if usesTimestampCache(args) {
 				header := args.Header()
-				var txnID []byte
+				var txnID *uuid.UUID
 				if ba.Txn != nil {
 					txnID = ba.Txn.ID
 				}
@@ -910,7 +911,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 			args := union.GetInner()
 			if usesTimestampCache(args) {
 				header := args.Header()
-				var txnID []byte
+				var txnID *uuid.UUID
 				if ba.Txn != nil {
 					txnID = ba.Txn.ID
 				}

@@ -321,7 +321,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 	var id string // optional transaction ID
 	if ba.Txn != nil {
 		// If this request is part of a transaction...
-		id = string(ba.Txn.ID)
+		id = ba.Txn.ID.String()
 		// Verify that if this Transaction is not read-only, we have it on
 		// file. If not, refuse writes - the client must have issued a write on
 		// another coordinator previously.
@@ -465,7 +465,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 	if len(ba.Requests) == 0 {
 		return util.Errorf("empty batch with txn")
 	}
-	if len(ba.Txn.ID) == 0 {
+	if ba.Txn.ID == nil {
 		// Create transaction without a key. The key is set when a begin
 		// transaction request is received.
 		newTxn := roachpb.NewTransaction(ba.Txn.Name, nil, ba.UserPriority,
@@ -505,7 +505,7 @@ func (tc *TxnCoordSender) cleanupTxn(trace opentracing.Span, txn roachpb.Transac
 	trace.LogEvent("coordinator stops")
 	tc.Lock()
 	defer tc.Unlock()
-	txnMeta, ok := tc.txns[string(txn.ID)]
+	txnMeta, ok := tc.txns[txn.ID.String()]
 	// The heartbeat might've already removed the record.
 	if !ok {
 		return
@@ -711,10 +711,10 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	}
 
 	return func() *roachpb.Error {
-		if len(newTxn.ID) <= 0 {
+		if newTxn.ID == nil {
 			return pErr
 		}
-		id := string(newTxn.ID)
+		id := newTxn.ID.String()
 		tc.Lock()
 		defer tc.Unlock()
 		txnMeta := tc.txns[id]

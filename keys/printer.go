@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 type dictEntry struct {
@@ -183,8 +184,11 @@ func localRangeKeyPrint(key roachpb.Key) string {
 			begin := bytes.Index(key, s.suffix)
 			if begin > 0 {
 				addrKey := key[:begin]
-				id := key[(begin + len(s.suffix)):]
-				fmt.Fprintf(&buf, "/%s/addrKey:%s/id:%q", s.name, decodeKeyPrint(addrKey), []byte(id))
+				txnID, err := uuid.FromBytes(key[(begin + len(s.suffix)):])
+				if err != nil {
+					return fmt.Sprintf("/%q/err:%v", key, err)
+				}
+				fmt.Fprintf(&buf, "/%s/addrKey:%s/id:%q", s.name, decodeKeyPrint(addrKey), txnID)
 				return buf.String()
 			}
 		}
@@ -200,21 +204,26 @@ func sequenceCacheKeyPrint(key roachpb.Key) string {
 		return fmt.Sprintf("/%q/err:%v", key, err)
 	}
 
+	txnID, err := uuid.FromBytes(id)
+	if err != nil {
+		return fmt.Sprintf("/%q/err:%v", key, err)
+	}
+
 	if len(b) == 0 {
-		return fmt.Sprintf("/%q", id)
+		return fmt.Sprintf("/%q", txnID)
 	}
 
 	b, epoch, err := encoding.DecodeUint32Descending(b)
 	if err != nil {
-		return fmt.Sprintf("/%q/err:%v", id, err)
+		return fmt.Sprintf("/%q/err:%v", txnID, err)
 	}
 
 	_, seq, err := encoding.DecodeUint32Descending(b)
 	if err != nil {
-		return fmt.Sprintf("/%q/epoch:%d/err:%v", id, epoch, err)
+		return fmt.Sprintf("/%q/epoch:%d/err:%v", txnID, epoch, err)
 	}
 
-	return fmt.Sprintf("/%q/epoch:%d/seq:%d", id, epoch, seq)
+	return fmt.Sprintf("/%q/epoch:%d/seq:%d", txnID, epoch, seq)
 }
 
 func print(key roachpb.Key) string {
