@@ -75,7 +75,7 @@ func exprCheckVars(expr parser.Expr, conv varConvertFunc) bool {
 }
 
 func exprConvertVars(expr parser.Expr, conv varConvertFunc) parser.Expr {
-	v := varConvertVisitor{justCheck: true, result: true, conv: conv}
+	v := varConvertVisitor{justCheck: false, result: false, conv: conv}
 	return parser.WalkExpr(&v, expr)
 }
 
