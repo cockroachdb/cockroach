@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/uuid"
+	"github.com/satori/go.uuid"
 )
 
 const (
@@ -328,8 +328,8 @@ func TestTimestampCacheReplacements(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 	tc := NewTimestampCache(clock)
 
-	txn1ID := uuid.NewUUID4()
-	txn2ID := uuid.NewUUID4()
+	txn1ID := uuid.NewV4().Bytes()
+	txn2ID := uuid.NewV4().Bytes()
 
 	ts1 := clock.Now()
 	tc.Add(roachpb.Key("a"), nil, ts1, nil, true)
@@ -381,8 +381,8 @@ func TestTimestampCacheWithTxnID(t *testing.T) {
 	tc := NewTimestampCache(clock)
 
 	// Add two successive txn entries.
-	txn1ID := uuid.NewUUID4()
-	txn2ID := uuid.NewUUID4()
+	txn1ID := uuid.NewV4().Bytes()
+	txn2ID := uuid.NewV4().Bytes()
 	ts1 := clock.Now()
 	tc.Add(roachpb.Key("a"), roachpb.Key("c"), ts1, txn1ID, true)
 	ts2 := clock.Now()
@@ -416,8 +416,8 @@ func TestTimestampCacheReadVsWrite(t *testing.T) {
 	tc.Add(roachpb.Key("a"), roachpb.Key("b"), ts1, nil, true)
 
 	// Add two successive txn entries; one read-only and one read-write.
-	txn1ID := uuid.NewUUID4()
-	txn2ID := uuid.NewUUID4()
+	txn1ID := uuid.NewV4().Bytes()
+	txn2ID := uuid.NewV4().Bytes()
 	ts2 := clock.Now()
 	tc.Add(roachpb.Key("a"), nil, ts2, txn1ID, true)
 	ts3 := clock.Now()
