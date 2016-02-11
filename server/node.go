@@ -17,7 +17,6 @@
 package server
 
 import (
-	"container/list"
 	"errors"
 	"fmt"
 	"net"
@@ -309,7 +308,7 @@ func (n *Node) start(rpcServer *rpc.Server, addr net.Addr, engines []engine.Engi
 // bootstraps list for initialization once the cluster and node IDs
 // have been determined.
 func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error {
-	bootstraps := list.New()
+	var bootstraps []*storage.Store
 
 	if len(engines) == 0 {
 		return util.Errorf("no engines")
@@ -321,7 +320,7 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 		if err := s.Start(stopper); err != nil {
 			if _, ok := err.(*storage.NotBootstrappedError); ok {
 				log.Infof("store %s not bootstrapped", s)
-				bootstraps.PushBack(s)
+				bootstraps = append(bootstraps, s)
 				continue
 			}
 			return util.Errorf("failed to start store: %s", err)
@@ -375,7 +374,7 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 	}
 
 	// Bootstrap any uninitialized stores asynchronously.
-	if bootstraps.Len() > 0 {
+	if len(bootstraps) > 0 {
 		stopper.RunAsyncTask(func() {
 			n.bootstrapStores(bootstraps, stopper)
 		})
@@ -405,14 +404,14 @@ func (n *Node) validateStores() error {
 // and node IDs have been established for this node. Store IDs are
 // allocated via a sequence id generator stored at a system key per
 // node.
-func (n *Node) bootstrapStores(bootstraps *list.List, stopper *stop.Stopper) {
+func (n *Node) bootstrapStores(bootstraps []*storage.Store, stopper *stop.Stopper) {
 	if n.ClusterID == "" {
 		panic("ClusterID missing during store bootstrap of auxiliary store")
 	}
 
 	// Bootstrap all waiting stores by allocating a new store id for
 	// each and invoking store.Bootstrap() to persist.
-	inc := int64(bootstraps.Len())
+	inc := int64(len(bootstraps))
 	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.ctx.DB)
 	if err != nil {
 		log.Fatal(err)
@@ -422,8 +421,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List, stopper *stop.Stopper) {
 		NodeID:    n.Descriptor.NodeID,
 		StoreID:   firstID,
 	}
-	for e := bootstraps.Front(); e != nil; e = e.Next() {
-		s := e.Value.(*storage.Store)
+	for _, s := range bootstraps {
 		if err := s.Bootstrap(sIdent, stopper); err != nil {
 			log.Fatal(err)
 		}
