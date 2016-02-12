@@ -24,20 +24,20 @@ t     c_idx   true   4   d      N/A       true
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4)
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t@b_idx
 ----
-0 /t/b_idx/2/1/3/4 NULL true
+0 /t/b_idx/2/1/3/4 NULL ROW
 
 query IIII
 SELECT a, b, c, d FROM t@b_idx
 ----
 1 2 3 4
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t@c_idx
 ----
-0 /t/c_idx/3 /1/2/4 true
+0 /t/c_idx/3 /1/2/4 ROW
 
 query IIII
 SELECT a, b, c, d FROM t@c_idx
@@ -47,10 +47,10 @@ SELECT a, b, c, d FROM t@c_idx
 statement ok
 CREATE INDEX d_idx ON t (d) STORING (a, b)
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t@d_idx
 ----
-0 /t/d_idx/4/1/2 NULL true
+0 /t/d_idx/4/1/2 NULL ROW
 
 query III
 SELECT a, b, d FROM t@d_idx

@@ -37,6 +37,8 @@ type indexJoinNode struct {
 	primaryKeyPrefix roachpb.Key
 	colIDtoRowIndex  map[ColumnID]int
 	pErr             *roachpb.Error
+	explain          explainMode
+	debugVals        debugValues
 }
 
 func makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoinNode {
@@ -99,9 +101,11 @@ func (n *indexJoinNode) Values() parser.DTuple {
 	return n.table.Values()
 }
 
-func (*indexJoinNode) DebugValues() debugValues {
-	// TODO(radu)
-	panic("debug mode not implemented in indexJoinNode")
+func (n *indexJoinNode) DebugValues() debugValues {
+	if n.explain != explainDebug {
+		panic("DebugValues called, node not in debug mode.")
+	}
+	return n.debugVals
 }
 
 func (n *indexJoinNode) Next() bool {
@@ -110,9 +114,12 @@ func (n *indexJoinNode) Next() bool {
 	// the index we perform another iteration of the loop looking for rows in the
 	// table. This outer loop is necessary because a batch of rows from the index
 	// might all be filtered when the resulting rows are read from the table.
-	for tableLookup := (n.table.kvs != nil); true; tableLookup = true {
+	for tableLookup := (len(n.table.spans) > 0); true; tableLookup = true {
 		// First, try to pull a row from the table.
 		if tableLookup && n.table.Next() {
+			if n.explain == explainDebug {
+				n.debugVals = n.table.DebugValues()
+			}
 			return true
 		}
 		if n.pErr = n.table.PErr(); n.pErr != nil {
@@ -137,6 +144,13 @@ func (n *indexJoinNode) Next() bool {
 				break
 			}
 
+			if n.explain == explainDebug {
+				n.debugVals = n.index.DebugValues()
+				if n.debugVals.output != debugValueRow {
+					return true
+				}
+			}
+
 			vals := n.index.Values()
 			primaryIndexKey, _, err := encodeIndexKey(
 				n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
@@ -149,6 +163,12 @@ func (n *indexJoinNode) Next() bool {
 				start: key,
 				end:   key.PrefixEnd(),
 			})
+
+			if n.explain == explainDebug {
+				// In debug mode, return the index information as a "partial" row.
+				n.debugVals.output = debugValuePartial
+				return true
+			}
 		}
 
 		if log.V(3) {
