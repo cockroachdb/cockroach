@@ -17,11 +17,13 @@
 package cli
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"io"
 	"net"
 	"net/url"
+	"unicode"
 	"unicode/utf8"
 
 	// Import postgres driver.
@@ -174,11 +176,12 @@ func formatVal(val interface{}) string {
 	case nil:
 		return "NULL"
 	case []byte:
-		if !utf8.Valid(t) {
-			// Ensure that protobufs containing non-UTF8 binary data print escaped.
-			return fmt.Sprintf("%q", t)
+		// Don't escape UTF8 strings that contain only printable characters.
+		if utf8.Valid(t) && len(bytes.TrimLeftFunc(t, unicode.IsPrint)) == 0 {
+			return string(t)
 		}
-		return string(t)
+		// We use %+q to ensure the output contains only ASCII (see issue #4315).
+		return fmt.Sprintf("%+q", t)
 	}
 	return fmt.Sprint(val)
 }

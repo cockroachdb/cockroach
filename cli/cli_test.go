@@ -575,6 +575,33 @@ func Example_sql() {
 	// 0	empty	-
 }
 
+func Example_sql_escape() {
+	c := newCLITest()
+	defer c.stop()
+
+	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string);"})
+	// We insert four rows:
+	//  - a valid printable UTF8 string
+	//  - a valid printable UTF8 string using escapes
+	//  - a valid UTF8 string with a non-printable character
+	//  - a non-UTF8 string
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values ('κόσμε'), (e'\\xc3\\xb1'), (e'\\x01'), (e'\\xc3\\x28')"})
+	c.RunWithArgs([]string{"sql", "-e", "select * from t.t"})
+
+	// Output:
+	// sql -e create database t; create table t.t (s string);
+	// OK
+	// sql -e insert into t.t values ('κόσμε'), (e'\xc3\xb1'), (e'\x01'), (e'\xc3\x28')
+	// OK
+	// sql -e select * from t.t
+	// 4 rows
+	// s
+	// κόσμε
+	// ñ
+	// "\x01"
+	// "\xc3("
+}
+
 func Example_user() {
 	c := newCLITest()
 	defer c.stop()
