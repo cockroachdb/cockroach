@@ -108,6 +108,22 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		return err
 	}
 
+	ctx := stream.Context()
+	syncChan := make(chan struct{}, 1)
+	release := func() { syncChan <- struct{}{} }
+	send := func(reply *Response) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-syncChan:
+			defer release()
+			return stream.Send(reply)
+		}
+	}
+
+	release()
+	defer func() { <-syncChan }()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -119,7 +135,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	}
 
 	s.stopper.RunWorker(func() {
-		s.gossipSender(&args, stream.Send)
+		s.gossipSender(&args, send)
 	})
 
 	reply := new(Response)
@@ -159,7 +175,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 				}
 
 				s.mu.Unlock()
-				err := stream.Send(reply)
+				err := send(reply)
 				s.mu.Lock()
 				return err
 			}
@@ -181,7 +197,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		}
 
 		s.mu.Unlock()
-		err = stream.Send(reply)
+		err = send(reply)
 		s.mu.Lock()
 		if err != nil {
 			return err
