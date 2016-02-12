@@ -533,6 +533,22 @@ range_max_bytes: 67108864
 	// zone ls
 }
 
+// Send a query that returns control characters as a byte array. The byte
+// array is hex-encoded per the postgres docs, see:
+// http://www.postgresql.org/docs/current/static/datatype-binary.html
+func Example_sql_Hex() {
+	c := newCLITest()
+	defer c.stop()
+
+	c.RunWithArgs([]string{"sql", "-e", "select E'\\x097f'"})
+
+	// Output:
+	// sql -e select E'\x097f'
+	// 1 row
+	// e'\t7f'
+	// "\t7f"
+}
+
 func Example_sql() {
 	c := newCLITest()
 	defer c.stop()
