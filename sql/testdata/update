@@ -171,8 +171,10 @@ SELECT * FROM abc
 ----
 1 6 7
 
-statement ok
-UPDATE abc SET (b, c) = (VALUES (8, 9))
+query III
+UPDATE abc SET (b, c) = (VALUES (8, 9)) RETURNING b, c, 4
+----
+8 9 4
 
 query III
 SELECT * FROM abc
@@ -187,3 +189,7 @@ UPDATE abc SET (b, b) = (10, 11)
 
 statement error multiple assignments to same column "b"
 UPDATE abc SET (b, c) = (10, 11), b = 12
+
+# Cannot return non-specified columns.
+statement error pq: qualified name """.a" not found
+UPDATE abc SET (b, c) = (13, 14) RETURNING a

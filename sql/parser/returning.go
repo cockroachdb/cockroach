@@ -1,4 +1,4 @@
-// Copyright 2015 The Cockroach Authors.
+// Copyright 2016 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,26 +12,24 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Peter Mattis (peter@cockroachlabs.com)
-
-// This code was derived from https://github.com/youtube/vitess.
-//
-// Copyright 2012, Google Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file
+// Author: Matt Jibson (mjibson@cockroachlabs.com)
 
 package parser
 
 import "fmt"
 
-// Delete represents a DELETE statement.
-type Delete struct {
-	Table     TableExpr
-	Where     *Where
-	Returning ReturningExprs
+type ReturningExprs SelectExprs
+
+func (r ReturningExprs) String() string {
+	if len(r) == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" RETURNING %s", SelectExprs(r))
 }
 
-func (node *Delete) String() string {
-	return fmt.Sprintf("DELETE FROM %s%s%s",
-		node.Table, node.Where, node.Returning)
+func (r ReturningExprs) StatementType() StatementType {
+	if r != nil {
+		return Rows
+	}
+	return RowsAffected
 }
