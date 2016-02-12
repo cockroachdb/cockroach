@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -396,5 +398,29 @@ func TestCommonMethods(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// Verifies that a nested transaction returns an error if an inner txn
+// propagates an error to an outer txn.
+func TestNestedTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s, db := setup()
+	defer s.Stop()
+
+	txnProto := roachpb.NewTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, roachpb.Timestamp{}, 0)
+	pErr := db.Txn(func(txn1 *client.Txn) *roachpb.Error {
+		if pErr := txn1.Put("a", "1"); pErr != nil {
+			t.Fatalf("unexpected put error: %s", pErr)
+		}
+		return db.Txn(func(txn2 *client.Txn) *roachpb.Error {
+			return roachpb.NewErrorWithTxn(util.Errorf("err"), txnProto)
+		})
+	})
+	if pErr == nil {
+		t.Fatal("unexpected success of txn")
+	}
+	if !testutils.IsPError(pErr, "mismatching transaction record in the error") {
+		t.Errorf("unexpected failure: %s", pErr)
 	}
 }
