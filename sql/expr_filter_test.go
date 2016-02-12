@@ -25,6 +25,33 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
+type countVarsVisitor struct {
+	numQNames, numQValues int
+}
+
+func (v *countVarsVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
+	if !pre {
+		return nil, expr
+	}
+
+	if _, ok := expr.(*qvalue); ok {
+		v.numQValues++
+	} else if _, ok := expr.(*parser.QualifiedName); ok {
+		v.numQNames++
+	}
+
+	return v, expr
+}
+
+// countVars counts how many *QualifiedName and *qvalue nodes are in an expression.
+func countVars(expr parser.Expr) (numQNames, numQValues int) {
+	v := countVarsVisitor{}
+	if expr != nil {
+		parser.WalkExpr(&v, expr)
+	}
+	return v.numQNames, v.numQValues
+}
+
 func TestSplitFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
@@ -90,7 +117,9 @@ func TestSplitFilter(t *testing.T) {
 			colName := q.colRef.get().Name
 			for _, col := range d.columns {
 				if colName == col {
-					return q
+					// Convert to a QualifiedName (to check that conversion happens correctly). It
+					// will print the same.
+					return &parser.QualifiedName{Base: parser.Name(colName)}
 				}
 			}
 			return nil
@@ -107,6 +136,16 @@ func TestSplitFilter(t *testing.T) {
 		if resStr != d.expectedRes || remStr != d.expectedRem {
 			t.Errorf("`%s` split along (%s): expected:\n   `%s`,`%s`\ngot:\n   `%s`,`%s`",
 				d.expr, strings.Join(d.columns, ","), d.expectedRes, d.expectedRem, resStr, remStr)
+		}
+		numQNames, numQVals := countVars(res)
+		if numQVals != 0 {
+			t.Errorf("`%s` split along (%s): resulting expression `%s` has unconverted qvalues!",
+				d.expr, strings.Join(d.columns, ","), resStr)
+		}
+		numQNames, numQVals = countVars(rem)
+		if numQNames != 0 {
+			t.Errorf("`%s` split along (%s): remainder expressions `%s` has converted qvalues!",
+				d.expr, strings.Join(d.columns, ","), remStr)
 		}
 	}
 }
