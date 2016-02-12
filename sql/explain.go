@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -98,8 +99,14 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 		return t, nil
 
 	case *indexJoinNode:
-		// Replace the indexJoinNode with the index node.
-		return markDebug(t.index, mode)
+		t.explain = mode
+		// Mark both the index and the table scan nodes as debug.
+		_, err := markDebug(t.index, mode)
+		if err != nil {
+			return t, err
+		}
+		_, err = markDebug(t.table, mode)
+		return t, err
 
 	case *sortNode:
 		// Replace the sort node with the node it wraps.
@@ -150,6 +157,22 @@ const (
 	debugValueRow
 )
 
+func (t debugValueType) String() string {
+	switch t {
+	case debugValuePartial:
+		return "PARTIAL"
+
+	case debugValueFiltered:
+		return "FILTERED"
+
+	case debugValueRow:
+		return "ROW"
+
+	default:
+		panic(fmt.Sprintf("invalid debugValueType %d", t))
+	}
+}
+
 // debugValues is a set of values used to implement EXPLAIN (DEBUG).
 type debugValues struct {
 	rowIdx int
@@ -169,7 +192,7 @@ var debugColumns = []ResultColumn{
 	{Name: "RowIdx", Typ: parser.DummyInt},
 	{Name: "Key", Typ: parser.DummyString},
 	{Name: "Value", Typ: parser.DummyString},
-	{Name: "Output", Typ: parser.DummyBool},
+	{Name: "Disposition", Typ: parser.DummyString},
 }
 
 func (*explainDebugNode) Columns() []ResultColumn { return debugColumns }
@@ -190,23 +213,11 @@ func (n *explainDebugNode) Values() parser.DTuple {
 		keyVal = parser.DString(vals.key)
 	}
 
-	// The "output" value is NULL for partial rows, or a DBool indicating if the row passed the
-	// filtering.
-	outputVal := parser.DNull
-
-	switch vals.output {
-	case debugValueFiltered:
-		outputVal = parser.DBool(false)
-
-	case debugValueRow:
-		outputVal = parser.DBool(true)
-	}
-
 	return parser.DTuple{
 		parser.DInt(vals.rowIdx),
 		keyVal,
 		parser.DString(vals.value),
-		outputVal,
+		parser.DString(vals.output.String()),
 	}
 }
 

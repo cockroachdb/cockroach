@@ -153,7 +153,7 @@ func (n *scanNode) Values() parser.DTuple {
 
 func (n *scanNode) DebugValues() debugValues {
 	if n.explain != explainDebug {
-		panic("DebugValues called, node not in debug mode.")
+		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
 	}
 	return n.debugVals
 }

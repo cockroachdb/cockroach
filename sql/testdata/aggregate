@@ -544,7 +544,7 @@ SELECT STDDEV(x) FROM xyz WHERE x = 1;
 NULL
 
 # Verify we only look at one row for MIN when we have an index on that column.
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT MIN(z) FROM xyz
 ----
-0 /xyz/zyx/3.0/2/1 NULL true 
+0 /xyz/zyx/3.0/2/1 NULL ROW 

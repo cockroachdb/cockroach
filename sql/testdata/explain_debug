@@ -8,76 +8,76 @@ CREATE TABLE abc (
   INDEX bar (a)
 )
 
-query ITTB colnames
+query ITTT colnames
 EXPLAIN (DEBUG) SELECT * FROM abc
 ----
-RowIdx  Key  Value  Output
+RowIdx  Key  Value  Disposition
 
 statement ok
 INSERT INTO abc VALUES (1, 'one', 1.1), (2, 'two', NULL), (3, 'three', NULL)
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM abc
 ----
-0  /abc/primary/1/'one'    NULL  NULL
-0  /abc/primary/1/'one'/c  1.1   true
-1  /abc/primary/2/'two'    NULL  true
-2  /abc/primary/3/'three'  NULL  true
+0  /abc/primary/1/'one'    NULL  PARTIAL
+0  /abc/primary/1/'one'/c  1.1   ROW
+1  /abc/primary/2/'two'    NULL  ROW
+2  /abc/primary/3/'three'  NULL  ROW
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM abc WHERE a = 2
 ----
-0  /abc/primary/2/'two'  NULL  true
+0  /abc/primary/2/'two'  NULL  ROW
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM abc@foo
 ----
-0  /abc/foo/'one'    /1  true
-1  /abc/foo/'three'  /3  true
-2  /abc/foo/'two'    /2  true
+0  /abc/foo/'one'    /1  ROW
+1  /abc/foo/'three'  /3  ROW
+2  /abc/foo/'two'    /2  ROW
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM abc@bar
 ----
-0  /abc/bar/1/'one'    NULL  true
-1  /abc/bar/2/'two'    NULL  true
-2  /abc/bar/3/'three'  NULL  true
+0  /abc/bar/1/'one'    NULL  ROW
+1  /abc/bar/2/'two'    NULL  ROW
+2  /abc/bar/3/'three'  NULL  ROW
 
 statement ok
 UPDATE abc SET c = NULL WHERE a = 1
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM abc
 ----
-0  /abc/primary/1/'one'    NULL  true
-1  /abc/primary/2/'two'    NULL  true
-2  /abc/primary/3/'three'  NULL  true
+0  /abc/primary/1/'one'    NULL  ROW
+1  /abc/primary/2/'two'    NULL  ROW
+2  /abc/primary/3/'three'  NULL  ROW
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT 3
 ----
-0 NULL NULL true
+0 NULL NULL ROW
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) VALUES (1, 2, 3), (4, 5, 6)
 ----
-0 0 (1, 2, 3) true
-1 1 (4, 5, 6) true
+0 0 (1, 2, 3) ROW
+1 1 (4, 5, 6) ROW
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS a;
 ----
-0 0 (1, 2, 3) true
-1 1 (4, 5, 6) true
+0 0 (1, 2, 3) ROW
+1 1 (4, 5, 6) ROW
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM (SELECT * FROM abc) AS sub WHERE a = 2;
 ----
-0  /abc/primary/1/'one'    NULL  false
-1  /abc/primary/2/'two'    NULL  true
-2  /abc/primary/3/'three'  NULL  false
+0  /abc/primary/1/'one'    NULL  FILTERED
+1  /abc/primary/2/'two'    NULL  ROW
+2  /abc/primary/3/'three'  NULL  FILTERED
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM (SELECT * FROM abc WHERE a = 2) AS sub;
 ----
-0  /abc/primary/2/'two'    NULL  true
+0  /abc/primary/2/'two'    NULL  ROW
