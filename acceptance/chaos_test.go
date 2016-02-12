@@ -231,7 +231,7 @@ CREATE TABLE bank.accounts (
 
 			// Sleep until at least one client is writing successfully.
 			log.Warningf("round %d: monkey sleeping while cluster recovers...", curRound)
-			for !madeProgress() {
+			for !done() && !madeProgress() {
 				time.Sleep(time.Second)
 			}
 			log.Warningf("round %d: cluster recovered", curRound)
