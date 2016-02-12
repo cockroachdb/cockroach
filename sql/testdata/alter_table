@@ -7,7 +7,7 @@ INSERT INTO t VALUES (1)
 query ITTT colnames
 EXPLAIN (DEBUG) SELECT * FROM t
 ----
-RowIdx Key          Value Type
+RowIdx Key          Value Disposition
 0      /t/primary/1 NULL  ROW
 
 user testuser
@@ -100,7 +100,7 @@ t      primary  true    1    a       ASC        false
 query ITTT colnames
 EXPLAIN (DEBUG) SELECT * FROM t
 ----
-RowIdx  Key             Value  Type
+RowIdx  Key             Value  Disposition
 0       /t/primary/1    NULL   ROW
 1       /t/primary/2    NULL   PARTIAL
 1       /t/primary/2/b  1      PARTIAL
@@ -115,7 +115,7 @@ ALTER TABLE t DROP b, DROP c
 query ITTT colnames
 EXPLAIN (DEBUG) SELECT * FROM t
 ----
-RowIdx  Key             Value  Type
+RowIdx  Key             Value  Disposition
 0       /t/primary/1    NULL   ROW
 1       /t/primary/2    NULL   ROW
 2       /t/primary/3    NULL   ROW

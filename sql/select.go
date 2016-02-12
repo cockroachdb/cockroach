@@ -95,7 +95,7 @@ func (s *selectNode) Values() parser.DTuple {
 
 func (s *selectNode) DebugValues() debugValues {
 	if s.explain != explainDebug {
-		panic("DebugValues called, node not in debug mode.")
+		panic("node not in debug mode")
 	}
 	return s.debugVals
 }

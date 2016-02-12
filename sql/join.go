@@ -103,7 +103,7 @@ func (n *indexJoinNode) Values() parser.DTuple {
 
 func (n *indexJoinNode) DebugValues() debugValues {
 	if n.explain != explainDebug {
-		panic("DebugValues called, node not in debug mode.")
+		panic("node not in debug mode")
 	}
 	return n.debugVals
 }

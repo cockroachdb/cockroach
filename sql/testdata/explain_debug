@@ -11,7 +11,7 @@ CREATE TABLE abc (
 query ITTT colnames
 EXPLAIN (DEBUG) SELECT * FROM abc
 ----
-RowIdx  Key  Value  Type
+RowIdx  Key  Value  Disposition
 
 statement ok
 INSERT INTO abc VALUES (1, 'one', 1.1), (2, 'two', NULL), (3, 'three', NULL)

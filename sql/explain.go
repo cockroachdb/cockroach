@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -156,6 +157,22 @@ const (
 	debugValueRow
 )
 
+func (t debugValueType) String() string {
+	switch t {
+	case debugValuePartial:
+		return "PARTIAL"
+
+	case debugValueFiltered:
+		return "FILTERED"
+
+	case debugValueRow:
+		return "ROW"
+
+	default:
+		panic(fmt.Sprintf("invalid debugValueType %d", t))
+	}
+}
+
 // debugValues is a set of values used to implement EXPLAIN (DEBUG).
 type debugValues struct {
 	rowIdx int
@@ -175,7 +192,7 @@ var debugColumns = []ResultColumn{
 	{Name: "RowIdx", Typ: parser.DummyInt},
 	{Name: "Key", Typ: parser.DummyString},
 	{Name: "Value", Typ: parser.DummyString},
-	{Name: "Type", Typ: parser.DummyString},
+	{Name: "Disposition", Typ: parser.DummyString},
 }
 
 func (*explainDebugNode) Columns() []ResultColumn { return debugColumns }
@@ -196,26 +213,11 @@ func (n *explainDebugNode) Values() parser.DTuple {
 		keyVal = parser.DString(vals.key)
 	}
 
-	// The "output" value is NULL for partial rows, or a DBool indicating if the row passed the
-	// filtering.
-	var outputVal parser.DString
-
-	switch vals.output {
-	case debugValuePartial:
-		outputVal = parser.DString("PARTIAL")
-
-	case debugValueFiltered:
-		outputVal = parser.DString("FILTERED")
-
-	case debugValueRow:
-		outputVal = parser.DString("ROW")
-	}
-
 	return parser.DTuple{
 		parser.DInt(vals.rowIdx),
 		keyVal,
 		parser.DString(vals.value),
-		outputVal,
+		parser.DString(vals.output.String()),
 	}
 }
 
