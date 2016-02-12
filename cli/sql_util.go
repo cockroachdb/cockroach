@@ -22,7 +22,6 @@ import (
 	"io"
 	"net"
 	"net/url"
-	"unicode/utf8"
 
 	// Import postgres driver.
 	_ "github.com/lib/pq"
@@ -174,9 +173,18 @@ func formatVal(val interface{}) string {
 	case nil:
 		return "NULL"
 	case []byte:
-		if !utf8.Valid(t) {
-			// Ensure that protobufs containing non-UTF8 binary data print escaped.
-			return fmt.Sprintf("%q", t)
+		// Ensure that buffers containing non-printable ASCII characters print escaped.
+		printable := true
+		for _, b := range t {
+			// Printable ASCII characters are between 0x20 and 0x7E.
+			if b < 0x20 || b > 0x7E {
+				printable = false
+				break
+			}
+		}
+		if !printable {
+			// We use %+q to ensure the output contains only ASCII (see issue #4315).
+			return fmt.Sprintf("%+q", t)
 		}
 		return string(t)
 	}
