@@ -626,9 +626,9 @@ func goToCSlice(b []byte) C.DBSlice {
 
 func goToCKey(key MVCCKey) C.DBKey {
 	return C.DBKey{
-		key:      goToCSlice(key.Key),
-		walltime: C.int64_t(key.Timestamp.WallTime),
-		logical:  C.int32_t(key.Timestamp.Logical),
+		key:       goToCSlice(key.Key),
+		wall_time: C.int64_t(key.Timestamp.WallTime),
+		logical:   C.int32_t(key.Timestamp.Logical),
 	}
 }
 
@@ -636,7 +636,7 @@ func cToGoKey(key C.DBKey) MVCCKey {
 	return MVCCKey{
 		Key: cSliceToGoBytes(key.key),
 		Timestamp: roachpb.Timestamp{
-			WallTime: int64(key.walltime),
+			WallTime: int64(key.wall_time),
 			Logical:  int32(key.logical),
 		},
 	}
@@ -646,7 +646,7 @@ func cToUnsafeGoKey(key C.DBKey) MVCCKey {
 	return MVCCKey{
 		Key: cSliceToUnsafeGoBytes(key.key),
 		Timestamp: roachpb.Timestamp{
-			WallTime: int64(key.walltime),
+			WallTime: int64(key.wall_time),
 			Logical:  int32(key.logical),
 		},
 	}

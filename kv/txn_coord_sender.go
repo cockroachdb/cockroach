@@ -777,7 +777,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 				panic("tracking a non-writing txn")
 			}
 			txnMeta.setLastUpdate(tc.clock.PhysicalNow())
-			// Adding the intents even on error reduces the likelyhood of dangling
+			// Adding the intents even on error reduces the likelihood of dangling
 			// intents blocking concurrent writers for extended periods of time.
 			// See #3346.
 			for _, intent := range intents {

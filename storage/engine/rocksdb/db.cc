@@ -165,19 +165,19 @@ rocksdb::Slice ToSlice(DBString s) {
 
 const int kMVCCVersionTimestampSize = 12;
 
-// MVCC keys are encoded as <key>[<walltime>[<logical>]]<#timestamp-bytes>. A
+// MVCC keys are encoded as <key>[<wall_time>[<logical>]]<#timestamp-bytes>. A
 // custom RocksDB comparator (DBComparator) is used to maintain the desired
 // ordering as these keys do not sort lexicographically correctly.
 std::string EncodeKey(DBKey k) {
   std::string s;
-  const bool ts = k.walltime != 0 || k.logical != 0;
+  const bool ts = k.wall_time != 0 || k.logical != 0;
   s.reserve(k.key.len + 1 + (ts ? 1 + kMVCCVersionTimestampSize : 0));
   s.append(k.key.data, k.key.len);
   if (ts) {
     // Add a NUL prefix to the timestamp data. See DBPrefixExtractor.Transform
     // for more details.
     s.push_back(0);
-    EncodeUint64(&s, uint64_t(k.walltime));
+    EncodeUint64(&s, uint64_t(k.wall_time));
     if (k.logical != 0) {
       // TODO(peter): Use varint encoding here. Logical values will
       // usually be small.
@@ -219,7 +219,7 @@ bool SplitKey(rocksdb::Slice buf, rocksdb::Slice *key, rocksdb::Slice *timestamp
   return true;
 }
 
-bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice *key, int64_t *walltime, int32_t *logical) {
+bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice *key, int64_t *wall_time, int32_t *logical) {
   key->clear();
 
   rocksdb::Slice timestamp;
@@ -232,7 +232,7 @@ bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice *key, int64_t *walltime, int32
     if (!DecodeUint64(&timestamp, &w)) {
       return false;
     }
-    *walltime = int64_t(w);
+    *wall_time = int64_t(w);
     *logical = 0;
     if (timestamp.size() > 0) {
       // TODO(peter): Use varint decoding here.
@@ -289,7 +289,7 @@ DBIterState DBIterGetState(DBIterator* iter) {
   state.valid = iter->rep->Valid();
   state.key.key.data = NULL;
   state.key.key.len = 0;
-  state.key.walltime = 0;
+  state.key.wall_time = 0;
   state.key.logical = 0;
   state.value.data = NULL;
   state.value.len = 0;
@@ -297,7 +297,7 @@ DBIterState DBIterGetState(DBIterator* iter) {
   if (state.valid) {
     rocksdb::Slice key;
     state.valid = DecodeKey(iter->rep->key(), &key,
-                            &state.key.walltime, &state.key.logical);
+                            &state.key.wall_time, &state.key.logical);
     if (state.valid) {
       state.key.key = ToDBSlice(key);
       state.value = ToDBSlice(iter->rep->value());
@@ -1551,15 +1551,15 @@ MVCCStatsResult MVCCComputeStats(
     const rocksdb::Slice value = iter_rep->value();
 
     rocksdb::Slice decoded_key;
-    int64_t walltime = 0;
+    int64_t wall_time = 0;
     int32_t logical = 0;
-    if (!DecodeKey(key, &decoded_key, &walltime, &logical)) {
+    if (!DecodeKey(key, &decoded_key, &wall_time, &logical)) {
       stats.status = FmtStatus("unable to decode key");
       break;
     }
 
     const bool isSys = (rocksdb::Slice(decoded_key).compare(kKeyLocalMax) < 0);
-    const bool isValue = (walltime != 0 || logical != 0);
+    const bool isValue = (wall_time != 0 || logical != 0);
     const bool implicitMeta = isValue && decoded_key != prev_key;
     prev_key.assign(decoded_key.data(), decoded_key.size());
 
@@ -1569,7 +1569,7 @@ MVCCStatsResult MVCCComputeStats(
       meta.set_key_bytes(kMVCCVersionTimestampSize);
       meta.set_val_bytes(value.size());
       meta.set_deleted(value.size() == 0);
-      meta.mutable_timestamp()->set_wall_time(walltime);
+      meta.mutable_timestamp()->set_wall_time(wall_time);
     }
 
     if (!isValue || implicitMeta) {
@@ -1632,7 +1632,7 @@ MVCCStatsResult MVCCComputeStats(
           break;
         }
       } else {
-        stats.gc_bytes_age += total_bytes * age_factor(walltime, now_nanos);
+        stats.gc_bytes_age += total_bytes * age_factor(wall_time, now_nanos);
       }
       stats.key_bytes += kMVCCVersionTimestampSize;
       stats.val_bytes += value.size();

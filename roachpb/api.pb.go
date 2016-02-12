@@ -815,7 +815,7 @@ func (*MergeResponse) ProtoMessage()    {}
 // is no requirement for correctness that the raft log truncation be synchronized across
 // replicas, it is nice to preserve the property that all replicas of a range are as close
 // to identical as possible. The raft leader can also inform decisions about the cutoff point
-// with its knowledge of the replicas' acknowledgement status.
+// with its knowledge of the replicas' acknowledgment status.
 type TruncateLogRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// Log entries < this index are to be discarded.

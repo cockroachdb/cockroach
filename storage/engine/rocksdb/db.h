@@ -39,7 +39,7 @@ typedef struct {
 
 typedef struct {
   DBSlice key;
-  int64_t walltime;
+  int64_t wall_time;
   int32_t logical;
 } DBKey;
 

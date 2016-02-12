@@ -792,7 +792,7 @@ var putBufferPool = sync.Pool{
 // key metadata. The timestamp must be passed as a parameter; using
 // the Timestamp field on the value results in an error.
 //
-// If the timestamp is specifed as roachpb.ZeroTimestamp, the value is
+// If the timestamp is specified as roachpb.ZeroTimestamp, the value is
 // inlined instead of being written as a timestamp-versioned value. A
 // zero timestamp write to a key precludes a subsequent write using a
 // non-zero timestamp and vice versa. Inlined values require only a

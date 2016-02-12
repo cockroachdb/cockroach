@@ -81,7 +81,7 @@ func SetFromFloat(z *inf.Dec, f float64) *inf.Dec {
 }
 
 // Float64FromDec converts a decimal to a float64 value, returning
-// the value and any error that occured. This converson exposes a
+// the value and any error that occurred. This converson exposes a
 // possible loss of information.
 func Float64FromDec(dec *inf.Dec) (float64, error) {
 	return strconv.ParseFloat(dec.String(), 64)

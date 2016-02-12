@@ -228,7 +228,7 @@ func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *roachpb.RangeDes
 		return AllocatorRemoveDead, removeDeadReplicaPriority + float64(quorum-liveReplicas)
 	}
 
-	// TODO(mrtracy): Handle non-homogenous and mismatched attribute sets.
+	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
 	need := len(zone.ReplicaAttrs)
 	have := len(desc.Replicas)
 	if have < need {

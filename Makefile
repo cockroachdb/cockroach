@@ -167,6 +167,8 @@ dupl:
 
 .PHONY: check
 check:
+	@echo "misspell"
+	@! git ls-files | xargs misspell | grep -vF 'causally'
 	@echo "checking for tabs in shell scripts"
 	@! git grep -F '	' -- '*.sh'
 	@echo "checking for forbidden imports"

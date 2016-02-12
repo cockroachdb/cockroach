@@ -139,7 +139,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	tracer := tracing.NewTracer()
 
 	// A custom RetryOptions is created which uses stopper.ShouldDrain() as
-	// the Closer. This prevents infinite retry loops from occuring during
+	// the Closer. This prevents infinite retry loops from occurring during
 	// graceful server shutdown
 	//
 	// Such a loop loop occurs with the DistSender attempts a connection to the
