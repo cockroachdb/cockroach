@@ -4,11 +4,11 @@ CREATE TABLE t (a INT PRIMARY KEY)
 statement ok
 INSERT INTO t VALUES (1)
 
-query ITTB colnames
+query ITTT colnames
 EXPLAIN (DEBUG) SELECT * FROM t
 ----
-RowIdx Key          Value Output
-0      /t/primary/1 NULL  true
+RowIdx Key          Value Disposition
+0      /t/primary/1 NULL  ROW
 
 user testuser
 
@@ -23,17 +23,17 @@ ALTER TABLE t ADD b INT
 query TTBT colnames
 SHOW COLUMNS FROM t
 ----
-Field Type Null Default
+Field Type Null  Default
 a     INT  false NULL
-b     INT  true NULL
+b     INT  true  NULL
 
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t@foo
 ----
-0 /t/foo/NULL /1 true
+0 /t/foo/NULL /1 ROW
 
 statement error duplicate index name: "foo"
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
@@ -97,28 +97,28 @@ SHOW INDEX FROM t
 Table  Name     Unique  Seq  Column  Direction  Storing
 t      primary  true    1    a       ASC        false
 
-query ITTB colnames
+query ITTT colnames
 EXPLAIN (DEBUG) SELECT * FROM t
 ----
-RowIdx  Key             Value  Output
-0       /t/primary/1    NULL   true
-1       /t/primary/2    NULL   NULL
-1       /t/primary/2/b  1      NULL
-1       /t/primary/2/c  1      true
-2       /t/primary/3    NULL   NULL
-2       /t/primary/3/b  2      NULL
-2       /t/primary/3/c  1      true
+RowIdx  Key             Value  Disposition
+0       /t/primary/1    NULL   ROW
+1       /t/primary/2    NULL   PARTIAL
+1       /t/primary/2/b  1      PARTIAL
+1       /t/primary/2/c  1      ROW
+2       /t/primary/3    NULL   PARTIAL
+2       /t/primary/3/b  2      PARTIAL
+2       /t/primary/3/c  1      ROW
 
 statement ok
 ALTER TABLE t DROP b, DROP c
 
-query ITTB colnames
+query ITTT colnames
 EXPLAIN (DEBUG) SELECT * FROM t
 ----
-RowIdx  Key             Value  Output
-0       /t/primary/1    NULL   true
-1       /t/primary/2    NULL   true
-2       /t/primary/3    NULL   true
+RowIdx  Key             Value  Disposition
+0       /t/primary/1    NULL   ROW
+1       /t/primary/2    NULL   ROW
+2       /t/primary/3    NULL   ROW
 
 statement ok
 ALTER TABLE t ADD d INT UNIQUE

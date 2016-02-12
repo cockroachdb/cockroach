@@ -7,11 +7,11 @@ CREATE TABLE t (
 statement ok
 INSERT INTO t VALUES (1,1)
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t
 ----
-0  /t/primary/1    NULL  NULL
-0  /t/primary/1/b  1     true
+0  /t/primary/1    NULL  PARTIAL
+0  /t/primary/1/b  1     ROW
 
 user testuser
 
@@ -36,19 +36,19 @@ Table Name    Unique Seq Column Direction Storing
 t     primary true   1   a      ASC       false
 t     foo     false  1   b      ASC       false
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t@foo
 ----
-0  /t/foo/1/1  NULL  true
+0  /t/foo/1/1  NULL  ROW
 
 statement ok
 INSERT INTO t VALUES (2,1)
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t@foo
 ----
-0  /t/foo/1/1  NULL  true
-1  /t/foo/1/2  NULL  true
+0  /t/foo/1/1  NULL  ROW
+1  /t/foo/1/2  NULL  ROW
 
 statement error duplicate key value \(b\)=\(1\) violates unique constraint "bar"
 CREATE UNIQUE INDEX bar ON t (b)
@@ -60,11 +60,11 @@ Table Name    Unique Seq Column Direction Storing
 t     primary true   1   a      ASC       false
 t     foo     false  1   b      ASC       false
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t@foo
 ----
-0  /t/foo/1/1  NULL  true
-1  /t/foo/1/2  NULL  true
+0  /t/foo/1/1  NULL  ROW
+1  /t/foo/1/2  NULL  ROW
 
 # test for DESC index
 

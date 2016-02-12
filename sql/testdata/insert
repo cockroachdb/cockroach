@@ -36,140 +36,140 @@ INSERT INTO kv (k,v) VALUES ('a', 'b'), ('c', 'd')
 statement ok
 INSERT INTO kv VALUES ('e', 'f'), ('g', '')
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM kv
 ----
-0  /kv/primary/'A'     NULL  true
-1  /kv/primary/'a'     NULL  NULL
-1  /kv/primary/'a'/v   'b'   true
-2  /kv/primary/'c'     NULL  NULL
-2  /kv/primary/'c'/v   'd'   true
-3  /kv/primary/'e'     NULL  NULL
-3  /kv/primary/'e'/v   'f'   true
-4  /kv/primary/'g'     NULL  NULL
-4  /kv/primary/'g'/v   ''    true
-5  /kv/primary/'nil1'  NULL  true
-6  /kv/primary/'nil2'  NULL  true
-7  /kv/primary/'nil3'  NULL  true
-8  /kv/primary/'nil4'  NULL  true
+0  /kv/primary/'A'     NULL  ROW
+1  /kv/primary/'a'     NULL  PARTIAL
+1  /kv/primary/'a'/v   'b'   ROW
+2  /kv/primary/'c'     NULL  PARTIAL
+2  /kv/primary/'c'/v   'd'   ROW
+3  /kv/primary/'e'     NULL  PARTIAL
+3  /kv/primary/'e'/v   'f'   ROW
+4  /kv/primary/'g'     NULL  PARTIAL
+4  /kv/primary/'g'/v   ''    ROW
+5  /kv/primary/'nil1'  NULL  ROW
+6  /kv/primary/'nil2'  NULL  ROW
+7  /kv/primary/'nil3'  NULL  ROW
+8  /kv/primary/'nil4'  NULL  ROW
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM kv@a
 ----
-0  /kv/a/NULL /'A'     true
-1  /kv/a/NULL /'nil1'  true
-2  /kv/a/NULL /'nil2'  true
-3  /kv/a/NULL /'nil3'  true
-4  /kv/a/NULL /'nil4'  true
-5  /kv/a/''   /'g'     true
-6  /kv/a/'b'  /'a'     true
-7  /kv/a/'d'  /'c'     true
-8  /kv/a/'f'  /'e'     true
+0  /kv/a/NULL /'A'     ROW
+1  /kv/a/NULL /'nil1'  ROW
+2  /kv/a/NULL /'nil2'  ROW
+3  /kv/a/NULL /'nil3'  ROW
+4  /kv/a/NULL /'nil4'  ROW
+5  /kv/a/''   /'g'     ROW
+6  /kv/a/'b'  /'a'     ROW
+7  /kv/a/'d'  /'c'     ROW
+8  /kv/a/'f'  /'e'     ROW
 
 statement error duplicate key value \(v\)=\('f'\) violates unique constraint "a"
 INSERT INTO kv VALUES ('e', 'f')
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM kv
 ----
-0  /kv/primary/'A'     NULL  true
-1  /kv/primary/'a'     NULL  NULL
-1  /kv/primary/'a'/v   'b'   true
-2  /kv/primary/'c'     NULL  NULL
-2  /kv/primary/'c'/v   'd'   true
-3  /kv/primary/'e'     NULL  NULL
-3  /kv/primary/'e'/v   'f'   true
-4  /kv/primary/'g'     NULL  NULL
-4  /kv/primary/'g'/v   ''    true
-5  /kv/primary/'nil1'  NULL  true
-6  /kv/primary/'nil2'  NULL  true
-7  /kv/primary/'nil3'  NULL  true
-8  /kv/primary/'nil4'  NULL  true
+0  /kv/primary/'A'     NULL  ROW
+1  /kv/primary/'a'     NULL  PARTIAL
+1  /kv/primary/'a'/v   'b'   ROW
+2  /kv/primary/'c'     NULL  PARTIAL
+2  /kv/primary/'c'/v   'd'   ROW
+3  /kv/primary/'e'     NULL  PARTIAL
+3  /kv/primary/'e'/v   'f'   ROW
+4  /kv/primary/'g'     NULL  PARTIAL
+4  /kv/primary/'g'/v   ''    ROW
+5  /kv/primary/'nil1'  NULL  ROW
+6  /kv/primary/'nil2'  NULL  ROW
+7  /kv/primary/'nil3'  NULL  ROW
+8  /kv/primary/'nil4'  NULL  ROW
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM kv@a
 ----
-0  /kv/a/NULL /'A'     true
-1  /kv/a/NULL /'nil1'  true
-2  /kv/a/NULL /'nil2'  true
-3  /kv/a/NULL /'nil3'  true
-4  /kv/a/NULL /'nil4'  true
-5  /kv/a/''   /'g'     true
-6  /kv/a/'b'  /'a'     true
-7  /kv/a/'d'  /'c'     true
-8  /kv/a/'f'  /'e'     true
+0  /kv/a/NULL /'A'     ROW
+1  /kv/a/NULL /'nil1'  ROW
+2  /kv/a/NULL /'nil2'  ROW
+3  /kv/a/NULL /'nil3'  ROW
+4  /kv/a/NULL /'nil4'  ROW
+5  /kv/a/''   /'g'     ROW
+6  /kv/a/'b'  /'a'     ROW
+7  /kv/a/'d'  /'c'     ROW
+8  /kv/a/'f'  /'e'     ROW
 
 statement ok
 INSERT INTO kv VALUES ('f', 'g')
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM kv
 ----
-0  /kv/primary/'A'     NULL  true
-1  /kv/primary/'a'     NULL  NULL
-1  /kv/primary/'a'/v   'b'   true
-2  /kv/primary/'c'     NULL  NULL
-2  /kv/primary/'c'/v   'd'   true
-3  /kv/primary/'e'     NULL  NULL
-3  /kv/primary/'e'/v   'f'   true
-4  /kv/primary/'f'     NULL  NULL
-4  /kv/primary/'f'/v   'g'   true
-5  /kv/primary/'g'     NULL  NULL
-5  /kv/primary/'g'/v   ''    true
-6  /kv/primary/'nil1'  NULL  true
-7  /kv/primary/'nil2'  NULL  true
-8  /kv/primary/'nil3'  NULL  true
-9  /kv/primary/'nil4'  NULL  true
+0  /kv/primary/'A'     NULL  ROW
+1  /kv/primary/'a'     NULL  PARTIAL
+1  /kv/primary/'a'/v   'b'   ROW
+2  /kv/primary/'c'     NULL  PARTIAL
+2  /kv/primary/'c'/v   'd'   ROW
+3  /kv/primary/'e'     NULL  PARTIAL
+3  /kv/primary/'e'/v   'f'   ROW
+4  /kv/primary/'f'     NULL  PARTIAL
+4  /kv/primary/'f'/v   'g'   ROW
+5  /kv/primary/'g'     NULL  PARTIAL
+5  /kv/primary/'g'/v   ''    ROW
+6  /kv/primary/'nil1'  NULL  ROW
+7  /kv/primary/'nil2'  NULL  ROW
+8  /kv/primary/'nil3'  NULL  ROW
+9  /kv/primary/'nil4'  NULL  ROW
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM kv@a
 ----
-0  /kv/a/NULL /'A'     true
-1  /kv/a/NULL /'nil1'  true
-2  /kv/a/NULL /'nil2'  true
-3  /kv/a/NULL /'nil3'  true
-4  /kv/a/NULL /'nil4'  true
-5  /kv/a/''   /'g'     true
-6  /kv/a/'b'  /'a'     true
-7  /kv/a/'d'  /'c'     true
-8  /kv/a/'f'  /'e'     true
-9  /kv/a/'g'  /'f'     true
+0  /kv/a/NULL /'A'     ROW
+1  /kv/a/NULL /'nil1'  ROW
+2  /kv/a/NULL /'nil2'  ROW
+3  /kv/a/NULL /'nil3'  ROW
+4  /kv/a/NULL /'nil4'  ROW
+5  /kv/a/''   /'g'     ROW
+6  /kv/a/'b'  /'a'     ROW
+7  /kv/a/'d'  /'c'     ROW
+8  /kv/a/'f'  /'e'     ROW
+9  /kv/a/'g'  /'f'     ROW
 
 statement error duplicate key value \(v\)=\('g'\) violates unique constraint "a"
 INSERT INTO kv VALUES ('h', 'g')
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM kv
 ----
-0  /kv/primary/'A'     NULL  true
-1  /kv/primary/'a'     NULL  NULL
-1  /kv/primary/'a'/v   'b'   true
-2  /kv/primary/'c'     NULL  NULL
-2  /kv/primary/'c'/v   'd'   true
-3  /kv/primary/'e'     NULL  NULL
-3  /kv/primary/'e'/v   'f'   true
-4  /kv/primary/'f'     NULL  NULL
-4  /kv/primary/'f'/v   'g'   true
-5  /kv/primary/'g'     NULL  NULL
-5  /kv/primary/'g'/v   ''    true
-6  /kv/primary/'nil1'  NULL  true
-7  /kv/primary/'nil2'  NULL  true
-8  /kv/primary/'nil3'  NULL  true
-9  /kv/primary/'nil4'  NULL  true
+0  /kv/primary/'A'     NULL  ROW
+1  /kv/primary/'a'     NULL  PARTIAL
+1  /kv/primary/'a'/v   'b'   ROW
+2  /kv/primary/'c'     NULL  PARTIAL
+2  /kv/primary/'c'/v   'd'   ROW
+3  /kv/primary/'e'     NULL  PARTIAL
+3  /kv/primary/'e'/v   'f'   ROW
+4  /kv/primary/'f'     NULL  PARTIAL
+4  /kv/primary/'f'/v   'g'   ROW
+5  /kv/primary/'g'     NULL  PARTIAL
+5  /kv/primary/'g'/v   ''    ROW
+6  /kv/primary/'nil1'  NULL  ROW
+7  /kv/primary/'nil2'  NULL  ROW
+8  /kv/primary/'nil3'  NULL  ROW
+9  /kv/primary/'nil4'  NULL  ROW
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM kv@a
 ----
-0  /kv/a/NULL /'A'     true
-1  /kv/a/NULL /'nil1'  true
-2  /kv/a/NULL /'nil2'  true
-3  /kv/a/NULL /'nil3'  true
-4  /kv/a/NULL /'nil4'  true
-5  /kv/a/''   /'g'     true
-6  /kv/a/'b'  /'a'     true
-7  /kv/a/'d'  /'c'     true
-8  /kv/a/'f'  /'e'     true
-9  /kv/a/'g'  /'f'     true
+0  /kv/a/NULL /'A'     ROW
+1  /kv/a/NULL /'nil1'  ROW
+2  /kv/a/NULL /'nil2'  ROW
+3  /kv/a/NULL /'nil3'  ROW
+4  /kv/a/NULL /'nil4'  ROW
+5  /kv/a/''   /'g'     ROW
+6  /kv/a/'b'  /'a'     ROW
+7  /kv/a/'d'  /'c'     ROW
+8  /kv/a/'f'  /'e'     ROW
+9  /kv/a/'g'  /'f'     ROW
 
 query TT
 SELECT * FROM kv
@@ -281,10 +281,10 @@ CREATE TABLE kv5 (
 statement ok
 INSERT INTO kv5 VALUES('a', NULL)
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM kv5@a
 ----
-0 /kv5/a/NULL/'a' true
+0 /kv5/a/NULL/'a' ROW
 
 query TT
 SELECT * FROM kv5@a

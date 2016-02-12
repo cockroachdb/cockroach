@@ -53,49 +53,49 @@ c   d
 e   f
 f   g
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM kv2
 ----
-0  /kv2/primary/'a'    NULL  NULL
-0  /kv2/primary/'a'/v  'b'   true
-1  /kv2/primary/'c'    NULL  NULL
-1  /kv2/primary/'c'/v  'd'   true
-2  /kv2/primary/'e'    NULL  NULL
-2  /kv2/primary/'e'/v  'f'   true
-3  /kv2/primary/'f'    NULL  NULL
-3  /kv2/primary/'f'/v  'g'   true
+0  /kv2/primary/'a'    NULL  PARTIAL
+0  /kv2/primary/'a'/v  'b'   ROW
+1  /kv2/primary/'c'    NULL  PARTIAL
+1  /kv2/primary/'c'/v  'd'   ROW
+2  /kv2/primary/'e'    NULL  PARTIAL
+2  /kv2/primary/'e'/v  'f'   ROW
+3  /kv2/primary/'f'    NULL  PARTIAL
+3  /kv2/primary/'f'/v  'g'   ROW
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM kv2@a
 ----
-0  /kv2/a/'b'  /'a'  true
-1  /kv2/a/'d'  /'c'  true
-2  /kv2/a/'f'  /'e'  true
-3  /kv2/a/'g'  /'f'  true
+0  /kv2/a/'b'  /'a'  ROW
+1  /kv2/a/'d'  /'c'  ROW
+2  /kv2/a/'f'  /'e'  ROW
+3  /kv2/a/'g'  /'f'  ROW
 
 
 statement error duplicate key value \(v\)=\('g'\) violates unique constraint "a"
 UPDATE kv2 SET v = 'g' WHERE k IN ('a')
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM kv2
 ----
-0  /kv2/primary/'a'    NULL  NULL
-0  /kv2/primary/'a'/v  'b'   true
-1  /kv2/primary/'c'    NULL  NULL
-1  /kv2/primary/'c'/v  'd'   true
-2  /kv2/primary/'e'    NULL  NULL
-2  /kv2/primary/'e'/v  'f'   true
-3  /kv2/primary/'f'    NULL  NULL
-3  /kv2/primary/'f'/v  'g'   true
+0  /kv2/primary/'a'    NULL  PARTIAL
+0  /kv2/primary/'a'/v  'b'   ROW
+1  /kv2/primary/'c'    NULL  PARTIAL
+1  /kv2/primary/'c'/v  'd'   ROW
+2  /kv2/primary/'e'    NULL  PARTIAL
+2  /kv2/primary/'e'/v  'f'   ROW
+3  /kv2/primary/'f'    NULL  PARTIAL
+3  /kv2/primary/'f'/v  'g'   ROW
 
-query ITTB
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM kv2@a
 ----
-0  /kv2/a/'b'  /'a'  true
-1  /kv2/a/'d'  /'c'  true
-2  /kv2/a/'f'  /'e'  true
-3  /kv2/a/'g'  /'f'  true
+0  /kv2/a/'b'  /'a'  ROW
+1  /kv2/a/'d'  /'c'  ROW
+2  /kv2/a/'f'  /'e'  ROW
+3  /kv2/a/'g'  /'f'  ROW
 
 statement ok
 UPDATE kv2 SET v = 'i' WHERE k IN ('a')
