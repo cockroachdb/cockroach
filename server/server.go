@@ -29,6 +29,9 @@ import (
 	"sync"
 	"time"
 
+	assetfs "github.com/elazarl/go-bindata-assetfs"
+	"google.golang.org/grpc"
+
 	snappy "github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -43,12 +46,12 @@ import (
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/ui"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
-	assetfs "github.com/elazarl/go-bindata-assetfs"
 )
 
 var (
@@ -69,6 +72,7 @@ type Server struct {
 	clock         *hlc.Clock
 	rpcContext    *crpc.Context
 	rpc           *crpc.Server
+	grpc          *grpc.Server
 	gossip        *gossip.Gossip
 	storePool     *storage.StorePool
 	db            *client.DB
@@ -238,7 +242,8 @@ func (s *Server) Start() error {
 
 	s.rpcContext.SetLocalServer(s.rpc, unresolvedAddr.String())
 
-	s.gossip.Start(s.rpc, unresolvedAddr)
+	s.grpc = grpc.NewServer()
+	s.gossip.Start(s.grpc, unresolvedAddr)
 
 	if err := s.node.start(s.rpc, unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
 		return err
@@ -273,8 +278,13 @@ func (s *Server) Start() error {
 func (s *Server) initHTTP() {
 	s.mux.Handle(rpc.DefaultRPCPath, s.rpc)
 
-	s.mux.Handle("/", http.FileServer(
-		&assetfs.AssetFS{Asset: ui.Asset, AssetDir: ui.AssetDir, AssetInfo: ui.AssetInfo}))
+	s.mux.Handle("/", grpcutil.GRPCHandlerFunc(s.grpc, http.FileServer(
+		&assetfs.AssetFS{
+			Asset:     ui.Asset,
+			AssetDir:  ui.AssetDir,
+			AssetInfo: ui.AssetInfo,
+		},
+	)))
 
 	// The admin server handles both /debug/ and /_admin/
 	// TODO(marc): when cookie-based authentication exists,

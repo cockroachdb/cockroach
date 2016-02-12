@@ -47,13 +47,10 @@ message Request {
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
   // Address of the requesting client.
   util.UnresolvedAddr addr = 2 [(gogoproto.nullable) = false];
-  // Local address of client on requesting node (this is a kludge to
-  // allow gossip to know when client connections are dropped).
-  util.UnresolvedAddr l_addr = 3 [(gogoproto.nullable) = false];
   // Map of information about other nodes, as seen by the requester.
-  map<int32, Node> nodes = 4;
+  map<int32, Node> nodes = 3;
   // Delta of Infos originating at sender.
-  map<string, Info> delta = 5;
+  map<string, Info> delta = 4;
 }
 
 // Response is returned from the Gossip.Gossip RPC.
@@ -92,4 +89,8 @@ message Info {
   // Peer node ID which passed this info.
   int32 peer_id = 6 [(gogoproto.customname) = "PeerID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
+}
+
+service Gossip {
+  rpc Gossip (stream Request) returns (stream Response) {}
 }
