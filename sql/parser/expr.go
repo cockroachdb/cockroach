@@ -42,6 +42,8 @@ type Expr interface {
 	// WalkExpr. For example, ValArg should be replace by the argument passed from
 	// the client.
 	Eval(EvalContext) (Datum, error)
+	// DeepCopy returns a new copy of the entire expression.
+	DeepCopy() Expr
 }
 
 // VariableExpr is an Expr that may change per row. It is used to
