@@ -11,7 +11,7 @@ features. The primary design goal is **global consistency and
 survivability**, hence the name. Cockroach aims to tolerate disk,
 machine, rack, and even **datacenter failures** with minimal latency
 disruption and **no manual intervention**. Cockroach nodes are
-symmetric; a design goal is **homogenous deployment** (one binary) with
+symmetric; a design goal is **homogeneous deployment** (one binary) with
 minimal configuration.
 
 Cockroach implements a **single, monolithic sorted map** from key to
@@ -131,7 +131,7 @@ commit timestamps and GC expirations per key.
 
 Each range maintains a small (i.e. latest 10s of read timestamps),
 *in-memory* cache from key to the latest timestamp at which the
-key was read. This *read timestamp cache* is updated everytime a key
+key was read. This *read timestamp cache* is updated every time a key
 is read. The cache’s entries are evicted oldest timestamp first, updating
 the low water mark of the cache appropriately. If a new range replica leader
 is elected, it sets the low water mark for the cache to the current
@@ -200,7 +200,7 @@ implementation is [here](https://github.com/cockroachdb/cockroach/blob/master/ut
 Cockroach picks a Timestamp for a transaction using HLC time. Throughout this
 document, *timestamp* always refers to the HLC time which is a singleton
 on each node. The HLC is updated by every read/write event on the node, and
-the HLC time >= walltime. A read/write timestamp received in a cockroach request
+the HLC time >= wall time. A read/write timestamp received in a cockroach request
 from another node is not only used to version the operation, but also updates
 the HLC on the node. This is useful in guaranteeing that all data read/written
 on a node is at a timestamp < next HLC time.

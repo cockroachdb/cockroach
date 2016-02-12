@@ -78,7 +78,7 @@ func TestIntentResolution(t *testing.T) {
 			defer mu.Unlock()
 			header := args.Header()
 			// Ignore anything outside of the intent key range of "a" - "z"
-			// TODO: Implement "ContainsKey()" for Span, currenly only
+			// TODO: Implement "ContainsKey()" for Span, currently only
 			// implemented for RSpan
 			if header.Key.Compare(roachpb.Key("a")) < 0 || header.Key.Compare(roachpb.Key("z")) > 0 {
 				return nil

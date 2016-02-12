@@ -1,3 +1,4 @@
+cmd github.com/client9/misspell/cmd/misspell
 cmd github.com/cockroachdb/c-protobuf/cmd/protoc
 cmd github.com/cockroachdb/cockroach/cmd/protoc-gen-gogoroach
 cmd github.com/cockroachdb/stress
@@ -18,6 +19,7 @@ github.com/Sirupsen/logrus be52937128b38f1d99787bb476c789e2af1147f1
 github.com/VividCortex/ewma c34099b489e4ac33ca8d8c5f9d29d6eeaf69f2ed
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
 github.com/biogo/store 3b4c041f52c224ee4a44f5c8b150d003a40643a0
+github.com/client9/misspell f7f51b6b325e307d84d28b406b1ad2e0fd1e47af
 github.com/cloudfoundry/gosigar 3ed7c74352dae6dc00bdc8c74045375352e3ec05
 github.com/cockroachdb/c-lz4 c40aaae2fc50293eb8750b34632bc3efe813e23f
 github.com/cockroachdb/c-protobuf 4feb192131ea08dfbd7253a00868ad69cbb61b81

@@ -2,7 +2,7 @@ output "port" {
   value = "${var.cockroach_port}"
 }
 
-output "fowarding_rule" {
+output "forwarding_rule" {
   value = "${google_compute_forwarding_rule.default.ip_address}"
 }
 

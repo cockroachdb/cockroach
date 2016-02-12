@@ -163,7 +163,7 @@ func (rq *replicateQueue) process(now roachpb.Timestamp, repl *Replica, sysCfg *
 		rebalanceStore := rq.allocator.RebalanceTarget(repl.store.StoreID(), zone.ReplicaAttrs[0], desc.Replicas)
 		if rebalanceStore == nil {
 			// No action was necessary and no rebalance target was found. Return
-			// without re-queueing this replica.
+			// without re-queuing this replica.
 			return nil
 		}
 		rebalanceReplica := roachpb.ReplicaDescriptor{

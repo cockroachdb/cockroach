@@ -481,7 +481,7 @@ message MergeResponse {
 // is no requirement for correctness that the raft log truncation be synchronized across
 // replicas, it is nice to preserve the property that all replicas of a range are as close
 // to identical as possible. The raft leader can also inform decisions about the cutoff point
-// with its knowledge of the replicas' acknowledgement status.
+// with its knowledge of the replicas' acknowledgment status.
 message TruncateLogRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 

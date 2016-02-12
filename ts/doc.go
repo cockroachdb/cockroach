@@ -35,7 +35,7 @@ Downsampling
 
 The amount of data produced by time series sampling can be staggering; the naive
 solution, storing every incoming data point with perfect fidelity in a unique
-key, would commmand a tremendous amount of computing resources.
+key, would command a tremendous amount of computing resources.
 
 However, in most cases a perfect fidelity is not necessary or desired; the exact
 time a sample was taken is unimportant, with the overall trend of the data over

@@ -64,7 +64,7 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	}
 
 	var cs raftpb.ConfState
-	// For uninitalized ranges, membership is unknown at this point.
+	// For uninitialized ranges, membership is unknown at this point.
 	if found || initialized {
 		for _, rep := range r.mu.desc.Replicas {
 			cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))

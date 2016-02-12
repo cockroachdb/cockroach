@@ -340,7 +340,7 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Put operation with earlier walltime. Will NOT be ignored.
+	// Put operation with earlier wall time. Will NOT be ignored.
 	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, txn1); err != nil {
 		t.Fatal(err)
 	}
@@ -493,7 +493,7 @@ func TestMVCCUpdateExistingKeyOldVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Earlier walltime.
+	// Earlier wall time.
 	err = MVCCPut(engine, nil, testKey1, makeTS(0, 1), value2, nil)
 	if err == nil {
 		t.Fatal("expected error on old version")
@@ -1680,7 +1680,7 @@ func TestMVCCReadWithDiffEpochs(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	// Write initial value wihtout a txn.
+	// Write initial value without a txn.
 	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil); err != nil {
 		t.Fatal(err)
 	}

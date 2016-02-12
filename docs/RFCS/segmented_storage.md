@@ -80,8 +80,8 @@ is:
            +------------+
            | roachpb.Key  |
 
-Segment ID | Raw key    | Walltime | Logical TS |
-4 bytes    | (variable) | 8 bytes  | 4 bytes    |
+Segment ID | Raw key    | Wall time | Logical TS |
+4 bytes    | (variable) | 8 bytes   | 4 bytes    |
 ```
 
 All keys not associated with a replica (including the counter used to
