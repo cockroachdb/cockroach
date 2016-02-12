@@ -121,6 +121,7 @@ type LocalCluster struct {
 	Nodes                []*Container
 	events               chan Event
 	expectedEvents       chan Event
+	oneshot              *Container
 	CertsDir             string
 	monitorCtx           context.Context
 	monitorCtxCancelFunc func()
@@ -168,6 +169,36 @@ func (l *LocalCluster) expectEvent(c *Container, msgs ...string) {
 		}
 		break
 	}
+}
+
+// OneShot runs a container, expecting it to successfully run to completion
+// and die, after which it is removed. Not goroutine safe: only one OneShot
+// can be running at once.
+func (l *LocalCluster) OneShot(image, tag string, c container.Config, h container.HostConfig) error {
+	ipo := types.ImagePullOptions{
+		ImageID: image,
+		Tag:     tag,
+	}
+	if err := pullImage(l, ipo); err != nil {
+		return err
+	}
+	c.Image = fmt.Sprintf("%s:%s", image, tag)
+	container, err := createContainer(l, c, h, "")
+	if err != nil {
+		return err
+	}
+	l.oneshot = container
+	defer func() {
+		if err := l.oneshot.Remove(); err != nil {
+			log.Errorf("ContainerRemove: %s", err)
+		}
+		l.oneshot = nil
+	}()
+
+	if err := l.oneshot.Start(); err != nil {
+		return err
+	}
+	return l.oneshot.Wait()
 }
 
 // stopOnPanic is invoked as a deferred function in Start in order to attempt
@@ -415,6 +446,10 @@ func (l *LocalCluster) startNode(i int) *Container {
 func (l *LocalCluster) processEvent(event events.Message) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
+	if l.oneshot != nil && event.ID == l.oneshot.id && event.Status == eventDie {
+		return true
+	}
 
 	for i, n := range l.Nodes {
 		if n != nil && n.id == event.ID {

@@ -23,11 +23,9 @@ import (
 	"testing"
 )
 
-// TestJava connects to a cluster with Java.
-func TestJava(t *testing.T) {
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/3826")
-	testDockerSuccess(t, "java", []string{"/bin/sh", "-c", strings.Replace(java, "%v", "3", 1)})
-	testDockerFail(t, "java", []string{"/bin/sh", "-c", strings.Replace(java, "%v", `"a"`, 1)})
+func TestDockerJava(t *testing.T) {
+	testDockerSuccess(t, []string{"/bin/sh", "-c", strings.Replace(java, "%v", "3", 1)})
+	testDockerFail(t, []string{"/bin/sh", "-c", strings.Replace(java, "%v", `"a"`, 1)})
 }
 
 const java = `
