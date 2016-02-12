@@ -547,9 +547,11 @@ var builtins = map[string][]builtin{
 		},
 	},
 
-	"statement_timestamp": {nowImpl},
-	"current_timestamp":   {nowImpl},
-	"now":                 {nowImpl},
+	"now":                   {stmtTSImpl},
+	"current_timestamp":     {stmtTSImpl},
+	"transaction_timestamp": {txnTSImpl},
+
+	"statement_timestamp": {stmtTSImpl},
 
 	"clock_timestamp": {
 		builtin{
@@ -558,16 +560,6 @@ var builtins = map[string][]builtin{
 			impure:     true,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
 				return DTimestamp{Time: time.Now()}, nil
-			},
-		},
-	},
-
-	"transaction_timestamp": {
-		builtin{
-			types:      argTypes{},
-			returnType: typeTimestamp,
-			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return e.TxnTimestamp, nil
 			},
 		},
 	},
@@ -1061,11 +1053,19 @@ var ceilImpl = []builtin{
 	}),
 }
 
-var nowImpl = builtin{
+var stmtTSImpl = builtin{
 	types:      argTypes{},
 	returnType: typeTimestamp,
 	fn: func(e EvalContext, args DTuple) (Datum, error) {
 		return e.StmtTimestamp, nil
+	},
+}
+
+var txnTSImpl = builtin{
+	types:      argTypes{},
+	returnType: typeTimestamp,
+	fn: func(e EvalContext, args DTuple) (Datum, error) {
+		return e.TxnTimestamp, nil
 	},
 }
 
