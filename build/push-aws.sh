@@ -14,30 +14,12 @@
 
 set -eux
 
-BUCKET_NAME="cockroach"
-LATEST_SUFFIX=".LATEST"
-REPO_NAME="cockroach"
+source $(dirname $0)/build-common.sh
+
+OSARCH="linux-amd64"
 SHA="${CIRCLE_SHA1-$(git rev-parse HEAD)}"
 
-# push_one_binary takes the path to the binary inside the repo.
-# eg: push_one_binary sql/sql.test
-# The file will be pushed to: s3://BUCKET_NAME/REPO_NAME/sql.test.SHA
-# The S3 basename will be stored in s3://BUCKET_NAME/REPO_NAME/sql.test.LATEST
-function push_one_binary {
-  rel_path=$1
-  binary_name=$(basename $1)
-
-  cd $(dirname $0)/..
-  time aws s3 cp ${rel_path} s3://${BUCKET_NAME}/${REPO_NAME}/${binary_name}.${SHA}
-
-  # Upload LATEST file.
-  tmpfile=$(mktemp /tmp/cockroach-push.XXXXXX)
-  echo ${SHA} > ${tmpfile}
-  time aws s3 cp ${tmpfile} s3://${BUCKET_NAME}/${REPO_NAME}/${binary_name}${LATEST_SUFFIX}
-  rm -f ${tmpfile}
-}
-
-push_one_binary cockroach
-push_one_binary sql/sql.test
-push_one_binary acceptance/acceptance.test
-push_one_binary static-tests.tar.gz
+push_one_binary ${SHA} cockroach cockroach-${OSARCH}
+push_one_binary ${SHA} sql/sql-${OSARCH}.test
+push_one_binary ${SHA} acceptance/acceptance-${OSARCH}.test
+push_one_binary ${SHA} static-tests-${OSARCH}.tar.gz

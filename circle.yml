@@ -39,3 +39,23 @@ deployment:
           -l "${CIRCLE_ARTIFACTS}"/acceptance_deploy 2>&1 >
           "${CIRCLE_ARTIFACTS}/acceptance_deploy.log"
       - build/push-aws.sh
+  osx:
+    branch: master
+    commands:
+      - |
+          if [ -n "${BUILD_OSX-}" ]; then
+            set -eux
+            # There must certainly be a better way to move ~/cockroach
+            # in its appropriate location in GOPATH (symlinking doesn't
+            # work due to path traversal issues on the build).
+            export repo="${GOPATH%%:*}/src/github.com/cockroachdb/cockroach"
+            cd "${repo}/.."
+            rm -r "${repo}"
+            mv ~/cockroach "${repo}"
+            cd "${repo}"
+            go get github.com/karalabe/xgo
+            xgo --targets=darwin-10.9/amd64 --go=1.6rc2 --ldflags="$(build/builder.sh make ldflags)" .
+            aws configure set region us-east-1
+            source build/build-common.sh
+            push_one_binary $(git rev-parse HEAD) cockroach-darwin-10.9-amd64 cockroach-darwin-10.9-amd64
+          fi
