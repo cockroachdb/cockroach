@@ -1528,10 +1528,11 @@ func foldComparisonExpr(op ComparisonOp, dummyLeft, dummyRight Datum) (Compariso
 
 // time.Time formats.
 const (
-	dateFormat                    = "2006-01-02"
-	timestampFormat               = "2006-01-02 15:04:05.999999999"
-	TimestampWithOffsetZoneFormat = "2006-01-02 15:04:05.999999999-07:00"
-	timestampWithNamedZoneFormat  = "2006-01-02 15:04:05.999999999 MST"
+	dateFormat                            = "2006-01-02"
+	timestampFormat                       = "2006-01-02 15:04:05.999999999"
+	TimestampWithOffsetZoneFormat         = "2006-01-02 15:04:05.999999999-07:00"
+	timestampWithNamedZoneFormat          = "2006-01-02 15:04:05.999999999 MST"
+	timestampRFC3339NanoWithoutZoneFormat = "2006-01-02T15:04:05.999999999"
 )
 
 // ParseDate parses a date.
@@ -1555,21 +1556,20 @@ func (ctx EvalContext) ParseTimestamp(s DString) (DTimestamp, error) {
 	}
 
 	str := string(s)
-	var err error
 
 	for _, format := range []string{
 		dateFormat,
 		TimestampWithOffsetZoneFormat,
 		timestampFormat,
 		timestampWithNamedZoneFormat,
+		timestampRFC3339NanoWithoutZoneFormat,
 	} {
-		var t time.Time
-		if t, err = time.ParseInLocation(format, str, loc); err == nil {
+		if t, err := time.ParseInLocation(format, str, loc); err == nil {
 			return DTimestamp{Time: t}, nil
 		}
 	}
 
-	return DTimestamp{}, err
+	return DTimestamp{}, fmt.Errorf("could not parse %s in any supported timestamp format", s)
 }
 
 // Simplifies LIKE expressions that do not need full regular expressions to evaluate the condition.
