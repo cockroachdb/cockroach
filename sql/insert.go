@@ -134,6 +134,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		result.columns = make([]ResultColumn, len(n.Returning))
 		table := tableInfo{
 			columns: makeResultColumns(cols, 0),
+			alias:   tableDesc.Name,
 		}
 		qvals = make(qvalMap)
 		for i, c := range n.Returning {
