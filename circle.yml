@@ -39,3 +39,15 @@ deployment:
           -l "${CIRCLE_ARTIFACTS}"/acceptance_deploy 2>&1 >
           "${CIRCLE_ARTIFACTS}/acceptance_deploy.log"
       - build/push-aws.sh
+  osx:
+    branch: master
+    commands:
+      - |
+          if [ -n "${BUILD_OSX-}" ]; then
+            set -eux
+            go get -u github.com/karalabe/xgo
+            docker pull karalabe/xgo-develop
+            xgo --targets=darwin-10.9/amd64 --go=1.6rc2 --ldflags="$(make ldflags)" .
+            source build/build-common.sh
+            push_one_binary cockroach-darwin-10.9-amd64 cockroach-darwin-10.9-amd64
+          fi

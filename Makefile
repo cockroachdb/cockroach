@@ -63,6 +63,14 @@ build: GOFLAGS += -i -o cockroach
 build: BUILDMODE = build
 build: install
 
+# TODO(tschottdorf): how to avoid this repetition with `install`?
+.PHONY: ldflags
+ldflags: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTag=$(shell git describe --dirty --tags)"
+ldflags: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
+ldflags: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildDeps=$(shell GOPATH=${GOPATH} build/depvers.sh)"
+ldflags:
+	@echo '$(LDFLAGS)'
+
 .PHONY: install
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTag=$(shell git describe --dirty --tags)"
 install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
