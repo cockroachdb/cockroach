@@ -983,7 +983,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	}
 
 	if !pusherWins {
-		err := roachpb.NewTransactionPushError(args.PusherTxn, reply.PusheeTxn)
+		err := roachpb.NewTransactionPushError(reply.PusheeTxn)
 		if log.V(1) {
 			log.Info(err)
 		}

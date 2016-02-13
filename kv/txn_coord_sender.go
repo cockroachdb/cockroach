@@ -699,12 +699,11 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		// race with the state update below.
 		defer tc.cleanupTxn(sp, *pErr.GetTxn())
 	case *roachpb.TransactionPushError:
-		newTxn.Update(t.Txn)
+		newTxn.Update(pErr.GetTxn())
 		// Increase timestamp if applicable, ensuring that we're
 		// just ahead of the pushee.
 		newTxn.Timestamp.Forward(t.PusheeTxn.Timestamp.Add(0, 1))
 		newTxn.Restart(ba.UserPriority, t.PusheeTxn.Priority-1, newTxn.Timestamp)
-		t.Txn = newTxn
 		pErr.SetTxn(newTxn)
 	case *roachpb.TransactionRetryError:
 		newTxn.Update(pErr.GetTxn())

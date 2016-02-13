@@ -342,18 +342,9 @@ func NewTransactionAbortedError() *TransactionAbortedError {
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.
-// Txn is the transaction which will be retried. Both arguments are copied.
-// Transactions.
-func NewTransactionPushError(txn, pusheeTxn Transaction) *TransactionPushError {
-	err := &TransactionPushError{PusheeTxn: pusheeTxn.Clone()}
-	if txn.ID != nil {
-		// When the pusher is non-transactional, txn will be
-		// empty but for the priority. In that case, ignore it
-		// here.
-		txnClone := txn.Clone()
-		err.Txn = &txnClone
-	}
-	return err
+// The argument is copied.
+func NewTransactionPushError(pusheeTxn Transaction) *TransactionPushError {
+	return &TransactionPushError{PusheeTxn: pusheeTxn.Clone()}
 }
 
 // Error formats error.
@@ -363,10 +354,10 @@ func (e *TransactionPushError) Error() string {
 
 // message returns an error message.
 func (e *TransactionPushError) message(pErr *Error) string {
-	if e.Txn == nil {
+	if pErr.UnexposedTxn == nil {
 		return fmt.Sprintf("failed to push %s", e.PusheeTxn)
 	}
-	return fmt.Sprintf("txn %s failed to push %s", e.Txn, e.PusheeTxn)
+	return fmt.Sprintf("txn %s failed to push %s", pErr.UnexposedTxn, e.PusheeTxn)
 }
 
 var _ ErrorDetailInterface = &TransactionPushError{}
