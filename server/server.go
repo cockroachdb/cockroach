@@ -163,11 +163,8 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, tracer, s.stopper)
 	s.db = client.NewDB(sender)
 
-	var err error
-	s.raftTransport, err = newRPCTransport(s.gossip, s.rpc, s.rpcContext)
-	if err != nil {
-		return nil, err
-	}
+	s.grpc = grpc.NewServer()
+	s.raftTransport = newRPCTransport(s.gossip, s.grpc, s.rpcContext)
 	s.stopper.AddCloser(s.raftTransport)
 
 	s.kvDB = kv.NewDBServer(&s.ctx.Context, sender, stopper)
@@ -242,7 +239,6 @@ func (s *Server) Start() error {
 
 	s.rpcContext.SetLocalServer(s.rpc, unresolvedAddr.String())
 
-	s.grpc = grpc.NewServer()
 	s.gossip.Start(s.grpc, unresolvedAddr)
 
 	if err := s.node.start(s.rpc, unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {

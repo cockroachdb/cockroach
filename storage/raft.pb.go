@@ -27,6 +27,11 @@ import raftpb "github.com/coreos/etcd/raft/raftpb"
 
 import github_com_cockroachdb_cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 
+import (
+	context "golang.org/x/net/context"
+	grpc "google.golang.org/grpc"
+)
+
 import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -75,6 +80,108 @@ func init() {
 	proto.RegisterType((*RaftMessageResponse)(nil), "cockroach.storage.RaftMessageResponse")
 	proto.RegisterType((*ConfChangeContext)(nil), "cockroach.storage.ConfChangeContext")
 }
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ context.Context
+var _ grpc.ClientConn
+
+// Client API for MultiRaft service
+
+type MultiRaftClient interface {
+	RaftMessage(ctx context.Context, opts ...grpc.CallOption) (MultiRaft_RaftMessageClient, error)
+}
+
+type multiRaftClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewMultiRaftClient(cc *grpc.ClientConn) MultiRaftClient {
+	return &multiRaftClient{cc}
+}
+
+func (c *multiRaftClient) RaftMessage(ctx context.Context, opts ...grpc.CallOption) (MultiRaft_RaftMessageClient, error) {
+	stream, err := grpc.NewClientStream(ctx, &_MultiRaft_serviceDesc.Streams[0], c.cc, "/cockroach.storage.MultiRaft/RaftMessage", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &multiRaftRaftMessageClient{stream}
+	return x, nil
+}
+
+type MultiRaft_RaftMessageClient interface {
+	Send(*RaftMessageRequest) error
+	CloseAndRecv() (*RaftMessageResponse, error)
+	grpc.ClientStream
+}
+
+type multiRaftRaftMessageClient struct {
+	grpc.ClientStream
+}
+
+func (x *multiRaftRaftMessageClient) Send(m *RaftMessageRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *multiRaftRaftMessageClient) CloseAndRecv() (*RaftMessageResponse, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(RaftMessageResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// Server API for MultiRaft service
+
+type MultiRaftServer interface {
+	RaftMessage(MultiRaft_RaftMessageServer) error
+}
+
+func RegisterMultiRaftServer(s *grpc.Server, srv MultiRaftServer) {
+	s.RegisterService(&_MultiRaft_serviceDesc, srv)
+}
+
+func _MultiRaft_RaftMessage_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(MultiRaftServer).RaftMessage(&multiRaftRaftMessageServer{stream})
+}
+
+type MultiRaft_RaftMessageServer interface {
+	SendAndClose(*RaftMessageResponse) error
+	Recv() (*RaftMessageRequest, error)
+	grpc.ServerStream
+}
+
+type multiRaftRaftMessageServer struct {
+	grpc.ServerStream
+}
+
+func (x *multiRaftRaftMessageServer) SendAndClose(m *RaftMessageResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *multiRaftRaftMessageServer) Recv() (*RaftMessageRequest, error) {
+	m := new(RaftMessageRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+var _MultiRaft_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "cockroach.storage.MultiRaft",
+	HandlerType: (*MultiRaftServer)(nil),
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "RaftMessage",
+			Handler:       _MultiRaft_RaftMessage_Handler,
+			ClientStreams: true,
+		},
+	},
+}
+
 func (m *RaftMessageRequest) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
