@@ -110,19 +110,17 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 	ctx := stream.Context()
 	syncChan := make(chan struct{}, 1)
-	release := func() { syncChan <- struct{}{} }
 	send := func(reply *Response) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-syncChan:
-			defer release()
+		case syncChan <- struct{}{}:
+			defer func() { <-syncChan }()
 			return stream.Send(reply)
 		}
 	}
 
-	release()
-	defer func() { <-syncChan }()
+	defer func() { syncChan <- struct{}{} }()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
