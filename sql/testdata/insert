@@ -325,12 +325,18 @@ INSERT INTO return VALUES (default) RETURNING a, b as C, 4
 a C 4
 3 NULL 4
 
+# Return a qualified name
+query I
+INSERT INTO return VALUES (default) RETURNING return.a
+----
+3
+
 # Can fetch rowid
 statement ok
 INSERT INTO return VALUES (default) RETURNING rowid != experimental_unique_int()
 
 # Cannot return non-default columns when columns specified.
-statement error pq: qualified name """.b" not found
+statement error pq: qualified name "return.b" not found
 INSERT INTO return (a) VALUES (default) RETURNING b
 
 # TODO(mjibson): support *
