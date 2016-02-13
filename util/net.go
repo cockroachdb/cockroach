@@ -75,6 +75,8 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 			log.Fatal(err)
 		}
 
+		<-stopper.ShouldStop()
+
 		mu.Lock()
 		for conn := range activeConns {
 			conn.Close()
@@ -83,7 +85,7 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 	})
 
 	stopper.RunWorker(func() {
-		<-stopper.ShouldStop()
+		<-stopper.ShouldDrain()
 		// Some unit tests manually close `ln`, so it may already be closed
 		// when we get here.
 		if err := ln.Close(); err != nil && !IsClosedConnection(err) {
