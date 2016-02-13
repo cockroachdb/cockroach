@@ -202,25 +202,6 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 	return nil
 }
 
-// TODO(tamird): extract
-type contextWithStopper struct {
-	context.Context
-	stopper *stop.Stopper
-}
-
-func (ctx contextWithStopper) Done() <-chan struct{} {
-	return ctx.stopper.ShouldDrain()
-}
-
-func (ctx contextWithStopper) Err() error {
-	select {
-	case <-ctx.Done():
-		return context.Canceled
-	default:
-		return nil
-	}
-}
-
 // gossip loops, sending deltas of the infostore and receiving deltas
 // in turn. If an alternate is proposed on response, the client addr
 // is modified and method returns for forwarding by caller.
@@ -231,10 +212,7 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 	addr := g.is.NodeAddr
 	g.mu.Unlock()
 
-	ctx := contextWithStopper{
-		Context: context.Background(),
-		stopper: stopper,
-	}
+	ctx := grpcutil.NewContextWithStopper(context.Background(), stopper)
 
 	stream, err := c.rpcClient.Gossip(ctx)
 	if err != nil {
