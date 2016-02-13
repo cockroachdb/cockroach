@@ -48,7 +48,7 @@ func ListenAndServeGRPC(stopper *stop.Stopper, server *grpc.Server, addr net.Add
 	})
 
 	stopper.RunWorker(func() {
-		<-stopper.ShouldStop()
+		<-stopper.ShouldDrain()
 		if err := ln.Close(); err != nil {
 			log.Fatal(err)
 		}
