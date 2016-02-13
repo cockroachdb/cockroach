@@ -222,9 +222,13 @@ func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable boo
 func (tc *TxnCoordSender) startStats() {
 	res := time.Millisecond // for duration logging resolution
 	lastNow := tc.clock.PhysicalNow()
+	var statusLogTimer util.Timer
+	defer statusLogTimer.Stop()
 	for {
+		statusLogTimer = statusLogTimer.Reset(statusLogInterval)
 		select {
-		case <-time.After(statusLogInterval):
+		case <-statusLogTimer.C:
+			statusLogTimer.Read = true
 			if !log.V(1) {
 				continue
 			}

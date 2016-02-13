@@ -159,7 +159,10 @@ func send(opts SendOptions, replicas ReplicaSlice,
 	var errors, retryableErrors int
 
 	// Wait for completions.
+	var sendNextTimer util.Timer
+	defer sendNextTimer.Stop()
 	for {
+		sendNextTimer = sendNextTimer.Reset(opts.SendNextTimeout)
 		select {
 		case call := <-done:
 			if call.Error == nil {
@@ -208,7 +211,8 @@ func send(opts SendOptions, replicas ReplicaSlice,
 				orderedClients = orderedClients[1:]
 			}
 
-		case <-time.After(opts.SendNextTimeout):
+		case <-sendNextTimer.C:
+			sendNextTimer.Read = true
 			// On successive RPC timeouts, send to additional replicas if available.
 			if len(orderedClients) > 0 {
 				sp.LogEvent("timeout, trying next peer")

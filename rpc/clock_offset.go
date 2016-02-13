@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -152,11 +153,15 @@ func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *stop.Stopper) {
 	if log.V(1) {
 		log.Infof("monitoring cluster offset")
 	}
+	var monitorTimer util.Timer
+	defer monitorTimer.Stop()
 	for {
+		monitorTimer = monitorTimer.Reset(monitorInterval)
 		select {
 		case <-stopper.ShouldStop():
 			return
-		case <-time.After(monitorInterval):
+		case <-monitorTimer.C:
+			monitorTimer.Read = true
 			offsetInterval, err := r.findOffsetInterval()
 			// By the contract of the hlc, if the value is 0, then safety checking
 			// of the max offset is disabled. However we may still want to
