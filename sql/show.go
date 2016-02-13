@@ -43,6 +43,8 @@ func (p *planner) Show(n *parser.Show) (planNode, *roachpb.Error) {
 		v.rows = append(v.rows, []parser.Datum{parser.DString(loc.String())})
 	case `SYNTAX`:
 		v.rows = append(v.rows, []parser.Datum{parser.DString(parser.Syntax(p.session.Syntax).String())})
+	case `DEFAULT_TRANSACTION_ISOLATION`:
+		v.rows = append(v.rows, []parser.Datum{parser.DString("SERIALIZABLE")})
 	case `TRANSACTION ISOLATION LEVEL`:
 		v.rows = append(v.rows, []parser.Datum{parser.DString(p.txn.Proto.Isolation.String())})
 	case `TRANSACTION PRIORITY`:
