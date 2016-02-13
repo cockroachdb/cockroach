@@ -186,6 +186,7 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 // heard from in longer than timeUntilStoreDead.
 func (sp *StorePool) start(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
+		timeoutTimer := time.NewTimer(sp.timeUntilStoreDead)
 		for {
 			var timeout time.Duration
 			sp.mu.Lock()
@@ -209,9 +210,12 @@ func (sp *StorePool) start(stopper *stop.Stopper) {
 					timeout = deadAsOf.Sub(now.GoTime())
 				}
 			}
+			if !timeoutTimer.Reset(timeout) {
+				<-timeoutTimer.C
+			}
 			sp.mu.Unlock()
 			select {
-			case <-time.After(timeout):
+			case <-timeoutTimer.C:
 			case <-stopper.ShouldStop():
 				return
 			}

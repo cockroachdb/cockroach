@@ -754,6 +754,7 @@ func (g *Gossip) bootstrap() {
 	stopper := g.server.stopper
 
 	stopper.RunWorker(func() {
+		bootstrapTimer := time.NewTimer(g.bootstrapInterval)
 		for {
 			stopper.RunTask(func() {
 				g.mu.Lock()
@@ -769,8 +770,11 @@ func (g *Gossip) bootstrap() {
 			})
 
 			// Pause an interval before next possible bootstrap.
+			if !bootstrapTimer.Reset(g.bootstrapInterval) {
+				<-bootstrapTimer.C
+			}
 			select {
-			case <-time.After(g.bootstrapInterval):
+			case <-bootstrapTimer.C:
 				// continue
 			case <-stopper.ShouldStop():
 				return

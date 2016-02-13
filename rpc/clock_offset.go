@@ -152,11 +152,15 @@ func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *stop.Stopper) {
 	if log.V(1) {
 		log.Infof("monitoring cluster offset")
 	}
+	monitorTimer := time.NewTimer(monitorInterval)
 	for {
+		if !monitorTimer.Reset(monitorInterval) {
+			<-monitorTimer.C
+		}
 		select {
 		case <-stopper.ShouldStop():
 			return
-		case <-time.After(monitorInterval):
+		case <-monitorTimer.C:
 			offsetInterval, err := r.findOffsetInterval()
 			// By the contract of the hlc, if the value is 0, then safety checking
 			// of the max offset is disabled. However we may still want to
