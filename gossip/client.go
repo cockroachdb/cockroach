@@ -240,6 +240,11 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err := stream.CloseSend(); err != nil {
+			log.Error(err)
+		}
+	}()
 
 	if err := c.requestGossip(g, addr, stream); err != nil {
 		return err
