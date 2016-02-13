@@ -44,7 +44,7 @@ import "time"
 //
 // Note that unlike the standard library's Timer type, this Timer will
 // not begin counting down until Reset is called for the first time, as
-// there is not constructor function.
+// there is no constructor function.
 type Timer struct {
 	*time.Timer
 	Read bool
