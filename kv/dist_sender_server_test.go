@@ -607,10 +607,10 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 		pErr := txn.CommitInBatch(b)
 		if epoch == 1 {
 			if tErr, ok := pErr.GetDetail().(*roachpb.TransactionPushError); ok {
-				if tErr.Txn.ID == nil {
+				if pErr.GetTxn().ID == nil {
 					t.Errorf("txn ID is not set unexpectedly: %s", tErr)
 				}
-				txnID = tErr.Txn.ID
+				txnID = pErr.GetTxn().ID
 			} else {
 				t.Errorf("expected TransactionRetryError, but got: %s", pErr)
 			}

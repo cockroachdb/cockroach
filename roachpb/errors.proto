@@ -77,10 +77,7 @@ message TransactionAbortedError {
 // continue because it encountered a write intent from another
 // transaction which it was unable to push.
 message TransactionPushError {
-  // txn can be null in the event the push error happened to a
-  // non-transactional method.
-  optional Transaction txn = 1;
-  optional Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
+  optional Transaction pushee_txn = 1 [(gogoproto.nullable) = false];
 }
 
 // A TransactionRetryError indicates that the transaction must be

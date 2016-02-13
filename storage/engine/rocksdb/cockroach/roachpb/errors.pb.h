@@ -746,19 +746,10 @@ class TransactionPushError : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.roachpb.Transaction txn = 1;
-  bool has_txn() const;
-  void clear_txn();
-  static const int kTxnFieldNumber = 1;
-  const ::cockroach::roachpb::Transaction& txn() const;
-  ::cockroach::roachpb::Transaction* mutable_txn();
-  ::cockroach::roachpb::Transaction* release_txn();
-  void set_allocated_txn(::cockroach::roachpb::Transaction* txn);
-
-  // optional .cockroach.roachpb.Transaction pushee_txn = 2;
+  // optional .cockroach.roachpb.Transaction pushee_txn = 1;
   bool has_pushee_txn() const;
   void clear_pushee_txn();
-  static const int kPusheeTxnFieldNumber = 2;
+  static const int kPusheeTxnFieldNumber = 1;
   const ::cockroach::roachpb::Transaction& pushee_txn() const;
   ::cockroach::roachpb::Transaction* mutable_pushee_txn();
   ::cockroach::roachpb::Transaction* release_pushee_txn();
@@ -766,15 +757,12 @@ class TransactionPushError : public ::google::protobuf::Message {
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.TransactionPushError)
  private:
-  inline void set_has_txn();
-  inline void clear_has_txn();
   inline void set_has_pushee_txn();
   inline void clear_has_pushee_txn();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::cockroach::roachpb::Transaction* txn_;
   ::cockroach::roachpb::Transaction* pushee_txn_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
@@ -3047,58 +3035,15 @@ inline void ReadWithinUncertaintyIntervalError::set_node_id(::google::protobuf::
 
 // TransactionPushError
 
-// optional .cockroach.roachpb.Transaction txn = 1;
-inline bool TransactionPushError::has_txn() const {
+// optional .cockroach.roachpb.Transaction pushee_txn = 1;
+inline bool TransactionPushError::has_pushee_txn() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void TransactionPushError::set_has_txn() {
+inline void TransactionPushError::set_has_pushee_txn() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void TransactionPushError::clear_has_txn() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void TransactionPushError::clear_txn() {
-  if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
-  clear_has_txn();
-}
-inline const ::cockroach::roachpb::Transaction& TransactionPushError::txn() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionPushError.txn)
-  return txn_ != NULL ? *txn_ : *default_instance_->txn_;
-}
-inline ::cockroach::roachpb::Transaction* TransactionPushError::mutable_txn() {
-  set_has_txn();
-  if (txn_ == NULL) {
-    txn_ = new ::cockroach::roachpb::Transaction;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TransactionPushError.txn)
-  return txn_;
-}
-inline ::cockroach::roachpb::Transaction* TransactionPushError::release_txn() {
-  clear_has_txn();
-  ::cockroach::roachpb::Transaction* temp = txn_;
-  txn_ = NULL;
-  return temp;
-}
-inline void TransactionPushError::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
-  delete txn_;
-  txn_ = txn;
-  if (txn) {
-    set_has_txn();
-  } else {
-    clear_has_txn();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.TransactionPushError.txn)
-}
-
-// optional .cockroach.roachpb.Transaction pushee_txn = 2;
-inline bool TransactionPushError::has_pushee_txn() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void TransactionPushError::set_has_pushee_txn() {
-  _has_bits_[0] |= 0x00000002u;
-}
 inline void TransactionPushError::clear_has_pushee_txn() {
-  _has_bits_[0] &= ~0x00000002u;
+  _has_bits_[0] &= ~0x00000001u;
 }
 inline void TransactionPushError::clear_pushee_txn() {
   if (pushee_txn_ != NULL) pushee_txn_->::cockroach::roachpb::Transaction::Clear();
