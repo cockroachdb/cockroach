@@ -22,15 +22,19 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc"
+
+	"github.com/coreos/etcd/raft/raftpb"
+
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/coreos/etcd/raft/raftpb"
 )
 
 type channelServer struct {
@@ -93,12 +97,13 @@ func TestSendAndReceive(t *testing.T) {
 	for serverIndex := 0; serverIndex < numServers; serverIndex++ {
 		nodeID := nextNodeID
 		nextNodeID++
-		server := rpc.NewServer(nodeRPCContext)
+		rpcServer := rpc.NewServer(nodeRPCContext)
+		grpcServer := grpc.NewServer()
 		tlsConfig, err := nodeRPCContext.GetServerTLSConfig()
 		if err != nil {
 			t.Fatal(err)
 		}
-		ln, err := util.ListenAndServe(stopper, server, util.CreateTestAddr("tcp"), tlsConfig)
+		ln, err := util.ListenAndServe(stopper, grpcutil.GRPCHandlerFunc(grpcServer, rpcServer), util.CreateTestAddr("tcp"), tlsConfig)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -114,10 +119,7 @@ func TestSendAndReceive(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		transport, err := newRPCTransport(g, server, nodeRPCContext)
-		if err != nil {
-			t.Fatalf("Unexpected error creating transport, Error: %s", err)
-		}
+		transport := newRPCTransport(g, grpcServer, nodeRPCContext)
 		defer transport.Close()
 		transports[nodeID] = transport
 
@@ -239,22 +241,20 @@ func TestInOrderDelivery(t *testing.T) {
 	g := gossip.New(nodeRPCContext, gossip.TestBootstrap, stopper)
 	g.SetNodeID(roachpb.NodeID(1))
 
-	server := rpc.NewServer(nodeRPCContext)
+	rpcServer := rpc.NewServer(nodeRPCContext)
+	grpcServer := grpc.NewServer()
 	tlsConfig, err := nodeRPCContext.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	ln, err := util.ListenAndServe(stopper, server, util.CreateTestAddr("tcp"), tlsConfig)
+	ln, err := util.ListenAndServe(stopper, grpcutil.GRPCHandlerFunc(grpcServer, rpcServer), util.CreateTestAddr("tcp"), tlsConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	const numMessages = 100
 	nodeID := roachpb.NodeID(roachpb.NodeID(2))
-	serverTransport, err := newRPCTransport(g, server, nodeRPCContext)
-	if err != nil {
-		t.Fatal(err)
-	}
+	serverTransport := newRPCTransport(g, grpcServer, nodeRPCContext)
 	defer serverTransport.Close()
 	serverChannel := newChannelServer(numMessages, 10*time.Millisecond)
 	if err := serverTransport.Listen(roachpb.StoreID(nodeID), serverChannel.RaftMessage); err != nil {
@@ -272,10 +272,7 @@ func TestInOrderDelivery(t *testing.T) {
 	}
 
 	clientNodeID := roachpb.NodeID(2)
-	clientTransport, err := newRPCTransport(g, nil, nodeRPCContext)
-	if err != nil {
-		t.Fatal(err)
-	}
+	clientTransport := newRPCTransport(g, nil, nodeRPCContext)
 	defer clientTransport.Close()
 
 	for i := 0; i < numMessages; i++ {
