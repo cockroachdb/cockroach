@@ -73,7 +73,7 @@ func GRPCHandlerFunc(grpcServer *grpc.Server, otherHandler http.Handler) http.Ha
 
 // IsClosedConnection returns true if err is an error produced by gRPC on closed connections.
 func IsClosedConnection(err error) bool {
-	if err == transport.ErrConnClosing || grpc.Code(err) == codes.Canceled {
+	if err == context.Canceled || err == transport.ErrConnClosing || grpc.Code(err) == codes.Canceled {
 		return true
 	}
 	if streamErr, ok := err.(transport.StreamError); ok && streamErr.Code == codes.Canceled {
