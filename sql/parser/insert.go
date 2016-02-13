@@ -32,7 +32,7 @@ type Insert struct {
 	Table     *QualifiedName
 	Columns   QualifiedNames
 	Rows      SelectStatement
-	Returning SelectExprs
+	Returning ReturningExprs
 }
 
 func (node *Insert) String() string {
@@ -46,9 +46,7 @@ func (node *Insert) String() string {
 	} else {
 		fmt.Fprintf(&buf, " %s", node.Rows)
 	}
-	if node.Returning != nil {
-		fmt.Fprintf(&buf, " RETURNING %s", node.Returning)
-	}
+	buf.WriteString(node.Returning.String())
 	return buf.String()
 }
 

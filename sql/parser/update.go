@@ -29,14 +29,15 @@ import (
 
 // Update represents an UPDATE statement.
 type Update struct {
-	Table TableExpr
-	Exprs UpdateExprs
-	Where *Where
+	Table     TableExpr
+	Exprs     UpdateExprs
+	Where     *Where
+	Returning ReturningExprs
 }
 
 func (node *Update) String() string {
-	return fmt.Sprintf("UPDATE %s SET %s%s",
-		node.Table, node.Exprs, node.Where)
+	return fmt.Sprintf("UPDATE %s SET %s%s%s",
+		node.Table, node.Exprs, node.Where, node.Returning)
 }
 
 // UpdateExprs represents a list of update expressions.

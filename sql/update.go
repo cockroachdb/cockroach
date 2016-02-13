@@ -136,6 +136,11 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 		return nil, pErr
 	}
 
+	result, qvals, err := p.initReturning(n.Returning, cols)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
 	// ValArgs have their types populated in the above Select if they are part
 	// of an expression ("SET a = 2 + $1") in the type check step where those
 	// types are inferred. For the simpler case ("SET a = $1"), populate them
@@ -182,7 +187,7 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 			}
 		}
 
-		return nil, nil
+		return result, nil
 	}
 
 	// Construct a map from column ID to the index the value appears at within a
@@ -235,7 +240,6 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 	marshalled := make([]interface{}, len(cols))
 
 	b := client.Batch{}
-	result := &valuesNode{}
 	tracing.AnnotateTrace()
 	for rows.Next() {
 		tracing.AnnotateTrace()
@@ -326,6 +330,10 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 
 				b.Del(key)
 			}
+		}
+
+		if err := p.populateReturning(n.Returning, result, qvals, newVals); err != nil {
+			return nil, roachpb.NewError(err)
 		}
 	}
 	tracing.AnnotateTrace()
