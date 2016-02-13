@@ -176,7 +176,7 @@ func (t *rpcTransport) processQueue(nodeID roachpb.NodeID, storeID roachpb.Store
 	for {
 		raftIdleTimer.Reset(raftIdleTimeout)
 		select {
-		case <-t.rpcContext.Stopper.ShouldStop():
+		case <-ctx.Done():
 			return
 		case <-raftIdleTimer.C:
 			raftIdleTimer.Read = true

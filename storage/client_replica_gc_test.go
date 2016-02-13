@@ -74,7 +74,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	mtc.unreplicateRange(rangeID, 1)
 
 	// Make sure the range is removed from the store.
-	util.SucceedsWithin(t, time.Second, func() error {
+	util.SucceedsWithin(t, 10*time.Second, func() error {
 		if _, err := mtc.stores[1].GetReplica(rangeID); !testutils.IsError(err, "range .* was not found") {
 			return util.Errorf("expected range removal")
 		}
