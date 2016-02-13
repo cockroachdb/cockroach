@@ -160,12 +160,17 @@ func (t *rpcTransport) processQueue(nodeID roachpb.NodeID, storeID roachpb.Store
 	var req *storage.RaftMessageRequest
 	protoResp := &storage.RaftMessageResponse{}
 	raftIdleTimer := time.NewTimer(raftIdleTimeout)
+	raftIdleTimerRead := false
 	for {
-		raftIdleTimer.Reset(raftIdleTimeout)
+		if !raftIdleTimer.Reset(raftIdleTimeout) && !raftIdleTimerRead {
+			<-raftIdleTimer.C
+		}
+		raftIdleTimerRead = false
 		select {
 		case <-t.rpcContext.Stopper.ShouldStop():
 			return
 		case <-raftIdleTimer.C:
+			raftIdleTimerRead = true
 			if log.V(1) {
 				log.Infof("closing Raft transport to %d due to inactivity", nodeID)
 			}

@@ -505,14 +505,17 @@ func (l *LocalCluster) Assert(t *testing.T) {
 	const almostZero = 50 * time.Millisecond
 	filter := func(ch chan Event, wait time.Duration) *Event {
 		waitTimer := time.NewTimer(wait)
+		waitTimerRead := false
 		for {
-			if !waitTimer.Reset(wait) {
+			if !waitTimer.Reset(wait) && !waitTimerRead {
 				<-waitTimer.C
 			}
+			waitTimerRead = false
 			select {
 			case act := <-ch:
 				return &act
 			case <-waitTimer.C:
+				waitTimerRead = true
 			}
 			break
 		}

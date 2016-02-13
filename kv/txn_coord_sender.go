@@ -223,12 +223,15 @@ func (tc *TxnCoordSender) startStats() {
 	res := time.Millisecond // for duration logging resolution
 	lastNow := tc.clock.PhysicalNow()
 	statusLogTimer := time.NewTimer(statusLogInterval)
+	statusLogTimerRead := false
 	for {
-		if !statusLogTimer.Reset(statusLogInterval) {
+		if !statusLogTimer.Reset(statusLogInterval) && !statusLogTimerRead {
 			<-statusLogTimer.C
 		}
+		statusLogTimerRead = false
 		select {
 		case <-statusLogTimer.C:
+			statusLogTimerRead = true
 			if !log.V(1) {
 				continue
 			}

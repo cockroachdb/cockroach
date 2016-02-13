@@ -310,6 +310,7 @@ func (c *Client) runHeartbeat(retryOpts retry.Options) {
 
 	var err = errUnstarted // initial condition
 	heartbeatTimer := time.NewTimer(c.heartbeatInterval)
+	heartbeatTimerRead := false
 	for {
 		for r := retry.Start(retryOpts); r.Next(); {
 			if c.maybeClose(retryOpts.Closer) {
@@ -345,9 +346,10 @@ func (c *Client) runHeartbeat(retryOpts retry.Options) {
 
 		// Wait after the heartbeat so that the first iteration gets a wait-free
 		// heartbeat attempt.
-		if !heartbeatTimer.Reset(c.heartbeatInterval) {
+		if !heartbeatTimer.Reset(c.heartbeatInterval) && !heartbeatTimerRead {
 			<-heartbeatTimer.C
 		}
+		heartbeatTimerRead = false
 		select {
 		case <-c.closer:
 			return
@@ -355,6 +357,7 @@ func (c *Client) runHeartbeat(retryOpts retry.Options) {
 			c.close()
 			return
 		case <-heartbeatTimer.C:
+			heartbeatTimerRead = true
 			// TODO(tamird): Perhaps retry more aggressively when the client is unhealthy.
 		}
 	}
