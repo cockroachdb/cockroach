@@ -121,9 +121,11 @@ CREATE TABLE bank.accounts (
 	}
 
 	for i := 0; i < num; i++ {
-		clients[i].Lock()
-		initClient(i)
-		clients[i].Unlock()
+		func() {
+			clients[i].Lock()
+			defer clients[i].Unlock()
+			initClient(i)
+		}()
 		go func(i int) {
 			for !done() {
 				if err := func() error {
@@ -167,9 +169,9 @@ CREATE TABLE bank.accounts (
 		<-teardown
 		for i := range clients {
 			clients[i].Lock()
+			defer clients[i].Unlock()
 			clients[i].stopper.Stop()
 			clients[i].stopper = nil
-			clients[i].Unlock()
 		}
 	}()
 
@@ -185,34 +187,38 @@ CREATE TABLE bank.accounts (
 				return
 			default:
 			}
-			nodes := rnd.Perm(num)[:rnd.Intn(num)+1]
-			// Prevent all clients from writing while nodes are being restarted.
-			for i := 0; i < num; i++ {
-				clients[i].Lock()
-			}
-			log.Infof("round %d: restarting nodes %v", curRound, nodes)
-			for _, i := range nodes {
-				// Two early exit conditions.
-				select {
-				case <-stopper:
-					break
-				default:
+			func() {
+				nodes := rnd.Perm(num)[:rnd.Intn(num)+1]
+				// Prevent all clients from writing while nodes are being restarted.
+				for i := 0; i < num; i++ {
+					clients[i].Lock()
 				}
-				if done() {
-					break
+				defer func() {
+					for i := 0; i < num; i++ {
+						clients[i].Unlock()
+					}
+				}()
+				log.Infof("round %d: restarting nodes %v", curRound, nodes)
+				for _, i := range nodes {
+					// Two early exit conditions.
+					select {
+					case <-stopper:
+						break
+					default:
+					}
+					if done() {
+						break
+					}
+					log.Infof("round %d: restarting %d", curRound, i)
+					if err := c.Kill(i); err != nil {
+						t.Fatal(err)
+					}
+					if err := c.Restart(i); err != nil {
+						t.Fatal(err)
+					}
+					initClient(i)
 				}
-				log.Infof("round %d: restarting %d", curRound, i)
-				if err := c.Kill(i); err != nil {
-					t.Fatal(err)
-				}
-				if err := c.Restart(i); err != nil {
-					t.Fatal(err)
-				}
-				initClient(i)
-			}
-			for i := 0; i < num; i++ {
-				clients[i].Unlock()
-			}
+			}()
 
 			preCount := make([]uint64, len(clients))
 			for i, client := range clients {
@@ -290,11 +296,14 @@ CREATE TABLE bank.accounts (
 	// Hold the read lock on node 0 to prevent it being restarted by
 	// chaos monkey.
 	var sum int
-	clients[0].RLock()
-	if err := clients[0].db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum); err != nil {
-		t.Fatal(err)
-	}
-	clients[0].RUnlock()
+	func() {
+		clients[0].RLock()
+		defer clients[0].RUnlock()
+		if err := clients[0].db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
 	if sum != 0 {
 		t.Fatalf("The bank is not in good order. Total value: %d", sum)
 	}
