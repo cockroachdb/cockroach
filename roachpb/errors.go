@@ -354,10 +354,10 @@ func (e *TransactionPushError) Error() string {
 
 // message returns an error message.
 func (e *TransactionPushError) message(pErr *Error) string {
-	if pErr.UnexposedTxn == nil {
+	if pErr.GetTxn() == nil {
 		return fmt.Sprintf("failed to push %s", e.PusheeTxn)
 	}
-	return fmt.Sprintf("txn %s failed to push %s", pErr.UnexposedTxn, e.PusheeTxn)
+	return fmt.Sprintf("txn %s failed to push %s", pErr.GetTxn(), e.PusheeTxn)
 }
 
 var _ ErrorDetailInterface = &TransactionPushError{}
