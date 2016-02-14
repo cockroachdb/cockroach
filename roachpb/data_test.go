@@ -415,6 +415,9 @@ func TestTransactionString(t *testing.T) {
 	if str := txn.String(); str != expStr {
 		t.Errorf("expected txn %s; got %s", expStr, str)
 	}
+
+	var txnEmpty Transaction
+	_ = txnEmpty.String() // prevent regression of NPE
 }
 
 // TestNodeList verifies that its exported methods Add() and Contain()
