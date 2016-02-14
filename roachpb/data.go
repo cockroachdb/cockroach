@@ -799,6 +799,9 @@ func (t Transaction) String() string {
 
 // Short returns the short form of the Transaction's UUID.
 func (t Transaction) Short() string {
+	if t.ID == nil {
+		return "????????"
+	}
 	return t.ID.String()[:8]
 }
 
