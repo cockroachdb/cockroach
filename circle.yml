@@ -6,6 +6,9 @@ checkout:
   post:
     - git fetch --unshallow || true
     - git fetch --tags
+    - rm -rf "${GOPATH%%:*}/src/github.com/cockroachdb/cockroach"
+    - mv ~/cockroach "${GOPATH%%:*}/src/github.com/cockroachdb/"
+    - ln -s ${GOPATH%%:*}/src/github.com/cockroachdb/cockroach ~/cockroach
 
 dependencies:
   override:
@@ -39,3 +42,14 @@ deployment:
           -l "${CIRCLE_ARTIFACTS}"/acceptance_deploy 2>&1 >
           "${CIRCLE_ARTIFACTS}/acceptance_deploy.log"
       - build/push-aws.sh
+  osx:
+    branch: master
+    commands:
+      - |
+          if [ -n "${BUILD_OSX-}" ]; then
+            set -eux
+            build/build-osx.sh
+            aws configure set region us-east-1
+            source build/build-common.sh
+            push_one_binary $(git rev-parse HEAD) cockroach-darwin-10.9-amd64 cockroach-darwin-10.9-amd64
+          fi
