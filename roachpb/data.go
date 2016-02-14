@@ -26,6 +26,7 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -799,6 +800,9 @@ func (t Transaction) String() string {
 
 // Short returns the short form of the Transaction's UUID.
 func (t Transaction) Short() string {
+	if t.ID == nil {
+		return strings.Repeat("?", 8)
+	}
 	return t.ID.String()[:8]
 }
 
