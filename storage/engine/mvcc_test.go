@@ -2377,7 +2377,6 @@ func TestMVCCStatsBasic(t *testing.T) {
 	// Resolve the deletion by aborting it.
 	txn.Status = roachpb.ABORTED
 	txn.Timestamp.Forward(ts2)
-	fmt.Printf("after delete: %+v\n", expMS2)
 	if err := MVCCResolveWriteIntent(engine, ms, roachpb.Intent{Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
 		t.Fatal(err)
 	}
