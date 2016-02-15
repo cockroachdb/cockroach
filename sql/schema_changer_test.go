@@ -24,10 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	csql "github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
-	"github.com/gogo/protobuf/proto"
 )
 
 func TestSchemaChangeLease(t *testing.T) {
@@ -223,7 +223,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	table := desc.GetTable()
 	expectedVersion = table.Version
 	// Make a copy of the index for use in a mutation.
-	index := proto.Clone(&table.Indexes[0]).(*csql.IndexDescriptor)
+	index := util.CloneProto(&table.Indexes[0]).(*csql.IndexDescriptor)
 	index.Name = "bar"
 	index.ID = table.NextIndexID
 	table.NextIndexID++
