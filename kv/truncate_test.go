@@ -8,8 +8,8 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/gogo/protobuf/proto"
 )
 
 func TestTruncate(t *testing.T) {
@@ -102,7 +102,7 @@ func TestTruncate(t *testing.T) {
 			}
 		}
 
-		original := *proto.Clone(&goldenOriginal).(*roachpb.BatchRequest)
+		original := *util.CloneProto(&goldenOriginal).(*roachpb.BatchRequest)
 
 		desc := &roachpb.RangeDescriptor{
 			StartKey: roachpb.RKey(test.desc[0]), EndKey: roachpb.RKey(test.desc[1]),
