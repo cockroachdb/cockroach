@@ -93,8 +93,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	txnID := *txn.Proto.ID
-	txnIDStr := txnID.String()
-	txnMeta, ok := s.Sender.txns[txnIDStr]
+	txnMeta, ok := s.Sender.txns[txnID]
 	if !ok {
 		t.Fatal("expected a transaction to be created on coordinator")
 	}
@@ -114,7 +113,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	if len(s.Sender.txns) != 1 {
 		t.Errorf("expected length of transactions map to be 1; got %d", len(s.Sender.txns))
 	}
-	txnMeta = s.Sender.txns[txnIDStr]
+	txnMeta = s.Sender.txns[txnID]
 	if lu := atomic.LoadInt64(&txnMeta.lastUpdateNanos); ts >= lu || lu != s.Manual.UnixNano() {
 		t.Errorf("expected last update time to advance; got %d", lu)
 	}
@@ -209,11 +208,10 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	}
 
 	txnID := *txn.Proto.ID
-	txnIDStr := txnID.String()
 
 	// Verify that the transaction metadata contains only two entries
 	// in its "keys" interval cache. "a" and range "aa"-"c".
-	txnMeta, ok := s.Sender.txns[txnIDStr]
+	txnMeta, ok := s.Sender.txns[txnID]
 	if !ok {
 		t.Fatalf("expected a transaction to be created on coordinator")
 	}
@@ -402,8 +400,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 	}
 	s.Sender.Lock()
 	txnID := *txn.Proto.ID
-	txnIDStr := txnID.String()
-	intentSpans := s.Sender.txns[txnIDStr].intentSpans()
+	intentSpans := s.Sender.txns[txnID].intentSpans()
 	expSpans := []roachpb.Span{{Key: key, EndKey: []byte("")}}
 	equal := !reflect.DeepEqual(intentSpans, expSpans)
 	s.Sender.Unlock()
@@ -474,12 +471,11 @@ func TestTxnCoordSenderGC(t *testing.T) {
 	s.Sender.Unlock()
 
 	txnID := *txn.Proto.ID
-	txnIDStr := txnID.String()
 
 	if err := util.IsTrueWithin(func() bool {
 		// Locking the TxnCoordSender to prevent a data race.
 		s.Sender.Lock()
-		_, ok := s.Sender.txns[txnIDStr]
+		_, ok := s.Sender.txns[txnID]
 		s.Sender.Unlock()
 		return !ok
 	}, 50*time.Millisecond); err != nil {
@@ -743,9 +739,8 @@ func TestTxnCoordSenderReleaseTxnMeta(t *testing.T) {
 	}
 
 	txnID := *txn.Proto.ID
-	txnIDStr := txnID.String()
 
-	if _, ok := s.Sender.txns[txnIDStr]; ok {
+	if _, ok := s.Sender.txns[txnID]; ok {
 		t.Fatal("expected TxnCoordSender has released the txn")
 	}
 }

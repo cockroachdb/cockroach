@@ -708,7 +708,7 @@ func TxnIDEqual(a, b *uuid.UUID) bool {
 	if a == nil && b == nil {
 		return true
 	} else if a != nil && b != nil {
-		return bytes.Equal(a.Bytes(), b.Bytes())
+		return *a == *b
 	}
 	return false
 }
