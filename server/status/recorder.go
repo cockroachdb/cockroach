@@ -22,10 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
-	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -212,7 +212,7 @@ func (rr registryRecorder) record(dest *[]ts.TimeSeriesData) {
 		case *metric.Histogram:
 			h := mtr.Current()
 			for _, pt := range recordHistogramQuantiles {
-				d := *proto.Clone(&data).(*ts.TimeSeriesData)
+				d := *util.CloneProto(&data).(*ts.TimeSeriesData)
 				d.Name += pt.suffix
 				d.Datapoints[0].Value = float64(h.ValueAtQuantile(pt.quantile))
 				*dest = append(*dest, d)

@@ -1679,7 +1679,7 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 		// TODO(tschottdorf): avoid data race related to batch unrolling in ExecuteCmd;
 		// can probably go again when that provisional code there is gone. Should
 		// still be careful though, a retry could happen and race with args.
-		args := proto.Clone(item.args).(roachpb.Request)
+		args := util.CloneProto(item.args).(roachpb.Request)
 		stopper.RunAsyncTask(func() {
 			// Everything here is best effort; give up rather than waiting
 			// too long (helps avoid deadlocks during test shutdown,

@@ -22,10 +22,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -71,7 +71,7 @@ func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse,
 		for i, req := range ba.Requests {
 			args := req.GetInner()
 			if _, ok := args.(*roachpb.PutRequest); ok {
-				if !br.Responses[i].SetValue(proto.Clone(testPutResp).(roachpb.Response)) {
+				if !br.Responses[i].SetValue(util.CloneProto(testPutResp).(roachpb.Response)) {
 					panic("failed to set put response")
 				}
 			}

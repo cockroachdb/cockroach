@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -305,7 +305,7 @@ func (ls *Stores) updateBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	}
 	// Update the latest timestamp and set cached version.
 	ls.biLatestTS = bi.Timestamp
-	ls.latestBI = proto.Clone(bi).(*gossip.BootstrapInfo)
+	ls.latestBI = util.CloneProto(bi).(*gossip.BootstrapInfo)
 	// Update all stores.
 	for _, s := range ls.storeMap {
 		if err := engine.MVCCPutProto(s.engine, nil, keys.StoreGossipKey(), roachpb.ZeroTimestamp, nil, bi); err != nil {
