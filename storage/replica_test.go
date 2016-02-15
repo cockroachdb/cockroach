@@ -1910,8 +1910,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	}
 	for _, test := range testCases {
 		// Establish existing txn state by writing directly to range engine.
-		var existTxn roachpb.Transaction
-		proto.Merge(&existTxn, txn)
+		existTxn := txn.Clone()
 		existTxn.Key = test.key
 		existTxn.Status = test.existStatus
 		existTxn.Epoch = test.existEpoch
