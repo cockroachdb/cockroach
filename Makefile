@@ -64,9 +64,7 @@ build: BUILDMODE = build
 build: install
 
 .PHONY: install
-install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTag=$(shell git describe --dirty --tags)"
-install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
-install: LDFLAGS += -X "github.com/cockroachdb/cockroach/util.buildDeps=$(shell GOPATH=${GOPATH} build/depvers.sh)"
+install: LDFLAGS += $(shell GOPATH=${GOPATH} build/ldflags.sh)
 install:
 	@echo "GOPATH set to $$GOPATH"
 	@echo "$$GOPATH/bin added to PATH"
