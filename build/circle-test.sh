@@ -94,17 +94,9 @@ prepare_artifacts() {
         # XML for more robust results.
         FAILEDTESTS=$(python3 -c 'import sys, xml.etree.ElementTree as ET; [print(t.attrib["name"]) for filename in sys.argv[1:] for t in ET.parse(filename).findall(".//failure/..")]' $(find "${CIRCLE_TEST_REPORTS}" -type f -iname '*.xml'))
       fi
-      # Generate string for JSON labels below:
-      # '"test-failure", "TestRaftRemoveRace", "TestChaos", "TestHoneyBooBoo"'
-      LABELSTR='"test-failure"'
-      for t in ${FAILEDTESTS}; do
-        # Need to make sure the label exists, or posting the issue will fail.
-        post labels "{ \"name\": \"${t}\", \"color\": \"e11d21\" }" > /dev/null
-        LABELSTR+=", \"${t}\""
-      done
 
       # JSON monster to post the issue.
-      post issues "{ \"title\": \"Failed tests (${CIRCLE_BUILD_NUM}): ${FAILEDTESTS}\", \"body\": \"The following test appears to have failed:\n\n[#${CIRCLE_BUILD_NUM}](https://circleci.com/gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/${CIRCLE_BUILD_NUM}):\n\n\`\`\`\n$(python -c 'import json,sys; print json.dumps(sys.stdin.read()).strip("\"")' < ${outdir}/excerpt.txt)\n\`\`\`\nPlease assign, take a look and update the issue accordingly.\", \"labels\": [${LABELSTR}] }" > /dev/null
+      post issues "{ \"title\": \"Failed tests (${CIRCLE_BUILD_NUM}): ${FAILEDTESTS}\", \"body\": \"The following test appears to have failed:\n\n[#${CIRCLE_BUILD_NUM}](https://circleci.com/gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/${CIRCLE_BUILD_NUM}):\n\n\`\`\`\n$(python -c 'import json,sys; print json.dumps(sys.stdin.read()).strip("\"")' < ${outdir}/excerpt.txt)\n\`\`\`\nPlease assign, take a look and update the issue accordingly.\", \"labels\": [\"test-failure\"] }" > /dev/null
       echo "Found test/race failures in test logs, see excerpt.log and the newly created issue on our issue tracker"
   fi
 
