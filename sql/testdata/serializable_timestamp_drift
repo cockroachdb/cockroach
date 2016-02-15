@@ -1,0 +1,37 @@
+# Prevents regression of #4293: We used the commit timestamp candidate instead
+# of the original timestamp for reads, which means that transactions were
+# changing their snapshot while they were active, which is wildly inconsistent.
+
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+GRANT ALL on t TO testuser
+
+# UserA starts the first transaction.
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+# The SELECT forces the timestamp to be chosen.
+query I
+SELECT * FROM t
+----
+
+user testuser
+
+# Touch all (relevant) keys with a timestamp ahead of TransactionA. This means
+# that future attempts of TransactionA to write with its original timestamp
+# must push TransactionA in the future.
+query I
+SELECT * FROM t
+----
+
+user root
+
+# This insert forces TransactionA's timestamp away from its original one, and
+# the restart happens immediately (as opposed to on EndTransaction).
+statement error retry txn.*
+INSERT INTO t(a) VALUES (1)
+
+statement ok
+ROLLBACK
