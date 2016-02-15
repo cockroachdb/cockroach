@@ -36,7 +36,6 @@ import (
 type client struct {
 	peerID      roachpb.NodeID  // Peer node ID; 0 until first gossip response
 	addr        net.Addr        // Peer node network address
-	rpcClient   GossipClient    // RPC client
 	forwardAddr net.Addr        // Set if disconnected with an alternate addr
 	remoteNodes map[int32]*Node // Remote server's high water timestamps and min hops
 	closer      chan struct{}   // Client shutdown channel
@@ -93,10 +92,9 @@ func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, s
 				log.Error(err)
 			}
 		}()
-		c.rpcClient = NewGossipClient(conn)
 
 		// Start gossiping.
-		if err := c.gossip(g, stopper); err != nil {
+		if err := c.gossip(g, NewGossipClient(conn), stopper); err != nil {
 			if !grpcutil.IsClosedConnection(err) {
 				if c.peerID != 0 {
 					log.Infof("closing client to node %d (%s): %s", c.peerID, c.addr, err)
@@ -205,7 +203,7 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 // gossip loops, sending deltas of the infostore and receiving deltas
 // in turn. If an alternate is proposed on response, the client addr
 // is modified and method returns for forwarding by caller.
-func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
+func (c *client) gossip(g *Gossip, gossipClient GossipClient, stopper *stop.Stopper) error {
 	// For un-bootstrapped node, g.is.NodeID is 0 when client start gossip,
 	// so it's better to get nodeID from g.is every time.
 	g.mu.Lock()
@@ -214,7 +212,7 @@ func (c *client) gossip(g *Gossip, stopper *stop.Stopper) error {
 
 	ctx := grpcutil.NewContextWithStopper(context.Background(), stopper)
 
-	stream, err := c.rpcClient.Gossip(ctx)
+	stream, err := gossipClient.Gossip(ctx)
 	if err != nil {
 		return err
 	}
