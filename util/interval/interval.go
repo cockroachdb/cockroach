@@ -44,7 +44,9 @@ type Range struct {
 type Interface interface {
 	Overlapper
 	Range() Range
-	ID() uintptr // Returns a unique ID for the element.
+	// Returns a unique ID for the element.
+	// TODO(nvanbenschoten) Should this be changed to an int64?
+	ID() uintptr
 }
 
 // A Comparable is a type that describes the ends of an Overlapper.
