@@ -209,7 +209,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.mu.cmdQ = NewCommandQueue()
+	r.mu.cmdQ = NewCommandQueue(clock)
 	r.mu.tsCache = NewTimestampCache(clock)
 	r.mu.pendingCmds = map[cmdIDKey]*pendingCmd{}
 
