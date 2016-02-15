@@ -23,6 +23,8 @@ import (
 	"net/http"
 	"strings"
 
+	"golang.org/x/net/context"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/transport"
@@ -46,7 +48,7 @@ func ListenAndServeGRPC(stopper *stop.Stopper, server *grpc.Server, addr net.Add
 	})
 
 	stopper.RunWorker(func() {
-		<-stopper.ShouldStop()
+		<-stopper.ShouldDrain()
 		if err := ln.Close(); err != nil {
 			log.Fatal(err)
 		}
@@ -71,11 +73,26 @@ func GRPCHandlerFunc(grpcServer *grpc.Server, otherHandler http.Handler) http.Ha
 
 // IsClosedConnection returns true if err is an error produced by gRPC on closed connections.
 func IsClosedConnection(err error) bool {
-	if err == transport.ErrConnClosing || grpc.Code(err) == codes.Canceled {
+	if err == context.Canceled || err == transport.ErrConnClosing || grpc.Code(err) == codes.Canceled {
 		return true
 	}
 	if streamErr, ok := err.(transport.StreamError); ok && streamErr.Code == codes.Canceled {
 		return true
 	}
 	return util.IsClosedConnection(err)
+}
+
+// NewContextWithStopper returns a context whose Done() channel is closed when
+// base's Done() channel is closed or when stopper's ShouldStop() channel is
+// closed, whichever is first.
+func NewContextWithStopper(base context.Context, stopper *stop.Stopper) context.Context {
+	ctx, cancel := context.WithCancel(base)
+	go func() {
+		select {
+		case <-ctx.Done():
+		case <-stopper.ShouldStop():
+			cancel()
+		}
+	}()
+	return ctx
 }

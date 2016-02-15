@@ -129,18 +129,21 @@ func TestSendToOneClient(t *testing.T) {
 func TestRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	clientStopper := stop.NewStopper()
+	defer clientStopper.Stop()
+	clientContext := newNodeTestContext(nil, clientStopper)
+	clientContext.HeartbeatTimeout = 10 * clientContext.HeartbeatInterval
 
-	nodeContext := newNodeTestContext(nil, stopper)
-	nodeContext.HeartbeatTimeout = 10 * nodeContext.HeartbeatInterval
-	s, ln := newTestServer(t, nodeContext)
+	serverStopper := stop.NewStopper()
+	serverContext := newNodeTestContext(nil, serverStopper)
+
+	s, ln := newTestServer(t, serverContext)
 	registerBatch(t, s, 0)
 
-	c := rpc.NewClient(ln.Addr(), nodeContext)
+	c := rpc.NewClient(ln.Addr(), clientContext)
 	// Wait until the client becomes healthy and shut down the server.
 	<-c.Healthy()
-	ln.Close()
+	serverStopper.Stop()
 	// Wait until the client becomes unhealthy.
 	func() {
 		for r := retry.Start(retry.Options{}); r.Next(); {
@@ -157,7 +160,7 @@ func TestRetryableError(t *testing.T) {
 		SendNextTimeout: 100 * time.Millisecond,
 		Timeout:         100 * time.Millisecond,
 	}
-	if _, err := sendBatch(opts, []net.Addr{ln.Addr()}, nodeContext); err != nil {
+	if _, err := sendBatch(opts, []net.Addr{ln.Addr()}, clientContext); err != nil {
 		retryErr, ok := err.(retry.Retryable)
 		if !ok {
 			t.Fatalf("Unexpected error type: %v", err)
