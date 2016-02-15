@@ -26,7 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -353,7 +352,7 @@ func TestStoreRemoveReplicaOldDescriptor(t *testing.T) {
 		t.Fatal(err)
 	}
 	origDesc := rng1.Desc()
-	newDesc := proto.Clone(origDesc).(*roachpb.RangeDescriptor)
+	newDesc := util.CloneProto(origDesc).(*roachpb.RangeDescriptor)
 	_, newRep := newDesc.FindReplica(store.StoreID())
 	newRep.ReplicaID++
 	newDesc.NextReplicaID++

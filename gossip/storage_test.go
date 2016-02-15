@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/gogo/protobuf/proto"
 )
 
 type testStorage struct {
@@ -50,7 +50,7 @@ func (tp *testStorage) ReadBootstrapInfo(info *gossip.BootstrapInfo) error {
 	tp.Lock()
 	defer tp.Unlock()
 	tp.read = true
-	*info = *proto.Clone(&tp.info).(*gossip.BootstrapInfo)
+	*info = *util.CloneProto(&tp.info).(*gossip.BootstrapInfo)
 	return nil
 }
 
@@ -58,7 +58,7 @@ func (tp *testStorage) WriteBootstrapInfo(info *gossip.BootstrapInfo) error {
 	tp.Lock()
 	defer tp.Unlock()
 	tp.write = true
-	tp.info = *proto.Clone(info).(*gossip.BootstrapInfo)
+	tp.info = *util.CloneProto(info).(*gossip.BootstrapInfo)
 	return nil
 }
 
