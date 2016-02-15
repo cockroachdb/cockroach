@@ -23,7 +23,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/montanaflynn/stats"
 	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
@@ -657,8 +656,6 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	sp := tracing.SpanFromContext(ctx)
 	newTxn := &roachpb.Transaction{}
 	newTxn.Update(ba.Txn)
-	// TODO(tamird): remove this clone. It's currently needed to avoid race conditions.
-	pErr = proto.Clone(pErr).(*roachpb.Error)
 	// If the request was successful but we're in a transaction which needs to
 	// restart but doesn't know it yet, let it restart now (as opposed to
 	// waiting until EndTransaction).
@@ -681,7 +678,8 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	case *roachpb.TransactionStatusError:
 		// Likely already committed or more obscure errors such as epoch or
 		// timestamp regressions; consider txn dead.
-		defer tc.cleanupTxn(sp, *pErr.GetTxn())
+		pErrTxn := pErr.GetTxn().Clone()
+		defer tc.cleanupTxn(sp, pErrTxn)
 	case *roachpb.OpRequiresTxnError:
 		panic("OpRequiresTxnError must not happen at this level")
 	case *roachpb.ReadWithinUncertaintyIntervalError:

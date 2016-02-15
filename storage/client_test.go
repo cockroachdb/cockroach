@@ -299,7 +299,7 @@ func (m *multiTestContext) Stop() {
 // the request to multiTestContext's localSenders specified in addrs. The request is
 // sent in order until no error is returned.
 func (m *multiTestContext) rpcSend(_ kv.SendOptions, replicas kv.ReplicaSlice,
-	args roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+	ba roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	fail := func(pErr *roachpb.Error) (proto.Message, error) {
@@ -310,7 +310,10 @@ func (m *multiTestContext) rpcSend(_ kv.SendOptions, replicas kv.ReplicaSlice,
 	var br *roachpb.BatchResponse
 	var pErr *roachpb.Error
 	for _, replica := range replicas {
-		ba := *proto.Clone(&args).(*roachpb.BatchRequest)
+		if txn := ba.Txn; txn != nil {
+			txnClone := ba.Txn.Clone()
+			ba.Txn = &txnClone
+		}
 		// Node ID is encoded in the address.
 		nodeID, stErr := strconv.Atoi(replica.NodeDesc.Address.String())
 		if stErr != nil {
