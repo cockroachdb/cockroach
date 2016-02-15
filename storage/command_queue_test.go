@@ -33,6 +33,11 @@ func add(cq *CommandQueue, from, to roachpb.Key, readOnly bool) interface{} {
 	return cq.Add(readOnly, roachpb.Span{Key: from, EndKey: to})[0]
 }
 
+func getWaitAndAdd(cq *CommandQueue, from, to roachpb.Key, readOnly bool, wg *sync.WaitGroup) interface{} {
+	getWait(cq, from, to, readOnly, wg)
+	return add(cq, from, to, readOnly)
+}
+
 // waitForCmd launches a goroutine to wait on the supplied
 // WaitGroup. A channel is returned which signals the completion of
 // the wait.
@@ -135,8 +140,8 @@ func TestCommandQueueMultiplePendingCommands(t *testing.T) {
 	wg3 := sync.WaitGroup{}
 
 	// Add a command which will overlap all commands.
-	wk := add(cq, roachpb.Key("a"), roachpb.Key("d"), false)
-	getWait(cq, roachpb.Key("a"), nil, false, &wg1)
+	wk0 := add(cq, roachpb.Key("a"), roachpb.Key("d"), false)
+	wk1 := getWaitAndAdd(cq, roachpb.Key("a"), roachpb.Key("b").Next(), false, &wg1)
 	getWait(cq, roachpb.Key("b"), nil, false, &wg2)
 	getWait(cq, roachpb.Key("c"), nil, false, &wg3)
 	cmdDone1 := waitForCmd(&wg1)
@@ -148,11 +153,17 @@ func TestCommandQueueMultiplePendingCommands(t *testing.T) {
 		testCmdDone(cmdDone3, 1*time.Millisecond) {
 		t.Fatal("no commands should finish with command outstanding")
 	}
-	cq.Remove([]interface{}{wk})
+	cq.Remove([]interface{}{wk0})
 	if !testCmdDone(cmdDone1, 5*time.Millisecond) ||
-		!testCmdDone(cmdDone2, 5*time.Millisecond) ||
 		!testCmdDone(cmdDone3, 5*time.Millisecond) {
-		t.Fatal("commands should finish with no commands outstanding")
+		t.Fatal("command 1 and 3 should finish")
+	}
+	if testCmdDone(cmdDone2, 5*time.Millisecond) {
+		t.Fatal("command 2 should remain outstanding")
+	}
+	cq.Remove([]interface{}{wk1})
+	if !testCmdDone(cmdDone2, 5*time.Millisecond) {
+		t.Fatal("command 2 should finish with no commands outstanding")
 	}
 }
 
