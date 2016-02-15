@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/gogo/protobuf/proto"
 )
 
 var emptySpan = roachpb.Span{}
@@ -97,7 +96,7 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 			if newHeader.Equal(*origRequests[pos].GetInner().Header()) {
 				ba.Requests[pos] = origRequests[pos]
 			} else {
-				ba.Requests[pos] = *proto.Clone(&origRequests[pos]).(*roachpb.RequestUnion)
+				ba.Requests[pos] = *util.CloneProto(&origRequests[pos]).(*roachpb.RequestUnion)
 				*ba.Requests[pos].GetInner().Header() = newHeader
 			}
 		}
