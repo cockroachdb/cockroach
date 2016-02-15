@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 // senderFn is a function that implements a Sender.
@@ -567,7 +568,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				reply = ba.CreateReply()
 			}
 			return reply, test.pErr
-		}), clock, false, nil, stopper)
+		}), clock, false, tracing.NewTracer(), stopper)
 		db := client.NewDB(ts)
 		txn := client.NewTxn(*db)
 		txn.InternalSetPriority(1)
@@ -670,7 +671,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 		br.Txn = &txnClone
 		br.Txn.Writing = true
 		return br, nil
-	}), clock, false, nil, stopper)
+	}), clock, false, tracing.NewTracer(), stopper)
 
 	// Stop the stopper manually, prior to trying the transaction. This has the
 	// effect of returning a NodeUnavailableError for any attempts at launching
@@ -705,7 +706,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 		pErr := roachpb.NewError(roachpb.NewTransactionRetryError())
 		pErr.SetTxn(&txn)
 		return nil, pErr
-	}), clock, false, nil, stopper)
+	}), clock, false, tracing.NewTracer(), stopper)
 	defer stopper.Stop()
 
 	var ba roachpb.BatchRequest

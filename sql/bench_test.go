@@ -29,11 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *sql.DB)) {
-	defer tracing.Disable()()
 	s := server.StartTestServer(b)
 	defer s.Stop()
 

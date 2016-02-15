@@ -38,10 +38,10 @@ func makeDBClient() (*client.DB, *stop.Stopper) {
 	// This should probably be made more explicit.
 	db, err := client.Open(stopper, fmt.Sprintf(
 		"%s://%s@%s?certs=%s",
-		context.RPCRequestScheme(),
+		cliContext.RPCRequestScheme(),
 		security.NodeUser,
-		context.Addr,
-		context.Certs))
+		cliContext.Addr,
+		cliContext.Certs))
 	if err != nil {
 		stopper.Stop()
 		panicf("failed to initialize KV client: %s", err)

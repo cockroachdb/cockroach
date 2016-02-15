@@ -47,6 +47,7 @@ import (
 // Note that the LocalTestCluster is different from server.TestCluster
 // in that although it uses a distributed sender, there is no RPC traffic.
 type LocalTestCluster struct {
+	Tracer     opentracing.Tracer
 	Manual     *hlc.ManualClock
 	Clock      *hlc.Clock
 	Gossip     *gossip.Gossip
@@ -78,13 +79,13 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20, ltc.Stopper)
 
 	ltc.stores = storage.NewStores(ltc.Clock)
-	tracer := tracing.NewTracer()
+	ltc.Tracer = tracing.NewTracer()
 	var rpcSend rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
 		args roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		if ltc.Latency > 0 {
 			time.Sleep(ltc.Latency)
 		}
-		sp := tracer.StartTrace("node")
+		sp := ltc.Tracer.StartSpan("node")
 		defer sp.Finish()
 		ctx, _ := opentracing.ContextWithSpan(context.Background(), sp)
 		sp.LogEvent(args.String())
@@ -114,7 +115,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 		RangeDescriptorDB:        ltc.stores, // for descriptor lookup
 	}, ltc.Gossip)
 
-	ltc.Sender = NewTxnCoordSender(ltc.distSender, ltc.Clock, false /* !linearizable */, tracer, ltc.Stopper)
+	ltc.Sender = NewTxnCoordSender(ltc.distSender, ltc.Clock, false /* !linearizable */, ltc.Tracer, ltc.Stopper)
 	ltc.DB = client.NewDB(ltc.Sender)
 	transport := storage.NewLocalRPCTransport(ltc.Stopper)
 	ltc.Stopper.AddCloser(transport)
@@ -123,7 +124,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ctx.DB = ltc.DB
 	ctx.Gossip = ltc.Gossip
 	ctx.Transport = transport
-	ctx.Tracer = tracer
+	ctx.Tracer = ltc.Tracer
 	ltc.Store = storage.NewStore(ctx, ltc.Eng, nodeDesc)
 	if err := ltc.Store.Bootstrap(roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)

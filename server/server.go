@@ -30,6 +30,7 @@ import (
 	"time"
 
 	assetfs "github.com/elazarl/go-bindata-assetfs"
+	"github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 
 	snappy "github.com/cockroachdb/c-snappy"
@@ -64,6 +65,7 @@ var (
 // Server is the cockroach server node.
 type Server struct {
 	ctx *Context
+	opentracing.Tracer
 
 	listener net.Listener // Only used in tests.
 
@@ -140,7 +142,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.storePool = storage.NewStorePool(s.gossip, s.clock, ctx.TimeUntilStoreDead, stopper)
 
 	feed := util.NewFeed(stopper)
-	tracer := tracing.NewTracer()
+	s.Tracer = tracing.NewTracer()
 
 	// A custom RetryOptions is created which uses stopper.ShouldDrain() as
 	// the Closer. This prevents infinite retry loops from occurring during
@@ -160,7 +162,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		RPCContext:      s.rpcContext,
 		RPCRetryOptions: &retryOpts,
 	}, s.gossip)
-	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, tracer, s.stopper)
+	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, s.Tracer, s.stopper)
 	s.db = client.NewDB(sender)
 
 	var err error
@@ -198,7 +200,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		ScanInterval:    s.ctx.ScanInterval,
 		ScanMaxIdleTime: s.ctx.ScanMaxIdleTime,
 		EventFeed:       feed,
-		Tracer:          tracer,
+		Tracer:          s.Tracer,
 		StorePool:       s.storePool,
 		SQLExecutor: sql.InternalExecutor{
 			LeaseManager: s.leaseMgr,

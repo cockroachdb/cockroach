@@ -29,7 +29,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -781,9 +781,14 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 	if pErr := r.checkCmdHeader(args.Header()); pErr != nil {
 		return nil, pErr
 	}
+	sp := opentracing.SpanFromContext(ctx)
+	if sp == nil {
+		sp = r.store.Tracer().StartSpan(fmt.Sprintf("%T", args))
+		defer sp.Finish()
+	}
 
 	// Admin commands always require the leader lease.
-	if pErr := r.redirectOnOrAcquireLeaderLease(tracing.SpanFromContext(ctx)); pErr != nil {
+	if pErr := r.redirectOnOrAcquireLeaderLease(sp); pErr != nil {
 		return nil, pErr
 	}
 
@@ -792,11 +797,11 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 	switch tArgs := args.(type) {
 	case *roachpb.AdminSplitRequest:
 		var reply roachpb.AdminSplitResponse
-		reply, pErr = r.AdminSplit(*tArgs, r.Desc())
+		reply, pErr = r.AdminSplit(ctx, *tArgs, r.Desc())
 		resp = &reply
 	case *roachpb.AdminMergeRequest:
 		var reply roachpb.AdminMergeResponse
-		reply, pErr = r.AdminMerge(*tArgs, r.Desc())
+		reply, pErr = r.AdminMerge(ctx, *tArgs, r.Desc())
 		resp = &reply
 	default:
 		return nil, roachpb.NewErrorf("unrecognized admin command: %T", args)
@@ -1818,7 +1823,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 	if len(baLocal.Requests) > 0 {
 		action := func() *roachpb.Error {
 			// Trace this under the ID of the intent owner.
-			sp := r.store.Tracer().StartTrace("resolve intents")
+			sp := r.store.Tracer().StartSpan("resolve intents")
 			defer sp.Finish()
 			ctx, _ = opentracing.ContextWithSpan(ctx, sp)
 			_, pErr := r.addWriteCmd(ctx, baLocal, &wg)
