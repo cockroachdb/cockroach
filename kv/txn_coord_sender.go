@@ -661,6 +661,15 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	newTxn.Update(ba.Txn)
 	// TODO(tamird): remove this clone. It's currently needed to avoid race conditions.
 	pErr = proto.Clone(pErr).(*roachpb.Error)
+	// If the request was successful but we're in a transaction which needs to
+	// restart but doesn't know it yet, let it restart now (as opposed to
+	// waiting until EndTransaction).
+	if pErr == nil && br.Txn != nil && br.Txn.Isolation == roachpb.SERIALIZABLE &&
+		!br.Txn.OrigTimestamp.Equal(br.Txn.Timestamp) {
+		pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), br.Txn)
+		br = nil
+	}
+
 	// TODO(bdarnell): We're writing to errors here (and where using ErrorWithIndex);
 	// since there's no concept of ownership copy-on-write is always preferable.
 	switch t := pErr.GetDetail().(type) {
@@ -715,85 +724,83 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		pErr.SetTxn(newTxn)
 	}
 
-	return func() *roachpb.Error {
-		if newTxn.ID == nil {
-			return pErr
-		}
-		txnID := *newTxn.ID
-		txnIDStr := txnID.String()
-		tc.Lock()
-		defer tc.Unlock()
-		txnMeta := tc.txns[txnIDStr]
-		// For successful transactional requests, keep the written intents and
-		// the updated transaction record to be sent along with the reply.
-		// The transaction metadata is created with the first writing operation.
-		// A tricky edge case is that of a transaction which "fails" on the
-		// first writing request, but actually manages to write some intents
-		// (for example, due to being multi-range). In this case, there will
-		// be an error, but the transaction will be marked as Writing and the
-		// coordinator must track the state, for the client's retry will be
-		// performed with a Writing transaction which the coordinator rejects
-		// unless it is tracking it (on top of it making sense to track it;
-		// after all, it **has** laid down intents and only the coordinator
-		// can augment a potential EndTransaction call). See #3303.
-		intents := ba.GetIntentSpans()
-		if len(intents) > 0 && (pErr == nil || newTxn.Writing) {
-			if txnMeta == nil {
-				if !newTxn.Writing {
-					panic("txn with intents marked as non-writing")
-				}
-				// If the transaction is already over, there's no point in
-				// launching a one-off coordinator which will shut down right
-				// away. If we ended up here with an error, we'll always start
-				// the coordinator - the transaction has laid down intents, so
-				// we expect it to be committed/aborted at some point in the
-				// future.
-				if _, isEnding := ba.GetArg(roachpb.EndTransaction); pErr != nil || !isEnding {
-					sp.LogEvent("coordinator spawns")
-					txnMeta = &txnMetadata{
-						txn:              *newTxn,
-						keys:             cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
-						firstUpdateNanos: tc.clock.PhysicalNow(),
-						lastUpdateNanos:  tc.clock.PhysicalNow(),
-						timeoutDuration:  tc.clientTimeout,
-						txnEnd:           make(chan struct{}),
-					}
-					tc.txns[txnIDStr] = txnMeta
-
-					if !tc.stopper.RunAsyncTask(func() {
-						tc.heartbeatLoop(txnID)
-					}) {
-						// The system is already draining and we can't start the
-						// heartbeat. We refuse new transactions for now because
-						// they're likely not going to have all intents committed.
-						// In principle, we can relax this as needed though.
-						tc.unregisterTxnLocked(txnID)
-						return roachpb.NewError(&roachpb.NodeUnavailableError{})
-					}
-				}
-			}
-		}
-		// Update our record of this transaction, even on error.
-		if txnMeta != nil {
-			txnMeta.txn = *newTxn
-			if !txnMeta.txn.Writing {
-				panic("tracking a non-writing txn")
-			}
-			txnMeta.setLastUpdate(tc.clock.PhysicalNow())
-			// Adding the intents even on error reduces the likelihood of dangling
-			// intents blocking concurrent writers for extended periods of time.
-			// See #3346.
-			for _, intent := range intents {
-				txnMeta.addKeyRange(intent.Key, intent.EndKey)
-			}
-		}
-		if pErr == nil {
-			// For successful transactional requests, always send the updated txn
-			// record back.
-			br.Txn = newTxn
-		}
+	if newTxn.ID == nil {
 		return pErr
-	}()
+	}
+	txnID := *newTxn.ID
+	txnIDStr := txnID.String()
+	tc.Lock()
+	defer tc.Unlock()
+	txnMeta := tc.txns[txnIDStr]
+	// For successful transactional requests, keep the written intents and
+	// the updated transaction record to be sent along with the reply.
+	// The transaction metadata is created with the first writing operation.
+	// A tricky edge case is that of a transaction which "fails" on the
+	// first writing request, but actually manages to write some intents
+	// (for example, due to being multi-range). In this case, there will
+	// be an error, but the transaction will be marked as Writing and the
+	// coordinator must track the state, for the client's retry will be
+	// performed with a Writing transaction which the coordinator rejects
+	// unless it is tracking it (on top of it making sense to track it;
+	// after all, it **has** laid down intents and only the coordinator
+	// can augment a potential EndTransaction call). See #3303.
+	intents := ba.GetIntentSpans()
+	if len(intents) > 0 && (pErr == nil || newTxn.Writing) {
+		if txnMeta == nil {
+			if !newTxn.Writing {
+				panic("txn with intents marked as non-writing")
+			}
+			// If the transaction is already over, there's no point in
+			// launching a one-off coordinator which will shut down right
+			// away. If we ended up here with an error, we'll always start
+			// the coordinator - the transaction has laid down intents, so
+			// we expect it to be committed/aborted at some point in the
+			// future.
+			if _, isEnding := ba.GetArg(roachpb.EndTransaction); pErr != nil || !isEnding {
+				sp.LogEvent("coordinator spawns")
+				txnMeta = &txnMetadata{
+					txn:              *newTxn,
+					keys:             cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
+					firstUpdateNanos: tc.clock.PhysicalNow(),
+					lastUpdateNanos:  tc.clock.PhysicalNow(),
+					timeoutDuration:  tc.clientTimeout,
+					txnEnd:           make(chan struct{}),
+				}
+				tc.txns[txnIDStr] = txnMeta
+
+				if !tc.stopper.RunAsyncTask(func() {
+					tc.heartbeatLoop(txnID)
+				}) {
+					// The system is already draining and we can't start the
+					// heartbeat. We refuse new transactions for now because
+					// they're likely not going to have all intents committed.
+					// In principle, we can relax this as needed though.
+					tc.unregisterTxnLocked(txnID)
+					return roachpb.NewError(&roachpb.NodeUnavailableError{})
+				}
+			}
+		}
+	}
+	// Update our record of this transaction, even on error.
+	if txnMeta != nil {
+		txnMeta.txn = *newTxn
+		if !txnMeta.txn.Writing {
+			panic("tracking a non-writing txn")
+		}
+		txnMeta.setLastUpdate(tc.clock.PhysicalNow())
+		// Adding the intents even on error reduces the likelihood of dangling
+		// intents blocking concurrent writers for extended periods of time.
+		// See #3346.
+		for _, intent := range intents {
+			txnMeta.addKeyRange(intent.Key, intent.EndKey)
+		}
+	}
+	if pErr == nil {
+		// For successful transactional requests, always send the updated txn
+		// record back.
+		br.Txn = newTxn
+	}
+	return pErr
 }
 
 // TODO(tschottdorf): this method is somewhat awkward but unless we want to
