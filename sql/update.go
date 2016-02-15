@@ -19,7 +19,6 @@ package sql
 import (
 	"bytes"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -32,7 +31,7 @@ import (
 // Privileges: UPDATE and SELECT on table. We currently always use a select statement.
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
-func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
+func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.Error) {
 	tracing.AnnotateTrace()
 	tableDesc, pErr := p.getAliasedTableLease(n.Table)
 	if pErr != nil {
@@ -234,7 +233,7 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 
 	marshalled := make([]interface{}, len(cols))
 
-	b := client.Batch{}
+	b := p.txn.NewBatch()
 	result := &valuesNode{}
 	tracing.AnnotateTrace()
 	for rows.Next() {
@@ -333,8 +332,17 @@ func (p *planner) Update(n *parser.Update) (planNode, *roachpb.Error) {
 	if pErr := rows.PErr(); pErr != nil {
 		return nil, pErr
 	}
-	if pErr := p.txn.Run(&b); pErr != nil {
-		return nil, convertBatchError(tableDesc, b, pErr)
+
+	if autoCommit {
+		// An auto-txn can commit the transaction with the batch. This is an
+		// optimization to avoid an extra round-trip to the transaction
+		// coordinator.
+		pErr = p.txn.CommitInBatch(b)
+	} else {
+		pErr = p.txn.Run(b)
+	}
+	if pErr != nil {
+		return nil, convertBatchError(tableDesc, *b, pErr)
 	}
 
 	tracing.AnnotateTrace()

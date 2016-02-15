@@ -100,7 +100,7 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	case *parser.CreateTable:
 		return p.CreateTable(n)
 	case *parser.Delete:
-		return p.Delete(n)
+		return p.Delete(n, autoCommit)
 	case *parser.DropDatabase:
 		return p.DropDatabase(n)
 	case *parser.DropIndex:
@@ -151,7 +151,7 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	case *parser.Truncate:
 		return p.Truncate(n)
 	case *parser.Update:
-		return p.Update(n)
+		return p.Update(n, autoCommit)
 	case parser.Values:
 		return p.Values(n)
 	default:
@@ -163,7 +163,7 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
 	p.prepareOnly = true
 	switch n := stmt.(type) {
 	case *parser.Delete:
-		return p.Delete(n)
+		return p.Delete(n, false)
 	case *parser.Insert:
 		return p.Insert(n, false)
 	case *parser.Select:
@@ -181,7 +181,7 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
 	case *parser.ShowTables:
 		return p.ShowTables(n)
 	case *parser.Update:
-		return p.Update(n)
+		return p.Update(n, false)
 	default:
 		return nil, roachpb.NewUErrorf("prepare statement not supported: %s", stmt.StatementTag())
 
