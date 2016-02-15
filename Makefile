@@ -170,17 +170,21 @@ check:
 	@echo "checking for tabs in shell scripts"
 	@! git grep -F '	' -- '*.sh'
 	@echo "checking for forbidden imports"
-	@$(GO) list -f '{{ $$ip := .ImportPath }}{{ range .Imports}}{{ $$ip }}: {{ println . }}{{end}}' $(PKG) | \
-		grep -E ' (golang/protobuf/proto|log|path)$$' | \
-		grep -Ev '(base|security|sql/driver|util(/(log|randutil|stop))?): log$$' | tee forbidden.log; \
+	@$(GO) list -f '{{ $$ip := .ImportPath }}{{ range .Imports}}{{ $$ip }}: {{ println . }}{{end}}{{ range .TestImports}}{{ $$ip }}: {{ println . }}{{end}}{{ range .XTestImports}}{{ $$ip }}: {{ println . }}{{end}}' $(PKG) | \
+		grep -E ' (github.com/golang/protobuf/proto|github.com/satori/go\.uuid|log|path)$$' | \
+		grep -Ev '(base|security|sql/driver|util(/(log|randutil|stop))?): log$$' | \
+		grep -vF 'util/uuid: github.com/satori/go.uuid' | tee forbidden.log; \
 	   if grep -E ' path$$' forbidden.log >/dev/null; then \
 	        echo; echo "Consider using 'path/filepath' instead of 'path'."; echo; \
 	   fi; \
 	   if grep -E ' log$$' forbidden.log >/dev/null; then \
 	        echo; echo "Consider using 'util/log' instead of 'log'."; echo; \
 	   fi; \
-	   if grep -E ' golang/protobuf/proto$$' forbidden.log >/dev/null; then \
+	   if grep -E ' github.com/golang/protobuf/proto$$' forbidden.log >/dev/null; then \
 	        echo; echo "Consider using 'gogo/protobuf/proto' instead of 'golang/protobuf/proto'."; echo; \
+	   fi; \
+	   if grep -E ' github.com/satori/go\.uuid$$' forbidden.log >/dev/null; then \
+	        echo; echo "Consider using 'util/uuid' instead of 'satori/go.uuid'."; echo; \
 	   fi; \
            test ! -s forbidden.log
 	@rm -f forbidden.log
