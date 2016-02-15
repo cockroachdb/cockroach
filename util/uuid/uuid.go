@@ -16,80 +16,54 @@
 
 package uuid
 
-import (
-	"errors"
-
-	"github.com/satori/go.uuid"
-)
+import "github.com/satori/go.uuid"
 
 // EmptyUUID is the zero-UUID.
-var EmptyUUID = &UUID{make([]byte, 16)}
+var EmptyUUID = &UUID{}
 
 // UUID is a thin wrapper around "github.com/satori/go.uuid".UUID that can be
 // used as a gogo/protobuf customtype.
 type UUID struct {
-	// TODO(tamird): should be an embedded uuid.UUID when
-	// https://github.com/gogo/protobuf/pull/146 is fixed.
-	// Revert this comment when that happens.
-	U []byte
+	uuid.UUID
 }
 
 // Size returns the marshalled size of u, in bytes.
 func (u UUID) Size() int {
-	return len(u.Bytes())
+	return len(u.UUID)
 }
 
 // MarshalTo marshals u to data.
 func (u UUID) MarshalTo(data []byte) (int, error) {
-	return copy(data, u.Bytes()), nil
+	return copy(data, u.UUID.Bytes()), nil
 }
 
 // Unmarshal unmarshals data to u.
 func (u *UUID) Unmarshal(data []byte) error {
-	if copy(u.Bytes(), data) != 16 {
-		return errors.New("did not copy enough bytes. uninitialized UUID struct?")
-	}
-	return nil
+	return u.UUID.UnmarshalBinary(data)
 }
 
 // MakeV4 delegates to "github.com/satori/go.uuid".NewV4 and wraps the result in
 // a UUID.
 func MakeV4() UUID {
-	return UUID{uuid.NewV4().Bytes()}
+	return UUID{uuid.NewV4()}
 }
 
 // NewV4 delegates to "github.com/satori/go.uuid".NewV4 and wraps the result in
 // a UUID.
 func NewV4() *UUID {
-	return &UUID{uuid.NewV4().Bytes()}
+	return &UUID{uuid.NewV4()}
 }
 
 // FromBytes delegates to "github.com/satori/go.uuid".FromBytes and wraps the
 // result in a UUID.
-func FromBytes(input []byte) (u *UUID, err error) {
-	inner, err := uuid.FromBytes(input)
-	return &UUID{inner.Bytes()}, err
+func FromBytes(input []byte) (*UUID, error) {
+	u, err := uuid.FromBytes(input)
+	return &UUID{u}, err
 }
 
 // FromString delegates to "github.com/satori/go.uuid".FromString and wraps the
 // result in a UUID.
-func FromString(input string) (u *UUID, err error) {
-	inner, err := uuid.FromString(input)
-	return &UUID{inner.Bytes()}, err
-}
-
-func (u UUID) String() string {
-	inner, err := uuid.FromBytes(u.Bytes())
-	if err != nil {
-		panic(err)
-	}
-	return inner.String()
-}
-
-// Bytes returns the underlying byte slice.
-func (u *UUID) Bytes() []byte {
-	if u.U == nil {
-		u.U = make([]byte, 16)
-	}
-	return u.U
+func FromString(input string) (*UUID, error) {
+	u, err := uuid.FromString(input)
+	return &UUID{u}, err
 }

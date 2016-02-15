@@ -1584,8 +1584,7 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	// so we error out below.
 	if uuidBytes, err := r.store.Gossip().GetInfo(gossip.KeyClusterID); err == nil {
 		if gossipClusterID, err := uuid.FromBytes(uuidBytes); err == nil {
-			clusterID := r.store.ClusterID()
-			if !bytes.Equal(gossipClusterID.Bytes(), clusterID.Bytes()) {
+			if *gossipClusterID != r.store.ClusterID() {
 				log.Fatalc(ctx, "store %d belongs to cluster %s, but attempted to join cluster %s via gossip",
 					r.store.StoreID(), r.store.ClusterID(), gossipClusterID)
 			}
@@ -1598,8 +1597,7 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 		log.Infoc(ctx, "gossiping cluster id %q from store %d, range %d", r.store.ClusterID(),
 			r.store.StoreID(), r.RangeID)
 	}
-	clusterID := r.store.ClusterID()
-	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, clusterID.Bytes(), 0*time.Second); err != nil {
+	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, r.store.ClusterID().Bytes(), 0*time.Second); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
 	if ok, pErr := r.getLeaseForGossip(ctx); !ok || pErr != nil {
@@ -1608,7 +1606,7 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	if log.V(1) {
 		log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.store.StoreID(), r.RangeID)
 	}
-	if err := r.store.Gossip().AddInfo(gossip.KeySentinel, clusterID.Bytes(), sentinelGossipTTL); err != nil {
+	if err := r.store.Gossip().AddInfo(gossip.KeySentinel, r.store.ClusterID().Bytes(), sentinelGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip sentinel: %s", err)
 	}
 	if log.V(1) {
@@ -1681,7 +1679,7 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 		// TODO(tschottdorf): avoid data race related to batch unrolling in ExecuteCmd;
 		// can probably go again when that provisional code there is gone. Should
 		// still be careful though, a retry could happen and race with args.
-		args := proto.Clone(item.args).(roachpb.Request)
+		args := util.CloneProto(item.args).(roachpb.Request)
 		stopper.RunAsyncTask(func() {
 			// Everything here is best effort; give up rather than waiting
 			// too long (helps avoid deadlocks during test shutdown,

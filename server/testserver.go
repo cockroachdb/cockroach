@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -184,7 +183,7 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 	// TODO(marc): set this in the zones table when we have an entry
 	// for the default cluster-wide zone config and remove these
 	// shenanigans about mutating the global default.
-	oldDefaultZC := proto.Clone(config.DefaultZoneConfig).(*config.ZoneConfig)
+	oldDefaultZC := util.CloneProto(config.DefaultZoneConfig).(*config.ZoneConfig)
 	config.DefaultZoneConfig.ReplicaAttrs = []roachpb.Attributes{{}}
 	stopper.AddCloser(stop.CloserFn(func() {
 		config.DefaultZoneConfig = oldDefaultZC

@@ -17,7 +17,6 @@
 package server
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net"
@@ -146,7 +145,7 @@ func bootstrapCluster(engines []engine.Engine) (uuid.UUID, error) {
 		s := storage.NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 		// Verify the store isn't already part of a cluster.
-		if !bytes.Equal(s.Ident.ClusterID.Bytes(), uuid.EmptyUUID.Bytes()) {
+		if s.Ident.ClusterID != *uuid.EmptyUUID {
 			return uuid.UUID{}, util.Errorf("storage engine already belongs to a cluster (%s)", s.Ident.ClusterID)
 		}
 
@@ -326,7 +325,7 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 			}
 			return util.Errorf("failed to start store: %s", err)
 		}
-		if bytes.Equal(s.Ident.ClusterID.Bytes(), uuid.EmptyUUID.Bytes()) || s.Ident.NodeID == 0 {
+		if s.Ident.ClusterID == *uuid.EmptyUUID || s.Ident.NodeID == 0 {
 			return util.Errorf("unidentified store: %s", s)
 		}
 		capacity, err := s.Capacity()
@@ -389,10 +388,10 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 // the agreed-upon cluster and node IDs.
 func (n *Node) validateStores() error {
 	return n.stores.VisitStores(func(s *storage.Store) error {
-		if bytes.Equal(n.ClusterID.Bytes(), uuid.EmptyUUID.Bytes()) {
+		if n.ClusterID == *uuid.EmptyUUID {
 			n.ClusterID = s.Ident.ClusterID
 			n.initNodeID(s.Ident.NodeID)
-		} else if !bytes.Equal(n.ClusterID.Bytes(), s.Ident.ClusterID.Bytes()) {
+		} else if n.ClusterID != s.Ident.ClusterID {
 			return util.Errorf("store %s cluster ID doesn't match node cluster %q", s, n.ClusterID)
 		} else if n.Descriptor.NodeID != s.Ident.NodeID {
 			return util.Errorf("store %s node ID doesn't match node ID: %d", s, n.Descriptor.NodeID)
@@ -406,7 +405,7 @@ func (n *Node) validateStores() error {
 // allocated via a sequence id generator stored at a system key per
 // node.
 func (n *Node) bootstrapStores(bootstraps []*storage.Store, stopper *stop.Stopper) {
-	if bytes.Equal(n.ClusterID.Bytes(), uuid.EmptyUUID.Bytes()) {
+	if n.ClusterID == *uuid.EmptyUUID {
 		panic("ClusterID missing during store bootstrap of auxiliary store")
 	}
 
@@ -458,9 +457,9 @@ func (n *Node) connectGossip() {
 	}
 	gossipClusterID := *gossipClusterIDPtr
 
-	if bytes.Equal(n.ClusterID.Bytes(), uuid.EmptyUUID.Bytes()) {
+	if n.ClusterID == *uuid.EmptyUUID {
 		n.ClusterID = gossipClusterID
-	} else if !bytes.Equal(n.ClusterID.Bytes(), gossipClusterID.Bytes()) {
+	} else if n.ClusterID != gossipClusterID {
 		log.Fatalf("node %d belongs to cluster %q but is attempting to connect to a gossip network for cluster %q",
 			n.Descriptor.NodeID, n.ClusterID, gossipClusterID)
 	}

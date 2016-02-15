@@ -1910,8 +1910,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	}
 	for _, test := range testCases {
 		// Establish existing txn state by writing directly to range engine.
-		var existTxn roachpb.Transaction
-		proto.Merge(&existTxn, txn)
+		existTxn := txn.Clone()
 		existTxn.Key = test.key
 		existTxn.Status = test.existStatus
 		existTxn.Epoch = test.existEpoch
@@ -3157,7 +3156,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	var origSeen, newSeen bool
 
 	for !(origSeen && newSeen) {
-		clonedRLArgs := proto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
+		clonedRLArgs := util.CloneProto(rlArgs).(*roachpb.RangeLookupRequest)
 
 		reply, pErr = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
@@ -3252,7 +3251,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 
 	// Test ReverseScan without intents.
 	for _, c := range testCases {
-		clonedRLArgs := proto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
+		clonedRLArgs := util.CloneProto(rlArgs).(*roachpb.RangeLookupRequest)
 		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.RKey(c.key))
 		reply, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
@@ -3281,7 +3280,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 
 	// Test ReverseScan with intents.
 	for _, c := range testCases {
-		clonedRLArgs := proto.Clone(rlArgs).(*roachpb.RangeLookupRequest)
+		clonedRLArgs := util.CloneProto(rlArgs).(*roachpb.RangeLookupRequest)
 		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.RKey(c.key))
 		reply, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
@@ -3599,7 +3598,7 @@ func TestReplicaDestroy(t *testing.T) {
 
 	// First try and fail with an outdated descriptor.
 	origDesc := rep.Desc()
-	newDesc := proto.Clone(origDesc).(*roachpb.RangeDescriptor)
+	newDesc := util.CloneProto(origDesc).(*roachpb.RangeDescriptor)
 	_, newRep := newDesc.FindReplica(tc.store.StoreID())
 	newRep.ReplicaID++
 	newDesc.NextReplicaID++

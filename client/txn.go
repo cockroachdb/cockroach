@@ -413,9 +413,9 @@ func (txn *Txn) exec(retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
 			// Make sure the txn record that pErr carries is for this txn.
 			// We check only when txn.Proto.ID has been initialized after an initial successful send.
 			if pErr.GetTxn() != nil && txn.Proto.ID != nil {
-				if !pErr.GetTxn().Equal(&txn.Proto) {
-					return roachpb.NewErrorf("mismatching transaction record in the error. %s v.s. %s",
-						pErr.GetTxn(), txn.Proto)
+				if errTxn := pErr.GetTxn(); !errTxn.Equal(&txn.Proto) {
+					return roachpb.NewErrorf("mismatching transaction record in the error:\n%s\nv.s.\n%s",
+						errTxn, txn.Proto)
 				}
 			}
 
