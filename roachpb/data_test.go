@@ -493,44 +493,10 @@ func TestTransactionUpdate(t *testing.T) {
 	}
 }
 
-func equalPtrFields(src, dst reflect.Value, prefix string) []string {
-	t := dst.Type()
-	if t.Kind() != reflect.Struct {
-		return nil
-	}
-	if srcType := src.Type(); srcType != t {
-		return nil
-	}
-	var res []string
-	for i := 0; i < t.NumField(); i++ {
-		srcF, dstF := src.Field(i), dst.Field(i)
-		switch f := t.Field(i); f.Type.Kind() {
-		case reflect.Ptr:
-			if srcF.Interface() == dstF.Interface() {
-				res = append(res, prefix+f.Name)
-			}
-		case reflect.Slice:
-			if srcF.Pointer() == dstF.Pointer() {
-				res = append(res, prefix+f.Name)
-			}
-			l := dstF.Len()
-			if srcLen := srcF.Len(); srcLen < l {
-				l = srcLen
-			}
-			for i := 0; i < l; i++ {
-				res = append(res, equalPtrFields(srcF.Index(i), dstF.Index(i), f.Name+".")...)
-			}
-		case reflect.Struct:
-			res = append(res, equalPtrFields(srcF, dstF, f.Name+".")...)
-		}
-	}
-	return res
-}
-
 func TestTransactionClone(t *testing.T) {
 	txn := nonZeroTxn.Clone()
 
-	fields := equalPtrFields(reflect.ValueOf(nonZeroTxn), reflect.ValueOf(txn), "")
+	fields := util.EqualPtrFields(reflect.ValueOf(nonZeroTxn), reflect.ValueOf(txn), "")
 	sort.Strings(fields)
 
 	// Verify that the only equal pointer fields after cloning are the ones
