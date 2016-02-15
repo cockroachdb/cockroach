@@ -17,12 +17,12 @@
 package cli
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"io"
 	"net"
 	"net/url"
-	"unicode/utf8"
 
 	// Import postgres driver.
 	_ "github.com/lib/pq"
@@ -174,11 +174,12 @@ func formatVal(val interface{}) string {
 	case nil:
 		return "NULL"
 	case []byte:
-		if !utf8.Valid(t) {
-			// Ensure that protobufs containing non-UTF8 binary data print escaped.
-			return fmt.Sprintf("%q", t)
+		// We don't escape strings that contain only printable ASCII characters.
+		if len(bytes.TrimLeftFunc(t, func(r rune) bool { return r >= 0x20 && r < 0x80 })) == 0 {
+			return string(t)
 		}
-		return string(t)
+		// We use %+q to ensure the output contains only ASCII (see issue #4315).
+		return fmt.Sprintf("%+q", t)
 	}
 	return fmt.Sprint(val)
 }

@@ -575,6 +575,49 @@ func Example_sql() {
 	// 0	empty	-
 }
 
+func Example_sql_escape() {
+	c := newCLITest()
+	defer c.stop()
+
+	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string, d string);"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'foo', 'printable ASCII')"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'foo\\x0a', 'non-printable ASCII')"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values ('κόσμε', 'printable UTF8')"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'\\xc3\\xb1', 'printable UTF8 using escapes')"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'\\x01', 'non-printable UTF8 string')"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'\\xdc\\x88\\x38\\x35', 'UTF8 string with RTL char')"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'\\xc3\\x28', 'non-UTF8 string')"})
+	c.RunWithArgs([]string{"sql", "-e", "select * from t.t"})
+
+	// Output:
+	// sql -e create database t; create table t.t (s string, d string);
+	// OK
+	// sql -e insert into t.t values (e'foo', 'printable ASCII')
+	// OK
+	// sql -e insert into t.t values (e'foo\x0a', 'non-printable ASCII')
+	// OK
+	// sql -e insert into t.t values ('κόσμε', 'printable UTF8')
+	// OK
+	// sql -e insert into t.t values (e'\xc3\xb1', 'printable UTF8 using escapes')
+	// OK
+	// sql -e insert into t.t values (e'\x01', 'non-printable UTF8 string')
+	// OK
+	// sql -e insert into t.t values (e'\xdc\x88\x38\x35', 'UTF8 string with RTL char')
+	// OK
+	// sql -e insert into t.t values (e'\xc3\x28', 'non-UTF8 string')
+	// OK
+	// sql -e select * from t.t
+	// 7 rows
+	// s	d
+	// foo	printable ASCII
+	// "foo\n"	non-printable ASCII
+	// "\u03ba\u1f79\u03c3\u03bc\u03b5"	printable UTF8
+	// "\u00f1"	printable UTF8 using escapes
+	// "\x01"	non-printable UTF8 string
+	// "\u070885"	UTF8 string with RTL char
+	// "\xc3("	non-UTF8 string
+}
+
 func Example_user() {
 	c := newCLITest()
 	defer c.stop()
