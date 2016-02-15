@@ -8,3 +8,5 @@ function check_static() {
         exit 1
     fi
 }
+
+
