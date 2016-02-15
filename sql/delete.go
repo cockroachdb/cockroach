@@ -17,7 +17,6 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -28,7 +27,7 @@ import (
 // Privileges: DELETE and SELECT on table. We currently always use a SELECT statement.
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
-func (p *planner) Delete(n *parser.Delete) (planNode, *roachpb.Error) {
+func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.Error) {
 	tableDesc, pErr := p.getAliasedTableLease(n.Table)
 	if pErr != nil {
 		return nil, pErr
@@ -63,7 +62,7 @@ func (p *planner) Delete(n *parser.Delete) (planNode, *roachpb.Error) {
 	primaryIndex := tableDesc.PrimaryIndex
 	primaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
-	b := client.Batch{}
+	b := p.txn.NewBatch()
 	result := &valuesNode{}
 	for rows.Next() {
 		rowVals := rows.Values()
@@ -114,7 +113,16 @@ func (p *planner) Delete(n *parser.Delete) (planNode, *roachpb.Error) {
 		// Mark transaction as operating on the system DB.
 		p.txn.SetSystemConfigTrigger()
 	}
-	if pErr := p.txn.Run(&b); pErr != nil {
+
+	if autoCommit {
+		// An auto-txn can commit the transaction with the batch. This is an
+		// optimization to avoid an extra round-trip to the transaction
+		// coordinator.
+		pErr = p.txn.CommitInBatch(b)
+	} else {
+		pErr = p.txn.Run(b)
+	}
+	if pErr != nil {
 		return nil, pErr
 	}
 
