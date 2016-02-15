@@ -159,8 +159,20 @@ func send(opts SendOptions, replicas ReplicaSlice,
 	var errors, retryableErrors int
 
 	// Wait for completions.
+	var sendNextTimer util.Timer
+	defer sendNextTimer.Stop()
 	for {
+		sendNextTimer.Reset(opts.SendNextTimeout)
 		select {
+		case <-sendNextTimer.C:
+			sendNextTimer.Read = true
+			// On successive RPC timeouts, send to additional replicas if available.
+			if len(orderedClients) > 0 {
+				sp.LogEvent("timeout, trying next peer")
+				sendOneFn(&orderedClients[0], opts.Timeout, context, sp, done)
+				orderedClients = orderedClients[1:]
+			}
+
 		case call := <-done:
 			if call.Error == nil {
 				// Verify response data integrity if this is a proto response.
@@ -204,14 +216,6 @@ func send(opts SendOptions, replicas ReplicaSlice,
 			// Send to additional replicas if available.
 			if len(orderedClients) > 0 {
 				sp.LogEvent("error, trying next peer")
-				sendOneFn(&orderedClients[0], opts.Timeout, context, sp, done)
-				orderedClients = orderedClients[1:]
-			}
-
-		case <-time.After(opts.SendNextTimeout):
-			// On successive RPC timeouts, send to additional replicas if available.
-			if len(orderedClients) > 0 {
-				sp.LogEvent("timeout, trying next peer")
 				sendOneFn(&orderedClients[0], opts.Timeout, context, sp, done)
 				orderedClients = orderedClients[1:]
 			}
