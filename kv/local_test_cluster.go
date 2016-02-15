@@ -84,7 +84,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 		if ltc.Latency > 0 {
 			time.Sleep(ltc.Latency)
 		}
-		sp := tracer.StartTrace("node")
+		sp := tracer.StartSpan("node")
 		defer sp.Finish()
 		ctx, _ := opentracing.ContextWithSpan(context.Background(), sp)
 		sp.LogEvent(args.String())
