@@ -183,10 +183,10 @@ type TxnCoordSender struct {
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
 	clientTimeout     time.Duration
-	sync.Mutex                                // protects txns and txnStats
-	txns              map[string]*txnMetadata // txn key to metadata
-	txnStats          txnCoordStats           // statistics of recent txns
-	linearizable      bool                    // enables linearizable behaviour
+	sync.Mutex                                   // protects txns and txnStats
+	txns              map[uuid.UUID]*txnMetadata // txn key to metadata
+	txnStats          txnCoordStats              // statistics of recent txns
+	linearizable      bool                       // enables linearizable behaviour
 	tracer            opentracing.Tracer
 	stopper           *stop.Stopper
 }
@@ -204,7 +204,7 @@ func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable boo
 		clock:             clock,
 		heartbeatInterval: storage.DefaultHeartbeatInterval,
 		clientTimeout:     defaultClientTimeout,
-		txns:              map[string]*txnMetadata{},
+		txns:              map[uuid.UUID]*txnMetadata{},
 		linearizable:      linearizable,
 		tracer:            tracer,
 		stopper:           stopper,
@@ -326,13 +326,12 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 	if ba.Txn != nil {
 		// If this request is part of a transaction...
 		txnID := *ba.Txn.ID
-		txnIDStr := txnID.String()
 		// Verify that if this Transaction is not read-only, we have it on
 		// file. If not, refuse writes - the client must have issued a write on
 		// another coordinator previously.
 		if ba.Txn.Writing && ba.IsTransactionWrite() {
 			tc.Lock()
-			_, ok := tc.txns[txnIDStr]
+			_, ok := tc.txns[txnID]
 			tc.Unlock()
 			if !ok {
 				return nil, roachpb.NewErrorf("transaction must not write on multiple coordinators")
@@ -364,7 +363,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 				return nil, roachpb.NewErrorf("client must not pass intents to EndTransaction")
 			}
 			tc.Lock()
-			txnMeta, metaOK := tc.txns[txnIDStr]
+			txnMeta, metaOK := tc.txns[txnID]
 			if metaOK {
 				et.IntentSpans = txnMeta.intentSpans()
 			}
@@ -510,7 +509,7 @@ func (tc *TxnCoordSender) cleanupTxn(trace opentracing.Span, txn roachpb.Transac
 	trace.LogEvent("coordinator stops")
 	tc.Lock()
 	defer tc.Unlock()
-	txnMeta, ok := tc.txns[txn.ID.String()]
+	txnMeta, ok := tc.txns[*txn.ID]
 	// The heartbeat might've already removed the record.
 	if !ok {
 		return
@@ -526,8 +525,7 @@ func (tc *TxnCoordSender) cleanupTxn(trace opentracing.Span, txn roachpb.Transac
 // unregisterTxn deletes a txnMetadata object from the sender
 // and collects its stats. It assumes the lock is held.
 func (tc *TxnCoordSender) unregisterTxnLocked(txnID uuid.UUID) {
-	txnIDStr := txnID.String()
-	txnMeta := tc.txns[txnIDStr] // guaranteed to exist
+	txnMeta := tc.txns[txnID] // guaranteed to exist
 	if txnMeta == nil {
 		panic(fmt.Sprintf("attempt to unregister non-existent transaction: %s", txnID))
 	}
@@ -543,7 +541,7 @@ func (tc *TxnCoordSender) unregisterTxnLocked(txnID uuid.UUID) {
 	}
 	txnMeta.keys.Clear()
 
-	delete(tc.txns, txnIDStr)
+	delete(tc.txns, txnID)
 }
 
 // heartbeatLoop periodically sends a HeartbeatTxn RPC to an extant
@@ -568,7 +566,7 @@ func (tc *TxnCoordSender) heartbeatLoop(txnID uuid.UUID) {
 	var sp opentracing.Span
 	{
 		tc.Lock()
-		txnMeta := tc.txns[txnID.String()] // do not leak to outer scope
+		txnMeta := tc.txns[txnID] // do not leak to outer scope
 		closer = txnMeta.txnEnd
 		sp = tc.tracer.StartTrace("heartbeat loop")
 		defer sp.Finish()
@@ -600,7 +598,7 @@ func (tc *TxnCoordSender) heartbeatLoop(txnID uuid.UUID) {
 func (tc *TxnCoordSender) heartbeat(txnID uuid.UUID, trace opentracing.Span, ctx context.Context) bool {
 	tc.Lock()
 	proceed := true
-	txnMeta := tc.txns[txnID.String()]
+	txnMeta := tc.txns[txnID]
 	// Before we send a heartbeat, determine whether this transaction
 	// should be considered abandoned. If so, exit heartbeat.
 	if txnMeta.hasClientAbandonedCoord(tc.clock.PhysicalNow()) {
@@ -728,10 +726,9 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		return pErr
 	}
 	txnID := *newTxn.ID
-	txnIDStr := txnID.String()
 	tc.Lock()
 	defer tc.Unlock()
-	txnMeta := tc.txns[txnIDStr]
+	txnMeta := tc.txns[txnID]
 	// For successful transactional requests, keep the written intents and
 	// the updated transaction record to be sent along with the reply.
 	// The transaction metadata is created with the first writing operation.
@@ -766,7 +763,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 					timeoutDuration:  tc.clientTimeout,
 					txnEnd:           make(chan struct{}),
 				}
-				tc.txns[txnIDStr] = txnMeta
+				tc.txns[txnID] = txnMeta
 
 				if !tc.stopper.RunAsyncTask(func() {
 					tc.heartbeatLoop(txnID)
