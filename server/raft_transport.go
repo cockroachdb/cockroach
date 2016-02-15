@@ -21,21 +21,21 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/gogo/protobuf/proto"
-
-	gorpc "net/rpc"
 )
 
 const (
-	// TODO(bdarnell): consider changing raftServiceName/raftMessageName
-	raftServiceName = "MultiRaft"
-	raftMessageName = raftServiceName + ".RaftMessage"
 	// Outgoing messages are queued on a per-node basis on a channel of
 	// this size.
 	raftSendBufferSize = 500
@@ -47,55 +47,48 @@ const (
 // rpcTransport handles the rpc messages for raft.
 type rpcTransport struct {
 	gossip     *gossip.Gossip
-	rpcServer  *rpc.Server
 	rpcContext *rpc.Context
 	mu         sync.Mutex
 	handlers   map[roachpb.StoreID]storage.RaftMessageHandler
 	queues     map[roachpb.StoreID]chan *storage.RaftMessageRequest
 }
 
-// newRPCTransport creates a new rpcTransport with specified gossip and rpc server.
-func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *rpc.Context) (
-	storage.RaftTransport, error) {
+// newRPCTransport creates a new rpcTransport with specified gossip and grpc server.
+func newRPCTransport(gossip *gossip.Gossip, grpcServer *grpc.Server, rpcContext *rpc.Context) storage.RaftTransport {
 	t := &rpcTransport{
 		gossip:     gossip,
-		rpcServer:  rpcServer,
 		rpcContext: rpcContext,
 		handlers:   make(map[roachpb.StoreID]storage.RaftMessageHandler),
 		queues:     make(map[roachpb.StoreID]chan *storage.RaftMessageRequest),
 	}
 
-	if t.rpcServer != nil {
-		if err := t.rpcServer.RegisterAsync(raftMessageName, false, /*not public*/
-			t.RaftMessage, &storage.RaftMessageRequest{}); err != nil {
-			return nil, err
-		}
+	if grpcServer != nil {
+		storage.RegisterMultiRaftServer(grpcServer, t)
 	}
 
-	return t, nil
+	return t
 }
 
 // RaftMessage proxies the incoming request to the listening server interface.
-func (t *rpcTransport) RaftMessage(args proto.Message, callback func(proto.Message, error)) {
-	req := args.(*storage.RaftMessageRequest)
+func (t *rpcTransport) RaftMessage(stream storage.MultiRaft_RaftMessageServer) error {
+	for {
+		req, err := stream.Recv()
+		if err != nil {
+			return err
+		}
 
-	t.mu.Lock()
-	handler, ok := t.handlers[req.ToReplica.StoreID]
-	t.mu.Unlock()
+		t.mu.Lock()
+		handler, ok := t.handlers[req.ToReplica.StoreID]
+		t.mu.Unlock()
 
-	if !ok {
-		callback(nil, util.Errorf("Unable to proxy message to node: %d", req.Message.To))
-		return
+		if !ok {
+			return util.Errorf("Unable to proxy message to node: %d", req.Message.To)
+		}
+
+		if err := handler(req); err != nil {
+			return err
+		}
 	}
-
-	// Raft responses are empty so we don't actually need to get a
-	// response from the handler. In fact, we don't even need to wait
-	// for the message to be processed to invoke the callback. We are
-	// just (ab)using the async handler mechanism to get this
-	// (synchronous) handler called in the RPC server's goroutine so we
-	// can preserve order of incoming messages.
-	err := handler(req)
-	callback(&storage.RaftMessageResponse{}, err)
 }
 
 // Listen implements the storage.RaftTransport interface by
@@ -142,29 +135,48 @@ func (t *rpcTransport) processQueue(nodeID roachpb.NodeID, storeID roachpb.Store
 		}
 		return
 	}
-	client := rpc.NewClient(addr, t.rpcContext)
-	select {
-	case <-t.rpcContext.Stopper.ShouldStop():
-		return
-	case <-client.Closed:
-		log.Warningf("raft client for node %d was closed", nodeID)
-		return
-	case <-time.After(raftIdleTimeout):
-		// Should never happen.
-		log.Errorf("raft client for node %d stuck connecting", nodeID)
-		return
-	case <-client.Healthy():
+
+	var dialOpt grpc.DialOption
+	if t.rpcContext.Insecure {
+		dialOpt = grpc.WithInsecure()
+	} else {
+		tlsConfig, err := t.rpcContext.GetClientTLSConfig()
+		if err != nil {
+			log.Error(err)
+			return
+		}
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 	}
 
-	done := make(chan *gorpc.Call, cap(ch))
-	var req *storage.RaftMessageRequest
-	protoResp := &storage.RaftMessageResponse{}
+	conn, err := grpc.Dial(addr.String(), dialOpt)
+	if err != nil {
+		log.Errorf("failed to dial: %v", err)
+		return
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Error(err)
+		}
+	}()
+	client := storage.NewMultiRaftClient(conn)
+	ctx := grpcutil.NewContextWithStopper(context.Background(), t.rpcContext.Stopper)
+	stream, err := client.RaftMessage(ctx)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	defer func() {
+		if err := stream.CloseSend(); err != nil {
+			log.Error(err)
+		}
+	}()
+
 	var raftIdleTimer util.Timer
 	defer raftIdleTimer.Stop()
 	for {
 		raftIdleTimer.Reset(raftIdleTimeout)
 		select {
-		case <-t.rpcContext.Stopper.ShouldStop():
+		case <-ctx.Done():
 			return
 		case <-raftIdleTimer.C:
 			raftIdleTimer.Read = true
@@ -172,21 +184,12 @@ func (t *rpcTransport) processQueue(nodeID roachpb.NodeID, storeID roachpb.Store
 				log.Infof("closing Raft transport to %d due to inactivity", nodeID)
 			}
 			return
-		case <-client.Closed:
-			log.Warningf("raft client for node %d closed", nodeID)
-			return
-		case call := <-done:
-			if call.Error != nil {
-				log.Errorf("raft message to node %d failed: %s", nodeID, call.Error)
+		case req := <-ch:
+			if err := stream.Send(req); err != nil {
+				log.Error(err)
+				return
 			}
-			continue
-		case req = <-ch:
 		}
-		if req == nil {
-			return
-		}
-
-		client.Go(raftMessageName, req, protoResp, done)
 	}
 }
 

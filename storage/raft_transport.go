@@ -19,21 +19,18 @@ package storage
 
 import (
 	"net"
-	netrpc "net/rpc"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/base"
+	"golang.org/x/net/context"
+
+	"google.golang.org/grpc"
+
 	"github.com/cockroachdb/cockroach/roachpb"
-	crpc "github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/rpc/codec"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/gogo/protobuf/proto"
 )
-
-// TODO(bdarnell): remove/change raftMessageName
-const raftMessageName = "MultiRaft.RaftMessage"
 
 // RaftMessageHandler is the callback type used by RaftTransport.
 type RaftMessageHandler func(*RaftMessageRequest) error
@@ -57,16 +54,15 @@ type RaftTransport interface {
 	Close()
 }
 
-type serverWithAddr struct {
-	server *crpc.Server
-	addr   net.Addr
+type clientWithConn struct {
+	conn   *grpc.ClientConn
+	client MultiRaftClient
 }
 
 type localRPCTransport struct {
 	mu      sync.Mutex
-	servers map[roachpb.StoreID]serverWithAddr
-	clients map[roachpb.StoreID]*netrpc.Client
-	conns   map[net.Conn]struct{}
+	servers map[roachpb.StoreID]net.Addr
+	clients map[roachpb.StoreID]clientWithConn
 	closed  chan struct{}
 	stopper *stop.Stopper
 }
@@ -79,46 +75,32 @@ type localRPCTransport struct {
 // TODO(bdarnell): can we get rid of LocalRPCTransport?
 func NewLocalRPCTransport(stopper *stop.Stopper) RaftTransport {
 	return &localRPCTransport{
-		servers: make(map[roachpb.StoreID]serverWithAddr),
-		clients: make(map[roachpb.StoreID]*netrpc.Client),
-		conns:   make(map[net.Conn]struct{}),
+		servers: make(map[roachpb.StoreID]net.Addr),
+		clients: make(map[roachpb.StoreID]clientWithConn),
 		closed:  make(chan struct{}),
 		stopper: stopper,
 	}
 }
 
-func (lt *localRPCTransport) Listen(id roachpb.StoreID, handler RaftMessageHandler) error {
-	ctx := crpc.Context{
-		Context: base.Context{
-			Insecure: true,
-		},
-		Stopper:      lt.stopper,
-		DisableCache: true,
+// RaftMessage implements the generated gRPC server interface.
+func (handler RaftMessageHandler) RaftMessage(stream MultiRaft_RaftMessageServer) error {
+	for {
+		req, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		if err := handler(req); err != nil {
+			return err
+		}
 	}
-	rpcServer := crpc.NewServer(&ctx)
-	err := rpcServer.RegisterAsync(raftMessageName, false, /*not public*/
-		func(argsI proto.Message, callback func(proto.Message, error)) {
-			defer func() {
-				// TODO(bdarnell): the http/rpc code is swallowing panics somewhere.
-				if p := recover(); p != nil {
-					log.Fatalf("caught panic: %s", p)
-				}
-			}()
-			args := argsI.(*RaftMessageRequest)
-			err := handler(args)
-			callback(&RaftMessageResponse{}, err)
-		}, &RaftMessageRequest{})
-	if err != nil {
-		return err
-	}
+}
 
-	tlsConfig, err := ctx.GetServerTLSConfig()
-	if err != nil {
-		return err
-	}
+func (lt *localRPCTransport) Listen(id roachpb.StoreID, handler RaftMessageHandler) error {
+	grpcServer := grpc.NewServer()
+	RegisterMultiRaftServer(grpcServer, handler)
 
 	addr := util.CreateTestAddr("tcp")
-	ln, err := util.ListenAndServe(ctx.Stopper, rpcServer, addr, tlsConfig)
+	ln, err := grpcutil.ListenAndServeGRPC(lt.stopper, grpcServer, addr, nil)
 	if err != nil {
 		return err
 	}
@@ -127,7 +109,7 @@ func (lt *localRPCTransport) Listen(id roachpb.StoreID, handler RaftMessageHandl
 	if _, ok := lt.servers[id]; ok {
 		log.Fatalf("node %d already listening", id)
 	}
-	lt.servers[id] = serverWithAddr{rpcServer, ln.Addr()}
+	lt.servers[id] = ln.Addr()
 	lt.mu.Unlock()
 
 	return nil
@@ -137,13 +119,16 @@ func (lt *localRPCTransport) Stop(id roachpb.StoreID) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 	delete(lt.servers, id)
-	if client, ok := lt.clients[id]; ok {
-		client.Close()
+	if clientConn, ok := lt.clients[id]; ok {
+		if err := clientConn.conn.Close(); err != nil {
+			log.Warningf("error stopping client: %s", err)
+		}
+
 		delete(lt.clients, id)
 	}
 }
 
-func (lt *localRPCTransport) getClient(id roachpb.StoreID) (*netrpc.Client, error) {
+func (lt *localRPCTransport) getClient(id roachpb.StoreID) (MultiRaftClient, error) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 
@@ -153,25 +138,23 @@ func (lt *localRPCTransport) getClient(id roachpb.StoreID) (*netrpc.Client, erro
 	default:
 	}
 
-	client, ok := lt.clients[id]
-	if ok {
-		return client, nil
+	if clientConn, ok := lt.clients[id]; ok {
+		return clientConn.client, nil
 	}
 
-	srvWithAddr, ok := lt.servers[id]
+	addr, ok := lt.servers[id]
 	if !ok {
 		return nil, util.Errorf("unknown peer %v", id)
 	}
-	address := srvWithAddr.addr.String()
 
 	// If this wasn't test code we wouldn't want to call Dial while holding the lock.
-	conn, err := codec.TLSDialHTTP("tcp", address, base.NetworkTimeout, nil)
+	conn, err := grpc.Dial(addr.String(), grpc.WithInsecure())
 	if err != nil {
 		return nil, err
 	}
-	client = netrpc.NewClientWithCodec(codec.NewClientCodec(conn))
-	lt.clients[id] = client
-	return client, err
+	client := NewMultiRaftClient(conn)
+	lt.clients[id] = clientWithConn{conn: conn, client: client}
+	return client, nil
 }
 
 func (lt *localRPCTransport) Send(req *RaftMessageRequest) error {
@@ -179,39 +162,20 @@ func (lt *localRPCTransport) Send(req *RaftMessageRequest) error {
 	if err != nil {
 		return err
 	}
-	call := client.Go(raftMessageName, req, &RaftMessageResponse{}, nil)
-	select {
-	case <-call.Done:
-		// If the call failed synchronously, report an error.
-		return call.Error
-	default:
-		// Otherwise, fire-and-forget.
-		go func() {
-			select {
-			case <-call.Done:
-			case <-lt.closed:
-				return
-			}
-			if call.Error != nil {
-				log.Errorf("sending %s rpc from %s to %s failed: %s", req.Message.Type,
-					req.FromReplica, req.ToReplica, call.Error)
-			}
-		}()
-		return nil
+	stream, err := client.RaftMessage(grpcutil.NewContextWithStopper(context.Background(), lt.stopper))
+	if err != nil {
+		return err
 	}
+	return stream.Send(req)
 }
 
 func (lt *localRPCTransport) Close() {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 	close(lt.closed)
-	for _, c := range lt.clients {
-		err := c.Close()
-		if err != nil {
+	for _, clientConn := range lt.clients {
+		if err := clientConn.conn.Close(); err != nil {
 			log.Warningf("error stopping client: %s", err)
 		}
-	}
-	for conn := range lt.conns {
-		conn.Close()
 	}
 }
