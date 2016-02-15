@@ -17,10 +17,13 @@
 package storage
 
 import (
+	"sort"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/cache"
+	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/interval"
 )
 
 // A CommandQueue maintains an interval tree of keys or key ranges for
@@ -47,18 +50,23 @@ import (
 //
 // CommandQueue is not thread safe.
 type CommandQueue struct {
+	clock *hlc.Clock
 	cache *cache.IntervalCache
+	rg    interval.RangeGroup
 }
 
 type cmd struct {
-	readOnly bool
-	pending  []*sync.WaitGroup // Pending commands gated on cmd
+	timestamp roachpb.Timestamp
+	readOnly  bool
+	pending   []*sync.WaitGroup // Pending commands gated on cmd
 }
 
 // NewCommandQueue returns a new command queue.
-func NewCommandQueue() *CommandQueue {
+func NewCommandQueue(clock *hlc.Clock) *CommandQueue {
 	cq := &CommandQueue{
+		clock: clock,
 		cache: cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
+		rg:    interval.NewRangeTree(),
 	}
 	cq.cache.OnEvicted = cq.onEvicted
 	return cq
@@ -87,16 +95,70 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 			end = start.Next()
 			start = end[:len(start)]
 		}
-		for _, c := range cq.cache.GetOverlaps(start, end) {
-			c := c.Value.(*cmd)
-			// Only add to the wait group if one of the commands isn't read-only.
-			if !readOnly || !c.readOnly {
+		overlaps := cq.cache.GetOverlaps(start, end)
+		if readOnly {
+			// If both commands are read-only, there are no dependencies between them,
+			// so these can be filtered out of the overlapping commands.
+			overlaps = filterReadWrite(overlaps)
+		}
+
+		// Easy cases that can avoid sorting and allocation.
+		switch len(overlaps) {
+		case 0:
+			continue
+		case 1:
+			c := overlaps[0].Value.(*cmd)
+			c.pending = append(c.pending, wg)
+			wg.Add(1)
+			continue
+		}
+
+		// Sort overlapping commands by timestamp and iterate from latest to earliest,
+		// adding the commands' ranges to the RangeGroup to determine gating keyspace
+		// command dependencies. Because all commands are given WaitGroup dependencies
+		// to the most recent commands that they are dependent on, and because of the
+		// causality provided by the Hybrid Logical Clock used to timestamp commands,
+		// this approach will construct a DAG-like dependency graph between WaitGroups
+		// with overlapping keys. This comes as an alternative to creating explicit
+		// WaitGroups dependencies to all gating commands for each new command, which
+		// could result in an exponential dependency explosion.
+		sort.Sort(overlapSorter(overlaps))
+		for i := len(overlaps) - 1; i >= 0; i-- {
+			c := overlaps[i]
+			if cq.rg.Add(c.Key.Range) {
+				c := c.Value.(*cmd)
 				c.pending = append(c.pending, wg)
 				wg.Add(1)
 			}
 		}
+		cq.rg.Clear()
 	}
 }
+
+// filterReadWrite filters out the read-only commands from the provided slice.
+func filterReadWrite(cmds []cache.Overlap) []cache.Overlap {
+	rwIdx := len(cmds)
+	for i := 0; i < rwIdx; {
+		c := cmds[i].Value.(*cmd)
+		if !c.readOnly {
+			i++
+		} else {
+			cmds[i], cmds[rwIdx-1] = cmds[rwIdx-1], cmds[i]
+			rwIdx--
+		}
+	}
+	return cmds[:rwIdx]
+}
+
+// overlapSorter attaches the methods of sort.Interface to []cache.Overlap, sorting
+// in increasing timestamp order.
+type overlapSorter []cache.Overlap
+
+func (o overlapSorter) Len() int { return len(o) }
+func (o overlapSorter) Less(i, j int) bool {
+	return o[i].Value.(*cmd).timestamp.Less(o[j].Value.(*cmd).timestamp)
+}
+func (o overlapSorter) Swap(i, j int) { o[i], o[j] = o[j], o[i] }
 
 // Add adds commands to the queue which affect the specified key ranges. Ranges
 // without an end key affect only the start key. The returned interface is the
@@ -117,8 +179,11 @@ func (cq *CommandQueue) Add(readOnly bool, spans ...roachpb.Span) []interface{} 
 			value cmd
 			entry cache.Entry
 		}{
-			key:   cq.cache.MakeKey(start, end),
-			value: cmd{readOnly: readOnly},
+			key: cq.cache.MakeKey(start, end),
+			value: cmd{
+				timestamp: cq.clock.Now(),
+				readOnly:  readOnly,
+			},
 		}
 		alloc.entry.Key = &alloc.key
 		alloc.entry.Value = &alloc.value

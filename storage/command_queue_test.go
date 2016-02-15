@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -59,7 +60,8 @@ func testCmdDone(cmdDone <-chan struct{}, wait time.Duration) bool {
 
 func TestCommandQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	cq := NewCommandQueue()
+	clock := hlc.NewClock(hlc.UnixNano)
+	cq := NewCommandQueue(clock)
 	wg := sync.WaitGroup{}
 
 	// Try a command with no overlapping already-running commands.
@@ -83,7 +85,8 @@ func TestCommandQueue(t *testing.T) {
 
 func TestCommandQueueNoWaitOnReadOnly(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	cq := NewCommandQueue()
+	clock := hlc.NewClock(hlc.UnixNano)
+	cq := NewCommandQueue(clock)
 	wg := sync.WaitGroup{}
 	// Add a read-only command.
 	wk := add(cq, roachpb.Key("a"), nil, true)
@@ -104,7 +107,8 @@ func TestCommandQueueNoWaitOnReadOnly(t *testing.T) {
 
 func TestCommandQueueMultipleExecutingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	cq := NewCommandQueue()
+	clock := hlc.NewClock(hlc.UnixNano)
+	cq := NewCommandQueue(clock)
 	wg := sync.WaitGroup{}
 
 	// Add multiple commands and add a command which overlaps them all.
@@ -129,7 +133,8 @@ func TestCommandQueueMultipleExecutingCommands(t *testing.T) {
 
 func TestCommandQueueMultiplePendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	cq := NewCommandQueue()
+	clock := hlc.NewClock(hlc.UnixNano)
+	cq := NewCommandQueue(clock)
 	wg1 := sync.WaitGroup{}
 	wg2 := sync.WaitGroup{}
 	wg3 := sync.WaitGroup{}
@@ -158,7 +163,8 @@ func TestCommandQueueMultiplePendingCommands(t *testing.T) {
 
 func TestCommandQueueClear(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	cq := NewCommandQueue()
+	clock := hlc.NewClock(hlc.UnixNano)
+	cq := NewCommandQueue(clock)
 	wg1 := sync.WaitGroup{}
 	wg2 := sync.WaitGroup{}
 
@@ -185,7 +191,8 @@ func TestCommandQueueClear(t *testing.T) {
 // the end key of a previous command.
 func TestCommandQueueExclusiveEnd(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	cq := NewCommandQueue()
+	clock := hlc.NewClock(hlc.UnixNano)
+	cq := NewCommandQueue(clock)
 	add(cq, roachpb.Key("a"), roachpb.Key("b"), false)
 
 	wg := sync.WaitGroup{}
@@ -201,7 +208,8 @@ func TestCommandQueueExclusiveEnd(t *testing.T) {
 // in deadlock.
 func TestCommandQueueSelfOverlap(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	cq := NewCommandQueue()
+	clock := hlc.NewClock(hlc.UnixNano)
+	cq := NewCommandQueue(clock)
 	a := roachpb.Key("a")
 	k := add(cq, a, roachpb.Key("b"), false)
 	var wg sync.WaitGroup
