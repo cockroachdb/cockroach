@@ -1,5 +1,3 @@
-YACC := ../../../../../../bin/yacc
-
 .PHONY: all
 all: sql.go keywords.go reserved_keywords.go
 
