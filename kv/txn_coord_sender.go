@@ -661,6 +661,15 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	newTxn.Update(ba.Txn)
 	// TODO(tamird): remove this clone. It's currently needed to avoid race conditions.
 	pErr = proto.Clone(pErr).(*roachpb.Error)
+	// If the request was successful but we're in a transaction which needs to
+	// restart but doesn't know it yet, let it restart now (as opposed to
+	// waiting until EndTransaction).
+	if pErr == nil && br.Txn != nil && br.Txn.Isolation == roachpb.SERIALIZABLE &&
+		!br.Txn.OrigTimestamp.Equal(br.Txn.Timestamp) {
+		pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), br.Txn)
+		br = nil
+	}
+
 	// TODO(bdarnell): We're writing to errors here (and where using ErrorWithIndex);
 	// since there's no concept of ownership copy-on-write is always preferable.
 	switch t := pErr.GetDetail().(type) {
