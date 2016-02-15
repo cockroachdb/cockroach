@@ -106,7 +106,6 @@ func TestTxnDBBasics(t *testing.T) {
 // the same key back to back in a single round-trip. Latency is simulated
 // by pausing before each RPC sent.
 func benchmarkSingleRoundtripWithLatency(b *testing.B, latency time.Duration) {
-	defer tracing.Disable()()
 	s := &LocalTestCluster{}
 	s.Latency = latency
 	s.Start(b)
@@ -205,7 +204,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			// higher values require roughly offset/5 restarts.
 			txnClock.SetMaxOffset(maxOffset)
 
-			sender := NewTxnCoordSender(s.distSender, txnClock, false, nil, s.Stopper)
+			sender := NewTxnCoordSender(s.distSender, txnClock, false, tracing.NewTracer(), s.Stopper)
 			txnDB := client.NewDB(sender)
 
 			if pErr := txnDB.Txn(func(txn *client.Txn) *roachpb.Error {

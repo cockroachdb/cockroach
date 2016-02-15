@@ -226,7 +226,9 @@ func (ds *DistSender) RangeLookup(key roachpb.RKey, desc *roachpb.RangeDescripto
 	replicas := newReplicaSlice(ds.gossip, desc)
 	// TODO(tschottdorf) consider a Trace here, potentially that of the request
 	// that had the cache miss and waits for the result.
-	br, err := ds.sendRPC(tracing.NilSpan(), desc.RangeID, replicas, orderRandom, ba)
+	sp := tracing.NoopSpan()
+	defer sp.Finish()
+	br, err := ds.sendRPC(sp, desc.RangeID, replicas, orderRandom, ba)
 	if err != nil {
 		return nil, err
 	}
