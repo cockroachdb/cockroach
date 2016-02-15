@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -621,7 +623,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 		mtc.replicateRange(replica.RangeID, 1, 2)
 		desc := replica.Desc()
 		splitArgs := adminSplitArgs(splitKey, splitKey)
-		if _, err := replica.AdminSplit(splitArgs, desc); err != nil {
+		if _, err := replica.AdminSplit(context.Background(), splitArgs, desc); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1003,7 +1005,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 		}
 		desc := rng.Desc()
 		args := adminSplitArgs(roachpb.KeyMin, []byte(fmt.Sprintf("A%03d", i)))
-		if _, err := rng.AdminSplit(args, desc); err != nil {
+		if _, err := rng.AdminSplit(context.Background(), args, desc); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1016,7 +1018,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 		}
 		desc := rng.Desc()
 		args := adminSplitArgs(roachpb.KeyMin, []byte(fmt.Sprintf("B%03d", i)))
-		if _, err := rng.AdminSplit(args, desc); err != nil {
+		if _, err := rng.AdminSplit(context.Background(), args, desc); err != nil {
 			t.Fatal(err)
 		}
 	}
