@@ -76,23 +76,23 @@ func goroutineLeaked() bool {
 		// not counting goroutines for leakage in -short mode
 		return false
 	}
+
 	var stackCount map[string]int
 	for i := 0; i < 8; i++ {
-		gs := interestingGoroutines()
-
 		n := 0
 		stackCount = make(map[string]int)
+		gs := interestingGoroutines()
 		for _, g := range gs {
 			stackCount[g]++
 			n++
 		}
-
 		if n == 0 {
 			return false
 		}
+		// Wait for goroutines to schedule and die off:
 		time.Sleep(10 * time.Millisecond)
 	}
-	fmt.Fprintf(os.Stderr, "Too many goroutines running after tests.\n")
+	fmt.Fprintf(os.Stderr, "Too many goroutines running after test(s).\n")
 	for stack, count := range stackCount {
 		fmt.Fprintf(os.Stderr, "%d instances of:\n%s\n", count, stack)
 	}
