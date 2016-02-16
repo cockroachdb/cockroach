@@ -23,11 +23,10 @@ import (
 	"testing"
 )
 
-// TestJava connects to a cluster with Java.
-func TestJava(t *testing.T) {
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/3826")
-	testDockerSuccess(t, "java", []string{"/bin/sh", "-c", strings.Replace(java, "%v", "3", 1)})
-	testDockerFail(t, "java", []string{"/bin/sh", "-c", strings.Replace(java, "%v", `"a"`, 1)})
+func TestDockerJava(t *testing.T) {
+	t.Skip("blocked by #4411")
+	testDockerSuccess(t, "java", []string{"/bin/sh", "-c", strings.Replace(java, "%v", "Int(2, 3)", 1)})
+	testDockerFail(t, "java", []string{"/bin/sh", "-c", strings.Replace(java, "%v", `String(2, "a")`, 1)})
 }
 
 const java = `
@@ -50,7 +49,7 @@ public class main {
 
 		PreparedStatement stmt = conn.prepareStatement("SELECT 1, 2 > ?, ?::int, ?::string, ?::string, ?::string, ?::string, ?::string");
 		stmt.setInt(1, 3);
-		stmt.setInt(2, %v);
+		stmt.set%v;
 
 		stmt.setBoolean(3, true);
 		stmt.setLong(4, -4L);

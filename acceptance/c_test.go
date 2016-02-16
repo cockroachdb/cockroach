@@ -23,9 +23,7 @@ import (
 	"testing"
 )
 
-// TestC connects to a cluster with C.
-func TestC(t *testing.T) {
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/3826")
+func TestDockerC(t *testing.T) {
 	testDockerSuccess(t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "3", 1)})
 	testDockerFail(t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "a", 1)})
 }
