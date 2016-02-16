@@ -154,17 +154,13 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 
 	switch t := expr.(type) {
 	case *qvalue:
-		// We will encounter a qvalue in the expression during retry of an
-		// auto-transaction. When that happens, we've already gone through
-		// qualified name normalization and lookup, we just need to hook the qvalue
-		// up to the scanNode.
-		//
-		// TODO(pmattis): Should we be more careful about ensuring that the various
-		// statement implementations do not modify the AST nodes they are passed?
-		colRef := t.colRef
-		// TODO(radu): this is pretty hacky and won't work with multiple FROMs..
-		colRef.table = v.qt.table
-		return v, v.qt.qvals.getQVal(colRef)
+		// We allow resolving qvalues on expressions that have already been resolved by this
+		// resolver. This is used in some cases when adding render targets for grouping or sorting.
+		if v.qt.qvals[t.colRef] != t {
+			// If this happens, the qvalue was not resolved with the same qvalResolver.
+			panic(fmt.Sprintf("already resolved qvalue does not match the map (name: %s)", t))
+		}
+		return v, expr
 
 	case *parser.QualifiedName:
 		var colRef columnRef
@@ -226,6 +222,12 @@ func resolveQNames(table *tableInfo, qvals qvalMap, expr parser.Expr) (parser.Ex
 			qvals: qvals,
 		},
 	}
+	// We make a copy of the expression first. This is necessary if the expression is reused, e.g.
+	// for retrying auto-transactions.
+	// TODO(radu): ideally the visitor would make copies only of those nodes that needed it,
+	// allowing the old and new expression to share nodes for constant expressions.
+	expr = expr.DeepCopy()
+
 	expr = parser.WalkExpr(&v, expr)
 	return expr, v.err
 }
