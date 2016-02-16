@@ -45,9 +45,6 @@ deployment:
           -l "${CIRCLE_ARTIFACTS}"/acceptance_deploy 2>&1 >
           "${CIRCLE_ARTIFACTS}/acceptance_deploy.log"
       - build/push-aws.sh
-  osx:
-    branch: master
-    commands:
       - |
           if [ -n "${BUILD_OSX-}" ]; then
             set -eux
