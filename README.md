@@ -88,19 +88,22 @@ Now let's talk to this node. The easiest way to do that is to use the `cockroach
 +----------+
 | Database |
 +----------+
-| "system" |
+| system   |
 +----------+
 192.168.99.100:26257> SET database = system;
 OK
 192.168.99.100:26257> show tables;
-+--------------+
-|    Table     |
-+--------------+
-| "descriptor" |
-| "namespace"  |
-| "users"      |
-| "zones"      |
-+--------------+
++------------+
+|   Table    |
++------------+
+| descriptor |
+| eventlog   |
+| lease      |
+| namespace  |
+| rangelog   |
+| users      |
+| zones      |
++------------+
 ```
 
 Check out `./cockroach help` to see all available commands.
