@@ -18,7 +18,6 @@ package grpcutil
 
 import (
 	"crypto/tls"
-	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -30,6 +29,7 @@ import (
 	"google.golang.org/grpc/transport"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
