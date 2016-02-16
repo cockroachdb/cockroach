@@ -100,7 +100,7 @@ statement ok
 INSERT INTO ab VALUES (1, 2), (1, 3), (2, 5)
 
 query II colnames
-SELECT * FROM ab AS foo (foo1, foo2)
+SELECT * FROM ab AS foo (foo1, foo2) ORDER BY foo2
 ----
 foo1 foo2
 1 2
