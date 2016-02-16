@@ -100,7 +100,7 @@ func (*CreateTable) StatementType() StatementType { return DDL }
 func (*CreateTable) StatementTag() string { return "CREATE TABLE" }
 
 // StatementType implements the Statement interface.
-func (*Delete) StatementType() StatementType { return RowsAffected }
+func (n *Delete) StatementType() StatementType { return n.Returning.StatementType() }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Delete) StatementTag() string { return "DELETE" }
@@ -136,12 +136,7 @@ func (*Grant) StatementType() StatementType { return DDL }
 func (*Grant) StatementTag() string { return "GRANT" }
 
 // StatementType implements the Statement interface.
-func (n *Insert) StatementType() StatementType {
-	if n.Returning != nil {
-		return Rows
-	}
-	return RowsAffected
-}
+func (n *Insert) StatementType() StatementType { return n.Returning.StatementType() }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Insert) StatementTag() string { return "INSERT" }
@@ -255,7 +250,7 @@ func (*Truncate) StatementType() StatementType { return Ack }
 func (*Truncate) StatementTag() string { return "TRUNCATE" }
 
 // StatementType implements the Statement interface.
-func (*Update) StatementType() StatementType { return RowsAffected }
+func (n *Update) StatementType() StatementType { return n.Returning.StatementType() }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Update) StatementTag() string { return "UPDATE" }
