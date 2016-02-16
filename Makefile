@@ -246,7 +246,7 @@ $(GLOCK):
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
 .bootstrap: $(GITHOOKS) $(GLOCK) GLOCKFILE
-	@env -u GIT_WORK_TREE $(GLOCK) sync github.com/cockroachdb/cockroach
+	unset GIT_WORK_TREE; $(GLOCK) sync github.com/cockroachdb/cockroach
 	touch $@
 
 include .bootstrap
