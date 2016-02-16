@@ -476,7 +476,7 @@ var builtins = map[string][]builtin{
 		},
 	},
 
-	"experimental_unique_int": {
+	"unique_rowid": {
 		builtin{
 			types:      argTypes{},
 			returnType: typeInt,
