@@ -132,9 +132,13 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		return util.Errorf("duplicate connection from node at %s", args.Addr)
 	}
 
-	s.stopper.RunWorker(func() {
-		s.gossipSender(&args, send)
-	})
+	if !s.stopper.RunTask(func() {
+		s.stopper.RunWorker(func() {
+			s.gossipSender(&args, send)
+		})
+	}) {
+		return nil
+	}
 
 	reply := new(Response)
 
