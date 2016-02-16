@@ -686,3 +686,42 @@ func TestPGWireMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPrepareSyntax(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPrepareSyntax")
+	defer cleanupFn()
+
+	db, err := sql.Open("postgres", pgUrl.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	const strTest = `SELECT """test"""`
+
+	if _, err := db.Exec(`SET SYNTAX = traditional`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Prepare(strTest); err == nil {
+		t.Fatal("expected error")
+	}
+
+	if _, err := db.Exec(`SET SYNTAX = modern`); err != nil {
+		t.Fatal(err)
+	}
+	stmt, err := db.Prepare(strTest)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	var v string
+	if err := stmt.QueryRow().Scan(&v); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	} else if v != "test" {
+		t.Fatalf("unexpected result: %q", v)
+	}
+}

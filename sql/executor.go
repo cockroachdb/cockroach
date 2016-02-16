@@ -214,8 +214,8 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 // Prepare returns the result types of the given statement. Args may be a
 // partially populated val args map. Prepare will populate the missing val
 // args. The column result types are returned (or nil if there are no results).
-func (e *Executor) Prepare(user string, query string, args parser.MapArgs) ([]ResultColumn, *roachpb.Error) {
-	stmt, err := parser.ParseOneTraditional(query)
+func (e *Executor) Prepare(user string, query string, session Session, args parser.MapArgs) ([]ResultColumn, *roachpb.Error) {
+	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}

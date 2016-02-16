@@ -324,7 +324,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		}
 		args[fmt.Sprint(i+1)] = v
 	}
-	cols, pErr := c.executor.Prepare(c.opts.user, query, args)
+	cols, pErr := c.executor.Prepare(c.opts.user, query, c.session, args)
 	if pErr != nil {
 		return c.sendError(pErr.String())
 	}
