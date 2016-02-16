@@ -132,6 +132,8 @@ ls -lah "${builder_dir}"
 # "build/builder.sh push" and the new tag value placed here.
 fetch_docker "builder" "20151210-134003"
 
+fetch_docker "docker-spy" "20160209-143235"
+
 if is_shard 0; then
   # Dockerfile at: https://github.com/cockroachdb/postgres-test
   fetch_docker "postgres-test" "20160203-140220"
