@@ -34,9 +34,8 @@ func (t *testError) SetErrorIndex(_ int32)      { panic("unsupported") }
 func TestSetGoErrorGeneric(t *testing.T) {
 	br := &BatchResponse{}
 	br.SetGoError(&testError{})
-	err := br.GoError()
-	if err.Error() != "test" {
-		t.Fatalf("unexpected error: %s", err)
+	if br.Error.GoError().Error() != "test" {
+		t.Errorf("unexpected error: %s", br.Error)
 	}
 	if !br.Error.Retryable {
 		t.Error("expected generic error to be retryable")
@@ -48,8 +47,8 @@ func TestSetGoErrorGeneric(t *testing.T) {
 func TestSetGoErrorNil(t *testing.T) {
 	br := &BatchResponse{}
 	br.SetGoError(nil)
-	if err := br.GoError(); err != nil {
-		t.Errorf("expected nil error; got %s", err)
+	if br.Error != nil {
+		t.Errorf("expected nil error; got %s", br.Error)
 	}
 }
 

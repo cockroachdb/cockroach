@@ -296,11 +296,6 @@ func (ba *BatchRequest) SetNewRequest() {
 	ba.Txn.Sequence++
 }
 
-// GoError returns the non-nil error from the proto.Error union.
-func (br *BatchResponse) GoError() error {
-	return br.Error.GoError()
-}
-
 // SetGoError converts the specified type into either one of the proto-
 // defined error types or into an Error for all other Go errors.
 func (br *BatchResponse) SetGoError(err error) {
