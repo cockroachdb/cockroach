@@ -76,23 +76,23 @@ func goroutineLeaked() bool {
 		// not counting goroutines for leakage in -short mode
 		return false
 	}
-	var stackCount map[string]int
-	for i := 0; i < 8; i++ {
-		gs := interestingGoroutines()
 
+	var stackCount map[string]int
+	for i := 0; i < 5; i++ {
 		n := 0
 		stackCount = make(map[string]int)
+		gs := interestingGoroutines()
 		for _, g := range gs {
 			stackCount[g]++
 			n++
 		}
-
 		if n == 0 {
 			return false
 		}
-		time.Sleep(10 * time.Millisecond)
+		// Wait for goroutines to schedule and die off:
+		time.Sleep(100 * time.Millisecond)
 	}
-	fmt.Fprintf(os.Stderr, "Too many goroutines running after tests.\n")
+	fmt.Fprintf(os.Stderr, "Too many goroutines running after test(s).\n")
 	for stack, count := range stackCount {
 		fmt.Fprintf(os.Stderr, "%d instances of:\n%s\n", count, stack)
 	}
@@ -138,7 +138,7 @@ func AfterTest(t testing.TB) {
 		"(*Range).Send":                                "a range command",
 	}
 	var stacks string
-	for i := 0; i < 8; i++ {
+	for i := 0; i < 4; i++ {
 		bad = ""
 		stacks = strings.Join(interestingGoroutines(), "\n\n")
 		for substr, what := range badSubstring {
@@ -151,7 +151,7 @@ func AfterTest(t testing.TB) {
 		}
 		// Bad stuff found, but goroutines might just still be
 		// shutting down, so give it some time.
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(250 * time.Millisecond)
 	}
 	atomic.StoreInt32(&hasFailed, 1)
 	t.Errorf("Test appears to have leaked %s:\n%s", bad, stacks)
