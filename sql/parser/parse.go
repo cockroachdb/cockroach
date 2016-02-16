@@ -111,8 +111,8 @@ func parseTraditional(sql string) (StatementList, error) {
 	return parse(sql, Traditional)
 }
 
-// parseOne parses a sql statement.
-func parseOne(sql string, syntax Syntax) (Statement, error) {
+// ParseOne parses a sql statement.
+func ParseOne(sql string, syntax Syntax) (Statement, error) {
 	stmts, err := parse(sql, syntax)
 	if err != nil {
 		return nil, err
@@ -123,14 +123,14 @@ func parseOne(sql string, syntax Syntax) (Statement, error) {
 	return stmts[0], nil
 }
 
-// ParseOneTraditional is short-hand for parseOne(sql, Traditional)
+// ParseOneTraditional is short-hand for ParseOne(sql, Traditional)
 func ParseOneTraditional(sql string) (Statement, error) {
-	return parseOne(sql, Traditional)
+	return ParseOne(sql, Traditional)
 }
 
 // parseExpr parses a sql expression.
 func parseExpr(expr string, syntax Syntax) (Expr, error) {
-	stmt, err := parseOne(`SELECT `+expr, syntax)
+	stmt, err := ParseOne(`SELECT `+expr, syntax)
 	if err != nil {
 		return nil, err
 	}
