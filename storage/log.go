@@ -59,7 +59,7 @@ CREATE TABLE system.rangelog (
   eventType     STRING     NOT NULL,
   otherRangeID  INT,
   info          STRING,
-  uniqueID      INT        DEFAULT experimental_unique_int(),
+  uniqueID      INT        DEFAULT unique_rowid(),
   PRIMARY KEY (timestamp, uniqueID)
 );`
 
