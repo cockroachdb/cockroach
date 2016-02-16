@@ -71,23 +71,39 @@ func newRPCTransport(gossip *gossip.Gossip, grpcServer *grpc.Server, rpcContext 
 
 // RaftMessage proxies the incoming request to the listening server interface.
 func (t *rpcTransport) RaftMessage(stream storage.MultiRaft_RaftMessageServer) error {
-	for {
-		req, err := stream.Recv()
-		if err != nil {
-			return err
-		}
+	errCh := make(chan error, 1)
 
-		t.mu.Lock()
-		handler, ok := t.handlers[req.ToReplica.StoreID]
-		t.mu.Unlock()
+	// Starting workers in a task prevents data races during shutdown.
+	t.rpcContext.Stopper.RunTask(func() {
+		t.rpcContext.Stopper.RunWorker(func() {
+			errCh <- func() error {
+				for {
+					req, err := stream.Recv()
+					if err != nil {
+						return err
+					}
 
-		if !ok {
-			return util.Errorf("Unable to proxy message to node: %d", req.Message.To)
-		}
+					t.mu.Lock()
+					handler, ok := t.handlers[req.ToReplica.StoreID]
+					t.mu.Unlock()
 
-		if err := handler(req); err != nil {
-			return err
-		}
+					if !ok {
+						return util.Errorf("Unable to proxy message to node: %d", req.Message.To)
+					}
+
+					if err := handler(req); err != nil {
+						return err
+					}
+				}
+			}()
+		})
+	})
+
+	select {
+	case <-t.rpcContext.Stopper.ShouldDrain():
+		return nil
+	case err := <-errCh:
+		return err
 	}
 }
 
