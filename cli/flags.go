@@ -297,7 +297,7 @@ func initFlags(ctx *Context) {
 	}
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
-		f.BoolVar(&context.EphemeralSingleNode, "dev", context.EphemeralSingleNode, usage("dev"))
+		f.BoolVar(&cliContext.EphemeralSingleNode, "dev", cliContext.EphemeralSingleNode, usage("dev"))
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, usage("certs"))
 		f.StringVar(&connHost, "host", "", usage("host"))
@@ -334,12 +334,12 @@ func initFlags(ctx *Context) {
 }
 
 func init() {
-	initFlags(context)
+	initFlags(cliContext)
 
 	cobra.OnInitialize(func() {
-		if context.EphemeralSingleNode {
-			context.Insecure = true
-			if len(context.JoinUsing) != 0 {
+		if cliContext.EphemeralSingleNode {
+			cliContext.Insecure = true
+			if len(cliContext.JoinUsing) != 0 {
 				log.Errorf("--join cannot be specified when running a node in dev mode (--dev)")
 				os.Exit(1)
 			}
@@ -354,7 +354,7 @@ func init() {
 
 `)
 		}
-		context.Addr = net.JoinHostPort(connHost, connPort)
-		context.PGAddr = net.JoinHostPort(connHost, connPGPort)
+		cliContext.Addr = net.JoinHostPort(connHost, connPort)
+		cliContext.PGAddr = net.JoinHostPort(connHost, connPGPort)
 	})
 }

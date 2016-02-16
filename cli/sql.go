@@ -202,7 +202,7 @@ func runStatements(db *sql.DB, stmts []string) error {
 }
 
 func runTerm(cmd *cobra.Command, args []string) error {
-	if !(context.OneShotSQL || len(args) == 0) {
+	if !(cliContext.OneShotSQL || len(args) == 0) {
 		mustUsage(cmd)
 		return errMissingParams
 	}
@@ -210,7 +210,7 @@ func runTerm(cmd *cobra.Command, args []string) error {
 	db, dbURL := makeSQLClient()
 	defer func() { _ = db.Close() }()
 
-	if context.OneShotSQL {
+	if cliContext.OneShotSQL {
 		// Single-line sql; run as simple as possible, without noise on stdout.
 		return runStatements(db, args)
 	}

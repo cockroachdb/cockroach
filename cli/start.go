@@ -38,8 +38,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Context is the CLI Context used for the command-line client.
-var context = NewContext()
+// cliContext is the CLI Context used for the command-line client.
+var cliContext = NewContext()
 
 var errMissingParams = errors.New("missing or invalid parameters")
 
@@ -69,11 +69,11 @@ func panicf(format string, args ...interface{}) {
 // getJSON is a convenience wrapper around util.GetJSON that uses our Context to populate
 // parts of the request.
 func getJSON(hostport, path string, v interface{}) error {
-	httpClient, err := context.GetHTTPClient()
+	httpClient, err := cliContext.GetHTTPClient()
 	if err != nil {
 		return err
 	}
-	return util.GetJSON(httpClient, context.HTTPRequestScheme(), hostport, path, v)
+	return util.GetJSON(httpClient, cliContext.HTTPRequestScheme(), hostport, path, v)
 }
 
 // startCmd starts a node by initializing the stores and joining
@@ -104,26 +104,26 @@ func runStart(_ *cobra.Command, _ []string) error {
 	log.Infof("[build] %s @ %s (%s)", info.Tag, info.Time, info.Vers)
 
 	// Default user for servers.
-	context.User = security.NodeUser
+	cliContext.User = security.NodeUser
 
-	if context.EphemeralSingleNode {
+	if cliContext.EphemeralSingleNode {
 		// TODO(marc): set this in the zones table when we have an entry
 		// for the default cluster-wide zone config.
 		config.DefaultZoneConfig.ReplicaAttrs = []roachpb.Attributes{{}}
-		context.Stores = "mem=1073741824" // 1024MB
+		cliContext.Stores = "mem=1073741824" // 1024MB
 	}
 
 	stopper := stop.NewStopper()
-	if err := context.InitStores(stopper); err != nil {
+	if err := cliContext.InitStores(stopper); err != nil {
 		return fmt.Errorf("failed to initialize stores: %s", err)
 	}
 
-	if err := context.InitNode(); err != nil {
+	if err := cliContext.InitNode(); err != nil {
 		return fmt.Errorf("failed to initialize node: %s", err)
 	}
 
 	log.Info("starting cockroach node")
-	s, err := server.NewServer(&context.Context, stopper)
+	s, err := server.NewServer(&cliContext.Context, stopper)
 	if err != nil {
 		return fmt.Errorf("failed to start Cockroach server: %s", err)
 	}
@@ -192,14 +192,14 @@ node, cycling through each store specified by the --stores flag.
 func runExterminate(_ *cobra.Command, _ []string) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	if err := context.InitStores(stopper); err != nil {
+	if err := cliContext.InitStores(stopper); err != nil {
 		panicf("failed to initialize context: %s", err)
 	}
 
 	runQuit(nil, nil)
 
 	// Exterminate all data held in specified stores.
-	for _, e := range context.Engines {
+	for _, e := range cliContext.Engines {
 		if rocksdb, ok := e.(*engine.RocksDB); ok {
 			log.Infof("exterminating data from store %s", e)
 			if err := rocksdb.Destroy(); err != nil {
@@ -207,7 +207,7 @@ func runExterminate(_ *cobra.Command, _ []string) {
 			}
 		}
 	}
-	log.Infof("exterminated all data from stores %s", context.Engines)
+	log.Infof("exterminated all data from stores %s", cliContext.Engines)
 }
 
 // quitCmd command shuts down the node server.
@@ -225,7 +225,7 @@ completed, the server exits.
 
 // runQuit accesses the quit shutdown path.
 func runQuit(_ *cobra.Command, _ []string) {
-	admin := client.NewAdminClient(&context.Context.Context, context.Addr, client.Quit)
+	admin := client.NewAdminClient(&cliContext.Context.Context, cliContext.Addr, client.Quit)
 	body, err := admin.Get()
 	// TODO(tschottdorf): needs cleanup. An error here can happen if the shutdown
 	// happened faster than the HTTP request made it back.
