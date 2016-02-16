@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-var hasFailed int32 // updated atomially (though not necessary in normal usage)
+var hasLeaked int32 // updated atomically (though not necessary in normal usage)
 
 // TestMainWithLeakCheck is an implementation of TestMain which verifies that
 // there are no leaked goroutines at the end of the run (except those created
@@ -106,23 +106,13 @@ func goroutineLeaked() bool {
 // If a previous test's check has already failed, this is a noop (to avoid
 // failing unrelated tests).
 func AfterTest(t testing.TB) {
-	if atomic.LoadInt32(&hasFailed) > 0 {
+	http.DefaultTransport.(*http.Transport).CloseIdleConnections()
+	if testing.Short() {
+		return
+	}
+	if atomic.LoadInt32(&hasLeaked) > 0 {
 		t.Log("prior leak detected, leaktest disabled")
 		return
-	}
-	if r := recover(); r != nil {
-		// Don't bother with leaktest if we're recovering from a panic.
-		panic(r)
-	}
-	http.DefaultTransport.(*http.Transport).CloseIdleConnections()
-	if testing.Short() || t.Failed() {
-		// If a test has failed, chances are it hasn't shut down cleanly, so
-		// stop checking for leaks in this run altogether.
-		atomic.StoreInt32(&hasFailed, 1)
-		return
-	}
-	if r := recover(); r != nil {
-		panic(r)
 	}
 	var bad string
 	badSubstring := map[string]string{
@@ -153,6 +143,8 @@ func AfterTest(t testing.TB) {
 		// shutting down, so give it some time.
 		time.Sleep(10 * time.Millisecond)
 	}
-	atomic.StoreInt32(&hasFailed, 1)
+	// If a test has leaked, all subsequent tests will suffer from the same leak,
+	// so stop checking for leaks in this run altogether.
+	atomic.StoreInt32(&hasLeaked, 1)
 	t.Errorf("Test appears to have leaked %s:\n%s", bad, stacks)
 }
