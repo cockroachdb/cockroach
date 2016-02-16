@@ -192,6 +192,9 @@ func (e *Error) SetTxn(txn *Transaction) {
 
 // GetTxn returns the txn.
 func (e *Error) GetTxn() *Transaction {
+	if e == nil {
+		return nil
+	}
 	return e.UnexposedTxn
 }
 
