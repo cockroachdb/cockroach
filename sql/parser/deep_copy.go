@@ -16,8 +16,6 @@
 
 package parser
 
-import "fmt"
-
 // Helper function to deep copy a list of expressions.
 func deepCopyExprs(exprs []Expr) Exprs {
 	if len(exprs) == 0 {
@@ -150,7 +148,9 @@ func (expr *RangeCond) DeepCopy() Expr {
 
 // DeepCopy is part of the Expr interface.
 func (expr *Subquery) DeepCopy() Expr {
-	panic(fmt.Sprintf("deep copy not implemented for %T", expr))
+	// TODO(radu): the code currently does not modify in-place any part of a subquery. We should
+	// however implement this properly at some point.
+	return expr
 }
 
 // DeepCopy is part of the Expr interface.
