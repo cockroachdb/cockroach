@@ -148,6 +148,9 @@ func (u *sqlSymUnion) selExpr() SelectExpr {
 func (u *sqlSymUnion) selExprs() SelectExprs {
     return u.val.(SelectExprs)
 }
+func (u *sqlSymUnion) retExprs() ReturningExprs {
+    return ReturningExprs(u.val.(SelectExprs))
+}
 func (u *sqlSymUnion) aliasClause() AliasClause {
     return u.val.(AliasClause)
 }
@@ -320,7 +323,7 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %type <GroupBy> group_clause
 %type <*Limit> select_limit
 %type <QualifiedNames> relation_expr_list
-%type <SelectExprs> returning_clause
+%type <ReturningExprs> returning_clause
 
 %type <bool> all_or_distinct
 %type <empty> join_outer
@@ -759,9 +762,9 @@ create_stmt:
 
 // DELETE FROM query
 delete_stmt:
-  opt_with_clause DELETE FROM relation_expr_opt_alias where_clause
+  opt_with_clause DELETE FROM relation_expr_opt_alias where_clause returning_clause
   {
-    $$.val = &Delete{Table: $4.tblExpr(), Where: newWhere(astWhere, $5.expr())}
+    $$.val = &Delete{Table: $4.tblExpr(), Where: newWhere(astWhere, $5.expr()), Returning: $6.retExprs()}
   }
 
 // DROP itemtype [ IF EXISTS ] itemname [, itemname ...] [ RESTRICT | CASCADE ]
@@ -1670,7 +1673,7 @@ insert_stmt:
   {
     $$.val = $5.stmt()
     $$.val.(*Insert).Table = $4.qname()
-    $$.val.(*Insert).Returning = $7.selExprs()
+    $$.val.(*Insert).Returning = $7.retExprs()
   }
 
 // Can't easily make AS optional here, because VALUES in insert_rest would have
@@ -1720,9 +1723,9 @@ returning_clause:
 
 update_stmt:
   opt_with_clause UPDATE relation_expr_opt_alias
-    SET set_clause_list from_clause where_clause
+    SET set_clause_list from_clause where_clause returning_clause
   {
-    $$.val = &Update{Table: $3.tblExpr(), Exprs: $5.updateExprs(), Where: newWhere(astWhere, $7.expr())}
+    $$.val = &Update{Table: $3.tblExpr(), Exprs: $5.updateExprs(), Where: newWhere(astWhere, $7.expr()), Returning: $8.retExprs()}
   }
 
 set_clause_list:
