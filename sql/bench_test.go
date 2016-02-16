@@ -233,23 +233,14 @@ func runBenchmarkUpdate(b *testing.B, db *sql.DB, count int) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		buf.Reset()
-		// Only start a transaction if we're going to be executing multiple
-		// statements. Note that the implicit transactions for a single statement
-		// can be quite a bit faster due to batching the end of the transaction
-		// with the rest of the operations.
-		//
-		// TODO(pmattis): Figure out how to perform this batching even in
-		// multi-statement transactions. This might require a transaction setting
-		// (e.g. SET TRANSACTION BATCHED).
-		if count > 1 {
-			buf.WriteString(`BEGIN; `)
-		}
+		buf.WriteString(`UPDATE bench.update SET v = v + 1 WHERE k IN (`)
 		for j := 0; j < count; j++ {
-			fmt.Fprintf(&buf, `UPDATE bench.update SET v = v + 1 WHERE k = %d; `, s.Intn(rows))
+			if j > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, `%d`, s.Intn(rows))
 		}
-		if count > 1 {
-			buf.WriteString(`COMMIT;`)
-		}
+		buf.WriteString(`)`)
 		if _, err := db.Exec(buf.String()); err != nil {
 			b.Fatal(err)
 		}
