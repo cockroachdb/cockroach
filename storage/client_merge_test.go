@@ -23,6 +23,8 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
@@ -351,7 +353,7 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 	// Attempt to merge.
 	rangeADesc = rangeA.Desc()
 	argsMerge := adminMergeArgs(roachpb.Key(rangeADesc.StartKey))
-	if _, pErr := rangeA.AdminMerge(argsMerge, rangeADesc); !testutils.IsPError(pErr, "ranges not collocated") {
+	if _, pErr := rangeA.AdminMerge(context.Background(), argsMerge, rangeADesc); !testutils.IsPError(pErr, "ranges not collocated") {
 		t.Fatalf("did not got expected error; got %s", pErr)
 	}
 }

@@ -196,7 +196,7 @@ var _ client.Sender = &TxnCoordSender{}
 // distributed DB instance.
 func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable bool, tracer opentracing.Tracer, stopper *stop.Stopper) *TxnCoordSender {
 	if tracer == nil {
-		tracer = tracing.NewTracer()
+		panic("nil tracer supplied")
 	}
 	tc := &TxnCoordSender{
 		wrapped:           wrapped,
@@ -318,7 +318,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 
 	// This is the earliest point at which the request has an ID (if
 	// applicable). Begin a Trace which follows this request.
-	sp := tc.tracer.StartTrace("sending batch")
+	sp := tc.tracer.StartSpan("sending batch")
 	defer sp.Finish()
 	ctx, _ = opentracing.ContextWithSpan(ctx, sp)
 
@@ -567,7 +567,7 @@ func (tc *TxnCoordSender) heartbeatLoop(txnID uuid.UUID) {
 		tc.Lock()
 		txnMeta := tc.txns[txnID] // do not leak to outer scope
 		closer = txnMeta.txnEnd
-		sp = tc.tracer.StartTrace("heartbeat loop")
+		sp = tc.tracer.StartSpan("heartbeat loop")
 		defer sp.Finish()
 		tc.Unlock()
 	}

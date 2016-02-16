@@ -36,13 +36,13 @@ func makeSQLClient() (*sql.DB, string) {
 	sqlURL := connURL
 	if len(connURL) == 0 {
 		options := url.Values{}
-		if context.Insecure {
+		if cliContext.Insecure {
 			options.Add("sslmode", "disable")
 		} else {
 			options.Add("sslmode", "verify-full")
-			options.Add("sslcert", security.ClientCertPath(context.Certs, connUser))
-			options.Add("sslkey", security.ClientKeyPath(context.Certs, connUser))
-			options.Add("sslrootcert", security.CACertPath(context.Certs))
+			options.Add("sslcert", security.ClientCertPath(cliContext.Certs, connUser))
+			options.Add("sslkey", security.ClientKeyPath(cliContext.Certs, connUser))
+			options.Add("sslrootcert", security.CACertPath(cliContext.Certs))
 		}
 		pgURL := url.URL{
 			Scheme:   "postgresql",

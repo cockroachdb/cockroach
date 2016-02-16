@@ -537,7 +537,7 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 	f := func() {
 		// TODO(tschottdorf) get a hold of the client's ID, add it to the
 		// context before dispatching, and create an ID for tracing the request.
-		sp := n.ctx.Tracer.StartTrace("node")
+		sp := n.ctx.Tracer.StartSpan("node")
 		defer sp.Finish()
 		ctx, _ := opentracing.ContextWithSpan((*Node)(n).context(), sp)
 

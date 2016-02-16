@@ -103,7 +103,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	stores := storage.NewStores(clock)
 	rpcSend := func(_ kv.SendOptions, _ kv.ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
-		sp := sCtx.Tracer.StartTrace("rpc send")
+		sp := sCtx.Tracer.StartSpan("rpc send")
 		defer sp.Finish()
 		ctx, _ := opentracing.ContextWithSpan(context.Background(), sp)
 		br, pErr := stores.Send(ctx, ba)
@@ -126,7 +126,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 		RangeDescriptorDB: stores, // for descriptor lookup
 	}, sCtx.Gossip)
 
-	sender := kv.NewTxnCoordSender(distSender, clock, false, nil, stopper)
+	sender := kv.NewTxnCoordSender(distSender, clock, false, tracing.NewTracer(), stopper)
 	sCtx.Clock = clock
 	sCtx.DB = client.NewDB(sender)
 	sCtx.StorePool = storage.NewStorePool(sCtx.Gossip, clock, storage.TestTimeUntilStoreDeadOff, stopper)
@@ -234,7 +234,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 			RPCSend:           m.rpcSend,
 			RPCRetryOptions:   &retryOpts,
 		}, m.gossip)
-		sender := kv.NewTxnCoordSender(m.distSender, m.clock, false, nil, m.clientStopper)
+		sender := kv.NewTxnCoordSender(m.distSender, m.clock, false, tracing.NewTracer(), m.clientStopper)
 		m.db = client.NewDB(sender)
 	}
 
