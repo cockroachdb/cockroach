@@ -30,3 +30,16 @@ func TestSetTxn(t *testing.T) {
 		t.Errorf("unexpected message: %s", e.Message)
 	}
 }
+
+func TestErrorTxn(t *testing.T) {
+	var pErr *Error
+	if txn := pErr.GetTxn(); txn != nil {
+		t.Fatalf("wanted nil, unexpected: %+v", txn)
+	}
+	pErr = &Error{}
+	const name = "X"
+	pErr.SetTxn(&Transaction{Name: name})
+	if txn := pErr.GetTxn(); txn == nil || txn.Name != name {
+		t.Fatalf("wanted name %s, unexpected: %+v", name, txn)
+	}
+}
