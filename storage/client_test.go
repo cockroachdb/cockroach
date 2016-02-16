@@ -198,6 +198,16 @@ func startMultiTestContext(t *testing.T, numStores int) *multiTestContext {
 func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	m.t = t
 	m.reenableTableSplits = config.TestingDisableTableSplits()
+
+	var ranSuccessfully bool
+	defer func() {
+		// t.Fatal calls runtime.Goexit(), so recover() is nil, but we
+		// still need to know whether we ran to completion.
+		if !ranSuccessfully {
+			m.reenableTableSplits()
+		}
+	}()
+
 	if m.manualClock == nil {
 		m.manualClock = hlc.NewManualClock(0)
 	}
@@ -250,6 +260,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		}
 		return nil
 	})
+	ranSuccessfully = true
 }
 
 func (m *multiTestContext) Stop() {
