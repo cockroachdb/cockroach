@@ -18,6 +18,7 @@ package sql
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/keys"
@@ -27,7 +28,7 @@ import (
 )
 
 // Show a session-local variable name.
-func (p *planner) Show(n *parser.Show) (planNode, *roachpb.Error) {
+func (p *planner) Show(n *parser.Show) (planNode, error) {
 	name := strings.ToUpper(n.Name)
 
 	v := &valuesNode{columns: []ResultColumn{{Name: name, Typ: parser.DummyString}}}
@@ -38,7 +39,7 @@ func (p *planner) Show(n *parser.Show) (planNode, *roachpb.Error) {
 	case `TIME ZONE`:
 		loc, err := p.evalCtx.GetLocation()
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		v.rows = append(v.rows, []parser.Datum{parser.DString(loc.String())})
 	case `SYNTAX`:
@@ -50,7 +51,7 @@ func (p *planner) Show(n *parser.Show) (planNode, *roachpb.Error) {
 	case `TRANSACTION PRIORITY`:
 		v.rows = append(v.rows, []parser.Datum{parser.DString(p.txn.UserPriority.String())})
 	default:
-		return nil, roachpb.NewUErrorf("unknown variable: %q", name)
+		return nil, fmt.Errorf("unknown variable: %q", name)
 	}
 
 	return v, nil
