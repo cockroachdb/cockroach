@@ -20,11 +20,11 @@ import (
 	"net"
 	"sync"
 
+	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -41,61 +41,20 @@ type server struct {
 	tighten  chan roachpb.NodeID                    // Channel of too-distant node IDs
 	sent     int                                    // Count of infos sent from this server to clients
 	received int                                    // Count of infos received from clients
-	ready    *sync.Cond                             // Broadcasts wakeup to waiting gossip requests
+	ready    chan struct{}                          // Broadcasts wakeup to waiting gossip requests
 
 	simulationCycler *sync.Cond // Used when simulating the network to signal next cycle
 }
 
 // newServer creates and returns a server struct.
 func newServer(stopper *stop.Stopper) *server {
-	s := &server{
+	return &server{
 		stopper:  stopper,
 		is:       newInfoStore(0, util.UnresolvedAddr{}, stopper),
 		incoming: makeNodeSet(minPeers),
 		nodeMap:  make(map[util.UnresolvedAddr]roachpb.NodeID),
 		tighten:  make(chan roachpb.NodeID, 1),
-	}
-	s.ready = sync.NewCond(&s.mu)
-	return s
-}
-
-func (s *server) gossipSender(argsPtr **Request, senderFn func(*Response) error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	reply := new(Response)
-
-	for {
-		if !s.stopper.RunTask(func() {
-			args := *argsPtr
-			delta := s.is.delta(args.Nodes)
-			if infoCount := len(delta); infoCount > 0 {
-				if log.V(1) {
-					log.Infof("node %d returned %d info(s) to node %d", s.is.NodeID, infoCount, args.NodeID)
-				}
-
-				*reply = Response{
-					NodeID: s.is.NodeID,
-					Nodes:  s.is.getNodes(),
-					Delta:  delta,
-				}
-
-				s.mu.Unlock()
-				err := senderFn(reply)
-				s.mu.Lock()
-				if err != nil {
-					if !grpcutil.IsClosedConnection(err) {
-						log.Error(err)
-					}
-					return
-				}
-				s.sent += infoCount
-			}
-		}) {
-			return
-		}
-
-		s.ready.Wait()
+		ready:    make(chan struct{}),
 	}
 }
 
@@ -108,7 +67,8 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		return err
 	}
 
-	ctx := stream.Context()
+	ctx, cancel := context.WithCancel(stream.Context())
+	defer cancel()
 	syncChan := make(chan struct{}, 1)
 	send := func(reply *Response) error {
 		select {
@@ -122,30 +82,74 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 	defer func() { syncChan <- struct{}{} }()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	// Verify that there aren't multiple incoming connections from the same
 	// node. This can happen when bootstrap connections are initiated through
 	// a load balancer.
-	if _, ok := s.nodeMap[args.Addr]; ok {
+	s.mu.Lock()
+	_, ok := s.nodeMap[args.Addr]
+	s.mu.Unlock()
+	if ok {
 		return util.Errorf("duplicate connection from node at %s", args.Addr)
 	}
 
-	// Starting the worker in a task prevents data races during shutdown.
-	if !s.stopper.RunTask(func() {
+	errCh := make(chan error, 1)
+
+	// Starting workers in a task prevents data races during shutdown.
+	s.stopper.RunTask(func() {
 		s.stopper.RunWorker(func() {
-			s.gossipSender(&args, send)
+			errCh <- s.gossipReceiver(&args, send, stream.Recv)
 		})
-	}) {
-		return nil
+	})
+
+	reply := new(Response)
+
+	for {
+		s.mu.Lock()
+
+		delta := s.is.delta(args.Nodes)
+
+		if infoCount := len(delta); infoCount > 0 {
+			if log.V(1) {
+				log.Infof("node %d returned %d info(s) to node %d", s.is.NodeID, infoCount, args.NodeID)
+			}
+
+			*reply = Response{
+				NodeID: s.is.NodeID,
+				Nodes:  s.is.getNodes(),
+				Delta:  delta,
+			}
+
+			s.mu.Unlock()
+			if err := send(reply); err != nil {
+				return err
+			}
+			s.mu.Lock()
+			s.sent += infoCount
+		}
+
+		ready := s.ready
+		s.mu.Unlock()
+
+		select {
+		case <-s.stopper.ShouldDrain():
+			return nil
+		case err := <-errCh:
+			return err
+		case <-ready:
+		}
 	}
+}
+
+func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) error, receiverFn func() (*Request, error)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	reply := new(Response)
 
 	// This loop receives gossip from the client. It does not attempt to send the
 	// server's gossip to the client.
 	for {
+		args := *argsPtr
 		if args.NodeID != 0 {
 			// Decide whether or not we can accept the incoming connection
 			// as a permanent peer.
@@ -178,7 +182,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 				}
 
 				s.mu.Unlock()
-				err := send(reply)
+				err := senderFn(reply)
 				s.mu.Lock()
 				return err
 			}
@@ -200,7 +204,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		}
 
 		s.mu.Unlock()
-		err = send(reply)
+		err = senderFn(reply)
 		s.mu.Lock()
 		if err != nil {
 			return err
@@ -211,16 +215,17 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		}
 
 		s.mu.Unlock()
-		recvArgs, err := stream.Recv()
+		recvArgs, err := receiverFn()
 		s.mu.Lock()
 		if err != nil {
 			return err
 		}
 
-		// args holds the remote peer state; we need to update it whenever we receive a new non-nil
-		// request. We avoid assigning to args directly because the gossip sender worker above has
-		// closed over args and may NPE if args were set to nil.
-		args = recvArgs
+		// *argsPtr holds the remote peer state; we need to update it whenever we
+		// receive a new non-nil request. We avoid assigning to *argsPtr directly
+		// because the gossip sender above has closed over *argsPtr and will NPE if
+		// *argsPtr were set to nil.
+		*argsPtr = recvArgs
 	}
 }
 
@@ -268,17 +273,25 @@ func (s *server) start(grpcServer *grpc.Server, addr net.Addr) {
 	s.mu.Unlock()
 	RegisterGossipServer(grpcServer, s)
 
-	updateCallback := func(_ string, _ roachpb.Value) {
-		// Wakeup all pending clients.
-		s.ready.Broadcast()
+	broadcast := func() {
+		ready := make(chan struct{})
+
+		s.mu.Lock()
+		close(s.ready)
+		s.ready = ready
+		s.mu.Unlock()
 	}
-	unregister := s.is.registerCallback(".*", updateCallback)
+	unregister := s.is.registerCallback(".*", func(_ string, _ roachpb.Value) {
+		broadcast()
+	})
 
 	s.stopper.RunWorker(func() {
-		<-s.stopper.ShouldStop()
+		<-s.stopper.ShouldDrain()
+
 		s.mu.Lock()
-		defer s.mu.Unlock()
 		unregister()
-		s.ready.Broadcast() // wake up clients
+		s.mu.Unlock()
+
+		broadcast()
 	})
 }
