@@ -119,7 +119,7 @@ func TestIntentResolution(t *testing.T) {
 					b.Put(key, "test")
 				}
 				for _, kr := range tc.ranges {
-					b.DelRange(kr[0], kr[1])
+					b.DelRange(kr[0], kr[1], false)
 				}
 				return txn.CommitInBatch(b)
 			}); pErr != nil {

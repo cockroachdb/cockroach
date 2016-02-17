@@ -106,7 +106,7 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 		if log.V(2) {
 			log.Infof("DelRange %s - %s", rowStartKey, rowEndKey)
 		}
-		b.DelRange(rowStartKey, rowEndKey)
+		b.DelRange(rowStartKey, rowEndKey, false)
 
 		if err := p.populateReturning(n.Returning, result, qvals, rowVals); err != nil {
 			return nil, roachpb.NewError(err)

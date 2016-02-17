@@ -235,9 +235,8 @@ func (r *Replica) Delete(batch engine.Engine, ms *engine.MVCCStats, h roachpb.He
 // start and end keys.
 func (r *Replica) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.DeleteRangeRequest) (roachpb.DeleteRangeResponse, error) {
 	var reply roachpb.DeleteRangeResponse
-
-	numDel, err := engine.MVCCDeleteRange(batch, ms, args.Key, args.EndKey, args.MaxEntriesToDelete, h.Timestamp, h.Txn)
-	reply.NumDeleted = numDel
+	deleted, err := engine.MVCCDeleteRange(batch, ms, args.Key, args.EndKey, args.MaxEntriesToDelete, h.Timestamp, h.Txn, args.ReturnKeys)
+	reply.Keys = deleted
 	return reply, err
 }
 
@@ -1658,7 +1657,7 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger)
 
 	// Remove the subsumed range's metadata.
 	localRangeKeyPrefix := keys.MakeRangeIDPrefix(merge.SubsumedRangeID)
-	if _, err := engine.MVCCDeleteRange(batch, nil, localRangeKeyPrefix, localRangeKeyPrefix.PrefixEnd(), 0, roachpb.ZeroTimestamp, nil); err != nil {
+	if _, err := engine.MVCCDeleteRange(batch, nil, localRangeKeyPrefix, localRangeKeyPrefix.PrefixEnd(), 0, roachpb.ZeroTimestamp, nil, false); err != nil {
 		return util.Errorf("cannot remove range metadata %s", err)
 	}
 

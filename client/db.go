@@ -146,6 +146,9 @@ type Result struct {
 	// rows returned is the number or rows matching the scan capped by the
 	// maxRows parameter. For DelRange Rows is nil.
 	Rows []KeyValue
+
+	// Keys is set by some operations instead of returning the rows themselves.
+	Keys []roachpb.Key
 }
 
 func (r Result) String() string {
@@ -375,7 +378,7 @@ func (db *DB) Del(keys ...interface{}) *roachpb.Error {
 // key can be either a byte slice or a string.
 func (db *DB) DelRange(begin, end interface{}) *roachpb.Error {
 	b := db.NewBatch()
-	b.DelRange(begin, end)
+	b.DelRange(begin, end, false)
 	_, pErr := runOneResult(db, b)
 	return pErr
 }
