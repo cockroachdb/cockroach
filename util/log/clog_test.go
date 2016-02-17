@@ -509,6 +509,8 @@ func TestLogBacktraceAt(t *testing.T) {
 // in the future clog and this test can be adapted to actually test that;
 // right now clog writes straight to os.StdErr.
 func TestFatalStacktraceStderr(t *testing.T) {
+	t.Skipf("TODO(pmattis): #4457")
+
 	setFlags()
 	logging.toStderr = false // TODO
 	osExitFunc = func(int) {}
