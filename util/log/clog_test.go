@@ -105,6 +105,7 @@ func contains(s Severity, str string, t *testing.T) bool {
 // them.
 func setFlags() {
 	osExitFunc = os.Exit
+	logging.stderrThreshold = ErrorLog
 	logging.toStderr = false
 }
 
@@ -509,9 +510,8 @@ func TestLogBacktraceAt(t *testing.T) {
 // in the future clog and this test can be adapted to actually test that;
 // right now clog writes straight to os.StdErr.
 func TestFatalStacktraceStderr(t *testing.T) {
-	t.Skipf("TODO(pmattis): #4457")
-
 	setFlags()
+	logging.stderrThreshold = NumSeverity
 	logging.toStderr = false // TODO
 	osExitFunc = func(int) {}
 
