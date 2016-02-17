@@ -1148,21 +1148,10 @@ func (r *Replica) handleRaftReady() error {
 
 	}
 	if shouldReproposeCmds {
-		if err := func() error {
-			r.mu.Lock()
-			defer r.mu.Unlock()
-			if len(r.mu.pendingCmds) > 0 {
-				if log.V(1) {
-					log.Infof("reproposing %d commands after empty entry", len(r.mu.pendingCmds))
-				}
-				for idKey, p := range r.mu.pendingCmds {
-					if err := r.proposePendingCmdLocked(idKey, p); err != nil {
-						return err
-					}
-				}
-			}
-			return nil
-		}(); err != nil {
+		r.mu.Lock()
+		err := r.reproposePendingCmdsLocked()
+		r.mu.Unlock()
+		if err != nil {
 			return err
 		}
 	}
@@ -1173,6 +1162,31 @@ func (r *Replica) handleRaftReady() error {
 	r.mu.Lock()
 	r.mu.raftGroup.Advance(rd)
 	r.mu.Unlock()
+	return nil
+}
+
+func (r *Replica) tick() error {
+	r.mu.Lock()
+	r.mu.raftGroup.Tick()
+	// TODO(tamird/bdarnell): Reproposals should occur less frequently than
+	// ticks, but this is acceptable for now.
+	// TODO(tamird/bdarnell): Add unit tests.
+	err := r.reproposePendingCmdsLocked()
+	r.mu.Unlock()
+	return err
+}
+
+func (r *Replica) reproposePendingCmdsLocked() error {
+	if len(r.mu.pendingCmds) > 0 {
+		if log.V(1) {
+			log.Infof("reproposing %d commands after empty entry", len(r.mu.pendingCmds))
+		}
+		for idKey, p := range r.mu.pendingCmds {
+			if err := r.proposePendingCmdLocked(idKey, p); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
