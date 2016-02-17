@@ -29,6 +29,21 @@ func init() {
 // than the end value.
 var ErrInvertedRange = errors.New("interval: inverted range")
 
+// ErrEmptyRange is returned if an interval is used where the start value is equal
+// to the end value.
+var ErrEmptyRange = errors.New("interval: empty range")
+
+func rangeError(r Range) error {
+	switch r.Start.Compare(r.End) {
+	case 1:
+		return ErrInvertedRange
+	case 0:
+		return ErrEmptyRange
+	default:
+		return nil
+	}
+}
+
 // An Overlapper can determine whether it overlaps a range.
 type Overlapper interface {
 	// Overlap returns a boolean indicating whether the receiver overlaps the parameter.
@@ -44,7 +59,9 @@ type Range struct {
 type Interface interface {
 	Overlapper
 	Range() Range
-	ID() uintptr // Returns a unique ID for the element.
+	// Returns a unique ID for the element.
+	// TODO(nvanbenschoten) Should this be changed to an int64?
+	ID() uintptr
 }
 
 // A Comparable is a type that describes the ends of an Overlapper.
@@ -240,8 +257,8 @@ func (n *Node) adjustRanges() {
 // existing stored intervals.
 func (t *Tree) Insert(e Interface, fast bool) (err error) {
 	r := e.Range()
-	if r.Start.Compare(r.End) > 0 {
-		return ErrInvertedRange
+	if err := rangeError(r); err != nil {
+		return err
 	}
 	var d int
 	t.Root, d = t.Root.insert(e, r.Start, e.ID(), fast)
@@ -375,8 +392,8 @@ func (n *Node) deleteMax(fast bool) (root *Node, d int) {
 // Delete deletes the element e if it exists in the Tree.
 func (t *Tree) Delete(e Interface, fast bool) (err error) {
 	r := e.Range()
-	if r.Start.Compare(r.End) > 0 {
-		return ErrInvertedRange
+	if err := rangeError(r); err != nil {
+		return err
 	}
 	if t.Root == nil || !e.Overlap(t.Root.Range) {
 		return

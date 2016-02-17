@@ -17,10 +17,12 @@
 package storage
 
 import (
+	"sort"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/cache"
+	"github.com/cockroachdb/cockroach/util/interval"
 )
 
 // A CommandQueue maintains an interval tree of keys or key ranges for
@@ -47,18 +49,22 @@ import (
 //
 // CommandQueue is not thread safe.
 type CommandQueue struct {
-	cache *cache.IntervalCache
+	cache   *cache.IntervalCache
+	idAlloc int64
+	rg      interval.RangeGroup // avoids allocating in GetWait.
 }
 
 type cmd struct {
+	ID       int64
 	readOnly bool
-	pending  []*sync.WaitGroup // Pending commands gated on cmd
+	pending  []*sync.WaitGroup // pending commands gated on cmd.
 }
 
 // NewCommandQueue returns a new command queue.
 func NewCommandQueue() *CommandQueue {
 	cq := &CommandQueue{
 		cache: cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
+		rg:    interval.NewRangeTree(),
 	}
 	cq.cache.OnEvicted = cq.onEvicted
 	return cq
@@ -87,16 +93,82 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 			end = start.Next()
 			start = end[:len(start)]
 		}
-		for _, c := range cq.cache.GetOverlaps(start, end) {
-			c := c.Value.(*cmd)
-			// Only add to the wait group if one of the commands isn't read-only.
-			if !readOnly || !c.readOnly {
+		overlaps := cq.cache.GetOverlaps(start, end)
+		if readOnly {
+			// If both commands are read-only, there are no dependencies between them,
+			// so these can be filtered out of the overlapping commands.
+			overlaps = filterReadWrite(overlaps)
+		}
+
+		// Sort overlapping commands by command ID and iterate from latest to earliest,
+		// adding the commands' ranges to the RangeGroup to determine gating keyspace
+		// command dependencies. Because all commands are given WaitGroup dependencies
+		// to the most recent commands that they are dependent on, and because of the
+		// causality provided by the strictly increasing command ID allocation, this
+		// approach will construct a DAG-like dependency graph between WaitGroups with
+		// overlapping keys. This comes as an alternative to creating explicit WaitGroups
+		// dependencies to all gating commands for each new command, which could result
+		// in an exponential dependency explosion.
+		//
+		// For example, consider the following 5 commands, each with key ranges represented
+		// on the x axis and WaitGroup dependencies represented by vertical lines:
+		//
+		// cmd 1:  --------------
+		//          |      |
+		// cmd 2:   |  -------------
+		//          |    |    |
+		// cmd 3:   -------   |
+		//               |    |
+		// cmd 4:        -------
+		//                  |
+		// cmd 5:        -------
+		//
+		// Instead of having each command establish explicit dependencies on all previous
+		// overlapping commands, each command only needs to establish explicit dependencies
+		// on the set of overlapping commands closest to the new command that together span
+		// the new commands overlapped range. Following this strategy, the other dependencies
+		// will be implicitly enforced, which reduces memory utilization and synchronization
+		// costs.
+		sort.Sort(overlapSorter(overlaps))
+		for i := len(overlaps) - 1; i >= 0; i-- {
+			c := overlaps[i]
+			if cq.rg.Add(c.Key.Range) {
+				c := c.Value.(*cmd)
 				c.pending = append(c.pending, wg)
 				wg.Add(1)
 			}
 		}
+
+		// Clear the RangeGroup so that it can be used again. This is an alternative
+		// to using a local variable that must be allocated in every iteration.
+		cq.rg.Clear()
 	}
 }
+
+// filterReadWrite filters out the read-only commands from the provided slice.
+func filterReadWrite(cmds []cache.Overlap) []cache.Overlap {
+	rwIdx := len(cmds)
+	for i := 0; i < rwIdx; {
+		c := cmds[i].Value.(*cmd)
+		if !c.readOnly {
+			i++
+		} else {
+			cmds[i], cmds[rwIdx-1] = cmds[rwIdx-1], cmds[i]
+			rwIdx--
+		}
+	}
+	return cmds[:rwIdx]
+}
+
+// overlapSorter attaches the methods of sort.Interface to []cache.Overlap, sorting
+// in increasing ID order.
+type overlapSorter []cache.Overlap
+
+func (o overlapSorter) Len() int { return len(o) }
+func (o overlapSorter) Less(i, j int) bool {
+	return o[i].Value.(*cmd).ID < o[j].Value.(*cmd).ID
+}
+func (o overlapSorter) Swap(i, j int) { o[i], o[j] = o[j], o[i] }
 
 // Add adds commands to the queue which affect the specified key ranges. Ranges
 // without an end key affect only the start key. The returned interface is the
@@ -117,8 +189,11 @@ func (cq *CommandQueue) Add(readOnly bool, spans ...roachpb.Span) []interface{} 
 			value cmd
 			entry cache.Entry
 		}{
-			key:   cq.cache.MakeKey(start, end),
-			value: cmd{readOnly: readOnly},
+			key: cq.cache.MakeKey(start, end),
+			value: cmd{
+				ID:       cq.nextID(),
+				readOnly: readOnly,
+			},
 		}
 		alloc.entry.Key = &alloc.key
 		alloc.entry.Value = &alloc.value
@@ -146,4 +221,9 @@ func (cq *CommandQueue) Remove(keys []interface{}) {
 // Clear removes all executing commands, signaling any waiting commands.
 func (cq *CommandQueue) Clear() {
 	cq.cache.Clear()
+}
+
+func (cq *CommandQueue) nextID() int64 {
+	cq.idAlloc++
+	return cq.idAlloc
 }
