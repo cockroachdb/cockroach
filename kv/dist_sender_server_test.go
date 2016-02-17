@@ -145,8 +145,8 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	// any active requests.
 	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		b := txn.NewBatch()
-		b.DelRange("a", "b")
-		b.DelRange("e", "f")
+		b.DelRange("a", "b", false)
+		b.DelRange("e", "f", false)
 		return txn.CommitInBatch(b)
 	}); pErr != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", pErr)
@@ -185,7 +185,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	// resolved via ResolveIntentRange upon completion.
 	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		b := txn.NewBatch()
-		b.DelRange("a", "d")
+		b.DelRange("a", "d", false)
 		return txn.CommitInBatch(b)
 	}); pErr != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", pErr)

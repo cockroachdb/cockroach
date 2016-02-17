@@ -157,6 +157,8 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roa
 				row.Key = []byte(args.(*roachpb.DeleteRequest).Key)
 
 			case *roachpb.DeleteRangeRequest:
+				result.Keys = reply.(*roachpb.DeleteRangeResponse).Keys
+
 			case *roachpb.BeginTransactionRequest:
 			case *roachpb.EndTransactionRequest:
 			case *roachpb.AdminMergeRequest:
@@ -363,7 +365,7 @@ func (b *Batch) Del(keys ...interface{}) {
 // Result.Err will indicate success or failure.
 //
 // key can be either a byte slice or a string.
-func (b *Batch) DelRange(s, e interface{}) {
+func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, err)
@@ -374,7 +376,7 @@ func (b *Batch) DelRange(s, e interface{}) {
 		b.initResult(0, 0, err)
 		return
 	}
-	b.reqs = append(b.reqs, roachpb.NewDeleteRange(roachpb.Key(begin), roachpb.Key(end)))
+	b.reqs = append(b.reqs, roachpb.NewDeleteRange(roachpb.Key(begin), roachpb.Key(end), returnKeys))
 	b.initResult(1, 0, nil)
 }
 

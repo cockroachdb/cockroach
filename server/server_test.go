@@ -351,6 +351,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 			Key:    writes[0],
 			EndKey: roachpb.Key(writes[len(writes)-1]).Next(),
 		},
+		ReturnKeys: true,
 	}
 	reply, err := client.SendWrappedWith(tds, nil, roachpb.Header{Timestamp: delTS}, del)
 	if err != nil {
@@ -360,9 +361,16 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	if dr.Txn != nil {
 		t.Errorf("expected no transaction in response header")
 	}
-	if n := dr.NumDeleted; n != int64(len(writes)) {
+	if n := len(dr.Keys); n != len(writes) {
 		t.Errorf("expected %d keys to be deleted, but got %d instead",
 			len(writes), n)
+	} else {
+		if !writes[0].Equal(dr.Keys[0]) {
+			t.Error("wrong key deleted:", dr.Keys[0])
+		}
+		if !writes[1].Equal(dr.Keys[1]) {
+			t.Error("wrong key deleted:", dr.Keys[1])
+		}
 	}
 
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), 0).(*roachpb.ScanRequest)

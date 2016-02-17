@@ -139,6 +139,7 @@ message DeleteRangeRequest {
   // If 0, *all* entries between key (inclusive) and end_key
   // (exclusive) are deleted. Must be >= 0.
   optional int64 max_entries_to_delete = 2 [(gogoproto.nullable) = false];
+  optional bool return_keys = 3 [(gogoproto.nullable) = false];
 }
 
 // A DeleteRangeResponse is the return value from the DeleteRange()
@@ -146,7 +147,7 @@ message DeleteRangeRequest {
 message DeleteRangeResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Number of entries removed.
-  optional int64 num_deleted = 2 [(gogoproto.nullable) = false];
+  repeated bytes keys = 2 [(gogoproto.casttype) = "Key"];
 }
 
 // A ScanRequest is the argument to the Scan() method. It specifies the

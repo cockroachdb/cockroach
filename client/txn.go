@@ -285,7 +285,7 @@ func (txn *Txn) Del(keys ...interface{}) *roachpb.Error {
 // key can be either a byte slice or a string.
 func (txn *Txn) DelRange(begin, end interface{}) *roachpb.Error {
 	b := txn.NewBatch()
-	b.DelRange(begin, end)
+	b.DelRange(begin, end, false)
 	_, pErr := runOneResult(txn, b)
 	return pErr
 }
