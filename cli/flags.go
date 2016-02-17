@@ -160,7 +160,7 @@ store may consume:`) + `
 `,
 
 	"time-until-store-dead": wrapText(`
-Adjusts the timeout for stores.  If there's been no gossiped updated
+Adjusts the timeout for stores.  If there's been no gossiped update
 from a store after this time, the store is considered unavailable.
 Replicas on an unavailable store will be moved to available ones.`),
 
