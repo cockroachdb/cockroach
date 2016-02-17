@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -249,6 +251,31 @@ func (ctx *Context) InitNode() error {
 	}
 
 	return nil
+}
+
+// AdminURL returns the URL for the admin UI.
+func (ctx *Context) AdminURL() string {
+	return fmt.Sprintf("%s://%s", ctx.HTTPRequestScheme(), ctx.Addr)
+}
+
+// PGURL returns the URL for the postgres endpoint.
+func (ctx *Context) PGURL(user string) string {
+	options := url.Values{}
+	if ctx.Insecure {
+		options.Add("sslmode", "disable")
+	} else {
+		options.Add("sslmode", "verify-full")
+		options.Add("sslcert", security.ClientCertPath(ctx.Certs, user))
+		options.Add("sslkey", security.ClientKeyPath(ctx.Certs, user))
+		options.Add("sslrootcert", security.CACertPath(ctx.Certs))
+	}
+	pgURL := url.URL{
+		Scheme:   "postgresql",
+		User:     url.User(user),
+		Host:     ctx.PGAddr,
+		RawQuery: options.Encode(),
+	}
+	return pgURL.String()
 }
 
 var errUnsizedInMemStore = errors.New("unable to initialize an in-memory store with capacity 0")

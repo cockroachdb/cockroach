@@ -19,6 +19,7 @@ package cli
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -131,6 +132,11 @@ func runStart(_ *cobra.Command, _ []string) error {
 	if err := s.Start(); err != nil {
 		return fmt.Errorf("cockroach server exited with error: %s", err)
 	}
+
+	fmt.Printf("admin:  %s\n", cliContext.AdminURL())
+	fmt.Printf("sql:    %s\n", cliContext.PGURL(connUser))
+	fmt.Printf("logs:   %s\n", flag.Lookup("log-dir").Value)
+	fmt.Printf("stores: %s\n", cliContext.Stores)
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt, os.Kill)
