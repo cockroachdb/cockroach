@@ -188,7 +188,7 @@ func (sr *ReverseScanResponse) Combine(c Response) error {
 func (dr *DeleteRangeResponse) Combine(c Response) error {
 	otherDR := c.(*DeleteRangeResponse)
 	if dr != nil {
-		dr.NumDeleted += otherDR.NumDeleted
+		dr.Keys = append(dr.Keys, otherDR.Keys...)
 		if err := dr.Header().Combine(otherDR.Header()); err != nil {
 			return err
 		}
@@ -499,12 +499,13 @@ func NewDelete(key Key) Request {
 
 // NewDeleteRange returns a Request initialized to delete the values in
 // the given key range (excluding the endpoint).
-func NewDeleteRange(startKey, endKey Key) Request {
+func NewDeleteRange(startKey, endKey Key, returnKeys bool) Request {
 	return &DeleteRangeRequest{
 		Span: Span{
 			Key:    startKey,
 			EndKey: endKey,
 		},
+		ReturnKeys: returnKeys,
 	}
 }
 
