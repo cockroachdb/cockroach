@@ -17,8 +17,6 @@
 package grpcutil
 
 import (
-	"crypto/tls"
-	"net"
 	"net/http"
 	"strings"
 
@@ -29,33 +27,8 @@ import (
 	"google.golang.org/grpc/transport"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
-
-// ListenAndServeGRPC creates a listener and serves server on it, closing
-// the listener when signalled by the stopper.
-func ListenAndServeGRPC(stopper *stop.Stopper, server *grpc.Server, addr net.Addr, config *tls.Config) (net.Listener, error) {
-	ln, err := util.Listen(addr, config)
-	if err != nil {
-		return nil, err
-	}
-
-	stopper.RunWorker(func() {
-		if err := server.Serve(ln); err != nil && !util.IsClosedConnection(err) {
-			log.Fatal(err)
-		}
-	})
-
-	stopper.RunWorker(func() {
-		<-stopper.ShouldDrain()
-		if err := ln.Close(); err != nil {
-			log.Fatal(err)
-		}
-	})
-
-	return ln, nil
-}
 
 // GRPCHandlerFunc returns an http.Handler that delegates to grpcServer on incoming gRPC
 // connections or otherHandler otherwise.
