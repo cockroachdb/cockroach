@@ -725,3 +725,30 @@ func TestPrepareSyntax(t *testing.T) {
 		t.Fatalf("unexpected result: %q", v)
 	}
 }
+
+// Test that we are sending a 'Z' after an error instead of more results.
+func TestPGMultiStatementError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGMultiStatementError")
+	defer cleanupFn()
+
+	db, err := sql.Open("postgres", pgUrl.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	tests := map[string]string{
+		`BEGIN; INSERT INTO x.y(a) VALUES (1); END;`:                            `pq: database "x" does not exist`,
+		`BEGIN TRANSACTION; SELECT * FROM system.t; INSERT INTO t(a) VALUES (1);`: `pq: table "t" does not exist`,
+	}
+	for query, expect := range tests {
+		if _, err := db.Query(query); err.Error() != expect {
+			t.Errorf("%s: got %s; expected %s", query, err, expect)
+		}
+	}
+}
