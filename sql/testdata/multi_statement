@@ -52,3 +52,9 @@ a b
 c d
 e f
 g h
+
+statement error pq: database "x" does not exist
+BEGIN; INSERT INTO x.y(a) VALUES (1); END;
+
+statement error pq: table "t" does not exist
+BEGIN TRANSACTION; SELECT * FROM system.t; INSERT INTO t(a) VALUES (1);

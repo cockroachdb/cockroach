@@ -626,7 +626,7 @@ func (c *v3Conn) sendResponse(resp sql.Response, formatCodes []formatCode, sendD
 			if err := c.sendError(result.PErr.String()); err != nil {
 				return err
 			}
-			continue
+			break
 		}
 
 		if result.PGTag == "INSERT" {
