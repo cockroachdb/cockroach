@@ -57,17 +57,23 @@ will log an error for all consistency problems seen.
 
 The SHA over a range replica is computed over all the KV pairs using
 replicaDataIterator, ignoring the raft HardState and any log entries with index
-greater than the applied index of the ComputeChecksum command.
+greater than the applied index of the ComputeChecksum command. If the replica is
+split or merged before CollectChecksum is received, the replica will return a
+RANGE_CHANGED error.
 
 Exposing consistency checker through an API for direct invocation:
 
 A cockroach node will support a command through which an admin or a test can
-check the consistency of all ranges for which it is a leader. This will be used
+check the consistency of all ranges for which it is a leader using the same
+mechanism provided for the periodic consistency checker. This will be used
 in all acceptance tests.
 
-Later it will be useful to support a CLI command for an admin to run
-consistency checks over sections of the KV range: e.g., [roachpb.KeyMin,
-roachpb.KeyMax).
+Later if needed it will be useful to support a CLI command for an admin to run
+consistency checks over a section of the KV map: e.g., [roachpb.KeyMin,
+roachpb.KeyMax). Since the underlying ranges within a specified KV section of
+the map can change while consistency is being checked, this command will be
+implemented through kv.DistSender to allow command retries in the event of
+range splits/merges.
 
 Noteworthy scenarios:
 
@@ -89,8 +95,6 @@ CollectChecksum: Nothing.
 7. A new replica is added between ComputeChecksum and CollectChecksum: The new
 replica receives the CollectChecksum and returns NOT_COMPUTED.
 8. A replica is removed between ComputeChecksum and CollectChecksum: Nothing.
-9. A range splits or merges with another range after ComputeChecksum: To be
-discussed and the RFC updated.
 
 # Drawbacks
 
