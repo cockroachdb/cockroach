@@ -147,6 +147,7 @@ message DeleteRangeResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Number of entries removed.
   optional int64 num_deleted = 2 [(gogoproto.nullable) = false];
+  repeated bytes keys = 3 [(gogoproto.casttype) = "Key"];
 }
 
 // A ScanRequest is the argument to the Scan() method. It specifies the

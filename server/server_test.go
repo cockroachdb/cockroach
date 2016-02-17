@@ -360,7 +360,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	if dr.Txn != nil {
 		t.Errorf("expected no transaction in response header")
 	}
-	if n := dr.NumDeleted; n != int64(len(writes)) {
+	if n := len(dr.Keys); n != len(writes) {
 		t.Errorf("expected %d keys to be deleted, but got %d instead",
 			len(writes), n)
 	}

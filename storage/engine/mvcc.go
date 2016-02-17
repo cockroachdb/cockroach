@@ -1068,23 +1068,42 @@ func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.
 
 // MVCCDeleteRange deletes the range of key/value pairs specified by
 // start and end keys. Specify max=0 for unbounded deletes.
-func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp, txn *roachpb.Transaction) (int64, error) {
+func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp, txn *roachpb.Transaction) error {
 	// In order to detect the potential write intent by another
 	// concurrent transaction with a newer timestamp, we need
 	// to use the max timestamp for scan.
 	kvs, _, err := MVCCScan(engine, key, endKey, max, roachpb.MaxTimestamp, true /* consistent */, txn)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
-	num := int64(0)
 	for _, kv := range kvs {
 		if err := MVCCDelete(engine, ms, kv.Key, timestamp, txn); err != nil {
-			return num, err
+			return err
 		}
-		num++
 	}
-	return num, nil
+	return nil
+}
+
+// MVCCDeleteRangeReturning is the same as MVCCDeleteRange
+// except it returns the deleted keys.
+func MVCCDeleteRangeReturning(engine Engine, ms *MVCCStats, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp, txn *roachpb.Transaction) ([]roachpb.Key, error) {
+	// In order to detect the potential write intent by another
+	// concurrent transaction with a newer timestamp, we need
+	// to use the max timestamp for scan.
+	kvs, _, err := MVCCScan(engine, key, endKey, max, roachpb.MaxTimestamp, true /* consistent */, txn)
+	if err != nil {
+		return nil, err
+	}
+
+	keys := make([]roachpb.Key, 0, len(kvs))
+	for _, kv := range kvs {
+		if err := MVCCDelete(engine, ms, kv.Key, timestamp, txn); err != nil {
+			return keys, err
+		}
+		keys = append(keys, kv.Key)
+	}
+	return keys, nil
 }
 
 func getScanMeta(iter Iterator, encEndKey MVCCKey, meta *MVCCMetadata) (MVCCKey, error) {

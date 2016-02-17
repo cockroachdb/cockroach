@@ -157,6 +157,10 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roa
 				row.Key = []byte(args.(*roachpb.DeleteRequest).Key)
 
 			case *roachpb.DeleteRangeRequest:
+				if deleteReply, ok := reply.(*roachpb.DeleteRangeResponse); ok {
+					result.Keys = deleteReply.Keys
+				}
+
 			case *roachpb.BeginTransactionRequest:
 			case *roachpb.EndTransactionRequest:
 			case *roachpb.AdminMergeRequest:

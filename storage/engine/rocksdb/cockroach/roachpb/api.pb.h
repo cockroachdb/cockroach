@@ -1399,6 +1399,22 @@ class DeleteRangeResponse : public ::google::protobuf::Message {
   ::google::protobuf::int64 num_deleted() const;
   void set_num_deleted(::google::protobuf::int64 value);
 
+  // repeated bytes keys = 3;
+  int keys_size() const;
+  void clear_keys();
+  static const int kKeysFieldNumber = 3;
+  const ::std::string& keys(int index) const;
+  ::std::string* mutable_keys(int index);
+  void set_keys(int index, const ::std::string& value);
+  void set_keys(int index, const char* value);
+  void set_keys(int index, const void* value, size_t size);
+  ::std::string* add_keys();
+  void add_keys(const ::std::string& value);
+  void add_keys(const char* value);
+  void add_keys(const void* value, size_t size);
+  const ::google::protobuf::RepeatedPtrField< ::std::string>& keys() const;
+  ::google::protobuf::RepeatedPtrField< ::std::string>* mutable_keys();
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.DeleteRangeResponse)
  private:
   inline void set_has_header();
@@ -1411,6 +1427,7 @@ class DeleteRangeResponse : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::cockroach::roachpb::ResponseHeader* header_;
   ::google::protobuf::int64 num_deleted_;
+  ::google::protobuf::RepeatedPtrField< ::std::string> keys_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -6887,6 +6904,60 @@ inline void DeleteRangeResponse::set_num_deleted(::google::protobuf::int64 value
   set_has_num_deleted();
   num_deleted_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.DeleteRangeResponse.num_deleted)
+}
+
+// repeated bytes keys = 3;
+inline int DeleteRangeResponse::keys_size() const {
+  return keys_.size();
+}
+inline void DeleteRangeResponse::clear_keys() {
+  keys_.Clear();
+}
+inline const ::std::string& DeleteRangeResponse::keys(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.DeleteRangeResponse.keys)
+  return keys_.Get(index);
+}
+inline ::std::string* DeleteRangeResponse::mutable_keys(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.DeleteRangeResponse.keys)
+  return keys_.Mutable(index);
+}
+inline void DeleteRangeResponse::set_keys(int index, const ::std::string& value) {
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.DeleteRangeResponse.keys)
+  keys_.Mutable(index)->assign(value);
+}
+inline void DeleteRangeResponse::set_keys(int index, const char* value) {
+  keys_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.DeleteRangeResponse.keys)
+}
+inline void DeleteRangeResponse::set_keys(int index, const void* value, size_t size) {
+  keys_.Mutable(index)->assign(
+    reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.DeleteRangeResponse.keys)
+}
+inline ::std::string* DeleteRangeResponse::add_keys() {
+  return keys_.Add();
+}
+inline void DeleteRangeResponse::add_keys(const ::std::string& value) {
+  keys_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.DeleteRangeResponse.keys)
+}
+inline void DeleteRangeResponse::add_keys(const char* value) {
+  keys_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:cockroach.roachpb.DeleteRangeResponse.keys)
+}
+inline void DeleteRangeResponse::add_keys(const void* value, size_t size) {
+  keys_.Add()->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:cockroach.roachpb.DeleteRangeResponse.keys)
+}
+inline const ::google::protobuf::RepeatedPtrField< ::std::string>&
+DeleteRangeResponse::keys() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.DeleteRangeResponse.keys)
+  return keys_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::std::string>*
+DeleteRangeResponse::mutable_keys() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.DeleteRangeResponse.keys)
+  return &keys_;
 }
 
 // -------------------------------------------------------------------

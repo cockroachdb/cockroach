@@ -146,6 +146,9 @@ type Result struct {
 	// rows returned is the number or rows matching the scan capped by the
 	// maxRows parameter. For DelRange Rows is nil.
 	Rows []KeyValue
+
+	// Keys is set by some operations instead of returning the rows themselves.
+	Keys []roachpb.Key
 }
 
 func (r Result) String() string {

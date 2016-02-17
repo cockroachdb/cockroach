@@ -374,6 +374,7 @@ type DeleteRangeResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// Number of entries removed.
 	NumDeleted int64 `protobuf:"varint,2,opt,name=num_deleted" json:"num_deleted"`
+	Keys       []Key `protobuf:"bytes,3,rep,name=keys,casttype=Key" json:"keys,omitempty"`
 }
 
 func (m *DeleteRangeResponse) Reset()         { *m = DeleteRangeResponse{} }
@@ -1461,6 +1462,14 @@ func (m *DeleteRangeResponse) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.NumDeleted))
+	if len(m.Keys) > 0 {
+		for _, b := range m.Keys {
+			data[i] = 0x1a
+			i++
+			i = encodeVarintApi(data, i, uint64(len(b)))
+			i += copy(data[i:], b)
+		}
+	}
 	return i, nil
 }
 
@@ -3388,6 +3397,12 @@ func (m *DeleteRangeResponse) Size() (n int) {
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.NumDeleted))
+	if len(m.Keys) > 0 {
+		for _, b := range m.Keys {
+			l = len(b)
+			n += 1 + l + sovApi(uint64(l))
+		}
+	}
 	return n
 }
 
@@ -5497,6 +5512,35 @@ func (m *DeleteRangeResponse) Unmarshal(data []byte) error {
 					break
 				}
 			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Keys", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Keys = append(m.Keys, make([]byte, postIndex-iNdEx))
+			copy(m.Keys[len(m.Keys)-1], data[iNdEx:postIndex])
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipApi(data[iNdEx:])

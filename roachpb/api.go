@@ -188,7 +188,7 @@ func (sr *ReverseScanResponse) Combine(c Response) error {
 func (dr *DeleteRangeResponse) Combine(c Response) error {
 	otherDR := c.(*DeleteRangeResponse)
 	if dr != nil {
-		dr.NumDeleted += otherDR.NumDeleted
+		dr.Keys = append(dr.Keys, otherDR.Keys...)
 		if err := dr.Header().Combine(otherDR.Header()); err != nil {
 			return err
 		}
