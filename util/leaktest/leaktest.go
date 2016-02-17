@@ -51,6 +51,9 @@ func interestingGoroutines() (gs []string) {
 		}
 		stack := strings.TrimSpace(sl[1])
 		if stack == "" ||
+			// TODO(tamird): remove after https://github.com/grpc/grpc-go/issues/559
+			// is resolved.
+			strings.Contains(stack, "created by google.golang.org/grpc.NewConn") ||
 			strings.Contains(stack, "created by net.startServer") ||
 			strings.Contains(stack, "created by testing.RunTests") ||
 			strings.Contains(stack, "closeWriteAndWait") ||
