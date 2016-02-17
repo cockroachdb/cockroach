@@ -20,6 +20,7 @@ import (
 	"net"
 	"sync"
 
+	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -193,7 +194,8 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		return err
 	}
 
-	ctx := stream.Context()
+	ctx, cancelFunc := context.WithCancel(stream.Context())
+	defer cancelFunc()
 	syncChan := make(chan struct{}, 1)
 	send := func(reply *Response) error {
 		select {
@@ -231,7 +233,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 	select {
 	case <-s.stopper.ShouldDrain():
-		return nil
+		return context.Canceled
 	case err := <-errCh:
 		return err
 	}
