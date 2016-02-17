@@ -82,7 +82,7 @@ func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, s
 			dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 		}
 
-		conn, err := grpc.Dial(c.addr.String(), dialOpt)
+		conn, err := grpc.Dial(c.addr.String(), dialOpt, grpc.WithBlock())
 		if err != nil {
 			log.Errorf("failed to dial: %v", err)
 			return
@@ -131,19 +131,19 @@ func (c *client) requestGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossi
 // and min hops.
 func (c *client) sendGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_GossipClient) error {
 	g.mu.Lock()
-	args := &Request{
-		NodeID: g.is.NodeID,
-		Addr:   addr,
-		Delta:  g.is.delta(c.remoteNodes),
-		Nodes:  g.is.getNodes(),
+	if delta := g.is.delta(c.remoteNodes); len(delta) > 0 {
+		args := Request{
+			NodeID: g.is.NodeID,
+			Addr:   addr,
+			Delta:  delta,
+			Nodes:  g.is.getNodes(),
+		}
+
+		g.mu.Unlock()
+		return stream.Send(&args)
 	}
 	g.mu.Unlock()
-
-	if len(args.Delta) == 0 {
-		return nil
-	}
-
-	return stream.Send(args)
+	return nil
 }
 
 // handleResponse handles errors, remote forwarding, and combines delta
@@ -210,17 +210,12 @@ func (c *client) gossip(g *Gossip, gossipClient GossipClient, stopper *stop.Stop
 	addr := g.is.NodeAddr
 	g.mu.Unlock()
 
-	ctx := grpcutil.NewContextWithStopper(context.Background(), stopper)
-
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	stream, err := gossipClient.Gossip(ctx)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err := stream.CloseSend(); err != nil {
-			log.Error(err)
-		}
-	}()
 
 	if err := c.requestGossip(g, addr, stream); err != nil {
 		return err
@@ -238,32 +233,31 @@ func (c *client) gossip(g *Gossip, gossipClient GossipClient, stopper *stop.Stop
 	// Defer calling "undoer" callback returned from registration.
 	defer g.RegisterCallback(".*", updateCallback)()
 
-	// Loop in worker, sending updates from the info store.
+	errCh := make(chan error, 1)
 	stopper.RunWorker(func() {
-		for {
-			select {
-			case <-sendGossipChan:
-				if err := c.sendGossip(g, addr, stream); err != nil {
-					if !grpcutil.IsClosedConnection(err) {
-						log.Error(err)
-					}
-					return
+		errCh <- func() error {
+			for {
+				reply, err := stream.Recv()
+				if err != nil {
+					return err
 				}
-			case <-stopper.ShouldStop():
-				return
+				if err := c.handleResponse(g, reply); err != nil {
+					return err
+				}
 			}
-		}
+		}()
 	})
 
-	// Loop until stopper is signalled, or until either the gossip or RPC clients are closed.
-	// The stopper's signal is propagated through the context attached to the stream.
 	for {
-		reply, err := stream.Recv()
-		if err != nil {
+		select {
+		case <-stopper.ShouldStop():
+			return nil
+		case err := <-errCh:
 			return err
-		}
-		if err := c.handleResponse(g, reply); err != nil {
-			return err
+		case <-sendGossipChan:
+			if err := c.sendGossip(g, addr, stream); err != nil {
+				return err
+			}
 		}
 	}
 }
