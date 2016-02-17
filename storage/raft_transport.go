@@ -100,7 +100,7 @@ func (lt *localRPCTransport) Listen(id roachpb.StoreID, handler RaftMessageHandl
 	RegisterMultiRaftServer(grpcServer, handler)
 
 	addr := util.CreateTestAddr("tcp")
-	ln, err := grpcutil.ListenAndServeGRPC(lt.stopper, grpcServer, addr, nil)
+	ln, err := util.ListenAndServe(lt.stopper, grpcServer, addr, nil)
 	if err != nil {
 		return err
 	}
