@@ -17,7 +17,6 @@
 package roachpb
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/util/caller"
@@ -139,12 +138,29 @@ func (e *Error) CanRetry() bool {
 	return e.Retryable
 }
 
+// strippedError is a Go error converted from Error.
+type strippedError struct {
+	msg string
+}
+
+// Error implements the Error interface.
+func (e *strippedError) Error() string {
+	return e.msg
+}
+
+// CanRetry implements the retry.Retryable interface. This method
+// always panic as CanRetry must not be called after Error is
+// converted to a Go error and its error detail is stripped.
+func (e *strippedError) CanRetry() bool {
+	panic(fmt.Sprintf("cannot call CanRetry for stripped error %s", e.msg))
+}
+
 // GoError returns a Go error converted from Error.
 func (e *Error) GoError() error {
 	if e == nil {
 		return nil
 	}
-	return errors.New(e.Message)
+	return &strippedError{e.Message}
 }
 
 // setGoError sets Error using err.
