@@ -362,6 +362,7 @@ type DeleteRangeRequest struct {
 	// If 0, *all* entries between key (inclusive) and end_key
 	// (exclusive) are deleted. Must be >= 0.
 	MaxEntriesToDelete int64 `protobuf:"varint,2,opt,name=max_entries_to_delete" json:"max_entries_to_delete"`
+	ReturnKeys         bool  `protobuf:"varint,3,opt,name=return_keys" json:"return_keys"`
 }
 
 func (m *DeleteRangeRequest) Reset()         { *m = DeleteRangeRequest{} }
@@ -373,7 +374,7 @@ func (*DeleteRangeRequest) ProtoMessage()    {}
 type DeleteRangeResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// Number of entries removed.
-	NumDeleted int64 `protobuf:"varint,2,opt,name=num_deleted" json:"num_deleted"`
+	Keys []Key `protobuf:"bytes,2,rep,name=keys,casttype=Key" json:"keys,omitempty"`
 }
 
 func (m *DeleteRangeResponse) Reset()         { *m = DeleteRangeResponse{} }
@@ -1432,6 +1433,14 @@ func (m *DeleteRangeRequest) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintApi(data, i, uint64(m.MaxEntriesToDelete))
+	data[i] = 0x18
+	i++
+	if m.ReturnKeys {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
 	return i, nil
 }
 
@@ -1458,9 +1467,14 @@ func (m *DeleteRangeResponse) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n18
-	data[i] = 0x10
-	i++
-	i = encodeVarintApi(data, i, uint64(m.NumDeleted))
+	if len(m.Keys) > 0 {
+		for _, b := range m.Keys {
+			data[i] = 0x12
+			i++
+			i = encodeVarintApi(data, i, uint64(len(b)))
+			i += copy(data[i:], b)
+		}
+	}
 	return i, nil
 }
 
@@ -3379,6 +3393,7 @@ func (m *DeleteRangeRequest) Size() (n int) {
 	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
 	n += 1 + sovApi(uint64(m.MaxEntriesToDelete))
+	n += 2
 	return n
 }
 
@@ -3387,7 +3402,12 @@ func (m *DeleteRangeResponse) Size() (n int) {
 	_ = l
 	l = m.ResponseHeader.Size()
 	n += 1 + l + sovApi(uint64(l))
-	n += 1 + sovApi(uint64(m.NumDeleted))
+	if len(m.Keys) > 0 {
+		for _, b := range m.Keys {
+			l = len(b)
+			n += 1 + l + sovApi(uint64(l))
+		}
+	}
 	return n
 }
 
@@ -5398,6 +5418,26 @@ func (m *DeleteRangeRequest) Unmarshal(data []byte) error {
 					break
 				}
 			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReturnKeys", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.ReturnKeys = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipApi(data[iNdEx:])
@@ -5479,10 +5519,10 @@ func (m *DeleteRangeResponse) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NumDeleted", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Keys", wireType)
 			}
-			m.NumDeleted = 0
+			var byteLen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowApi
@@ -5492,11 +5532,21 @@ func (m *DeleteRangeResponse) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.NumDeleted |= (int64(b) & 0x7F) << shift
+				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if byteLen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Keys = append(m.Keys, make([]byte, postIndex-iNdEx))
+			copy(m.Keys[len(m.Keys)-1], data[iNdEx:postIndex])
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipApi(data[iNdEx:])

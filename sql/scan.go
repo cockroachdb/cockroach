@@ -332,7 +332,7 @@ func (n *scanNode) initVisibleCols(visibleCols []ColumnDescriptor, numImplicit i
 	n.row = make([]parser.Datum, len(visibleCols))
 }
 
-// initScan initializes but does not performs the key-value scan.
+// initScan initializes but does not perform the key-value scan.
 func (n *scanNode) initScan() bool {
 	// Initialize our key/values.
 	if len(n.spans) == 0 {

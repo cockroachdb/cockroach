@@ -49,7 +49,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, *roachpb.Error) {
 		if log.V(2) {
 			log.Infof("DelRange %s - %s", tableStartKey, tableEndKey)
 		}
-		b.DelRange(tableStartKey, tableEndKey)
+		b.DelRange(tableStartKey, tableEndKey, false)
 	}
 
 	if pErr := p.txn.Run(&b); pErr != nil {
