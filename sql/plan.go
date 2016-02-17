@@ -185,10 +185,7 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
 	case *parser.Update:
 		return p.Update(n, false)
 	default:
-		return nil, roachpb.NewUErrorf("prepare statement not supported: %s", stmt.StatementTag())
-
-		// TODO(mjibson): add support for parser.Values.
-		// Broken because it conflicts with INSERT's use of VALUES.
+		return nil, nil
 	}
 }
 
