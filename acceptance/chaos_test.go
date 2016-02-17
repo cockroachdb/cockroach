@@ -291,10 +291,11 @@ CREATE TABLE bank.accounts (
 	// chaos monkey.
 	var sum int
 	clients[0].RLock()
-	if err := clients[0].db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum); err != nil {
+	err := clients[0].db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum)
+	clients[0].RUnlock()
+	if err != nil {
 		t.Fatal(err)
 	}
-	clients[0].RUnlock()
 	if sum != 0 {
 		t.Fatalf("The bank is not in good order. Total value: %d", sum)
 	}

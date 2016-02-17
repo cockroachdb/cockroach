@@ -226,7 +226,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		m.clientStopper = stop.NewStopper()
 	}
 	if m.transport == nil {
-		m.transport = storage.NewLocalRPCTransport(m.clientStopper)
+		m.transport = storage.NewLocalRPCTransport(m.transportStopper)
 	}
 	if m.storePool == nil {
 		if m.timeUntilStoreDead == 0 {
@@ -268,8 +268,8 @@ func (m *multiTestContext) Stop() {
 	go func() {
 		m.mu.RLock()
 		defer m.mu.RUnlock()
-		stoppers := append([]*stop.Stopper{m.clientStopper, m.transportStopper},
-			m.stoppers...)
+		stoppers := append([]*stop.Stopper{m.clientStopper}, m.stoppers...)
+		stoppers = append(stoppers, m.transportStopper)
 		// Quiesce all the stoppers so that we can stop all stoppers in unison.
 		for _, s := range stoppers {
 			// Stoppers may be nil if stopStore has been called without restartStore.

@@ -1657,9 +1657,9 @@ func (s *Store) processRaft() {
 				s.processRaftMu.Lock()
 				s.mu.Lock()
 				for rangeID, r := range s.mu.replicas {
-					r.mu.Lock()
-					r.mu.raftGroup.Tick()
-					r.mu.Unlock()
+					if err := r.tick(); err != nil {
+						log.Error(err)
+					}
 					s.mu.pendingRaftGroups[rangeID] = struct{}{}
 				}
 				s.mu.Unlock()
