@@ -17,7 +17,9 @@
 package util
 
 import (
+	"bytes"
 	"crypto/tls"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -29,13 +31,51 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+type replayableConn struct {
+	net.Conn
+	buf    bytes.Buffer
+	reader io.Reader
+}
+
+// Do not call `replay` more than once, bad things will happen.
+func (bc *replayableConn) replay() *replayableConn {
+	bc.reader = io.MultiReader(&bc.buf, bc.Conn)
+	return bc
+}
+
+func (bc *replayableConn) Read(b []byte) (int, error) {
+	return bc.reader.Read(b)
+}
+
+func newBufferedConn(conn net.Conn) *replayableConn {
+	bc := replayableConn{Conn: conn}
+	bc.reader = io.TeeReader(conn, &bc.buf)
+	return &bc
+}
+
+type replayableConnListener struct {
+	net.Listener
+}
+
+func (ml *replayableConnListener) Accept() (net.Conn, error) {
+	conn, err := ml.Listener.Accept()
+	if err == nil {
+		conn = newBufferedConn(conn)
+	}
+	return conn, err
+}
+
 // Listen delegates to `net.Listen` and, if tlsConfig is not nil, to `tls.NewListener`.
 // The returned listener's Addr() method will return an address with the hostname unresovled,
 // which means it can be used to initiate TLS connections.
 func Listen(addr net.Addr, tlsConfig *tls.Config) (net.Listener, error) {
 	ln, err := net.Listen(addr.Network(), addr.String())
-	if err == nil && tlsConfig != nil {
-		ln = tls.NewListener(ln, tlsConfig)
+	if err == nil {
+		if tlsConfig != nil {
+			ln = tls.NewListener(ln, tlsConfig)
+		} else {
+			ln = &replayableConnListener{ln}
+		}
 	}
 
 	return ln, err
@@ -66,7 +106,29 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 			mu.Unlock()
 		},
 	}
-	if err := http2.ConfigureServer(&httpServer, nil); err != nil {
+
+	var http2Server http2.Server
+
+	if tlsConfig == nil {
+		connOpts := http2.ServeConnOpts{
+			BaseConfig: &httpServer,
+			Handler:    handler,
+		}
+
+		httpServer.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.ProtoMajor == 2 {
+				if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
+					http2Server.ServeConn(conn.(*replayableConn).replay(), &connOpts)
+				} else {
+					log.Fatal(err)
+				}
+			} else {
+				handler.ServeHTTP(w, r)
+			}
+		})
+	}
+
+	if err := http2.ConfigureServer(&httpServer, &http2Server); err != nil {
 		return nil, err
 	}
 
