@@ -64,9 +64,9 @@ After your test does something to trigger your new metric update, you'll probabl
 methods in TestServer such as MustGetCounter() to verify that the metric was updated correctly. See
 "sql/metric_test.go" for an example.
 
-Additionally, you can manually verify that your metric is updating by using the metrics endpoint.
-For example, if you're running the Cockroach DB server with the "--dev" flag, you can use access the
-endpoint as follows:
+Additionally, you can manually verify that your metric is updating by using the metrics
+endpoint.  For example, if you're running the Cockroach DB server with the "--insecure"
+flag, you can use access the endpoint as follows:
 
 	$ curl http://localhost:26257/_status/metrics/1
 

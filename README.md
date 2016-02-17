@@ -66,7 +66,7 @@ Note: If you’re using Docker as described above, run all the commands describe
 Setting up Cockroach is easy, but starting a test node is even easier. All it takes is running:
 
 ```bash
-./cockroach start --dev &
+./cockroach start --insecure &
 ```
 
 Verify that you're up and running by visiting the cluster UI. If you're running
@@ -80,7 +80,7 @@ the correct address (but the port is the same).
 Now let's talk to this node. The easiest way to do that is to use the `cockroach` binary - it comes with a built-in sql client:
 
 ```bash
-./cockroach sql --dev
+./cockroach sql --insecure
 # Welcome to the cockroach SQL interface.
 # All statements must be terminated by a semicolon.
 # To exit: CTRL + D.
