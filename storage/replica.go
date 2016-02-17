@@ -1690,18 +1690,18 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 			// too long (helps avoid deadlocks during test shutdown,
 			// although this is imperfect due to the use of an
 			// uninterruptible WaitGroup.Wait in beginCmds).
-			ctxWithDeadline, cancel := context.WithDeadline(ctx, time.Now().Add(rpc.DefaultRPCTimeout))
+			ctxWithTimeout, cancel := context.WithTimeout(ctx, rpc.DefaultRPCTimeout)
 			defer cancel()
 			h := roachpb.Header{Timestamp: now}
-			resolveIntents, pErr := r.store.resolveWriteIntentError(ctxWithDeadline, &roachpb.WriteIntentError{
+			resolveIntents, pErr := r.store.resolveWriteIntentError(ctxWithTimeout, &roachpb.WriteIntentError{
 				Intents: item.intents,
 			}, r, args, h, roachpb.PUSH_TOUCH)
 			if wiErr, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
-				log.Warningc(ctxWithDeadline, "failed to push during intent resolution: %s", pErr)
+				log.Warningc(ctxWithTimeout, "failed to push during intent resolution: %s", pErr)
 				return
 			}
-			if pErr := r.resolveIntents(ctxWithDeadline, resolveIntents, true /* wait */, true /* poison */); pErr != nil {
-				log.Warningc(ctxWithDeadline, "failed to resolve intents: %s", pErr)
+			if pErr := r.resolveIntents(ctxWithTimeout, resolveIntents, true /* wait */, true /* poison */); pErr != nil {
+				log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", pErr)
 				return
 			}
 			// We successfully resolved the intents, so we're able to GC from
@@ -1730,7 +1730,7 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 				gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{Key: keys.TransactionKey(txn.Key, txn.ID)})
 
 				ba.Add(&gcArgs)
-				if _, pErr := r.addWriteCmd(ctxWithDeadline, ba, nil /* nil */); pErr != nil {
+				if _, pErr := r.addWriteCmd(ctxWithTimeout, ba, nil /* nil */); pErr != nil {
 					log.Warningf("could not GC completed transaction: %s", pErr)
 				}
 			}
