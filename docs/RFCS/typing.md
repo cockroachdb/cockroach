@@ -29,7 +29,7 @@ To reach these goals the RFC proposes to:
 - extend `EXPLAIN` to pretty-print the inferred types.
 
 As with all in software engineering, more intelligence requires more
-work, and has the potential to make software less predictable. 
+work, and has the potential to make software less predictable.
 Among the spectrum of possible design points, this RFC settles
 on a typing system we call *Morty*, which can be implemented
 as a rule-based depth-first traversal of the query AST.
@@ -146,13 +146,13 @@ For example:
 1. pessimistic typing for numeric literals.
 
    For example:
-   
+
    ```sql
 
       create table t (x float);
       insert into t(x) values (1e10000 * 1e-9999);
    ```
-   
+
    This fails on both Postgres and CockroachDB with a complaint that
    the numbers do not fit in either int or float, despite the fact the
    result would.
@@ -176,7 +176,7 @@ For example:
    ```sql
        select floor($1 + $2)
    ```
-   
+
    This fails in Postgres with "can't infer the types" whereas the
    context suggests that inferring ``decimal`` would be perfectly
    fine.
@@ -196,7 +196,7 @@ For example:
    ```sql
         prepare a as select g(f($1))
    ```
-   
+
    This fails with ambiguous/untypable $1, whereas one could argue (as
    is implemented in other languages) that ``g`` asking for ``int`` is
    sufficient to select the 1st overload for ``f`` and thus fully
@@ -205,27 +205,27 @@ For example:
 5. Lack of clarity about the expected behavior of the division sign.
 
    Consider the following:
-   
+
    ```sql
        create table w (x int, y float);
 	   insert into w values (3/2, 3/2);
    ```
-   
+
    In PostgreSQL this inserts (1, 1.0), with perhaps a surprise on the
    2nd value.  In CockroachDB this fails (arguably surprisingly) on
    the 1st expression (can't insert float into int), although the
    expression seems well-formed for the receiving column type.
-   
+
 6. Uncertainty on the typing of placeholders due to conflicting contexts:
 
    ```sql
       prepare a as select (3 + $1) + ($1 + 3.5)
    ```
-   
+
    PostgreSQL resolves #1 as `decimal`. CockroachDB can't infer.
    Arguably both "int" and "float" may come to mind as well.
-   
-   
+
+
 
 ## Things that look wrong but really aren't
 
@@ -238,7 +238,7 @@ For example:
 
      -- reports 3 (in Postgres)
    ```
-   
+
    The issue here is that the + operator is overloaded, and the
    engine performs typing on $1 only considering the 2nd operand to
    the +, and not the fact that $1 may have a richer type.
@@ -253,13 +253,13 @@ For example:
    ```sql
       select 1.5 + 2
    ```
-   
+
    is not equivalent to:
 
    ```sql
       prepare a as select $1 + 2; execute a(1.5)
    ```
-   
+
    The real issue however is that SQL's typing is essentially
    monomorphic and that prepare statements are evaluated independently
    of subsequent queries: there is simply no SQL type that can be
@@ -272,7 +272,7 @@ For example:
      prepare a as select $1::float + 2;
      execute a(1.5)
    ```
-   
+
 2. Casts as type hints.
 
    Postgres uses casts as a way to indicate type hints on
@@ -280,12 +280,12 @@ For example:
    user may legitimately want to use a value of a given type in a
    context where another type is needed, without restricting the type
    of the placeholder. For example:
-   
+
    ```sql
      create table t (x int, s string);
      insert into t (x, s)  values ($1, "hello " + $1::string)
    ```
-   
+
    Here intuition says we want this to infer "int" for $1, not get a
    type error due to conflicting types.
 
@@ -297,7 +297,7 @@ For example:
      create table t (x int, s string);
      insert into t (x, s)  values ($1::int, "hello " + ($1::int)::string
    ```
-   
+
    Therefore the use of casts as type hints should not be seem as a
    hurdle, and simply requires the documentation to properly mention
    to the user "if you intend to cast placeholders, explain the intended source
@@ -324,8 +324,8 @@ For example:
 We use the following notations below:
 
 
-    E :: T  => the regular SQL cast, equivalent to `CAST(E as T)`  
-    E [T]   => an AST node representing `E` 
+    E :: T  => the regular SQL cast, equivalent to `CAST(E as T)`
+    E [T]   => an AST node representing `E`
                with an annotation that indicates it has type T
 
 ## AST changes and new types
@@ -351,7 +351,7 @@ First pass: populating initial types for literals and placeholders.
 - for each numeric literal, annotate with an internal type
   `exact`. Just like for Rick, we can do arithmethic in this type for
   constant folding.
-  
+
 - for each placeholder, process immediate casts if any by annotating
   the placeholder by the type indicated by the cast *when there is no
   other type discovered earlier for this placeholder* during this
@@ -371,7 +371,7 @@ Third pass, type inference and soundness analysis:
    that position, and *also* there is only one candidate that accepts
    a numeric type T at that position, then the expression E is
    automatically substituted by `TYPEASSERT_NUMERIC(E,T)[T]` and
-   typing continues assuming E[T] (see rule 11 below for a definition of `TYPEASSERT_NUMERIC`).   
+   typing continues assuming E[T] (see rule 11 below for a definition of `TYPEASSERT_NUMERIC`).
 3. If, during overload resolution, a *literal* `string` E is
    found at some argument position and no candidate accepts `string`
    at that position, and *also* there is only one candidate left based
@@ -387,7 +387,7 @@ Third pass, type inference and soundness analysis:
 6. If overload resolution finds more than 1 candidate, typing fails
    with "ambiguous overload".
 7. `INSERT`s and `UPDATE`s come with the same inference rules
-   as function calls.  
+   as function calls.
 8. If no type can be inferred for a placeholder (e.g. it's used only
    in overloaded function calls with multiple remaining candidates or
    only comes in contact with other untyped placeholders), then again
@@ -420,49 +420,49 @@ Third pass, type inference and soundness analysis:
     integer and decimal), the value of the expression is returned,
     converted to the type. Otherwise, a SQL error is generated.
 
-You can see that Morty is simpler than Rick: there's no sets of type candidates for any expressions.  
+You can see that Morty is simpler than Rick: there's no sets of type candidates for any expressions.
 Other differences is that Morty relies on the introduction of an
 guarded implicit cast. This is because of the following cases:
 
 ```sql
     (1)   INSERT INTO t(int_col) VALUES (4.5)
-```    
-    
+```
+
 This is a type error in Rick. Without Morty's rule 2 and a "blind"
 implicit cast, this would insert `4` which would be undesirable. With
 rule 2, the semantics become:
 
 ```sql
     (1)   INSERT INTO t(int_col) VALUES (TYPEASSERT_NUMERIC(4.5, int)[int])
-```    
+```
 
 And this would fail, as desired.
 
 `Exact` is obviously not supported by the pgwire protocol, or by
 clients, so we'd report `numeric` when `exact` has been inferred for a
-placeholder.  
-   
+placeholder.
+
 Similarly, and in a fashion compatible with many SQL engines, string
 values are autocasted when there is no ambiguity (rule 3); for
 example:
-   
+
 ```sql
     (1b)   INSERT INTO t(timestamp_col) VALUES ('2012-02-01 01:02:03')
-	
+
 	Gets replaced by:
-	
-    (1b)   INSERT INTO t(timestamp_col) VALUES (TYPEASSERT_STRING('2012-02-01 01:02:03', timestamp)[timestamp]) 
-	
-	which succeeds, and 
-	
+
+    (1b)   INSERT INTO t(timestamp_col) VALUES (TYPEASSERT_STRING('2012-02-01 01:02:03', timestamp)[timestamp])
+
+	which succeeds, and
+
     (1c)   INSERT INTO t(timestamp_col) VALUES ('4.5')
-	
+
 	gets replaced by:
-	
+
     (1c)   INSERT INTO t(timestamp_col) VALUES (TYPEASSERT_STRING('4.5', timestamp)[timestamp])
-	
+
 	which fails at run-time.
-```    
+```
 
 Morty's rule 3 is proposed for convenience, observing that
 once the SQL implementation starts to provide custom / extended types,
@@ -502,7 +502,7 @@ However meanwhile because the expression `$1 + 1` is also
 ```
 
 This way the statement only effectively succeeds when the client
-passes integers for the placeholder. 
+passes integers for the placeholder.
 
 Although another type system could have chosen to infer `int` for `$1`
 based on the appearance of the constant 1 in the expression, the true
@@ -652,7 +652,7 @@ elements. HFor example:
 ```sql
     f : int -> int
     INSERT INTO t (a, b) VALUES (f($1), $1 + $2)
-    -- succeeds (f types $1::int first, then $2 gets typed int), 
+    -- succeeds (f types $1::int first, then $2 gets typed int),
     -- however:
     INSERT INTO t (b, a) VALUES ($1 + $2, f($1))
     -- fails with ambiguous typing for $1+$2, f not visited yet.
@@ -668,13 +668,13 @@ expressions as long as it manages to type new placeholders. This way:
     INSERT INTO t (b, a) VALUES ($1 + $2, f($1))
     --                              ^  fail, but continue
 	--  						 $1 + $2, f($1)      continue
-	--  							        ^ 
+	--  							        ^
 	--  						  ....  , f($1:int)  now retry
-	--  						    
+	--
     --                           $1::int + $2, ...
 	--  						         ^ aha! new information
 	--  						 $1::int + $2::int, f($1::int)
-								 
+
     -- all is well!
 ```
 
@@ -698,7 +698,7 @@ is likely to become outdated a few months after the RFC gets accepted.)
    AST nodes or placeholder names are keys.
 4. Semantic analysis will be done as a new step doing constant
    folding, type inference, type checking.
-  
+
 The semantic analysis will thus look like::
 
     ```go
@@ -758,15 +758,15 @@ point of reference if the topic is revisited in the future.
   expressions involving only constants;
 
 - Rick tries to "optimize" the type given to a literal constant
-  depending on context; 
+  depending on context;
 
 
 ## Proposed typing strategy for Rick
 
 We use the following notations below::
 
-    E :: T  => the regular SQL cast, equivalent to `CAST(E as T)`  
-    E [T]   => an AST node representing `E` 
+    E :: T  => the regular SQL cast, equivalent to `CAST(E as T)`
+    E [T]   => an AST node representing `E`
                with an annotation that indicates it has type T
 
 For conciseness, we also introduce the notation E[\*N] to mean that
@@ -799,7 +799,7 @@ The details:
    expressions.  For number literals, the imlementation type from the
    [exact](<https://godoc.org/golang.org/x/tools/go/exact>)
    arithmetic library can be used.
-   
+
    While the constant expressions are folded, the results must be typed
    using either the known type if any operands had one; or the unknown
    numeric type when the none of the operands had a known type.
@@ -809,7 +809,7 @@ The details:
         true and false               => false[bool]
         'a' + 'b'                    => "ab"[string]
         12 + 3.5                     => 15.5[*N]
-        case 1 when 1 then x         => x[?] 
+        case 1 when 1 then x         => x[?]
         case 1 when 1 then 2         => 2[*N]
         3 + case 1 when 1 then 2     => 5[*N]
         abs(-2)                      => 2[*N]
@@ -838,26 +838,26 @@ The details:
    subset of supported functions, they need to be pure and have an
    implementation for the exact type.
 
-2. Culling and candidate type collection.  
+2. Culling and candidate type collection.
 
    This phase collects candidate types for AST nodes, does a
    pre-selection of candidates for overloaded calls and computes
    intersections.
 
    This is a depth-first, post-order traversal. At every node:
-   
+
    1. the candidate types of the children are computed first
-   
+
    2. the current node is looked at, some candidate overloads may be
       filtered out
-      
+
    3. in case of call to an overloaded op/fun, the argument types
       are used to restrict the candidate set of the direct child
       nodes (set intersection)
-      
+
    4. if the steps above determine there are no
-      possible types for a node, fail as a typing error.  
-              
+      possible types for a node, fail as a typing error.
+
       (Note: this is probably a point where we can look at implicit
       coercions)
 
@@ -868,7 +868,7 @@ The details:
    This filters the candidates for + to only the one taking `int` and
    `int` (rule 2).  Then by rule 2.3 the annotation on 23 is changed,
    and we obtain:
-      
+
         ( 5[int] + 23[int] )[int]
 
    Another example::
@@ -882,21 +882,21 @@ The details:
 
         (12[*N] + $1) + f($1)
            ^
-    
+
         (12[*N] + $1[*N]) + f($1[*N])
                     ^
         -- Note that the placeholders in the AST share
         their type annotation between all their occurrences
         (this is unique to them, e.g. literals have
         separate type annotations)
-    
+
         (12[*N] + $1[*N])[*N] + f($1[*N])
                          ^
-    
+
         (12[*N] + $1[*N])[*N] + f($1[*N])
                                   ^
           (nothing to do anymore)
-    
+
         (12[*N] + $1[*N])[*N] + f($1[*N])
                                ^
 
@@ -946,14 +946,14 @@ The details:
    This is a depth-first, post-order traversal.
 
    For every constant with more than one type in its candidate type
-   set, pick the best type that can represent the constant: we use 
-   the preference order `int`, `float`, `decimal` 
+   set, pick the best type that can represent the constant: we use
+   the preference order `int`, `float`, `decimal`
    and pick the first that can represent the value we've computed.
 
    For example:
 
          12[int,float] + $1[int,float] => 12[int] + $1[int, float]
- 
+
    The reason why we consider constants here (and not placeholders) is
    that the programmers express an intent about typing in the form of
    their literals. That is, there is a special meaning expressed by
@@ -1052,9 +1052,9 @@ The following example types differently from PostgreSQL::
      select (3 + $1) + ($1 + 3.5)
      --      (3[*N] + $1[*N]) + ($1[*N] + 3.5[*N])       rule 2
      --      (3[int] + $1[*N]) + ($1[*N] + 3.5[float])   rule 4
-     --      (3[int] + $1[int]) + ...                   
+     --      (3[int] + $1[int]) + ...
      --                ^                                 rule 2
-     --      (3[int] + $1[int] + ($1[int] + 3.5[float])  
+     --      (3[int] + $1[int] + ($1[int] + 3.5[float])
      --                                   ^  failure, unknown overload
 ```
 
@@ -1081,18 +1081,18 @@ as possible candidates for an improvement:
 
 ## Alternatives around Rick (other than Morty)
 
-There's cases where the type inference doesn't quite work, like 
+There's cases where the type inference doesn't quite work, like
 
     floor($1 + $2)
     g(f($1))
-    CASE a 
-      WHEN 1 THEN 'one' 
-      WHEN 2 THEN  
-         CASE language 
-           WHEN 'en' THEN $1 
-         END 
+    CASE a
+      WHEN 1 THEN 'one'
+      WHEN 2 THEN
+         CASE language
+           WHEN 'en' THEN $1
+         END
     END
-    
+
 Another category of failures involves dependencies between choices of
 types. E.g.:
 
@@ -1105,12 +1105,12 @@ types. E.g.:
     h: string->int
 
     f($1, $2) + g($1) + h($2)
-  
+
 Here the only possibility is `$1[int], $2[int]` but the algorithm is not
 smart enough to figure that out.
 
 To support these, one might
-suggest to make Rick super-smart via 
+suggest to make Rick super-smart via
 the application of a "bidirectional" typing algorithm, where
 the allowable types in a given context guide the typing of
 sub-expressions. These are akin to constraint-driven typing and a number
@@ -1238,7 +1238,7 @@ type inference algorithm probably needs to be extended to rank overload options 
 the number of casts required.
 
 What's the story for `NULL` constants (literals or the result of a
-pure function) in Rick? Do they need to be typed? 
+pure function) in Rick? Do they need to be typed?
 
 Generally do we need to have null-able and non-nullable types?
 
