@@ -225,6 +225,14 @@ func normalizeStdFlagName(s string) string {
 // Keep in sync with "server/context.go". Values in Context should be
 // settable here.
 func initFlags(ctx *Context) {
+	// Change the logging defaults for the main cockroach binary.
+	if err := flag.Lookup("log-dir").Value.Set(os.TempDir()); err != nil {
+		panic(err)
+	}
+	if err := flag.Lookup("logtostderr").Value.Set("false"); err != nil {
+		panic(err)
+	}
+
 	// Map any flags registered in the standard "flag" package into the
 	// top-level cockroach command.
 	pf := cockroachCmd.PersistentFlags()

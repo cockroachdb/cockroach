@@ -723,8 +723,9 @@ Flags:
       --alsologtostderr         log to standard error as well as files
       --color                   colorize standard error output according to severity (default "auto")
       --log-backtrace-at        when logging hits line file:N, emit a stack trace (default :0)
-      --log-dir                 if non-empty, write log files in this directory
-      --logtostderr             log to standard error instead of files (default true)
+      --log-dir                 if non-empty, write log files in this directory (default "` + os.TempDir() + `")
+      --log-threshold           logs at or above this threshold go to stderr (default ERROR)
+      --logtostderr             log to standard error instead of files
       --verbosity               log level for V logs
       --vmodule                 comma-separated list of pattern=N settings for file-filtered logging
 
