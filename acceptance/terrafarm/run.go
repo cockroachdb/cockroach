@@ -50,14 +50,14 @@ func (f *Farmer) run(cmd string, args ...string) (_ string, _ string, err error)
 		for scanO.Scan() {
 			line := scanO.Text() + "\n"
 			_, _ = outBuf.WriteString(line)
-			f.logf(line)
+			f.logf("%s", line)
 		}
 	}()
 	go func() {
 		for scanE.Scan() {
 			line := scanE.Text() + "\n"
 			_, _ = errBuf.WriteString(line)
-			f.logf(line)
+			f.logf("%s", line)
 		}
 	}()
 
