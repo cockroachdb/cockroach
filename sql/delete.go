@@ -66,6 +66,16 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 	primaryIndex := tableDesc.PrimaryIndex
 	primaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
 
+	// Determine the additional indexes that will need to be updated.
+	indexes := tableDesc.Indexes
+	// Also include all the indexes under mutation; mutation state is
+	// irrelevant for deletions.
+	for _, m := range tableDesc.Mutations {
+		if index := m.GetIndex(); index != nil {
+			indexes = append(indexes, *index)
+		}
+	}
+
 	b := p.txn.NewBatch()
 	for rows.Next() {
 		rowVals := rows.Values()
@@ -77,15 +87,6 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 			return nil, roachpb.NewError(err)
 		}
 
-		// Delete the secondary indexes.
-		indexes := tableDesc.Indexes
-		// Also include all the indexes under mutation; mutation state is
-		// irrelevant for deletions.
-		for _, m := range tableDesc.Mutations {
-			if index := m.GetIndex(); index != nil {
-				indexes = append(indexes, *index)
-			}
-		}
 		secondaryIndexEntries, err := encodeSecondaryIndexes(
 			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
 		if err != nil {
