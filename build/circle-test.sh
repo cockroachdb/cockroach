@@ -82,7 +82,7 @@ prepare_artifacts() {
       function post() {
         curl -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
         "https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/$1" \
-        -d "${2:0:$(getconf ARG_MAX)-1000}"
+        -d "${2:0:30000}"
       }
 
       echo "Posting an issue"
