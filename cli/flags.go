@@ -20,7 +20,6 @@ import (
 	"flag"
 	"fmt"
 	"net"
-	"os"
 	"reflect"
 	"strings"
 
@@ -29,7 +28,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var maxResults int64
@@ -234,7 +232,6 @@ func initFlags(ctx *Context) {
 
 	{
 		f := startCmd.Flags()
-		f.BoolVar(&ctx.EphemeralSingleNode, "dev", ctx.EphemeralSingleNode, usage("dev"))
 
 		// Server flags.
 		f.StringVar(&connHost, "host", "", usage("host"))
@@ -297,7 +294,6 @@ func initFlags(ctx *Context) {
 	}
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
-		f.BoolVar(&cliContext.EphemeralSingleNode, "dev", cliContext.EphemeralSingleNode, usage("dev"))
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, usage("certs"))
 		f.StringVar(&connHost, "host", "", usage("host"))
@@ -337,23 +333,6 @@ func init() {
 	initFlags(cliContext)
 
 	cobra.OnInitialize(func() {
-		if cliContext.EphemeralSingleNode {
-			cliContext.Insecure = true
-			if len(cliContext.JoinUsing) != 0 {
-				log.Errorf("--join cannot be specified when running a node in dev mode (--dev)")
-				os.Exit(1)
-			}
-			fmt.Printf(`
-****
-**
-** This node is being run in DEVELOPMENT mode.
-**
-** All data is ephemeral, and there is no security.
-**
-****
-
-`)
-		}
 		cliContext.Addr = net.JoinHostPort(connHost, connPort)
 		cliContext.PGAddr = net.JoinHostPort(connHost, connPGPort)
 	})

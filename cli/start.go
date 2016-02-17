@@ -26,8 +26,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -105,13 +103,6 @@ func runStart(_ *cobra.Command, _ []string) error {
 
 	// Default user for servers.
 	cliContext.User = security.NodeUser
-
-	if cliContext.EphemeralSingleNode {
-		// TODO(marc): set this in the zones table when we have an entry
-		// for the default cluster-wide zone config.
-		config.DefaultZoneConfig.ReplicaAttrs = []roachpb.Attributes{{}}
-		cliContext.Stores = "mem=1073741824" // 1024MB
-	}
 
 	stopper := stop.NewStopper()
 	if err := cliContext.InitStores(stopper); err != nil {
