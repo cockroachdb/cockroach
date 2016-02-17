@@ -80,6 +80,9 @@ func (s *Severity) set(val Severity) {
 
 // String is part of the flag.Value interface.
 func (s *Severity) String() string {
+	if i := int(*s); i >= 0 && i < len(severityName) {
+		return severityName[i]
+	}
 	return strconv.FormatInt(int64(*s), 10)
 }
 
@@ -597,8 +600,8 @@ func formatLogEntry(entry *LogEntry, colors *colorProfile) []byte {
 }
 
 func init() {
-	// Default stderrThreshold is so high that nothing gets through.
-	logging.stderrThreshold = NumSeverity
+	// Default stderrThreshold to errors and above.
+	logging.stderrThreshold = ErrorLog
 	{
 		tmpStr := ""
 		logDir = &tmpStr

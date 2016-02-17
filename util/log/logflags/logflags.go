@@ -63,10 +63,7 @@ func InitFlags(mu sync.Locker, toStderr *bool, alsoToStderr *bool, logDir, color
 	flag.Var(&atomicBool{Locker: mu, b: alsoToStderr}, "alsologtostderr", "log to standard error as well as files")
 	flag.StringVar(color, "color", "auto", "colorize standard error output according to severity")
 	flag.Var(verbosity, "verbosity", "log level for V logs")
-	// TODO(tschottdorf): decide if we need this.
-	// pf.Var(&logging.stderrThreshold, "log-threshold", "logs at or above this threshold go to stderr")
 	flag.Var(vmodule, "vmodule", "comma-separated list of pattern=N settings for file-filtered logging")
 	flag.Var(traceLocation, "log-backtrace-at", "when logging hits line file:N, emit a stack trace")
 	flag.StringVar(logDir, "log-dir", "", "if non-empty, write log files in this directory") // in util/log/file.go
-
 }

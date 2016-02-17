@@ -236,6 +236,7 @@ func (s *Server) Start() error {
 	if err := officializeAddr(unresolvedAddr, ln.Addr()); err != nil {
 		return err
 	}
+	s.ctx.Addr = unresolvedAddr.String()
 
 	s.rpcContext.SetLocalServer(s.rpc, unresolvedAddr.String())
 
@@ -267,7 +268,16 @@ func (s *Server) Start() error {
 	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), unresolvedAddr)
 	s.initHTTP()
 
-	return s.pgServer.Start(util.NewUnresolvedAddr("tcp", s.ctx.PGAddr))
+	pgAddr := util.NewUnresolvedAddr("tcp", s.ctx.PGAddr)
+	if err := s.pgServer.Start(pgAddr); err != nil {
+		return err
+	}
+	if err := officializeAddr(pgAddr, s.pgServer.Addr()); err != nil {
+		return err
+	}
+	s.ctx.PGAddr = pgAddr.String()
+
+	return nil
 }
 
 // initHTTP registers http prefixes.

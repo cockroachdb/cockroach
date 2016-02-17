@@ -22,36 +22,19 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/url"
 
 	// Import postgres driver.
 	_ "github.com/lib/pq"
 
 	"github.com/olekukonko/tablewriter"
-
-	"github.com/cockroachdb/cockroach/security"
 )
 
 func makeSQLClient() (*sql.DB, string) {
 	sqlURL := connURL
 	if len(connURL) == 0 {
-		options := url.Values{}
-		if cliContext.Insecure {
-			options.Add("sslmode", "disable")
-		} else {
-			options.Add("sslmode", "verify-full")
-			options.Add("sslcert", security.ClientCertPath(cliContext.Certs, connUser))
-			options.Add("sslkey", security.ClientKeyPath(cliContext.Certs, connUser))
-			options.Add("sslrootcert", security.CACertPath(cliContext.Certs))
-		}
-		pgURL := url.URL{
-			Scheme:   "postgresql",
-			User:     url.User(connUser),
-			Host:     net.JoinHostPort(connHost, connPGPort),
-			Path:     connDBName,
-			RawQuery: options.Encode(),
-		}
-		sqlURL = pgURL.String()
+		tmpCtx := cliContext
+		tmpCtx.PGAddr = net.JoinHostPort(connHost, connPGPort)
+		sqlURL = tmpCtx.PGURL(connUser)
 	}
 	db, err := sql.Open("postgres", sqlURL)
 	if err != nil {
