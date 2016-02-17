@@ -1298,18 +1298,28 @@ class DeleteRangeRequest : public ::google::protobuf::Message {
   ::google::protobuf::int64 max_entries_to_delete() const;
   void set_max_entries_to_delete(::google::protobuf::int64 value);
 
+  // optional bool return_keys = 3;
+  bool has_return_keys() const;
+  void clear_return_keys();
+  static const int kReturnKeysFieldNumber = 3;
+  bool return_keys() const;
+  void set_return_keys(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.DeleteRangeRequest)
  private:
   inline void set_has_header();
   inline void clear_has_header();
   inline void set_has_max_entries_to_delete();
   inline void clear_has_max_entries_to_delete();
+  inline void set_has_return_keys();
+  inline void clear_has_return_keys();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::Span* header_;
   ::google::protobuf::int64 max_entries_to_delete_;
+  bool return_keys_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -1392,25 +1402,32 @@ class DeleteRangeResponse : public ::google::protobuf::Message {
   ::cockroach::roachpb::ResponseHeader* release_header();
   void set_allocated_header(::cockroach::roachpb::ResponseHeader* header);
 
-  // optional int64 num_deleted = 2;
-  bool has_num_deleted() const;
-  void clear_num_deleted();
-  static const int kNumDeletedFieldNumber = 2;
-  ::google::protobuf::int64 num_deleted() const;
-  void set_num_deleted(::google::protobuf::int64 value);
+  // repeated bytes keys = 2;
+  int keys_size() const;
+  void clear_keys();
+  static const int kKeysFieldNumber = 2;
+  const ::std::string& keys(int index) const;
+  ::std::string* mutable_keys(int index);
+  void set_keys(int index, const ::std::string& value);
+  void set_keys(int index, const char* value);
+  void set_keys(int index, const void* value, size_t size);
+  ::std::string* add_keys();
+  void add_keys(const ::std::string& value);
+  void add_keys(const char* value);
+  void add_keys(const void* value, size_t size);
+  const ::google::protobuf::RepeatedPtrField< ::std::string>& keys() const;
+  ::google::protobuf::RepeatedPtrField< ::std::string>* mutable_keys();
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.DeleteRangeResponse)
  private:
   inline void set_has_header();
   inline void clear_has_header();
-  inline void set_has_num_deleted();
-  inline void clear_has_num_deleted();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::ResponseHeader* header_;
-  ::google::protobuf::int64 num_deleted_;
+  ::google::protobuf::RepeatedPtrField< ::std::string> keys_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -6818,6 +6835,30 @@ inline void DeleteRangeRequest::set_max_entries_to_delete(::google::protobuf::in
   // @@protoc_insertion_point(field_set:cockroach.roachpb.DeleteRangeRequest.max_entries_to_delete)
 }
 
+// optional bool return_keys = 3;
+inline bool DeleteRangeRequest::has_return_keys() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void DeleteRangeRequest::set_has_return_keys() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void DeleteRangeRequest::clear_has_return_keys() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void DeleteRangeRequest::clear_return_keys() {
+  return_keys_ = false;
+  clear_has_return_keys();
+}
+inline bool DeleteRangeRequest::return_keys() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.DeleteRangeRequest.return_keys)
+  return return_keys_;
+}
+inline void DeleteRangeRequest::set_return_keys(bool value) {
+  set_has_return_keys();
+  return_keys_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.DeleteRangeRequest.return_keys)
+}
+
 // -------------------------------------------------------------------
 
 // DeleteRangeResponse
@@ -6865,28 +6906,58 @@ inline void DeleteRangeResponse::set_allocated_header(::cockroach::roachpb::Resp
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.DeleteRangeResponse.header)
 }
 
-// optional int64 num_deleted = 2;
-inline bool DeleteRangeResponse::has_num_deleted() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
+// repeated bytes keys = 2;
+inline int DeleteRangeResponse::keys_size() const {
+  return keys_.size();
 }
-inline void DeleteRangeResponse::set_has_num_deleted() {
-  _has_bits_[0] |= 0x00000002u;
+inline void DeleteRangeResponse::clear_keys() {
+  keys_.Clear();
 }
-inline void DeleteRangeResponse::clear_has_num_deleted() {
-  _has_bits_[0] &= ~0x00000002u;
+inline const ::std::string& DeleteRangeResponse::keys(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.DeleteRangeResponse.keys)
+  return keys_.Get(index);
 }
-inline void DeleteRangeResponse::clear_num_deleted() {
-  num_deleted_ = GOOGLE_LONGLONG(0);
-  clear_has_num_deleted();
+inline ::std::string* DeleteRangeResponse::mutable_keys(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.DeleteRangeResponse.keys)
+  return keys_.Mutable(index);
 }
-inline ::google::protobuf::int64 DeleteRangeResponse::num_deleted() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.DeleteRangeResponse.num_deleted)
-  return num_deleted_;
+inline void DeleteRangeResponse::set_keys(int index, const ::std::string& value) {
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.DeleteRangeResponse.keys)
+  keys_.Mutable(index)->assign(value);
 }
-inline void DeleteRangeResponse::set_num_deleted(::google::protobuf::int64 value) {
-  set_has_num_deleted();
-  num_deleted_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.DeleteRangeResponse.num_deleted)
+inline void DeleteRangeResponse::set_keys(int index, const char* value) {
+  keys_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.DeleteRangeResponse.keys)
+}
+inline void DeleteRangeResponse::set_keys(int index, const void* value, size_t size) {
+  keys_.Mutable(index)->assign(
+    reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.DeleteRangeResponse.keys)
+}
+inline ::std::string* DeleteRangeResponse::add_keys() {
+  return keys_.Add();
+}
+inline void DeleteRangeResponse::add_keys(const ::std::string& value) {
+  keys_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.DeleteRangeResponse.keys)
+}
+inline void DeleteRangeResponse::add_keys(const char* value) {
+  keys_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:cockroach.roachpb.DeleteRangeResponse.keys)
+}
+inline void DeleteRangeResponse::add_keys(const void* value, size_t size) {
+  keys_.Add()->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:cockroach.roachpb.DeleteRangeResponse.keys)
+}
+inline const ::google::protobuf::RepeatedPtrField< ::std::string>&
+DeleteRangeResponse::keys() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.DeleteRangeResponse.keys)
+  return keys_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::std::string>*
+DeleteRangeResponse::mutable_keys() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.DeleteRangeResponse.keys)
+  return &keys_;
 }
 
 // -------------------------------------------------------------------

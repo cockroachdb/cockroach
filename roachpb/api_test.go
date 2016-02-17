@@ -67,22 +67,22 @@ func TestCombinable(t *testing.T) {
 
 	dr1 := &DeleteRangeResponse{
 		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 100}},
-		NumDeleted:     5,
+		Keys:           []Key{[]byte("1")},
 	}
 	if _, ok := interface{}(dr1).(Combinable); !ok {
 		t.Fatalf("DeleteRangeResponse does not implement Combinable")
 	}
 	dr2 := &DeleteRangeResponse{
 		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 1}},
-		NumDeleted:     12,
+		Keys:           []Key{[]byte("2")},
 	}
 	dr3 := &DeleteRangeResponse{
 		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 111}},
-		NumDeleted:     3,
+		Keys:           nil,
 	}
 	wantedDR := &DeleteRangeResponse{
 		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 111}},
-		NumDeleted:     20,
+		Keys:           []Key{[]byte("1"), []byte("2")},
 	}
 	if err := dr2.Combine(dr3); err != nil {
 		t.Fatal(err)
