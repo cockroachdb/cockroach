@@ -17,6 +17,9 @@
 package gossip_test
 
 import (
+	"reflect"
+	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -62,22 +65,34 @@ func (tp *testStorage) WriteBootstrapInfo(info *gossip.BootstrapInfo) error {
 	return nil
 }
 
+type unresolvedAddrSlice []util.UnresolvedAddr
+
+func (s unresolvedAddrSlice) Len() int {
+	return len(s)
+}
+func (s unresolvedAddrSlice) Less(i, j int) bool {
+	networkCmp := strings.Compare(s[i].Network(), s[j].Network())
+	return networkCmp < 0 || networkCmp == 0 && strings.Compare(s[i].String(), s[j].String()) < 0
+}
+func (s unresolvedAddrSlice) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
 // TestGossipStorage verifies that a gossip node can join the cluster
 // using the bootstrap hosts in a gossip.Storage object.
 func TestGossipStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("#3755")
 
-	const numNodes = 3
 	network := simulation.NewNetwork(3)
 	defer network.Stop()
 
 	// Set storage for each of the nodes.
-	stores := []*testStorage{}
-	for _, n := range network.Nodes {
-		tp := &testStorage{}
-		stores = append(stores, tp)
-		if err := n.Gossip.SetStorage(tp); err != nil {
+	addresses := make(unresolvedAddrSlice, len(network.Nodes))
+	stores := make([]*testStorage, len(network.Nodes))
+	for i, n := range network.Nodes {
+		addresses[i] = util.MakeUnresolvedAddr(n.Addr.Network(), n.Addr.String())
+		stores[i] = new(testStorage)
+		if err := n.Gossip.SetStorage(stores[i]); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -92,9 +107,17 @@ func TestGossipStorage(t *testing.T) {
 		if !p.isWrite() {
 			t.Errorf("%d: expected write from storage", i)
 		}
+
+		gotAddresses := unresolvedAddrSlice(p.info.Addresses)
+
+		sort.Sort(gotAddresses)
+		expectedAddresses := append(unresolvedAddrSlice(nil), addresses...)
+		expectedAddresses = append(expectedAddresses[:i], expectedAddresses[i+1:]...)
+		sort.Sort(expectedAddresses)
+
 		// Verify all gossip addresses are written to each persistent store.
-		if len(p.info.Addresses) != 3 {
-			t.Errorf("%d: expected 3 addresses, have: %s", i, p.info.Addresses)
+		if !reflect.DeepEqual(gotAddresses, expectedAddresses) {
+			t.Errorf("%d: expected addresses: %s, got: %s", i, expectedAddresses, gotAddresses)
 		}
 	}
 
