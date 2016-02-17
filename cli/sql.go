@@ -50,6 +50,33 @@ Open a sql shell running against a cockroach database.
 	SilenceUsage:  true,
 }
 
+// handleShortCommand processes client-side commands of the form '\xxx'.
+func handleShortCommand(tl string) bool {
+	if len(tl) == 0 {
+		return true
+	} else if tl == "?" {
+		fmt.Print(`You are using 'cockroach sql', CockroachDB's lightweight SQL client.
+Type: \q to exit (Ctrl+C/Ctrl+D also supported)
+      \? or "help" to print this help.
+
+More documentation about our SQL dialect is available online:
+http://www.cockroachlabs.com/docs/
+
+`)
+		return true
+	} else if tl == "q" {
+		return false
+	} else if tl[0] == 'd' {
+		// We do not advertise this command for now, but newcomers are
+		// likely to try it first hand. Guide them a little.
+		fmt.Printf("Invalid command: \\%s. Try \\? for help, or use the SQL SHOW statement to inspect your database schema.\n", tl)
+		return true
+	}
+
+	fmt.Printf("Invalid command: \\%s. Try \\? for help.\n", tl)
+	return true
+}
+
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
 func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
@@ -109,7 +136,7 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 		if err == linenoise.KillSignalError {
 			break
 		} else if err != nil {
-			fmt.Fprintf(osStderr, "input error: %s", err)
+			fmt.Fprintf(osStderr, "input error: %s\n", err)
 			return err
 		}
 
@@ -120,6 +147,17 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 			// we may be in the middle of a string literal where empty lines
 			// may be significant.
 			continue
+		}
+
+		if len(stmt) == 0 && tl == "help" {
+			handleShortCommand("?")
+			continue
+		} else if len(tl) > 0 && tl[0] == '\\' {
+			if handleShortCommand(tl[1:]) {
+				continue
+			} else {
+				break
+			}
 		}
 
 		stmt = append(stmt, l)
