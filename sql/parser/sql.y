@@ -19,10 +19,16 @@
 
 %{
 package parser
-import "github.com/cockroachdb/cockroach/sql/privilege"
+
+import (
+	"errors"
+	"github.com/cockroachdb/cockroach/sql/privilege"
+)
+
+var errUnimplemented = errors.New("unimplemented")
 
 func unimplemented() {
-  panic("TODO(pmattis): unimplemented")
+	panic(errUnimplemented)
 }
 %}
 

@@ -65,7 +65,15 @@ type Parser struct {
 }
 
 // Parse parses the sql and returns a list of statements.
-func (p *Parser) Parse(sql string, syntax Syntax) (StatementList, error) {
+func (p *Parser) Parse(sql string, syntax Syntax) (stmts StatementList, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			var ok bool
+			if err, ok = r.(error); !ok || err != errUnimplemented {
+				panic(r)
+			}
+		}
+	}()
 	p.scanner.init(sql, syntax)
 	if p.parserImpl.Parse(&p.scanner) != 0 {
 		return nil, errors.New(p.scanner.lastError)
