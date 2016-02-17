@@ -560,7 +560,7 @@ evaluates to exact 10, this gets autocasted back to float for insert.
       select length(E'\\000a'::bytea || 'b'::text)
 ```
 
-Type error, concat only works for homogenous types.
+Type error, concat only works for homogeneous types.
 
 ```sql
       select floor($1 + $2)
@@ -1153,7 +1153,7 @@ panic because they should not be possible based on our
 parser. However, we could eventually introduce Complex literals using
 this approach.
 
-Finally, once type checking has occured, we can proceed with folding
+Finally, once type checking has occurred, we can proceed with folding
 for all typed values and expressions.
 
 Untyped numeric literals become typed when they interact with other
