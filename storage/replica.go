@@ -1393,6 +1393,8 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	if ba.IsWrite() {
 		if err == nil {
 			// If command was successful, flush the MVCC stats to the batch.
+			// TODO(nvanbenschoten): this needs to happen regardless of the
+			// error at the end of this function.
 			if err := r.stats.MergeMVCCStats(btch, *ms); err != nil {
 				// TODO(tschottdorf): ReplicaCorruptionError.
 				log.Fatalc(ctx, "setting mvcc stats in a batch should never fail: %s", err)
@@ -1405,13 +1407,28 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			// prepare for the failed sequence cache entry.
 			btch.Close()
 			btch = r.store.Engine().NewBatch()
+			*ms = engine.MVCCStats{}
 		}
-		// Only transactional requests have replay protection.
+		// Only transactional requests have replay protection. If the transaction
+		// just ended (via a successful EndTransaction call), we can purge the
+		// local sequence cache state: this is the range to which the transaction
+		// is anchored, and so replay protection isn't needed any more: we either
+		// still have the transaction entry (so a renewed attempt to commit will fail)
+		// or we have GCed it automatically (in case there are no external intents),
+		// in which case commit also fails, unless the replay also contains
+		// BeginTransaction. That case needs discussion; one option is keeping
+		// the sequence cache when we have non-idempotent commands in the batch
+		// such as Inc, and one vector to reliably fail them is invalidating
+		// the timestamp cache's knowledge of that transaction so that the
+		// repeated write (at the same timestamp) will fail.
 		if ba.Txn != nil {
-			if putErr := r.sequence.Put(btch, ba.Txn.ID, ba.Txn.Epoch,
-				ba.Txn.Sequence, ba.Txn.Key, ba.Txn.Timestamp, err); putErr != nil {
-				// TODO(tschottdorf): ReplicaCorruptionError.
-				log.Fatalc(ctx, "putting a sequence cache entry in a batch should never fail: %s", putErr)
+			_, isEndTxn := ba.GetArg(roachpb.EndTransaction)
+			if !isEndTxn || err != nil {
+				if putErr := r.sequence.Put(btch, ms, ba.Txn.ID, ba.Txn.Epoch,
+					ba.Txn.Sequence, ba.Txn.Key, ba.Txn.Timestamp, err); putErr != nil {
+					// TODO(tschottdorf): ReplicaCorruptionError.
+					log.Fatalc(ctx, "putting a sequence cache entry in a batch should never fail: %s", putErr)
+				}
 			}
 		}
 	}

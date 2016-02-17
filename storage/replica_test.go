@@ -1523,7 +1523,7 @@ func TestRangeSequenceCacheStoredTxnRetryError(t *testing.T) {
 	for i, pastError := range []error{errors.New("boom"), nil} {
 		txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
 		txn.Sequence = uint32(1 + i)
-		_ = tc.rng.sequence.Put(tc.engine, txn.ID, uint32(txn.Epoch), txn.Sequence, txn.Key, txn.Timestamp, roachpb.NewError(pastError))
+		_ = tc.rng.sequence.Put(tc.engine, nil, txn.ID, uint32(txn.Epoch), txn.Sequence, txn.Key, txn.Timestamp, roachpb.NewError(pastError))
 
 		args := incrementArgs(key, 1)
 		_, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
@@ -1708,6 +1708,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 
 		// Try a heartbeat to the already-committed transaction; should get
 		// committed txn back, but without last heartbeat timestamp set.
+		txn.Epoch++ // need to fake a higher epoch to sneak past sequence cache
 		txn.Sequence++
 		hBA, h := heartbeatArgs(txn)
 
@@ -2267,7 +2268,7 @@ func TestSequenceCacheError(t *testing.T) {
 	// to trigger TransactionRetryError.
 	key := roachpb.Key("k")
 	ts := txn.Timestamp.Next()
-	if err := tc.rng.sequence.Put(tc.engine, txn.ID, txn.Epoch, txn.Sequence+1, key, ts, nil); err != nil {
+	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, txn.Epoch, txn.Sequence+1, key, ts, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2283,7 +2284,7 @@ func TestSequenceCacheError(t *testing.T) {
 	}
 
 	// Poison the sequence cache to trigger TransactionAbortedError.
-	if err := tc.rng.sequence.Put(tc.engine, txn.ID, txn.Epoch, roachpb.SequencePoisonAbort, key, ts, nil); err != nil {
+	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, txn.Epoch, roachpb.SequencePoisonAbort, key, ts, nil); err != nil {
 		t.Fatal(err)
 	}
 
