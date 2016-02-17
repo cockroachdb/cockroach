@@ -25,7 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/GeertJohan/go.linenoise"
+	"github.com/chzyer/readline"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -87,13 +87,19 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 			}
 		} else {
 			histFile = filepath.Join(userAcct.HomeDir, ".cockroachdb_history")
-			if err := linenoise.LoadHistory(histFile); err != nil {
-				if log.V(2) {
-					log.Warningf("cannot load command-line history: %s", err)
-				}
-			}
 		}
 	}
+
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt:                 fullPrompt,
+		HistoryFile:            histFile,
+		DisableAutoSaveHistory: true,
+	})
+
+	if err != nil {
+		panic(err)
+	}
+	defer rl.Close()
 
 	fmt.Print(infoMessage)
 
@@ -104,13 +110,13 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 		if len(stmt) > 0 {
 			thisPrompt = continuePrompt
 		}
-		l, err := linenoise.Line(thisPrompt)
+		rl.SetPrompt(thisPrompt)
+		l, err := rl.Readline()
 
-		if err == linenoise.KillSignalError {
-			break
+		if err == readline.ErrInterrupt {
+			continue
 		} else if err != nil {
-			fmt.Fprintf(osStderr, "input error: %s", err)
-			return err
+			break
 		}
 
 		tl := strings.TrimSpace(l)
@@ -139,22 +145,7 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 		fullStmt := strings.Join(stmt, "\n")
 
 		if keepHistory {
-			// We ignore linenoise's error here since it only reports an
-			// error in two situations: out of memory (this will be caught
-			// soon enough by cockroach sql) or duplicate entry (we don't
-			// care).
-			_ = linenoise.AddHistory(strings.Join(stmt, " "))
-
-			if histFile != "" {
-				// We save the history between each statement, This enables
-				// reusing history in another SQL shell without closing the
-				// current shell.
-				if err := linenoise.SaveHistory(histFile); err != nil {
-					log.Warningf("cannot save command-line history: %s", err)
-					log.Info("command-line history will not be saved in this session")
-					histFile = ""
-				}
-			}
+			rl.SaveHistory(strings.Join(stmt, " "))
 		}
 
 		if exitErr = runPrettyQuery(db, os.Stdout, fullStmt); exitErr != nil {

@@ -14,7 +14,7 @@ cmd github.com/robfig/glock
 cmd github.com/tebeka/go2xunit
 cmd golang.org/x/tools/cmd/goimports
 cmd golang.org/x/tools/cmd/stringer
-github.com/GeertJohan/go.linenoise 1918ff89d61336553294cc577e9a32b647732fff
+github.com/chzyer/readline 01066143c6ee8eb37a96702268798f889987ce2a
 github.com/Sirupsen/logrus 3455d89ac9652295c85db2a98ea32f1d61c380bc
 github.com/VividCortex/ewma c34099b489e4ac33ca8d8c5f9d29d6eeaf69f2ed
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
