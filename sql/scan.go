@@ -169,6 +169,9 @@ func (n *scanNode) Next() bool {
 		if !n.initScan() {
 			return false
 		}
+		if !n.fetchKVs() {
+			return false
+		}
 	}
 
 	// All of the columns for a particular row will be grouped together. We loop
@@ -329,7 +332,7 @@ func (n *scanNode) initVisibleCols(visibleCols []ColumnDescriptor, numImplicit i
 	n.row = make([]parser.Datum, len(visibleCols))
 }
 
-// initScan initializes (and performs) the key-value scan.
+// initScan initializes the key-value scan but does not perform it.
 //
 // TODO(pmattis): The key-value scan currently reads all of the key-value
 // pairs, but they could just as easily be read in chunks. Probably worthwhile
@@ -345,29 +348,6 @@ func (n *scanNode) initScan() bool {
 			start: start,
 			end:   start.PrefixEnd(),
 		})
-	}
-
-	// Retrieve all the spans.
-	b := &client.Batch{}
-	if n.reverse {
-		for i := len(n.spans) - 1; i >= 0; i-- {
-			b.ReverseScan(n.spans[i].start, n.spans[i].end, n.spans[i].count)
-		}
-	} else {
-		for i := 0; i < len(n.spans); i++ {
-			b.Scan(n.spans[i].start, n.spans[i].end, n.spans[i].count)
-		}
-	}
-	if n.pErr = n.txn.Run(b); n.pErr != nil {
-		return false
-	}
-
-	for _, result := range b.Results {
-		if n.kvs == nil {
-			n.kvs = result.Rows
-		} else {
-			n.kvs = append(n.kvs, result.Rows...)
-		}
 	}
 
 	if n.valTypes == nil {
@@ -392,6 +372,32 @@ func (n *scanNode) initScan() bool {
 				return false
 			}
 			n.implicitVals = make([]parser.Datum, len(n.implicitValTypes))
+		}
+	}
+	return true
+}
+
+func (n *scanNode) fetchKVs() bool {
+	// Retrieve all the spans.
+	b := &client.Batch{}
+	if n.reverse {
+		for i := len(n.spans) - 1; i >= 0; i-- {
+			b.ReverseScan(n.spans[i].start, n.spans[i].end, n.spans[i].count)
+		}
+	} else {
+		for i := 0; i < len(n.spans); i++ {
+			b.Scan(n.spans[i].start, n.spans[i].end, n.spans[i].count)
+		}
+	}
+	if n.pErr = n.txn.Run(b); n.pErr != nil {
+		return false
+	}
+
+	for _, result := range b.Results {
+		if n.kvs == nil {
+			n.kvs = result.Rows
+		} else {
+			n.kvs = append(n.kvs, result.Rows...)
 		}
 	}
 	return true
@@ -434,6 +440,10 @@ func (n *scanNode) computeOrdering(index *IndexDescriptor, exactPrefix int, reve
 	return ordering
 }
 
+func (n *scanNode) readIndexKey(k roachpb.Key) ([]byte, error) {
+	return decodeIndexKey(&n.desc, n.index.ID, n.valTypes, n.vals, n.columnDirs, k)
+}
+
 func (n *scanNode) processKV(kv client.KeyValue) bool {
 	if n.indexKey == nil {
 		// Reset the row to nil; it will get filled in in with the column
@@ -445,7 +455,7 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 
 	var remaining []byte
 	var err error
-	remaining, err = decodeIndexKey(&n.desc, n.index.ID, n.valTypes, n.vals, n.columnDirs, kv.Key)
+	remaining, err = n.readIndexKey(kv.Key)
 	n.pErr = roachpb.NewError(err)
 	if n.pErr != nil {
 		return false
