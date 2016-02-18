@@ -61,6 +61,9 @@ func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 			return nil, roachpb.NewUErrorf("%s: \"%s\" is not in (%q, %q)", name, s, parser.Modern, parser.Traditional)
 		}
 
+	case `EXTRA_FLOAT_DIGITS`:
+		// These settings are sent by the JDBC driver but we silently ignore them.
+
 	default:
 		return nil, roachpb.NewUErrorf("unknown variable: %q", name)
 	}

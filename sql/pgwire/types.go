@@ -250,6 +250,7 @@ var (
 		oid.T_numeric:   parser.DummyDecimal,
 		oid.T_text:      parser.DummyString,
 		oid.T_timestamp: parser.DummyTimestamp,
+		oid.T_varchar:   parser.DummyString,
 	}
 	// Using reflection to support unhashable types.
 	datumToOid = map[reflect.Type]oid.Oid{
@@ -382,7 +383,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 		default:
 			return d, fmt.Errorf("unsupported numeric format code: %d", code)
 		}
-	case oid.T_text:
+	case oid.T_text, oid.T_varchar:
 		switch code {
 		case formatText:
 			d = parser.DString(b)
