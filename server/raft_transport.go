@@ -24,7 +24,6 @@ import (
 	"golang.org/x/net/context"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -136,19 +135,7 @@ func (t *rpcTransport) processQueue(nodeID roachpb.NodeID, storeID roachpb.Store
 		return
 	}
 
-	var dialOpt grpc.DialOption
-	if t.rpcContext.Insecure {
-		dialOpt = grpc.WithInsecure()
-	} else {
-		tlsConfig, err := t.rpcContext.GetClientTLSConfig()
-		if err != nil {
-			log.Error(err)
-			return
-		}
-		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
-	}
-
-	conn, err := grpc.Dial(addr.String(), dialOpt)
+	conn, err := t.rpcContext.GRPCDial(addr.String())
 	if err != nil {
 		log.Errorf("failed to dial: %v", err)
 		return
