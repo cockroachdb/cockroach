@@ -37,31 +37,31 @@ type testStorage struct {
 	info        gossip.BootstrapInfo
 }
 
-func (tp *testStorage) isRead() bool {
-	tp.Lock()
-	defer tp.Unlock()
-	return tp.read
+func (ts *testStorage) isRead() bool {
+	ts.Lock()
+	defer ts.Unlock()
+	return ts.read
 }
 
-func (tp *testStorage) isWrite() bool {
-	tp.Lock()
-	defer tp.Unlock()
-	return tp.write
+func (ts *testStorage) isWrite() bool {
+	ts.Lock()
+	defer ts.Unlock()
+	return ts.write
 }
 
-func (tp *testStorage) ReadBootstrapInfo(info *gossip.BootstrapInfo) error {
-	tp.Lock()
-	defer tp.Unlock()
-	tp.read = true
-	*info = *util.CloneProto(&tp.info).(*gossip.BootstrapInfo)
+func (ts *testStorage) ReadBootstrapInfo(info *gossip.BootstrapInfo) error {
+	ts.Lock()
+	defer ts.Unlock()
+	ts.read = true
+	*info = *util.CloneProto(&ts.info).(*gossip.BootstrapInfo)
 	return nil
 }
 
-func (tp *testStorage) WriteBootstrapInfo(info *gossip.BootstrapInfo) error {
-	tp.Lock()
-	defer tp.Unlock()
-	tp.write = true
-	tp.info = *util.CloneProto(info).(*gossip.BootstrapInfo)
+func (ts *testStorage) WriteBootstrapInfo(info *gossip.BootstrapInfo) error {
+	ts.Lock()
+	defer ts.Unlock()
+	ts.write = true
+	ts.info = *util.CloneProto(info).(*gossip.BootstrapInfo)
 	return nil
 }
 
@@ -108,17 +108,22 @@ func TestGossipStorage(t *testing.T) {
 			t.Errorf("%d: expected write from storage", i)
 		}
 
+		p.Lock()
 		gotAddresses := unresolvedAddrSlice(p.info.Addresses)
-
 		sort.Sort(gotAddresses)
-		expectedAddresses := append(unresolvedAddrSlice(nil), addresses...)
-		expectedAddresses = append(expectedAddresses[:i], expectedAddresses[i+1:]...)
+		var expectedAddresses unresolvedAddrSlice
+		for j, addr := range addresses {
+			if i != j { // skip node's own address
+				expectedAddresses = append(expectedAddresses, addr)
+			}
+		}
 		sort.Sort(expectedAddresses)
 
 		// Verify all gossip addresses are written to each persistent store.
 		if !reflect.DeepEqual(gotAddresses, expectedAddresses) {
 			t.Errorf("%d: expected addresses: %s, got: %s", i, expectedAddresses, gotAddresses)
 		}
+		p.Unlock()
 	}
 
 	// Create an unaffiliated gossip node with only itself as a resolver,
@@ -148,10 +153,12 @@ func TestGossipStorage(t *testing.T) {
 
 	// Give the new node storage with info established from a node
 	// in the established network.
-	tp := &testStorage{
-		info: stores[0].info,
+	stores[0].Lock()
+	ts2 := &testStorage{
+		info: *util.CloneProto(&stores[0].info).(*gossip.BootstrapInfo),
 	}
-	if err := node.Gossip.SetStorage(tp); err != nil {
+	stores[0].Unlock()
+	if err := node.Gossip.SetStorage(ts2); err != nil {
 		t.Fatal(err)
 	}
 
