@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"net"
 	"net/rpc"
@@ -325,7 +326,16 @@ func (c *Client) runHeartbeat(retryOpts retry.Options) {
 				}
 				if err = c.connect(); err != nil {
 					setUnhealthy()
-					log.Warning(err)
+					switch err.(type) {
+					case x509.HostnameError, x509.CertificateInvalidError, x509.UnknownAuthorityError,
+						x509.SystemRootsError, x509.InsecureAlgorithmError, x509.ConstraintViolationError,
+						x509.UnhandledCriticalExtension:
+						// Various crypto errors are indicative of misconfiguration. Give
+						// up and die.
+						log.Fatal(err)
+					default:
+						log.Error(err)
+					}
 					continue
 				}
 			}
