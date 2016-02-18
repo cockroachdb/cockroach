@@ -66,8 +66,6 @@ func (ml *replayableConnListener) Accept() (net.Conn, error) {
 }
 
 // Listen delegates to `net.Listen` and, if tlsConfig is not nil, to `tls.NewListener`.
-// The returned listener's Addr() method will return an address with the hostname unresovled,
-// which means it can be used to initiate TLS connections.
 func Listen(addr net.Addr, tlsConfig *tls.Config) (net.Listener, error) {
 	ln, err := net.Listen(addr.Network(), addr.String())
 	if err == nil {
