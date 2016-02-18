@@ -105,6 +105,8 @@ func (n *Network) CreateNode() (*Node, error) {
 // StartNode initializes a gossip instance for the simulation node and
 // starts it.
 func (n *Network) StartNode(node *Node) error {
+	node.Gossip.Start(node.Server, node.Addr)
+	node.Gossip.EnableSimulationCycler(true)
 	n.nodeIDAllocator++
 	node.Gossip.SetNodeID(n.nodeIDAllocator)
 	if err := node.Gossip.SetNodeDescriptor(&roachpb.NodeDescriptor{
@@ -117,8 +119,6 @@ func (n *Network) StartNode(node *Node) error {
 		encoding.EncodeUint64Ascending(nil, 0), time.Hour); err != nil {
 		return err
 	}
-	node.Gossip.Start(node.Server, node.Addr)
-	node.Gossip.EnableSimulationCycler(true)
 	return nil
 }
 
