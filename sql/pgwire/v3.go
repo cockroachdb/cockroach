@@ -282,7 +282,7 @@ func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
 		return err
 	}
 
-	return c.executeStatements(query, nil, nil, true)
+	return c.executeStatements(query, nil, nil, true, 0)
 }
 
 func (c *v3Conn) handleParse(buf *readBuffer) error {
@@ -544,14 +544,11 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 	if err != nil {
 		return err
 	}
-	if limit != 0 {
-		return c.sendError("execute row count limits not supported")
-	}
 
-	return c.executeStatements(portal.stmt.query, portal.params, portal.outFormats, false)
+	return c.executeStatements(portal.stmt.query, portal.params, portal.outFormats, false, int(limit))
 }
 
-func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCodes []formatCode, sendDescription bool) error {
+func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCodes []formatCode, sendDescription bool, limit int) error {
 	tracing.AnnotateTrace()
 
 	c.session.Database = c.opts.database
@@ -573,7 +570,7 @@ func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCo
 
 	c.opts.database = c.session.Database
 	tracing.AnnotateTrace()
-	return c.sendResponse(resp, formatCodes, sendDescription)
+	return c.sendResponse(resp, formatCodes, sendDescription, limit)
 }
 
 func (c *v3Conn) sendCommandComplete(tag []byte) error {
@@ -617,13 +614,19 @@ func (c *v3Conn) sendError(errToSend string) error {
 	return c.writeBuf.finishMsg(c.wr)
 }
 
-func (c *v3Conn) sendResponse(resp sql.Response, formatCodes []formatCode, sendDescription bool) error {
+func (c *v3Conn) sendResponse(resp sql.Response, formatCodes []formatCode, sendDescription bool, limit int) error {
 	if len(resp.Results) == 0 {
 		return c.sendCommandComplete(nil)
 	}
 	for _, result := range resp.Results {
 		if result.PErr != nil {
 			if err := c.sendError(result.PErr.String()); err != nil {
+				return err
+			}
+			break
+		}
+		if limit != 0 && len(result.Rows) > limit {
+			if err := c.sendError(fmt.Sprintf("execute row count limits not supported: %v of %v", limit, len(result.Rows))); err != nil {
 				return err
 			}
 			break

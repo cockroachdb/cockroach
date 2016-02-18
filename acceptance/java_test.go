@@ -24,7 +24,6 @@ import (
 )
 
 func TestDockerJava(t *testing.T) {
-	t.Skip("blocked by #4411")
 	testDockerSuccess(t, "java", []string{"/bin/sh", "-c", strings.Replace(java, "%v", "Int(2, 3)", 1)})
 	testDockerFail(t, "java", []string{"/bin/sh", "-c", strings.Replace(java, "%v", `String(2, "a")`, 1)})
 }
