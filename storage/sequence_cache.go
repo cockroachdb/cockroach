@@ -201,7 +201,7 @@ func (sc *SequenceCache) CopyFrom(e engine.Engine, ms *engine.MVCCStats, originR
 // Del removes all sequence cache entries for the given transaction.
 func (sc *SequenceCache) Del(e engine.Engine, ms *engine.MVCCStats, txnID *uuid.UUID) error {
 	startKey := keys.SequenceCacheKeyPrefix(sc.rangeID, txnID)
-	_, err := engine.MVCCDeleteRange(e, nil /* ms */, startKey, startKey.PrefixEnd(), 0 /* max */, roachpb.ZeroTimestamp, nil /* txn */)
+	_, err := engine.MVCCDeleteRange(e, nil /* TODO(nvanbenschoten) */, startKey, startKey.PrefixEnd(), 0 /* max */, roachpb.ZeroTimestamp, nil /* txn */)
 	return err
 }
 

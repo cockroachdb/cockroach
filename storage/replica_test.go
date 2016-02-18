@@ -794,6 +794,28 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 	}
 }
 
+func maybeWrapWithBeginTransaction(sender client.Sender, ctx context.Context, header roachpb.Header, req roachpb.Request) (roachpb.Response, *roachpb.Error) {
+	if header.Txn == nil || header.Txn.Writing {
+		return client.SendWrappedWith(sender, ctx, header, req)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	var ba roachpb.BatchRequest
+	bt, _ := beginTxnArgs(req.Header().Key, header.Txn)
+	ba.Header = header
+	ba.Add(&bt)
+	ba.Add(req)
+	br, pErr := sender.Send(ctx, ba)
+	if pErr != nil {
+		return nil, pErr
+	}
+	unwrappedReply := br.Responses[1].GetInner()
+	unwrappedReply.Header().Txn = br.Txn
+	return unwrappedReply, nil
+
+}
+
 // TestRangeNoGossipConfig verifies that certain commands (e.g.,
 // reads, writes in uncommitted transactions) do not trigger gossip.
 func TestRangeNoGossipConfig(t *testing.T) {
@@ -807,7 +829,6 @@ func TestRangeNoGossipConfig(t *testing.T) {
 
 	txn := newTransaction("test", key, 1 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
 	h := roachpb.Header{Txn: txn}
-	bt, _ := beginTxnArgs(key, txn)
 	req1 := putArgs(key, []byte("foo"))
 	req2, _ := endTxnArgs(txn, true /* commit */)
 	req2.IntentSpans = []roachpb.Span{{Key: key}}
@@ -817,7 +838,6 @@ func TestRangeNoGossipConfig(t *testing.T) {
 		req roachpb.Request
 		h   roachpb.Header
 	}{
-		{&bt, h},
 		{&req1, h},
 		{&req2, h},
 		{&req3, roachpb.Header{}},
@@ -825,9 +845,10 @@ func TestRangeNoGossipConfig(t *testing.T) {
 
 	for i, test := range testCases {
 		txn.Sequence++
-		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), test.h, test.req); pErr != nil {
+		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), test.h, test.req); pErr != nil {
 			t.Fatal(pErr)
 		}
+		txn.Writing = true
 
 		// System config is not gossiped.
 		cfg := tc.gossip.GetSystemConfig()
@@ -852,17 +873,15 @@ func TestRangeNoGossipFromNonLeader(t *testing.T) {
 	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
 
 	txn := newTransaction("test", key, 1 /* userPriority */, roachpb.SERIALIZABLE, tc.clock)
-	bt, h := beginTxnArgs(key, txn)
-	if _, pErr := client.SendWrappedWith(tc.Sender(), nil, h, &bt); pErr != nil {
-		t.Fatal(pErr)
-	}
 	req1 := putArgs(key, nil)
-	txn.Sequence++
-	if _, pErr := client.SendWrappedWith(tc.Sender(), nil, roachpb.Header{
+	if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), nil, roachpb.Header{
 		Txn: txn,
 	}, &req1); pErr != nil {
 		t.Fatal(pErr)
 	}
+	txn.Writing = true
+	txn.Sequence++
+
 	req2, h := endTxnArgs(txn, true /* commit */)
 	req2.IntentSpans = []roachpb.Span{{Key: key}}
 	txn.Sequence++
@@ -1584,11 +1603,13 @@ func TestEndTransactionDeadline(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		key := roachpb.Key("key: " + strconv.Itoa(i))
 		txn := newTransaction("txn: "+strconv.Itoa(i), key, 1, roachpb.SERIALIZABLE, tc.clock)
+		put := putArgs(key, key)
 
-		btArgs, btHeader := beginTxnArgs(key, txn)
-		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), btHeader, &btArgs); pErr != nil {
+		_, header := beginTxnArgs(key, txn)
+		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), header, &put); pErr != nil {
 			t.Fatal(pErr)
 		}
+		txn.Writing = true
 
 		etArgs, etHeader := endTxnArgs(txn, true /* commit */)
 		switch i {
@@ -1646,17 +1667,14 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 
 	key := roachpb.Key("foo")
 	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
-	bt, h := beginTxnArgs(key, txn)
-	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &bt); pErr != nil {
-		t.Fatal(pErr)
-	}
 	pArgs := putArgs(key, []byte("only here to make this a rw transaction"))
 	txn.Sequence++
-	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
+	if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), roachpb.Header{
 		Txn: txn,
 	}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
+	txn.Writing = true
 
 	args, h := endTxnArgs(txn, true /* commit */)
 	// Make an EndTransaction request which would fail if not
@@ -1689,11 +1707,13 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 	key := []byte("a")
 	for _, commit := range []bool{true, false} {
 		txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
-		bt, btH := beginTxnArgs(key, txn)
-		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), btH, &bt); pErr != nil {
+		_, btH := beginTxnArgs(key, txn)
+		put := putArgs(key, key)
+		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), btH, &put); pErr != nil {
 			t.Fatal(pErr)
 		}
 		txn.Sequence++
+		txn.Writing = true
 		args, h := endTxnArgs(txn, commit)
 		resp, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args)
 		if pErr != nil {
@@ -1722,6 +1742,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 		if hBR.Txn.Status != expStatus || hBR.Txn.LastHeartbeat != nil {
 			t.Errorf("unexpected heartbeat reply contents: %+v", hBR)
 		}
+		key = roachpb.Key(key).Next()
 	}
 }
 
@@ -1733,11 +1754,12 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	key := []byte("a")
+	key := roachpb.Key("a")
 	for _, commit := range []bool{true, false} {
 		txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
-		bt, btH := beginTxnArgs(key, txn)
-		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), btH, &bt); pErr != nil {
+		_, btH := beginTxnArgs(key, txn)
+		put := putArgs(key, key)
+		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), btH, &put); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -1773,6 +1795,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 			t.Errorf("expected heartbeats to remain equal: %+v != %+v",
 				reply.Txn.LastHeartbeat, hBR.Txn.LastHeartbeat)
 		}
+		key = key.Next()
 	}
 }
 
@@ -1796,13 +1819,15 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 		{false, roachpb.SERIALIZABLE, false},
 		{false, roachpb.SNAPSHOT, false},
 	}
-	key := []byte("a")
+	key := roachpb.Key("a")
 	for _, test := range testCases {
 		txn := newTransaction("test", key, 1, test.isolation, tc.clock)
-		bt, btH := beginTxnArgs(key, txn)
-		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), btH, &bt); pErr != nil {
+		_, btH := beginTxnArgs(key, txn)
+		put := putArgs(key, key)
+		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), btH, &put); pErr != nil {
 			t.Fatal(pErr)
 		}
+		txn.Writing = true
 		// End the transaction with args timestamp moved forward in time.
 		args, h := endTxnArgs(txn, test.commit)
 		// TODO(tschottdorf): this test is pretty dirty. It should really
@@ -1837,6 +1862,7 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 				t.Errorf("expected transaction status to be %s; got %s", expStatus, reply.Txn.Status)
 			}
 		}
+		key = key.Next()
 	}
 }
 
@@ -1850,10 +1876,12 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 
 	key := []byte("a")
 	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
-	bt, btH := beginTxnArgs(key, txn)
-	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), btH, &bt); pErr != nil {
+	_, btH := beginTxnArgs(key, txn)
+	put := putArgs(key, key)
+	if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), btH, &put); pErr != nil {
 		t.Fatal(pErr)
 	}
+	txn.Writing = true
 
 	// Start out with a heartbeat to the transaction.
 	hBA, h := heartbeatArgs(txn)
@@ -1955,6 +1983,8 @@ func TestEndTransactionLocalGC(t *testing.T) {
 
 	splitKey := roachpb.RKey("c")
 	splitTestRange(tc.store, splitKey, splitKey, t)
+	key := roachpb.Key("a")
+	putKey := key
 	for i, test := range []struct {
 		intents []roachpb.Span
 		expGC   bool
@@ -1970,12 +2000,13 @@ func TestEndTransactionLocalGC(t *testing.T) {
 		// Intent inside and outside.
 		{[]roachpb.Span{{Key: roachpb.Key("a")}, {Key: splitKey.AsRawKey()}}, false},
 	} {
-		key := roachpb.Key("a")
 		txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
-		bt, btH := beginTxnArgs(key, txn)
-		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), btH, &bt); pErr != nil {
+		_, btH := beginTxnArgs(key, txn)
+		put := putArgs(putKey, key)
+		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), btH, &put); pErr != nil {
 			t.Fatal(pErr)
 		}
+		putKey = putKey.Next() // for the next iteration
 		args, h := endTxnArgs(txn, true)
 		args.IntentSpans = test.intents
 		txn.Sequence++
@@ -2005,14 +2036,9 @@ func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key, splitKey
 	// values are unexpected.
 	txn.Sequence++
 	txn.Epoch++
-	bt, btH := beginTxnArgs(key, txn)
-	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), btH, &bt); pErr != nil {
-		t.Fatal(pErr)
-	}
 	pArgs := putArgs(key, []byte("value"))
 	h := roachpb.Header{Txn: txn}
-	txn.Sequence++
-	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &pArgs); pErr != nil {
+	if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), h, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -2204,14 +2230,15 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 		pushee.Priority = 1 // pusher will win
 
 		inc := func(actor *roachpb.Transaction, k roachpb.Key) (*roachpb.IncrementResponse, *roachpb.Error) {
-			actor.Sequence++
-			reply, pErr := client.SendWrappedWith(tc.store, nil, roachpb.Header{
+			reply, pErr := maybeWrapWithBeginTransaction(tc.store, nil, roachpb.Header{
 				Txn:     actor,
 				RangeID: 1,
 			}, &roachpb.IncrementRequest{Span: roachpb.Span{Key: k}, Increment: 123})
 			if pErr != nil {
 				return nil, pErr
 			}
+			actor.Writing = true
+			actor.Sequence++
 			return reply.(*roachpb.IncrementResponse), nil
 		}
 
@@ -2225,12 +2252,7 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 			return pErr
 		}
 
-		// Begin the pushee's transaction and write an intent.
-		btArgs, btH := beginTxnArgs(key, pushee)
-		if _, pErr := client.SendWrappedWith(tc.Sender(), nil,
-			btH, &btArgs); pErr != nil {
-			t.Fatal(pErr)
-		}
+		// Write an intent (this also begins the pushee's transaction).
 		if _, pErr := inc(pushee, key); pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -2385,8 +2407,9 @@ func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 		pushee.Priority = 2 // pusher will lose, meaning we shouldn't push unless pushee is already ended.
 
 		// Begin the pushee's transaction.
-		btArgs, btH := beginTxnArgs(key, pushee)
-		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), btH, &btArgs); pErr != nil {
+		_, btH := beginTxnArgs(key, pushee)
+		put := putArgs(key, key)
+		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), btH, &put); pErr != nil {
 			t.Fatal(pErr)
 		}
 		// End the pushee's transaction.
@@ -2444,8 +2467,9 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		// First, establish "start" of existing pushee's txn via BeginTransaction.
 		pushee.Timestamp = test.startTS
 		pushee.LastHeartbeat = &test.startTS
-		bt, btH := beginTxnArgs(key, pushee)
-		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), btH, &bt); pErr != nil {
+		_, btH := beginTxnArgs(key, pushee)
+		put := putArgs(key, key)
+		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), btH, &put); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -2519,9 +2543,10 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		if !test.heartbeat.Equal(roachpb.ZeroTimestamp) {
 			pushee.LastHeartbeat = &test.heartbeat
 		}
-		bt, btH := beginTxnArgs(key, pushee)
+		_, btH := beginTxnArgs(key, pushee)
 		btH.Timestamp = tc.rng.store.Clock().Now()
-		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), btH, &bt); pErr != nil {
+		put := putArgs(key, key)
+		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), btH, &put); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -2594,8 +2619,9 @@ func TestPushTxnPriorities(t *testing.T) {
 		pusher.Timestamp = test.pusherTS
 		pushee.Timestamp = test.pusheeTS
 
-		bt, btH := beginTxnArgs(key, pushee)
-		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), btH, &bt); pErr != nil {
+		_, btH := beginTxnArgs(key, pushee)
+		put := putArgs(key, key)
+		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), btH, &put); pErr != nil {
 			t.Fatal(pErr)
 		}
 		// Now, attempt to push the transaction with intent epoch set appropriately.
@@ -2631,10 +2657,13 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 	pusher.Timestamp = roachpb.Timestamp{WallTime: 50, Logical: 25}
 	pushee.Timestamp = roachpb.Timestamp{WallTime: 5, Logical: 1}
 
-	bt, btH := beginTxnArgs(roachpb.Key("a"), pushee)
-	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), btH, &bt); pErr != nil {
+	key := roachpb.Key("a")
+	_, btH := beginTxnArgs(key, pushee)
+	put := putArgs(key, key)
+	if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), btH, &put); pErr != nil {
 		t.Fatal(pErr)
 	}
+	pushee.Writing = true
 
 	// Now, push the transaction with args.Abort=false.
 	args := pushTxnArgs(pusher, pushee, roachpb.PUSH_TIMESTAMP)
@@ -2671,8 +2700,10 @@ func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	pusher.Timestamp = roachpb.Timestamp{WallTime: 50, Logical: 0}
 	pushee.Timestamp = roachpb.Timestamp{WallTime: 50, Logical: 1}
 
-	bt, btH := beginTxnArgs(roachpb.Key("a"), pushee)
-	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), btH, &bt); pErr != nil {
+	key := roachpb.Key("a")
+	_, btH := beginTxnArgs(key, pushee)
+	put := putArgs(key, key)
+	if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), btH, &put); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -3155,14 +3186,9 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	// We send directly to Replica throughout this test, so there's no danger
 	// of the Store aborting this transaction (i.e. we don't have to set a high
 	// priority).
-	bArgs, h := beginTxnArgs(key, txn)
-	if _, pErr = client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &bArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-
 	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key)), data)
 	txn.Sequence++
-	if _, pErr = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
+	if _, pErr = maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
