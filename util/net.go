@@ -31,26 +31,78 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+const eol = "\r\n"
+const hostHeader = eol + "Host: CRDB"
+
+var http2ClientPrefaceFirstLineSlice = []byte(http2.ClientPreface[:strings.Index(http2.ClientPreface, eol)])
+
 type replayableConn struct {
 	net.Conn
 	buf    bytes.Buffer
 	reader io.Reader
 }
 
-// Do not call `replay` more than once, bad things will happen.
-func (bc *replayableConn) replay() *replayableConn {
-	bc.reader = io.MultiReader(&bc.buf, bc.Conn)
-	return bc
+func newReplayableConn(conn net.Conn) *replayableConn {
+	rc := replayableConn{Conn: conn}
+	rc.reader = io.LimitReader(io.TeeReader(conn, &rc.buf), int64(len(http2ClientPrefaceFirstLineSlice)))
+	return &rc
 }
 
-func (bc *replayableConn) Read(b []byte) (int, error) {
-	return bc.reader.Read(b)
+func (rc *replayableConn) replay() *replayableConn {
+	rc.reader = io.MultiReader(&rc.buf, rc.Conn)
+	return rc
 }
 
-func newBufferedConn(conn net.Conn) *replayableConn {
-	bc := replayableConn{Conn: conn}
-	bc.reader = io.TeeReader(conn, &bc.buf)
-	return &bc
+func (rc *replayableConn) Read(p []byte) (int, error) {
+	if limitReader, ok := rc.reader.(*io.LimitedReader); ok {
+		// rc.reader is a LimitedReader wrapping a TeeReader.
+		off := int64(len(http2ClientPrefaceFirstLineSlice)) - limitReader.N
+		n, err := rc.reader.Read(p)
+		if !bytes.HasPrefix(http2ClientPrefaceFirstLineSlice[off:], p[:n]) {
+			// The incoming request is not an HTTP2 request, so buffering is no
+			// longer required; send all reads directly to the underlying net.Conn.
+			rc.reader = rc.Conn
+		} else if err == io.EOF {
+			// We've exhausted our LimitedReader, which means he incoming request is
+			// an HTTP2 request. Remember, that we are in this code path means that
+			// TLS is not in use, which means the caller (net/http machinery) won't
+			// be able to parse anything after http2ClientPrefaceFirstLineSlice.
+			// However, Go 1.6 introduced strict Host header checking for HTTP >= 1.1
+			// requests (see https://github.com/golang/go/commit/6e11f45), and
+			// http2ClientPrefaceFirstLineSlice contains enough information for the
+			// caller to identify this first request as an HTTP 2 request, but not
+			// enough for the caller to determine the value of the Host header. On
+			// the next line, we're going to help the caller out by providing a bogus
+			// HTTP 1.x-style Host header. This will get us past Host header
+			// verification.
+			//
+			// Note that this bogus header won't reappear after replay is called.
+			rc.reader = io.MultiReader(strings.NewReader(hostHeader), limitReader.R)
+		} else {
+			// The LimitedReader isn't exhausted yet, or we hit an error.
+			return n, err
+		}
+
+		// We've replaced our LimitedReader with rc.Conn or a new MultiReader - we
+		// might be able to read some more.
+		if err == io.EOF {
+			var m int
+			m, err = rc.reader.Read(p[n:])
+			n += m
+		}
+		return n, err
+	}
+	// Pseudocode:
+	// if rc.IsHTTP2() {
+	// 	if rc.replayCalled {
+	// 		rc.reader == io.MultiReader(&rc.buf, rc.Conn)
+	// 	} else {
+	// 		rc.reader == io.TeeReader(conn, &rc.buf)
+	// 	}
+	// } else {
+	// 	rc.reader == rc.Conn
+	// }
+	return rc.reader.Read(p)
 }
 
 type replayableConnListener struct {
@@ -60,7 +112,7 @@ type replayableConnListener struct {
 func (ml *replayableConnListener) Accept() (net.Conn, error) {
 	conn, err := ml.Listener.Accept()
 	if err == nil {
-		conn = newBufferedConn(conn)
+		conn = newReplayableConn(conn)
 	}
 	return conn, err
 }
