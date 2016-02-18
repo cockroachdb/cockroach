@@ -177,7 +177,7 @@ func localRangeKeyPrint(key roachpb.Key) string {
 		if s.atEnd {
 			if bytes.HasSuffix(key, s.suffix) {
 				key = key[:len(key)-len(s.suffix)]
-				fmt.Fprintf(&buf, "/%s%s", s.name, decodeKeyPrint(key))
+				fmt.Fprintf(&buf, "%s/%s", decodeKeyPrint(key), s.name)
 				return buf.String()
 			}
 		} else {
@@ -188,7 +188,7 @@ func localRangeKeyPrint(key roachpb.Key) string {
 				if err != nil {
 					return fmt.Sprintf("/%q/err:%v", key, err)
 				}
-				fmt.Fprintf(&buf, "/%s/addrKey:%s/id:%q", s.name, decodeKeyPrint(addrKey), txnID)
+				fmt.Fprintf(&buf, "%s/%s/addrKey:/id:%q", decodeKeyPrint(addrKey), s.name, txnID)
 				return buf.String()
 			}
 		}

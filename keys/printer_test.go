@@ -56,9 +56,9 @@ func TestPrettyPrint(t *testing.T) {
 		{RangeStatsKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeStats"},
 
 		{MakeRangeKeyPrefix(roachpb.RKey("ok")), `/Local/Range/"ok"`},
-		{RangeDescriptorKey(roachpb.RKey("111")), `/Local/Range/RangeDescriptor/"111"`},
-		{RangeTreeNodeKey(roachpb.RKey("111")), `/Local/Range/RangeTreeNode/"111"`},
-		{TransactionKey(roachpb.Key("111"), txnID), fmt.Sprintf(`/Local/Range/Transaction/addrKey:/"111"/id:%q`, txnID)},
+		{RangeDescriptorKey(roachpb.RKey("111")), `/Local/Range/"111"/RangeDescriptor`},
+		{RangeTreeNodeKey(roachpb.RKey("111")), `/Local/Range/"111"/RangeTreeNode`},
+		{TransactionKey(roachpb.Key("111"), txnID), fmt.Sprintf(`/Local/Range/"111"/Transaction/addrKey:/id:%q`, txnID)},
 
 		{LocalMax, `/Meta1/""`}, // LocalMax == Meta1Prefix
 
