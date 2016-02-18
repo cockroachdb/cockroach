@@ -77,12 +77,12 @@ func (ls *Stores) HasStore(storeID roachpb.StoreID) bool {
 
 // GetStore looks up the store by store ID. Returns an error
 // if not found.
-func (ls *Stores) GetStore(storeID roachpb.StoreID) (*Store, *roachpb.Error) {
+func (ls *Stores) GetStore(storeID roachpb.StoreID) (*Store, error) {
 	ls.mu.RLock()
 	store, ok := ls.storeMap[storeID]
 	ls.mu.RUnlock()
 	if !ok {
-		return nil, roachpb.NewErrorf("store %d not found", storeID)
+		return nil, util.Errorf("store %d not found", storeID)
 	}
 	return store, nil
 }
@@ -132,7 +132,7 @@ func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	sp := tracing.SpanFromContext(ctx)
 	var store *Store
-	var pErr *roachpb.Error
+	var err error
 
 	// If we aren't given a Replica, then a little bending over
 	// backwards here. This case applies exclusively to unittests.
@@ -140,8 +140,8 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		var repl *roachpb.ReplicaDescriptor
 		var rangeID roachpb.RangeID
 		rs := keys.Range(ba)
-		rangeID, repl, pErr = ls.lookupReplica(rs.Key, rs.EndKey)
-		if pErr == nil {
+		rangeID, repl, err = ls.lookupReplica(rs.Key, rs.EndKey)
+		if err == nil {
 			ba.RangeID = rangeID
 			ba.Replica = *repl
 		}
@@ -150,13 +150,12 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	ctx = log.Add(ctx,
 		log.RangeID, ba.RangeID)
 
-	if pErr == nil {
-		store, pErr = ls.GetStore(ba.Replica.StoreID)
+	if err == nil {
+		store, err = ls.GetStore(ba.Replica.StoreID)
 	}
 
-	var br *roachpb.BatchResponse
-	if pErr != nil {
-		return nil, pErr
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 	// For calls that read data within a txn, we can avoid uncertainty
 	// related retries in certain situations. If the node is in
@@ -177,7 +176,7 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		shallowTxn.MaxTimestamp = ba.Txn.OrigTimestamp
 		ba.Txn = &shallowTxn
 	}
-	br, pErr = store.Send(ctx, ba)
+	br, pErr := store.Send(ctx, ba)
 	if br != nil && br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(store, br))
 	}
@@ -189,7 +188,7 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 // Returns RangeID and replica on success; RangeKeyMismatch error
 // if not found.
 // This is only for testing usage; performance doesn't matter.
-func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeID, replica *roachpb.ReplicaDescriptor, pErr *roachpb.Error) {
+func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeID, replica *roachpb.ReplicaDescriptor, err error) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	var rng *Replica
@@ -208,25 +207,25 @@ func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeI
 			continue
 		}
 		// Should never happen outside of tests.
-		return 0, nil, roachpb.NewErrorf(
+		return 0, nil, util.Errorf(
 			"range %+v exists on additional store: %+v", rng, store)
 	}
 	if replica == nil {
-		pErr = roachpb.NewError(roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), nil))
+		err = roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), nil)
 	}
-	return rangeID, replica, pErr
+	return rangeID, replica, err
 }
 
 // FirstRange implements the RangeDescriptorDB interface. It returns the
 // range descriptor which contains KeyMin.
 func (ls *Stores) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
-	_, replica, pErr := ls.lookupReplica(roachpb.RKeyMin, nil)
-	if pErr != nil {
-		return nil, pErr
+	_, replica, err := ls.lookupReplica(roachpb.RKeyMin, nil)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
-	store, pErr := ls.GetStore(replica.StoreID)
-	if pErr != nil {
-		return nil, pErr
+	store, err := ls.GetStore(replica.StoreID)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	rpl := store.LookupReplica(roachpb.RKeyMin, nil)
