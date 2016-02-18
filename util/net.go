@@ -31,23 +31,45 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+const EOL = "\r\n"
+const hostHeader = EOL + "Host: CRDB" + EOL
+
+var http2ClientPrefaceEOLIndex = strings.Index(http2.ClientPreface, EOL)
+var http2ClientPrefaceFirstLine = []byte(http2.ClientPreface[:http2ClientPrefaceEOLIndex])
+
 type replayableConn struct {
 	net.Conn
-	buf    bytes.Buffer
-	reader io.Reader
+	isReplaying bool
+	buf         bytes.Buffer
+	reader      io.Reader
 }
 
 // Do not call `replay` more than once, bad things will happen.
 func (bc *replayableConn) replay() *replayableConn {
+	bc.isReplaying = true
 	bc.reader = io.MultiReader(&bc.buf, bc.Conn)
 	return bc
 }
 
-func (bc *replayableConn) Read(b []byte) (int, error) {
-	return bc.reader.Read(b)
+func (bc *replayableConn) Read(p []byte) (int, error) {
+	if bc.isReplaying {
+		// bc.reader is a MultiReader.
+		return bc.reader.Read(p)
+	}
+	// bc.reader is a TeeReader.
+	n, err := bc.reader.Read(p[:http2ClientPrefaceEOLIndex])
+	if err == nil {
+		if bytes.HasPrefix(p, http2ClientPrefaceFirstLine) {
+			n += copy(p[n:], hostHeader)
+		}
+		var m int
+		m, err = bc.reader.Read(p[n:])
+		n += m
+	}
+	return n, err
 }
 
-func newBufferedConn(conn net.Conn) *replayableConn {
+func newReplayableConn(conn net.Conn) *replayableConn {
 	bc := replayableConn{Conn: conn}
 	bc.reader = io.TeeReader(conn, &bc.buf)
 	return &bc
@@ -60,7 +82,7 @@ type replayableConnListener struct {
 func (ml *replayableConnListener) Accept() (net.Conn, error) {
 	conn, err := ml.Listener.Accept()
 	if err == nil {
-		conn = newBufferedConn(conn)
+		conn = newReplayableConn(conn)
 	}
 	return conn, err
 }
