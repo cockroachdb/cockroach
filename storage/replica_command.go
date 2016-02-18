@@ -519,7 +519,19 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		}
 	}
 
-	return reply, externalIntents, nil
+	// If the transaction just ended (via a successful EndTransaction call),
+	// we can purge the local sequence cache state. Why? We are on the range to
+	// which the transaction is anchored, and replay protection isn't needed
+	// any more. When a transactional write gets replayed over its own resolved
+	// intent, the write will fail (WriteTooOldError), so the case which
+	// requires our attention is that of a yet unresolved intent. We're ok on
+	// this range; after all, we are resolving all local intents in this same
+	// batch. The only interesting replay here could be another lonely
+	// EndTransaction, which is fine either way (if we auto-gced our entry,
+	// that will fail due to missing BeginTransaction; otherwise, there's a
+	// non-pending entry here). BeginTransaction itself can't replay; it always
+	// comes in a batch with a write and will thus fail.
+	return reply, externalIntents, r.adjustSequenceCache(batch, ms, false /* !poison */, reply.Txn.TxnMeta, reply.Txn.Status)
 }
 
 // intersectSpan takes an intent and a descriptor. It then splits the
@@ -1012,14 +1024,23 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	return reply, nil
 }
 
-// maybePoison inspects the given transaction and, if it's either been aborted
-// or pushed despite being serializable, poisons the sequence cache entry
-// accordingly so that the transaction will be forced to abort or restart,
-// respectively, upon returning to this Range.
-func (r *Replica) maybePoison(batch engine.Engine, shouldPoison bool, txn roachpb.TxnMeta, status roachpb.TransactionStatus) error {
-	if !shouldPoison {
-		return nil
+// adjustSequenceCache clears out the sequence cache and optionally poisons it
+// (creating a new special entry). shouldPoison should be set when the
+// transaction in question may still be in use, and causes the sequence cache
+// to be "poisoned": a transaction which has been aborted will not be able to
+// access the range again (preventing anomalies as in #2231). Similarly, when a
+// transaction needs to restart, we may update the sequence cache here to that
+// effect (though there is no anomaly involved).
+//
+// Clearing out the sequence cache reduces the work the GC queue and range
+// splits/merges (which need to copy the whole sequence cache) have to carry
+// out.
+// TODO(tschottdorf): early restarts are currently disabled, see TODO within.
+func (r *Replica) adjustSequenceCache(batch engine.Engine, ms *engine.MVCCStats, shouldPoison bool, txn roachpb.TxnMeta, status roachpb.TransactionStatus) error {
+	if err := r.sequence.Del(batch, ms, txn.ID); err != nil {
+		return err
 	}
+
 	var poison uint32
 	switch status {
 	case roachpb.ABORTED:
@@ -1040,7 +1061,7 @@ func (r *Replica) maybePoison(batch engine.Engine, shouldPoison bool, txn roachp
 		return nil
 	}
 
-	return r.sequence.Put(batch, txn.ID, txn.Epoch, poison,
+	return r.sequence.Put(batch, ms, txn.ID, txn.Epoch, poison,
 		txn.Key, txn.Timestamp, nil)
 }
 
@@ -1057,7 +1078,7 @@ func (r *Replica) ResolveIntent(batch engine.Engine, ms *engine.MVCCStats, h roa
 	if err := engine.MVCCResolveWriteIntent(batch, ms, intent); err != nil {
 		return reply, err
 	}
-	return reply, r.maybePoison(batch, args.Poison, args.IntentTxn, intent.Status)
+	return reply, r.adjustSequenceCache(batch, ms, args.Poison, args.IntentTxn, intent.Status)
 }
 
 // ResolveIntentRange resolves write intents in the specified
@@ -1075,7 +1096,7 @@ func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
 	if _, err := engine.MVCCResolveWriteIntentRange(batch, ms, intent, 0); err != nil {
 		return reply, err
 	}
-	return reply, r.maybePoison(batch, args.Poison, args.IntentTxn, intent.Status)
+	return reply, r.adjustSequenceCache(batch, ms, args.Poison, args.IntentTxn, intent.Status)
 }
 
 // Merge is used to merge a value into an existing key. Merge is an
@@ -1404,22 +1425,23 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 	}
 
 	// Compute stats for updated range.
-	sp.LogEvent("computing stats for old range")
 	now := r.store.Clock().Timestamp()
 	ms, err := r.computeStats(&split.UpdatedDesc, batch, now.WallTime)
 	if err != nil {
 		return util.Errorf("unable to compute stats for updated range after split: %s", err)
 	}
+	sp.LogEvent("computed stats for old range")
 	if err := r.stats.SetMVCCStats(batch, ms); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 
-	sp.LogEvent("copying sequence cache")
 	// Initialize the new range's sequence cache by copying the original's.
-	if err = r.sequence.CopyInto(batch, split.NewDesc.RangeID); err != nil {
+	seqCount, err := r.sequence.CopyInto(batch, nil /* TODO(nvanbeschoten) */, split.NewDesc.RangeID)
+	if err != nil {
 		// TODO(tschottdorf): ReplicaCorruptionError.
 		return util.Errorf("unable to copy sequence cache to new split range: %s", err)
 	}
+	sp.LogEvent(fmt.Sprintf("copied sequence cache (%d entries)", seqCount))
 
 	// Add the new split replica to the store. This step atomically
 	// updates the EndKey of the updated replica and also adds the
@@ -1430,7 +1452,6 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 	}
 
 	// Compute stats for new range.
-	sp.LogEvent("computing stats for new range")
 	ms, err = r.computeStats(&split.NewDesc, batch, now.WallTime)
 	if err != nil {
 		return util.Errorf("unable to compute stats for new range after split: %s", err)
@@ -1438,17 +1459,18 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 	if err = newRng.stats.SetMVCCStats(batch, ms); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
+	sp.LogEvent("computed stats for new range")
 
-	sp.LogEvent("copy timestamp cache")
 	// Copy the timestamp cache into the new range.
 	r.mu.Lock()
 	newRng.mu.Lock()
 	r.mu.tsCache.MergeInto(newRng.mu.tsCache, true /* clear */)
 	newRng.mu.Unlock()
 	r.mu.Unlock()
+	sp.LogEvent("copied timestamp cache")
 
-	sp.LogEvent("returning to EndTransaction")
-
+	// Note: you must not use the trace inside of this defer since it may
+	// run after the trace has already completed.
 	batch.Defer(func() {
 		if err := r.store.SplitRange(r, newRng); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
@@ -1625,7 +1647,8 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger)
 	}
 
 	// Copy the subsumed range's sequence cache to the subsuming one.
-	if err := r.sequence.CopyFrom(batch, merge.SubsumedRangeID); err != nil {
+	_, err := r.sequence.CopyFrom(batch, nil /* TODO(nvanbenschoten) */, merge.SubsumedRangeID)
+	if err != nil {
 		return util.Errorf("unable to copy sequence cache to new split range: %s", err)
 	}
 
