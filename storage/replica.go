@@ -1393,6 +1393,8 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	if ba.IsWrite() {
 		if err == nil {
 			// If command was successful, flush the MVCC stats to the batch.
+			// TODO(nvanbenschoten): this needs to happen regardless of the
+			// error at the end of this function.
 			if err := r.stats.MergeMVCCStats(btch, *ms); err != nil {
 				// TODO(tschottdorf): ReplicaCorruptionError.
 				log.Fatalc(ctx, "setting mvcc stats in a batch should never fail: %s", err)
@@ -1405,13 +1407,22 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			// prepare for the failed sequence cache entry.
 			btch.Close()
 			btch = r.store.Engine().NewBatch()
+			*ms = engine.MVCCStats{}
 		}
-		// Only transactional requests have replay protection.
+		// Only transactional requests have replay protection. If the transaction
+		// just ended (via a successful EndTransaction call), it has purged its
+		// sequence cache state and would prefer if we didn't write an entry
+		// which would then need to be GCed on the slow path. See
+		// (*Replica).adjustResponseCache for a more salient explanation of
+		// why that is ok.
 		if ba.Txn != nil {
-			if putErr := r.sequence.Put(btch, ba.Txn.ID, ba.Txn.Epoch,
-				ba.Txn.Sequence, ba.Txn.Key, ba.Txn.Timestamp, err); putErr != nil {
-				// TODO(tschottdorf): ReplicaCorruptionError.
-				log.Fatalc(ctx, "putting a sequence cache entry in a batch should never fail: %s", putErr)
+			_, isEndTxn := ba.GetArg(roachpb.EndTransaction)
+			if !isEndTxn || err != nil {
+				if putErr := r.sequence.Put(btch, ms, ba.Txn.ID, ba.Txn.Epoch,
+					ba.Txn.Sequence, ba.Txn.Key, ba.Txn.Timestamp, err); putErr != nil {
+					// TODO(tschottdorf): ReplicaCorruptionError.
+					log.Fatalc(ctx, "putting a sequence cache entry in a batch should never fail: %s", putErr)
+				}
 			}
 		}
 	}
