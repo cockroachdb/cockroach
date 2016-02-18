@@ -346,6 +346,11 @@ SELECT reverse('abcde')
 edcba
 
 query T
+SELECT reverse('世界')
+----
+界世
+
+query T
 SELECT replace('abcdefabcdef', 'cd', 'XX')
 ----
 abXXefabXXef
