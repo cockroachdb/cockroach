@@ -39,13 +39,15 @@ var http2ClientPrefaceFirstLine = []byte(http2.ClientPreface[:http2ClientPreface
 
 type replayableConn struct {
 	net.Conn
-	isReplaying bool
-	buf         bytes.Buffer
-	reader      io.Reader
+	hasRead, isReplaying bool
+	buf                  bytes.Buffer
+	reader               io.Reader
 }
 
-// Do not call `replay` more than once, bad things will happen.
 func (bc *replayableConn) replay() *replayableConn {
+	if bc.isReplaying {
+		panic("`replay` may only be called once")
+	}
 	bc.isReplaying = true
 	bc.reader = io.MultiReader(&bc.buf, bc.Conn)
 	return bc
@@ -57,8 +59,12 @@ func (bc *replayableConn) Read(p []byte) (int, error) {
 		return bc.reader.Read(p)
 	}
 	// bc.reader is a TeeReader.
+	if bc.hasRead {
+		return bc.reader.Read(p)
+	}
 	n, err := bc.reader.Read(p[:http2ClientPrefaceEOLIndex])
 	if err == nil {
+		bc.hasRead = true
 		if bytes.HasPrefix(p, http2ClientPrefaceFirstLine) {
 			// The incoming request is an HTTP2 request. Remember, that we are in
 			// this code path means that TLS is not in use, which means the caller
