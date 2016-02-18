@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/acceptance/testconfig"
+	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
@@ -38,8 +38,8 @@ func TestPut(t *testing.T) {
 	}
 }
 
-func testPutInner(t *testing.T, clusterConfig testconfig.TestConfig) {
-	c := StartCluster(t, clusterConfig)
+func testPutInner(t *testing.T, cfg cluster.TestConfig) {
+	c := StartCluster(t, cfg)
 	defer c.AssertAndStop(t)
 
 	db, dbStopper := makeClient(t, c.ConnString(0))
@@ -47,7 +47,7 @@ func testPutInner(t *testing.T, clusterConfig testconfig.TestConfig) {
 
 	errs := make(chan error, c.NumNodes())
 	start := time.Now()
-	deadline := start.Add(*flagDuration)
+	deadline := start.Add(cfg.Duration)
 	var count int64
 	for i := 0; i < c.NumNodes(); i++ {
 		go func() {

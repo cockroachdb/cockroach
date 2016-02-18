@@ -40,7 +40,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
-	"github.com/cockroachdb/cockroach/acceptance/testconfig"
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/util/caller"
@@ -49,12 +48,12 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-var flagDuration = flag.Duration("d", testconfig.DefaultDuration, "duration to run the test")
+var flagDuration = flag.Duration("d", cluster.DefaultDuration, "duration to run the test")
 var flagNodes = flag.Int("nodes", 3, "number of nodes")
 var flagStores = flag.Int("stores", 1, "number of stores to use for each node")
 var flagRemote = flag.Bool("remote", false, "run the test using terrafarm instead of docker")
 var flagCwd = flag.String("cwd", "../cloud/aws", "directory to run terraform from")
-var flagStall = flag.Duration("stall", testconfig.DefaultStall, "duration after which if no forward progress is made, consider "+
+var flagStall = flag.Duration("stall", cluster.DefaultStall, "duration after which if no forward progress is made, consider "+
 	"the test stalled")
 var flagKeyName = flag.String("key-name", "", "name of key for remote cluster")
 var flagLogDir = flag.String("l", "", "the directory to store log files, relative to the test source")
@@ -101,31 +100,31 @@ func farmer(t *testing.T) *terrafarm.Farmer {
 
 // readConfigFromFlags will convert the flags to a TestConfig for the purposes
 // of starting up a cluster.
-func readConfigFromFlags() testconfig.TestConfig {
-	return testconfig.TestConfig{
+func readConfigFromFlags() cluster.TestConfig {
+	return cluster.TestConfig{
 		Name:     fmt.Sprintf("AdHoc %dx%d", *flagNodes, *flagStores),
 		Duration: *flagDuration,
 		Stall:    *flagStall,
-		Nodes: []testconfig.NodeConfig{
+		Nodes: []cluster.NodeConfig{
 			{
 				Count:  int32(*flagNodes),
-				Stores: []testconfig.StoreConfig{{Count: int32(*flagStores)}},
+				Stores: []cluster.StoreConfig{{Count: int32(*flagStores)}},
 			},
 		},
 	}
 }
 
-func getConfigs() []testconfig.TestConfig {
+func getConfigs() []cluster.TestConfig {
 	if *flagTestConfigs {
-		return testconfig.DefaultConfigs()
+		return cluster.DefaultConfigs()
 	}
-	return []testconfig.TestConfig{readConfigFromFlags()}
+	return []cluster.TestConfig{readConfigFromFlags()}
 }
 
 // StartCluster starts a cluster from the relevant flags. All test clusters
 // should be created through this command since it sets up the logging in a
 // unified way.
-func StartCluster(t *testing.T, tc testconfig.TestConfig) cluster.Cluster {
+func StartCluster(t *testing.T, cfg cluster.TestConfig) cluster.Cluster {
 	if !*flagRemote {
 		logDir := *flagLogDir
 		if logDir != "" {
@@ -133,7 +132,7 @@ func StartCluster(t *testing.T, tc testconfig.TestConfig) cluster.Cluster {
 				logDir = filepath.Join(logDir, fun)
 			}
 		}
-		l := cluster.CreateLocal(tc, logDir, stopper)
+		l := cluster.CreateLocal(cfg, logDir, stopper)
 		l.Start()
 		checkRangeReplication(t, l, 20*time.Second)
 		return l

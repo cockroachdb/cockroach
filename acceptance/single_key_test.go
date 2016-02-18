@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/acceptance/testconfig"
+	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -39,8 +39,8 @@ func TestSingleKey(t *testing.T) {
 	}
 }
 
-func testSingleKeyInner(t *testing.T, clusterConfig testconfig.TestConfig) {
-	c := StartCluster(t, clusterConfig)
+func testSingleKeyInner(t *testing.T, cfg cluster.TestConfig) {
+	c := StartCluster(t, cfg)
 	defer c.AssertAndStop(t)
 	num := c.NumNodes()
 
@@ -59,7 +59,7 @@ func testSingleKeyInner(t *testing.T, clusterConfig testconfig.TestConfig) {
 	}
 
 	resultCh := make(chan result, num)
-	deadline := time.Now().Add(*flagDuration)
+	deadline := time.Now().Add(cfg.Duration)
 	var expected int64
 
 	// Start up num workers each reading and writing the same

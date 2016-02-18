@@ -31,7 +31,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/acceptance/testconfig"
+	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -54,8 +54,8 @@ func TestChaos(t *testing.T) {
 	}
 }
 
-func testChaosInner(t *testing.T, clusterConfig testconfig.TestConfig) {
-	c := StartCluster(t, clusterConfig)
+func testChaosInner(t *testing.T, cfg cluster.TestConfig) {
+	c := StartCluster(t, cfg)
 	defer c.AssertAndStop(t)
 
 	num := c.NumNodes()
@@ -123,7 +123,7 @@ CREATE TABLE bank.accounts (
 	}
 
 	start := time.Now()
-	deadline := start.Add(*flagDuration)
+	deadline := start.Add(cfg.Duration)
 	done := func() bool {
 		return !time.Now().Before(deadline) || atomic.LoadInt32(&stalled) == 1
 	}
@@ -247,7 +247,7 @@ CREATE TABLE bank.accounts (
 	}()
 
 	prevRound := atomic.LoadUint64(&round)
-	stallTime := time.Now().Add(*flagStall)
+	stallTime := time.Now().Add(cfg.Stall)
 	var prevOutput string
 	// Spin until all clients are shut.
 	for numShutClients := 0; numShutClients < num; {
@@ -269,11 +269,11 @@ CREATE TABLE bank.accounts (
 				if curRound == prevRound {
 					if time.Now().After(stallTime) {
 						atomic.StoreInt32(&stalled, 1)
-						t.Fatalf("Stall detected at round %d, no forward progress for %s", curRound, *flagStall)
+						t.Fatalf("Stall detected at round %d, no forward progress for %s", curRound, cfg.Stall)
 					}
 				} else {
 					prevRound = curRound
-					stallTime = time.Now().Add(*flagStall)
+					stallTime = time.Now().Add(cfg.Stall)
 				}
 				// Periodically print out progress so that we know the test is
 				// still running and making progress.

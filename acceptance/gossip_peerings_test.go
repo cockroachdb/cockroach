@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
-	"github.com/cockroachdb/cockroach/acceptance/testconfig"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -110,15 +109,15 @@ func TestGossipPeerings(t *testing.T) {
 	}
 }
 
-func testGossipPeeringsInner(t *testing.T, clusterConfig testconfig.TestConfig) {
-	c := StartCluster(t, clusterConfig)
+func testGossipPeeringsInner(t *testing.T, cfg cluster.TestConfig) {
+	c := StartCluster(t, cfg)
 	defer c.AssertAndStop(t)
 	num := c.NumNodes()
 
-	deadline := time.Now().Add(*flagDuration)
+	deadline := time.Now().Add(cfg.Duration)
 
 	waitTime := longWaitTime
-	if *flagDuration < waitTime {
+	if cfg.Duration < waitTime {
 		waitTime = shortWaitTime
 	}
 
@@ -149,27 +148,29 @@ func testGossipPeeringsInner(t *testing.T, clusterConfig testconfig.TestConfig) 
 // re-bootstrapped after a time when all nodes were down
 // simultaneously.
 func TestGossipRestart(t *testing.T) {
+	// TODO(bram): Limit this test to only the relevant cases. No chaos agents
+	// should be required.
 	clusterConfigs := getConfigs()
 	for _, clusterConfig := range clusterConfigs {
 		testGossipRestartInner(t, clusterConfig)
 	}
 }
 
-func testGossipRestartInner(t *testing.T, clusterConfig testconfig.TestConfig) {
+func testGossipRestartInner(t *testing.T, cfg cluster.TestConfig) {
 	// This already replicates the first range (in the local setup).
 	// The replication of the first range is important: as long as the
 	// first range only exists on one node, that node can trivially
 	// acquire the leader lease. Once the range is replicated, however,
 	// nodes must be able to discover each other over gossip before the
 	// lease can be acquired.
-	c := StartCluster(t, readConfigFromFlags())
+	c := StartCluster(t, cfg)
 	defer c.AssertAndStop(t)
 	num := c.NumNodes()
 
-	deadline := time.Now().Add(*flagDuration)
+	deadline := time.Now().Add(cfg.Duration)
 
 	waitTime := longWaitTime
-	if clusterConfig.Duration < waitTime {
+	if cfg.Duration < waitTime {
 		waitTime = shortWaitTime
 	}
 

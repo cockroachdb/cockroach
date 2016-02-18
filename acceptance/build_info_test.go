@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/acceptance/testconfig"
+	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -33,8 +33,8 @@ func TestBuildInfo(t *testing.T) {
 	}
 }
 
-func testBuildInfoInner(t *testing.T, clusterConfig testconfig.TestConfig) {
-	c := StartCluster(t, clusterConfig)
+func testBuildInfoInner(t *testing.T, cfg cluster.TestConfig) {
+	c := StartCluster(t, cfg)
 	defer c.AssertAndStop(t)
 
 	checkGossip(t, c, 20*time.Second, hasPeers(c.NumNodes()))

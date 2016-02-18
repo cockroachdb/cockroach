@@ -15,8 +15,8 @@
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 syntax = "proto2";
-package cockroach.acceptance.testconfig;
-option go_package = "testconfig";
+package cockroach.acceptance.cluster;
+option go_package = "cluster";
 
 import weak "gogoproto/gogo.proto";
 
@@ -33,9 +33,13 @@ message NodeConfig {
 }
 
 message TestConfig {
-  repeated NodeConfig nodes = 1 [(gogoproto.nullable) = false];
-  optional int64 duration = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
-  optional int64 stall = 3 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
-  optional string name = 4 [(gogoproto.nullable) = false];
+  optional string name = 1 [(gogoproto.nullable) = false];
+  repeated NodeConfig nodes = 2 [(gogoproto.nullable) = false];
+  // Duration is the total time that the test should run for. Important for
+  // tests such as TestPut that will run indefinitely.
+  optional int64 duration = 3 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
+  // Stall is the duration after which if no forward progress is made in a test,
+  // consider the test stalled.
+  optional int64 stall = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
 // TODO(bram): once defined, add in a collection of chaos agents here.
 }

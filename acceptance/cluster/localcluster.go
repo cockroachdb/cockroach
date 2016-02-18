@@ -31,7 +31,6 @@ import (
 	"testing"
 	"time"
 
-	testConfig "github.com/cockroachdb/cockroach/acceptance/testconfig"
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -109,14 +108,14 @@ type Event struct {
 type testStore struct {
 	index  int
 	str    string
-	config testConfig.StoreConfig
+	config StoreConfig
 }
 
 type testNode struct {
 	*Container
 	index  int
 	str    string
-	config testConfig.NodeConfig
+	config NodeConfig
 	stores []testStore
 }
 
@@ -130,7 +129,7 @@ type LocalCluster struct {
 	mu                   sync.Mutex // Protects the fields below
 	dns                  *Container
 	vols                 *Container
-	tc                   testConfig.TestConfig
+	config               TestConfig
 	Nodes                []*testNode
 	events               chan Event
 	expectedEvents       chan Event
@@ -145,7 +144,7 @@ type LocalCluster struct {
 // CreateLocal creates a new local cockroach cluster. The stopper is used to
 // gracefully shutdown the channel (e.g. when a signal arrives). The cluster
 // must be started before being used.
-func CreateLocal(tc testConfig.TestConfig, logDir string, stopper chan struct{}) *LocalCluster {
+func CreateLocal(cfg TestConfig, logDir string, stopper chan struct{}) *LocalCluster {
 	select {
 	case <-stopper:
 		// The stopper was already closed, exit early.
@@ -163,7 +162,7 @@ func CreateLocal(tc testConfig.TestConfig, logDir string, stopper chan struct{})
 	return &LocalCluster{
 		client:  cli,
 		stopper: stopper,
-		tc:      tc,
+		config:  cfg,
 		// TODO(tschottdorf): deadlocks will occur if these channels fill up.
 		events:         make(chan Event, 1000),
 		expectedEvents: make(chan Event, 1000),
@@ -275,7 +274,7 @@ func (l *LocalCluster) runDockerSpy() {
 // create the volumes container that keeps all of the volumes used by
 // the cluster.
 func (l *LocalCluster) initCluster() {
-	log.Infof("Initializing Cluster:\n%s", l.tc.PrettyString())
+	log.Infof("Initializing Cluster:\n%s", l.config.PrettyString())
 	l.panicOnStop()
 
 	// Create the temporary certs directory in the current working
@@ -312,16 +311,17 @@ func (l *LocalCluster) initCluster() {
 
 	l.Nodes = []*testNode{}
 	vols := map[string]struct{}{}
+	// Expand the cluster configuration into nodes and stores per node.
 	var nodeCount int
-	for _, nc := range l.tc.Nodes {
+	for _, nc := range l.config.Nodes {
 		for i := 0; i < int(nc.Count); i++ {
-			var storeCount int
 			newTestNode := &testNode{
 				config: nc,
 				index:  nodeCount,
 				str:    nodeStr(nodeCount),
 			}
 			nodeCount++
+			var storeCount int
 			for _, sc := range nc.Stores {
 				for j := 0; j < int(sc.Count); j++ {
 					vols[dataStr(nodeCount, storeCount)] = struct{}{}
@@ -431,7 +431,13 @@ func (l *LocalCluster) createNodeCerts() {
 
 func (l *LocalCluster) startNode(node *testNode) {
 	var stores string
+	first := true
 	for _, store := range node.stores {
+		if first {
+			first = false
+		} else {
+			stores += ","
+		}
 		stores += "ssd=" + store.str
 	}
 
@@ -443,6 +449,7 @@ func (l *LocalCluster) startNode(node *testNode) {
 		"--port=" + base.CockroachPort,
 		"--scan-max-idle-time=200ms", // set low to speed up tests
 	}
+	log.Warning(stores)
 	// Append --join flag for all nodes except first.
 	if node.index > 0 {
 		cmd = append(cmd, "--join="+net.JoinHostPort(l.Nodes[0].str, base.CockroachPort))

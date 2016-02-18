@@ -14,7 +14,7 @@
 //
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
-package testconfig
+package cluster
 
 import (
 	"bytes"
