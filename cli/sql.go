@@ -99,7 +99,7 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 	if err != nil {
 		panic(err)
 	}
-	defer rl.Close()
+	defer func() { _ = rl.Close() }()
 
 	fmt.Print(infoMessage)
 
