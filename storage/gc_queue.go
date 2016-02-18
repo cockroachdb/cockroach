@@ -412,6 +412,9 @@ func processSequenceCache(r *Replica, now, cutoff roachpb.Timestamp, prevTxns ma
 
 	var wg sync.WaitGroup
 	wg.Add(len(txns))
+	// TODO(tschottdorf): a lot of these transactions will be on our local range,
+	// so we should simply read those from a snapshot, and only push those which
+	// are PENDING.
 	for _, txn := range txns {
 		// Check if the Txn is still alive. If this indicates that the Txn is
 		// aborted and old enough to guarantee that any running coordinator

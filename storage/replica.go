@@ -1730,23 +1730,30 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 				return
 			}
 			// We successfully resolved the intents, so we're able to GC from
-			// the txn/sequence span directly.
+			// the txn span directly. Note that the sequence cache was cleared
+			// out synchronously with EndTransaction (see comments within for
+			// an explanation of why that is kosher).
+			//
 			// Note that we poisoned the sequence caches on the external ranges
-			// above. This may seem counter-intuitive, but it's actually necessary:
-			// Assume a transaction has committed here, with two external intents,
-			// and assume that we did not poison. Normally, these two intents will
-			// be resolved in the same batch, but that is not guaranteed (for example,
-			// if DistSender has a stale descriptor after a Merge). When resolved
-			// separately, the first ResolveIntent would clear out the sequence cache;
-			// an individual write on the second (still present) intent could then
-			// be replayed and would resolve as a real value (at least for a
-			// window of time unless we delete the local txn entry).
-			// TODO(tschottdorf): A way to work around this is to have another
-			// side effect on MVCCResolveIntent (on commit/abort): If it were
-			// able to remove the txn from its corresponding entries in the
-			// timestamp cache, no more replays at the same timestamp would be
-			// possible. This appears to be a useful performance optimization;
-			// we could then not poison on EndTransaction.
+			// above. This may seem counter-intuitive, but it's actually
+			// necessary: Assume a transaction has committed here, with two
+			// external intents, and assume that we did not poison. Normally,
+			// these two intents would be resolved in the same batch, but that
+			// is not guaranteed (for example, if DistSender has a stale
+			// descriptor after a Merge). When resolved separately, the first
+			// ResolveIntent would clear out the sequence cache; an individual
+			// write on the second (still present) intent could then be
+			// replayed and would resolve to a real value (at least for a
+			// window of time unless we delete the local txn entry). That's not
+			// OK for non-idempotent commands such as Increment.
+			// TODO(tschottdorf): We should have another side effect on
+			// MVCCResolveIntent (on commit/abort): If it were able to remove
+			// the txn from its corresponding entries in the timestamp cache,
+			// no more replays at the same timestamp would be possible. This
+			// appears to be a useful performance optimization; we could then
+			// not poison on EndTransaction. In fact, the above mechanism
+			// could be an effective alternative to sequence-cache based
+			// poisoning (or the whole sequence cache?) itself.
 			//
 			// TODO(tschottdorf): down the road, can probably unclog the system
 			// here by batching up a bunch of those GCRequests before proposing.
@@ -1756,18 +1763,6 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 				gcKey := r.Desc().StartKey.AsRawKey()
 				gcArgs := roachpb.GCRequest{
 					Span: roachpb.Span{Key: gcKey, EndKey: gcKey.Next()},
-				}
-				{
-					kvs, err := r.sequence.GetAllTransactionID(r.store.Engine(), txn.ID)
-					if err != nil {
-						panic(err) // TODO(tschottdorf): ReplicaCorruptionError
-					}
-					// Allocate slots for the transaction key and the sequence
-					// cache keys.
-					gcArgs.Keys = make([]roachpb.GCRequest_GCKey, 0, len(kvs)+1)
-					for _, kv := range kvs {
-						gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{Key: kv.Key})
-					}
 				}
 				gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{Key: keys.TransactionKey(txn.Key, txn.ID)})
 

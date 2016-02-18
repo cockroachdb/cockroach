@@ -531,7 +531,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	// that will fail due to missing BeginTransaction; otherwise, there's a
 	// non-pending entry here). BeginTransaction itself can't replay; it always
 	// comes in a batch with a write and will thus fail.
-	return reply, externalIntents, r.adjustSequenceCache(batch, ms, false /* !poison */, reply.Txn.TxnMeta, reply.Txn.Status)
+	return reply, externalIntents, r.clearSequenceCache(batch, ms, false /* !poison */, reply.Txn.TxnMeta, reply.Txn.Status)
 }
 
 // intersectSpan takes an intent and a descriptor. It then splits the
@@ -1024,27 +1024,31 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	return reply, nil
 }
 
-// adjustSequenceCache clears out the sequence cache and optionally poisons it
+// clearSequenceCache clears out the sequence cache and optionally poisons it
 // (creating a new special entry). shouldPoison should be set when the
 // transaction in question may still be in use, and causes the sequence cache
-// to be "poisoned": a transaction which has been aborted will not be able to
-// access the range again (preventing anomalies as in #2231). Similarly, when a
-// transaction needs to restart, we may update the sequence cache here to that
-// effect (though there is no anomaly involved).
+// to be "poisoned": the transaction will not be able to access the range again
+// (preventing anomalies as in #2231).
 //
 // Clearing out the sequence cache reduces the work the GC queue and range
 // splits/merges (which need to copy the whole sequence cache) have to carry
 // out.
 // TODO(tschottdorf): early restarts are currently disabled, see TODO within.
-func (r *Replica) adjustSequenceCache(batch engine.Engine, ms *engine.MVCCStats, shouldPoison bool, txn roachpb.TxnMeta, status roachpb.TransactionStatus) error {
-	if err := r.sequence.Del(batch, ms, txn.ID); err != nil {
-		return err
+func (r *Replica) clearSequenceCache(batch engine.Engine, ms *engine.MVCCStats, shouldPoison bool, txn roachpb.TxnMeta, status roachpb.TransactionStatus) (err error) {
+	// Clear out before (maybe) poisoning unless it's PENDING. No need for old
+	// stuff to accumulate.
+	if status != roachpb.PENDING {
+		if err := r.sequence.Del(batch, ms, txn.ID); err != nil {
+			return err
+		}
+	}
+
+	if !shouldPoison {
+		return nil
 	}
 
 	var poison uint32
 	switch status {
-	case roachpb.ABORTED:
-		poison = roachpb.SequencePoisonAbort
 	case roachpb.PENDING:
 		poison = roachpb.SequencePoisonRestart
 		// TODO(tschottdorf): Previous code here poisoned unless the
@@ -1055,12 +1059,16 @@ func (r *Replica) adjustSequenceCache(batch engine.Engine, ms *engine.MVCCStats,
 		// elbow grease, it should be possible to thread the necessary
 		// information through ResolveIntent{,Range} to here, at least in cases
 		// where the performance matters (short-circuiting a Transaction helps
-		// avoid redundant work).
+		// avoid redundant work). Early-return for now; we don't want to mess
+		// with SNAPSHOT transactions.
 		return nil
 	default:
-		return nil
+		// When committing or aborting, we don't want the transaction (or accidental
+		// replays) to come back.
+		poison = roachpb.SequencePoisonAbort
 	}
 
+	// The snake bites.
 	return r.sequence.Put(batch, ms, txn.ID, txn.Epoch, poison,
 		txn.Key, txn.Timestamp, nil)
 }
@@ -1078,7 +1086,7 @@ func (r *Replica) ResolveIntent(batch engine.Engine, ms *engine.MVCCStats, h roa
 	if err := engine.MVCCResolveWriteIntent(batch, ms, intent); err != nil {
 		return reply, err
 	}
-	return reply, r.adjustSequenceCache(batch, ms, args.Poison, args.IntentTxn, intent.Status)
+	return reply, r.clearSequenceCache(batch, ms, args.Poison, args.IntentTxn, intent.Status)
 }
 
 // ResolveIntentRange resolves write intents in the specified
@@ -1096,7 +1104,7 @@ func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
 	if _, err := engine.MVCCResolveWriteIntentRange(batch, ms, intent, 0); err != nil {
 		return reply, err
 	}
-	return reply, r.adjustSequenceCache(batch, ms, args.Poison, args.IntentTxn, intent.Status)
+	return reply, r.clearSequenceCache(batch, ms, args.Poison, args.IntentTxn, intent.Status)
 }
 
 // Merge is used to merge a value into an existing key. Merge is an

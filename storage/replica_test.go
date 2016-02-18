@@ -2001,6 +2001,10 @@ func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key, splitKey
 	newRng := splitTestRange(tc.store, splitKey, splitKey, t)
 
 	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	// These increments are not required, but testing feels safer when zero
+	// values are unexpected.
+	txn.Sequence++
+	txn.Epoch++
 	bt, btH := beginTxnArgs(key, txn)
 	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), btH, &bt); pErr != nil {
 		t.Fatal(pErr)
@@ -2070,7 +2074,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 
 // TestEndTransactionDirectGC verifies that after successfully resolving the
 // external intents of a transaction after EndTransaction, the transaction and
-// sequence cache records are purged.
+// sequence cache records are purged on the local range (and only there).
 func TestEndTransactionDirectGC(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
@@ -2079,7 +2083,7 @@ func TestEndTransactionDirectGC(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	_, txn := setupResolutionTest(t, tc, key, splitKey)
+	rightRng, txn := setupResolutionTest(t, tc, key, splitKey)
 
 	util.SucceedsWithin(t, 5*time.Second, func() error {
 		if gr, _, err := tc.rng.Get(tc.engine, roachpb.Header{}, roachpb.GetRequest{Span: roachpb.Span{Key: keys.TransactionKey(txn.Key, txn.ID)}}); err != nil {
@@ -2089,10 +2093,15 @@ func TestEndTransactionDirectGC(t *testing.T) {
 		}
 
 		var entry roachpb.SequenceCacheEntry
-		if seq, _, err := tc.rng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
-			return err
+		if _, seq, err := tc.rng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
+			t.Fatal(err)
 		} else if seq > 0 {
 			return util.Errorf("sequence cache still populated: %v", entry)
+		}
+		if _, seq, err := rightRng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
+			t.Fatal(err)
+		} else if seq == 0 {
+			t.Fatalf("right-hand side with external intent had its sequence cache cleared")
 		}
 
 		return nil
