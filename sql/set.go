@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -35,9 +36,9 @@ func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 	name := strings.ToUpper(n.Name.String())
 	switch name {
 	case `DATABASE`:
-		dbName, pErr := p.getStringVal(name, n.Values)
-		if pErr != nil {
-			return nil, pErr
+		dbName, err := p.getStringVal(name, n.Values)
+		if err != nil {
+			return nil, roachpb.NewError(err)
 		}
 		if len(dbName) != 0 {
 			// Verify database descriptor exists.
@@ -48,9 +49,9 @@ func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 		p.session.Database = dbName
 
 	case `SYNTAX`:
-		s, pErr := p.getStringVal(name, n.Values)
-		if pErr != nil {
-			return nil, pErr
+		s, err := p.getStringVal(name, n.Values)
+		if err != nil {
+			return nil, roachpb.NewError(err)
 		}
 		switch normalizeName(string(s)) {
 		case normalizeName(parser.Modern.String()):
@@ -70,38 +71,38 @@ func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 	return &emptyNode{}, nil
 }
 
-func (p *planner) getStringVal(name string, values parser.Exprs) (string, *roachpb.Error) {
+func (p *planner) getStringVal(name string, values parser.Exprs) (string, error) {
 	if len(values) != 1 {
-		return "", roachpb.NewUErrorf("%s: requires a single string value", name)
+		return "", fmt.Errorf("%s: requires a single string value", name)
 	}
 	val, err := values[0].Eval(p.evalCtx)
 	if err != nil {
-		return "", roachpb.NewError(err)
+		return "", err
 	}
 	s, ok := val.(parser.DString)
 	if !ok {
-		return "", roachpb.NewUErrorf("%s: requires a single string value: %s is a %s",
+		return "", fmt.Errorf("%s: requires a single string value: %s is a %s",
 			name, values[0], val.Type())
 	}
 	return string(s), nil
 }
 
-func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, *roachpb.Error) {
+func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, error) {
 	switch n.Isolation {
 	case parser.SerializableIsolation:
 		p.session.DefaultIsolationLevel = roachpb.SERIALIZABLE
 	case parser.SnapshotIsolation:
 		p.session.DefaultIsolationLevel = roachpb.SNAPSHOT
 	default:
-		return nil, roachpb.NewUErrorf("unsupported default isolation level: %s", n.Isolation)
+		return nil, fmt.Errorf("unsupported default isolation level: %s", n.Isolation)
 	}
 	return &emptyNode{}, nil
 }
 
-func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, *roachpb.Error) {
+func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 	d, err := n.Value.Eval(p.evalCtx)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 	var offset int64
 	switch v := d.(type) {
@@ -111,7 +112,7 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, *roachpb.Error) 
 			location = "UTC"
 		}
 		if _, err := time.LoadLocation(location); err != nil {
-			return nil, roachpb.NewUErrorf("cannot find time zone %q: %v", location, err)
+			return nil, fmt.Errorf("cannot find time zone %q: %v", location, err)
 		}
 		p.session.Timezone = &Session_Location{Location: location}
 
@@ -129,11 +130,11 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, *roachpb.Error) 
 		sixty.Mul(sixty, sixty).Mul(sixty, &v.Dec)
 		var ok bool
 		if offset, ok = sixty.Unscaled(); !ok {
-			return nil, roachpb.NewUErrorf("time zone value %s would overflow an int64", sixty)
+			return nil, fmt.Errorf("time zone value %s would overflow an int64", sixty)
 		}
 
 	default:
-		return nil, roachpb.NewUErrorf("bad time zone value: %v", n.Value)
+		return nil, fmt.Errorf("bad time zone value: %v", n.Value)
 	}
 	if offset != 0 {
 		p.session.Timezone = &Session_Offset{Offset: offset}

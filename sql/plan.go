@@ -139,12 +139,14 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	case *parser.Set:
 		return p.Set(n)
 	case *parser.SetTimeZone:
-		return p.SetTimeZone(n)
+		pNode, err := p.SetTimeZone(n)
+		return pNode, roachpb.NewError(err)
 	case *parser.SetTransaction:
 		pNode, err := p.SetTransaction(n)
 		return pNode, roachpb.NewError(err)
 	case *parser.SetDefaultIsolation:
-		return p.SetDefaultIsolation(n)
+		pNode, err := p.SetDefaultIsolation(n)
+		return pNode, roachpb.NewError(err)
 	case *parser.Show:
 		pNode, err := p.Show(n)
 		return pNode, roachpb.NewError(err)
