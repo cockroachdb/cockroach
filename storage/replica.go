@@ -1393,6 +1393,8 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	if ba.IsWrite() {
 		if err == nil {
 			// If command was successful, flush the MVCC stats to the batch.
+			// TODO(nvanbenschoten): this needs to happen regardless of the
+			// error at the end of this function.
 			if err := r.stats.MergeMVCCStats(btch, *ms); err != nil {
 				// TODO(tschottdorf): ReplicaCorruptionError.
 				log.Fatalc(ctx, "setting mvcc stats in a batch should never fail: %s", err)
@@ -1405,13 +1407,22 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			// prepare for the failed sequence cache entry.
 			btch.Close()
 			btch = r.store.Engine().NewBatch()
+			*ms = engine.MVCCStats{}
 		}
-		// Only transactional requests have replay protection.
+		// Only transactional requests have replay protection. If the transaction
+		// just ended (via a successful EndTransaction call), it has purged its
+		// sequence cache state and would prefer if we didn't write an entry
+		// which would then need to be GCed on the slow path. See
+		// (*Replica).adjustResponseCache for a more salient explanation of
+		// why that is ok.
 		if ba.Txn != nil {
-			if putErr := r.sequence.Put(btch, ba.Txn.ID, ba.Txn.Epoch,
-				ba.Txn.Sequence, ba.Txn.Key, ba.Txn.Timestamp, err); putErr != nil {
-				// TODO(tschottdorf): ReplicaCorruptionError.
-				log.Fatalc(ctx, "putting a sequence cache entry in a batch should never fail: %s", putErr)
+			_, isEndTxn := ba.GetArg(roachpb.EndTransaction)
+			if !isEndTxn || err != nil {
+				if putErr := r.sequence.Put(btch, ms, ba.Txn.ID, ba.Txn.Epoch,
+					ba.Txn.Sequence, ba.Txn.Key, ba.Txn.Timestamp, err); putErr != nil {
+					// TODO(tschottdorf): ReplicaCorruptionError.
+					log.Fatalc(ctx, "putting a sequence cache entry in a batch should never fail: %s", putErr)
+				}
 			}
 		}
 	}
@@ -1719,7 +1730,31 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 				return
 			}
 			// We successfully resolved the intents, so we're able to GC from
-			// the txn/sequence span directly.
+			// the txn span directly. Note that the sequence cache was cleared
+			// out synchronously with EndTransaction (see comments within for
+			// an explanation of why that is kosher).
+			//
+			// Note that we poisoned the sequence caches on the external ranges
+			// above. This may seem counter-intuitive, but it's actually
+			// necessary: Assume a transaction has committed here, with two
+			// external intents, and assume that we did not poison. Normally,
+			// these two intents would be resolved in the same batch, but that
+			// is not guaranteed (for example, if DistSender has a stale
+			// descriptor after a Merge). When resolved separately, the first
+			// ResolveIntent would clear out the sequence cache; an individual
+			// write on the second (still present) intent could then be
+			// replayed and would resolve to a real value (at least for a
+			// window of time unless we delete the local txn entry). That's not
+			// OK for non-idempotent commands such as Increment.
+			// TODO(tschottdorf): We should have another side effect on
+			// MVCCResolveIntent (on commit/abort): If it were able to remove
+			// the txn from its corresponding entries in the timestamp cache,
+			// no more replays at the same timestamp would be possible. This
+			// appears to be a useful performance optimization; we could then
+			// not poison on EndTransaction. In fact, the above mechanism
+			// could be an effective alternative to sequence-cache based
+			// poisoning (or the whole sequence cache?) itself.
+			//
 			// TODO(tschottdorf): down the road, can probably unclog the system
 			// here by batching up a bunch of those GCRequests before proposing.
 			if args.Method() == roachpb.EndTransaction {
@@ -1728,18 +1763,6 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 				gcKey := r.Desc().StartKey.AsRawKey()
 				gcArgs := roachpb.GCRequest{
 					Span: roachpb.Span{Key: gcKey, EndKey: gcKey.Next()},
-				}
-				{
-					kvs, err := r.sequence.GetAllTransactionID(r.store.Engine(), txn.ID)
-					if err != nil {
-						panic(err) // TODO(tschottdorf): ReplicaCorruptionError
-					}
-					// Allocate slots for the transaction key and the sequence
-					// cache keys.
-					gcArgs.Keys = make([]roachpb.GCRequest_GCKey, 0, len(kvs)+1)
-					for _, kv := range kvs {
-						gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{Key: kv.Key})
-					}
 				}
 				gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{Key: keys.TransactionKey(txn.Key, txn.ID)})
 

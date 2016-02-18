@@ -380,7 +380,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		}
 		seqTS := txn.Timestamp
 		seqTS.Forward(*txn.LastHeartbeat)
-		if err := tc.rng.sequence.Put(tc.engine, txn.ID, epo, 2*epo, txn.Key, seqTS, nil /* err */); err != nil {
+		if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, epo, 2*epo, txn.Key, seqTS, nil /* err */); err != nil {
 			t.Fatal(err)
 		}
 	}
