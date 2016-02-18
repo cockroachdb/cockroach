@@ -31,23 +31,64 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+const eol = "\r\n"
+const hostHeader = eol + "Host: CRDB"
+
+var http2ClientPrefaceEOLIndex = strings.Index(http2.ClientPreface, eol)
+var http2ClientPrefaceFirstLine = []byte(http2.ClientPreface[:http2ClientPrefaceEOLIndex])
+
 type replayableConn struct {
 	net.Conn
-	buf    bytes.Buffer
-	reader io.Reader
+	hasRead, isReplaying bool
+	buf                  bytes.Buffer
+	reader               io.Reader
 }
 
-// Do not call `replay` more than once, bad things will happen.
 func (bc *replayableConn) replay() *replayableConn {
+	if bc.isReplaying {
+		panic("`replay` may only be called once")
+	}
+	bc.isReplaying = true
 	bc.reader = io.MultiReader(&bc.buf, bc.Conn)
 	return bc
 }
 
-func (bc *replayableConn) Read(b []byte) (int, error) {
-	return bc.reader.Read(b)
+func (bc *replayableConn) Read(p []byte) (int, error) {
+	if bc.isReplaying {
+		// bc.reader is a MultiReader.
+		return bc.reader.Read(p)
+	}
+	// bc.reader is a TeeReader.
+	if bc.hasRead {
+		return bc.reader.Read(p)
+	}
+	n, err := bc.reader.Read(p[:http2ClientPrefaceEOLIndex])
+	if err == nil {
+		bc.hasRead = true
+		if bytes.HasPrefix(p, http2ClientPrefaceFirstLine) {
+			// The incoming request is an HTTP2 request. Remember, that we are in
+			// this code path means that TLS is not in use, which means the caller
+			// (net/http machinery) won't be able to parse anything after
+			// http2ClientPrefaceFirstLine. However, Go 1.6 introduced strict Host
+			// header checking for HTTP >= 1.1 requests (see
+			// https://github.com/golang/go/commit/6e11f45), and
+			// http2ClientPrefaceFirstLine contains enough information for the caller
+			// to identify this first request as an HTTP 2 request, but not enough
+			// for the caller to determine the value of the Host header. On the next
+			// line, we're going to help the caller out by providing a bogus HTTP
+			// 1.x-style Host header. This will get us past Host header verification.
+			//
+			// Note that this bogus header won't reappear after replay is called.
+			n += copy(p[n:], hostHeader)
+		}
+		var m int
+		m, err = bc.reader.Read(p[n:])
+		n += m
+	}
+	return n, err
 }
 
-func newBufferedConn(conn net.Conn) *replayableConn {
+func newReplayableConn(conn net.Conn) *replayableConn {
 	bc := replayableConn{Conn: conn}
 	bc.reader = io.TeeReader(conn, &bc.buf)
 	return &bc
@@ -60,7 +101,7 @@ type replayableConnListener struct {
 func (ml *replayableConnListener) Accept() (net.Conn, error) {
 	conn, err := ml.Listener.Accept()
 	if err == nil {
-		conn = newBufferedConn(conn)
+		conn = newReplayableConn(conn)
 	}
 	return conn, err
 }
