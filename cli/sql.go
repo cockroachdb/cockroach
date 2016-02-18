@@ -83,8 +83,8 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 			}
 		} else {
 			histFile := filepath.Join(userAcct.HomeDir, ".cockroachdb_history")
-			// if histFile is exists, readline will try to load them all into
-			// memory, or it will create a file. If there is a IO error
+			// If histFile exists, readline will try to load them all into
+			// memory, or it will create a file. If there is an IO error
 			// occured, just skip it.
 			readline.SetHistoryPath(histFile)
 		}
