@@ -175,8 +175,8 @@ func protoFromResponse(r Response) (*driver.Response, error) {
 
 func protoFromResult(r Result) driver.Response_Result {
 	drr := driver.Response_Result{}
-	if r.PErr != nil {
-		drr.Error = proto.String(r.PErr.String())
+	if r.Err != nil {
+		drr.Error = proto.String(r.Err.Error())
 	}
 	switch r.Type {
 	case parser.DDL:

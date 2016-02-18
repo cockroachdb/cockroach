@@ -89,7 +89,7 @@ type Response struct {
 
 // Result corresponds to the execution of a single SQL statement.
 type Result struct {
-	PErr *roachpb.Error
+	Err error
 	// The type of statement that the result is for.
 	Type parser.StatementType
 	// The tag of the statement that the result is for.
@@ -559,7 +559,7 @@ func makeResultFromError(planMaker *planner, pErr *roachpb.Error) Result {
 			planMaker.txn.Cleanup(pErr)
 		}
 	}
-	return Result{PErr: pErr}
+	return Result{Err: pErr.GoError()}
 }
 
 var _ parser.Args = parameters{}
