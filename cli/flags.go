@@ -21,11 +21,11 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"reflect"
 	"strings"
 
 	"github.com/kr/text"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
@@ -35,22 +35,6 @@ var maxResults int64
 
 var connURL string
 var connUser, connHost, connPort, connPGPort, connDBName string
-
-// pflagValue wraps flag.Value and implements the extra methods of the
-// pflag.Value interface.
-type pflagValue struct {
-	flag.Value
-}
-
-func (v pflagValue) Type() string {
-	t := reflect.TypeOf(v.Value).Elem()
-	return t.Kind().String()
-}
-
-func (v pflagValue) IsBoolFlag() bool {
-	t := reflect.TypeOf(v.Value).Elem()
-	return t.Kind() == reflect.Bool
-}
 
 var flagUsage = map[string]string{
 	"attrs": wrapText(`
@@ -78,11 +62,6 @@ storage devices.`),
 	"certs": wrapText(`
 Directory containing RSA key and x509 certs. This flag is required if
 --insecure=false.`),
-
-	"dev": wrapText(`
-Runs the node as a standalone in-memory cluster and forces --insecure
-for all server and client commands. Useful for developing Cockroach
-itself.`),
 
 	"execute": wrapText(`
 Execute the SQL statement(s) on the command line, then exit. Each
@@ -216,10 +195,6 @@ func usage(name string) string {
 		strings.Repeat(" ", usageIndentation-1)
 }
 
-func normalizeStdFlagName(s string) string {
-	return strings.Replace(s, "_", "-", -1)
-}
-
 // initFlags sets the cli.Context values to flag values.
 // Keep in sync with "server/context.go". Values in Context should be
 // settable here.
@@ -236,7 +211,7 @@ func initFlags(ctx *Context) {
 	// top-level cockroach command.
 	pf := cockroachCmd.PersistentFlags()
 	flag.VisitAll(func(f *flag.Flag) {
-		pf.Var(pflagValue{f.Value}, normalizeStdFlagName(f.Name), f.Usage)
+		pf.AddFlag(pflag.PFlagFromGoFlag(f))
 	})
 
 	{

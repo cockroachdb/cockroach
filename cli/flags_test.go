@@ -33,9 +33,8 @@ func TestStdFlagToPflag(t *testing.T) {
 		if strings.HasPrefix(f.Name, "test.") {
 			return
 		}
-		n := normalizeStdFlagName(f.Name)
-		if pf := cf.Lookup(n); pf == nil {
-			t.Errorf("unable to find \"%s\"", n)
+		if pf := cf.Lookup(f.Name); pf == nil {
+			t.Errorf("unable to find \"%s\"", f.Name)
 		}
 	})
 }

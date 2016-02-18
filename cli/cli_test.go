@@ -720,14 +720,14 @@ Available Commands:
   debug       debugging commands
 
 Flags:
-      --alsologtostderr         log to standard error as well as files
-      --color                   colorize standard error output according to severity (default "auto")
-      --log-backtrace-at        when logging hits line file:N, emit a stack trace (default :0)
-      --log-dir                 if non-empty, write log files in this directory (default "` + os.TempDir() + `")
-      --log-threshold           logs at or above this threshold go to stderr (default ERROR)
-      --logtostderr             log to standard error instead of files
-      --verbosity               log level for V logs
-      --vmodule                 comma-separated list of pattern=N settings for file-filtered logging
+      --alsologtostderr value[=true]   log to standard error as well as files
+      --color value                    colorize standard error output according to severity (default "auto")
+      --log-backtrace-at value         when logging hits line file:N, emit a stack trace (default :0)
+      --log-dir value                  if non-empty, write log files in this directory (default "` + os.TempDir() + `")
+      --log-threshold value            logs at or above this threshold go to stderr (default ERROR)
+      --logtostderr value[=true]       log to standard error instead of files
+      --verbosity value                log level for V logs
+      --vmodule value                  comma-separated list of pattern=N settings for file-filtered logging
 
 Use "cockroach [command] --help" for more information about a command.
 `
