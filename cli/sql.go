@@ -19,13 +19,14 @@ package cli
 import (
 	"database/sql"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
 	"strings"
 
-	"github.com/GeertJohan/go.linenoise"
+	"github.com/chzyer/readline"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -71,14 +72,10 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 	fullPrompt += "> "
 	continuePrompt += "> "
 
-	histFile := ""
-	keepHistory := false
-
 	if isatty.IsTerminal(os.Stdout.Fd()) {
 		// We only enable history management when the terminal is actually
 		// interactive. This saves on memory when e.g. piping a large SQL
 		// script through the command-line client.
-		keepHistory = true
 		userAcct, err := user.Current()
 		if err != nil {
 			if log.V(2) {
@@ -86,12 +83,8 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 				log.Info("cannot load or save the command-line history")
 			}
 		} else {
-			histFile = filepath.Join(userAcct.HomeDir, ".cockroachdb_history")
-			if err := linenoise.LoadHistory(histFile); err != nil {
-				if log.V(2) {
-					log.Warningf("cannot load command-line history: %s", err)
-				}
-			}
+			histFile := filepath.Join(userAcct.HomeDir, ".cockroachdb_history")
+			readline.SetHistoryPath(histFile)
 		}
 	}
 
@@ -104,9 +97,9 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 		if len(stmt) > 0 {
 			thisPrompt = continuePrompt
 		}
-		l, err := linenoise.Line(thisPrompt)
+		l, err := readline.Line(thisPrompt)
 
-		if err == linenoise.KillSignalError {
+		if err == readline.ErrInterrupt || err == io.EOF {
 			break
 		} else if err != nil {
 			fmt.Fprintf(osStderr, "input error: %s", err)
@@ -138,23 +131,18 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 		// statement.
 		fullStmt := strings.Join(stmt, "\n")
 
-		if keepHistory {
-			// We ignore linenoise's error here since it only reports an
-			// error in two situations: out of memory (this will be caught
-			// soon enough by cockroach sql) or duplicate entry (we don't
-			// care).
-			_ = linenoise.AddHistory(strings.Join(stmt, " "))
-
-			if histFile != "" {
-				// We save the history between each statement, This enables
-				// reusing history in another SQL shell without closing the
-				// current shell.
-				if err := linenoise.SaveHistory(histFile); err != nil {
-					log.Warningf("cannot save command-line history: %s", err)
-					log.Info("command-line history will not be saved in this session")
-					histFile = ""
-				}
-			}
+		// We save the history between each statement, This enables
+		// reusing history in another SQL shell without closing the
+		// current shell.
+		//
+		// AddHistory will push command into memory and try to persist
+		// to disk (if readline.SetHistoryPath was called).
+		// err can be not nil only if it got a IO error while
+		// trying to persist.
+		if err := readline.AddHistory(strings.Join(stmt, " ")); err != nil {
+			log.Warningf("cannot save command-line history: %s", err)
+			log.Info("command-line history will not be saved in this session")
+			readline.SetHistoryPath("")
 		}
 
 		if exitErr = runPrettyQuery(db, os.Stdout, fullStmt); exitErr != nil {
