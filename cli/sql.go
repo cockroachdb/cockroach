@@ -145,6 +145,9 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 		fullStmt := strings.Join(stmt, "\n")
 
 		if keepHistory {
+			// We save the history between each statement, This enables
+			// reusing history in another SQL shell without closing the
+			// current shell.
 			rl.SaveHistory(strings.Join(stmt, " "))
 		}
 
