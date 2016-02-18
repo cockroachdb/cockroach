@@ -325,7 +325,7 @@ func (c *Client) runHeartbeat(retryOpts retry.Options) {
 				}
 				if err = c.connect(); err != nil {
 					setUnhealthy()
-					log.Warning(err)
+					log.Error(err)
 					continue
 				}
 			}
