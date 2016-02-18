@@ -3,6 +3,9 @@ package rpc
 import (
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -37,6 +40,22 @@ func NewContext(context *base.Context, clock *hlc.Clock, stopper *stop.Stopper) 
 		HealthWait:   5 * time.Second,
 	}
 	return ctx
+}
+
+// GRPCDial calls grpc.Dial with the options appropriate for the context.
+func (c *Context) GRPCDial(target string) (*grpc.ClientConn, error) {
+	var dialOpt grpc.DialOption
+	if c.Insecure {
+		dialOpt = grpc.WithInsecure()
+	} else {
+		tlsConfig, err := c.GetClientTLSConfig()
+		if err != nil {
+			return nil, err
+		}
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
+	}
+
+	return grpc.Dial(target, dialOpt, grpc.WithBlock(), grpc.WithTimeout(base.NetworkTimeout))
 }
 
 // Copy creates a copy of the rpc Context config values, but with a

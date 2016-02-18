@@ -21,8 +21,6 @@ import (
 	"net"
 
 	"golang.org/x/net/context"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -70,19 +68,7 @@ func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, s
 			disconnected <- c
 		}()
 
-		var dialOpt grpc.DialOption
-		if ctx.Insecure {
-			dialOpt = grpc.WithInsecure()
-		} else {
-			tlsConfig, err := ctx.GetClientTLSConfig()
-			if err != nil {
-				log.Error(err)
-				return
-			}
-			dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
-		}
-
-		conn, err := grpc.Dial(c.addr.String(), dialOpt, grpc.WithBlock())
+		conn, err := ctx.GRPCDial(c.addr.String())
 		if err != nil {
 			log.Errorf("failed to dial: %v", err)
 			return
