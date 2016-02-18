@@ -186,7 +186,6 @@ func TestPGPrepareFail(t *testing.T) {
 		"SELECT CASE 1 WHEN 2 THEN 1 ELSE $1 END":  "pq: incompatible value types parameter, int",
 		"SELECT CASE 1 WHEN 2 THEN $2 ELSE $1 END": "pq: could not determine data type of parameter $1",
 		"CREATE TABLE $1 (id INT)":                 "pq: syntax error at or near \"1\"\nCREATE TABLE $1 (id INT)\n             ^\n",
-		"DROP TABLE t":                             "pq: prepare statement not supported: DROP TABLE",
 		"UPDATE d.t SET s = i + $1":                "pq: value type int doesn't match type STRING of column \"s\"",
 	}
 
@@ -415,6 +414,19 @@ func TestPGPreparedExec(t *testing.T) {
 		tests []preparedExecTest
 	}{
 		{
+			"CREATE DATABASE d",
+			[]preparedExecTest{
+				base,
+			},
+		},
+		{
+			"CREATE TABLE d.t (i INT, s STRING, d INT)",
+			[]preparedExecTest{
+				base,
+				base.Error(`pq: table "t" already exists`),
+			},
+		},
+		{
 			"INSERT INTO d.t VALUES ($1, $2, $3)",
 			[]preparedExecTest{
 				base.Params(1, "one", 2).RowsAffected(1),
@@ -451,6 +463,19 @@ func TestPGPreparedExec(t *testing.T) {
 				base.Params(1, 2, 3).RowsAffected(3),
 			},
 		},
+		{
+			"DROP TABLE d.t",
+			[]preparedExecTest{
+				base,
+				base.Error(`pq: table "t" does not exist`),
+			},
+		},
+		{
+			"DROP DATABASE d",
+			[]preparedExecTest{
+				base,
+			},
+		},
 	}
 
 	s := server.StartTestServer(t)
@@ -464,10 +489,6 @@ func TestPGPreparedExec(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-
-	if _, err := db.Exec(`CREATE DATABASE d; CREATE TABLE d.t (i INT, s STRING, d INT)`); err != nil {
-		t.Fatal(err)
-	}
 
 	runTests := func(query string, tests []preparedExecTest, execFunc func(...interface{}) (sql.Result, error)) {
 		for _, test := range tests {
@@ -487,18 +508,10 @@ func TestPGPreparedExec(t *testing.T) {
 		}
 	}
 
-	if _, err := db.Exec(`TRUNCATE TABLE d.t`); err != nil {
-		t.Fatal(err)
-	}
-
 	for _, execTest := range execTests {
 		runTests(execTest.query, execTest.tests, func(args ...interface{}) (sql.Result, error) {
 			return db.Exec(execTest.query, args...)
 		})
-	}
-
-	if _, err := db.Exec(`TRUNCATE TABLE d.t`); err != nil {
-		t.Fatal(err)
 	}
 
 	for _, execTest := range execTests {
