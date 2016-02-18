@@ -1476,6 +1476,12 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 	// accumulate updates to it.
 	isTxn := ba.Txn != nil
 
+	if ba.Requests[0].GetInner().Method() == roachpb.BeginTransaction &&
+		(len(ba.Requests) < 2 || !roachpb.IsTransactionWrite(ba.Requests[1].GetInner())) {
+		return nil, nil, roachpb.NewError(util.Errorf("BeginTransaction must be followed by a transactional write: %s", ba))
+
+	}
+
 	// Ensure that timestamps on individual requests are offset by an incremental
 	// amount of logical ticks from the base timestamp of the batch request (if
 	// that is non-zero and the batch is not in a Txn). This has the effect of
