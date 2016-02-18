@@ -71,14 +71,10 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 	fullPrompt += "> "
 	continuePrompt += "> "
 
-	histFile := ""
-	keepHistory := false
-
 	if isatty.IsTerminal(os.Stdout.Fd()) {
 		// We only enable history management when the terminal is actually
 		// interactive. This saves on memory when e.g. piping a large SQL
 		// script through the command-line client.
-		keepHistory = true
 		userAcct, err := user.Current()
 		if err != nil {
 			if log.V(2) {
@@ -86,20 +82,13 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 				log.Info("cannot load or save the command-line history")
 			}
 		} else {
-			histFile = filepath.Join(userAcct.HomeDir, ".cockroachdb_history")
+			histFile := filepath.Join(userAcct.HomeDir, ".cockroachdb_history")
+			// if histFile is exists, readline will try to load them all into
+			// memory, or it will create a file. If there is a IO error
+			// occured, just skip it.
+			readline.SetHistoryPath(histFile)
 		}
 	}
-
-	rl, err := readline.NewEx(&readline.Config{
-		Prompt:                 fullPrompt,
-		HistoryFile:            histFile,
-		DisableAutoSaveHistory: true,
-	})
-
-	if err != nil {
-		panic(err)
-	}
-	defer func() { _ = rl.Close() }()
 
 	fmt.Print(infoMessage)
 
@@ -110,12 +99,8 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 		if len(stmt) > 0 {
 			thisPrompt = continuePrompt
 		}
-		rl.SetPrompt(thisPrompt)
-		l, err := rl.Readline()
-
-		if err == readline.ErrInterrupt {
-			continue
-		} else if err != nil {
+		l, err := readline.Line(thisPrompt)
+		if err != nil {
 			break
 		}
 
@@ -144,11 +129,18 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 		// statement.
 		fullStmt := strings.Join(stmt, "\n")
 
-		if keepHistory {
-			// We save the history between each statement, This enables
-			// reusing history in another SQL shell without closing the
-			// current shell.
-			rl.SaveHistory(strings.Join(stmt, " "))
+		// We save the history between each statement, This enables
+		// reusing history in another SQL shell without closing the
+		// current shell.
+		//
+		// AddHistory will push command into memory and trying to persist
+		// to disk(if readline.SetHistoryPath is called).
+		// err can be not nil only if it got a IO error while
+		// trying to persist.
+		if err = readline.AddHistory(strings.Join(stmt, " ")); err != nil {
+			log.Warningf("cannot save command-line history: %s", err)
+			log.Info("command-line history will not be saved in this session")
+			readline.SetHistoryPath("")
 		}
 
 		if exitErr = runPrettyQuery(db, os.Stdout, fullStmt); exitErr != nil {
