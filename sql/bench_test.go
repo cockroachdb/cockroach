@@ -129,6 +129,70 @@ func BenchmarkSelect1_MySQL(b *testing.B) {
 	benchmarkMySQL(b, runBenchmarkSelect1)
 }
 
+// runBenchmarkSelect2 Runs a SELECT query with non-trivial expressions. The main purpose is to
+// detect major regressions in query expression processing.
+func runBenchmarkSelect2(b *testing.B, db *sql.DB) {
+	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.select`); err != nil {
+		b.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE bench.select (k INT PRIMARY KEY, a INT, b INT, c INT, d INT)`); err != nil {
+		b.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString(`INSERT INTO bench.select VALUES `)
+
+	// We insert all combinations of values between 1 and num for columns a, b, c. The intention is
+	// to benchrmark the expression parsing and query setup so we don't want to have many rows to go
+	// through.
+	const num = 3
+	row := 0
+	for i := 1; i <= num; i++ {
+		for j := 1; j <= num; j++ {
+			for k := 1; k <= num; k++ {
+				if row > 0 {
+					buf.WriteString(", ")
+				}
+				row++
+				fmt.Fprintf(&buf, "(%d, %d, %d, %d)", row, i, j, k)
+			}
+		}
+	}
+	if _, err := db.Exec(buf.String()); err != nil {
+		b.Fatal(err)
+	}
+
+	defer func() {
+		if _, err := db.Exec(`DROP TABLE bench.select`); err != nil {
+			b.Fatal(err)
+		}
+	}()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		targets := `a, b, c, a+b, a+1, (a+2)*(b+3)*(c+4)`
+		filter := `(a = 1) OR ((a = 2) and (b = c)) OR (a + b = 3) OR (2*a + 4*b = 4*c)`
+		rows, err := db.Query(fmt.Sprintf(`SELECT %s FROM bench.select WHERE %s`, targets, filter))
+		if err != nil {
+			b.Fatal(err)
+		}
+		rows.Close()
+	}
+	b.StopTimer()
+}
+
+func BenchmarkSelect2_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkSelect2)
+}
+
+func BenchmarkSelect2_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkSelect2)
+}
+
+func BenchmarkSelect2_MySQL(b *testing.B) {
+	benchmarkMySQL(b, runBenchmarkSelect2)
+}
+
 // runBenchmarkInsert benchmarks inserting count rows into a table.
 func runBenchmarkInsert(b *testing.B, db *sql.DB, count int) {
 	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.insert`); err != nil {

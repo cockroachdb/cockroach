@@ -101,6 +101,8 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	// "*, 1, 2", not "*, (1, 2)".
 	targets := tableDesc.allColumnsSelector()
 	i := 0
+	// Remember the index where the targets for n.Exprs start.
+	exprTargetIdx := len(targets)
 	for _, expr := range n.Exprs {
 		if expr.Tuple {
 			switch t := expr.Expr.(type) {
@@ -146,46 +148,19 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	// using marshalColumnValue. This step also verifies that the expression
 	// types match the column types.
 	if p.prepareOnly {
-		i := 0
-		f := func(expr parser.Expr) *roachpb.Error {
-			idx := i
-			i++
+		for i, target := range rows.(*selectNode).render[exprTargetIdx:] {
 			// DefaultVal doesn't implement TypeCheck
-			if _, ok := expr.(parser.DefaultVal); ok {
-				return nil
+			if _, ok := target.(parser.DefaultVal); ok {
+				continue
 			}
-			d, err := expr.TypeCheck(p.evalCtx.Args)
+			d, err := target.TypeCheck(p.evalCtx.Args)
 			if err != nil {
-				return roachpb.NewError(err)
+				return nil, roachpb.NewError(err)
 			}
-			if _, err := marshalColumnValue(cols[idx], d, p.evalCtx.Args); err != nil {
-				return roachpb.NewError(err)
-			}
-			return nil
-		}
-		for _, expr := range n.Exprs {
-			if expr.Tuple {
-				switch t := expr.Expr.(type) {
-				case parser.Tuple:
-					for _, e := range t {
-						if err := f(e); err != nil {
-							return nil, err
-						}
-					}
-				case parser.DTuple:
-					for _, e := range t {
-						if err := f(e); err != nil {
-							return nil, err
-						}
-					}
-				}
-			} else {
-				if err := f(expr.Expr); err != nil {
-					return nil, err
-				}
+			if _, err := marshalColumnValue(cols[i], d, p.evalCtx.Args); err != nil {
+				return nil, roachpb.NewError(err)
 			}
 		}
-
 		return result, nil
 	}
 
