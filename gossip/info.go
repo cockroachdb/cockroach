@@ -24,10 +24,7 @@ func (i *Info) expired(now int64) bool {
 // isFresh returns false if the info has an originating timestamp
 // earlier than the latest seen by this node.
 func (i *Info) isFresh(highWaterStamp int64) bool {
-	if i.OrigStamp > highWaterStamp {
-		return true
-	}
-	return false
+	return i.OrigStamp > highWaterStamp
 }
 
 // infoMap is a map of keys to info object pointers.

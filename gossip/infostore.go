@@ -60,10 +60,10 @@ type callback struct {
 type infoStore struct {
 	stopper *stop.Stopper
 
-	Infos           infoMap             `json:"infos,omitempty"` // Map from key to info
-	NodeID          roachpb.NodeID      `json:"-"`               // Owning node's ID
-	NodeAddr        util.UnresolvedAddr `json:"-"`               // Address of node owning this info store: "host:port"
-	highWaterStamps map[int32]int64     // Per-node information for gossip peers
+	Infos           infoMap                  `json:"infos,omitempty"` // Map from key to info
+	NodeID          roachpb.NodeID           `json:"-"`               // Owning node's ID
+	NodeAddr        util.UnresolvedAddr      `json:"-"`               // Address of node owning this info store: "host:port"
+	highWaterStamps map[roachpb.NodeID]int64 // Per-node information for gossip peers
 	callbacks       []*callback
 
 	callbackMu     sync.Mutex // Serializes callbacks
@@ -124,7 +124,7 @@ func newInfoStore(nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr, stopper *
 		Infos:           make(infoMap),
 		NodeID:          nodeID,
 		NodeAddr:        nodeAddr,
-		highWaterStamps: map[int32]int64{},
+		highWaterStamps: map[roachpb.NodeID]int64{},
 	}
 }
 
@@ -180,15 +180,15 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 	if i.OrigStamp == 0 {
 		i.Value.InitChecksum([]byte(key))
 		i.OrigStamp = monotonicUnixNano()
-		if highWaterStamp, ok := is.highWaterStamps[int32(i.NodeID)]; ok && highWaterStamp >= i.OrigStamp {
+		if highWaterStamp, ok := is.highWaterStamps[i.NodeID]; ok && highWaterStamp >= i.OrigStamp {
 			panic(util.Errorf("high water stamp %d >= %d", highWaterStamp, i.OrigStamp))
 		}
 	}
 	// Update info map.
 	is.Infos[key] = i
 	// Update the high water timestamp & min hops for the originating node.
-	if nID := int32(i.NodeID); nID != 0 {
-		if hws, ok := is.highWaterStamps[nID]; !ok || hws < i.OrigStamp {
+	if nID := i.NodeID; nID != 0 {
+		if hws := is.highWaterStamps[nID]; hws < i.OrigStamp {
 			is.highWaterStamps[nID] = i.OrigStamp
 		}
 	}
@@ -198,8 +198,8 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 
 // getHighWaterStamps returns a copy of the high water stamps map of
 // gossip peer info maintained by this infostore.
-func (is *infoStore) getHighWaterStamps() map[int32]int64 {
-	copy := make(map[int32]int64, len(is.highWaterStamps))
+func (is *infoStore) getHighWaterStamps() map[roachpb.NodeID]int64 {
+	copy := make(map[roachpb.NodeID]int64, len(is.highWaterStamps))
 	for k, hws := range is.highWaterStamps {
 		copy[k] = hws
 	}
@@ -333,11 +333,11 @@ func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) (fre
 // newer than the high water timestamps indicated by the supplied
 // map (which is taken from the perspective of the peer node we're
 // taking this delta for).
-func (is *infoStore) delta(highWaterTimestamps map[int32]int64) map[string]*Info {
+func (is *infoStore) delta(highWaterTimestamps map[roachpb.NodeID]int64) map[string]*Info {
 	infos := make(map[string]*Info)
 	// Compute delta of infos.
 	if err := is.visitInfos(func(key string, i *Info) error {
-		if i.isFresh(highWaterTimestamps[int32(i.NodeID)]) {
+		if i.isFresh(highWaterTimestamps[i.NodeID]) {
 			infos[key] = i
 		}
 		return nil

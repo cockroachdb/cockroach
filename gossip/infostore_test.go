@@ -220,13 +220,13 @@ func TestInfoStoreDelta(t *testing.T) {
 	is := createTestInfoStore(t)
 
 	// Verify deltas with successive high water timestamps & min hops.
-	infos := is.delta(map[int32]int64{})
+	infos := is.delta(map[roachpb.NodeID]int64{})
 	for i := 0; i < 10; i++ {
 		if i > 0 {
 			infoA := is.getInfo(fmt.Sprintf("a.%d", i-1))
 			infoB := is.getInfo(fmt.Sprintf("b.%d", i-1))
 			infoC := is.getInfo(fmt.Sprintf("c.%d", i-1))
-			infos = is.delta(map[int32]int64{
+			infos = is.delta(map[roachpb.NodeID]int64{
 				1: infoA.OrigStamp,
 				2: infoB.OrigStamp,
 				3: infoC.OrigStamp,
@@ -243,7 +243,7 @@ func TestInfoStoreDelta(t *testing.T) {
 		}
 	}
 
-	if infos := is.delta(map[int32]int64{
+	if infos := is.delta(map[roachpb.NodeID]int64{
 		1: math.MaxInt64,
 		2: math.MaxInt64,
 		3: math.MaxInt64,
