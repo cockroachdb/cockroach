@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"bytes"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -76,7 +78,17 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 		}
 	}
 
+	if isSystemConfigID(tableDesc.GetID()) {
+		// Mark transaction as operating on the system DB.
+		p.txn.SetSystemConfigTrigger()
+	}
+
+	if canDeleteWithoutScan(n, rows, len(indexes)) {
+		return p.fastDelete(rows, result, autoCommit)
+	}
+
 	b := p.txn.NewBatch()
+
 	for rows.Next() {
 		rowVals := rows.Values()
 		result.rows = append(result.rows, parser.DTuple(nil))
@@ -117,11 +129,6 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 
-	if isSystemConfigID(tableDesc.GetID()) {
-		// Mark transaction as operating on the system DB.
-		p.txn.SetSystemConfigTrigger()
-	}
-
 	if autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
@@ -134,5 +141,84 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 
+	return result, nil
+}
+
+// Determine if the deletion of `rows` can be done without actually scanning them,
+// i.e. if we do not need to know their values for filtering expressions or a
+// RETURNING clause or for updating secondary indexes.
+func canDeleteWithoutScan(n *parser.Delete, rows planNode, indexCount int) bool {
+	if sel, ok := rows.(*selectNode); ok {
+		if indexCount != 0 {
+			if log.V(2) {
+				log.Infof("delete forced to scan: values required to update %d secondary indexes", indexCount)
+			}
+			return false
+		}
+		if n.Returning != nil {
+			if log.V(2) {
+				log.Infof("delete forced to scan: values required for RETURNING")
+			}
+			return false
+		}
+		if sel.filter != nil {
+			if log.V(2) {
+				log.Infof("delete forced to scan: values required for filter (%s)", sel.filter)
+			}
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+// `fastDelete` skips the scan of rows and just deletes the ranges that
+// `rows` would scan. Should only be used if `canDeleteWithoutScan` indicates
+// that it is safe to do so.
+func (p *planner) fastDelete(rows planNode, result *valuesNode, autoCommit bool) (planNode, *roachpb.Error) {
+	b := p.txn.NewBatch()
+	sel := rows.(*selectNode)
+	scan := sel.table.node.(*scanNode)
+
+	for _, span := range scan.spans {
+		if log.V(2) {
+			log.Infof("Skipping scan and just deleting %s - %s", span.start, span.end)
+		}
+		b.DelRange(span.start, span.end, true)
+	}
+
+	if autoCommit {
+		// An auto-txn can commit the transaction with the batch. This is an
+		// optimization to avoid an extra round-trip to the transaction
+		// coordinator.
+		if pErr := p.txn.CommitInBatch(b); pErr != nil {
+			return nil, pErr
+		}
+	} else {
+		if pErr := p.txn.Run(b); pErr != nil {
+			return nil, pErr
+		}
+	}
+
+	if !scan.initScan() {
+		return nil, scan.pErr
+	}
+
+	for _, r := range b.Results {
+		var prev []byte
+		for _, i := range r.Keys {
+			after, err := scan.readIndexKey(i)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+			k := i[:len(i)-len(after)]
+			if !bytes.Equal(k, prev) {
+				prev = k
+				// Unfortunately length of the result rows is used to compute affected row count.
+				// TODO(dt): Plumb the count though rather than allocating a big slice.
+				result.rows = append(result.rows, parser.DTuple(nil))
+			}
+		}
+	}
 	return result, nil
 }
