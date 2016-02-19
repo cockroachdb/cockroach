@@ -106,7 +106,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	for {
 		s.mu.Lock()
 
-		delta := s.is.delta(args.Nodes)
+		delta := s.is.delta(args.HighWaterStamps)
 
 		if infoCount := len(delta); infoCount > 0 {
 			if log.V(1) {
@@ -114,9 +114,9 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 			}
 
 			*reply = Response{
-				NodeID: s.is.NodeID,
-				Nodes:  s.is.getNodes(),
-				Delta:  delta,
+				NodeID:          s.is.NodeID,
+				HighWaterStamps: s.is.getHighWaterStamps(),
+				Delta:           delta,
 			}
 
 			s.mu.Unlock()
@@ -199,8 +199,8 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 		s.maybeTighten()
 
 		*reply = Response{
-			NodeID: s.is.NodeID,
-			Nodes:  s.is.getNodes(),
+			NodeID:          s.is.NodeID,
+			HighWaterStamps: s.is.getHighWaterStamps(),
 		}
 
 		s.mu.Unlock()
