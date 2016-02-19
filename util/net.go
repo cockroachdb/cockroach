@@ -28,6 +28,7 @@ import (
 
 	"golang.org/x/net/http2"
 
+	clog "github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -157,6 +158,7 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 			}
 			mu.Unlock()
 		},
+		ErrorLog: clog.NewStdLogger(clog.ErrorLog),
 	}
 
 	var http2Server http2.Server

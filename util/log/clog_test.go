@@ -122,19 +122,15 @@ func TestInfo(t *testing.T) {
 	}
 }
 
-func init() {
-	CopyStandardLogTo("INFO")
-}
-
-// Test that CopyStandardLogTo panics on bad input.
-func TestCopyStandardLogToPanic(t *testing.T) {
+// Test that copyStandardLogTo panics on bad input.
+func TestcopyStandardLogToPanic(t *testing.T) {
 	setFlags()
 	defer func() {
 		if s, ok := recover().(string); !ok || !strings.Contains(s, "LOG") {
-			t.Errorf(`CopyStandardLogTo("LOG") should have panicked: %v`, s)
+			t.Errorf(`copyStandardLogTo("LOG") should have panicked: %v`, s)
 		}
 	}()
-	CopyStandardLogTo("LOG")
+	copyStandardLogTo("LOG")
 }
 
 // Test that using the standard log package logs to INFO.

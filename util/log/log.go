@@ -19,9 +19,7 @@ package log
 import "golang.org/x/net/context"
 
 func init() {
-	// TODO(tschottdorf) this should go to our logger. Currently this will log
-	// with clog (=glog) format.
-	CopyStandardLogTo("INFO")
+	copyStandardLogTo("INFO")
 }
 
 // FatalOnPanic recovers from a panic and exits the process with a
