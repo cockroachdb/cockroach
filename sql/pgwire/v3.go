@@ -570,7 +570,7 @@ func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCo
 
 	c.opts.database = c.session.Database
 	tracing.AnnotateTrace()
-	return c.sendResponse(resp, formatCodes, sendDescription, int(limit))
+	return c.sendResponse(resp, formatCodes, sendDescription, limit)
 }
 
 func (c *v3Conn) sendCommandComplete(tag []byte) error {
@@ -614,7 +614,7 @@ func (c *v3Conn) sendError(errToSend string) error {
 	return c.writeBuf.finishMsg(c.wr)
 }
 
-func (c *v3Conn) sendResponse(resp sql.Response, formatCodes []formatCode, sendDescription bool, limit int) error {
+func (c *v3Conn) sendResponse(resp sql.Response, formatCodes []formatCode, sendDescription bool, limit int32) error {
 	if len(resp.Results) == 0 {
 		return c.sendCommandComplete(nil)
 	}
@@ -625,7 +625,7 @@ func (c *v3Conn) sendResponse(resp sql.Response, formatCodes []formatCode, sendD
 			}
 			break
 		}
-		if limit != 0 && len(result.Rows) > limit {
+		if limit != 0 && len(result.Rows) > int(limit) {
 			if err := c.sendError(fmt.Sprintf("execute row count limits not supported: %d of %d", limit, len(result.Rows))); err != nil {
 				return err
 			}
