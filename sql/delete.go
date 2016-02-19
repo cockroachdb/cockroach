@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"bytes"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -77,39 +79,74 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 	}
 
 	b := p.txn.NewBatch()
-	for rows.Next() {
-		rowVals := rows.Values()
-		result.rows = append(result.rows, parser.DTuple(nil))
 
-		primaryIndexKey, _, err := encodeIndexKey(
-			&primaryIndex, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
-		if err != nil {
-			return nil, roachpb.NewError(err)
-		}
-
-		secondaryIndexEntries, err := encodeSecondaryIndexes(
-			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
-		if err != nil {
-			return nil, roachpb.NewError(err)
-		}
-
-		for _, secondaryIndexEntry := range secondaryIndexEntries {
+	scanSkipped := false
+	if sel, ok := rows.(*selectNode); ok {
+		canSkip := true
+		if len(indexes) > 0 {
 			if log.V(2) {
-				log.Infof("Del %s", secondaryIndexEntry.key)
+				log.Infof("delete forced to scan: values required to update %d secondary indexes", len(indexes))
 			}
-			b.Del(secondaryIndexEntry.key)
+			canSkip = false
 		}
-
-		// Delete the row.
-		rowStartKey := roachpb.Key(primaryIndexKey)
-		rowEndKey := rowStartKey.PrefixEnd()
-		if log.V(2) {
-			log.Infof("DelRange %s - %s", rowStartKey, rowEndKey)
+		if n.Returning != nil {
+			if log.V(2) {
+				log.Infof("delete forced to scan: values required for RETURNING")
+			}
+			canSkip = false
 		}
-		b.DelRange(rowStartKey, rowEndKey, false)
+		if sel.filter != nil {
+			if log.V(2) {
+				log.Infof("delete forced to scan: values required for filter (%s)", sel.filter)
+			}
+			canSkip = false
+		}
+		if scan, ok := sel.table.node.(*scanNode); ok && canSkip {
+			for _, span := range scan.spans {
+				if log.V(2) {
+					log.Infof("Skipping scan and just deleting %s - %s", span.start, span.end)
+				}
+				b.DelRange(span.start, span.end, true)
+			}
+			scanSkipped = true
+		}
+	}
 
-		if err := p.populateReturning(n.Returning, result, qvals, rowVals); err != nil {
-			return nil, roachpb.NewError(err)
+	if !scanSkipped {
+		for rows.Next() {
+			rowVals := rows.Values()
+			result.rows = append(result.rows, parser.DTuple(nil))
+
+			primaryIndexKey, _, err := encodeIndexKey(
+				&primaryIndex, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+
+			secondaryIndexEntries, err := encodeSecondaryIndexes(
+				tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+
+			for _, secondaryIndexEntry := range secondaryIndexEntries {
+				if log.V(2) {
+					log.Infof("Del %s", secondaryIndexEntry.key)
+				}
+				b.Del(secondaryIndexEntry.key)
+			}
+
+			// Delete the row.
+			rowStartKey := roachpb.Key(primaryIndexKey)
+			rowEndKey := rowStartKey.PrefixEnd()
+			if log.V(2) {
+				log.Infof("DelRange %s - %s", rowStartKey, rowEndKey)
+			}
+			b.DelRange(rowStartKey, rowEndKey, false)
+
+			if err := p.populateReturning(n.Returning, result, qvals, rowVals); err != nil {
+				return nil, roachpb.NewError(err)
+			}
 		}
 	}
 
@@ -132,6 +169,30 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 	}
 	if pErr != nil {
 		return nil, pErr
+	}
+
+	if scanSkipped {
+		// Unfortunately length of the result rows is used to compute affected row count.
+		// TODO(dt): Plumb the count though rather than allocating a big slice.
+		scan := rows.(*selectNode).table.node.(*scanNode)
+		if !scan.initScan() {
+			return nil, scan.pErr
+		}
+
+		for _, r := range b.Results {
+			var prev []byte
+			for _, i := range r.Keys {
+				after, err := scan.readIndexKey(i)
+				if err != nil {
+					return nil, roachpb.NewError(err)
+				}
+				k := i[:len(i)-len(after)]
+				if !bytes.Equal(k, prev) {
+					prev = k
+					result.rows = append(result.rows, parser.DTuple(nil))
+				}
+			}
+		}
 	}
 
 	return result, nil
