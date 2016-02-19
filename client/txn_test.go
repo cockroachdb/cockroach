@@ -312,6 +312,27 @@ func TestTxnInsertBeginTransaction(t *testing.T) {
 	}
 }
 
+// TestBeginTransactionErrorIndex verifies that the error index is cleared
+// when a BeginTransaction command causes an error.
+func TestBeginTransactionErrorIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		pErr := roachpb.NewError(&roachpb.WriteIntentError{})
+		pErr.SetErrorIndex(0)
+		return nil, pErr
+	}, nil))
+	pErr := db.Txn(func(txn *Txn) *roachpb.Error {
+		return txn.Put("a", "b")
+	})
+	// Verify that the original error type is preserved, but the error index is unset.
+	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
+		t.Fatalf("unexpected error %s", pErr)
+	}
+	if pErr.Index != nil {
+		t.Errorf("error index must not be set, but got %s", pErr.Index)
+	}
+}
+
 // TestCommitTransactionOnce verifies that if the transaction is
 // ended explicitly in the retryable func, it is not automatically
 // ended a second time at completion of retryable func.

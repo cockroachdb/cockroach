@@ -521,7 +521,7 @@ func (txn *Txn) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.
 			idx := pErr.Index.Index
 			if idx == int32(firstWriteIndex) {
 				// An error was encountered on begin txn; disallow the indexing.
-				pErr = roachpb.NewErrorf("error on begin transaction: %s", pErr)
+				pErr.Index = nil
 			} else if idx > int32(firstWriteIndex) {
 				// An error was encountered after begin txn; decrement index.
 				pErr.SetErrorIndex(idx - 1)

@@ -1510,14 +1510,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 
 		if pErr != nil {
 			// Initialize the error index.
-			// TODO(kaneda): Always set the index when the
-			// error stems from an individual command.
-			if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
-				pErr.SetErrorIndex(int32(index))
-			}
-			if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); ok {
-				pErr.SetErrorIndex(int32(index))
-			}
+			pErr.SetErrorIndex(int32(index))
 			return nil, intents, pErr
 		}
 
