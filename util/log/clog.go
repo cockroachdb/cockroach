@@ -22,6 +22,7 @@ package log
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,7 +38,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/util/caller"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -379,10 +379,7 @@ func (lr *EntryDecoder) Decode(entry *LogEntry) error {
 	if err != nil {
 		return err
 	}
-	_, sz, err := encoding.DecodeUint32Ascending(szBuf)
-	if err != nil {
-		return err
-	}
+	sz := binary.BigEndian.Uint32(szBuf)
 	buf := make([]byte, sz)
 	n, err = lr.in.Read(buf)
 	if err != nil {
@@ -811,7 +808,8 @@ func encodeLogEntry(entry *LogEntry) []byte {
 		panic(fmt.Sprintf("unable to marshal log entry: %s", err))
 	}
 	// Encode the length of the data first, followed by the encoded data.
-	data := encoding.EncodeUint32Ascending([]byte(nil), uint32(len(entryData)))
+	data := make([]byte, 4, 4+len(entryData))
+	binary.BigEndian.PutUint32(data, uint32(len(entryData)))
 	return append(data, entryData...)
 }
 
