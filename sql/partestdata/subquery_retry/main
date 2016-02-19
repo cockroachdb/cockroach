@@ -1,0 +1,7 @@
+run setup
+
+# TODO(radu): this fails because of issue #4472
+# run txn txn txn
+run txn
+
+run final
