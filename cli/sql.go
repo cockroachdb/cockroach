@@ -74,7 +74,6 @@ http://www.cockroachlabs.com/docs/
 // run a client-side command, print some help or continue with
 // a regular query.
 func handleInputLine(stmt *[]string, line string) int {
-
 	if len(*stmt) == 0 {
 		// Special case: first line of multi-line statement.
 		// In this case ignore empty lines, and recognize "help" specially.
@@ -120,7 +119,6 @@ func handleInputLine(stmt *[]string, line string) int {
 // preparePrompts computes a full and short prompt for the interactive
 // CLI.
 func preparePrompts(db *sql.DB, dbURL string) (fullPrompt string, continuePrompt string) {
-
 	// Default prompt is part of the connection URL. eg: "marc@localhost>"
 	// continued statement prompt is: "        -> "
 	fullPrompt = dbURL
@@ -145,7 +143,6 @@ func preparePrompts(db *sql.DB, dbURL string) (fullPrompt string, continuePrompt
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
 func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
-
 	fullPrompt, continuePrompt := preparePrompts(db, dbURL)
 
 	if isatty.IsTerminal(os.Stdout.Fd()) {
