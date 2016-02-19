@@ -158,16 +158,6 @@ func (tm *txnMetadata) intentSpans() []roachpb.Span {
 	return intents
 }
 
-// txnCoordStats tallies up statistics about the transactions which have
-// completed on this sender.
-type txnCoordStats struct {
-	committed, abandoned, aborted int
-
-	// Store float64 since that's what we want in the end.
-	durations []float64 // nanoseconds
-	restarts  []float64 // restarts (as measured by epoch)
-}
-
 // TxnMetrics holds all metrics relating to KV transactions.
 type TxnMetrics struct {
 	Aborts    metric.Rates

@@ -701,17 +701,15 @@ func TestPGWireMetrics(t *testing.T) {
 	}
 
 	// Verify connection counter.
-	expectConns := func(n, tries int) {
-		nid := s.Gossip().GetNodeID().String()
-		connsKey := "cr.node.pgwire.conns." + nid
-		var conns int64
-		for i := 1; i <= tries; i++ {
-			if conns = s.MustGetCounter(connsKey); conns == int64(n) {
-				return
+	nid := s.Gossip().GetNodeID().String()
+	expectConns := func(n int) {
+		util.SucceedsWithin(t, 3*time.Second, func() error {
+			connsKey := "cr.node.pgwire.conns." + nid
+			if conns := s.MustGetCounter(connsKey); conns != int64(n) {
+				return util.Errorf("connections %d != expected %d", conns, n)
 			}
-			time.Sleep(time.Duration(i+1) * 250 * time.Millisecond)
-		}
-		t.Fatalf("connections %d != expected %d", conns, n)
+			return nil
+		})
 	}
 
 	var conns [10]*sql.DB
@@ -727,12 +725,12 @@ func TestPGWireMetrics(t *testing.T) {
 			t.Fatal(err)
 		}
 		rows.Close()
-		expectConns(i+1, 1)
+		expectConns(i + 1)
 	}
 
 	for i := len(conns) - 1; i >= 0; i-- {
 		conns[i].Close()
-		expectConns(i, 4)
+		expectConns(i)
 	}
 }
 

@@ -49,7 +49,7 @@ func (f senderFn) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 
 // teardownHeartbeats goes through the coordinator's active transactions and
 // has the associated heartbeat tasks quit. This is useful for tests which
-// don't finish transactions.
+// don't finish transactions. This is safe to call multiple times.
 func teardownHeartbeats(tc *TxnCoordSender) {
 	if r := recover(); r != nil {
 		panic(r)
@@ -748,12 +748,13 @@ func TestTxnCoordSenderReleaseTxnMeta(t *testing.T) {
 	}
 }
 
+// checkTxnMetrics verifies that the provided Sender's transaction metrics match the expected
+// values. This is done through a series of retries with increasing backoffs, to work around
+// the TxnCoordSender's asynchronous updating of metrics after a transaction ends.
 func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string, commits, abandoned, aborts, restarts int64) {
-	// Retry checks, because the TxnCoordSender's metrics are updated asynchronously when the
-	// transaction ends.
-	const tries = 4
 	metrics := sender.metrics
-	for i := 1; i <= tries; i++ {
+
+	util.SucceedsWithin(t, 5*time.Second, func() error {
 		testcases := []struct {
 			name string
 			a, e int64
@@ -764,13 +765,10 @@ func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string, commits,
 			{"durations", metrics.Durations[metric.Scale1M].Current().TotalCount(),
 				commits + abandoned + aborts},
 		}
-		errors := 0
+
 		for _, tc := range testcases {
 			if tc.a != tc.e {
-				errors++
-				if i == tries {
-					t.Errorf("%s: actual %s %d != expected %d", name, tc.name, tc.a, tc.e)
-				}
+				return util.Errorf("%s: actual %s %d != expected %d", name, tc.name, tc.a, tc.e)
 			}
 		}
 
@@ -787,23 +785,11 @@ func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string, commits,
 			}
 		}
 		if a, e := actualRestarts, restarts; a != e {
-			errors++
-			if i == tries {
-				t.Errorf("%s: actual restarts %d != expected %d", name, a, e)
-			}
+			return util.Errorf("%s: actual restarts %d != expected %d", name, a, e)
 		}
 
-		if errors == 0 {
-			return
-		}
-		if i < tries {
-			time.Sleep(time.Duration(i*250) * time.Millisecond)
-		}
-	}
-
-	if t.Failed() {
-		t.FailNow()
-	}
+		return nil
+	})
 }
 
 // setupMetricsTest returns a TxnCoordSender and ManualClock pointing to a newly created
@@ -823,7 +809,11 @@ func setupMetricsTest(t *testing.T) (*hlc.ManualClock, *TxnCoordSender, func()) 
 	}
 }
 
+// Test a normal transaction. This and the other metrics tests below use real KV operations,
+// because it took far too much mucking with TxnCoordSender internals to mock out the sender
+// function as other tests do.
 func TestTxnCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	_, sender, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
 	value := []byte("value")
@@ -849,10 +839,11 @@ func TestTxnCommit(t *testing.T) {
 	}); pErr != nil {
 		t.Fatal(pErr)
 	}
+	teardownHeartbeats(sender)
 	checkTxnMetrics(t, sender, "commit txn", 1, 0, 0, 0)
 }
 
-func TestAbandonCount(t *testing.T) {
+func TestTxnAbandonCount(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	manual, sender, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
@@ -881,12 +872,13 @@ func TestAbandonCount(t *testing.T) {
 		// loop to execute and mark the transaction abandoned. We need this sleep here specifically,
 		// because the KV client auto-commits when we exit from this transaction (if there are no
 		// errors).
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(sender.heartbeatInterval * 20)
 
 		return nil
 	}); pErr == nil {
 		t.Fatalf("unexpected success")
 	}
+	teardownHeartbeats(sender)
 	checkTxnMetrics(t, sender, "abandon txn", 0, 1, 0, 0)
 }
 
@@ -916,7 +908,6 @@ func TestTxnAbortCount(t *testing.T) {
 	}
 	teardownHeartbeats(sender)
 	checkTxnMetrics(t, sender, "abort txn", 0, 0, 1, 0)
-	fmt.Println("DONE")
 }
 
 func TestTxnRestartCount(t *testing.T) {
@@ -944,8 +935,6 @@ func TestTxnRestartCount(t *testing.T) {
 	if err := txn.Put(key, value); err == nil {
 		t.Fatalf("unexpected success")
 	}
-
-	// Explicitly teardown heartbeats to force stat updates.
 	teardownHeartbeats(sender)
 	checkTxnMetrics(t, sender, "restart txn", 0, 1, 0, 1)
 }
