@@ -51,13 +51,79 @@ Open a sql shell running against a cockroach database.
 	SilenceUsage:  true,
 }
 
-// runInteractive runs the SQL client interactively, presenting
-// a prompt to the user for each statement.
-func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
+const (
+	cliNextLine     = 0 // Done with this line, ask for another line.
+	cliExit         = 1 // User requested to exit.
+	cliProcessQuery = 2 // Regular query to send to the server.
+)
+
+// printCliHelp prints a short inline help about the CLI.
+func printCliHelp() {
+	fmt.Print(`You are using 'cockroach sql', CockroachDB's lightweight SQL client.
+Type: \q to exit (Ctrl+C/Ctrl+D also supported)
+      \? or "help" to print this help.
+
+More documentation about our SQL dialect is available online:
+http://www.cockroachlabs.com/docs/
+
+`)
+}
+
+// handleInputLine looks at a single line of text entered
+// by the user at the prompt and decides what to do: either
+// run a client-side command, print some help or continue with
+// a regular query.
+func handleInputLine(stmt *[]string, line string) int {
+
+	if len(*stmt) == 0 {
+		// Special case: first line of multi-line statement.
+		// In this case ignore empty lines, and recognize "help" specially.
+		switch line {
+		case "":
+			return cliNextLine
+		case "help":
+			printCliHelp()
+			return cliNextLine
+		}
+	}
+
+	if len(line) > 0 && line[0] == '\\' {
+		// Client-side commands: process locally.
+
+		switch line {
+		case `\q`:
+			return cliExit
+		case `\`, `\?`:
+			printCliHelp()
+		default:
+			fmt.Printf("Invalid command: %s. Try \\? for help.\n", line)
+		}
+
+		if strings.HasPrefix(line, `\d`) {
+			// Unrecognized command for now, but we want to be helpful.
+			fmt.Print("Suggestion: use the SQL SHOW statement to inspect your schema.\n")
+		}
+
+		return cliNextLine
+	}
+
+	*stmt = append(*stmt, line)
+
+	if !strings.HasSuffix(line, ";") {
+		// Not yet finished with multi-line statement.
+		return cliNextLine
+	}
+
+	return cliProcessQuery
+}
+
+// preparePrompts computes a full and short prompt for the interactive
+// CLI.
+func preparePrompts(db *sql.DB, dbURL string) (fullPrompt string, continuePrompt string) {
 
 	// Default prompt is part of the connection URL. eg: "marc@localhost>"
 	// continued statement prompt is: "        -> "
-	fullPrompt := dbURL
+	fullPrompt = dbURL
 	if parsedURL, err := url.Parse(dbURL); err == nil {
 		// If parsing fails, we keep the entire URL. The Open call succeeded, and that
 		// is the important part.
@@ -67,10 +133,20 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 	if len(fullPrompt) == 0 {
 		fullPrompt = " "
 	}
-	continuePrompt := strings.Repeat(" ", len(fullPrompt)-1) + "-"
+
+	continuePrompt = strings.Repeat(" ", len(fullPrompt)-1) + "-"
 
 	fullPrompt += "> "
 	continuePrompt += "> "
+
+	return fullPrompt, continuePrompt
+}
+
+// runInteractive runs the SQL client interactively, presenting
+// a prompt to the user for each statement.
+func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
+
+	fullPrompt, continuePrompt := preparePrompts(db, dbURL)
 
 	if isatty.IsTerminal(os.Stdout.Fd()) {
 		// We only enable history management when the terminal is actually
@@ -102,26 +178,19 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 		if err == readline.ErrInterrupt || err == io.EOF {
 			break
 		} else if err != nil {
-			fmt.Fprintf(osStderr, "input error: %s", err)
+			fmt.Fprintf(osStderr, "input error: %s\n", err)
 			return err
 		}
 
 		tl := strings.TrimSpace(l)
-		if len(stmt) == 0 && len(tl) == 0 {
-			// Empty line at beginning, simply continue.
-			// However, we don't simply continue after the first line since
-			// we may be in the middle of a string literal where empty lines
-			// may be significant.
-			continue
-		}
 
-		stmt = append(stmt, l)
-
-		// See if we have a semicolon at the end of the line (ignoring
-		// trailing whitespace).
-		if !strings.HasSuffix(tl, ";") {
-			// No semicolon: read some more.
+		// Check if this is a request for help or a client-side command.
+		// If so, process it directly and skip query processing below.
+		status := handleInputLine(&stmt, tl)
+		if status == cliNextLine {
 			continue
+		} else if status == cliExit {
+			break
 		}
 
 		// We join the statements back together with newlines in case
