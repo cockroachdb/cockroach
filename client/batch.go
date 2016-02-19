@@ -174,6 +174,7 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roa
 			case *roachpb.MergeRequest:
 			case *roachpb.TruncateLogRequest:
 			case *roachpb.LeaderLeaseRequest:
+			case *roachpb.CheckConsistencyRequest:
 				// Nothing to do for these methods as they do not generate any
 				// rows.
 
@@ -339,6 +340,22 @@ func (b *Batch) Scan(s, e interface{}, maxRows int64) {
 // key can be either a byte slice or a string.
 func (b *Batch) ReverseScan(s, e interface{}, maxRows int64) {
 	b.scan(s, e, maxRows, true)
+}
+
+// CheckConsistency creates a batch request to check for consistency.
+func (b *Batch) CheckConsistency(s, e interface{}) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, err)
+		return
+	}
+	b.reqs = append(b.reqs, roachpb.NewCheckConsistency(roachpb.Key(begin), roachpb.Key(end)))
+	b.initResult(1, 0, nil)
 }
 
 // Del deletes one or more keys.
