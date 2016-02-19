@@ -169,6 +169,9 @@ func (n *scanNode) Next() bool {
 		if !n.initScan() {
 			return false
 		}
+		if !n.fetchKVs() {
+			return false
+		}
 	}
 
 	// All of the columns for a particular row will be grouped together. We loop
@@ -329,12 +332,7 @@ func (n *scanNode) initVisibleCols(visibleCols []ColumnDescriptor, numImplicit i
 	n.row = make([]parser.Datum, len(visibleCols))
 }
 
-// initScan initializes (and performs) the key-value scan.
-//
-// TODO(pmattis): The key-value scan currently reads all of the key-value
-// pairs, but they could just as easily be read in chunks. Probably worthwhile
-// to separate out the retrieval of the key-value pairs into a separate
-// structure.
+// initScan initializes but does not performs the key-value scan.
 func (n *scanNode) initScan() bool {
 	// Initialize our key/values.
 	if len(n.spans) == 0 {
@@ -345,29 +343,6 @@ func (n *scanNode) initScan() bool {
 			start: start,
 			end:   start.PrefixEnd(),
 		})
-	}
-
-	// Retrieve all the spans.
-	b := &client.Batch{}
-	if n.reverse {
-		for i := len(n.spans) - 1; i >= 0; i-- {
-			b.ReverseScan(n.spans[i].start, n.spans[i].end, n.spans[i].count)
-		}
-	} else {
-		for i := 0; i < len(n.spans); i++ {
-			b.Scan(n.spans[i].start, n.spans[i].end, n.spans[i].count)
-		}
-	}
-	if n.pErr = n.txn.Run(b); n.pErr != nil {
-		return false
-	}
-
-	for _, result := range b.Results {
-		if n.kvs == nil {
-			n.kvs = result.Rows
-		} else {
-			n.kvs = append(n.kvs, result.Rows...)
-		}
 	}
 
 	if n.valTypes == nil {
@@ -392,6 +367,38 @@ func (n *scanNode) initScan() bool {
 				return false
 			}
 			n.implicitVals = make([]parser.Datum, len(n.implicitValTypes))
+		}
+	}
+	return true
+}
+
+// fetchKVs fetches spans from the kv. initScan should be called first.
+//
+// TODO(pmattis): The key-value scan currently reads all of the key-value
+// pairs, but they could just as easily be read in chunks. Probably worthwhile
+// to separate out the retrieval of the key-value pairs into a separate
+// structure.
+func (n *scanNode) fetchKVs() bool {
+	// Retrieve all the spans.
+	b := &client.Batch{}
+	if n.reverse {
+		for i := len(n.spans) - 1; i >= 0; i-- {
+			b.ReverseScan(n.spans[i].start, n.spans[i].end, n.spans[i].count)
+		}
+	} else {
+		for i := 0; i < len(n.spans); i++ {
+			b.Scan(n.spans[i].start, n.spans[i].end, n.spans[i].count)
+		}
+	}
+	if n.pErr = n.txn.Run(b); n.pErr != nil {
+		return false
+	}
+
+	for _, result := range b.Results {
+		if n.kvs == nil {
+			n.kvs = result.Rows
+		} else {
+			n.kvs = append(n.kvs, result.Rows...)
 		}
 	}
 	return true
