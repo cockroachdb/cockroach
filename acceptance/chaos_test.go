@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -357,7 +358,6 @@ func testClusterRecoveryInner(t *testing.T, c cluster.Cluster, cfg cluster.TestC
 // than the one the client is connected to is being restarted periodically.
 // The test measures read/write performance in the presence of restarts.
 func TestNodeRestart(t *testing.T) {
-	t.Skipf("TODO(pmattis): #4517")
 	runTestOnConfigs(t, testNodeRestartInner)
 }
 
@@ -405,4 +405,9 @@ func testNodeRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfi
 	elapsed := time.Since(start)
 	count := atomic.LoadUint64(&client.count)
 	log.Infof("%d %.1f/sec", count, float64(count)/elapsed.Seconds())
+	kvClient, kvStopper := makeClient(t, c.ConnString(num-1))
+	defer kvStopper.Stop()
+	if pErr := kvClient.CheckConsistency(keys.TableDataMin, keys.TableDataMax); pErr != nil {
+		t.Fatal(pErr.GoError())
+	}
 }

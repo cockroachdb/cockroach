@@ -9,6 +9,7 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
@@ -402,6 +403,15 @@ func (db *DB) AdminMerge(key interface{}) *roachpb.Error {
 func (db *DB) AdminSplit(splitKey interface{}) *roachpb.Error {
 	b := db.NewBatch()
 	b.adminSplit(splitKey)
+	_, pErr := runOneResult(db, b)
+	return pErr
+}
+
+// CheckConsistency runs a consistency check on all the ranges containing
+// the key span.
+func (db *DB) CheckConsistency(begin, end interface{}) *roachpb.Error {
+	b := db.NewBatch()
+	b.CheckConsistency(begin, end)
 	_, pErr := runOneResult(db, b)
 	return pErr
 }

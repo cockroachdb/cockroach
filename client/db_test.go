@@ -116,6 +116,10 @@ func ExampleDB_CPut() {
 	// aa=2
 	// bb=
 	// bb=4
+
+	if pErr := db.CheckConsistency("a", "c"); pErr != nil {
+		panic(pErr)
+	}
 }
 
 func ExampleDB_Inc() {
@@ -154,6 +158,10 @@ func ExampleBatch() {
 	// Output:
 	// "aa"=
 	// "bb"=2
+
+	if pErr := db.CheckConsistency("a", "c"); pErr != nil {
+		panic(pErr)
+	}
 }
 
 func ExampleDB_Scan() {
@@ -343,12 +351,13 @@ func TestCommonMethods(t *testing.T) {
 		// request with the information that this particular Get must be
 		// unmarshaled, which didn't seem worth doing as we're not using
 		// Batch.GetProto at the moment.
-		key{dbType, "GetProto"}:  {},
-		key{txnType, "GetProto"}: {},
-
+		key{dbType, "GetProto"}:                   {},
+		key{txnType, "GetProto"}:                  {},
+		key{batchType, "CheckConsistency"}:        {},
 		key{batchType, "InternalAddRequest"}:      {},
 		key{dbType, "AdminMerge"}:                 {},
 		key{dbType, "AdminSplit"}:                 {},
+		key{dbType, "CheckConsistency"}:           {},
 		key{dbType, "NewBatch"}:                   {},
 		key{dbType, "Run"}:                        {},
 		key{dbType, "RunWithResponse"}:            {},
