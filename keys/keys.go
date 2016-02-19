@@ -442,9 +442,10 @@ func MakeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 func Range(ba roachpb.BatchRequest) roachpb.RSpan {
 	from := roachpb.RKeyMax
 	to := roachpb.RKeyMin
+	var emptySpan = roachpb.RSpan{}
 	for _, arg := range ba.Requests {
 		req := arg.GetInner()
-		if req.Method() == roachpb.Noop {
+		if req.Method() == roachpb.Noop && !roachpb.IsRange(req) {
 			continue
 		}
 		h := req.Header()
@@ -461,6 +462,27 @@ func Range(ba roachpb.BatchRequest) roachpb.RSpan {
 			// EndKey is larger than `to`.
 			to = endKey
 		}
+	}
+
+	verifyRange := func(ba roachpb.BatchRequest) error {
+		for _, union := range ba.Requests {
+			arg := union.GetInner()
+			header := arg.Header()
+			if bytes.Compare(header.Key, roachpb.KeyMax) >= 0 {
+				return util.Errorf("start %s must be less than KeyMax", header.Key)
+			}
+			if bytes.Compare(roachpb.KeyMax, header.EndKey) < 0 {
+				return util.Errorf("end %s must be less than or equal to KeyMax", header.EndKey)
+			}
+			if roachpb.IsRange(arg) == false && len(header.EndKey) != 0 {
+				return util.Errorf("end %s should not be specified for this operation", header.EndKey)
+			}
+		}
+		return nil
+	}
+
+	if err := verifyRange(ba); err != nil {
+		return emptySpan
 	}
 	return roachpb.RSpan{Key: from, EndKey: to}
 }
