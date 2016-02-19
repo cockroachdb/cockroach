@@ -63,6 +63,7 @@ func sqlForUser(context *base.Context) proto.Message {
 // Verify client certificate enforcement and user whitelisting.
 func TestSSLEnforcement(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skipf("TODO(pmattis): #4501")
 	s := StartTestServer(t)
 	defer s.Stop()
 
