@@ -102,4 +102,9 @@ const (
 	TruncateLog
 	// LeaderLease requests a leader lease for a replica.
 	LeaderLease
+	// ComputeChecksum starts a checksum computation over a replica snapshot.
+	ComputeChecksum
+	// VerifyChecksum verify the checksum computed through an earlier
+	// ComputeChecksum.
+	VerifyChecksum
 )

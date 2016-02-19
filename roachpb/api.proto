@@ -517,6 +517,46 @@ message LeaderLeaseResponse{
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// A ComputeChecksumRequest is arguments to the ComputeChecksum() method, to
+// start computing the checksum for the specified range at the snapshot for
+// this request command. A response is returned without the checksum.
+// The computed checksum is later compared to the one supplied
+// through a VerifyChecksumRequest.
+message ComputeChecksumRequest {
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The version used to pick the checksum method. It allows us to use a
+  // consistent checksumming method across replicas.
+  optional uint32 version = 2 [(gogoproto.nullable) = false];
+  // A unique identifier to match a future VerifyChecksumRequest with this request.
+  optional bytes checksum_id = 3 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ChecksumID",
+      (gogoproto.customtype) = "ChecksumID"];
+} 
+
+// A ComputeChecksumResponse is the response to a ComputeChecksum() operation.
+message ComputeChecksumResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A VerifyChecksumRequest is arguments to the VerifyChecksum() method, to
+// verify the checksum computed on the leader against the one requested
+// earlier through a ComputeChecksumRequest with the same checksum_id.
+message VerifyChecksumRequest {
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The version used to pick the checksum method. It allows us to use a
+  // consistent checksumming method across replicas.
+  optional uint32 version = 2 [(gogoproto.nullable) = false];
+  optional bytes checksum_id = 3 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ChecksumID",
+      (gogoproto.customtype) = "ChecksumID"];
+  optional bytes checksum = 4;
+} 
+
+// A VerifyChecksumResponse is the response to a VerifyChecksum() operation.
+message VerifyChecksumResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A RequestUnion contains exactly one of the optional requests.
 // The values added here must match those in ResponseUnion.
 message RequestUnion {
@@ -543,7 +583,9 @@ message RequestUnion {
   optional TruncateLogRequest truncate_log = 19;
   optional LeaderLeaseRequest leader_lease = 20;
   optional ReverseScanRequest reverse_scan = 21;
-  optional NoopRequest noop = 22;
+  optional ComputeChecksumRequest compute_checksum = 22;
+  optional VerifyChecksumRequest verify_checksum = 23;
+  optional NoopRequest noop = 24;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
@@ -572,7 +614,9 @@ message ResponseUnion {
   optional TruncateLogResponse truncate_log = 19;
   optional LeaderLeaseResponse leader_lease = 20;
   optional ReverseScanResponse reverse_scan = 21;
-  optional NoopResponse noop = 22;
+  optional ComputeChecksumResponse compute_checksum = 22;
+  optional VerifyChecksumResponse verify_checksum = 23;
+  optional NoopResponse noop = 24;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary

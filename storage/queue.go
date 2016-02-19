@@ -349,6 +349,10 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 
 		for {
 			select {
+			// Exit on stopper.
+			case <-stopper.ShouldStop():
+				return
+
 			// Incoming signal sets the next time to process if there were previously
 			// no replicas in the queue.
 			case <-bq.incoming:
@@ -378,10 +382,6 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				} else {
 					nextTime = time.After(bq.impl.timer())
 				}
-
-			// Exit on stopper.
-			case <-stopper.ShouldStop():
-				return
 			}
 		}
 	})
