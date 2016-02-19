@@ -62,7 +62,7 @@ type Request struct {
 	Addr cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=addr" json:"addr"`
 	// Map of high water timestamps from infos originating at other
 	// nodes, as seen by the requester.
-	HighWaterStamps map[int32]int64 `protobuf:"bytes,3,rep,name=highWaterStamps" json:"highWaterStamps,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
+	HighWaterStamps map[github_com_cockroachdb_cockroach_roachpb.NodeID]int64 `protobuf:"bytes,3,rep,name=high_water_stamps,castkey=github.com/cockroachdb/cockroach/roachpb.NodeID" json:"high_water_stamps" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
 	// Delta of Infos originating at sender.
 	Delta map[string]*Info `protobuf:"bytes,4,rep,name=delta" json:"delta,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 }
@@ -87,7 +87,7 @@ type Response struct {
 	Delta map[string]*Info `protobuf:"bytes,5,rep,name=delta" json:"delta,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 	// Map of high water timestamps from infos originating at other
 	// nodes, as seen by the responder.
-	HighWaterStamps map[int32]int64 `protobuf:"bytes,6,rep,name=highWaterStamps" json:"highWaterStamps,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
+	HighWaterStamps map[github_com_cockroachdb_cockroach_roachpb.NodeID]int64 `protobuf:"bytes,6,rep,name=high_water_stamps,castkey=github.com/cockroachdb/cockroach/roachpb.NodeID" json:"high_water_stamps" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
 }
 
 func (m *Response) Reset()         { *m = Response{} }
@@ -888,9 +888,9 @@ func (m *Request) Unmarshal(data []byte) error {
 				}
 			}
 			if m.HighWaterStamps == nil {
-				m.HighWaterStamps = make(map[int32]int64)
+				m.HighWaterStamps = make(map[github_com_cockroachdb_cockroach_roachpb.NodeID]int64)
 			}
-			m.HighWaterStamps[mapkey] = mapvalue
+			m.HighWaterStamps[github_com_cockroachdb_cockroach_roachpb.NodeID(mapkey)] = mapvalue
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
@@ -1362,9 +1362,9 @@ func (m *Response) Unmarshal(data []byte) error {
 				}
 			}
 			if m.HighWaterStamps == nil {
-				m.HighWaterStamps = make(map[int32]int64)
+				m.HighWaterStamps = make(map[github_com_cockroachdb_cockroach_roachpb.NodeID]int64)
 			}
-			m.HighWaterStamps[mapkey] = mapvalue
+			m.HighWaterStamps[github_com_cockroachdb_cockroach_roachpb.NodeID(mapkey)] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

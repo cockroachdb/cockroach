@@ -17,6 +17,7 @@
 package gossip
 
 import (
+	"math/rand"
 	"net"
 	"sync"
 
@@ -166,10 +167,15 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 			} else {
 				var alternateAddr util.UnresolvedAddr
 				var alternateNodeID roachpb.NodeID
+				// Choose a random peer for forwarding.
+				altIdx := rand.Intn(len(s.nodeMap))
 				for addr, id := range s.nodeMap {
-					alternateAddr = addr
-					alternateNodeID = id
-					break
+					if altIdx == 0 {
+						alternateAddr = addr
+						alternateNodeID = id
+						break
+					}
+					altIdx--
 				}
 
 				log.Infof("refusing gossip from node %d (max %d conns); forwarding to %d (%s)",

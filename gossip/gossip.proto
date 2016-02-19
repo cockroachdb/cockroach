@@ -41,7 +41,7 @@ message Request {
   util.UnresolvedAddr addr = 2 [(gogoproto.nullable) = false];
   // Map of high water timestamps from infos originating at other
   // nodes, as seen by the requester.
-  map<int32, int64> highWaterStamps = 3;
+  map<int32, int64> high_water_stamps = 3 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/roachpb.NodeID", (gogoproto.nullable) = false];
   // Delta of Infos originating at sender.
   map<string, Info> delta = 4;
 }
@@ -64,7 +64,7 @@ message Response {
   map<string, Info> delta = 5;
   // Map of high water timestamps from infos originating at other
   // nodes, as seen by the responder.
-  map<int32, int64> highWaterStamps = 6;
+  map<int32, int64> high_water_stamps = 6 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/roachpb.NodeID", (gogoproto.nullable) = false];
 }
 
 // Info is the basic unit of information traded over the

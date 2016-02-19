@@ -32,11 +32,11 @@ import (
 
 // client is a client-side RPC connection to a gossip peer node.
 type client struct {
-	peerID                roachpb.NodeID  // Peer node ID; 0 until first gossip response
-	addr                  net.Addr        // Peer node network address
-	forwardAddr           net.Addr        // Set if disconnected with an alternate addr
-	remoteHighWaterStamps map[int32]int64 // Remote server's high water timestamps
-	closer                chan struct{}   // Client shutdown channel
+	peerID                roachpb.NodeID           // Peer node ID; 0 until first gossip response
+	addr                  net.Addr                 // Peer node network address
+	forwardAddr           net.Addr                 // Set if disconnected with an alternate addr
+	remoteHighWaterStamps map[roachpb.NodeID]int64 // Remote server's high water timestamps
+	closer                chan struct{}            // Client shutdown channel
 }
 
 // extractKeys returns a string representation of a gossip delta's keys.
@@ -52,7 +52,7 @@ func extractKeys(delta map[string]*Info) string {
 func newClient(addr net.Addr) *client {
 	return &client{
 		addr: addr,
-		remoteHighWaterStamps: map[int32]int64{},
+		remoteHighWaterStamps: map[roachpb.NodeID]int64{},
 		closer:                make(chan struct{}),
 	}
 }
