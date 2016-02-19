@@ -718,7 +718,6 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) []interface{} {
 	var cmdKeys []interface{}
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
-		r.mu.Lock()
 		var spans []roachpb.Span
 		readOnly := ba.IsReadOnly()
 		for _, union := range ba.Requests {
@@ -726,6 +725,7 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) []interface{} {
 			spans = append(spans, roachpb.Span{Key: h.Key, EndKey: h.EndKey})
 		}
 		var wg sync.WaitGroup
+		r.mu.Lock()
 		r.mu.cmdQ.GetWait(readOnly, &wg, spans...)
 		cmdKeys = append(cmdKeys, r.mu.cmdQ.Add(readOnly, spans...)...)
 		r.mu.Unlock()
@@ -1150,10 +1150,7 @@ func (r *Replica) handleRaftReady() error {
 
 	}
 	if shouldReproposeCmds {
-		r.mu.Lock()
-		err := r.reproposePendingCmdsLocked()
-		r.mu.Unlock()
-		if err != nil {
+		if err := r.reproposePendingCmds(); err != nil {
 			return err
 		}
 	}
@@ -1169,13 +1166,19 @@ func (r *Replica) handleRaftReady() error {
 
 func (r *Replica) tick() error {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.mu.raftGroup.Tick()
 	// TODO(tamird/bdarnell): Reproposals should occur less frequently than
 	// ticks, but this is acceptable for now.
 	// TODO(tamird/bdarnell): Add unit tests.
 	err := r.reproposePendingCmdsLocked()
-	r.mu.Unlock()
 	return err
+}
+
+func (r *Replica) reproposePendingCmds() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.reproposePendingCmdsLocked()
 }
 
 func (r *Replica) reproposePendingCmdsLocked() error {
