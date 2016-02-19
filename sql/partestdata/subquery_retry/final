@@ -1,0 +1,5 @@
+# Verify there are no duplicate values in the table.
+query I
+SELECT COUNT(k) - COUNT(DISTINCT k) from T;
+----
+0
