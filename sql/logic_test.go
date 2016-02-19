@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"crypto/md5"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -48,10 +49,10 @@ import (
 )
 
 var (
-	resultsRE = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
-	errorRE   = regexp.MustCompile(`^(?:statement|query)\s+error\s+(.*)$`)
-	testdata  = flag.String("d", "testdata/[^.]*", "test data glob")
-	bigtest   = flag.Bool("bigtest", false, "use the big set of logic test files (overrides testdata)")
+	resultsRE     = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
+	errorRE       = regexp.MustCompile(`^(?:statement|query)\s+error\s+(.*)$`)
+	logictestdata = flag.String("d", "testdata/[^.]*", "test data glob")
+	bigtest       = flag.Bool("bigtest", false, "use the big set of logic test files (overrides testdata)")
 )
 
 const logicMaxOffset = 50 * time.Millisecond
@@ -159,14 +160,18 @@ type logicTest struct {
 	// re-use them and close them all on exit.
 	clients map[string]*sql.DB
 	// client currently in use.
-	user         string
-	db           *sql.DB
-	progress     int
-	lastProgress time.Time
-	traceFile    *os.File
+	user            string
+	db              *sql.DB
+	progress        int
+	lastProgress    time.Time
+	traceFile       *os.File
+	cleanupRootUser func()
 }
 
 func (t *logicTest) close() {
+	if t.cleanupRootUser != nil {
+		t.cleanupRootUser()
+	}
 	if t.srv != nil {
 		cleanupTestServer(t.srv)
 		t.srv = nil
@@ -228,20 +233,13 @@ func (t *logicTest) setUser(user string) func() {
 	return cleanupFunc
 }
 
-// TODO(tschottdorf): some logic tests currently take a long time to run.
-// Probably a case of heartbeats timing out or many restarts in some tests.
-// Need to investigate when all moving parts are in place.
 func (t *logicTest) run(path string) {
 	defer t.close()
+	t.setup()
+	t.processTestFile(path)
+}
 
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer file.Close()
-
-	t.lastProgress = time.Now()
-
+func (t *logicTest) setup() {
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
 	ctx := server.NewTestContext()
@@ -250,8 +248,7 @@ func (t *logicTest) run(path string) {
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
-	cleanupFunc := t.setUser(security.RootUser)
-	defer cleanupFunc()
+	t.cleanupRootUser = t.setUser(security.RootUser)
 
 	if _, err := t.db.Exec(`
 CREATE DATABASE test;
@@ -259,7 +256,21 @@ SET DATABASE = test;
 `); err != nil {
 		t.Fatal(err)
 	}
+}
 
+// TODO(tschottdorf): some logic tests currently take a long time to run.
+// Probably a case of heartbeats timing out or many restarts in some tests.
+// Need to investigate when all moving parts are in place.
+func (t *logicTest) processTestFile(path string) {
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	t.lastProgress = time.Now()
+
+	repeat := 1
 	s := newLineScanner(file)
 	for s.Scan() {
 		fields := strings.Fields(s.Text())
@@ -272,6 +283,20 @@ SET DATABASE = test;
 			continue
 		}
 		switch cmd {
+		case "repeat":
+			// A line "repeat X" makes the test repeat the following statement or query X times.
+			var err error
+			count := 0
+			if len(fields) != 2 {
+				err = errors.New("invalid line format")
+			} else if count, err = strconv.Atoi(fields[1]); err == nil && count < 2 {
+				err = errors.New("invalid count")
+			}
+			if err != nil {
+				t.Fatalf("%s:%d invalid repeat line: %s", path, s.line, err)
+			}
+			repeat = count
+
 		case "statement":
 			stmt := logicStatement{pos: fmt.Sprintf("%s:%d", path, s.line)}
 			// Parse "query error <regexp>"
@@ -288,10 +313,13 @@ SET DATABASE = test;
 			}
 			stmt.sql = strings.TrimSpace(buf.String())
 			if !s.skip {
-				t.execStatement(stmt)
+				for i := 0; i < repeat; i++ {
+					t.execStatement(stmt)
+				}
 			} else {
 				s.skip = false
 			}
+			repeat = 1
 			t.success(path)
 
 		case "query":
@@ -392,10 +420,13 @@ SET DATABASE = test;
 			}
 
 			if !s.skip {
-				t.execQuery(query)
+				for i := 0; i < repeat; i++ {
+					t.execQuery(query)
+				}
 			} else {
 				s.skip = false
 			}
+			repeat = 1
 			t.success(path)
 
 		case "halt", "hash-threshold":
@@ -700,7 +731,7 @@ func TestLogic(t *testing.T) {
 			// [uses joins] logicTestPath + "/test/random/select/*.test",
 		}
 	} else {
-		globs = []string{*testdata}
+		globs = []string{*logictestdata}
 	}
 
 	var paths []string
