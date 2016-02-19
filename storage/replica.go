@@ -141,6 +141,17 @@ type pendingCmd struct {
 
 type cmdIDKey string
 
+type replicaChecksum struct {
+	// Set to true when the checksum computation is ready. The checksum
+	// can be nil indicating an error.
+	ok bool
+	// Computed checksum. This is set to nil on error.
+	checksum []byte
+	// GC this checksum after this timestamp. The timestamp is set when
+	// ok is set to true.
+	gcTimestamp time.Time
+}
+
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -148,12 +159,13 @@ type cmdIDKey string
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Replica struct {
-	RangeID      roachpb.RangeID // Should only be set by the constructor.
-	store        *Store
-	stats        *rangeStats    // Range statistics
-	systemDBHash []byte         // sha1 hash of the system config @ last gossip
-	llMu         sync.Mutex     // Synchronizes (throttles) readers' requests for leader lease
-	sequence     *SequenceCache // Provides txn replay protection
+	RangeID                           roachpb.RangeID // Should only be set by the constructor.
+	store                             *Store
+	stats                             *rangeStats    // Range statistics
+	systemDBHash                      []byte         // sha1 hash of the system config @ last gossip
+	llMu                              sync.Mutex     // Synchronizes (throttles) readers' requests for leader lease
+	sequence                          *SequenceCache // Provides txn replay protection
+	testingVerifyChecksumPanicOnMatch bool           // Turn on panic in VerifyChecksum when the checksums match.
 
 	// Held in read mode during read-only commands. Held in exclusive mode to
 	// prevent read-only commands from executing. Acquired before the embedded
@@ -163,19 +175,21 @@ type Replica struct {
 	mu struct {
 		sync.Mutex                   // Protects all fields in the mu struct.
 		appliedIndex   uint64        // Last index applied to the state machine.
-		cmdQ           *CommandQueue // Enforce at most one command is running per key(s)
+		cmdQ           *CommandQueue // Enforce at most one command is running per key(s).
 		desc           *roachpb.RangeDescriptor
 		lastIndex      uint64 // Last index persisted to the raft log (not necessarily committed).
 		leaderLease    *roachpb.Lease
 		maxBytes       int64 // Max bytes before split.
 		pendingCmds    map[cmdIDKey]*pendingCmd
-		pendingSeq     uint64 // atomic sequence counter for cmdIDKey generation
+		pendingSeq     uint64 // atomic sequence counter for cmdIDKey generation.
 		raftGroup      *raft.RawNode
 		replicaID      roachpb.ReplicaID
 		truncatedState *roachpb.RaftTruncatedState
 		tsCache        *TimestampCache // Most recent timestamps for keys / key ranges
 		// proposeRaftCommandFn can be set to mock out the propose operation.
 		proposeRaftCommandFn func(cmdIDKey, roachpb.RaftCommand) error
+		checksums            map[uuid.UUID]replicaChecksum // computed checksum at a snapshot UUID.
+		checksumNotify       map[uuid.UUID]chan []byte     // notify of computed checksum.
 	}
 }
 
@@ -213,7 +227,8 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	r.mu.cmdQ = NewCommandQueue()
 	r.mu.tsCache = NewTimestampCache(clock)
 	r.mu.pendingCmds = map[cmdIDKey]*pendingCmd{}
-
+	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
+	r.mu.checksumNotify = map[uuid.UUID]chan []byte{}
 	r.setDescWithoutProcessUpdateLocked(desc)
 
 	var err error
@@ -246,7 +261,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	return r.setReplicaIDLocked(replicaID)
 }
 
-// String returns a string representation of the range.
+// String returns a string representation of the range. It acquires mu.Lock in the call to Desc().
 func (r *Replica) String() string {
 	desc := r.Desc()
 	return fmt.Sprintf("range=%d [%s-%s)", desc.RangeID, desc.StartKey, desc.EndKey)
@@ -716,7 +731,6 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.Error) {
 	var cmdKeys []interface{}
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
-		r.mu.Lock()
 		var spans []roachpb.Span
 		readOnly := ba.IsReadOnly()
 		for _, union := range ba.Requests {
@@ -724,6 +738,7 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.Error) {
 			spans = append(spans, roachpb.Span{Key: h.Key, EndKey: h.EndKey})
 		}
 		var wg sync.WaitGroup
+		r.mu.Lock()
 		r.mu.cmdQ.GetWait(readOnly, &wg, spans...)
 		cmdKeys = append(cmdKeys, r.mu.cmdQ.Add(readOnly, spans...)...)
 		r.mu.Unlock()
@@ -806,6 +821,10 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 	case *roachpb.AdminMergeRequest:
 		var reply roachpb.AdminMergeResponse
 		reply, pErr = r.AdminMerge(ctx, *tArgs, r.Desc())
+		resp = &reply
+	case *roachpb.CheckConsistencyRequest:
+		var reply roachpb.CheckConsistencyResponse
+		reply, pErr = r.CheckConsistency(*tArgs, r.Desc())
 		resp = &reply
 	default:
 		return nil, roachpb.NewErrorf("unrecognized admin command: %T", args)
@@ -1208,12 +1227,12 @@ func (r *Replica) handleRaftReady() error {
 
 func (r *Replica) tick() error {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.mu.raftGroup.Tick()
 	// TODO(tamird/bdarnell): Reproposals should occur less frequently than
 	// ticks, but this is acceptable for now.
 	// TODO(tamird/bdarnell): Add unit tests.
 	err := r.reproposePendingCmdsLocked()
-	r.mu.Unlock()
 	return err
 }
 
