@@ -87,6 +87,7 @@ var (
 		RaftHeartbeatIntervalTicks: 1,
 		RaftElectionTimeoutTicks:   2,
 		ScanInterval:               10 * time.Minute,
+		ConsistencyCheckInterval:   10 * time.Minute,
 	}
 )
 
@@ -249,27 +250,29 @@ type replicaDescCacheKey struct {
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
-	Ident           roachpb.StoreIdent
-	ctx             StoreContext
-	db              *client.DB
-	engine          engine.Engine   // The underlying key-value store
-	allocator       Allocator       // Makes allocation decisions
-	rangeIDAlloc    *idAllocator    // Range ID allocator
-	gcQueue         *gcQueue        // Garbage collection queue
-	splitQueue      *splitQueue     // Range splitting queue
-	verifyQueue     *verifyQueue    // Checksum verification queue
-	replicateQueue  *replicateQueue // Replication queue
-	replicaGCQueue  *replicaGCQueue // Replica GC queue
-	raftLogQueue    *raftLogQueue   // Raft Log Truncation queue
-	scanner         *replicaScanner // Replica scanner
-	metrics         *storeMetrics
-	wakeRaftLoop    chan struct{}
-	started         int32
-	stopper         *stop.Stopper
-	startedAt       int64
-	nodeDesc        *roachpb.NodeDescriptor
-	initComplete    sync.WaitGroup // Signaled by async init tasks
-	raftRequestChan chan *RaftMessageRequest
+	Ident                   roachpb.StoreIdent
+	ctx                     StoreContext
+	db                      *client.DB
+	engine                  engine.Engine            // The underlying key-value store
+	allocator               Allocator                // Makes allocation decisions
+	rangeIDAlloc            *idAllocator             // Range ID allocator
+	gcQueue                 *gcQueue                 // Garbage collection queue
+	splitQueue              *splitQueue              // Range splitting queue
+	verifyQueue             *verifyQueue             // Checksum verification queue
+	replicateQueue          *replicateQueue          // Replication queue
+	replicaGCQueue          *replicaGCQueue          // Replica GC queue
+	raftLogQueue            *raftLogQueue            // Raft Log Truncation queue
+	scanner                 *replicaScanner          // Replica scanner
+	replicaConsistencyQueue *replicaConsistencyQueue // Replica consistency check queue
+	consistencyScanner      *replicaScanner          // Consistency checker scanner
+	metrics                 *storeMetrics
+	wakeRaftLoop            chan struct{}
+	started                 int32
+	stopper                 *stop.Stopper
+	startedAt               int64
+	nodeDesc                *roachpb.NodeDescriptor
+	initComplete            sync.WaitGroup // Signaled by async init tasks
+	raftRequestChan         chan *RaftMessageRequest
 
 	// Locking notes: To avoid deadlocks, the following lock order
 	// must be obeyed: processRaftMu < Store.mu.Mutex <
@@ -337,6 +340,10 @@ type StoreContext struct {
 	// If enabled (> 0), the scanner may complete in less than ScanInterval for small
 	// stores.
 	ScanMaxIdleTime time.Duration
+
+	// ConsistencyCheckInterval is the default time period in between consecutive
+	// consistency checks on a range.
+	ConsistencyCheckInterval time.Duration
 
 	// TimeUntilStoreDead is the time after which if there is no new gossiped
 	// information about a store, it can be considered dead.
@@ -534,6 +541,11 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	s.raftLogQueue = newRaftLogQueue(s.db, s.ctx.Gossip)
 	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
 
+	// Add consistency check scanner.
+	s.consistencyScanner = newReplicaScanner(ctx.ConsistencyCheckInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
+	s.replicaConsistencyQueue = newReplicaConsistencyQueue(s.ctx.Gossip)
+	s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
+
 	return s
 }
 
@@ -710,6 +722,17 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 				return
 			}
 		})
+
+		// Start the consistency scanner.
+		s.stopper.RunWorker(func() {
+			select {
+			case <-s.ctx.Gossip.Connected:
+				//s.consistencyScanner.Start(s.ctx.Clock, s.stopper)
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		})
+
 	}
 
 	// Set the started flag (for unittests).
@@ -1245,6 +1268,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 		return util.Errorf("couldn't find range in replicasByKey btree")
 	}
 	s.scanner.RemoveReplica(rep)
+	s.consistencyScanner.RemoveReplica(rep)
 
 	// TODO(bdarnell): This is fairly expensive to do under store.Mutex, but
 	// doing it outside the lock is tricky due to the risk that a replica gets

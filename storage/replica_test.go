@@ -3971,3 +3971,96 @@ func TestGCIncorrectRange(t *testing.T) {
 		t.Errorf("expected value at key %s to no longer exist after GC to correct range, found value %v", key, resVal)
 	}
 }
+
+func TestComputeVerifyChecksum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	defer testingEnableVerifyChecksumPrefix()()
+	rng := tc.rng
+
+	incArgs := incrementArgs([]byte("a"), 23)
+	if _, err := client.SendWrapped(tc.Sender(), rng.context(), &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	id := roachpb.ChecksumID{UUID: uuid.MakeV4()}
+	notify := make(chan []byte)
+	rng.setChecksumNotify(id, notify)
+	args := roachpb.ComputeChecksumRequest{
+		ChecksumID: id,
+	}
+	_, err := rng.ComputeChecksum(nil, nil, roachpb.Header{}, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-notify:
+	}
+	verifyArgs := roachpb.VerifyChecksumRequest{
+		ChecksumID: id,
+		// Send the prefix of the checksum for this test.
+		Checksum: []byte{138, 250, 74, 17, 132, 221, 163, 228},
+	}
+	_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Getting a value will not affect the snapshot checksum
+	gArgs := getArgs(roachpb.Key("a"))
+	if _, err := client.SendWrapped(tc.Sender(), rng.context(), &gArgs); err != nil {
+		t.Fatal(err)
+	}
+	id = roachpb.ChecksumID{UUID: uuid.MakeV4()}
+	notify = make(chan []byte)
+	rng.setChecksumNotify(id, notify)
+	args = roachpb.ComputeChecksumRequest{
+		ChecksumID: id,
+	}
+	_, err = rng.ComputeChecksum(nil, nil, roachpb.Header{}, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-notify:
+	}
+	verifyArgs = roachpb.VerifyChecksumRequest{
+		ChecksumID: id,
+		// Send the prefix of the checksum for this test.
+		Checksum: []byte{138, 250, 74, 17, 132, 221, 163, 228},
+	}
+	_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Modifying the range will change the checksum.
+	incArgs = incrementArgs([]byte("a"), 5)
+	if _, err := client.SendWrapped(tc.Sender(), rng.context(), &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	id = roachpb.ChecksumID{UUID: uuid.MakeV4()}
+	notify = make(chan []byte)
+	rng.setChecksumNotify(id, notify)
+	args = roachpb.ComputeChecksumRequest{
+		ChecksumID: id,
+	}
+	_, err = rng.ComputeChecksum(nil, nil, roachpb.Header{}, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-notify:
+	}
+	verifyArgs = roachpb.VerifyChecksumRequest{
+		ChecksumID: id,
+		// Send the prefix of the checksum for this test.
+		Checksum: []byte{73, 60, 253, 199, 160, 182, 37, 212},
+	}
+	_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+}

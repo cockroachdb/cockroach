@@ -21,8 +21,15 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
 )
+
+// ChecksumID is a custom type identifying the snapshot at which a range
+// replica checksum should be computed.
+type ChecksumID struct {
+	uuid.UUID
+}
 
 // UserPriority is a custom type for transaction's user priority.
 type UserPriority float64
@@ -207,6 +214,18 @@ func (rr *ResolveIntentRangeResponse) Combine(c Response) error {
 	return nil
 }
 
+// Combine implements the Combinable interface.
+func (sr *CheckConsistencyResponse) Combine(c Response) error {
+	otherSR := c.(*CheckConsistencyResponse)
+	if sr != nil {
+		// sr.Rows = append(sr.Rows, otherSR.Rows...)
+		if err := sr.Header().Combine(otherSR.Header()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Header implements the Request interface for RequestHeader.
 func (rh *Span) Header() *Span {
 	return rh
@@ -330,6 +349,9 @@ func (*ScanRequest) Method() Method { return Scan }
 func (*ReverseScanRequest) Method() Method { return ReverseScan }
 
 // Method implements the Request interface.
+func (*CheckConsistencyRequest) Method() Method { return CheckConsistency }
+
+// Method implements the Request interface.
 func (*BeginTransactionRequest) Method() Method { return BeginTransaction }
 
 // Method implements the Request interface.
@@ -371,6 +393,12 @@ func (*TruncateLogRequest) Method() Method { return TruncateLog }
 // Method implements the Request interface.
 func (*LeaderLeaseRequest) Method() Method { return LeaderLease }
 
+// Method implements the Request interface.
+func (*ComputeChecksumRequest) Method() Method { return ComputeChecksum }
+
+// Method implements the Request interface.
+func (*VerifyChecksumRequest) Method() Method { return VerifyChecksum }
+
 // CreateReply implements the Request interface.
 func (*GetRequest) CreateReply() Response { return &GetResponse{} }
 
@@ -394,6 +422,9 @@ func (*ScanRequest) CreateReply() Response { return &ScanResponse{} }
 
 // CreateReply implements the Request interface.
 func (*ReverseScanRequest) CreateReply() Response { return &ReverseScanResponse{} }
+
+// CreateReply implements the Request interface.
+func (*CheckConsistencyRequest) CreateReply() Response { return &CheckConsistencyResponse{} }
 
 // CreateReply implements the Request interface.
 func (*BeginTransactionRequest) CreateReply() Response { return &BeginTransactionResponse{} }
@@ -438,6 +469,12 @@ func (*TruncateLogRequest) CreateReply() Response { return &TruncateLogResponse{
 
 // CreateReply implements the Request interface.
 func (*LeaderLeaseRequest) CreateReply() Response { return &LeaderLeaseResponse{} }
+
+// CreateReply implements the Request interface.
+func (*ComputeChecksumRequest) CreateReply() Response { return &ComputeChecksumResponse{} }
+
+// CreateReply implements the Request interface.
+func (*VerifyChecksumRequest) CreateReply() Response { return &VerifyChecksumResponse{} }
 
 // NewGet returns a Request initialized to get the value at key.
 func NewGet(key Key) Request {
@@ -521,6 +558,16 @@ func NewScan(key, endKey Key, maxResults int64) Request {
 	}
 }
 
+// NewCheckConsistency returns a Request initialized to scan from start to end keys.
+func NewCheckConsistency(key, endKey Key) Request {
+	return &CheckConsistencyRequest{
+		Span: Span{
+			Key:    key,
+			EndKey: endKey,
+		},
+	}
+}
+
 // NewReverseScan returns a Request initialized to reverse scan from end to
 // start keys with max results.
 func NewReverseScan(key, endKey Key, maxResults int64) Request {
@@ -565,3 +612,6 @@ func (*NoopRequest) flags() int               { return isRead } // slightly spec
 func (*MergeRequest) flags() int              { return isWrite }
 func (*TruncateLogRequest) flags() int        { return isWrite }
 func (*LeaderLeaseRequest) flags() int        { return isWrite }
+func (*ComputeChecksumRequest) flags() int    { return isWrite }
+func (*VerifyChecksumRequest) flags() int     { return isWrite }
+func (*CheckConsistencyRequest) flags() int   { return isAdmin | isRange }

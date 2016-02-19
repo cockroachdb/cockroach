@@ -405,4 +405,9 @@ func testNodeRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfi
 	elapsed := time.Since(start)
 	count := atomic.LoadUint64(&client.count)
 	log.Infof("%d %.1f/sec", count, float64(count)/elapsed.Seconds())
+	kvClient, kvStopper := makeClient(t, c.ConnString(num-1))
+	defer kvStopper.Stop()
+	if pErr := kvClient.CheckConsistency("a", "z"); pErr != nil {
+		t.Fatal(pErr.GoError())
+	}
 }
