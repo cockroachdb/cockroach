@@ -136,7 +136,7 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 		return fmt.Sprintf("/err<%q>", []byte(key))
 	}
 
-	// get range id
+	// Get the rangeID.
 	key, i, err := encoding.DecodeVarintAscending(key)
 	if err != nil {
 		return fmt.Sprintf("/err<%v:%q>", err, []byte(key))
@@ -144,8 +144,13 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 
 	fmt.Fprintf(&buf, "/%d", i)
 
-	// get suffix
+	// Print and remove the rangeID infix specifier.
+	if len(key) != 0 {
+		fmt.Fprintf(&buf, "/%s", string(key[0]))
+		key = key[1:]
+	}
 
+	// Get the suffix.
 	hasSuffix := false
 	for _, s := range rangeIDSuffixDict {
 		if bytes.HasPrefix(key, s.suffix) {
@@ -160,7 +165,7 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 		}
 	}
 
-	// get encode values
+	// Get the encode values.
 	if hasSuffix {
 		fmt.Fprintf(&buf, "%s", decodeKeyPrint(key))
 	} else {

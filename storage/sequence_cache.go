@@ -236,12 +236,13 @@ func decodeSequenceCacheKey(key roachpb.Key, dest []byte) (*uuid.UUID, uint32, u
 	if !bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {
 		return nil, 0, 0, util.Errorf("key %s does not have %s prefix", key, keys.LocalRangeIDPrefix)
 	}
-	// Cut the prefix and the Range ID.
+	// Cut the prefix, the Range ID, and the infix specifier.
 	b := key[len(keys.LocalRangeIDPrefix):]
 	b, _, err := encoding.DecodeUvarintAscending(b)
 	if err != nil {
 		return nil, 0, 0, err
 	}
+	b = b[1:]
 	if !bytes.HasPrefix(b, keys.LocalSequenceCacheSuffix) {
 		return nil, 0, 0, util.Errorf("key %s does not contain the sequence cache suffix %s",
 			key, keys.LocalSequenceCacheSuffix)
