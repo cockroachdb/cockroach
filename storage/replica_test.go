@@ -2086,7 +2086,7 @@ func TestEndTransactionDirectGC(t *testing.T) {
 		}
 
 		var entry roachpb.SequenceCacheEntry
-		if seq, _, err := tc.rng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
+		if seq, _, err := tc.rng.sequence.Get(tc.engine, txn.ID, roachpb.SERIALIZABLE, &entry); err != nil {
 			return err
 		} else if seq > 0 {
 			return util.Errorf("sequence cache still populated: %v", entry)
@@ -2134,13 +2134,72 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	})
 }
 
+// TestSequenceSnapshotIgnoreRestartPoisoning verifies that we correctly
+// handle SNAPSHOT transactions: They should ignore a sequence cache value
+// of SequencePoisonRestart and instead check on the previous, "unpoisoned"
+// cache entry.
+func TestSequenceSnapshotIgnoreRestartPoisoning(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	key := roachpb.Key("a")
+
+	const expEpo = 123
+	const initialSeq = 456
+
+	for i, test := range []struct {
+		iso    roachpb.IsolationType
+		abort  bool
+		expSeq uint32
+	}{
+		{roachpb.SNAPSHOT, true, SequencePoisonAbort},
+		{roachpb.SNAPSHOT, false, initialSeq},
+		{roachpb.SERIALIZABLE, true, SequencePoisonAbort},
+		{roachpb.SERIALIZABLE, false, SequencePoisonRestart},
+	} {
+		func() {
+			tc := testContext{}
+			tc.Start(t)
+			defer tc.Stop()
+
+			txn := newTransaction("test", key, 1, test.iso, nil)
+			txn.Epoch, txn.Sequence = expEpo, initialSeq
+			if err := tc.rng.sequence.Put(tc.engine, txn.ID, txn.Epoch, txn.Sequence, txn.Key, txn.Timestamp, nil); err != nil {
+				t.Fatal(err)
+			}
+
+			args := roachpb.ResolveIntentRequest{
+				Span:      roachpb.Span{Key: key},
+				Status:    roachpb.PENDING,
+				Poison:    true,
+				IntentTxn: txn.TxnMeta,
+			}
+			if test.abort {
+				args.Status = roachpb.ABORTED
+			}
+
+			if _, err := tc.rng.ResolveIntent(tc.engine, nil, roachpb.Header{}, args); err != nil {
+				t.Fatal(err)
+			}
+
+			epo, seq, err := tc.rng.sequence.Get(tc.engine, txn.ID, test.iso, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if epo != expEpo {
+				t.Errorf("%d: epoch: wanted %d, got %d", i, expEpo, epo)
+			}
+			if seq != test.expSeq {
+				t.Errorf("%d: seq: wanted %d, got %d", i, test.expSeq, seq)
+			}
+		}()
+	}
+}
+
 // TestSequenceCachePoisonOnResolve verifies that when an intent is pushed into
 // the future or aborted, the sequence cache on the respective Range is
 // poisoned and the pushee is presented with a txn retry or abort on its next
 // contact with the Range in the same epoch.
 func TestSequenceCachePoisonOnResolve(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	defer t.Skip("TODO(tschottdorf): currently cannot poison effectively on restarts")
 	key := roachpb.Key("a")
 
 	// Isolation of the pushee and whether we're going to abort it.
@@ -2243,8 +2302,7 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 		}
 	}
 
-	// `false` disabled; see the call to Skip above.
-	for _, abort := range []bool{ /* false, */ true} {
+	for _, abort := range []bool{false, true} {
 		run(abort, roachpb.SERIALIZABLE)
 		run(abort, roachpb.SNAPSHOT)
 	}
@@ -2283,7 +2341,7 @@ func TestSequenceCacheError(t *testing.T) {
 	}
 
 	// Poison the sequence cache to trigger TransactionAbortedError.
-	if err := tc.rng.sequence.Put(tc.engine, txn.ID, txn.Epoch, roachpb.SequencePoisonAbort, key, ts, nil); err != nil {
+	if err := tc.rng.sequence.Put(tc.engine, txn.ID, txn.Epoch, SequencePoisonAbort, key, ts, nil); err != nil {
 		t.Fatal(err)
 	}
 

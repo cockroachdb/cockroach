@@ -31,6 +31,15 @@ import (
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
+const (
+	// SequencePoisonAbort is a special value for the sequence cache which
+	// commands a TransactionAbortedError.
+	SequencePoisonAbort = math.MaxUint32
+	// SequencePoisonRestart is a special value for the sequence cache which
+	// commands a TransactionRestartError.
+	SequencePoisonRestart = math.MaxUint32 - 1
+)
+
 var errEmptyTxnID = errors.New("empty Transaction ID used in sequence cache")
 
 // The SequenceCache provides idempotence for request retries. Each
@@ -84,7 +93,10 @@ func (sc *SequenceCache) ClearData(e engine.Engine) error {
 // The latest entry is that with the highest epoch (and then, highest
 // sequence). On a miss, zero is returned for both. If an entry is found and a
 // SequenceCacheEntry is provided, it is populated from the found value.
-func (sc *SequenceCache) Get(e engine.Engine, txnID *uuid.UUID, dest *roachpb.SequenceCacheEntry) (uint32, uint32, error) {
+// If iso is SNAPSHOT, a topmost sequence cache entry of SequencePoisonRestart
+// is ignored (since a SNAPSHOT transaction does not have to restart when its
+// intents are pushed).
+func (sc *SequenceCache) Get(e engine.Engine, txnID *uuid.UUID, iso roachpb.IsolationType, dest *roachpb.SequenceCacheEntry) (uint32, uint32, error) {
 	if txnID == nil {
 		return 0, 0, errEmptyTxnID
 	}
@@ -95,21 +107,30 @@ func (sc *SequenceCache) Get(e engine.Engine, txnID *uuid.UUID, dest *roachpb.Se
 	// we just scan and check via a simple prefix check whether we read a
 	// key for "our" cache id.
 	prefix := keys.SequenceCacheKeyPrefix(sc.rangeID, txnID)
-	kvs, _, err := engine.MVCCScan(e, prefix, sc.max, 1, /* num */
-		roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */)
-	if err != nil || len(kvs) == 0 || !bytes.HasPrefix(kvs[0].Key, prefix) {
-		return 0, 0, err
-	}
-	_, epoch, seq, err := decodeSequenceCacheKey(kvs[0].Key, sc.scratchBuf[:0])
-	if err != nil {
-		return 0, 0, err
-	}
-	if dest != nil {
-		dest.Reset()
-		// Caller wants to have the unmarshaled value.
-		if err := kvs[0].Value.GetProto(dest); err != nil {
+	startKey := prefix
+	var epoch, seq uint32
+	for {
+		kvs, _, err := engine.MVCCScan(e, startKey, sc.max, 1, /* num */
+			roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */)
+		if err != nil || len(kvs) == 0 || !bytes.HasPrefix(kvs[0].Key, prefix) {
 			return 0, 0, err
 		}
+		_, epoch, seq, err = decodeSequenceCacheKey(kvs[0].Key, sc.scratchBuf[:0])
+		if err != nil {
+			return 0, 0, err
+		}
+		if seq == SequencePoisonRestart && iso == roachpb.SNAPSHOT {
+			startKey = kvs[0].Key.Next()
+			continue
+		}
+		if dest != nil {
+			dest.Reset()
+			// Caller wants to have the unmarshaled value.
+			if err := kvs[0].Value.GetProto(dest); err != nil {
+				return 0, 0, err
+			}
+		}
+		break
 	}
 	return epoch, seq, nil
 }

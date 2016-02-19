@@ -1023,19 +1023,14 @@ func (r *Replica) maybePoison(batch engine.Engine, shouldPoison bool, txn roachp
 	var poison uint32
 	switch status {
 	case roachpb.ABORTED:
-		poison = roachpb.SequencePoisonAbort
+		poison = SequencePoisonAbort
 	case roachpb.PENDING:
-		poison = roachpb.SequencePoisonRestart
-		// TODO(tschottdorf): Previous code here poisoned unless the
-		// transaction was either SERIALIZABLE and with its original timestamp
-		// or SNAPSHOT. This hasn't been possible since we factored out the
-		// transaction metadata from the transaction proto, since now we only
-		// have the **metadata** available at the callsite. With a bit more
-		// elbow grease, it should be possible to thread the necessary
-		// information through ResolveIntent{,Range} to here, at least in cases
-		// where the performance matters (short-circuiting a Transaction helps
-		// avoid redundant work).
-		return nil
+		// Note that a SNAPSHOT transaction will simply ignore being poisoned.
+		// We don't know what type of transaction we're dealing with here, or
+		// we would preferably only poison SERIALIZABLE transactions.
+		// Instead, we poison unconditionally and SNAPSHOT txns ignore such
+		// an entry.
+		poison = SequencePoisonRestart
 	default:
 		return nil
 	}

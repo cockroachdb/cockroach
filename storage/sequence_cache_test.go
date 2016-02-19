@@ -86,7 +86,7 @@ func TestSequenceCachePutGetClearData(t *testing.T) {
 	defer stopper.Stop()
 	sc, e := createTestSequenceCache(t, 1, stopper)
 	// Start with a get for an unseen id/sequence combo.
-	if seq, _, readErr := sc.Get(e, testTxnID, nil); seq > 0 {
+	if seq, _, readErr := sc.Get(e, testTxnID, roachpb.SERIALIZABLE, nil); seq > 0 {
 		t.Errorf("expected no response for id %s", testTxnID)
 	} else if readErr != nil {
 		t.Fatalf("unxpected read error: %s", readErr)
@@ -97,9 +97,9 @@ func TestSequenceCachePutGetClearData(t *testing.T) {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
-	tryHit := func(expSeq, expEpo uint32) {
+	tryHit := func(expEpo, expSeq uint32, iso roachpb.IsolationType) {
 		var entry roachpb.SequenceCacheEntry
-		if actEpo, actSeq, readErr := sc.Get(e, testTxnID, &entry); readErr != nil {
+		if actEpo, actSeq, readErr := sc.Get(e, testTxnID, iso, &entry); readErr != nil {
 			t.Errorf("unexpected failure getting response: %s", readErr)
 		} else if (expSeq > 0 || actSeq > 0) && expSeq != actSeq {
 			t.Errorf("wanted hit: %t, got actual %d vs expected %d", expSeq > 0, actSeq, expSeq)
@@ -113,28 +113,48 @@ func TestSequenceCachePutGetClearData(t *testing.T) {
 		}
 	}
 
-	tryHit(seq, testTxnEpoch)
+	tryHit(testTxnEpoch, seq, roachpb.SERIALIZABLE)
 	if err := sc.ClearData(e); err != nil {
 		t.Error(err)
 	}
-	tryHit(0, 0)
+	tryHit(0, 0, roachpb.SERIALIZABLE)
 
 	if err := sc.Put(e, testTxnID, testTxnEpoch, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
-	tryHit(2*seq, testTxnEpoch)
+	tryHit(testTxnEpoch, 2*seq, roachpb.SERIALIZABLE)
 
 	if err := sc.Put(e, testTxnID, 2*testTxnEpoch, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
-	tryHit(2*seq, 2*testTxnEpoch)
+	tryHit(2*testTxnEpoch, 2*seq, roachpb.SERIALIZABLE)
 
 	if err := sc.Put(e, testTxnID, testTxnEpoch-1, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
-	tryHit(2*seq, 2*testTxnEpoch)
+	tryHit(2*testTxnEpoch, 2*seq, roachpb.SERIALIZABLE)
+
+	if err := sc.ClearData(e); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := sc.Put(e, testTxnID, testTxnEpoch, SequencePoisonRestart, testTxnKey, testTxnTimestamp, nil); err != nil {
+		t.Fatal(err)
+	}
+	tryHit(0, 0, roachpb.SNAPSHOT)
+
+	if err := sc.Put(e, testTxnID, testTxnEpoch, 5, testTxnKey, testTxnTimestamp, nil); err != nil {
+		t.Fatal(err)
+	}
+	tryHit(testTxnEpoch, 5, roachpb.SNAPSHOT)
+	tryHit(testTxnEpoch, SequencePoisonRestart, roachpb.SERIALIZABLE)
+	if err := sc.Put(e, testTxnID, testTxnEpoch, SequencePoisonAbort, testTxnKey, testTxnTimestamp, nil); err != nil {
+		t.Fatal(err)
+	}
+	tryHit(testTxnEpoch, SequencePoisonAbort, roachpb.SNAPSHOT)
+	tryHit(testTxnEpoch, SequencePoisonAbort, roachpb.SERIALIZABLE)
 }
 
 // TestSequenceCacheEmptyParams tests operation with empty parameters.
@@ -150,7 +170,7 @@ func TestSequenceCacheEmptyParams(t *testing.T) {
 	if err := sc.Put(e, nil, testTxnEpoch, 10, testTxnKey, testTxnTimestamp, nil); err != errEmptyTxnID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if _, _, readErr := sc.Get(e, nil, nil); readErr != errEmptyTxnID {
+	if _, _, readErr := sc.Get(e, nil, roachpb.SERIALIZABLE, nil); readErr != errEmptyTxnID {
 		t.Fatalf("unxpected read error: %v", readErr)
 	}
 }
@@ -175,7 +195,7 @@ func TestSequenceCacheCopyInto(t *testing.T) {
 	for _, cache := range []*SequenceCache{rc1, rc2} {
 		var entry roachpb.SequenceCacheEntry
 		// Get should return 1 for both caches.
-		if _, actSeq, readErr := cache.Get(e, testTxnID, &entry); readErr != nil {
+		if _, actSeq, readErr := cache.Get(e, testTxnID, roachpb.SERIALIZABLE, &entry); readErr != nil {
 			t.Errorf("unexpected failure getting response from source: %s", readErr)
 		} else if actSeq != seq {
 			t.Fatalf("unxpected cache miss")
@@ -207,7 +227,7 @@ func TestSequenceCacheCopyFrom(t *testing.T) {
 	// Get should hit both caches.
 	for i, cache := range []*SequenceCache{rc1, rc2} {
 		var entry roachpb.SequenceCacheEntry
-		if _, actSeq, readErr := cache.Get(e, testTxnID, &entry); readErr != nil {
+		if _, actSeq, readErr := cache.Get(e, testTxnID, roachpb.SERIALIZABLE, &entry); readErr != nil {
 			t.Fatalf("%d: unxpected read error: %s", i, readErr)
 		} else if actSeq != seq {
 			t.Errorf("%d: unexpected cache miss: wanted %d, got %d", i, seq, actSeq)

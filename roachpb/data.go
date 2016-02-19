@@ -39,15 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
-const (
-	// SequencePoisonAbort is a special value for the sequence cache which
-	// commands a TransactionAbortedError.
-	SequencePoisonAbort = math.MaxUint32
-	// SequencePoisonRestart is a special value for the sequence cache which
-	// commands a TransactionRestartError.
-	SequencePoisonRestart = math.MaxUint32 - 1
-)
-
 var (
 	// RKeyMin is a minimum key value which sorts before all other keys.
 	RKeyMin = RKey("")
