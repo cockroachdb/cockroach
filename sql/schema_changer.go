@@ -148,16 +148,16 @@ func (sc *SchemaChanger) findTableWithLease(txn *client.Txn, lease TableDescript
 
 // ReleaseLease the table lease if it is the one registered with
 // the table descriptor.
-func (sc *SchemaChanger) ReleaseLease(lease TableDescriptor_SchemaChangeLease) *roachpb.Error {
+func (sc *SchemaChanger) ReleaseLease(lease TableDescriptor_SchemaChangeLease) error {
 	return sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
-		tableDesc, err := sc.findTableWithLease(txn, lease)
-		if err != nil {
-			return err
+		tableDesc, pErr := sc.findTableWithLease(txn, lease)
+		if pErr != nil {
+			return pErr
 		}
 		tableDesc.Lease = nil
 		txn.SetSystemConfigTrigger()
 		return txn.Put(MakeDescMetadataKey(tableDesc.ID), wrapDescriptor(tableDesc))
-	})
+	}).GoError()
 }
 
 // ExtendLease for the current leaser.
@@ -185,8 +185,8 @@ func (sc SchemaChanger) exec() *roachpb.Error {
 	}
 	// Always try to release lease.
 	defer func(l *TableDescriptor_SchemaChangeLease) {
-		if pErr := sc.ReleaseLease(*l); pErr != nil {
-			log.Warning(pErr)
+		if err := sc.ReleaseLease(*l); err != nil {
+			log.Warning(err)
 		}
 	}(&lease)
 
@@ -199,8 +199,8 @@ func (sc SchemaChanger) exec() *roachpb.Error {
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
 	defer func() {
-		if pErr := sc.waitToUpdateLeases(); pErr != nil {
-			log.Warning(pErr)
+		if err := sc.waitToUpdateLeases(); err != nil {
+			log.Warning(err)
 		}
 	}()
 
@@ -213,8 +213,8 @@ func (sc SchemaChanger) exec() *roachpb.Error {
 	// but we're no longer responsible for taking care of that.
 
 	// Run through mutation state machine before backfill.
-	if pErr := sc.RunStateMachineBeforeBackfill(); pErr != nil {
-		return pErr
+	if err := sc.RunStateMachineBeforeBackfill(); err != nil {
+		return roachpb.NewError(err)
 	}
 
 	// Apply backfill.
@@ -246,7 +246,7 @@ func (sc *SchemaChanger) MaybeIncrementVersion() *roachpb.Error {
 // RunStateMachineBeforeBackfill moves the state machine forward
 // and wait to ensure that all nodes are seeing the latest version
 // of the table.
-func (sc *SchemaChanger) RunStateMachineBeforeBackfill() *roachpb.Error {
+func (sc *SchemaChanger) RunStateMachineBeforeBackfill() error {
 	if pErr := sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
 		var modified bool
 		// Apply mutations belonging to the same version.
@@ -290,7 +290,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill() *roachpb.Error {
 		}
 		return nil
 	}); pErr != nil {
-		return pErr
+		return pErr.GoError()
 	}
 	// wait for the state change to propagate to all leases.
 	return sc.waitToUpdateLeases()
@@ -298,7 +298,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill() *roachpb.Error {
 
 // Wait until the entire cluster has been updated to the latest version
 // of the table descriptor.
-func (sc *SchemaChanger) waitToUpdateLeases() *roachpb.Error {
+func (sc *SchemaChanger) waitToUpdateLeases() error {
 	// Aggressively retry because there might be a user waiting for the
 	// schema change to complete.
 	retryOpts := retry.Options{
@@ -306,8 +306,8 @@ func (sc *SchemaChanger) waitToUpdateLeases() *roachpb.Error {
 		MaxBackoff:     200 * time.Millisecond,
 		Multiplier:     2,
 	}
-	_, pErr := sc.leaseMgr.waitForOneVersion(sc.tableID, retryOpts)
-	return pErr
+	_, err := sc.leaseMgr.waitForOneVersion(sc.tableID, retryOpts)
+	return err
 }
 
 func (sc *SchemaChanger) done() *roachpb.Error {
@@ -335,7 +335,7 @@ func (sc *SchemaChanger) done() *roachpb.Error {
 // Purge all mutations with the mutationID. This is called after
 // hitting an irrecoverable error. Reverse the direction of the mutations
 // and run through the state machine until the mutations are deleted.
-func (sc *SchemaChanger) purgeMutations(lease *TableDescriptor_SchemaChangeLease) *roachpb.Error {
+func (sc *SchemaChanger) purgeMutations(lease *TableDescriptor_SchemaChangeLease) error {
 	// Reverse the flow of the state machine.
 	if pErr := sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
 		for i, mutation := range desc.Mutations {
@@ -356,12 +356,12 @@ func (sc *SchemaChanger) purgeMutations(lease *TableDescriptor_SchemaChangeLease
 		// Publish() will increment the version.
 		return nil
 	}); pErr != nil {
-		return pErr
+		return pErr.GoError()
 	}
 
 	// Run through mutation state machine before backfill.
-	if pErr := sc.RunStateMachineBeforeBackfill(); pErr != nil {
-		return pErr
+	if err := sc.RunStateMachineBeforeBackfill(); err != nil {
+		return err
 	}
 
 	// Apply backfill and don't run purge on hitting an error.
@@ -370,16 +370,16 @@ func (sc *SchemaChanger) purgeMutations(lease *TableDescriptor_SchemaChangeLease
 	// changers keep attempting to apply and purge mutations.
 	// This is a theoretical problem at this stage (2015/12).
 	if pErr := sc.applyMutations(lease); pErr != nil {
-		return pErr
+		return pErr.GoError()
 	}
 
 	// Mark the mutations as completed.
-	return sc.done()
+	return sc.done().GoError()
 }
 
 // IsDone returns true if the work scheduled for the schema changer
 // is complete.
-func (sc *SchemaChanger) IsDone() (bool, *roachpb.Error) {
+func (sc *SchemaChanger) IsDone() (bool, error) {
 	var done bool
 	pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		done = true
@@ -401,7 +401,7 @@ func (sc *SchemaChanger) IsDone() (bool, *roachpb.Error) {
 		}
 		return nil
 	})
-	return done && pErr == nil, pErr
+	return done && pErr == nil, pErr.GoError()
 }
 
 // SchemaChangeManager processes pending schema changes seen in gossip
