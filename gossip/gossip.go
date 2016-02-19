@@ -267,7 +267,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	}
 
 	// Merge the stored bootstrap info addresses with any we've become
-	// aware of through the --join bootstrap hosts we've connected to.
+	// aware of through gossip.
 	if len(g.bootstrapInfo.Addresses) > 0 {
 		existing := map[string]struct{}{}
 		makeKey := func(a util.UnresolvedAddr) string { return fmt.Sprintf("%s,%s", a.Network(), a.String()) }
