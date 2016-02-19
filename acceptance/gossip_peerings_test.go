@@ -141,6 +141,8 @@ func TestGossipPeerings(t *testing.T) {
 // re-bootstrapped after a time when all nodes were down
 // simultaneously.
 func TestGossipRestart(t *testing.T) {
+	t.Skipf("TODO(pmattis): #4445")
+
 	// This already replicates the first range (in the local setup).
 	// The replication of the first range is important: as long as the
 	// first range only exists on one node, that node can trivially

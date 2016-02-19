@@ -89,6 +89,7 @@ func (s unresolvedAddrSlice) Swap(i, j int) {
 // using the bootstrap hosts in a gossip.Storage object.
 func TestGossipStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skipf("TODO(pmattis): #4500")
 
 	network := simulation.NewNetwork(3)
 	defer network.Stop()

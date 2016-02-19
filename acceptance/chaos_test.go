@@ -299,6 +299,8 @@ func waitClientsStop(num int, state *testState, stallDuration time.Duration) {
 // being killed and restarted continuously. The test doesn't measure write
 // performance, but cluster recovery.
 func TestClusterRecovery(t *testing.T) {
+	t.Skipf("TODO(pmattis): #4517")
+
 	c := StartCluster(t)
 	defer c.AssertAndStop(t)
 
