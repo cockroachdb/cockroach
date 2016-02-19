@@ -33,8 +33,8 @@ import (
 func AddStructured(ctx context.Context, s Severity, depth int, format string, args []interface{}) {
 	file, line, _ := caller.Lookup(depth + 1)
 	entry := LogEntry{}
-	entry.set(ctx, format, args)
-	logging.outputLogEntry(s, file, line, false, &entry)
+	entry.Set(ctx, format, args)
+	logging.outputLogEntry(s, file, line, &entry)
 }
 
 // getJSON returns a JSON representation of the specified argument.
@@ -61,7 +61,9 @@ func getJSON(arg interface{}) []byte {
 	return jsonBytes
 }
 
-func (entry *LogEntry) set(ctx context.Context, format string, args []interface{}) {
+// Set sets the contents of an entry from a context, format string and
+// arguments.
+func (entry *LogEntry) Set(ctx context.Context, format string, args []interface{}) {
 	entry.Format, entry.Args = parseFormatWithArgs(format, args)
 
 	if ctx != nil {

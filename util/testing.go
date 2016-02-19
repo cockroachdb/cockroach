@@ -19,12 +19,13 @@ package util
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"reflect"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // Tester is a proxy for e.g. testing.T which does not introduce a dependency
