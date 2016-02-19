@@ -76,6 +76,13 @@ var (
 	// NOTE: LocalRangeIDPrefix must be kept in sync with the value
 	// in storage/engine/rocksdb/db.cc.
 	LocalRangeIDPrefix = roachpb.RKey(makeKey(localPrefix, roachpb.Key("i")))
+
+	// localRangeIDReplicatedInfix is the post-Range ID specifier for all Raft
+	// replicated per-range data. By appending this after the Range ID, these
+	// keys will be sorted directly before the local unreplicated keys for the
+	// same Range ID, so they can be manipulated either together or individually
+	// in a single scan.
+	localRangeIDReplicatedInfix = []byte("r")
 	// LocalSequenceCacheSuffix is the suffix used for the replay protection
 	// mechanism.
 	LocalSequenceCacheSuffix = []byte("res-")
@@ -83,12 +90,8 @@ var (
 	localRaftLeaderLeaseSuffix = []byte("rfll")
 	// localRaftTombstoneSuffix is the suffix for the raft tombstone.
 	localRaftTombstoneSuffix = []byte("rftb")
-	// localRaftHardStateSuffix is the Suffix for the raft HardState.
-	localRaftHardStateSuffix = []byte("rfth")
 	// localRaftAppliedIndexSuffix is the suffix for the raft applied index.
 	localRaftAppliedIndexSuffix = []byte("rfta")
-	// localRaftLogSuffix is the suffix for the raft log.
-	localRaftLogSuffix = []byte("rftl")
 	// localRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
 	localRaftTruncatedStateSuffix = []byte("rftt")
 	// localRaftLastIndexSuffix is the suffix for raft's last index.
@@ -98,6 +101,17 @@ var (
 	localRangeLastVerificationTimestampSuffix = []byte("rlvt")
 	// localRangeStatsSuffix is the suffix for range statistics.
 	localRangeStatsSuffix = []byte("stat")
+
+	// localRangeIDUnreplicatedInfix is the post-Range ID specifier for all
+	// per-range data that is not fully Raft replicated. By appending this
+	// after the Range ID, these keys will be sorted directly after the local
+	// replicated keys for the same Range ID, so they can be manipulated either
+	// together or individually in a single scan.
+	localRangeIDUnreplicatedInfix = []byte("u")
+	// localRaftHardStateSuffix is the Suffix for the raft HardState.
+	localRaftHardStateSuffix = []byte("rfth")
+	// localRaftLogSuffix is the suffix for the raft log.
+	localRaftLogSuffix = []byte("rftl")
 
 	// LocalRangePrefix is the prefix identifying per-range data indexed
 	// by range key (either start key, or some key in the range). The
