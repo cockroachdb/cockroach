@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -147,11 +148,13 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 		}
 		return nil
 	})
+	// TODO(kaneda): Call roachpb.NewError(pErr.GoError()) to pass
+	// an error from the inner txn to the outer txn?
 	return lease, pErr
 }
 
 // Release a previously acquired table descriptor lease.
-func (s LeaseStore) Release(lease *LeaseState) *roachpb.Error {
+func (s LeaseStore) Release(lease *LeaseState) error {
 	return s.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		p := planner{txn: txn, user: security.RootUser}
 
@@ -165,7 +168,7 @@ func (s LeaseStore) Release(lease *LeaseState) *roachpb.Error {
 			return roachpb.NewErrorf("%s: expected 1 result, found %d", deleteLease, count)
 		}
 		return nil
-	})
+	}).GoError()
 }
 
 // waitForOneVersion returns once there are no unexpired leases on the
@@ -174,7 +177,7 @@ func (s LeaseStore) Release(lease *LeaseState) *roachpb.Error {
 // returned verson. Lease acquisition (see acquire()) maintains the
 // invariant that no new leases for desc.Version-1 will be granted once
 // desc.Version exists.
-func (s LeaseStore) waitForOneVersion(tableID ID, retryOpts retry.Options) (DescriptorVersion, *roachpb.Error) {
+func (s LeaseStore) waitForOneVersion(tableID ID, retryOpts retry.Options) (DescriptorVersion, error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(tableID)
 	var tableDesc *TableDescriptor
@@ -183,18 +186,18 @@ func (s LeaseStore) waitForOneVersion(tableID ID, retryOpts retry.Options) (Desc
 		//
 		// TODO(pmattis): Do an inconsistent read here?
 		if pErr := s.db.GetProto(descKey, desc); pErr != nil {
-			return 0, pErr
+			return 0, pErr.GoError()
 		}
 		tableDesc = desc.GetTable()
 		if tableDesc == nil {
-			return 0, roachpb.NewErrorf("ID %d is not a table", tableID)
+			return 0, util.Errorf("ID %d is not a table", tableID)
 		}
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
 		now := s.clock.Now()
-		count, pErr := s.countLeases(tableDesc.ID, tableDesc.Version-1, now.GoTime())
-		if pErr != nil {
-			return 0, pErr
+		count, err := s.countLeases(tableDesc.ID, tableDesc.Version-1, now.GoTime())
+		if err != nil {
+			return 0, err
 		}
 		if count == 0 {
 			break
@@ -218,14 +221,14 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) *ro
 	for r := retry.Start(retryOpts); r.Next(); {
 		// Wait until there are no unexpired leases on the previous version
 		// of the table.
-		expectedVersion, pErr := s.waitForOneVersion(tableID, retryOpts)
-		if pErr != nil {
-			return pErr
+		expectedVersion, err := s.waitForOneVersion(tableID, retryOpts)
+		if err != nil {
+			return roachpb.NewError(err)
 		}
 
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
-		pErr = s.db.Txn(func(txn *client.Txn) *roachpb.Error {
+		pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
 			desc := &Descriptor{}
 			descKey := MakeDescMetadataKey(tableID)
 
@@ -285,7 +288,7 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) *ro
 
 // countLeases returns the number of unexpired leases for a particular version
 // of a descriptor.
-func (s LeaseStore) countLeases(descID ID, version DescriptorVersion, expiration time.Time) (int, *roachpb.Error) {
+func (s LeaseStore) countLeases(descID ID, version DescriptorVersion, expiration time.Time) (int, error) {
 	var count int
 	pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		p := planner{txn: txn, user: security.RootUser}
@@ -299,7 +302,7 @@ func (s LeaseStore) countLeases(descID ID, version DescriptorVersion, expiration
 		count = int(values[0].(parser.DInt))
 		return nil
 	})
-	return count, pErr
+	return count, pErr.GoError()
 }
 
 // leaseSet maintains an ordered set of LeaseState objects. It supports
@@ -453,11 +456,11 @@ func (t *tableState) acquire(txn *client.Txn, version DescriptorVersion, store L
 			// There is no active lease acquisition so we'll go ahead and perform
 			// one.
 			t.acquiring = make(chan struct{})
-			s, err := t.acquireNodeLease(txn, version, store)
+			s, pErr := t.acquireNodeLease(txn, version, store)
 			close(t.acquiring)
 			t.acquiring = nil
-			if err != nil {
-				return nil, err
+			if pErr != nil {
+				return nil, pErr
 			}
 			t.active.insert(s)
 			if err := t.releaseNonLatest(store); err != nil {
@@ -470,14 +473,14 @@ func (t *tableState) acquire(txn *client.Txn, version DescriptorVersion, store L
 }
 
 // releaseNonLatest releases all unused non-latest leases.
-func (t *tableState) releaseNonLatest(store LeaseStore) *roachpb.Error {
+func (t *tableState) releaseNonLatest(store LeaseStore) error {
 	// Skip the last lease.
 	for i := 0; i < len(t.active.data)-1; {
 		s := t.active.data[i]
 		if s.Refcount() == 0 {
 			t.active.remove(s)
-			if pErr := t.releaseNodeLease(s, store); pErr != nil {
-				return pErr
+			if err := t.releaseNodeLease(s, store); err != nil {
+				return err
 			}
 		} else {
 			i++
@@ -503,13 +506,13 @@ func (t *tableState) acquireNodeLease(txn *client.Txn, minVersion DescriptorVers
 	return store.Acquire(txn, t.id, minVersion)
 }
 
-func (t *tableState) release(lease *LeaseState, store LeaseStore) *roachpb.Error {
+func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	s := t.active.find(lease.Version, lease.expiration)
 	if s == nil {
-		return roachpb.NewErrorf("table %d version %d not found", lease.ID, lease.Version)
+		return util.Errorf("table %d version %d not found", lease.ID, lease.Version)
 	}
 	s.refcount--
 	if log.V(3) {
@@ -532,7 +535,7 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) *roachpb.Error
 	return nil
 }
 
-func (t *tableState) releaseNodeLease(lease *LeaseState, store LeaseStore) *roachpb.Error {
+func (t *tableState) releaseNodeLease(lease *LeaseState, store LeaseStore) error {
 	// We're called with mu locked, but need to unlock it while releasing the
 	// lease.
 	t.mu.Unlock()
@@ -570,10 +573,10 @@ func (m *LeaseManager) Acquire(txn *client.Txn, tableID ID, version DescriptorVe
 }
 
 // Release releases a previously acquired read lease.
-func (m *LeaseManager) Release(lease *LeaseState) *roachpb.Error {
+func (m *LeaseManager) Release(lease *LeaseState) error {
 	t := m.findTableState(lease.ID, false)
 	if t == nil {
-		return roachpb.NewErrorf("table %d not found", lease.ID)
+		return util.Errorf("table %d not found", lease.ID)
 	}
 	// TODO(pmattis): Can/should we delete from LeaseManager.tables if the
 	// tableState becomes empty?
@@ -646,7 +649,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 }
 
 // refreshLease tries to refresh the node's table lease.
-func (m *LeaseManager) refreshLease(db *client.DB, id ID, minVersion DescriptorVersion) *roachpb.Error {
+func (m *LeaseManager) refreshLease(db *client.DB, id ID, minVersion DescriptorVersion) error {
 	// Only attempt to update a lease for a table that is already leased.
 	if t := m.findTableState(id, false); t == nil {
 		return nil
@@ -664,7 +667,7 @@ func (m *LeaseManager) refreshLease(db *client.DB, id ID, minVersion DescriptorV
 		lease, pErr = m.Acquire(txn, id, minVersion)
 		return pErr
 	}); pErr != nil {
-		return pErr
+		return pErr.GoError()
 	}
 	return m.Release(lease)
 }

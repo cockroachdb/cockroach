@@ -267,8 +267,8 @@ func (p *planner) notifySchemaChange(id ID, mutationID MutationID) {
 func (p *planner) releaseLeases(db client.DB) {
 	if p.leases != nil {
 		for _, lease := range p.leases {
-			if pErr := p.leaseMgr.Release(lease); pErr != nil {
-				log.Warning(pErr)
+			if err := p.leaseMgr.Release(lease); err != nil {
+				log.Warning(err)
 			}
 		}
 		p.leases = nil
