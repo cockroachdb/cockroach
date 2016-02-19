@@ -353,7 +353,7 @@ func runBenchmarkDelete(b *testing.B, db *sql.DB, rows int) {
 	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.delete`); err != nil {
 		b.Fatal(err)
 	}
-	if _, err := db.Exec(`CREATE TABLE bench.delete (k INT PRIMARY KEY)`); err != nil {
+	if _, err := db.Exec(`CREATE TABLE bench.delete (k INT PRIMARY KEY, v1 INT, v2 INT, v3 INT)`); err != nil {
 		b.Fatal(err)
 	}
 	defer func() {
@@ -372,7 +372,7 @@ func runBenchmarkDelete(b *testing.B, db *sql.DB, rows int) {
 			if j > 0 {
 				buf.WriteString(", ")
 			}
-			fmt.Fprintf(&buf, "(%d)", j)
+			fmt.Fprintf(&buf, "(%d, %d, %d, %d)", j, j, j, j)
 		}
 		if _, err := db.Exec(buf.String()); err != nil {
 			b.Fatal(err)

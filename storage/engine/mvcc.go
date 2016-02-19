@@ -1070,22 +1070,29 @@ func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.
 // MVCCDeleteRange deletes the range of key/value pairs specified by
 // start and end keys. Specify max=0 for unbounded deletes.
 func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp, txn *roachpb.Transaction) (int64, error) {
+	num := int64(0)
+	buf := putBufferPool.Get().(*putBuffer)
+	iter := engine.NewIterator(endKey)
+
+	f := func(kv roachpb.KeyValue) (bool, error) {
+		if err := mvccPutInternal(engine, iter, ms, kv.Key, timestamp, nil, txn, buf); err != nil {
+			return true, err
+		}
+		num++
+		if max != 0 && max >= num {
+			return true, nil
+		}
+		return false, nil
+	}
+
 	// In order to detect the potential write intent by another
 	// concurrent transaction with a newer timestamp, we need
 	// to use the max timestamp for scan.
-	kvs, _, err := MVCCScan(engine, key, endKey, max, roachpb.MaxTimestamp, true /* consistent */, txn)
-	if err != nil {
-		return 0, err
-	}
+	_, err := MVCCIterate(engine, key, endKey, roachpb.MaxTimestamp, true, txn, false, f)
 
-	num := int64(0)
-	for _, kv := range kvs {
-		if err := MVCCDelete(engine, ms, kv.Key, timestamp, txn); err != nil {
-			return num, err
-		}
-		num++
-	}
-	return num, nil
+	iter.Close()
+	putBufferPool.Put(buf)
+	return num, err
 }
 
 func getScanMeta(iter Iterator, encEndKey MVCCKey, meta *MVCCMetadata) (MVCCKey, error) {
