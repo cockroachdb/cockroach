@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -252,14 +253,24 @@ func (ctx *Context) AdminURL() string {
 
 // PGURL returns the URL for the postgres endpoint.
 func (ctx *Context) PGURL(user string) string {
+	// Try to convert path to an absolute path. Failing to do so return path
+	// unchanged.
+	absPath := func(path string) string {
+		r, err := filepath.Abs(path)
+		if err != nil {
+			return path
+		}
+		return r
+	}
+
 	options := url.Values{}
 	if ctx.Insecure {
 		options.Add("sslmode", "disable")
 	} else {
 		options.Add("sslmode", "verify-full")
-		options.Add("sslcert", security.ClientCertPath(ctx.Certs, user))
-		options.Add("sslkey", security.ClientKeyPath(ctx.Certs, user))
-		options.Add("sslrootcert", security.CACertPath(ctx.Certs))
+		options.Add("sslcert", absPath(security.ClientCertPath(ctx.Certs, user)))
+		options.Add("sslkey", absPath(security.ClientKeyPath(ctx.Certs, user)))
+		options.Add("sslrootcert", absPath(security.CACertPath(ctx.Certs)))
 	}
 	pgURL := url.URL{
 		Scheme:   "postgresql",
