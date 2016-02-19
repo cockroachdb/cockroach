@@ -7,7 +7,16 @@ CREATE TABLE kv (
 )
 
 statement ok
+CREATE TABLE unindexed (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
 INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
+
+statement ok
+INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
 query II
 SELECT * FROM kv
@@ -50,3 +59,22 @@ EXPLAIN (DEBUG) SELECT * FROM kv@bar
 
 statement error qualified name "kv.nonexistent" not found
 DELETE FROM kv WHERE nonexistent = 1
+
+statement ok
+DELETE FROM unindexed WHERE k=3 OR v=6
+
+query II
+SELECT * FROM unindexed
+----
+1 2
+7 8
+
+query II
+DELETE FROM unindexed RETURNING k, v
+----
+1 2
+7 8
+
+query II
+SELECT * FROM unindexed
+----

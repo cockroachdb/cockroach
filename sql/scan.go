@@ -441,6 +441,10 @@ func (n *scanNode) computeOrdering(index *IndexDescriptor, exactPrefix int, reve
 	return ordering
 }
 
+func (n *scanNode) readIndexKey(k roachpb.Key) ([]byte, error) {
+	return decodeIndexKey(&n.desc, n.index.ID, n.valTypes, n.vals, n.columnDirs, k)
+}
+
 func (n *scanNode) processKV(kv client.KeyValue) bool {
 	if n.indexKey == nil {
 		// Reset the row to nil; it will get filled in in with the column
@@ -452,7 +456,7 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 
 	var remaining []byte
 	var err error
-	remaining, err = decodeIndexKey(&n.desc, n.index.ID, n.valTypes, n.vals, n.columnDirs, kv.Key)
+	remaining, err = n.readIndexKey(kv.Key)
 	n.pErr = roachpb.NewError(err)
 	if n.pErr != nil {
 		return false
