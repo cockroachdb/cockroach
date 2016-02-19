@@ -349,7 +349,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		panic("trying to execute schema changes while still in a transaction")
 	}
 	// Release the leases once a transaction is complete.
-	planMaker.releaseLeases(e.db)
+	planMaker.releaseLeases()
 	if len(scc.schemaChangers) == 0 ||
 		// Disable execution in some tests.
 		disableSyncSchemaChangeExec {
@@ -485,7 +485,7 @@ func (e *Executor) ExecuteStatements(
 	if curTxnState.txn != nil {
 		// TODO(pmattis): Need to associate the leases used by a transaction with
 		// the session state.
-		planMaker.releaseLeases(e.db)
+		planMaker.releaseLeases()
 		session.Txn = Session_Transaction{
 			Txn:          &curTxnState.txn.Proto,
 			TxnTimestamp: Timestamp(curTxnState.txnTimestamp),
@@ -628,7 +628,7 @@ func (e *Executor) execRequest(
 		// If the txn is in a final state (committed, rolled back or aborted), exec
 		// the schema changes.
 		if txnState.state() != openTransaction {
-			planMaker.releaseLeases(e.db)
+			planMaker.releaseLeases()
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
 			// found).

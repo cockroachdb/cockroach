@@ -105,7 +105,7 @@ func (t *leaseTest) mustAcquire(nodeID uint32, descID csql.ID, version csql.Desc
 	return lease
 }
 
-func (t *leaseTest) release(nodeID uint32, lease *csql.LeaseState) *roachpb.Error {
+func (t *leaseTest) release(nodeID uint32, lease *csql.LeaseState) error {
 	return t.node(nodeID).Release(lease)
 }
 
