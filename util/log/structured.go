@@ -25,7 +25,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/caller"
 )
 
@@ -44,9 +43,15 @@ func AddStructured(ctx context.Context, s Severity, depth int, format string, ar
 func getJSON(arg interface{}) []byte {
 	// Not much point in storing strings and byte slices twice, as
 	// they're nearly always exactly specified in the format string.
-	switch arg.(type) {
-	case string, []byte, roachpb.Key:
-		return nil
+	if arg != nil {
+		switch typ := reflect.TypeOf(arg); typ.Kind() {
+		case reflect.String:
+			return nil
+		case reflect.Slice:
+			if typ.Elem().Kind() == reflect.Uint8 {
+				return nil
+			}
+		}
 	}
 
 	jsonBytes, err := json.Marshal(arg)
@@ -55,24 +60,14 @@ func getJSON(arg interface{}) []byte {
 	}
 	return jsonBytes
 }
+
 func (entry *LogEntry) set(ctx context.Context, format string, args []interface{}) {
 	entry.Format, entry.Args = parseFormatWithArgs(format, args)
 
 	if ctx != nil {
-		for i := Field(0); i < maxField; i++ {
-			if v := ctx.Value(i); v != nil {
-				switch vTyp := v.(type) {
-				case roachpb.NodeID:
-					entry.NodeID = &vTyp
-				case roachpb.StoreID:
-					entry.StoreID = &vTyp
-				case roachpb.RangeID:
-					entry.RangeID = &vTyp
-				case roachpb.Method:
-					entry.Method = &vTyp
-				case roachpb.Key:
-					entry.Key = vTyp
-				}
+		for _, field := range allFields {
+			if v := ctx.Value(field); v != nil {
+				field.populate(entry, v)
 			}
 		}
 	}

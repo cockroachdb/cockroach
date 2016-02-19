@@ -374,8 +374,7 @@ func readAllEntriesFromFile(file FileInfo, startTimestamp, endTimestamp int64, m
 			logText := fmt.Sprintf(entry.Format, args...)
 
 			match = pattern.MatchString(logText) ||
-				pattern.MatchString(entry.File) ||
-				((entry.Method != nil) && (pattern.MatchString(entry.Method.String())))
+				pattern.MatchString(entry.File)
 		}
 		if match && entry.Time >= startTimestamp && entry.Time <= endTimestamp {
 			entries = append([]LogEntry{entry}, entries...)
