@@ -42,15 +42,16 @@ import (
 
 // Context defaults.
 const (
-	defaultCGroupMemPath      = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
-	defaultAddr               = ":" + base.DefaultPort
-	defaultMaxOffset          = 250 * time.Millisecond
-	defaultCacheSize          = 512 << 20 // 512 MB
-	defaultMemtableBudget     = 512 << 20 // 512 MB
-	defaultScanInterval       = 10 * time.Minute
-	defaultScanMaxIdleTime    = 5 * time.Second
-	defaultMetricsFrequency   = 10 * time.Second
-	defaultTimeUntilStoreDead = 5 * time.Minute
+	defaultCGroupMemPath            = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+	defaultAddr                     = ":" + base.DefaultPort
+	defaultMaxOffset                = 250 * time.Millisecond
+	defaultCacheSize                = 512 << 20 // 512 MB
+	defaultMemtableBudget           = 512 << 20 // 512 MB
+	defaultScanInterval             = 10 * time.Minute
+	defaultConsistencyCheckInterval = 24 * time.Hour
+	defaultScanMaxIdleTime          = 5 * time.Second
+	defaultMetricsFrequency         = 10 * time.Second
+	defaultTimeUntilStoreDead       = 5 * time.Minute
 )
 
 // Context holds parameters needed to setup a server.
@@ -111,6 +112,9 @@ type Context struct {
 	// If enabled (> 0), the scanner may complete in less than ScanInterval for small
 	// stores.
 	ScanMaxIdleTime time.Duration
+
+	// ConsistencyCheckInterval
+	ConsistencyCheckInterval time.Duration
 
 	// MetricsFrequency determines the frequency at which the server should
 	// record internal metrics.
@@ -181,6 +185,7 @@ func (ctx *Context) InitDefaults() {
 	ctx.MemtableBudget = defaultMemtableBudget
 	ctx.ScanInterval = defaultScanInterval
 	ctx.ScanMaxIdleTime = defaultScanMaxIdleTime
+	ctx.ConsistencyCheckInterval = defaultConsistencyCheckInterval
 	ctx.MetricsFrequency = defaultMetricsFrequency
 	ctx.TimeUntilStoreDead = defaultTimeUntilStoreDead
 	ctx.Stores.Specs = append(ctx.Stores.Specs, StoreSpec{Path: "cockroach-data"})

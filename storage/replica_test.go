@@ -4049,3 +4049,135 @@ func TestReplicaCancelRaft(t *testing.T) {
 		}()
 	}
 }
+
+// verify the checksum for the range and returrn it.
+func verifyChecksum(t *testing.T, rng *Replica) []byte {
+	id := uuid.MakeV4()
+	notify := make(chan []byte, 1)
+	rng.setChecksumNotify(id, notify)
+	args := roachpb.ComputeChecksumRequest{
+		ChecksumID: id,
+		Version:    replicaChecksumVersion,
+	}
+	_, err := rng.ComputeChecksum(nil, nil, roachpb.Header{}, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case checksum := <-notify:
+		if checksum == nil {
+			t.Fatal("couldn't compute checksum")
+		}
+		verifyArgs := roachpb.VerifyChecksumRequest{
+			ChecksumID: id,
+			Version:    replicaChecksumVersion,
+			Checksum:   checksum,
+		}
+		_, err := rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return checksum
+	}
+}
+
+func TestComputeVerifyChecksum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	rng := tc.rng
+
+	incArgs := incrementArgs([]byte("a"), 23)
+	if _, err := client.SendWrapped(tc.Sender(), rng.context(), &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	initialChecksum := verifyChecksum(t, rng)
+
+	// Getting a value will not affect the snapshot checksum
+	gArgs := getArgs(roachpb.Key("a"))
+	if _, err := client.SendWrapped(tc.Sender(), rng.context(), &gArgs); err != nil {
+		t.Fatal(err)
+	}
+	checksum := verifyChecksum(t, rng)
+
+	if !bytes.Equal(initialChecksum, checksum) {
+		t.Fatalf("changed checksum: e = %v, c = %v", initialChecksum, checksum)
+	}
+
+	// Modifying the range will change the checksum.
+	incArgs = incrementArgs([]byte("a"), 5)
+	if _, err := client.SendWrapped(tc.Sender(), rng.context(), &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	checksum = verifyChecksum(t, rng)
+	if bytes.Equal(initialChecksum, checksum) {
+		t.Fatalf("same checksum: e = %v, c = %v", initialChecksum, checksum)
+	}
+
+	// Verify that a bad version/checksum sent will result in an error.
+	id := uuid.MakeV4()
+	notify := make(chan []byte, 1)
+	rng.setChecksumNotify(id, notify)
+	args := roachpb.ComputeChecksumRequest{
+		ChecksumID: id,
+	}
+	_, err := rng.ComputeChecksum(nil, nil, roachpb.Header{}, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Set a callback for checksum mismatch panics.
+	var panicked bool
+	rng.store.ctx.TestingMocker.BadChecksumPanic = func() { panicked = true }
+	select {
+	case <-notify:
+		// First test that sending a Verification request with a bad version and
+		// bad checksum will return without panicking because of a bad checksum.
+		verifyArgs := roachpb.VerifyChecksumRequest{
+			ChecksumID: id,
+			Version:    10000001,
+			Checksum:   []byte("bad checksum"),
+		}
+		_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if panicked {
+			t.Fatal("VerifyChecksum panicked")
+		}
+		// Setting the correct version results in a panic.
+		verifyArgs.Version = replicaChecksumVersion
+		_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !panicked {
+			t.Fatal("VerifyChecksum didn't panic")
+		}
+		panicked = false
+	}
+
+	id = uuid.MakeV4()
+	// send a ComputeChecksum with a bad version doesn't result in a
+	// computed checksum.
+	args = roachpb.ComputeChecksumRequest{
+		ChecksumID: id,
+		Version:    23343434,
+	}
+	_, err = rng.ComputeChecksum(nil, nil, roachpb.Header{}, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Sending a VerifyChecksum with a bad checksum is a noop.
+	verifyArgs := roachpb.VerifyChecksumRequest{
+		ChecksumID: id,
+		Checksum:   []byte("bad checksum"),
+	}
+	_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if panicked {
+		t.Fatal("VerifyChecksum panicked")
+	}
+}
