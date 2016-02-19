@@ -10,7 +10,6 @@
 
 	It has these top-level messages:
 		BootstrapInfo
-		Node
 		Request
 		Response
 		Info
@@ -55,26 +54,15 @@ func (m *BootstrapInfo) Reset()         { *m = BootstrapInfo{} }
 func (m *BootstrapInfo) String() string { return proto.CompactTextString(m) }
 func (*BootstrapInfo) ProtoMessage()    {}
 
-// Node contains information about a gossip node.
-type Node struct {
-	// The most recent timestamp of any info which originated at this node.
-	HighWaterStamp int64 `protobuf:"varint,1,opt,name=high_water_stamp,proto3" json:"high_water_stamp,omitempty"`
-	// The minimum number of hops seen for any info which originated at this node.
-	MinHops uint32 `protobuf:"varint,2,opt,name=min_hops,proto3" json:"min_hops,omitempty"`
-}
-
-func (m *Node) Reset()         { *m = Node{} }
-func (m *Node) String() string { return proto.CompactTextString(m) }
-func (*Node) ProtoMessage()    {}
-
 // Request is the request struct passed with the Gossip RPC.
 type Request struct {
 	// Requesting node's ID.
 	NodeID github_com_cockroachdb_cockroach_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,proto3,casttype=github.com/cockroachdb/cockroach/roachpb.NodeID" json:"node_id,omitempty"`
 	// Address of the requesting client.
 	Addr cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=addr" json:"addr"`
-	// Map of information about other nodes, as seen by the requester.
-	Nodes map[int32]*Node `protobuf:"bytes,3,rep,name=nodes" json:"nodes,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
+	// Map of high water timestamps from infos originating at other
+	// nodes, as seen by the requester.
+	HighWaterStamps map[int32]int64 `protobuf:"bytes,3,rep,name=highWaterStamps" json:"highWaterStamps,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
 	// Delta of Infos originating at sender.
 	Delta map[string]*Info `protobuf:"bytes,4,rep,name=delta" json:"delta,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 }
@@ -97,8 +85,9 @@ type Response struct {
 	// Delta of Infos which are fresh according to the map of Node info messages
 	// passed with the request.
 	Delta map[string]*Info `protobuf:"bytes,5,rep,name=delta" json:"delta,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
-	// Map of information about other nodes, as seen by the responder.
-	Nodes map[int32]*Node `protobuf:"bytes,6,rep,name=nodes" json:"nodes,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
+	// Map of high water timestamps from infos originating at other
+	// nodes, as seen by the responder.
+	HighWaterStamps map[int32]int64 `protobuf:"bytes,6,rep,name=highWaterStamps" json:"highWaterStamps,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
 }
 
 func (m *Response) Reset()         { *m = Response{} }
@@ -127,7 +116,6 @@ func (*Info) ProtoMessage()    {}
 
 func init() {
 	proto.RegisterType((*BootstrapInfo)(nil), "cockroach.gossip.BootstrapInfo")
-	proto.RegisterType((*Node)(nil), "cockroach.gossip.Node")
 	proto.RegisterType((*Request)(nil), "cockroach.gossip.Request")
 	proto.RegisterType((*Response)(nil), "cockroach.gossip.Response")
 	proto.RegisterType((*Info)(nil), "cockroach.gossip.Info")
@@ -270,34 +258,6 @@ func (m *BootstrapInfo) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *Node) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Node) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.HighWaterStamp != 0 {
-		data[i] = 0x8
-		i++
-		i = encodeVarintGossip(data, i, uint64(m.HighWaterStamp))
-	}
-	if m.MinHops != 0 {
-		data[i] = 0x10
-		i++
-		i = encodeVarintGossip(data, i, uint64(m.MinHops))
-	}
-	return i, nil
-}
-
 func (m *Request) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -326,28 +286,19 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n2
-	if len(m.Nodes) > 0 {
-		for k := range m.Nodes {
+	if len(m.HighWaterStamps) > 0 {
+		for k := range m.HighWaterStamps {
 			data[i] = 0x1a
 			i++
-			v := m.Nodes[k]
-			if v == nil {
-				return 0, errors.New("proto: map has nil element")
-			}
-			msgSize := v.Size()
-			mapSize := 1 + sovGossip(uint64(k)) + 1 + msgSize + sovGossip(uint64(msgSize))
+			v := m.HighWaterStamps[k]
+			mapSize := 1 + sovGossip(uint64(k)) + 1 + sovGossip(uint64(v))
 			i = encodeVarintGossip(data, i, uint64(mapSize))
 			data[i] = 0x8
 			i++
 			i = encodeVarintGossip(data, i, uint64(k))
-			data[i] = 0x12
+			data[i] = 0x10
 			i++
-			i = encodeVarintGossip(data, i, uint64(v.Size()))
-			n3, err := v.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n3
+			i = encodeVarintGossip(data, i, uint64(v))
 		}
 	}
 	if len(m.Delta) > 0 {
@@ -368,11 +319,11 @@ func (m *Request) MarshalTo(data []byte) (int, error) {
 			data[i] = 0x12
 			i++
 			i = encodeVarintGossip(data, i, uint64(v.Size()))
-			n4, err := v.MarshalTo(data[i:])
+			n3, err := v.MarshalTo(data[i:])
 			if err != nil {
 				return 0, err
 			}
-			i += n4
+			i += n3
 		}
 	}
 	return i, nil
@@ -401,20 +352,20 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintGossip(data, i, uint64(m.Addr.Size()))
-	n5, err := m.Addr.MarshalTo(data[i:])
+	n4, err := m.Addr.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n5
+	i += n4
 	if m.AlternateAddr != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintGossip(data, i, uint64(m.AlternateAddr.Size()))
-		n6, err := m.AlternateAddr.MarshalTo(data[i:])
+		n5, err := m.AlternateAddr.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n6
+		i += n5
 	}
 	if m.AlternateNodeID != 0 {
 		data[i] = 0x20
@@ -439,35 +390,26 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 			data[i] = 0x12
 			i++
 			i = encodeVarintGossip(data, i, uint64(v.Size()))
-			n7, err := v.MarshalTo(data[i:])
+			n6, err := v.MarshalTo(data[i:])
 			if err != nil {
 				return 0, err
 			}
-			i += n7
+			i += n6
 		}
 	}
-	if len(m.Nodes) > 0 {
-		for k := range m.Nodes {
+	if len(m.HighWaterStamps) > 0 {
+		for k := range m.HighWaterStamps {
 			data[i] = 0x32
 			i++
-			v := m.Nodes[k]
-			if v == nil {
-				return 0, errors.New("proto: map has nil element")
-			}
-			msgSize := v.Size()
-			mapSize := 1 + sovGossip(uint64(k)) + 1 + msgSize + sovGossip(uint64(msgSize))
+			v := m.HighWaterStamps[k]
+			mapSize := 1 + sovGossip(uint64(k)) + 1 + sovGossip(uint64(v))
 			i = encodeVarintGossip(data, i, uint64(mapSize))
 			data[i] = 0x8
 			i++
 			i = encodeVarintGossip(data, i, uint64(k))
-			data[i] = 0x12
+			data[i] = 0x10
 			i++
-			i = encodeVarintGossip(data, i, uint64(v.Size()))
-			n8, err := v.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n8
+			i = encodeVarintGossip(data, i, uint64(v))
 		}
 	}
 	return i, nil
@@ -491,11 +433,11 @@ func (m *Info) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintGossip(data, i, uint64(m.Value.Size()))
-	n9, err := m.Value.MarshalTo(data[i:])
+	n7, err := m.Value.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n9
+	i += n7
 	if m.OrigStamp != 0 {
 		data[i] = 0x10
 		i++
@@ -565,18 +507,6 @@ func (m *BootstrapInfo) Size() (n int) {
 	return n
 }
 
-func (m *Node) Size() (n int) {
-	var l int
-	_ = l
-	if m.HighWaterStamp != 0 {
-		n += 1 + sovGossip(uint64(m.HighWaterStamp))
-	}
-	if m.MinHops != 0 {
-		n += 1 + sovGossip(uint64(m.MinHops))
-	}
-	return n
-}
-
 func (m *Request) Size() (n int) {
 	var l int
 	_ = l
@@ -585,15 +515,11 @@ func (m *Request) Size() (n int) {
 	}
 	l = m.Addr.Size()
 	n += 1 + l + sovGossip(uint64(l))
-	if len(m.Nodes) > 0 {
-		for k, v := range m.Nodes {
+	if len(m.HighWaterStamps) > 0 {
+		for k, v := range m.HighWaterStamps {
 			_ = k
 			_ = v
-			l = 0
-			if v != nil {
-				l = v.Size()
-			}
-			mapEntrySize := 1 + sovGossip(uint64(k)) + 1 + l + sovGossip(uint64(l))
+			mapEntrySize := 1 + sovGossip(uint64(k)) + 1 + sovGossip(uint64(v))
 			n += mapEntrySize + 1 + sovGossip(uint64(mapEntrySize))
 		}
 	}
@@ -639,15 +565,11 @@ func (m *Response) Size() (n int) {
 			n += mapEntrySize + 1 + sovGossip(uint64(mapEntrySize))
 		}
 	}
-	if len(m.Nodes) > 0 {
-		for k, v := range m.Nodes {
+	if len(m.HighWaterStamps) > 0 {
+		for k, v := range m.HighWaterStamps {
 			_ = k
 			_ = v
-			l = 0
-			if v != nil {
-				l = v.Size()
-			}
-			mapEntrySize := 1 + sovGossip(uint64(k)) + 1 + l + sovGossip(uint64(l))
+			mapEntrySize := 1 + sovGossip(uint64(k)) + 1 + sovGossip(uint64(v))
 			n += mapEntrySize + 1 + sovGossip(uint64(mapEntrySize))
 		}
 	}
@@ -801,94 +723,6 @@ func (m *BootstrapInfo) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Node) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowGossip
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: Node: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Node: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field HighWaterStamp", wireType)
-			}
-			m.HighWaterStamp = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowGossip
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.HighWaterStamp |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MinHops", wireType)
-			}
-			m.MinHops = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowGossip
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.MinHops |= (uint32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipGossip(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthGossip
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
 func (m *Request) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -969,7 +803,7 @@ func (m *Request) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Nodes", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field HighWaterStamps", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1038,7 +872,7 @@ func (m *Request) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			var mapmsglen int
+			var mapvalue int64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowGossip
@@ -1048,30 +882,15 @@ func (m *Request) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				mapmsglen |= (int(b) & 0x7F) << shift
+				mapvalue |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if mapmsglen < 0 {
-				return ErrInvalidLengthGossip
+			if m.HighWaterStamps == nil {
+				m.HighWaterStamps = make(map[int32]int64)
 			}
-			postmsgIndex := iNdEx + mapmsglen
-			if mapmsglen < 0 {
-				return ErrInvalidLengthGossip
-			}
-			if postmsgIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			mapvalue := &Node{}
-			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
-				return err
-			}
-			iNdEx = postmsgIndex
-			if m.Nodes == nil {
-				m.Nodes = make(map[int32]*Node)
-			}
-			m.Nodes[mapkey] = mapvalue
+			m.HighWaterStamps[mapkey] = mapvalue
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
@@ -1458,7 +1277,7 @@ func (m *Response) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 6:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Nodes", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field HighWaterStamps", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1527,7 +1346,7 @@ func (m *Response) Unmarshal(data []byte) error {
 					break
 				}
 			}
-			var mapmsglen int
+			var mapvalue int64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowGossip
@@ -1537,30 +1356,15 @@ func (m *Response) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				mapmsglen |= (int(b) & 0x7F) << shift
+				mapvalue |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if mapmsglen < 0 {
-				return ErrInvalidLengthGossip
+			if m.HighWaterStamps == nil {
+				m.HighWaterStamps = make(map[int32]int64)
 			}
-			postmsgIndex := iNdEx + mapmsglen
-			if mapmsglen < 0 {
-				return ErrInvalidLengthGossip
-			}
-			if postmsgIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			mapvalue := &Node{}
-			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
-				return err
-			}
-			iNdEx = postmsgIndex
-			if m.Nodes == nil {
-				m.Nodes = make(map[int32]*Node)
-			}
-			m.Nodes[mapkey] = mapvalue
+			m.HighWaterStamps[mapkey] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

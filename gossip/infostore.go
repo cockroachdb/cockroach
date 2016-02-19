@@ -60,11 +60,11 @@ type callback struct {
 type infoStore struct {
 	stopper *stop.Stopper
 
-	Infos     infoMap             `json:"infos,omitempty"` // Map from key to info
-	NodeID    roachpb.NodeID      `json:"-"`               // Owning node's ID
-	NodeAddr  util.UnresolvedAddr `json:"-"`               // Address of node owning this info store: "host:port"
-	nodes     map[int32]*Node     // Per-node information for gossip peers
-	callbacks []*callback
+	Infos           infoMap             `json:"infos,omitempty"` // Map from key to info
+	NodeID          roachpb.NodeID      `json:"-"`               // Owning node's ID
+	NodeAddr        util.UnresolvedAddr `json:"-"`               // Address of node owning this info store: "host:port"
+	highWaterStamps map[int32]int64     // Per-node information for gossip peers
+	callbacks       []*callback
 
 	callbackMu     sync.Mutex // Serializes callbacks
 	callbackWorkMu sync.Mutex // Protects callbackWork
@@ -120,11 +120,11 @@ func (is *infoStore) String() string {
 // newInfoStore allocates and returns a new infoStore.
 func newInfoStore(nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr, stopper *stop.Stopper) *infoStore {
 	return &infoStore{
-		stopper:  stopper,
-		Infos:    make(infoMap),
-		NodeID:   nodeID,
-		NodeAddr: nodeAddr,
-		nodes:    map[int32]*Node{},
+		stopper:         stopper,
+		Infos:           make(infoMap),
+		NodeID:          nodeID,
+		NodeAddr:        nodeAddr,
+		highWaterStamps: map[int32]int64{},
 	}
 }
 
@@ -180,37 +180,28 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 	if i.OrigStamp == 0 {
 		i.Value.InitChecksum([]byte(key))
 		i.OrigStamp = monotonicUnixNano()
-		if n, ok := is.nodes[int32(i.NodeID)]; ok && n.HighWaterStamp >= i.OrigStamp {
-			panic(util.Errorf("high water stamp %d >= %d", n.HighWaterStamp, i.OrigStamp))
+		if highWaterStamp, ok := is.highWaterStamps[int32(i.NodeID)]; ok && highWaterStamp >= i.OrigStamp {
+			panic(util.Errorf("high water stamp %d >= %d", highWaterStamp, i.OrigStamp))
 		}
 	}
 	// Update info map.
 	is.Infos[key] = i
 	// Update the high water timestamp & min hops for the originating node.
 	if nID := int32(i.NodeID); nID != 0 {
-		n, ok := is.nodes[nID]
-		if !ok {
-			is.nodes[nID] = &Node{i.OrigStamp, i.Hops}
-		} else {
-			if n.HighWaterStamp < i.OrigStamp {
-				n.HighWaterStamp = i.OrigStamp
-			}
-			if n.MinHops > i.Hops {
-				n.MinHops = i.Hops
-			}
+		if hws, ok := is.highWaterStamps[nID]; !ok || hws < i.OrigStamp {
+			is.highWaterStamps[nID] = i.OrigStamp
 		}
 	}
 	is.processCallbacks(key, i.Value)
 	return nil
 }
 
-// getNodes returns a copy of the nodes map of gossip peer info
-// maintained by this infostore.
-func (is *infoStore) getNodes() map[int32]*Node {
-	copy := make(map[int32]*Node, len(is.nodes))
-	for k, v := range is.nodes {
-		nodeCopy := *v
-		copy[k] = &nodeCopy
+// getHighWaterStamps returns a copy of the high water stamps map of
+// gossip peer info maintained by this infostore.
+func (is *infoStore) getHighWaterStamps() map[int32]int64 {
+	copy := make(map[int32]int64, len(is.highWaterStamps))
+	for k, hws := range is.highWaterStamps {
+		copy[k] = hws
 	}
 	return copy
 }
@@ -338,17 +329,15 @@ func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) (fre
 	return
 }
 
-// delta returns a map of infos which are newer or have fewer hops
-// than the values indicated by the supplied nodes map. The
-// supplied nodes map contains gossip node information from the
-// perspective of the peer asking for the delta. That is, the map
-// contains a record of the most recent info timestamp and min hops
-// which the requester has seen from each node in the network.
-func (is *infoStore) delta(nodes map[int32]*Node) map[string]*Info {
+// delta returns a map of infos which have originating timestamps
+// newer than the high water timestamps indicated by the supplied
+// map (which is taken from the perspective of the peer node we're
+// taking this delta for).
+func (is *infoStore) delta(highWaterTimestamps map[int32]int64) map[string]*Info {
 	infos := make(map[string]*Info)
 	// Compute delta of infos.
 	if err := is.visitInfos(func(key string, i *Info) error {
-		if i.isFresh(nodes[int32(i.NodeID)]) {
+		if i.isFresh(highWaterTimestamps[int32(i.NodeID)]) {
 			infos[key] = i
 		}
 		return nil
