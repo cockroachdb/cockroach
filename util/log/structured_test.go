@@ -38,16 +38,15 @@ func (t testArg) String() string {
 
 func testContext() context.Context {
 	ctx := context.Background()
-	return Add(ctx, NodeID, roachpb.NodeID(1), StoreID, roachpb.StoreID(2), RangeID, roachpb.RangeID(3), Key, roachpb.Key("key"))
+	return Add(ctx, NodeID, int32(1), StoreID, int32(2), RangeID, int64(3))
 }
 
 func TestSetLogEntry(t *testing.T) {
 	ctx := testContext()
 
-	nodeID := ctx.Value(NodeID).(roachpb.NodeID)
-	storeID := ctx.Value(StoreID).(roachpb.StoreID)
-	rangeID := ctx.Value(RangeID).(roachpb.RangeID)
-	key := ctx.Value(Key).(roachpb.Key)
+	nodeID := ctx.Value(NodeID).(int32)
+	storeID := ctx.Value(StoreID).(int32)
+	rangeID := ctx.Value(RangeID).(int64)
 
 	testCases := []struct {
 		ctx      context.Context
@@ -57,14 +56,14 @@ func TestSetLogEntry(t *testing.T) {
 	}{
 		{nil, "", []interface{}{}, LogEntry{}},
 		{ctx, "", []interface{}{}, LogEntry{
-			NodeID: &nodeID, StoreID: &storeID, RangeID: &rangeID, Key: key,
+			NodeID: &nodeID, StoreID: &storeID, RangeID: &rangeID,
 		}},
 		{ctx, "no args", []interface{}{}, LogEntry{
-			NodeID: &nodeID, StoreID: &storeID, RangeID: &rangeID, Key: key,
+			NodeID: &nodeID, StoreID: &storeID, RangeID: &rangeID,
 			Format: "no args",
 		}},
 		{ctx, "1 arg %s", []interface{}{"foo"}, LogEntry{
-			NodeID: &nodeID, StoreID: &storeID, RangeID: &rangeID, Key: key,
+			NodeID: &nodeID, StoreID: &storeID, RangeID: &rangeID,
 			Format: "1 arg %s",
 			Args: []LogEntry_Arg{
 				{Str: "foo"},
