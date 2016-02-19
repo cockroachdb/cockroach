@@ -41,5 +41,5 @@ func NewContext() *Context {
 func (ctx *Context) InitDefaults() {
 	ctx.Context.InitDefaults()
 	ctx.OneShotSQL = false
-	ctx.Stores = "./cockroach-data"
+	ctx.Stores = "cockroach-data"
 }

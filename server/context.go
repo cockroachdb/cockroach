@@ -56,6 +56,13 @@ const (
 	defaultBalanceMode        = storage.BalanceModeUsage
 )
 
+// StoreSpec holds the parameters for a store.
+type StoreSpec struct {
+	Name  string
+	Attrs string
+	Path  string
+}
+
 // Context holds parameters needed to setup a server.
 // Calling "cli".initFlags(ctx *Context) will initialize Context using
 // command flags. Keep in sync with "cli/flags.go".
@@ -200,32 +207,47 @@ var storesRE = regexp.MustCompile(`(?:([^,=]+)=)?([^=,]+)(,|$)`)
 // InitStores interprets the stores parameter to initialize a slice of
 // engine.Engine objects.
 func (ctx *Context) InitStores(stopper *stop.Stopper) error {
-	ctx.Stores = strings.TrimSpace(ctx.Stores)
-	if len(ctx.Stores) == 0 {
-		return fmt.Errorf("no storage specified; see --stores")
+	specs, err := ctx.GetStoreSpecs()
+	if err != nil {
+		return err
 	}
-	storeSpecs := storesRE.FindAllStringSubmatch(ctx.Stores, -1)
-	// Error if regexp doesn't match.
-	if storeSpecs == nil {
-		return fmt.Errorf("invalid storage specification %q; see --stores", ctx.Stores)
-	}
-
-	for _, storeSpec := range storeSpecs {
-		name := storeSpec[0]
-		if len(storeSpec) != 4 {
-			return util.Errorf("unable to parse attributes and path from store %q", name)
-		}
-		attrs, path := storeSpec[1], storeSpec[2]
+	for _, spec := range specs {
 		// There are two matches for each store specification: the colon-separated
 		// list of attributes and the path.
-		engine, err := ctx.initEngine(attrs, path, stopper)
+		engine, err := ctx.initEngine(spec.Attrs, spec.Path, stopper)
 		if err != nil {
-			return util.Errorf("unable to init engine for store %q: %s", name, err)
+			return util.Errorf("unable to init engine for store %q: %s", spec.Name, err)
 		}
 		ctx.Engines = append(ctx.Engines, engine)
 	}
 	log.Infof("%d storage engine(s) specified", len(ctx.Engines))
 	return nil
+}
+
+// GetStoreSpecs parses the Stores string and returns the a slice of
+// StoreSpecs.
+func (ctx *Context) GetStoreSpecs() ([]StoreSpec, error) {
+	ctx.Stores = strings.TrimSpace(ctx.Stores)
+	if len(ctx.Stores) == 0 {
+		return nil, fmt.Errorf("no storage specified; see --stores")
+	}
+	storeSpecs := storesRE.FindAllStringSubmatch(ctx.Stores, -1)
+	// Error if regexp doesn't match.
+	if storeSpecs == nil {
+		return nil, fmt.Errorf("invalid storage specification %q; see --stores", ctx.Stores)
+	}
+	specs := make([]StoreSpec, len(storeSpecs))
+	for i, spec := range storeSpecs {
+		if len(spec) != 4 {
+			return nil, fmt.Errorf("unable to parse attributes and path from store %q", spec[0])
+		}
+		specs[i] = StoreSpec{
+			Name:  spec[0],
+			Attrs: spec[1],
+			Path:  spec[2],
+		}
+	}
+	return specs, nil
 }
 
 // InitNode parses node attributes and initializes the gossip bootstrap

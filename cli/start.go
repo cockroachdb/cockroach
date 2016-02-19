@@ -23,7 +23,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
+	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -99,6 +101,34 @@ uninitialized, specify the --join flag to point to any healthy node
 // of other active nodes used to join this node to the cockroach
 // cluster, if this is its first time connecting.
 func runStart(_ *cobra.Command, _ []string) error {
+	storeSpecs, err := cliContext.GetStoreSpecs()
+	if err != nil {
+		return err
+	}
+	// Default the log directory to the the "logs" subdirectory of the first
+	// non-memory store. We only do this for the "start" command which is why
+	// this work occurs here and not in an OnInitialize function.
+	//
+	// TODO(pmattis): This isn't quite correct. The user might specify
+	// --log-dir=$TMPDIR and this will override their request. This can be fixed
+	// by changing the log-dir flag to keep track of whether it has been set or
+	// not. Doesn't seem urgent to do (yet).
+	if f := flag.Lookup("log-dir"); f.Value.String() == os.TempDir() {
+		for _, spec := range storeSpecs {
+			if spec.Attrs == "mem" {
+				continue
+			}
+			dir := filepath.Join(spec.Path, "logs")
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return err
+			}
+			if err := f.Value.Set(dir); err != nil {
+				return err
+			}
+			break
+		}
+	}
+
 	info := util.GetBuildInfo()
 	log.Infof("[build] %s @ %s (%s)", info.Tag, info.Time, info.Vers)
 
@@ -124,10 +154,17 @@ func runStart(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("cockroach server exited with error: %s", err)
 	}
 
-	fmt.Printf("admin:  %s\n", cliContext.AdminURL())
-	fmt.Printf("sql:    %s\n", cliContext.PGURL(connUser))
-	fmt.Printf("logs:   %s\n", flag.Lookup("log-dir").Value)
-	fmt.Printf("stores: %s\n", cliContext.Stores)
+	tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
+	fmt.Fprintf(tw, "build:\t%s @ %s (%s)\n", info.Tag, info.Time, info.Vers)
+	fmt.Fprintf(tw, "admin:\t%s\n", cliContext.AdminURL())
+	fmt.Fprintf(tw, "sql:\t%s\n", cliContext.PGURL(connUser))
+	fmt.Fprintf(tw, "logs:\t%s\n", flag.Lookup("log-dir").Value)
+	for i, spec := range storeSpecs {
+		fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec.Name)
+	}
+	if err := tw.Flush(); err != nil {
+		return err
+	}
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt, os.Kill)
