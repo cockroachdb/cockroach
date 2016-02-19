@@ -17,6 +17,7 @@
 package storage_test
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"strings"
@@ -1022,6 +1023,56 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+}
+
+func TestSHA512(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	mtc := startMultiTestContext(t, 1)
+	defer mtc.Stop()
+
+	// Perform an increment before replication to ensure that commands are not
+	// repeated on restarts.
+	incArgs := incrementArgs([]byte("a"), 23)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	// pick a timestamp and compute the sha at that timestamp.
+	rng := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil)
+	if rng == nil {
+		t.Fatal("failed to look up min range")
+	}
+	timestamp := mtc.stores[0].Clock().Now()
+	sha_before, err := rng.SHA512(timestamp)
+	if err != nil {
+		t.Fatalf("failed to sha min range: %s", err)
+	}
+
+	// increment again
+	incArgs = incrementArgs([]byte("a"), 5)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Use the original timestamp and ensure that the sha stays the same.
+	sha, err := rng.SHA512(timestamp)
+	if err != nil {
+		t.Fatalf("failed to sha min range: %s", err)
+	}
+
+	if !bytes.Equal(sha_before[:], sha[:]) {
+		t.Fatalf("sha not equal at the same timestamp, e = %v, v = %v", sha_before, sha)
+	}
+
+	// Use a new timestamp and see that the sha has changed.
+	timestamp = mtc.stores[0].Clock().Now()
+	sha, err = rng.SHA512(timestamp)
+	if err != nil {
+		t.Fatalf("failed to sha min range: %s", err)
+	}
+	if bytes.Equal(sha_before[:], sha[:]) {
+		t.Fatalf("sha not equal at the same timestamp, e = %v, v = %v", sha_before, sha)
+	}
+
 }
 
 // TestRaftAfterRemoveRange verifies that the raft state removes

@@ -160,6 +160,18 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* LeaderLeaseResponse_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   LeaderLeaseResponse_reflection_ = NULL;
+const ::google::protobuf::Descriptor* ComputeChecksumRequest_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  ComputeChecksumRequest_reflection_ = NULL;
+const ::google::protobuf::Descriptor* ComputeChecksumResponse_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  ComputeChecksumResponse_reflection_ = NULL;
+const ::google::protobuf::Descriptor* VerifyChecksumRequest_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  VerifyChecksumRequest_reflection_ = NULL;
+const ::google::protobuf::Descriptor* VerifyChecksumResponse_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  VerifyChecksumResponse_reflection_ = NULL;
 const ::google::protobuf::Descriptor* RequestUnion_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   RequestUnion_reflection_ = NULL;
@@ -923,8 +935,72 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto() {
       sizeof(LeaderLeaseResponse),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(LeaderLeaseResponse, _internal_metadata_),
       -1);
-  RequestUnion_descriptor_ = file->message_type(45);
-  static const int RequestUnion_offsets_[22] = {
+  ComputeChecksumRequest_descriptor_ = file->message_type(45);
+  static const int ComputeChecksumRequest_offsets_[3] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ComputeChecksumRequest, header_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ComputeChecksumRequest, version_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ComputeChecksumRequest, checksum_id_),
+  };
+  ComputeChecksumRequest_reflection_ =
+    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
+      ComputeChecksumRequest_descriptor_,
+      ComputeChecksumRequest::default_instance_,
+      ComputeChecksumRequest_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ComputeChecksumRequest, _has_bits_[0]),
+      -1,
+      -1,
+      sizeof(ComputeChecksumRequest),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ComputeChecksumRequest, _internal_metadata_),
+      -1);
+  ComputeChecksumResponse_descriptor_ = file->message_type(46);
+  static const int ComputeChecksumResponse_offsets_[1] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ComputeChecksumResponse, header_),
+  };
+  ComputeChecksumResponse_reflection_ =
+    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
+      ComputeChecksumResponse_descriptor_,
+      ComputeChecksumResponse::default_instance_,
+      ComputeChecksumResponse_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ComputeChecksumResponse, _has_bits_[0]),
+      -1,
+      -1,
+      sizeof(ComputeChecksumResponse),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ComputeChecksumResponse, _internal_metadata_),
+      -1);
+  VerifyChecksumRequest_descriptor_ = file->message_type(47);
+  static const int VerifyChecksumRequest_offsets_[3] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(VerifyChecksumRequest, header_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(VerifyChecksumRequest, checksum_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(VerifyChecksumRequest, checksum_),
+  };
+  VerifyChecksumRequest_reflection_ =
+    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
+      VerifyChecksumRequest_descriptor_,
+      VerifyChecksumRequest::default_instance_,
+      VerifyChecksumRequest_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(VerifyChecksumRequest, _has_bits_[0]),
+      -1,
+      -1,
+      sizeof(VerifyChecksumRequest),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(VerifyChecksumRequest, _internal_metadata_),
+      -1);
+  VerifyChecksumResponse_descriptor_ = file->message_type(48);
+  static const int VerifyChecksumResponse_offsets_[1] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(VerifyChecksumResponse, header_),
+  };
+  VerifyChecksumResponse_reflection_ =
+    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
+      VerifyChecksumResponse_descriptor_,
+      VerifyChecksumResponse::default_instance_,
+      VerifyChecksumResponse_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(VerifyChecksumResponse, _has_bits_[0]),
+      -1,
+      -1,
+      sizeof(VerifyChecksumResponse),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(VerifyChecksumResponse, _internal_metadata_),
+      -1);
+  RequestUnion_descriptor_ = file->message_type(49);
+  static const int RequestUnion_offsets_[24] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestUnion, get_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestUnion, put_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestUnion, conditional_put_),
@@ -946,6 +1022,8 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto() {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestUnion, truncate_log_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestUnion, leader_lease_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestUnion, reverse_scan_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestUnion, compute_checksum_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestUnion, collect_checksum_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestUnion, noop_),
   };
   RequestUnion_reflection_ =
@@ -959,8 +1037,8 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto() {
       sizeof(RequestUnion),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestUnion, _internal_metadata_),
       -1);
-  ResponseUnion_descriptor_ = file->message_type(46);
-  static const int ResponseUnion_offsets_[22] = {
+  ResponseUnion_descriptor_ = file->message_type(50);
+  static const int ResponseUnion_offsets_[24] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseUnion, get_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseUnion, put_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseUnion, conditional_put_),
@@ -982,6 +1060,8 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto() {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseUnion, truncate_log_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseUnion, leader_lease_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseUnion, reverse_scan_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseUnion, compute_checksum_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseUnion, collect_checksum_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseUnion, noop_),
   };
   ResponseUnion_reflection_ =
@@ -995,7 +1075,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto() {
       sizeof(ResponseUnion),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseUnion, _internal_metadata_),
       -1);
-  Header_descriptor_ = file->message_type(47);
+  Header_descriptor_ = file->message_type(51);
   static const int Header_offsets_[6] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Header, timestamp_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Header, replica_),
@@ -1015,7 +1095,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto() {
       sizeof(Header),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Header, _internal_metadata_),
       -1);
-  BatchRequest_descriptor_ = file->message_type(48);
+  BatchRequest_descriptor_ = file->message_type(52);
   static const int BatchRequest_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(BatchRequest, header_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(BatchRequest, requests_),
@@ -1031,7 +1111,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto() {
       sizeof(BatchRequest),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(BatchRequest, _internal_metadata_),
       -1);
-  BatchResponse_descriptor_ = file->message_type(49);
+  BatchResponse_descriptor_ = file->message_type(53);
   static const int BatchResponse_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(BatchResponse, header_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(BatchResponse, responses_),
@@ -1171,6 +1251,14 @@ void protobuf_RegisterTypes(const ::std::string&) {
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       LeaderLeaseResponse_descriptor_, &LeaderLeaseResponse::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+      ComputeChecksumRequest_descriptor_, &ComputeChecksumRequest::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+      ComputeChecksumResponse_descriptor_, &ComputeChecksumResponse::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+      VerifyChecksumRequest_descriptor_, &VerifyChecksumRequest::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+      VerifyChecksumResponse_descriptor_, &VerifyChecksumResponse::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       RequestUnion_descriptor_, &RequestUnion::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       ResponseUnion_descriptor_, &ResponseUnion::default_instance());
@@ -1279,6 +1367,14 @@ void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto() {
   delete LeaderLeaseRequest_reflection_;
   delete LeaderLeaseResponse::default_instance_;
   delete LeaderLeaseResponse_reflection_;
+  delete ComputeChecksumRequest::default_instance_;
+  delete ComputeChecksumRequest_reflection_;
+  delete ComputeChecksumResponse::default_instance_;
+  delete ComputeChecksumResponse_reflection_;
+  delete VerifyChecksumRequest::default_instance_;
+  delete VerifyChecksumRequest_reflection_;
+  delete VerifyChecksumResponse::default_instance_;
+  delete VerifyChecksumResponse_reflection_;
   delete RequestUnion::default_instance_;
   delete RequestUnion_reflection_;
   delete ResponseUnion::default_instance_;
@@ -1440,95 +1536,116 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
     "hpb.SpanB\010\310\336\037\000\320\336\037\001\022-\n\005lease\030\002 \001(\0132\030.cock"
     "roach.roachpb.LeaseB\004\310\336\037\000\"R\n\023LeaderLease"
     "Response\022;\n\006header\030\001 \001(\0132!.cockroach.roa"
-    "chpb.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\201\n\n\014Reques"
-    "tUnion\022*\n\003get\030\001 \001(\0132\035.cockroach.roachpb."
-    "GetRequest\022*\n\003put\030\002 \001(\0132\035.cockroach.roac"
-    "hpb.PutRequest\022A\n\017conditional_put\030\003 \001(\0132"
-    "(.cockroach.roachpb.ConditionalPutReques"
-    "t\0226\n\tincrement\030\004 \001(\0132#.cockroach.roachpb"
-    ".IncrementRequest\0220\n\006delete\030\005 \001(\0132 .cock"
-    "roach.roachpb.DeleteRequest\022;\n\014delete_ra"
-    "nge\030\006 \001(\0132%.cockroach.roachpb.DeleteRang"
-    "eRequest\022,\n\004scan\030\007 \001(\0132\036.cockroach.roach"
-    "pb.ScanRequest\022E\n\021begin_transaction\030\010 \001("
-    "\0132*.cockroach.roachpb.BeginTransactionRe"
-    "quest\022A\n\017end_transaction\030\t \001(\0132(.cockroa"
-    "ch.roachpb.EndTransactionRequest\0229\n\013admi"
-    "n_split\030\n \001(\0132$.cockroach.roachpb.AdminS"
-    "plitRequest\0229\n\013admin_merge\030\013 \001(\0132$.cockr"
-    "oach.roachpb.AdminMergeRequest\022=\n\rheartb"
-    "eat_txn\030\014 \001(\0132&.cockroach.roachpb.Heartb"
-    "eatTxnRequest\022(\n\002gc\030\r \001(\0132\034.cockroach.ro"
-    "achpb.GCRequest\0223\n\010push_txn\030\016 \001(\0132!.cock"
-    "roach.roachpb.PushTxnRequest\022;\n\014range_lo"
-    "okup\030\017 \001(\0132%.cockroach.roachpb.RangeLook"
-    "upRequest\022\?\n\016resolve_intent\030\020 \001(\0132\'.cock"
-    "roach.roachpb.ResolveIntentRequest\022J\n\024re"
-    "solve_intent_range\030\021 \001(\0132,.cockroach.roa"
-    "chpb.ResolveIntentRangeRequest\022.\n\005merge\030"
-    "\022 \001(\0132\037.cockroach.roachpb.MergeRequest\022;"
-    "\n\014truncate_log\030\023 \001(\0132%.cockroach.roachpb"
-    ".TruncateLogRequest\022;\n\014leader_lease\030\024 \001("
-    "\0132%.cockroach.roachpb.LeaderLeaseRequest"
-    "\022;\n\014reverse_scan\030\025 \001(\0132%.cockroach.roach"
-    "pb.ReverseScanRequest\022,\n\004noop\030\026 \001(\0132\036.co"
-    "ckroach.roachpb.NoopRequest:\004\310\240\037\001\"\230\n\n\rRe"
-    "sponseUnion\022+\n\003get\030\001 \001(\0132\036.cockroach.roa"
-    "chpb.GetResponse\022+\n\003put\030\002 \001(\0132\036.cockroac"
-    "h.roachpb.PutResponse\022B\n\017conditional_put"
-    "\030\003 \001(\0132).cockroach.roachpb.ConditionalPu"
-    "tResponse\0227\n\tincrement\030\004 \001(\0132$.cockroach"
-    ".roachpb.IncrementResponse\0221\n\006delete\030\005 \001"
-    "(\0132!.cockroach.roachpb.DeleteResponse\022<\n"
-    "\014delete_range\030\006 \001(\0132&.cockroach.roachpb."
-    "DeleteRangeResponse\022-\n\004scan\030\007 \001(\0132\037.cock"
-    "roach.roachpb.ScanResponse\022F\n\021begin_tran"
-    "saction\030\010 \001(\0132+.cockroach.roachpb.BeginT"
-    "ransactionResponse\022B\n\017end_transaction\030\t "
-    "\001(\0132).cockroach.roachpb.EndTransactionRe"
-    "sponse\022:\n\013admin_split\030\n \001(\0132%.cockroach."
-    "roachpb.AdminSplitResponse\022:\n\013admin_merg"
-    "e\030\013 \001(\0132%.cockroach.roachpb.AdminMergeRe"
-    "sponse\022>\n\rheartbeat_txn\030\014 \001(\0132\'.cockroac"
-    "h.roachpb.HeartbeatTxnResponse\022)\n\002gc\030\r \001"
-    "(\0132\035.cockroach.roachpb.GCResponse\0224\n\010pus"
-    "h_txn\030\016 \001(\0132\".cockroach.roachpb.PushTxnR"
-    "esponse\022<\n\014range_lookup\030\017 \001(\0132&.cockroac"
-    "h.roachpb.RangeLookupResponse\022@\n\016resolve"
-    "_intent\030\020 \001(\0132(.cockroach.roachpb.Resolv"
-    "eIntentResponse\022K\n\024resolve_intent_range\030"
-    "\021 \001(\0132-.cockroach.roachpb.ResolveIntentR"
-    "angeResponse\022/\n\005merge\030\022 \001(\0132 .cockroach."
-    "roachpb.MergeResponse\022<\n\014truncate_log\030\023 "
-    "\001(\0132&.cockroach.roachpb.TruncateLogRespo"
-    "nse\022<\n\014leader_lease\030\024 \001(\0132&.cockroach.ro"
-    "achpb.LeaderLeaseResponse\022<\n\014reverse_sca"
-    "n\030\025 \001(\0132&.cockroach.roachpb.ReverseScanR"
-    "esponse\022-\n\004noop\030\026 \001(\0132\037.cockroach.roachp"
-    "b.NoopResponse:\004\310\240\037\001\"\314\002\n\006Header\0225\n\ttimes"
-    "tamp\030\001 \001(\0132\034.cockroach.roachpb.Timestamp"
-    "B\004\310\336\037\000\022;\n\007replica\030\002 \001(\0132$.cockroach.roac"
-    "hpb.ReplicaDescriptorB\004\310\336\037\000\022,\n\010range_id\030"
-    "\003 \001(\003B\032\310\336\037\000\342\336\037\007RangeID\372\336\037\007RangeID\022+\n\ruse"
-    "r_priority\030\004 \001(\001B\024\310\336\037\000\372\336\037\014UserPriority\022+"
-    "\n\003txn\030\005 \001(\0132\036.cockroach.roachpb.Transact"
-    "ion\022F\n\020read_consistency\030\006 \001(\0162&.cockroac"
-    "h.roachpb.ReadConsistencyTypeB\004\310\336\037\000\"\202\001\n\014"
-    "BatchRequest\0223\n\006header\030\001 \001(\0132\031.cockroach"
-    ".roachpb.HeaderB\010\310\336\037\000\320\336\037\001\0227\n\010requests\030\002 "
-    "\003(\0132\037.cockroach.roachpb.RequestUnionB\004\310\336"
-    "\037\000:\004\230\240\037\000\"\253\002\n\rBatchResponse\022A\n\006header\030\001 \001"
-    "(\0132\'.cockroach.roachpb.BatchResponse.Hea"
-    "derB\010\310\336\037\000\320\336\037\001\0229\n\tresponses\030\002 \003(\0132 .cockr"
-    "oach.roachpb.ResponseUnionB\004\310\336\037\000\032\225\001\n\006Hea"
-    "der\022\'\n\005error\030\001 \001(\0132\030.cockroach.roachpb.E"
-    "rror\0225\n\ttimestamp\030\002 \001(\0132\034.cockroach.roac"
-    "hpb.TimestampB\004\310\336\037\000\022+\n\003txn\030\003 \001(\0132\036.cockr"
-    "oach.roachpb.Transaction:\004\230\240\037\000*L\n\023ReadCo"
-    "nsistencyType\022\016\n\nCONSISTENT\020\000\022\r\n\tCONSENS"
-    "US\020\001\022\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000*G\n\013PushTxnT"
-    "ype\022\022\n\016PUSH_TIMESTAMP\020\000\022\016\n\nPUSH_ABORT\020\001\022"
-    "\016\n\nPUSH_TOUCH\020\002\032\004\210\243\036\000B\tZ\007roachpbX\003", 8994);
+    "chpb.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\276\001\n\026Comput"
+    "eChecksumRequest\0221\n\006header\030\001 \001(\0132\027.cockr"
+    "oach.roachpb.SpanB\010\310\336\037\000\320\336\037\001\022\025\n\007version\030\002"
+    " \001(\rB\004\310\336\037\000\022Z\n\013checksum_id\030\003 \001(\014BE\310\336\037\000\342\336\037"
+    "\nChecksumID\332\336\037/github.com/cockroachdb/co"
+    "ckroach/util/uuid.UUID\"V\n\027ComputeChecksu"
+    "mResponse\022;\n\006header\030\001 \001(\0132!.cockroach.ro"
+    "achpb.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\270\001\n\025Verif"
+    "yChecksumRequest\0221\n\006header\030\001 \001(\0132\027.cockr"
+    "oach.roachpb.SpanB\010\310\336\037\000\320\336\037\001\022Z\n\013checksum_"
+    "id\030\002 \001(\014BE\310\336\037\000\342\336\037\nChecksumID\332\336\037/github.c"
+    "om/cockroachdb/cockroach/util/uuid.UUID\022"
+    "\020\n\010checksum\030\003 \001(\014\"U\n\026VerifyChecksumRespo"
+    "nse\022;\n\006header\030\001 \001(\0132!.cockroach.roachpb."
+    "ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\212\013\n\014RequestUnio"
+    "n\022*\n\003get\030\001 \001(\0132\035.cockroach.roachpb.GetRe"
+    "quest\022*\n\003put\030\002 \001(\0132\035.cockroach.roachpb.P"
+    "utRequest\022A\n\017conditional_put\030\003 \001(\0132(.coc"
+    "kroach.roachpb.ConditionalPutRequest\0226\n\t"
+    "increment\030\004 \001(\0132#.cockroach.roachpb.Incr"
+    "ementRequest\0220\n\006delete\030\005 \001(\0132 .cockroach"
+    ".roachpb.DeleteRequest\022;\n\014delete_range\030\006"
+    " \001(\0132%.cockroach.roachpb.DeleteRangeRequ"
+    "est\022,\n\004scan\030\007 \001(\0132\036.cockroach.roachpb.Sc"
+    "anRequest\022E\n\021begin_transaction\030\010 \001(\0132*.c"
+    "ockroach.roachpb.BeginTransactionRequest"
+    "\022A\n\017end_transaction\030\t \001(\0132(.cockroach.ro"
+    "achpb.EndTransactionRequest\0229\n\013admin_spl"
+    "it\030\n \001(\0132$.cockroach.roachpb.AdminSplitR"
+    "equest\0229\n\013admin_merge\030\013 \001(\0132$.cockroach."
+    "roachpb.AdminMergeRequest\022=\n\rheartbeat_t"
+    "xn\030\014 \001(\0132&.cockroach.roachpb.HeartbeatTx"
+    "nRequest\022(\n\002gc\030\r \001(\0132\034.cockroach.roachpb"
+    ".GCRequest\0223\n\010push_txn\030\016 \001(\0132!.cockroach"
+    ".roachpb.PushTxnRequest\022;\n\014range_lookup\030"
+    "\017 \001(\0132%.cockroach.roachpb.RangeLookupReq"
+    "uest\022\?\n\016resolve_intent\030\020 \001(\0132\'.cockroach"
+    ".roachpb.ResolveIntentRequest\022J\n\024resolve"
+    "_intent_range\030\021 \001(\0132,.cockroach.roachpb."
+    "ResolveIntentRangeRequest\022.\n\005merge\030\022 \001(\013"
+    "2\037.cockroach.roachpb.MergeRequest\022;\n\014tru"
+    "ncate_log\030\023 \001(\0132%.cockroach.roachpb.Trun"
+    "cateLogRequest\022;\n\014leader_lease\030\024 \001(\0132%.c"
+    "ockroach.roachpb.LeaderLeaseRequest\022;\n\014r"
+    "everse_scan\030\025 \001(\0132%.cockroach.roachpb.Re"
+    "verseScanRequest\022C\n\020compute_checksum\030\026 \001"
+    "(\0132).cockroach.roachpb.ComputeChecksumRe"
+    "quest\022B\n\020collect_checksum\030\027 \001(\0132(.cockro"
+    "ach.roachpb.VerifyChecksumRequest\022,\n\004noo"
+    "p\030\030 \001(\0132\036.cockroach.roachpb.NoopRequest:"
+    "\004\310\240\037\001\"\243\013\n\rResponseUnion\022+\n\003get\030\001 \001(\0132\036.c"
+    "ockroach.roachpb.GetResponse\022+\n\003put\030\002 \001("
+    "\0132\036.cockroach.roachpb.PutResponse\022B\n\017con"
+    "ditional_put\030\003 \001(\0132).cockroach.roachpb.C"
+    "onditionalPutResponse\0227\n\tincrement\030\004 \001(\013"
+    "2$.cockroach.roachpb.IncrementResponse\0221"
+    "\n\006delete\030\005 \001(\0132!.cockroach.roachpb.Delet"
+    "eResponse\022<\n\014delete_range\030\006 \001(\0132&.cockro"
+    "ach.roachpb.DeleteRangeResponse\022-\n\004scan\030"
+    "\007 \001(\0132\037.cockroach.roachpb.ScanResponse\022F"
+    "\n\021begin_transaction\030\010 \001(\0132+.cockroach.ro"
+    "achpb.BeginTransactionResponse\022B\n\017end_tr"
+    "ansaction\030\t \001(\0132).cockroach.roachpb.EndT"
+    "ransactionResponse\022:\n\013admin_split\030\n \001(\0132"
+    "%.cockroach.roachpb.AdminSplitResponse\022:"
+    "\n\013admin_merge\030\013 \001(\0132%.cockroach.roachpb."
+    "AdminMergeResponse\022>\n\rheartbeat_txn\030\014 \001("
+    "\0132\'.cockroach.roachpb.HeartbeatTxnRespon"
+    "se\022)\n\002gc\030\r \001(\0132\035.cockroach.roachpb.GCRes"
+    "ponse\0224\n\010push_txn\030\016 \001(\0132\".cockroach.roac"
+    "hpb.PushTxnResponse\022<\n\014range_lookup\030\017 \001("
+    "\0132&.cockroach.roachpb.RangeLookupRespons"
+    "e\022@\n\016resolve_intent\030\020 \001(\0132(.cockroach.ro"
+    "achpb.ResolveIntentResponse\022K\n\024resolve_i"
+    "ntent_range\030\021 \001(\0132-.cockroach.roachpb.Re"
+    "solveIntentRangeResponse\022/\n\005merge\030\022 \001(\0132"
+    " .cockroach.roachpb.MergeResponse\022<\n\014tru"
+    "ncate_log\030\023 \001(\0132&.cockroach.roachpb.Trun"
+    "cateLogResponse\022<\n\014leader_lease\030\024 \001(\0132&."
+    "cockroach.roachpb.LeaderLeaseResponse\022<\n"
+    "\014reverse_scan\030\025 \001(\0132&.cockroach.roachpb."
+    "ReverseScanResponse\022D\n\020compute_checksum\030"
+    "\026 \001(\0132*.cockroach.roachpb.ComputeChecksu"
+    "mResponse\022C\n\020collect_checksum\030\027 \001(\0132).co"
+    "ckroach.roachpb.VerifyChecksumResponse\022-"
+    "\n\004noop\030\030 \001(\0132\037.cockroach.roachpb.NoopRes"
+    "ponse:\004\310\240\037\001\"\314\002\n\006Header\0225\n\ttimestamp\030\001 \001("
+    "\0132\034.cockroach.roachpb.TimestampB\004\310\336\037\000\022;\n"
+    "\007replica\030\002 \001(\0132$.cockroach.roachpb.Repli"
+    "caDescriptorB\004\310\336\037\000\022,\n\010range_id\030\003 \001(\003B\032\310\336"
+    "\037\000\342\336\037\007RangeID\372\336\037\007RangeID\022+\n\ruser_priorit"
+    "y\030\004 \001(\001B\024\310\336\037\000\372\336\037\014UserPriority\022+\n\003txn\030\005 \001"
+    "(\0132\036.cockroach.roachpb.Transaction\022F\n\020re"
+    "ad_consistency\030\006 \001(\0162&.cockroach.roachpb"
+    ".ReadConsistencyTypeB\004\310\336\037\000\"\202\001\n\014BatchRequ"
+    "est\0223\n\006header\030\001 \001(\0132\031.cockroach.roachpb."
+    "HeaderB\010\310\336\037\000\320\336\037\001\0227\n\010requests\030\002 \003(\0132\037.coc"
+    "kroach.roachpb.RequestUnionB\004\310\336\037\000:\004\230\240\037\000\""
+    "\253\002\n\rBatchResponse\022A\n\006header\030\001 \001(\0132\'.cock"
+    "roach.roachpb.BatchResponse.HeaderB\010\310\336\037\000"
+    "\320\336\037\001\0229\n\tresponses\030\002 \003(\0132 .cockroach.roac"
+    "hpb.ResponseUnionB\004\310\336\037\000\032\225\001\n\006Header\022\'\n\005er"
+    "ror\030\001 \001(\0132\030.cockroach.roachpb.Error\0225\n\tt"
+    "imestamp\030\002 \001(\0132\034.cockroach.roachpb.Times"
+    "tampB\004\310\336\037\000\022+\n\003txn\030\003 \001(\0132\036.cockroach.roac"
+    "hpb.Transaction:\004\230\240\037\000*L\n\023ReadConsistency"
+    "Type\022\016\n\nCONSISTENT\020\000\022\r\n\tCONSENSUS\020\001\022\020\n\014I"
+    "NCONSISTENT\020\002\032\004\210\243\036\000*G\n\013PushTxnType\022\022\n\016PU"
+    "SH_TIMESTAMP\020\000\022\016\n\nPUSH_ABORT\020\001\022\016\n\nPUSH_T"
+    "OUCH\020\002\032\004\210\243\036\000B\tZ\007roachpbX\003", 9825);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/api.proto", &protobuf_RegisterTypes);
   ResponseHeader::default_instance_ = new ResponseHeader();
@@ -1577,6 +1694,10 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
   TruncateLogResponse::default_instance_ = new TruncateLogResponse();
   LeaderLeaseRequest::default_instance_ = new LeaderLeaseRequest();
   LeaderLeaseResponse::default_instance_ = new LeaderLeaseResponse();
+  ComputeChecksumRequest::default_instance_ = new ComputeChecksumRequest();
+  ComputeChecksumResponse::default_instance_ = new ComputeChecksumResponse();
+  VerifyChecksumRequest::default_instance_ = new VerifyChecksumRequest();
+  VerifyChecksumResponse::default_instance_ = new VerifyChecksumResponse();
   RequestUnion::default_instance_ = new RequestUnion();
   ResponseUnion::default_instance_ = new ResponseUnion();
   Header::default_instance_ = new Header();
@@ -1629,6 +1750,10 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
   TruncateLogResponse::default_instance_->InitAsDefaultInstance();
   LeaderLeaseRequest::default_instance_->InitAsDefaultInstance();
   LeaderLeaseResponse::default_instance_->InitAsDefaultInstance();
+  ComputeChecksumRequest::default_instance_->InitAsDefaultInstance();
+  ComputeChecksumResponse::default_instance_->InitAsDefaultInstance();
+  VerifyChecksumRequest::default_instance_->InitAsDefaultInstance();
+  VerifyChecksumResponse::default_instance_->InitAsDefaultInstance();
   RequestUnion::default_instance_->InitAsDefaultInstance();
   ResponseUnion::default_instance_->InitAsDefaultInstance();
   Header::default_instance_->InitAsDefaultInstance();
@@ -18119,6 +18244,1502 @@ void LeaderLeaseResponse::set_allocated_header(::cockroach::roachpb::ResponseHea
 // ===================================================================
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int ComputeChecksumRequest::kHeaderFieldNumber;
+const int ComputeChecksumRequest::kVersionFieldNumber;
+const int ComputeChecksumRequest::kChecksumIdFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+ComputeChecksumRequest::ComputeChecksumRequest()
+  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.ComputeChecksumRequest)
+}
+
+void ComputeChecksumRequest::InitAsDefaultInstance() {
+  header_ = const_cast< ::cockroach::roachpb::Span*>(&::cockroach::roachpb::Span::default_instance());
+}
+
+ComputeChecksumRequest::ComputeChecksumRequest(const ComputeChecksumRequest& from)
+  : ::google::protobuf::Message(),
+    _internal_metadata_(NULL) {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ComputeChecksumRequest)
+}
+
+void ComputeChecksumRequest::SharedCtor() {
+  ::google::protobuf::internal::GetEmptyString();
+  _cached_size_ = 0;
+  header_ = NULL;
+  version_ = 0u;
+  checksum_id_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+ComputeChecksumRequest::~ComputeChecksumRequest() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.ComputeChecksumRequest)
+  SharedDtor();
+}
+
+void ComputeChecksumRequest::SharedDtor() {
+  checksum_id_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (this != default_instance_) {
+    delete header_;
+  }
+}
+
+void ComputeChecksumRequest::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* ComputeChecksumRequest::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return ComputeChecksumRequest_descriptor_;
+}
+
+const ComputeChecksumRequest& ComputeChecksumRequest::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
+  return *default_instance_;
+}
+
+ComputeChecksumRequest* ComputeChecksumRequest::default_instance_ = NULL;
+
+ComputeChecksumRequest* ComputeChecksumRequest::New(::google::protobuf::Arena* arena) const {
+  ComputeChecksumRequest* n = new ComputeChecksumRequest;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void ComputeChecksumRequest::Clear() {
+  if (_has_bits_[0 / 32] & 7u) {
+    if (has_header()) {
+      if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
+    }
+    version_ = 0u;
+    if (has_checksum_id()) {
+      checksum_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    }
+  }
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  if (_internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->Clear();
+  }
+}
+
+bool ComputeChecksumRequest::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.ComputeChecksumRequest)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional .cockroach.roachpb.Span header = 1;
+      case 1: {
+        if (tag == 10) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_header()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(16)) goto parse_version;
+        break;
+      }
+
+      // optional uint32 version = 2;
+      case 2: {
+        if (tag == 16) {
+         parse_version:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
+                 input, &version_)));
+          set_has_version();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(26)) goto parse_checksum_id;
+        break;
+      }
+
+      // optional bytes checksum_id = 3;
+      case 3: {
+        if (tag == 26) {
+         parse_checksum_id:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_checksum_id()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.ComputeChecksumRequest)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.ComputeChecksumRequest)
+  return false;
+#undef DO_
+}
+
+void ComputeChecksumRequest::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.ComputeChecksumRequest)
+  // optional .cockroach.roachpb.Span header = 1;
+  if (has_header()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      1, *this->header_, output);
+  }
+
+  // optional uint32 version = 2;
+  if (has_version()) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt32(2, this->version(), output);
+  }
+
+  // optional bytes checksum_id = 3;
+  if (has_checksum_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      3, this->checksum_id(), output);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ComputeChecksumRequest)
+}
+
+::google::protobuf::uint8* ComputeChecksumRequest::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.ComputeChecksumRequest)
+  // optional .cockroach.roachpb.Span header = 1;
+  if (has_header()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        1, *this->header_, target);
+  }
+
+  // optional uint32 version = 2;
+  if (has_version()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(2, this->version(), target);
+  }
+
+  // optional bytes checksum_id = 3;
+  if (has_checksum_id()) {
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
+        3, this->checksum_id(), target);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.roachpb.ComputeChecksumRequest)
+  return target;
+}
+
+int ComputeChecksumRequest::ByteSize() const {
+  int total_size = 0;
+
+  if (_has_bits_[0 / 32] & 7u) {
+    // optional .cockroach.roachpb.Span header = 1;
+    if (has_header()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->header_);
+    }
+
+    // optional uint32 version = 2;
+    if (has_version()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::UInt32Size(
+          this->version());
+    }
+
+    // optional bytes checksum_id = 3;
+    if (has_checksum_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::BytesSize(
+          this->checksum_id());
+    }
+
+  }
+  if (_internal_metadata_.have_unknown_fields()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void ComputeChecksumRequest::MergeFrom(const ::google::protobuf::Message& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  const ComputeChecksumRequest* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const ComputeChecksumRequest>(
+          &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void ComputeChecksumRequest::MergeFrom(const ComputeChecksumRequest& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_header()) {
+      mutable_header()->::cockroach::roachpb::Span::MergeFrom(from.header());
+    }
+    if (from.has_version()) {
+      set_version(from.version());
+    }
+    if (from.has_checksum_id()) {
+      set_has_checksum_id();
+      checksum_id_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.checksum_id_);
+    }
+  }
+  if (from._internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+  }
+}
+
+void ComputeChecksumRequest::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void ComputeChecksumRequest::CopyFrom(const ComputeChecksumRequest& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool ComputeChecksumRequest::IsInitialized() const {
+
+  return true;
+}
+
+void ComputeChecksumRequest::Swap(ComputeChecksumRequest* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void ComputeChecksumRequest::InternalSwap(ComputeChecksumRequest* other) {
+  std::swap(header_, other->header_);
+  std::swap(version_, other->version_);
+  checksum_id_.Swap(&other->checksum_id_);
+  std::swap(_has_bits_[0], other->_has_bits_[0]);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::google::protobuf::Metadata ComputeChecksumRequest::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = ComputeChecksumRequest_descriptor_;
+  metadata.reflection = ComputeChecksumRequest_reflection_;
+  return metadata;
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// ComputeChecksumRequest
+
+// optional .cockroach.roachpb.Span header = 1;
+bool ComputeChecksumRequest::has_header() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+void ComputeChecksumRequest::set_has_header() {
+  _has_bits_[0] |= 0x00000001u;
+}
+void ComputeChecksumRequest::clear_has_header() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+void ComputeChecksumRequest::clear_header() {
+  if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
+  clear_has_header();
+}
+const ::cockroach::roachpb::Span& ComputeChecksumRequest::header() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ComputeChecksumRequest.header)
+  return header_ != NULL ? *header_ : *default_instance_->header_;
+}
+::cockroach::roachpb::Span* ComputeChecksumRequest::mutable_header() {
+  set_has_header();
+  if (header_ == NULL) {
+    header_ = new ::cockroach::roachpb::Span;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ComputeChecksumRequest.header)
+  return header_;
+}
+::cockroach::roachpb::Span* ComputeChecksumRequest::release_header() {
+  clear_has_header();
+  ::cockroach::roachpb::Span* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+void ComputeChecksumRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+  delete header_;
+  header_ = header;
+  if (header) {
+    set_has_header();
+  } else {
+    clear_has_header();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ComputeChecksumRequest.header)
+}
+
+// optional uint32 version = 2;
+bool ComputeChecksumRequest::has_version() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+void ComputeChecksumRequest::set_has_version() {
+  _has_bits_[0] |= 0x00000002u;
+}
+void ComputeChecksumRequest::clear_has_version() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+void ComputeChecksumRequest::clear_version() {
+  version_ = 0u;
+  clear_has_version();
+}
+ ::google::protobuf::uint32 ComputeChecksumRequest::version() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ComputeChecksumRequest.version)
+  return version_;
+}
+ void ComputeChecksumRequest::set_version(::google::protobuf::uint32 value) {
+  set_has_version();
+  version_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ComputeChecksumRequest.version)
+}
+
+// optional bytes checksum_id = 3;
+bool ComputeChecksumRequest::has_checksum_id() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+void ComputeChecksumRequest::set_has_checksum_id() {
+  _has_bits_[0] |= 0x00000004u;
+}
+void ComputeChecksumRequest::clear_has_checksum_id() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+void ComputeChecksumRequest::clear_checksum_id() {
+  checksum_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_checksum_id();
+}
+ const ::std::string& ComputeChecksumRequest::checksum_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ComputeChecksumRequest.checksum_id)
+  return checksum_id_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void ComputeChecksumRequest::set_checksum_id(const ::std::string& value) {
+  set_has_checksum_id();
+  checksum_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ComputeChecksumRequest.checksum_id)
+}
+ void ComputeChecksumRequest::set_checksum_id(const char* value) {
+  set_has_checksum_id();
+  checksum_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ComputeChecksumRequest.checksum_id)
+}
+ void ComputeChecksumRequest::set_checksum_id(const void* value, size_t size) {
+  set_has_checksum_id();
+  checksum_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ComputeChecksumRequest.checksum_id)
+}
+ ::std::string* ComputeChecksumRequest::mutable_checksum_id() {
+  set_has_checksum_id();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ComputeChecksumRequest.checksum_id)
+  return checksum_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ ::std::string* ComputeChecksumRequest::release_checksum_id() {
+  clear_has_checksum_id();
+  return checksum_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void ComputeChecksumRequest::set_allocated_checksum_id(::std::string* checksum_id) {
+  if (checksum_id != NULL) {
+    set_has_checksum_id();
+  } else {
+    clear_has_checksum_id();
+  }
+  checksum_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), checksum_id);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ComputeChecksumRequest.checksum_id)
+}
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int ComputeChecksumResponse::kHeaderFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+ComputeChecksumResponse::ComputeChecksumResponse()
+  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.ComputeChecksumResponse)
+}
+
+void ComputeChecksumResponse::InitAsDefaultInstance() {
+  header_ = const_cast< ::cockroach::roachpb::ResponseHeader*>(&::cockroach::roachpb::ResponseHeader::default_instance());
+}
+
+ComputeChecksumResponse::ComputeChecksumResponse(const ComputeChecksumResponse& from)
+  : ::google::protobuf::Message(),
+    _internal_metadata_(NULL) {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ComputeChecksumResponse)
+}
+
+void ComputeChecksumResponse::SharedCtor() {
+  _cached_size_ = 0;
+  header_ = NULL;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+ComputeChecksumResponse::~ComputeChecksumResponse() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.ComputeChecksumResponse)
+  SharedDtor();
+}
+
+void ComputeChecksumResponse::SharedDtor() {
+  if (this != default_instance_) {
+    delete header_;
+  }
+}
+
+void ComputeChecksumResponse::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* ComputeChecksumResponse::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return ComputeChecksumResponse_descriptor_;
+}
+
+const ComputeChecksumResponse& ComputeChecksumResponse::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
+  return *default_instance_;
+}
+
+ComputeChecksumResponse* ComputeChecksumResponse::default_instance_ = NULL;
+
+ComputeChecksumResponse* ComputeChecksumResponse::New(::google::protobuf::Arena* arena) const {
+  ComputeChecksumResponse* n = new ComputeChecksumResponse;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void ComputeChecksumResponse::Clear() {
+  if (has_header()) {
+    if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
+  }
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  if (_internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->Clear();
+  }
+}
+
+bool ComputeChecksumResponse::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.ComputeChecksumResponse)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional .cockroach.roachpb.ResponseHeader header = 1;
+      case 1: {
+        if (tag == 10) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_header()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.ComputeChecksumResponse)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.ComputeChecksumResponse)
+  return false;
+#undef DO_
+}
+
+void ComputeChecksumResponse::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.ComputeChecksumResponse)
+  // optional .cockroach.roachpb.ResponseHeader header = 1;
+  if (has_header()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      1, *this->header_, output);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ComputeChecksumResponse)
+}
+
+::google::protobuf::uint8* ComputeChecksumResponse::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.ComputeChecksumResponse)
+  // optional .cockroach.roachpb.ResponseHeader header = 1;
+  if (has_header()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        1, *this->header_, target);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.roachpb.ComputeChecksumResponse)
+  return target;
+}
+
+int ComputeChecksumResponse::ByteSize() const {
+  int total_size = 0;
+
+  // optional .cockroach.roachpb.ResponseHeader header = 1;
+  if (has_header()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+        *this->header_);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void ComputeChecksumResponse::MergeFrom(const ::google::protobuf::Message& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  const ComputeChecksumResponse* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const ComputeChecksumResponse>(
+          &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void ComputeChecksumResponse::MergeFrom(const ComputeChecksumResponse& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_header()) {
+      mutable_header()->::cockroach::roachpb::ResponseHeader::MergeFrom(from.header());
+    }
+  }
+  if (from._internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+  }
+}
+
+void ComputeChecksumResponse::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void ComputeChecksumResponse::CopyFrom(const ComputeChecksumResponse& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool ComputeChecksumResponse::IsInitialized() const {
+
+  return true;
+}
+
+void ComputeChecksumResponse::Swap(ComputeChecksumResponse* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void ComputeChecksumResponse::InternalSwap(ComputeChecksumResponse* other) {
+  std::swap(header_, other->header_);
+  std::swap(_has_bits_[0], other->_has_bits_[0]);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::google::protobuf::Metadata ComputeChecksumResponse::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = ComputeChecksumResponse_descriptor_;
+  metadata.reflection = ComputeChecksumResponse_reflection_;
+  return metadata;
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// ComputeChecksumResponse
+
+// optional .cockroach.roachpb.ResponseHeader header = 1;
+bool ComputeChecksumResponse::has_header() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+void ComputeChecksumResponse::set_has_header() {
+  _has_bits_[0] |= 0x00000001u;
+}
+void ComputeChecksumResponse::clear_has_header() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+void ComputeChecksumResponse::clear_header() {
+  if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
+  clear_has_header();
+}
+const ::cockroach::roachpb::ResponseHeader& ComputeChecksumResponse::header() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ComputeChecksumResponse.header)
+  return header_ != NULL ? *header_ : *default_instance_->header_;
+}
+::cockroach::roachpb::ResponseHeader* ComputeChecksumResponse::mutable_header() {
+  set_has_header();
+  if (header_ == NULL) {
+    header_ = new ::cockroach::roachpb::ResponseHeader;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ComputeChecksumResponse.header)
+  return header_;
+}
+::cockroach::roachpb::ResponseHeader* ComputeChecksumResponse::release_header() {
+  clear_has_header();
+  ::cockroach::roachpb::ResponseHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+void ComputeChecksumResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+  delete header_;
+  header_ = header;
+  if (header) {
+    set_has_header();
+  } else {
+    clear_has_header();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ComputeChecksumResponse.header)
+}
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int VerifyChecksumRequest::kHeaderFieldNumber;
+const int VerifyChecksumRequest::kChecksumIdFieldNumber;
+const int VerifyChecksumRequest::kChecksumFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+VerifyChecksumRequest::VerifyChecksumRequest()
+  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.VerifyChecksumRequest)
+}
+
+void VerifyChecksumRequest::InitAsDefaultInstance() {
+  header_ = const_cast< ::cockroach::roachpb::Span*>(&::cockroach::roachpb::Span::default_instance());
+}
+
+VerifyChecksumRequest::VerifyChecksumRequest(const VerifyChecksumRequest& from)
+  : ::google::protobuf::Message(),
+    _internal_metadata_(NULL) {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.VerifyChecksumRequest)
+}
+
+void VerifyChecksumRequest::SharedCtor() {
+  ::google::protobuf::internal::GetEmptyString();
+  _cached_size_ = 0;
+  header_ = NULL;
+  checksum_id_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  checksum_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+VerifyChecksumRequest::~VerifyChecksumRequest() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.VerifyChecksumRequest)
+  SharedDtor();
+}
+
+void VerifyChecksumRequest::SharedDtor() {
+  checksum_id_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  checksum_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (this != default_instance_) {
+    delete header_;
+  }
+}
+
+void VerifyChecksumRequest::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* VerifyChecksumRequest::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return VerifyChecksumRequest_descriptor_;
+}
+
+const VerifyChecksumRequest& VerifyChecksumRequest::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
+  return *default_instance_;
+}
+
+VerifyChecksumRequest* VerifyChecksumRequest::default_instance_ = NULL;
+
+VerifyChecksumRequest* VerifyChecksumRequest::New(::google::protobuf::Arena* arena) const {
+  VerifyChecksumRequest* n = new VerifyChecksumRequest;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void VerifyChecksumRequest::Clear() {
+  if (_has_bits_[0 / 32] & 7u) {
+    if (has_header()) {
+      if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
+    }
+    if (has_checksum_id()) {
+      checksum_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    }
+    if (has_checksum()) {
+      checksum_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    }
+  }
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  if (_internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->Clear();
+  }
+}
+
+bool VerifyChecksumRequest::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.VerifyChecksumRequest)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional .cockroach.roachpb.Span header = 1;
+      case 1: {
+        if (tag == 10) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_header()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(18)) goto parse_checksum_id;
+        break;
+      }
+
+      // optional bytes checksum_id = 2;
+      case 2: {
+        if (tag == 18) {
+         parse_checksum_id:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_checksum_id()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(26)) goto parse_checksum;
+        break;
+      }
+
+      // optional bytes checksum = 3;
+      case 3: {
+        if (tag == 26) {
+         parse_checksum:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_checksum()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.VerifyChecksumRequest)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.VerifyChecksumRequest)
+  return false;
+#undef DO_
+}
+
+void VerifyChecksumRequest::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.VerifyChecksumRequest)
+  // optional .cockroach.roachpb.Span header = 1;
+  if (has_header()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      1, *this->header_, output);
+  }
+
+  // optional bytes checksum_id = 2;
+  if (has_checksum_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      2, this->checksum_id(), output);
+  }
+
+  // optional bytes checksum = 3;
+  if (has_checksum()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      3, this->checksum(), output);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.VerifyChecksumRequest)
+}
+
+::google::protobuf::uint8* VerifyChecksumRequest::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.VerifyChecksumRequest)
+  // optional .cockroach.roachpb.Span header = 1;
+  if (has_header()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        1, *this->header_, target);
+  }
+
+  // optional bytes checksum_id = 2;
+  if (has_checksum_id()) {
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
+        2, this->checksum_id(), target);
+  }
+
+  // optional bytes checksum = 3;
+  if (has_checksum()) {
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
+        3, this->checksum(), target);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.roachpb.VerifyChecksumRequest)
+  return target;
+}
+
+int VerifyChecksumRequest::ByteSize() const {
+  int total_size = 0;
+
+  if (_has_bits_[0 / 32] & 7u) {
+    // optional .cockroach.roachpb.Span header = 1;
+    if (has_header()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->header_);
+    }
+
+    // optional bytes checksum_id = 2;
+    if (has_checksum_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::BytesSize(
+          this->checksum_id());
+    }
+
+    // optional bytes checksum = 3;
+    if (has_checksum()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::BytesSize(
+          this->checksum());
+    }
+
+  }
+  if (_internal_metadata_.have_unknown_fields()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void VerifyChecksumRequest::MergeFrom(const ::google::protobuf::Message& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  const VerifyChecksumRequest* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const VerifyChecksumRequest>(
+          &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void VerifyChecksumRequest::MergeFrom(const VerifyChecksumRequest& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_header()) {
+      mutable_header()->::cockroach::roachpb::Span::MergeFrom(from.header());
+    }
+    if (from.has_checksum_id()) {
+      set_has_checksum_id();
+      checksum_id_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.checksum_id_);
+    }
+    if (from.has_checksum()) {
+      set_has_checksum();
+      checksum_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.checksum_);
+    }
+  }
+  if (from._internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+  }
+}
+
+void VerifyChecksumRequest::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void VerifyChecksumRequest::CopyFrom(const VerifyChecksumRequest& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool VerifyChecksumRequest::IsInitialized() const {
+
+  return true;
+}
+
+void VerifyChecksumRequest::Swap(VerifyChecksumRequest* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void VerifyChecksumRequest::InternalSwap(VerifyChecksumRequest* other) {
+  std::swap(header_, other->header_);
+  checksum_id_.Swap(&other->checksum_id_);
+  checksum_.Swap(&other->checksum_);
+  std::swap(_has_bits_[0], other->_has_bits_[0]);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::google::protobuf::Metadata VerifyChecksumRequest::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = VerifyChecksumRequest_descriptor_;
+  metadata.reflection = VerifyChecksumRequest_reflection_;
+  return metadata;
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// VerifyChecksumRequest
+
+// optional .cockroach.roachpb.Span header = 1;
+bool VerifyChecksumRequest::has_header() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+void VerifyChecksumRequest::set_has_header() {
+  _has_bits_[0] |= 0x00000001u;
+}
+void VerifyChecksumRequest::clear_has_header() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+void VerifyChecksumRequest::clear_header() {
+  if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
+  clear_has_header();
+}
+const ::cockroach::roachpb::Span& VerifyChecksumRequest::header() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.VerifyChecksumRequest.header)
+  return header_ != NULL ? *header_ : *default_instance_->header_;
+}
+::cockroach::roachpb::Span* VerifyChecksumRequest::mutable_header() {
+  set_has_header();
+  if (header_ == NULL) {
+    header_ = new ::cockroach::roachpb::Span;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.VerifyChecksumRequest.header)
+  return header_;
+}
+::cockroach::roachpb::Span* VerifyChecksumRequest::release_header() {
+  clear_has_header();
+  ::cockroach::roachpb::Span* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+void VerifyChecksumRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
+  delete header_;
+  header_ = header;
+  if (header) {
+    set_has_header();
+  } else {
+    clear_has_header();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.VerifyChecksumRequest.header)
+}
+
+// optional bytes checksum_id = 2;
+bool VerifyChecksumRequest::has_checksum_id() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+void VerifyChecksumRequest::set_has_checksum_id() {
+  _has_bits_[0] |= 0x00000002u;
+}
+void VerifyChecksumRequest::clear_has_checksum_id() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+void VerifyChecksumRequest::clear_checksum_id() {
+  checksum_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_checksum_id();
+}
+ const ::std::string& VerifyChecksumRequest::checksum_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.VerifyChecksumRequest.checksum_id)
+  return checksum_id_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void VerifyChecksumRequest::set_checksum_id(const ::std::string& value) {
+  set_has_checksum_id();
+  checksum_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.VerifyChecksumRequest.checksum_id)
+}
+ void VerifyChecksumRequest::set_checksum_id(const char* value) {
+  set_has_checksum_id();
+  checksum_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.VerifyChecksumRequest.checksum_id)
+}
+ void VerifyChecksumRequest::set_checksum_id(const void* value, size_t size) {
+  set_has_checksum_id();
+  checksum_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.VerifyChecksumRequest.checksum_id)
+}
+ ::std::string* VerifyChecksumRequest::mutable_checksum_id() {
+  set_has_checksum_id();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.VerifyChecksumRequest.checksum_id)
+  return checksum_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ ::std::string* VerifyChecksumRequest::release_checksum_id() {
+  clear_has_checksum_id();
+  return checksum_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void VerifyChecksumRequest::set_allocated_checksum_id(::std::string* checksum_id) {
+  if (checksum_id != NULL) {
+    set_has_checksum_id();
+  } else {
+    clear_has_checksum_id();
+  }
+  checksum_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), checksum_id);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.VerifyChecksumRequest.checksum_id)
+}
+
+// optional bytes checksum = 3;
+bool VerifyChecksumRequest::has_checksum() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+void VerifyChecksumRequest::set_has_checksum() {
+  _has_bits_[0] |= 0x00000004u;
+}
+void VerifyChecksumRequest::clear_has_checksum() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+void VerifyChecksumRequest::clear_checksum() {
+  checksum_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_checksum();
+}
+ const ::std::string& VerifyChecksumRequest::checksum() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.VerifyChecksumRequest.checksum)
+  return checksum_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void VerifyChecksumRequest::set_checksum(const ::std::string& value) {
+  set_has_checksum();
+  checksum_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.VerifyChecksumRequest.checksum)
+}
+ void VerifyChecksumRequest::set_checksum(const char* value) {
+  set_has_checksum();
+  checksum_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.VerifyChecksumRequest.checksum)
+}
+ void VerifyChecksumRequest::set_checksum(const void* value, size_t size) {
+  set_has_checksum();
+  checksum_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.VerifyChecksumRequest.checksum)
+}
+ ::std::string* VerifyChecksumRequest::mutable_checksum() {
+  set_has_checksum();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.VerifyChecksumRequest.checksum)
+  return checksum_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ ::std::string* VerifyChecksumRequest::release_checksum() {
+  clear_has_checksum();
+  return checksum_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void VerifyChecksumRequest::set_allocated_checksum(::std::string* checksum) {
+  if (checksum != NULL) {
+    set_has_checksum();
+  } else {
+    clear_has_checksum();
+  }
+  checksum_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), checksum);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.VerifyChecksumRequest.checksum)
+}
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int VerifyChecksumResponse::kHeaderFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+VerifyChecksumResponse::VerifyChecksumResponse()
+  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.VerifyChecksumResponse)
+}
+
+void VerifyChecksumResponse::InitAsDefaultInstance() {
+  header_ = const_cast< ::cockroach::roachpb::ResponseHeader*>(&::cockroach::roachpb::ResponseHeader::default_instance());
+}
+
+VerifyChecksumResponse::VerifyChecksumResponse(const VerifyChecksumResponse& from)
+  : ::google::protobuf::Message(),
+    _internal_metadata_(NULL) {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.VerifyChecksumResponse)
+}
+
+void VerifyChecksumResponse::SharedCtor() {
+  _cached_size_ = 0;
+  header_ = NULL;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+VerifyChecksumResponse::~VerifyChecksumResponse() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.VerifyChecksumResponse)
+  SharedDtor();
+}
+
+void VerifyChecksumResponse::SharedDtor() {
+  if (this != default_instance_) {
+    delete header_;
+  }
+}
+
+void VerifyChecksumResponse::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* VerifyChecksumResponse::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return VerifyChecksumResponse_descriptor_;
+}
+
+const VerifyChecksumResponse& VerifyChecksumResponse::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
+  return *default_instance_;
+}
+
+VerifyChecksumResponse* VerifyChecksumResponse::default_instance_ = NULL;
+
+VerifyChecksumResponse* VerifyChecksumResponse::New(::google::protobuf::Arena* arena) const {
+  VerifyChecksumResponse* n = new VerifyChecksumResponse;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void VerifyChecksumResponse::Clear() {
+  if (has_header()) {
+    if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
+  }
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  if (_internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->Clear();
+  }
+}
+
+bool VerifyChecksumResponse::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.VerifyChecksumResponse)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional .cockroach.roachpb.ResponseHeader header = 1;
+      case 1: {
+        if (tag == 10) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_header()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.VerifyChecksumResponse)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.VerifyChecksumResponse)
+  return false;
+#undef DO_
+}
+
+void VerifyChecksumResponse::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.VerifyChecksumResponse)
+  // optional .cockroach.roachpb.ResponseHeader header = 1;
+  if (has_header()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      1, *this->header_, output);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.VerifyChecksumResponse)
+}
+
+::google::protobuf::uint8* VerifyChecksumResponse::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.VerifyChecksumResponse)
+  // optional .cockroach.roachpb.ResponseHeader header = 1;
+  if (has_header()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        1, *this->header_, target);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.roachpb.VerifyChecksumResponse)
+  return target;
+}
+
+int VerifyChecksumResponse::ByteSize() const {
+  int total_size = 0;
+
+  // optional .cockroach.roachpb.ResponseHeader header = 1;
+  if (has_header()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+        *this->header_);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void VerifyChecksumResponse::MergeFrom(const ::google::protobuf::Message& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  const VerifyChecksumResponse* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const VerifyChecksumResponse>(
+          &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void VerifyChecksumResponse::MergeFrom(const VerifyChecksumResponse& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_header()) {
+      mutable_header()->::cockroach::roachpb::ResponseHeader::MergeFrom(from.header());
+    }
+  }
+  if (from._internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+  }
+}
+
+void VerifyChecksumResponse::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void VerifyChecksumResponse::CopyFrom(const VerifyChecksumResponse& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool VerifyChecksumResponse::IsInitialized() const {
+
+  return true;
+}
+
+void VerifyChecksumResponse::Swap(VerifyChecksumResponse* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void VerifyChecksumResponse::InternalSwap(VerifyChecksumResponse* other) {
+  std::swap(header_, other->header_);
+  std::swap(_has_bits_[0], other->_has_bits_[0]);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::google::protobuf::Metadata VerifyChecksumResponse::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = VerifyChecksumResponse_descriptor_;
+  metadata.reflection = VerifyChecksumResponse_reflection_;
+  return metadata;
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// VerifyChecksumResponse
+
+// optional .cockroach.roachpb.ResponseHeader header = 1;
+bool VerifyChecksumResponse::has_header() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+void VerifyChecksumResponse::set_has_header() {
+  _has_bits_[0] |= 0x00000001u;
+}
+void VerifyChecksumResponse::clear_has_header() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+void VerifyChecksumResponse::clear_header() {
+  if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
+  clear_has_header();
+}
+const ::cockroach::roachpb::ResponseHeader& VerifyChecksumResponse::header() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.VerifyChecksumResponse.header)
+  return header_ != NULL ? *header_ : *default_instance_->header_;
+}
+::cockroach::roachpb::ResponseHeader* VerifyChecksumResponse::mutable_header() {
+  set_has_header();
+  if (header_ == NULL) {
+    header_ = new ::cockroach::roachpb::ResponseHeader;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.VerifyChecksumResponse.header)
+  return header_;
+}
+::cockroach::roachpb::ResponseHeader* VerifyChecksumResponse::release_header() {
+  clear_has_header();
+  ::cockroach::roachpb::ResponseHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+void VerifyChecksumResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+  delete header_;
+  header_ = header;
+  if (header) {
+    set_has_header();
+  } else {
+    clear_has_header();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.VerifyChecksumResponse.header)
+}
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RequestUnion::kGetFieldNumber;
 const int RequestUnion::kPutFieldNumber;
 const int RequestUnion::kConditionalPutFieldNumber;
@@ -18140,6 +19761,8 @@ const int RequestUnion::kMergeFieldNumber;
 const int RequestUnion::kTruncateLogFieldNumber;
 const int RequestUnion::kLeaderLeaseFieldNumber;
 const int RequestUnion::kReverseScanFieldNumber;
+const int RequestUnion::kComputeChecksumFieldNumber;
+const int RequestUnion::kCollectChecksumFieldNumber;
 const int RequestUnion::kNoopFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -18171,6 +19794,8 @@ void RequestUnion::InitAsDefaultInstance() {
   truncate_log_ = const_cast< ::cockroach::roachpb::TruncateLogRequest*>(&::cockroach::roachpb::TruncateLogRequest::default_instance());
   leader_lease_ = const_cast< ::cockroach::roachpb::LeaderLeaseRequest*>(&::cockroach::roachpb::LeaderLeaseRequest::default_instance());
   reverse_scan_ = const_cast< ::cockroach::roachpb::ReverseScanRequest*>(&::cockroach::roachpb::ReverseScanRequest::default_instance());
+  compute_checksum_ = const_cast< ::cockroach::roachpb::ComputeChecksumRequest*>(&::cockroach::roachpb::ComputeChecksumRequest::default_instance());
+  collect_checksum_ = const_cast< ::cockroach::roachpb::VerifyChecksumRequest*>(&::cockroach::roachpb::VerifyChecksumRequest::default_instance());
   noop_ = const_cast< ::cockroach::roachpb::NoopRequest*>(&::cockroach::roachpb::NoopRequest::default_instance());
 }
 
@@ -18205,6 +19830,8 @@ void RequestUnion::SharedCtor() {
   truncate_log_ = NULL;
   leader_lease_ = NULL;
   reverse_scan_ = NULL;
+  compute_checksum_ = NULL;
+  collect_checksum_ = NULL;
   noop_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
@@ -18237,6 +19864,8 @@ void RequestUnion::SharedDtor() {
     delete truncate_log_;
     delete leader_lease_;
     delete reverse_scan_;
+    delete compute_checksum_;
+    delete collect_checksum_;
     delete noop_;
   }
 }
@@ -18319,7 +19948,7 @@ void RequestUnion::Clear() {
       if (resolve_intent_ != NULL) resolve_intent_->::cockroach::roachpb::ResolveIntentRequest::Clear();
     }
   }
-  if (_has_bits_[16 / 32] & 4128768u) {
+  if (_has_bits_[16 / 32] & 16711680u) {
     if (has_resolve_intent_range()) {
       if (resolve_intent_range_ != NULL) resolve_intent_range_->::cockroach::roachpb::ResolveIntentRangeRequest::Clear();
     }
@@ -18334,6 +19963,12 @@ void RequestUnion::Clear() {
     }
     if (has_reverse_scan()) {
       if (reverse_scan_ != NULL) reverse_scan_->::cockroach::roachpb::ReverseScanRequest::Clear();
+    }
+    if (has_compute_checksum()) {
+      if (compute_checksum_ != NULL) compute_checksum_->::cockroach::roachpb::ComputeChecksumRequest::Clear();
+    }
+    if (has_collect_checksum()) {
+      if (collect_checksum_ != NULL) collect_checksum_->::cockroach::roachpb::VerifyChecksumRequest::Clear();
     }
     if (has_noop()) {
       if (noop_ != NULL) noop_->::cockroach::roachpb::NoopRequest::Clear();
@@ -18623,13 +20258,39 @@ bool RequestUnion::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(178)) goto parse_noop;
+        if (input->ExpectTag(178)) goto parse_compute_checksum;
         break;
       }
 
-      // optional .cockroach.roachpb.NoopRequest noop = 22;
+      // optional .cockroach.roachpb.ComputeChecksumRequest compute_checksum = 22;
       case 22: {
         if (tag == 178) {
+         parse_compute_checksum:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_compute_checksum()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(186)) goto parse_collect_checksum;
+        break;
+      }
+
+      // optional .cockroach.roachpb.VerifyChecksumRequest collect_checksum = 23;
+      case 23: {
+        if (tag == 186) {
+         parse_collect_checksum:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_collect_checksum()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(194)) goto parse_noop;
+        break;
+      }
+
+      // optional .cockroach.roachpb.NoopRequest noop = 24;
+      case 24: {
+        if (tag == 194) {
          parse_noop:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_noop()));
@@ -18791,10 +20452,22 @@ void RequestUnion::SerializeWithCachedSizes(
       21, *this->reverse_scan_, output);
   }
 
-  // optional .cockroach.roachpb.NoopRequest noop = 22;
+  // optional .cockroach.roachpb.ComputeChecksumRequest compute_checksum = 22;
+  if (has_compute_checksum()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      22, *this->compute_checksum_, output);
+  }
+
+  // optional .cockroach.roachpb.VerifyChecksumRequest collect_checksum = 23;
+  if (has_collect_checksum()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      23, *this->collect_checksum_, output);
+  }
+
+  // optional .cockroach.roachpb.NoopRequest noop = 24;
   if (has_noop()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      22, *this->noop_, output);
+      24, *this->noop_, output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -18954,11 +20627,25 @@ void RequestUnion::SerializeWithCachedSizes(
         21, *this->reverse_scan_, target);
   }
 
-  // optional .cockroach.roachpb.NoopRequest noop = 22;
+  // optional .cockroach.roachpb.ComputeChecksumRequest compute_checksum = 22;
+  if (has_compute_checksum()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        22, *this->compute_checksum_, target);
+  }
+
+  // optional .cockroach.roachpb.VerifyChecksumRequest collect_checksum = 23;
+  if (has_collect_checksum()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        23, *this->collect_checksum_, target);
+  }
+
+  // optional .cockroach.roachpb.NoopRequest noop = 24;
   if (has_noop()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        22, *this->noop_, target);
+        24, *this->noop_, target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -19088,7 +20775,7 @@ int RequestUnion::ByteSize() const {
     }
 
   }
-  if (_has_bits_[16 / 32] & 4128768u) {
+  if (_has_bits_[16 / 32] & 16711680u) {
     // optional .cockroach.roachpb.ResolveIntentRangeRequest resolve_intent_range = 17;
     if (has_resolve_intent_range()) {
       total_size += 2 +
@@ -19124,7 +20811,21 @@ int RequestUnion::ByteSize() const {
           *this->reverse_scan_);
     }
 
-    // optional .cockroach.roachpb.NoopRequest noop = 22;
+    // optional .cockroach.roachpb.ComputeChecksumRequest compute_checksum = 22;
+    if (has_compute_checksum()) {
+      total_size += 2 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->compute_checksum_);
+    }
+
+    // optional .cockroach.roachpb.VerifyChecksumRequest collect_checksum = 23;
+    if (has_collect_checksum()) {
+      total_size += 2 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->collect_checksum_);
+    }
+
+    // optional .cockroach.roachpb.NoopRequest noop = 24;
     if (has_noop()) {
       total_size += 2 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -19225,6 +20926,12 @@ void RequestUnion::MergeFrom(const RequestUnion& from) {
     if (from.has_reverse_scan()) {
       mutable_reverse_scan()->::cockroach::roachpb::ReverseScanRequest::MergeFrom(from.reverse_scan());
     }
+    if (from.has_compute_checksum()) {
+      mutable_compute_checksum()->::cockroach::roachpb::ComputeChecksumRequest::MergeFrom(from.compute_checksum());
+    }
+    if (from.has_collect_checksum()) {
+      mutable_collect_checksum()->::cockroach::roachpb::VerifyChecksumRequest::MergeFrom(from.collect_checksum());
+    }
     if (from.has_noop()) {
       mutable_noop()->::cockroach::roachpb::NoopRequest::MergeFrom(from.noop());
     }
@@ -19277,6 +20984,8 @@ void RequestUnion::InternalSwap(RequestUnion* other) {
   std::swap(truncate_log_, other->truncate_log_);
   std::swap(leader_lease_, other->leader_lease_);
   std::swap(reverse_scan_, other->reverse_scan_);
+  std::swap(compute_checksum_, other->compute_checksum_);
+  std::swap(collect_checksum_, other->collect_checksum_);
   std::swap(noop_, other->noop_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
@@ -20197,15 +21906,101 @@ void RequestUnion::set_allocated_reverse_scan(::cockroach::roachpb::ReverseScanR
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RequestUnion.reverse_scan)
 }
 
-// optional .cockroach.roachpb.NoopRequest noop = 22;
-bool RequestUnion::has_noop() const {
+// optional .cockroach.roachpb.ComputeChecksumRequest compute_checksum = 22;
+bool RequestUnion::has_compute_checksum() const {
   return (_has_bits_[0] & 0x00200000u) != 0;
 }
-void RequestUnion::set_has_noop() {
+void RequestUnion::set_has_compute_checksum() {
   _has_bits_[0] |= 0x00200000u;
 }
-void RequestUnion::clear_has_noop() {
+void RequestUnion::clear_has_compute_checksum() {
   _has_bits_[0] &= ~0x00200000u;
+}
+void RequestUnion::clear_compute_checksum() {
+  if (compute_checksum_ != NULL) compute_checksum_->::cockroach::roachpb::ComputeChecksumRequest::Clear();
+  clear_has_compute_checksum();
+}
+const ::cockroach::roachpb::ComputeChecksumRequest& RequestUnion::compute_checksum() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.compute_checksum)
+  return compute_checksum_ != NULL ? *compute_checksum_ : *default_instance_->compute_checksum_;
+}
+::cockroach::roachpb::ComputeChecksumRequest* RequestUnion::mutable_compute_checksum() {
+  set_has_compute_checksum();
+  if (compute_checksum_ == NULL) {
+    compute_checksum_ = new ::cockroach::roachpb::ComputeChecksumRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.compute_checksum)
+  return compute_checksum_;
+}
+::cockroach::roachpb::ComputeChecksumRequest* RequestUnion::release_compute_checksum() {
+  clear_has_compute_checksum();
+  ::cockroach::roachpb::ComputeChecksumRequest* temp = compute_checksum_;
+  compute_checksum_ = NULL;
+  return temp;
+}
+void RequestUnion::set_allocated_compute_checksum(::cockroach::roachpb::ComputeChecksumRequest* compute_checksum) {
+  delete compute_checksum_;
+  compute_checksum_ = compute_checksum;
+  if (compute_checksum) {
+    set_has_compute_checksum();
+  } else {
+    clear_has_compute_checksum();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RequestUnion.compute_checksum)
+}
+
+// optional .cockroach.roachpb.VerifyChecksumRequest collect_checksum = 23;
+bool RequestUnion::has_collect_checksum() const {
+  return (_has_bits_[0] & 0x00400000u) != 0;
+}
+void RequestUnion::set_has_collect_checksum() {
+  _has_bits_[0] |= 0x00400000u;
+}
+void RequestUnion::clear_has_collect_checksum() {
+  _has_bits_[0] &= ~0x00400000u;
+}
+void RequestUnion::clear_collect_checksum() {
+  if (collect_checksum_ != NULL) collect_checksum_->::cockroach::roachpb::VerifyChecksumRequest::Clear();
+  clear_has_collect_checksum();
+}
+const ::cockroach::roachpb::VerifyChecksumRequest& RequestUnion::collect_checksum() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.collect_checksum)
+  return collect_checksum_ != NULL ? *collect_checksum_ : *default_instance_->collect_checksum_;
+}
+::cockroach::roachpb::VerifyChecksumRequest* RequestUnion::mutable_collect_checksum() {
+  set_has_collect_checksum();
+  if (collect_checksum_ == NULL) {
+    collect_checksum_ = new ::cockroach::roachpb::VerifyChecksumRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.collect_checksum)
+  return collect_checksum_;
+}
+::cockroach::roachpb::VerifyChecksumRequest* RequestUnion::release_collect_checksum() {
+  clear_has_collect_checksum();
+  ::cockroach::roachpb::VerifyChecksumRequest* temp = collect_checksum_;
+  collect_checksum_ = NULL;
+  return temp;
+}
+void RequestUnion::set_allocated_collect_checksum(::cockroach::roachpb::VerifyChecksumRequest* collect_checksum) {
+  delete collect_checksum_;
+  collect_checksum_ = collect_checksum;
+  if (collect_checksum) {
+    set_has_collect_checksum();
+  } else {
+    clear_has_collect_checksum();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RequestUnion.collect_checksum)
+}
+
+// optional .cockroach.roachpb.NoopRequest noop = 24;
+bool RequestUnion::has_noop() const {
+  return (_has_bits_[0] & 0x00800000u) != 0;
+}
+void RequestUnion::set_has_noop() {
+  _has_bits_[0] |= 0x00800000u;
+}
+void RequestUnion::clear_has_noop() {
+  _has_bits_[0] &= ~0x00800000u;
 }
 void RequestUnion::clear_noop() {
   if (noop_ != NULL) noop_->::cockroach::roachpb::NoopRequest::Clear();
@@ -20266,6 +22061,8 @@ const int ResponseUnion::kMergeFieldNumber;
 const int ResponseUnion::kTruncateLogFieldNumber;
 const int ResponseUnion::kLeaderLeaseFieldNumber;
 const int ResponseUnion::kReverseScanFieldNumber;
+const int ResponseUnion::kComputeChecksumFieldNumber;
+const int ResponseUnion::kCollectChecksumFieldNumber;
 const int ResponseUnion::kNoopFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -20297,6 +22094,8 @@ void ResponseUnion::InitAsDefaultInstance() {
   truncate_log_ = const_cast< ::cockroach::roachpb::TruncateLogResponse*>(&::cockroach::roachpb::TruncateLogResponse::default_instance());
   leader_lease_ = const_cast< ::cockroach::roachpb::LeaderLeaseResponse*>(&::cockroach::roachpb::LeaderLeaseResponse::default_instance());
   reverse_scan_ = const_cast< ::cockroach::roachpb::ReverseScanResponse*>(&::cockroach::roachpb::ReverseScanResponse::default_instance());
+  compute_checksum_ = const_cast< ::cockroach::roachpb::ComputeChecksumResponse*>(&::cockroach::roachpb::ComputeChecksumResponse::default_instance());
+  collect_checksum_ = const_cast< ::cockroach::roachpb::VerifyChecksumResponse*>(&::cockroach::roachpb::VerifyChecksumResponse::default_instance());
   noop_ = const_cast< ::cockroach::roachpb::NoopResponse*>(&::cockroach::roachpb::NoopResponse::default_instance());
 }
 
@@ -20331,6 +22130,8 @@ void ResponseUnion::SharedCtor() {
   truncate_log_ = NULL;
   leader_lease_ = NULL;
   reverse_scan_ = NULL;
+  compute_checksum_ = NULL;
+  collect_checksum_ = NULL;
   noop_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
@@ -20363,6 +22164,8 @@ void ResponseUnion::SharedDtor() {
     delete truncate_log_;
     delete leader_lease_;
     delete reverse_scan_;
+    delete compute_checksum_;
+    delete collect_checksum_;
     delete noop_;
   }
 }
@@ -20445,7 +22248,7 @@ void ResponseUnion::Clear() {
       if (resolve_intent_ != NULL) resolve_intent_->::cockroach::roachpb::ResolveIntentResponse::Clear();
     }
   }
-  if (_has_bits_[16 / 32] & 4128768u) {
+  if (_has_bits_[16 / 32] & 16711680u) {
     if (has_resolve_intent_range()) {
       if (resolve_intent_range_ != NULL) resolve_intent_range_->::cockroach::roachpb::ResolveIntentRangeResponse::Clear();
     }
@@ -20460,6 +22263,12 @@ void ResponseUnion::Clear() {
     }
     if (has_reverse_scan()) {
       if (reverse_scan_ != NULL) reverse_scan_->::cockroach::roachpb::ReverseScanResponse::Clear();
+    }
+    if (has_compute_checksum()) {
+      if (compute_checksum_ != NULL) compute_checksum_->::cockroach::roachpb::ComputeChecksumResponse::Clear();
+    }
+    if (has_collect_checksum()) {
+      if (collect_checksum_ != NULL) collect_checksum_->::cockroach::roachpb::VerifyChecksumResponse::Clear();
     }
     if (has_noop()) {
       if (noop_ != NULL) noop_->::cockroach::roachpb::NoopResponse::Clear();
@@ -20749,13 +22558,39 @@ bool ResponseUnion::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(178)) goto parse_noop;
+        if (input->ExpectTag(178)) goto parse_compute_checksum;
         break;
       }
 
-      // optional .cockroach.roachpb.NoopResponse noop = 22;
+      // optional .cockroach.roachpb.ComputeChecksumResponse compute_checksum = 22;
       case 22: {
         if (tag == 178) {
+         parse_compute_checksum:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_compute_checksum()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(186)) goto parse_collect_checksum;
+        break;
+      }
+
+      // optional .cockroach.roachpb.VerifyChecksumResponse collect_checksum = 23;
+      case 23: {
+        if (tag == 186) {
+         parse_collect_checksum:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_collect_checksum()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(194)) goto parse_noop;
+        break;
+      }
+
+      // optional .cockroach.roachpb.NoopResponse noop = 24;
+      case 24: {
+        if (tag == 194) {
          parse_noop:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_noop()));
@@ -20917,10 +22752,22 @@ void ResponseUnion::SerializeWithCachedSizes(
       21, *this->reverse_scan_, output);
   }
 
-  // optional .cockroach.roachpb.NoopResponse noop = 22;
+  // optional .cockroach.roachpb.ComputeChecksumResponse compute_checksum = 22;
+  if (has_compute_checksum()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      22, *this->compute_checksum_, output);
+  }
+
+  // optional .cockroach.roachpb.VerifyChecksumResponse collect_checksum = 23;
+  if (has_collect_checksum()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      23, *this->collect_checksum_, output);
+  }
+
+  // optional .cockroach.roachpb.NoopResponse noop = 24;
   if (has_noop()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      22, *this->noop_, output);
+      24, *this->noop_, output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -21080,11 +22927,25 @@ void ResponseUnion::SerializeWithCachedSizes(
         21, *this->reverse_scan_, target);
   }
 
-  // optional .cockroach.roachpb.NoopResponse noop = 22;
+  // optional .cockroach.roachpb.ComputeChecksumResponse compute_checksum = 22;
+  if (has_compute_checksum()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        22, *this->compute_checksum_, target);
+  }
+
+  // optional .cockroach.roachpb.VerifyChecksumResponse collect_checksum = 23;
+  if (has_collect_checksum()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        23, *this->collect_checksum_, target);
+  }
+
+  // optional .cockroach.roachpb.NoopResponse noop = 24;
   if (has_noop()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        22, *this->noop_, target);
+        24, *this->noop_, target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -21214,7 +23075,7 @@ int ResponseUnion::ByteSize() const {
     }
 
   }
-  if (_has_bits_[16 / 32] & 4128768u) {
+  if (_has_bits_[16 / 32] & 16711680u) {
     // optional .cockroach.roachpb.ResolveIntentRangeResponse resolve_intent_range = 17;
     if (has_resolve_intent_range()) {
       total_size += 2 +
@@ -21250,7 +23111,21 @@ int ResponseUnion::ByteSize() const {
           *this->reverse_scan_);
     }
 
-    // optional .cockroach.roachpb.NoopResponse noop = 22;
+    // optional .cockroach.roachpb.ComputeChecksumResponse compute_checksum = 22;
+    if (has_compute_checksum()) {
+      total_size += 2 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->compute_checksum_);
+    }
+
+    // optional .cockroach.roachpb.VerifyChecksumResponse collect_checksum = 23;
+    if (has_collect_checksum()) {
+      total_size += 2 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->collect_checksum_);
+    }
+
+    // optional .cockroach.roachpb.NoopResponse noop = 24;
     if (has_noop()) {
       total_size += 2 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -21351,6 +23226,12 @@ void ResponseUnion::MergeFrom(const ResponseUnion& from) {
     if (from.has_reverse_scan()) {
       mutable_reverse_scan()->::cockroach::roachpb::ReverseScanResponse::MergeFrom(from.reverse_scan());
     }
+    if (from.has_compute_checksum()) {
+      mutable_compute_checksum()->::cockroach::roachpb::ComputeChecksumResponse::MergeFrom(from.compute_checksum());
+    }
+    if (from.has_collect_checksum()) {
+      mutable_collect_checksum()->::cockroach::roachpb::VerifyChecksumResponse::MergeFrom(from.collect_checksum());
+    }
     if (from.has_noop()) {
       mutable_noop()->::cockroach::roachpb::NoopResponse::MergeFrom(from.noop());
     }
@@ -21403,6 +23284,8 @@ void ResponseUnion::InternalSwap(ResponseUnion* other) {
   std::swap(truncate_log_, other->truncate_log_);
   std::swap(leader_lease_, other->leader_lease_);
   std::swap(reverse_scan_, other->reverse_scan_);
+  std::swap(compute_checksum_, other->compute_checksum_);
+  std::swap(collect_checksum_, other->collect_checksum_);
   std::swap(noop_, other->noop_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
@@ -22323,15 +24206,101 @@ void ResponseUnion::set_allocated_reverse_scan(::cockroach::roachpb::ReverseScan
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ResponseUnion.reverse_scan)
 }
 
-// optional .cockroach.roachpb.NoopResponse noop = 22;
-bool ResponseUnion::has_noop() const {
+// optional .cockroach.roachpb.ComputeChecksumResponse compute_checksum = 22;
+bool ResponseUnion::has_compute_checksum() const {
   return (_has_bits_[0] & 0x00200000u) != 0;
 }
-void ResponseUnion::set_has_noop() {
+void ResponseUnion::set_has_compute_checksum() {
   _has_bits_[0] |= 0x00200000u;
 }
-void ResponseUnion::clear_has_noop() {
+void ResponseUnion::clear_has_compute_checksum() {
   _has_bits_[0] &= ~0x00200000u;
+}
+void ResponseUnion::clear_compute_checksum() {
+  if (compute_checksum_ != NULL) compute_checksum_->::cockroach::roachpb::ComputeChecksumResponse::Clear();
+  clear_has_compute_checksum();
+}
+const ::cockroach::roachpb::ComputeChecksumResponse& ResponseUnion::compute_checksum() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.compute_checksum)
+  return compute_checksum_ != NULL ? *compute_checksum_ : *default_instance_->compute_checksum_;
+}
+::cockroach::roachpb::ComputeChecksumResponse* ResponseUnion::mutable_compute_checksum() {
+  set_has_compute_checksum();
+  if (compute_checksum_ == NULL) {
+    compute_checksum_ = new ::cockroach::roachpb::ComputeChecksumResponse;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.compute_checksum)
+  return compute_checksum_;
+}
+::cockroach::roachpb::ComputeChecksumResponse* ResponseUnion::release_compute_checksum() {
+  clear_has_compute_checksum();
+  ::cockroach::roachpb::ComputeChecksumResponse* temp = compute_checksum_;
+  compute_checksum_ = NULL;
+  return temp;
+}
+void ResponseUnion::set_allocated_compute_checksum(::cockroach::roachpb::ComputeChecksumResponse* compute_checksum) {
+  delete compute_checksum_;
+  compute_checksum_ = compute_checksum;
+  if (compute_checksum) {
+    set_has_compute_checksum();
+  } else {
+    clear_has_compute_checksum();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ResponseUnion.compute_checksum)
+}
+
+// optional .cockroach.roachpb.VerifyChecksumResponse collect_checksum = 23;
+bool ResponseUnion::has_collect_checksum() const {
+  return (_has_bits_[0] & 0x00400000u) != 0;
+}
+void ResponseUnion::set_has_collect_checksum() {
+  _has_bits_[0] |= 0x00400000u;
+}
+void ResponseUnion::clear_has_collect_checksum() {
+  _has_bits_[0] &= ~0x00400000u;
+}
+void ResponseUnion::clear_collect_checksum() {
+  if (collect_checksum_ != NULL) collect_checksum_->::cockroach::roachpb::VerifyChecksumResponse::Clear();
+  clear_has_collect_checksum();
+}
+const ::cockroach::roachpb::VerifyChecksumResponse& ResponseUnion::collect_checksum() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.collect_checksum)
+  return collect_checksum_ != NULL ? *collect_checksum_ : *default_instance_->collect_checksum_;
+}
+::cockroach::roachpb::VerifyChecksumResponse* ResponseUnion::mutable_collect_checksum() {
+  set_has_collect_checksum();
+  if (collect_checksum_ == NULL) {
+    collect_checksum_ = new ::cockroach::roachpb::VerifyChecksumResponse;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.collect_checksum)
+  return collect_checksum_;
+}
+::cockroach::roachpb::VerifyChecksumResponse* ResponseUnion::release_collect_checksum() {
+  clear_has_collect_checksum();
+  ::cockroach::roachpb::VerifyChecksumResponse* temp = collect_checksum_;
+  collect_checksum_ = NULL;
+  return temp;
+}
+void ResponseUnion::set_allocated_collect_checksum(::cockroach::roachpb::VerifyChecksumResponse* collect_checksum) {
+  delete collect_checksum_;
+  collect_checksum_ = collect_checksum;
+  if (collect_checksum) {
+    set_has_collect_checksum();
+  } else {
+    clear_has_collect_checksum();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ResponseUnion.collect_checksum)
+}
+
+// optional .cockroach.roachpb.NoopResponse noop = 24;
+bool ResponseUnion::has_noop() const {
+  return (_has_bits_[0] & 0x00800000u) != 0;
+}
+void ResponseUnion::set_has_noop() {
+  _has_bits_[0] |= 0x00800000u;
+}
+void ResponseUnion::clear_has_noop() {
+  _has_bits_[0] &= ~0x00800000u;
 }
 void ResponseUnion::clear_noop() {
   if (noop_ != NULL) noop_->::cockroach::roachpb::NoopResponse::Clear();

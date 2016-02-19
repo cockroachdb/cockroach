@@ -21,6 +21,7 @@ package storage
 
 import (
 	"bytes"
+	"crypto/sha512"
 	"fmt"
 	"math/rand"
 	"time"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -147,6 +149,14 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 	case *roachpb.LeaderLeaseRequest:
 		var resp roachpb.LeaderLeaseResponse
 		resp, err = r.LeaderLease(batch, ms, h, *tArgs)
+		reply = &resp
+	case *roachpb.ComputeChecksumRequest:
+		var resp roachpb.ComputeChecksumResponse
+		resp, err = r.ComputeChecksum(batch, ms, h, *tArgs)
+		reply = &resp
+	case *roachpb.VerifyChecksumRequest:
+		var resp roachpb.VerifyChecksumResponse
+		resp, err = r.VerifyChecksum(batch, ms, h, *tArgs)
 		reply = &resp
 	default:
 		err = util.Errorf("unrecognized command %s", args.Method())
@@ -1267,6 +1277,132 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 	}
 
 	return reply, nil
+}
+
+// ComputeChecksum starts the process of computing a checksum on the replica at
+// a particular snapshot. The checksum is later verified through the
+// VerifyChecksum request.
+func (r *Replica) ComputeChecksum(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.ComputeChecksumRequest) (roachpb.ComputeChecksumResponse, error) {
+	timestamp := r.store.Clock().Timestamp()
+	stopper := r.store.Stopper()
+
+	// Compute SHA asynchronously and store it in a map by UUID.
+	stopper.RunAsyncTask(func() {
+		sha, err := r.SHA512(timestamp)
+		if err != nil {
+			log.Info(err)
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			// Enter a nil checksum as an indicator of the inability to compute the checksum.
+			r.mu.checksums[args.ChecksumID] = nil
+			return
+		}
+
+		// Create a goroutine to gc the checksum entry in case the VerifyChecksum
+		// is never received.
+		// TODO: test this in this PR.
+		stopper.RunWorker(func() {
+			select {
+			case <-stopper.ShouldStop():
+			case <-time.After(30 * time.Minute):
+				r.mu.Lock()
+				defer r.mu.Unlock()
+				delete(r.mu.checksums, args.ChecksumID)
+			}
+		})
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.mu.checksums[args.ChecksumID] = sha[:]
+	})
+	return roachpb.ComputeChecksumResponse{}, nil
+}
+
+// SHA512 computes the SHA512 hash of all the replica data at the timestamp.
+func (r *Replica) SHA512(timestamp roachpb.Timestamp) ([sha512.Size]byte, error) {
+	// Copy all the data from a consistent RocksDB snapshot into a RaftSnapshotData.
+	snap := r.store.NewSnapshot()
+	defer snap.Close()
+	var snapData roachpb.RaftSnapshotData
+
+	var desc roachpb.RangeDescriptor
+	// Does the consistent flag matter?
+	ok, err := engine.MVCCGetProto(snap, keys.RangeDescriptorKey(r.mu.desc.StartKey),
+		timestamp, true /* consistent */, nil, &desc)
+	if err != nil {
+		return [sha512.Size]byte{}, util.Errorf("failed to get desc: %s", err)
+	}
+	if !ok {
+		return [sha512.Size]byte{}, util.Errorf("couldn't find range descriptor")
+	}
+
+	// Some keys that need to be ignored.
+	hardStateKey := keys.RaftHardStateKey(r.RangeID)
+	raftLogPrefixKey := keys.RaftLogPrefix(r.RangeID)
+	rangeStatsKey := keys.RangeStatsKey(r.RangeID)
+	raftAppliedIndexKey := keys.RaftAppliedIndexKey(r.RangeID)
+	raftLastIndexKey := keys.RaftLastIndexKey(r.RangeID)
+	// Iterate over all the data in the range.
+	iter := newReplicaDataIterator(&desc, snap)
+	defer iter.Close()
+	for ; iter.Valid(); iter.Next() {
+		key := iter.Key()
+		// Ignore newer keys. I suspect GC might race with this and delete some old
+		// keys which do not get added to the checksum. I'm pretty sure this is broken.
+		if timestamp.Less(key.Timestamp) {
+			continue
+		}
+		// Ignore keys that are not meant to be consistent.
+		if bytes.Equal(key.Key, hardStateKey) ||
+			bytes.Equal(key.Key, rangeStatsKey) ||
+			bytes.Equal(key.Key, raftAppliedIndexKey) ||
+			bytes.Equal(key.Key, raftLastIndexKey) ||
+			bytes.HasPrefix(key.Key, raftLogPrefixKey) {
+			continue
+		}
+		snapData.KV = append(snapData.KV,
+			&roachpb.RaftSnapshotData_KeyValue{
+				Key:       key.Key,
+				Value:     iter.Value(),
+				Timestamp: key.Timestamp,
+			})
+	}
+
+	// Marshal proto and checksum it.
+	data, err := proto.Marshal(&snapData)
+	if err != nil {
+		return [sha512.Size]byte{}, err
+	}
+	return sha512.Sum512(data), nil
+}
+
+func (r *Replica) getChecksum(id uuid.UUID) ([]byte, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	checksum, ok := r.mu.checksums[id]
+	return checksum, ok
+}
+
+// VerifyChecksum verifies the checksum that was computed through a
+// ComputeChecksum request.
+func (r *Replica) VerifyChecksum(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.VerifyChecksumRequest) (roachpb.VerifyChecksumResponse, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	checksum, ok := r.mu.checksums[args.ChecksumID]
+	if ok {
+		if checksum != nil {
+			if !bytes.Equal(checksum, args.Checksum) {
+				panic("checksum incorrect")
+			} else {
+				// TODO: remove in this PR.
+				log.Errorf("checksum correct %v", checksum)
+			}
+		} else {
+			log.Error("checksum computation failed")
+		}
+	} else {
+		log.Error("checksum still not computed")
+	}
+	return roachpb.VerifyChecksumResponse{}, nil
 }
 
 // AdminSplit divides the range into into two ranges, using either

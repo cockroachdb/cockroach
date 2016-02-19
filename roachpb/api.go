@@ -24,6 +24,10 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+// ChecksumID is a custom type identifying the snapshot at which a range
+// replica checksum should be computed.
+type ChecksumID []byte
+
 // UserPriority is a custom type for transaction's user priority.
 type UserPriority float64
 
@@ -371,6 +375,12 @@ func (*TruncateLogRequest) Method() Method { return TruncateLog }
 // Method implements the Request interface.
 func (*LeaderLeaseRequest) Method() Method { return LeaderLease }
 
+// Method implements the Request interface.
+func (*ComputeChecksumRequest) Method() Method { return ComputeChecksum }
+
+// Method implements the Request interface.
+func (*VerifyChecksumRequest) Method() Method { return VerifyChecksum }
+
 // CreateReply implements the Request interface.
 func (*GetRequest) CreateReply() Response { return &GetResponse{} }
 
@@ -438,6 +448,12 @@ func (*TruncateLogRequest) CreateReply() Response { return &TruncateLogResponse{
 
 // CreateReply implements the Request interface.
 func (*LeaderLeaseRequest) CreateReply() Response { return &LeaderLeaseResponse{} }
+
+// CreateReply implements the Request interface.
+func (*ComputeChecksumRequest) CreateReply() Response { return &ComputeChecksumResponse{} }
+
+// CreateReply implements the Request interface.
+func (*VerifyChecksumRequest) CreateReply() Response { return &VerifyChecksumResponse{} }
 
 // NewGet returns a Request initialized to get the value at key.
 func NewGet(key Key) Request {
@@ -565,3 +581,9 @@ func (*NoopRequest) flags() int               { return isRead } // slightly spec
 func (*MergeRequest) flags() int              { return isWrite }
 func (*TruncateLogRequest) flags() int        { return isWrite }
 func (*LeaderLeaseRequest) flags() int        { return isWrite }
+
+// Send the request down to all replicas.
+func (*ComputeChecksumRequest) flags() int { return isWrite }
+
+// Send the request down to all replicas.
+func (*VerifyChecksumRequest) flags() int { return isWrite }

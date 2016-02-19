@@ -165,17 +165,18 @@ type Replica struct {
 	mu struct {
 		sync.Mutex                   // Protects all fields in the mu struct.
 		appliedIndex   uint64        // Last index applied to the state machine.
-		cmdQ           *CommandQueue // Enforce at most one command is running per key(s)
+		cmdQ           *CommandQueue // Enforce at most one command is running per key(s).
 		desc           *roachpb.RangeDescriptor
 		lastIndex      uint64 // Last index persisted to the raft log (not necessarily committed).
 		leaderLease    *roachpb.Lease
 		maxBytes       int64 // Max bytes before split.
 		pendingCmds    map[cmdIDKey]*pendingCmd
-		pendingSeq     uint64 // atomic sequence counter for cmdIDKey generation
+		pendingSeq     uint64 // atomic sequence counter for cmdIDKey generation.
 		raftGroup      *raft.RawNode
 		replicaID      roachpb.ReplicaID
 		truncatedState *roachpb.RaftTruncatedState
-		tsCache        *TimestampCache // Most recent timestamps for keys / key ranges
+		tsCache        *TimestampCache      // Most recent timestamps for keys / key ranges.
+		checksums      map[uuid.UUID][]byte // computed checksum at a snapshot UUID.
 	}
 }
 
@@ -213,7 +214,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	r.mu.cmdQ = NewCommandQueue()
 	r.mu.tsCache = NewTimestampCache(clock)
 	r.mu.pendingCmds = map[cmdIDKey]*pendingCmd{}
-
+	r.mu.checksums = map[uuid.UUID][]byte{}
 	r.setDescWithoutProcessUpdateLocked(desc)
 
 	var err error

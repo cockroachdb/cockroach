@@ -44,16 +44,17 @@ import (
 
 // Context defaults.
 const (
-	defaultCGroupMemPath      = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
-	defaultAddr               = ":" + base.DefaultPort
-	defaultMaxOffset          = 250 * time.Millisecond
-	defaultCacheSize          = 512 << 20 // 512 MB
-	defaultMemtableBudget     = 512 << 20 // 512 MB
-	defaultScanInterval       = 10 * time.Minute
-	defaultScanMaxIdleTime    = 5 * time.Second
-	defaultMetricsFrequency   = 10 * time.Second
-	defaultTimeUntilStoreDead = 5 * time.Minute
-	defaultBalanceMode        = storage.BalanceModeUsage
+	defaultCGroupMemPath            = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+	defaultAddr                     = ":" + base.DefaultPort
+	defaultMaxOffset                = 250 * time.Millisecond
+	defaultCacheSize                = 512 << 20 // 512 MB
+	defaultMemtableBudget           = 512 << 20 // 512 MB
+	defaultScanInterval             = 10 * time.Minute
+	defaultScanMaxIdleTime          = 5 * time.Second
+	defaultConsistencyCheckInterval = 24 * time.Hour
+	defaultMetricsFrequency         = 10 * time.Second
+	defaultTimeUntilStoreDead       = 5 * time.Minute
+	defaultBalanceMode              = storage.BalanceModeUsage
 )
 
 // StoreSpec holds the parameters for a store.
@@ -135,6 +136,9 @@ type Context struct {
 	// stores.
 	ScanMaxIdleTime time.Duration
 
+	// ConsistencyCheckInterval
+	ConsistencyCheckInterval time.Duration
+
 	// MetricsFrequency determines the frequency at which the server should
 	// record internal metrics.
 	MetricsFrequency time.Duration
@@ -199,6 +203,7 @@ func (ctx *Context) InitDefaults() {
 	ctx.MemtableBudget = defaultMemtableBudget
 	ctx.ScanInterval = defaultScanInterval
 	ctx.ScanMaxIdleTime = defaultScanMaxIdleTime
+	ctx.ConsistencyCheckInterval = defaultConsistencyCheckInterval
 	ctx.MetricsFrequency = defaultMetricsFrequency
 	ctx.TimeUntilStoreDead = defaultTimeUntilStoreDead
 	ctx.BalanceMode = defaultBalanceMode
