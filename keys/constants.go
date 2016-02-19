@@ -76,9 +76,26 @@ var (
 	// NOTE: LocalRangeIDPrefix must be kept in sync with the value
 	// in storage/engine/rocksdb/db.cc.
 	LocalRangeIDPrefix = roachpb.RKey(makeKey(localPrefix, roachpb.Key("i")))
+
+	// localRangeIDMetaInfix is the post-Range ID specifier for all non-raft
+	// per-range data. By appending this after the Range ID, these keys will
+	// be sorted directly before the raft keys for the same range, so they can
+	// be scanned and deleted together or separately.
+	localRangeIDMetaInfix = []byte("m")
 	// LocalSequenceCacheSuffix is the suffix used for the replay protection
 	// mechanism.
 	LocalSequenceCacheSuffix = []byte("res-")
+	// localRangeLastVerificationTimestampSuffix is the suffix for a range's
+	// last verification timestamp (for checking integrity of on-disk data).
+	localRangeLastVerificationTimestampSuffix = []byte("rlvt")
+	// localRangeStatsSuffix is the suffix for range statistics.
+	localRangeStatsSuffix = []byte("stat")
+
+	// localRangeIDRaftInfix is the post-Range ID specifier for all raft
+	// per-range data. By appending this after the Range ID, these keys will
+	// be sorted directly after the non-raft keys for the same range, so they
+	// can be scanned and deleted together or separately.
+	localRangeIDRaftInfix = []byte("r")
 	// localRaftLeaderLeaseSuffix is the suffix for the raft leader lease.
 	localRaftLeaderLeaseSuffix = []byte("rfll")
 	// localRaftTombstoneSuffix is the suffix for the raft tombstone.
@@ -93,11 +110,6 @@ var (
 	localRaftTruncatedStateSuffix = []byte("rftt")
 	// localRaftLastIndexSuffix is the suffix for raft's last index.
 	localRaftLastIndexSuffix = []byte("rfti")
-	// localRangeLastVerificationTimestampSuffix is the suffix for a range's
-	// last verification timestamp (for checking integrity of on-disk data).
-	localRangeLastVerificationTimestampSuffix = []byte("rlvt")
-	// localRangeStatsSuffix is the suffix for range statistics.
-	localRangeStatsSuffix = []byte("stat")
 
 	// LocalRangePrefix is the prefix identifying per-range data indexed
 	// by range key (either start key, or some key in the range). The

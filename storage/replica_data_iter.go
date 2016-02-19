@@ -40,7 +40,7 @@ type replicaDataIterator struct {
 	engine.Iterator
 }
 
-func makeReplicaKeyRanges(d *roachpb.RangeDescriptor) []keyRange {
+func makeReplicaKeyRanges(d *roachpb.RangeDescriptor, statsOnly bool) []keyRange {
 	// The first range in the keyspace starts at KeyMin, which includes the
 	// node-local space. We need the original StartKey to find the range
 	// metadata, but the actual data starts at LocalMax.
@@ -48,10 +48,14 @@ func makeReplicaKeyRanges(d *roachpb.RangeDescriptor) []keyRange {
 	if d.StartKey.Equal(roachpb.RKeyMin) {
 		dataStartKey = keys.LocalMax
 	}
+	metaFunc := keys.MakeRangeIDPrefix
+	if statsOnly {
+		metaFunc = keys.MakeRangeIDMetaPrefix
+	}
 	return []keyRange{
 		{
-			start: engine.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(d.RangeID)),
-			end:   engine.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(d.RangeID + 1)),
+			start: engine.MakeMVCCMetadataKey(metaFunc(d.RangeID)),
+			end:   engine.MakeMVCCMetadataKey(metaFunc(d.RangeID + 1)),
 		},
 		{
 			start: engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.StartKey)),
@@ -66,7 +70,7 @@ func makeReplicaKeyRanges(d *roachpb.RangeDescriptor) []keyRange {
 
 func newReplicaDataIterator(d *roachpb.RangeDescriptor, e engine.Engine) *replicaDataIterator {
 	ri := &replicaDataIterator{
-		ranges:   makeReplicaKeyRanges(d),
+		ranges:   makeReplicaKeyRanges(d, false),
 		Iterator: e.NewIterator(nil),
 	}
 	ri.Seek(ri.ranges[ri.curIndex].start)
