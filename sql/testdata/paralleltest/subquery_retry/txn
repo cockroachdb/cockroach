@@ -1,0 +1,63 @@
+# This test verifies that the results of the subquery are consistent with the transaction. If we
+# inadvertently reuse the previous results of the subquery during a retry, we might insert
+# duplicate values.
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+statement ok
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))

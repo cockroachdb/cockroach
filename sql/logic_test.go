@@ -48,10 +48,10 @@ import (
 )
 
 var (
-	resultsRE = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
-	errorRE   = regexp.MustCompile(`^(?:statement|query)\s+error\s+(.*)$`)
-	testdata  = flag.String("d", "testdata/logictest/[^.]*", "test data glob")
-	bigtest   = flag.Bool("bigtest", false, "use the big set of logic test files (overrides testdata)")
+	resultsRE     = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
+	errorRE       = regexp.MustCompile(`^(?:statement|query)\s+error\s+(.*)$`)
+	logictestdata = flag.String("d", "testdata/logictest/[^.]*", "test data glob")
+	bigtest       = flag.Bool("bigtest", false, "use the big set of logic test files (overrides testdata)")
 )
 
 const logicMaxOffset = 50 * time.Millisecond
@@ -159,14 +159,18 @@ type logicTest struct {
 	// re-use them and close them all on exit.
 	clients map[string]*sql.DB
 	// client currently in use.
-	user         string
-	db           *sql.DB
-	progress     int
-	lastProgress time.Time
-	traceFile    *os.File
+	user            string
+	db              *sql.DB
+	progress        int
+	lastProgress    time.Time
+	traceFile       *os.File
+	cleanupRootUser func()
 }
 
 func (t *logicTest) close() {
+	if t.cleanupRootUser != nil {
+		t.cleanupRootUser()
+	}
 	if t.srv != nil {
 		cleanupTestServer(t.srv)
 		t.srv = nil
@@ -228,20 +232,13 @@ func (t *logicTest) setUser(user string) func() {
 	return cleanupFunc
 }
 
-// TODO(tschottdorf): some logic tests currently take a long time to run.
-// Probably a case of heartbeats timing out or many restarts in some tests.
-// Need to investigate when all moving parts are in place.
 func (t *logicTest) run(path string) {
 	defer t.close()
+	t.setup()
+	t.processTestFile(path)
+}
 
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer file.Close()
-
-	t.lastProgress = time.Now()
-
+func (t *logicTest) setup() {
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
 	ctx := server.NewTestContext()
@@ -250,8 +247,7 @@ func (t *logicTest) run(path string) {
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
-	cleanupFunc := t.setUser(security.RootUser)
-	defer cleanupFunc()
+	t.cleanupRootUser = t.setUser(security.RootUser)
 
 	if _, err := t.db.Exec(`
 CREATE DATABASE test;
@@ -259,6 +255,19 @@ SET DATABASE = test;
 `); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TODO(tschottdorf): some logic tests currently take a long time to run.
+// Probably a case of heartbeats timing out or many restarts in some tests.
+// Need to investigate when all moving parts are in place.
+func (t *logicTest) processTestFile(path string) {
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	t.lastProgress = time.Now()
 
 	s := newLineScanner(file)
 	for s.Scan() {
@@ -700,7 +709,7 @@ func TestLogic(t *testing.T) {
 			// [uses joins] logicTestPath + "/test/random/select/*.test",
 		}
 	} else {
-		globs = []string{*testdata}
+		globs = []string{*logictestdata}
 	}
 
 	var paths []string
