@@ -300,10 +300,9 @@ func waitClientsStop(num int, state *testState, stallDuration time.Duration) {
 // performance, but cluster recovery.
 func TestClusterRecovery(t *testing.T) {
 	t.Skipf("TODO(pmattis): #4517")
+}
 
-	c := StartCluster(t)
-	defer c.AssertAndStop(t)
-
+func testClusterRecoveryInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	num := c.NumNodes()
 	if num <= 0 {
 		t.Fatalf("%d nodes in cluster", num)
@@ -317,7 +316,7 @@ func TestClusterRecovery(t *testing.T) {
 		t:        t,
 		errChan:  make(chan error, num),
 		teardown: make(chan struct{}),
-		deadline: start.Add(*flagDuration),
+		deadline: start.Add(cfg.Duration),
 		clients:  make([]testClient, num),
 	}
 
@@ -340,7 +339,7 @@ func TestClusterRecovery(t *testing.T) {
 	}
 	go chaosMonkey(&state, c, true, pickNodes)
 
-	waitClientsStop(num, &state, *flagStall)
+	waitClientsStop(num, &state, cfg.Stall)
 
 	// Verify accounts.
 	verifyAccounts(t, &state.clients[0])
@@ -361,10 +360,10 @@ func TestClusterRecovery(t *testing.T) {
 // The test measures read/write performance in the presence of restarts.
 func TestNodeRestart(t *testing.T) {
 	t.Skipf("TODO(pmattis): #4517")
+	runTestOnConfigs(t, testNodeRestartInner)
+}
 
-	c := StartCluster(t)
-	defer c.AssertAndStop(t)
-
+func testNodeRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	num := c.NumNodes()
 	if num <= 0 {
 		t.Fatalf("%d nodes in cluster", num)
@@ -378,7 +377,7 @@ func TestNodeRestart(t *testing.T) {
 		t:        t,
 		errChan:  make(chan error, 1),
 		teardown: make(chan struct{}),
-		deadline: start.Add(*flagDuration),
+		deadline: start.Add(cfg.Duration),
 		clients:  make([]testClient, 1),
 	}
 
@@ -400,7 +399,7 @@ func TestNodeRestart(t *testing.T) {
 	}
 	go chaosMonkey(&state, c, false, pickNodes)
 
-	waitClientsStop(1, &state, *flagStall)
+	waitClientsStop(1, &state, cfg.Stall)
 
 	// Verify accounts.
 	verifyAccounts(t, client)

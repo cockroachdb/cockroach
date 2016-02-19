@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
@@ -31,15 +32,16 @@ import (
 // TestPut starts up an N node cluster and runs N workers that write
 // to independent keys.
 func TestPut(t *testing.T) {
-	c := StartCluster(t)
-	defer c.AssertAndStop(t)
+	runTestOnConfigs(t, testPutInner)
+}
 
+func testPutInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	db, dbStopper := makeClient(t, c.ConnString(0))
 	defer dbStopper.Stop()
 
 	errs := make(chan error, c.NumNodes())
 	start := time.Now()
-	deadline := start.Add(*flagDuration)
+	deadline := start.Add(cfg.Duration)
 	var count int64
 	for i := 0; i < c.NumNodes(); i++ {
 		go func() {

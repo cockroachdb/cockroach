@@ -22,13 +22,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/util"
 )
 
 func TestBuildInfo(t *testing.T) {
-	c := StartCluster(t)
-	defer c.AssertAndStop(t)
+	runTestOnConfigs(t, testBuildInfoInner)
+}
 
+func testBuildInfoInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	checkGossip(t, c, 20*time.Second, hasPeers(c.NumNodes()))
 
 	util.SucceedsWithin(t, 10*time.Second, func() error {
