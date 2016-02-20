@@ -86,6 +86,16 @@ func (p *planner) getStringVal(name string, values parser.Exprs) (string, *roach
 	return string(s), nil
 }
 
+func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, *roachpb.Error) {
+	switch n.Isolation {
+	case parser.SerializableIsolation:
+		// Nothing for now.
+	default:
+		return nil, roachpb.NewUErrorf("unsupported default isolation level: %s", n.Isolation)
+	}
+	return &emptyNode{}, nil
+}
+
 func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, *roachpb.Error) {
 	d, err := n.Value.Eval(p.evalCtx)
 	if err != nil {
