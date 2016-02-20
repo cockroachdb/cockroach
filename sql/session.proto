@@ -44,4 +44,6 @@ message Session {
     // A time duration in seconds.
     int64 offset = 6;
   }
+  // Whether new transactions should be serializable or snapshot.
+  optional roachpb.IsolationType default_isolation_level = 7 [(gogoproto.nullable) = false];
 }
