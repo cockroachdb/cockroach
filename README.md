@@ -118,7 +118,7 @@ see [cloud deployment](https://github.com/cockroachdb/cockroach/tree/master/clou
 
 We'll set up a three-node cluster below.
 
-The code assumes that $NODE{1,2,3} are the host names of the three nodes in the cluster.
+The code assumes that `$NODE{1,2,3}` are the host names of the three nodes in the cluster.
 
 ```bash
 # Create certificates
