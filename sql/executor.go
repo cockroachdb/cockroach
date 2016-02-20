@@ -214,10 +214,10 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 // Prepare returns the result types of the given statement. Args may be a
 // partially populated val args map. Prepare will populate the missing val
 // args. The column result types are returned (or nil if there are no results).
-func (e *Executor) Prepare(user string, query string, session Session, args parser.MapArgs) ([]ResultColumn, error) {
+func (e *Executor) Prepare(user string, query string, session Session, args parser.MapArgs) ([]ResultColumn, *roachpb.Error) {
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
-		return nil, err
+		return nil, roachpb.NewError(err)
 	}
 	planMaker := plannerPool.Get().(*planner)
 	defer plannerPool.Put(planMaker)
@@ -244,7 +244,7 @@ func (e *Executor) Prepare(user string, query string, session Session, args pars
 	planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: timestamp}
 	plan, pErr := planMaker.prepare(stmt)
 	if pErr != nil {
-		return nil, pErr.GoError()
+		return nil, pErr
 	}
 	if plan == nil {
 		return nil, nil
@@ -252,7 +252,7 @@ func (e *Executor) Prepare(user string, query string, session Session, args pars
 	cols := plan.Columns()
 	for _, c := range cols {
 		if err := checkResultDatum(c.Typ); err != nil {
-			return nil, err
+			return nil, roachpb.NewError(err)
 		}
 	}
 	return cols, nil
