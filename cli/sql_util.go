@@ -21,7 +21,6 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	"net"
 
 	// Import postgres driver.
 	_ "github.com/lib/pq"
@@ -32,9 +31,7 @@ import (
 func makeSQLClient() (*sql.DB, string) {
 	sqlURL := connURL
 	if len(connURL) == 0 {
-		tmpCtx := cliContext
-		tmpCtx.PGAddr = net.JoinHostPort(connHost, connPGPort)
-		sqlURL = tmpCtx.PGURL(connUser)
+		sqlURL = cliContext.PGURL(connUser)
 	}
 	db, err := sql.Open("postgres", sqlURL)
 	if err != nil {
