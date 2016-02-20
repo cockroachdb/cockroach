@@ -49,6 +49,8 @@ const (
 	dockerspyImage = "cockroachdb/docker-spy"
 	dockerspyTag   = "20160209-143235"
 	domain         = "local"
+
+	builderImageFull = builderImage + ":" + builderTag
 )
 
 var (
@@ -56,7 +58,7 @@ var (
 	pgTCP        nat.Port = base.PGPort + "/tcp"
 )
 
-var cockroachImage = flag.String("i", builderImage, "the docker image to run")
+var cockroachImage = flag.String("i", builderImageFull, "the docker image to run")
 var cockroachBinary = flag.String("b", defaultBinary(), "the binary to run (if image == "+builderImage+")")
 var cockroachEntry = flag.String("e", "", "the entry point for the image")
 var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
@@ -153,7 +155,7 @@ func CreateLocal(cfg TestConfig, logDir string, stopper chan struct{}) *LocalClu
 	default:
 	}
 
-	if *cockroachImage == builderImage && !exists(*cockroachBinary) {
+	if *cockroachImage == builderImageFull && !exists(*cockroachBinary) {
 		log.Fatalf("\"%s\": does not exist", *cockroachBinary)
 	}
 
@@ -296,7 +298,7 @@ func (l *LocalCluster) initCluster() {
 		// running as a regular Joe as it happens on CircleCI).
 		maybePanic(os.MkdirAll(l.logDir, 0777))
 	}
-	if *cockroachImage == builderImage {
+	if *cockroachImage == builderImageFull {
 		path, err := filepath.Abs(*cockroachBinary)
 		maybePanic(err)
 		binds = append(binds, path+":/"+filepath.Base(*cockroachBinary))
@@ -331,7 +333,7 @@ func (l *LocalCluster) initCluster() {
 		}
 	}
 
-	if *cockroachImage == builderImage {
+	if *cockroachImage == builderImageFull {
 		maybePanic(pullImage(l, types.ImagePullOptions{ImageID: builderImage, Tag: builderTag}))
 	}
 	c, err := createContainer(
@@ -373,7 +375,7 @@ func (l *LocalCluster) createRoach(node *testNode, dns, vols *Container, cmd ...
 		hostname = fmt.Sprintf("roach%d", node.index)
 	}
 	var entrypoint []string
-	if *cockroachImage == builderImage {
+	if *cockroachImage == builderImageFull {
 		entrypoint = append(entrypoint, "/"+filepath.Base(*cockroachBinary))
 	} else if *cockroachEntry != "" {
 		entrypoint = append(entrypoint, *cockroachEntry)
