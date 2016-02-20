@@ -159,16 +159,11 @@ func (c cliTest) RunWithArgs(a []string) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	pg, err := c.PGPort()
 	if err != nil {
 		fmt.Println(err)
 	}
 	args = append(args, fmt.Sprintf("--host=%s", h))
-	if a[0] == "kv" || a[0] == "quit" || a[0] == "range" || a[0] == "exterminate" || a[0] == "node" {
-		args = append(args, fmt.Sprintf("--port=%s", p))
-	} else {
-		args = append(args, fmt.Sprintf("--pgport=%s", pg))
-	}
+	args = append(args, fmt.Sprintf("--port=%s", p))
 	// Always load test certs.
 	args = append(args, fmt.Sprintf("--certs=%s", c.certsDir))
 	args = append(args, a[1:]...)
