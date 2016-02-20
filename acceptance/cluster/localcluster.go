@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/log"
-	dockerclient "github.com/docker/engine-api/client"
+	"github.com/docker/engine-api/client"
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
 	"github.com/docker/engine-api/types/events"
@@ -124,7 +124,7 @@ type testNode struct {
 // entries for the cockroach nodes, a "volumes" container which manages the
 // persistent volumes used for certs and node data and N cockroach nodes.
 type LocalCluster struct {
-	client               *dockerclient.Client
+	client               *client.Client
 	stopper              chan struct{}
 	mu                   sync.Mutex // Protects the fields below
 	dns                  *Container
@@ -156,7 +156,7 @@ func CreateLocal(cfg TestConfig, logDir string, stopper chan struct{}) *LocalClu
 		log.Fatalf("\"%s\": does not exist", *cockroachBinary)
 	}
 
-	cli, err := dockerclient.NewEnvClient()
+	cli, err := client.NewEnvClient()
 	maybePanic(err)
 
 	return &LocalCluster{
