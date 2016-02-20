@@ -18,8 +18,8 @@ github.com/Sirupsen/logrus 57cce1ed6103dce7791881d3e69e55f90d986aa5
 github.com/VividCortex/ewma c34099b489e4ac33ca8d8c5f9d29d6eeaf69f2ed
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
 github.com/biogo/store 3b4c041f52c224ee4a44f5c8b150d003a40643a0
-github.com/chzyer/readline 5aaa89df05e26e3f095ccd5a70f43b8600bcbe4a
-github.com/client9/misspell 0c4632c84ed240443adb04ec6b7fa90711f27578
+github.com/chzyer/readline 2978660421784ef14bca1f3fb41dcb8891f279e9
+github.com/client9/misspell c9127cb48d96739b0712cff253d86f05d1f431b1
 github.com/cloudfoundry/gosigar 3ed7c74352dae6dc00bdc8c74045375352e3ec05
 github.com/cockroachdb/c-lz4 c40aaae2fc50293eb8750b34632bc3efe813e23f
 github.com/cockroachdb/c-protobuf 4feb192131ea08dfbd7253a00868ad69cbb61b81
@@ -27,7 +27,7 @@ github.com/cockroachdb/c-rocksdb c0124c907c74b579d9d3d48eb96471bef270bc25
 github.com/cockroachdb/c-snappy 5c6d0932e0adaffce4bfca7bdf2ac37f79952ccf
 github.com/cockroachdb/stress aa7690c22fd0abd6168ed0e6c361e4f4c5f7ab25
 github.com/codahale/hdrhistogram e88be87d51429689cef99043a54150d733265cd7
-github.com/coreos/etcd c3824b10daa09fe99fba66a329db881adeb03aae
+github.com/coreos/etcd f8c998906c9e496ac30ebf6d1222f9b75385676d
 github.com/cpuguy83/go-md2man 2724a9c9051aa62e9cca11304e7dd518e9e41599
 github.com/docker/engine-api 0c2bfae8bef6432b075411062c9840406bf6ad3e
 github.com/docker/go-connections 34b5052da6b11e27f5f2e357b38b571ddddd3928
@@ -62,12 +62,13 @@ github.com/satori/go.uuid e673fdd4dea8a7334adbbe7f57b7e4b00bdc5502
 github.com/shurcooL/sanitized_anchor_name 10ef21a441db47d8b13ebcc5fd2310f636973c77
 github.com/spf13/cobra 65a708cee0a4424f4e353d031ce440643e312f92
 github.com/spf13/pflag 7f60f83a2c81bc3c3c0d5297f61ddfa68da9d3b7
+github.com/tamird/cmux a474f2d0e92c7e772723e5b2f6a030f7da7185d7
 github.com/tebeka/go2xunit 304a3dad367b395460778a969d87101b778b322f
 github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 golang.org/x/crypto 1f22c0103821b9390939b6776727195525381532
 golang.org/x/net b6d7b1396ec874c3b00f6c84cd4301a17c56c8ed
 golang.org/x/text 07b9a78963006a15c538ec5175243979025fa7a8
-golang.org/x/tools a17fa845d74d17bf6d466f84fd9d3c5602669e53
+golang.org/x/tools 86372b3255bd23c074d3112bdb87052e725463ed
 google.golang.org/grpc 178b68e2819d3ed711040301c12f3f97b6c270ce
 gopkg.in/inf.v0 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
