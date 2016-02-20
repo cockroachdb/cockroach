@@ -32,7 +32,8 @@ type Session struct {
 	// Types that are valid to be assigned to Timezone:
 	//	*Session_Location
 	//	*Session_Offset
-	Timezone isSession_Timezone `protobuf_oneof:"timezone"`
+	Timezone              isSession_Timezone               `protobuf_oneof:"timezone"`
+	DefaultIsolationLevel cockroach_roachpb1.IsolationType `protobuf:"varint,7,opt,name=default_isolation_level,enum=cockroach.roachpb.IsolationType" json:"default_isolation_level"`
 }
 
 func (m *Session) Reset()         { *m = Session{} }
@@ -186,6 +187,9 @@ func (m *Session) MarshalTo(data []byte) (int, error) {
 		}
 		i += nn2
 	}
+	data[i] = 0x38
+	i++
+	i = encodeVarintSession(data, i, uint64(m.DefaultIsolationLevel))
 	return i, nil
 }
 
@@ -282,6 +286,7 @@ func (m *Session) Size() (n int) {
 	if m.Timezone != nil {
 		n += m.Timezone.Size()
 	}
+	n += 1 + sovSession(uint64(m.DefaultIsolationLevel))
 	return n
 }
 
@@ -501,6 +506,25 @@ func (m *Session) Unmarshal(data []byte) error {
 				}
 			}
 			m.Timezone = &Session_Offset{v}
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DefaultIsolationLevel", wireType)
+			}
+			m.DefaultIsolationLevel = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSession
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.DefaultIsolationLevel |= (cockroach_roachpb1.IsolationType(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipSession(data[iNdEx:])

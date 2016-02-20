@@ -472,7 +472,7 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %token <str>   BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
 
 %token <str>   CASCADE CASE CAST CHAR
-%token <str>   CHARACTER CHECK
+%token <str>   CHARACTER CHARACTERISTICS CHECK
 %token <str>   COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
 %token <str>   COMMITTED CONCAT CONFLICT CONSTRAINT
 %token <str>   COVERING CREATE
@@ -964,6 +964,10 @@ set_stmt:
 | SET LOCAL set_rest
   {
     $$.val = $3.stmt()
+  }
+| SET SESSION CHARACTERISTICS AS TRANSACTION transaction_iso_level
+  {
+    $$.val = &SetDefaultIsolation{Isolation: $6.isoLevel()}
   }
 | SET SESSION set_rest
   {
@@ -3934,6 +3938,7 @@ col_name_keyword:
 | BYTES
 | CHAR
 | CHARACTER
+| CHARACTERISTICS
 | COALESCE
 | DATE
 | DEC

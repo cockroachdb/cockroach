@@ -32,6 +32,7 @@ var keywords = map[string]int{
 	"CAST":              CAST,
 	"CHAR":              CHAR,
 	"CHARACTER":         CHARACTER,
+	"CHARACTERISTICS":   CHARACTERISTICS,
 	"CHECK":             CHECK,
 	"COALESCE":          COALESCE,
 	"COLLATE":           COLLATE,
