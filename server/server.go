@@ -253,11 +253,9 @@ func (s *Server) Start() error {
 		anyL := m.Match(cmux.Any())
 
 		var h2 http2.Server
-
 		serveConnOpts := &http2.ServeConnOpts{
 			Handler: s,
 		}
-
 		serveH2 := func(conn net.Conn) {
 			h2.ServeConn(conn, serveConnOpts)
 		}
@@ -265,26 +263,18 @@ func (s *Server) Start() error {
 		serveConn = util.ServeHandler(s.stopper, s, anyL, tlsConfig)
 
 		s.stopper.RunWorker(func() {
-			if err := serveConn(h2L, serveH2); err != nil && !util.IsClosedConnection(err) {
-				log.Fatal(err)
-			}
+			util.FatalIfUnexpected(serveConn(h2L, serveH2))
 		})
 	}
 
 	s.stopper.RunWorker(func() {
-		if err := serveConn(pgL, func(conn net.Conn) {
-			if err := s.pgServer.ServeConn(conn); err != nil && !util.IsClosedConnection(err) {
-				log.Error(err)
-			}
-		}); err != nil && !util.IsClosedConnection(err) {
-			log.Fatal(err)
-		}
+		util.FatalIfUnexpected(serveConn(pgL, func(conn net.Conn) {
+			util.FatalIfUnexpected(s.pgServer.ServeConn(conn))
+		}))
 	})
 
 	s.stopper.RunWorker(func() {
-		if err := m.Serve(); err != nil && !util.IsClosedConnection(err) {
-			log.Fatal(err)
-		}
+		util.FatalIfUnexpected(m.Serve())
 	})
 
 	s.rpcContext.SetLocalServer(s.rpc, s.ctx.Addr)
