@@ -19,6 +19,7 @@ package server
 
 import (
 	"compress/gzip"
+	"crypto/tls"
 	"encoding/json"
 	"io"
 	"net"
@@ -29,7 +30,10 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/http2"
+
 	assetfs "github.com/elazarl/go-bindata-assetfs"
+	"github.com/tamird/cmux"
 	"google.golang.org/grpc"
 
 	snappy "github.com/cockroachdb/c-snappy"
@@ -76,7 +80,7 @@ type Server struct {
 	db            *client.DB
 	kvDB          *kv.DBServer
 	sqlServer     sql.Server
-	pgServer      *pgwire.Server
+	pgServer      pgwire.Server
 	node          *Node
 	recorder      *status.NodeStatusRecorder
 	admin         *adminServer
@@ -178,11 +182,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		return nil, err
 	}
 
-	s.pgServer = pgwire.NewServer(&pgwire.Context{
-		Context:  &s.ctx.Context,
-		Executor: s.sqlServer.Executor,
-		Stopper:  stopper,
-	})
+	s.pgServer = pgwire.MakeServer(&s.ctx.Context, s.sqlServer.Executor)
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
@@ -224,18 +224,82 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	unresolvedAddr := util.NewUnresolvedAddr("tcp", s.ctx.Addr)
-	ln, err := util.ListenAndServe(s.stopper, s, unresolvedAddr, tlsConfig)
+	// The following code is a specialization of util/net.go's ListenAndServe
+	// which adds pgwire support. A single port is used to serve all protocols
+	// (pg, http, h2) via the following construction:
+	//
+	// non-TLS case:
+	// net.Listen -> cmux.New -> pgwire.Match -> pgwire.Server.ServeConn
+	//               |
+	//               -  -> cmux.HTTP2 -> http2.(*Server).ServeConn
+	//               -  -> cmux.Any -> http.(*Server).Serve
+	//
+	// TLS case:
+	// net.Listen -> cmux.New -> pgwire.Match -> pgwire.Server.ServeConn
+	//               |
+	//               -  -> cmux.Any -> tls.NewListener -> http.(*Server).Serve
+	//
+	// Note that the difference between the TLS and non-TLS cases exists due to
+	// Go's lack of an h2c (HTTP2 Clear Text) implementation. See inline comments
+	// in util.ListenAndServe for an explanation of how h2c is implemented there
+	// and here.
+
+	ln, err := net.Listen("tcp", s.ctx.Addr)
 	if err != nil {
 		return err
 	}
-
-	if err := officializeAddr(unresolvedAddr, ln.Addr()); err != nil {
+	unresolvedAddr, err := officialAddr(s.ctx.Addr, ln.Addr())
+	if err != nil {
 		return err
 	}
 	s.ctx.Addr = unresolvedAddr.String()
 
-	s.rpcContext.SetLocalServer(s.rpc, unresolvedAddr.String())
+	s.stopper.RunWorker(func() {
+		<-s.stopper.ShouldDrain()
+		if err := ln.Close(); err != nil {
+			log.Fatal(err)
+		}
+	})
+
+	m := cmux.New(ln)
+	pgL := m.Match(pgwire.Match)
+
+	var serveConn func(net.Listener, func(net.Conn)) error
+	if tlsConfig != nil {
+		anyL := m.Match(cmux.Any())
+		serveConn = util.ServeHandler(s.stopper, s, tls.NewListener(anyL, tlsConfig), tlsConfig)
+	} else {
+		h2L := m.Match(cmux.HTTP2())
+		anyL := m.Match(cmux.Any())
+
+		var h2 http2.Server
+		serveConnOpts := &http2.ServeConnOpts{
+			Handler: s,
+		}
+		serveH2 := func(conn net.Conn) {
+			h2.ServeConn(conn, serveConnOpts)
+		}
+
+		serveConn = util.ServeHandler(s.stopper, s, anyL, tlsConfig)
+
+		s.stopper.RunWorker(func() {
+			util.FatalIfUnexpected(serveConn(h2L, serveH2))
+		})
+	}
+
+	s.stopper.RunWorker(func() {
+		util.FatalIfUnexpected(serveConn(pgL, func(conn net.Conn) {
+			if err := s.pgServer.ServeConn(conn); err != nil && !util.IsClosedConnection(err) {
+				log.Error(err)
+			}
+		}))
+	})
+
+	s.stopper.RunWorker(func() {
+		util.FatalIfUnexpected(m.Serve())
+	})
+
+	s.rpcContext.SetLocalServer(s.rpc, s.ctx.Addr)
 
 	s.gossip.Start(s.grpc, unresolvedAddr)
 
@@ -262,17 +326,8 @@ func (s *Server) Start() error {
 
 	s.status = newStatusServer(s.db, s.gossip, s.registry, s.ctx)
 
-	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), unresolvedAddr)
+	log.Infof("starting %s/postgres server at %s", s.ctx.HTTPRequestScheme(), unresolvedAddr)
 	s.initHTTP()
-
-	pgAddr := util.NewUnresolvedAddr("tcp", s.ctx.PGAddr)
-	if err := s.pgServer.Start(pgAddr); err != nil {
-		return err
-	}
-	if err := officializeAddr(pgAddr, s.pgServer.Addr()); err != nil {
-		return err
-	}
-	s.ctx.PGAddr = pgAddr.String()
 
 	return nil
 }
@@ -461,15 +516,15 @@ func (w *snappyResponseWriter) Close() {
 	}
 }
 
-func officializeAddr(unresolvedAddr *util.UnresolvedAddr, resolvedAddr net.Addr) error {
-	unresolvedHost, unresolvedPort, err := net.SplitHostPort(unresolvedAddr.String())
+func officialAddr(unresolvedAddr string, resolvedAddr net.Addr) (*util.UnresolvedAddr, error) {
+	unresolvedHost, unresolvedPort, err := net.SplitHostPort(unresolvedAddr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	resolvedHost, resolvedPort, err := net.SplitHostPort(resolvedAddr.String())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var host string
@@ -494,7 +549,5 @@ func officializeAddr(unresolvedAddr *util.UnresolvedAddr, resolvedAddr net.Addr)
 		port = resolvedPort
 	}
 
-	unresolvedAddr.AddressField = net.JoinHostPort(host, port)
-
-	return nil
+	return util.NewUnresolvedAddr(resolvedAddr.Network(), net.JoinHostPort(host, port)), nil
 }
