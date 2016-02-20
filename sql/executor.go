@@ -223,6 +223,18 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 	return cfg, cache
 }
 
+// initializeTxn initialize a Txn using the session defaults.
+func (e *Executor) initializeTxn(txn *client.Txn, s Session) {
+	txn.Proto.Isolation = s.DefaultIsolationLevel
+}
+
+// newTxn creates a new Txn and initializes it using the session defaults.
+func (e *Executor) newTxn(s Session) *client.Txn {
+	txn := client.NewTxn(e.db)
+	e.initializeTxn(txn, s)
+	return txn
+}
+
 // Prepare returns the result types of the given statement. Args may be a
 // partially populated val args map. Prepare will populate the missing val
 // args. The column result types are returned (or nil if there are no results).
@@ -251,7 +263,7 @@ func (e *Executor) Prepare(user string, query string, session Session, args pars
 	}
 
 	timestamp := time.Now()
-	txn := client.NewTxn(e.db)
+	txn := e.newTxn(session)
 	planMaker.setTxn(txn, timestamp)
 	planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: timestamp}
 	plan, pErr := planMaker.prepare(stmt)
@@ -294,7 +306,7 @@ func (e *Executor) ExecuteStatements(user string, session Session, stmts string,
 
 	// Resume a pending transaction if present.
 	if planMaker.session.Txn != nil {
-		txn := client.NewTxn(e.db)
+		txn := e.newTxn(session)
 		txn.Proto = planMaker.session.Txn.Txn
 		txn.UserPriority = planMaker.session.Txn.UserPriority
 		if planMaker.session.MutatesSystemConfig {
@@ -409,7 +421,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 		}
 		// Start a transaction here and not in planMaker to prevent begin
 		// transaction from being called within an auto-transaction below.
-		planMaker.setTxn(client.NewTxn(e.db), time.Now())
+		planMaker.setTxn(e.newTxn(planMaker.session), time.Now())
 		planMaker.txn.SetDebugName("sql", 0)
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		if planMaker.txn == nil {
@@ -509,6 +521,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 	// No transaction. Run the command as a retryable block in an
 	// auto-transaction.
 	if pErr := e.db.Txn(func(txn *client.Txn) *roachpb.Error {
+		e.initializeTxn(txn, planMaker.session)
 		// For transient stats, we do not report implicit transactions as part of txnCount.
 		timestamp := time.Now()
 		planMaker.setTxn(txn, timestamp)

@@ -78,3 +78,17 @@ func (node *SetTimeZone) String() string {
 	}
 	return fmt.Sprintf("%s %s", prefix, node.Value)
 }
+
+// SetDefaultIsolation represents a SET SESSION CHARACTERISTICS AS TRANSACTION statement.
+type SetDefaultIsolation struct {
+	Isolation IsolationLevel
+}
+
+func (node *SetDefaultIsolation) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL")
+	if node.Isolation != UnspecifiedIsolation {
+		fmt.Fprintf(&buf, " %s", node.Isolation)
+	}
+	return buf.String()
+}
