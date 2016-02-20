@@ -136,6 +136,8 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	case *parser.SetTransaction:
 		pNode, err := p.SetTransaction(n)
 		return pNode, roachpb.NewError(err)
+	case *parser.SetDefaultIsolation:
+		return p.SetDefaultIsolation(n)
 	case *parser.Show:
 		pNode, err := p.Show(n)
 		return pNode, roachpb.NewError(err)
