@@ -26,7 +26,7 @@ import (
 var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
 
 func TestParseResolverSpec(t *testing.T) {
-	def := ensureHostPort(":", base.CockroachPort)
+	def := ensureHostPort(":", base.DefaultPort)
 	testCases := []struct {
 		input           string
 		success         bool
@@ -35,14 +35,14 @@ func TestParseResolverSpec(t *testing.T) {
 	}{
 		// Ports are not checked at parsing time. They are at GetAddress time though.
 		{"127.0.0.1:26222", true, "tcp", "127.0.0.1:26222"},
-		{":" + base.CockroachPort, true, "tcp", def},
-		{"127.0.0.1", true, "tcp", "127.0.0.1:" + base.CockroachPort},
-		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1:" + base.CockroachPort},
+		{":" + base.DefaultPort, true, "tcp", def},
+		{"127.0.0.1", true, "tcp", "127.0.0.1:" + base.DefaultPort},
+		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1:" + base.DefaultPort},
 		{"tcp=127.0.0.1:23456", true, "tcp", "127.0.0.1:23456"},
 		{"unix=/tmp/unix-socket12345", true, "unix", "/tmp/unix-socket12345"},
-		{"http-lb=localhost:" + base.CockroachPort, true, "http-lb", "localhost:" + base.CockroachPort},
+		{"http-lb=localhost:" + base.DefaultPort, true, "http-lb", "localhost:" + base.DefaultPort},
 		{"http-lb=newhost:1234", true, "http-lb", "newhost:1234"},
-		{"http-lb=:" + base.CockroachPort, true, "http-lb", def},
+		{"http-lb=:" + base.DefaultPort, true, "http-lb", def},
 		{"http-lb=:", true, "http-lb", def},
 		{"", false, "", ""},
 		{"foo=127.0.0.1", false, "", ""},
@@ -78,7 +78,7 @@ func TestGetAddress(t *testing.T) {
 		addressValue string
 	}{
 		{"tcp=127.0.0.1:26222", true, true, "tcp", "127.0.0.1:26222"},
-		{"tcp=127.0.0.1", true, true, "tcp", "127.0.0.1:" + base.CockroachPort},
+		{"tcp=127.0.0.1", true, true, "tcp", "127.0.0.1:" + base.DefaultPort},
 		{"tcp=localhost:80", true, true, "tcp", "localhost:80"},
 		// We should test unresolvable dns too, but this would be fragile.
 		{"unix=/tmp/foo", true, true, "unix", "/tmp/foo"},

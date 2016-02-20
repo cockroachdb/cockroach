@@ -53,10 +53,7 @@ const (
 	builderImageFull = builderImage + ":" + builderTag
 )
 
-var (
-	cockroachTCP nat.Port = base.CockroachPort + "/tcp"
-	pgTCP        nat.Port = base.PGPort + "/tcp"
-)
+const defaultTCP nat.Port = base.DefaultPort + "/tcp"
 
 var cockroachImage = flag.String("i", builderImageFull, "the docker image to run")
 var cockroachBinary = flag.String("b", defaultBinary(), "the binary to run (if image == "+builderImage+")")
@@ -388,8 +385,7 @@ func (l *LocalCluster) createRoach(node *testNode, dns, vols *Container, cmd ...
 			Domainname: domain,
 			Image:      *cockroachImage,
 			ExposedPorts: map[nat.Port]struct{}{
-				cockroachTCP: {},
-				pgTCP:        {},
+				defaultTCP: {},
 			},
 			Entrypoint: strslice.New(entrypoint...),
 			Cmd:        strslice.New(cmd...),
@@ -434,13 +430,13 @@ func (l *LocalCluster) startNode(node *testNode) {
 		"--stores=" + stores,
 		"--certs=/certs",
 		"--host=" + node.nodeStr,
-		"--port=" + base.CockroachPort,
+		"--port=" + base.DefaultPort,
 		"--scan-max-idle-time=200ms", // set low to speed up tests
 	}
 	log.Warning(stores)
 	// Append --join flag for all nodes except first.
 	if node.index > 0 {
-		cmd = append(cmd, "--join="+net.JoinHostPort(l.Nodes[0].nodeStr, base.CockroachPort))
+		cmd = append(cmd, "--join="+net.JoinHostPort(l.Nodes[0].nodeStr, base.DefaultPort))
 	}
 
 	var locallogDir string
@@ -456,14 +452,13 @@ func (l *LocalCluster) startNode(node *testNode) {
 	}
 	l.createRoach(node, l.dns, l.vols, cmd...)
 	maybePanic(node.Start())
-	uri := fmt.Sprintf("https://%s", node.Addr(""))
 	// Infof doesn't take positional parameters, hence the Sprintf.
 	log.Infof(fmt.Sprintf(`*** started %[1]s ***
   ui:    %[2]s
   trace: %[2]s/debug/requests
   logs:  %[3]s/cockroach.INFO
   pprof: docker exec -it %[4]s /bin/bash -c 'go tool pprof /cockroach <(wget --no-check-certificate -qO- https://$(hostname):%[5]s/debug/pprof/heap)'`,
-		node.Name(), uri, locallogDir, node.Container.id[:5], base.CockroachPort))
+		node.Name(), "https://"+node.Addr().String(), locallogDir, node.Container.id[:5], base.DefaultPort))
 }
 
 func (l *LocalCluster) processEvent(event events.Message) bool {
@@ -666,13 +661,13 @@ func (l *LocalCluster) stop() {
 // ConnString creates a connections string.
 func (l *LocalCluster) ConnString(i int) string {
 	return "rpcs://" + security.NodeUser + "@" +
-		l.Nodes[i].Addr("").String() +
+		l.Addr(i).String() +
 		"?certs=" + l.CertsDir
 }
 
-// PGAddr returns the Postgres address for the given node.
-func (l *LocalCluster) PGAddr(i int) *net.TCPAddr {
-	return l.Nodes[i].PGAddr()
+// Addr returns the TCP address for the given node.
+func (l *LocalCluster) Addr(i int) *net.TCPAddr {
+	return l.Nodes[i].Addr()
 }
 
 // PGUrl returns a URL string for the given node postgres server.
@@ -686,7 +681,7 @@ func (l *LocalCluster) PGUrl(i int) string {
 	pgURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(certUser),
-		Host:     l.Nodes[i].PGAddr().String(),
+		Host:     l.Addr(i).String(),
 		RawQuery: options.Encode(),
 	}
 	return pgURL.String()
@@ -709,5 +704,5 @@ func (l *LocalCluster) Restart(i int) error {
 
 // URL returns the base url.
 func (l *LocalCluster) URL(i int) string {
-	return "https://" + l.Nodes[i].Addr(cockroachTCP).String()
+	return "https://" + l.Addr(i).String()
 }
