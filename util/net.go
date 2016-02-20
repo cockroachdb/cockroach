@@ -17,136 +17,78 @@
 package util
 
 import (
-	"bytes"
 	"crypto/tls"
-	"io"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/soheilhy/cmux"
 	"golang.org/x/net/http2"
 
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-const eol = "\r\n"
-const hostHeader = "Host: CRDB" + eol
-
-var headerInsertionIndex = int64(strings.Index(http2.ClientPreface, eol) + len(eol))
-
-type replayableConn struct {
-	net.Conn
-	buf    bytes.Buffer
-	reader io.Reader
-}
-
-func newReplayableConn(conn net.Conn) *replayableConn {
-	rc := replayableConn{Conn: conn}
-	rc.reader = io.LimitReader(io.TeeReader(conn, &rc.buf), headerInsertionIndex)
-	return &rc
-}
-
-func (rc *replayableConn) replay() *replayableConn {
-	rc.reader = io.MultiReader(&rc.buf, rc.Conn)
-	return rc
-}
-
-func (rc *replayableConn) Read(p []byte) (int, error) {
-	if limitReader, ok := rc.reader.(*io.LimitedReader); ok {
-		// rc.reader is a LimitedReader wrapping a TeeReader.
-		off := headerInsertionIndex - limitReader.N
-		n, err := rc.reader.Read(p)
-		if !strings.HasPrefix(http2.ClientPreface[off:], string(p[:n])) {
-			// The incoming request is not an HTTP2 request, so buffering is no
-			// longer required; send all reads directly to the underlying net.Conn.
-			rc.reader = rc.Conn
-			rc.buf = bytes.Buffer{} // Release the memory.
-		} else if err == io.EOF {
-			// We've exhausted our LimitedReader, which means he incoming request is
-			// an HTTP2 request. Remember, that we are in this code path means that
-			// TLS is not in use, which means the caller (net/http machinery) won't
-			// be able to parse anything after http2.ClientPreface. However, Go 1.6
-			// introduced strict Host header checking for HTTP >= 1.1 requests (see
-			// https://github.com/golang/go/commit/6e11f45), and http2.ClientPreface
-			// contains enough information for the caller to identify this first
-			// request as an HTTP 2 request, but not enough for the caller to
-			// determine the value of the Host header. On the next line, we're going
-			// to help the caller out by providing a bogus HTTP 1.x-style Host
-			// header. This will get us past Host header verification.
-			//
-			// Note that this bogus header won't reappear after replay is called.
-			rc.reader = io.MultiReader(strings.NewReader(hostHeader), limitReader.R)
-		} else {
-			// The LimitedReader isn't exhausted yet, or we hit an error.
-			return n, err
-		}
-
-		// Cribbed from io.Multireader.
-		if n > 0 || err != io.EOF {
-			if err == io.EOF {
-				// Don't return EOF yet. We've replaced our LimitedReader with rc.Conn or
-				// a new MultiReader and there may be more bytes in there.
-				err = nil
-			}
-			return n, err
-		}
-	}
-
-	// Pseudocode:
-	// if rc.IsHTTP2() {
-	// 	if rc.replayCalled {
-	// 		rc.reader == io.MultiReader(&rc.buf, rc.Conn)
-	// 	} else {
-	// 		rc.reader == io.TeeReader(conn, &rc.buf)
-	// 	}
-	// } else {
-	// 	rc.reader == rc.Conn
-	// }
-	return rc.reader.Read(p)
-}
-
-type replayableConnListener struct {
-	net.Listener
-}
-
-func (ml *replayableConnListener) Accept() (net.Conn, error) {
-	conn, err := ml.Listener.Accept()
-	if err == nil {
-		conn = newReplayableConn(conn)
-	}
-	return conn, err
-}
-
-// Listen delegates to `net.Listen` and, if tlsConfig is not nil, to `tls.NewListener`.
-func Listen(addr net.Addr, tlsConfig *tls.Config) (net.Listener, error) {
-	ln, err := net.Listen(addr.Network(), addr.String())
-	if err == nil {
-		if tlsConfig != nil {
-			ln = tls.NewListener(ln, tlsConfig)
-		} else {
-			ln = &replayableConnListener{ln}
-		}
-	}
-
-	return ln, err
-}
-
 // ListenAndServe creates a listener and serves handler on it, closing
 // the listener when signalled by the stopper.
 func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, tlsConfig *tls.Config) (net.Listener, error) {
-	ln, err := Listen(addr, tlsConfig)
-	if err != nil {
-		return nil, err
-	}
+	ln, err := net.Listen(addr.Network(), addr.String())
+	if err == nil {
+		stopper.RunWorker(func() {
+			<-stopper.ShouldDrain()
+			// Some unit tests manually close `ln`, so it may already be closed
+			// when we get here.
+			if err := ln.Close(); err != nil && !IsClosedConnection(err) {
+				log.Fatal(err)
+			}
+		})
 
+		if tlsConfig != nil {
+			ServeHandler(stopper, handler, tls.NewListener(ln, tlsConfig), tlsConfig)
+		} else {
+			m := cmux.New(ln)
+			h2L := m.Match(cmux.HTTP2())
+			anyL := m.Match(cmux.Any())
+
+			var h2 http2.Server
+
+			serveConnOpts := &http2.ServeConnOpts{
+				Handler: handler,
+			}
+
+			serveH2 := func(conn net.Conn) {
+				h2.ServeConn(conn, serveConnOpts)
+			}
+
+			serveConn := ServeHandler(stopper, handler, anyL, tlsConfig)
+
+			stopper.RunWorker(func() {
+				if err := serveConn(h2L, serveH2); err != nil && !IsClosedConnection(err) {
+					log.Fatal(err)
+				}
+			})
+
+			stopper.RunWorker(func() {
+				if err := m.Serve(); err != nil && !IsClosedConnection(err) {
+					log.Fatal(err)
+				}
+			})
+		}
+	}
+	return ln, err
+}
+
+// ServeHandler serves the handler on the listener.
+func ServeHandler(stopper *stop.Stopper, handler http.Handler, ln net.Listener, tlsConfig *tls.Config) func(net.Listener, func(net.Conn)) error {
 	var mu sync.Mutex
 	activeConns := make(map[net.Conn]struct{})
 
+	logger := log.NewStdLogger(log.ErrorLog)
 	httpServer := http.Server{
-		TLSConfig: tlsConfig,
 		Handler:   handler,
+		TLSConfig: tlsConfig,
 		ConnState: func(conn net.Conn, state http.ConnState) {
 			mu.Lock()
 			switch state {
@@ -157,42 +99,14 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 			}
 			mu.Unlock()
 		},
-		ErrorLog: log.NewStdLogger(log.ErrorLog),
+		ErrorLog: logger,
 	}
 
-	var http2Server http2.Server
-
-	if tlsConfig == nil {
-		connOpts := http2.ServeConnOpts{
-			BaseConfig: &httpServer,
-			Handler:    handler,
-		}
-
-		httpServer.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.ProtoMajor == 2 {
-				if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
-					http2Server.ServeConn(conn.(*replayableConn).replay(), &connOpts)
-				} else {
-					log.Fatal(err)
-				}
-			} else {
-				handler.ServeHTTP(w, r)
-			}
-		})
+	// net/http.(*Server).Serve/http2.ConfigureServer are not thread safe with
+	// respect to net/http.(*Server).TLSConfig, so we call it synchronously here.
+	if err := http2.ConfigureServer(&httpServer, nil); err != nil {
+		log.Fatal(err)
 	}
-
-	if err := http2.ConfigureServer(&httpServer, &http2Server); err != nil {
-		return nil, err
-	}
-
-	stopper.RunWorker(func() {
-		<-stopper.ShouldDrain()
-		// Some unit tests manually close `ln`, so it may already be closed
-		// when we get here.
-		if err := ln.Close(); err != nil && !IsClosedConnection(err) {
-			log.Fatal(err)
-		}
-	})
 
 	stopper.RunWorker(func() {
 		if err := httpServer.Serve(ln); err != nil && !IsClosedConnection(err) {
@@ -200,7 +114,6 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 		}
 
 		<-stopper.ShouldStop()
-
 		mu.Lock()
 		for conn := range activeConns {
 			conn.Close()
@@ -208,10 +121,39 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 		mu.Unlock()
 	})
 
-	return ln, nil
+	logFn := logger.Printf
+	return func(l net.Listener, serveConn func(net.Conn)) error {
+		// Inspired by net/http.(*Server).Serve
+		var tempDelay time.Duration // how long to sleep on accept failure
+		for {
+			rw, e := l.Accept()
+			if e != nil {
+				if ne, ok := e.(net.Error); ok && ne.Temporary() {
+					if tempDelay == 0 {
+						tempDelay = 5 * time.Millisecond
+					} else {
+						tempDelay *= 2
+					}
+					if max := 1 * time.Second; tempDelay > max {
+						tempDelay = max
+					}
+					logFn("http: Accept error: %v; retrying in %v", e, tempDelay)
+					time.Sleep(tempDelay)
+					continue
+				}
+				return e
+			}
+			tempDelay = 0
+			go func() {
+				httpServer.ConnState(rw, http.StateNew) // before Serve can return
+				serveConn(rw)
+				httpServer.ConnState(rw, http.StateClosed)
+			}()
+		}
+	}
 }
 
 // IsClosedConnection returns true if err is the net package's errClosed.
 func IsClosedConnection(err error) bool {
-	return strings.Contains(err.Error(), "use of closed network connection")
+	return err == cmux.ErrListenerClosed || strings.Contains(err.Error(), "use of closed network connection")
 }
