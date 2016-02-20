@@ -1403,9 +1403,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 	// and the original error otherwise.
 	sp.LogEvent("store retry limit exceeded") // good to check for if tests fail
 	if ba.Txn != nil {
-		pErr := roachpb.NewError(roachpb.NewTransactionRetryError())
-		pErr.SetTxn(ba.Txn)
-		return nil, pErr
+		return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), ba.Txn)
 	}
 	return nil, pErr
 }
