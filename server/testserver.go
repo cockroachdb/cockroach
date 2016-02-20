@@ -254,7 +254,7 @@ func (ts *TestServer) Stores() *storage.Stores {
 
 // ServingAddr returns the rpc server's address. Should be used by clients.
 func (ts *TestServer) ServingAddr() string {
-	return ts.listener.Addr().String()
+	return ts.ctx.Addr
 }
 
 // ServingHost returns the host portion of the rpc server's address.
