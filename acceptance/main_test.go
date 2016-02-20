@@ -256,7 +256,7 @@ func testDocker(t *testing.T, name string, cmd []string) error {
 	defer l.AssertAndStop(t)
 	addr := l.Nodes[0].PGAddr()
 	containerConfig := container.Config{
-		Image: fmt.Sprintf("%s:%s", image, tag),
+		Image: fmt.Sprintf(image + ":" + tag),
 		Env: []string{
 			fmt.Sprintf("PGHOST=%s", addr.IP),
 			fmt.Sprintf("PGPORT=%d", addr.Port),
@@ -266,12 +266,12 @@ func testDocker(t *testing.T, name string, cmd []string) error {
 		Cmd: strslice.New(cmd...),
 	}
 	hostConfig := container.HostConfig{
-		Binds:       []string{fmt.Sprintf("%s:%s", l.CertsDir, "/certs")},
+		Binds:       []string{l.CertsDir + ":/certs"},
 		NetworkMode: "host",
 	}
 	ipo := types.ImagePullOptions{
 		ImageID: image,
 		Tag:     tag,
 	}
-	return l.OneShot(ipo, containerConfig, hostConfig, fmt.Sprintf("docker-%s", name))
+	return l.OneShot(ipo, containerConfig, hostConfig, "docker-"+name)
 }

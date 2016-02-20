@@ -45,6 +45,7 @@ import (
 
 const (
 	builderImage   = "cockroachdb/builder"
+	builderTag     = "20160218-125307"
 	dockerspyImage = "cockroachdb/docker-spy"
 	dockerspyTag   = "20160209-143235"
 	domain         = "local"
@@ -241,26 +242,18 @@ func (l *LocalCluster) panicOnStop() {
 func (l *LocalCluster) runDockerSpy() {
 	l.panicOnStop()
 
-	create := func() (*Container, error) {
-		return createContainer(l,
-			container.Config{
-				Image: dockerspyImage + ":" + dockerspyTag,
-				Cmd:   strslice.New("--dns-domain=" + domain),
-			}, container.HostConfig{
-				Binds:           []string{"/var/run/docker.sock:/var/run/docker.sock"},
-				PublishAllPorts: true,
-			},
-			"docker-spy",
-		)
-	}
-	c, err := create()
-	if dockerclient.IsErrImageNotFound(err) {
-		if err := pullImage(l, types.ImagePullOptions{ImageID: dockerspyImage, Tag: dockerspyTag}); err != nil {
-			log.Fatal(err)
-		}
-
-		c, err = create()
-	}
+	maybePanic(pullImage(l, types.ImagePullOptions{ImageID: dockerspyImage, Tag: dockerspyTag}))
+	c, err := createContainer(
+		l,
+		container.Config{
+			Image: dockerspyImage + ":" + dockerspyTag,
+			Cmd:   strslice.New("--dns-domain=" + domain),
+		}, container.HostConfig{
+			Binds:           []string{"/var/run/docker.sock:/var/run/docker.sock"},
+			PublishAllPorts: true,
+		},
+		"docker-spy",
+	)
 	maybePanic(err)
 	maybePanic(c.Start())
 	l.dns = c
@@ -338,29 +331,22 @@ func (l *LocalCluster) initCluster() {
 		}
 	}
 
-	create := func() (*Container, error) {
-		return createContainer(
-			l,
-			container.Config{
-				Image:      *cockroachImage,
-				Volumes:    vols,
-				Entrypoint: strslice.New("/bin/true"),
-			}, container.HostConfig{
-				Binds:           binds,
-				PublishAllPorts: true,
-			},
-			"volumes",
-		)
+	if *cockroachImage == builderImage {
+		maybePanic(pullImage(l, types.ImagePullOptions{ImageID: builderImage, Tag: builderTag}))
 	}
-	c, err := create()
-	if dockerclient.IsErrImageNotFound(err) && *cockroachImage == builderImage {
-		if err := pullImage(l, types.ImagePullOptions{ImageID: *cockroachImage}); err != nil {
-			log.Fatal(err)
-		}
-		c, err = create()
-	}
+	c, err := createContainer(
+		l,
+		container.Config{
+			Image:      *cockroachImage,
+			Volumes:    vols,
+			Entrypoint: strslice.New("/bin/true"),
+		}, container.HostConfig{
+			Binds:           binds,
+			PublishAllPorts: true,
+		},
+		"volumes",
+	)
 	maybePanic(err)
-
 	maybePanic(c.Start())
 	maybePanic(c.Wait())
 	l.vols = c
