@@ -84,7 +84,6 @@ func NewTestContext() *Context {
 	// Start() to an available port.
 	// Call TestServer.ServingAddr() for the full address (including bound port).
 	ctx.Addr = "127.0.0.1:0"
-	ctx.PGAddr = "127.0.0.1:0"
 	// Set standard "node" user for intra-cluster traffic.
 	ctx.User = security.NodeUser
 
@@ -266,17 +265,6 @@ func (ts *TestServer) ServingHost() (string, error) {
 // ServingPort returns the port portion of the rpc server's address.
 func (ts *TestServer) ServingPort() (string, error) {
 	_, p, err := net.SplitHostPort(ts.ServingAddr())
-	return p, err
-}
-
-// PGAddr returns the Postgres-protocol endpoint's address.
-func (ts *TestServer) PGAddr() string {
-	return ts.ServingAddr()
-}
-
-// PGPort returns the port portion of the Postgres-protocol endpoint's address.
-func (ts *TestServer) PGPort() (string, error) {
-	_, p, err := net.SplitHostPort(ts.PGAddr())
 	return p, err
 }
 

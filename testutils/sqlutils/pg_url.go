@@ -36,7 +36,7 @@ import (
 // certain embedded security certificates. The certificates will be created in a new temporary
 // directory. The returned cleanup function will delete this temporary directory.
 func PGUrl(t testing.TB, ts *server.TestServer, user, prefix string) (url.URL, func()) {
-	host, port, err := net.SplitHostPort(ts.PGAddr())
+	host, port, err := net.SplitHostPort(ts.ServingAddr())
 	if err != nil {
 		t.Fatal(err)
 	}

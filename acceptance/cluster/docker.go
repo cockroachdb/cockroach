@@ -31,7 +31,6 @@ import (
 
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
-	"github.com/docker/go-connections/nat"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/util/log"
@@ -238,33 +237,22 @@ func (c *Container) Inspect() (types.ContainerJSON, error) {
 	return c.cluster.client.ContainerInspect(c.id)
 }
 
-// Addr returns the address to connect to the specified port.
-func (c *Container) Addr(name nat.Port) *net.TCPAddr {
+// Addr returns the TCP address to connect to.
+func (c *Container) Addr() *net.TCPAddr {
 	containerInfo, err := c.Inspect()
 	if err != nil {
 		return nil
 	}
-	if name == "" {
-		name = cockroachTCP
-	}
-	bindings, ok := containerInfo.NetworkSettings.Ports[name]
+	bindings, ok := containerInfo.NetworkSettings.Ports[defaultTCP]
 	if !ok || len(bindings) == 0 {
 		return nil
 	}
-	port, _ := strconv.Atoi(bindings[0].HostPort)
+	port, err := strconv.Atoi(bindings[0].HostPort)
+	if err != nil {
+		return nil
+	}
 	return &net.TCPAddr{
 		IP:   dockerIP(),
 		Port: port,
 	}
-}
-
-// PGAddr returns the address to connect to the Postgres port.
-func (c *Container) PGAddr() *net.TCPAddr {
-	return c.Addr(pgTCP)
-}
-
-// GetJSON retrieves the URL specified by https://Addr(<port>)<path>
-// and unmarshals the result as JSON.
-func (c *Container) GetJSON(port nat.Port, path string, v interface{}) error {
-	return getJSON(true /* tls */, c.Addr(port).String(), path, v)
 }
