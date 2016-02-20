@@ -271,7 +271,7 @@ func (ts *TestServer) ServingPort() (string, error) {
 
 // PGAddr returns the Postgres-protocol endpoint's address.
 func (ts *TestServer) PGAddr() string {
-	return ts.pgServer.Addr().String()
+	return ts.ServingAddr()
 }
 
 // PGPort returns the port portion of the Postgres-protocol endpoint's address.

@@ -586,15 +586,12 @@ func TestSystemConfigGossip(t *testing.T) {
 }
 
 func checkOfficialize(t *testing.T, network, oldAddrString, newAddrString, expAddrString string) {
-	unresolvedAddr := util.NewUnresolvedAddr(network, oldAddrString)
 	resolvedAddr := util.NewUnresolvedAddr(network, newAddrString)
 
-	if err := officializeAddr(unresolvedAddr, resolvedAddr); err != nil {
+	if unresolvedAddr, err := officialAddr(oldAddrString, resolvedAddr); err != nil {
 		t.Fatal(err)
-	}
-
-	if retAddrString := unresolvedAddr.String(); retAddrString != expAddrString {
-		t.Errorf("officializeAddr(%s, %s) was %s; expected %s", oldAddrString, newAddrString, retAddrString, expAddrString)
+	} else if retAddrString := unresolvedAddr.String(); retAddrString != expAddrString {
+		t.Errorf("officialAddr(%s, %s) was %s; expected %s", oldAddrString, newAddrString, retAddrString, expAddrString)
 	}
 }
 
